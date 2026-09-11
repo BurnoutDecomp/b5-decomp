@@ -20,7 +20,7 @@
 //   state's .cpp, delete its block here.
 // GROUP B -- the two dev-menu behaviours BehaviourManager::AllocateBehaviour<T> forces
 //   vtables for (their real TUs pull the Tweaker mapping API + panorama screenshot callback).
-// GROUP C -- sub-systems with no landed TU (ICEWrapper, the director DebugComponent, the
+// GROUP C -- sub-systems with no landed TU (the director DebugComponent, the
 //   scene-query post-office free functions, rw SLerp).
 // GROUP D -- declared-only leaves of already-mounted TUs.
 // GROUP F -- the moment sub-system (MomentController::NewMoment).
@@ -30,7 +30,6 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 
-#include "GameSource/Director/BrnDirectorICEWrapper.h"
 #include "GameSource/Director/BrnDirectorResourceManager.h"
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"
@@ -54,7 +53,6 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"                       // group E
 #include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // group E
 
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                          // ICEWrapper::Construct boot witness
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 #include "SharedClasses/Traffic/BrnTrafficSection.h"
@@ -121,14 +119,15 @@ namespace BrnDirector
     // un-gating the arbitrator's crash-nav trigger would enter a state that publishes a camera
     // nothing ever writes.
     // ⇒ ALL FIVE COME OUT TOGETHER WITH THE MOUNT, never one at a time (LNK2005 x5 otherwise).
-    // That TU needs exactly twelve externals this link does not provide:
+    // Re-measured 2026-09-11 (dumpbin over that TU's object against the mounted symbol set):
+    // it needs exactly TEN externals this link does not provide, all of them ICE:
     //     8  ICEMoviePlayer::{Construct,Prepare,Update,Stop,Loop,GetCamera,InterpolateFrom,
     //        CutToInterpolateOut} -- written, in the unmounted Utils/BrnICEMoviePlayer.cpp.
     //     2  ICEWrapper::{GetCurrentMovie,PlayMovie} -- written, unmounted
     //        SDKs/Packages/ICE/ICEWrapper.cpp.
-    //     1  SharedCameraContainer::GetGameplayCameraHelperIndex -- written, unmounted TU.
-    //     1  Camera::Camera::SetRequestedBorderPostFX -- declared in Camera/Camera.h, defined
-    //        nowhere in the tree; the only one needing recovery rather than a mount.
+    // The two non-ICE ones are closed: SharedCameraContainer::GetGameplayCameraHelperIndex
+    // (Camera/BrnSharedCameraContainer.cpp mounted) and Camera::Camera::SetRequestedBorderPostFX
+    // (bodied in Camera/Camera.cpp). ⇒ these five come out with the ICE mount, nothing else.
     void ArbStateCrashNav::Construct()                          { ArbitratorState::Construct(); }
     // Prepare forwards to the base: the override declared in BrnArbStateCrashNav.h adds a vtable
     // slot MainDirector references, so it must be defined even while the TU is unmounted.
@@ -232,58 +231,6 @@ namespace Camera
 // ----------------------------------------------------------------------------
 namespace BrnDirector
 {
-    // -- ICEWrapper (the ICE/in-car-entertainment take player). MainDirector embeds one by
-    //    value and Constructs/Prepares/Destructs it; nothing on the fly-by path drives a take.
-    //    Prepare returns TRUE = "staged Prepare finished", so DirectorModule::Prepare's stage
-    //    machine advances instead of spinning for ever.
-    //    DELETE-WHEN: BrnDirectorICEWrapper.cpp's Construct/Prepare/Destruct land.
-    void ICEWrapper::Construct()
-    {
-        // PARTIAL BODY: every store the recorded Construct makes except the tail
-        // Camera::Construct on the ICE camera's embedded director camera. That call is the
-        // only missing declaration -- BrnDirector::Camera::Camera::Construct is bodied in
-        // Camera/Camera.cpp, which is not on the exe source list. The full body is kept in
-        // SDKs/Packages/ICE/ICEWrapper.cpp, unmounted.
-        // miICELoadStateB (+0x120E8) is the stage word ICEWrapper::Prepare switches on.
-        // DELETE-WHEN: GameSource/Director/Camera/Camera.cpp joins the link.
-        mVehicleRef.Construct();
-
-        // VehicleRef::Set(E_PLAYER_CAR, ..) inlined: the ref is bound, not merely zeroed.
-        mVehicleRef.meType         = VehicleRef::E_PLAYER_CAR;
-        mVehicleRef.mbSet          = true;
-        mVehicleRef.muRef          = 0;
-        mVehicleRef.miRaceCarIndex = -1;
-
-        // Take the dev-tools action stack off the "unconstructed" sentinel the ctor seeds.
-        mActionQueue.Clear();
-
-        miICELoadStateB = 0;
-        miICELoadStateA = 0;
-
-        // MISSING HERE: mICECamera's embedded Camera::Construct (see above).
-
-        mfTimeScale = 0.0f;
-
-        // TEMPORARY boot witness, not console behaviour; remove once the wave is signed off.
-        {
-            static bool sbLoggedOnce = false;
-            if (!sbLoggedOnce && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedOnce = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[g09-ice] ICEWrapper::Construct refType=" << static_cast<s32>(mVehicleRef.meType)
-                    << " refSet=" << static_cast<s32>(mVehicleRef.mbSet)
-                    << " raceCar=" << mVehicleRef.miRaceCarIndex
-                    << " actionQueueLen=" << mActionQueue.miLength
-                    << " loadStage=" << miICELoadStateB << "\n";
-            }
-        }
-    }
-    // Blocked on ICE::ICEController::DestructMenus, which has no body anywhere in the tree
-    // (real body in the unmounted SDKs/Packages/ICE/ICEWrapper.cpp).
-    // DELETE-WHEN: ICEController::DestructMenus is reconstructed and ICEManager.cpp mounts.
-    void ICEWrapper::Destruct() {}
-
     // -- The director's own CgsDev::DebugComponent page ("Camera"). Its five recovered
     //    functions (DirectorModule/BrnDirectorModuleDebugCompononent.cpp, unmounted) all index
     //    DirectorModule regions this reconstruction does not model yet.
@@ -377,45 +324,53 @@ namespace vpu
 }
 
 // GROUP F -- THE MOMENT SUB-SYSTEM (the establishing-shot / jump-cutaway camera).
-// ONE gate remains: MomentController::NewMoment, below.
+// ONE gate remains: MomentController::NewMoment, below. The two trap stubs that used to stand
+// with it (MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor,
+// MomentTumbling::SignalIsGoodTimeToPlant) are gone: both TUs are mounted.
 //
 // It is a camera blocker: NewMoment allocates nothing, so every MomentHandle stays
 // !IsAllocated(), MomentSelector::Update's classification loop skips them all, muValidMoments
 // is pinned at 0, and ArbStateRoaming::Update's DRIVING arm never calls SelectBestMoment.
 //
-// Mounting the closure (BrnMomentControllerNewMoment.cpp + BrnMoment.cpp + all 14
-// Moments/*.cpp) costs 147 non-CRT unresolved externals, by family:
-//     49  detail::MomentSharedInfo_* reach shims -- the record has no home in this tree; every
-//         Moments/*.cpp declares its own declaration-only free-function reaches into it.
-//     35  per-moment-class virtuals and privates (Destruct / GetInstanceType / SetParameters /
-//         Prepare / Release, plus MomentTumbling::SetGyroCamParameters and
-//         MomentPlayerJumping::UpdateCamera)
+// Mounting the rest of the closure (BrnMomentControllerNewMoment.cpp + the eleven Moments/*.cpp
+// that are still unmounted) costs 135 non-CRT unresolved externals, re-measured 2026-09-11 by
+// compiling every candidate with the shipping flags and subtracting the defined-symbol set of
+// the whole current object list. By family:
+//     39  detail::MomentSharedInfo_* reach shims. The record itself IS homed now
+//         (MomentController/BrnMomentSharedInfo.h) and eleven of its shims are bodied; these
+//         are the rest, each still a declaration at the head of the TU that reads it.
+//     33  per-moment-class virtuals and privates (Destruct / GetInstanceType / SetParameters /
+//         Prepare / Release, plus MomentPlayerJumping::UpdateCamera)
 //     24  BehaviourCollection<T,P,N> methods -- six template methods x four instantiations
-//     19  other subsystems (BehaviourRig's virtual set + Parameters::Construct, six
+//     24  other subsystems (BehaviourRig's virtual set + Parameters::Construct, six
 //         vector-deleting destructors, BehaviourPassengerCam::SetParameters,
-//         Camera::SetRequestedBorderPostFX, ShotSelector::GetCrashShot,
-//         DirectorResourceManager::GetKeyAnim)
+//         BehaviourLooseAttachment::Parameters::Construct, Camera::SetRequestedBorderPostFX,
+//         ShotSelector::GetCrashShot, DirectorResourceManager::GetKeyAnim)
 //     13  other detail:: reach shims (ICETakeData_*, IceAnimShotData_*, Vehicle_*,
 //         BehaviourRig_*, CameraState_AppendToDebugLog, ...)
-//      7  BehaviourParameterBank / NamedParameters accessors
+//      2  BehaviourParameterBank accessors -- and only the two INDEXED ones are left
+//         (GetPlayerJumpingRigShotParams / GetPlayerJumpingBystanderShotParams). The four
+//         single-block moment accessors are bodied; see that header's RECORD MAP for why the
+//         indexed pair needs its call sites renumbered before it can follow.
 // Every `AllocateVoid<MomentXxx>()` arm placement-constructs a MomentXxx, which emits its
 // vftable, which needs every virtual of that class defined at link -- so the twelve-arm switch
-// drags all twelve subclasses in whole.
+// drags all twelve subclasses in whole. That is what makes this ONE gate cost 135 symbols while
+// the individual moment TUs cost nothing: mounted without NewMoment, a moment TU emits no
+// vftable and so drags none of its siblings' virtuals in.
 //
 // The closure alone would not make a cutaway play: nothing in this tree ticks a moment
 // (MomentController::UpdateAllMoments has no body, MainDirector::UpdateMoments is
 // declaration-only, and its call is commented out in MainDirector::Update).
 //
 // DELETE-WHEN, in dependency order -- do NOT start at the bottom:
-//   1. Give BehaviourParameterBank / NamedParameters the moment camera parameter blocks and
-//      body their accessors (Camera lane). The four cheapest moment TUs are blocked on nothing
-//      else, and every one of those accessors returns a const reference, so none can be stubbed.
-//   2. Home the MomentSharedInfo record (its readers are the detail:: declarations at the head
-//      of every Moments/*.cpp; it is Moment::Update's third argument, currently `const void*`).
-//   3. Body MomentController::UpdateAllMoments and MainDirector::UpdateMoments, then un-gate
-//      the commented-out call in MainDirector::Update. Those last two are NOT in this file set.
-//   4. Body the six BehaviourCollection<> template methods and the per-class virtuals.
-//   5. Mount the closure TUs and delete the gate below.
+//   1. Body the rest of the MomentSharedInfo shims against the homed record. Each one is a
+//      named member read; what takes the time is checking the role name the call site coined
+//      against the member it lands on -- two of the eleven already bodied turned out to be
+//      misnamed, and both are recorded in the record's own header.
+//   2. Body MomentController::UpdateAllMoments and MainDirector::UpdateMoments, then un-gate
+//      the commented-out call in MainDirector::Update. Those two are NOT in this file set.
+//   3. Body the six BehaviourCollection<> template methods and the per-class virtuals.
+//   4. Mount the closure TUs and delete the gate below.
 //
 // The moment pool's bucket is widened on this x64 host (static_assert per moment type; see
 // the HOST BUCKET WIDENING banner in BrnMomentController.h).
@@ -423,7 +378,6 @@ namespace vpu
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"     // MomentSelector
 #include "GameSource/Director/MomentController/BrnMomentController.h"   // MomentController
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"        // group G: ValidityAccount::Print x2
-#include "GameSource/Director/MomentController/Moments/BrnMomentTumbling.h"  // group G: MomentTumbling
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // group G: DebugPrinter / DebugLog
 
 namespace BrnDirector
@@ -472,43 +426,6 @@ namespace BrnDirector
     {
         (void)lrDebugPrinter;
         CGS_ASSERT(false, "MomentSelector::ActualDebugRender is not reconstructed");
-        __debugbreak();
-    }
-
-    // ------------------------------------------------------------------------
-    // MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor -- NOT dev-only:
-    // ArbStateCrashing::Update calls it on a live path (a BYSTANDER_SEES_ACTION crash moment
-    // held longer than kfMomentTime squashes the shot's perceived distance to 0.5).
-    //
-    // The body is committed at its real home (MomentController/Moments/
-    // BrnMomentBystanderSeesAction.cpp); it is the MOUNT that is blocked. Mounting that TU
-    // opens nine unresolved externals: seven `detail::MomentSharedInfo_*` free-function shims
-    // (declared, never defined) plus BehaviourParameterBank::GetBystanderCam{,Close}MomentParams.
-    //
-    // A trap rather than a no-op on purpose: a quiet body would swallow a camera-framing change
-    // on a live path. If it ever fires, the fix is the mount, not the stub.
-    // DELETE-WHEN: the seven MomentSharedInfo shims are replaced by the real accessors and
-    // BrnMomentBystanderSeesAction.cpp joins the exe source list.
-    // ------------------------------------------------------------------------
-    void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
-    {
-        (void)lfFactor;
-        CGS_ASSERT(false, "MomentBystanderSeesAction TU is not mounted");
-        __debugbreak();
-    }
-
-    // ------------------------------------------------------------------------
-    // MomentTumbling::SignalIsGoodTimeToPlant -- same shape as the bystander trap above: the
-    // body is committed at MomentController/Moments/BrnMomentTumbling.cpp; the MOUNT is missing.
-    // ArbStateCrashing::Update calls it on the first frame of a slow-motion burst when the
-    // selected crash moment is a TUMBLING shot. Neither trap can fire while NewMoment (above)
-    // allocates nothing: HasSelectedMoment() guards both call sites and muValidMoments is
-    // pinned at 0. Both go live the same day the moment sub-system does.
-    // DELETE-WHEN: BrnMomentTumbling.cpp joins the exe source list.
-    // ------------------------------------------------------------------------
-    void MomentTumbling::SignalIsGoodTimeToPlant()
-    {
-        CGS_ASSERT(false, "MomentTumbling TU is not mounted");
         __debugbreak();
     }
 }

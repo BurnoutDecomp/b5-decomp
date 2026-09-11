@@ -123,9 +123,9 @@ void Vector3Randomiser::Prepare(Vector3 lvA, Vector3 lvB)
     mVecB.w = lvB.w - lvA.w;
 }
 
-Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
+// The Vector-slot draw on its own: one float, refilled in place, index bumped past it.
+f32 Vector3Randomiser::DrawInterpolant(CgsNumeric::Random &lrRandom)
 {
-    // The Vector-slot draw: one float, splatted across the lerp.
     const u32 luSlot = (lrRandom.muOldestBufferIndex + 3) & 4;
     const f32 lfT    = lrRandom.mafFloatBuffer[luSlot] - 1.0f;   // the quad primed last call
 
@@ -134,6 +134,14 @@ Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
     lrRandom.mauIntegerBuffer[luSlot] =
         CgsNumeric::KU_IEEE_754_REPRESENTATION_FLOAT_ONE | (luS0Hi >> 9);
     lrRandom.muOldestBufferIndex = luSlot + 1;
+
+    return lfT;
+}
+
+Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
+{
+    // The Vector-slot draw: one float, splatted across the lerp.
+    const f32 lfT = DrawInterpolant(lrRandom);
 
     Vector3 lvResult;
     lvResult.x = mVecA.x + mVecB.x * lfT;

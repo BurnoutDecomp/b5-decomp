@@ -484,6 +484,21 @@ namespace BrnParticle
                                                   const ParticleRenderData& lrRenderData);
         void HandleFireDebrisBurstEvent(const FireDebrisBurstEvent* lpEvent);
 
+        // THE DEBRIS PRODUCER (update thread), body in ParticleModule_DebrisSpawn.cpp.
+        // Append one debris record to the 32-entry spawn buffer (mu16SpawnBufferCount /
+        // mpSparkSpawnBuffer) and, on the 32nd, publish the whole batch as a type-4 event.
+        // Callers: EffectsModule::{HandleCrashingTrail, BurstAreaEmitParticles} and
+        // JumpStateMachine::FireWheelDebris.
+        // lvColour is only read for eDebrisArray_Coloured; every other type takes the colour
+        // from its own preset.
+        void SpawnDebris(Native::EDebrisArrayID leDebrisType,
+                         Vector3 lvPosition,
+                         Vector3 lvVelocity,
+                         Vector3 lvRotationAxis,
+                         Vector4 lvColour,
+                         f32 lfSize,
+                         f32 lfSpawnTime);
+
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
         LionEffect* GetLionEffect(u32 luHandle);

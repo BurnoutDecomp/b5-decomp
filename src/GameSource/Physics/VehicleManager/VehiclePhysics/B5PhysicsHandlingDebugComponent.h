@@ -11,8 +11,9 @@
 // vehicle physics. Derives from the real CgsDev::DebugComponent. The full component (the
 // PrimitiveVehicleDebugRender2D / GearStats / GripCurveDebugGraph / GripCurveDebugWindow
 // helper classes and the render/update/window machinery declared in the DWARF) is owned by
-// its own dev-UI pass. Incremental: this TU implements ONLY the leaf path getter
-// (GetPath @0x825DB0D0). It is declared here BY NAME so the body has a real .cpp home.
+// its own dev-UI pass. Incremental: this TU implements the leaf path getter, the last-wall
+// -triangle setter and the per-frame sampling tick. Each is declared here BY NAME so its body
+// has a real .cpp home.
 
 namespace BrnPhysics
 {
@@ -26,11 +27,9 @@ namespace Vehicle
         // debug overlay. Copies the whole 80-byte AOSTriangle into mLastWallTriangle @+0x350.
         void SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle);
 
-        // The per-frame tick
-        // VehicleManager::UpdateVehiclePhysics calls once per live car (bl @0x82645A78,
-        // f1 = the sim timestep). Declaration-only here -- the body is a named FLAG trap
-        // stub in BrnVehicleManagerLinkStubs.cpp until this component's own reconstruction
-        // pass lands (this TU is not mounted).
+        // The per-frame tick VehicleManager::UpdateVehiclePhysics calls once per live car with
+        // the sim timestep. Samples only: gear-stats time accumulate, the four wheels'
+        // road-contact mirror, and the speed mirror. Bodied in this TU.
         void Update(f32 lfTimeStep);
 
     protected:

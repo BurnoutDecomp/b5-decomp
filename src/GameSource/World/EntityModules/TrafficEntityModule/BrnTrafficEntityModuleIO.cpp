@@ -452,6 +452,21 @@ namespace BrnTrafficIO
         mPropToTrafficInterface.Construct();           // +0x30C60 (knock-down) + +0x30CEC (restore)
     }
 
+    // write-lock tripwire then return &mSceneResultQueue (console +166960). Sole
+    // producer: WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics.
+    InputBuffer_PrePhysics::SceneResultQueue* InputBuffer_PrePhysics::GetSceneResultQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneResultQueue;
+    }
+
+    // The read-lock twin (the module's own drain side).
+    const InputBuffer_PrePhysics::SceneResultQueue* InputBuffer_PrePhysics::GetSceneResultQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mSceneResultQueue;
+    }
+
     void InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -519,6 +534,15 @@ namespace BrnTrafficIO
     OutputBuffer_PostScene::SceneCoarseQueryQueue* OutputBuffer_PostScene::GetSceneCoarseQueryQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mSceneCoarseQueryQueue;
+    }
+
+    // read-lock; return &mSceneCoarseQueryQueue (this + 4). Sole
+    // consumer: WorldModule::BridgeTrafficModuleToSceneModule_PostScene, which merges the
+    // queue into the scene query input buffer's coarse queue.
+    const OutputBuffer_PostScene::SceneCoarseQueryQueue* OutputBuffer_PostScene::GetSceneCoarseQueryQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
         return &mSceneCoarseQueryQueue;
     }
 

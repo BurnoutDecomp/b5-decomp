@@ -12,6 +12,7 @@
 //   ShowChallengeOnCompass  @ 0x82428CC0
 //   ShowPositionOnCompass                  (p0 wave 2026-09-08)
 //   FormatDirectionLetters                 (p0 wave 2026-09-08)
+//   Update                                 (p1 wave 2026-09-11)
 //
 // Reconstructed store-for-store from the console listing; attested declaration shape.
 //
@@ -21,13 +22,6 @@
 // direction-letter tables read straight out of the shipped image (see below). The
 // player-route frame-name table was likewise a two-entry placeholder and is now the
 // real triple. Nothing here is invented; every value is read from the image.
-//
-// STILL TODO (blocked, body left for a keystone wave -- declared in the header):
-//   Update                 @ 0x8242E160 -- un-homed GuiTracker actively-tracked-landmark
-//                                          accessors (GetActivelyTrackedLandmarks /
-//                                          GetNumActivelyTrackedLandmarks -- no reconstructed
-//                                          home, no disasm) + the GuiCache heading /
-//                                          event-destination-landmark reads.
 // ===================================================================================
 #include "GameSource/Gui/Flow/HUD/Components/BrnCompassComponent.h"
 
@@ -45,6 +39,10 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"           // BrnFlapt::FileRef::FindComponent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // BrnFlapt::MovieClipInstance::ResetTimeline
 #include "GameSource/GameState/BrnGameStateTypes.h"         // BrnGameState::LandmarkIndex (complete)
+#include "GameSource/Gui/SatNav/BrnGuiTracker.h"            // GuiTracker::Get{,Num}ActivelyTrackedLandmarks (Update's online arm)
+
+// The game-mode enum Update switches on; BrnGuiCache.h already pulls the owning header in.
+namespace GsmIO = BrnGameState::GameStateModuleIO;
 
 // CgsSystem::HardwareSku::FindLanguage @0x8241FB4C is a namespace free function with no
 // reconstructed header home (bodies live in CgsHardwareSku{PC,PS3}.cpp); declare the exact
@@ -410,6 +408,89 @@ namespace BrnGui
         return false;
     }
 
+    // Update -- the per-frame compass drive. Two halves:
+    //
+    //   1. scroll the strip to where the player is pointing. The cache's player
+    //      orientation is in RADIANS; the strip's zero sits half a turn from north, so the
+    //      heading is orientation*180/pi + 180, wrapped into [0, 360]. The two wraps are
+    //      the console's own compare-and-branch pairs kept as loops, written as ordered
+    //      compares so an unordered (NaN) operand falls straight out of both -- which is
+    //      what the PPC `bge`/`ble` exits do, and is the polarity that matters here: the
+    //      second loop's repeat branch is `bgt`, so a NaN heading must NOT spin.
+    //
+    //   2. decide what the destination marker shows. Outside an event (the cache's
+    //      in-event gate byte clear) and in every mode with no compass destination, the
+    //      marker is parked and hidden. Otherwise the game mode picks the source:
+    //        * offline race / burning route / marked man -- the event's destination
+    //          landmark, drawn as the "finish" marker;
+    //        * online race / online road rage -- the first of the sat-nav tracker's
+    //          actively-tracked landmarks, drawn as "finish" when it is the only one left
+    //          and "checkpoint" while more follow;
+    //        * the freeburn-challenge mode -- the active challenge's trigger location,
+    //          which draws its own "fbcTarget" marker and reports whether it drew one.
+    //      Only the challenge arm can fall through to the hide path (when no challenge is
+    //      running); the other two return with the marker placed.
+    void CompassComponent::Update()
+    {
+        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+
+        f32 lfBearing = mpGuiCache->GetPlayerOrientation() * KF_RADIANS_TO_DEGREES
+                      + KF_DEGREES_HALF_TURN;
+        while (lfBearing < 0.0f)
+            lfBearing += KF_DEGREES_PER_TURN;
+        while (lfBearing > KF_DEGREES_PER_TURN)
+            lfBearing -= KF_DEGREES_PER_TURN;
+
+        SetBearing(lfBearing);
+
+        if (mpGuiCache->GetInEventColouringGate())
+        {
+            switch (mpGuiCache->GetGameMode())
+            {
+                case GsmIO::E_MODE_OFFLINE_RACE:
+                case GsmIO::E_MODE_BURNING_ROUTE:
+                case GsmIO::E_MODE_MARKED_MAN:
+                {
+                    ShowLandmarkOnCompass(mpGuiCache->GetEventDestinationLandmarkIndex(), lfBearing);
+                    mDestMarkerMovie.GotoAndPlayLabel("finish");
+                    return;
+                }
+
+                case GsmIO::E_MODE_ONLINE_RACE:
+                case GsmIO::E_MODE_ONLINE_ROAD_RAGE:
+                {
+                    GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
+                    CGS_ASSERT(lpTracker != NULL, "lpTracker");
+
+                    const BrnGameState::LandmarkIndex* lpLandmarks =
+                        lpTracker->GetActivelyTrackedLandmarks();
+                    CGS_ASSERT(lpLandmarks != NULL, "lpLandmarks");
+
+                    ShowLandmarkOnCompass(lpLandmarks[0], lfBearing);
+
+                    if (lpTracker->GetNumActivelyTrackedLandmarks() == 1)
+                        mDestMarkerMovie.GotoAndPlayLabel("finish");
+                    else
+                        mDestMarkerMovie.GotoAndPlayLabel("checkpoint");
+                    return;
+                }
+
+                case GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY:
+                {
+                    if (ShowChallengeOnCompass(lfBearing))
+                        return;
+                    break;
+                }
+
+                default:
+                    break;
+            }
+        }
+
+        SetMarkerPos(0.0f, false);
+        mDestMarkerMovie.GotoAndPlayLabel("invisible");
+    }
+
     // @ 0x8241F8A0 -- one-time setup of the compass HUD from its apt file:
     //   * resolve this component and reset its timeline;
     //   * descend into the "CVParent_mc" container (reset it too);
@@ -463,9 +544,9 @@ namespace BrnGui
         const CgsLanguage::ELanguage leLanguage =
             static_cast<CgsLanguage::ELanguage>(CgsSystem::HardwareSku::FindLanguage());
         CGS_ASSERT(leLanguage > CgsLanguage::E_LANGUAGE_INVALID,
-                   "leLanguage > CgsLanguage::E_LANGUAGE_INVALID");   // BrnCompassComponent.cpp:247
+                   "leLanguage > CgsLanguage::E_LANGUAGE_INVALID");
         CGS_ASSERT(leLanguage < CgsLanguage::E_LANGUAGE_TOTAL,
-                   "leLanguage < CgsLanguage::E_LANGUAGE_TOTAL");     // BrnCompassComponent.cpp:248
+                   "leLanguage < CgsLanguage::E_LANGUAGE_TOTAL");
 
         FormatDirectionLetters(leLanguage, &lCompassViewFrontLeft);
         FormatDirectionLetters(leLanguage, &lCompassViewFrontCentre);

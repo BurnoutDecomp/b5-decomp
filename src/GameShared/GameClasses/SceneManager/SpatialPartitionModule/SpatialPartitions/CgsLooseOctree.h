@@ -198,6 +198,13 @@ namespace CgsSceneManager
         virtual void Destruct();
         virtual bool Prepare();                                        // @ 0x828CA2D0
         virtual bool Release();
+        // Slot 5. Builds the traversal parameter block (centre, radius, entity-type mask,
+        // result buffer), brackets SphereTestRecursive from the root with the "Octree
+        // SphereTest" CPU monitor, and reports whether the query attempted any result.
+        // Bodied in CgsLooseOctree.cpp beside the frustum family.
+        virtual bool SphereTest(u32 lx32EntityTypeFlags, Vector3 lCentre, f32 lfRadius,
+                                CoarseQueryResultBuffer<16384>* lpResultBufferOut);
+
         // @ 0x828D01F0 -- slot 6. Brackets LineTestOptimized with the "Octree VP LineTest"
         // monitor (_miVPLineTestPerfMon, DWARF CgsLooseOctree.h:120 == X360 dword_82F33F20,
         // registered by Construct @0x828CA18C). Bodied in CgsLooseOctree_wSQ1.cpp.
@@ -227,11 +234,11 @@ namespace CgsSceneManager
         void StartFrustumTestJobs();                                                       // @0x828B23E0
         void WaitForFrustumTestJobResults(CoarseQueryResultBuffer<16384>* lpResultBufferOut); // @0x828B2558
 
-        // @ 0x828CA7F8 -- the synchronous view-projection frustum query.
-        bool FrustumTestVp(u32 lx32EntityTypeMask,
-                           const CgsGeometric::Frustum& lrFrustum,
-                           const Matrix44& lrViewProjection,
-                           CoarseQueryResultBuffer<16384>* lpResultBuffer);
+        // Slot 9 -- the synchronous view-projection frustum query.
+        virtual bool FrustumTestVp(u32 lx32EntityTypeMask,
+                                   const CgsGeometric::Frustum& lrFrustum,
+                                   const Matrix44& lrViewProjection,
+                                   CoarseQueryResultBuffer<16384>* lpResultBuffer);
 
 
         // @ 0x828CA5F8 (128 insns) -- the VMX line walk LineTest wraps (DWARF :328); its
@@ -246,7 +253,26 @@ namespace CgsSceneManager
         // them yet, so this stays -1 and StartMonitor/StopMonitor are no-ops (IsValidHandle).
         // Defined in CgsLooseOctree_wSQ1.cpp.
         static s32 _miVPLineTestPerfMon;
+
+        // The "Octree SphereTest" CPU monitor SphereTest brackets its traversal with, the
+        // twin of _miVPLineTestPerfMon above and unregistered for the same reason, so it
+        // stays -1 and both PerfMonCpu calls are inert. Defined in CgsLooseOctree.cpp.
+        static s32 _miSphereTestPerfMon;
     private:
+        // The per-query sphere-traversal parameter block, built once by SphereTest and
+        // handed to every SphereTestRecursive level by pointer:
+        //   +0x00 the query centre in a whole lane, +0x10 the radius splatted across the
+        //   lane, +0x20 the entity-type mask, +0x24 the result buffer.
+        struct SphereTestParams
+        {
+            Vector3                         mCentre;
+            f32                             mfRadius;
+            u32                             mx32EntityTypeFlags;
+            CoarseQueryResultBuffer<16384>* mpResultBuffer;
+        };
+
+        void SphereTestRecursive(u16 lu16NodeIndex, SphereTestParams* lpParams);
+
         // The per-query traversal parameter block (X360 stack image; see FrustumTestVp).
         // Exactly one of the two sinks is set: the synchronous entry point collects into
         // the caller's shared CoarseQueryResultBuffer through PushResult, the job path

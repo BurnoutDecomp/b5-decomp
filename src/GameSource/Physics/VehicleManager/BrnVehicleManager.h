@@ -343,8 +343,7 @@ namespace Vehicle
         // ==================================================================================
         // The per-frame FORCE
         // PRODUCER and its sibling surface. DWARF lines cited per member; bodies either in
-        // BrnVehicleManager_UpdateVehiclePhysics.cpp (slice TU) or named FLAG trap stubs in
-        // BrnVehicleManagerLinkStubs.cpp (dead until PhysicsModule::Update lands).
+        // BrnVehicleManager_UpdateVehiclePhysics.cpp (slice TU) or in its sibling slice TUs.
         // ==================================================================================
 
         // DWARF h:896; X360 @0x82644FA8 (1,038 insns). The manager-level per-frame conductor.
@@ -1146,6 +1145,21 @@ namespace Vehicle
                                         VehicleManagerOutputInterface* lpManagerOutputInterface,
                                         BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface,
                                         VehicleOutputInterface* lpVehicleOutputInterface);
+
+        // The remote-crash twin of SetRaceCarCrashing, and the only callee of the stage above:
+        // latch the car's physics into the crash state, publish the crash to the game side and
+        // allocate its RaceCarCrashData slot. No suppression gate, no takedown classification and
+        // no contact geometry -- the remote peer already decided. lfCrashTime, the request
+        // interface and the deformation interface are passed through unread. The float argument
+        // takes its own register and skips a GPR slot, so the pointer run starts one slot later
+        // than the parameter order suggests.
+        void SetNetworkCarCrashing(EntityId lVictimEntityId,
+                                   EntityId lCrasherEntityId,
+                                   f32 lfCrashTime,
+                                   BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
+                                   VehicleManagerOutputInterface* lpManagerOutputInterface,
+                                   VehicleOutputInterface* lpVehicleOutputInterface,
+                                   BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
         // @0x8263F460 (DWARF :393; 380 insns).
         void WriteOutVehicleStats(VehicleOutputInterface* lpVehicleOutputInterface);

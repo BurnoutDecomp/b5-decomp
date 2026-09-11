@@ -131,8 +131,8 @@ namespace
 //
 // ⚠️ [marked deviation] the ICEAuthor overlay is OMITTED, not stubbed away. It is the
 // in-game take editor's "an edit of this take is open, play that instead" override,
-// and ICEAuthor has no instance on this build (BrnDirectorICEWrapper.cpp is unmounted
-// and ICEWrapper::Construct/Prepare are DirectorLinkStubs no-ops), so
+// and ICEAuthor has no instance on this build (BrnDirectorICEWrapper.cpp is unmounted,
+// so the wrapper constructor never builds the ICE manager or its editor), so
 // FindEditedTakeFromGuid would return 0 for every guid and the console would fall
 // straight through to the dictionary take -- which is what this returns. Restoring the
 // two lines is mechanical once BrnDirectorICEWrapper.cpp + ICEAuthorTakeOps.cpp land

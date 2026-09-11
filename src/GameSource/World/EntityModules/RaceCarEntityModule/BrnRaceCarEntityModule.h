@@ -8,7 +8,7 @@
 //   RaceCarEntityModule::GetActiveRaceCar(EActiveRaceCarIndex)  X360 0x822A34A8
 //   RaceCarEntityModule::GetGlobalRaceCar(EGlobalRaceCarIndex)  X360 0x822A3568
 // Both are simple in-range-checked &array[index] accessors. The full
-// RaceCarEntityModule class (LegacySrc reference BrnRaceCarEntityModule.h, ~50 module
+// RaceCarEntityModule class (~50 module
 // dependencies: ModuleSingleBuffered base, the streamer/boost/near-miss/crash-play
 // managers, WorldMap2D, replay serialiser, etc.) is far larger and is NOT
 // reconstructed here -- only the layout slice the accessors touch.
@@ -789,10 +789,22 @@ public:
     // tailgating predicate. (Calls IsPlayerCarTailgatingOtherRaceCars, declared below.)
     bool UpdateTailgateTimer(f32 lfDeltaTime);
 
+    // One frame of near-miss bookkeeping: publish the player's speed and crashing flag to
+    // mNearMissManager (a crashing player also breaks the chain), remember every other active
+    // race car that is crashing, drain the vehicle manager's fine crashing-traffic queue into
+    // the traffic half, then step NearMissManager::Update. The console calls it from
+    // PostPhysicsUpdate, inside the second sim-paused skip. Body in
+    // BrnRaceCarEntityModule_NearMissTailgate.cpp.
+    void UpdateNearMisses(RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+                          RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput);
+
 private:
-    // FLAG: declaration-only sibling this TU references but does not body here -- it
-    // reaches the un-homed ActiveRaceCar interior + a tailgating cone test. Declared so
-    // UpdateTailgateTimer links; its body belongs to a later race-car-interior pass.
+    // True when the player car sits inside the tailgate cone behind any other active race car
+    // (reference point 2 m along that car's heading, 20 m along its reversed heading, a
+    // 0.346 rad cone, the other car above 30 mph and the two velocities within 90 mph of each
+    // other). Latches the slot into meIndexOfCarPlayerIsTailgating, or resets it to INVALID.
+    // The parameter is the active-car array BASE, not the player's slot -- the console forms
+    // the player's slot from it. Body in BrnRaceCarEntityModule_NearMissTailgate.cpp.
     bool IsPlayerCarTailgatingOtherRaceCars(
         EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
         const ActiveRaceCar* lpPlayerActiveRaceCar);
@@ -1151,8 +1163,7 @@ private:
     // X360 +0x11100 (69888). The per-car asset director. Every function that reaches it
     // in the console asm uses `this + 0x11100` as the receiver -- AttachActiveRaceCar,
     // DetachActiveRaceCar, UpdateStreaming, SendStreamerEvents, OnRaceCarResourcesLoaded.
-    // DWARF BrnRaceCarEntityModule.h:343 names it mRaceCarStreamer (LegacySrc's mStreamer
-    // is drift). The receiver queue's 4096 capacity above was derived from the console
+    // The recovered type information names it mRaceCarStreamer (mStreamer is drift). The receiver queue's 4096 capacity above was derived from the console
     // gap 0x11100 - 0x100E8 == 4120, so these two are the same layout fact.
     RaceCarStreamer mRaceCarStreamer;
 

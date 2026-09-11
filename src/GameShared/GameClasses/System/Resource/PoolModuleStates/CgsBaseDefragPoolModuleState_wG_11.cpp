@@ -1,14 +1,6 @@
 // ===========================================================================
-// PARKED PARTFILE, not on the build list. The remaining out-of-line members of
-// CgsResource::BaseDefragPoolModuleState: BeginDefragment, DoFinalAllocations and
-// AddAddressedAllocRequest.
-//
-// Missing declarations (declared, defined nowhere in the tree):
-//   Pool::BeginDefragmentation, Pool::BeginEmergencyDefragmentation,
-//   Pool::GetHeapAlignment, Pool::IsDefragmenting, Pool::GenerateLinearHeap,
-//   Pool::ExecuteBatchAllocation, Pool::ExecuteBatchAddressedAllocation,
-//   Heap::GenerateLinearHeap, Heap::ExecuteBatchAllocation,
-//   Heap::ExecuteBatchAddressedAllocation, Heap::ExecuteBatchRelocation
+// Partfile: the remaining out-of-line members of CgsResource::BaseDefragPoolModuleState
+// -- BeginDefragment, DoFinalAllocations and AddAddressedAllocRequest.
 // ===========================================================================
 
 #include "types.hpp"

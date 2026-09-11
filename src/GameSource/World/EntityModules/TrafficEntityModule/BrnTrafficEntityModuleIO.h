@@ -20,6 +20,7 @@
 // ---- InputBuffer_PreScene member/parameter type homes ----
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"                 // CgsSystem::TimerStatusInterface
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntity{Active,Global}RaceCarOutputInterface, RCEntityPlayerResetInterface
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarToTrafficInterface.h"          // RaceCarToTrafficInterface (InputBuffer_PostScene member)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"           // TrafficNetworkInputInterface
 
 // ---- InputBuffer_PrePhysics member type homes ----
@@ -38,6 +39,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                          // CgsModule::VariableEventQueue<N,16>
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // BrnWorld::PropEntityIO::PropToTrafficInterface (InputBuffer_PrePhysics member)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"            // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface (the two OutputBuffer scene seats)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQuery.h"            // CgsSceneManager::SceneManagerIO::SceneCoarseQueryQueue (OutputBuffer_PostScene seat)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h" // TrafficDirectorOutputInterface (OutputBuffer_PostPhysics @+6208)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"      // TrafficTypeResponse (OutputBuffer_PostPhysics @+830144)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"  // TrafficToRaceCarInterface_PreScene (OutputBuffer_PreScene @+818784)
@@ -193,22 +195,30 @@ namespace BrnTrafficIO
     //   mActiveRaceCarOutputInterface (RCEntityActiveRaceCarOutputInterface) @ 1648  (0x670; 16-aligned)
     //   mRaceCarToTrafficInterface    (RaceCarToTrafficInterface)            follows
     //
-    // FLAG (opaque interior): RaceCarToTrafficInterface has no home in the tree, so it is a
-    // 1-byte placeholder. Nothing here touches its interior, and the two offsets that matter
-    // (@8 and @1648) are asserted in the .cpp bodies. Adopt the named type when its home lands.
+    // mRaceCarToTrafficInterface is the REAL race-car -> traffic interface
+    // (BrnRaceCarToTrafficInterface.h), not a placeholder: PostSceneUpdate republishes its two
+    // flags and its showtime density scale into the module every frame, so a 1-byte stand-in
+    // here read three fields out of whatever followed the member.
     class InputBuffer_PostScene : public CgsModule::IOBuffer
     {
     public:
         typedef BrnWorld::CrashIO::TrafficOutputInterface                             CrashTrafficOutputInterface; // DWARF :250
         typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarOutputInterface; // :240
-        // RaceCarToTrafficInterface home not yet reconstructed -- opaque placeholder (see FLAG).
-        struct RaceCarToTrafficInterface { u8 muDUMMY; };                                                          // :241
+        typedef BrnWorld::RaceCarEntityModuleIO::RaceCarToTrafficInterface            RaceCarToTrafficInterface;    // :241
 
+        // :225 -- the buffer bring-up CreateIOBuffer<T> runs. Without it all four embedded
+        // queues (two in the crash-traffic interface, two in the race-car-to-traffic one) keep
+        // whatever the IO stack's previous tenant left, and the first setter Clear+Appends onto
+        // a NULL mpEvents.
+        void Construct();
         const CrashTrafficOutputInterface* GetCrashTrafficOutputInterface() const;     // :228 (0x82710F20)
         void SetCrashTrafficOutputInterface(const CrashTrafficOutputInterface*);        // :229 (0x827ACDE8)
         const ActiveRaceCarOutputInterface* GetActiveRaceCarOutputInterface() const;   // :231
         void SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface*);      // :232 (0x8279FEA8)
         const RaceCarToTrafficInterface* GetRaceCarToTrafficInterface() const;         // :234 (0x82711070) read-lock; return &mRaceCarToTrafficInterface (this+12128)
+        // :235 -- write-lock; per-queue Clear+Append of the source's two rival queues, then the
+        // two scalars. Producer: WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene.
+        void SetRaceCarToTrafficInterface(const RaceCarToTrafficInterface*);
 
     private:
         CrashTrafficOutputInterface   mCrashTrafficOutputInterface;    // :239 @8
@@ -257,6 +267,14 @@ namespace BrnTrafficIO
         const RCEntityPlayerResetInterface* GetPlayerResetInterface() const;                     // :283
         void  SetPlayerResetInterface(const RCEntityPlayerResetInterface* lpPlayerResetInterface); // :284 W (0x827A0158)
 
+        typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueue;                       // :296
+
+        // :291 -- write-lock; &mSceneResultQueue (console +166960). The scene query-results
+        // fan-out (WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics) Appends the
+        // scene output's results ring onto it every frame.
+        SceneResultQueue*       GetSceneResultQueue();
+        const SceneResultQueue* GetSceneResultQueue() const;
+
         const PropToTrafficInterface* GetPropToTrafficInterface() const;                         // :289 (0x827113B8) read-lock; &member (this+199776)
         PropToTrafficInterface*       GetPropToTrafficInterface();                               // :290 (0x827A02D0) write-lock; &member (this+199776)
 
@@ -270,7 +288,7 @@ namespace BrnTrafficIO
         // opaque span its mbIsConstructed/miFirstEventOffset kept whatever the previous IO-stack
         // tenant left. Size-neutral: VariableEventQueue<BUFSIZE,ALIGN> is pointer-free
         // (bool + char[BUFSIZE] + three s32), so its host sizeof is 32,784, the span it replaces.
-        CgsModule::VariableEventQueue<32768, 16> mSceneResultQueue;                              // :296 (offset 166960)
+        SceneResultQueue             mSceneResultQueue;                                           // :296 (offset 166960)
         RCEntityPlayerResetInterface mPlayerResetInterface;                                       // :298 (offset 199744, 32B)
         PropToTrafficInterface       mPropToTrafficInterface;                                     // :299 (offset 199776, real type)
     };
@@ -312,6 +330,11 @@ namespace BrnTrafficIO
         // (CgsVariableEventQueue.h:454 / :728). Naming the type lets Construct() below build it.
         typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueStorage; // :373 span +0xEC30+sizeof(VMOI) .. +0x128C0
 
+        // Size-neutral in the same way: VariableEventQueue<32768,16> is pointer-free, so its
+        // host sizeof is 32,784 -- the span the opaque stand-in occupied. Naming it lets
+        // Construct() below build it and lets the scene-query bridge Append onto it.
+        typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueue;       // :371
+
         // The X360 CreateIOBuffer<T> runs T::Construct after the stack alloc; the PC template only
         // placement-news, so WorldModule::Update / UpdateForBootUpVideo call this explicitly.
         void Construct();
@@ -346,13 +369,15 @@ namespace BrnTrafficIO
         const GameActionQueueStorage*        GetGameActionQueue() const;               // :355 (0x827117A8) read-lock; &member (this+62640)
         GameActionQueueStorage*              GetGameActionQueue();                      // :356 (0x827A0618) write-lock; &member (this+62640)
 
-    private:
-        // Opaque-by-value stand-in for the scene-result queue member this batch does not touch,
-        // sized to the X360 span between the pinned real members (host offsets are not asserted).
-        struct SceneResultQueueStorage { unsigned char maReserved[32784]; }; // :371 span +0x10+sizeof(VOI) .. +0xEC30
+        // Write-lock; &mSceneResultQueue. The second leg of the scene query-results fan-out
+        // (WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics) Appends the same
+        // results ring onto this buffer's copy.
+        SceneResultQueue*       GetSceneResultQueue();
+        const SceneResultQueue* GetSceneResultQueue() const;
 
+    private:
         VehicleOutputInterface                     mVehicleOutputInterface;                       // :370  X360 +0x10
-        SceneResultQueueStorage                    mSceneResultQueue;                             // :371
+        SceneResultQueue                           mSceneResultQueue;                             // :371
         VehicleManagerOutputInterface              mVehicleManagerOutputInterface;                // :372  X360 +0xEC30
         GameActionQueueStorage                     mGameActionQueue;                              // :373
         ActiveRaceCarOutputInterface               mActiveRaceCarOutputInterface;                 // :374  X360 +0x128C0 (10480 B)
@@ -373,16 +398,17 @@ namespace BrnTrafficIO
     // mSceneCoarseQueryQueue is the SceneManager coarse-query input queue
     // (InputBuffer_Query::InSmCoarseQueryQueue == InCoarseQueryQueue<16384>, a
     // VariableEventQueue<16384,16> subclass that adds NO data members). The X360 places it at
-    // offset 4 (4-aligned, right after the 1-byte IOBuffer status), so it is modelled as a
-    // 4-ALIGNED 16400-byte sized blob -- NOT the alignas(16) SceneCoarseQueryQueue slice, which
-    // would force it to offset 16. mTrafficAIInterface (alignas 16) then lands at 16416 (16400
-    // queue ends at 16404, padded up to the next 16-boundary), matching the X360.
+    // offset 4, right after the 1-byte IOBuffer status, and the real queue type is itself
+    // 4-aligned (it carries no SIMD member and no alignas), so naming it keeps that seat.
+    // mTrafficAIInterface (alignas 16) then lands at 16416 (16400 queue ends at 16404, padded
+    // up to the next 16-boundary), matching the console.
     struct OutputBuffer_PostScene : public CgsModule::IOBuffer
     {
-        // 4-aligned sized blob for the coarse-query queue (sizeof(VariableEventQueue<16384,16>)
-        // == 1 + 16384 + 12 -> round to 4 == 16400). The full queue layout/methods belong to
-        // the SceneCoarseQueryQueue TU; this buffer only takes &mSceneCoarseQueryQueue.
-        struct SceneCoarseQueryQueue { unsigned char maReserved[16400]; };
+        // The real coarse-query queue (sizeof(VariableEventQueue<16384,16>)
+        // == 1 + 16384 + 12 -> round to 4 == 16400), the same span the sized blob that stood
+        // here occupied. WorldModule::BridgeTrafficModuleToSceneModule_PostScene Appends it
+        // into the scene query input buffer's own coarse queue every frame.
+        typedef CgsSceneManager::SceneManagerIO::SceneCoarseQueryQueue SceneCoarseQueryQueue;
 
         // DWARF :187 -- the trailing traffic->race-car post-scene interface. The DWARF spells
         // it as a 1-byte placeholder (muDUMMY); the X360 zeroes it in Construct. Modelled as the

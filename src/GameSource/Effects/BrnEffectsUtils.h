@@ -74,6 +74,14 @@ public:
     void    Prepare(Vector3 lvA, Vector3 lvB);
     Vector3 RandomInterpolate(CgsNumeric::Random &lrRandom);
 
+    // The bare one-slot ring draw RandomInterpolate is built on, exposed because the console
+    // inlines that draw at sites which lerp TWO vectors from ONE interpolant and so cannot be
+    // spelled as two RandomInterpolate calls (JumpStateMachine::FireWheelDebris draws once and
+    // lerps both cone bounds with it). Static, and here rather than on Random,
+    // because the ring members it touches are reachable only through this struct's friendship.
+    // Returns the interpolant in [0, 1) -- the value primed by the PREVIOUS draw.
+    static f32 DrawInterpolant(CgsNumeric::Random &lrRandom);
+
     // DWARF BrnEffectsUtils.h:121 / asm @ 0x82277EC8. Defined in BrnEffectsUtils.cpp.
     Vector3 RandomiseXYZ(CgsNumeric::Random &lrRandom);
 };

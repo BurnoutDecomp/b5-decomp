@@ -676,6 +676,12 @@ namespace BrnGui
         // GetBurnoutSkillsManager; no standalone X360 symbols).
         s32 GetGameMode() const                                  { return meGameModeType; }
 
+        // ADDITIVE GROW (CompassComponent::Update, which inlines the raw load of
+        // mfPlayerOrientation at +0x4B14 and turns it into the compass heading): the
+        // player's world heading in RADIANS. Same header-inline precedent as
+        // GetGuiTracker / GetGameMode above; no standalone console symbol.
+        f32 GetPlayerOrientation() const                         { return mfPlayerOrientation; }
+
         // ADDITIVE (results-screen wave 2026-08-29). The offline event-result record at
         // +0x9E68. InstantResultsState::HandleIncomingEvents @0x824DBAD8 case 64 takes a
         // wholesale 192-byte copy of it; expressing that as a struct read keeps the copy off

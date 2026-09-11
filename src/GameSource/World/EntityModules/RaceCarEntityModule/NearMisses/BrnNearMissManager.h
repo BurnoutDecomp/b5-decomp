@@ -78,16 +78,30 @@ namespace BrnWorld
         void AddNearRaceCar(u32 luRaceCarId);
         void AddNearTraffic(u32 luEntityId);
 
+        // Named typedefs.
+        typedef NearMissData<4, 8> TrafficNearMissData;
+        typedef NearMissData<4, 7> RaceCarNearMissData;
+
+        // ADDITIVE 2026-09-11, same rule as the ActiveRaceCar accessor blocks: the per-frame
+        // driver, RaceCarEntityModule::UpdateNearMisses, reaches these six seats DIRECTLY off
+        // the manager -- the four scalars at +0x00 / +0x04 / +0x26C / +0x26D, and the two
+        // sub-object bases it hands to NearMissData<A,B>::AddCrashed as bare displacements of
+        // the manager's own seat inside the module. Only SetSpeed is a console symbol (the
+        // compiler inlined the rest at the call site), so these exist purely so that producer
+        // names each seat instead of re-deriving an offset.
+        void SetSpeed(f32 lfSpeed)                     { mfSpeed = lfSpeed; }
+        void SetCrashing(bool lbCrashing)              { mbCrashing = lbCrashing; }
+        void SetNearMissTimeout(f32 lfTimeout)         { mfNearMissTimeout = lfTimeout; }
+        void SetFailedNearMissChain(bool lbFailed)     { mbFailedNearMissChain = lbFailed; }
+        TrafficNearMissData& GetTrafficNearMissData()  { return mTrafficNearMissData; }
+        RaceCarNearMissData& GetRaceCarNearMissData()  { return mRaceCarNearMissData; }
+
     private:
         // Re-prime the chain timeout, bump the chain count, notify the boost manager and push a
         // single NearMiss chain event of the given category. @0x822F88B8. (luEntityId is carried
         // for the caller's symmetry but is not read by the X360 body.)
         void NearMissEvent(ENearMissType leNearMissType, u32 luEntityId,
                            GameEventQueue* lpEventQueue, BoostManager* lpBoostManager);
-
-        // DWARF-named typedefs (BrnNearMissManager.h:49-50).
-        typedef NearMissData<4, 8> TrafficNearMissData;
-        typedef NearMissData<4, 7> RaceCarNearMissData;
 
         f32                 mfSpeed;               // +0x00
         f32                 mfNearMissTimeout;     // +0x04

@@ -13,8 +13,8 @@
 // method set verbatim from the DecFIGS DWARF (BrnMomentTumbling.h:47/:93-:106/
 // :116-:134); gated on the X360 ledger. This TU bodies Construct/Update/
 // Release/SetParameters/GetName/SignalIsGoodTimeToPlant; Prepare/Destruct/
-// GetInstanceType/SetGyroCamParameters and Parameters::Construct are their own
-// ledger functions (declaration-only, DWARF-gated).
+// GetInstanceType and Parameters::Construct are their own ledger functions
+// (declaration-only); SetGyroCamParameters is bodied with this TU.
 //
 // NOTE (mutual exclusion, the MomentHitTraffic precedent): BrnMomentSubclasses.h
 // carries a layout-stubbed MomentTumbling (its Parameters modelled there for the
@@ -81,8 +81,8 @@ namespace BrnDirector
         virtual EType GetInstanceType();
 
     private:
-        // DWARF cpp:4xx -- its own ledger function (declaration-only): push the
-        // subtype-selected gyro parameter block onto the freshly allocated rig.
+        // Bodied in this TU -- push the subtype-selected gyro parameter block onto
+        // the freshly allocated rig.
         void SetGyroCamParameters(const void* lSharedInfo);
 
         // DWARF h:93-:106 (X360 offsets in comments; access BY NAME).

@@ -90,6 +90,9 @@ namespace CgsSceneManager
         // slot  1  Destruct()
         // slot  2  Prepare()
         // slot  3  Release()
+        // slot  5  SphereTest(entityTypeFlags, centre, radius, resultBufferOut)
+        // slot  6  LineTest(entityTypeFlags, lineStart, lineEnd, resultBufferOut)
+        // slot  9  FrustumTestVp(entityTypeFlags, frustum, viewProjection, resultBufferOut)
         // slot 10  Update()
         // slot 11  SetEntityPosition(id, position)
         // slot 12  SetEntityRadius(id, radius)
@@ -106,12 +109,28 @@ namespace CgsSceneManager
         //   @0x828D3EA0 (`lwz r11,0x280(this) ; lwz r10,0(r11) ; lwz r11,0x18(r10) ; bctrl` with
         //   r4 = mx32EntityTypeFlags, r5 = the coarse result buffer, v1/v2 = start/end). DWARF
         //   CgsSpatialPartition.h:221: `virtual bool LineTest(EntityTypeFlags, Vector3, Vector3,
-        //   CoarseQueryResultBufferDefault*)`. The DWARF puts DebugRender (slot 4) and SphereTest
-        //   (slot 5) before it and FrustumTest / VolumeTest / FrustumTestVp (slots 7/8/9) after it;
-        //   those five are still undeclared here (no mounted caller yet) -- add them IN THAT ORDER
-        //   when one lands. Host vtable order is not load-bearing (named virtual calls).
+        //   CoarseQueryResultBufferDefault*)`. DebugRender (slot 4) sits before it and
+        //   FrustumTest / VolumeTest (slots 7/8) after it; those three are still undeclared
+        //   here (no mounted caller yet) -- add them IN THAT ORDER when one lands. Host vtable
+        //   order is not load-bearing (named virtual calls).
+        //
+        // slot  5  SphereTest(entityTypeFlags, centre, radius, resultBufferOut)
+        //   ADDED 2026-09-11, dispatched by SceneManagerModule::ProcessCoarseSphereTest. The
+        //   radius is the argument BETWEEN the centre and the buffer: it is the second scalar
+        //   parameter, which is what the call site's argument slots pin it to.
+        virtual bool SphereTest(u32 lx32EntityTypeFlags, Vector3 lCentre, float32_t lfRadius,
+                                CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual bool LineTest(u32 lx32EntityTypeFlags, Vector3 lLineStart, Vector3 lLineEnd,
                               CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
+        // slot  9  FrustumTestVp(entityTypeFlags, frustum, viewProjection, resultBufferOut)
+        //   ADDED 2026-09-11, dispatched by SceneManagerModule::ProcessCoarseFrustumTestVp with
+        //   the query's entity-type flags, its eight swizzled frustum planes, its view-projection
+        //   matrix and the coarse result buffer. (The next occupied slot is the SUBSET form,
+        //   which narrows an earlier query's result run instead of walking the tree; it has no
+        //   producer on this build -- see ProcessCoarseFrustumTestVp.)
+        virtual bool FrustumTestVp(u32 lx32EntityTypeFlags, const CgsGeometric::Frustum& lrFrustum,
+                                   const Matrix44& lrViewProjection,
+                                   CoarseQueryResultBuffer<16384>* lpResultBufferOut) = 0;
         virtual void Update() = 0;
         virtual void SetEntityPosition(u16 lu16Id, Vector3 lPosition) = 0;
         virtual void SetEntityRadius(u16 lu16Id, float32_t lfRadius) = 0;

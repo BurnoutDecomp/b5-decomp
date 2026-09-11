@@ -27,6 +27,7 @@
 //   LooseOctree::TrivialAcceptRecursive         @ 0x828B1B50
 //   LooseOctree::FrustumTestEntities            @ 0x828B1CA0
 //   LooseOctree::NodeInsideFrustum              @ 0x828BDAC0
+//   LooseOctree::SphereTest / SphereTestRecursive   (the coarse sphere query, 2026-09-11)
 //
 // Behaviour-faithful (semantic parity): the X360 hand-vectorises the geometry over
 // VMX; these bodies reproduce the same math on the named Vector3/Vector4 lanes.
@@ -73,6 +74,7 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h" // CoarseQueryResultBuffer<16384>
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG culling wave]
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // PerfMonCpu::Start/StopMonitor
 
 #include <cmath>     // std::fabs
 #include <cstdlib>   // std::getenv ([DIAG] BRN_CULL_OFF)
@@ -80,6 +82,11 @@
 
 namespace CgsSceneManager
 {
+    // The "Octree SphereTest" CPU monitor SphereTest brackets its traversal with. The
+    // tree's Construct registers none of the octree's monitors yet, so this stays -1 and
+    // PerfMonCpu::Start/StopMonitor no-op on the invalid handle.
+    s32 LooseOctree::_miSphereTestPerfMon = -1;
+
     namespace
     {
         // X360 unk_83085A70 (CgsLooseOctree.cpp:62, .data) --
@@ -1358,5 +1365,103 @@ namespace CgsSceneManager
         }
 
         return lbFullyInside ? 1u : 2u;
+    }
+
+    // ===========================================================================
+    // SphereTest -- the coarse sphere query (slot 5).
+    //
+    // Stage the traversal parameters the recursion reads by pointer -- the centre, the
+    // radius, the entity-type mask and the result buffer -- walk from the root bracketed by
+    // the octree's own CPU monitor, and report whether anything was attempted.
+    // ===========================================================================
+    bool LooseOctree::SphereTest(u32 lx32EntityTypeFlags, Vector3 lCentre, f32 lfRadius,
+                                 CoarseQueryResultBuffer<16384>* lpResultBufferOut)
+    {
+        SphereTestParams lParams;
+        lParams.mCentre             = lCentre;
+        lParams.mfRadius            = lfRadius;
+        lParams.mx32EntityTypeFlags = lx32EntityTypeFlags;
+        lParams.mpResultBuffer      = lpResultBufferOut;
+
+        const s32 liMonitor = _miSphereTestPerfMon;
+        CgsDev::PerfMonCpu::StartMonitor(liMonitor);
+        SphereTestRecursive(0, &lParams);
+        CgsDev::PerfMonCpu::StopMonitor(liMonitor);
+
+        return lpResultBufferOut->GetNumResultsAttempted() > 0;
+    }
+
+    // ===========================================================================
+    // SphereTestRecursive
+    //
+    //   reject unless the query sphere overlaps this node's loose box on ALL THREE axes:
+    //       |nodeCentre[i] - queryCentre[i]| <= nodeHalfExtent[i] + radius
+    //     with the half extents { HalfSize, HalfHeight, HalfSize } the walk rebuilds out of
+    //     mParams0.w / mParams1.z rather than reading mHalfDimensions;
+    //   test this node's own entity chain when the node's OR-of-type-masks intersects the
+    //     query and the chain is non-empty -- an entity is accepted when the centres are no
+    //     further apart than the two radii summed (compared squared, never rooted);
+    //   recurse into each of the FOUR children whose sub-tree type mask intersects the query.
+    // Unlike the frustum walk there is no trivial-accept arm: a sphere has no cheap
+    // "node entirely inside" classification here.
+    // ===========================================================================
+    void LooseOctree::SphereTestRecursive(u16 lu16NodeIndex, SphereTestParams* lpParams)
+    {
+        const LooseOctreeNode& lrNode = mpNodes[lu16NodeIndex];
+
+        const f32 lfHalfSize   = lrNode.GetHalfSize();
+        const f32 lfHalfHeight = lrNode.GetHalfHeight();
+
+        const f32 lfDx = lrNode.mPosition.x - lpParams->mCentre.x;
+        const f32 lfDy = lrNode.mPosition.y - lpParams->mCentre.y;
+        const f32 lfDz = lrNode.mPosition.z - lpParams->mCentre.z;
+
+        if (!(lfHalfSize   + lpParams->mfRadius >= std::fabs(lfDx)) ||
+            !(lfHalfHeight + lpParams->mfRadius >= std::fabs(lfDy)) ||
+            !(lfHalfSize   + lpParams->mfRadius >= std::fabs(lfDz)))
+        {
+            return;
+        }
+
+        if ((lrNode.mxNodeEntityFlags & lpParams->mx32EntityTypeFlags) != 0 &&
+            lrNode.muNumElements > 0)
+        {
+            u16 lu16Entity = lrNode.muHeadIndex;
+            while (lu16Entity != KU_INVALID_NODE)
+            {
+                const SpatialPartitionEntityLink& lrLink = GetEntityLink(lu16Entity);
+                if ((lrLink.mx32TypeFlags & lpParams->mx32EntityTypeFlags) != 0)
+                {
+                    const Vector4& lrSphere =
+                        GetEntityBoundingSphereConst(lu16Entity).mPositionRadius;
+
+                    const f32 lfEx = lpParams->mCentre.x - lrSphere.x;
+                    const f32 lfEy = lpParams->mCentre.y - lrSphere.y;
+                    const f32 lfEz = lpParams->mCentre.z - lrSphere.z;
+
+                    const f32 lfSumRadii = lrSphere.w + lpParams->mfRadius;
+
+                    if (lfSumRadii * lfSumRadii >=
+                        lfEx * lfEx + lfEy * lfEy + lfEz * lfEz)
+                    {
+                        lpParams->mpResultBuffer->PushResult(lu16Entity);
+                    }
+                }
+                lu16Entity = lrLink.mu16NextEntity;
+            }
+        }
+
+        if (lrNode.muFirstChildIndex != KU_INVALID_NODE)
+        {
+            for (u32 luChild = 0; luChild < KU_NUM_SUBNODES; ++luChild)
+            {
+                const u16 lu16ChildIndex = static_cast<u16>(lrNode.muFirstChildIndex + luChild);
+                if ((mpNodesEntityInfo[lu16ChildIndex].mxSubTreeEntityFlags &
+                     lpParams->mx32EntityTypeFlags) != 0)
+                {
+                    SphereTestRecursive(lu16ChildIndex, lpParams);
+                }
+            }
+        }
     }
 }

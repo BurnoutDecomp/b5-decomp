@@ -7,8 +7,7 @@
 //
 //   OnDetermineNextState @ 0x8229B9F8   OnChangeState  @ 0x82299510
 //   SetVapourBlend       @ 0x82288A58   OnTick         -- no export (empty base slot)
-//   FireWheelSparks      @ 0x82299670   FireWheelDebris @ 0x822939D8  (both PARKED --
-//                                       see their banners below)
+//   FireWheelSparks (still PARKED -- see its banner below)   FireWheelDebris
 //
 // The machine is ticked once per active car per frame: EffectsModule.cpp:1835 ->
 // ActiveRaceCarData::Tick -> EffectsStateMachine::Tick (EffectsStateMachine.cpp:49),
@@ -44,6 +43,7 @@
 #include "GameSource/Effects/Particles/BrnParticleDescription.h"  // ParticleDescription::HashString
 #include "GameSource/Effects/BrnEffectsDebugComponent.h"      // EffectsDebugComponent / EffectsDebugJumping
 #include "GameSource/Effects/Curves.h"                        // BrnEffects::Curves::SmoothStep
+#include "GameSource/Effects/BrnEffectsUtils.h"               // Utils::Vector3Randomiser (FireWheelDebris)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState / WheelLite
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // the [jump] diag witness
@@ -77,6 +77,35 @@ namespace
 
     // The LandedWaiting dwell before the machine finishes the jump (flt_8200DD24 == 3.0).
     const f32 KF_LANDED_WAITING_TIME = 3.0f;
+
+    // ---- FireWheelDebris literals ------------------------------------------------
+    // The speed ramp the burst count rides, and the count it maps onto. Below the low
+    // speed the ramp is negative and the whole burst is skipped.
+    const f32 KF_DEBRIS_SPEED_LOW  = 17.877777099609375f;
+    const f32 KF_DEBRIS_SPEED_HIGH = 53.63333511352539f;
+    const f32 KF_DEBRIS_MIN_BURST  = 20.0f;
+    const f32 KF_DEBRIS_MAX_BURST  = 40.0f;
+
+    // The debris size: draw^2 scaled onto [0.04, 0.10].
+    const f32 KF_DEBRIS_SIZE_MIN   = 0.03999999910593033f;
+    const f32 KF_DEBRIS_SIZE_RANGE = 0.06000000238418579f;
+
+    // How much of the car's surface-tangential velocity a piece inherits: a draw in
+    // [0.8, 1.1] (both dynamically-initialised splats).
+    const f32 KF_DEBRIS_INHERIT_MIN = 0.800000011920929f;
+    const f32 KF_DEBRIS_INHERIT_MAX = 1.100000023841858f;
+
+    // The two ejection-cone bound PAIRS, lerped between by one shared draw: NARROW is the
+    // pair used at interpolant 0, WIDE at 1. Lateral spread widens from +-3 to +-7 and the
+    // upward component from [1, 4] to [1, 6].
+    const Vector3 KV_DEBRIS_CONE_MIN_NARROW = { -3.0f, 1.0f, -3.0f, 0.0f };
+    const Vector3 KV_DEBRIS_CONE_MAX_NARROW = {  3.0f, 4.0f,  3.0f, 0.0f };
+    const Vector3 KV_DEBRIS_CONE_MIN_WIDE   = { -7.0f, 1.0f, -7.0f, 0.0f };
+    const Vector3 KV_DEBRIS_CONE_MAX_WIDE   = {  7.0f, 6.0f,  7.0f, 0.0f };
+
+    // The colour argument (a 1.0 splat). Ignored by SpawnDebris for every type but
+    // eDebrisArray_Coloured, and this burst is Dark.
+    const Vector4 KV_DEBRIS_WHITE = { 1.0f, 1.0f, 1.0f, 1.0f };
 
     // The three LION effect paths, read out of the ARTIST image at the pointer table
     // off_82CDAE58 / off_82CDAE5C / off_82CDAE60.
@@ -237,32 +266,151 @@ void JumpStateMachine::FireWheelSparks(CarState& /*lCarState*/,
 }
 
 // =============================================================================
-// FireWheelDebris @ 0x822939D8 -- PARKED, and announced rather than faked.
+// FireWheelDebris
 //
-// The X360 body normalises the car's linear velocity, runs it through a smoothstep
-// over the rodata pair flt_82CDAE64 / flt_82CDAE68 to get a burst count between
-// flt_82CDAE6C and flt_82CDAE70, and then, once per burst, draws a rejection-sampled
-// unit direction out of the effects module's random pool, offsets it through
-// BrnEffects::Utils::Vector3Randomiser::RandomiseXYZ, and calls
-// BrnParticle::ParticleModule::SpawnDebris with debris type 2.
+// The landing debris burst: a spray of dark debris thrown off the line between the two
+// REAR wheel contact patches, sized and counted by how fast the car is travelling.
 //
-// BLOCKER: ParticleModule::SpawnDebris has NO declaration and NO definition anywhere
-// in the tree (`tools/re/hasbody.py ParticleModule::SpawnDebris` -> NO DEFINITION IN
-// THE TREE; ParticleModule.h declares only the Native::BrnDebrisArray::SpawnDebris it
-// eventually dispatches to). Six of the vectors the burst shape reads
-// (unk_82FAB7C0 / unk_82FAB8C0 / unk_82FAC110 / unk_82FAC120 / unk_82FAC130 /
-// unk_82FAC370) are also unnamed rodata with no attested owner. The ladder keeps its
-// call -- the control flow is faithful -- and only the debris burst is missing.
-// UNPARK WHEN ParticleModule::SpawnDebris has a body.
+// SPEED -> BURST COUNT. |mLinearVelocity| is mapped onto [0, 1] across
+// KF_DEBRIS_SPEED_LOW .. KF_DEBRIS_SPEED_HIGH; below the low end the ramp goes negative
+// and the whole function returns. One scalar ring draw scales that ramp, the product is
+// clamped at 1, and the count is the truncated KF_DEBRIS_MIN_BURST + t * (MAX - MIN).
+//
+// THE SPAWN SEGMENT is the two rear wheels' road-contact points, each lifted along the
+// car's world up axis (mTransform.yAxis) by that wheel's radius; each burst picks a
+// point on it with one ring draw. The mean of the two contact NORMALS is the surface the
+// inherited velocity is flattened against: the car's velocity minus its component along
+// that mean, scaled by a draw in [0.8, 1.1].
+//
+// THE EJECTION VELOCITY is Vector3Randomiser::RandomiseXYZ over a cone whose two bounds
+// are themselves lerped (by ONE shared draw, hence DrawInterpolant) between a narrow and
+// a wide pair -- so a single burst is either tight or broad, never mixed.
+//
+// THE ROTATION AXIS is a uniform point on the unit sphere by Marsaglia rejection: draw
+// u, v in [-1, 1) until u*u + v*v < 1, then (2*u*s, 2*v*s, 2*(u*u+v*v) - 1) with
+// s = sqrt(1 - u*u - v*v).
+//
+// The six burst-shape vectors are dynamically-initialised .bss splats (a literal read of
+// their addresses returns zero by definition); each was recovered through its CRT init
+// startup initialiser, which was located and disassembled to read the values off.
 // =============================================================================
-void JumpStateMachine::FireWheelDebris(CarState& /*lCarState*/,
-                                       RaceCarParticleEffectHelper& /*lHelper*/) const
+void JumpStateMachine::FireWheelDebris(CarState& lCarState,
+                                       RaceCarParticleEffectHelper& lHelper) const
 {
-    static bool sbSaid = false;
-    if (JumpDiagTakeOnce(sbSaid))
+    const BrnPhysics::Vehicle::RaceCarState* lpCar = lHelper.RaceCarState();
+    CgsNumeric::Random& lrRandom = lHelper.GetEffectsModule()->RandomNumberGenerator();
+
+    // speed = |mLinearVelocity| (the original is a reciprocal-square-root approximation with
+    // two Newton refinements, guarded so |v|^2 == 0 yields 0).
+    const Vector3& lvVelocity = lpCar->mLinearVelocity;
+    const f32 lfSpeed = sqrtf(lvVelocity.x * lvVelocity.x
+                            + lvVelocity.y * lvVelocity.y
+                            + lvVelocity.z * lvVelocity.z);
+
+    const f32 lfSpeedRamp = (1.0f / (KF_DEBRIS_SPEED_HIGH - KF_DEBRIS_SPEED_LOW))
+                          * (lfSpeed - KF_DEBRIS_SPEED_LOW);
+    if (lfSpeedRamp < 0.0f)
     {
-        JumpDiagText("[jump] FireWheelDebris @0x822939D8 PARKED "
-                     "(ParticleModule::SpawnDebris has no body)\n");
+        return;
+    }
+
+    f32 lfBurstRamp = lrRandom.RandomFloat() * lfSpeedRamp;
+    if ((lfBurstRamp - 1.0f) >= 0.0f)
+    {
+        lfBurstRamp = 1.0f;
+    }
+    const s32 liBurstCount = static_cast<s32>(
+        lfBurstRamp * (KF_DEBRIS_MAX_BURST - KF_DEBRIS_MIN_BURST) + KF_DEBRIS_MIN_BURST);
+
+    // ---- the spawn segment and the surface the inherited velocity flattens against ----
+    const BrnPhysics::Vehicle::WheelLite& lrRearLeft  = lpCar->maWheels[2];
+    const BrnPhysics::Vehicle::WheelLite& lrRearRight = lpCar->maWheels[3];
+    const Vector3& lvUp = lpCar->mTransform.yAxis;
+
+    const Vector3 lvSegmentStart = {
+        lvUp.x * lrRearLeft.mfRadius + lrRearLeft.mRoadContact.mPosition.x,
+        lvUp.y * lrRearLeft.mfRadius + lrRearLeft.mRoadContact.mPosition.y,
+        lvUp.z * lrRearLeft.mfRadius + lrRearLeft.mRoadContact.mPosition.z, 0.0f };
+    const Vector3 lvSegmentEnd = {
+        lvUp.x * lrRearRight.mfRadius + lrRearRight.mRoadContact.mPosition.x,
+        lvUp.y * lrRearRight.mfRadius + lrRearRight.mRoadContact.mPosition.y,
+        lvUp.z * lrRearRight.mfRadius + lrRearRight.mRoadContact.mPosition.z, 0.0f };
+
+    const Vector3 lvMeanNormal = {
+        (lrRearLeft.mRoadContact.mNormal.x + lrRearRight.mRoadContact.mNormal.x) * 0.5f,
+        (lrRearLeft.mRoadContact.mNormal.y + lrRearRight.mRoadContact.mNormal.y) * 0.5f,
+        (lrRearLeft.mRoadContact.mNormal.z + lrRearRight.mRoadContact.mNormal.z) * 0.5f, 0.0f };
+
+    // ---- the ejection cone: both bounds lerped by ONE shared draw ----
+    const f32 lfConeWidth = Utils::Vector3Randomiser::DrawInterpolant(lrRandom);
+    const Vector3 lvConeMin = {
+        (KV_DEBRIS_CONE_MIN_WIDE.x - KV_DEBRIS_CONE_MIN_NARROW.x) * lfConeWidth + KV_DEBRIS_CONE_MIN_NARROW.x,
+        (KV_DEBRIS_CONE_MIN_WIDE.y - KV_DEBRIS_CONE_MIN_NARROW.y) * lfConeWidth + KV_DEBRIS_CONE_MIN_NARROW.y,
+        (KV_DEBRIS_CONE_MIN_WIDE.z - KV_DEBRIS_CONE_MIN_NARROW.z) * lfConeWidth + KV_DEBRIS_CONE_MIN_NARROW.z,
+        0.0f };
+    const Vector3 lvConeMax = {
+        (KV_DEBRIS_CONE_MAX_WIDE.x - KV_DEBRIS_CONE_MAX_NARROW.x) * lfConeWidth + KV_DEBRIS_CONE_MAX_NARROW.x,
+        (KV_DEBRIS_CONE_MAX_WIDE.y - KV_DEBRIS_CONE_MAX_NARROW.y) * lfConeWidth + KV_DEBRIS_CONE_MAX_NARROW.y,
+        (KV_DEBRIS_CONE_MAX_WIDE.z - KV_DEBRIS_CONE_MAX_NARROW.z) * lfConeWidth + KV_DEBRIS_CONE_MAX_NARROW.z,
+        0.0f };
+
+    // ---- the inherited velocity: the car's velocity flattened onto the mean normal ----
+    const f32 lfAlongNormal = lvVelocity.x * lvMeanNormal.x
+                            + lvVelocity.y * lvMeanNormal.y
+                            + lvVelocity.z * lvMeanNormal.z;
+    const Vector3 lvTangential = { lvVelocity.x - lvMeanNormal.x * lfAlongNormal,
+                                   lvVelocity.y - lvMeanNormal.y * lfAlongNormal,
+                                   lvVelocity.z - lvMeanNormal.z * lfAlongNormal, 0.0f };
+
+    Utils::Vector3Randomiser lPositionRandomiser;
+    lPositionRandomiser.Prepare(lvSegmentStart, lvSegmentEnd);
+
+    Utils::Vector3Randomiser lEjectionRandomiser;
+    lEjectionRandomiser.Prepare(lvConeMin, lvConeMax);
+
+    Utils::Vector3Randomiser lInheritRandomiser;
+    lInheritRandomiser.Prepare(
+        { lvTangential.x * KF_DEBRIS_INHERIT_MIN, lvTangential.y * KF_DEBRIS_INHERIT_MIN,
+          lvTangential.z * KF_DEBRIS_INHERIT_MIN, 0.0f },
+        { lvTangential.x * KF_DEBRIS_INHERIT_MAX, lvTangential.y * KF_DEBRIS_INHERIT_MAX,
+          lvTangential.z * KF_DEBRIS_INHERIT_MAX, 0.0f });
+
+    for (s32 liBurst = 0; liBurst < liBurstCount; ++liBurst)
+    {
+        const Vector3 lvPosition  = lPositionRandomiser.RandomInterpolate(lrRandom);
+        const Vector3 lvEjection  = lEjectionRandomiser.RandomiseXYZ(lrRandom);
+        const Vector3 lvInherited = lInheritRandomiser.RandomInterpolate(lrRandom);
+        const Vector3 lvDebrisVelocity = { lvEjection.x + lvInherited.x,
+                                           lvEjection.y + lvInherited.y,
+                                           lvEjection.z + lvInherited.z, 0.0f };
+
+        // Marsaglia rejection: a uniform point on the unit sphere.
+        f32 lfU;
+        f32 lfV;
+        f32 lfRadiusSq;
+        do
+        {
+            lfU = lrRandom.RandomFloat(-1.0f, 1.0f);
+            lfV = lrRandom.RandomFloat(-1.0f, 1.0f);
+            lfRadiusSq = lfV * lfV + lfU * lfU;
+        }
+        while (lfRadiusSq >= 1.0f);
+
+        const f32 lfSphereScale = sqrtf(1.0f - lfRadiusSq) * 2.0f;
+        const Vector3 lvRotationAxis = { lfSphereScale * lfU,
+                                         lfSphereScale * lfV,
+                                         lfRadiusSq * 2.0f - 1.0f, 0.0f };
+
+        const f32 lfSizeDraw = lrRandom.RandomFloat();
+        const f32 lfSize = (lfSizeDraw * lfSizeDraw) * KF_DEBRIS_SIZE_RANGE + KF_DEBRIS_SIZE_MIN;
+
+        lHelper.ParticleModule().SpawnDebris(BrnParticle::Native::eDebrisArray_Dark,
+                                             lvPosition,
+                                             lvDebrisVelocity,
+                                             lvRotationAxis,
+                                             KV_DEBRIS_WHITE,
+                                             lfSize,
+                                             lCarState.GetTime());
     }
 }
 

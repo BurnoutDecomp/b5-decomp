@@ -75,8 +75,6 @@ namespace BrnGui
 
         // @ 0x8242E160 -- per-frame: scroll the compass to the player heading, then show
         // the destination/checkpoint/challenge marker for the current game mode (or hide it).
-        // BLOCKED (todo): needs un-homed GuiTracker::GetActivelyTrackedLandmarks /
-        // GetNumActivelyTrackedLandmarks and the GuiCache tracker/heading/event-landmark reads.
         void Update();
 
         // @ 0x824115E8 -- play the visible / transin / invisible / transout timeline label

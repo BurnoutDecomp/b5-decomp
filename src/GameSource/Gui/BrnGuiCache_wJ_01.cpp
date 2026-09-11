@@ -748,9 +748,9 @@ namespace BrnGui
     // records, read by CrashNavIconRenderer::GetNumIcons @0x82456C68 and by
     // OnlineSelectRoute::UpdateAfterToggleChange @0x8249E558.
     //
-    // ⭐ ADDRESS + SHAPE CORRECTION (this wave). BrnGuiCache_GetNumEventStarts.cpp (UNMOUNTED)
-    // carried this as a tail-FORWARDER to SetUpAllEventStartsInterface::GetNumEventStarts, on
-    // the strength of a 0x824F8830 attribution the header has since retired. The real export
+    // ⭐ ADDRESS + SHAPE CORRECTION (this wave). An earlier split-out TU carried this as a
+    // tail-FORWARDER to SetUpAllEventStartsInterface::GetNumEventStarts, on the strength of
+    // a 0x824F8830 attribution the header has since retired. The real export
     // at 0x8241E4C8 forwards to nothing at all -- it is four instructions plus the array
     // guard:
     //     addi r31, r3, 0x5690      ; &mSetUpAllEventStartsInterface

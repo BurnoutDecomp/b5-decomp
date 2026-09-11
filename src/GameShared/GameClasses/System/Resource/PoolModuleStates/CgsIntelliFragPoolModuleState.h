@@ -10,12 +10,10 @@
 // staging the relocations through a ScratchPool. It derives from BaseDefragPoolModuleState and
 // overrides the two strategy hooks.
 //
-// DECOMPILED from BURNOUT_X360_ARTIST.XEX. Member offsets read from the inlined field accesses in
-// Begin (0x828DA908: miMaxToMove (base) set to 0x200000 @ +0x48, meState@+0x4C, mpScratchPool@+0x50)
-// and RunPoolDefragmentation (0x828F80C0: mpPool@+0xC via the base, mpScratchPool@+0x50). The two
+// Member offsets read from the inlined field accesses in Begin and RunPoolDefragmentation. The two
 // derived members sit immediately after the base's miMaxToMove (+0x48), so meState lands at +0x4C.
 // Field widths follow the x64 PC target (pointers widen); order/types are faithful. We identify
-// members by the X360 offsets but do NOT byte-match.
+// members by the console offsets but do NOT byte-match.
 
 namespace CgsResource
 {
@@ -50,19 +48,19 @@ namespace CgsResource
         };
 
         // ---- lifecycle / step machine (Construct / Update bodied by their own passes) ----------
-        void Construct(PoolModule* lpPoolModule);                  // .cpp:41 (deferred)
-        void Begin(IntelliFragParams* lpParams);                   // .cpp:59 (THIS PASS @ 0x828DA908)
-        EIntelliFragResult Update();                               // .cpp:82 (deferred)
+        void Construct(PoolModule* lpPoolModule);                  // deferred
+        void Begin(IntelliFragParams* lpParams);
+        EIntelliFragResult Update();
 
     private:
         // ---- the two concrete-strategy hooks (overrides) --------------------------------------
         virtual bool RunDefragAlgorithm(AllocListSet* lpAllocListSet, LinearHeapNode* lpNodes,
-                                        s32 liLastNode, s32 liMemType) override;       // .cpp:179 (THIS PASS @ 0x828E3EB8)
+                                        s32 liLastNode, s32 liMemType) override;
         virtual void RunPoolDefragmentation(RelocateRequest* lpRequests, RelocateSource* lpSources,
-                                            u32 luNum, s32 liMemType) override;        // .cpp:279 (THIS PASS @ 0x828F80C0)
+                                            u32 luNum, s32 liMemType) override;
 
-        // ---- Layout (offsets verified against the X360 asm; first derived member at +0x4C) -----
-        EInternalState meState;        // +0x4C  :76
-        ScratchPool*   mpScratchPool;  // +0x50  :77
+        // ---- Layout (first derived member at +0x4C) --------------------------------------
+        EInternalState meState;        // +0x4C
+        ScratchPool*   mpScratchPool;  // +0x50
     };
 }

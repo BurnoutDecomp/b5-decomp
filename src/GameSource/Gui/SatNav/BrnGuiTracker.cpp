@@ -497,4 +497,16 @@ const BrnGameState::LandmarkIndex* GuiTracker::GetActivelyTrackedLandmarks()
     }
     return maActivelyTrackedLandmarks;
 }
+
+// The entry count of the list GetActivelyTrackedLandmarks refreshes.
+// Nothing tracked -> 0; otherwise the [miCurrentlyTrackedIndex, miTrackerCount) tail, which
+// is exactly the span the refresh loop above writes. No asserts on the console side.
+s32 GuiTracker::GetNumActivelyTrackedLandmarks() const
+{
+    if (miCurrentlyTrackedIndex == -1)
+    {
+        return 0;
+    }
+    return miTrackerCount - miCurrentlyTrackedIndex;
+}
 }

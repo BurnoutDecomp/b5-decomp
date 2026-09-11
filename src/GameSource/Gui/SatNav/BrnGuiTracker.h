@@ -234,9 +234,8 @@ namespace BrnGui
         //     mpGuiCache and mPlayersTrackerInfo are bound once at boot; the console
         //     re-posts 64 per cache update and this build does not, so the player's own
         //     record does not follow the camera yet.
-        //   * GuiTracker::Update @0x82511BD0, ContructRouteNodeFromTrackedItem @0x8250A520,
-        //     GetNumActivelyTrackedLandmarks @0x824F4330 and GetActivelyTrackedLandmarks
-        //     @0x824F4358 are still unreconstructed (no body anywhere in the tree).
+        //   * GuiTracker::Update and ContructRouteNodeFromTrackedItem
+        //     are still unreconstructed (no body anywhere in the tree).
         void RecEvent(const CgsModule::Event* lpEvent, s32 liEventId, s32 liEventSizeBytes);
 
         // @ 0x824FA008 -- flatten every received route record's live points into
@@ -253,6 +252,12 @@ namespace BrnGui
         // Inlined by EventInfoComponent::UpdateDestinationText, ARTIST0x82412F78.
         s32 GetCurrentlyTrackedIndex() const { return miCurrentlyTrackedIndex; }
         const BrnGameState::LandmarkIndex* GetActivelyTrackedLandmarks(); // ARTIST 0x824F4358
+
+        // How many entries GetActivelyTrackedLandmarks above refreshes:
+        // zero when nothing is being tracked (miCurrentlyTrackedIndex == -1), otherwise the
+        // tail of the record array from the currently-tracked index onward. The two share
+        // one loop bound, so a caller may index the returned list with [0, this).
+        s32 GetNumActivelyTrackedLandmarks() const;
 
     private:
         // ===============================================================================

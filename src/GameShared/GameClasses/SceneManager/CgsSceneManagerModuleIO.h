@@ -16,6 +16,7 @@
 // here from the former local minimal slice -- now lives in CgsSceneManagerIO_SceneUpdate.h.
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // CgsSceneManager::SceneManagerIO::InSceneUpdateInterface
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_Event.h"       // CgsSceneManager::SceneManagerIO::Event (single canonical definition)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h" // InEventLineTestFine (SceneFineLineTestQueue element)
 
 namespace CgsSceneManager
 {
@@ -102,9 +103,8 @@ namespace SceneManagerIO
     {
     };
 
-    // MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
-    // reconstructed by SceneFineLineTestQueue's own TU (DWARF home
-    // CgsSceneManagerModuleIO.h). Size 16400 (DWARF-derived: see below).
+    // CgsSceneManager::SceneManagerIO::SceneFineLineTestQueue -- the fine line-test input
+    // queue the module IO buffers embed by value. Size 16400 (see below).
     //
     // In BrnRaceCarEntityModuleIO.h, OutputBuffer_PostScene declares
     //   typedef InputBuffer_Query::InFineLineTestQueue SceneFineLineTestQueue;  // :78
@@ -117,13 +117,10 @@ namespace SceneManagerIO
     //   + SceneQueryId(4) + EntityTypeFlags u32(4) + EntityId(4) + EExclusionMode enum(4)
     //   + VolumeTypeFlags u8(1) -> 49 bytes, alignas(16) (carries Vector3) -> 64 bytes.
     //   So sizeof == 16 + 256*64 = 16400 bytes. Carries Vector3, so alignas(16).
-    // Per the stub rules the real EventQueue/BaseEventQueue generic + the
-    // InEventLineTestFine element are intentionally NOT pulled in; a complete sized
-    // blob unlocks the buffer (the IO header only takes &member). Full layout belongs
-    // to this type's own ledger TU.
-    struct alignas(16) SceneFineLineTestQueue
-    {
-        unsigned char maReserved[16400];
-    };
+    // That is exactly the span the sized blob that stood here occupied, so naming the
+    // real queue type is size-neutral and gains it Construct/Append/AddEvent -- which is
+    // what lets WorldModule::BridgeRaceCarModuleToSceneModule_PostScene merge it into the
+    // scene query input buffer's own fine line-test queue.
+    typedef CgsModule::EventQueue<InEventLineTestFine, 256> SceneFineLineTestQueue;
 }
 }

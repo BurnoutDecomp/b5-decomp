@@ -393,9 +393,10 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
         //   BurnoutSkillzManager::PreWorldUpdate(this+3136, lpPreWorldInputBuffer,
         //                                        lpActiveRaceCarOutput, lpOutputBuffer, true)
         // this+3136 is the BurnoutSkillzManager region embedded INSIDE mOnlineFreeBurnLobby
-        // (BrnModeManager.h's member run pins the lobby at +2952 and the skillz region at +3136);
-        // the host header exposes no accessor for it, and the Skillz TU carries the known
-        // GameActionQueue typedef clash the wave brief puts out of scope.
+        // (BrnModeManager.h's member run pins the lobby at +2952 and the skillz region at +3136).
+        // OnlineFreeBurnLobbyMode declares no members at all on host, so there is no such region
+        // to address and no accessor to reach it; the manager's own TU is also still off the
+        // build (five unresolved externals, roll-call in the bat's STILL OUT rem).
     }
 
     // ---- (7) the intro-just-finished latch -----------------------------------------------------

@@ -42,7 +42,7 @@
 // arm whose component TU is not on the build (tools/build/build_game_exe.bat) or whose method
 // has no declaration yet keeps the X360 gate and control flow verbatim and logs the gap once
 // instead of inventing a body. Deferred here: PlayerPositionTableComponent, PaybackComponent,
-// OnlineTimeoutComponent, CompassComponent, ChallengeSelector, the five FriendsListComponent
+// OnlineTimeoutComponent, ChallengeSelector, the five FriendsListComponent
 // entry points that have no body anywhere, HandleMugshotEvent (not declared -- it is in the
 // header's RESIDUE block) and the freeburn challenge-on arm. For E_MODE_STUNT_ATTACK (7)
 // UpdateSetupState turns the gate byte OFF for every one of those except the friends list,
@@ -799,8 +799,7 @@ namespace BrnGui
         }
         if (mbCompass)
         {
-            // FLAG deferred: BrnCompassComponent.cpp is bodied but not on the build.
-            LogDeferredComponent("CompassComponent::Update");
+            mCompass.Update();
         }
         if (mbFreeburnChallengeOnComponent)
         {

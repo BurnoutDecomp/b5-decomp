@@ -156,6 +156,17 @@ namespace BrnParticle
         };
 
         u16 mu16DebrisCount;                                          // :133 +0x00
+        u8  maPadCountToRecords[0x10 - sizeof(u16)];                  // -> +0x10
+
+        // FLAG -- not named by the layout source, which carries only the count. Both ends of
+        // the record put the payload at +0x10 and nowhere else: ParticleModule::SpawnDebris and
+        // ::PreRenderUpdate both copy the 16-byte header and then count * 80 payload bytes to
+        // +0x10, and ProcessEventQueue case 4 walks from +0x10 at an 80-byte stride. The event is
+        // variable-length (the allocation is count * 80 + 16), so the array is sized at the spawn
+        // buffer's own capacity -- the largest batch SpawnDebris can ever publish -- and is only
+        // ever reached through a pointer into that allocation.
+        static const u16 KU16_MAX_DEBRIS_PER_BATCH = 32;
+        DebrisSpawnData maDebris[KU16_MAX_DEBRIS_PER_BATCH];          // +0x10
     };
 
     // BrnParticleModuleIO_EventTypes.h:138.

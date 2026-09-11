@@ -1,6 +1,7 @@
 // =============================================================================
 // BrnEffectsDebrisColourRandomiser.cpp
-//   (OWNING HOME for BrnEffects::Utils::DebrisColourRandomiser)
+//   (bodies for BrnEffects::Utils::DebrisColourRandomiser; the struct itself is
+//    declared in BrnEffectsDebrisColourRandomiser.h so SpawnDebris can reach it)
 //
 // The per-spawn debris colour randomiser (callers BrnParticle::ParticleModule::
 // SpawnDebris / HandleFireDebrisBurstEvent). A sibling of the Vector3/Vector4
@@ -30,29 +31,12 @@
 //   lvResult.w = 1.0f                           (vrlimi128 of the 1.0 splat)
 // =============================================================================
 
-#include "BrnCommonTypes.h"   // Vector4 (rw::math::vpu float lanes)
-#include "GameShared/GameClasses/Numeric/CgsRandom.h"  // CgsNumeric::Random (+ LCG constants)
+#include "GameSource/Effects/BrnEffectsDebrisColourRandomiser.h"
 
 namespace BrnEffects
 {
 namespace Utils
 {
-
-struct DebrisColourRandomiser
-{
-private:
-    // asm-attested base/range pair the body reads (lvx128 @ +0x00 / +0x10 off _R4).
-    Vector4 mVecBase;   // +0x00
-    Vector4 mVecRange;  // +0x10
-
-    // One LCG draw from the Random ring (reused BY NAME via the friend grant in
-    // CgsRandom.h). A member so the friendship reaches muSeed / the ring / index.
-    static Vector4 DrawNextRingVector(CgsNumeric::Random& lrRandom);
-
-public:
-    // @ 0x8227E698. Draws a randomised colour into lrOut.
-    void Randomise(Vector4& lrOut, CgsNumeric::Random& lrRandom);
-};
 
 // One LCG draw: pack the high word of the PRE-step seed into a [1, 2) float,
 // write it into the ring at slot ((index + 3) & 4), advance index and seed, and

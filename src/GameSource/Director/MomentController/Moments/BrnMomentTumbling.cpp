@@ -8,10 +8,11 @@
 // (DWARF primary file BrnMomentTumbling.cpp; member/parameter names verbatim
 // from the DecFIGS DWARF).
 //
-// Bodied here (6 ledger functions):
+// Bodied here (7 ledger functions):
 //   Construct @0x8225ED28   Update @0x82271F28   Release @0x8223A990
 //   SetParameters @0x821F75A8   GetName @0x821F75B0
 //   SignalIsGoodTimeToPlant @0x8220A078
+//   SetGyroCamParameters
 
 namespace BrnDirector
 {
@@ -20,8 +21,8 @@ namespace
 {
     // XEX rodata: the per-frame angular-velocity smoothing factor (@0x82001AEC)
     // and the tumble speed-squared eligibility threshold (@0x82CDADAC; the DWARF
-    // statics kfTumbleSensitivity / kfTumbleStartThreshold -- kfTumbleStopThreshold
-    // belongs to SetGyroCamParameters' own TU).
+    // statics kfTumbleSensitivity / kfTumbleStartThreshold. The third static,
+    // kfTumbleStopThreshold, is read by nothing this TU bodies).
     const f32 KF_TUMBLE_SENSITIVITY     = 0.1f;     // cpp:21 (@0x82001AEC)
     const f32 KF_TUMBLE_START_THRESHOLD = 200.0f;   // cpp:22 (@0x82CDADAC; |v|^2)
 
@@ -63,6 +64,9 @@ namespace detail
     const rw::math::vpu::Vector3& MomentSharedInfo_GetPlayerAngularVelocity(const void* lpSharedInfo);  // +832
 
     const AllVehicleData* MomentSharedInfo_GetAllVehicleData(const void* lpSharedInfo);   // +1288
+
+    // The named camera parameter record SetGyroCamParameters picks its gyro block out of.
+    const NamedParameters* MomentSharedInfo_GetNamedBehaviourParams(const void* lpSharedInfo);
 
     // ⭐ RETIRED 2026-08-23 (moment-camera wave). This used to be a DECLARATION-ONLY
     // `VehicleInfo_GetVelocity(const VehicleInfo&)` shim -- an unresolved external AND an
@@ -112,6 +116,76 @@ void MomentTumbling::SetParameters(const Moment::Parameters* lpParameters)
 const char* MomentTumbling::GetName() const
 {
     return "MomentTumbling";
+}
+
+// Push the subtype-selected gyro parameter block onto the rig this moment has
+// just allocated. Five subtype arms, each naming one block of
+// the named camera parameter record; the block names and the subtype names agree
+// (see the RECORD MAP banner in BrnBehaviourParameterBank.h for how they are pinned).
+//
+// The TRUCKING_SIDE arm is the only one with state: it alternates left / right block
+// across allocations and latches which side this crash settled on, so a crash that
+// re-allocates the rig keeps the side it started with rather than flip-flopping.
+//   - already latched left            -> the left block, no state change
+//   - already latched right           -> the right block, no state change
+//   - neither latched: mbTryLeft picks the block, that side's latch goes up, and
+//     mbTryLeft flips so the NEXT crash starts on the other side
+// The alternation is deliberately not collapsed into the two latch tests: the console
+// re-reads mbUseLeftForThisCrash inside the right-latched arm, and the flip is a
+// separate statement that runs on the un-latched path only.
+void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
+{
+    const NamedParameters& lrNamed = *MomentSharedInfo_GetNamedBehaviourParams(lSharedInfo);
+
+    switch (mpParameters->meSubType)
+    {
+    case Parameters::E_SUBTYPE_TRUCKING_SIDE:
+        if (!mbUseLeftForThisCrash)
+        {
+            if (mbUseRightForThisCrash)
+            {
+                mGyroCam.GetBehaviour()->SetParameters(
+                    &lrNamed.mGyroCamDefaultSideTruckingRightParams);
+                return;
+            }
+            if (!mbTryLeft)
+            {
+                mGyroCam.GetBehaviour()->SetParameters(
+                    &lrNamed.mGyroCamDefaultSideTruckingRightParams);
+                mbUseRightForThisCrash = true;
+            }
+            else
+            {
+                mGyroCam.GetBehaviour()->SetParameters(
+                    &lrNamed.mGyroCamDefaultSideTruckingLeftParams);
+                mbUseLeftForThisCrash = true;
+            }
+            mbTryLeft = !mbTryLeft;
+            return;
+        }
+        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamDefaultSideTruckingLeftParams);
+        return;
+
+    case Parameters::E_SUBTYPE_TRUCKING_FRONT:
+        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamTruckFront);
+        return;
+
+    case Parameters::E_SUBTYPE_FOLLOW:
+        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamFollow);
+        return;
+
+    case Parameters::E_SUBTYPE_LEAD:
+        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamDefaultParams);
+        return;
+
+    case Parameters::E_SUBTYPE_SIDE:
+        mGyroCam.GetBehaviour()->SetParameters(&lrNamed.mGyroCamLeft);
+        return;
+
+    default:
+        CGS_ASSERT(false, "invalid subtype");   // :343 (non-gating)
+        return;
+    }
 }
 
 // @ 0x8220A078 -- cpp:265. On a LEAD-subtype tumble, raise the gyro rig's plant

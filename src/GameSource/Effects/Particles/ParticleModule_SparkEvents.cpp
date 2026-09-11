@@ -123,22 +123,12 @@ namespace BrnParticle
             {
                 // `li r31, 5 ; add r30, r27, 0x22818 ; ClearAllBuckets(r30) ; r30 += 0x20` x5 --
                 // i.e. maDebris[0..4].ClearAllBuckets().
-                // ⛔ NOT CALLED, AND THE REASON IS A MOUNT, NOT A MISSING BODY: BrnDebrisArray.cpp
-                // has both bodies but is DELIBERATELY UNMOUNTED -- its Construct binds
-                // `_gaDebrisArrayParams`, an `extern const` with no definition anywhere in the
-                // tree (the note is in tools/build/build_game_exe.bat beside the Effects block).
-                // Calling it is an unresolved external, which is how this was found.
-                // ⚠️ CORRECTED 2026-09-06: this used to add "it is also UNREACHABLE on this
-                // build: nothing publishes a type-0 record". That is no longer true --
-                // EffectsModule::HandlePlayerTriangleCache @0x82296EA0 posts exactly one
-                // type-0 record on the frame a crash ENDS (AllocateEventSafe(0, 0)), and that
-                // post was landed in the same wave as this drain. So this arm IS reached, once
-                // per crash, and the announcement below is the only thing standing between the
-                // console's call and maDebris[0..4].ClearAllBuckets().
-                static bool sbLogged = false;
-                LogSparkEventNotReconstructed(sbLogged,
-                    "ProcessEventQueue case 0 (clear all debris buckets): maDebris[0..4]."
-                    "ClearAllBuckets(). BLOCKED -- BrnDebrisArray.cpp is unmounted");
+                // Reached once per crash: EffectsModule::HandlePlayerTriangleCache posts exactly
+                // one type-0 record on the frame a crash ENDS.
+                for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+                {
+                    maDebris[luArray].ClearAllBuckets();
+                }
                 break;
             }
 
@@ -168,13 +158,29 @@ namespace BrnParticle
                 //                                  record+0x2C, record+0x0C, record+0x1C)
                 // -- the four vectors loaded whole, the three scalars being the w lanes of the
                 // first three, in the register order f1/f2/f3.
-                // ⛔ SAME BLOCK AS CASE 0: BrnDebrisArray.cpp is unmounted. And nothing publishes a
-                // type-4 record either -- PreRenderUpdate's single AllocateEventSafe is fed by the
-                // spawn-buffer pair at +0x2B7A0, whose count no producer in this build raises.
-                static bool sbLogged = false;
-                LogSparkEventNotReconstructed(sbLogged,
-                    "ProcessEventQueue case 4 (debris batch spawn): the n*80 record walk into "
-                    "BrnDebrisArray::SpawnDebris. BLOCKED -- BrnDebrisArray.cpp is unmounted");
+                // The count is re-read every iteration, so the walk is written against the
+                // event's own header word rather than a cached copy.
+                {
+                    const DebrisBatchSpawnEvent* const lpBatch =
+                        static_cast<const DebrisBatchSpawnEvent*>(lpEvent);
+                    for (u32 luRecord = 0; luRecord < lpBatch->mu16DebrisCount; ++luRecord)
+                    {
+                        const DebrisBatchSpawnEvent::DebrisSpawnData& lrData =
+                            lpBatch->maDebris[luRecord];
+
+                        CGS_ASSERT(lrData.meType < Native::eDebrisArray_Max,
+                                   "lDebrisData.meType < BrnParticle::Native::eDebrisArray_Max");
+
+                        maDebris[lrData.meType].SpawnDebris(
+                            lrData.mvPositionPlusSize.GetVector3(),
+                            lrData.mvVelocityPlusSpawnTime.GetVector3(),
+                            lrData.mvRotationAxisPlusRotationAmount.GetVector3(),
+                            lrData.mvColour,
+                            lrData.mvRotationAxisPlusRotationAmount.w,
+                            lrData.mvPositionPlusSize.w,
+                            lrData.mvVelocityPlusSpawnTime.w);
+                    }
+                }
                 break;
             }
 

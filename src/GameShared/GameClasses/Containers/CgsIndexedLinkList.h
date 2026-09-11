@@ -162,6 +162,7 @@ namespace CgsContainers
 
         s32  GetNodeIndex(Node* lpNode) const { return static_cast<s32>(lpNode - mpBase); }
         bool IsEmpty() const                  { return miCount == 0; }
+        s32  GetCount() const                 { return miCount; }
 
         // CountElements walks the chain (vs the cached miCount) -- the generator/validators
         // use it to verify the live length.

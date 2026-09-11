@@ -3,11 +3,11 @@
 //
 // ICE::ICEController -- the in-game ICE camera-take editor/driver. This TU bodies
 // the MENU-CONSTRUCT group of the controller's 23 functions: the editor-UI
-// lifecycle (ConstructMenus / DestructMenus) plus the two per-frame content fills
+// lifecycle (ConstructMenus; DestructMenus is split into ICEControllerMenus_wG_11.cpp
+// so it can be on the link while this TU cannot) plus the two per-frame content fills
 // (RefreshMenu / RefreshInfoList). ConstructMenus allocates the seven menu widgets
 // + the two embedded time bars + the info list from the ICE memory manager and
-// positions them; DestructMenus frees the seven menu widgets (and their row
-// buffers) back to the same edit heap; RefreshMenu repopulates a menu's text cells
+// positions them; RefreshMenu repopulates a menu's text cells
 // for the current editor state; RefreshInfoList rebuilds the read-out lines from
 // the author's live state.
 //
@@ -253,36 +253,6 @@ void ICEController::ConstructMenus()
     // the widget reserved heads; ConstructMenus seeds them as the fixed editor HUD
     // layout. They are not driven by named members here (the widgets own those
     // lanes); the seeding is a fixed-layout init the Render path consumes.
-}
-
-// ---------------------------------------------------------------------------
-// DestructMenus
-//
-// Free the seven menu widgets back to the ICE memory manager's edit heap. For each
-// non-null menu slot, free the widget's row buffer (mpRows) first, then the widget
-// itself. The loop walks the seven-slot menu-pointer block (KI_ICE_NUM_MENU_WIDGETS)
-// starting at mpMenuMain.
-//
-// The source-spine frees through HeapMalloc::Free(&mpMenuC->mEditHeap, block); the
-// committed ICEMemory::FreeMemory frees to that same edit heap, so each free is
-// expressed as mpMenuC->FreeMemory(block).
-// ---------------------------------------------------------------------------
-void ICEController::DestructMenus()
-{
-    // The seven menu-widget pointers occupy a contiguous block starting at mpMenuMain.
-    ICEWidgetMenu** lppMenus = &mpMenuMain;
-
-    for (s32 li = 0; li < KI_ICE_NUM_MENU_WIDGETS; ++li)
-    {
-        ICEWidgetMenu* lpMenu = lppMenus[li];
-        if (lpMenu)
-        {
-            // Free the widget's row buffer first (mpRows == the +0x30 slot the source
-            // spine frees as `*(*slot + 48)`), then the widget itself.
-            mpMenuC->FreeMemory(lpMenu->mpRows);
-            mpMenuC->FreeMemory(lpMenu);
-        }
-    }
 }
 
 // ---------------------------------------------------------------------------

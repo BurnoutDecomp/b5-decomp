@@ -195,11 +195,23 @@ namespace CgsSceneManager
                                                    SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
                                                    SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
         void ProcessCoarseLineTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );   // @0x828C6D78 TRAP
-        void ProcessCoarseSphereTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* ); // @0x828C6B48 TRAP
+        // One coarse SPHERE query: broad-phase it, re-emit the hit indices as one
+        // scene-output event.
+        void ProcessCoarseSphereTest( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                      const CgsModule::Event* lpEvent,
+                                      SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
         void ProcessCoarseVolumeTest( const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer* ); // @0x828C62C0 TRAP
         void ProcessCoarseFrustumTest( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer* );// @0x828C6918 TRAP
-        void ProcessCoarseFrustumTestVp( SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*,
-                                         void* lpScratchA, void* lpScratchB, SceneManagerIO::OutputBuffer* );                    // @0x828C6518 TRAP
+        // One coarse view-projection FRUSTUM query. The two arrays are the
+        // dispatcher's per-pass scratch, carried across the queue's queries so a query may
+        // narrow an earlier one's result run instead of walking the tree again: slot i holds
+        // that earlier query's written-result count (-1 == none) and the start of its run in
+        // the coarse result buffer.
+        void ProcessCoarseFrustumTestVp( SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+                                         const CgsModule::Event* lpEvent,
+                                         s32* lpaPreviousNumResults,
+                                         const u16** lpaPreviousResults,
+                                         SceneManagerIO::OutputBuffer* lpSceneOutputBuffer );
 
         // @ 0x828D5608 -- fine pass: stack the three pass buffers + a CollisionGenerator, lock,
         // run ProcessFineQueriesDirectly, tear down in reverse.

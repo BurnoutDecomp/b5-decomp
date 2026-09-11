@@ -106,12 +106,10 @@ namespace CgsResource
     // on it (advancing to DEFRAGMENTING_HEAP). DEFRAGMENTING_HEAP -> once the pool reports its defrag
     // mem-type idle (-1), re-arm and do the final allocations. Any other state is invalid.
     //
-    // X360 offsets: meState@+0x4C (a1[19]), miCountdown@+0x50 (a1[20]); base mpPool@+0xC, base
-    // mpAllocListSet@+0x10. Pool+0x1C8 == IsDefragmenting(), Pool+0x1BC == GetDefragMemType(). The
-    // X360 body reads the base-private alloc-result array (mpAllocListSet + 0xC ==
-    // &maeAllocRequestResults[0]) directly; this reconstruction reaches it through the ATTESTED base
-    // accessor GetAllocationResult(memType) (the same array the IntelliFrag sibling reads), avoiding
-    // an unattested GetAllocListSet() accessor. The inner 2x re-test of the same slot in the X360
+    // The console body reads the base-private alloc-result array (&maeAllocRequestResults[0])
+    // directly; this reconstruction reaches it through the ATTESTED base accessor
+    // GetAllocationResult(memType) (the same array the IntelliFrag sibling reads), avoiding an
+    // unattested GetAllocListSet() accessor. The inner 2x re-test of the same slot in the console
     // codegen is behaviourally a single per-memtype test and is expressed as one here.
     EmergencyFragPoolModuleState::EEmergencyFragResult EmergencyFragPoolModuleState::Update()
     {
@@ -128,7 +126,7 @@ namespace CgsResource
                 return E_RESULT_PEND;
             }
 
-            if (GetPool()->IsDefragmenting())   // *(mpPool + 0x1C8) != 0
+            if (GetPool()->GetNumEntriesInPurgatory() != 0)   // a pass may not start until purgatory is empty
             {
                 return E_RESULT_PEND;
             }
@@ -150,7 +148,7 @@ namespace CgsResource
 
         if (meState == E_STATE_DEFRAGMENTING_HEAP)   // a1[19] == 2
         {
-            if (GetPool()->GetDefragMemType() == -1)   // *(mpPool + 0x1BC) == -1: pool defrag done
+            if (GetPool()->GetDefragMemType() == -1)   // pool defrag done
             {
                 meState = E_STATE_START_DEFRAGMENTING;   // a1[19] = 1
                 DoFinalAllocations();

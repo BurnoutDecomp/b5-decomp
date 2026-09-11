@@ -886,7 +886,6 @@ namespace BrnPhysics
             mDeformationManager.VerifyPartIndices();
 
             TrafficYStep("deform-states", mVehicleManager);
-            // FLAG: gate-bodied (image-only address 0x8263C7C0).
             mVehicleManager.ProcessCrashingNetworkCars(
                 reinterpret_cast<const Vehicle::VehicleDriverInputInterface*>(
                     lpPhysicsModuleInputBuffer->GetVehicleDriverInterface()),  // FLAG: storage->real seam cast

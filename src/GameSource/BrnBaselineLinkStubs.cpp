@@ -6,7 +6,6 @@
 // None of these paths runs on the offline boot -> title -> driving slice.
 // ===========================================================================
 
-#include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsIntelliFragPoolModuleState.h"
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsEmergencyFragPoolModuleState.h"
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"
@@ -22,13 +21,11 @@
 
 namespace CgsResource
 {
-    // The concrete defrag strategies. Real bodies exist in CgsIntelliFragPoolModuleState.cpp /
-    // CgsEmergencyFragPoolModuleState.cpp (unmounted): they call Pool::BeginDefragmentation and
-    // BaseDefragPoolModuleState::AddAddressedAllocRequest, declared in CgsResourcePool.h /
-    // CgsBaseDefragPoolModuleState.h with no body. Mount those TUs and delete these four when
-    // the Pool bodies land. Returning false / doing nothing leaves the pool un-defragmented.
-    bool IntelliFragPoolModuleState::RunDefragAlgorithm(AllocListSet*, LinearHeapNode*, s32, s32)      { return false; }
-    void IntelliFragPoolModuleState::RunPoolDefragmentation(RelocateRequest*, RelocateSource*, u32, s32) {}
+    // The emergency defrag strategy. Its real bodies are in CgsEmergencyFragPoolModuleState.cpp,
+    // which cannot be mounted: RunPoolDefragmentation calls Pool::BeginEmergencyDefragmentation,
+    // and that needs CgsMemory::Relocator (no class in the tree, only a byte pad in the pool
+    // module) plus the job-scheduler entry it submits. Delete both when the Relocator lands.
+    // Returning false / doing nothing means the pool never falls back to an emergency compaction.
     bool EmergencyFragPoolModuleState::RunDefragAlgorithm(AllocListSet*, LinearHeapNode*, s32, s32)      { return false; }
     void EmergencyFragPoolModuleState::RunPoolDefragmentation(RelocateRequest*, RelocateSource*, u32, s32) {}
 }

@@ -1,33 +1,30 @@
 #pragma once
 
-// MINIMAL SLICE for the RaceCarEntityModuleIO IO-buffer unlock; full layout
-// reconstructed by SceneCoarseQueryQueue's own TU (DWARF home
-// CgsSceneManagerIO_CoarseQuery.h). Size 16400 (DWARF-derived: see below).
+// CgsSceneManager::SceneManagerIO::SceneCoarseQueryQueue -- the coarse-query input
+// queue the module IO buffers embed by value.
 //
 // In BrnRaceCarEntityModuleIO.h, OutputBuffer_PostScene declares
 //   typedef InputBuffer_Query::InSmCoarseQueryQueue SceneCoarseQueryQueue;  // :77
 // and embeds it BY VALUE (mSceneCoarseQueryQueue, :387). InSmCoarseQueryQueue is
 //   typedef CgsSceneManager::SceneManagerIO::InCoarseQueryQueue<16384> ...   (CgsSceneManagerModuleIO.h:247)
-// and InCoarseQueryQueue<16384> : public VariableEventQueue<16384,16>
-// (CgsSceneManagerIO_CoarseQuery.h:90) adds NO data members (only SphereTest/
-// FrustumTest/VolumeTest methods). So sizeof == sizeof(VariableEventQueue<16384,16>):
+// and InCoarseQueryQueue<16384> : public VariableEventQueue<16384,16> adds NO data
+// members (only the SphereTest/FrustumTest/VolumeTest enqueue helpers). So this name is
+// the real queue type, not a stand-in: sizeof == sizeof(VariableEventQueue<16384,16>)
 //   bool mbIsConstructed (+0) + char macData[16384] (+1, byte-aligned, no alignas)
 //   + s32 miBufferWritePos + s32 miLength + s32 miFirstEventOffset
-//   = 1 + 16384 + 12 -> round to 4 -> 16400 bytes.
-// It carries Vector3/Matrix44-bearing query events, so the slice is alignas(16).
-// Per the stub rules the real generic VariableEventQueue<> + the coarse-query event
-// element cascade are intentionally NOT pulled in; a complete sized blob unlocks the
-// buffer (the IO header only takes &member). Full layout belongs to this type's own TU.
+//   = 1 + 16384 + 12 -> round to 4 -> 16400 bytes,
+// which is the span the sized blob that stood here occupied, so the collapse is
+// size-neutral. It gains Construct/Append/AddEvent, which is what lets
+// WorldModule::BridgeRaceCarModuleToSceneModule_PostScene merge it into the scene
+// query input buffer's own coarse queue.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h" // InCoarseQueryQueue<N>
 
 namespace CgsSceneManager
 {
 namespace SceneManagerIO
 {
-    struct alignas(16) SceneCoarseQueryQueue
-    {
-        unsigned char maReserved[16400];
-    };
+    typedef InCoarseQueryQueue<16384> SceneCoarseQueryQueue;
 }
 }

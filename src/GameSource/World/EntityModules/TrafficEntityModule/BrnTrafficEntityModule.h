@@ -505,6 +505,35 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
                               BrnTrafficIO::OutputBuffer_PostScene* lpOutput,
                               BrnUpdateSet lUpdateSet );
 
+        // ---- the five post-scene stage helpers PostSceneUpdate calls, plus the AI-entity
+        //      builder one of them uses. Bodies in BrnTrafficEntityModule_wG_PostScene.cpp. ----
+
+        // The player-centred coarse sphere query; results come back through
+        // ProcessNearbyTrafficSceneQueryResults.
+        void PostNearbyTrafficSceneQueryRequest( const BrnTrafficIO::InputBuffer_PostScene* lpInput,
+                                                 BrnTrafficIO::OutputBuffer_PostScene* lpOutput );
+
+        // Drain the crash module's cleanup queue. DISTINCT from CleanUpCrashedVehiclePhysics,
+        // which takes the pre-physics OUTPUT buffer.
+        void CleanUpCrashedVehicles( const BrnTrafficIO::InputBuffer_PostScene* lpInput );
+
+        // Online only: queue the network-replicated traffic the crash module says must crash.
+        void HandleCrashingNetworkTraffic( const BrnTrafficIO::InputBuffer_PostScene* lpInput );
+
+        // Last frame's per-race-car nearby-traffic lists -> this frame's AI interface.
+        void ConvertSceneResultsToTrafficDataForAI( BrnTrafficIO::OutputBuffer_PostScene* lpOutput );
+
+        // One coarse frustum query per active race car, feeding maStoredAITrafficData.
+        void AIPostSceneQueryRequests( const BrnTrafficIO::InputBuffer_PostScene* lpInput,
+                                       BrnTrafficIO::OutputBuffer_PostScene* lpOutput );
+
+        // Build one AI-visible traffic record (planar centre/velocity + eight world-space
+        // bounding-box corners) for traffic vehicle luIndex.
+        void CreateTrafficAIEntity( u32 luIndex,
+                                    const VehicleTypeRuntime* lpVehicleTypeRuntime,
+                                    EActiveRaceCarIndex leRaceCarIndex,
+                                    BrnTrafficIO::TrafficAIEntity* lpOutEntity ) const;
+
         // ---- (WorldModule::EntityModulePreSceneUpdate @0x827BD1F0) ----
         void PreSceneUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              CgsModule::IOBufferStack* lpOutputBufferStack,
@@ -819,8 +848,7 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         // queue and clear it. Called from PrePhysicsUpdate's three arms.
         void CleanUpCrashedVehiclePhysics(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput);
 
-        // @0x8271DD30 (96). BODIED in _wT3_00.cpp. DWARF :1578; the LegacySrc reference
-        // spells the body verbatim at BrnTrafficEntityModule.cpp:1410.
+        // BODIED in _wT3_00.cpp.
         void CalculateInitialPhysicalState(const Vehicle* lpInVehicle,
                                            Matrix44Affine lVehicleTransform,
                                            Vector3& lOutInitialVelocity,

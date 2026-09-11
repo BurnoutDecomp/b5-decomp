@@ -5724,6 +5724,24 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // second skip only starts at 0x82307744, one instruction later). Landed 2026-08-18.
     SendRaceCarSceneUpdates( lpOutput );
 
+    // ⭐⭐ [gate wave 2026-09-11, lane 04] THE NEAR-MISS TICK, at the console's own position:
+    // immediately after SendRaceCarSceneUpdates, as the FIRST call inside the SECOND sim-paused
+    // skip, taking the two post-physics buffers. This is the only driver of
+    // NearMissManager::Update in the whole image: without it the near-miss / crash-escape chain
+    // never aged, never fired and never posted its chain game events, and the fine
+    // crashing-traffic queue the vehicle manager fills every frame had no reader at all.
+    // ⚠️ THE PLAYER-SLOT GATE IS OURS, NOT THE CONSOLE'S -- same temporary precondition the
+    // PrePhysicsUpdate arms above carry: this build runs post-physics frames before the
+    // junkyard reset attaches a player car, and the console's own player-index assert would
+    // fire on every one of them. DELETE-WHEN the player car is attached before the world's
+    // first frame.
+    if( !lbSimPaused && lpInput != 0
+        && static_cast<u32>( mePlayerActiveRaceCarIndex ) < E_ACTIVE_RACE_CAR_INDEX_COUNT
+        && GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
+    {
+        UpdateNearMisses( lpInput, lpOutput );
+    }
+
     // ⭐ [tut-ticker] the console's own tail order @0x82307938: SendGameEvents runs here,
     // immediately before SendStreamerEvents (both OUTSIDE the second paused skip -- the skip's
     // target 0x82307930 lands before this call).

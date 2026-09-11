@@ -5,7 +5,6 @@
 // Reconstructed from the X360 ARTIST 2007-02 spine against the frozen layout in
 // ICEManager.hpp:
 //   Construct      @0x8253DCF0   build the four takes + the controller, init state
-//   Destruct       @0x825333F0   tear down the controller menus, null owned pointers
 //   GetCameraTake  @0x8252CAD0   select the active take (playback vs editor)
 //   Update         @0x82540010   drive the controller, then advance movie playback
 //
@@ -22,8 +21,9 @@
 namespace ICE
 {
 
-// PARKED, missing declarations: ICEController::Construct, ICEController::DestructMenus,
-// ICEController::Update have no definition in the tree.
+// PARKED, missing declarations: ICEController::Construct and ICEController::Update have
+// no definition in the tree. Destruct is split into ICEManager_wG_11.cpp so it can be on
+// the link while this TU cannot.
 
 // ---------------------------------------------------------------------------
 // Construct (@0x8253DCF0)
@@ -68,36 +68,6 @@ void ICEManager::Construct(ICEPointers* lpICEPointers)
 
     // Build the embedded editor/driver from the whole bundle.
     mController.Construct(lpICEPointers);
-}
-
-// ---------------------------------------------------------------------------
-// Destruct (@0x825333F0)
-//
-// Tear down: drop the two owned subsystem pointers the manager cached (the file
-// sink and the ICE memory manager -- the X360 zeroes +0x1CF8 / +0x1CFC), then let
-// the controller destruct its menus and release the three editor pointers it owns.
-//
-// X360: stw 0 at +0x1CF8 and +0x1CFC, then ICEController::DestructMenus(this+0x1D10),
-// then `if (p) p = 0;` over the controller's +0xF70/+0xF74/+0xF78 pointers.
-// ---------------------------------------------------------------------------
-void ICEManager::Destruct()
-{
-    // Release the manager-cached subsystem pointers (ownership passes back to the
-    // bundle owner; the manager no longer references them).
-    mpFileHandler = nullptr;
-    mpICEMemory   = nullptr;
-
-    // Tear down the editor menus.
-    mController.DestructMenus();
-
-    // Null the three editor pointers the controller owns (guarded clears, matching
-    // the X360 `if (p) p = 0;` sequence over controller +0xF70/+0xF74/+0xF78).
-    if (mController.mpMenuB)
-        mController.mpMenuB = nullptr;   // +0xF70
-    if (mController.mpMenuA)
-        mController.mpMenuA = nullptr;   // +0xF74 (read first in the X360, lower addr cleared after)
-    if (mController.mpMenuC)
-        mController.mpMenuC = nullptr;   // +0xF78
 }
 
 // ---------------------------------------------------------------------------

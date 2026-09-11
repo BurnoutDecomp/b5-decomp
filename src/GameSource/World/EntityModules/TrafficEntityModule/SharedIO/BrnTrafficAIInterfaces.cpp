@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags ("Traffic Flood")
 
 // ============================================================================
 // GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.cpp
@@ -33,6 +34,31 @@ namespace BrnTrafficIO
         mUpdateRivalQueue.Construct();
         mAddedRivals.Construct();
         mRemovedRivals.Construct();
+    }
+
+    // ------------------------------------------------------------------------
+    // TrafficAIInterface::AddTrafficEntity.
+    //
+    // Like Construct above, the console emits no out-of-line symbol for it: it is inlined
+    // into its one producer, TrafficEntityModule::ConvertSceneResultsToTrafficDataForAI,
+    // which shows the whole body -- the cap test against the 256-entry active list, the
+    // "Traffic Flood" message on overflow, and otherwise the 176-byte record copy into
+    // maActiveEntityList[mu16EntityCount] followed by the count bump.
+    // ------------------------------------------------------------------------
+    void TrafficAIInterface::AddTrafficEntity(const TrafficAIEntity& lrEntity)
+    {
+        if (mu16EntityCount >= KI_MAX_TRAFFIC_NEAR_RACECARS)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "Traffic Flood\n";
+            }
+        }
+        else
+        {
+            maActiveEntityList[mu16EntityCount] = lrEntity;
+            ++mu16EntityCount;
+        }
     }
 }
 }

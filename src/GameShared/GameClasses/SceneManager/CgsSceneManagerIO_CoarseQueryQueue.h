@@ -59,17 +59,30 @@ namespace SceneManagerIO
         u32             mxQueryFlags;        // +0xC8
     };
 
-    // The coarse sphere-test event record (E_IN_EVENT_SPHERE_TEST). The X360 typed
-    // AddEvent<InEventSphereTest> @0x8273F9D8 bakes `li r6, 0x20`, so its queued byte
-    // image is 32 bytes. No field-level DWARF is recovered in any decompiled TU's scope
-    // (the emitter builds the stack image and the queue block-copies it whole), so the
-    // payload is modelled as an OPAQUE byte span at the X360-attested size, mirroring the
-    // opaque-blob homes (CgsSceneManagerIO_EventSphereTest.h / EventAddDynamicVolume).
-    // FLAG: opaque interior -- field names/types NOT fabricated (HARD RULE 3); only the
-    // X360-attested sizeof(==32) is load-bearing (the liSize the typed AddEvent passes).
+    // The coarse sphere-test event record (E_IN_EVENT_SPHERE_TEST). The typed
+    // AddEvent<InEventSphereTest> bakes a 32-byte size, so its queued byte image is 32 bytes.
+    //
+    // The interior was an opaque 32-byte span until the module's only emitter was
+    // reconstructed: BrnTraffic::TrafficEntityModule::PostNearbyTrafficSceneQueryRequest
+    // builds the stack image store for store and pins every lane --
+    //   +0x00  a whole 16-byte lane copy of the camera position (the sphere centre)
+    //   +0x10  a word that the matching results consumer compares against the module's
+    //          registered query id
+    //   +0x14  a word carrying the same entity-type mask the frustum-test record spells
+    //          at its own +0xC4
+    //   +0x18  a SINGLE-PRECISION FLOAT (stfs, not stw) -- the sphere radius
+    //   +0x1C  never written by the emitter
+    // The field ORDER and WIDTHS are attested; the three trailing NAMES follow the sibling
+    // InEventFrustumTestVp record above (mQueryId / mx32EntityTypeFlags at the same relative
+    // seats) and the float's only possible role in a sphere test. FLAG: names inferred from
+    // the single emitter.
     struct alignas(16) InEventSphereTest : public CgsModule::Event
     {
-        u8 macOpaquePayload[32];   // +0x00  opaque (X360-attested 32-byte AddEvent liSize)
+        Vector3         mCentre;             // +0x00  (whole 16-byte lane)
+        SceneQueryId    mQueryId;            // +0x10
+        EntityTypeFlags mx32EntityTypeFlags; // +0x14
+        f32             mfRadius;            // +0x18
+        u32             muPad;               // +0x1C  never written by the emitter
     };
     static_assert(sizeof(InEventSphereTest) == 32, "InEventSphereTest byte image must match X360 AddEvent liSize (0x20)");
 

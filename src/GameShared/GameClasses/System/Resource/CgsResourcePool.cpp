@@ -235,6 +235,7 @@ namespace CgsResource
     s32  Pool::GetNumDependencies() const          { return miNumDependencies; }
     s32  Pool::GetRefCountThreshold()              { return miRefCountThreshold; }
     s32  Pool::GetNumEntriesInPurgatory() const    { return miNumResourcesInPurgatory; }
+    u32  Pool::GetHeapAlignment(s32 liMemType) const { return maHeaps[liMemType].GetHeapAlignment(); }
     bool Pool::GetAllowDefragmentation() const     { return mbAllowDefragmentation; }
     void Pool::SetAllowDefragmentation(bool lbAllow) { mbAllowDefragmentation = lbAllow; }
     s32  Pool::GetDefragMemType() const            { return miDefragMemType; }
@@ -720,5 +721,61 @@ namespace CgsResource
                 lbAllResolved = false;
         }
         return lbAllResolved;
+    }
+
+    // ---- batch allocation / heap flattening (the defragmenter's pool-side surface) --------
+    //
+    // All three are thin per-memory-type forwarders onto the matching Heap. The console asserts
+    // first (the pool must be valid / the memory type must be one of the three) and then indexes
+    // maHeaps.
+
+    u16 Pool::GenerateLinearHeap(s32 liMemType, LinearHeapNode* lpOut, u16 luMaxLength)
+    {
+        CGS_ASSERT(static_cast<u32>(liMemType) < BasePool::KI_NUM_TYPES, "Mem type out of range\n");
+        return maHeaps[liMemType].GenerateLinearHeap(lpOut, luMaxLength);
+    }
+
+    // The per-memory-type slice of the caller's AllocListSet (its request array, its
+    // result array and its request count) goes straight to the heap, always freeing on failure.
+    EBatchAllocResult Pool::ExecuteBatchAllocation(AllocListSet* lpAllocListSet, s32 liMemType)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        return maHeaps[liMemType].ExecuteBatchAllocation(lpAllocListSet->mapAllocRequests[liMemType],
+                                                        lpAllocListSet->mapAllocResults[liMemType],
+                                                        lpAllocListSet->manAllocRequestCounts[liMemType],
+                                                        true);
+    }
+
+    EBatchAllocResult Pool::ExecuteBatchAddressedAllocation(s32 liMemType, AllocRequestAddressed* lpRequests,
+                                                            AllocResult* lpResults, u32 luNumRequests,
+                                                            bool lbFreeOnFailure)
+    {
+        CGS_ASSERT(static_cast<u32>(liMemType) < BasePool::KI_NUM_TYPES, "Mem type out of range\n");
+        return maHeaps[liMemType].ExecuteBatchAddressedAllocation(lpRequests, lpResults, luNumRequests,
+                                                                  lbFreeOnFailure);
+    }
+
+    // Arm the relocating defragmentation pass the pool module's IntelliFrag strategy planned: latch
+    // the staging pool and the plan (the relocate requests and their sources), reset the per-pass
+    // frame counter and the relocation cursor, move the stage on, and re-seat the heap's nodes for
+    // the whole plan in one go. The byte moves themselves are driven afterwards, one slice per
+    // UpdateDefrag call, out of the staging pool.
+    void Pool::BeginDefragmentation(ScratchPool* lpScratchPool, RelocateRequest* lpRequests,
+                                    RelocateSource* lpSources, u32 luNum, s32 liMemType)
+    {
+        CGS_ASSERT(mbIsValid, "Pool is not valid\n");
+        CGS_ASSERT(mbAllowDefragmentation, "This pool does not have defragmentation enabled\n");
+
+        mpCurrentScratchPool = lpScratchPool;
+        mpCurrentRelocator   = 0;          // this is the staging-pool route, not the relocator one
+        miDefragFrame        = 0;
+        miDefragMemType      = liMemType;
+        mpRelocateRequests   = lpRequests;
+        meDefragStage        = DEFRAGSTAGE_WAIT_FOR_INITIAL_DEATHS;
+        mpRelocateSources    = lpSources;
+        muNextRelocation     = 0;
+        muNumRelocations     = luNum;
+
+        maHeaps[liMemType].ExecuteBatchRelocation(lpRequests, luNum);
     }
 }

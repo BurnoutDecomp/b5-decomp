@@ -70,7 +70,6 @@
 //   FindNonParallelNormalisedVectorTo @0x822171B0  (the SECOND of its two returned constants
 //                                                   is still unattested; unk_82181510 is now
 //                                                   pinned -- see KV_AXIS_Y below)
-//   GetFOVDegsToFitObjectToScreenArea @0x8220C398  (VMX rsqrt/reciprocal Newton-refine + vsel)
 //
 // ⛔ CORRECTED 2026-08-01 -- CreateAdjustedLookAt and GetFOVDegsToFitObjectToScreenSize used
 //   to sit in the list above, described as unbodiable "vrefp128 + vperm128 mask" and "two
@@ -1257,6 +1256,56 @@ Vector2 GetSizeOnScreen(Matrix44Affine lCameraTransform,
     lSize.z = 0.0f;
     lSize.w = 0.0f;
     return lSize;
+}
+
+// ----------------------------------------------------------------------------
+// GetFOVDegsToFitObjectToScreenArea
+//
+// The AREA sibling of the function below: instead of fitting each screen axis separately it
+// compares the SQUARE ROOTS of the two areas, so one isotropic ratio scales the zoom.
+//   * lSizeOnScreen.x * lSizeOnScreen.y -- the area the subject currently occupies
+//   * a reciprocal-square-root estimate with one Newton refinement, then area * (1/sqrt(area))
+//     == sqrt(area); a compare/select against zero forces an exactly zero area to an exactly
+//     zero size instead of a NaN
+//   * a reciprocal (again estimate + Newton) of that size. NO zero guard on it -- a subject
+//     that projects to nothing divides by zero, which is what the IsValid assert below is
+//     watching for
+//   * GetZoomFromFOVDegs(the first argument)
+//   * the same rsqrt/select pipeline over lvTargetArea -> sqrt(targetArea)
+//   * zoom * sqrt(targetArea) / sqrt(area) -> GetFOVDegsFromZoom
+//   * assert IsValid(lDesiredFOV)
+//
+// AS IN THE SIBLING BELOW, THE FIRST PARAMETER IS NOT A DISTANCE despite the console's own
+//   name for it: it is fed straight to GetZoomFromFOVDegs, so it is an FOV in degrees, and its
+//   one caller (Looker::Zoom) passes the camera's current FOV.
+//
+// FLAG (SIMD -> portable, this tree's standing convention): the two reciprocal-square-root
+// estimates and the reciprocal, each Newton-refined on the console, are reconstructed as the
+// exact std::sqrt / divide -- exactly as Normalize and OrthoNormalize3x3 already are in this
+// file. Numerically tighter, never a placeholder. The two zero-area selects and the ABSENCE of
+// a guard on the divide are transcribed, not invented.
+// ----------------------------------------------------------------------------
+VecFloat GetFOVDegsToFitObjectToScreenArea(VecFloat lvDistance,
+                                           Vector2 lSizeOnScreen,
+                                           VecFloat lvTargetArea)
+{
+    const f32 lfAreaOnScreen = lSizeOnScreen.x * lSizeOnScreen.y;
+    const f32 lfSizeOnScreen = (lfAreaOnScreen == 0.0f)
+                                   ? 0.0f
+                                   : std::sqrt(lfAreaOnScreen);   // the zero-area select
+
+    const f32 lfTargetArea = lvTargetArea;
+    const f32 lfTargetSize = (lfTargetArea == 0.0f)
+                                 ? 0.0f
+                                 : std::sqrt(lfTargetArea);     // the second such select
+
+    const f32 lfZoom = GetZoomFromFOVDegs(lvDistance);
+
+    const f32 lfDesiredFOV = GetFOVDegsFromZoom(lfZoom * (lfTargetSize / lfSizeOnScreen));
+
+    CGS_ASSERT(rw::math::fpu::IsValid(lfDesiredFOV), "IsValid(lDesiredFOV)");
+
+    return lfDesiredFOV;
 }
 
 // ----------------------------------------------------------------------------

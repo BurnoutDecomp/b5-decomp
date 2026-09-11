@@ -396,6 +396,34 @@ void Camera::SetRequestedPostFX(f32 lfAmount)
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::Camera::Camera::SetRequestedBorderPostFX
+//
+// ⚠️⚠️ BODIED 2026-09-11 -- it had NO DEFINITION ANYWHERE IN THE TREE. Camera.h has
+// declared it since the mEffects carve and four TUs already call it
+// (Arbitrator/States/BrnArbStateCrashMode.cpp, Arbitrator/States/BrnArbStateCrashNav.cpp x3,
+// MomentController/Moments/BrnMomentPlayerJumping.cpp,
+// MomentController/Moments/BrnMomentNewCarJoined_wN_02.cpp); none of the four is on the build
+// list, which is the only reason the link is green today. Same latent-link-break shape as
+// SetRequestedTimeDilation below.
+//
+// Like its siblings it has no standalone symbol -- every caller inlines the single store, and
+// that store is what pins the field. Both ArbStateCrashNav::Update and ArbStateCrashMode::Update
+// hold their camera at state +0x10 and issue the request as one float store at state +0x120,
+// i.e. camera +0x110; +0x110 minus mEffects (+0x68) is +0xA8 -- the black-bar / letterbox
+// amount committed as mfRaceEndEffectAmount, the same float lane SetRequestedPostFX above
+// writes. Crash nav requests zero on it, crash mode its borders-timer value.
+//
+// So this is a SECOND NAME for one store, not a second field: the borders/letterbox request.
+// Both spellings are kept because both call-site sets are committed (rule 1); the shared
+// lane is the reason crash mode and a moment camera cannot request borders in the same frame
+// without the last writer winning, which is the console's behaviour too.
+// ----------------------------------------------------------------------------
+void Camera::SetRequestedBorderPostFX(f32 lfAmount)
+{
+    mEffects.mfRaceEndEffectAmount = lfAmount;   // stfs -> mEffects +0xA8 (camera +0x110)
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::Camera::SetRequestedTimeDilation
 //
 // ⚠️⚠️ BODIED 2026-08-02 -- IT HAD NO DEFINITION ANYWHERE IN THE TREE, and this was a LATENT

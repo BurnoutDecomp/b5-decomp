@@ -11,10 +11,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData::Clear (RecEvent 322)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING (RecEvent 321/322 tail)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
-// (BrnGameStateSharedIO.h must NOT be included here: its real BrnGameState /
-// BrnNetwork types clash with BrnGuiOptionsDataProfile.h's compile-only slices.
-// GetNumEventStarts, which needs the real SetUpAllEventStartsInterface, lives in
-// its own TU -- BrnGuiCache_GetNumEventStarts.cpp.)
+// (GuiCache::GetNumEventStarts is homed in the partfile BrnGuiCache_wJ_01.cpp.)
 
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h"
@@ -2454,8 +2451,4 @@ namespace BrnGui
     // narrower copy that lived here was a redefinition of that inline (C2084) and pinned a
     // strict subset of the same offsets, so it has been removed -- the header version is
     // canonical and supersedes it.
-
-    // GetNumEventStarts @0x824F8830 is homed in BrnGuiCache_GetNumEventStarts.cpp --
-    // it needs the REAL BrnGameStateSharedIO.h types this TU cannot include (see the
-    // include-clash note at the top).
 }

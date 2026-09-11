@@ -259,31 +259,62 @@ InputBuffer_PostScene::GetTrafficToRaceCarInterface_PreScene() const
 // The offsets close exactly on the committed member sizes (4 + 16400 -> 16416;
 // + 16400 -> 32816; + 16 + 128*16 -> 34880), which is what identifies each leg.
 //
-// PARTIAL SLICE, and every leg it does not run is NAMED here rather than left unmentioned:
-//   [FLAG] mSceneCoarseQueryQueue / mSceneFineLineTestQueue are 16400-byte `maReserved` blobs in
-//     this tree (CgsSceneManagerIO_CoarseQuery.h / CgsSceneManagerModuleIO.h) with no Construct
-//     to call. They keep the zero the memset below gives them -- EXACTLY what they had before
-//     this change, so nothing regresses; they gain a real Construct with their own layout.
-//   [FLAG] mRaceCarToTrafficInterface's two queues + muFlags/mfShowtimeTrafficDensityScale:
-//     RaceCarToTrafficInterface::Construct (DWARF :130) is declaration-only in this tree and its
-//     members are private with const-only accessors, so there is no by-name route to them.
-//     Same disposition, same zero, same debt.
-//   ⚠️ mfShowtimeTrafficDensityScale therefore reads 0.0f here where the console reads 1.0f.
-//     That is UNCHANGED from the retired gate (which zeroed it too) and its only consumer is the
-//     showtime traffic-density publish, itself a parked leg of PostSceneUpdate.
-// DELETE-WHEN those three types get real Constructs; then the memset goes too.
+// COMPLETE as of the scene-query bridge wave: every leg above now has a by-name expression, so
+// the zero-fill the retired gate left behind is gone with it. The last one to land was
+// mRaceCarToTrafficInterface -- its Construct is the two rival-queue Constructs plus the flag
+// word and the density scale, and the scale's initial value is 1.0f, which the memset was
+// quietly leaving at 0.0f for the showtime traffic-density publish.
 // =================================================================================================
 void
 OutputBuffer_PostScene::Construct()
 {
-    // [FLAG PC] the retired gate's zero-fill, kept for the three members above.
-    std::memset(this, 0, sizeof(*this));
+    CgsModule::IOBuffer::Construct();                                   // console *this = 1
 
-    CgsModule::IOBuffer::Construct();                                   // X360 *this = 1
+    // Console +4 / +16416 -- the two scene-query staging queues the post-scene bridge drains.
+    mSceneCoarseQueryQueue.Construct();
+    mSceneFineLineTestQueue.Construct();
 
-    // ⭐ X360 +32816 -- the ONLY leg with a reachable, real Construct today, and the one the
-    // reset-on-track pump posts into every time a crashed car asks to be put back.
+    // ⭐ Console +32816 -- the one the reset-on-track pump posts into every time a crashed
+    // car asks to be put back.
     mAIModuleRequestInterface.GetResetOnTrackRequestQueue()->Construct();
+
+    // Console +34880 / +36528 / +36576 / +36580 -- the two rival queues, the flag word and the
+    // showtime density scale, all inlined on the console as this interface's own Construct.
+    mRaceCarToTrafficInterface.Construct();
+}
+
+
+// (R, :373) -- read-lock tripwire ("Not locked for reading") then return the member seat
+// (console +4). Sole consumer: WorldModule::BridgeRaceCarModuleToSceneModule_PostScene.
+const OutputBuffer_PostScene::SceneCoarseQueryQueue*
+OutputBuffer_PostScene::GetSceneCoarseQueryQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mSceneCoarseQueryQueue;
+}
+
+// :374 -- the write-side twin. No out-of-line console emission (the producers reach the seat
+// through the module's own write path), so no lock tripwire is attested for it.
+OutputBuffer_PostScene::SceneCoarseQueryQueue*
+OutputBuffer_PostScene::GetSceneCoarseQueryQueue()
+{
+    return &mSceneCoarseQueryQueue;
+}
+
+// (R, :376) -- read-lock tripwire ("Not locked for reading") then return the member seat
+// (console +16416). Sole consumer: WorldModule::BridgeRaceCarModuleToSceneModule_PostScene.
+const OutputBuffer_PostScene::SceneFineLineTestQueue*
+OutputBuffer_PostScene::GetSceneFineLineTestQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mSceneFineLineTestQueue;
+}
+
+// :377 -- the write-side twin, same disposition as the coarse one above.
+OutputBuffer_PostScene::SceneFineLineTestQueue*
+OutputBuffer_PostScene::GetSceneFineLineTestQueue()
+{
+    return &mSceneFineLineTestQueue;
 }
 
 
@@ -305,6 +336,14 @@ OutputBuffer_PostScene::GetAIModuleRequestInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
     return &mAIModuleRequestInterface;
+}
+
+// Const race-car->traffic accessor; the post-scene traffic bridge reads through it.
+const RaceCarToTrafficInterface*
+OutputBuffer_PostScene::GetRaceCarToTrafficInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    return &mRaceCarToTrafficInterface;
 }
 
 // X360 0x822B56B0 (W, :383) -- mutable race-car->traffic accessor.

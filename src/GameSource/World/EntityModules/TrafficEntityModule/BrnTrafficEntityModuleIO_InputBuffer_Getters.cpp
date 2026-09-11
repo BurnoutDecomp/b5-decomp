@@ -32,6 +32,10 @@ namespace BrnTrafficIO
     {
         CgsModule::IOBuffer::Construct();
         mGameActionQueue.Construct();
+        // The scene query-results fan-out Appends onto this seat every frame
+        // (WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics), and Append
+        // asserts the destination is Constructed.
+        mSceneResultQueue.Construct();
         // The physics->traffic readback bridge assigns both interfaces (operator= Clears +
         // Appends every embedded EventQueue), so their queues must be Constructed here.
         mVehicleOutputInterface.Construct();
@@ -43,12 +47,46 @@ namespace BrnTrafficIO
     }
 
 
+    // InputBuffer_PostScene::Construct (:225), store for store. The console runs the race-car
+    // interface's two queue Constructs and its two scalar stores FIRST (inlined
+    // RaceCarToTrafficInterface::Construct on the seat at +12128), then the crash interface's
+    // two queue Constructs (+8), then Clears the active-race-car interface (+1648). Without it
+    // the buffer's four embedded queues keep whatever the IO stack's previous tenant left and
+    // the first publish Clear+Appends onto a NULL mpEvents.
+    void InputBuffer_PostScene::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mRaceCarToTrafficInterface.Construct();
+        mCrashTrafficOutputInterface.Construct();
+        mActiveRaceCarOutputInterface.Clear();
+    }
+
+    // InputBuffer_PostScene::SetRaceCarToTrafficInterface (:235) -- write-lock tripwire
+    // ("Not locked for writing"), then publish the source interface onto the member seat
+    // (+12128): Clear+Append on each of the two rival queues, then the flag word and the
+    // showtime density scale. Those four stores live in RaceCarToTrafficInterface::operator=,
+    // where the queues are members. Producer:
+    // WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene.
+    void InputBuffer_PostScene::SetRaceCarToTrafficInterface(const RaceCarToTrafficInterface* lpRaceCarToTrafficInterface)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mRaceCarToTrafficInterface = *lpRaceCarToTrafficInterface;
+    }
+
     // X360 0x82710F20 (:228) -- read-lock; return &mCrashTrafficOutputInterface (this+8).
     // Consumers: TrafficEntityModule::HandleCrashingNetworkTraffic / CleanUpCrashedVehicles.
     const InputBuffer_PostScene::CrashTrafficOutputInterface* InputBuffer_PostScene::GetCrashTrafficOutputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mCrashTrafficOutputInterface;
+    }
+
+    // (:231) -- read-lock; return &mActiveRaceCarOutputInterface (this+1648). Consumers:
+    // TrafficEntityModule::PostNearbyTrafficSceneQueryRequest / AIPostSceneQueryRequests.
+    const InputBuffer_PostScene::ActiveRaceCarOutputInterface* InputBuffer_PostScene::GetActiveRaceCarOutputInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mActiveRaceCarOutputInterface;
     }
 
     // X360 0x82711070 (:234) -- read-lock; return &mRaceCarToTrafficInterface (this+0x2F60 == 12128).
@@ -89,6 +127,22 @@ namespace BrnTrafficIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return &mGameActionQueue;
+    }
+
+    // Write-lock; return &mSceneResultQueue. Producer:
+    // WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics, the second of its two
+    // Appends of the same scene query-results ring.
+    InputBuffer_PostPhysics::SceneResultQueue* InputBuffer_PostPhysics::GetSceneResultQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mSceneResultQueue;
+    }
+
+    // The read-lock twin (the module's own drain side).
+    const InputBuffer_PostPhysics::SceneResultQueue* InputBuffer_PostPhysics::GetSceneResultQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mSceneResultQueue;
     }
 
     // X360 0x827118F8 (:365, IDA truncates the symbol to `BrnTraffic::BrnTraffi`) -- read-lock

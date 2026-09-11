@@ -12,8 +12,15 @@
 //   SceneManagerModule::ProcessFineQueriesDirectly            @ 0x828D4F80   (418 insns)  REAL
 //   SceneManagerModule::ProcessLineTestNearest                @ 0x828D38C0   (315 insns)  REAL
 //   SceneManagerModule::ProcessTriangleCollisionLineTestNearests @ 0x828D4880 (234 insns) REAL (direct arm), job arm LOUD
-//   -- and, as LOUD TRAPS carrying their console address, the eleven sibling handlers this
+//   SceneManagerModule::ProcessCoarseSphereTest                             REAL
+//   SceneManagerModule::ProcessCoarseFrustumTestVp                          REAL (tree-walk arm), narrowing arm LOUD
+//   -- and, as LOUD TRAPS carrying their console address, the nine sibling handlers this
 //      build has no producer for yet (see the block at the end of the file).
+//
+// The two coarse handlers landed 2026-09-11, when the traffic module's post-scene stage
+// started posting its player-centred sphere query and its per-race-car AI frustum queries and
+// the world bridge began carrying them: both arms of the coarse dispatcher then ran into an
+// unreconstructed consumer every frame.
 //
 // ⭐ WHY THIS TU EXISTS. Every race car posts one 10 m "nearest" down-ray per frame
 // (VehicleManager::GenerateAboveGroundLineTests @0x82633990, entity-type flags == 2 == the
@@ -57,6 +64,8 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                                   // IOBufferStack::Create/DestroyIOBuffer<T>
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"                                     // CgsModule::Lock/UnlockBuffersForIO
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                            // InputBuffer_Query / TriCacheQueryBuffer / OutputBuffer
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h"           // InEventSphereTest / InEventFrustumTestVp
+#include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"                           // CgsGeometric::Frustum
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryResultsQueue.h"     // OutSceneQueryResultsQueue<32768>::AddTriangleCollisionLineTestNearestResult
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsSpatialPartitionManagerIO.h" // SpatialPartitionIO::OutputBuffer
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h"   // CoarseQueryResultBuffer<16384>
@@ -120,6 +129,49 @@ namespace CgsSceneManager
 
         // The console's empty-result line parameter (flt_82001CC0).
         const f32 KF_NO_HIT_LINE_PARAM = 0.0f;
+
+        // Bit 1 of a query's entity-type flags -- the WORLD bit. The coarse broad phase does
+        // not hold the world, so both coarse handlers with a producer trip on it.
+        const u32 KX_COARSE_QUERY_WORLD_TYPE_BIT = 2;
+
+        // How many result-run seats the coarse VP frustum pass carries across one queue walk
+        // (the two 16-byte scratch blocks the dispatcher seeds are four s32 / four pointers).
+        const s32 KI_COARSE_FRUSTUM_QUERY_SEATS = 4;
+
+        // The tail both coarse handlers share, written out once: publish one finished coarse
+        // batch as a single variable-size event on the scene output's results queue. The
+        // broad phase answers in entity pool INDICES, so each is resolved to its public id on
+        // the way out; the event is three header words plus one id per result, which is the
+        // size the queue is asked for.
+        void EmitCoarseQueryResult(EntityManager&                lrEntityManager,
+                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+                                   SceneQueryId                  lQueryId,
+                                   s32                           liNumResults,
+                                   s32                           liNumAttempted,
+                                   const u16*                    lpu16Results)
+        {
+            SceneManagerIO::OutCoarseQueryResult* lpResult =
+                static_cast<SceneManagerIO::OutCoarseQueryResult*>(
+                    lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite()->AllocateEvent(
+                        SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE,
+                        static_cast<s32>(4 * (liNumResults + 3))));
+
+            lpResult->mQueryId              = lQueryId;
+            lpResult->miNumResults          = liNumResults;
+            lpResult->miNumResultsAttempted = liNumAttempted;
+
+            EntityId* lpIds = lpResult->GetEntityIds();
+            for (s32 liResult = 0; liResult < liNumResults; ++liResult)
+            {
+                const u16 lu16Index = lpu16Results[liResult];
+                CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+
+                const EntityId lId = lrEntityManager.GetEntityIdByIndex(lu16Index);
+                CGS_ASSERT(lId != K_INVALID_ENTITY_ID, "lID != K_INVALID_ENTITY_ID");
+
+                lpIds[liResult] = lId;
+            }
+        }
 
         // A CgsGeometric::Line is two 16-byte lanes; the console fills them with whole-lane
         // `lvx128/stvx128` copies of the query's mLineStart/mLineEnd (all four floats, w included).
@@ -191,11 +243,10 @@ namespace CgsSceneManager
     //   1 -> ProcessCoarseSphereTest(this, spOut, event, sceneOut)        @0x828C6B48
     //   2 -> ProcessCoarseVolumeTest(this, event, spOut, sceneOut)        @0x828C62C0
     //   3 -> ProcessCoarseFrustumTest(this, spOut, event, sceneOut)       @0x828C6918
-    //   4 -> ProcessCoarseFrustumTestVp(this, spOut, event, &v15, &v14, sceneOut) @0x828C6518
-    //        -- v15 is a 16-byte stack block memset to 0xFF and v14 a 16-byte block memset to 0,
-    //           both carved once before the loop (the Vp pass's per-call scratch: a "previous
-    //           result" seed of all-ones and a zeroed accumulator); their types belong to that
-    //           handler's TU and are carried as opaque 16-byte blocks here.
+    //   4 -> ProcessCoarseFrustumTestVp(this, spOut, event, previousCounts, previousRuns, sceneOut)
+    //        -- the two 16-byte stack blocks the console memsets to 0xFF and 0x00 before the
+    //           loop are that pass's four-seat scratch: four s32 result counts seeded to -1
+    //           and four result-run pointers seeded to null (see the handler).
     //   default -> ignored.
     // The coarse getter is re-fetched for GetNextEvent every iteration (the console calls
     // SceneManagerIO::InputBuffer_Query::GetCoarseQueryQueue again at 0x828CDC98).
@@ -212,9 +263,14 @@ namespace CgsSceneManager
         SpatialPartitionIO::OutputBuffer*         lpSpatialPartitionOutputBuffer,
         SceneManagerIO::OutputBuffer*             lpSceneOutputBuffer)
     {
-        alignas(16) u8 laFrustumTestVpScratchA[16];   // memset(v15, 0xFF, 16) @0x828CDBB0
-        alignas(16) u8 laFrustumTestVpScratchB[16];   // memset(v14, 0x00, 16) @0x828CDBA8
-        for (s32 li = 0; li < 16; ++li) { laFrustumTestVpScratchA[li] = 0xFF; laFrustumTestVpScratchB[li] = 0; }
+        // The VP pass's per-pass scratch, carved once before the loop and carried across
+        // every query in the queue: four "written result count" seats seeded to all-ones
+        // (-1 == no earlier query in that seat) and four result-run pointers seeded to
+        // null. ProcessCoarseFrustumTestVp fills a seat when its query claims one and
+        // reads a seat when its query narrows an earlier one.
+        s32        laPreviousNumResults[4];
+        const u16* lpaPreviousResults[4];
+        for (s32 li = 0; li < 4; ++li) { laPreviousNumResults[li] = -1; lpaPreviousResults[li] = 0; }
 
         const CgsModule::Event* lpEvent = 0;
         s32                     liSize  = 0;
@@ -238,7 +294,7 @@ namespace CgsSceneManager
                 break;
             case 4:
                 ProcessCoarseFrustumTestVp(lpSpatialPartitionOutputBuffer, lpEvent,
-                                           laFrustumTestVpScratchA, laFrustumTestVpScratchB,
+                                           laPreviousNumResults, lpaPreviousResults,
                                            lpSceneOutputBuffer);
                 break;
             default:
@@ -792,11 +848,150 @@ namespace CgsSceneManager
     }
 
     // =========================================================================================
-    // THE ELEVEN SIBLING HANDLERS -- LOUD TRAPS, each carrying its console address.
+    // THE TWO COARSE HANDLERS WITH A PRODUCER ON THIS BUILD.
     //
-    // None of them has a producer on this build: the coarse queue's five record kinds come from
-    // the entity modules' SceneQueryInterface coarse tests and the AI (all still gated), and the
-    // fine LineFine / FastDS / SphereFast / VolumeDeepest / VolumeFine queues are fed by the
+    // Both follow the same four acts, which is the coarse pass's whole contract:
+    //   BeginResultsBatch on the spatial-partition output buffer's coarse result buffer;
+    //   run the broad phase, which pushes one u16 ENTITY INDEX per hit into that batch;
+    //   read the batch back (written count, attempted count, run start) and EndResultsBatch;
+    //   allocate one variable-size event on the scene output's results queue and copy the run
+    //     out as public EntityIds -- three header words then one id per result.
+    // The attempted count is carried separately because the result buffer caps what it stores:
+    // a consumer that sees attempted > results knows its answer was truncated.
+    //
+    // Both also open with the same tripwire. Bit 1 of a query's entity-type flags is the WORLD
+    // bit, and the broad phase does not hold the world: a coarse query that asks for it is a
+    // producer bug, not an empty answer.
+    // =========================================================================================
+
+    // =========================================================================================
+    // ProcessCoarseSphereTest
+    //
+    // One coarse sphere query. Its producer is the traffic module's player-centred "nearby
+    // traffic" request, whose results feed the traffic AI on the following frame.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseSphereTest(
+        SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+        const CgsModule::Event*           lpEvent,
+        SceneManagerIO::OutputBuffer*     lpSceneOutputBuffer)
+    {
+        const SceneManagerIO::InEventSphereTest& lrQuery =
+            *static_cast<const SceneManagerIO::InEventSphereTest*>(lpEvent);
+
+        CGS_ASSERT((lrQuery.mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        mSpatialPartitionManager.GetSpatialPartition()->SphereTest(
+            lrQuery.mx32EntityTypeFlags, lrQuery.mCentre, lrQuery.mfRadius,
+            lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+        const SceneQueryId lQueryId = lrQuery.mQueryId;
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
+    }
+
+    // =========================================================================================
+    // ProcessCoarseFrustumTestVp
+    //
+    // One coarse view-projection frustum query. Its producer is the per-race-car AI visibility
+    // query -- a wide, shallow slab centred ahead of the car.
+    //
+    // The query's flag word carries an optional four-seat relationship with the OTHER queries in
+    // the same pass: bit i CLAIMS seat i for this query (its result run is published into the
+    // seat for later queries to reuse), and bit 4+i says this query is a SUBSET of seat i -- it
+    // skips the tree entirely and re-tests only the entities that seat already holds. The first
+    // matching bit wins; with no bits set the query is a plain tree walk that claims nothing.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseFrustumTestVp(
+        SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+        const CgsModule::Event*           lpEvent,
+        s32*                              lpaPreviousNumResults,
+        const u16**                       lpaPreviousResults,
+        SceneManagerIO::OutputBuffer*     lpSceneOutputBuffer)
+    {
+        const SceneManagerIO::InEventFrustumTestVp& lrQuery =
+            *static_cast<const SceneManagerIO::InEventFrustumTestVp*>(lpEvent);
+
+        CGS_ASSERT((lrQuery.mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        // Which seat this query relates to, and how.
+        s32  liClaimedSeat = -1;
+        bool lbNarrowed    = false;
+        if (lrQuery.mxQueryFlags != 0)
+        {
+            for (s32 liSeat = 0; liSeat < KI_COARSE_FRUSTUM_QUERY_SEATS; ++liSeat)
+            {
+                if (((1u << liSeat) & lrQuery.mxQueryFlags) != 0)
+                {
+                    liClaimedSeat = liSeat;
+                    break;
+                }
+                if (((16u << liSeat) & lrQuery.mxQueryFlags) != 0)
+                {
+                    CGS_ASSERT(lpaPreviousNumResults[liSeat] != -1,
+                               "Bad subset index. No matching union test found");
+
+                    // NOT RECONSTRUCTED -- a LOUD trap, never a quiet "no result". The narrowing
+                    // form re-tests one earlier query's result run against this frustum instead
+                    // of walking the tree; a no-op here would hand the asker an EMPTY answer to a
+                    // query it did ask, which is the silent-drop class. No producer in the tree
+                    // posts a coarse frustum query with a non-zero flag word (every one of them
+                    // writes zero), so this arm is unreachable today and becomes the first thing
+                    // a future producer hits.
+                    CGS_ASSERT(false,
+                               "the narrowing form of the coarse frustum query is not reconstructed");
+                    lbNarrowed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!lbNarrowed)
+        {
+            mSpatialPartitionManager.GetSpatialPartition()->FrustumTestVp(
+                lrQuery.mx32EntityTypeFlags,
+                *reinterpret_cast<const CgsGeometric::Frustum*>(lrQuery.maFrustumPlanes),
+                lrQuery.mViewProjection,
+                lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+            if (liClaimedSeat != -1)
+            {
+                lpaPreviousNumResults[liClaimedSeat] =
+                    lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+                lpaPreviousResults[liClaimedSeat] =
+                    lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+            }
+        }
+
+        const SceneQueryId lQueryId = lrQuery.mQueryId;
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
+    }
+
+    // =========================================================================================
+    // THE NINE SIBLING HANDLERS -- LOUD TRAPS, each carrying its console address.
+    //
+    // None of them has a producer on this build: the coarse queue's remaining record kinds come
+    // from the entity modules' SceneQueryInterface coarse tests (all still gated), and the fine
+    // LineFine / FastDS / SphereFast / VolumeDeepest / VolumeFine queues are fed by the
     // race-car / traffic / trigger post-scene bridges, which are WorldLinkStubs gates. A trap
     // here is therefore unreachable today and becomes the FIRST thing a future producer hits --
     // which is the point: never a quiet "no result" for a query somebody asked.
@@ -805,10 +1000,6 @@ namespace CgsSceneManager
     {
         CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseLineTest @0x828C6D78 is not reconstructed");
     }
-    void SceneManagerModule::ProcessCoarseSphereTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
-    {
-        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseSphereTest @0x828C6B48 is not reconstructed");
-    }
     void SceneManagerModule::ProcessCoarseVolumeTest(const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer*)
     {
         CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseVolumeTest @0x828C62C0 is not reconstructed");
@@ -816,11 +1007,6 @@ namespace CgsSceneManager
     void SceneManagerModule::ProcessCoarseFrustumTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
     {
         CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseFrustumTest @0x828C6918 is not reconstructed");
-    }
-    void SceneManagerModule::ProcessCoarseFrustumTestVp(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, void*, void*, SceneManagerIO::OutputBuffer*)
-    {
-        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseFrustumTestVp @0x828C6518 is not reconstructed "
-                          "(the synchronous VP frustum test; the job path is ProcessFrustumTestJobRequests)");
     }
     void SceneManagerModule::ProcessLineTestFine(CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
                                                  SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFine*,

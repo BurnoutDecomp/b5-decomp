@@ -4,9 +4,7 @@
 // Runtime bodies for BrnDirector::ICEWrapper (the director-side ICE owner). The home
 // (member layout) is GameSource/Director/BrnDirectorICEWrapper.h; members are accessed
 // BY NAME here -- the struct-relative offsets quoted in comments are provenance only,
-// never used as casts. The seven functions in this TU:
-//   Construct        build the vehicle ref + ICE camera, clear playback/input/movie state
-//   Destruct         tear down the ICE manager + the base heap
+// never used as casts. The five functions in this TU:
 //   PlayMovie        resolve + start a recorded camera take, aim the vehicle ref
 //   Update           per-frame: cache spaces, scale sim time, advance + render + drive mover
 //   GetCurrentMovie  snapshot the currently-playing movie
@@ -14,7 +12,8 @@
 //   UpdateAction     queue this frame's dev-tools input actions
 //
 // The ctor / EditorOn / EditorOff / ReconstructCameraMover bodies live in the sibling
-// TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home).
+// TU GameSource/Director/BrnDirectorICEWrapper.cpp (same home); Construct / Destruct
+// are split into ICEWrapper_wG_11.cpp so they can be on the link while this TU cannot.
 // ============================================================================
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
@@ -50,60 +49,6 @@ namespace
 
     // The take channel Update samples for the mover's per-frame integer value.
     const s32 KI_MOVER_VALUE_CHANNEL   = 41;
-}
-
-// ----------------------------------------------------------------------------
-// BrnDirector::ICEWrapper::Construct
-//
-// Build the runtime state: construct the vehicle ref and seed its bound-state fields,
-// zero the two ICE load-state scalars, Clear the dev-tools action queue, construct the
-// ICE camera (its embedded Camera), then zero the sim-time scale. (The heaps / manager
-// / mover are built by the ctor; the embedded members auto-construct the rest.)
-//
-// Member map (provenance): VehicleRef::Construct(&mVehicleRef @+0x120F0) then the first
-// words of mVehicleRef (+0x120F0=0, +0x120F4=-1, +0x120F8=0, +0x120FC=1) seed the ref's
-// bound-state fields; mActionQueue Clear writes miLength at +0x11BC8; the two ICE
-// load-state scalars at +0x120E4/+0x120E8 are zeroed; Camera::Construct(mICECamera.mCamera
-// @+0x11D70); mfTimeScale = 0 (+0x9B20). No write to the manager playback flag, the
-// current-movie id, or the accept-input gate happens here.
-// ----------------------------------------------------------------------------
-// PARKED, missing declaration: BrnDirector::Camera::Camera::Construct has no linked body
-// (GameSource/Director/Camera/Camera.cpp is not on the source list).
-void ICEWrapper::Construct()
-{
-    mVehicleRef.Construct();
-
-    // VehicleRef::Set(E_PLAYER_CAR, ..) inlined -- the ref is bound to the player car.
-    mVehicleRef.meType         = VehicleRef::E_PLAYER_CAR;
-    mVehicleRef.mbSet          = true;
-    mVehicleRef.muRef          = 0;
-    mVehicleRef.miRaceCarIndex = -1;
-
-    // Reset the two ICE load-state scalars.
-    miICELoadStateA = 0;
-    miICELoadStateB = 0;
-
-    // Make the dev-tools action queue usable (off the unconstructed sentinel).
-    mActionQueue.Clear();
-
-    // Build the ICE camera (its embedded director camera is the Camera::Construct target).
-    mICECamera.Construct();
-
-    // No sim-time scale until the first Update.
-    mfTimeScale = 0.0f;
-}
-
-// ----------------------------------------------------------------------------
-// BrnDirector::ICEWrapper::Destruct
-//
-// Tear down the runtime: destruct the ICE manager, then destruct the base heap (the
-// CgsMemory::HeapMalloc this wrapper IS). The recorded code calls
-// ICEManager::Destruct(this+0xA40) then HeapMalloc::Destruct(this).
-// ----------------------------------------------------------------------------
-void ICEWrapper::Destruct()
-{
-    mICEManager.Destruct();
-    HeapMalloc::Destruct();
 }
 
 // ----------------------------------------------------------------------------

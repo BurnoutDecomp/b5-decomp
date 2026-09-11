@@ -2,10 +2,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"  // the REAL record
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CGS_ASSERT
 
-// Split out of BrnGuiCache.cpp for the same reason as BrnGuiCache_GetNumEventStarts.cpp:
-// that TU types the cache's embedded OptionsDataProfile via BrnGuiOptionsDataProfile.h, whose
-// COMPILE-ONLY network/game-state slices clash with the real BrnNetwork types this body needs
-// (its own header says so at the top). GuiCache::maPlayerInfo is byte storage precisely
+// A partfile split of BrnGuiCache.cpp. GuiCache::maPlayerInfo is byte storage precisely
 // because BrnGuiCache.h can only forward-declare InGamePlayerStatusData; this TU has the
 // complete type, so every field access below is BY NAME.
 

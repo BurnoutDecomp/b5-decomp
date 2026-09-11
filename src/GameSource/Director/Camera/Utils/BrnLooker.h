@@ -49,20 +49,11 @@ namespace Utils
                 E_ZOOM_SCREEN_REGION      = 2,  // DWARF
             };
 
-            // ⭐ Parameters::Construct @0x821F8D80 -- MOVED HERE FROM BrnLooker.cpp 2026-08-01
-            // (orbit-camera wave). Every store is one stfs/stb/stw from the asm; offsets map
-            // 1:1 to the DWARF member order. FULLY GROUNDED -- unchanged from the committed
-            // out-of-line body, only re-homed.
-            //
-            // ⚠️ WHY IT IS A HEADER INLINE AND NOT AN OUT-OF-LINE BODY: its owning TU,
-            //   BrnLooker.cpp, DOES NOT COMPILE (BrnLooker.cpp:189 calls the three-argument
-            //   rw::math::vpu::SLerp that was replaced by the four-argument form long ago and
-            //   never re-fitted -- a stale TU nobody noticed because nothing ever linked it).
-            //   BehaviourRotateAboutVehicle::Parameters::Construct needs this seed on the live
-            //   car-select path, and it is not worth blocking a working camera on an unrelated
-            //   TU's rot. Inline, the body materialises only where a caller needs it, which is
-            //   the same mount-hazard reasoning BrnVehicleRef.h's VehicleRef::Get carries.
-            //   DELETE-WHEN: BrnLooker.cpp is re-fitted and mounted -- then move it back.
+            // Parameters::Construct -- the parameter-block seed. Every store is
+            // one store each; offsets map 1:1 to the recovered member order. It is
+            // a header inline (the console keeps it out of line) so that the behaviours that
+            // seed a stack Looker::Parameters -- BehaviourRotateAboutVehicle among them -- do
+            // not have to drag a TU in for it. THIS IS THE ONLY DEFINITION.
             void Construct()
             {
                 mfInitialXLookOffsetRange       = 0.0f;          // stfs 0.0  @4

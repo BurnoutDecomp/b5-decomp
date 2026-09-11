@@ -488,15 +488,30 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // STILL ANNOUNCED, and for ONE reason only: the third argument is &mWorldTexRenderer,
         // which is a `ContainedInterface` placeholder in ParticleModule.h -- there is no
         // BrnGraphics::Im3dTexPlusLighting object to hand it, and type-punning the placeholder
-        // would be an invented type. The renderer's BODY is reconstructed and its TU is now
-        // mounted; landing this call needs Im3dTexPlusLighting itself, i.e. the converted
-        // world-textured program pair (the same job SkidProgramsPC.cpp did for the skids
-        // renderer), not anything in the debris family.
+        // would be an invented type. The renderer's BODY is reconstructed and its TU is mounted.
+        //
+        // ⚠ THE BLOCKER, MEASURED 2026-09-11 (debris-producer wave), so the next lane does not
+        // have to re-measure it. Im3dTexPlusLighting::Construct is the exact shape of the
+        // committed Im3dSkidsRenderer::Construct: build the
+        // ImRenderer<BrnGraphics::WorldTexturedVertex> base over ONE {vertex, pixel} program pair
+        // and resolve six named shader constants -- gaWorldTransforms (a 32-entry float4x4 array),
+        // gViewProjection and gEyeLocation against the VERTEX program, gLightDirection /
+        // gLightColour / gShinyParams against the PIXEL one. The template half is ALREADY WRITTEN
+        // and unmounted, in
+        // GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3dTexPlusLighting.cpp.
+        // What is missing is only the program pair: the two executable-embedded shader programs
+        // must be re-authored for D3D9 the way SkidProgramsPC.cpp / LionBlendProgramsPC.cpp were.
+        // That is a bigger job than the skid pair -- the vertex program does an indexed instanced
+        // transform, the pixel program a full per-pixel Blinn-Phong with a log/exp power term --
+        // and it buys nothing until something DRAWS debris: BrnDebrisRenderer::BeginRender /
+        // RenderDebrisArray / EndRender have no bodies in the tree and no caller does either,
+        // so this Construct is a prerequisite, not the thing standing between a spawn and a
+        // pixel. The SPAWN half is landed (ParticleModule_DebrisSpawn.cpp).
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's BrnDebrisRenderer::Construct -- its renderer "
-                "argument is mWorldTexRenderer, a ContainedInterface placeholder");
+                "ParticleModule::Prepare's BrnDebrisRenderer::Construct -- Im3dTexPlusLighting "
+                "needs its converted world-textured program pair");
         }
         // ...and the five BrnDebrisArray::Construct calls beside it, which ARE called now.
         // ⭐ THE PARAMETER TABLE IS REAL AS OF THIS WAVE. `mpParams = &_gaDebrisArrayParams[type]`

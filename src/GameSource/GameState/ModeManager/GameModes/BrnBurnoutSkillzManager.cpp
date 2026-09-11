@@ -225,7 +225,7 @@ void BurnoutSkillzManager::OnEnterRoad(BrnNetwork::Road::ChallengeIndex liRoadIn
 // GetActiveRaceCarIndex -- X360 0x82322B18. Look up the car record for a network player
 // id and return its active-race-car index, or E_ACTIVE_RACE_CAR_INDEX_INVALID.
 // ----------------------------------------------------------------------------
-EActiveRaceCarIndex BurnoutSkillzManager::GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
+::EActiveRaceCarIndex BurnoutSkillzManager::GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
 
@@ -234,7 +234,7 @@ EActiveRaceCarIndex BurnoutSkillzManager::GetActiveRaceCarIndex(BrnNetwork::Netw
     {
         return lpData->GetActiveRaceCarIndex();
     }
-    return E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    return ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
 }
 
 // ----------------------------------------------------------------------------
@@ -283,7 +283,7 @@ void BurnoutSkillzManager::SetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::SetNewSkillIfGreater(BurnoutSkillzData::EBurnoutSkillType leSkillType,
                                                 BurnoutSkillzData* lpSkillzData,
-                                                EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
+                                                ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
                                                 f32 lfNewValue)
 {
     CGS_ASSERT(lpSkillzData, "lpSkillzData");
@@ -307,7 +307,7 @@ void BurnoutSkillzManager::SetNewSkillIfGreater(BurnoutSkillzData::EBurnoutSkill
 // SendUpdatePlayerSkillsEvent -- X360 0x82322988. Mark the car dirty and OR the
 // "send update" flags into its slot (bit 4 always, bit 8 when a HUD message is wanted).
 // ----------------------------------------------------------------------------
-void BurnoutSkillzManager::SendUpdatePlayerSkillsEvent(EActiveRaceCarIndex leActiveRaceCarIndex,
+void BurnoutSkillzManager::SendUpdatePlayerSkillsEvent(::EActiveRaceCarIndex leActiveRaceCarIndex,
                                                        bool lbShowHudMessage)
 {
     CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
@@ -330,7 +330,7 @@ void BurnoutSkillzManager::SendUpdatePlayerSkillsEvent(EActiveRaceCarIndex leAct
 void BurnoutSkillzManager::UpdateBoostChains(
     BurnoutSkillzData* lpSkillzData,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
-    EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
+    ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
 {
     CGS_ASSERT(lpActiveCarInterface, "lpActiveCarInterface");
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
@@ -338,10 +338,8 @@ void BurnoutSkillzManager::UpdateBoostChains(
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
 
-    // GetBoostOutputInfoN takes the global ::EActiveRaceCarIndex; cast across the same-valued
-    // dup enum (BrnGameState::EActiveRaceCarIndex here vs the vehicle interface's global one).
-    const BoostOutputInfo* lpBoostInfo = lpActiveCarInterface->GetBoostOutputInfoN(
-        static_cast<::EActiveRaceCarIndex>(leLocalPlayerActiveRaceCarIndex));
+    const BoostOutputInfo* lpBoostInfo =
+        lpActiveCarInterface->GetBoostOutputInfoN(leLocalPlayerActiveRaceCarIndex);
     CGS_ASSERT(lpBoostInfo, "lpBoostInfo");
 
     // muNumChained (+0x0C): the live boost-chain count. While it is non-zero the chain is
@@ -364,7 +362,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
     BurnoutSkillzData* lpSkillzData,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
     const GameStateModuleIO::GameEventQueue* lpQueue,
-    EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
+    ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
 {
     CGS_ASSERT(lpSkillzData, "lpSkillzData");
     CGS_ASSERT(lpQueue, "lpQueue");
@@ -492,15 +490,15 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
                                                BrnStreetData::ChallengePlayerScoreEntry lChallengeScore,
                                                BrnStreetData::ScoreType leScoreType,
                                                BrnNetwork::Road::ChallengeIndex liChallengeIndex,
-                                               EActiveRaceCarIndex leLocalActiveRaceCarIndex)
+                                               ::EActiveRaceCarIndex leLocalActiveRaceCarIndex)
 {
     CGS_ASSERT(leLocalActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                leLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "( leLocalActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
     CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
 
-    s32                 liPreviousHolderScore = 0;
-    EActiveRaceCarIndex lePreviousHolderRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    s32                   liPreviousHolderScore = 0;
+    ::EActiveRaceCarIndex lePreviousHolderRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
     mpScoringSystem->GetHighestLobbyRoadRuleScore(liChallengeIndex, leScoreType,
                                                   &liPreviousHolderScore, &lePreviousHolderRaceCarIndex);
 
@@ -514,9 +512,8 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
             CGS_ASSERT(mpMugshotManager, "mpMugshotManager");
             const BrnStreetData::Road* lpRoad =
                 mpStreetManager->GetStreetData()->GetRoad(liChallengeIndex);
-            // ProcessBeatenRoadRuleEvent takes the global ::EActiveRaceCarIndex (cast across the dup).
             mpMugshotManager->ProcessBeatenRoadRuleEvent(
-                lpOutputBuffer, static_cast<::EActiveRaceCarIndex>(lePreviousHolderRaceCarIndex),
+                lpOutputBuffer, lePreviousHolderRaceCarIndex,
                 lpRoad->GetId(), leScoreType);
         }
 
@@ -576,7 +573,7 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
 void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
     GameStateModuleIO::GameActionQueue* lpActionQueue,
     const GameStateModuleIO::OnlineRoadRulesPersonalBestRecvEvent* lpPersonalBestEvent,
-    EActiveRaceCarIndex leLocalPlayersActiveRaceCarIndex)
+    ::EActiveRaceCarIndex leLocalPlayersActiveRaceCarIndex)
 {
     CGS_ASSERT(lpPersonalBestEvent, "lpPersonalBestEvent");
 
@@ -600,8 +597,8 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
         {
             CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
 
-            s32                 liHighScore = 0;
-            EActiveRaceCarIndex leHighScoreRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+            s32                   liHighScore = 0;
+            ::EActiveRaceCarIndex leHighScoreRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
             mpScoringSystem->GetHighestLobbyRoadRuleScore(liChallengeIndex, leScoreType,
                                                           &liHighScore, &leHighScoreRaceCarIndex);
 
@@ -611,7 +608,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
 
             if (lReceivedEntry.CompareScores(leScoreType, liReceivedScore, liHighScore) < 0)
             {
-                EActiveRaceCarIndex leSenderRaceCarIndex = GetActiveRaceCarIndex(lpEventView->mPlayerID);
+                ::EActiveRaceCarIndex leSenderRaceCarIndex = GetActiveRaceCarIndex(lpEventView->mPlayerID);
                 if (leSenderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
                 {
                     CGS_ASSERT(mpStreetManager, "mpStreetManager");
@@ -662,7 +659,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
         if (lpSenderCar->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
             liChallengeIndex == miCurrentRoadIndex)
         {
-            EActiveRaceCarIndex leSenderRaceCarIndex = GetActiveRaceCarIndex(lpEventView->mPlayerID);
+            ::EActiveRaceCarIndex leSenderRaceCarIndex = GetActiveRaceCarIndex(lpEventView->mPlayerID);
             if (leSenderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
                 CGS_ASSERT(leSenderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -680,7 +677,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
 void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
     const GameStateModuleIO::GameEventQueue* lpEventQueue,
     GameStateModuleIO::GameActionQueue* lpActionQueue,
-    EActiveRaceCarIndex leLocalPlayersActiveRaceCarIndex)
+    ::EActiveRaceCarIndex leLocalPlayersActiveRaceCarIndex)
 {
     CGS_ASSERT(lpActionQueue, "lpActionQueue");
     CGS_ASSERT(lpEventQueue, "lpEventQueue");
@@ -744,7 +741,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                 reinterpret_cast<const BurnoutSkillzEventView*>(lpEvent);
             CGS_ASSERT(lpBurnoutSkillzEvent, "lpBurnoutSkillzEvent");
 
-            EActiveRaceCarIndex leNetworkPlayerActiveRaceCarIndex =
+            ::EActiveRaceCarIndex leNetworkPlayerActiveRaceCarIndex =
                 GetActiveRaceCarIndex(lpBurnoutSkillzEvent->mPlayerID);
             if (leNetworkPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
@@ -855,7 +852,7 @@ void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
                     CarData* lpCarData = mpScoringSystem->GetCarData(lPlayerID);
                     if (lpCarData)
                     {
-                        EActiveRaceCarIndex leRaceCarIndex = lpCarData->GetActiveRaceCarIndex();
+                        ::EActiveRaceCarIndex leRaceCarIndex = lpCarData->GetActiveRaceCarIndex();
                         if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
                         {
                             CGS_ASSERT(leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -874,19 +871,19 @@ void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
 // across all active cars, award the per-skill leader a point, and (when a total changes)
 // mark the car dirty + notify the achievement manager for the local player.
 // ----------------------------------------------------------------------------
-void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
+void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
 {
     // Per-skill winner tracking across the SEND-VIA-NETWORK skill range (11 skills).
     const s32 KI_SKILL_RANGE = BurnoutSkillzData::E_BURNOUT_SKILL_TO_SEND_VIA_NETWORK_COUNT + 2; // 11
 
     bool                labIsTie[KI_SKILL_RANGE];
     f32                 lafBestValue[KI_SKILL_RANGE];
-    EActiveRaceCarIndex laeBestCar[KI_SKILL_RANGE];
+    ::EActiveRaceCarIndex laeBestCar[KI_SKILL_RANGE];
     for (s32 liSkill = 0; liSkill < KI_SKILL_RANGE; ++liSkill)
     {
         labIsTie[liSkill] = false;
         lafBestValue[liSkill] = 0.0f;
-        laeBestCar[liSkill] = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        laeBestCar[liSkill] = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
 
     // Per-car running point totals.
@@ -901,7 +898,7 @@ void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(EActiveRaceCarIndex leLocal
     for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
     {
         lapSkillzData[liCar] =
-            mpScoringSystem->GetBurnoutSkillzData(static_cast<EActiveRaceCarIndex>(liCar));
+            mpScoringSystem->GetBurnoutSkillzData(static_cast<::EActiveRaceCarIndex>(liCar));
     }
 
     // Find the leader (and ties) for each skill.
@@ -923,7 +920,7 @@ void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(EActiveRaceCarIndex leLocal
                     if (lfValue > lafBestValue[liSkill] || laeBestCar[liSkill] == E_ACTIVE_RACE_CAR_INDEX_INVALID)
                     {
                         lafBestValue[liSkill] = lfValue;
-                        laeBestCar[liSkill] = static_cast<EActiveRaceCarIndex>(liCar);
+                        laeBestCar[liSkill] = static_cast<::EActiveRaceCarIndex>(liCar);
                         labIsTie[liSkill] = false;
                     }
                 }
@@ -984,10 +981,8 @@ void BurnoutSkillzManager::PreWorldUpdate(
     CGS_ASSERT(lpInput, "lpInput");
     CGS_ASSERT(lpActiveCarInterface, "lpActiveCarInterface");
 
-    // GetPlayerActiveRaceCarIndex returns the global ::EActiveRaceCarIndex; cast across the
-    // same-valued dup enum into this TU's BrnGameState::EActiveRaceCarIndex.
-    EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
-        static_cast<EActiveRaceCarIndex>(lpActiveCarInterface->GetPlayerActiveRaceCarIndex());
+    ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
+        lpActiveCarInterface->GetPlayerActiveRaceCarIndex();
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
                "Player car index hasn't been set");
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
@@ -1065,9 +1060,9 @@ void BurnoutSkillzManager::PreWorldUpdate(
          liDirtyCar = mabDirtyFlags.GetNextBitSet(liDirtyCar))
     {
         const CarData* lpCarData =
-            mpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(liDirtyCar));
+            mpScoringSystem->GetCarData(static_cast<::EActiveRaceCarIndex>(liDirtyCar));
         BurnoutSkillzData* lpSkillzData =
-            mpScoringSystem->GetBurnoutSkillzData(static_cast<EActiveRaceCarIndex>(liDirtyCar));
+            mpScoringSystem->GetBurnoutSkillzData(static_cast<::EActiveRaceCarIndex>(liDirtyCar));
         if (lpSkillzData)
         {
             const BrnNetwork::NetworkPlayerID lPlayerID = lpCarData->GetNetworkPlayerID();
@@ -1121,13 +1116,11 @@ BurnoutSkillzData* BurnoutSkillzManager::PostWorldUpdate(
 {
     CGS_ASSERT(lpInput, "lpInput");
 
-    // The active-car output interface lives inside the post-world input buffer; its
-    // GetPlayerActiveRaceCarIndex returns the global ::EActiveRaceCarIndex -- cast across the
-    // same-valued dup enum into this TU's BrnGameState::EActiveRaceCarIndex.
+    // The active-car output interface lives inside the post-world input buffer.
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface =
         lpInput->GetActiveRaceCarOutputInterface();
-    EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
-        static_cast<EActiveRaceCarIndex>(lpActiveCarInterface->GetPlayerActiveRaceCarIndex());
+    ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
+        lpActiveCarInterface->GetPlayerActiveRaceCarIndex();
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
                "Player car index hasn't been set");
 

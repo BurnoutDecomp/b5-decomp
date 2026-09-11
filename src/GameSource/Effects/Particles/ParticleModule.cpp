@@ -518,9 +518,9 @@ namespace BrnParticle
         //     header's leading u16 count; the size is `(count + count*4) << 4` + 0x10 ==
         //     count*80 + 16, the type id is 4, and the two memcpys copy the 16-byte header then
         //     count*80 payload bytes out of *(this + 0x2B7B0). The count is then zeroed.
-        //     ⚠ count is ALWAYS 0 on this build: nothing fills mpSparkSpawnBuffer yet (the
-        //     debris batch producer is not landed), so this arm allocates nothing. It is written
-        //     because it is the console's, not because it moves today.
+        //     This arm carries the PART-FULL remainder: ParticleModule::SpawnDebris publishes a
+        //     buffer the moment it fills (32 records), so what is left here at end of frame is
+        //     whatever the frame's last burst did not round out.
         {
             const u16 lu16Count = mu16SpawnBufferCount;
             if (lu16Count != 0)

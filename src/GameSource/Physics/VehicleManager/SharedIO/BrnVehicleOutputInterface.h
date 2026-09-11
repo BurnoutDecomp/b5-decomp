@@ -425,6 +425,14 @@ namespace Vehicle
             return mFineTrafficCrashedEventQueue;
         }
 
+        // The read side of the same seam (2026-09-11): the consumer reaches this interface
+        // through InputBuffer_PostPhysics::GetVehicleManagerOutputInterface, which hands back a
+        // const pointer, so it needs the const overload to drain the queue.
+        const FineTrafficCrashedEventQueue& GetFineTrafficCrashedEventQueue() const
+        {
+            return mFineTrafficCrashedEventQueue;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

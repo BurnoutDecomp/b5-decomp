@@ -172,11 +172,22 @@ namespace CgsResource
         return lpBest;
     }
 
-    // Addressed allocation (Malloc with a fixed lpAddress) is not on the resource load path;
-    // reconstructed when the batch-addressed allocator is brought up.
-    Heap::HeapEntryNode* Heap::FindFreeNodeContainingAddress(HeapEntryNode*, u32, void*)
+    // The free block (>= luSize) that CONTAINS lpAddress, walking forward from lpStartNode and
+    // wrapping once through the head -- the FindFreeNodeFromTop walk with an extra containment
+    // test. This is the policy an addressed allocation uses: the caller has already decided which
+    // byte offset the block must land at.
+    Heap::HeapEntryNode* Heap::FindFreeNodeContainingAddress(HeapEntryNode* lpStartNode, u32 luSize, void* lpAddress)
     {
-        CGS_ASSERT(false, "Heap::FindFreeNodeContainingAddress not yet reconstructed");
+        char* lpcAddress = static_cast<char*>(lpAddress);
+
+        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
+                && lpNode->GetData()->Contains(lpcAddress))
+                return lpNode;
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
+                && lpNode->GetData()->Contains(lpcAddress))
+                return lpNode;
         return 0;
     }
 
@@ -318,6 +329,175 @@ namespace CgsResource
     // now; an undersized pool already asserts at the call site. Use Free(u16) for normal frees.
     void Heap::Free(void* /*lpPtr*/)
     {
+    }
+
+    u32 Heap::GetHeapAlignment() const { return muHeapAlignment; }
+
+    // Flatten the live address-ordered node list into the caller's array: one
+    // (offset, size, status, node index, owner) record per node in mUsedNodes, in list order.
+    // The console does NOT clamp to luMaxLength -- the caller sizes the array from its own
+    // muMaxLinearHeapNodes -- so the parameter is unused here too.
+    u16 Heap::GenerateLinearHeap(LinearHeapNode* lpInputLinearHeap, u16 /*luMaxLength*/)
+    {
+        CGS_ASSERT(lpInputLinearHeap != 0, "No linear heap passed in\n");
+
+        const s32      liNumNodes = mUsedNodes.GetCount();
+        HeapEntryNode* lpNode     = (liNumNodes > 0) ? mUsedNodes.GetHead() : 0;
+
+        LinearHeapNode* lpOut = lpInputLinearHeap;
+        for (s32 liNode = 0; liNode < liNumNodes; ++liNode, ++lpOut)
+        {
+            const HeapEntry* lpEntry = lpNode->GetData();
+            lpOut->mpOwner  = lpEntry->GetOwner();
+            lpOut->muSize   = lpEntry->GetSize();
+            lpOut->muOffset = static_cast<u32>(lpEntry->GetAddress() - mpcAddress);
+            lpOut->muNode   = static_cast<u16>(lpNode - mpNodes);
+            lpOut->muStatus = static_cast<u16>(lpEntry->IsAllocated() ? LinearHeapNode::KU_STATUS_USED
+                                                                     : LinearHeapNode::KU_STATUS_FREE);
+            lpNode = mUsedNodes.GetNext(lpNode);
+        }
+
+        return static_cast<u16>(liNumNodes);
+    }
+
+    // Carve one block per request in order. Top- and bottom-allocated requests keep
+    // SEPARATE running start-node indices, so each policy resumes its search where it left off
+    // instead of walking the list from the head every time. The first failed Malloc stops the
+    // batch; on failure the already-carved blocks are handed back when lbFreeOnFailure, and the
+    // return distinguishes "the bytes exist but are fragmented" (the defragmenter's cue) from
+    // "the heap is simply too small".
+    EBatchAllocResult Heap::ExecuteBatchAllocation(AllocRequest* lpRequests, AllocResult* lpResults,
+                                                   u32 luNumRequests, bool lbFreeOnFailure)
+    {
+        u16 luTopStartIndex    = 0xFFFF;
+        u16 luBottomStartIndex = 0xFFFF;
+        u16 luTopFoundIndex    = 0xFFFF;
+        u16 luBottomFoundIndex = 0xFFFF;
+
+        u32 luDone = 0;
+        for (; luDone < luNumRequests; ++luDone)
+        {
+            const AllocRequest& lRequest = lpRequests[luDone];
+            AllocResult&        lResult  = lpResults[luDone];
+
+            if (lRequest.mbAllocateTop)
+            {
+                lResult.mpData = Malloc(lRequest.muSize, "", lRequest.mpOwner,
+                                        luTopStartIndex, &luTopFoundIndex, false, true, 0);
+                if (lResult.mpData == 0)
+                    break;
+                luTopStartIndex = luTopFoundIndex;
+                lResult.muIndex = luTopFoundIndex;
+            }
+            else
+            {
+                lResult.mpData = Malloc(lRequest.muSize, "", lRequest.mpOwner,
+                                        luBottomStartIndex, &luBottomFoundIndex, false, false, 0);
+                if (lResult.mpData == 0)
+                    break;
+                luBottomStartIndex = luBottomFoundIndex;
+                lResult.muIndex    = luBottomFoundIndex;
+            }
+        }
+
+        if (luDone == luNumRequests)
+            return E_BATCHALLOCRESULT_SUCCESS;
+
+        if (lbFreeOnFailure && luDone != 0)
+        {
+            for (u16 luFreed = 0; luFreed < luDone; ++luFreed)
+                Free(lpResults[luFreed].muIndex);
+        }
+
+        // Would the whole batch have fitted in the free bytes? If so the heap is fragmented.
+        u32 luRequired = 0;
+        for (u32 luRequest = 0; luRequest < luNumRequests; ++luRequest)
+            luRequired += (muHeapAlignment + lpRequests[luRequest].muSize - 1) & ~(muHeapAlignment - 1);
+
+        return (muAmountFree >= luRequired) ? E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG
+                                            : E_BATCHALLOCRESULT_FAIL_NO_ROOM;
+    }
+
+    // The addressed sibling: every request names the byte offset it must land at, so
+    // each Malloc is handed a fixed address (and no running start index -- the search always
+    // begins at the list head). Same failure accounting as the free-placement batch above.
+    EBatchAllocResult Heap::ExecuteBatchAddressedAllocation(AllocRequestAddressed* lpRequests, AllocResult* lpResults,
+                                                            u32 luNumRequests, bool lbFreeOnFailure)
+    {
+        u16 luFoundIndex = 0xFFFF;
+
+        u32 luDone = 0;
+        for (; luDone < luNumRequests; ++luDone)
+        {
+            const AllocRequestAddressed& lRequest = lpRequests[luDone];
+            AllocResult&                 lResult  = lpResults[luDone];
+
+            lResult.mpData = Malloc(lRequest.muSize, "", lRequest.mpOwner,
+                                    0xFFFF, &luFoundIndex, false, true, mpcAddress + lRequest.muOffset);
+            if (lResult.mpData == 0)
+                break;
+            lResult.muIndex = luFoundIndex;
+        }
+
+        if (luDone == luNumRequests)
+            return E_BATCHALLOCRESULT_SUCCESS;
+
+        if (lbFreeOnFailure && luDone != 0)
+        {
+            for (u16 luFreed = 0; luFreed < luDone; ++luFreed)
+                Free(lpResults[luFreed].muIndex);
+        }
+
+        u32 luRequired = 0;
+        for (u32 luRequest = 0; luRequest < luNumRequests; ++luRequest)
+            luRequired += (muHeapAlignment + lpRequests[luRequest].muSize - 1) & ~(muHeapAlignment - 1);
+
+        return (muAmountFree >= luRequired) ? E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG
+                                            : E_BATCHALLOCRESULT_FAIL_NO_ROOM;
+    }
+
+    // Re-seat every relocated block in the heap's own bookkeeping. The bytes are NOT copied here
+    // -- the pool's ScratchPool / Relocator pass moves those; this only rewires nodes, and it does
+    // so in two passes so that a block's destination may overlap a block that has not moved yet:
+    //   pass 1: lift each request's entry into a spare node taken from the unused pool, held on a
+    //           temporary chain, and free the block it came from (which coalesces into the hole);
+    //   pass 2: pop that chain in order and re-allocate each entry at its destination address,
+    //           then hand the temporary node back to the unused pool.
+    // Each request is rewritten in place with the node index its block now lives in.
+    void Heap::ExecuteBatchRelocation(RelocateRequest* lpRelocateRequests, u32 luNumRequests)
+    {
+        // The temporary chain links nodes of the SAME node array, and starts empty.
+        HeapEntryList lTempNodes;
+        lTempNodes.Init(mpNodes, 0);
+
+        for (u32 luRequest = 0; luRequest < luNumRequests; ++luRequest)
+        {
+            HeapEntryNode* lpTemp = mUnusedNodes.RemoveHead();
+            CGS_ASSERT(lpTemp != 0, "Unable to get a free node to use for temporary storage - maybe need more?\n");
+
+            const u16 luNode = lpRelocateRequests[luRequest].muNode;
+            lpTemp->SetData(mpNodes[luNode].GetData());
+            Free(luNode);
+            lTempNodes.AddTail(lpTemp);
+        }
+
+        u16 luFoundIndex = 0xFFFF;
+        for (u32 luRequest = 0; luRequest < luNumRequests; ++luRequest)
+        {
+            HeapEntryNode* lpTemp = lTempNodes.RemoveHead();
+            CGS_ASSERT(lpTemp != 0, "Ran out of temp nodes before finishing request processing\n");
+
+            RelocateRequest& lRequest     = lpRelocateRequests[luRequest];
+            char*            lpcDestination = mpcAddress + lRequest.muDestOffset;
+
+            void* lpMoved = Malloc(lpTemp->GetData()->GetSize(), "", lpTemp->GetData()->GetOwner(),
+                                   0xFFFF, &luFoundIndex, false, true, lpcDestination);
+            CGS_ASSERT(static_cast<char*>(lpMoved) == lpcDestination, "Failed to allocate to fixed address\n");
+            (void)lpMoved;
+
+            lRequest.muNode = luFoundIndex;
+            RemoveNode(lpTemp);
+        }
     }
 
     // Reset to an unprepared, empty state (the X360 Construct Init's both index-lists).

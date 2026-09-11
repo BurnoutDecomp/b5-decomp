@@ -32,7 +32,7 @@
 // members.
 // ----------------------------------------------------------------------------
 //
-// PARKED -- not on the exe source list. It compiles clean; twelve externals it needs have no
+// PARKED -- not on the exe source list. It compiles clean; TEN externals it needs have no
 // definition in any mounted TU, and the five ArbStateCrashNav stubs in
 // Director/DirectorLinkStubs.cpp stay until they are all cleared:
 //   ICEMoviePlayer::Construct / Prepare / Update / Stop / Loop / GetCamera /
@@ -41,10 +41,11 @@
 //     is on the source list).
 //   ICEWrapper::GetCurrentMovie / PlayMovie  (2) -- written, unmounted
 //     SDKs/Packages/ICE/ICEWrapper.cpp.
-//   SharedCameraContainer::GetGameplayCameraHelperIndex  (1) -- written, unmounted
-//     Camera/BrnSharedCameraContainer.cpp.
-//   Camera::Camera::SetRequestedBorderPostFX  (1) -- declared in Camera/Camera.h, defined
-//     nowhere in the tree; three call sites here. Needs recovery, not a mount.
+// The other two of the old twelve are closed: SharedCameraContainer::GetGameplayCameraHelperIndex
+// (Camera/BrnSharedCameraContainer.cpp is now mounted) and Camera::Camera::SetRequestedBorderPostFX
+// (bodied in Camera/Camera.cpp). Re-measured 2026-09-11 by dumpbin over this TU's object against
+// the mounted symbol set: 60 undefined, all resolved but the ten above, plus CRT and two
+// weak-external vector-deleting-destructor aliases that fall back to their scalar defaults.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector

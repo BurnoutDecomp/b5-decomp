@@ -13,8 +13,8 @@
 // Families still stubbed here: the Massive SDK seam (uncommitted third party);
 // Attribulator LiveLink (GameTalk); the FineIntersection / OverlapGeneration
 // sub-manager seams (their TUs drag the rw::collision query closure); module-fleet
-// Destruct/Release leaves; five WorldModule bridges blocked on forked IO types; and
-// the PropSerialiserFrame replay codec (frame interior still padding-modelled).
+// Destruct/Release leaves; and the PropSerialiserFrame replay codec (frame interior
+// still padding-modelled).
 //
 // The include preamble mirrors BrnWorldModule.cpp (IO headers before the module
 // headers) so the nested IO buffer types resolve exactly as they do for the
@@ -297,19 +297,6 @@ void BrnTraffic::TrafficEntityModule::Destruct()
     }
 }
 
-// Boot gate (reached every frame): the body is written in BrnTrafficEntityModule_wG_Stages.cpp,
-// parked under #if 0 behind the five missing declarations its banner lists. Quiet one-shot log.
-void BrnTraffic::TrafficEntityModule::PostSceneUpdate(struct CgsModule::IOBufferStack *,struct CgsModule::IOBufferStack *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnTraffic::TrafficEntityModule::PostSceneUpdate: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
 // Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
 bool BrnTraffic::TrafficEntityModule::Release()
 {
@@ -351,19 +338,6 @@ void BrnWorld::RaceCarEntityModule::Destruct()
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
-}
-
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-bool BrnWorld::RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars(enum EActiveRaceCarIndex,class BrnWorld::ActiveRaceCar const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnWorld::RaceCarEntityModule::IsPlayerCarTailgatingOtherRaceCars: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-    return false;
 }
 
 // Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
@@ -498,81 +472,6 @@ void CgsSceneManager::SceneManagerIO::InSceneUpdateInterface::AddVolumeInstance(
     }
 }
 
-// -------------------------------------------------------------------------
-// WorldModule -- the five bridges still parked here, one blocker line each.
-// -------------------------------------------------------------------------
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-// BLOCKED: both source queues are opaque 16400-byte blobs (SceneManagerIO::SceneCoarseQueryQueue,
-// ::SceneFineLineTestQueue) with no Append; unpark = collapse them onto the real queue types.
-void WorldModule::BridgeRaceCarModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToSceneModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-// BLOCKED on the destination: BrnTrafficIO::InputBuffer_PostScene has no SetRaceCarToTrafficInterface,
-// and RaceCarToTrafficInterface is forked into two unrelated one-byte placeholders.
-void WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostScene *,struct BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-// BLOCKED on the post-physics leg: BrnTrafficIO::InputBuffer_PostPhysics models its scene-result queue
-// as an opaque 32784-byte blob with no getter, and that buffer has no Construct (promoting the blob must
-// bring the Construct call with it). The pre-physics leg alone is expressible but half a bridge is worse
-// than an inert one.
-void WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics(void *,class BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics *,class BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics *,struct CgsSceneManager::SceneManagerIO::OutputBuffer const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-// BLOCKED: this one builds an event rather than merging a queue, and the traffic vehicle-input
-// interface interior, the 56-byte record type and its record id all have no home in the tree.
-void WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics(void *,struct BrnWorldIO::UpdateOutputBuffer *,class BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-// BLOCKED: the source, BrnTrafficIO::OutputBuffer_PostScene, holds its own nested 16400-byte
-// SceneCoarseQueryQueue blob with no Append (same fork as BridgeRaceCarModuleToSceneModule_PostScene).
-void WorldModule::BridgeTrafficModuleToSceneModule_PostScene(void *,struct CgsSceneManager::SceneManagerIO::InputBuffer_Query *,struct BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene const *)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "WorldModule::BridgeTrafficModuleToSceneModule_PostScene: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Attrib mount closure: GameTalk live-edit decode (attrib gap G6). Traps loudly; it is
 // not on the schema/vault-register path.
@@ -638,6 +537,9 @@ void BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene::Construct()
     // without it the mUpdateRivalQueue the AI input buffer copies via SetTrafficAIInterface
     // has mpEvents == NULL. The other post-scene legs are still the memset stand-in above.
     mTrafficAIInterface.Construct();
+    // Console +4: the coarse-query staging queue WorldModule::BridgeTrafficModuleToSceneModule_
+    // PostScene merges into the scene query input buffer. Append asserts it is Constructed.
+    mSceneCoarseQueryQueue.Construct();
 }
 
 // ---------------------------------------------------------------------------

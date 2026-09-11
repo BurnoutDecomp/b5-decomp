@@ -128,6 +128,12 @@ namespace Native
                          f32 lrSizeScale,
                          f32 lrSpawnTime);
 
+        // The preset this array was bound to by Construct. ParticleModule::SpawnDebris reads
+        // the preset's mColour through it for every non-Coloured debris type (the console indexes
+        // maDebris at a 32-byte stride, loads this[0] == mpParams, and reads the preset's +0x20),
+        // which is a read of a private member from outside.
+        const BrnDebrisArrayParams* Params() const { return mpParams; }
+
     private:
         // BrnParticle::Native::BrnDebrisArray::GetNewDebris (BrnDebrisRenderer.cpp:250). Claim the
         // next free debris slot from the tail bucket, threading in a fresh bucket from the pool

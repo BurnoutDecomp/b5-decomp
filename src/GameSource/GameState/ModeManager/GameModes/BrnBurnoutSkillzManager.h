@@ -2,14 +2,15 @@
 
 #include "types.hpp"
 
-#include "GameSource/BurnoutConstants.h"                                          // E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
 // NOTE: the project carries two same-valued EActiveRaceCarIndex enums -- the global one
-// (BurnoutConstants.h, used by the vehicle/traffic IO headers) and BrnGameState::EActiveRaceCarIndex
-// (BrnTakedownManagerTypes.h, used by ScoringSystem / CarData). This TU talks to the
-// ScoringSystem/CarData API, so its member/method enum is the BrnGameState one; include its home
-// here so the header declarations resolve to the SAME type the .cpp bodies see. Calls into the
-// global-enum vehicle interface static_cast across the dup boundary in the .cpp.
-#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"          // BrnGameState::EActiveRaceCarIndex
+// (BurnoutConstants.h) and BrnGameState::EActiveRaceCarIndex (BrnTakedownManagerTypes.h).
+// ScoringSystem / CarData are declared against the GLOBAL one (BrnScoringSystem.h includes
+// BurnoutConstants.h and nothing that introduces the BrnGameState dup), so this header must NOT
+// pull BrnTakedownManagerTypes.h: doing so brings the dup into scope first and every unqualified
+// `EActiveRaceCarIndex` in BrnScoringSystem.h then binds to the BrnGameState one, which mangles
+// the ScoringSystem accessors differently from every other TU on the build and leaves them
+// unresolved at link. Same-valued, so the interface calls need no cast either way.
+#include "GameSource/BurnoutConstants.h"                                          // ::EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                        // BrnNetwork::NetworkPlayerID (s32), BrnNetwork::Road::ChallengeIndex
 #include "SharedClasses/StreetData/BrnChallengeData.h"                            // BrnStreetData::{ChallengeData, ChallengePlayerScoreEntry, ScoreType}
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"           // BrnStreetData::ChallengeHighScoreEntry
@@ -42,6 +43,8 @@
 // ---- forward declarations (passed by pointer only; real homes pulled by the .cpp) ----
 namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }
 
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct NetworkToGameStateInterface; } }
+
 namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
 namespace BrnPhysics { namespace Vehicle { struct RaceCarState; } }
 
@@ -57,10 +60,18 @@ namespace GameStateModuleIO
     struct PreWorldInputBuffer;
     struct PostWorldInputBuffer;
     struct OutputBuffer;
-    class  GameEventQueue;                 // == CgsModule::VariableEventQueue<1536,16>
-    class  GameActionQueue;                // == CgsModule::VariableEventQueue<13312,16>
-    struct NetworkToGameStateInterface;
+    class  GameEventQueue;                 // : public CgsModule::VariableEventQueue<1536,16>
     struct OnlineRoadRulesPersonalBestRecvEvent;
+
+    // GameActionQueue and NetworkToGameStateInterface are ALIASES in this namespace, not
+    // classes of their own: the canonical declarations (BrnGameStateSharedIO.h and
+    // BrnGameStateModuleIO.h) typedef them onto the concrete queue instantiation and onto
+    // the network module's own interface aggregate. Repeat the aliases verbatim -- a
+    // `class GameActionQueue;` / `struct NetworkToGameStateInterface;` forward declaration
+    // here names a DIFFERENT type and collides with every TU that also pulls the real IO
+    // headers, which is what kept this TU off the build.
+    typedef CgsModule::VariableEventQueue<13312, 16>                     GameActionQueue;
+    typedef BrnNetwork::BrnNetworkModuleIO::NetworkToGameStateInterface  NetworkToGameStateInterface;
 }
 }
 

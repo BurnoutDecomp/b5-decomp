@@ -88,4 +88,17 @@ void* ICEMemory::GetMemory(u32 luSize)
     return lpMemory;
 }
 
+// ---------------------------------------------------------------------------
+// ICEMemory::FreeMemory(void* lpMemory)
+//
+// Return a block previously handed out by GetMemory to the embedded edit heap.
+// No symbol of its own: every recorded caller inlines it to a HeapMalloc::Free
+// against the manager's +0x520 heap (e.g. ICEController::DestructMenus frees both
+// of its blocks that way).
+// ---------------------------------------------------------------------------
+void ICEMemory::FreeMemory(void* lpMemory)
+{
+    mEditHeap.Free(lpMemory);
+}
+
 } // namespace ICE
