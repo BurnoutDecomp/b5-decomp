@@ -16,12 +16,7 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::StringToKey / shotgroup
 
 // ============================================================================
-// BrnDirector::ArbStateRaceIntro -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
-//   Construct  @0x8225ADB8
-//   GetName    @0x821F6320
-//   Prepare    @0x8226E350
-//   Update     @0x8226E5B0
-//   Release    @0x82235D50
+// BrnDirector::ArbStateRaceIntro -- Construct / GetName / Prepare / Update / Release.
 //
 // The director's "race intro" arbitrator state. On Prepare it picks the event's intro
 // shot-group (default group from the resource manager, or an event-specific group built by
@@ -37,79 +32,49 @@ namespace BrnDirector
 {
     namespace
     {
-        // The vehicle-index selector GetNearestRaceCarIndexToPlayer is called with (X360 li
-        // r4, 1): "race cars only" (vs. all tracked cars).
+        // The vehicle-index selector GetNearestRaceCarIndexToPlayer is called with 1:
+        // "race cars only" (vs. all tracked cars).
         const u32 KU_NEAREST_RACE_CARS_ONLY = 1u;
 
         // The event-specific-shot-group "none" sentinel (miEventSpecificShotGroup == -1 means
         // use the resource manager's default intro group).
         const s32 KI_NO_EVENT_SPECIFIC_SHOT_GROUP = -1;
 
-        // The event modes that suppress the single-shot per-take reset byte (X360 cmpwi 0xF /
-        // 0x10 in Prepare): 15 and 16.
+        // The event modes that suppress the single-shot per-take reset byte in Prepare:
+        // 15 and 16.
         const s32 KI_EVENT_TYPE_15 = 15;
         const s32 KI_EVENT_TYPE_16 = 16;
 
-        // The event mode the COUNTDOWN-state "Car_Reset" effect gates on (X360 evType == 7).
+        // The event mode the COUNTDOWN-state "Car_Reset" effect gates on (event type == 7).
         const s32 KI_EVENT_TYPE_CAR_RESET = 7;
 
-        // The blend the COUNTDOWN-state "Car_Reset" camera effect plays at (flt_82001C98 == 1.0).
+        // The blend the COUNTDOWN-state "Car_Reset" camera effect plays at.
         const f32 KF_CAR_RESET_BLEND = 1.0f;
 
         // The dirty-flag bit Update raises on the state's camera while an intro behaviour is
-        // driving it (X360 mCamera.mState_uFlags |= 2).
+        // driving it (mCamera.mState_uFlags |= 2).
         const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
     }
 
     // ------------------------------------------------------------------------
-    // BehaviourHandle::Release @ sub_8222DFD8 -- drop the manager-side hold on the behaviour
-    // and clear the handle. Defined out-of-line where the BehaviourManager type is complete.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    bool ArbStateRaceIntro::BehaviourHandle<TBehaviour>::Release()
-    {
-        if (mbAllocated)
-        {
-            mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
-            muHelperIndex   = 0;
-            mpManager       = 0;
-            mpBehaviour     = 0;
-            mbAllocated     = false;
-        }
-        return true;
-    }
-
-    // ------------------------------------------------------------------------
-    // BehaviourHandle::GetProducedCamera -- the camera the live ICE-anim behaviour produced
-    // this frame (the manager keeps it alongside the behaviour; modelled here BY NAME as the
-    // behaviour's produced camera). Defined out-of-line where BehaviourIceAnim is complete.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    const Camera::Camera& ArbStateRaceIntro::BehaviourHandle<TBehaviour>::GetProducedCamera() const
-    {
-        CGS_ASSERT(mbAllocated, "IsAllocated()");
-        return mpBehaviour->GetProducedCamera();
-    }
-
-    // ------------------------------------------------------------------------
-    // Construct @0x8225ADB8 -- build the camera, clear the base camera flags, and zero the
+    // Construct -- build the camera, clear the base camera flags, and zero the
     // behaviour handle + state machine.
     // ------------------------------------------------------------------------
     void ArbStateRaceIntro::Construct()
     {
-        GetNonConstCamera().Construct();   // X360 Camera::Construct(this+0x10)
+        GetNonConstCamera().Construct();   // the base camera at +0x10
 
-        ResetBaseCameraFlags();            // X360 stb 0, +0x170 / +0x171
+        ResetBaseCameraFlags();            // clears the two flag bytes at +0x170 / +0x171
 
         meState = E_STATE_INACTIVE;        // +0x194 = 0
 
         // The behaviour handle starts unallocated (+0x180 block zeroed: mbAllocated,
-        // muAllocationKey, muHelperIndex, mpManager, mpBehaviour).
-        mRaceIntroBehaviourHandle = BehaviourHandle<Camera::BehaviourIceAnim>();
+        // muAllocationKey, mpHelperPool, mpManager, mpBehaviour).
+        mRaceIntroBehaviourHandle = Camera::BehaviourHandle<Camera::BehaviourIceAnim>();
     }
 
     // ------------------------------------------------------------------------
-    // GetName @0x821F6320
+    // GetName
     // ------------------------------------------------------------------------
     const char* ArbStateRaceIntro::GetName() const
     {
@@ -117,14 +82,14 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Prepare @0x8226E350 -- enter the race-intro state: pick the intro shot-group, allocate
+    // Prepare -- enter the race-intro state: pick the intro shot-group, allocate
     // and configure the ICE-anim behaviour. Only runs the setup when not already ACTIVE /
     // COUNTDOWN / CHANGING_TO_ROAMING and the behaviour is not already allocated.
     // ------------------------------------------------------------------------
     bool ArbStateRaceIntro::Prepare(ArbStateSharedInfo& lrSharedInfo)
     {
         // Already running (ACTIVE_PRE_COUNTDOWN / ACTIVE_COUNTDOWN / CHANGING_TO_ROAMING): do
-        // nothing. (X360: meState != 2 && != 3 && != 4.)
+        // nothing (meState != 2 && != 3 && != 4).
         if (meState != E_STATE_ACTIVE_PRE_COUNTDOWN &&
             meState != E_STATE_ACTIVE_COUNTDOWN &&
             meState != E_STATE_CHANGING_TO_ROAMING)
@@ -138,7 +103,7 @@ namespace BrnDirector
                 GameState& lrGameState = *lrSharedInfo.mpGameState;
 
                 // ---- pick whether the nearest race car is "in front" of the player --------
-                // The X360 takes the direction from the nearest race car to the player car,
+                // The original takes the direction from the nearest race car to the player car,
                 // normalises it, and compares its alignment with the player transform's At
                 // (forward) axis against its alignment with the Right axis: the car is treated
                 // as "in front" when it is more forward-aligned than side-aligned. That bool
@@ -147,7 +112,7 @@ namespace BrnDirector
                 const AllVehicleData& lrAllVehicles = *lrSharedInfo.mpAllVehicleData;
                 const EActiveRaceCarIndex leNearestRaceCar =
                     lrAllVehicles.GetNearestRaceCarIndexToPlayer(KU_NEAREST_RACE_CARS_ONLY);
-                // GetRaceCar now returns the DWARF-typed record (VehicleInfo is
+                // GetRaceCar now returns the typed record (VehicleInfo is
                 // reference-only here); the +0x220 position read below stays a
                 // byte-offset reach into the un-reconstructed record.
                 const void* lpRaceCar = &lrAllVehicles.GetRaceCar(leNearestRaceCar);
@@ -163,14 +128,12 @@ namespace BrnDirector
                     rw::math::vpu::Normalize(lrRaceCarPos - lrPlayerTransform.Pos());
                 const f32 lfAlongForward = rw::math::vpu::Dot(lv3Dir, lrPlayerTransform.At());
                 const f32 lfAlongRight   = rw::math::vpu::Dot(lv3Dir, lrPlayerTransform.Right());
-                const bool lbCarInFront  = lfAlongForward > lfAlongRight;   // X360 vcmpgtfp
+                const bool lbCarInFront  = lfAlongForward > lfAlongRight;
 
                 // ---- resolve the intro shot-group -----------------------------------------
-                // (2026-07-31: GetEventIntroShots now returns the group BY REFERENCE off the
-                // real DirectorResourceManager -- the retired ICE-anim fork typed it `const
-                // void*` because the manager had no declared members to hand back. The X360
-                // @0x821F6AB8 returns `this + <group offset>`, i.e. a reference, so the cast
-                // that used to sit here is gone.)
+                // GetEventIntroShots returns the group BY REFERENCE off the real
+                // DirectorResourceManager (it hands back `this + <group offset>`), so no cast
+                // is needed here.
                 const Attrib::Gen::shotgroup* lpDefaultShots =
                     &lrSharedInfo.mpDirectorResourceManager->GetEventIntroShots(
                         lrGameState.meEventType, lbCarInFront);
@@ -232,14 +195,14 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Update @0x8226E5B0 -- per-frame intro state machine.
+    // Update -- per-frame intro state machine.
     // ------------------------------------------------------------------------
     void ArbStateRaceIntro::Update(ArbStateSharedInfo& lrSharedInfo)
     {
         Camera::Camera& lrCamera    = GetNonConstCamera();
         GameState&      lrGameState = *lrSharedInfo.mpGameState;
 
-        lrCamera.Construct();   // X360 Camera::Construct(this+0x10) at entry
+        lrCamera.Construct();   // the base camera at +0x10, at entry
 
         switch (meState)
         {
@@ -353,22 +316,17 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Release @0x82235D50 -- leave the race-intro state: reset the state machine, release the
+    // Release -- leave the race-intro state: reset the state machine, release the
     // ICE-anim behaviour back to the manager, and assert no behaviours remain allocated.
     // ------------------------------------------------------------------------
     bool ArbStateRaceIntro::Release(ArbStateSharedInfo& lrSharedInfo)
     {
         meState = E_STATE_INACTIVE;   // +0x194 = 0
 
-        if (mRaceIntroBehaviourHandle.IsAllocated())   // +0x180 block
-        {
-            mRaceIntroBehaviourHandle.mpManager->UnSetBehaviourUsedByHandle(
-                mRaceIntroBehaviourHandle.muAllocationKey);
-            mRaceIntroBehaviourHandle.muHelperIndex = 0;
-            mRaceIntroBehaviourHandle.mpManager     = 0;
-            mRaceIntroBehaviourHandle.mpBehaviour   = 0;
-            mRaceIntroBehaviourHandle.mbAllocated   = false;
-        }
+        // The handle release the console inlines here is the shared handle's own Release():
+        // when allocated, UnSetBehaviourUsedByHandle(muAllocationKey) on the owning manager,
+        // then zero the five-word block (+0x180).
+        mRaceIntroBehaviourHandle.Release();
 
         lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
         return true;

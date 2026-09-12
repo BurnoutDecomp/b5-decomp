@@ -2,8 +2,8 @@
 #define GAMESOURCE_DIRECTOR_ARBITRATOR_STATES_BRN_ARB_STATE_CRASH_MODE_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (handle IsAllocated check)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState / ArbStateSharedInfo
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"              // Camera::BehaviourHandle<> (the SHARED handle)
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.h
@@ -15,33 +15,31 @@
 // base). The state machine walks INACTIVE -> PREPARING -> ACTIVE -> CHANGING_TO_ROAMING ->
 // RELEASING; the heavy work lives in Update().
 //
-// LAYOUT: the member NAMES + DWARF declaration order come from the DecFIGS DWARF
-// (BrnArbStateCrashMode.h, X360-attested for this build). The per-member X360 offsets are
-// pinned from the ARTIST asm (Construct @0x8225AC98, Update @0x82235488, DoCloseup @0x82208EF8,
-// Release @0x82235A48):
+// LAYOUT: the member names and their declaration order are the ones this build declares; the
+// per-member console offsets are pinned from Construct / Update / DoCloseup / Release:
 //   * mCamera is the base ArbitratorState's by-value Camera @+0x10 (this state reaches it by
 //     name through the base GetNonConstCamera()/the effect-trigger free functions).
 //   * mAftertouch       @+0x180 (BehaviourHandle, 0x14) -- the aftertouch-crash camera handle
 //   * meState           @+0x194 (EState, the crash-mode state machine value)
 //   * the scalar/flag block @+0x198..+0x1CE (the intro flash/borders/blur timers, the camera
 //     tilt block, and the close-up timers/flags).
-// Parity is BY NAMED MEMBER (the project's x64-gate rule): the X360 4-byte-pointer offsets
+// Parity is BY NAMED MEMBER (the project's x64-gate rule): the 4-byte-pointer offsets
 // quoted above are provenance; on the x64 host the embedded Camera widens, so absolute offsets
 // shift -- the member ROLES are what is reproduced.
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
 {
-    namespace Camera { class BehaviourManager; class BehaviourAftertouchCrash; }
+    namespace Camera { class BehaviourAftertouchCrash; }
 
     class ArbStateCrashMode : public ArbitratorState
     {
     public:
-        // DWARF EState (BrnArbStateCrashMode.h:72). The crash-mode state machine. Construct
+        // EState -- the crash-mode state machine. Construct
         // seeds 0 (INACTIVE); Update's case-1 (PREPARING) success edge stores 2 (ACTIVE) and
         // the dispatch table is indexed by this value. The CHANGING_TO_ROAMING / RELEASING
-        // edges store 3 / 4. Values are the X360 jump-table case indices / the immediates the
-        // asm stores into meState.
+        // edges store 3 / 4. Values are the console dispatch-table case indices / the immediates
+        // stored into meState.
         enum EState
         {
             E_STATE_INACTIVE            = 0,
@@ -53,64 +51,38 @@ namespace BrnDirector
             E_NUM_STATES                = 5
         };
 
-        // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        void        Construct() override;                            // @0x8225AC98
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // (vtable slot 1)
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x82235488
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x82235A48
-        const char* GetName() const override;                        // @0x821F62F0
+        // ---- ArbitratorState virtual overrides (vtable order; see base) -------------------
+        void        Construct() override;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;   // vtable slot 1
+        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;   // vtable slot 3
+        const char* GetName() const override;
 
-        // Destruct() is NOT in this TU's X360 function set (it keeps the base declaration; no
+        // Destruct() is not in this TU's function set (it keeps the base declaration; no
         // override added here).
 
     private:
-        // ---- private per-state helper (DWARF BrnArbStateCrashMode.h:324) -----------------
+        // ---- private per-state helper ----------------------------------------------------
         // Drive the slow-mo "close-up" while one is active: ramp the behaviour's close-up
-        // blend and pick the time-dilation the camera requests. @0x82208EF8.
+        // blend and pick the time-dilation the camera requests.
         void DoCloseup(ArbStateSharedInfo& lrSharedInfo);
 
-        // The ACTIVE-state per-frame body. The X360 inlines this whole block into Update's case 2
+        // The ACTIVE-state per-frame body. The console inlines this whole block into Update's case 2
         // (it is reached both from case 2 directly and via the case-1 PREPARING success
         // fall-through); de-inlined here to a named helper so Update's PREPARING edge can call it
-        // without the switch falling through into a declaration scope. Not a separate X360
-        // function. @ (inlined into Update @0x82235488).
+        // without the switch falling through into a declaration scope. Not a separate console
+        // function (it is inlined into Update).
         void TickActive(ArbStateSharedInfo& lrSharedInfo);
 
-        // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
-        // Released in Release() via BehaviourManager::UnSetBehaviourUsedByHandle(mpManager,
-        // muAllocationKey). 0x14-byte block (5 words) pinned from the Construct/Release/Update
-        // asm: mbAllocated(+0x00), muAllocationKey(+0x04), a behaviour-lookup helper word
-        // (+0x08), mpManager(+0x0C), mpBehaviour(+0x10). The X360 re-resolves the live
-        // behaviour from the manager pool through (helper word, allocation key); GetBehaviour()
-        // returns the cached pointer to that same behaviour after asserting IsAllocated().
-        // FLAG: the +0x08 word's role is not fully recovered in this TU (modelled as an opaque
-        // behaviour-lookup helper index, as in BrnArbStateRoaming.h).
-        template <typename TBehaviour>
-        struct BehaviourHandle
-        {
-            BehaviourHandle()
-                : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-                  mpManager(0), mpBehaviour(0) {}
-
-            bool IsAllocated() const { return mbAllocated; }
-
-            // The live behaviour this handle owns (only valid while IsAllocated()). The X360
-            // asserts IsAllocated() inside the manager-pool lookup before returning it.
-            TBehaviour* GetBehaviour() const
-            {
-                CGS_ASSERT(mbAllocated, "IsAllocated()");
-                return mpBehaviour;
-            }
-
-            bool                      mbAllocated;     // +0x00
-            u32                       muAllocationKey; // +0x04
-            u32                       muHelperIndex;   // +0x08  FLAG: role not recovered (lookup helper)
-            Camera::BehaviourManager* mpManager;       // +0x0C
-            TBehaviour*               mpBehaviour;     // +0x10
-        };
-
-        // ---- members, DWARF order; X360 offsets in comments ------------------------------
-        BehaviourHandle<Camera::BehaviourAftertouchCrash> mAftertouch; // X360 +0x180
+        // ---- members, in declaration order; console offsets in comments -------------------
+        // The handle is the SHARED BrnDirector::Camera::BehaviourHandle<TBehaviour> (the same
+        // five-word block the console has: mbAllocated +0x00, muAllocationKey +0x04, the owning
+        // helper pool +0x08, mpManager +0x0C, mpBehaviour +0x10). This state used to carry a
+        // private copy of that template with the +0x08 word FLAGged as an unrecovered "lookup
+        // helper"; the shared one has it pinned as the pool pointer and brings the three members
+        // this TU needs and the copy could not provide -- IsReadyToPrepare(), GetProducedCamera()
+        // and Release().
+        Camera::BehaviourHandle<Camera::BehaviourAftertouchCrash> mAftertouch; // +0x180
         EState meState;             // +0x194  the crash-mode state-machine state
 
         // intro flash / borders / motion-blur ramp block (Update case-1->2 seeds these).

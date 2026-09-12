@@ -26,9 +26,9 @@
 //   * Destruct / Prepare have NO X360 body and never will from the binary: a scan of
 //     all 30,095 exports finds no symbol for either, on this class or on the blend and
 //     rasterizer twins, and no callee's xrefs_to names one. They are DEFINED -- as
-//     documented, never-called, link-closure stubs -- in
-//     GameShared/GameClasses/Graphics/CgsStateFactoryLinkStubs.cpp. That file is not
-//     decoration: this class is polymorphic, so its vtable is emitted in whatever TU
+//     flagged, never-called, link-closure fillers -- at the end of
+//     CgsDepthStencilStateFactory.cpp. Those fillers are not decoration:
+//     this class is polymorphic, so its vtable is emitted in whatever TU
 //     constructs it and names every virtual, and the day BrnRendererModule stops using
 //     its empty placeholder and embeds the real class by value (it is reached from
 //     `static BrnGame::BrnGameModule gGameModule;`, BrnMain.cpp:45) an undefined virtual

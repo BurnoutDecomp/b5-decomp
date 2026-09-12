@@ -144,8 +144,8 @@ struct Resource
 // (`this+0x3940 / +0x3944 / +0x3948`, r4 = mpGraphicsAllocator), and the post-fx composite pushes
 // slots of those tables (saDepthStencilStates[1], saRasterizerStates[2]) -- with the tables null the
 // push was a compare-then-skip and the composite quad drew under the world's back-face cull, i.e. not
-// at all. Their Construct/Destruct/Prepare vtables link: Construct in each factory .cpp,
-// Destruct/Prepare in CgsStateFactoryLinkStubs.cpp. On PC the three Constructs run from the bring-up
+// at all. Their Construct/Destruct/Prepare vtables link: each factory .cpp defines its own
+// Construct plus the Destruct/Prepare fillers. On PC the three Constructs run from the bring-up
 // (BrnRendererModule::Render, beside the post-fx pool) because the module's Construct has no allocator.
 #include "GameShared/GameClasses/Graphics/CgsBlendStateFactory.h"
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"

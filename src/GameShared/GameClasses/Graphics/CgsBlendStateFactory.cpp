@@ -22,7 +22,7 @@
 //      is reached from `static BrnGame::BrnGameModule gGameModule;` in BrnMain.cpp:45)
 //      makes the vtable live in the linked exe and requires every virtual to be
 //      defined in that link. All three of this class's virtuals ARE defined -- Construct
-//      below, Destruct and Prepare in CgsStateFactoryLinkStubs.cpp -- but the sibling
+//      below, Destruct and Prepare as flagged fillers at the end of this file -- but the sibling
 //      CgsRasterizerStateFactory still declares itself TU-locally and non-polymorphic
 //      in its own .cpp, so the three-header swap cannot be completed honestly yet.
 //   2. Mounting it would buy nothing today anyway: NOTHING calls
@@ -314,4 +314,15 @@ void CgsBlendStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
         CreateBlendState(lpAllocatorShim, &lParameters);                   // stw @0x827EBB70
     CGS_ASSERT(saBlendStates[E_FACTORY_BLEND_STATE_NO_COLOUR_WRITE_ALPHA_TEST],
                "saBlendStates[ eFactoryBlendState_NoColourWrite_AlphaTest ]");
+}
+
+// FLAG PC-platform leaf: no console body or caller; vtable filler.
+void CgsBlendStateFactory::Destruct()
+{
+}
+
+// FLAG PC-platform leaf: no console body or caller; vtable filler.
+bool CgsBlendStateFactory::Prepare()
+{
+    return true;
 }

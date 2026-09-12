@@ -112,3 +112,14 @@ void CgsRasterizerStateFactory::Construct(rw::IResourceAllocator* lpAllocator)
     CGS_ASSERT(saRasterizerStates[E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE],
                "saRasterizerStates[ eFactoryRasterizerState_Scissor_CullModeNone ]");
 }
+
+// FLAG PC-platform leaf: no console body or caller; vtable filler.
+void CgsRasterizerStateFactory::Destruct()
+{
+}
+
+// FLAG PC-platform leaf: no console body or caller; vtable filler.
+bool CgsRasterizerStateFactory::Prepare()
+{
+    return true;
+}

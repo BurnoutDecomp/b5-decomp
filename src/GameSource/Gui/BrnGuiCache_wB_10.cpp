@@ -11,8 +11,47 @@
 // mirrors the X360 ARTIST asm store-for-store; the debug asserts are the game's release
 // CGS_ASSERT (a no-op in this build, matching the X360 assert machinery).
 
+extern "C"
+{
+    // Sign-in state for a controller/user index (the committed network managers compare the
+    // same way); 2 == signed in to the online service.
+    u32 XUserGetSigninState(u32 luUserIndex);
+
+    // Query one privilege for a user index. 0 == the query succeeded, and lpbResult is then
+    // filled with 1 when the user holds the privilege.
+    s32 XUserCheckPrivilege(u32 luUserIndex, u32 luPrivilegeType, u32* lpbResult);
+
+    // Fill the sign-in info block for a user index. 0 == success; the only field this caller
+    // reads is the privilege / guest flags word at +0x08.
+    s32 XUserGetSigninInfo(u32 luUserIndex, u32 luFlags, void* lpSigninInfo);
+}
+
 namespace BrnGui
 {
+    namespace
+    {
+        // XUserGetSigninState result for "signed in to the online service".
+        const u32 KU_SIGNIN_STATE_LIVE = 2;
+
+        // The privilege id the console passes for the multiplayer-sessions check.
+        // FLAG: named after the platform privilege; only the value 254 is attested.
+        const u32 KU_XPRIVILEGE_MULTIPLAYER_SESSIONS = 254;
+
+        // The guest bit of the sign-in flags word (the same mask the login manager tests).
+        const u32 KU_SIGNIN_INFO_GUEST_FLAG_MASK = 0x02;
+
+        // The sign-in info buffer XUserGetSigninInfo fills. The console builds a 40-byte stack
+        // buffer here and reads only the flags word at +0x08, so only that field is named and
+        // the surrounding bytes stay opaque rather than fabricated. FLAGGED: the full platform
+        // layout is not reproduced.
+        struct XUserSigninInfo
+        {
+            u8  maPad00[0x08];       // +0x00..+0x08 (user id + sign-in state; opaque)
+            u32 muFlags;             // +0x08 -- privilege / guest flags word
+            u8  maPad0C[40 - 0x0C];  // +0x0C..+0x28 (gamertag etc.; opaque)
+        };
+    }
+
     // @ 0x824EC678 -- scan the player's profile car list for any unlocked car whose
     // unlock sequence has not yet been shown. Sets mbCarUnlockDetermined on entry, then
     // mbCarUnlockPending == true iff such a car exists (empty list -> pending == false).
@@ -92,5 +131,33 @@ namespace BrnGui
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT");
         return maReplayARCRendered[leActiveRaceCarIndex];
+    }
+
+    // Is the active controller's profile allowed into multiplayer? Starts from "allowed", and
+    // only a signed-in profile whose multiplayer-sessions privilege query succeeds narrows that
+    // to the queried answer; a guest profile (the sign-in flags guest bit, read only when the
+    // sign-in info query succeeds) is refused outright. A failed query leaves the running
+    // answer alone -- so with no profile signed in the console answers "allowed".
+    bool GuiCache::IsMultiplayerAllowed() const
+    {
+        const u32 luUserIndex = static_cast<u32>(miActiveControllerIndex);   // +0x4B38
+
+        bool lbAllowed = true;
+        u32  lauPrivilegeResult[4] = { 0, 0, 0, 0 };
+        if (XUserGetSigninState(luUserIndex) == KU_SIGNIN_STATE_LIVE
+            && XUserCheckPrivilege(luUserIndex, KU_XPRIVILEGE_MULTIPLAYER_SESSIONS,
+                                   lauPrivilegeResult) == 0)
+        {
+            lbAllowed = (lauPrivilegeResult[0] == 1);
+        }
+
+        XUserSigninInfo lSigninInfo;
+        if (XUserGetSigninInfo(luUserIndex, 0, &lSigninInfo) != 0
+            || (lSigninInfo.muFlags & KU_SIGNIN_INFO_GUEST_FLAG_MASK)
+                   != KU_SIGNIN_INFO_GUEST_FLAG_MASK)
+        {
+            return lbAllowed;
+        }
+        return false;
     }
 }

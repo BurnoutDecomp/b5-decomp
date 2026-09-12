@@ -173,10 +173,9 @@ public:
     // CgsBlendStateFactory.cpp:235 / :250 (DWARF). NEITHER HAS AN X360 BODY: a scan
     // of all 30,095 exports finds no Destruct and no Prepare symbol for any of the
     // three factories, and no xrefs_to anywhere names one, so there is nothing to
-    // reconstruct and nothing is invented here. They are DEFINED -- as documented,
-    // never-called link-closure stubs -- in
-    // GameShared/GameClasses/Graphics/CgsStateFactoryLinkStubs.cpp, so that this
-    // class's vtable resolves completely the moment anything constructs it.
+    // reconstruct and nothing is invented here. They are DEFINED -- as flagged,
+    // never-called link-closure fillers -- at the end of CgsBlendStateFactory.cpp, so
+    // that this class's vtable resolves completely the moment anything constructs it.
     virtual void Destruct();
     virtual bool Prepare();
 

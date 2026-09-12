@@ -17,8 +17,8 @@
 // ⚠ NONE OF THE THREE IS REACHED YET, and that is stated rather than implied: the chain above
 // them (Update -> Generate -> Emit) is not reconstructed, so nothing calls ParticleInsert.
 //
-// The rest of the emitter -- Update (the simulation core), DeInit, Bind, BucketRemove -- is not
-// reconstructed and is announced in LionRuntimeLinkStubs.cpp rather than faked here.
+// The rest of the emitter -- Update (the simulation core), DeInit, Bind, BucketRemove -- is
+// bodied further down in this file.
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleEmitter.h"

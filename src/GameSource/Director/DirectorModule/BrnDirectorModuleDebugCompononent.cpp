@@ -2,20 +2,20 @@
 // GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.cpp
 //
 // BrnDirector::DebugComponent -- the director module's in-game debug menu component
-// (registered under the name "Camera" -- see GetName). Of the 7 functions this build's
-// ARTIST export recovers for this TU, 4 are reconstructed here:
-//   - Construct                @ 0x821F6FD8  [EXECUTED in boot trace]
-//   - GetName                  @ 0x821F7050
-//   - TakePanorama             @ 0x821F7060
-//   - (Destruct is DWARF-declared but has no recovered body in this export)
+// (registered under the name "Camera" -- see GetName). Of the 7 recovered functions of
+// this class, 3 are reconstructed here:
+//   - Construct      (runs on every boot)
+//   - GetName
+//   - TakePanorama
+//   - (Destruct is declared in the original header but has no recovered body)
 //
-// OnActivate (0x82275F68), RenderHUD (0x82209A68), StartEditor (0x821F7080) and
-// UpdatePanoramaScreenshots (0x8221B470) remain declaration-only -- see the per-function
-// BLOCKED comments in the header. All four reach into BrnDirector::DirectorModule's
-// still-unmodelled multi-megabyte layout (BrnDirectorModule.h is constructor-only) by raw
-// byte offset off mpDirectorModule, which the project convention forbids reconstructing as
-// a raw offset-cast; RenderHUD and UpdatePanoramaScreenshots additionally involve heavy VMX
-// matrix/quaternion math with no recovered semantic names for their constant tables.
+// OnActivate, RenderHUD, StartEditor and UpdatePanoramaScreenshots remain declaration-only
+// -- see the per-function BLOCKED comments in the header. All four reach into
+// BrnDirector::DirectorModule's still-unmodelled multi-megabyte layout
+// (BrnDirectorModule.h is constructor-only) by raw byte offset off mpDirectorModule, which
+// the project convention forbids reconstructing as a raw offset-cast; RenderHUD and
+// UpdatePanoramaScreenshots additionally involve heavy vector-unit matrix/quaternion math
+// with no recovered semantic names for their coefficient tables.
 // ============================================================================
 
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"
@@ -26,12 +26,12 @@ namespace BrnDirector
 {
 
 // ----------------------------------------------------------------------------
-// DebugComponent::Construct @ 0x821F6FD8  (called by BrnDirector::DirectorModule::Construct)
+// DebugComponent::Construct  (called by BrnDirector::DirectorModule::Construct)
 //
-// The X360 prologue's first call demangles as
-// CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct, but a Construct
-// calling an unrelated class's Destruct makes no sense -- this is the well-known
-// linker ICF folding pattern documented for this class family (see CgsDebugComponent.cpp
+// The first call in the recovered prologue resolves to a name from an unrelated class
+// (CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct), but a Construct
+// calling an unrelated class's Destruct makes no sense -- this is the well-known linker
+// ICF folding pattern documented for this class family (see CgsDebugComponent.cpp
 // DebugComponent::Construct: two zero-stores, mbActive=false / mpDebugLinkedListNext=
 // nullptr). It is the base CgsDev::DebugComponent::Construct() call, folded at link time
 // with a byte-identical trivial function from an unrelated TU.
@@ -49,7 +49,7 @@ void DebugComponent::Construct(DirectorModule* lpDirectorModule)
 }
 
 // ----------------------------------------------------------------------------
-// DebugComponent::GetName @ 0x821F7050
+// DebugComponent::GetName
 // ----------------------------------------------------------------------------
 const char* DebugComponent::GetName() const
 {
@@ -57,7 +57,7 @@ const char* DebugComponent::GetName() const
 }
 
 // ----------------------------------------------------------------------------
-// DebugComponent::TakePanorama @ 0x821F7060
+// DebugComponent::TakePanorama
 //
 // Debug-menu action callback (OnActivate registers it with userData=this -- see the
 // header FLAG comment). Arms the panorama screenshot request on the rising edge

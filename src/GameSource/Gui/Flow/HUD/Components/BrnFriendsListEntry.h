@@ -143,7 +143,8 @@ namespace BrnGui
         // (@0x82422DDC SetLocalisedText / @0x82422DFC SetText on +0x80).
         BrnFlapt::TextFieldRef&       GetNameField()       { return mPlayerNameTextField; }
         const BrnFlapt::TextFieldRef& GetNameField() const { return mPlayerNameTextField; }
-        virtual void Select();
+        // Select is NOT overridden here: the row's vtable slot 4 holds the empty Selectable
+        // base default (the same body MenuItem's slot 4 holds), so the base declaration stands.
         void SetIndexText(s32 liIndex);
 
     private:

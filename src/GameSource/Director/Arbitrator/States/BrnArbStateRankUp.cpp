@@ -11,12 +11,7 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup + Attrib::DefaultDataArea
 
 // ============================================================================
-// BrnDirector::ArbStateRankUp -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
-//   Construct  @0x8225B2B8
-//   GetName    @0x821F6710
-//   Prepare    @0x82270EE8
-//   Update     @0x82236380
-//   Release    @0x82236650
+// BrnDirector::ArbStateRankUp -- reconstructed for semantic parity with the shipped build.
 //
 // The director's "rank up" arbitrator state. On Prepare it allocates an ICE-anim camera
 // behaviour to play the rank-up shot-group, anchoring it to the current rival's car. Update
@@ -27,9 +22,9 @@
 // "Checkpoint" camera effect or hands control back to the roaming state.
 //
 // All member access is BY NAME. The three rank-up control fields it reacts to live in the
-// GameState snapshot's trailing sub-object region, whose DecFIGS DWARF field layout does not
-// line up with the byte/word offsets the asm uses (documented on BrnDirectorGameState.h); they
-// are reached through the named GameState accessors IsRankUpIntroRunning() /
+// GameState snapshot's trailing sub-object region, whose recovered field layout does not line
+// up with the byte/word offsets the shipped code uses (documented on BrnDirectorGameState.h);
+// they are reached through the named GameState accessors IsRankUpIntroRunning() /
 // IsNewRankUpRivalThisFrame() / GetRankUpRivalRaceCarIndex() (the owning type encapsulates the
 // documented-offset reads), so this consumer never reinterprets the blob itself.
 // ----------------------------------------------------------------------------
@@ -39,29 +34,28 @@ namespace BrnDirector
     namespace
     {
         // The default attrib data-area size requested when a shot's parameter block is absent
-        // (X360 li r3, 0x18 -> Attrib::DefaultDataArea(0x18)). Same as the race-intro state.
+        // (Attrib::DefaultDataArea(0x18)). Same as the race-intro state.
         const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
 
         // The two trailing arguments the BehaviourManager::NewBehaviour<TBehaviour> allocation
-        // request carries (X360 li r6,0 / li r7,1). RETYPED 2026-07-29: r6 is NewBehaviour's
-        // OWNER slot -- a `const void*` (the arbitrator states pass null there; the moments pass
-        // their Moment*) -- and r7 is the s32 reference LIMIT. Declaring the owner as `const s32`
-        // meant the call matched no overload at all: a `const s32` variable is not an integer
-        // LITERAL, so it is not a null-pointer constant and will not convert to `const void*`.
-        // (That is the Step-0 defect the previous wave recorded as "one of the two call sites'
-        // arg lists is wrong" -- it was the TYPE, not the count.)
+        // request carries (0 and 1). The third parameter is NewBehaviour's OWNER slot -- a
+        // `const void*` (the arbitrator states pass null there; the moments pass their
+        // Moment*) -- and the fourth is the s32 reference LIMIT. Declaring the owner as
+        // `const s32` meant the call matched no overload at all: a `const s32` variable is not
+        // an integer LITERAL, so it is not a null-pointer constant and will not convert to
+        // `const void*`.
         const void* const KPC_NEW_BEHAVIOUR_OWNER   = 0;
         const s32         KI_NEW_BEHAVIOUR_REFLIMIT = 1;
 
         // The dirty-flag bit Update raises on the state's camera while the rank-up behaviour is
-        // driving it (X360 mCamera.mState_uFlags |= 2). Same as the race-intro state.
+        // driving it (mCamera.mState_uFlags |= 2). Same as the race-intro state.
         const s32 KI_CAMERA_DIRTY_BEHAVIOUR_DRIVEN = 2;
 
-        // The blend the end-of-take "Checkpoint" camera effect hook plays at (flt_82001C98 == 1.0).
+        // The blend the end-of-take "Checkpoint" camera effect hook plays at.
         const f32 KF_CHECKPOINT_BLEND = 1.0f;
 
         // The parametric time a freshly-swapped take is rewound to each frame the rank-up
-        // advances to the next rival's shot (flt_82001CC0 == 0.0).
+        // advances to the next rival's shot.
         const f32 KF_TAKE_START_PARAMETRIC_TIME = 0.0f;
 
         // The end-of-take camera effect hook name the rank-up state requests / checks against.
@@ -69,38 +63,25 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // BehaviourHandle::IsBehaviourReadyToUse -- the X360's "has the take finished its initial
-    // Prepare?" query (sub @0x822128A0): assert allocated, then ask the manager whether the
-    // behaviour is still waiting to prepare. Defined out-of-line where BehaviourManager is
-    // complete.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    bool ArbStateRankUp::BehaviourHandle<TBehaviour>::IsBehaviourReadyToUse() const
-    {
-        CGS_ASSERT(mbAllocated, "mbIsAllocated");
-        return !mpManager->IsBehaviourWaitingToPrepare(muAllocationKey);
-    }
-
-    // ------------------------------------------------------------------------
-    // Construct @0x8225B2B8 -- build the camera, clear the base camera flags, zero the state
-    // machine, and zero the behaviour handle. (miRival is left for Prepare to seed; the X360
-    // Construct does not write +0x194.)
+    // Construct -- build the camera, clear the base camera flags, zero the state machine, and
+    // zero the behaviour handle. (miRival is left for Prepare to seed; Construct does not
+    // write +0x194.)
     // ------------------------------------------------------------------------
     void ArbStateRankUp::Construct()
     {
-        GetNonConstCamera().Construct();   // X360 Camera::Construct(this+0x10)
+        GetNonConstCamera().Construct();   // the base camera @ +0x10
 
-        ResetBaseCameraFlags();            // X360 stb 0, +0x170 / +0x171
+        ResetBaseCameraFlags();            // +0x170 / +0x171 = 0
 
         meState = E_STATE_INACTIVE;        // +0x198 = 0
 
         // The behaviour handle starts unallocated (+0x180 block zeroed: mbAllocated,
-        // muAllocationKey, muHelperIndex, mpManager, mpBehaviour).
-        mIceCam = BehaviourHandle<Camera::BehaviourIceAnim>();
+        // muAllocationKey, mpHelperPool, mpManager, mpBehaviour).
+        mIceCam = Camera::BehaviourHandle<Camera::BehaviourIceAnim>();
     }
 
     // ------------------------------------------------------------------------
-    // GetName @0x821F6710
+    // GetName
     // ------------------------------------------------------------------------
     const char* ArbStateRankUp::GetName() const
     {
@@ -108,14 +89,14 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Prepare @0x82270EE8 -- enter the rank-up state: allocate and configure the ICE-anim
+    // Prepare -- enter the rank-up state: allocate and configure the ICE-anim
     // behaviour for the first rival's take. Does nothing when already ACTIVE / CHANGING_TO_-
     // ROAMING. Returns whether the freshly-allocated take is ready to use (so Update only
     // advances to ACTIVE once the behaviour has finished preparing).
     // ------------------------------------------------------------------------
     bool ArbStateRankUp::Prepare(ArbStateSharedInfo& lrSharedInfo)
     {
-        // Already running (ACTIVE / CHANGING_TO_ROAMING): do nothing. (X360: meState == 2 || == 3.)
+        // Already running (ACTIVE / CHANGING_TO_ROAMING): do nothing (meState == 2 || == 3).
         if (meState == E_STATE_ACTIVE || meState == E_STATE_CHANGING_TO_ROAMING)
         {
             return true;
@@ -157,13 +138,12 @@ namespace BrnDirector
             lpBehaviour->ClearBaseFirstFrameGate();      // base +0x28 = 0
         }
 
-        // The X360 returns !IsBehaviourWaitingToPrepare(...) (sub @0x822128A0 == 0): the take is
-        // "prepared" only once the manager no longer has it queued.
-        return mIceCam.IsBehaviourReadyToUse();
+        // The take is "prepared" only once the manager no longer has it queued.
+        return !mIceCam.IsWaitingToPrepare();
     }
 
     // ------------------------------------------------------------------------
-    // Update @0x82236380 -- per-frame rank-up state machine.
+    // Update -- per-frame rank-up state machine.
     // ------------------------------------------------------------------------
     void ArbStateRankUp::Update(ArbStateSharedInfo& lrSharedInfo)
     {
@@ -174,7 +154,7 @@ namespace BrnDirector
 
         case E_STATE_PREPARING:
             // Try to enter ACTIVE; on success advance and run the ACTIVE body this same frame
-            // (the X360 case-1 success edge falls into case 2).
+            // (the case-1 success edge falls into case 2).
             if (!Prepare(lrSharedInfo))
             {
                 break;   // still preparing
@@ -194,7 +174,7 @@ namespace BrnDirector
             GameState& lrGameState = *lrSharedInfo.mpGameState;
 
             // While the game is cycling rivals this frame, advance to the next rival's take.
-            if (lrGameState.IsNewRankUpRivalThisFrame())   // X360 byte +0x1D6
+            if (lrGameState.IsNewRankUpRivalThisFrame())   // byte +0x1D6
             {
                 ++miRival;   // +0x194
 
@@ -202,12 +182,12 @@ namespace BrnDirector
 
                 // Re-anchor the take to this rival's car (GameState rival race-car index).
                 lpBehaviour->SetPrimaryVehicleRefToRaceCar(
-                    lrGameState.GetRankUpRivalRaceCarIndex());   // X360 word +0x1D8
+                    lrGameState.GetRankUpRivalRaceCarIndex());   // word +0x1D8
 
                 // Swap the take to this rival's shot (index = rival % shot count).
                 const Attrib::Gen::shotgroup& lrRankUpShots =
                     lrSharedInfo.mpDirectorResourceManager->GetRankUp();
-                const u32 luShotCount = lrRankUpShots.Num_ShotList();   // X360 twllei n,0 guards the divide
+                const u32 luShotCount = lrRankUpShots.Num_ShotList();   // trap-checked divide
                 const s32 liShotIndex = static_cast<s32>(static_cast<u32>(miRival) % luShotCount);
 
                 const void* lpShotData = lrRankUpShots.GetShotListData(liShotIndex);
@@ -226,14 +206,14 @@ namespace BrnDirector
             // Once the rank-up is no longer actively driving (the "rank-up intro running" gate
             // is clear), check whether the take has finished and either request the end-of-take
             // "Checkpoint" effect or hand control back to roaming.
-            if (!lrGameState.IsRankUpIntroRunning())   // X360 byte +0x1D4
+            if (!lrGameState.IsRankUpIntroRunning())   // byte +0x1D4
             {
                 if (mIceCam.GetBehaviour()->HasFinishedOrFailed())
                 {
                     // Is the "Checkpoint" effect already the live camera effect?
                     const EffectInterface& lrEffects = *lrSharedInfo.mpEffectInterface;
                     bool lbCheckpointAlreadyLive = false;
-                    if (lrEffects.HasCurrentEffectName())   // X360 byte +0xD37
+                    if (lrEffects.HasCurrentEffectName())   // byte +0xD37
                     {
                         lbCheckpointAlreadyLive =
                             std::strcmp(lrEffects.GetCurrentEffectName(), KPC_CHECKPOINT_HOOK) == 0;
@@ -251,7 +231,7 @@ namespace BrnDirector
                         if (lrContainer.GetState(ArbitratorStateContainer::E_STATE_ROAMING)->Prepare(lrSharedInfo))
                         {
                             lrContainer.SetCurrentState(ArbitratorStateContainer::E_STATE_ROAMING);
-                            Release(lrSharedInfo);   // X360: this->Release (vtable slot 3)
+                            Release(lrSharedInfo);   // this->Release (vtable slot 3)
                         }
                         else
                         {
@@ -275,7 +255,7 @@ namespace BrnDirector
             if (lrContainer.GetState(ArbitratorStateContainer::E_STATE_ROAMING)->Prepare(lrSharedInfo))
             {
                 lrContainer.SetCurrentState(ArbitratorStateContainer::E_STATE_ROAMING);
-                Release(lrSharedInfo);   // X360: this->Release (vtable slot 3)
+                Release(lrSharedInfo);   // this->Release (vtable slot 3)
             }
             break;
         }
@@ -287,21 +267,17 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Release @0x82236650 -- leave the rank-up state: reset the state machine, release the
-    // ICE-anim behaviour back to the manager, and assert no behaviours remain allocated.
+    // Release -- leave the rank-up state: reset the state machine, release the ICE-anim
+    // behaviour back to the manager, and assert no behaviours remain allocated.
     // ------------------------------------------------------------------------
     bool ArbStateRankUp::Release(ArbStateSharedInfo& lrSharedInfo)
     {
         meState = E_STATE_INACTIVE;   // +0x198 = 0
 
-        if (mIceCam.mbAllocated)      // +0x180 block
-        {
-            mIceCam.mpManager->UnSetBehaviourUsedByHandle(mIceCam.muAllocationKey);
-            mIceCam.muHelperIndex = 0;
-            mIceCam.mpManager     = 0;
-            mIceCam.mpBehaviour   = 0;
-            mIceCam.mbAllocated   = false;
-        }
+        // The handle release inlined here is the shared handle's own Release(): when
+        // allocated, UnSetBehaviourUsedByHandle(muAllocationKey) on the owning manager, then
+        // zero the five-word block (+0x180).
+        mIceCam.Release();
 
         lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
         return true;

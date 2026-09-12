@@ -264,6 +264,74 @@ const Attrib::Gen::shotgroup& DirectorResourceManager::GetEventIntroShots(
                         : mRaceStartGroup;              // +568  (0x238)
 }
 
+// ----------------------------------------------------------------------------
+// DirectorResourceManager::GetEventCompletionShots -- the post-event completion group.
+//
+// The sibling of GetEventIntroShots above, and the last unbodied leaf under the post-event
+// arbitrator state. Reconstructed from the export, jump table and all: a 10-case switch on the
+// mode (r4), every non-race arm a single `addi r3,r31,<offset>`; the RACE arm is a LADDER of
+// eight 64-bit equality tests on the finish-line id (r5) selecting the eight compass finish
+// groups, with an "Unknown finish line" assert falling through into the plain race group.
+//
+// ⭐ IT IS ALSO AN INDEPENDENT CONFIRMATION OF THIRTEEN MEMBER OFFSETS: 0x2F8/0x308/0x318/
+// 0x328/0x338 land exactly on mBurningRouteFinishGroup / mMarkedManFinishGroup /
+// mRaceFinishGroup / mRoadRageFinishGroup / mStuntFinishGroup, and the eight ids below land
+// on mRaceFinishNorth..mRaceFinishNorthWest in the declaration order this header records --
+// the compass names and the id ladder agree slot for slot.
+//
+// ⚠️ CONSOLE ODDITIES, REPRODUCED, DO NOT "FIX":
+//   * only modes 0 / 3 / 5 / 7 / 8 have arms. Every other mode -- including the whole online
+//     range and E_MODE_OFFLINE_SHOWTIME -- falls into the default and returns the plain race
+//     finish group, with NO assert (unlike the intro sibling, whose default does assert).
+//   * the finish-line ladder's own default DOES assert, then falls through to that same
+//     group rather than returning early.
+// ----------------------------------------------------------------------------
+const Attrib::Gen::shotgroup& DirectorResourceManager::GetEventCompletionShots(
+    s32 liEventMode, s64 liFinishLineID) const
+{
+    // The eight compass finish-line ids, in the order the ladder tests them.
+    const s64 KI_FINISH_LINE_NORTH      = 557289;
+    const s64 KI_FINISH_LINE_NORTH_EAST = 557288;
+    const s64 KI_FINISH_LINE_EAST       = 557321;
+    const s64 KI_FINISH_LINE_SOUTH_EAST = 557287;
+    const s64 KI_FINISH_LINE_SOUTH      = 557285;
+    const s64 KI_FINISH_LINE_SOUTH_WEST = 557284;
+    const s64 KI_FINISH_LINE_WEST       = 557286;
+    const s64 KI_FINISH_LINE_NORTH_WEST = 557290;
+
+    switch (liEventMode)
+    {
+    case 3:     // E_MODE_ROAD_RAGE
+        return mRoadRageFinishGroup;                  // +808  (0x328)
+
+    case 5:     // E_MODE_BURNING_ROUTE
+        return mBurningRouteFinishGroup;              // +760  (0x2F8)
+
+    case 7:     // E_MODE_STUNT_ATTACK
+        return mStuntFinishGroup;                     // +824  (0x338)
+
+    case 8:     // E_MODE_MARKED_MAN
+        return mMarkedManFinishGroup;                 // +776  (0x308)
+
+    case 0:     // E_MODE_OFFLINE_RACE -- the compass ladder
+        if (liFinishLineID == KI_FINISH_LINE_NORTH)      return mRaceFinishNorth;      // +840
+        if (liFinishLineID == KI_FINISH_LINE_NORTH_EAST) return mRaceFinishNorthEast;  // +856
+        if (liFinishLineID == KI_FINISH_LINE_EAST)       return mRaceFinishEast;       // +872
+        if (liFinishLineID == KI_FINISH_LINE_SOUTH_EAST) return mRaceFinishSouthEast;  // +888
+        if (liFinishLineID == KI_FINISH_LINE_SOUTH)      return mRaceFinishSouth;      // +904
+        if (liFinishLineID == KI_FINISH_LINE_SOUTH_WEST) return mRaceFinishSouthWest;  // +920
+        if (liFinishLineID == KI_FINISH_LINE_WEST)       return mRaceFinishWest;       // +936
+        if (liFinishLineID == KI_FINISH_LINE_NORTH_WEST) return mRaceFinishNorthWest;  // +952
+        CGS_ASSERT(false, "Unknown finish line");
+        break;
+
+    default:    // every other mode -- no assert here, see the note above
+        break;
+    }
+
+    return mRaceFinishGroup;                          // +792  (0x318)
+}
+
 
 // ----------------------------------------------------------------------------
 // [PC diagnostic] one-shot report of how many of the 65 slots actually bound a collection.

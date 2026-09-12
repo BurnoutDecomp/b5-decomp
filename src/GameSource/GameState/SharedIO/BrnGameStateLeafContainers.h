@@ -11,8 +11,16 @@
 
 namespace BrnGameState
 {
-struct GridPositionAndScoreData { u8 maBlob[8]; };   // X360 stride 8 (provisional)
 struct BufferedNewHighScore     { u8 maBlob[32]; };  // X360 stride 32 (provisional)
+
+// NOTE: BrnGameState::GridPositionAndScoreData is now FULLY homed in
+// ModeManager/BrnModeManager.h -- the TU that owns its one producer
+// (ModeManager::SetupOnlineStartingGrid) and the only header with a complete BrnGameState::CarData,
+// which its ordering operator needs. The provisional `struct GridPositionAndScoreData { u8
+// maBlob[8]; }` stub that used to live here has been removed; the Array<GridPositionAndScoreData,8>
+// explicit-instantiation TU (Array_GridPositionAndScoreData_8.cpp) now includes that home directly
+// (mirroring the DeveloperChallengeManager / ImageManagerBase / StuntModeScoringOnline promotions
+// below). This header must NOT include BrnScoringSystem.h -- that is an include cycle.
 
 // NOTE: GameStateModuleIO::TargetEventScore is now FULLY homed in SharedIO/BrnTargetEventScore.h
 // (its id/score fields were decoded by the BrnProgression::Profile TU, whose maTargetEventScores

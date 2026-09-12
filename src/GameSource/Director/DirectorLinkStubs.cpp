@@ -36,7 +36,6 @@
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h"
-#include "GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineCarSelect.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h"
@@ -97,24 +96,11 @@
 
 namespace BrnDirector
 {
-    // ArbStateCrashMode is NOT the crash camera the game enters (that is ArbStateCrashing,
-    // mounted); it is only reached from ArbStateCrashing::ProcessPossibleStateChanges.
-    // Mounting BrnArbStateCrashMode.cpp needs its Prepare, which BrnArbStateCrashMode.h
-    // declares with no definition. Blocker on that Prepare: the SetParameters argument is
-    // BehaviourParameterBank + 0x7C, not yet carved as BehaviourAftertouchCrash::Parameters.
-    // Polarity: CrashMode's IsReadyToPrepare callee already negates -- return it raw (AttractMode
-    // negates at the call site instead).
-    // DELETE-WHEN: that Prepare is bodied -> mount BrnArbStateCrashMode.cpp, delete this line.
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStateCrashMode,       "ArbStateCrashMode")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineCarSelect, "ArbStateOnlineCarSelect")
     BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineRaceIntro, "ArbStateOnlineRaceIntro")
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStatePostEvent,       "ArbStatePostEvent")
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStateRaceIntro,       "ArbStateRaceIntro")
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStateRankUp,          "ArbStateRankUp")
 
-    // Two states declare an explicit Destruct() override that has no body in the tree.
+    // One state declares an explicit Destruct() override that has no body in the tree.
     void ArbStateOnlineRaceIntro::Destruct() {}
-    void ArbStatePostEvent::Destruct()       {}
 }
 
 #undef BRN_DIRECTOR_STUB_ARBSTATE
@@ -207,15 +193,11 @@ namespace Camera
 // ----------------------------------------------------------------------------
 namespace BrnDirector
 {
-    // -- The director's own CgsDev::DebugComponent page ("Camera"). Its five recovered
-    //    functions (DirectorModule/BrnDirectorModuleDebugCompononent.cpp, unmounted) all index
+    // -- The three still-gated functions of the director's own CgsDev::DebugComponent page
+    //    ("Camera"); the rest of the page lives in
+    //    DirectorModule/BrnDirectorModuleDebugCompononent.cpp. These three index
     //    DirectorModule regions this reconstruction does not model yet.
-    //    QUIET no-ops: the debug menu simply has an empty Camera page.
-    void DebugComponent::Construct(DirectorModule* lpDirectorModule)
-    {
-        (void)lpDirectorModule;
-    }
-
+    //    QUIET no-ops: the Camera page registers no variables and draws no overlay.
     void DebugComponent::UpdatePanoramaScreenshots(Camera::Camera* lpCamera)
     {
         (void)lpCamera;
@@ -224,11 +206,6 @@ namespace BrnDirector
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
         (void)lpRender;
-    }
-
-    const char* DebugComponent::GetName() const
-    {
-        return "Camera";   // the page name the console registers (DWARF + the header's note)
     }
 
     void DebugComponent::OnActivate() {}

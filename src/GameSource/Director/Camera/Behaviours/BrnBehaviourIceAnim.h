@@ -426,11 +426,12 @@ public:
 
     // ---- rank-up arbitrator-state pokes (BrnArbStateRankUp::Prepare/Update) -------------
     // Bind the behaviour's primary anchor vehicle reference (mPrimaryVehicleRef @+0xDF0) to a
-    // race car, so the rank-up take frames that rival's car (X360:
-    // VehicleRef::SetToRaceCar(this+0xDF0, raceCarIndex)). Exposed as a named setter so the
-    // arbitrator state never reaches the (private) ref by offset. DECLARATION-ONLY (the
-    // VehicleRef::SetToRaceCar body lands with the VehicleRef TU; the per-TU cl /c gate does
-    // not link).
+    // race car, so the rank-up take frames that rival's car
+    // (VehicleRef::SetToRaceCar(this+0xDF0, raceCarIndex)). Exposed as a named setter so the
+    // arbitrator state never reaches the (private) ref by offset. BODIED 2026-09-12 in this
+    // behaviour's own TU (which owns the private member), exactly like its SECONDARY sibling
+    // below; the VehicleRef::SetToRaceCar it forwards to is the real out-of-line method in
+    // Utils/BrnVehicleRef.cpp.
     void SetPrimaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar);
 
     // ⭐ ADDED 2026-08-29 (crash-camera wave): the SECONDARY-ref sibling of the setter above,
@@ -446,12 +447,12 @@ public:
 
     // ---- post-event arbitrator-state poke (BrnArbStatePostEvent::Prepare) ---------------
     // Seed the behaviour's BYSTANDER anchor vehicle reference (mBystanderRef @+0xE10) to the
-    // fixed value the post-event take frames the winner against. X360 (Prepare @0x8226E228)
-    // stores into mBystanderRef directly: word +0x00 = 0, word +0x04 = -1, word +0x08 = 0,
-    // byte +0x0C = 1. Exposed as a named setter so the arbitrator state never pokes the
-    // (private) ref by offset. DECLARATION-ONLY (the body lands with this behaviour's TU,
-    // which owns mBystanderRef). FLAG: the four bystander-ref fields' individual roles are
-    // not recovered (modelled as a fixed post-event seed; the field WRITES are asm-attested).
+    // fixed value the post-event take frames the winner against. ArbStatePostEvent::Prepare
+    // inlines the writes into mBystanderRef directly: word +0x00 = 0, word +0x04 = -1,
+    // word +0x08 = 0, byte +0x0C = 1. Exposed as a named setter so the arbitrator state never
+    // pokes the (private) ref by offset. BODIED below in this behaviour's own TU (which owns
+    // mBystanderRef). FLAG: the four bystander-ref fields' individual roles in the bystander
+    // case are the base VehicleRef's; only the field WRITES are attested.
     void SetBystanderRefForPostEvent();
 
     // ADDITIVE GROW (BrnArbStateTakedown.cpp -- SimpleIceTakedownPlayer::Prepare @0x8226CF38).

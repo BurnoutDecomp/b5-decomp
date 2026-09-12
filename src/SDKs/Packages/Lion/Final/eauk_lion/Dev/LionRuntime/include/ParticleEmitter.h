@@ -216,13 +216,12 @@ public:
 
     // Bind arBindings onto this emitter: store the binding pointer and back-link the
     // binding's emitter (cLionBindings::SetEmitter). Called (inlined) by
-    // cLionParticleEffectManager::BindingsAttach @ 0x82914530. NOT RECONSTRUCTED -- see
-    // LionRuntimeLinkStubs.cpp.
+    // cLionParticleEffectManager::BindingsAttach. Bodied in ParticleEmitter.cpp.
     void Bind(cLionBindings& arBindings);
 
     // Detach apBucket from this emitter's bucket list. Called by
-    // cParticleBucketManager::Free @ 0x8290F378 as it recycles a bucket back to the pool.
-    // X360 @0x82909790 is an EXPORT-SET HOLE; NOT RECONSTRUCTED -- see LionRuntimeLinkStubs.cpp.
+    // cParticleBucketManager::Free as it recycles a bucket back to the pool. Bodied in
+    // ParticleEmitter.cpp.
     void BucketRemove(cParticleBucket* apBucket);
 
     // Bring the emitter to its initial state for apDescriptor (nullptr while pooling).
@@ -241,9 +240,8 @@ public:
     void Blend();
 
     // Advance one frame; returns non-zero while still alive (0 -> manager unregisters it).
-    // X360 @0x829153D8 -- the head of the Lion SIMULATION core (Generate / Emit /
-    // ParticleBuild / InitialiseParticle / Blend). NOT RECONSTRUCTED -- see
-    // LionRuntimeLinkStubs.cpp.
+    // The head of the Lion SIMULATION core (Generate / Emit / ParticleBuild /
+    // InitialiseParticle / Blend). Bodied in ParticleEmitter.cpp.
     u32 Update(const cTime& arTime);
 
     // ParticleEmitter.h:284 / ParticleEmitter.cpp:1414 (DWARF) -- ADVANCE ONE PARTICLE ONE

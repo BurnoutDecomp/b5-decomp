@@ -170,6 +170,39 @@ namespace GameStateModuleIO
 }
 
 // ===================================================================================================
+//  GridPositionAndScoreData -- one grid candidate: the slot a car currently occupies plus the
+//  scoring record the online starting grid orders by.
+//
+//  PROMOTED HERE from the provisional 8-byte blob that used to stand in
+//  GameSource/GameState/SharedIO/BrnGameStateLeafContainers.h (same treatment as the
+//  DeveloperChallengeManager / ImageManagerBase / StuntModeScoringOnline promotions recorded in
+//  that file): this TU is the record's real owner -- ModeManager::SetupOnlineStartingGrid is the
+//  only producer, and operator> needs a COMPLETE BrnGameState::CarData, which only this header
+//  has (the leaf-container header cannot include BrnScoringSystem.h without a cycle). Single
+//  owner; Array_GridPositionAndScoreData_8.cpp reaches the type through this header.
+//
+//  Layout is the console's: liGridPosition at +0x00, lpCarData at +0x04, 8-byte stride (the
+//  Array<GridPositionAndScoreData,8> element accessor strides by 8, and the sort swaps two words).
+// ===================================================================================================
+struct GridPositionAndScoreData
+{
+    s32                           liGridPosition;
+    const CarData*                lpCarData;
+
+    // The order BubbleSort<GridPositionAndScoreData, Array<GridPositionAndScoreData,8> > drives:
+    // ASCENDING cumulative points. Inline because the console emits no standalone symbol for it --
+    // the whole body (both null guards plus the points compare) is visible inside the sort
+    // instantiation, which is what pins the two assert strings below to THIS operator rather than
+    // to the sort or to its caller.
+    bool operator>(const GridPositionAndScoreData& lRhs) const
+    {
+        CGS_ASSERT(lpCarData != nullptr, "lpCarData");
+        CGS_ASSERT(lRhs.lpCarData != nullptr, "lRhs.lpCarData");
+        return lpCarData->GetCumulativePoints() > lRhs.lpCarData->GetCumulativePoints();
+    }
+};
+
+// ===================================================================================================
 //  ModeManager
 // ===================================================================================================
 class ModeManager
@@ -390,8 +423,11 @@ public:
     void SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount, bool lbPushForwards) const;   // X360 0x82328608
     void SetOnlineRaceCars(GameModeParams* lpGameModeParams,
                            const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent) const;
-    void SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 liNumRaceCars,
-                                 CgsNumeric::Random* lpRandom, bool lbPushForwards) const;
+    // [!] PARAMETER NAMES CORRECTED with the body: the fourth argument is NOT the push-forwards
+    // flag SetStartingGrid takes. It selects how each team's grid block is ordered -- true keeps
+    // the current standings (sort by cumulative points), false shuffles.
+    void SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount,
+                                 CgsNumeric::Random* lpRandom, bool lbUseCurrentStandings) const;
 
     // ===============================================================================================
     // THE 16 COMMITTED BODIES (BrnModeManager.cpp) -- hazards H2: never re-implement these, CALL them.

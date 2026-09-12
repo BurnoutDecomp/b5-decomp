@@ -240,6 +240,18 @@ extern "C" int XNotifyGetNext(void* /*hListener*/, unsigned long /*dwMsgFilter*/
 // so SystemUserProfile::UpdateUserSigninState derives "not signed in" for any user.
 extern "C" u32 XUserGetSigninState(u32 /*luUserIndex*/) { return 0; }
 
+// FLAG PC-platform leaf: XDK privilege query; a non-zero error return makes the caller keep
+// its running answer rather than read an unfilled result word (unreached: every caller gates
+// the query on XUserGetSigninState reporting a signed-in user).
+extern "C" s32 XUserCheckPrivilege(u32 /*luUserIndex*/, u32 /*luPrivilegeType*/,
+                                   u32* /*lpbResult*/) { return 87; /* ERROR_INVALID_PARAMETER */ }
+
+// FLAG PC-platform leaf: XDK sign-in-info query; a non-zero error return makes the caller
+// treat the query as failed rather than parse an unfilled block -- the same answer the console
+// gives for a user index with no profile signed in.
+extern "C" s32 XUserGetSigninInfo(u32 /*luUserIndex*/, u32 /*luFlags*/,
+                                  void* /*lpSigninInfo*/) { return 87; /* ERROR_INVALID_PARAMETER */ }
+
 // FLAG PC-platform leaf: XDK user-name query; success + empty name (unreached: no
 // user ever signs in without XNotify events, so the no-user sentinel holds).
 extern "C" u32 XUserGetName(u32 /*luUserIndex*/, char* lpszUserName, u32 luCchUserName)

@@ -11,6 +11,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h" // BehaviourRotateAboutVehicle::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h" // BehaviourSpirallingDeathcam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"      // BehaviourAftertouchCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"    // BehaviourAftertouchCrash::Parameters
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -61,6 +62,13 @@ namespace BrnDirector
         const Camera::BehaviourAftertouchCam::Parameters& GetAftertouchCamParameters() const
         {
             return mAftertouchCamDefault;
+        }
+
+        // The record's first aftertouch-crash block, at record +108. ArbStateCrashMode::Prepare
+        // hands it to the crash camera behaviour's SetParameters.
+        const Camera::BehaviourAftertouchCrash::Parameters& GetAftertouchCrashParameters() const
+        {
+            return mAftertouchCrashParams;
         }
 
         // Accessor returning the address of the look-around-car parameter block (mpNamedParameters
@@ -136,6 +144,13 @@ namespace BrnDirector
             // transcription, not a zero-and-tag stand-in: its per-block Construct is a
             // straight-line run of constant stores and every one of them is reproduced.
             mAftertouchCamDefault.Construct();
+
+            // ⭐ 2026-09-12: the two aftertouch-crash blocks, each with its own authored
+            // Construct -- a straight-line constant run, reproduced in full. Without them the
+            // crash-mode camera's SetParameters type-tag tripwire fires on the first crash and
+            // the whole rig runs off a zeroed block.
+            mAftertouchCrashParams.Construct();
+            mCrashDebugParams.Construct();
 
             maLookAroundCarCamParameters.Construct();
 
@@ -225,7 +240,17 @@ namespace BrnDirector
         // stay inside the reserved remainder below, which is sized so the gyro run cannot
         // move whatever this block's reconstruction weighs.
         Camera::BehaviourAftertouchCam::Parameters mAftertouchCamDefault;   // +0
-        u8 maReservedHead[480 - sizeof(Camera::BehaviourAftertouchCam::Parameters)];
+
+        // ⭐ THE TWO AFTERTOUCH-CRASH BLOCKS, CARVED 2026-09-12 (crash-mode wave).
+        // ArbStateCrashMode::Prepare hands the FIRST of them to
+        // BehaviourAftertouchCrash::SetParameters (the console reaches it as bank +0x7C, i.e.
+        // record +108, the bank's record starting at bank +0x10). The names are this record's
+        // own; the 112-byte stride between them is sizeof the crash Parameters block, which its
+        // own Construct pins by writing every word out to +0x6C. The aftertouch-cam block above
+        // is exactly 108 bytes, so the first of these starts right after it with no padding.
+        Camera::BehaviourAftertouchCrash::Parameters mAftertouchCrashParams;   // +108
+        Camera::BehaviourAftertouchCrash::Parameters mCrashDebugParams;        // +220
+        u8 maReservedHead[480 - 220 - sizeof(Camera::BehaviourAftertouchCrash::Parameters)];  // +332 (helicam block)
         Camera::BehaviourGyroCam::Parameters mGyroCamDefaultParams;                  // +480
         Camera::BehaviourGyroCam::Parameters mGyroCamTruckFront;                     // +684
         Camera::BehaviourGyroCam::Parameters mGyroCamLeft;                           // +888
@@ -248,6 +273,11 @@ namespace BrnDirector
     // parameter block cannot silently slide them off their attested offsets.
     static_assert(sizeof(Camera::BehaviourGyroCam::Parameters) == 204,
                   "BehaviourGyroCam::Parameters is the 204-byte grid the tumbling blocks sit on");
+
+    // The 112-byte stride the record's two aftertouch-crash head blocks sit on (record +108 and
+    // +220). Ratcheted so a future widening of that block cannot slide either off its offset.
+    static_assert(sizeof(Camera::BehaviourAftertouchCrash::Parameters) == 112,
+                  "BehaviourAftertouchCrash::Parameters is the 112-byte head-run stride");
     static_assert(sizeof(Camera::BehaviourAftertouchCam::Parameters) == 108,
                   "BehaviourAftertouchCam::Parameters is the record's 108-byte first block");
     static_assert(offsetof(NamedParameters, mAftertouchCamDefault) == 0,

@@ -19,9 +19,8 @@
 // -- which is why nothing outside that one .cpp could name a rasteriser state,
 // and why BrnPostFx.cpp had to carry an invented `gpPostFxRasterizerState`
 // extern instead of naming saRasterizerStates[2]. Reconciling that declaration
-// to the DWARF shape is exactly the change CgsStateFactoryLinkStubs.cpp's
-// "NOT COVERED HERE" note asks for, and it lands with the two link stubs that
-// note requires (CgsRasterizerStateFactory::Destruct / ::Prepare).
+// to that documented shape lands together with this class's two link-closure fillers
+// (CgsRasterizerStateFactory::Destruct / ::Prepare).
 //
 // -----------------------------------------------------------------------------
 // SHAPE. DecFIGS DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/
@@ -50,7 +49,6 @@
 //     b5-decomp/src/GameSource/Graphics/BrnRendererModule.h:378:  // (see the CgsBlendStateFactory / CgsRasterizerStateFactory / CgsDepthStencilStateFactory
 //     b5-decomp/src/GameSource/Graphics/BrnRendererModule.h:554:    CgsRasterizerStateFactory           mRasterizerStateFactory;
 //     b5-decomp/src/GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.cpp:6/82
-//     b5-decomp/src/GameShared/GameClasses/Graphics/CgsStateFactoryLinkStubs.cpp:45..53 (the comment)
 // (BrnRendererModule.h:144 WAS the empty PLACEHOLDER struct at the time of that grep; the
 // gate-flip wave replaced the three placeholders with #includes of the real headers, and
 // BrnRendererModule::Render now calls all three Constructs in its deferred PC bring-up.)
@@ -166,11 +164,10 @@ public:
     // CgsRasterizerStateFactory.cpp:90 / :105 (DWARF). NEITHER HAS AN X360 BODY: a
     // scan of all 30,095 exports finds no Destruct and no Prepare symbol for any of
     // the three factories, and no xrefs_to anywhere names one, so there is nothing to
-    // reconstruct and nothing is invented. They are DEFINED -- as documented,
-    // never-called link-closure stubs -- in
-    // GameShared/GameClasses/Graphics/CgsStateFactoryLinkStubs.cpp, alongside the
-    // blend and depth/stencil twins', so that this class's vtable resolves completely
-    // the moment anything constructs it.
+    // reconstruct and nothing is invented. They are DEFINED -- as flagged,
+    // never-called link-closure fillers -- at the end of
+    // CgsRasterizerStateFactory.cpp, as for the blend and depth/stencil twins, so that
+    // this class's vtable resolves completely the moment anything constructs it.
     virtual void Destruct();
     virtual bool Prepare();
 

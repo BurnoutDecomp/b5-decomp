@@ -55,4 +55,18 @@ namespace CgsAlgorithms
 
         return lrContainer;
     }
+
+    // Whole-container entry (the twin of CgsBubbleSort.h's 1-arg BubbleSort). Read off the
+    // instantiation the console inlines into ModeManager::SetupOnlineStartingGrid: read the live
+    // length (GetLength() carries the "Array used before Construct/Clear was called" guard), assert
+    // it is not negative with CgsShuffle.h's OWN message, then shuffle the whole live window
+    // [0, GetLength()). The length guard is a signed test on the console, hence the cast.
+    template <class Type, class Container>
+    Container& Shuffle(Container& lrContainer, CgsNumeric::Random& lrRandom)
+    {
+        const s32 liEndPlusOne = static_cast<s32>(lrContainer.GetLength());
+        CGS_ASSERT(liEndPlusOne >= 0, "Array is too large to shuffle!");
+
+        return Shuffle<Type, Container>(lrContainer, 0, liEndPlusOne, lrRandom);
+    }
 }

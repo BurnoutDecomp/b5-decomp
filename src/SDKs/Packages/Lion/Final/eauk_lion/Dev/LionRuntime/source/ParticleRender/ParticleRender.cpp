@@ -85,10 +85,10 @@ extern "C"
                                 u32 luStartVertex, u32 luVertexCount);
 }
 
-// The Lion particle path's sampler-state object (X360 dword_83010F60): Dispatch binds it on
-// sampler 0 through the shadow device before rendering. Set up by the particle module init; no
-// project TU homes it yet, so it is referenced by name as an external.
-extern void* gpLionParticleSamplerState;
+// The Lion particle path's sampler-state object: Dispatch binds it on sampler 0 through the
+// shadow device before rendering. FLAG PC-platform leaf -- null on this backend because the
+// state's builder, part of the particle module's render init, is not landed.
+void* gpLionParticleSamplerState = nullptr;
 
 // The Xenon particle draw primitive type (X360 li r4, 0xD passed to D3DDevice_DrawVertices).
 static const u32 KU_PARTICLE_PRIMITIVE_TYPE = 13;

@@ -863,4 +863,46 @@ void BehaviourIceAnim::SetSecondaryVehicleRefToRaceCar(EActiveRaceCarIndex leRac
     mSecondaryVehicleRef.SetToRaceCar(leRaceCar);
 }
 
+// ----------------------------------------------------------------------------
+// SetPrimaryVehicleRefToRaceCar
+// ----------------------------------------------------------------------------
+// The PRIMARY-ref sibling of the setter above, for mPrimaryVehicleRef (+0xDF0). The de-inlined
+// form of the shipped build's VehicleRef::SetToRaceCar(behaviour + 0xDF0, raceCarIndex) -- one
+// real out-of-line call, emitted twice by the rank-up arbitrator state (ArbStateRankUp::Prepare
+// seeds the first rival's take, ArbStateRankUp::Update re-anchors every time the game moves to
+// the next rival), so the rank-up ICE camera frames that rival's car. Same distinction as the
+// secondary setter: this is the real out-of-line VehicleRef method (bodied in
+// Utils/BrnVehicleRef.cpp), NOT the inlined four-word {kind=1, index, 0, valid=1} seed that
+// SetPrimaryVehicleRefToRaceCarIndex models. The member is private, so the setter lives here
+// rather than letting the arbitrator state form the offset.
+// ----------------------------------------------------------------------------
+void BehaviourIceAnim::SetPrimaryVehicleRefToRaceCar(EActiveRaceCarIndex leRaceCar)
+{
+    mPrimaryVehicleRef.SetToRaceCar(leRaceCar);
+}
+
+// ----------------------------------------------------------------------------
+// SetBystanderRefForPostEvent
+// ----------------------------------------------------------------------------
+// The BYSTANDER-ref seed the post-event take runs with, for mBystanderRef (+0xE10). Unlike the
+// two SetToRaceCar setters above this one has no out-of-line callee: the shipped build INLINES
+// the four field writes straight into ArbStatePostEvent::Prepare, in the order
+//     word +0x00 = 0 ; word +0x08 = 0 ; byte +0x0C = 1 ; word +0x04 = -1
+// (the store order is the scheduler's; the values are what matter). Written here through the
+// ref's named fields: the reference kind is the PLAYER CAR, it binds no race-car index, it
+// names no nearest-player rank, and it is marked populated -- i.e. the post-event take frames
+// the player, which is what a "who is watching the winner" bystander anchor means here.
+// FLAG: the four fields' VALUES are attested; their individual ROLES in the bystander case are
+// the base VehicleRef's, taken over unchanged.
+// The member is private, so the setter lives here rather than letting the arbitrator state
+// form the offset.
+// ----------------------------------------------------------------------------
+void BehaviourIceAnim::SetBystanderRefForPostEvent()
+{
+    mBystanderRef.meType         = BrnDirector::VehicleRef::E_PLAYER_CAR;   // +0x00 = 0
+    mBystanderRef.miRaceCarIndex = -1;                                      // +0x04 = -1
+    mBystanderRef.muRef          = 0;                                       // +0x08 = 0
+    mBystanderRef.mbSet          = true;                                    // +0x0C = 1
+}
+
 } } // namespace BrnDirector::Camera
