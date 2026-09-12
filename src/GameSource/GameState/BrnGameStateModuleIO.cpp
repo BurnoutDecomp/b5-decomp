@@ -801,6 +801,22 @@ const SetUpAllEventStartsInterface& OutputBuffer::GetSetUpAllEventStartsInterfac
     return mSetUpAllEventStartsInterface;
 }
 
+// ⭐ [preset-races producer wave 2026-09-12] The interface the two flag accessors below guard.
+// INLINED at both ends of the shipped build (the producer's memcpy destination and the bridge's
+// memcpy source are
+// the same `out + 0x2D1D0` adjust, 0x1E18 in both directions), so there is no console symbol here
+// -- this pair IS that adjust, exactly as GetSetUpAllEventStartsInterface above. NO LOCK ASSERT,
+// for the same reason: the console lock-checks only the valid flag beside it.
+SpecificGameModeEventInterface& OutputBuffer::GetSpecificGameModeEventInterface()
+{
+    return mSpecificGameModeEventInterface;
+}
+
+const SpecificGameModeEventInterface& OutputBuffer::GetSpecificGameModeEventInterface() const
+{
+    return mSpecificGameModeEventInterface;
+}
+
 // X360 0x823BA190 - read-lock getter for mbSpecificGameModeEventInterfaceIsValid (this+192489).
 bool OutputBuffer::GetSpecificGameModeEventInterfaceIsValid() const
 {

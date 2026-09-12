@@ -11,8 +11,8 @@
 // smoothing the angular velocity each frame and signalling the gyro rig when a
 // LEAD-subtype tumble is a good time to plant. Class shape / member names /
 // method set verbatim from the declarations (BrnMomentTumbling.h);
-// gated in the console build ledger. This TU bodies Construct/Update/
-// Release/SetParameters/GetName/SignalIsGoodTimeToPlant; Prepare/Destruct/
+// gated in the console build ledger. This TU bodies Construct/Prepare/Update/
+// Release/SetParameters/GetName/SignalIsGoodTimeToPlant; Destruct/
 // GetInstanceType and Parameters::Construct are their own ledger functions
 // (declaration-only); SetGyroCamParameters is bodied with this TU.
 //
@@ -45,7 +45,8 @@ namespace BrnDirector
         // gyro handle clear, and the try/first-crash latch seeds.
         virtual void Construct();
 
-        //  Its own ledger function (declaration-only).
+        // (this TU) -- park at SEARCHING and clear the
+        // smoothed angular velocity; allocates nothing.
         virtual bool Prepare(void* lrBehaviourController);
 
         // the per-frame tumbling state

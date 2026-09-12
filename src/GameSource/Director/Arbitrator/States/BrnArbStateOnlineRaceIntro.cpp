@@ -13,14 +13,8 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup + Attrib::DefaultDataArea
 
 // ============================================================================
-// BrnDirector::ArbStateOnlineRaceIntro -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
-//   CalculateStateTimes  @0x821F6370
-//   GetName              @0x821F6480
-//   Construct            @0x8225AE98
-//   SetupRivalMovie      @0x8226EC18
-//   Update               @0x822734A8
-//   (Prepare body @0x821F6340 -- the small "latch meState" entry, mirrored from the DWARF +
-//    the case-1 dispatch; Release/Destruct are declaration-only -- no attested asm in this TU.)
+// BrnDirector::ArbStateOnlineRaceIntro -- Construct / GetName / Prepare / CalculateStateTimes /
+// SetupRivalMovie / Update / Release.
 //
 // The director's ONLINE race-intro arbitrator state. It plays a pre-race camera fly-by: it
 // shows each rival in turn (the three rival "show" ICE-anim takes, cycled through
@@ -40,13 +34,14 @@ namespace BrnDirector
     namespace
     {
         // The default attrib data-area size requested when a shot's parameter block is absent
-        // (X360 li r3, 0x18 -> Attrib::DefaultDataArea(0x18)). Same as the sibling states.
+        // (the console requests Attrib::DefaultDataArea(0x18)). Same as the sibling states.
         const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
 
         // The two trailing arguments the BehaviourManager::NewBehaviour<TBehaviour> allocation
-        // request carries (X360 li r6,0 / li r7,1). RETYPED 2026-07-29: r6 is NewBehaviour's
-        // OWNER slot -- a `const void*` (the arbitrator states pass null there; the moments pass
-        // their Moment*) -- and r7 is the s32 reference LIMIT. Declaring the owner as `const s32`
+        // request carries (owner null, reference limit 1). RETYPED 2026-07-29: the first is
+        // NewBehaviour's OWNER slot -- a `const void*` (the arbitrator states pass null there; the
+        // moments pass their Moment*) -- and the second the s32 reference LIMIT. Declaring the
+        // owner as `const s32`
         // meant the call matched no overload at all: a `const s32` variable is not an integer
         // LITERAL, so it is not a null-pointer constant and will not convert to `const void*`.
         // (That is the Step-0 defect the previous wave recorded as "one of the two call sites'
@@ -65,64 +60,19 @@ namespace BrnDirector
         const char* const KPC_HOOK_BLACK_FADE_IN_QUICK = "BlackFadeIn_Quick";
 
         // The minimum number of shots the online-race-start group must carry (the case-1 assert
-        // "lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT"). X360 cmpwi 3.
+        // "lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT").
         const u32 KU_ICE_MOVIE_MIN_COUNT = 3;
 
         // muNumberOfCarsInIntro must be in [1, 3] (the case-1 assert).
         const u32 KU_MAX_CARS_IN_INTRO = 3;
 
-        // The behaviour-internal "give up following" sentinel the X360 writes onto the forced-
+        // The behaviour-internal "give up following" sentinel the console writes onto the forced-
         // finished gameplay behaviour (+0x290 == 0x7F7FFFFF == FLT_MAX bits); reproduced via the
         // named SharedCameraContainer operation, not poked by offset.
     }
 
     // ------------------------------------------------------------------------
-    // BehaviourHandle::GetProducedCamera -- the camera the live behaviour produced this frame
-    // (the manager keeps it alongside the behaviour; the X360 reads slot+0x10 via sub_821FD450).
-    // Defined out-of-line where the behaviour types are complete. Both the ICE-anim and the
-    // interpolate behaviour expose the produced camera by name.
-    // ------------------------------------------------------------------------
-    template <>
-    const Camera::Camera&
-    ArbStateOnlineRaceIntro::BehaviourHandle<Camera::BehaviourIceAnim>::GetProducedCamera() const
-    {
-        CGS_ASSERT(mbAllocated, "IsAllocated()");
-        return mpBehaviour->GetProducedCamera();
-    }
-
-    template <>
-    const Camera::Camera&
-    ArbStateOnlineRaceIntro::BehaviourHandle<Camera::BehaviourInterpolate>::GetProducedCamera() const
-    {
-        CGS_ASSERT(mbAllocated, "IsAllocated()");
-        // The interpolate behaviour holds NO camera of its own: the blend writes the camera the
-        // pool helper owns, and the console's de-inlined accessor reads it straight out of that
-        // helper slot. Reached BY NAME through the manager-side twin of the same lookup.
-        return mpManager->GetCameraFromBehaviour(
-            Camera::BehaviourHelperIndex(static_cast<s32>(muAllocationKey)));
-    }
-
-    // ------------------------------------------------------------------------
-    // BehaviourHandle::Release -- drop the manager-side hold on the behaviour and clear the
-    // handle (X360 sub_8222DFD8 on the ICE-anim handles / sub_8222DCA8 on the interpolator).
-    // Defined out-of-line where the BehaviourManager type is complete.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    bool ArbStateOnlineRaceIntro::BehaviourHandle<TBehaviour>::Release()
-    {
-        if (mbAllocated)
-        {
-            mpManager->UnSetBehaviourUsedByHandle(muAllocationKey);
-            muHelperIndex = 0;
-            mpManager     = 0;
-            mpBehaviour   = 0;
-            mbAllocated   = false;
-        }
-        return true;
-    }
-
-    // ------------------------------------------------------------------------
-    // GetName @0x821F6480
+    // GetName
     // ------------------------------------------------------------------------
     const char* ArbStateOnlineRaceIntro::GetName() const
     {
@@ -130,21 +80,21 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Construct @0x8225AE98 -- build the camera, clear the base camera flags, zero the state
+    // Construct -- build the camera, clear the base camera flags, zero the state
     // machine + the rival-movie cursor, and zero every behaviour handle + the interpolator
     // parameter block.
     // ------------------------------------------------------------------------
     void ArbStateOnlineRaceIntro::Construct()
     {
-        GetNonConstCamera().Construct();   // X360 Camera::Construct(this+0x10)
+        GetNonConstCamera().Construct();   // the embedded camera @+0x10
 
-        ResetBaseCameraFlags();            // X360 stb 0, +0x170 / +0x171
+        ResetBaseCameraFlags();            // the two base flag bytes @+0x170 / +0x171
 
         meState            = E_STATE_INACTIVE;   // +0x220 = 0
         muRivalMovieOffset = 0;                  // +0x21C = 0
 
         // The interpolator handle starts unallocated (+0x180 block zeroed).
-        mInterpolator = BehaviourHandle<Camera::BehaviourInterpolate>();
+        mInterpolator.Clear();
 
         // The interpolator parameter block seed (+0x194: {+0x00:0, +0x04:8, +0x08:0, +0x0C:2}).
         mInterpolatorParams           = InterpolatorParameters();
@@ -155,21 +105,19 @@ namespace BrnDirector
         // mPlayer @+0x1E0, mLights @+0x1F4 blocks zeroed).
         for (u32 luRival = 0; luRival < KU_NUM_RIVAL_BEHAVIOURS; ++luRival)
         {
-            maRivalBehaviourHandle[luRival] = BehaviourHandle<Camera::BehaviourIceAnim>();
+            maRivalBehaviourHandle[luRival].Clear();
         }
-        mPlayerBehaviourHandle = BehaviourHandle<Camera::BehaviourIceAnim>();
-        mLightsBehaviourHandle = BehaviourHandle<Camera::BehaviourIceAnim>();
+        mPlayerBehaviourHandle.Clear();
+        mLightsBehaviourHandle.Clear();
     }
 
     // ------------------------------------------------------------------------
-    // Prepare @0x821F6340 -- the small entry latch: unless already ACTIVE-or-later, force
-    // PREPARING and reset the rival-movie cursor, then report ready (the X360 returns 1).
+    // Prepare -- the small entry latch: unless already ACTIVE-or-later, force PREPARING and
+    // reset the rival-movie cursor, then report ready (the console returns true unconditionally).
     //
     //   if (meState <= 1) { meState = 1; muRivalMovieOffset = 0; }   return true;
     //
-    // (X360: `if (*(a1+544) <= 1u) { *(a1+544)=1; *(a1+536)=0; }` -- +0x220 == meState,
-    // +0x21C == muRivalMovieOffset on the console; the DWARF/asm word offsets quoted in the
-    // pseudocode packet are the console layout, reached here BY NAME.)
+    // (+0x220 == meState, +0x21C == muRivalMovieOffset on the console; both reached here BY NAME.)
     // ------------------------------------------------------------------------
     bool ArbStateOnlineRaceIntro::Prepare(ArbStateSharedInfo& lrSharedInfo)
     {
@@ -184,7 +132,7 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // CalculateStateTimes @0x821F6370 -- split the event's intro time budget across the per-rival
+    // CalculateStateTimes -- split the event's intro time budget across the per-rival
     // "show" / "move" segments.
     //
     // luNumRivals == 0: put the whole (un-deducted) budget in the player "show" time and zero the
@@ -192,8 +140,8 @@ namespace BrnDirector
     // weight the budget by (numRivals+1) shows plus 2*(numRivals+1) move segments. When the
     // budget covers the full weighted time, every show gets budget/totalWeight and every move
     // twice that; when it is short, every show is capped at 1.0 and the moves absorb the
-    // remainder. (The X360 int->double conversion of numRivals / numRivals+1 is reproduced as
-    // plain f32 arithmetic; the four rodata constants are asm-attested.)
+    // remainder. (The console's int->double conversion of numRivals / numRivals+1 is reproduced
+    // as plain f32 arithmetic; the four constants are attested.)
     // ------------------------------------------------------------------------
     void ArbStateOnlineRaceIntro::CalculateStateTimes(u32 luNumRivals, f32 lfMaxTime)
     {
@@ -208,7 +156,8 @@ namespace BrnDirector
                                          + KF_MOVE_SEGMENTS_SCALE;
             const f32 lfTotalWeight    = lfShowCount + lfMoveWeight;
 
-            // asm @0x821F6370: fcmpu cr6, totalWeight, budget; bge -> the budget-covers branch.
+            // The console compares the total weighted time against the budget; >= takes the
+            // budget-covers branch.
             if (lfTotalWeight >= lfBudget)
             {
                 // Budget covers the full fly-by: interpolate gets an even slice, each look-segment 2x.
@@ -235,7 +184,7 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // SetupRivalMovie @0x8226EC18 -- allocate + configure the rival "show" ICE-anim behaviour at
+    // SetupRivalMovie -- allocate + configure the rival "show" ICE-anim behaviour at
     // the current rival-movie cursor (muRivalMovieOffset) for rival luRivalIndex.
     //
     // Picks the rival's shot from the online-race-start shot group (indexing
@@ -276,7 +225,7 @@ namespace BrnDirector
             static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
 
         // Anchor the take's eye + look vehicle references to this rival's intro race car (the
-        // X360 reads the rival's race-car index from the GameState's per-intro-car id table and
+        // console reads the rival's race-car index from the GameState's per-intro-car id table and
         // writes the same race-car ref into both mPrimaryVehicleRef @+0xDF0 and
         // mSecondaryVehicleRef @+0xE00, asserting the index < ku8MaxNumRaceCars inside each
         // setter).
@@ -287,10 +236,10 @@ namespace BrnDirector
         maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()
             ->SetSecondaryVehicleRefToRaceCarIndex(liRivalRaceCar);          // +0xE00 block
 
-        // Enable the take's collision policy (X360 stb 1 at +0xE28).
+        // Enable the take's collision policy (behaviour +0xE28).
         maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()->SetUseCollisionPolicy(true);
 
-        // Clear the base first-frame gate (X360 *(behaviour + 40) = 0).
+        // Clear the base first-frame gate (behaviour +0x28 = 0).
         maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()->ClearBaseFirstFrameGate();
 
         ++muRivalMovieOffset;
@@ -299,7 +248,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     // SetupInterpolator -- allocate the take-to-take blend behaviour and latch it to blend
     // lrFromCamera -> lrToCamera over mfTimeToSpendInterpolating, seeded from mInterpolatorParams.
-    // De-inlines the X360 interpolator-setup sequence the MOVING_TO_* edges share.
+    // De-inlines the console's interpolator-setup sequence the MOVING_TO_* edges share.
     // ------------------------------------------------------------------------
     void ArbStateOnlineRaceIntro::SetupInterpolator(ArbStateSharedInfo& lrSharedInfo,
                                                     const Camera::Camera& lrFromCamera,
@@ -327,16 +276,16 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Update @0x822734A8 -- per-frame online-race-intro state machine.
+    // Update -- per-frame online-race-intro state machine.
     //
     // FLAG (scope of faithful reconstruction): the per-state camera drive, the GameState event-
     // state reads, the ChangeToState hand-offs, the behaviour allocation + ICE-anim configuration
-    // and the epilogue fade are reproduced BY NAME from the X360 pseudocode/asm. The take-to-take
+    // and the epilogue fade are reproduced BY NAME from the shipped build. The take-to-take
     // interpolator SETUP (cases MOVING_TO_RIVAL / MOVING_TO_PLAYER) goes through an unrecovered
-    // multi-stage camera-reference pipeline (X360 sub_821FD4B8 builds a CameraReference from a
-    // BehaviourHandle, sub_8224EE58 latches the interpolator over the two refs); those steps are
+    // multi-stage camera-reference pipeline (the console builds a CameraReference from a
+    // BehaviourHandle, then latches the interpolator over the two refs); those steps are
     // expressed through the BehaviourInterpolate named-setup API (declaration-only) rather than
-    // paraphrased to per-field stores. The camera-state dirty-flag word writes the X360 ORs into
+    // paraphrased to per-field stores. The camera-state dirty-flag word writes the console ORs into
     // mCamera.mState_uFlags each frame are reproduced as the named flag OR.
     // ------------------------------------------------------------------------
     void ArbStateOnlineRaceIntro::Update(ArbStateSharedInfo& lrSharedInfo)
@@ -344,7 +293,7 @@ namespace BrnDirector
         Camera::Camera& lrCamera    = GetNonConstCamera();
         GameState&      lrGameState = *lrSharedInfo.mpGameState;
 
-        // The X360 clears the camera's "behaviour-driven" dirty bit at entry
+        // The console clears the camera's "behaviour-driven" dirty bit at entry
         // (mCamera.mState_uFlags &= ~2).
         lrCamera.mState_uFlags &= ~2;
 
@@ -383,7 +332,7 @@ namespace BrnDirector
                                    "lOnlineRaceStartShotGroup.Num_ShotList() >= E_ICE_MOVIE_MIN_COUNT");
 
                         // Force the primary gameplay behaviour to finish so the intro camera can
-                        // take over (X360 resolves the primary gameplay behaviour and sets its
+                        // take over (the console resolves the primary gameplay behaviour and sets its
                         // remaining-time to FLT_MAX + raises its finished flags).
                         lrSharedInfo.mpSharedCameraContainer->ForcePrimaryGameplayBehaviourToFinish();
 
@@ -405,8 +354,8 @@ namespace BrnDirector
                             static_cast<Camera::BehaviourIceAnim::ShotReference*>(
                                 const_cast<void*>(lpShotData)));
 
-                        // Anchor the player take's eye + look references to the player (X360
-                        // writes {kind 0, index -1, 0, valid 1} into both refs).
+                        // Anchor the player take's eye + look references to the player (the
+                        // console writes {kind 0, index -1, 0, valid 1} into both refs).
                         lpBehaviour->SetPrimaryVehicleRefToPlayer();     // +0xDF0
                         lpBehaviour->SetSecondaryVehicleRefToPlayer();   // +0xE00
 
@@ -466,8 +415,8 @@ namespace BrnDirector
 
                 // Allocate the interpolator and seed it from the InterpolatorParameters block,
                 // then blend FROM the rival "show" produced camera TO the player "show" produced
-                // camera over the per-move time. (X360 builds the two CameraReferences from the
-                // rival + player handles and latches Setup over them via sub_8224EE58; expressed
+                // camera over the per-move time. (The console builds the two CameraReferences from
+                // the rival + player handles and latches Setup over them; expressed
                 // here through the BehaviourInterpolate named-setup API.)
                 SetupInterpolator(lrSharedInfo,
                     maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera(),
@@ -493,7 +442,7 @@ namespace BrnDirector
             {
                 lrCamera = mInterpolator.GetProducedCamera();
                 mfTimeInState = 0.0f;   // +0x214 = 0
-                meState = E_STATE_MOVING_TO_RIVAL;   // re-enter the move (X360 *v3 = 5)
+                meState = E_STATE_MOVING_TO_RIVAL;   // re-enter the move (+0x220 = 5)
             }
             else
             {
@@ -534,8 +483,8 @@ namespace BrnDirector
                     mPlayerBehaviourHandle.GetProducedCamera(),
                     maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera());
 
-                // Release the rival behaviour (X360 sub_8222DFD8 on the rival handle).
-                maRivalBehaviourHandle[muRivalMovieOffset - 1].Release();   // X360 sub_8222DFD8
+                // Release the rival behaviour.
+                maRivalBehaviourHandle[muRivalMovieOffset - 1].Release();
                 meState = E_STATE_MOVING_TO_PLAYER;   // +0x220 = 6
             }
             else
@@ -550,8 +499,8 @@ namespace BrnDirector
                     maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera(),
                     maRivalBehaviourHandle[muRivalMovieOffset - 2].GetProducedCamera());
 
-                // Release the previous rival behaviour (X360 sub_8222DFD8).
-                maRivalBehaviourHandle[muRivalMovieOffset - 2].Release();   // X360 sub_8222DFD8
+                // Release the previous rival behaviour.
+                maRivalBehaviourHandle[muRivalMovieOffset - 2].Release();
             }
 
             lrCamera.mState_uFlags |= 0x10000000;
@@ -567,7 +516,7 @@ namespace BrnDirector
 
             if (mInterpolator.GetBehaviour()->HasFinished())
             {
-                // Report the rival now being shown to the director output interface (X360 writes
+                // Report the rival now being shown to the director output interface (the console writes
                 // {requested 1, rival index, show time} into mpOutputInterface @+0x00/+0x04/+0x08
                 // == ArbStateSharedInfo +0x10). FLAG: DirectorOutputInterface is forward-declared
                 // only in this cone; the three fields are written by attested offset (opaque
@@ -578,7 +527,7 @@ namespace BrnDirector
                 lpRivalReportSlot[1] = static_cast<s32>(muCurrentRival);
                 *reinterpret_cast<f32*>(&lpRivalReportSlot[2]) = mfTimeToSpendLookingAtRival;
 
-                mInterpolator.Release();   // X360 sub_8222DCA8 release
+                mInterpolator.Release();
 
                 lrCamera.mState_uFlags |= 0x2000000;
                 mfTimeInState = 0.0f;   // +0x214 = 0
@@ -735,5 +684,32 @@ namespace BrnDirector
         }
 
         mfTimeInState += lrSharedInfo.mfSimTimestep;   // +0x214 += mfSimTimestep
+    }
+
+    // ------------------------------------------------------------------------
+    // Release -- leave the online race intro: reset the state machine, release every
+    // camera behaviour back to the manager, and assert none remain allocated.
+    //
+    // The release ORDER is the console's and is not the member order: the start-lights handle
+    // first, then the player handle, then the interpolator, and only then the three rival handles
+    // in array order. Each release is the shared handle's own Release() (when allocated,
+    // UnSetBehaviourUsedByHandle(muAllocationKey) on the owning manager, then zero the five-word
+    // block) -- the console inlines exactly that body at each of the six sites.
+    // ------------------------------------------------------------------------
+    bool ArbStateOnlineRaceIntro::Release(ArbStateSharedInfo& lrSharedInfo)
+    {
+        meState = E_STATE_INACTIVE;   // +0x220 = 0
+
+        mLightsBehaviourHandle.Release();   // +0x1F4
+        mPlayerBehaviourHandle.Release();   // +0x1E0
+        mInterpolator.Release();            // +0x180
+
+        for (u32 luRival = 0; luRival < KU_NUM_RIVAL_BEHAVIOURS; ++luRival)
+        {
+            maRivalBehaviourHandle[luRival].Release();   // +0x1A4 / +0x1B8 / +0x1CC
+        }
+
+        lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
+        return true;
     }
 }

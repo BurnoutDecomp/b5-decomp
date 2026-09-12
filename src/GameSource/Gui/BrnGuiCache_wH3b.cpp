@@ -5,7 +5,7 @@
 //   GetDriveThrough                  (X360-inlined; offsets from GetDriveThroughOrJunkyard-
 //   GetNumberOfDriveThroughs          AtIndex @0x824FAC10: entries cache+0x7790 stride 0x30,
 //                                     count cache+0x8030, bound assert BrnGuiCache.h:5164)
-//   GetOnlineLandmarkInfoAtPositionInList @ 0x82506528  [NAMED GATE -- see the body]
+//   GetOnlineLandmarkInfoAtPositionInList
 //   PresetEvent::GetPositionLookupId / GetEventId (word +0x20 / +0x28 of the 0x2C record)
 //
 // Recon: scratch h3b_dump8/9/10.txt (decomp + asm; the maEventStarts stride-48 indexer
@@ -14,9 +14,9 @@
 
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // the online-landmark park print
-
-#include <cstring>   // memset (the gated online-landmark fill)
+#include "GameSource/Gui/BrnGuiWorldDataController.h"       // WorldDataController (the online-landmark forward)
+#include "SharedClasses/Trigger/BrnLandmark.h"                 // BrnTrigger::Landmark (COMPLETE: field reads)
+#include "SharedClasses/World/BrnWorldRegion.h"                // BrnWorld::WorldRegion::DistrictToCounty
 
 namespace BrnGui
 {
@@ -108,30 +108,54 @@ s32 GuiCache::GetNumberOfDriveThroughs() const
     return miNumDriveThroughs;
 }
 
-// @ 0x82506528 -- fill lpOutIconInfo with the online-landmark record at a position-in-list
-// slot. [H3b NAMED GATE]: the X360 forwards to WorldDataController::
-// GetOnlineLandmarkInfoAtPositionInList @0x82501970 (unreconstructed -- the WDC's
-// online-landmark table is not modelled) and then packs the landmark into the icon record
-// (position lane, ids, district->county, type 4). The one consumer is the sat-nav
-// renderer's ONLINE checkpoint display mode (display type 2), unreachable in this build's
-// offline flow. One-shot-logged, not a silent stub: the out record is zeroed so a caller
-// that DOES reach it sees an empty icon, and the log names the missing producer.
-GuiEventUpdateSatNav::SatNavIconInfo*
-GuiCache::GetOnlineLandmarkInfoAtPositionInList(s32 liIndex,
-                                                GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+// Fill lpOutIconInfo with the online-landmark record at a position-in-list slot -- the
+// ONLINE_CHECKPOINTS (display type 2) source for the sat-nav and crash-nav icon renderers.
+// Forwards to WorldDataController::GetOnlineLandmarkInfoAtPositionInList (the trigger data's
+// online-landmark table) and then packs the landmark into the icon record with exactly the
+// same store sequence as GetLandmarkInfoAtPositionInList / GetLandmarkInfoFromIndex in
+// BrnGuiCache_wJ_01.cpp: position lane, 0.0f rotation and speed, the whole 64-bit landmark
+// id, district then county (county read back OFF the record), type 4, -1 in the
+// active-race-car slot, design index, and the landmark's own region index @+0x20.
+void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
+         s32 liIndex,
+         GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
 {
-    (void)liIndex;
-    static bool sbLogged = false;
-    if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
+    CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3586
+
+    // [FLAG PC bring-up guard] the trigger-data resource can be acquired-but-unbound on this
+    // build, and both asserts here are non-gating, so the two derefs below are guarded rather
+    // than turned into a crash; the caller's record is left exactly as it staged it.
+    // DELETE-WHEN asserts gate / the trigger-data landmark table is populated on this build.
+    if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
     {
-        sbLogged = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[UI-gate] PARK: GuiCache::GetOnlineLandmarkInfoAtPositionInList @0x82506528 "
-               "(WorldDataController::GetOnlineLandmarkInfoAtPositionInList @0x82501970 "
-               "unreconstructed; online-checkpoint icons only)\n";
+        return;
     }
-    std::memset(lpOutIconInfo, 0, sizeof(*lpOutIconInfo));
-    return lpOutIconInfo;
+
+    const BrnTrigger::Landmark* lpLandmark =
+        mpWorldDataController->GetOnlineLandmarkInfoAtPositionInList(liIndex);
+    CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3589
+    if (lpLandmark == 0)
+    {
+        return;
+    }
+
+    const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+    const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                      lv3LandmarkPosition.z, 0.0f };
+    lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // -> +0x00
+    lpOutIconInfo->SetRotation(0.0f);                                   // -> +0x18
+    lpOutIconInfo->SetSpeedMph(0.0f);                                   // -> +0x1C
+    lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // -> +0x10
+    lpOutIconInfo->SetDistrict(
+        static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // -> +0x25
+    lpOutIconInfo->SetCounty(
+        BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+    lpOutIconInfo->SetIconType(
+        GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // -> +0x28
+    lpOutIconInfo->SetLandmarkIndexHalf(
+        static_cast<s16>(lpLandmark->GetRegionIndex()));                // -> +0x20
+    lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // -> +0x26
+    lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // -> +0x22
 }
 
 // @ 0x8241E520 (the GuiCache face over the mEvents CgsArray element accessor

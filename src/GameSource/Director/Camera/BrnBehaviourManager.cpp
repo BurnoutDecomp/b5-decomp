@@ -103,6 +103,10 @@
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState (owner identity + GetName)
+#include "GameSource/Director/MomentController/BrnMoment.h"       // Moment (owner identity + GetName)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"      // Behaviour::GetDebugParametersName / GetName
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
 
 // The behaviour-type homes, pulled in so each AllocateBehaviour<TBehaviour> explicit
 // instantiation (below) sees a COMPLETE TBehaviour (AllocateVoid<T> needs sizeof(T) + a
@@ -564,17 +568,129 @@ namespace Camera
     //     }
     //     if (gxMessageFilterFlags & 1) *gpDebugPrint << "\n";
     //
-    // FLAG PC-platform leaf: debug-TTY dump no-op on the PC link -- exactly the treatment its
-    // sibling BehaviourManager::DebugDumpToTTY already has (DirectorLinkStubs.cpp:355). The real
-    // body needs BehaviourHelper::GetDebugFullName (declaration-only behind the un-homed helper
-    // interior) and CgsDev::Log::gpDebugPrint (no reconstructed home).
-    // DELETE-WHEN: BehaviourHelper::GetDebugFullName lands.
     // ------------------------------------------------------------------------
-    // FLAG PC-platform leaf: debug-TTY dump no-op on the PC link (camera link-closure wave
-    // 2026-08-01) -- see the banner above; the real body walks GetDebugFullName + gpDebugPrint.
     void BehaviourManager::RefCountLogDump(const BehaviourHelperIndex& lrHelper) const
     {
-        (void)lrHelper;
+        char lacFullName[64];
+
+        mBehaviourHelperPool[lrHelper].GetDebugFullName(lacFullName);
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "\nBehaviours referencing " << lacFullName
+                                       << ": (chronological order)\n";
+        }
+
+        const Array<BehaviourHelperIndex, 28u>& lrLog =
+            mDebugBehaviourRefCountIndexLog[static_cast<u32>(lrHelper)];
+        for (u32 luI = 0; luI < lrLog.GetLength(); ++luI)
+        {
+            mBehaviourHelperPool[lrLog[luI]].GetDebugFullName(lacFullName);
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << lacFullName << "\n";
+            }
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourManager::DebugDumpToTTY -- print one line per live behaviour helper:
+    // "<owning state>::<owning moment>::<behaviour name>:<slot size>". Reached from the
+    // manager's out-of-slots pre-check.
+    // ------------------------------------------------------------------------
+    void BehaviourManager::DebugDumpToTTY() const
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "\n\n*** BehaviourManager::DebugDumpToTTY ***\n";
+        }
+
+        const u32 luCount = mBehaviourHelperIndexArray.GetLength();
+        for (u32 luI = 0; luI < luCount; ++luI)
+        {
+            const BehaviourHelperIndex lHelperID = mBehaviourHelperIndexArray[luI];
+
+            char lacFullName[64];
+            char lacLine[64];
+
+            mBehaviourHelperPool[lHelperID].GetDebugFullName(lacFullName);
+            CgsCore::SPrintf(lacLine, 64, "%s:%i", lacFullName,
+                             mBehaviourHelperPool[lHelperID].GetBehaviourSize());
+
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << lacFullName
+                    << ":"
+                    << static_cast<u32>(mBehaviourHelperPool[lHelperID].GetBehaviourSize())
+                    << "\n";
+            }
+        }
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "\n****************************************\n";
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::GetBehaviourSize -- the pool slot's size in 16-byte buckets. The
+    // original build reads the handle's size word and shifts it right by four at every call
+    // site; the accessor is out-of-lined here because the header declares it.
+    // ------------------------------------------------------------------------
+    s32 BehaviourManager::BehaviourHelper::GetBehaviourSize() const
+    {
+        return static_cast<s32>(static_cast<u32>(mBehaviourPoolHandle.GetSize()) >> 4);
+    }
+
+    // ------------------------------------------------------------------------
+    // BehaviourHelper::GetDebugFullName -- format this slot's identity into a 64-byte caller
+    // buffer as "<arbitrator state>::<moment>::<behaviour>". Each owner contributes its name
+    // plus a "::" separator only when it is set; the behaviour itself prefers the debug
+    // parameters name it was given and falls back to its virtual GetName().
+    // ------------------------------------------------------------------------
+    const char* BehaviourManager::BehaviourHelper::GetDebugFullName(char lacFullNameOut[64]) const
+    {
+        const Behaviour* const lpBehaviour = GetBehaviour();
+
+        const char* lpcBehaviourName = lpBehaviour->GetDebugParametersName();
+        if (lpcBehaviourName == 0)
+        {
+            lpcBehaviourName = lpBehaviour->GetName();
+        }
+
+        const char* lpcMomentName      = "";
+        const char* lpcMomentSeparator = "::";
+        if (mpDebugMomentOwner != 0)
+        {
+            lpcMomentName = mpDebugMomentOwner->GetName();
+        }
+        else
+        {
+            lpcMomentSeparator = "";
+        }
+
+        const char* lpcStateName      = "";
+        const char* lpcStateSeparator = "::";
+        if (mpDebugArbitratorStateOwner != 0)
+        {
+            lpcStateName = mpDebugArbitratorStateOwner->GetName();
+        }
+        else
+        {
+            lpcStateSeparator = "";
+        }
+
+        CgsCore::SPrintf(lacFullNameOut, 64, "%s%s%s%s%s",
+                         lpcStateName, lpcStateSeparator,
+                         lpcMomentName, lpcMomentSeparator,
+                         lpcBehaviourName);
+
+        return lacFullNameOut;
     }
 
 

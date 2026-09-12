@@ -2,18 +2,18 @@
 // b5-decomp/src/GameSource/GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp
 //
 // BrnGameState::BurnoutSkillzManager -- the burnout-skillz game-mode manager.
-// Semantic reconstruction (X360 asm authoritative) of all 16 functions owned by this
+// Semantic reconstruction (console binary authoritative) of all 16 functions owned by this
 // TU: Construct / PreWorldUpdate / SendUpdatePlayerSkillsEvent / ProcessNewRoadScore /
 // OnEnterRoad / ClearAllBurnoutSkillzData / UpdateBoostChains / UpdateLobbyRoadRulesScores /
 // ProcessNetworkRoadRulePB / Get/SetRoadRuleHighScore / ProcessGameEventInputQueue{Pre,Post}World /
 // SetNewSkillIfGreater / GetActiveRaceCarIndex / UpdateBurnoutSkillzTotals.
 //
-// Members are accessed BY NAME. The dirty-flags FastBitArray<8> bit walks that the X360
+// Members are accessed BY NAME. The dirty-flags FastBitArray<8> bit walks that the console
 // inlines (SetBit / SetAll / GetFirstBitSet / GetNextBitSet, each wrapped in CgsDev::StrStream
 // out-of-range assert machinery) are reconstructed as clean FastBitArray<8> API calls; that
 // folded assert/StrStream scaffolding is intentionally NOT reproduced bit-for-bit (assert
 // parity is benign). The per-car maiBurnoutSkillsUpdatedFlags[] bit-OR stores (bits 4/8/0xE)
-// are kept as the named-member integer ORs the asm performs.
+// are kept as the named-member integer ORs the console performs.
 //
 // House CGS_ASSERT replaces the inlined CgsDev::Assert::Begin/Fire/EndAssert triples.
 // ============================================================================
@@ -34,7 +34,10 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue<>
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::PlayerName, RoadRulesRecvData, RoadRulesMessageData
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                       // [skillz] the road-score witness rung
+
 #include <cstring>  // memcpy
+#include <cstdlib>  // getenv (BRN_STUNT_DIAG)
 
 namespace BrnGameState
 {
@@ -44,22 +47,22 @@ typedef BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo BoostOutputInfo;
 typedef BrnPhysics::Vehicle::RaceCarState                RaceCarState;
 
 // The two GameStateModuleIO event queues are the concrete VariableEventQueue
-// instantiations the X360 dispatches to (GameEventQueue == <1536,16>,
+// instantiations the console dispatches to (GameEventQueue == <1536,16>,
 // GameActionQueue == <13312,16>); alias them so the bodies read the events / push the
 // actions through their real templated API by name.
 typedef CgsModule::VariableEventQueue<1536, 16>  GameEventQueueImpl;
 typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 
-// KI_MAX_CHALLENGES (the road-rule challenge table width, X360 0x40) now comes from
-// the frozen BrnGameStateStreetManager.h (its DWARF home, BrnGameStateStreetManager.h:102);
-// the former file-local duplicate was removed with the wave-B StreetManager freeze.
+// KI_MAX_CHALLENGES (the road-rule challenge table width, 64 entries) now comes from
+// the frozen BrnGameStateStreetManager.h, its home header; the former file-local
+// duplicate was removed with the wave-B StreetManager freeze.
 
 // ----------------------------------------------------------------------------
 // Event payload views.
 //
-// These per-event-type structs are the byte layouts the X360 reads off each
-// VariableEventQueue record payload (no DWARF/reference home exists for them in this slice).
-// Fields are named by the X360 access (offset -> name); each event is read back through
+// These per-event-type structs are the byte layouts the console reads off each
+// VariableEventQueue record payload (no declared home exists for them in this slice).
+// Fields are named by the console access (offset -> name); each event is read back through
 // a typed pointer view of the queued payload so the bodies stay member-by-name.
 // ----------------------------------------------------------------------------
 struct InAirEventView                 { f32 mfTimeInAir; };                 // case 'E' (69): *v12 -> mfCurrentTimeInAir
@@ -68,7 +71,7 @@ struct TrafficCheckingChainEventView  { s32 miChainLength; };               // c
 struct NearMissChainCompleteEventView { s32 miChainLength; bool mbValid; }; // case 'B' (66): *v12 (count) + +4 (valid)
 struct PowerParkResultEventView       { s32 miResult; s32 miNumCars; };     // case '6' (54): *v12 (==1) + +4 (cars)
 
-// CompletedStuntEvent (case 'w' (119)). The X360 reads flag word @+0x00, drift @+0x50,
+// CompletedStuntEvent (case 'w' (119)). The console reads flag word @+0x00, drift @+0x50,
 // spin @+0x5C (deg = *0x5C * 57.29578), barrel-roll @+0x68 (flag bit 0x40), air-distance
 // @+0x70 (flag bit 0x200).
 struct CompletedStuntEventView
@@ -85,7 +88,7 @@ struct CompletedStuntEventView
 };
 
 // The OnlineRoadRulesPersonalBestRecvEvent payload (ProcessNetworkRoadRulePB / PreWorld
-// case 139). The X360 copies the leading 7 quadwords (56 bytes) into a stack
+// case 139). The console copies the leading 7 quadwords (56 bytes) into a stack
 // ChallengeHighScoreEntry, then reads mPlayerID @+0x38 and mChallengeIndex @+0x3C, with a
 // validity byte @+0x3C of the burnout-skillz event in the PreWorld case.
 struct OnlineRoadRulesPersonalBestRecvEventView
@@ -107,30 +110,37 @@ struct BurnoutSkillzEventView
 // PlayerFinalisedEvent payload (PreWorld case 128). Just the network player id @+0x00.
 struct PlayerFinalisedEventView { s32 mPlayerID; };
 
-// The burnout-skillz network event the manager (re)broadcasts: a 168-byte (0xA8) record
-// of type 68 (0x44). The X360 fills the first 56 bytes from the source skillz data, then
-// the trailing fields below (player id, race-car index, a flag, accuracy, road-rule
-// time/crash floats). Modelled as the byte image the X360 memcpy + field stores produce.
+// The burnout-skillz network event the manager (re)broadcasts: a 68-byte (0x44) record of
+// action type 168 (0xA8). The three producer sites all build it the same way: memcpy the
+// source record's 56-byte skill payload over the leading fourteen floats, then overwrite the
+// last two of those with the road-rule time/crash scores (so a slot keeps the copied skill
+// value only when the player has no recorded score of that type), then fill the three
+// trailing words.
 struct UpdatePlayerSkillsNetEvent
 {
-    u8  maSkillzData[56];   // +0x00 (56-byte skillz payload copied from source)
-    f32 mfRoadRuleTime;     // +0x30 (index 12) -- v35[12] / v86[12]
-    f32 mfRoadRuleCrash;    // +0x34 (index 13) -- v35[13] / v86[13]
-    s32 miAccuracyOrFlag;   // +0x38 (index 14) -- v35[14] = 4, or v86[14]
-    f32 mfV15;              // +0x3C (index 15) -- v86[15]
-    s32 miPlayerId;         // +0x40 (index 16)
-    s32 miRaceCarIndex;     // +0x44 (index 17)
-    u8  maTail[0xA8 - 0x48];
+    // +0x00 .. +0x37: the 56-byte skill payload.
+    f32 mafSkillzData[14];
+    s32 miAccuracyOrFlag;   // +0x38
+    s32 miPlayerId;         // +0x3C
+    s32 miRaceCarIndex;     // +0x40
+
+    // The two payload slots the producers overwrite with the road-rule scores.
+    static const s32 KI_ROAD_RULE_TIME_SLOT  = 12;
+    static const s32 KI_ROAD_RULE_CRASH_SLOT = 13;
 };
+
+// The action type + payload size the three producer sites queue the record with.
+static const s32 KI_ACTION_UPDATE_PLAYER_SKILLS      = 168;
+static const s32 KI_ACTION_UPDATE_PLAYER_SKILLS_SIZE = 68;
 
 // The "road-rule beaten" net event (type 169 / 0x18 bytes): the beaten road id quadword.
 struct RoadRuleBeatenNetEvent { u64 mu64RoadID; u8 maPad[0x18 - 8]; };
 
-// The received-road-rules queue (NetworkToGameStateInterface::RoadRulesReceivedQueue). The X360
+// The received-road-rules queue (NetworkToGameStateInterface::RoadRulesReceivedQueue). The console
 // reads the entry count at +0x08 and reaches the idx-th RoadRulesRecvData (264 bytes) via
 // BrnNetwork::RoadRulesRecvDa(queue, idx). Modelled here as the count + a contiguous entry array
-// (the X360 stride is sizeof(RoadRulesRecvData) == 264). No DWARF/reference shape exists for the queue
-// header, so the two leading words are opaque storage; the count + entries are X360-attested.
+// (the console stride is sizeof(RoadRulesRecvData) == 264). No declared shape exists for the queue
+// header, so the two leading words are opaque storage; the count + entries are console-attested.
 struct RoadRulesRecvQueueView
 {
     u8                            maHeader[0x08]; // +0x00 opaque queue header
@@ -139,7 +149,7 @@ struct RoadRulesRecvQueueView
     BrnNetwork::RoadRulesRecvData maEntries[1];   // +0x10 first entry (flexible run)
 };
 
-// Address of the idx-th received road-rules entry (the X360 BrnNetwork::RoadRulesRecvDa helper).
+// Address of the idx-th received road-rules entry (the console BrnNetwork::RoadRulesRecvDa helper).
 static const BrnNetwork::RoadRulesRecvData*
 RoadRulesRecvQueueGetEntry(const GameStateModuleIO::NetworkToGameStateInterface* lpQueue, s32 liIndex)
 {
@@ -148,7 +158,7 @@ RoadRulesRecvQueueGetEntry(const GameStateModuleIO::NetworkToGameStateInterface*
 }
 
 // ----------------------------------------------------------------------------
-// Construct -- X360 0x82332688.
+// Construct.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::Construct(ModeManager* lpModeManager)
 {
@@ -158,7 +168,7 @@ void BurnoutSkillzManager::Construct(ModeManager* lpModeManager)
     CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
 
     // The achievement manager is the subobject embedded in the owning GameStateModule
-    // (the X360 reaches it as modeManager->mpGameStateModule + 181680).
+    // (the console reaches it as modeManager->mpGameStateModule + 181680).
     mpAchievementManager = lpModeManager->GetGameStateModule()->GetAchievementManager();
     CGS_ASSERT(mpAchievementManager, "mpAchievementManager");
 
@@ -179,7 +189,7 @@ void BurnoutSkillzManager::Construct(ModeManager* lpModeManager)
 }
 
 // ----------------------------------------------------------------------------
-// ClearAllBurnoutSkillzData -- X360 0x82322480. Reset every car's road-rule scores +
+// ClearAllBurnoutSkillzData. Reset every car's road-rule scores +
 // clear the whole scoring-system skillz tally + zero the per-frame skill scalars/flags.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::ClearAllBurnoutSkillzData()
@@ -208,7 +218,7 @@ void BurnoutSkillzManager::ClearAllBurnoutSkillzData()
 }
 
 // ----------------------------------------------------------------------------
-// OnEnterRoad -- X360 0x82322B98. Record the new road, mark every car's dirty bit, and
+// OnEnterRoad. Record the new road, mark every car's dirty bit, and
 // OR the "on a road" flag (bit 4) into each car's updated-flags slot.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::OnEnterRoad(BrnNetwork::Road::ChallengeIndex liRoadIndex)
@@ -222,7 +232,7 @@ void BurnoutSkillzManager::OnEnterRoad(BrnNetwork::Road::ChallengeIndex liRoadIn
 }
 
 // ----------------------------------------------------------------------------
-// GetActiveRaceCarIndex -- X360 0x82322B18. Look up the car record for a network player
+// GetActiveRaceCarIndex. Look up the car record for a network player
 // id and return its active-race-car index, or E_ACTIVE_RACE_CAR_INDEX_INVALID.
 // ----------------------------------------------------------------------------
 ::EActiveRaceCarIndex BurnoutSkillzManager::GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
@@ -238,7 +248,7 @@ void BurnoutSkillzManager::OnEnterRoad(BrnNetwork::Road::ChallengeIndex liRoadIn
 }
 
 // ----------------------------------------------------------------------------
-// GetRoadRuleHighScore -- X360 0x823227C0. Copy a challenge's stored high-score entry out
+// GetRoadRuleHighScore. Copy a challenge's stored high-score entry out
 // of the network player's car record; returns false if the player has no car record.
 // ----------------------------------------------------------------------------
 bool BurnoutSkillzManager::GetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID,
@@ -260,7 +270,7 @@ bool BurnoutSkillzManager::GetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
 }
 
 // ----------------------------------------------------------------------------
-// SetRoadRuleHighScore -- X360 0x823228A0. Store a challenge's high-score entry into the
+// SetRoadRuleHighScore. Store a challenge's high-score entry into the
 // network player's car record.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::SetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID,
@@ -278,7 +288,7 @@ void BurnoutSkillzManager::SetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
 }
 
 // ----------------------------------------------------------------------------
-// SetNewSkillIfGreater -- X360 0x823225C0. If the new value beats the car's stored skill,
+// SetNewSkillIfGreater. If the new value beats the car's stored skill,
 // bank it, set the car's dirty bit, and OR the "skills updated" flags (0xE) into its slot.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::SetNewSkillIfGreater(BurnoutSkillzData::EBurnoutSkillType leSkillType,
@@ -304,7 +314,7 @@ void BurnoutSkillzManager::SetNewSkillIfGreater(BurnoutSkillzData::EBurnoutSkill
 }
 
 // ----------------------------------------------------------------------------
-// SendUpdatePlayerSkillsEvent -- X360 0x82322988. Mark the car dirty and OR the
+// SendUpdatePlayerSkillsEvent. Mark the car dirty and OR the
 // "send update" flags into its slot (bit 4 always, bit 8 when a HUD message is wanted).
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::SendUpdatePlayerSkillsEvent(::EActiveRaceCarIndex leActiveRaceCarIndex,
@@ -324,7 +334,7 @@ void BurnoutSkillzManager::SendUpdatePlayerSkillsEvent(::EActiveRaceCarIndex leA
 }
 
 // ----------------------------------------------------------------------------
-// UpdateBoostChains -- X360 0x823327B8. When a boost chain ends (boost-output flag clears),
+// UpdateBoostChains. When a boost chain ends (boost-output flag clears),
 // bank the accumulated chain count as the BOOST_CHAIN skill and reset the chain counter.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::UpdateBoostChains(
@@ -354,7 +364,7 @@ void BurnoutSkillzManager::UpdateBoostChains(
 }
 
 // ----------------------------------------------------------------------------
-// ProcessGameEventInputQueuePostWorld -- X360 0x823328D0. Walk the frame's post-world game
+// ProcessGameEventInputQueuePostWorld. Walk the frame's post-world game
 // events and feed completed stunts / near-miss / oncoming / power-park / in-air / traffic
 // chains into the per-car skill records.
 // ----------------------------------------------------------------------------
@@ -481,7 +491,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
 }
 
 // ----------------------------------------------------------------------------
-// ProcessNewRoadScore -- X360 0x82345348. A buffered road score is finalised: tell the
+// ProcessNewRoadScore. A buffered road score is finalised: tell the
 // mugshot manager if it beat someone, push the "road rule beaten" + "set" game actions,
 // update the local car's road-rule high-score table, broadcast the score, and (for the
 // local player) mark the car dirty.
@@ -561,12 +571,34 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
                 mabDirtyFlags.SetBit(static_cast<u32>(leLocalActiveRaceCarIndex));
                 maiBurnoutSkillsUpdatedFlags[leLocalActiveRaceCarIndex] |= 4u;
             }
+
+            // [FLAG PC witness] [skillz] THE ROAD-SCORE RUNG. NOT IN THE CONSOLE BINARY. Opt-in
+            // behind BRN_STUNT_DIAG, first-N capped. This is the single point where a finished
+            // road run is accepted into the car's road-rule table (UpdateEntry returned true),
+            // so one line here answers "did a road rule actually score?". Road runs end at human
+            // cadence, so the rung cannot flood; the cap is belt and braces.
+            // DELETE-WHEN the road-rule feeds have a standing regression case.
+            {
+                static const bool sbStuntDiag = (getenv("BRN_STUNT_DIAG") != 0);
+                static s32        siRoadLines = 0;
+                const s32         KI_ROAD_LINE_MAX = 200;
+                if (sbStuntDiag && siRoadLines < KI_ROAD_LINE_MAX && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siRoadLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[skillz] road score road=" << liChallengeIndex
+                        << " type=" << static_cast<s32>(leScoreType)
+                        << " score=" << liNewScore
+                        << " prev=" << liPreviousHolderScore
+                        << " car=" << static_cast<s32>(leLocalActiveRaceCarIndex) << "\n";
+                }
+            }
         }
     }
 }
 
 // ----------------------------------------------------------------------------
-// ProcessNetworkRoadRulePB -- X360 0x82345740. A remote player's road-rule personal best
+// ProcessNetworkRoadRulePB. A remote player's road-rule personal best
 // arrived: compare it against the lobby high score, notify on a tie, push the beaten event,
 // merge into the player's record, and mark the local car for a skill update.
 // ----------------------------------------------------------------------------
@@ -614,7 +646,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
                     CGS_ASSERT(mpStreetManager, "mpStreetManager");
 
                     // Push a "set road rule" notification: type 149 (tie -> notify) or the
-                    // local "set" path (a flag word). The X360 selects the score-type index
+                    // local "set" path (a flag word). The console selects the score-type index
                     // 12 or 13 (time vs crash) and notes whether the sender already holds it.
                     s32 liSetFlag;
                     if (leLocalPlayersActiveRaceCarIndex == leHighScoreRaceCarIndex)
@@ -671,7 +703,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
 }
 
 // ----------------------------------------------------------------------------
-// ProcessGameEventInputQueuePreWorld -- X360 0x82345AC0. Walk the frame's pre-world game
+// ProcessGameEventInputQueuePreWorld. Walk the frame's pre-world game
 // events: clear-all, player finalised, network road-rule PB, and the burnout-skillz event.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
@@ -715,15 +747,18 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                 mpScoringSystem->GetBurnoutSkillzData(leLocalPlayersActiveRaceCarIndex);
             CarData* lpLocalCarData = mpScoringSystem->GetCarData(leLocalPlayersActiveRaceCarIndex);
             CGS_ASSERT(lpSkillzData, "lpSkillzData");
-            if (lpLocalCarData)
+            CGS_ASSERT(lpLocalCarData, "lpCarData");
+            if (lpLocalCarData && lpSkillzData)
             {
-                CGS_ASSERT(lpSkillzData, "lpCarData");
-                // Rebroadcast the local player's skillz totals (event type 68 / 168 bytes).
+                // Rebroadcast the local player's skillz totals (action 168 / 68 bytes).
                 UpdatePlayerSkillsNetEvent lNetEvent;
-                std::memcpy(lNetEvent.maSkillzData, lpSkillzData, sizeof(lNetEvent.maSkillzData));
                 lNetEvent.miPlayerId = lpPlayerFinalisedEvent->mPlayerID;
                 lNetEvent.miRaceCarIndex = leLocalPlayersActiveRaceCarIndex;
-                lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNetEvent), 68, 168);
+                std::memcpy(lNetEvent.mafSkillzData, lpSkillzData, sizeof(lNetEvent.mafSkillzData));
+                lNetEvent.miAccuracyOrFlag = 1;
+                lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNetEvent),
+                                            KI_ACTION_UPDATE_PLAYER_SKILLS,
+                                            KI_ACTION_UPDATE_PLAYER_SKILLS_SIZE);
             }
             break;
         }
@@ -753,7 +788,8 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                     UpdatePlayerSkillsNetEvent lNetEvent;
                     lNetEvent.miPlayerId = lpBurnoutSkillzEvent->mPlayerID;
                     lNetEvent.miRaceCarIndex = leNetworkPlayerActiveRaceCarIndex;
-                    std::memcpy(lNetEvent.maSkillzData, lpBurnoutSkillzEvent->maSkillzPayload, 56);
+                    std::memcpy(lNetEvent.mafSkillzData, lpBurnoutSkillzEvent->maSkillzPayload,
+                                sizeof(lNetEvent.mafSkillzData));
                     lNetEvent.miAccuracyOrFlag = 4;
 
                     BrnStreetData::ChallengeHighScoreEntry lHighScoreEntry;
@@ -765,7 +801,8 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                         lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_TIME, &liScore, &lName);
                         f32 lfRoundedTime = static_cast<f32>(liScore) * 0.001f;
                         BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.0049999999);
-                        lNetEvent.mfRoadRuleTime = lfRoundedTime;
+                        lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_TIME_SLOT] =
+                            lfRoundedTime;
                     }
                     if (lHighScoreEntry.ContainsData(BrnStreetData::E_SCORE_TYPE_CRASH))
                     {
@@ -774,9 +811,12 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
                         lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_CRASH, &liScore, &lName);
                         f32 lfRoundedCrash = static_cast<f32>(liScore);
                         BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.0049999999);
-                        lNetEvent.mfRoadRuleCrash = lfRoundedCrash;
+                        lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_CRASH_SLOT] =
+                            lfRoundedCrash;
                     }
-                    lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNetEvent), 68, 168);
+                    lpActionQueueImpl->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNetEvent),
+                                                KI_ACTION_UPDATE_PLAYER_SKILLS,
+                                                KI_ACTION_UPDATE_PLAYER_SKILLS_SIZE);
                 }
                 else
                 {
@@ -795,7 +835,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
 }
 
 // ----------------------------------------------------------------------------
-// UpdateLobbyRoadRulesScores -- X360 0x8233A668. Drain the received road-rules queue,
+// UpdateLobbyRoadRulesScores. Drain the received road-rules queue,
 // merging each remote player's scores into our records and kicking skill updates.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
@@ -803,7 +843,7 @@ void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
 {
     CGS_ASSERT(lpRoadRulesRecvQueue, "lpRoadRulesRecvQueue");
 
-    // The interface front-loads a count (X360 *(queue+8)); each entry is a RoadRulesRecvData.
+    // The interface front-loads a count (console *(queue+8)); each entry is a RoadRulesRecvData.
     const RoadRulesRecvQueueView* lpQueueView =
         reinterpret_cast<const RoadRulesRecvQueueView*>(lpRoadRulesRecvQueue);
 
@@ -867,7 +907,7 @@ void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
 }
 
 // ----------------------------------------------------------------------------
-// UpdateBurnoutSkillzTotals -- X360 0x82322C30. Recompute the "best of" per-skill totals
+// UpdateBurnoutSkillzTotals. Recompute the "best of" per-skill totals
 // across all active cars, award the per-skill leader a point, and (when a total changes)
 // mark the car dirty + notify the achievement manager for the local player.
 // ----------------------------------------------------------------------------
@@ -967,7 +1007,7 @@ void BurnoutSkillzManager::UpdateBurnoutSkillzTotals(::EActiveRaceCarIndex leLoc
 }
 
 // ----------------------------------------------------------------------------
-// PreWorldUpdate -- X360 0x8234D410. The per-frame pre-world entry point: drain the input
+// PreWorldUpdate. The per-frame pre-world entry point: drain the input
 // queues, flush any buffered road score, run boost-chain / skillz-total updates while the
 // player is alive and grounded, and finally broadcast every dirty car's skillz update.
 // ----------------------------------------------------------------------------
@@ -1061,51 +1101,58 @@ void BurnoutSkillzManager::PreWorldUpdate(
     {
         const CarData* lpCarData =
             mpScoringSystem->GetCarData(static_cast<::EActiveRaceCarIndex>(liDirtyCar));
-        BurnoutSkillzData* lpSkillzData =
-            mpScoringSystem->GetBurnoutSkillzData(static_cast<::EActiveRaceCarIndex>(liDirtyCar));
-        if (lpSkillzData)
+        if (lpCarData)
         {
-            const BrnNetwork::NetworkPlayerID lPlayerID = lpCarData->GetNetworkPlayerID();
-
-            UpdatePlayerSkillsNetEvent lNetEvent;
-            std::memcpy(lNetEvent.maSkillzData, lpSkillzData, sizeof(lNetEvent.maSkillzData));
-            lNetEvent.miPlayerId = lPlayerID;
-            lNetEvent.miRaceCarIndex = liDirtyCar;
-            lNetEvent.miAccuracyOrFlag = maiBurnoutSkillsUpdatedFlags[liDirtyCar];
-            maiBurnoutSkillsUpdatedFlags[liDirtyCar] = 0;
-
-            BrnStreetData::ChallengeHighScoreEntry lHighScoreEntry;
-            if (GetRoadRuleHighScore(lPlayerID, miCurrentRoadIndex, &lHighScoreEntry))
+            BurnoutSkillzData* lpSkillzData =
+                mpScoringSystem->GetBurnoutSkillzData(static_cast<::EActiveRaceCarIndex>(liDirtyCar));
+            if (lpSkillzData)
             {
-                if (lHighScoreEntry.ContainsData(BrnStreetData::E_SCORE_TYPE_TIME))
-                {
-                    s32 liScore = 0;
-                    CgsNetwork::PlayerName lName;
-                    lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_TIME, &liScore, &lName);
-                    f32 lfRoundedTime = static_cast<f32>(liScore) * 0.001f;
-                    BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.0049999999);
-                    lNetEvent.mfRoadRuleTime = lfRoundedTime;
-                }
-                if (lHighScoreEntry.ContainsData(BrnStreetData::E_SCORE_TYPE_CRASH))
-                {
-                    s32 liScore = 0;
-                    CgsNetwork::PlayerName lName;
-                    lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_CRASH, &liScore, &lName);
-                    f32 lfRoundedCrash = static_cast<f32>(liScore);
-                    BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.0049999999);
-                    lNetEvent.mfRoadRuleCrash = lfRoundedCrash;
-                }
-            }
+                const BrnNetwork::NetworkPlayerID lPlayerID = lpCarData->GetNetworkPlayerID();
 
-            mabDirtyFlags.UnSetBit(static_cast<u32>(liDirtyCar));
-            reinterpret_cast<GameActionQueueImpl*>(lpOutput->GetGameActionQueue())
-                ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNetEvent), 68, 168);
+                UpdatePlayerSkillsNetEvent lNetEvent;
+                lNetEvent.miPlayerId = lPlayerID;
+                lNetEvent.miRaceCarIndex = liDirtyCar;
+                std::memcpy(lNetEvent.mafSkillzData, lpSkillzData, sizeof(lNetEvent.mafSkillzData));
+                lNetEvent.miAccuracyOrFlag = maiBurnoutSkillsUpdatedFlags[liDirtyCar];
+
+                BrnStreetData::ChallengeHighScoreEntry lHighScoreEntry;
+                if (GetRoadRuleHighScore(lPlayerID, miCurrentRoadIndex, &lHighScoreEntry))
+                {
+                    if (lHighScoreEntry.ContainsData(BrnStreetData::E_SCORE_TYPE_TIME))
+                    {
+                        s32 liScore = 0;
+                        CgsNetwork::PlayerName lName;
+                        lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_TIME, &liScore, &lName);
+                        f32 lfRoundedTime = static_cast<f32>(liScore) * 0.001f;
+                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedTime, 0.0049999999);
+                        lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_TIME_SLOT] =
+                            lfRoundedTime;
+                    }
+                    if (lHighScoreEntry.ContainsData(BrnStreetData::E_SCORE_TYPE_CRASH))
+                    {
+                        s32 liScore = 0;
+                        CgsNetwork::PlayerName lName;
+                        lHighScoreEntry.GetScore(BrnStreetData::E_SCORE_TYPE_CRASH, &liScore, &lName);
+                        f32 lfRoundedCrash = static_cast<f32>(liScore);
+                        BrnNetwork::NetworkRounder::RoundFloatToAccuracy(&lfRoundedCrash, 0.0049999999);
+                        lNetEvent.mafSkillzData[UpdatePlayerSkillsNetEvent::KI_ROAD_RULE_CRASH_SLOT] =
+                            lfRoundedCrash;
+                    }
+                }
+
+                maiBurnoutSkillsUpdatedFlags[liDirtyCar] = 0;
+                mabDirtyFlags.UnSetBit(static_cast<u32>(liDirtyCar));
+                reinterpret_cast<GameActionQueueImpl*>(lpOutput->GetGameActionQueue())
+                    ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lNetEvent),
+                               KI_ACTION_UPDATE_PLAYER_SKILLS,
+                               KI_ACTION_UPDATE_PLAYER_SKILLS_SIZE);
+            }
         }
     }
 }
 
 // ----------------------------------------------------------------------------
-// PostWorldUpdate -- X360 0x8233A560. The per-frame post-world entry point. Resolves the
+// PostWorldUpdate. The per-frame post-world entry point. Resolves the
 // local player's active-race-car index from the post-world input buffer's active-car output
 // interface, looks up that car's skillz record, feeds the frame's post-world game events into
 // it, then banks the car's takedown count as the TOTAL skill. Returns the skillz record it

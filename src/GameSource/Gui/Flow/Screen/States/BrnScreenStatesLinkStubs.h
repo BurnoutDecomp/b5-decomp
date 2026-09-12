@@ -19,8 +19,6 @@
 
 namespace BrnGui
 {
-    class ProfileManager;   // forward-only: the CN_PROFILE stub must NOT call into it
-
     // FLAG PC-platform leaf: placeholder -- real BrnGui::NullState (X360 56B; trivial
     // vtable-only ctor @0x82523E98) not yet reconstructed. Script id "NULL".
     struct NullState : public CgsGui::State
@@ -47,20 +45,9 @@ namespace BrnGui
     //  States/BrnCrashNavMapMain.h, deriving the now-landed CrashNavMap base. The pause-wave
     //  partial that lived here moved out with it, per the re-parent contract above.)
 
-    // FLAG PC-platform leaf: placeholder -- real BrnGui::CrashNavProfile (X360 5896B;
-    // out-of-line ctor + the wider Construct(id, fsm, ProfileManager&) @0x8252448C the
-    // flow's Prepare calls DIRECTLY instead of the vtbl+0x18 dispatch) not yet
-    // reconstructed. Script id "CN_PROFILE". The stub's wider Construct forwards to the
-    // base 2-arg Construct and never touches the profile manager (its backing object may
-    // be an un-reconstructed shell).
-    struct CrashNavProfile : public CgsGui::State
-    {
-        using CgsGui::State::Construct;   // keep the base (id, fsm) overload visible
-        void Construct(CgsID lId, CgsFsm::ScriptedFsm* lpFsm, ProfileManager& lrProfileManager);
-        virtual void OnEnter();
-        virtual void OnLeave();
-        virtual void Update();
-    };
+    // ---- CN_PROFILE: SCAFFOLD RETIRED -- the real TU States/BrnCrashNavProfile.{h,cpp}
+    //  is MOUNTED, so the placeholder and its escape-hatch lifecycle in the matching .cpp
+    //  are gone. BrnScreenFlow includes the real header directly.
 
     // FLAG PC-platform leaf: placeholder -- real BrnGui::OnlineGameRoomPlayerInfo (X360
     // 87968B, the largest screen state) not yet reconstructed. Script id "ON_GAME_ROOM".

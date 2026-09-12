@@ -161,6 +161,21 @@ const char* MomentHardStop::GetName() const
     return "MomentHardStop";
 }
 
+// Drop BOTH rig behaviours if held (each is the guarded handle Release the console
+// build inlines: UnSetBehaviourUsedByHandle(pool, key) then clear the five words),
+// clear the gates, raise the searching head bit, and park the state machine at
+// INACTIVE. Always reports released.
+bool MomentHardStop::Release()
+{
+    mRigCameraHandleA.Release();
+    mRigCameraHandleB.Release();
+    SetConditionsNotMet();
+    SetCanSwitchToMeNow(false);
+    GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_SEARCHING);
+    SetState(E_STATE_INVALID_INACTIVE);
+    return true;
+}
+
 // The per-frame hard-stop state machine:
 //   SEARCHING        evaluate crash eligibility; on a hit, snapshot the crash
 //                    analysis, select the preferred (A) and fallback (B) crash

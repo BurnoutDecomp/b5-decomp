@@ -1215,6 +1215,25 @@ namespace BrnGui
             }
             break;
 
+        case 194:
+            // [map-event exit wave 2026-09-12] the preset-race response
+            // (BrnGui::GuiEventSpecificPresetRaces): the payload is a whole per-mode
+            // preset-event interface, copied verbatim out of the game-state output buffer
+            // by the game-state to GUI bridge, and adopted by value into the cache's
+            // mEvents storage, after which the online finish-point bitmask is rebuilt.
+            // ⚠️ The id is 194, and 194 is what this switch (which reads the RAW event id)
+            // must carry: the first sub-switch rebases by -4, so a jump-table case N is GUI
+            // event id N + 4 -- the same convention the 199 and 203 arms below already use.
+            // The producer bakes it: AddGuiEvent<GuiEventSpecificPresetRaces> passes id 194
+            // with a 7704-byte record. 190 is GuiOverlayShowingNotification, an 8-byte
+            // record (BrnGuiEventTypeDefs.h:1152), and is NOT this.
+            // Body: GameSource/Gui/BrnGuiCache_wB_13.cpp.
+            HandleSpecificPreSetRacesEvent(
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface*>(
+                    lpEvent));
+            break;
+
         case 199:
             // [hud H3b tracking slice 2026-08-25] X360 case 199 @0x8250DDF0: the per-frame
             // GuiEventUpdateSatNav icon array (count @+0x900, clamped to 48). The PLAYER

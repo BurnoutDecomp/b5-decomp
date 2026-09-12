@@ -858,6 +858,20 @@ public:
     // Body: GameStateModule_SendSetUpAllEventStarts.cpp (read its banner before touching this).
     void SendSetUpAllEventStartsMessage(GameStateModuleIO::OutputBuffer* lpOutput);
 
+    // ⭐⭐ SendSpecificPreSetRacesModesAction -- THE MAP MENU PRESET-RACES PRODUCER, and the
+    // only path in the shipped image to SpecificGameModeEventInterface::AddEvent.
+    // For the requested event type, walks every light trigger of every TrafficData
+    // hull, resolves each junction's event-junction id through ProgressionData's junction table
+    // to a RaceEventData, keeps the ones whose mode maps to that very event type, and publishes
+    // {event junction id, light-trigger id, the event's landmark set} into the output buffer's
+    // SpecificGameModeEventInterface, then raises its valid flag for BridgeGameStateToGui to
+    // turn into GUI event 194 (GuiEventSpecificPresetRaces, a 0x1E18 record). Its sole shipped
+    // call site is ProcessGameEvents, game event 28, which passes the request payload's first
+    // word as liEventType and the output buffer as lpOutput.
+    // Body: GameStateModule_SendSpecificPreSetRacesModes.cpp (read its banner before touching).
+    void SendSpecificPreSetRacesModesAction(s32                              liEventType,
+                                            GameStateModuleIO::OutputBuffer* lpOutput);
+
     // ⭐⭐ SendSetUpAllDriveThrusMessage -- THE DRIVE-THRU ICON TABLE PRODUCER ([minimap blips,
     // issue #9, 2026-09-07]: the sat-nav had no gas / body-shop / paint / junkyard / car-park blips).
     // Walks the track's generic regions, keeps the five drive-thru sub-types the profile has

@@ -900,11 +900,10 @@ void ModeManager::ShowModeResults(
             static_cast<u8>(mpProgressionManager->HasEventBeenWonPreviously(luEventId) ? 0 : 1);
     }
 
-    // record+0xE5 == 1. [!] FLAG: the frozen ShowModeResultsAction declares +0xE5..+0xE7 as
-    // `maPadE5[3]`, but +0xE5 is a REAL field -- this body writes 1 into it and re-reads it at the
-    // tail to decide whether to post the 48-byte follow-on action. Written through the pad byte so
-    // the wire image is exact; header_request filed to name it.
-    lAction.maPadE5[0] = 1;
+    // record+0xE5 == 1. This body writes 1 into it and re-reads it at the tail to decide whether
+    // to post the 48-byte follow-on action; the director's own arm for this record reads the same
+    // byte to decide whether to enter its post-event camera, which is what named the field.
+    lAction.mu8FieldE5 = 1;
 
     lAction.miFinishPosition = GetPlayersFinishPosition();                          // record+0x04
     lAction.mu8FieldE0       = static_cast<u8>(HasPlayerWon() ? 1 : 0);             // record+0xE0
@@ -1118,7 +1117,7 @@ void ModeManager::ShowModeResults(
                                 static_cast<s32>(sizeof(GameStateModuleIO::ShowModeResultsAction)));
 
     // ---- the two follow-on actions -------------------------------------------------------------------
-    if (lAction.maPadE5[0] != 0)   // record+0xE5, raised above
+    if (lAction.mu8FieldE5 != 0)   // record+0xE5, raised above
     {
         // Console re-reads the MODE TYPE out of the record (`lwz r11, var_180`) and skips this post
         // for the showtime pair.

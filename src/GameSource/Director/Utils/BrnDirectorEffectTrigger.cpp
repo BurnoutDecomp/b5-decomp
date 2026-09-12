@@ -4,24 +4,22 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Director/Camera/Camera.h"       // Camera::Camera / GetEffects (EnsureEffectIsPlaying)
 
-// BrnDirector::EffectInterface -- reconstructed from BURNOUT_X360_ARTIST.XEX.
+// BrnDirector::EffectInterface.
 //
-// Bodied here (1 ledger function, DWARF primary file
+// Bodied here (1 ledger function, whose primary file in the original is
 // GameSource/Director/Utils/BrnDirectorEffectTrigger.cpp):
-//   EffectInterface::Update(s32, const char* const*, bool*) @0x8221E0F0
+//   EffectInterface::Update(s32, const char* const*, bool*)
 //
-// Asm walk: clear the hook table (the inlined Array::Clear -- `stw 0` into the
-// count word at +0xCE4), then when liNumHooks >= 0 wrap + append every name --
-// each NULL name fires the streamed assert ("Registering a NULL effect hook name
-// at index:" + index + " maybe there's some limit set elsewhere?", cpp:57; folded
-// static per convention, non-gating: the X360 still Set()s the null name) -- and
-// latch mbGotHooks. The out-flag asks the caller to (re)enumerate the hooks while
-// none have been registered yet.
+// Attested behaviour: clear the hook table (the inlined Array::Clear -- zero the count
+// word at +0xCE4), then when liNumHooks >= 0 wrap + append every name -- each NULL name
+// fires the streamed assert ("Registering a NULL effect hook name at index:" + index +
+// " maybe there's some limit set elsewhere?"; folded static per convention, non-gating:
+// the console still Set()s the null name) -- and latch mbGotHooks. The out-flag asks the
+// caller to (re)enumerate the hooks while none have been registered yet.
 
 namespace BrnDirector
 {
 
-// @ 0x8221E0F0
 void EffectInterface::Update(s32 liNumHooks, const char* const* lapHookNames,
                              bool* lpbRequestEnumerationOut)
 {
@@ -49,28 +47,27 @@ void EffectInterface::Update(s32 liNumHooks, const char* const* lapHookNames,
 
 
 // ============================================================================
-// BrnDirector::BackgroundEffectRequest (class TU) -- reconstructed from
-// BURNOUT_X360_ARTIST.XEX.
-//   GetBackgroundStartRequestBlendAmount @0x823A79C8   (h:249 tripwire)
-//   RegisterAndUpdateRequest             @0x82232E88   (h:361 tripwire)
+// BrnDirector::BackgroundEffectRequest (class TU).
+//   GetBackgroundStartRequestBlendAmount   (guarded by its own tripwire)
+//   RegisterAndUpdateRequest               (guarded by its own tripwire)
 // ============================================================================
 namespace BrnDirector
 {
-    // h:249 -- non-gating guard, then the staged blend.
+    // Non-gating guard, then the staged blend.
     f32 BackgroundEffectRequest::GetBackgroundStartRequestBlendAmount() const
     {
-        CGS_ASSERT(HasBackgroundStartRequest(), "HasBackgroundStartRequest()");   // :249
+        CGS_ASSERT(HasBackgroundStartRequest(), "HasBackgroundStartRequest()");   // non-gating
         return mfBlendAmount;
     }
 
-    // @ 0x82232E88 -- h:361. Apply the pending request against the live interface:
-    // a stop request stops the named background hook; a start request registers it
-    // (the X360 inlines RegisterStartingBackgroundEffectWithName's three stores).
-    // NOTE (asm-pinned): the pending flag clears ONLY when the hook does NOT exist
-    // yet -- an applied request stays pending and re-applies each frame.
+    // Apply the pending request against the live interface: a stop request stops the
+    // named background hook; a start request registers it (the console inlines
+    // RegisterStartingBackgroundEffectWithName's three stores).
+    // NOTE (attested): the pending flag clears ONLY when the hook does NOT exist yet --
+    // an applied request stays pending and re-applies each frame.
     void BackgroundEffectRequest::RegisterAndUpdateRequest(EffectInterface* lpEffectInterface)
     {
-        CGS_ASSERT(lpEffectInterface != 0, "lpEffectInterface != NULL");   // :361
+        CGS_ASSERT(lpEffectInterface != 0, "lpEffectInterface != NULL");
 
         if (mbStartRequested)
         {
@@ -99,15 +96,15 @@ namespace BrnDirector
 // batch 15): the blend accessor and the three register entry points.
 // ============================================================================
 
-// @ 0x821F1818 -- h:115 tripwire (non-gating), then the blend.
+// The tripwire (non-gating), then the blend.
 f32 EffectInterface::GetCurrentEffectBlendAmount() const
 {
-    CGS_ASSERT(mbHasCurrentEffectName, "HasCurrentEffectName()");   // :115 (non-gating)
+    CGS_ASSERT(mbHasCurrentEffectName, "HasCurrentEffectName()");   // non-gating
     return mfCurrentEffectBlendAmount;
 }
 
-// @ 0x82203FD8 -- adopt a starting camera-PFX effect: drop the id form, raise the
-// name form, copy the name, store the blend (the asm's store order).
+// Adopt a starting camera-PFX effect: drop the id form, raise the name form, copy the
+// name, store the blend -- in the console's own store order.
 void EffectInterface::RegisterStartingEffectWithName(const HookNameStringWrapper& lrName,
                                                      f32 lfBlend)
 {
@@ -117,11 +114,11 @@ void EffectInterface::RegisterStartingEffectWithName(const HookNameStringWrapper
     mfCurrentEffectBlendAmount = lfBlend;
 }
 
-// @ 0x8221E268 -- does the game currently publish a camera-PFX hook by this name?
-// Asm walk: bail FALSE when the hook table has not been enumerated yet (mbGotHooks,
-// +0xD36); otherwise wrap the raw name into a stack HookNameStringWrapper (the
-// HookNameStringWrapper::Set call at 0x8221E28C) and ask the table.
-// The tail call at 0x8221E298 is Array<HookNameStringWrapper,100>::Contains.
+// Does the game currently publish a camera-PFX hook by this name?
+// Attested behaviour: bail FALSE when the hook table has not been enumerated yet
+// (mbGotHooks, +0xD36); otherwise wrap the raw name into a stack HookNameStringWrapper
+// through HookNameStringWrapper::Set and ask the table. The tail call is
+// Array<HookNameStringWrapper,100>::Contains.
 bool EffectInterface::HookExists(const char* lpcName) const
 {
     if (!mbGotHooks)
@@ -135,12 +132,13 @@ bool EffectInterface::HookExists(const char* lpcName) const
     return maHookNames.Contains(lHookNameStringWrapper);
 }
 
-// The background counterpart of RegisterStartingEffectWithName. NO STANDALONE X360 SYMBOL --
-// the console inlines it into its only caller, BackgroundEffectRequest::RegisterAndUpdateRequest
-// @0x82232E88, whose three stores at 0x82232F20..0x82232F38 ARE this body, in this order:
-//   stb  1,       0xD38(interface)  -> mbHasCurrentBackgroundEffectName = true
-//   bl   HookNameStringWrapper::Set with r3 = interface + 0xD15 -> mCurrentBackgroundHookName
-//   stfs f31,     0xCF0(interface)  -> mfCurrentBackgroundEffectBlendAmount = lfBlend
+// The background counterpart of RegisterStartingEffectWithName. NO STANDALONE CONSOLE
+// SYMBOL -- the console inlines it into its only caller,
+// BackgroundEffectRequest::RegisterAndUpdateRequest, whose three stores ARE this body,
+// in this order:
+//   store true into the flag at +0xD38   -> mbHasCurrentBackgroundEffectName = true
+//   HookNameStringWrapper::Set on +0xD15 -> mCurrentBackgroundHookName
+//   store the blend into +0xCF0          -> mfCurrentBackgroundEffectBlendAmount = lfBlend
 // (Note the flag is raised BEFORE the name copy -- reproduced.) Unlike the foreground twin it
 // does NOT clear mbHasCurrentEffectId; the console really does leave the id form alone here.
 void EffectInterface::RegisterStartingBackgroundEffectWithName(const HookNameStringWrapper& lrName,
@@ -151,18 +149,17 @@ void EffectInterface::RegisterStartingBackgroundEffectWithName(const HookNameStr
     mfCurrentBackgroundEffectBlendAmount = lfBlend;
 }
 
-// @ 0x821F1870 -- drop the current effect when the stopping name matches it (or
-// when nothing is current -- the X360 falls into the same clear).
+// Drop the current effect when the stopping name matches it (or when nothing is
+// current -- the console falls into the same clear).
 void EffectInterface::RegisterStoppingEffectWithName(const HookNameStringWrapper& lrName)
 {
     if (!mbHasCurrentEffectName || mCurrentEffectName == lrName.mHookNameString)
         mbHasCurrentEffectName = false;
 }
 
-// @ 0x821F18C0 -- the background counterpart. FAITHFUL QUIRK: the X360 gates on
-// the FOREGROUND has-flag (+0xD37) and compares against the FOREGROUND name
-// (+0xCF4) -- not the background pair -- while clearing the BACKGROUND has-flag
-// (+0xD38); reproduced as-is.
+// The background counterpart. FAITHFUL QUIRK: the console gates on the FOREGROUND
+// has-flag (+0xD37) and compares against the FOREGROUND name (+0xCF4) -- not the
+// background pair -- while clearing the BACKGROUND has-flag (+0xD38); reproduced as-is.
 void EffectInterface::RegisterStoppingBackgroundEffectWithName(const HookNameStringWrapper& lrName)
 {
     if (!mbHasCurrentEffectName || mCurrentEffectName == lrName.mHookNameString)
@@ -173,36 +170,36 @@ void EffectInterface::RegisterStoppingBackgroundEffectWithName(const HookNameStr
 
 
 // ============================================================================
-// BrnDirector::Camera::EnsureEffectIsPlaying @0x821F2720 -- a FREE function in
-// namespace BrnDirector::Camera (r3 = Camera&, r4 = const EffectInterface&,
-// r5 = const char*, f1 = f32; signature recovered from the asm, not from Hex-Rays).
+// BrnDirector::Camera::EnsureEffectIsPlaying -- a FREE function in namespace
+// BrnDirector::Camera taking (Camera&, const EffectInterface&, const char*, f32); the
+// signature is recovered from the attested calls, not from a decompiler's guess.
 //
-// Asm walk, with the Camera-relative displacements resolved through mEffects @camera +0x68
-// (BrnCameraEffects.h's X360-proven 0xBC block):
-//   0x821F2744  stb 0, 0x11F(camera)      -> mEffects.mbHasStartHookNameString = false  (+0xB7)
-//   0x821F2748  stb 0, 0x120(camera)      -> mEffects.mbHasStopHookNameString  = false  (+0xB8)
-//   0x821F274C  stw 0, 0x0E4(camera)      -> mEffects.muRequestedPostFxId      = 0      (+0x7C)
-//   0x821F2750  lbz 0xD37(source)         -> EffectInterface::mbHasCurrentEffectName
+// Attested behaviour, with the camera-relative fields resolved through mEffects
+// @camera +0x68 (BrnCameraEffects.h's console-proven 0xBC block):
+//   clear mEffects.mbHasStartHookNameString (+0xB7)
+//   clear mEffects.mbHasStopHookNameString  (+0xB8)
+//   zero  mEffects.muRequestedPostFxId      (+0x7C)
+//   read EffectInterface::mbHasCurrentEffectName (+0xD37)
 //               if clear                  -> jump straight to the request
-//   0x821F275C  open-coded strcmp(source + 0xCF4, lpcHook)      -- mCurrentEffectName,
-//               if DIFFERENT              -> jump to the request                 read inline
-//   0x821F2790  bl EffectInterface::GetCurrentEffectName; open-coded strcmp against lpcHook,
+//   compare mCurrentEffectName (+0xCF4, read inline) against lpcHook,
+//               if DIFFERENT              -> jump to the request
+//   call EffectInterface::GetCurrentEffectName and compare against lpcHook again,
 //               if DIFFERENT              -> RETURN (do nothing)   <- note the asymmetry, it
 //                                                                     is the third || term
 //                                                                     short-circuiting
-//   0x821F27D0  bl EffectInterface::GetCurrentEffectBlendAmount
+//   call EffectInterface::GetCurrentEffectBlendAmount
 //               if EQUAL to lfBlend       -> RETURN (already playing at this blend)
-//   0x821F27DC  the request:
-//                 HookNameStringWrapper::Set(camera + 0x68, lpcHook)  -> mStartHookNameString
-//                 stfs lfBlend, 0x80(that)  == camera + 0xE8          -> mfStartHookNameBlendAmount
-//                 stb  1,       0xB7(that)  == camera + 0x11F         -> mbHasStartHookNameString
+//   the request:
+//                 HookNameStringWrapper::Set(mEffects +0x00, lpcHook) -> mStartHookNameString
+//                 store lfBlend into mEffects +0x80          -> mfStartHookNameBlendAmount
+//                 store true  into mEffects +0xB7            -> mbHasStartHookNameString
 //               i.e. exactly CameraEffects::SetStartHookName, but with the +0xB7 / +0x80
 //               store order swapped -- both are independent stores, so this is the same
 //               named operation.
 //
 // ⚠️ THE REDUNDANT SECOND NAME COMPARE IS FAITHFUL, not a transcription slip. The console
 // evaluates the current-effect NAME twice: once inlined off +0xCF4 and once through the
-// out-of-line accessor (which carries the h:112 tripwire). Reproduced as the three-term ||
+// out-of-line accessor (which carries the tripwire). Reproduced as the three-term ||
 // below, which is the only shape that reproduces the branch table exactly -- in particular
 // the A && B && !C case, where the console silently does NOTHING.
 // ============================================================================
@@ -218,33 +215,32 @@ void EnsureEffectIsPlaying(Camera& lrCamera, const EffectInterface& lrSource,
 
     // The three unconditional clears at the head (the previous frame's request is dropped
     // before anything else is decided).
-    lrEffects.mbHasStartHookNameString = false;   // 0x821F2744
-    lrEffects.mbHasStopHookNameString  = false;   // 0x821F2748
-    lrEffects.muRequestedPostFxId      = 0;       // 0x821F274C
+    lrEffects.mbHasStartHookNameString = false;   // +0xB7
+    lrEffects.mbHasStopHookNameString  = false;   // +0xB8
+    lrEffects.muRequestedPostFxId      = 0;       // +0x7C
 
-    if (!lrSource.HasCurrentEffectName()                                        // 0x821F2750
-        || strcmp(lrSource.GetCurrentEffectName(), lpcHook) != 0                // 0x821F275C (inlined)
-        || (strcmp(lrSource.GetCurrentEffectName(), lpcHook) == 0               // 0x821F2790 (call)
-            && lrSource.GetCurrentEffectBlendAmount() != lfBlend))              // 0x821F27D0
+    if (!lrSource.HasCurrentEffectName()                                        // +0xD37
+        || strcmp(lrSource.GetCurrentEffectName(), lpcHook) != 0                // inlined off +0xCF4
+        || (strcmp(lrSource.GetCurrentEffectName(), lpcHook) == 0               // through the accessor
+            && lrSource.GetCurrentEffectBlendAmount() != lfBlend))
     {
-        // 0x821F27DC..0x821F27F4.
         lrEffects.SetStartHookName(lpcHook, lfBlend);
     }
 }
 
 // ============================================================================
-// BrnDirector::Camera::StopCurrentEffect @0x82205BB8 -- BODIED 2026-08-01.
-// r3 = Camera&, r4 = const EffectInterface&; no float argument, no return.
+// BrnDirector::Camera::StopCurrentEffect -- BODIED 2026-08-01.
+// Takes (Camera&, const EffectInterface&); no float argument, no return.
 //
-// Asm walk (camera displacements resolved through mEffects @camera +0x68):
-//   0x82205BCC  stb 0, 0x11F(camera)   -> mEffects.mbHasStartHookNameString = false (+0xB7)
-//   0x82205BD0  stw 0, 0x0E4(camera)   -> mEffects.muRequestedPostFxId      = 0     (+0x7C)
-//   0x82205BD4  lbz 0xD37(source)      -> EffectInterface::mbHasCurrentEffectName
-//   0x82205BEC  when SET: HookNameStringWrapper::Set(camera + 0x89, source + 0xCF4)
-//               -- camera+0x89 == mEffects +0x21 == mStopHookNameString, source+0xCF4 ==
-//               mCurrentEffectName -- then stb 1, mEffects +0xB8, and RETURN.
-//   0x82205C0C  when CLEAR: lbz +0xD39 (mbHasCurrentEffectId) AND lwz +0xCE8 (the current
-//               effect id) != 0x7BEC6 (the null effect id) -> stw 0x7BEC6 into
+// Attested behaviour (camera fields resolved through mEffects @camera +0x68):
+//   clear mEffects.mbHasStartHookNameString (+0xB7)
+//   zero  mEffects.muRequestedPostFxId      (+0x7C)
+//   read  EffectInterface::mbHasCurrentEffectName (+0xD37)
+//   when SET: HookNameStringWrapper::Set(mEffects +0x21, mCurrentEffectName at +0xCF4)
+//               -- mEffects +0x21 is mStopHookNameString -- then raise mEffects +0xB8,
+//               and RETURN.
+//   when CLEAR: read mbHasCurrentEffectId (+0xD39) AND the current effect id (+0xCE8);
+//               when that id != 0x7BEC6 (the null effect id), store 0x7BEC6 into
 //               mEffects.muRequestedPostFxId, i.e. REQUEST the null post-FX rather than
 //               leaving it at the 0 written at entry.
 //
@@ -255,8 +251,8 @@ void StopCurrentEffect(Camera& lrCamera, const EffectInterface& lrSource)
 {
     CameraEffects& lrEffects = lrCamera.GetEffects();
 
-    lrEffects.mbHasStartHookNameString = false;   // 0x82205BCC
-    lrEffects.muRequestedPostFxId      = 0;       // 0x82205BD0
+    lrEffects.mbHasStartHookNameString = false;   // +0xB7
+    lrEffects.muRequestedPostFxId      = 0;       // +0x7C
 
     if (lrSource.HasCurrentEffectName())
     {
@@ -277,25 +273,89 @@ void StopCurrentEffect(Camera& lrCamera, const EffectInterface& lrSource)
 
     if (lbRequestNullEffectId)
     {
-        lrEffects.muRequestedPostFxId = lrSource.GetNullEffectId();   // 0x82205C3C
+        lrEffects.muRequestedPostFxId = lrSource.GetNullEffectId();
     }
 }
 
 // ============================================================================
 // BrnDirector::Camera::RequestStartEffectHook -- BODIED 2026-08-01.
 //
-// NO STANDALONE X360 SYMBOL: the console emits the same three stores inline at every site.
-// The clearest copy is ArbStateRoaming::ProcessPossiblePaybackEffects @0x82208C5C, where
-// r31 = this + 0x78 == &mCamera.mEffects (mCamera @state +0x10, mEffects @camera +0x68):
-//   bl   HookNameStringWrapper::Set(r31, name)     -> mEffects.mStartHookNameString
-//   stfs flt_82001C98 (1.0f), 0x80(r31)            -> mEffects.mfStartHookNameBlendAmount
-//   stb  1,                   0xB7(r31)            -> mEffects.mbHasStartHookNameString
+// NO STANDALONE CONSOLE SYMBOL: the console emits the same three stores inline at every
+// site. The clearest copy is ArbStateRoaming::ProcessPossiblePaybackEffects, working off
+// &mCamera.mEffects (mCamera @state +0x10, mEffects @camera +0x68):
+//   HookNameStringWrapper::Set(mEffects +0x00, name) -> mEffects.mStartHookNameString
+//   store the constant 1.0f into mEffects +0x80      -> mEffects.mfStartHookNameBlendAmount
+//   store true into mEffects +0xB7                   -> mEffects.mbHasStartHookNameString
 // which is exactly CameraEffects::SetStartHookName(name, blend). Unlike
 // EnsureEffectIsPlaying this is UNCONDITIONAL -- it never consults the EffectInterface.
 // ============================================================================
 void RequestStartEffectHook(Camera& lrCamera, const char* lpcHook, f32 lfBlend)
 {
     lrCamera.GetEffects().SetStartHookName(lpcHook, lfBlend);
+}
+
+// ============================================================================
+// BrnDirector::Camera::EnsureEffectIsStopped -- BODIED 2026-09-12 (was declaration-only).
+// A free function in namespace BrnDirector::Camera taking (Camera&, const EffectInterface&,
+// const char*); no float argument, no return. The complement of EnsureEffectIsPlaying --
+// make sure the NAMED hook is not left playing on lrCamera.
+//
+// Walk, with the camera-relative displacements resolved through mEffects @camera +0x68:
+//   * when a start-hook request is pending (mEffects +0xB7) and its name (mEffects +0x00) is
+//     the hook we are stopping, drop the request -- the console open-codes the compare
+//     against mStartHookNameString rather than calling the accessor.
+//   * then, when the interface publishes a current effect NAME (+0xD37) that is this same
+//     hook, AND the start-hook request is (now) clear, ask for the hook to be stopped by
+//     name: mEffects.mStopHookNameString = lpcHook, mEffects +0xB8 = true.
+// Note the second block re-reads the start-hook flag AFTER the first block may have cleared
+// it, so a request raised THIS frame suppresses the stop -- reproduced as written.
+// The console's stop-name copy uses the CALLER's hook string, not the interface's.
+// ============================================================================
+void EnsureEffectIsStopped(Camera& lrCamera, const EffectInterface& lrSource,
+                           const char* lpcHook)
+{
+    CameraEffects& lrEffects = lrCamera.GetEffects();
+
+    if (lrEffects.mbHasStartHookNameString
+        && strcmp(lrEffects.mStartHookNameString.mHookNameString, lpcHook) == 0)
+    {
+        lrEffects.mbHasStartHookNameString = false;
+    }
+
+    if (lrSource.HasCurrentEffectName()
+        && strcmp(lrSource.GetCurrentEffectName(), lpcHook) == 0
+        && !lrEffects.mbHasStartHookNameString)
+    {
+        lrEffects.mStopHookNameString.Set(lpcHook);
+        lrEffects.mbHasStopHookNameString = true;
+    }
+}
+
+// ============================================================================
+// BrnDirector::Camera::RequestStartEffectHookReset -- BODIED 2026-09-12.
+//
+// NO STANDALONE CONSOLE SYMBOL: the shipped build emits the same six stores inline at each
+// site. Two identical copies (ArbStateOnlineCarSelect::Update's SELECTING_LIVERY arm and
+// ArbStateOnlineRaceIntro::Update's epilogue) give, against mEffects @camera +0x68:
+//   clear mEffects +0xB7   -> mbHasStartHookNameString = false
+//   clear mEffects +0xB8   -> mbHasStopHookNameString  = false
+//   zero  mEffects +0x7C   -> muRequestedPostFxId      = 0
+//   HookNameStringWrapper::Set(mEffects +0x00, name)  \
+//   store the blend into mEffects +0x80                > == CameraEffects::SetStartHookName
+//   raise mEffects +0xB7                              /
+// i.e. EnsureEffectIsPlaying's three unconditional clears followed by an UNCONDITIONAL
+// start-hook request: the previous frame's whole request state is reset before the new hook is
+// armed, and the EffectInterface is never consulted.
+// ============================================================================
+void RequestStartEffectHookReset(Camera& lrCamera, const char* lpcHook, f32 lfBlend)
+{
+    CameraEffects& lrEffects = lrCamera.GetEffects();
+
+    lrEffects.mbHasStartHookNameString = false;
+    lrEffects.mbHasStopHookNameString  = false;
+    lrEffects.muRequestedPostFxId      = 0;
+
+    lrEffects.SetStartHookName(lpcHook, lfBlend);
 }
 
 }

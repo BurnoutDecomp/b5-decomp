@@ -20,6 +20,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapMain.h"  // the real CN_MAP_MAIN (main-menu wave; NewPoolState needs the complete type)
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"
+#include "GameSource/Gui/Flow/Screen/States/BrnCrashNavProfile.h"   // the real CN_PROFILE (NewPoolState needs the complete type)
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavOptions.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavAccountManagement.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavTrax.h"

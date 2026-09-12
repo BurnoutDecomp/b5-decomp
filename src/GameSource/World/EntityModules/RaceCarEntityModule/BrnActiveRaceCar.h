@@ -354,6 +354,7 @@ public:
     // banner rather than accepted and ignored (an accepted-and-ignored argument is how a
     // silent-drop stub is born).
     void Update(f32 lfTimeStep,
+                f32 lfTimeStepMultiplier,
                 f32 lfAcceleration,
                 f32 lfBraking,
                 bool lbIsInOnlineGameMode,
@@ -811,6 +812,19 @@ public:
     // BrnVehicleEvents.h is already in this header's include closure (it is where
     // InEventAddForCollision's own typedef points), so naming it costs no new include.
     BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup DetermineCullingGroup();
+
+    // The attested declaration slot: the original class declares this between
+    // DetermineCullingGroup / SetCullingGroup / UpdateLostContact / UpdateTimeSinceCreation
+    // above and ResetInAirRotations / UpdateInAirRotations below, none of which this build
+    // has landed. Signature `void (f32)`, parameter named lfTimeStepMultiplier.
+    //
+    // ⭐ THE WHEEL-BLUR PRODUCER. Publishes, for each of the four road wheels,
+    // |mPhysicsState.maWheels[i].mfRadiansPerSecond| * lfTimeStepMultiplier into
+    // mRenderParams.mafWheelAngularVelocities[i]. That array is the ONLY input to the
+    // renderer's per-wheel technique choice (RenderRaceCar compares it against the 30 rad/s
+    // wheel-blur threshold), so with this function absent every race-car wheel read 0 rad/s
+    // and could never pick the blurred variant.
+    void CalculateWheelAngularVelocities(f32 lfTimeStepMultiplier);
 
     // X360 0x822B8828: the render body transform,
     // `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. The console's only caller

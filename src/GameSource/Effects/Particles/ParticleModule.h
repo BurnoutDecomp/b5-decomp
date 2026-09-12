@@ -14,6 +14,7 @@
 #include "GameSource/Effects/Particles/EffectsVertexBufferManager.h"   // EffectsVertexBufferManager (x3, BY VALUE)
 #include "GameSource/Effects/Particles/Native/FXBuckets.h"             // BrnParticle::FXBucketManager (mBucketManager, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer (mSkidsRenderer, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.h" // BrnGraphics::Im3dTexPlusLighting (mWorldTexRenderer, BY VALUE)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"          // CgsGraphics::Im3d (mImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"   // BrnGraphics::LionBlendRenderer (mLionImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
@@ -658,8 +659,17 @@ namespace BrnParticle
         // was (nothing reads these members by absolute offset).
         u8 maPadIfaceAToB[(0x91A0 - 0x9010) > sizeof(CgsGraphics::Im3d)
                           ? (0x91A0 - 0x9010) - sizeof(CgsGraphics::Im3d) : 1]; // -> +0x91A0 on the console
-        ContainedInterface mWorldTexRenderer;          // +0x91A0 (37280) DWARF :58 BrnGraphics::Im3dTexPlusLighting (off_820CEBE0)
-        u8 maPadIfaceBToC[0x9210 - (0x91A0 + sizeof(ContainedInterface))]; // -> +0x9210
+        // +0x91A0 (37280). NOT a ContainedInterface placeholder any more: this IS the
+        // BrnGraphics::Im3dTexPlusLighting that BrnDebrisRenderer borrows, and
+        // ParticleModule::Prepare builds it with Im3dTexPlusLighting::Construct (the same
+        // GlobalGraphics allocator all five contained renderers take). Its program
+        // pair is the re-authored pc/gcm/renderengine/WorldTexturedProgramsPC.cpp. The console
+        // span +0x91A0..+0x9210 is 0x70, which is exactly the modelled sizeof (0x58 ImRenderer
+        // base + six 4-byte shader-variable handles); host pointers widen the base, so the pad
+        // below is clamped the same way maPadIfaceAToB is.
+        BrnGraphics::Im3dTexPlusLighting mWorldTexRenderer; // +0x91A0 (37280)
+        u8 maPadIfaceBToC[(0x9210 - 0x91A0) > sizeof(BrnGraphics::Im3dTexPlusLighting)
+                          ? (0x9210 - 0x91A0) - sizeof(BrnGraphics::Im3dTexPlusLighting) : 1]; // -> +0x9210
         // +0x9210 (37392): DWARF :61 BrnGraphics::Im3dSkidsRenderer mSkidsRenderer -- the skid /
         // tyre-mark immediate-mode renderer, 100 bytes on the console, constructed by
         // ParticleModule::Prepare @0x8229BEA0 and handed to the trail system's renderer.

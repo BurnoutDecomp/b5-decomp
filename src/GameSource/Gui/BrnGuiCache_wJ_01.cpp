@@ -72,7 +72,6 @@
 // liNumActiveIcons` test stays false on -1 exactly as it did on 0 -- no spurious chirp.
 // =================================================================================================
 
-#include <cstring>   // std::memset (the GetOnlineFinishPoint link gate)
 #include <cstdlib>   // getenv (the opt-in [satnav-tracker] publish witness)
 
 #include "GameSource/Gui/BrnGuiCache.h"
@@ -806,41 +805,203 @@ namespace BrnGui
         }
         return luFinishPointCount;
     }
-    // =============================================================================================
-    // X360 BrnGui::GuiCache::GetOnlineFinishPoint @0x82506940 (json name field verified).
-    // ⛔ LINK GATE, NOT A RECONSTRUCTION -- relocated here 2026-08-29 when
-    // BrnMainMapLinkGates.cpp (its old home) died with its last real-body retirement, matching
-    // the flyby wave's deletion of that file. The real body asserts mpWorldDataController,
-    // popcount-walks the 256-bit maOnlineFinishPointsMask @+0x7770 to the liIndex-th set bit,
-    // resolves it through the events-with-unique-finish list (cache+0x8040) and
-    // WorldDataController::GetLandmarkInfoFromIndex, and fills the out record. Its ONLY caller
-    // (CrashNavIconRenderer::GetIconInformation's ONLINE_FINISH_POINTS arm,
-    // BrnCrashNavIconRenderer_wK_01.cpp) iterates CountSetBits() of that same mask -- ZERO
-    // offline -- so the gate is unreachable in the offline milestone; it exists to close the
-    // link. RETURN VALUE = lpOutIconInfo, record ZEROED (deterministic; no reachable caller
-    // consumes the zeros). [FLAG link scaffold]
-    // DELETE-WHEN the real body lands (the popcount walk + the 0x8040-list element lookup).
-    // =============================================================================================
-    GuiEventUpdateSatNav::SatNavIconInfo*
-    GuiCache::GetOnlineFinishPoint(s32 /*liIndex*/,
-                                   GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+    // The online finish-point mask is a 256-bit set held as four 64-bit fields -- the shape
+    // CgsContainers::BitArray gives it, and the name the recovered assert texts below use
+    // for it (mEventsWithUniqueFinishPoints). GetOnlineFinishPoint walks it with the set's
+    // first/next-set-bit pair, which the recovered code inlines at the call site rather than
+    // calling; the cache holds the fields as a plain array, so the pair is reproduced here
+    // with internal linkage instead of being reached through the container.
+    namespace
     {
-        static bool sbLoggedGate = false;
-        if (!sbLoggedGate)
+        const s32 KI_INVALID_BITINDEX     = -1;
+        const u32 KU_BITS_IN_FIELD        = 64;
+        const u32 KU_MAX_FINISH_POINTS    = 256;                                   // the set's capacity
+        const u32 KU_FINISH_POINT_FIELDS  = KU_MAX_FINISH_POINTS / KU_BITS_IN_FIELD;
+
+        // The PPC count-leading-zeros the two walkers below are built out of.
+        s32 CountLeadingZeros64(u64 lu64Value)
         {
-            sbLoggedGate = true;
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+            s32 liCount = 0;
+            while (liCount < 64
+                   && (lu64Value & (static_cast<u64>(1) << (63 - liCount))) == 0)
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "[gui-cache-gate] BrnGui::GuiCache::GetOnlineFinishPoint: inert"
-                       " stand-in, no body anywhere in the tree [FLAG link scaffold]\n";
+                ++liCount;
             }
+            return liCount;
         }
-        if (lpOutIconInfo != 0)
+
+        // Index of the lowest set bit of a field, expressed the way the recovered code
+        // computes it: isolate the lowest set bit with `x - ((x - 1) & x)`, count its leading
+        // zeros, then `field*64 - clz + 63`. Value-identical to a count-trailing-zeros.
+        s32 LowestSetBitIndex(u32 luField, u64 lu64FieldBits)
         {
-            std::memset(lpOutIconInfo, 0, sizeof(*lpOutIconInfo));
+            const u64 lu64Lowest = lu64FieldBits - ((lu64FieldBits - 1) & lu64FieldBits);
+            return static_cast<s32>(luField * KU_BITS_IN_FIELD)
+                 - CountLeadingZeros64(lu64Lowest) + 63;
         }
-        return lpOutIconInfo;
+
+        // Lowest set bit in the whole set, or KI_INVALID_BITINDEX when every field is zero.
+        s32 GetFirstSetBit(const u64* lpa64Fields)
+        {
+            for (u32 luField = 0; luField < KU_FINISH_POINT_FIELDS; ++luField)
+            {
+                if (lpa64Fields[luField] != 0)
+                {
+                    return LowestSetBitIndex(luField, lpa64Fields[luField]);
+                }
+            }
+            return KI_INVALID_BITINDEX;
+        }
+
+        // Lowest set bit strictly after liAfter, or KI_INVALID_BITINDEX when there is none.
+        // Two phases, exactly as the recovered code splits them: a linear probe to the end of
+        // liAfter's own field (the one that carries the set's bounds assert), then a
+        // field-at-a-time scan of the fields after it. liAfter == KI_INVALID_BITINDEX makes
+        // the first phase empty and starts the scan at field 0, which is what the recovered
+        // code's `(liAfter & ~63) + 64` arithmetic does with -1.
+        s32 GetNextSetBit(const u64* lpa64Fields, s32 liAfter)
+        {
+            const u32 luFieldEnd = static_cast<u32>((liAfter & ~63) + 64);
+            u32 luBit = static_cast<u32>(liAfter + 1);
+
+            for (; luBit < luFieldEnd; ++luBit)
+            {
+                CGS_ASSERT(luBit < KU_MAX_FINISH_POINTS, "invalid index");  // CgsBitArray.h:203
+                const u64 lu64Mask = static_cast<u64>(1) << (luBit & (KU_BITS_IN_FIELD - 1));
+                if ((lpa64Fields[luBit / KU_BITS_IN_FIELD] & lu64Mask) != 0)
+                {
+                    return static_cast<s32>(luBit);
+                }
+            }
+
+            for (u32 luField = luBit / KU_BITS_IN_FIELD;
+                 luField < KU_FINISH_POINT_FIELDS; ++luField)
+            {
+                if (lpa64Fields[luField] != 0)
+                {
+                    return LowestSetBitIndex(luField, lpa64Fields[luField]);
+                }
+            }
+            return KI_INVALID_BITINDEX;
+        }
+    }
+
+    // =============================================================================================
+    // GuiCache::GetOnlineFinishPoint -- the ONLINE_FINISH_POINTS icon accessor. Its only
+    // caller is CrashNavIconRenderer::GetIconInformation's ONLINE_FINISH_POINTS arm
+    // (BrnCrashNavIconRenderer_wK_01.cpp), which iterates GetNumOnlineFinishPoints() -- the
+    // popcount of the same mask -- and reads back the record's leading position lane and its
+    // sign-extended landmark half-word @+0x20.
+    //
+    // The producer of the mask is GuiCache::HandleSpecificPreSetRacesEvent
+    // (BrnGuiCache_wB_13.cpp): bit i is set for preset event i when event i's LAST landmark
+    // (its finish point) is not already the last landmark of an earlier event. So slot
+    // liIndexIn here means "the liIndexIn-th event with a distinct finish point", and the
+    // walk below turns that slot back into an event index.
+    //
+    // Step for step:
+    //   1. assert mpWorldDataController                                        (cpp:3695)
+    //   2. assert the slot against the mask's own set-bit count                (cpp:3696)
+    //      -- the recovered code inlines the SWAR popcount here; the named accessor next to
+    //      this body IS that popcount, so it is called by name.
+    //   3. first set bit, asserted valid                                       (cpp:3699)
+    //   4. advance to the next set bit liIndexIn times, each one asserted      (cpp:3703)
+    //   5. that bit indexes the adopted preset-event list; assert the record   (cpp:3708)
+    //   6. the record's LAST landmark index -> WorldDataController lookup, asserted
+    //                                                                          (cpp:3711)
+    //   7. fill the out record from the landmark.
+    //
+    // The out-record fill is byte-for-byte the same sequence as
+    // GetLandmarkInfoAtPositionInList / GetLandmarkInfoFromIndex above -- position lane,
+    // 0.0f rotation and speed, the whole 64-bit landmark id, district then county (county
+    // read back OFF the record, not off the local), type 4, -1 in the active-race-car slot,
+    // design index -- with ONE difference: the landmark half-word @+0x20 is the landmark's
+    // own region index, not the caller's slot.
+    //
+    // NOTE, deliberately not "fixed": step 6 reads landmark `count - 1` with no zero-count
+    // test of its own. The producer never sets a bit for an event with zero landmarks, so
+    // the count is >= 1 for every bit the walk can reach.
+    // =============================================================================================
+    void GuiCache::GetOnlineFinishPoint(s32 liIndexIn,
+                                        GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+    {
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");       // cpp:3695
+        CGS_ASSERT(static_cast<u32>(liIndexIn) < GetNumOnlineFinishPoints(),
+                   "((uint32_t)liIndexIn) < mEventsWithUniqueFinishPoints.CountSetBits()");
+                                                                               // cpp:3696
+
+        s32 liSetBit = GetFirstSetBit(maOnlineFinishPointsMask);
+        CGS_ASSERT(liSetBit != KI_INVALID_BITINDEX,
+                   "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
+                   "::KI_INVALID_BITINDEX");                                   // cpp:3699
+
+        for (s32 liRemaining = liIndexIn; liRemaining > 0; --liRemaining)
+        {
+            liSetBit = GetNextSetBit(maOnlineFinishPointsMask, liSetBit);
+            CGS_ASSERT(liSetBit != KI_INVALID_BITINDEX,
+                       "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
+                       "::KI_INVALID_BITINDEX");                               // cpp:3703
+        }
+
+        // [FLAG PC bring-up guard] the walk answers KI_INVALID_BITINDEX whenever the mask is
+        // empty -- which is every offline session, because nothing posts the preset-races
+        // event there -- and the asserts above are non-gating in this build, so without this
+        // the -1 would reach the list indexer. The caller's record is left exactly as it
+        // staged it, which is what the non-fatal path effectively leaves too.
+        // DELETE-WHEN asserts gate.
+        if (liSetBit == KI_INVALID_BITINDEX)
+        {
+            return;
+        }
+
+        const PresetEvent* lpEventWithUniqueFinish = GetPresetEvent(liSetBit);
+        CGS_ASSERT(lpEventWithUniqueFinish != 0, "lpEventWithUniqueFinish");    // cpp:3708
+        if (lpEventWithUniqueFinish == 0)
+        {
+            return;
+        }
+
+        const BrnGameState::LandmarkIndex lFinishLandmarkIndex =
+            lpEventWithUniqueFinish->GetLandmark(
+                lpEventWithUniqueFinish->GetNumLandmarks() - 1);
+
+        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
+        if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
+        {
+            LogAbsentTriggerDataOnce("GuiCache::GetOnlineFinishPoint");
+            return;
+        }
+
+        const BrnTrigger::Landmark* lpLandmark =
+            mpWorldDataController->GetLandmarkInfoFromIndex(lFinishLandmarkIndex);
+        CGS_ASSERT(lpLandmark != 0, "lpLandmark");                             // cpp:3711
+
+        // [FLAG PC bring-up guard, wave J] same reasoning as GetLandmarkInfoFromIndex above:
+        // the lookup can answer NULL on a miss and has already reported it, and the assert is
+        // non-gating here, so the deref is guarded rather than turned into a crash.
+        // DELETE-WHEN the trigger-data landmark table is populated on this build.
+        if (lpLandmark == 0)
+        {
+            return;
+        }
+
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                          lv3LandmarkPosition.z, 0.0f };
+        lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // -> +0x00
+        lpOutIconInfo->SetRotation(0.0f);                                   // -> +0x18
+        lpOutIconInfo->SetSpeedMph(0.0f);                                   // -> +0x1C
+        lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // -> +0x10
+        lpOutIconInfo->SetDistrict(
+            static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // -> +0x25
+        lpOutIconInfo->SetCounty(
+            BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+        lpOutIconInfo->SetIconType(
+            GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // -> +0x28
+        lpOutIconInfo->SetLandmarkIndexHalf(
+            static_cast<s16>(lpLandmark->GetRegionIndex()));                // -> +0x20
+        lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // -> +0x26
+        lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // -> +0x22
     }
 }
 

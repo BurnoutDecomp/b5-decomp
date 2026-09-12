@@ -5,56 +5,34 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX. The class layout, control flow, status
-// constants and ring arithmetic are taken from the X360 asm (no DWARF / no LegacySrc source
-// exists for this TU). See the header for the offset map.
+// The class layout, control flow, status constants and ring arithmetic are recovered from the
+// console build; no original header or source exists for this TU. See the header for the
+// offset map.
 
-// --- Win32 critical-section primitives (the lock embedded at this+0x3180). Declared here as
+// --- Win32 critical-section primitives (the lock embedded at +0x3180). Declared here as
 //     the sibling CgsDeviceOperationPool.cpp does; the real bodies come from the platform. ---
 extern "C" void RtlEnterCriticalSection(void* lpCriticalSection);
 extern "C" void RtlLeaveCriticalSection(void* lpCriticalSection);
 
-namespace CgsMemory
-{
-    // The embedded per-frame relocator copy engine (CgsMemory::Relocator). Its type is
-    // .cpp-local in GameShared/Jobs/Relocator/CgsRelocator.cpp (no shared header), so the
-    // op-driving entry points this TU calls are declared here as opaque pointer shims reached
-    // by name on the relocator subobject (this+0x2180). Update(...) returns "ran this frame".
-    //   Construct @0x828687C8, Update/Execute (Dispatch's relocator pump).
-    void  Relocator_Construct(void* lpRelocator);
-    bool  Relocator_Update(void* lpRelocator, char la2, char la3);
-    void  Relocator_Execute(void* lpRelocator, void* lpOpList);
-
-    // One relocator copy op (X360: 4 * u32 {src,dst,size,type}; here native pointers so the
-    // op records survive a 64-bit host). Built into the stream's maRelocatorOps buffer.
-    struct RelocatorOp
-    {
-        void* mpSrc;
-        void* mpDst;
-        u32   muSize;
-        u32   muType; // 1 = secondary->tertiary, 2 = primary->secondary
-    };
-}
-
 namespace BrnReplays
 {
-    // ---- file-scope debug toggles / state (asm: byte_82F2A598/599/59A, dword_82F2A634). ----
+    // ---- file-scope debug toggles / state (three byte toggles and one state word). ----
     // The three byte toggles gate the normal write/transfer pipeline; the boot trace shows the
-    // stream operating, so they default ENABLED. NOTE: their init values are NOT asm-grounded
-    // (read-only debug switches with no recovered initializer); defaulting to true reproduces
-    // the observed behaviour. dword_82F2A634 is grounded: Construct stores 3.
-    static bool gbEnablePrimaryTransfer   = true; // byte_82F2A598
-    static bool gbEnableSecondaryTransfer = true; // byte_82F2A599
-    static bool gbEnableWriteRequests     = true; // byte_82F2A59A
-    static s32  giStreamSystemState       = 0;    // dword_82F2A634 (Construct sets 3)
+    // stream operating, so they default ENABLED. NOTE: their init values are NOT grounded --
+    // they are read-only debug switches with no recovered initializer, and defaulting to true
+    // reproduces the observed behaviour. The state word IS grounded: Construct stores 3.
+    static bool gbEnablePrimaryTransfer   = true;
+    static bool gbEnableSecondaryTransfer = true;
+    static bool gbEnableWriteRequests     = true;
+    static s32  giStreamSystemState       = 0;    // Construct sets 3
 
     // =====================================================================================
-    // Construct @ 0x8264D510
+    // Construct -- seed the rings and clear the handle/state.
     // =====================================================================================
     void GPUDiskWriteStream::Construct()
     {
-        muHandle  = 0;   // a1[3448] / a1[3449]
-        miState   = 0;   // a1[3444]
+        mHandle.Clear(); // +0x35E0
+        miState   = 0;   // +0x35D0
 
         // Seed every ring slot's / global block's owner back-pointer to `this`.
         for (s32 li = 0; li < KI_NUM_GLOBAL_BLOCKS; ++li)
@@ -66,12 +44,12 @@ namespace BrnReplays
         for (s32 li = 0; li < KI_TERTIARY_BLOCKS; ++li)
             maTertiaryBlocks[li].mpStream = this;
 
-        CgsMemory::Relocator_Construct(maRelocator);
+        mRelocator.Construct();
         giStreamSystemState = 3;
     }
 
     // =====================================================================================
-    // AllocateGlobalBlock @ 0x8264B2F8 -- pop a free global-block index off the free-list.
+    // AllocateGlobalBlock -- pop a free global-block index off the free-list.
     // =====================================================================================
     s32 GPUDiskWriteStream::AllocateGlobalBlock()
     {
@@ -82,7 +60,7 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // FreeGlobalBlock @ 0x8264B378 -- push a global-block index back onto the free-list.
+    // FreeGlobalBlock -- push a global-block index back onto the free-list.
     // =====================================================================================
     void GPUDiskWriteStream::FreeGlobalBlock(s32 liGlobalBlock)
     {
@@ -93,7 +71,7 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // AddBlock @ 0x8265C378 -- queue la4Size bytes (a multiple of 64 KiB) of frunk data from
+    // AddBlock -- queue la4Size bytes (a multiple of 64 KiB) of frunk data from
     // lpData at on-disk offset la2Offset into the primary ring. Returns false if the pool is
     // full. Called by BrnReplays::WriteStream::AddFrunk.
     // =====================================================================================
@@ -155,7 +133,7 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // Service @ 0x82659748 -- drive the next disk op: a close once everything has drained,
+    // Service -- drive the next disk op: a close once everything has drained,
     // otherwise the next write while the stream is open.
     // =====================================================================================
     s32 GPUDiskWriteStream::Service()
@@ -172,25 +150,25 @@ namespace BrnReplays
             if (gbEnableWriteRequests)
                 return SubmitWriteRequest();
         }
-        return 0; // X360 returned `this` here; the result is discarded by callers
+        return 0; // the console returned `this` here; the result is discarded by callers
     }
 
     // =====================================================================================
-    // SubmitCloseRequest @ 0x82653890 -- issue the async disk Close on the file handle.
+    // SubmitCloseRequest -- issue the async disk Close on the file handle.
     // =====================================================================================
     s32 GPUDiskWriteStream::SubmitCloseRequest()
     {
-        CGS_ASSERT(muHandle != 0, "No handle");
+        CGS_ASSERT(!mHandle.IsNull(), "No handle");
 
         CgsFileSystem::DeviceManager* lpDeviceManager = CgsFileSystem::GetDeviceManager();
-        lpDeviceManager->Close(static_cast<CgsFileSystem::Handle>(muHandle),
+        lpDeviceManager->Close(mHandle,
                                &GPUDiskWriteStream::CloseCallback, this, KI_OP_PRIORITY);
         ++miPendingOps;
         return 1;
     }
 
     // =====================================================================================
-    // SubmitWriteRequest @ 0x8264D5C8 -- if a tertiary block is ready, stream it to disk.
+    // SubmitWriteRequest -- if a tertiary block is ready, stream it to disk.
     // =====================================================================================
     s32 GPUDiskWriteStream::SubmitWriteRequest()
     {
@@ -214,10 +192,10 @@ namespace BrnReplays
         CGS_ASSERT(lbValidFrunk, "Invalid frunk has been written");
 
         lGlobal.miStatus = KI_STATUS_WRITING;
-        CGS_ASSERT(muHandle != 0, "No handle");
+        CGS_ASSERT(!mHandle.IsNull(), "No handle");
 
         CgsFileSystem::DeviceManager* lpDeviceManager = CgsFileSystem::GetDeviceManager();
-        lpDeviceManager->Write(static_cast<CgsFileSystem::Handle>(muHandle),
+        lpDeviceManager->Write(mHandle,
                                static_cast<u64>(lGlobal.miOffset),
                                mpTertiaryData + lLocalBlock.miOffset,
                                KI_BLOCK_SIZE,
@@ -229,17 +207,17 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // Dispatch @ 0x8265C648 -- per-frame pump. Run the relocator, reclaim drained blocks, and
+    // Dispatch -- per-frame pump. Run the relocator, reclaim drained blocks, and
     // build the relocator ops that copy primary->secondary then secondary->tertiary.
     // =====================================================================================
     void GPUDiskWriteStream::Dispatch()
     {
         RtlEnterCriticalSection(maLock);
 
-        if (CgsMemory::Relocator_Update(maRelocator, 1, 1))
+        if (mRelocator.Update(true, true))
         {
             // --- reclaim blocks whose secondary copy has completed (status bit (s&7)==7). ---
-            if (miPrimaryInFlight > 0)   // asm 0x8265C68C reads 0x35D4 (miPrimaryInFlight)
+            if (miPrimaryInFlight > 0)   // the console reads +0x35D4 here
             {
                 for (s32 li = 0; li < KI_NUM_GLOBAL_BLOCKS; ++li)
                 {
@@ -264,7 +242,7 @@ namespace BrnReplays
                             --miBlocksInPrimary;
                             lGlobal.miPrimaryLocalIndex = KI_INVALID_BLOCK;
                             lGlobal.miStatus            = KI_STATUS_SEC_DONE;
-                            --miPrimaryInFlight;   // asm 0x8265C810 --0x35D4 (keep --miBlocksInPrimary above)
+                            --miPrimaryInFlight;   // +0x35D4 (keep --miBlocksInPrimary above)
                         }
                         else
                         {
@@ -275,7 +253,7 @@ namespace BrnReplays
             }
 
             // --- reclaim blocks whose tertiary copy has completed (status (s&0xD)==0xD). ---
-            if (miSecondaryInFlight > 0)   // asm 0x8265C82C reads 0x35D8 (miSecondaryInFlight)
+            if (miSecondaryInFlight > 0)   // the console reads +0x35D8 here
             {
                 for (s32 li = 0; li < KI_NUM_GLOBAL_BLOCKS; ++li)
                 {
@@ -289,7 +267,7 @@ namespace BrnReplays
                             --miBlocksInSecondary;
                             lGlobal.miSecondaryLocalIndex = KI_INVALID_BLOCK;
                             lGlobal.miStatus              = KI_STATUS_TER_DONE;
-                            --miSecondaryInFlight;   // asm 0x8265C8A0 --0x35D8 (keep --miBlocksInSecondary above)
+                            --miSecondaryInFlight;   // +0x35D8 (keep --miBlocksInSecondary above)
                         }
                         else
                         {
@@ -302,10 +280,9 @@ namespace BrnReplays
             Service();
 
             // Reset the relocator op list for this frame.
-            miRelocatorOpCount   = 0;
-            mpRelocatorOpCursor  = maRelocatorOps;
-            CgsMemory::RelocatorOp* lpOps
-                = reinterpret_cast<CgsMemory::RelocatorOp*>(maRelocatorOps);
+            mRelocatorParams.miNumOps = 0;
+            mRelocatorParams.mpOps    = maRelocatorOps;
+            CgsMemory::RelocateOp* lpOps = maRelocatorOps;
 
             // --- build secondary->tertiary copy ops (status 5 -> 13). ---
             if (gbEnableSecondaryTransfer && miBlocksInSecondary > miSecondaryInFlight)
@@ -327,12 +304,12 @@ namespace BrnReplays
                     CGS_ASSERT(lTertiary.miGlobalBlockIndex == KI_INVALID_BLOCK,
                                "lTertiary.miGlobalBlockIndex == -1");
 
-                    CgsMemory::RelocatorOp& lOp = lpOps[miRelocatorOpCount];
-                    lOp.mpSrc  = mpSecondaryData + lSecondary.miOffset;
-                    lOp.mpDst  = mpTertiaryData + lTertiary.miOffset;
-                    lOp.muSize = KI_BLOCK_SIZE;
-                    lOp.muType = 1;
-                    ++miRelocatorOpCount;
+                    CgsMemory::RelocateOp& lOp = lpOps[mRelocatorParams.miNumOps];
+                    lOp.mpSource      = mpSecondaryData + lSecondary.miOffset;
+                    lOp.mpDest        = mpTertiaryData + lTertiary.miOffset;
+                    lOp.muSize        = KI_BLOCK_SIZE;
+                    lOp.muMemorySpace = 1;   // the tag the console stores for this leg
+                    ++mRelocatorParams.miNumOps;
 
                     lTertiary.miGlobalBlockIndex = lSecondary.miGlobalBlockIndex;
                     lGlobal.miTertiaryLocalIndex = miTertiaryWriteIndex;
@@ -341,8 +318,8 @@ namespace BrnReplays
 
                     miTertiaryReadIndex  = (miTertiaryReadIndex + 1) % miSecondaryRingSize;
                     miTertiaryWriteIndex = (miTertiaryWriteIndex + 1) % miTertiaryRingSize;
-                    ++miBlocksInTertiary;  // a1[3434]
-                    ++miSecondaryInFlight; // a1[3446]
+                    ++miBlocksInTertiary;  // +0x35A8
+                    ++miSecondaryInFlight; // +0x35D8
                 }
             }
 
@@ -373,12 +350,12 @@ namespace BrnReplays
                     CGS_ASSERT(lSecondary.miGlobalBlockIndex == KI_INVALID_BLOCK,
                                "lSecondary.miGlobalBlockIndex == -1");
 
-                    CgsMemory::RelocatorOp& lOp = lpOps[miRelocatorOpCount];
-                    lOp.mpSrc  = mpPrimaryData + lPrimary.miOffset;
-                    lOp.mpDst  = mpSecondaryData + lSecondary.miOffset;
-                    lOp.muSize = KI_BLOCK_SIZE;
-                    lOp.muType = 2;
-                    ++miRelocatorOpCount;
+                    CgsMemory::RelocateOp& lOp = lpOps[mRelocatorParams.miNumOps];
+                    lOp.mpSource      = mpPrimaryData + lPrimary.miOffset;
+                    lOp.mpDest        = mpSecondaryData + lSecondary.miOffset;
+                    lOp.muSize        = KI_BLOCK_SIZE;
+                    lOp.muMemorySpace = 2;   // the tag the console stores for this leg
+                    ++mRelocatorParams.miNumOps;
 
                     lSecondary.miGlobalBlockIndex = lPrimary.miGlobalBlockIndex;
                     lGlobal.miSecondaryLocalIndex = miSecondaryWriteIndex;
@@ -392,14 +369,14 @@ namespace BrnReplays
                 }
             }
 
-            CgsMemory::Relocator_Execute(maRelocator, &mpRelocatorOpCursor);
+            mRelocator.Execute(&mRelocatorParams);
         }
 
         RtlLeaveCriticalSection(maLock);
     }
 
     // =====================================================================================
-    // Close @ 0x8265C2B8 -- flag a clean close; Service issues it once all blocks have drained.
+    // Close -- flag a clean close; Service issues it once all blocks have drained.
     // Called by BrnReplays::ReplayModule::CloseReplayFiles.
     // =====================================================================================
     void GPUDiskWriteStream::Close()
@@ -412,10 +389,10 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // WriteCallback @ 0x82659C18 -- async write completion. The context is the tertiary
+    // WriteCallback -- async write completion. The context is the tertiary
     // LocalBlock; its mpStream back-pointer is the stream.
     // =====================================================================================
-    void GPUDiskWriteStream::WriteCallback(s32 liResult, s32 lHandle, u64 luSize, void* lpContext)
+    void GPUDiskWriteStream::WriteCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext)
     {
         LocalBlock* lpBlock = static_cast<LocalBlock*>(lpContext);
         CGS_ASSERT(lpBlock != 0, "Invalid stream block");
@@ -424,9 +401,9 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // CloseCallback @ 0x82650B00 -- async close completion. The context is the stream.
+    // CloseCallback -- async close completion. The context is the stream.
     // =====================================================================================
-    void GPUDiskWriteStream::CloseCallback(s32 liResult, s32 lHandle, u64 luSize, void* lpContext)
+    void GPUDiskWriteStream::CloseCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext)
     {
         (void)lHandle;
         (void)luSize;
@@ -435,10 +412,10 @@ namespace BrnReplays
     }
 
     // =====================================================================================
-    // OnWrite @ 0x826597E0 -- a write op finished: clear the tertiary block and free its
+    // OnWrite -- a write op finished: clear the tertiary block and free its
     // global block.
     // =====================================================================================
-    s32 GPUDiskWriteStream::OnWrite(s32 liResult, s32 lHandle, u64 luSize, void* lpBlock)
+    s32 GPUDiskWriteStream::OnWrite(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpBlock)
     {
         (void)lHandle;
         (void)luSize;
@@ -485,11 +462,11 @@ namespace BrnReplays
         --miPendingOps;
         Service();
         RtlLeaveCriticalSection(maLock);
-        return 0; // X360 returned `this`; the callback result is discarded
+        return 0; // the console returned `this`; the callback result is discarded
     }
 
     // =====================================================================================
-    // OnClose @ 0x82650848 -- a close op finished: settle the close state.
+    // OnClose -- a close op finished: settle the close state.
     // =====================================================================================
     s32 GPUDiskWriteStream::OnClose(s32 liResult, void* lpStream)
     {
@@ -515,14 +492,14 @@ namespace BrnReplays
         }
         else
         {
-            // asm zeroes the 64-bit handle (bytes 13792/13796) and the state (13776).
-            muHandle = 0;
-            miState  = 0;
+            // The console zeroes both handle words and the state here.
+            mHandle.Clear();
+            miState = 0;
         }
 
         --miPendingOps;
         RtlLeaveCriticalSection(maLock);
-        return 0; // X360 returned `this`; the callback result is discarded
+        return 0; // the console returned `this`; the callback result is discarded
     }
 
 }

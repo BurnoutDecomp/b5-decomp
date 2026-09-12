@@ -198,6 +198,24 @@ namespace BrnGame
         return &mSnapShotRequest;
     }
 
+    // ---- the dispatch camera's view-projection ---------------------------------------
+
+    // SetCameraViewProjection. INLINED on the console: there is no standalone body, and
+    // the ONE writer, WorldModule::GenerateDispatchLists, emits the copy directly -- it
+    // loads the four 16-byte rows of the dispatch camera's view-projection matrix and
+    // stores them, in order, at buffer +0x99C0 / +0x99D0 / +0x99E0 / +0x99F0, which is
+    // exactly the four rows of mOcclusionViewProjectionMatrix. Nothing else in the image
+    // writes the block, so the whole body is the assignment.
+    //
+    // The write-lock assert is the sibling convention in this file, not an attested part
+    // of the store; the console's inline sits inside GenerateDispatchLists' own
+    // LockForWrite/UnlockForWrite bracket, and so does the call on this build.
+    void DispatchThreadInputBuffer::SetCameraViewProjection( const Matrix44& lrViewProjection )
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mOcclusionViewProjectionMatrix = lrViewProjection;
+    }
+
     // ---- env-map face-render flags ---------------------------------------------------
 
     // SetEnvMapFaceRender (DWARF h:141, dwarfdump _compile/BrnWorldUnity.cpp:10926

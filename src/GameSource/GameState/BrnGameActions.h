@@ -1335,7 +1335,11 @@ struct PrepareForModeAction : public GameAction<E_ACTION_PREPARE_FOR_MODE>
     void                  SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPlayerID);   // X360 0x8230FD60 (defined)
     f32                   GetPlayerBoostEarning() const;                 // declared-only
     void                  SetPlayerBoostEarning(f32 lfBoostEarning);     // declared-only
-    s32                   GetShotGroup() const;                          // declared-only
+    // Same treatment (and same reason) as the four inline getters above: MainDirector's
+    // prepare-for-mode handler reads the shot group straight off the record with a bare word
+    // load and no call, so the console emits no out-of-line body for it. Inline here, or the
+    // director's arm is an LNK2019 against a body that exists nowhere in the tree.
+    s32                   GetShotGroup() const { return miShotGroup; }
     void                  SetShotGroup(s32 liShotGroup);                 // declared-only
     bool                  GetFinishedOnlineEvent() const { return mbFinishedOnlineEvent; }   // [evt-flow E1] inline (see above)
     void                  SetFinishedOnlineEvent(bool lbFinished);       // declared-only
@@ -2308,7 +2312,13 @@ struct ShowModeResultsAction : public GameAction<E_ACTION_SHOW_MODE_RESULTS>
     u8   mu8FieldE3;          // +0xE3 FLAG
     u8   mbIsOnlinePostEvent; // +0xE4 picks the online (320) vs offline (GuiEvent<291>) post-event
                               //       request, and gates the autosave request at the arm's tail
-    u8   maPadE5[3];          // +0xE5..+0xE7 tail padding to the attested 232
+    u8   mu8FieldE5;          // +0xE5 IDENTITY: the director's post-event gate. MainDirector's
+                              //       game-action arm for this record pushes E_EVENT_STATE_POST_EVENT
+                              //       onto GameState::mEventState only when this byte is set, so it
+                              //       is what starts the post-event camera. FLAG: the producer-side
+                              //       name is unrecovered; the ROLE is not. It was inside the
+                              //       "tail padding" run until that arm was read.
+    u8   maPadE6[2];          // +0xE6..+0xE7 tail padding to the attested 232
 };
 static_assert(sizeof(ShowModeResultsAction) == 232,
               "X360 ModeManager::ShowModeResults posts action 37 with size 232");

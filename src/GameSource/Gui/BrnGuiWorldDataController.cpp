@@ -670,4 +670,18 @@ const BrnTrigger::Landmark* WorldDataController::GetLandmarkInfoAtPositionInList
         "Landmark list index is outside the valid range");
     return mpTriggerData->GetLandmark(liIndex);
 }
+
+// The ONLINE twin of the accessor above. Same shape store for store: the state gate, the
+// bounds report against the ONLINE landmark count, then the trigger data's own online-landmark
+// element accessor. The recovered code streams the offending index and the live count into the
+// bounds message ("Index N is outside of valid range ( 0 to M )"); the assert face in this tree
+// takes a plain string, as everywhere else in this file.
+const BrnTrigger::Landmark* WorldDataController::GetOnlineLandmarkInfoAtPositionInList(s32 liIndex) const
+{
+    CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
+        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+    CGS_ASSERT(liIndex >= 0 && liIndex < mpTriggerData->GetOnlineLandmarkCount(),
+        "Index is outside of valid range");
+    return mpTriggerData->GetOnlineLandmark(liIndex);
+}
 }

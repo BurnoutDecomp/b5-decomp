@@ -101,22 +101,26 @@ bool MomentPlayerJumping::Prepare(void* lrBehaviourController)
         const Camera::BehaviourParameterBank& lrBank =
             lpBehaviourManager->GetBehaviourParameterBank();
 
-        // The attached-rig shots (bank +0x1280 grid, the console build's call order).
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(0));    // bank+0x1280
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(1));    // bank+0x13A0
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(6));    // bank+0x1940
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(9));    // bank+0x1CA0
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(8));    // bank+0x1B80
-        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(4));    // bank+0x1700
+        // The attached-rig shots, in the console build's call order. The arguments are
+        // RECORD SLOT numbers in the bank's 14-block rig run (stride 288 from record
+        // +4432); they were one short at every slot until 2026-09-12.
+        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(1));    // mRigRearQFwd
+        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(2));    // mRigFrontQCuFwd
+        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(7));    // mRigRoofFwd
+        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(10));   // mRigUnderbelly
+        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(9));    // mRigFrontQCuFwd2
+        mRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(5));    // mRigBootViewFwd
 
-        // The bystander shots (bank +0xD18 grid).
-        mBystanderCollection.AddShot(&lrBank.GetPlayerJumpingBystanderShotParams(0));   // bank+0xD18
-        mBystanderCollection.AddShot(&lrBank.GetPlayerJumpingBystanderShotParams(1));   // bank+0xE50
+        // The bystander shots: slots 0 and 2 of the 7-block bystander run (stride 156 from
+        // record +3336) -- the two blocks whose own names begin "Jump". Slot 1 is NOT one of
+        // them; the second argument used to read 1.
+        mBystanderCollection.AddShot(&lrBank.GetPlayerJumpingBystanderShotParams(0));   // mBystanderJumpLeftParameters
+        mBystanderCollection.AddShot(&lrBank.GetPlayerJumpingBystanderShotParams(2));   // mBystanderJumpFromBehindParameters
 
-        // The dropped-rig shots (the same rig grid's tail).
-        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(10));   // bank+0x1DC0
-        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(11));   // bank+0x1EE0
-        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(12));   // bank+0x2000
+        // The dropped-rig shots: the rig run's three "Drop" blocks, slots 11..13.
+        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(11));   // mRigDropUnderbelly
+        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(12));   // mRigDropFrontQCuFwd
+        mDroppedRigCollection.AddShot(&lrBank.GetPlayerJumpingRigShotParams(13));   // mRigDropBootViewFwd
 
         // The ice shots: the shot group's ShotList array (key 0x7533C0E2_15246B49,
         // resolved through the generated Num/Get pair), clamped to the collection's

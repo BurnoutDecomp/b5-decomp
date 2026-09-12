@@ -57,27 +57,25 @@
 // mpcDebugParametersName widen, so absolute offsets shift. Parity here is BY NAMED MEMBER
 // (the project's x64 rule) -- no consumer indexes this base by offset.
 //
-// VTABLE ORDER (asm-attested where marked; the rest from the DWARF declaration order):
-//   0  Construct()                                     <- BehaviourHelper::Prepare  @0x82255F48
-//                                                          `lwz r11,0(vt); bctrl`
-//   1  Prepare(const BehaviourSharedPrepareReleaseInfo&) <- PrepareBehaviours @0x8221EE08
-//                                                          `(*(**v14 + 4))(*v14, v44)`
-//   2  Update(Camera&, const BehaviourSharedInfo&)      <- BehaviourHelper::Update @0x82220688
-//                                                          `lwz r11,8(vt); bctrl`
+// VTABLE ORDER. The console's concrete behaviour tables are EIGHT slots, and all nineteen of
+// them agree on this order:
+//   0  Construct()
+//   1  Prepare(const BehaviourSharedPrepareReleaseInfo&)
+//   2  Update(Camera&, const BehaviourSharedInfo&)
 //   3  PostCollisionUpdate(Camera&, const BehaviourSharedInfo&)
-//   4  Release(const BehaviourSharedPrepareReleaseInfo&) <- ReleaseBehaviours @0x8221FDE8
-//                                                          `(*(**v14 + 16))(*v14, v45)`
+//   4  Release(const BehaviourSharedPrepareReleaseInfo&)
 //   5  GetCollisionPolicy()
-//   6  GetParameters() const
-//   7  SetParameters(const Parameters*)
-//   8  SetupTweaker(Utils::Tweaker&)
-//   9  GetName() const
-// FLAG (slot 6/7): the DWARF dump of `Behaviour` does not list GetParameters/SetParameters,
-//   but the DWARF of BehaviourRoadRunner (and of every other concrete behaviour) lists them
-//   as VIRTUAL overrides sitting between PostCollisionUpdate and SetupTweaker. They are
-//   therefore declared here in that position. Slots 3/5-9 are NOT individually asm-pinned;
-//   only 0/1/2/4 are. Since the x64 gate is semantic-parity-by-named-member and nothing in
-//   the reconstruction indexes a vtable by slot number, the residual risk is naming only.
+//   6  SetupTweaker(Utils::Tweaker&)
+//   7  GetName() const
+// There is NO destructor slot. The base declares no virtual destructor and no behaviour is ever
+// released through a base pointer -- they are pooled, never deleted.
+// GetParameters/SetParameters are NOT part of this interface. They are plain non-virtual members
+// here (the neutral default), and each concrete behaviour that wants them declares its OWN pair
+// over its OWN nested Parameters type, which HIDES -- never overrides -- these. Four behaviours
+// (RoadRunner, RenderMetrics, RotateAboutVehicle, SpirallingDeathcam) additionally declare a
+// virtual Get/SetParameters pair over Behaviour::Parameters; those are NEW virtuals introduced by
+// the derived class, occupying that class's own slots 8/9 -- which is why exactly those four
+// tables are ten words long instead of eight.
 // ============================================================================
 
 namespace CgsNumeric { class Random; }
@@ -400,7 +398,6 @@ namespace Camera
               mbCanSwitchToMeNow(false), mbCanSwitchFromMeNow(false),
               mpcDebugParametersName(0)
         {}
-        virtual ~Behaviour() {}
 
         // ---- the virtual interface (see the vtable table in the file banner) -----------
         virtual void Construct();                                                    // slot 0
@@ -409,10 +406,14 @@ namespace Camera
         virtual bool PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo); // 3
         virtual void Release(const BehaviourSharedPrepareReleaseInfo& lrInfo);        // slot 4
         virtual CollisionPolicy* GetCollisionPolicy();                                // slot 5
-        virtual const Parameters* GetParameters() const;                              // slot 6
-        virtual void SetParameters(const Parameters* lpParameters);                   // slot 7
-        virtual void SetupTweaker(Utils::Tweaker& lrTweaker);                         // slot 8
-        virtual const char* GetName() const;                                          // slot 9
+        virtual void SetupTweaker(Utils::Tweaker& lrTweaker);                         // slot 6
+        virtual const char* GetName() const;                                          // slot 7
+
+        // ---- NOT virtual: no console slot holds either of these (see the banner). A derived
+        // behaviour that declares its own Get/SetParameters hides this pair; it does not
+        // override it, and nothing dispatches either through a Behaviour* base pointer.
+        const Parameters* GetParameters() const;
+        void SetParameters(const Parameters* lpParameters);
 
         // ---- non-virtual API (DWARF Behaviour.h:368..:510) ------------------------------
 

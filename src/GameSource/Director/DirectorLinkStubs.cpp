@@ -15,16 +15,10 @@
 // When a real TU lands for any symbol below, DELETE its stub here (a duplicate definition
 // is a link error, so the removal is enforced by the build).
 //
-// GROUP A -- arbitrator states whose .cpp is not mounted: each entered state produces no
-//   camera and reports "released". DELETE-WHEN: the state's sub-system lands -> mount the
-//   state's .cpp, delete its block here.
-// GROUP B -- the two dev-menu behaviours BehaviourManager::AllocateBehaviour<T> forces
-//   vtables for (their real TUs pull the Tweaker mapping API + panorama screenshot callback).
 // GROUP C -- sub-systems with no landed TU (the director DebugComponent, the
-//   scene-query post-office free functions, rw SLerp).
-// GROUP D -- declared-only leaves of already-mounted TUs.
+//   scene-query post-office free functions).
+// GROUP D -- the vendor rw SLerp leaf.
 // GROUP F -- the moment sub-system (MomentController::NewMoment).
-// GROUP G -- dev-only trap leaves ArbStateCrashing reaches.
 // ============================================================================
 
 #include "types.hpp"
@@ -37,15 +31,11 @@
 
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h"
-#include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineCarSelect.h"
-#include "GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStatePostEvent.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRaceIntro.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRankUp.h"
 #include "GameSource/Director/Arbitrator/States/BrnArbStateRoaming.h"
 
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugOrbitPlayer.h"
 #include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"           // the DWARF home (NOT the stale BrnBehaviourPassengerCam.h slice)
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"                       // group E
@@ -57,136 +47,6 @@
 #include "SharedClasses/Trigger/BrnGenericRegion.h"
 #include "SharedClasses/Trigger/BrnRegion.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
-
-// ----------------------------------------------------------------------------
-// GROUP A -- the off-path arbitrator states.
-//
-// Every stub below mirrors the BASE ArbitratorState default (see
-// Arbitrator/BrnDirectorArbitratorState.cpp), which is what an un-entered state does anyway:
-//   Construct() -- build the state's camera and clear the base flags;
-//   Prepare()   -- "ready" (the arbitrator only calls it after CanRun said yes);
-//   Update()    -- drive nothing;
-//   Release()   -- "already released" (ReleaseAll asserts the result);
-//   Destruct()  -- own nothing;
-//   GetName()   -- the state's own console name literal.
-// ----------------------------------------------------------------------------
-#define BRN_DIRECTOR_STUB_ARBSTATE(CLASS, NAME_LITERAL)                             \
-    void CLASS::Construct()                                                         \
-    {                                                                               \
-        ArbitratorState::Construct();                                               \
-    }                                                                               \
-    bool CLASS::Prepare(ArbStateSharedInfo& lrSharedInfo)                           \
-    {                                                                               \
-        (void)lrSharedInfo;                                                         \
-        return true;                                                                \
-    }                                                                               \
-    void CLASS::Update(ArbStateSharedInfo& lrSharedInfo)                            \
-    {                                                                               \
-        (void)lrSharedInfo;                                                         \
-    }                                                                               \
-    bool CLASS::Release(ArbStateSharedInfo& lrSharedInfo)                           \
-    {                                                                               \
-        (void)lrSharedInfo;                                                         \
-        return true;                                                                \
-    }                                                                               \
-    const char* CLASS::GetName() const                                              \
-    {                                                                               \
-        return NAME_LITERAL;                                                        \
-    }
-
-namespace BrnDirector
-{
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineCarSelect, "ArbStateOnlineCarSelect")
-    BRN_DIRECTOR_STUB_ARBSTATE(ArbStateOnlineRaceIntro, "ArbStateOnlineRaceIntro")
-
-    // One state declares an explicit Destruct() override that has no body in the tree.
-    void ArbStateOnlineRaceIntro::Destruct() {}
-}
-
-#undef BRN_DIRECTOR_STUB_ARBSTATE
-
-// ----------------------------------------------------------------------------
-// GROUP B -- the two dev-menu behaviours the manager's AllocateBehaviour<T> forces vtables
-// for. Their real TUs (BrnBehaviourDebugFlyWorld.cpp / BrnBehaviourDebugOrbitPlayer.cpp) pull
-// the whole Tweaker mapping API + the panorama screenshot callback. Neither is allocated on
-// the fly-by path -- only ArbStateAttractMode's BehaviourRoadRunner is.
-// Update() returns FALSE = "I produced no camera this frame", the same answer the console's
-// own behaviours give when they have nothing to say.
-// DELETE-WHEN: Camera/Utils/BrnCameraTweaker.cpp lands -> mount both real TUs, delete this.
-// ----------------------------------------------------------------------------
-namespace BrnDirector
-{
-namespace Camera
-{
-    void BehaviourDebugFlyWorld::Construct()
-    {
-        // NOTE: these two classes are still PRE-BASE forks -- they carry their own
-        // `void* mpVTable` at +0x00 instead of deriving from Camera::Behaviour, so there is no
-        // base Construct to chain to. (Retiring those two forks the way the road runner's was
-        // retired is a separate job.)
-    }
-
-    bool BehaviourDebugFlyWorld::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
-    {
-        (void)lrInfo;
-        return true;
-    }
-
-    bool BehaviourDebugFlyWorld::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
-    {
-        (void)lrCamera;
-        (void)lrInfo;
-        return false;
-    }
-
-    void BehaviourDebugFlyWorld::SetupTweaker(Utils::Tweaker& lrTweaker)
-    {
-        (void)lrTweaker;
-    }
-
-    const char* BehaviourDebugFlyWorld::GetName() const
-    {
-        return "BehaviourDebugFlyWorld";
-    }
-
-    void BehaviourDebugFlyWorld::WarpToLookAt(Vector3 lEye, Vector3 lLookAt)
-    {
-        (void)lEye;
-        (void)lLookAt;
-    }
-
-    // Concrete Behaviour vtables measure EIGHT slots, not the TEN Behaviour.h's banner lists:
-    // its slots 6/7 (GetParameters/SetParameters) are very likely not virtual. Behaviour.h's lane.
-
-    void BehaviourDebugOrbitPlayer::Construct()
-    {
-        // (same pre-base fork note as BehaviourDebugFlyWorld::Construct above)
-    }
-
-    bool BehaviourDebugOrbitPlayer::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
-    {
-        (void)lrInfo;
-        return true;
-    }
-
-    bool BehaviourDebugOrbitPlayer::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
-    {
-        (void)lrCamera;
-        (void)lrInfo;
-        return false;
-    }
-
-    void BehaviourDebugOrbitPlayer::SetupTweaker(Utils::Tweaker& lrTweaker)
-    {
-        (void)lrTweaker;
-    }
-
-    const char* BehaviourDebugOrbitPlayer::GetName() const
-    {
-        return "BehaviourDebugOrbitPlayer";
-    }
-}
-}
 
 // ----------------------------------------------------------------------------
 // GROUP C -- sub-systems with no landed TU.
@@ -235,21 +95,8 @@ namespace SceneManagerIO
 }
 
 // ----------------------------------------------------------------------------
-// GROUP D -- declared-only leaves of TUs that ARE in the link.
+// GROUP D -- the vendor leaf with no reconstructed body.
 // ----------------------------------------------------------------------------
-namespace BrnDirector
-{
-namespace Camera
-{
-    // BehaviourManager::DebugDumpToTTY -- walks every helper slot and prints GetDebugFullName.
-    // Called from the manager's allocation-failure path only; that failure still asserts
-    // through its own CGS_ASSERT, so a quiet no-op loses nothing.
-    // FLAG PC-platform leaf: BehaviourHelper::GetDebugFullName is declaration-only.
-    // DELETE-WHEN: BehaviourHelper::GetDebugFullName lands.
-    void BehaviourManager::DebugDumpToTTY() const {}
-}
-}
-
 namespace rw
 {
 namespace math
@@ -346,9 +193,7 @@ namespace vpu
 // The moment pool's bucket is widened on this x64 host (static_assert per moment type; see
 // the HOST BUCKET WIDENING banner in BrnMomentController.h).
 // ============================================================================
-#include "GameSource/Director/MomentController/BrnMomentSelector.h"     // MomentSelector
 #include "GameSource/Director/MomentController/BrnMomentController.h"   // MomentController
-#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // group G: DebugPrinter / DebugLog
 
 namespace BrnDirector
 {
@@ -375,27 +220,6 @@ namespace BrnDirector
         (void)lrMomentHandleInOut;   // deliberately left !IsAllocated()
         (void)lrBehaviourManager;
         return true;
-    }
-
-    // ------------------------------------------------------------------------
-    // GROUP G -- THE ONE DEV-ONLY LEAF BrnArbStateCrashing.cpp STILL REACHES. It is a TRAP
-    // stub, not a quiet one, and that is deliberate: every call site is inside
-    // `if (IsDebugDisplayActive())`, and ArbStateCrashing::Construct seeds that flag FALSE
-    // (the console only raises it from a dev tool), so retail never reaches it.
-    //
-    //   MomentSelector::ActualDebugRender -- walks the handle + description arrays and prints
-    //       one line per candidate through the DebugPrinter.
-    //
-    // The two ValidityAccount::Print overloads that stood here are GONE: the reason-NAME table
-    // they walk is recovered and both are bodied in BrnCameraValidityAccount.cpp.
-    //
-    // DELETE-WHEN: ActualDebugRender is bodied.
-    // ------------------------------------------------------------------------
-    void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
-    {
-        (void)lrDebugPrinter;
-        CGS_ASSERT(false, "MomentSelector::ActualDebugRender is not reconstructed");
-        __debugbreak();
     }
 }
 

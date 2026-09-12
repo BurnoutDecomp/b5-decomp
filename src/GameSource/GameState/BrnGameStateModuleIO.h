@@ -685,6 +685,14 @@ namespace GameStateModuleIO
         bool GetSpecificGameModeEventInterfaceIsValid() const;       // 0x823BA190 read, line 334
         void SetSpecificGameModeEventInterfaceIsValid(bool lbValid); // 0x82363248 write, line 335
 
+        // ⭐ [preset-races producer wave 2026-09-12] THE INTERFACE THE FLAG ABOVE GUARDS. Same
+        // de-inlining as the event-starts pair: INLINED at both ends of the shipped build
+        // (producer memcpy dst
+        // `out + 0x2D1D0`, bridge memcpy src at the identical adjust, 0x1E18 both ways), so
+        // there is no console symbol to match and neither side pokes an absolute offset.
+        SpecificGameModeEventInterface&       GetSpecificGameModeEventInterface();
+        const SpecificGameModeEventInterface& GetSpecificGameModeEventInterface() const;
+
     private:
         // --- data members at exact X360 byte offsets (absolute from `this`) ----
         u8  maPadToGameActionQueue[0x04 - sizeof(CgsModule::IOBuffer)];   // base end -> 0x0004
@@ -789,18 +797,50 @@ namespace GameStateModuleIO
         // and 176360 + 8 + 8416 + 7704 == 192488 EXACTLY -- the two spans plus the 8-byte 16-align
         // hole in front of the first one fill the old blob with nothing left over, which is the
         // arithmetic that proves the carve rather than assuming it.
-        // Only the FIRST is typed here: SetUpAllEventStartsInterface is a complete type in
+        // BOTH are typed now. SetUpAllEventStartsInterface is a complete type in
         // BrnGameStateSharedIO.h (included above) and its _AssertLayout pins sizeof == 0x20E0.
-        // SpecificGameModeEventInterface stays CONSOLE-WIDTH OPAQUE storage -- its host sizeof is
-        // not yet pinned against the console's 7704 and nothing in this tree produces or consumes
-        // it, so widening it here could shift mbSetUpAllEventStartsInterfaceIsValid off the byte
-        // three accessors already agree on. Type it when its producer lands.
+        // ⭐ [preset-races producer wave 2026-09-12] SpecificGameModeEventInterface was CONSOLE-
+        // WIDTH OPAQUE storage pending "type it when its producer lands" -- the producer landed
+        // (GameStateModule_SendSpecificPreSetRacesModes.cpp), and the host sizeof IS the console's
+        // 7704: the Event record is 16 LandmarkIndex (2 bytes each) + three 4-byte words == 44
+        // with no host padding, so Array<Event,175> is 175*44 + the count word == 0x1E18 exactly.
+        // SpecificGameModeEventInterface::_AssertLayout pins that sizeof, so the two flag bytes
+        // that follow cannot shift off the offsets three accessors already agree on.
         u8  maPadToSetUpAllEventStarts[176368 - 176360];                  // console +176360 (8; 16-align)
-        SetUpAllEventStartsInterface mSetUpAllEventStartsInterface;       // console +176368 (8416)
-        u8  mSpecificGameModeEventInterfaceStorage[192488 - 184784];      // console +184784 (7704)
+        SetUpAllEventStartsInterface   mSetUpAllEventStartsInterface;     // console +176368 (8416)
+        SpecificGameModeEventInterface mSpecificGameModeEventInterface;   // console +184784 (7704)
         bool mbSetUpAllEventStartsInterfaceIsValid;                       // console +192488
         bool mbSpecificGameModeEventInterfaceIsValid;                     // console +192489
         bool mbControllerActive;                                          // console +192490
+
+        // ⭐ [preset-races producer wave 2026-09-12] Compile-time guards for the buffer TAIL,
+        // added with the typing of mSpecificGameModeEventInterface above. Both interfaces are
+        // now real types rather than opaque spans, so a width change in either would slide the
+        // three flag bytes -- which three accessors and both bridges agree on -- silently.
+        // RELATIVE, not absolute: the host buffer's absolute offsets differ from the console's
+        // (its base and several un-homed member types are not console-width), so what is pinned
+        // here is the ADJACENCY the console's own offset arithmetic states. Private members, so
+        // this has to be a member-fn context. NEVER CALLED.
+        static void _AssertLayout()
+        {
+            // The two interfaces are ADJACENT, with nothing between them: the console span
+            // between them is exactly one SetUpAllEventStartsInterface wide.
+            static_assert(offsetof(OutputBuffer, mSpecificGameModeEventInterface)
+                            - offsetof(OutputBuffer, mSetUpAllEventStartsInterface)
+                          == sizeof(SetUpAllEventStartsInterface),
+                          "the two published interfaces are adjacent (184784 - 176368 == 0x20E0)");
+            // And the three flag bytes sit immediately behind the second one, in this order.
+            static_assert(offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid)
+                            - offsetof(OutputBuffer, mSpecificGameModeEventInterface)
+                          == sizeof(SpecificGameModeEventInterface),
+                          "the valid flags sit right behind the second interface (0x1E18 on)");
+            static_assert(offsetof(OutputBuffer, mbSpecificGameModeEventInterfaceIsValid)
+                          == offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid) + 1,
+                          "mbSpecificGameModeEventInterfaceIsValid is the second flag byte");
+            static_assert(offsetof(OutputBuffer, mbControllerActive)
+                          == offsetof(OutputBuffer, mbSetUpAllEventStartsInterfaceIsValid) + 2,
+                          "mbControllerActive is the third flag byte");
+        }
     };
 
     // ---- free predicate over EGameModeType (X360 0x821F2B08) -----------------

@@ -254,6 +254,7 @@ void RaceCarEntityModule::Construct()
     // queues, so no AddEntry can ever reach a request ring.
     mRaceCarStreamer.Construct();
     mfTimeStep = 0.0f;
+    mfTimeStepMultiplier = 0.0f;   // the console's Construct seeds this seat from the same 0.0f
 
     // The crash-play manager is a by-value member and ARTIST inlines its Construct here. Landing
     // it stops the console's own `mpCrashPlayManager != NULL` assert (BrnCrashPlayDebugComponent
@@ -4149,6 +4150,7 @@ void RaceCarEntityModule::PreSceneUpdate(
     if( ( lUpdateSet & 1 ) != 0 )
     {
         mfTimeStep = 0.0f;
+        mfTimeStepMultiplier = 0.0f;   // the paused arm zeroes BOTH seats
     }
     else
     {
@@ -4156,6 +4158,14 @@ void RaceCarEntityModule::PreSceneUpdate(
             lpInput->GetTimerStatusInterface();
         mfTimeStep = ( lpTimers != 0 )
             ? lpTimers->GetSimTimerStatus()->GetCurrentTimeStep()
+            : 0.0f;
+        // The BARE multiplier is latched in the same breath (the console stores
+        // `simStatus->mfTimeStepMultiplier` into module +0x183A4 four instructions after the
+        // product above). It is the scale ActiveRaceCar::CalculateWheelAngularVelocities
+        // applies to each wheel's spin rate, so without this latch the wheel-blur input
+        // would be a permanent zero.
+        mfTimeStepMultiplier = ( lpTimers != 0 )
+            ? lpTimers->GetSimTimerStatus()->GetTimeStepMultiplier()
             : 0.0f;
     }
 
@@ -5860,11 +5870,12 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         // that reads it is built. That ORDER is load-bearing: swap the two and the gas lags
         // the ignition by a frame.
         //
-        // All three floats are loaded by the console right here, from the module, at
+        // All four floats are loaded by the console right here, from the module, at
         // 0x82307294..0x823072C4 (`lfs f31, 0(r31)` with r31 == &mfTimeStep, then
-        // `lfsx f29, r29, 0x183C8` and `lfsx f30, r29, 0x183CC`), and 0x183C8 / 0x183CC are
-        // mPlayerVehicleControls + 32 / + 36 == mfAcceleration / mfBraking.
-        UpdateActiveCars( mfTimeStep,
+        // `lfsx f28, r29, 0x183A4`, `lfsx f29, r29, 0x183C8` and `lfsx f30, r29, 0x183CC`):
+        // 0x183A4 is mfTimeStepMultiplier and 0x183C8 / 0x183CC are mPlayerVehicleControls
+        // + 32 / + 36 == mfAcceleration / mfBraking.
+        UpdateActiveCars( mfTimeStep, mfTimeStepMultiplier,
                           mPlayerVehicleControls.mfAcceleration,
                           mPlayerVehicleControls.mfBraking, lpOutput->GetGameEventQueue() );
 
@@ -5908,10 +5919,11 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 // PrePhysicsUpdate @0x823072CC..0x823072F0 passes thirteen things; this slice forwards the
 // three the ignition needs and drops the rest, each named:
 //   f1  mfTimeStep (+0x18398)                      ✔ forwarded
+//   f3  mfTimeStepMultiplier (+0x183A4)            ✔ forwarded (-> ActiveRaceCar::
+//                                                   CalculateWheelAngularVelocities)
 //   f4  mPlayerVehicleControls.mfAcceleration      ✔ forwarded
 //   f5  mPlayerVehicleControls.mfBraking           ✔ forwarded
-//   f2  module +0x183A0        f3  module +0x183A4 (-> ActiveRaceCar::CalculateWheelAngular-
-//                                                   Velocities, which does not exist yet)
+//   f2  module +0x183A0 (mfSimTime)
 //   r4  sub_822B5EA0(lpOutput)         r10 InputBuffer_PrePhysics::GetInHardStopCamera()
 //   stack: lpVehicleOutput, module +0x18490 (the RNG), module +0x18368 (meGameModeType)
 //   v1/v2  two Vector3s from module +0x18720 / +0x18730 (the route vectors)
@@ -5925,8 +5937,9 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 //    (ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents @0x822BF840) is itself
 //    dropped by Update's slice, so running it here would drain a queue nothing fills.
 // ============================================================================
-void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking,
-                                          RaceCarEntityModuleIO::GameEventQueue* lpGameEvents )
+void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
+                                           f32 lfAcceleration, f32 lfBraking,
+                                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents )
 {
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
@@ -5936,7 +5949,7 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, 
         {
             // mbIsInOnlineGameMode / mbInCarSelectScreen are the console's own
             // `lbzx r10, r31, 0x18345` / `lbzx r8, r31, 0x186C9` -- both read from `this`.
-            lrCar.Update( lfTimeStep, lfAcceleration, lfBraking,
+            lrCar.Update( lfTimeStep, lfTimeStepMultiplier, lfAcceleration, lfBraking,
                           mbIsInOnlineGameMode, mbInCarSelectScreen, static_cast<s32>(meGameModeType),
                           mPlayersCurrentRouteNodePosition, mPlayersNextRouteNodePosition, lpGameEvents );
         }

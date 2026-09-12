@@ -455,9 +455,11 @@ OnlineGameResults& OnlineGameResults::operator=(const OnlineGameResults& lOther)
 // (:575, :576, :577, :591, :686, :714, :726, :727), and seam_audit S3b already checked the
 // mounted consumer arm (case 23) against them. These bodies are the missing middle of that chain.
 //
-// Only the six SETTERS are landed. Their declared-only read twins (GetPlayerScoringIndex,
-// GetPlayerBoostEarning, GetShotGroup) have no mounted caller, and a body with no live consumer
-// is a body whose member mapping nothing can check -- they stay declared-only on purpose.
+// Only the six SETTERS are landed here. Of their read twins, GetShotGroup has a live consumer
+// now (MainDirector's prepare-for-mode arm, which the console compiles as a bare word load) and
+// is a header inline beside the other four; GetPlayerScoringIndex and GetPlayerBoostEarning
+// still have no mounted caller, so they stay declared-only -- a body with no live consumer is a
+// body whose member mapping nothing can check.
 // =============================================================================
 
 // -----------------------------------------------------------------------------

@@ -13,7 +13,7 @@
 // high-energy world crashes, a randomised ultra-slow-mo sim-time scale).
 // Class shape / member names / method set verbatim from the declarations
 // gated in the console build ledger. This TU
-// bodies Construct/Prepare/Update/SetParameters/GetName; Release/Destruct/
+// bodies Construct/Prepare/Update/SetParameters/GetName/Release; Destruct/
 // GetInstanceType/SetupShot and Parameters::Construct are their own ledger
 // functions (declaration-only, declaration-gated).
 //

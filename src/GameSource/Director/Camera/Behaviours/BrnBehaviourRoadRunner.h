@@ -213,10 +213,14 @@ public:
     bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // @0x8220F748
     bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // @0x82247E98
     bool        PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override; // @0x8220F850
-    const Behaviour::Parameters* GetParameters() const override;                          // :1172
-    void        SetParameters(const Behaviour::Parameters* lpParameters) override;        // :1185
     void        SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // :1200
     const char* GetName() const override;                                                 // @0x821FB130
+
+    // ---- this class's OWN virtuals -------------------------------------------
+    // These are NOT base overrides: the base declares no virtual Get/SetParameters, so this
+    // pair introduces two new slots that follow the base's eight in this class's own table.
+    virtual void                        SetParameters(const Behaviour::Parameters* lpParameters); // :1185
+    virtual const Behaviour::Parameters* GetParameters() const;                                   // :1172
 
     // ---- public API (DWARF BrnBehaviourRoadRunner.h) -------------------------
     void Reset();                                    // :162 (declaration-only)

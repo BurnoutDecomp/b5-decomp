@@ -340,6 +340,26 @@ namespace BrnGameState
             Event* AddEvent(s32 liEventID, u32 luTrafficLightTriggerId,
                             LandmarkIndex* lpaLandmarkIndices, s32 liNumLandmarks);
 
+            // The live count of registered per-mode event records (maEvents.GetLength()). The
+            // The shipped build emits no standalone symbol: the producer never reads it back
+            // and the GUI
+            // side reads the same count word off its own copy of the record.
+            u32 GetNumEvents() const { return maEvents.GetLength(); }
+
+            // The producer's local interface is Construct'd (count -1 -> 0) before its first
+            // AddEvent, which is what keeps the CgsArray "Array used before Construct/Clear was
+            // called" guard silent. Same shape as SetUpAllEventStartsInterface::Construct below.
+            void Construct() { maEvents.Construct(); }
+
+            // Layout pin. NEVER CALLED; in-class because the member it measures is private.
+            static void _AssertLayout()
+            {
+                static_assert(sizeof(Event) == 44, "Event stride -- 16 LandmarkIndex + 3 words");
+                static_assert(sizeof(SpecificGameModeEventInterface) == 0x1E18,
+                              "SpecificGameModeEventInterface -- the 0x1E18 the producer memcpys "
+                              "and AddGuiEvent<GuiEventSpecificPresetRaces> sizes");
+            }
+
         private:
             Array<Event, KU_MAX_EVENTS> maEvents; // +0x00 (Event stride 44; miCount @ +0x1E14 == 175*44)
         };

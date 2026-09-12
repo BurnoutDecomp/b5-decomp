@@ -280,11 +280,20 @@ namespace
     // -------------------------------------------------------------------------
     // 3. The staged shader-constant rows.
     // -------------------------------------------------------------------------
-    // One row per BeginShaderStates call since the last flush. 64 bytes each so a
-    // 4-register matrix (ImRenderer<V>::SetTransform writes worldViewProj as 64 raw
-    // bytes into the returned cursor) fits in a single row.
+    // One row per BeginShaderStates call since the last flush. A row has to hold the
+    // LARGEST constant any caller opens, because the caller writes into the returned
+    // cursor without being told how much room it has:
+    //   * a 4-register matrix (ImRenderer<V>::SetTransform, 64 raw bytes), and
+    //   * the debris pass's gaWorldTransforms -- 128 registers / 2048 bytes, the
+    //     32-matrix per-instance batch BrnDebrisRenderer::RenderDebrisArray stages
+    //     through Im3dTexPlusLighting::SetTransformArray.
+    // At 64 bytes the second one overran its row by 1984 bytes into the neighbouring
+    // rows' storage AND uploaded only its first matrix (the count clamp below), so the
+    // row size is the larger of the two. Nothing else changes: rows are addressed by
+    // index * KU_ROW_BYTES, and a small constant still uploads exactly mu8RegisterCount
+    // registers.
     const u32 KU_MAX_STAGED_ROWS = 64u;
-    const u32 KU_ROW_BYTES       = 64u;
+    const u32 KU_ROW_BYTES       = 2048u;
 
     struct StagedRow
     {
@@ -368,6 +377,19 @@ namespace
     //     Premultiplied     (1, 7, 0)  ONE / ONE_MINUS_SRC_ALPHA -- premultiplied alpha, exactly
     ImBlendState        sImAdditiveBlendState      = { TRUE, D3DBLEND_SRCALPHA, D3DBLEND_ONE, FALSE, FALSE };
     ImRasterizerState   sSkyDomeRasterizerState   = { D3DCULL_NONE, D3DFILL_SOLID };
+    // The DEBRIS pass's two states (dword_83010F44 / dword_83010F48), which
+    // BrnDebrisRenderer::BeginRender binds between its blend bind and its sampler bind.
+    // Both come straight out of ImRendererBase::ConstructOnceOnly's argument lists:
+    //   dword_83010F44 = ConstructRasteriserState(alloc, 2)
+    //   dword_83010F48 = ConstructDepthStencilState(alloc, 1, 1, 3)
+    // The cull-mode encoding is attested by CgsRasterizerStateFactory, which builds its
+    // three slots as muCullMode 2 (Back), (x & 4) | 1 (Front) and x & 4 (None) -- so 2 is
+    // CULL BACK, and the engine's own XenonCullToD3D9 maps 2 (cull-back, CCW-is-front) to
+    // D3DCULL_CW. The depth triple is (test, write, function) in the same shape the sky
+    // states above use, with function 3 == the Xenos LESSEQUAL; debris is solid geometry,
+    // so unlike the sky and the sparks it WRITES depth.
+    ImRasterizerState   sImDebrisRasterizerState  = { D3DCULL_CW, D3DFILL_SOLID };
+    ImDepthStencilState sImDebrisDepthStencilState = { TRUE, TRUE, D3DCMP_LESSEQUAL };
     ImDepthStencilState sSkyDomeDepthStencilState = { TRUE, FALSE, D3DCMP_LESSEQUAL };
     // The env-map faces are rendered into a freshly cleared face with nothing else in
     // it, so that pass takes the depth test out of the way entirely.
@@ -432,6 +454,10 @@ void* gpImStandardAlphaBlendState      = &sImStandardAlphaBlendState;
 // X360 dword_83010F24 -- the library additive blend (see the object above). Bound by the SPARK
 // pass (BrnSparkRenderer_Render.cpp) through ImDeviceSetBlendState.
 void* gpImAdditiveBlendState           = &sImAdditiveBlendState;
+// dword_83010F44 / dword_83010F48 -- the DEBRIS pass's rasteriser and depth-stencil
+// (see the two objects above). Bound by BrnDebrisRenderer::BeginRender.
+void* gpImDebrisRasterizerState        = &sImDebrisRasterizerState;
+void* gpImDebrisDepthStencilState      = &sImDebrisDepthStencilState;
 
 // ============================================================================================
 // [DIAG] NOT IN THE X360 BINARY. The tyre-mark campaign's DISCRIMINATOR, reachable only when

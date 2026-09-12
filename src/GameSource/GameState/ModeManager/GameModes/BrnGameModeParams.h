@@ -282,6 +282,11 @@ public:
     void SetProgressionRankAsRatio(f32 lfRatio)         { mfProgressionRankAsRatio = lfRatio; }
     void SetStartMechanism(EGameModeStartMechanism leM) { meStartMechanism = leM; }
     void SetTrafficLightTriggerId(LightTriggerId luId)  { mTrafficLightTriggerId = luId; }
+    // The READ twin of the setter above, same (de_inlined) treatment. The member is private and
+    // Construct seeds it to the all-ones invalid handle, so a reader with no accessor cannot ask
+    // the question at all; MainDirector's prepare-for-mode handler is the consumer that needs it
+    // (it resolves the id to the event's junction logic box) and the console inlines the load.
+    LightTriggerId GetTrafficLightTriggerId() const     { return mTrafficLightTriggerId; }
     void SetFlag(u64 luFlags)                           { muFlags |= luFlags; }
     s32  GetNumRivals() const                           { return miNumRivals; }
 

@@ -976,7 +976,16 @@ private:
     // writes it yet (the console's PreSceneUpdate accumulator is not landed), so it reads 0.0f.
     u8  maTailPadB1a0[0x183A0 - 0x18398];  // +0x18398 (99224) .. +0x183A0 (99232)  mfSimTimerTimeStep / mfIntroTimer seats
     f32 mfSimTime;                          // +0x183A0 (99232)  DWARF :407
-    u8  maTailPadB1a[0x184D0 - 0x183A4];   // +0x183A4 (99236) .. +0x184D0 (99536)
+
+    // 2026-09-12 (wheel-blur wave): the pad is split once more to name the FOURTH float of
+    // that four-float run (:408). PreSceneUpdate latches it in the same breath as mfTimeStep --
+    // mfTimeStep is `simStatus->mfBaseTimeStep * simStatus->mfTimeStepMultiplier`, and this
+    // seat is the bare multiplier -- and PrePhysicsUpdate forwards it, through
+    // UpdateActiveCars, to ActiveRaceCar::CalculateWheelAngularVelocities, whose only job is
+    // to scale each wheel's |rad/s| by it before the renderer picks a wheel-blur technique.
+    // In normal play it is 1.0f; slow motion drops it, and the wheels stop smearing with it.
+    f32 mfTimeStepMultiplier;               // +0x183A4 (99236)  :408
+    u8  maTailPadB1a[0x184D0 - 0x183A8];   // +0x183A8 (99240) .. +0x184D0 (99536)
     // ⭐⭐⭐ 2026-09-07 (measurement-guard wave): the pad is split again, because this is not one
     // mirror pair, it is TWO PAIRS AND A ONE-SHOT, and reading it as one pair is how a wave loses
     // an afternoon. Every writer and reader in the image was enumerated by OFFSET (a name-grep
@@ -1377,10 +1386,11 @@ private:
     //     0x822FF318  lbzx r10, r31, 0x18345  ->  mbIsInOnlineGameMode
     //     0x822FF304  lbzx r8,  r31, 0x186C9  ->  mbInCarSelectScreen
     // so they are read from the members directly rather than threaded through the signature.
-    // Only the three floats this slice forwards are declared; see the .cpp banner for the
-    // console's other five arguments and for SendAddedForCollisionStateToPhysics.
-    void UpdateActiveCars( f32 lfTimeStep, f32 lfAcceleration, f32 lfBraking,
-                          RaceCarEntityModuleIO::GameEventQueue* lpGameEvents );
+    // Only the four floats this slice forwards are declared; see the .cpp banner for the
+    // console's other four arguments and for SendAddedForCollisionStateToPhysics.
+    void UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
+                           f32 lfAcceleration, f32 lfBraking,
+                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents );
     void StorePlayerRoutePortalPositions(const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput);
 
     // X360 +0x17890 (96400). DWARF :347. The receiver of

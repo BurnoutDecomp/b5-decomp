@@ -193,10 +193,10 @@ public:
     //   so nothing could ever pull it in out of geometry.
     virtual CollisionPolicy* GetCollisionPolicy();
 
-    // @0x821F91A8 -- the slot-7 override (the DWARF declares it taking the BASE Parameters
-    // type, .cpp:135, which is what makes it an override rather than a hiding overload the
-    // way the bumper's is).
-    virtual void SetParameters(const Behaviour::Parameters* lpParameters);
+    // NOT virtual: this behaviour's console vtable is eight slots and none of them holds
+    // SetParameters. It takes the BASE Parameters type, so it hides the base's non-virtual
+    // member of the same signature; every caller holds a BehaviourGameplayExternal*.
+    void SetParameters(const Behaviour::Parameters* lpParameters);
 
     // @0x821F9218.
     virtual const char* GetName() const;

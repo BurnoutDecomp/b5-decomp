@@ -16,12 +16,7 @@
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"          // Camera::VehicleInfo (mpPlayerCar, by name)
 
 // ============================================================================
-// BrnDirector::ArbStateOnlineCarSelect -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
-//   Construct  @0x8225B3E0
-//   GetName    @0x821F6730
-//   Prepare    @0x82271020
-//   Update     @0x82236840
-//   Release    @0x82236E28
+// BrnDirector::ArbStateOnlineCarSelect -- Construct / GetName / Prepare / Update / Release.
 //
 // The director's ONLINE car-select / livery arbitrator state. On Prepare it allocates two
 // camera behaviours -- an ICE-anim "reveal" cam (the black-and-white car reveal) and a
@@ -43,21 +38,21 @@ namespace BrnDirector
     namespace
     {
         // The default attrib data-area size requested when a shot's parameter block is absent
-        // (X360 li r3, 0x18 -> Attrib::DefaultDataArea(0x18)). Same as the race-intro/rank-up states.
+        // (the console requests Attrib::DefaultDataArea(0x18)). Same as the race-intro/rank-up states.
         const u32 KU_SHOT_DEFAULT_DATA_AREA_SIZE = 0x18u;
 
         // The two trailing selectors the BehaviourManager::NewBehaviour<TBehaviour> allocation
-        // request carries (X360 li r6,0 / li r7,1). Same as the sibling arbitrator states.
-        // r6 is the manager's `const void* lpOwner` slot (null here -- the arbitrator states own
-        // their behaviours through lpOwningState), so it must be typed as a POINTER: a `const s32`
+        // request carries (owner null, reference limit 1). Same as the sibling arbitrator states.
+        // The owner is the manager's `const void* lpOwner` slot (null here -- the arbitrator states
+        // own their behaviours through lpOwningState), so it must be typed as a POINTER: a `const s32`
         // whose value is 0 stopped being a null-pointer constant in C++11, so the old `s32` form
         // matched no NewBehaviour overload under /std:c++17 /permissive-. ArbStateDriveThru
         // already spells it `const void* const`; matched here.
         const void* const KI_NEW_BEHAVIOUR_ARG_A = 0;
         const s32         KI_NEW_BEHAVIOUR_ARG_B = 1;
 
-        // The reveal take LOOPS. RESOLVED 2026-08-05: the X360's `stb 1` at behaviour +0xDE4
-        // is the embedded KeyAnimController's own mbIsLooping (+0x764), not a "reset byte".
+        // The reveal take LOOPS. RESOLVED 2026-08-05: the flag the console raises at behaviour
+        // +0xDE4 is the embedded KeyAnimController's own mbIsLooping (+0x764), not a "reset byte".
         const bool KB_TAKE_LOOPS = true;
 
         // The blend every car-select screen-fade camera-PFX hook plays at (flt_82001C98 == 1.0).
@@ -75,10 +70,9 @@ namespace BrnDirector
         const char* const KPC_HOOK_BLACK_FADE_IN_QUICK = "BlackFadeIn_Quick";
 
         // The game modes (GameState::meEventType, EGameModeType) the car-select treats as
-        // "online race" modes that may start a race intro: 10, 11, 12, 13, 14, 17. X360 reads
-        // these as the meEventType cmpwi set in Update's transition gate (0xA/0xB/0xC/0xD/0xE/
-        // 0x11). FLAG: the exact EGameModeType enumerator names are not recovered for this TU;
-        // the VALUES are asm-attested.
+        // "online race" modes that may start a race intro: 10, 11, 12, 13, 14, 17 -- the
+        // meEventType values the console tests in Update's transition gate. FLAG: the exact
+        // EGameModeType enumerator names are not recovered for this TU; the VALUES are attested.
         bool CanStartOnlineRaceIntro(s32 liEventType)
         {
             return liEventType == 10 || liEventType == 11 || liEventType == 12 ||
@@ -87,67 +81,26 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // BehaviourHandle::GetProducedCamera -- the camera the live behaviour produced this frame
-    // (the manager keeps it alongside the behaviour; the X360 reads slot+0x10). Defined
-    // out-of-line where the behaviour type is complete. The ICE-anim behaviour exposes it by
-    // name; the rotate-about-vehicle behaviour has no reconstructed home for it yet, so its
-    // produced camera is reached through the manager pool slot the handle resolves to (modelled
-    // here as the same role). FLAG: the rotate-about-vehicle GetProducedCamera path is the
-    // minimal slice -- the camera ROLE is reproduced (the X360 sub_821FDF38 reads slot+0x10).
-    // ------------------------------------------------------------------------
-    template <>
-    const Camera::Camera&
-    ArbStateOnlineCarSelect::BehaviourHandle<Camera::BehaviourIceAnim>::GetProducedCamera() const
-    {
-        CGS_ASSERT(mbAllocated, "IsAllocated()");
-        return mpBehaviour->GetProducedCamera();
-    }
-
-    template <>
-    const Camera::Camera&
-    ArbStateOnlineCarSelect::BehaviourHandle<Camera::BehaviourRotateAboutVehicle>::GetProducedCamera() const
-    {
-        CGS_ASSERT(mbAllocated, "IsAllocated()");
-        // The rotate-about-vehicle behaviour's produced camera lives at the same manager-pool
-        // slot offset the ICE-anim behaviour's does (the X360 sub_821FDF38 reads slot+0x10);
-        // reached BY NAME through the behaviour's GetProducedCamera() accessor.
-        return mpBehaviour->GetProducedCamera();
-    }
-
-    // ------------------------------------------------------------------------
-    // BehaviourHandle::IsBehaviourWaitingToPrepare -- the X360's "is the take still queued for
-    // its initial Prepare?" query (sub @0x822128A0): assert allocated, then ask the manager. The
-    // online-car-select Prepare returns this value DIRECTLY (no negation, unlike the rank-up
-    // state). Defined out-of-line where BehaviourManager is complete.
-    // ------------------------------------------------------------------------
-    template <typename TBehaviour>
-    bool ArbStateOnlineCarSelect::BehaviourHandle<TBehaviour>::IsBehaviourWaitingToPrepare() const
-    {
-        CGS_ASSERT(mbAllocated, "mbIsAllocated");
-        return mpManager->IsBehaviourWaitingToPrepare(muAllocationKey);
-    }
-
-    // ------------------------------------------------------------------------
-    // Construct @0x8225B3E0 -- build the camera, clear the base camera flags, zero the state
-    // machine, and zero both behaviour handles. (mbWasCarModScreen is left for Update to seed;
-    // the X360 Construct does not write +0x1A8.)
+    // Construct -- build the camera, clear the base camera flags, zero the state machine, and
+    // zero both behaviour handles. (mbWasCarModScreen is left for Update to seed; the console's
+    // Construct does not write +0x1A8.)
     // ------------------------------------------------------------------------
     void ArbStateOnlineCarSelect::Construct()
     {
-        GetNonConstCamera().Construct();   // X360 Camera::Construct(this+0x10)
+        GetNonConstCamera().Construct();   // the embedded camera @+0x10
 
-        ResetBaseCameraFlags();            // X360 stb 0, +0x170 / +0x171
+        ResetBaseCameraFlags();            // the two base flag bytes @+0x170 / +0x171
 
         meState = E_STATE_INACTIVE;        // +0x1AC = 0
 
         // Both behaviour handles start unallocated (+0x180 / +0x194 blocks zeroed: mbAllocated,
-        // muAllocationKey, muHelperIndex, mpManager, mpBehaviour).
-        mIceCam           = BehaviourHandle<Camera::BehaviourIceAnim>();
-        mLookAroundCarCam = BehaviourHandle<Camera::BehaviourRotateAboutVehicle>();
+        // muAllocationKey, the helper-pool pointer, mpManager, mpBehaviour).
+        mIceCam.Clear();
+        mLookAroundCarCam.Clear();
     }
 
     // ------------------------------------------------------------------------
-    // GetName @0x821F6730
+    // GetName
     // ------------------------------------------------------------------------
     const char* ArbStateOnlineCarSelect::GetName() const
     {
@@ -155,14 +108,14 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // Prepare @0x82271020 -- enter the car-select state: allocate and configure both camera
+    // Prepare -- enter the car-select state: allocate and configure both camera
     // behaviours (the ICE-anim reveal cam and the rotate-about-vehicle look-around cam). Does
     // nothing once already PREPARING-or-later (meState != 0, i.e. mbPreparing latch +0x1AC).
     // Returns whether the ICE-anim reveal behaviour is still waiting to prepare.
     // ------------------------------------------------------------------------
     bool ArbStateOnlineCarSelect::Prepare(ArbStateSharedInfo& lrSharedInfo)
     {
-        // The X360 latches meState (+0x1AC) as a "have we prepared this cycle" gate: when it is
+        // The console latches meState (+0x1AC) as a "have we prepared this cycle" gate: when it is
         // already non-zero, do nothing and report ready (return 1). Otherwise set it and run the
         // allocation.
         if (meState != E_STATE_INACTIVE)
@@ -206,13 +159,13 @@ namespace BrnDirector
             mLookAroundCarCam.GetBehaviour()->SetParameters(&lrParams);
         }
 
-        // The X360 tail-returns the reveal behaviour's "still waiting to prepare?" query directly
-        // (sub @0x822128A0; no negation).
-        return mIceCam.IsBehaviourWaitingToPrepare();
+        // The console tail-returns the reveal behaviour's "still waiting to prepare?" query
+        // directly (no negation, unlike the rank-up state).
+        return mIceCam.IsWaitingToPrepare();
     }
 
     // ------------------------------------------------------------------------
-    // Update @0x82236840 -- per-frame car-select state machine.
+    // Update -- per-frame car-select state machine.
     //
     // mbWasCarModScreen selects, in the later states, which behaviour's produced camera to copy
     // and which fade-hook variant to play: when set (the car-mod / livery screen was entered)
@@ -228,13 +181,13 @@ namespace BrnDirector
         switch (meState)
         {
         case E_STATE_INACTIVE:
-            // X360: case 0 jumps straight to the epilogue, skipping the clamp-to-car block.
+            // The console's case 0 goes straight to the epilogue, skipping the clamp-to-car block.
             return;
 
         case E_STATE_PREPARING:
             // Run Prepare; on a non-ready result (still preparing) stop here this frame. On
             // success advance to SELECTING_CAR and fall into the case-2 body that frame (the
-            // X360 case-1 success edge sets +0x1AC = 2 and falls into case 2).
+            // console's case-1 success edge sets +0x1AC = 2 and falls into case 2).
             if (!Prepare(lrSharedInfo))
             {
                 break;
@@ -250,7 +203,7 @@ namespace BrnDirector
 
             // In the INTRO event state with the game saying the car-select can start the intro,
             // hand over to the online race-intro state IFF the game mode is an online-race mode;
-            // otherwise hold this frame. (X360: when the INTRO && canStart gate fails, fall to
+            // otherwise hold this frame. (Console: when the INTRO && canStart gate fails, fall to
             // the abort / finished / car-mod checks instead.)
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_INTRO &&
                 lrGameState.mbOnlineCarSelectCanStartRaceIntro)
@@ -302,7 +255,7 @@ namespace BrnDirector
 
             // In the INTRO event state with the game saying the car-select can start the intro,
             // hand over to the online race-intro state IFF the game mode is an online-race mode
-            // (stopping the effect first); otherwise hold. (X360: when the INTRO && canStart gate
+            // (stopping the effect first); otherwise hold. (Console: when the INTRO && canStart gate
             // fails, fall to the abort / finished / car-mod checks instead.)
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_INTRO &&
                 lrGameState.mbOnlineCarSelectCanStartRaceIntro)
@@ -357,7 +310,7 @@ namespace BrnDirector
 
             // In the INTRO event state with the game saying the car-select can start the intro,
             // hand over to the online race-intro state IFF the game mode is an online-race mode;
-            // otherwise hold. (X360: when the INTRO && canStart gate fails, fall to the abort
+            // otherwise hold. (Console: when the INTRO && canStart gate fails, fall to the abort
             // check instead.)
             if (lrGameState.mEventState.GetCurrent() == GameState::E_EVENT_STATE_INTRO &&
                 lrGameState.mbOnlineCarSelectCanStartRaceIntro)
@@ -428,7 +381,7 @@ namespace BrnDirector
         }
 
         // After any state work: while the game asks the car-select to clamp to the car, snap the
-        // state camera's position onto the player car. The X360 copies a single 16-byte lane
+        // state camera's position onto the player car. The console copies a single 16-byte lane
         // from the player-car VehicleInfo (+0x220) into the camera transform's translation row
         // (mCamera.mTransform.Pos()).
         if (lrGameState.mbOnlineCarSelectMustClampToCar)   // GameState +0x1A8
@@ -441,35 +394,23 @@ namespace BrnDirector
             const rw::math::vpu::Vector3& lrPlayerCarPos =
                 lrSharedInfo.mpPlayerCar->mRaceCarState.mTransform.Pos();
 
-            lrCamera.mTransform.Pos() = lrPlayerCarPos;   // X360 stvx128 v0, this+0x40 (== mCamera.mTransform +0x30)
+            lrCamera.mTransform.Pos() = lrPlayerCarPos;   // state +0x40 == mCamera.mTransform +0x30
         }
     }
 
     // ------------------------------------------------------------------------
-    // Release @0x82236E28 -- leave the car-select state: reset the state machine, release both
+    // Release -- leave the car-select state: reset the state machine, release both
     // camera behaviours back to the manager, and assert no behaviours remain allocated.
     // ------------------------------------------------------------------------
     bool ArbStateOnlineCarSelect::Release(ArbStateSharedInfo& lrSharedInfo)
     {
         meState = E_STATE_INACTIVE;   // +0x1AC = 0
 
-        if (mIceCam.mbAllocated)      // +0x180 block
-        {
-            mIceCam.mpManager->UnSetBehaviourUsedByHandle(mIceCam.muAllocationKey);
-            mIceCam.muHelperIndex = 0;
-            mIceCam.mpManager     = 0;
-            mIceCam.mpBehaviour   = 0;
-            mIceCam.mbAllocated   = false;
-        }
-
-        if (mLookAroundCarCam.mbAllocated)   // +0x194 block
-        {
-            mLookAroundCarCam.mpManager->UnSetBehaviourUsedByHandle(mLookAroundCarCam.muAllocationKey);
-            mLookAroundCarCam.muHelperIndex = 0;
-            mLookAroundCarCam.mpManager     = 0;
-            mLookAroundCarCam.mpBehaviour   = 0;
-            mLookAroundCarCam.mbAllocated   = false;
-        }
+        // The two handle releases the console inlines here are the shared handle's own Release():
+        // when allocated, UnSetBehaviourUsedByHandle(muAllocationKey) on the owning manager, then
+        // zero the five-word block.
+        mIceCam.Release();            // +0x180 block
+        mLookAroundCarCam.Release();  // +0x194 block
 
         lrSharedInfo.mpBehaviourManager->CheckNoBehavioursAreAllocatedByState(this);
         return true;

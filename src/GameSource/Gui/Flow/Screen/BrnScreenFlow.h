@@ -41,6 +41,7 @@ namespace BrnGui
     struct CrashNavStats;                  // States/BrnCrashNavStats.h
     struct CrashNavSettings;               // States/BrnCrashNavSettings.h
     struct CrashNavMapEvent;               // States/BrnCrashNavMapEvent.h
+    struct CrashNavProfile;                // States/BrnCrashNavProfile.h
     class  CrashNavOptions;                // States/BrnCrashNavOptions.h
     struct CrashNavAccountManagement;      // States/BrnCrashNavAccountManagement.h
     struct CrashNavTrax;                   // States/BrnCrashNavTrax.h
@@ -86,7 +87,6 @@ namespace BrnGui
     // -- not-yet-reconstructed screen states (placeholders in States/BrnScreenStatesLinkStubs.h)
     struct NullState;
     struct CrashNavMapMain;
-    struct CrashNavProfile;
     struct OnlineGameRoomPlayerInfoState;   // placeholder name; see the stub header's FLAG note
     struct OnlineTeamSelection;
     struct ReplayClips;

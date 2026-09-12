@@ -25,12 +25,14 @@
 //   * Update()        -- the prologue, the no-player path, the arbitrator leg of the
 //                        gameplay middle, and the whole publish tail
 //   * UpdateArbitrator() + BuildArbStateSharedInfo() -- the per-frame arbitrator context
-//   * ProcessInputQueue()     -- the game-action queue drain (junkyard/car-select arms)
+//   * ProcessInputQueue()     -- the game-action queue drain (junkyard/car-select arms plus
+//                                the mode-lifecycle arms that drive the event-state journal)
 //   * PostGuiUpdate()         -- every leg whose destination is a GameState field
+//   * HandlePrepareForModeAction() -- the event-entry push (PRE_INTRO + meEventType)
 //
 // DECLARATION-ONLY + FLAGGED (in the header): UpdateICE / UpdateMoments / UpdateAttribSys /
 // UpdateCameraBehaviours* / UpdateDebug* / ProcessNewVehicleEvents /
-// HandlePrepareForModeAction / CalcTrafficLightSpace / DebugDisplayCurrentCamera.
+// CalcTrafficLightSpace / DebugDisplayCurrentCamera.
 // Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends on un-dumped
 // rodata.
 // ============================================================================
@@ -53,6 +55,12 @@
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"          // Attrib::Gen::burnoutcarasset
 #include "GameSource/AttribSys/Generated/classes/camerabumperbehaviour.h"    // Attrib::Gen::camerabumperbehaviour
 #include "GameSource/AttribSys/Generated/classes/cameraexternalbehaviour.h"  // Attrib::Gen::cameraexternalbehaviour
+
+// -- the event-state journal legs: the game-action records they read, and the traffic-light
+//    lookup the prepare-for-mode arm resolves the event's junction logic box through ----------
+#include "GameSource/GameState/BrnGameActions.h"                   // the mode-lifecycle records
+#include "GameSource/Director/Utils/BrnDirectorWorldMap.h"         // WorldMap::GetTrafficData
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"      // GetJunctionLogicBoxForTrafficLight
 
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 #include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
@@ -1104,6 +1112,116 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
+    // The event-presentation reset both event-boundary legs open-code (the prepare-for-mode
+    // handler and ProcessInputQueue's stop-mode arm run the identical store list). Its
+    // destinations are the GameState's two trailing sub-objects, whose recovered field layouts are
+    // unreliable -- so, exactly as GameState::Clear and GameState::ResetPerFrameData do, the
+    // stores go through each sub-object's own opaque storage at its documented offset.
+    // FLAG: the field NAMES in this region are not recovered; the offsets and the values are.
+    // ------------------------------------------------------------------------
+    static void ClearEventPresentationBlock(GameState& lrGameState)
+    {
+        const f32 lfZero = 0.0f;
+        const s32 liZero = 0;
+
+        // ShowTimeInfo + 0x08 / + 0x0C / + 0x10  (GameState +0x1DC / +0x1E0 / +0x1E4)
+        std::memcpy(&lrGameState.mShowTimeInfo.maOpaque[0x08], &lfZero, sizeof(f32));
+        std::memcpy(&lrGameState.mShowTimeInfo.maOpaque[0x0C], &liZero, sizeof(s32));
+        std::memcpy(&lrGameState.mShowTimeInfo.maOpaque[0x10], &liZero, sizeof(s32));
+
+        // DirectorProfileData + 0x00 .. + 0x05  (GameState +0x1E8 .. +0x1ED). Six bytes, one
+        // more than the five ResetPerFrameData clears every frame.
+        for (s32 liByte = 0; liByte < 6; ++liByte)
+            lrGameState.mDirectorProfileData.maOpaque[liByte] = 0;
+    }
+
+    // ------------------------------------------------------------------------
+    // HandlePrepareForModeAction   -- ⭐⭐ THE EVENT-ENTRY PUSH
+    //
+    // Fold a prepare-for-mode action into the GameState snapshot. This is the ONLY producer of
+    // GameState::E_EVENT_STATE_PRE_INTRO in the image, and (with the two event-end legs) one of
+    // only three writers of GameState::meEventType -- which is why the roaming state's PRE_INTRO
+    // arm and the whole race-intro camera ladder were dead while it was declaration-only.
+    //
+    // Console shape, store for store:
+    //   * run only for the FIRST prepare of an event (all-in-one, or the first of a split pair);
+    //     the second half of a split prepare is ignored here.
+    //   * if the online post-event is on screen, DEFER: copy the whole record into
+    //     maModeActionAndDebugBlock and raise the deferred bit. PostGuiUpdate replays it from
+    //     there when the post-event ends.
+    //   * otherwise push PRE_INTRO and seed the event snapshot from the mode params.
+    //
+    // The record type is BrnGameState::GameStateModuleIO::PrepareForModeAction (BrnGameActions.h), whose layout is
+    // byte-exact against the console's own 0x8E0 post, so every field below is a named member --
+    // no offset indexing, which matters because the embedded GameModeParams does NOT keep the
+    // console's byte offsets on this host.
+    // ------------------------------------------------------------------------
+    void MainDirector::HandlePrepareForModeAction(const BrnGameState::GameStateModuleIO::PrepareForModeAction& lrAction,
+                                                  const DirectorInputOutput* lpIO)
+    {
+        // The console tests the stage enum inline (`== 0 || == 1`); PrepareForModeAction spells
+        // that predicate by name.
+        if (!lrAction.IsFirstPrepareForMode())
+            return;
+
+        // Deferred arm: the online post-event owns the camera, so park the record and leave the
+        // event state alone. The copy is the console's `memcpy(this + <block>, action, 0x8E0)`.
+        if (maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT])
+        {
+            static_assert(sizeof(BrnGameState::GameStateModuleIO::PrepareForModeAction) <= sizeof(maModeActionAndDebugBlock),
+                          "the deferred prepare-for-mode record must fit the block the console copies it into");
+            std::memcpy(maModeActionAndDebugBlock, &lrAction, sizeof(BrnGameState::GameStateModuleIO::PrepareForModeAction));
+            maStateFlagTail[E_FLAG_TAIL_MODE_ACTION_DEFERRED] = 1;
+            return;
+        }
+
+        const BrnGameState::GameModeParams& lrParams = *lrAction.GetGameModeParams();
+
+        // ⭐ THE PUSH. `idx = (idx + 1) % 2; entries[idx] = v; if (size < 2) ++size` IS
+        // DataJournal<T,2>::SetCurrent, so the console's open-coded push is spelt by name.
+        maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_PRE_INTRO);
+        maGameState.meEventType = lrParams.GetGameModeType();                       // +0x120
+
+        maGameState.mbGoToCrashModeAfterIntro =
+            lrParams.GetFlag(BrnGameState::GameModeParams::KU_FLAG_SET_DIRECTOR_TO_CRASH_MODE_AFTER_INTRO);
+        // The console's `cntlzw`-normalised `mbIsOnline == 0`: slow motion is an offline-only
+        // privilege, and this is where an event withdraws it.
+        maGameState.mbCanUseSlomo = !lrParams.mbIsOnline;                            // +0x100
+        maGameState.miEventSpecificShotGroup = lrAction.GetShotGroup();              // +0x134
+
+        // The event's own per-frame presentation state, reset for the new event.
+        maGameState.mfHowCloseToTotalled            = 0.0f;                          // +0x1BC
+        maGameState.mbRoadRageOneMoreCrashToWrecked = false;                         // +0x1C0
+        maGameState.mbRoadRageTotalled              = false;                         // +0x1C1
+
+        // The showtime / profile sub-objects' per-event fields. Their field layouts are
+        // unreliable (see BrnDirectorGameState.h), so the console's stores go through the
+        // opaque storage at its own documented offsets -- the same shape GameState::Clear and
+        // GameState::ResetPerFrameData already use for this region. The stop-mode arm in
+        // ProcessInputQueue runs the identical block; the console open-codes it in both.
+        ClearEventPresentationBlock(maGameState);
+
+        // The event's junction logic box, resolved from the mode's traffic-light trigger. The
+        // handle's invalid form is "hull == 0xFFFF or index == 0xFF", which is exactly what
+        // GameModeParams::Construct seeds it to, so a mode with no start lights lands here with
+        // a null box rather than a query.
+        // ⚠️ DIVERGENCE, deliberate: the console dereferences the traffic data unconditionally
+        //   on the valid arm. WorldMap::GetTrafficData returns null until the map's traffic
+        //   resource is loaded (it gates on the load state), and this handler can run before
+        //   that on this build, so the null is checked instead of crashed on. The stored value
+        //   is the same in every case the console reaches.
+        const u32 luLightTriggerId = static_cast<u32>(lrParams.GetTrafficLightTriggerId());
+        const bool lbLightTriggerIdValid = ((luLightTriggerId & 0x00FFFF00u) != 0x00FFFF00u) &&
+                                           ((luLightTriggerId & 0x000000FFu) != 0x000000FFu);
+        const BrnTraffic::TrafficData* lpTrafficData =
+            lbLightTriggerIdValid ? lpIO->mpWorldMap->GetTrafficData() : 0;
+        maGameState.mpEventJLBox =
+            (lpTrafficData != 0)
+                ? lpTrafficData->GetJunctionLogicBoxForTrafficLight(luLightTriggerId)
+                : 0;                                                                 // +0x000
+    }
+
+    // ------------------------------------------------------------------------
     // ProcessInputQueue  @ 0x822372F8   -- ⭐⭐ THE GAME-ACTION -> GAMESTATE SEAM
     //
     // Drain the input buffer's game-action queue (DirectorIO::InputBuffer::GetGameActionQueue
@@ -1140,7 +1258,7 @@ namespace BrnDirector
     // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other 30 handled cases (0, 6, 12, 23, 24, 29, 30, 33, 34, 37, 39, 42, 43, 47,
+    //   * the other 23 handled cases (0, 6, 24, 42, 43,
     //     53, 54, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
     //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
     //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
@@ -1531,8 +1649,161 @@ namespace BrnDirector
                 maGameState.mbOnlineCarSelectCarIsShowable = (lpacPayload[0] != 0);
                 break;
 
+            // ================= THE EVENT-STATE JOURNAL ARMS ==============================
+            // Every arm below pushes GameState::mEventState, GameState::meEventType, or both.
+            // Together with HandlePrepareForModeAction they are the journal's ONLY producers;
+            // with them gated, the journal never left the ACTIVE that GameState::Clear seeds,
+            // so ArbStateRoaming's INTRO and POST_EVENT ladders could not fire and the race-
+            // intro / post-event cameras were unreachable however well they worked.
+            // The push itself is DataJournal<EEventState,2>::SetCurrent in every case (the
+            // console open-codes `idx = (idx + 1) % 2; entries[idx] = v; if (size < 2) ++size`,
+            // which is that member's body).
+
+            // ---- 23  E_ACTION_PREPARE_FOR_MODE (0x8E0 bytes) -------------------------
+            case 23:
+                HandlePrepareForModeAction(
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::PrepareForModeAction*>(lpacPayload), lpIO);
+                break;
+
+            // ---- 29  E_ACTION_START_MODE_INTRO (604 bytes) ---------------------------
+            // ⭐ THE RACE-INTRO TRIGGER. mbDoIntro is the producer's own
+            // `mfDurationSeconds > 0.0f`: an event WITH an intro goes to INTRO (which is what
+            // ArbStateRoaming::ProcessActiveDrivingTransitions turns into ArbStateRaceIntro);
+            // an event without one goes straight to ACTIVE.
+            case 29:
+            {
+                const BrnGameState::GameStateModuleIO::StartModeIntroAction& lrIntroAction =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::StartModeIntroAction*>(lpacPayload);
+
+                if (!lrIntroAction.mbDoIntro)
+                {
+                    maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_ACTIVE);
+                    maGameState.mbGoToCrashModeAfterIntro = false;          // +0x11C
+                    break;
+                }
+
+                maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_INTRO);
+
+                maGameState.muNumberOfCarsInIntro = static_cast<u32>(lrIntroAction.mFlybyData.miNumberOfCars);
+                maGameState.mfStateTimeLeft       = lrIntroAction.mfDurationSeconds;   // +0x13C
+                CGS_ASSERT(maGameState.muNumberOfCarsInIntro <=
+                               static_cast<u32>(BrnGameState::GameStateModuleIO::FlybyRivalData::KI_MAX_CARS_IN_FLYBY),
+                           "mGameState.muNumberOfCarsInIntro <= (uint32_t)BrnGameState::GameStateModuleIO::FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
+
+                // The console walks the record through FlybyData's indexed accessor; that
+                // accessor is non-const in this tree and the queue hands out a const record, so
+                // the walk reads the (public) slot array directly. Same slots, same asserts.
+                for (u32 luRivalIndex = 0; luRivalIndex < maGameState.muNumberOfCarsInIntro; ++luRivalIndex)
+                {
+                    const EActiveRaceCarIndex leRaceCarIndex =
+                        lrIntroAction.mFlybyData.mRivalsToShow[luRivalIndex].meRaceCarIndex;
+                    CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                               "lpIntroAction->mFlybyData.GetCarFlybyData(luRivalIndex)->meRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+                    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "lpIntroAction->mFlybyData.GetCarFlybyData(luRivalIndex)->meRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                    maGameState.maeIntroCarID[luRivalIndex] = leRaceCarIndex;          // +0x110
+                }
+                break;
+            }
+
+            // ---- 30  E_ACTION_STOP_MODE_INTRO / 47  E_ACTION_SET_COUNTDOWN -----------
+            // The same COUNTDOWN push, split by mode: the intro's END starts the countdown for
+            // every mode EXCEPT the four below, and for those four the explicit countdown
+            // action does it instead. FLAG: the membership is the console's literal comparison
+            // set; why those four and not the whole online range is not recovered.
+            case 30:
+            case 47:
+            {
+                const s32 leEventType = maGameState.meEventType;
+                const bool lbCountdownComesFromCountdownAction =
+                    (leEventType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_RACE)     ||
+                    (leEventType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE) ||
+                    (leEventType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN)||
+                    (leEventType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END);
+
+                if (lbCountdownComesFromCountdownAction != (liActionType == 47))
+                    break;
+
+                maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_COUNTDOWN);
+
+                // ⚠️ GATE: CalcTrafficLightSpace( lpIO ) -- declaration-only, and the one thing
+                //    in this TU that is still a multi-stage VMX pipeline (see its declaration).
+                //    The push above is what the roaming ladder reads; the traffic-light space it
+                //    would compute is only consumed by the start-line camera's framing.
+                break;
+            }
+
+            // ---- 12 / 33 / 34  the ACTIVE pushes ------------------------------------
+            // 33 is E_ACTION_STOP_MODE_COUNTDOWN and 34 E_ACTION_START_PLAYING_MODE: the event
+            // goes live. 12 is the online car-select ABORT (it clears the car-select latch and
+            // raises the aborted one before making the same push). FLAG: 12 has no recovered
+            // enumerator name.
+            case 12:
+                maGameState.mbIsOnlineCarSelectActive       = false;        // +0x1A5
+                maGameState.mbHasOnlineCarSelectBeenAborted = true;         // +0x1A6
+                maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_ACTIVE);
+                break;
+
+            case 33:
+            case 34:
+                maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_ACTIVE);
+                break;
+
+            // ---- 37  E_ACTION_SHOW_MODE_RESULTS (232 bytes) --------------------------
+            // ⭐ THE POST-EVENT TRIGGER, and the only writer of mbWonLastEvent -- which is what
+            // ArbStatePostEvent::PickAppropriateShot picks its take from, so this arm feeds both
+            // halves of the post-event camera.
+            case 37:
+            {
+                const BrnGameState::GameStateModuleIO::ShowModeResultsAction& lrResults =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::ShowModeResultsAction*>(lpacPayload);
+
+                maGameState.mbWonLastEvent =
+                    (lrResults.mu8FieldE0 != 0) &&
+                    (lrResults.mu8FieldE1 == 0) &&
+                    (lrResults.mu8FieldE3 == 0) &&
+                    ((lrResults.mu8FieldE2 == 0) ||
+                     (lrResults.meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE));
+
+                if (lrResults.mu8FieldE5 != 0)
+                    maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_POST_EVENT);
+                break;
+            }
+
+            // ---- 39  E_ACTION_STOP_MODE (24 bytes) ----------------------------------
+            // The event teardown: back to ACTIVE (i.e. "no event state"), meEventType cleared to
+            // E_MODE_NONE, and the per-event presentation block reset.
+            case 39:
+            {
+                CGS_ASSERT(lpAction != 0, "lpStopModeAction");
+                const BrnGameState::GameStateModuleIO::StopModeAction& lrStopAction =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::StopModeAction*>(lpacPayload);
+
+                // Skipped while the online post-event owns the camera, so stopping the mode
+                // behind the results screen does not cut the post-event take short.
+                if (!maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT])
+                    maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_ACTIVE);
+
+                maGameState.mbGoToCrashModeAfterIntro = false;              // +0x11C
+                // Slow motion comes back offline, and online only once the last round is done.
+                maGameState.mbCanUseSlomo = (lrStopAction.mu8Field10 == 0) ||
+                                            (lrStopAction.mu8Field12 != 0);  // +0x100
+                maGameState.meEventType   = BrnGameState::GameStateModuleIO::E_MODE_NONE;
+
+                maGameState.mfHowCloseToTotalled            = 0.0f;          // +0x1BC
+                maGameState.meTargetRaceCarIndex            = E_ACTIVE_RACE_CAR_INDEX_0;   // +0x140
+                maGameState.meTargetVehicleRefType          = VehicleRef::E_PLAYER_CAR;    // +0x144
+                maGameState.mbRoadRageOneMoreCrashToWrecked = false;         // +0x1C0
+                maGameState.mbRoadRageTotalled              = false;         // +0x1C1
+                ClearEventPresentationBlock(maGameState);
+
+                maGameState.mbStartingFreeburnDueToPlayerJoinThisFrame =
+                    (lrStopAction.mu8Field15 != 0);                           // +0x1C8
+                break;
+            }
+
             default:
-                // The console's own default arm, plus the 36 GATED cases listed in the banner.
+                // The console's own default arm, plus the GATED cases listed in the banner.
                 break;
             }
 
@@ -2172,7 +2443,23 @@ namespace BrnDirector
         // mbGameTalkRefreshRequest byte, which only the live-tuning tool sets. See its body.
         UpdateAttribSys(lpIO->mpInputBuffer);
 
-        // ⚠️ GATE: the rest of the post-publish tail (lines 871-877 / 880-924) -- see the banner.
+        // ⭐ THE EVENT-END PUSH, immediately after UpdateAttribSys. One of the four producers of
+        // GameState::mEventState: when either end-of-event request in the flag tail is standing
+        // the journal goes back to ACTIVE and meEventType is cleared to E_MODE_NONE, which is
+        // what takes the arbitrator out of the post-event / race-intro ladders.
+        // FLAG: the second half of the first arm is a byte inside the director OUTPUT
+        //   INTERFACE, an opaque named span in the output buffer with no recovered field
+        //   layout, so it is read at its own documented offset -- the same treatment the span
+        //   gets everywhere else. Its ROLE (it qualifies the first request) is the console's.
+        if ((maStateFlagTail[E_FLAG_TAIL_EVENT_END_REQUEST] != 0 &&
+             lpIO->mpOutputBuffer->GetDirectorOutputIn()[0x0D] != 0) ||
+            maStateFlagTail[E_FLAG_TAIL_EVENT_END_FORCED] != 0)
+        {
+            maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_ACTIVE);
+            maGameState.meEventType = BrnGameState::GameStateModuleIO::E_MODE_NONE;
+        }
+
+        // ⚠️ GATE: the rest of the post-publish tail -- see the banner.
     }
 
     // ------------------------------------------------------------------------
@@ -2215,8 +2502,6 @@ namespace BrnDirector
     //
     // ⚠️ STILL GATED (each names a destination this class cannot honestly reach yet):
     //   * the hook-enumeration leg -- BrnDirector::EffectInterface has no reconstructed home;
-    //   * the online post-event / mode-action legs -- they write the MainDirector flag tail
-    //     (+0x35479/+0x3547A) and call HandlePrepareForModeAction, itself declaration-only;
     //   * HasNewDirectorProfileData's SECOND store, `*(this + 91808) = (data == 1)`, which
     //     lands inside mArbitrator, not the GameState. (Its FIRST store, into
     //     DirectorProfileData +0x08, is an opaque sub-object byte-word -- also left alone.)
@@ -2279,8 +2564,34 @@ namespace BrnDirector
             maGameState.mbNewProfileIntroActive = false;
         }
 
-        // ⚠️ GATE: HasNewDirectorProfileData (opaque sub-object word + an arbitrator field),
-        //    and the online post-event / mode-action pair.
+        // ⚠️ GATE: HasNewDirectorProfileData (opaque sub-object word + an arbitrator field).
+
+        // ⭐ THE ONLINE POST-EVENT HANDSHAKE, and the fourth producer of the event-state
+        // journal. Entering the post-event arms the latch and clears any stale deferral;
+        // leaving it either REPLAYS the prepare-for-mode action that arrived while the results
+        // were up (the copy HandlePrepareForModeAction parked in maModeActionAndDebugBlock) or,
+        // if none did, simply pushes the event state back to ACTIVE.
+        if (lpInput->GetEnteredOnlinePostEvent())                     // GUI command 290
+        {
+            maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT] = 1;
+            maStateFlagTail[E_FLAG_TAIL_MODE_ACTION_DEFERRED] = 0;
+        }
+        if (lpInput->GetLeftOnlinePostEvent() &&                      // GUI command 294
+            maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT] != 0)
+        {
+            const bool lbHadDeferredAction = (maStateFlagTail[E_FLAG_TAIL_MODE_ACTION_DEFERRED] != 0);
+            maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT] = 0;
+            if (lbHadDeferredAction)
+            {
+                HandlePrepareForModeAction(
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::PrepareForModeAction*>(maModeActionAndDebugBlock),
+                    lpIO);
+            }
+            else
+            {
+                maGameState.mEventState.SetCurrent(GameState::E_EVENT_STATE_ACTIVE);
+            }
+        }
 
         // GUI command 77 -> the car-unlock-ticker handshake's WAITING bit (+0x1A4).
         if (lpInput->GetCarSelectTickerClosedThisFrame())

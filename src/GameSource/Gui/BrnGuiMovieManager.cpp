@@ -58,12 +58,14 @@ namespace BrnGui
         CgsSystem::MovieAudioPC g_movieAudio;
         char                    g_acSoundStreamPath[260] = { 0 };
 
-        // dword_830082A8 -- the .data DEFAULT VIDEO SOUND NAME that VideoDefinition::Prepare
-        // seeds +0x18 from (`lwz r10, dword_830082A8; stw r10, 0x18(r31)` @0x824729C8/D8).
-        // Its image initialiser is 0x0233B6D5, read out of the decrypted XEX. Kept as a
-        // named mutable global rather than folded into Prepare because the console's is
-        // mutable .data -- if a writer turns up, this is its home.
-        u32 gsuDefaultVideoSoundName = 0x0233B6D5u;
+        // The DEFAULT VIDEO SOUND NAME that VideoDefinition::Prepare seeds +0x18 from.
+        // It is mutable data on the console, and its image initialiser is 0. Its ONE
+        // writer is the static-initialiser thunk, whose whole body is
+        // `gsuDefaultVideoSoundName = CgsSound::Playback::Name::MakeHash("")`; the empty
+        // string hashes to 0, so the value is 0 both in the image and at run time. Every
+        // other reference to the word is a load. Kept as a named mutable global rather
+        // than folded into Prepare because the console's is mutable data.
+        u32 gsuDefaultVideoSoundName = 0u;
     }
 
     // ---- VideoDefinition -----------------------------------------------------------------------------

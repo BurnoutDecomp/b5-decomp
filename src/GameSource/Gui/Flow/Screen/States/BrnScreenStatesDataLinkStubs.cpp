@@ -51,7 +51,6 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineViewChallenges.h"
 #include "GameSource/Gui/Flow/Screen/States/OnlineYouWin.h"
-#include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.h"
 #include "GameSource/Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.h"
@@ -256,11 +255,6 @@ namespace BrnGui
     void CarSelectOnlineEnd::OnLeave() {}
     void CarSelectOnlineEnd::Update()  {}
 
-    // ---- CompletedGame ----------------------------------------------------------------
-    void CompletedGame::OnEnter() { LogUnreconstructedState("CompletedGame", "OnEnter"); }
-    void CompletedGame::OnLeave() {}
-    void CompletedGame::Update()  {}
-
     // ---- CrashNavAccountManagement ----------------------------------------------------
     void CrashNavAccountManagement::OnEnter() { LogUnreconstructedState("CrashNavAccountManagement", "OnEnter"); }
     void CrashNavAccountManagement::OnLeave() {}
@@ -269,10 +263,6 @@ namespace BrnGui
     // ---- CrashNavEnterOnline variants (Mod TU landed NoTitle only) --------------------
     void CrashNavEnterOnlineFull::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineFull", "OnEnter"); }
     void CrashNavEnterOnlineX360::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineX360", "OnEnter"); }
-
-    // ---- Credits (BrnCredits.cpp is partial: OnEnter landed) --------------------------
-    void Credits::OnLeave() {}
-    void Credits::Update()  {}
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
     void OnlineGameOptionsSummary::OnEnter() { LogUnreconstructedState("OnlineGameOptionsSummary", "OnEnter"); }

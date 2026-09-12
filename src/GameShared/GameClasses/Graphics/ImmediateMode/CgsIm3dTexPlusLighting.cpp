@@ -1,9 +1,8 @@
-// CgsGraphics::ImRenderer<BrnGraphics::WorldTexturedVertex> -- the X360 immediate-mode textured +
+// CgsGraphics::ImRenderer<BrnGraphics::WorldTexturedVertex> -- the console immediate-mode textured +
 // lit 3D renderer instantiation (behind BrnGraphics::Im3dTexPlusLighting;
 // BrnParticle::Native::BrnDebrisRenderer::BeginRender drives BeginRendering).
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX:
-//   AddProgram @ 0x82286F20   Construct @ 0x8228DE30   BeginRendering @ 0x8227C090   SetProgram @ 0x827DC1D8
+// Four bodies: AddProgram, Construct, BeginRendering, SetProgram.
 // Mirrors CgsIm3dSkyDome.cpp / CgsIm3dZOnly.cpp: per-member out-of-class defs + per-member explicit
 // instantiation (NOT whole-struct). Element words 0x1A23A6/0x2A23B9/0x2C23A5 and the pixel flag 1 are
 // raw asm immediates.
@@ -45,10 +44,16 @@ namespace
     const u32 KU_NORMAL_ELEMENT_WORD   = 0x2A23B9u; // element 1 (normal)                @ off 16
     const u32 KU_TEXCOORD_ELEMENT_WORD = 0x2C23A5u; // element 2 (UVs)                   @ off 28
 
-    // Per-module shadow caches (X360 .data block off_83010950), shared by BeginRendering + SetProgram.
-    renderengine::ProgramBuffer* spgLastVertexProgram      = nullptr; // dword_8301095C
-    const void*                  spgLastVertexDescriptor   = nullptr; // off_83010958
-    bool                         sbVertexProgramStateDirty = false;   // byte_83010A34
+    // NO TU-LOCAL SHADOW CACHES HERE. This TU used to declare
+    //     renderengine::ProgramBuffer* spgLastVertexProgram;      // dword_8301095C
+    //     const void*                  spgLastVertexDescriptor;   // off_83010958
+    //     bool                         sbVertexProgramStateDirty; // byte_83010A34
+    // as file statics. Those three words are NOT TU-local: they are shadow::Device's own
+    // mpVertexProgramShadow / mpVertexDescriptor / mbVertexProgramStateDirty, all inside the one
+    // device shadow block. Kept privately, the compare-and-set stops being the device's, the bind
+    // is skipped from the second pass on, and the batch reaches D3D with no vertex shader and no
+    // vertex declaration bound -- the defect BrnSkidVertex.cpp measured and documents at length.
+    // BeginRendering / SetProgram below go through the device, as every corrected sibling does.
 }
 } // namespace CgsGraphics
 
@@ -56,12 +61,13 @@ namespace shadow
 {
     void DeviceSetVertexProgramInternal(void* lpVertexProgram);
     void DeviceSetPixelProgram(void* lpPixelProgram);
+    void DeviceSetVertexDescriptor(void* lpVertexDescriptor);
 }
 
 namespace CgsGraphics
 {
 
-// AddProgram @ 0x82286F20 -- vertex-type-agnostic (identical to committed siblings).
+// AddProgram -- vertex-type-agnostic (identical to committed siblings).
 template <typename V>
 s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
                              const void* lpVertexProgramBinary, u32 luVertexProgramSize,
@@ -81,6 +87,41 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     }
     CGS_ASSERT(li8ProgramIndex < KI8_MAX_PROGRAMS,
                "Adding too many shader programs to the immediate mode renderer");
+
+    // ---- [PC-platform leaf] adopt a pre-built PC ShaderProgramBuffer image ----------------------
+    // The console route below (GetResourceDescriptor -> allocator Create -> Initialize) cannot run
+    // on the PC backend: both renderengine::ProgramBuffer bodies call XGGetMicrocodeShaderParts,
+    // whose PC stub returns 0 WITHOUT writing *lpParts, and then read that uninitialised
+    // ProgramMicrocodeParts for the microcode size and hand a 64-bit function pointer truncated
+    // into the u32 muFunction to Xbox2CreateConstantTable. When the supplied binary is already a
+    // converted platform-4 ShaderProgramBuffer (which is what the PC world-textured programs are),
+    // the leaf adopts it directly -- there is nothing for Initialize to build. A non-PC binary
+    // returns null here and falls through to the console path unchanged.
+    //
+    // This TU was written before the adopt path existed and was never mounted, so it kept the
+    // console route while every sibling was corrected. MEASURED CONSEQUENCE, first mount:
+    //     [debrispass] worldtex constants: transforms{cnt=0} vp{cnt=0} eye{cnt=0}
+    //                                      lightdir{cnt=0} lightcol{cnt=0} shiny{cnt=0}
+    // with no "[ImLeaf] adopted PC program buffer" line before it, while the skid and Lion
+    // renderers on the same run printed theirs and resolved every constant. Nothing was adopting
+    // the two converted images, so GetVariableHandleByName walked an empty variable table and
+    // left all six handles at register count 0 -- which the leaf's BeginShaderStates routes to a
+    // DISCARD row, i.e. the transform array, view-projection, eye and the three lighting
+    // constants would never have been uploaded.
+    if (renderengine::ProgramBufferData* lpAdoptedVertex =
+            renderengine::ProgramBufferPC_Adopt(lpVertexProgramBinary, luVertexProgramSize, 0u))
+    {
+        renderengine::ProgramBufferData* const lpAdoptedPixel =
+            renderengine::ProgramBufferPC_Adopt(lpPixelProgramBinary, luPixelProgramSize, 1u);
+        if (lpAdoptedPixel != nullptr)
+        {
+            mapVertexProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedVertex);
+            mapPixelProgramBuffer[li8ProgramIndex] =
+                reinterpret_cast<renderengine::ProgramBuffer*>(lpAdoptedPixel);
+            return li8ProgramIndex;
+        }
+    }
 
     ResourceAllocator* lpAllocatorIf = reinterpret_cast<ResourceAllocator*>(lpAllocator);
 
@@ -121,7 +162,7 @@ s8 ImRenderer<V>::AddProgram(rw::IResourceAllocator* lpAllocator,
     return li8ProgramIndex;
 }
 
-// Construct @ 0x8228DE30
+// Construct
 template <typename V>
 void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
                               const void* const* lapVertexProgramBinary,
@@ -188,7 +229,7 @@ void ImRenderer<V>::Construct(rw::IResourceAllocator* lpAllocator,
     }
 }
 
-// BeginRendering @ 0x8227C090 (parameterless; mirrors CgsIm3dSkyDome.cpp::BeginRendering)
+// BeginRendering (parameterless; mirrors CgsIm3dSkyDome.cpp::BeginRendering)
 template <typename V>
 void ImRenderer<V>::BeginRendering()
 {
@@ -203,22 +244,20 @@ void ImRenderer<V>::BeginRendering()
     renderengine::ProgramBuffer* lpPixelProgram  = mapPixelProgramBuffer[0];
     mi8CurrentProgram = 0;
 
-    if (spgLastVertexProgram != lpVertexProgram)
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-    }
+    // The compare against the last-bound vertex program is the DEVICE's: ResetShadowing has just
+    // nulled its shadow, so the console's compare is always a miss and the bind always happens.
+    shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
     shadow::DeviceSetPixelProgram(lpPixelProgram);
 
-    const void* lpVertexDescriptor = mpVertexDescriptor;
-    if (spgLastVertexDescriptor != lpVertexDescriptor)
-    {
-        sbVertexProgramStateDirty = true;
-        spgLastVertexDescriptor   = lpVertexDescriptor;
-    }
+    // Shadow this renderer's vertex descriptor and raise the vertex-program-state dirty flag where
+    // FlushVertexProgramState reads it -- the compare-then-set + dirty flag IS the device's
+    // SetVertexDescriptor, not a private pair.
+    shadow::DeviceSetVertexDescriptor(
+        const_cast<renderengine::VertexDescriptorData*>(
+            reinterpret_cast<const renderengine::VertexDescriptorData*>(mpVertexDescriptor)));
 }
 
-// SetProgram @ 0x827DC1D8
+// SetProgram
 template <typename V>
 bool ImRenderer<V>::SetProgram(s8 li8Program)
 {
@@ -228,17 +267,9 @@ bool ImRenderer<V>::SetProgram(s8 li8Program)
                "mapPixelProgramBuffer[ li8Program ] != NULL");
 
     renderengine::ProgramBuffer* lpVertexProgram = mapVertexProgramBuffer[li8Program];
-    bool lbChanged;
-    if (spgLastVertexProgram == lpVertexProgram)
-    {
-        lbChanged = false;
-    }
-    else
-    {
-        shadow::DeviceSetVertexProgramInternal(lpVertexProgram);
-        spgLastVertexProgram = lpVertexProgram;
-        lbChanged = true;
-    }
+    // Device::SetVertexProgram IS the compare-and-set this function used to keep a private copy of.
+    const bool lbChanged = shadow::Device::SetVertexProgram(
+        reinterpret_cast<const renderengine::ProgramBufferData*>(lpVertexProgram));
 
     if (lbChanged)
     {

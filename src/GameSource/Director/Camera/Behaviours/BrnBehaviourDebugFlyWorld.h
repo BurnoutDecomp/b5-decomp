@@ -10,39 +10,16 @@
 // slo-mo), exposes a live camera Tweaker binding so a dev can nudge the rig on the pad,
 // and each frame integrates the rig into the produced camera transform.
 //
-// HOME for the batch bodied in the matching .cpp:
-//   Construct           @0x82210088 (virtual)
-//   Prepare             @0x821FB738 (virtual)
-//   SetupTweaker        @0x822100E0 (virtual)
-//   GetName             @0x821FB728 (virtual)
-//   WarpToLookAt        @0x8222CB10
-//   ChangeMovingSpeed   @0x821FB790 (static tweaker callback)
-//   WarpToCar           @0x821FB860 (static tweaker callback)
-//   LookAtCar           @0x821FB870 (static tweaker callback)
-//   LevelOut            @0x821FB888 (static tweaker callback)
-//   ToggleCarAttachment @0x821FB8A0 (static tweaker callback)
-//   ToggleSloMo         @0x821FB8B8 (static tweaker callback)
-//   Update              @0x8222C618 (virtual) -- integrate the fly rig into the produced camera.
-//       Its Camera writes resolve to the homed Camera (the +0x140 flag word is Camera::mState_uFlags),
-//       its GetImplicitVelocity call is the committed VehicleTracker::GetImplicitVelocity() const,
-//       and its three foreign BehaviourSharedInfo fields (car position @+0x280, per-frame scale float
-//       @+0x580 [role unrecovered], VehicleTracker* @+0x5E0) are read by named accessor through the
-//       .cpp's file-local `detail::` shim (the type stays opaque; owning TU pins the offsets).
+// Every function declared here is bodied in the matching .cpp.
 //
-// Member layout is DWARF-attested (BrnBehaviourDebugFlyWorld.h member NAMES + order) with
-// byte offsets pinned by the X360 asm:
-//   Construct zeroes base bytes +8..+0xC and words +4/+0x10, sets mbWarpToCar@+0x7C,
-//     zeroes mbAttachedToCar@+0x7E / mbUseSloMo@+0x7F / meMoveSpeedState@+0x74 / mpParameters@+0x78.
-//   Prepare  writes mfYaw@+0x40, mfPitch@+0x44, mfRoll@+0x48, mfX@+0x4C, mfY@+0x50, mfZ@+0x54,
-//     mfFOV@+0x70, meMoveSpeedState@+0x74, the base "active" byte @+8, and zeroes
-//     mPosition@+0x20 / mCurrentPosition@+0x30.
-//   ChangeMovingSpeed writes the six speed floats mfMoveXSpeed@+0x58 .. mfRollSpeed@+0x6C.
-//   SetupTweaker binds the rig floats (this+0x40..+0x6C) and &mfFOV (+0x70).
-// The Behaviour base (vtable + shared flag block) has no committed home yet, so the
-// +0x00..+0x1F head is modelled inline with reserved bytes to pin the member offsets the
-// bodies store to; the two Vector3 rig positions start at the next 16-byte slot (+0x20).
-// Offsets in comments are X360 (4-byte-pointer) provenance; the x64 recon accesses every
-// member BY NAME (semantic parity, not byte-matching).
+// FLAG: the class is still a PRE-BASE FORK -- it carries its own vtable pointer and the
+// Behaviour base head as reserved bytes (+0x00..+0x1F) instead of deriving from
+// Camera::Behaviour, which is why the member offsets below are pinned by hand. Nothing
+// allocates it (the arbitrator's NewBehaviour<> calls are gated), so the fork is inert;
+// retiring it onto the real base is its own job.
+//
+// Offsets in comments are original-build (4-byte-pointer) provenance; the reconstruction
+// accesses every member BY NAME (semantic parity, not byte-matching).
 // ============================================================================
 
 #include "types.hpp"
@@ -63,7 +40,7 @@ class  Camera;                              // Update target (opaque here)
 class BehaviourDebugFlyWorld
 {
 public:
-    // DWARF: BrnBehaviourDebugFlyWorld.h:108. Which of three speed presets the fly rig is on;
+    // Which of three speed presets the fly rig is on;
     // ChangeMovingSpeed cycles SLOW -> NORMAL -> FAST -> SLOW.
     enum EMoveSpeedType
     {
@@ -74,50 +51,45 @@ public:
         E_MOVE_SPEED_TYPE_MAX    = 3,
     };
 
-    // The fly-rig parameter block (Behaviour::Parameters derivative). DWARF:
-    // struct Parameters : Behaviour::Parameters { void Construct(); }. Declaration-only here.
+    // The fly-rig parameter block (a Behaviour::Parameters derivative). Declaration-only here.
     class Parameters;
 
     // ------------------------------------------------------------------------
-    // Virtual interface (DWARF vtable order). Bodies not in this batch are declaration-only.
+    // Virtual interface, in vtable order.
     // ------------------------------------------------------------------------
-    virtual void        Construct();                                              // @0x82210088
-    virtual bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo); // @0x821FB738
-    virtual bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo); // @0x8222C618
-    virtual void        SetupTweaker(Utils::Tweaker& lrTweaker);                  // @0x822100E0
-    virtual const char* GetName() const;                                         // @0x821FB728
+    virtual void        Construct();                                              //
+    virtual bool        Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo); //
+    virtual bool        Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo); //
+    virtual void        SetupTweaker(Utils::Tweaker& lrTweaker);                  //
+    virtual const char* GetName() const;                                         //
 
     void SetParameters(const Parameters* lpParameters);
 
-    // Snap the fly camera to lEye looking at lLookAt (both world-space; the X360 passes the
-    // two Vector3s in VMX registers straight through the arbitrator wrapper). @0x8222CB10.
+    // Snap the fly camera to lEye looking at lLookAt (both world-space; the original build passes the
+    // two Vector3s in VMX registers straight through the arbitrator wrapper).
     void WarpToLookAt(Vector3 lEye, Vector3 lLookAt);
 
 private:
     // ------------------------------------------------------------------------
-    // Tweaker just-pressed callbacks. The X360 stores a plain function pointer with no
+    // Tweaker just-pressed callbacks. The original-build stores a plain function pointer with no
     // this-adjust into a void(*)(void*) slot, so these are static void(void*) callbacks;
-    // lpData is the BehaviourDebugFlyWorld* userData bound in SetupTweaker. DWARF lists them
-    // without the static flag (a known DWARF drop for static members); the asm proves the
-    // plain-address form, so static is required to compile the faithful &Class::Fn binding.
+    // lpData is the BehaviourDebugFlyWorld* userData bound in SetupTweaker.
     // ------------------------------------------------------------------------
-    static void ChangeMovingSpeed(void* lpData);    // @0x821FB790 (also called by Construct)
-    static void WarpToCar(void* lpData);            // @0x821FB860
-    static void LookAtCar(void* lpData);            // @0x821FB870
-    static void LevelOut(void* lpData);             // @0x821FB888
-    static void ToggleCarAttachment(void* lpData);  // @0x821FB8A0
-    static void ToggleSloMo(void* lpData);          // @0x821FB8B8
-    // The "Take Screenshot" callback SetupTweaker binds. Its X360 body was ICF-folded onto an
-    // identical empty routine (the export names it BaseCollisionGenerator::Destruct); DWARF
-    // attests it here as BrnBehaviourDebugFlyWorld.cpp:345. Declaration-only (body not in this
-    // TU's function set); required so SetupTweaker can take its address faithfully.
+    static void ChangeMovingSpeed(void* lpData);    // (also called by Construct)
+    static void WarpToCar(void* lpData);            //
+    static void LookAtCar(void* lpData);            //
+    static void LevelOut(void* lpData);             //
+    static void ToggleCarAttachment(void* lpData);  //
+    static void ToggleSloMo(void* lpData);          //
+    // The "Take Screenshot" callback SetupTweaker binds. The shipped build folded it onto an
+    // identical empty routine, so its recovered body is empty (see the .cpp).
     static void TakeScreenshot(void* lpData);
 
     // ------------------------------------------------------------------------
     // Members. Base Behaviour occupies +0x00..+0x1F (vtable + shared flag block; Construct
     // zeroes +4, bytes +8..+0xC, word +0x10). mbActive is the base byte @+8 that Prepare sets
     // to 1. The two 16-byte-aligned Vector3 rig positions start at the next 16-byte slot
-    // (+0x20); the owned scalar rig fields (DWARF names + order) follow at +0x40.
+    // (+0x20); the owned scalar rig fields follow at +0x40.
     // ------------------------------------------------------------------------
     void* mpVTable;                      // +0x00  Behaviour vtable (base head)
     u32   mBaseResetWord;                // +0x04  base reset word (Construct-zeroed)

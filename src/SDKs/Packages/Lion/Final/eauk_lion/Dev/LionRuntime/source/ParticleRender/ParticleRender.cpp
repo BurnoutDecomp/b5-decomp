@@ -2,12 +2,12 @@
 // SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/source/ParticleRender/ParticleRender.cpp
 //
 // cParticleRender -- the Lion (eauk_lion) particle-render pipeline driver. Reconstructed
-// from the X360 ARTIST pseudocode + assembly (behaviour authority) and the DecFIGS DWARF
-// (declaration shape).
+// behaviour-faithful against the shipped console build, with the declaration shape taken
+// from the original headers.
 //
-// LANDED HERE: cParticleRender::Dispatch (0x82911E98), and -- added 2026-09-03 by the boost-
-// exhaust wave -- Instance / AppInit / Update, none of which has a body of its own in the X360
-// image (all three are inlined into cLionFX::Init @0x82914A98, itself an export-set hole; see
+// LANDED HERE: cParticleRender::Dispatch, and -- added 2026-09-03 by the boost-
+// exhaust wave -- Instance / AppInit / Update, none of which has a body of its own in the
+// console image (all three are inlined into cLionFX::Init; see
 // the block above their definitions).
 //
 // The other three LEDGER functions in this TU are still declared-only, and the reasons below are
@@ -21,16 +21,16 @@
 // ON A TYPE -- it is blocked on the three cParticleEmitter::SimulateParticlesInBucketGeneral<>
 // kernels it calls (578 pseudocode lines between them), which have no bodies.
 //
-//   * cParticleRender::Render          (0x829147F8) -- BLOCKED. The per-emitter frustum cull
-//     is VMX128: it loads two un-recovered rodata constant tables (unk_8327F110, a vperm
-//     permute table; unk_83123740, a masking constant) whose bytes are not in the dossier,
-//     then runs vperm/vcmpgtfp/vcmpequw/vcmpeqfp over the packed frustum planes. The cull
+//   * cParticleRender::Render          -- BLOCKED. The per-emitter frustum cull
+//     is pure vector-unit code: it loads two un-recovered constant tables (a lane-permute
+//     table and a masking constant) whose bytes have not been recovered,
+//     then runs permute/compare sequences over the packed frustum planes. The cull
 //     cannot be faithfully reconstructed without those table bytes.
-//   * cParticleRender::EmitterCubeRender (0x82913C80) -- BLOCKED. The per-particle box clip
-//     is VMX128 (lvx128/stvx128/vsubfp/vmsum3fp128/fsel/fnmsubs over the bucket vectors) and
-//     multiplies by an un-recovered rodata float constant (flt_82F357F4); the snap-to-plane
-//     math cannot be reproduced without that constant's value.
-//   * cParticleRender::EmitterRender   (0x82913928) -- the type conflict that used to park it is
+//   * cParticleRender::EmitterCubeRender -- BLOCKED. The per-particle box clip
+//     is pure vector-unit code (lane loads/stores, subtracts, 3-component dot products and
+//     selects over the bucket vectors) and multiplies by an un-recovered float constant; the
+//     snap-to-plane math cannot be reproduced without that constant's value.
+//   * cParticleRender::EmitterRender   -- the type conflict that used to park it is
 //     GONE (see the banner). Its remaining blocker is its three callees: the
 //     cParticleEmitter::SimulateParticlesInBucketGeneral<> kernels for the Matrix (212 lines),
 //     Vector (132) and Local (234) bucket types. Everything else it needs now exists --
@@ -38,8 +38,8 @@
 //     are bodied, cParticleBucket::GetpMatrix is bodied, and the bucket walk it does
 //     (mpMatrices -> mpVectors -> locator) is the same three-way GetpMatrix documents.
 //
-// Dispatch's device path: the X360 build inlines the shadow-device sampler-state bind (the
-// dword_830109A8 compare + sub_827E8950 + store block) that shadow::Device::SetState owns;
+// Dispatch's device path: the console build inlines the shadow-device sampler-state bind (the
+// cached-state compare plus the setter-and-store block) that shadow::Device::SetState owns;
 // it is de-inlined back to that call here (semantic parity, one owning body -- AGENTS.md).
 // ============================================================================
 
@@ -52,12 +52,12 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"             // the emitter binding block
 #include "GameSource/Effects/Particles/EffectsVertexBuffer.h"   // the locked buffer + its Begin/EndBatch window
 // ⚠ THE LION SDK REACHES INTO THE GAME HERE, AND THAT IS THE CONSOLE'S OWN SHAPE, not a shortcut:
-// cParticleRender::Render @0x82914834 and ::EmitterRender @0x82913978 call
+// cParticleRender::Render and ::EmitterRender call
 // BrnParticle::LionParticleRender::GetCameraMatrix / RenderGroupBeginLite / GetVertexStride /
-// Render / RenderGroupEndLite with `bl`, NOT through the iParticleRender vtable -- the Lion
-// runtime in this build is compiled knowing its one concrete renderer. (The Vector arm's
-// sub_82289158 is a second, different `bl`, which is what proves these are not devirtualised
-// vtable calls: one slot cannot resolve to two addresses.)
+// Render / RenderGroupEndLite as DIRECT calls, NOT through the iParticleRender vtable -- the Lion
+// runtime in this build is compiled knowing its one concrete renderer. (The Vector arm calls a
+// second, different helper directly, which is what proves these are not devirtualised
+// vtable calls: one vtable slot cannot resolve to two different targets.)
 #include "GameSource/Effects/Particles/LionParticleRender.h"    // BrnParticle::LionParticleRender
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the one-shot EmitterCubeRender announcement
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"   // shadow::Device
@@ -68,9 +68,9 @@
 #include <cstdio>
 #include <cstdlib>   // [lionfx] getenv -- the BRN_LIONFX_NOCULL bring-up bypass    // snprintf -- the [lionfx] bring-up witness
 
-// --- Platform (Xbox 360 D3D) device + fast-path draw thunks ------------------------------------
-// The engine's single D3D device global (X360 off_83271608 == renderengine::gpD3DDevice, defined
-// in the renderengine device TU) and the two Xenon D3DDevice_* thunks Dispatch binds through. No
+// --- Platform D3D device + fast-path draw thunks -----------------------------------------------
+// The engine's single D3D device global (renderengine::gpD3DDevice, defined
+// in the renderengine device TU) and the two D3DDevice_* thunks Dispatch binds through. No
 // project TU homes the thunks; declared here as the minimal extern surface, matching the XDK d3d9
 // fast-set API and the shadow-device precedent (shadowingdevice.cpp).
 struct IDirect3DDevice9;
@@ -90,11 +90,11 @@ extern "C"
 // state's builder, part of the particle module's render init, is not landed.
 void* gpLionParticleSamplerState = nullptr;
 
-// The Xenon particle draw primitive type (X360 li r4, 0xD passed to D3DDevice_DrawVertices).
+// The particle draw primitive type the console passes to D3DDevice_DrawVertices.
 static const u32 KU_PARTICLE_PRIMITIVE_TYPE = 13;
 
 // ----------------------------------------------------------------------------
-// cParticleRender::Dispatch @ 0x82911E98
+// cParticleRender::Dispatch
 //
 // Replay the frame's accumulated batch list to the device. Called by cLionFX::Dispatch.
 // ----------------------------------------------------------------------------
@@ -128,7 +128,7 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
     }
 
     // Nothing to replay if the batch list is empty. GetLength() fires the "Array used before
-    // Construct/Clear was called" assert on the -1 sentinel, matching the X360 length read.
+    // Construct/Clear was called" assert on the -1 sentinel, matching the console length read.
     if (arBatchArray.GetLength() == 0)
     {
         return;
@@ -144,7 +144,7 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
     // out in the documented no-op SetSamplerStateLowLevel, so that call binds nothing twice over and
     // the pass runs on whatever sampler words the previous pass left on unit 0 (measured by the
     // [lionbind] probe: ADDRESSU/V = WRAP, the world path's non-cube default). The console's state is
-    // not a mystery -- it is ImRendererBase::ConstructOnceOnly @0x827F1C20's
+    // not a mystery -- it is ImRendererBase::ConstructOnceOnly's
     // ConstructSamplerState(alloc, 1, 0, 2, 2), i.e. min/mag LINEAR, mip NONE, address U/V CLAMP --
     // and this installs exactly those words. See the banner on LionParticleSampler_ApplyState.
     renderengine::LionParticleSampler_ApplyState(0);
@@ -155,7 +155,7 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
 
     // Walk every batch, opening a render group each time the material changes and issuing one
     // DrawVertices per batch. The length is re-read each iteration (its assert re-fires) to match
-    // the X360 loop.
+    // the console loop.
     const cParticleMaterial* lpCurrentMaterial = nullptr;
     for (u32 luIndex = 0; luIndex < arBatchArray.GetLength(); ++luIndex)
     {
@@ -255,27 +255,21 @@ void cParticleRender::Dispatch(renderengine::VertexBuffer* apVertexBuffer,
 // ================================================================================================
 // cParticleRender::Instance / ::AppInit / ::Update
 //
-// ⭐ NONE OF THE THREE HAS A BODY OF ITS OWN IN THE X360 IMAGE. All three are inlined into
-// cLionFX::Init @0x82914A98 and cLionFX::Update @0x82915758 -- and cLionFX::Init is an
-// EXPORT-SET HOLE: IDA names it in cParticleSystem::AppInit's `xrefs_to` but emits no
-// 0x82914A98.json, so it had no ledger row and no dossier. It was disassembled straight out of
-// the packed .i64 (tools/re/x360rd.py + a capstone PPC-BE pass) and cross-checked against the
-// DecFIGS DWARF, which declares all three (ParticleRender.h:165 / :174 / :224).
+// ⭐ NONE OF THE THREE HAS A BODY OF ITS OWN IN THE CONSOLE IMAGE. All three are inlined into
+// cLionFX::Init and cLionFX::Update -- and cLionFX::Init had no dossier of its own, being named
+// only from cParticleSystem::AppInit's cross-references. Its behaviour was recovered directly
+// from the shipped image and cross-checked against the original headers, which declare all
+// three.
 // ================================================================================================
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::Instance  (DWARF ParticleRender.h:165)
+// cParticleRender::Instance  (declared in the original header)
 //
 // A function-local static: that is the exact construct MSVC compiles into the guard-word +
-// atexit pair every inlining call site shows --
-//     lwz  r10, dword_82FAD080 ; clrlwi r11,r10,31 ; bne <done>
-//     ori  r11, r10, 1 ; stw r11, dword_82FAD080
-//     bl   atexit(<dynamic atexit destructor for 'm_instance'>)
-// -- and that mangled destructor symbol, which IDA prints in full as
-//     `cParticleRender::Instance'::`2'::`dynamic atexit destructor for 'm_instance''
-// is what names both the accessor (Instance) and the object (m_instance). The object itself is
-// 0x82FACC20 and the guard is 0x82FAD080, exactly 0x460 bytes later, which is
-// sizeof(cParticleRender): see the layout note in the header.
+// atexit pair every inlining call site shows -- test the guard's low bit, set it, then register
+// a dynamic atexit destructor for the object. The mangled destructor symbol names both the
+// accessor (Instance) and the object (m_instance). The object sits exactly 0x460 bytes before
+// its own guard word, which is sizeof(cParticleRender): see the layout note in the header.
 // ------------------------------------------------------------------------------------------------
 cParticleRender& cParticleRender::Instance()
 {
@@ -284,17 +278,17 @@ cParticleRender& cParticleRender::Instance()
 }
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::AppInit  (DWARF ParticleRender.h:174)
+// cParticleRender::AppInit  (declared in the original header)
 //
-// Recovered from cLionFX::Init @0x82914A98, 0x82914B9C..0x82914C08, store for store. The eight
-// lod distances come from eight separate .rdata floats, read out of the image (tools/re/x360rd.py):
-//     +0x40 <- flt_820049E0 = 100.0     +0x50 <- flt_82004C6C =  60.0
-//     +0x44 <- flt_82004F64 =  90.0     +0x54 <- flt_820138DC =  50.0
-//     +0x48 <- flt_82004A18 =  80.0     +0x58 <- flt_82004D0C =  40.0
-//     +0x4C <- flt_820051BC =  70.0     +0x5C <- flt_82004F5C =  30.0
-// Eight distinct rodata slots rather than one table is what makes these eight separate literal
+// Recovered from the inlined copy inside cLionFX::Init, store for store. The eight lod distances
+// come from eight separate read-only float constants in the shipped image:
+//     +0x40 <- 100.0     +0x50 <-  60.0
+//     +0x44 <-  90.0     +0x54 <-  50.0
+//     +0x48 <-  80.0     +0x58 <-  40.0
+//     +0x4C <-  70.0     +0x5C <-  30.0
+// Eight distinct constant slots rather than one table is what makes these eight separate literal
 // statements in the source rather than an initialised array -- so they are written as eight
-// SetLodDistance calls, which is also the accessor the DWARF gives them (h:207).
+// SetLodDistance calls, which is also the accessor the original header gives them.
 //
 // ⛔ NOT TUNING. These are the console's own numbers, read out of the console's own image. If a
 // particle LOD later looks wrong, the fix is a transcription defect somewhere else, not a nudge
@@ -309,8 +303,8 @@ cParticleRender& cParticleRender::Instance()
 void cParticleRender::AppInit(EA::Allocator::ITaggedAllocator* apAllocator,
                               iParticleRender* apRenderer)
 {
-    mpAllocator = apAllocator;   // stw r30, 0(r11)   @0x82914BAC
-    mpRenderer  = apRenderer;    // stw r26, 4(r11)   @0x82914BBC
+    mpAllocator = apAllocator;   // the store at record +0x00
+    mpRenderer  = apRenderer;    // the store at record +0x04
 
     SetLodDistance(0, 100.0f);
     SetLodDistance(1,  90.0f);
@@ -323,13 +317,13 @@ void cParticleRender::AppInit(EA::Allocator::ITaggedAllocator* apAllocator,
 }
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::Update  (DWARF ParticleRender.h:224)
+// cParticleRender::Update  (declared in the original header)
 //
 // ⚠ ATTESTED EMPTY -- this is a transcription, not a stub, and the distinction is the whole point
-// of the trap-stub rule. The DWARF for cLionFX::Update (LionFX.cpp:111) lists exactly two calls:
-// cParticleRender::Instance() and cParticleRender::Update(). The X360 body of cLionFX::Update
-// @0x82915758 is nine instructions: the magic-static guard, the atexit, and a tail call to
-// cParticleEmitterManager::Update. There is no third call, no store, and no register traffic
+// of the trap-stub rule. The original cLionFX::Update makes exactly two calls:
+// cParticleRender::Instance() and cParticleRender::Update(). Its console body is nine
+// instructions long: the magic-static guard, the atexit registration, and a tail call to
+// cParticleEmitterManager::Update. There is no third call, no store, and nothing else
 // between the guard and the tail -- so Update() had nothing in it on this build. A __debugbreak
 // here would fire every frame for a function the console runs every frame and that does nothing.
 // ------------------------------------------------------------------------------------------------
@@ -346,7 +340,7 @@ void cParticleRender::Update(const cTime& /*arTime*/)
 // record is the exception and the assertions prove it: the console's two 4-byte pointers plus four
 // 4-byte scalars come to 0x18, which the 16-byte-aligned mCamPos pads to 0x20; on the host the same
 // two pointers are 8 bytes each, giving 0x20 with NO padding. The widening is absorbed by padding
-// the console already had, so every member from mCamPos onward -- including mLodDistances at 0x40,
+// the console already had, so every member from mCamPos onward -- including mLodDistances at +0x40,
 // which is where cLionFX::Init's eight stores land -- sits at the SAME byte offset on both ABIs,
 // and sizeof is 0x460 on both.
 //
@@ -361,25 +355,25 @@ void cParticleRender::Update(const cTime& /*arTime*/)
 void cParticleRender::_AssertLayout()
 {
     // The two cVectors must be 16-byte aligned: that alignment is what puts mLodDistances on 0x40.
-    static_assert(alignof(cVector) == 16, "cVector must be 16-byte aligned (X360 vector stride/align)");
+    static_assert(alignof(cVector) == 16, "cVector must be 16-byte aligned (vector stride/align)");
     static_assert(sizeof(cVector) == 16,  "cVector must be 16 bytes");
 
     static_assert(offsetof(cParticleRender, mpAllocator) == 0x00,
-                  "mpAllocator @+0x00 -- cLionFX::Init `stw r30, 0(r11)` @0x82914BAC");
+                  "mpAllocator at +0x00 -- cLionFX::Init's first store");
     static_assert(offsetof(cParticleRender, mpRenderer) == sizeof(void*),
-                  "mpRenderer follows mpAllocator -- cLionFX::Init `stw r26, 4(r11)` @0x82914BBC");
+                  "mpRenderer follows mpAllocator -- cLionFX::Init's second store");
     static_assert(offsetof(cParticleRender, mCamPos) == 0x20,
-                  "mCamPos @+0x20 (DWARF ParticleRender.h:255) -- 16-byte aligned after the "
+                  "mCamPos at +0x20 (declared in the original header) -- 16-byte aligned after the "
                   "two pointers + four scalars");
     static_assert(offsetof(cParticleRender, mCamDir) == 0x30,
-                  "mCamDir @+0x30 (DWARF ParticleRender.h:256)");
+                  "mCamDir at +0x30 (declared in the original header)");
     static_assert(offsetof(cParticleRender, mLodDistances) == 0x40,
-                  "mLodDistances @+0x40 -- the eight stfs in cLionFX::Init @0x82914BA8..0x82914C08");
+                  "mLodDistances at +0x40 -- the eight float stores in cLionFX::Init");
     static_assert(offsetof(cParticleRender, mFogAlphas) == 0x60,
-                  "mFogAlphas @+0x60, right after the 8-entry lod table");
+                  "mFogAlphas at +0x60, right after the 8-entry lod table");
     static_assert(sizeof(cParticleRender) == 0x460,
-                  "sizeof(cParticleRender) == 0x460 -- the object at 0x82FACC20 ends exactly at "
-                  "its magic-static guard word 0x82FAD080");
+                  "sizeof(cParticleRender) == 0x460 -- the object ends exactly at "
+                  "its magic-static guard word");
 }
 
 
@@ -396,71 +390,71 @@ void cParticleRender::_AssertLayout()
 //
 // ⚠ THE PERFMON BRACKETS ARE NOT REPRODUCED, for this project's standing reason (the same
 // paragraph ParticleModule.cpp carries): nothing on this build calls LionPerfMon::Construct, so
-// every id in dword_82FAB638 / 64C / 650 / 654 / 658 / 65C is 0 and a bracket here would time one
+// every one of the six perfmon id words is 0 and a bracket here would time one
 // shared id -- a diagnostic that reports something other than its name. They are timing only; no
 // behaviour rides on them.
 // =================================================================================================
 
-// The Lion runtime's single fog descriptor (X360 unk_83122E08 == cLionFog::mSingleton, DWARF
-// LionFog.h:5). Both EmitterRender and EmitterCubeRender pass its address as the `lpFog` argument
+// The Lion runtime's single fog descriptor (cLionFog::mSingleton, declared in the original
+// header). Both EmitterRender and EmitterCubeRender pass its address as the `lpFog` argument
 // of every iParticleRender::Render call. cLionFog has no reconstructed body in this tree and
 // nothing on the landed draw path reads the pointer (LionParticleRender::Render's apFog parameter
 // is unused), so it is carried as a null here rather than pointing at a fabricated object --
 // stated, not hidden. DELETE-WHEN cLionFog lands: this becomes &cLionFog::mSingleton.
-static const cLionFog* const gpLionFogSingleton = 0;   // X360 &unk_83122E08
+static const cLionFog* const gpLionFogSingleton = 0;   // stands in for &cLionFog::mSingleton
 
-// The cull constants, all three read out of the image rather than chosen:
-//   flt_82005D9C == 10000.0  -- the RANGE test is on the SQUARED distance, so this is 100 m.
-//   unk_83123740 <- CRT thunk 0x82C70810 : splat4(*(float*)0x820FEC58) == splat4(8.0)
-//   flt_820C26C0 == -8.0     -- the same 8 metres, behind the eye.
+// The cull constants, all three read out of the shipped image rather than chosen:
+//   10000.0  -- the RANGE test is on the SQUARED distance, so this is 100 m.
+//   8.0      -- the cull radius, splatted across all four lanes by a startup initialiser.
+//   -8.0     -- the same 8 metres, behind the eye.
 static const f32 KF_EMITTER_CULL_RANGE_SQ = 10000.0f;
 static const f32 KF_EMITTER_CULL_RADIUS   = 8.0f;
 static const f32 KF_EMITTER_CULL_BEHIND   = -8.0f;
 
 // The simulation run EmitterRender streams through: 32 RenderedParticle and 32 side-array
-// elements (DWARF ParticleRender.cpp:501-502 -- `RenderedParticle[32] lParticle` and
-// `cMatrix[32] lParticleMatrices`), which is also what the X360 stack frame measures (0x800 of
-// cMatrix at sp+0x280 and 0xE00 of RenderedParticle at sp+0xA80).
+// elements (the original locals are `RenderedParticle[32] lParticle` and
+// `cMatrix[32] lParticleMatrices`), which is also what the console stack frame measures: 0x800
+// bytes of cMatrix and 0xE00 bytes of RenderedParticle.
 static const u32 KU_SIMULATION_RUN = 32;
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::Render  @ 0x829147F8   (DWARF ParticleRender.cpp:299, locals lMat / lpEmitter)
+// cParticleRender::Render   (the original locals are lMat / lpEmitter)
 //
-// ⭐⭐ THE TWO RODATA TABLES THE OLD TRAP CALLED "UN-RECOVERED" ARE BOTH READ, and neither is
-// exotic -- they were dynamically-initialised .bss, which reads 0x00000000 by definition:
-//     unk_8327F110 <- CRT thunk 0x82C740E0 : the word 0x0004080C four times
-//                     => vperm(A,A,tbl) gathers the TOP BYTE of each of A's four words into every
-//                        byte of every output word: the classic "reduce four lane masks to one".
-//     unk_83123740 <- CRT thunk 0x82C70810 : splat4(*(float*)0x820FEC58) == splat4(8.0)
+// ⭐⭐ THE TWO CONSTANT TABLES THE OLD TRAP CALLED "UN-RECOVERED" ARE BOTH READ, and neither is
+// exotic -- they are dynamically initialised at startup, so they read as zero in the image:
+//     a lane-permute table holding the word 0x0004080C four times
+//                     => permuting a vector through it gathers the TOP BYTE of each of its four
+//                        words into every byte of every output word: the classic "reduce four
+//                        lane masks to one".
+//     a constant vector holding 8.0 splatted across all four lanes
 //                     => an 8-metre cull radius, and the same 8 the near test's -8.0 uses.
-// (tools/re/findinit.py -> tools/re/ppcdis.py -> tools/re/x360rd.py, the ParticleBuild recipe.)
 //
 // WHAT IT DOES, in the console's order:
 //   1. Take the camera basis from the RENDERER, not from this object:
 //      LionParticleRender::GetCameraMatrix returns mCameraTransform by value, and this function
-//      keeps its TRANSLATION row as mCamPos (`stvx128 v0, r31, 0x20`) and its Z row as mCamDir
-//      (`stvx128 v13, r0, r20` with r20 == this + 0x30). ⚠ Row 3 is the position and row 2 is the
+//      keeps its TRANSLATION row as mCamPos (stored at +0x20) and its Z row as mCamDir
+//      (stored at +0x30). ⚠ Row 3 is the position and row 2 is the
 //      direction -- taking row 3 for both (or transposing them) silently culls the whole world.
-//   2. mParticlesRenderedCount = 0 (`stw r22, 8(r31)`), the per-frame vertex tally EmitterRender
+//   2. mParticlesRenderedCount = 0 (the word at +0x08), the per-frame vertex tally EmitterRender
 //      accumulates into.
 //   3. For every emitter on the manager's USED list (mpUsed @+0x18, walked by mpNext @+0x204):
 //        * descriptor CELL_RENDER_FLAG (0x8) -> EmitterCubeRender, unconditionally. No cull: a
 //          cell emitter is anchored to the camera, so it is always on screen.
 //        * else, only if the emitter is ACTIVE (mFlags bit 0):
-//            - RANGE: |locatorPos - camPos|^2 < 10000 (flt_82005D9C, i.e. 100 m).
+//            - RANGE: |locatorPos - camPos|^2 < 10000, i.e. 100 m.
 //            - FRUSTUM: the renderer's packed LRTB planes at +0x120..+0x150, four planes at a time.
 //              row0*p.x + row1*p.y + row2*p.z + 8 must be > the plane distances on ALL FOUR lanes.
 //              ⭐ THE PLANE CONVENTION IS THE CAMERA'S OWN and the two halves agree exactly:
 //              CgsGraphics::Camera stores each plane as (N, D) with dot3(N,p) == D and N pointing
-//              INTO the volume (CgsCamera.h:44), so `dot + 8 > D` is "inside, with an 8 m slack" --
-//              the same 8 the splat above carries. The four-lane AND is the vperm/vcmpequw/
-//              vcmpeqfp. reduction: gather the four masks' top bytes, test the word against
-//              0xFFFFFFFF (== all four inside), then read CR6's all-true bit.
+//              INTO the volume (see CgsCamera.h), so `dot + 8 > D` is "inside, with an 8 m slack" --
+//              the same 8 the splatted constant above carries. The four-lane AND is the
+//              permute-and-compare reduction: gather the four masks' top bytes, test the word
+//              against 0xFFFFFFFF (== all four inside), then read the all-true condition bit.
 //              ⚠ THE PACKED ROWS ARE SoA, NOT FOUR PLANES. ParticleModule::BuildLionVertexBuffers
 //              builds them by transposing GetFrustum's planes 2..5 (left/right/top/bottom) with
-//              six vperm + three vsldoi, so row 0 is (Lx,Rx,Tx,Bx) and row 3 is (Ld,Rd,Td,Bd).
+//              a permute/shift sequence, so row 0 is (Lx,Rx,Tx,Bx) and row 3 is (Ld,Rd,Td,Bd).
 //              Reading a row as one plane is the mistake that would make this cull nonsense.
-//            - NEAR: dot(mCamDir, locatorPos - camPos) > -8.0 (flt_820C26C0). The same 8 metres
+//            - NEAR: dot(mCamDir, locatorPos - camPos) > -8.0. The same 8 metres
 //              again, this time behind the eye, which is why an emitter just behind the camera
 //              plane still draws its trailing particles.
 //          Survivors go to EmitterRender.
@@ -477,11 +471,11 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
     BrnParticle::LionParticleRender* const lpRenderer =
         static_cast<BrnParticle::LionParticleRender*>(mpRenderer);
 
-    // --- the camera basis, out of the concrete renderer (asm words 5-14) ----------------------
+    // --- the camera basis, out of the concrete renderer ---------------------------------------
     const cMatrix lCameraTransform = lpRenderer->GetCameraMatrix();
 
-    mCamPos = lCameraTransform.wa;   // stvx128 v0, r31, 0x20
-    mCamDir = lCameraTransform.za;   // stvx128 v13, r0, (this + 0x30)
+    mCamPos = lCameraTransform.wa;   // stored at +0x20
+    mCamDir = lCameraTransform.za;   // stored at +0x30
     mParticlesRenderedCount = 0;
 
     const rw::math::vpu::Matrix44& lrFrustum = lpRenderer->GetPackedFrustumLrtb();
@@ -599,7 +593,7 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
         // bar pinned to the CAR at an offset nothing authored". THE THIRD OBJECT IS NOT A PLUME
         // AND NOT A LION DRAW. It is the HUD BOOST BAR -- BrnGui::BoostBarRenderer's fire body,
         // green because this car's EBoostType is E_BOOST_TYPE_STUNT, whose authored inner colour
-        // KV3_BOOSTTYPE_STUNT_INNER_COLOUR is {0.375, 0.95, 0.30} (BrnBoostBarRenderer.cpp:68).
+        // KV3_BOOSTTYPE_STUNT_INNER_COLOUR is {0.375, 0.95, 0.30} (see BrnBoostBarRenderer.cpp).
         // ⚠ AND THE COLOUR CLAIM IS THE HUE, NOT A RATIO -- the first cut of this banner quoted
         // "78/189/61 == 0.41/1.00/0.32 normalised, a match", and that mean was taken over a window
         // that swept in the debug strip's PURE-GREEN squares and fps text, which pulled it toward
@@ -681,10 +675,10 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
 }
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::EmitterRender  @ 0x82913928   (DWARF ParticleRender.cpp:459)
+// cParticleRender::EmitterRender
 //
-// ONE emitter, one material, one batch. The local names below are the DWARF's own
-// (ParticleRender.cpp:463-589): lMaterial / lCurrentLocatorTime / lBindingsLocatorMat / lpFog /
+// ONE emitter, one material, one batch. The local names below are the original source's own:
+// lMaterial / lCurrentLocatorTime / lBindingsLocatorMat / lpFog /
 // lpBucket / luVertexStride / lVertexIterator / lBatch / lParticle[32] / lParticleMatrices[32] /
 // lParticleVectors[32] / lTotalNumParticlesSimulated.
 //
@@ -702,25 +696,25 @@ void cParticleRender::Render(EffectsVertexBufferLocked& arVertexBuffer,
 //       if the batch emitted anything: tag it with the material and Append it
 //   RenderGroupEndLite()
 //
-// ⭐ THE `n + 16 >= 32` FLUSH IS A HEADROOM TEST, NOT A FULLNESS TEST (`addi r11, r31, 0x10 ;
-// cmplwi cr6, r11, 0x20 ; bge`). 16 is cParticleBucket::KU_MAX_PARTICLES -- the most the NEXT
+// ⭐ THE `n + 16 >= 32` FLUSH IS A HEADROOM TEST, NOT A FULLNESS TEST: the console adds 16 to the
+// running count and branches when the sum reaches 32. 16 is cParticleBucket::KU_MAX_PARTICLES -- the most the NEXT
 // bucket could add -- and 32 is the arrays' capacity. So it flushes when one more bucket could
 // overflow, which is why the arrays are 32 and not 16: two buckets' worth minus one.
 //
 // ⭐ THE THREE ARMS PICK THEIR KERNEL FROM THE **FIRST** BUCKET AND NEVER RE-TEST IT
-// (`lwz r11, 0xE60(r27)` @0x829139C0 with r27 still the head). All of an emitter's buckets come
+// (it reads the kind word at emitter +0xE60 while still on the list head). All of an emitter's buckets come
 // from the same descriptor and therefore the same pool, so the kind cannot change mid-list; but
 // the loop really is three separate loops in the binary, each with its own arrays, which is why
 // this reads as duplication rather than one loop with a switch inside.
 //
-// ⚠ THE DRAW IS GATED ON THE BINDING'S WORLD INDEX (`lwz r11, 0x1FC(r29) ; lwz r11, 4(r11)`,
-// i.e. cLionBindings::GetWorldIndex() == 0). The simulation still runs for a non-zero world -- the
+// ⚠ THE DRAW IS GATED ON THE BINDING'S WORLD INDEX (the binding pointer at emitter +0x1FC, then
+// its own +0x04 -- i.e. cLionBindings::GetWorldIndex() == 0). The simulation still runs for a non-zero world -- the
 // particles advance and the count is still added to mParticlesRenderedCount -- only the draw call
 // is skipped. That is how the player's own effects leave the outside view while the bumper camera
 // is up without their state drifting.
 //
-// ⚠ AND THE VECTOR ARM CALLS A DIFFERENT RENDER OVERLOAD (sub_82289158 == the `const cVector*`
-// Render the DWARF declares at ParticleRender.h:8/:170), not the cMatrix one. It is the same draw
+// ⚠ AND THE VECTOR ARM CALLS A DIFFERENT RENDER OVERLOAD (the `const cVector*` Render the
+// original header declares alongside the cMatrix one), not the cMatrix one. It is the same draw
 // with an adapter in front of it; see LionParticleRender.cpp.
 // ------------------------------------------------------------------------------------------------
 void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuffer,
@@ -864,7 +858,7 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
 }
 
 // ------------------------------------------------------------------------------------------------
-// cParticleRender::EmitterCubeRender  @ 0x82913C80 (448 instructions) -- NOT RECONSTRUCTED, and
+// cParticleRender::EmitterCubeRender  (448 instructions on the console) -- NOT RECONSTRUCTED, and
 // announced ONCE rather than asserted or passed over without a word.
 // (The two-word phrase for that last failure mode is what the faithfulness lint flags as
 // invented-format vocabulary, so it is spelled out longhand -- same reason BrnLionBlendRenderer.cpp
@@ -879,22 +873,22 @@ void cParticleRender::EmitterRender(const EffectsVertexBufferLocked& arVertexBuf
 // WHAT IT IS, from the pseudocode, so the next wave does not start cold. A CELL emitter is a
 // camera-anchored volume (rain / dust / snow): its particles are wrapped into an axis-aligned box
 // that follows the camera, and faded by distance from the box centre.
-//   * The box is built from the descriptor's mpBehaviour[+0x280] half-extent (`*(v11 + 640)`) and
+//   * The box is built from the descriptor's mpBehaviour +0x280 half-extent and
 //     the camera position, one axis at a time: lo = camPos.a * e + locator.a - e, hi = ... + e,
-//     with the wrap span 2*e (`v16 = 2.0 * e`).
+//     with the wrap span 2*e.
 //   * BeginBatch / the three simulation kernels / EndBatch / Append are the SAME shape as
 //     EmitterRender above -- one batch, one material, the same three-way bucket-kind selection,
-//     and the same `sub_82289158` vs `LionParticleRender::Render` split on the vector arm. The
+//     and the same cVector-overload vs cMatrix-overload split on the vector arm. The
 //     only structural difference is that it uses ONE pair of arrays for all three kinds
-//     (v115/v112 + v113) and draws after every bucket rather than on a headroom test.
+//     and draws after every bucket rather than on a headroom test.
 //   * Between simulate and draw it runs TWO extra passes the other renderer does not have:
 //       - a DISTANCE FADE, unrolled x4: d2 = |particle.mPos - camPos|^2, then
-//         alpha' = alpha - alpha * (1 - d2/(2e)^2) * flt_82F357F4, selected with `fsel` so the
-//         clamp is branchless. flt_82F357F4 is NOT yet read out of the image.
+//         alpha' = alpha - alpha * (1 - d2/(2e)^2) * K, with a branchless select for the
+//         clamp. K is NOT yet read out of the image.
 //       - a WRAP: each of the three position axes is folded back into [lo, hi] with a
 //         `(p - hi) / span` truncate-and-subtract, which is what makes the volume infinite.
 //
-// WHAT IS NEEDED TO FINISH IT: the value of flt_82F357F4, the exact lane order of the four-wide
+// WHAT IS NEEDED TO FINISH IT: the value of that fade constant K, the exact lane order of the four-wide
 // fade (the unrolled block indexes lParticle at +3/+31/+59/+87 floats, i.e. the .w of mPos across
 // four 112-byte records), and the three-axis wrap's sign conventions. All three are ordinary
 // reads; none is blocked.
@@ -912,7 +906,7 @@ void cParticleRender::EmitterCubeRender(const EffectsVertexBufferLocked& /*arVer
     {
         sbLogged = true;
         CgsDev::Log::WriteToLog(
-            "[effects] NOT RECONSTRUCTED: cParticleRender::EmitterCubeRender @0x82913C80 (the "
+            "[effects] NOT RECONSTRUCTED: cParticleRender::EmitterCubeRender (the "
             "CELL_RENDER camera-anchored volume: the per-particle distance fade and the "
             "three-axis wrap). Emitters with CELL_RENDER_FLAG neither simulate nor draw; every "
             "other emitter kind is unaffected.\n");

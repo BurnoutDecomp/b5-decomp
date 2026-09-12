@@ -93,6 +93,17 @@ void MomentTumbling::Construct()
     mpParameters           = 0;
 }
 
+// Arm the search: park the state machine at SEARCHING and clear the smoothed
+// angular velocity the tumble test integrates (one 16-byte zero store over the
+// whole lane register). It allocates nothing -- the gyro rig is allocated in
+// Update, once the tumble conditions read true -- and always reports prepared.
+bool MomentTumbling::Prepare(void* /* lrBehaviourController */)
+{
+    SetState(E_STATE_INVALID_SEARCHING);
+    mSmoothedAngularVelocity.SetZero();
+    return true;
+}
+
 // The inlined guarded handle Release, the gate clears,
 // the searching head bit, then park at INACTIVE (state 0 -- this moment's
 // distinct Release target).

@@ -1,7 +1,7 @@
 // ===================================================================================
 // BrnGui::OnlineGameOptions -- wave-I partfile 09: the two big handlers.
-//   HandleGuiCacheEvent             @0x824A85E8  (assert cpp:1048)
-//   HandleControllerInputCreateGame @0x824A7878  (assert cpp:494)
+//   HandleGuiCacheEvent
+//   HandleControllerInputCreateGame
 //
 //
 // The committed leaf header BrnOnlineGameOptions.h is still the MINIMAL pre-wave version
@@ -12,7 +12,7 @@
 // mpGuiCache / mGameOptions / miStartItem / the component members / the class statics / the
 // sibling methods it calls. Both additionally need the GuiCache friendship grant the wave-C
 // HudMessageAnalyzer and wave-H OnlineGameRoomPlayerInfo keystones already hold
-// (BrnGuiCache.h:44 / :661) -- mbOnlineMatchRanked, mbOnlineMatchUnranked,
+// (in BrnGuiCache.h) -- mbOnlineMatchRanked, mbOnlineMatchUnranked,
 // mbOnlineStartPending and maOnlineGameModeOptionsStorage are private with no read accessors.
 //
 // The two complete bodies, each with a banner naming the EXACT declaration lines that
@@ -24,28 +24,26 @@
 // MEASURED CORRECTION TO THE WAVE-I SPEC (spec §5 TRAP 2) -- THE CONDUCTOR SHOULD READ THIS.
 // The spec says HandleControllerInputCreateGame's '+' / ',' arms compare a ZERO-extended
 // miHighlightedIndex against GetIndexFromId(0), so a -1 (no row highlighted) reads back as
-// 255 and can never match. THE ASSEMBLY SAYS OTHERWISE -- both arms do
-//     lbz   r11, 0x11A5(r31)     ; the s8 SelectableGroup::miHighlightedIndex
-//     extsb r30, r11             ; SIGN-extend
-//     cmpw  cr6, r30, r3         ; signed word compare against GetIndexFromId's s32
-// (0x824A7A34/0x824A7A40/0x824A7A48 and 0x824A7AA8/0x824A7AB4/0x824A7ABC). `extsb` is a
-// console by reading the s8 member straight into an s32; the `static_cast<u8>` the spec
-// prescribes would be a live behaviour change. (0x11A5 == 4517 == mCreateGameToggles(4352)
-// + SelectableGroup::miHighlightedIndex(+0xA5), which corroborates the member exactly.)
+// 255 and can never match. THE CONSOLE SAYS OTHERWISE -- both arms read the s8
+// SelectableGroup::miHighlightedIndex, SIGN-extend it, and compare it as a signed word
+// against GetIndexFromId's s32, so -1 == -1 IS taken. Reproduced by matching the
+// console: read the s8 member straight into an s32; the `static_cast<u8>` the spec
+// prescribes would be a live behaviour change. (The member's reach is +0x11A5 == 4517 ==
+// mCreateGameToggles(4352) + SelectableGroup::miHighlightedIndex(+0xA5), which
+// corroborates the member exactly.)
 //
-// VTABLE SLOTS MEASURED, NOT ASSUMED (headless IDA -> scratchpad/waveI/g09_vt.txt). The
-// MenuToggleGroupVarSize<5> constructor @0x824F9AA0 stores off_820730AC at +0x00 (and
-// off_820730A8, its GuiComponent sub-object table, at +0x18), so the dispatch displacements
-// these bodies show resolve against 0x820730AC as:
+// VTABLE SLOTS MEASURED, NOT ASSUMED. The MenuToggleGroupVarSize<5> constructor stores its
+// own dispatch table at +0x00 (and its GuiComponent sub-object table at +0x18), so the
+// dispatch displacements these bodies show resolve against that table as:
 //     +0x18 -> MenuToggleGroupVarSize<5>::Clear
 //     +0x28 -> SelectableGroup::HighlightNext        (arg 0 == lbQuiet false)
 //     +0x2C -> SelectableGroup::HighlightPrevious    (arg 0 == lbQuiet false)
 //     +0x30 -> SelectableGroup::HighlightIndex
 //     +0x34 -> MenuToggleGroupVarSize<5>::HighlightNextItem
 //     +0x38 -> MenuToggleGroupVarSize<5>::HighlightPreviousItem
-// KPC_ARROW_ANIMATION_STATES @0x82F2683C = { "invisible", "visible", "animate" }.
+// KPC_ARROW_ANIMATION_STATES = { "invisible", "visible", "animate" }.
 //
-// NO CONSOLE LAYOUT LITERALS. Every X360 displacement in these two bodies (this+0xA500 ==
+// NO CONSOLE LAYOUT LITERALS. Every console displacement in these two bodies (this+0xA500 ==
 // mpGuiCache, this+0xA0C0 == mGameOptions, this+0xA50C == miStartItem, this+0x7A90/0x7B1C ==
 // the two arrow animators, this+0x7A94.. == the six component names, cache+0xA800 == the
 // params mirror, cache+0xA9E0 == the changed flag, cache+0x12B80/0x12B84 == the two profile
@@ -80,7 +78,7 @@
 //      GuiCache::AppendExpectedAptComponent(GuiFlow, const char*) -- BrnGuiCache.cpp:853
 //        (and GuiCache::GetOptionsDataProfile at :886),
 //      CgsGui::GuiComponent::AddOutputAptViewState -- CgsGuiComponent.cpp:40.
-//    GuiCache::IsMultiplayerAllowed is genuinely body-less (decl BrnGuiCache.h:451) but is
+//    GuiCache::IsMultiplayerAllowed is bodied (BrnGuiCache_wB_10.cpp) but is
 //    NOT a callee of either body here -- it is CheckPrivileges, group 02, that calls it.
 // ===================================================================================
 
@@ -109,54 +107,51 @@ namespace BrnGui
 //
 // ⭐⭐ MEASURED CORRECTION TO THE WAVE-I SPEC (spec §5 TRAP 2). The spec says the '+' / ','
 // arms compare a ZERO-extended miHighlightedIndex against GetIndexFromId(0), so a -1 (no row
-// highlighted) reads back as 255 and can never match a -1 index. THE ASSEMBLY SAYS OTHERWISE:
-//     0x824A7A34  lbz   r11, 0x11A5(r31)   ; the s8 SelectableGroup::miHighlightedIndex
-//     0x824A7A40  extsb r30, r11           ; SIGN-extend
-//     0x824A7A48  cmpw  cr6, r30, r3       ; signed word compare vs GetIndexFromId's s32
-// and identically at 0x824A7AA8/0x824A7AB4/0x824A7ABC in the ',' arm. `extsb` sign-extends,
-// so -1 == -1 IS taken. Reproduced verbatim below by reading the s8 member straight into an
-// s32; do NOT re-introduce a u8 cast. (0x11A5 == 4517 == mCreateGameToggles(4352) +
+// highlighted) reads back as 255 and can never match a -1 index. THE CONSOLE SAYS OTHERWISE:
+// both arms read the s8 SelectableGroup::miHighlightedIndex, SIGN-extend it, and compare it
+// as a signed word against GetIndexFromId's s32, so -1 == -1 IS taken. Reproduced verbatim
+// below by reading the s8 member straight into an s32; do NOT re-introduce a u8 cast.
+// (The member's reach is +0x11A5 == 4517 == mCreateGameToggles(4352) +
 // SelectableGroup::miHighlightedIndex(+0xA5) -- the offset corroborates the member exactly.)
 //
-// ⭐ VTABLE SLOTS MEASURED, NOT ASSUMED (headless IDA, scratchpad/waveI/g09_vt.txt). The
-// MenuToggleGroupVarSize<5> ctor @0x824F9AA0 stores off_820730AC at +0x00, so the dispatch
-// displacements resolve as +0x18 Clear, +0x28 SelectableGroup::HighlightNext, +0x2C
+// ⭐ VTABLE SLOTS MEASURED, NOT ASSUMED. The MenuToggleGroupVarSize<5> ctor stores its own
+// dispatch table at +0x00, so the dispatch displacements resolve as +0x18 Clear,
+// +0x28 SelectableGroup::HighlightNext, +0x2C
 // SelectableGroup::HighlightPrevious, +0x30 SelectableGroup::HighlightIndex, +0x34
 // HighlightNextItem, +0x38 HighlightPreviousItem. All are called by name below.
 //
-// NOTES TAKEN FROM THE ASM RATHER THAN HEX-RAYS
-// ---------------------------------------------
-//  * Hex-Rays lost the live range of the miStartItem base register in BOTH scroll arms and
-//    printed `*v20 = v19;` / `*v27 = v28 + 1;` with v20/v27 never assigned. The asm computes
-//    it as `addis r7, r31, 1 / addi r7, r7, -0x5AF4` == this + 0xA50C == miStartItem in each
-//    arm (0x824A7B2C and 0x824A7C9C).
+// NOTES TAKEN FROM THE CONSOLE'S OWN CODE, NOT A DECOMPILER'S PRINT-OUT
+// --------------------------------------------------------------------
+//  * A decompiler loses the live range of the miStartItem base register in BOTH scroll arms
+//    and prints `*v20 = v19;` / `*v27 = v28 + 1;` with v20/v27 never assigned. The console
+//    forms the address as this + 0xA50C == miStartItem in each arm.
 //  * The five-call window rebuild (StoreCreateGameOptions / Clear / SetupGroup(5,false) /
 //    SetupCommonCreateGameOptions / HighlightCreateGameOptions) appears FOUR times, written
 //    out each time -- there is no `bl` to a shared helper and no such helper in the ledger,
 //    so it is written out here too rather than inventing one.
-//  * The arrow states come from KPC_ARROW_ANIMATION_STATES (@0x82F2683C), dumped with
-//    headless IDA: [0] "invisible", [1] "visible", [2] "animate". Scrolling UP animates the
+//  * The arrow states come from KPC_ARROW_ANIMATION_STATES, whose entries are
+//    [0] "invisible", [1] "visible", [2] "animate". Scrolling UP animates the
 //    up arrow and leaves the down arrow merely visible; scrolling DOWN is the mirror; with
 //    one option or fewer BOTH go invisible. The up arrow is written first, the down arrow
 //    second, in both arms (this+0x7A90 then this+0x7B1C).
 //  * The suspension event on the '2' arm is posted onto the out-queue directly rather than
 //    through CgsGui::StateInterface::OutputGuiEvent, whose committed body passes the event id
-//    (45) as the AddEvent channel where the X360 passes 40. Same accommodation the group-03
-//    partfile makes.
+//    (45) as the AddEvent channel where the console passes 40. Same accommodation the
+//    group-03 partfile makes.
 //  * The '1' arm copies mGameOptions OUT to the cache mirror (Dst = cache + 0xA800, Src =
 //    this + 0xA0C0) -- the opposite direction to the copy HandleGuiCacheEvent makes.
-//  * The '3' arm reads the two profile counters the X360 inlines as cache + 0x12B80 /
+//  * The '3' arm reads the two profile counters the console inlines as cache + 0x12B80 /
 //    0x12B84; those are GetOptionsDataProfile() (+0xB878) plus miNumCreated/
 //    ReceivedOnlineGameOptions (+0x7308/+0x730C), reached through the profile's accessors.
 //  * No float compares anywhere in this body, so there is no NaN-polarity decision.
     namespace
     {
         // ---- AddEvent channel (the out-queue selector word) ---------------------------
-        const s32 KI_CHANNEL_GUI_OUT = 40;   // X360 `li r5, 0x28`
+        const s32 KI_CHANNEL_GUI_OUT = 40;   // the console's own channel constant, 0x28
 
         // ---- controller action ids (the in-queue payload's second word) ----------------
         // BrnGui's EGameInputActions values. The enum IS fully recovered
-        // (references/DecFIGS/dwarfdump/GameSource/Input/GameInputActions.h:24) -- it just
+        // from the original GameSource/Input/GameInputActions.h -- it just
         // has no committed home under b5-decomp/src yet, which is why these stay s32. Same
         // names and values the group-02 partfile's TriggerSound uses.
         const s32 KI_ACTION_GUI_UP      = 0x29;   // 41 GUI_UP      scroll the option window up
@@ -167,7 +162,7 @@ namespace BrnGui
         const s32 KI_ACTION_GUI_CANCEL  = 0x32;   // 50 GUI_CANCEL  back out of the page
         const s32 KI_ACTION_GUI_OPTION0 = 0x33;   // 51 GUI_OPTION0 open the saved-options page
 
-        // ---- KPC_ARROW_ANIMATION_STATES indices (@0x82F2683C, measured) ----------------
+        // ---- KPC_ARROW_ANIMATION_STATES indices (measured) -----------------------------
         const s32 KI_ARROW_STATE_INVISIBLE = 0;   // "invisible"
         const s32 KI_ARROW_STATE_VISIBLE   = 1;   // "visible"
         const s32 KI_ARROW_STATE_ANIMATE   = 2;   // "animate"
@@ -177,7 +172,7 @@ namespace BrnGui
 
         // ---- in-queue payload view -----------------------------------------------------
         // The state in-queue hands handlers the HEADER-STRIPPED payload; this handler reads
-        // only the second word (`lwz r28, 4(r26)` at 0x824A790C). Same view the sibling
+        // only the payload's second word. Same view the sibling
         // screens carry for CgsGui::GuiEventControllerInput*.
         struct ControllerButtonPayload : public CgsModule::Event
         {
@@ -186,12 +181,12 @@ namespace BrnGui
         };
     }
 
-    // ------------------------------------------- HandleControllerInputCreateGame @0x824A7878
+    // ----------------------------------------------------- HandleControllerInputCreateGame
     void OnlineGameOptions::HandleControllerInputCreateGame(const CgsModule::Event* lpEvent)
     {
         // Non-fatal (BeginAssert / FireAssert / EndAssert, no early-out).
         CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineGameOptions::HandleControllerInputCreateGame");   // cpp:494
+                   "Invalid event sent to OnlineGameOptions::HandleControllerInputCreateGame");
 
         const ControllerButtonPayload* lpInput =
             reinterpret_cast<const ControllerButtonPayload*>(lpEvent);
@@ -343,7 +338,7 @@ namespace BrnGui
             if (mCreateGameToggles.HighlightPreviousItem())
             {
                 // Changing the GAME MODE row rebuilds the whole option set below it.
-                // See the banner: the console SIGN-extends the s8 highlight (`extsb`), so a
+                // See the banner: the console SIGN-extends the s8 highlight, so a
                 // -1 highlight does match a -1 game-mode row.
                 const s32 liHighlightedRow = mCreateGameToggles.miHighlightedIndex;
                 const s32 liGameModeRow = mCreateGameToggles.GetIndexFromId(
@@ -389,7 +384,7 @@ namespace BrnGui
             memcpy(reinterpret_cast<GuiEventNetworkGameParams*>(
                        &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
                    &mGameOptions,
-                   sizeof(mGameOptions));   // X360 size 0x1E0 == the whole cache mirror
+                   sizeof(mGameOptions));   // size 0x1E0 == the whole cache mirror
 
             TriggerSound(leAction);
             SendStateEvent("ADVANCE");
@@ -408,7 +403,7 @@ namespace BrnGui
                     mpStateInterface->GetOutputEventQueue()->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
                         KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lNetworkSuspension)));   // X360 record size 16
+                        static_cast<s32>(sizeof(lNetworkSuspension)));   // record size 16
 
                     mpGuiCache->mbOnlineStartPending = false;
                     lpacStateEvent = "GO_BACK_EASY";
@@ -462,34 +457,34 @@ namespace BrnGui
 //  * The ticker payload is built in a stack scratch at sp+0x80 and memcpy'd into the record
 //    payload at sp+0x8AC; built directly in the record here (the CarSelectVehicle_Input
 //    precedent), which is the same bytes on the wire.
-//  * The payload seeds differ from CarSelectVehicle::SetTicker's. Measured at
-//    0x824A86A4..0x824A86C0 (the offsets are payload-relative):
+//  * The payload seeds differ from CarSelectVehicle::SetTicker's. Measured (the offsets
+//    are payload-relative):
 //        +0x810 = 0   mi8NumStrings
 //        +0x811 = 1   maFlags[0]      <-- SetTicker leaves this 0
 //        +0x812 = 0   maFlags[1]
 //        +0x813 = 1   maFlags[2]      <-- the seed SetTicker also sets
 //        +0x814 = 0   maFlags[3]
-//    with maiStringTypes (+0x00..+0x0F) zeroed by two `std` and the 0x800-byte string block
-//    zeroed by the memset. A whole-struct memset plus the two flag stores is identical.
-//  * The six name-registrations are `sub_824F87C0(cache, 0, component + 4)`. +4 is
-//    CgsGui::GuiComponent::macName, i.e. the component's GetName(); and sub_824F87C0 is the
-//    name-taking entry of GuiCache::AppendExpectedAptComponent already declared at
-//    BrnGuiCache.h:231. Their order is up / down / load-header ANIM / load-header TEXT /
+//    with maiStringTypes (+0x00..+0x0F) zeroed by two wide stores and the 0x800-byte string
+//    block zeroed by the memset. A whole-struct memset plus the two flag stores is identical.
+//  * The six name-registrations pass (cache, 0, component + 4). +4 is
+//    CgsGui::GuiComponent::macName, i.e. the component's GetName(); and the callee is the
+//    name-taking entry of GuiCache::AppendExpectedAptComponent already declared in
+//    BrnGuiCache.h. Their order is up / down / load-header ANIM / load-header TEXT /
 //    title TEXT / map-border (this+0x7A94, 0x7B20, 0x7BAC, 0x7CC4, 0x7DEC, 0x7C38) -- the
-//    map border is registered LAST, out of declaration order; kept as the asm has it.
+//    map border is registered LAST, out of declaration order; kept as the console has it.
 //  * The suspension event is posted onto the out-queue directly rather than through
 //    CgsGui::StateInterface::OutputGuiEvent, whose committed body passes the event id (45)
-//    as the AddEvent channel where the X360 passes 40. Same accommodation the group-03
+//    as the AddEvent channel where the console passes 40. Same accommodation the group-03
 //    partfile makes.
 //  * The id-409 record's two payload bytes are built as a halfword in a scratch slot and
-//    stored with a single `sth` (0x824A88B0..0x824A88CC); modelled as the two bytes they are.
-//    Id 409 has no declared event type anywhere in the recovered DWARF slice, so the record
+//    stored as one halfword; modelled as the two bytes they are.
+//    Id 409 has no declared event type anywhere in the recovered declarations, so the record
 //    is a file-local wire with a FLAG role-name taken from what the call site does with it.
     namespace
     {
         // ---- AddEvent channel (the out-queue selector word) ---------------------------
 
-        // The ticker string's format/kind selector (X360 `li r5, 2` at 0x824A870C) -- the
+        // The ticker string's format/kind selector (the console passes the constant 2) -- the
         // same word BrnGui::CarSelectVehicle::SetTicker passes to AddString.
         const s32 KI_TICKER_STRING_TYPE = 2;
 
@@ -500,8 +495,8 @@ namespace BrnGui
 
         // ---- in-queue payload view -----------------------------------------------------
         // The state in-queue hands handlers the HEADER-STRIPPED payload, so the incoming
-        // cache pointer is the payload's first word (`lwz r11, 0(r26)` at 0x824A8604,
-        // re-read at 0x824A8698). The DWARF types the parameter const GuiEventCache*, whose
+        // cache pointer is the payload's first word (read twice by the console). The
+        // original types the parameter const GuiEventCache*, whose
         // home header hard-collides with BrnGuiEventTypeDefs.h -- the same file-local view
         // the wave-H twin (BrnOnlineGameRoomPlayerInfo_wH_18.cpp) carries.
         struct GuiEventCachePayload : public CgsModule::Event
@@ -512,11 +507,11 @@ namespace BrnGui
         // ---- out-queue wire records ----------------------------------------------------
 
         // The custom ticker message payload (0x818 bytes). Layout recovered store-for-store
-        // from BrnGui::GuiEventTickerCustomMessage::AddString @0x823A6940, whose asserts bake
-        // "GameSource/Gui/BrnGuiEventTypeDefs.h" lines 390/391/392:
+        // from BrnGui::GuiEventTickerCustomMessage::AddString, whose asserts name
+        // "GameSource/Gui/BrnGuiEventTypeDefs.h" as the type's home:
         //   +0x000  s32  maiStringTypes[4]
         //   +0x010  char maacStrings[4][512]
-        //   +0x810  s8   mi8NumStrings          (`lbz`/`extsb`, bounded < 4)
+        //   +0x810  s8   mi8NumStrings          (read as a SIGNED byte, bounded < 4)
         //   +0x811..+0x814  four flag bytes
         // Kept TU-LOCAL rather than promoted into BrnGuiEventTypeDefs.h: the type already has
         // an opaque twin in BrnGuiDemangledEventTypes.h (GuiEvent<537> + a 2060-byte blob) and
@@ -524,7 +519,7 @@ namespace BrnGui
         // be a live ODR fork. Identical to the view BrnCarSelectVehicle_Input.cpp carries.
         struct GuiTickerCustomMessagePayload
         {
-            static const s32 KI_MAX_NUM_STRINGS   = 4;     // AddString's bound (h:391)
+            static const s32 KI_MAX_NUM_STRINGS   = 4;     // AddString's bound
             static const s32 KI_MAX_STRING_LENGTH = 512;   // AddString's strncpy count
 
             s32  maiStringTypes[KI_MAX_NUM_STRINGS];                       // +0x000
@@ -536,13 +531,13 @@ namespace BrnGui
             u8   maFlags[4];                                               // +0x811
             u8   maPad815[3];                                              // +0x815 (sizeof == 0x818)
 
-            // @0x823A6940 -- copy lpString into the next free 512-byte slot and record its
-            // format type. The count is read as a SIGNED byte (X360 `lbz` + `extsb`).
+            // Copy lpString into the next free 512-byte slot and record its format type.
+            // The count is read as a SIGNED byte.
             void AddString(const char* lpString, s32 liType)
             {
-                CGS_ASSERT(mi8NumStrings >= 0, "mi8NumStrings >= 0");                   // h:390
+                CGS_ASSERT(mi8NumStrings >= 0, "mi8NumStrings >= 0");
                 CGS_ASSERT(mi8NumStrings < KI_MAX_NUM_STRINGS,
-                           "mi8NumStrings < KI_MAX_NUM_STRINGS");                       // h:391
+                           "mi8NumStrings < KI_MAX_NUM_STRINGS");
                 CGS_ASSERT(lpString != 0, "lpString");                                  // h:392
 
                 std::strncpy(maacStrings[mi8NumStrings], lpString,
@@ -569,10 +564,10 @@ namespace BrnGui
         };
 
         // Id 409 -- the "the online game options changed, re-publish them" refresh record.
-        // FLAG: id 409 carries no declared event struct anywhere in the recovered DWARF
-        // slice, so the payload shape and the role-name both come from this single call
-        // site: the X360 stack-builds { 2, 409, 12 } + the two payload bytes { 1, 0 } and
-        // publishes 16 bytes on channel 40 (0x824A88A8..0x824A88E0). The two flag names are
+        // FLAG: id 409 carries no declared event struct anywhere in the recovered
+        // declarations, so the payload shape and the role-name both come from this single
+        // call site: the console stack-builds { 2, 409, 12 } + the two payload bytes { 1, 0 }
+        // and publishes 16 bytes on channel 40. The two flag names are
         // deliberately role-free -- nothing in the binary names them.
         struct GuiEventOnlineGameOptionsRefresh
         {
@@ -611,16 +606,16 @@ namespace BrnGui
             sizeof(GuiEventOnlineGameOptionsRefreshWire) == 16 ? 1 : -1];
     }
 
-    // ------------------------------------------------------ HandleGuiCacheEvent @0x824A85E8
+    // ------------------------------------------------------------------ HandleGuiCacheEvent
     void OnlineGameOptions::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)
     {
         const GuiEventCachePayload* lpCacheEvent =
             reinterpret_cast<const GuiEventCachePayload*>(lpEvent);
 
-        // Non-fatal (BeginAssert / FireAssert / EndAssert, no early-out) -- the X360 falls
+        // Non-fatal (BeginAssert / FireAssert / EndAssert, no early-out) -- the console falls
         // straight through into the body, so a null cache would be latched as-is.
         CGS_ASSERT(lpCacheEvent->mpGuiCache != 0,
-                   "Invalid cache in HandleGuiCacheEvent::Update");   // cpp:1048
+                   "Invalid cache in HandleGuiCacheEvent::Update");
 
         // ---- first arrival only: the whole page setup is a one-shot -------------------
         if (mpGuiCache != 0)
@@ -653,7 +648,7 @@ namespace BrnGui
 
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lTicker), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lTicker)));   // X360 record size 0x824
+                static_cast<s32>(sizeof(lTicker)));   // record size 0x824
         }
 
         // ---- either arm the page, or back straight out --------------------------------
@@ -683,7 +678,7 @@ namespace BrnGui
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
                 KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lNetworkSuspension)));   // X360 record size 16
+                static_cast<s32>(sizeof(lNetworkSuspension)));   // record size 16
 
             mpGuiCache->mbOnlineStartPending = false;
             SendStateEvent("GO_BACK_EASY");
@@ -697,7 +692,7 @@ namespace BrnGui
         memcpy(&mGameOptions,
                reinterpret_cast<const GuiEventNetworkGameParams*>(
                    &mpGuiCache->maOnlineGameModeOptionsStorage[0]),
-               sizeof(mGameOptions));   // X360 size 0x1E0 == the whole cache mirror
+               sizeof(mGameOptions));   // size 0x1E0 == the whole cache mirror
 
         // ---- ask for a fresh publish when the options went stale ----------------------
         // Either something changed the options while this screen was away, or the lobby is
@@ -709,7 +704,7 @@ namespace BrnGui
             GuiEventOnlineGameOptionsRefreshWire lRefresh;
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lRefresh), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRefresh)));   // X360 record size 16
+                static_cast<s32>(sizeof(lRefresh)));   // record size 16
 
             mpGuiCache->mbOnlineGameOptionsChanged = false;
         }

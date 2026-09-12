@@ -121,6 +121,44 @@ namespace BrnReplays
         return 0;
     }
 
+    // The 1-byte read primitive. Same four guards as Read, with the space test spelled
+    // against a single byte; then one byte is popped from the playback buffer at the read
+    // cursor and the cursor advances. Returns 1 (the byte count), unconditionally -- unlike
+    // WriteByte there is no mode gate on the copy itself, because the "Not playing" assert
+    // above already pinned the mode.
+    s32 BaseSerialiser::ReadByte(void* lpDest)
+    {
+        CGS_ASSERT(meMode == E_MODE_PLAYING, "Not playing\n");
+        CGS_ASSERT(mbLocked, "Not locked\n");
+        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        CGS_ASSERT(miBufferUsed - miBufferRead >= 1, "Not enough data in buffer\n");
+
+        *static_cast<u8*>(lpDest) = static_cast<const u8*>(mpBuffer)[miBufferRead];
+        ++miBufferRead;
+        return 1;
+    }
+
+    // The 1-byte write primitive, the record mirror of ReadByte. Same four guards as Write;
+    // the byte is only committed (and the used cursor advanced) while meMode is exactly
+    // E_MODE_RECORDING -- in the other two recording sub-states the call validates, writes
+    // nothing and returns 0.
+    s32 BaseSerialiser::WriteByte(const void* lpSrc)
+    {
+        CGS_ASSERT(IsRecording(), "Not recording\n");
+        CGS_ASSERT(mbLocked, "Not locked\n");
+        CGS_ASSERT(mpBuffer != nullptr, "Buffer not allocated\n");
+        CGS_ASSERT(miBufferSize - miBufferUsed >= 1, "Not enough space in buffer\n");
+
+        if (meMode == E_MODE_RECORDING)
+        {
+            static_cast<u8*>(mpBuffer)[miBufferUsed] = *static_cast<const u8*>(lpSrc);
+            ++miBufferUsed;
+            return 1;
+        }
+
+        return 0;
+    }
+
     // @ 0x8264C470
     // Mode-directed serialise dispatch. The X360 body switches on meMode (read at
     // *this+0): in E_MODE_RECORDING it tail-calls Write(buffer, size); in

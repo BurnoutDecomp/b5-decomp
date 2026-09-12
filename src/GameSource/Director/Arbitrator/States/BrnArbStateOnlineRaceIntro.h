@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (handle IsAllocated check)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState / ArbStateSharedInfo
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"              // Camera::BehaviourHandle
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h
@@ -22,10 +23,9 @@
 // CalculateStateTimes() splits the event's intro time budget across the per-rival "show" /
 // "move" segments so the whole fly-by fits the time the game gives it.
 //
-// LAYOUT: the member NAMES + DWARF declaration order come from the DecFIGS DWARF
-// (BrnArbStateOnlineRaceIntro.h, X360-attested for this build). The per-member X360 offsets
-// are pinned from the ARTIST asm (Construct @0x8225AE98, CalculateStateTimes @0x821F6370,
-// Update @0x822734A8, SetupRivalMovie @0x8226EC18):
+// LAYOUT: the member names and declaration order are the shipped build's; the per-member
+// console offsets quoted below are pinned from Construct / CalculateStateTimes / Update /
+// SetupRivalMovie:
 //   * mCamera is the base ArbitratorState's by-value Camera @+0x10 (this state reaches it by
 //     name through the base GetNonConstCamera() / the effect-trigger free functions; Construct
 //     calls Camera::Construct(this+0x10)).
@@ -49,7 +49,7 @@
 //   * muRivalMovieOffset   @+0x21C (u32) -- the rival-handle-array allocation cursor.
 //   * meState              @+0x220 (EState) -- the state-machine value; the dispatch table is
 //                           indexed by it (0..11; default -> assert).
-// Parity is BY NAMED MEMBER (the project's x64-gate rule): the X360 4-byte-pointer offsets
+// Parity is BY NAMED MEMBER (the project's x64-gate rule): the console's 4-byte-pointer offsets
 // quoted above are provenance; on the x64 host the embedded Camera widens, so absolute offsets
 // shift -- the member ROLES are what is reproduced.
 // ----------------------------------------------------------------------------
@@ -66,12 +66,12 @@ namespace BrnDirector
     class ArbStateOnlineRaceIntro : public ArbitratorState
     {
     public:
-        // DWARF EState (BrnArbStateOnlineRaceIntro.h:79). The online-race-intro state machine.
+        // EState -- the online-race-intro state machine.
         // Construct seeds 0 (INACTIVE); Prepare forces 1 (PREPARING). Update's case-1 success
         // edge stores 2 (ACTIVE); the per-rival/player/lights edges store 3..9; the hand-back
         // edges run ChangeToState with blocked value 10 (CHANGING_TO_ROAMING). The dispatch
         // table is indexed by this value (0..11; >0xA hits the default assert). Values are the
-        // X360 jump-table case indices / the immediates the asm stores into meState (+0x220).
+        // console's dispatch-table case indices / the values it stores into meState (+0x220).
         enum EState
         {
             E_STATE_INACTIVE             = 0,
@@ -90,78 +90,34 @@ namespace BrnDirector
             E_NUM_STATES                 = 12
         };
 
-        // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        void        Construct() override;                             // @0x8225AE98
-        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override; // @0x821F6340
-        void        Update(ArbStateSharedInfo& lrSharedInfo) override;  // @0x822734A8
-        const char* GetName() const override;                        // @0x821F6480
+        // ---- ArbitratorState virtual overrides (vtable order; see base) ------------------
+        void        Construct() override;
+        bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
+        void        Update(ArbStateSharedInfo& lrSharedInfo) override;
+        const char* GetName() const override;
+        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Release() and Destruct() are listed in the DWARF (cpp:499 / cpp:529) but the X360
-        // ledger does NOT attest a body for either in this TU's recovered function set (the
-        // postmortem packet bodies only Construct / GetName / Prepare / CalculateStateTimes /
-        // Update / SetupRivalMovie). They are therefore DECLARATION-ONLY here -- declared so the
-        // concrete class overrides the base virtuals this state's X360 set defines, with their
-        // bodies landing when the ARTIST asm for them is recovered. NEVER fabricate a body for a
-        // function with no attested asm.
-        bool        Release(ArbStateSharedInfo& lrSharedInfo) override;  // @cpp:499 (no asm; decl-only)
-        void        Destruct() override;                                // @cpp:529 (no asm; decl-only)
+        // Destruct() is NOT in this TU's recovered function set -- no symbol and no reference to
+        // one exists anywhere in the shipped build for this class -- so it keeps the base
+        // declaration and no override is added here (the declaration record lists one; the
+        // shipped build does not).
 
     private:
-        // ---- a typed handle to a camera behaviour owned by the BehaviourManager ----------
-        // Allocated in Prepare/Update via BehaviourManager::NewBehaviour<TBehaviour> and
-        // released in Update/Release via BehaviourManager::UnSetBehaviourUsedByHandle(mpManager,
-        // muAllocationKey). 0x14-byte block (5 words) pinned from the Construct/Update/SetupRival
-        // asm: mbAllocated(+0x00), muAllocationKey(+0x04), a behaviour-lookup helper word(+0x08),
-        // mpManager(+0x0C), mpBehaviour(+0x10). The X360 re-resolves the live behaviour from the
-        // manager pool through (helper word, allocation key); GetBehaviour() returns the cached
-        // pointer to that same behaviour after asserting IsAllocated() (sub_821FD3E8 ==
-        // BrnBehaviourManager.h:589). GetProducedCamera() returns the camera the live behaviour
-        // produced this frame, which the manager keeps alongside the behaviour in the same pool
-        // slot (sub_821FD450 reads slot+0x10 == BrnBehaviourManager.h:610). FLAG: the +0x08
-        // word's role is not fully recovered in this TU (modelled as an opaque behaviour-lookup
-        // helper index, as in BrnArbStateRaceIntro.h / BrnArbStateOnlineCarSelect.h).
-        template <typename TBehaviour>
-        struct BehaviourHandle
-        {
-            BehaviourHandle()
-                : mbAllocated(false), muAllocationKey(0), muHelperIndex(0),
-                  mpManager(0), mpBehaviour(0) {}
-
-            bool IsAllocated() const { return mbAllocated; }
-
-            // The live behaviour this handle owns (only valid while IsAllocated()). The X360
-            // asserts IsAllocated() inside the manager-pool lookup before returning it
-            // (sub_821FD3E8; BrnBehaviourManager.h:589).
-            TBehaviour* GetBehaviour() const
-            {
-                CGS_ASSERT(mbAllocated, "IsAllocated()");
-                return mpBehaviour;
-            }
-
-            // The camera the live behaviour produced this frame. The X360 reads it from the
-            // manager pool slot the handle resolves to (sub_821FD450 returns slot+0x10;
-            // BrnBehaviourManager.h:610), which is the same camera the behaviour writes each
-            // frame -- modelled by NAME as the behaviour's produced camera. Asserts
-            // IsAllocated(). Defined out-of-line in the .cpp where the behaviour type is
-            // complete.
-            const Camera::Camera& GetProducedCamera() const;
-
-            // Drop the manager-side hold on the behaviour and clear the handle back to empty
-            // (X360 sub_8222DFD8 / sub_8222DCA8): when allocated, UnSetBehaviourUsedByHandle(
-            // mpManager, muAllocationKey) then zero the slots. Always returns true. Defined
-            // out-of-line in the .cpp where BehaviourManager is complete.
-            bool Release();
-
-            bool                      mbAllocated;     // +0x00
-            u32                       muAllocationKey; // +0x04
-            u32                       muHelperIndex;   // +0x08  FLAG: role not recovered (lookup helper)
-            Camera::BehaviourManager* mpManager;       // +0x0C
-            TBehaviour*               mpBehaviour;     // +0x10
-        };
+        // RETIRED: this state used to carry its OWN nested five-word BehaviourHandle<> copy.
+        // It now uses the SHARED BrnDirector::Camera::BehaviourHandle<TBehaviour>, which is what
+        // the console has -- ONE template instantiated per behaviour type, not a per-state
+        // duplicate. Using the shared handle is therefore more faithful, and it is what lets the
+        // bodied BehaviourManager::NewBehaviour<> overload bind here (the generic THandle overload
+        // is declaration-only, so a nested fork compiles and then leaves the behaviour unallocated
+        // at link time). The shared handle also identifies the +0x08 word this file used to flag
+        // as "role not recovered": it is the owning BehaviourHelper pool pointer, which a u32
+        // would have truncated on this host. It brings IsAllocated / GetBehaviour /
+        // GetProducedCamera / Release with it, all bodied, so this header no longer declares any
+        // of them.
 
         // ---- the per-take interpolation parameters (mInterpolatorParams, +0x194, 0x10) -----
         // The BehaviourInterpolate::Parameters block Construct seeds and Update hands to the
-        // interpolator setup (sub_8224EE58). The DecFIGS DWARF names the member
+        // interpolator setup. The declaration record names the member
         // BrnDirector::Camera::BehaviourInterpolate::Parameters but the BehaviourInterpolate TU's
         // minimal slice models Parameters as an opaque type; the four words Construct writes are
         // reproduced here BY VALUE so the seed is byte-faithful. FLAG: the field ROLES are not
@@ -182,12 +138,12 @@ namespace BrnDirector
 
         static const u32 KU_NUM_RIVAL_BEHAVIOURS = 3;
 
-        // ---- members, DWARF order; X360 offsets in comments ------------------------------
-        BehaviourHandle<Camera::BehaviourInterpolate> mInterpolator;         // X360 +0x180
-        InterpolatorParameters                        mInterpolatorParams;   // X360 +0x194
-        BehaviourHandle<Camera::BehaviourIceAnim> maRivalBehaviourHandle[KU_NUM_RIVAL_BEHAVIOURS]; // +0x1A4
-        BehaviourHandle<Camera::BehaviourIceAnim>     mPlayerBehaviourHandle; // +0x1E0
-        BehaviourHandle<Camera::BehaviourIceAnim>     mLightsBehaviourHandle; // +0x1F4
+        // ---- members, declaration order; offsets in comments -----------------------------
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolator;       // +0x180
+        InterpolatorParameters                        mInterpolatorParams;   // +0x194
+        Camera::BehaviourHandle<Camera::BehaviourIceAnim> maRivalBehaviourHandle[KU_NUM_RIVAL_BEHAVIOURS]; // +0x1A4
+        Camera::BehaviourHandle<Camera::BehaviourIceAnim> mPlayerBehaviourHandle; // +0x1E0
+        Camera::BehaviourHandle<Camera::BehaviourIceAnim> mLightsBehaviourHandle; // +0x1F4
         f32                                           mfTimeToSpendInterpolating;   // +0x208
         f32                                           mfTimeToSpendLookingAtRival;  // +0x20C
         f32                                           mfTimeToSpendLookingAtPlayer; // +0x210
@@ -196,23 +152,23 @@ namespace BrnDirector
         u32                                           muRivalMovieOffset;     // +0x21C
         EState                                        meState;                // +0x220
 
-        // ---- private helpers (X360 attested) ---------------------------------------------
+        // ---- private helpers (console-attested) ------------------------------------------
         // Split the event's intro time budget across the per-rival "show" / "move" segments.
-        // @0x821F6370. luNumRivals == 0 puts the whole budget in mfTimeToSpendLookingAtPlayer;
+        // luNumRivals == 0 puts the whole budget in mfTimeToSpendLookingAtPlayer;
         // otherwise it divides lfMaxTime (asserting it is > 0 after a fixed 0.25s deduction)
         // across the (numRivals+1) shows plus the 2*(numRivals+1) moves.
         void CalculateStateTimes(u32 luNumRivals, f32 lfMaxTime);   // @cpp:74
 
         // Allocate + configure the rival "show" ICE-anim behaviour for rival liRivalIndex from
-        // the event's online-race-start shot group. @0x8226EC18.
+        // the event's online-race-start shot group.
         void SetupRivalMovie(ArbStateSharedInfo& lrSharedInfo, u32 luRivalIndex);   // @cpp:472
 
         // Allocate the take-to-take interpolator and latch it to blend lrFrom -> lrTo over
-        // mfTimeToSpendInterpolating, seeded from mInterpolatorParams. De-inlines the X360
+        // mfTimeToSpendInterpolating, seeded from mInterpolatorParams. De-inlines the console's
         // interpolator-setup sequence (NewBehaviour<BehaviourInterpolate> + the per-take params
-        // + the sub_8224EE58 Setup over the two producing cameras) the MOVING_TO_* edges share.
-        // FLAG: the X360 builds the from/to camera references from the producing BehaviourHandles
-        // (sub_821FD4B8) before the multi-arg Setup; modelled here through the BehaviourInterpolate
+        // + the Setup over the two producing cameras) the MOVING_TO_* edges share.
+        // FLAG: the console builds the from/to camera references from the producing
+        // BehaviourHandles before the multi-arg Setup; modelled here through the BehaviourInterpolate
         // named-setup API, NOT paraphrased to per-field stores.
         void SetupInterpolator(ArbStateSharedInfo& lrSharedInfo,
                                const Camera::Camera& lrFromCamera,

@@ -102,9 +102,11 @@ namespace BrnParticle
         // the real CgsGraphics::Im3d, so there are no mpVTable / mu04 / mu08 fields to poke. The
         // console's off_820CF69C store is part of that object's genuine construction, which
         // ParticleModule::Prepare now performs through CgsGraphics::Im3d::Construct @0x827FC748.
-        mWorldTexRenderer.mpVTable = nullptr;           // X360 off_820CEBE0
-        mWorldTexRenderer.mu04 = 0;
-        mWorldTexRenderer.mu08 = 0;
+        // mWorldTexRenderer is no longer a ContainedInterface placeholder either -- it is the
+        // real BrnGraphics::Im3dTexPlusLighting, so there are no mpVTable / mu04 / mu08 fields
+        // to poke. The console's off_820CEBE0 store is part of that object's genuine
+        // construction, which ParticleModule::Prepare now performs through
+        // Im3dTexPlusLighting::Construct.
         mSmokeRenderer.mpVTable = nullptr;              // X360 off_820CEBE8
         mSmokeRenderer.mu04 = 0;
         mSmokeRenderer.mu08 = 0;
@@ -1312,11 +1314,10 @@ namespace BrnParticle
     //     if (this[143670]) { cLionFX::Dispatch(...) }
     //     StopMonitor(v4[8])
     //
-    //   FOUR of those five branches cannot run on this build and say so once each rather
-    //   than dropping silently -- EndSimulateDebris, the debris arrays, the spark dispatch
-    //   and the Lion dispatch all reach placeholder-sized members or un-landed subsystems
-    //   (BrnDebrisRenderer's array params, SparkFrameDataSet, cLionFX). The TRAIL branch is
-    //   the one that is fully landed on both sides, so it is reproduced exactly.
+    //   Only EndSimulateDebris is still carved out: its simulation jobs are asm-sized
+    //   placeholders, so there is nothing to end. The trail branch, the Lion dispatch, the
+    //   spark dispatch and -- since the debris renderer's BeginRender / RenderDebrisArray
+    //   landed -- the debris branch are all reproduced.
     //
     //   THE PERFMON BRACKET IS NOT REPRODUCED, for this file's standing reason: nothing on
     //   this build calls PerfMonCpu::AddMonitor for the render-thread sets, so every id in
@@ -1334,6 +1335,43 @@ namespace BrnParticle
         if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderTrails) != 0)
         {
             mTrailSystem.Render(lfWhiteLevel);   // this + 38672 == +0x9710
+        }
+
+        // ---- (flags & 4) -- eRenderDataFlagRenderDebris ---------------------------------
+        // THE DEBRIS PASS. BeginRender opens it with the frame's four lighting/camera
+        // constants, the five arrays are drawn in declaration order, and the pass is closed by
+        // clearing the active-renderer latch -- which is the whole of the console's EndRender
+        // fold here (its `mgpActiveRenderer == this` assert is a dev check on the same word).
+        //
+        // THE FOURTH ARGUMENT IS THE REDUCED-FRAME-RATE BIT, not a quality switch: the console
+        // forms it as `(muFlags >> 6) & 1` at this call site and RenderDebrisArray uses it to
+        // pick between the full per-lane lifetimes and a fifth of them.
+        //
+        // THE EYE IS THE CAMERA TRANSFORM'S TRANSLATION ROW, and the view-projection is the
+        // camera's combined matrix -- the two the console loads from renderData + 0x50 and
+        // renderData + 0xE0, which are exactly mCameraTransform.wAxis and
+        // mCgsCamera.mViewProjection on this layout.
+        if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderDebris) != 0)
+        {
+            const bool lbFullLifetime =
+                (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0;
+
+            mDebrisRenderer.BeginRender(lpRenderData->mCgsCamera.GetViewProjectionMatrix(),
+                                        lpRenderData->mvSunDirection,
+                                        lpRenderData->mvSunColour,
+                                        lpRenderData->mvAmbientColour,
+                                        lpRenderData->mCameraTransform.wAxis);
+
+            for (u32 luArray = 0; luArray < KU_NUM_DEBRIS_ARRAYS; ++luArray)
+            {
+                mDebrisRenderer.RenderDebrisArray(
+                    lpRenderData->mfCurrentTime,
+                    &maDebris[luArray],
+                    static_cast<Native::EDebrisArrayID>(luArray),
+                    lbFullLifetime);
+            }
+
+            CgsGraphics::ImRendererBase::mgpActiveRenderer = 0;
         }
 
         // ---- the LION DISPATCH (X360 @0x8229B1B4..0x8229B23C) ---------------------------
@@ -1436,16 +1474,15 @@ namespace BrnParticle
                                     lpSparkVertexBuffer, gSparkBatchArray);
         }
 
-        // ---- the branches this build still cannot run -----------------------------------
+        // ---- the branch this build still cannot run -------------------------------------
         // EndSimulateDebris is UNCONDITIONAL on the console and closes the debris
         // simulation jobs before the debris renderer reads their output; the jobs are
         // asm-sized placeholders here, so there is nothing to end.
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::RenderFullResParticles' EndSimulateDebris + the debris "
-                "(flags & 4) branch -- their job members are asm-sized placeholders. "
-                "THE TRAIL BRANCH (flags & 0x20) AND THE LION DISPATCH ARE REAL AND RUN");
+                "ParticleModule::RenderFullResParticles' EndSimulateDebris -- its job members "
+                "are asm-sized placeholders. THE TRAIL, DEBRIS, SPARK AND LION BRANCHES RUN");
         }
     }
 

@@ -172,6 +172,12 @@ namespace BrnGui
         // DWARF h:116 / X360 0x824286E0 -- online landmark count (mpTriggerData->miOnlineLandmarkCount).
         s32 GetTotalNumberOfOnlineLandmarks() const;
 
+        // The ONLINE twin of GetLandmarkInfoAtPositionInList above: the
+        // liIndex'th entry of the trigger data's online-landmark table. Same meState gate as
+        // the count accessor, plus the table's own bounds report; forwards to
+        // TriggerData::GetOnlineLandmark.
+        const BrnTrigger::Landmark* GetOnlineLandmarkInfoAtPositionInList(s32 liIndex) const;
+
         // DWARF h:122 / X360 0x82501AC0 -- copy the generic-region box for trigger lTriggerID into
         // *lpRegion (linear scan of the trigger data's generic-region table; fires on empty/miss).
         void GetTriggerVolumeRegion(CgsID lTriggerID, BrnTrigger::BoxRegion* lpRegion) const;

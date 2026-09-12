@@ -1,18 +1,18 @@
 #pragma once
 
 // Home for BrnDirector::Camera::Utils::DebugController.
-// DWARF home: GameSource/Director/Camera/Utils/BrnDebugController.h:45.
 //
 // Minimal OWNING slice -- this is the first TU to home the type, so it carries the
-// full DWARF-attested member layout. The DebugControllerInfo sub-struct's layout is
-// pinned by the X360 asm for the four bodied functions:
-//   DebugControllerInfo::Clear @0x821F8738  -- zeroes the four parallel control
-//       arrays (value @+0, state @+88, justPressed @+110, justReleased @+132) plus
-//       the four stick-axis floats (@+156..+168), so the per-element accessors
-//       resolve to those exact offsets.
-//   GetIsPressed     @0x821F8708  -- reads mabControlState[control]        (base +88)
-//   GetJustPressed   @0x821F8718  -- reads mabControlJustPressed[control]  (base +110)
-//   GetJustReleased  @0x821F8728  -- reads mabControlJustReleased[control] (base +132)
+// full member layout the original declarations give. The DebugControllerInfo
+// sub-struct's layout is pinned by the attested behaviour of the four bodied
+// functions:
+//   DebugControllerInfo::Clear  -- zeroes the four parallel control arrays
+//       (value +0x00, state +0x58, justPressed +0x6E, justReleased +0x84) plus the
+//       four stick-axis floats (+0x9C..+0xA8), so the per-element accessors resolve
+//       to those exact offsets.
+//   GetIsPressed     -- reads mabControlState[control]        (base +0x58)
+//   GetJustPressed   -- reads mabControlJustPressed[control]  (base +0x6E)
+//   GetJustReleased  -- reads mabControlJustReleased[control] (base +0x84)
 
 #include "types.hpp"
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector2
@@ -24,10 +24,10 @@ namespace BrnDirector
     {
         namespace Utils
         {
-            // DWARF: BrnDebugController.h:45.
+            // The debug controller snapshot type.
             struct DebugController
             {
-                // DWARF: BrnDebugController.h:48.
+                // Control ids, in the original declaration order.
                 enum EControl
                 {
                     E_CONTROL_UP_DPAD = 0,
@@ -56,8 +56,7 @@ namespace BrnDirector
                     E_CONTROL_COUNT = 22
                 };
 
-                // DWARF: BrnDebugController.h:113. Four parallel per-control arrays
-                // followed by the analogue stick axes.
+                // Four parallel per-control arrays followed by the analogue stick axes.
                 struct DebugControllerInfo
                 {
                     f32  mafControlValue[E_CONTROL_COUNT];        // +0x00
@@ -70,20 +69,20 @@ namespace BrnDirector
                     f32  mfRightStickXAxis;  // +0xA4 (164)
                     f32  mfRightStickYAxis;  // +0xA8 (168)
 
-                    // @0x821F8738.
+                    // Zeroes every array and axis.
                     void Clear();
                 };
 
-                // @0x8220BFD8 -- forwards to mDebugControllerInfo.Clear().
+                // Forwards to mDebugControllerInfo.Clear().
                 void Clear();
 
-                // @0x821F8708 / 0x821F8718 / 0x821F8728 -- per-control queries.
+                // Per-control queries.
                 bool GetIsPressed(EControl leControl) const;
                 bool GetJustPressed(EControl leControl) const;
                 bool GetJustReleased(EControl leControl) const;
                 f32 GetControlValue(s32 liControl) const;
 
-                // Remaining DWARF-declared accessors (BrnDebugController.h:145..170).
+                // Remaining accessors from the original declarations.
                 // DECLARATION-ONLY -- bodies land with their own ledger entries; the
                 // per-TU `cl /c` gate does not link.
                 f32 GetLowerTriggerAxis() const;
@@ -93,15 +92,19 @@ namespace BrnDirector
                 f32 GetButtonsLeftRightAxis() const;
                 rw::math::vpu::Vector2 GetLeftStick() const;
                 rw::math::vpu::Vector2 GetRightStick() const;
-                const DebugControllerInfo& GetControllerInfo() const;
                 void SetControllerInfo(const DebugControllerInfo& lrInfo);
 
+                // The embedded snapshot. Every call site the original build has is inlined
+                // straight onto the info block (the controller IS its info block), so this
+                // is defined inline here rather than emitted out of line.
+                const DebugControllerInfo& GetControllerInfo() const { return mDebugControllerInfo; }
+
             private:
-                // DWARF: BrnDebugController.h:176.
+                // The one and only member.
                 DebugControllerInfo mDebugControllerInfo;
             };
 
-            // Pin the offsets the X360 asm proves for the bodied functions.
+            // Pin the offsets the bodied functions' attested behaviour proves.
             static_assert(offsetof(DebugController::DebugControllerInfo, mafControlValue) == 0,
                           "DebugControllerInfo value array must be at +0x00");
             static_assert(offsetof(DebugController::DebugControllerInfo, mabControlState) == 88,

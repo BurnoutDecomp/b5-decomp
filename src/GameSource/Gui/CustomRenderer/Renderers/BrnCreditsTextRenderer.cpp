@@ -5,26 +5,26 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"          // CgsCore::SPrintf
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"  // CgsLanguage::LanguageManager::FindString
 
-// BrnGui::CreditsTextRenderer bodies -- faithful X360 ARTIST ports.
+// BrnGui::CreditsTextRenderer bodies -- faithful ports of the console's behaviour.
 //
 // The simple accessors (Construct/GetID/Prepare/SetTextRenderer/SetRenderEnabled) are
 // recovered store-for-store. RecalculateParagraphs and RenderComponent are reconstructed
-// from the PPC asm (the Hex-Rays output was register-mangled -- "local variable allocation
-// has failed"); Update is dominated by an inlined VPU matrix build (the screen transform),
-// reconstructed for its scalar scroll/fade tail and left with the transform build flagged.
+// from the console's own code, because a decompiler could not resolve their locals
+// ("local variable allocation has failed"); Update is dominated by an inlined vector-unit
+// matrix build (the screen transform), reconstructed for its scalar scroll/fade tail and
+// left with the transform build flagged.
 //
 // FLAGGED -- UNRECOVERED .data/.rodata CONSTANTS:
-//   This TU defines a band of file-scope float layout constants (the DWARF names them
+//   This TU defines a band of file-scope float layout constants (the original names them
 //   KF_TEXTBOX_* / KF_*_TEXT_SIZE / KF_SCROLL_* / KF_FADE_* / KF_PARAGRAPH_SPACING* /
-//   KF_CREDITS_DROPSHADOW_* / KF_DROPSHADOW_ALPHA / KI_CREDITS_BRIGHTNESS). The dossier
-//   exposes only the rodata ADDRESSES the asm loads (flt_82F258A4, flt_82F258A8, ...),
-//   not their byte values, so the actual numbers are genuinely unrecoverable here. Per
-//   project policy they are NOT fabricated: each is an honest 0-initialised placeholder
-//   tagged `// FLAGGED: <addr> value unrecovered`. The control flow / field wiring around
-//   them is faithful; only the literal magnitudes are pending a rodata recovery pass.
-//   Likewise the static credits name table (off_82F258E8 "Director people") and the four
-//   immediate-buffer batch helpers (sub_824587B0 / sub_82458EC0 / sub_82458898 /
-//   sub_821F0E50) are flagged where they appear.
+//   KF_CREDITS_DROPSHADOW_* / KF_DROPSHADOW_ALPHA / KI_CREDITS_BRIGHTNESS). What is
+//   available names each constant and says where it is loaded, but not its byte value, so
+//   the actual numbers are genuinely unrecoverable here. Per project policy they are NOT
+//   fabricated: each is an honest 0-initialised placeholder tagged
+//   `// FLAGGED: value unrecovered`. The control flow / field wiring around them is
+//   faithful; only the literal magnitudes are pending a constant-recovery pass.
+//   Likewise the static credits name table ("Director people") and the four
+//   immediate-buffer batch helpers are flagged where they appear.
 
 namespace BrnGui
 {
@@ -32,51 +32,51 @@ namespace
 {
     // ------------------------------------------------------------------------------------
     // FLAGGED placeholders for this TU's unrecovered file-scope float constants. Names are
-    // the DWARF names (BrnCreditsTextRenderer.cpp:23-40); VALUES are placeholders.
+    // the names the original gives them; VALUES are placeholders.
     // ------------------------------------------------------------------------------------
-    const f32 KF_TEXTBOX_CENTRE_X     = 0.0f; // FLAGGED: flt_82F25? value unrecovered (DWARF KF_TEXTBOX_CENTRE_X)
+    const f32 KF_TEXTBOX_CENTRE_X     = 0.0f; // FLAGGED: value unrecovered (KF_TEXTBOX_CENTRE_X)
     const f32 KF_TEXTBOX_CENTRE_Y     = 0.0f; // FLAGGED: value unrecovered (KF_TEXTBOX_CENTRE_Y)
     const f32 KF_TEXTBOX_WIDTH        = 0.0f; // FLAGGED: value unrecovered (KF_TEXTBOX_WIDTH)
     const f32 KF_TEXTBOX_HEIGHT       = 0.0f; // FLAGGED: value unrecovered (KF_TEXTBOX_HEIGHT)
     const f32 KF_TEXTBOX_ANGLE        = 0.0f; // FLAGGED: value unrecovered (KF_TEXTBOX_ANGLE)
-    const f32 KF_LARGE_TEXT_SIZE      = 0.0f; // FLAGGED: flt_82F258B4 value unrecovered (title font height)
-    const f32 KF_SMALL_TEXT_SIZE      = 0.0f; // FLAGGED: flt_82F258B0 value unrecovered (detail font height)
-    const f32 KF_PARAGRAPH_SPACING0   = 0.0f; // FLAGGED: unk_82F258B8 value unrecovered (detail-paragraph spacing)
-    const f32 KF_PARAGRAPH_SPACING1   = 0.0f; // FLAGGED: unk_82F258BC value unrecovered (title-paragraph spacing)
-    const f32 KF_SCROLL_START         = 0.0f; // FLAGGED: flt_82F258C0 value unrecovered (initial scroll)
-    const f32 KF_SCROLL_SPEED         = 0.0f; // FLAGGED: flt_82F258C4 value unrecovered (scroll/sec)
-    const f32 KF_FADE_BORDER          = 0.0f; // FLAGGED: flt_82F258C8 value unrecovered (bottom fade band)
-    const f32 KF_FADE_IN_START        = 0.0f; // FLAGGED: flt_82F258CC value unrecovered (initial fade)
-    const f32 KF_FADE_IN_SPEED        = 0.0f; // FLAGGED: flt_82F258D0 value unrecovered (fade/sec)
-    const f32 KF_CREDITS_DROPSHADOW_X = 0.0f; // FLAGGED: flt_82F258D4 value unrecovered (shadow X offset)
-    const f32 KF_CREDITS_DROPSHADOW_Y = 0.0f; // FLAGGED: flt_82F258D8 value unrecovered (shadow Y offset)
-    const f32 KF_DROPSHADOW_ALPHA     = 0.0f; // FLAGGED: flt_82F258E0 value unrecovered (shadow alpha scale)
+    const f32 KF_LARGE_TEXT_SIZE      = 0.0f; // FLAGGED: value unrecovered (title font height)
+    const f32 KF_SMALL_TEXT_SIZE      = 0.0f; // FLAGGED: value unrecovered (detail font height)
+    const f32 KF_PARAGRAPH_SPACING0   = 0.0f; // FLAGGED: value unrecovered (detail-paragraph spacing)
+    const f32 KF_PARAGRAPH_SPACING1   = 0.0f; // FLAGGED: value unrecovered (title-paragraph spacing)
+    const f32 KF_SCROLL_START         = 0.0f; // FLAGGED: value unrecovered (initial scroll)
+    const f32 KF_SCROLL_SPEED         = 0.0f; // FLAGGED: value unrecovered (scroll/sec)
+    const f32 KF_FADE_BORDER          = 0.0f; // FLAGGED: value unrecovered (bottom fade band)
+    const f32 KF_FADE_IN_START        = 0.0f; // FLAGGED: value unrecovered (initial fade)
+    const f32 KF_FADE_IN_SPEED        = 0.0f; // FLAGGED: value unrecovered (fade/sec)
+    const f32 KF_CREDITS_DROPSHADOW_X = 0.0f; // FLAGGED: value unrecovered (shadow X offset)
+    const f32 KF_CREDITS_DROPSHADOW_Y = 0.0f; // FLAGGED: value unrecovered (shadow Y offset)
+    const f32 KF_DROPSHADOW_ALPHA     = 0.0f; // FLAGGED: value unrecovered (shadow alpha scale)
 
-    // Right edge of the text box (flt_82F258A4) and the box bottom margin (flt_82F258A8)
-    // the asm folds in repeatedly. FLAGGED: values unrecovered.
-    const f32 KF_TEXTBOX_RIGHT        = 0.0f; // FLAGGED: flt_82F258A4 value unrecovered
-    const f32 KF_TEXTBOX_BOTTOM       = 0.0f; // FLAGGED: flt_82F258A8 value unrecovered
+    // Right edge of the text box and the box bottom margin, which the console folds in
+    // repeatedly. FLAGGED: values unrecovered.
+    const f32 KF_TEXTBOX_RIGHT        = 0.0f; // FLAGGED: value unrecovered
+    const f32 KF_TEXTBOX_BOTTOM       = 0.0f; // FLAGGED: value unrecovered
 
-    // 1.0f the asm materialises from flt_82001CC0 for the autosize/colour-clamp paths.
+    // 1.0f, which the console materialises for the autosize/colour-clamp paths.
     const f32 KF_ONE = 1.0f;
 
     // The fade-band extent constants passed to RenderStringFadingY's shadow pass: a fade-in
-    // ramp length (flt_82057DD8) and a +100 unit Y margin (flt_820049E0 == 100.0). The margin
+    // ramp length and a +100 unit Y margin (a recovered 100.0 literal). The margin
     // is recovered from the literal; the ramp length is unrecovered.
-    const f32 KF_SHADOW_FADE_RAMP = 0.0f;   // FLAGGED: flt_82057DD8 value unrecovered
-    const f32 KF_FADE_Y_MARGIN    = 100.0f; // flt_820049E0 (recovered literal)
+    const f32 KF_SHADOW_FADE_RAMP = 0.0f;   // FLAGGED: value unrecovered
+    const f32 KF_FADE_Y_MARGIN    = 100.0f; // recovered literal
 
-    // Per-frame timestep the X360 multiplies the scroll/fade speeds by (0.016666668 ==
-    // 1/60s, flt_820139F8). Recovered from the literal in the asm.
+    // Per-frame timestep the console multiplies the scroll/fade speeds by (0.016666668 ==
+    // 1/60s). Recovered as a literal from the console's own code.
     const f32 KF_FRAME_DT = 0.016666668f;
 
-    // The static credits name table the Construct loop counts (off_82F258E8, "Director
-    // people"). FLAGGED: table contents unrecovered; its entry count seeds miNumStrings.
+    // The static credits name table the Construct loop counts ("Director people").
+    // FLAGGED: table contents unrecovered; its entry count seeds miNumStrings.
     // Modelled as an empty (NULL-terminated) table so the count is a faithful 0 until the
-    // rodata is recovered.
-    const char* const KAPC_CREDITS_NAME_TABLE[] = { 0 }; // FLAGGED: off_82F258E8 contents unrecovered
+    // table is recovered.
+    const char* const KAPC_CREDITS_NAME_TABLE[] = { 0 }; // FLAGGED: contents unrecovered
 
-    // The X360 default (invalid) resource-font handle qword (qword_82FB3688) Construct copies
+    // The console's default (invalid) resource-font handle qword that Construct copies
     // into both font handles. It is the null/invalid handle (matches TextObject::Construct's
     // own mpFont reset); modelled as a default-cleared SafeResourceHandle.
     void lClearToDefaultFontHandle(CgsResource::SafeResourceHandle<CgsResource::Font>& lrHandle)
@@ -86,19 +86,20 @@ namespace
     }
 }
 
-// 0x8244EA38: copy the default font handle into both handles, clear the credits type and
+// Copy the default font handle into both handles, clear the credits type and
 // the paragraph count, count the static credits name-table entries into the count, then
 // zero the paragraph array.
 void CreditsTextRenderer::Construct()
 {
-    // stw qword_82FB3688 -> +0x60/+0x64 (mpTitleFont) and +0x58/+0x5C (mpNormalFont).
+    // Store the default-handle qword into +0x60/+0x64 (mpTitleFont) and +0x58/+0x5C
+    // (mpNormalFont).
     lClearToDefaultFontHandle(mpTitleFont);
     lClearToDefaultFontHandle(mpNormalFont);
 
-    meCreditsType = E_CREDITS_TYPE_END; // stw 0, 0x20C4
-    miNumStrings  = 0;                  // stw 0, 0x68
+    meCreditsType = E_CREDITS_TYPE_END; // +0x20C4
+    miNumStrings  = 0;                  // +0x68
 
-    // do { ++miNumStrings; } while (off_82F258E8[miNumStrings]); -- count the static name
+    // do { ++miNumStrings; } while (table[miNumStrings]); -- count the static name
     // table entries (the loop runs only if the table is non-empty).
     if (KAPC_CREDITS_NAME_TABLE[0] != 0)
     {
@@ -119,80 +120,81 @@ void CreditsTextRenderer::Construct()
     }
 }
 
-// 0x82447190: store the heap allocator (guest stores arg3 at +0x08) and report success.
+// Store the heap allocator (the console stores it at +0x08) and report success.
 bool CreditsTextRenderer::Prepare(rw::IResourceAllocator* lpHeapAllocator)
 {
-    mpHeapAllocator = lpHeapAllocator; // stw r5, 8(r11)
+    mpHeapAllocator = lpHeapAllocator; // +0x08
     return true;                       // li r3, 1
 }
 
-// 0x824471A0: the renderer id.
+// The renderer id.
 CgsID CreditsTextRenderer::GetID() const
 {
     return CgsIDCompress("CREDITS");
 }
 
-// 0x824471B0: store the shared text renderer (guest stores arg at +0x50).
+// Store the shared text renderer (the console stores it at +0x50).
 void CreditsTextRenderer::SetTextRenderer(CgsGraphics::TextRenderer* lpTextRenderer)
 {
-    mpTextRenderer = lpTextRenderer; // stw r4, 0x50(r3)
+    mpTextRenderer = lpTextRenderer; // +0x50
 }
 
-// 0x82457BB8: store the enabled flag; when enabling, rebuild the paragraphs and reset the
+// Store the enabled flag; when enabling, rebuild the paragraphs and reset the
 // scroll/fade to their start values.
 void CreditsTextRenderer::SetRenderEnabled(bool lbRenderEnabled)
 {
-    mbRenderEnabled = lbRenderEnabled; // stb r4, 4(r31)
+    mbRenderEnabled = lbRenderEnabled; // +0x04
 
     if (lbRenderEnabled)
     {
         RecalculateParagraphs();
-        mfScroll = KF_SCROLL_START;  // stfs flt_82F258C0, 0x20A4
-        mfFade   = KF_FADE_IN_START; // stfs flt_82F258CC, 0x20A8
+        mfScroll = KF_SCROLL_START;  // +0x20A4
+        mfFade   = KF_FADE_IN_START; // +0x20A8
     }
 }
 
-// 0x8244EAB0: (re)build the paragraph list from the localisation database. For each index
+// (Re)build the paragraph list from the localisation database. For each index
 // look up its title + detail strings (CREDITS_*_%d, or REPLAY_CREDITS_*_%d for replay
 // credits), set the text on the matching TextObject, measure its line count and height,
 // and accumulate the scroll positions. Stops at the first missing pair (end credits) or
 // after the fixed 3-entry replay set.
 void CreditsTextRenderer::RecalculateParagraphs()
 {
-    // The two TextObjects are (re)constructed with default state, then styled. The X360 copies
-    // mpTitleFont into mTitleTextObject (+0x1FAC) and mpNormalFont into mNormalTextObject
-    // (+0x2028) over each object's leading mpFont handle (the stw r,0(obj)/stw r,4(obj) pairs),
+    // The two TextObjects are (re)constructed with default state, then styled. The console
+    // copies mpTitleFont into mTitleTextObject (+0x1FAC) and mpNormalFont into
+    // mNormalTextObject (+0x2028) over each object's leading mpFont handle (two words each),
     // sets the font height, the text-box rect, and the multiline / wordwrap / italic flags.
     mTitleTextObject.Construct(0, 0);
-    mTitleTextObject.mpFont         = mpTitleFont;                       // stw {+0x60,+0x64}, 0(r18)/4(r18) -> mpFont
-    mTitleTextObject.mbAutosize     = false;                            // stb 0, 0x1FF1
-    mTitleTextObject.mfFontHeight   = KF_SMALL_TEXT_SIZE;               // stfs flt_82F258B0, 0x1FB4
-    mTitleTextObject.mv2TopLeft.mX  = 0.0f;                             // stfs 0, 0x1FC4
-    mTitleTextObject.mv2TopLeft.mY  = 0.0f;                             // stfs 0, 0x1FC8
-    mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;              // stfs flt_82F258A4, 0x1FCC
-    mTitleTextObject.mv2BottomRight.mY = KF_TEXTBOX_BOTTOM;             // stfs flt_82F258A8, 0x1FD0
-    mTitleTextObject.mbMultiLine    = 1;                                // stw 1, 0x1FD8
-    mTitleTextObject.mbWordWrap     = 1;                                // stw 1, 0x1FDC
-    mTitleTextObject.mbItalic       = 1;                                // stw 1, 0x1FE0
+    mTitleTextObject.mpFont         = mpTitleFont;                       // +0x60/+0x64 -> mpFont
+    mTitleTextObject.mbAutosize     = false;                            // +0x1FF1
+    mTitleTextObject.mfFontHeight   = KF_SMALL_TEXT_SIZE;               // +0x1FB4
+    mTitleTextObject.mv2TopLeft.mX  = 0.0f;                             // +0x1FC4
+    mTitleTextObject.mv2TopLeft.mY  = 0.0f;                             // +0x1FC8
+    mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;              // +0x1FCC
+    mTitleTextObject.mv2BottomRight.mY = KF_TEXTBOX_BOTTOM;             // +0x1FD0
+    mTitleTextObject.mbMultiLine    = 1;                                // +0x1FD8
+    mTitleTextObject.mbWordWrap     = 1;                                // +0x1FDC
+    mTitleTextObject.mbItalic       = 1;                                // +0x1FE0
 
     mNormalTextObject.Construct(0, 0);
-    mNormalTextObject.mpFont        = mpNormalFont;                     // stw {+0x58,+0x5C}, 0(r21)/4(r21) -> mpFont
-    mNormalTextObject.mbAutosize    = false;                            // stb 0, 0x206D
-    mNormalTextObject.mfFontHeight  = KF_LARGE_TEXT_SIZE;               // stfs flt_82F258B4, 0x2030
+    mNormalTextObject.mpFont        = mpNormalFont;                     // +0x58/+0x5C -> mpFont
+    mNormalTextObject.mbAutosize    = false;                            // +0x206D
+    mNormalTextObject.mfFontHeight  = KF_LARGE_TEXT_SIZE;               // +0x2030
     mNormalTextObject.mv2TopLeft.mX = 0.0f;
     mNormalTextObject.mv2TopLeft.mY = 0.0f;
     mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;
     mNormalTextObject.mv2BottomRight.mY = KF_TEXTBOX_BOTTOM;
-    mNormalTextObject.mbMultiLine   = 1;                                // stw 1, 0x2054
-    mNormalTextObject.mbWordWrap    = 1;                                // stw 1, 0x2058
-    mNormalTextObject.mbItalic      = 1;                                // stw 1, 0x205C
+    mNormalTextObject.mbMultiLine   = 1;                                // +0x2054
+    mNormalTextObject.mbWordWrap    = 1;                                // +0x2058
+    mNormalTextObject.mbItalic      = 1;                                // +0x205C
 
     s32 liCount = 0;
     f32 lfScrollPos = 0.0f;
 
-    // Guard (X360): only build when both the language manager and text renderer are set, and
-    // neither font handle is still the default/invalid handle. (The asm tests handle halves
-    // against the default qword_82FB3688; on the host that is "the handle is non-default".)
+    // Guard (console): only build when both the language manager and text renderer are set,
+    // and neither font handle is still the default/invalid handle. (The console tests the
+    // handle halves against the default qword; on the host that is "the handle is
+    // non-default".)
     if (mpTextRenderer != 0 && mpLanguageManager != 0 &&
         !mpTitleFont.IsNull() && !mpNormalFont.IsNull())
     {
@@ -285,10 +287,10 @@ void CreditsTextRenderer::RecalculateParagraphs()
         }
     }
 
-    miNumStrings = liCount; // stw r23, 0x68(this)
+    miNumStrings = liCount; // +0x68
 }
 
-// 0x8245DE40: rebuild the paragraphs, then -- once faded in -- draw every in-view paragraph
+// Rebuild the paragraphs, then -- once faded in -- draw every in-view paragraph
 // in two passes through TextRenderer::RenderStringFadingY: a dropped/offset shadow pass and
 // the main pass. Each pass walks maParagraphs, keeps the ones overlapping the visible band,
 // positions the matching TextObject's box and colour, and renders with the top/bottom fade.
@@ -302,7 +304,8 @@ void CreditsTextRenderer::RenderComponent(ImRendererSet* lpRendererSet)
 
     CgsGraphics::Im2dRenderBuffer* lpBuffer = lpRendererSet->mpIm2dRenderBuffer;
 
-    // FLAGGED: sub_824587B0(buffer+4) -- open the immediate-buffer batch for this submission
+    // FLAGGED: an unnamed helper reached at buffer+4 opens the immediate-buffer batch for
+    // this submission
     // (an Im2dRenderBuffer batch-begin reached at buffer+4). External callee, body pending.
     // lBatchBegin(lpBuffer);
 
@@ -355,10 +358,10 @@ void CreditsTextRenderer::RenderComponent(ImRendererSet* lpRendererSet)
         }
     }
 
-    // FLAGGED: byte_82FB3784 / sub_82458EC0(buffer+4, dword_83010F24) -- an optional batch
-    // state switch (a debug/blend toggle) before the main pass. External callee + flag, body
-    // pending.
-    // if (gbCreditsBatchToggle) sub_82458EC0(lpBuffer, KU_CreditsBatchState);
+    // FLAGGED: a global flag byte gates a second unnamed helper at buffer+4 -- an optional
+    // batch state switch (a debug/blend toggle) before the main pass. External callee +
+    // flag, body pending.
+    // if (gbCreditsBatchToggle) lBatchStateSwitch(lpBuffer, KU_CreditsBatchState);
 
     // --- Pass 2: the main coloured text. ---
     for (s32 liPara = 0; liPara < miNumStrings; ++liPara)
@@ -379,10 +382,10 @@ void CreditsTextRenderer::RenderComponent(ImRendererSet* lpRendererSet)
                 if (mTitleTextObject.mbWordWrap == 1)
                     mTitleTextObject.CalculateAutosizing();
                 // Main colour: a grey (KI_CREDITS_BRIGHTNESS replicated into RGB) with the
-                // fade alpha (clamp(mfFade * 255) << 24) in the top byte. FLAGGED:
-                // dword_82F258DC (the brightness byte) value unrecovered -> 0.
+                // fade alpha (clamp(mfFade * 255) << 24) in the top byte. FLAGGED: the
+                // brightness byte's value is unrecovered -> 0.
                 const s32 liAlpha = static_cast<s32>(mfFade * 255.0f + 0.5f) & 0xFF;
-                const u32 luBrightness = 0u; // FLAGGED: dword_82F258DC value unrecovered
+                const u32 luBrightness = 0u; // FLAGGED: value unrecovered
                 mTitleTextObject.mTextColour = static_cast<CgsGraphics::RGBA>(
                     (((((liAlpha << 8) | luBrightness) << 8) | luBrightness) << 8) | luBrightness);
                 lpObject = &mTitleTextObject;
@@ -398,13 +401,13 @@ void CreditsTextRenderer::RenderComponent(ImRendererSet* lpRendererSet)
                 if (mNormalTextObject.mbWordWrap == 1)
                     mNormalTextObject.CalculateAutosizing();
                 const s32 liAlpha = static_cast<s32>(mfFade * 255.0f + 0.5f) & 0xFF;
-                const u32 luBrightness = 0u; // FLAGGED: dword_82F258DC value unrecovered
+                const u32 luBrightness = 0u; // FLAGGED: value unrecovered
                 mNormalTextObject.mTextColour = static_cast<CgsGraphics::RGBA>(
                     (((((liAlpha << 8) | luBrightness) << 8) | luBrightness) << 8) | luBrightness);
                 lpObject = &mNormalTextObject;
             }
 
-            // Main pass fade band (asm f1..f4): top pivot 0.0, fade border KF_FADE_BORDER,
+            // Main pass fade band (four arguments): top pivot 0.0, fade border KF_FADE_BORDER,
             // lower-fade start KF_TEXTBOX_BOTTOM - KF_FADE_BORDER, lower-fade end KF_TEXTBOX_BOTTOM.
             mpTextRenderer->RenderStringFadingY(lpBuffer, *lpObject, 0.0f, KF_FADE_BORDER,
                                                 KF_TEXTBOX_BOTTOM - KF_FADE_BORDER,
@@ -412,33 +415,35 @@ void CreditsTextRenderer::RenderComponent(ImRendererSet* lpRendererSet)
         }
     }
 
-    // FLAGGED: sub_82458898(buffer+4) -- close / submit the immediate-buffer batch. External
+    // FLAGGED: a third unnamed helper at buffer+4 closes / submits the immediate-buffer
+    // batch. External
     // callee, body pending.
     // lBatchEnd(lpBuffer);
 }
 
-// 0x824575F0: advance the scroll + fade while enabled, wrap the scroll once the last
+// Advance the scroll + fade while enabled, wrap the scroll once the last
 // paragraph has left the top of the box, and clamp the fade to 1.0. The leading body builds
-// the rotated + aspect-corrected screen transform from the text box (an inlined VPU matrix
+// the rotated + aspect-corrected screen transform from the text box (an inlined vector-unit
 // build); that part is flagged -- only the scalar scroll/fade tail is reconstructed here.
 void CreditsTextRenderer::Update()
 {
-    // FLAGGED: the X360 first rebuilds mScreenTransform from the credits text-box centre /
-    // size / angle (KF_TEXTBOX_CENTRE_X/Y, KF_TEXTBOX_WIDTH/HEIGHT, KF_TEXTBOX_ANGLE) via an
-    // inlined rw::math::vpu matrix path (vperm/vmaddfp ...), then folds in the display aspect
-    // ratio. That transform build is not faithfully reconstructable from the VPU asm and its
-    // box constants are unrecovered; left as a flagged gap. The scalar scroll/fade update
-    // below IS faithful.
-    // BuildScreenTransform();   // -> mScreenTransform (FLAGGED: VPU transform build)
+    // FLAGGED: the console first rebuilds mScreenTransform from the credits text-box centre
+    // / size / angle (KF_TEXTBOX_CENTRE_X/Y, KF_TEXTBOX_WIDTH/HEIGHT, KF_TEXTBOX_ANGLE) via
+    // an inlined rw::math::vpu matrix path (permutes + fused multiply-adds), then folds in
+    // the display aspect ratio. That transform build is not faithfully reconstructable from
+    // the vector-unit path and its box constants are unrecovered; left as a flagged gap. The
+    // scalar scroll/fade update below IS faithful.
+    // BuildScreenTransform();   // -> mScreenTransform (FLAGGED: vector transform build)
 
     if (mbRenderEnabled)
     {
-        mfScroll += KF_SCROLL_SPEED * KF_FRAME_DT; // *(this+0x20A4) += flt_82F258C4 * 1/60
-        mfFade   += KF_FADE_IN_SPEED * KF_FRAME_DT; // *(this+0x20A8) += flt_82F258D0 * 1/60
+        mfScroll += KF_SCROLL_SPEED * KF_FRAME_DT; // +0x20A4 += the scroll speed * 1/60
+        mfFade   += KF_FADE_IN_SPEED * KF_FRAME_DT; // +0x20A8 += the fade speed * 1/60
     }
 
     // Wrap the scroll once the credits column has fully scrolled off the top, then snap it back
-    // to -KF_TEXTBOX_BOTTOM. FLAGGED (register-mangled fn): the X360 forms the wrap limit from
+    // to -KF_TEXTBOX_BOTTOM. FLAGGED (a function a decompiler could not resolve): the console
+    // forms the wrap limit from
     // two `this`-relative loads into the paragraph region --
     //   f0  = *(f32*)(this + (miNumStrings + 6) * 16)
     //   f12 = *(f32*)(this + miNumStrings * 16 + 0x5C)
@@ -446,7 +451,7 @@ void CreditsTextRenderer::Update()
     // The array base is +0x6C (not a 16-aligned offset), so this byte arithmetic does not map
     // cleanly onto named maParagraphs[] members; the named approximation below preserves the
     // intent (last paragraph's position + height + the box margin) but is NOT byte-exact to the
-    // guest's index pairing. Reconfirm against the rodata/offset pass.
+    // console's index pairing. Reconfirm against the constant/offset pass.
     const f32 lfWrapLimit =
         maParagraphs[miNumStrings + 6].mfPosition +
         maParagraphs[miNumStrings].mfHeight +

@@ -2,16 +2,15 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX:
-//   CgsDepthStencilStateFactory::Construct  @ 0x827EBBA0  [EXECUTED in goal trace]
+// Reconstructed from the shipped console build of
+//   CgsDepthStencilStateFactory::Construct  [EXECUTED in goal trace]
 //
 // Builds the fixed set of depth/stencil states the immediate-mode renderer selects
-// between. Only Construct is X360-attested for this TU (Destruct / Prepare / GetState
-// are DWARF-only -- see the header).
+// between. Only Construct is console-attested for this TU (Destruct / Prepare / GetState
+// are declaration-only -- see the header).
 
-// The five depth/stencil-state slots (X360 file-scope statics dword_8301090C /
-// dword_83010910 / dword_83010914 / dword_83010918 / dword_8301091C, one per index of
-// saDepthStencilStates). DWARF (CgsDepthStencilStateFactory.h:53 / .cpp:25) declares
+// The five depth/stencil-state slots (five consecutive file-scope words on the console,
+// one per index of saDepthStencilStates). The original header and .cpp declare
 // this as a PRIVATE STATIC MEMBER of CgsDepthStencilStateFactory named
 // saDepthStencilStates, and this wave promotes it to exactly that: it used to be a
 // TU-local array in the anonymous namespace below, which is why no reader outside this
@@ -24,8 +23,9 @@ namespace
 {
 
     // Carve the backing store for one depth/stencil state through the supplied resource
-    // allocator, then initialise it. X360: size via DepthStencilState::GetResourceDescriptor
-    // (slot-0 {size, align}), carve via lpAllocator's vtable slot +0x10 (DoAllocate),
+    // allocator, then initialise it. The console sizes it via
+    // DepthStencilState::GetResourceDescriptor (slot-0 {size, align}), carves it via
+    // lpAllocator's vtable slot +0x10 (DoAllocate),
     // then DepthStencilState::Initialize. Mirrors renderengine::StateHelper::Initialize's
     // AllocateStateResource + CreateDefaultBlendState pattern.
     renderengine::DepthStencilState* CreateDepthStencilState(
@@ -55,10 +55,10 @@ namespace
 
 CgsDepthStencilStateFactory::CgsDepthStencilStateFactory()
 {
-    // Not X360-attested for this TU (DWARF-only); no ledger body to reconstruct from.
+    // Not console-attested for this TU (declaration-only); no ledger body to reconstruct from.
 }
 
-// @ 0x827EBBA0 -- build the 5 depth/stencil states into saDepthStencilStates, asserting
+// Build the 5 depth/stencil states into saDepthStencilStates, asserting
 // each slot came back non-null. Every state shares the same fixed parameter block; only
 // the comparison function (muFunction) and the depth test/write enable flags differ.
 void CgsDepthStencilStateFactory::Construct(rw::IResourceAllocator* lpAllocator)

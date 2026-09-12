@@ -308,11 +308,6 @@ namespace BrnGui
         // FLAG PC-platform leaf: no-op boundary until the GuiCache TU exposes it.
         void CacheClearExpectedAptComponentList(GuiCache* /*lpCache*/) {}
 
-        // FLAG PC-platform leaf: GuiCache::IsMultiplayerAllowed (X360 @0x824EEB48, the
-        // signed-in profile's multiplayer privilege) is not declared on the committed
-        // GuiCache; PC mirrors the signed-in default (allowed) while the cache holds.
-        bool CacheIsMultiplayerAllowed(const GuiCache* lpCache) { return lpCache != 0; }
-
         // GuiCache's GuiTracker* (X360 +0x4054) and GuiTracker::ClearTracker
         // (@0x824FA0A8) have no committed PC surface. The X360 asserts the tracker
         // pointer first ("mpGuiCache->GetGuiTracker()"), preserved by the callers.
@@ -723,7 +718,7 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1253
 
-        const bool lbMultiplayerAllowed = CacheIsMultiplayerAllowed(mpGuiCache);
+        const bool lbMultiplayerAllowed = mpGuiCache->IsMultiplayerAllowed();
         switch (leMainMenuOption)
         {
         case E_MAIN_MENU_OPTIONS_FREEBURN_PLAY_NOW:

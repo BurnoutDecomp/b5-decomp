@@ -30,6 +30,9 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] one-shot jump-ladder rungs only
 #include "GameSource/Director/MomentController/BrnMomentSelectorSelector.h"   // Selector<u32,10> (the random arm)
+#include "GameSource/Director/MomentController/BrnMoment.h"                    // Moment (state/flags + GetName)
+#include "GameSource/Director/MomentController/BrnMomentController.h"          // MomentController::MomentHandle
+#include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"  // DebugPrinter
 
 namespace BrnDirector
 {
@@ -635,6 +638,79 @@ bool MomentSelector::SelectBestRandomMomentWithExclusion(CgsNumeric::Random& lRa
     }
 
     return true;
+}
+
+// ----------------------------------------------------------------------------
+// MomentSelector::ActualDebugRender -- print one line per registered moment candidate
+// through the director's debug printer, colour-coded by the candidate's live state.
+//
+// Every line fades with the candidate's recency: the alpha byte is 255 minus the recency
+// scaled by 128, so a freshly-picked moment (recency 1) prints at alpha 127 and a long-unused
+// one at 255. The packed colour is that alpha in the top byte over a per-state constant.
+//
+// The state test order is the original build's, branch for branch. Candidates whose handle is
+// not allocated print nothing at all. Two of the arms print through PrintName (which formats
+// the moment's own identity line) and the rest print the moment's GetName() directly; the
+// 0xFFFF00 arm is unreachable with the conditions that reach it, and is kept because the
+// original build keeps it.
+// ----------------------------------------------------------------------------
+void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
+{
+    const u32 luCount = mMomentDescriptionArray.GetLength();
+
+    for (u32 luI = 0; luI < luCount; ++luI)
+    {
+        const s32 liAlpha = 255 - static_cast<s32>(mRecencyArray[luI] * 128.0f);
+
+        if (!mMomentHandleArray[luI].IsAllocated())
+        {
+            continue;
+        }
+
+        const Moment& lrMoment = *mMomentHandleArray[luI].GetMoment();
+
+        if (lrMoment.GetState() == Moment::E_STATE_VALID && lrMoment.CanSwitchToMeNow())
+        {
+            lrDebugPrinter.Print(lrMoment.GetName(),
+                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFF00));
+        }
+        else if (lrMoment.GetState() == Moment::E_STATE_VALID && !lrMoment.CanSwitchToMeNow())
+        {
+            lrDebugPrinter.Print(lrMoment.GetName(),
+                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x8000));
+        }
+        else if (lrMoment.ConditionsAreMet() && !lrMoment.IsInhibited())
+        {
+            lrDebugPrinter.Print(lrMoment.GetName(),
+                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x80FF));
+        }
+        else if (!lrMoment.ConditionsAreMet() && !lrMoment.IsInhibited()
+                 && mMomentDescriptionArray[luI].mbCanBeInhibited)
+        {
+            lrDebugPrinter.PrintName(lrMoment,
+                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFF));
+        }
+        else if (lrMoment.ConditionsAreMet() && lrMoment.IsInhibited())
+        {
+            lrDebugPrinter.PrintName(lrMoment,
+                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFFFF));
+        }
+        else if (!lrMoment.ConditionsAreMet() && lrMoment.IsInhibited())
+        {
+            lrDebugPrinter.PrintName(lrMoment,
+                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x808080));
+        }
+        else if (lrMoment.ConditionsAreMet() || lrMoment.IsInhibited())
+        {
+            lrDebugPrinter.Print(lrMoment.GetName(),
+                                 static_cast<CgsDev::RGBA>((liAlpha << 24) | 0xFFFF00));
+        }
+        else
+        {
+            lrDebugPrinter.PrintName(lrMoment,
+                                     static_cast<CgsDev::RGBA>((liAlpha << 24) | 0x404040));
+        }
+    }
 }
 
 } // namespace BrnDirector

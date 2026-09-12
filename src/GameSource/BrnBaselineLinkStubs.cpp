@@ -6,7 +6,6 @@
 // None of these paths runs on the offline boot -> title -> driving slice.
 // ===========================================================================
 
-#include "GameSource/Replays/BrnReplayModule.h"
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
@@ -17,22 +16,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
 #include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
-
-namespace BrnReplays
-{
-    // Link stub for the replay module ctor (BrnGameModule constructs mReplayModule). The real
-    // ctor is in BrnReplayModule.cpp, unmounted: that TU also defines Update_Dispatch ->
-    // GPUDiskWriteStream::Dispatch, and Stream/BrnReplayGPUDiskWriteStream.cpp does not compile
-    // (two u64 -> CgsFileSystem::Handle casts at :186/:220). Delete this stub when that closure
-    // mounts.
-    ReplayModule::ReplayModule()
-    {
-        // The two members ReplayModule::Prepare / StoreSerialisers depend on; the real ctor
-        // zeroes them too. An unzeroed mpLinearMalloc would be read as a live allocator.
-        mbPrepared     = false;
-        mpLinearMalloc = 0;
-    }
-}
 
 namespace BrnNetwork
 {
@@ -146,7 +129,7 @@ extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long /*dwUserIndex*/) { 
 // --- RenderWare resource-descriptor helpers driving RwRenderableResourceType::
 // GetSerialisedResourceDescriptor (a resource-SIZE query, not exercised while rendering the
 // title Apt). RenderableMesh::GetResourceDescriptor has no linkable body; the renderengine
-// IndexBuffer/VertexBuffer bodies live in TUs that drag undefined X360 XDK shims, so they are
+// IndexBuffer/VertexBuffer bodies live in TUs that drag undefined console-SDK shims, so they are
 // stubbed here rather than linked. All inert: empty/zero descriptors, pass-through pointers. ---
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"
 #include "pc/gcm/renderengine/IndexBuffer.h"
@@ -320,7 +303,7 @@ namespace CgsSound
 {
 namespace Playback
 {
-    // Environment::operator delete(void*) (DWARF h:167): demanded by the
+    // Environment::operator delete(void*), from the original declarations: demanded by the
     // compiler-emitted scalar deleting destructor; the console never scalar-
     // deletes an Environment (disposal is DoDispose -> the allocator-keyed
     // operator delete), so this plain form has no carve to hand back.
@@ -328,14 +311,14 @@ namespace Playback
     {
     }
 
-    // Registry::Dump (DWARF CgsRegistry.h:137; the debug registry printer, its
+    // Registry::Dump (declared in CgsRegistry.h; the debug registry printer, its
     // own slice). Reached from Module::DumpRegistries (a debug-page action).
     void Registry::Dump()
     {
     }
 
-    // Real intern: the console static initializer (sub_82C654A8) stores
-    // Name::MakeHash("~GenericRwacFactory::SK_NAME~") into dword_83008650.
+    // Real intern: the console static initializer stores
+    // Name::MakeHash("~GenericRwacFactory::SK_NAME~") into its own static slot.
     const Name& GenericRwacFactorySkName()
     {
         static const Name SK_NAME("~GenericRwacFactory::SK_NAME~");
@@ -346,7 +329,7 @@ namespace Playback
     }
 
     // The interned-name globals Environment::GetR keys on: gu32VoiceTypeTag is the console
-    // dword_83008650 (GetR compares voice->mFactory.mName against it); dword_830080A8 is
+    // slot GetR compares voice->mFactory.mName against; the second slot is
     // PlayerVoice::SK_PLAYER_SLOT_NAME (used by GenericRwacVoice::CreateVoiceInstance and
     // every streaming voice attach/detach call).
     const u32 gu32VoiceTypeTag      = Name("~GenericRwacFactory::SK_NAME~").GetValue();

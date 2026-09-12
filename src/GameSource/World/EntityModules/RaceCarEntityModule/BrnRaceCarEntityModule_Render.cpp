@@ -163,16 +163,9 @@ s32 giWheelsToRender = 4;
 // global is a VecFloat splat and the console's technique test is an ALL-LANE `vcmpgtfp.` +
 // CR6 bit 24; with four equal lanes that is identical to the lane-x test spelled below.
 //
-// ⚠️ RESIDUAL, NAMED: this fixes SHARP-AT-REST, and only that, for the RACE CAR. The other
-// half -- BLURRED-AT-SPEED -- cannot happen yet, because nothing on this build writes
-// RaceCarRenderParams::mafWheelAngularVelocities (RenderParams+0xD8C): there is not one
-// caller of SetWheelAngularVelocity in the tree, and the console's producer,
-// ActiveRaceCar::CalculateWheelAngularVelocities @0x822BFCF8, is one of the four functions
-// BrnActiveRaceCar.cpp's Update banner lists as absent (item 6, "why the wheels still do not
-// spin"). So every wheel reads 0 rad/s, every wheel picks technique 1, and constant 25 lane x
-// stays 0. The TRAFFIC twin has no such hole -- it derives its spin from Vehicle::GetSpeed(),
-// which is live -- so traffic wheels are the ones that will visibly blur at speed.
-// DELETE-WHEN CalculateWheelAngularVelocities lands.
+// The producer side is live as of 2026-09-12: ActiveRaceCar::CalculateWheelAngularVelocities
+// fills RenderParams::mafWheelAngularVelocities every tick from the published per-wheel spin
+// rate, so the race car now has BOTH halves -- sharp at rest and blurred past 30 rad/s.
 Vector4 gvWheelBlurConstants = { 30.0f, 30.0f, 30.0f, 30.0f };
 
 // The console's wheel matrix / pointer stack arrays are four entries long

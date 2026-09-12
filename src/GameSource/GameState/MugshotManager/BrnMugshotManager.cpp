@@ -2,7 +2,8 @@
 // b5-decomp/src/GameSource/GameState/MugshotManager/BrnMugshotManager.cpp
 // ============================================================================
 // Bodies for BrnGameState::MugshotManager (home: BrnMugshotManager.h). Reconstructed
-// store-for-store from the X360 ARTIST.XEX (asm authoritative; DWARF for names/shapes).
+// store-for-store from the console build (the binary is authoritative for behaviour; the
+// declared shape for names and types).
 //
 // The manager runs two parallel FSMs that ask the image/camera layer (via GameActions
 // pushed onto the OutputBuffer's GameActionQueue) to capture and show mugshots:
@@ -10,17 +11,17 @@
 //   * SHOW machine    (meMugshotShowState):    a remote player's mugshot.
 //
 // GAME-ACTION PAYLOADS (pushed via CgsModule::VariableEventQueue<13312,16>::AddEvent):
-//   * type 213 (0xD5), 32 bytes -- the "start mugshot" action (DWARF PaybackMugshotAction):
+//   * type 213 (0xD5), 32 bytes -- the "start mugshot" action (the declaration record PaybackMugshotAction):
 //        +0x00 CgsID mImageId; +0x08 show-car; +0x0C player-car; +0x10 state/index word;
 //        +0x14 EImageType; +0x18 bool; +0x19 bool broadcast.
-//   * type 214 (0xD6), 16 bytes -- the "abort mugshot capture" action (DWARF AbortMugshotCaptureAction):
+//   * type 214 (0xD6), 16 bytes -- the "abort mugshot capture" action (the declaration record AbortMugshotCaptureAction):
 //        +0x00 aborted-show-car; +0x04 player-car; +0x08 EImageType; +0x0C bool.
 // PaybackMugshotAction / AbortMugshotCaptureAction have no committed home yet, so each is
-// modelled here as the exact byte image the X360 builds on the stack and memcpy's into the
+// modelled here as the exact byte image the console builds on the stack and memcpy's into the
 // queue. They are file-local payloads (the queue stores them by byte image); when those
 // GameAction types land in BrnGameActions.h, swap these for the real structs (the layouts match).
 //
-// ASSERT-PARITY NOTE: the X360 bakes the verbatim source path "d:\\p4\\b5_main\\...
+// ASSERT-PARITY NOTE: the console bakes the verbatim source path "d:\\p4\\b5_main\\...
 // BrnMugshotManager.cpp" and the exact line numbers into every FireAssert. The house CGS_ASSERT
 // macro emits __FILE__/__LINE__ instead; this is the project-wide benign assert-machinery YELLOW.
 
@@ -31,7 +32,7 @@ namespace BrnGameState
 {
 namespace
 {
-    // --- KAI_MUGSHOT_PRIORITIES (DWARF BrnMugshotManager.h:163, `extern int32_t[]`) ---------
+    // --- KAI_MUGSHOT_PRIORITIES (declared in the home header as `extern int32_t[]`) ---------
     // Indexed by GameStateModuleIO::EImageType (0..6, the default meCaptureMugshotType == COUNT(6)
     // is a valid index). StartMugshotCapture only ever uses these for the RELATIVE comparison
     // `priority[new] < priority[current]` to decide whether a newly-requested capture out-ranks the
@@ -52,22 +53,21 @@ namespace
         6,  // E_IMAGE_TYPE_COUNT                   (6) -- lowest precedence (cleared/default slot)
     };
 
-    // --- FSM timing constants (DWARF BrnMugshotManager.cpp:44-50) -----------------------------
-    // X360 float immediates (flt_8202AC1C etc.); the exact constants the FSM compares timers against.
-    const f32 KF_WAIT_MUGSHOT_DURATION                = 0.2f;       // flt_8202AC1C
-    const f32 KF_WAIT_PAYBACK_MUGSHOT_DURATION        = 3.0f;       // flt_8202AC20
-    const f32 KF_CAPTURE_YOUR_MUGSHOT_DURATION        = 2.3f;       // flt_8202AC24
-    const f32 KF_CAPTURE_YOUR_VICTORY_MUGSHOT_DURATION = 4.8000002f; // flt_8202AC28
-    const f32 KF_SHOW_YOUR_MUGSHOT_DURATION           = 4.0f;       // flt_8202AEAC
+    // --- FSM timing constants (declared at this TU's scope) -------------------------------
+    // Console float immediates; the exact constants the FSM compares its timers against.
+    const f32 KF_WAIT_MUGSHOT_DURATION                = 0.2f;
+    const f32 KF_WAIT_PAYBACK_MUGSHOT_DURATION        = 3.0f;
+    const f32 KF_CAPTURE_YOUR_MUGSHOT_DURATION        = 2.3f;
+    const f32 KF_CAPTURE_YOUR_VICTORY_MUGSHOT_DURATION = 4.8000002f;
+    const f32 KF_SHOW_YOUR_MUGSHOT_DURATION           = 4.0f;
     const f32 KF_SHOW_THEIR_MUGSHOT_DURATION          = 4.0f;       // (show machine timeout)
-    const f32 KF_CAPTURE_THEIR_MUGSHOT_TIMEOUT_DURATION = 10.0f;    // flt_8202AC38
-
-    // The two GameAction event types + their 32/16-byte payload sizes (X360 AddEvent immediates).
+    const f32 KF_CAPTURE_THEIR_MUGSHOT_TIMEOUT_DURATION = 10.0f;
+    // The two GameAction event types + their 32/16-byte payload sizes (console AddEvent immediates).
     const s32 KI_GAME_ACTION_START_MUGSHOT = 213;  // 0xD5
     const s32 KI_GAME_ACTION_ABORT_MUGSHOT = 214;  // 0xD6
 
     // The "begin capture/show a mugshot" GameAction payload (type 213, 32 bytes). Byte image matches
-    // the stack record the X360 builds before AddEvent. The state/index word at +0x10 carries either
+    // the stack record the console builds before AddEvent. The state/index word at +0x10 carries either
     // 0 (StartMugshotCapture queue), or the FSM-stage tag (1/3/5) the step handlers stamp.
     struct StartMugshotGameAction
     {
@@ -92,8 +92,8 @@ namespace
     };
 
     // The GameActionQueue concrete type (forward-declared in BrnGameStateModuleIO.h) is the variable
-    // event queue the GameStateModuleIO TU returns; the X360 calls VariableEventQueue<13312,16>::AddEvent
-    // straight on it. Bridge the opaque return to the queue type the X360 invokes the method on.
+    // event queue the GameStateModuleIO TU returns; the console calls VariableEventQueue<13312,16>::AddEvent
+    // straight on it. Bridge the opaque return to the queue type the console invokes the method on.
     inline CgsModule::VariableEventQueue<13312, 16>* AsVeq(GameStateModuleIO::GameActionQueue* lpQueue)
     {
         return reinterpret_cast<CgsModule::VariableEventQueue<13312, 16>*>(lpQueue);
@@ -101,7 +101,7 @@ namespace
 }
 
 // ---------------------------------------------------------------------------
-// CameraStatusData::Clear -- X360 (inlined). Reset to {INVALID, COUNT(4)}.
+// CameraStatusData::Clear -- console (inlined). Reset to {INVALID, COUNT(4)}.
 // ---------------------------------------------------------------------------
 void MugshotManager::CameraStatusData::Clear()
 {
@@ -110,14 +110,14 @@ void MugshotManager::CameraStatusData::Clear()
 }
 
 // ---------------------------------------------------------------------------
-// Construct -- X360 0x82363A88. Seed every member to its cleared value.
+// Construct. Seed every member to its cleared value.
 // ---------------------------------------------------------------------------
 void MugshotManager::Construct(GameStateModule* lpGameStateModule)
 {
     mpGameStateModule           = lpGameStateModule;          // this+0x68
     meMugshotCaptureState       = E_MUGSHOT_CAPTURE_STATE_IDLE; // this+0x58 (0)
     meMugshotShowState          = E_MUGSHOT_SHOW_STATE_IDLE;    // this+0x5C (0)
-    // this+0x40: CgsID seeded to 0x800000000 (HIDWORD == 8, LODWORD == 0).
+    // this+0x40: CgsID seeded to the id whose high word is 8 and whose low word is 0.
     mRoadRuleMugshotBeatenRoadID = (static_cast<u64>(8) << 32);
     mfMugshotCaptureTimer       = -1.0f;                      // this+0x50
     mbIsAnythingPaused          = false;                      // this+0x6C
@@ -136,14 +136,14 @@ void MugshotManager::Construct(GameStateModule* lpGameStateModule)
 }
 
 // ---------------------------------------------------------------------------
-// Prepare / Release / Destruct -- X360-inlined no-ops for this manager.
+// Prepare / Release / Destruct -- console-inlined no-ops for this manager.
 // ---------------------------------------------------------------------------
 bool MugshotManager::Prepare()  { return true; }
 bool MugshotManager::Release()  { return true; }
 void MugshotManager::Destruct() { }
 
 // ---------------------------------------------------------------------------
-// ResetState -- X360 (BrnMugshotManager.cpp:138). Shared body used by OnRoundStart /
+// ResetState. Shared body used by OnRoundStart /
 // OnRoundEnd to reset both FSMs and the camera-status cache (round-boundary HIDWORD == 6).
 // ---------------------------------------------------------------------------
 void MugshotManager::ResetState()
@@ -167,7 +167,7 @@ void MugshotManager::ResetState()
 }
 
 // ---------------------------------------------------------------------------
-// OnRoundStart -- X360 0x82357A70. Unconditional full reset.
+// OnRoundStart. Unconditional full reset.
 // ---------------------------------------------------------------------------
 void MugshotManager::OnRoundStart()
 {
@@ -175,7 +175,7 @@ void MugshotManager::OnRoundStart()
 }
 
 // ---------------------------------------------------------------------------
-// OnRoundEnd -- X360 0x82357AF8. Reset only when asked.
+// OnRoundEnd. Reset only when asked.
 // ---------------------------------------------------------------------------
 void MugshotManager::OnRoundEnd(bool lbResetState)
 {
@@ -186,7 +186,7 @@ void MugshotManager::OnRoundEnd(bool lbResetState)
 }
 
 // ---------------------------------------------------------------------------
-// DoesPlayerHaveACamera -- X360 0x823579D8. Find the cache slot for the given player
+// DoesPlayerHaveACamera. Find the cache slot for the given player
 // and report whether they have a working camera (status != 0; status 4 == COUNT asserts).
 // ---------------------------------------------------------------------------
 bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCarIndex)
@@ -207,7 +207,7 @@ bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCar
 }
 
 // ---------------------------------------------------------------------------
-// UpdateCameraStatusData -- X360 0x82363AF0. Copy each network player's active-race-car
+// UpdateCameraStatusData. Copy each network player's active-race-car
 // slot + camera status into maCameraStatusData[], padding the tail to {INVALID, COUNT}.
 // ---------------------------------------------------------------------------
 void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInputBuffer* lpInput)
@@ -222,8 +222,8 @@ void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInp
     const s32 liNumPlayers = lpPlayerStatusInterface->GetNumPlayers();
     for (; liIndex < liNumPlayers; ++liIndex)
     {
-        // The X360 reads the player record directly; the bounds asserts below mirror its
-        // GetPlayerStatusData() asserts (file BrnNetworkModuleInGamePlayerStatusInterface.h).
+        // The console reads the player record directly; the bounds asserts below mirror its
+        // GetPlayerStatusData asserts (file BrnNetworkModuleInGamePlayerStatusInterface.h).
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
         CGS_ASSERT(liIndex < liNumPlayers, "liIndex < miNumPlayers");
 
@@ -242,7 +242,7 @@ void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInp
 }
 
 // ---------------------------------------------------------------------------
-// StartMugshotCapture -- X360 0x82382E18. Arbitrate which FSM the local player drives for a
+// StartMugshotCapture. Arbitrate which FSM the local player drives for a
 // newly-requested capture of mugshot type leMugshotTypeToCapture and queue the GameActions.
 // ---------------------------------------------------------------------------
 void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutput,
@@ -317,18 +317,18 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
         }
         else
         {
-            return; // X360 LABEL_36: a capture/show already runs -- do not queue the broadcast.
+            return; // console LABEL_36: a capture/show already runs -- do not queue the broadcast.
         }
     }
 
     // Broadcast the "begin capture" GameAction.
-    // X360 (0x82383044-0x82383058): the payload's +0x08 word receives r28 (the CAPTURE-resolved
-    // index) and the +0x0C word receives r29 (the SHOW-resolved index) -- the opposite assignment
+    // Console order: the payload's +0x08 word receives the CAPTURE-resolved index and the
+    // +0x0C word receives the SHOW-resolved index -- the opposite assignment
     // to the other builders' use of these slots. Write +0x08 = capture-resolved, +0x0C = show-resolved.
     StartMugshotGameAction lMugshotPrepareCaptureAction;
     lMugshotPrepareCaptureAction.mImageId        = mRoadRuleMugshotBeatenRoadID;
-    lMugshotPrepareCaptureAction.meShowRaceCar   = leImageCaptureRaceCarIndex; // +0x08 (r28)
-    lMugshotPrepareCaptureAction.mePlayerRaceCar = leImageShowRaceCarIndex;    // +0x0C (r29)
+    lMugshotPrepareCaptureAction.meShowRaceCar   = leImageCaptureRaceCarIndex; // +0x08
+    lMugshotPrepareCaptureAction.mePlayerRaceCar = leImageShowRaceCarIndex;    // +0x0C
     lMugshotPrepareCaptureAction.miStageTag      = 0;
     lMugshotPrepareCaptureAction.meImageType     = leMugshotTypeToCapture;
     lMugshotPrepareCaptureAction.mbFlagA         = false;
@@ -342,7 +342,7 @@ void MugshotManager::StartMugshotCapture(GameStateModuleIO::OutputBuffer* lpOutp
 }
 
 // ---------------------------------------------------------------------------
-// ProcessTakedownEvents -- X360 0x823830D0. For each frame takedown the local player is
+// ProcessTakedownEvents. For each frame takedown the local player is
 // the victim of (and has a camera for), start a payback mugshot capture.
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInputBuffer* /*lpInput*/,
@@ -398,14 +398,14 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
 }
 
 // ---------------------------------------------------------------------------
-// CheckForSuccessfulPayback -- X360 0x823832D0. Scan the network dirty-trick queue for a
+// CheckForSuccessfulPayback. Scan the network dirty-trick queue for a
 // completed payback (type 4) the local player pulled off, and start a payback mugshot.
 //
 // NOTE: the dirty-trick queue lives on the PreWorldInputBuffer's NetworkToGameStateInterface
-// (this+0x2268 region in the X360). That interface is still a named-opaque placeholder
+// (this+0x2268 region in the console). That interface is still a named-opaque placeholder
 // (BrnGameStateModuleIO.h NetworkToGameStateInterface), so the iteration over its dirty-trick
 // records cannot yet be spelled by named members. The control flow + the per-record action are
-// reconstructed; FLAG: the queue walk is gated behind GetNetworkToGameStateInterface() and is a
+// reconstructed; FLAG: the queue walk is gated behind GetNetworkToGameStateInterface and is a
 // no-op until that interface's real layout (dirty-trick record array) is homed.
 // ---------------------------------------------------------------------------
 void MugshotManager::CheckForSuccessfulPayback(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
@@ -414,13 +414,13 @@ void MugshotManager::CheckForSuccessfulPayback(const GameStateModuleIO::PreWorld
     CGS_ASSERT(lpInput != nullptr, "lpInput");
     CGS_ASSERT(lpInput->GetNetworkToGameStateInterface() != nullptr,
                "lpInput->GetNetworkToGameStateInterface()");
-    // The X360 also asserts the dirty-trick queue is non-null; that sub-accessor is not yet on the
+    // The console also asserts the dirty-trick queue is non-null; that sub-accessor is not yet on the
     // opaque NetworkToGameStateInterface, so the record walk + StartMugshotCapture(..., PAYBACK ...)
     // per matched dirty-trick (type 4) lands when that interface is homed (see FLAG above).
 }
 
 // ---------------------------------------------------------------------------
-// HandlePreparingForMugshotCapture -- X360 0x82363C38 (capture FSM, state 1).
+// HandlePreparingForMugshotCapture -- (capture FSM, state 1).
 // Wait out the prepare delay (longer for the payback type), then advance to CAPTURE.
 // ---------------------------------------------------------------------------
 void MugshotManager::HandlePreparingForMugshotCapture()
@@ -439,7 +439,7 @@ void MugshotManager::HandlePreparingForMugshotCapture()
 }
 
 // ---------------------------------------------------------------------------
-// HandleCapturingMugshot -- X360 0x82383438 (capture FSM, state 2).
+// HandleCapturingMugshot -- (capture FSM, state 2).
 // On the first frame (timer just reset to 0) queue the capture action; thereafter wait out the
 // per-type capture duration then advance to TAKE.
 // ---------------------------------------------------------------------------
@@ -477,9 +477,9 @@ void MugshotManager::HandleCapturingMugshot(GameStateModuleIO::OutputBuffer* lpO
 }
 
 // ---------------------------------------------------------------------------
-// HandleTakingMugshot -- X360-inlined (capture FSM, state 3). No out-of-line body was emitted
+// HandleTakingMugshot -- console-inlined (capture FSM, state 3). No out-of-line body was emitted
 // (the Update switch's case-3 handler collapses to nothing observable in the trace milestone).
-// FLAG(still_unbodied): no X360 asm section for this handler in the dossier -- left as a no-op.
+// FLAG(still_unbodied): no console binary section for this handler in the dossier -- left as a no-op.
 // ---------------------------------------------------------------------------
 void MugshotManager::HandleTakingMugshot(GameStateModuleIO::OutputBuffer* /*lpOutput*/,
                                          const GameStateModuleIO::VehicleOutputInterface* /*lpVehicleOutput*/,
@@ -488,16 +488,16 @@ void MugshotManager::HandleTakingMugshot(GameStateModuleIO::OutputBuffer* /*lpOu
 }
 
 // ---------------------------------------------------------------------------
-// HandlePreparingToCaptureTheirMugshot -- X360-inlined (show FSM, state 1). The Update switch's
+// HandlePreparingToCaptureTheirMugshot -- console-inlined (show FSM, state 1). The Update switch's
 // case-1 handler is inlined directly (wait KF_WAIT_MUGSHOT_DURATION then advance to CAPTURE), so
-// there is no separate body; the transition lives in Update(). Declared for completeness.
+// there is no separate body; the transition lives in Update. Declared for completeness.
 // ---------------------------------------------------------------------------
 void MugshotManager::HandlePreparingToCaptureTheirMugshot()
 {
 }
 
 // ---------------------------------------------------------------------------
-// HandleCapturingTheirMugshot -- X360 0x82383768 (show FSM, state 2).
+// HandleCapturingTheirMugshot -- (show FSM, state 2).
 // Once the capture-their timeout elapses, queue the capture action and advance to SHOW (resetting
 // the show timer + the beaten-road id to the round-reset value 0x600000000).
 // ---------------------------------------------------------------------------
@@ -528,7 +528,7 @@ void MugshotManager::HandleCapturingTheirMugshot(GameStateModuleIO::OutputBuffer
 }
 
 // ---------------------------------------------------------------------------
-// HandleShowingTheirMugshot -- X360 0x82383870 (show FSM, state 3).
+// HandleShowingTheirMugshot -- (show FSM, state 3).
 // On the first frame (timer just reset to 0) queue the show action; once the show duration elapses
 // queue the dismiss action and return to IDLE.
 // ---------------------------------------------------------------------------
@@ -576,7 +576,7 @@ void MugshotManager::HandleShowingTheirMugshot(GameStateModuleIO::OutputBuffer* 
 }
 
 // ---------------------------------------------------------------------------
-// Update -- X360 0x82391690 (BrnGameStateModule::PreWorldUpdate). Drive both FSMs.
+// Update -- (BrnGameStateModule::PreWorldUpdate). Drive both FSMs.
 // ---------------------------------------------------------------------------
 void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                             GameStateModuleIO::OutputBuffer* lpOutput,
@@ -591,7 +591,7 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
     ProcessTakedownEvents(lpInput, lpOutput, lpTakedownEventQueue, leGameModeType);
     CheckForSuccessfulPayback(lpInput, lpOutput);
 
-    // Advance both timers by the frame's delta-time (timer[1] * timer[2] in the X360 read: the
+    // Advance both timers by the frame's delta-time (timer[1] * timer[2] in the console read: the
     // PreWorldInputBuffer timer-status payload words at +0x04/+0x08); -1.0f means "freshly armed",
     // which seeds the timer at 0.0f without advancing.
     const GameStateModuleIO::TimerStatusInterface* lpTimer = lpInput->GetTimerStatusInterface();
@@ -651,7 +651,7 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
 }
 
 // ---------------------------------------------------------------------------
-// ProcessImageReceivedEvent -- X360 0x82363C90. A remote player's mugshot arrived: if we are not
+// ProcessImageReceivedEvent. A remote player's mugshot arrived: if we are not
 // already showing one (and not in a blocked post-event-camera state), latch it and arm the show FSM.
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessImageReceivedEvent(const OnlineImageReceivedEvent* lpImageReceivedEvent)
@@ -660,7 +660,7 @@ void MugshotManager::ProcessImageReceivedEvent(const OnlineImageReceivedEvent* l
     CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
     CGS_ASSERT(mpGameStateModule->GetModeManager() != nullptr, "mpGameStateModule->GetModeManager()");
 
-    // X360 gate: proceed when the show FSM is idle, OR it is in the capture-their state AND the
+    // console gate: proceed when the show FSM is idle, OR it is in the capture-their state AND the
     // current mode is NOT in a blocked post-event camera state.
     bool lbAcceptImage;
     if (meMugshotShowState == E_MUGSHOT_SHOW_STATE_IDLE)
@@ -691,7 +691,7 @@ void MugshotManager::ProcessImageReceivedEvent(const OnlineImageReceivedEvent* l
 }
 
 // ---------------------------------------------------------------------------
-// ProcessBeatenRoadRuleEvent -- X360 0x82383A40. A road rule was beaten by lBeatenPlayerRaceCarIndex:
+// ProcessBeatenRoadRuleEvent. A road rule was beaten by lBeatenPlayerRaceCarIndex:
 // if the local player has a camera, latch the beaten road id and start the road-rule mugshot (crash
 // vs time variant chosen by leScoreType: non-zero score -> time mugshot (3), zero -> crash (4)).
 // ---------------------------------------------------------------------------
@@ -715,7 +715,7 @@ void MugshotManager::ProcessBeatenRoadRuleEvent(GameStateModuleIO::OutputBuffer*
 }
 
 // ---------------------------------------------------------------------------
-// ProcessOnlineWin -- X360 (BrnMugshotManager.cpp:954). The local player won an online event:
+// ProcessOnlineWin. The local player won an online event:
 // start a victory mugshot of themselves (show == capture == the local player).
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessOnlineWin(GameStateModuleIO::OutputBuffer* lpOutput)
@@ -726,7 +726,7 @@ void MugshotManager::ProcessOnlineWin(GameStateModuleIO::OutputBuffer* lpOutput)
 }
 
 // ---------------------------------------------------------------------------
-// ProcessAbortCaptureEvent -- X360 0x82363DE0. The image layer aborted an in-flight capture:
+// ProcessAbortCaptureEvent. The image layer aborted an in-flight capture:
 // reset whichever FSM (capture if mbAbortCaptureMachine, else show) back to IDLE.
 // ---------------------------------------------------------------------------
 void MugshotManager::ProcessAbortCaptureEvent(const OnlineImageCaptureAbortedEvent* lpAbortEvent)
@@ -749,7 +749,7 @@ void MugshotManager::ProcessAbortCaptureEvent(const OnlineImageCaptureAbortedEve
 }
 
 // ---------------------------------------------------------------------------
-// ChangeState / UpdateFSMTimers -- X360-inlined helpers (declared in the home). The X360 inlines
+// ChangeState / UpdateFSMTimers -- console-inlined helpers (declared in the home). The console inlines
 // the state writes / timer advance at each call site (see Update / StartMugshotCapture), so no
 // out-of-line bodies were emitted; de-inlined definitions provided for the named declarations.
 // ---------------------------------------------------------------------------

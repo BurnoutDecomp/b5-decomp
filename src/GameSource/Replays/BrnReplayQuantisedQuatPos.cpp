@@ -1,12 +1,12 @@
 // BrnReplays::QuantisedQuatPos -- packs/unpacks a quaternion-orientation + position pair into a
 // compact 12-byte replay record.
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (QuantisedQuatPos TU):
-//   Pack           @0x82657C50
-//   UnPack         @0x82657E50
-//   ValidateQuatPos@0x82657AB0
-//   PrintQuatPos   @0x82653028
-// No DWARF or LegacySrc source recovered; the surface is taken from the X360 asm and the
+// Reconstructed from the shipped image (QuantisedQuatPos TU):
+//   Pack
+//   UnPack
+//   ValidateQuatPos
+//   PrintQuatPos
+// No type information recovered; the surface is taken from the image and the
 // TrafficEntitySerialiser / PropSerialiserFrame call sites.
 //
 // Working-buffer layout (8 floats): [0..3] quaternion (x,y,z,w), [4..6] position (x,y,z), [7] pad.
@@ -28,7 +28,7 @@ namespace BrnReplays
 {
 namespace
 {
-    // fsel-based clamp matching the X360 codegen: lo = (min-v>=0)?min:v; then
+    // branch-free clamp matching the codegen: lo = (min-v>=0)?min:v; then
     // r = (max-lo>=0)?lo:max. Order-preserving so NaN/-0.0 behaviour matches the asm.
     static inline float FselClamp(float lfValue, float lfMin, float lfMax)
     {
@@ -39,9 +39,9 @@ namespace
 
 namespace QuantisedQuatPos
 {
-    // @ 0x82653028
+    //
     // Debug dump of a quat+pos working buffer to the engine log, gated by the message
-    // filter. lpQuatPos is the 8-float buffer (quat[0..3], pos[4..6]). The X360 streams
+    // filter. lpQuatPos is the 8-float buffer (quat[0..3], pos[4..6]). The image streams
     // the position and quaternion through the StrStreamBase vector operator<< overloads
     // (VMX lvx128 of a padded 4-lane copy); reconstructed here as the equivalent per-
     // component stream chain (mirrors BrnBehaviourRenderMetrics). liUnused is dead.
@@ -67,7 +67,7 @@ namespace QuantisedQuatPos
         }
     }
 
-    // @ 0x82657AB0
+    //
     // Range-check a quat+pos working buffer (quat[0..3], pos[4..6]): every field must
     // already equal its clamp to the packed range (pos.x/z +/-10000, pos.y +/-1000,
     // quat +/-1). A mismatch means the value would not survive quantisation -> dump it
@@ -105,7 +105,7 @@ namespace QuantisedQuatPos
         }
     }
 
-    // @ 0x82657C50
+    //
     // Quantise the source quaternion+position (8-float working buffer: quat[0..3],
     // pos[4..6]) into the 12-byte record lpDest12. The quaternion is normalised; the
     // w-sign is folded (w forced non-negative so w can be dropped and rederived on
@@ -155,7 +155,7 @@ namespace QuantisedQuatPos
         lStream.AddBits(luPacked, 10);
     }
 
-    // @ 0x82657E50
+    //
     // Expand the 12-byte quantised record lpSource12 into the 8-float working buffer
     // lpDest32 (quat[0..3], pos[4..6]). The dropped quaternion w is rederived as
     // +sqrt(1 - x^2 - y^2 - z^2) (Pack forced w non-negative). Returns lpDest32.

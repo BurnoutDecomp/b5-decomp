@@ -12,6 +12,8 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h" // BehaviourSpirallingDeathcam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"      // BehaviourAftertouchCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"    // BehaviourAftertouchCrash::Parameters
+#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"                   // BehaviourRig::Parameters
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 
 // ============================================================================
 // GameSource/Director/Camera/BrnBehaviourParameterBank.h
@@ -486,6 +488,32 @@ namespace BrnDirector
                 mBystanderCloseParameters.meType = eBehaviourBystanderCam;
                 mBystanderFarParameters.meType   = eBehaviourBystanderCam;
                 mFixedDefault.meType             = eBehaviourFixedCam;
+
+                // ⭐ 2026-09-12: the eleven player-jumping shot blocks, same posture.
+                // ⚠ THE NINE RIG BLOCKS' TYPE TAGS ARE NOT SEEDED and cannot be from here:
+                // BehaviourRig::Parameters inherits the shared Behaviour::Parameters head,
+                // whose mType is protected, and the only thing that writes it is
+                // BehaviourRig::Parameters::Construct -- which lives in the unmounted
+                // BehaviourRig.cpp and sets it to 0 anyway (the console's authored tunings,
+                // tag included, come from the bank's own compiled-in Construct, which is not
+                // recovered). Nothing can reach these blocks yet either: the only consumer is
+                // MomentPlayerJumping::Prepare, whose TU is not in the link. Inert, not wrong.
+                // DELETE-WHEN: BehaviourRig.cpp is mounted, and Construct calls
+                // BehaviourRig::Parameters::Construct on each of the nine instead of zeroing.
+                ZeroBlock(&mBystanderJumpLeftParameters,       sizeof(mBystanderJumpLeftParameters));
+                ZeroBlock(&mBystanderJumpFromBehindParameters, sizeof(mBystanderJumpFromBehindParameters));
+                ZeroBlock(&mRigRearQFwd,        sizeof(mRigRearQFwd));
+                ZeroBlock(&mRigFrontQCuFwd,     sizeof(mRigFrontQCuFwd));
+                ZeroBlock(&mRigBootViewFwd,     sizeof(mRigBootViewFwd));
+                ZeroBlock(&mRigRoofFwd,         sizeof(mRigRoofFwd));
+                ZeroBlock(&mRigFrontQCuFwd2,    sizeof(mRigFrontQCuFwd2));
+                ZeroBlock(&mRigUnderbelly,      sizeof(mRigUnderbelly));
+                ZeroBlock(&mRigDropUnderbelly,  sizeof(mRigDropUnderbelly));
+                ZeroBlock(&mRigDropFrontQCuFwd, sizeof(mRigDropFrontQCuFwd));
+                ZeroBlock(&mRigDropBootViewFwd, sizeof(mRigDropBootViewFwd));
+
+                mBystanderJumpLeftParameters.meType       = eBehaviourBystanderCam;
+                mBystanderJumpFromBehindParameters.meType = eBehaviourBystanderCam;
             }
 
             // The named-parameter record this bank owns, at bank +0x10. The arbitrator states
@@ -582,29 +610,63 @@ namespace BrnDirector
                 return mPassengerDefault;
             }
 
-            // The player-jumping moment's shot parameter blocks (MomentPlayerJumping::
-            // Prepare AddShots). STILL DECLARATION-ONLY -- these two are the only moment
-            // camera accessors the record map does not close, because they are INDEXED and
-            // this class models blocks by name, not as the record's arrays.
+            // ⭐ THE PLAYER-JUMPING SHOT BLOCKS, CARVED 2026-09-12. These two were the last
+            // moment camera accessors left declaration-only: they are INDEXED, and this class
+            // models blocks by name rather than as the record's arrays. They are bodied now
+            // as a switch over the RECORD SLOT INDEX, and the eleven blocks the jump moment
+            // names are real members below (the same by-name parity the four blocks above
+            // have -- placing the runs at their record offsets is still impossible here, see
+            // the members' own note).
             //
-            // ⭐ THE INDEX BASE THE CALL SITES USE IS OFF BY ONE, and it must be corrected
-            // before either is bodied. The nine attested manager displacements are
+            // The index base the call sites used WAS off by one, and is corrected in the same
+            // change. The eleven attested manager displacements are
             //   rigs      79792 80080 81520 82384 82096 80944  (attached collection)
             //             82672 82960 83248                    (dropped collection)
             //   bystander 78408 78720
-            // Against the record map those are rig slots {1,2,7,10,9,5} + {11,12,13} and
-            // bystander slots {0,2} -- i.e. mRigRearQFwd / mRigFrontQCuFwd / mRigRoofFwd /
-            // mRigUnderbelly / mRigFrontQCuFwd2 / mRigBootViewFwd, then the three blocks
-            // whose own names begin "Drop" feeding the DROPPED collection (which is what
-            // makes the +1 unambiguous), and the two bystander blocks whose own names begin
-            // "Jump" feeding the jump moment. BrnMomentPlayerJumping.cpp currently passes
-            // {0,1,6,9,8,4} / {10,11,12} / {0,1}, one short at every rig slot and wrong at
-            // the second bystander.
-            // DELETE-WHEN: the record's rig and bystander runs are placed (their Parameters
-            // are modelled narrower than the console's 288 / 156, so placing them is a type
-            // widening, not a reserved-span edit) and the call sites are renumbered.
-            const BehaviourRig::Parameters&          GetPlayerJumpingRigShotParams(s32 liIndex) const;
-            const BehaviourBystanderCam::Parameters& GetPlayerJumpingBystanderShotParams(s32 liIndex) const;
+            // Against the record map (rig run at record +4432 stride 288, bystander run at
+            // record +3336 stride 156, bank == record + 0x10) those are rig slots
+            // {1,2,7,10,9,5} + {11,12,13} and bystander slots {0,2} -- mRigRearQFwd /
+            // mRigFrontQCuFwd / mRigRoofFwd / mRigUnderbelly / mRigFrontQCuFwd2 /
+            // mRigBootViewFwd, then the three blocks whose own names begin "Drop" feeding the
+            // DROPPED collection (which is what makes the +1 unambiguous), and the two
+            // bystander blocks whose own names begin "Jump" feeding the jump moment.
+            // BrnMomentPlayerJumping.cpp used to pass {0,1,6,9,8,4} / {10,11,12} / {0,1};
+            // it now passes the slot numbers above.
+            //
+            // [FLAG, PC-only] the `default:` arm. The console has no such function at all --
+            // it inlines each of the eleven reads to its own fixed displacement -- so there is
+            // no console behaviour for an index outside the eleven. The arm exists only so a
+            // future caller cannot read past the end of this class; it returns the first block
+            // of the run it is asked for and fires the assert.
+            const BehaviourRig::Parameters& GetPlayerJumpingRigShotParams(s32 liIndex) const
+            {
+                switch (liIndex)
+                {
+                case 1:  return mRigRearQFwd;
+                case 2:  return mRigFrontQCuFwd;
+                case 5:  return mRigBootViewFwd;
+                case 7:  return mRigRoofFwd;
+                case 9:  return mRigFrontQCuFwd2;
+                case 10: return mRigUnderbelly;
+                case 11: return mRigDropUnderbelly;
+                case 12: return mRigDropFrontQCuFwd;
+                case 13: return mRigDropBootViewFwd;
+                default: break;
+                }
+                CGS_ASSERT(false, "GetPlayerJumpingRigShotParams: unmodelled rig slot");
+                return mRigRearQFwd;
+            }
+            const BehaviourBystanderCam::Parameters& GetPlayerJumpingBystanderShotParams(s32 liIndex) const
+            {
+                switch (liIndex)
+                {
+                case 0: return mBystanderJumpLeftParameters;
+                case 2: return mBystanderJumpFromBehindParameters;
+                default: break;
+                }
+                CGS_ASSERT(false, "GetPlayerJumpingBystanderShotParams: unmodelled bystander slot");
+                return mBystanderJumpLeftParameters;
+            }
 
             // X360 0x822732D0. Dumps the whole parameter bank to the debug text file
             // "d:\\camera.txt". The X360 compiler inlines TextFileWriteSerialiser::
@@ -668,6 +730,27 @@ namespace BrnDirector
             BehaviourBystanderCam::Parameters mBystanderFarParameters;     // record +4116
             BehaviourPassengerCam::Parameters mPassengerDefault;           // record +8660
             BehaviourFixedCam::Parameters     mFixedDefault;               // record +8996
+
+            // ---- the eleven player-jumping shot blocks (2026-09-12) ----------------------
+            // Same by-name posture, same reason: they are the bystander run's slots 0 and 2
+            // and the rig run's slots 1/2/5/7/9/10 (attached) + 11/12/13 (dropped), and both
+            // runs are modelled NARROWER here than the console's 156 / 288 strides, so they
+            // cannot be placed inside mNamedParameters without widening two types. Each block
+            // exists under the record's own name for that slot, is seeded by Construct below,
+            // and its one consumer (MomentPlayerJumping::Prepare) reaches it through the two
+            // indexed accessors above. The record offsets in the comments are provenance.
+            // DELETE-WHEN: the rig and bystander runs are placed inside mNamedParameters.
+            BehaviourBystanderCam::Parameters mBystanderJumpLeftParameters;       // record +3336
+            BehaviourBystanderCam::Parameters mBystanderJumpFromBehindParameters; // record +3648
+            BehaviourRig::Parameters          mRigRearQFwd;                       // record +4720
+            BehaviourRig::Parameters          mRigFrontQCuFwd;                    // record +5008
+            BehaviourRig::Parameters          mRigBootViewFwd;                    // record +5872
+            BehaviourRig::Parameters          mRigRoofFwd;                        // record +6448
+            BehaviourRig::Parameters          mRigFrontQCuFwd2;                   // record +7024
+            BehaviourRig::Parameters          mRigUnderbelly;                     // record +7312
+            BehaviourRig::Parameters          mRigDropUnderbelly;                 // record +7600
+            BehaviourRig::Parameters          mRigDropFrontQCuFwd;                // record +7888
+            BehaviourRig::Parameters          mRigDropBootViewFwd;                // record +8176
         };
 
         // NEVER CALLED. The record is the one part of this slice whose bank offset is

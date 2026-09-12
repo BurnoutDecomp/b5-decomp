@@ -1,16 +1,12 @@
 // BrnDirector::Camera::Utils::Tweaker -- live camera-parameter debug tweaker.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX, semantic-parity (not byte-matching).
+// Semantic-parity reconstruction (not byte-matching).
 //
-// Bodied here (4 ledger functions; the fifth, Tweaker::Construct @0x821F8588, was
-// file-split VERBATIM into BrnCameraTweakerConstruct.cpp on 2026-08-01 so it could be
-// mounted without this TU's debug-render leaves -- see that file's banner):
-//   Tweaker::AddMapping    @0x821F85E0  (the f32* lpfScale overload)
-//   Tweaker::GetAxisValue  @0x8220BC58
-//   Tweaker::Render        @0x8220BE88
-//   Tweaker::Update        @0x822217C8
+// Bodied here: Construct, both AddMapping overloads, AddJustPressedMapping, GetAxisValue,
+// Update and Render, plus the two static name tables Render prints through.
 //
-// Declaration-only (no X360 body in this packet): the constant-scale AddMapping
-// overload, AddJustPressedMapping, AddJustReleasedMapping.
+// Declaration-only (no recovered body, no caller in the tree): AddJustReleasedMapping.
+// Update already drives the just-released bindings, so the feature is complete the day a
+// caller and a body for that one binder land.
 
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"
 
@@ -25,26 +21,97 @@ namespace BrnDirector
         namespace Utils
         {
             // ----------------------------------------------------------------
-            // Static name tables read by Render. The X360 build sources these
-            // from rodata arrays (dword_82FAACE8 = axis names, dword_82FAAC90 =
-            // control names); their string CONTENTS are rodata we cannot ground
-            // from this packet, so they are declared extern and defined by their
-            // own data TU (the per-TU `cl /c` gate does not link). KAAC_AXIS_NAMES
-            // is the DWARF-attested symbol (BrnCameraTweaker.h:87).
+            // The two name tables Render prints. Recovered verbatim from the shipped
+            // image's own tables (the original build fills them from a pointer table at
+            // start-up; a plain constant table is the same thing with less ceremony).
             // ----------------------------------------------------------------
-            extern const char* const KAAC_AXIS_NAMES[Tweaker::E_AXIS_COUNT];
-            extern const char* const KAAC_CONTROL_NAMES[DebugController::E_CONTROL_COUNT];
+            extern const char* const KAAC_AXIS_NAMES[Tweaker::E_AXIS_COUNT] =
+            {
+                "Left Stick Left/Right",   // E_AXIS_LEFT_STICK_X
+                "Left Stick Up/Down",      // E_AXIS_LEFT_STICK_Y
+                "Right Stick Left/Right",  // E_AXIS_RIGHT_STICK_X
+                "Right Stick Up/Down",     // E_AXIS_RIGHT_STICK_Y
+                "DPad Up/Down",            // E_AXIS_DPAD_Y
+                "DPad Left/Right",         // E_AXIS_DPAD_X
+                "Lower Triggers",          // E_AXIS_LOWER_TRIGGERS
+                "Upper Triggers",          // E_AXIS_UPPER_TRIGGERS
+                "Square/Circle or X/B",    // E_AXIS_BUTTONS_LEFT_RIGHT
+            };
 
-            // @0x821F8588 Tweaker::Construct is NOT here any more (2026-08-01): it was
-            // file-split VERBATIM into the sibling BrnCameraTweakerConstruct.cpp so it could
-            // be mounted without this TU's five debug-render leaves. See that file's banner
-            // for the measurement and the DELETE-WHEN. Do not re-add it here -- a second
-            // definition is an LNK2005.
+            extern const char* const KAAC_CONTROL_NAMES[DebugController::E_CONTROL_COUNT] =
+            {
+                "DPad Up",              // E_CONTROL_UP_DPAD
+                "DPad Down",            // E_CONTROL_DOWN_DPAD
+                "DPad Left",            // E_CONTROL_LEFT_DPAD
+                "DPad Right",           // E_CONTROL_RIGHT_DPAD
+                "Y Button",             // E_CONTROL_UP_BUTTON
+                "A Button",             // E_CONTROL_DOWN_BUTTON
+                "X Button",             // E_CONTROL_LEFT_BUTTON
+                "B Button",             // E_CONTROL_RIGHT_BUTTON
+                "Left Trigger",         // E_CONTROL_LOWER_TRIGGER_LEFT
+                "Right Trigger",        // E_CONTROL_LOWER_TRIGGER_RIGHT
+                "L1",                   // E_CONTROL_UPPER_TRIGGER_LEFT
+                "R1",                   // E_CONTROL_UPPER_TRIGGER_RIGHT
+                "Left Stick Up",        // E_CONTROL_LEFT_STICK_UP
+                "Left Stick Down",      // E_CONTROL_LEFT_STICK_DOWN
+                "Left Stick Left",      // E_CONTROL_LEFT_STICK_LEFT
+                "Left Stick Right",     // E_CONTROL_LEFT_STICK_RIGHT
+                // The shipped table repeats the four LEFT stick captions for the RIGHT
+                // stick directions -- an authoring slip in the original table, carried
+                // verbatim so the debug overlay reads the way it shipped.
+                "Left Stick Up",        // E_CONTROL_RIGHT_STICK_UP
+                "Left Stick Down",      // E_CONTROL_RIGHT_STICK_DOWN
+                "Left Stick Left",      // E_CONTROL_RIGHT_STICK_LEFT
+                "Left Stick Right",     // E_CONTROL_RIGHT_STICK_RIGHT
+                "Left Stick Pressed",   // E_CONTROL_LEFT_STICK_BUTTON
+                "Right Stick Pressed",  // E_CONTROL_RIGHT_STICK_BUTTON
+            };
 
-            // @0x821F85E0. Bind a tunable float to an axis using a LIVE scale source
-            // (a pointer the caller keeps updating). Asserts all four preconditions,
-            // then fills the [map][axis] slot: mfScale is forced to 0.0 (the live
-            // source wins), the three pointers are stored, and mbUsed is set.
+            // Reset the tweaker to an empty, "instructions-shown" state. Walks the mbUsed
+            // flag of every binding and clears it, then clears mbHideInstructions. Nothing
+            // else is touched -- AddMapping fully overwrites a slot when it is (re)used.
+            void Tweaker::Construct()
+            {
+                for (s32 liMap = 0; liMap < E_MAP_COUNT; ++liMap)
+                {
+                    for (s32 liAxis = 0; liAxis < E_AXIS_COUNT; ++liAxis)
+                    {
+                        maAxisMapping[liMap][liAxis].mbUsed = false;
+                    }
+
+                    for (s32 liControl = 0; liControl < DebugController::E_CONTROL_COUNT; ++liControl)
+                    {
+                        mJustPressedMapping[liMap][liControl].mbUsed  = false;
+                        mJustReleasedMapping[liMap][liControl].mbUsed = false;
+                    }
+                }
+
+                mbHideInstructions = false;
+            }
+
+            // Bind a tunable float to an axis with a CONSTANT scale. Fills the [map][axis]
+            // slot: the live-scale source is cleared (the constant wins), the name, the
+            // tracked float and the constant scale are stored, and mbUsed is set.
+            void Tweaker::AddMapping(const char* lpcName, f32* lpfVariableToTweak, f32 lfScale,
+                                     EAxis leAxisToMapTo, EMap leMap)
+            {
+                CGS_ASSERT(lpcName != nullptr, "lpcName != NULL");
+                CGS_ASSERT(lpfVariableToTweak != nullptr, "lpfVariableToTweak != NULL");
+                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, "leAxisToMapTo < E_AXIS_COUNT");
+                CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
+
+                AxisMapping& lrMapping = maAxisMapping[leMap][leAxisToMapTo];
+                lrMapping.lpcName            = lpcName;
+                lrMapping.mpfVariableToTweak = lpfVariableToTweak;
+                lrMapping.mpfScale           = 0;
+                lrMapping.mfScale            = lfScale;
+                lrMapping.mbUsed             = true;
+            }
+
+            // Bind a tunable float to an axis using a LIVE scale source (a pointer the
+            // caller keeps updating). Asserts all five preconditions, then fills the
+            // [map][axis] slot: mfScale is forced to 0.0 (the live source wins), the three
+            // pointers are stored, and mbUsed is set.
             void Tweaker::AddMapping(const char* lpcName, f32* lpfVariableToTweak, f32* lpfScale,
                                      EAxis leAxisToMapTo, EMap leMap)
             {
@@ -62,9 +129,26 @@ namespace BrnDirector
                 lrMapping.mbUsed             = true;
             }
 
-            // @0x822217C8. Drive every used binding from this frame's controller.
-            //   * DOWN_BUTTON edge toggles mbHideInstructions (controller +0x73 =
-            //     mabControlJustPressed[E_CONTROL_DOWN_BUTTON=5]).
+            // Bind a callback to a control's just-pressed edge. Fills the [map][control]
+            // slot with the caption, the callback and its user data, and sets mbUsed.
+            void Tweaker::AddJustPressedMapping(const char* lpcName, void (*lpFunction)(void*),
+                                                void* lpUserData, DebugController::EControl leControl,
+                                                EMap leMap)
+            {
+                CGS_ASSERT(lpcName != nullptr, "lpcName != NULL");
+                CGS_ASSERT(lpFunction != nullptr, "lpFunction != NULL");
+                CGS_ASSERT(leControl < DebugController::E_CONTROL_COUNT, "leControl < E_CONTROL_COUNT");
+                CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
+
+                ControlFunctionMapping& lrMapping = mJustPressedMapping[leMap][leControl];
+                lrMapping.mpUserData = lpUserData;
+                lrMapping.mbUsed     = true;
+                lrMapping.mpcName    = lpcName;
+                lrMapping.mpFunction = lpFunction;
+            }
+
+            // Drive every used binding from this frame's controller.
+            //   * The A-button edge toggles mbHideInstructions.
             //   * Each used axis mapping advances its tracked float by
             //     axisValue * scale  (scale from *mpfScale when present, else mfScale).
             //   * Each used just-pressed / just-released control mapping fires its
@@ -96,8 +180,8 @@ namespace BrnDirector
                         const DebugController::EControl leControl =
                             static_cast<DebugController::EControl>(liControl);
 
-                        // asm guards the callback on the mapping's mbUsed flag (lbz mapping+0xC),
-                        // not on the function pointer, before testing the controller edge.
+                        // The callback is guarded on the mapping's mbUsed flag, not on the
+                        // function pointer, before the controller edge is tested.
                         ControlFunctionMapping& lrPressed = mJustPressedMapping[liMap][liControl];
                         if (lrPressed.mbUsed && lrDebugController.GetJustPressed(leControl))
                         {
@@ -113,10 +197,10 @@ namespace BrnDirector
                 }
             }
 
-            // @0x8220BC58. The raw value of the requested axis from the controller's
-            // analogue stick floats. The X360 only wires the four stick components
-            // (left/right * X/Y); the d-pad / trigger / button axes fall through with
-            // no value and an unhandled axis asserts.
+            // The raw value of the requested axis from the controller's analogue stick
+            // floats. Only the four stick components are read straight; the d-pad /
+            // trigger / button axes are the difference of two control values, and an
+            // unhandled axis asserts.
             f32 Tweaker::GetAxisValue(EAxis leAxisToGet, const DebugController& lrDebugController)
             {
                 const DebugController::DebugControllerInfo& lrInfo =
@@ -133,8 +217,6 @@ namespace BrnDirector
                     case E_AXIS_RIGHT_STICK_Y:
                         return lrInfo.mfRightStickYAxis;
 
-                    // Composite axes = the difference of two control values (asm jumptable cases 4-8
-                    // @0x8220BD8C..0x8220BDEC, fsubs of two DebugControllerInfo::mafControlValue[] entries).
                     case E_AXIS_DPAD_Y:
                         return lrInfo.mafControlValue[DebugController::E_CONTROL_UP_DPAD]
                              - lrInfo.mafControlValue[DebugController::E_CONTROL_DOWN_DPAD];
@@ -160,11 +242,11 @@ namespace BrnDirector
                 return 0.0f;
             }
 
-            // @0x8220BE88. Render the live bindings through the DebugPrinter. While
-            // instructions are shown, print one "<axis>  <var>" line per used axis
-            // binding and one "<control>  <action>" line per used just-pressed binding
-            // (across all three maps), then the hide-instructions hint keyed to the
-            // right-stick button (control name index 5).
+            // Render the live bindings through the DebugPrinter. While instructions are
+            // shown, print one "<axis>  <var>" line per used axis binding and one
+            // "<control>  <action>" line per used just-pressed binding (across all three
+            // maps), then the hide-instructions hint naming the control the Update toggle
+            // reads.
             void Tweaker::Render(DebugPrinter& lrDebugPrinter)
             {
                 const char lacFormat[10] = "%-30s  %s";
@@ -202,8 +284,6 @@ namespace BrnDirector
                     }
                 }
 
-                // asm @0x8220BF98 names control_names[5] = E_CONTROL_DOWN_BUTTON (the same control the
-                // Update toggle reads), NOT the right-stick button.
                 CgsCore::SPrintf(lacMessage, kiMessageLength, "Press the %s to hide instructions",
                                  KAAC_CONTROL_NAMES[DebugController::E_CONTROL_DOWN_BUTTON]);
                 lrDebugPrinter.Print("");

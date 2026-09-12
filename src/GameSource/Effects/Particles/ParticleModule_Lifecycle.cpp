@@ -380,6 +380,9 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // it is the one the trail system draws through, so it is the one that matters here.
         rw::IResourceAllocator* lpGraphicsAllocator =
             BrnResource::Allocators::GetGlobalGraphicsAllocator();
+        // The textured-plus-lit renderer the debris arrays draw through. Its program pair is the
+        // re-authored pc/gcm/renderengine/WorldTexturedProgramsPC.cpp; see BrnIm3dTexPlusLighting.cpp.
+        mWorldTexRenderer.Construct(lpGraphicsAllocator);
         mSkidsRenderer.Construct(lpGraphicsAllocator);
         // asm word 145 (0x8229C0E4 `bl BrnGraphics__Im3dBlend__Construct`), r3 = the object at
         // this+0x92E0 == &mLionImmediateModeRenderer, r4 = the same off_82F2C814 allocator all
@@ -391,9 +394,8 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         {
             static bool sbLogged = false;
             LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's three other Im3d Constructs (CgsGraphics::Im3d, "
-                "Im3dTexPlusLighting, Im3dSmokeRenderer) -- ContainedInterface placeholders in "
-                "ParticleModule.h; Im3dSkidsRenderer and Im3dBlend ARE constructed");
+                "ParticleModule::Prepare's Im3dSmokeRenderer Construct -- a ContainedInterface "
+                "placeholder in ParticleModule.h; the other four Im3d renderers ARE constructed");
         }
 
         // --- the Lion renderer ------------------------------------------------------------
@@ -484,35 +486,9 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         mTrailSystem.Prepare();
 
         // --- debris ------------------------------------------------------------------------
-        // BrnDebrisRenderer::Construct(&mDebrisRenderer, lpGraphicsAllocator, &mWorldTexRenderer).
-        // STILL ANNOUNCED, and for ONE reason only: the third argument is &mWorldTexRenderer,
-        // which is a `ContainedInterface` placeholder in ParticleModule.h -- there is no
-        // BrnGraphics::Im3dTexPlusLighting object to hand it, and type-punning the placeholder
-        // would be an invented type. The renderer's BODY is reconstructed and its TU is mounted.
-        //
-        // ⚠ THE BLOCKER, MEASURED 2026-09-11 (debris-producer wave), so the next lane does not
-        // have to re-measure it. Im3dTexPlusLighting::Construct is the exact shape of the
-        // committed Im3dSkidsRenderer::Construct: build the
-        // ImRenderer<BrnGraphics::WorldTexturedVertex> base over ONE {vertex, pixel} program pair
-        // and resolve six named shader constants -- gaWorldTransforms (a 32-entry float4x4 array),
-        // gViewProjection and gEyeLocation against the VERTEX program, gLightDirection /
-        // gLightColour / gShinyParams against the PIXEL one. The template half is ALREADY WRITTEN
-        // and unmounted, in
-        // GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3dTexPlusLighting.cpp.
-        // What is missing is only the program pair: the two executable-embedded shader programs
-        // must be re-authored for D3D9 the way SkidProgramsPC.cpp / LionBlendProgramsPC.cpp were.
-        // That is a bigger job than the skid pair -- the vertex program does an indexed instanced
-        // transform, the pixel program a full per-pixel Blinn-Phong with a log/exp power term --
-        // and it buys nothing until something DRAWS debris: BrnDebrisRenderer::BeginRender /
-        // RenderDebrisArray / EndRender have no bodies in the tree and no caller does either,
-        // so this Construct is a prerequisite, not the thing standing between a spawn and a
-        // pixel. The SPAWN half is landed (ParticleModule_DebrisSpawn.cpp).
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's BrnDebrisRenderer::Construct -- Im3dTexPlusLighting "
-                "needs its converted world-textured program pair");
-        }
+        // BrnDebrisRenderer::Construct(&mDebrisRenderer, lpGraphicsAllocator, &mWorldTexRenderer):
+        // cache the borrowed textured-plus-lit renderer and build the debris blend state.
+        mDebrisRenderer.Construct(lpGraphicsAllocator, &mWorldTexRenderer);
         // ...and the five BrnDebrisArray::Construct calls beside it, which ARE called now.
         // ⭐ THE PARAMETER TABLE IS REAL AS OF THIS WAVE. `mpParams = &_gaDebrisArrayParams[type]`
         // used to bind an `extern const` with no definition anywhere in the tree, so this loop

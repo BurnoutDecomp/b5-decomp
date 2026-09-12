@@ -143,9 +143,9 @@ namespace BrnReplays
         // (lwz 0x134 / lwz 0x138), the names are inferred from that use.
         s32             miNormalPriority;                    // X360 +0x134 priority when buffered
         s32             miUrgentPriority;                    // X360 +0x138 priority when starved
-        // DWARF: rw::core::filesys::Handle* volatile mpHandle. Read/written as 8 bytes and
-        // truncated to CgsFileSystem::Handle at the Read call (same as the sibling's u64).
-        u64             muHandle;                            // X360 +0x140 open device file handle
+        // The compound device file handle {device, device-private handle}. The console packed
+        // the pair into the two words here; this is the typed value itself.
+        CgsFileSystem::Handle mHandle;                       // +0x140 open device file handle
         ReadStreamBlock maBlocks[KI_MAX_STREAM_BLOCKS];      // X360 +0x148 the ring
         s32             miOutputBlock;                       // X360 +0x558 next slot to consume
         bool            mbLockedForRead;                     // X360 +0x55C locked by a reader

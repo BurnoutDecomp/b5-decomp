@@ -66,6 +66,8 @@ namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // Dir
 //   the head; the lifecycle methods are called directly by DirectorModule, not virtually).
 // ----------------------------------------------------------------------------
 
+namespace BrnGameState { namespace GameStateModuleIO { struct PrepareForModeAction; } }  // GameSource/GameState/BrnGameActions.h
+
 namespace BrnDirector
 {
     struct DirectorInputOutput;   // GameSource/Director/DirectorModule/BrnDirectorInputOutput.h
@@ -220,10 +222,18 @@ namespace BrnDirector
         //     it passing.
         void ProcessNewVehicleEvents(const DirectorIO::InputBuffer* lpInput);
 
-        // X360 0x8221B0B0. Handle a "prepare for mode" director action.
-        // DECLARATION-ONLY + FLAG (GameState action region).
-        void HandlePrepareForModeAction(s32 liArg1, s32 liArg2, s32 liArg3, s32 liArg4,
-                                        s32 liArg5, s32 liArg6);
+        // ⭐⭐ Fold a "prepare for mode" action into the GameState snapshot:
+        // THE EVENT-ENTRY PUSH. It is the only producer of E_EVENT_STATE_PRE_INTRO and the only
+        // writer of GameState::meEventType other than the two event-end legs, i.e. the head of
+        // the chain the roaming state's PRE_INTRO arm keys on.
+        //
+        // ⚠️ THE OLD DECLARATION WAS A SIX-ARGUMENT s32 PLACEHOLDER behind a "GameState action
+        // region" FLAG. Both halves had expired: the console takes THREE arguments (this, the
+        // action record, the frame's DirectorInputOutput -- `mr r4,r30; lwz r5,arg_1C(r1)` at
+        // its one queue call site), and every destination it writes is a named GameState member
+        // today. A body written against the placeholder would have dropped the record.
+        void HandlePrepareForModeAction(const BrnGameState::GameStateModuleIO::PrepareForModeAction& lrAction,
+                                        const DirectorInputOutput* lpIO);
 
         // X360 0x8221A3A8. Compute the traffic-light reference space for the current event.
         // DECLARATION-ONLY + FLAG (multi-stage VMX pipeline; never scalar-paraphrased).
@@ -455,8 +465,12 @@ namespace BrnDirector
         CgsGraphics::Camera mCgsCamera;
 
         // +0x34B40 .. +0x35420  the "prepare for mode" action block + the debug camera-info
-        //           snapshot scratch. FLAG: un-homed; named opaque span.
-        u8 maModeActionAndDebugBlock[0x35420 - 0x34B40];
+        //           snapshot scratch. The span is exactly the console's PrepareForModeAction
+        //           record size, which is what it holds: PostGuiUpdate's post-event leg copies
+        //           the action here when it cannot run it immediately, and replays it from here
+        //           when the post-event ends. Over-aligned so the record can be read back as
+        //           its own type. FLAG: the trailing debug scratch has no recovered role.
+        alignas(16) u8 maModeActionAndDebugBlock[0x35420 - 0x34B40];
 
         // ⭐ THESE ARE TWO SEPARATE STAGE MACHINES, not a stage + a counter. Corrected
         // 2026-07-29 (fly-by campaign) against the asm; the previous reading had the two words
@@ -486,6 +500,29 @@ namespace BrnDirector
         //           the two latches Update/PreSceneQueryUpdate read are recovered; named
         //           opaque span.
         u8 maStateFlagTail[0x35450 - 0x35430];
+
+        // Byte ROLES inside maStateFlagTail that the event-state legs recovered. Indices are
+        // byte offsets from the span's own base (+0x35430), which is how every other consumer
+        // of an opaque span in this tree reaches into one -- the span stays honest storage and
+        // nothing open-codes a raw number at the use site.
+        enum EStateFlagTailByte
+        {
+            // +0x35439. Raised when the GUI reports the player ENTERED the online post-event
+            // screen, cleared when it reports they left. While it is set, a prepare-for-mode
+            // action is deferred instead of run (the stop-mode arm also skips its ACTIVE push
+            // while it is set, so the post-event camera is not cut short).
+            E_FLAG_TAIL_IN_ONLINE_POST_EVENT = 0x09,
+            // +0x3543A. "A prepare-for-mode action arrived during the post-event and was copied
+            // into maModeActionAndDebugBlock." Cleared when the post-event is entered, tested
+            // when it is left: set -> replay the deferred action, clear -> just resume ACTIVE.
+            E_FLAG_TAIL_MODE_ACTION_DEFERRED = 0x0A,
+            // +0x3543E / +0x3543F. The two event-END requests Update folds into the ACTIVE
+            // push at the foot of its publish tail. FLAG: recovered only as far as "either of
+            // these ends the event state"; the first is additionally gated on the director
+            // output interface's own byte, the second is unconditional.
+            E_FLAG_TAIL_EVENT_END_REQUEST    = 0x0E,
+            E_FLAG_TAIL_EVENT_END_FORCED     = 0x0F,
+        };
     };
 }
 

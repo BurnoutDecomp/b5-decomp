@@ -1854,6 +1854,44 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
     }
 }
 
+// -------------------------------------------------------------------------------------------------
+// CalculateWheelAngularVelocities   (41 instructions)   -- wheel-blur wave 2026-09-12
+//
+// ⭐⭐ THE MISSING PRODUCER OF RACE-CAR WHEEL BLUR. The renderer picks a per-wheel technique
+// by comparing mRenderParams.mafWheelAngularVelocities[i] against the 30 rad/s wheel-blur
+// threshold; this is the ONLY thing in the game that writes that array for a race car. With it
+// absent every wheel read 0 rad/s, so no race-car wheel could ever pick the blurred variant
+// (traffic has no such hole -- its module derives the same quantity from the vehicle speed).
+//
+// The body is four unrolled copies of one statement, one per ROAD wheel: take the wheel's
+// signed spin rate from the published physics snapshot, drop the sign (the blur test only
+// cares how fast, not which way), and scale it by this frame's time-step multiplier so the
+// smear tracks slow motion instead of ignoring it. The multiplier is the same one the module
+// latches alongside its time step, handed down through Update.
+//
+// Both ends are named members of committed sub-objects: the source is
+// mPhysicsState.maWheels[i].mfRadiansPerSecond (WheelLite +0x44, published by the vehicle
+// output interface) and the destination is mRenderParams.mafWheelAngularVelocities[i]
+// (RenderParams +0xD8C), reached through the accessor that already exists for it.
+//
+// The leading IsAttached() tripwire is the console's own.
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::CalculateWheelAngularVelocities(f32 lfTimeStepMultiplier)
+{
+    CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1096
+
+    const BrnPhysics::Vehicle::WheelLite* lpaWheelArray = GetPhysicsState()->maWheels;
+    RenderParams*                         lpRenderParams = GetRenderParams();
+
+    const u32 KU_ROAD_WHEEL_COUNT = 4;
+    for( u32 luWheelIndex = 0; luWheelIndex < KU_ROAD_WHEEL_COUNT; ++luWheelIndex )
+    {
+        lpRenderParams->SetWheelAngularVelocity(
+            luWheelIndex,
+            std::fabs( lpaWheelArray[luWheelIndex].mfRadiansPerSecond ) * lfTimeStepMultiplier );
+    }
+}
+
 // ============================================================================
 // Update @ 0x822F78B0   (400 instructions)   -- PARTIAL SLICE   (engine wave 2026-08-12)
 //
@@ -1875,8 +1913,8 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
 //   0x68 ptr     (`lwz r23, arg_6C`, asserted non-NULL)    <- lpVehicleOutput
 //   0x70 int                                               <- module + 0x18368 (meGameModeType)
 //   f1   f32     -> lfTimeStep      ✔ USED   <- module mfTimeStep      (+0x18398)
-//   f2   f32                                 <- module +0x183A0
-//   f3   f32                                 <- module +0x183A4  (-> CalculateWheelAngular…)
+//   f2   f32                                 <- module +0x183A0  (mfSimTime)
+//   f3   f32     -> lfTimeStepMultiplier ✔ USED  <- module mfTimeStepMultiplier (+0x183A4)
 //   f4   f32     -> lfAcceleration  ✔ USED   <- mPlayerVehicleControls.mfAcceleration (+0x183C8)
 //   f5   f32     -> lfBraking       ✔ USED   <- mPlayerVehicleControls.mfBraking      (+0x183CC)
 //   v1/v2 two Vector3s                       <- module +0x18720 / +0x18730
@@ -1897,16 +1935,15 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
 //  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
 //     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
 //     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
-//  6. CalculateWheelAngularVelocities @0x822BFCF8, UpdateInAirRotations @0x822BFFA8,
-//     SendAddedRemovedNetworkCarForCollisionEvents @0x822BF840, UpdateIndicators @0x822A5340 --
-//     NONE of the four exists anywhere in this tree yet.
-//     ⚠️ #6 is why the wheels still do not spin: CalculateWheelAngularVelocities is the
-//     producer for them, and GetWheelsWorldTransfrom @0x825D8878 is bodyless besides.
+//  6. UpdateInAirRotations, SendAddedRemovedNetworkCarForCollisionEvents and
+//     UpdateIndicators -- none of the three exists in this tree yet.
+//     (CalculateWheelAngularVelocities landed 2026-09-12 and is called below.)
 //  7. the mbIsWaitingForDeferredReset -> RequestPlaceOnTrack countdown (0x822F7E80..0x822F7EB8).
 //     RequestPlaceOnTrack exists, but the latch is only ever armed by code this build has not
 //     landed, so running the countdown would be dead work with a live teleport at the end.
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::Update(f32 lfTimeStep,
+                           f32 lfTimeStepMultiplier,
                            f32 lfAcceleration,
                            f32 lfBraking,
                            bool lbIsInOnlineGameMode,
@@ -1998,6 +2035,12 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     }
 
     mbAIToBeActivated = false;                           // +0x781 (0x822F7E54)
+
+    // ⭐ THE WHEEL-BLUR WIRE. Unconditional, every active car, immediately after the
+    // engine-state gate: this is the only producer of
+    // mRenderParams.mafWheelAngularVelocities, which the renderer's per-wheel technique test
+    // reads. Its argument is this frame's time-step multiplier, straight off the module.
+    CalculateWheelAngularVelocities( lfTimeStepMultiplier );
 
     // 0x822F7EBC..0x822F7ED0.
     if( mbCrashedIntoWater )                             // +0x783

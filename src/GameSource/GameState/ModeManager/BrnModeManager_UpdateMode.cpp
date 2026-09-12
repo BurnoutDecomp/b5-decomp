@@ -395,8 +395,8 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
         // this+3136 is the BurnoutSkillzManager region embedded INSIDE mOnlineFreeBurnLobby
         // (BrnModeManager.h's member run pins the lobby at +2952 and the skillz region at +3136).
         // OnlineFreeBurnLobbyMode declares no members at all on host, so there is no such region
-        // to address and no accessor to reach it; the manager's own TU is also still off the
-        // build (five unresolved externals, roll-call in the bat's STILL OUT rem).
+        // to address and no accessor to reach it. The manager's own TU is now mounted and links
+        // clean, so growing the lobby mode's layout is the only remaining step.
     }
 
     // ---- (7) the intro-just-finished latch -----------------------------------------------------

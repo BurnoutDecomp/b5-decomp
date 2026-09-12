@@ -7,9 +7,10 @@
 // running machine that binds the credits apt movie + music, then advances out on the
 // controller action. DWARF home BrnCredits.h:44. This home originally carried only the
 // header-attributed GetResourcesToLoad inline; the BrnCredits.cpp TU grew it to the
-// full DWARF surface (OnEnter / UpdateLoadResources / UpdateRunning bodied there;
-// OnLeave / Update / UpdateWFInit / HandleControllerInputPressed are their own ledger
-// functions, declaration-only).
+// full declared surface (OnEnter / OnLeave / Update / UpdateLoadResources / UpdateRunning
+// bodied there; UpdateWFInit / HandleControllerInputPressed are their own ledger
+// functions, declaration-only -- neither has an out-of-line console body, and the
+// Update ladder emits no call or test for the WFINIT rung at all).
 namespace BrnGui
 {
     class GuiCache;

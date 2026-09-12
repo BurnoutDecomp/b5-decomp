@@ -1,21 +1,12 @@
 // ============================================================================
 // GameSource/Replays/BrnReplayModule_Prepare.cpp
 //
-// BrnReplays::ReplayModule::Prepare @0x82652768 and ::StoreSerialisers @0x8264B600.
-//
-// WHY A SEPARATE TU (the same reason ParticleModule_Lifecycle.cpp and
-// BrnReplayPropSerialiserFrame_operator_assign.cpp are separate): these two bodies belong to
-// BrnReplayModule.cpp, but that file also defines Update_Dispatch, whose
-// GPUDiskWriteStream::Dispatch pulls Stream/BrnReplayGPUDiskWriteStream.cpp into the link --
-// and that TU does not compile today (two u64 -> CgsFileSystem::Handle casts, :186/:220). It
-// also defines the ctor, which BrnBaselineLinkStubs.cpp still stands in for. Splitting the two
-// functions out lets the ALLOCATOR land without dragging the replay-stream closure in.
-// DELETE THIS FILE and fold the bodies back into BrnReplayModule.cpp when that closure links.
+// BrnReplays::ReplayModule::Prepare and ::StoreSerialisers.
 //
 // WHAT THEY ARE FOR: StoreSerialisers is the ONLY place in the engine that gives any
 // BrnReplays::BaseSerialiser its stream buffer and its STATIC buffer, and Prepare is what
 // acquires the linear region they are carved from. Until they ran,
-// BrnEffects::EffectsModule::Update @0x8229EC28 returned at its `GetStaticLayout() == 0` guard
+// BrnEffects::EffectsModule::Update returned at its `GetStaticLayout() == 0` guard
 // before it ever reached HandleWheels -- so no tyre marks, sparks, debris or Lion effects.
 // ============================================================================
 
@@ -31,7 +22,7 @@
 namespace BrnReplays
 {
     // =========================================================================================
-    // ReplayModule::Prepare  @0x82652768
+    // ReplayModule::Prepare
     //   v4 = *(this + 0x228);                       // the module's own prepare stage
     //   if (v4 < 2) {
     //       *(this + 0x228) = 1;
@@ -50,7 +41,7 @@ namespace BrnReplays
     // ⭐ WHAT THIS UNBLOCKS, and why it is here at all: BaseSerialiser::mpStaticBuffer is
     // allocated in exactly ONE place in the whole engine -- StoreSerialisers, below, out of the
     // linear region THIS function acquires. With no Prepare there is no region, with no region
-    // there is no static buffer, and BrnEffects::EffectsModule::Update @0x8229EC28 returns at
+    // there is no static buffer, and BrnEffects::EffectsModule::Update returns at
     // its `GetStaticLayout() == 0` guard before it ever reaches the wheel loop. Measured
     // (BRN_SKID_PROBE, 2026-09-02):
     //     [skid-gate] Update REACHED the per-system enables: trails=1 sparks=1 ...
@@ -145,7 +136,7 @@ namespace BrnReplays
     }
 
     // =========================================================================================
-    // ReplayModule::StoreSerialisers  @0x8264B600
+    // ReplayModule::StoreSerialisers
     //   for (id = 0; id < 11; ++id)
     //       if (RequestInterface::GetSerialiser(rq, id))
     //       {

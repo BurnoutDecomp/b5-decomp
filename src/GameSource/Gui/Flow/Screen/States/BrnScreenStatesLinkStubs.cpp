@@ -89,24 +89,6 @@ namespace BrnGui
         }
     }
 
-    // ---- CN_PROFILE ---------------------------------------------------------------------
-    // FLAG PC-platform leaf: placeholder for the un-reconstructed CrashNavProfile's wider
-    // X360 Construct(id, fsm, ProfileManager&) -- forwards to the base 2-arg Construct and
-    // deliberately never touches the profile manager (its backing object may be an
-    // un-reconstructed shell).
-    void CrashNavProfile::Construct(CgsID lId, CgsFsm::ScriptedFsm* lpFsm,
-                                    ProfileManager& lrProfileManager)
-    {
-        (void)lrProfileManager;
-        CgsGui::State::Construct(lId, lpFsm);
-    }
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavProfile.
-    void CrashNavProfile::OnEnter() { LogUnreconstructedState("CrashNavProfile", "OnEnter"); }
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavProfile.
-    void CrashNavProfile::OnLeave() {}
-    // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed CrashNavProfile.
-    void CrashNavProfile::Update()  {}
-
     // ---- ON_GAME_ROOM -------------------------------------------------------------------
     // FLAG PC-platform leaf: placeholder lifecycle for the un-reconstructed
     // OnlineGameRoomPlayerInfo (renamed +State here; see the header's ODR note).

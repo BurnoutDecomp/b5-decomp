@@ -118,7 +118,7 @@ namespace BrnReplays
         lBlock.muFlags     = KU_RSBFLAG_READING;
 
         CgsFileSystem::DeviceManager* lpDeviceManager = CgsFileSystem::GetDeviceManager();
-        lpDeviceManager->Read(static_cast<CgsFileSystem::Handle>(muHandle),
+        lpDeviceManager->Read(mHandle,
                               static_cast<u64>(miNextInputPosition),
                               mpBuffer + lBlock.miStreamPos,
                               static_cast<u32>(miBlockSize),

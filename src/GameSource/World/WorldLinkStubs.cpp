@@ -12,9 +12,8 @@
 //
 // Families still stubbed here: the Massive SDK seam (uncommitted third party);
 // Attribulator LiveLink (GameTalk); the FineIntersection / OverlapGeneration
-// sub-manager seams (their TUs drag the rw::collision query closure); module-fleet
-// Destruct/Release leaves; and the PropSerialiserFrame replay codec (frame interior
-// still padding-modelled).
+// sub-manager seams (their TUs drag the rw::collision query closure); and module-fleet
+// Destruct/Release leaves.
 //
 // The include preamble mirrors BrnWorldModule.cpp (IO headers before the module
 // headers) so the nested IO buffer types resolve exactly as they do for the
@@ -98,7 +97,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameSource/Director/Camera/Camera.h"
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"
-#include "GameSource/Game/BrnDispatchThreadInputBuffer.h"
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"
 #include "GameSource/World/EnvironmentManager/BrnEnvironmentManager.h"
 #include "GameSource/World/EnvironmentMap/BrnEnvironmentMap.h"
@@ -113,7 +111,6 @@
 #include "vendor/renderware/collision/BitTable.hpp"
 #include "vendor/renderware/collision/VolumeQuery.hpp"
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropCellManager.h"        // PropCellManager contact-gen gates
-#include "GameSource/Replays/Serialisers/BrnReplayPropSerialiserFrame.h"                // PropSerialiserFrame delta-serialisation gates
 
 // ---------------------------------------------------------------------------
 // rw::collision::Volume -- same platform/SDK forward-declaration exception as
@@ -168,21 +165,6 @@ bool BrnAI::AIModule::Release()
             *CgsDev::Log::gpDebugPrint << "BrnAI::AIModule::Release: inert (body not reconstructed) [FLAG PC boot gate]\n";
     }
     return false;
-}
-
-// -------------------------------------------------------------------------
-// BrnGame::DispatchThreadInputBuffer
-// -------------------------------------------------------------------------
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-void BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection(struct rw::math::vpu::Matrix44 const &)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnGame::DispatchThreadInputBuffer::SetCameraViewProjection: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
 }
 
 // -------------------------------------------------------------------------
@@ -538,72 +520,4 @@ uint32_t CgsResource::ShaderTechniqueResourceType::GetShaderConstantExternalSeri
 {
     CGS_ASSERT(false, "ShaderTechniqueResourceType::GetShaderConstantExternalSerialisedResourceDescriptorSize: documented deferral -- reconstruct");
     return 0;
-}
-
-// ============================================================================
-// PROP REPLAY DELTA SERIALISATION x4 -- the record/playback half of
-// BrnReplays::PropSerialiserFrame. Referenced by PropEntitySerialiser::Read/Write; every
-// gameplay caller takes the IsPlaying()==false branch, so none of these runs while props
-// are simply spawning and rendering.
-//
-// Parked as OUT OF SCOPE, not blocked: the frame interior is a ~15 KB record whose
-// per-cell / per-prop / per-part arrays are still modelled as padding runs
-// (BrnReplayPropSerialiserFrame.h is one long maPadNNNN[] ladder with a handful of named
-// flags); a delta codec written against padding would be fabrication.
-// UNPARKED BY: reconstructing the PropSerialiserFrame interior (padding ladder -> named
-// per-cell/per-prop/per-part arrays); the sibling WriteProp / WritePart show the idiom.
-// ============================================================================
-void BrnReplays::PropSerialiserFrame::Read(BrnReplays::BaseSerialiser*)
-{
-    // WOULD: delta-read one prop frame out of the replay stream.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::Read: inert -- frame interior still "
-                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnReplays::PropSerialiserFrame::KeyFrameRead(BrnReplays::BaseSerialiser*)
-{
-    // WOULD: read a full (non-delta) prop key frame.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::KeyFrameRead: inert -- frame interior still "
-                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnReplays::PropSerialiserFrame::Write(BrnReplays::BaseSerialiser*,
-                                            BrnReplays::PropSerialiserFrame*)
-{
-    // WOULD: delta-write this frame against the static layout.
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::Write: inert -- frame interior still "
-                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
-    }
-}
-
-void BrnReplays::PropSerialiserFrame::KeyFrameWrite(BrnReplays::BaseSerialiser*,
-                                                    BrnReplays::PropSerialiserFrame*)
-{
-    // WOULD: write a full prop key frame (reached as the fourth call out of
-    // PropEntitySerialiser::Write).
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PropSerialiserFrame::KeyFrameWrite: inert -- frame interior still "
-                                          "padding-modelled; replay only [FLAG PC boot gate]\n";
-    }
 }
