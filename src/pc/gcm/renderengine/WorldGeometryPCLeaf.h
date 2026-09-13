@@ -115,6 +115,11 @@ namespace renderengine
     //    range (or the mirrors keyed on the old header pointer go stale).
     void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize);
 
+    // Host vertex declarations share the descriptor resource's lifetime. These
+    // are implemented by XenonD3D9Shims and called by the mirror lifecycle below.
+    void WorldVd32_OnResourceMemoryFreed(const void* lpBase, size_t luSize);
+    void WorldVd32_ReleaseAll();
+
     // Release everything. NO CALLER TODAY: this build never tears the D3D device down
     // (there is no gDevice->Release() anywhere -- process exit reclaims it), so nothing
     // needs to release the mirrors first. Kept as the one correct place to do so the day a

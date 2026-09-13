@@ -836,6 +836,7 @@ s32 WorldGeometry_Submit(const WorldGeometryDraw& lrDraw, u32 luBaseVertexIndex)
 // would be drawn with the previous one's geometry.
 void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
 {
+    WorldVd32_OnResourceMemoryFreed(lpBase, luSize);
     // No "maps are empty" early-out here: a resource's header and its buffer bytes live in
     // DIFFERENT memtype blocks (renderable descriptor slot 0 = the 0x28-byte header, slot 2
     // = the vertex/index bytes), so one resource produces two notifications, and the page
@@ -921,6 +922,7 @@ void WorldGeometry_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
 
 void WorldGeometry_ReleaseAll()
 {
+    WorldVd32_ReleaseAll();
     // First, before a single node dies: every front-cache slot points into the maps about
     // to be cleared, so retire them all up front (unconditionally here -- this erases
     // everything by definition).

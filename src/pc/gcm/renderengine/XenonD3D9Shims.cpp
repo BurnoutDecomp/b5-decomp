@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <cmath>
 #include <unordered_map>
+#include <map>
 #include <vector>
 
 // The renderengine D3D device singleton alias the fast-path callers name
@@ -322,7 +323,12 @@ namespace
         u16                          mau16BlendSourceOffset[2];
         u8                           mau8BlendType[2];
     };
-    std::unordered_map<const void*, Vd32Cached> sVdCache;
+    // FLAG PC-platform leaf: descriptors reside in streamed resource allocations.
+    // Order addresses so freeing a block visits only the declarations it owns.
+    std::map<uintptr_t, Vd32Cached> sVdCache;
+    // FLAG PC diagnostic: detect a changed descriptor while its cached declaration is still live.
+    std::unordered_map<const void*, std::vector<u8>> sVdSourceWitness;
+
 
     // [DIAG] D3DDECLTYPE / D3DDECLUSAGE -> their D3D9 spelling, for the [wheel-decode] line.
     // Names only; nothing behavioural reads these.
@@ -1710,6 +1716,48 @@ namespace renderengine
         return lbBoundAny;
     }
 
+    // FLAG PC-platform leaf: retire the host declaration before its descriptor's
+    // allocation can be reused by another streamed map resource. D3D retains its
+    // own reference to a bound declaration; this releases the cache's reference.
+    void WorldVd32_OnResourceMemoryFreed(const void* lpBase, size_t luSize)
+    {
+        if (lpBase == nullptr || luSize == 0)
+            return;
+        const uintptr_t luBegin = reinterpret_cast<uintptr_t>(lpBase);
+        u32 luRetired = 0;
+        auto lIt = sVdCache.lower_bound(luBegin);
+        // Subtraction avoids wrapping the exclusive end at the top of address space.
+        while (lIt != sVdCache.end() && lIt->first - luBegin < luSize)
+        {
+            if (spLastDeclElements == lIt->second.macElements)
+                spLastDeclElements = "";
+            if (lIt->second.mpDeclaration != nullptr)
+                lIt->second.mpDeclaration->Release();
+            sVdSourceWitness.erase(reinterpret_cast<const void*>(lIt->first));
+            lIt = sVdCache.erase(lIt);
+            ++luRetired;
+        }
+        static const bool sbTrace = std::getenv("BRN_WORLD_GEOMETRY_DIAG") != nullptr;
+        if (sbTrace && luRetired != 0)
+        {
+            char lacMessage[192];
+            std::snprintf(lacMessage, sizeof(lacMessage),
+                "[world-vd] retired=%u base=%p bytes=%zu\n", luRetired, lpBase, luSize);
+            CgsDev::Log::WriteToLog(lacMessage);
+        }
+    }
+
+    // FLAG PC-platform leaf: release the declaration cache with the other D3D mirrors.
+    void WorldVd32_ReleaseAll()
+    {
+        spLastDeclElements = "";
+        for (auto& lrEntry : sVdCache)
+            if (lrEntry.second.mpDeclaration != nullptr)
+                lrEntry.second.mpDeclaration->Release();
+        sVdCache.clear();
+        sVdSourceWitness.clear();
+    }
+
     void* WorldVd32_GetDeclaration(const void* lpVdImage, u32* lpuStride)
     {
         *lpuStride = 0;
@@ -1720,7 +1768,33 @@ namespace renderengine
         if (lpVdImage == nullptr)
             return nullptr;
 
-        std::unordered_map<const void*, Vd32Cached>::iterator lIt = sVdCache.find(lpVdImage);
+        static const bool sbVdLifetimeTrace = std::getenv("BRN_WORLD_GEOMETRY_DIAG") != nullptr;
+        if (sbVdLifetimeTrace)
+        {
+            const u8* lpBytes = static_cast<const u8*>(lpVdImage);
+            u16 luCount = 0;
+            std::memcpy(&luCount, lpBytes + 8, sizeof(luCount));
+            if (luCount > 0 && luCount <= 16)
+            {
+                const size_t luSize = 16 + 17 * luCount;
+                std::vector<u8>& lrPrevious = sVdSourceWitness[lpVdImage];
+                if (!lrPrevious.empty() && (lrPrevious.size() != luSize ||
+                    std::memcmp(lrPrevious.data(), lpBytes, luSize) != 0))
+                {
+                    const auto lCached = sVdCache.find(reinterpret_cast<uintptr_t>(lpVdImage));
+                    char lacMessage[256];
+                    std::snprintf(lacMessage, sizeof(lacMessage),
+                        "[world-vd] STALE descriptor=%p oldBytes=%zu newBytes=%zu cached=%d oldStride=%u newStride=%u\n",
+                        lpVdImage, lrPrevious.size(), luSize, static_cast<int>(lCached != sVdCache.end()),
+                        lCached != sVdCache.end() ? lCached->second.muSourceStride : 0u,
+                        static_cast<u32>(lpBytes[16 + 16 * luCount]));
+                    CgsDev::Log::WriteToLog(lacMessage);
+                }
+                lrPrevious.assign(lpBytes, lpBytes + luSize);
+            }
+        }
+
+        auto lIt = sVdCache.find(reinterpret_cast<uintptr_t>(lpVdImage));
         if (lIt != sVdCache.end())
         {
             *lpuStride = lIt->second.muStride;
@@ -1999,7 +2073,7 @@ namespace renderengine
         }
         // Bind to the STORED entry, not the local: spLastDeclElements below has to point at
         // the cache's own buffer (the cache-hit path hands out the same pointer).
-        const Vd32Cached& lrStored = (sVdCache[lpVdImage] = lEntry);
+        const Vd32Cached& lrStored = (sVdCache[reinterpret_cast<uintptr_t>(lpVdImage)] = lEntry);
         *lpuStride = lrStored.muStride;
         sbLastDeclHasTexcoord0 = lrStored.mbHasTexcoord0;
         suLastDeclUsageMask    = lrStored.muUsageMask;
@@ -4274,7 +4348,7 @@ namespace renderengine
         // bytes, which is independent of every decode decision except POSITION's own type.
         //
         // For the record, MEASURED OFFLINE from the shipped bundles (X360 retail
-        // WHEELS/WHE_51916650_GR.BNDL and our converted build/game/Wheels/WHE_51916650_GR.bndl
+        // WHEELS/WHE_51916650_GR.BNDL and converted build/game/Wheels/WHE_51916650_GR.bndl
         // -- 24 of 24 meshes byte-identical in positions and indices): the wheel model carries
         // five LOD states, and state 4 -- the coarsest -- ships a 24-vertex axis-aligned CUBE
         // as its tyre mesh (renderable 04F87E17 mesh 1, material 68B809B4 =
