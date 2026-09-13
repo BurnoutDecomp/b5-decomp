@@ -95,6 +95,8 @@ namespace BrnWorld
         void SetFailedNearMissChain(bool lbFailed)     { mbFailedNearMissChain = lbFailed; }
         TrafficNearMissData& GetTrafficNearMissData()  { return mTrafficNearMissData; }
         RaceCarNearMissData& GetRaceCarNearMissData()  { return mRaceCarNearMissData; }
+        // Inlined at ARTIST 822F6D68: manager+0x148 is the race-car tracker.
+        void AddTakenDownRaceCar(u32 luEntityId) { mRaceCarNearMissData.AddTakenDown(luEntityId); }
 
     private:
         // Re-prime the chain timeout, bump the chain count, notify the boost manager and push a

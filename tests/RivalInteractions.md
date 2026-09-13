@@ -46,3 +46,21 @@ to the existing HUD, AI and state-transition checks, it requires multiple camera
 and nonzero rotation sampled from an authored shake take. Frame captures permit visual
 inspection of the cut and return to driving. It does not establish organic collision
 attribution; use `run_rival_organic.py` for that separate check.
+
+## Visible rival damage
+
+```powershell
+python b5-decomp/tests/run_rival_damage.py
+python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/RivalDamage.ps1 --run-name rival_damage
+```
+
+The 13 focused checks cover damage-model activation on player takedowns, the five
+active damaged-car budget, AI/network ownership, boost rewards and penalties, and
+victim lifecycle flags. They execute the production takedown consumers with
+controlled vehicle state.
+
+The driving case uses real collisions and links player credit to the same victim's
+crash state, enabled damage rendering, nonzero deformation and changing pose.
+It also saves frames for visual inspection; a HUD message alone cannot pass it.
+The relevant ARTIST paths are `UpdateBoost` at `0x82304BF0..0x82304C90`,
+`GetDamagedCarCount` at `0x822A4958`, and `ProcessTakedownEvents` at `0x822F6CF8`.

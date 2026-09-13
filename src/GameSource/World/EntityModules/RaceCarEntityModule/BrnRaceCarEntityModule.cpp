@@ -5910,6 +5910,7 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         }
 
         ProcessPlayerVehicleInput( mfTimeStep, lpInput, lpOutput );
+        ProcessTakedownEvents( lpInput->GetTakedownEventQueue() ); // ARTIST 82307340
     }
 
     // ⭐⭐⭐ THE CONSUMER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
@@ -6045,6 +6046,40 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
 // sequence at the tail of the pseudocode) and drops it identically. No game state depends on it.
 // DELETE-WHEN BoostManager::DebugRender lands.
 // =============================================================================================
+// ARTIST 822A4958. The player and network cars count toward this budget too.
+s32 RaceCarEntityModule::GetDamagedCarCount() const
+{
+    s32 liCount = 0;
+    for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+    {
+        const ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
+        if (lrCar.IsActive() && lrCar.GetRenderParams()->IsDamaged())
+            ++liCount;
+    }
+    return liCount;
+}
+
+// ARTIST 822F6CF8: keep the takedown lifecycle synchronized with scoring.
+void RaceCarEntityModule::ProcessTakedownEvents(
+        const RaceCarEntityModuleIO::TakedownEventQueue* lpQueue)
+{
+    for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+    {
+        const BrnGameState::TakedownEvent& lrEvent = lpQueue->GetEvent(liEvent);
+        if (lrEvent.meAggressorIndex == mePlayerActiveRaceCarIndex)
+            mNearMissManager.AddTakenDownRaceCar(lrEvent.meVictimIndex);
+        if (lrEvent.meVictimIndex == mePlayerActiveRaceCarIndex)
+        {
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbIsWrecked = true;
+            mBoostManager.GetBoostStrategy()->OnTakenDownByAIOrPlayer();
+        }
+        CGS_ASSERT(lrEvent.meVictimIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                   lrEvent.meVictimIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "Takedown victim index is outside the active race cars");
+        GetActiveRaceCar(lrEvent.meVictimIndex)->SetTakenDown(true);
+    }
+}
+
 void RaceCarEntityModule::UpdateBoost(
         f32 lfTimeStep,
         const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
@@ -6131,6 +6166,24 @@ void RaceCarEntityModule::UpdateBoost(
                 == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
         {
             mBoostManager.GetBoostStrategy()->OnTakedown();
+            // ARTIST 82304BF0..82304C90: enable the victim's deforming render
+            // technique, respecting the original five-damaged-car budget.
+            if( GetDamagedCarCount() < 5 )
+            {
+                ActiveRaceCar* lpVictim = GetActiveRaceCar(lrEvent.meVictimIndex);
+                CGS_ASSERT(lpVictim != 0, "lpVictim");
+                RaceCar* lpVictimCar = lpVictim->GetGlobalRaceCar();
+                CGS_ASSERT(lpVictimCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                           "muType < E_RACE_CAR_TYPE_COUNT");
+                if( lpVictimCar->IsAIDriven() )
+                    lpVictim->GetRenderParams()->SetDamaged(true);
+            }
+            // FLAG PC diagnostic: join player credit to that same victim's
+            // physical/deformation readback in ActiveRaceCar::UpdateDeformationState.
+            static const bool sbTraceRivalDamage = getenv("BRN_RIVAL_DAMAGE_DIAG") != 0;
+            if (sbTraceRivalDamage && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[rival-damage] player-takedown victim="
+                    << static_cast<s32>(lrEvent.meVictimIndex) << "\n";
         }
     }
 
@@ -6624,7 +6677,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 // [INTERIOR] reach un-homed RaceCar/ActiveRaceCar/*Manager/Streamer/BrnAI/BrnTraffic
 //            interiors or call un-homed sibling methods:
 //   Release-adjacent state writes aside, this covers: DetachActiveRaceCar,
-//   ProcessTakedownEvents, ProcessPropContactQueue, ProcessLeapedAndStompedCars,
+//   ProcessPropContactQueue, ProcessLeapedAndStompedCars,
 //   ProcessPowerParking, ProcessRaceCarCrashEvents_PostPhysics, UpdatePowerParking,
 //   UpdateCrashingPlayerContacts,
 //   (UpdateHidingEvents RETIRED from this list 2026-09-05, rival range-loop wave -- COMPLETE in
@@ -6644,7 +6697,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   (SetHiddenDelay and IsRaceCarWrappable RETIRED from this list 2026-09-05, rival range-loop
 //    wave -- both COMPLETE in BrnRaceCarEntityModule_Range.cpp.)
 //   RemoveRivals, RemoveAllRivalsFromWorld, RemoveAllNetworkCarsFromWorld, RemoveAllRaceCars,
-//   ChangePlayerCarColour, GetDamagedCarCount, GetPersistentDamageCarCount,
+//   ChangePlayerCarColour, GetPersistentDamageCarCount,
 //   EnterReplay, LeaveReplay, LoadGlobalResources, IsCarColourInUse,
 //   IsPlayerCarTailgatingOtherRaceCars, UpdatePowerParking (Pre/Post variants),
 //   UpdateReplayStreaming-adjacent helpers (28+ total).

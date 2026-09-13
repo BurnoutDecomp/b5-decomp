@@ -100,6 +100,8 @@ const s32 KI_TRAINING_REQUEST_QUEUE_SIZE = 8;
 // SharedIO/BrnRaceCarEntityModuleOutputInterface.h). CopyActiveRaceCarToPlayerScoringMappingToOutput
 // only takes a pointer to it, so a forward declaration suffices here.
 namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; }
+// Pointer-only dependency; the queue is owned by SharedIO/BrnRaceCarEntityModuleIOQueues.h.
+namespace RaceCarEntityModuleIO { struct TakedownEventQueue; }
 namespace RaceCarEntityModuleIO { struct GameEventQueue; class InputBuffer_PrePhysics; class OutputBuffer_PrePhysics; class InputBuffer_PostScene; class OutputBuffer_PostScene; class InputBuffer_GenerateDispatchLists; struct InputBuffer_PreScene; struct OutputBuffer_PreScene; struct InputBuffer_PostPhysics; struct OutputBuffer_PostPhysics; struct OutputBuffer_Prepare; }
 
 // The "CarColours" palette resource LoadGlobalResources acquires (real home
@@ -1376,6 +1378,10 @@ private:
     void UpdateBoost( f32 lfTimeStep,
                       const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
                       RaceCarEntityModuleIO::GameEventQueue* lpEventQueue );
+
+    // ARTIST 822A4958 / 822F6CF8; DecFIGS declaration shapes.
+    s32 GetDamagedCarCount() const;
+    void ProcessTakedownEvents(const RaceCarEntityModuleIO::TakedownEventQueue* lpQueue);
 
     // ⭐ X360 0x822FF250 (73 insns) -- PARTIAL SLICE (engine wave 2026-08-12). The eight-slot
     // active-car tick: `for (i = 0; i < 8; ++i) if (maActiveRaceCars[i].IsActive())
