@@ -1,4 +1,6 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags (the ApplyLocalImpulse gate)
@@ -71,6 +73,65 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
+	// ARTIST 0x8260A508..0x8260A930, called by UpdateOutputContactSpies.
+	// The stored spy uses physical body ids. Traffic's body index can differ from
+	// its scene index, so orientation uses the caller's global entity id for traffic.
+	void DeformationSensor::OutputContactSpy(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+	                                       PhysicsModuleIO::PotentialContactInterface* lpContacts,
+	                                       EntityId lGlobalCarId)
+	{
+		const f32 lfNormalStressSq = maPostPhysicsVec1[0] * maPostPhysicsVec1[0]
+		                          + maPostPhysicsVec1[1] * maPostPhysicsVec1[1]
+		                          + maPostPhysicsVec1[2] * maPostPhysicsVec1[2];
+		if (!(lfNormalStressSq > 0.00001f))
+			return;
+
+		const u32 luEntityA = static_cast<u32>(mSpyVolumeInstanceIdA >> 32);
+		const u32 luEntityB = static_cast<u32>(mSpyVolumeInstanceIdB >> 32);
+		const u32 luOwnerA = luEntityA >> 24;
+		const u32 luOwnerB = luEntityB >> 24;
+		CGS_ASSERT(luOwnerA != 0, "Contact spy A must not be world");
+		const auto& lrContact = lpContacts->GetEvent(ContactId(mSpyContactId));
+		const u32 luContactA = static_cast<u32>(lrContact.muVolumeInstanceIdA.muId >> 32);
+		const u32 luContactB = static_cast<u32>(lrContact.muVolumeInstanceIdB.muId >> 32);
+		if (luOwnerA == 1 && (luOwnerB == 0 || luOwnerB == 1))
+		{
+			CGS_ASSERT(luContactA == luEntityA, "Contact A must match spy A");
+			CGS_ASSERT(luContactB == luEntityB, "Contact B must match spy B");
+		}
+		else if (luOwnerA == 2 && luOwnerB == 0)
+		{
+			CGS_ASSERT((luContactA >> 24) == 2, "Contact A must be traffic");
+			CGS_ASSERT((luContactB >> 24) == 0, "Contact B must be world");
+		}
+		else if (luOwnerA == 1 && luOwnerB == 2)
+		{
+			CGS_ASSERT((luContactA >> 24) == 1, "Contact A must be a race car");
+			CGS_ASSERT((luContactB >> 24) == luOwnerB, "Contact B owner must match spy B");
+		}
+
+		CgsPhysics::PhysicsSimulationIO::OutContactSpy lSpy;
+		lSpy.mFrictionStress = Vector3{maPostPhysicsVec0[0], maPostPhysicsVec0[1], maPostPhysicsVec0[2], maPostPhysicsVec0[3]};
+		lSpy.mNormalStress = Vector3{maPostPhysicsVec1[0], maPostPhysicsVec1[1], maPostPhysicsVec1[2], maPostPhysicsVec1[3]};
+		lSpy.mNormal = mSpyNormal;
+		lSpy.mPointOnA = mSpyPointOnA;
+		lSpy.mPointOnB = mSpyPointOnB;
+		lSpy.mIDA = mSpyVolumeInstanceIdA;
+		lSpy.mIDB = mSpyVolumeInstanceIdB;
+		lSpy.muTag = mSpyContactId;
+		const u32 luSceneEntityA = luOwnerA == 2 ? lGlobalCarId.muValue : luEntityA;
+		if (luSceneEntityA != luContactA)
+		{
+			CGS_ASSERT(luSceneEntityA == luContactB, "Spy entity must belong to the potential contact");
+			lSpy.SwapEntityOrder();
+			mSpyNormal = lSpy.mNormal;
+			mSpyPointOnA = lSpy.mPointOnA;
+			mSpyPointOnB = lSpy.mPointOnB;
+			mSpyVolumeInstanceIdA = lSpy.mIDA;
+			mSpyVolumeInstanceIdB = lSpy.mIDB;
+		}
+		lpOutput->GetContactSpyQueue()->AddEvent(lSpy);
+	}
 	namespace
 	{
 		// LAYOUT PIN -- StoredContact is HOST-NATIVE (80 B, static_assert-pinned in the header) and
