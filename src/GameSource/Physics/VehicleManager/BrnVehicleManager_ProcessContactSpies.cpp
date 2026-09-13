@@ -69,6 +69,7 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                // RaceCarContact (mEntityIdA/B, mNormal)
 #include "GameSource/World/BrnEntityTypes.h"                                    // BrnWorld::E_ENTITYTYPE_RACECAR / _TRAFFIC_VEHICLE
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                       // gpDebugPrint ([td-spies] witness)
 #include "rw/math/vpu/vector3_operation.h"                                      // vpu::Dot, unary operator-
 
 namespace BrnPhysics
@@ -96,6 +97,48 @@ namespace Vehicle
     {
         (void)lpDeformationManager;   // asm: r9 (the manager) is never read in the 118 instructions.
 
+        // -------------------------------------------------------------------------------------
+        // [td-spies] PC witness (NOT in the console) -- the queue at the HEAD of the takedown
+        // chain. With nothing printing here, "no contact was ever queued" and "contacts were
+        // queued but none of them was car-vs-car" look identical from the log, and every parked
+        // stage downstream gets blamed for a seam that never fired. Bounded: the first 8
+        // non-empty queues, plus one summary line every 600th call. Counters only -- the
+        // histogram accumulation below is two increments and no formatting. [FLAG PC witness]
+        // DELETE-WHEN: the organic takedown case goes green and the race-car contact arm is
+        // confirmed reachable from a scenario run.
+        //
+        // ⭐ WHAT ownerB == 3 ON EVERY ENTRY MEANS (takedown lane S1, 2026-09-13): it is the
+        // FAITHFUL reading of the only race-car contact this tree currently produces, NOT a
+        // mis-encoded id, and no owner byte anywhere on the store path needs repairing.
+        //   * A prop-vs-race-car scene contact is routed onto the shared dummy-car body before it
+        //     enters the simulation -- the race-car side's owner byte is restamped
+        //     PROP_COLLISION_RACECAR -- so the resolved spy's A owner is 11 and the physics store's
+        //     race-car arm fires. The ids the stored record carries come from the POTENTIAL
+        //     contact, which still holds the untouched scene pair (RACECAR, PROP). Hence A == 1,
+        //     B == 3, on every entry.
+        //   * A car-vs-car BODY contact never travels that road. The contact-generation router
+        //     canonicalises every race-car-vs-race-car overlap pair into the race-car-with-race-car
+        //     custom queue, and that queue has exactly two drains: the interpolation fix-up (which
+        //     mutates the record in place) and the deformation-sensor read (whose simulation-input
+        //     parameter is genuinely unused on the console). Neither adds a simulation contact, so
+        //     no spy can come back naming two race cars.
+        // ⇒ The HandleRaceCarRaceCarContact arm below is waiting on a PRODUCER that does not exist
+        //   in this tree yet, not on a bad owner byte in the spy record. Re-read the two inert
+        //   deformation bridges (body-part-with-car and detached-wheel-with-car) before blaming
+        //   anything on this file, the spy factory, or the deformation contact fix-ups -- all four
+        //   were re-verified store-for-store against the console this wave and are faithful.
+        // -------------------------------------------------------------------------------------
+        static u32 suSpyCalls               = 0u;
+        static u32 suSpyNonEmptySeen        = 0u;
+        static u32 suSpyContactsTotal       = 0u;
+        // One bucket per BrnWorld::EEntityTypeID value 0..12 plus a "13 or above" catch-all: the
+        // sim-side race car arrives as PROP_COLLISION_RACECAR (11) while the arm below tests only
+        // RACECAR (1), so 11 must be readable on its own and never folded in with the wheel and
+        // deformable-part owners (8..10).
+        static u32 sauSpyOwnerBHistogram[14] =
+            { 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u };   // [13] == "13 or above"
+        ++suSpyCalls;
+
         muTakedownEventsThisFrame = 0;                                          // 0x82646CD0
 
         const ContactSpy::ContactSpyData::RaceCarContactQueue* lpRaceCarContactSpyQueue =
@@ -113,6 +156,10 @@ namespace Vehicle
                        "lSpy.mEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");   // :4457
 
             const u8 luOwnerB = static_cast<u8>(lSpy.mEntityIdB.muValue >> 24);   // 0x82646D3C lbz 4(spy)
+
+            // [td-spies] PC witness accumulation (see the block at the top). [FLAG PC witness]
+            ++suSpyContactsTotal;
+            ++sauSpyOwnerBHistogram[(luOwnerB < 13u) ? luOwnerB : 13u];
 
             if (luOwnerB == BrnWorld::E_ENTITYTYPE_RACECAR)                     // 0x82646D44
             {
@@ -140,6 +187,30 @@ namespace Vehicle
                     lpCarA->SetFatallyCrashing();                               // 0x82646E38 stb 1,0x711
                 }
             }
+        }
+
+        // [td-spies] PC witness read-out (see the block at the top). [FLAG PC witness]
+        if (CgsDev::Log::gpDebugPrint != 0
+            && ((liNumContacts > 0 && suSpyNonEmptySeen < 8u) || (suSpyCalls % 600u) == 0u))
+        {
+            if (liNumContacts > 0)
+            {
+                ++suSpyNonEmptySeen;
+            }
+
+            *CgsDev::Log::gpDebugPrint << "[td-spies] calls=" << suSpyCalls
+                                       << " queueLen=" << liNumContacts
+                                       << " contactsTotal=" << suSpyContactsTotal
+                                       << " ownerB[0..12,13+]=";
+            for (s32 liBucket = 0; liBucket < 14; ++liBucket)
+            {
+                *CgsDev::Log::gpDebugPrint << sauSpyOwnerBHistogram[liBucket];
+                if (liBucket < 13)
+                {
+                    *CgsDev::Log::gpDebugPrint << ",";
+                }
+            }
+            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
         }
 
         ProcessShowtimeShunts(lpContactSpies);                                  // 0x82646E50 @0x82629F20

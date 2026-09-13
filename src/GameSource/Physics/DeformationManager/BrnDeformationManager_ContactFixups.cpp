@@ -49,6 +49,24 @@ namespace Deformation
     }
 
     // ==========================================================================================
+    // REFUTED 2026-09-13 (takedown lane S1) -- DO NOT "FIX" EITHER FIXUP TO REMAP THE PART OR
+    // WHEEL ID ONTO ITS OWNING VEHICLE.
+    // A standing lead read the two bodies below as the place where the console turns a deformable
+    // part / detached wheel id into the owning car's scene id, so that a car-vs-car contact would
+    // reach the race-car spy queue with a RACECAR owner on its B side. Read off the instructions,
+    // each body writes exactly TWO ids and neither of them is that remap:
+    //     idA <- the part's own packed handle (part +0x1D0), or the wheel's own packed handle
+    //            (wheel +0x70). The owner stays RACECAR_/TRAFFIC_DEFORMABLE_PART or
+    //            DETACHED_*_WHEEL, because the routine that packs those handles stamps those
+    //            owner tags itself.
+    //     idB <- the owning car model's handling-body word (model +0x6710), owner RACECAR.
+    // So a race-car contact spy built from a fixed-up contact carries the PART (or the WHEEL) on
+    // its B side once the A/B-swapped reciprocal store runs -- never a race car. The producer of
+    // a race-car-vs-race-car spy is elsewhere; see the note in
+    // BrnVehicleManager_ProcessContactSpies.cpp.
+    // ==========================================================================================
+
+    // ==========================================================================================
     // FixupBodyPartVehicleContact @ 0x825A0B88
     //
     // Repair a potential DETACHED-BODY-PART-vs-VEHICLE contact so the detached part collides with

@@ -142,11 +142,13 @@ struct LightTriggerStartData;
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct InGamePlayerStatusInterface; } }
 
 namespace CgsModule { template <typename T> class BaseEventQueue; }          // ProcessPlayerCrashes(queue) overload
+namespace CgsModule { template <typename T, s32 N> class EventQueue; }        // the takedown-event queue the post-world scoring leg takes
 namespace BrnPhysics { namespace Vehicle { struct RaceCarCrashEvent; } }      // (element type; complete in the .cpp)
 
 namespace BrnGameState
 {
 class GameStateModule;
+struct TakedownEvent;              // (element type; complete in BrnTakedownManagerTypes.h)
 class NetworkRoundManager;
 class TriggerQueryManager;
 class StreetManager;
@@ -306,6 +308,18 @@ public:
     // takedown leg is reached from the PostWorldInputBuffer, which carries the same queue.
     void PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer,
                          f32                                            lfDelta);
+
+    // The TAKEDOWN + CRASH SCORING ARM of PostWorldUpdate, at the console's own position, as its
+    // own entry point. THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY -- the same reduction the four other
+    // lifted post-world legs already carry: PostWorldUpdate itself has no caller (nothing on this
+    // build creates a PostWorldInputBuffer) and no takedown-queue parameter, while the module's own
+    // takedown-event queue and the world's race-car crash queue ARE both live at the console's own
+    // call position. The gate inside is the console's, unchanged: KU_FLAG_DISABLE_ALL_TDS clear AND
+    // the current mode in progress. DELETE-WHEN the real post-world buffer lands and PostWorldUpdate
+    // is callable -- the arm folds back into it at its console position.
+    void PostWorldUpdateTakedownScoringBringUp(
+            const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
+            const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
 
     void ProcessPlayerCrashes(const GameStateModuleIO::PostWorldInputBuffer* lpPostWorldInputBuffer);                 // DWARF :160 / X360 0x8231E638
     // [road-rage wave 2026-09-02, conductor] THE SAME BODY, taking the queue the buffer version

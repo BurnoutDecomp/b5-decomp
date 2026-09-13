@@ -55,6 +55,8 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // BrnGameState::GameStateToNetworkInterface::DirtyTrickQueue (== EventQueue<DirtyTrickEvent,28>)
 #include "GameSource/GameState/PaybackManager/BrnPaybackDebugComponent.h"        // BrnGameState::PaybackDebugComponent (embedded by value @ +620)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                          // GameStateModuleIO::EGameModeType
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                        // CgsModule::EventQueue<TakedownEvent,8> (Update's takedown-queue arg)
+#include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"         // BrnGameState::TakedownEvent
 
 // The Update / Handle* vehicle-output param (DWARF spells it unqualified `VehicleOutputInterface`,
 // which resolves to BrnPhysics::Vehicle::VehicleOutputInterface). Pointer-only in this header --
@@ -72,7 +74,10 @@ namespace BrnGameState
         struct PreWorldInputBuffer;
         struct OutputBuffer;
     }
-    namespace InputBuffer { struct TakedownEventQueue; }  // BrnScoringSystemEventQueues.h completes it
+    // The takedown-event queue the module hands both this manager and the MugshotManager is the
+    // module's OWN EventQueue<TakedownEvent,8> (the copy it drains the output buffer into), not the
+    // world input buffer's derived TakedownEventQueue -- so the base instantiation is the parameter
+    // type, exactly as MugshotManager::Update already spells it.
 
     struct PaybackManager
     {
@@ -116,7 +121,7 @@ namespace BrnGameState
         void Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,          // :90
                     GameStateModuleIO::OutputBuffer* lpOutput,
                     const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
-                    const InputBuffer::TakedownEventQueue* lpQueue,
+                    const CgsModule::EventQueue<TakedownEvent, 8>* lpQueue,
                     GameStateModuleIO::EGameModeType leGameModeType);
 
         void OnRoundStart();                                                        // :94  (own TU)
@@ -131,7 +136,7 @@ namespace BrnGameState
 
         void ProcessTakedownEvents(const GameStateModuleIO::PreWorldInputBuffer* lpInput, // :177
                                    GameStateModuleIO::OutputBuffer* lpOutput,
-                                   const InputBuffer::TakedownEventQueue* lpQueue,
+                                   const CgsModule::EventQueue<TakedownEvent, 8>* lpQueue,
                                    GameStateModuleIO::EGameModeType leGameModeType);
 
         void ProcessDirtyTrickEventQueue(const GameStateModuleIO::PreWorldInputBuffer* lpInput, // :182

@@ -20,6 +20,7 @@
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // BrnPhysics::Vehicle::{VehicleOutputInterface,CrashingRaceCarInterface}
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint ([payback] witness)
 
 namespace BrnGameState
 {
@@ -273,7 +274,14 @@ namespace BrnGameState
         const s32 liPlayerRaceCarIndex =
             static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex());
 
-        if (lCrashingRaceCars.IsCrashing(liPlayerRaceCarIndex))
+        // FLAG parked: CrashingRaceCarInterface::IsCrashing is declared with no body anywhere in
+        // the tree, and the flag array it reads is private, so this arm's test cannot be taken.
+        // FLAG placeholder, not a recovered value -- the arm is held shut until that body lands.
+        const bool lbPlayerIsCrashing = false;
+        (void)lCrashingRaceCars;
+        (void)liPlayerRaceCarIndex;
+
+        if (lbPlayerIsCrashing)
         {
             mfPaybackAggTimer       = -1.0f;                                 // +588
             mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_AWARD_DT;    // +604 = 2
@@ -339,8 +347,10 @@ namespace BrnGameState
         const ::EActiveRaceCarIndex    leVictimIndex2 = mePaybackVictimRaceCarIndex;
         const ::EActiveRaceCarIndex    lePlayerIndex2 = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
-        lpOutput->GetGameStateToGuiInterface()->AddDirtyTrickTriggered(
-            lePlayerIndex2, leVictimIndex2, leAwarded2);
+        // FLAG parked: GameStateToGuiInterface::AddDirtyTrickTriggered is declared with no body
+        // anywhere in the tree; the three values it would carry are computed above.
+        (void)leAwarded2; (void)leVictimIndex2; (void)lePlayerIndex2;
+        (void)lpOutput;
 
         // X360 @0x82397C08 end-stores (asm order): timer off, clear the awarded trick, drop the victim
         // index, return the aggressor FSM to IDLE, clear the awarded flag. The earlier reconstruction
@@ -366,7 +376,7 @@ namespace BrnGameState
     void
     PaybackManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInputBuffer* /*lpInput*/,
                                           GameStateModuleIO::OutputBuffer* /*lpOutput*/,
-                                          const InputBuffer::TakedownEventQueue* lpQueue,
+                                          const CgsModule::EventQueue<TakedownEvent, 8>* lpQueue,
                                           GameStateModuleIO::EGameModeType /*leGameModeType*/)
     {
         for (s32 liIndex = 0; liIndex < lpQueue->GetLength(); ++liIndex)
@@ -396,6 +406,24 @@ namespace BrnGameState
             if (mpGameStateModule->GetPlayerActiveRaceCarIndex() != leTakedownVictimRaceCarIndex)
                 continue;
 
+            // [payback] PC witness (NOT in the console), first 8 only: the point where this
+            // manager REGISTERS a takedown -- the marked-man and local-victim filters have both
+            // passed and the aggressor FSM is about to be armed. [FLAG PC witness]
+            // DELETE-WHEN: the organic takedown case goes green and the payback registration is
+            // confirmed from a scenario run.
+            {
+                static s32 siPaybackWitnessed = 0;
+                if (siPaybackWitnessed < 8 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siPaybackWitnessed;
+                    *CgsDev::Log::gpDebugPrint << "[payback] takedown registered attacker "
+                                               << static_cast<s32>(leTakedownAggressorRaceCarIndex)
+                                               << " -> victim " << static_cast<s32>(leTakedownVictimRaceCarIndex)
+                                               << " markedMan=" << (lTakedownEvent.mbMarkedManTakeDown ? 1 : 0)
+                                               << " [FLAG PC witness]\n";
+                }
+            }
+
             mfPaybackAggTimer              = -1.0f;
             mePaybackAggressorRaceCarIndex = leTakedownVictimRaceCarIndex;
             mePaybackVictimRaceCarIndex    = leTakedownAggressorRaceCarIndex;
@@ -423,11 +451,16 @@ namespace BrnGameState
         CGS_ASSERT(lpInput, "lpInput");
         CGS_ASSERT(lpInput->GetNetworkToGameStateInterface(),
                    "lpInput->GetNetworkToGameStateInterface()");
-        CGS_ASSERT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue(),
-                   "lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue()");
 
-        const CgsModule::EventQueue<BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent, 28>* lpDirtyTrickQueue =
-            lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue();
+        // FLAG parked: NetworkToGameStateInterface::GetDirtyTrickQueue and GameStateToGuiInterface::
+        // AddDirtyTrickEnding are both declared with no body anywhere in the tree, so the whole drain
+        // below cannot be linked yet. The body is kept intact behind this gate; delete the gate when
+        // those two land.
+        const CgsModule::EventQueue<BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent, 28>* lpDirtyTrickQueue = 0;
+        if (lpDirtyTrickQueue == 0)
+        {
+            return;
+        }
 
         for (s32 liIndex = 0; liIndex < lpDirtyTrickQueue->GetLength(); ++liIndex)
         {
@@ -494,7 +527,7 @@ namespace BrnGameState
     PaybackManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                            GameStateModuleIO::OutputBuffer* lpOutput,
                            const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
-                           const InputBuffer::TakedownEventQueue* lpQueue,
+                           const CgsModule::EventQueue<TakedownEvent, 8>* lpQueue,
                            GameStateModuleIO::EGameModeType leGameModeType)
     {
         ProcessTakedownEvents(lpInput, lpOutput, lpQueue, leGameModeType);
@@ -518,10 +551,10 @@ namespace BrnGameState
                 HandleWaitForPaybackAggressorToCrash(lpVehicleOutputInterface);
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_AWARD_DT:
-                HandleWaitingToAwardPayback(lpVehicleOutputInterface);
+                // FLAG parked: PaybackManager::HandleWaitingToAwardPayback has no body anywhere in the tree.
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER:
-                HandleAwardingPayback(lpOutput, lpVehicleOutputInterface, leGameModeType);
+                // FLAG parked: PaybackManager::HandleAwardingPayback has no body anywhere in the tree.
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_YOU_TRIGGERED_DT:
                 HandleHavingPayback(lpOutput);
@@ -541,16 +574,16 @@ namespace BrnGameState
             case E_PAYBACK_VICTIM_STATE_IDLE:
                 break;
             case E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU:
-                HandleReceivingPayback(lpOutput, lpVehicleOutputInterface);
+                // FLAG parked: PaybackManager::HandleReceivingPayback has no body anywhere in the tree.
                 break;
             case E_PAYBACK_VICTIM_STATE_ACTIVE:
-                HandleActivePayback(lpOutput);
+                // FLAG parked: PaybackManager::HandleActivePayback has no body anywhere in the tree.
                 break;
             case E_PAYBACK_VICTIM_STATE_YOU_CRASHED:
-                HandleCrashDueToPayback(lpOutput);
+                // FLAG parked: PaybackManager::HandleCrashDueToPayback has no body anywhere in the tree.
                 break;
             case E_PAYBACK_VICTIM_STATE_YOU_SURVIVED:
-                HandleSurvivingPayback(lpOutput);
+                // FLAG parked: PaybackManager::HandleSurvivingPayback has no body anywhere in the tree.
                 break;
             default:
                 CGS_ASSERT(false, "Unknown payback victim state");
@@ -559,7 +592,8 @@ namespace BrnGameState
 
         // Publish this frame's outbound dirty-trick events onto the GameState->Network interface's
         // dirty-trick queue, then clear the manager's per-frame queue (X360 *(this+56) = 0).
-        lpOutput->GetGameStateToNetworkInterface()->GetDirtyTrickQueue()->Append(mDirtyTrickOutputQueue);
+        // FLAG parked: GameStateToNetworkInterface::GetDirtyTrickQueue is declared with no body
+        // anywhere in the tree, so the merge cannot be linked; the per-frame clear still runs.
         mDirtyTrickOutputQueue.Clear();
 
         // (X360 tail: a virtual hook on the embedded debug component -- a debug-only per-frame record

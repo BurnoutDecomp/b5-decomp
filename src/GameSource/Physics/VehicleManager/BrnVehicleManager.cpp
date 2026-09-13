@@ -8,6 +8,7 @@
 #include "rw/math/vpu/vector3_operation.h"                                    // vpu::Dot (T-bone side-speed gates, wave B3b)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint ([bringup] crash-entry banner)
+#include "GameSource/World/BrnEntityTypes.h"                                   // BrnWorld::EEntityTypeID -- the owner byte the crash witness names
 
 #include <cmath>    // std::fabs, std::acos
 #include <cstddef>  // offsetof (layout asserts)
@@ -145,6 +146,77 @@ namespace Vehicle
     // = 0.44704 * 50.0 == 50 MPH in m/s. The old 0.0 made the gate a pass-through.
     static const f32 KF_MIN_IMPACT_SPEED_SUM = 0.44704f * 50.0f;   // flt_82FB8290 <- init 0x82C5BB18 (22.352 m/s)
 
+    // --------------------------------------------------------------------------------------
+    // [td-contact] / [td-crash] PC witness helpers (NOT in the console): enum -> name, so the
+    // witness lines below read as verdicts instead of bare integers. [FLAG PC witness]
+    // DELETE-WHEN: the two witnesses below are deleted (organic takedown case green).
+    // --------------------------------------------------------------------------------------
+    static const char* WitnessImpactTypeName(s32 liImpactType)
+    {
+        switch (liImpactType)
+        {
+        case E_IMPACT_NONE:          return "none";
+        case E_IMPACT_TRADING_PAINT: return "trading-paint";
+        case E_IMPACT_NUDGE:         return "nudge";
+        case E_IMPACT_SLAM:          return "slam";
+        case E_IMPACT_SHUNT:         return "shunt";
+        case E_IMPACT_BOOST_SLAM:    return "boost-slam";
+        case E_IMPACT_BOOST_SHUNT:   return "boost-shunt";
+        case E_IMPACT_GRINDING:      return "grinding";
+        case E_IMPACT_RUBBING:       return "rubbing";
+        default:                     return "?";
+        }
+    }
+
+    static const char* WitnessTakedownTypeName(s32 liTakedownType)
+    {
+        switch (liTakedownType)
+        {
+        case BrnGameState::E_TAKEDOWN_NONE:          return "none";
+        case BrnGameState::E_TAKEDOWN_STANDARD:      return "standard";
+        case BrnGameState::E_TAKEDOWN_GRINDING:      return "grinding";
+        case BrnGameState::E_TAKEDOWN_T_BONE:        return "t-bone";
+        case BrnGameState::E_TAKEDOWN_VERTICAL:      return "vertical";
+        case BrnGameState::E_TAKEDOWN_TRAFFIC_CHECK: return "traffic-check";
+        case BrnGameState::E_TAKEDOWN_HEAD_ON:       return "head-on";
+        case BrnGameState::E_TAKEDOWN_UNKNOWN0:      return "unknown0";
+        case BrnGameState::E_TAKEDOWN_UNKNOWN1:      return "unknown1";
+        case BrnGameState::E_TAKEDOWN_DOUBLE:        return "double";
+        case BrnGameState::E_TAKEDOWN_REVENGE:       return "revenge";
+        case BrnGameState::E_TAKEDOWN_INTO_CAR:      return "into-car";
+        case BrnGameState::E_TAKEDOWN_INTO_VAN:      return "into-van";
+        case BrnGameState::E_TAKEDOWN_INTO_BUS:      return "into-bus";
+        default:                                     return "?";
+        }
+    }
+
+    // The OWNER byte of an EntityId word, by name. The crash record's aggressor seat is an
+    // EntityId, never a slot index: "no attacker" is spelled by the OWNER (world / traffic /
+    // the victim's own id), and the entity field means nothing until the owner is read. A witness
+    // that printed only bits 10..23 rendered a WORLD-owned aggressor as "attacker 0" -- which
+    // reads as the player's race-car slot and is what made every self-inflicted rival crash look
+    // like the player was credited for it.
+    static const char* WitnessEntityOwnerName(u32 luOwner)
+    {
+        switch (static_cast<s32>(luOwner))
+        {
+        case BrnWorld::E_ENTITYTYPE_WORLD:                   return "world";
+        case BrnWorld::E_ENTITYTYPE_RACECAR:                 return "racecar";
+        case BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE:         return "traffic";
+        case BrnWorld::E_ENTITYTYPE_PROP:                    return "prop";
+        case BrnWorld::E_ENTITYTYPE_TRIGGER:                 return "trigger";
+        case BrnWorld::E_ENTITYTYPE_WORLD_GRAPHICS:          return "world-graphics";
+        case BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART: return "racecar-part";
+        case BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART: return "traffic-part";
+        case BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL:           return "racecar-wheel";
+        case BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL:  return "detached-racecar-wheel";
+        case BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL:  return "detached-traffic-wheel";
+        case BrnWorld::E_ENTITYTYPE_PROP_COLLISION_RACECAR:  return "prop-collision-racecar";
+        case BrnWorld::E_ENTITYTYPE_PROP_COLLISION_TRAFFIC:  return "prop-collision-traffic";
+        default:                                             return "?";
+        }
+    }
+
     // The grind-event record HandleRaceCarRaceCarContact's pre-pass pushes onto the player-driver
     // queue (asm AddEventSafe(..., 31, 12) -- a 12-byte event). The X360 writes a grind type (7 or 8)
     // at +0 and two -1 sentinels (v205/v206). FLAG: 12-byte layout modelled as the fields the asm
@@ -179,11 +251,11 @@ namespace Vehicle
     // grind pre-pass + the classifier ladder, commits flagged crashes, then drives the slam/shunt
     // physics + the last-attacker/revenge bookkeeping.
     //
-    // A/B SWAP (asm-authoritative, surprising -- carried as a FLAG): the X360 stores the EntityId-A
-    // side into the struct's "B" slots and the EntityId-B side into the struct's "A" slots (the asm
-    // writes v229[16]=B-crashing into +0x50=mbRaceCarAIsCrashing, etc.). The populate below mirrors
-    // this swap by NAME so the classifiers (which were bodied against the struct's A/B) read the
-    // values the X360 put there.
+    // A/B: there is NO swap. Re-read store by store from the asm -- the A record's crashing byte
+    // goes to +0x50 (mbRaceCarAIsCrashing) and B's to +0x51, the A type-derived is-player byte to
+    // +0x52 and B's to +0x53, the A is-network byte to +0x54 and B's to +0x55. An earlier pass read
+    // the two crashing loads inverted and carried a "surprising swap" note for it; the loads are
+    // straight (see the per-car flag populate below).
     //
     // The per-car SPEEDS (+0x5C/+0x60), the CLOSING velocity (+0x30) and speed (+0x58), and
     // mfAngleBetweenCars (+0xF0) are computed by long vmsum3fp/vrsqrtefp/XMVectorACos register
@@ -205,25 +277,34 @@ namespace Vehicle
         const s32 liIndexA = static_cast<s32>((lContact.mEntityIdA.muValue >> 10) & 0x3FFF);   // asm v43
         const s32 liIndexB = static_cast<s32>((lContact.mEntityIdB.muValue >> 10) & 0x3FFF);   // asm v44
 
-        // Master gate: the whole routine is a no-op unless takedowns are enabled. asm v45 = *(v39+171464).
-        // [td-contact] PC witness (NOT X360), first 8 only: proves race-car-vs-race-car contacts reach
-        // the crash classifier now that ProcessContactSpies is real.
+        // [td-contact] PC witness (NOT the console), first 16 only: proves race-car-vs-race-car
+        // contacts reach the crash classifier now that ProcessContactSpies is real. The paired
+        // "verdict" line after the classifier ladder (step 5) says which sub-classifier fired --
+        // an entry line with no verdict line means one of the gates below returned first.
+        // [FLAG PC witness]
+        // DELETE-WHEN: the organic takedown case goes green.
         {
             static s32 siWitnessed = 0;
-            if (siWitnessed < 8 && CgsDev::Log::gpDebugPrint != 0)
+            if (siWitnessed < 16 && CgsDev::Log::gpDebugPrint != 0)
             {
                 ++siWitnessed;
-                *CgsDev::Log::gpDebugPrint << "[td-contact] race car " << liIndexA << " vs " << liIndexB
+                *CgsDev::Log::gpDebugPrint << "[td-contact] entry race car " << liIndexA << " vs " << liIndexB
                                            << " [FLAG PC witness]\n";
             }
         }
-            return;   // asm: goto LABEL_92
+
+        // Master gate: the whole routine is a no-op unless slams and shunts are enabled. The asm
+        // materialises the constant +171464, byte-loads it off `this` (`lbzx`), compares against zero
+        // and branches to the epilogue when it IS zero -- so the gate is active-high and its false
+        // arm is a plain return, not a jump past the populate.
+        if (!mbSlamsAndShuntsOn)   // asm: lbzx +171464 ; cmplwi 0 ; beq epilogue
+            return;
 
         // Both cars must be live in the mUsedRaceCars bitset (asm reads the 64-bit word and tests the
-        // per-index bit -- now the real BitArray<8>, accessed by its named ops).
-        if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liIndexB)))   // asm: index B bit must be set
-            return;
+        // per-index bit -- now the real BitArray<8>, accessed by its named ops). A is tested first.
         if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liIndexA)))   // asm: index A bit must be set
+            return;
+        if (!mUsedRaceCars.IsBitSet(static_cast<u32>(liIndexB)))   // asm: index B bit must be set
             return;
 
         // (asm normalizes the contact normal and asserts |n|-1 ~ 0 within 0.05 -- debug-only.)
@@ -238,9 +319,8 @@ namespace Vehicle
         lInfo.mRaceCarAEntityID         = lContact.mEntityIdA;
         lInfo.mRaceCarBEntityID         = lContact.mEntityIdB;
 
-        // The A/B SWAP: the EntityId-A side fills the struct's "A" index/record, and likewise B. (The
-        // asm's deeper swap of the crash/player FLAG bytes is reproduced field-by-field below; the
-        // index/record assignment itself is straight so the entity ids + indices stay consistent.)
+        // The EntityId-A side fills the struct's "A" index/record, and likewise B -- straight through,
+        // exactly as the per-car flag bytes below are.
         lInfo.meActiveRaceCarIndexA     = static_cast<EActiveRaceCarIndex>(liIndexA);   // asm v225 = v43
         lInfo.meActiveRaceCarIndexB     = static_cast<EActiveRaceCarIndex>(liIndexB);   // asm v224 = v44
 
@@ -249,19 +329,28 @@ namespace Vehicle
         lInfo.mpRaceCarA = reinterpret_cast<RaceCarPhysics*>(&lrRecordA);
         lInfo.mpRaceCarB = reinterpret_cast<RaceCarPhysics*>(&lrRecordB);
 
-        // Per-car TYPE -> is-player / is-crashing flags. asm: v70 = maeRaceCarTypes[A],
-        // v71 = maeRaceCarTypes[B]; the _cntlzw tricks derive is-player (type 0 == PLAYER) and
-        // is-crashing (type 1 == AI, or the per-record +3664 disabled flag).
-        // FLAG: the exact type -> bool encoding is the X360's _cntlzw idiom; reconstructed here
-        // as the documented predicates (player car == mePlayerActiveRaceCarIndex; crashing == the
-        // in-record disabled flag). The struct's A/B crashing bytes carry the X360 swap (B->A, A->B).
+        // Per-car TYPE -> is-player / is-network / is-AI flags, plus the two in-record crashing bytes.
+        // The two type words are read straight out of maeRaceCarTypes (the asm's `addi rX, index,
+        // 0x2B28` + `slwi 2` pair reproduces exactly that member's own offset), and the
+        // `cntlzw` + `extrwi ...,1,26` idiom is an exact equality test: bit 26 of a count-leading-
+        // zeros result is set only when the count is 32, i.e. only when the operand is zero. So
+        // `cntlzw(type)` yields (type == PLAYER) and `cntlzw(type - 2)` yields (type == NETWORK);
+        // the AI byte is the OR of the two plain `cmpwi 1` tests.
+        //   +0x52 / +0x53  is-player      +0x54 / +0x55  is-network      +0x56  either car is AI
+        // The crashing bytes are each record's own +0xE50 byte (the vehicle-physics sub-object sits at
+        // record +0x740 and its mbCrashing at sub-object +0x710) -- A's load feeds +0x50 and B's feeds
+        // +0x51, straight through, with no swap on any of the six bytes.
         const s32 liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
-        lInfo.mbRaceCarAIsCrashing   = (lrRecordB.mbCrashing != 0);   // asm v229[16] = v90 (B's flag)
-        lInfo.mbRaceCarBIsCrashing   = (lrRecordA.mbCrashing != 0);   // asm v229[17] = v93 (A's flag)
-        lInfo.mbRaceCarAIsPlayer     = (liIndexA == liPlayer);
-        lInfo.mbRaceCarBIsPlayer     = (liIndexB == liPlayer);
-        lInfo.mbRaceCarAIsNetworkCar = false;   // FLAG: network-car flag not pinned in this dossier; default false
-        lInfo.mbRaceCarBIsNetworkCar = false;   // FLAG: as above
+        const BrnWorld::ERaceCarType leTypeA = maeRaceCarTypes[liIndexA];
+        const BrnWorld::ERaceCarType leTypeB = maeRaceCarTypes[liIndexB];
+        lInfo.mbRaceCarAIsCrashing   = (lrRecordA.mbCrashing != 0);   // asm lbz r29, +0xE50(A record)
+        lInfo.mbRaceCarBIsCrashing   = (lrRecordB.mbCrashing != 0);   // asm lbz r28, +0xE50(B record)
+        lInfo.mbRaceCarAIsPlayer     = (leTypeA == BrnWorld::E_RACE_CAR_TYPE_PLAYER);
+        lInfo.mbRaceCarBIsPlayer     = (leTypeB == BrnWorld::E_RACE_CAR_TYPE_PLAYER);
+        lInfo.mbRaceCarAIsNetworkCar = (leTypeA == BrnWorld::E_RACE_CAR_TYPE_NETWORK);
+        lInfo.mbRaceCarBIsNetworkCar = (leTypeB == BrnWorld::E_RACE_CAR_TYPE_NETWORK);
+        lInfo.mbOtherCarIsAI         = (leTypeA == BrnWorld::E_RACE_CAR_TYPE_AI)
+                                    || (leTypeB == BrnWorld::E_RACE_CAR_TYPE_AI);
 
         // (asm asserts !(A-is-player && B-is-player) and liIndexA != liIndexB -- debug-only.)
 
@@ -321,10 +410,13 @@ namespace Vehicle
         lInfo.muImpactScore                  = 0;
         lInfo.meImpactSitutation             = static_cast<EImpactSituation>(0);   // asm v248 = 0
 
-        // ---- Step 3: per-car crashing pre-gate (asm: bail if BOTH already crashing/disabled) ----
-        // asm: if (v90 && v93 || v78 && v79) goto LABEL_92. (v90/v93 = the two +3664 disabled flags;
-        // v78/v79 = the car-type derived flags.) Reproduced via the response-info crash flags.
+        // ---- Step 3: per-car pre-gate (asm: two paired tests, each branching to the epilogue) ----
+        // The asm tests the two crashing bytes it just stored and bails when BOTH are set, then does
+        // the same with the two is-network bytes: a network-vs-network contact is resolved on the
+        // machine that owns those cars, not here.
         if (lInfo.mbRaceCarAIsCrashing && lInfo.mbRaceCarBIsCrashing)
+            return;
+        if (lInfo.mbRaceCarAIsNetworkCar && lInfo.mbRaceCarBIsNetworkCar)
             return;
 
         // ---- Step 4: grinding pre-pass (only when a player is involved) ----
@@ -332,7 +424,7 @@ namespace Vehicle
         // slam/shunt step also reads). When set AND CheckForGrindingAndRubbing fires AND there is no
         // active player car (mePlayerActiveRaceCarIndex == -1), push a grind event (type 7 or 8 by the
         // two grind thresholds).
-        const bool lbPlayerInvolved = (lInfo.mbRaceCarAIsPlayer || lInfo.mbRaceCarBIsPlayer);   // asm v123/v208
+        const bool lbPlayerInvolved = (lInfo.mbRaceCarAIsPlayer || lInfo.mbRaceCarBIsPlayer);   // asm: OR of the two type==PLAYER bytes
         if (lbPlayerInvolved
             && CheckForGrindingAndRubbing(&lInfo)
             && static_cast<s32>(mePlayerActiveRaceCarIndex) == -1)
@@ -364,6 +456,28 @@ namespace Vehicle
 
         // ---- Step 5: classify ----
         CheckForAllTypesOfImpacts(&lInfo);   // sets mbCrashRaceCarA/B (v251/v252) + meImpactSitutation (v248)
+
+        // [td-contact] PC witness (NOT the console), first 16 only: the CLASSIFIER VERDICT for this
+        // contact -- which sub-classifier fired ("none" when the ladder rejected it), the
+        // who-hit-whom situation, the two crash-commit flags, and the closing speed every threshold
+        // in the ladder is measured against. Without it, a silent chain cannot be told apart from a
+        // chain that classified every contact as nothing. [FLAG PC witness]
+        // DELETE-WHEN: the organic takedown case goes green.
+        {
+            static s32 siVerdicts = 0;
+            if (siVerdicts < 16 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siVerdicts;
+                *CgsDev::Log::gpDebugPrint << "[td-contact] verdict " << liIndexA << " vs " << liIndexB
+                                           << " impact=" << WitnessImpactTypeName(static_cast<s32>(lInfo.meImpactType))
+                                           << "(" << static_cast<s32>(lInfo.meImpactType) << ")"
+                                           << " situation=" << static_cast<s32>(lInfo.meImpactSitutation)
+                                           << " crashA=" << (lInfo.mbCrashRaceCarA ? 1 : 0)
+                                           << " crashB=" << (lInfo.mbCrashRaceCarB ? 1 : 0)
+                                           << " closingSpeed=" << lInfo.mfClosingSpeed
+                                           << " [FLAG PC witness]\n";
+            }
+        }
 
         // ---- Step 6: crash commit for the flags the classifiers set ----
         // asm: if (v251) SetRaceCarCrashing(victim=idB, aggressor=idA, ...,-1);
@@ -1005,6 +1119,57 @@ namespace Vehicle
         maRaceCarCrashes[liSlot].mRaceCarEntityID  = lVictimEntityId;
         mUsedRaceCarCrashesList.SetBit(static_cast<u32>(liSlot));   // asm: set the allocation bit (v179 OR into field)
 
+        // [td-crash] PC witness (NOT the console), first 16 only: this sink is the ONLY road from a
+        // contact to a crash record, so a run with [td-contact] verdicts but no [td-crash] line was
+        // suppressed or de-duplicated above, and a run with [td-crash] lines but nothing scored is a
+        // fault further down the chain. Prints the two car indices, the takedown type the caller
+        // classified, the slot just written, and how many crash records are live.
+        //
+        // ⭐ THE ATTACKER IS AN ENTITY ID, NOT A SLOT INDEX (re-read against the export this wave).
+        // There is NO "-1 attacker" sentinel anywhere on this path: every caller passes a real
+        // causing entity -- the world entity word for a wall hit, the traffic slot's global id for
+        // a traffic hit, the other car's id for a car-on-car pair, and the victim's OWN id for the
+        // self-inflicted arm. "No attacker" is carried by the OWNER byte, which is exactly what the
+        // one consumer that reads this seat without a takedown type tests (the standard-takedown
+        // classifier compares the owner against the traffic type and names the aggressor from the
+        // victim's shunt state instead). So the earlier reading of "attacker 0 -> victim N" as the
+        // player being credited for every rival's own crash was the WITNESS dropping the owner
+        // byte: owner 0 is the WORLD, and its entity field is 0. Both owners are printed now.
+        // [FLAG PC witness]  DELETE-WHEN: the organic takedown case goes green.
+        {
+            static s32 siCrashWitnessed = 0;
+            if (siCrashWitnessed < 16 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siCrashWitnessed;
+
+                const u32 luAggressorWitnessOwner = (lAggressorEntityId.muValue >> 24) & 0xFF;
+                const s32 liAggressorWitnessIndex =
+                    static_cast<s32>((lAggressorEntityId.muValue >> 10) & 0x3FFF);
+                s32 liLiveCrashRecords = 0;
+                for (s32 liScan = 0; liScan < 32; ++liScan)
+                {
+                    if (mUsedRaceCarCrashesList.IsBitSet(static_cast<u32>(liScan)))
+                    {
+                        ++liLiveCrashRecords;
+                    }
+                }
+
+                *CgsDev::Log::gpDebugPrint << "[td-crash] attacker "
+                                           << WitnessEntityOwnerName(luAggressorWitnessOwner)
+                                           << "(" << static_cast<s32>(luAggressorWitnessOwner) << ")"
+                                           << ":" << liAggressorWitnessIndex
+                                           << " -> victim "
+                                           << WitnessEntityOwnerName(luVictimOwner)
+                                           << "(" << static_cast<s32>(luVictimOwner) << ")"
+                                           << ":" << liVictimIndex
+                                           << " takedownType=" << WitnessTakedownTypeName(static_cast<s32>(leTakedownType))
+                                           << "(" << static_cast<s32>(leTakedownType) << ")"
+                                           << " slot=" << liSlot
+                                           << " records=" << liLiveCrashRecords
+                                           << " [FLAG PC witness]\n";
+            }
+        }
+
         // ---- Step 5: secondary remapped-entity event ----
         // Fired only when the AGGRESSOR id is traffic-owned: the sub-event republishes the entity
         // index of that traffic slot's global id onto the manager's traffic-type request queue.
@@ -1578,11 +1743,6 @@ namespace Vehicle
     // sibling CheckForVerticalTakedownSituation (the up-axis geometry test) and an up-axis height
     // comparison (the asm compares a transform +4192 lane against rodata unk_82FB82A0, then equality
     // against 0). Commits VERTICAL.
-    //
-    // FLAG: CheckForVerticalTakedownSituation is a declared-only callee (not in this dossier). The
-    // up-axis height lanes the asm reads at in-record +4192 are part of the unmodelled RaceCarPhysics
-    // layout; the height comparison is delegated to the situation helper rather than reconstructed
-    // inline, and the rodata unk_82FB82A0 vector is unrecovered.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForVerticalTakedown(RaceCarResponseInfo* lpInfo)
     {

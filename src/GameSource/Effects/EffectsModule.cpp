@@ -82,6 +82,10 @@ namespace
     typedef BrnPhysics::Vehicle::RaceCarState                                    RaceCarState;
     typedef BrnPhysics::Vehicle::WheelLite                                       WheelLite;
 
+    // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceiling for the opt-in witnesses in
+    // this TU, so an armed knob still cannot flood the log. DELETE-WHEN those witnesses go.
+    const u32 KU_EFFECTS_DIAG_MAX_LINES = 128u;
+
     // ---- the X360 data cells this TU owns -------------------------------------------
     EffectsModule* gpEffectsModule = 0;          // off_82FAB594 (Construct stores `this`)
     bool           sbRestartEffects = false;     // byte_82FAB694 (RestartEffects raises, HandleQADebugTests consumes)
@@ -1519,12 +1523,18 @@ void EffectsModule::UpdateActiveRaceCars(EActiveRaceCarIndex lePlayerIndex,
         // the replay serialiser is not playing. That pointer is THIS lookup's result. So the line
         // below says whether the deformation output published any locator table at all and whether
         // this car's entity id is among the ones it did publish. DELETE-WHEN-STABLE.
+        // [FLAG PC witness] OPT-IN (BRN_DEFORMLOC_DIAG=1) + hard first-N cap: the key carries the
+        // car index, so a field of cars cycles it every frame and the "latched" line printed
+        // 44,810 lines in a 140 s run. DELETE-WHEN the boost-locator path is signed off.
         {
+            static const bool sbDeformLocDiag = (std::getenv("BRN_DEFORMLOC_DIAG") != 0);
+            static u32 suDeformLocLines = 0u;
             static u32 suLastKey = 0xFFFFFFFFu;
             const u32 luKey = (static_cast<u32>(lpDeformation->miNumLocatorOutputs) << 8)
                             | (lpLocators != 0 ? 1u : 0u) | (luCar << 16);
-            if (luKey != suLastKey)
+            if (sbDeformLocDiag && suDeformLocLines < KU_EFFECTS_DIAG_MAX_LINES && luKey != suLastKey)
             {
+                ++suDeformLocLines;
                 suLastKey = luKey;
                 CgsSceneManager::EntityId lWantId;
                 lWantId.Set(1u, luCar, 0u);

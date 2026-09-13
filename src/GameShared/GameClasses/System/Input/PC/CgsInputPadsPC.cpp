@@ -764,7 +764,7 @@ namespace
     //
     // The driving rows deliberately mirror a PAD player, not a keyboard one: ACCELERATE/BRAKE
     // land in their maActionInfo slots (where the triggers put them) and steering lands on
-    // mfStickLX (where the left stick puts it) -- see HarnessSteerActive below. So the game
+    // mfStickLX (where the left stick puts it) -- see HarnessSteerChannelHeld below. So the game
     // sees an ordinary controller, through the ordinary bridge.
     bool ConsumeHarnessAction(s32 liActionId)
     {
@@ -877,32 +877,93 @@ namespace
             && WaitForSingleObject(sapHarnessEvents[luBinding], 0) == 0;
     }
 
-    // The harness's two STEERING channels. Steering is not an action -- on a pad it is the left
+    // The harness's STEERING channels. Steering is not an action -- on a pad it is the left
     // stick, and BridgeControllerToWorld takes mfStickLX (not any maActionInfo slot) through the
     // response curve into mfSteering. So these are summed onto mfStickLX in exactly the place,
-    // and by exactly the +/-1.0 full deflection, that the keyboard's A/D rows use; a second
-    // device on the same port, which is what InputPads::FillRawData @0x828E7350 does with one.
-    // They carry no action id and therefore no KA_BINDINGS row, hence their own handle pair.
-    bool HarnessSteerActive(bool lbRight)
+    // and by the same full deflection, that the keyboard's A/D rows use; a second device on the
+    // same port, which is what InputPads::FillRawData accumulates. They carry no action id and
+    // therefore no KA_BINDINGS row, hence their own handle set.
+    //
+    // ---------------------------------------------------------------------------------------
+    // PARTIAL LOCK (harness lane, 2026-09-13) -- the magnitude now arrives with the direction.
+    // ---------------------------------------------------------------------------------------
+    // Until now the only steering a script could express was FULL LOCK, and full lock under
+    // throttle is a SPIN rather than a lane change: measured on this build, a held `right`
+    // took the car from 11.9 m/s to 0.84 m/s in two seconds. So every scripted lane change had
+    // to be a stab of full lock, and the response curve's ramp -- not the script -- decided
+    // what the car did. The fix is a fractional stick, encoded as TWO extra manual-reset
+    // channels that are read ONLY while one of the two side channels is signalled:
+    //     neither held -> 1.00      (bit-for-bit what every existing harness script already got)
+    //     Frac25 held  -> 0.75
+    //     Frac50 held  -> 0.50
+    //     both held    -> 0.25
+    // i.e. the deflection is 1.0 minus the weights of the fraction channels being held. Two
+    // kernel objects for four levels, and the nothing-held case is the old full lock, so no
+    // script that predates this change moves by a single float.
+    // ⚠️ THE FRACTION PAIR IS SIDE-INDEPENDENT ON PURPOSE. The harness resolves exactly one
+    // steering token per poll, so left and right are never signalled at once; a second pair for
+    // the right side would be two more kernel objects expressing nothing the first pair cannot.
+    // ⓘ It is still summed and then clamped, exactly like the full-lock value it replaces --
+    // an attached pad's own stick still adds to it, which is the console's own accumulate.
+    const f32 KF_HARNESS_STEER_FRAC25 = 0.25f;
+    const f32 KF_HARNESS_STEER_FRAC50 = 0.50f;
+
+    enum EHarnessSteerChannel
+    {
+        E_HARNESSSTEERCHANNEL_LEFT = 0,
+        E_HARNESSSTEERCHANNEL_RIGHT,
+        E_HARNESSSTEERCHANNEL_FRAC25,
+        E_HARNESSSTEERCHANNEL_FRAC50,
+        E_HARNESSSTEERCHANNEL_COUNT
+    };
+
+    // ⭐ A LEVEL READ, EVERY UPDATE, WITH NO EDGE STATE ANYWHERE -- and that is load-bearing, so
+    // it is spelled out. The four channels are MANUAL-RESET on the harness side, and
+    // WaitForSingleObject does not consume a manual-reset event, so "held" is a property of the
+    // instant this runs and of nothing else. A token first raised ten seconds into a drive is
+    // therefore seen on the very next input update, exactly like one raised on the first frame;
+    // there is no latch to miss and no previous token that has to be held for this one to land.
+    // (Measured against the wave-6 runs that read as "a mid-drive token is ignored": the harness
+    // applied every one of them on time and this shim passed every one through. What the car did
+    // with a ~1 s stab of full lock was the response curve's RAMP -- |steer| reached 0.11..0.16
+    // of its 0.3927 limit before the release -- not a dropped press. That ramp is the reason the
+    // fractional channels above exist rather than a longer stab.)
+    bool HarnessSteerChannelHeld(u32 luChannel)
     {
         static const bool s_bHarnessEnabled =
             (std::getenv("BRN_INPUT_ALLOW_BACKGROUND") != nullptr);
         if (!s_bHarnessEnabled)
             return false;
 
-        static void* sapSteerEvents[2] = {};
-        const u32 luIndex = lbRight ? 1u : 0u;
-        if (sapSteerEvents[luIndex] == 0)
+        static const char* const KAPC_STEER_CHANNELS[E_HARNESSSTEERCHANNEL_COUNT] =
+        {
+            "Local\\BurnoutPC_Input_SteerLeft",
+            "Local\\BurnoutPC_Input_SteerRight",
+            "Local\\BurnoutPC_Input_SteerFrac25",
+            "Local\\BurnoutPC_Input_SteerFrac50",
+        };
+        static void* sapSteerEvents[E_HARNESSSTEERCHANNEL_COUNT] = {};
+        if (sapSteerEvents[luChannel] == 0)
         {
             // Slot-suffixed like the action channels above (CgsHarnessSlot.h).
             char lacEventName[64];
-            sapSteerEvents[luIndex] = OpenEventA(0x00100000u, 0,
+            sapSteerEvents[luChannel] = OpenEventA(0x00100000u, 0,
                     CgsSystem::HarnessSlot::Name(lacEventName, sizeof(lacEventName),
-                            lbRight ? "Local\\BurnoutPC_Input_SteerRight"
-                                    : "Local\\BurnoutPC_Input_SteerLeft"));
+                            KAPC_STEER_CHANNELS[luChannel]));
         }
-        return sapSteerEvents[luIndex] != 0
-            && WaitForSingleObject(sapSteerEvents[luIndex], 0) == 0;
+        return sapSteerEvents[luChannel] != 0
+            && WaitForSingleObject(sapSteerEvents[luChannel], 0) == 0;
+    }
+
+    // The fraction the two magnitude channels are asking for, read once per update.
+    f32 HarnessSteerDeflection()
+    {
+        f32 lfDeflection = 1.0f;
+        if (HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_FRAC25))
+            lfDeflection -= KF_HARNESS_STEER_FRAC25;
+        if (HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_FRAC50))
+            lfDeflection -= KF_HARNESS_STEER_FRAC50;
+        return lfDeflection;
     }
 }
 
@@ -992,8 +1053,45 @@ namespace CgsInput
         // once each, here, because mfStickLX is the ONLY place steering reaches the bridge.
         // They do NOT touch mfStickLY: a pad player's throttle is the trigger (action 0), not
         // the stick, and mfStickLY is the bridge's mfForwardSteering (in-air pitch), not gas.
-        if (HarnessSteerActive(false)) lfStickLX -= 1.0f;
-        if (HarnessSteerActive(true))  lfStickLX += 1.0f;
+        // ⭐ The deflection is the PARTIAL-LOCK fraction now (1.00 / 0.75 / 0.50 / 0.25, see
+        // HarnessSteerChannelHeld's banner); it is 1.00 whenever the fraction channels are idle,
+        // which is every run that predates them.
+        const bool lbHarnessSteerLeft  = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_LEFT);
+        const bool lbHarnessSteerRight = HarnessSteerChannelHeld(E_HARNESSSTEERCHANNEL_RIGHT);
+        f32 lfHarnessDeflection = 0.0f;
+        if (lbHarnessSteerLeft || lbHarnessSteerRight)
+        {
+            lfHarnessDeflection = HarnessSteerDeflection();
+            if (lbHarnessSteerLeft)  lfStickLX -= lfHarnessDeflection;
+            if (lbHarnessSteerRight) lfStickLX += lfHarnessDeflection;
+        }
+
+        // ---- [harness-steer] the build says what the steering channel asked for -------------
+        // DIAG. NOT IN THE CONSOLE BINARY. One line per CHANGE of the harness steering state,
+        // bounded at 64 lines, and it exists because the question it answers was un-answerable:
+        // three waves have read a scripted turn that did not move the car and could not tell
+        // "the token never reached the game" from "it reached the game and the response curve
+        // ramped for a second and released". This names the side and the deflection at the only
+        // place steering enters the pad record, so the log itself separates the two.
+        // DELETE-WHEN a scripted steer is measured end-to-end by a case instead.
+        {
+            static f32 sfLastHarnessSteer = 0.0f;
+            static u32 suHarnessSteerPrints = 0;
+            const f32 lfSigned = lbHarnessSteerLeft  ? -lfHarnessDeflection
+                               : lbHarnessSteerRight ?  lfHarnessDeflection
+                                                     :  0.0f;
+            if (lfSigned != sfLastHarnessSteer && suHarnessSteerPrints < 64u
+                && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++suHarnessSteerPrints;
+                *CgsDev::Log::gpDebugPrint
+                    << "[harness-steer] deflection " << lfSigned
+                    << " (left " << (lbHarnessSteerLeft ? 1 : 0)
+                    << " right " << (lbHarnessSteerRight ? 1 : 0)
+                    << ") -- summed onto mfStickLX [FLAG PC witness]\n";
+            }
+            sfLastHarnessSteer = lfSigned;
+        }
 
         lrPad.mfStickLX = ClampAxis(lfStickLX);                                        // E_PADAXIS_0_X
         lrPad.mfStickLY = ClampAxis(lfStickLY);                                        // E_PADAXIS_0_Y

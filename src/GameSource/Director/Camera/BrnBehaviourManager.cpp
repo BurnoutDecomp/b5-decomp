@@ -1161,10 +1161,12 @@ namespace Camera
     // Camera::Behaviour (each such header carries a RE-BASED banner): the road-runner (the
     // attract-mode fly-by camera), the two SHARED GAMEPLAY cameras SharedCameraContainer::Prepare
     // allocates (BehaviourGameplayBumper / BehaviourGameplayExternal -- what Arbitrator::Update's
-    // very first state needs), the interpolator, and the two rigs ArbStateTakedown::Prepare
-    // allocates, BehaviourAftertouchCrash and BehaviourGyroCam. The opaque `void* mpVTable` head
-    // those last two used to carry is what made BehaviourHelper::Prepare's slot-0 dispatch read a
-    // null vptr on the first takedown of a session.
+    // very first state needs), the interpolator, and the three rigs the takedown state allocates:
+    // BehaviourAftertouchCrash and BehaviourGyroCam (ArbStateTakedown::Prepare) and
+    // BehaviourLooseAttachment, which the shutdown-takedown arm pools FOUR times over a single
+    // takedown -- the lookback rig plus one per zoom beat. The opaque `void* mpVTable` head those
+    // three used to carry is what made BehaviourHelper::Prepare's slot-0 dispatch read a null
+    // vptr on the first takedown of a session.
     // The behaviour slices still on that opaque-head model cannot be pooled through here --
     // dispatching Behaviour's vtable through the helper would be a static_cast onto a type that
     // is not (yet) a Behaviour -- so their NewBehaviour<> call sites keep binding the generic
@@ -1189,6 +1191,9 @@ namespace Camera
         const void* lpOwner, s32 liRefLimit);
     template void BehaviourManager::NewBehaviour<BehaviourGyroCam>(
         BehaviourHandle<BehaviourGyroCam>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
+    template void BehaviourManager::NewBehaviour<BehaviourLooseAttachment>(
+        BehaviourHandle<BehaviourLooseAttachment>& lrHandle, void* lpOwningState,
         const void* lpOwner, s32 liRefLimit);
 }
 } // namespace BrnDirector

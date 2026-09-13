@@ -34,23 +34,12 @@
 // same source as CopyScoringDataToOutput (BrnGameStateModule.h). DELETE-WHEN
 // DoUpdate_GameStatePreWorld stages a real PreWorldInputBuffer whose timer block is filled.
 //
-// FOUR LEGS ARE PARKED, EACH WITH A LOG-ONCE FLAG AT ITS SITE (every park is named and logged):
-//   P1  ProgressionManager::OnTakedownTo @0x823666D0 -- neither declared nor bodied in the tree.
-//   P2  AchievementManagerBase::OnTakedown / OnTakedownChain / OnCaughtFever -- the base TU is
-//       deliberately unmounted (build_game_exe.bat: eight unresolved externals); OnTakedownChain
-//       has no body at all.
-//   P3  DeveloperChallengeManager::OnTakedownChain / OnTakedown -- bodied in the tree but the TU
-//       is unmounted (seven unresolved externals) AND the manager is never Construct()ed, so the
-//       real bodies would run against null back-pointers (the OnEventEnd precedent in
-//       BrnBaselineLinkStubs.cpp).
-//   P4  the E_ACTION_SEND_TELEMETRY post -- BrnNetwork::BrnNetworkModuleIO::TelemetryData
-//       (DWARF BrnNetworkSharedIO.h:542, {ETelemetryHook meHook; char macBuffer[16]}) is not in
-//       the tree; sub_8236A8B8 is its AddParameter(Vector3) overload.
+// Every leg of the console body is live: the progression tally, the achievement hooks, the
+// developer-challenge hooks and the telemetry posts all reach real bodies.
 // ============================================================================================
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"              // gpDebugPrint (the log-once FLAGs)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                // CgsModule::EventQueue<TakedownEvent,8>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface / Time
@@ -77,20 +66,6 @@ namespace
     // BrnDriveThruManager.cpp names KF_TRAINING_TIP_SETTLE_TIME.
     const f32 KF_TRAINING_TIP_SETTLE_TIME = 5.0f;
 
-    // KI_TAKEDOWN_CHAIN_ACHIEVEMENT_MIN -- `cmpwi cr6, r30, 0xA` @0x8238FE84: the takedown-chain
-    // length at which the console fires achievement 14 through the achievement manager.
-    const s32 KI_TAKEDOWN_CHAIN_ACHIEVEMENT_MIN = 10;
-
-    // The log-once FLAG rung shared by the four parked legs above. Same logger every other
-    // GameStateModule partfile uses; each site keeps its own latch so every park is named once.
-    void LogParkedLegOnce(bool& lrbLogged, const char* lpcText)
-    {
-        if (!lrbLogged && CgsDev::Log::gpDebugPrint != 0)
-        {
-            lrbLogged = true;
-            *CgsDev::Log::gpDebugPrint << "[road-rage FLAG] " << lpcText << "\n";
-        }
-    }
 }
 
 // ============================================================================
@@ -102,7 +77,7 @@ namespace
 //                 (interface base 235488 + 9776; the two :824/:825 range asserts are GetRivalId's)
 //   0x8238FD58    if (!(mpCurrentGameMode && mpCurrentGameMode->IsOnline()))       -- gsm+0x1DB8 / mode+0xAC
 //   0x8238FD98      ProgressionManager::OnTakedownTo(actionQ, event.meType, rivalId,
-//                                                    meCurrentGameModeType == E_MODE_MARKED_MAN)   [P1]
+//                                                    meCurrentGameModeType == E_MODE_MARKED_MAN)
 //                 else
 //   0x8238FDA8      lpCarData = mScoringSystem.GetCarData(victim)   (0x8231DCD0, the const twin)
 //   0x8238FDBC      CGS_ASSERT(lpCarData, "lpCarData")               (BrnGameStateModule.cpp:4940)
@@ -111,14 +86,14 @@ namespace
 //   0x8238FE30        actionQ.AddEvent(<1 byte>, 238 /*E_ACTION_NETWORK_CAUGHT_FEVER*/, 1)
 //   0x8238FE54    mScoringSystem.OnPlayerDoesATakedown(gsm+208368 /*Time*/, actionQ)
 //   0x8238FE64    if (!IsAchievementEarnt(14) && event.miTakedownChainCount >= 10)
-//                   AchievementEarnt(14)                              == AchievementManagerBase::OnTakedownChain [P2]
+//                   AchievementEarnt(14)                              == AchievementManagerBase::OnTakedownChain
 //   0x8238FEB0    mDeveloperChallengeManager.OnTakedownChain(event.miTakedownChainCount)      [P3]
 //   0x8238FEC0    mDeveloperChallengeManager.OnTakedown(meCurrentGameModeType, victim)         [P3]
 //   0x8238FEF0    if (!online) mAchievementManager.OnTakedown()                                [P2]
 //   0x8238FEF4    telemetry hook: T_BONE(2) -> 13, VERTICAL(3) -> 11 (+ online: profile online
 //                 vertical tally++ @gsm+48700 == Profile+412), else 10; AddParameter(player pos);
 //                 actionQ.AddEvent(<20 bytes>, 228 /*E_ACTION_SEND_TELEMETRY*/, 20);
-//                 if (event.mbMarkedManTakeDown) a second hook 14, same action           [P4]
+//                 if (event.mbMarkedManTakeDown) a second hook 14, same action
 //   0x8238FFC4  else: the two :824/:825 range asserts on meAggressorIndex (an inlined interface
 //               accessor whose value is dead; only its asserts survive)
 //   0x82390004  BOTH ARMS: if (event.meVictimIndex == player && mode == E_MODE_MARKED_MAN &&
@@ -134,9 +109,6 @@ void GameStateModule::ProcessTakedownEvents(
         GameStateModuleIO::OutputBuffer*                lpOutputBuffer,
         const CgsSystem::TimerStatusInterface&          lrTimerStatusInterface)
 {
-    static bool sbParkedOnTakedownTo      = false;   // P1
-    static bool sbParkedAchievementHooks  = false;   // P2
-
     for (s32 liEvent = 0; liEvent < lpTakedownEventQueue->GetLength(); ++liEvent)
     {
         const TakedownEvent& lrEvent = lpTakedownEventQueue->GetEvent(liEvent);
@@ -157,20 +129,10 @@ void GameStateModule::ProcessTakedownEvents(
 
             if (!lbOnlineMode)
             {
-                // [P1] FLAG PARKED: BrnProgression::ProgressionManager::OnTakedownTo @0x823666D0
-                //     (mProgressionManager, lpGameActionQueue, lrEvent.meType, lVictimRivalId,
-                //      GetCurrentGameModeType() == GameStateModuleIO::E_MODE_MARKED_MAN)
-                // Asm 0x8238FD7C..0x8238FD98: r3 = this+0xBB30 (mProgressionManager), r4 = r27
-                // (the action queue), r5 = event+0x18 (meType), r6 = the ldx above (a 64-bit
-                // CgsID -- Hex-Rays rendered only its low word), r7 = (meCurrentGameModeType == 8).
-                // DWARF BrnProgressionManager.h:254:
-                //     void OnTakedownTo(InputBuffer::GameActionQueue*, BrnGameState::ETakedownType,
-                //                       CgsID, bool);
-                // ⭐ UN-PARKED P1 [progression wave 2026-09-06, lane rivals]: bodied in
-                // BrnProgressionManager_Rivals.cpp @0x823666D0. It tallies the takedown into the
-                // profile (Profile::AddTakedown) and asks for the aggression (22) / generic (40)
-                // takedown training tip. The queue and the rival id ride the console's r4/r6 and
-                // are DEAD in its body -- passed anyway so the call keeps the DWARF shape.
+                // The callee tallies the takedown into the profile and asks for the aggression /
+                // generic takedown training tip. The action queue and the rival id ride the
+                // console's argument registers and are DEAD in the callee body -- passed anyway
+                // so the call keeps its declared shape.
                 mProgressionManager.OnTakedownTo(
                     lpGameActionQueue,
                     lrEvent.meType,
@@ -210,12 +172,10 @@ void GameStateModule::ProcessTakedownEvents(
                 // question is the ScoringSystem TU's, named here rather than papered over.
                 if (lpCarData != 0 && lpCarData->HasFever())
                 {
-                    // [P2] FLAG PARKED: AchievementManagerBase::OnCaughtFever @0x8235B590 (inlined
-                    // here as the vtable pair on id 49, 0x8238FDE0..0x8238FE18). The base TU is
-                    // deliberately unmounted (build_game_exe.bat) -- eight unresolved externals.
-                    LogParkedLegOnce(sbParkedAchievementHooks,
-                        "AchievementManagerBase::OnTakedown / OnTakedownChain / OnCaughtFever are "
-                        "unmounted (base TU); the takedown achievements are skipped");
+                    // `add r31, r29, r26`, r26 == +0x2C5B0, is the embedded achievement manager,
+                    // and the vtable pair on id 49 is OnCaughtFever inlined. Called out of line
+                    // here, as the sibling partfiles do.
+                    mAchievementManager.OnCaughtFever();
 
                     // `li r6, 1 / li r5, 0xEE` -- one byte, never initialised by the console (an
                     // empty record); zeroed here so the payload is deterministic.
@@ -236,35 +196,35 @@ void GameStateModule::ProcessTakedownEvents(
             // ---- the chain / developer-challenge / achievement hooks ------------------------
             const s32 liTakedownChainCount = lrEvent.miTakedownChainCount;   // event+0x20
 
-            // [P2] FLAG PARKED: 0x8238FE58..0x8238FEA0 is AchievementManagerBase::OnTakedownChain
-            // inlined -- `if (!IsAchievementEarnt(14) && chain >= 10) AchievementEarnt(14)`. The
-            // DWARF declares that hook (:168) and the tree's header carries it, but it has NO body
-            // and the base TU is unmounted. KI_TAKEDOWN_CHAIN_ACHIEVEMENT_MIN above is the console's
-            // 10 so the threshold is not lost with the park.
-            (void)KI_TAKEDOWN_CHAIN_ACHIEVEMENT_MIN;
+            // The next span is AchievementManagerBase::OnTakedownChain inlined --
+            // `if (!IsAchievementEarnt(14) && chain >= 10) AchievementEarnt(14)`. The id and the
+            // threshold live with the body, in the achievement-manager base home.
+            mAchievementManager.OnTakedownChain(liTakedownChainCount);
 
-            // [P3] LANDED 2026-09-03 (aiwave): 0x8238FEA4..0x8238FEC0 -- the developer-challenge hooks
-            // (this+0x2D570 == mDeveloperChallengeManager, Construct()ed since this wave).
+            // The developer-challenge hooks (this+0x2D570 == mDeveloperChallengeManager).
             mDeveloperChallengeManager.OnTakedownChain(liTakedownChainCount);                       // r4 = event+0x20
             mDeveloperChallengeManager.OnTakedown(static_cast<s32>(GetCurrentGameModeType()),       // r4 = gsm+0x1DB4
                                                   static_cast<u32>(lrEvent.meVictimIndex));         // r5 = event+4
 
-            // [P2] 0x8238FEC4..0x8238FEF0: `if (!online) mAchievementManager.OnTakedown()` -- parked
-            // with its siblings above (one latch, one line).
+            // The console re-evaluates the online test inline off mModeManager.mpCurrentGameMode;
+            // lbOnlineMode above is that same pair of reads.
+            if (!lbOnlineMode)
+            {
+                mAchievementManager.OnTakedown();
+            }
 
             // ---- the telemetry hook ----------------------------------------------------------
             // 0x8238FEF4..0x8238FF5C selects the hook id from the takedown type: 13 for
             // E_TAKEDOWN_T_BONE, 11 for E_TAKEDOWN_VERTICAL, 10 otherwise. The VERTICAL arm also
             // bumps the profile's online vertical-takedown tally when the mode is online
             // (`addis/addi -> gsm+0x10000-0x4360 == gsm+48288 (Profile) ; lwz/addi/stw 0x19C`).
-            // The tally is a real profile store and is kept live; the post itself is parked.
+            // The tally is a real profile store; the telemetry post below is live too.
             if (lrEvent.meType == E_TAKEDOWN_VERTICAL && lbOnlineMode)
             {
                 mProgressionManager.GetProfile()->IncrementTotalOnlineVerticleTakedownCount();
             }
 
-            // [P4] LANDED 2026-09-03 (aiwave, lane P1): 0x8238FF60..0x8238FFBC. TelemetryData is the
-            // DWARF record (BrnNetworkSharedIO.h:542, 20 B: ETelemetryHook + char[16]); hook 10 default,
+            // TelemetryData is the 20-byte record (ETelemetryHook + char[16]); hook 10 default,
             // 13 T-bone (@0x8238FF58), 11 vertical (@0x8238FF14); AddParameter(Vector3) = sub_8236A8B8.
             // r27 == the lpGameActionQueue parameter (`mr r27, r4` @0x8238FC6C), not the output buffer's.
             {

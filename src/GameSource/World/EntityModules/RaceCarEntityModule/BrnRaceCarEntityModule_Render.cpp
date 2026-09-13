@@ -99,6 +99,12 @@
 // by the CgsShaderConstants TU). Mirrors the committed extern in the sibling TUs.
 namespace CgsGraphics { extern ::ShaderConstantTable mShaderConstantTable; }
 
+// [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceilings for the opt-in render
+// witnesses in this TU, so an armed knob still cannot flood the log. DELETE-WHEN those
+// witnesses go.
+static const u32 KU_GLASSFX_DIAG_MAX_LINES  = 256u;
+static const u32 KU_RACECAR_DIAG_MAX_LINES  = 128u;
+
 // ============================================================================
 // The two file-scope globals the wheel block reads. Both are console globals, and
 // both were recovered from the image rather than guessed.
@@ -475,15 +481,22 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // Latched on the VALUE, not on a "printed once" bool -- the paint starts at the
         // palette-0/colour-0 fallback and only becomes the car's authored colour once game
         // action 79 (CarSelectChangeColourAction) has been processed, several frames later.
+        // [FLAG PC witness] OPT-IN (BRN_RACECAR_PAINT_DIAG=1) + hard first-N cap. DELETE-WHEN the
+        // paint transfer is signed off. The colour latch is shared by every car, so two cars with
+        // different paint alternate it forever: 57,912 lines in a 140 s run.
+        static const bool sbPaintDiag = ( getenv( "BRN_RACECAR_PAINT_DIAG" ) != 0 );
+        static u32 suPaintDiagLines = 0u;
         static f32 sfLastLoggedPaintX = -1.0f;
         static f32 sfLastLoggedPaintY = -1.0f;
         static f32 sfLastLoggedPaintZ = -1.0f;
         const Vector4& lrPaintProbe = lpRenderParams->GetPaintColour();
-        if( ( lrPaintProbe.x != sfLastLoggedPaintX
+        if( sbPaintDiag && suPaintDiagLines < KU_RACECAR_DIAG_MAX_LINES
+            && ( lrPaintProbe.x != sfLastLoggedPaintX
               || lrPaintProbe.y != sfLastLoggedPaintY
               || lrPaintProbe.z != sfLastLoggedPaintZ )
             && CgsDev::Log::gpDebugPrint != 0 )
         {
+            ++suPaintDiagLines;
             sfLastLoggedPaintX = lrPaintProbe.x;
             sfLastLoggedPaintY = lrPaintProbe.y;
             sfLastLoggedPaintZ = lrPaintProbe.z;
@@ -711,10 +724,17 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // [DIAG racecar-lod] value-latched on the LOD (re-added per the LOD-system memory note):
         // the wheels drew their LOD-4 box proxy on Car Select because nothing lifted mLOD off
         // Reset's 4 there -- this line says what LOD each RenderRaceCar walk actually sees.
+        // [FLAG PC witness] OPT-IN (BRN_RACECAR_LOD_DIAG=1) + hard first-N cap. DELETE-WHEN the
+        // LOD ladder is signed off. The value latch is per-process but the LOD alternates between
+        // the cars walked each frame, so it printed 141,780 lines in a 140 s run.
         {
+            static const bool sbLodDiag = ( getenv( "BRN_RACECAR_LOD_DIAG" ) != 0 );
+            static u32 suLodDiagLines = 0u;
             static s32 siLastLoggedLod = -1;
-            if ( static_cast< s32 >( leLOD ) != siLastLoggedLod && CgsDev::Log::gpDebugPrint != 0 )
+            if ( sbLodDiag && suLodDiagLines < KU_RACECAR_DIAG_MAX_LINES
+                 && static_cast< s32 >( leLOD ) != siLastLoggedLod && CgsDev::Log::gpDebugPrint != 0 )
             {
+                ++suLodDiagLines;
                 siLastLoggedLod = static_cast< s32 >( leLOD );
                 *CgsDev::Log::gpDebugPrint << "[racecar-lod] RenderRaceCar sees mLOD "
                                             << static_cast< s32 >( leLOD )
@@ -1261,11 +1281,20 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
             // [DIAG glassfx wave] one line per DISTINCT (pane, strength) pair -- a census, not
             // a peak. "the loop never ran", "it ran and every pane was skipped" and "it ran and
             // submitted" are three different findings and a bare counter conflates them.
+            // [FLAG PC witness] OPT-IN (BRN_GLASSFX_DIAG=1) + hard first-N cap. DELETE-WHEN the
+            // shattered-glass path is signed off. The (pane, strength) latch is NOT a bound: the
+            // strength is a float that moves every frame and the latch array is shared by every
+            // car, so this census printed 639,936 of 1,002,683 lines in a 140 s run and drove the
+            // harness into its log-size abort before the scenario finished.
             {
+                static const bool sbGlassFxDiag = ( getenv( "BRN_GLASSFX_DIAG" ) != 0 );
+                static u32 suGlassFxPaneLines = 0u;
                 static u32 sauLoggedPaneKeys[8] = { 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u };
                 const u32 luKey = static_cast< u32 >( lfFracture * 100.0f ) + 1u;
-                if ( sauLoggedPaneKeys[liPane] != luKey && CgsDev::Log::gpDebugPrint != 0 )
+                if ( sbGlassFxDiag && suGlassFxPaneLines < KU_GLASSFX_DIAG_MAX_LINES
+                     && sauLoggedPaneKeys[liPane] != luKey && CgsDev::Log::gpDebugPrint != 0 )
                 {
+                    ++suGlassFxPaneLines;
                     sauLoggedPaneKeys[liPane] = luKey;
                     *CgsDev::Log::gpDebugPrint
                         << "[glassfx] cracked pane " << liPane
@@ -1284,12 +1313,19 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
         // where it reads `submitted 0 noModel 6` means the spec has no shattered models on
         // this build. Those are three different bugs and the [glassfx] device probe cannot
         // tell them apart on its own.
+        // [FLAG PC witness] OPT-IN (BRN_GLASSFX_DIAG=1) + hard first-N cap -- same reason as the
+        // per-pane line above: the census key alternates between the cars on screen, so the
+        // "distinct value" latch is not a bound. DELETE-WHEN the shattered-glass path is signed off.
         {
+            static const bool sbGlassFxDiag = ( getenv( "BRN_GLASSFX_DIAG" ) != 0 );
+            static u32 suGlassFxCensusLines = 0u;
             static u32 suLastCensusKey = 0xFFFFFFFFu;
             const u32 luCensusKey = ( luSeen << 20 ) | ( luNotDamaged << 15 )
                                   | ( luSmashed << 10 ) | ( luNoModel << 5 ) | luSubmitted;
-            if ( luCensusKey != suLastCensusKey && CgsDev::Log::gpDebugPrint != 0 )
+            if ( sbGlassFxDiag && suGlassFxCensusLines < KU_GLASSFX_DIAG_MAX_LINES
+                 && luCensusKey != suLastCensusKey && CgsDev::Log::gpDebugPrint != 0 )
             {
+                ++suGlassFxCensusLines;
                 suLastCensusKey = luCensusKey;
                 *CgsDev::Log::gpDebugPrint
                     << "[glassfx] shattered-glass loop: seen " << static_cast< s32 >( luSeen )

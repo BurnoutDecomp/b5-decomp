@@ -29,8 +29,8 @@
 // gsm+250816) ->
 // TakedownManager::Update(this+0x238, activeIf, dt, crashQ, &crashingIf, preIn, out, trafficTypeQ)
 // -> `*(gsm+249944) = 0` (the module copy's miLength) + TakedownEvent_::Append(gsm+249936, out's
-// takedown queue) -> [MugshotManager::Update @gsm+1280 / PaybackManager::Update @gsm+1392 -- see
-// the note at the leg] ->
+// takedown queue) -> MugshotManager::Update(gsm +0x500, ...) -> PaybackManager::Update(gsm +0x570,
+// ...) ->
 // ProcessTakedownEvents(actionQ, gsm+249936, out).
 // ============================================================================
 
@@ -38,6 +38,8 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/GameState/BrnGameStateTakedownCache.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"
+#include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"     // MugshotManager (Construct / Update)
+#include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"     // PaybackManager (Construct / Update)
 #include "GameSource/GameState/Offences/BrnDriveThruManager.h"    // DriveThroughsCanNowOpenAgain (OnModeFinish / OnModeEnd)
 #include "GameSource/GameState/BrnGameActions.h"                   // SetTakedownCameraAction (OnModeFinish)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -65,6 +67,34 @@ void GameStateModule::ConstructTakedownBringUp()
         mpTakedownCache = new TakedownPostWorldCache();
     }
     mpTakedownCache->Construct();
+
+    // The two managers the module Constructs immediately after the TakedownManager, in the console's
+    // order: MugshotManager::Construct(gsm +0x500, gsm) then PaybackManager::Construct(gsm +0x570,
+    // gsm). Each takes the owning module as its single argument and registers its own debug
+    // component. Held by pointer here for the reason recorded on the members -- BrnMugshotManager.h
+    // includes BrnGameStateModule.h, so a by-value member is a genuine include cycle; the allocation
+    // site moves, nothing else does.
+    //
+    // THE never-Constructed-QUEUE TRAP, PAID HERE BECAUSE THIS LANDING ARMS IT. Both managers
+    // publish their HUD records onto GetOutputGuiEventQueue()'s VariableEventQueue<18432,16>
+    // (mOutputGuiEventQueue), and until now NOTHING in this tree ever wrote to it, so nothing
+    // noticed that it is never Constructed -- the module is heap-allocated, so its write cursor and
+    // length are garbage and the first AddEvent would walk off the buffer. The console's own
+    // Construct carries `VariableEventQueue<18432,16>::Construct(gsm +0x2E580)`; that call belongs
+    // in GameStateModule::Construct, which is not this file. DELETE-WHEN it lands there.
+    mOutputGuiEventQueue.Construct();
+
+    if (mpMugshotManager == 0)
+    {
+        mpMugshotManager = new MugshotManager();
+    }
+    mpMugshotManager->Construct(this);
+
+    if (mpPaybackManager == 0)
+    {
+        mpPaybackManager = new PaybackManager();
+    }
+    mpPaybackManager->Construct(this);
 }
 
 // X360 GameStateModule::Prepare @0x8239E578, stage 14: `if (TakedownManager::Prepare(gsm+568))`.
@@ -161,7 +191,27 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
                                           const CgsSystem::TimerStatusInterface& lrTimerStatusInterface,
                                           bool lbSimPaused)
 {
-    if (mpTakedownManager == 0 || mpTakedownCache == 0)
+    // Console PreWorldUpdate clears the module's own GUI event queue (gsm +0x2E580) once per frame,
+    // at the head of the function, immediately before ProcessGameEvents. Reproduced here, the
+    // earliest per-frame point this file owns: nothing between the console's position and this one
+    // writes that queue on this build -- the only writers tree-wide are the two manager ticks below.
+    // Without the clear the queue only ever grows, and AddEvent's overflow arm asserts and then
+    // writes the record ANYWAY, so repeated payback publishes eventually walk off the storage.
+    // DELETE-WHEN the clear can sit in PreWorldUpdate itself, beside the game-event drain.
+    //
+    // FLAG NOT REPRODUCED (blocked outside this file): the console's matching per-frame DRAIN at the
+    // tail of PreWorldUpdate, `OutputBuffer::GetGuiEventQueue()->Append(<this queue>)`, unconditional
+    // just before the race-distance fill. OutputBufferGuiEventQueue is still the opaque byte-array
+    // placeholder in BrnGameStateModuleIO.h rather than the console's VariableEventQueue<18432,16>,
+    // so the destination has neither an Append nor a Construct. Until it is retyped there, the
+    // records the managers publish are cleared unread instead of reaching the GUI.
+    mOutputGuiEventQueue.Clear();
+
+    // The console guards none of this leg: the two manager ticks below sit unconditionally inside
+    // its not-paused arm, gated only by the pause byte. So the takedown manager's own pointer is
+    // NOT part of the leg's entry test any more -- it gates only its own tick, and the mugshot and
+    // payback ticks are no longer silently coupled to takedown bring-up succeeding.
+    if (mpTakedownCache == 0)
     {
         return;
     }
@@ -201,7 +251,7 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     {
         static bool sbForced = false;
         static const char* spcForce = getenv("BRN_FORCE_TAKEDOWN");
-        if (!sbForced && spcForce != 0)
+        if (!sbForced && spcForce != 0 && mpTakedownManager != 0)
         {
             const GameMode* lpMode = mModeManager.GetCurrentGameMode();
             if (lpMode != 0 && lpMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS &&
@@ -222,39 +272,57 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // (GetTakedownEventInputQueue asserts "Not locked for reading", BrnGameStateModuleIO.cpp:147)
     // see a read lock; the module's stand-in buffer is never locked by the seam, so the lock is
     // taken here for the duration of the tick. [FLAG PC bring-up: the lock is the console's, the
-    // place it is taken is not.]
+    // place it is taken is not.] The lock spans the two manager ticks below as well: both reach the
+    // pre-world buffer through its read-locked accessors (the in-game player-status interface and
+    // the network-to-game-state interface), exactly as they do inside the console's own lock.
     mpPreWorldInputBuffer->LockForRead();
-    mpTakedownManager->Update(&mLastActiveRaceCarInterface,
-                              lfGameTimestep,
-                              &mpTakedownCache->mRaceCarCrashEventQueue,
-                              &mpTakedownCache->mCrashingRaceCarInterface,
-                              mpPreWorldInputBuffer,
-                              mpOutputBuffer,
-                              &mpTakedownCache->mTrafficTypeResponseQueue);
-    mpPreWorldInputBuffer->UnlockForRead();
+    if (mpTakedownManager != 0)
+    {
+        mpTakedownManager->Update(&mLastActiveRaceCarInterface,
+                                  lfGameTimestep,
+                                  &mpTakedownCache->mRaceCarCrashEventQueue,
+                                  &mpTakedownCache->mCrashingRaceCarInterface,
+                                  mpPreWorldInputBuffer,
+                                  mpOutputBuffer,
+                                  &mpTakedownCache->mTrafficTypeResponseQueue);
+    }
 
     // 0x823A59F8..0x823A5A10: `*(gsm+249944) = 0; TakedownEvent_::Append(gsm+249936, out's queue)`.
     mpTakedownCache->mTakedownEventQueue.Append(*lpOutputTakedownQueue);   // (the copy was cleared above)
 
-    // [X] STILL PARKED, re-measured 2026-09-13 -- and the old wording ("neither manager exists on
-    // this build") was wrong in one half and right in the other:
-    //  * BOTH CLASSES ARE BODIED. MugshotManager::Update is BrnMugshotManager.cpp and
-    //  PaybackManager::Update is BrnPaybackManager.cpp, both carrying the console's own
-    //     signature -- whose third parameter is `const VehicleOutputInterface*`, i.e. r24, the very
-    //     cache this file now owns.
-    //   * WHAT IS ACTUALLY MISSING IS OWNERSHIP AND THE MOUNT, both outside this lane:
-    //       (a) GameStateModule has no member for either manager (the console embeds them at
-    //           gsm+1280 / gsm+1392) and no Construct call for them, so there is nothing to tick;
-    //       (b) BrnPaybackManager.cpp / BrnPaybackDebugComponent.cpp are NOT mounted in the exe
-    //           build list, so calling PaybackManager::Update would be an unresolved external for
-    //           the whole build. (BrnMugshotManager.cpp IS mounted.)
-    // Console position, for whoever lands them ( /):
-    //     MugshotManager::Update(gsm+1280, preIn, out, cachedVehicleOutput, gsm+249936,
-    //                            meCurrentGameModeType, <pause flag>);
-    //     PaybackManager::Update(gsm+1392, preIn, out, cachedVehicleOutput, gsm+249936,
-    //                            meCurrentGameModeType);
-    // The Mugshot call's 7th argument (r9) is `*(r14) != 0` off a stack-held pointer
-    // this lane did not resolve -- pin it before wiring, do not guess it.
+    // The two managers the console ticks between the takedown-queue drain and ProcessTakedownEvents,
+    // in that order and with the console's argument lists:
+    //     MugshotManager::Update(gsm +0x500, preIn, out, cachedVehicleOutput, the module's takedown
+    //                            queue copy, meCurrentGameModeType, <the pause bool>)
+    //     PaybackManager::Update(gsm +0x570, preIn, out, cachedVehicleOutput, the same queue copy,
+    //                            meCurrentGameModeType)
+    // THE SEVENTH ARGUMENT IS RESOLVED. In the console leg r9 is `*(r14) != 0`, where r14 is a
+    // stack slot holding a pointer the module computed far earlier in the same function -- the
+    // module's own pause-reason bitfield, gsm +0x38B60 == miSimPauseFlags. Two independent reads
+    // pin it: the same stack-held pointer feeds DriveThruManager::Update's pause argument earlier
+    // in the tick, and it is dereferenced again right after this leg as RumbleManager::
+    // UpdatePauseState's `lbPaused`. So the argument is `miSimPauseFlags != 0`, i.e. "is anything
+    // paused" -- not the leg's own lbSimPaused (which is the stricter IsSimPaused answer the leg
+    // already early-returned on).
+    if (mpMugshotManager != 0)
+    {
+        mpMugshotManager->Update(mpPreWorldInputBuffer,
+                                 mpOutputBuffer,
+                                 &mpTakedownCache->mVehicleOutputInterface,
+                                 &mpTakedownCache->mTakedownEventQueue,
+                                 GetCurrentGameModeType(),
+                                 miSimPauseFlags != 0);
+    }
+
+    if (mpPaybackManager != 0)
+    {
+        mpPaybackManager->Update(mpPreWorldInputBuffer,
+                                 mpOutputBuffer,
+                                 &mpTakedownCache->mVehicleOutputInterface,
+                                 &mpTakedownCache->mTakedownEventQueue,
+                                 GetCurrentGameModeType());
+    }
+    mpPreWorldInputBuffer->UnlockForRead();
 
     if (mpTakedownCache->mTakedownEventQueue.GetLength() > 0 && CgsDev::Log::gpDebugPrint != 0)
     {
@@ -323,9 +391,10 @@ void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuff
 // ==============================================================================================
 // GameStateModule::OnModeEnd  (X360 0x823767E0) -- SendModeStopMessages @0x8234BEC0's tail.
 //
-//   0x823767F0  MugshotManager::OnRoundEnd(this + 1280)     -- neither manager exists on this
-//   0x823767F8  PaybackManager::OnRoundEnd(this + 1392)        build; named, not faked (the same
-//                                                              two TakedownPreWorldLeg names)
+//   +0x500 / +0x570  MugshotManager::OnRoundEnd / PaybackManager::OnRoundEnd -- NOT wired.
+//     Both managers now exist and are Constructed (see ConstructTakedownBringUp), but the console
+//     sets only r3 at these two calls while both declarations carry a bool reset argument, so the
+//     argument is unrecovered. FLAG: named, not guessed -- wire it when the register is pinned.
 //   0x82376800  TakedownManager::ClearRaceCarData(this + 568)
 //   0x82376808  lwz this+7604 == meCurrentGameModeType ; == 2 || == 16 (the two SHOWTIME modes) ->
 //   0x82376838      stw 0, +284504   == mShowtimePendingTrafficIndexStack's count (Clear)

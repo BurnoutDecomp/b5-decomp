@@ -2,30 +2,21 @@
 // GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp
 //
 // Compilation home for the BrnDirector::Camera::BehaviourLooseAttachment slice this TU owns:
-//   - BehaviourLooseAttachment::AttachTo      @0x821F4458
-//   - BehaviourLooseAttachment::Get           @0x821FAA58
-//   - BehaviourLooseAttachment::SetParameters @0x821F43E8
-//   - BehaviourLooseAttachment::SetTarget     @0x821F44B8
-// and the loose-attachment Parameters field-walk visitor (class:BrnDirector::Camera::
-// BehaviourLooseAttachment::Parameters):
-//   - Parameters::Serialise<DebugMenuSerialiser>     @0x82254248
-//   - Parameters::Serialise<TextFileReadSerialiser>  @0x8224D2F0
-//   - Parameters::Serialise<TextFileWriteSerialiser> @0x82254BC8
+// the five transcribed virtuals (Construct, Prepare, GetCollisionPolicy, SetupTweaker, GetName)
+// and the two reference binders (AttachTo / SetTarget). SetParameters and LockTargetVector are
+// defined inline in the header. The rest of the behaviour (Update and the
+// full rig) lands with its own TU.
 //
-// The four accessor methods are defined inline in the header; this .cpp is the translation-unit
-// anchor that pulls the header into the compile gate and pins the asm-attested member offsets.
-// Installed by the new-car-joined / shutdown-takedown moments and the testbed arbitrator state.
+// The loose-attachment Parameters field-walk visitor and its three explicit instantiations
+// live in the sibling BrnBehaviourLooseAttachmentParameters.cpp, so this TU can be mounted
+// without dragging in the camera-tunings serialiser types.
+//
+// The behaviour is installed by the new-car-joined moment, by the shutdown-takedown state (its
+// lookback rig plus the three zoom beats) and by the arbitrator testbed.
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
-
-// The three Parameters::Serialise<S> instances drive one serialiser type each by name; pull in
-// every serialiser this TU instantiates the visitor over. (BrnCameraImpactEffect.h, for the
-// embedded "Impact" sub-block's own nested Serialise<S>, arrives transitively via the behaviour
-// header.)
-#include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"   // TextFileWriteSerialiser
-#include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"    // TextFileReadSerialiser
-#include "GameSource/Director/Camera/Behaviours/BrnDebugMenuSerialiser.h"  // DebugMenuSerialiser
+#include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"   // Utils::Tweaker::Construct (slot 6)
 
 #include <cstddef>   // offsetof
 
@@ -34,44 +25,196 @@ namespace BrnDirector
 namespace Camera
 {
 
-// FLAG (unrecovered rodata @0x820051C0): the field label the loose-attachment Serialise passes for
-// the +0x54 tunable (mfField54, sibling to "Distance" @+0x50 and "Dutch" @+0x58). All three visitor
-// instances reference only the address (lis/addi unk_820051C0) -- the debug-menu Process<float>
-// @0x82254248, the write FormatName @0x82254BC8 -- so the literal string bytes are not in the export
-// and the label is declared extern and NOT fabricated (the same shared @0x820051C0 rodata the
-// bumper-cam / camera-rig visitors reference for their own unrecovered field labels). Define it with
-// the literal bytes at @0x820051C0 when that rodata is recovered.
-extern const char* const KPC_LABEL_820051C0;   // @0x820051C0 -- mfField54 field label
+// The pool bucket this behaviour routes to. AllocateBehaviour<TBehaviour> bakes the choice from
+// sizeof(TBehaviour): at or under the small pool's 1600-byte bucket it takes one of the twenty
+// small slots, otherwise one of the eight large ones. The console record is 0x330 and this
+// reconstruction measures 0x340 -- the base head, the embedded policy and the adopted-parameter
+// pointer all widen on the host -- so it stays well inside the small bucket and routes exactly
+// where the console routes it. That matters here: the shutdown-takedown arm holds up to four of
+// these at once (the lookback rig plus the three zoom beats), and unlike the gyro rig (which the
+// host widening pushed out of the small bucket onto the eight-slot large pool) this one costs the
+// large pool nothing.
+static_assert(sizeof(BehaviourLooseAttachment) <= 100u * 16u,
+              "BehaviourLooseAttachment fits the small behaviour pool bucket");
 
-// Pin the asm-attested member offsets the four methods touch.
-static_assert(offsetof(BehaviourLooseAttachment, meTimestepType)       == 0x004, "base timestep flavour @ +0x04");
-static_assert(offsetof(BehaviourLooseAttachment, mParamWord1)          == 0x010, "param word 1 @ +0x10");
-static_assert(offsetof(BehaviourLooseAttachment, mImpactEffect)        == 0x2F0, "impact effect @ +0x2F0");
-static_assert(offsetof(BehaviourLooseAttachment, miTargetSet)          == 0x304, "target set flag @ +0x304");
-static_assert(offsetof(BehaviourLooseAttachment, meTargetRaceCarIndex) == 0x308, "target index @ +0x308");
-static_assert(offsetof(BehaviourLooseAttachment, miTargetField30C)     == 0x30C, "target field @ +0x30C");
-static_assert(offsetof(BehaviourLooseAttachment, mbTargetField310)     == 0x310, "target byte @ +0x310");
-static_assert(offsetof(BehaviourLooseAttachment, miAttachSet)          == 0x314, "attach set flag @ +0x314");
-static_assert(offsetof(BehaviourLooseAttachment, meAttachRaceCarIndex) == 0x318, "attach index @ +0x318");
-static_assert(offsetof(BehaviourLooseAttachment, miAttachField31C)     == 0x31C, "attach field @ +0x31C");
-static_assert(offsetof(BehaviourLooseAttachment, mbAttachField320)     == 0x320, "attach byte @ +0x320");
-static_assert(offsetof(BehaviourLooseAttachment, muParametersSlot)     == 0x324, "params slot @ +0x324");
-static_assert(offsetof(BehaviourLooseAttachment, mbNoResult)           == 0x32C, "no-result flag @ +0x32C");
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::Construct -- seed a freshly pooled instance.
+//
+//   li     r5, 0
+//   stb    r5,  +0x008(r6)    ; \
+//   stb    r5,  +0x009(r6)    ;  |
+//   stb    r5,  +0x00A(r6)    ;  |- the base head: these seven stores ARE Behaviour::Construct,
+//   stb    r5,  +0x00B(r6)    ;  |  inlined (meTimestepType, the five flag bytes and the debug
+//   stb    r5,  +0x00C(r6)    ;  |  parameters name, all zero)
+//   stw    r5,  +0x004(r6)    ;  |
+//   stw    r5,  +0x010(r6)    ; /
+//   stb    r8,  +0x2A0(r6)    ; lag +0x20 mbFirstFrame  = true   (r8 == 1)   \ PositionLag::
+//   stb    r8,  +0x2A1(r6)    ; lag +0x21 mbConstructed = true               / Construct
+//   stfs   f0,  +0x2F0(r6) .. +0x300(r6)   ; the five zeroed floats of the impact effect
+//   stfs   f0,  +0x2E0(r6) .. +0x2EC(r6)   ; CameraShake::Construct (four wobble floats)
+//   <the Random::Construct spine at +0x2B0: seed, eight ring draws, index bump>
+//   stb    r5,  +0x310(r6)    ; mTarget     set-flag = false
+//   stb    r5,  +0x320(r6)    ; mAttachment set-flag = false
+//   addi   r3,  r6, 0x20 ; li r4, 0 ; bl CollisionPolicyAttachedToVehicle::Construct
+//   stb    r5,  +0x32C(r6)    ; mbDetached         = false
+//   stb    r5,  +0x32E(r6)    ; mbTargetVectorLock = false
+//
+// The one read-only constant is 0.0f (a big-endian 00000000 at the referenced slot); the two
+// 64-bit literals the Random spine builds are the engine's default seed and LCG multiplier,
+// which is what identifies the spine as Random::Construct rather than an open-coded draw.
+//
+// NOT written here, faithfully: mWorldSpaceOffsetFromCar, mpParameters (SetParameters adopts
+// it), mfDetachedAmount and mbFirstFrame (Prepare arms the latch).
+// ----------------------------------------------------------------------------
+void BehaviourLooseAttachment::Construct()
+{
+    Behaviour::Construct();
 
-// Out-of-line anchors: force the four inline methods to be emitted in this TU.
-void BehaviourLooseAttachment_AttachToAnchor(BehaviourLooseAttachment& lr, s32 li)      { lr.AttachTo(li); }
-void* BehaviourLooseAttachment_GetAnchor(BehaviourLooseAttachment& lr)                  { return lr.Get(); }
-void BehaviourLooseAttachment_SetParametersAnchor(BehaviourLooseAttachment& lr,
-                                                   const BehaviourLooseAttachment::Parameters* lp) { lr.SetParameters(lp); }
-void BehaviourLooseAttachment_SetTargetAnchor(BehaviourLooseAttachment& lr, s32 li)     { lr.SetTarget(li); }
-void BehaviourLooseAttachment_SetTimestepTypeAnchor(BehaviourLooseAttachment& lr,
-                                                    BrnDirector::Timestep::EType le)    { lr.SetTimestepType(le); }
-Utils::CameraImpactEffect* BehaviourLooseAttachment_GetImpactEffectAnchor(BehaviourLooseAttachment& lr)
-                                                                                        { return &lr.GetImpactEffect(); }
+    // The four rig sub-objects, each seeded by its own Construct -- which is what the console
+    // does too, since every one of them is inlined here rather than called.
+    mPositionLag.Construct();                   // the two flag bytes at the lag's +0x20 / +0x21
+    mRandom.Construct();                        // the ring, the default seed and the index bump
+    mShake.Construct();                         // the four wobble floats
 
-// Pin the asm-attested Parameters field-walk offsets (host-pointer-width invariant -- the walked
-// region holds no pointers): the "Impact" sub-block at +0x2C and the loose-attachment tunables at
-// the a1+0x48..a1+0x60 offsets the write/read/menu asm loads/stores.
+    // The impact effect's own Construct is not homed, and the console does not call it either:
+    // it emits the five zero stores directly. Written here through the effect's two named
+    // handles so no byte of it is reached by displacement.
+    mImpact.SetImpactFactor(0.0f);              // effect +0x00
+    mImpact.GetCameraShake().Construct();       // effect +0x04 (the embedded 16-byte shake)
+
+    // Both vehicle references start unbound. The console writes only the set-flag byte of each
+    // (it does NOT run VehicleRef::Construct here), so only that byte is written.
+    mTarget.mbSet     = false;                  // stb 0, +0x310
+    mAttachment.mbSet = false;                  // stb 0, +0x320
+
+    // The embedded vehicle-attached policy, with the literal false every loose-attachment site
+    // passes (the vehicle-collision flag at the policy's own +0x24F).
+    mCollisionPolicy.Construct(false);           // bl ..., r4 == 0
+
+    mbDetached         = false;                 // stb 0, +0x32C
+    mbTargetVectorLock = false;                 // stb 0, +0x32E
+}
+
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::Prepare
+//   lbz    r11, +0x320(r31)   ; mAttachment set-flag
+//   cmplwi r11, 0
+//   bne    ...                ; assert mAttachment.HasBeenSet()
+//   li     r3,  1             ; the return value: it cannot fail
+//   stb    r11, +0x008(r31)   ; SetNotPrepared()
+//   stb    r10, +0x32D(r31)   ; mbFirstFrame = true   (r10 == 1)
+//
+// The shared prepare/release info block is not read. Dropping the prepared latch and arming the
+// first-frame latch is the same first-frame idiom the road-runner and interpolate behaviours
+// use -- Update re-seeds the rig on the frame after (it is mbFirstFrame that lets the position
+// lag run on the first frame of a detached rig, and Update clears it again).
+// ----------------------------------------------------------------------------
+bool BehaviourLooseAttachment::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
+{
+    CGS_ASSERT(mAttachment.mbSet, "mAttachment.HasBeenSet()");
+
+    SetNotPrepared();                                       // stb 0, +0x08
+    mbFirstFrame = true;                                    // stb 1, +0x32D
+
+    return true;                                            // li r3, 1
+}
+
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::GetCollisionPolicy
+//   lbz    r11, +0x32C(r3)    ; mbDetached
+//   addi   r3,  r3, 0x20      ; r3 = &this->mCollisionPolicy (the candidate return)
+//   cmplwi r11, 0
+//   beqlr                     ; flag clear -> return &mCollisionPolicy
+//   li     r3, 0              ; flag set   -> return null
+//   blr
+//
+// The `addi r3, r3, 0x20` is the derived-to-base adjustment folded into the return: on the
+// console CollisionPolicyAttachedToVehicle's CollisionPolicy sub-object is at its own +0x00, so
+// the policy's address and the interface pointer coincide. On the host the compiler emits
+// whatever adjustment the real base sub-object needs; parity is by named member.
+//
+// This is the slot-5 virtual the retired slice modelled as a hand-written `Get()` returning an
+// invented `SubObject*`.
+// ----------------------------------------------------------------------------
+CollisionPolicy* BehaviourLooseAttachment::GetCollisionPolicy()
+{
+    if (mbDetached)                                         // lbz +0x32C; bne -> null
+    {
+        return 0;
+    }
+    return &mCollisionPolicy;                               // this + 0x20
+}
+
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::SetupTweaker
+//   mr     r3, r4
+//   b      Utils::Tweaker::Construct
+//
+// A tail call into Construct on the SUPPLIED tweaker: the loose-attachment rig resets the
+// tweaker it is handed and exposes no tweakable of its own. (The image folds this body with
+// BehaviourIceAnim::SetupTweaker, which is byte-identical.)
+// ----------------------------------------------------------------------------
+void BehaviourLooseAttachment::SetupTweaker(Utils::Tweaker& lrTweaker)
+{
+    lrTweaker.Construct();
+}
+
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::GetName -- returns the class's own literal.
+// ----------------------------------------------------------------------------
+const char* BehaviourLooseAttachment::GetName() const
+{
+    return "BehaviourLooseAttachment";
+}
+
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::AttachTo
+//   stw  r4,  +0x318(r3)     ; mAttachment.miRaceCarIndex = leRaceCarIndex
+//   stb  1,   +0x320(r3)     ; mAttachment.mbSet          = true
+//   stw  1,   +0x314(r3)     ; mAttachment.meType         = E_RACE_CAR
+//   stw  0,   +0x31C(r3)     ; mAttachment.muRef          = 0
+//   cmpwi r4, 8 ; blt skip   ; assert "meRaceCarIndex < ...ku8MaxNumRaceCars"
+//
+// All four stores precede the assert, and they are VehicleRef's own race-car binder inlined --
+// which is why the assert cites the reference's header, not this one -- and why its text names
+// the reference's own member meRaceCarIndex rather than this parameter. Do not "correct" the
+// literal to the parameter spelling: it is the attested string. Written through the named
+// reference rather than as a call: the binder has no body in this tree yet, and forwarding to a
+// declaration-only method would emit an unresolved external at every link.
+// ----------------------------------------------------------------------------
+void BehaviourLooseAttachment::AttachTo(s32 leRaceCarIndex)
+{
+    mAttachment.miRaceCarIndex = leRaceCarIndex;            // stw r4, +0x318
+    mAttachment.mbSet          = true;                      // stb 1,  +0x320
+    mAttachment.meType         = BrnDirector::VehicleRef::E_RACE_CAR;   // stw 1, +0x314
+    mAttachment.muRef          = 0;                         // stw 0,  +0x31C
+
+    CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
+               "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
+}
+
+// ----------------------------------------------------------------------------
+// BehaviourLooseAttachment::SetTarget -- the identical binder on the other reference.
+//   stw  r4,  +0x308(r3)     ; mTarget.miRaceCarIndex = leRaceCarIndex
+//   stb  1,   +0x310(r3)     ; mTarget.mbSet          = true
+//   stw  1,   +0x304(r3)     ; mTarget.meType         = E_RACE_CAR
+//   stw  0,   +0x30C(r3)     ; mTarget.muRef          = 0
+//   cmpwi r4, 8 ; blt skip   ; assert "meRaceCarIndex < ...ku8MaxNumRaceCars"
+// ----------------------------------------------------------------------------
+void BehaviourLooseAttachment::SetTarget(s32 leRaceCarIndex)
+{
+    mTarget.miRaceCarIndex = leRaceCarIndex;                // stw r4, +0x308
+    mTarget.mbSet          = true;                          // stb 1,  +0x310
+    mTarget.meType         = BrnDirector::VehicleRef::E_RACE_CAR;       // stw 1, +0x304
+    mTarget.muRef          = 0;                             // stw 0,  +0x30C
+
+    CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
+               "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
+}
+
+// Pin the field-walk offsets of the parameter block (host-pointer-width invariant -- the walked
+// region holds no pointers): the "Impact" sub-block at +0x2C and the loose-attachment tunables
+// at the +0x48..+0x60 offsets the write/read/menu assembly loads and stores.
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mPositionLagParams) == 0x08, "position-lag block @ +0x08");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mShakeParams)       == 0x1C, "shake block @ +0x1C");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mImpact)            == 0x2C, "Impact block @ +0x2C");
@@ -82,52 +225,6 @@ static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfField54)         
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfDutch)            == 0x58, "Dutch @ +0x58");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mfDetachLerpAmount) == 0x5C, "Detach Lerp Amount @ +0x5C");
 static_assert(offsetof(BehaviourLooseAttachment::Parameters, mbLookFromTarget)   == 0x60, "Look from target @ +0x60");
-
-// ----------------------------------------------------------------------------
-// BehaviourLooseAttachment::Parameters::Serialise<S> -- the ONE loose-attachment field-walk visitor
-// body. Recurses into the embedded impact block as the nested "Impact" section, then walks the
-// loose-attachment tunables, handing each to the serialiser S by name. S supplies the per-field/
-// -section direction; the field sequence + labels are identical across all three instances' asm
-// (mirrors the committed sibling CameraImpactEffect::Parameters::Serialise in BrnCameraImpactEffect.cpp):
-//   - Serialise<DebugMenuSerialiser>    @0x82254248: AddToPath("Impact") + recurse into the impact
-//       block, then each float -> Process<float>(name, &field) + SetStep(0.01); the bool via
-//       Process<bool>("Look from target", &field). (The scalar DebugMenuSerialiser::Serialise
-//       overloads inline to those Process+SetStep pairs.)
-//   - Serialise<TextFileWriteSerialiser> @0x82254BC8: the "Impact" section header + recurse, then
-//       each float -> FormatName + fprintf "%s : %f\n"; the bool -> "%s : %d\n" when mpFile is open.
-//   - Serialise<TextFileReadSerialiser>  @0x8224D2F0: consume the section-header line + recurse, then
-//       each float -> fscanf "%s : %f\n"; the bool -> fscanf "%s : %d\n" while the FILE* is open.
-//
-// Field/label map (from the write/read/menu asm, in visitor walk order):
-//   +0x2C mImpact            "Impact"              (nested CameraImpactEffect::Parameters block)
-//   +0x48 mfPitch            "Pitch"
-//   +0x4C mfHeight           "Height"
-//   +0x50 mfDistance         "Distance"
-//   +0x54 mfField54          <unk_820051C0>        (label rodata unrecovered -- extern, FLAG)
-//   +0x58 mfDutch            "Dutch"
-//   +0x60 mbLookFromTarget   "Look from target"    (walked BEFORE the +0x5C float -- asm order)
-//   +0x5C mfDetachLerpAmount "Detach Lerp Amount"
-// ----------------------------------------------------------------------------
-template<class TSerialiser>
-void BehaviourLooseAttachment::Parameters::Serialise(TSerialiser& lrSerialiser)
-{
-    lrSerialiser.Serialise("Impact", mImpact);
-    lrSerialiser.Serialise("Pitch", mfPitch);
-    lrSerialiser.Serialise("Height", mfHeight);
-    lrSerialiser.Serialise("Distance", mfDistance);
-    lrSerialiser.Serialise(KPC_LABEL_820051C0, mfField54);   // +0x54 -- label unrecovered (extern)
-    lrSerialiser.Serialise("Dutch", mfDutch);
-    lrSerialiser.Serialise("Look from target", mbLookFromTarget);   // +0x60 bool, walked before +0x5C
-    lrSerialiser.Serialise("Detach Lerp Amount", mfDetachLerpAmount);
-}
-
-// Explicit instantiations -- one per serialiser this block is menu'd / saved / loaded through. All
-// three serialiser types are reconstructed and homed (the DebugMenu instance's nested-block section
-// overload lands via the additive declaration in BrnDebugMenuSerialiser.h), so every present
-// instance is emitted.
-template void BehaviourLooseAttachment::Parameters::Serialise<DebugMenuSerialiser>(DebugMenuSerialiser&);
-template void BehaviourLooseAttachment::Parameters::Serialise<TextFileWriteSerialiser>(TextFileWriteSerialiser&);
-template void BehaviourLooseAttachment::Parameters::Serialise<TextFileReadSerialiser>(TextFileReadSerialiser&);
 
 } // namespace Camera
 } // namespace BrnDirector

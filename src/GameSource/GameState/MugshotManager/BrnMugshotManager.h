@@ -50,6 +50,13 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                          // CgsModule::EventQueue<TakedownEvent,8> (Update's takedown-queue arg)
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"         // BrnGameState::TakedownEvent, CgsID
 
+// Update's third parameter is the module's cached post-world vehicle output -- the physics
+// module's VehicleOutputInterface, the same object the takedown cache holds. Pointer-only and
+// never dereferenced in this header's TU, so it is forward-declared rather than pulling the
+// physics header in. (It was previously spelled as the GameStateModuleIO forward declaration of
+// the same name, which is a different C++ type and would not bind at the module's call site.)
+namespace BrnPhysics { namespace Vehicle { struct VehicleOutputInterface; } }
+
 namespace BrnGameState
 {
 // Forward decls for the network-image event payloads. These two events are produced by the
@@ -134,7 +141,7 @@ public:
     // X360 0x82391690 (BrnGameStateModule::PreWorldUpdate). Advances both FSMs.
     void Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                 GameStateModuleIO::OutputBuffer* lpOutput,
-                const GameStateModuleIO::VehicleOutputInterface* lpVehicleOutput,
+                const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput,
                 const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
                 GameStateModuleIO::EGameModeType leGameModeType,
                 bool lbIsAnythingPaused);
@@ -187,7 +194,7 @@ private:
     void HandlePreparingForMugshotCapture();                                       // X360 0x82363C38
     void HandleCapturingMugshot(GameStateModuleIO::OutputBuffer* lpOutput);         // X360 0x82383438
     void HandleTakingMugshot(GameStateModuleIO::OutputBuffer* lpOutput,
-                             const GameStateModuleIO::VehicleOutputInterface* lpVehicleOutput,
+                             const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput,
                              GameStateModuleIO::EGameModeType leGameModeType);       // X360-inlined (case 3 helper)
     // ---- show-FSM step handlers ----
     void HandlePreparingToCaptureTheirMugshot();                                   // X360-inlined
