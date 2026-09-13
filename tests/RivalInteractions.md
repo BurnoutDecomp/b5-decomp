@@ -64,3 +64,25 @@ crash state, enabled damage rendering, nonzero deformation and changing pose.
 It also saves frames for visual inspection; a HUD message alone cannot pass it.
 The relevant ARTIST paths are `UpdateBoost` at `0x82304BF0..0x82304C90`,
 `GetDamagedCarCount` at `0x822A4958`, and `ProcessTakedownEvents` at `0x822F6CF8`.
+
+## Road steering and wall regression
+
+```powershell
+python b5-decomp/tests/run_rival_road_steering.py
+powershell -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/RivalRoad.ps1
+```
+
+The 32 geometry checks cover fan headings in every quadrant, left/right ordering,
+road targets, XZ projection, translation/height invariance and road-direction penalties.
+They execute production methods with real AI headers. Before the correction, 22 failed.
+
+The live case uses ordinary player acceleration through the Waterfront Road Rage
+start. At least four rivals must drive south into the bend and leave west through
+the carriageway at speed. Placement jumps cannot complete the traversal. The
+baseline completed zero traversals; the corrected capture completed all five.
+Frames and `BRN_AI_ROAD_DIAG` records preserve the actual targets and trajectories.
+
+ARTIST `GenerateFanVectors` at `0x827792C0` stores `{sin(angle), cos(angle)}`:
+the shuffle bytes at `0x82CDA3C0` and instructions `0x827796C0..0x827796C8`
+pin the sign and lane order. `IncludeCentreLineTracking` flattens world XZ at
+`0x82786C3C/0x82786C4C` before subtracting the planar road centre.

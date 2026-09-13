@@ -126,9 +126,9 @@ void SteeringFan::CalculateFanAngle(AICar* lpCar)
 // Rebuild the 17 fan rays around the car for this tick.
 //   r29 = this, r31 = lpCar.
 //   0x827792F0 GetPosition(lpCar)         -> v127 ; stvx128 v127, r29, 0x340 -> mFanOrigin
-//   0x82779304 GetUsefulDirection(lpCar)  -> v13  (only x/y are used, via the vrlimi128 pair)
-//   0x8277933C mFanOrigin2D.xy = carPos.xy (vrlimi128 into the loaded this+0x350)
-//   0x827793B4 f28 = FindSignedAngleBetween2DVectors(normalize2D(useful.xy), (0,1))
+//   0x82779304 GetUsefulDirection(lpCar)  -> v13  (XZ is flattened via the vrlimi128 pair)
+//   0x8277933C mFanOrigin2D.xy = carPos.xz (vrlimi128 into the loaded this+0x350)
+//   0x827793B4 f28 = FindSignedAngleBetween2DVectors(normalize2D(useful.xz), (0,1))
 //              -- var_110/var_10C are stored 0.0 (flt_82001CC0) / 1.0 (flt_82001C98) to build
 //              the (0,1) reference vector the angle is measured from.
 //   loop i = 0..16 with lfT += mfReciprocalSteps (this+0x7F4, == 1/16):
@@ -141,13 +141,11 @@ void SteeringFan::CalculateFanAngle(AICar* lpCar)
 //     0x82779724      mHNGTarget[i] = mFanOrigin2D + mUnitDirection[i] * mfLookAheadHNGRadius
 //   0x8277973C      mCentreTarget (this+0x330) = mTarget[8] (lvx this+0x80)
 //
-// THE SIN/COS LANE ORDER is not read off the vperm constants (unk_82CDA3C0 / unk_82CDA400 are not
-// exported); it is DERIVED, and the derivation is exact: FindSignedAngleBetween2DVectors(A,(0,1))
-// returns acos(A.y) signed by -sign(A.x) (see BrnAIUtils_Angles.cpp @0x827716A8), so the car's own
-// heading maps to the angle t at ray 8 (where the cubic term is 0) and the inverse that must
-// reproduce it is ( -sin(t), cos(t) ): at t = 0 that is (0,1); at t = -pi/2 it is (1,0), which is
-// exactly the direction whose signed angle to (0,1) is -pi/2. Ray 0 is therefore mfFanAngle to the
-// car's RIGHT and ray 16 mfFanAngle to its LEFT, with ray 8 dead ahead.
+// ARTIST 827796C0..C8: vperm with bytes at 82CDA3C0
+// {00010203,00010203,00010203,14151617} selects {sin,sin,sin,cos}.
+// vsldoi by 8 bytes then stores {sin,cos,0,0}; there is no sine negation.
+// This agrees with FindSignedAngleBetween2DVectors(A,(0,1)): sign(cross) = sign(A.x).
+// Ray 8 follows the useful heading; ray 0 is left and ray 16 is right.
 // ========================================================================================
 void SteeringFan::GenerateFanVectors(AICar* lpCar)
 {
@@ -180,7 +178,7 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
         CGS_ASSERT(liStep < KI_FAN_STEPS, "Fan index out of range at ");
 
         Vector2 lUnit;
-        lUnit.x = -std::sin(lfAngle);
+        lUnit.x =  std::sin(lfAngle);
         lUnit.y =  std::cos(lfAngle);
         lUnit.z = 0.0f;
         lUnit.w = 0.0f;
@@ -272,7 +270,7 @@ void SteeringFan::CachePointAhead(RacingLineGenerator* lpRacingLineGenerator,
 //
 //   0x82786BC8  racing line not initialised (racingline+0xBD0) -> zero the row, return.
 //   0x82786BF4  !mbCentreHereKnown (this+0x809)                -> zero the row, return.
-//   0x82786C20  delta = mCentreHere (this+0x390) - Vector2(mFanOrigin.xy) (this+0x340)
+//   0x82786C20  delta = mCentreHere (this+0x390) - Flatten(mFanOrigin) (this+0x340)
 //   0x82786C64..CF0  if |delta.x| <= FLT_EPSILON && |delta.y| <= FLT_EPSILON -> return with the
 //               row LEFT AS IT WAS (`bnelr`, not a zero-then-return -- unlike the two arms above).
 //   0x82786D00  f13 = lpRacingLine->mfCentreLineAhead (racingline+0xC04)
@@ -297,7 +295,7 @@ void SteeringFan::IncludeCentreLineTracking(RacingLineGenerator* lpRacingLineGen
 
     Vector2 lDelta;
     lDelta.x = mCentreHere.x - mFanOrigin.x;
-    lDelta.y = mCentreHere.y - mFanOrigin.y;
+    lDelta.y = mCentreHere.y - mFanOrigin.z; // ARTIST 82786C4C: world Z into planar Y
     lDelta.z = 0.0f;
     lDelta.w = 0.0f;
 
