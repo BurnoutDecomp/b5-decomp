@@ -10,8 +10,9 @@
 //   BrnAI::AIModule::OnRaceCarReachedFinish      @0x8277B8D0  (40 insns;  whole)
 //   BrnAI::AIModule::OnModeStart                 @0x82791DB8  (133 insns; 2 named parks inside)
 //   BrnAI::AIModule::OnModeEnd                   @0x8277BA80  (96 insns;  1 named park inside)
-//   BrnAI::AIModule::OnPlayerTakedown            @0x8278A720  (34 insns;  NAMED PARK)
+//  BrnAI::AIModule::OnPlayerTakedown  (34 insns;  whole)
 //   BrnAI::AIModule::OnRaceCarReachedCheckpoint  @0x8278A658  (NAMED PARK -- ARTIST export hole)
+//  BrnAI::AIModule::SetupRaceBalancingManager  (125 insns; whole)
 //
 // =================================================================================================
 // ⭐⭐⭐ WHY THIS FILE EXISTS: NOTHING ELSE ON THIS BUILD ACTIVATES AN AI DRIVER.
@@ -1083,17 +1084,13 @@ void AIModule::OnRollingStart()
 // AICar::OnModeStartRacing; the master route is then rebuilt from the player's car unless the mode
 // is online; and both start-mechanism flags are consumed.
 //
-// asm 0x8276E4C4 `*(this + 270921) = 0` -- a byte inside the AIDebugComponent block that neither
-// this file nor BrnAIModule.h has a named member for; see the park below.
+// `*(this + 270921) = 0` is mRaceBalancingManager.mbOnStartLine (module + 0x42249
+// == manager + 0x4879): the grid has released, so the rubber-band stops holding the field on the
+// start line. That is the manager's OnRaceStartPlaying, inlined.
 // =================================================================================================
 void AIModule::OnModeStartRacing(bool lbSkipPlayerCar)
 {
-    // [FLAG PC bring-up] AIModule::OnModeStartRacing @0x8276E4C4 clears the byte at this+270921.
-    // 270921 lands in the AIDebugComponent block (DWARF BrnAIModule.h:74 `AIDebugComponent
-    // mAIDebugComponent`) that AIModule::Update's own debug arm reads at +270920/+270921 and this
-    // host class does not declare -- the whole component is absent, so there is nothing to clear.
-    // Drop-safe: its only reader is the debug time accumulator, which is also absent.
-    // DELETE-WHEN AIModule grows a named mAIDebugComponent member.
+    mRaceBalancingManager.OnRaceStartPlaying();
 
     for (EGlobalRaceCarIndex leIndex = E_GLOBAL_RACE_CAR_INDEX_0;
          leIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
@@ -1299,13 +1296,15 @@ void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
 void AIModule::OnModeEnd(bool lbRestoreDrivingInput)
 {
     // [FLAG PC bring-up] the console's first store (asm 0x8277BA90, this+271528 = 0) resets
-    // mRouteRequestManager.meDefaultAStarDistanceFunction, the loop at 0x8277BBF0..0x8277BC04
-    // clears all 16 mRouteRequestManager per-checkpoint block-section counts, and 0x8277BBD8..
-    // 0x8277BBE8 zero this+270908 / +270916 / +270920 (the AIDebugComponent block) and
-    // this+252816 (a word inside mRaceBalancingManager with no named member). None of those four
-    // members exists on this host class -- same gap as OnModeStart's park above.
-    // DELETE-WHEN BrnAIModule.h grows mRouteRequestManager / mAIDebugComponent and
-    // RaceBalancingManager exposes the +448 word by name.
+    // mRouteRequestManager.meDefaultAStarDistanceFunction and the loop
+    // clears all 16 mRouteRequestManager per-checkpoint block-section counts; those two rest on
+    // RouteRequestManager's internal layout, which this host class does not carry yet.
+    // (The four stores that an earlier note filed under a debug overlay
+    // are landed below: all four hang off the single base `addis r11,r30,4 ; addi r11,r11,-0x2630`
+    // == this + 0x3D9D0 == &mRaceBalancingManager and land on named members of it -- +0x1C0
+    // maRaceBalancingGraphs count, +0x486C maRaceBalancingRoutes count, +0x4874 miCheckpointCount
+    // and +0x4878 mbInRace.)
+    // DELETE-WHEN RouteRequestManager carries its internal layout.
 
     if (lbRestoreDrivingInput)                                                                // 0x8277BA9C
     {
@@ -1344,6 +1343,9 @@ void AIModule::OnModeEnd(bool lbRestoreDrivingInput)
 
     meSpeedSelectionMethod = E_AI_SPEED_SELECTION_METHOD_FREE_ROAM;                            // 0x8277BBC8 (stw 0, 0x4EB6C)
 
+    // The four stores off `module + 0x3D9D0`: the manager's race teardown.
+    mRaceBalancingManager.OnRaceEnd();
+
     mMasterRoute.miNodeCount = 0;                                                              // 0x8277BC10 (+0x1400)
     mMasterRoute.meStatus    = Route::E_STATUS_UNINITIALISED;                                  // 0x8277BC0C (+0x1408)
 
@@ -1352,81 +1354,96 @@ void AIModule::OnModeEnd(bool lbRestoreDrivingInput)
 }
 
 // =================================================================================================
-// SetupRaceBalancingManager @0x8278A460   (DWARF BrnAIModule.cpp:202)   -- NAMED PARK
+// SetupRaceBalancingManager  (declaration reference BrnAIModule.cpp)
+//
+// Seeds the race-balancing rubber-band for the mode that is starting. Only modes carrying the
+// balance flag (+0x864 bit 0x8000, `ld r11,0x860(params) ; rlwinm r11,r11,0,16,16`) are balanced;
+// every other mode leaves the manager untouched and the rivals run at their unbalanced pace.
+// For each rival the mode declares, its OpponentBalanceData's two 8-point catch-up curves are
+// copied into a stack RaceBalancingGraph (ahead row then behind row, point by point) and appended
+// to a 7-slot array, which is handed to RaceBalancingManager::OnRaceStart together
+// with the mode's checkpoint count and the module's take-down-penalty flag.
 // =================================================================================================
 void AIModule::SetupRaceBalancingManager(const BrnGameState::GameModeParams* lpGameModeParams)
 {
-    // [FLAG PC bring-up] BrnAI::AIModule::SetupRaceBalancingManager @0x8278A460 (125 insns) is
-    // parked. The console body, recovered in full so this is cheap to land later:
-    //     if (!lpGameModeParams->GetFlag(0x8000))        return;      // `lbz 0x219 ; andi 0x8000`
-    //     Array<RaceBalancingGraph,7> laGraphs;          // 448 bytes on the caller's stack
-    //     for (i = 0; i < lpGameModeParams->GetOpponentCount(); ++i)
-    //     {
-    //         const OpponentData* lpOpponent = lpGameModeParams->GetOpponentData(i);
-    //         RaceBalancingGraph lGraph;                 // 32 bytes; zeroed as 8x2 words
-    //         for (p = 0; p < 8; ++p)                    // KI_GRAPH_POINTS, BrnRaceBalance.h:144/:152
-    //         {
-    //             lGraph.SetX(p, lpOpponent-><+0x1C + 4*p>);
-    //             lGraph.SetY(p, lpOpponent-><+0x3C + 4*p>);
-    //         }
-    //         laGraphs.Append(lGraph);                   // BrnAI::RaceBalancingGraph,7>::Append @0x8276A238
-    //     }
-    //     mRaceBalancingManager.OnRaceStart(laGraphs, lpGameModeParams->GetCheckpointCount(),
-    //                                       *(u8*)(this + 322433));   // @0x82789AF8
-    // Three blockers, none of them this lane's file: RaceBalancingGraph's two per-point setters are
-    // not published, OpponentData's two 8-float graph arrays (+0x1C / +0x3C) are not named, and the
-    // module's +322433 byte is DELIBERATELY UNDECLARED in BrnAIModule.h (see the comment there --
-    // it is an X360-only bool the PS3 DWARF does not have, so it has no name to give it), which is
-    // OnRaceStart's third argument.
-    // Consequence: the race-balancing rubber-band never gets its per-opponent difficulty curve, so
-    // rivals run at their unbalanced pace. NOT on the activation path.
-    // DELETE-WHEN RaceBalancingGraph publishes its point setters, OpponentData names its graph
-    // arrays, and BrnAIModule.h names +322433.
-    (void)lpGameModeParams;
-
-    static bool sbWitnessed = false;
-    if (!sbWitnessed && CgsDev::Log::gpDebugPrint != 0)
+    if (!lpGameModeParams->GetFlag(0x8000u))                                  // rlwinm 0,16,16
     {
-        sbWitnessed = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[ai-evt] SetupRaceBalancingManager is PARKED -- rivals get no per-opponent"
-               " race-balancing curve\n";
+        return;
     }
+
+    // 448-byte stack array + its count word; the console clears the count in place before the
+    // opponent loop (`stw r10(0), graphs+0x1C0`) -- Append does the rest.
+    Array<RaceBalancingGraph, 7u> laRaceBalancingGraphs;
+    laRaceBalancingGraphs.Clear();
+
+    // The opponent count is re-read from the params every iteration on the console
+    // (`lbz r11,0(r21) ; extsb r9,r11` at both the loop head and the loop tail).
+    for (s32 liOpponent = 0; liOpponent < lpGameModeParams->GetOpponentCount(); ++liOpponent)
+    {
+        const BrnProgression::OpponentBalanceData* const lpBalanceData =
+            lpGameModeParams->GetOpponentData(liOpponent)->GetRaceBalanceData();
+
+        RaceBalancingGraph lRaceBalancingGraph;
+        lRaceBalancingGraph.Construct();
+
+        for (s32 liPoint = 0; liPoint < RaceBalancingGraph::KI_GRAPH_POINT_COUNT; ++liPoint)
+        {
+            // Source-side bounds asserts are OpponentBalanceData's own (the two baked
+            // "liPointIndex>= 0 && liPointIndex < KI_GRAPH_POINTS" lines); the graph stores are
+            // bare indexed writes.
+            lRaceBalancingGraph.SetPoint(E_GRAPH_TYPE_AHEAD,  liPoint,
+                                         lpBalanceData->GetAheadTime(liPoint));
+            lRaceBalancingGraph.SetPoint(E_GRAPH_TYPE_BEHIND, liPoint,
+                                         lpBalanceData->GetBehindTime(liPoint));
+        }
+
+        laRaceBalancingGraphs.Append(lRaceBalancingGraph);
+    }
+
+    mRaceBalancingManager.OnRaceStart(&laRaceBalancingGraphs,
+                                      lpGameModeParams->GetCheckpointCount(),
+                                      mbHighTakenDownPenalty);                 // lbzx r6, +0x4EB81
 }
 
 // =================================================================================================
-// OnPlayerTakedown @0x8278A720   (DWARF BrnAIModule.cpp:884)   -- NAMED PARK
+// OnPlayerTakedown  (declaration reference BrnAIModule.cpp)
+//
+// One rival was taken down by the player: bump that rival's race-balancing take-down tally, which
+// RaceBalancingRoute::GetTime weights by mfTakenDownTimePenalty, so the rubber-band gives a rival
+// the player keeps wrecking a correspondingly easier par time.
+//
+// The console reaches BOTH of the seats it needs off ONE base register --
+// `addis r11,r31,4 ; addi r11,r11,-0x2630` == module + 0x3D9D0 == &mRaceBalancingManager -- and
+// then uses +0x4878 (mbInRace) and +0x1C4 (maRaceBalancingRoutes). Nothing here belongs to the AI
+// debug overlay.
 // =================================================================================================
 void AIModule::OnPlayerTakedown(
         const BrnGameState::GameStateModuleIO::OnPlayerTakedownAction* lpAction)
 {
-    // [FLAG PC bring-up] BrnAI::AIModule::OnPlayerTakedown @0x8278A720 -- the RACE-BALANCING half
-    // is unreachable from this host class. The console body is:
-    //     lpCar = GetAICar(lpAction->meVictimGlobalRaceCarIndex);
-    //     liOpponent = lpCar->miOpponentIndex;                       (car+0x153A)
-    //     if (liOpponent != 0xFF && !lpCar->mbIsPlayer                (car+0x1549)
-    //         && *(u8*)(this + 270920))                               (the AIDebugComponent block)
-    //         ++Array<RaceBalancingRoute,7>::GetItem(this + 252820, liOpponent)->+0xA04;
-    // Two of the three seats have no named member here: this+270920 (DWARF BrnAIModule.h:74
-    // `AIDebugComponent mAIDebugComponent`, which this class does not declare) and
-    // this+252820 == mRaceBalancingManager + 452, whose RaceBalancingRoute array
-    // (BrnAI::RaceBalancingRoute,7>::GetItem @0x8276A7F8) is private with no public accessor,
-    // as is the per-route +0xA04 takedown counter it bumps.
-    // The park is SAFE for this wave: the counter feeds the race-balancing rubber-band only, and
-    // nothing on the activation path reads it. Doing it by offset would be exactly the
-    // `*(T*)(p+N)` hack the faithfulness gate exists to stop.
-    // DELETE-WHEN BrnAIModule.h grows a named mAIDebugComponent and RaceBalancingManager exposes
-    // its RaceBalancingRoute array + that route's takedown counter by name.
-    (void)lpAction;
-
-    static bool sbWitnessed = false;
-    if (!sbWitnessed && CgsDev::Log::gpDebugPrint != 0)
+    AICar* const lpCar = GetAICar(static_cast<u32>(lpAction->meVictimGlobalRaceCarIndex));
+    if (lpCar == 0)
     {
-        sbWitnessed = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[ai-evt] OnPlayerTakedown is PARKED (race-balancing takedown counter has no named"
-               " home) -- rubber-banding will not react to player takedowns\n";
+        return;   // [GUARD]
     }
+
+    // The victim has to be one of the mode's numbered rivals and not the player's own car; the
+    // console tests the raw +0x153A byte against the 0xFF "no slot" sentinel before sign-extending
+    // it for the array index.
+    const s8 liOpponentIndex = lpCar->GetOpponentIndex();                      // car+0x153A
+    if (liOpponentIndex == -1 || lpCar->IsPlayerCar())                         // car+0x1549
+    {
+        return;
+    }
+
+    // Outside a balanced race the routes hold no par times, so the tally is not kept.
+    if (!mRaceBalancingManager.IsInRace())                                     // +0x4878
+    {
+        return;
+    }
+
+    RaceBalancingRoute* const lpRaceBalancingRoute =
+        mRaceBalancingManager.GetRaceBalancingRoute(liOpponentIndex);
+    lpRaceBalancingRoute->SetTakenDownCount(lpRaceBalancingRoute->GetTakenDownCount() + 1);
 }
 
 // =================================================================================================

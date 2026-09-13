@@ -28,12 +28,11 @@
 // This TU is deliberately mounted anyway: it is correct, complete, costs zero unresolved
 // externals, and it is the piece that was previously blocked on data nobody had.
 //
-// WHY IT IS A SEPARATE TU: the owning GameBridgeGameStateToX.cpp does not compile and did
-// not before this leg either (measured against HEAD's own copy: an ODR fork on
-// BrnGui::GuiTakedownEvent plus a stale mpCgsGuiModule reference, all inside
-// TranslateTakedownsToGuiEvents). The MOVED-OUT block left behind there records the four
-// exact errors. Fold this file back in when they are repaired -- that is a delete, not a
-// duplicate-symbol hunt, because the function was MOVED and not copied.
+// WHY IT IS A SEPARATE TU: the owning GameBridgeGameStateToX.cpp did not compile when this
+// leg landed (an ODR fork on BrnGui::GuiTakedownEvent plus a stale mpCgsGuiModule reference,
+// both inside TranslateTakedownsToGuiEvents). Both are repaired: that parent TU now compiles
+// and is mounted. Folding this file back into it is a delete, not a duplicate-symbol hunt,
+// because the function was MOVED and not copied.
 // ============================================================================
 
 #include "GameSource/Game/GameBridgeGameStateToX.h"        // BrnGame::ConvertTrainingTypeToStringId decl

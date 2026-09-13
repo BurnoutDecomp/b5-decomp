@@ -187,17 +187,18 @@ namespace BrnGameState
     // StuntModeScoring::UpdateStunts  (X360 0x82338908)
     // ------------------------------------------------------------------------
     // The stunt-detection sub-pass. Only runs while the player car is active. If the player car is
-    // in a "disturbed" state this frame (mbPlayerCarCrashing was set last frame, or the car just
-    // reset / was just slammed / is crashing), it abandons the in-progress stunt (clears mbValidStunt
+    // in a "disturbed" state this frame (mbPlayerCarCrashing was set last frame, or the car is
+    // crashing / fatally crashing), it abandons the in-progress stunt (clears mbValidStunt
     // and resets the per-category rating state); otherwise it runs the four category detectors
     // (air / drift / boost / driving) and folds their "valid" results into mbStuntInProgress.
     //
     // X360 (0x82338908):
     //   * v6 = *(a2+10328)  -> GetPlayerActiveRaceCarIndex()  (shared <8 count assert)
     //   * v8 = *(a2+10336)  -> IsPlayerCarActive()            (only read when index != -1)
-    //   * v9  = *(1120*v6 + a2 + 1914) -> GetRaceCarState(v6)->mbResetCarTransform (@1098)
+    //   * v9  = *(1120*v6 + a2 + 0x77A) -> GetRaceCarState(v6)->mbCrashing         (element +0x44A;
+    //     maRaceCarStates sits at interface +0x330, so 0x77A - 0x330 == +0x44A)
     //   * *(a2+10464)                  -> IsPlayerCarCrashing() (player-level bool ORed in)
-    //   * v10 = *(1120*v6 + a2 + 1915) -> GetRaceCarState(v6)->mbJustBeenSlammed   (@1099)
+    //   * v10 = *(1120*v6 + a2 + 0x77B) -> GetRaceCarState(v6)->mbIsFatalyCrashing (element +0x44B)
     //   * disturbed = mbPlayerCarCrashing(last frame, *(v5+48)) || (v9 || *(a2+10464) || v10).
     //   * disturbed branch: *(v5+43)=0 (mbValidStunt=false) then the vtable-slot-+0x20 reset call.
     //   * else branch: v7 = UpdateAirStunts | UpdateDriftStunts | UpdateBoostStunts | UpdateDrivingStunts.
@@ -227,18 +228,18 @@ namespace BrnGameState
         }
 
         // Per-car physics flags for the player's race-car state.
-        bool lbResetCarTransform = false;
-        bool lbJustBeenSlammed   = false;
+        bool lbCrashing        = false;
+        bool lbFatalyCrashing  = false;
         if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
         {
             const BrnPhysics::Vehicle::RaceCarState* lpState = lpRaceCar->GetRaceCarState(lePlayerIndex);
-            lbResetCarTransform = lpState->mbResetCarTransform;   // @1098
-            lbJustBeenSlammed   = lpState->mbJustBeenSlammed;     // @1099
+            lbCrashing       = lpState->mbCrashing;           // +0x44A
+            lbFatalyCrashing = lpState->mbIsFatalyCrashing;   // +0x44B
         }
 
         // FLAG(1): provisional accessor for the player-level *(a2+10464) bool.
         const bool lbPlayerDisturbedNow =
-            lbResetCarTransform || lpRaceCar->IsPlayerCarCrashing() || lbJustBeenSlammed;
+            lbCrashing || lpRaceCar->IsPlayerCarCrashing() || lbFatalyCrashing;
 
         bool lbAnyStuntValid = false;
 

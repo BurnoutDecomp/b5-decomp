@@ -17,15 +17,14 @@
 //
 // ⭐⭐⭐ ARM 75 IS NOT AN EVENT-FLOW ARM AND IS HERE ON PURPOSE (returning-player wave,
 // 2026-08-28). It belongs to the CAR-SELECT band, but the same three reasons that put every arm
-// above in a sibling TU apply unchanged -- the parent GameBridgeGameStateToX.cpp cannot be
-// mounted, the member function has exactly one definition (in the stunt TU), and this file is
+// above in a sibling TU apply unchanged -- the member function has exactly one definition
+// (in the stunt TU), this file is
 // already the wired dispatch seam. Opening a third partfile for ONE three-instruction arm would
 // buy nothing and cost another mount. It is listed under its own heading below.
 //
 // WHY A SIBLING TU AND NOT MORE ARMS IN THE STUNT TU: the same reason that TU exists at all
-// (its banner, and the ConvertTrainingTypeToStringId split of 2026-08-16) -- the parent
-// GameBridgeGameStateToX.cpp cannot be mounted, and one 105 KB function reconstructed by five
-// different waves in one file is a merge hazard. The member function has exactly ONE definition,
+// (its banner, and the ConvertTrainingTypeToStringId split of 2026-08-16) -- one 105 KB
+// function reconstructed by five different waves in one file is a merge hazard. The member function has exactly ONE definition,
 // in the stunt TU, so this file cannot re-define it; it exposes the arms as a dispatch-seam
 // helper instead, shaped exactly like the switch body it came from.
 //
@@ -1227,8 +1226,8 @@ namespace
 
         // =====================================================================================
         // ⭐⭐ [road-rage wave 2026-09-02] THE THREE ROAD RAGE ARMS. Not event-flow arms, and
-        // here for the same three reasons as arm 75: the parent TU cannot be mounted, the member
-        // function has one definition (in the stunt TU), and this is the wired dispatch seam.
+        // here for the same reasons as arm 75: the member function has one definition (in the
+        // stunt TU), and this is the wired dispatch seam.
         // Action ids are LITERAL X360 jump-table cases: BrnGameActions.h carries no enumerator
         // for 103 / 255 / 205 yet (DWARF E_ACTION_PLAYER_REACHED_ROAD_RAGE_TARGET 98 (+5),
         // E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION 248 (+7), E_ACTION_ROAD_RAGE_PLAYER_DAMAGE

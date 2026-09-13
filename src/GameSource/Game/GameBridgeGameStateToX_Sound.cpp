@@ -2,8 +2,9 @@
 // b5-decomp/src/GameSource/Game/GameBridgeGameStateToX_Sound.cpp
 //
 // SIBLING SPLIT of GameBridgeGameStateToX.cpp (the established precedent --
-// see GameBridgeGameStateToX_TrainingStringIds.cpp and the build bat's note:
-// the parent TU is not mountable). BridgeGameStateToSound gained its caller
+// see GameBridgeGameStateToX_TrainingStringIds.cpp; when this split was made
+// the parent TU was not mountable, which it now is).
+// BridgeGameStateToSound gained its caller
 // with the faithful-audio-engine phase C4b in-game leg (DoUpdate_Sound
 // @0x823DCEC0 is its ONLY console call site), so it is MOVED -- not copied --
 // here so it can be mounted on its own. Folding it back later is a delete.

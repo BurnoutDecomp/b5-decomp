@@ -1713,12 +1713,6 @@ namespace Vehicle
         // The selector is the shared 16-byte-PAIR vsel mask table at 0x8327F240, indexed
         // `cntlzw; rlwinm ..,31,27,27; xori 0x10`, whose polarity ([0]=false, [0x10]=all-ones=true)
         // is proven in BrnDeformationSensor.cpp:977 / BrnCrashTriangleCache.cpp:219.
-        // ⚠ FLAG (the ONE thing still unmodelled): the attacker predicate itself reads three
-        // RaceCarPhysics fields this tree does not declare -- +0x13E0 and +0x1150 (both compared
-        // against mePlayerActiveRaceCarIndex) and lane .z of the vector at +0x1050 (gated
-        // 0.25f > it, unk_82FB7F80 = splat(flt_8208F834)). Until those are homed, the slamming
-        // call sites pass the flag-FALSE arm 0.75f; see BrnVehicleManager.cpp for why that is the
-        // faithful majority arm and not an invented value.
         bool ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimActiveRaceCarIndex,
                                            const RaceCarPhysics* lpVictim,
                                            const SimpleVehiclePhysics* lpOtherBody,

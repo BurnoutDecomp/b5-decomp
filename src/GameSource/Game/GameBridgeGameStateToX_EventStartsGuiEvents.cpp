@@ -31,10 +31,11 @@
 // (SetUpAllEventStartsInterface), so this is a plain assignment of the named member -- which the
 // compiler will render as the console's memcpy anyway, and which cannot drift.
 //
-// ⛔ WHY A SIBLING TU, and it is the SAME reason GameBridgeGameStateToX_EventStatusGuiEvents.cpp
-// and _StuntGuiEvents.cpp give: the DWARF home GameBridgeGameStateToX.cpp compiles but CANNOT BE
-// MOUNTED (six symbols in its other bodies have no definition anywhere in src). Landing this
-// slice there would make it unreachable. Folding all of them back once those six are homed is a
+// WHY A SIBLING TU, and it is the SAME reason GameBridgeGameStateToX_EventStatusGuiEvents.cpp
+// and _StuntGuiEvents.cpp give: when this slice landed the declared home
+// GameBridgeGameStateToX.cpp could not be mounted, so landing it there would have made it
+// unreachable. That parent TU now compiles and IS mounted; the remaining un-homed symbols sit
+// in the sibling GameBridgeGameStateToX_Controller.cpp. Folding these siblings back in is a
 // delete, not a duplicate-symbol hunt.
 //
 // ⓘ THE VALID FLAG IS NOT CLEARED HERE, and that is the console's shape, not an oversight:

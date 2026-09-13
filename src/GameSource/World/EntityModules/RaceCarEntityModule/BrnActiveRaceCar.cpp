@@ -38,6 +38,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::Mult
+#include "rw/math/vpu/vector3_operation.h"        // rw::math::vpu::TransformVector's operands (operator+ / operator*)
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface::CreateRaceCar / RemoveRaceCar
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface (the Detach chain's four Remove* posts)
@@ -1892,6 +1893,106 @@ void ActiveRaceCar::CalculateWheelAngularVelocities(f32 lfTimeStepMultiplier)
     }
 }
 
+// -------------------------------------------------------------------------------------------------
+// UpdateInAirRotations  (158 instructions)  -- wheel wave 2026-09-13
+//
+// The car-space rotation the body has swept since it last left the ground, plus the latch that
+// decides whether that accumulator is live. Update calls it once a frame, immediately after
+// CalculateWheelAngularVelocities and with the SAME argument -- the module's time-step
+// MULTIPLIER, not its raw time step (the console does `fmr f1, f27` for both calls, where f27 is
+// Update's third float parameter). The declaration reference spells the parameter lfTimeStep, so that name is
+// kept; the mismatch is the console's, not this reconstruction's.
+//
+// ---- THE THREE LEGS, AS THE ASM ORDERS THEM -----------------------------------------------------
+//  1.  airborne test: mPhysicsState.mfTimeInAir (RaceCarState @1028) > 0. Taken with
+//     `fcmpu / ble` -- the arm-the-latch leg needs a STRICTLY greater ORDERED compare, so it is
+//     written `> 0.0f` and a NaN falls to the grounded leg exactly as the branch does. Airborne:
+//     zero the stability timer and raise mbCurrentlyRotating.
+//  2.  grounded, and only while the latch is still up: walk the four road wheels and
+//     decide whether the car is STABLE this frame. A wheel the car no longer has
+//     (mPhysicsState.mabWheelExists[i], RaceCarState @1094) is skipped; a wheel it does have must
+//     be BOTH attached and gripping (WheelLite mbAttached +0x60 / mbHasTraction +0x61) or the walk
+//     stops there. Only a walk that ran all four wheels out (the console's `cmpwi r29, 4`) adds
+//     this frame to mfTimeSinceLastStable; any early stop zeroes it. Once a full second of
+//     unbroken stability has accumulated the latch drops and the accumulator is cleared. The
+//     console SKIPS that clear with a `blt` over a 1.0f constant, and a `blt` is NOT taken when
+//     the compare is unordered, so the clear must run on not-less-OR-unordered: it is written
+//     `!(timer < 1.0f)` and a NaN timer is therefore reset, exactly as the branch does.
+//  3.  while the latch is up, integrate: rotate the world angular velocity
+//     (mPhysicsState.mAngularVelocity, RaceCarState @832) into car space through the inverse of
+//     the car transform (mPhysicsState.mTransform, RaceCarState @496) and add a frame of it to
+//     mCurrentInAirRotations. The console builds only the 3x3 transpose inline (vmrghw/vmrglw
+//     lane merges feeding a vmaddfp cascade) because TransformVector never touches the
+//  translation row -- the source shape is the pair of SDK calls the declaration reference lists for this
+//     function (InverseOfMatrixWithOrthonormal3x3 then TransformVector), and the local names
+//  below are the declaration reference's own (BrnActiveRaceCar.cpp).
+//
+// The four IsAttached() tripwires are the console's own: one per inlined GetPhysicsState().
+// -------------------------------------------------------------------------------------------------
+void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
+{
+    const s32 KI_ROAD_WHEEL_COUNT = 4;
+
+    // A full second of stable contact retires the accumulator (console constant 1.0f).
+    const f32 KF_STABLE_TIME_TO_STOP_ROTATING = 1.0f;
+
+    if( mPhysicsState.mfTimeInAir > 0.0f )
+    {
+        mfTimeSinceLastStable = 0.0f;                        // +0x760
+        mbCurrentlyRotating   = true;                        // +0x764
+    }
+    else if( mbCurrentlyRotating )
+    {
+        s32 liWheelIndex = 0;
+        for( ; liWheelIndex < KI_ROAD_WHEEL_COUNT; ++liWheelIndex )
+        {
+            CGS_ASSERT( IsAttached(), "IsAttached()" );      // BrnActiveRaceCar.h
+
+            if( GetPhysicsState()->mabWheelExists[liWheelIndex] )
+            {
+                CGS_ASSERT( IsAttached(), "IsAttached()" );  // BrnActiveRaceCar.h
+
+                if( !GetPhysicsState()->maWheels[liWheelIndex].mbAttached )
+                {
+                    break;
+                }
+                if( !GetPhysicsState()->maWheels[liWheelIndex].mbHasTraction )
+                {
+                    break;
+                }
+            }
+        }
+
+        if( liWheelIndex == KI_ROAD_WHEEL_COUNT )
+        {
+            mfTimeSinceLastStable = mfTimeSinceLastStable + lfTimeStep;
+        }
+        else
+        {
+            mfTimeSinceLastStable = 0.0f;
+        }
+
+        if( !( mfTimeSinceLastStable < KF_STABLE_TIME_TO_STOP_ROTATING ) )
+        {
+            mbCurrentlyRotating    = false;
+            mCurrentInAirRotations = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };  // +0x750, a full 16-byte clear
+        }
+    }
+
+    if( mbCurrentlyRotating )
+    {
+        CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h
+        Matrix44Affine lInverseCarTransform =
+            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3( GetPhysicsState()->mTransform );
+
+        CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h
+        Vector3 lAngularVelocityInCarSpace =
+            rw::math::vpu::TransformVector( lInverseCarTransform, GetPhysicsState()->mAngularVelocity );
+
+        mCurrentInAirRotations = mCurrentInAirRotations + lAngularVelocityInCarSpace * lfTimeStep;
+    }
+}
+
 // ============================================================================
 // Update @ 0x822F78B0   (400 instructions)   -- PARTIAL SLICE   (engine wave 2026-08-12)
 //
@@ -1935,9 +2036,10 @@ void ActiveRaceCar::CalculateWheelAngularVelocities(f32 lfTimeStepMultiplier)
 //  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
 //     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
 //     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
-//  6. UpdateInAirRotations, SendAddedRemovedNetworkCarForCollisionEvents and
-//     UpdateIndicators -- none of the three exists in this tree yet.
-//     (CalculateWheelAngularVelocities landed 2026-09-12 and is called below.)
+//  6. SendAddedRemovedNetworkCarForCollisionEvents and UpdateIndicators -- neither exists in
+//     this tree yet (re-measured 2026-09-13: no definition anywhere).
+//     (CalculateWheelAngularVelocities landed 2026-09-12 and UpdateInAirRotations 2026-09-13;
+//      both are called below.)
 //  7. the mbIsWaitingForDeferredReset -> RequestPlaceOnTrack countdown (0x822F7E80..0x822F7EB8).
 //     RequestPlaceOnTrack exists, but the latch is only ever armed by code this build has not
 //     landed, so running the countdown would be dead work with a live teleport at the end.
@@ -2041,6 +2143,11 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     // mRenderParams.mafWheelAngularVelocities, which the renderer's per-wheel technique test
     // reads. Its argument is this frame's time-step multiplier, straight off the module.
     CalculateWheelAngularVelocities( lfTimeStepMultiplier );
+
+    // The very next call, and the console hands it the SAME f27 -- the
+    // time-step multiplier, not lfTimeStep. This is the only producer of mCurrentInAirRotations,
+    // which GetCurrentInAirRotations publishes.
+    UpdateInAirRotations( lfTimeStepMultiplier );
 
     // 0x822F7EBC..0x822F7ED0.
     if( mbCrashedIntoWater )                             // +0x783

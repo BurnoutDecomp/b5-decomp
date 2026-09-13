@@ -1787,13 +1787,9 @@ namespace BrnGame
     // BrnGameStateModuleIO.h by the member offset each returns plus its assert's own
     // __FILE__/__LINE__ -- the same recovery route GetGameActionQueue() const already used.
     //
-    // FLAG (home): the DWARF home is GameSource/Game/GameBridgeGameStateToX.cpp, alongside its
-    // five siblings. The body sits HERE for the same reason BridgeGameStateToDirector's does --
-    // and, this time, for a measured one as well: that TU IS NOT MOUNTED and DOES NOT COMPILE
-    // (`mpCgsGuiModule` is referenced but declared nowhere, and its BrnGui::GuiTakedownEvent /
-    // GuiSoftTakedownEvent placeholders collide with the real definitions in
-    // BrnGuiEventTypeDefs.h:982 / BrnGuiDemangledEventTypes.h:251). Re-home both bridges there
-    // when that TU is repaired and mounted.
+    // FLAG (home): the declared home is GameSource/Game/GameBridgeGameStateToX.cpp, alongside
+    // its five siblings. The body sits HERE for the same reason BridgeGameStateToDirector's
+    // does. Re-home both bridges there when this file's bridge family is consolidated.
     //
     // ⚠️ ONE DELIBERATE DEVIATION FROM A LITERAL TRANSCRIPTION, and it is load-bearing. The
     // console passes the scoring snapshots as raw addresses because there the source span and
@@ -4301,7 +4297,18 @@ namespace BrnGame
                         // [takedown wave 2026-09-02] the traffic-type response queue, same rule.
                         lpcWorldOutput->GetTrafficTypeResponseQueue(),
                         lpcWorldOutput->GetAICarOutputInterface(),
-                        lpcWorldOutput->GetRaceCarGlobalOutputInterface());
+                        lpcWorldOutput->GetRaceCarGlobalOutputInterface(),
+                        // [takedown wave 2026-09-13] THE NINTH ARGUMENT IS THE FRAME'S VEHICLE
+                        // OUTPUT INTERFACE, and it is the one input
+                        // CacheTakedownManagerPostWorldInputData reads: the console's cache copies
+                        // the interface head plus its eight RaceCarStates out of the
+                        // PostWorldInputBuffer, and TakedownPreWorldLeg then builds the
+                        // crashing-race-car scratch from that copy. Without it
+                        // SetFromVehicleOutputInterface saw a Construct()ed no-slot-in-use cache
+                        // and wrote all-false every frame, so organic takedown detection was blind.
+                        // Same one-feed rule as every argument above; the const overload, inside
+                        // this LockForRead bracket.
+                        lpcWorldOutput->GetVehicleOutputInterface());
                     mpWorldUpdateOutputBuffer->UnlockForRead();
                 }
 
@@ -4386,6 +4393,33 @@ namespace BrnGame
                         BrnGame::BridgeGameStateToGui_EventStarts(
                             lpcGameStateOutput, mpGuiInputBuffer);
                         TranslateGameActionsToGuiEvents(mpGuiInputBuffer, lpcGameStateOutput);
+                        // ⭐⭐ [takedown wave 2026-09-13] THE TAKEDOWN -> HUD LEG, in the console's own
+                        // position: the bridge calls the takedown translator immediately after the
+                        // game-action translator, and it was the missing half -- the translator is
+                        // reconstructed but had no caller anywhere, so GUI events 363/364 were never
+                        // produced and HudMessageAnalyzer::HandleTakedown never ran. The console's
+                        // own shape, `bl` for `bl`: fetch the queue, assert it non-null (the assert
+                        // text below is the console's, and it belongs to the CALLER -- the callee
+                        // has no guard at all), load the player's active race-car index out of the
+                        // scoring output interface, then call with (guiBuffer, queue, playerIndex).
+                        // The cast is the same documented cross-home one BridgeGameStateToWorld
+                        // carries: GameStateModuleIO::TakedownEventOutputQueueType is still a
+                        // forward-declared incomplete class, and the payload behind it is the
+                        // committed EventQueue<BrnGameState::TakedownEvent,8>.
+                        const BrnGameState::GameStateModuleIO::TakedownEventOutputQueueType*
+                            lpcTakedownQueue = lpcGameStateOutput->GetTakedownEventOutputQueue();
+                        CGS_ASSERT(lpcTakedownQueue != 0,
+                                   "lpGameStateOutput->GetTakedownEventOutputQueue()");
+                        if (lpcTakedownQueue != 0)
+                        {
+                            TranslateTakedownsToGuiEvents(
+                                mpGuiInputBuffer,
+                                reinterpret_cast<const CgsModule::BaseEventQueue<
+                                    BrnGameState::TakedownEvent>*>(lpcTakedownQueue),
+                                static_cast<s32>(
+                                    lpcGameStateOutput->GetScoringOutputInterface()
+                                        ->mePlayerRaceCarIndex));
+                        }
                         mpGuiInputBuffer->UnlockForWrite();
                         mGameStateModule.GetOutputBuffer()->UnlockForRead();
                     }

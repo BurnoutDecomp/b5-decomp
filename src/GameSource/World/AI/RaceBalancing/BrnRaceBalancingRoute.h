@@ -77,6 +77,14 @@ public:
     // @0x827658F0 -- bodied in this TU.
     f32  GetTime(GraphType leGraphType, s32 liIndex) const;
     s32  GetTimeCount() const { return miTimeCount; }   // (inline 2026-09-03: the console reads +0xA00 inline, no export)
+
+    // The per-racer take-down tally GetTime weights by mfTakenDownTimePenalty. The console
+    // increments it INLINE at its one producer (AIModule::OnPlayerTakedown reads the route out of
+    // the manager's array and does `lwz/addi 1/stw` straight onto +0xA04), so the member has no
+    // standalone accessor of its own on the console either; these publish it by name so that
+    // producer needs no raw-offset pointer arithmetic.
+    s32  GetTakenDownCount() const      { return miTakenDownCount; }   // (+0xA04)
+    void SetTakenDownCount(s32 liCount) { miTakenDownCount = liCount; }
     f32  GetTotalTime(GraphType leGraphType) const;
     bool IsValid() const;
 

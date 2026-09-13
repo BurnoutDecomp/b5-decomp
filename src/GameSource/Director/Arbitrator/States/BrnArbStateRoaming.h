@@ -93,9 +93,8 @@ namespace BrnDirector
         void ProcessPossibleFX(ArbStateSharedInfo& lrSharedInfo);           // @0x82234A00
         void ProcessPossibleStateChanges(ArbStateSharedInfo& lrSharedInfo); // @0x82219C58
 
-        // @0x82208BA8 -- DWARF :1017. ⚠️ The old note here ("NOT in this TU's X360 set;
-        // omitted") was WRONG: it is an export, its assert cites this TU's own .cpp path at
-        // line 1094, and the DRIVING arm of Update calls it UNCONDITIONALLY every frame.
+        // An export of this TU -- its assert cites this TU's own .cpp path -- and the DRIVING
+        // arm of Update calls it unconditionally every frame. Bodied in BrnArbStateRoaming.cpp.
         void ProcessPossiblePaybackEffects(ArbStateSharedInfo& lrSharedInfo);
 
         // De-inlined inner branch of ProcessPossibleStateChanges (the X360 flattens it inline):

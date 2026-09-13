@@ -103,6 +103,15 @@ public:
         f32 mfHeight;                                    // +0x4C  "Height"
         f32 mfDistance;                                  // +0x50  "Distance"
         f32 mfField54;                                   // +0x54  <unk_820051C0 label> tunable (label rodata unrecovered)
+                                                         //  ⓘ The declaration reference names this slot mfFOV
+                                                         //  (BrnBehaviourLooseAttachment.h), which the
+                                                         //        seeds corroborate: 90.0f by default, 40.0f for the
+                                                         //        new-car-joined moment, 100.0f for the shutdown
+                                                         //        takedown's zoom beats -- all field-of-view degrees.
+                                                         //        NOT renamed here: two TUs outside this header's
+                                                         //        ownership spell it mfField54 (this class's own .cpp
+                                                         //        serialiser and BrnMomentNewCarJoined_wO_01.cpp), so
+                                                         //        the rename must land with them in one change.
         f32 mfDutch;                                     // +0x58  "Dutch"
         f32 mfDetachLerpAmount;                          // +0x5C  "Detach Lerp Amount"
         bool mbLookFromTarget;                           // +0x60  "Look from target"

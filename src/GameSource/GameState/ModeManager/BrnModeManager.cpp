@@ -162,9 +162,9 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
         return false;   // not a checkpoint landmark for this mode
     }
 
-    // Map the global car to its active slot. FLAG: the X360 indexes an internal table on the active
-    // interface @ mpGameStateModule+0x245968 (`*(4*(global+525)+interface)`); de-inlined to the
-    // GlobalToActiveRaceCarIndex() helper (declared-only -- see header FLAG).
+    // Map the global car to its active slot: the console indexes an internal table on the active
+    // interface (`*(4*(global+525)+interface)`), de-inlined here to the GlobalToActiveRaceCarIndex()
+    // helper, which is bodied at BrnModeManager_Accessors.cpp.
     const EActiveRaceCarIndex leActiveRaceCarIndex = GlobalToActiveRaceCarIndex(leGlobalRaceCarIndex);
     CGS_ASSERT(leActiveRaceCarIndex >= 0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,

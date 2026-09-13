@@ -19,7 +19,21 @@ namespace BrnGameState
         CgsModule::EventQueue<TakedownEvent, 8>                                  mTakedownEventQueue;        // gsm+249936
         CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>         mRaceCarCrashEventQueue;    // gsm+250272
         CgsModule::EventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse, 32> mTrafficTypeResponseQueue;  // "lpLastTrafficTypeResponseQueue"
-        BrnPhysics::Vehicle::CrashingRaceCarInterface                            mCrashingRaceCarInterface;  // gsm+250816
+
+        // The scratch CrashingRaceCarInterface TakedownManager::Update is handed. On the console
+        // this is PreWorldUpdate's own STACK local (var_6D8, filled at by
+        // SetFromVehicleOutputInterface and passed as r7 at); it lives here because the
+        // pre-world leg is an extracted member function rather than PreWorldUpdate's own frame.
+        BrnPhysics::Vehicle::CrashingRaceCarInterface                            mCrashingRaceCarInterface;
+
+        // gsm+250816 -- the module's CACHED COPY of the post-world VehicleOutputInterface, and the
+        // one input SetFromVehicleOutputInterface reads (mUsedRaceCars, then each in-use slot's
+        // RaceCarState::mbCrashing -- console element +0x44A). Filled by
+        // GameStateModule::CacheTakedownManagerPostWorldInputData: the console copies the used-cars
+        // head (`ld/std` at +0x00), block-copies the eight RaceCarStates (`memcpy(+0x10, +0x10,
+        // 0x2300)` -- 8960 is the CONSOLE span; the host copy is by sizeof), and Clear+Appends the
+        // impact / traffic-state / game-event queues. Named member, host layout.
+        BrnPhysics::Vehicle::VehicleOutputInterface                              mVehicleOutputInterface;
 
         void Construct()
         {
@@ -27,6 +41,7 @@ namespace BrnGameState
             mRaceCarCrashEventQueue.Construct();
             mTrafficTypeResponseQueue.Construct();
             mCrashingRaceCarInterface.Clear();
+            mVehicleOutputInterface.Construct();
         }
     };
 }

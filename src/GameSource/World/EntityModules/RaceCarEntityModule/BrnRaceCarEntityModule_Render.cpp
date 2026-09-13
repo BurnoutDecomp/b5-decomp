@@ -890,7 +890,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     }
 
     // ---- [DIAG carrender wave 2026-08-12] THE PER-PART WITNESS -----------------
-    // ⛔ DELETE-WHEN the wheels + panels are confirmed on a booted run.
     // Answers, in ONE line per part, the two questions the frame poses: "where does a body
     // part's world matrix come from?" and "is anything flung?". It re-walks the spec
     // read-only -- it cannot perturb the loop above.
@@ -1457,27 +1456,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     laWheelConstants[ liInstanceCount ]  = lv4WheelConstants;
                     lapWheelMatrices[ liInstanceCount ]  = &laWheelMatrices[ liInstanceCount ];
                     ++liInstanceCount;
-
-                    // [FLAG PC bring-up] ONE-SHOT wheel-blur witness. Latched on a file-static
-                    // so it costs one predictable branch per wheel after the first car and
-                    // never streams. It reports the resolved reference and, for the first car
-                    // only, every wheel's angular velocity, the clamped constant-25 lane x and
-                    // the technique that lane selects -- so a boot-drive can prove
-                    // SHARP-at-rest / BLURRED-at-speed instead of inferring it from a frame.
-                    // DELETE-WHEN the blur is confirmed on a moving car.
-                    static s32 siWheelBlurLinesLogged = 0;
-                    if ( siWheelBlurLinesLogged < KU_WHEELS_TO_RENDER_MAX
-                         && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        ++siWheelBlurLinesLogged;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[wheel-blur] reference " << lfBlurReference
-                            << " rad/s | wheel " << liWheel
-                            << " angVel " << lfWheelAngularVelocity
-                            << " -> c25.x " << lv4WheelConstants.x
-                            << " technique " << static_cast< s32 >( lu8Technique )
-                            << " (0 blurred, 1 sharp, 2 shadow)\n";
-                    }
                 }
 
                 if ( liInstanceCount > 0 )
@@ -1502,19 +1480,6 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
                     // number in the high bits of every index -- so 4/5 of the index values
                     // pointed outside the 240-vertex vertex buffer. It now submits slice 0.
                     // See the banner on Device::DrawIndexedMeshPC.
-                    //
-                    // ⚠️ WHAT IS STILL MISSING, MEASURED (task 133): the wheels draw, at the
-                    // four correct world positions, with correct geometry and an in-range index
-                    // run -- and are INVISIBLE, because they are 0.74 m UNDERGROUND.
-                    // PlaceCarOnTrack seats the car's ORIGIN on the collision surface
-                    // (y = -3.525 in the junkyard, BrnPlaceOnTrackManager's own measured
-                    // number) and nothing lifts the body by the wheel radius, because nothing
-                    // simulates the suspension. Wheel centre = origin - 0.409 (authored
-                    // WheelSpec), wheel radius = 0.5 * 0.663 = 0.3315 -> the tyre bottom is
-                    // 0.7405 below the ground plane. Proven by drawing the instanced meshes
-                    // with the depth test defeated (BRN_WHEEL_ZALWAYS=1): all four wheels
-                    // appear, correctly placed and shaped, through the sand.
-                    // DELETE-WHEN the suspension settle lands (the vehicle-physics wall).
                     // ================================================================
                     //
                     // ---- history (task 118) ----------------------------------------

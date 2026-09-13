@@ -50,6 +50,25 @@ namespace Vehicle
             return lvfResult;
         }
 
+        // The console's `vmsum3fp128` -- a three-lane dot product left splatted across the
+        // register. Every call site here consumes one lane, so it reduces to the scalar sum.
+        inline f32 Dot3_VM(const Vector3& lrA, const Vector3& lrB)
+        {
+            return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+        }
+
+        // The console's length idiom: dot3 the vector with itself, take an estimated reciprocal
+        // square root, refine it with two Newton steps, multiply back -- and vsel a hard zero over
+        // the result when the squared length compared equal to zero (the rsqrt of 0 is infinite).
+        // The two Newton steps only chase the estimate's error, so the host takes the exact root.
+        inline f32 Length3_VM(const Vector3& lrV)
+        {
+            const f32 lfLengthSq = lrV.x * lrV.x + lrV.y * lrV.y + lrV.z * lrV.z;
+            if (lfLengthSq == 0.0f)
+                return 0.0f;   // asm vcmpeqfp128 + vsel against the zero register
+            return std::sqrt(lfLengthSq);
+        }
+
         // The car-vs-car impact speed CheckForHittingAlreadyCrashingCar builds for each of its two
         // arms, read from asm @0x8263DC30..DC68 and @0x8263DE40..DE78 (identical but for which car
         // is the victim):
@@ -85,10 +104,37 @@ namespace Vehicle
         // CheckForPlayerSlammingAIIntoAI selects its scale per victim through the shared vsel mask
         // pair at 0x8327F240: TRUE -> 2.0f (materialised inline), FALSE -> unk_82FB8320, which its
         // static-init thunk @0x82C5BB60..BB84 fills with splat(flt_82004018) == 0.75f. BOTH values
-        // are read from the image; neither is a guess. See BrnVehicleManager.h for the full decode
-        // and for the three unmodelled RaceCarPhysics fields the selector predicate needs.
+        // are read from the image; neither is a guess. The selector predicate itself is reconstructed
+        // in CheckForPlayerSlammingAIIntoAI from the victim's own VehiclePhysics fields.
         const f32 KF_SLAM_REVENGE_CRASH_THRESHOLD_SCALE = 2.0f;   // inline vspltisw/vcfsx
         const f32 KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE = 0.75f;  // unk_82FB8320 <- flt_82004018
+
+        // Shunt/nudge alignment cap: the summed |dot| of each car's At axis against the contact normal
+        // must stay BELOW this, or the contact is too head-on to be a shunt.
+        static const f32 KF_SHUNT_ALIGNMENT_MIN    = 1.9f;    // flt_8207104C (image-read)
+        // How much of a car's own deformable-AABB rear extent still counts as "the front of the car"
+        // when deciding which car drove into which. A contact point further back than this does not
+        // make that car the one doing the hitting.
+        static const f32 KF_CONTACT_REAR_EXTENT_SCALE = 0.5f; // flt_82FB7F40, image-read via its initialiser
+        // Revenge windows on VehiclePhysics' time-since-last-race-car-contact lane (seconds). The
+        // player only counts as a car's current attacker while its last contact is this recent.
+        static const f32 KF_REVENGE_WINDOW_SLAM    = 0.25f;   // unk_82FB7F80, image-read via its initialiser
+        static const f32 KF_REVENGE_WINDOW_PILEON  = 1.0f;    // asm vcsxwfp128 v124,0 -> 1.0f
+        // Pile-on timing band on the crashing car's time-crashing lane (seconds): it must have been
+        // crashing longer than the floor to be a pile-on target at all, and less than the ceiling for
+        // the player-revenge takedown to register.
+        static const f32 KF_PILEON_MIN_TIME_CRASHING     = 1.0f;   // asm vcsxwfp128 v124,0 -> 1.0f
+        static const f32 KF_PILEON_REVENGE_MAX_CRASHING  = 0.5f;   // asm vcsxwfp128 v124,1 -> 0.5f
+        // Aggressive-driving veto: a player slam is suppressed while the relevant grinding frame
+        // counter is still below this many frames.
+        static const u8  KU_GRINDING_FRAMES_VETO   = 30;      // asm cmplwi 0x1E
+        // ...and only while the slam-steer itself is still below this bound.
+        static const f32 KF_GRINDING_VETO_STEER_BOUND = 0.5f; // flt_82001DA0 (image-read)
+        // Per-car-type slam severity speed, indexed by BrnWorld::ERaceCarType. Above the entry the
+        // in-band contact is a SLAM, at or below it trading paint. The console reads this flat table
+        // with no bounds check (`clrlslwi` index scale only).
+        static const f32 KAF_SLAM_SEVERITY_SPEED_BY_CAR_TYPE[8] =
+            { 0.1f, 0.3f, 0.1f, 0.1f, 2.0f, 4.0f, 2.0f, 0.0f };   // flt_82F2A218 (image-read)
     }
 
 
@@ -139,12 +185,11 @@ namespace Vehicle
     // this swap by NAME so the classifiers (which were bodied against the struct's A/B) read the
     // values the X360 put there.
     //
-    // FLAG (the VMX-heavy steps): the per-car SPEEDS (+0x5C/+0x60), the CLOSING velocity, and
-    // mfAngleBetweenCars (+0xF0 = acos(clamp(dot(fwdA,fwdB),-1,1))) are computed by long vmsum3fp/
-    // vrsqrtefp/XMVectorACos register cascades whose intermediate operands Hex-Rays could not name.
-    // They are reconstructed here with NAMED Vector3 math against the two cars' transforms/velocities;
-    // the load-bearing RESULTS (speeds, closing speed, inter-car angle) match the asm, but the exact
-    // VMX refinement steps are modelled, not reproduced register-for-register.
+    // The per-car SPEEDS (+0x5C/+0x60), the CLOSING velocity (+0x30) and speed (+0x58), and
+    // mfAngleBetweenCars (+0xF0) are computed by long vmsum3fp/vrsqrtefp/XMVectorACos register
+    // cascades. They are reconstructed here with NAMED Vector3 math against the two cars'
+    // transforms and mLastLinearVelocity: the results match, while the rsqrt Newton refinement --
+    // which only chases the estimate's error -- becomes an exact host square root.
     // -------------------------------------------------------------------------------------------
     void VehicleManager::HandleRaceCarRaceCarContact(BrnPhysics::ContactSpy::RaceCarContact lContact,
                                                      BrnPhysics::Vehicle::VehicleOutputRequestInterface* lpRequestOutputInterface,
@@ -234,18 +279,32 @@ namespace Vehicle
         lInfo.mRaceCarATransform = lrRecordA.mTransform;
         lInfo.mRaceCarBTransform = lrRecordB.mTransform;
 
-        // Speeds + closing velocity + inter-car angle. FLAG (VMX): the X360 loads each car's velocity
-        // vector from its record and computes magnitudes; here the speeds/closing-speed are left as
-        // the zero-init the response-info carries (the per-car velocity lanes live in the unmodelled
-        // RaceCarPhysics layout). mfAngleBetweenCars = acos(clamp(dot(fwdA,fwdB), -1, 1)) with the
-        // forward axes taken from the (stand-in identity) transforms above.
-        lInfo.mfRaceCarASpeed = 0.0f;   // FLAG: per-car velocity lane unmodelled
-        lInfo.mfRaceCarBSpeed = 0.0f;   // FLAG: as above
-        lInfo.mfClosingSpeed  = 0.0f;   // FLAG: as above
+        // Speeds + closing velocity + inter-car angle. Every one of these is built from the two
+        // cars' own mLastLinearVelocity (asm `li r11, 0x13B0` in both populate copies, indexing
+        // both record bases): the closing velocity is the difference of the two, the closing speed
+        // its length, and each car's speed the length of its own.
+        //
+        // This is what makes the whole classifier ladder below live: mfClosingSpeed is the value
+        // every speed threshold in this file is compared against.
+        lInfo.mClosingVelocityAtoB = { lrRecordA.mLastLinearVelocity.x - lrRecordB.mLastLinearVelocity.x,
+                                       lrRecordA.mLastLinearVelocity.y - lrRecordB.mLastLinearVelocity.y,
+                                       lrRecordA.mLastLinearVelocity.z - lrRecordB.mLastLinearVelocity.z,
+                                       0.0f };   // asm vsubfp v0 ; stvx128 -> lInfo+0x30
+        lInfo.mfClosingSpeed  = Length3_VM(lInfo.mClosingVelocityAtoB);        // asm -> lInfo+0x58
+        lInfo.mfRaceCarASpeed = Length3_VM(lrRecordA.mLastLinearVelocity);     // asm -> lInfo+0x5C
+        lInfo.mfRaceCarBSpeed = Length3_VM(lrRecordB.mLastLinearVelocity);     // asm -> lInfo+0x60
         {
+            // mfAngleBetweenCars = acos(clamp(dot(normalize(AtA), normalize(AtB)), -1, 1)). The asm
+            // normalises BOTH At axes with the same rsqrt-Newton block before the dot rather than
+            // assuming the transform rows are already unit.
             const Vector3& lvFwdA = lInfo.mRaceCarATransform.At();
             const Vector3& lvFwdB = lInfo.mRaceCarBTransform.At();
-            f32 lfDot = lvFwdA.x * lvFwdB.x + lvFwdA.y * lvFwdB.y + lvFwdA.z * lvFwdB.z;   // asm vmsum3fp128
+            const f32 lfLenA = Length3_VM(lvFwdA);
+            const f32 lfLenB = Length3_VM(lvFwdB);
+            f32 lfDot = 0.0f;
+            if (lfLenA > 0.0f && lfLenB > 0.0f)
+                lfDot = (lvFwdA.x * lvFwdB.x + lvFwdA.y * lvFwdB.y + lvFwdA.z * lvFwdB.z)
+                      / (lfLenA * lfLenB);                                     // asm vmsum3fp128
             if (lfDot < -1.0f) lfDot = -1.0f;   // asm vmaxfp against -1
             if (lfDot >  1.0f) lfDot =  1.0f;   // asm vminfp against +1
             lInfo.mfAngleBetweenCars = std::acos(lfDot);   // asm XMVectorACos
@@ -465,16 +524,54 @@ namespace Vehicle
             }
         }
 
-        // ---- Post-pass: the IsBeingSlamedOrShuntedByRaceCar recording ----
-        // asm: for each car, IsBeingSlamedOrShuntedByRaceCar(record, otherIdx); when the closing speed
-        // exceeds a rodata-scaled threshold (unk_82FB7F40, value UNRECOVERED) AND a player is involved,
-        // it records the aggressor into the RaceCarPhysics record (+4432) and rlimi-clears a field at
-        // +4176. Those are RaceCarPhysics-side in-record writes that belong to the RaceCarPhysics
-        // layout pass, NOT VehicleManager. FLAG: this post-pass is reduced to the named predicate call
-        // (no side effect modelled); the +4176/+4432 in-record writes + the unk_82FB7F40 threshold are
-        // documented and OMITTED here.
-        reinterpret_cast<RaceCarPhysics*>(&lrRecordA)->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexB));
-        reinterpret_cast<RaceCarPhysics*>(&lrRecordB)->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexA));
+        // ---- Post-pass: the last-contacted-car recording (asm, the tail of this function) ----
+        // A symmetric pair, one arm per car. For each car in turn: unless that car is ALREADY being
+        // slammed or shunted by the other one (in which case it is the victim, not the aggressor),
+        // and unless its own contact point sits behind half of its deformable AABB's rear extent
+        // measured along its At axis (a purely rear-end contact does not make it the one doing the
+        // hitting), the OTHER car's record is stamped -- its last-contacted-race-car id becomes this
+        // car's index and its time-since-last-race-car-contact lane is cleared to zero. Both stamps
+        // are additionally gated on a player being involved in the contact.
+        //
+        // Those two stamps are what the revenge sub-gates in CheckForPlayerSlammingAIIntoAI and
+        // CheckForHittingAlreadyCrashingCar read back: mi8LastContactedRaceCar answers "who touched
+        // me last" and the cleared timer lane bounds how long that answer stays valid.
+        const Vector3& lrAtA  = lrRecordA.GetTransform().At();    // asm lvx128 v124, r15, 0x30
+        const Vector3& lrAtB  = lrRecordB.GetTransform().At();    // asm lvx128 v11,  r16, 0x30
+        const Vector3& lrPosA = lrRecordA.GetTransform().Pos();   // asm lvx128 v126, r15, 0x40
+        const Vector3& lrPosB = lrRecordB.GetTransform().Pos();   // asm lvx128 v11,  r16, 0x40
+
+        // dot(At, contactPoint - position): how far forward of the car's own origin, along its own
+        // At axis, its side of the contact sits. asm vmsum3fp128 v13 / v121.
+        const Vector3 lvContactOffsetA = { lContact.mPointOnA.x - lrPosA.x,
+                                           lContact.mPointOnA.y - lrPosA.y,
+                                           lContact.mPointOnA.z - lrPosA.z, 0.0f };
+        const Vector3 lvContactOffsetB = { lContact.mPointOnB.x - lrPosB.x,
+                                           lContact.mPointOnB.y - lrPosB.y,
+                                           lContact.mPointOnB.z - lrPosB.z, 0.0f };
+        const f32 lfContactAlongA = Dot3_VM(lrAtA, lvContactOffsetA);
+        const f32 lfContactAlongB = Dot3_VM(lrAtB, lvContactOffsetB);
+
+        // mMin.z is the rear-most lane of the car's own deformable box, so the scaled bound is
+        // negative and the test reads "not too far behind me". asm vspltw128 v123/v122 of +0x6D0.
+        const f32 lfRearBoundA = lrRecordA.GetDeformableAABB().mMin.z * KF_CONTACT_REAR_EXTENT_SCALE;
+        const f32 lfRearBoundB = lrRecordB.GetDeformableAABB().mMin.z * KF_CONTACT_REAR_EXTENT_SCALE;
+
+        if (!lrRecordA.IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexB))   // asm: redundancy guard
+            && lfContactAlongA > lfRearBoundA                                       // asm: rear-extent test
+            && lbPlayerInvolved)                                                    // asm: player gate
+        {
+            // asm: vrlimi128 mask 2 == the Z lane only, then `stb` the A index.
+            lrRecordB.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z = 0.0f;
+            lrRecordB.mi8LastContactedRaceCar = static_cast<s8>(liIndexA);
+        }
+        if (!lrRecordB.IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIndexA))   // asm: redundancy guard
+            && lfContactAlongB > lfRearBoundB                                       // asm: rear-extent test
+            && lbPlayerInvolved)                                                    // asm: player gate
+        {
+            lrRecordA.mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z = 0.0f;
+            lrRecordA.mi8LastContactedRaceCar = static_cast<s8>(liIndexB);
+        }
     }
 
     // -------------------------------------------------------------------------------------------
@@ -977,7 +1074,7 @@ namespace Vehicle
         if (lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
             return false;
 
-        // FLAGS RETIRED 2026-08-24 (wave B3b): IsPointBetweenTwoParallelPlanes is recovered
+        // IsPointBetweenTwoParallelPlanes is recovered
         // (@0x825C5660, four vector args -- point, a point on each plane, the shared normal) and
         // this block is rebuilt from the caller asm @0x8263D4F0..0x8263D69C. The console's actual
         // test is NOT "contact point in a slab": each arm asks whether ONE CAR'S POSITION lies
@@ -1077,7 +1174,7 @@ namespace Vehicle
             return false;
 
         // At least one car must clear the min closing speed (* scale).
-        const f32 lfMinSpeed = mfMinHeadToHeadIndividualSpeed * KF_SPEED_UNIT_SCALE; // FLAG: scale rodata flt_82F31928
+        const f32 lfMinSpeed = mfMinHeadToHeadIndividualSpeed * KF_SPEED_UNIT_SCALE; // MPH -> m/s
         const f32 lfSpeedA = lpInfo->mfRaceCarASpeed;   // asm a2+23 (==+0x5C)
         const f32 lfSpeedB = lpInfo->mfRaceCarBSpeed;   // asm a2+24 (==+0x60)
         if (lfSpeedA <= lfMinSpeed && lfSpeedB <= lfMinSpeed)
@@ -1209,7 +1306,7 @@ namespace Vehicle
         // Speed asymmetry. The asm reads a2[23]/a2[24] (mfRaceCarASpeed/BSpeed).
         const f32 lfSpeedA = lpInfo->mfRaceCarASpeed;
         const f32 lfSpeedB = lpInfo->mfRaceCarBSpeed;
-        if (std::fabs(lfSpeedA - lfSpeedB) < KF_STATIONARY_MIN_SPEED_DIFF) // FLAG: rodata flt_82FB8298
+        if (std::fabs(lfSpeedA - lfSpeedB) < KF_STATIONARY_MIN_SPEED_DIFF)
             return false;
 
         EActiveRaceCarIndex leVictim;
@@ -1221,7 +1318,7 @@ namespace Vehicle
         {
             // A is the slower (stationary) VICTIM; B is the faster aggressor. (asm: speedA<=speedB)
             // asm: stamps victim(+63)=v16=indexA, aggressor(+62)=v15=indexB; InstantTakedown victim=idA.
-            if (lfSpeedA > KF_STATIONARY_SLOW_CAP || lfSpeedB < KF_STATIONARY_FAST_FLOOR) // FLAG: rodata 829C / 7F18
+            if (lfSpeedA > KF_STATIONARY_SLOW_CAP || lfSpeedB < KF_STATIONARY_FAST_FLOOR)
                 return false;
             leVictim    = lpInfo->meActiveRaceCarIndexA; // asm v16 = a2+7  -> victim slot a2[63]
             leAggressor = lpInfo->meActiveRaceCarIndexB; // asm v15 = a2+8  -> aggressor slot a2[62]
@@ -1232,7 +1329,7 @@ namespace Vehicle
         else
         {
             // B is the slower (stationary) VICTIM; A is the faster aggressor.
-            if (lfSpeedB > KF_STATIONARY_SLOW_CAP || lfSpeedA < KF_STATIONARY_FAST_FLOOR) // FLAG: rodata 829C / 7F18
+            if (lfSpeedB > KF_STATIONARY_SLOW_CAP || lfSpeedA < KF_STATIONARY_FAST_FLOOR)
                 return false;
             leVictim    = lpInfo->meActiveRaceCarIndexB;
             leAggressor = lpInfo->meActiveRaceCarIndexA;
@@ -1261,39 +1358,45 @@ namespace Vehicle
     // -------------------------------------------------------------------------------------------
     // CheckForShuntAndNudge  @0x8261A3A0  ->  FORCE ONLY (no crash). Recency-gated.
     //
-    // Bails if either car has had a recent impact. Alignment must be below 1.9 (too head-on belongs
-    // to head-to-head). Picks the aggressor/victim by a closing-velocity sign test, then -- if the
-    // victim is not already being slammed/shunted -- classifies the contact as nudge (closing <=
-    // mfMinShuntSpeed*scale, type 2) or shunt (<= mfFatalShuntSpeed*scale, type 4),
-    // promoting shunt->boost-shunt (6) when the victim is boost-eligible. Returns 1; never crashes.
+    // Bails if either car has had a recent impact. Alignment must REACH 1.9 (a shunt is a
+    // rear-end hit, so the contact normal has to be near-parallel to both cars' At axes; a
+    // glancing contact belongs to trading paint). Picks the aggressor/victim by a closing-
+    // velocity sign test, then -- if the victim is not already being slammed/shunted --
+    // classifies the contact as nudge (closing <= mfMinShuntSpeed*scale, type 2) or shunt
+    // (<= mfFatalShuntSpeed*scale, type 4), promoting shunt->boost-shunt (6) when the victim
+    // is boost-eligible. Returns 1; never crashes.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForShuntAndNudge(RaceCarResponseInfo* lpInfo)
     {
-        // Recency throttle on BOTH cars (asm a2[8] then a2[7]). FLAG: HasRaceCarHadRecentImpact body
-        // not in this dossier -- declared-only callee.
+        // Recency throttle on BOTH cars (asm a2[8] then a2[7]).
         if (HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexB)))
             return false;
         if (HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexA)))
             return false;
 
-        // Alignment gate: the sum of the two cars' forward-axis dots with the contact normal must
-        // be below 1.9 (asm immediate). A higher value means the contact is too head-on.
-        // FLAG: the asm forms two vmsum3fp dots of the contact normal (mpContact+48) against the
-        // two car transform forward columns (a2+208 / a2+144). Modelled with named Vector3 dots.
-        const Vector3 lvNormal = lpInfo->mpContact->mNormal;
-        const Vector3 lvFwdA   = lpInfo->mRaceCarATransform.At();   // asm a2+144 region
-        const Vector3 lvFwdB   = lpInfo->mRaceCarBTransform.At();   // asm a2+208 region
-        const f32 lfDotA = std::fabs(lvNormal.x * lvFwdA.x + lvNormal.y * lvFwdA.y + lvNormal.z * lvFwdA.z);
-        const f32 lfDotB = std::fabs(lvNormal.x * lvFwdB.x + lvNormal.y * lvFwdB.y + lvNormal.z * lvFwdB.z);
-        if (1.9f < (lfDotA + lfDotB))
+        // Alignment gate: the sum of the two cars' At-axis |dot|s with the contact normal must
+        // REACH the bound. A rear-end hit puts the normal along both cars' forward axes, so the sum
+        // sits near 2; a glancing hit drops it, and that is not a shunt.
+        // (asm: two vmsum3fp128 against mpContact+0x30, each sign-stripped by vandc, summed, then
+        // `vcmpgtfp. bound, sum` -- the all-true CR6 bit BRANCHES TO `li r3, 0`, so bound > sum is
+        // the BAIL and the fall-through is sum >= bound. An unordered compare is not all-true and
+        // therefore continues.)
+        const Vector3& lrNormal = lpInfo->mpContact->mNormal;
+        const Vector3& lrFwdA   = lpInfo->mRaceCarATransform.At();   // asm a2+0x90
+        const Vector3& lrFwdB   = lpInfo->mRaceCarBTransform.At();   // asm a2+0xD0
+        const f32 lfDotA = std::fabs(Dot3_VM(lrNormal, lrFwdA));
+        const f32 lfDotB = std::fabs(Dot3_VM(lrNormal, lrFwdB));
+        if (KF_SHUNT_ALIGNMENT_MIN > (lfDotA + lfDotB))
             return false;
 
-        // Aggressor/victim by the closing-velocity sign (asm subtracts the +160/+224 position lanes
-        // and dots against the forward column; >= 0 picks A as aggressor, else B).
-        const f32 ldx = lpInfo->mRaceCarATransform.Pos().x - lpInfo->mRaceCarBTransform.Pos().x;
-        const f32 ldy = lpInfo->mRaceCarATransform.Pos().y - lpInfo->mRaceCarBTransform.Pos().y;
-        const f32 ldz = lpInfo->mRaceCarATransform.Pos().z - lpInfo->mRaceCarBTransform.Pos().z;
-        const f32 lfApproach = ldx * lvFwdB.x + ldy * lvFwdB.y + ldz * lvFwdB.z;
+        // Aggressor/victim by which car the other one sits in FRONT of: the asm forms
+        // (posB - posA) and dots it against A's OWN At axis (asm:
+        // `lvx v13, a2+0xA0 ; lvx v11, a2+0xE0 ; vsubfp v13, v11, v13 ; vmsum3fp128 v13, v13, v12`
+        // with v12 == a2+0x90 == A's At). >= 0 means B is ahead of A, so A is the aggressor.
+        const Vector3& lrPosA = lpInfo->mRaceCarATransform.Pos();
+        const Vector3& lrPosB = lpInfo->mRaceCarBTransform.Pos();
+        const Vector3 lvBFromA = { lrPosB.x - lrPosA.x, lrPosB.y - lrPosA.y, lrPosB.z - lrPosA.z, 0.0f };
+        const f32 lfApproach = Dot3_VM(lvBFromA, lrFwdA);
 
         const EActiveRaceCarIndex leA = lpInfo->meActiveRaceCarIndexA; // asm v20 = _R31[7]
         const EActiveRaceCarIndex leB = lpInfo->meActiveRaceCarIndexB; // asm v21 = _R31[8]
@@ -1310,19 +1413,20 @@ namespace Vehicle
             lpInfo->mbPlayerWonImpact = lpInfo->mbRaceCarBIsPlayer; // asm v22 = *(_R31+83)
         }
 
-        // If the victim is already being slammed/shunted by a race car, this contact is redundant.
-        // FLAG: IsBeingSlamedOrShuntedByRaceCar takes the victim's RaceCarPhysics record + the
-        // aggressor active-index; modelled via maRaceCarVehicles[victim] cast to RaceCarPhysics*.
-        // (Declared on VehiclePhysics, not in this TU -- left as a structural no-op gate here so the
-        // classification still resolves; the real call belongs to the VehiclePhysics home.)
-        // -> we cannot call into VehiclePhysics from this minimal slice, so the slam/shunt-already
-        //    guard is documented but not invoked. FLAG: redundancy guard omitted (cross-TU callee).
+        // Redundancy guard: if the AGGRESSOR is itself already being slammed/shunted by the victim,
+        // this contact is the other half of a pairing that has already been classified.
+        // asm: the record is maRaceCarVehicles[meAggressorActiveRaceCarIndex]
+        // (`mulli 0x1460 ; addi 0x740`) and the argument is the VICTIM index, sign-extended.
+        if (maRaceCarVehicles[static_cast<s32>(lpInfo->meAggressorActiveRaceCarIndex)]
+                .IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(lpInfo->meVictimActiveRaceCarIndex)))
+            return false;
 
-        const f32 lfClosing = lpInfo->mfClosingSpeed; // asm *(_R31+22) == word 22 == byte 88 == mfClosingSpeed
-        if (lfClosing <= (mfFatalShuntSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata flt_82F31928
+        // Both tuning speeds are stored in MPH and converted by the global speed-unit scale.
+        const f32 lfClosing = lpInfo->mfClosingSpeed; // asm lfs f0, 0x58(r31) == mfClosingSpeed
+        if (!(lfClosing > (mfFatalShuntSpeed * KF_SPEED_UNIT_SCALE)))   // asm fcmpu ; ble
         {
             EImpactType leType = E_IMPACT_SHUNT;                       // asm v25 = 4
-            if (lfClosing <= (mfMinShuntSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata
+            if (!(lfClosing > (mfMinShuntSpeed * KF_SPEED_UNIT_SCALE))) // asm fcmpu ; bgt keeps SHUNT
                 leType = E_IMPACT_NUDGE;                               // asm v25 = 2
             lpInfo->meImpactType = leType;                             // asm _R31[61] = v25
             // Promote a plain shunt to a boost-shunt when the aggressor was HOLDING BOOST (+123 ==
@@ -1349,14 +1453,11 @@ namespace Vehicle
     // mfFatalSlamSpeed] (* scale). Sets impact severity 1/3/5 (TRADING_PAINT / SLAM /
     // BOOST_SLAM), stores a slam vector, returns 1. No crash.
     //
-    // FLAG: this classifier's full body reads several RaceCarPhysics in-record fields the asm
-    // reaches via 5216*idx + 5124 (a per-car slam accumulator) plus the aggressive-driving timer
-    // tables (+171936 / +171944) and a rodata speed-curve table (flt_82F2A218). Those reads are
-    // NOT placeable with named access in this minimal slice (the RaceCarPhysics layout +5124 field
-    // and the aggressive-driving tables are unmodelled). The load-bearing CLASSIFICATION decision
-    // (recency gate, alignment gate, energy band, severity) is reconstructed with named access; the
-    // in-record slam-accumulator comparison and the aggressive-driving timer veto are documented
-    // and FLAGged as omitted cross-record reads.
+    // The slammer is picked from each car's own RaceCarPhysics::mfSlamSteering (in-record +0x1404),
+    // signed by which side of the other car it sits on; the larger, positive one is the slammer.
+    // A player slam is additionally vetoed while the grinding frame counters say the two cars have
+    // been rubbing rather than slamming, and the SLAM-vs-trading-paint severity comes from a
+    // per-car-type speed table.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForSlamAndTradingPaint(RaceCarResponseInfo* lpInfo)
     {
@@ -1369,20 +1470,42 @@ namespace Vehicle
         if (HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexB)))
             return false;
 
-        // Alignment gate: the contact-normal dot must clear the paint-alignment threshold.
-        // FLAG: the asm dots two transform-derived lanes (v123 . v122); modelled as the contact
-        // normal vs the A-car forward axis.
-        const Vector3 lvNormal = lpInfo->mpContact->mNormal;
-        const Vector3 lvFwdA   = lpInfo->mRaceCarATransform.At();
-        const f32 lfAlignDot = lvNormal.x * lvFwdA.x + lvNormal.y * lvFwdA.y + lvNormal.z * lvFwdA.z;
-        if (KF_PAINT_ALIGNMENT_GATE > lfAlignDot) // FLAG: rodata unk_82FB8310
+        // Alignment gate: the two cars must be pointing the SAME way -- the asm dots A's At axis
+        // against B's At axis, not the contact normal against either (the asm loads
+        // a2+0x90 and a2+0xD0 into v123/v122 and dots those two).
+        const Vector3& lrFwdA = lpInfo->mRaceCarATransform.At();   // asm a2+0x90
+        const Vector3& lrFwdB = lpInfo->mRaceCarBTransform.At();   // asm a2+0xD0
+        if (KF_PAINT_ALIGNMENT_GATE > Dot3_VM(lrFwdA, lrFwdB))
             return false;
+
+        // The signed per-car slam-steering magnitudes the slammer test compares. Each car's own
+        // mfSlamSteering is signed by which side of the inter-car offset that car's Right axis
+        // points to, and B's sign is additionally inverted (asm: one
+        // vsubfp of the two position rows, two vmsum3fp128 against the two Right axes, the
+        // vcmpgtfp/vcmpgefp pair reducing each dot to sign(), then a vxor of the B lane only).
+        const Vector3& lrRightA = lpInfo->mRaceCarATransform.Right();   // asm a2+0x70
+        const Vector3& lrRightB = lpInfo->mRaceCarBTransform.Right();   // asm a2+0xB0
+        const Vector3& lrPosA   = lpInfo->mRaceCarATransform.Pos();     // asm a2+0xA0
+        const Vector3& lrPosB   = lpInfo->mRaceCarBTransform.Pos();     // asm a2+0xE0
+        const Vector3 lvAFromB = { lrPosA.x - lrPosB.x, lrPosA.y - lrPosB.y, lrPosA.z - lrPosB.z, 0.0f };
+
+        const f32 lfSideA = Dot3_VM(lvAFromB, lrRightA);
+        const f32 lfSideB = Dot3_VM(lvAFromB, lrRightB);
+        const f32 lfSignA = (lfSideA > 0.0f) ? 1.0f : ((lfSideA >= 0.0f) ? 0.0f : -1.0f);
+        const f32 lfSignB = (lfSideB > 0.0f) ? 1.0f : ((lfSideB >= 0.0f) ? 0.0f : -1.0f);
+        const f32 lfSlamA =  lfSignA * lpInfo->mpRaceCarA->GetSlamSteering();   // asm lfs 0x1404(a2+0x24)
+        const f32 lfSlamB = -lfSignB * lpInfo->mpRaceCarB->GetSlamSteering();   // asm lfs 0x1404(a2+0x28)
+
+        const bool lbEitherIsPlayer = (lpInfo->mbRaceCarAIsPlayer || lpInfo->mbRaceCarBIsPlayer);
+        const s32  liIdxA   = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
+        const s32  liIdxB   = static_cast<s32>(lpInfo->meActiveRaceCarIndexB);
+        const s32  liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
 
         // Energy band [min, max] (* scale). The asm reads *(_R31+88) == mfClosingSpeed.
         const f32 lfEnergy = lpInfo->mfClosingSpeed;
-        if (lfEnergy <= (mfMinTradingPaintSpeed * KF_SPEED_UNIT_SCALE)) // FLAG: scale rodata flt_82F31928
+        if (!(lfEnergy > (mfMinTradingPaintSpeed * KF_SPEED_UNIT_SCALE)))
             return false;
-        if (lfEnergy > (mfFatalSlamSpeed * KF_SPEED_UNIT_SCALE))  // FLAG: scale rodata flt_82F31928
+        if (lfEnergy > (mfFatalSlamSpeed * KF_SPEED_UNIT_SCALE))
         {
             // Above the band -> mark each NON-network car handled, report consumed (no crash).
             // asm 0x8261A2xx (pseudocode 5618/5620): the crash-flag store is gated on the car's
@@ -1392,19 +1515,59 @@ namespace Vehicle
             return true;
         }
 
-        // In-band: the asm picks the slammer by an in-record slam-accumulator comparison (+5124)
-        // gated by the aggressive-driving timers, then sets severity 1 (TRADING_PAINT) or 3 (SLAM),
-        // promoting SLAM->BOOST_SLAM (5) when the slammer is boost-eligible (+123).
-        // FLAG: the slam-accumulator (+5124) + aggressive-driving timer (+171936/+171944) reads are
-        // omitted cross-record/table reads; the severity here defaults to TRADING_PAINT and is
-        // promoted only by the boost-eligible byte we DO model.
-        const s32 liA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA);
-        lpInfo->meAggressorActiveRaceCarIndex = lpInfo->meActiveRaceCarIndexA; // asm *(_R31+248)=v27
-        lpInfo->meVictimActiveRaceCarIndex    = lpInfo->meActiveRaceCarIndexB; // asm *(_R31+252)=v29
-        EImpactType leSeverity = E_IMPACT_TRADING_PAINT;                       // asm *(_R31+244)=1
-        if (maRaceCarDrivers[liA].mControls.mbBoost)
-            leSeverity = E_IMPACT_BOOST_SLAM;                                  // asm *(_R31+244)=5 (3->5 promote)
-        lpInfo->meImpactType = leSeverity;
+        // In-band. The slammer is whichever car carries the larger signed slam-steer, and it must
+        // be positive; A wins ties (asm `blt` to the B arm, then `ble` against 0).
+        s32 liSlammer = -1;
+        s32 liVictim  = -1;
+        f32 lfSlamMagnitude = 0.0f;
+        if (!(lfSlamA < lfSlamB) && lfSlamA > 0.0f
+            && !lpInfo->mpRaceCarA->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIdxB)))
+        {
+            liSlammer = liIdxA;
+            liVictim  = liIdxB;
+            lfSlamMagnitude = lfSlamA;
+        }
+        // Every way of failing the A arm -- including its redundancy guard -- drops into the B arm
+        // (asm: both failure branches land on the B arm).
+        else if (lfSlamB > 0.0f
+                 && !lpInfo->mpRaceCarB->IsBeingSlamedOrShuntedByRaceCar(static_cast<s8>(liIdxA)))
+        {
+            liSlammer = liIdxB;
+            liVictim  = liIdxA;
+            lfSlamMagnitude = lfSlamB;
+        }
+
+        if (liSlammer >= 0)
+        {
+            // Aggressive-driving veto. Both arms of the console test the A-side slam-steer against
+            // the same 0.5 bound (both arms `fcmpu cr6, f31, f0`), which is
+            // why lfSlamA appears here even on the B arm -- that asymmetry is the console's.
+            if (lbEitherIsPlayer && lfSlamA < KF_GRINDING_VETO_STEER_BOUND)
+            {
+                if (liIdxA == liPlayer
+                    && mau8FramesSincePlayerGrindingOther[liIdxB] < KU_GRINDING_FRAMES_VETO)
+                    return false;
+                if (liIdxB == liPlayer
+                    && mau8FramesSinceOtherGrindingPlayer[liIdxA] < KU_GRINDING_FRAMES_VETO)
+                    return false;
+            }
+
+            // Severity: above the slammer's per-car-type speed entry it is a SLAM, else paint.
+            const s32 liSlammerType = static_cast<s32>(maeRaceCarTypes[liSlammer]);
+            lpInfo->meImpactType = (lfSlamMagnitude > KAF_SLAM_SEVERITY_SPEED_BY_CAR_TYPE[liSlammerType])
+                                 ? E_IMPACT_SLAM             // asm stw 3, 0xF4
+                                 : E_IMPACT_TRADING_PAINT;   // asm stw 1, 0xF4
+            lpInfo->meAggressorActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(liSlammer);
+            lpInfo->meVictimActiveRaceCarIndex    = static_cast<EActiveRaceCarIndex>(liVictim);
+            lpInfo->mvfSlamMagnitude = SplatVecFloat_VM(lfSlamMagnitude);   // asm stvx128 v0, r31, 0x40
+
+            // Promote SLAM -> BOOST_SLAM when the slammer was holding boost. The console reads the
+            // driver row unconditionally here; it can only matter when a slammer was recorded, so
+            // the read stays inside this arm rather than running off the front of the array.
+            if (maRaceCarDrivers[liSlammer].mControls.mbBoost
+                && lpInfo->meImpactType == E_IMPACT_SLAM)
+                lpInfo->meImpactType = E_IMPACT_BOOST_SLAM;   // asm stw 5, 0xF4
+        }
         return true;
     }
 
@@ -1435,7 +1598,7 @@ namespace Vehicle
         EntityId lVictimId{};
         EntityId lAggressorId{};
 
-        // FLAG RETIRED 2026-08-24 (wave B3b): CheckForVerticalTakedownSituation is recovered
+        // CheckForVerticalTakedownSituation is recovered
         // (@0x825C56D8 -- victim car + CONTACT POINT, the 80%-footprint test) and the two gates
         // this caller wraps around it are decoded from @0x8263D7CC/@0x8263D80C: the AGGRESSOR
         // must be really airborne (its air-time lane +0x1060.z > 0.2 == splat @0x82FB82A0,
@@ -1483,11 +1646,10 @@ namespace Vehicle
     // the player is the slammer. Calls ShouldRaceCarCrashOnCarImpact per victim and commits each
     // that passes.
     //
-    // FLAG: the asm reads several RaceCarPhysics in-record attacker fields (5216*idx + 6944 / +6288
-    // / +6032, and the v13+4432 / +4176 lanes) to confirm the player is the current attacker of the
-    // car being shunted. Those are unmodelled RaceCarPhysics fields; the player-is-slammer
-    // confirmation is delegated to ShouldRaceCarCrashOnCarImpact (declared-only) -- the standalone
-    // attacker-field reads are documented and omitted here.
+    // "The player is this car's current attacker" is answered per candidate from three of the car's
+    // own VehiclePhysics fields: its last slammer/shunter, its last contacted race car, and how long
+    // ago that contact was. The answer is both this function's entry gate (at least one car must
+    // say yes) and the per-victim crash-threshold scale.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForPlayerSlammingAIIntoAI(RaceCarResponseInfo* lpInfo)
     {
@@ -1504,26 +1666,34 @@ namespace Vehicle
         RaceCarPhysics* const lpVehB = &maRaceCarVehicles[liB];
 
         // The impact speed BOTH arms pass is the record's own closing speed, splatted
-        // (asm 0x8263E078..0x8263E0AC: lfs f0,0x58(r31) ; stfs -16(r1) ; lvx ; vspltw v126,v0,0 --
+        // (asm: lfs f0,0x58(r31) ; stfs -16(r1) ; lvx ; vspltw v126,v0,0 --
         // and v126 is passed as v1 unchanged at both call sites).
         const VecFloat lvfImpactSpeed = SplatVecFloat_VM(lpInfo->mfClosingSpeed);
 
-        // ⚠ FLAG (unchanged in substance from the previous round, now stated precisely): the
-        // per-victim "is the player this car's recorded attacker" predicate reads three
-        // RaceCarPhysics fields this tree does not declare -- +0x13E0 and +0x1150 (both compared
-        // against mePlayerActiveRaceCarIndex) and lane .z of the vector at +0x1050 (gated
-        // 0.25f > it). It also forms this function's real entry gate (the console only reaches the
-        // two calls when the predicate holds for at least ONE of the cars, asm 0x8263E1A0..E1B0).
-        // Both are omitted here exactly as before.
-        //
-        // ⭐ WHY 0.75 AND NOT AN INVENTED CONSTANT: the predicate selects between two arms that are
-        // now BOTH read from the image -- true -> 2.0f, false -> 0.75f. With the predicate
-        // unmodelled we ship the FALSE arm, which is the console's behaviour for every contact in
-        // which the player is not the recorded attacker (the common case, and the only case this
-        // build can produce today since it has one race car). It is a documented degradation of a
-        // known predicate, not a placeholder: when the three fields are homed, replace the constant
-        // with the select and delete this note. Shipping the TRUE arm instead would double the
-        // crash threshold for every car-vs-car contact, which is the wrong majority.
+        // The per-victim "is the player this car's current attacker" predicate, from the asm
+        // (run once per car, the two copies identical but for the record):
+        //     lbz 0x13E0(rec) ; extsb ; cmpw against mePlayerActiveRaceCarIndex
+        //     lbz 0x1150(rec) ; extsb ; cmpw against the same
+        //     lvx (rec+0x1050) ; vspltw ...,2 ; vcmpgtfp. splat(unk_82FB7F80), that
+        // i.e. the player must be BOTH the car's recorded slammer/shunter and the last race car it
+        // touched, and that contact must still be inside the revenge window.
+        const s32 liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
+        const bool lbPlayerAttacksA =
+            (static_cast<s32>(lpVehA->mi8LastAttackersRaceCarIndex) == liPlayer)
+            && (static_cast<s32>(lpVehA->mi8LastContactedRaceCar) == liPlayer)
+            && (KF_REVENGE_WINDOW_SLAM
+                > lpVehA->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z);
+        const bool lbPlayerAttacksB =
+            (static_cast<s32>(lpVehB->mi8LastAttackersRaceCarIndex) == liPlayer)
+            && (static_cast<s32>(lpVehB->mi8LastContactedRaceCar) == liPlayer)
+            && (KF_REVENGE_WINDOW_SLAM
+                > lpVehB->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z);
+
+        // Entry gate: the console only reaches the two calls when the predicate holds for at least
+        // ONE of the cars (asm: the entry gate).
+        if (!lbPlayerAttacksA && !lbPlayerAttacksB)
+            return false;
+
         bool lbAny = false;
 
         // Victim candidate A (asm 0x8263E1B4..0x8263E214:
@@ -1531,7 +1701,9 @@ namespace Vehicle
         //   v2 = vsel(unk_82FB8320, 2.0f, mask[flagA])).
         if (ShouldRaceCarCrashOnCarImpact(static_cast<EActiveRaceCarIndex>(liA), lpVehA, lpVehB,
                                           lvfImpactSpeed,
-                                          SplatVecFloat_VM(KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE)))
+                                          SplatVecFloat_VM(lbPlayerAttacksA
+                                              ? KF_SLAM_REVENGE_CRASH_THRESHOLD_SCALE
+                                              : KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE)))
         {
             lpInfo->mbCrashRaceCarA = true; // asm *(a2+256)=1
             // aggressor = the player slot; victim = A. The asm re-encodes the player index and a2[7].
@@ -1553,7 +1725,9 @@ namespace Vehicle
         // r5 = vehB (victim), r6 = vehA, the SAME v1, and v2 = the flagB select).
         if (ShouldRaceCarCrashOnCarImpact(static_cast<EActiveRaceCarIndex>(liB), lpVehB, lpVehA,
                                           lvfImpactSpeed,
-                                          SplatVecFloat_VM(KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE)))
+                                          SplatVecFloat_VM(lbPlayerAttacksB
+                                              ? KF_SLAM_REVENGE_CRASH_THRESHOLD_SCALE
+                                              : KF_SLAM_DEFAULT_CRASH_THRESHOLD_SCALE)))
         {
             lpInfo->mbCrashRaceCarB = true; // asm *(a2+257)=1
             const EntityId lAggressor = MakeRaceCarEntityId(static_cast<u32>(mePlayerActiveRaceCarIndex));
@@ -1581,28 +1755,34 @@ namespace Vehicle
     // Calls ShouldRaceCarCrashOnCarImpact for the still-live car; commits if it passes and the two
     // cars' types are both E_RACE_CAR_TYPE_AI.
     //
-    // FLAG: the asm reads RaceCarPhysics in-record velocity lanes (5216*idx + 5680, the +4432
-    // current-attacker field, and the +4176 height lane) plus the maeRaceCarTypes array via
-    // 4*(idx+11048)+this. The car-type reads ARE modelled (named array); the in-record velocity /
-    // attacker / height reads are unmodelled RaceCarPhysics fields, so the "which car is crashing"
-    // determination is taken from the response-info crash flags and the player-revenge sub-gate is
-    // delegated to ShouldRaceCarCrashOnCarImpact. Those omitted in-record reads are documented.
+    // "Already crashing" is the response-info flag AND-folded with the car's own time-crashing lane
+    // (or its network flag); the revenge sub-gate then asks the crashing car's own record whether the
+    // player is the last race car it touched, and how long ago.
     // -------------------------------------------------------------------------------------------
     bool VehicleManager::CheckForHittingAlreadyCrashingCar(RaceCarResponseInfo* lpInfo)
     {
         const s32 liA = static_cast<s32>(lpInfo->meActiveRaceCarIndexA); // asm v4 = v0[7]
         const s32 liB = static_cast<s32>(lpInfo->meActiveRaceCarIndexB); // asm v6 = v0[8]
 
-        // The asm OR-folds an in-record velocity-magnitude test with the response-info crash flag to
-        // decide each car is "crashing-and-fast-enough". FLAG: the velocity lane (+5680) is
-        // unmodelled; we use the response-info crash flags directly.
-        const bool lbACrashing = lpInfo->mbRaceCarAIsCrashing; // asm (v19 & v5)
-        const bool lbBCrashing = lpInfo->mbRaceCarBIsCrashing; // asm (v7 & v24)
+        RaceCarPhysics* const lpVehA = &maRaceCarVehicles[liA];
+        RaceCarPhysics* const lpVehB = &maRaceCarVehicles[liB];
+
+        // asm: for each car, splat lane .y of its crash-state register
+        // (+0xEF0 == time spent crashing), compare it against 1.0f, OR that with the car's NETWORK
+        // flag, and AND the result with the response-info crash flag. A car that only just started
+        // crashing is not yet a pile-on target unless it is a network car.
+        const bool lbACrashing = lpInfo->mbRaceCarAIsCrashing
+            && ((lpVehA->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y
+                    > KF_PILEON_MIN_TIME_CRASHING)
+                || lpInfo->mbRaceCarAIsNetworkCar);
+        const bool lbBCrashing = lpInfo->mbRaceCarBIsCrashing
+            && ((lpVehB->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y
+                    > KF_PILEON_MIN_TIME_CRASHING)
+                || lpInfo->mbRaceCarBIsNetworkCar);
         if (!lbACrashing && !lbBCrashing)
             return false;
 
-        RaceCarPhysics* const lpVehA = &maRaceCarVehicles[liA];
-        RaceCarPhysics* const lpVehB = &maRaceCarVehicles[liB];
+        const s32 liPlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
 
         if (lbACrashing)
         {
@@ -1621,15 +1801,20 @@ namespace Vehicle
             if (!lpInfo->mbRaceCarBIsNetworkCar)
             {
                 // Both cars' types must read E_RACE_CAR_TYPE_AI for the pile-on takedown to register.
-                if (maeRaceCarTypes[liA] == 1 && maeRaceCarTypes[liB] == 1)
+                // Player-revenge sub-gate: the crashing car (A here) must have been crashing for
+                // less than the ceiling, must name the player as the last race car it touched, and
+                // that contact must still be inside the revenge window.
+                // asm: vcsxwfp128 v124,1 == 0.5f vs the +0xEF0 .y lane, then
+                // lbz 0x1150 vs mePlayerActiveRaceCarIndex, then 1.0f vs the +0x1050 .z lane.
+                if (maeRaceCarTypes[liA] == 1 && maeRaceCarTypes[liB] == 1
+                    && (KF_PILEON_REVENGE_MAX_CRASHING
+                            > lpVehA->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y)
+                    && (static_cast<s32>(lpVehA->mi8LastContactedRaceCar) == liPlayer)
+                    && (KF_REVENGE_WINDOW_PILEON
+                            > lpVehA->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z))
                 {
-                    // Player-revenge sub-gate: only fire when the player is the current attacker.
-                    // FLAG: the asm reads the in-record current-attacker field (+4432) and the
-                    // +4176 height lane vs mePlayerActiveRaceCarIndex; those in-record reads are
-                    // unmodelled, so the revenge confirmation is delegated to the car-type gate.
-                    const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
                     const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liB)); // asm victim=(v6<<10) = indexB
-                    const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);              // asm aggr=(v35<<10) = player
+                    const EntityId lAggressor = MakeRaceCarEntityId(static_cast<u32>(liPlayer)); // asm aggr=(v35<<10) = player
                     InstantTakedown(lVictim, lAggressor,
                                     lpInfo->mpContact->mNormal,
                                     lpInfo->mpContact->mPointOnA,
@@ -1659,12 +1844,17 @@ namespace Vehicle
         // Guard is the live car's NETWORK flag (asm 0x8263DBFC: if(!*(_R31+84))), not the crash flag.
         if (!lpInfo->mbRaceCarAIsNetworkCar)
         {
-            if (maeRaceCarTypes[liA] == 1 && maeRaceCarTypes[liB] == 1)
+            // The mirror of the revenge sub-gate above, read off the crashing car B
+            // (asm: the mirror arm).
+            if (maeRaceCarTypes[liA] == 1 && maeRaceCarTypes[liB] == 1
+                && (KF_PILEON_REVENGE_MAX_CRASHING
+                        > lpVehB->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y)
+                && (static_cast<s32>(lpVehB->mi8LastContactedRaceCar) == liPlayer)
+                && (KF_REVENGE_WINDOW_PILEON
+                        > lpVehB->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.z))
             {
-                // FLAG: player-revenge in-record reads (+4432 / +4176) omitted as above.
-                const u32 luPlayer = static_cast<u32>(mePlayerActiveRaceCarIndex);
                 const EntityId lVictim    = MakeRaceCarEntityId(static_cast<u32>(liA)); // asm victim=(v4<<10) = indexA
-                const EntityId lAggressor = MakeRaceCarEntityId(luPlayer);              // asm aggr=(v52<<10) = player
+                const EntityId lAggressor = MakeRaceCarEntityId(static_cast<u32>(liPlayer)); // asm aggr=(v52<<10) = player
                 InstantTakedown(lVictim, lAggressor,
                                 lpInfo->mpContact->mNormal,
                                 lpInfo->mpContact->mPointOnA,

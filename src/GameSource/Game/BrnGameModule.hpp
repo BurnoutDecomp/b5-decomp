@@ -533,13 +533,16 @@ namespace BrnGame
 
         // X360 0x823E1C38 -- walk the game-state output's TakedownEvent output queue and push one
         // GUI takedown event per record through the CgsGui GUI module (this + 7252512). A record
-        // whose race-car index matches the runner index, or when the "soft takedown display" flag
-        // bit is clear, becomes a BrnGui::GuiTakedownEvent; otherwise a BrnGui::GuiSoftTakedownEvent.
+        // becomes a BrnGui::GuiTakedownEvent when its VICTIM index equals the player's active
+        // race-car index, or when the "soft takedown display" flag bit is clear; otherwise a
+        // BrnGui::GuiSoftTakedownEvent. (The body compares the record's +0x04 field, meVictimIndex,
+        // against the third argument -- which the caller loads from the scoring output interface's
+        // mePlayerRaceCarIndex, so it is the PLAYER index, not a runner index.)
         // Called by BridgeGameStateToGui. Home GameSource/Game/GameBridgeGameStateToX.cpp.
         void TranslateTakedownsToGuiEvents(
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
-            const void* lpTakedownQueue,
-            s32 liRunnerActiveRaceCarIndex);
+            const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>* lpTakedownQueue,
+            s32 liPlayerActiveRaceCarIndex);
 
         // ⭐⭐ [gateui] X360 0x823E9CE0 -- the GAME-ACTION -> GUI-EVENT translator: drain the
         // game-state output buffer's GameActionQueue (VariableEventQueue<13312,16>) and post

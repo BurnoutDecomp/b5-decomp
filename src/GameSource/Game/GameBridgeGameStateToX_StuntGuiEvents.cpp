@@ -7,20 +7,16 @@
 //   MapStuntEnumsFromGameplayToGui   0x823AA4A8   (a real X360 symbol, whole)
 //   TranslateGameActionsToGuiEvents  0x823E9CE0   (PARTIAL -- cases 58/59/60 only)
 //
-// ⛔ WHY A SIBLING TU RATHER THAN THE PARENT FILE. GameBridgeGameStateToX.cpp COMPILES
-// again as of this wave (the two forked GUI-event placeholders that produced its four
-// C2011/C2065 errors are gone), but it still cannot be MOUNTED: its other two bodies
-// reach six by-name symbols that have no definition anywhere in b5-decomp/src --
-//     BrnGameState::GetTakedownEventOutputCount / GetTakedownEventOutputRecord
-//     BrnGameState::GetGameStateInputBindRequestQueue / GetGameStateInputUnbindRequestQueue
-//     CgsInput::InputIO::PostWorldInputBuffer::PostBindRequest / PostUnbindRequest
-// -- i.e. mounting it is six LNK2019s. Both of those bodies are also CALLERLESS today
-// (BridgeGameStateToGui @0x823EE880 and DoUpdate_InputPostWorld are unreconstructed),
-// whereas the two functions HERE are called every sub-step by BrnGameModule::Update, so
-// they must be linkable NOW. Split, exactly as ConvertTrainingTypeToStringId was split into
-// GameBridgeGameStateToX_TrainingStringIds.cpp on 2026-08-16 -- MOVED, not copied, so
-// folding it back in once those six symbols are homed is a delete, not a
-// duplicate-symbol hunt.
+// WHY A SIBLING TU RATHER THAN THE PARENT FILE. Historical: GameBridgeGameStateToX.cpp
+// neither compiled nor linked when this slice landed. Both are fixed -- the parent TU
+// compiles and is MOUNTED, its takedown translator having dropped the two invented
+// accessors that were half of its link hole. What is still un-homed lives in the OTHER
+// sibling, GameBridgeGameStateToX_Controller.cpp (see its banner for the four symbols),
+// which is why that one is unmounted and this one is not. The functions HERE are called
+// every sub-step by BrnGameModule::Update, so they must stay linkable. Split, exactly as
+// ConvertTrainingTypeToStringId was split into GameBridgeGameStateToX_TrainingStringIds.cpp
+// on 2026-08-16 -- MOVED, not copied, so folding these siblings back into the parent is a
+// delete, not a duplicate-symbol hunt.
 //
 // The shared GUI-event push (PushGuiEvent) lives in GameBridgeGameStateToX.h so both TUs
 // use one copy; its banner explains why the queue is written directly instead of through

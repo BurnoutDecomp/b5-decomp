@@ -199,9 +199,9 @@ public:
         void OnModeStartRacing( bool lbSkipPlayerCar );                                                                  // @0x8276E4B0
         void OnRollingStart();                                                                                           // @0x8276E5C8
         void OnModeEnd( bool lbRestoreDrivingInput );                                                                    // @0x8277BA80
-        // DWARF BrnAIModule.cpp:202. OnModeStart's one call; body is a NAMED PARK in
-        // BrnAIModule_Events.cpp (it builds a temporary Array<RaceBalancingGraph,7> out of the
-        // mode's OpponentData and hands it to RaceBalancingManager::OnRaceStart @0x82789AF8).
+        // declaration reference BrnAIModule.cpp. OnModeStart's one call: it builds a temporary
+        // Array<RaceBalancingGraph,7> out of the mode's OpponentData and hands it to
+        // RaceBalancingManager::OnRaceStart. Bodied in BrnAIModule_Events.cpp.
         void SetupRaceBalancingManager( const BrnGameState::GameModeParams* lpGameModeParams );                          // @0x8278A460
 
     AIModule();
@@ -502,10 +502,14 @@ private:
     bool                mbIsInGameMode;
     bool                mbFullRollingStart;         // DWARF :379  +322431 (OnModeStart: flags & 0x4000000)
     bool                mbDonutStart;               // DWARF :380  +322432 (OnModeStart: flags & 0x8000000)
-    // +322433 (0x4EB81) is a bool the X360 build HAS and the PS3 DWARF does NOT: Construct
-    // and Prepare zero it, and SetupRaceBalancingManager @0x8278A460 passes it as the third
-    // argument of RaceBalancingManager::OnRaceStart. It has no name to give it, so it is not
-    // declared; nothing in this tree reads it.
+    // +322433 (0x4EB81) is a bool the console build HAS and the declaration reference does NOT: Construct and
+    // Prepare zero it, and SetupRaceBalancingManager (`ori r11,r11,0xEB81 ; lbzx r6`)
+    // passes it as the third argument of RaceBalancingManager::OnRaceStart -- the flag that picks
+    // each route's initial mfTakenDownTimePenalty (20.0s when set, 5.0s otherwise). FLAG: the name
+    // below is taken from that single use (the same precedent as RaceBalancingRoute::
+    // mfTakenDownTimePenalty, named from its GetTime use), NOT from any symbol; it must be
+    // declared so the bools after it keep their attested offsets.
+    bool                mbHighTakenDownPenalty;
     // X360 +322434 (0x4EB82) -- StoreDrivenCarData: `isPlayer && !this` is the mbIsDrivenByPlayer
     // bool it hands AICar::UpdateInRangeData (asm 0x82795CB4..CD4; corrected 2026-09-05). Construct
     // stores 0 (r30) here -- the WorldDebugComponent's "AI drives player" toggle is the only setter.

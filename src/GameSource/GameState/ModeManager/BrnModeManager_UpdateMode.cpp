@@ -572,41 +572,14 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     // ---- (13) road rage / marked man: the player has been totalled --------------------------------
     if (lbRoadRageOrMarkedMan)
     {
-        // ⭐ [road-rage wave, agent C] ROAD-RAGE CRASH ARM UN-PARKED (was conductor decision #10).
-        // Console @0x823513D8..0x82351410, exact:
-        //     lwz  r11, 0x6D58(r31)  ; mpGameStateModule
-        //     addi r3, r11, 0x238    ; gsm+568 == the embedded TakedownManager
-        //     bl   TakedownManager::IsInTakedownCamera     ; `*(this+640) != -1.0f` @0x82359620
-        //     bne  -> skip
-        //     lbzx r11, r31, 0x950A  ; mbPlayerCrashedLastFrame
-        //     beq  -> skip
-        //     li r5, 1 / mr r4, r18 (lpOutputBuffer) / mr r3, r25 (&mScoringSystem)
-        //     bl   ScoringSystem::OnRoadRagePlayerCrashed  ; 1 == E_ROADRAGE_CRASHTYPE_WRECKED
-        //
-        // [FLAG PC bring-up] THE CAMERA TEST IS REDUCED TO ITS VALUE ON THIS BUILD, false. The
-        // predicate is TakedownManager::mfTakedownCameraTime != -1.0f, and on this build (a) the
-        // GameStateModule does not embed a TakedownManager at all (the header names gsm+568 only in
-        // a comment), (b) TakedownManager::Update / StartTakedownCamera -- the only writers that
-        // ever move that timer off -1 -- have no body, and (c) IsInTakedownCamera itself has no
-        // body. So "not in a takedown camera" is not a guess about a value; it is the only value
-        // the missing subsystem can have. The other conjunct is real: mbPlayerCrashedLastFrame is
-        // cleared before and set during the crash scan in BrnModeManager_TransmitCrash.cpp
-        // (:440 / :465), one frame per crash, so this fires once per player wreck exactly as the
-        // console does. The old park's worry ("would fire during every takedown camera") cannot
-        // occur while nothing starts one.
-        // DELETE-WHEN GameStateModule embeds mTakedownManager and IsInTakedownCamera @0x82359620
-        // is bodied: restore the `!mpGameStateModule->GetTakedownManager()->IsInTakedownCamera()`
-        // conjunct in front of the flag.
-        //
-        // ⛔ CROSS-LANE: ScoringSystem::OnRoadRagePlayerCrashed @0x823444B0 is being bodied by
-        // agent B this wave (declared BrnScoringSystem.h:356, called here by that declaration).
-        // Until that landing consolidates this is an unresolved external at LINK time -- the
-        // parallel-wave contract, stated rather than hidden.
-        // [takedown wave 2026-09-02] the console conjunct is back: the manager exists now
-        // (GameStateModule::GetTakedownManager), and TakedownManager::IsInTakedownCamera @0x82359620
-        // is bodied. Console @0x823513D8: `bl IsInTakedownCamera; bne skip; lbzx mbPlayerCrashedLastFrame`.
-        // (Reached through GameStateModule::IsInTakedownCamera: BrnTakedownManager.h cannot be included
-        //  here -- its Types header re-binds EActiveRaceCarIndex, the second-enum rule.)
+        // Road-rage / marked-man player wreck. The console reads mpGameStateModule, offsets to
+        // the TakedownManager it owns, calls IsInTakedownCamera and skips on true; then tests
+        // mbPlayerCrashedLastFrame (+0x950A) and skips on false; then calls
+        // ScoringSystem::OnRoadRagePlayerCrashed(lpOutputBuffer, E_ROADRAGE_CRASHTYPE_WRECKED).
+        // The camera conjunct is reached here through GameStateModule::IsInTakedownCamera, which
+        // forwards to that same manager. mbPlayerCrashedLastFrame is cleared before, and set
+        // during, the crash scan in BrnModeManager_TransmitCrash.cpp, so the arm fires exactly
+        // one frame per player wreck.
         if (!mpGameStateModule->IsInTakedownCamera() && mbPlayerCrashedLastFrame)
         {
             mScoringSystem.OnRoadRagePlayerCrashed(lpOutputBuffer,

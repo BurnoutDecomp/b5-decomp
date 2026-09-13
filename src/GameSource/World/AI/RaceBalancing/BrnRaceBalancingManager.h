@@ -20,10 +20,12 @@
 //   ComputeParSpeed (private)    @0x82789EC0
 //   ComputeTargetSpeed (private) @0x827916E0
 //   CalculateScheduleOffset      @0x82789E00
-// The remaining DWARF methods (Construct / OnRaceStartPlaying / OnRaceEnd / Update /
-// UpdateOpponentRoute / OnOpponentTakenDown / the public ComputeTargetSpeed overload)
-// were INLINED on X360 with no standalone symbol -> declared here, bodied in their own
-// TUs (or inline at their call sites). Not bodied here; do not fabricate.
+//   OnRaceStartPlaying / OnRaceEnd  (no standalone symbol; recovered from the single caller
+//                                    that inlines each -- see the bodies for the asm range)
+// The remaining declaration reference methods (Construct / Update / UpdateOpponentRoute / OnOpponentTakenDown /
+// the public ComputeTargetSpeed overload) were INLINED on console with no standalone symbol and
+// no caller that pins their whole body -> declared here, bodied in their own TUs (or inline at
+// their call sites). Not bodied here; do not fabricate.
 
 #include <cstddef>   // offsetof
 
@@ -80,8 +82,10 @@ namespace BrnAI
         void OnRaceStart(const Array<RaceBalancingGraph, 7u>* lpRaceBalancingGraphArray,
                          s32 liCheckpointCount, bool lbHighTakenDownPenalty);   // :61
 
-        void OnRaceStartPlaying();                                              // :64  (inlined on X360)
-        void OnRaceEnd();                                                       // :67  (inlined on X360)
+        // :64  -- bodied in this TU from AIModule::OnModeStartRacing's inlining.
+        void OnRaceStartPlaying();
+        // :67  -- bodied in this TU from AIModule::OnModeEnd's inlining.
+        void OnRaceEnd();
         void Update(const AICar* lpPlayerCar, f32 lfTimeStep);                  // :72  (inlined on X360)
         void UpdateOpponentRoute(const AICar* lpAICar,
                                  const AISectionsData* lpAISectionsData);       // :77  (inlined on X360)
@@ -100,6 +104,23 @@ namespace BrnAI
         // [E_GRAPH_TYPE_AHEAD]=seconds the racer is ahead of schedule,
         // [E_GRAPH_TYPE_BEHIND]=seconds behind. (Note: the asm writes [1] then [0].)
         void CalculateScheduleOffset(const AICar* lpAICar, f32* lafOutScheduleOffsets) const; // :97
+
+        // ---- published storage accessors ---------------------------------------------------
+        // AIModule::OnPlayerTakedown reaches straight into this object from its own
+        // `this` (one base register, r11 = module + 0x3D9D0 == &mRaceBalancingManager): it reads
+        // the in-race byte at +0x4878 (mbInRace) and, when it is set, calls
+        // Array<RaceBalancingRoute,7>::GetItem on +0x1C4 (maRaceBalancingRoutes) to bump the
+        // victim's take-down tally. Both members are private, so the de-inlined host call needs
+        // them published by name; these two accessors are that publication and nothing more.
+        bool IsInRace() const { return mbInRace; }                              // (+0x4878)
+        RaceBalancingRoute* GetRaceBalancingRoute(s32 liOpponentIndex)          // (+0x01C4)
+        {
+            return &maRaceBalancingRoutes.GetItem(static_cast<u32>(liOpponentIndex));
+        }
+        const RaceBalancingRoute* GetRaceBalancingRoute(s32 liOpponentIndex) const
+        {
+            return &maRaceBalancingRoutes.GetItem(static_cast<u32>(liOpponentIndex));
+        }
 
     private:
         // @0x827916E0 -- bodied in this TU.

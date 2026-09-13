@@ -253,7 +253,8 @@ void ModeManager::TransmitAndIncrementCheckPointsReached(GameStateModuleIO::Game
         // `EActiveRaceCarIndex GetActiveRaceCarIndex(EGlobalRaceCarIndex) const`. It is exactly the
         // array this expression indexes: the sibling GetGlobalRaceCarIndex @0x82310570 SCANS that
         // same table at iface+2100 (35 entries, 4-byte stride) looking for an active index. Called
-        // by name here rather than through the still-unbodied ModeManager::GlobalToActiveRaceCarIndex.
+        // by name here rather than through ModeManager::GlobalToActiveRaceCarIndex, which is
+        // bodied (BrnModeManager_Accessors.cpp) and is the same one-line forward.
         lReachedCheckpointAction.meActiveRaceCarIndex =
             lpGlobalRaceCarOutput->GetActiveRaceCarIndex(leGlobalRaceCarIndex);
         lReachedCheckpointAction.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
@@ -410,8 +411,9 @@ void ModeManager::TransmitAndIncrementFinishReached(GameStateModuleIO::GameActio
 // Recompute, from scratch every PostWorldUpdate, the one-frame latch mbPlayerCrashedLastFrame
 // (+38154 / 0x950A): true iff the player's own car is the subject of a PRIMARY crash event this
 // frame. UpdateCurrentMode's road-rage arm is its consumer
-// (`if (!TakedownManager::IsInTakedownCamera() && mbPlayerCrashedLastFrame)
-//    ScoringSystem::OnRoadRagePlayerCrashed(...)`) -- which is what pins the byte's semantics
+// (`if (!mpGameStateModule->IsInTakedownCamera() && mbPlayerCrashedLastFrame)
+//    mScoringSystem.OnRoadRagePlayerCrashed(...)`, BrnModeManager_UpdateMode.cpp -- the accessor
+// forwards to the TakedownManager the GameStateModule owns) -- which is what pins the byte's semantics
 // (header +38154), so this body must clear it unconditionally BEFORE the scan or one crash would
 // stick for the rest of the mode.
 // ============================================================================================

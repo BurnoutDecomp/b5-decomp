@@ -188,9 +188,9 @@ namespace RaceCarEntityModuleIO
         // inlined call site at the top of BrnGameModule::BridgeWorldToDirector @0x823E3AB0:
         //   `v25 = mePlayerActiveRaceCarIndex;
         //    v25 == -1 ? 0 : *(1120*v25 + iface + 1914)`
-        // 1914 - 816 (maRaceCarStates) == element +1098, which is the console offset of the
-        // committed mbCrashing (@1094 here -- the uniform +4 X360 drift, see BrnPlayerInfo/
-        // GameBridgeWorldToX). Note it does NOT bounds-assert -- only the -1 sentinel is
+        // 1914 - 816 (maRaceCarStates) == element +1098, which is exactly where the committed
+        // RaceCarState puts mbCrashing (BrnVehicleEvents.h: mabWheelExists[4] +1094..+1097,
+        // mbCrashing +1098) -- no drift on this member. Note it does NOT bounds-assert -- only the -1 sentinel is
         // tested; the "< E_ACTIVE_RACE_CAR_INDEX_COUNT" assert at that call site belongs to
         // the IsPlayerCarActive() inline that guards it.
         bool IsPlayerCarCrashing() const

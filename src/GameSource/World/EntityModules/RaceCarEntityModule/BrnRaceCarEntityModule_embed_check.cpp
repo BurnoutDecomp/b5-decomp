@@ -1,18 +1,19 @@
 // Translation-unit embed check for BrnWorld::RaceCarEntityModule's accessor pair.
-// Forces the owning header to compile standalone, exercises both accessors, and
-// locks the X360-proven array offsets/strides so the layout stays wired.
+// Forces the owning header to compile standalone and exercises both accessors, so
+// the array element types and the accessor return types stay wired together.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 
 namespace
 {
-// offsetof on the private array members must be evaluated where they are
-// accessible; this friendless TU can only see them via a member-scope context,
-// so the locks live in a (compiled, never-called) member of a local probe that
-// derives nothing -- instead we assert the X360 strides/offsets the asm proves
-// against sizeof of the element stand-ins (which ARE public) and the public
-// accessor return path. The element strides are the load-bearing facts.
-static_assert(sizeof(BrnWorld::RaceCar) == 0xB0,          "RaceCar stride 0xB0 (== 176)");
-static_assert(sizeof(BrnWorld::ActiveRaceCar) == 0x1CD0,  "ActiveRaceCar stride 0x1CD0 (== 7376)");
+// No element-size lock lives here. This TU used to assert sizeof(RaceCar) == 0xB0
+// and sizeof(ActiveRaceCar) == 0x1CD0: those are the CONSOLE strides the accessor
+// arithmetic bakes in, and they were assertable only while this header defined its
+// own opaque byte-array stand-ins for the two element types. Those stand-ins were an
+// ODR fork and are long deleted -- the arrays now hold the real RaceCar /
+// ActiveRaceCar, both of which carry pointers the console stored in four bytes, so
+// on the host the element sizes are larger and are not a parity fact to pin. Parity
+// for this module is by named member, and the one offset that still holds
+// (maRaceCars) is locked in the header, where offsetof has member-scope access.
 
 void EmbedCheck(BrnWorld::RaceCarEntityModule* lpModule)
 {

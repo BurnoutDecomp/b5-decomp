@@ -815,8 +815,9 @@ public:
 
     // The attested declaration slot: the original class declares this between
     // DetermineCullingGroup / SetCullingGroup / UpdateLostContact / UpdateTimeSinceCreation
-    // above and ResetInAirRotations / UpdateInAirRotations below, none of which this build
-    // has landed. Signature `void (f32)`, parameter named lfTimeStepMultiplier.
+    // above and ResetInAirRotations / UpdateInAirRotations below. Of those neighbours only
+    // UpdateInAirRotations has landed (declared right after this one, in its own slot);
+    // the rest are still absent. Signature `void (f32)`, parameter named lfTimeStepMultiplier.
     //
     // ⭐ THE WHEEL-BLUR PRODUCER. Publishes, for each of the four road wheels,
     // |mPhysicsState.maWheels[i].mfRadiansPerSecond| * lfTimeStepMultiplier into
@@ -825,6 +826,22 @@ public:
     // wheel-blur threshold), so with this function absent every race-car wheel read 0 rad/s
     // and could never pick the blurred variant.
     void CalculateWheelAngularVelocities(f32 lfTimeStepMultiplier);
+
+    // The in-air rotation accumulator: the car-space angle the body has swept since it left
+    // the ground, and the "is it still spinning?" latch that gates it. Update calls it every
+    // frame, immediately after CalculateWheelAngularVelocities, with the SAME argument (the
+    // module's time-step multiplier, not its raw time step).
+    //
+    // Airborne (mPhysicsState.mfTimeInAir > 0) arms mbCurrentlyRotating and resets the
+    // stability timer. Back on the ground the timer only advances while every wheel the car
+    // still has is both attached and gripping; one wheel off the road zeroes it again. A full
+    // second of that unbroken and the latch drops and mCurrentInAirRotations is cleared.
+    // While the latch is up, the world angular velocity is rotated into car space and
+    // integrated into mCurrentInAirRotations.
+    //
+    // Parameter name from the declaration reference (BrnActiveRaceCar.h), which spells it
+    // lfTimeStep even though Update hands it the multiplier.
+    void UpdateInAirRotations(f32 lfTimeStep);
 
     // X360 0x822B8828: the render body transform,
     // `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. The console's only caller

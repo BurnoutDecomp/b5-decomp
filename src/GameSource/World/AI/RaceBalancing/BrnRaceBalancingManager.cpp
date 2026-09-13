@@ -72,6 +72,33 @@ void RaceBalancingManager::OnRaceStart(const Array<RaceBalancingGraph, 7u>* lpRa
 }
 
 // ===========================================================================================
+// OnRaceStartPlaying -- no standalone console symbol; the console inlines it at its one caller.
+// AIModule::OnModeStartRacing is that caller and is the whole body: a single
+// `stbx r26(0), r31, 0x42249` == module + 0x42249 == &mRaceBalancingManager + 0x4879 ==
+// mbOnStartLine. The grid has released, so the balancer stops treating the field as stationary
+// and starts accruing mfRaceTime (OnRaceStart raises this flag; this is its only clear).
+// ===========================================================================================
+void RaceBalancingManager::OnRaceStartPlaying()
+{
+    mbOnStartLine = false;                // +0x4879
+}
+
+// ===========================================================================================
+// OnRaceEnd -- likewise inlined at its one caller. AIModule::OnModeEnd
+// is four stores off one base register (`addis r11,r30,4 ; addi r11,r11,-0x2630` == module +
+// 0x3D9D0 == this): the in-race flag down, both per-opponent tables emptied and the checkpoint
+// count cleared. Everything the balancer needs is rebuilt by the next OnRaceStart, so the race
+// clock (+0x4870) is deliberately left where it stopped -- the console does not clear it here.
+// ===========================================================================================
+void RaceBalancingManager::OnRaceEnd()
+{
+    mbInRace          = false;            // +0x4878
+    maRaceBalancingGraphs.Clear();        // +0x01C0 count -> 0
+    maRaceBalancingRoutes.Clear();        // +0x486C count -> 0
+    miCheckpointCount = 0;                // +0x4874
+}
+
+// ===========================================================================================
 // OnOpponentReachedCheckpoint @0x82789D88
 // An AI opponent crossed checkpoint liCheckpointIndex: invalidate its route's cached timing
 // and advance its current-checkpoint cursor to the next checkpoint. (The X360 inlined what the

@@ -46,6 +46,10 @@ void AirTimeManager::Update(const BrnPhysics::Vehicle::RaceCarState* lpRaceCarSt
     CGS_ASSERT(lpEventQueue != 0, "lpEventQueue");
     CGS_ASSERT(lpRaceCarState != 0, "lpRaceCarState");
 
+    // [PARKED -- file not owned by this lane] AirTimeManager::Update reads RaceCarState bytes
+    // +0x44A and +0x44E, which are mbCrashing and mbResetCarTransform; mbIsHidden (+0x452) is
+    // never read here. The two reads below and the banner at the top of this file are slid by
+    // one member each and need the owning lane to correct them.
     // +0x404 mfGas (airborne indicator), +0x44A mbResetCarTransform, +0x44E mbIsHidden.
     const f32  lfAirborne   = lpRaceCarState->mfGas;
     const bool lbResetOrHidden =

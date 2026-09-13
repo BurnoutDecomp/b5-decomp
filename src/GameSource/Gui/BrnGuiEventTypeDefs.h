@@ -1489,15 +1489,22 @@ struct GuiTakedownEvent
 };
 static_assert(sizeof(GuiTakedownEvent) == 40, "X360 AddGuiEvent size 40 (id 363)");
 
-// GuiSoftTakedownEvent (id 364, 32 bytes) -- [boost-msg wave 2026-08-26] RECOVERED, retiring
-// BOTH the opaque BrnGuiDemangledEventTypes.h shell AND the soft arm this tree had parked:
-// GameBridgeGameStateToX.cpp's TranslateTakedownsToGuiEvents decoded the producer stores
-// (@0x823E1CDC..0x823E1D1C: two CgsIDs at +0x00/+0x08, the two indices at +0x10/+0x14, the
-// takedown type at +0x18 and the two status bytes pulled forward to +0x1C/+0x1D) and asked
-// for exactly this grow. The consumer half corroborates: AddGuiEvent<GuiSoftTakedownEvent>
-// @0x823D9AD0 -> AddEvent(q, ev, 364, 32), and BoostMessageManager::RecvEvent case 364
-// compares +0x10 (the aggressor index) against GuiCache::mePlayerActiveRaceCarIndex
-// (@0x82420B18). Same family layout as GuiTakedownEvent above, minus the two chain counts.
+// GuiSoftTakedownEvent (id 364, 32 bytes): the SOFT arm of the takedown bridge -- "somebody
+// else got taken down", as opposed to GuiTakedownEvent's "the player did / was". Same family
+// layout as GuiTakedownEvent above, minus the two chain counts, with the two status bytes
+// pulled forward to +0x1C/+0x1D.
+//
+// Every field below is pinned by the producer's own stores in
+// BrnGame::BrnGameModule::TranslateTakedownsToGuiEvents (the soft arm), read off the assembly:
+//     stw  src+0x00 -> +0x10        stw  src+0x04 -> +0x14
+//     std  src+0x08 -> +0x00        std  src+0x10 -> +0x08
+//     stw  src+0x18 -> +0x18
+//     stb  src+0x24 -> +0x1C        stb  src+0x26 -> +0x1D
+// -- seven stores, no 12-byte CgsGui::GuiEvent header (the first store lands at +0x00), so this
+// is a PLAIN record and NOT a GuiEvent<364> derivative. The size is pinned independently by the
+// AddGuiEvent<GuiSoftTakedownEvent> instantiation, whose AddEvent immediate pair is (364, 32),
+// and the consumer corroborates the aggressor slot: BoostMessageManager::RecvEvent's case 364
+// compares +0x10 against GuiCache::mePlayerActiveRaceCarIndex.
 struct GuiSoftTakedownEvent
 {
     CgsID                       mAggressorCarID;     // +0x00 <- producer src +0x08
@@ -1511,9 +1518,14 @@ struct GuiSoftTakedownEvent
 
     s32 GetEventType() const { return 364; }
 };
-static_assert(sizeof(GuiSoftTakedownEvent) == 32, "X360 AddGuiEvent size 32 (id 364)");
-static_assert(__builtin_offsetof(GuiSoftTakedownEvent, meAggressorIndex) == 0x10,
-              "X360 RecvEvent case 364 compares +0x10 to the active race-car index");
+static_assert(sizeof(GuiSoftTakedownEvent) == 32, "AddGuiEvent<GuiSoftTakedownEvent> size 32 (id 364)");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, mAggressorCarID)     == 0x00, "soft takedown +0x00");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, mVictimCarID)        == 0x08, "soft takedown +0x08");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, meAggressorIndex)    == 0x10, "soft takedown +0x10");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, meVictimIndex)       == 0x14, "soft takedown +0x14");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, meTakedownType)      == 0x18, "soft takedown +0x18");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, mbMarkedManTakeDown) == 0x1C, "soft takedown +0x1C");
+static_assert(__builtin_offsetof(GuiSoftTakedownEvent, mbSettledScore)      == 0x1D, "soft takedown +0x1D");
 
 // (GuiShutdownEvent -- DWARF :3618 {CgsID mVictimCarID} -- KEEPS its
 // BrnGuiDemangledEventTypes.h placeholder, id 373 size 8: HandleShutdown is not part of

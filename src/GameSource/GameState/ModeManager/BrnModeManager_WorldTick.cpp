@@ -1119,16 +1119,51 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
 
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
         {
-            // [!] [stuntrace] ONLINE ARM DEFERRED -- the lobby BurnoutSkillz tick. Console
-            // 0x8234AEEC..0x8234AF94, with its two verbatim asserts
-            //   "lpFreeburnLobbyMode" (BrnModeManager.cpp:887) and
-            //   "mpGameStateModule"   (BrnModeManager.cpp:5700):
-            //   BurnoutSkillzManager::SetNewSkillIfGreater(mode + 184, 10,
-            //       <lookup(*(mode + 184 + 112), playerActiveIndex)>, playerActiveIndex,
-            //       (f32)<a word of lStuntScoreInfo>);
-            // The embedded BurnoutSkillzManager region and its per-player lookup belong to the
-            // online free-burn lobby, and the Skillz TU carries the known GameActionQueue typedef
-            // clash that hazards H7 puts out of scope.
+            // [!] ONLINE ARM PARKED -- the lobby BurnoutSkillz tick. The console arm, in full
+            // (its two verbatim asserts are "lpFreeburnLobbyMode" and "mpGameStateModule"):
+            //   OnlineFreeBurnLobbyMode* lpFreeburnLobbyMode = <mpCurrentGameMode>;  // asserted
+            //   CGS_ASSERT(mpGameStateModule);
+            //   const EActiveRaceCarIndex leIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+            //   BurnoutSkillzManager& lrSkillz = <the manager the lobby mode embeds at mode +0xB8>;
+            //   BurnoutSkillzData* lpData = <lrSkillz's cached ScoringSystem, +0x70>
+            //                                  ->GetBurnoutSkillzData(leIndex);   // BY-INDEX entry
+            //   if (lpData != 0)
+            //       lrSkillz.SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_ROAD_RULE_TIME,
+            //                                     lpData, leIndex,
+            //                                     static_cast<f32>(static_cast<s32>(lStuntScoreInfo.muWord05)));
+            // Skill id is the immediate 10; the console sign-extends the stunt-score word before
+            // the integer-to-float, so the conversion is SIGNED, and the float travels in f1 with
+            // its GPR slot skipped -- which is why the argument list ends in the four-arg shape
+            // BrnBurnoutSkillzManager.h already declares.
+            //
+            // [!] THE LOOKUP IS TWO-STAGE -- do not flatten it when this is un-parked. The callee
+            // is the BY-INDEX overload ScoringSystem::GetBurnoutSkillzData(EActiveRaceCarIndex)
+            // (BrnScoringSystem.h): it walks the per-car scoring table at scoring +0x5044
+            // (stride +0x158) for the entry whose first word equals leIndex, reads that entry's
+            // key at +0x5048, and only then forwards to the by-key twin -- the one-loop compare
+            // against maBurnoutSkillzPlayerIDs reconstructed at BrnScoringSystem_Lookup.cpp.
+            // The committed by-index body (BrnScoringSystem_Lookup.cpp) is today a copy of
+            // that by-key loop and performs no index->key translation at all, so it does not yet
+            // mean what the console call means; see prerequisite 4.
+            //
+            // REAL BLOCKERS (re-measured this wave -- the GameActionQueue typedef clash that used
+            // to be cited here is FIXED: BrnBurnoutSkillzManager.h repeats the two IO aliases
+            // verbatim, and it and BrnOnlineFreeBurnLobbyMode.h both include into this TU
+            // cleanly). Four prerequisites remain, every one of them in a file this lane does not
+            // own:
+            //   1. OnlineFreeBurnLobbyMode declares no data members at all, so the manager it
+            //      embeds at mode +0xB8 has NO NAME to write (BrnOnlineFreeBurnLobbyMode.h).
+            //   2. BurnoutSkillzManager::mpScoringSystem (+0x70) is private with no accessor.
+            //   3. BurnoutSkillzManager::SetNewSkillIfGreater is private as well -- the header
+            //      carries one public: section and one private: section, and the declaration sits
+            //      below the private: line, so this call site cannot reach it either.
+            //   4. ScoringSystem::GetBurnoutSkillzData(EActiveRaceCarIndex) must grow the
+            //      index->key table walk described above before it means what the console means.
+            // Nothing here may reach any of those regions by an offset cast, so the arm stays
+            // parked rather than faked.
+            //
+            // It is online-only: this build never enters the lobby mode, so the mode-type gate
+            // above keeps it inert offline exactly as the console gates it.
         }
 
         (void)lStuntScoreInfo;

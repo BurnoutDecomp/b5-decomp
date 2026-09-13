@@ -226,6 +226,7 @@ void AIModule::Construct()
     mbEnableDrivingInput     = true;
     mbIsInOnlineGameMode     = false;
     mbIsInGameMode           = false;
+    mbHighTakenDownPenalty   = false;
     mbAIDrivesPlayer         = false;
     mbAIPlayerInvulnerable   = true;
     mRandom.Construct();

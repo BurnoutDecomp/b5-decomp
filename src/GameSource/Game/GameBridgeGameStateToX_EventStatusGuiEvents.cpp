@@ -18,14 +18,13 @@
 // required, neither does anything alone.
 //
 // ---------------------------------------------------------------------------
-// ⛔ WHY A SIBLING TU. Exactly the split precedent already carried by
+// WHY A SIBLING TU. Exactly the split precedent already carried by
 // GameBridgeGameStateToX_StuntGuiEvents.cpp and GameBridgeGameStateToX_TrainingStringIds.cpp:
-// the DWARF home GameBridgeGameStateToX.cpp compiles but CANNOT BE MOUNTED (six symbols in
-// its other bodies -- BrnGameState::GetTakedownEventOutputCount / GetTakedownEventOutputRecord
-// / GetGameStateInputBindRequestQueue / GetGameStateInputUnbindRequestQueue and the two
-// CgsInput::InputIO::PostWorldInputBuffer::Post*Request leaves -- have no definition anywhere
-// in src, i.e. six LNK2019s). Landing this slice there would make it unreachable. MOVED, not
-// copied: folding it back once those six are homed is a delete, not a duplicate-symbol hunt.
+// the declared home GameBridgeGameStateToX.cpp neither compiled nor linked when this slice
+// landed, so landing it there would have made it unreachable. Both are fixed -- the parent
+// TU compiles and is MOUNTED. The four symbols that are still un-homed sit in the other
+// sibling, GameBridgeGameStateToX_Controller.cpp, which is the one left unmounted. MOVED,
+// not copied: folding these siblings back in is a delete, not a duplicate-symbol hunt.
 //
 // ---------------------------------------------------------------------------
 // ⚠️ THE SEAM IS A NAMED FREE FUNCTION, AND IT IS NOT CALLED YET.

@@ -249,21 +249,30 @@ EActiveRaceCarIndex ScoringSystem::GetNextTeamMember(EActiveRaceCarIndex leRaceC
 // burnout-skillz tally.
 // ----------------------------------------------------------------------------
 
-// X360 0x82311110. Slot of maBurnoutSkillzData[] whose parallel player-id matches leRaceCarIndex
-// (the id arg); NULL when no slot matches.
+// The by-index entry point, and it is TWO-STAGE -- it does NOT index the skillz arrays itself.
+// Stage 1 walks the per-car scoring records (maCarData[], the console's +0x5044 field / +0x158
+// stride walk over each record's stored active-race-car index) for the slot matching
+// leRaceCarIndex and reads that record's network player id (the next word, +0x5048). Stage 2 is
+// the by-key twin below, which matches that id against the parallel id array and returns the
+// matching skillz record. No car record for the index => NULL, without ever touching the twin.
 BurnoutSkillzData* ScoringSystem::GetBurnoutSkillzData(EActiveRaceCarIndex leRaceCarIndex)
 {
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
     {
-        if (maBurnoutSkillzPlayerIDs[liSlot] == leRaceCarIndex)
+        // The scoring-index iteration guard the console inlines into every one of these scans.
+        CGS_ASSERT(liSlot <= GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
+                   "leEnumIndex <= E_PLAYER_SCORING_INDEX_COUNT");
+
+        if (maCarData[liSlot].GetActiveRaceCarIndex() == leRaceCarIndex)
         {
-            return &maBurnoutSkillzData[liSlot];
+            return GetBurnoutSkillzData(maCarData[liSlot].GetNetworkPlayerID());
         }
     }
     return NULL;
 }
 
-// By-network-id twin (same parallel-array search).
+// Stage 2 / the by-network-id overload: slot of maBurnoutSkillzData[] whose parallel player id
+// matches lID; NULL when no slot matches.
 BurnoutSkillzData* ScoringSystem::GetBurnoutSkillzData(BrnNetwork::NetworkPlayerID lID)
 {
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)

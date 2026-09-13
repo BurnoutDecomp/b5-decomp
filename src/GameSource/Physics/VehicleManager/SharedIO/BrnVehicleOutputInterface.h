@@ -196,6 +196,8 @@ namespace Vehicle
     struct CrashingRaceCarInterface
     {
         void Clear();
+        // [PARKED -- file not owned by this lane] the line below misnames the copied member on
+        // SetFromVehicleOutputInterface: the body copies RaceCarState::mbCrashing (element +0x44A).
         // @0x823625C0: copy each in-use car's RaceCarState::mbResetCarTransform flag into the array.
         void SetFromVehicleOutputInterface(const VehicleOutputInterface* lpOutput);
         bool IsCrashing(s32 liIndex) const;

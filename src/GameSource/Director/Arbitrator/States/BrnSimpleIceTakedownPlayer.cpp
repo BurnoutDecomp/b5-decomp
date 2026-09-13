@@ -22,7 +22,7 @@
 
 namespace BrnDirector
 {
-    void SimpleIceTakedownPlayer::SetIceAnim(Attrib::Gen::iceanim* lpIceAnim)
+    void SimpleIceTakedownPlayer::SetIceAnim(Camera::Camera::ShotReference* lpIceAnim)
     {
         // X360: if (!a2 || a2[1] != (*a2 | 0xC1EE)) FireAssert(...). The && short-circuit
         // matches the asm (a2[1]/*a2 are only read when a2 is non-null).

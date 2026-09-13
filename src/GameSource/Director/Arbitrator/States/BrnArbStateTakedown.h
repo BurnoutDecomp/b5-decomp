@@ -4,7 +4,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState / ArbStateSharedInfo
-#include "GameSource/Director/Camera/BrnBehaviourManager.h"              // BehaviourHandle<>, BehaviourManager, Camera::BehaviourInterpolate
+#include "GameSource/Director/Camera/BrnBehaviourManager.h"              // BehaviourHandle<>, BehaviourManager
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"  // Camera::BehaviourInterpolate (+ ::Parameters, held by value)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"     // Camera::BehaviourGyroCam
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h" // Camera::BehaviourLooseAttachment
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h" // Camera::BehaviourAftertouchCrash
@@ -24,54 +25,26 @@
 // takedown flow drives, and a MomentSelector used to pick an establishing "moment" shot while
 // the takedown plays out.
 //
-// LAYOUT: member NAMES + DWARF declaration order come from the DecFIGS DWARF
+// LAYOUT: member NAMES + declaration order come from the declaration reference
 // (references/DecFIGS/dwarfdump/GameSource/Director/Arbitrator/States/BrnArbStateTakedown.h),
-// gated on the X360 ledger's 18-function set for this TU (ARTIST asm is the offset/behaviour
-// authority; DWARF supplies names/types/shape only for functions the X360 build attests).
-// Per-member X360 (4-byte-pointer) offsets are pinned from the ARTIST asm (Construct
-// @0x8225A318, Prepare @0x8226D828, Update @0x8225A698, Release @0x822353B8) and quoted in
-// comments as provenance; parity on the x64 compile-gate host is BY NAMED MEMBER (the
-// project's x64-gate rule), not by byte offset.
+// gated on the console ledger's 27-function set for this TU (the ARTIST asm is the offset /
+// behaviour authority; declaration reference supplies names/types/shape only for functions the console build
+// attests). Every per-member offset quoted below is pinned store-for-store from
+// ArbStateTakedown::Construct -- which seeds every sub-player, every behaviour handle and every
+// parameter block -- and cross-checked against each player's Release and against
+// ArbStateTakedown::Update's member reads. Parity on the x64 compile-gate host is BY NAMED
+// MEMBER; the quoted offsets are provenance.
 //
-// TRACTABILITY: this TU's 18 functions split into two tiers.
-//   * BODIED here (BrnArbStateTakedown.cpp): the trivial one-liners (GetName, every player's
-//     HasFinished(), inline in this header), ArbStateTakedown::Release, DriveByTakedownPlayer::
-//     Update, and SimpleIceTakedownPlayer::Prepare/Update/Release -- the functions whose
-//     per-frame work resolves entirely through NAMED accessors already homed elsewhere
-//     (BehaviourHandle<T>::GetProducedCamera()/GetBehaviour()/IsBehaviourReadyToUse(),
-//     BehaviourIceAnim::HasFinishedOrFailed(), Camera::RequestStartEffectHook(),
-//     BehaviourManager::CheckNoBehavioursAreAllocatedByState()/UnSetBehaviourUsedByHandle()).
-//   * DECLARATION-ONLY (honest FLAG comment at each): everything else -- ArbStateTakedown::
-//     Construct/Prepare/Update/Destruct/PickNewTakedownType; B3ClassicTakedownPlayer's full
-//     Construct/Prepare/Release/Update; DestructionPathTakedownPlayer's full Construct/Prepare/
-//     Release/Update; DriveByTakedownPlayer's Construct/Prepare/Release (Update IS bodied);
-//     ShutdownTakedownPlayer's full Construct/Prepare/Release/Update. Each keeps its X360
-//     vtable slot with an inline comment naming exactly what blocks it; the recurring blockers
-//     are:
-//       (a) a VMX "world-space normalized vector from car" computation that reads the live
-//           race car's world position out of AllVehicleData::GetRaceCar()'s return -- that
-//           accessor is intentionally typed `const void*` (its own TU is not reconstructed
-//           yet), so the position read would have to be a raw-offset poke into a real,
-//           not-yet-typed C++ object -- exactly what the project rules forbid (this is NOT
-//           the "external serialised blob" exception: it is a live game-object record with a
-//           pending reconstructed home);
-//       (b) the BehaviourInterpolate camera-blend setup helper (X360 sub_8224EE58) whose
-//           parameter mapping (duration vs. the two camera-source handles) is not confidently
-//           recoverable from the ARTIST asm alone without guessing an argument order -- every
-//           B3Classic/DestructionPath/Shutdown Update case that hands off into an interpolate
-//           blend hits this, even though their steady-state per-frame math is otherwise
-//           tractable;
-//       (c) (ArbStateTakedown::Update only) MomentSelector-driven moment selection combined
-//           with an ImpactShakeController::Update call whose full argument list the pseudocode
-//           collapses, plus a raw read into the opaque per-vehicle team/race-car snapshot; and
-//       (d) (Construct-family only) MomentSelector::AddMoment call sites whose argument-register
-//           pattern packs a second integer word alongside the type tag that does not match
-//           AddMoment's currently-declared (Moment::EType, f32) signature (see the Construct
-//           comment below) -- or (ShutdownTakedownPlayer::Construct) a
-//           BehaviourLooseAttachment::Parameters block whose ~140-byte tail is not yet named
-//           past its {meType, miParamWord1} head.
-//     This is the same honest-declaration convention BrnArbStatePostEvent.h's PickAppropriateShot
-//     uses for an unrecovered VMX pipeline.
+// Two things gate the functions still left declaration-only, and each such declaration carries
+// a one-line FLAG naming the single thing it waits on:
+//   (i)  the two gyro-cam Parameters blocks these players adopt live inside NamedParameters'
+//        un-carved reserved span -- record +2112 (B3-classic / destruction-path / shutdown) and
+//        record +2928 (drive-by), both on the record's 204-byte BehaviourGyroCam::Parameters
+//        grid. NamedParameters is homed in GameSource/Director/Camera/BrnBehaviourParameterBank.h;
+//        naming those two blocks is that header's work, not this one's.
+//  (ii) the BehaviourInterpolate camera-blend setup helper (console an unnamed helper) has no declared
+//        home in this tree, and the live race car's world position is only reachable through
+//        AllVehicleData::GetRaceCar()'s deliberately-opaque `const void*` return.
 // ----------------------------------------------------------------------------
 
 namespace Attrib { namespace Gen { class iceanim; } }
@@ -81,7 +54,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     // BrnDirector::B3ClassicTakedownPlayer -- the "Burnout 3 classic" replay-style takedown: an
     // aftertouch-crash flyback blended into a gyro-cam-anchored gameplay-camera hand-off via an
-    // interpolate behaviour. DWARF home BrnArbStateTakedown.h:65.
+    // interpolate behaviour. declaration reference home BrnArbStateTakedown.h. console +0x180 (0x58 bytes).
     // ------------------------------------------------------------------------
     class B3ClassicTakedownPlayer : public TakedownPlayer
     {
@@ -99,31 +72,30 @@ namespace BrnDirector
             E_NUM_STATES                        = 5
         };
 
-        // Construct/Prepare/Release are NOT in this TU's recovered 18-function set (no asm body
-        // available for this class). DECLARATION-ONLY: the overrides keep the X360 vtable slots.
-        void Construct();                                                                          // @0x???????? (no asm recovered)
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Construct (declaration reference BrnArbStateTakedown.cpp) -- the console INLINES it into
+        // ArbStateTakedown::Construct (the this+0x180 store block); de-inlined back
+        // into its own body in the .cpp.
+        void Construct();
 
-        // Update @0x822656E0 -- DECLARATION-ONLY. The FLYBACK state's hand-off branch (when the
-        // gyro-cam behaviour reports finished AND mfActiveTime has run past its threshold) runs
-        // the same unrecovered BehaviourInterpolate camera-blend setup helper as file banner
-        // FLAG (b) (X360 sub_8224EE58, allocating+configuring mInterpolaterB), so this function
-        // shares that blocker even though its steady-state per-frame math (the sin-based
-        // motion-blur amounts, the "Takedown" start-hook request) IS tractable through
-        // Camera::RequestMotionBlur / Camera::RequestStartEffectHook. Left declaration-only
-        // rather than body only the steady-state branch and drop the state-advance side effect.
+        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
+        // Parameters block at record +2112 (BrnBehaviourParameterBank.h).
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+
+        // Update -- FLAG: needs a declared home for the BehaviourInterpolate
+        // camera-blend setup helper (console an unnamed helper) the FLYBACK hand-off branch runs.
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Release -- reset the state machine, then drop the three behaviour holds.
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // HasFinished @0x821F6268: return meState == E_STATE_FINISHED.
         bool HasFinished() const override { return meState == E_STATE_FINISHED; }
 
     private:
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCam;         // X360 +0x00 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterA;   // X360 +0x14 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterB;   // X360 +0x28 (0x14)
-        Camera::BehaviourInterpolate::Parameters               mInterpolateParams; // X360 +0x3C
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCam;           // console +0x04 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterA;     // console +0x18 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterB;     // console +0x2C (0x14)
+        Camera::BehaviourInterpolate::Parameters              mInterpolateParams; // console +0x40 (0x10)
 
         f32    mfActiveTime;   // X360 +0x50  (asm: *(a2+80))
         EState meState;        // X360 +0x54  (asm: *(a2+84))
@@ -132,6 +104,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     // BrnDirector::DestructionPathTakedownPlayer -- the destruction-path takedown: two flyback
     // beats blended by an interpolate behaviour. DWARF home BrnArbStateTakedown.h:114.
+    // console +0x1D8 (0x6C bytes).
     // ------------------------------------------------------------------------
     class DestructionPathTakedownPlayer : public TakedownPlayer
     {
@@ -148,25 +121,30 @@ namespace BrnDirector
             E_NUM_STATES      = 5
         };
 
-        void Construct();                                                                          // @0x???????? (no asm recovered)
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Construct (declaration reference BrnArbStateTakedown.cpp) -- inlined by the console into
+        // ArbStateTakedown::Construct (the this+0x1D8 store block); de-inlined in the .cpp.
+        void Construct();
 
-        // Update @0x82265A58 -- DECLARATION-ONLY. Same FLAG (b) blocker as
-        // B3ClassicTakedownPlayer::Update: the FLYBACK1 hand-off branch runs the unrecovered
-        // BehaviourInterpolate camera-blend setup helper (sub_8224EE58).
+        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
+        // Parameters block at record +2112 (BrnBehaviourParameterBank.h).
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
+
+        // Update -- FLAG: needs a declared home for the BehaviourInterpolate
+        // camera-blend setup helper (console an unnamed helper) the FLYBACK1 hand-off branch runs.
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Release -- reset the state machine, then drop the four behaviour holds.
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // HasFinished @0x821F6280: return meState == E_STATE_FINISHED.
         bool HasFinished() const override { return meState == E_STATE_FINISHED; }
 
     private:
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCamA;       // X360 +0x00 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCamB;       // X360 +0x14 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterA;  // X360 +0x28 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterB;  // X360 +0x3C (0x14)
-        Camera::BehaviourInterpolate::Parameters               mInterpolateParams; // X360 +0x50
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCamA;          // console +0x04 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam>     mGyroCamB;          // console +0x18 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterA;     // console +0x2C (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolaterB;     // console +0x40 (0x14)
+        Camera::BehaviourInterpolate::Parameters              mInterpolateParams; // console +0x54 (0x10)
 
         f32    mfActiveTime;   // X360 +0x64  (asm: *(a2+100))
         EState meState;        // X360 +0x68  (asm: *(a2+104))
@@ -175,7 +153,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     // BrnDirector::DriveByTakedownPlayer -- the drive-by takedown: a gyro cam on either the
     // shooter's or the victim's car, selected by which car's produced-camera dirty-behaviour
-    // flag is set. DWARF home BrnArbStateTakedown.h:164.
+    // flag is set. declaration reference home BrnArbStateTakedown.h. console +0x398 (0x34 bytes).
     // ------------------------------------------------------------------------
     class DriveByTakedownPlayer : public TakedownPlayer
     {
@@ -191,21 +169,27 @@ namespace BrnDirector
             E_NUM_STATES      = 4
         };
 
-        void Construct();                                                                          // @0x???????? (no asm recovered)
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Construct (declaration reference BrnArbStateTakedown.cpp) -- inlined by the console into
+        // ArbStateTakedown::Construct (the this+0x398 store block); de-inlined in the .cpp.
+        void Construct();
+
+        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
+        // Parameters block at record +2928 (BrnBehaviourParameterBank.h).
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // Update @0x8225A000 -- tractable: picks between the two gyro-cam handles' produced
         // cameras by their dirty-behaviour flag, no interpolate-setup / VMX dependency.
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Release -- reset the state machine, then drop the two gyro-cam holds.
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // HasFinished @0x821F6298: return meState == E_STATE_FINISHED.
         bool HasFinished() const override { return meState == E_STATE_FINISHED; }
 
     private:
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam> mGyroCamDriveByL;  // X360 +0x00 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam> mGyroCamDriveByR;  // X360 +0x14 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam> mGyroCamDriveByL;  // console +0x04 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam> mGyroCamDriveByR;  // console +0x18 (0x14)
 
         f32    mfActiveTime;   // X360 +0x2C  (asm: *(a2+44))
         EState meState;        // X360 +0x30  (asm: *(a2+48))
@@ -215,7 +199,7 @@ namespace BrnDirector
     // BrnDirector::ShutdownTakedownPlayer -- the "shutdown"/impact takedown: the most elaborate
     // player, a 9-state sequence blending a gyro cam into an interpolate hand-off, then three
     // sequential loose-attachment "zoom" beats each registering a camera-impact effect on the
-    // wrecked car. DWARF home BrnArbStateTakedown.h:260.
+    // wrecked car. declaration reference home BrnArbStateTakedown.h. console +0x268 (0x130 bytes).
     // ------------------------------------------------------------------------
     class ShutdownTakedownPlayer : public TakedownPlayer
     {
@@ -238,52 +222,42 @@ namespace BrnDirector
             E_NUM_STATES      = 9
         };
 
-        // Construct @0x82208D80 -- DECLARATION-ONLY. The recovered body's tail calls
-        // BrnDirector::Camera::BehaviourLooseAttachment::Parameters::Construct(this+0xC0) and
-        // then stores several more field/constant writes into that Parameters block (offsets up
-        // to ~+140 past its head, including three float magic constants). That Parameters type
-        // (BrnBehaviourLooseAttachment.h) currently only models the {meType, miParamWord1} head
-        // this TU's OTHER functions touch (SetParameters/AttachTo/SetTarget/Get) -- growing it to
-        // the full ~140-byte block with named fields for every remaining zeroed/constant slot is
-        // that type's own TU's work, not something to fabricate here as anonymous padding dressed
-        // up as a body. Left declaration-only; the vtable slot is kept.
+        // Construct -- the one sub-player Construct the console does NOT inline
+        // (ArbStateTakedown::Construct calls it out of line).
         void Construct();
 
-        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
+        // Parameters block at record +2112 (BrnBehaviourParameterBank.h).
+        bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Update @0x8226D0B0 -- DECLARATION-ONLY. See the file banner FLAGs (a)/(b): state
-        // LOOKBACK seeds the gyro-cam's world-space normalized from-car vector by reading the
-        // live race car's world position out of AllVehicleData::GetRaceCar()'s intentionally-
-        // opaque `const void*` return, and also runs the BehaviourInterpolate camera-blend setup
-        // helper. Both feed every later state (FLYBACK..FINISHED), so the function is left
-        // declaration-only rather than bodying only its zoom-beat tail (states FLYBACK..FINISHED,
-        // which BY THEMSELVES are tractable through BehaviourLooseAttachment /
-        // CameraImpactEffect::RegisterImpact) and silently dropping the vector-seed/interpolate-
-        // blend side effects the earlier state depends on.
+        // Update -- FLAG: needs a typed AllVehicleData::GetRaceCar return (the
+        // LOOKBACK case seeds the gyro cam's from-car vector from the live car's world position,
+        // and every later state depends on that seed).
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;  // @0x???????? (no asm recovered)
+        // Release -- reset the state machine, then drop all seven behaviour holds.
+        void Release(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // HasFinished @0x821F62C8: return meState == E_STATE_FINISHED.
         bool HasFinished() const override { return meState == E_STATE_FINISHED; }
 
     private:
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam>       mGyroCam;         // X360 +0x00 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate>   mInterpolaterA;   // X360 +0x14 (0x14)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate>   mInterpolaterB;   // X360 +0x28 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam>       mGyroCam;         // console +0x04 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate>   mInterpolaterA;   // console +0x18 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate>   mInterpolaterB;   // console +0x2C (0x14)
 
-        // ---- three sequential "zoom" loose-attachment behaviours (X360 +0x40/+0x54/+0x68) ----
+        // ---- the loose-attachment hold plus three sequential "zoom" beats ----
         Camera::BehaviourHandle<Camera::BehaviourLooseAttachment> mLooseAttachment; // X360 +0x40 (0x14)
         Camera::BehaviourHandle<Camera::BehaviourLooseAttachment> mZoom1;           // X360 +0x54 (0x14)
         Camera::BehaviourHandle<Camera::BehaviourLooseAttachment> mZoom2;           // X360 +0x68 (0x14)
         Camera::BehaviourHandle<Camera::BehaviourLooseAttachment> mZoom3;           // X360 +0x7C (0x14)
 
-        Camera::BehaviourInterpolate::Parameters               mInterpolateParamsA; // X360 +0x90
-        Camera::BehaviourInterpolate::Parameters               mInterpolateParamsB; // X360 +0x94
-        Camera::BehaviourInterpolate::Parameters               mInterpolateParamsC; // X360 +0x98
-        Camera::BehaviourLooseAttachment::Parameters           mLooseAttachmentParameters; // X360 +0xC0
+        Camera::BehaviourInterpolate::Parameters     mInterpolateParamsA; // console +0x90 (0x10)
+        Camera::BehaviourInterpolate::Parameters     mInterpolateParamsB; // console +0xA0 (0x10)
+        Camera::BehaviourInterpolate::Parameters     mInterpolateParamsC; // console +0xB0 (0x10)
+        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentParameters; // console +0xC0 (0x64)
 
-        f32    mfActiveTime;          // X360 +0x124  (asm: *(a2+292))
+        f32    mfActiveTime;          // console +0x124  (asm: *(a2+292)) -- NOT seeded by Construct
         EState meState;               // X360 +0x128  (asm: *(a2+296))
         bool   mbUsedFinalShotImpact; // X360 +0x12C  (asm: *(a2+300), cleared in Update's LOOKBACK case)
     };
@@ -295,8 +269,9 @@ namespace BrnDirector
     class ArbStateTakedown : public ArbitratorState
     {
     public:
-        // DWARF ETakedownType (BrnArbStateTakedown.h:353). The X360 build only ever selects the
-        // B3-classic style (PickNewTakedownType is not in this TU's recovered function set).
+        // declaration reference ETakedownType (BrnArbStateTakedown.h). Construct seeds meTakedownType with
+        // the console's literal 1, i.e. the past-the-end E_NUM_TYPES sentinel ("no style picked
+        // yet"); PickNewTakedownType is what selects a real style.
         enum ETakedownType
         {
             E_TYPE_B3CLASSIC = 0,
@@ -305,7 +280,7 @@ namespace BrnDirector
         };
 
         // DWARF EState (BrnArbStateTakedown.h:364). Update's dispatch switch is indexed by this
-        // value (0..5, case 4 falls through to case 3's blocked-hand-off tail).
+        // value (0..5, case 4 falls through to case 3's hand-off tail).
         enum EState
         {
             E_STATE_INACTIVE                     = 0,
@@ -319,75 +294,62 @@ namespace BrnDirector
         };
 
         // ---- ArbitratorState virtual overrides (X360 vtable order; see base) -------------
-        // Construct @0x8225A318 -- DECLARATION-ONLY. Most of the body (zero every sub-player's
-        // state, seed the interpolate-parameters blocks) is mechanical, but its tail calls
-        // MomentSelector::AddMoment three times with an argument-register pattern that does NOT
-        // match that method's currently-declared (Moment::EType, f32) signature: the asm packs a
-        // SECOND integer word (5, then 9) alongside the type tag into the same 64-bit GPR the
-        // type occupies (e.g. `stw r27(=2), var_50; stw r11(=5), var_50+4; ld r4, var_50`), on
-        // top of a separately-packed float register for the weight. Reconciling this would mean
-        // either fabricating a 3-argument AddMoment overload or guessing which of {5, 9} is real
-        // vs. incidental -- both cross into BrnMomentSelector's own (already-`done`) TU rather
-        // than this one. Left declaration-only rather than guess the call.
+        // Construct.
         void        Construct() override;
 
-        // Prepare @0x8226D828 -- DECLARATION-ONLY. See the file banner FLAGs (a)/(b): this
-        // function seeds the debug-cam/gyro-cam's world-space normalized from-car vector from
-        // the live race car's opaque position record and runs the interpolate camera-blend
-        // setup helper, neither of which is recoverable by named member without fabricating a
-        // layout/argument order.
+        // Prepare -- FLAG: needs a typed AllVehicleData::GetRaceCar return (it
+        // seeds the gyro cam's world-space normalized from-car vector from the live car's
+        // world position, which that accessor hands back as an opaque `const void*`).
         bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Update @0x8225A698 -- DECLARATION-ONLY. See the file banner FLAG (c): the per-frame
-        // moment-selection + ImpactShakeController::Update call chain and a raw read into the
-        // opaque per-vehicle snapshot are not recoverable by named member without fabrication.
+        // Update -- FLAG: needs a typed AllVehicleData::GetRaceCar return (the
+        // debug-cam arm adds the live car's world position into this state's camera offset).
         void        Update(ArbStateSharedInfo& lrSharedInfo) override;
 
         bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x822353B8
         const char* GetName() const override;                          // @0x821F62E0
 
-        // Destruct() IS in the base vtable but NO asm body was recovered for it in this TU's
-        // 18-function ledger set. DECLARATION-ONLY: the override keeps the X360 vtable slot; the
-        // body is left to the base (the per-TU cl /c gate does not link it). FLAG: body not
-        // recovered.
+        // FLAG: no asm body recovered for Destruct in this TU's ledger set.
         void        Destruct() override;
 
     private:
-        // PickNewTakedownType @0x???????? -- choose which takedown style to play next. NOT in
-        // this TU's recovered 18-function set (no asm body available). DECLARATION-ONLY.
+        // FLAG: no asm body recovered for PickNewTakedownType in this TU's ledger set (declaration reference
+        // home BrnArbStateTakedown.cpp).
         void PickNewTakedownType(ArbStateSharedInfo& lrSharedInfo);
 
         // ---- members, DWARF order; X360 (4-byte-pointer) offsets in comments --------------
-        B3ClassicTakedownPlayer          mClassicTakedown;          // X360 +0x10   (0x58)
-        DestructionPathTakedownPlayer    mDestructionPathTakedown;  // X360 +0x180  (0x6C)
+        // (the base's own members end at +0x172; the sub-player run starts at +0x180.)
+        B3ClassicTakedownPlayer          mClassicTakedown;          // console +0x180  (0x58)
+        DestructionPathTakedownPlayer    mDestructionPathTakedown;  // console +0x1D8  (0x6C)
         SimpleIceTakedownPlayer          mSimpleIceTakedown;        // X360 +0x244  (0x24)
         ShutdownTakedownPlayer           mShutdownTakedown;         // X360 +0x268  (0x130)
         DriveByTakedownPlayer            mDriveByTakedown;          // X360 +0x398  (0x34)
 
-        Camera::ImpactShakeController                              mImpactShakeController; // X360 +0x3CC (+972 dec)
-        Camera::BehaviourHandle<Camera::BehaviourAftertouchCrash>  mTakedownDebugCam;      // X360 +0x3E0 (+992 dec)
-        Camera::BehaviourHandle<Camera::BehaviourGyroCam>          mGyroCam;               // X360 +0x3F4 (+1012 dec)
-        Camera::BehaviourHandle<Camera::BehaviourInterpolate>      mInterpolator;          // X360 +0x408 (+1032 dec)
-        Camera::BehaviourInterpolate::Parameters                   mInterpolatorParams;    // X360 +0x41C (+1052 dec)
+        Camera::ImpactShakeController                             mImpactShakeController; // console +0x3CC (five f32)
+        Camera::BehaviourHandle<Camera::BehaviourAftertouchCrash>  mTakedownDebugCam;     // console +0x3E0 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourGyroCam>          mGyroCam;              // console +0x3F4 (0x14)
+        Camera::BehaviourHandle<Camera::BehaviourInterpolate>      mInterpolator;         // console +0x408 (0x14)
+        Camera::BehaviourInterpolate::Parameters                   mInterpolatorParams;   // console +0x41C (0x10)
 
-        MomentSelector mMomentSelector;   // X360 +0x42C (+1068 dec)
+        MomentSelector mMomentSelector;   // console +0x42C (0x1E4)
 
-        TakedownPlayer* mpCurrentTakedown;    // X360 +0x610 (+1552 dec)
-        ETakedownType    meTakedownType;      // X360 +0x618 (+1560 dec)
-        s32              miIceMovieIndex;     // X360 +0x61C (+1564 dec)
-        s32              miRoadRageRDCutCount;// X360 +0x??? -- FLAG: X360 store target not confidently pinned; see Construct/Release .cpp notes
+        TakedownPlayer*  mpCurrentTakedown;    // console +0x610 (asm: *(a1+1552))
+        ETakedownType    meTakedownType;       // console +0x614
+        s32              miIceMovieIndex;      // console +0x618 (Construct seeds -1)
+        s32              miRoadRageRDCutCount; // console +0x61C (asm: *(a1+1564); Update compares it
+                                               //              against KI_MAX_ROADRAGE_CUTS == 2)
 
-        f32    mfFailsafeTimer;   // X360 +0x620 (+1568 dec)
-        f32    mfActiveTime;      // X360 +0x624 (+1572 dec)
-        EState meState;           // X360 +0x628 (+1576 dec)
+        f32    mfFailsafeTimer;   // console +0x620 (asm: *(a1+1568))
+        f32    mfActiveTime;      // console +0x624 (asm: *(a1+1572))
+        EState meState;           // console +0x628 (asm: *(a1+1576))
 
-        bool   mbAlwaysUseShutdownCam;   // X360 +0x62C (+1580 dec)
-        bool   mbUseTakedownDebugCam;    // X360 +0x60C (+1548 dec)
-        bool   mbHasTriggeredFlash;      // X360 +0x62D (+1581 dec)
-        bool   mbUsingMomentSelector;    // X360 +0x60D (+1549 dec)  MomentSelector::Update gate (Update; DECLARATION-ONLY there)
-        bool   mbPlayedRoadRageEffect;   // X360 +0x62E (+1582 dec)  road-rage "Car_Reset" one-shot gate (Update; DECLARATION-ONLY there)
+        bool   mbAlwaysUseShutdownCam;   // console +0x62C (Construct clears)
+        bool   mbUseTakedownDebugCam;    // console +0x62D (Construct clears; Update's debug-cam arm
+                                         //              gates on it AND mTakedownDebugCam)
+        bool   mbHasTriggeredFlash;      // console +0x62E (one-shot "Car_Reset" effect gate in
+                                         //              Update; NOT seeded by Construct)
 
-        static const s32 KI_MAX_ROADRAGE_CUTS;   // BrnArbStateTakedown.cpp:28
+        static const s32 KI_MAX_ROADRAGE_CUTS;   // BrnArbStateTakedown.cpp (declaration reference value 2)
         static const f32 KF_TRANSITION_TIME;     // BrnArbStateTakedown.cpp:26
         static const f32 KF_MIN_FAILSAFE_TIME;   // BrnArbStateTakedown.cpp:27
     };

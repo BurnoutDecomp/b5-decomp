@@ -241,7 +241,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
         const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
         const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface,
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface)
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface,
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
 {
     // ---- leg 1: refresh the cached active-race-car snapshot ---------------------------------
     // âš ï¸ COPIED BY ASSIGNMENT, NEVER AT THE CONSOLE'S LITERAL 10480 BYTES. 10480 is the X360
@@ -304,7 +305,8 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // CONSOLE POSITION, exact. GameStateModule::PostWorldUpdate @0x8238F358's `bl` stream:
     //     #6/#7   GetActiveRaceCarOutputInterface + XMemCpy   <- leg 1 above
     //     #14/#15 GetGameEventQueue + Append<1536,16>         <- leg 2 above
-    //     #18     GameStateModule::CacheTakedownManagerPostWorldInputData   (no body on this tree)
+    //     #18     GameStateModule::CacheTakedownManagerPostWorldInputData   (bodied 2026-09-13,
+    //             GameStateModule_gTD_00.cpp; staged below)
     //     #19     BrnGameState::ModeManager::PostWorldUpdate   <- THIS LEG, immediately after leg 2
     //     #23     TriggerQueryManager::PostWorldUpdate
     //
@@ -530,10 +532,15 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
         GetModeManager()->ProcessPlayerCrashes(lpRaceCarCrashEventQueue);
     }
 
-    // ---- [takedown wave 2026-09-02, conductor] post-world #18 -----------------------------
-    // CacheTakedownManagerPostWorldInputData @0x82375E70: the crash queue (and the traffic-type
-    // response queue) cached for next frame's TakedownManager::Update. GameStateModule_gTD_00.cpp.
-    CacheTakedownPostWorldInputs(lpRaceCarCrashEventQueue, lpTrafficTypeResponseQueue);
+    // ---- [takedown wave] the two post-world takedown caches, in the console's order --------
+    // PostWorldUpdate does the traffic-type response queue itself (the miLength store
+    // at + TrafficTypeResponse_::Append at), then calls
+    // CacheTakedownManagerPostWorldInputData at `bl` #18 -- which caches
+    // the race-car crash queue AND the module's copy of the post-world VehicleOutputInterface
+    // (gsm+250816), the interface next frame's SetFromVehicleOutputInterface reads.
+    // Both bodies: GameStateModule_gTD_00.cpp.
+    CacheTakedownTrafficTypeResponses(lpTrafficTypeResponseQueue);
+    CacheTakedownManagerPostWorldInputData(lpVehicleOutputInterface, lpRaceCarCrashEventQueue);
 
     // ============================================================================
     // ⭐⭐⭐ [stuntrace 2026-08-27] LEG 4 -- THE STUNT-SCORER LATCH DRAIN
@@ -613,6 +620,40 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     }
 
     // ============================================================================
+    // [takedown wave 2026-09-13] LEG 5b -- REFRESH THE PER-SLOT "this car is crashing" CACHE
+    // (console PostWorldUpdate -- between ProcessContacts
+    // and the player-index publish below, which is where it sits here).
+    //
+    // THE CONSOLE LOOP, register for register:
+    //     r29 = this + 0x3BF60 (== 245600), stepped by 2 per iteration
+    //     r24 = this + 0x32DBC (== 208316), indexed by the slot
+    //     lhz r11, 0(r29) ; clrlwi r11, r11, 31 ; beq -> store 0
+    //     GetRaceCarState(iface, i) ; lbz r11, 0x44A(r3) ; stbx r11, r24, r30
+    // 245600 - 235488 (mLastActiveRaceCarInterface's seat) == 10112 == the interface's u16-per-slot
+    // flag word array, and that member IS NAMED in this tree: maxRaceCarFlags (declaration reference
+    // BrnRaceCarEntityModuleOutputInterface.h; the same 2*(idx+0x13C0) displacement
+    // SetRaceCarState's `sthx` writes). Bit 0 is E_RACE_CAR_OUTPUT_FLAG_IN_USE, and testing it is
+    // exactly RCEntityActiveRaceCarOutputInterface::IsRaceCarActive  -- which the
+    // console inlined here, leaving only its two range asserts. So the gate is called by name; no
+    // offset is poked. The payload byte is element +0x44A == +1098, and this tree's RaceCarState
+    // puts mbCrashing at exactly 1098 as well (BrnVehicleEvents.h: miRaceCarID +1088, mi8Gear
+    // +1092, mi8LastContactedRaceCar +1093, mabWheelExists[4] +1094..+1097, mbCrashing +1098) --
+    // console and host agree, there is NO offset drift on this member. Read by name through the
+    // committed const GetRaceCarState.
+    //
+    // ⛔ WHY IT MATTERS: maRaceCarCrashing is what GameStateModule::IsRaceCarCrashing
+    // returns, and until now nothing in the tree ever wrote it -- so that accessor answered from
+    // zero-initialised static storage on every frame. [[deterministic-does-not-mean-data]].
+    // ============================================================================
+    for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+    {
+        const ::EActiveRaceCarIndex leSlot = static_cast<::EActiveRaceCarIndex>(liSlot);
+        maRaceCarCrashing[liSlot] =
+            mLastActiveRaceCarInterface.IsRaceCarActive(leSlot) &&
+            mLastActiveRaceCarInterface.GetRaceCarState(leSlot)->mbCrashing;
+    }
+
+    // ============================================================================
     // [showtime score wave 2026-08-29] LEG 6 -- PUBLISH THE PLAYER'S ACTIVE-CAR INDEX
     // (console PostWorldUpdate @0x8238F358, the block immediately after ProcessContacts).
     //
@@ -639,12 +680,6 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // ⓘ POSITION IS THE CONSOLE'S, and it matters: the publish runs AFTER ProcessContacts, so
     // the contact pass reads the PREVIOUS frame's index. That one-frame staleness is the
     // console's own; do not "fix" it by hoisting this above leg 5.
-    //
-    // [!] Still unimplemented: the per-slot maRaceCarCrashing[8] refresh
-    // (console 0x8238F460..0x8238F4E4, `*(this + 208316 + i) = <iface slot i in use> ?
-    // GetRaceCarState(i)->mbCrashing : 0`). Its gate is a u16-per-slot flag array at
-    // iface+10112 that this tree's RCEntityActiveRaceCarOutputInterface does not yet name, and
-    // guessing which member that is would be exactly the offset-poke hazards H9 forbids.
     // ============================================================================
     if (mLastActiveRaceCarInterface.IsPlayerCarActive())
     {
@@ -1918,13 +1953,16 @@ void GameStateModule::ProcessGameEventsStartGameModeBringUp(
 //     case 27: ModeManager::UserCancelCurrentMode(v23 + 4128);
 //              TakedownManager::ClearRaceCarData(v23 + 568)
 //
-// [!] CASES 25 AND 26 ARE ARMED (26 added 2026-08-29). FinishOfflineModeIntro @0x823119B0 is
-// bodied (BrnModeManager_IntroPlay.cpp) and so is ResultsAccept @0x82311858 -- the latter closes
-// the event loop's game side: it is the ONLY caller-visible path from "the results screen went
-// away" to ExitCurrentMode clearing mpCurrentGameMode. FinishedMapPan / UserCancelCurrentMode and
-// TakedownManager::ClearRaceCarData still have NO declaration and NO body anywhere in the tree --
-// a tree-wide `tools/re/hasbody.py`, not an assumption -- so their two arms stay written out and
-// PARKED. Nothing faked. DELETE-WHEN those three land: un-park each arm exactly as quoted above.
+// [!] CASES 25, 26 AND 27's SECOND CALL ARE ARMED. FinishOfflineModeIntro is bodied
+// (BrnModeManager_IntroPlay.cpp) and so is ResultsAccept -- the latter closes the event
+// loop's game side: it is the ONLY caller-visible path from "the results screen went away" to
+// ExitCurrentMode clearing mpCurrentGameMode. TakedownManager::ClearRaceCarData is bodied too
+// (BrnTakedownManager.cpp), reached through GameStateModule::ClearTakedownRaceCarData.
+// [X] STILL PARKED, re-measured 2026-09-13 with a tree-wide `tools/re/hasbody.py` rather than
+// assumed: ModeManager::FinishedMapPan and ModeManager::UserCancelCurrentMode
+// have NO declaration and NO definition anywhere in the tree, so case 24 and case 27's
+// FIRST call stay written out and unarmed. Nothing faked. DELETE-WHEN those two land: un-park each
+// arm exactly as quoted above.
 //
 // IntroState uses a countdown for online modes and offline Showtime. Other offline modes
 // wait for the pre-event GUI to finish its presentation and send GUI 163, which
@@ -1955,7 +1993,8 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
         switch (liType)
         {
         case 24:   // E_EVENT_FINISHED_MAP_PAN
-            // [X] PARKED: ModeManager::FinishedMapPan has no declaration and no body on this tree.
+            // [X] PARKED: ModeManager::FinishedMapPan has no declaration and no body on
+            // this tree (re-measured 2026-09-13).
             //     mModeManager.FinishedMapPan();
             break;
 
@@ -2034,9 +2073,11 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
             break;
 
         case 27:   // E_EVENT_POST_EVENT_LEAVE
-            // [X] PARKED: ModeManager::UserCancelCurrentMode has no body on this tree.
+            // [X] PARKED: ModeManager::UserCancelCurrentMode has no declaration and no
+            // body on this tree (re-measured 2026-09-13).
             //     mModeManager.UserCancelCurrentMode();
-            // [takedown wave 2026-09-02] the second call of the arm (0x823A0A18 case 27) is real now.
+            // The arm's SECOND console call is real: TakedownManager::ClearRaceCarData(gsm+568),
+            // bodied at BrnTakedownManager.cpp and reached through the module's own hook.
             ClearTakedownRaceCarData();
             break;
 

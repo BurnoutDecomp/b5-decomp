@@ -76,6 +76,9 @@ namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 // header. The partfile includes the real header.
 namespace BrnGameState   { struct TakedownEvent; struct TakedownManager; struct TakedownPostWorldCache; }
 namespace BrnTraffic     { namespace BrnTrafficIO { struct TrafficTypeResponse; } }   // [takedown wave] cache arg
+// CacheTakedownManagerPostWorldInputData takes the post-world VehicleOutputInterface by pointer
+// only; forward-declared rather than pulling BrnVehicleOutputInterface.h into this header.
+namespace BrnPhysics     { namespace Vehicle { struct VehicleOutputInterface; } }
 
 namespace BrnGameState
 {
@@ -220,7 +223,7 @@ public:
     // ControllerInput::mbRaceModePressed -- accelerator AND brake both past 0.25 analogue
     // travel, SetButtonPressed @0x823BA240), f1 = the game timestep, r6 = the out start
     // mechanism. r5 IS SKIPPED -- the PPC float argument consumes its GPR slot, which is why
-    // the Hex-Rays prototype shows a phantom `int a4`.
+    // the decompiler's prototype shows a phantom `int a4`.
     // Returns true exactly once, on the frame the 0.35 s hold expires.
     bool ShouldStartSnapRaceMode(bool                     lbRaceModePressed,
                                  f32                      lfGameTimestep,
@@ -384,7 +387,13 @@ public:
         // TakedownManager::Update's "last traffic type response queue" argument.
         const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue,
         const BrnAI::AIModuleIO::AICarOutputInterface* lpAICarOutputInterface,
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface);
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutputInterface,
+        // [takedown wave 2026-09-13] the world output's VehicleOutputInterface -- what
+        // BridgeWorldToGameState would copy into the PostWorldInputBuffer, and the ONE input
+        // CacheTakedownManagerPostWorldInputData reads out of it. Same one-feed rule as every
+        // argument above; UpdateOutputBuffer::GetVehicleOutputInterface() const publishes exactly
+        // this type, and the call site passes it inside its own LockForRead bracket.
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface);
 
     // ==========================================================================================
     // ⭐⭐⭐ [showtime score wave 2026-08-29] ProcessContacts -- X360 0x8236BC68, DWARF :853.
@@ -501,8 +510,15 @@ public:
     // ClearRaceCarData hook (ProcessGameEvents cases 27 / 32).
     void ConstructTakedownBringUp();
     bool PrepareTakedownBringUp();
-    void CacheTakedownPostWorldInputs(
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
+    // , post-world `bl` #18. Caches the race-car crash queue (gsm+250272) and the
+    // module's copy of the post-world VehicleOutputInterface (gsm+250816) -- the interface the
+    // pre-world leg's SetFromVehicleOutputInterface reads. Body in GameStateModule_gTD_00.cpp.
+    void CacheTakedownManagerPostWorldInputData(
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue);
+    // The separate Clear+Append of the module's TrafficTypeResponse<32> queue (gsm+278480), which
+    // GameStateModule::PostWorldUpdate does itself, two `bl` before the cache call above.
+    void CacheTakedownTrafficTypeResponses(
         const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue);
     void TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lpActionQueue, f32 lfGameTimestep,
                              const CgsSystem::TimerStatusInterface& lrTimerStatusInterface, bool lbSimPaused);
@@ -586,11 +602,14 @@ public:
     // 25 GUI_FINISHED_OFFLINE_PRE_EVENT, 26 RESULTS_FINISHED, 27 POST_EVENT_LEAVE) -- verified by
     // the callee on each arm, not assumed.
     //
-    // ⚠️ CASES 25 AND 26 ARE ARMED (26 added 2026-08-29). ModeManager::FinishOfflineModeIntro
-    // @0x823119B0 and ModeManager::ResultsAccept @0x82311858 are both bodied in
-    // BrnModeManager_IntroPlay.cpp; FinishedMapPan / UserCancelCurrentMode are still neither
-    // declared nor bodied on this tree, so those two arms stay PARKED IN THE BODY with the console
-    // call written out. Nothing is fabricated. DELETE-WHEN those two land.
+    // ⚠️ CASES 25, 26 AND 27's SECOND CALL ARE ARMED. ModeManager::FinishOfflineModeIntro
+    // and ModeManager::ResultsAccept are bodied in
+    // BrnModeManager_IntroPlay.cpp, and TakedownManager::ClearRaceCarData is bodied at
+    // BrnTakedownManager.cpp (reached through GameStateModule::ClearTakedownRaceCarData).
+    // STILL PARKED, re-measured 2026-09-13 with tools/re/hasbody.py: ModeManager::FinishedMapPan
+    // and ModeManager::UserCancelCurrentMode have no declaration and no
+    // definition anywhere in the tree, so case 24 and case 27's FIRST call stay written out and
+    // unarmed. Nothing is fabricated. DELETE-WHEN those two land.
     void ProcessGameEventsModeIntroBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
 
@@ -635,7 +654,7 @@ public:
     //
     // SIGNATURE IS THE DWARF's (BrnGameStateModule.h:781
     // `bool ShouldStartShowtimeMode(float32_t, bool, TimerRequests*)`) AND THE ASM AGREES, which is
-    // what settles the phantom-argument trap: Hex-Rays renders this
+    // what settles the phantom-argument trap: the decompiler renders this
     // `(int a1, double a2, int a3, char a4, unsigned int* a5)` -- FIVE arguments -- because the f32
     // rides f1 and CONSUMES the r4 GPR slot. r4 is never read in the body; the bool is r5
     // (`clrlwi r11, r5, 24` @0x82356C18) and the pointer is r6 (`lwz r11, 0(r6)` @0x82356BF0).
@@ -724,7 +743,7 @@ public:
     // ⭐⭐ [driver-details pause wave 2026-08-28] X360 ProcessGameEvents @0x823A0A18, THE CASE-80
     // ARM -- "the GUI asks for the player's rank progress". Same extraction precedent as the
     // case-111/113/115 and the pause-family arms above. The console arm, verbatim from the asm
-    // @0x823A2D54..0x823A2E60 (Hex-Rays renders the same nine statements):
+    // (the decompiler renders the same nine statements):
     //     data = mProgressionManager.GetProgressionData();          // ResourcePtr, null-guarded
     //     rankCount = data->muProgressionRankCount;                 // lwz 0x14(data)
     //     m8 = GetProgressionRankForGameMode(E_MODE_MARKED_MAN);    // li r4, 8
@@ -832,7 +851,7 @@ public:
     // OnProfileLoaded @0x82397310 feeds it the Profile's saved position, SendSetupPlayerCarEvent
     // @0x8239A918 feeds it TriggerData::GetPlayerStartPosition().
     //
-    // ⚠️⚠️ DROPPED-ARGUMENT TRAP (the SIXTH recorded incident, and the first VECTOR one). Hex-Rays
+    // ⚠️⚠️ DROPPED-ARGUMENT TRAP (the SIXTH recorded incident, and the first VECTOR one). The decompiler
     // renders this `FindNearestJunkyardID()` -- ARITY ZERO. The asm opens `vmr128 v124, v1`, and
     // both call sites load v1 immediately before the branch (`lvx128 v1, r30, 48` in
     // OnProfileLoaded; `vmr128 v1, v127` in SendSetupPlayerCarEvent). It takes a Vector3 by value
@@ -1279,7 +1298,7 @@ public:
     // The BrnGameState::CarSelectManager (junkyard car-select) hooks. The junkyard FSM routes the
     // player-car snapshot / streaming / swap-broadcast / unpause hooks through the owning
     // GameStateModule. Every signature below was RE-RECOVERED FROM THE X360 ASM this wave (the
-    // register-pair rendering in the Hex-Rays prototypes drops arguments -- see the bodies).
+    // register-pair rendering in the decompiler's prototypes drops arguments -- see the bodies).
     // ------------------------------------------------------------------------
 
     // X360 read at GameStateModule+0x456D8 -- the active player car's CgsID, compared against the
@@ -1769,7 +1788,7 @@ private:
     // X360 +284436 (0x45714). The accelerator+brake HOLD countdown, in seconds.
     // ShouldStartSnapRaceMode decrements it by the frame timestep and fires when it crosses 0;
     // every bail arm re-arms it to 0.35 (`li`-free: the console stores the literal 0x3EB33333
-    // == 0.35f, rendered by Hex-Rays both as `0.34999999` and as the raw `1051931443`).
+    // == 0.35f, rendered by the decompiler both as `0.34999999` and as the raw `1051931443`).
     // ⓘ [showtime S7b-b] THE CONSOLE NAME FOR THIS MEMBER IS `mfTimeSpentDoingStartRaceAction`
     // (DWARF BrnGameStateModule.h:851) -- it is the immediate neighbour of, and the exact twin of,
     // mfTimeSpentDoingCrashStartAction below (:852, +284440). Not renamed here because

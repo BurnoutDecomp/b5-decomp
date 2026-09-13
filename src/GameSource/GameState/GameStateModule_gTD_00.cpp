@@ -9,20 +9,28 @@
 //                                                    takedown-event queue (Clear + Append each tick)
 //   gsm+250272  EventQueue<RaceCarCrashEvent,8>      the post-world crash queue, cached by
 //                                                    CacheTakedownManagerPostWorldInputData @0x82375E70
-//   gsm+250816  CrashingRaceCarInterface             built by SetFromVehicleOutputInterface from the
-//                                                    cached VehicleOutputInterface (gsm+250832)
+//   gsm+250816  VehicleOutputInterface               the module's cached copy of the post-world
+//                                                    vehicle output -- used-cars head at +0, the
+//                                                    eight RaceCarStates at +0x10 (the console's
+//                                                    8960-byte memcpy span). The frame's
+//                                                    CrashingRaceCarInterface is built FROM it by
+//                                                    SetFromVehicleOutputInterface into a STACK
+//                                                    local of PreWorldUpdate (var_6D8).
 // This build has neither a PostWorldInputBuffer nor a per-frame output buffer (mpOutputBuffer is
 // new'd once), so the same state lives in a heap-allocated TakedownPostWorldCache (mpTakedownCache)
-// and the manager itself is heap-allocated (mpTakedownManager) -- the mpTrainingManager precedent:
-// BrnGameStateModule.h cannot include BrnTakedownManagerTypes.h (its second EActiveRaceCarIndex
-// would re-bind the widely-included header), so the complete types are confined to this TU.
+// and the manager itself is heap-allocated (mpTakedownManager) -- the mpTrainingManager precedent.
 // FLAG PC deviation: pointers where the console embeds; the bodies below are the console's.
+//   Embedding would need the complete TakedownManager (BrnTakedownManager.h) by value, which
+//   changes GameStateModule's layout and its Construct/Destruct lifetime -- a change this lane
+//   did not take. BrnGameStateModule.h keeps only the forward declarations.
 //
 // Console positions reproduced here (GameStateModule::PreWorldUpdate @0x823A5328, !IsSimPaused arm,
-// asm 0x823A59C8..0x823A5A10): SetFromVehicleOutputInterface(stack, cachedVehicleOutput) ->
+// ): SetFromVehicleOutputInterface(stack, cachedVehicleOutput == r24 ==
+// gsm+250816) ->
 // TakedownManager::Update(this+0x238, activeIf, dt, crashQ, &crashingIf, preIn, out, trafficTypeQ)
 // -> `*(gsm+249944) = 0` (the module copy's miLength) + TakedownEvent_::Append(gsm+249936, out's
-// takedown queue) -> [MugshotManager / PaybackManager::Update -- absent on this build] ->
+// takedown queue) -> [MugshotManager::Update @gsm+1280 / PaybackManager::Update @gsm+1392 -- see
+// the note at the leg] ->
 // ProcessTakedownEvents(actionQ, gsm+249936, out).
 // ============================================================================
 
@@ -65,25 +73,79 @@ bool GameStateModule::PrepareTakedownBringUp()
     return mpTakedownManager->Prepare();
 }
 
-// X360 CacheTakedownManagerPostWorldInputData @0x82375E70 (post-world #18): the crash queue is
-// Clear()ed (`*(gsm+250280) = 0`) and Append()ed from the PostWorldInputBuffer's copy of the world
-// output's VehicleManagerOutputInterface crash queue. This build hands the world output's queues in
-// directly (the argument is the deviation, not the body). The traffic-type response queue is NOT
-// part of that function: Update's 7th argument is gsm+278480 (r26 @0x823A5878), a
-// TrafficTypeResponse<32> queue the module owns, Constructed @0x82380388 and Clear+Append'ed in
-// GameStateModule::PostWorldUpdate @0x8238F358 (verify V3). Cached here at the same post-world point.
-void GameStateModule::CacheTakedownPostWorldInputs(
-        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue,
-        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue)
+// ==============================================================================================
+// GameStateModule::CacheTakedownManagerPostWorldInputData  (, post-world `bl` #18)
+//
+// The console body, statement for statement (r29 == gsm, r26 == lpInput, r31 == gsm+250816,
+// r27 == gsm+250800, r30 == lpInput's VehicleOutputInterface):
+//   CGS_ASSERT(lpInput, "lpInput")
+//   *(gsm+250280) = 0                     the crash queue's miLength                 (Clear)
+//   *(gsm+250800) = 0                     the contact-spy word
+//   *(+250816 +0x2628) = 0                the cached traffic-state queue's miLength   (Clear)
+//   *(+250816 +0x2318) = 0                the cached impact queue's miLength          (Clear)
+//   VariableEventQueue<1536,16>::Clear(+250816 +0x65F0)   the cached game-event queue (Clear)
+//   std 0, +250816                        the used-cars head, zeroed
+//   stb 0, +250816 +0x6C00 .. +0x6C04     the five AggressiveDrivingFlags bytes
+//  *(gsm+250800) = *<contact-spy accessor>(lpInput)  [NAME NOT RECOVERED: that
+//                                        symbol is unnamed in the image and its body is only the
+//                                        "Not locked for reading" assert around a member fetch]
+//   RaceCarCrashEvent_::Append(gsm+250272, GetRaceCarCrashEventQueue(lpInput))
+//   r30 = GetVehicleOutputInterface(lpInput)
+//   PhysicalTrafficState_::Append(+250816 +0x2620, r30 +0x2620)
+//   ImpactEvent_::Append          (+250816 +0x2310, r30 +0x2310)
+//   VariableEventQueue::Append    (+250816 +0x65F0, r30 +0x65F0)
+//   std *(r30 +0), +250816                the used-cars head
+//   memcpy(+250816 +0x10, r30 +0x10, 0x2300)   the eight RaceCarStates (CONSOLE span)
+// That Clear-then-Append/copy of every field of the cached interface IS
+// VehicleOutputInterface::operator= (, BrnVehicleOutputInterface.cpp), so the copy runs
+// through that committed symbol -- by sizeof on the host, never at the console's 8960.
+//   ONE RECORDED DIFFERENCE: the console leaves the cached AggressiveDrivingFlags ZEROED (the five
+//   byte stores above are never followed by a copy) while operator= copies them. Nothing reads that
+//   field out of the cache -- SetFromVehicleOutputInterface touches only mUsedRaceCars and the
+//   RaceCarStates -- so the copy is inert; recorded rather than special-cased.
+//
+// [FLAG PC bring-up] THE ARGUMENTS ARE THE DEVIATION, NOT THE BODY -- the same reduction
+// ProcessContacts carries. The console reads both values out of the PostWorldInputBuffer nothing on
+// this build stages; the world module's UpdateOutputBuffer publishes exactly these two types, so
+// they arrive as arguments. The contact-spy word (gsm+250800) is deliberately NOT cached here:
+// this build feeds ProcessContacts the interface directly at the same post-world point
+// (PostWorldUpdateStuntBringUp leg 5), so caching it too would be the one-feed-not-two mistake.
+// ==============================================================================================
+void GameStateModule::CacheTakedownManagerPostWorldInputData(
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
+        const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent>* lpRaceCarCrashEventQueue)
 {
     if (mpTakedownCache == 0)
     {
         return;
     }
+
     mpTakedownCache->mRaceCarCrashEventQueue.Clear();
     if (lpRaceCarCrashEventQueue != 0)
     {
         mpTakedownCache->mRaceCarCrashEventQueue.Append(*lpRaceCarCrashEventQueue);
+    }
+
+    // [PC GUARD] the console has no null test here -- it reads the interface straight out of the
+    // PostWorldInputBuffer. A null pointer has nothing to copy, so the tripwire costs nothing.
+    if (lpVehicleOutputInterface != 0)
+    {
+        mpTakedownCache->mVehicleOutputInterface = *lpVehicleOutputInterface;
+    }
+}
+
+// The traffic-type response queue is NOT part of CacheTakedownManagerPostWorldInputData. It is
+// TakedownManager::Update's 7th argument, gsm+278480 (r26), a TrafficTypeResponse<32>
+// queue the module owns: Constructed in GameStateModule::Construct and Clear+Append'ed
+// by GameStateModule::PostWorldUpdate itself ( -- the miLength store at and
+// TrafficTypeResponse_::Append at), two `bl` BEFORE the cache call. Reproduced at that
+// position, with the same argument deviation as the cache above.
+void GameStateModule::CacheTakedownTrafficTypeResponses(
+        const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpTrafficTypeResponseQueue)
+{
+    if (mpTakedownCache == 0)
+    {
+        return;
     }
     mpTakedownCache->mTrafficTypeResponseQueue.Clear();
     if (lpTrafficTypeResponseQueue != 0)
@@ -124,11 +186,12 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
         return;
     }
 
-    // 0x823A59C8..0x823A59D0: the crashing-race-car scratch, from the cached VehicleOutputInterface.
-    // That cache (gsm+250832, an 8960-byte X360 copy) is not modelled here; Update only asserts the
-    // pointer non-null (BrnTakedownManager.cpp:182) and none of its callees receive it, so the
-    // Clear()ed interface is passed. [FLAG] SetFromVehicleOutputInterface not run on this build.
-    mpTakedownCache->mCrashingRaceCarInterface.Clear();
+    // : the crashing-race-car scratch, built from the cached
+    // VehicleOutputInterface (r24 == gsm+250816) exactly as the console builds it -- for every slot
+    // the cache's mUsedRaceCars marks in use, that car's RaceCarState::mbCrashing. The cache is
+    // filled at the post-world point by CacheTakedownManagerPostWorldInputData above.
+    mpTakedownCache->mCrashingRaceCarInterface.SetFromVehicleOutputInterface(
+        &mpTakedownCache->mVehicleOutputInterface);
 
     // [PC HARNESS, NOT X360] BRN_FORCE_TAKEDOWN=<seconds>: once the current mode has been IN_PROGRESS
     // for that long, fire the console's own "Force takedown" debug action (aggressor = car 0, victim
@@ -173,8 +236,25 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // 0x823A59F8..0x823A5A10: `*(gsm+249944) = 0; TakedownEvent_::Append(gsm+249936, out's queue)`.
     mpTakedownCache->mTakedownEventQueue.Append(*lpOutputTakedownQueue);   // (the copy was cleared above)
 
-    // [MugshotManager::Update @gsm+1280 / PaybackManager::Update @gsm+1392 sit here on the console;
-    //  neither manager exists on this build -- named, not faked.]
+    // [X] STILL PARKED, re-measured 2026-09-13 -- and the old wording ("neither manager exists on
+    // this build") was wrong in one half and right in the other:
+    //  * BOTH CLASSES ARE BODIED. MugshotManager::Update is BrnMugshotManager.cpp and
+    //  PaybackManager::Update is BrnPaybackManager.cpp, both carrying the console's own
+    //     signature -- whose third parameter is `const VehicleOutputInterface*`, i.e. r24, the very
+    //     cache this file now owns.
+    //   * WHAT IS ACTUALLY MISSING IS OWNERSHIP AND THE MOUNT, both outside this lane:
+    //       (a) GameStateModule has no member for either manager (the console embeds them at
+    //           gsm+1280 / gsm+1392) and no Construct call for them, so there is nothing to tick;
+    //       (b) BrnPaybackManager.cpp / BrnPaybackDebugComponent.cpp are NOT mounted in the exe
+    //           build list, so calling PaybackManager::Update would be an unresolved external for
+    //           the whole build. (BrnMugshotManager.cpp IS mounted.)
+    // Console position, for whoever lands them ( /):
+    //     MugshotManager::Update(gsm+1280, preIn, out, cachedVehicleOutput, gsm+249936,
+    //                            meCurrentGameModeType, <pause flag>);
+    //     PaybackManager::Update(gsm+1392, preIn, out, cachedVehicleOutput, gsm+249936,
+    //                            meCurrentGameModeType);
+    // The Mugshot call's 7th argument (r9) is `*(r14) != 0` off a stack-held pointer
+    // this lane did not resolve -- pin it before wiring, do not guess it.
 
     if (mpTakedownCache->mTakedownEventQueue.GetLength() > 0 && CgsDev::Log::gpDebugPrint != 0)
     {

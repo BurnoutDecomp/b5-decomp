@@ -365,7 +365,7 @@ namespace Vehicle
 
     // @0x823625C0  CrashingRaceCarInterface::SetFromVehicleOutputInterface
     //   For every race-car slot in use (mUsedRaceCars bit set) copy that car's
-    //   RaceCarState::mbResetCarTransform flag (byte @1098) into mabCrashingRaceCars[]. The
+    //   RaceCarState::mbCrashing flag (byte +0x44A) into mabCrashingRaceCars[]. The
     //   per-iteration index<8 guard is the inlined CgsBitArray bounds assert (loop-bounded, never
     //   fires); GetUsedCarsBitArray() == the interface's first member.
     void CrashingRaceCarInterface::SetFromVehicleOutputInterface(const VehicleOutputInterface* lpOutput)
@@ -377,7 +377,7 @@ namespace Vehicle
             if (lpOutput->GetUsedCarsBitArray().IsBitSet(static_cast<u32>(liIndex)))
             {
                 const RaceCarState* lpState = lpOutput->GetRaceCar(static_cast<u32>(liIndex));
-                mabCrashingRaceCars[liIndex] = lpState->mbResetCarTransform;
+                mabCrashingRaceCars[liIndex] = lpState->mbCrashing;
             }
         }
     }

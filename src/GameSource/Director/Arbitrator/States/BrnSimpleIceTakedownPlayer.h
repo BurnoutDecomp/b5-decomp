@@ -62,9 +62,26 @@ namespace BrnDirector
             E_NUM_STATES      = 4
         };
 
-        // Bind the iceanim that drives this takedown camera. Asserts the passed
-        // object carries iceanim's class-key tag. @0x821F58C8.
-        void SetIceAnim(Attrib::Gen::iceanim* lpIceAnim);
+        // Bind the shot reference (one ShotList element) that drives this takedown camera.
+        // Asserts the referenced object carries iceanim's class-key tag..
+        //
+        // The parameter/member type is the declaration reference's (BrnArbStateTakedown.h ->
+        // `Camera::ShotReference*`), not Attrib::Gen::iceanim*: the stored pointer is handed
+        // straight to BehaviourIceAnim::SetParameters, whose own typedef was corrected to
+        // Camera::Camera::ShotReference (== const Attrib::RefSpec) for exactly this reason --
+        // every producer in the tree passes a 24-byte ShotList element, never a constructed
+        // Attrib::Instance. See the note on BrnBehaviourIceAnim.h's ShotReference typedef.
+        void SetIceAnim(Camera::Camera::ShotReference* lpIceAnim);
+
+        // Construct (declaration reference BrnArbStateTakedown.cpp) -- the console INLINES it into
+        // ArbStateTakedown::Construct (the this+0x244 store block: `stw 0, 0x20`
+        // then the five-word handle clear at +0x04). Header-inline here, matching the console's
+        // own inlining, so it needs no separate mount.
+        void Construct()
+        {
+            meState = E_STATE_INACTIVE;   // stw r5(=0), 0x20(this+0x244)
+            mIceCam.Clear();              // stb 0, +0x04 / stw 0, +0x08..+0x14
+        }
 
         // Prepare @0x8226CF38 -- allocate + configure the ICE-anim behaviour (once) with the
         // bound shot's takedown look/eye vehicle refs on the live player race car, then report
@@ -92,7 +109,7 @@ namespace BrnDirector
         // pointer-sized-member-correct but not byte-identical to the X360 slot.
         Camera::BehaviourHandle<Camera::BehaviourIceAnim> mIceCam;   // X360 +0x04 (0x14) -- was mPad0[0x18]
 
-        Attrib::Gen::iceanim* mpIceAnim;     // X360 +0x18  the bound ICE anim
+        Camera::Camera::ShotReference* mpIceAnim;   // console +0x18  the bound ICE-anim shot reference
         f32    mfActiveTime;                 // X360 +0x1C  (asm: *(a2+28))
         EState meState;                      // X360 +0x20  (asm: *(a2+32))
 
