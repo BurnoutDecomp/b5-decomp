@@ -75,6 +75,10 @@ namespace BrnResource    { namespace GameDataIO { class AllocatorList; } }
 // forward-declared rather than pulling BrnTakedownManagerTypes.h into this widely-included
 // header. The partfile includes the real header.
 namespace BrnGameState   { struct TakedownEvent; struct TakedownManager; struct TakedownPostWorldCache; }
+// [takedown wave] The mugshot / payback managers the module owns beside the TakedownManager.
+// Pointer-only members here (see the two declarations near mpTakedownManager); the partfile
+// includes their real headers.
+namespace BrnGameState   { struct MugshotManager; struct PaybackManager; }
 namespace BrnTraffic     { namespace BrnTrafficIO { struct TrafficTypeResponse; } }   // [takedown wave] cache arg
 // CacheTakedownManagerPostWorldInputData takes the post-world VehicleOutputInterface by pointer
 // only; forward-declared rather than pulling BrnVehicleOutputInterface.h into this header.
@@ -1730,6 +1734,14 @@ private:
     TrainingManager*                        mpTrainingManager = 0;
     TakedownManager*        mpTakedownManager = 0;   // [takedown wave] X360 gsm+568 by value; heap here (GameStateModule_gTD_00.cpp)
     TakedownPostWorldCache* mpTakedownCache = 0;     // [takedown wave] X360 gsm+249936/+250272/+250816 by value; heap here
+    // [takedown wave F2] The two managers the module embeds immediately after the TakedownManager
+    // (gsm +0x500 and gsm +0x570; the module's Construct runs MugshotManager::Construct(gsm +0x500,
+    // gsm) and PaybackManager::Construct(gsm +0x570, gsm) back to back, and PreWorldUpdate ticks
+    // both from the takedown leg). Held by pointer for the same reason mpTrainingManager is:
+    // BrnMugshotManager.h `#include`s THIS header, so a by-value member is a genuine include cycle.
+    // The offsets are the identity proof, not a layout (semantic parity by named members).
+    MugshotManager*         mpMugshotManager = 0;
+    PaybackManager*         mpPaybackManager = 0;
 
     // ========================================================================================
     // ⭐⭐ [stuntrace wave D, D3] THE JUNCTION CACHE + THE HOLD TIMER (X360 +0x456C8..+0x456D2

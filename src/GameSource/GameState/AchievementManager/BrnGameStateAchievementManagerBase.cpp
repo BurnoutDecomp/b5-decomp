@@ -57,6 +57,10 @@ namespace
     const EAchievement E_X360_ACHIEVEMENT_SET_ALL_ROAD_RULE_CRASH  = static_cast<EAchievement>(31); // OnSetAllRoadRules (CRASH)
     const EAchievement E_X360_ACHIEVEMENT_FIND_ALL_DRIVE_THRUS     = static_cast<EAchievement>(32); // OnFindAllDriveThrus
     const EAchievement E_X360_ACHIEVEMENT_COMPLETE_GAME            = static_cast<EAchievement>(34); // OnGameCompletion
+    // Console id 0xE, read straight off the inlined OnTakedownChain expansion in
+    // GameStateModule::ProcessTakedownEvents. Deliberately NOT spelled with a declaration-record
+    // enumerator name: the console SKU's numbering differs from that record in this band.
+    const EAchievement E_CONSOLE_ACHIEVEMENT_TAKEDOWN_CHAIN        = static_cast<EAchievement>(14); // OnTakedownChain
 
     // OnSetRoadRule street ids (X360 64-bit CgsID literals).
     const CgsID KU_ROAD_ID_TIME_WATT_ST   = 0x5E2C9u;   // 385737  (score type TIME / 0)
@@ -73,6 +77,7 @@ namespace
     const s32 KI_MILLIONAIRE_SCORE             = 1000000;
     const s32 KI_PERFECT_RAGE_TAKEDOWNS        = 10;
     const s32 KI_GET_500_TAKEDOWNS             = 500;
+    const s32 KI_TAKEDOWN_CHAIN_FOR_ACHIEVEMENT = 10;   // OnTakedownChain (cmpwi chain, 0xA)
 }
 
 // ----------------------------------------------------------------------------
@@ -378,6 +383,26 @@ void AchievementManagerBase::OnGameCompletion()
     if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_COMPLETE_GAME))
     {
         AchievementEarnt(E_X360_ACHIEVEMENT_COMPLETE_GAME);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// OnTakedownChain
+//   Fires the takedown-chain achievement (console id 0xE) the first time a chain
+//   reaches ten. The console has no standalone symbol for this hook: it is inlined
+//   at its sole call site, GameStateModule::ProcessTakedownEvents, where the
+//   expansion is the identical virtual pair every sibling hook here uses --
+//   vtable slot 1 with the id, branch out if already earnt, `cmpwi chain, 0xA`,
+//   branch out if below, then vtable slot 0 with the same id. Both virtuals are
+//   protected, so the caller cannot name them; the hook is declared on this class
+//   in the header for exactly that reason, and this is its body.
+// ----------------------------------------------------------------------------
+void AchievementManagerBase::OnTakedownChain(s32 liChainLength)
+{
+    if (!IsAchievementEarnt(E_CONSOLE_ACHIEVEMENT_TAKEDOWN_CHAIN)
+        && liChainLength >= KI_TAKEDOWN_CHAIN_FOR_ACHIEVEMENT)
+    {
+        AchievementEarnt(E_CONSOLE_ACHIEVEMENT_TAKEDOWN_CHAIN);
     }
 }
 

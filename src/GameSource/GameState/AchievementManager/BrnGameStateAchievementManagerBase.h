@@ -178,6 +178,13 @@ public:
     void OnPowerParking(s32 liNumCars);                                         // X360 0x8235B138
     void OnGameCompletion();                                                    // X360 0x8235B1B0
 
+    // Bodied in this TU. It has no standalone symbol because the console INLINES it at its
+    // sole call site, GameStateModule::ProcessTakedownEvents, whose expansion there is the
+    // identical IsAchievementEarnt/AchievementEarnt pair every sibling hook in this record
+    // uses. Both of those virtuals are `protected`, so only a member of THIS class could have
+    // emitted that pair -- and this record already declared exactly this hook.
+    void OnTakedownChain(s32 liChainLength);
+
     // ===== remaining base hooks declared in the DWARF (bodies in other TUs) =====
     void OnShutdown(CgsID lCarId);                                              // DWARF :98
     void OnDrivenDistance();                                                    // DWARF :117
@@ -192,7 +199,6 @@ public:
     void OnStuntRunMultiplier(s32 liMultiplier);                               // DWARF :148
     void OnShowTimeMultiplier(s32 liMultiplier);                              // DWARF :153
     void OnBoostChain(s32 liChainLength);                                       // DWARF :163
-    void OnTakedownChain(s32 liChainLength);                                    // DWARF :168
 
     // ADDITIVE GROW (FLAG): X360 BurnoutSkillzManager::UpdateBurnoutSkillzTotals
     // (0x82322C30) calls this through the achievement-manager back-pointer when a

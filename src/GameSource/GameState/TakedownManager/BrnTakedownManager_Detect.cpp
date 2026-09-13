@@ -82,7 +82,19 @@ namespace BrnGameState
 
         // The crasher's packed EntityId word, as the real CgsSceneManager::EntityId so the owner byte
         // and the 14-bit entity index come out through the named accessors (the BrnCommonTypes.h
-        // EntityId is storage only). Same idiom as BrnChallengeManager_wC_05.cpp.
+        // EntityId is storage only). Same idiom as the challenge manager's crash reader.
+        //
+        // SETTLED this wave (the "attacker 0 on every rival crash" scare): there is NO "no attacker"
+        // SENTINEL in this seat and none is owed. The crash sink publishes a real causing entity on
+        // every path -- the world entity for a wall hit, the traffic slot's global id for a traffic
+        // hit, the other car for a car-on-car pair, the victim's own id for the self-inflicted arm --
+        // so "nobody took this car down" is spelled by the OWNER BYTE, never by the index. Both
+        // readers below are already owner-correct: the instant path reads the index only after the
+        // takedown TYPE has proven non-NONE (a classified takedown always has a race-car crasher),
+        // and the standard path tests GetOwner() against the traffic type and otherwise names the
+        // aggressor from the victim's shunt state rather than from this seat at all. A reader that
+        // took the bare entity index as an attacker slot would credit the player for every rival's
+        // self-inflicted crash; do not add one.
         CgsSceneManager::EntityId GetCrasherEntityId(const RaceCarCrashEvent* lpCrashEvent)
         {
             return CgsSceneManager::EntityId(lpCrashEvent->mCrasherEntityID.muValue);

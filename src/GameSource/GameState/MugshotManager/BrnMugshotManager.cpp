@@ -27,6 +27,7 @@
 
 #include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint ([mugshot] witness)
 
 namespace BrnGameState
 {
@@ -188,6 +189,23 @@ void MugshotManager::OnRoundEnd(bool lbResetState)
 // ---------------------------------------------------------------------------
 // DoesPlayerHaveACamera. Find the cache slot for the given player
 // and report whether they have a working camera (status != 0; status 4 == COUNT asserts).
+//
+// VERIFIED CONSOLE-FAITHFUL (re-read against the export this wave, instruction by instruction):
+// the linear walk of the eight stride-8 records, the bail after eight misses, the COUNT assert on
+// the found record's status, and the final "status != NONE" result all match. The gate itself is
+// NOT why no mugshot has ever been witnessed.
+//
+// FLAG(host stand-in, NOT a divergence in this file): the gate can never pass on the host because
+// nothing seeds maCameraStatusData. UpdateCameraStatusData fills it from the network in-game
+// player-status interface and pads every slot past the player count to {INVALID, COUNT} -- and
+// that interface's GetNumPlayers is a baseline LINK STUB returning a literal 0 rather than its
+// miNumPlayers member (GameSource/BrnBaselineLinkStubs.cpp, not this lane's file), so all eight
+// slots are padded and no victim index can ever match. Landing the accessor is a one-line change
+// in a file this lane does not own; it is reported as a blocker, not edited here.
+// ⚠️ AND IT WOULD NOT BY ITSELF PRODUCE A MUGSHOT. Both of the consumer's capture arms are
+// online-only (online non-lobby, or a free-burn lobby), so on an OFFLINE forced takedown the
+// console issues no capture either -- [mugshot] silence on an offline run is structural, exactly
+// as [payback] silence is. The witness in the consumer now says which of the two it was.
 // ---------------------------------------------------------------------------
 bool MugshotManager::DoesPlayerHaveACamera(::EActiveRaceCarIndex lePlayerRaceCarIndex)
 {
@@ -371,26 +389,80 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
         CGS_ASSERT(mpGameStateModule != nullptr, "mpGameStateModule");
 
         // Only react when the local player is the aggressor or the victim.
-        if (mpGameStateModule->GetPlayerActiveRaceCarIndex() != (::EActiveRaceCarIndex)leTakedownAggressorRaceCarIndex
-            && mpGameStateModule->GetPlayerActiveRaceCarIndex() != (::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex)
-        {
-            continue;
-        }
-        if (!DoesPlayerHaveACamera((::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex))
-            continue;
+        const bool lbPlayerIsParty =
+            mpGameStateModule->GetPlayerActiveRaceCarIndex() == (::EActiveRaceCarIndex)leTakedownAggressorRaceCarIndex
+            || mpGameStateModule->GetPlayerActiveRaceCarIndex() == (::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex;
 
-        // Online (non-lobby) takedowns broadcast their mugshot; free-burn-lobby takedowns capture
-        // locally without broadcast; everything else (offline online-lobby case) is skipped.
-        if (mpGameStateModule->IsOnlineGameMode()
-            && !GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType))
+        // The VICTIM's camera, not the player's: an aggressor's mugshot is taken BY the car that
+        // was taken down. Console-faithful -- the gate walks maCameraStatusData for a record whose
+        // active-race-car index equals the victim's and reports its camera status.
+        const bool lbVictimHasCamera =
+            lbPlayerIsParty && DoesPlayerHaveACamera((::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex);
+
+        // Which capture arm the two mode gates select. Re-derived from the export this wave: the
+        // console decides the IMAGE TYPE here (online non-lobby -> MUGSHOT, free-burn lobby ->
+        // FREEBURN_MUGSHOT) and passes the broadcast flag as a hard FALSE at both call sites. The
+        // tree had those two arguments the other way round -- the manager's own meShowMugshotType
+        // in the type seat and the 1/0 in the broadcast seat -- which both mis-typed the capture
+        // and flipped StartMugshotCapture's show/capture resolution, since that routine swaps the
+        // two race-car indices when the broadcast flag is set.
+        const bool lbOnlineNonLobby = mpGameStateModule->IsOnlineGameMode()
+                                   && !GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType);
+        const bool lbFreeBurnLobby  = GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType);
+
+        // [mugshot] PC witness (NOT in the console), first 8 only: this manager is silent on every
+        // run, and until now there was no way to tell a manager that never saw the event from one
+        // that saw it and filtered it. Prints ONE line per takedown event with the reason code of
+        // the FIRST gate that rejects it, or "capture" when a request is actually issued:
+        //   not-a-party   the local player is neither aggressor nor victim
+        //   no-camera     the victim has no camera record (see the FLAG below -- the host's
+        //                 player-status stand-in reports zero players, so no record is ever seeded)
+        //   offline       both capture arms are online-only, so an offline takedown reaches the
+        //                 end of the loop by design and issues nothing
+        // [FLAG PC witness]  DELETE-WHEN: the organic takedown case goes green and the mugshot
+        // request is confirmed.
         {
-            StartMugshotCapture(lpOutput, meShowMugshotType,
-                                (::EActiveRaceCarIndex)leTakedownAggressorRaceCarIndex,
-                                (::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex, true);
+            static s32 siMugshotWitnessed = 0;
+            if (siMugshotWitnessed < 8 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siMugshotWitnessed;
+
+                const char* lpcReason = "capture";
+                if (!lbPlayerIsParty)        lpcReason = "not-a-party";
+                else if (!lbVictimHasCamera) lpcReason = "no-camera";
+                else if (!lbOnlineNonLobby && !lbFreeBurnLobby) lpcReason = "offline";
+
+                *CgsDev::Log::gpDebugPrint << "[mugshot] takedown attacker "
+                                           << static_cast<s32>(leTakedownAggressorRaceCarIndex)
+                                           << " -> victim " << static_cast<s32>(leTakedownVictimRaceCarIndex)
+                                           << " player=" << static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex())
+                                           << " gameMode=" << static_cast<s32>(leGameModeType)
+                                           << " online=" << (mpGameStateModule->IsOnlineGameMode() ? 1 : 0)
+                                           << " reason=" << lpcReason
+                                           << " [FLAG PC witness]\n";
+            }
         }
-        else if (GameStateModuleIO::IsOnlineFreeBurnLobby(leGameModeType))
+
+        if (!lbPlayerIsParty)
         {
-            StartMugshotCapture(lpOutput, meShowMugshotType,
+            continue;
+        }
+        if (!lbVictimHasCamera)
+        {
+            continue;
+        }
+
+        // Online (non-lobby) takedowns capture the full mugshot; free-burn-lobby takedowns capture
+        // the free-burn one; everything else (the offline case) is skipped.
+        if (lbOnlineNonLobby)
+        {
+            StartMugshotCapture(lpOutput, GameStateModuleIO::E_IMAGE_TYPE_MUGSHOT,
+                                (::EActiveRaceCarIndex)leTakedownAggressorRaceCarIndex,
+                                (::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex, false);
+        }
+        else if (lbFreeBurnLobby)
+        {
+            StartMugshotCapture(lpOutput, GameStateModuleIO::E_IMAGE_TYPE_FREEBURN_MUGSHOT,
                                 (::EActiveRaceCarIndex)leTakedownAggressorRaceCarIndex,
                                 (::EActiveRaceCarIndex)leTakedownVictimRaceCarIndex, false);
         }
@@ -482,7 +554,7 @@ void MugshotManager::HandleCapturingMugshot(GameStateModuleIO::OutputBuffer* lpO
 // FLAG(still_unbodied): no console binary section for this handler in the dossier -- left as a no-op.
 // ---------------------------------------------------------------------------
 void MugshotManager::HandleTakingMugshot(GameStateModuleIO::OutputBuffer* /*lpOutput*/,
-                                         const GameStateModuleIO::VehicleOutputInterface* /*lpVehicleOutput*/,
+                                         const BrnPhysics::Vehicle::VehicleOutputInterface* /*lpVehicleOutput*/,
                                          GameStateModuleIO::EGameModeType /*leGameModeType*/)
 {
 }
@@ -580,7 +652,7 @@ void MugshotManager::HandleShowingTheirMugshot(GameStateModuleIO::OutputBuffer* 
 // ---------------------------------------------------------------------------
 void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
                             GameStateModuleIO::OutputBuffer* lpOutput,
-                            const GameStateModuleIO::VehicleOutputInterface* lpVehicleOutput,
+                            const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput,
                             const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
                             GameStateModuleIO::EGameModeType leGameModeType,
                             bool lbIsAnythingPaused)

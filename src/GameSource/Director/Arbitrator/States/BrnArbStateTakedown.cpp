@@ -46,7 +46,9 @@
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                   // Attrib::Gen::shotgroup
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"                      // Timestep::E_WORLD_NO_SLOMO
 #include "rw/math/vpu/vector3_operation.h"                                      // Normalize / IsZero / operator-
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] gpDebugPrint ([crashcam])
 #include <cmath>                                                                // sinf (the blend easing curves)
+#include <cstdlib>                                                              // [diag] getenv (BRN_CRASHCAM_DIAG)
 
 namespace BrnDirector
 {
@@ -1411,6 +1413,24 @@ namespace BrnDirector
             {
                 meTakedownType    = E_TYPE_B3CLASSIC;
                 mpCurrentTakedown = &mClassicTakedown;
+            }
+
+            // [crashcam] BRN_CRASHCAM_DIAG witness (NOT in the console) -- the ONE point where this
+            // state latches meTakedownType and picks its player. Which of the three arms ran is
+            // invisible from outside, and a takedown that plays the wrong camera looks exactly like
+            // one that never latched. One line per INACTIVE -> PREPARING edge, behind the existing
+            // crash-cam knob. [FLAG PC witness]
+            // DELETE-WHEN: the organic takedown case goes green and the takedown camera is
+            // confirmed to pick its arm from the game state.
+            if (getenv("BRN_CRASHCAM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[crashcam] takedown latch meTakedownType=" << static_cast<s32>(meTakedownType)
+                    << " (" << ((meTakedownType == E_TYPE_B3CLASSIC) ? "E_TYPE_B3CLASSIC" : "E_NUM_TYPES/unset") << ")"
+                    << " isShutdown=" << (lrGameState.mbIsShutdown ? 1 : 0)
+                    << " alwaysShutdownCam=" << (mbAlwaysUseShutdownCam ? 1 : 0)
+                    << " isRevengeTD=" << (lrGameState.mbIsRevengeTD ? 1 : 0)
+                    << " [FLAG PC witness]\n";
             }
         }
 

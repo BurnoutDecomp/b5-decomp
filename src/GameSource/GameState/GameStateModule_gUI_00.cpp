@@ -36,6 +36,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16>
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer (lock + GetGameActionQueue)
+#include "GameSource/GameState/BrnGameStateTakedownCache.h"             // mpTakedownCache->mTakedownEventQueue (the post-world scoring leg)
 #include "GameSource/GameState/BrnGameEvents.h"                         // RecordPropHitEvent / E_EVENT_RECORD_PROP_HIT / E_EVENT_CHANGE_WORLD_REGION
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // WorldRegionChangeEvent (the case-115 payload)
 #include "GameSource/GameState/Offences/BrnStuntManager.h"              // StuntManager::OnPropHit / Update
@@ -541,6 +542,40 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // Both bodies: GameStateModule_gTD_00.cpp.
     CacheTakedownTrafficTypeResponses(lpTrafficTypeResponseQueue);
     CacheTakedownManagerPostWorldInputData(lpVehicleOutputInterface, lpRaceCarCrashEventQueue);
+
+    // ---- [takedown wave] LEG 6 -- THE TAKEDOWN + CRASH SCORING ARM ------------------------
+    // CONSOLE POSITION, exact, and it is this one: GameStateModule::PostWorldUpdate's `bl` stream
+    // runs CacheTakedownManagerPostWorldInputData (#18) and then, with no instruction in between
+    // beyond building its arguments, ModeManager::PostWorldUpdate (#19) -- whose takedown-queue
+    // argument is r5 == gsm+249936, i.e. THIS MODULE'S OWN mTakedownEventQueue, the very queue the
+    // two lines above and the pre-world takedown leg maintain. So the arm lands here, immediately
+    // after the cache calls, not folded into leg 3.
+    //
+    // ⛔ WHY IT IS AN EXTRACTED LEG, same reason as legs 1-5: the committed
+    // ModeManager::PostWorldUpdate dereferences a PostWorldInputBuffer nothing on this build
+    // creates, so it has no call site at all -- and it has no takedown-queue parameter either. The
+    // narrow entry point it calls carries the console's gate (KU_FLAG_DISABLE_ALL_TDS clear AND the
+    // mode in progress) and the console's two scorer calls, unchanged. THE ARGUMENTS ARE THE
+    // DEVIATION, NOT THE BODY.
+    //
+    // ⛔ WHAT WAS MISSING WITHOUT IT: nothing counted a takedown. ScoringSystem::UpdateTakedowns is
+    // the only writer of CarScoreData's takedown / takedowns-against / marked-man / traitorous
+    // tallies anywhere in the tree, and UpdateCrashes the only writer of the per-car crash tally.
+    // The road-rage HUD counter moved (that runs through ProcessTakedownEvents ->
+    // OnPlayerDoesATakedown, a different consumer of the same queue), so the gap read as "scoring
+    // works" while every per-car record stayed at zero -- for the player and for the AI.
+    //
+    // ⓘ THE QUEUE IS STILL FULL AT THIS POINT IN THE FRAME. TakedownPreWorldLeg Clears it at the top
+    // of the NEXT pre-world tick, fills it from the takedown manager, and ProcessTakedownEvents only
+    // READS it; nothing drains it in between. Same lifetime the console relies on.
+    //
+    // DELETE-WHEN a real PostWorldInputBuffer exists: this collapses into
+    // `mModeManager.PostWorldUpdate(lpPostWorldInput, lpTakedownQueue, lfDelta)` with legs 1-5.
+    if (mpTakedownCache != 0)
+    {
+        GetModeManager()->PostWorldUpdateTakedownScoringBringUp(
+            &mpTakedownCache->mTakedownEventQueue, lpRaceCarCrashEventQueue);
+    }
 
     // ============================================================================
     // ⭐⭐⭐ [stuntrace 2026-08-27] LEG 4 -- THE STUNT-SCORER LATCH DRAIN

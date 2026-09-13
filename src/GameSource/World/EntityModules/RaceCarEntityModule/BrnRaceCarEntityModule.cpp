@@ -84,6 +84,10 @@ namespace BrnWorld
 // carries 0 for "no car" / "derive the wheel set" / "no rival").
 static const CgsID KU_CGSID_NULL = 0;
 
+// [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceiling for the opt-in witnesses in
+// this TU, so an armed knob still cannot flood the log. DELETE-WHEN those witnesses go.
+static const u32 KU_RACECAR_MODULE_DIAG_MAX_LINES = 128u;
+
 // X360 0x822A47A8. Append one training request to the per-frame ring.
 //
 // The X360 reads miPendingRequestCount (this+0x18394), asserts it is below the
@@ -2073,12 +2077,19 @@ void RaceCarEntityModule::PublishRestPoseLightLocatorsBringUp( ActiveRaceCar* lp
     // [DIAG coronas step 1] the car's authored lamp inventory, printed once per distinct car
     // (latched on the first locator's X, the same trick the wheel stand-in above uses, so a
     // run where every position is zero is distinguishable from a run where this never ran).
+    // [FLAG PC witness] OPT-IN (BRN_CORONA_DIAG=1) + hard first-N cap. DELETE-WHEN the corona
+    // work is signed off. The first-locator-X latch is not a bound: it is shared by every car and
+    // the value moves with the car, so it printed 37,352 lines in a 140 s run.
     {
+        static const bool sbCoronaDiag = ( getenv( "BRN_CORONA_DIAG" ) != 0 );
+        static u32 suCoronaDiagLines = 0u;
         static f32 sfLastLoggedLocator0X = 1e30f;
-        if ( lLocators.miNumLightLocators > 0
+        if ( sbCoronaDiag && suCoronaDiagLines < KU_RACECAR_MODULE_DIAG_MAX_LINES
+             && lLocators.miNumLightLocators > 0
              && lLocators.maLightLocators[0].wAxis.x != sfLastLoggedLocator0X
              && CgsDev::Log::gpDebugPrint != 0 )
         {
+            ++suCoronaDiagLines;
             sfLastLoggedLocator0X = lLocators.maLightLocators[0].wAxis.x;
             *CgsDev::Log::gpDebugPrint
                 << "[corona-locators] car " << liActiveRaceCar << ": "
@@ -3533,12 +3544,20 @@ void RaceCarEntityModule::UpdateActiveRaceCarColours()
         // starts at 0/0 on every fresh spawn and only becomes the car's authored default when
         // ChangePlayerCarColour runs, several frames later. A one-shot latch would print the
         // fallback and never the real value.
+        // [FLAG PC witness] OPT-IN (BRN_RACECAR_PAINT_DIAG=1, the same knob as the consuming end
+        // in RenderRaceCar) + hard first-N cap. DELETE-WHEN the paint transfer is signed off. The
+        // {palette, colour} latch is shared by every slot, so two differently painted cars
+        // alternate it forever: 14,971 lines in a 140 s run.
         {
+            static const bool sbPaintDiag = ( getenv( "BRN_RACECAR_PAINT_DIAG" ) != 0 );
+            static u32 suPaintDiagLines = 0u;
             static s32 siLastLoggedPalette = -2;
             static s32 siLastLoggedColour  = -2;
-            if( ( liPaletteIndex != siLastLoggedPalette || liColourIndex != siLastLoggedColour )
+            if( sbPaintDiag && suPaintDiagLines < KU_RACECAR_MODULE_DIAG_MAX_LINES
+                && ( liPaletteIndex != siLastLoggedPalette || liColourIndex != siLastLoggedColour )
                 && CgsDev::Log::gpDebugPrint != 0 )
             {
+                ++suPaintDiagLines;
                 siLastLoggedPalette = liPaletteIndex;
                 siLastLoggedColour  = liColourIndex;
                 *CgsDev::Log::gpDebugPrint

@@ -33,6 +33,7 @@
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"  // [DIAG] the scene-match stamp
 #include <cmath>                                              // sqrtf
 #include <cstdio>                                             // snprintf (witnesses)
+#include <cstdlib>                                            // std::getenv (the opt-in witness gate)
 
 namespace BrnEffects
 {
@@ -46,6 +47,10 @@ namespace
     // The vehicle speed (m/s) above which the exhaust-pop transition is suppressed
     // (rodata flt_8200DD34 == 13.4112, ~= 30 mph). DWARF KF_EXHAUST_MAX_VEHICLE_SPEED.
     const f32 KF_EXHAUST_MAX_VEHICLE_SPEED = 13.4112f;
+
+    // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only. Hard first-N ceiling for the opt-in witnesses in
+    // this TU, so an armed knob still cannot flood the log. DELETE-WHEN those witnesses go.
+    const u32 KU_BOOSTLOC_DIAG_MAX_LINES = 128u;
 
     // The default boost-transition smoothstep input range (rodata flt_8200DD24 /
     // flt_8200DD28) used when the debug component is NOT overriding it.
@@ -682,11 +687,18 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
 
             // [boostloc] the stand-in's own witness, latched on the car moving into a new
             // 8-metre cell so a stationary car costs one line. DELETE with the arm above.
+            // [FLAG PC witness] OPT-IN (BRN_BOOSTLOC_DIAG=1) + hard first-N cap: an 8-metre cell
+            // latch is one line per cell for a car that is DRIVING, which is 43,856 lines in a
+            // 140 s run. DELETE with the stand-in arm above.
+            static const bool sbBoostLocDiag = (std::getenv("BRN_BOOSTLOC_DIAG") != 0);
+            static u32 suBoostLocStandInLines = 0u;
             static s32 siLastCell = 0x7FFFFFFF;
             const s32 liCell = static_cast<s32>(lpCar->mTransform.wAxis.x * 0.125f)
                              ^ (static_cast<s32>(lpCar->mTransform.wAxis.z * 0.125f) << 12);
-            if (liCell != siLastCell)
+            if (sbBoostLocDiag && suBoostLocStandInLines < KU_BOOSTLOC_DIAG_MAX_LINES
+                && liCell != siLastCell)
             {
+                ++suBoostLocStandInLines;
                 siLastCell = liCell;
                 char lacMsg[224];
                 const Matrix44Affine lW0 =
@@ -764,11 +776,16 @@ void BoostStateMachine::OnTick(CarState& lCarState, RaceCarParticleEffectHelper&
     // locator source at all, a locator list with no FXBOOSTPOINT in it, a tag the machine has no
     // slot for, or a transform that really is the identity. Latched on the answer CHANGING, so a
     // steady state costs one line. DELETE-WHEN-STABLE.
+    // [FLAG PC witness] OPT-IN (BRN_BOOSTLOC_DIAG=1) + hard first-N cap -- the key is shared by
+    // every car, so a field of cars with different tag counts alternates it every frame.
     {
+        static const bool sbBoostLocDiag = (std::getenv("BRN_BOOSTLOC_DIAG") != 0);
+        static u32 suBoostLocLines = 0u;
         static u32 suLastKey = 0xFFFFFFFFu;
         const u32 luKey = (static_cast<u32>(luActiveMask) << 8) | muNumBoostTags;
-        if (luKey != suLastKey)
+        if (sbBoostLocDiag && suBoostLocLines < KU_BOOSTLOC_DIAG_MAX_LINES && luKey != suLastKey)
         {
+            ++suBoostLocLines;
             suLastKey = luKey;
             const BrnPhysics::Deformation::VehicleLocatorOutput* lpLocOut = lHelper.VehicleLocators();
             s32 liNum = -1;

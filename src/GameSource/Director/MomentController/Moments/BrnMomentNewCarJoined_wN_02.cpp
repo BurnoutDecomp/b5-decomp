@@ -240,12 +240,11 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
             lpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
                 mInterpolaterB, 0, this, 1);
 
-            // The console writes 1 into the loose behaviour's +0x32E byte here, so the
-            // attachment eases off while the return blend runs. RESTORED in wave O, once
-            // the member landed in BrnBehaviourLooseAttachment.h. The store and the offset
-            // are from the console code; the NAME is role-inferred from the sibling
-            // tunable Parameters::mfDetachLerpAmount.
-            mLooseAttachment.GetBehaviour()->mbDetachRequested = 1;
+            // The console writes 1 into the loose behaviour's +0x32E byte here, pinning the
+            // rig's target vector while the return blend runs. That byte is the recovered
+            // mbTargetVectorLock and the store is the behaviour's own LockTargetVector(),
+            // which the console inlines to exactly this one byte.
+            mLooseAttachment.GetBehaviour()->LockTargetVector();
 
             mInterpolaterB.GetBehaviour()->SetParameters(&mInterpolateParams);
             mInterpolaterB.GetBehaviour()->SetTimestepType(Timestep::E_WORLD_NO_SLOMO);
