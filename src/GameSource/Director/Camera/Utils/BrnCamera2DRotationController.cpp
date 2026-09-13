@@ -11,6 +11,22 @@ namespace Camera
 {
 namespace Utils
 {
+    const f32 Camera2DRotationController::kfDefaultBlendFactor = 0.1f;
+    const f32 Camera2DRotationController::kfDefaultReturnBlendFactor = 0.125f;
+    const f32 Camera2DRotationController::kfDefaultMinRotationTime = 0.4f;
+    const f32 Camera2DRotationController::kfDeadZoneRadius = 0.5f;
+
+    // Inlined at ARTIST 82251830..82251858.
+    void Camera2DRotationController::Construct()
+    {
+        mStickVector.SetZero();
+        mfTimeSinceRotation = mfRotationAngleDegs = 0.0f;
+        mfMinRotationTime = kfDefaultMinRotationTime;
+        mfRotationBlendFactor = kfDefaultBlendFactor;
+        mfRotationReturnBlendFactor = kfDefaultReturnBlendFactor;
+        mbIsRotated = mbIsLookbackLastFrame = mbIsLookback = false;
+    }
+
     // @ 0x8220BFE0
     // Fold this frame's 2D look-stick input into the rotation controller: age the
     // rotation timer, latch the look-back edge, and drive mfRotationAngleDegs toward

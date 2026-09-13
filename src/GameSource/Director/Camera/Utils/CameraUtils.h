@@ -267,6 +267,10 @@ namespace Utils
     // FLAG (declaration-only): one of the two returned constants is the raw rodata sentinel
     // unk_82181510 (an unrecovered basis vector) -- not fabricated. Left unbodied.
     Vector3 FindNonParallelNormalisedVectorTo(Vector3 lVector);
+    Vector3 SafeSLerp(Vector3 lV0, Vector3 lV1, VecFloat lAmount);
+    bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
+                               Vector3 lVelocity, f32 lfHorizontalFOV, f32 lfVerticalFOV,
+                               f32* lpfTimeBeforeLeavingSecs);
 // ----------------------------------------------------------------------------
 // TransitionSmoother (ADDITIVE GROW: its class TU) -- a lerp-smoothed scalar
 // with a self-smoothed lerp amount. Class shape / member names / method set

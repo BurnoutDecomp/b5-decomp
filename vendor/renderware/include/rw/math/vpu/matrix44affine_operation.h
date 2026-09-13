@@ -730,6 +730,35 @@ namespace vpu
             lrOutAxis = QueryRotateDegenerateUnitAxis(lrMatrix);
         }
     }
+    // ARTIST 8223D7D0 and 8223F610: quaternion-to-affine SDK expansion.
+    inline Matrix44Affine Matrix44AffineFromQuaternion(const Quaternion& lrQuat)
+    {
+        const float lfXX = lrQuat.x * lrQuat.x;
+        const float lfYY = lrQuat.y * lrQuat.y;
+        const float lfZZ = lrQuat.z * lrQuat.z;
+        const float lfXY = lrQuat.x * lrQuat.y;
+        const float lfXZ = lrQuat.x * lrQuat.z;
+        const float lfYZ = lrQuat.y * lrQuat.z;
+        const float lfWX = lrQuat.w * lrQuat.x;
+        const float lfWY = lrQuat.w * lrQuat.y;
+        const float lfWZ = lrQuat.w * lrQuat.z;
+
+        Matrix44Affine lResult;
+        lResult.xAxis = Vector3{ 1.0f - 2.0f * (lfYY + lfZZ),
+                                               2.0f * (lfXY + lfWZ),
+                                               2.0f * (lfXZ - lfWY), 0.0f };
+        lResult.yAxis = Vector3{        2.0f * (lfXY - lfWZ),
+                                        1.0f - 2.0f * (lfXX + lfZZ),
+                                               2.0f * (lfYZ + lfWX), 0.0f };
+        lResult.zAxis = Vector3{        2.0f * (lfXZ + lfWY),
+                                               2.0f * (lfYZ - lfWX),
+                                        1.0f - 2.0f * (lfXX + lfYY), 0.0f };
+        // The SDK leaves the translation row ZERO (the console's `vspltisw 0`); ::Update
+        // overwrites it with the sampled take position before it composes.
+        lResult.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        return lResult;
+    }
+
 }
 }
 }

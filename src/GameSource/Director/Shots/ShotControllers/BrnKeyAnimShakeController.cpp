@@ -167,33 +167,7 @@ namespace
     //   an anonymous namespace so it can never collide with the real one. Reported to the
     //   conductor. DELETE-WHEN: the vendor header carries it.
     // ------------------------------------------------------------------------------------
-    inline rwvpu::Matrix44Affine Matrix44AffineFromQuaternion(const rwvpu::Quaternion& lrQuat)
-    {
-        const f32 lfXX = lrQuat.x * lrQuat.x;
-        const f32 lfYY = lrQuat.y * lrQuat.y;
-        const f32 lfZZ = lrQuat.z * lrQuat.z;
-        const f32 lfXY = lrQuat.x * lrQuat.y;
-        const f32 lfXZ = lrQuat.x * lrQuat.z;
-        const f32 lfYZ = lrQuat.y * lrQuat.z;
-        const f32 lfWX = lrQuat.w * lrQuat.x;
-        const f32 lfWY = lrQuat.w * lrQuat.y;
-        const f32 lfWZ = lrQuat.w * lrQuat.z;
 
-        rwvpu::Matrix44Affine lResult;
-        lResult.xAxis = rwvpu::Vector3{ 1.0f - 2.0f * (lfYY + lfZZ),
-                                               2.0f * (lfXY + lfWZ),
-                                               2.0f * (lfXZ - lfWY), 0.0f };
-        lResult.yAxis = rwvpu::Vector3{        2.0f * (lfXY - lfWZ),
-                                        1.0f - 2.0f * (lfXX + lfZZ),
-                                               2.0f * (lfYZ + lfWX), 0.0f };
-        lResult.zAxis = rwvpu::Vector3{        2.0f * (lfXZ + lfWY),
-                                               2.0f * (lfYZ - lfWX),
-                                        1.0f - 2.0f * (lfXX + lfYY), 0.0f };
-        // The SDK leaves the translation row ZERO (the console's `vspltisw 0`); ::Update
-        // overwrites it with the sampled take position before it composes.
-        lResult.wAxis = rwvpu::Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        return lResult;
-    }
 }
 
 // ----------------------------------------------------------------------------

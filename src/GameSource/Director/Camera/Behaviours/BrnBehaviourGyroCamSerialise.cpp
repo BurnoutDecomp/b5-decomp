@@ -44,9 +44,9 @@ namespace Camera
 static_assert(sizeof(Utils::CameraShake::Parameters) == 16,  "CameraShake::Parameters is 16B");
 static_assert(sizeof(Utils::Looker::Parameters)      == 100, "Looker::Parameters is 100B");
 static_assert(sizeof(AttachmentTruck::Parameters)    == 8,   "AttachmentTruck::Parameters is 8B");
-static_assert(offsetof(BehaviourGyroCam::Parameters, maShakeParams)                == 0x08, "maShakeParams @ +0x08");
-static_assert(offsetof(BehaviourGyroCam::Parameters, maLookerParams)               == 0x2C, "maLookerParams @ +0x2C");
-static_assert(offsetof(BehaviourGyroCam::Parameters, maAttachmentTruck)            == 0x90, "maAttachmentTruck @ +0x90");
+static_assert(offsetof(BehaviourGyroCam::Parameters, mShakeParams)                == 0x08, "mShakeParams @ +0x08");
+static_assert(offsetof(BehaviourGyroCam::Parameters, mLookerParams)               == 0x2C, "mLookerParams @ +0x2C");
+static_assert(offsetof(BehaviourGyroCam::Parameters, mAttachmentTruckParams)            == 0x90, "mAttachmentTruckParams @ +0x90");
 static_assert(offsetof(BehaviourGyroCam::Parameters, mfSlowDistance)               == 0x98, "mfSlowDistance @ +0x98");
 static_assert(offsetof(BehaviourGyroCam::Parameters, mfFastPitch)                  == 0xAC, "mfFastPitch @ +0xAC");
 static_assert(offsetof(BehaviourGyroCam::Parameters, mfField_B0)                   == 0xB0, "mfField_B0 @ +0xB0");
@@ -96,11 +96,11 @@ void BehaviourGyroCam::Parameters::Serialise(TSerialiser& lrSerialiser)
     // The three nested sub-blocks: cast the size-exact raw storage to its canonical sub-Parameters
     // type BY NAME (the X360 passes a1+8 / a1+0x2C / a1+0x90 straight to each block's Serialise).
     lrSerialiser.Serialise("Shake Params",
-        reinterpret_cast<Utils::CameraShake::Parameters&>(maShakeParams));
+        mShakeParams);
     lrSerialiser.Serialise("Looker Params",
-        reinterpret_cast<Utils::Looker::Parameters&>(maLookerParams));
+        mLookerParams);
     lrSerialiser.Serialise("Attachment truck",
-        reinterpret_cast<AttachmentTruck::Parameters&>(maAttachmentTruck));
+        mAttachmentTruckParams);
 
     lrSerialiser.Serialise("Slow Distance", mfSlowDistance);
     lrSerialiser.Serialise("Slow Height", mfSlowHeight);

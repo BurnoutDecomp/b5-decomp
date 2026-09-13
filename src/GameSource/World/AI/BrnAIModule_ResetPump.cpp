@@ -41,6 +41,8 @@
 // =================================================================================================
 
 #include "GameSource/World/AI/BrnAIModule.h"
+#include "GameSource/World/AI/BrnAIDriver.h"
+#include "GameSource/World/AI/BrnAIAggression.h"
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO.h"                // AIModuleIO::InputBuffer
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"   // AIModuleIO::OutputBuffer
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"  // AIModuleRequestInterface
@@ -177,31 +179,8 @@ void AIModule::ProcessRequestInterface(const AIModuleIO::InputBuffer* lpInputBuf
 
 }
 
-// =================================================================================================
-// UpdateResetOnTrackManager @0x8279ABB0 -- a SLICE (the manager tick, whole).
-//
-//   0x8279ABD4  StartMonitor(dword_82F30168)                                   [PARKED]
-//   0x8279ABE0  if (!GetAICar(mePlayerGlobalRaceCarIndex)) skip everything
-//   0x8279ABF4  lePlayer = GetAICar(mePlayerGlobalRaceCarIndex)->miRaceCarIndex   (AICar +0x14C4)
-//   0x8279AC00  Camera::Camera(<stack>, this + 322048)                          [PARKED]
-//   0x8279AC0C  mResetOnTrackManager.Update(lpResults, lePlayer, lfTime)        ⭐ REPRODUCED
-//   0x8279AC24  for each published ResetOnTrackResult: fetch the AI car it names, re-seed its
-//               route state, and either log "<AI> Transform NOT set" or store the new transform
-//               and call AICar::SetDirection                                    [PARKED]
-//
-// ⛔ [FLAG PC bring-up] THE RESULT FAN-OUT IS PARKED. It writes ~13 members of the AICar's
-// route/driver block (offsets +7168..+7272 off the car's own driver pointer at +5296) that have
-// no names in BrnAICar.h, and calls AICar::SetDirection @0x8276B2C0, which is absent. It is how
-// the AI's own model of a reset car catches up -- and every AICar on this build is INACTIVE, so
-// there is nothing to catch up. The PLAYER's recovery does not go through here at all: it goes
-// through the ResetOnTrackResult ring the manager just wrote, which
-// WorldModule::BridgeAIToEntityModules_PrePhysics carries to the race-car module.
-//
-// ⚠️ lePlayer IS NOT "the player's global race-car index" on this build -- see the banner on
-// mePlayerGlobalRaceCarIndex in BrnAIModule.h. It is 0, which is what the console's own .bss
-// holds when the AI-driver writer arm never runs, and the manager uses it only for range
-// asserts. The request itself carries the real index.
-// =================================================================================================
+// ARTIST 8279ABB0: process resets, refresh aggression state for in-range
+// cars, and apply each successful placement to the AI model as well as physics.
 void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lpResults,
                                          f32 lfTime)
 {
@@ -248,7 +227,30 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
         static_cast<EGlobalRaceCarIndex>(liPlayer),
         lfTime);
 
-    // [FLAG PC bring-up] the AI-car result fan-out -- see the banner.
+    // ARTIST 0x8279AC40..0x8279AE90. Keep the AI model in step with the
+    // world/physics reset. In-range cars also discard their pre-reset aggression
+    // target, even when the reset request failed.
+    const auto* lpResetResults = lpResults->GetResetOnTrackResultQueue();
+    for (s32 liResult = 0; liResult < lpResetResults->GetLength(); ++liResult)
+    {
+        const auto& lrResult = lpResetResults->GetEvent(liResult);
+        AICar* lpCar = GetAICar(static_cast<u32>(lrResult.GetGlobalRaceCarIndex()));
+        if (lpCar->meCarState == E_AI_CAR_STATE_IN_RANGE)
+            lpCar->GetDriver()->GetAggression()->Prepare(lpCar);
+        if (lrResult.GetState() == AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS)
+        {
+            lpCar->mPosition = lrResult.GetResetPosition();
+            lpCar->SetDirection(lrResult.GetResetDirection());
+        }
+    }
+    const auto* lpPlacements = lpResults->GetPlaceOnTrackRequestQueue();
+    for (s32 liPlacement = 0; liPlacement < lpPlacements->GetLength(); ++liPlacement)
+    {
+        const auto& lrPlacement = lpPlacements->GetEvent(liPlacement);
+        AICar* lpCar = GetAICar(static_cast<u32>(lrPlacement.GetGlobalRaceCarIndex()));
+        lpCar->mPosition = lrPlacement.GetResetPosition();
+        lpCar->SetDirection(lrPlacement.GetResetDirection());
+    }
 }
 
 // =================================================================================================

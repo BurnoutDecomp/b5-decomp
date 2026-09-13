@@ -23,6 +23,40 @@ namespace BrnDirector
 namespace Camera
 {
 
+// Inlined in BehaviourGyroCam::Construct @82244B20 and Update @8224510C.
+// The policy's query postboxes remain in their existing reserved spans.
+void VisibilityCollisionPolicy::Construct()
+{
+    ClearFailed();
+    mVehicleCollisionPredictor.Construct();
+    mGeometryCollisionPredictor.Construct();
+    mbSeeThroughEnabled = true;
+    mbSeeThroughAlways = false;
+    mbSeeThroughSuppressed = true;
+    mfDesiredHeight = -1.0f;
+    mfMinHeight = 1.5f;
+    mfCollisionRadius = 0.5f;
+    mbCanFail = true;
+    mbFirstFrame = true;
+    mbTargetSet = false;
+    mVelocity.SetZero();
+    mbHaveDesiredHeight = false;
+}
+
+void VisibilityCollisionPolicy::SetTarget(Matrix44Affine lTargetTransform, AABBox lTargetAABB,
+                                          CgsSceneManager::EntityId lTargetEntityId)
+{
+    mbTargetSet = true;
+    mTargetTransform = lTargetTransform;
+    mTargetAABB = lTargetAABB;
+    mTargetEntityId = lTargetEntityId;
+}
+
+void VisibilityCollisionPolicy::SetVelocity(Vector3 lVelocity)
+{
+    mVelocity = lVelocity;
+}
+
 // @ 0x821F38E0 -- h:489. The latch is raised BEFORE the assert (the asm's
 // stb 1,0x23C precedes the compare); NaN heights fire the assert like the X360's
 // fcmpu (bgt-only skip).

@@ -2,6 +2,7 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_UTILS_BRN_CAMERA_SHAKE_H
 
 #include "types.hpp"
+#include "SDKs/Packages/ICE/ICEData.hpp"
 #include "BrnCommonTypes.h"                            // Matrix44Affine
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"  // CgsNumeric::Random
 
@@ -279,12 +280,12 @@ namespace Utils
         //   ⚠️ On x64 the real ICETake is LARGER than 0x738 (its pointers widen). That is
         //   expected and harmless: parity in this build is BY NAMED MEMBER, and nothing
         //   indexes this class by offset.
-        struct OpaqueICETake { u8 maOpaque[0x738]; };
+
 
         Matrix44Affine          mMatrix;                 // :179  +0x000  (64B, 16-aligned)
         CameraShake             mProceduralShake;        // :180  +0x040
         CameraShake::Parameters mProceduralShakeParams;  // :181  +0x050
-        OpaqueICETake           mShakeTake;              // :182  +0x060..+0x797 (0x738)
+        ICE::ICETake            mShakeTake;              // :182  +0x060..+0x797 (0x738)
         u8                      mu8ActiveShake;          // :183  +0x798  stb, ::Update's last store
         Random                  mRandom;                 // :184  +0x7A0  ring +0x7A0, seed +0x7C0, idx +0x7C8
         f32                     mfShotRunningTime;       // :185  +0x7D0

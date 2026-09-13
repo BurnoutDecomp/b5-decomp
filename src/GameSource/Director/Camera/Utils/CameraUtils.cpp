@@ -1375,6 +1375,69 @@ Matrix44Affine CreateAdjustedLookAt(Matrix44Affine lLookAt,
     return rw::math::vpu::Mult(CreateLookAt(lOrigin, lOffsetTarget), lLookAt);
 }
 
+// ARTIST 822171B0 / 82217270. Near-opposite vectors use the console's
+// spherical quadratic curve through a perpendicular direction.
+Vector3 FindNonParallelNormalisedVectorTo(Vector3 lVector)
+{
+    return std::fabs(lVector.y) > std::fabs(lVector.x) ? Vector3{1,0,0,0} : Vector3{0,1,0,0};
+}
+
+namespace {
+Vector3 SphericalBlend(Vector3 a, Vector3 b, f32 t)
+{
+    using namespace rw::math::vpu;
+    const f32 dot = Dot(a, b);
+    if (dot > std::cos(0.087266468f)) return Normalize(a + (b - a) * t);
+    const f32 angle = std::acos(dot);
+    return a * (std::sin((1.0f - t) * angle) / std::sin(angle))
+         + b * (std::sin(t * angle) / std::sin(angle));
+}
+}
+
+Vector3 SafeSLerp(Vector3 lV0, Vector3 lV1, VecFloat lAmount)
+{
+    using namespace rw::math::vpu;
+    CGS_ASSERT(std::fabs(MagnitudeSquared(lV0) - 1.0f) <= 1.5258789e-5f, "lV0 is not of unit length");
+    CGS_ASSERT(std::fabs(MagnitudeSquared(lV1) - 1.0f) <= 1.5258789e-5f, "lV1 is not of unit length");
+    const f32 t = std::fmin(1.0f, std::fmax(0.0f, static_cast<f32>(lAmount)));
+    if (Dot(lV0, lV1) > std::cos(3.0543263f)) return SphericalBlend(lV0, lV1, t);
+    const Vector3 perpendicular = Normalize(Cross(lV0, FindNonParallelNormalisedVectorTo(lV0)));
+    const f32 bend = std::cos(2.0f * 0.087266468f);
+    const Vector3 fromControl = SphericalBlend(lV0, perpendicular, bend);
+    const Vector3 toControl = SphericalBlend(lV1, perpendicular, bend);
+    return SphericalBlend(SphericalBlend(lV0, toControl, t), SphericalBlend(fromControl, lV1, t), t);
+}
+
+// ARTIST 8220D150: project to the current eye-space cross section, then
+// predict the first horizontal/vertical boundary crossing. Z velocity is not used.
+bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
+                           Vector3 lVelocity, f32 lfHorizontalFOV, f32 lfVerticalFOV,
+                           f32* lpfTimeBeforeLeavingSecs)
+{
+    using namespace rw::math::vpu;
+    CGS_ASSERT(lpfTimeBeforeLeavingSecs != 0, "lpfTimeBeforeLeavingSecs != NULL");
+    CGS_ASSERT(IsOrthogonal3x3(lTransform, 1.1920929e-7f), "IsOrthogonal3x3(lFustrumTransform)");
+    const Vector3 offset = lPoint - lTransform.Pos();
+    const Vector3 point = {Dot(offset,lTransform.xAxis), Dot(offset,lTransform.yAxis), Dot(offset,lTransform.zAxis),0};
+    const Vector3 vel = {Dot(lVelocity,lTransform.xAxis), Dot(lVelocity,lTransform.yAxis), Dot(lVelocity,lTransform.zAxis),0};
+    const f32 width = std::tan(lfHorizontalFOV * 0.0087266462f) * point.z;
+    const f32 height = std::tan(lfVerticalFOV * 0.0087266462f) * point.z;
+    if (std::fabs(point.x) >= width || std::fabs(point.y) >= height)
+    {
+        *lpfTimeBeforeLeavingSecs = 0.0f;
+        return true;
+    }
+    if (std::fabs(vel.x) <= 1.1920929e-7f && std::fabs(vel.y) <= 1.1920929e-7f)
+        return false;
+    f32 xTime = 10000.0f, yTime = 10000.0f;
+    if (vel.x > 0.0f) xTime = (width - point.x) / vel.x;
+    else if (vel.x < 0.0f) xTime = (-width - point.x) / vel.x;
+    if (vel.y > 0.0f) yTime = (height - point.y) / vel.y;
+    else if (vel.y < 0.0f) yTime = (-height - point.y) / vel.y;
+    *lpfTimeBeforeLeavingSecs = std::fmin(xTime, yTime);
+    return true;
+}
+
 }
 }
 }

@@ -27,6 +27,7 @@ namespace Utils
 class VehicleCollisionPredictor
 {
 public:
+    void Construct() { mbHasPredictedCollision = false; }
     // A vehicle collision has been predicted this frame (the guard the time read
     // is published behind).
     bool HasPredictedCollision() const { return mbHasPredictedCollision != 0; }

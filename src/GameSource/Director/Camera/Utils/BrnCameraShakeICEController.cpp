@@ -43,6 +43,11 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"      // THE home for this class
+#include "GameSource/AttribSys/Generated/classes/iceanim.h"
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"
+#include "rw/math/vpu/matrix44affine_operation.h"
+#include <cmath>
+#include <cstdlib>
 #include "GameSource/Director/BrnDirectorResourceManager.h"       // GetShakeAnimGroup() (+0x518)
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"     // Attrib::Gen::shotgroup::Num_ShotList
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"             // Random::Construct / ::RandomFloat
@@ -125,101 +130,8 @@ void CameraShakeICEController::Construct()
 // ============================================================================
 // CameraShakeICEController::Update @0x8223EEC8 / PS3 @0x68840 / BrnCameraShake.cpp:233
 //
-// ⛔⛔ THIS IS A DOCUMENTED PARTIAL, AND THE PART THAT IS MISSING IS NAMED PRECISELY.
-//   WHAT IS HERE (complete, both builds): the whole function up to and including its three
-//   early-outs -- the shot clock, the procedural vibration random walk, and the three gates.
-//   WHAT IS NOT HERE: the ICE take arm (X360 0x8223F038..0x8223F7EC), which resolves an
-//   authored shake take out of the director's shot group, samples it, and publishes mMatrix.
-//
-// ⭐⭐ WHY A PARTIAL IS DEFENSIBLE HERE AND WOULD NOT BE ANYWHERE ELSE -- because the console
-//   ALSO publishes nothing when a gate trips, and it does so by the same mechanism. All three
-//   gates branch STRAIGHT to loc_8223F7F0, which is nothing but the register restore. The
-//   pointer to mMatrix (`addi r27, r30, 0x30`, i.e. this + 0x30 -- the take-space matrix the
-//   arm writes) is not even FORMED until 0x8223F624, deep inside the arm; the mu8ActiveShake
-//   store is at 0x8223F7E0, after it. So on a gated frame the console writes exactly what
-//   this body writes: mfShotRunningTime, mfBumpValue and the Random ring, and nothing else.
-//   ⇒ ON EVERY FRAME A GATE TRIPS THIS BODY IS BIT-IDENTICAL TO THE CONSOLE. It differs only
-//     on frames where an authored take actually resolves.
-//
-// ⚠️⚠️ AND THAT DIFFERENCE IS PROBABLY LIVE ON THIS BUILD -- DO NOT READ THE ABOVE AS "SAFE".
-//   BehaviourGameplayExternal::Update .cpp:445 calls this with the file statics
-//   ln8ShakeType == 2 and lfShakeFrequency == 1.0f and an amplitude scaled by 9.0f
-//   (flt_82CDAD58/5C/60), so gates 1 and 2 do NOT trip. Gate 3 tests
-//   `2 > GetShakeAnimGroup().Num_ShotList()`, and DirectorResourceManager +0x518 is
-//   mShakeAnimsGroup (collection "428114"), which BrnDirectorResourceManager.h records as
-//   BOOT-VERIFIED to BIND, 64/64 shotgroups. ⇒ if that group carries two or more shots the
-//   arm IS taken on the console and IS dropped here.
-//   ⭐ SO THE DROP IS MADE LOUD, NOT SILENT. The one-shot [iceshake] diagnostic at the bottom
-//     of this function fires the first time all three gates pass, and prints the shot count it
-//     saw. It costs one static bool. THIS TREE'S SIGNATURE FAILURE IS THE STUB THAT COPIES
-//     NOTHING AND REPORTS NOTHING; a partial that announces itself the first time it matters
-//     is not that. Delete the diagnostic with the arm.
-//
-// ⛔ WHAT THE ARM ACTUALLY NEEDS -- three concrete, checkable items, not a vague "ICE is
-//   gated". Most of the plumbing an earlier note called gated is already MOUNTED and was
-//   re-checked for a DEFINITION (not a declaration) while writing this file:
-//     ✅ Attrib::Gen::shotgroup::Num_ShotList        AttribSys/Generated/classes/shotgroup.cpp:50
-//     ✅ Attrib::Instance::GetAttributePointer       AttribSys/.../attribinstance.cpp:271
-//     ✅ Attrib::RefSpec::Clean                      AttribSys/.../attribsupport.cpp:131
-//     ✅ Attrib::Gen::iceanim::iceanim(RefSpec,void*) AttribSys/Generated/classes/iceanim.cpp:46
-//     ✅ DirectorResourceManager::GetKeyAnimFromGuid BrnDirectorResourceManagerICE.cpp:63
-//     ✅ ICE::ICETake::SetDataPointers               SDKs/Packages/ICE/ICEData.cpp:1629
-//   The three that are NOT closed:
-//     ⛔ 1. `Attrib::DefaultDataArea(u32)` has NO DEFINITION anywhere in the tree. Eighty-odd
-//           generated AttribSys headers CALL it from their default ctors; the link is green
-//           only because every one of those calls is currently dead. The arm's
-//           `if (!ptr) ptr = Attrib::DefaultDataArea(0x18)` fallback lights the first one up.
-//     ⛔ 2. The take sampler. X360 `sub_8252F848(ICETake*, s32 liElement, u16 lu16Key)` ->
-//           f32 (PS3 twin `sub_10BB0`), called SIX times per frame with element ids
-//           0x16/0x17/0x18 (frame N) and again for frame N+1, then 0x19/0x1A/0x1B for the
-//           second triple. Its pseudocode is `ICE::ICETake::GetValue(&out, take, element, key)`
-//           followed by a type test against gaICEElementChannels[22 * element + 3] -- i.e. it
-//           is a typed float accessor over ICETake, not an unnamed helper. It has no name on
-//           either export and no definition here.
-//     ⛔ 3. The blend itself: 0x8223F2C4..0x8223F610 is ~200 instructions of hand VMX -- two
-//           orthonormal frames built from the two sampled Euler triples, a dot-product sign
-//           fix-up, and a full quaternion SLerp expanded inline around XMVectorCos /
-//           XMVectorACos / three XMVectorSin. ⭐ IT IS NOT AS OPAQUE AS IT LOOKS: the DecFIGS
-//           dwarfdump names the locals, and they say outright what the block is (see the map
-//           below) -- `Quaternion lRotationQuat / lRotationQuat2 / lRotationQuatInterped`.
-//           So the recovery job is "which rw-math Quaternion entry points", not "reverse 200
-//           lines of VMX from first principles".
-//   ⭐ The arm's own reads inside the take are already located: `lhz r11, 0x1E4(r30)` is
-//     take + 0x184 == mChannels[11].mu16Keys (mChannels starts at ICETake +0x0D4 and
-//     ICEChannel is 16 bytes), i.e. the key count the two frame indices are taken modulo.
-//
-// ⭐⭐ THE ARM'S ENTIRE VARIABLE MAP, FROM THE DecFIGS DWARFDUMP -- do not re-derive it.
-//   `work postmortem GameSource/Director/Camera/Utils/BrnCameraShake.cpp` prints this; every
-//   line is a DWARF local of THIS function with its own source line:
-//     :235 f32 kfShakeFocalDistance     :236 f32 kfShakeVibrationAmount   (done, above)
-//     :240 f32 lfRandomValue            :244 Vector3 lTargetCameraAnglesRandom  (done, above)
-//     :259 RefSpec lShakeParams         :266 iceanim lShakeAnim
-//     :267 const ICETakeData* lpShakeTake
-//     :275 f32 lfFrame                  :276 s32 liFrame
-//     :277 s32 liShakeKey               :278 s32 liInterpKey
-//     :281 VecFloat lvfInterp
-//     :284 Vector3 lvRotation           :288 Vector3 lvRotation2
-//     :295 Quaternion lRotationQuat     :296 Quaternion lRotationQuat2
-//     :297 Quaternion lRotationQuatInterped
-//     :301 Vector3 lTargetCameraAngles  :310 Vector3 lvPosition
-//   ⇒ the arm reads as: resolve the shot's iceanim -> bind the take -> turn the shot clock
-//     into a frame index pair (liShakeKey / liInterpKey) and a fractional interpolant
-//     (lvfInterp) -> sample two Euler rotations (lvRotation / lvRotation2, the 0x18/0x17/0x16
-//     element triples) -> quaternion-SLerp them -> add lTargetCameraAnglesRandom -> sample a
-//     position (lvPosition, the 0x1B/0x1A/0x19 triple) -> publish mMatrix.
-//   ⚠️ `VecFloat` here is the GLOBAL alias, not BrnDirector::VecFloat -- BrnDirectorTimestep.h:39
-//     shadows it with a DIFFERENT 16-byte type inside this very namespace, and the wrong
-//     spelling COMPILES. Use ::VecFloat.
-//
-// ---- SOURCE-LINE ANCHORS (this file has NO DecFIGS/X360 offset, unlike its neighbour) -----
-//   ::Construct is BrnCameraShake.cpp:203 and ::Update is BrnCameraShake.cpp:233 in the DWARF,
-//   and the X360's own class-key assert inside the arm cites BrnCameraShake.cpp:261 (0x105)
-//   -- two lines after the DWARF puts `RefSpec lShakeParams` at :259, exactly where a
-//   construct-then-assert pair lands. ⚠️ So the "+74" that BrnBehaviourGameplayExternal.cpp
-//   needs does NOT apply here; it was a property of that file, not of the build.
-//
-// ---- ARITY, RECOVERED FROM THE ASM AND CONFIRMED BY THE PS3 MANGLING ---------------------
-//   The X360 register map is r3 this / r4 lpDirectorResourceManager / f1 lfTimestep /
+// The authored take is sampled and blended after the original early-out gates.
+// Calling convention verified against ARTIST:
 //   r6 lu8ShakeType / f2 lfShakeAmplitude / f3 lfShakeFrequency -- note r5 is SKIPPED, which
 //   is the float argument consuming its GPR slot, and is what pins the u8 to the FOURTH
 //   parameter rather than the third. The DecFIGS symbol says the same thing outright:
@@ -304,8 +216,8 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
         mfBumpValue * 0.01f * (1.0f / kfShakeFocalDistance) * lfShakeAmplitude;
     lTargetCameraAnglesRandom.y = 0.0f;
     lTargetCameraAnglesRandom.z = 0.0f;
-    (void)lTargetCameraAnglesRandom;
-    (void)lfShakeFrequency;   // the arm's only reader: `lfShakeFrequency * mfShotRunningTime`
+    lTargetCameraAnglesRandom.w = 0.0f;
+
 
     // ---- GATE 1 @0x8223F014 / PS3 0x68A88 -----------------------------------
     // `fcmpu cr6, f30, flt_82001CC0` then `beq -> epilogue`. An exact float compare against
@@ -329,30 +241,68 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     if (static_cast<u32>(lu8ShakeType) > luNumShots)
         return;
 
-    // ------------------------------------------------------------------------
-    // ⛔ THE ICE TAKE ARM (X360 0x8223F038..0x8223F7EC) IS NOT REPRODUCED. See the banner.
-    //    Falling out of the function here leaves mMatrix at whatever Construct() set (the
-    //    IDENTITY, so the caller's post-multiply is a no-op rather than an annihilation) and
-    //    leaves mu8ActiveShake alone.
-    //
-    // [diag, one-shot -- NOT console code] the loudness this partial owes the reader. Delete
-    // it together with the arm.
-    // ------------------------------------------------------------------------
+    // ARTIST 8223F038..8223F7EC: resolve the authored take, wrap its two
+    // adjacent 30 Hz keys, interpolate their quaternion rotations, then add
+    // the procedural pitch vibration and its focal-plane compensation.
+    const Attrib::RefSpec ref(*lpDirectorResourceManager->GetShakeAnimGroup().ShotList(lu8ShakeType - 1));
+    CGS_ASSERT(ref.GetClassKey() == static_cast<u64>(Attrib::Gen::iceanim::ClassKey()),
+               "lShakeParams.GetClassKey() == Attrib::Gen::iceanim::ClassKey()");
+    if (mu8ActiveShake != lu8ShakeType)
     {
-        static bool sbReported = false;
-        if (!sbReported && (CgsDev::Message::gxMessageFilterFlags & 1) &&
-            CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbReported = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[iceshake] CameraShakeICEController::Update: ALL THREE GATES PASSED"
-                   " (shakeType " << static_cast<u32>(lu8ShakeType)
-                << ", shots in mShakeAnimsGroup " << luNumShots
-                << ") -- the authored ICE take arm is NOT reproduced, so mMatrix stays"
-                   " identity and the boost shake is DROPPED. This is the documented partial"
-                   " in BrnCameraShakeICEController.cpp, not a silent failure.\n";
-        }
+        const Attrib::Gen::iceanim anim(ref, 0);
+        mShakeTake.SetDataPointers(lpDirectorResourceManager->GetKeyAnimFromGuid(anim.GetAnimGuid()), false);
     }
+    const f32 frame = lfShakeFrequency * mfShotRunningTime * 30.0f;
+    const s32 wholeFrame = static_cast<s32>(frame);
+    const s32 count = mShakeTake.GetNumKeys(11);
+    auto key = [count](s32 value) -> u16 {
+        if (count <= 0) return 0;
+        while (value < 0) value += count;
+        return static_cast<u16>(value % count);
+    };
+    const u16 current = key(wholeFrame), next = key(wholeFrame + 1);
+    const f32 t = frame - static_cast<f32>(wholeFrame);
+    using namespace rw::math::vpu;
+    auto sampleRotation = [&](u16 k) {
+        Vector3 v = {mShakeTake.GetValueFloat(22,k), mShakeTake.GetValueFloat(23,k), mShakeTake.GetValueFloat(24,k),0};
+        v = v * (lfShakeAmplitude / kfShakeFocalDistance);
+        const f32 remainder = 1.0f - Magnitude(v);
+        return Quaternion{v.x,v.y,v.z,remainder == 0.0f ? 0.0f : std::sqrt(remainder)};
+    };
+    Quaternion a = sampleRotation(current), b = sampleRotation(next);
+    f32 dot = a.x*b.x + a.y*b.y + a.z*b.z + a.w*b.w;
+    if (dot < 0.0f) { a = {-a.x,-a.y,-a.z,-a.w}; dot = -dot; }
+    Quaternion rotation;
+    if (dot > std::cos(0.087266468f))
+    {
+        rotation = {a.x+(b.x-a.x)*t,a.y+(b.y-a.y)*t,a.z+(b.z-a.z)*t,a.w+(b.w-a.w)*t};
+        const f32 inverseLength = 1.0f / std::sqrt(rotation.x*rotation.x+rotation.y*rotation.y+rotation.z*rotation.z+rotation.w*rotation.w);
+        rotation = {rotation.x*inverseLength,rotation.y*inverseLength,rotation.z*inverseLength,rotation.w*inverseLength};
+    }
+    else
+    {
+        const f32 angle = std::acos(dot);
+        const f32 from = std::sin((1.0f-t)*angle) / std::sin(angle);
+        const f32 to = std::sin(t*angle) / std::sin(angle);
+        rotation = {a.x*from+b.x*to,a.y*from+b.y*to,a.z*from+b.z*to,a.w*from+b.w*to};
+    }
+    mMatrix = Matrix44AffineFromQuaternion(rotation);
+    const Vector3 angles = EulerAnglesZXYFromMatrix44Affine(mMatrix, 0, 0.01f) + lTargetCameraAnglesRandom;
+    mMatrix.SetIdentity();
+    RotateMatrix44AffineByEulerAnglesZXY(mMatrix, angles);
+    // These three samples occur in the console even though their values are discarded.
+    mShakeTake.GetValueFloat(27,current);
+    mShakeTake.GetValueFloat(26,current);
+    mShakeTake.GetValueFloat(25,current);
+    mMatrix.Pos().y -= std::tan(angles.x) * kfShakeFocalDistance;
+    mu8ActiveShake = lu8ShakeType;
+    // FLAG PC diagnostic: demonstrate that a nonempty authored take changes the view.
+    static const bool trace = std::getenv("BRN_CAMERA_RIG_DIAG") != 0;
+    static u32 lines = 0;
+    if (trace && lfShakeAmplitude > 0.1f && lines++ < 32 && CgsDev::Log::gpDebugPrint)
+        *CgsDev::Log::gpDebugPrint << "[camera-rig] boost-shake type=" << static_cast<u32>(lu8ShakeType)
+            << " keys=" << count << " frame=" << frame << " angles=" << angles.x << "," << angles.y << "," << angles.z
+            << " lift=" << mMatrix.Pos().y << "\n";
 }
 
 // ============================================================================

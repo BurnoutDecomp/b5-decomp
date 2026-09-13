@@ -2014,17 +2014,8 @@ namespace BrnDirector
     // was retired when the tree collapsed to one SuspensionSpring), so it is filled with the
     // console's own `VehicleInfo::operator=` copy of the player's race-car record.
     //
-    // ⚠️ WHAT IS STILL FLAGGED HERE:
-    //   * mCarModifier / mCameraModifier / mfSpeedRatio / mfCrashTimeRemaining /
-    //     mfTempFOVBoostAmount -- products of the ~500-line VMX prologue. Left zeroed, which is
-    //     also what UpdateAllBehaviours' own (gated) responder prologue would leave them at.
-    //   * the two rotation-controller Updates and ProcessSceneQueryResults -- VMX pipelines /
-    //     un-homed controller interiors.
-    //   * the ControllerInfo and DebugPrinter arguments -- both are INCOMPLETE types in this
-    //     tree (declared, never defined), and the reconstructed UpdateAllBehaviours body casts
-    //     both to void without dereferencing. They are passed as references over a static
-    //     zeroed byte block rather than fabricating either layout.
-    // DELETE-WHEN: per item, as each aggregate is homed.
+    // The behaviour manager publishes speed/boost and controller state in each pass.
+    // Crash-time staging and the debug-printer interior retain their existing gaps.
     // ------------------------------------------------------------------------
     // ⭐⭐ SPLIT 2026-08-01 (car-select hand-off wave). This staging used to sit inside
     // UpdateCameraBehavioursPostScene; it is now shared, because the console has TWO entry
@@ -2187,15 +2178,13 @@ namespace BrnDirector
         ICE::CameraSpaceHandler     lCameraSpaces = ICE::CameraSpaceHandler();
         BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
 
-        // ⚠️ FLAG (see the BuildBehaviourSharedInfo banner): the two incomplete-type
-        // reference arguments.
-        static u8 saOpaqueControllerInfo[64] = { 0 };
+        // The behaviour manager does not consume the debug-printer interior.
         static u8 saOpaqueDebugPrinter[64]   = { 0 };
 
         mBehaviourManager.UpdateAllBehaviours(
-            false,                                                        // lbPaused
+            lpIO->mpInputBuffer->IsSimPaused(),
             lSharedInfo,
-            *reinterpret_cast<const ControllerInfo*>(saOpaqueControllerInfo),
+            *lpIO->mpInputBuffer->GetControll(),
             true,                                                         // the console's `1`
             *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
     }
@@ -2227,14 +2216,13 @@ namespace BrnDirector
         ICE::CameraSpaceHandler     lCameraSpaces = ICE::CameraSpaceHandler();
         BuildBehaviourSharedInfo(lpIO, liPlayerCarIndex, lSharedInfo, lCameraSpaces);
 
-        static u8 saOpaqueControllerInfo[64] = { 0 };
         static u8 saOpaqueDebugPrinter[64]   = { 0 };
 
         // ⭐ @0x8225024C -- the console's own call here, and the one this build was missing.
         mBehaviourManager.PostCollisionUpdateAllBehaviours(
-            false,                                                        // lbPaused
+            lpIO->mpInputBuffer->IsSimPaused(),
             lSharedInfo,
-            *reinterpret_cast<const ControllerInfo*>(saOpaqueControllerInfo),
+            *lpIO->mpInputBuffer->GetControll(),
             true,                                                         // the console's `1`
             *reinterpret_cast<DebugPrinter*>(saOpaqueDebugPrinter));
     }

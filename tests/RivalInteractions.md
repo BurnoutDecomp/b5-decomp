@@ -28,3 +28,21 @@ The restored deformation producer is ARTIST `0x8260A508`, reached by
 `DeformableObject::UpdateOutputContactSpies` at `0x826251E8`. The audio queue's
 emergency culling is `0x826D3CF0`, with duplicate removal at `0x826A00C8`, playing
 sound suppression at `0x826BE5E0`, and compaction at `0x826BE910`.
+
+## Rival recovery and camera regression
+
+```powershell
+python b5-decomp/tests/run_rival_recovery_camera.py
+powershell -ExecutionPolicy Bypass -File tools/tests/run_case.ps1 -Case b5-decomp/tests/RivalCamera.ps1
+```
+
+The 36 focused checks exercise production recovery geometry, recovery-section selection,
+route and wrong-way handling, attachment tracking, spherical interpolation, frustum
+prediction, and speed/boost response. Fixtures provide the road network and vehicle
+snapshots; the recovered algorithms are extracted unchanged from the production files.
+
+The camera case uses a forced takedown to select the rig deterministically. In addition
+to the existing HUD, AI and state-transition checks, it requires multiple camera poses
+and nonzero rotation sampled from an authored shake take. Frame captures permit visual
+inspection of the cut and return to driving. It does not establish organic collision
+attribution; use `run_rival_organic.py` for that separate check.

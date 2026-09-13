@@ -192,6 +192,7 @@ public:
     // Assert the attachment reference was bound, drop the prepared latch and arm the
     // first-frame latch the rig seeds itself from. Cannot fail.                    (slot 1)
     bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
 
     // Hand back the vehicle-attached collision policy embedded after the base, or null once
     // the rig has detached.                                                        (slot 5)
@@ -203,12 +204,7 @@ public:
     //                                                                              (slot 7)
     const char* GetName() const override;
 
-    // FLAG (not transcribed): slot 2 is this class's own Update -- the whole loose-attachment
-    //   rig (the attachment/target resolve, the lag + shake + impact cascade, the detach lerp
-    //   off mfDetachLerpAmount and the look-from-target arm). It is not declared here, so slot 2
-    //   keeps the base default (returns true, leaves the camera untouched). That is a DOCUMENTED
-    //   GAP, not a fabrication -- the alternative would be inventing a camera rig.
-    //   DELETE-WHEN: the rig TU lands and bodies Update.
+    // Update resolves the attachment/target, detaches, and applies lag, shake and impacts.
 
     // Adopt a loose-attachment parameter block: assert it carries the loose-attachment type
     // tag, then store the pointer. NOT a virtual override: it is declared over the DERIVED
