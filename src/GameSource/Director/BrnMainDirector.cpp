@@ -1258,11 +1258,18 @@ namespace BrnDirector
     // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other 23 handled cases (0, 6, 24, 42, 43,
+    //   * the other 22 handled cases (0, 24, 42, 43,
     //     53, 54, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
     //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
     //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
     //     aggregate (AllVehicleData, DebugRender).
+    //     ⭐ 6 (E_ACTION_SET_TAKEDOWN_CAMERA_STATE) CAME OFF THIS LIST 2026-09-13. Its blanket
+    //     reason -- "writes into a part of the GameState that is still opaque" -- had expired:
+    //     all five fields the arm touches are named members of BrnDirector::GameState
+    //     today (+0xDA mbTakedownActive, +0xDB mbIsRevengeTD, +0xDC mbIsShutdown,
+    //     +0xDD mbIsSignatureTD, +0xE0 meTakedownVictimID). It is the ONLY writer of
+    //     mbTakedownActive in the image, i.e. the takedown camera's entire gate
+    //     (ArbStateRoaming takes its takedown edge on that flag).
     //     ⭐ 97 / 98 / 100 / 102 CAME OFF THIS LIST 2026-08-29 and are bodied below. The reason
     //     they were on it -- "an opaque GameState part / the un-homed VMX drive-thru transform
     //     pipeline" -- had expired: every field they touch is a named DWARF member today and the
@@ -1328,6 +1335,53 @@ namespace BrnDirector
 
             switch (liActionType)
             {
+            // ---- 6  E_ACTION_SET_TAKEDOWN_CAMERA_STATE (8 bytes) ---------------------
+            // ⭐⭐ THE TAKEDOWN CAMERA'S GATE. This arm is the ONLY writer of
+            // GameState::mbTakedownActive in the whole image, and that flag is what
+            // ArbStateRoaming takes its takedown edge on -- so with the arm absent the takedown
+            // camera was unreachable no matter how complete the state below it was. Same shape
+            // as the drive-thru break below: the state, its slot and its shot chain were all
+            // there; nothing raised the flag the roaming state tests.
+            //
+            // The producer is TakedownManager::PostTakedownCameraState, which posts the 8-byte
+            // SetTakedownCameraAction {victim index @+0x00, active @+0x04, signature @+0x05,
+            // revenge @+0x06}: StartTakedownCamera posts {victim, 1, 0, isRevenge} and both
+            // EndTakedownCamera and ClearAllTakedowns post {invalid, 0, 0, 0}. That second post
+            // IS the clear -- the flag is not sticky and nothing in the arbitrator has to drop
+            // it. Transcribed store-for-store:
+            //     lbz  payload+0x04 -> mbTakedownActive            (+0xDA)
+            //     lwz  payload+0x00 -> meTakedownVictimID          (+0xE0)
+            //     re-read +0xDA; if set:
+            //       lbz payload+0x05 -> mbIsSignatureTD            (+0xDD)
+            //       lbz payload+0x06 -> mbIsRevengeTD              (+0xDB)
+            //     else:  mbIsSignatureTD = mbIsShutdown = mbIsRevengeTD = 0
+            // ⚠ The victim index is a full WORD at +0x00 while the three flags are BYTES at
+            // +0x04..+0x06 -- read them at those widths, not as one packed word.
+            // ⚠ mbIsShutdown (+0xDC) is cleared on the inactive arm only; the active arm never
+            // writes it, exactly as here. Its producer is elsewhere.
+            case 6:
+            {
+                s32 liFocusOnRaceCarIndex = 0;                       // payload +0x00
+                std::memcpy(&liFocusOnRaceCarIndex, lpacPayload + 0x00, sizeof(s32));
+
+                maGameState.mbTakedownActive   = (lpacPayload[0x04] != 0);
+                maGameState.meTakedownVictimID =
+                    static_cast<EActiveRaceCarIndex>(liFocusOnRaceCarIndex);
+
+                if (maGameState.mbTakedownActive)
+                {
+                    maGameState.mbIsSignatureTD = (lpacPayload[0x05] != 0);
+                    maGameState.mbIsRevengeTD   = (lpacPayload[0x06] != 0);
+                }
+                else
+                {
+                    maGameState.mbIsSignatureTD = false;
+                    maGameState.mbIsShutdown    = false;
+                    maGameState.mbIsRevengeTD   = false;
+                }
+                break;
+            }
+
             // ---- 56  E_ACTION_ON_JUMP_START (24 bytes) -------------------------------
             // ⭐⭐ THE JUMP CAMERA REQUEST. Producer: StuntManager::UpdateJumps @0x8239D460
             // (`li r6,0x18 / li r5,0x38`), whose record the asm builds as

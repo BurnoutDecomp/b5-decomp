@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Director/Camera/Camera.h"   // BrnDirector::Camera::Camera (mCamera by value)
+#include "rw/math/vpu/types.h"                  // rw::math::vpu::Matrix44Affine (mpPlayerCarTransform)
 
 // ----------------------------------------------------------------------------
 // BrnDirector::ArbitratorState -- the polymorphic base of every director arbitrator
@@ -101,7 +102,13 @@ namespace BrnDirector
         const ControllerInfo*                   mpControllerInfo;             // +0x40
         const Camera::VehicleInfo*              mpRaceCars;                   // +0x44
         const Camera::VehicleInfo*              mpPlayerCar;                  // +0x48
-        const void*                             mpPlayerCarTransform;         // +0x4C  (Matrix44Affine*)
+        // ⭐ TYPED. This was an opaque `const void*` whose own comment already named the
+        // pointee, so every consumer laundered it back through a static_cast at the point of
+        // use. The producer binds it to the player race car's car-to-world frame by name, and
+        // the affine-transform type is already on this header's include graph, so the cast
+        // bought nothing. Typed here; the casts at the call sites stay legal (a static_cast to
+        // the same type is an identity conversion) so they can be removed independently.
+        const rw::math::vpu::Matrix44Affine*    mpPlayerCarTransform;         // +0x4C
         s32                                     mePlayerActiveRaceCarIndex;   // +0x50  (EActiveRaceCarIndex)
         const Camera2DRotationController*       mpRotationController;         // +0x54
         const CameraSphericalRotationController* mpSphericalRotationController; // +0x58

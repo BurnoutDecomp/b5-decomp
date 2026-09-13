@@ -471,9 +471,11 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         liEventType = lpQueueImpl->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 
-    // While the player is being reset (post-crash) or hidden, drop any pending in-air time.
+    // While the player is crashing, or the car's transform was reset, drop any pending in-air
+    // time. The console reads element +0x44A (mbCrashing) first and only then +0x44E
+    // (mbResetCarTransform) -- re-fetching the state for the second arm, i.e. short-circuit.
     const RaceCarState* lpRaceCarState = lpActiveCarInterface->GetPlayerRaceCarState();
-    if (lpRaceCarState->mbResetCarTransform || lpRaceCarState->mbIsHidden)
+    if (lpRaceCarState->mbCrashing || lpRaceCarState->mbResetCarTransform)
     {
         mfCurrentTimeInAir = 0.0f;
     }
@@ -1050,7 +1052,8 @@ void BurnoutSkillzManager::PreWorldUpdate(
     const RaceCarState* lpRaceCarState = lpActiveCarInterface->GetPlayerRaceCarState();
     CGS_ASSERT(lpRaceCarState, "lpRaceCarState");
 
-    if (lpRaceCarState->mbResetCarTransform)
+    // The single byte the console tests here is element +0x44A, mbCrashing -- not the reset flag.
+    if (lpRaceCarState->mbCrashing)
     {
         miCurrentTrafficChain = 0;
         miCurrentBoostChains = 0;

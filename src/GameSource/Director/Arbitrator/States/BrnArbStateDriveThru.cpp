@@ -175,7 +175,7 @@ namespace BrnDirector
         // ---- resolve whether the bay approach is reversed ---------------------------------
         // X360: dot(mDriveThruTransform.Pos() - mpPlayerCarTransform->Pos(), mDriveThruTransform.At()) < 0.
         const rw::math::vpu::Matrix44Affine& lrPlayerTransform =
-            *static_cast<const rw::math::vpu::Matrix44Affine*>(lrSharedInfo.mpPlayerCarTransform);
+            *lrSharedInfo.mpPlayerCarTransform;
 
         const rw::math::vpu::Vector3 lv3BayToPlayer =
             lrGameState.mDriveThruTransform.Pos() - lrPlayerTransform.Pos();
@@ -325,7 +325,7 @@ namespace BrnDirector
                 {
                     ++siWitnessLines;
                     const rw::math::vpu::Matrix44Affine& lrCarToWorld =
-                        *static_cast<const rw::math::vpu::Matrix44Affine*>(lrSharedInfo.mpPlayerCarTransform);
+                        *lrSharedInfo.mpPlayerCarTransform;
                     const rw::math::vpu::Vector3& lrCamPos = lrCamera.GetTransform().Pos();
                     const rw::math::vpu::Vector3& lrCarPos = lrCarToWorld.Pos();
                     const f32 lfDX = lrCamPos.x - lrCarPos.x;

@@ -13,6 +13,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"      // BehaviourAftertouchCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"    // BehaviourAftertouchCrash::Parameters
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"                   // BehaviourRig::Parameters
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h" // BehaviourLooseAttachment::Parameters
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 
 // ============================================================================
@@ -71,6 +72,54 @@ namespace BrnDirector
         const Camera::BehaviourAftertouchCrash::Parameters& GetAftertouchCrashParameters() const
         {
             return mAftertouchCrashParams;
+        }
+
+        // ---- the gyro blocks the takedown arbitrator states adopt ----------------------
+        // Each returns the block by const reference; the caller passes &block to
+        // BehaviourGyroCam::SetParameters, whose type-tag tripwire Construct below satisfies.
+
+        // Record +480, gyro slot 0. DestructionPathTakedownPlayer::Prepare adopts it for the
+        // first of its two gyro behaviours.
+        const Camera::BehaviourGyroCam::Parameters& GetGyroCamDefaultParameters() const
+        {
+            return mGyroCamDefaultParams;
+        }
+
+        // Record +2112, gyro slot 8. B3ClassicTakedownPlayer::Prepare and
+        // DestructionPathTakedownPlayer::Prepare both adopt it.
+        const Camera::BehaviourGyroCam::Parameters& GetGyroCamTakedownParameters() const
+        {
+            return mGyroCamTakedownParams;
+        }
+
+        // Record +2928, gyro slot 12. DriveByTakedownPlayer::Prepare adopts it for BOTH of its
+        // gyro behaviours -- see the run's banner.
+        const Camera::BehaviourGyroCam::Parameters& GetGyroCamDriveByLParameters() const
+        {
+            return mGyroCamDriveByLParams;
+        }
+
+        // ---- the three loose-attachment blocks the shutdown-takedown beats adopt ----------
+        // ShutdownTakedownPlayer::Update runs three zoom beats; each allocates a loose-attachment
+        // behaviour and adopts the NEXT of these three blocks, reading it straight off the shared
+        // context's named-parameter record at +8696 / +8796 / +8896. Each returns by const
+        // reference; the caller passes &block to BehaviourLooseAttachment::SetParameters, whose
+        // type-tag tripwire the class-default seed below satisfies -- the per-record tunings are
+        // not recovered, see the FLAG beside that seed.
+
+        const Camera::BehaviourLooseAttachment::Parameters& GetLooseAttachmentTakedown1Parameters() const
+        {
+            return mLooseAttachmentTakedown1;
+        }
+
+        const Camera::BehaviourLooseAttachment::Parameters& GetLooseAttachmentTakedown2Parameters() const
+        {
+            return mLooseAttachmentTakedown2;
+        }
+
+        const Camera::BehaviourLooseAttachment::Parameters& GetLooseAttachmentTakedown3Parameters() const
+        {
+            return mLooseAttachmentTakedown3;
         }
 
         // Accessor returning the address of the look-around-car parameter block (mpNamedParameters
@@ -168,7 +217,26 @@ namespace BrnDirector
             // first road-rage-totalled crash.
             maSpirallingDeathcamParameters.Construct();
 
-            // ⭐ 2026-09-11: seed the seven tumbling gyro blocks. BehaviourGyroCam::Parameters
+            // ⭐ The three loose-attachment blocks. Each is seeded by calling the CLASS
+            // default seed, BehaviourLooseAttachment::Parameters::Construct -- itself a real
+            // attested constant run, transcribed in that class's own header -- which writes the
+            // type tag, so the three shutdown-takedown zoom beats meet a tagged block instead of
+            // pool garbage when BehaviourLooseAttachment::SetParameters runs its tripwire.
+            // [FLAG PC bring-up] the class default is NOT attested as these records' content.
+            // Each of the three is a separate named block in the bank, and whatever per-block
+            // re-tunes the bank's own Construct writes over the seed are NOT recovered -- the
+            // same gap the gyro blocks below carry, and the reason this is a stand-in rather
+            // than a transcription. Until the bank's Construct lands the beats run on the class
+            // defaults (mfPitch 5.0, mfDistance 4.0, mfField54 90.0, mfDetachLerpAmount 0.1).
+            // A per-record delta is the expected shape, not the exception: the state-owned
+            // block the non-beat loose-attachment take adopts is seeded by this same Construct
+            // and then re-tuned on three of those very fields at its own call site.
+            // DELETE-WHEN: the BehaviourParameterBank TU lands with the real bank Construct.
+            mLooseAttachmentTakedown1.Construct();
+            mLooseAttachmentTakedown2.Construct();
+            mLooseAttachmentTakedown3.Construct();
+
+            // ⭐ 2026-09-11: seed the gyro blocks. BehaviourGyroCam::Parameters
             // has no Construct of its own in this tree, so the blocks are zeroed and stamped
             // with the gyro type tag -- the one field BehaviourGyroCam::SetParameters asserts
             // on. [FLAG PC bring-up] the authored per-block tunings are NOT reproduced: they
@@ -182,6 +250,13 @@ namespace BrnDirector
                 &mGyroCamDefaultSideTruckingLeftParams,
                 &mGyroCamDefaultSideTruckingRightParams,
                 &mGyroCamFollow,
+                &mGyroCamAlwaysLowParams,
+                &mGyroCamTakedownParams,
+                &mGyroCamTakedownZoomedOutParams,
+                &mGyroCamHighParams,
+                &mGyroCamHelicamParams,
+                &mGyroCamDriveByLParams,
+                &mGyroCamDriveByRParams,
             };
             for (u32 luBlock = 0; luBlock < sizeof(lapGyro) / sizeof(lapGyro[0]); ++luBlock)
             {
@@ -213,20 +288,42 @@ namespace BrnDirector
             return maSpirallingDeathcamParameters;
         }
 
-        // ⭐⭐ THE SEVEN TUMBLING GYRO BLOCKS, PLACED AT THEIR EXACT RECORD OFFSETS
-        // (2026-09-11, moment-camera wave). MomentTumbling::SetGyroCamParameters picks one of
-        // six of these by Parameters::ESubType and hands it to BehaviourGyroCam::SetParameters:
+        // ⭐⭐ THE FOURTEEN GYRO BLOCKS, PLACED AT THEIR EXACT RECORD OFFSETS. Slots 0..6 came
+        // from MomentTumbling; slots 7..13 close the run (takedown-camera wave) and carry the
+        // two blocks the takedown arbitrator states adopt. MomentTumbling::SetGyroCamParameters
+        // picks one of six of these by Parameters::ESubType and hands it to
+        // BehaviourGyroCam::SetParameters:
         //     E_SUBTYPE_LEAD           -> +480   mGyroCamDefaultParams
         //     E_SUBTYPE_TRUCKING_FRONT -> +684   mGyroCamTruckFront
         //     E_SUBTYPE_SIDE           -> +888   mGyroCamLeft
         //     E_SUBTYPE_TRUCKING_SIDE  -> +1296 / +1500  (the left/right alternation)
         //     E_SUBTYPE_FOLLOW         -> +1704  mGyroCamFollow
         // The six reads sit on an exact 204-byte grid == sizeof(BehaviourGyroCam::Parameters),
-        // with one unread slot at +1092 between them, so the span is a run of seven consecutive
+        // with one unread slot at +1092 between them, so the span is a run of consecutive
         // same-typed blocks and the names above are the record's own, in order. The semantics
         // corroborate the grid independently: the TRUCKING_FRONT subtype lands on the block
         // named TruckFront, and the TRUCKING_SIDE subtype's two-way alternation lands on the
         // pair named SideTruckingLeft / SideTruckingRight.
+        //
+        // ⭐ SLOTS 7..13, ADDED IN THE TAKEDOWN-CAMERA WAVE, ON THE SAME GRID AND WITH TWO
+        // MORE INDEPENDENT CONSUMERS. Three takedown-player Prepare bodies read a gyro block
+        // straight off ArbStateSharedInfo::mpNamedParameters (`lwz r11, +0x1C(sharedInfo)`
+        // then an `addi` into the record) and hand it to BehaviourGyroCam::SetParameters:
+        //     B3ClassicTakedownPlayer::Prepare        +0x840 == +2112
+        //     DestructionPathTakedownPlayer::Prepare  +0x1E0 == +480, then +0x840 == +2112
+        //     DriveByTakedownPlayer::Prepare          +0xB70 == +2928, twice
+        // (2112 - 480) / 204 == 8 and (2928 - 480) / 204 == 12 exactly, so both land on the
+        // grid with no remainder, at slots 8 and 12. The recovered type information's member
+        // list for this record names the fourteen blocks in order, and slot 8 is
+        // mGyroCamTakedownParams while slot 12 is mGyroCamDriveByLParams -- the takedown
+        // states landing on the block named Takedown and the drive-by takedown landing on the
+        // block named DriveBy is the same kind of semantic corroboration the subtype names
+        // gave the first half. It also lands slot 11 on mGyroCamHelicamParams, which is
+        // exactly the block this file already attributed to record +2724 from the hit-traffic
+        // moment's own displacement -- a fourth consumer agreeing with the grid.
+        //
+        // ⓘ DriveByTakedownPlayer reads the SAME block for both of its behaviours; the
+        // record's mGyroCamDriveByRParams (slot 13) has no reader in this build.
         //
         // Placing them at their real offsets costs nothing -- this reconstruction's gyro
         // Parameters is byte-exact (static_asserted below) -- so unlike the two by-name blocks
@@ -260,18 +357,50 @@ namespace BrnDirector
         Camera::BehaviourGyroCam::Parameters mGyroCamDefaultSideTruckingLeftParams;  // +1296
         Camera::BehaviourGyroCam::Parameters mGyroCamDefaultSideTruckingRightParams; // +1500
         Camera::BehaviourGyroCam::Parameters mGyroCamFollow;                         // +1704
+        // ⭐ THE RUN'S SECOND HALF, CARVED (takedown-camera wave). Slots 7..13 complete the
+        // fourteen-block gyro run at +480 .. +3336, all seven on the same 204-byte grid and
+        // all seven named by the recovered type information, in the record's own order. Two of
+        // them have attested consumers (see the accessors above); the other five are carried
+        // because a run is only byte-faithful as a whole, and because slot 11 is the helicam
+        // block the bank used to model as a separate by-name member.
+        Camera::BehaviourGyroCam::Parameters mGyroCamAlwaysLowParams;                // +1908
+        Camera::BehaviourGyroCam::Parameters mGyroCamTakedownParams;                 // +2112
+        Camera::BehaviourGyroCam::Parameters mGyroCamTakedownZoomedOutParams;        // +2316
+        Camera::BehaviourGyroCam::Parameters mGyroCamHighParams;                     // +2520
+        Camera::BehaviourGyroCam::Parameters mGyroCamHelicamParams;                  // +2724
+        Camera::BehaviourGyroCam::Parameters mGyroCamDriveByLParams;                 // +2928
+        Camera::BehaviourGyroCam::Parameters mGyroCamDriveByRParams;                 // +3132
         // The remaining reserved span carries the addressed block to the attested +0x2334 (it
         // lands at +9016 rather than +9012 -- see the note under the asserts below). The rest
-        // of the record (the other seven gyro blocks, the bystander / rig / failsafe /
-        // passenger / loose-attachment / fixed blocks) is not modelled here -- see the RECORD
-        // MAP in the BehaviourParameterBank banner below for every one of their offsets.
-        u8                         maReserved0774[0x2334 - 1908];    // +1908 .. +0x2333
+        // of the record (the bystander / rig / failsafe / passenger / fixed
+        // blocks) is not modelled here -- see the RECORD MAP in the BehaviourParameterBank
+        // banner below for every one of their offsets.
+        u8                         maReserved0D08[8696 - 3336];      // +3336 .. +8695
+        // ⭐⭐ THE THREE LOOSE-ATTACHMENT BLOCKS, CARVED (takedown-camera wave), at their exact
+        // record offsets. ShutdownTakedownPlayer::Update reaches each one off the shared
+        // context's named-parameter record (`lwz` the record pointer, then an `addi` into it) and
+        // hands it to BehaviourLooseAttachment::SetParameters:
+        //     beat 1  record +8696
+        //     beat 2  record +8796
+        //     beat 3  record +8896
+        // 100 apart, and 100 is exactly sizeof(BehaviourLooseAttachment::Parameters) (asserted
+        // below), so the three sit on their own exact grid. THE RUN CLOSES WITH NO SLACK at both
+        // ends, which is what makes the placement forced rather than fitted: the RECORD MAP below
+        // already puts mPassengerDefault at +8660 and mFixedDefault at +8996 from four unrelated
+        // consumers, and 8896 + 100 == 8996 exactly. The names are the record's own, in order --
+        // the recovered type information lists exactly three consecutive
+        // BehaviourLooseAttachment::Parameters members between mPassengerDefault and
+        // mFixedDefault, which is the same count the bank serialiser's walk order gives.
+        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentTakedown1;  // +8696
+        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentTakedown2;  // +8796
+        Camera::BehaviourLooseAttachment::Parameters mLooseAttachmentTakedown3;  // +8896
+        u8                         maReserved22C4[0x2334 - 8996];    // +8996 .. +0x2333 (mFixedDefault)
         LookAroundCarCamParameters maLookAroundCarCamParameters;     // +0x2334
         Camera::BehaviourSpirallingDeathcam::Parameters
                                    maSpirallingDeathcamParameters;   // console +0x23B4 (see note)
     };
 
-    // The grid the seven gyro placements rest on, ratcheted so a future widening of the gyro
+    // The grid the fourteen gyro placements rest on, ratcheted so a future widening of the gyro
     // parameter block cannot silently slide them off their attested offsets.
     static_assert(sizeof(Camera::BehaviourGyroCam::Parameters) == 204,
                   "BehaviourGyroCam::Parameters is the 204-byte grid the tumbling blocks sit on");
@@ -296,6 +425,34 @@ namespace BrnDirector
                   "NamedParameters::mGyroCamDefaultSideTruckingRightParams @ +1500");
     static_assert(offsetof(NamedParameters, mGyroCamFollow) == 1704,
                   "NamedParameters::mGyroCamFollow @ +1704 (E_SUBTYPE_FOLLOW)");
+    static_assert(offsetof(NamedParameters, mGyroCamAlwaysLowParams) == 1908,
+                  "NamedParameters::mGyroCamAlwaysLowParams @ +1908 (gyro slot 7)");
+    static_assert(offsetof(NamedParameters, mGyroCamTakedownParams) == 2112,
+                  "NamedParameters::mGyroCamTakedownParams @ +2112 (the takedown states' block)");
+    static_assert(offsetof(NamedParameters, mGyroCamTakedownZoomedOutParams) == 2316,
+                  "NamedParameters::mGyroCamTakedownZoomedOutParams @ +2316 (gyro slot 9)");
+    static_assert(offsetof(NamedParameters, mGyroCamHighParams) == 2520,
+                  "NamedParameters::mGyroCamHighParams @ +2520 (gyro slot 10)");
+    static_assert(offsetof(NamedParameters, mGyroCamHelicamParams) == 2724,
+                  "NamedParameters::mGyroCamHelicamParams @ +2724 (the hit-traffic moment's block)");
+    static_assert(offsetof(NamedParameters, mGyroCamDriveByLParams) == 2928,
+                  "NamedParameters::mGyroCamDriveByLParams @ +2928 (the drive-by takedown's block)");
+    static_assert(offsetof(NamedParameters, mGyroCamDriveByRParams) == 3132,
+                  "NamedParameters::mGyroCamDriveByRParams @ +3132 (gyro slot 13, no reader)");
+    static_assert(offsetof(NamedParameters, maReserved0D08) == 3336,
+                  "the gyro run closes at +3336, where the bystander run starts");
+    // The 100-byte grid the three loose-attachment placements rest on, ratcheted so a future
+    // widening of that block cannot silently slide them off their attested offsets.
+    static_assert(sizeof(Camera::BehaviourLooseAttachment::Parameters) == 100,
+                  "BehaviourLooseAttachment::Parameters is the 100-byte loose-attachment stride");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown1) == 8696,
+                  "NamedParameters::mLooseAttachmentTakedown1 @ +8696 (shutdown-takedown beat 1)");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown2) == 8796,
+                  "NamedParameters::mLooseAttachmentTakedown2 @ +8796 (shutdown-takedown beat 2)");
+    static_assert(offsetof(NamedParameters, mLooseAttachmentTakedown3) == 8896,
+                  "NamedParameters::mLooseAttachmentTakedown3 @ +8896 (shutdown-takedown beat 3)");
+    static_assert(offsetof(NamedParameters, maReserved22C4) == 8996,
+                  "the loose-attachment run closes at +8996, where mFixedDefault starts");
     // ⓘ The look-around block below the gyro run is NOT asserted, because on this host it
     // does not land on its console offset and never has: BehaviourRotateAboutVehicle::
     // Parameters inherits the Behaviour::Parameters head, whose debug-name POINTER is 8 bytes
@@ -472,19 +629,17 @@ namespace BrnDirector
                 mGameplayExternalCameraParamsForCar.Construct();         // over +0x2488
                 mGameplayBumperCameraParamsForCar.Construct();           // over +0x2538
 
-                // ⭐ 2026-09-11: the four moment camera blocks. None of their Parameters
+                // ⭐ 2026-09-11: the remaining moment camera blocks. None of their Parameters
                 // classes has a recovered Construct, so each is zeroed and -- where the tag
                 // is reachable -- stamped with the type tag its SetParameters asserts on.
                 // Same [FLAG, PC-only] posture as the two ZeroBlocks above: the console's
                 // authored tunings for these blocks are compiled into the bank's own
                 // Construct, which is not recovered, so every block reads as a zeroed rig.
-                ZeroBlock(&mGyroCamHelicamParams,     sizeof(mGyroCamHelicamParams));
                 ZeroBlock(&mBystanderCloseParameters, sizeof(mBystanderCloseParameters));
                 ZeroBlock(&mBystanderFarParameters,   sizeof(mBystanderFarParameters));
                 ZeroBlock(&mPassengerDefault,         sizeof(mPassengerDefault));
                 ZeroBlock(&mFixedDefault,             sizeof(mFixedDefault));
 
-                mGyroCamHelicamParams.meType     = eBehaviourGyroCam;
                 mBystanderCloseParameters.meType = eBehaviourBystanderCam;
                 mBystanderFarParameters.meType   = eBehaviourBystanderCam;
                 mFixedDefault.meType             = eBehaviourFixedCam;
@@ -559,10 +714,12 @@ namespace BrnDirector
 
             // The gyro-cam block the hit-traffic moment binds (MomentHitTraffic::Update
             // hands manager+77796 == record +2724 to BehaviourGyroCam::SetParameters).
-            // Record +2724 is gyro slot 11 == mGyroCamHelicamParams.
+            // Record +2724 is gyro slot 11 == mGyroCamHelicamParams, and the record now
+            // places the whole fourteen-block gyro run, so this returns the record's own
+            // block rather than a second by-name copy of it.
             const BehaviourGyroCam::Parameters& GetGyroCamMomentParams() const
             {
-                return mGyroCamHelicamParams;
+                return mNamedParameters.mGyroCamHelicamParams;
             }
 
             // The fixed-cam block the static-cam-impact moment binds
@@ -712,20 +869,21 @@ namespace BrnDirector
             BehaviourGameplayExternal::Parameters mGameplayExternalCameraParamsForCar;  // +0x2488
             BehaviourGameplayBumper::Parameters   mGameplayBumperCameraParamsForCar;    // +0x2538
 
-            // ---- the four moment camera blocks ------------------------------------------
+            // ---- the remaining moment camera blocks --------------------------------------
             // On the console these live inside the bank's mNamedParameters sub-record, at the
             // record offsets in the comments (bank offset == record offset + 0x10). The record
-            // IS modelled now (mNamedParameters above), but each of these five offsets falls
+            // IS modelled now (mNamedParameters above), but each of these four offsets falls
             // inside one of its reserved spans, and carving them out would mean placing runs
             // whose Parameters this tree models NARROWER than the console's (the bystander and
             // rig strides) -- a type widening, not a span edit. So they stay where they are and
             // parity is BY NAMED MEMBER, as for every other block in this slice: each block
             // exists under its own record name, is seeded, and its one consumer reaches it
             // through the accessor above. They are not a second copy of anything the record
-            // holds -- the record does not model these five slots at all.
-            // DELETE-WHEN: the gyro / bystander / passenger / fixed runs are placed inside
+            // holds -- the record does not model these four slots at all. (The helicam block
+            // that used to head this list is gone: the gyro run IS placed now, so
+            // GetGyroCamMomentParams returns the record's own slot 11.)
+            // DELETE-WHEN: the bystander / passenger / fixed runs are placed inside
             // mNamedParameters; then these members go and the accessors return record blocks.
-            BehaviourGyroCam::Parameters      mGyroCamHelicamParams;       // record +2724
             BehaviourBystanderCam::Parameters mBystanderCloseParameters;   // record +3804
             BehaviourBystanderCam::Parameters mBystanderFarParameters;     // record +4116
             BehaviourPassengerCam::Parameters mPassengerDefault;           // record +8660

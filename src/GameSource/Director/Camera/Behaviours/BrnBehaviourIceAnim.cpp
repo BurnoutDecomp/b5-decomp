@@ -582,7 +582,7 @@ bool BehaviourIceAnim::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSha
     BehaviourSharedInfo& lrInfo = const_cast<BehaviourSharedInfo&>(lrSharedInfo);
     const AllVehicleData* lpWorld = lrSharedInfo.GetWorld();
 
-    if (!mPrimaryVehicleRef.IsValid(lpWorld) || !mSecondaryVehicleRef.IsValid(lpWorld))
+    if (!mPrimaryVehicleRef.IsValid(*lpWorld) || !mSecondaryVehicleRef.IsValid(*lpWorld))
     {
         // Neither anchor resolves -> give up following. The block here (account
         // SetFlag(11) on camera +0x138, clearing bit 1 of camera +0x140, then the three base
@@ -918,6 +918,29 @@ void BehaviourIceAnim::SetPrimaryVehicleRefToRaceCarIndex(s32 liRaceCarIndex)
 void BehaviourIceAnim::SetSecondaryVehicleRefToRaceCarIndex(s32 liRaceCarIndex)
 {
     mSecondaryVehicleRef.SetToRaceCar(static_cast<EActiveRaceCarIndex>(liRaceCarIndex));
+    CGS_ASSERT(liRaceCarIndex < 8, "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
+}
+
+// ----------------------------------------------------------------------------
+// SetBystanderRefToRaceCarIndex
+// ----------------------------------------------------------------------------
+// BODIED (was declaration-only tree-wide, and its only call site was parked because of that).
+// The simple-ICE takedown take anchors BOTH its secondary (look) reference and its BYSTANDER
+// reference onto the SAME race car -- the car the player just took down. The shipped build
+// inlines the four-field race-car seed into SimpleIceTakedownPlayer::Prepare twice in a row,
+// once per ref, reading the index out of the shared context both times:
+//     mSecondaryVehicleRef (+0xE00) : kind word = 1 ; index word = the race car ;
+//                                     nearest-player ref word = 0 ; set-flag byte = 1
+//     mBystanderRef        (+0xE10) : the identical four stores, 0x10 further on
+// with the race-car-index tripwire fired after each seed (non-gating, like every folded assert
+// here). Those four fields ARE VehicleRef::SetToRaceCar, so this setter is the one named call
+// plus the trailing tripwire -- byte-for-byte the sibling above, on the bystander ref instead
+// of the secondary one. The ref is private, so the setter lives in this behaviour's own TU
+// rather than letting the arbitrator state form the offset.
+// ----------------------------------------------------------------------------
+void BehaviourIceAnim::SetBystanderRefToRaceCarIndex(s32 liRaceCarIndex)
+{
+    mBystanderRef.SetToRaceCar(static_cast<EActiveRaceCarIndex>(liRaceCarIndex));
     CGS_ASSERT(liRaceCarIndex < 8, "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
 }
 

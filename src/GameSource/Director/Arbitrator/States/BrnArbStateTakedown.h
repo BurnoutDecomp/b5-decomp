@@ -35,16 +35,8 @@
 // ArbStateTakedown::Update's member reads. Parity on the x64 compile-gate host is BY NAMED
 // MEMBER; the quoted offsets are provenance.
 //
-// Two things gate the functions still left declaration-only, and each such declaration carries
-// a one-line FLAG naming the single thing it waits on:
-//   (i)  the two gyro-cam Parameters blocks these players adopt live inside NamedParameters'
-//        un-carved reserved span -- record +2112 (B3-classic / destruction-path / shutdown) and
-//        record +2928 (drive-by), both on the record's 204-byte BehaviourGyroCam::Parameters
-//        grid. NamedParameters is homed in GameSource/Director/Camera/BrnBehaviourParameterBank.h;
-//        naming those two blocks is that header's work, not this one's.
-//  (ii) the BehaviourInterpolate camera-blend setup helper (console an unnamed helper) has no declared
-//        home in this tree, and the live race car's world position is only reachable through
-//        AllVehicleData::GetRaceCar()'s deliberately-opaque `const void*` return.
+// Every Prepare / Update below is bodied in BrnArbStateTakedown.cpp, and every store those
+// bodies make now goes through a declared setter on the behaviour that owns it.
 // ----------------------------------------------------------------------------
 
 namespace Attrib { namespace Gen { class iceanim; } }
@@ -77,12 +69,12 @@ namespace BrnDirector
         // into its own body in the .cpp.
         void Construct();
 
-        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
-        // Parameters block at record +2112 (BrnBehaviourParameterBank.h).
+        // Prepare -- allocate the gyro rig on the victim's car (takedown parameter
+        // block, record +2112) and the blend that carries the gameplay camera into it.
         bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Update -- FLAG: needs a declared home for the BehaviourInterpolate
-        // camera-blend setup helper (console an unnamed helper) the FLYBACK hand-off branch runs.
+        // Update -- the four-beat flyback; the FLYBACK hand-off allocates the second
+        // blend (gyro cam -> gameplay camera) and advances to INTERPOLATING_TO_GAMEPLAY.
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // Release -- reset the state machine, then drop the three behaviour holds.
@@ -125,12 +117,13 @@ namespace BrnDirector
         // ArbStateTakedown::Construct (the this+0x1D8 store block); de-inlined in the .cpp.
         void Construct();
 
-        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
-        // Parameters block at record +2112 (BrnBehaviourParameterBank.h).
+        // Prepare -- two gyro rigs (default block on the player's car, takedown block
+        // on the victim's), both seeded from the player tracker's implicit velocity, plus the
+        // blend from a synthesised look-at camera into the first rig.
         bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Update -- FLAG: needs a declared home for the BehaviourInterpolate
-        // camera-blend setup helper (console an unnamed helper) the FLYBACK1 hand-off branch runs.
+        // Update -- two flyback beats; the FLYBACK1 hand-off allocates the rig-to-rig
+        // blend and advances to FLYBACK2.
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // Release -- reset the state machine, then drop the four behaviour holds.
@@ -173,8 +166,8 @@ namespace BrnDirector
         // ArbStateTakedown::Construct (the this+0x398 store block); de-inlined in the .cpp.
         void Construct();
 
-        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
-        // Parameters block at record +2928 (BrnBehaviourParameterBank.h).
+        // Prepare -- allocate BOTH gyro rigs on the victim's car; both adopt the same
+        // drive-by parameter block (record +2928) and neither is given a from-car vector seed.
         bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // Update @0x8225A000 -- tractable: picks between the two gyro-cam handles' produced
@@ -226,13 +219,14 @@ namespace BrnDirector
         // (ArbStateTakedown::Construct calls it out of line).
         void Construct();
 
-        // Prepare -- FLAG: needs a NamedParameters accessor for the gyro-cam
-        // Parameters block at record +2112 (BrnBehaviourParameterBank.h).
+        // Prepare -- allocate the loose-attachment rig (hung off the player's car,
+        // aimed at the victim's, adopting this player's OWN parameter block) plus the lookback
+        // blend into it.
         bool Prepare(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Update -- FLAG: needs a typed AllVehicleData::GetRaceCar return (the
-        // LOOKBACK case seeds the gyro cam's from-car vector from the live car's world position,
-        // and every later state depends on that seed).
+        // Update -- the nine-state sequence. LOOKBACK seeds the gyro rig's from-car
+        // vector from the live cars' world positions and sets up the flyback blend; the three
+        // zoom beats then run in sequence, each its own loose-attachment behaviour.
         Camera::Camera Update(const ArbitratorState* lpCallingState, ArbStateSharedInfo& lrSharedInfo) override;
 
         // Release -- reset the state machine, then drop all seven behaviour holds.
@@ -297,24 +291,25 @@ namespace BrnDirector
         // Construct.
         void        Construct() override;
 
-        // Prepare -- FLAG: needs a typed AllVehicleData::GetRaceCar return (it
-        // seeds the gyro cam's world-space normalized from-car vector from the live car's
-        // world position, which that accessor hands back as an opaque `const void*`).
+        // Prepare -- pick the owning player off the game state on the first call,
+        // then bring up this state's own three behaviours, the moment selector, and the player.
         bool        Prepare(ArbStateSharedInfo& lrSharedInfo) override;
 
-        // Update -- FLAG: needs a typed AllVehicleData::GetRaceCar return (the
-        // debug-cam arm adds the live car's world position into this state's camera offset).
+        // Update -- the state's own six-state machine, the moment-selector cutting
+        // policy for road rage, and the exit edge back to roaming.
         void        Update(ArbStateSharedInfo& lrSharedInfo) override;
 
         bool        Release(ArbStateSharedInfo& lrSharedInfo) override; // @0x822353B8
         const char* GetName() const override;                          // @0x821F62E0
 
-        // FLAG: no asm body recovered for Destruct in this TU's ledger set.
-        void        Destruct() override;
+        // Destruct() is NOT in this TU's recovered function set -- no symbol, and nothing
+        // references it -- so the base declaration is kept and no override is declared here
+        // (the same call the eight sibling states made).
 
     private:
-        // FLAG: no asm body recovered for PickNewTakedownType in this TU's ledger set (declaration reference
-        // home BrnArbStateTakedown.cpp).
+        // FLAG: no asm body recovered for PickNewTakedownType in this TU's ledger set, and no
+        // recovered code calls it -- Prepare picks the player straight off the game state.
+        // Declaration-only (declaration reference home BrnArbStateTakedown.cpp).
         void PickNewTakedownType(ArbStateSharedInfo& lrSharedInfo);
 
         // ---- members, DWARF order; X360 (4-byte-pointer) offsets in comments --------------

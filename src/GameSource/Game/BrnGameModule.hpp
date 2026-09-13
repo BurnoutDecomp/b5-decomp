@@ -550,8 +550,11 @@ namespace BrnGame
         // prologue (r3 = this, r4 = lpGuiInput, r5 = lpGameStateOutput); the two null asserts
         // are GameBridgeGameStateToX.cpp:754/755. Called by BridgeGameStateToGui @0x823EE880
         // (call site @0x823EF22C).
-        // ⚠️ PARTIAL RECONSTRUCTION -- only the three STUNT-COLLECTIBLE arms (58/59/60) are
-        // reproduced. The full body is a ~700-case switch; see the FLAG on the body.
+        // ⚠️ PARTIAL RECONSTRUCTION -- the console body is a ~700-case switch and only some of
+        // its arms are reproduced. The set has grown well past the original stunt-collectible
+        // three, so it is NOT duplicated here: the banner above the body in
+        // GameBridgeGameStateToX_StuntGuiEvents.cpp enumerates exactly which arms exist and is
+        // the one list to keep current.
         // Home GameSource/Game/GameBridgeGameStateToX.cpp.
         void TranslateGameActionsToGuiEvents(
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,

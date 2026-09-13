@@ -637,7 +637,7 @@ void TriggerQueryManager::ProcessPlayerTriggers(
             //     lVelocity        = lpActiveRaceCarInterface->GetPlayerLinearVelocity();
             //     lRegionDirection = lpGenericRegion->GetBoxRegion()->ComputeDirection();
             //     lbEntryDirection = Dot(lVelocity, lRegionDirection) > 0.0f;
-            //     liRoadLimit      = <player RaceCarState::mbResetCarTransform, X360
+            //     liRoadLimit      = <player RaceCarState::mbCrashing -- the console
             //                          *(1120*playerIndex + interface + 1914)>   (role unverified)
             //     luRoadLimitRegionId = GetGroupId() ? GetGroupId() : GetId();
             //     mpRoadRulesManager->OnRoadLimit(luRoadLimitRegionId, lbEntryDirection,

@@ -359,7 +359,8 @@ void ChallengeManager::UpdateLeaptCars(
                 lpActiveRaceCarOutputInterface->GetRaceCarState(leActiveRaceCarIndex);
             CGS_ASSERT(lpRaceCarState, "lpRaceCarState");                           // X360 line 3972
 
-            if (lpRaceCarState->mbResetCarTransform)
+            // Element +0x44A -- mbCrashing. A car that is mid-crash cannot be leapt.
+            if (lpRaceCarState->mbCrashing)
             {
                 continue;
             }

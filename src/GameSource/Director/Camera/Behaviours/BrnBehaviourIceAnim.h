@@ -461,9 +461,8 @@ public:
     // Bind the bystander anchor vehicle reference (mBystanderRef @+0xE10) to a specific race car,
     // the same 4-word {kind=1, index, 0, valid=1} pattern as SetSecondaryVehicleRefToRaceCarIndex
     // (the console asserts liRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars, same as
-    // that sibling setter). DECLARATION-ONLY (the body lands with this behaviour's TU,
-    // which owns mBystanderRef); exposed as a named setter so the takedown player never pokes
-    // the (private) ref by offset.
+    // that sibling setter). Bodied in this behaviour's own TU, which owns mBystanderRef;
+    // exposed as a named setter so the takedown player never pokes the (private) ref by offset.
     void SetBystanderRefToRaceCarIndex(s32 liRaceCarIndex);
 
     // Seek the embedded key-anim controller's normalised playback parameter (mKeyAnimController

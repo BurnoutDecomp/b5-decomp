@@ -1122,8 +1122,17 @@ namespace Camera
     // instantiation picks its pool from sizeof(TBehaviour): a behaviour that fits the small
     // pool's 1600-byte bucket -> mSmallBehaviourPool ("small behaviour"); larger -> the 4000-byte
     // mLargeBehaviourPool ("large behaviour"). Measured routing (matches every sibling's asm):
-    //   LARGE pool: Failsafe(2656) GameplayBumper(2112) GameplayExternal(2840) IceAnim(3904)
-    //   SMALL pool: all others (GyroCam is 1600 -- it exactly fills a small bucket).
+    //   LARGE pool: Failsafe GameplayBumper GameplayExternal IceAnim -- each far past the bucket
+    //               on the console and on the host alike; and GyroCam, which fits the console's
+    //               1600-byte bucket EXACTLY but MEASURES 1632 here (host pointer width and
+    //               alignment through the whole record, the Behaviour base included), so it
+    //               routes LARGE. That is a host-width consequence, not a reconstruction choice
+    //               -- the only route back into the small bucket is trimming a reserved span,
+    //               which would be a layout accommodation. ⚠️ It is also a real capacity
+    //               divergence: the gyro rigs move off a 20-slot pool onto an 8-slot one that
+    //               already holds the four above, and two rigs are allocated at once on the
+    //               destruction-path and drive-by takedowns. Headroom, but not the console's.
+    //   SMALL pool: all others.
     // IceAnim / RenderMetrics / Rig are instantiated in their own isolated TUs (their headers'
     // shared-slice re-declarations collide with each other and with the real shared headers).
     // ========================================================================
@@ -1149,16 +1158,19 @@ namespace Camera
     // NewBehaviour<TBehaviour> explicit instantiation (X360 @0x822580F8 &c.)
     //
     // Emitted here for the behaviours that HAVE been re-based onto the canonical
-    // Camera::Behaviour: the road-runner (the attract-mode fly-by camera) and, since
-    // 2026-07-29, the two SHARED GAMEPLAY cameras SharedCameraContainer::Prepare allocates
-    // (BehaviourGameplayBumper / BehaviourGameplayExternal -- see their headers' RE-BASED
-    // banners; those two are what Arbitrator::Update's very first state needs, and their old
-    // `void* mpVTable` fork is what made BehaviourHelper::Prepare's slot-0 dispatch fault on
-    // a null vptr). The remaining ~32 behaviour slices still model their base head as an
-    // opaque `void* mpVTable`, so pooling them and dispatching Behaviour's vtable through the
-    // helper would be a static_cast onto a type that is not (yet) a Behaviour. They are
-    // re-based one at a time; until then their NewBehaviour<> call sites keep binding the
-    // generic DECLARATION-ONLY overload, exactly as before.
+    // Camera::Behaviour (each such header carries a RE-BASED banner): the road-runner (the
+    // attract-mode fly-by camera), the two SHARED GAMEPLAY cameras SharedCameraContainer::Prepare
+    // allocates (BehaviourGameplayBumper / BehaviourGameplayExternal -- what Arbitrator::Update's
+    // very first state needs), the interpolator, and the two rigs ArbStateTakedown::Prepare
+    // allocates, BehaviourAftertouchCrash and BehaviourGyroCam. The opaque `void* mpVTable` head
+    // those last two used to carry is what made BehaviourHelper::Prepare's slot-0 dispatch read a
+    // null vptr on the first takedown of a session.
+    // The behaviour slices still on that opaque-head model cannot be pooled through here --
+    // dispatching Behaviour's vtable through the helper would be a static_cast onto a type that
+    // is not (yet) a Behaviour -- so their NewBehaviour<> call sites keep binding the generic
+    // DECLARATION-ONLY overload. They are re-based one at a time. A re-based behaviour whose
+    // header cannot be included in this TU (its flat-slice re-declarations collide with the real
+    // shared headers) is instantiated in its own isolated TU instead.
     // ========================================================================
     template void BehaviourManager::NewBehaviour<BehaviourRoadRunner>(
         BehaviourHandle<BehaviourRoadRunner>& lrHandle, void* lpOwningState,
@@ -1171,6 +1183,12 @@ namespace Camera
         const void* lpOwner, s32 liRefLimit);
     template void BehaviourManager::NewBehaviour<BehaviourInterpolate>(
         BehaviourHandle<BehaviourInterpolate>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
+    template void BehaviourManager::NewBehaviour<BehaviourAftertouchCrash>(
+        BehaviourHandle<BehaviourAftertouchCrash>& lrHandle, void* lpOwningState,
+        const void* lpOwner, s32 liRefLimit);
+    template void BehaviourManager::NewBehaviour<BehaviourGyroCam>(
+        BehaviourHandle<BehaviourGyroCam>& lrHandle, void* lpOwningState,
         const void* lpOwner, s32 liRefLimit);
 }
 } // namespace BrnDirector

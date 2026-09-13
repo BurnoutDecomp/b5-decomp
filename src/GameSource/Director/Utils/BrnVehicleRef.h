@@ -88,6 +88,73 @@ namespace BrnDirector
             return &lrWorld.GetPlayer();
         }
 
+        // ⭐ IsValid -- does this reference currently resolve to a LIVE race car? DE-FORKED
+        // HERE: this is the console's own VehicleRef::IsValid, a method of THIS struct, and the
+        // single copy of it. It used to live only as a slice on the behaviour-side derived
+        // Camera::Behaviour::VehicleRef, taking the world as an opaque pointer; that copy is
+        // gone and the derived class now pulls this one in with a using-declaration, so there
+        // is exactly one body tree-wide.
+        //
+        // The console shape:
+        //     if (!mbSet) return false;
+        //     switch (meType) {
+        //       case E_PLAYER_CAR:              index = world.mePlayerRaceCarIndex;   // +0xC4
+        //       case E_RACE_CAR:                index = miRaceCarIndex;
+        //       case E_RACE_CAR_NEAREST_PLAYER: index = world.GetNearestRaceCarIndexToPlayer(muRef);
+        //       case E_TRAFFIC_VEHICLE:         assert("not implemented yet"); return false;
+        //       default:                        assert("unknown type");        return false;
+        //     }
+        //     assert(index < 8);                              // the bit-array tripwire
+        //     return world.mUsedRaceCars.IsBitSet(index);     // +0xC8
+        // The two displacements land exactly on the committed AllVehicleData members
+        // (mePlayerRaceCarIndex @+0xC4 == 196, mUsedRaceCars @+0xC8 == 200), which the
+        // disassembly reaches as world+196 and world + 8*((index>>6)+25).
+        //
+        // ⚠ The used-race-car BIT is the console's only guard against a reference to a car
+        // that was never spawned -- and it is a guard on the bit, not on the vehicle data, so a
+        // car whose bit is set but whose record is zeroed still passes here on the console too.
+        //
+        // INLINE deliberately, for the same mount hazard Get carries above: an out-of-line body
+        // in BrnVehicleRef.cpp -- which IS on the build list -- would emit an unresolved
+        // external for every AllVehicleData accessor it reaches in EVERY link, whether or not
+        // anything calls IsValid. Inline, the body materialises only where a caller needs it.
+        bool IsValid(const AllVehicleData& lrWorld) const
+        {
+            if (!mbSet)
+            {
+                return false;
+            }
+
+            EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+            switch (meType)
+            {
+            case E_PLAYER_CAR:
+                leIndex = lrWorld.GetPlayerRCIndex();
+                break;
+
+            case E_RACE_CAR:
+                leIndex = static_cast<EActiveRaceCarIndex>(miRaceCarIndex);
+                break;
+
+            case E_RACE_CAR_NEAREST_PLAYER:
+                leIndex = lrWorld.GetNearestRaceCarIndexToPlayer(muRef);
+                break;
+
+            case E_TRAFFIC_VEHICLE:
+                CGS_ASSERT(false, "not implemented yet");    // non-gating
+                return false;
+
+            default:
+                CGS_ASSERT(false, "unknown type");           // non-gating
+                return false;
+            }
+
+            CGS_ASSERT(static_cast<u32>(leIndex) < 8u, "invalid index");   // non-gating
+
+            return lrWorld.GetUsedRaceCarsBitArray().IsBitSet(static_cast<u32>(leIndex));
+        }
+
         // @0x8252D7F8 (class TU; body in BrnVehicleRef.cpp) -- bind the reference.
         // The trailing word is stored only for E_RACE_CAR_NEAREST_PLAYER (the X360
         // ICEWrapper::PlayMovie call site passes 1 there).

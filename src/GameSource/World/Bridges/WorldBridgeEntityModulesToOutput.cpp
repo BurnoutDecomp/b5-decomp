@@ -727,8 +727,6 @@ void BridgeWorldEntityInfoToOutput(
 // ----------------------------------------------------------------------------
 // BridgePhysicsToOutput  @ 0x827AEB18
 //
-// [showtime score wave 2026-08-29] ONLY THE CONTACT-SPY LEG IS REAL HERE. It replaced the
-// one-shot inert stub that had stood since the world-drive wave (2026-07-27).
 // The caller already exists and already brackets it
 // correctly: BrnWorldModule.cpp:3183 runs it every frame inside
 // LockBuffersForIO(lpUpdateOutputBuffer, lpPhysicsOutput).
@@ -745,21 +743,15 @@ void BridgeWorldEntityInfoToOutput(
 //    5  UpdateOutputBuffer::AppendGameEventQueue(out, OutputBuffer::Ge(phys) + 26096)
 //    6  UpdateOutputBuffer::AppendPropUpdateNotificationQueue(out, GetProp(phys) + 64048)
 //
-// ⭐ LEG 2 IS LANDED HERE AND THE REST ARE NOT, and the reason is scope, not difficulty:
-// this wave needs the contact spy and nothing else. Leg 2 is a whole-object copy of a
+// ⭐ LEGS 1-3 ARE LANDED HERE AND 4-6 ARE NOT. Leg 2 is a whole-object copy of a
 // one-pointer handle (ContactSpyInterface is `ContactSpyData* mpData`), so it is
 // host-safe as written -- the console's own `*dst = *src`, no byte count involved.
 //
-// [!] NOT REPRODUCED, named rather than faked. Leg 1 in particular carries a MEASURED
-// SIZE TRAP of exactly the kind BridgeWorldToGameState's leg 5 documents: the console
-// memcpy's 8960 X360 bytes of a VehicleOutputInterface whose host object has widened
-// pointers, so it must be an assignment, not a byte copy -- and the two truncated IDA
-// accessor names (`OutputBuffer::Ge`, `GetVehicleOutputInt`) have to be resolved against
-// their return offsets first. Legs 3-6 need four UpdateOutputBuffer setters/appenders
-// whose sources are still opaque spans on this tree. Behaviour still lost: the physics
-// vehicle/impact/traffic-state fan-in, the deformation interface, and the physics module's
-// own game events and prop-update notifications.
-// DELETE-WHEN a wave lands legs 1 and 3-6: this banner shrinks to the function's own.
+// [!] NOT REPRODUCED, named rather than faked. Legs 4-6 need three UpdateOutputBuffer
+// setters/appenders whose sources are still opaque spans on this tree. Behaviour still
+// lost: the deformation interface, and the physics module's own game events and
+// prop-update notifications.
+// DELETE-WHEN a wave lands legs 4-6: this banner shrinks to the function's own.
 //
 // ⚠️ WHY THIS MATTERS BEYOND THIS WAVE. Nothing else in the tree writes
 // UpdateOutputBuffer::mContactSpyInterface, so before this the world's published contact
@@ -784,6 +776,50 @@ void BridgePhysicsToOutput(
         return;   // [PC GUARD] not X360 -- the console has no tripwire here at all.
     }
 
+    // ---- leg 1: the VEHICLE-OUTPUT-INTERFACE fan-in --------------------------------------
+    // The console's first act, five statements over the two interfaces:
+    //     PhysicalTrafficState<20>::Append( dst +0x2620, src +0x2620 )
+    //     ImpactEvent<16>::Append         ( dst +0x2310, src +0x2310 )
+    //     VariableEventQueue<1536,16>::Append( dst +0x65F0, src +0x65F0 )
+    //     dst->mUsedRaceCars = src->mUsedRaceCars        (one 8-byte load/store at +0)
+    //     memcpy( dst +0x10, src +0x10, <the eight RaceCarStates> )
+    // That IS VehicleOutputInterface::operator=, member for member, and the copy therefore runs
+    // through that committed symbol -- by host sizeof, never at the console's byte count. It is
+    // the same reduction the game-state side already takes on the identical fan-in
+    // (GameStateModule::CacheTakedownManagerPostWorldInputData, whose banner decodes the same
+    // five statements onto the same operator).
+    //
+    // TWO RECORDED DIFFERENCES, both inert on this build and both stated rather than smoothed:
+    //   * operator= Clears each destination queue before appending; the console appends without
+    //     clearing. The destination is this sub-step's own UpdateOutputBuffer -- created and
+    //     Constructed by BrnGameModule::CreateStaticIOBuffers and destroyed at the end of the
+    //     sub-step -- so every destination queue is already empty when this runs and the Clear
+    //     cannot remove anything. Likewise the game-event queue: operator= block-copies the
+    //     size-pinned span where the console appends, which into an empty destination carries the
+    //     same live events.
+    //   * operator= also copies mAggressiveDrivingFlags (+0x6C00); the console leaves the
+    //     destination's five bytes at their constructed zero. Nothing in the tree reads the
+    //     WORLD copy of that field -- the producer and the only readers all sit on the physics
+    //     side's own interface -- so the extra copy is unobservable.
+    //
+    // ⚠️ ITS PRECONDITION, which was NOT met until this change: the destination's three interior
+    // queues have to be Constructed before the first Append, or the merge writes through a null
+    // event pointer. UpdateOutputBuffer::Construct now runs mVehicleOutputInterface.Construct()
+    // as its first member construct, exactly where the console emits it.
+    //
+    // ⭐⭐ WHY IT MATTERS: nothing else in the tree ever wrote
+    // UpdateOutputBuffer::mVehicleOutputInterface, so the world module published a
+    // freshly-constructed, no-slot-in-use interface every frame of every run. The physics side was
+    // never the problem -- VehicleManager::WriteOutVehicleStats fills the PHYSICS buffer's copy
+    // each frame. Downstream of this leg the whole organic-takedown chain was reading that empty
+    // publication: BrnGameModule hands the world copy to
+    // GameStateModule::PostWorldUpdateStuntBringUp, CacheTakedownManagerPostWorldInputData copies
+    // it into the game-state takedown cache, and the pre-world leg builds its crashing-race-car
+    // scratch from that cache -- so CrashingRaceCarInterface::SetFromVehicleOutputInterface wrote
+    // all-false every frame and no organic takedown could ever be detected.
+    *lpOutputBuffer->GetVehicleOutputInterface() =
+        *lpPhysicsOutputBuffer->GetVehicleOutputInterface();
+
     // ---- leg 2: publish the frame's contact spy (0x827AEB68..0x827AEB78) ---------------
     *lpOutputBuffer->GetContactSpyInterface() =
         *lpPhysicsOutputBuffer->GetContactSpyInterface();
@@ -795,7 +831,7 @@ void BridgePhysicsToOutput(
     // (the tree's body: clear + Append each of the eight queues, copy the three GUI bools and the
     // two FF-spring floats). This is what carries the RaceCarCrashEvent queue (+0x3A0) that
     // SetRaceCarCrashing posts into out of the physics buffer, so ModeManager::ProcessPlayerCrashes
-    // (via the game-state post-world seam) can see a player wreck. Legs 1 and 4-6 stay parked.
+    // (via the game-state post-world seam) can see a player wreck. Legs 4-6 stay parked.
     *lpOutputBuffer->GetVehicleManagerOutputInterface() =
         *lpPhysicsOutputBuffer->GetVehicleManagerOutputInterface();
 }

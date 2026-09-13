@@ -44,7 +44,9 @@ namespace Camera
 extern const char* const KPC_LABEL_820051C0;   // @0x820051C0 -- mfField54 field label
 
 // Pin the asm-attested member offsets the four methods touch.
+static_assert(offsetof(BehaviourLooseAttachment, meTimestepType)       == 0x004, "base timestep flavour @ +0x04");
 static_assert(offsetof(BehaviourLooseAttachment, mParamWord1)          == 0x010, "param word 1 @ +0x10");
+static_assert(offsetof(BehaviourLooseAttachment, mImpactEffect)        == 0x2F0, "impact effect @ +0x2F0");
 static_assert(offsetof(BehaviourLooseAttachment, miTargetSet)          == 0x304, "target set flag @ +0x304");
 static_assert(offsetof(BehaviourLooseAttachment, meTargetRaceCarIndex) == 0x308, "target index @ +0x308");
 static_assert(offsetof(BehaviourLooseAttachment, miTargetField30C)     == 0x30C, "target field @ +0x30C");
@@ -62,6 +64,10 @@ void* BehaviourLooseAttachment_GetAnchor(BehaviourLooseAttachment& lr)          
 void BehaviourLooseAttachment_SetParametersAnchor(BehaviourLooseAttachment& lr,
                                                    const BehaviourLooseAttachment::Parameters* lp) { lr.SetParameters(lp); }
 void BehaviourLooseAttachment_SetTargetAnchor(BehaviourLooseAttachment& lr, s32 li)     { lr.SetTarget(li); }
+void BehaviourLooseAttachment_SetTimestepTypeAnchor(BehaviourLooseAttachment& lr,
+                                                    BrnDirector::Timestep::EType le)    { lr.SetTimestepType(le); }
+Utils::CameraImpactEffect* BehaviourLooseAttachment_GetImpactEffectAnchor(BehaviourLooseAttachment& lr)
+                                                                                        { return &lr.GetImpactEffect(); }
 
 // Pin the asm-attested Parameters field-walk offsets (host-pointer-width invariant -- the walked
 // region holds no pointers): the "Impact" sub-block at +0x2C and the loose-attachment tunables at

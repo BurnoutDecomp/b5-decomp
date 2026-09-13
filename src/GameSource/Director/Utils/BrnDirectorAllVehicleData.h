@@ -497,4 +497,42 @@ namespace BrnDirector
     // Pin the X360 12-byte element (kept from the earlier slice; the Append
     // @0x821FBA48 asm copies exactly three 32-bit words at a 12-byte stride).
     static_assert(sizeof(AllVehicleData::NearestCarInfo) == 12, "NearestCarInfo is a 12-byte element");
+
+    // ------------------------------------------------------------------------------------
+    // ⭐ WHAT GetRaceCar HANDS BACK, PINNED. Added this wave because two consumer families
+    // reach the returned record for the car's WORLD POSITION and had been parked waiting for
+    // the return type to stop being an opaque `const void*`. It is not opaque and has not
+    // been since the namespace fork above was fixed: the record IS
+    // BrnDirector::Camera::VehicleInfo, its own committed home, and the position is reached
+    // BY NAME as `GetRaceCar(leIndex).mRaceCarState.mTransform.wAxis`.
+    //
+    // The console leaves no room for doubt -- GetRaceCar's whole body, after its three
+    // asserts, is one indexed add off the mpRaceCars base at +0xC0:
+    //     lwz   r11, 0xC0(this)          ; mpRaceCars
+    //     mulli rN,  rIndex, 0x4F0       ; the element stride
+    //     add   r3,  rN, r11             ; &mpRaceCars[leIndex]
+    // so the element stride IS sizeof(VehicleInfo) and the returned address IS the array
+    // element -- there is no second record type and no director-side copy.
+    //
+    // The two offsets the position readers care about, in the record's own terms:
+    //     +0x000  mRaceCarState                     (the physics publish, first member)
+    //     +0x1F0  mRaceCarState.mTransform          (the car-to-world frame)
+    //     +0x220  mRaceCarState.mTransform.wAxis    (the world POSITION lane)
+    // These are the same offsets UpdatePlayerSpaces above already reads through this class
+    // (the +0x44A crashing byte and the +0x1E8 ground-test valid byte land in the same
+    // record), so the two agree by construction.
+    //
+    // Asserted rather than commented because the host record carries no pointers anywhere in
+    // its embedded types, so the console strides survive the move to host widths unchanged --
+    // and if a future edit ever breaks that, this fires at compile time instead of silently
+    // handing every position reader the wrong lane.
+    // ------------------------------------------------------------------------------------
+    static_assert(sizeof(Camera::VehicleInfo) == 0x4F0,
+                  "GetRaceCar indexes mpRaceCars at the VehicleInfo stride (mulli 0x4F0)");
+    static_assert(offsetof(Camera::VehicleInfo, mRaceCarState) == 0x0,
+                  "VehicleInfo leads with mRaceCarState");
+    static_assert(offsetof(BrnPhysics::Vehicle::RaceCarState, mTransform) == 0x1F0,
+                  "the returned race car's car-to-world frame sits at +0x1F0");
+    static_assert(offsetof(Matrix44Affine, wAxis) == 0x30,
+                  "the world position is the frame's wAxis lane (record +0x220)");
 }

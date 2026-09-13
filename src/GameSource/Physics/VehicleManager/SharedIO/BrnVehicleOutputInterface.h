@@ -18,6 +18,8 @@
 // X360. WheelFFSpring / GameEventQueue members are only ever block-copied here.
 // ============================================================================
 
+#include <cstddef>     // offsetof (the traffic-state-queue seat gate inside VehicleOutputInterface)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                          // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue<BUFSIZE,ALIGN>
@@ -186,6 +188,17 @@ namespace Vehicle
         // as opaque size-correct storage (0x610 == 1552 bytes) -- only ever block-copied here.
         u8                          mGameEventQueueStorage[0x610]; // @0x65F0 (DWARF :386, GameEventQueue)
         AggressiveDrivingFlags      mAggressiveDrivingFlags;  // @0x6C00  (DWARF :387)
+
+        // mTrafficStateQueue is private, so offsetof on it needs the complete-class context a
+        // member function body provides (same idiom as BrnPlayerDriverControls::_AssertLayout).
+        // Never called. It pins the one seat callers reach by name instead of by byte: the
+        // world -> sound bridge and TrafficEntityModule::HandleExternalResponses both land on
+        // this member, and both are only correct while it sits here.
+        static void _AssertTrafficStateQueueSeat()
+        {
+            static_assert(offsetof(VehicleOutputInterface, mTrafficStateQueue) == 0x2620,
+                          "VehicleOutputInterface::mTrafficStateQueue @+0x2620");
+        }
     };
 
     // ------------------------------------------------------------------------
@@ -196,9 +209,7 @@ namespace Vehicle
     struct CrashingRaceCarInterface
     {
         void Clear();
-        // [PARKED -- file not owned by this lane] the line below misnames the copied member on
-        // SetFromVehicleOutputInterface: the body copies RaceCarState::mbCrashing (element +0x44A).
-        // @0x823625C0: copy each in-use car's RaceCarState::mbResetCarTransform flag into the array.
+        // Copy each in-use car's RaceCarState::mbCrashing flag (element +0x44A) into the array.
         void SetFromVehicleOutputInterface(const VehicleOutputInterface* lpOutput);
         bool IsCrashing(s32 liIndex) const;
 

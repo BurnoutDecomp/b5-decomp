@@ -366,7 +366,7 @@ namespace BrnDirector
         // The player car's world position -- the transform's translation row (X360
         // `lvx128 v13, playerCarTransform, 0x30`).
         const rw::math::vpu::Matrix44Affine& lrPlayerTransform =
-            *static_cast<const rw::math::vpu::Matrix44Affine*>(lrSharedInfo.mpPlayerCarTransform);
+            *lrSharedInfo.mpPlayerCarTransform;
         const rw::math::vpu::Vector3& lrPlayerPosition = lrPlayerTransform.Pos();
 
         s32 liNearestJunkyard   = 0;

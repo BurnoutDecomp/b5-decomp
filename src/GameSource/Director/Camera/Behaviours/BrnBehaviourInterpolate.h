@@ -173,6 +173,16 @@ public:
     void SetupCameraBFromHelper(BehaviourHelperIndex lHelper, BehaviourManager& lrManager);
     void Setup();
 
+    // The combined hand-off overload the console's blend sites actually call: duration plus
+    // BOTH camera references in one go. It latches mbSetup FIRST and then Setups the two
+    // references directly, so it evaluates none of the GetCameraXForSetup / IsValid asserts the
+    // decomposed four-call shape does. The blend runs FROM lFromHelper's camera TO lToHelper's;
+    // both resolve against the same behaviour manager. (Body in the .cpp.)
+    void Setup(f32 lfDuration,
+               BehaviourHelperIndex lFromHelper,
+               BehaviourHelperIndex lToHelper,
+               const BehaviourManager* lpBehaviourController);
+
     bool HasFinished() const { return mbHasFinished; }
 
     // Layout members are public-of-layout so consumers reach them BY NAME.
@@ -346,16 +356,6 @@ BehaviourInterpolate::SetInterpolationMode(s32 liMode)
 //   (The asserts carry a copy-pasted "Can't setup twice" message in the shipped strings.)
 //   The two validity reads are @0x821F3E0C (0x2B0 + 0x168) and @0x821F3E50 (0x420 + 0x168),
 //   i.e. CameraReference::meType -- which is what pins the real reference layout.
-//
-// ⚠️ THE CONSOLE ALSO HAS A COMBINED OVERLOAD, Setup(f32, BehaviourHelperIndex,
-//   BehaviourHelperIndex, BehaviourManager&) @0x8224EE58, and InterpolaterHelper::Prepare
-//   @0x822662DC calls THAT rather than the four-call decomposition the PC reconstruction
-//   uses. The combined form writes mfDuration, latches mbSetup FIRST, then Setups both
-//   references directly (no GetCameraXForSetup, no IsValid asserts). The decomposed shape
-//   reaches an identical end state and fires no assert (mbSetup is still false while the
-//   references are written); it just evaluates five asserts the console path skips.
-//   Recorded rather than "fixed" -- swapping to the combined overload is a behaviour-neutral
-//   shape change and belongs with the InterpolaterHelper TU.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourInterpolate::Setup()

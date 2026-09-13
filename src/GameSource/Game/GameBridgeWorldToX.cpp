@@ -595,12 +595,13 @@ namespace BrnGame
         lpSoundInputBuffer->SetTrafficOutputInterface(
             reinterpret_cast<const RootIn::TrafficSoundOutputInterface*>(
                 lpWorldOutputBuffer->GetTrafficSoundOutputInterface()));
-        // The physical-traffic block rides INSIDE the vehicle output interface at
-        // console +9760 (the X360 bridge computes the reach inline; kept as the
-        // same byte reach over the opaque record -- FLAG: interior un-homed).
+        // The physical-traffic block rides INSIDE the vehicle output interface at +0x2620 --
+        // mTrafficStateQueue, the member the console reaches inline here and at the traffic
+        // entity module's own consumer. Read it through the typed accessor, exactly as the
+        // effects path does; the cast is only the cross-namespace view onto the sound twin.
         lpSoundInputBuffer->SetPhysicalTrafficStates(
             reinterpret_cast<const RootIn::PhysicalTrafficStateQueue*>(
-                reinterpret_cast<const u8*>(lpWorldOutputBuffer->GetVehicleOutputInterface()) + 9760));
+                lpWorldOutputBuffer->GetVehicleOutputInterface()->GetTrafficStateQueue()));
         lpSoundInputBuffer->SetDeformationInterface(
             reinterpret_cast<const RootIn::DeformationInterface*>(
                 lpWorldOutputBuffer->GetDeformationOutputInterface()));

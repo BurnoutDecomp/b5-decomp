@@ -300,12 +300,16 @@ namespace BrnGameState
     //
     // When the player car is NOT active, both timers reset to zero. Otherwise both timers are
     // first advanced by the frame delta, then selectively cleared from the player's RaceCarState:
-    //   * if the car was reset, or is on the gas (mfGas > 0), or mid barrel-roll
-    //     (mfInProgressBarrelRollAngle > 0), or braking hard (mfHandBrake / mfBrake > 0.1) --
-    //     it is clearly under control, so BOTH timers reset;
-    //   * additionally, if the car is moving (mfMaxSpeedMPH > 2.0) the stationary timer resets;
-    //   * additionally, if there is meaningful boost-time magnitude (|mfTimeBoosting| > 0.1) the
-    //     no-input timer resets.
+    //   * if the car is crashing (element +0x44A, mbCrashing), or is airborne
+    //     (mfTimeInAir +0x404 > 0), or is boosting (mfTimeBoosting +0x418 > 0), or is braking
+    //     hard (mfBrake +0x40C > 0.1), or is on the gas (mfGas +0x408 > 0.1) -- something is
+    //     happening to it, so BOTH timers reset;
+    //   * additionally, if the car is moving (mfSpeedMPH +0x3CC > 2.0) the stationary timer
+    //     resets;
+    //   * additionally, if the wheel is turned (|mfSteering| +0x414 > 0.1) the no-input timer
+    //     resets.
+    // Three literals do all the comparing -- 0.0, 0.1 and 2.0 -- and every comparison is a
+    // `bgt`, so each is a strict greater-than that an unordered result does not take.
     // The X360 returns the result pointer (a this/result-register artifact of the void-returning
     // C++ method); the reconstruction drops it. RaceCarState fields are read BY NAME.
     void ScoringSystem::DetectPlayerStationary(const ActiveRaceCarOutputInterface* lpOutput,
@@ -332,22 +336,22 @@ namespace BrnGameState
 
             const BrnPhysics::Vehicle::RaceCarState* lpState = lpOutput->GetRaceCarState(lePlayerIndex);
 
-            if (lpState->mbResetCarTransform
-                || lpState->mfGas > 0.0f
-                || lpState->mfInProgressBarrelRollAngle > 0.0f
-                || lpState->mfHandBrake > 0.1f
-                || lpState->mfBrake > 0.1f)
+            if (lpState->mbCrashing
+                || lpState->mfTimeInAir > 0.0f
+                || lpState->mfTimeBoosting > 0.0f
+                || lpState->mfBrake > 0.1f
+                || lpState->mfGas > 0.1f)
             {
                 mfPlayerTimeStationary  = 0.0f;
                 mfPlayerTimeWithoutInput = 0.0f;
             }
 
-            if (lpState->mfMaxSpeedMPH > 2.0f)
+            if (lpState->mfSpeedMPH > 2.0f)
             {
                 mfPlayerTimeStationary = 0.0f;
             }
 
-            if (std::fabs(lpState->mfTimeBoosting) > 0.1f)
+            if (std::fabs(lpState->mfSteering) > 0.1f)
             {
                 mfPlayerTimeWithoutInput = 0.0f;
             }

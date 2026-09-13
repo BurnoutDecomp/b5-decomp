@@ -160,11 +160,12 @@ namespace
     // ~700-case jump table (`jpt_823EA1F0`) over every game action in the build. The arms
     // reproduced here are 58 / 59 / 60 (the stunt-collectible family), 55, 112, 148 (the
     // training ticker, [tut-ticker] 2026-08-24), 181, 97 / 98 / 100 / 101 (the drive-thru
-    // family, [drive-thru] 2026-08-29), and 45 (the drive-thru ICON TABLE -> the pending sat-nav
-    // record posted at the tail, [minimap blips, issue #9] 2026-09-07); the event-flow arms live in the sibling
+    // family, [drive-thru] 2026-08-29), 45 (the drive-thru ICON TABLE -> the pending sat-nav
+    // record posted at the tail, [minimap blips, issue #9] 2026-09-07), and 6 (the TAKEDOWN
+    // CRASH-BAR edge -> GUI 377 payloads 2/3, [takedown HUD] 2026-09-13); the event-flow arms live in the sibling
     // GameBridgeGameStateToX_EventFlowGuiEvents.cpp, reached through the `default:` below.
     // Every other action falls through with NO event posted. A future owner adding, say, the
-    // takedown or road-rules arms must add them HERE rather than in a parallel function.
+    // road-rules arms must add them HERE rather than in a parallel function.
     //
     // ⛔⛔ THE SENTENCE THAT STOOD HERE WAS STALE, AND IT WAS THE LOAD-BEARING ONE. It read:
     // "each of them is currently unreachable anyway (this TU has never been mounted, and
@@ -507,6 +508,51 @@ namespace
                     *CgsDev::Log::gpDebugPrint
                         << "[profile-save] action 55 -> gui 356 (flag "
                         << static_cast<s32>(lEvent.mu8Flag) << ")\n";
+                }
+                break;
+            }
+
+            // ---- 6  E_ACTION_SET_TAKEDOWN_CAMERA_STATE -> GUI 377 payloads 2 / 3 ---------
+            // ⭐⭐ [takedown HUD wave 2026-09-13] THE MISSING HALF OF GUI EVENT 377. The world
+            // bridge (BridgeWorldVehicleDataToGui) posts only the two CRASH payloads,
+            // 0 START_CRASHED / 1 LEAVE_CRASHED, on the player-crashing edge. The two TAKEDOWN
+            // payloads, 2 START_TAKEDOWN / 3 LEAVE_TAKEDOWN, come from HERE and nowhere else --
+            // those are the image's only two AddGuiEvent<GuiPlayerCrashingStateChangeEvent>
+            // sites. With this arm absent, payload 2 was never posted anywhere in the build, so
+            // HudMessageAnalyzer::HandleCrashedEvent's START_TAKEDOWN case could not run: the
+            // takedown line parked by HandleTakedown (mbTakedownMessagePending +
+            // mPendingTakedownEvent) had no flush and the "TDGdShutD" shutdown line never fired.
+            // It also left the analyzer's meCrashEntryState unable to reach 2, which is the test
+            // HandleTakedown uses to decide "fire immediately" instead of "park".
+            //
+            // The console arm, transcribed: it reads ONE byte -- the action's mbActive at +0x04
+            // -- and posts `2 + (mbActive == 0)`:
+            //     lbz r11, 4(record) ; cntlzw ; extrwi 1,26 ; addi r11, r11, 2 ; stw
+            // i.e. it ignores the victim index and the signature/revenge flags entirely; only
+            // the director's own case-6 arm consumes those. The pairing is exact, because the
+            // SAME action drives both: TakedownManager::StartTakedownCamera posts active = 1
+            // (-> 2) and EndTakedownCamera / ClearAllTakedowns post active = 0 (-> 3), so the
+            // bar's takedown enter/leave edges cannot drift from the camera's.
+            case BrnGameState::GameStateModuleIO::E_ACTION_SET_TAKEDOWN_CAMERA_STATE:      // 6
+            {
+                const BrnGameState::GameStateModuleIO::SetTakedownCameraAction* lpTakedownCamera =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::SetTakedownCameraAction*>(lpAction);
+
+                BrnGui::GuiPlayerCrashingStateChangeEvent lEvent;
+                lEvent.meCurrentState =
+                    lpTakedownCamera->mbActive
+                        ? BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_START_TAKEDOWN
+                        : BrnGui::GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_LEAVE_TAKEDOWN;
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] NOT IN THE BINARY -- the takedown HUD chain's bridge rung.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[takedown-hud] action 6 -> gui 377 state "
+                        << static_cast<s32>(lEvent.meCurrentState)
+                        << (lpTakedownCamera->mbActive ? " (START_TAKEDOWN)" : " (LEAVE_TAKEDOWN)")
+                        << "\n";
                 }
                 break;
             }

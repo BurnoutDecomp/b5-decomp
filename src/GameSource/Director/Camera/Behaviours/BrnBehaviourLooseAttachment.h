@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (SetParameters type assert + race-car index asserts)
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"   // Utils::CameraImpactEffect::Parameters (embedded "Impact" sub-block @+0x2C of Parameters)
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"          // Utils::PositionLag::Parameters (embedded lag sub-block @+0x08 of Parameters)
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"     // Timestep::EType (the base behaviour word at +0x04)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h
@@ -123,6 +124,27 @@ public:
     //   offset. Get returns null instead when the +0x32C "no result" flag is set.
     class SubObject;
 
+    // The embedded impact-effect sub-object at +0x2F0. The shutdown-takedown moment's three
+    // zoom beats each allocate a loose-attachment behaviour, bind it, and then register a UNIT
+    // impact on it -- the console reaches the effect as `behaviour + 752` and hands it straight
+    // to Utils::CameraImpactEffect::RegisterImpact with a magnitude of 1.0. 752 == +0x2F0, and
+    // CameraImpactEffect is twenty bytes, so the sub-object closes exactly where the target
+    // VehicleRef block begins at +0x304 -- the placement has no slack in it.
+    // Exposed by name so an arbitrator state never forms that displacement itself.
+    Utils::CameraImpactEffect&       GetImpactEffect()       { return mImpactEffect; }
+    const Utils::CameraImpactEffect& GetImpactEffect() const { return mImpactEffect; }
+
+    // The base Camera::Behaviour timestep-flavour word at +0x04. Declared with the base's exact
+    // signature (see Behaviour.h) so a call site reads identically whichever behaviour it holds.
+    // The same three zoom beats store 1 == E_WORLD_NO_SLOMO into this word right after
+    // registering the impact, which is what keeps the beat running at world rate through the
+    // takedown's slow-motion.
+    // FLAG: this class is not re-based onto Camera::Behaviour yet (its head is still modelled as
+    // a reserved span), so the word is written through this class's own member rather than
+    // inherited. DELETE-WHEN: BehaviourLooseAttachment derives from Camera::Behaviour, at which
+    // point this setter and meTimestepType both come from the base.
+    void SetTimestepType(BrnDirector::Timestep::EType leType) { meTimestepType = leType; }
+
     // Bind the attachment to a race car: record the race-car index, mark valid / set, assert the
     // index is in range. @0x821F4458 (VehicleRef block @+0x314).
     void AttachTo(s32 meRaceCarIndex);
@@ -147,10 +169,17 @@ public:
     //   the by-name accessors below, so by-name access stays type-correct. All fields are public
     //   so the file-scope offsetof pins in the .cpp can verify the (now exact) layout. The rest of
     //   the loose-attachment rig lands with the full behaviour TU; reserved spans place each field.
-    u8    maHead000[0x10];                     // +0x000 .. +0x00F  vtable + rig head (X360 4B ptr slot)
+    u8    maHead000[0x04];                     // +0x000 .. +0x003  vtable (console 4B ptr slot)
+    BrnDirector::Timestep::EType meTimestepType;  // +0x004  the base behaviour's timestep flavour
+    u8    maReserved008[0x10 - 0x08];          // +0x008 .. +0x00F (base flags/name not modelled here)
     s32   mParamWord1;                         // +0x010  cached lpParameters->miParamWord1
     u8    maReserved014[0x20 - 0x14];          // +0x014 .. +0x01F (rig members not modelled here)
-    u8    maSubObject[0x304 - 0x20];           // +0x020  embedded sub-object (&-of by Get)
+    u8    maSubObject[0x2F0 - 0x20];           // +0x020  embedded sub-object (&-of by Get)
+
+    // --- the embedded impact effect the shutdown-takedown zoom beats register on ----------
+    // Twenty bytes (one f32 accumulator + the sixteen-byte runtime shake), so it runs
+    // +0x2F0 .. +0x303 and the target VehicleRef block below picks up with no padding.
+    Utils::CameraImpactEffect mImpactEffect;   // +0x2F0
 
     // --- mTarget (Behaviour::VehicleRef) sub-block SetTarget writes, +0x304 .. +0x313 ---
     s32   miTargetSet;                         // +0x304  target-set flag (= 1)

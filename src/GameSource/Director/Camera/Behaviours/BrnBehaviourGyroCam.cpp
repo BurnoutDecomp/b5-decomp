@@ -2,13 +2,13 @@
 // GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp
 //
 // Compilation home for the BrnDirector::Camera::BehaviourGyroCam slices this TU owns:
-//   SetParameters                        @0x821F4068 (inline in the header)
-//   AttachToRaceCar                      @0x821F40D8 (inline in the header)
-//   GetCollisionPolicy                   @0x821FA1C0 (inline in the header)
-//   SetWorldSpaceNormalizedVectorFromCar @0x822067D0 (inline in the header)
-// This .cpp is the translation-unit anchor that pulls the header into the compile gate and
-// forces an out-of-line emission of each. The rest of the behaviour (Construct/Prepare/Update
-// and the full rig) lands with its own TU.
+//   Construct / Prepare / GetCollisionPolicy / GetName  (the declared vtable slots)
+//   SetParameters / AttachToRaceCar / SetWorldSpaceNormalizedVectorFromCar
+// Every one of them is header-inline (this class is re-based onto Camera::Behaviour and this
+// .cpp is not on the build list, so an out-of-line body here would be a vtable slot no link
+// could resolve). This .cpp is the translation-unit anchor that pulls the header into the
+// compile gate and forces an emission of each. The rig's Update and SetupTweaker slots land
+// with the gyro-cam rig TU.
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"
@@ -35,7 +35,7 @@ void BehaviourGyroCam_AttachToRaceCarAnchor(
     lrBehaviour.AttachToRaceCar(meRaceCarIndex);
 }
 
-BehaviourGyroCam::CollisionPolicy* BehaviourGyroCam_GetCollisionPolicyAnchor(
+CollisionPolicy* BehaviourGyroCam_GetCollisionPolicyAnchor(
     BehaviourGyroCam& lrBehaviour)
 {
     return lrBehaviour.GetCollisionPolicy();
@@ -46,6 +46,13 @@ void BehaviourGyroCam_SetWorldSpaceNormalizedVectorFromCarAnchor(
     rw::math::vpu::Vector3 lVectorFromCar)
 {
     lrBehaviour.SetWorldSpaceNormalizedVectorFromCar(lVectorFromCar);
+}
+
+void BehaviourGyroCam_SetUseVehicleAttachmentCollisionAnchor(
+    BehaviourGyroCam& lrBehaviour,
+    bool lbUseVehicleAttachmentCollision)
+{
+    lrBehaviour.SetUseVehicleAttachmentCollision(lbUseVehicleAttachmentCollision);
 }
 
 } // namespace Camera

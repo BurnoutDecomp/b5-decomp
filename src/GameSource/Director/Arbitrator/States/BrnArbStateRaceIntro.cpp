@@ -7,6 +7,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer::EState
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"            // BrnDirector::GameState
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"                // AllVehicleData (nearest race car)
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"                  // Camera::VehicleInfo (the race-car record)
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"                 // Camera::EnsureEffectIsPlaying
 #include "GameSource/Director/Camera/BrnSharedCameraContainer.h"                // SharedCameraContainer (gameplay cam)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"          // Camera::BehaviourIceAnim
@@ -112,17 +113,13 @@ namespace BrnDirector
                 const AllVehicleData& lrAllVehicles = *lrSharedInfo.mpAllVehicleData;
                 const EActiveRaceCarIndex leNearestRaceCar =
                     lrAllVehicles.GetNearestRaceCarIndexToPlayer(KU_NEAREST_RACE_CARS_ONLY);
-                // GetRaceCar now returns the typed record (VehicleInfo is
-                // reference-only here); the +0x220 position read below stays a
-                // byte-offset reach into the un-reconstructed record.
-                const void* lpRaceCar = &lrAllVehicles.GetRaceCar(leNearestRaceCar);
-
                 const rw::math::vpu::Matrix44Affine& lrPlayerTransform =
-                    *static_cast<const rw::math::vpu::Matrix44Affine*>(lrSharedInfo.mpPlayerCarTransform);
-                // The race car's position is the lvx128 at race-car +0x220 (a Vector3 lane).
+                    *lrSharedInfo.mpPlayerCarTransform;
+
+                // The race car's world position, by name: the console's lvx128 at record +0x220
+                // is the car-to-world frame's translation row.
                 const rw::math::vpu::Vector3& lrRaceCarPos =
-                    *reinterpret_cast<const rw::math::vpu::Vector3*>(
-                        static_cast<const u8*>(lpRaceCar) + 0x220);
+                    lrAllVehicles.GetRaceCar(leNearestRaceCar).mRaceCarState.mTransform.wAxis;
 
                 const rw::math::vpu::Vector3 lv3Dir =
                     rw::math::vpu::Normalize(lrRaceCarPos - lrPlayerTransform.Pos());

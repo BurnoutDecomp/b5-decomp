@@ -13,6 +13,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateDriveThru.h" // BrnDirector::ArbStateDriveThru (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCarSelect.h" // BrnDirector::ArbStateCarSelect (real layout)
 #include "GameSource/Director/Arbitrator/States/BrnArbStateCrashing.h"  // BrnDirector::ArbStateCrashing (real layout)
+#include "GameSource/Director/Arbitrator/States/BrnArbStateTakedown.h"  // BrnDirector::ArbStateTakedown (real layout)
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"                // BrnDirector::SharedPlaylists
 
 // ----------------------------------------------------------------------------
@@ -57,7 +58,13 @@ namespace BrnDirector
     // ⛔ It de-forks together with MainDirector's mbCrashActive writer, deliberately: with only
     // the writer, the arbitrator would finally reach the shell and freeze the camera for the
     // rest of the session out of a green build.
-    class ArbStateTakedown        : public ArbitratorState {};
+    // ⭐⭐⭐ ArbStateTakedown IS DE-FORKED (takedown-camera wave). Its placeholder --
+    // `class ArbStateTakedown : public ArbitratorState {};` -- was the last empty shell in this
+    // file, and it sat on the same edge the crashing shell did: E_STATE_TAKEDOWN is a real
+    // destination in the container's table, so every takedown drove a do-nothing base Update
+    // that never wrote meState and had no exit back to roaming. The real header is #included
+    // above; its five sub-players, the impact-shake controller and the moment selector all come
+    // with it, and its Update's CHANGING_TO_ROAMING arm is the exit edge the shell never had.
     // ✅ ArbStateCarSelect is DE-FORKED here as of 2026-07-30: its placeholder is gone and the
     // real header is #included above, exactly as the eight sibling states did. The blocker the
     // old note described -- the six CollisionPolicy / VisibilityCollisionPolicy /

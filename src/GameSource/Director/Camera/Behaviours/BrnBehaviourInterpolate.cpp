@@ -100,6 +100,45 @@ BehaviourInterpolate::GetParametricTime() const
 }
 
 // ----------------------------------------------------------------------------
+// BrnDirector::Camera::BehaviourInterpolate::Setup(f32, BehaviourHelperIndex,
+//   BehaviourHelperIndex, const BehaviourManager*) -- the combined hand-off overload every
+//   console blend site calls (the interpolater helper's Prepare, the roaming/takedown/online
+//   race-intro states, the new-car-joined moment and the three takedown players).
+//
+//   The duration rides in f1 and therefore SKIPS its GPR slot, so the three word arguments
+//   are the two helper indices and the manager, in that order:
+//     fmr  f31, f1          ; latch lfDuration
+//     lbz  r11, +0x595(r31) ; mbSetup
+//     ... assert !mbSetup ("Can't setup twice") ...
+//     stfs f31, +0x2A4(r31) ; mfDuration = lfDuration
+//     stb  r11(=1), +0x595(r31)  ; mbSetup = true -- latched BEFORE either reference is written
+//     addi r3, r31, +0x2B0  ; &mFromCamera
+//     bl   CameraReference::Setup   ; (first helper index, manager)
+//     addi r3, r31, +0x420  ; &mToCamera
+//     bl   CameraReference::Setup   ; (second helper index, manager)
+//
+// ⚠️ The latch order is load-bearing and is why this overload uses the references DIRECTLY
+//   rather than GetCameraAForSetup/GetCameraBForSetup: those two assert !mbSetup, which is
+//   already true by the time the references are written here. The no-arg Setup()'s two
+//   IsValid asserts are likewise absent -- CameraReference::Setup itself asserts the
+//   reference is still E_TYPE_INVALID, which is the stronger check.
+// ----------------------------------------------------------------------------
+void
+BehaviourInterpolate::Setup(f32 lfDuration,
+                            BehaviourHelperIndex lFromHelper,
+                            BehaviourHelperIndex lToHelper,
+                            const BehaviourManager* lpBehaviourController)
+{
+    CGS_ASSERT(!mbSetup, "Can't setup twice");
+
+    mfDuration = lfDuration;
+    mbSetup    = true;
+
+    mFromCamera.Setup(lFromHelper, lpBehaviourController);
+    mToCamera.Setup(lToHelper, lpBehaviourController);
+}
+
+// ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourInterpolate::Construct @0x82255FC8
 //
 //   0x82255FF8..0x82256010  the SEVEN base stores -- i.e. Behaviour::Construct() inlined

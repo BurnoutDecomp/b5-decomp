@@ -2,30 +2,77 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_AFTERTOUCH_CRASH_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert + _AssertLayout)
-#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"   // Utils::CameraShake::Parameters (the "Shake Params" sub-block, embedded by value @+0x08)
-#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"   // Utils::PositionLag::Parameters (the lag sub-block, embedded by value @+0x18)
+#include "BrnCommonTypes.h"                                         // Vector3 / Matrix44Affine
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE canonical Camera::Behaviour base
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // CollisionPolicy(+AttachedToVehicle)
+#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"     // Utils::CameraShake::Parameters (the
+                                                                    //   "Shake Params" sub-block, by value)
+#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"        // Utils::PositionLag::Parameters (the lag
+                                                                    //   sub-block, by value)
 
-#include <cstddef>   // offsetof (the never-called _AssertLayout pin)
+#include <cstddef>   // offsetof (the compile-time layout pins)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h
 //
-// BrnDirector::Camera::BehaviourAftertouchCrash -- the "aftertouch crash" camera behaviour
-// (the crash-mode / takedown aftertouch camera the crash/takedown arbitrator states and the
-// testbed install). HOME for the BehaviourAftertouchCrash class slice this TU bodies
-// (SetParameters and the gated Get* sub-object accessor). The full
-// behaviour (Construct/Prepare/Update and the rest of the rig) and its Behaviour base land with
-// their own TUs; this header models only the members these two functions touch, BY NAME, at
-// their attested offsets.
+// BrnDirector::Camera::BehaviourAftertouchCrash -- the "aftertouch crash" camera behaviour: the
+// crash-mode / takedown aftertouch camera the crash-mode and takedown arbitrator states and the
+// arbitrator testbed install.
+//
+// RE-BASED. This class used to be a raw-offset SLICE: an opaque `void* mpVTable` head, a
+// hand-placed `s32 mParamWord1`, reserved byte spans, an invented nested `GettableSubObject`
+// type and an invented `Get()` accessor over an untyped `u8 maSubObject[]`. It now derives the
+// canonical BrnDirector::Camera::Behaviour and carries the recovered member list by name.
+//
+// WHY IT HAD TO BE RE-BASED: the takedown state pools this behaviour through
+// BehaviourManager::NewBehaviour<BehaviourAftertouchCrash>, which placement-news it into a raw
+// pool slot; BehaviourManager::BehaviourHelper::Prepare then dispatches vtable slot 0. For a
+// NON-POLYMORPHIC class placement-new installs no vtable, so that dispatch read a null vptr --
+// EXCEPTION_ACCESS_VIOLATION reading 0 the moment the first takedown started.
 //
 // ----------------------------------------------------------------------------
-// SetParameters: asserts the supplied parameter block is an aftertouch-crash block
-//   (its type tag == eBehaviourAftertouchCrash == 13), caches the block's first word at +0x10,
-//   and stores the pointer at +0x3D8.
-// Get*: returns &this + 0x60 (a pointer to an embedded sub-object at +0x60) UNLESS
-//   the byte flag at +0x3C2 is set, in which case it returns null.
-// ----------------------------------------------------------------------------
+// THE LAYOUT CHAIN (member NAMES and order from the declaration-shape reference; every offset is
+// independently re-derived from the assembly, and the chain closes exactly):
+//
+//   base head                                  +0x000 .. +0x013   Behaviour
+//   mIceCarRelativeBasis                       +0x020   Matrix44Affine (0x40, 16-aligned)
+//   mCollisionPolicy                           +0x060   CollisionPolicyAttachedToVehicle (0x250)
+//   mCurrentTargetPos                          +0x2B0   Vector3
+//   mWorldSpaceNormalizedVectorFromCar         +0x2C0
+//   mDesiredWorldSpaceNormalizedVectorFromCar  +0x2D0
+//   mCrashPoint                                +0x2E0
+//   mCameraPositionLastFrame                   +0x2F0
+//   mPositionLag/mRandom/mShake/mImpactEffect  +0x300 .. +0x383  (reserved run, see below)
+//   mfHeight                                   +0x384
+//   mfDistance                                 +0x388
+//   mfBlendFactor                              +0x38C
+//   mfTimeSinceLastDecision                    +0x390
+//   mfTimeSinceLastManualControl               +0x394
+//   mManualCameraDirection                     +0x3A0   Vector3
+//   mfManualHeightAdjustment                   +0x3B0   VecFloat (reserved, see below)
+//   mbManualCameraControl                      +0x3C0
+//   mbWasFallingDownwards                      +0x3C1
+//   mbDisableCollision                         +0x3C2
+//   mbIsTempDebugCrashCamera                   +0x3C3
+//   mbIsRandomStartTempDebugCrashCamera        +0x3C4
+//   mfDebugCrashCameraParam0to1                +0x3C8
+//   mfBounceShakeMultiplier                    +0x3CC
+//   mfRollAngleRads                            +0x3D0
+//   mfCloseupAmount0To1                        +0x3D4
+//   mpParameters                               +0x3D8
+//
+// Two anchors pin the whole chain, and they are what the retired slice got wrong:
+//   * mCollisionPolicy lands at +0x60 only because the base head is 0x14 and the 16-aligned
+//     Matrix44Affine that follows occupies +0x20 .. +0x5F -- i.e. 0x20 + 0x40 == 0x60. The
+//     retired slice modelled +0x60 as an untyped byte blob behind an invented accessor; it is
+//     the vehicle-attached collision policy, and the accessor is the base's own slot-5 virtual.
+//   * the five flag bytes land at +0x3C0 .. +0x3C4 exactly, which is what makes the +0x3C2 byte
+//     the takedown state raises mbDisableCollision and the +0x3C3 byte mbIsTempDebugCrashCamera.
+//
+// x64: parity is BY NAMED MEMBER (pointers and the embedded policy widen); the offsets above are
+// provenance and are never used as casts.
+// ============================================================================
 
 namespace BrnDirector
 {
@@ -34,19 +81,25 @@ namespace Camera
 
 // FLAG: minimal slice of the camera-behaviour type tag. Each behaviour carries a type id in the
 //   leading word of its Parameters block; SetParameters asserts the block's id is the
-//   aftertouch-crash one. The console value for eBehaviourAftertouchCrash is 13 (the console compares the block's first word against 13). Replace with the real
-//   EBehaviourType enum when the Behaviour base TU lands; the enumerator's VALUE (13) is attested.
+//   aftertouch-crash one. The value 13 is attested (the console compares the block's first word
+//   against 13). There is still no single homed EBehaviourType enum -- each behaviour's tag is
+//   only observable in its own assert.
 enum EBehaviourTypeAftertouchCrash
 {
     eBehaviourAftertouchCrash = 13
 };
 
-class BehaviourAftertouchCrash
+class BehaviourAftertouchCrash : public Behaviour
 {
 public:
 
     // The aftertouch-crash parameter block: a type tag in its leading word plus behaviour-specific
     // data. GetType returns the tag SetParameters asserts on.
+    //
+    // PARK: this block cannot derive Behaviour::Parameters (which is what the recovered
+    //   declaration has) until the parameter-bank lane re-expresses BrnBehaviourParameterBank.h's
+    //   stride pin, and the reserved span it sizes, as
+    //   sizeof(Camera::BehaviourAftertouchCrash::Parameters) instead of a console literal.
     class Parameters
     {
     public:
@@ -106,53 +159,85 @@ public:
         // asserts on). A straight-line run of constant stores.
         void Construct();
 
-        // Never called: pin the serialised-field offsets against the console's stores. Every field here
-        // precedes any pointer member, so these offsets are host-pointer-width invariant.
+        // Never called, but every pin below is a static_assert: the compiler evaluates them while
+        // it compiles this body, so the serialised-field offsets are enforced at build time.
+        // Every field here precedes any pointer member, so these offsets are host-pointer-width
+        // invariant and can be pinned absolutely.
         static void _AssertLayout()
         {
-            CGS_ASSERT(offsetof(Parameters, mShakeParams) == 0x08,
-                       "mShakeParams @ +0x08");
-            CGS_ASSERT(offsetof(Parameters, mfSlowDistance) == 0x2C,
-                       "mfSlowDistance @ +0x2C");
-            CGS_ASSERT(offsetof(Parameters, mfPitch) == 0x3C,
-                       "mfPitch @ +0x3C");
-            CGS_ASSERT(offsetof(Parameters, mfFOV) == 0x40,
-                       "mfFOV @ +0x40");
-            CGS_ASSERT(offsetof(Parameters, mfHeightDistanceVelocityRange) == 0x58,
-                       "mfHeightDistanceVelocityRange @ +0x58");
-            CGS_ASSERT(offsetof(Parameters, mfTimeBetweenDecisions) == 0x6C,
-                       "mfTimeBetweenDecisions @ +0x6C");
+            static_assert(offsetof(Parameters, mShakeParams) == 0x08,
+                          "mShakeParams @ +0x08");
+            static_assert(offsetof(Parameters, mfSlowDistance) == 0x2C,
+                          "mfSlowDistance @ +0x2C");
+            static_assert(offsetof(Parameters, mfPitch) == 0x3C,
+                          "mfPitch @ +0x3C");
+            static_assert(offsetof(Parameters, mfFOV) == 0x40,
+                          "mfFOV @ +0x40");
+            static_assert(offsetof(Parameters, mfHeightDistanceVelocityRange) == 0x58,
+                          "mfHeightDistanceVelocityRange @ +0x58");
+            static_assert(offsetof(Parameters, mfTimeBetweenDecisions) == 0x6C,
+                          "mfTimeBetweenDecisions @ +0x6C");
         }
     };
 
-    // FLAG: the +0x60 sub-object the Get* accessor exposes. The truncated dossier name ("Get")
-    //   and the `lbz +0x3C2 / addi +0x60` body attest only that it returns the address of an
-    //   embedded member at +0x60 (or null when the +0x3C2 flag is set); the member's concrete
-    //   type lands with the full behaviour TU. Modelled as an opaque embedded sub-object so the
-    //   accessor returns a typed pointer to it at the attested offset.
-    class GettableSubObject;
+    // ---- the virtual interface ----------------------------------------------------------
+    // The base's interface is EIGHT slots (Construct / Prepare / Update / PostCollisionUpdate /
+    // Release / GetCollisionPolicy / SetupTweaker / GetName; GetParameters/SetParameters are not
+    // virtual and there is no destructor slot). The declaration-shape reference has this class
+    // overriding SIX of
+    // them -- slots 0, 1, 2, 5, 6 and 7 -- and appending NO extra virtuals of its own, so the
+    // derived vtable is the base's eight slots with those six re-pointed. The four transcribed
+    // below are declared in that slot order, each with `override` so the compiler proves the
+    // signature still lands on the base slot it is meant to fill.
 
-    // Return the address of the embedded sub-object at +0x60, or null when the gating flag at
-    // +0x3C2 is set..
-    GettableSubObject* Get();
+    // Seed the whole behaviour: the base head, the embedded collision policy plus its four
+    // authored flag overrides, the rig sub-objects, and the flag/scalar tail.        (slot 0)
+    void Construct() override;
+
+    // Drop the prepared latch, then seed the running blend/height/distance from the adopted
+    // parameter block and re-arm the debug-crash-camera parameter. Cannot fail.      (slot 1)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
+
+    // Hand back the vehicle-attached collision policy embedded after the basis, or null when
+    // collision has been disabled on this instance.                                  (slot 5)
+    CollisionPolicy* GetCollisionPolicy() override;
+
+    //                                                                                (slot 7)
+    const char* GetName() const override;
+
+    // FLAG (not transcribed): the recovered declaration also carries
+    //   `virtual bool Update(Camera&, const BehaviourSharedInfo&)` -- the ~430-line aftertouch
+    //   crash rig -- and `virtual void SetupTweaker(Tweaker&)`, plus the private helper
+    //   `bool CheckForPlayerCarBouncing(const BehaviourSharedInfo&)`. Neither is declared here,
+    //   so slots 2 and 6 keep the base's defaults (Update returns true and leaves the camera
+    //   untouched; SetupTweaker does nothing). That is a DOCUMENTED GAP, not a fabrication --
+    //   the alternative would be inventing a camera rig.
+    //   DELETE-WHEN: the rig TU lands and bodies Update/SetupTweaker.
 
     // Adopt an aftertouch-crash parameter block: assert it carries the aftertouch-crash type
-    // tag, then cache its first word and store the pointer..
+    // tag, then store the pointer. NOT a virtual override: it is declared over the DERIVED
+    // Parameters type, so it HIDES the base name rather than overriding it.
     void SetParameters(const Parameters* lpParameters);
 
+    // ---- the two flags the takedown state raises on the debug crash cam -----------------
+    // The takedown state's Prepare raises both bytes immediately after SetParameters, with a
+    // literal 1 in each (`stb r26, +0x3C2` / `stb r26, +0x3C3`, with r26 loaded `li r26, 1` in
+    // the prologue). Both member names and both setter declarations are recovered, not invented.
+
+    // Suppress this instance's collision policy -- GetCollisionPolicy then returns null.
+    void DisableCollision() { mbDisableCollision = true; }                 // stb 1, +0x3C2
+
+    // Mark this instance as the temporary debug crash camera.
+    void SetIsTempDebugCrashCamera() { mbIsTempDebugCrashCamera = true; }  // stb 1, +0x3C3
+
     // ---- per-frame outputs the crash-mode arbitrator state drives -----------------------
-    // The two named operations BrnArbStateCrashMode::Update / ::DoCloseup invoke on the live
-    // behaviour each frame (SetRollAngleRads / SetCloseupAmount0To1). Neither has
-    // a console symbol of its own: both call sites inline the setter to its single store, so the
-    // bodies below ARE the whole function. The crash-mode state pokes only these two scalars,
-    // by name.
+    // The two named operations the crash-mode state's Update / DoCloseup invoke on the live
+    // behaviour each frame. Neither has a console symbol of its own: both call sites inline the
+    // setter to its single store, so the bodies below ARE the whole function.
     //
     // There is no GetCamera() on this class. The produced camera is NOT read off the behaviour:
     // the crash-mode state copies it through its BehaviourHandle's GetProducedCamera(), which
     // resolves the manager's BehaviourHelper slot and returns the helper's own embedded Camera.
-    // (The behaviour's +0x10 word is mParamWord1 below -- SetParameters writes it -- so the old
-    // "produced camera at behaviour +0x10" note was reading the handle-side accessor's offset as
-    // a behaviour-side one.)
 
     // Set the camera roll angle (radians) the crash-mode tilt oscillation drives.
     void SetRollAngleRads(f32 lfRollAngleRads)
@@ -168,41 +253,100 @@ public:
 
 private:
 
-    // FLAG: only the members these two functions touch are modelled at their attested
-    //   offsets; the rest of the aftertouch-crash rig lands with the full behaviour TU. Reserved
-    //   byte spans place them exactly. The vtable/base head occupies +0x00; the cached param word
-    //   at +0x10; the +0x60 sub-object Get* returns; the byte gating flag at +0x3C2; the param
-    //   pointer at +0x3D8.
-    void*             mpVTable;                       // +0x00   behaviour vtable (opaque base head)
-    u8                maReserved04[0x10 - 0x04];      // +0x04 .. +0x0F (rig members not modelled here)
-    s32               mParamWord1;                    // +0x10   cached lpParameters->miParamWord1
-    u8                maReserved14[0x60 - 0x14];      // +0x14 .. +0x5F (rig members not modelled here)
-    u8                maSubObject[0x3C2 - 0x60];      // +0x60   sub-object Get* returns (opaque)
-    u8                mbGetGated;                     // +0x3C2  when set, Get* returns null
-    u8                maReserved3C3[0x3D0 - 0x3C3];   // +0x3C3 .. +0x3CF (rig members not modelled here)
-    f32               mfRollAngleRads;                // +0x3D0  the camera roll SetRollAngleRads drives
-    f32               mfCloseupAmount0To1;            // +0x3D4  the close-up blend SetCloseupAmount0To1 drives
-    const Parameters* mpParameters;                   // +0x3D8  the adopted parameter block
-};
+    // ---- layout (member NAMES and order recovered; see the file banner) -----------------
+    // The Behaviour base occupies the head. Three reserved runs stand in for rig members whose
+    // types are named in the recovered declaration but are not homed for this slice to embed; they are
+    // placeholders for REAL members, not invented ones, and nothing reads them.
 
-// ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourAftertouchCrash::Get
-//   lbz    r11, 0x3C2(r3)       ; mbGetGated
-//   addi   r3,  r3, 0x60        ; r3 = &this->maSubObject (the candidate return)
-//   cmplwi r11, 0
-//   beqlr                       ; flag clear -> return &maSubObject
-//   li     r3, 0                ; flag set   -> return null
-//   blr
-// ----------------------------------------------------------------------------
-inline BehaviourAftertouchCrash::GettableSubObject*
-BehaviourAftertouchCrash::Get()
-{
-    if (mbGetGated)                                                  // lbz +0x3C2; bne -> null
+    Matrix44Affine                   mIceCarRelativeBasis;                      // +0x020 (0x40)
+    CollisionPolicyAttachedToVehicle mCollisionPolicy;                          // +0x060 (0x250)
+    Vector3                          mCurrentTargetPos;                         // +0x2B0
+    Vector3                          mWorldSpaceNormalizedVectorFromCar;        // +0x2C0
+    Vector3                          mDesiredWorldSpaceNormalizedVectorFromCar; // +0x2D0
+    Vector3                          mCrashPoint;                               // +0x2E0
+    Vector3                          mCameraPositionLastFrame;                  // +0x2F0
+
+    // +0x300 .. +0x383 -- mPositionLag (PositionLag), mRandom (Random), mShake (CameraShake) and
+    // mImpactEffect (CameraImpactEffect), in that declared order. Held as one run until those four
+    // types are homed; the rig TU carves them out.
+    u8                               maReservedRigSubObjects[0x384 - 0x300];
+
+    f32                              mfHeight;                      // +0x384
+    f32                              mfDistance;                    // +0x388
+    f32                              mfBlendFactor;                 // +0x38C
+    f32                              mfTimeSinceLastDecision;       // +0x390
+    f32                              mfTimeSinceLastManualControl;  // +0x394
+
+    // +0x398 .. +0x39F -- the alignment gap ahead of the 16-aligned Vector3 below.
+    u8                               maReservedAlign398[0x3A0 - 0x398];
+
+    Vector3                          mManualCameraDirection;        // +0x3A0
+
+    // +0x3B0 .. +0x3BF -- mfManualHeightAdjustment (VecFloat, a 16-byte vector scalar). Held as a
+    // run until VecFloat is homed here; nothing in this slice reads it.
+    u8                               maReservedManualHeight[0x3C0 - 0x3B0];
+
+    bool                             mbManualCameraControl;               // +0x3C0
+    bool                             mbWasFallingDownwards;               // +0x3C1
+    bool                             mbDisableCollision;                  // +0x3C2
+    bool                             mbIsTempDebugCrashCamera;            // +0x3C3
+    bool                             mbIsRandomStartTempDebugCrashCamera; // +0x3C4
+    u8                               maReservedAlign3C5[0x3C8 - 0x3C5];
+
+    f32                              mfDebugCrashCameraParam0to1;   // +0x3C8
+    f32                              mfBounceShakeMultiplier;       // +0x3CC
+    f32                              mfRollAngleRads;               // +0x3D0
+    f32                              mfCloseupAmount0To1;           // +0x3D4
+    const Parameters*                mpParameters;                  // +0x3D8
+
+    // Never called, but every pin below is a static_assert: the compiler evaluates them while it
+    // compiles this body, so the derived run is pinned at build time. The ABSOLUTE offsets are
+    // NOT host-stable (the base head and the embedded policy both widen), so every pin here is
+    // written size-stably -- the first derived member against the base's own size, and the tail
+    // run as DISPLACEMENTS from the first of the five flag bytes, which is the run the takedown
+    // state, the crash-mode state and Prepare all reach into.
+    static void _AssertLayout()
     {
-        return 0;
+        // mIceCarRelativeBasis sits immediately after the base, rounded up to its own 16-byte
+        // alignment -- the step that puts mCollisionPolicy at the attested +0x60 on the console.
+        static_assert(offsetof(BehaviourAftertouchCrash, mIceCarRelativeBasis)
+                          == ((sizeof(Behaviour) + 15u) & ~static_cast<size_t>(15u)),
+                      "mIceCarRelativeBasis follows the Behaviour base, 16-aligned");
+
+        // The five flag bytes are contiguous.
+        static_assert(offsetof(BehaviourAftertouchCrash, mbWasFallingDownwards)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x01,
+                      "mbWasFallingDownwards is the second flag byte");
+        static_assert(offsetof(BehaviourAftertouchCrash, mbDisableCollision)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x02,
+                      "mbDisableCollision is the third flag byte");
+        static_assert(offsetof(BehaviourAftertouchCrash, mbIsTempDebugCrashCamera)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x03,
+                      "mbIsTempDebugCrashCamera is the fourth flag byte");
+        static_assert(offsetof(BehaviourAftertouchCrash, mbIsRandomStartTempDebugCrashCamera)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x04,
+                      "mbIsRandomStartTempDebugCrashCamera is the fifth flag byte");
+
+        // ...and the scalar tail follows them at its attested displacements.
+        static_assert(offsetof(BehaviourAftertouchCrash, mfDebugCrashCameraParam0to1)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x08,
+                      "mfDebugCrashCameraParam0to1 sits at the flag run +0x08");
+        static_assert(offsetof(BehaviourAftertouchCrash, mfRollAngleRads)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x10,
+                      "mfRollAngleRads sits at the flag run +0x10");
+        static_assert(offsetof(BehaviourAftertouchCrash, mfCloseupAmount0To1)
+                       - offsetof(BehaviourAftertouchCrash, mbManualCameraControl) == 0x14,
+                      "mfCloseupAmount0To1 sits at the flag run +0x14");
+
+        // The running rig scalars Prepare seeds are a contiguous f32 run.
+        static_assert(offsetof(BehaviourAftertouchCrash, mfDistance)
+                       - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x04,
+                      "mfDistance follows mfHeight");
+        static_assert(offsetof(BehaviourAftertouchCrash, mfBlendFactor)
+                       - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x08,
+                      "mfBlendFactor follows mfDistance");
     }
-    return reinterpret_cast<GettableSubObject*>(maSubObject);        // this + 0x60
-}
+};
 
 // ----------------------------------------------------------------------------
 // BehaviourAftertouchCrash::Parameters::Construct -- the block's authored defaults, a
@@ -248,20 +392,24 @@ BehaviourAftertouchCrash::Parameters::Construct()
 
 // ----------------------------------------------------------------------------
 // BrnDirector::Camera::BehaviourAftertouchCrash::SetParameters
-//   lwz  r11, 0(r4)          ; lpParameters->meType
+//   lwz    r11, 0(r4)        ; lpParameters->meType
 //   cmplwi r11, 0xD          ; == eBehaviourAftertouchCrash
 //   ... assert on mismatch ...
-//   lwz  r11, 4(r4)          ; lpParameters->miParamWord1
-//   stw  r4,  +0x3D8(r3)     ; mpParameters = lpParameters
-//   stw  r11, +0x10(r3)      ; mParamWord1  = lpParameters->miParamWord1
+//   lwz    r11, 4(r4)        ; the parameter block's second word
+//   stw    r4,  +0x3D8(r3)   ; mpParameters = lpParameters
+//   stw    r11, +0x10(r3)    ; the BASE's mpcDebugParametersName
+//
+// PARK: the second store is the base's SetDebugParametersName(lpParameters->GetDebugName()), and
+//   restoring it needs the Parameters PARK above (the parameter-bank stride pin) closed first.
+//   Omitted rather than forged through the s32 word -- it feeds only the tweaker and the debug
+//   printers, so nothing on the live camera path reads it.
 // ----------------------------------------------------------------------------
 inline void
 BehaviourAftertouchCrash::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCrash,
                "lpParameters->GetType() == eBehaviourAftertouchCrash");
-    mpParameters = lpParameters;                   // stw r4,  0x3D8(this)
-    mParamWord1  = lpParameters->miParamWord1;      // lwz r11,4(lp); stw r11, 0x10(this)
+    mpParameters = lpParameters;                   // stw r4, +0x3D8(this)
 }
 
 } // namespace Camera

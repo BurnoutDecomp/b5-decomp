@@ -5,9 +5,10 @@
 // machine, stepped each PostPhysics frame by BrnWorld::RaceCarEntityModule::PostPhysicsUpdate.
 //
 // The X360 reads three RaceCarState fields by their committed byte offsets:
-//   +0x404 mfGas               (airborne indicator: > 0 while the car is in the air)
-//   +0x44A mbResetCarTransform (the car was reset -> drop the run)
-//   +0x44E mbIsHidden          (the car is hidden -> drop the run)
+//   +0x404 mfTimeInAir         (seconds airborne so far: > 0 while the car is in the air)
+//   +0x44A mbCrashing          (the car is crashing -> drop the run)
+//   +0x44E mbResetCarTransform (the car was reset -> drop the run)
+// (mbIsHidden, +0x452, is NOT read here)
 // and walks { meState, mfTimeSinceLastAir, mfPreviousAirTime, mfTotalAirTime } at +0/+4/+8/+0xC,
 // pushing InAir events (type 69 / 'E', payload { mfTotalAirTime, mfDeltaThisFrame }) onto the
 // game-event queue via VariableEventQueue<1536,16>::AddEvent.
@@ -46,24 +47,20 @@ void AirTimeManager::Update(const BrnPhysics::Vehicle::RaceCarState* lpRaceCarSt
     CGS_ASSERT(lpEventQueue != 0, "lpEventQueue");
     CGS_ASSERT(lpRaceCarState != 0, "lpRaceCarState");
 
-    // [PARKED -- file not owned by this lane] AirTimeManager::Update reads RaceCarState bytes
-    // +0x44A and +0x44E, which are mbCrashing and mbResetCarTransform; mbIsHidden (+0x452) is
-    // never read here. The two reads below and the banner at the top of this file are slid by
-    // one member each and need the owning lane to correct them.
-    // +0x404 mfGas (airborne indicator), +0x44A mbResetCarTransform, +0x44E mbIsHidden.
-    const f32  lfAirborne   = lpRaceCarState->mfGas;
-    const bool lbResetOrHidden =
-        lpRaceCarState->mbResetCarTransform || lpRaceCarState->mbIsHidden;
+    // +0x404 mfTimeInAir, +0x44A mbCrashing, +0x44E mbResetCarTransform.
+    const f32  lfAirborne   = lpRaceCarState->mfTimeInAir;
+    const bool lbCrashedOrReset =
+        lpRaceCarState->mbCrashing || lpRaceCarState->mbResetCarTransform;
 
-    // A reset/hidden car forces the machine back to CRASHING and runs the case-0 logic.
-    if (lbResetOrHidden)
+    // A crashed/reset car forces the machine back to CRASHING and runs the case-0 logic.
+    if (lbCrashedOrReset)
         meState = E_AIR_STATE_CRASHING;
 
     switch (meState)
     {
         case E_AIR_STATE_CRASHING:   // 0
-            // Once the car has settled (not reset and off the air indicator), prime a fresh run.
-            if (!lpRaceCarState->mbResetCarTransform && lfAirborne == 0.0f)
+            // Once the car has settled (no longer crashing and off the air indicator), prime a fresh run.
+            if (!lpRaceCarState->mbCrashing && lfAirborne == 0.0f)
             {
                 mfPreviousAirTime  = 0.0f;            // +0x8
                 mfTotalAirTime     = 0.0f;            // +0xC
@@ -109,12 +106,12 @@ void AirTimeManager::Update(const BrnPhysics::Vehicle::RaceCarState* lpRaceCarSt
             else
             {
                 // Still airborne: track the latest airborne value.
-                mfPreviousAirTime = lfAirborne;   // +0x8 = mfGas
+                mfPreviousAirTime = lfAirborne;   // +0x8 = mfTimeInAir
             }
             {
                 // Report the run: total + this frame's airborne contribution.
                 InAirEvent lEvent;
-                lEvent.mfTotalAirTime   = mfTotalAirTime + lfAirborne; // v7[3] + mfGas
+                lEvent.mfTotalAirTime   = mfTotalAirTime + lfAirborne; // v7[3] + mfTimeInAir
                 lEvent.mfDeltaThisFrame = lfAirborne;
                 lpEventQueue->AddEvent(&lEvent, 69, 8);
             }

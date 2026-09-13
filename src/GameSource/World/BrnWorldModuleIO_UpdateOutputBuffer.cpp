@@ -38,8 +38,7 @@ void UpdateOutputBuffer::_AssertLayout()
 //
 // PARTIAL SLICE (FLAG): the members whose committed types expose Construct/Clear run the
 // REAL call; the interface interiors whose Construct/Clear bodies are not committed yet
-// (VehicleOutputInterface's three interior queues + head words, the two
-// RCEntityActiveRaceCarOutputInterface Clears, TriggerEntity/DirectorVehicle/RaceCarGlobal/
+// (the two RCEntityActiveRaceCarOutputInterface Clears, TriggerEntity/DirectorVehicle/RaceCarGlobal/
 // VehicleManager/ContactSpy/TrafficNetwork/Crash/Deformation interfaces, the
 // AICarOutputInterface 35-slot {DIST_MAX, 0x7FFF} splat, and the StatusInterface
 // {0,0,0,1,1} seed whose setters are still WorldLinkStubs traps) are covered by the
@@ -54,6 +53,21 @@ void UpdateOutputBuffer::Construct()
     CgsModule::IOBuffer::Construct();                       // X360 *this = 1
 
     // -- the committed queue constructs, in the X360 call order --
+    // ⭐⭐ THE VEHICLE-OUTPUT INTERFACE, FIRST -- and it is the console's first act too. The
+    // console loads the +0x10 seat into a register before anything else and emits the interface's
+    // interior inline over it: PhysicalTrafficState<20>::Construct (+0x2620), ImpactEvent<16>::
+    // Construct (+0x2310), VariableEventQueue<1536,16>::Construct (+0x65F0), one 8-byte zero over
+    // the used-cars head, then the five aggressive-driving bytes -- i.e. exactly the committed
+    // VehicleOutputInterface::Construct, which is the same body the physics module's own output
+    // buffer construct emits over its own seat. The whole run lands BEFORE the
+    // VehicleManagerOutputInterface::Construct below, which is where the console emits it.
+    //
+    // ⚠️ THE NEVER-CONSTRUCTED-QUEUE TRAP, and this buffer was the destination it applied to: the
+    // zero-fill above leaves all three interior queues with a null event pointer, so the moment
+    // BridgePhysicsToOutput's leg 1 (the vehicle-output fan-in, landed 2026-09-13) carries a live
+    // event the Append writes through it. Every element of the interface is constructed here now.
+    mVehicleOutputInterface.Construct();                    // +0x10
+
     // [road-rage wave 2026-09-02] ONE MORE of the banner's "covered by the zero-fill" interfaces made
     // real -- and, as with the director vehicle interface below, a zero-fill is exactly wrong for it:
     // VehicleManagerOutputInterface is eight EventQueues whose mpEvents must point at their own
