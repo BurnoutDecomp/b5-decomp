@@ -918,6 +918,37 @@ namespace BrnAI
 #endif
         }
 
+        // FLAG PC diagnostic: observe road targets without changing steering decisions.
+        static const bool sbRoadTrace = getenv("BRN_AI_ROAD_DIAG") != 0;
+        static u32 sauRoadSamples[E_GLOBAL_RACE_CAR_INDEX_COUNT] = {};
+        const s32 liCar = static_cast<s32>(lpCar->GetRaceCarIndex());
+        if (sbRoadTrace && !lpCar->IsPlayerCar() && liCar >= 0 &&
+            liCar < E_GLOBAL_RACE_CAR_INDEX_COUNT &&
+            (++sauRoadSamples[liCar] % 60) == 0 && CgsDev::Log::gpDebugPrint)
+        {
+            s32 liRay = 0;
+            for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
+                if (mSteeringFan.mTarget[liStep].x == lResult.x &&
+                    mSteeringFan.mTarget[liStep].y == lResult.y) liRay = liStep;
+            const Vector3 lPosition = lpCar->GetPosition();
+            const Vector3 lDirection = lpCar->GetDirection();
+            *CgsDev::Log::gpDebugPrint << "[ai-road] car=" << liCar
+                << " pos=" << lPosition.x << "," << lPosition.y << "," << lPosition.z
+                << " dir=" << lDirection.x << "," << lDirection.z
+                << " speed=" << lpCar->GetSpeed() << " behaviour=" << static_cast<s32>(lpCar->meBehaviour)
+                << " target=" << lResult.x << "," << lResult.y
+                << " centreKnown=" << static_cast<s32>(mSteeringFan.mbCentreHereKnown)
+                << " centre=" << mSteeringFan.mCentreHere.x << "," << mSteeringFan.mCentreHere.y
+                << " ahead=" << mSteeringFan.mCentreAhead.x << "," << mSteeringFan.mCentreAhead.y
+                << " section=" << GetRacingLine().miLastKnownSectionID
+                << " ray=" << liRay << " bias=" << static_cast<s32>(mSteeringFan.meBiasMode)
+                << " hng=" << mSteeringFan.mfWeighting[eFan_AvoidHNG][liRay]
+                << "," << mSteeringFan.mfWeighting[eFan_ExitHNG][liRay]
+                << " edge=" << mSteeringFan.mfWeighting[eFan_AvoidEdges][liRay]
+                << " parallel=" << mSteeringFan.mfWeighting[eFan_DriveParallel][liRay]
+                << " stuck=" << mfStuckTime << "\n";
+        }
+
         return lResult;
     }
 
