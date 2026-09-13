@@ -88,6 +88,7 @@ public:
     // GROWN for VisibilityCollisionPolicy::TimeUntilCollisionWithGeometry @0x821F37C8
     // (its h:425 wrapper assert reads this flag through the embedded predictor).
     bool WillCollide() const { return mbWillCollide != 0; }
+    void Construct() { mbWillCollide = false; }
 
 private:
     // FLAG: only the two members GetTimeUntilCollision reads are modelled at their asm-attested
@@ -522,7 +523,8 @@ private:
     bool mbCanFail;                                            // X360 +0x08 (default true)
     bool mbFirstFrame;                                         // X360 +0x09 (default true)
     bool mbTargetSet;                                          // X360 +0x0A (default false)
-    u8 maReservedToVehiclePredictor[0x70 - 0x0B];              // X360 [+0x0B, +0x70)
+    Matrix44Affine mTargetTransform;                         // X360 +0x10
+    AABBox mTargetAABB;                                     // X360 +0x50
                                                                //   mTargetTransform @+0x10,
                                                                //   mTargetAABB      @+0x50
     Utils::VehicleCollisionPredictor mVehicleCollisionPredictor;   // X360 +0x70 (flag/time @+0x70/+0x74)
@@ -534,7 +536,11 @@ private:
     bool mbSeeThroughSuppressed;                               // X360 +0x1A2 (default true)
     u8 maReserved1A3[0x210 - 0x1A3];                           // X360 [+0x1A3, +0x210)
     f32 mfDesiredHeight;                                       // X360 +0x210 (SetDesiredHeight stores)
-    u8 maReserved214[0x23C - 0x214];                           // X360 [+0x214, +0x23C)
+    u8 maReserved214[0x220 - 0x214];
+    Vector3 mVelocity;                                      // X360 +0x220
+    CgsSceneManager::EntityId mTargetEntityId;                // X360 +0x230
+    f32 mfMinHeight;                                        // X360 +0x234
+    f32 mfCollisionRadius;                                  // X360 +0x238
     u8 mbHaveDesiredHeight;                                    // X360 +0x23C (SetDesiredHeight raises)
     u8 maReservedTail[0x240 - 0x23D];                          // X360 [+0x23D, +0x240)
 };

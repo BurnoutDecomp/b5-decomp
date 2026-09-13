@@ -68,6 +68,13 @@ namespace BrnAI
 {
     namespace vpu = rw::math::vpu;
 
+    Vector3 AICar::GetVelocityDirection() const
+    {
+        if (vpu::MagnitudeSquared(mVelocity) > KF_USEFUL_DIRECTION_MIN_SPEED * KF_USEFUL_DIRECTION_MIN_SPEED)
+            return vpu::Normalize(GetVelocity());
+        return GetDirection();
+    }
+
     // ===== file-local constants (every value read from the image; addresses in the banner) =====
     const f32 KF_AICAR_FLOAT_EPSILON              = 1.1920929e-7f;   // flt_820C3B70
     const f32 KF_WRONG_WAY_TIME_LIMIT             = 4.0f;            // flt_820C41C0

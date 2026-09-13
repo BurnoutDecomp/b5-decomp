@@ -236,12 +236,7 @@ namespace BrnDirector
             mLooseAttachmentTakedown2.Construct();
             mLooseAttachmentTakedown3.Construct();
 
-            // ⭐ 2026-09-11: seed the gyro blocks. BehaviourGyroCam::Parameters
-            // has no Construct of its own in this tree, so the blocks are zeroed and stamped
-            // with the gyro type tag -- the one field BehaviourGyroCam::SetParameters asserts
-            // on. [FLAG PC bring-up] the authored per-block tunings are NOT reproduced: they
-            // are compiled into the bank's own Construct, which is not recovered, so every
-            // block reads as a zeroed gyro rig. The tag is what keeps the tripwire honest.
+            // ARTIST BehaviourParameterBank::Construct @8223DC90: defaults and authored overrides.
             Camera::BehaviourGyroCam::Parameters* const lapGyro[] = {
                 &mGyroCamDefaultParams,
                 &mGyroCamTruckFront,
@@ -260,12 +255,84 @@ namespace BrnDirector
             };
             for (u32 luBlock = 0; luBlock < sizeof(lapGyro) / sizeof(lapGyro[0]); ++luBlock)
             {
-                u8* lpBytes = reinterpret_cast<u8*>(lapGyro[luBlock]);
-                for (u32 luByte = 0; luByte < sizeof(Camera::BehaviourGyroCam::Parameters); ++luByte)
-                {
-                    lpBytes[luByte] = 0;
-                }
-                lapGyro[luBlock]->meType = Camera::eBehaviourGyroCam;
+                lapGyro[luBlock]->Construct();
+            }
+            mGyroCamDefaultParams.mLookerParams.mfTrackingTolerance = 0.1f;
+            mGyroCamDefaultParams.mShakeParams.mfWobbleCenteringFactor = 1.0f;
+            mGyroCamDefaultParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
+            mGyroCamDefaultParams.mLookerParams.mbUseZoom = false;
+            mGyroCamDefaultParams.mfSlowDistance = 3.5f;
+            mGyroCamDefaultParams.mfSlowPitch = -4.0f;
+            mGyroCamDefaultSideTruckingLeftParams = mGyroCamDefaultParams;
+            mGyroCamDefaultSideTruckingLeftParams.mbUseTruck = true;
+            mGyroCamDefaultSideTruckingLeftParams.mbUseSideVector = true;
+            mGyroCamDefaultSideTruckingRightParams = mGyroCamDefaultSideTruckingLeftParams;
+            mGyroCamDefaultSideTruckingRightParams.mbInvertVector = true;
+            mGyroCamFollow = mGyroCamDefaultParams;
+            mGyroCamFollow.mbInvertVector = true;
+            mGyroCamAlwaysLowParams = mGyroCamDefaultParams;
+            mGyroCamAlwaysLowParams.mfSlowPitch = mGyroCamAlwaysLowParams.mfFastPitch = -4.0f;
+            mGyroCamAlwaysLowParams.mfSlowDistance = mGyroCamAlwaysLowParams.mfFastDistance = 9.0f;
+            mGyroCamAlwaysLowParams.mfSlowHeight = mGyroCamAlwaysLowParams.mfFastHeight = 0.2f;
+            mGyroCamTakedownParams.mLookerParams.mfTrackingTolerance = 0.1f;
+            mGyroCamTakedownParams.mShakeParams.mfWobbleCenteringFactor = 1.0f;
+            mGyroCamTakedownParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
+            mGyroCamTakedownParams.mLookerParams.mbUseZoom = false;
+            mGyroCamTakedownParams.mShakeParams.mfXYShakeMagnitudeDegs = 0.15f;
+            mGyroCamTakedownParams.mShakeParams.mfZShakeMagnitudeDegs = 0.05f;
+            mGyroCamTakedownParams.mShakeParams.mfXYWobbleMagnitudeDegs = 4.0f;
+            mGyroCamTakedownParams.mbStickToGround = false;
+            mGyroCamTakedownParams.mfSlowDistance = 4.0f;
+            mGyroCamTakedownParams.mfFastDistance = 8.0f;
+            mGyroCamTakedownParams.mfSlowHeight = 1.0f;
+            mGyroCamTakedownParams.mfSlowPitch = -1.0f;
+            mGyroCamTakedownParams.mfFastHeight = 1.5f;
+            mGyroCamTakedownZoomedOutParams = mGyroCamTakedownParams;
+            mGyroCamTakedownZoomedOutParams.mfSlowDistance = 8.0f;
+            mGyroCamTakedownZoomedOutParams.mfFastDistance = 8.0f;
+            mGyroCamHighParams.mShakeParams.mfWobbleCenteringFactor = 1.0f;
+            mGyroCamHighParams.mLookerParams.mfTrackingTolerance = 0.1f;
+            mGyroCamHighParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
+            mGyroCamHighParams.mLookerParams.mbUseZoom = false;
+            mGyroCamHighParams.mfSlowDistance = 9.0f;
+            mGyroCamHighParams.mfFastDistance = 18.0f;
+            mGyroCamHighParams.mfSlowHeight = mGyroCamHighParams.mfFastHeight = 5.0f;
+            mGyroCamHighParams.mbStickToGround = false;
+            mGyroCamHelicamParams.mLookerParams.mbInitialiseToLookingAtTarget = true;
+            mGyroCamHelicamParams.mLookerParams.mfTrackingTolerance = 0.1f;
+            mGyroCamHelicamParams.mLookerParams.mbUseZoom = false;
+            mGyroCamHelicamParams.mbStickToGround = false;
+            mGyroCamHelicamParams.mfSlowDistance = mGyroCamHelicamParams.mfFastDistance = 20.0f;
+            mGyroCamDriveByLParams = mGyroCamDefaultParams;
+            mGyroCamDriveByLParams.mAttachmentTruckParams.mfInitialOffsetDist = -4.0f;
+            mGyroCamDriveByLParams.mAttachmentTruckParams.mfConvergenceTimeSecs = 0.125f;
+            mGyroCamDriveByLParams.mbUseTruck = mGyroCamDriveByLParams.mbUseSideVector = true;
+            mGyroCamDriveByRParams = mGyroCamDriveByLParams;
+            mGyroCamDriveByRParams.mbInvertVector = true;
+            mGyroCamTruckFront = mGyroCamDefaultParams;
+            mGyroCamTruckFront.mAttachmentTruckParams.mfInitialOffsetDist = 7.5f;
+            mGyroCamTruckFront.mAttachmentTruckParams.mfConvergenceTimeSecs = 2.0f;
+            mGyroCamTruckFront.mbUseTruck = true;
+            mGyroCamLeft = mGyroCamDefaultParams;
+            mGyroCamLeft.mbUseSideVector = true;
+            mGyroCamRight = mGyroCamDefaultParams;
+            mGyroCamRight.mbUseSideVector = mGyroCamRight.mbInvertVector = true;
+
+            Camera::BehaviourLooseAttachment::Parameters* const beats[] = {
+                &mLooseAttachmentTakedown1, &mLooseAttachmentTakedown2, &mLooseAttachmentTakedown3};
+            for (u32 i = 0; i < 3; ++i)
+            {
+                auto& p = *beats[i];
+                p.mImpact.mShakeParams.mfXYShakeMagnitudeDegs = 0.1f;
+                p.mImpact.mShakeParams.mfXYWobbleMagnitudeDegs = 0.0f;
+                p.mImpact.mfShakeDecayFactor = 0.15f;
+                p.mImpact.mfShakeMagnitude = 45.0f;
+                p.mImpact.mfShakeFrequencyScale = 2.5f;
+                p.mfHeight = 0.25f;
+                p.mfDistance = i == 0 ? 6.0f : 5.0f;
+                p.mfField54 = i == 0 ? 90.0f : (i == 1 ? 60.0f : 40.0f);
+                p.mfDutch = 10.0f * (i + 1);
+                p.mbLookFromTarget = true;
             }
         }
 

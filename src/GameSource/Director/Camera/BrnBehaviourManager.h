@@ -1,3 +1,6 @@
+#include "GameSource/Director/Camera/Utils/BrnTempBoostResponder.h"
+#include "GameSource/Director/Camera/Utils/BrnSpeedResponder.h"
+#include "GameSource/Director/SharedIO/BrnDirectorControllerInfo.h"
 #ifndef GAMESOURCE_DIRECTOR_CAMERA_BRN_BEHAVIOUR_MANAGER_H
 #define GAMESOURCE_DIRECTOR_CAMERA_BRN_BEHAVIOUR_MANAGER_H
 
@@ -74,7 +77,7 @@ struct DebugPrinter;                   // Update/SceneQuery debug printer arg
 //  Camera/Behaviours/Behaviour.h included above -- they live in BrnDirector::Camera, not
 //  BrnDirector, so the old BrnDirector-scope forward declaration here was a DIFFERENT
 //  type that could never have bound to the real one.)
-struct ControllerInfo;                 // UpdateAllBehaviours arg
+// ControllerInfo is shared with DirectorIO.                 // UpdateAllBehaviours arg
 struct CollisionPolicySharedInfo;      // GenerateSceneQueries / ProcessSceneQueryResults arg
 
 namespace Camera
@@ -386,14 +389,11 @@ namespace Camera
                                        mDebugBehaviourRefCountIndexLog;                     // :337
         Array<s32, 28u> mDebugBehaviourRefCountLimits;                       // :338
 
-        // FLAG opaque: the camera responders + rotation controllers (DWARF :346..:350). All
-        // un-homed heavy Camera aggregates; named opaque sub-objects. The X360 keeps a float
-        // time accumulator in this region (console +0x15870, UpdateAllBehaviours), confirming
-        // it sits between the helper pool and the helper-index array.
-        OpaqueSub<1> mTempCameraBoostResponder;                                            // :346
-        OpaqueSub<2> mSpeedResponder;                                                      // :347
-        OpaqueSub<3> mRotationController;          // Camera2DRotationController             // :349
-        OpaqueSub<4> mSphericalRotationController; // CameraSphericalRotationController      // :350
+        // Camera responders and rotation state (DecFIGS :346..:350).
+        Utils::TempCameraBoostResponder mTempCameraBoostResponder;                                            // :346
+        Utils::SpeedResponder mSpeedResponder;                                                      // :347
+        Utils::Camera2DRotationController mRotationController;          // Camera2DRotationController             // :349
+        Utils::CameraSphericalRotationController mSphericalRotationController; // CameraSphericalRotationController      // :350
 
         // The single attached-tweaker slot (DWARF :359).
         TweakerHelper mTweakerHelper;                                                      // :359

@@ -1,105 +1,9 @@
-// ============================================================================
-// GameSource/Director/Camera/BrnBehaviourManager.cpp
-//
-// Bodies for the BrnDirector::Camera::BehaviourManager camera-behaviour manager.
-// The full layout is homed in BrnBehaviourManager.h (committed e1028d1); this TU
-// bodies the manager methods against that header's REAL named members
-// (mBehaviourHelperIndexArray / mBehaviourHelperPool / the four BitArray<28> sets /
-// the ref-count Array tables / mpDirectorResourceManager / ...).
-//
-// SOURCE-OF-TRUTH: the X360 BURNOUT_X360_ARTIST.XEX pseudocode + asm for this TU is
-// the spine; the recovered type information gave the declaration shape; the earlier revision was style
-// only (it has no source for this TU).
-//
-// SCOPE (re-verified wave; the ledger's per-TU function list is a stale raw-offset snapshot --
-// see the committed member names above for ground truth):
-//   FAITHFULLY BODIED (operate purely on the homed manager members + committed APIs):
-//     * BehaviourManager::Construct                            @0x82251778  (BehaviourManager
-//         wave -- two documented quiet gates for the two FLAGGED opaque sub-objects it seeds)
-//     * BehaviourManager::Prepare                              @0x8223DBE0  (BehaviourManager
-//         wave -- the three pool free-queue refills + the handbrake timer; NO gate)
-//     * BehaviourManager::Destruct                             (folded into MainDirector::
-//         Destruct @0x8224FCC0 on the console -- the three pool occupancy clears)
-//     * BehaviourManager::CheckNoBehavioursAreAllocatedByState  @0x822201B0
-//     * BehaviourManager::IsBehaviourWaitingToPrepare           @0x82208170  (pure BitArray<28>
-//         book-keeping query; the field pick is now byte-attested by a second asm site --
-//         NewBehaviour<> @0x822580F8 -- see the note on its body)
-//
-//   DECLARATION-ONLY + FLAGGED (each reaches an un-homed opaque interior, an un-homed
-//   template family, or a multi-stage VMX pipeline -- bodying any of these would require
-//   fabricating state the binary's structure does NOT attest in the homed layout):
-//     * BehaviourHelper::GetDebugFullName        @0x821F8350  (reaches the Behaviour
-//         interior's debug-parameters name + the debug-owner GetName virtuals through the
-//         un-homed BehaviourHelper::Get()->Behaviour interior)
-//     * BehaviourHelper::Prepare                 @0x82255F48  (calls a virtual through the
-//         pooled object via the type-erased handle then constructs the slot camera; the
-//         handle-dispatch + behaviour vtable are the un-homed Behaviour interior)
-//     * BehaviourHelper::Update                  @0x82220688  (drives the Behaviour's
-//         ValidityAccount + PreUpdate virtuals -- un-homed Behaviour/CameraState interior)
-//     * BehaviourManager::DebugDumpToTTY         @0x82220750  (per-slot GetDebugFullName +
-//         CgsDev::Log debug print -- reaches the same opaque BehaviourHelper::Get() name)
-//     * BehaviourManager::GenerateSceneQueries   @0x8221F1C0  (per-slot
-//         BehaviourHelper::GenerateSceneQueries -> Behaviour interior collision policy)
-//     * BehaviourManager::NewBehaviour<>         @0x82267418  -- ⭐ LANDED 2026-08-29, in
-//         BrnBehaviourManager_NewBehaviourFromShot.cpp (isolated for the same header-collision
-//         reason as the three AllocateBehaviour_* partfiles). ⛔ THE NOTE THAT STOOD HERE WAS
-//         STALE ON TWO COUNTS, and it is worth stating both because it parked the drive-thru
-//         camera for a month:
-//           (1) it said the +0x170 / +0x174 owner stores were "offsets no homed Behaviour base
-//               slice models". They are not Behaviour offsets at all -- they are
-//               BehaviourHelper::mpDebugArbitratorStateOwner / mpDebugMomentOwner, which this
-//               header has had named setters for since the helper was homed, and which the
-//               templated sibling in BrnBehaviourManager.h already writes by name.
-//           (2) the companion note in BrnDirectorArbitrator.cpp reads "until that base is homed,
-//               NO camera behaviour can be allocated by anyone". BehaviourHelper::Prepare was
-//               homed in the Pass-A re-home below, and the crash camera has been allocating
-//               behaviours through NewBehaviour<TBehaviour> since 2026-08-29.
-//         What was ACTUALLY missing was this overload's TYPE DISPATCH: unlike the templated
-//         family, it picks the concrete behaviour at runtime from the shot RefSpec's class key.
-//         Two of its three arms are still gated -- their Parameters arguments live inside
-//         BehaviourParameterBank::maReservedHead; see the TU's banner.
-//
-//   NOW HOMED THIS WAVE (Pass-A re-homed template instantiations):
-//     * BehaviourManager::AllocateBehaviour<TBehaviour>  @0x82263370 + 19 siblings -- the ONE
-//         shared body lives out-of-line in BrnBehaviourManager.h (sizeof-based pool split proven
-//         against every sibling's asm); the 20 concrete instantiations are emitted below (17) and
-//         in BrnBehaviourManager_AllocateBehaviour_{IceAnim,RenderMetrics,Rig}.cpp (3, isolated
-//         because those behaviour headers' shared-slice re-declarations collide).
-//     * BehaviourManager::ProcessSceneQueryResults @0x8221F438 (per-slot
-//         BehaviourHelper::ProcessSceneQueryResults -> Behaviour interior)
-//     * BehaviourManager::PostCollisionUpdateAllBehaviours @0x8221F870  VMX-PIPELINE
-//         (vrlimi128/vperm/vcmpgtfp attitude-band math) -- NEVER scalar-paraphrased
-//     * BehaviourManager::UpdateAllBehaviours    @0x82251960  VMX-PIPELINE
-//         (vrlimi128/vperm/vcmpgtfp attitude bands + responder time accumulator) --
-//         NEVER scalar-paraphrased
-//     * BehaviourManager::AttachTweaker          @0x822082A8  (re-verified this wave now that
-//         Utils::Tweaker is real (BrnCameraTweaker.h): still reaches an un-homed Behaviour
-//         interior -- `(*(**v7 + 24))(*v7, &mTweakerHelper.mTweaker)` is a virtual dispatch
-//         through the pooled object's OWN vtable (mpObject's vptr, not the manager's), i.e. the
-//         un-homed Behaviour::SetupTweaker(Utils::Tweaker&) virtual (BrnBehaviourIceAnim.h:442
-//         declares one instance of it). AttachTweaker/DetachTweaker are also declared PRIVATE in
-//         the committed header, with no public entry point exercised by any already-committed
-//         caller, so there is no way to body this without inventing the Behaviour vtable slot.
-//     * BehaviourManager::DetachTweaker / DetachAllTweakers @0x82208330 (DetachAllTweakers):
-//         same un-homed-interior blocker -- `*(mBehaviourHelperPool[...].mBehaviourPoolHandle.
-//         mpObject + 0xA) = 0` is a raw write into the pooled Behaviour object's own private
-//         interior, not a BehaviourHelper/BehaviourManager member.
-//     * BehaviourManager::BehaviourManager() (the implicit/compiler-generated default ctor;
-//         X360 @0x827E26A8, called from MainDirector::MainDirector): writes the two AbstractPool
-//         vptrs (mLargeBehaviourPool/mSmallBehaviourPool -- already handled by the implicit
-//         default ctor now that neither AbstractPool nor BehaviourManager declares one) plus
-//         three more -1 sentinel stores and a `BehaviourHelperIndex(28)` array-ctor call at
-//         offsets that do NOT independently cross-check against any already-homed member (they
-//         land inside the still-opaque OpaqueSub responder/rotation-controller region per the
-//         header's own FLAG note) -- left to the implicit default ctor rather than adding an
-//         explicit one that would have to guess which opaque region each -1 belongs to.
-//
-//   The declaration-only methods are intentionally NOT defined here; their out-of-line
-//   bodies land when the Behaviour interior / the responder+rotation-controller sub-types /
-//   the AllocateBehaviour<> template / the VMX attitude pipeline are homed. Leaving them
-//   undefined keeps the TU honest (no fabricated bodies) while the faithfully-recovered
-//   methods below link.
-// ----------------------------------------------------------------------------
+#include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
+#include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
+#include <cmath>
+// Behaviour pools and frame dispatch. ARTIST is the behaviour authority;
+// named member shapes come from DecFIGS. The pre-scene pass advances camera
+// responders and rotation, and the collision pass republishes their current state.
 
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState (owner identity + GetName)
@@ -223,7 +127,10 @@ namespace Camera
 
         mBehaviourHelperIndexArray.Clear();                  // length word @+91064
 
-        // ⚠️ GATE: the responder / rotation-controller seeds (+88172..+88288).
+        mTempCameraBoostResponder.Construct();
+        mSpeedResponder.Construct();
+        mRotationController.Construct();
+        mSphericalRotationController.Construct();
 
         mBehaviourNeedsPreparingFlags.UnSetAll();            // +84656
         mBehaviourNeedsReleasingFlags.UnSetAll();            // +84664
@@ -909,60 +816,55 @@ namespace Camera
         }
     }
 
-    // ------------------------------------------------------------------------
-    // BehaviourManager::UpdateAllBehaviours @0x82251960 -- run every live behaviour for one
-    // frame. This is the call that makes a director camera MOVE.
-    //
-    // X360 body, in order:
-    //   (1) the temp-FOV-boost responder + the two rotation controllers  -- ⚠️ GATED, see below
-    //   (2) mfLastHandbrakeTime bookkeeping -> lrSharedInfo.mfLastHandbrakeTime   -- REAL
-    //   (3) for i in [0, mBehaviourHelperIndexArray.GetLength()):                 -- REAL
-    //           lHelper = mBehaviourHelperIndexArray[i];
-    //           assert(!mBehaviourNeedsPreparingFlags.IsBitSet(lHelper));   // .cpp:270
-    //           if (!lbPaused || mBehaviourUpdateDuringPauseFlags.IsBitSet(lHelper))
-    //               mBehaviourHelperPool[lHelper].Update(lrSharedInfo);
-    //           <per-behaviour debug printer / ValidityAccount::Print block>       -- ⚠️ GATED
-    //   (4) the attached Tweaker's Update/Render                                   -- ⚠️ GATED
-    //
-    // ⚠️ QUIET GATE (1): the leading block is a genuine VMX lane pipeline over the manager's
-    //   un-homed responder region (manager +88176/+88180) plus
-    //   Camera2DRotationController::Update and CameraSphericalRotationController::Update, and
-    //   it ends in `lrSharedInfo.mfTempFOVBoostAmount = Utils::SineLerp(...)`. Both controllers
-    //   are named opaque sub-objects in this class (see the header FLAG) and the block reaches
-    //   AllVehicleData::GetPlayer + a Vector3<8> ring buffer. Paraphrasing it scalar-wise is
-    //   exactly what the project rules forbid.
-    //   CONSEQUENCE: mfTempFOVBoostAmount / mfSpeedRatio stay at whatever the caller seeded
-    //   (0 today) and the 2D / spherical rotation controllers do not advance -- i.e. no
-    //   speed-based FOV boost and no player-driven camera orbit. Behaviours that do not read
-    //   those fields (the road-runner fly-by among them) are unaffected.
-    //   DELETE-WHEN: the two rotation controllers + the responder region are homed.
-    //
-    // ⚠️ QUIET GATE (3-debug) and (4): the per-behaviour debug print block (GetDebugFullName /
-    //   ValidityAccount::Print / DebugPrinter::ActualPrint, all gated on
-    //   mbDebugDisplayAllCameras) and the tweaker Update/Render tail. Neither touches a camera.
-    //   DELETE-WHEN: DebugPrinter's print surface and the tweaker are wired.
-    // ------------------------------------------------------------------------
+    // ARTIST 82251AC4..82251BF8 / 8221F8E0..8221F9F0. The VMX CR6
+    // all-false result tests that every velocity component is within one unit.
+    static void PublishControllerState(bool paused, BehaviourSharedInfo& info,
+                                       const ControllerInfo& controller)
+    {
+        info.mCameraModifier = controller.mCameraModifier;
+        info.mbUseControlPauseBehaviour = paused;
+        info.mbLookback = controller.mbLookback;
+        const auto& velocityJournal = info.mpPlayerTracker->GetLinearVelocityJournal();
+        if (velocityJournal.GetSize() > 0)
+        {
+            const Vector3 velocity = velocityJournal[0];
+            const bool stationary = std::fabs(velocity.x) <= 1.0f &&
+                std::fabs(velocity.y) <= 1.0f && std::fabs(velocity.z) <= 1.0f;
+            const bool crashing = info.mpAllVehicleData->GetPlayer().mRaceCarState.mbCrashing;
+            info.mbUseControlPauseBehaviour = paused || stationary || crashing;
+            info.mbLookback = controller.mbLookback && !crashing;
+        }
+        // VMX vperm 82CDA350 selects {-x, y, -x, -x}.
+        info.mCarModifier = {-controller.mCarModifier.x, controller.mCarModifier.y,
+                            -controller.mCarModifier.x, -controller.mCarModifier.x};
+    }
+
+    // ARTIST 82251960: responders, controllers, then every live behaviour.
     void BehaviourManager::UpdateAllBehaviours(bool lbPaused, BehaviourSharedInfo& lrSharedInfo,
                                                const ControllerInfo& lrControllerInfo, bool lbArg,
                                                DebugPrinter& lrDebugPrinter)
     {
-        (void)lrControllerInfo;
         (void)lbArg;
         (void)lrDebugPrinter;
-
-        // ⚠️ GATE (1): the responder / rotation-controller VMX prologue (see the banner).
-
-        // (2) The handbrake timestamp the behaviours read out of the shared info. The X360
-        //     resets it on the controller's handbrake byte and otherwise accumulates the
-        //     no-slomo world timestep, saturating at FLT_MAX (the "never" sentinel
-        //     Construct/Prepare seed).
-        //     ⚠️ GATE: the controller's handbrake byte lives in the un-homed ControllerInfo
-        //     (console +9); without it the reset never fires. The accumulate half is real.
-        //     DELETE-WHEN: Camera::ControllerInfo is homed.
-        if (mfLastHandbrakeTime < 3.4028235e38f)
-        {
-            mfLastHandbrakeTime += lrSharedInfo.mTimestep.Get(BrnDirector::Timestep::E_WORLD_NO_SLOMO);
-        }
+        const auto& player = lrSharedInfo.mPlayerInfo.mRaceCarState;
+        mTempCameraBoostResponder.Update(player.mfTimeBoosting > 0.0f && player.mfSpeedMPH > 100.0f,
+            lrSharedInfo.mTimestep.Get(Timestep::E_WORLD));
+        mSpeedResponder.Update(player.mfSpeedMPH, player.mfMaxBoostSpeedMPH);
+        const f32 gameDt = lrSharedInfo.mTimestep.Get(Timestep::E_GAME);
+        mRotationController.Update(gameDt, lrControllerInfo.mCameraModifier, lrControllerInfo.mbLookback, lbPaused);
+        PublishControllerState(lbPaused, lrSharedInfo, lrControllerInfo);
+        if (lrSharedInfo.mpPlayerTracker->GetLinearVelocityJournal().GetSize() > 0)
+            mSphericalRotationController.Update(gameDt, lrControllerInfo.mCameraModifier,
+                lrSharedInfo.mbLookback, lrSharedInfo.mbUseControlPauseBehaviour, -10.0f, 10.0f);
+        lrSharedInfo.mpBehaviourManager = this;
+        lrSharedInfo.mRotationController = mRotationController;
+        lrSharedInfo.mSphericalRotationController = mSphericalRotationController;
+        lrSharedInfo.mfTempFOVBoostAmount = mTempCameraBoostResponder.GetFOVBoostAmount();
+        lrSharedInfo.mfSpeedRatio = mSpeedResponder.GetSpeedRatio();
+        if (lrControllerInfo.mbHandbrake)
+            mfLastHandbrakeTime = 0.0f;
+        else if (mfLastHandbrakeTime < 3.4028235e38f)
+            mfLastHandbrakeTime += lrSharedInfo.mTimestep.Get(Timestep::E_WORLD_NO_SLOMO);
         lrSharedInfo.mfLastHandbrakeTime = mfLastHandbrakeTime;
 
         // (3) Every live behaviour, in helper-index-array order.
@@ -986,49 +888,22 @@ namespace Camera
         // ⚠️ GATE (4): the attached tweaker's Update/Render tail (see the banner).
     }
 
-    // ------------------------------------------------------------------------
-    // BehaviourManager::PostCollisionUpdateAllBehaviours @0x8221F870 -- run every live
-    // behaviour's COLLISION-PASS frame (vtable slot 3).
-    //
-    // ⭐⭐ BODIED 2026-08-01 (car-select hand-off wave). It had never had one, and nothing
-    // called it -- so slot 3 was never dispatched anywhere in this build. That mattered because
-    // BehaviourInterpolate does ALL of its per-frame work in slot 3: the parametric-time
-    // advance, the blend and the mbHasFinished latch. With the pass missing, an interpolate
-    // behaviour produced a never-written camera and never reported "finished", which is what
-    // stalled ArbStateCarSelect in GAME_INTRO_PART_THREE.
-    //
-    // The console's body is structurally the twin of UpdateAllBehaviours above -- same
-    // responder/rotation-controller prologue over the same manager region, same
-    // helper-index-array walk with the same `helper < 0x1C` bound assert
-    // (0x8221FAFC) and the same mBehaviourUpdateDuringPauseFlags gate word
-    // (`addi rN, helper, 0x2958` -- byte-identical to UpdateAllBehaviours' @0x8225212C) --
-    // differing only in the dispatched slot:
-    //     0x8221FDA8  addi r4, r11, 0x10      ; &helper.mCamera
-    //     0x8221FDA0  mr   r5, r21            ;  lrSharedInfo
-    //     0x8221FDAC  lwz  r3,  0(r11)        ;  the behaviour
-    //     0x8221FDB0  lwz  r11, 0xC(vtable)   ;  slot 3 == PostCollisionUpdate
-    // (UpdateAllBehaviours' twin instruction is a direct `bl BehaviourHelper::Update`.)
-    //
-    // ⚠️ THE PROLOGUE IS GATED exactly as UpdateAllBehaviours' is, and for the same reasons --
-    // see that banner. What this one additionally publishes into the shared info before the
-    // loop (0x8221F8E0..0x8221F9F0: mCameraModifier at +0x5F0, mbUseControlPauseBehaviour /
-    // mbLookback at +0x600/+0x601 off the un-homed ControllerInfo and AllVehicleData::
-    // GetPlayer()+0x44A, mpBehaviourManager at +0x5C0, and a vperm'd +0x590 pair) is the same
-    // family of un-homed reads. The CALLER (MainDirector::UpdateCameraBehavioursPostScene)
-    // already seeds mpBehaviourManager and leaves the rest at the values its own gate list
-    // documents, so nothing here is fabricated.
-    // ------------------------------------------------------------------------
+    // ARTIST 8221F870: publish the current controller state without advancing it.
     void BehaviourManager::PostCollisionUpdateAllBehaviours(bool lbPaused,
                                                             BehaviourSharedInfo& lrSharedInfo,
                                                             const ControllerInfo& lrControllerInfo,
                                                             bool lbArg,
                                                             DebugPrinter& lrDebugPrinter)
     {
-        (void)lrControllerInfo;
         (void)lbArg;
         (void)lrDebugPrinter;
-
-        // ⚠️ GATE: the responder / rotation-controller / shared-info-staging prologue (banner).
+        PublishControllerState(lbPaused, lrSharedInfo, lrControllerInfo);
+        lrSharedInfo.mpBehaviourManager = this;
+        lrSharedInfo.mRotationController = mRotationController;
+        lrSharedInfo.mSphericalRotationController = mSphericalRotationController;
+        lrSharedInfo.mfTempFOVBoostAmount = mTempCameraBoostResponder.GetFOVBoostAmount();
+        lrSharedInfo.mfSpeedRatio = mSpeedResponder.GetSpeedRatio();
+        lrSharedInfo.mfLastHandbrakeTime = mfLastHandbrakeTime;
 
         const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
         for (u32 luEntry = 0; luEntry < luNumBehaviours; ++luEntry)

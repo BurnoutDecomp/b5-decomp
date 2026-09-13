@@ -2,6 +2,8 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_ATTACHMENT_TRUCK_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Vector3 (the 16-byte position)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (the !mbFirstFrame guard)
 
@@ -68,6 +70,13 @@ public:
         f32 mfConvergenceTimeSecs;  // +0x04  "Convergence Time Secs"
     };
 
+    void Construct() { mbFirstFrame = true; }
+    void Set(VecFloat lRatio, rw::math::vpu::Vector3 lVelocity,
+             rw::math::vpu::Vector3 lPosition);
+    void Update(rw::math::vpu::Vector3 lPosition, rw::math::vpu::Vector3 lVelocity,
+                VecFloat lTimestep, const Parameters& lrParams);
+    rw::math::vpu::Vector3 GetVelocity() const;
+
 private:
 
     // FLAG: only the members GetPosition reads are modelled at their asm-attested offsets; the
@@ -76,7 +85,9 @@ private:
     //   source); mbFirstFrame is the byte at +0x40 (the lbz source). A reserved span places the
     //   flag at its attested offset.
     rw::math::vpu::Vector3 mPosition;                  // +0x00  cached world position (lvx128 source)
-    u8                     maReserved10[0x40 - 0x10];  // +0x10 .. +0x3F (truck rig state not modelled here)
+    rw::math::vpu::Vector3 mDirection;
+    VecFloat mSpeed;
+    VecFloat mDesiredSpeedRatio;
     u8                     mbFirstFrame;               // +0x40  set until the truck has been stepped once
 };
 

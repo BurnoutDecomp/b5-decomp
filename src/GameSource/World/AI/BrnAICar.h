@@ -120,6 +120,7 @@ namespace BrnAI
         Vector3 GetDirection() const;         // X360 AICar::GetDirection       @0x8276B488
         Vector3 GetUsefulDirection() const;   // X360 AICar::GetUsefulDirection @0x82770028
         Vector3 GetVelocity() const;          // X360 AICar::GetVelocity        @0x8276B570
+        Vector3 GetVelocityDirection() const; // X360 0x8276FF48
         f32     GetSpeed() const;             // X360 AICar::GetSpeed           @0x82764D68
         bool    IsOnStartLine() const;        // X360 AICar::IsOnStartLine      @0x82764E68
         // GetRight is inlined on the X360 build (no standalone symbol) but IS a DWARF accessor

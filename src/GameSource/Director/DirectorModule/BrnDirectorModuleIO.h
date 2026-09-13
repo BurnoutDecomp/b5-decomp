@@ -1,3 +1,4 @@
+#include "GameSource/Director/SharedIO/BrnDirectorControllerInfo.h"
 #pragma once
 
 #include "types.hpp"
@@ -91,57 +92,6 @@ namespace BrnDirector
 {
 namespace DirectorIO
 {
-    struct ControlInput
-    {
-        // ---- ADDITIVE (MainDirector::UpdateArbitrator @0x82271120 / Arbitrator::Update
-        //      @0x8226ADA0) --------------------------------------------------------------
-        // Camera-control bytes the director reads out of this block. X360-attested as byte
-        // loads at control-block +1 / +2 / +3 / +4:
-        //   * UpdateArbitrator passes controller[3] as Arbitrator::Update's lbCycleCamera and
-        //     controller[2] as its lbCycleCameraHeld (the "tap to cycle / hold for slow-mo"
-        //     pair UpdateCameraCycleControl consumes);
-        //   * Arbitrator::Update's NORMAL case stores controller[4] straight into
-        //     SharedCameraContainer::mbLookbackOverride;
-        //   * MainDirector::UpdateAttribSys @0x8221AFD0 gates its ENTIRE body on controller[1].
-        //
-        // ⭐⭐ THE NAMES ARE NO LONGER INFERRED (2026-08-02). The DecFIGS DWARF has this whole
-        // block, at GameSource/Director/SharedIO/BrnDirectorControllerInfo.h:42 --
-        // `struct BrnDirector::DirectorIO::ControllerInfo`, a run of bools in declaration
-        // order starting at offset 0:
-        //     :48 mbAnyInput               +0x00
-        //     :49 mbGameTalkRefreshRequest +0x01
-        //     :50 mbCameraButtonHeldDown   +0x02
-        //     :51 mbCycleCameras           +0x03
-        //     :52 mbLookback               +0x04
-        //     :53 mbRequestSloMo           +0x05
-        //     :54 mbTakeScreenshot         +0x06
-        //     :55 mbTempBoredOfCamera      +0x07
-        //     :56 mbTempBoosting           +0x08
-        //     :57 mbHandbrake              +0x09
-        //     :58 Vector2 mCarModifier / :59 Vector2 mCameraModifier / :61 DebugController
-        // The three previously-inferred names land EXACTLY on the DWARF's +2/+3/+4 roles,
-        // which is what makes this a retrofit rather than a rewrite; the accessors keep their
-        // existing spellings (callers depend on them) with the DWARF member named alongside.
-        // FLAG: the block interior below is still modelled as maPad -- only the byte offsets
-        //   and these roles are pinned. Retype to the DWARF struct when its own home lands.
-        bool IsCycleCameraPressed() const { return maPad[3] != 0; }   // +0x03 mbCycleCameras
-        bool IsCycleCameraHeld() const    { return maPad[2] != 0; }   // +0x02 mbCameraButtonHeldDown
-        bool IsLookbackHeld() const       { return maPad[4] != 0; }   // +0x04 mbLookback
-
-        // ⭐⭐ +0x01 mbGameTalkRefreshRequest -- the LIVE-TUNING refresh request. GameTalk is
-        // the EA authoring tool that edits AttribSys values on a running build; this byte is
-        // its "re-read the attribs" pulse. It is the ONLY gate on
-        // MainDirector::UpdateAttribSys, which is why that function is NOT a per-frame
-        // re-seed: on a build with no GameTalk connection it never runs its body at all.
-        // ⇒ MainDirector::ProcessNewVehicleEvents is the ONLY thing that seeds the two
-        // gameplay cameras' Parameters on this build. (Corrects the "per-frame re-seed"
-        // reading that had been carried in the camera chain map.)
-        bool IsGameTalkRefreshRequested() const { return maPad[1] != 0; }   // +0x01
-
-        u8 maPad[48];
-        BrnDirector::Camera::Utils::DebugController mDebugController;
-    };
-
     struct InputBuffer : public CgsModule::IOBuffer
     {
         // X360 @0x822393D0 -- the buffer's OWN Construct, which the console's

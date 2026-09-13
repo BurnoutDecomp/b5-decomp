@@ -228,6 +228,10 @@ namespace BrnAI
         // ...remaining DWARF methods elided from this minimal home...
 
     private:
+        Vector3 ComputeNearestPositionInSegment(Vector3 lPosition, Vector3 lStart, Vector3 lEnd);
+        f32 ComputeAISectionWidth(const AISection* lpSection, Vector2 lDirection);
+        bool UpdateResetOnTrackSectionUsingRoute(AICar* lpCar);
+        void UpdateResetOnTrackSectionUsingCurrentSection(AICar* lpCar);
         AICar* GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex);   // @0x82765878 (this batch)
 
         // =========================================================================================

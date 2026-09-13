@@ -3,12 +3,113 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"      // AIModuleResultInterface
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint
+#include "GameSource/World/AI/BrnAIPortal.h"
+#include "GameSource/World/AI/Route/BrnRoute.h"
+#include "rw/math/vpu/vector3_operation.h"
+#include <cmath>
 
 // BrnAI::ResetOnTrackManager out-of-line members: Construct (@0x82791A48) and GetAICar
 // (@0x82765878), plus the file-scope static perf-mon handles.
 
 namespace BrnAI
 {
+    // ARTIST 82768908: projection onto a finite 3D portal segment.
+    Vector3 ResetOnTrackManager::ComputeNearestPositionInSegment(Vector3 lPosition, Vector3 lStart, Vector3 lEnd)
+    {
+        using namespace rw::math::vpu;
+        const Vector3 segment = lEnd - lStart;
+        CGS_ASSERT(!IsZero(segment, 1.5258789e-5f), "!RwMath::IsSimilar( lLineStart, lLineEnd )");
+        const Vector3 direction = Normalize(segment);
+        const f32 distance = Dot(direction, lPosition - lStart);
+        if (distance <= 0.0f) return lStart;
+        if (distance * distance >= MagnitudeSquared(segment)) return lEnd;
+        return lStart + direction * distance;
+    }
+
+    // ARTIST 82778250: choose the pair of opposite footprint edges across the
+    // travel direction and average their lengths. The corners are packed XZ pairs.
+    f32 ResetOnTrackManager::ComputeAISectionWidth(const AISection* lpSection, Vector2 lDirection)
+    {
+        const auto* c = lpSection->mpaCorners;
+        auto length = [](f32 x, f32 y) { return std::sqrt(x*x + y*y); };
+        const f32 ax = c[1].x-c[0].x, ay = c[1].y-c[0].y;
+        const f32 bx = c[2].x-c[1].x, by = c[2].y-c[1].y;
+        const f32 a = length(ax, ay), b = length(bx, by);
+        const f32 da = std::fabs((lDirection.x*ax + lDirection.y*ay) / a);
+        const f32 db = std::fabs((lDirection.x*bx + lDirection.y*by) / b);
+        return da > db ? 0.5f * (b + length(c[0].x-c[3].x, c[0].y-c[3].y))
+                       : 0.5f * (a + length(c[3].x-c[2].x, c[3].y-c[2].y));
+    }
+
+    bool ResetOnTrackManager::UpdateResetOnTrackSectionUsingRoute(AICar* lpCar)
+    {
+        using namespace rw::math::vpu;
+        const Route* route = lpCar->GetRoute();
+        if (!lpCar->HasValidRoute() || route->GetNodeCount() < 2 || static_cast<s32>(lpCar->meRouteFindingStyle) != 1) return false;
+        u16 index = static_cast<u16>(lpCar->miNextRouteNodeIndex);
+        if (index == 0) index = 1;
+        const RouteNode* previous = route->GetNode(index-1);
+        const RouteNode* current = route->GetNode(index);
+        const AISection* section = mpAISectionData->GetAISection(current->muSectionIndex);
+        if (section->mu8NumPortals < 2 || (section->mx8Flags & 6)) return false;
+        const u8 end = static_cast<u8>(current->muPad0x0E);
+        u8 start = 255;
+        for (u8 p = 0; p < section->mu8NumPortals; ++p)
+            if (section->GetPortal(p)->GetLinkSectionIndex() == previous->muSectionIndex) { start = p; break; }
+        if (start == 255 || start == end) return false;
+        const Vector3 from = section->GetPortal(start)->GetPosition();
+        const Vector3 to = section->GetPortal(end)->GetPosition();
+        if (lpCar->mbIsPlayer && !(Dot(to-from, lpCar->GetVelocityDirection()) > -std::cos(1.919862151145935f))) return false;
+        lpCar->UpdateResetOnTrackSection(static_cast<EResetSpeedType>(0), current->muSectionIndex, start, end);
+        return true;
+    }
+
+    // ARTIST 82786338: reset pairs may redirect off-road/special sections;
+    // ordinary sections need exactly two usable portals.
+    void ResetOnTrackManager::UpdateResetOnTrackSectionUsingCurrentSection(AICar* lpCar)
+    {
+        using namespace rw::math::vpu;
+        u16 sectionIndex = lpCar->muBestSectionIndex;
+        if (sectionIndex == AICar::KI_INVALID_SECTION_INDEX) return;
+        const SectionResetPair* pair = 0;
+        bool foundPair = false, usePair = false;
+        for (u32 i = 0; i < mpAISectionData->muNumSectionResetPairs; ++i)
+        {
+            pair = &mpAISectionData->mpaSectionResetPairs[i];
+            if (pair->muStartSectionIndex != sectionIndex) continue;
+            if (!lpCar->mbIsInResetPairSection || (pair->meResetSpeed >= 16 && pair->meResetSpeed <= 19))
+            {
+                usePair = true;
+                sectionIndex = pair->muResetSectionIndex;
+            }
+            foundPair = true;
+            break;
+        }
+        lpCar->mbIsInResetPairSection = foundPair;
+        const AISection* section = mpAISectionData->GetAISection(sectionIndex);
+        u8 first = 0, second = 1;
+        u32 count = 0;
+        if (!usePair)
+        {
+            for (u8 p = 0; p < section->mu8NumPortals; ++p)
+            {
+                const AISection* linked = mpAISectionData->GetAISection(section->GetPortal(p)->GetLinkSectionIndex());
+                if (!linked->IsUnsuitableForResetOnTrackLink() || section->IsUnsuitableForResetOnTrackLink() || lpCar->mbIsInShowtime)
+                {
+                    if (count == 0) first = p; else second = p;
+                    ++count;
+                }
+            }
+        }
+        if (!usePair && !(count == 2 && (lpCar->mbIsInShowtime || !(section->mx8Flags & 6)))) return;
+        const Vector3 from = section->GetPortal(first)->GetPosition();
+        const Vector3 to = section->GetPortal(second)->GetPosition();
+        CGS_ASSERT(first != second, "luFirstGoodPortalIndex != luSecondGoodPortalIndex");
+        const Vector3 direction = usePair ? Normalize(lpCar->GetPosition() - section->GetMiddle()) : lpCar->GetVelocityDirection();
+        const EResetSpeedType resetSpeed = static_cast<EResetSpeedType>(usePair ? pair->meResetSpeed : 0);
+        if (Dot(to-from, direction) > 0.0f) lpCar->UpdateResetOnTrackSection(resetSpeed, sectionIndex, first, second);
+        else lpCar->UpdateResetOnTrackSection(resetSpeed, sectionIndex, second, first);
+    }
     // File-scope static perf-mon handles (DWARF BrnResetOnTrackManager.h:349-351;
     // X360 dword_82F3026C / dword_82F30274 / dword_82F30270).
     s32 ResetOnTrackManager::miInitialCoordinatesPM;
@@ -223,46 +324,8 @@ namespace BrnAI
         mResetOnTrackRequestQueue.Append(*lpRequest);
     }
 
-    // ---------------------------------------------------------------------------------------------
-    // ComputeInitialCoordinatesStandard @0x82783DD8   -- A MINIMAL-COMPLETE SLICE
-    //
-    //   0x82783E28  AICar* car = GetAICar(leGlobalRaceCarIndex)
-    //   0x82783E30  v9  = car->meCarState               (lwz  0x14C8)
-    //   0x82783E34  v10 = car->muResetOnTrackSectionIndex (lhz 0x1530)
-    //   0x82783E44  if (!(v9 == 0 || v9 == 1)) goto FAIL          <- IsActive()
-    //   0x82783E4C  if (v10 == 0x7FFF)          goto FAIL         <- no reset section
-    //   ---- everything past here is the GEOMETRY, and it is PARKED ----
-    //   0x82783E54  data = mpAISectionData.operator->()
-    //               sec  = AISectionsData::GetAISection(data, v10)
-    //               start = *AISection::GetPortal(sec, car->maPortalIndices[0])   (lbz 0x1538)
-    //               end   = *AISection::GetPortal(sec, car->maPortalIndices[1])   (lbz 0x1539)
-    //               assert(sec != NULL) ; assert(!IsSimilar(start, end)) ; dir = Normalise(end-start)
-    //               assert(IsValid(dir))
-    //               pos = ComputeNearestPositionInSegment(car->GetLastGoodPosition(), start, end)
-    //               if (sec->flags(+23) & 8)   pos += <lateral offset from ComputeAISectionWidth>
-    //               if (MagnitudeSquared2D(car->GetLastGoodPosition() - pos) > 40000.0f) goto FAIL
-    //               out->{mpAISection, mPosition, mDirection} = {sec, pos, dir} ; return true
-    //   FAIL: return false
-    //
-    // ⛔ [FLAG PC bring-up] THE GEOMETRY ARM IS PARKED. ⚠ CORRECTED 2026-09-03 (aiwave A11) --
-    // the note that stood here was false in both of its claims. It said the arm is "UNREACHABLE
-    // ... every AICar is INACTIVE": the AI car feed has landed and the player's car is IN_RANGE,
-    // so the IsActive() gate now PASSES and this park is reached on every crash reset. And it
-    // said the arm "needs FOUR functions none of which exists in this tree": two of the four are
-    // now here (AISectionsData::GetAISection, AISection::GetPortal), as are the AISection
-    // interior and all three AICar members it named (muResetOnTrackSectionIndex @+0x1530,
-    // muResetOnTrackStartPortal/EndPortal @+0x1538/+0x1539 -- all three are named and
-    // static_asserted in BrnAICar.h now).
-    // WHAT IS ACTUALLY LEFT is two ResetOnTrackManager members that have never been reconstructed:
-    // ComputeNearestPositionInSegment @0x82768908 (DWARF BrnResetOnTrackManager.cpp:39) and
-    // ComputeAISectionWidth @0x82778250 (:96), ~320 instructions between them.
-    // ⭐ THE COST OF THE PARK IS BOUNDED AND KNOWN: reset type 1 keeps resolving to
-    // E_STATE_FAILURE, which sends RaceCarEntityModule::ProcessResetOnTrackResultQueue down the
-    // ActiveRaceCar::GetResetCoords arm -- the crash-recovery path that has been working since
-    // 2026-08-26. Landing it would upgrade a crashed player's reset from "where I last was" to
-    // "the nearest point on the road", not unblock anything.
-    // DELETE-WHEN ComputeNearestPositionInSegment and ComputeAISectionWidth land.
-    // ---------------------------------------------------------------------------------------------
+    // ARTIST 82783DD8: project the last good position onto the stored recovery
+    // section, apply its authored lateral bias, and reject distant stale sections.
     bool ResetOnTrackManager::ComputeInitialCoordinatesStandard(ResetOnTrackCoords* lpOutCoords,
                                                                EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
@@ -276,11 +339,26 @@ namespace BrnAI
             return false;
         }
 
-        // [FLAG PC bring-up] the second gate (muResetOnTrackSectionIndex @+0x1530 ==
-        // KI_INVALID_SECTION_INDEX) and the whole geometry arm below it -- see the banner. The
-        // member has no name in BrnAICar.h yet, so it is not read here rather than read by raw
-        // offset. UNREACHABLE today: the IsActive() gate above always refuses first.
-        return false;
+        if (lpAICar->muResetOnTrackSectionIndex == AICar::KI_INVALID_SECTION_INDEX) return false;
+        using namespace rw::math::vpu;
+        const AISection* section = mpAISectionData->GetAISection(lpAICar->muResetOnTrackSectionIndex);
+        const Vector3 start = section->GetPortal(lpAICar->muResetOnTrackStartPortal)->GetPosition();
+        const Vector3 end = section->GetPortal(lpAICar->muResetOnTrackEndPortal)->GetPosition();
+        CGS_ASSERT(!IsZero(start-end, 1.5258789e-5f), "!RwMath::IsSimilar( lStartPortalPosition, lEndPortalPosition )");
+        const Vector3 direction = Normalize(end-start);
+        CGS_ASSERT(IsValid(direction), "RwMath::IsValid( lDirection )");
+        Vector3 position = ComputeNearestPositionInSegment(lpAICar->GetLastGoodPosition(), start, end);
+        if (section->mx8Flags & 8)
+        {
+            const f32 width = ComputeAISectionWidth(section, Vector2{direction.x,direction.z,0,0});
+            position = position + Cross(direction, Vector3{0,1,0,0}) * (0.3f * width);
+        }
+        const Vector3 delta = lpAICar->GetLastGoodPosition() - position;
+        if (delta.x*delta.x + delta.z*delta.z > 40000.0f) return false;
+        lpOutCoords->mpAISection = section;
+        lpOutCoords->mPosition = position;
+        lpOutCoords->mDirection = direction;
+        return true;
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -477,16 +555,48 @@ namespace BrnAI
 
         if (ComputeResetOnTrack(&lCoords, lpRequest))
         {
-            // [FLAG PC bring-up] the SUCCESS arm -- see the banner. Unreachable today; the
-            // direction override switch and the "not type 1" AICar tail both need unnamed
-            // BrnAICar.h members. The result below carries the computed pose with the request's
-            // own speed, which is the console's `default:` switch arm.
+            AICar* car = GetAICar(lpRequest->GetGlobalRaceCarIndex());
+            f32 speed = lpRequest->GetResetSpeed();
+            // ARTIST 82799D84 jump table; speed constants initialized at 82C692B0/D0.
+            const f32 slow = 60.0f * 0.44704f;
+            const f32 fast = 140.0f * 0.44704f;
+            switch (car->meResetSpeedType)
+            {
+            case E_RESET_SPEED_TYPE_NONE: case E_RESET_SPEED_TYPE_NONE_AND_IGNORE: speed = 0; break;
+            case E_RESET_SPEED_TYPE_SLOW: speed = slow; break;
+            case E_RESET_SPEED_TYPE_FAST: speed = fast; break;
+            case E_RESET_SPEED_TYPE_SLOW_NORTH_FACE: speed = slow; lCoords.mDirection = {0,0,-1,0}; break;
+            case E_RESET_SPEED_TYPE_SLOW_SOUTH_FACE: speed = slow; lCoords.mDirection = {0,0,1,0}; break;
+            case E_RESET_SPEED_TYPE_SLOW_EAST_FACE: speed = slow; lCoords.mDirection = {-1,0,0,0}; break;
+            case E_RESET_SPEED_TYPE_SLOW_WEST_FACE: speed = slow; lCoords.mDirection = {1,0,0,0}; break;
+            case E_RESET_SPEED_TYPE_SLOW_REVERSE: case E_RESET_SPEED_TYPE_REVERSE_AND_IGNORE_SLOW:
+                speed = slow; lCoords.mDirection = rw::math::vpu::Negate(lCoords.mDirection); break;
+            case E_RESET_SPEED_TYPE_STOP_REVERSE: case E_RESET_SPEED_TYPE_REVERSE_AND_IGNORE:
+                speed = 0; lCoords.mDirection = rw::math::vpu::Negate(lCoords.mDirection); break;
+            case E_RESET_SPEED_TYPE_STOP_NORTH_FACE: speed = 0; lCoords.mDirection = {0,0,-1,0}; break;
+            case E_RESET_SPEED_TYPE_STOP_SOUTH_FACE: speed = 0; lCoords.mDirection = {0,0,1,0}; break;
+            case E_RESET_SPEED_TYPE_STOP_EAST_FACE: speed = 0; lCoords.mDirection = {-1,0,0,0}; break;
+            case E_RESET_SPEED_TYPE_STOP_WEST_FACE: case E_RESET_SPEED_TYPE_WEST_AND_IGNORE:
+                speed = 0; lCoords.mDirection = {1,0,0,0}; break;
+            case E_RESET_SPEED_TYPE_STOP_NORTH_EAST_FACE: speed = 0; lCoords.mDirection = {-0.707f,0,0.707f,0}; break;
+            case E_RESET_SPEED_TYPE_STOP_SOUTH_WEST_FACE: speed = 0; lCoords.mDirection = {0.707f,0,-0.707f,0}; break;
+            default: break;
+            }
             lResult.Construct(AIModuleIO::ResetOnTrackResult::E_STATE_SUCCESS,
                               lpRequest->GetGlobalRaceCarIndex(),
-                              lpRequest->GetResetSpeed(),
+                              speed,
                               lCoords.mPosition,
                               lCoords.mDirection);
             lpResults->GetResetOnTrackResultQueue()->AddEvent(lResult);
+
+            if (lpRequest->GetResetType() != E_RESET_TYPE_STANDARD)
+            {
+                car->mfWrongWayTime = 0.0f;
+                car->GetRoute()->meStatus = Route::E_STATUS_UNINITIALISED;
+                car->GetRoute()->miNodeCount = 0;
+                car->muBestSectionIndex = AICar::KI_INVALID_SECTION_INDEX;
+                car->muDefaultSectionIndex = AICar::KI_INVALID_SECTION_INDEX;
+            }
 
             RecentResetEntry lEntry;
             lEntry.mPosition = lCoords.mPosition;
@@ -563,11 +673,7 @@ namespace BrnAI
     // console latches r29 at 0x8279A8CC. Nothing between them changes it, but the order is the
     // console's.
     //
-    // ⛔ [FLAG PC bring-up] THE 35-CAR SECTION REFRESH IS PARKED. Both of its targets are absent
-    // (UpdateResetOnTrackSectionUsingRoute @0x82786100, ...UsingCurrentSection @0x82786338 --
-    // 346 pseudocode lines over the same unmounted AI section-data readers) and its two extra
-    // flag reads (AICar +0x1541 / +0x1543) have no names in BrnAICar.h. ⭐ THE GATE ABOVE IT IS
-    // REPRODUCED, so the park is provably unreached: every AICar is INACTIVE.
+    // Refresh each active car's recovery section after processing the request queue.
     // [FLAG PC boot gate] the streamed three-value assert at :138 -- the tree drops streamed
     // assert payloads by policy; the condition itself is kept as a plain CGS_ASSERT.
     // ---------------------------------------------------------------------------------------------
@@ -661,28 +767,12 @@ namespace BrnAI
             }
         }
 
-        // [FLAG PC bring-up] the 35-car reset-on-track section refresh -- see the banner. The
-        // console's own state gate is reproduced so the park is provably unreached.
-        for (s32 liCar = 0; liCar < 35; ++liCar)
+        for (s32 i = 0; i < 35; ++i)
         {
-            const AICar* lpAICar =
-                GetAICar(static_cast<EGlobalRaceCarIndex>(liCar));
-            if (lpAICar->IsActive())
-            {
-                static bool sbReportedParkedSectionRefresh = false;
-                if (!sbReportedParkedSectionRefresh)
-                {
-                    sbReportedParkedSectionRefresh = true;
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        *CgsDev::Log::gpDebugPrint
-                            << "[rot] PARKED: ResetOnTrackManager::UpdateResetOnTrackSectionUsing"
-                               "{Route,CurrentSection} (X360 0x82786100 / 0x82786338) are not "
-                               "reconstructed -- AI car " << liCar << " is ACTIVE and its "
-                               "reset-on-track section will not update.\n";
-                    }
-                }
-            }
+            AICar* car = GetAICar(static_cast<EGlobalRaceCarIndex>(i));
+            if (car->IsActive() && (car->mbIsInShowtime || (!car->mbIsInAir && !car->mbIsCrashing
+                && !UpdateResetOnTrackSectionUsingRoute(car))))
+                UpdateResetOnTrackSectionUsingCurrentSection(car);
         }
     }
 }

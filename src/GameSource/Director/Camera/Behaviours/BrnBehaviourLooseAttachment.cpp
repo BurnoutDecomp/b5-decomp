@@ -19,11 +19,74 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"   // Utils::Tweaker::Construct (slot 6)
 
 #include <cstddef>   // offsetof
+#include "rw/math/vpu/matrix44affine_operation.h"
 
 namespace BrnDirector
 {
 namespace Camera
 {
+
+// ARTIST 82246738. The direction remains live until the target is locked;
+// detachment then carries the previous eye with a decaying attachment velocity.
+bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
+{
+    using namespace rw::math::vpu;
+    if (mTarget.mbSet && !mTarget.IsValid(*lrInfo.GetWorld())) Fail(lrCamera, 11);
+    if (!mAttachment.IsValid(*lrInfo.GetWorld())) Fail(lrCamera, 11);
+    mCollisionPolicy.SetVehicleRef(mAttachment);
+    mCollisionPolicy.SetTestAgainstWorldOnly(true);
+    mCollisionPolicy.SetUseFrustrumResolver(true);
+    if (HasFailed()) return true;
+    const VehicleInfo& attachment = *mAttachment.Get(lrInfo.GetWorld());
+    if (!IsPrepared())
+    {
+        if (mTarget.mbSet)
+        {
+            CGS_ASSERT(mTarget != mAttachment, "mTarget != mAttachment");
+            const Vector3 target = mTarget.Get(lrInfo.GetWorld())->mRaceCarState.mTransform.Pos();
+            mWorldSpaceOffsetFromCar = attachment.mRaceCarState.mTransform.Pos() - target;
+            if (mpParameters->mbLookFromTarget) mWorldSpaceOffsetFromCar = -mWorldSpaceOffsetFromCar;
+            mWorldSpaceOffsetFromCar.y = 0;
+            CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), "!IsZero(mWorldSpaceOffsetFromCar)");
+            mWorldSpaceOffsetFromCar = Normalize(mWorldSpaceOffsetFromCar) * mpParameters->mfDistance;
+            if (mbTargetVectorLock) SetPrepared();
+        }
+        else
+        {
+            mWorldSpaceOffsetFromCar = attachment.mRaceCarState.mTransform.zAxis * mpParameters->mfDistance;
+            SetPrepared();
+        }
+        if (mbDetached) SetPrepared();
+    }
+    lrCamera.mState_uFlags |= 2;
+    const f32 dt = lrInfo.GetTimestep(GetTimestepType());
+    if (mbDetached && !mbFirstFrame)
+    {
+        lrCamera.mTransform.Pos() = lrCamera.mTransform.Pos() + attachment.mRaceCarState.mLinearVelocity
+            * ((1.0f - mfDetachedAmount) * lrInfo.GetTimestep(Timestep::E_WORLD_NO_SLOMO));
+        mfDetachedAmount += (1.0f - mfDetachedAmount) * mpParameters->mfDetachLerpAmount;
+    }
+    else
+    {
+        Matrix44Affine transform = attachment.mRaceCarState.mTransform;
+        mPositionLag.Update(mpParameters->mPositionLagParams, dt, transform);
+        const Vector3 position = attachment.mRaceCarState.mTransform.Pos();
+        transform = Utils::CreateLookAt(position + mWorldSpaceOffsetFromCar, position);
+        transform.Pos().y += mpParameters->mfHeight;
+        transform = Mult(MakeRotationZ(mpParameters->mfDutch * 0.017453292f), transform);
+        transform = Mult(MakeRotationX(mpParameters->mfPitch * 0.017453292f), transform);
+        mShake.Update(transform, mpParameters->mShakeParams, mRandom, dt, 1.0f);
+        lrCamera.mTransform = transform;
+        lrCamera.ValidateTransformWithDebugInfo();
+        lrCamera.SetFOV(mpParameters->mfField54);
+    }
+    const auto& impact = mpParameters->mImpact;
+    mImpact.GetCameraShake().Update(lrCamera.mTransform, impact.mShakeParams, mRandom,
+        impact.mfShakeFrequencyScale * dt, impact.mfShakeMagnitude * mImpact.GetImpactFactor());
+    mImpact.SetImpactFactor(mImpact.GetImpactFactor() * (1.0f - impact.mfShakeDecayFactor));
+    mbFirstFrame = false;
+    return true;
+}
 
 // The pool bucket this behaviour routes to. AllocateBehaviour<TBehaviour> bakes the choice from
 // sizeof(TBehaviour): at or under the small pool's 1600-byte bucket it takes one of the twenty

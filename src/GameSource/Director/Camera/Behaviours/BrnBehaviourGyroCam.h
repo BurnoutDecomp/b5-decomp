@@ -2,6 +2,10 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_GYRO_CAM_H
 
 #include "types.hpp"
+#include "GameSource/Director/Camera/Utils/BrnLooker.h"
+#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"
+#include "GameSource/Director/Camera/Behaviours/BrnAttachmentTruck.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert + the rig asserts)
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Vector3 (SetWorldSpaceNormalizedVectorFromCar)
 #include "rw/math/vpu/vector3_operation.h"            // MagnitudeSquared (the IsSimilar magnitude assert)
@@ -51,12 +55,7 @@
 // Update, GetCollisionPolicy, SetupTweaker, GetName and nothing else). The class introduces NO
 // extra virtuals, so its table is eight words, not ten.
 //
-// FLAG (not transcribed -- a DOCUMENTED GAP, not a fabrication): slot 2 (Update, the ~500-line
-//   rig that drives the camera off the tracked car) and slot 6 (SetupTweaker) are NOT declared
-//   here, so both keep the base's defaults (Update returns true and leaves the camera
-//   untouched; SetupTweaker does nothing). Slot 0 (Construct) IS declared, but only PARTIALLY
-//   transcribed -- see the gate on its body below.
-//   DELETE-WHEN: the gyro rig TU lands.
+// Update drives the tracked-car rig. SetupTweaker retains the base default.
 //
 // LAYOUT AUTHORITY: the declaration reference member list for this class -- mpParameters,
 // mVisibilityCollisionPolicy, mVehicleAttachmentCollisionPolicy, mTransform, mLooker,
@@ -156,6 +155,29 @@ public:
         // Declared so the serialiser's Serialise<Parameters> can drive it by name.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
+        // ARTIST 821FA010. These defaults are also the starting point for every
+        // authored gyro entry in BehaviourParameterBank::Construct.
+        void Construct()
+        {
+            meType = eBehaviourGyroCam;
+            miParamWord1 = 0;
+            mLookerParams.Construct();
+            mShakeParams.Construct();
+            mLagParams.Construct();
+            mAttachmentTruckParams.mfInitialOffsetDist = 4.0f;
+            mAttachmentTruckParams.mfConvergenceTimeSecs = 0.5f;
+            mfSlowDistance = 3.0f; mfSlowHeight = 0.2f; mfSlowPitch = 0.0f;
+            mfFastDistance = 9.0f; mfFastHeight = 1.0f; mfFastPitch = 0.0f;
+            mfField_B0 = 60.0f;
+            mfBlendFactorBlendFactor = 0.01f;
+            mfMinimumBlendFactor = 0.001f;
+            mfMaximumBlendFactor = 0.01f;
+            mfHeightDistanceBlendFactor = 0.1f;
+            mfHeightDistanceVelocityRange = 40.0f;
+            mbUseTruck = mbUseSideVector = mbInvertVector = false;
+            mbStickToGround = true;
+        }
+
         EBehaviourTypeGyroCam GetType() const
         {
             return static_cast<EBehaviourTypeGyroCam>(meType);
@@ -167,10 +189,10 @@ public:
 
         // --- embedded serialised sub-blocks: size-exact 4-byte-aligned raw storage, cast to the
         //     canonical sub-Parameters type in the .cpp (walked as nested named sections) ---
-        u32  maShakeParams[16 / 4];                     // +0x08  "Shake Params"     Utils::CameraShake::Parameters (16B -> +0x18)
-        u8   maReserved18[0x2C - 0x18];                 // +0x18..+0x2B  un-serialised gyro-cam rig state
-        u32  maLookerParams[100 / 4];                   // +0x2C  "Looker Params"    Utils::Looker::Parameters (100B -> +0x90)
-        u32  maAttachmentTruck[8 / 4];                  // +0x90  "Attachment truck" AttachmentTruck::Parameters (8B -> +0x98)
+        Utils::CameraShake::Parameters mShakeParams;
+        Utils::PositionLag::Parameters mLagParams;
+        Utils::Looker::Parameters mLookerParams;
+        AttachmentTruck::Parameters mAttachmentTruckParams;
 
         // --- f32 tunables (debug-menu SetStep 0.01) ---
         f32  mfSlowDistance;                 // +0x98  "Slow Distance"
@@ -202,6 +224,8 @@ public:
 
     // Seed the live height/distance/pitch/blend scalars from the adopted block.
     bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1
+
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;
 
     // Hand back whichever of the two embedded policies is active.
     CollisionPolicy* GetCollisionPolicy() override;                                // slot 5
@@ -271,7 +295,8 @@ private:
 
     // +0x4B0 .. +0x50F: mTransform (Matrix44Affine) and mLooker -- rig members with no home
     // type yet. Reserved so the members after them keep the console's order.
-    u8                               maReserved4B0[0x510 - 0x4B0];
+    Matrix44Affine mTransform;
+    Utils::Looker mLooker;
 
     // +0x510: the vehicle this rig hangs off. Construct seeds it {E_PLAYER_CAR, -1, 0, set} and
     // AttachToRaceCar re-binds it to a race car -- the four stores the console emits inline.
@@ -283,7 +308,11 @@ private:
 
     // +0x550 .. +0x61F: mOriginalPoint, mPositionLag, mRandom, mShake, mAttachmentTruck --
     // rig members with no home type yet.
-    u8                               maReserved550[0x620 - 0x550];
+    Vector3 mOriginalPoint;
+    Utils::PositionLag mPositionLag;
+    CgsNumeric::Random mRandom;
+    Utils::CameraShake mShake;
+    AttachmentTruck mAttachmentTruck;
 
     // The live rig scalars Prepare seeds off the adopted parameter block.
     f32                              mfHeight;          // +0x620  <- mfFastHeight
@@ -305,61 +334,30 @@ private:
 //                                                              here mParamWord1 (see its FLAG)
 //   stw  r5, 0x14(r6)                                        ; mpParameters = 0
 //   ... ~40 stores across +0x20..+0x25F                      ; VisibilityCollisionPolicy::Construct,
-//                                                              inlined  (GATED -- see below)
+//                                                              inlined
 //   bl   CollisionPolicyAttachedToVehicle::Construct(r6+0x260, 0)
 //   stb  r31(=1), 0x4AC(r6)                                  ; policy-relative +0x24C ==
 //                                                              mbTestAgainstWorldOnly
-//   ... the Random / Looker / PositionLag / shake / truck seeds inside +0x4B0..+0x61F (GATED)
+//   ... the Random / Looker / PositionLag / shake / truck seeds inside +0x4B0..+0x61F
 //   stw  r5,  0x510(r6) ; stw r11(=-1), 0x514(r6) ; stw r5, 0x518(r6) ; stb r31(=1), 0x51C(r6)
 //   stb  r5,  0x630/0x631/0x632/0x633(r6)
 // ----------------------------------------------------------------------------
 inline void
 BehaviourGyroCam::Construct()
 {
-    Behaviour::Construct();                       // the seven inlined base stores
-
-    // The console's single `stw 0, 0x10` covers the base's debug-name slot AND this class's
-    // stand-in for it. Behaviour::Construct zeroes the former; mParamWord1 needs its own seed.
-    mParamWord1  = 0;                             // stw 0, 0x10(this)
-    mpParameters = 0;                             // stw 0, 0x14(this)
-
-    // ⚠️ GATE: VisibilityCollisionPolicy::Construct(mVisibilityCollisionPolicy) -- the console's
-    //   ~40-store block across +0x20..+0x25F (the see-through triple, the two 1.5f / 0.5f leaf
-    //   magnitudes, the -1.0f at +0x230 and the can-fail / first-frame pair).
-    //   VisibilityCollisionPolicy::Construct is DECLARATION-ONLY in this tree and this TU is not
-    //   its home, so calling it would put an unresolved external into every link. The policy is
-    //   left as the pool allocation left it, exactly as BehaviourInterpolate::Construct records
-    //   for the same sub-object.
-    //   CONSEQUENCE: the visibility policy is only reachable through GetCollisionPolicy below,
-    //   and only while mbUseVehicleAttachmentCollision is false -- which the takedown states
-    //   clear by raising it through SetUseVehicleAttachmentCollision.
-    //   DELETE-WHEN: VisibilityCollisionPolicy::Construct is bodied.
-
-    mVehicleAttachmentCollisionPolicy.Construct(false);   // bl ...::Construct(this+0x260, 0)
-
-    // The one store the console emits between the policy construct and the rig seeds. It lands
-    // at this+0x4AC, i.e. policy-relative +0x24C -- mbTestAgainstWorldOnly, which the policy's
-    // own Construct had just cleared. The gyro cam therefore resolves against the world only,
-    // never against other vehicles. (this is still live in the same register across the call;
-    // the callee touches neither it nor the constant register the 1 rides in.)
-    mVehicleAttachmentCollisionPolicy.SetTestAgainstWorldOnly(true);   // stb 1, 0x4AC(this)
-
-    // ⚠️ GATE: the rig seeds inside maReserved4B0 / maReserved550 (mTransform, mLooker, the
-    //   CgsNumeric::Random stream the console reseeds in place, mPositionLag, mShake and
-    //   mAttachmentTruck). None of those members has a home type yet, so poking them by offset
-    //   is exactly what the x64 rule forbids.
-    //   DELETE-WHEN: the gyro rig TU lands and those members are named.
-
-    // mAttachedTo: the inlined VehicleRef construct (kind = the player car, no race car bound).
-    mAttachedTo.meType         = BrnDirector::VehicleRef::E_PLAYER_CAR;  // stw 0,  0x510(this)
-    mAttachedTo.miRaceCarIndex = -1;                                     // stw -1, 0x514(this)
-    mAttachedTo.muRef          = 0;                                      // stw 0,  0x518(this)
-    mAttachedTo.mbSet          = true;                                   // stb 1,  0x51C(this)
-
-    mbIsPlanted                     = false;      // stb 0, 0x630(this)
-    mbIsFirstFrameOfPlanted         = false;      // stb 0, 0x631(this)
-    mbIsWorldSpaceVectorSet         = false;      // stb 0, 0x632(this)
-    mbUseVehicleAttachmentCollision = false;      // stb 0, 0x633(this)
+    Behaviour::Construct();
+    mParamWord1 = 0;
+    mpParameters = 0;
+    mVisibilityCollisionPolicy.Construct();
+    mVehicleAttachmentCollisionPolicy.Construct(false);
+    mVehicleAttachmentCollisionPolicy.SetTestAgainstWorldOnly(true);
+    mPositionLag.Construct();
+    mRandom.Construct();
+    mLooker.Construct();
+    mShake.Construct();
+    mAttachmentTruck.Construct();
+    mAttachedTo.Set(BrnDirector::VehicleRef::E_PLAYER_CAR, E_ACTIVE_RACE_CAR_INDEX_INVALID, 0);
+    mbIsPlanted = mbIsFirstFrameOfPlanted = mbIsWorldSpaceVectorSet = mbUseVehicleAttachmentCollision = false;
 }
 
 // ----------------------------------------------------------------------------

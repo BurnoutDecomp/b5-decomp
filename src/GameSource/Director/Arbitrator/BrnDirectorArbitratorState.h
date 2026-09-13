@@ -1,3 +1,4 @@
+#include "GameSource/Director/SharedIO/BrnDirectorControllerInfo.h"
 #ifndef GAMESOURCE_DIRECTOR_ARBITRATOR_BRN_DIRECTOR_ARBITRATOR_STATE_H
 #define GAMESOURCE_DIRECTOR_ARBITRATOR_BRN_DIRECTOR_ARBITRATOR_STATE_H
 
@@ -57,7 +58,7 @@ namespace BrnDirector
     // wrong namespace. See the banner at its home in Camera/SharedIO/BrnPlayerInfo.h.
     class  AllVehicleData;
     class  VehicleTracker;
-    struct ControllerInfo;
+    // ControllerInfo is shared with DirectorIO.
     // ⛔ RETIRED 2026-08-29 (crash-camera wave) -- `struct VehicleInfo;` AT BrnDirector SCOPE WAS
     // A NAMESPACE FORK, the same one BrnDirectorAllVehicleData.h:35 already retired for its own
     // surface and that BrnArbStateCarSelect.cpp / BrnArbStateCrashNav.cpp /
