@@ -1355,6 +1355,34 @@ void ActiveRaceCar::UpdateDeformationState(
     // Summed squared sensor displacement -> the render damage scalar.
     mRenderParams.SetDeformationSquared(lpCarState->GetSummedDisplacementSquared());
 
+    // FLAG PC diagnostic: follow the physical victim and its actual render offsets,
+    // rather than treating a HUD/camera transition as proof of a visible wreck.
+    static const bool sbTraceRivalDamage = getenv("BRN_RIVAL_DAMAGE_DIAG") != 0;
+    static u32 sauRivalDamageFrames[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {};
+    if (sbTraceRivalDamage && meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+        meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)
+    {
+        u32& lruFrame = sauRivalDamageFrames[meActiveRaceCarIndex];
+        if (!mbTakenDown) lruFrame = 0;
+        else if (lruFrame++ < 48 && CgsDev::Log::gpDebugPrint)
+        {
+            f32 lfOffsetSum = 0.0f;
+            const Vector3Plus* lpOffsets = mRenderParams.GetVerletOffsets();
+            for (u32 luPoint = 0; luPoint < 128; ++luPoint)
+                lfOffsetSum += std::fabs(lpOffsets[luPoint].x) +
+                    std::fabs(lpOffsets[luPoint].y) + std::fabs(lpOffsets[luPoint].z);
+            *CgsDev::Log::gpDebugPrint << "[rival-damage] slot=" << static_cast<s32>(meActiveRaceCarIndex)
+                << " crashing=" << (mPhysicsState.mbCrashing ? 1 : 0)
+                << " damaged=" << (mRenderParams.IsDamaged() ? 1 : 0)
+                << " displacement=" << lpCarState->GetSummedDisplacementSquared()
+                << " offsets=" << lfOffsetSum
+                << " pos=" << mPhysicsState.mTransform.Pos().x << "," << mPhysicsState.mTransform.Pos().y
+                << "," << mPhysicsState.mTransform.Pos().z
+                << " angular=" << mPhysicsState.mAngularVelocity.x << "," << mPhysicsState.mAngularVelocity.y
+                << "," << mPhysicsState.mAngularVelocity.z << "\n";
+        }
+    }
+
     // [deform-readback] one-shot measurement: the first NON-ZERO summed displacement seen
     // (the deform-land wave's acceptance metric -- prove the dents are real numbers, not a
     // texture trick). Prints once per boot.

@@ -4,6 +4,7 @@ Requires a built game and mounted data. Evidence includes every steering decisio
 the game log, and the case report. Physics, collision and scoring are never injected.
 """
 import ctypes
+import argparse
 import math
 from pathlib import Path
 import re
@@ -12,6 +13,10 @@ import sys
 import time
 
 root = Path(__file__).resolve().parents[2]
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--case', default='b5-decomp/tests/RivalOrganic.ps1')
+parser.add_argument('--run-name', default='rival_organic')
+args = parser.parse_args()
 kernel = ctypes.WinDLL('kernel32', use_last_error=True)
 kernel.CreateEventW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_wchar_p]
 kernel.CreateEventW.restype = ctypes.c_void_p
@@ -42,11 +47,11 @@ motion_re = re.compile(r'\[motion\] n (\d+) pos ' + ' '.join([number]*3)
 rival_re = re.compile(r'\[rival\] slot (\d+) global (\d+) pos \(' + ', '.join([number]*3) + r'\)')
 log = root / 'build/game/BrnGame.log'
 start = time.time()
-evidence = root / 'scratch/bugtest/runs/rival_organic' / time.strftime('%Y%m%d_%H%M%S')
+evidence = root / 'scratch/bugtest/runs' / args.run_name / time.strftime('%Y%m%d_%H%M%S')
 evidence.mkdir(parents=True)
 output = open(evidence / 'driver.console.log', 'w', encoding='utf-8')
 proc = subprocess.Popen(['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-                         'tools/tests/run_case.ps1', '-Case', 'b5-decomp/tests/RivalOrganic.ps1',
+                         'tools/tests/run_case.ps1', '-Case', args.case,
                          '-RunDir', str(evidence), '-LockTimeoutSec', '30', '-Label', 'rival-pad-pursuit'], cwd=root,
                         stdout=output, stderr=subprocess.STDOUT, creationflags=subprocess.CREATE_NO_WINDOW)
 position = 0
