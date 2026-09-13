@@ -649,12 +649,134 @@ void CollisionStateManager::MakePropInputCollision(
 
 void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
 {
-    if (lrCollision.mbCull)
+    // ARTIST 0x826D3CF0: default (unfiltered) developer settings. The distance
+    // splat at 0x830085A0 is 4900, initialized at 0x82C632B8 from 0x820B94B4.
+    const Vector3& lrCamera = mCameraInfo.mTransform.Pos();
+    const f32 lfX = lrCollision.mPosition.x - lrCamera.x;
+    const f32 lfY = lrCollision.mPosition.y - lrCamera.y;
+    const f32 lfZ = lrCollision.mPosition.z - lrCamera.z;
+    if (lfX * lfX + lfY * lfY + lfZ * lfZ > 4900.0f)
         return;
-    CGS_ASSERT(mu32InputCollisionCount < 64u,
-               "mu32InputCollisionCount < KU_MAX_INPUT_COLLISIONS");
+
+    // The console makes room by culling, then drops the new collision if still
+    // full. It does not assert on a busy collision frame.
+    if (mu32InputCollisionCount >= 64u)
+        CullInputCollisions();
     if (mu32InputCollisionCount < 64u)
         maInputCollision[mu32InputCollisionCount++] = lrCollision;
+}
+
+// ARTIST 0x826A00C8. Keep the strongest contact for an entity pair and orientation.
+// Only regular contacts permit reversing the pair. Match the console's pointer
+// worklist and swap-removal order, including retaining the earlier entry on ties.
+void CollisionStateManager::CullInputCollisions_RemoveDuplicates()
+{
+    if (mu32InputCollisionCount <= 1u)
+        return;
+    InputCollision* lapCollisions[64];
+    u32 luCount = 0;
+    for (u32 luIndex = 0; luIndex < mu32InputCollisionCount; ++luIndex)
+        if (!maInputCollision[luIndex].mbCull)
+            lapCollisions[luCount++] = &maInputCollision[luIndex];
+
+    for (u32 luI = 0; luI < luCount; ++luI)
+    {
+        InputCollision* lpWinner = lapCollisions[luI];
+        u32 luJ = luI + 1;
+        while (luJ < luCount)
+        {
+            InputCollision* lpOther = lapCollisions[luJ];
+            const bool lbSame = lpWinner->maEntityID[0].muValue == lpOther->maEntityID[0].muValue
+                             && lpWinner->maEntityID[1].muValue == lpOther->maEntityID[1].muValue;
+            const bool lbReverse = lpWinner->maEntityID[0].muValue == lpOther->maEntityID[1].muValue
+                                && lpWinner->maEntityID[1].muValue == lpOther->maEntityID[0].muValue;
+            if ((lbSame || (lbReverse && lpOther->mePipeline == InputCollision::E_REGULAR))
+                && lpWinner->meOrientation == lpOther->meOrientation)
+            {
+                const VecFloat& a = lpWinner->maParameter[0];
+                const VecFloat& b = lpOther->maParameter[0];
+                if (b.x > a.x || b.y > a.y || b.z > a.z || b.w > a.w)
+                {
+                    lpWinner->mbCull = true;
+                    lpWinner = lpOther;
+                }
+                else
+                    lpOther->mbCull = true;
+                lapCollisions[luJ] = lapCollisions[--luCount];
+            }
+            else
+                ++luJ;
+        }
+    }
+}
+
+// ARTIST 0x826BE5E0. Suppress repeated sounds during their 0.3-second window,
+// unless a regular collision is over ten times stronger than the playing one.
+void CollisionStateManager::CullAgainstPlaying()
+{
+    for (u32 luIndex = 0; luIndex < mu32InputCollisionCount; ++luIndex)
+    {
+        InputCollision& lrInput = maInputCollision[luIndex];
+        for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase; lpBase = lpBase->GetNextState())
+        {
+            if (!lpBase->IsAttached())
+                continue;
+            const CollisionState* lpState = static_cast<const CollisionState*>(lpBase);
+            const OutputCollision& lrPlaying = lpState->GetOutputCollision();
+            const bool lbRecent = lpState->GetTimeWeAttached() + 0.3f > mfCurrentTime;
+            if (lrPlaying.meFatality == E_FATAL_START && lbRecent)
+            {
+                lrInput.mbCull = true;
+                break;
+            }
+            const bool lbRegular = lrInput.mePipeline == InputCollision::E_REGULAR;
+            const bool lbMaterials =
+                (lrInput.maMaterial[0] == lrPlaying.maMaterial[0] && lrInput.maMaterial[1] == lrPlaying.maMaterial[1])
+                || (lbRegular && lrInput.maMaterial[0] == lrPlaying.maMaterial[1] && lrInput.maMaterial[1] == lrPlaying.maMaterial[0]);
+            const bool lbEntities =
+                (lrInput.maEntityID[0].muValue == lrPlaying.maEntityID[0].muValue && lrInput.maEntityID[1].muValue == lrPlaying.maEntityID[1].muValue)
+                || (lbRegular && lrInput.maEntityID[0].muValue == lrPlaying.maEntityID[1].muValue && lrInput.maEntityID[1].muValue == lrPlaying.maEntityID[0].muValue);
+            if (!lbMaterials || !lbEntities
+                || mFrameInformation.meFatality.GetCurrent() != lrPlaying.meFatality
+                || mFrameInformation.meImpactTime.GetCurrent() != lrPlaying.meImpactTime)
+                continue;
+            if (lrInput.meAction == AttribSys::Enums::eAction::Collision && lrInput.mePipeline != InputCollision::E_PROP)
+            {
+                // 0x82C63208 initializes 0x830082E0 from 0x820ABB14 == 0.1.
+                const VecFloat& a = lrInput.maParameter[0];
+                const VecFloat& b = lrPlaying.maParameter[0];
+                if (a.x * 0.1f > b.x && a.y * 0.1f > b.y && a.z * 0.1f > b.z && a.w * 0.1f > b.w)
+                    continue;
+            }
+            if (lrInput.meOrientation == lrPlaying.meOrientation && lbRecent)
+            {
+                lrInput.mbCull = true;
+                break;
+            }
+        }
+    }
+}
+
+// ARTIST 0x826BE910: compact in reverse index order by replacing with the tail.
+void CollisionStateManager::CullInputCollisions()
+{
+    CullInputCollisions_RemoveDuplicates();
+    CullAgainstPlaying();
+    u8 lauRemoved[64];
+    u32 luRemoved = 0;
+    for (u32 luIndex = 0; luIndex < mu32InputCollisionCount; ++luIndex)
+    {
+        CGS_ASSERT(luIndex < 64u, "lu32I < E_MAX_COLLISION");
+        if (maInputCollision[luIndex].mbCull)
+            lauRemoved[luRemoved++] = static_cast<u8>(luIndex);
+    }
+    while (luRemoved)
+    {
+        const u32 luIndex = lauRemoved[--luRemoved];
+        --mu32InputCollisionCount;
+        if (luIndex != mu32InputCollisionCount)
+            maInputCollision[luIndex] = maInputCollision[mu32InputCollisionCount];
+    }
 }
 
 void CollisionStateManager::SetCameraInfo(
@@ -774,6 +896,7 @@ void CollisionStateManager::UpdateResolver(
         }
     }
 
+    CullInputCollisions();
     ProcessCollisions();
     if (mu32InputCollisionCount != 0u && CollisionAudioDiagEnabled() &&
         CgsDev::Log::gpDebugPrint)

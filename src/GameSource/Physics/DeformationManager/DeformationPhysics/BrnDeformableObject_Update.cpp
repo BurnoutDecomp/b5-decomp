@@ -80,7 +80,6 @@ namespace renderengine { extern u32 guPresentCount; }
 // declaration:
 //   * CgsDev::Debug3DImmediateRender::DrawBox / DrawLine  (RenderSensors) -- the render class is only
 //     forward-declared in the frozen header; the draw calls are documented but not emitted.
-//   * DeformationSensor::OutputContactSpy                 (UpdateOutputContactSpies) -- not declared
 //     on the homed DeformationSensor; the per-sensor spy push is documented but not emitted.
 // Both reproduce the recoverable outer flow (loop bounds, counts, the game-mode-word source); the
 // emission is left as a documented gap (no fabricated callee signatures / declarations).
@@ -1600,38 +1599,14 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // UpdateOutputContactSpies @0x826251E8
-    //
-    // Push each deformation sensor's contact spy into the output buffer. For each of the bare deformation
-    // sensors the asm calls
-    //   DeformationSensor::OutputContactSpy(sensor, lpOutput, lpContacts, this->mu32GameModeState)
-    // -- the spy carries this car's game-mode/state word (this +26392) so the consumer can attribute the
-    // contact. The sensor stride is 432 bytes (the maDeformationSensors[] stride); the loop bound is the
-    // live sensor count.
-    //
-    // FLAGGED-DEFERRED: DeformationSensor::OutputContactSpy is an out-of-tree callee with no declaration
-    // on the homed DeformationSensor, so it cannot be reached BY NAME without a fabricated declaration.
-    // The recoverable outer flow (the per-sensor loop bound + the game-mode-word source) is reproduced;
-    // the per-sensor spy push is left as a documented gap (no fabricated callee declaration).
-    // Caller (X360 xref): DeformableObject::Update.
-    // =============================================================================================
+    // UpdateOutputContactSpies @0x826251E8. Only the bare deformation sensors
+    // (excluding four wheel sensors) output spies. +0x6718 is mGlobalEntityId.
     void DeformableObject::UpdateOutputContactSpies(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
                                                     BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpContacts)
     {
-        const s32 liNumSensors = GetNumSensors() - 4;   // *(mpDeformationSpec + 1618)
-        const u32 luGameModeState = mu32GameModeState;  // this +26392 -- carried into each spy record
-
-        for ( s32 li = 0; li < liNumSensors; ++li )
-        {
-            DeformationSensor& lrSensor = maDeformationSensors[li];
-            // DeformationSensor::OutputContactSpy(&lrSensor, lpOutput, lpContacts, luGameModeState)
-            // -- FLAGGED-DEFERRED (callee not declared on the homed sensor; see header).
-            (void)lrSensor;
-        }
-
-        (void)lpOutput;
-        (void)lpContacts;
-        (void)luGameModeState;
+        const s32 liNumSensors = GetNumSensors() - 4;
+        for (s32 li = 0; li < liNumSensors; ++li)
+            maDeformationSensors[li].OutputContactSpy(lpOutput, lpContacts, mGlobalEntityId);
     }
 
     // =============================================================================================

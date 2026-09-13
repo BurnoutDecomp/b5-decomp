@@ -56,8 +56,11 @@ namespace CgsGeometric
 	struct Sphere;
 }
 
+namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutputBuffer; } }
+
 namespace BrnPhysics
 {
+namespace PhysicsModuleIO { struct PotentialContactInterface; }
 namespace Deformation
 {
 	// ⚠️ FORK FIXED 2026-08-14 (walls wave): this used to be `struct Sphere;` declared INSIDE
@@ -256,6 +259,11 @@ namespace Deformation
 		// ---- Wave-3 sensor methods (DECLARED-ONLY; bodies in the sensor TUs) --------------------
 		// DWARF :97. Default constructor (zero-init via ClearVariables).
 		DeformationSensor();
+
+		// ARTIST 0x8260A508; DWARF BrnDeformationSensor.h:162.
+		void OutputContactSpy(CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
+		                      PhysicsModuleIO::PotentialContactInterface* lpContacts,
+		                      EntityId lGlobalCarId);
 
 		// DWARF BrnDeformationSensor.cpp:90. Bind the sensor to its spec + local/world spheres and place
 		// it in the body frame. (Matrix44Affine + the four trailing Vector3Plus/Vector3 args are the

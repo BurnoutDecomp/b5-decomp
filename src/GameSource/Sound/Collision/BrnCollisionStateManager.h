@@ -207,6 +207,9 @@ private:
                         const BrnSound::Logic::FrameInformation& lrFrame,
                         f32 afDeltaTime);
     void AddInputCollision(const InputCollision& lrCollision);
+    void CullInputCollisions();
+    void CullInputCollisions_RemoveDuplicates();
+    void CullAgainstPlaying();
     bool ProcessCollision(OutputCollision& lrOutput, const InputCollision& lrInput);
     void ProcessCollisions();
     u64 MapEntityIdToMaterial(const EntityId& lrEntityId,
