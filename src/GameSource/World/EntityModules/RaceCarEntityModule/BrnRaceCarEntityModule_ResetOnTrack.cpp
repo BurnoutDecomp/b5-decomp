@@ -28,23 +28,8 @@
 // which nothing in this tree had ever set to anything but 0x7FFF. These two functions are that
 // caller and that setter.
 //
-// ⛔⛔ MEASURED THE DAY THEY LANDED, AND SAY IT BEFORE ANYONE READS "LANDED" AS "WORKING":
-// THE RING IS STILL EMPTY, because the ABOVE-GROUND RAY NEVER HITS. A booted drive run
-// (asserts=0, phase=DRIVING) prints, on every sample:
-//     [collision-tag] car 0 aboveGroundValid=0 tag=0x-32768 section=32767
-//                            wheel0OnGround=1 wheel0Tag=0x-23520 timeInAir=0.000000
-//     [rot-ring] player depth=0 aiSection=32767 inSystem=0 resetPos=(3018.9,-9.2,-354.9)
-// 0xFFFF8000 is the CLEAR value AboveGroundTestResult::Reset writes; mbValid never goes true.
-// THE PRODUCER IS ABSENT: BrnPhysics::Vehicle::VehicleManager::GenerateAboveGroundLineTests
-// @0x82633990 (via PhysicsModule::GenerateSceneQueries @0x825A1428, from WorldModule::Update) is
-// the ONLY thing in the whole image that posts a race car's downward InEventLineTestNearest, and
-// nothing in this tree posts one. The RESULT half of that round trip is entirely live already
-// (WorldBridgeSceneToPhysics' case 2 -> VehicleInputInterface::AddLineTestResult ->
-// VehicleManager::ProcessAboveGroundLineTestsResults -> SimpleVehiclePhysics::
-// SetAboveGroundTestResult, all bodied), so this is a one-function hole, not a subsystem.
-// ⭐ The wheel contacts on the SAME frames are real and drivable, which is what proves the
-// diagnostic is reading live physics rather than an unpopulated struct.
-// DELETE-WHEN GenerateAboveGroundLineTests lands and [rot-ring] reports a non-zero depth.
+// The above-ground line-test producer and result consumer are now live. Their
+// packed group/material tags also supply the player's oncoming boost classification.
 //
 // ⭐ THE SURFACE COLLISION TAG *IS* THE AI SECTION INDEX -- no road network required.
 // BrnWorld::CollisionTag is {u16 mu16GroupTag; u16 mu16MaterialTag} and its GetAISectionIndex() is
@@ -56,6 +41,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"   // RaceCarState
+#include <cmath>
+#include <cstdlib>
 #include "SharedClasses/World/BrnCollisionTag.h"                            // KU_MAX_AI_SECTION_INDEX
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint
@@ -82,45 +69,8 @@ namespace
     }
 }
 
-// =================================================================================================
-// UpdateRaceCarCollisionTagging @0x822D2280   -- A MINIMAL-COMPLETE SLICE
-//
-//   0x822D2280  three asserts: index >= 0 (:5775), index < KI_MAX_ACTIVE_RACE_CARS (:5776),
-//               lpRaceCarState (:5777)
-//   0x822D2328  if (!lpRaceCarState->mAboveGroundTestResult.mbValid)   return   (lbz  a3+488)
-//   0x822D2330  tag = lpRaceCarState->mAboveGroundTestResult.mCollisionTag      (lwz  a3+484)
-//   0x822D2338  if (index != mePlayerActiveRaceCarIndex) goto SET_SECTION       (lwz this+99064)
-//               ---- the PLAYER-ONLY wrong-way / oncoming arm (PARKED, see below) ----
-//   0x822D2364  heading = atan2(mTransform.zAxis.z (a3+536), mTransform.zAxis.x (a3+528))
-//               if (heading < 0) heading += 2*PI                          (flt_82CDB634)
-//   0x822D2388  switch (CollisionTag::GetTrafficInfo(&tag, &lfLaneAngle)) ...
-//               ... a three-state latch over module+100120 / module+100124 with a 0.75 s
-//               dwell, ending in `(*(vtbl(mBoostManager's BoostStrategy*) + 152))(strategy, code)`
-//               with code 0 (oncoming) / 1 (normal) / 2 (unknown)
-//   SET_SECTION:
-//   0x822D2478  ActiveRaceCar::SetAISection( GetActiveRaceCar(index), HIWORD(tag) & 0x7FFF )
-//
-// ⭐ THE SET_SECTION CALL IS UNCONDITIONAL GIVEN mbValid -- FOR THE PLAYER TOO. Every one of the
-// five player-arm paths ends in `goto LABEL_17` (the virtual dispatch) and LABEL_17 falls straight
-// into it. That is what makes the park below safe: the leg this wave needs runs for the player
-// exactly as the console runs it, and only the oncoming bookkeeping is missing.
-//
-// ⛔ [FLAG PC bring-up] THE PLAYER-ONLY WRONG-WAY / ONCOMING ARM IS PARKED, LOUDLY.
-// Three separate reasons, and none of them is "it looked hard":
-//   (a) it dispatches through the BoostStrategy* the boost manager owns at module+97504 with a
-//       vtable slot index (152/4 == 38) -- a NUMERIC module-vtable index, which this tree does not
-//       take (see the vtable slot-0 Create shim bug: the tree's own slot order differs).
-//   (b) its two latch members live at module+100120 / module+100124 and have NO named member in
-//       BrnRaceCarEntityModule.h's tail pad. Minting members from raw offsets is the exact
-//       live-corruption class this project keeps paying for.
-//   (c) CollisionTag::GetTrafficInfo is a BrnWorld::CollisionTag method and the tag arriving here
-//       is the placeholder type (see the fork note above); routing one into the other needs the
-//       fork retired first, which is its own change.
-// What is LOST by the park: the "driving into oncoming traffic" boost-earning state. It is a boost
-// bonus, not a safety property, and nothing on the reset-on-track path reads it.
-// DELETE-WHEN the ::CollisionTag / BrnWorld::CollisionTag fork is retired and the two oncoming
-// latch members are named.
-// =================================================================================================
+// ARTIST 0x822D2280: ground tags drive both the reset section and player oncoming boost.
+// UNKNOWN lane direction preserves the previous state; NO_LANES expires it after 0.75s.
 void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
         s32 liActiveRaceCarIndex,
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState )
@@ -168,21 +118,57 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
 
     if( liActiveRaceCarIndex == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
     {
-        // ⛔ [FLAG PC bring-up] the wrong-way / oncoming-traffic arm -- see the banner.
-        static bool sbReportedParkedOncomingArm = false;
-        if( !sbReportedParkedOncomingArm )
+        const u32 luPackedTag = lpRaceCarState->mAboveGroundTestResult.mCollisionTag.muValue;
+        BrnWorld::CollisionTag lTag;
+        lTag.Construct(static_cast<u16>(luPackedTag >> 16), static_cast<u16>(luPackedTag));
+        f32 lfHeading = std::atan2(lpRaceCarState->mTransform.zAxis.z,
+                                    lpRaceCarState->mTransform.zAxis.x);
+        if (lfHeading < 0.0f) lfHeading += 6.2831855f;
+        f32 lfLaneAngle = 0.0f;
+        const TrafficDirection leTraffic = lTag.GetTrafficInfo(&lfLaneAngle);
+        BoostStrategy* lpStrategy = mBoostManager.GetBoostStrategy();
+        OncomingState leState = E_ONCOMING_STATE_FALSE;
+        if (leTraffic == E_TRAFFIC_DIRECTION_VALID)
         {
-            sbReportedParkedOncomingArm = true;
-            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
-                && CgsDev::Log::gpDebugPrint != 0 )
+            const f32 lfAngleRatio = std::fabs(lfLaneAngle - lfHeading) * 0.15915494f;
+            if (lfAngleRatio > 0.4f && lfAngleRatio < 0.6f) leState = E_ONCOMING_STATE_TRUE;
+            mbOncomingTimerActive = false;
+            mfOncomingNoClueTimer = 0.0f;
+        }
+        else if (leTraffic == E_TRAFFIC_DIRECTION_UNKNOWN)
+        {
+            mbOncomingTimerActive = false;
+            mfOncomingNoClueTimer = 0.0f;
+            leState = E_ONCOMING_STATE_PREVIOUS;
+        }
+        else if (lpStrategy->GetPreviousOncomingState() != E_ONCOMING_STATE_FALSE)
+        {
+            mfOncomingNoClueTimer += mfTimeStep;
+            if (!mbOncomingTimerActive)
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "[collision-tag] PARKED player-only leg: the wrong-way / oncoming-traffic "
-                       "state machine of RaceCarEntityModule::UpdateRaceCarCollisionTagging "
-                       "(X360 0x822D2280) is NOT reconstructed -- oncoming boost earning will not "
-                       "update. The AI-section store below IS live.\n";
+                mbOncomingTimerActive = true;
+                leState = E_ONCOMING_STATE_PREVIOUS;
+            }
+            else if (mfOncomingNoClueTimer <= 0.75f)
+                leState = E_ONCOMING_STATE_PREVIOUS;
+            else
+            {
+                mbOncomingTimerActive = false;
+                mfOncomingNoClueTimer = 0.0f;
             }
         }
+        lpStrategy->SetOncomingState(leState);
+        // FLAG PC-platform leaf: opt-in observation of the live road/boost chain.
+        static const bool sbTrace = std::getenv("BRN_ONCOMING_DIAG") != 0;
+        static u32 luSample = 0;
+        if (sbTrace && (++luSample % 12) == 0 && CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[oncoming] tag=" << luPackedTag
+                << " traffic=" << static_cast<s32>(leTraffic) << " heading=" << lfHeading
+                << " lane=" << lfLaneAngle << " state=" << static_cast<s32>(leState)
+                << " active=" << (lpStrategy->IsOncoming() ? 1 : 0)
+                << " speed=" << lpRaceCarState->mfSpeedMPH
+                << " boost=" << lpStrategy->GetBoostAmount() << "\n";
+
     }
 
     ActiveRaceCar* lpActiveRaceCar =

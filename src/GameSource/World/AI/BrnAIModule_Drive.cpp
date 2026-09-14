@@ -1,3 +1,4 @@
+#include <cstdlib>
 // =================================================================================================
 // BrnAIModule_Drive.cpp -- the DRIVE legs of BrnAI::AIModule's per-frame spine
 // (aiwave lane A1, 2026-09-03).
@@ -1160,6 +1161,21 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
                         << " aggLvl " << lpCar->GetAggressiveness()->GetAggressionLevel()
                         << " [FLAG PC witness]\n";
                 }
+            }
+
+            // FLAG PC-platform leaf: opt-in control handoff diagnostics.
+            static const bool sbPlayerTrace = std::getenv("BRN_PLAYER_AI_DIAG") != 0;
+            if (lbIsPlayer && sbPlayerTrace)
+            {
+                static unsigned luSample = 0;
+                if ((luSample++ % 6) == 0 && CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint << "[player-ai] control=" << (lpCar->mbIsDrivenByPlayer ? 1 : 0)
+                        << " speed=" << lpCar->GetSpeed() << " desired=" << lpDriver->GetDesiredSpeed()
+                        << " top=" << lpCar->GetDesiredSpeed() << " behaviour=" << static_cast<s32>(lpCar->meBehaviour)
+                        << " gas=" << lControls.mfGas << " brake=" << lControls.mfBrake
+                        << " handbrake=" << lControls.mfHandBrake << " steer=" << lControls.mfSteering
+                        << " forced=" << (lControls.mbDoSpeedMatch ? 1 : 0) << " match=" << lControls.mfSpeedMatchSpeed
+                        << " line=" << (lpDriver->mbIsRacingLineInitialised ? 1 : 0) << "\n";
             }
 
             ++liActiveRecords;

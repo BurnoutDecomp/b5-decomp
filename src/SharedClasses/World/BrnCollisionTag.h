@@ -48,7 +48,13 @@ namespace BrnWorld
     struct CollisionTag
     {
         void Construct();                              // :110 (own slice)
-        void Construct(u16 lu16Group, u16 lu16Material); // :115 (own slice)
+        // Inlined two-halfword store, DWARF :115; preserve group/material order
+        // when decoding the physics interface's packed host integer.
+        void Construct(u16 lu16Group, u16 lu16Material)
+        {
+            mu16GroupTag = lu16Group;
+            mu16MaterialTag = lu16Material;
+        }
 
         u32 GetRawData() const;                        // :121 (own slice)
         u16 GetMaterialTag() const;                    // :124 (own slice)

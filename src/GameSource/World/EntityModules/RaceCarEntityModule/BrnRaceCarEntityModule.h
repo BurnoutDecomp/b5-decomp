@@ -987,7 +987,9 @@ private:
     // to scale each wheel's |rad/s| by it before the renderer picks a wheel-blur technique.
     // In normal play it is 1.0f; slow motion drops it, and the wheels stop smearing with it.
     f32 mfTimeStepMultiplier;               // +0x183A4 (99236)  :408
-    u8  maTailPadB1a[0x184D0 - 0x183A8];   // +0x183A8 (99240) .. +0x184D0 (99536)
+    u8  maTailPadB1a[0x184C0 - 0x183A8];
+    f32 mfLastPlayerCarSpeed; // DWARF :421; ARTIST action 7, +0x184C0 (m/s)
+    u8  maTailPadB1aSpeed[0x184D0 - 0x184C4];
     // ⭐⭐⭐ 2026-09-07 (measurement-guard wave): the pad is split again, because this is not one
     // mirror pair, it is TWO PAIRS AND A ONE-SHOT, and reading it as one pair is how a wave loses
     // an afternoon. Every writer and reader in the image was enumerated by OFFSET (a name-grep
@@ -1019,7 +1021,11 @@ private:
     bool mbPlayerBaseDeformRequestPending;  // +0x184DC (99548) one-shot: force mbResetDeformation
     u8   maTailPadB1c0[0x184E0 - 0x184DD];  // +0x184DD (99549) .. +0x184E0 (99552)
     f32  mfPlayerBaseDeformAmountSaved;     // +0x184E0 (99552) mode-change stash of the amount
-    u8   maTailPadB1c[0x187BC - 0x184E4];   // +0x184E4 (99556) .. +0x187BC (100284)
+    u8   maTailPadB1c[0x18718 - 0x184E4];
+    bool mbOncomingTimerActive; // DWARF :453; ARTIST +0x18718
+    u8   maOncomingPadding[3];
+    f32  mfOncomingNoClueTimer; // DWARF :454; ARTIST +0x1871C
+    u8   maTailPadAfterOncoming[0x187BC - 0x18720];
 
     // X360 +0x187BC (100284). Player-scoring-slot -> active-race-car-slot map. The X360
     // DWORD index is 0x61EF (25071). Indexed by EPlayerScoringIndex (0..7); each cell is

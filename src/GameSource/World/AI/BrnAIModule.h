@@ -90,6 +90,9 @@ class AIModule : public CgsModule::ModuleSingleBuffered
     friend class ::BrnWorld::WorldDebugComponent;
 
 public:
+    // DWARF SetAIDrivesPlayer; inlined store in ARTIST WorldModule::Update @0x827D753C.
+    void SetAIDrivesPlayer(bool lbEnabled) { mbAIDrivesPlayer = lbEnabled; }
+
         // X360 0x82794D08. Reached by the wired WorldModule::Construct @0x827CF540 fleet cascade.
         void Construct() override;
         // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
@@ -512,7 +515,7 @@ private:
     bool                mbHighTakenDownPenalty;
     // X360 +322434 (0x4EB82) -- StoreDrivenCarData: `isPlayer && !this` is the mbIsDrivenByPlayer
     // bool it hands AICar::UpdateInRangeData (asm 0x82795CB4..CD4; corrected 2026-09-05). Construct
-    // stores 0 (r30) here -- the WorldDebugComponent's "AI drives player" toggle is the only setter.
+    // stores 0 (r30) here; WorldModule::Update refreshes it from player control ownership.
     bool                mbAIDrivesPlayer;
     // X360 +322435 (0x4EB83) -- ProcessAIVehicleInputs: `isPlayer && this` -> the record's
     // mbIsInvulnerableToWorld, OR'd with AIDriver::IsInvulnerable() into
