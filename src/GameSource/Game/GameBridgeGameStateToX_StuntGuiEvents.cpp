@@ -109,6 +109,75 @@ namespace
     // console's bridge arm reads exactly it back (`lbz r11, 0x85(r31)` @0x823EB5C8).
     // =========================================================================
     const s32 KI_SHOP_ACTION_EFFECTIVE_BYTE = 0x85;
+
+    // =========================================================================
+    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE SIX BOOST-TICKER GUI WIRE RECORDS, TU-LOCAL for
+    // exactly the reason TickerCustomMessageWire537 and AutosaveRequestWire356 above are: this
+    // TU cannot include BrnGuiDemangledEventTypes.h (the C2011 fork pair documented in the
+    // include banner), and that header is where the canonical BrnGui::GuiNearMissEvent /
+    // GuiDriftingEvent / GuiSpinningEvent / GuiInAirEvent / GuiOncomingEvent /
+    // GuiTailgatingEvent / GuiTrafficCheckEvent live. Each record below is field-for-field its
+    // canonical twin -- no fork of meaning, only of scope (file-static in an anonymous
+    // namespace, so there is no ODR fork either).
+    //
+    // WIRE PROOF for every id + size: the console's own AddGuiEvent<T> instantiation, whose
+    // ONLY xref is TranslateGameActionsToGuiEvents @0x823E9CE0:
+    //     GuiTrafficCheckEvent 0x823D3F88 -> AddEvent(q, e, 383, 4)
+    //     GuiNearMissEvent     0x823D4040 -> AddEvent(q, e, 384, 8)
+    //     GuiDriftingEvent     0x823D40F8 -> AddEvent(q, e, 385, 4)
+    //     GuiSpinningEvent     0x823D41B0 -> AddEvent(q, e, 386, 4)
+    //     GuiInAirEvent        0x823D4268 -> AddEvent(q, e, 387, 8)
+    //     GuiOncomingEvent     0x823D4320 -> AddEvent(q, e, 388, 4)
+    //     GuiTailgatingEvent   0x823D43D8 -> AddEvent(q, e, 389, 4)
+    // and the far end is BrnGui::BoostMessageManager::RecvEvent @0x824204E8, whose cases
+    // 383..389 read exactly these fields (already committed, already routed by
+    // BrnRaceMainHudState_wS3.cpp's LABEL_120).
+    // =========================================================================
+    struct TrafficCheckEventWire383
+    {
+        s32 miCount;                      // +0x00
+        s32 GetEventType() const { return 383; }
+    };
+    struct NearMissEventWire384
+    {
+        s32 miCount;                      // +0x00
+        s32 meNearMissType;               // +0x04 (BrnWorld::ENearMissType; RecvEvent treats
+                                          //        2 and 3 as the crash-escape flavours)
+        s32 GetEventType() const { return 384; }
+    };
+    struct DriftingEventWire385
+    {
+        f32 mfDistance;                   // +0x00
+        s32 GetEventType() const { return 385; }
+    };
+    struct SpinningEventWire386
+    {
+        f32 mfSpinAngle;                  // +0x00
+        s32 GetEventType() const { return 386; }
+    };
+    struct InAirEventWire387
+    {
+        f32 mfCumulativeAirTime;          // +0x00
+        f32 mfCurrentJumpAirTime;         // +0x04
+        s32 GetEventType() const { return 387; }
+    };
+    struct OncomingEventWire388
+    {
+        f32 mfDistance;                   // +0x00
+        s32 GetEventType() const { return 388; }
+    };
+    struct TailgatingEventWire389
+    {
+        f32 mfDistance;                   // +0x00
+        s32 GetEventType() const { return 389; }
+    };
+    static_assert(sizeof(TrafficCheckEventWire383) == 4, "GUI 383 size 4");
+    static_assert(sizeof(NearMissEventWire384)     == 8, "GUI 384 size 8");
+    static_assert(sizeof(DriftingEventWire385)     == 4, "GUI 385 size 4");
+    static_assert(sizeof(SpinningEventWire386)     == 4, "GUI 386 size 4");
+    static_assert(sizeof(InAirEventWire387)        == 8, "GUI 387 size 8");
+    static_assert(sizeof(OncomingEventWire388)     == 4, "GUI 388 size 4");
+    static_assert(sizeof(TailgatingEventWire389)   == 4, "GUI 389 size 4");
 }
 
     // =========================================================================
@@ -429,6 +498,120 @@ namespace
                         << " count=" << lpStunt->miCurrentCount
                         << "/" << lpStunt->miTotalCount << "\n";
                 }
+                break;
+            }
+
+            // =====================================================================================
+            // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE SEVEN BOOST-TICKER ARMS -- X360
+            // TranslateGameActionsToGuiEvents @0x823E9CE0 cases 108 and 171..176.
+            //
+            // These are the second missing link of the boost hint strip. The first
+            // (world event -> game action) is GameStateModule::ProcessGameEventsBoostTickerBringUp,
+            // landed by the same wave; the far end (GUI event -> the hint strip) has been
+            // committed and routed for weeks. Every arm below is the console's own body,
+            // which in six of the seven cases is literally "copy the words, post the event":
+            //
+            //   console arm                                    ->  GUI event (id, size)
+            //   case 108 @0x823EB..  v329 = *action                383 GuiTrafficCheckEvent (4)
+            //   case 171 @0x823ED..  v463[0]=*a; v463[1]=a[1]      384 GuiNearMissEvent     (8)
+            //   case 172             v377 = *a                     385 GuiDriftingEvent     (4)
+            //   case 173             v423 = *a                     386 GuiSpinningEvent     (4)
+            //   case 174             assert(a); v451[0..1]=a[0..1] 387 GuiInAirEvent        (8)
+            //   case 175             v409 = *a                     388 GuiOncomingEvent     (4)
+            //   case 176             v381 = *a                     389 GuiTailgatingEvent   (4)
+            //
+            // ⚠️ NOTE THE WIDTH ASYMMETRY ON 176 AND IT IS THE CONSOLE'S: the TailgatingAction
+            // is EIGHT bytes {mfDistance, meTailgatedCarIndex} but the console's arm copies
+            // ONE word (`v381 = *v7`) into a FOUR-byte GuiTailgatingEvent -- the tailgated car
+            // index never reaches the GUI. Do not "complete" it.
+            // =====================================================================================
+
+            // ---- 108  E_ACTION_ON_TRAFFIC_CHECKING_CHAIN (4 bytes) -> GUI 383 ---------------
+            case BrnGameState::GameStateModuleIO::E_ACTION_ON_TRAFFIC_CHECKING_CHAIN:
+            {
+                const BrnGameState::GameStateModuleIO::TrafficCheckingChainAction* lpChain =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::TrafficCheckingChainAction*>(lpAction);
+                TrafficCheckEventWire383 lEvent;
+                lEvent.miCount = lpChain->miChainSize;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 171  E_ACTION_NEAR_MISS (8 bytes) -> GUI 384 -------------------------------
+            case BrnGameState::GameStateModuleIO::E_ACTION_NEAR_MISS:
+            {
+                const BrnGameState::GameStateModuleIO::NearMissAction* lpNearMiss =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::NearMissAction*>(lpAction);
+                NearMissEventWire384 lEvent;
+                lEvent.miCount        = lpNearMiss->miCount;
+                lEvent.meNearMissType = lpNearMiss->meNearMissType;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 172  E_ACTION_DRIFTING (4 bytes) -> GUI 385 --------------------------------
+            case BrnGameState::GameStateModuleIO::E_ACTION_DRIFTING:
+            {
+                const BrnGameState::GameStateModuleIO::DriftingAction* lpDrift =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::DriftingAction*>(lpAction);
+                DriftingEventWire385 lEvent;
+                lEvent.mfDistance = lpDrift->mfDistance;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 173  E_ACTION_SPINNING (4 bytes) -> GUI 386 --------------------------------
+            case BrnGameState::GameStateModuleIO::E_ACTION_SPINNING:
+            {
+                const BrnGameState::GameStateModuleIO::SpinningAction* lpSpin =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::SpinningAction*>(lpAction);
+                SpinningEventWire386 lEvent;
+                lEvent.mfSpinAngle = lpSpin->mfSpinAngle;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 174  E_ACTION_IN_AIR (8 bytes) -> GUI 387 ----------------------------------
+            case BrnGameState::GameStateModuleIO::E_ACTION_IN_AIR:
+            {
+                CGS_ASSERT(lpAction != 0, "lpInAirAction");   // GameBridgeGameStateToX.cpp:1983
+                const BrnGameState::GameStateModuleIO::InAirAction* lpInAir =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::InAirAction*>(lpAction);
+                InAirEventWire387 lEvent;
+                lEvent.mfCumulativeAirTime  = lpInAir->mfCumulativeAirTime;
+                lEvent.mfCurrentJumpAirTime = lpInAir->mfCurrentJumpAirTime;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 175  E_ACTION_ONCOMING (4 bytes) -> GUI 388 --------------------------------
+            // THE "ONCOMING 800m" COUNTER: BoostMessageManager::UpdateOncoming composes
+            // "<ONCOMING> GENERAL_SEPARATOR <distance>m" once the latched distance passes 50 m.
+            case BrnGameState::GameStateModuleIO::E_ACTION_ONCOMING:
+            {
+                const BrnGameState::GameStateModuleIO::OncomingAction* lpOncoming =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::OncomingAction*>(lpAction);
+                OncomingEventWire388 lEvent;
+                lEvent.mfDistance = lpOncoming->mfDistance;
+                PushGuiEvent(lEvent, lpGuiInput);
+                break;
+            }
+
+            // ---- 176  E_ACTION_TAILGATING (8 bytes) -> GUI 389 (4 bytes) --------------------
+            case BrnGameState::GameStateModuleIO::E_ACTION_TAILGATING:
+            {
+                const BrnGameState::GameStateModuleIO::TailgatingAction* lpTailgating =
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::TailgatingAction*>(lpAction);
+                TailgatingEventWire389 lEvent;
+                lEvent.mfDistance = lpTailgating->mfDistance;   // the index is NOT forwarded
+                PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 

@@ -46,6 +46,7 @@
 #include "SharedClasses/World/BrnWorldRegion.h"                                   // BrnWorld::WorldRegion (mCurrentWorldRegion, +0x244)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"         // BrnWorld::NearMissManager (by value, +0x17E68)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/AirTime/BrnAirTimeManager.h"             // BrnWorld::AirTimeManager (by value, +0x18098) [boost-ticker wave]
 #include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h"  // BrnWorld::CrashPlayManager (by value, +0x180F0)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"
 #include "GameSource/AttribSys/Generated/classes/surfacelist.h"        // Attrib::Gen::surfacelist mSurfaceList (DWARF :365)     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
@@ -1418,6 +1419,15 @@ private:
     // near-miss bit. Its producers (Update/AddNear*) have no reconstructed caller yet, so
     // the lists stay empty and the bit reads false -- honest state, not a stub.
     NearMissManager mNearMissManager;
+
+    // ⭐⭐ X360 +0x18098 (98520). DWARF :351. ADDITIVE CARVE (boost-ticker wave 2026-09-14).
+    // The console's PostPhysicsUpdate @0x82307538 ticks it at 0x82307... --
+    // `AirTimeManager::Update(module + 98520, playerCar->GetPhysicsState(), mfTimeStep,
+    // lpOutput->GetGameEventQueue())` -- inside the second sim-paused skip, right after the
+    // NearMisses / PowerParking pair. BrnAirTimeManager.cpp has been committed and complete
+    // for a long time; it had NO OWNER AND NO CALLER, so game event 69 (in air) was never
+    // produced and the boost ticker's AIR line could not exist. This member is the seat.
+    AirTimeManager mAirTimeManager;
 
     // X360 +0x180F0 (98544). DWARF :355. Asm-literal base:
     // HandlePrepareForModeAction @0x823092F0 calls `CrashPlayManager::Activate(module + 98544,

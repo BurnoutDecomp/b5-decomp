@@ -147,6 +147,36 @@ enum EGameEventType
     E_EVENT_DRIFTING                          = 67,  // X360 (PS3 68; "lpDriftEvent")
     E_EVENT_ONCOMING                          = 70,  // X360 (PS3 71)
     E_EVENT_ONCOMING_COMPLETED                = 71,  // X360 (PS3 72)
+    // ================================================================================
+    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE SIX WORLD EVENTS THE BOOST TICKER IS MADE OF.
+    // Every one of them is PRODUCER-PINNED in the world (the `li r5,<id>` / `li r6,<size>`
+    // pair at the AddEvent site) AND CONSUMER-PINNED in GameStateModule::ProcessGameEvents
+    // @0x823A0A18, whose arm turns each into the game action the GUI translator forwards:
+    //
+    //   id  producer                                          size  ProcessGameEvents -> action
+    //   64  NearMissManager::NearMissEvent   @0x822F88B8         8   case 64 -> 171 (near miss)
+    //   68  BoostStrategy::Update            @0x822F8130         4   case 68 -> 173 (spin)
+    //   69  AirTimeManager::Update           @0x822F8C88         8   case 69 -> 174 (in air)
+    //   72  BoostStrategy::Update            @0x822F8130         8   case 72 -> 176 (tailgating)
+    //   73  (traffic-check detector)                             2   case 73 -> 107 (checked)
+    //   74  TrafficCheckManager::Update      @0x822F8F20         4   case 74 -> 108 (check chain)
+    //
+    // ⚠️ THE NEAR-MISS SPELLING. The PS3 DWARF names ids 65/66/67 NearMissEvent /
+    // NearMissChainInProgressEvent / NearMissChainCompleteEvent; the X360 block is those
+    // MINUS ONE (64/65/66), which is proved by the payload SIZES the console's own producer
+    // posts -- NearMissManager posts {miCount, meNearMissType} (8) as 64, {miCount} (4) as
+    // 65 and {miCount, mbCompletedSuccessfully} (8) as 66. So the enumerator already spelled
+    // `E_EVENT_NEAR_MISS = 65` above is in fact the CHAIN-IN-PROGRESS event; it is left at
+    // its value because ChallengeManager::ProcessEvent's committed arm dispatches on it and
+    // the console's own case-65 assert string ("lpNearMissEvent") is the loose local name the
+    // original source used there. The SCORED event -- the one the ticker needs -- is 64 and
+    // is spelled with a distinct name below rather than stealing the taken one.
+    E_EVENT_NEAR_MISS_SCORED                  = 64,  // FLAG spelling; DWARF calls this E_EVENT_NEAR_MISS (PS3 65)
+    E_EVENT_SPINNING                          = 68,  // X360 (PS3 69)
+    E_EVENT_IN_AIR                            = 69,  // X360 (PS3 70)
+    E_EVENT_TAILGATING                        = 72,  // X360 (PS3 73)
+    E_EVENT_TRAFFIC_CHECKING                  = 73,  // X360 (PS3 74)
+    E_EVENT_TRAFFIC_CHECKING_CHAIN            = 74,  // X360 (PS3 75)
     E_EVENT_COMPLETED_STUNT                   = 119, // X360 == PS3 ("lpCompletedStuntEvent")
     E_EVENT_INPROGRESS_STUNT                  = 120, // X360 == PS3 ("lpInProgressStuntEvent")
     E_EVENT_FREEBURN_CHALLENGE_ACTION_SUCCESS = 165, // X360 (PS3 160; "lpActionSuccessEvent")
@@ -510,6 +540,69 @@ struct OncomingEvent : public GameEvent<E_EVENT_ONCOMING>
 struct OncomingCompletedEvent : public GameEvent<E_EVENT_ONCOMING_COMPLETED>
 {
     f32 mfDistance;   // 0x00 (:1989)
+};
+
+// ====================================================================================
+// ⭐⭐⭐ [boost-ticker wave 2026-09-14] The remaining boost-ticker world-event payloads.
+// Member names/types are the DecFIGS DWARF's (BrnGameEvents.h :1490/:1601/:1615/:1532/
+// :1546/:1559); every offset is attested by the console PRODUCER's stores and re-attested
+// by GameStateModule::ProcessGameEvents' arm, which copies exactly these words into the
+// game action it posts.
+// ====================================================================================
+
+// The SCORED near miss (X360 id 64). Producer NearMissManager::NearMissEvent @0x822F88B8
+// (`AddEvent(q, {miNearMissCount, leNearMissType}, 64, 8)`); ProcessGameEvents case 64
+// copies both words into game action 171, which becomes GUI event 384.
+// This is the SAME two-word shape the DWARF gives its `NearMissEvent`; the tree's
+// `struct NearMissEvent` above is the ChallengeManager-facing one at id 65 (see the
+// enumerator note) and is left alone.
+struct NearMissScoredEvent : public GameEvent<E_EVENT_NEAR_MISS_SCORED>
+{
+    s32 miCount;         // 0x00 (:1490)
+    s32 meNearMissType;  // 0x04 (:1491, BrnWorld::ENearMissType; s32 storage -- same
+                         //       decoupling the sibling NearMissEvent above uses)
+};
+
+// Flat spin (X360 id 68). Producer BoostStrategy::Update @0x822F8130 posts the live
+// mfSpinAngle whenever it is outside +/-FLT_EPSILON; ProcessGameEvents case 68 -> action 173.
+struct SpinningEvent : public GameEvent<E_EVENT_SPINNING>
+{
+    f32 mfSpinAngle;   // 0x00 (:1601)
+};
+
+// Airborne (X360 id 69). Producer AirTimeManager::Update @0x822F8C88 (two AddEvent sites,
+// both `..., 69, 8`); ProcessGameEvents case 69 copies both words into action 174 AND
+// keeps the session maximum of mfCurrentJumpAirTime.
+struct InAirEvent : public GameEvent<E_EVENT_IN_AIR>
+{
+    f32 mfCumulativeAirTime;   // 0x00 (:1615)
+    f32 mfCurrentJumpAirTime;  // 0x04 (:1616)
+};
+
+// Tailgating (X360 id 72). Producer BoostStrategy::Update @0x822F8130
+// (`AddEvent(q, {mfTailgatingDistance, meTailgatedCarIndex}, 72, 8)`); ProcessGameEvents
+// case 72 copies both words into action 176 (the GUI event keeps only the distance).
+struct TailgatingEvent : public GameEvent<E_EVENT_TAILGATING>
+{
+    f32 mfDistance;             // 0x00 (:1532)
+    s32 meTailgatedCarIndex;    // 0x04 (:1533, EActiveRaceCarIndex; s32 storage keeps this
+                                //       header free of BurnoutConstants.h)
+};
+
+// A traffic check landed (X360 id 73) -- the 2-byte vehicle index. Consumed by
+// TrafficCheckManager::Update (which counts the chain) and by ProcessGameEvents case 73,
+// which forwards it as action 107 so RaceCarEntityModule can award the boost.
+struct TrafficCheckingEvent : public GameEvent<E_EVENT_TRAFFIC_CHECKING>
+{
+    u16 muVehicleIndex;   // 0x00 (:1546)
+};
+
+// The running traffic-check chain (X360 id 74). Producer TrafficCheckManager::Update
+// @0x822F8F20 (`AddEvent(out, &miCurrentCheckChain, 74, 4)`); ProcessGameEvents case 74
+// forwards it as action 108, which becomes GUI event 383.
+struct TrafficCheckingChainEvent : public GameEvent<E_EVENT_TRAFFIC_CHECKING_CHAIN>
+{
+    s32 miChainSize;   // 0x00 (:1559)
 };
 
 // A freeburn-challenge action succeeded (network echo) (DWARF :2507). X360 case 165:

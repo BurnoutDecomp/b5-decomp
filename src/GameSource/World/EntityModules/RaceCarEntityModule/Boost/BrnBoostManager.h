@@ -56,6 +56,18 @@ public:
     // the selected strategy's vtable slot 6 -- see NearMissManager::NearMissEvent).
     void OnNearMiss(ENearMissType leNearMissType) { mpBoostStrategy->OnNearMiss(leNearMissType); }
 
+    // ⭐ [boost-ticker wave 2026-09-14] The two notifications RaceCarEntityModule::HandleGameActions
+    // @0x8230BE08 raises. Like every other forwarder on this class the console inlines the manager
+    // hop and dispatches straight through mpBoostStrategy's vtable, so the slot is the proof:
+    //   case 107 @0x8230D198  `(*(**(this+97504) + 48))(strategy)`   slot 12 (+0x30) OnTrafficCheck
+    //   case 61  @0x8230CD74  `(*(**(this+97504) + 40))(strategy,x)` slot 10 (+0x28) OnStuntCompletion
+    // (module+97504 is mBoostManager+0x450, i.e. mpBoostStrategy.)
+    void OnTrafficCheck() { mpBoostStrategy->OnTrafficCheck(); }
+    void OnStuntCompletion(BrnGameState::StuntElementType leElementType)
+    {
+        mpBoostStrategy->OnStuntCompletion(leElementType);
+    }
+
     void SetCrashing(bool lbCrashing) { mpBoostStrategy->SetCrashing(lbCrashing); }
     void SetForceBoost(bool lbForceBoost) { mpBoostStrategy->SetForceBoost(lbForceBoost); }
     void SetInfiniteBoost(bool lbInfiniteBoost) { mpBoostStrategy->SetInfiniteBoost(lbInfiniteBoost); }

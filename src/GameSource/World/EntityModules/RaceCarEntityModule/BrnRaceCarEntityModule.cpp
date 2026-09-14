@@ -3191,6 +3191,61 @@ void RaceCarEntityModule::HandleGameActions(
             mBoostManager.TurnOffBoosting();
             break;
 
+        // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE STUNT-ELEMENT BOOST AWARD -- ARTIST
+        // 0x8230CD74, the console's `case 61`:
+        //     (*(**(this + 97504) + 40))(*(this + 97504), *payload)
+        // i.e. a straight dispatch through mpBoostStrategy's vtable slot 10 (+0x28),
+        // OnStuntCompletion(StuntElementType), with the action's single word as the argument.
+        // No gate, no player check -- the action only ever reaches this module for the player.
+        //
+        // ⛔ WHY IT MATTERS: the PRODUCER has been committed and live for weeks --
+        // StuntManager_gUI_00.cpp:343 posts action 61 every time a stunt element (a smashed
+        // billboard, a broken gate, a super jump) completes -- and NOTHING in the tree
+        // consumed it, so one of the game's headline boost sources paid out nothing at all.
+        // BoostBurnout2/3/5 all override OnStuntCompletion with a real AddBoost.
+        case BrnGameState::GameStateModuleIO::E_ACTION_STUNT_ELEMENT_BOOST: // 61
+        {
+            const BrnGameState::GameStateModuleIO::StuntElementBoostAction* lpStuntBoost =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::StuntElementBoostAction*>(lpEvent);
+            CGS_ASSERT(lpStuntBoost != 0, "lpStuntElementBoostAction != NULL");
+            mBoostManager.OnStuntCompletion(lpStuntBoost->meStuntElementType);
+            break;
+        }
+
+        // ⭐⭐ [boost-ticker wave 2026-09-14] THE TRAFFIC-CHECK AWARD -- ARTIST 0x8230D198,
+        // the console's `case 107`, four statements in this order:
+        //     (*(**(this + 97504) + 48))(strategy)          // slot 12 OnTrafficCheck -> AddBoost
+        //     assert(lpTrafficCheckingAction)               // BrnRaceCarEntityModule.cpp:6916
+        //     NearMissData<4,8>::AddChecked(this + 97908, *payload)
+        //     *(this + 97900) = 0.0f;  *(this + 98516) = 1;
+        // The last two are mNearMissManager's own seats (+97896 is the manager, so +97900 is
+        // mfNearMissTimeout and +98516 is mbFailedNearMissChain): a traffic check CANCELS the
+        // near-miss chain and marks it failed, and AddChecked stops the checked vehicle from
+        // also scoring a near miss when it leaves the near list.
+        //
+        // ⚠️ DECLARED HONESTLY: on this image the arm is REACHABLE BUT CURRENTLY SILENT.
+        // Action 107 is produced by ProcessGameEvents' case-73 arm (landed by this wave) from
+        // world event 73, and an exhaustive scan of all 30,084 exported ARTIST functions found
+        // NO producer of world event 73 on a <1536,16> queue anywhere in the image -- see the
+        // matching note at TrafficCheckManager in the report. The consumer is reconstructed here
+        // because it is the console's arm and it is what a future producer will need; it is not
+        // evidence that traffic checks pay out today.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ON_TRAFFIC_CHECKING: // 107
+        {
+            mBoostManager.OnTrafficCheck();
+
+            const BrnGameState::GameStateModuleIO::TrafficCheckingAction* lpChecking =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::TrafficCheckingAction*>(lpEvent);
+            CGS_ASSERT(lpChecking != 0, "lpTrafficCheckingAction != NULL");   // :6916
+
+            mNearMissManager.GetTrafficNearMissData().AddChecked(lpChecking->muVehicleIndex);
+            mNearMissManager.SetNearMissTimeout(0.0f);
+            mNearMissManager.SetFailedNearMissChain(true);
+            break;
+        }
+
         // ⭐⭐⭐ [showtime session-length wave 2026-08-29] THE SHOWTIME LATCH. Four instructions,
         // and without them an offline showtime session is FIVE SECONDS LONG.
         //
@@ -5814,6 +5869,28 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         && GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
     {
         UpdateNearMisses( lpInput, lpOutput );
+
+        // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE AIR-TIME TICK, at the console's own position:
+        // PostPhysicsUpdate @0x82307538 runs it inside this same sim-paused skip, after the
+        // NearMisses / PowerParking pair and before SendGameEvents, with the arguments the asm
+        // gives (`module + 98520`, the PLAYER car's physics state at activeRaceCar + 224, the
+        // module's own mfTimeStep at +99224, and lpOutput's game-event queue).
+        //
+        // ⛔ WHY IT WAS ABSENT AND WHAT THAT COST: BrnAirTimeManager.cpp is a complete committed
+        // reconstruction of AirTimeManager::Update @0x822F8C88 -- and the class had NO MEMBER
+        // and NO CALLER anywhere in the tree, so its body never ran. Game event 69 (in air) is
+        // produced NOWHERE ELSE in the image, so the whole air chain downstream of it --
+        // ProcessGameEvents case 69 -> action 174 -> GUI 387 -> BoostMessageManager's AIR hint and
+        // the profile's air-time best -- had nothing to carry. [[silent-drop-stubs]]: a body that
+        // exists, links, and is never called is the same defect wearing a different coat.
+        //
+        // The player gate above (index in range + IsAttached) is the same PC precondition
+        // UpdateNearMisses already stands behind, and it is what the console asserts here
+        // (BrnRaceCarEntityModule.cpp:2766/:2767 + ActiveRaceCar.h:1096).
+        mAirTimeManager.Update(
+                GetActiveRaceCar( mePlayerActiveRaceCarIndex )->GetPhysicsState(),
+                mfTimeStep,
+                lpOutput->GetGameEventQueue() );
     }
 
     // ⭐ [tut-ticker] the console's own tail order @0x82307938: SendGameEvents runs here,
