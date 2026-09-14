@@ -553,6 +553,12 @@ namespace BrnWorld
         EActiveRaceCarIndex GetLocalPlayerActiveRaceCarIndex() const { return meLocalPlayerActiveRaceCarIndex; }
 
     private:
+        // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER=1: once the player's slot is attached and its
+        // AI driver is active, hand the car to the game's own AI through the console's debug toggle
+        // (WorldDebugComponent::AIDrivesPlayerChanged @0x827B1FC0). One-shot; inert without the
+        // variable. Defined at the end of BrnWorldModule.cpp; called once per Update.
+        void HarnessArmAIDrivesPlayer();
+
         // @0x827A52B0 (DWARF BrnWorldModule.h:473 -- `void BridgeRaceCarModuleToWorldModule_
         // PreScene(InputBuffer_PreScene*, const OutputBuffer_PreScene*)`, i.e. a WorldModule
         // METHOD with `this` implicit). Latch the race-car module's pre-scene active-race-car
