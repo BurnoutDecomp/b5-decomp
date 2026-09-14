@@ -67,6 +67,20 @@ enum EGameEventType
     // @0x823A27F4 -> `mr r4, r25` (the event) / `addi r3, r31, 0x1020` (&mModeManager) /
     // `bl BrnGameState::ModeManager::PlayerFinishedMode` @0x823A27FC. The one function that
     // consumes a PlayerFinishedModeEvent is reached from case 32, so 32 is the discriminant.
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] THE RIVAL-IMPACT EVENT -- the source of trading paint /
+    // nudge / slam / shunt. PINNED THE SAME WAY ITS NEIGHBOUR BELOW IS, off the dispatcher:
+    // GameStateModule::ProcessGameEvents @0x823A0A18 `jumptable 823A107C case 31` @0x823A278C
+    // is the arm that calls GameStateModule::SendVehicleImpactMessages, and that function is the
+    // only consumer of a VehicleImpactEvent in the image -- so 31 IS the discriminant.
+    // The PS3 DWARF says 32 (BrnGameEvents.h enum) -- exactly the one-higher offset the pause
+    // family below already records for this region, and 32 is taken here by
+    // E_EVENT_PLAYER_FINISHED_MODE, which is itself jump-table-attested.
+    // PRODUCER (live, and reconstructed): BrnPhysics::Vehicle::VehicleManager::
+    // HandleRaceCarRaceCarContact @0x82642F78 posts it twice -- `AddEventSafe(..., 31, 12)`
+    // @0x82643808 (the grind arm) and `AddEvent(..., 31, 12)` @0x82643B58 (the impact arm) --
+    // onto VehicleOutputInterface::mGameEventQueue. Both are in the tree at
+    // BrnVehicleManager.cpp:378 / :438.
+    E_EVENT_VEHICLE_IMPACT          = 31,    // X360 case 31 @0x823A278C (PS3 DWARF 32)
     E_EVENT_PLAYER_FINISHED_MODE    = 32,    // X360 case 32 @0x823A27F4 (PS3 DWARF 33)
     E_EVENT_PLAYER_PAUSE_STATE_CHANGED = 33, // X360 (PS3 DWARF 34)
     E_EVENT_ENTER_REPLAY            = 35,    // X360 (PS3 DWARF 36)
@@ -587,6 +601,24 @@ struct TailgatingEvent : public GameEvent<E_EVENT_TAILGATING>
     f32 mfDistance;             // 0x00 (:1532)
     s32 meTailgatedCarIndex;    // 0x04 (:1533, EActiveRaceCarIndex; s32 storage keeps this
                                 //       header free of BurnoutConstants.h)
+};
+
+// ⭐⭐⭐ [boost-wave2 2026-09-14] A rival-vs-player vehicle impact (X360 id 31, 12 bytes).
+// DWARF BrnGameEvents.h:1324-1329 gives all three members and their order; the X360 consumer
+// SendVehicleImpactMessages @0x82381A00 confirms every one of them:
+//   `lwz r11, 0(r31)` -> the impact type, used to index the two 9-entry message-id tables
+//   `lwz r30, 4(r31)` -> compared against GetPlayerActiveRaceCarIndex() to choose action 53
+//                        (the player is the AGGRESSOR) vs action 54 (the player is the victim)
+//   `lwz r9,  8(r31)` -> copied through untouched; ProcessGameEvents' case-31 arm compares it
+//                        against the player index too, for the victim-side rumble.
+struct VehicleImpactEvent : public GameEvent<E_EVENT_VEHICLE_IMPACT>
+{
+    s32 meImpactType;                  // 0x00 (:1327, BrnPhysics::Vehicle::EImpactType; s32
+                                       //       storage keeps this header free of the physics
+                                       //       constants header, same reason meTailgatedCarIndex
+                                       //       above stores EActiveRaceCarIndex as s32)
+    s32 meAggressorActiveRaceCarIndex; // 0x04 (:1328, EActiveRaceCarIndex)
+    s32 meVictimActiveRaceCarIndex;    // 0x08 (:1329, EActiveRaceCarIndex)
 };
 
 // A traffic check landed (X360 id 73) -- the 2-byte vehicle index. Consumed by

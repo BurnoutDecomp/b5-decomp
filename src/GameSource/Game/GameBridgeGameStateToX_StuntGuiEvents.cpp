@@ -300,6 +300,27 @@ namespace
             case 66:
                 lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 565, sizeof(CgsID));
                 break;
+            // ⭐⭐ [boost-wave2 2026-09-14] 287 -> GUI 380, the SHORTCUT latch. ARTIST
+            // 0x823ED554..0x823ED56C, the console's `case 287`:
+            //     lbz  r11, 0(r31)                 ; the action's one byte
+            //     stb  r11, var_35D8(r1)
+            //     bl   AddGuiEvent<BrnGui::GuiPlayerInShortcutEvent>   -> AddEvent(q, rec, 380, 1)
+            // A raw one-byte payload, no GuiEvent header -- same shape as case 81 below.
+            //
+            // BOTH ENDS WERE ALREADY LIVE AND COULD NOT HEAR EACH OTHER, the same defect the
+            // boost-ticker wave found on its seven arms:
+            //   PRODUCER  BrnGameState::StreetManager::UpdateUpcomingStreets @0x82350A88 posts
+            //             action 287 on each edge of the player's shortcut membership (AISection
+            //             flag bit 0) -- reconstructed and running at
+            //             BrnGameStateStreetManager_wB_10.cpp:206-222.
+            //   CONSUMER  BrnGui::GuiCache::RecvEvent case 380 (BrnGuiCache.cpp:1637) latches
+            //             mbInShortcut, and GuiModule forwards 380 in its whitelist
+            //             (BrnGuiModule.cpp:1972).
+            // This arm was the only missing link, so the GUI's "player is in a shortcut" state
+            // was stuck false for the whole game.
+            case 287:
+                lpGuiInput->GetGuiEvents()->AddEvent(lpAction, 380, 1);
+                break;
             // ARTIST 0x823EA760 / 0x823EBC50: colour and unlocked-livery replies.
             // These are raw GUI payloads, without a GuiEvent header.
             case 81:
