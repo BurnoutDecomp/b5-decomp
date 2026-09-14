@@ -2206,12 +2206,34 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         }
     }
 
+    // ⭐ [traffic-type wave 2026-09-14] THE TRAFFIC-TYPE QUERY IS ANSWERED HERE, at exactly the
+    // console's position: after UpdateEventStarts / GenerateNetworkUpdateEvents and before the
+    // replay-serialiser registration, INSIDE the LockForRead/LockForWrite bracket
+    // (0x8274EEA4..0x8274EEC4):
+    //     mr   r3, r24 ; bl 0x82711700   -- InputBuffer_PostPhysics::GetVehicleManagerOutputInterface
+    //     mr   r3, r25 ; bl 0x82711EE0   -- OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue (WRITE)
+    //     addi r4, r30, 0x750            -- + mTrafficTypeRequestQueue
+    //     bl   0x8272B880                -- ProcessTrafficTypeRequests
+    // The `+ 0x750` is the console's inlining of VehicleManagerOutputInterface::
+    // GetTrafficTypeRequestQueue() const (DWARF BrnVehicleOutputInterface.h:235); the accessor
+    // is spelled out here because the member is private.
+    //
+    // ⛔ WHY IT MATTERS: this was the middle of three missing hops on the "takedown car / van /
+    // bus" chain. The request queue was being carried into this buffer every frame with NOBODY
+    // reading it, so the takedown manager's response queue was permanently empty, every
+    // traffic-caused takedown classified as INTO_CAR by fall-through, and
+    // "Missing traffic vehicle check!" (BrnTakedownManager.cpp:842) fired -- an assert that
+    // PAUSES the sim -- on each one. [[silent-drop-stubs]]
+    ProcessTrafficTypeRequests(
+        lpInput->GetVehicleManagerOutputInterface()->GetTrafficTypeRequestQueue(),
+        lpOutput->GetTrafficTypeResponseQueue());
+
     {
         static bool sbLogged = false;
         LogMissingLeg(sbLogged,
             "PostPhysicsUpdate remaining tail legs -- the perfmon bracket, UpdateEventStarts "
-            "@0x82743B80, GenerateNetworkUpdateEvents, ProcessTrafficTypeRequests "
-            "@0x8272B880 (EXPORT HOLE) and the replay-serialiser registration/write");
+            "@0x82743B80, GenerateNetworkUpdateEvents and the replay-serialiser "
+            "registration/write");
     }
 
     lpInput->UnlockForRead();

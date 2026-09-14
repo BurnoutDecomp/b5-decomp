@@ -200,6 +200,17 @@ namespace BrnTrafficIO
         return &mTrafficTypeResponseQueue;
     }
 
+    // X360 0x82711EE0 (baked 413): write-lock; return &mTrafficTypeResponseQueue (this + 830144,
+    // `addis r3, r28, 0xd / addi r3, r3, -0x5540`). The write half of the +830144 pair; its lock
+    // test is `rlwinm r11, r11, 0x1d, 0x1f, 0x1f` (status>>3 == IsBufferLockedForWriting), which
+    // is what separates it from the read twin at 0x827A0CC8 (>>4). Sole console consumer:
+    // TrafficEntityModule::PostPhysicsUpdate @0x8274EEB4, feeding ProcessTrafficTypeRequests.
+    OutputBuffer_PostPhysics::TrafficTypeResponseQueue* OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        return &mTrafficTypeResponseQueue;
+    }
+
     // X360 0x827A0D70 (baked 415): read-lock; return &mResourceRequestInterface (this + 830672).
     const OutputBuffer_PostPhysics::ResourceRequestInterface* OutputBuffer_PostPhysics::GetResourceRequestInterface() const
     {

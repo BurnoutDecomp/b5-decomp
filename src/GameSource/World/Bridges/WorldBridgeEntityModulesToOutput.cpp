@@ -232,8 +232,16 @@ void BridgePropToOutput_PreScene(
 // (BrnWorldModuleIO_UpdateOutputBuffer.cpp :: Construct, `mGameEventQueue.Construct()`).
 //
 // STILL DROPPED, DELIBERATELY (each now exactly specified above, so landing one is mechanical):
-//   * legs 4/6/7/13 -- the remaining traffic transfers. Source getters un-homed on this
+//   * legs 4/6/13 -- the remaining traffic transfers. Source getters un-homed on this
 //     build. (Leg 3, the resource-request flush, has landed -- see the body.)
+//   (⭐ LEG 7, the traffic-type RESPONSE transfer, is LANDED 2026-09-14 (traffic-type wave) --
+//    see the block in the body. It was never "un-homed": BOTH ends were already bodied
+//    (OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue() const @0x827A0CC8 and
+//    UpdateOutputBuffer::AppendTrafficTypeResponseQueue @0x827AA710), and everything downstream
+//    of it -- BrnGameModule.cpp:4298, CacheTakedownTrafficTypeResponses, the takedown cache,
+//    TakedownManager::Update's lpLastTrafficTypeResponseQueue -- was live. Only this one hop
+//    was missing, and it was the reason every traffic-caused takedown classified as
+//    "takedown car" and fired "Missing traffic vehicle check!". [[silent-drop-stubs]])
 //   (legs 8/9 are LANDED 2026-09-06, effects-producer wave -- see the block in the body. The
 //    note above used to read "they are OFF the OnPropHit chain, so the gateui brief says
 //    note-don't-land", which was true of the chain that brief was scoped to and is exactly why
@@ -324,6 +332,66 @@ void BridgeEntityModulesToOutput_PostPhysics(
         // named leg; see the function below.
         BridgeRaceCarEntityInfoToOutput_PostPhysics(lpWorldModule, lpOutputBuffer,
                                                     lpRaceCarOutput_PostPhysics);
+    }
+
+    // ================================================================================
+    // ⭐⭐ LEG 7, @0x827AF024..0x827AF02C -- THE TRAFFIC-TYPE RESPONSE TRANSFER.
+    //   0x827AF024  mr r3, <trafficOut>        ; OutputBuffer_PostPhysics::
+    //   0x827AF028  bl …GetTrafficTypeResponseQueue() const   (0x827A0CC8 -> +830144)
+    //   0x827AF02C  bl …AppendTrafficTypeResponseQueue        (0x827AA710 -> +155616)
+    // Destination: UpdateOutputBuffer::mTrafficTypeResponseQueue, whose Append is the committed
+    // BaseEventQueue<TrafficTypeResponse>::Append. Both ends were already bodied in this tree;
+    // only the hop between them was missing.
+    //
+    // ⭐⭐ WHY IT MATTERS -- THE LAST OF THE THREE HOPS OF THE "TAKEDOWN CAR / VAN / BUS" CHAIN.
+    // Downstream of here the whole path is already live:
+    //   BrnGameModule.cpp:4298  lpcWorldOutput->GetTrafficTypeResponseQueue() ->
+    //   GameStateModule::PostWorldUpdate -> CacheTakedownTrafficTypeResponses ->
+    //   mpTakedownCache->mTrafficTypeResponseQueue -> TakedownManager::Update @0x8239FAC0's
+    //   `lpLastTrafficTypeResponseQueue` -> DetectStandardTakedown @0x8237A3C0 ->
+    //   GetTakedownTypeFromTrafficVehicleIndex @0x82366288.
+    // With this leg dropped that queue could never be non-empty, so every traffic-caused
+    // takedown fell through to E_VEHICLECLASS_CAR (always "takedown car") AND fired the
+    // "Missing traffic vehicle check!" assert at BrnTakedownManager.cpp:842 -- an assert that
+    // PAUSES the sim. MEASURED before this change (run td_G, line 32190):
+    //   [td-detect] standard victim=4 aggressor=3 multiple=0 crasherOwner=2 crasherIndex=591
+    //               trafficResponses=0 -> type=10
+    // -- owner 2 is E_ENTITYTYPE_TRAFFIC_VEHICLE, i.e. a real organic traffic takedown, and
+    // `trafficResponses=0` is this leg.
+    //
+    // The traffic output buffer is READ-locked in WorldModule::Update's LockBuffersForIO
+    // bracket (hence the const accessor) and the destination is WRITE-locked, exactly like the
+    // prop legs below. The console runs it unconditionally, between leg 6 and leg 8.
+    // ================================================================================
+    lpOutputBuffer->AppendTrafficTypeResponseQueue(
+        lpTrafficOutput_PostPhysics->GetTrafficTypeResponseQueue());
+
+    // [td-type] PC witness (BRN_TD_DIAG), NOT in the X360 binary: proves the leg RUNS and what
+    // it carried. It prints the first N armed frames INCLUDING the empty ones, for the same
+    // reason the prop witness below does -- a rung that only speaks when a count is non-zero
+    // cannot tell "no traffic takedown happened" from "the leg never executed".
+    // [FLAG PC witness]  DELETE-WHEN: "takedown bus" has been seen in a real run.
+    {
+        static const bool sbTdDiag = ( getenv( "BRN_TD_DIAG" ) != 0 );
+        static s32 siLinesLeft  = 12;
+        static s32 siCarried    = 0;
+
+        if ( sbTdDiag && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            const s32 liLength = lpTrafficOutput_PostPhysics->GetTrafficTypeResponseQueue()->GetLength();
+            siCarried += liLength;
+            if ( liLength != 0 || siLinesLeft > 0 )
+            {
+                if ( siLinesLeft > 0 )
+                {
+                    --siLinesLeft;
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << "[td-type] leg7 traffic->world responses=" << liLength
+                    << " carriedTotal=" << siCarried
+                    << " [FLAG PC witness]\n";
+            }
+        }
     }
 
     // ================================================================================

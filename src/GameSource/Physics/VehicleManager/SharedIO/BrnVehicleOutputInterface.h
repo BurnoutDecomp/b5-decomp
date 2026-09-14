@@ -443,6 +443,19 @@ namespace Vehicle
             return mFineTrafficCrashedEventQueue;
         }
 
+        // ⭐ [traffic-type wave 2026-09-14] The READ half of the +0x750 pair, DWARF
+        // BrnVehicleOutputInterface.h:235 (`const VehicleManagerOutputInterface::
+        // TrafficTypeRequestQueue* GetTrafficTypeRequestQueue() const`). It has no out-of-line
+        // X360 symbol because the one console consumer INLINES it: TrafficEntityModule::
+        // PostPhysicsUpdate @0x8274EEBC emits `addi r4, r30, 0x750` on the pointer
+        // InputBuffer_PostPhysics::GetVehicleManagerOutputInterface @0x82711700 just returned,
+        // and hands that to ProcessTrafficTypeRequests. 1872 == 0x750 is provenance for WHICH
+        // member; the body below is by name.
+        const TrafficTypeRequestQueue* GetTrafficTypeRequestQueue() const
+        {
+            return &mTrafficTypeRequestQueue;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)
