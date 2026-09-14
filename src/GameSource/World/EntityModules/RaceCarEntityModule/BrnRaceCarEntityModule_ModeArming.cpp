@@ -61,8 +61,8 @@ static const f32 KF_START_GRID_PLACE_ON_TRACK_SPEED = 0.0f;
 // ----------------------------------------------------------------------------
 // HandlePrepareForModeAction @0x823092F0 -- common non-Showtime boost spine.
 //
-// The full ARTIST function also rebuilds online grids/opponents, publishes an
-// AI-control event, configures CrashPlay and copies unrelated mode flags. Those
+// The full ARTIST function also rebuilds online grids/opponents and copies
+// unrelated mode flags. Those
 // branches remain outside this BoostManager pass. The state below is the exact
 // subset that selects/preserves the boost strategy, seeds its mode bar, gates
 // earning until START_PLAYING_MODE, and arms attached cars. Showtime's
@@ -170,6 +170,15 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         || mbPlayerDonutsOnEventStart;
 
     meGameModeType = lpGameModeParams->GetGameModeType();
+    // ARTIST 0x82309580..0x823095D8: modes which take the wheel must also
+    // switch the player's AI routing state before the first driving update.
+    if (lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_SET_ALL_CARS_TO_STARTING_AI_CONTROL))
+    {
+        BrnAI::AIModuleIO::PlayerControlChangedEvent lChanged;
+        lChanged.mbPlayerIsInControl = false;
+        lpOutput->GetRaceCarAIInterface()->mManagementQueue.AddEvent(
+            &lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
+    }
     mbIsInGameMode = true;
 
     if (CgsDev::Log::gpDebugPrint != 0)

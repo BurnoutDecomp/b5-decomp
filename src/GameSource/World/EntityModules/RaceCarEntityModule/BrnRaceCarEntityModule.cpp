@@ -49,6 +49,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"                  // AcquireResourceRequest / *Response
 #include "GameShared/GameClasses/System/Resource/CgsResourceId.h"                        // CgsResource::ID::HashString
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint
+#include "SharedClasses/Trigger/BrnRegion.h"
 #include "SharedClasses/World/BrnCollisionTag.h"                                        // BrnWorld::KU_COLLISION_FLAG_FATAL ([crash-verdict] witness)
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                               // BrnWorld::GlobalColourPalette
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"                              // GameDataAssetEvent (reply shape)
@@ -258,6 +259,9 @@ void RaceCarEntityModule::Construct()
     // queues, so no AddEntry can ever reach a request ring.
     mRaceCarStreamer.Construct();
     mfTimeStep = 0.0f;
+    mfLastPlayerCarSpeed = 0.0f;
+    mbOncomingTimerActive = false;
+    mfOncomingNoClueTimer = 0.0f;
     mfTimeStepMultiplier = 0.0f;   // the console's Construct seeds this seat from the same 0.0f
 
     // The crash-play manager is a by-value member and ARTIST inlines its Construct here. Landing
@@ -3058,6 +3062,47 @@ void RaceCarEntityModule::HandleGameActions(
                     const BrnGameState::GameStateModuleIO::CompletedStuntAction*>(lpEvent);
             CGS_ASSERT(lpCompletedStunt != 0, "lpCompletedStuntAction != NULL");
             mBoostManager.UpdateStuntBoost(lpCompletedStunt);
+            break;
+        }
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_SET_PLAYER_CAR_DRIVER:
+        {
+            // ARTIST 0x8230CA34..0x8230CCA0. Notify AI before the active-car gate:
+            // physics control ownership alone does not update the driver's routing policy.
+            const auto* lpAction = reinterpret_cast<const BrnGameState::GameStateModuleIO::SetPlayerCarDriverAction*>(lpEvent);
+            BrnAI::AIModuleIO::PlayerControlChangedEvent lChanged;
+            lChanged.mbPlayerIsInControl = lpAction->meCarControl == E_CAR_CONTROL_ENTITY_MODULE;
+            lpOutput->GetRaceCarAIInterface()->mManagementQueue.AddEvent(
+                &lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
+            if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID) break;
+            ActiveRaceCar* lpCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
+            if (!lpCar->IsActive()) break;
+            if (lChanged.mbPlayerIsInControl)
+                mBoostManager.GetBoostStrategy()->SetForceBoost(false);
+            else
+            {
+                mfLastPlayerCarSpeed = lpCar->GetPhysicsState()->mfSpeedMPH * 0.44704f;
+                if (mbIsInGameMode || mbIsInOnlineGameMode)
+                    mBoostManager.GetBoostStrategy()->SetForceBoost(true);
+            }
+            if (lpAction->mbIsDriveThru)
+            {
+                BrnTrigger::BoxRegion lBox;
+                static_assert(sizeof(lBox) == sizeof(lpAction->maDriveThruBoxRegion), "drive-through box payload");
+                std::memcpy(&lBox, lpAction->maDriveThruBoxRegion, sizeof(lBox));
+                Vector3 lDirection = lBox.ComputeDirection();
+                const Vector3 lVelocity = lpCar->GetVelocity();
+                if (lVelocity.x * lDirection.x + lVelocity.y * lDirection.y + lVelocity.z * lDirection.z < 0.0f)
+                    lDirection = -lDirection;
+                if (lChanged.mbPlayerIsInControl)
+                {
+                    f32 lfSpeed = mfLastPlayerCarSpeed < lpAction->mfMaxResetSpeed ? mfLastPlayerCarSpeed : lpAction->mfMaxResetSpeed;
+                    if (lfSpeed < 0.0f) lfSpeed = 0.0f;
+                    lpCar->RequestPlaceOnTrack(lpCar->GetPosition(), lpCar->GetDirection(), lfSpeed);
+                }
+                else
+                    lpCar->RequestPlaceOnTrack(lBox.GetPosition() - lDirection * (lBox.GetDimensionZ() * 0.5f), lDirection, 0.0f);
+            }
             break;
         }
 

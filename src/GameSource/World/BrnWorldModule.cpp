@@ -2791,13 +2791,11 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
                                    lpRaceCarOutput_PostScene, lpSceneOutput,
                                    lpRaceCarOutput_PreScene );
 
-    // The player-car-under-AI-control latch + the AI camera copy: the X360 pokes
-    // both straight into mAIModule's interior (this+0x5DFD00 camera <-
-    // mLastCameraInput; this+0x5DFE82 byte <- maeCarControls[player] == 2).
-    // [FLAG PC boot gate] the AI module's committed slice models that interior as
-    // opaque padding, so the two stores have no named home yet; the AI update
-    // below is gated inert, so the observable is unchanged. Restore both with
-    // the AI module TU (add SetPlayerUnderAIControl + the camera member).
+    // ARTIST 0x827D74FC..0x827D753C refreshes ownership before StoreDrivenCarData.
+    // The management event resets the route/PID once; this latch keeps subsequent
+    // frames from overwriting the handoff with "human driving" again.
+    mAIModule.SetAIDrivesPlayer(meLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+        GetCarControl(meLocalPlayerActiveRaceCarIndex) == E_CAR_CONTROL_AI_MODULE);
 
     PerfMonCpu::StartMonitor( miAIModuleUpdatePM );
     // X360 (*(vtbl(mAIModule) + 68)) == Update; devirtualised.
