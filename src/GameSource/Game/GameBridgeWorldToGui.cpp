@@ -732,10 +732,57 @@ void BrnGameModule::BridgeWorldToGui(
 {
     BridgeWorldVehicleDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);
 
-    // FLAG deferred (console order): BridgeWorldRouteInformationToGui,
-    // BridgeWorldTrafficAndPropDataToGui, BridgeWorldImpactInformationToGui, and the
-    // world-entity-state -> GuiEventRequestCollisionWorldEvent tail. Each is its own
-    // X360 body; they land with their consumers.
+    // FLAG deferred (console order): BridgeWorldRouteInformationToGui and
+    // BridgeWorldTrafficAndPropDataToGui sit between the two calls below on the console
+    // (0x823EDD50), and the world-entity-state -> GuiEventRequestCollisionWorldEvent tail
+    // follows. Each is its own X360 body; they land with their consumers.
+    BridgeWorldImpactInformationToGui(lpGuiInputBuffer, lpWorldOutputBuffer);
+}
+
+// ============================================================================
+// BridgeWorldImpactInformationToGui @0x823E6A80 -- the rival-impact hint feed.
+//
+// Walks the world output buffer's game-event queue (VariableEventQueue<1536,16>, the same
+// queue GameStateModule::ProcessGameEvents consumes) and forwards every id-31 record --
+// BrnWorldIO's VehicleImpactEvent {meImpactType, meAggressorActiveRaceCarIndex,
+// meVictimActiveRaceCarIndex} -- to the GUI as GuiImpactEvent (365, 12 bytes): the three
+// words are copied verbatim (`v10[0..2] = i[0..2]`) and AddGuiEvent<GuiImpactEvent> posts
+// them. This is the ONLY producer of 365 in the image; BoostMessageManager::RecvEvent turns
+// it into the TRADING PAINT / NUDGE / SLAM / SHUNT hint above the boost bar and
+// HudMessageAnalyzer::HandleImpact @0x824F2E48 guards the type in (0, 9).
+// Non-consuming: the console reads the queue here and leaves it for the game-state module
+// (and its Clear), exactly as the tree's other readers of this queue do.
+// ============================================================================
+void BrnGameModule::BridgeWorldImpactInformationToGui(
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer)
+{
+    const BrnWorldIO::UpdateOutputBuffer::GameEventQueue* lpGameEventQueue =
+        lpWorldOutputBuffer->GetGameEventQueue();
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == 31)   // BrnGameState::GameStateModuleIO::E_EVENT_VEHICLE_IMPACT
+        {
+            const s32* lpiWords = reinterpret_cast<const s32*>(lpEvent);
+            BrnGui::GuiImpactEvent lImpact;
+            lImpact.meImpactType                 = static_cast<BrnPhysics::Vehicle::EImpactType>(lpiWords[0]);
+            lImpact.meAggressorActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(lpiWords[1]);
+            lImpact.meVictimActiveRaceCarIndex    = static_cast<EActiveRaceCarIndex>(lpiWords[2]);
+            // (direct queue push -- AddGuiEvent<GuiImpactEvent> folds to AddEvent(&event, 365, 12);
+            // the 206 post above documents the convention)
+            CGS_ASSERT(lpGuiInputBuffer != 0, "Input hasn't been locked for write");   // CgsGuiModule.h:286
+            lpGuiInputBuffer->GetGuiEvents()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lImpact),
+                lImpact.GetEventType(),
+                static_cast<s32>(sizeof(lImpact)));
+        }
+        liType = lpGameEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
 }
 
 } // namespace BrnGame
