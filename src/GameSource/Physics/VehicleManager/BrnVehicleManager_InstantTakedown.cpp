@@ -11,11 +11,21 @@
 // =================================================================================================
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdlib>
 
 namespace BrnPhysics
 {
 namespace Vehicle
 {
+    // [PC HARNESS, NOT X360] BRN_TD_DIAG=1 -- see the twin in BrnVehicleManager.cpp. This TU is a
+    // build-mechanics split of that one, so the switch is duplicated file-locally rather than
+    // exported. DELETE-WHEN every takedown type is proven on film.
+    static bool TakedownDiagEnabled()
+    {
+        static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
+        return sbOn;
+    }
     // -------------------------------------------------------------------------------------------
     // InstantTakedown  @0x82636108
     //
@@ -58,6 +68,18 @@ namespace Vehicle
         // Decode both entities to their active-car slots (TU-wide packing: bits 10..23 of muValue).
         const s32 liVictimActiveRaceCarIndex    = static_cast<s32>((lVictimEntityId.muValue    >> 10) & 0x3FFF);
         const s32 liAggressorActiveRaceCarIndex = static_cast<s32>((lAggressorEntityId.muValue >> 10) & 0x3FFF);
+
+        // [td-instant] PC witness: the classified type, the two slots, and the master gate --
+        // the single point every classifier funnels through. [FLAG PC witness]
+        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-instant] type=" << static_cast<s32>(leTakedownType)
+                                       << " victim=" << liVictimActiveRaceCarIndex
+                                       << " aggressor=" << liAggressorActiveRaceCarIndex
+                                       << " slamsOn=" << (mbSlamsAndShuntsOn ? 1 : 0)
+                                       << " victimCarType=" << static_cast<s32>(maeRaceCarTypes[liVictimActiveRaceCarIndex])
+                                       << " [FLAG PC witness]\n";
+        }
 
         // Master gate: do nothing at all unless takedowns are currently enabled.
         if (!mbSlamsAndShuntsOn)
