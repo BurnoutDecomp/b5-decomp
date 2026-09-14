@@ -64,8 +64,11 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                       // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                                         // vpu::Subtract / Normalize
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // [td-probe] PC harness witness
 
 #include <cmath>
+#include <cstdlib>                                                                 // std::getenv / atof ([td-probe])
+#include <cstring>                                                                 // strchr ([td-probe])
 
 namespace BrnPhysics
 {
@@ -480,6 +483,114 @@ namespace Vehicle
     {
         AggressiveDrivingFlags&   lrFlags = lpVehicleOutputInterface->GetAggressiveDrivingFlags();          // +0x6C00
         VehicleGuiOutputMessages& lrGui   = lpVehicleManagerOutputInterface->GetVehicleGuiOutputMessages(); // +0x79C
+
+        // =========================================================================================
+        // [PC HARNESS, NOT X360] BRN_TD_PROBE=<firstSeconds>[:<periodSeconds>] -- the TAKEDOWN-TYPE
+        // LADDER PROBE.
+        //
+        // ⭐ WHY IT EXISTS, and what it does NOT do. The eight physics classifiers were walked
+        // against the ARTIST asm this wave and they are faithful; what could not be answered from
+        // code is whether a classified type SURVIVES the publication chain
+        //     InstantTakedown -> SetRaceCarCrashing -> RaceCarCrashEvent.meInstantTakedownType
+        //     -> TakedownManager::DetectInstantTakedown -> TakedownEvent.meType
+        //     -> TranslateTakedownsToGuiEvents -> GuiTakedownEvent (363)
+        //     -> HudMessageAnalyzer::HandleTakedown -> KAPC_TAKEDOWN_TYPES[type]
+        // for every type, because a scripted drive cannot be made to produce a vertical, a T-bone
+        // and a traffic check on demand -- run td_A drove for 200 s with rivals on the map and
+        // produced ZERO race-car-vs-race-car contacts, so the ladder never even ran.
+        // This probe FAKES NO CLASSIFICATION: it calls the console's own InstantTakedown, the exact
+        // entry point every classifier funnels through, with the exact operands the grinding arm
+        // twenty lines below builds, and walks the takedown TYPE through the enum. Everything after
+        // that call is the console's own code. A type that does not come out the far end is a
+        // genuine defect in the chain; a type that does is proven end to end.
+        // ⛔ It is a CAPABILITY, not an instrument: it wrecks cars that were not hit. Off unless the
+        // variable is set, and it must be in the harness wipe list.
+        // DELETE-WHEN every takedown type is proven on film from organic play.
+        // =========================================================================================
+        {
+            static const char* spcProbe = std::getenv("BRN_TD_PROBE");
+            if (spcProbe != 0 && mePlayerActiveRaceCarIndex != static_cast<EActiveRaceCarIndex>(-1))
+            {
+                static f32  sfProbeClock = 0.0f;
+                static s32  siProbeShot  = -1;
+                static f32  sfProbeNext  = 0.0f;
+                static f32  sfProbePeriod = 0.0f;
+                if (siProbeShot < 0)
+                {
+                    sfProbeNext   = static_cast<f32>(atof(spcProbe));
+                    // ':' not ',' -- flow_run.ps1's -DiagEnv splits its argument on commas.
+                    const char* lpcColon = strchr(spcProbe, ':');
+                    sfProbePeriod = (lpcColon != 0) ? static_cast<f32>(atof(lpcColon + 1)) : 8.0f;
+                    if (sfProbePeriod <= 0.0f) sfProbePeriod = 8.0f;
+                    siProbeShot   = 0;
+                }
+                sfProbeClock += lfTimeStep;
+
+                // The ladder the owner named, in enum order: every type a classifier can produce
+                // plus the three game-state INTO_* types, so the HUD id for each is read from one run.
+                static const BrnGameState::ETakedownType KAE_PROBE_TYPES[10] =
+                {
+                    BrnGameState::E_TAKEDOWN_GRINDING,      BrnGameState::E_TAKEDOWN_T_BONE,
+                    BrnGameState::E_TAKEDOWN_VERTICAL,      BrnGameState::E_TAKEDOWN_TRAFFIC_CHECK,
+                    BrnGameState::E_TAKEDOWN_HEAD_ON,       BrnGameState::E_TAKEDOWN_STANDARD,
+                    BrnGameState::E_TAKEDOWN_REVENGE,       BrnGameState::E_TAKEDOWN_INTO_CAR,
+                    BrnGameState::E_TAKEDOWN_INTO_VAN,      BrnGameState::E_TAKEDOWN_INTO_BUS,
+                };
+
+                // The cadence is measured FROM THE LAST SHOT, not from t=0: the first shot can only
+                // fire once a non-player car exists, and a fixed `first + n*period` schedule then
+                // fires every remaining shot on consecutive frames -- measured run td_B, where
+                // shots 1..9 all landed inside 0.017 s and every one of them was swallowed by
+                // SetRaceCarCrashing's duplicate-crash gate (same victim/aggressor pair, record
+                // still live), so nine types were "fired" and none reached a crash event.
+                if (siProbeShot < 10 && sfProbeClock >= sfProbeNext)
+                {
+                    const s32 liProbePlayer = static_cast<s32>(mePlayerActiveRaceCarIndex);
+                    // Pick a victim: the first used slot that is not the player and is not already
+                    // crashing (an already-crashing victim takes SetRaceCarCrashing's light arm,
+                    // which publishes E_TAKEDOWN_NONE and would measure nothing).
+                    s32 liProbeVictim = -1;
+                    for (s32 liScan = mUsedRaceCars.GetFirstNonZeroBit();
+                         liScan != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
+                         liScan = mUsedRaceCars.GetNextNonZeroBit(liScan))
+                    {
+                        if (liScan != liProbePlayer && !maRaceCarVehicles[liScan].mbCrashing)
+                        {
+                            liProbeVictim = liScan;
+                            break;
+                        }
+                    }
+                    if (liProbeVictim >= 0)
+                    {
+                        const BrnGameState::ETakedownType leProbeType = KAE_PROBE_TYPES[siProbeShot];
+                        ++siProbeShot;
+                        sfProbeNext = sfProbeClock + sfProbePeriod;
+                        if (CgsDev::Log::gpDebugPrint != 0)
+                        {
+                            *CgsDev::Log::gpDebugPrint << "[td-probe] shot " << (siProbeShot - 1)
+                                                       << " type=" << static_cast<s32>(leProbeType)
+                                                       << " victim=" << liProbeVictim
+                                                       << " aggressor=" << liProbePlayer
+                                                       << " t=" << sfProbeClock
+                                                       << " [FLAG PC harness]\n";
+                        }
+                        EntityId lProbeVictimId;
+                        lProbeVictimId.muValue    = static_cast<u32>(maRaceCarHandlingBodyIDs[liProbeVictim]  >> 32);
+                        EntityId lProbeAggressorId;
+                        lProbeAggressorId.muValue = static_cast<u32>(maRaceCarHandlingBodyIDs[liProbePlayer] >> 32);
+                        const Vector3 lvProbeOffset =
+                            rw::math::vpu::Subtract(maRaceCarVehicles[liProbeVictim].GetPosition(),
+                                                    maRaceCarVehicles[liProbePlayer].GetPosition());
+                        InstantTakedown(lProbeVictimId, lProbeAggressorId,
+                                        rw::math::vpu::Normalize(lvProbeOffset), lvProbeOffset,
+                                        KF_GRINDING_TAKEDOWN_NORMAL_STRESS_SQ,
+                                        lpRequestOutputInterface, lpVehicleManagerOutputInterface,
+                                        lpVehicleOutputInterface, lpDeformationInterface,
+                                        leProbeType);
+                    }
+                }
+            }
+        }
 
         for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
         {

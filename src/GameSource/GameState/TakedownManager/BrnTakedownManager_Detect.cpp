@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>                                                                  // std::memset (the residue-zeroed action records)
+#include <cstdlib>                                                                  // std::getenv ([td-detect] PC witness switch)
 
 // ============================================================================================
 // BrnGameState::TakedownManager -- Update and the detect / process chain (BrnTakedownManager.cpp
@@ -106,6 +107,14 @@ namespace BrnGameState
         // the interface boundary only.
         inline ::EActiveRaceCarIndex GlobalIndex(EActiveRaceCarIndex leIndex)   { return static_cast<::EActiveRaceCarIndex>(leIndex); }
         inline EActiveRaceCarIndex   LocalIndex(::EActiveRaceCarIndex leIndex)  { return static_cast<EActiveRaceCarIndex>(leIndex); }
+
+        // [PC HARNESS, NOT X360] BRN_TD_DIAG=1 -- the takedown-classification trace switch shared
+        // (by name, not by symbol) with the physics side. DELETE-WHEN every type is proven on film.
+        bool TakedownDiagEnabled()
+        {
+            static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
+            return sbOn;
+        }
     }
 
     // ----------------------------------------------------------------------------------------
@@ -162,6 +171,83 @@ namespace BrnGameState
         }
 
         DetectNetworkTakedowns(lpInput, lpActiveCarInterface, lpOutput);
+
+        // =====================================================================================
+        // [PC HARNESS, NOT X360] BRN_TD_LADDER=<firstSeconds>[:<periodSeconds>] -- the TAKEDOWN
+        // TYPE DISPLAY LADDER.
+        //
+        // ⭐ WHY. The takedown HUD banner is only ever produced INSIDE A GAME MODE: the console's
+        // ProcessTakedownEvent pushes the TakedownEvent onto the output queue only in its
+        // `mpCurrentGameMode != 0` arm (@0x82393E9C; the free-burn else-arm posts the rival
+        // SHUTDOWN instead and queues nothing). So "does a VERTICAL show as TDGdVert" cannot be
+        // answered by driving around free burn at all, and a scripted drive cannot be made to
+        // produce a vertical, a T-bone AND a traffic check inside one event on demand.
+        // THIS INVENTS NOTHING. It arms exactly the record the console's OWN debug callback
+        // "Force takedown" arms (TakedownManagerDebugComponent::ForceTakedownCallback
+        // @0x823597F8 -- Clear, mbWaitingOnTakedown, aggressor 0, victim 1) and changes ONE field:
+        // the takedown TYPE, walked through the enum. Everything downstream -- ProcessQueuedTakedowns,
+        // ProcessTakedownEvent, the output queue, TranslateTakedownsToGuiEvents, HandleTakedown,
+        // KAPC_TAKEDOWN_TYPES -- is the console's own code, unmodified.
+        // ⛔ A CAPABILITY, not an instrument: it awards takedowns nobody earned. Off unless set,
+        // and it must be in the harness wipe list.
+        // DELETE-WHEN every type is proven on film from organic play.
+        // =====================================================================================
+        {
+            static const char* spcLadder = std::getenv("BRN_TD_LADDER");
+            if (spcLadder != 0 && mpModeManager->GetCurrentGameMode() != nullptr)
+            {
+                static const ETakedownType KAE_LADDER_TYPES[10] =
+                {
+                    E_TAKEDOWN_STANDARD, E_TAKEDOWN_GRINDING, E_TAKEDOWN_T_BONE,
+                    E_TAKEDOWN_VERTICAL, E_TAKEDOWN_TRAFFIC_CHECK, E_TAKEDOWN_HEAD_ON,
+                    E_TAKEDOWN_REVENGE,  E_TAKEDOWN_INTO_CAR, E_TAKEDOWN_INTO_VAN,
+                    E_TAKEDOWN_INTO_BUS,
+                };
+                static f32 sfLadderClock  = 0.0f;
+                static f32 sfLadderNext   = -1.0f;
+                static f32 sfLadderPeriod = 0.0f;
+                static s32 siLadderShot   = 0;
+                if (sfLadderNext < 0.0f)
+                {
+                    sfLadderNext   = static_cast<f32>(atof(spcLadder));
+                    // ':' not ',': flow_run.ps1's -DiagEnv splits its argument on commas.
+                    const char* lpcColon = strchr(spcLadder, ':');
+                    sfLadderPeriod = (lpcColon != 0) ? static_cast<f32>(atof(lpcColon + 1)) : 5.0f;
+                    if (sfLadderPeriod <= 0.0f) sfLadderPeriod = 5.0f;
+                }
+                sfLadderClock += lfDeltaTime;
+                // ⛔ THE VICTIM MUST BE AN ATTACHED, ACTIVE RACE CAR. Measured run td_F: the
+                // console's own "Force takedown" shape (victim = slot 1, unconditionally) awarded a
+                // takedown against a slot that does not exist in a solo stunt run; one frame later
+                // ActiveRaceCar::GetGlobalRaceCar fired `IsAttached()` (BrnActiveRaceCar.cpp:864)
+                // from RaceCarEntityModule::UpdateBoost and the process died 0xC0000005. The debug
+                // callback gets away with it because a developer only presses it with a rival on
+                // screen; a scheduled probe must check.
+                const bool lbLadderVictimActive =
+                    lpActiveCarInterface->IsRaceCarActive(GlobalIndex(E_ACTIVE_RACE_CAR_INDEX_1));
+                if (siLadderShot < 10 && sfLadderClock >= sfLadderNext && lbLadderVictimActive)
+                {
+                    const ETakedownType leLadderType = KAE_LADDER_TYPES[siLadderShot];
+                    RaceCarData& lrLadderCar = maRaceCarData[E_ACTIVE_RACE_CAR_INDEX_0];
+                    lrLadderCar.Clear();
+                    lrLadderCar.mfTimeSinceVictimCrashed                = 0.0f;
+                    lrLadderCar.mbWaitingOnTakedown                     = true;
+                    lrLadderCar.mPendingTakedownEvent.meAggressorIndex  = E_ACTIVE_RACE_CAR_INDEX_0;
+                    lrLadderCar.mPendingTakedownEvent.meVictimIndex     = E_ACTIVE_RACE_CAR_INDEX_1;
+                    lrLadderCar.mPendingTakedownEvent.meType            = leLadderType;
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "[td-ladder-probe] shot " << siLadderShot
+                                                   << " armed type=" << static_cast<s32>(leLadderType)
+                                                   << " t=" << sfLadderClock
+                                                   << " victimActive=1 [FLAG PC harness]\n";
+                    }
+                    ++siLadderShot;
+                    sfLadderNext = sfLadderClock + sfLadderPeriod;
+                }
+            }
+        }
+
         ProcessQueuedTakedowns(lpInput, lpActiveCarInterface, lpOutput, lfDeltaTime);
 
         if (IsInTakedownCamera())
@@ -248,6 +334,16 @@ namespace BrnGameState
     {
         const EActiveRaceCarIndex leCrashedActiveRaceCarIndex = GetCrashedActiveRaceCarIndex(lpCrashEvent);
         RaceCarData* lpCrashedCarData = GetRaceCarData(leCrashedActiveRaceCarIndex);
+
+        // [td-detect] PC witness: what the physics side classified for this crash. [FLAG PC witness]
+        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-detect] instant crash victim=" << static_cast<s32>(leCrashedActiveRaceCarIndex)
+                                       << " crasherOwner=" << static_cast<s32>(GetCrasherEntityId(lpCrashEvent).GetOwner())
+                                       << " crasherIndex=" << static_cast<s32>(GetCrasherEntityId(lpCrashEvent).GetEntityIndex())
+                                       << " instantType=" << static_cast<s32>(lpCrashEvent->meInstantTakedownType)
+                                       << " [FLAG PC witness]\n";
+        }
 
         if (lpCrashEvent->meInstantTakedownType == E_TAKEDOWN_NONE)
         {
@@ -366,6 +462,19 @@ namespace BrnGameState
         else
         {
             lpAggressorTakedownEvent->meType = E_TAKEDOWN_DOUBLE;
+        }
+
+        // [td-detect] PC witness: the standard-path type and the terms that chose it. [FLAG PC witness]
+        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-detect] standard victim=" << static_cast<s32>(leVictimActiveRaceCarIndex)
+                                       << " aggressor=" << static_cast<s32>(leAggressorActiveRaceCarIndex)
+                                       << " multiple=" << lpAggressorCarData->miMultipleTakedownLength
+                                       << " crasherOwner=" << static_cast<s32>(GetCrasherEntityId(lpCrashEvent).GetOwner())
+                                       << " crasherIndex=" << static_cast<s32>(GetCrasherEntityId(lpCrashEvent).GetEntityIndex())
+                                       << " trafficResponses=" << (lpLastTrafficTypeResponseQueue != 0 ? lpLastTrafficTypeResponseQueue->GetLength() : -1)
+                                       << " -> type=" << static_cast<s32>(lpAggressorTakedownEvent->meType)
+                                       << " [FLAG PC witness]\n";
         }
 
         mTakedownManagerDebugComponent.RecordTakedown(leAggressorActiveRaceCarIndex, leVictimActiveRaceCarIndex);
@@ -552,12 +661,31 @@ namespace BrnGameState
             {
                 lpTakedownEvent->meType = E_TAKEDOWN_DOUBLE;
             }
+            // [td-detect] PC witness: the type the SCORING queue actually receives, after the
+            // in-a-mode DOUBLE override the console applies here. [FLAG PC witness]
+            if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[td-detect] process(in-mode) type=" << static_cast<s32>(lpTakedownEvent->meType)
+                                           << " chain=" << lpTakedownEvent->miTakedownChainCount
+                                           << " multiple=" << lpTakedownEvent->miMultipleTakedownCount
+                                           << " [FLAG PC witness]\n";
+            }
             // FLAG cross-home cast (see DetectNetworkTakedowns): TakedownEventOutputQueueType is the
             // forward-declared name of EventQueue<TakedownEvent,8> -- the same cast GameStateModule_gUI_00.cpp
             // and BrnGameModule.cpp carry for this member.
             CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue =
                 reinterpret_cast<CgsModule::EventQueue<TakedownEvent, 8>*>(lpOutput->GetTakedownEventOutputQueue());
             lpTakedownEventQueue->AddEvent(*lpTakedownEvent);
+            // [td-detect] PC witness: the queue OBJECT and its depth right after the push, so a
+            // translator that reads zero can be told apart from a translator reading a different
+            // queue. [FLAG PC witness]
+            if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[td-detect] pushed to queue "
+                                           << static_cast<s32>(reinterpret_cast<u64>(lpTakedownEventQueue) & 0xFFFFFFFFu)
+                                           << " len=" << lpTakedownEventQueue->GetLength()
+                                           << " [FLAG PC witness]\n";
+            }
         }
         else
         {

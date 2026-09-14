@@ -3,6 +3,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDUnCompress
 #include "GameSource/Gui/BrnGuiCache.h"                 // GuiCache accessors
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [td-msg] PC witness
+#include <cstdlib>                                      // std::getenv ([td-msg] switch)
 
 // BrnGui::HudMessageAnalyzer -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -27,6 +29,21 @@ void HudMessageAnalyzer::HandleTakedown(const GuiTakedownEvent* lpTakedown)
 
     const EActiveRaceCarIndex leLocalPlayer =
         static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex());
+
+    // [td-msg] PC witness (BRN_TD_DIAG): the GUI event reaching the analyzer, and which of the
+    // three arms it will take. [FLAG PC witness]
+    {
+        static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
+        if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-msg] HandleTakedown type=" << static_cast<s32>(lpTakedown->meTakedownType)
+                                       << " aggressor=" << static_cast<s32>(lpTakedown->meAggressorIndex)
+                                       << " victim=" << static_cast<s32>(lpTakedown->meVictimIndex)
+                                       << " player=" << static_cast<s32>(leLocalPlayer)
+                                       << " crashEntryState=" << static_cast<s32>(meCrashEntryState)
+                                       << " [FLAG PC witness]\n";
+        }
+    }
 
     if (leLocalPlayer == lpTakedown->meAggressorIndex)
     {
@@ -127,6 +144,21 @@ void HudMessageAnalyzer::ConstructTakedownMessage(GuiHudMessage* lpHudMessage,
     // Non-gating tripwires (cpp:2576/2577).
     CGS_ASSERT(lpHudMessage != NULL, "lpHudMessage");
     CGS_ASSERT(lpTakedown != NULL, "lpTakedown");
+
+    // [td-msg] PC witness (BRN_TD_DIAG): which string id this takedown resolves to. [FLAG PC witness]
+    {
+        static const bool sbTdDiag = (std::getenv("BRN_TD_DIAG") != 0);
+        if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const s32 liType = static_cast<s32>(lpTakedown->meTakedownType);
+            *CgsDev::Log::gpDebugPrint << "[td-msg] type=" << liType
+                                       << " chain=" << lpTakedown->miTakedownChainCount
+                                       << " multiple=" << lpTakedown->miMultipleTakedownCount
+                                       << " id="
+                                       << ((liType >= 0 && liType < 13) ? KAPC_TAKEDOWN_TYPES[liType] : "<out-of-range>")
+                                       << " [FLAG PC witness]\n";
+        }
+    }
 
     // Multi-takedowns get their own dedicated message elsewhere.
     if (lpTakedown->miMultipleTakedownCount <= 1)

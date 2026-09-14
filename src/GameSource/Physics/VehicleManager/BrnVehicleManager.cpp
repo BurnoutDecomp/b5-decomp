@@ -152,6 +152,16 @@ namespace Vehicle
     // witness lines below read as verdicts instead of bare integers. [FLAG PC witness]
     // DELETE-WHEN: the two witnesses below are deleted (organic takedown case green).
     // --------------------------------------------------------------------------------------
+    // [PC HARNESS, NOT X360] BRN_TD_DIAG=1 turns on the takedown-classification trace
+    // ([td-ladder] / [td-vert] / [td-tbone] / [td-instant] here, [td-detect] in the takedown
+    // manager, [td-gui] in the game->gui bridge, [td-msg] in the HUD message analyzer). Off for
+    // every run that does not set it. DELETE-WHEN every takedown type is proven on film.
+    static bool TakedownDiagEnabled()
+    {
+        static const bool sbOn = (std::getenv("BRN_TD_DIAG") != 0);
+        return sbOn;
+    }
+
     static const char* WitnessImpactTypeName(s32 liImpactType)
     {
         switch (liImpactType)
@@ -489,25 +499,86 @@ namespace Vehicle
     void VehicleManager::CheckForAllTypesOfImpacts(RaceCarResponseInfo* lpInfo)
     {
         // Energy gate: ignore contacts whose combined closing speed is below the threshold.
-        if (std::fabs(lpInfo->mfRaceCarBSpeed) + std::fabs(lpInfo->mfRaceCarASpeed) < KF_MIN_IMPACT_SPEED_SUM)
+        const f32 lfWitnessSpeedSum =
+            std::fabs(lpInfo->mfRaceCarBSpeed) + std::fabs(lpInfo->mfRaceCarASpeed);
+        if (lfWitnessSpeedSum < KF_MIN_IMPACT_SPEED_SUM)
+        {
+            // [td-ladder] PC witness, BRN_TD_DIAG only [FLAG PC witness]
+            if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[td-ladder] " << static_cast<s32>(lpInfo->meActiveRaceCarIndexA)
+                                           << " vs " << static_cast<s32>(lpInfo->meActiveRaceCarIndexB)
+                                           << " REJECT energy speedSum=" << lfWitnessSpeedSum
+                                           << " need=" << KF_MIN_IMPACT_SPEED_SUM << " [FLAG PC witness]\n";
+            }
             return;
+        }
+
+        const bool lbWitness = TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0;
+        if (lbWitness)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-ladder] " << static_cast<s32>(lpInfo->meActiveRaceCarIndexA)
+                                       << " vs " << static_cast<s32>(lpInfo->meActiveRaceCarIndexB)
+                                       << " ENTER speedSum=" << lfWitnessSpeedSum
+                                       << " crashA=" << (lpInfo->mbRaceCarAIsCrashing ? 1 : 0)
+                                       << " crashB=" << (lpInfo->mbRaceCarBIsCrashing ? 1 : 0)
+                                       << " playerA=" << (lpInfo->mbRaceCarAIsPlayer ? 1 : 0)
+                                       << " playerB=" << (lpInfo->mbRaceCarBIsPlayer ? 1 : 0)
+                                       << " angle=" << lpInfo->mfAngleBetweenCars << " [FLAG PC witness]\n";
+        }
 
         // Highest priority: a player shunting an AI into a third AI, and re-hits on a car that is
         // already crashing -- these run even if a car is mid-crash.
-        if (CheckForPlayerSlammingAIIntoAI(lpInfo))    return;
-        if (CheckForHittingAlreadyCrashingCar(lpInfo)) return;
+        if (CheckForPlayerSlammingAIIntoAI(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> SlammingAIIntoAI [FLAG PC witness]\n";
+            return;
+        }
+        if (CheckForHittingAlreadyCrashingCar(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> HittingAlreadyCrashingCar [FLAG PC witness]\n";
+            return;
+        }
 
         // The geometric classifiers only apply to a fresh impact: a car already crashing cannot be
         // freshly taken down.
         if (lpInfo->mbRaceCarAIsCrashing || lpInfo->mbRaceCarBIsCrashing)
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> REJECT already-crashing [FLAG PC witness]\n";
             return;
+        }
 
-        if (CheckForVerticalTakedown(lpInfo))   return;
-        if (CheckForTBoneTakedown(lpInfo))      return;
-        if (CheckForHeadToHead(lpInfo))         return;
-        if (CheckForShuntAndNudge(lpInfo))      return;
-        if (CheckForSlamAndTradingPaint(lpInfo)) return;
-        CheckForStationaryTargetTakedown(lpInfo);
+        if (CheckForVerticalTakedown(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> VERTICAL [FLAG PC witness]\n";
+            return;
+        }
+        if (CheckForTBoneTakedown(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> T_BONE [FLAG PC witness]\n";
+            return;
+        }
+        if (CheckForHeadToHead(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> HEAD_ON [FLAG PC witness]\n";
+            return;
+        }
+        if (CheckForShuntAndNudge(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> shunt/nudge [FLAG PC witness]\n";
+            return;
+        }
+        if (CheckForSlamAndTradingPaint(lpInfo))
+        {
+            if (lbWitness) *CgsDev::Log::gpDebugPrint << "[td-ladder] -> slam/paint [FLAG PC witness]\n";
+            return;
+        }
+        const bool lbStationary = CheckForStationaryTargetTakedown(lpInfo);
+        if (lbWitness)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-ladder] -> stationary=" << (lbStationary ? 1 : 0)
+                                       << " (ladder exhausted) [FLAG PC witness]\n";
+        }
     }
 
     // -------------------------------------------------------------------------------------------
@@ -1032,6 +1103,19 @@ namespace Vehicle
         // Perpendicularity band: ||angle| - pi/2| < band(deg) * (pi/180)  (flt_8208F604/8208F5F4).
         const f32 lfPiOver2  = 1.5707964f;
         const f32 lfDegToRad = 0.017453292f;
+        // [td-tbone] PC witness: the perpendicularity term and the two lateral-speed terms.
+        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const RaceCarPhysics& lrWA = maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
+            const RaceCarPhysics& lrWB = maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexB)];
+            *CgsDev::Log::gpDebugPrint
+                << "[td-tbone] |angle-pi/2|=" << std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
+                << " band=" << (mfTBoneTakedownMaxAngle * lfDegToRad)
+                << " latA=" << std::fabs(vpu::Dot(lrWB.mTransform.xAxis, lrWA.mLastLinearVelocity))
+                << " latB=" << std::fabs(vpu::Dot(lrWA.mTransform.xAxis, lrWB.mLastLinearVelocity))
+                << " minLat=" << (mfTBoneTakedownSpeed * KF_SPEED_UNIT_SCALE)
+                << " [FLAG PC witness]\n";
+        }
         if (std::fabs(std::fabs(lpInfo->mfAngleBetweenCars) - lfPiOver2)
             < mfTBoneTakedownMaxAngle * lfDegToRad)
         {
@@ -1372,10 +1456,27 @@ namespace Vehicle
         // Early-out only when BOTH cars are recency-blocked (asm: && of the two recency checks).
         if (HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexB))
             && HasRaceCarHadRecentImpact(static_cast<s32>(lpInfo->meActiveRaceCarIndexA)))
+        {
+            if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[td-vert] REJECT both-recent [FLAG PC witness]\n";
             return false;
+        }
 
         RaceCarPhysics* const lpVehB = &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexB)];
         RaceCarPhysics* const lpVehA = &maRaceCarVehicles[static_cast<s32>(lpInfo->meActiveRaceCarIndexA)];
+
+        // [td-vert] PC witness: every gate of both arms, so a rejection names its own term.
+        if (TakedownDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[td-vert] armA(B victim) footprint=" << (CheckForVerticalTakedownSituation(lpVehB, lpInfo->mpContact->mPointOnB) ? 1 : 0)
+                << " aggrInAir=" << (lpVehA->IsReallyInAir() ? 1 : 0)
+                << " victimGroundedLane=" << lpVehB->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
+                << " | armB(A victim) footprint=" << (CheckForVerticalTakedownSituation(lpVehA, lpInfo->mpContact->mPointOnA) ? 1 : 0)
+                << " aggrInAir=" << (lpVehB->IsReallyInAir() ? 1 : 0)
+                << " victimGroundedLane=" << lpVehA->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.z
+                << " [FLAG PC witness]\n";
+        }
 
         bool lbFired = false;
         EntityId lVictimId{};

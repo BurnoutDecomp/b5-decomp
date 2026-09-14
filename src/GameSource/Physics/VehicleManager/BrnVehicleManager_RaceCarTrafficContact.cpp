@@ -715,8 +715,30 @@ void VehicleManager::HandleRaceCarTrafficCarPotentialContact(
         //   li r10, -1                     -> type      = E_TAKEDOWN_NONE
         ::EntityId lCrashVictimID;
         lCrashVictimID.muValue = luRaceCarGlobalWord;
+        // ⭐⭐ CORRECTED 2026-09-14 (takedown-type wave). This seat used to take
+        // `luTrafficGlobalWord` -- the TrafficEntityModule's GLOBAL traffic id, whose entity index
+        // runs to 600 (the map's own assert `cmplwi r16, 0x258` @0x8263FB70). SetRaceCarCrashing
+        // then takes its owner==2 arm and reads `mPhysicalTrafficManager.maTrafficEntityIDs[index]`
+        // -- an array of TWENTY. Measured run td_A: the sink was handed `traffic(2):389`, read 369
+        // entries past the end of the array, and published 0x7F7F7Cxx into the crash event, which
+        // the game side decoded as `crasherOwner=127 crasherIndex=8159`. That kills the whole
+        // INTO_CAR / INTO_VAN / INTO_BUS branch of DetectStandardTakedown, whose only test is
+        // `GetCrasherEntityId(...).GetOwner() == E_ENTITYTYPE_TRAFFIC_VEHICLE`.
+        // THE CONSOLE PASSES THE PHYSICS ID, not the global one. Read straight out of the image
+        // (this function is an ARTIST export hole; disassembled with tools/re/ppcdis.py):
+        //   0x8263FB58  srwi   r31, r21, 10        ; r21 == the traffic GLOBAL entity word
+        //   0x8263FB60  clrlwi r16, r31, 18        ; == global traffic index
+        //   0x8263FBAC  lbzx   r31, r11, r30       ; global->physical map byte @ this+149456
+        //   0x8263FBBC  cmplwi r31, 0x7F           ; the "no physical body" sentinel -> return
+        //   0x8263FBE8  slwi   r10, r31, 10        ; physicalIndex << 10
+        //   0x8263FBF0  oris   r17, r10, 0x200     ; | owner 2 == E_ENTITYTYPE_TRAFFIC_VEHICLE
+        //   0x8263FBF4  stw    r17, 0xA8(r1)       ; ...and 0xA8(r1) is reloaded into r17
+        //   0x82640498  mr     r5, r17             ; == the AGGRESSOR argument of SetRaceCarCrashing
+        // i.e. exactly the id `GetTrafficPhysicsEntityIDFromGlobalEntityID_Safe` already returned
+        // into lTrafficPhysicsID above, which is what makes the sink's maTrafficEntityIDs[] lookup
+        // an IN-BOUNDS physical-slot -> global-entity-id translation instead of a wild read.
         ::EntityId lCrashAggressorID;
-        lCrashAggressorID.muValue = luTrafficGlobalWord;
+        lCrashAggressorID.muValue = lTrafficPhysicsID.muValue;
 
         Vector3 lvVictimNormal;
         lvVictimNormal.x = -lContactNormal.x;
