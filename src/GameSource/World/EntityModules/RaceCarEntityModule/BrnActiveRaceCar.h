@@ -1027,6 +1027,16 @@ public:
     // ActiveRaceCar::Update @0x822F7A0C (`mbCrashing ? false : (mfTimeInAir <= 0.0f)`), which is
     // drop #2 in that function's banner and is still not reproduced.
     void SetTouchingWorld(bool lbTouchingWorld)      { mbIsTouchingWorld = lbTouchingWorld; }  // +0x774
+    // ADDITIVE 2026-09-14 (boost-wave2), the WRITE half of the two readers above, for the same
+    // reason SetTouchingWorld exists: RaceCarEntityModule::UpdateRaceCarContacts @0x822F5CAC /
+    // @0x822F5CD4 stores 1 into these bytes directly off the slot (`stb r27, 0x772(r3)` and
+    // `stb r27, 0x773(r3)`, r27 == 1) for the A-side car of every race-car-owner contact. No
+    // console accessor symbol -- the module pokes the members -- so these exist so the producer
+    // names them instead of re-deriving +0x772 / +0x773.
+    // ⚠️ Write-ONLY-true here on purpose, exactly like mbIsTouchingWorld: the contact pass never
+    // clears them. The clear belongs to ActiveRaceCar::Update @0x822F7A0C.
+    void SetTouchingAnotherRaceCar(bool lbTouching)  { mbIsTouchingAnotherRaceCar = lbTouching; } // +0x772
+    void SetTouchingPlayer(bool lbTouching)          { mbIsTouchingPlayer = lbTouching; }         // +0x773
     bool IsOnStartLine() const
     { return meRaceStartState == E_RACE_START_STATE_ON_START_LINE; }                           // +0x77C
 

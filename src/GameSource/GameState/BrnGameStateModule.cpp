@@ -29,6 +29,9 @@
 #include <cmath>                                                        // std::sqrt (FindNearestJunkyardID)
 #include <stdlib.h>                                                     // getenv (the [showtime-crash] witness)
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"                 // BrnWorld::PropEntityID + BrnWorld::E_ENTITYTYPE_* (ProcessContacts' prop leg)
+#include "GameSource/GameState/BrnGameActions.h"                         // [boost-wave2] PlayerHitRivalAction / RivalHitPlayerAction / ShowHudMessageAction
+#include "GameShared/GameClasses/Core/CgsID.h"                            // [boost-wave2] CgsIDCompress (the two impact message-id tables)
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // [boost-wave2] BrnPhysics::Vehicle::EImpactType (E_IMPACT_COUNT)
 
 namespace BrnGameState
 {
@@ -2686,6 +2689,164 @@ void GameStateModule::ProcessContacts(
             {
                 break;
             }
+        }
+    }
+}
+
+// =================================================================================================
+// [boost-wave2 2026-09-14] THE TWO IMPACT MESSAGE-ID TABLES.
+//
+// The console keeps them as two 9-entry (== E_IMPACT_COUNT) u64 arrays in .bss, filled by a CRT
+// dynamic initialiser -- sub_82C4D590 writes the AGGRESSOR table at 0x82FAE228 and sub_82C4D620
+// the VICTIM table at 0x82FAE1E0 -- and SendVehicleImpactMessages indexes whichever table it
+// picked with `slwi r9, r11, 3 ; ldx r11, r9, r10`, i.e. table[impactType].
+//
+// ⚠️ THE IMAGE BYTES READ ZERO BY DEFINITION (.bss), so the CONTENTS come from the two
+// initialiser bodies, not from a data dump -- each is a straight-line run of
+// `CgsIDCompress(<literal>)` calls and `std`s of a zeroed register, and the store offsets give
+// the index exactly:
+//     aggressor (player hit rival):  [1] "GameTPaint"  [3] "GameGdSlam"  [4] "GameGdShunt"
+//     victim    (rival hit player):  [1] "GameTPaint"  [3] "GameBdSlam"  [4] "GameBdShunt"
+// Every other slot -- [0] NONE, [2] NUDGE, [5] BOOST_SLAM, [6] BOOST_SHUNT, [7] GRINDING,
+// [8] RUBBING -- is stored as literal ZERO (`li r30, 0` then five/four `std r30/r11`), and slot
+// [0] of each table is never stored at all, so it keeps its .bss zero. That is why a nudge or a
+// boost-slam posts action 48 with a ZERO message id: the console really does post it, and the
+// HUD-message consumer really does ignore a zero id. Reproduced exactly; not "tidied" into a
+// skip, because the action id and its count are observable.
+//
+// The tables are built on first use rather than at static-init time for the reason this project
+// records for every recovered dyn-init constant: a namespace-scope initialiser here would run in
+// an order the console never had. One-shot, single-threaded build.
+// =================================================================================================
+namespace
+{
+    struct VehicleImpactMessageTables
+    {
+        CgsID maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_COUNT];
+        CgsID maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_COUNT];
+    };
+
+    const VehicleImpactMessageTables& GetVehicleImpactMessageTables()
+    {
+        static VehicleImpactMessageTables lTables = []() {
+            VehicleImpactMessageTables lBuilt;
+            for (s32 liImpact = 0; liImpact < BrnPhysics::Vehicle::E_IMPACT_COUNT; ++liImpact)
+            {
+                lBuilt.maAggressorMessages[liImpact] = 0;
+                lBuilt.maVictimMessages[liImpact]    = 0;
+            }
+            // sub_82C4D590 -- the table SendVehicleImpactMessages picks when the aggressor is
+            // the local player (and posts alongside action 53).
+            lBuilt.maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT] =
+                CgsIDCompress("GameTPaint");                      // std -> 0x82FAE230
+            lBuilt.maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_SLAM] =
+                CgsIDCompress("GameGdSlam");                      // std -> 0x82FAE240
+            lBuilt.maAggressorMessages[BrnPhysics::Vehicle::E_IMPACT_SHUNT] =
+                CgsIDCompress("GameGdShunt");                     // std -> 0x82FAE248
+            // sub_82C4D620 -- the table for every other aggressor (posted alongside action 54).
+            lBuilt.maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT] =
+                CgsIDCompress("GameTPaint");                      // std -> 0x82FAE1E8
+            lBuilt.maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_SLAM] =
+                CgsIDCompress("GameBdSlam");                      // std -> 0x82FAE1F8
+            lBuilt.maVictimMessages[BrnPhysics::Vehicle::E_IMPACT_SHUNT] =
+                CgsIDCompress("GameBdShunt");                     // std -> 0x82FAE200
+            return lBuilt;
+        }();
+        return lTables;
+    }
+}
+
+// =================================================================================================
+// SendVehicleImpactMessages  @0x82381A00  -- TRADING PAINT / NUDGE / SLAM / SHUNT, THE SOURCE.
+//
+// ⭐⭐⭐ THIS FUNCTION HAD NO BODY IN THE TREE, and it is the ONLY producer of game actions 53 and
+// 54 in the whole image. So every rival impact the physics layer detected -- and the physics
+// layer HAS been posting world event 31 for it all along (VehicleManager::
+// HandleRaceCarRaceCarContact, reconstructed at BrnVehicleManager.cpp:378 / :438) -- died at the
+// game-state boundary. Downstream that meant: no OnPlayerAttacksRival boost award for slamming a
+// rival (RaceCarEntityModule::HandleGameActions case 53, landed this wave), and no HUD message
+// for trading paint / a good or bad slam / a good or bad shunt.
+//
+// SIGNATURE from the prologue (`mr r31, r4` / `mr r29, r5`): (this, lpEvent, lpActionQueue).
+// The action queue is the caller's -- ProcessGameEvents passes its own r22 -- and it is the
+// 13312-byte GameActionQueue, not the 1536-byte game-event queue.
+//
+// THE WHOLE BODY, 34 instructions:
+//     record = { event->meImpactType, event->meAggressor, event->meVictim }    // 3 x lwz/stw
+//     if (event->meAggressorActiveRaceCarIndex == GetPlayerActiveRaceCarIndex())
+//          id = 53 (PLAYER_HIT_RIVAL); table = aggressor table
+//     else id = 54 (RIVAL_HIT_PLAYER); table = victim table
+//     messageId = table[event->meImpactType]                                   // ldx, 8-byte stride
+//     AddEvent(actionQueue, &record, id, 12)
+//     AddEvent(actionQueue, &messageId, 48 /* SHOW_HUD_MESSAGE */, 8)
+//
+// ⚠️ THE MESSAGE-ID LOAD HAPPENS BEFORE THE FIRST AddEvent (`ldx r11, r9, r10 ; std r11, var_40`
+// at 0x82381A64..0x82381A68) and is UNGUARDED: the impact type indexes a 9-entry table with no
+// range check, exactly as written below. E_IMPACT_COUNT is 9 and the producer only ever writes
+// 1..8, so the console's own bound holds.
+// =================================================================================================
+void GameStateModule::SendVehicleImpactMessages(
+        const GameStateModuleIO::VehicleImpactEvent* lpImpactEvent,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    CGS_ASSERT(lpImpactEvent != 0, "lpVehicleImpactEvent != NULL");
+    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+    if (lpImpactEvent == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    // The console builds the 12-byte record on the stack from three straight `lwz`/`stw` pairs.
+    // PlayerHitRivalAction and RivalHitPlayerAction are the same three fields (DWARF :3733-:3735
+    // and :3750-:3752), so one record serves both arms -- which is what the console does too:
+    // it fills var_38 once, before it knows which id it will post.
+    GameStateModuleIO::PlayerHitRivalAction lAction;
+    lAction.meImpactType =
+        static_cast<BrnPhysics::Vehicle::EImpactType>(lpImpactEvent->meImpactType);
+    lAction.meAggressorActiveRaceCarIndex =
+        static_cast< ::EActiveRaceCarIndex>(lpImpactEvent->meAggressorActiveRaceCarIndex);
+    lAction.meVictimActiveRaceCarIndex =
+        static_cast< ::EActiveRaceCarIndex>(lpImpactEvent->meVictimActiveRaceCarIndex);
+
+    const bool lbPlayerIsAggressor =
+        (lpImpactEvent->meAggressorActiveRaceCarIndex
+            == static_cast<s32>(GetPlayerActiveRaceCarIndex()));
+
+    const VehicleImpactMessageTables& lrTables = GetVehicleImpactMessageTables();
+
+    const s32   liActionId = lbPlayerIsAggressor
+                                 ? static_cast<s32>(GameStateModuleIO::E_ACTION_PLAYER_HIT_RIVAL)
+                                 : static_cast<s32>(GameStateModuleIO::E_ACTION_RIVAL_HIT_PLAYER);
+    const CgsID lMessageId = lbPlayerIsAggressor
+                                 ? lrTables.maAggressorMessages[lpImpactEvent->meImpactType]
+                                 : lrTables.maVictimMessages[lpImpactEvent->meImpactType];
+
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+                            liActionId, sizeof(lAction));
+
+    GameStateModuleIO::ShowHudMessageAction lMessageAction;
+    lMessageAction.mMessageId = lMessageId;
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lMessageAction),
+                            static_cast<s32>(GameStateModuleIO::E_ACTION_SHOW_HUD_MESSAGE),
+                            sizeof(lMessageAction));
+
+    // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. The rung that separates "the
+    // physics never reported an impact" from "it reported one and nothing paid out". Budgeted.
+    // DELETE-WHEN-STABLE.
+    {
+        static const bool sbImpactDiag  = (getenv("BRN_BOOST_TICKER_DIAG") != 0);
+        static s32        siImpactLines = 0;
+        if (sbImpactDiag && siImpactLines < 24 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siImpactLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[impact] type " << lpImpactEvent->meImpactType
+                << " aggressor " << lpImpactEvent->meAggressorActiveRaceCarIndex
+                << " victim " << lpImpactEvent->meVictimActiveRaceCarIndex
+                << " player " << static_cast<s32>(GetPlayerActiveRaceCarIndex())
+                << " -> action " << liActionId
+                << " + msg " << static_cast<u64>(lMessageId)
+                << " [DELETE-WHEN-STABLE]\n";
         }
     }
 }

@@ -47,6 +47,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostManager.h"                 // BrnWorld::BoostManager (by value, +0x17890)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/NearMisses/BrnNearMissManager.h"         // BrnWorld::NearMissManager (by value, +0x17E68)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/AirTime/BrnAirTimeManager.h"             // BrnWorld::AirTimeManager (by value, +0x18098) [boost-ticker wave]
+#include "GameSource/World/EntityModules/RaceCarEntityModule/TrafficCheck/BrnTrafficCheckManager.h"    // BrnWorld::TrafficCheckManager (by value, +0x180E8) [boost-wave2]
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"                     // BrnPhysics::Vehicle::AggressiveDrivingFlags (mAggressiveDrivingFlags, +0x1836C) [boost-wave2]
 #include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h"  // BrnWorld::CrashPlayManager (by value, +0x180F0)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"
 #include "GameSource/AttribSys/Generated/classes/surfacelist.h"        // Attrib::Gen::surfacelist mSurfaceList (DWARF :365)     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
@@ -325,6 +327,23 @@ public:
         // instructions -- a stale third argument at the call site. Declared with the two the
         // body actually uses.
         void UpdateCrashingPlayerContacts(
+                const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
+
+        // [boost-wave2 2026-09-14] X360 0x822F5A50 (122 instructions). The SIBLING contact pass
+        // the console runs FIRST of the three (`bl` at 0x82307664). Walks the post-physics
+        // race-car contact queue and, for every contact on the PLAYER's own body, logs the other
+        // vehicle into the matching NearMissData "contacted" list -- which is what SUPPRESSES a
+        // near-miss award for a car the player actually touched -- then marks the A-side car's
+        // two "touching" bytes for the AI module.
+        void UpdateRaceCarContacts(
+                const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
+
+        // [boost-wave2 2026-09-14] X360 0x822D2690 (48 instructions). The SECOND of the three
+        // (`bl` at 0x82307670). Walks the contact-spy PROP queue and dispatches the boost
+        // strategy's OnPropHit (vtable slot 16, +0x40) for every prop contact that began moving
+        // this frame and belongs to the player's car -- i.e. it is the ONLY thing in the image
+        // that pays BoostBurnout3::OnPropHit's mfStuntSmashEarning for smashing roadside props.
+        void ProcessPropContactQueue(
                 const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput );
 
         // X360 0x822CEEA8 (the tail call of GenerateSceneUpdateEvents). Walk
@@ -1429,6 +1448,32 @@ private:
     // produced and the boost ticker's AIR line could not exist. This member is the seat.
     AirTimeManager mAirTimeManager;
 
+    // X360 +0x180E8 (98536). DWARF :354 -- the run between mAirTimeManager :353 and
+    // mCrashPlayManager :355, and the asm pins it exactly: PostPhysicsUpdate @0x82307918..
+    // 0x8230792C builds `addis r3, r31, 2 ; addi r3, r3, -0x7F18` == module + 0x180E8 and hands
+    // it to TrafficCheckManager::Update.
+    // ADDITIVE CARVE (boost-wave2 2026-09-14), for exactly the reason mAirTimeManager was one
+    // wave earlier: BrnTrafficCheckManager.cpp is a complete committed reconstruction that had
+    // NO MEMBER and NO CALLER, so game event 74 (the traffic-check CHAIN) was produced nowhere
+    // in the build and the ticker's TRAFFICCHECK line could not draw -- even though the world
+    // event 73 it counts HAS had a live producer all along (VehicleManager::
+    // HandleRaceCarTrafficCarPotentialContact @0x8263FA50, post site 0x82640268).
+    TrafficCheckManager mTrafficCheckManager;
+
+    // X360 +0x1836C (99180), five bytes. PostPhysicsUpdate @0x82307628..0x8230764C copies them
+    // out of the physics readback with a literal `mtctr 5` byte loop:
+    //     r10 = module + 0x1836C ; r11 = InputBuffer_PostPhysics::GetVehicleOutputInterface()
+    //                                    + 0x6C00 ; 5 x (lbz/stb)
+    // and +0x6C00 IS BrnPhysics::Vehicle::VehicleOutputInterface::mAggressiveDrivingFlags, so
+    // this member is that record, by name, at the console's own seat.
+    // ⛔ WHY IT MATTERS: UpdateBoost @0x82304CA4..0x82304CE0 reads bytes +1 and +3 of this
+    // record -- mbPlayerLostSlamThisFrame / mbPlayerLostGrindingThisFrame -- and dispatches
+    // BoostStrategy::OnSlammed (vtable slot 9, +0x24) when either is set. That is the ONLY call
+    // site of OnSlammed in the whole image. The copy used to be a named-but-dropped leg of
+    // PostPhysicsUpdate ("its destination is still inside maTailPadB0"), so the gate read two
+    // bytes nothing ever wrote and being slammed by a rival paid nothing.
+    BrnPhysics::Vehicle::AggressiveDrivingFlags mAggressiveDrivingFlags;
+
     // X360 +0x180F0 (98544). DWARF :355. Asm-literal base:
     // HandlePrepareForModeAction @0x823092F0 calls `CrashPlayManager::Activate(module + 98544,
     // lpActiveRaceCar, lfDifficulty)`. ProcessPlayerVehicleInput reads three of its members
@@ -1604,6 +1649,17 @@ private:
     // this seat rather than dropped. DELETE-WHEN the manager is embedded -- at which point
     // this becomes mPowerParkingManager.miNearTrafficCount and the accesses move with it.
     s32 miPowerParkingNearTrafficCount = 0;
+
+    // MODELLED member (boost-wave2 2026-09-14), the immediate sibling of the seat above and the
+    // same DELETE-WHEN. Running tally of vehicle CONTACTS the player's car made this session:
+    // UpdateRaceCarContacts bumps it once per player-side contact, whether the other party is
+    // traffic (owner 2) or another race car (owner 1).
+    // ⚠️ THE CONSOLE'S SEAT IS NOT A MODULE MEMBER either: it is mPowerParkingManager's +0x64
+    // (PowerParkingManager::miContactTrafficCount, DWARF BrnPowerParkingManager.h -- the member
+    // immediately before miNearTrafficCount), reached by UpdateRaceCarContacts as
+    // `lwz/stw 0x64(module + 0x18250)`. Nothing else in the image reads it; the console's WRITE
+    // is reproduced on this seat rather than dropped. DELETE-WHEN the manager is embedded.
+    s32 miPowerParkingContactTrafficCount = 0;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,

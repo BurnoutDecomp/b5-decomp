@@ -27,6 +27,13 @@ namespace BrnResource
 enum ECarType : int;
 }
 
+// [boost-wave2 2026-09-14] Opaque fixed-underlying-type enum declaration, the committed idiom
+// this project already uses for this exact enum in BrnBoostStrategy.h. Its home is
+// GameSource/Physics/VehicleManager/BrnVehicleConstants.h (`enum EImpactType : s32`); the
+// forward declaration avoids dragging the whole physics-constants header into every TU that
+// includes the game-action family, and the two rival-impact records below only need the type.
+namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
+
 // Owning header for the BrnGameState::GameStateModuleIO GameAction<> family slices reconstructed
 // by the GameMode/ModeManager leaf batch. Each struct is a minimal slice: only the members the
 // reconstructed body touches are declared. The GameAction<T> base is modelled as an empty
@@ -341,6 +348,23 @@ enum EGameActionType
     // DecFIGS :57 gives 47 -- the same +5 PS3->X360 shift this enum records for the stunt
     // element ids below. [verify V2 2026-09-02] NO game-action arm consumes 52 (TranslateGameActionsToGuiEvents @0x823E9CE0 has no case 52; GUI 348 is produced by case 205 only) -- consumer unpinned.
     E_ACTION_DAMAGE_CRITICAL            = 52,
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] THE RIVAL-IMPACT PAIR -- trading paint / nudge / slam /
+    // shunt. BOTH are posted by the ONE console function
+    // BrnGameState::GameStateModule::SendVehicleImpactMessages @0x82381A00, whose whole body is
+    // "pick one of the two ids and one of the two message tables":
+    //     li r5, 0x35 (53)  when the impact's AGGRESSOR is the local player
+    //     li r5, 0x36 (54)  otherwise
+    //     li r6, 0xC        both, i.e. the 12-byte record below
+    // DWARF gives E_ACTION_PLAYER_HIT_RIVAL 48 / E_ACTION_RIVAL_HIT_PLAYER 49 -- the SAME +5
+    // PS3->X360 shift this enum already records for DAMAGE_CRITICAL (47 -> 52) and the whole
+    // stunt block, and the two `li r5` immediates confirm it directly.
+    E_ACTION_PLAYER_HIT_RIVAL           = 53,    // DWARF :58 gives 48 (+5 X360); size 12
+    E_ACTION_RIVAL_HIT_PLAYER           = 54,    // DWARF :59 gives 49 (+5 X360); size 12
+
+    // The HUD-message id the same function posts immediately afterwards, with an 8-byte payload
+    // (`li r5, 0x30 ; li r6, 8` @0x82381A70..0x82381A80) taken from one of two 9-entry CgsID
+    // tables indexed by the impact type. DWARF :53 gives 43 -- the same +5 shift.
+    E_ACTION_SHOW_HUD_MESSAGE           = 48,    // DWARF :53 gives 43 (+5 X360); size 8 (CgsID)
     E_ACTION_ON_JUMP_START              = 56,    // X360 UpdateJumps @0x8239D460 (`li r5,0x38`, size 24)
     E_ACTION_SHOW_JUMP_NAME             = 57,    // X360 UpdateJumps @0x8239D460 (`li r5,0x39`, size 8)
     E_ACTION_ON_STUNT_ELEMENT_COMPLETE  = 58,    // X360 0x8239D384 (DWARF :63 gives 53 -- PS3 value)
@@ -901,6 +925,35 @@ struct StopBoostingAction : public GameAction<E_ACTION_STOP_BOOSTING>
 struct DamageCriticalMessageAction : public GameAction<E_ACTION_DAMAGE_CRITICAL>
 {
     bool mbPlayerCarIsDamageCritical;
+};
+
+// =============================================================================================
+// [boost-wave2 2026-09-14] The rival-impact pair + the HUD-message carrier they post with.
+//
+// DWARF BrnGameActions.h:3733-3735 (PlayerHitRivalAction) and :3750-3752 (RivalHitPlayerAction)
+// declare the identical three members, and the X360 producer copies exactly three words --
+// `lwz r11, 0(r31) / lwz r30, 4(r31) / lwz r9, 8(r31)` straight off the 12-byte
+// VehicleImpactEvent -- so the action record IS the event record, field for field.
+// =============================================================================================
+struct PlayerHitRivalAction : public GameAction<E_ACTION_PLAYER_HIT_RIVAL>
+{
+    BrnPhysics::Vehicle::EImpactType meImpactType;                  // +0x00  DWARF :3733
+    ::EActiveRaceCarIndex            meAggressorActiveRaceCarIndex; // +0x04  DWARF :3734
+    ::EActiveRaceCarIndex            meVictimActiveRaceCarIndex;    // +0x08  DWARF :3735
+};
+
+struct RivalHitPlayerAction : public GameAction<E_ACTION_RIVAL_HIT_PLAYER>
+{
+    BrnPhysics::Vehicle::EImpactType meImpactType;                  // +0x00  DWARF :3750
+    ::EActiveRaceCarIndex            meAggressorActiveRaceCarIndex; // +0x04  DWARF :3751
+    ::EActiveRaceCarIndex            meVictimActiveRaceCarIndex;    // +0x08  DWARF :3752
+};
+
+// DWARF BrnGameActions.h:1807 -- a bare CgsID. The X360 posts it as 8 bytes (`li r6, 8`), which
+// is sizeof(CgsID) with GameAction<T> an empty tag.
+struct ShowHudMessageAction : public GameAction<E_ACTION_SHOW_HUD_MESSAGE>
+{
+    CgsID mMessageId;
 };
 
 // =============================================================================================

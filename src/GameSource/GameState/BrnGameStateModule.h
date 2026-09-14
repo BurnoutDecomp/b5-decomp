@@ -757,6 +757,24 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] X360 0x82381A00. The ONLY producer of game actions 53
+    // (E_ACTION_PLAYER_HIT_RIVAL) and 54 (E_ACTION_RIVAL_HIT_PLAYER) in the image, plus the
+    // 8-byte HUD-message action 48 that carries the impact's message id. It had NO BODY in this
+    // tree, so trading paint / nudge / slam / shunt were dead at the source even though the
+    // physics layer has been posting world event 31 for them all along. Bodied in
+    // BrnGameStateModule.cpp; called from the case-31 arm below.
+    void SendVehicleImpactMessages(
+        const GameStateModuleIO::VehicleImpactEvent* lpImpactEvent,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // ⭐⭐ [boost-wave2 2026-09-14] X360 ProcessGameEvents @0x823A0A18, THE CASE-31 ARM. Same
+    // extraction precedent as the boost-ticker arms above: the dispatcher's own walk, one `case`
+    // per console arm, no Clear. See the body for what the console's arm does beyond the
+    // SendVehicleImpactMessages call, and for the one leg deliberately left out.
+    void ProcessGameEventsVehicleImpactBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // [boost-ticker wave] NOT A CONSOLE FUNCTION -- the shared AddEvent + opt-in
     // BRN_BOOST_TICKER_DIAG witness the eight arms above post through, so each arm reads as
     // the console's own one-liner. See its body.

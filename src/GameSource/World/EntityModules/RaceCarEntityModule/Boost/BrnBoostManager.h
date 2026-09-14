@@ -68,6 +68,23 @@ public:
         mpBoostStrategy->OnStuntCompletion(leElementType);
     }
 
+    // [boost-wave2 2026-09-14] The three remaining notifications the module raises. Like every
+    // other forwarder on this class the console inlines the manager hop and dispatches straight
+    // through mpBoostStrategy's vtable, so the slot IS the proof (module+97504 == mBoostManager
+    // +0x450 == mpBoostStrategy):
+    //   HandleGameActions case 53 @0x8230C5F8   `(*(**(this+97504) + 20))(strategy, type)`
+    //                                           slot 5  (+0x14) OnPlayerAttacksRival
+    //   UpdateBoost           @0x82304CD8       `(*(*strategy + 36))(strategy)`
+    //                                           slot 9  (+0x24) OnSlammed
+    //   ProcessPropContactQueue @0x822D278C     `(*(**(this+97504) + 64))(strategy)`
+    //                                           slot 16 (+0x40) OnPropHit
+    void OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType)
+    {
+        mpBoostStrategy->OnPlayerAttacksRival(leImpactType);
+    }
+    void OnSlammed()  { mpBoostStrategy->OnSlammed(); }
+    void OnPropHit()  { mpBoostStrategy->OnPropHit(); }
+
     void SetCrashing(bool lbCrashing) { mpBoostStrategy->SetCrashing(lbCrashing); }
     void SetForceBoost(bool lbForceBoost) { mpBoostStrategy->SetForceBoost(lbForceBoost); }
     void SetInfiniteBoost(bool lbInfiniteBoost) { mpBoostStrategy->SetInfiniteBoost(lbInfiniteBoost); }

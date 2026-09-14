@@ -1018,6 +1018,69 @@ void GameStateModule::ProcessGameEventsBoostTickerBringUp(
 }
 
 // ============================================================================
+// ⭐⭐⭐ [boost-wave2 2026-09-14] ProcessGameEventsVehicleImpactBringUp -- the CASE-31 arm of
+// GameStateModule::ProcessGameEvents @0x823A0A18, extracted exactly like the eight boost-ticker
+// arms above (ONE walk, the dispatcher's own GetFirstEvent/GetNextEvent, one arm per `case`).
+//
+// ⛔⛔ WHY IT EXISTS: THIS IS WHERE TRADING PAINT / NUDGE / SLAM / SHUNT DIED. The physics layer
+// has been posting world event 31 for every rival impact for a long time (VehicleManager::
+// HandleRaceCarRaceCarContact @0x82642F78, `AddEventSafe(..., 31, 12)` @0x82643808 and
+// `AddEvent(..., 31, 12)` @0x82643B58 -- both reconstructed, BrnVehicleManager.cpp:378/:438),
+// and BrnGui::BoostMessageManager has been ready to draw every one of the six impact hints
+// (TRADING_PAINT / NUDGE / SLAM / SHUNT / BOOST_SLAM / BOOST_SHUNT) off GUI event 365. Between
+// them, NOTHING: this arm did not exist, and neither did the function it calls.
+//
+// THE CONSOLE'S ARM, all of it (0x823A278C..0x823A27F0):
+//     SendVehicleImpactMessages(event, actionQueue)                        // 0x823A2798
+//     if (event->meAggressorActiveRaceCarIndex == GetPlayerActiveRaceCarIndex())
+//     {
+//         <a 16-byte-object teardown stub on this+0x1DD0, which IDA name-matched to
+//          CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct -- the same
+//          symbol-collision artefact surfacelist.h already records for this exact stub>
+//         RumbleManager::OnVehicleAggressorImpact(&mRumbleManager, event->meImpactType);
+//     }
+//     if (event->meVictimActiveRaceCarIndex == GetPlayerActiveRaceCarIndex())
+//         RumbleManager::OnVehicleAggressorImpact(&mRumbleManager, event->meImpactType);
+//
+// ⚠️ THE TWO RUMBLE LEGS ARE NOT REPRODUCED, AND THEY ARE NAMED HERE RATHER THAN DROPPED
+// SILENTLY: BrnGameState::RumbleManager::OnVehicleAggressorImpact has NO DEFINITION anywhere in
+// this tree (`tools/re/hasbody.py` -- one mention, a comment). Both console call sites go
+// through the same `bl`, i.e. the aggressor and victim bodies ICF-folded, so a single landed
+// body unblocks both. They change the PAD, not the boost or the hint strip.
+//
+// ⚠️ IT DOES NOT Clear() THE QUEUE -- PreWorldUpdateStuntBringUp owns the console's Clear, later
+// in the same sub-step, exactly as for every sibling arm.
+// ============================================================================
+void GameStateModule::ProcessGameEventsVehicleImpactBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_VEHICLE_IMPACT)     // world 31
+        {
+            const GameStateModuleIO::VehicleImpactEvent* lpImpact =
+                reinterpret_cast<const GameStateModuleIO::VehicleImpactEvent*>(lpEvent);
+            SendVehicleImpactMessages(lpImpact, lpActionQueue);
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
+// [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
+// console emits a bare AddEvent per arm.// ============================================================================
 // [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
 // console emits a bare AddEvent per arm. It exists so the eight arms above read as the
 // console's eight one-liners instead of eight copies of the same diagnostic block.
@@ -1569,6 +1632,11 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // 383..389 in the SAME sub-step -- which is why the hint strip beside the boost bar
     // updates on the frame the trick happens, not a frame later.
     ProcessGameEventsBoostTickerBringUp(&mGameEventCarryQueue, lpActionQueue);
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] the dispatcher's CASE-31 arm (the rival-impact family),
+    // same walk, same must-run-before-the-Clear constraint. It posts actions 53/54 + 48 onto the
+    // action queue this function already holds the write lock for; RaceCarEntityModule::
+    // HandleGameActions turns 53 into the OnPlayerAttacksRival boost award in the SAME sub-step.
+    ProcessGameEventsVehicleImpactBringUp(&mGameEventCarryQueue, lpActionQueue);
     // â­ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
     // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
     // 86/87/88 onto the action queue this function already holds the write lock for --

@@ -73,6 +73,11 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"            // BrnPhysics::Vehicle::VehicleManagerOutputInterface (the create-vehicle result queue)
 #include "GameSource/World/BrnEntityTypes.h"                                                 // BrnWorld::E_ENTITYTYPE_RACECAR (the VolumeInstanceId owner byte)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                // InSceneUpdateInterface::SetVolumeInstanceTransform / SetEntityPosition / ClearEntityVolumesPadding
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                           // ContactSpyInterface::GetRaceCarContacts / GetPropContacts  [boost-wave2]
+#include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                              // RaceCarContact / PropContact                              [boost-wave2]
+#include "GameSource/AttribSys/Generated/classes/surface.h"                                   // Attrib::Gen::surface (the surface-list tripwire)          [boost-wave2]
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"                             // Attrib::FindCollectionWithDefault                         [boost-wave2]
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"            // Attrib::StringToKey                                       [boost-wave2]
 
 #include <cstring>   // memset
 #include <cstdlib>   // getenv  ([motion] opt-in probe)
@@ -3213,6 +3218,57 @@ void RaceCarEntityModule::HandleGameActions(
             break;
         }
 
+        // ⭐⭐⭐ [boost-wave2 2026-09-14] TRADING PAINT / NUDGE / SLAM / SHUNT -- the AGGRESSOR's
+        // boost award. ARTIST 0x8230C5DC..0x8230C604, the console's `case 53`:
+        //     lwz  r11, 4(r27)          ; the action's meAggressorActiveRaceCarIndex
+        //     lwzx r10, r31, 0x182F8    ; mePlayerActiveRaceCarIndex
+        //     cmpw ; bne -> default     ; only when the player is the aggressor
+        //     lwzx r3, r31, 0x17CE0     ; mpBoostStrategy
+        //     lwz  r4, 0(r27)           ; the action's meImpactType
+        //     lwz r11,0(r3) ; lwz r11,0x14(r11) ; bctrl   <- slot 5, OnPlayerAttacksRival
+        //
+        // ⚠️ THE PLAYER TEST IS REDUNDANT AND IT IS KEPT: SendVehicleImpactMessages only ever
+        // posts 53 when the aggressor IS the player (it posts 54 otherwise), so this compare can
+        // never fail today. It is the console's, and a future producer that posts 53 for a
+        // non-player aggressor would be gated by it.
+        //
+        // ⛔ WHY IT PAID NOTHING: the action's ONLY producer,
+        // GameStateModule::SendVehicleImpactMessages @0x82381A00, had no body in the tree, so
+        // actions 53/54 were never posted at all -- and there is no case 54 here (the victim
+        // side is a HUD message, not a boost award; 54 sits in this jump table's default list).
+        // Landed this wave in GameStateModule_gUI_00.cpp together with the case-31 arm that
+        // calls it.
+        case BrnGameState::GameStateModuleIO::E_ACTION_PLAYER_HIT_RIVAL: // 53
+        {
+            const BrnGameState::GameStateModuleIO::PlayerHitRivalAction* lpHitRival =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::PlayerHitRivalAction*>(lpEvent);
+            CGS_ASSERT(lpHitRival != 0, "lpPlayerHitRivalAction != NULL");
+
+            if (static_cast<s32>(lpHitRival->meAggressorActiveRaceCarIndex)
+                    == static_cast<s32>(mePlayerActiveRaceCarIndex))
+            {
+                mBoostManager.OnPlayerAttacksRival(lpHitRival->meImpactType);
+
+                // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+                static const bool sbImpactDiag  = (getenv("BRN_BOOST_TICKER_DIAG") != 0);
+                static s32        siImpactLines = 0;
+                if (sbImpactDiag && siImpactLines < 24 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++siImpactLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[hit-rival] impactType "
+                        << static_cast<s32>(lpHitRival->meImpactType)
+                        << " aggressor "
+                        << static_cast<s32>(lpHitRival->meAggressorActiveRaceCarIndex)
+                        << " victim "
+                        << static_cast<s32>(lpHitRival->meVictimActiveRaceCarIndex)
+                        << " -> OnPlayerAttacksRival [DELETE-WHEN-STABLE]\n";
+                }
+            }
+            break;
+        }
+
         // ⭐⭐ [boost-ticker wave 2026-09-14] THE TRAFFIC-CHECK AWARD -- ARTIST 0x8230D198,
         // the console's `case 107`, four statements in this order:
         //     (*(**(this + 97504) + 48))(strategy)          // slot 12 OnTrafficCheck -> AddBoost
@@ -5225,6 +5281,296 @@ void RaceCarEntityModule::GenerateSceneUpdateEvents(
 }
 
 // =================================================================================================
+// [boost-wave2 2026-09-14] TU-LOCAL constants for the two contact passes below.
+// =================================================================================================
+namespace
+{
+    // The three tripwire keys UpdateRaceCarContacts' prologue bakes, byte-identical to the ones
+    // CheckForResetOnTrackConditions bakes in BrnRaceCarEntityModule_ResetPump.cpp (same class
+    // key 0x42C25F4985B5C4F4, same collection slot qword_82FAD4F0, same attribute key, same
+    // DefaultDataArea(0x18), same flt_82014460). They are TU-local in the console too; the
+    // sibling copies are in the sibling partfile's own anonymous namespace.
+    const u64 KU_CONTACTS_SURFACE_LIST_COLLECTION_KEY = Attrib::StringToKey( "340654" );
+    const u64 KU_CONTACTS_SURFACE_LIST_ENTRY_ATTRIBUTE = 0x0ADCE56EF3DA7F1Full;
+    const u32 KU_CONTACTS_REF_SPEC_DATA_AREA_BYTES     = 0x18u;
+    const f32 KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE   = 1.1920928955078125e-07f;  // flt_82014460
+
+    inline f32 ContactsAbsF( f32 lfValue ) { return ( lfValue < 0.0f ) ? -lfValue : lfValue; }
+
+    // The two scene-manager owner bytes UpdateRaceCarContacts and ProcessPropContactQueue
+    // dispatch on (`srwi r11, r30, 24` / `lbz r11, 0(r31)`): BrnWorld::E_ENTITYTYPE_RACECAR is 1
+    // and the traffic owner is 2 -- the same pair UpdateCrashingPlayerContacts tests by literal
+    // a few hundred lines below, and the same pair the contact-spy StoreContact router writes.
+    const u8 KU_CONTACT_OWNER_RACECAR = 1;
+    const u8 KU_CONTACT_OWNER_TRAFFIC = 2;
+}
+
+// =================================================================================================
+// UpdateRaceCarContacts  @0x822F5A50  -- THE NEAR-MISS CONTACT PASS. 122 instructions.
+//
+// ⭐⭐⭐ THIS IS WHAT MAKES A NEAR MISS A *MISS*. NearMissManager::Update fires a near-miss award
+// for every vehicle that leaves the "near" list without having been contacted, crashed or
+// checked; NOTHING in the tree ever filled the CONTACTED list, because this is its only producer
+// in the whole image. So until this landed, scraping a rival or a traffic car still paid the
+// full NEARMISS boost the moment it dropped out of the near list.
+//
+// SIGNATURE from the call site (0x8230765C..0x82307664: r3 = this, r4 = lpInput) and the
+// prologue (`mr r28, r3` / `mr r3, r4` straight into GetContactSpyInterface) -- two arguments,
+// no output buffer.
+//
+// SHAPE:
+//   spy = lpInput->GetContactSpyInterface();  assert(spy->mpData)      // ContactSpyInterface.h:179
+//   contacts = spy->GetRaceCarContacts()                               // mpData + 0
+//   <the surface-list dev tripwire, 0x822F5A9C..0x822F5BD0>            // X360 :4654
+//   for each RaceCarContact:
+//       liIndexA = c.mEntityIdA.GetEntityIndex()       // extrwi r29, r9, 14,8
+//       lucOwnerB = c.mEntityIdB.GetOwner()            // srwi   r11, r30, 24
+//       if (liIndexA == mePlayerActiveRaceCarIndex)
+//           if (lucOwnerB == 2) { mNearMissManager.mTrafficNearMissData.AddContacted(idxB);
+//                                 timeout = 0; failedChain = true; ++contactTally; }       // next
+//           else if (lucOwnerB == 1) { mNearMissManager.mRaceCarNearMissData.AddContacted(idxB);
+//                                 timeout = 0; failedChain = true; ++contactTally;
+//                                 <fall through to the touching marks> }
+//       else if (lucOwnerB == 1)  <the touching marks>
+//       touching marks:  GetActiveRaceCar(liIndexA)->mbIsTouchingAnotherRaceCar = true;
+//                        if (player == liIndexA || player == idxB)
+//                            GetActiveRaceCar(liIndexA)->mbIsTouchingPlayer = true;
+//
+// ⭐ THE TRAFFIC ARM DOES **NOT** MARK TOUCHING, and that is not a simplification: the console's
+// traffic arm ends in `b loc_822F5CD8` (0x822F5C60), the loop tail, while the race-car arm ends
+// in `b loc_822F5CA0` (0x822F5C94), the marks. The `lbMarkTouching` flag below is the de-goto'd
+// form of exactly those two branch targets; writing it as an if/else chain without the flag
+// would either drop the non-player arm's marks or add them to the traffic arm.
+//
+// ⭐ THE A-SIDE IS ALWAYS A RACE CAR, which is why the console indexes maActiveRaceCars with it
+// unguarded: this queue has exactly one writer -- PhysicsModule::StoreContact's owner-1 arm --
+// and that arm dispatches on the A-side owner byte. GetActiveRaceCar's own console assert is
+// therefore reachable-but-quiet, and it is left as the console's, not wrapped in a guard.
+//
+// ⭐ +0x64 ON THE POWER-PARKING SEAT. The `lwz/addi/stw 0x64(module + 0x18250)` triple both arms
+// share is PowerParkingManager::miContactTrafficCount -- the sibling of the +0x68 seat the
+// near-miss producer wave already modelled on this class. See the member's banner.
+// =================================================================================================
+void RaceCarEntityModule::UpdateRaceCarContacts(
+        const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
+{
+    const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpy =
+            lpInput->GetContactSpyInterface();
+
+    // 0x822F5A70..0x822F5A98 -- the console's OWN inlined GetRaceCarContacts assert, baking
+    // BrnContactSpyInterface.h's line 179 (0xB3). The accessor below re-asserts it; the console
+    // emits the test once because it inlined the accessor, so the pass is written the same way.
+    CGS_ASSERT( lpContactSpy->IsValid(), "mpData != NULL" );
+    if( !lpContactSpy->IsValid() )
+    {
+        return;
+    }
+
+    const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue* lpContacts =
+            lpContactSpy->GetRaceCarContacts();
+
+    // ---- the surface-list dev tripwire (0x822F5A9C..0x822F5BD0) ------------------------------
+    // Transcribed for the same reason its identical twin in CheckForResetOnTrackConditions is:
+    // the console runs it every frame, it re-resolves mSurfaceList onto the surfacelist class's
+    // default collection (a real, if idempotent, side effect on a module member), and the assert
+    // is the console's own. No gameplay effect.
+    {
+        mSurfaceList.Change( Attrib::FindCollectionWithDefault(
+                                 Attrib::Gen::surfacelist::KU_SURFACELIST_CLASS_KEY,
+                                 KU_CONTACTS_SURFACE_LIST_COLLECTION_KEY ) );
+
+        void* lpEntry = mSurfaceList.GetAttributePointer(
+                            KU_CONTACTS_SURFACE_LIST_ENTRY_ATTRIBUTE, 1u );
+        if( lpEntry == 0 )
+        {
+            lpEntry = Attrib::DefaultDataArea( KU_CONTACTS_REF_SPEC_DATA_AREA_BYTES );
+        }
+
+        Attrib::RefSpec* lpRefSpec = static_cast<Attrib::RefSpec*>( lpEntry );
+        Attrib::Gen::surface lSurface(
+            const_cast<Attrib::Collection*>( lpRefSpec->GetCollection() ), 0 );
+
+        // `vandc` against splat(0x80000000) is a componentwise fabs; the `vcmpgtfp.` verdict is
+        // read from CR6 bit 2 (== NONE of the four lanes greater), so the assert fires when the
+        // whole leading quad is within FLT_EPSILON of zero.
+        const Vector4& lrLeading =
+            *static_cast<const Vector4*>( lSurface.GetAttributeData() );
+        const bool lbSurfaceListLooksSane =
+               ( ContactsAbsF( lrLeading.x ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( ContactsAbsF( lrLeading.y ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( ContactsAbsF( lrLeading.z ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE )
+            || ( ContactsAbsF( lrLeading.w ) > KF_CONTACTS_SURFACE_LIST_MIN_MAGNITUDE );
+
+        CGS_ASSERT( lbSurfaceListLooksSane, "Surface list appears to be corrupt" );   // :4654
+    }
+
+    // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. The rung that separates "no contact
+    // ever reached this pass" from "it reached it and the near-miss list still paid out".
+    // ⚠️ THE BUDGET IS PER B-SIDE OWNER, and it has to be: on the first measured run a SHARED
+    // budget of 24 lines was eaten entirely by owner-3 contacts (the player's car scraping a
+    // static world entity over and over), so the run could say nothing at all about the owner-1
+    // and owner-2 contacts it was taken to measure. [[diagnostics-that-lie]] -- a witness that
+    // starves reports an absence it never observed.
+    static const bool sbContactDiag = ( getenv( "BRN_BOOST_TICKER_DIAG" ) != 0 );
+    const s32         KI_CONTACT_DIAG_OWNERS   = 16;
+    const s32         KI_CONTACT_DIAG_PER_OWNER = 8;
+    static s32        saiContactLines[KI_CONTACT_DIAG_OWNERS] = { 0 };
+
+    for( s32 liContact = 0; liContact < lpContacts->GetLength(); ++liContact )
+    {
+        const BrnPhysics::ContactSpy::RaceCarContact& lrContact = lpContacts->GetEvent( liContact );
+
+        // Same reading as UpdateCrashingPlayerContacts: BaseContact stores the bare 32-bit word,
+        // and the console's extrwi/srwi pair IS CgsSceneManager::EntityId's accessors inlined.
+        const CgsSceneManager::EntityId lContactIdA( lrContact.mEntityIdA.muValue );
+        const CgsSceneManager::EntityId lContactIdB( lrContact.mEntityIdB.muValue );
+
+        const s32 liContactIndexA = static_cast<s32>( lContactIdA.GetEntityIndex() );
+        const s32 liContactIndexB = static_cast<s32>( lContactIdB.GetEntityIndex() );
+        const u8  lucOwnerB       = lContactIdB.GetOwner();
+
+        // The de-goto'd form of the console's two branch targets (see the banner).
+        bool lbMarkTouching = false;
+
+        if( liContactIndexA == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
+        {
+            if( lucOwnerB == KU_CONTACT_OWNER_TRAFFIC )
+            {
+                mNearMissManager.GetTrafficNearMissData().AddContacted(
+                        static_cast<u32>( liContactIndexB ) );
+                mNearMissManager.SetNearMissTimeout( 0.0f );            // stfs f31(=0), 4(r31)
+                mNearMissManager.SetFailedNearMissChain( true );        // stb  r27(=1), 0x26C(r31)
+                ++miPowerParkingContactTrafficCount;                    // +0x64 on the PP seat
+            }
+            else if( lucOwnerB == KU_CONTACT_OWNER_RACECAR )
+            {
+                mNearMissManager.GetRaceCarNearMissData().AddContacted(
+                        static_cast<u32>( liContactIndexB ) );
+                mNearMissManager.SetNearMissTimeout( 0.0f );
+                mNearMissManager.SetFailedNearMissChain( true );
+                ++miPowerParkingContactTrafficCount;
+                lbMarkTouching = true;                                  // b loc_822F5CA0
+            }
+        }
+        else if( lucOwnerB == KU_CONTACT_OWNER_RACECAR )
+        {
+            lbMarkTouching = true;                                      // b loc_822F5CA0
+        }
+
+        if( lbMarkTouching )
+        {
+            ActiveRaceCar* lpContactCar =
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liContactIndexA ) );
+            lpContactCar->SetTouchingAnotherRaceCar( true );             // stb 1, 0x772(r3)
+
+            if( static_cast<s32>( mePlayerActiveRaceCarIndex ) == liContactIndexA
+                || static_cast<s32>( mePlayerActiveRaceCarIndex ) == liContactIndexB )
+            {
+                // The console re-calls GetActiveRaceCar with the same index here; the second
+                // call is the compiler's, not a different car.
+                GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liContactIndexA ) )
+                        ->SetTouchingPlayer( true );                     // stb 1, 0x773(r3)
+            }
+        }
+
+        const s32 liDiagSlot = static_cast<s32>( lucOwnerB ) & ( KI_CONTACT_DIAG_OWNERS - 1 );
+        if( sbContactDiag && saiContactLines[liDiagSlot] < KI_CONTACT_DIAG_PER_OWNER
+            && CgsDev::Log::gpDebugPrint != 0
+            && ( liContactIndexA == static_cast<s32>( mePlayerActiveRaceCarIndex )
+                 || lbMarkTouching ) )
+        {
+            ++saiContactLines[liDiagSlot];
+            *CgsDev::Log::gpDebugPrint
+                << "[rc-contact] A idx " << liContactIndexA
+                << " owner " << static_cast<s32>( lContactIdA.GetOwner() )
+                << " | B idx " << liContactIndexB
+                << " owner " << static_cast<s32>( lucOwnerB )
+                << " player " << static_cast<s32>( mePlayerActiveRaceCarIndex )
+                << " touching " << ( lbMarkTouching ? 1 : 0 )
+                << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
+}
+
+// =================================================================================================
+// ProcessPropContactQueue  @0x822D2690  -- THE SMASHED-PROP BOOST PASS. 48 instructions.
+//
+// ⭐⭐ THE ONLY PRODUCER OF BoostStrategy::OnPropHit IN THE IMAGE (slot 16 / +0x40 -- the vcall
+// scan over every export finds exactly one site, 0x822D2790, and it is this one). BoostBurnout3
+// overrides it with a real AddBoost of mfStuntSmashEarning, so with this pass absent every fence,
+// bin, barrier and roadside prop the player smashed paid nothing at all.
+//
+// SIGNATURE from the call site (0x82307668..0x82307670: r3 = this, r4 = lpInput) and the
+// prologue (`mr r26, r3` / `mr r31, r4`).
+//
+// SHAPE:
+//   spy = lpInput->GetContactSpyInterface();
+//   if (!spy->mpData) return;                                    // lwz 0(r3) / beq -> exit
+//   queue = spy->GetPropContacts();  assert(queue != NULL)       // X360 :5999 (0x176F)
+//   for each PropContact c:
+//       assert(&c != NULL)                                       // X360 :6005 (0x1775)
+//       if (c.muBeganMoving == 1                                 // lbz 0x64(r31), == 1
+//           && (c.mEntityIdA.GetOwner() == 1 || c.mEntityIdB.GetOwner() == 1)
+//           && c.mEntityIdB.GetEntityIndex() == mePlayerActiveRaceCarIndex)
+//           mBoostManager.OnPropHit();                           // (*(**(this+97504) + 64))(..)
+//
+// ⚠️ THE INDEX TEST IS ON THE **B** SIDE while the owner test accepts EITHER side, and that
+// asymmetry is the console's, read off the asm and left alone: `lwz r11, 4(r31)` feeds the
+// extrwi at 0x822F..0x822D2778, i.e. mEntityIdB. Writing it "the obvious way" (index from
+// whichever side carried owner 1) would be a different predicate.
+//
+// ⚠️ THE OUTER GUARD IS `mpData != NULL`, NOT an assert: the console BRANCHES OUT at 0x822D26B4
+// with no FireAssert, then re-fetches the interface and asserts only the QUEUE pointer. So an
+// unbound contact-spy interface is a silent no-op here, unlike in UpdateRaceCarContacts.
+// =================================================================================================
+void RaceCarEntityModule::ProcessPropContactQueue(
+        const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
+{
+    if( !lpInput->GetContactSpyInterface()->IsValid() )
+    {
+        return;
+    }
+
+    const BrnPhysics::ContactSpy::ContactSpyData::PropContactQueue* lpPropContactQueue =
+            lpInput->GetContactSpyInterface()->GetPropContacts();
+    CGS_ASSERT( lpPropContactQueue != 0, "lpPropContactQueue != NULL" );        // :5999
+
+    // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
+    static const bool sbPropDiag  = ( getenv( "BRN_BOOST_TICKER_DIAG" ) != 0 );
+    static s32        siPropLines = 0;
+
+    for( s32 liContact = 0; liContact < lpPropContactQueue->GetLength(); ++liContact )
+    {
+        const BrnPhysics::ContactSpy::PropContact* lpPropContact =
+                &lpPropContactQueue->GetEvent( liContact );
+        CGS_ASSERT( lpPropContact != 0, "lpPropContact != NULL" );              // :6005
+        const BrnPhysics::ContactSpy::PropContact& lrPropContact = *lpPropContact;
+
+        const CgsSceneManager::EntityId lContactIdA( lrPropContact.mEntityIdA.muValue );
+        const CgsSceneManager::EntityId lContactIdB( lrPropContact.mEntityIdB.muValue );
+
+        if( lrPropContact.muBeganMoving == 1
+            && ( lContactIdA.GetOwner() == KU_CONTACT_OWNER_RACECAR
+                 || lContactIdB.GetOwner() == KU_CONTACT_OWNER_RACECAR )
+            && static_cast<s32>( lContactIdB.GetEntityIndex() )
+                   == static_cast<s32>( mePlayerActiveRaceCarIndex ) )
+        {
+            mBoostManager.OnPropHit();
+
+            if( sbPropDiag && siPropLines < 24 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++siPropLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-hit] type " << static_cast<s32>( lrPropContact.muType )
+                    << " flags " << static_cast<s32>( lrPropContact.muFlags )
+                    << " state " << static_cast<s32>( lrPropContact.muState )
+                    << " -> OnPropHit [DELETE-WHEN-STABLE]\n";
+            }
+        }
+    }
+}
+
+// =================================================================================================
 // UpdateCrashingPlayerContacts  @0x822E85F0  -- THE CRASH-PLAY CONTACT PASS. 114 instructions.
 //
 // ⭐ This is the ONLY producer of CrashPlayManager::HandlePlayerToVehicleImpact in the whole
@@ -5705,24 +6051,55 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // AggressiveDrivingFlags copy, and INSIDE the sim-paused skip that starts at 0x82307610.
     // Landed 2026-08-18 (wave Q5, cluster G1).
     //
-    // [FLAG PC bring-up] the console leg BETWEEN the readback and this call is NOT reproduced:
-    // the 5-byte copy of VehicleOutputInterface::mAggressiveDrivingFlags (input +0x6C00) into
-    // module +0x1836C (asm 0x82307628..0x8230764C, a `mtctr 5` byte loop). Its destination is
-    // still inside this module's maTailPadB0 span -- no DWARF-named member is pinned there --
-    // so it is named here rather than faked. Nothing in the scene chain reads it.
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] THE AGGRESSIVE-DRIVING FLAG COPY, at the console's own slot:
+    // asm 0x82307628..0x8230764C, a literal `mtctr 5` byte loop from
+    // `GetVehicleOutputInterface() + 0x6C00` into `module + 0x1836C`, between the physics
+    // readback and GenerateSceneUpdateEvents and inside the same sim-paused skip.
+    //
+    // ⛔ THIS BANNER USED TO SAY THE LEG WAS "NOT REPRODUCED ... nothing in the scene chain reads
+    // it", and the second half was the load-bearing error: nothing in the SCENE chain reads it,
+    // but UpdateBoost @0x82304CA4 does. It reads bytes +1 and +3 -- mbPlayerLostSlamThisFrame /
+    // mbPlayerLostGrindingThisFrame -- and fires BoostStrategy::OnSlammed (vtable slot 9, the
+    // ONLY call site of OnSlammed in the whole image) when either is set. With the copy dropped
+    // those two bytes were never written, so being slammed or out-ground by a rival paid no
+    // boost at all. The destination is now the named member mAggressiveDrivingFlags.
+    if( !lbSimPaused && lpInput != 0 )
+    {
+        // The console copies the five bytes one at a time off a const input pointer
+        // (`lbz`/`stb` x5); here it is the record's own assignment. The const_cast is the
+        // accessor's, not the data's: VehicleOutputInterface::GetAggressiveDrivingFlags() has
+        // only a non-const form because the interface's queue/flag storage is still an opaque
+        // span, and that header is in the physics lane this wave must not edit.
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpcVehicleOutput =
+                lpInput->GetVehicleOutputInterface();
+        if( lpcVehicleOutput != 0 )
+        {
+            mAggressiveDrivingFlags =
+                const_cast<BrnPhysics::Vehicle::VehicleOutputInterface*>( lpcVehicleOutput )
+                    ->GetAggressiveDrivingFlags();
+        }
+    }
+
     if( !lbSimPaused )
     {
         GenerateSceneUpdateEvents( lpOutput );
     }
 
-    // ⭐⭐ [showtime end wave 2026-08-29] THE CRASH-PLAY CONTACT PASS, at the console's own slot:
-    // the `bl` at 0x82307680, inside the sim-paused skip, immediately after the two sibling
-    // contact legs (0x82307664 UpdateRaceCarContacts / 0x82307670 ProcessPropContactQueue,
-    // neither reconstructed) and immediately before UpdateActiveRaceCarTransforms (0x82307688,
-    // below). This is the ONLY producer of CrashPlayManager::HandlePlayerToVehicleImpact ->
-    // OnCarCrash in the image; without it both of those bodies are unreachable.
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] THE THREE POST-PHYSICS CONTACT LEGS, now complete and in the
+    // console's own order: 0x82307664 UpdateRaceCarContacts, 0x82307670 ProcessPropContactQueue,
+    // 0x82307680 UpdateCrashingPlayerContacts -- one `bl` after another inside the sim-paused
+    // skip, immediately before UpdateActiveRaceCarTransforms (0x82307688, below). The first two
+    // were the last remaining DELETE-WHEN on the third's banner; both are bodied above.
+    //   * UpdateRaceCarContacts is the only producer of the near-miss CONTACTED lists, i.e. the
+    //     only thing that stops a scraped car from still paying a NEARMISS award.
+    //   * ProcessPropContactQueue is the only producer of BoostStrategy::OnPropHit, i.e. the
+    //     only thing that pays boost for smashing a roadside prop.
+    //   * UpdateCrashingPlayerContacts is the only producer of
+    //     CrashPlayManager::HandlePlayerToVehicleImpact -> OnCarCrash.
     if( !lbSimPaused && lpInput != 0 )
     {
+        UpdateRaceCarContacts( lpInput );
+        ProcessPropContactQueue( lpInput );
         UpdateCrashingPlayerContacts( lpInput );
     }
 
@@ -5891,6 +6268,46 @@ void RaceCarEntityModule::PostPhysicsUpdate(
                 GetActiveRaceCar( mePlayerActiveRaceCarIndex )->GetPhysicsState(),
                 mfTimeStep,
                 lpOutput->GetGameEventQueue() );
+
+        // ⭐⭐⭐ [boost-wave2 2026-09-14] THE TRAFFIC-CHECK TICK, at the console's own position:
+        // PostPhysicsUpdate @0x823078F8..0x8230792C, the next call after the air-time tick, with
+        // the arguments the asm gives --
+        //     r3 = module + 0x180E8                            (mTrafficCheckManager)
+        //     r4 = GetVehicleOutputInterface(lpInput) + 0x65F0 (VehicleOutputInterface::
+        //                                                       mGameEventQueue -- the PHYSICS
+        //                                                       side queue world event 73 lands
+        //                                                       on, NOT the world's own)
+        //     r5 = lpOutput->GetGameEventQueue()               (sub_822B67D0)
+        //     r6 = playerCar +0x52A                            (mbCrashing)
+        //     f1 = module + 0x18398                            (mfTimeStep)
+        //
+        // ⛔ WHY IT WAS ABSENT AND WHAT IT COST: BrnTrafficCheckManager.cpp has been a complete
+        // committed reconstruction with NO MEMBER AND NO CALLER -- exactly the silent-drop shape
+        // BrnAirTimeManager.cpp was in one wave ago. So world event 74 (the traffic-check CHAIN)
+        // was produced nowhere in the build, and ProcessGameEvents' case-74 arm, landed last
+        // wave, had nothing to hear.
+        // ⭐⭐ AND THE EVENT IT COUNTS WAS NEVER MISSING. The previous wave recorded "an
+        // exhaustive scan of all 30,084 exported ARTIST functions found NO producer of world
+        // event 73". The producer exists and is already reconstructed in this tree:
+        // VehicleManager::HandleRaceCarTrafficCarPotentialContact @0x8263FA50 posts it at
+        // 0x82640268 (`li r6,2 ; sth r16,0xA4(r1) ; li r5,0x49 ; addi r3,r28,0x65F0 ; bl
+        // AddEvent`), reconstructed at BrnVehicleManager_RaceCarTrafficContact.cpp:592. The scan
+        // could not see it because that function is an ARTIST **EXPORT HOLE** -- it has no
+        // 0x<addr>.json at all. Found with `tools/re/ppcdis.py 0x8263FA50`.
+        // [[ida-export-set-has-holes]]: a text scan of the export set is not a scan of the image.
+        {
+            const BrnPhysics::Vehicle::VehicleOutputInterface* lpcVehicleOutput =
+                    lpInput->GetVehicleOutputInterface();
+            if( lpcVehicleOutput != 0 )
+            {
+                mTrafficCheckManager.Update(
+                        const_cast<BrnPhysics::Vehicle::VehicleOutputInterface*>( lpcVehicleOutput )
+                            ->GetGameEventQueue(),
+                        lpOutput->GetGameEventQueue(),
+                        GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsCrashing(),
+                        mfTimeStep );
+            }
+        }
     }
 
     // ⭐ [tut-ticker] the console's own tail order @0x82307938: SendGameEvents runs here,
@@ -6106,9 +6523,11 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
 // speed/time inputs below are scalar `lfs` values. Only the in-air rotations
 // are a genuine Vector3 load; fsubs/fsel then chooses max(abs(y), abs(z)).
 //
-// Two regular-branch side effects remain outside this bounded boost closure:
-// the post-takedown AI RenderDamaged latch needs the unhomed damaged-car count,
-// and OnSlammed needs the still-opaque aggressive-driving flags at +0x1836C.
+// ⭐ [boost-wave2 2026-09-14] ONE of the two side effects this banner used to park is now in:
+// OnSlammed's gate no longer "needs the still-opaque aggressive-driving flags at +0x1836C" --
+// those five bytes are the named member mAggressiveDrivingFlags, written by PostPhysicsUpdate's
+// own copy leg, and the gate is reproduced below the takedown sweep. The post-takedown AI
+// RenderDamaged latch's damaged-car count is still the one unhomed input.
 //
 // =============================================================================================
 // ⭐⭐⭐ THE SHOWTIME ARM -- THIS IS WHAT SPENDS THE TANK, AND IT WAS MISSING (2026-08-29).
@@ -6306,6 +6725,42 @@ void RaceCarEntityModule::UpdateBoost(
             if (sbTraceRivalDamage && CgsDev::Log::gpDebugPrint)
                 *CgsDev::Log::gpDebugPrint << "[rival-damage] player-takedown victim="
                     << static_cast<s32>(lrEvent.meVictimIndex) << "\n";
+        }
+    }
+
+    // ⭐⭐⭐ [boost-wave2 2026-09-14] THE "YOU GOT SLAMMED" AWARD -- ARTIST
+    // 0x82304CA4..0x82304CE0, the two instructions after the takedown sweep's loop tail and the
+    // two before the CarScoreData copy below:
+    //     lis/ori r11, 0x1836D ; lbzx r11, r29, r11 ; cmplwi 0 ; bne  -> fire
+    //     lis/ori r11, 0x1836F ; lbzx r11, r29, r11 ; cmplwi 0 ; beq  -> skip
+    //     lwz r3, 0(r23) ; lwz r11, 0(r3) ; lwz r11, 0x24(r11) ; bctrl   <- slot 9, OnSlammed
+    // i.e. `if (flags.mbPlayerLostSlamThisFrame || flags.mbPlayerLostGrindingThisFrame)
+    //           mpBoostStrategy->OnSlammed();`
+    //
+    // ⛔ THE TWO BYTES HAD NO WRITER, which is why this arm's banner used to say OnSlammed
+    // "needs the still-opaque aggressive-driving flags at +0x1836C". They are bytes +1 and +3 of
+    // VehicleOutputInterface::mAggressiveDrivingFlags, and PostPhysicsUpdate's `mtctr 5` byte
+    // loop (0x82307628) is their only producer -- a leg this file explicitly dropped until this
+    // wave. This is the ONLY call site of OnSlammed in the whole image (proven by a vcall scan
+    // for `lwz rX, 0x24(rY) ; mtctr` over every export), so with the copy dropped, being slammed
+    // or out-ground by a rival paid nothing anywhere in the game.
+    if( mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame
+        || mAggressiveDrivingFlags.mbPlayerLostGrindingThisFrame )
+    {
+        mBoostManager.OnSlammed();
+
+        // [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. Budgeted. DELETE-WHEN-STABLE.
+        static const bool sbSlamDiag  = ( getenv( "BRN_BOOST_TICKER_DIAG" ) != 0 );
+        static s32        siSlamLines = 0;
+        if( sbSlamDiag && siSlamLines < 24 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++siSlamLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[slammed] lostSlam "
+                << ( mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame ? 1 : 0 )
+                << " lostGrind "
+                << ( mAggressiveDrivingFlags.mbPlayerLostGrindingThisFrame ? 1 : 0 )
+                << " -> OnSlammed [DELETE-WHEN-STABLE]\n";
         }
     }
 
