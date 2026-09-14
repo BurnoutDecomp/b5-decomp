@@ -133,6 +133,10 @@ namespace BrnTrafficIO { class OutputBuffer_Prepare; }
 // and EntityModulePostPhysicsUpdate @0x827D3F10 name these IO buffers).
 namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene;
                          class InputBuffer_PostPhysics; class OutputBuffer_PostPhysics; }
+// ProcessTrafficTypeRequests' response element, by pointer only (forward-declaration
+// exception (b)): the real definition is SharedIO/BrnTrafficTypeInterface.h, which
+// BrnTrafficEntityModuleIO.h already includes, and BrnWorldModule.h includes THIS header.
+namespace BrnTrafficIO { struct TrafficTypeResponse; }
 
     // The module's small record types. The DWARF homes every one of them in this header;
     // the `:NNN` on each is its source line there.
@@ -1083,6 +1087,24 @@ namespace BrnTrafficIO { class InputBuffer_PreScene; class OutputBuffer_PreScene
         void HandleRecycledTraffic(
             const CgsModule::EventQueue<BrnPhysics::Vehicle::TrafficRemovedEvent, 25>*
                 lpRemovedTrafficQueue);
+
+        // @0x8272B880 (ARTIST EXPORT HOLE -- read out of the image with tools/re/ppcdis.py; the
+        // PS3 twin is Burnout_External_PS3 @0x4C4C1C, whose mangled name gives the signature).
+        // DWARF `void ProcessTrafficTypeRequests(
+        //   const VehicleManagerOutputInterface::TrafficTypeRequestQueue*,
+        //   OutputBuffer_PostPhysics::TrafficTypeResponseQueue*)` (BrnTrafficEntityModule.cpp:15533).
+        // ⭐ THE ANSWERING HALF OF THE TAKEDOWN-TYPE QUERY. Physics pushes a crashing traffic
+        // car's GLOBAL entity index onto VehicleManagerOutputInterface::mTrafficTypeRequestQueue
+        // (AddRemappedEntityIdEvent); this walks that queue and answers one TrafficTypeResponse
+        // per request -- vehicle index, VehicleClass (car/van/bus/bigrig) and the asset CgsID --
+        // which is the ONLY input TakedownManager::GetTakedownTypeFromTrafficVehicleIndex
+        // @0x82366288 has for choosing INTO_CAR / INTO_VAN / INTO_BUS.
+        // Body in BrnTrafficEntityModule_ProcessTrafficTypeRequests.cpp; the two queue types are
+        // named through the forward-declared template (same reason as HandleRecycledTraffic
+        // above -- the real headers are included by the .cpp).
+        void ProcessTrafficTypeRequests(
+            const CgsModule::EventQueue<u16, 32>* lpRequestQueue,
+            CgsModule::EventQueue<BrnTrafficIO::TrafficTypeResponse, 32>* lpResponseQueue);
 
         // ---- THE TWO DRAINS OF maNewCrashedVehicles. Bodies in _wT3_01.cpp beside its one
         //      producer, RecordTrafficVehicleIsPhysical.

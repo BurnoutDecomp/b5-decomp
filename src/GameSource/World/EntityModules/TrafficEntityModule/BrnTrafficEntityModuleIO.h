@@ -538,6 +538,18 @@ namespace BrnTrafficIO
         SceneInputInterface*       GetSceneInputInterface();                      // 0x82711E38 (baked 410)
         // +830144 read mTrafficTypeResponseQueue.
         const TrafficTypeResponseQueue* GetTrafficTypeResponseQueue() const;      // 0x827A0CC8 (baked 412)
+        // The WRITE half of the +830144 pair, DWARF BrnTrafficEntityModuleIO.h:120
+        // (`OutputBuffer_PostPhysics::TrafficTypeResponseQueue* GetTrafficTypeResponseQueue()`).
+        // X360 sub_82711EE0 -- an IDA name-truncation ("BrnTraffic::BrnTr"), not a hole.
+        // Which of the pair is which is settled by the LOCK BIT, not by the address range:
+        //   0x82711EE0  rlwinm r11, r11, 0x1d, 0x1f, 0x1f   -> status>>3 == locked for WRITING
+        //   0x827A0CC8  rlwinm r11, r11, 0x1c, 0x1f, 0x1f   -> status>>4 == locked for READING
+        // and its epilogue is `addis r3, r28, 0xd / addi r3, r3, -0x5540` == this + 830144.
+        // ⭐ THIS IS THE ONE TrafficEntityModule::PostPhysicsUpdate CALLS @0x8274EEB4, one
+        // instruction before it hands the result to ProcessTrafficTypeRequests -- the const
+        // twin could not be used there, because that buffer is LockForWrite()-held at the time
+        // and the read-lock tripwire would fire on every frame that answers a traffic-type query.
+        TrafficTypeResponseQueue*       GetTrafficTypeResponseQueue();            // 0x82711EE0 (baked 413)
         // +830672 read mResourceRequestInterface.
         const ResourceRequestInterface* GetResourceRequestInterface() const;      // 0x827A0D70 (baked 415)
         // The write half. X360 sub_82711F88, whose only xref is UpdateStreaming @0x82748848: it
