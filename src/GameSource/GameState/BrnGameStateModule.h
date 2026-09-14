@@ -744,6 +744,25 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] X360 ProcessGameEvents @0x823A0A18, THE EIGHT
+    // BOOST-TICKER ARMS (cases 64 / 67 / 68 / 69 / 70 / 72 / 73 / 74). Same extraction
+    // precedent as the case-111/113/115 and pause-family arms above: the dispatcher's own
+    // walk, one `case` per console arm, no Clear (PreWorldUpdateStuntBringUp owns it).
+    // It is THE MISSING MIDDLE of the boost hint strip -- the world already produced every
+    // one of these events and BrnGui::BoostMessageManager already latched every one of the
+    // GUI events they become; nothing carried them across the game-state boundary. The body
+    // carries the full per-arm attestation, the two Profile maxima the console keeps inside
+    // cases 69/70, and the two console side effects this extraction deliberately leaves out.
+    void ProcessGameEventsBoostTickerBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // [boost-ticker wave] NOT A CONSOLE FUNCTION -- the shared AddEvent + opt-in
+    // BRN_BOOST_TICKER_DIAG witness the eight arms above post through, so each arm reads as
+    // the console's own one-liner. See its body.
+    void AddBoostTickerAction(GameStateModuleIO::GameActionQueue* lpActionQueue,
+                              const void* lpRecord, s32 liActionId, s32 liSize);
+
     // ⭐⭐ [driver-details pause wave 2026-08-28] X360 ProcessGameEvents @0x823A0A18, THE CASE-80
     // ARM -- "the GUI asks for the player's rank progress". Same extraction precedent as the
     // case-111/113/115 and the pause-family arms above. The console arm, verbatim from the asm

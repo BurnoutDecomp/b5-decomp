@@ -810,6 +810,30 @@ public:
     f32  GetCompletedDriftDistance() const    { return mfCompletedDriftDistance; }       // +600 (lfs)
     f32  GetOncomingDistance() const          { return mfOncomingDistance; }             // +604 (lfs)
     f32  GetAirMaximum() const                { return mfAirMaximum; }                   // +608 (lfs)
+    // ⭐ [boost-ticker wave 2026-09-14] The two "keep the session best" writers, DWARF
+    // BrnProfile.h:483 / :490 (`void SetNewOncomingMaximum(float32_t)` /
+    // `void SetNewAirMaximum(float32_t)`). The X360 emits NO standalone symbol for either --
+    // their only caller, GameStateModule::ProcessGameEvents @0x823A0A18, folds each into its
+    // arm as a raw compare-and-store against the profile's own slot:
+    //     case 69 (in air):   if ( event[1]  > *(profile + 608) ) *(profile + 608) = event[1];
+    //     case 70 (oncoming): if ( *event    > *(profile + 604) ) *(profile + 604) = *event;
+    // +604 and +608 are exactly mfOncomingDistance and mfAirMaximum below, so the compare
+    // belongs INSIDE the "SetNew...Maximum" the DWARF names -- an inline body here is the
+    // faithful un-inlining, the same move GetOncomingDistance's neighbours already carry.
+    void SetNewOncomingMaximum(f32 lfDistance)
+    {
+        if (lfDistance > mfOncomingDistance)
+        {
+            mfOncomingDistance = lfDistance;
+        }
+    }
+    void SetNewAirMaximum(f32 lfAirTime)
+    {
+        if (lfAirTime > mfAirMaximum)
+        {
+            mfAirMaximum = lfAirTime;
+        }
+    }
     // maiTakedownTypeCounts (+416), the array AddTakedown writes. The DWARF spells the index
     // BrnGameState::ETakedownType; kept as s32 here so this header keeps pulling no extra enum.
     s32  GetTakedownTypeCount(s32 leTakedownType) const { return maiTakedownTypeCounts[leTakedownType]; }

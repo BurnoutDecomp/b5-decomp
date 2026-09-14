@@ -827,6 +827,246 @@ void GameStateModule::ProcessGameEventsPropHitBringUp(
 // ({ meCounty @+0x00, meDistrict @+0x04 } -- the exact 8-byte pair the world's
 // UpdateCurrentWorldRegion posts).
 // ============================================================================
+
+// ============================================================================
+// ⭐⭐⭐ [boost-ticker wave 2026-09-14] ProcessGameEventsBoostTickerBringUp -- the SEVEN
+// boost-ticker arms of GameStateModule::ProcessGameEvents @0x823A0A18, extracted exactly
+// like the case-111 / 113 / 115 / pause / stats arms above (ONE walk, the dispatcher's own
+// GetFirstEvent/GetNextEvent, one arm per `if`).
+//
+// ⛔⛔ WHY THIS FUNCTION EXISTS AT ALL -- THE MISSING MIDDLE OF THE BOOST TICKER.
+// Both ENDS of this wire were already committed and neither end could ever hear the other:
+//
+//   PRODUCERS (world, all bodied):  NearMissManager::NearMissEvent posts world event 64,
+//     BoostStrategy::Update posts 67/68/70/71/72, AirTimeManager::Update posts 69,
+//     TrafficCheckManager::Update posts 74.
+//   CONSUMER  (GUI, fully bodied):  BrnGui::BoostMessageManager::RecvEvent @0x824204E8
+//     latches GUI events 383/384/385/386/387/388/389, and BrnRaceMainHudState_wS3.cpp's
+//     LABEL_120 already routes every one of them into it.
+//   MISSING:  the two links between -- THIS arm (world event -> game action) and the
+//     TranslateGameActionsToGuiEvents cases (game action -> GUI event), neither of which
+//     existed anywhere in the tree. So every near miss, drift, spin, jump, oncoming run,
+//     tailgate and traffic-check chain the world computed was dropped on the floor at the
+//     game-state boundary, and the hint strip beside the boost bar could never draw.
+//
+// THE ARMS, from the console's own jump table (each `AddEvent(actionQueue, rec, id, size)`
+// is the arm's last statement):
+//     case 64 -> action 171 size 8   {miCount, meNearMissType}   -> GUI 384
+//     case 67 -> action 172 size 4   {mfDistance}                -> GUI 385
+//     case 68 -> action 173 size 4   {mfSpinAngle}               -> GUI 386
+//     case 69 -> action 174 size 8   {cumulative, currentJump}   -> GUI 387
+//     case 70 -> action 175 size 4   {mfDistance}                -> GUI 388
+//     case 72 -> action 176 size 8   {mfDistance, tailgatedCar}  -> GUI 389
+//     case 74 -> action 108 size 4   {miChainSize}               -> GUI 383
+//     case 73 -> action 107 size 2   {muVehicleIndex}            -> NOT a GUI event: it is
+//               RaceCarEntityModule::HandleGameActions case 107 that turns it into boost.
+//
+// TWO CONSOLE SIDE EFFECTS ARE HERE TOO, because they are inside these arms and dropping
+// them would be an omission, not a reduction:
+//   * case 69 keeps the profile's air-time best  (`if (e[1] > profile+608) ...`)
+//   * case 70 keeps the profile's oncoming best  (`if (e[0] > profile+604) ...`)
+// both spelled through the DWARF's own Profile::SetNewAirMaximum / SetNewOncomingMaximum.
+//
+// ⚠️ WHAT IS *NOT* HERE, AND IS NAMED AS ABSENT RATHER THAN QUIETLY DROPPED. The console's
+// cases 67/69/70 each ALSO call BrnGameState::ModeManager::ProcessEvent(<the same event>)
+// -- the freeburn-challenge / skill scorer feed. That is a DIFFERENT consumer of the same
+// events with its own committed home (ChallengeManager::ProcessEvent, reached through
+// ModeManager), and wiring it is not this wave's charter; it changes no ticker behaviour.
+// Likewise case 73's `*(this + 47605) = 1` byte (a module latch with no reader anywhere in
+// the reconstructed tree) is left out rather than given an invented member.
+//
+// ⚠️ IT DOES NOT Clear() THE QUEUE -- PreWorldUpdateStuntBringUp owns the console's Clear,
+// later in the same sub-step, exactly as for every sibling arm.
+// ============================================================================
+void GameStateModule::ProcessGameEventsBoostTickerBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        switch (liType)
+        {
+            case GameStateModuleIO::E_EVENT_NEAR_MISS_SCORED:        // world 64 -> action 171
+            {
+                const GameStateModuleIO::NearMissScoredEvent* lpNearMiss =
+                    reinterpret_cast<const GameStateModuleIO::NearMissScoredEvent*>(lpEvent);
+                GameStateModuleIO::NearMissAction lAction;
+                lAction.miCount        = lpNearMiss->miCount;
+                lAction.meNearMissType = lpNearMiss->meNearMissType;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_NEAR_MISS, sizeof(lAction));
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_DRIFTING:                // world 67 -> action 172
+            {
+                const GameStateModuleIO::DriftingEvent* lpDrift =
+                    reinterpret_cast<const GameStateModuleIO::DriftingEvent*>(lpEvent);
+                GameStateModuleIO::DriftingAction lAction;
+                lAction.mfDistance = lpDrift->mfDistance;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_DRIFTING, sizeof(lAction));
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_SPINNING:                // world 68 -> action 173
+            {
+                const GameStateModuleIO::SpinningEvent* lpSpin =
+                    reinterpret_cast<const GameStateModuleIO::SpinningEvent*>(lpEvent);
+                GameStateModuleIO::SpinningAction lAction;
+                lAction.mfSpinAngle = lpSpin->mfSpinAngle;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_SPINNING, sizeof(lAction));
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_IN_AIR:                  // world 69 -> action 174
+            {
+                // The console asserts the event pointer here (BrnGameStateModule.cpp:2878)
+                // and again asserts the profile is non-null (:2886) before the maximum latch.
+                CGS_ASSERT(lpEvent != 0, "lpInAirEvent");            // cpp:2878
+                const GameStateModuleIO::InAirEvent* lpInAir =
+                    reinterpret_cast<const GameStateModuleIO::InAirEvent*>(lpEvent);
+                GameStateModuleIO::InAirAction lAction;
+                lAction.mfCumulativeAirTime  = lpInAir->mfCumulativeAirTime;
+                lAction.mfCurrentJumpAirTime = lpInAir->mfCurrentJumpAirTime;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_IN_AIR, sizeof(lAction));
+
+                BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+                CGS_ASSERT(lpProfile != 0, "GetProfile()");          // cpp:2886
+                if (lpProfile != 0)
+                {
+                    lpProfile->SetNewAirMaximum(lpInAir->mfCurrentJumpAirTime);
+                }
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_ONCOMING:                // world 70 -> action 175
+            {
+                const GameStateModuleIO::OncomingEvent* lpOncoming =
+                    reinterpret_cast<const GameStateModuleIO::OncomingEvent*>(lpEvent);
+                GameStateModuleIO::OncomingAction lAction;
+                lAction.mfDistance = lpOncoming->mfDistance;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_ONCOMING, sizeof(lAction));
+
+                BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+                CGS_ASSERT(lpProfile != 0, "GetProfile()");          // cpp:2902
+                if (lpProfile != 0)
+                {
+                    lpProfile->SetNewOncomingMaximum(lpOncoming->mfDistance);
+                }
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_TAILGATING:              // world 72 -> action 176
+            {
+                const GameStateModuleIO::TailgatingEvent* lpTailgating =
+                    reinterpret_cast<const GameStateModuleIO::TailgatingEvent*>(lpEvent);
+                GameStateModuleIO::TailgatingAction lAction;
+                lAction.mfDistance          = lpTailgating->mfDistance;
+                lAction.meTailgatedCarIndex =
+                    static_cast< ::EActiveRaceCarIndex>(lpTailgating->meTailgatedCarIndex);
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_TAILGATING, sizeof(lAction));
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_TRAFFIC_CHECKING:        // world 73 -> action 107
+            {
+                CGS_ASSERT(lpEvent != 0, "lpTrafficCheckingEvent"); // cpp:2807
+                const GameStateModuleIO::TrafficCheckingEvent* lpChecking =
+                    reinterpret_cast<const GameStateModuleIO::TrafficCheckingEvent*>(lpEvent);
+                GameStateModuleIO::TrafficCheckingAction lAction;
+                lAction.muVehicleIndex = lpChecking->muVehicleIndex;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_ON_TRAFFIC_CHECKING,
+                                     sizeof(lAction));
+                break;
+            }
+
+            case GameStateModuleIO::E_EVENT_TRAFFIC_CHECKING_CHAIN:  // world 74 -> action 108
+            {
+                CGS_ASSERT(lpEvent != 0, "lpTrafficCheckingChainEvent"); // cpp:4083
+                const GameStateModuleIO::TrafficCheckingChainEvent* lpChain =
+                    reinterpret_cast<const GameStateModuleIO::TrafficCheckingChainEvent*>(lpEvent);
+                GameStateModuleIO::TrafficCheckingChainAction lAction;
+                lAction.miChainSize = lpChain->miChainSize;
+                AddBoostTickerAction(lpActionQueue, &lAction,
+                                     GameStateModuleIO::E_ACTION_ON_TRAFFIC_CHECKING_CHAIN,
+                                     sizeof(lAction));
+                break;
+            }
+
+            default:
+                break;
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
+// [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
+// console emits a bare AddEvent per arm. It exists so the eight arms above read as the
+// console's eight one-liners instead of eight copies of the same diagnostic block.
+//
+// [DIAG] BRN_BOOST_TICKER_DIAG -- NOT IN THE X360 BINARY. The rung that separates "the
+// world never produced it" from "it was produced and nothing forwarded it": this prints
+// the action id and size at the exact moment the game-state layer hands it on. Budgeted,
+// because the oncoming/tailgating/spin events fire on EVERY frame the state is live.
+// DELETE-WHEN-STABLE.
+// ============================================================================
+void GameStateModule::AddBoostTickerAction(
+        GameStateModuleIO::GameActionQueue* lpActionQueue,
+        const void* lpRecord, s32 liActionId, s32 liSize)
+{
+    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lpRecord),
+                            liActionId, liSize);
+
+    static const bool sbDiag = (getenv("BRN_BOOST_TICKER_DIAG") != 0);
+    // ⚠️ THE BUDGET IS PER ACTION ID, and it has to be: on the first measured run a SHARED
+    // budget of 96 lines was eaten entirely by actions 173 (spin) and 174 (in air), which the
+    // world posts on EVERY frame the state is live, so the run could say nothing at all about
+    // the near-miss / oncoming / tailgating arms it was taken to measure.
+    // [[diagnostics-that-lie]] -- a witness that starves is a witness that reports absence it
+    // never observed. Index is action-id minus the lowest id this function posts (107).
+    const s32  KI_BOOST_TICKER_DIAG_FIRST_ID = 107;
+    const s32  KI_BOOST_TICKER_DIAG_ID_COUNT = 176 - 107 + 1;
+    const s32  KI_BOOST_TICKER_DIAG_PER_ID   = 24;
+    static s32 saiLines[KI_BOOST_TICKER_DIAG_ID_COUNT] = { 0 };
+    const s32  liSlot = liActionId - KI_BOOST_TICKER_DIAG_FIRST_ID;
+    if (sbDiag && liSlot >= 0 && liSlot < KI_BOOST_TICKER_DIAG_ID_COUNT
+        && saiLines[liSlot] < KI_BOOST_TICKER_DIAG_PER_ID && CgsDev::Log::gpDebugPrint != 0)
+    {
+        ++saiLines[liSlot];
+        *CgsDev::Log::gpDebugPrint << "[boost-ticker] action " << liActionId
+                                   << " size " << liSize;
+        // The 4-byte guard matters: the traffic-check action is only TWO bytes, so an
+        // unconditional word read off the caller's stack record would run past it.
+        if (liSize >= 4)
+        {
+            s32 liWord0 = 0;
+            memcpy(&liWord0, lpRecord, sizeof(liWord0));
+            f32 lfWord0 = 0.0f;
+            memcpy(&lfWord0, lpRecord, sizeof(lfWord0));
+            *CgsDev::Log::gpDebugPrint << " w0i=" << liWord0 << " w0f=" << lfWord0;
+        }
+        *CgsDev::Log::gpDebugPrint << " [DELETE-WHEN-STABLE]\n";
+    }
+}
+
 void GameStateModule::ProcessGameEventsWorldRegionBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
@@ -1322,6 +1562,13 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // same walk, same must-run-before-the-Clear constraint; it posts onto the action queue
     // this function already holds the write lock for.
     ProcessGameEventsWorldRegionBringUp(&mGameEventCarryQueue, lpActionQueue);
+    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] the dispatcher's EIGHT boost-ticker arms (cases
+    // 64/67/68/69/70/72/73/74), same walk, same must-run-before-the-Clear constraint. They
+    // post actions 107/108/171..176 onto the action queue this function already holds the
+    // write lock for, and TranslateGameActionsToGuiEvents turns six of them into GUI events
+    // 383..389 in the SAME sub-step -- which is why the hint strip beside the boost bar
+    // updates on the frame the trick happens, not a frame later.
+    ProcessGameEventsBoostTickerBringUp(&mGameEventCarryQueue, lpActionQueue);
     // â­ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
     // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
     // 86/87/88 onto the action queue this function already holds the write lock for --

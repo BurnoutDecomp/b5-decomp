@@ -247,6 +247,42 @@ enum EGameActionType
     // BrnDriveThruManager.cpp's TU-local KI_ACTION_STOP_DRIVE_THRU_PRES) now that both ends
     // exist in the tree.
     E_ACTION_STOP_DRIVE_THRU_PRESENTATION = 101, // size 1
+    // =============================================================================================
+    // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE EIGHT BOOST-TICKER ACTIONS. Every id below is taken
+    // from the `li r5,<id>` / `li r6,<size>` pair at its ONE producer -- the arms of
+    // GameStateModule::ProcessGameEvents @0x823A0A18 that forward a world event -- and every one is
+    // CONSUMER-pinned at the far end of the same wire by
+    // BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0, whose case turns it into the GUI
+    // event BrnGui::BoostMessageManager::RecvEvent @0x824204E8 latches:
+    //
+    //   action  ProcessGameEvents arm   size  translator -> GUI event        BoostMessageManager
+    //   107     case 73  @0x823A...        2  (no GUI arm; RaceCarEntityModule::HandleGameActions
+    //                                         case 107 -> BoostStrategy slot 12 OnTrafficCheck)
+    //   108     case 74                    4  case 108 -> 383 GuiTrafficCheckEvent   mbChecking
+    //   171     case 64                    8  case 171 -> 384 GuiNearMissEvent       mbNearMiss
+    //   172     case 67                    4  case 172 -> 385 GuiDriftingEvent       mfDriftingDist
+    //   173     case 68                    4  case 173 -> 386 GuiSpinningEvent       mfSpinAngle
+    //   174     case 69                    8  case 174 -> 387 GuiInAirEvent          mfAirTime
+    //   175     case 70                    4  case 175 -> 388 GuiOncomingEvent       mfOncomingDist
+    //   176     case 72                    8  case 176 -> 389 GuiTailgatingEvent     mfTailDist
+    //
+    // THE SHIFTS, both already recorded by neighbours in this enum:
+    //   107/108 are DWARF E_ACTION_ON_TRAFFIC_CHECKING (102) / _CHAIN (103) +5 -- the same +5 band
+    //           as PLAYER_INVULNERABLE (106 -> 111) and SHUTDOWN_FINISHED (116 -> 121) above.
+    //   171..176 are DWARF 163..168 +8 -- the same +8 band as EVENT_STATE_RESPONSE (171 -> 179),
+    //           GAME_STATS_RESPONSE (172 -> 180) and RANK_INFO_RESPONSE (173 -> 181).
+    // ⚠️ THE SHIFT IS NOT THE PROOF -- the producer arm is. Each id was read out of
+    // ProcessGameEvents' own AddEvent call, and each size matches the record below member for
+    // member, which is what makes an id + record identity attested at one site.
+    // =============================================================================================
+    E_ACTION_ON_TRAFFIC_CHECKING          = 107, // DWARF 102 (+5 X360); size 2
+    E_ACTION_ON_TRAFFIC_CHECKING_CHAIN    = 108, // DWARF 103 (+5 X360); size 4
+    E_ACTION_NEAR_MISS                    = 171, // DWARF 163 (+8 X360); size 8
+    E_ACTION_DRIFTING                     = 172, // DWARF 164 (+8 X360); size 4
+    E_ACTION_SPINNING                     = 173, // DWARF 165 (+8 X360); size 4
+    E_ACTION_IN_AIR                       = 174, // DWARF 166 (+8 X360); size 8
+    E_ACTION_ONCOMING                     = 175, // DWARF 167 (+8 X360); size 4
+    E_ACTION_TAILGATING                   = 176, // DWARF 168 (+8 X360); size 8
     // ⛔ VALUE CORRECTION 2026-08-20 -- this carried the PS3-DWARF value (19). The X360 ARTIST
     // build posts 23, asm-pinned at BOTH ends:
     //   producer  ModeManager::PrepareForMode @0x82342930 -- `li r5,0x17` (23) + `li r6,0x8E0`
@@ -1551,6 +1587,88 @@ struct OverheadSignHitAction : public GameAction<E_ACTION_OVERHEAD_SIGN_HIT>
                             //        leading byte; no consumer in the image reads it, so the
                             //        name describes the wire, not a recovered semantic.
     u8  maPad5[3];          // +0x05..+0x07 -- never written; posted size is 8.
+};
+
+// =============================================================================================
+// ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE BOOST-TICKER ACTION RECORDS.
+//
+// Each is the byte image GameStateModule::ProcessGameEvents @0x823A0A18 builds on its stack and
+// hands to AddEvent, and each is read back word-for-word by
+// TranslateGameActionsToGuiEvents @0x823E9CE0. Member names/types are the DecFIGS DWARF's
+// (BrnGameActions.h :2336/:2351/:2365/:2379/:2394/:2408/:2075/:2088); the WIDTHS are the
+// console's posted sizes. Every one of these records is a straight copy of its world event's
+// payload -- the game-state layer adds nothing but the id change and (for in-air/oncoming) a
+// session-maximum latch it keeps for itself.
+// =============================================================================================
+
+// Action 171, 8 bytes. ProcessGameEvents case 64 @0x823A...: `v465[0] = *event; v465[1] =
+// event[1]; AddEvent(q, v465, 171, 8)` -- a verbatim copy of the world's NearMissScoredEvent.
+// Translator case 171 copies both words into GuiNearMissEvent (id 384, size 8).
+struct NearMissAction : public GameAction<E_ACTION_NEAR_MISS>
+{
+    s32 miCount;         // +0x00 (:2338)
+    s32 meNearMissType;  // +0x04 (:2339, BrnWorld::ENearMissType; s32 storage -- the same
+                         //        decoupling BrnGameEvents.h's NearMissEvent uses, so this
+                         //        header does not pull in the World near-miss header)
+};
+
+// Action 172, 4 bytes. ProcessGameEvents case 67: `v389 = *event; AddEvent(q, &v389, 172, 4)`
+// (and then ModeManager::ProcessEvent(67) on the SAME event, which is the challenge/skill feed).
+// Translator case 172 -> GuiDriftingEvent (id 385, size 4).
+struct DriftingAction : public GameAction<E_ACTION_DRIFTING>
+{
+    f32 mfDistance;   // +0x00 (:2353)
+};
+
+// Action 173, 4 bytes. ProcessGameEvents case 68. Translator case 173 -> GuiSpinningEvent
+// (id 386, size 4). BoostMessageManager::RecvEvent asserts the angle is >= 0.
+struct SpinningAction : public GameAction<E_ACTION_SPINNING>
+{
+    f32 mfSpinAngle;   // +0x00 (:2367)
+};
+
+// Action 174, 8 bytes. ProcessGameEvents case 69 asserts the event pointer
+// (BrnGameStateModule.cpp:2878), copies both words, and ALSO keeps the running maximum of
+// mfCurrentJumpAirTime in the module. Translator case 174 -> GuiInAirEvent (id 387, size 8).
+struct InAirAction : public GameAction<E_ACTION_IN_AIR>
+{
+    f32 mfCumulativeAirTime;    // +0x00 (:2381)
+    f32 mfCurrentJumpAirTime;   // +0x04 (:2382)
+};
+
+// Action 175, 4 bytes. ProcessGameEvents case 70 copies the distance, keeps the session maximum,
+// then runs ModeManager::ProcessEvent(70). Translator case 175 -> GuiOncomingEvent (id 388,
+// size 4) -- the "ONCOMING 800m" counter the boost ticker draws.
+struct OncomingAction : public GameAction<E_ACTION_ONCOMING>
+{
+    f32 mfDistance;   // +0x00 (:2396)
+};
+
+// Action 176, 8 bytes. ProcessGameEvents case 72 copies BOTH words; the translator's case 176
+// forwards only word 0 (`v381 = *v7`), because GuiTailgatingEvent is 4 bytes.
+struct TailgatingAction : public GameAction<E_ACTION_TAILGATING>
+{
+    f32                   mfDistance;           // +0x00 (:2410)
+    ::EActiveRaceCarIndex meTailgatedCarIndex;  // +0x04 (:2411)
+};
+
+// Action 107, 2 bytes. ProcessGameEvents case 73 asserts the event
+// (BrnGameStateModule.cpp:2807), copies the u16 and raises the module's own "a check happened"
+// byte. The consumer is NOT the GUI translator: it is
+// RaceCarEntityModule::HandleGameActions @0x8230BE08 case 107, which calls the boost strategy's
+// vtable slot 12 (OnTrafficCheck, +0x30) and then NearMissData<4,8>::AddChecked with this index
+// so the checked vehicle cannot also score a near miss.
+struct TrafficCheckingAction : public GameAction<E_ACTION_ON_TRAFFIC_CHECKING>
+{
+    u16 muVehicleIndex;   // +0x00 (:2077)
+};
+
+// Action 108, 4 bytes. ProcessGameEvents case 74 asserts the event
+// (BrnGameStateModule.cpp:4083) and forwards TrafficCheckManager's running chain count.
+// Translator case 108 -> GuiTrafficCheckEvent (id 383, size 4).
+struct TrafficCheckingChainAction : public GameAction<E_ACTION_ON_TRAFFIC_CHECKING_CHAIN>
+{
+    s32 miChainSize;   // +0x00 (:2090)
 };
 
 // Action 140, 36 bytes -- THE SHOWTIME PER-CAR SCORE RECORD. Producer:
