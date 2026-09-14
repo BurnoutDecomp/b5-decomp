@@ -340,4 +340,12 @@ void WorldDebugComponent::AIDrivesPlayerChanged(void*, void* lpThis)
         lpWorldModule->mAIModule.mbAIPlayerInvulnerable = true;
     }
 }
+
+// [PC HARNESS, NOT X360] -- see the header. The debug menu's toggle, driven from the harness:
+// the member store the menu would make, then the console's own callback.
+void WorldDebugComponent::HarnessSetAIDrivesPlayer(bool lbEnabled)
+{
+    mbAIDrivesPlayer = lbEnabled;
+    AIDrivesPlayerChanged(nullptr, this);
+}
 }

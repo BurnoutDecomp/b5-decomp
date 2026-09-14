@@ -2791,6 +2791,10 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
                                    lpRaceCarOutput_PostScene, lpSceneOutput,
                                    lpRaceCarOutput_PreScene );
 
+    // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER -- see HarnessArmAIDrivesPlayer (end of file).
+    // Placed BEFORE the refresh below so the frame that arms it already runs the AI-owned path.
+    HarnessArmAIDrivesPlayer();
+
     // ARTIST 0x827D74FC..0x827D753C refreshes ownership before StoreDrivenCarData.
     // The management event resets the route/PID once; this latch keeps subsequent
     // frames from overwriting the handoff with "human driving" again.
@@ -7955,4 +7959,81 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     }
 }
 
+
+// =================================================================================================
+// [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER=1 -- hand the player car to the game's OWN AI.
+//
+// The console has this seat. WorldDebugComponent registers the debug variable "AI drives player"
+// and its callback AIDrivesPlayerChanged @0x827B1FC0 stores maeCarControls[player] = 2 and
+// mAIModule.mbAIPlayerInvulnerable = false. From there every link is the console's:
+//   * Update (above) refreshes AIModule::mbAIDrivesPlayer from the control word each frame
+//     (ARTIST 0x827D74FC..0x827D753C);
+//   * AIModule::StoreDrivenCarData derives AICar::mbIsDrivenByPlayer = isPlayer && !mbAIDrivesPlayer
+//     (asm 0x82795CB4..0x82795CD4), so the player's AIDriver drives its car like any rival's;
+//   * WorldBridgeAIModule forwards the AI's BrnAIDriverControls for the player slot to physics ONLY
+//     when the control word is 2 (0x827AAC1C..0x827AAC2C), and WorldBridgeEntityModulesToPhysics
+//     forwards the pad record ONLY when it is 1 (0x827AAFEC..0x827AB008);
+//   * VehicleManager::UpdateAIDriver @0x825C5110 installs the AI record in the per-car slot and
+//     mirrors it into mPlayerAiDriver.
+// The same seat is what ModeManager posts at event finish (SET_PLAYER_CAR_DRIVER selector 2) and
+// what the AI aggression code tests (FindTarget refuses an AI-driven player car as a target).
+//
+// A harness run has no debug menu, so this arm flips the same member through the same callback
+// once the player's slot is attached AND its AI driver slot is active (before that the callback's
+// index assert would fire and there is no driver to take the wheel). It is a STANDING policy, like
+// the console's sibling mbDEBUGPlayerCarAlwaysUnderAIControl: several console flows hand the car
+// back to pad control (SET_PLAYER_CAR_DRIVER selector 1 at a drive-thru exit, the case-34 "reset
+// every car to player control" arm), so whenever the word is found back at 1 while the variable is
+// set, the toggle is applied again -- the first time with the full banner, afterwards one short
+// line, so a log shows exactly when the game reclaimed the car and the harness re-took it.
+// Opt-in; inert without the variable. The pad channels the harness holds (-Drive/-Steer/-*Script)
+// are dropped by the bridge while the word is 2 -- by the console's own gate, not by anything here.
+// DELETE-WHEN the debug menu is drivable from the harness.
+// =================================================================================================
+void WorldModule::HarnessArmAIDrivesPlayer()
+{
+    static const bool skbWanted = ( std::getenv( "BRN_AI_DRIVES_PLAYER" ) != 0 );
+    static s32        siArmCount = 0;
+    if ( !skbWanted )
+    {
+        return;
+    }
+    if ( meLocalPlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        return;
+    }
+    if ( maeCarControls[ meLocalPlayerActiveRaceCarIndex ] == E_CAR_CONTROL_AI_MODULE )
+    {
+        return;   // already the AI's -- nothing to re-apply
+    }
+    const BrnAI::AIDriver* lpPlayerDriver = mAIModule.GetAIDriver( meLocalPlayerActiveRaceCarIndex );
+    if ( lpPlayerDriver == 0 || !lpPlayerDriver->IsActive() )
+    {
+        return;
+    }
+
+    const s32 liPreviousControl = maeCarControls[ meLocalPlayerActiveRaceCarIndex ];
+    ++siArmCount;
+    mDebugComponent.HarnessSetAIDrivesPlayer( true );
+
+    if ( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        if ( siArmCount == 1 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ai-drive] ***** HARNESS-ONLY (BRN_AI_DRIVES_PLAYER=1): the game's own AI now drives the "
+                << "player car -- WorldDebugComponent::AIDrivesPlayerChanged @0x827B1FC0 stored maeCarControls["
+                << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "]=2 and mbAIPlayerInvulnerable=0. "
+                << "The pad record is no longer forwarded to physics; the AI record for this slot is. "
+                << "Standing: re-applied whenever the game hands the car back. *****\n";
+        }
+        else
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ai-drive] re-armed #" << siArmCount << ": the game had set maeCarControls["
+                << static_cast<s32>( meLocalPlayerActiveRaceCarIndex ) << "]=" << liPreviousControl
+                << "; back to 2 (AI) via the same @0x827B1FC0 callback\n";
+        }
+    }
+}
 }

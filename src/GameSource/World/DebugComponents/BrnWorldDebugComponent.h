@@ -31,6 +31,13 @@ namespace BrnWorld
         bool HaveDebugController() const { return mbHaveDebugController; }
         bool GetWantsDebugControllerFocus() const { return HaveDebugController(); }
 
+        // [PC HARNESS, NOT X360] BRN_AI_DRIVES_PLAYER. On the console the debug menu flips
+        // mbAIDrivesPlayer and the registered-variable callback AIDrivesPlayerChanged
+        // @0x827B1FC0 applies it (maeCarControls[player] = 2, mbAIPlayerInvulnerable = false).
+        // A harness run has no debug menu, so WorldModule::HarnessArmAIDrivesPlayer flips the
+        // SAME member and runs the SAME callback through this entry. Nothing else calls it.
+        void HarnessSetAIDrivesPlayer(bool lbEnabled);
+
     protected:
         const char* GetName() const override;
         bool IsSimple() const override;
