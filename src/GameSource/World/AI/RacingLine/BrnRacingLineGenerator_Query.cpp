@@ -536,12 +536,34 @@ bool RacingLineGenerator::GetPointFarAhead(RacingLine* lpRacingLine, f32 lfDista
         return false;
     }
 
-    // fsel f0, -interp, 0.0, interp   then   fsel f1, 1.0 - interp, interp, 1.0
-    f32 lfInterp = lfDistanceRemaining / lfSectionLength;
-    if (lfInterp <= 0.0f)
-        lfInterp = 0.0f;
-    if (lfInterp > 1.0f)
-        lfInterp = 1.0f;
+    // ⭐⭐⭐ THE CLAMP IS AN `fsel` PAIR AND ITS NaN ARM IS LOAD-BEARING (fixed 2026-09-15,
+    // issue #24). ARTIST 0x827901CC..0x82790200, verbatim:
+    //     fdivs f0, f31, f1              ; interp = remaining / sectionLength
+    //     lfs   f13, flt_82001CC0        ; 0.0
+    //     fneg  f12, f0                  ; -interp
+    //     fsel  f0, f12, f13, f0         ; FRT,FRA,FRC,FRB -> (-interp >= 0) ? 0.0 : interp
+    //     lfs   f13, flt_82001C98        ; 1.0
+    //     fsubs f12, f13, f0             ; 1.0 - interp
+    //     fsel  f1, f12, f0, f13         ; (1.0 - interp >= 0) ? interp : 1.0
+    // PowerPC `fsel FRT,FRA,FRC,FRB` is "if (FRA) >= 0.0 then FRC else FRB", and the >= is FALSE
+    // for a NaN FRA -- so a NaN interp survives the FIRST fsel (FRB is interp) and is turned into
+    // **1.0** by the SECOND (FRB is 1.0). That second arm is the console's NaN CONTAINMENT for the
+    // whole hermite stack.
+    // ⛔ The previous `if (x <= 0) x = 0; if (x > 1) x = 1;` form is NOT that program: in C++ both
+    // comparisons are false for a NaN, so a NaN interp was passed straight into
+    // GetPointAndNormalOnCurve.
+    // ⚠️ REPRODUCIBLE IS NOT ATTRIBUTABLE -- MEASURED, AND SAID OUT LOUD. Fixing THIS site alone
+    // (issue #24 run 4) changed nothing: 53,522 asserts and a per-site histogram identical to the
+    // runs before it, and GetPointAndNormalOnCurve's own "Bad interp" (.cpp:2148) never fires at
+    // all. The storm comes through the OTHER caller of the same hermite pair,
+    // GetCentreCentreLineHere @0x8278E930, which carried the identical mistranslation; see the
+    // banner there. This site is corrected because the console's program says so, not because it
+    // was the cause of anything observed.
+    // Written as the two explicit `>= 0.0f` tests so the NaN behaviour is the ternary's own
+    // (a NaN comparison is false in C++ too, so each line IS its fsel).
+    const f32 lfRawInterp = lfDistanceRemaining / lfSectionLength;
+    f32 lfInterp = (-lfRawInterp >= 0.0f) ? 0.0f : lfRawInterp;   // fsel f0, f12, f13, f0
+    lfInterp    = ((1.0f - lfInterp) >= 0.0f) ? lfInterp : 1.0f;  // fsel f1, f12, f0, f13
 
     Vector2 lPoint;
     Vector2 lNormal;
