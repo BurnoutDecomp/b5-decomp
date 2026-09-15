@@ -401,6 +401,58 @@ static void WatchBlackFramesIfRequested()
             CgsDev::Log::WriteToLog(lacMsg);
         }
         ++suBlackRun;
+
+        // Keep the PICTURE of the first two black presents of a window (mid-drive only: presents
+        // before 2000 are the boot's loading screens), as top-down 32-bit BMPs beside the exe
+        // (`blackframe_<present>.bmp`), so "black" can be told apart from "world missing, HUD
+        // drawn" -- a mean of 1.1 with a HUD on screen is the scene / post-fx path, a mean of 0.0
+        // is the presenter. Two files per window, cost only when a window opens.
+        if (suBlackRun <= 2u && renderengine::guPresentCount > 2000u)
+        {
+            IDirect3DSurface9* lpFull = nullptr;
+            if (SUCCEEDED(renderengine::gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpFull)) && lpFull != nullptr)
+            {
+                D3DSURFACE_DESC lFullDesc;
+                lpFull->GetDesc(&lFullDesc);
+                IDirect3DSurface9* lpFullSys = nullptr;
+                if (SUCCEEDED(renderengine::gDevice->CreateOffscreenPlainSurface(
+                        lFullDesc.Width, lFullDesc.Height, lFullDesc.Format, D3DPOOL_SYSTEMMEM, &lpFullSys, nullptr))
+                    && SUCCEEDED(renderengine::gDevice->GetRenderTargetData(lpFull, lpFullSys)))
+                {
+                    D3DLOCKED_RECT lFullLock;
+                    if (SUCCEEDED(lpFullSys->LockRect(&lFullLock, nullptr, D3DLOCK_READONLY)))
+                    {
+                        char lacPath[128];
+                        std::snprintf(lacPath, sizeof(lacPath), "blackframe_%06u.bmp", renderengine::guPresentCount);
+                        FILE* lpFile = std::fopen(lacPath, "wb");
+                        if (lpFile != nullptr)
+                        {
+                            const u32 luW = lFullDesc.Width, luH = lFullDesc.Height;
+                            const u32 luImageBytes = luW * luH * 4u;
+                            u8 laHdr[54] = { 'B', 'M' };
+                            *reinterpret_cast<u32*>(laHdr + 2)  = 54u + luImageBytes;       // BMP file-format header blob
+                            *reinterpret_cast<u32*>(laHdr + 10) = 54u;                      // BMP file-format header blob
+                            *reinterpret_cast<u32*>(laHdr + 14) = 40u;                      // BMP file-format header blob
+                            *reinterpret_cast<s32*>(laHdr + 18) = static_cast<s32>(luW);    // BMP file-format header blob
+                            *reinterpret_cast<s32*>(laHdr + 22) = -static_cast<s32>(luH);   // top-down BMP file-format header blob
+                            *reinterpret_cast<u16*>(laHdr + 26) = 1;                        // BMP file-format header blob
+                            *reinterpret_cast<u16*>(laHdr + 28) = 32;                       // BMP file-format header blob
+                            *reinterpret_cast<u32*>(laHdr + 34) = luImageBytes;             // BMP file-format header blob
+                            fwrite(laHdr, 1, sizeof(laHdr), lpFile);
+                            for (u32 luRow = 0; luRow < luH; ++luRow)
+                            {
+                                fwrite(static_cast<const u8*>(lFullLock.pBits) + luRow * lFullLock.Pitch, 1, luW * 4u, lpFile);
+                            }
+                            fclose(lpFile);
+                            CgsDev::Log::WriteToLog("[black-frame] picture written beside the exe\n");
+                        }
+                        lpFullSys->UnlockRect();
+                    }
+                }
+                if (lpFullSys != nullptr) { lpFullSys->Release(); }
+                lpFull->Release();
+            }
+        }
     }
     else if (suBlackRun != 0u)
     {
