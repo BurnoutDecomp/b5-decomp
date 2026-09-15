@@ -29,9 +29,13 @@ namespace
         u32 muPayloadOffset;
     };
 
+    // The wire record of GUI event 456 (BrnGui::GuiAudioEvent: s32 component type, s32 action,
+    // s32 additional information, CgsID hud message id) is 24 bytes -- ARTIST case 456
+    // @0x826EE0C8..0x826EE108 copies it with three doubleword stores. 12 truncated the CgsID
+    // HUDEffect::FindEventMapping keys on, so no HUD sting could ever match a mapping.
     struct GuiAudioEventData
     {
-        u8 maData[12];
+        u8 maData[24];
     };
 
     const u8* GetGuiPayload(const CgsModule::Event* apEvent, s32 aiEventType,
