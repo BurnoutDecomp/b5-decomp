@@ -1,6 +1,7 @@
 #include "GameSource/World/BrnBaseStreamer.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"   // Load/UnloadGameDataEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [stream] multi-reply trace
+#include <cstdlib>                                              // std::getenv ([car-audio] witness)
 
 // =============================================================================
 // BrnWorld::InternalBaseStreamer  (GameSource/World/BrnBaseStreamer.h DWARF home)
@@ -361,6 +362,9 @@ void InternalBaseStreamer::PostLoadRequest( s32 liListIndex )
     lEvent.mId             = mpCurrentEntryList[liListIndex].mResourceId;
     lEvent.meType          = meAssetSet;
     lEvent.mbFailFlag      = mbAllowFailure;
+    if ( std::getenv( "BRN_ENGINE_DIAG" ) != 0 && CgsDev::Log::gpDebugPrint != 0 )   // [DIAG] NOT IN THE X360 BINARY
+        *CgsDev::Log::gpDebugPrint << "[car-audio] streamer post LOAD(26) set=" << static_cast<s32>( meAssetSet )
+                                   << " id=" << lEvent.mId << "\n";
     mGDRequestInterface.mRequestQueue.AddEvent( &lEvent, 26 );
 }
 
@@ -586,6 +590,9 @@ bool InternalBaseStreamer::UpdateUnloading()
                 lEvent.mId             = mpCurrentEntryList[liListIndex].mResourceId;
                 lEvent.meType          = meAssetSet;
                 lEvent.mbFailFlag      = false;
+                if ( std::getenv( "BRN_ENGINE_DIAG" ) != 0 && CgsDev::Log::gpDebugPrint != 0 )   // [DIAG] NOT IN THE X360 BINARY
+                    *CgsDev::Log::gpDebugPrint << "[car-audio] streamer post UNLOAD(39) set=" << static_cast<s32>( meAssetSet )
+                                               << " id=" << lEvent.mId << " pool=" << lEvent.miPoolId << " list=" << liListIndex << "\n";
                 mGDRequestInterface.mRequestQueue.AddEvent( &lEvent, 39 );
 
                 mPendingEntryQueue[static_cast<u32>( liSlot )] = -1;

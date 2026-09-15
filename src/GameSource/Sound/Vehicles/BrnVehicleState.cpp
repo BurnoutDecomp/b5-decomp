@@ -7,6 +7,7 @@
 #include "GameSource/AttribSys/Generated/classes/physicsvehicleengineattribs.h"
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 
 #include <algorithm>
 #include <cstring>
@@ -175,6 +176,10 @@ void VehicleState::UpdateParams(f32 af32DeltaTime)
         && VehicleStateManager::GetLoadedAssetId(mAttachInfo.muVehicleIndex)
             != mAttachInfo.mAttachToken)
     {
+        if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
+            *CgsDev::Log::gpDebugPrint << "[car-audio] sound VehicleState DETACH car=" << mAttachInfo.muVehicleIndex
+                                       << " token=" << mAttachInfo.mAttachToken
+                                       << " desiredNow=" << VehicleStateManager::GetLoadedAssetId(mAttachInfo.muVehicleIndex) << "\n";
         Detach();
     }
 }
