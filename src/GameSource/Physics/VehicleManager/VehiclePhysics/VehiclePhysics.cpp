@@ -9189,6 +9189,38 @@ namespace Vehicle
 
         UpdateFreezing(lpControls, lvfTimeStep);
 
+        // [DIAG] NOT IN THE X360 BINARY. BRN_STARTLINE_DIAG=1 only. THE EVENT-START WITNESS for
+        // vehicle 0: who is driving the player's car at an event start, and whether the
+        // start-line hold is in force. Per sample it names
+        //   * the flag the hold is gated on (controls->mbIsOnStartLine +0x40) and the freeze
+        //     latch UpdateFreezing just decided (mbFrozen +0x70 -- frozen is what ZEROES both
+        //     mLinearVelocity and mAngularVelocity, so a start-line car cannot rotate),
+        //   * the above-ground validity the un-freeze arm below needs,
+        //   * the DRIVER TYPE of the record physics actually consumed and whether the AI donut
+        //     attribs are latched (mbIsUsingAIDonutAttribs +0x10F7),
+        //   * the car's HEADING and ANGULAR VELOCITY on either side of this frame's driving leg.
+        // The heading is derived from mTransform.zAxis -- the car's OWN forward axis, not from a
+        // published contact point -- so it measures the body, not the publish path.
+        // POSITIVE CONTROL: the line keeps printing with onLine=0 / donutAttribs=0 outside an
+        // event, so "never sampled" and "sampled, flag false" cannot be confused.
+        // ⚠ GATED ON THE CAR, NOT ON THE DRIVER TYPE. The first cut of this probe filtered on
+        // E_DRIVER_TYPE_PLAYER and went silent for exactly the frames that matter -- the ones
+        // where somebody OTHER than the pad is driving the player's car, which is what a DONUT
+        // START is. The type is a printed FIELD now, and that field is what settled issue #21's
+        // "the car spins on the start line": drvType=1 (AI), steer=-1.0, donutAttribs=1.
+        // getenv is read ONCE (this runs for every vehicle, every step).
+        static const char* const kspStartLineDiag = getenv("BRN_STARTLINE_DIAG");
+        const bool lbStartLineDiag = (kspStartLineDiag != 0) && (lpControls->miVehicleID == 0);
+        f32     lfDiagHeadingPre = 0.0f;
+        bool    lbDiagFrozenPre  = false;
+        Vector3 lvDiagAngVelPre  = { 0.0f, 0.0f, 0.0f, 0.0f };
+        if (lbStartLineDiag)
+        {
+            lfDiagHeadingPre = std::atan2(mTransform.zAxis.x, mTransform.zAxis.z) * 57.2957795f;
+            lbDiagFrozenPre  = mbFrozen;
+            lvDiagAngVelPre  = mAngularVelocity;
+        }
+
         if (lpControls->mbIsOnStartLine && mAboveGroundTestResult.mbValid)
         {
             mbFrozen = false;                            // stb 0 -> +0x70
@@ -9198,6 +9230,8 @@ namespace Vehicle
             const f32 lfAlong = vpu::Dot(mLinearVelocity, lvNegNormal);
             mLinearVelocity = vpu::Mult(lvNegNormal, lfAlong);
         }
+
+        const bool lbDiagFrozenArmed = mbFrozen;
 
         UpdateHandBrake(lvfTimeStep, lpControls->mfHandBrake);
 
@@ -9273,6 +9307,48 @@ namespace Vehicle
         }
 
         miNumCollisions = 0;                             // stw 0 -> +0x1354
+
+        // [DIAG] NOT IN THE X360 BINARY. The second half of the BRN_STARTLINE_DIAG sample --
+        // see the capture block next to UpdateFreezing above. One line every 15 physics steps.
+        if (lbStartLineDiag)
+        {
+            static u32 sluStartLineDiagStep = 0;
+            static f32 sfStartLineDiagTime  = 0.0f;
+            sfStartLineDiagTime += lfDT;
+            if ((sluStartLineDiagStep++ % 15u) == 0u && CgsDev::Log::gpDebugPrint != 0)
+            {
+                const f32 lfHeadingPost =
+                    std::atan2(mTransform.zAxis.x, mTransform.zAxis.z) * 57.2957795f;
+                *CgsDev::Log::gpDebugPrint
+                    << "[startline] t=" << sfStartLineDiagTime
+                    << " id=" << lpControls->miVehicleID
+                    << " drvType=" << static_cast<s32>(lpControls->GetType())
+                    << " donutAttribs=" << (mbIsUsingAIDonutAttribs ? 1 : 0)
+                    << " pos=(" << mTransform.wAxis.x << "," << mTransform.wAxis.z << ")"
+                    << " onLine=" << (lpControls->mbIsOnStartLine ? 1 : 0)
+                    << " agValid=" << (mAboveGroundTestResult.mbValid ? 1 : 0)
+                    << " frozenAfterFreeze=" << (lbDiagFrozenPre ? 1 : 0)
+                    << " frozenAfterArm=" << (lbDiagFrozenArmed ? 1 : 0)
+                    << " forceFrozen=" << (mbForceFrozen ? 1 : 0)
+                    << " boost=" << (lpControls->mbBoost ? 1 : 0)
+                    << " showtime=" << (IsPlayerVehicleActuallyInShowtime() ? 1 : 0)
+                    << " hdgPre=" << lfDiagHeadingPre
+                    << " hdgPost=" << lfHeadingPost
+                    << " angVelPre=(" << lvDiagAngVelPre.x << "," << lvDiagAngVelPre.y
+                    << "," << lvDiagAngVelPre.z << ")"
+                    << " angVelPost=(" << mAngularVelocity.x << "," << mAngularVelocity.y
+                    << "," << mAngularVelocity.z << ")"
+                    << " linVel=(" << mLinearVelocity.x << "," << mLinearVelocity.y
+                    << "," << mLinearVelocity.z << ")"
+                    << " gas=" << lpControls->mfGas
+                    << " brake=" << lpControls->mfBrake
+                    << " hbrake=" << lpControls->mfHandBrake
+                    << " steer=" << lpControls->mfSteering
+                    << " crashing=" << (mbCrashing ? 1 : 0)
+                    << " dt=" << lfDT
+                    << "\n";
+            }
+        }
 
         {
             static const f32 KF_RACECAR_CONTACT_TIME_CAP = 100.0f;   // unk_82FB9BE0 <- flt_820049E0
