@@ -218,7 +218,11 @@ namespace
         return true;
     }
 
-    inline bool IsFiniteF32(f32 lfValue) { return std::isfinite(lfValue); }
+    // RwMath::IsValid( x ) -- a NaN SELF-COMPARE. ⛔ CORRECTED (issue #31): was `std::isfinite`,
+    // which also rejects +-Inf. StoreDrivenCarData's own three cascades are `vcmpeqfp. v13,v13,v13`
+    // per lane -- 0x82795A04/0x82795A20/0x82795A3C (matrix), 0x82795BD4/0x82795BF4/0x82795C10
+    // (velocity), 0x82795C70 (speed) -- and `Inf == Inf` is TRUE, so ARTIST does not assert on Inf.
+    inline bool IsFiniteF32(f32 lfValue) { return lfValue == lfValue; }
 
     // The AI record with its driver type stamped. BrnPlayerDriverControls keeps meDriverType
     // protected and BrnAIDriverControls (lane-foreign header) declares no constructor, so the
