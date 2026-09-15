@@ -5,6 +5,7 @@
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
+#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 
 #include <cmath>
 #include <cstdio>
@@ -70,6 +71,7 @@ PhysicsControl::PhysicsControl()
     , meIntroRevingState(E_NIS_REVING_STATE_OFF)
     , mEngineDataSet()
     , mEngineStartLineRPM()
+    , mfDiagWitnessTimer(0.0f)      // [DIAG] NOT IN THE X360 BINARY
 {
     mAttachInfo.mpVehicleAsset = nullptr;
     mAttachInfo.muVehicleIndex = 0;
@@ -142,6 +144,17 @@ void PhysicsControl::SetupLoadData()
         std::snprintf(lacRegistry, sizeof(lacRegistry), "%sRegistry", lpcComponent);
         LoadAsset(lacBundle, lpcComponent, BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
         LoadAsset(lacBundle, lacRegistry, BrnSound::Logic::ResourceRegistrar::E_DATA);
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG.
+        if (BrnSound::Vehicles::EngineAudioDiagLive())
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[engine-asset] component=" << (liComponent == 0 ? "ENGINE" : "EXHAUST")
+                << " name=" << lpcComponent
+                << " bundle=" << lacBundle
+                << " registry=" << lacRegistry
+                << "\n";
+        }
     }
 }
 
@@ -189,15 +202,30 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     const BrnSound::Vehicles::VehicleData& lrRaw = *mpVehiclePhysicsData;
     PhysicsData& lrData = mProcessedPhysicsData;
 
+    // ARTIST @ 0x826CB7B0:
+    //     lwz  r26, 8(r31)        ; the VehicleState
+    //     lfs  f0, 0x520(r26)     ; VehicleState::mfMaxRpm      (+1312)
+    //     stfs f0, 0x5C(r31)      ; PhysicsData::mfMaxRpm       (PhysicsData+0x20)
+    // -- the car's OWN max RPM (VehicleState::UpdateParams takes it from the six
+    // authored physicsvehicleengineattribs GearUpRPM lanes) is re-read into the
+    // PhysicsData EVERY frame. Without it the normalization divisor stayed at the
+    // PhysicsData ctor's 7000.0f for every car in the game, which is the divisor
+    // UnityPhysicsRpm @0x826B2860 uses for the engine note.
+    BrnSound::Vehicles::VehicleState* lpVehicleState =
+        static_cast<BrnSound::Vehicles::VehicleState*>(GetStateBase());
+    lrData.mfMaxRpm = lpVehicleState->GetMaxRPM();
+
     const s32 liGear = static_cast<s32>(lrRaw.mi8Gear);
     lrData.mbJustShifted = lrData.mGear.GetCurrent() != liGear;
     lrData.mGear.Update(liGear);
     lrData.mfDurationInGear = lrData.mbJustShifted ? 0.0f : lrData.mfDurationInGear + afTimeStep;
 
-    // ARTIST keeps the PhysicsData ctor's 7000/997 normalization limits and
-    // applies the authored PhysicsRpmMap cubic.  The former interim body replaced
-    // these every frame with the current gear's upshift RPM and a linear map,
-    // which drove the audio controller to redline much too early.
+    // ARTIST applies the authored PhysicsRpmMap cubic to the normalized RPM.
+    // The IDLE limit is the PhysicsData ctor's 997 (UpdateParams never touches
+    // PhysicsData+0x24); the MAX limit is NOT the ctor's 7000 -- see the
+    // mfMaxRpm re-read above. An earlier interim body used the CURRENT gear's
+    // upshift RPM with a linear map, which redlined too early; the console uses
+    // the MAXIMUM of the six authored GearUpRPM lanes with the cubic.
     const f32 lfUnityRpm = UnityPhysicsRpm(lrRaw.mfRPM);
     lrData.mUnityRpm.Update(lfUnityRpm);
     lrData.mNormalizedRpm.Update(lfUnityRpm * 9000.0f + 1000.0f);
@@ -221,13 +249,128 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
                                      lrRaw.mLinearVelocity.y * lrRaw.mLinearVelocity.y +
                                      lrRaw.mLinearVelocity.z * lrRaw.mLinearVelocity.z);
     lrData.mVelocityMagnitude.Update(lfVelocity);
-    lrData.mSpeedMPH.Update(lrRaw.mfSpeedMPH);
-    lrData.mSpeedMPS.Update(lrRaw.mfSpeedMPH * 0.44704f);
-    lrData.mDrifting.Update(lrRaw.mfAbsDriftScale);
+    // ARTIST 0x826CB8B8: `lfs f0,0x3CC(r7) ; fabs f0,f0 ; stfs f0,0x124(r31)` --
+    // mSpeedMPH is the ABSOLUTE speed, and 0x826CBB5C re-reads that same absolute
+    // value for the MPS conversion (flt_8200D4DC = 0.44704). Without the fabs a
+    // reversing car drives the four speed ramps below to zero.
+    const f32 lfAbsSpeedMPH = std::fabs(lrRaw.mfSpeedMPH);
+    lrData.mSpeedMPH.Update(lfAbsSpeedMPH);
+    lrData.mSpeedMPS.Update(lfAbsSpeedMPH * 0.44704f);
+    // ARTIST 0x826CB7B8..0x826CB7FC -- mDrifting is RATE-LIMITED toward the raw
+    // mfAbsDriftScale, not assigned from it:
+    //     f11 = target - cur ; if (f11 > flt_82F2CC1C)  new = cur + flt_82F2CC1C
+    //     else { f11 = cur - target ; if (f11 > flt_82F2CC18) new = cur - flt_82F2CC18 }
+    // with flt_82F2CC1C = 0.04 (rise) and flt_82F2CC18 = 0.01 (fall) per frame.
+    // mDrifting feeds ClutchControl, HybridExhaustControl, BoostEffect and
+    // WheelControl, so an unfiltered step made every one of them jump.
+    {
+        const f32 lfTarget = lrRaw.mfAbsDriftScale;
+        const f32 lfCurrent = lrData.mDrifting.GetCurrent();
+        f32 lfNext = lfTarget;
+        if (lfTarget - lfCurrent > 0.04f)
+            lfNext = lfCurrent + 0.04f;
+        else if (lfCurrent - lfTarget > 0.01f)
+            lfNext = lfCurrent - 0.01f;
+        lrData.mDrifting.Update(lfNext);
+    }
     lrData.mfTimeSinceRespawn += afTimeStep;
 
+    // -----------------------------------------------------------------------
+    // The DMix control-input feed, ARTIST @ 0x826CBD08..0x826CBE84, in order.
+    //
+    // 0x826CBD08  lwz r3,0x30(r31) / beq / li r5,0x7FFF / li r4,7
+    //             bl Nicotine::DMixIO::SetDMixInput
+    // -- slot 7 is opened wide EVERY frame, straight on the DMixIO (not through
+    // SetMixerInputValue). Attach @0x826CB540 seeds it to 0.
+    Nicotine::DMixIO* lpDMix = GetDMixIOPtr();
+    if (lpDMix)
+        lpDMix->SetDMixInput(7, 0x7FFF);
+
+    // 0x826CBD20/0x826CBD70/0x826CBDB4/0x826CBDFC -- four speed ramps off
+    // mSpeedMPH, each `clamp(v, 0, LIMIT) * (1/LIMIT) * 32767.0`. The clamp is
+    // the two-fsel idiom (`fsel(-v, 0, v)` = max(v,0); `fsel(L-v, v, L)` =
+    // min(v,L)); the limits are flt_820ABCD8=5.0, flt_82004F5C=30.0,
+    // flt_82004A18=80.0, flt_82006530=150.0, the reciprocals flt_82004744=0.2,
+    // flt_820AA358=0.033333335, flt_82009B98=0.0125, flt_820B3BBC=0.0066666668,
+    // and f31 = flt_820AD310 = 32767.0.
+    const f32 lfSpeedMPH = lrData.mSpeedMPH.GetCurrent();
+    SetMixerInputValue(0, SpeedRampMixerValue(lfSpeedMPH,   5.0f, 0.2f));
+    SetMixerInputValue(1, SpeedRampMixerValue(lfSpeedMPH,  30.0f, 0.033333335f));
+    SetMixerInputValue(2, SpeedRampMixerValue(lfSpeedMPH,  80.0f, 0.0125f));
+    SetMixerInputValue(3, SpeedRampMixerValue(lfSpeedMPH, 150.0f, 0.0066666668f));
+
+    // 0x826CBE44  lbz r11,0x44A(rawdata) ; subfic/subfe/clrlwi -> 0 or 0x7FFF
     SetMixerInputValue(4, lrRaw.mbCrashing ? 0x7FFF : 0);
+
+    // 0x826CBE64  li r4,5 / lbz r5,0x524(r26) -- the VehicleState's latched
+    // collision flag, passed as the RAW BYTE (0 or 1, not 0x7FFF), and cleared
+    // straight afterwards (0x826CBE80 stb r25,0x524(r26)): a one-shot event.
+    const s32 liCollisionLatch = lpVehicleState->GetCollisionOccured() ? 1 : 0;
+    SetMixerInputValue(5, liCollisionLatch);
+    if (liCollisionLatch)
+        lpVehicleState->SetCollisionOccured(false);
+
+    // 0x826CBE84  lbz r11,0x44C(rawdata) -> 0x7FFF / 0
     SetMixerInputValue(8, lrRaw.mbIsDriveable ? 0x7FFF : 0);
+
+    // OPEN (not landed here): slot 6, ARTIST 0x826CBEA8..0x826CC04C -- the
+    // director-camera engine gain. It needs two reads this tree cannot yet make
+    // BY NAME: the camera's +0x140 flag word bits 3 and 4 (both set => 0x7FFF),
+    // and the GameModeOutputInterface's +0xC mode word (0 or 1 => 0). Its third
+    // branch is clamp((1 - dot3(mTransform.zAxis, camera.mTransform.zAxis)) *
+    // 0.5, 0, 1) * 32767, latched into PhysicsData+0x1D0. Landing it needs the
+    // GameModeOutputInterface typed (it is u8[0x10] opaque in
+    // BrnRootSoundModuleIo.h today), so it is left unwritten rather than
+    // approximated.
+
+    EngineParamWitness(afTimeStep);
+}
+
+// ---------------------------------------------------------------------------
+// [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG.
+// One line per second of game time per control: the physics -> AEMS parameter
+// feed and the NINE DMix control-input slots READ BACK from the DMixIO, i.e.
+// exactly what the authored AEMS patch graph sees. Reading them back (rather
+// than echoing what we just wrote) is what makes a never-written slot visible.
+// ---------------------------------------------------------------------------
+void PhysicsControl::EngineParamWitness(f32 afTimeStep)
+{
+    if (!BrnSound::Vehicles::EngineAudioDiagLive())
+        return;
+
+    mfDiagWitnessTimer += afTimeStep;
+    if (mfDiagWitnessTimer < 1.0f)
+        return;
+    mfDiagWitnessTimer = 0.0f;
+
+    const BrnSound::Vehicles::VehicleData& lrRaw = *mpVehiclePhysicsData;
+    const PhysicsData& lrData = mProcessedPhysicsData;
+
+    *CgsDev::Log::gpDebugPrint
+        << "[engine-param] state=" << GetStateId()
+        << " rpm=" << lrRaw.mfRPM
+        << " unity=" << lrData.mUnityRpm.GetCurrent()
+        << " norm=" << lrData.mNormalizedRpm.GetCurrent()
+        << " throttle=" << lrData.mThrottle.GetCurrent()
+        << " gear=" << lrData.mGear.GetCurrent()
+        << " mph=" << lrData.mSpeedMPH.GetCurrent()
+        << " idleRpm=" << lrData.mfIdleRpm
+        << " maxRpm=" << lrData.mfMaxRpm;
+
+    Nicotine::DMixIO* lpDMix = GetDMixIOPtr();
+    *CgsDev::Log::gpDebugPrint << " dmix=";
+    if (!lpDMix)
+    {
+        *CgsDev::Log::gpDebugPrint << "<null>\n";
+        return;
+    }
+    for (s32 liSlot = 0; liSlot <= 8; ++liSlot)
+    {
+        if (liSlot)
+            *CgsDev::Log::gpDebugPrint << ",";
+        *CgsDev::Log::gpDebugPrint << lpDMix->GetDMixInput(liSlot);
+    }
+    *CgsDev::Log::gpDebugPrint << "\n";
 }
 
 f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
@@ -248,6 +391,22 @@ f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
                          lMap.zAxis.y * lfUnity +
                          lMap.wAxis.y;
     return (std::max)(0.0f, (std::min)(1.0f, lfMapped));
+}
+
+// ---------------------------------------------------------------------------
+// The four speed-ramp DMix values of UpdateParams, factored out because the
+// console emits the same nine instructions four times with different constants:
+//   fneg f13,v ; fsel f0,f13,0.0,v      -> max(v, 0)
+//   fsubs f12,L,f0 ; fsel f13,f12,f0,L  -> min(that, L)
+//   fmuls f0,f13,R ; fmuls f0,f0,32767.0 ; fctiwz
+// (fsel(a,b,c) is a >= 0 ? b : c, so a NaN speed takes the `c` arm in both --
+// the same way round as the console.)
+// ---------------------------------------------------------------------------
+s32 PhysicsControl::SpeedRampMixerValue(f32 afSpeedMPH, f32 afLimit, f32 afReciprocal)
+{
+    const f32 lfLow  = (-afSpeedMPH >= 0.0f) ? 0.0f : afSpeedMPH;
+    const f32 lfHigh = ((afLimit - lfLow) >= 0.0f) ? lfLow : afLimit;
+    return static_cast<s32>(lfHigh * afReciprocal * 32767.0f);
 }
 
 void PhysicsControl::ProcessUpdate()

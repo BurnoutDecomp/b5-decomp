@@ -5,6 +5,7 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 
 #include <cstring>
 
@@ -100,6 +101,23 @@ void PlayerVehicleState::Attach(void* apvAttachment)
         const u64 luExhaustKey = lpVehicle->GetExhaustKey();
         std::memcpy(&mEngineComponentKey[E_ENGINE], &luEngineKey, sizeof(luEngineKey));
         std::memcpy(&mEngineComponentKey[E_EXHAUST], &luExhaustKey, sizeof(luExhaustKey));
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG. Names/keys as copied
+        // out of the ported VehicleListEntry, so a uniform or empty port shows up
+        // as identical lines for every car.
+        if (EngineAudioDiagLive())
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[engine-attach] vehicleIndex=" << static_cast<s32>(mAttachInfo.muVehicleIndex)
+                << " car=" << (lpVehicle->GetName() ? lpVehicle->GetName() : "?")
+                << " engineName=" << &mcaEngineComponentName[E_ENGINE][0]
+                << " exhaustName=" << &mcaEngineComponentName[E_EXHAUST][0]
+                << " engineKey=" << CgsDev::E_PRINTMODE_HEXONCE << luEngineKey
+                << " exhaustKey=" << CgsDev::E_PRINTMODE_HEXONCE << luExhaustKey
+                << " collectionKey=" << CgsDev::E_PRINTMODE_HEXONCE
+                << lpVehicle->GetAttribCollectionKeyHash()
+                << "\n";
+        }
     }
 
     CgsSound::Logic::State::Attach(apvAttachment);
