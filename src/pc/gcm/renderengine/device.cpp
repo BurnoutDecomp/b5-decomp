@@ -31,6 +31,16 @@ bool renderengine::gFullscreen = false;
 s32  renderengine::gDisplayWidth = 640;
 s32  renderengine::gDisplayHeight = 480;
 s32  renderengine::gAdapterIndex = 0;
+
+// [PC platform leaf] On a laptop with hybrid graphics the D3D9 default adapter is the
+// integrated GPU unless the driver is told otherwise. These two exported words are the
+// NVIDIA Optimus / AMD PowerXpress contract for "run me on the discrete GPU"; the drivers
+// read them out of the exe's export table at process start. Not in the X360 binary (no such
+// choice exists there); an owner report of iGPU-level frame rates is what earned them.
+extern "C" {
+    __declspec(dllexport) DWORD NvOptimusEnablement                  = 0x00000001;
+    __declspec(dllexport) int   AmdPowerXpressRequestHighPerformance = 1;
+}
 s32  renderengine::gAspectRatioIndex = 0;
 // THE ANTI-ALIASING KNOB (given its meaning by the anti-aliasing wave, 2026-08-16).
 //
@@ -218,6 +228,18 @@ void renderengine::Device::Start()
         return;
     }
     CgsDev::Log::WriteToLog("[device] Start: device created, window shown.\n");
+    {
+        D3DADAPTER_IDENTIFIER9 lIdent;
+        std::memset(&lIdent, 0, sizeof(lIdent));
+        if (SUCCEEDED(gD3D9->GetAdapterIdentifier(static_cast<UINT>(gAdapterIndex), 0, &lIdent)))
+        {
+            char lacAdapter[256];
+            std::snprintf(lacAdapter, sizeof(lacAdapter), "[device] adapter %d: %s (%s) vendor=0x%04X device=0x%04X\n",
+                          static_cast<int>(gAdapterIndex), lIdent.Description, lIdent.Driver,
+                          static_cast<unsigned>(lIdent.VendorId), static_cast<unsigned>(lIdent.DeviceId));
+            CgsDev::Log::WriteToLog(lacAdapter);
+        }
+    }
 
     // The engine's "device's own surface" state (rw::graphics::postfx::gpDefaultRenderTargetState,
     // X360 dword_83271614) is installed HERE on the console too -- Device::Start is what publishes

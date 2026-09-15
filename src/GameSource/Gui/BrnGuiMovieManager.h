@@ -122,6 +122,13 @@ namespace BrnGui
         // returns the queued video's resource ID (else a default-name hash). NON-const (mutates state).
         CgsResource::ID PendingVideoDataResourceRequest();
         EMovieManagerState GetState() const { return meState; }
+        // The two arms BrnGui::GuiModule::Update @0x82527A58 drives by hand (the manager
+        // is a plain member there, `*(gm + 301604)` is meState and `gm + 304976` this
+        // definition): REQUESTING_AUDIO(5) -> WAITING_FOR_AUDIO(6) with the video's
+        // sound-stream post, and REPORTING_FINISHED(12) -> IDLE(13) with the stop post +
+        // event 510 carrying the finished definition.
+        void SetState(EMovieManagerState leState) { meState = leState; }
+        const VideoDefinition& GetPlayingMovieDefinition() const { return mPlayingMovie; }
 
         // ARTIST @0x824EAF78: the GUI's car-pool-validation flow (BrnGui::GuiModule::UpdateCarPoolValidation)
         // hands the manager the re-validated car-pool resource + its descriptor and flips meCarPoolState to

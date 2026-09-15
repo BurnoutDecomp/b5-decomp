@@ -691,6 +691,10 @@ namespace BrnGame
         // The GUI phase-complete flag (X360 +10094152; command 70). Stays latched until
         // the next BridgeGameToGui stage post clears it -- the X360 lifecycle.
         bool IsGuiPhaseComplete() const { return mbGuiPhaseComplete; }
+        // X360 gm+10094117 (0x9A02F5): MainGameFlowStateMemoryCard::Update @0x823F2F98 sets it on
+        // the flow's GUI-phase-complete exit; DoUpdate_GameStatePreWorld @0x823EE0E8 consumes it
+        // (clear + game event 8 -> GameStateModule::WaitForStreaming).
+        void RequestStreamingWait() { mbRequestStreamingWait = true; }
 
         // The pre-accept flag (X360 +10094153; command 71 -- "resume the world load while
         // the accept dwell plays"). Read-and-clear, as MainGameFlowStateStartScreen does.
@@ -1033,6 +1037,7 @@ namespace BrnGame
         // ---- the GUI flow-FSM bridge state (X360-attested offsets) -----------------------
         s32  miGuiFsmStage;             // @ +10094148 (1..5 = pending RunFsm post; 6 = idle)
         bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
+        bool mbRequestStreamingWait = false;   // @ +10094117 (see RequestStreamingWait)
         bool mbSkipVideos;              // TUB WinMain's "-skipvideos" latch (boot audit F-P0-10)
         // X360 gm+0x9A0630 -- the reusable loading-screen allocator the renderer lends us
         // through RendererIO::OutputBuffer each GamePrepare pass (boot audit F-P2-4). Null
