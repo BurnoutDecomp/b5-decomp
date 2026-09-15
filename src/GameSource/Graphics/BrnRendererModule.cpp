@@ -5250,6 +5250,31 @@ void BrnRendererModule::PublishSkyConstantsBringUp(BrnShaderConstantsFrame* lpFr
     // as `[shadow-prod] keyLight` on the same frame -- that is the regression this closes --
     // and the top-of-sky colour must drift as the timeline advances the hour.
     // DELETE with the bring-up.
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENV_DIAG=1 (issue #30): a published live frame whose
+    // white level is not positive or whose key light is not finite is named with the present
+    // count, so the black-frame watch's presents can be laid against the renderer's inputs.
+    {
+        static int siEnvDiag = -1;
+        if ( siEnvDiag < 0 )
+        {
+            const char* lpcEnv = std::getenv( "BRN_ENV_DIAG" );
+            siEnvDiag = ( lpcEnv != 0 && lpcEnv[0] != '\0' && lpcEnv[0] != '0' ) ? 1 : 0;
+        }
+        static u32 suBadPrinted = 0u;
+        const bool lbFiniteKey = ( lKeyLightDirection.x == lKeyLightDirection.x )
+                              && ( lKeyLightDirection.y == lKeyLightDirection.y )
+                              && ( lKeyLightDirection.z == lKeyLightDirection.z );
+        if ( siEnvDiag == 1 && CgsDev::Log::gpDebugPrint != 0 && suBadPrinted < 64u
+             && ( !( lfWhiteLevel > 0.0f ) || !lbFiniteKey ) )
+        {
+            ++suBadPrinted;
+            *CgsDev::Log::gpDebugPrint
+                << "[env-diag] publish present=" << renderengine::guPresentCount
+                << " whiteLevel=" << lfWhiteLevel << " keyLight=(" << lKeyLightDirection.x << ", "
+                << lKeyLightDirection.y << ", " << lKeyLightDirection.z << ") top=("
+                << lTopColourDrk.x << ", " << lTopColourDrk.y << ", " << lTopColourDrk.z << ")\n";
+        }
+    }
     {
         static u32 suSkyPublishCount = 0;
         ++suSkyPublishCount;

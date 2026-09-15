@@ -109,6 +109,9 @@ namespace
 // CGS_ASSERT); the X360-baked file/line are discarded per project convention. The typo
 // "Tyring" is reproduced verbatim from the ARTIST rodata.
 
+#include <cstdlib>   // [DIAG] getenv (BRN_ENV_DIAG)
+namespace renderengine { extern u32 guPresentCount; }   // [DIAG] the PC presenter's present count (device.cpp)
+
 namespace BrnWorld
 {
 namespace EnvironmentSettings
@@ -1199,9 +1202,55 @@ void EnvironmentManager::Update( f32 lfPlayerSpeed, BrnWorldIO::UpdateOutputBuff
 
     lpOutput->UnlockForWrite();
 
-    if ( SetupBlend( mBlendFrame, lfPlayerSpeed, lpOutput ) )
+    const bool lbBlendSetUp = SetupBlend( mBlendFrame, lfPlayerSpeed, lpOutput );
+    if ( lbBlendSetUp )
     {
         PerformBlend( mBlendFrame );
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENV_DIAG=1 (issue #30, the 438 s black window):
+    // names the frame (by present count) on which the time of day REFLECTS at a bound, on which
+    // SetupBlend fails, or on which the blend frame is degenerate (null keyframe / weights not
+    // summing to one), so a black present can be laid against the environment's own state.
+    {
+        static int siEnvDiag = -1;
+        if ( siEnvDiag < 0 )
+        {
+            const char* lpcEnv = getenv( "BRN_ENV_DIAG" );
+            siEnvDiag = ( lpcEnv != 0 && lpcEnv[0] != '\0' && lpcEnv[0] != '0' ) ? 1 : 0;
+        }
+        if ( siEnvDiag == 1 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            static f32 sfPrevDelta   = 0.0f;
+            static u32 suPrinted     = 0u;
+            const f32  lfWeightSum   = mBlendFrame.mafWeights[ 0 ] + mBlendFrame.mafWeights[ 1 ]
+                                     + mBlendFrame.mafWeights[ 2 ] + mBlendFrame.mafWeights[ 3 ];
+            const bool lbNullKeyframe = mBlendFrame.mapKeyframes[ 0 ] == 0 || mBlendFrame.mapKeyframes[ 1 ] == 0
+                                     || mBlendFrame.mapKeyframes[ 2 ] == 0 || mBlendFrame.mapKeyframes[ 3 ] == 0;
+            const bool lbBadWeights   = !( lfWeightSum > 0.999f && lfWeightSum < 1.001f );
+            const bool lbReflected    = ( sfPrevDelta != 0.0f ) && ( ( sfPrevDelta > 0.0f ) != ( mfTimeOfDayDelta > 0.0f ) );
+            sfPrevDelta = mfTimeOfDayDelta;
+            if ( ( lbReflected || !lbBlendSetUp || lbNullKeyframe || lbBadWeights ) && suPrinted < 200u )
+            {
+                ++suPrinted;
+                char lacMsg[ 320 ];
+                std::snprintf( lacMsg, sizeof( lacMsg ),
+                               "[env-diag] present=%u %s%s%s%s tod=%.1f delta=%.4f mode=%d seasonStage=%d "
+                               "blend=[%.3f %.3f %.3f %.3f] kf=[%p %p %p %p]\n",
+                               renderengine::guPresentCount,
+                               lbReflected ? "REFLECT " : "",
+                               lbBlendSetUp ? "" : "SETUPBLEND-FALSE ",
+                               lbNullKeyframe ? "NULL-KEYFRAME " : "",
+                               lbBadWeights ? "BAD-WEIGHTS " : "",
+                               static_cast<double>( mfTimeOfDay ), static_cast<double>( mfTimeOfDayDelta ),
+                               static_cast<int>( meBlendMode ), static_cast<int>( meSetupSeasonsBlendStage ),
+                               static_cast<double>( mBlendFrame.mafWeights[ 0 ] ), static_cast<double>( mBlendFrame.mafWeights[ 1 ] ),
+                               static_cast<double>( mBlendFrame.mafWeights[ 2 ] ), static_cast<double>( mBlendFrame.mafWeights[ 3 ] ),
+                               static_cast<const void*>( mBlendFrame.mapKeyframes[ 0 ] ), static_cast<const void*>( mBlendFrame.mapKeyframes[ 1 ] ),
+                               static_cast<const void*>( mBlendFrame.mapKeyframes[ 2 ] ), static_cast<const void*>( mBlendFrame.mapKeyframes[ 3 ] ) );
+                CgsDev::Log::WriteToLog( lacMsg );
+            }
+        }
     }
 
     // ---- [FLAG PC bring-up diagnostic] the one line that proves the chain -------------------
