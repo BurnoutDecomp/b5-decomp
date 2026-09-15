@@ -725,16 +725,26 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     //     +8  = meCurrentGameModeType        +12 = current mode state (or -1 with no mode)
     // ORDER IS LOAD-BEARING: the PREVIOUS pair is published BEFORE it is overwritten.
     //
-    // [!] [stuntrace] PARKED (header) -- header_request #3. GameModeOutputInterface is a
-    // forward-declared, field-less struct backed by opaque storage, and OutputBuffer offers only
-    // the CONST getter, so there is no way to write those four words without inventing a layout.
-    // Behaviour lost: BridgeGameStateToSound's 16-byte copy (GameBridgeGameStateToX.cpp:280) reads
-    // a stale block, so mode-change sound cues do not re-trigger. Nothing on the stunt-race start
-    // path depends on it.
+    // [x] PARK DISCHARGED (sound pass, 2026-09-15). The record is complete in
+    // BrnGameStateModuleIO.h -- its layout is attested from both ends (this writer and the
+    // sound-side readers MusicEffect::GetMusicType @0x8269CE70 / CollisionStateManager /
+    // PhysicsControl) -- and OutputBuffer has the write-lock getter. Until this landed the
+    // sound module read game mode 0 / state 0 forever: EA Trax never chose a type, the
+    // start-line rev never left STARTLINE, mode-change cues never re-triggered.
     //
     // The member ROLL itself is NOT parked -- it is ModeManager's own state and UpdateCurrentMode /
     // ExitCurrentMode read it.
     // ------------------------------------------------------------------------------------------
+    {
+        GameStateModuleIO::GameModeOutputInterface* lpGameModeOut =
+            lpOutputBuffer->GetGameModeOutputInterface();
+        lpGameModeOut->miPreviousGameModeType  = static_cast<s32>(mePreviousGameModeType);
+        lpGameModeOut->miPreviousGameModeState = static_cast<s32>(mePreviousGameModeState);
+        lpGameModeOut->miCurrentGameModeType   = static_cast<s32>(meCurrentGameModeType);
+        lpGameModeOut->miCurrentGameModeState  = (mpCurrentGameMode != NULL)
+            ? static_cast<s32>(mpCurrentGameMode->GetCurrentState())
+            : -1;
+    }
     mePreviousGameModeType  = meCurrentGameModeType;
     mePreviousGameModeState = (mpCurrentGameMode != NULL)
                                   ? static_cast<GameStateModuleIO::EGameModeState>(
