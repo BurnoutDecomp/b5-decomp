@@ -142,10 +142,20 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     EngRevDataSet mEngineDataSet;
     CgsSound::Utils::InterpolateLine mEngineStartLineRPM;
 
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG witness accumulator.
+    f32 mfDiagWitnessTimer;
+
 protected:
     // BrnPhysicsControl.cpp:940, ARTIST @ 0x826B2860.  Converts the raw
     // physics RPM through the per-car cubic PhysicsRpmMap into [0,1].
     f32 UnityPhysicsRpm(f32 afPhysicsRPM) const;
+
+    // The repeated speed-ramp DMix value of UpdateParams (ARTIST 0x826CBD20 and
+    // its three copies): clamp(mph, 0, limit) * reciprocal * 32767.
+    static s32 SpeedRampMixerValue(f32 afSpeedMPH, f32 afLimit, f32 afReciprocal);
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG (see BrnEngineAudioDiag.h).
+    void EngineParamWitness(f32 afTimeStep);
 };
 
 } // namespace Engines
