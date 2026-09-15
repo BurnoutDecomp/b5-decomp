@@ -485,6 +485,76 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
                                      lrRaw.mLinearVelocity.y * lrRaw.mLinearVelocity.y +
                                      lrRaw.mLinearVelocity.z * lrRaw.mLinearVelocity.z);
     lrData.mVelocityMagnitude.Update(lfVelocity);
+    // ARTIST 0x826CB9D0..0x826CB9EC -- mAcceleration3d is the RAW per-frame velocity
+    // DELTA, not a per-second rate:
+    //     lvx128 v13, mVelocity3d.cur ; lvx128 v0, r31+0xEC == mVelocity3d.prev
+    //     vsubfp v0, v13, v0 ; <mAcceleration3d.prev = cur> ; stvx128 v0, .cur
+    // and 0x826CB9F0 lifts {x, z} out of it through the SAME vperm control mask
+    // (unk_82CDA450 = 00010203 18191A1B ...) the position/velocity 2d lanes use.
+    // The subtract is a full four-lane vsubfp, so the unused w lane travels too.
+    {
+        const Vector3& lrVelCur  = lrData.mVelocity3d.GetCurrent();
+        const Vector3& lrVelPrev = lrData.mVelocity3d.GetPrevious();
+        Vector3 lAcceleration3d = { lrVelCur.x - lrVelPrev.x,
+                                    lrVelCur.y - lrVelPrev.y,
+                                    lrVelCur.z - lrVelPrev.z,
+                                    lrVelCur.w - lrVelPrev.w };
+        lrData.mAcceleration3d.Update(lAcceleration3d);
+        Vector2 lAcceleration2d = { lAcceleration3d.x, lAcceleration3d.z, 0.0f, 0.0f };
+        lrData.mAcceleration2d.Update(lAcceleration2d);
+    }
+
+    // ARTIST 0x826CBA0C..0x826CBA44 -- mAccelerationMagnitude IS a per-second rate,
+    // and is left ALONE on a zero time step (the inlined RwMathFPU::IsZero pair,
+    // flt_820AA114 = +1.1920929e-7 and flt_82002514 = -1.1920929e-7):
+    //     if (!IsZero(dt)) { prev = cur; cur = (velMag.cur - velMag.prev) / dt; }
+    if (afTimeStep > 1.1920929e-7f || afTimeStep < -1.1920929e-7f)
+    {
+        lrData.mAccelerationMagnitude.Update(
+            (lrData.mVelocityMagnitude.GetCurrent()
+             - lrData.mVelocityMagnitude.GetPrevious()) / afTimeStep);
+    }
+
+    // ARTIST 0x826CBB80..0x826CBCBC -- mYaw is the SLIP ANGLE IN DEGREES between the
+    // car's forward axis and the direction it is actually travelling, folded onto
+    // [0, 90]:
+    //     ; gate: fabs(mVelocityMagnitude.cur) > flt_82F2FD2C (0.15), else angle = 0
+    //     lvx128 v13, raw + 0x330            ; RaceCarState::mLinearVelocity  (@816)
+    //     <vrsqrtefp + two Newton steps>     ; normalize it
+    //     lvx128 v12, raw + 0x210            ; RaceCarState::mTransform.zAxis (496+0x20)
+    //     vmsum3fp128 v0, v12, v0            ; dot3(forward, velocityDirection)
+    //     bl  XMVectorACos
+    //     fmuls * flt_820AA0E8 (57.29578)    ; radians -> degrees
+    //     if (angle > flt_82004F64 90.0) angle = flt_820025FC 180.0 - angle
+    //     mYaw.Update(angle)
+    // Its consumer is BrnSkidEffect.cpp:163, which had been reading a constant 0
+    // because nothing in this tree ever wrote mYaw.
+    // FLAG: the console reaches acos through XMVectorACos @0x821F0980, whose contract
+    // is "each component should be between -1.0 and 1.0"; std::acos is UNDEFINED
+    // outside that, so the dot is clamped to the domain before the call. That clamp
+    // is the host libm's domain requirement, not a behavioural arm -- for a
+    // normalized vector the dot only leaves [-1,1] by float rounding.
+    {
+        f32 lfYawDegrees = 0.0f;
+        if (std::fabs(lrData.mVelocityMagnitude.GetCurrent()) > 0.15f)
+        {
+            const Vector3& lrVelocity = lrRaw.mLinearVelocity;
+            const f32 lfLengthSquared = lrVelocity.x * lrVelocity.x
+                                      + lrVelocity.y * lrVelocity.y
+                                      + lrVelocity.z * lrVelocity.z;
+            const f32 lfInverseLength = lfLengthSquared > 0.0f
+                ? 1.0f / std::sqrt(lfLengthSquared) : 0.0f;
+            const Vector3& lrForward = lrRaw.mTransform.At();
+            f32 lfDot = (lrForward.x * lrVelocity.x
+                       + lrForward.y * lrVelocity.y
+                       + lrForward.z * lrVelocity.z) * lfInverseLength;
+            lfDot = (std::max)(-1.0f, (std::min)(1.0f, lfDot));
+            lfYawDegrees = std::acos(lfDot) * 57.29578f;
+            if (lfYawDegrees > 90.0f)
+                lfYawDegrees = 180.0f - lfYawDegrees;
+        }
+        lrData.mYaw.Update(lfYawDegrees);
+    }
     // ARTIST 0x826CB8B8: `lfs f0,0x3CC(r7) ; fabs f0,f0 ; stfs f0,0x124(r31)` --
     // mSpeedMPH is the ABSOLUTE speed, and 0x826CBB5C re-reads that same absolute
     // value for the MPS conversion (flt_8200D4DC = 0.44704). Without the fabs a
