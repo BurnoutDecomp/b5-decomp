@@ -25,14 +25,18 @@
 // SEMANTICALLY into portable named float maths, preserving the row STORE ORDER
 // (wAxis @+0x30, xAxis @+0x00, yAxis @+0x10, zAxis @+0x20).
 //
-// FLAGGED inferred data: the five K_*_PERMUTE shuffles and the bit-field widths
-// the asm uses (quaternion via vcfsx shift 0x1F == /2^31; scale via vcfux shift
-// 0x18 == /2^24) are recovered from the asm shape; the .rdata permute vectors
-// (X360 stru_83011130 / stru_83011220 / stru_83011370 / stru_830113A0 /
-// stru_830113C0 / unk_82CDA3D0.. / unk_8327F130 / unk_830113C0) carry no values
-// in the export. The decode reproduces the recovered intent (packed
-// position/quaternion/scale -> scaled rotation matrix), not a byte-exact bit
-// unpack -- see CgsPackedOobb.cpp for the per-step mapping.
+// RECOVERED, NOT INFERRED (2026-09-15, b5-decomp issue #26). This note used to say
+// the five K_*_PERMUTE vectors "carry no values in the export" and that the decode
+// reproduced the intent rather than the bit unpack. They carry no values because
+// they are DYN-INIT .bss statics -- zero in the image by definition -- and their CRT
+// initialisers at 0x82C6C598..0x82C6C6E4 hold them. They pin the packed 16 bytes
+// exactly (console byte order):
+//   [0..1]  position scale  -- the top 16 bits of an IEEE float
+//   [2..7]  position x/y/z  -- s16 fixed, vcfsx 0x1F
+//   [8]     scale exponent  -- lands at bit 23 after `vsrw 1` => 2^(b - 127)
+//   [9..11] scale mantissa x/y/z -- u8, vcfux 0x18
+//   [12..15] quaternion x/y/z/w  -- u8, vcfsx 0x1F
+// See CgsPackedOobb.cpp for the constants themselves and the per-step mapping.
 // ===========================================================================
 
 #include "types.hpp"
