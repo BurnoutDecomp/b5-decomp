@@ -881,8 +881,10 @@ void SoundLogicModule::ProcessGameActionQueue(
 
         case 148:  // GameTrainingAction -- the first-time tip VO for this training type.
             CGS_ASSERT(lpEvent != 0, "lpGameTrainingAction");
+            // The console loads the training type as a 32-bit word (lwz); a byte read
+            // happened to agree on little-endian for every type < 256 -- read the word.
             PostSoundMessage(mMessageQueue, 34, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
-                             static_cast<s32>(EventU8At(lpEvent, 0)));
+                             EventS32At(lpEvent, 0));
             break;
 
         case 153:  // Online voice-over triggers.
