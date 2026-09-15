@@ -43,6 +43,21 @@
 
 #include <stdlib.h>   // getenv (BRN_PROP_DIAG, host-only bring-up diagnostic)
 
+// includes folded in from the CgsSceneManagerModule_w*.cpp partfiles (2026-09-15)
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"   // VolumeInstanceId (by-value param)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventSetPadding.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventClearEntityPadding.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventForceNoPadding.h"
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"                                     // CgsModule::Lock/UnlockBuffersForIO
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h"           // InEventSphereTest / InEventFrustumTestVp
+#include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"                           // CgsGeometric::Frustum
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryResultsQueue.h"     // OutSceneQueryResultsQueue<32768>::AddTriangleCollisionLineTestNearestResult
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/CgsCoarseQueryResultBuffer.h"   // CoarseQueryResultBuffer<16384>
+#include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h" // SpatialPartition::LineTest
+#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"  // CgsCollision::CollisionGenerator / BaseCollisionGenerator
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsCollisionResult.h"          // CgsCollision::CollisionResultList / CollisionResult
+#include "GameShared/GameClasses/Geometric/Primitives/CgsLine.h"                                  // CgsGeometric::Line
+
 // rw::collision::AABBox is only NAMED in this TU (GetBBox's out-parameter and AddBody's
 // pointer parameter). Its real home, vendor/renderware/collision/AABBox.hpp, pulls the SDK
 // rw::math::vpu::Vector3 CLASS into a TU that already has the vendor 4-lane POD via
@@ -2112,3 +2127,1513 @@ void SceneManagerModule::RemoveAllOwnerVolumeInstances(
 }
 
 }  // namespace CgsSceneManager
+
+// ============================================================================
+// FOLDED FROM CgsSceneManagerModule_wQ5_01.cpp (wave Q5) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===========================================================================
+// CgsSceneManager::SceneManagerModule -- wave Q5 cluster E1b (2026-08-19)
+//   THE PADDING / COLLISION-BODY RE-POST LEG of the scene-update drain.
+//
+// Partfile of GameShared/GameClasses/SceneManager/CgsSceneManagerModule.cpp
+// (declarations live in CgsSceneManagerModule.h, which is owned by cluster E1a;
+// this TU only DEFINES four of its already-declared members so the two owners of
+// the drain can land in parallel without touching one another's file).
+//
+// X360 ARTIST functions reconstructed here, store-for-store:
+//   SceneManagerModule::ProcessSetPaddingEvent          @ 0x828CF9A8  (46 insns)
+//   SceneManagerModule::ProcessClearEntityPaddingEvent  @ 0x828CFA60 (136 insns)
+//   SceneManagerModule::ProcessForceNoPaddingEvent      @ 0x828CFC80  (46 insns)
+//   SceneManagerModule::UpdateCollisionBody             @ 0x828C7528  (63 insns)
+//
+// ⚠️ UpdateCollisionBody @0x828C7528 is an EXPORT HOLE: it has no
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x828C7528.json and no progress/identity.json
+// row. Its disassembly + pseudocode were recovered by the wave-Q5 scout's headless-IDA
+// run on a PRIVATE copy of the .i64 and live in scratchpad/waveQ5/q5_out.json (entry
+// req == "0x828c7528"); every instruction quoted below is from that dump. The other
+// three DO have per-address JSON.
+//
+// WHY THIS LEG EXISTS AT ALL (the wave's point). The broad-phase sweeper only knows a
+// body's world AABB + its sweep padding from what the SceneManagerModule pushes onto
+// OverlapGenerationIO::InputBuffer. UpdateCollisionBody is the one producer of
+// mUpdateBodyQueue: it re-measures a volume instance's world box through the rwcollision
+// per-type GetBBox and re-posts it together with the instance's padding lane. The three
+// padding events are its only callers besides the drain
+// (BridgeInputSceneUpdateInterfaceToSubModules @0x828D1F88 idx 1429 / 1473 / 1514 / 1555).
+//
+// SOURCE LADDER USED
+//   rung 1  ARTIST asm  -- every store, branch, early-out and call target below.
+//   rung 2  DecFIGS DWARF -- signatures (CgsSceneManagerModule.h:337/340/343/346) and
+//           the local NAMES/TYPES, transcribed from
+//           references/DecFIGS/dwarfdump/_compile/CgsSceneManagerUnity.cpp:17821 /
+//           :17907 / :17942 / :18017 (lAabb, lpVolInst, lpVolume, lPadding, lZero,
+//           lu16EntityIdx, liVolumeInstIndex, lVolId, liVolumeInstIndex).
+//   rung 3  Feb-2007 -- not consulted; this file has no Feb-2007 counterpart.
+//
+// ASSERT MESSAGES + BAKED LINES (all from CgsSceneManagerModule.cpp on the console;
+// the string constant is aDP4B5MainBurno_415 == ".../scenemanager/CgsSceneManagerModule.cpp"):
+//   0x45B == 1115  "lpOverlapGenerationInputBuffer != NULL"   ProcessSetPaddingEvent
+//   0x469 == 1129  "Volume instance not found"                ProcessSetPaddingEvent
+//   0x478 == 1144  "lpOverlapGenerationInputBuffer != NULL"   ProcessClearEntityPaddingEvent
+//   0x47E == 1150  "Entity not found (ClearPadding): "        ProcessClearEntityPaddingEvent
+//   0x48D == 1165  "Volume instance not found"                ProcessClearEntityPaddingEvent
+//   0x4A5 == 1189  "lpOverlapGenerationInputBuffer != NULL"   ProcessForceNoPaddingEvent
+//   0x4B3 == 1203  "Volume instance not found"                ProcessForceNoPaddingEvent
+//   0x4C9 == 1225  "lpOverlapGenerationInputBuffer != NULL"   UpdateCollisionBody
+//   0x4E7 == 1255  "Volume instance not found"                UpdateCollisionBody
+// The console streams the offending id onto the two "... : " messages through
+// CgsDev::StrStream; CGS_ASSERT in this tree takes a plain string (CgsAssert.h), so the
+// message stops at the string -- the same treatment every other reconstructed TU gives
+// (see CgsVolumeManager.cpp's banner).
+//
+// CONSOLE OFFSETS, FOR PROVENANCE ONLY -- nothing below is spelled as an offset:
+//   this + 0x1A2480 (`addis 0x1A ; addi 0x2480`)  == mEntityManager
+//   this + 0x2C7800 (`addis 0x2C ; addi 0x7800`)  == mVolumeManager
+//   this + 0x1C9A80 (`lis 0x1C ; ori 0x9A80`)     == mEntityManager.mVolumeInstancePool
+//                                                    (0x1A2480 + 0x27600), reached by the
+//                                                    inlined GetVolumeInstanceIdByIndex
+// Both match the member map in CgsSceneManagerModule.h:308/309.
+// ===========================================================================
+
+
+namespace CgsSceneManager
+{
+
+// ---------------------------------------------------------------------------
+// SceneManagerModule::UpdateCollisionBody @ 0x828C7528  (63 insns; export hole --
+//   dump: scratchpad/waveQ5/q5_out.json, DWARF CgsSceneManagerModule.h:346 /
+//   body CgsSceneManagerModule.cpp:1223)
+//
+// SIGNATURE FROM THE ASM (not from Hex-Rays, which renders it `(int,int,int,int)`):
+//   r3 = this
+//   r4 = liVolumeInstanceIndex   -- `cmpwi cr6, r30, -1` => a SIGNED 32-bit index
+//   r5 = lVolumeInstanceID       -- moved whole into r6 for UpdateBody's `std`, and every
+//                                   caller loads it with a 64-bit `ld`, so it is the whole
+//                                   packed 8-byte VolumeInstanceId BY VALUE (DWARF h:346
+//                                   spells exactly `VolumeInstanceId`, not a reference)
+//   r6 = lpOverlapGenerationInputBuffer
+//
+// BODY, instruction by instruction:
+//   0x828C7548  cmplwi r27,0 / bne         -- assert lpOverlapGenerationInputBuffer != NULL (:1225)
+//   0x828C7570  cmpwi  r30,-1 / beq 0x828C7600
+//                                          -- the -1 arm only fires the "Volume instance
+//                                             not found" assert (:1255) and returns; there
+//                                             is no work on that path
+//   0x828C7588  bl sub_828B9FD8            -- mEntityManager.GetVolumeInstance(index).
+//                                             sub_828B9FD8 is the NON-const overload (it
+//                                             calls the non-const ObjectPool operator[]
+//                                             @0x828B7348); a non-const member reaching a
+//                                             non-const member => plain member access here.
+//   0x828C7590  lbz 0x6A / clrlwi ,31 / beq -> return
+//                                          -- `if (!lpVolInst->IsCollidable()) return;`
+//                                             (VolumeInstance::mx8Flags bit 0, pinned in
+//                                             CgsVolumeInstance.h)
+//   0x828C75A4  lwz r4,0x5C(r31)           -- lpVolInst->miVolumeIndex
+//   0x828C75AC  bl VolumeManager::GetRwVolume
+//   0x828C75B0  lwz r11,0x40(r3) ; lwz r11,4(r11) ; bctrl  with r3=volume, r4=r31,
+//               r5=1, r6=&var_60
+//                                          -- lpVolume->GetBBox(&lpVolInst->
+//                                             mWorldSpaceTransform, /*tight*/1, lAabb).
+//                                             ⚠️ r4 is the VolumeInstance POINTER: the
+//                                             transform is that record's FIRST member
+//                                             (CgsVolumeInstance.h +0x00), so the console's
+//                                             `&instance` IS `&instance.mWorldSpaceTransform`.
+//                                             This is NOT C++ virtual dispatch -- +0x40 is
+//                                             the rwcollision per-TYPE descriptor and +0x04
+//                                             inside it is getBBox (volume_debug_access.h).
+//   0x828C75D4  bl sub_828B9FD8            -- GetVolumeInstance(index) a SECOND time. Kept:
+//                                             the console really does call it twice (the
+//                                             DWARF call list names EntityManager::
+//                                             GetVolumeInstance twice for this function), and
+//                                             it is an out-of-line, non-pure call the
+//                                             compiler could not have CSE'd away.
+//   0x828C75F0  lvx128 v1, r11, 0x40       -- lPadding = thatInstance->mPadding
+//   0x828C75F4  bl OverlapGenerationIO::InputBuffer::UpdateBody
+//                                             r3=buffer, r4=index, r5=&lAabb, r6=id, v1=padding
+//
+// ARGUMENT ORDER OF UpdateBody -- WHY (index, aabb, padding, id) AND NOT (…, id, padding).
+// The Xenon ABI gives vector parameters their own register file (v1..) and they do NOT
+// consume a GPR argument slot. So the GPR slots r4/r5/r6 are arguments 1, 2 and 4 while
+// v1 is argument 3 -- which is exactly the DWARF declaration
+// `UpdateBody(uint32_t, AABBox*, Vector3, VolumeInstanceId)` already landed at
+// CgsOverlapGenerationModuleIO.h:223. Cross-check on the same convention in this very
+// file: EntityManager::SetVolumePadding(int32_t, Vector3) is called from
+// ProcessSetPaddingEvent with r4 = index and v1 = padding and NO r5 -- one GPR slot for
+// one GPR argument. Had a vector consumed a slot, UpdateBody's id would have landed in
+// r7, not r6.
+//
+// ⚠️ NO NULL GUARD ON lpVolInst, DELIBERATELY. EntityManager::GetVolumeInstance returns
+// NULL for an unallocated slot, and the console dereferences the result unconditionally
+// (`lbz r11,0x6A(r31)` with no test). A guard the binary does not have is new behaviour
+// and would silently swallow a real breakage; reproduced as-is.
+// ---------------------------------------------------------------------------
+void SceneManagerModule::UpdateCollisionBody(s32 liVolumeInstanceIndex,
+                                             VolumeInstanceId lVolumeInstanceID,
+                                             OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
+{
+    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+
+    if (liVolumeInstanceIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    {
+        CGS_ASSERT(false, "Volume instance not found");
+        return;
+    }
+
+    // DWARF CgsSceneManagerModule.cpp:1230 -- `const VolumeInstance * lpVolInst`.
+    const VolumeInstance* lpVolInst = mEntityManager.GetVolumeInstance(liVolumeInstanceIndex);
+
+    if (!lpVolInst->IsCollidable())
+    {
+        return;
+    }
+
+    // DWARF :1231 -- `const VolRef::Volume * lpVolume`.
+    const VolRef::Volume* lpVolume = mVolumeManager.GetRwVolume(lpVolInst->miVolumeIndex);
+
+    // DWARF :1229 -- `AABBox lAabb`. rw::collision::AABBox is only NAMED in this TU: its
+    // real home (vendor/renderware/collision/AABBox.hpp) pulls the SDK
+    // rw::math::vpu::Vector3 CLASS into a TU that already has the vendor 4-lane POD via
+    // BrnCommonTypes.h, and the two cannot coexist -- a PRE-EXISTING Vector3 fork reported
+    // by three earlier readers (CgsVolumeManager.cpp:54-77, CgsSceneSweeper_wQ5_01.cpp:26-53,
+    // PropManager_wQ4_03.cpp:289-301). OverlapGenerationIO::AABBoxRows is the byte image of
+    // AABBox already declared for exactly this purpose in the header this TU includes
+    // (two 16-byte corner rows, pinned by the mounted layout oracle
+    // PropManager_wQ4_03_embed_check.cpp), so no new local fork is minted here.
+    OverlapGenerationIO::AABBoxRows lAabb;
+
+    // The scene manager's opaque VolRef::Volume IS rw::collision::Volume (DecFIGS
+    // volume.h:39 typedefs exactly that); the cast is between two spellings of one type,
+    // not a layout reinterpretation. Same one-liner as CgsVolumeManager.cpp:218.
+    reinterpret_cast<const rw::collision::Volume*>(lpVolume)->GetBBox(
+        &lpVolInst->mWorldSpaceTransform,
+        1,
+        *reinterpret_cast<rw::collision::AABBox*>(&lAabb));
+
+    {
+        // DWARF opens an inner block at :1237 for `Vector3 lPadding` -- and the asm's
+        // second GetVolumeInstance call is inside it.
+        const Vector3 lPadding =
+            mEntityManager.GetVolumeInstance(liVolumeInstanceIndex)->mPadding;
+
+        lpOverlapGenerationInput->UpdateBody(static_cast<u32>(liVolumeInstanceIndex),
+                                             reinterpret_cast<const rw::collision::AABBox*>(&lAabb),
+                                             lPadding,
+                                             lVolumeInstanceID);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// SceneManagerModule::ProcessSetPaddingEvent @ 0x828CF9A8  (46 insns)
+//   DWARF CgsSceneManagerModule.h:337, body CgsSceneManagerModule.cpp:1113,
+//   local :1117 `int32_t liVolumeInstIndex`.
+//
+// Drain leg for InSceneUpdateInterface::mSetPaddingQueue (idx 1473 of
+// BridgeInputSceneUpdateInterfaceToSubModules).
+//
+//   0x828CF9C4  cmplwi r27,0 / bne          -- assert the input buffer (:1115)
+//   0x828CF9F0  ld r4, 0(r30)               -- lrEvent.mVolInstanceId. A 64-bit `ld` off
+//                                              the event's FIRST byte: the whole packed
+//                                              VolumeInstanceId (CgsSceneManagerIO_EventSetPadding.h)
+//   0x828CF9FC  bl EntityManager::GetVolumeInstanceIndexByID
+//   0x828CFA04  cmpwi r31,-1 / beq 0x828CFA3C
+//                                           -- miss arm: assert (:1129) and nothing else
+//   0x828CFA18  lvx128 v1, r30, 0x10        -- lrEvent.mPadding (the event's +0x10 lane)
+//   0x828CFA1C  bl EntityManager::SetVolumePadding(index, padding)
+//   0x828CFA24  ld r5, 0(r30)               -- re-read the id for the call below
+//   0x828CFA30  bl SceneManagerModule::UpdateCollisionBody(index, id, buffer)
+// ---------------------------------------------------------------------------
+void SceneManagerModule::ProcessSetPaddingEvent(const SceneManagerIO::InEventSetPadding& lrEvent,
+                                                OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
+{
+    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+
+    const s32 liVolumeInstIndex =
+        mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolInstanceId);
+
+    if (liVolumeInstIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    {
+        CGS_ASSERT(false, "Volume instance not found");
+        return;
+    }
+
+    mEntityManager.SetVolumePadding(liVolumeInstIndex, lrEvent.mPadding);
+
+    UpdateCollisionBody(liVolumeInstIndex, lrEvent.mVolInstanceId, lpOverlapGenerationInput);
+}
+
+// ---------------------------------------------------------------------------
+// SceneManagerModule::ProcessForceNoPaddingEvent @ 0x828CFC80  (46 insns)
+//   DWARF CgsSceneManagerModule.h:343, body CgsSceneManagerModule.cpp:1187,
+//   local :1191 `int32_t liVolumeInstIndex`.
+//
+// Drain leg for InSceneUpdateInterface::mForceNoPaddingQueue (idx 1555).
+//
+//   0x828CFC9C  cmplwi r30,0 / bne          -- assert the input buffer (:1189)
+//   0x828CFCC8  ld r4, 0(r28)               -- lrEvent.mVolInstanceId (8-byte id, the
+//                                              event's only field)
+//   0x828CFCD0  bl EntityManager::GetVolumeInstanceIndexByID
+//   0x828CFCD8  cmpwi r31,-1 / beq 0x828CFD14  -- miss arm: assert (:1203) only
+//   0x828CFCE4  stw r31, var_40(r1)         -- the console builds the one-word
+//   0x828CFCEC  bl sub_828B0380             --   InForceNoPadding on the stack, fetches
+//   0x828CFCF4  bl InForceNoPadding::AddEvent --  the write-locked queue and appends:
+//                                              i.e. InputBuffer::ForceNoPadding(index),
+//                                              inlined. De-inlined back to the member the
+//                                              DWARF declares (CgsOverlapGenerationModuleIO.h:216,
+//                                              body already landed by cluster D1) -- the
+//                                              DWARF call list for THIS function names
+//                                              `OverlapGenerationIO::InputBuffer::ForceNoPadding`
+//                                              explicitly.
+//   0x828CFD00  ld r5, 0(r28)               -- re-read the id
+//   0x828CFD08  bl SceneManagerModule::UpdateCollisionBody(index, id, buffer)
+// ---------------------------------------------------------------------------
+void SceneManagerModule::ProcessForceNoPaddingEvent(const SceneManagerIO::InEventForceNoPadding& lrEvent,
+                                                    OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
+{
+    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+
+    const s32 liVolumeInstIndex =
+        mEntityManager.GetVolumeInstanceIndexByID(lrEvent.mVolInstanceId);
+
+    if (liVolumeInstIndex == KI_INVALID_VOLUME_INSTANCE_INDEX)
+    {
+        CGS_ASSERT(false, "Volume instance not found");
+        return;
+    }
+
+    lpOverlapGenerationInput->ForceNoPadding(static_cast<u32>(liVolumeInstIndex));
+
+    UpdateCollisionBody(liVolumeInstIndex, lrEvent.mVolInstanceId, lpOverlapGenerationInput);
+}
+
+// ---------------------------------------------------------------------------
+// SceneManagerModule::ProcessClearEntityPaddingEvent @ 0x828CFA60  (136 insns)
+//   DWARF CgsSceneManagerModule.h:340, body CgsSceneManagerModule.cpp:1142.
+//   Locals (DWARF): :1145 `Vector3 lZero`, :1146 `const VolumeInstance * lpVolInst`,
+//   :1147 `uint16_t lu16EntityIdx`, :1148 `int32_t liVolumeInstIndex`, and inside the
+//   loop body :1158 `VolumeInstanceId lVolId`.
+//
+// Drain leg for InSceneUpdateInterface::mClearEntityPaddingQueue (idx 1514). Walks an
+// ENTITY's whole volume-instance chain and zeroes every instance's sweep padding.
+//
+//   0x828CFA84  cmplwi r21,0 / bne              -- assert the input buffer (:1144)
+//   0x828CFAC0  lfs f0, flt_82001CC0 (== 0.0f)
+//   0x828CFAC8  stfs x3 + stw 0                 -- lZero = {0,0,0,0}; loaded back into
+//                                                  v127 at 0x828CFBCC and re-used for
+//                                                  every iteration
+//   0x828CFAB0  lwz r4, 0(r28)                  -- lrEvent.mEntity (a 4-byte EntityId --
+//                                                  note the `lwz`, NOT the `ld` the two
+//                                                  VolumeInstanceId events use)
+//   0x828CFAD8  bl <IndexedHashTable<EntityId,u16,541>::Get>
+//   0x828CFAE0..0x828CFAE8  r26 = element ? *(u16*)element : -1
+//                                               -- i.e. EntityManager::GetEntityIndexByID,
+//                                                  inlined. De-inlined back to the member
+//                                                  (the DWARF call list names it).
+//   0x828CFAEC  clrlwi/cmplwi 0xFFFF / bne      -- assert "Entity not found (ClearPadding): "
+//                                                  (:1150). ⚠️ NOT A GATE: the miss path
+//                                                  falls straight through to the walk with
+//                                                  lu16EntityIdx == 0xFFFF. Faithful.
+//   0x828CFB94  bl EntityManager::GetFirstEntityVolumeInstance(lu16EntityIdx,
+//                                                              &liVolumeInstIndex)
+//   0x828CFB9C  cmplwi r27,0 / beq -> return    -- the walk is a plain `while (inst)`
+//   loop body @0x828CFBD0:
+//     cmpwi r31,-1 / beq 0x828CFC3C             -- the -1 arm fires assert (:1165) only
+//     0x828CFBD8..0x828CFC1C                    -- the inlined EntityManager::
+//                                                  GetVolumeInstanceIdByIndex(liVolumeInstIndex):
+//                                                  the SAME bounds assert (baked file
+//                                                  aDP4B5MainBurno_439 == CgsEntityManager.h,
+//                                                  line 0x159 == 345, message "liIndex <
+//                                                  KI_MAX_NUM_VOLUME_INSTANCES &..."), the
+//                                                  CONST pool operator[] @0x828B71E8 and
+//                                                  `ld 0x50` == VolumeInstance::mUserID.
+//                                                  De-inlined to the member @0x828B9E10.
+//     0x828CFC20  bl EntityManager::SetVolumePadding(liVolumeInstIndex, lZero)
+//     0x828CFC34  bl SceneManagerModule::UpdateCollisionBody(liVolumeInstIndex, lVolId, buffer)
+//   loop tail @0x828CFC54:
+//     lwz r4,0x60(r27)                          -- lpVolInst->miNextEntityVolumeInstance
+//     bl EntityManager::GetVolumeInstance (0x828B9F28, the CONST overload)
+//     bne -> loop body                          -- i.e. EntityManager::
+//                                                  GetNextEntityVolumeInstance, inlined --
+//                                                  see the note below.
+//
+// ⚠️ MISSING DECLARATION, REPORTED NOT EDITED. The loop tail is DWARF's
+// `EntityManager::GetNextEntityVolumeInstance(const VolumeInstance*, int32_t*) const`
+// (declared CgsEntityManager.h:120, body CgsEntityManager.h:465 -- a header inline with
+// NO out-of-line X360 symbol, which is why the asm shows its two steps in place). This
+// tree's CgsEntityManager.h does not declare it (the wave-Q5 A2 owner listed it as
+// deliberately out of scope, entmgr.owner.md section on omissions), and CgsEntityManager.*
+// is read-only for this cluster -- so the console's own inlined form is what is written
+// here, and the exact declaration to add is reported in scratchpad/waveQ5/e1b.owner.md.
+// Re-de-inline this to the member the moment that declaration lands.
+//
+// ⚠️ WHY THE `const EntityManager&` ALIAS. `GetVolumeInstance` is OVERLOADED on constness
+// (const @0x828B9F28 / non-const @0x828B9FD8) and the two X360 symbols say which one each
+// caller used: this function's xrefs list 0x828B9F28 (const) and the const pool
+// operator[] 0x828B71E8, because the console reaches both through the CONST helpers
+// GetNextEntityVolumeInstance / GetVolumeInstanceIdByIndex. Plain `mEntityManager.` from a
+// non-const member would silently pick the NON-const overload -- a different X360 symbol
+// than the binary calls. The alias keeps the call targets honest; delete it when
+// GetNextEntityVolumeInstance is declared.
+// ---------------------------------------------------------------------------
+void SceneManagerModule::ProcessClearEntityPaddingEvent(const SceneManagerIO::InEventClearEntityPadding& lrEvent,
+                                                        OverlapGenerationIO::InputBuffer* lpOverlapGenerationInput)
+{
+    CGS_ASSERT(lpOverlapGenerationInput != NULL, "lpOverlapGenerationInputBuffer != NULL");
+
+    // DWARF :1145 -- the zero padding lane, built once and reused for the whole chain
+    // (the console loads it into v127 outside the loop).
+    Vector3 lZero;
+    lZero.SetZero();
+
+    // See the "WHY THE const EntityManager& ALIAS" note above.
+    const EntityManager& lrConstEntityManager = mEntityManager;
+
+    // DWARF :1147 -- `uint16_t lu16EntityIdx`. This tree's GetEntityIndexByID keeps the
+    // s32/-1 shape on purpose (CgsEntityManager.h:121-129 documents why re-typing it to
+    // the DWARF's uint16_t would turn "absent" into the valid-looking index 65535 in three
+    // live per-frame paths), so the narrowing the console gets for free is explicit here.
+    // The console's own inlined form yields exactly 0xFFFF on a miss (`li r26,-1` then
+    // `clrlwi r11,r26,16`), which is KU16_INVALID_ENTITY_INDEX.
+    const s32 liEntityIndex = lrConstEntityManager.GetEntityIndexByID(lrEvent.mEntity);
+    const u16 lu16EntityIdx = (liEntityIndex < 0)
+                                  ? KU16_INVALID_ENTITY_INDEX
+                                  : static_cast<u16>(liEntityIndex);
+
+    // NOT a gate on the console -- the miss path walks on with 0xFFFF. Reproduced.
+    CGS_ASSERT(lu16EntityIdx != KU16_INVALID_ENTITY_INDEX, "Entity not found (ClearPadding): ");
+
+    // DWARF :1148 / :1146.
+    s32 liVolumeInstIndex = KI_INVALID_VOLUME_INSTANCE_INDEX;
+    const VolumeInstance* lpVolInst =
+        lrConstEntityManager.GetFirstEntityVolumeInstance(lu16EntityIdx, &liVolumeInstIndex);
+
+    while (lpVolInst != NULL)
+    {
+        if (liVolumeInstIndex != KI_INVALID_VOLUME_INSTANCE_INDEX)
+        {
+            // DWARF :1158.
+            const VolumeInstanceId lVolId =
+                lrConstEntityManager.GetVolumeInstanceIdByIndex(liVolumeInstIndex);
+
+            mEntityManager.SetVolumePadding(liVolumeInstIndex, lZero);
+
+            UpdateCollisionBody(liVolumeInstIndex, lVolId, lpOverlapGenerationInput);
+        }
+        else
+        {
+            CGS_ASSERT(false, "Volume instance not found");
+        }
+
+        // EntityManager::GetNextEntityVolumeInstance(lpVolInst, &liVolumeInstIndex),
+        // inlined by the console and not declarable from this cluster -- see the banner.
+        liVolumeInstIndex = lpVolInst->miNextEntityVolumeInstance;
+        lpVolInst = lrConstEntityManager.GetVolumeInstance(liVolumeInstIndex);
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM CgsSceneManagerModule_wSQ1.cpp (wave SQ1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =============================================================================
+// GameShared/GameClasses/SceneManager/CgsSceneManagerModule_wSQ1.cpp
+//
+// THE SCENE-QUERY PIPELINE -- the two passes SceneManagerModule::ProcessSceneQueries
+// @0x828D57D0 runs over a query input buffer, and the fine-query dispatchers under them.
+// Scene-query wave 1 (2026-09-02). Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic
+// parity, not byte match); every constant below is read out of the image, never guessed.
+//
+//   SceneManagerModule::ProcessCoarseQueries                  @ 0x828CE770   (73 insns)   REAL
+//   SceneManagerModule::ProcessCoarseSpatialPartitionQueries  @ 0x828CDB80   (79 insns)   REAL (dispatcher)
+//   SceneManagerModule::ProcessFineQueries                    @ 0x828D5608   (114 insns)  REAL
+//   SceneManagerModule::ProcessFineQueriesDirectly            @ 0x828D4F80   (418 insns)  REAL
+//   SceneManagerModule::ProcessLineTestNearest                @ 0x828D38C0   (315 insns)  REAL
+//   SceneManagerModule::ProcessTriangleCollisionLineTestNearests @ 0x828D4880 (234 insns) REAL (direct arm), job arm LOUD
+//   SceneManagerModule::ProcessCoarseSphereTest                             REAL
+//   SceneManagerModule::ProcessCoarseFrustumTestVp                          REAL (tree-walk arm), narrowing arm LOUD
+//   -- and, as LOUD TRAPS carrying their console address, the nine sibling handlers this
+//      build has no producer for yet (see the block at the end of the file).
+//
+// The two coarse handlers landed 2026-09-11, when the traffic module's post-scene stage
+// started posting its player-centred sphere query and its per-race-car AI frustum queries and
+// the world bridge began carrying them: both arms of the coarse dispatcher then ran into an
+// unreconstructed consumer every frame.
+//
+// ⭐ WHY THIS TU EXISTS. Every race car posts one 10 m "nearest" down-ray per frame
+// (VehicleManager::GenerateAboveGroundLineTests @0x82633990, entity-type flags == 2 == the
+// WORLD bit). Its answer -- AboveGroundTestResult.mbValid -- is guard 8 of UpdateDriftState
+// @0x8261F94C, and until this TU existed the ray had NO consumer on this build:
+// WorldModule::BridgePhysicsSceneQueriesToScene was an inert gate and ProcessSceneQueries
+// skipped both passes. Measured last wave: 134 drift entries, 134 exits, all guard 8;
+// mbValid == 0 on every frame of the session. The chain this file closes is
+//   GenerateAboveGroundLineTests -> BridgePhysicsSceneQueriesToScene (type 6 -> the query
+//   buffer's nearest-line queue) -> ProcessSceneQueries -> ProcessFineQueries ->
+//   ProcessFineQueriesDirectly -> ProcessLineTestNearest (world-only: park the test on the
+//   TriCacheQueryBuffer) -> ProcessTriangleCollisionLineTestNearests (line vs the static
+//   poly-soup world) -> OutSceneQueryResultsQueue::AddTriangleCollisionLineTestNearestResult
+//   (record type 2) -> BridgeSceneQueryResultsToPhysics -> ProcessAboveGroundLineTestsResults.
+//
+// ⛔ WHAT THIS WAVE DOES NOT LAND (named, not hidden):
+//   * (LANDED in wave 1b, same day, b5 c6cb403f) BaseCollisionGenerator::
+//     CollideLineAgainstPolySoupListNearest @0x828131C0 -- the ray-vs-world kernel over
+//     PolygonSoupListSpatialMap::RunQuery @0x82843A80 and CgsGeometric::
+//     IntersectLinePolygonSoupNearestSingleSided @0x8283BC98 -- is now a BODY for lines under
+//     20 m (CgsCollisionGenerator_wSQ1.cpp + CgsPolygonSoupTests_LineNearest.cpp). Measured:
+//     2165 HIT / 0 MISS, mbValid 274/274, drift held 97 frames, exit guard 4 (run sq1_drift2).
+//     Only its 20 m+ arm (sub_82843E98) is still a loud trap.
+//   * the job arm of ProcessTriangleCollisionLineTestNearests (>= 100 tests a pass).
+//   * the octree arm's callees (LooseOctree::LineTestOptimized, the fine module's Compute*)
+//     -- both LOUD traps in their own TUs; the race car's world-only rays never reach them.
+//
+// Image constants (tools/re/x360rd.py, corroborated against each other and the asm):
+//   dword_82F33E44 = 0x00000064 (100)       the job-arm threshold in ProcessTriangleCollisionLineTestNearests
+//   dword_82F33F64 = 0xFFFFFFFF             EntityId::KU_INVALID_ENTITY_ID (the invalid exclude id)
+//   qword_82F33F70 = 0xFFFFFFFFFFFFFFFF     VolumeInstanceId::KU_INVALID_ID
+//   flt_82001CC0   = 0.0f                   the "no hit" line parameter
+//   flt_82001C98   = 1.0f / flt_820F259C = FLT_MAX  (fine-module constants, not used here)
+// =============================================================================
+
+
+namespace CgsSceneManager
+{
+    // The pass monitors, registered by SceneManagerModule::Construct (CgsSceneManagerModule.cpp,
+    // X360 dword_82F33ED0..dword_82F33EF4 -- "       Coarse" / "       Fine" / the six
+    // "           Line*/Sphere*/Vol*" sub-monitors / "       TriCollLTs" / "       TriCollLTNs").
+    extern s32 siProcessCoarseQueriesPerfMon;                  // dword_82F33ED0
+    extern s32 siProcessFineQueriesPerfMon;                    // dword_82F33ED4
+    extern s32 siProcessFineQueriesLineFinePerfMon;            // dword_82F33ED8
+    extern s32 siProcessFineQueriesLineNearPerfMon;            // dword_82F33EDC
+    extern s32 siProcessFineQueriesLineFastDSPerfMon;          // dword_82F33EE0
+    extern s32 siProcessFineQueriesSphereFastPerfMon;          // dword_82F33EE4
+    extern s32 siProcessFineQueriesVolFinePerfMon;             // dword_82F33EE8  ("VolFine" == ProcessFineVolumeTest)
+    extern s32 siProcessFineQueriesVolNearPerfMon;             // dword_82F33EEC  ("VolNear" == ProcessVolumeTestDeepest)
+    extern s32 siProcessTriCollisionLineTestsPerfMon;          // dword_82F33EF0
+    extern s32 siProcessTriCollisionLineTestNearestsPerfMon;   // dword_82F33EF4
+
+    namespace
+    {
+        // The console brackets each pass with `if (id > -1) StartMonitor(id)` ... `if (id > -1)
+        // StopMonitor(id)` (a literal `cmpwi cr6, r3, -1 ; ble` before every call).
+        inline void StartPassMonitor(s32 liMonitor) { if (liMonitor > -1) CgsDev::PerfMonCpu::StartMonitor(liMonitor); }
+        inline void StopPassMonitor(s32 liMonitor)  { if (liMonitor > -1) CgsDev::PerfMonCpu::StopMonitor(liMonitor); }
+
+        // Per-pass query counters. X360 .bss dword_83084860 .. dword_8308488C: each fine pass
+        // adds its queue length (`lwz r10 ; add r10, r10, count ; stw r10`), and
+        // ProcessTriangleCollisionLineTestNearests keeps a high-water mark. They are the scene
+        // manager's per-frame statistics (the debug component's readers are not mounted). The
+        // DWARF's static list for CgsSceneManagerModule.cpp does not name them, so they carry
+        // descriptive names here; nothing keys on the console addresses.
+        s32 siStat_NumLineTestFine          = 0;   // dword_83084860
+        s32 siStat_NumLineTestNearest       = 0;   // dword_83084864
+        s32 siStat_NumLineTestFastDS        = 0;   // dword_83084868
+        s32 siStat_NumSphereTestFast        = 0;   // dword_8308486C
+        s32 siStat_NumFineVolumeTest        = 0;   // dword_83084870
+        s32 siStat_NumVolumeTestDeepest     = 0;   // dword_83084874
+        s32 siStat_NumTriColLineTestsIn     = 0;   // dword_83084878  (input buffer's own, before the merge)
+        s32 siStat_NumTriColLineTestNearIn  = 0;   // dword_8308487C
+        s32 siStat_NumTriColLineTests       = 0;   // dword_83084880  (after the merge)
+        s32 siStat_NumTriColLineTestNear    = 0;   // dword_83084884
+        s32 siStat_MaxTriColLineTestNear    = 0;   // dword_8308488C  (high-water mark)
+
+        // The two invalid-id sentinels the dispatchers stamp on a MISS result, read from the
+        // image (see the file banner). Spelled through the id types' own constants so the two
+        // homes cannot drift apart.
+        inline EntityId InvalidEntityId()                 { EntityId l; l.SetInvalid(); return l; }           // dword_82F33F64
+        inline VolumeInstanceId InvalidVolumeInstanceId() { VolumeInstanceId l; l.SetInvalid(); return l; }   // qword_82F33F70
+
+        // The job-arm threshold of ProcessTriangleCollisionLineTestNearests (dword_82F33E44,
+        // .data, image value 0x64). Below it the tests run synchronously on the calling thread.
+        const s32 KI_MIN_TRI_COL_LINE_TEST_NEARESTS_FOR_JOB = 100;
+
+        // The console's empty-result line parameter (flt_82001CC0).
+        const f32 KF_NO_HIT_LINE_PARAM = 0.0f;
+
+        // Bit 1 of a query's entity-type flags -- the WORLD bit. The coarse broad phase does
+        // not hold the world, so both coarse handlers with a producer trip on it.
+        const u32 KX_COARSE_QUERY_WORLD_TYPE_BIT = 2;
+
+        // How many result-run seats the coarse VP frustum pass carries across one queue walk
+        // (the two 16-byte scratch blocks the dispatcher seeds are four s32 / four pointers).
+        const s32 KI_COARSE_FRUSTUM_QUERY_SEATS = 4;
+
+        // The tail both coarse handlers share, written out once: publish one finished coarse
+        // batch as a single variable-size event on the scene output's results queue. The
+        // broad phase answers in entity pool INDICES, so each is resolved to its public id on
+        // the way out; the event is three header words plus one id per result, which is the
+        // size the queue is asked for.
+        void EmitCoarseQueryResult(EntityManager&                lrEntityManager,
+                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer,
+                                   SceneQueryId                  lQueryId,
+                                   s32                           liNumResults,
+                                   s32                           liNumAttempted,
+                                   const u16*                    lpu16Results)
+        {
+            SceneManagerIO::OutCoarseQueryResult* lpResult =
+                static_cast<SceneManagerIO::OutCoarseQueryResult*>(
+                    lpSceneOutputBuffer->GetSceneQueryResultsQueueForWrite()->AllocateEvent(
+                        SceneManagerIO::OutCoarseQueryResult::KI_EVENT_TYPE,
+                        static_cast<s32>(4 * (liNumResults + 3))));
+
+            lpResult->mQueryId              = lQueryId;
+            lpResult->miNumResults          = liNumResults;
+            lpResult->miNumResultsAttempted = liNumAttempted;
+
+            EntityId* lpIds = lpResult->GetEntityIds();
+            for (s32 liResult = 0; liResult < liNumResults; ++liResult)
+            {
+                const u16 lu16Index = lpu16Results[liResult];
+                CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+
+                const EntityId lId = lrEntityManager.GetEntityIdByIndex(lu16Index);
+                CGS_ASSERT(lId != K_INVALID_ENTITY_ID, "lID != K_INVALID_ENTITY_ID");
+
+                lpIds[liResult] = lId;
+            }
+        }
+
+        // A CgsGeometric::Line is two 16-byte lanes; the console fills them with whole-lane
+        // `lvx128/stvx128` copies of the query's mLineStart/mLineEnd (all four floats, w included).
+        inline Vector3Plus LaneCopy(const Vector3& lrLane)
+        {
+            Vector3Plus lOut;
+            lOut.x = lrLane.x; lOut.y = lrLane.y; lOut.z = lrLane.z; lOut.w = lrLane.w;
+            return lOut;
+        }
+        inline Vector3 ZeroLane() { Vector3 lZero; lZero.SetZero(); return lZero; }   // vspltisw v0, 0
+        // The literal zero ids the tri-collision pass stamps (`li r5, 0 ; li r6, 0`).
+        inline VolumeInstanceId ZeroVolumeInstanceId() { VolumeInstanceId l; l.muId = 0; return l; }
+
+        // [DIAG] host-only, opt-in (BRN_SCENE_QUERY_DIAG=1): print both sides of every
+        // decision on the nearest-line path. Never on by default; nothing behavioural.
+        bool SceneQueryDiagEnabled()
+        {
+            static const bool sbEnabled = []() {
+                const char* lpcValue = getenv("BRN_SCENE_QUERY_DIAG");
+                return lpcValue != 0 && lpcValue[0] == '1';
+            }();
+            return sbEnabled;
+        }
+    }
+
+    // =========================================================================================
+    // ProcessCoarseQueries @ 0x828CE770  (CgsSceneManagerModule.cpp:847..)
+    //
+    //   four null tripwires (:847/:848/:849/:850, non-gating)
+    //   0x828CE83C  CreateIOBuffer<SpatialPartitionIO::OutputBuffer>(lpOutputBufferStack, "SpacialPartition")
+    //   0x828CE848  LockBuffersForIO(lpSceneOutput /*write*/, lpSceneInput /*read*/)   (sub_823B6FE0)
+    //   0x828CE854  LockForWrite(spatialPartitionOut)
+    //   0x828CE868  ProcessCoarseSpatialPartitionQueries(this, lpSceneInput, spatialPartitionOut, lpSceneOutput)
+    //   0x828CE870  UnlockForWrite(spatialPartitionOut)
+    //   0x828CE87C  UnlockBuffersForIO(lpSceneOutput, lpSceneInput)                  (sub_823B7060)
+    //   0x828CE888  DestroyIOBuffer<SpatialPartitionIO::OutputBuffer>(lpOutputBufferStack, ...)
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseQueries(CgsModule::IOBufferStack* lpInputBufferStack,
+                                                  CgsModule::IOBufferStack* lpOutputBufferStack,
+                                                  SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
+                                                  SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
+    {
+        CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");    // :847
+        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");   // :848
+        CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");    // :849
+        CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");   // :850
+
+        SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer = 0;
+        lpOutputBufferStack->CreateIOBuffer(&lpSpatialPartitionOutputBuffer, "SpacialPartition");
+
+        CgsModule::LockBuffersForIO(lpSceneOutputBuffer, lpSceneInputBuffer);
+        lpSpatialPartitionOutputBuffer->LockForWrite();
+
+        ProcessCoarseSpatialPartitionQueries(lpSceneInputBuffer, lpSpatialPartitionOutputBuffer,
+                                             lpSceneOutputBuffer);
+
+        lpSpatialPartitionOutputBuffer->UnlockForWrite();
+        CgsModule::UnlockBuffersForIO(lpSceneOutputBuffer, lpSceneInputBuffer);
+
+        lpOutputBufferStack->DestroyIOBuffer(&lpSpatialPartitionOutputBuffer);
+    }
+
+    // =========================================================================================
+    // ProcessCoarseSpatialPartitionQueries @ 0x828CDB80  (CgsSceneManagerBridgeFunctions.cpp)
+    //
+    // Walk the query input's COARSE queue (VariableEventQueue, read-locked getter @0x828AF270)
+    // and dispatch each record on its type id:
+    //   0 -> ProcessCoarseLineTest(this, spOut, event, sceneOut)          @0x828C6D78
+    //   1 -> ProcessCoarseSphereTest(this, spOut, event, sceneOut)        @0x828C6B48
+    //   2 -> ProcessCoarseVolumeTest(this, event, spOut, sceneOut)        @0x828C62C0
+    //   3 -> ProcessCoarseFrustumTest(this, spOut, event, sceneOut)       @0x828C6918
+    //   4 -> ProcessCoarseFrustumTestVp(this, spOut, event, previousCounts, previousRuns, sceneOut)
+    //        -- the two 16-byte stack blocks the console memsets to 0xFF and 0x00 before the
+    //           loop are that pass's four-seat scratch: four s32 result counts seeded to -1
+    //           and four result-run pointers seeded to null (see the handler).
+    //   default -> ignored.
+    // The coarse getter is re-fetched for GetNextEvent every iteration (the console calls
+    // SceneManagerIO::InputBuffer_Query::GetCoarseQueryQueue again at 0x828CDC98).
+    //
+    // ⚠️ The case numbers are the console's raw jump-table indices. The tree's
+    // SceneManagerIO::ECoarseQueryEvent (CgsSceneManagerIO_CoarseQueryQueue.h) spells only
+    // E_IN_EVENT_FRUSTUM_TEST_VP == 4 from an attested `li r5, 4`; its SPHERE == 1 agrees with
+    // case 1, but its FRUSTUM == 2 and VOLUME == 8 CONTRADICT this switch (2 dispatches to the
+    // VOLUME test, 3 to the frustum test). The switch is the authority; the literals stay
+    // literals until that enum is re-attested from its producers.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseSpatialPartitionQueries(
+        const SceneManagerIO::InputBuffer_Query*  lpSceneInputBuffer,
+        SpatialPartitionIO::OutputBuffer*         lpSpatialPartitionOutputBuffer,
+        SceneManagerIO::OutputBuffer*             lpSceneOutputBuffer)
+    {
+        // The VP pass's per-pass scratch, carved once before the loop and carried across
+        // every query in the queue: four "written result count" seats seeded to all-ones
+        // (-1 == no earlier query in that seat) and four result-run pointers seeded to
+        // null. ProcessCoarseFrustumTestVp fills a seat when its query claims one and
+        // reads a seat when its query narrows an earlier one.
+        s32        laPreviousNumResults[4];
+        const u16* lpaPreviousResults[4];
+        for (s32 li = 0; li < 4; ++li) { laPreviousNumResults[li] = -1; lpaPreviousResults[li] = 0; }
+
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        for (s32 liId = lpSceneInputBuffer->GetCoarseQueryQueue()->GetFirstEvent(&lpEvent, &liSize);
+             liId >= 0;
+             liId = lpSceneInputBuffer->GetCoarseQueryQueue()->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            switch (liId)
+            {
+            case 0:
+                ProcessCoarseLineTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
+                break;
+            case 1:
+                ProcessCoarseSphereTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
+                break;
+            case 2:
+                ProcessCoarseVolumeTest(lpEvent, lpSpatialPartitionOutputBuffer, lpSceneOutputBuffer);
+                break;
+            case 3:
+                ProcessCoarseFrustumTest(lpSpatialPartitionOutputBuffer, lpEvent, lpSceneOutputBuffer);
+                break;
+            case 4:
+                ProcessCoarseFrustumTestVp(lpSpatialPartitionOutputBuffer, lpEvent,
+                                           laPreviousNumResults, lpaPreviousResults,
+                                           lpSceneOutputBuffer);
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    // =========================================================================================
+    // ProcessFineQueries @ 0x828D5608  (CgsSceneManagerModule.cpp:880..)
+    //
+    //   four null tripwires (:880/:881/:882/:883)
+    //   0x828D56E0  CreateIOBuffer<SpatialPartitionIO::OutputBuffer>(outStack, "SpacialPartition")
+    //   0x828D56F4  CreateIOBuffer<FineIntersectionTestIO::OutputBuffer>(outStack, "FineTest")
+    //   0x828D5708  CreateIOBuffer<SceneManagerIO::TriCacheQueryBuffer>(outStack, "TriCacheQuery")
+    //   0x828D5714  LockBuffersForIO(sceneOut /*write*/, sceneIn /*read*/)
+    //   0x828D5720  LockForWrite(spatialPartitionOut)
+    //   0x828D572C  LockForWrite(fineTestOut)
+    //   0x828D5740  CreateIOBuffer<CgsCollision::CollisionGenerator>(INPUT stack, "Contact Generator")
+    //   0x828D5758  BaseCollisionGenerator::Prepare(gen, gen + 0x12400, 0x200000)
+    //               == CollisionGenerator::Prepare() (the embedded 2 MB results arena; the
+    //               same inlined pair VehicleManager::StartVehicleContactGeneration emits)
+    //   0x828D5778  ProcessFineQueriesDirectly(this, sceneIn, gen, triCacheQuery, spOut, fineOut, sceneOut)
+    //   0x828D5784  DestroyIOBuffer<CollisionGenerator>(INPUT stack, ...)
+    //   0x828D578C  UnlockForWrite(spatialPartitionOut)
+    //   0x828D5794  UnlockForWrite(fineTestOut)
+    //   0x828D57A0  UnlockBuffersForIO(sceneOut, sceneIn)
+    //   0x828D57AC  DestroyIOBuffer<TriCacheQueryBuffer>(outStack)
+    //   0x828D57B8  DestroyIOBuffer<FineIntersectionTestIO::OutputBuffer>(outStack)
+    //   0x828D57C4  DestroyIOBuffer<SpatialPartitionIO::OutputBuffer>(outStack)
+    //   (note: the TriCacheQuery buffer is NOT lock-bracketed here -- ProcessFineQueriesDirectly
+    //    write-locks it itself.)
+    // =========================================================================================
+    void SceneManagerModule::ProcessFineQueries(CgsModule::IOBufferStack* lpInputBufferStack,
+                                                CgsModule::IOBufferStack* lpOutputBufferStack,
+                                                SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
+                                                SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
+    {
+        CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");    // :880
+        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");   // :881
+        CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");    // :882
+        CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");   // :883
+
+        SpatialPartitionIO::OutputBuffer*      lpSpatialPartitionOutputBuffer = 0;
+        FineIntersectionTestIO::OutputBuffer*  lpFineTestOutputBuffer         = 0;
+        SceneManagerIO::TriCacheQueryBuffer*   lpTriCacheQueryBuffer          = 0;
+        lpOutputBufferStack->CreateIOBuffer(&lpSpatialPartitionOutputBuffer, "SpacialPartition");
+        lpOutputBufferStack->CreateIOBuffer(&lpFineTestOutputBuffer, "FineTest");
+        lpOutputBufferStack->CreateIOBuffer(&lpTriCacheQueryBuffer, "TriCacheQuery");
+
+        CgsModule::LockBuffersForIO(lpSceneOutputBuffer, lpSceneInputBuffer);
+        lpSpatialPartitionOutputBuffer->LockForWrite();
+        lpFineTestOutputBuffer->LockForWrite();
+
+        CgsCollision::CollisionGenerator* lpCollisionGenerator = 0;
+        lpInputBufferStack->CreateIOBuffer(&lpCollisionGenerator, "Contact Generator");
+        lpCollisionGenerator->Prepare();
+
+        ProcessFineQueriesDirectly(lpSceneInputBuffer, lpCollisionGenerator, lpTriCacheQueryBuffer,
+                                   lpSpatialPartitionOutputBuffer, lpFineTestOutputBuffer,
+                                   lpSceneOutputBuffer);
+
+        lpInputBufferStack->DestroyIOBuffer(&lpCollisionGenerator);
+
+        lpSpatialPartitionOutputBuffer->UnlockForWrite();
+        lpFineTestOutputBuffer->UnlockForWrite();
+        CgsModule::UnlockBuffersForIO(lpSceneOutputBuffer, lpSceneInputBuffer);
+
+        lpOutputBufferStack->DestroyIOBuffer(&lpTriCacheQueryBuffer);
+        lpOutputBufferStack->DestroyIOBuffer(&lpFineTestOutputBuffer);
+        lpOutputBufferStack->DestroyIOBuffer(&lpSpatialPartitionOutputBuffer);
+    }
+
+    // =========================================================================================
+    // ProcessFineQueriesDirectly @ 0x828D4F80  (CgsSceneManagerBridgeFunctions.cpp:579..)
+    //
+    //   four null tripwires (:579 sceneIn / :580 spatialPartitionOut / :581 fineTestOut / :582 sceneOut)
+    //   0x828D5044  LockForWrite(triCacheQuery)
+    //   six passes, each `StartMonitor ; n = queue.GetLength() ; stat += n ; for i < n:
+    //   handler(queue.GetEvent(i)) ; StopMonitor`, in this order:
+    //     LineFine   (0x828AF318 / GetEvent 0x828ACED0 stride 64)  -> ProcessLineTestFine
+    //     LineNear   (0x828AF3C0 / GetEvent 0x828ACF78 stride 64)  -> ProcessLineTestNearest
+    //     LineFastDS (0x828AF468 / inline GetEvent stride 64)      -> ProcessLineTestFastDoubleSided
+    //     SphereFast (0x828AF510 / GetEvent 0x828AD020)            -> ProcessSphereTestFast
+    //     VolNear    (0x828AF5B8 / inline GetEvent stride 224)     -> ProcessVolumeTestDeepest
+    //     VolFine    (0x828AF660 / inline GetEvent stride 224)     -> ProcessFineVolumeTest
+    //   (each inline GetEvent carries the three CgsBaseEventQueue.h:272/:274/:275 tripwires
+    //    -- the queue's own GetEvent does that on the host)
+    //   0x828D54D4..0x828D5560  stats += the input buffer's own tri-collision queue lengths, then
+    //                           MERGE the input buffer's three tri-collision queues onto the
+    //                           TriCacheQueryBuffer's (BaseEventQueue<T>::Append x3:
+    //                           sub_828B9668 LineTest, sub_828B9758 LineTestNearest, and the
+    //                           InEventTriangleCollisionSphereTest Append @0x828B9848)
+    //   0x828D5568..0x828D55A8  stats += the merged lengths
+    //   0x828D55BC  ProcessTriangleCollisionLineTests(this, gen, triCacheQuery.LineTestQueue, sceneOut)
+    //   0x828D55D8  ProcessTriangleCollisionLineTestNearests(this, gen, triCacheQuery.NearestQueue, sceneOut)
+    //   0x828D55F4  ProcessTriangleCollisionSphereTests(this, gen, triCacheQuery.SphereQueue, sceneOut)
+    //   0x828D55FC  UnlockForWrite(triCacheQuery)
+    //
+    // The per-pass queue length is read ONCE before each loop (`lwz r28, 8(r3)`), so handlers
+    // that push more work onto the SAME queue are not re-walked -- reproduced with a hoisted
+    // count. (None of the six handlers appends to its own input queue; the nearest handler
+    // pushes onto the TriCacheQueryBuffer, which is drained after the merge below.)
+    // =========================================================================================
+    void SceneManagerModule::ProcessFineQueriesDirectly(
+        const SceneManagerIO::InputBuffer_Query*   lpSceneInputBuffer,
+        CgsCollision::BaseCollisionGenerator*      lpCollisionGenerator,
+        SceneManagerIO::TriCacheQueryBuffer*       lpTriCacheQueryBuffer,
+        SpatialPartitionIO::OutputBuffer*          lpSpatialPartitionOutputBuffer,
+        FineIntersectionTestIO::OutputBuffer*      lpFineTestOutputBuffer,
+        SceneManagerIO::OutputBuffer*              lpSceneOutputBuffer)
+    {
+        CGS_ASSERT(lpSceneInputBuffer != NULL,             "lpSceneInputBuffer != NULL");              // :579
+        CGS_ASSERT(lpSpatialPartitionOutputBuffer != NULL, "lpSpatialPartitionOutputBuffer != NULL");  // :580
+        CGS_ASSERT(lpFineTestOutputBuffer != NULL,         "lpFineTestOutputBuffer != NULL");          // :581
+        CGS_ASSERT(lpSceneOutputBuffer != NULL,            "lpSceneOutputBuffer != NULL");             // :582
+
+        lpTriCacheQueryBuffer->LockForWrite();
+
+        // ---- LineFine ------------------------------------------------------------------------
+        StartPassMonitor(siProcessFineQueriesLineFinePerfMon);
+        {
+            const SceneManagerIO::InputBuffer_Query::InFineLineTestQueue* lpQueue =
+                lpSceneInputBuffer->GetFineLineTestQueue();
+            const s32 liCount = lpQueue->GetLength();
+            siStat_NumLineTestFine += liCount;
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                ProcessLineTestFine(lpCollisionGenerator, lpTriCacheQueryBuffer,
+                                    lpSpatialPartitionOutputBuffer,
+                                    &lpSceneInputBuffer->GetFineLineTestQueue()->GetEvent(li),
+                                    lpSceneOutputBuffer, lpFineTestOutputBuffer);
+            }
+        }
+        StopPassMonitor(siProcessFineQueriesLineFinePerfMon);
+
+        // ---- LineNear ------------------------------------------------------------------------
+        StartPassMonitor(siProcessFineQueriesLineNearPerfMon);
+        {
+            const SceneManagerIO::InputBuffer_Query::InFineLineTestNearestQueue* lpQueue =
+                lpSceneInputBuffer->GetFineLineTestNearestQueue();
+            const s32 liCount = lpQueue->GetLength();
+            siStat_NumLineTestNearest += liCount;
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                ProcessLineTestNearest(lpCollisionGenerator, lpTriCacheQueryBuffer,
+                                       lpSpatialPartitionOutputBuffer,
+                                       &lpSceneInputBuffer->GetFineLineTestNearestQueue()->GetEvent(li),
+                                       lpSceneOutputBuffer);
+            }
+        }
+        StopPassMonitor(siProcessFineQueriesLineNearPerfMon);
+
+        // ---- LineFastDS ----------------------------------------------------------------------
+        StartPassMonitor(siProcessFineQueriesLineFastDSPerfMon);
+        {
+            const SceneManagerIO::InputBuffer_Query::InFineLineTestFastDoubleSidedQueue* lpQueue =
+                lpSceneInputBuffer->GetFineLineTestFastDoubleSidedQueue();
+            const s32 liCount = lpQueue->GetLength();
+            siStat_NumLineTestFastDS += liCount;
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                ProcessLineTestFastDoubleSided(lpCollisionGenerator, lpTriCacheQueryBuffer,
+                                               lpSpatialPartitionOutputBuffer,
+                                               &lpSceneInputBuffer->GetFineLineTestFastDoubleSidedQueue()->GetEvent(li),
+                                               lpSceneOutputBuffer);
+            }
+        }
+        StopPassMonitor(siProcessFineQueriesLineFastDSPerfMon);
+
+        // ---- SphereFast ----------------------------------------------------------------------
+        StartPassMonitor(siProcessFineQueriesSphereFastPerfMon);
+        {
+            const SceneManagerIO::InputBuffer_Query::InFineSphereTestFastQueue* lpQueue =
+                lpSceneInputBuffer->GetFineSphereTestFastQueue();
+            const s32 liCount = lpQueue->GetLength();
+            siStat_NumSphereTestFast += liCount;
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                ProcessSphereTestFast(lpCollisionGenerator, lpTriCacheQueryBuffer,
+                                      &lpSceneInputBuffer->GetFineSphereTestFastQueue()->GetEvent(li),
+                                      lpSpatialPartitionOutputBuffer, lpSceneOutputBuffer);
+            }
+        }
+        StopPassMonitor(siProcessFineQueriesSphereFastPerfMon);
+
+        // ---- VolNear (deepest) ---------------------------------------------------------------
+        StartPassMonitor(siProcessFineQueriesVolNearPerfMon);
+        {
+            const SceneManagerIO::InputBuffer_Query::InFineVolumeTestDeepestQueue* lpQueue =
+                lpSceneInputBuffer->GetFineVolumeTestDeepestQueue();
+            const s32 liCount = lpQueue->GetLength();
+            siStat_NumVolumeTestDeepest += liCount;
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                ProcessVolumeTestDeepest(lpCollisionGenerator, lpTriCacheQueryBuffer,
+                                         &lpSceneInputBuffer->GetFineVolumeTestDeepestQueue()->GetEvent(li),
+                                         lpSpatialPartitionOutputBuffer, lpSceneOutputBuffer);
+            }
+        }
+        StopPassMonitor(siProcessFineQueriesVolNearPerfMon);
+
+        // ---- VolFine -------------------------------------------------------------------------
+        StartPassMonitor(siProcessFineQueriesVolFinePerfMon);
+        {
+            const SceneManagerIO::InputBuffer_Query::InFineVolumeTestQueue* lpQueue =
+                lpSceneInputBuffer->GetFineVolumeTestQueue();
+            const s32 liCount = lpQueue->GetLength();
+            siStat_NumFineVolumeTest += liCount;
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                ProcessFineVolumeTest(&lpSceneInputBuffer->GetFineVolumeTestQueue()->GetEvent(li),
+                                      lpSpatialPartitionOutputBuffer, lpSceneOutputBuffer,
+                                      lpFineTestOutputBuffer);
+            }
+        }
+        StopPassMonitor(siProcessFineQueriesVolFinePerfMon);
+
+        // ---- merge the input buffer's own triangle-collision tests onto the pass buffer ------
+        siStat_NumTriColLineTestsIn    += lpTriCacheQueryBuffer->GetTriangleCollisionLineTestQueue()->GetLength();
+        siStat_NumTriColLineTestNearIn += lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->GetLength();
+
+        lpTriCacheQueryBuffer->GetTriangleCollisionLineTestQueue()->Append(
+            *lpSceneInputBuffer->GetTriangleCollisionLineTestQueue());                     // sub_828B9668
+        lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->Append(
+            *lpSceneInputBuffer->GetTriangleCollisionLineTestNearestQueue());              // sub_828B9758
+        lpTriCacheQueryBuffer->GetTriangleCollisionSphereTestQueue()->Append(
+            *lpSceneInputBuffer->GetTriangleCollisionSphereTestQueue());                   // @0x828B9848
+
+        siStat_NumTriColLineTests    += lpTriCacheQueryBuffer->GetTriangleCollisionLineTestQueue()->GetLength();
+        siStat_NumTriColLineTestNear += lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->GetLength();
+
+        // ---- the three triangle-collision passes ---------------------------------------------
+        ProcessTriangleCollisionLineTests(lpCollisionGenerator,
+                                          lpTriCacheQueryBuffer->GetTriangleCollisionLineTestQueue(),
+                                          lpSceneOutputBuffer);
+        ProcessTriangleCollisionLineTestNearests(lpCollisionGenerator,
+                                                 lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue(),
+                                                 lpSceneOutputBuffer);
+        ProcessTriangleCollisionSphereTests(lpCollisionGenerator,
+                                            lpTriCacheQueryBuffer->GetTriangleCollisionSphereTestQueue(),
+                                            lpSceneOutputBuffer);
+
+        lpTriCacheQueryBuffer->UnlockForWrite();
+    }
+
+    // =========================================================================================
+    // ProcessLineTestNearest @ 0x828D38C0  (CgsSceneManagerBridgeFunctions.cpp:1198..)
+    //
+    // r3 = this, r4 = lpCollisionGenerator, r5 = lpTriCacheQueryBuffer, r6 = lpSpatialPartitionOut,
+    // r7 = lpQuery (InEventLineTestNearest, 64 bytes), r8 = lpSceneOutputBuffer.
+    //
+    // 1. WORLD-ONLY SHORT-CUT (0x828D38F4): if mx32EntityTypeFlags == 2 (exactly the world bit)
+    //    build an InEventTriangleCollisionLineTestNearest {start, end, queryId} and AddEvent it on
+    //    the TriCacheQueryBuffer's nearest queue (write-locked getter @0x828AFC48); return. The
+    //    race car's above-ground rays take this arm every frame.
+    // 2. Otherwise run the COARSE octree line query into the spatial-partition output's coarse
+    //    result buffer: BeginResultsBatch; mpSpatialPartition->LineTest(flags, start, end, buf)
+    //    (vtbl+24); read written / attempted / batch pointer; EndResultsBatch.
+    // 3. Resolve the exclude entity: if mExcludeEntityId != KU_INVALID_ENTITY_ID look it up
+    //    (EntityManager id->index, `short_5(this+2661568, id)` is the table probe); a missing
+    //    entity streams "Entity not found (LineTestNearest): <id>" (:1198). Then the two
+    //    consistency tripwires (:1201 query-id echo, :1203 attempted == written).
+    // 4. If the coarse pass produced candidates -- and they are not ONLY the excluded entity --
+    //    build the fine-module query {start, end, queryId, candidate indices, count,
+    //    excludeIndex, volumeTypeFlags, excludeParts = (meExclusionMode == 1)} and run
+    //    FineIntersectionTestModule::ComputeLineTestNearest (this+0x148C40); keep the result
+    //    when it reports an intersection.
+    // 5. If the world bit is NOT set (0x828D3B34..): publish the fine result if any (record type 2
+    //    via the typed AddEvent, VolumeInstanceId/EntityId resolved through the EntityManager's
+    //    index->id lookups), else the EMPTY result (zero position/normal, invalid ids, param 0.0,
+    //    mbIntersection 0).
+    // 6. If the world bit IS set: with no fine result, park the test on the TriCacheQueryBuffer
+    //    exactly as in step 1. With a fine result, ALSO test the line against the static world
+    //    synchronously (CollideLineAgainstPolySoupListNearest on &mTriangleCollisionManager --
+    //    this+0x3A82C0 IS the TriangleCollisionManager, whose first member is the
+    //    PolygonSoupListSpatialMap -- then Finish); if the world produced a result AND the fine
+    //    hit's line parameter is greater than the world hit's (vcmpgtfp on the +0x50 lane, ALL
+    //    lanes), publish the world hit through AddTriangleCollisionLineTestNearestResult with
+    //    the invalid entity / volume-instance ids; otherwise publish the fine result (step 5).
+    // =========================================================================================
+    void SceneManagerModule::ProcessLineTestNearest(
+        CgsCollision::BaseCollisionGenerator*          lpCollisionGenerator,
+        SceneManagerIO::TriCacheQueryBuffer*           lpTriCacheQueryBuffer,
+        SpatialPartitionIO::OutputBuffer*              lpSpatialPartitionOutputBuffer,
+        const SceneManagerIO::InEventLineTestNearest*  lpQuery,
+        SceneManagerIO::OutputBuffer*                  lpSceneOutputBuffer)
+    {
+        // The world bit of the entity-type flags (the `rlwinm r11, r11, 0,30,30` mask @0x828D3B38
+        // and the `cmplwi r11, 2` equality @0x828D38F4).
+        static const u32 KU_ENTITY_TYPE_FLAG_WORLD = 2u;
+
+        // ---- 1. world-only: hand the test straight to the triangle-collision pass ------------
+        if (lpQuery->mx32EntityTypeFlags == KU_ENTITY_TYPE_FLAG_WORLD)
+        {
+            SceneManagerIO::InEventTriangleCollisionLineTestNearest lTriangleTest;
+            lTriangleTest.mLineStart = lpQuery->mLineStart;   // stvx128 +0x00
+            lTriangleTest.mLineEnd   = lpQuery->mLineEnd;     // stvx128 +0x10
+            lTriangleTest.mQueryId   = lpQuery->mQueryId;     // stw     +0x20
+            lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->AddEvent(lTriangleTest);
+
+            if (SceneQueryDiagEnabled())
+            {
+                *CgsDev::Log::gpDebugPrint << "[scene-query] nearest world-only q="
+                    << lpQuery->mQueryId.mId
+                    << " start=(" << lpQuery->mLineStart.x << "," << lpQuery->mLineStart.y << "," << lpQuery->mLineStart.z
+                    << ") end.y=" << lpQuery->mLineEnd.y
+                    << " -> triCache nearest queue len="
+                    << lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->GetLength() << "\n";
+            }
+            return;
+        }
+
+        // ---- 2. the coarse octree pass -------------------------------------------------------
+        CoarseQueryResultBuffer<16384>* lpCoarseResults = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer();
+        lpCoarseResults->BeginResultsBatch();
+        mSpatialPartitionManager.GetSpatialPartition()->LineTest(lpQuery->mx32EntityTypeFlags,
+                                                                 lpQuery->mLineStart, lpQuery->mLineEnd,
+                                                                 lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+        const SceneQueryId lCoarseQueryId    = lpQuery->mQueryId;   // `lwz r24, 0x20(r31)` after the call
+        const s32  liNumResultsWritten       = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumResultsAttempted     = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpau16ResultsBatch        = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        // ---- 3. the exclude entity ------------------------------------------------------------
+        const bool lbExcludeParts = (lpQuery->meExclusionMode == SceneManagerIO::E_NEAREST_EXCLUDE_ALL_CHILD_PARTS);
+        u16 lu16ExcludeEntityIndex = 0xFFFF;
+        if (lpQuery->mExcludeEntityId != InvalidEntityId())
+        {
+            const s32 liIndex = mEntityManager.GetEntityIndexByID(lpQuery->mExcludeEntityId);
+            if (liIndex >= 0)
+            {
+                lu16ExcludeEntityIndex = static_cast<u16>(liIndex);
+            }
+            // :1198 -- "Entity not found (LineTestNearest): <id>" (the console streams the id).
+            CGS_ASSERT(lu16ExcludeEntityIndex != 0xFFFF, "Entity not found (LineTestNearest)");
+        }
+        CGS_ASSERT(lpQuery->mQueryId.mId == lCoarseQueryId.mId,
+                   "lpInputQuery->mQueryId == lpCoarseResult->mQueryId");                        // :1201
+        CGS_ASSERT(liNumResultsAttempted == liNumResultsWritten,
+                   "lpCoarseResult->miActualNumResults == lpCoarseResult->miNumResultsStored");   // :1203
+
+        // ---- 4. the fine module over the candidates -------------------------------------------
+        FineIntersectionTestIO::OutEventLineTestNearestResult  lFineResult;
+        const FineIntersectionTestIO::OutEventLineTestNearestResult* lpFineResult = 0;   // r22
+        if (liNumResultsWritten != 0 &&
+            !(liNumResultsWritten == 1 && lu16ExcludeEntityIndex == lpau16ResultsBatch[0]))
+        {
+            FineIntersectionTestIO::InEventLineTestNearest lFineQuery;
+            lFineQuery.mLineStart              = lpQuery->mLineStart;                  // +0x00
+            lFineQuery.mLineEnd                = lpQuery->mLineEnd;                    // +0x10
+            lFineQuery.mQueryId                = lpQuery->mQueryId;                    // +0x20
+            lFineQuery.mpau16EntityIndices     = lpau16ResultsBatch;                   // +0x24
+            lFineQuery.mu16NumEntities         = static_cast<u16>(liNumResultsWritten);// +0x28
+            lFineQuery.mu16ExcludeEntityIndex  = lu16ExcludeEntityIndex;               // +0x2A
+            lFineQuery.mxVolumeTypeFlags       = lpQuery->mxVolumeTypeFlags;           // +0x2C
+            lFineQuery.mbExcludeParts          = lbExcludeParts;                       // +0x2D
+
+            mFineIntersectionTestModule.ComputeLineTestNearest(&lFineQuery, &lFineResult);
+            if (lFineResult.mbIntersection)
+            {
+                lpFineResult = &lFineResult;
+            }
+        }
+
+        SceneManagerIO::OutSceneQueryResultsQueue<32768>* lpResultsQueue = lpSceneOutputBuffer->GetResultsQueue();
+
+        // ---- 6. the world bit is set: the static world competes with the fine hit ------------
+        if ((lpQuery->mx32EntityTypeFlags & KU_ENTITY_TYPE_FLAG_WORLD) != 0)
+        {
+            if (lpFineResult == 0)
+            {
+                SceneManagerIO::InEventTriangleCollisionLineTestNearest lTriangleTest;   // 0x828D3B54..
+                lTriangleTest.mLineStart = lpQuery->mLineStart;
+                lTriangleTest.mLineEnd   = lpQuery->mLineEnd;
+                lTriangleTest.mQueryId   = lpQuery->mQueryId;
+                lpTriCacheQueryBuffer->GetTriangleCollisionLineTestNearestQueue()->AddEvent(lTriangleTest);
+                return;
+            }
+
+            CgsGeometric::Line lLine;                                     // the two lanes at sp+0xC0/0xD0
+            lLine.mStart = LaneCopy(lpQuery->mLineStart);
+            lLine.mEnd   = LaneCopy(lpQuery->mLineEnd);
+            const u16 lu16ResultList = lpCollisionGenerator->CollideLineAgainstPolySoupListNearest(
+                lLine, mTriangleCollisionManager.GetPolySoupListSpacialMap(), 0, 0);   // 0x828D3BB0
+            lpCollisionGenerator->Finish();                                             // 0x828D3BBC
+
+            CgsCollision::CollisionResultList lResultList = lpCollisionGenerator->GetResultList(lu16ResultList);
+            if (lResultList.mu16NumResults != 0)                                        // lhz 0xC
+            {
+                const CgsCollision::CollisionResult* lpWorldResult = lResultList.GetResult(0);
+                if (lpWorldResult != 0)
+                {
+                    // 0x828D3C00..0x828D3C3C: splat the fine hit's mfLineParam and vcmpgtfp it
+                    // against the world result's +0x50 lane; the CR6 "all lanes true" bit decides.
+                    // +0x50 is the line-parameter lane of the CollisionResult record (the same
+                    // offset AddTriangleCollisionLineTestNearestResult reads as mfLineParam); the
+                    // record has no field-level DWARF in the corpus, so this is the documented
+                    // raw read the tree already uses for it.
+                    const Vector4& lrWorldParamLane =
+                        *reinterpret_cast<const Vector4*>(reinterpret_cast<const u8*>(lpWorldResult) + 0x50);
+                    const f32 lfFineParam = lpFineResult->mfLineParam;
+                    const bool lbWorldIsNearer = (lfFineParam > lrWorldParamLane.x) &&
+                                                 (lfFineParam > lrWorldParamLane.y) &&
+                                                 (lfFineParam > lrWorldParamLane.z) &&
+                                                 (lfFineParam > lrWorldParamLane.w);
+                    if (lbWorldIsNearer)
+                    {
+                        // 0x828D3C44..0x828D3C90: the world hit wins.
+                        CgsCollision::CollisionResultList lWinningList = lpCollisionGenerator->GetResultList(lu16ResultList);
+                        lpResultsQueue->AddTriangleCollisionLineTestNearestResult(
+                            lpQuery->mQueryId, InvalidEntityId(), InvalidVolumeInstanceId(),
+                            lWinningList.GetResult(0), true);
+                        return;
+                    }
+                }
+            }
+            // fall through: the fine hit stands (LABEL_27 with lpFineResult != 0)
+        }
+
+        // ---- 5. publish: the fine hit, or the empty result ------------------------------------
+        SceneManagerIO::OutEventLineTestNearestResult lResult;
+        if (lpFineResult == 0)
+        {
+            // 0x828D3CA8..0x828D3D00: the EMPTY record.
+            lResult.mPosition         = ZeroLane();                  // vspltisw v0, 0
+            lResult.mNormal           = ZeroLane();
+            lResult.mVolumeInstanceId = InvalidVolumeInstanceId();   // qword_82F33F70
+            lResult.mQueryId          = lpQuery->mQueryId;
+            lResult.mEntityId         = InvalidEntityId();           // dword_82F33F64
+            lResult.mfLineParam       = KF_NO_HIT_LINE_PARAM;        // flt_82001CC0
+            lResult.mu16MaterialTag   = 0;
+            lResult.mu16GroupTag      = 0;
+            lResult.mbIntersection    = false;
+        }
+        else
+        {
+            // 0x828D3D14..0x828D3DA0: the fine hit, its pool indices resolved back to ids.
+            lResult.mVolumeInstanceId = mEntityManager.GetVolumeInstanceIdByIndex(
+                                            static_cast<s32>(lpFineResult->muVolumeInstanceIndex));
+            lResult.mEntityId         = mEntityManager.GetEntityIdByIndex(lpFineResult->mu16EntityIndex);
+            lResult.mQueryId          = lpQuery->mQueryId;
+            lResult.mPosition         = lpFineResult->mPosition;
+            lResult.mNormal           = lpFineResult->mNormal;
+            lResult.mfLineParam       = lpFineResult->mfLineParam;
+            lResult.mu16MaterialTag   = lpFineResult->mu16MaterialTag;
+            lResult.mu16GroupTag      = lpFineResult->mu16GroupTag;
+            lResult.mbIntersection    = true;
+        }
+        lpResultsQueue->AddEvent<SceneManagerIO::OutEventLineTestNearestResult>(&lResult, 2);
+    }
+
+    // =========================================================================================
+    // ProcessTriangleCollisionLineTestNearests @ 0x828D4880  (the TriCollLTNs pass)
+    //
+    // r3 = this, r4 = lpCollisionGenerator, r5 = the merged nearest queue, r6 = lpSceneOutputBuffer.
+    //
+    //   StartMonitor(dword_82F33EF4)
+    //   dword_8308488C = max(dword_8308488C, queue.length)                  (high-water mark)
+    //   if (queue.length >= dword_82F33E44 /*100*/)  -> the JOB arm (0x828D48F0..0x828D4A70):
+    //       stream = the generator's line-vs-poly-soup stream (sub_82810FE8 == the
+    //       CgsCollisionGenerator.cpp:695/:715 "Failed to allocate stream producer/buffers"
+    //       creator); one 112-byte command per test through DataStreamCommandPoster;
+    //       RunCollideLineAgainstPolySoupList(gen, &mTriangleCollisionManager, stream, 1, 1, 0)
+    //       fans the batches out to PolygonSoupTesterEntry jobs; then one
+    //       AddTriangleCollisionLineTestNearestResult per test from the result iterator.
+    //   else                                          -> the DIRECT arm (0x828D4A80..0x828D4B30):
+    //       for each test: line = {event.mLineStart, event.mLineEnd};
+    //           idx = CollideLineAgainstPolySoupListNearest(gen, &line, &mTriangleCollisionManager, 0, 0);
+    //           Finish();
+    //           list = GetResultList(idx)  (the :303 "luIndex < mu16NumUsedResultLists" tripwire,
+    //                                       then the four-word copy)
+    //           if (list.mu16NumResults != 0)   (`HIWORD(v21)` == the +0xC halfword)
+    //               result = GetResultList(idx).GetResult(0)  (the :143 "lu16Index < mu16NumResults" tripwire)
+    //               AddTriangleCollisionLineTestNearestResult(queue, event.mQueryId, 0, 0, result, true)
+    //           else
+    //               AddTriangleCollisionLineTestNearestResult(queue, event.mQueryId, 0, 0, NULL, false)
+    //   StopMonitor(dword_82F33EF4)
+    //
+    // ⚠️ On the MISS path the console passes entity id 0 and volume-instance id 0 -- NOT the
+    // invalid sentinels ProcessLineTestNearest uses (`li r5,0 ; li r6,0` at 0x828D4A38 /
+    // 0x828D4B10). Reproduced literally: the consumer keys on mbIntersection, not on the ids.
+    //
+    // ⛔ The JOB arm is a LOUD trap this wave (its stream creator, the DataStreamCommandPoster
+    // command layout and the RunCollideLineAgainstPolySoupList batch descriptor are not in the
+    // tree). It is reached only with >= 100 world line tests in ONE query pass; this build's
+    // producers post one per live race car.
+    // =========================================================================================
+    void SceneManagerModule::ProcessTriangleCollisionLineTestNearests(
+        CgsCollision::BaseCollisionGenerator*                                  lpCollisionGenerator,
+        CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTestNearest, 256>* lpQueue,
+        SceneManagerIO::OutputBuffer*                                          lpSceneOutputBuffer)
+    {
+        StartPassMonitor(siProcessTriCollisionLineTestNearestsPerfMon);
+
+        if (lpQueue->GetLength() > siStat_MaxTriColLineTestNear)
+        {
+            siStat_MaxTriColLineTestNear = lpQueue->GetLength();
+        }
+
+        if (lpQueue->GetLength() >= KI_MIN_TRI_COL_LINE_TEST_NEARESTS_FOR_JOB)
+        {
+            CGS_ASSERT(false, "ProcessTriangleCollisionLineTestNearests @0x828D4880: the JOB arm (>= 100 tests; "
+                              "RunCollideLineAgainstPolySoupList @0x82811198 + its stream) is not reconstructed");
+        }
+        else
+        {
+            const s32 liCount = lpQueue->GetLength();
+            for (s32 li = 0; li < liCount; ++li)
+            {
+                const SceneManagerIO::InEventTriangleCollisionLineTestNearest& lrTest = lpQueue->GetEvent(li);
+
+                CgsGeometric::Line lLine;                                  // lvx/stvx at sp+0x90/0xA0
+                lLine.mStart = LaneCopy(lrTest.mLineStart);
+                lLine.mEnd   = LaneCopy(lrTest.mLineEnd);
+                const u16 lu16ResultList = lpCollisionGenerator->CollideLineAgainstPolySoupListNearest(
+                    lLine, mTriangleCollisionManager.GetPolySoupListSpacialMap(), 0, 0);
+                lpCollisionGenerator->Finish();
+
+                CgsCollision::CollisionResultList lResultList = lpCollisionGenerator->GetResultList(lu16ResultList);
+                SceneManagerIO::OutSceneQueryResultsQueue<32768>* lpResultsQueue = lpSceneOutputBuffer->GetResultsQueue();
+                if (lResultList.mu16NumResults != 0)
+                {
+                    CgsCollision::CollisionResultList lHitList = lpCollisionGenerator->GetResultList(lu16ResultList);
+                    const CgsCollision::CollisionResult* lpHit = lHitList.GetResult(0);
+                    if (SceneQueryDiagEnabled())
+                    {
+                        const f32 lfParam = *reinterpret_cast<const f32*>(reinterpret_cast<const u8*>(lpHit) + 0x50);
+                        const Vector3& lrPos = *reinterpret_cast<const Vector3*>(reinterpret_cast<const u8*>(lpHit) + 0x40);
+                        *CgsDev::Log::gpDebugPrint << "[scene-query] world nearest HIT q=" << lrTest.mQueryId.mId
+                            << " t=" << lfParam << " pos=(" << lrPos.x << "," << lrPos.y << "," << lrPos.z << ")\n";
+                    }
+                    lpResultsQueue->AddTriangleCollisionLineTestNearestResult(
+                        lrTest.mQueryId, EntityId(0u), ZeroVolumeInstanceId(), lpHit, true);
+                }
+                else
+                {
+                    if (SceneQueryDiagEnabled())
+                    {
+                        *CgsDev::Log::gpDebugPrint << "[scene-query] world nearest MISS q="
+                            << lrTest.mQueryId.mId << " (result list empty)\n";
+                    }
+                    lpResultsQueue->AddTriangleCollisionLineTestNearestResult(
+                        lrTest.mQueryId, EntityId(0u), ZeroVolumeInstanceId(), 0, false);
+                }
+            }
+        }
+
+        StopPassMonitor(siProcessTriCollisionLineTestNearestsPerfMon);
+    }
+
+    // =========================================================================================
+    // THE TWO COARSE HANDLERS WITH A PRODUCER ON THIS BUILD.
+    //
+    // Both follow the same four acts, which is the coarse pass's whole contract:
+    //   BeginResultsBatch on the spatial-partition output buffer's coarse result buffer;
+    //   run the broad phase, which pushes one u16 ENTITY INDEX per hit into that batch;
+    //   read the batch back (written count, attempted count, run start) and EndResultsBatch;
+    //   allocate one variable-size event on the scene output's results queue and copy the run
+    //     out as public EntityIds -- three header words then one id per result.
+    // The attempted count is carried separately because the result buffer caps what it stores:
+    // a consumer that sees attempted > results knows its answer was truncated.
+    //
+    // Both also open with the same tripwire. Bit 1 of a query's entity-type flags is the WORLD
+    // bit, and the broad phase does not hold the world: a coarse query that asks for it is a
+    // producer bug, not an empty answer.
+    // =========================================================================================
+
+    // =========================================================================================
+    // ProcessCoarseSphereTest
+    //
+    // One coarse sphere query. Its producer is the traffic module's player-centred "nearby
+    // traffic" request, whose results feed the traffic AI on the following frame.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseSphereTest(
+        SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+        const CgsModule::Event*           lpEvent,
+        SceneManagerIO::OutputBuffer*     lpSceneOutputBuffer)
+    {
+        const SceneManagerIO::InEventSphereTest& lrQuery =
+            *static_cast<const SceneManagerIO::InEventSphereTest*>(lpEvent);
+
+        CGS_ASSERT((lrQuery.mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        mSpatialPartitionManager.GetSpatialPartition()->SphereTest(
+            lrQuery.mx32EntityTypeFlags, lrQuery.mCentre, lrQuery.mfRadius,
+            lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+        const SceneQueryId lQueryId = lrQuery.mQueryId;
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
+    }
+
+    // =========================================================================================
+    // ProcessCoarseFrustumTestVp
+    //
+    // One coarse view-projection frustum query. Its producer is the per-race-car AI visibility
+    // query -- a wide, shallow slab centred ahead of the car.
+    //
+    // The query's flag word carries an optional four-seat relationship with the OTHER queries in
+    // the same pass: bit i CLAIMS seat i for this query (its result run is published into the
+    // seat for later queries to reuse), and bit 4+i says this query is a SUBSET of seat i -- it
+    // skips the tree entirely and re-tests only the entities that seat already holds. The first
+    // matching bit wins; with no bits set the query is a plain tree walk that claims nothing.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseFrustumTestVp(
+        SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer,
+        const CgsModule::Event*           lpEvent,
+        s32*                              lpaPreviousNumResults,
+        const u16**                       lpaPreviousResults,
+        SceneManagerIO::OutputBuffer*     lpSceneOutputBuffer)
+    {
+        const SceneManagerIO::InEventFrustumTestVp& lrQuery =
+            *static_cast<const SceneManagerIO::InEventFrustumTestVp*>(lpEvent);
+
+        CGS_ASSERT((lrQuery.mx32EntityTypeFlags & KX_COARSE_QUERY_WORLD_TYPE_BIT) == 0,
+                   "World volume tests not currently supported");
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->BeginResultsBatch();
+
+        // Which seat this query relates to, and how.
+        s32  liClaimedSeat = -1;
+        bool lbNarrowed    = false;
+        if (lrQuery.mxQueryFlags != 0)
+        {
+            for (s32 liSeat = 0; liSeat < KI_COARSE_FRUSTUM_QUERY_SEATS; ++liSeat)
+            {
+                if (((1u << liSeat) & lrQuery.mxQueryFlags) != 0)
+                {
+                    liClaimedSeat = liSeat;
+                    break;
+                }
+                if (((16u << liSeat) & lrQuery.mxQueryFlags) != 0)
+                {
+                    CGS_ASSERT(lpaPreviousNumResults[liSeat] != -1,
+                               "Bad subset index. No matching union test found");
+
+                    // The narrowing form: re-test seat i's published result run against this
+                    // query's frustum instead of walking the tree. The run still lives in the
+                    // coarse result buffer -- BeginResultsBatch only moved the write cursor
+                    // past it -- so the earlier pointer stays valid for the whole pass.
+                    // Note the argument order: the frustum leads, the entity-type flags follow,
+                    // and the run is (pointer, count) in that order.
+                    mSpatialPartitionManager.GetSpatialPartition()->FrustumTestEntities(
+                        *reinterpret_cast<const CgsGeometric::Frustum*>(lrQuery.maFrustumPlanes),
+                        lrQuery.mx32EntityTypeFlags,
+                        lpaPreviousResults[liSeat],
+                        lpaPreviousNumResults[liSeat],
+                        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+                    lbNarrowed = true;
+                    break;
+                }
+            }
+        }
+
+        if (!lbNarrowed)
+        {
+            mSpatialPartitionManager.GetSpatialPartition()->FrustumTestVp(
+                lrQuery.mx32EntityTypeFlags,
+                *reinterpret_cast<const CgsGeometric::Frustum*>(lrQuery.maFrustumPlanes),
+                lrQuery.mViewProjection,
+                lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer());
+
+            if (liClaimedSeat != -1)
+            {
+                lpaPreviousNumResults[liClaimedSeat] =
+                    lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+                lpaPreviousResults[liClaimedSeat] =
+                    lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+            }
+        }
+
+        const SceneQueryId lQueryId = lrQuery.mQueryId;
+
+        const s32  liNumResults   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsWritten();
+        const s32  liNumAttempted = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetNumResultsAttempted();
+        const u16* lpu16Results   = lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->GetResultsBatch();
+
+        lpSpatialPartitionOutputBuffer->GetCoarseResultBuffer()->EndResultsBatch();
+
+        EmitCoarseQueryResult(mEntityManager, lpSceneOutputBuffer, lQueryId, liNumResults,
+                              liNumAttempted, lpu16Results);
+    }
+
+    // =========================================================================================
+    // ProcessTriangleCollisionSphereTests -- the pass that was never implemented.
+    // =========================================================================================
+    void SceneManagerModule::ProcessTriangleCollisionSphereTests(CgsCollision::BaseCollisionGenerator*,
+                                                                 CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionSphereTest, 256>* lpQueue,
+                                                                 SceneManagerIO::OutputBuffer*)
+    {
+        // NOT a trap: this IS the console's body. The triangle-collision sphere pass was never
+        // implemented in the shipping build -- the handler reads its queue length and, if
+        // anything was queued, logs the request and fires "not supported yet". An empty queue
+        // is silent. Its two siblings in the same pass are real handlers; this one never was.
+        if (lpQueue->GetLength() > 0)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "Triangle collision sphere test requested\n";
+            }
+
+            CGS_ASSERT(false, "Triangle sphere tests not supported yet");
+        }
+    }
+
+    // =========================================================================================
+    // THE NINE SIBLING HANDLERS -- LOUD TRAPS, each carrying its console address.
+    //
+    // None of them has a producer on this build: the coarse queue's remaining record kinds come
+    // from the entity modules' SceneQueryInterface coarse tests (all still gated), and the fine
+    // LineFine / FastDS / SphereFast / VolumeDeepest / VolumeFine queues are fed by the
+    // race-car / traffic / trigger post-scene bridges, which are WorldLinkStubs gates. A trap
+    // here is therefore unreachable today and becomes the FIRST thing a future producer hits --
+    // which is the point: never a quiet "no result" for a query somebody asked.
+    // =========================================================================================
+    void SceneManagerModule::ProcessCoarseLineTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseLineTest @0x828C6D78 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessCoarseVolumeTest(const CgsModule::Event*, SpatialPartitionIO::OutputBuffer*, SceneManagerIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseVolumeTest @0x828C62C0 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessCoarseFrustumTest(SpatialPartitionIO::OutputBuffer*, const CgsModule::Event*, SceneManagerIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessCoarseFrustumTest @0x828C6918 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessLineTestFine(CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                                 SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFine*,
+                                                 SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessLineTestFine @0x828CDCD0 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessLineTestFastDoubleSided(CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                                            SpatialPartitionIO::OutputBuffer*, const SceneManagerIO::InEventLineTestFastDoubleSided*,
+                                                            SceneManagerIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessLineTestFastDoubleSided @0x828D3DB0 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessSphereTestFast(CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                                   const SceneManagerIO::InEventSphereTestFast*, SpatialPartitionIO::OutputBuffer*,
+                                                   SceneManagerIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessSphereTestFast @0x828D4090 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessVolumeTestDeepest(CgsCollision::BaseCollisionGenerator*, SceneManagerIO::TriCacheQueryBuffer*,
+                                                      const SceneManagerIO::InEventVolumeTestDeepest*, SpatialPartitionIO::OutputBuffer*,
+                                                      SceneManagerIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessVolumeTestDeepest @0x828D4460 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessFineVolumeTest(const SceneManagerIO::InEventVolumeTestFine*, SpatialPartitionIO::OutputBuffer*,
+                                                   SceneManagerIO::OutputBuffer*, FineIntersectionTestIO::OutputBuffer*)
+    {
+        CGS_ASSERT(false, "SceneManagerModule::ProcessFineVolumeTest @0x828CE328 is not reconstructed");
+    }
+    void SceneManagerModule::ProcessTriangleCollisionLineTests(CgsCollision::BaseCollisionGenerator*,
+                                                               CgsModule::EventQueue<SceneManagerIO::InEventTriangleCollisionLineTest, 256>* lpQueue,
+                                                               SceneManagerIO::OutputBuffer*)
+    {
+        // The console runs the pass unconditionally; with an EMPTY queue it does nothing but
+        // its monitor bracket, so an empty queue is not a reason to trap. Only actual work is.
+        StartPassMonitor(siProcessTriCollisionLineTestsPerfMon);
+        CGS_ASSERT(lpQueue->GetLength() == 0,
+                   "SceneManagerModule::ProcessTriangleCollisionLineTests @0x828C6FB0 is not reconstructed (tests were queued)");
+        StopPassMonitor(siProcessTriCollisionLineTestsPerfMon);
+    }
+}
+
+// ============================================================================
+// FOLDED FROM CgsSceneManagerModule_wG_ExternalQueries.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===========================================================================
+// CgsSceneManagerModule_wG_ExternalQueries.cpp
+//   (GameShared/GameClasses/SceneManager)
+//
+// CgsSceneManager::SceneManagerModule::ExternalSceneQueriesUpdate -- the scene
+// module's service point for queries submitted from OUTSIDE the world module (on
+// this build, the director's camera collision / line-of-sight). Same coarse-then-
+// fine machinery as the world's own pass, on a separately stacked buffer pair.
+//
+// The console's forwarder is a tail-jump into the module vtable's slot 17 (+68),
+// ProcessSceneQueries, whose four parameters are the four forwarded here. The
+// caller's fifth argument (the frame update set) is not consumed by the target and
+// stops at the world-module boundary, so it is not accepted here. The whole console
+// function is that one dispatch.
+// ===========================================================================
+
+
+namespace CgsSceneManager
+{
+
+// ===========================================================================
+// SceneManagerModule::ExternalSceneQueriesUpdate   (the vtbl+68 dispatch)
+// ===========================================================================
+void SceneManagerModule::ExternalSceneQueriesUpdate(
+        CgsModule::IOBufferStack* lpInputBufferStack,
+        CgsModule::IOBufferStack* lpOutputBufferStack,
+        SceneManagerIO::InputBuffer_Query* lpQueryInput,
+        SceneManagerIO::OutputBuffer* lpQueryOutput )
+{
+    ProcessSceneQueries( lpInputBufferStack, lpOutputBufferStack,
+                         lpQueryInput, lpQueryOutput );
+}
+
+} // namespace CgsSceneManager

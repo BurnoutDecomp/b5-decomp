@@ -116,6 +116,13 @@
 #include <cstdlib>   // std::getenv (the BRN_PROP_DIAG latch)
 #include <cstring>   // std::memcpy (reading a lane's raw bit pattern)
 
+// includes folded in from the ContactGeneratorJob_w*.cpp partfiles (2026-09-15)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"               // CgsGeometric::Box
+#include "GameShared/GameClasses/Geometric/Primitives/CgsCapsule.h"           // CgsGeometric::Capsule
+#include "GameShared/GameClasses/Geometric/Primitives/CgsCylinder.h"          // CgsGeometric::Cylinder
+#include <stdlib.h>   // getenv (the [DIAG] latch, host only)
+#include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsSphereList.h"
+
 // The six per-job-thread contexts. X360 base unk_831BBF80, stride 0x10300, bound 6 --
 // all three read out of ContactGeneratorEntry @0x82920F10 (see ContactGenerator.cpp).
 ContactGeneratorJob gaContactGeneratorJobs[KI_NUM_CONTACT_GENERATOR_JOBS];
@@ -1741,3 +1748,1025 @@ void ContactGeneratorJob::ExecutePrimitivePairList()
 // The earlier prop narrow-phase gate went the same way one wave before this
 // (2026-08-19, wave Q6 cluster pvt: ExecutePrimitiveListWithTriangleList @0x82925908).
 // =============================================================================================
+
+// ============================================================================
+// FOLDED FROM ContactGeneratorJob_wQ6_01.cpp (wave Q6) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// GameShared/Jobs/ContactGenerator/ContactGeneratorJob_wQ6_01.cpp
+//
+// ⭐⭐⭐ THE TWO GP KERNELS OF THE PROP NARROW PHASE. A partfile of ContactGeneratorJob.cpp
+// (wave Q6, cluster `gpi`, 2026-08-19) holding the two members that
+// ContactGeneratorJob::ExecutePrimitiveListWithTriangleList @0x82925908 calls and that had NO
+// body anywhere in the tree:
+//
+//   ContactGeneratorJob::BuildGPInstance    @0x829222A0  (258)  :1660 :1699
+//   ContactGeneratorJob::CollideGPInstances @0x829253C8  (244)  :1279 :1286 :1287 :1288
+//
+// ⚠️ 258 vs 254: `(0x829226A4 - 0x829222A0)/4 + 1` counts 258 WORDS in the .text run, but the
+// export's `assembly` array has 254 ROWS, because the five-entry jump table at
+// 0x829222D0..0x829222E0 is one `.long` row. Both numbers are right about different things; the
+// sibling header quotes 258. No instruction is missing from the decode.
+//
+// The console's own path for both is the SAME TU as the rest of the family -- every assert here
+// passes the string
+//   D:\P4\B5_MAIN\Burnout\MAIN\Code\GameShared\Jobs\ContactGenerator\ContactGeneratorJob.cpp
+// so this is a partfile of that TU, split only because ContactGeneratorJob.cpp is owned by a
+// concurrent session in this wave. FOLLOW-UP: fold it back into ContactGeneratorJob.cpp when
+// nobody is editing that file; there is no reason for two TUs beyond the ownership split.
+//
+// ─── WHERE THIS SITS IN THE BREAKABLE-PROPS CHAIN ────────────────────────────────────────────
+//   PropManager::DoPart/DoPropInstanceWorldContactGeneration
+//     -> PrimitivePairListBuilder::AddPrimitive(...)             (packs a primitive into the blob)
+//     -> AddPrimitiveListWithTriangleListToStream                (posts one command)
+//     -> RunCollidePrimitiveListWithTriangleListStream           (desc type 12)
+//        -> ContactGeneratorJob::Execute case 12
+//           -> ExecutePrimitiveListWithTriangleListStream        (wave Q6 / pstream)
+//              -> ExecutePrimitiveListWithTriangleList @0x82925908   (wave Q6 / pvt)
+//                 -> BuildGPInstance     <-- THIS FILE: one packed primitive -> one GPInstance
+//                 -> CollideGPInstances  <-- THIS FILE: GPInstance pair -> PrimitiveTestResults
+// Nothing below this line runs the SAT/feature machinery itself: `CollideGPInstances` is a thin
+// adaptor onto the already-real vendor kernel rw::collision::ComputeContactPoints @0x82BABDA8
+// (src/vendor/renderware/collision/PrimitiveIntersect.cpp, mounted bat:2111), whose own banner
+// already names this function as its caller.
+//
+// =================================================================================================
+// ─── 1. BuildGPInstance @0x829222A0 -- REGISTER MAP AND DISPATCH ─────────────────────────────
+//
+// Read off the call site in ExecutePrimitiveListWithTriangleList (0x829261C8..0x829261EC), which
+// is the only caller in the image:
+//     0x829261C8  lbz  r30, iterator.mCurrentHeader.mu8PrimTypeA   -> r4  the TYPE BYTE
+//     0x829261CC  lhz  r15, iterator.mCurrentHeader.mu16PrimitiveATag -> r7  the TAG
+//     0x829261D0  addi r14, r1, var_1A0                            -> r6  the DESTINATION
+//     0x829261D4  bl   PrimitivePairList::Itterator::GetPrimativeA -> r5  the PACKED DATA
+//     0x829261EC  bl   BuildGPInstance
+// so: r3 = this (NEVER READ -- case 4 overwrites r3 with `addi r3, r5, 0x40` as its first
+// instruction), r4 = EVolumeType, r5 = the packed primitive, r6 = the GPInstance to fill,
+// r7 = the caller tag (zero-extended from 16 bits at every arm: `clrlwi r7, r7, 16`).
+//
+// The body is a 5-case jump table on `r4 - 1` (`addi r11, r4, -1 ; cmplwi cr6, r11, 4 ; bgt
+// default`), i.e. exactly PrimitivePairList::EVolumeType 1..5, with the INVALID (0) and any
+// out-of-range value falling into the `false` assert. Jump-table targets, from the listing's own
+// case labels: case 0 -> 0x829223B0 (SPHERE), 1 -> 0x8292242C (CAPSULE), 2 -> 0x829224F4
+// (4TRIANGLES -> assert), 3 -> 0x829222E4 (BOX), 4 -> 0x82922534 (CYLINDER).
+//
+// ⚠️ NO RETURN VALUE. IDA types it `int` because r3 is live at the `b __restgprlr_26`, but every
+// arm leaves r3 holding a dead scratch (case 1 leaves 1, case 5 leaves 0, case 4 leaves a stack
+// address) and the call site never reads it. void.
+//
+// ─── THE FIVE ARMS, STORE FOR STORE ──────────────────────────────────────────────────────────
+// Common to every non-asserting arm (offsets are the console's; the host reaches them by name):
+//     stw r7,   0x84  mVolumeTag  = tag      <-- BOTH tag words get the SAME caller tag; this is
+//     stw r7,   0x88  mUserTag    = tag          NOT the `mVolumeTag = this, mUserTag = 0` shape
+//                                                the rw Volume::CreateGPInstance siblings use.
+//     stw ...,  0x94  mFlags      = 0        (li r26/r10/r3, 0 -- never the volume's flag word)
+//     4 x lwz/stw -> +0xA4  mMethods = g_aGPVolumeMethods[type]
+//
+//  SPHERE (type 1, 16-byte CgsGeometric::Sphere -- KAU16_VOLUME_SIZES[1] == 16):
+//     stvx128 v0, r0, r6         mPos = src[+0x00]  ALL FOUR LANES (the radius rides in w)
+//     stb 0, 0x8C / stb 0, 0x8D  mNumFaceNormals = mNumEdgeDirections = 0
+//     stw 1, 0x90                mVolumeType = GPInstance::SPHERE
+//     vspltw v13,v0,3 -> stfs    mFatness = src[+0x00].w  (the radius)
+//     mMethods <- off_82F91900 == unk_82F918F0 + 1*0x10, i.e. ROW 1
+//
+//  CAPSULE (type 2, 32-byte CgsGeometric::Capsule -- KAU16_VOLUME_SIZES[2] == 32):
+//     stvx128 v0, r0, r6         mPos = src[+0x00]  (position.xyz, radius in w)
+//     stvx128 v13, r6, 0x40      mEdgeDirections[0] = src[+0x10] (direction.xyz, length in w)
+//     stb 0, 0x8C / stb 1, 0x8D  mNumFaceNormals = 0, mNumEdgeDirections = 1
+//     stw 2, 0x90                mVolumeType = GPInstance::CAPSULE
+//     vspltw v11,v0,3  -> stfs   mFatness      = src[+0x00].w  (the radius)
+//     the +0x70 READ-MODIFY-WRITE round trip (lvx128 +0x70 ; stvx128 stack ; stfs lane 0 ;
+//     lvx128 stack ; stvx128 +0x70)  ->  mDimensions.x = src[+0x10].w  (the length)
+//        ⚠️ LANES y/z/w OF mDimensions ARE LEFT EXACTLY AS THE CALLER'S BUFFER HAD THEM -- not
+//        zeroed. Identical treatment to the committed CapsuleVolume::CreateGPInstance.
+//     mMethods <- unk_82F918F0[type], the type RE-READ from +0x90 (`lwz r9, 0x90(r6)`)
+//
+//  4TRIANGLES (type 3): assert only, ContactGeneratorJob.cpp:1660,
+//     "Are you mad? Triangle-Triangle collision" -- and NOTHING is written to the instance.
+//     (The triangle side of this worker never comes through here: the caller builds its four
+//     triangle GPInstances from Triangle4::GetAOSTriangle, not from the pair blob.)
+//
+//  BOX (type 4, 80-byte CgsGeometric::Box -- KAU16_VOLUME_SIZES[4] == 80):
+//     stvx128 v11, r0, r6        mPos = src[+0x30]  (the transform's CENTRE row)
+//     stvx128 v0,  r6, 0x10      mFaceNormals[0]    = src[+0x00]  (Right)
+//     stvx128 v0,  r6, 0x40      mEdgeDirections[0] = src[+0x00]     the SAME row twice
+//     stvx128 v13, r6, 0x20      mFaceNormals[1]    = src[+0x10]  (Up)
+//     stvx128 v13, r6, 0x50      mEdgeDirections[1] = src[+0x10]
+//     stvx128 v12, r6, 0x30      mFaceNormals[2]    = src[+0x20]  (At)
+//     stvx128 v12, r6, 0x60      mEdgeDirections[2] = src[+0x20]
+//     stvx128 v10, r6, 0x70      mDimensions        = src[+0x40]  ALL FOUR LANES
+//     stb 3, 0x8C / stb 3, 0x8D  mNumFaceNormals = mNumEdgeDirections = 3
+//     stw 4, 0x90                mVolumeType = GPInstance::BOX
+//     vspltw v9,v9,3 -> stfs     mFatness = src[+0x40].w
+//     mMethods <- off_82F91930 == unk_82F918F0 + 4*0x10, i.e. ROW 4
+//
+//  CYLINDER (type 5, 80-byte CgsGeometric::Cylinder -- KAU16_VOLUME_SIZES[5] == 80):
+//     stvx128 v12, r0, r6        mPos = src[+0x30]  (the CENTRE row)
+//     stvx128 v0,  r6, 0x10      mFaceNormals[0]    = src[+0x20]   <-- THE AXIS
+//     stvx128 v0,  r6, 0x40      mEdgeDirections[0] = src[+0x20]   <-- the same row
+//     stvx128 v11, r6, 0x20      mFaceNormals[1]    = src[+0x10]
+//     stvx128 v13, r6, 0x30      mFaceNormals[2]    = src[+0x00]
+//     stb 1, 0x8C / stb 1, 0x8D  mNumFaceNormals = mNumEdgeDirections = 1
+//     stw 5, 0x90                mVolumeType = GPInstance::CYLINDER
+//     lvlx v10, r5, 0x44 ; vspltw 0 ; two round trips through +0x70:
+//                                mDimensions.x = the f32 at src[+0x44]   (Cylinder::mfLength)
+//     lvlx v9,  r5, 0x40 ; vspltw 0:
+//                                mDimensions.y = the f32 at src[+0x40]   (Cylinder::mfRadius)
+//     lfs f0, flt_82001CC0 -> stfs 0x80   mFatness = 0.0f   (see the constant below)
+//     mMethods <- unk_82F918F0[type], the type RE-READ from +0x90
+//
+// ⭐ THREE INDEPENDENT CROSS-CHECKS OF THAT TABLE, none of them this cluster's own reasoning.
+//  1. The committed rw::collision Volume producers fill the SAME GPInstance slots from the SAME
+//     kind of source and agree lane for lane:
+//       BoxVolume::CreateGPInstance      @0x82BA92E8 (BoxVolume.cpp:663)   -- rows 0/1/2 into
+//         mFaceNormals[0..2] AND mEdgeDirections[0..2], row 3 into mPos, 3/3 counts;
+//       CapsuleVolume::CreateGPInstance  @0x82BAF5F8 (CapsuleVolume.cpp:161) -- axis into
+//         mEdgeDirections[0], centre into mPos, 0/1 counts, mDimensions.x = half height and the
+//         SAME "+0x70 lane-x-only round trip, y/z/w survive" note;
+//       CylinderVolume::CreateGPInstance @0x82BAC7F8 (CylinderVolume.cpp:276) -- frame[1] into
+//         mFaceNormals[1], frame[0] into mFaceNormals[2], frame[2] into BOTH mFaceNormals[0] and
+//         mEdgeDirections[0], frame[3] into mPos, 1/1 counts, mDimensions.x then .y.
+//     The cylinder permutation in particular (rows landing 2/1/0 in slots 0/1/2) is a strange
+//     enough shape that two producers agreeing on it is real evidence.
+//  2. PrimitivePairList::KAU16_VOLUME_SIZES (rodata word_820DA934, dumped from the image in
+//     CgsPrimitivePairList.cpp:164) is { 0, 16, 32, 224, 80, 80 }. Every arm above reads exactly
+//     up to its type's size and no further: 16 / 32 / 80 / 0x48-of-80.
+//  3. The CgsGeometric primitive layouts landed by round 2's `addprim` cluster from the OTHER
+//     end of the pipe (PrimitivePairListBuilder::AddPrimitive's per-type packers) match slot for
+//     slot: Sphere{Vector4 mPositionRadius}, Capsule{Vector3Plus mPositionAndRadius,
+//     mDirectionAndLength}, Box{Matrix44Affine mTransform, Vector3Plus mDimensionsAndFatness},
+//     Cylinder{Matrix44Affine mTransform, f32 mfRadius @+0x40, f32 mfLength @+0x44}.
+//
+// ⭐ A MEASUREMENT THIS BODY CLOSES FOR A HEADER IT DOES NOT OWN.
+// CgsCylinder.h documents CgsGeometric::Cylinder::GetDirection as "DECLARED ONLY ... the
+// cylinder's axis is one of the three basis rows of mTransform and NOTHING MEASURED SAYS WHICH".
+// This body says which: the CYLINDER arm puts src[+0x20] -- mTransform.At() / zAxis -- into
+// GPInstance::mEdgeDirections[0] and mFaceNormals[0], which are the two slots GPCylinder's SAT
+// callbacks read as THE AXIS, and CylinderVolume::CreateGPInstance independently puts ITS axis
+// row (maFrame[2]) in the same two slots. Reported, NOT edited (CgsCylinder.h is not this
+// cluster's file) -- see the owner record.
+// Same shape, same caveat: the lane that CylinderVolume fills from `mfHalfHeight` is the lane
+// this body fills from `CgsGeometric::Cylinder::mfLength`, so that field is a HALF-length in GP
+// terms. Reported, not renamed.
+//
+// =================================================================================================
+// ─── 2. CollideGPInstances @0x829253C8 -- THE ABI TRAP AND THE RECORD ────────────────────────
+//
+// ⚠️⚠️ GOTCHA 3 IS LIVE HERE, AND IT IS THE ONLY REASON THIS SIGNATURE IS NOT OBVIOUS. The
+// prologue never reads r6 (`addi r6, r1, var_280` at 0x829253E4 overwrites it before any use)
+// while it does use r7/r8/r9/r10 AND f1. On this ABI a float argument consumes BOTH an FPR and
+// its positional GPR slot, so r6 is the SKIPPED slot of the third parameter:
+//     r3 = this
+//     r4 = const GPInstance*  gp1        (-> ComputeContactPoints' first operand)
+//     r5 = const GPInstance*  gp2        (-> its second)
+//     f1 = f32 padding                   (r6 slot BURNED; stored to the stack at 0x829253D8 and
+//                                         passed by address, because the vendor kernel takes it
+//                                         as `const f32&`)
+//     r7 = u16   -> record +0x48   muPrimitive0Index
+//     r8 = u16   -> record +0x4A   muPrimitive1Index
+//     r9 = u16   -> record +0x4C   mu16TestIndex
+//     r10 = CollisionResultList*
+// Confirmed at all four call sites in ExecutePrimitiveListWithTriangleList (0x829262B8,
+// 0x829263AC, 0x829264A4, 0x8292659C): every one sets r4/r5/r7/r8/r9/r10 and f1 and NEVER r6,
+// and r8 is `r27*4 + lane` for lane 0..3 -- the triangle index of the Triangle4 block's lane,
+// exactly the muPrimitive0Index/muPrimitive1Index vocabulary the sphere worker already uses.
+//
+// ⚠️ NO RETURN VALUE (IDA's `unsigned int` is the trailing PrintStringed's r3; the call sites
+// read r28, never r3). void.
+//
+// THE 80-BYTE RECORD, built once on the stack and copied per contact pair with a 10 x ld/std
+// loop at `results + 80*index` (`rotlwi r7, idx, 2 ; add ; slwi 4` == idx*80):
+//     +0x00  mPrimitive0Normal  = lStackResult.normal      <-- the SAME vector in both normal
+//     +0x10  mPrimitive1Normal  = lStackResult.normal          slots (one v0, two stvx128)
+//     +0x20  mPrimitive0Contact = pointPairs[i].p1   (the gp1 side)
+//     +0x30  mPrimitive1Contact = pointPairs[i].p2   (the gp2 side)
+//     +0x40  muPrimitive0Tag    = lStackResult.volumeTag1
+//     +0x44  muPrimitive1Tag    = lStackResult.volumeTag2
+//     +0x48/+0x4A/+0x4C        = the three u16 arguments, stored ONCE before the kernel call
+//     +0x4E  muPad              NEVER WRITTEN -- console stack garbage travels into the queued
+//                               copy. Zero-initialised here instead (deterministic; garbage is
+//                               not reproducible), exactly as ExecuteSphereListWithTriangleList
+//                               already does for the same field.
+// `lStackResult` is the console's own local name, recovered from the assert strings.
+//
+// THE COUNT BUMP, verbatim (0x82925754..0x82925784) -- TWO halfword stores, not one:
+//     lhz num, +0xC ; lhz max, +0xA ; addi num+1 ; sth num+1, +0xC     <-- unconditional
+//     if (num+1 >= max) r9 = max-1                                     <-- clamp
+//     sth r9, +0xC                                                    <-- second store
+// i.e. the live count is published, then clamped so an overflowing list keeps overwriting its
+// LAST slot. Reproduced as the two stores it is. (The sphere/swept workers do the same clamp
+// against a local header copy; this worker has no local header -- it reads and writes the
+// caller's CollisionResultList in place, `lwz/lhz/sth 0(r29)/0xA(r29)/0xC(r29)`.)
+//
+// ⚠️ THE RESULTS BUFFER IS THE 80-BYTE CARVE, NOT CollisionResult'S 112. The list was allocated
+// by BaseCollisionGenerator::PrepareNewPrimitiveTestResultsList (80 * max, meResultType == 0),
+// so mpResults is reinterpreted as PrimitiveTestResult[] -- the same reinterpretation, for the
+// same reason, that ContactGeneratorJob.cpp:626 already makes.
+//
+// ⚠️ NaN POLARITY (gotcha 4). The three validity asserts are `vcmpeqfp. vX, vX, vX` self-
+// compares on lanes 0/1/2 only, one splat at a time: a lane equals itself iff it is not NaN, and
+// the w lane is NEVER tested. Written as `x == x && y == y && z == z`, the idiom this tree
+// already uses at CgsLine.cpp:26 and CgsTriangle4.cpp:39. Both compile under /fp:precise.
+//
+// PC LOWERING, stated once: the console's VMX whole-register moves (lvx128/stvx128) are written
+// here as four-lane copies through the two vector vocabularies this TU straddles --
+// rw::collision::Vec4 on the GPInstance/ContactPoints side and rw::math::vpu::Vector3(Plus) on
+// the CgsGeometric/PrimitiveTestResult side. Both are {f32 x,y,z,w} at 16 bytes, so the copy is
+// exact; the helpers below exist so that no lane is ever dropped by an accessor that zeroes w.
+// =================================================================================================
+
+// (preprocessor / using lines carried from the partfile's include region)
+using CgsSceneManager::CgsCollision::CollisionResultList;
+using CgsSceneManager::CgsCollision::PrimitivePairList;
+using CgsSceneManager::CgsCollision::PrimitiveTestResult;
+using rw::collision::GPInstance;
+
+namespace
+{
+    // ---------------------------------------------------------------------------------------
+    // Lane-exact bridges between the two 16-byte vector vocabularies. The console moves these
+    // rows with a single lvx128/stvx128 pair -- ALL FOUR LANES, including w -- so none of these
+    // may go through an accessor that manufactures a zero w (CgsGeometric's GetPosition() /
+    // GetDimensions() do exactly that, which is why the packed w lanes below are re-attached
+    // from the matching GetRadius()/GetLength()/GetFatness() broadcast instead).
+    // ---------------------------------------------------------------------------------------
+    template <typename TSourceVector>
+    inline rw::collision::Vec4 AsVec4(const TSourceVector& arSource)
+    {
+        rw::collision::Vec4 lvResult;
+        lvResult.x = arSource.x;
+        lvResult.y = arSource.y;
+        lvResult.z = arSource.z;
+        lvResult.w = arSource.w;
+        return lvResult;
+    }
+
+    inline rw::collision::Vec4 MakeVec4(f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        rw::collision::Vec4 lvResult;
+        lvResult.x = lfX;
+        lvResult.y = lfY;
+        lvResult.z = lfZ;
+        lvResult.w = lfW;
+        return lvResult;
+    }
+
+    inline Vector3 AsVector3(const rw::collision::Vec4& arSource)
+    {
+        Vector3 lvResult;
+        lvResult.x = arSource.x;
+        lvResult.y = arSource.y;
+        lvResult.z = arSource.z;
+        lvResult.w = arSource.w;   // carried, not dropped -- the console moves 16 bytes
+        return lvResult;
+    }
+
+    inline Vector3Plus AsVector3Plus(const rw::collision::Vec4& arSource)
+    {
+        Vector3Plus lvResult;
+        lvResult.x = arSource.x;
+        lvResult.y = arSource.y;
+        lvResult.z = arSource.z;
+        lvResult.w = arSource.w;
+        return lvResult;
+    }
+
+    // The inlined `rw::math::IsValid( <Vector3> )` the three CollideGPInstances asserts spell.
+    // vcmpeqfp. self-compare per lane, lanes x/y/z only (the console never splats lane 3).
+    inline bool IsValidVector(const rw::collision::Vec4& arVector)
+    {
+        return arVector.x == arVector.x
+            && arVector.y == arVector.y
+            && arVector.z == arVector.z;
+    }
+
+    // X360 flt_82001CC0 -- the fatness the CYLINDER arm stores (`lfs f0, flt_82001CC0@l(r10)`).
+    // The four bytes at that address are 00 00 00 00, measured twice and independently: this
+    // wave's headless-idat dump (scratchpad/waveQ6/ida_pstream/out.json, recorded in
+    // pstream.owner.md 2.3) and the committed FeatureEdge::KF_START_THRESHOLD, which the linker
+    // folded onto the SAME rodata slot (FeatureEdge.cpp:31). It is spelled as its own constant
+    // here rather than reused from FeatureEdge because the two are unrelated quantities that
+    // merely share a zero.
+    // WHY A CYLINDER GETS ZERO FATNESS AND A BOX DOES NOT: CgsGeometric::Cylinder simply has no
+    // fatness member (Matrix44Affine + mfRadius + mfLength and 8 bytes of tail padding), while
+    // CgsGeometric::Box packs one into mDimensionsAndFatness.w. The console is not discarding a
+    // value here; there is none to read.
+    const f32 KF_GP_CYLINDER_FATNESS = 0.0f;
+
+    // The console's assert bound, spelled as the assert string spells it (ContactGeneratorJob.cpp
+    // :1279): sizeof(pointPairs) / sizeof(PointPair). `cmplwi cr6, r31, 0x10 ; ble` -> 16.
+    const u32 KU_MAX_CONTACT_POINT_PAIRS =
+        static_cast<u32>(sizeof(GPInstance::ContactPoints::pointPairs)
+                         / sizeof(GPInstance::ContactPoints::PointPair));
+}
+
+// =================================================================================================
+// ContactGeneratorJob::BuildGPInstance @0x829222A0 (258 words / 254 listed rows -- see the file
+// banner for why both numbers are right)
+//
+// Turn one packed primitive from a PrimitivePairList blob into an rw::collision::GPInstance.
+// `this` is never read (see the banner); the member spelling is the console's.
+// =================================================================================================
+void ContactGeneratorJob::BuildGPInstance(PrimitivePairList::EVolumeType leVolumeType,
+                                          const void*                    lpcPrimitiveData,
+                                          GPInstance*                    lpInstance,
+                                          u16                            lu16Tag)
+{
+    // The console's r4 is a 32-bit register holding the pair header's zero-extended
+    // mu8PrimTypeA byte; the VALUES are PrimitivePairList::EVolumeType, which is how the
+    // declaration spells it, and the five arms below are the jump table's five cases.
+    switch (leVolumeType)
+    {
+        // -------------------------------------------------------------------------------------
+        case PrimitivePairList::E_VOLUME_TYPE_SPHERE:            // jumptable case 0 -> 0x829223B0
+        {
+            const CgsGeometric::Sphere* lpSphere =
+                static_cast<const CgsGeometric::Sphere*>(lpcPrimitiveData);
+
+            lpInstance->mPos               = AsVec4(lpSphere->mPositionRadius);
+            lpInstance->mVolumeTag         = lu16Tag;
+            lpInstance->mUserTag           = lu16Tag;
+            lpInstance->mNumFaceNormals    = 0;
+            lpInstance->mNumEdgeDirections = 0;
+            lpInstance->mFlags             = 0;
+            lpInstance->mVolumeType        = GPInstance::SPHERE;
+            lpInstance->mFatness           = lpSphere->mPositionRadius.w;   // vspltw lane 3
+            lpInstance->mMethods           = rw::collision::g_aGPVolumeMethods[GPInstance::SPHERE];
+            break;
+        }
+
+        // -------------------------------------------------------------------------------------
+        case PrimitivePairList::E_VOLUME_TYPE_CAPSULE:           // jumptable case 1 -> 0x8292242C
+        {
+            const CgsGeometric::Capsule* lpCapsule =
+                static_cast<const CgsGeometric::Capsule*>(lpcPrimitiveData);
+
+            // The two packed rows, rebuilt with their w lanes intact (the accessors split them).
+            const Vector3 lvPosition  = lpCapsule->GetPosition();
+            const Vector3 lvDirection = lpCapsule->GetDirection();
+            const f32     lfRadius    = lpCapsule->GetRadius().w;
+            const f32     lfLength    = lpCapsule->GetLength().w;
+
+            lpInstance->mPos               = MakeVec4(lvPosition.x, lvPosition.y,
+                                                      lvPosition.z, lfRadius);
+            lpInstance->mEdgeDirections[0] = MakeVec4(lvDirection.x, lvDirection.y,
+                                                      lvDirection.z, lfLength);
+            lpInstance->mVolumeTag         = lu16Tag;
+            lpInstance->mUserTag           = lu16Tag;
+            lpInstance->mNumFaceNormals    = 0;
+            lpInstance->mNumEdgeDirections = 1;
+            lpInstance->mFlags             = 0;
+            lpInstance->mVolumeType        = GPInstance::CAPSULE;
+            lpInstance->mFatness           = lfRadius;
+
+            // The +0x70 round trip: lane x only; y/z/w survive untouched.
+            lpInstance->mDimensions.x      = lfLength;
+
+            // The console re-reads the type word it just stored; keep that read.
+            lpInstance->mMethods = rw::collision::g_aGPVolumeMethods[lpInstance->mVolumeType];
+            break;
+        }
+
+        // -------------------------------------------------------------------------------------
+        case PrimitivePairList::E_VOLUME_TYPE_4TRIANGLES:        // jumptable case 2 -> 0x829224F4
+        {
+            // Assert and return; the instance is left exactly as the caller had it.
+            CGS_ASSERT(false, "Are you mad? Triangle-Triangle collision");            // :1660
+            break;
+        }
+
+        // -------------------------------------------------------------------------------------
+        case PrimitivePairList::E_VOLUME_TYPE_BOX:               // jumptable case 3 -> 0x829222E4
+        {
+            const CgsGeometric::Box* lpBox =
+                static_cast<const CgsGeometric::Box*>(lpcPrimitiveData);
+
+            const Matrix44Affine lTransform  = lpBox->GetTransform();
+            const Vector3        lvDimensions = lpBox->GetDimensions();
+            const f32            lfFatness    = lpBox->GetFatness().w;
+
+            lpInstance->mPos               = AsVec4(lTransform.Pos());
+            lpInstance->mFaceNormals[0]    = AsVec4(lTransform.Right());
+            lpInstance->mEdgeDirections[0] = AsVec4(lTransform.Right());
+            lpInstance->mFaceNormals[1]    = AsVec4(lTransform.Up());
+            lpInstance->mEdgeDirections[1] = AsVec4(lTransform.Up());
+            lpInstance->mFaceNormals[2]    = AsVec4(lTransform.At());
+            lpInstance->mEdgeDirections[2] = AsVec4(lTransform.At());
+
+            // mDimensions takes the WHOLE packed row -- half-extents in xyz, fatness in w.
+            lpInstance->mDimensions        = MakeVec4(lvDimensions.x, lvDimensions.y,
+                                                      lvDimensions.z, lfFatness);
+
+            lpInstance->mVolumeTag         = lu16Tag;
+            lpInstance->mUserTag           = lu16Tag;
+            lpInstance->mNumFaceNormals    = 3;
+            lpInstance->mNumEdgeDirections = 3;
+            lpInstance->mFlags             = 0;
+            lpInstance->mVolumeType        = GPInstance::BOX;
+            lpInstance->mFatness           = lfFatness;
+            lpInstance->mMethods           = rw::collision::g_aGPVolumeMethods[GPInstance::BOX];
+            break;
+        }
+
+        // -------------------------------------------------------------------------------------
+        case PrimitivePairList::E_VOLUME_TYPE_CYLINDER:          // jumptable case 4 -> 0x82922534
+        {
+            const CgsGeometric::Cylinder* lpCylinder =
+                static_cast<const CgsGeometric::Cylinder*>(lpcPrimitiveData);
+
+            const Matrix44Affine lTransform = lpCylinder->GetTransform();
+
+            lpInstance->mPos               = AsVec4(lTransform.Pos());
+            lpInstance->mFaceNormals[0]    = AsVec4(lTransform.At());     // THE AXIS
+            lpInstance->mEdgeDirections[0] = AsVec4(lTransform.At());     // the same row
+            lpInstance->mFaceNormals[1]    = AsVec4(lTransform.Up());
+            lpInstance->mFaceNormals[2]    = AsVec4(lTransform.Right());
+
+            lpInstance->mVolumeTag         = lu16Tag;
+            lpInstance->mUserTag           = lu16Tag;
+            lpInstance->mNumFaceNormals    = 1;   // 1, while THREE face-normal rows are written
+            lpInstance->mNumEdgeDirections = 1;
+            lpInstance->mFlags             = 0;
+            lpInstance->mVolumeType        = GPInstance::CYLINDER;
+
+            // The two +0x70 round trips: lanes x then y; z/w survive untouched.
+            lpInstance->mDimensions.x      = lpCylinder->GetLength().w;   // f32 @ src+0x44
+            lpInstance->mDimensions.y      = lpCylinder->GetRadius().w;   // f32 @ src+0x40
+
+            lpInstance->mFatness           = KF_GP_CYLINDER_FATNESS;      // flt_82001CC0 == 0.0f
+
+            // The console re-reads the type word it just stored; keep that read.
+            lpInstance->mMethods = rw::collision::g_aGPVolumeMethods[lpInstance->mVolumeType];
+            break;
+        }
+
+        // -------------------------------------------------------------------------------------
+        default:                                     // jumptable default case -> 0x82922640
+        {
+            // E_VOLUME_TYPE_INVALID and anything past CYLINDER. The console's expression text is
+            // literally "false" -- an unconditional CGS_ASSERT( false ) in the source.
+            CGS_ASSERT(false, "false");                                               // :1699
+            break;
+        }
+    }
+}
+
+// =================================================================================================
+// ContactGeneratorJob::CollideGPInstances @0x829253C8 (244)
+//
+// Run the narrow-phase contact kernel over one GPInstance pair and queue one 80-byte
+// PrimitiveTestResult per contact point pair into the caller's CollisionResultList.
+// =================================================================================================
+void ContactGeneratorJob::CollideGPInstances(const GPInstance*    lpGPInstance0,
+                                             const GPInstance*    lpGPInstance1,
+                                             f32                  lfPadding,
+                                             u16                  lu16Primitive0Index,
+                                             u16                  lu16Primitive1Index,
+                                             u16                  lu16TestIndex,
+                                             CollisionResultList* lpResultsList)
+{
+    // The record is carved ONCE: the console writes its three index halfwords BEFORE the kernel
+    // call (0x829253E0/E8/F0) and only refreshes the vectors and the two tag words per pair.
+    // ⚠️ The `= {}` also zeroes muPad (+0x4E), which the console never writes -- see the banner.
+    PrimitiveTestResult lRecord = {};
+    lRecord.muPrimitive0Index = lu16Primitive0Index;   // sth r7
+    lRecord.muPrimitive1Index = lu16Primitive1Index;   // sth r8
+    lRecord.mu16TestIndex     = lu16TestIndex;         // sth r9
+
+    // The console's own local name, recovered from the assert strings. Deliberately NOT
+    // zero-initialised: it is a 560-byte stack local on the hot path and the kernel fills every
+    // field it publishes, exactly as on the console. Nothing below reads it unless the kernel
+    // returned a non-zero count, which is the guard that makes that safe.
+    GPInstance::ContactPoints lStackResult;
+
+    const u32 luNumContacts = rw::collision::ComputeContactPoints(*lpGPInstance0, *lpGPInstance1,
+                                                                  lfPadding, lStackResult);
+
+    // The console compares against 16 and asserts on GREATER; the `>= 0` half of the source
+    // expression is vacuous on an unsigned count and emits no code.
+    CGS_ASSERT(luNumContacts <= KU_MAX_CONTACT_POINT_PAIRS,
+               "luNumContacts >= 0 && luNumContacts <= sizeof( lStackResult.pointPairs ) / "
+               "sizeof(rw::collision::GPInstance::ContactPoints::PointPair)");        // :1279
+
+    if (luNumContacts == 0)
+    {
+        return;
+    }
+
+    // The console rotates this into `if (numPoints) do { ... } while (i < numPoints)` and
+    // RELOADS the bound every pass; a plain for-loop is the same thing.
+    for (u32 luCurrentContactPoint = 0;
+         luCurrentContactPoint < lStackResult.numPoints;
+         ++luCurrentContactPoint)
+    {
+        const GPInstance::ContactPoints::PointPair& lrPair =
+            lStackResult.pointPairs[luCurrentContactPoint];
+
+        CGS_ASSERT(IsValidVector(lrPair.p1),
+                   "rw::math::IsValid( lStackResult.pointPairs[liCurrentContactPoint].p1 )"); // :1286
+        CGS_ASSERT(IsValidVector(lrPair.p2),
+                   "rw::math::IsValid( lStackResult.pointPairs[liCurrentContactPoint].p2 )"); // :1287
+        CGS_ASSERT(IsValidVector(lStackResult.normal),
+                   "rw::math::IsValid( lStackResult.normal )");                               // :1288
+
+        // Both normal slots get the SAME contact normal (one v0, two stvx128) -- the same shape
+        // the sphere kernel produces, where the two "sides" share one contact direction.
+        lRecord.mPrimitive0Normal  = AsVector3(lStackResult.normal);
+        lRecord.mPrimitive1Normal  = AsVector3(lStackResult.normal);
+        lRecord.mPrimitive0Contact = AsVector3Plus(lrPair.p1);
+        lRecord.mPrimitive1Contact = AsVector3Plus(lrPair.p2);
+        lRecord.muPrimitive0Tag    = lStackResult.volumeTag1;
+        lRecord.muPrimitive1Tag    = lStackResult.volumeTag2;
+
+        // The 80-byte carve, not CollisionResult's 112 -- see the banner.
+        PrimitiveTestResult* lpaResults =
+            reinterpret_cast<PrimitiveTestResult*>(lpResultsList->mpResults);
+
+        lpaResults[lpResultsList->mu16NumResults] = lRecord;   // 10 x ld/std at base + 80*index
+
+        // idx+1 published first, then clamped to max-1: an overflowing list keeps overwriting
+        // its last slot. Two halfword stores, exactly as the console emits them.
+        u16 lu16Next = static_cast<u16>(lpResultsList->mu16NumResults + 1);
+        lpResultsList->mu16NumResults = lu16Next;
+        if (lu16Next >= lpResultsList->mu16MaxNumResults)
+        {
+            lu16Next = static_cast<u16>(lpResultsList->mu16MaxNumResults - 1);
+        }
+        lpResultsList->mu16NumResults = lu16Next;
+
+        // ---------------------------------------------------------------------------------
+        // [DIAG] NOT IN THE X360 BINARY -- ONE-SHOT, behind BRN_PROP_DIAG, getenv latched once
+        // (a getenv per contact would be a syscall on the hot path).
+        //
+        // This is the line that says the prop NARROW PHASE produced geometry. Read it as a pair
+        // with "[Q6-worldc] first prop-vs-world contact pass" (the poster) and with
+        // "Warning!! prop fell out of the world": worldc firing and this one NOT firing means
+        // pairs are being posted but no primitive ever collides; both firing while parts still
+        // fall means the contact is generated but not consumed downstream.
+        // ---------------------------------------------------------------------------------
+        {
+            static const bool sbPropDiag     = (getenv("BRN_PROP_DIAG") != 0);
+            static bool       sbFirstContact = true;
+            if (sbPropDiag && sbFirstContact && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbFirstContact = false;
+                *CgsDev::Log::gpDebugPrint
+                    << "[Q6-gpi] first GP narrow-phase contact: gp1 type "
+                    << static_cast<s32>(lpGPInstance0->mVolumeType)
+                    << " vs gp2 type " << static_cast<s32>(lpGPInstance1->mVolumeType)
+                    << ", " << static_cast<s32>(lStackResult.numPoints)
+                    << " point pair(s), result slot "
+                    << static_cast<s32>(lpResultsList->mu16NumResults) << "\n";
+            }
+        }
+    }
+}
+
+// ============================================================================
+// FOLDED FROM ContactGeneratorJob_wQ7_01.cpp (wave Q7) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// GameShared/Jobs/ContactGenerator/ContactGeneratorJob_wQ7_01.cpp
+//
+// ⭐⭐⭐ THE SPHERE-LIST vs SPHERE-LIST NARROW PHASE — collision job types 7 and 8, i.e. the
+// CAR-vs-CAR contact leg. A partfile of ContactGeneratorJob.cpp (wave Q7, cluster `ss`,
+// 2026-08-19) holding the two arms of `Execute`'s 12-way switch that were still NAMED ONE-SHOT
+// BOOT GATES at the foot of that file:
+//
+//   ContactGeneratorJob::ExecuteSphereListWithSphereList       @0x829215B0  (193)  :721
+//   ContactGeneratorJob::ExecuteSphereListWithSphereListStream @0x82923758  (100)  :429 :430
+//
+// The console's own path for both is the SAME TU as the rest of the family — every assert here
+// passes the string
+//   D:\P4\B5_MAIN\Burnout\MAIN\Code\GameShared\Jobs\ContactGenerator\ContactGeneratorJob.cpp
+// (rodata 0x82101940) — so this is a partfile of that TU, split only because
+// ContactGeneratorJob.{h,cpp} is owned by a concurrent session in this wave. FOLLOW-UP: fold it
+// back into ContactGeneratorJob.cpp when nobody is editing that file, exactly as
+// ContactGeneratorJob_wQ6_01.cpp's banner already asks for itself. There is no reason for three
+// TUs beyond the ownership split.
+//
+// ─── WHERE THIS SITS IN THE CAR-vs-CAR CHAIN ─────────────────────────────────────────────────
+//   VehicleManager::DoCarCarContactGeneration @0x8261BB38
+//     -> BaseCollisionGenerator::AddSphereListWithSphereListToStream @0x828119F0   (one command)
+//     -> BaseCollisionGenerator::RunCollideSphereListWithSphereListStream @0x82811C00
+//        (`li r23, 8` -> descriptor +0xFF, i.e. job type 8)
+//        -> ContactGeneratorJob::Execute @0x829267E0 case 8
+//           -> ExecuteSphereListWithSphereListStream   <-- THIS FILE (drains the command stream)
+//              -> ExecuteSphereListWithSphereList      <-- THIS FILE (the worker, per command)
+//                 -> one 80-byte PrimitiveTestResult per touching sphere pair into the
+//                    command's own CollisionResultList
+// While both were gates, every car-vs-car sphere pair the vehicle manager posted was silently
+// dropped: the stream drained nothing and the result list stayed at zero.
+//
+// ─── GROUNDING ───────────────────────────────────────────────────────────────────────────────
+// * @0x829215B0: the RAW `assembly` array of .ida-exports/BURNOUT_X360_ARTIST.XEX/0x829215B0.json
+//   (193 rows == (0x829218B0-0x829215B0)/4 + 1), dumped to scratchpad/waveQ7/ss/asm_829215B0.txt.
+//   Hex-Rays pseudocode NOT consulted.
+// * @0x82923758: **AN EXPORT HOLE — there is no per-address JSON for it.** Disassembled this wave
+//   with headless IDA 9.3 on a PRIVATE COPY of the .i64 (scratchpad/waveQ7/ss/ida/, script
+//   dump_ss.py, output out.json key `asm_82923758`); IDA reports start 0x82923758 / end
+//   0x829238E8 / 100 instructions, which is exactly the gap between
+//   ExecuteSphereListWithTriangleListStream @0x829235C8 and
+//   ExecuteSweptSphereListWithTriangleList @0x829238E8. Nothing is missing from the decode.
+// * The same run re-read every string operand both bodies reference (out.json `refs_*`): the file
+//   path 0x82101940, "lResult.IsValid()" @0x821019D0 (17 chars, NOT truncated), "No job
+//   description\n" @0x821019F8 and "No stream producer\n" @0x821019E4.
+// * NO RODATA CONSTANT IS READ BY EITHER BODY. Every vector constant the worker needs is
+//   MATERIALISED, not loaded: `vspltisw v0,1` + `vcsxwfp128 v126,v0,0` == 1.0f,
+//   `vcsxwfp128 v125,v0,1` == 0.5f (a shift-by-one convert), `vspltisw128 v127,0` == 0.0f, and
+//   `vspltisw v0,-1` + `vcfsx v0,v0,0` == -1.0f. So there is no unk_/flt_ table to guess at and
+//   none is guessed at (gotcha 5 has nothing to bite on here).
+//
+// ─── ⚠️⚠️ THE SIGNATURE, AND HOW IT WAS MEASURED ─────────────────────────────────────────────
+// `ExecuteSphereListWithSphereList` TAKES THE DESCRIPTOR AS A PARAMETER. It is not the no-arg
+// form the header carried while it was a gate; owner `arms` corrected the declaration in the
+// same wave, from the same two witnesses, independently. Both are in the asm:
+//   1. 0x829215C4  `mr r18, r4` is the FIRST thing the body does after its prologue, and every
+//      later descriptor read goes through r18 (`ld 0(r18)` / `ld 8(r18)` / `lwz 0xF0(r18)` /
+//      `lfs 0xF4(r18)`). A no-arg member would have to reach them through
+//      this->mpJobDescription (`lwz 0x10(r3)`), and that load does not exist in the 193 rows.
+//   2. Execute's jump table calls it at 0x82926890 with r4 == lpvJobData untouched — exactly as
+//      cases 5 (sphere/triangle), 6 (prop) and 8 (swept) do for the three workers that already
+//      take a descriptor — and the Stream arm below calls it at 0x829238B4 with
+//      `addi r4, r1, var_130`, i.e. ITS OWN STACK-LOCAL descriptor.
+// ⚠️ Witness 2 is the load-bearing one: on the stream path this->mpJobDescription is the STREAM
+// descriptor (type 8) while r4 is the per-command NON-stream descriptor (type 7). A no-arg body
+// reading mpJobDescription would therefore read the WRONG OBJECT on every streamed command —
+// a silent, compile-clean, lint-clean corruption of exactly the kind this wave keeps finding.
+//
+// ─── PC LOWERING, STATED ONCE ────────────────────────────────────────────────────────────────
+// The console runs the worker's inner test on VMX with every operand BROADCAST (the separation
+// is a `vmsum3fp128`, the two radii and the padding are `vspltw`s), so all four lanes always
+// carry the same number and the SoA "which lane?" hazard the sibling triangle workers face does
+// not exist here: the lowering is plain scalar f32, which is this family's standing precedent
+// (CgsTriangle4.cpp, CgsPolygonSoupTests.cpp, ContactGeneratorJob.cpp). Whole-vector moves
+// (lvx128/stvx128) stay four-lane copies so no `w` is dropped.
+// ⚠️ ONE PLACE WHERE THE ARITHMETIC IS NOT BIT-IDENTICAL TO THE CONSOLE, flagged at the site:
+// `vrsqrtefp` + TWO Newton-Raphson rounds is lowered to `1.0f / std::sqrt()`. Same lowering, same
+// wording and same reason as ContactGeneratorJob.cpp:553 — more accurate than the console, and it
+// cannot flip an accept/reject decision except in the last couple of ulps.
+// =================================================================================================
+
+// (preprocessor / using lines carried from the partfile's include region)
+using CgsSceneManager::CgsCollision::CollisionResultList;
+using CgsSceneManager::CgsCollision::PrimitiveTestResult;
+using CgsSceneManager::CgsCollision::SphereList;
+using CgsSceneManager::CgsCollision::SphereListWithSphereListJobDesc;
+using CgsSceneManager::CgsCollision::SphereListWithSphereListStreamJobDesc;
+
+// =================================================================================================
+// ContactGeneratorJob::ExecuteSphereListWithSphereList @0x829215B0 (193)   :721
+//
+// Every sphere of list A against every sphere of list B; one 80-byte PrimitiveTestResult per
+// touching pair into the descriptor's CollisionResultList.
+//
+// SHAPE (every citation is an address in scratchpad/waveQ7/ss/asm_829215B0.txt):
+//   0x829215CC  ld  r11, 0(desc)  -> the {base,count} pair of sphere list A, copied to a local
+//   0x829215D8  ld  r11, 8(desc)  -> ... and of sphere list B
+//   0x829215E0  LoadResultList(desc->mpResultsList, &lResultsList)      (r4 = `lwz 0xF0(desc)`)
+//   0x829215E8  lfs f0, 0xF4(desc) -> the padding, splatted into v122
+//   0x82921600  clrlwi r17, r10, 16  ⚠️ BOTH COUNTS AND BOTH LOOP INDICES ARE u16 (the indices are
+//               re-masked on every increment at 0x82921858 / 0x8292186C) — reproduced, not widened
+//   0x82921624  a ZERO A-count branches STRAIGHT to the header write-back, so that write-back is
+//               unconditional — reproduced
+//   0x82921664  outer: sphere A = the 16 bytes at listA.mpSpheres + 16*a, copied to a stack local
+//   0x82921688  a zero B-count skips the inner loop
+//   0x829216A8  inner:
+//     0x829216C4  d   = B - A                      (ALL FOUR LANES, so d.w == rB - rA)
+//     0x829216CC  v13 = rA + rB                    (two vspltw of lane 3 + vaddfp)
+//     0x829216D0  v0  = dot3(d, d)                 (vmsum3fp128, broadcast)
+//     0x829216D4  v6  = rA + rB + padding
+//     0x829216D8..0x82921708  invLen = vrsqrtefp(dot3) refined by TWO Newton-Raphson rounds
+//     0x8292170C  dir      = d * invLen            (the unit A->B direction, all four lanes)
+//     0x82921710  distance = dot3 * invLen         (== sqrt(dot3))
+//     0x82921718  stvx128 -> record +0x10  mPrimitive1Normal  = dir
+//     0x8292171C  vmaddfp v9 = dir*rA + A          -> the contact point ON A
+//     0x82921724  vsubfp  v12 = B - dir*rB         -> the contact point ON B
+//     0x82921738  stvx128 -> record +0x20  mPrimitive0Contact = {A-side point, w = 0}
+//     0x8292174C  stvx128 -> record +0x30  mPrimitive1Contact = {B-side point, w = 0}
+//     0x82921750  vsel: a ZERO dot3 forces distance to 0 (see the NaN note below)
+//     0x82921754..0x8292176C  accept  <=>  !(distance > rA + rB + padding)
+//     0x82921780  record +0x00  mPrimitive0Normal = dir * -1.0f
+//     0x82921788  PrimitiveTestResult::IsValid  -> assert "lResult.IsValid()"          (:721)
+//     0x829217EC  record +0x48/+0x4A = the two u16 sphere indices; +0x40/+0x44 = 0
+//     0x82921818  the ten ld/std that copy the 80-byte record to results[numResults]
+//     0x8292182C  numResults+1, clamped to max-1, published into the LOCAL header
+//   0x8292187C  the unconditional 16-byte header write-back through desc->mpResultsList
+//
+// ⚠️ PRIMITIVE0 IS SPHERE A AND PRIMITIVE1 IS SPHERE B, and the two normals are OPPOSITE, not
+// equal. `sth r27 -> +0x48` is the A index and `sth r31 -> +0x4A` is the B index (both registers
+// are the compiler's induction copies of the loop counters r25/r28 and hold the CURRENT index at
+// the store — checked iteration by iteration). +0x10 gets `dir` (A->B) and +0x00 gets `-dir`, i.e.
+// each side's normal points AWAY from the other. That is a real difference from the two triangle
+// workers, where CollideGPInstances/IntersectTriangle4Sphere write the SAME vector into both
+// normal slots; do not "harmonise" them.
+//
+// ⚠️ NO `numResults < maxNumResults` ASSERT. The sphere/triangle worker checks that once per
+// (batch x sphere) at :182 and the swept one at :497; this worker has NO such check — the only
+// assert in its 193 instructions is the IsValid one. Reproduced as read.
+//
+// ⚠️ NO LoadPrimitives CALL. The two sphere lists are copied with plain 8-byte loads/stores
+// (0x829215CC / 0x829215D8); only the RESULT list goes through a Load* helper. `xrefs_from`
+// on 0x829215B0 lists exactly LoadResultList, PrimitiveTestResult::IsValid, Assert::PrintStringed
+// and the three save/restore thunks (__savegprlr_17 / __savevmx_122 / __restvmx_122;
+// __restgprlr_17 arrives via the tail `b`) — nothing else.
+//
+// ⚠️ mu16TestIndex (+0x4C) and muPad (+0x4E) ARE NEVER WRITTEN by this worker either, so on the
+// console they carry stack garbage into every queued copy. Zero-initialised once here instead
+// (deterministic; garbage is not reproducible) — the same call, for the same reason, that
+// ExecuteSphereListWithTriangleList and CollideGPInstances already make.
+//
+// ⚠️ THE THREE VECTOR FIELDS AT +0x10/+0x20/+0x30 ARE STORED **BEFORE** THE ACCEPTANCE TEST
+// (0x82921718 / 0x82921738 / 0x8292174C all sit above the `bne` at 0x8292176C) while +0x00 is
+// stored after it. Kept in that order. It is not observable — an accepted pair rewrites all four
+// before the copy — but it is what the console does and the next reader should not have to
+// re-derive it.
+//
+// ⚠️ ONE STORE IS DELIBERATELY NOT REPRODUCED, and this note is why the next reader diffing the
+// listing does not have to re-derive it: 0x829216B4 `stw r30, var_180(r1)` writes zero into the
+// stack slot that held sphere list A's {base,count} pair, once per INNER iteration. Both halves
+// of that slot were already latched into registers before the loops (`lwz r19, var_180` at
+// 0x8292162C for the base, `lwz r10, var_180+4` at 0x829215F4 for the count) and nothing reads
+// the slot again in the remaining 190 instructions. It is a dead compiler artifact — a spilled
+// zero for a value the optimiser folded away — not a field of anything.
+//
+// ⚠️ TWO COINCIDENT SPHERE CENTRES ARE WHY THE IsValid ASSERT EXISTS. With dot3 == 0 the
+// reciprocal square root is infinite, so `dir` is 0*inf == NaN, and the `vsel` at 0x82921750
+// forces the distance to 0 — which is `<= rA+rB+padding`, so the pair is ACCEPTED with NaN
+// normals and IsValid then fails. That is the console's own behaviour, tripwire included; no
+// degenerate guard is invented here (the same call BuildGPTriangleInstance makes for its zero
+// edge length).
+// =================================================================================================
+void ContactGeneratorJob::ExecuteSphereListWithSphereList(
+    const SphereListWithSphereListJobDesc* lpDesc)
+{
+    using CgsGeometric::Sphere;
+
+    // 0x829215CC / 0x829215D8 — one 8-byte load each on the console (a {base,count} pair is two
+    // dwords there); reached by name here, so the host's wider pointer costs nothing.
+    const SphereList lSphereListA = lpDesc->mSphereListA;
+    const SphereList lSphereListB = lpDesc->mSphereListB;
+
+    CollisionResultList lResultsList;
+    LoadResultList(lpDesc->mpResultsList, &lResultsList);
+
+    // 0x829215E8 `lfs f0, 0xF4(desc)` + 0x82921620 `vspltw128 v122, v0, 0` — the reach the pair
+    // test adds to the two radii. Scalar here: every lane of v122 carries this same float.
+    const f32 lfPadding = lpDesc->mfRadius;
+
+    // 0x82921600 / 0x82921604 / 0x82921634 — `clrlwi ..., 16` on both counts.
+    const u16 lu16NumSpheresA = static_cast<u16>(lSphereListA.miNumSpheres);
+    const u16 lu16NumSpheresB = static_cast<u16>(lSphereListB.miNumSpheres);
+
+    // 0x8292162C / 0x82921630 — both bases are hoisted out of both loops on the console.
+    const Sphere* const lpaSpheresA = reinterpret_cast<const Sphere*>(lSphereListA.mpSpheres);
+    const Sphere* const lpaSpheresB = reinterpret_cast<const Sphere*>(lSphereListB.mpSpheres);
+
+    // 0x82921644 — the results buffer is the meResultType == 0 / 80-byte carve
+    // (PrepareNewPrimitiveTestResultsList Mallocs 80*max), so the base is reinterpreted as
+    // PrimitiveTestResult[]; CollisionResult's 112-byte stride belongs to the OTHER record type.
+    PrimitiveTestResult* const lpaResults =
+        reinterpret_cast<PrimitiveTestResult*>(lResultsList.mpResults);
+
+    // 0x82921648 / 0x8292163C — the live count and the capacity, read ONCE from the local header.
+    u16       lu16NumResults = lResultsList.mu16NumResults;
+    const u16 lu16MaxResults = lResultsList.mu16MaxNumResults;
+
+    // ONE stack record for the whole call (the console's var_130), refilled per accepted pair.
+    // The `= {}` is what zeroes mu16TestIndex/muPad — see the banner.
+    PrimitiveTestResult lRecord = {};
+
+    for (u16 lu16SphereA = 0; lu16SphereA < lu16NumSpheresA; ++lu16SphereA)
+    {
+        // 0x82921678..0x82921684 — sphere A is COPIED to a stack local once per outer iteration
+        // (two ld/std), then loaded as a vector; sphere B is read straight out of its array.
+        const Sphere lSphereA = lpaSpheresA[lu16SphereA];
+
+        const f32 lfRadiusA = lSphereA.mPositionRadius.w;      // vspltw v9, v10, 3
+
+        for (u16 lu16SphereB = 0; lu16SphereB < lu16NumSpheresB; ++lu16SphereB)
+        {
+            const Sphere& lrSphereB = lpaSpheresB[lu16SphereB];
+
+            const f32 lfRadiusB = lrSphereB.mPositionRadius.w; // vspltw v8, v12, 3
+
+            // 0x829216C4 `vsubfp v11, v12, v10` — a WHOLE-VECTOR subtract, so the w lane carries
+            // (rB - rA) and rides through every multiply below exactly as it does on the console.
+            const f32 lfDeltaX = lrSphereB.mPositionRadius.x - lSphereA.mPositionRadius.x;
+            const f32 lfDeltaY = lrSphereB.mPositionRadius.y - lSphereA.mPositionRadius.y;
+            const f32 lfDeltaZ = lrSphereB.mPositionRadius.z - lSphereA.mPositionRadius.z;
+            const f32 lfDeltaW = lrSphereB.mPositionRadius.w - lSphereA.mPositionRadius.w;
+
+            // 0x829216CC / 0x829216D4 — the reach this pair is tested against.
+            const f32 lfReach = (lfRadiusA + lfRadiusB) + lfPadding;
+
+            // 0x829216D0 `vmsum3fp128` — three lanes only, broadcast to all four.
+            const f32 lfSeparationSquared =
+                (lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY) + (lfDeltaZ * lfDeltaZ);
+
+            // ⚠️ PC LOWERING, FLAGGED: `vrsqrtefp` + 2 Newton-Raphson rounds (0x829216D8..
+            // 0x82921708) is a ~23-bit reciprocal square root; `1/std::sqrt()` is exact to the
+            // last ulp. Same precedent and same wording as ContactGeneratorJob.cpp:553.
+            // NO GUARD: a zero separation gives +inf here exactly as the console's estimate does,
+            // and the NaN that follows is caught by the IsValid assert below, not by an invented
+            // early-out (see the banner).
+            const f32 lfInverseLength = 1.0f / std::sqrt(lfSeparationSquared);
+
+            // 0x8292170C — the unit A->B direction. All four lanes, w included.
+            const f32 lfDirectionX = lfDeltaX * lfInverseLength;
+            const f32 lfDirectionY = lfDeltaY * lfInverseLength;
+            const f32 lfDirectionZ = lfDeltaZ * lfInverseLength;
+            const f32 lfDirectionW = lfDeltaW * lfInverseLength;
+
+            // 0x82921718 — record +0x10. Sphere B's separation direction is A->B.
+            lRecord.mPrimitive1Normal.x = lfDirectionX;
+            lRecord.mPrimitive1Normal.y = lfDirectionY;
+            lRecord.mPrimitive1Normal.z = lfDirectionZ;
+            lRecord.mPrimitive1Normal.w = lfDirectionW;
+
+            // 0x8292171C `vmaddfp v9, v13, v10, v9` — A + dir*rA, the point on A's surface facing
+            // B. 0x82921724 `vsubfp v12, v12, v11` — B - dir*rB, the point on B's facing A.
+            // ⚠️ BOTH CONTACT POINTS LAND WITH w == 0 and that is measured, not assumed: the
+            // console runs `vrlimi128 <v>, v127, 1, 0` on each (0x8292172C / 0x82921740) with
+            // v127 == 0 and the immediate mask selecting the w lane, right before the store. The
+            // vrlimi that PRECEDES each of those (0x82921728 / 0x82921734) inserts the PREVIOUS
+            // iteration's w and is immediately overwritten by the zero — dead, and not reproduced.
+            lRecord.mPrimitive0Contact.x = lSphereA.mPositionRadius.x + (lfDirectionX * lfRadiusA);
+            lRecord.mPrimitive0Contact.y = lSphereA.mPositionRadius.y + (lfDirectionY * lfRadiusA);
+            lRecord.mPrimitive0Contact.z = lSphereA.mPositionRadius.z + (lfDirectionZ * lfRadiusA);
+            lRecord.mPrimitive0Contact.w = 0.0f;
+
+            lRecord.mPrimitive1Contact.x = lrSphereB.mPositionRadius.x - (lfDirectionX * lfRadiusB);
+            lRecord.mPrimitive1Contact.y = lrSphereB.mPositionRadius.y - (lfDirectionY * lfRadiusB);
+            lRecord.mPrimitive1Contact.z = lrSphereB.mPositionRadius.z - (lfDirectionZ * lfRadiusB);
+            lRecord.mPrimitive1Contact.w = 0.0f;
+
+            // 0x82921710 + the vsel at 0x82921750: the separation is `dot3 * invLen` (== sqrt of
+            // dot3), with a HARD ZERO substituted when dot3 compared equal to 0. Written as the
+            // select it is, not as a plain sqrt, because the two differ exactly at dot3 == 0.
+            f32 lfSeparation = lfSeparationSquared * lfInverseLength;
+            if (lfSeparationSquared == 0.0f)
+            {
+                lfSeparation = 0.0f;
+            }
+
+            // 0x82921754 `vcmpgtfp` + 0x82921758 `vnot` — the accept test is the NEGATION of a
+            // GREATER-THAN, and that is not the same as `<=` (gotcha 4): `vcmpgtfp` is FALSE for a
+            // NaN operand, so `vnot` makes a NaN separation ACCEPTED. Reproduced as shipped.
+            const bool lbTouching = !(lfSeparation > lfReach);
+            if (!lbTouching)
+            {
+                continue;
+            }
+
+            // 0x8292177C `vspltisw v0,-1 ; vcfsx v0,v0,0` == -1.0f, 0x82921780 `vmulfp128` —
+            // record +0x00. Sphere A's separation direction is B->A, the opposite of B's.
+            lRecord.mPrimitive0Normal.x = lfDirectionX * -1.0f;
+            lRecord.mPrimitive0Normal.y = lfDirectionY * -1.0f;
+            lRecord.mPrimitive0Normal.z = lfDirectionZ * -1.0f;
+            lRecord.mPrimitive0Normal.w = lfDirectionW * -1.0f;
+
+            // 0x82921788 — the console's only assert in this worker. Its message is the source
+            // expression, read whole out of the image at 0x821019D0.
+            CGS_ASSERT(lRecord.IsValid(), "lResult.IsValid()");                          // :721
+
+            // 0x829217EC / 0x829217F0 / 0x829217FC / 0x82921800 — the four tail fields.
+            lRecord.muPrimitive0Index = lu16SphereA;   // sth r27
+            lRecord.muPrimitive1Index = lu16SphereB;   // sth r31
+            lRecord.muPrimitive0Tag   = 0;             // stw r30
+            lRecord.muPrimitive1Tag   = 0;             // stw r30
+
+            // 0x82921804..0x82921828 — ten ld/std at `base + 80*index` (`n + 4n` then `<< 4`).
+            lpaResults[lu16NumResults] = lRecord;
+
+            // 0x8292182C..0x82921850 — idx+1, clamped to max-1, then published into the LOCAL
+            // header. An overflowing list keeps overwriting its last slot; there is no assert on
+            // this path (see the banner).
+            u16 lu16Next = static_cast<u16>(lu16NumResults + 1);
+            if (lu16Next >= lu16MaxResults)
+            {
+                lu16Next = static_cast<u16>(lu16MaxResults - 1);
+            }
+            lu16NumResults = lu16Next;
+            lResultsList.mu16NumResults = lu16NumResults;
+        }
+    }
+
+    // ⭐ [DIAG] NOT IN THE X360 BINARY — wave Q7, behind BRN_PROP_DIAG, one-shot. The getenv is
+    // latched ONCE (a getenv per command would be a syscall on the job thread's hot path) and the
+    // line fires on the first call that actually had a sphere list to walk, so the counts describe
+    // real work rather than an empty command. THERE IS NO SECOND LINE to read it against — the
+    // stream arm emits no diag of its own. The honest reading: this line never firing while the
+    // car-car poster is live points at DoCarCarContactGeneration /
+    // AddSphereListWithSphereListToStream, not at this arm.
+    if (lu16NumSpheresA != 0)
+    {
+        static const bool sbPropDiag  = (std::getenv("BRN_PROP_DIAG") != 0);
+        static bool       sbFirstPass = true;
+        if (sbPropDiag && sbFirstPass && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbFirstPass = false;
+            *CgsDev::Log::gpDebugPrint
+                << "[Q7-ss] first sphere-sphere batch: spheresA="
+                << static_cast<s32>(lu16NumSpheresA)
+                << " spheresB=" << static_cast<s32>(lu16NumSpheresB)
+                << " results=" << static_cast<s32>(lu16NumResults)
+                << "\n";
+        }
+    }
+
+    // 0x8292187C..0x829218A0 — the unconditional 16-byte header write-back. This is what publishes
+    // mu16NumResults to whoever harvests the command's result list.
+    *lpDesc->mpResultsList = lResultsList;
+}
+
+// =================================================================================================
+// ContactGeneratorJob::ExecuteSphereListWithSphereListStream @0x82923758 (100)   :429 :430
+//
+// Instruction-for-instruction the sphere/swept/prop stream arms with four symbols changed (the two
+// assert line numbers, the Prepare and the worker). ⚠️ NO AddResult: the results travel through
+// the command's own CollisionResultList, which the poster
+// (BaseCollisionGenerator::AddSphereListWithSphereListToStream @0x828119F0) carved with
+// PrepareNewPrimitiveTestResultsList.
+//
+//   0x82923770  lwz r28, 0x10(this)   -> mpJobDescription   assert :429 "No job description\n"
+//   0x829237D4  lwz r11, 0(r28)       -> mpStreamProducer   assert :430 "No stream producer\n"
+//               (0x1AD == 429, 0x1AE == 430 — the `li r5` immediates at 0x82923780 / 0x829237E4)
+//   0x82923848  SimpleDataStreamConsumer::Construct(&consumer, producer, 0, 0)
+//   0x82923858  AllocateMemory(0x80, 0x80)                    -> the command scratch
+//   0x82923880  stwx  -> miMemoryRestorePoint = miAllocCursor   (AFTER the alloc, as the twins do)
+//   loop:       DataStreamCommandReader::ReadCom(&consumer.mReader, command, &index)
+//   0x82923890  addi r29, r31, 8       -> &cmd->mSphereListB      (command +0x08)
+//               (hoisted out of the drain loop; the loop head is 0x82923894 `mr r5, r29`, which is
+//                also the branch target of the `beq` — the &B computation is done once, not per
+//                command. The swept sibling spells the same hoist at 0x82925338.)
+//   0x8292389C  mr   r4, r31           -> &cmd->mSphereListA      (command +0x00)
+//   0x82923898  lfs  f1, 0x10(r31)     -> cmd->mfPadding          (command +0x10)
+//   0x829238A0  lwz  r6, 0x14(r31)     -> cmd->mpResultList       (command +0x14)
+//   0x829238A8  SphereListWithSphereListJobDesc::Prepare(local, &A, &B, resultList, padding)
+//   0x829238B4  ExecuteSphereListWithSphereList(&local)      (r4 == the stack-local descriptor)
+//   0x829238BC  RestoreMemory()
+//   0x829238DC  SimpleDataStreamConsumer::Destruct()
+//
+// ⚠️ THOSE FOUR COMMAND OFFSETS ARE THE CONSUMER-SIDE PROOF of the StreamCommand layout that
+// CgsSphereListWithSphereListJobDesc.h models from the DWARF (h:108-113) and from the poster side.
+// Both directions agree — A @+0x00, B @+0x08, padding @+0x10, result list @+0x14 on the console.
+//
+// ⚠️ GOTCHA 3 AT THE Prepare CALL: the padding is `f1`, so its positional GPR slot (r7) is BURNED
+// and the result list travels in r6 as the THIRD integer argument. The committed
+// `Prepare(const SphereList*, const SphereList*, CollisionResultList*, f32)` is exactly that
+// order, so nothing needs re-ordering here — but read it before "fixing" the argument list.
+//
+// ⚠️ 128 IS A WHOLE ARENA SLICE, NOT A STRIDE THE RUNTIME ROUNDS TO — MEASURED, and the opposite
+// of what the sibling stream arms' banners claim. The console asks for 128 bytes outright
+// (`li r4, 0x80 / li r5, 0x80`) and that literal is kept here verbatim. The per-command COPY
+// LENGTH is the producer's miCommandSize, which is sizeof(StreamCommand) passed through VERBATIM:
+// SimpleDataStreamProducer::Construct rounds the command BUFFER TOTAL to 128 and rounds the RESULT
+// stride (miAlignedResultSize) to 128, but not the per-command size; DataStreamCommandPoster::
+// Construct then stores `miCommandSize = liCommandSize` and ReadCom copies exactly that many bytes
+// — 24 on the console, 48 on this host. So the 128 is comfortable HEADROOM, not a round-up, and
+// the static_assert in the body enforces the headroom instead of asserting it in prose.
+// (⚠️ The identical false "aligned stride" doctrine is PRE-EXISTING in the three sibling stream
+// arms' banners; it is wrong there too, for the same measured reason.)
+// =================================================================================================
+void ContactGeneratorJob::ExecuteSphereListWithSphereListStream()
+{
+    typedef SphereListWithSphereListStreamJobDesc Desc;
+
+    // The console's AllocateMemory(0x80, 0x80) is kept verbatim below. ReadCom copies
+    // miCommandSize == sizeof(StreamCommand) bytes into it (24 console / 48 host), so 128 is
+    // headroom — enforce that rather than trusting the banner.
+    static_assert(sizeof(Desc::StreamCommand) <= 128,
+                  "the console's 128-byte command scratch must hold a whole StreamCommand");
+
+    const Desc* lpDesc = static_cast<const Desc*>(mpJobDescription);
+
+    CGS_ASSERT(lpDesc != NULL, "No job description\n");                      // :429
+    CGS_ASSERT(lpDesc->GetStreamProducer() != NULL, "No stream producer\n"); // :430
+
+    CgsMemory::SimpleDataStreamConsumer lConsumer;
+    lConsumer.Construct(lpDesc->GetStreamProducer(), NULL, 0);
+
+    Desc::StreamCommand* lpCommand =
+        static_cast<Desc::StreamCommand*>(AllocateMemory(128, 128));
+
+    miMemoryRestorePoint = miAllocCursor;
+
+    u32 luCommandIndex = 0;
+    while (lConsumer.ReadCo(lpCommand, &luCommandIndex) == 0)
+    {
+        SphereListWithSphereListJobDesc lLocalDesc;
+        lLocalDesc.Prepare(&lpCommand->mSphereListA, &lpCommand->mSphereListB,
+                           lpCommand->mpResultList, lpCommand->mfPadding);
+
+        ExecuteSphereListWithSphereList(&lLocalDesc);
+
+        RestoreMemory();
+    }
+
+    lConsumer.Destruct();
+}
