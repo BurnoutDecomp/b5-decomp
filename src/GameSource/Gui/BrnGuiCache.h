@@ -786,6 +786,15 @@ namespace BrnGui
         // @0x824805B8 (`ori r10,r10,0xB86D ; lbzx ; cmplwi 1` -> FriendsListChangeIcon::ShowNow).
         // FLAG: consumer-named -- neither producer is recovered.
         bool IsFreeBurnMenuLocked() const { return mbFreeBurnMenuLocked; } // ARTIST +0x4B57
+        // The DWARF-named faces of three pause-gate bytes InGame::PauseAllowed @0x824B8DF8 reads
+        // (issue #29 wave, 2026-09-15): `lbz cache+0x4B57` == DWARF BrnGuiCache.h:1675
+        // mbIsInJunkyard, `+0x4B59` == h:1677 mbMugshotActive, `+0x13B90` == h:1895
+        // mbIsLoadingScreenVisible. The first two members keep the consumer names an earlier
+        // wave gave them; the third is carved below. Set == pausing is NOT allowed.
+        bool IsInJunkyard() const           { return mbFreeBurnMenuLocked; }     // +0x4B57 (DWARF mbIsInJunkyard)
+        bool IsMugshotActive() const        { return mbFreeBurnInputDisabled; }  // +0x4B59 (DWARF mbMugshotActive)
+        // (IsLoadingScreenVisible() is declared with the cache accessors above; it reads the
+        //  +0x13B90 member carved below.)
         bool IsFriendsListOpen() const        { return mbFriendsListOpen; }          // +0xB86C
         bool IsFriendsListChangePending() const { return mbFriendsListChangePending; } // +0xB86D
 
@@ -1225,6 +1234,9 @@ namespace BrnGui
         // fly-by-active gate. X360-INLINED as a far-member byte store: OnEnter
         // @0x824C6718 stores 1 and OnLeave @0x824C6BC4 stores 0 (`stbx r, cache, 0xA015`).
         void SetPreRaceFlyByActive(bool lbActive)                { mbIsPreRaceFlyByActive = lbActive; }
+        // The DWARF getter of that pair. Its one recovered reader is InGame::PauseAllowed
+        // @0x824B8DF8 (`lbz cache+0xA015`, set == pausing NOT allowed) -- issue #29.
+        bool IsPreRaceFlyByActive() const                        { return mbIsPreRaceFlyByActive; }
 
         // DWARF BrnGuiCache.h:1122 -- EXACT signature (`float32_t (ECurrentMedalTargetTime)`,
         // declared NON-const there). The per-medal score target for the current event.
@@ -1557,12 +1569,13 @@ namespace BrnGui
         // mpGuiCache+0x4B4E: blocks the ENTER_GAME state event while set).
         bool mbIsStartingGameDueToPlayerJoin;            // +0x4B4E (19278)
         bool mbPerformingInvite;                         // +0x4B4F (19279) HandleGuiCacheEvent source
-        // MERGE RECONCILE PENDING: the loading-screen-visible byte (DecFIGS h:
-        // IsLoadingScreenVisible; the accessor + BootProfile::OnLeave read it) was carved
-        // at the SAME X360 byte (+0x4B4F) the OnlinePlay wave named mbPerformingInvite.
-        // The x64 layout is name-based, so both live as distinct members until the DWARF
-        // claim is re-verified; the IsLoadingScreenVisible accessor reads this one.
-        bool mbIsLoadingScreenVisible;                   // +0x4B4F claim (19279) -- see note
+        // MERGE RECONCILED (issue #29 wave, 2026-09-15): an earlier wave ALSO carved a
+        // "mbIsLoadingScreenVisible" at this byte, on a DecFIGS claim. The DWARF places
+        // mbIsLoadingScreenVisible at h:1895, immediately before mfDistanceDrivenInCurrentCar
+        // (h:1898 == X360 +0x13B94), i.e. at +0x13B90 -- where InGame::PauseAllowed
+        // @0x824B8DF8 and InGame::HandleControllerInput read it. The duplicate is gone; the
+        // one reader of +0x4B4F outside the online flow, BootProfile::OnLeave @0x824784F8
+        // (`lbz r11, 0x4B4F(r11)` @0x824785C0), now reads this member by its OnlinePlay name.
         // ADDITIVE CARVE (BrnCrashNavMap wave J): the friend-selected road-rule score gate.
         // X360-attested as an `lbz` at BOTH read sites in CrashNavMap::UpdateButtonPrompts
         // (@0x824B6A50 / @0x824B6B3C) -- a BYTE, so this carve stops short of
@@ -2169,7 +2182,15 @@ namespace BrnGui
         //         never shows the colour-select screen);
         //   CLEAR by CarSelectLivery::OnLeave @0x824D6C30 and GuiCache::Construct.
         bool mbCarSelectTransitionAlreadyShown;          // +0x13B5E (80734)
-        u8  mPad_13B5F[53];                              // +0x13B5F..+0x13B93
+        u8  mPad_13B5F[49];                              // +0x13B5F..+0x13B8F
+        // +0x13B90 (80784). Carved out of the old mPad_13B5F[53] span (49 + 1 + 3 == 53, so no
+        // member is shifted). DWARF BrnGuiCache.h:1895 `bool mbIsLoadingScreenVisible` -- the
+        // member immediately before mfDistanceDrivenInCurrentCar (h:1898 == +0x13B94 below),
+        // which pins it. Recovered readers: InGame::PauseAllowed @0x824B8DF8 and
+        // InGame::HandleControllerInput (both `lbz cache+0x13B90`, set == suppress). No
+        // recovered writer yet -- the byte reads false on this build, as the padding did.
+        bool mbIsLoadingScreenVisible;                   // +0x13B90 (80784) DWARF h:1895
+        u8  mPad_13B91[3];                               // +0x13B91..+0x13B93
         f32 mfDistanceDriven;                            // +0x13B94 (80788) GetDistanceDriven (OdometerComponent::Update @0x82424160)
         u8  mPad_13B98[2];                               // +0x13B98..+0x13B99
         bool mbAreRoadRulesAvailable;                    // +0x13B9A (RecEvent 350)
