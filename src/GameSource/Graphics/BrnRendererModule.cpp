@@ -286,6 +286,7 @@ namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresen
 
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
+namespace CgsSystem { u64 GetSystemTimerBaseTime64(); u64 GetSystemTimerFrequency64(); }   // the console's width (CgsTimeUtils.cpp)
 
 // The engine-global shader-constant table (bodied by the CgsShaderConstants TU); the X360
 // StartOfFrame @0x823FC160 opens its frame on the GDL write bin.
@@ -591,12 +592,20 @@ namespace
             << "\n";
     }
 
-    u32  gu32LastMonitorTick = 0;
+    u64  gu64LastMonitorTick = 0;
     bool gbMonitorTickValid  = false;
 
     // [PC presentation leaf] the movie screen-ownership linger (see the movie block in
     // Render): tick of the last frame the MovieManager's presentation cycle was active.
-    u32  gu32LastMoviePresentTick = 0;
+    // ISSUE #30 (the screen blinks black for 250 ms every ~7 minutes): this stamp and its
+    // compare below were u32 -- the LOW WORD of a 10 MHz performance counter, which wraps
+    // every 429.5 s. (now - last) then re-enters [0, freq/4) for exactly 250 ms once per wrap,
+    // and the opaque movie underlay below was drawn over the whole frame for that window,
+    // first at (last logo's end + 429.5 s) and then every 429.5 s. Eight harness runs put the
+    // blink at 438.0 +/- 0.3 s of wall clock after the first present with the sim frame
+    // varying from 17401 to 30121. The console keeps this counter in 64 bits
+    // (GetSystemTimerBaseTime @0x828D75A0 returns the whole LARGE_INTEGER -- CgsTimeUtils.cpp).
+    u64  gu64LastMoviePresentTick = 0;
     bool gbMoviePresentTickValid  = false;
 
     // Submit one solid-coloured quad (4-vertex triangle strip) through the Im2d, in 1280x720 logical px.
@@ -6766,17 +6775,17 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
             mLoadingScreenRenderer.IsForegroundHideFadePending();
         const bool lbPresenting = !lbLoadingFadePending &&
             BrnGui::gpActiveMovieManager->IsMoviePresentationActive();
-        const u32  lu32PresentNow  = CgsSystem::GetSystemTimerBaseTime();
-        const u32  lu32PresentFreq = CgsSystem::GetSystemTimerFrequency();
+        const u64  lu64PresentNow  = CgsSystem::GetSystemTimerBaseTime64();
+        const u64  lu64PresentFreq = CgsSystem::GetSystemTimerFrequency64();
         if (lbPresenting)
         {
-            gu32LastMoviePresentTick = lu32PresentNow;
+            gu64LastMoviePresentTick = lu64PresentNow;
             gbMoviePresentTickValid  = true;
         }
         const bool lbOwnsScreen = lbPresenting ||
             (!lbLoadingFadePending &&
-             gbMoviePresentTickValid && lu32PresentFreq != 0u &&
-             (lu32PresentNow - gu32LastMoviePresentTick) < lu32PresentFreq / 4u);
+             gbMoviePresentTickValid && lu64PresentFreq != 0u &&
+             (lu64PresentNow - gu64LastMoviePresentTick) < lu64PresentFreq / 4u);
         // [diag] BRN_IM2D_TRACE: surface the underlay latch state on the same cadence as
         // the Im2d draw trace (queued id + manager state + owns-screen).
         {
@@ -6837,12 +6846,12 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
     // the present-to-present frame time - matching the observed behaviour (green at framerate, reddening
     // as the game/CPU slows). The X360 gates this on a debug-display flag.
     {
-        const u32 lu32Now  = CgsSystem::GetSystemTimerBaseTime();
-        const u32 lu32Freq = CgsSystem::GetSystemTimerFrequency();
+        const u64 lu64Now  = CgsSystem::GetSystemTimerBaseTime64();
+        const u64 lu64Freq = CgsSystem::GetSystemTimerFrequency64();
         f32 lfFrameMs = 0.0f;
-        if (gbMonitorTickValid && lu32Freq != 0u)
-            lfFrameMs = static_cast<f32>(static_cast<double>(lu32Now - gu32LastMonitorTick) * 1000.0 / static_cast<double>(lu32Freq));
-        gu32LastMonitorTick = lu32Now;
+        if (gbMonitorTickValid && lu64Freq != 0u)
+            lfFrameMs = static_cast<f32>(static_cast<double>(lu64Now - gu64LastMonitorTick) * 1000.0 / static_cast<double>(lu64Freq));
+        gu64LastMonitorTick = lu64Now;
         gbMonitorTickValid  = true;
 
         const f32 lfBudgetMs = 1000.0f / 60.0f;
