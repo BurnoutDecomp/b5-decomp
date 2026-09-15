@@ -91,7 +91,10 @@ namespace BrnAI
     // TU-local de-SIMD helpers (same shape as BrnAIDriver.cpp's; static, so no ODR clash).
     namespace
     {
-        inline bool IsFiniteU(f32 lfValue) { return std::isfinite(lfValue); }
+        // RwMath::IsValid( x ) -- a NaN SELF-COMPARE, exactly as `vcmpeqfp. vX,vX,vX`.
+        // ⛔ CORRECTED (issue #31): was `std::isfinite`, which also rejects +-Inf; ARTIST does not.
+        // See the banner on BrnAIDriver.cpp's IsFinite for the recovered compare sites.
+        inline bool IsFiniteU(f32 lfValue) { return lfValue == lfValue; }
 
         Vector2 Normalize2DU(Vector2 lVector)
         {
