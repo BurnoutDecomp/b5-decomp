@@ -17,6 +17,20 @@
 
 #include <cstdio>    // std::snprintf (the one-shot deferral log)
 
+// includes folded in from the BrnRaceMainHudState_w*.cpp partfiles (2026-09-15)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the two streamed asserts)
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // Start/StopMonitor
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / CgsModule::Event
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // the ShowHide / ticker / overlay records
+#include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"                // FreeburnChallengeManager (state + host reads)
+#include "GameSource/Gui/BrnGuiPerfmons.h"                                // GuiPerfmons::miHudStateUpdate
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTriggerPayload (event 21, typed)
+#include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager
+#include "SharedClasses/DataLists/ChallengeList.h"                        // BrnResource::ChallengeList
+#include "SharedClasses/DataLists/ChallengeListEntry.h"                   // BrnResource::ChallengeListEntry(Action)
+#include <cstring>   // std::strstr / std::strcmp / std::strncpy / std::memset
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX -- BrnGui::RaceMainHudState, the RACE_MAIN
 // slot of the BrnHudFlow 14-state pool (the in-event main HUD). Landed here:
 //   RaceMainHudState::SetExpectedComponent(const char*)  @ 0x82473698
@@ -59,7 +73,7 @@ namespace BrnGui
         {
             u8 mu8Flag;
             u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
+            explicit GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
             { maPad[0] = maPad[1] = maPad[2] = 0; }
         };
 
@@ -160,11 +174,36 @@ namespace BrnGui
         // ---- component deferral log (the FBurn LogDeferredComponent idiom) ----------
         // Each site below keeps the X360 control flow and logs the gap ONCE instead of
         // inventing a body for a callee whose X360 function is not reconstructed yet.
-        void LogDeferredComponent(const char* lpcWhat)
+        //
+        // NOT IN THE X360 BINARY -- this helper is ours (progress/identity.json has no
+        // LogDeferredComponent and neither does any ARTIST export); there is no asm to
+        // match it against. Waves S3 and S4 each landed their own copy of it in their
+        // partfiles, and when issue #20 folded the family into this TU the three copies
+        // were one name over two different bodies. THE ONE-SHOT 16-SLOT SHAPE WINS: it is
+        // what this very comment already claimed ("logs the gap ONCE") and what wS3/wS4
+        // both wrote, and their call sites are per-frame (UpdateRunning @0x8247E898,
+        // Update, HandleTrigger) where the unconditional variant that stood here floods
+        // the log. The only edit to the surviving text is dropping wS3/wS4's "(wave SN)"
+        // tag -- one TU can carry only one of them, and the wave is provenance of our
+        // reconstruction, not of the console.
+        void LogDeferredComponent(const char* lpacComponent)
         {
-            char lac[128];
-            std::snprintf(lac, sizeof(lac), "[RaceMainHud] deferred component call: %s\n", lpcWhat);
-            CgsDev::Log::WriteToLog(lac);
+            static const char* sapcNames[16];
+            for (s32 li = 0; li < 16; ++li)
+            {
+                if (sapcNames[li] == lpacComponent)
+                    return;
+                if (sapcNames[li] == 0)
+                {
+                    sapcNames[li] = lpacComponent;
+                    char lac[160];
+                    std::snprintf(lac, sizeof(lac),
+                                  "[RaceMainHud] %s -- component TU deferred.\n",
+                                  lpacComponent);
+                    CgsDev::Log::WriteToLog(lac);
+                    return;
+                }
+            }
         }
 
         // ---- GuiCache boundary (X360 cache members BrnGuiCache.h has not named yet) --
@@ -1078,5 +1117,2113 @@ namespace BrnGui
         }
 
         return true;
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnRaceMainHudState_wS2.cpp (wave S2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===================================================================================
+// wave-S2 partfile 01 of BrnRaceMainHudState.cpp -- the RACE_MAIN phase machine
+//
+//   BrnGui::RaceMainHudState::Update          @0x82481898 (cpp:1855)
+//   BrnGui::RaceMainHudState::UpdateLoading   @0x8247A410
+//   BrnGui::RaceMainHudState::UpdateWFInit    @0x82480200 (cpp:2819)
+//   BrnGui::RaceMainHudState::UpdatePermenant @0x824806E8 (cpp:3620 / 3702 / 3737)
+//   BrnGui::RaceMainHudState::RevealHud       @0x8247A4E0
+//
+// Every one of the five was re-verified against
+// .ida-exports/BURNOUT_X360_ARTIST.XEX/0x<ADDR>.json -- the `name` field of each JSON
+// matches the symbol claimed above -- and every body below is transcribed from the raw
+// DISASSEMBLY, arbitrated over Hex-Rays wherever the two disagree (they disagree three
+// times; each is called out at its site).
+//
+// The sibling BrnRaceMainHudState.cpp keeps the class's other bodies (OnEnter, OnLeave,
+// UpdateSetupState, UpdateRunning, SetExpectedComponent/SetExpectedAptComponentList,
+// SetupEventInfo, the countdown pair, the freeburn tickers) and the static .rdata
+// resource table. Nothing in this partfile redeclares any of that; the shared class
+// definition is GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h.
+//
+// WHAT THIS PARTFILE IS FOR. RACE_MAIN's phase machine is NOT a copy of the freeburn
+// one. Three differences are load-bearing and each is preserved verbatim:
+//   1. Update CASCADES. FBurnMainHudState::Update advances at most one phase per frame
+//      (BrnFBurnMainHudState.cpp:542). RACE_MAIN's switch FALLS THROUGH -- SETUPSTATE ->
+//      LOADING -> WF_INIT -> RUNNING can all execute in a single frame (the console's own
+//      `goto LABEL_3/4/5` chain @0x824818EC..0x8248194C). Copying the freeburn shape here
+//      would change the reveal timing by up to three frames.
+//   2. UpdatePermenant is GATED (`if (meInternalState != IDLE)`, @0x824819E8); the
+//      freeburn state calls its own unconditionally.
+//   3. UpdateWFInit blocks on a NON-EMPTY expected-apt-component list. RACE_MAIN's
+//      SetExpectedAptComponentList installs exactly one hash -- "EventHud_Animator" --
+//      where the freeburn state installs an empty list, so AreAllAptComponentsInitialised
+//      here is a real handshake, not a formality. If the apt side never reports that
+//      component the HUD loads and never reveals; that is what the [hud-reveal] diagnostic
+//      below exists to distinguish from a black screen.
+// ===================================================================================
+
+
+namespace BrnGui
+{
+    namespace
+    {
+// (fold: an identical definition of KI_CHANNEL_GUI_OUT was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KI_CHANNEL_VIEW_STATE was dropped here -- this TU defines it once, above)
+
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+
+// (fold: an identical definition of GuiCommandEvent16 was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of PostCommand16 was dropped here -- this TU defines it once, above)
+
+        // The 24-byte road-rule bring-up record { 8, 327, 16 } + a zeroed 8-byte tail.
+        // X360 @0x82480460..0x82480490: `li r11,8 -> var_70`, `li r11,0x147 -> var_6C`,
+        // `li r11,0x10 -> var_68`, `std r23(==0) -> var_60`, size 0x18, channel 0x28.
+        // FLAG (console-uninitialised word): the console never writes var_64 (payload +12),
+        // so its byte-4..7 are whatever the caller's frame held. Zeroed here -- the same
+        // choice BrnFBurnMainHudState.cpp:717 already made for the identical record.
+        struct GuiEvent327 : public CgsGui::GuiEvent<327>
+        {
+            s32 miPadA;   // +0x0C -- console-uninitialised (see FLAG above)
+            s32 miPadB;   // +0x10 -- console `std r23` low word (0)
+            s32 miPadC;   // +0x14 -- console `std r23` high word (0)
+            GuiEvent327() : CgsGui::GuiEvent<327>(8, 16), miPadA(0), miPadB(0), miPadC(0) {}
+        };
+
+        // (2026-08-27 verify round: the TU-local KAPC_PRE_EVENT_OVERLAYS[18] copy that stood
+        // here is DELETED -- it was DEAD by name lookup: inside a RaceMainHudState member,
+        // the unqualified name binds the CLASS STATIC declared in BrnRaceMainHudState.h:257
+        // and defined in BrnRaceMainHudState.cpp:~340, so an edit here would silently have
+        // had no effect. One definition now, the class-static one; both copies held the same
+        // image-verified data @0x82F261E0.)
+
+        // The freeburn-challenge selector actions UpdatePermenant's case-573 arm switches on
+        // (`lwz r11, 8(r28)`, switch 4 cases @0x824808A0). Only action 2 does anything here.
+        const s32 KI_SELECTOR_ACTION_START_TICKER = 2;
+    }
+
+    // =======================================================================
+    //  Update  @ 0x82481898
+    // =======================================================================
+    // The cascading phase machine, bracketed by the "HUD state Update" CPU monitor.
+    //
+    // dword_82F27640 is GuiPerfmons::miHudStateUpdate, not a bare global: GuiPerfmons::
+    // Initialise @0x824EF050 stores AddMonitor's handle to 0x82F2763C right after loading
+    // "        Gui - HudFlow Update" (@0x824EF19C/0x824EF1C4) and to 0x82F27640 right after
+    // loading "          HUD state Update" (@0x824EF1CC/0x824EF1F0) -- so +0x82F27640 is the
+    // second of that pair. BrnGuiPerfmons.cpp:90 registers the same monitor.
+    //
+    // ⭐ THE FALLTHROUGH IS THE POINT. Each case re-stores its own enum value FIRST and then
+    // falls into the next case on a true return, so one Update() call can walk the whole
+    // ladder. Written as C++ fallthrough because that is literally the console's control
+    // flow (`beq loc_824819E4` on false, straight-line otherwise); an if/else chain would
+    // read the same but hide why the re-stores exist -- they are what lands the new phase.
+    void RaceMainHudState::Update()
+    {
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miHudStateUpdate);
+
+        switch (meInternalState)
+        {
+        case E_RACEINTERNALSTATE_SETUPSTATE:
+            meInternalState = E_RACEINTERNALSTATE_SETUPSTATE;   // @0x824818EC/F4
+            if (!UpdateSetupState())
+                break;
+            // fall through -- @0x82481904 `beq` only on false
+        case E_RACEINTERNALSTATE_LOADING:
+            meInternalState = E_RACEINTERNALSTATE_LOADING;      // @0x82481908/10
+            if (!UpdateLoading())
+                break;
+            // fall through -- @0x82481920
+        case E_RACEINTERNALSTATE_WF_INIT:
+            meInternalState = E_RACEINTERNALSTATE_WF_INIT;      // @0x82481924/2C
+            if (!UpdateWFInit())
+                break;
+            // fall through -- @0x8248193C
+        case E_RACEINTERNALSTATE_RUNNING:
+            meInternalState = E_RACEINTERNALSTATE_RUNNING;      // @0x82481940/48
+            UpdateRunning();
+            break;
+        case E_RACEINTERNALSTATE_IDLE:
+            meInternalState = E_RACEINTERNALSTATE_IDLE;         // @0x82481954/58
+            break;
+        default:
+            {
+                // The streamed assert @0x82481960..0x824819E0: the message text, then the
+                // offending enum value, then FireAssert at cpp:1855 (`li r5, 0x73F`).
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "Should never call update in the following state";
+                lStrStream << static_cast<s32>(meInternalState);
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    lacMessage,
+                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp",
+                    1855);
+                CgsDev::Assert::EndAssert();
+            }
+            break;
+        }
+
+        // GATED, unlike the freeburn state's unconditional call (@0x824819E4..0x824819F4).
+        if (meInternalState != E_RACEINTERNALSTATE_IDLE)
+            UpdatePermenant();
+
+        // The pumps read without consuming; the state clears its in-queue at frame end
+        // (`lwz r3, 0x18(r29)` == mpInGuiEventQueue, @0x824819F8).
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+        if (lpInQueue != 0)
+            lpInQueue->Clear();
+
+        CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miHudStateUpdate);
+    }
+
+    // =======================================================================
+    //  UpdateLoading  @ 0x8247A410
+    // =======================================================================
+    // Four statements, and the console asserts NOTHING here (unlike the freeburn twin at
+    // BrnFBurnMainHudState.cpp:674, which does assert its cache) -- UpdateSetupState has
+    // already refused to advance until mpCache is non-null, so this phase cannot run without
+    // one. Kept assert-free to match.
+    bool RaceMainHudState::UpdateLoading()
+    {
+        // @0x8247A424..0x8247A440: r4 = &maResourcesToLoad (unk_82F25F88),
+        // r5 = muNumResourcesToLoad (dword_82F25F84 == 21). Hex-Rays drops both operands and
+        // prints a one-argument call; the asm is authoritative.
+        if (!mpCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+            return false;
+
+        if (mbSatNav)
+            mSatNavComponent.LoadResources();   // @0x8247A45C (this + 0x6A0)
+
+        // Mount the HUD apt movie at level 1. The console builds the 20-byte { 8, 18, 12,
+        // name, 1 } record by hand (@0x8247A464..0x8247A4B0, channel 0x29) with the name
+        // taken from off_82F27BE0[0]; that pointer is verified as "B5RaceHud" both by IDA's
+        // own operand comment here and by an image read of 0x82F27BE0. Posted through
+        // StateInterface::PlayAptMovie rather than a hand-rolled record for the reason
+        // BrnFBurnMainHudState.cpp:684 documents: the record's name field is an 8-byte
+        // pointer on x64, so a hardcoded 20-byte post truncates the trailing level number.
+        //
+        // ⚠️ SEAM: the freeburn state mounts the SAME movie at the SAME level. The HUD flow
+        // must have left FBURN_MAIN before RACE_MAIN gets here or the level-1 mount collides.
+        mpStateInterface->PlayAptMovie("B5RaceHud", 1);
+
+        SetExpectedAptComponentList();   // @0x8247A4B8 -- installs the "EventHud_Animator" hash
+        return true;
+    }
+
+    // =======================================================================
+    //  UpdateWFInit  @ 0x82480200
+    // =======================================================================
+    bool RaceMainHudState::UpdateWFInit()
+    {
+        // THE gate. One hash in the list ("EventHud_Animator"), so this really does wait.
+        if (!mpCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD))
+            return false;
+
+        if (mbPaybackComponent)
+            mPaybackComponent.Initialize(mpCache);                       // @0x82480244
+
+        // The sat-nav animator is parked visible/invisible UNCONDITIONALLY -- the flag only
+        // picks which label, it does not gate the call (@0x82480248..0x8248027C).
+        mSatNavAnimationComponent.AddOutputAptViewState(
+            "apt_Transition", mbSatNav ? "visible" : "invisible", false);
+
+        if (mbPlayerPositionTable)
+            mPlayerPositionTable.SetupGameMode();                        // @0x82480290
+
+        if (mbOnlineTimeoutTimer && mpCache->IsOnlineTimeoutPending())   // @0x824802A8 (+0x13B5C)
+            mOnlineTimeoutTimer.Show();
+
+        if (mbFreeburnChallengeButtonStart)
+        {
+            // @0x824802D0..0x82480320. Hex-Rays renders GetFreeburnChallengeManager with no
+            // `this`; the asm passes mpCache in r3. The three reads off the returned manager
+            // are `lwz r10, 4(r3)` (meInternalState, tested against the {2,3,4} set) and
+            // `lbz r11, 0x18(r3)` (mbIsLocalHost, tested == 1). The START button shows only
+            // when the manager is active, NOT already running, and this machine is the host.
+            const FreeburnChallengeManager* lpManager = mpCache->GetFreeburnChallengeManager();
+            if (lpManager->IsActive() && !lpManager->IsRunning() && lpManager->IsLocalHost())
+                mChallengeComponent.Show();
+        }
+
+        if (mbFreeburnChallengeSelector)
+        {
+            // @0x82480338 `stw r3, 0x78FC(r31)` -- +0x78FC is mChallengeSelectorComponent
+            // (+0x67A0) + 0x115C, i.e. ChallengeSelector::mpChallengeList. The console
+            // inlined SetChallengeList; restored here as the real call.
+            mChallengeSelectorComponent.SetChallengeList(mpCache->GetFreeburnChallengeList());
+        }
+
+        if (mbFreeburnChallengeTicker)
+        {
+            // @0x8248034C..0x82480398 -- same manager state word, three-way.
+            const FreeburnChallengeManager* lpManager = mpCache->GetFreeburnChallengeManager();
+            if (lpManager->IsActive())
+                StartFreeburnChallengeTicker();
+            else if (lpManager->IsNotActive())
+                StartFreeburnChallengeNotActiveTicker();
+        }
+
+        if (mbEventInfo)
+            SetupEventInfo();                                            // @0x824803AC
+
+        // ---- THE REVEAL LADDER (@0x824803B0..0x82480448) --------------------------------
+        // mpCache+0xA014 == mbEventPreparedForModeStart, read as a byte through the
+        // materialised offset pair `ori r26, r10, 0xA014 ; lbzx r10, r11, r26`.
+        const bool lbInEvent = mpCache->IsEventPreparedForModeStart();
+
+        bool lbRevealNow  = false;
+        bool lbImmediate  = false;
+        if (!lbInEvent)
+        {
+            // Not in an event: the countdown is over before it started.
+            meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_DONE;   // @0x824803D0
+            if (mbPreRaceCountdownRenders)
+                mEventCountdownIcon.SetState("invisible");                 // vslot +0xC @0x824803E8
+            lbRevealNow = true;
+            lbImmediate = true;
+        }
+        else if (!mbPreRaceCountdown)
+        {
+            // In an event with no countdown widget: tell the view the countdown is finished
+            // ({ 1, 236, 12 }, 16 bytes, channel 0x28 @0x82480404..0x82480428) and transition
+            // the HUD in rather than snapping it on.
+            //
+            // FLAG (console-uninitialised byte): the console writes only the three header
+            // words of that record -- its flag byte at +12 is left holding whatever the frame
+            // had. Sent as 0 here; the record's consumer reads the id, not the flag.
+            PostCommand16<236>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+            lbRevealNow = true;
+            lbImmediate = false;
+        }
+        else if (mpCache->IsOnlineStartInProgress())                       // @0x82480434 (+0x4B4C)
+        {
+            lbRevealNow = true;
+            lbImmediate = true;
+        }
+        // else: in an event, countdown armed, offline start -- NO reveal here. The HUD waits
+        // for UpdateEventCountdown's "GO" arm to call RevealHud(false).
+
+        // [hud-reveal] RACE_MAIN. NOT X360 -- the PC-side twin of the freeburn state's
+        // engine-state diagnostic (BrnFBurnMainHudState.cpp:743). This ladder has four
+        // outcomes and three of them look identical from outside (a HUD that is simply not
+        // there yet), so print which arm was taken. The fourth -- "waiting for GO" -- is the
+        // one that legitimately leaves the screen bare, and the one worth telling apart from
+        // an apt-init hang before anyone starts bisecting a black screen.
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[hud-reveal] RACE_MAIN UpdateWFInit inEvent=" << (lbInEvent ? 1 : 0)
+                << " preRaceCountdown=" << (mbPreRaceCountdown ? 1 : 0)
+                << " onlineStart=" << (mpCache->IsOnlineStartInProgress() ? 1 : 0)
+                << (lbRevealNow
+                        ? (lbImmediate ? " -> RevealHud(IMMEDIATE)\n" : " -> RevealHud(TRANSIN)\n")
+                        : " -> DEFERRED, waiting for the countdown GO\n");
+        }
+
+        if (lbRevealNow)
+            RevealHud(lbImmediate);                                        // @0x82480448
+
+        if (mbRoadRuleComponent)
+        {
+            // The road-rule bring-up post, then the show-time latch, then the replay of any
+            // rule the cache already has live (@0x82480460..0x82480518).
+            GuiEvent327 lEvent;
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 24);
+
+            // @0x82480494..0x824804B4: `stb r11, 0x646C(r31)` -- +0x646C is
+            // mRoadRuleComponent (+0x5F60) + 0x50C == RoadRuleComponent::mbInShowTime, with
+            // r11 == 1 only for game modes 2 (offline showtime) and 16 (online showtime).
+            // The console inlined SetIfInShowTime; restored here as the real call.
+            const s32 liGameMode = mpCache->GetGameMode();
+            mRoadRuleComponent.SetIfInShowTime(liGameMode == 2 || liGameMode == 16);
+
+            // The replay sweep. The console runs it as a do/while with the bound assert
+            // INSIDE the loop and the `< 2` re-test after it (@0x824804CC..0x82480518), so
+            // index 2 is reached, asserted on, and then rejected -- an off-by-one the retail
+            // build ships. Reproduced with the assert on the post-increment value, which is
+            // what the console tests (`cmpwi r30, 2 ; ble` -> assert when > 2 is false...
+            // i.e. it fires only if the index ever exceeded 2, which it cannot here).
+            for (s32 leEnumIndex = 0; leEnumIndex < 2; ++leEnumIndex)
+            {
+                if (mpCache->IsRoadRuleActive(leEnumIndex))
+                {
+                    mRoadRuleComponent.HandleRoadRuleBegin(
+                        static_cast<BrnStreetData::ScoreType>(leEnumIndex));
+                }
+                CGS_ASSERT(leEnumIndex + 1 <= 2, "leEnumIndex <= E_SCORE_TYPE_COUNT");   // BrnChallengeData.h:56
+            }
+        }
+
+        // @0x8248051C..0x8248054C: assert the cache, then store the gameplay-HUD gate byte
+        // through it REGARDLESS (the assert is non-gating on console).
+        CGS_ASSERT(mpCache != 0, "mpCache");                               // cpp:2819
+        mpCache->SetGameplayHudActive(true);                               // stb 1 @cache+0x407C
+
+        // @0x82480550..0x82480590: in an event (byte == 1) AND mode 4 (E_MODE_PURSUIT) ->
+        // post { 1, 433, 12 } on channel 0x28. Same console-uninitialised flag byte as the
+        // 236 post above.
+        if (mpCache->IsEventPreparedForModeStart() && mpCache->GetGameMode() == 4)
+            PostCommand16<433>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+
+        if (mbFriendsList)
+        {
+            mFriendsList.SetGuiCachePointer(mpCache);                      // @0x824805AC
+            if (mpCache->IsFriendsListChangePending())                     // @0x824805BC (+0xB86D, == 1)
+                mFriendsListChangeIcon.ShowNow();
+            mFriendsList.AttemptStateRestore();                            // @0x824805D4
+        }
+
+        if (mbDistrictMarker)
+        {
+            // @0x824805E4..0x824805EC: `lbz r11, 0x4B4C(cache) ; stb r11, 0x1062(r31)` --
+            // +0x1062 is mDistrictMarker (+0xFFC) + 0x66 == DistrictMarkerComponent::mbOnline.
+            // The console inlined SetOnline; restored here as the real call.
+            mDistrictMarker.SetOnline(mpCache->IsOnlineStartInProgress());
+        }
+
+        if (mbPaybackComponent)
+        {
+            // @0x824805FC..0x82480620. Gate byte first, then the two argument words; a type
+            // word of 3 is skipped outright (that arm never calls).
+            if (mpCache->IsPaybackAvailable())
+            {
+                const s32 liPaybackType = mpCache->GetPaybackAvailableType();
+                if (liPaybackType != 3)
+                {
+                    mPaybackComponent.ShowAvailableInstantly(
+                        static_cast<BrnNetwork::EPaybackType>(liPaybackType),
+                        static_cast<::EActiveRaceCarIndex>(mpCache->GetPaybackVictimRaceCarIndex()));
+                }
+            }
+        }
+
+        // @0x82480624..0x82480640 -- clear the showtime bounce-boost prompt. unk_820046A7 is
+        // the shared empty string (image read at 0x820046A7 == ""), and both glyph arguments
+        // are 15 == FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE.
+        mbBounceBoostPromptVisible = false;
+        mShowtimeBounceBoostButton.SetItem("",
+                                           FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                                           FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                                           false);
+
+        if (mbCompass)
+        {
+            // @0x82480658..0x82480690. The "lpGuiCache" assert at BrnCompassComponent.h:208
+            // belongs to the INLINED CompassComponent::SetGuiCachePointer, not to this
+            // function -- its file/line argument names the compass header. Restored as the
+            // real call (the assert travels with it).
+            mCompass.SetGuiCachePointer(mpCache);
+            mCompass.SetVisibility(true, false);
+        }
+
+        if (mbFreeburnChallengeSelector)
+        {
+            // @0x824806A0..0x824806C8. Same shape: the "lpGuiCache" assert at
+            // BrnChallengeSelector.h:277 is the inlined ChallengeSelector::
+            // SetGuiCachePointer's own, and +0x7900 is that component's mpGuiCache (+0x1160).
+            mChallengeSelectorComponent.SetGuiCachePointer(mpCache);
+        }
+
+        return true;
+    }
+
+    // =======================================================================
+    //  RevealHud  @ 0x8247A4E0
+    // =======================================================================
+    // One-shot on mbHudVisible. The parameter is the DWARF's `lbReveal`, but every use is
+    // "snap rather than transition", so it is spelled lbImmediate at the definition: it
+    // picks "visible" over "transin" and nothing else.
+    void RaceMainHudState::RevealHud(bool lbImmediate)
+    {
+        if (mbHudVisible)                                  // @0x8247A4F0 (+0x5F54)
+            return;
+        mbHudVisible = true;
+
+        // THE ENGINE GATE -- the same cache word (+0x4B20) the freeburn state documents at
+        // BrnFBurnMainHudState.cpp:735. 0 == E_ENGINE_OFF, 1 == E_ENGINE_ON. With the engine
+        // off the whole compose block is skipped and the HUD stays on its invisible frame;
+        // note that mbHudVisible has ALREADY been latched by then, so this state never
+        // re-tries the compose. That is the console's behaviour, not an oversight to fix.
+        if (mpCache->GetPlayerEngineState() == 1)
+        {
+            const char* const lpcViewState = lbImmediate ? "visible" : "transin";
+
+            // BOTH halves of the "EventHud_Animator" pair: the apt view-state write the
+            // movie's ActionScript polls, and the FLAPT goto-and-play.
+            mGeneralTransitionComponentApt.AddOutputAptViewState(
+                "apt_Transition", lpcViewState, false);                     // @0x8247A548
+            mGeneralTransitionComponentFlapt.Run(lpcViewState);             // @0x8247A554
+
+            if (mbBoostBar)
+            {
+                // @0x8247A564..0x8247A570 -- a single show byte, wrapped onto channel 41.
+                GuiEventShowHideBoostBar lShowBoostBar;
+                lShowBoostBar.maData[0] = 1;
+                mpStateInterface->OutputViewState(lShowBoostBar);
+            }
+
+            if (mbSatNav)
+            {
+                // @0x8247A580..0x8247A5B8. The 12-byte payload is { 1, flt_82001CC0, 1 }:
+                // map type 1 (E_MAPTYPE_GPS), fade time 0.0f -- flt_82001CC0 read out of the
+                // image, NOT assumed -- and show 1. One record, three consumers: the view
+                // channel, the internal-state mirror, and the component itself.
+                GuiEventShowHideSatNav lShowSatNav;
+                lShowSatNav.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS, true, 0.0f);
+                mpStateInterface->OutputViewState(lShowSatNav);
+                mpStateInterface->OutputInternalState(lShowSatNav);
+                mSatNavComponent.RecvEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lShowSatNav), 213);
+            }
+        }
+
+        // OUTSIDE the engine gate (@0x8247A5BC) -- { 1, 215, 12, 1 }, 16 bytes, channel 0x29.
+        // ⭐ [A3 SEAM] +0x15B. This is the ONE consumer of the flag the E1 header carried
+        // twice (mbTemporaryReplayIndicator / mbAboveCarIcons at +0x15B/+0x15C, where the
+        // console has exactly 25 flag bytes and OnEnter @0x82478EF8 zeroes only
+        // +0x150..+0x168). Agent A3 owns that deletion; at the time this partfile was
+        // written A3's in-flight edit had already dropped mbTemporaryReplayIndicator from the
+        // constructor's initialiser list and kept mbAboveCarIcons, which is also what the s2
+        // scout dossier concluded from the flag's mode profile (ON for showtime / road rage /
+        // every online mode, OFF for race / face-off / pursuit / burning route / eliminator /
+        // stunt attack / marked man / traffic attack). If A3 lands the other name instead,
+        // this identifier is the single token that has to change.
+        if (mbAboveCarIcons)
+            PostCommand16<215>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
+    }
+
+    // =======================================================================
+    //  UpdatePermenant  @ 0x824806E8
+    // =======================================================================
+    // The SECOND pass over the same in-queue each frame (Update's own phase bodies made the
+    // first). Runs in every phase except IDLE.
+    void RaceMainHudState::UpdatePermenant()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+        if (lpInQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+             lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+            const u8*  lpu8Payload = reinterpret_cast<const u8*>(lpEvent);
+
+            // The console's dispatch is a compare ladder (0x23D / 0x123 / 0x15 / 0x94)
+            // followed by an 8-case jumptable over `id - 0x23E` (574..581); flattened here.
+            switch (liEventId)
+            {
+            case 21:
+                ProcessAptEvents(lpEvent);                                  // @0x824807DC
+                break;
+
+            case 148:
+                // @0x8248079C `lbz r11, 0(r28)` -- a BYTE test, not a word. Payload 0 audio-
+                // cues and then pauses; anything else is ignored entirely.
+                if (lpu8Payload[0] == 0)
+                {
+                    // X360 @0x824807C0: OutputGuiEvent<GuiAudioEvent> with { 2, 0, -1 } and a
+                    // zeroed qword tail. FLAG deferred: the GuiAudioEvent record's field
+                    // layout is not homed (BrnGuiDemangledEventTypes.h carries only an opaque
+                    // 24-byte placeholder), and BrnFBurnMainHudState.cpp:1252 already parked
+                    // the identical post for the identical reason. The PAUSE below is the
+                    // load-bearing half and is NOT deferred.
+                    // DELETE-WHEN: BrnGui::GuiAudioEvent gets real fields.
+                    SendStateEvent("PAUSE");
+                }
+                break;
+
+            case 291:
+            case 320:
+                SendStateEvent("PAUSE");                                    // @0x824807C4 (shared arm)
+                break;
+
+            case 377:
+                // @0x824807F4 `lwz r11, 0(r28)` -- a WORD here (contrast case 148's byte).
+                if (lpiPayload[0] == 0 || lpiPayload[0] == 2)
+                {
+                    if (mbFriendsList)
+                        mFriendsList.SaveCurrentState();                    // @0x82480818
+                    // @0x8248081C..0x82480898: switch on meGameModeType - 7, 11 cases; the
+                    // jumptable's cases 0/5/7/10 (== modes 7, 12, 14, 17) take START_CSTNT,
+                    // every other mode takes START_CRASH.
+                    switch (mpCache->GetGameMode())
+                    {
+                    case 7:    // E_MODE_STUNT_ATTACK
+                    case 12:
+                    case 14:
+                    case 17:
+                        // ⚠️ A stunt-run crash hands off to CRASHEDSTNT, which is still a
+                        // stub in BrnHudStatesLinkStubs.cpp -- so on the stunt-race bring-up
+                        // path this transition currently lands nowhere. The console call is
+                        // kept EXACTLY as-is: the hole is in the destination state, not here,
+                        // and swapping in START_CRASH to "make it work" would hide it.
+                        SendStateEvent("START_CSTNT");
+                        break;
+                    default:
+                        SendStateEvent("START_CRASH");
+                        break;
+                    }
+                }
+                break;
+
+            case 573:
+                // @0x8248089C `lwz r11, 8(r28)` -- the selector action word, 4 cases.
+                // Actions 0, 1 and 3 do nothing; action 2 shares the 576 arm; anything else
+                // asserts with the value streamed in hex.
+                if (lpiPayload[2] == KI_SELECTOR_ACTION_START_TICKER)
+                {
+                    if (mbFreeburnChallengeTicker)
+                        StartFreeburnChallengeTicker();
+                }
+                else if (lpiPayload[2] < 0 || lpiPayload[2] > 3)
+                {
+                    char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                    CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                    lStrStream << "Unknown freeburn challenge selector action ";
+                    lStrStream << lpiPayload[2];   // console formats it "0x%X" (off_82F31944)
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert(
+                        lacMessage,
+                        "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp",
+                        3702);
+                    CgsDev::Assert::EndAssert();
+                }
+                break;
+
+            case 574:
+                CGS_ASSERT(lpEvent != 0, "lpChallengeEvent");               // cpp:3620 (li r5, 0xE24)
+                // @0x824809D4 `lbz r11, 8(r28)` -- a BYTE at +8 here, where case 573 read a
+                // word at the same offset. Only a ZERO byte falls into the 576 arm.
+                if (lpu8Payload[8] == 0 && mbFreeburnChallengeTicker)
+                    StartFreeburnChallengeTicker();
+                break;
+
+            case 576:
+                if (mbFreeburnChallengeTicker)                              // @0x824809E0
+                    StartFreeburnChallengeTicker();
+                break;
+
+            case 578:
+            case 579:
+                // @0x824809F8 (case 578) and @0x82480A68 (case 579) build the SAME
+                // ticker-clear record -- byte pair { 0, 1 } -- at two different stack slots
+                // and share one post (@0x82480A88). Hex-Rays renders the pair as two
+                // differently-shaped writes into one __int64 local; the asm shows two
+                // identical `stb r26(==0) ; stb 1` pairs.
+                // ⭐ 2026-08-27 verify round: the console queues the FULL 16-byte
+                // {2,536,12}+{0,1} wire on CHANNEL 40 (`li r5, 0x28 ; li r6, 0x10`), NOT the
+                // raw 2-byte GuiEventTickerClearMessages through OutputGuiEvent (which
+                // direct-passes and would land 2 bytes on channel 536 -- a record the ticker
+                // consumer never sees, so clears would silently drop and challenge lines
+                // would accumulate). TU-local wire struct per the partfile precedent
+                // (wS4's GuiTickerClearWire536 / BrnRaceMainHudState.cpp's GuiEvent536).
+                if (mbFreeburnChallengeTicker)                              // both gate on +0x167
+                {
+                    struct GuiTickerClearWire536 : public CgsGui::GuiEvent<536>
+                    {
+                        u8 mbForceFadeOut;            // +0x0C == 0
+                        u8 mbDeleteChallengeMessages; // +0x0D == 1
+                        u8 mau8Pad[2];
+                        GuiTickerClearWire536()
+                            : CgsGui::GuiEvent<536>(2, 12)
+                            , mbForceFadeOut(0), mbDeleteChallengeMessages(1)
+                        { mau8Pad[0] = mau8Pad[1] = 0; }
+                    };
+                    GuiTickerClearWire536 lClear;
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lClear), 40, 16);
+                }
+                break;
+
+            case 581:
+                // @0x82480A18..0x82480A64 -- the manager's own state has to be active too.
+                if (mbFreeburnChallengeTicker)
+                {
+                    if (mpCache->GetFreeburnChallengeManager()->IsActive())
+                        StartFreeburnChallengeTicker();
+                }
+                break;
+
+            default:
+                break;
+            }
+        }
+
+        // ---- the pre-event overlay expiry (@0x82480AAC..0x82480B30) ---------------------
+        // Retail-dead as shipped: UpdateSetupState clears mbPreEventOverlay on EVERY mode
+        // path, so this arm only runs under the debug component-override table. Transcribed
+        // anyway -- it is the only recovered consumer of KAPC_PRE_EVENT_OVERLAYS.
+        if (mbPreEventOverlay && mbOverlayInProgress
+            && mpCache->GetTime() > mfOverlayRemovalTime)
+        {
+            mbOverlayInProgress = false;                                    // @0x82480AE0
+            CGS_ASSERT(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed] != 0,
+                       "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:3737 (li r5, 0xE99)
+
+            GuiOverlayWaitFinishRequest lRequest;
+            lRequest.Construct(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
+            mpStateInterface->OutputGuiEvent(lRequest);
+        }
+
+        if (mbFriendsList)
+        {
+            if (mpCache != 0)
+            {
+                // @0x82480B40..0x82480B70: `stb r11, 0x25F1(r29)` -- +0x25F1 is mFriendsList
+                // (+0x1D58) + 0x899 == FriendsListComponent::mabEntryFlags[1], set for game
+                // modes 15 and 16 only. No accessor exists for that byte in the ledger, so
+                // BrnFriendsList.h grants this state friendship (the same pattern
+                // BrnDistrictMarker.h and BrnRoadRuleComponent.h use for the freeburn state).
+                // FLAG: the byte's semantics are unrecovered -- it is set, not interpreted.
+                const s32 liGameMode = mpCache->GetGameMode();
+                mFriendsList.mabEntryFlags[1] =
+                    static_cast<u8>((liGameMode == 15 || liGameMode == 16) ? 1 : 0);
+            }
+            mFriendsList.UpdateAptVariables();                              // @0x82480B78
+        }
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnRaceMainHudState_wS3.cpp (wave S3) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// BrnRaceMainHudState_wS3.cpp
+// Reconstructed from BURNOUT_X360_ARTIST.XEX -- part-file 2 of the BrnRaceMainHudState TU.
+// The sibling part-files are BrnRaceMainHudState.cpp (the .rdata resource table +
+// SetExpectedComponent) and the other _wS* part-files of the same wave; NONE of the four
+// bodies below is defined anywhere else.
+//
+//   BrnGui::RaceMainHudState::UpdateRunning            @ 0x8247E898  (781 pseudocode lines)
+//   BrnGui::RaceMainHudState::SetupEventInfo           @ 0x82474A60
+//   BrnGui::RaceMainHudState::UpdateEventCountdown     @ 0x8247A608
+//   BrnGui::RaceMainHudState::ConcludeEventCountdown   @ 0x824748F0
+//
+// Every offset in the X360 pseudocode below was resolved against BrnRaceMainHudState.h's
+// member map (a1+320 == mpCache, a1+368 == mEventInfoComponent, a1+4616 == mEventCountdownIcon,
+// a1+4636 == meCurrentEventCountdownState, a1+4640 == mfEventCountdownTimer, ...). Access is
+// BY NAME throughout.
+//
+// ⭐ THE FLAG-BLOCK SHIFT (s2 scout, 2026-08-26). The retail X360 object carries TWENTY-FIVE
+// enable bytes at +0x150..+0x168, not the 26 the committed header spells: OnEnter @0x82478EF8
+// emits exactly 25 consecutive `stb r30, 0x150(r31)` .. `stb r30, 0x168(r31)`, and this
+// function pins three of them at instruction level -- `lbz r11, 0x15C(r31)` gates
+// `addi r3,r31,0x5F60 ; bl RoadRuleComponent__HandleLeaveRoadEvent` (so +0x15C IS
+// mbRoadRuleComponent, not mbAboveCarIcons), `lbz 0x15F` gates PaybackComponent and
+// `lbz 0x163/0x164/0x165/0x166/0x167/0x168` gate OnlineTimeout / Compass / the three
+// freeburn-challenge widgets / the challenge-on component. This file therefore spells the
+// flags with the CORRECTED names from the scout's table. It compiles against the header
+// either way (every name used here exists in both spellings); the byte a flag lands on only
+// matters once the header drops the 26th entry, which is the conductor's paired edit --
+// see the request list returned with this file.
+//
+// ⭐ (f) THERE IS EXACTLY ONE EventInfoComponent CALL IN THIS FUNCTION. The whole 63-case
+// switch carries NO arm for GuiEventCurrentStatus(492), GuiAttackScoreUpdate(428),
+// GuiEventScoreUpdate(424) or GuiEventTimeInfo: the stunt score / multiplier / combo / timer
+// readout is PULLED out of GuiCache by EventInfoComponent::Update @0x82435430 (whose only
+// xref to UpdateStuntAttack @0x82429C08 is itself), never pushed through this state's GUI
+// event queue. The single call is the per-frame tick at 0x8247FFCC:
+//     lbz  r11, 0x157(r31)                ; mbEventInfo
+//     addi r3, r31, 0x170                 ; &mEventInfoComponent
+//     lwz  r4, 0x140(r31)                 ; mpCache
+//     bl   BrnGui__EventInfoComponent__Update
+//
+// COMPONENT DEFERRALS. Same rule and same idiom as the sibling BrnFBurnMainHudState.cpp: an
+// arm whose component TU is not on the build (tools/build/build_game_exe.bat) or whose method
+// has no declaration yet keeps the X360 gate and control flow verbatim and logs the gap once
+// instead of inventing a body. Deferred here: PlayerPositionTableComponent, PaybackComponent,
+// OnlineTimeoutComponent, ChallengeSelector, the five FriendsListComponent
+// entry points that have no body anywhere, HandleMugshotEvent (not declared -- it is in the
+// header's RESIDUE block) and the freeburn challenge-on arm. For E_MODE_STUNT_ATTACK (7)
+// UpdateSetupState turns the gate byte OFF for every one of those except the friends list,
+// so none of them executes on the stunt-race bring-up path.
+
+namespace BrnGui
+{
+    namespace
+    {
+// (fold: an identical definition of KI_CHANNEL_GUI_OUT was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KI_CHANNEL_VIEW_STATE was dropped here -- this TU defines it once, above)
+        const s32 KI_CHANNEL_INTERNAL_STATE = 42;  // the internal-state mirror channel
+
+        typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+
+        // The black-bar / letterbox threshold the case-221 arm compares against
+        // (X360 flt_82002138, read out of the XEX image).
+        const f32 KF_BLACK_BARS_THRESHOLD = 0.0099999998f;
+
+// (fold: an identical definition of GuiCommandEvent16 was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of PostCommand16 was dropped here -- this TU defines it once, above)
+
+        // 20-byte GuiEvent<465> road-rule crash-score record { 8, 465, 12, 0, f32 } -- the
+        // per-frame post the road-rule tick makes (X360 @0x8248007C..0x824800B8: the payload
+        // pair is stack-built as {0, mfCurrentCrashScore} and copied with one `std`).
+        struct GuiRoadRuleCrashEvent20 : public CgsGui::GuiEvent<465>
+        {
+            s32 miReserved;   // +0x0C (the console's `stw r18` zero)
+            f32 mfCrashScore; // +0x10
+            explicit GuiRoadRuleCrashEvent20(f32 lfCrashScore)
+                : CgsGui::GuiEvent<465>(8, 12), miReserved(0), mfCrashScore(lfCrashScore) {}
+        };
+
+        // 24-byte OutputGuiEvent<BrnGui::GuiAudioEvent> WRAPPER record -- header
+        // { sizeof(payload)=24, type=456, payload offset=16 } then the 24-byte payload. The
+        // countdown's four audio posts differ only in the third payload word (3/2/1/0), which
+        // is the countdown step. Shape verbatim from the committed
+        // BrnInGameMessagesComponent.cpp:160 GuiAudioEventRecord40 (the same X360 record).
+        // ⚠ FLAG payload field NAMES: BrnGui::GuiAudioEvent is still `u8 maPayload[12]` in
+        // BrnGuiDemangledEventTypes.h, so the leading words have no recovered names and are
+        // spelled by role here rather than forked into that header.
+        struct alignas(8) GuiAudioEventRecord40
+        {
+            s32   miOutEventSize;     // +0x00 = 24
+            s32   miOutEventType;     // +0x04 = 456
+            s32   miOutEventOffset;   // +0x08 = 16
+            s32   miHeaderPad;        // +0x0C (uninitialised on the console)
+            s32   miAudioParam0;      // +0x10 = 0 on all four countdown posts
+            s32   miAudioParam1;      // +0x14 = 6 (the countdown audio bank)
+            s32   miAudioParam2;      // +0x18 = the countdown step 3/2/1/0
+            s32   miPayloadPad;       // +0x1C (uninitialised on the console)
+            CgsID mAudioId;           // +0x20 = 0
+
+            GuiAudioEventRecord40(s32 liParam0, s32 liParam1, s32 liParam2)
+                : miOutEventSize(24), miOutEventType(456), miOutEventOffset(16), miHeaderPad(0)
+                , miAudioParam0(liParam0), miAudioParam1(liParam1), miAudioParam2(liParam2)
+                , miPayloadPad(0), mAudioId(0)
+            {
+            }
+        };
+
+        void PostCountdownAudio(CgsGui::StateInterface* lpInterface, s32 liStep)
+        {
+            // X360 @0x8247A734/A79C/A834/A8FC: { 0, 6, liStep } + an 8-byte zero tail.
+            GuiAudioEventRecord40 lAudio(0, 6, liStep);
+            lpInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT, 40);
+        }
+
+        // ---- GuiCache boundary (the far cache fields this state reads that BrnGuiCache.h
+        // does not expose) -------------------------------------------------------------
+        // Same idiom as BrnFBurnMainHudState.cpp's cache boundary (:116-:215): one helper per
+        // X360 cache field, each carrying the offset so the eventual cache-member naming (or
+        // a `friend struct RaceMainHudState;` grant next to the existing friends at
+        // BrnGuiCache.h:992) lands exactly here.
+
+        // ---- the cache fields that DO have accessors now -----------------------------
+        // The wave's cache carve (BrnGuiCache.h) publishes the in-event gate as
+        // IsEventPreparedForModeStart() @+0xA014,
+        // GetPlayerRacePosition() @+0x4B24, IsPlayerRacePositionOverridden() @+0x4B25,
+        // IsFriendsListOpen() @+0xB86C and GetSatNavZoomLevel() @+0x803C, so this file reads
+        // them by name and only the two below still need a stand-in.
+
+        // ⚠ FLAG accessor leaf: the "local player is the online host" byte. The member IS
+        // named (GuiCache::mbIsOnlineHost @+0xB864, BrnGuiCache.h:1665) but is private and
+        // this class is not one of the cache's friends, so the read is stood in for here
+        // rather than forking a second copy of the member.
+        // DELETE-WHEN: BrnGuiCache.h publishes `bool IsOnlineHost() const` (or grants
+        // `friend struct RaceMainHudState;` beside the friends at :992); the body then
+        // becomes `return lpGuiCache->mbIsOnlineHost;`.
+        bool GuiCache_IsOnlineHost(const GuiCache* /*lpGuiCache*/)
+        {
+            return false;
+        }
+
+        // ⚠ FLAG accessor leaf: the sat-nav zoom-level WRITE. GuiCache publishes the
+        // read (GetSatNavZoomLevel() @+0x803C, BrnGuiCache.h:529) and the "zoom out" step
+        // (ZoomSatNavOut()), but the case-6 arm also stores 0 straight into the member and
+        // there is no setter for that half.
+        // DELETE-WHEN: BrnGuiCache.h publishes `void SetSatNavZoomLevel(s32)`; the body then
+        // becomes `lpGuiCache->SetSatNavZoomLevel(liLevel);`.
+        void GuiCache_SetSatNavZoomLevel(GuiCache* /*lpGuiCache*/, s32 /*liLevel*/)
+        {
+        }
+
+// (fold: an identical definition of LogDeferredComponent was dropped here -- this TU defines it once, above)
+    }
+
+    // =======================================================================
+    //  UpdateRunning  @ 0x8247E898 -- the RUNNING per-frame event dispatch + tick tail
+    // =======================================================================
+    void RaceMainHudState::UpdateRunning()
+    {
+        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+        if (lpInQueue == 0)
+            return;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        // X360 head @0x8247E8C0..0x8247E8E4 -- the per-frame sat-nav pre-pass. Both words are
+        // INSIDE the component: its player-info binding (component +0x130 == state +0x7D0)
+        // and, through its icon manager (component +0x254 == state +0x8F4), the manager's
+        // used-icon count (+0x990). The event pump repopulates both during this same frame.
+        // ⚠ PAIRED EDIT: needs `friend struct RaceMainHudState;` beside the existing
+        // `friend struct FBurnMainHudState;` in BrnSatNavComponent.h:150 and
+        // BrnMapIconManager.h:254 -- the freeburn HUD makes the identical pair of stores.
+        if (mbSatNav)
+        {
+            mSatNavComponent.mpPlayerInfo = 0;
+            if (mSatNavComponent.mpIconManager != 0)
+                mSatNavComponent.mpIconManager->miNumUsedIcons = 0;
+        }
+
+        for (; lpEvent != 0;
+             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+            switch (liEventId)
+            {
+            case 6:      // controller input pressed
+                if (mbFriendsList)
+                {
+                    mFriendsList.HandleControllerInput(lpiPayload);
+                }
+                if (mbBurnoutSkillz && lpiPayload[1] == 38 &&
+                    !mpCache->IsFriendsListOpen())
+                {
+                    PostCommand16<543>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                    GuiEventRoadRuleModeRequest lModeRequest;
+                    lModeRequest.maData[0] = 0; lModeRequest.maData[1] = 0;
+                    lModeRequest.maData[2] = 0; lModeRequest.maData[3] = 0;
+                    lModeRequest.maData[4] = 0; lModeRequest.maData[5] = 0;
+                    lModeRequest.maData[6] = 0; lModeRequest.maData[7] = 0;
+                    mpStateInterface->OutputGuiEvent(lModeRequest);
+                }
+                if (mbFreeburnChallengeButtonStart)
+                    mChallengeComponent.HandleButtonPress(lpiPayload[1]);
+                {
+                    // X360 @0x8247EFB4: `lwz r11, 4(GetFreeburnChallengeManager(mpCache))`
+                    // tested against 3 and 4 -- the manager's own IsRunning/IsShowingResults
+                    // pair, folded inline by the compiler.
+                    const FreeburnChallengeManager* lpManager =
+                        mpCache->GetFreeburnChallengeManager();
+                    const bool lbChallengeLive =
+                        lpManager != 0 && (lpManager->IsRunning() || lpManager->IsShowingResults());
+                    if (lbChallengeLive && !mpCache->IsFriendsListOpen() &&
+                        lpiPayload[1] == 38)
+                    {
+                        PostCommand16<544>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                    }
+                }
+                if (lpiPayload[1] == 53)
+                {
+                    // The sat-nav zoom toggle, live only in E_MODE_ONLINE_BURNING_HOME_RUN(13).
+                    if (mpCache->GetGameMode() == 13)
+                    {
+                        if (mpCache->GetSatNavZoomLevel() == 1)
+                            GuiCache_SetSatNavZoomLevel(mpCache, 0);
+                        else
+                            mpCache->ZoomSatNavOut();   // X360 renders this `this`-less (hazard 4)
+                    }
+                }
+                break;
+            case 7:      // controller input released
+                if (mbFreeburnChallengeButtonStart)
+                    mChallengeComponent.HandleButtonRelease(lpiPayload[1]);
+                break;
+            case 94:
+                if (mbFriendsList)
+                    mFriendsListChangeIcon.Hide();
+                break;
+            case 95:
+                if (mbFriendsList)
+                {
+                    mFriendsList.EndWait();
+                }
+                break;
+            case 101:
+                if (mbFriendsList)
+                    mFriendsList.SetTotalFriends(lpiPayload[0]);
+                break;
+            case 102:
+                if (mbFriendsList)
+                {
+                    mFriendsList.ProcessNewEntryData(lpEvent);
+                }
+                break;
+            case 103:
+                if (mbFriendsList)
+                    mFriendsList.RequestRefreshedData();
+                break;
+            case 104:
+                if (mbFriendsList && mpCache->IsOnlineStartInProgress() &&
+                    GuiCache_IsOnlineHost(mpCache))
+                {
+                    mFriendsList.ReshowShortcuts();
+                }
+                break;
+            case 106:
+                if (mbFriendsList && !mpCache->IsFriendsListOpen())
+                    mFriendsListChangeIcon.AnimateIn();
+                break;
+            case 108:
+                if (mbOnlineTimeoutTimer)
+                {
+                    // FLAG deferred: OnlineTimeoutComponent::SetTime @0x824157B0 is neither
+                    // declared in BrnOnlineTimeoutTimerComponent.h nor on the build.
+                    LogDeferredComponent("OnlineTimeoutComponent::SetTime");
+                }
+                break;
+            case 154:
+                if (mbHudMessages)
+                    mHudMessageComponent.AddMessage(lpEvent);
+                break;
+            case 156:
+                if (mbHudMessages)
+                    mHudMessageComponent.TerminateMessages();
+                break;
+            case 177:
+                if (mbPaybackComponent)
+                {
+                    // FLAG deferred: BrnPaybackComponent.cpp is not on the build
+                    // (BeginAwardAnimation(payload[2], payload[1]) @0x8243E148).
+                    LogDeferredComponent("PaybackComponent::BeginAwardAnimation");
+                }
+                break;
+            case 179:
+            case 180:
+                if (mbPaybackComponent)
+                {
+                    // FLAG deferred: PaybackComponent::BecomeInvisible @0x8241FFE8 -- TU off the build.
+                    LogDeferredComponent("PaybackComponent::BecomeInvisible");
+                }
+                break;
+            case 182:   // hide the event HUD
+            {
+                mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "invisible", false);
+                mGeneralTransitionComponentFlapt.Run("invisible");
+                if (lpiPayload[0] != 1)
+                {
+                    GuiEventShowHideBoostBar lBoostBar;
+                    lBoostBar.maData[0] = 0;
+                    mpStateInterface->OutputViewState(lBoostBar);
+                }
+                break;
+            }
+            case 183:   // show the event HUD
+            {
+                mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "visible", false);
+                mGeneralTransitionComponentFlapt.Run("visible");
+                GuiEventShowHideBoostBar lBoostBar;
+                lBoostBar.maData[0] = 1;
+                mpStateInterface->OutputViewState(lBoostBar);
+                break;
+            }
+            case 199:
+            case 200:
+                UpdateSatNav(lpEvent, liEventId);
+                break;
+            case 205:   // show/hide satnav passthrough: view record + the satnav mirror
+            {
+                GuiEventShowHideSatNav lShowHide;
+                lShowHide.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS,
+                                    *reinterpret_cast<const u8*>(lpEvent) != 0, 0.0f);
+                mpStateInterface->OutputViewState(lShowHide);
+                if (mbSatNav)
+                {
+                    mSatNavComponent.RecvEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lShowHide), 213);
+                }
+                break;
+            }
+            case 206:
+                ProcessBoostInfo(lpEvent);
+                break;
+            case 221:   // the black-bars / letterbox amount (f32)
+            {
+                // X360 @0x8247F1B0: the whole arm is gated on NOT being in an event.
+                if (!mpCache->IsEventPreparedForModeStart())
+                {
+                    const f32 lfBlackBars = *reinterpret_cast<const f32*>(lpEvent);
+                    if (mfBlackBarsCurrentValue != lfBlackBars)
+                    {
+                        u8 lu8Show;
+                        if (lfBlackBars >= KF_BLACK_BARS_THRESHOLD)
+                        {
+                            mGeneralTransitionComponentApt.AddOutputAptViewState(
+                                "apt_Transition", "invisible", false);
+                            mGeneralTransitionComponentFlapt.Run("invisible");
+                            GuiEventShowHideBoostBar lBoostBar;
+                            lBoostBar.maData[0] = 0;
+                            mpStateInterface->OutputViewState(lBoostBar);
+                            lu8Show = 0;
+                        }
+                        else
+                        {
+                            mGeneralTransitionComponentApt.AddOutputAptViewState(
+                                "apt_Transition", "visible", false);
+                            mGeneralTransitionComponentFlapt.Run("visible");
+                            GuiEventShowHideBoostBar lBoostBar;
+                            lBoostBar.maData[0] = 1;
+                            mpStateInterface->OutputViewState(lBoostBar);
+                            lu8Show = 1;
+                        }
+                        GuiEventShowHideSatNav lShowHide;
+                        lShowHide.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS,
+                                            lu8Show != 0, 0.0f);
+                        mpStateInterface->OutputViewState(lShowHide);
+                        mpStateInterface->OutputInternalState(lShowHide);
+                        if (mbSatNav)
+                        {
+                            mSatNavComponent.RecvEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lShowHide), 213);
+                        }
+                        mfBlackBarsCurrentValue = *reinterpret_cast<const f32*>(lpEvent);
+                    }
+                }
+                break;
+            }
+            case 222:   // the PP toggle
+                if (mbB5Ident)
+                {
+                    CGS_ASSERT(lpEvent != 0, "lpPPToggle");   // cpp:1301 (non-gating)
+                    if (lpiPayload[0] == 1)
+                        mIdentAnimator.Run("transIn");
+                    else
+                        mIdentAnimator.Run("invisible");
+                }
+                break;
+            case 226:
+                PostCommand16<60>(mpStateInterface, KI_CHANNEL_VIEW_STATE);
+                break;
+            case 227:
+                PostCommand16<61>(mpStateInterface, KI_CHANNEL_VIEW_STATE);
+                break;
+            case 234:
+                UpdateEventCountdown(lpEvent);
+                break;
+            case 239:
+                if (mbPlayerPositionTable)
+                {
+                    // FLAG deferred: BrnPlayerPositionTable.cpp is not on the build
+                    // (UpdatePositionDetails @0x82441260).
+                    LogDeferredComponent("PlayerPositionTableComponent::UpdatePositionDetails");
+                }
+                break;
+            case 325:
+                if (mbMugShotComponent)
+                {
+                    // FLAG deferred: HandleMugshotEvent @0x82475CD0 is in the header's
+                    // RESIDUE block -- its GuiMugshotControlEvent parameter type is
+                    // ODR-forked between GameBridgeNetworkToX.h and
+                    // BrnGuiDemangledEventTypes.h, so it has no declaration to call.
+                    LogDeferredComponent("RaceMainHudState::HandleMugshotEvent");
+                }
+                break;
+            case 333:   // GuiEventRoadRuleEnter
+                if (mbRoadRuleComponent)
+                    mRoadRuleComponent.HandleEnterRoadEvent(
+                        reinterpret_cast<const GuiEventRoadRuleEnter*>(lpEvent));
+                break;
+            case 335:   // road-rule begin { ScoreType }
+                if (mbRoadRuleComponent)
+                    mRoadRuleComponent.HandleRoadRuleBegin(
+                        static_cast<BrnStreetData::ScoreType>(lpiPayload[0]));
+                mbBounceBoostPromptNeeded = false;   // X360: the store is OUTSIDE the gate
+                break;
+            case 336:   // GuiEventRoadRuleEnd
+                if (mbRoadRuleComponent)
+                    mRoadRuleComponent.HandleRoadRuleEnd(
+                        reinterpret_cast<const GuiEventRoadRuleEnd*>(lpEvent));
+                mbBounceBoostPromptNeeded = false;
+                break;
+            case 338:   // rule-time update { f32 time, .., f32 crashTarget, s32 multiplier }
+                if (mbRoadRuleComponent)
+                {
+                    const f32* lpfPayload = reinterpret_cast<const f32*>(lpEvent);
+                    mRoadRuleComponent.UpdateCurrentTime(lpfPayload[0]);
+                    // X360 @0x8247F55C..: the crash-target pair rides the same record; a
+                    // changed multiplier nudges the target by +0.01 so the eased readout
+                    // re-renders. This is RoadRuleComponent::UpdateCurrentCrash inlined --
+                    // it is spelled as the two named stores because that method has no body
+                    // in the tree, exactly as BrnFBurnMainHudState.cpp:1050 spells it.
+                    // ⚠ PAIRED EDIT: needs `friend struct RaceMainHudState;` beside
+                    // `friend struct FBurnMainHudState;` at BrnRoadRuleComponent.h:51.
+                    const s32 liNewMultiplier = lpiPayload[4];
+                    mRoadRuleComponent.mfTargetCrashScore = lpfPayload[3];
+                    if (mRoadRuleComponent.miCrashMultiplier != liNewMultiplier)
+                    {
+                        mRoadRuleComponent.miCrashMultiplier  = liNewMultiplier;
+                        mRoadRuleComponent.mfTargetCrashScore = lpfPayload[3] + KF_BLACK_BARS_THRESHOLD;
+                    }
+                }
+                break;
+            case 339:   // GuiEventRoadRuleUpdateTargetScores
+                if (mbRoadRuleComponent)
+                {
+                    CGS_ASSERT(lpEvent != 0, "lpRRTargetUpdate");   // cpp:1018 (non-gating)
+                    mRoadRuleComponent.HandleRoadRuleTargetUpdate(
+                        reinterpret_cast<const GuiEventRoadRuleUpdateTargetScores*>(lpEvent));
+                }
+                break;
+            case 340:   // road-rule leave { CgsID }
+                // Hazard 4: the asm is `addi r3,r31,0x5F60 ; ld r4,0(r29)` -- ONE 64-bit
+                // payload load, not the two s32s Hex-Rays renders.
+                if (mbRoadRuleComponent)
+                    mRoadRuleComponent.HandleLeaveRoadEvent(
+                        *reinterpret_cast<const CgsID*>(lpEvent));
+                mbBounceBoostPromptNeeded = false;
+                break;
+            case 341:   // GuiEventRoadRuleUpcomingRoads
+                if (mbRoadRuleComponent)
+                    mRoadRuleComponent.HandleUpcomingRoadEvent(
+                        reinterpret_cast<const GuiEventRoadRuleUpcomingRoads*>(lpEvent));
+                break;
+            case 343:   // road-rule mode change { EActiveRoadRule }
+                if (mbRoadRuleComponent)
+                    mRoadRuleComponent.SwitchModes(
+                        static_cast<BrnGameState::EActiveRoadRule>(lpiPayload[0]));
+                break;
+            case 379:   // the HUD transin / transout pair (player engine state)
+            {
+                CGS_ASSERT(static_cast<u32>(lpiPayload[0]) < 2u,
+                           "( GuiPlayerEngineEvent::E_ENGINE_OFF == lpEngineChange->meNewEngineState )"
+                           " || ( GuiPlayerEngineEvent::E_ENGINE_ON == lpEngineChange->meNewEngineState )");   // cpp:1159
+                GuiEventShowHideSatNav lShowHide;
+                if (lpiPayload[0] == 0)
+                {
+                    mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "transout", false);
+                    mGeneralTransitionComponentFlapt.Run("transout");
+                    PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+                    lShowHide.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS, false, 0.0f);
+                    mpStateInterface->OutputViewState(lShowHide);
+                    mpStateInterface->OutputInternalState(lShowHide);
+                }
+                else if (lpiPayload[0] == 1)
+                {
+                    mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "transin", false);
+                    mGeneralTransitionComponentFlapt.Run("transin");
+                    PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
+                    lShowHide.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS, true, 0.0f);
+                    mpStateInterface->OutputViewState(lShowHide);
+                    mpStateInterface->OutputInternalState(lShowHide);
+                }
+                // X360 @0x8247F318: the satnav mirror is OUTSIDE the if/else.
+                if (mbSatNav)
+                {
+                    mSatNavComponent.RecvEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lShowHide), 213);
+                }
+                break;
+            }
+            case 218:
+            case 364: case 365: case 367: case 368:
+            case 382: case 383: case 384: case 385: case 386: case 387:
+            case 388: case 389: case 390: case 391: case 394:
+            case 400: case 401:
+                // X360 LABEL_120 -- the whole boost-message event family routes through the
+                // manager with the LIVE event id. Note there is NO mbBoostMessages gate here;
+                // only the per-frame Update below is gated.
+                CGS_ASSERT(mpCache != 0, "mpCache != NULL");   // cpp:839 (non-gating)
+                mBoostMessageManager.RecvEvent(lpEvent, liEventId, mpCache);
+                break;
+            case 398:
+                mbBounceBoostPromptNeeded = (lpiPayload[0] != 0);
+                break;
+            case 573:   // freeburn challenge selector action
+                if (lpiPayload[2] == 2 || lpiPayload[2] == 3)
+                {
+                    if (mbFreeburnChallengeSelector)
+                    {
+                        // FLAG deferred: BrnChallengeSelector.cpp / _wL_01.cpp are not on the
+                        // build and their mount has three unresolved residuals
+                        // (ChallengeList::GetChallengeCount, ChallengeListEntry::
+                        // GetNumPlayers / GetDescriptionStringID). Action 2 =
+                        // SetAvailableChallenges(cache->muChallengeSlotMirror) +
+                        // SelectAvailableChallengeByID(*payload, false); action 3 = Hide().
+                        LogDeferredComponent("ChallengeSelector::(action 2/3)");
+                    }
+                }
+                else if (lpiPayload[2] > 3)
+                {
+                    CGS_ASSERT(false, "Unknown freeburn challenge selector action");   // cpp:1478 (streamed)
+                }
+                break;
+            case 574:
+                CGS_ASSERT(lpEvent != 0, "lpChallengeEvent");   // cpp:1361 (non-gating)
+                if (*(reinterpret_cast<const u8*>(lpEvent) + 8) != 0)
+                {
+                    if (mbFreeburnChallengeButtonStart)
+                        mChallengeComponent.Show();
+                }
+                else if (mbFreeburnChallengeSelector)
+                {
+                    CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:1379 (non-gating)
+                    // FLAG deferred (X360 @0x8247FCDC): SetAvailableChallenges(
+                    // mpCache->muChallengeSlotMirror @+0xAC78) then
+                    // SelectAvailableChallengeByID(the CgsID at payload+0 -- `ld r4,0(r29)`,
+                    // a 64-bit load Hex-Rays renders as the 32-bit v4[1]), lbSelect false.
+                    LogDeferredComponent("ChallengeSelector::SelectAvailableChallengeByID");
+                }
+                break;
+            case 576:
+                if (mbFreeburnChallengeButtonStart)
+                    mChallengeComponent.Hide();
+                if (mbFreeburnChallengeSelector)
+                {
+                    // FLAG deferred: `if (selector.IsVisible()) selector.Hide();`
+                    LogDeferredComponent("ChallengeSelector::Hide");
+                }
+                break;
+            case 578:
+                if (mbFreeburnChallengeSelector)
+                {
+                    // FLAG deferred: the same Hide, additionally gated on the cache's
+                    // online-host byte (X360 `!*(mpCache + 47204)`).
+                    LogDeferredComponent("ChallengeSelector::Hide");
+                }
+                break;
+            case 582:
+                if (mbFreeburnChallengeSelector)
+                {
+                    CGS_ASSERT(lpEvent != 0, "lpShowChallengeSelectorEvent");   // cpp:887 (non-gating)
+                    // FLAG deferred: SetAvailableChallenges -> GetAvailableChallengeCount>0
+                    // -> Show + SelectAvailableChallengeByID/SelectAvailableChallenge.
+                    LogDeferredComponent("ChallengeSelector::Show");
+                }
+                break;
+            case 583:
+                if (mbFreeburnChallengeTicker)
+                    StartFreeburnChallengeNotActiveTicker();
+                break;
+            case 584:
+                // ⭐ 2026-08-27 verify round: the FULL 16-byte {2,536,12}+{0,1} wire on
+                // CHANNEL 40 (console `li r5, 0x28 ; li r6, 0x10`), not the raw 2-byte
+                // record through OutputGuiEvent (2 bytes on channel 536 = a clear the
+                // ticker consumer never sees). TU-local wire per the partfile precedent.
+                if (mbFreeburnChallengeTicker)
+                {
+                    struct GuiTickerClearWire536 : public CgsGui::GuiEvent<536>
+                    {
+                        u8 mbForceFadeOut;            // +0x0C == 0
+                        u8 mbDeleteChallengeMessages; // +0x0D == 1
+                        u8 mau8Pad[2];
+                        GuiTickerClearWire536()
+                            : CgsGui::GuiEvent<536>(2, 12)
+                            , mbForceFadeOut(0), mbDeleteChallengeMessages(1)
+                        { mau8Pad[0] = mau8Pad[1] = 0; }
+                    };
+                    GuiTickerClearWire536 lClear;
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lClear), 40, 16);
+                }
+                break;
+            default:
+                break;
+            }
+        }
+
+        // ---- the per-frame component ticks (X360 @0x8247FE54..0x824801EC) --------------
+        if (mbDistrictMarker)
+        {
+            // The marker's own per-frame method: an ICF fold of an EMPTY body on console
+            // (the pseudocode's BaseCollisionGenerator::Destruct @0x8284CB38 decompiles to
+            // `{ ; }`) -- hazard 6, do NOT reconstruct a collision call here.
+            mDistrictMarker.Update();
+
+            GuiEventChangeDistrict lRecord;
+            lRecord.meCounty    = mpCache->GetChangeDistrictCounty();
+            lRecord.meDistrict  = mpCache->GetChangeDistrictDistrict();
+            lRecord.mu8Consumed = mpCache->IsChangeDistrictConsumed() ? 1 : 0;
+            lRecord.maPad[0] = lRecord.maPad[1] = lRecord.maPad[2] = 0;
+            if (!lRecord.mu8Consumed ||
+                (mbFirstFrame && lRecord.meDistrict != BrnWorld::E_DISTRICT_INVALID))
+            {
+                mDistrictMarker.SetCounty(static_cast<BrnWorld::ECounty>(lRecord.meCounty));
+                mDistrictMarker.SetDistrict(static_cast<BrnWorld::EDistrict>(lRecord.meDistrict));
+                lRecord.mu8Consumed = 1;
+                mpCache->RecEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 169);
+                mbFirstFrame = false;
+            }
+        }
+
+        // The position indicator (X360 @0x8247FEE0..0x8247FF40). r4 carries the cache's
+        // position byte into BOTH calls: the zero-position path falls straight through to
+        // SetVisible(false), and the loaded path re-reads the component's own pending
+        // trans-in latch between SetPosition and SetVisible(true).
+        // ⚠ PAIRED EDIT: mPositionIndicatorComponent.mbFirstFrame is private -- needs
+        // `friend struct RaceMainHudState;` in BrnPositionIndicator.h (the class has no
+        // friend list yet; add one beside the member block).
+        {
+            const s32 liPosition = mpCache->GetPlayerRacePosition();
+            if (liPosition == 0)
+            {
+                mPositionIndicatorComponent.SetVisible(false);
+            }
+            else if (mpCache->IsPlayerRacePositionOverridden() ||
+                     (mPositionIndicatorComponent.mbFirstFrame && liPosition > 0 && liPosition <= 8))
+            {
+                mPositionIndicatorComponent.SetPosition(liPosition);
+                if (mPositionIndicatorComponent.mbFirstFrame)
+                    mPositionIndicatorComponent.SetVisible(true);
+            }
+        }
+
+        // The showtime bounce-boost help item (X360 @0x8247FF44..0x8247FFC0).
+        if (mbShowTimeBar)
+        {
+            if (mbBounceBoostPromptNeeded)
+            {
+                if (!mbBounceBoostPromptVisible)
+                {
+                    mShowtimeBounceBoostButton.SetItem(
+                        "$HINT_SHOWTIME_GROUND_BREAK",
+                        FlaptButtonIconComponent::E_PADBUTTON_SELECT,
+                        FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                        false);
+                    mbBounceBoostPromptVisible = true;
+                }
+            }
+            else if (mbBounceBoostPromptVisible)
+            {
+                // X360 &unk_820046A7 -- the empty string (image byte 0x00), the "clear it" call.
+                mShowtimeBounceBoostButton.SetItem(
+                    "",
+                    FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                    FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                    false);
+                mbBounceBoostPromptVisible = false;
+            }
+        }
+
+        // ⭐ THE ONE EventInfoComponent CALL (X360 @0x8247FFCC). The stunt-run score /
+        // multiplier / banked-combo / event-timer readout rides this single per-frame tick;
+        // there is no event-switch arm feeding it.
+        if (mbEventInfo)
+            mEventInfoComponent.Update(mpCache);
+
+        if (mbOnlineTimeoutTimer)
+        {
+            // FLAG deferred: OnlineTimeoutComponent::Update @0x8242C1E0 is neither declared
+            // in BrnOnlineTimeoutTimerComponent.h nor on the build.
+            LogDeferredComponent("OnlineTimeoutComponent::Update");
+        }
+        if (mbSatNav)
+            mSatNavComponent.Update();
+        if (mbBoostMessages)
+        {
+            // X360 @0x8248000C: `lfs f1, 0(mpCache)` == GuiCache::mfTimeStep (GetTimeStep),
+            // and `lbz r5, 0x160(this)` == mbShowTimeBar -- the showtime flag IS the second
+            // argument, so in showtime the manager runs only its showtime ticker.
+            mBoostMessageManager.Update(mpCache->GetTimeStep(), mbShowTimeBar);
+        }
+        if (mbHudMessages)
+            mHudMessageComponent.Update();
+        if (mbFriendsList)
+        {
+            mFriendsList.Update();
+        }
+        if (mbRoadRuleComponent)
+        {
+            mRoadRuleComponent.Update(mpCache->GetTime());
+            // Hazard 5: the operand is an `lvx128 v1, mpCache, 0x4AE0` that Hex-Rays drops
+            // entirely -- the world-camera position. Same recipe as
+            // BrnFBurnMainHudState.cpp:1290.
+            const Vector4& lv4Camera = mpCache->GetWorldCameraPosition();
+            Vector3 lv3Camera;
+            lv3Camera.x = lv4Camera.x;
+            lv3Camera.y = lv4Camera.y;
+            lv3Camera.z = lv4Camera.z;
+            lv3Camera.w = lv4Camera.w;
+            mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
+
+            GuiRoadRuleCrashEvent20 lCrash(mRoadRuleComponent.mfCurrentCrashScore);
+            mpStateInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lCrash), KI_CHANNEL_GUI_OUT, 20);
+        }
+        if (mbPaybackComponent)
+        {
+            // FLAG deferred: PaybackComponent::Update @0x8241FF38 -- TU off the build.
+            LogDeferredComponent("PaybackComponent::Update");
+        }
+        if (mbCompass)
+        {
+            mCompass.Update();
+        }
+        if (mbFreeburnChallengeOnComponent)
+        {
+            // FLAG deferred: the challenge-on arm. X360 @0x824800F8..0x824801E4:
+            //   assert(cache->mpChallengeManager, "mpChallengeManager", BrnGuiCache.h:2390)
+            //   if (manager->IsRunning() || manager->IsShowingResults())
+            //       lbShow = (manager->GetCurrentAction()->GetTimeLimit() <= 0.0f);
+            //   else lbShow = false;
+            //   if (mbChallengeOnShowing != lbShow) {
+            //       mbChallengeOnShowing = lbShow;
+            //       mChallengeOnComponent.SetState(lbShow ? "transin" : "invisible");
+            //   }
+            // Deferred because the +0x40 read is ChallengeListEntryAction::GetTimeLimit,
+            // which is declared-only in SharedClasses/DataLists/ChallengeListEntry.h (no
+            // body anywhere), and GuiCache::mpChallengeManager is private to this class.
+            // mbFreeburnChallengeOnComponent is 0 for every offline mode including
+            // E_MODE_STUNT_ATTACK, so this arm is dead on the bring-up path.
+            LogDeferredComponent("RaceMainHudState::(freeburn challenge-on arm)");
+        }
+
+        ConcludeEventCountdown();
+    }
+
+    // =======================================================================
+    //  SetupEventInfo  @ 0x82474A60
+    // =======================================================================
+    // Ten lines: assert the cache and the enable flag, publish the live game mode to the
+    // event-info panel and -- for every mode except 15 (the freeburn lobby) -- run its
+    // "transin". The mode word is GuiCache::meGameModeType (X360 cache+40536).
+    void RaceMainHudState::SetupEventInfo()
+    {
+        CGS_ASSERT(mpCache != 0, "mpCache");           // cpp:3804 (non-gating)
+        CGS_ASSERT(mbEventInfo, "mbEventInfo");        // cpp:3805 (non-gating)
+
+        const s32 liGameMode = mpCache->GetGameMode();
+        mEventInfoComponent.SetEventType(
+            static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(liGameMode));
+        if (liGameMode != 15)
+            mEventInfoComponent.MoveAnimation("transin");
+    }
+
+    // =======================================================================
+    //  UpdateEventCountdown  @ 0x8247A608
+    // =======================================================================
+    // The pre-event 3 / 2 / 1 / GO ladder. The WHOLE body is gated on mbPreRaceCountdown, so
+    // for E_MODE_STUNT_ATTACK (mode 7, where UpdateSetupState clears the flag) this is a
+    // no-op. meCurrentEventCountdownState is a strictly DESCENDING ratchet: each arm runs only
+    // while the state is still above the value it is about to write, so a repeated or
+    // out-of-order countdown event cannot walk the icon backwards.
+    void RaceMainHudState::UpdateEventCountdown(const CgsModule::Event* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid event passed to RaceMainHudState::UpdateEventCountdown");   // cpp:3252 (streamed; non-gating)
+
+        if (!mbPreRaceCountdown)
+            return;
+
+        const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
+        switch (lpiPayload[0])
+        {
+        case 3:
+            if (meCurrentEventCountdownState > E_EVENT_COUNTDOWN_STATE_THREE)
+            {
+                meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_THREE;
+                if (mbPreRaceCountdownRenders)
+                    mEventCountdownIcon.SetState("three");
+                PostCountdownAudio(mpStateInterface, 3);
+            }
+            break;
+        case 2:
+            if (meCurrentEventCountdownState > E_EVENT_COUNTDOWN_STATE_TWO)
+            {
+                meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_TWO;
+                if (mbPreRaceCountdownRenders)
+                    mEventCountdownIcon.SetState("two");
+                PostCountdownAudio(mpStateInterface, 2);
+            }
+            break;
+        case 1:
+            if (meCurrentEventCountdownState > E_EVENT_COUNTDOWN_STATE_ONE)
+            {
+                meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_ONE;
+                if (mbPreRaceCountdownRenders)
+                    mEventCountdownIcon.SetState("one");
+                CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:3336 (non-gating)
+                mfEventCountdownTimer = mpCache->GetTime();
+                PostCountdownAudio(mpStateInterface, 1);
+            }
+            break;
+        case 0:
+            if (meCurrentEventCountdownState > E_EVENT_COUNTDOWN_STATE_GO)
+            {
+                meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_GO;
+                if (mbPreRaceCountdownRenders)
+                    mEventCountdownIcon.SetState("go");
+
+                // ⭐ HAZARD 7 -- an EXACT float sentinel, deliberately not epsilon'd. OnEnter
+                // leaves mfEventCountdownTimer at 0.0f, and 0.0f is the "the ONE step never
+                // arrived" marker: in that case the timer is back-dated by one second so the
+                // reflection below still yields a sane GO deadline. Then the timer is
+                // REFLECTED about now (`fmsubs f0, f1, 2.0, f13` == now*2 - then), turning
+                // "the moment the countdown reached ONE" into "the moment the GO banner should
+                // retire" -- ConcludeEventCountdown waits for it. Do not "fix" either line.
+                if (mfEventCountdownTimer == 0.0f)
+                    mfEventCountdownTimer = mpCache->GetTime() - 1.0f;
+                CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:3369 (non-gating)
+                mfEventCountdownTimer = (mpCache->GetTime() * 2.0f) - mfEventCountdownTimer;
+
+                PostCountdownAudio(mpStateInterface, 0);
+                RevealHud(false);
+                PostCommand16<236>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<533>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            }
+            break;
+        case 4:
+        case 5:
+        case 6:
+        case 7:
+        case 8:
+        case 9:
+            break;
+        default:
+            CGS_ASSERT(false,
+                       "Unexpected Countdown State in RaceMainHudState::UpdateEventCountdown");   // cpp:3392
+            break;
+        }
+    }
+
+    // =======================================================================
+    //  ConcludeEventCountdown  @ 0x824748F0
+    // =======================================================================
+    // Called unconditionally at the end of every UpdateRunning frame. Once the GO banner's
+    // reflected deadline passes, retire the icon and disarm the timer with -1.0f (the console's
+    // "already concluded" value -- distinct from the 0.0f OnEnter sentinel the GO arm reads).
+    void RaceMainHudState::ConcludeEventCountdown()
+    {
+        if (mbPreRaceCountdown && meCurrentEventCountdownState == E_EVENT_COUNTDOWN_STATE_GO)
+        {
+            CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:3423 (non-gating)
+            if (mpCache->GetTime() >= mfEventCountdownTimer)
+            {
+                const bool lbRenders = mbPreRaceCountdownRenders;
+                meCurrentEventCountdownState = E_EVENT_COUNTDOWN_STATE_DONE;
+                if (lbRenders)
+                    mEventCountdownIcon.SetState("invisible");
+                mfEventCountdownTimer = -1.0f;
+            }
+        }
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnRaceMainHudState_wS4.cpp (wave S4) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===================================================================================
+// wave-S4 partfile of BrnRaceMainHudState.cpp -- the five RACE_MAIN helper bodies the
+// mounted sibling part-files CALL but that were bodied NOWHERE in the tree (the RMH
+// verifier's link list). Every one is declared in BrnRaceMainHudState.h:200/201/205/210/211.
+//
+//   BrnGui::RaceMainHudState::ProcessBoostInfo                      @0x82474550 (DWARF .cpp:2937)
+//   BrnGui::RaceMainHudState::ProcessAptEvents                      @0x82474638 (DWARF .cpp:2964)
+//   BrnGui::RaceMainHudState::UpdateSatNav                          @0x82474830 (DWARF .cpp:3261)
+//   BrnGui::RaceMainHudState::StartFreeburnChallengeTicker          @0x8247A9C0 (DWARF .cpp:4085)
+//   BrnGui::RaceMainHudState::StartFreeburnChallengeNotActiveTicker @0x8247AF38 (DWARF .cpp:4185)
+//
+// Each JSON's `name` field was checked against the symbol claimed above before a line was
+// written, and every body is transcribed from the raw DISASSEMBLY -- Hex-Rays is arbitrated
+// against wherever the two disagree. It disagrees three times here and each is called out
+// at its site:
+//   (1) UpdateSatNav / ProcessAptEvents: Hex-Rays renders the SatNavComponent receiver as
+//       `v3 + 424` in one function and `v4 + 1696` in the other for the SAME member. The asm
+//       is `addi r3, r<this>, 0x6A0` in BOTH -- 424 is the dropped `(_DWORD *)` cast. The
+//       member is mSatNavComponent (header PINNED +0x6A0) either way.
+//   (2) ProcessAptEvents' mbEventInfo arm calls a function IDA names
+//       `CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct`. That address
+//       (0x8284CB38) is a bare `blr` with hundreds of xrefs -- the linker's ICF pool for
+//       every empty method in the image. The RECEIVER is `this + 0x170` == mEventInfoComponent
+//       and the asm sets THREE argument registers (r3 = &mEventInfoComponent, r4 = lpEvent,
+//       r5 = mpCache @0x824747C4), so the call is EventInfoComponent::HandleTrigger
+//       (DWARF BrnEventInfo.h:429), folded to empty in retail. See its site.
+//   (3) The two tickers: Hex-Rays renders the four identical post blocks as straight-line
+//       code and hides the `for` they came from; the asm is four byte-identical
+//       memcpy+AddEvent groups (0x8247AE58..0x8247AF2C / 0x8247B004..0x8247B0D8).
+//
+// THE TICKER WIRE. Both tickers post through OutputGuiEvent<T>, whose X360 body stack-builds
+// a GuiEventWrapper<T,40> -- { sizeof(T), T's id, 12 } then a byte copy of T -- and queues
+// THAT on channel 40. The in-tree StateInterface::OutputGuiEvent template still direct-passes
+// (the divergence FLAGged at CgsGuiStateInterface.h:131), so both records are built here and
+// posted through GetOutputEventQueue()->AddEvent at their true wire size. That is the
+// standing accommodation for this family and it is what the two closest siblings already do:
+// BrnRaceMainHudState.cpp:113 (its OnLeave GuiEvent536) and BrnJunctionInfoComponent.cpp:41
+// (the 2072-byte id-537 custom-message payload, whose layout attestation -- AddString
+// @0x823A6940, types stride 4 @+0, strings stride 512 @+0x10, count @+0x810 -- this file
+// reuses verbatim).
+// ⚠ NOTE for the conductor: the sibling wS2.cpp:630 / wS3.cpp:658 ticker-CLEAR arms post the
+// same id-536 record through `mpStateInterface->OutputGuiEvent(lClear)` instead, which lands
+// it on channel 536 at 2 bytes rather than channel 40 at 16. Not edited here (not this file's
+// partfile) -- reported instead.
+//
+// COMPONENT DEFERRALS. Same rule and same one-shot helper as the sibling
+// BrnRaceMainHudState_wS3.cpp:183 / BrnFBurnMainHudState.cpp:216: a call whose callee is not
+// reachable from the build keeps the console's gate and control flow verbatim and logs the
+// gap once instead of inventing a body. FOUR here, each named at its site:
+//   * EventInfoComponent::HandleTrigger -- undeclared on the component, and ICF-folded EMPTY
+//     in retail, so the deferral costs no behaviour at all.
+//   * ChallengeSelector::HandleLoadNotification and
+//     PaybackComponent::RespondToTransitionComplete -- both TUs are on disk but NOT on the
+//     build (only their BrnHudStatesLinkStubs.cpp Construct scaffolds are), and wS3 already
+//     defers every arm of both for exactly this reason. Deferring them TU-wide is what keeps
+//     the RACE_MAIN mount linkable.
+//   * the local player's completed-challenge bit -- the GUI FreeburnChallengeManager's
+//     mCompletedData tail is deliberately unmodelled (BrnGuiFreeburnChallengeManager.h:148,
+//     "HONEST BOUNDARY").
+//
+// ⚠ TWO LINK RESIDUALS THIS FILE ADDS (reported, not papered over -- both are real data
+// accessors whose values would be visibly wrong if stood in):
+//   * BrnResource::ChallengeListEntry::GetDescriptionStringID() const -- declared-only, NO
+//     body anywhere. BrnHudStatesLinkStubs.cpp:107 already names it as the ChallengeSelector
+//     mount's residual, and ChallengeListEntry.h:427 documents the fix: it is the identical
+//     shape to the already-inline GetTitleStringID, over macDescriptionStringID (+0xA0).
+//   * BrnResource::ChallengeListEntryAction::GetTargetValue(s32) const -- FULLY bodied at
+//     SharedClasses/DataLists/ChallengeListEntry.cpp:71; that TU is simply not in
+//     tools/build/build_game_exe.bat yet.
+// (A third, BrnResource::ChallengeListEntry::GetNumPlayers(), links TODAY only to the
+// BrnFriendsListLinkGates.cpp:116 gate, which returns 0 and logs -- so the ticker's player
+// -count parameter renders "0" until the DataLists body lands. Not this file's gate.)
+// ===================================================================================
+
+
+namespace BrnGui
+{
+    namespace
+    {
+// (fold: an identical definition of KI_CHANNEL_GUI_OUT was dropped here -- this TU defines it once, above)
+
+        // ---- the id-536 ticker-clear wire record ------------------------------------
+        // { 2, 536, 12 } + the {0,1} byte pair, 16 bytes, channel 40. Identical shape to
+        // the sibling BrnRaceMainHudState.cpp:113 (OnLeave posts the same record); kept
+        // file-local per partfile, exactly as the GuiCommandEvent16 twins are.
+        // Both ticker bodies open with it: @0x8247AA18..0x8247AA44 (active) and
+        // @0x8247AF90..0x8247AFBC (not-active) build the pair as two `stb`s into a scratch
+        // half-word and store it with one `sth`, so the payload is a {0, 1} BYTE PAIR at
+        // +0x0C, not a 16-bit 256. Named after the DWARF's own two fields
+        // (BrnGuiEventTypeDefs.h:301/:302 GuiEventTickerClearMessages).
+        struct GuiTickerClearWire536 : public CgsGui::GuiEvent<536>
+        {
+            u8 mbForceFadeOut;            // +0x0C == 0
+            u8 mbDeleteChallengeMessages; // +0x0D == 1
+            u8 mau8Pad[2];
+            GuiTickerClearWire536()
+                : CgsGui::GuiEvent<536>(2, 12), mbForceFadeOut(0), mbDeleteChallengeMessages(1)
+            { mau8Pad[0] = mau8Pad[1] = 0; }
+        };
+
+        void PostTickerClear536(CgsGui::StateInterface* lpInterface)
+        {
+            GuiTickerClearWire536 lEvent;
+            lpInterface->GetOutputEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+        }
+
+        // ---- the id-537 custom ticker message ---------------------------------------
+        // The 0x818-byte payload + its GuiEvent<537> wire header. TU-local model of
+        // BrnGui::GuiEventTickerCustomMessage's on-queue record; the canonical
+        // BrnGuiDemangledEventTypes.h:256 entry is an opaque 12B-header shape that does NOT
+        // match the wire. Layout attested by BrnJunctionInfoComponent.cpp:41 (from AddString
+        // @0x823A6940) and corroborated here by BOTH ticker bodies: the console's Construct
+        // is inlined as `std 0 ; std 0` over +0x000..+0x00F (the four string types),
+        // `memset(base + 0x10, 0, 0x800)` (the four 512-byte strings) and five tail `stb`s at
+        // +0x810..+0x814 (the count then the four flags), total 0x818.
+        //
+        // ⚠ FLAG DWARF-vs-RETAIL (capacities): the DecFIGS DWARF (BrnGuiEventTypeDefs.h:310/
+        // :311) says KI_MAX_NUM_STRINGS 4 / KI_MAX_CUSTOMMESSAGE_LENGTH 256 and declares the
+        // strings BEFORE the types. Retail X360 is 4 x 512 with the TYPES FIRST -- 4*512 +
+        // 4*4 == 0x810, which is exactly where the console's count byte lands. The retail
+        // shape is used. DELETE-WHEN: never (this IS the shipped record).
+        // The four tail flags carry the DWARF names (BrnGuiEventTypeDefs.h:358..:362) in
+        // DWARF declaration order; only their VALUES are X360-attested here.
+        struct GuiTickerCustomMessagePayload537
+        {
+            static const s32 KI_MAX_NUM_STRINGS   = 4;
+            static const s32 KI_MAX_STRING_LENGTH = 512;
+
+            // -- BrnGuiEventTypeDefs.h:313 (DWARF) --
+            enum EStringType
+            {
+                E_STRINGTYPE_NONE     = 0,
+                E_STRINGTYPE_TEXT     = 1,
+                E_STRINGTYPE_STRINGID = 2,
+                E_STRINGTYPE_NUM      = 3,
+            };
+
+            s32  maeStringTypes[KI_MAX_NUM_STRINGS];                     // +0x000
+            char maacMessageStrings[KI_MAX_NUM_STRINGS][KI_MAX_STRING_LENGTH]; // +0x010
+            s8   mi8NumStrings;                                          // +0x810
+            u8   mbLoopMessage;                                          // +0x811
+            u8   mbTrainingMessage;                                      // +0x812
+            u8   mbAllowDuplicates;                                      // +0x813
+            u8   mbIsChallengeMessage;                                   // +0x814
+            u8   mau8Pad815[3];                                          // +0x815
+
+            // BrnGuiEventTypeDefs.h:327 (DWARF Construct(bool,bool,bool,bool)) -- inlined at
+            // both ticker call sites as the zero-seed plus the five tail stores.
+            void Construct(bool lbLoop, bool lbTraining, bool lbAllowDuplicates,
+                           bool lbIsChallengeMessage)
+            {
+                std::memset(maeStringTypes, 0, sizeof(maeStringTypes));
+                std::memset(maacMessageStrings, 0, sizeof(maacMessageStrings));
+                mi8NumStrings        = 0;
+                mbLoopMessage        = static_cast<u8>(lbLoop ? 1 : 0);
+                mbTrainingMessage    = static_cast<u8>(lbTraining ? 1 : 0);
+                mbAllowDuplicates    = static_cast<u8>(lbAllowDuplicates ? 1 : 0);
+                mbIsChallengeMessage = static_cast<u8>(lbIsChallengeMessage ? 1 : 0);
+                mau8Pad815[0] = mau8Pad815[1] = mau8Pad815[2] = 0;
+            }
+
+            // X360 0x823A6940, transcribed (the console's own bounds asserts, then the
+            // 512-byte strncpy + type store + count bump). Same body as the committed
+            // BrnJunctionInfoComponent.cpp:54 model.
+            void AddString(const char* lpString, EStringType leType)
+            {
+                CGS_ASSERT(mi8NumStrings >= 0, "mi8NumStrings >= 0");                   // h:390
+                CGS_ASSERT(mi8NumStrings < KI_MAX_NUM_STRINGS,
+                           "mi8NumStrings < KI_MAX_NUM_STRINGS");                       // h:391
+                CGS_ASSERT(lpString != 0, "lpString");                                  // h:392
+                std::strncpy(maacMessageStrings[mi8NumStrings], lpString,
+                             static_cast<size_t>(KI_MAX_STRING_LENGTH));
+                maeStringTypes[mi8NumStrings] = static_cast<s32>(leType);
+                ++mi8NumStrings;
+            }
+        };
+
+        // { 0x818, 537, 12, <the message> }, channel 40, 0x824 bytes on the wire.
+        struct GuiTickerCustomMessageWire537 : public CgsGui::GuiEvent<537>
+        {
+            GuiTickerCustomMessagePayload537 mMessage;   // +0x0C
+            GuiTickerCustomMessageWire537()
+                : CgsGui::GuiEvent<537>(
+                      static_cast<u32>(sizeof(GuiTickerCustomMessagePayload537)), 12)
+            {
+                std::memset(&mMessage, 0, sizeof(mMessage));
+            }
+        };
+
+        // Both tickers queue the SAME finished record FOUR times (four byte-identical
+        // memcpy+AddEvent groups; the console unrolled the loop). Not a Hex-Rays artefact --
+        // the asm carries all four, 0x8247AE58..0x8247AF2C and 0x8247B004..0x8247B0D8.
+        const s32 KI_TICKER_MESSAGE_POST_COUNT = 4;
+
+        void PostTickerCustomMessage537(CgsGui::StateInterface* lpInterface,
+                                        const GuiTickerCustomMessagePayload537& lMessage)
+        {
+            for (s32 li = 0; li < KI_TICKER_MESSAGE_POST_COUNT; ++li)
+            {
+                GuiTickerCustomMessageWire537 lWire;
+                lWire.mMessage = lMessage;   // the console's `memcpy(dst, src, 0x818)`
+                lpInterface->GetOutputEventQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
+                    static_cast<s32>(sizeof(lWire)));
+            }
+        }
+
+        // ---- the active ticker's positional-parameter slots -------------------------
+        // StartFreeburnChallengeTicker's stack frame carries FOUR (text, format) pairs and
+        // hands all four to FormatAndAddText, though liNumParams is only ever 1..3 (one for
+        // the challenge's player count plus one per action that has targets, and
+        // KI_MAX_ACTIONS_PER_CHALLENGE == 2). The console leaves slot 3 holding whatever the
+        // frame last had there -- it aliases the dead id-536 record's payload half-word at
+        // sp+0xAC. FLAG PC defensive: the slots are zero-seeded here (FormatTextV never reads
+        // past liNumParams, so no queued byte changes); an uninitialised vararg read would be
+        // UB on the host. DELETE-WHEN: never.
+        const s32 KI_TICKER_MAX_PARAMS    = 4;
+        const u32 KU_TICKER_PARAM_TEXT_LEN = 64;   // `li r4, 0x40` into both SnPrintf calls
+
+// (fold: an identical definition of LogDeferredComponent was dropped here -- this TU defines it once, above)
+    }
+
+    // =======================================================================
+    //  ProcessBoostInfo  @ 0x82474550
+    // =======================================================================
+    // UpdateRunning's case-206 arm (BrnRaceMainHudState_wS3.cpp:396): hand the boost-type
+    // record to the boost-message manager under its own id, which is the latch that tints
+    // every message the manager subsequently posts. The mpCache assert is NON-GATING on
+    // console (@0x824745FC the store falls through to the call either way).
+    void RaceMainHudState::ProcessBoostInfo(const CgsModule::Event* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0, "Invalid event");                          // cpp:2902
+
+        if (mbBoostMessages)                                                // lbz 0x154
+        {
+            CGS_ASSERT(mpCache != 0, "mpCache != NULL");                    // cpp:2910
+            // @0x8247461C: `li r5, 0xCE` == 206, `addi r3, r27, 0x1078` == &mBoostMessageManager.
+            mBoostMessageManager.RecvEvent(lpEvent, 206, mpCache);
+        }
+    }
+
+    // =======================================================================
+    //  ProcessAptEvents  @ 0x82474638
+    // =======================================================================
+    // UpdatePermenant's case-21 arm (BrnRaceMainHudState_wS2.cpp:531): the apt trigger fan-out.
+    // Two typed arms (ONLOAD == 1, TRANSITION_COMPLETE == 4) and then an UNCONDITIONAL tail
+    // that runs for EVERY apt event type -- including a SECOND mSatNavComponent.RecvEvent(21)
+    // for the type-1 case. That double post is not a transcription slip: the asm issues the
+    // identical three-argument call twice, at 0x8247474C (inside the type-1 arm) and again at
+    // 0x824747B4 (the tail). Preserved verbatim.
+    void RaceMainHudState::ProcessAptEvents(const CgsModule::Event* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid event passed to RaceMainHudState::ProcessAptEvents");   // cpp:2930
+
+        // The event-21 record on this host IS the native-width GuiEventAptTriggerPayload
+        // (CgsAptCommunicator.h) -- the same typed read the sibling FBurn state's
+        // ProcessAptEvents already does. The console reads the clip name as "payload word 2"
+        // because that is where the 32-bit record's pointer lands; by-name is both the house
+        // rule and the x64 fix.
+        const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+            reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+        const char* lpacClipName = lpTrigger->mpacComponentName;
+
+        if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
+        {
+            if (mbSatNav)                                                   // lbz 0x150
+                mSatNavComponent.RecvEvent(lpEvent, 21);                    // addi r3, +0x6A0
+
+            // @0x82474750: strstr(Str = the clip name, SubStr = "PositionIndicator_mc") --
+            // a SUBSTRING test, not a compare, because the apt name arrives parent-qualified.
+            if (std::strstr(lpacClipName, macPositionIndicatorName) != 0)
+                mPositionIndicatorComponent.SetLoaded();                    // addi r3, +0x1224
+
+            if (mbFreeburnChallengeSelector)                                // lbz 0x166
+            {
+                // @0x8247477C: `addi r4, r28, 0x67A4` == mChallengeSelectorComponent + 4 ==
+                // the GuiComponent base's macName. The component matches on its OWN resolved
+                // name, so the by-name spelling is GetName().
+                if (std::strstr(lpacClipName,
+                                mChallengeSelectorComponent.GetName()) != 0)
+                {
+                    // FLAG deferred: ChallengeSelector's TU (BrnChallengeSelector.cpp +
+                    // BrnChallengeSelector_wL_01.cpp) is NOT on the build -- only the
+                    // BrnHudStatesLinkStubs.cpp Construct scaffold is -- so every out-of-line
+                    // method of it is deferred TU-wide by this wave; the sibling
+                    // BrnRaceMainHudState_wS3.cpp:639/:648 defers Show/Hide for the same
+                    // reason. The gate and the name match above are the console's, verbatim.
+                    // DELETE-WHEN: the ChallengeSelector pair mounts (and its scaffold dies);
+                    // the line then becomes
+                    // `mChallengeSelectorComponent.HandleLoadNotification(lpacClipName);`.
+                    LogDeferredComponent("ChallengeSelector::HandleLoadNotification");
+                }
+            }
+        }
+        else if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE
+                 && mbPaybackComponent)                                     // lbz 0x15F
+        {
+            // @0x824746F0..0x82474724 is an INLINED strcmp against "Payback_mc" (the
+            // byte-at-a-time subtract loop Hex-Rays renders open-coded), not a strstr like
+            // the two above -- restored as the call it came from, against the class static
+            // macPaybackName rather than a second copy of the literal.
+            if (std::strcmp(lpacClipName, macPaybackName) == 0)
+            {
+                // @0x82474728 `addi r3, r28, 0x920` == &mPaybackComponent.
+                // FLAG deferred: BrnPaybackComponent.cpp is NOT on the build (its TU still
+                // owes SendAwardTriggerableEvent -- BrnHudStatesLinkStubs.cpp:118 -- and only
+                // its Construct scaffold is mounted), and the sibling
+                // BrnRaceMainHudState_wS3.cpp defers every PaybackComponent arm for the same
+                // reason. UpdateSetupState clears mbPaybackComponent on the stunt-race path,
+                // so this arm does not execute on the bring-up route either way.
+                // DELETE-WHEN: BrnPaybackComponent.cpp mounts; the line then becomes
+                // `mPaybackComponent.RespondToTransitionComplete();`.
+                LogDeferredComponent("PaybackComponent::RespondToTransitionComplete");
+            }
+        }
+
+        // ---- the unconditional tail (@0x8247479C..0x82474820) --------------------------
+        if (mbSatNav)                                                       // lbz 0x150
+            mSatNavComponent.RecvEvent(lpEvent, 21);
+
+        if (mbEventInfo && mpCache != 0)                                    // lbz 0x157 / lwz 0x140
+        {
+            // @0x824747D0: r3 = &mEventInfoComponent (this+0x170), r4 = lpEvent,
+            // r5 = mpCache -- i.e. EventInfoComponent::HandleTrigger(const GuiEventAptTrigger*,
+            // GuiCache*) (DWARF BrnEventInfo.h:429). The branch target IDA labels
+            // `BaseCollisionGenerator::Destruct` is 0x8284CB38, a bare `blr`: the image's ICF
+            // pool for every empty method, so this call does NOTHING in retail.
+            // FLAG deferred: HandleTrigger is not declared on BrnGui::EventInfoComponent in
+            // the tree (and its GuiEventAptTrigger parameter type has no committed home), so
+            // the gate is kept and the call is logged rather than invented. Behaviourally
+            // free -- the console body is empty.
+            // DELETE-WHEN: BrnEventInfo.h declares HandleTrigger; the line then becomes
+            // `mEventInfoComponent.HandleTrigger(lpTrigger, mpCache);`.
+            LogDeferredComponent("EventInfoComponent::HandleTrigger");
+        }
+
+        if (mbBoostMessages)                                                // lbz 0x154
+        {
+            CGS_ASSERT(mpCache != 0, "mpCache != NULL");                    // cpp:3134
+            // @0x82474810: `li r5, 0x15` == 21. Id 21 is the apt-trigger record the manager's
+            // switch deliberately ignores (its jump table starts at 206) -- the call is made
+            // and falls through to default, exactly as shipped.
+            mBoostMessageManager.RecvEvent(lpEvent, 21, mpCache);
+        }
+    }
+
+    // =======================================================================
+    //  UpdateSatNav  @ 0x82474830
+    // =======================================================================
+    // UpdateRunning's shared cases 199/200 arm (BrnRaceMainHudState_wS3.cpp:380): forward the
+    // record to the sat-nav component under the ORIGINAL event id, so one body serves both.
+    void RaceMainHudState::UpdateSatNav(const CgsModule::Event* lpEvent, s32 liEventId)
+    {
+        CGS_ASSERT(lpEvent != 0, " invalid event passed ");                 // cpp:3226
+        // (the assert string's leading and trailing spaces are the console's, verbatim)
+
+        if (mbSatNav)                                                       // lbz 0x150
+            mSatNavComponent.RecvEvent(lpEvent, liEventId);                 // addi r3, +0x6A0
+    }
+
+    // =======================================================================
+    //  StartFreeburnChallengeTicker  @ 0x8247A9C0
+    // =======================================================================
+    // Publish the ACTIVE freeburn challenge as a scrolling ticker line: clear whatever the
+    // ticker is showing, build the challenge's localised description under the
+    // "CHALLENGE_TICKER_STRING_DESCRIPTION" dynamic-string id (its %1..%N positional markers
+    // filled with the challenge's player count and each action's target value), then queue a
+    // two-part custom message -- "<title>: <description>" -- four times.
+    //
+    // Callers: UpdateWFInit @0x82480200 (wS2.cpp:271) and UpdateRunning/UpdatePermenant
+    // cases 573/574/576/581 (wS2.cpp:591/613/618/642).
+    void RaceMainHudState::StartFreeburnChallengeTicker()
+    {
+        CGS_ASSERT(mbFreeburnChallengeTicker,
+                   "mbFreeburnChallengeTicker == true");                    // cpp:4038 (lbz 0x167)
+
+        PostTickerClear536(mpStateInterface);
+
+        // Both asserts below belong to the INLINED accessors, not to this function:
+        // "mpChallengeManager" is GuiCache::GetFreeburnChallengeManager's (BrnGuiCache.h:2390)
+        // and "meInternalState != E_INTERNAL_STATE_OFF" is GetCurrentChallenge's
+        // (BrnGuiFreeburnChallengeManager.h:235). Restored as the calls they came from.
+        const FreeburnChallengeManager* lpManager = mpCache->GetFreeburnChallengeManager();
+        const BrnResource::ChallengeListEntry* lpChallenge = lpManager->GetCurrentChallenge();
+
+        // ---- the positional parameters (@0x8247AAA8..0x8247AB94) -----------------------
+        char lacParamText[KI_TICKER_MAX_PARAMS][KU_TICKER_PARAM_TEXT_LEN];
+        CgsLanguage::LanguageManager::ParameterFormatType
+             laeParamFormat[KI_TICKER_MAX_PARAMS];
+        for (s32 liSlot = 0; liSlot < KI_TICKER_MAX_PARAMS; ++liSlot)
+        {
+            lacParamText[liSlot][0] = 0;
+            laeParamFormat[liSlot]  = CgsLanguage::LanguageManager::E_FORMAT_TEXT;
+        }
+
+        // Parameter 0 is always the challenge's player count. @0x8247AAC0 reads the byte at
+        // +0xD3 and masks it with `clrlwi r6, r11, 28` (== & 0xF) -- that mask IS
+        // GetNumPlayers()'s body (muNumPlayers packs the current count in the low nibble;
+        // BrnChallengeManager_wB_03.cpp:118 records the same read).
+        CgsCore::SnPrintf(lacParamText[0], KU_TICKER_PARAM_TEXT_LEN, "%d",
+                          lpChallenge->GetNumPlayers());
+        lacParamText[0][KU_TICKER_PARAM_TEXT_LEN - 1] = 0;
+        laeParamFormat[0] = CgsLanguage::LanguageManager::E_FORMAT_INTEGER;   // `li r23, 0xB`
+
+        s32 liNumParams = 1;
+        for (s32 liActionIndex = 0;
+             liActionIndex < lpChallenge->GetNumActions();                  // lbz 0xD4, re-read each pass
+             ++liActionIndex)
+        {
+            // The two loop-body asserts (ChallengeListEntry.h:941/:942) are GetAction's own,
+            // inlined; the receiver walks `entry + 0x50 * index` == &maAction[index].
+            const BrnResource::ChallengeListEntryAction* lpAction =
+                lpChallenge->GetAction(liActionIndex);
+            if (lpAction->GetNumTargets() != 0)                             // lbz action+0x30
+            {
+                CgsCore::SnPrintf(lacParamText[liNumParams], KU_TICKER_PARAM_TEXT_LEN, "%d",
+                                  lpAction->GetTargetValue(0));             // lwz action+0x34
+                lacParamText[liNumParams][KU_TICKER_PARAM_TEXT_LEN - 1] = 0;
+                laeParamFormat[liNumParams] = CgsLanguage::LanguageManager::E_FORMAT_INTEGER;
+                ++liNumParams;
+            }
+        }
+
+        // @0x8247ABF8 -- the function IDA leaves as sub_82866450 is
+        // LanguageManager::FormatAndAddText(id, source, format, count, ...) (its body is
+        // FormatTextV into a 1KB local followed by AddString under the id; the tree already
+        // homes it at CgsLanguageManager.h:222). r6 == 9 == E_FORMAT_ID_LOOKUP, i.e. the
+        // source is resolved as a loc-string id first. All four (text, format) pairs are
+        // pushed; only liNumParams of them are read.
+        mpStateInterface->GetLanguageManager()->FormatAndAddText(
+            "CHALLENGE_TICKER_STRING_DESCRIPTION",
+            lpChallenge->GetDescriptionStringID(),                          // entry + 0xA0
+            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+            liNumParams,
+            lacParamText[0], laeParamFormat[0],
+            lacParamText[1], laeParamFormat[1],
+            lacParamText[2], laeParamFormat[2],
+            lacParamText[3], laeParamFormat[3]);
+
+        // @0x8247ABFC: `ld r31, 0xC0(r20)` -- a FULL 64-bit CgsID load (mChallengeID), then
+        // the list lookup that turns it into a dense challenge index.
+        const CgsID lChallengeID = lpChallenge->GetChallengeID();
+        const s32   liChallengeIndex =
+            mpCache->GetFreeburnChallengeList()->GetChallengeIndex(lChallengeID);
+
+        GuiTickerCustomMessagePayload537 lMessage;
+        // @0x8247AC14..0x8247AC48: {loop, training, allowDuplicates, isChallengeMessage} ==
+        // {1, 0, 1, 1} -- this one IS a challenge message (contrast the not-active twin).
+        lMessage.Construct(true, false, true, true);
+
+        // @0x8247AC40..0x8247ADC4 -- the console inlines
+        // CgsContainers::FastBitArray<2000>::IsBitSet over the manager's completed-challenge
+        // bit store (`addi r26, r19, 0x7F0` == the LOCAL player's CompletedFburnChallenges
+        // inside mCompletedData; `srawi 6 / slwi 3 / ldx` then `1ULL << (index & 63)`),
+        // including that template's own range assert -- "Index <n> is out of range (max bits:
+        // 2000)", CgsFastBitArray.h:396, streamed in hex. A set bit means the local player has
+        // ALREADY completed this challenge, and the ticker then prefixes the line with "[~]".
+        // FLAG deferred: BrnGuiFreeburnChallengeManager.h:148 deliberately leaves the
+        // mCompletedData tail unmodelled ("HONEST BOUNDARY" -- its real home is the GameState
+        // IO header graph), so there is no way to read the bit by name from here and no way
+        // to reach it at all without growing that header. Deferred to "not completed", which
+        // is the common case and the un-prefixed format; the index is still computed above
+        // because FormatAndAddText's line above does not depend on it and the lookup is the
+        // half that is recoverable.
+        // DELETE-WHEN: BrnGuiFreeburnChallengeManager.h models mCompletedData (or publishes
+        // `bool HasLocalPlayerCompleted(s32 liChallengeIndex) const`); this becomes that call.
+        LogDeferredComponent("FreeburnChallengeManager::mCompletedData (completed-challenge bit)");
+        const bool lbAlreadyCompleted = false;
+        (void)liChallengeIndex;
+
+        // @0x8247ADC8..0x8247AE34 -- the separator format. FRENCH (ELanguage 10) puts a space
+        // BEFORE the colon; every other language does not. The "[~]" prefix marks a challenge
+        // the local player has already completed.
+        const bool lbFrenchSpacing =
+            mpStateInterface->GetLanguageManager()->GetCurrentLanguage()
+                == static_cast<s32>(CgsLanguage::E_LANGUAGE_FRENCH);
+        const char* lpacSeparatorFormat;
+        if (lbAlreadyCompleted)
+            lpacSeparatorFormat = lbFrenchSpacing ? "[~] %1 : %2" : "[~] %1: %2";
+        else
+            lpacSeparatorFormat = lbFrenchSpacing ? "%1 : %2" : "%1: %2";
+
+        lMessage.AddString(lpacSeparatorFormat,
+                           GuiTickerCustomMessagePayload537::E_STRINGTYPE_TEXT);      // li r5, 1
+        lMessage.AddString(lpChallenge->GetTitleStringID(),                           // entry + 0xB0
+                           GuiTickerCustomMessagePayload537::E_STRINGTYPE_STRINGID);  // li r5, 2
+        lMessage.AddString("CHALLENGE_TICKER_STRING_DESCRIPTION",
+                           GuiTickerCustomMessagePayload537::E_STRINGTYPE_STRINGID);
+
+        PostTickerCustomMessage537(mpStateInterface, lMessage);
+    }
+
+    // =======================================================================
+    //  StartFreeburnChallengeNotActiveTicker  @ 0x8247AF38
+    // =======================================================================
+    // The twin of the body above for the "a challenge is running but this machine is not in
+    // it" case: clear the ticker, then queue the single fixed "CHALLENGE_IN_PROGRESS" line
+    // four times. No challenge record is read, so no manager/list lookup and no parameters.
+    //
+    // Callers: UpdateWFInit @0x82480200 (wS2.cpp:273) and UpdateRunning case 583
+    // (wS3.cpp:653).
+    void RaceMainHudState::StartFreeburnChallengeNotActiveTicker()
+    {
+        CGS_ASSERT(mbFreeburnChallengeTicker,
+                   "mbFreeburnChallengeTicker == true");                    // cpp:4138 (lbz 0x167)
+
+        PostTickerClear536(mpStateInterface);
+
+        GuiTickerCustomMessagePayload537 lMessage;
+        // @0x8247AFC4..0x8247AFDC: {loop, training, allowDuplicates, isChallengeMessage} ==
+        // {1, 0, 1, 0}. The ONLY difference from the active ticker's seed is the last flag --
+        // this generic line is not tied to a challenge, so a ticker clear that deletes
+        // challenge messages must not delete it.
+        lMessage.Construct(true, false, true, false);
+        lMessage.AddString("CHALLENGE_IN_PROGRESS",
+                           GuiTickerCustomMessagePayload537::E_STRINGTYPE_STRINGID);  // li r5, 2
+
+        PostTickerCustomMessage537(mpStateInterface, lMessage);
     }
 }
