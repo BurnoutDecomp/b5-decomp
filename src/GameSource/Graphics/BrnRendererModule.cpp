@@ -282,7 +282,7 @@ namespace
 #include <cstdlib>     // [diag] std::getenv (BRN_LION_QRES_OFF, the quarter-res A/B pin)
 
 // [diag] present counter (device.cpp) - stamps the trace lines with their frame.
-namespace renderengine { extern u32 guPresentCount; }
+namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30
 
 // High-res frame timer (CgsTimeUtils.cpp), forward-declared - drives the thread-monitor health.
 namespace CgsSystem { u32 GetSystemTimerBaseTime(); u32 GetSystemTimerFrequency(); }
@@ -6659,6 +6659,22 @@ void BrnRendererModule::Render(const BrnGame::DispatchThreadInputBuffer* lpDispa
                 lPostFxFrameBytes.mbMotionBlurActive,
                 lpCalibrationTexture);
 
+        // [DIAG] NOT IN THE X360 BINARY -- issue #30: on a black present, every input of the composite.
+        {
+            static u32 suBlackCompositePrinted = 0u;
+            if (renderengine::gbDiagLastPresentBlack && suBlackCompositePrinted < 64u && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++suBlackCompositePrinted;
+                *CgsDev::Log::gpDebugPrint
+                    << "[composite-diag] BLACK-PRESENT present=" << renderengine::guPresentCount
+                    << " composited=" << (lbComposited ? 1 : 0) << " renderPostFX=" << (mbRenderPostFX ? 1 : 0)
+                    << " effectsAllowed=" << (lbEffectsAllowed ? 1 : 0)
+                    << " tint2d=(" << lafTint2dColour[0] << "," << lafTint2dColour[1] << "," << lafTint2dColour[2] << "," << lafTint2dColour[3] << ")"
+                    << " whiteLevel=" << lfFrameWhiteLevel << " brightness=" << liBrightnessSetting << " contrast=" << liContrastSetting
+                    << " motionBlur=" << (lPostFxFrameBytes.mbMotionBlurActive ? 1 : 0)
+                    << " calibTex=" << (lpCalibrationTexture != 0 ? 1 : 0) << "\n";
+            }
+        }
         if (lbComposited)
         {
             PCBringUpHandBackTheBackBuffer();
