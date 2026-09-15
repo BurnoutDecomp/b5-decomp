@@ -1233,11 +1233,31 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
 
     for (s32 liSection = liFirstSection; liSection <= liLastSection; ++liSection)
     {
-        f32 lfInterp = GetSectionInterpPosition(lpRacingLine, liSection, lTargetPos2D);
-        if (lfInterp <= 0.0f)
-        {
-            lfInterp = 0.0f;        // fsel f31, -f1, 0.0, f1
-        }
+        // ⭐⭐⭐ THE TWO CLAMPS ROUND THIS CALL ARE AN `fsel` PAIR AND THE SECOND ONE'S NaN ARM
+        // IS THE CONSOLE'S NaN CONTAINMENT FOR THE WHOLE HERMITE STACK (fixed 2026-09-15,
+        // issue #24). ARTIST 0x8278EA38..0x8278EAD8:
+        //     bl    GetSectionInterpPosition
+        //     fneg  f0, f1                 ; -interp
+        //     fsel  f31, f0, f28(0.0), f1  ; (-interp >= 0) ? 0.0 : interp
+        //     ... GenerateInOutVectors ...
+        //     fsubs f0, f30(1.0), f31      ; 1.0 - interp
+        //     fsel  f1, f0, f31, f30(1.0)  ; (1.0 - interp >= 0) ? interp : 1.0
+        //     bl    GetIterativeHermite
+        // `fsel FRT,FRA,FRC,FRB` is "if (FRA) >= 0.0 then FRC else FRB" and that compare is FALSE
+        // for a NaN FRA, so a NaN interp SURVIVES the first fsel (its FRB is interp) and is turned
+        // into **1.0** by the second (its FRB is the 1.0 literal).
+        // ⛔ The previous `if (x <= 0) x = 0;` / `(x > 1.0f) ? 1.0f : x` form is not that program:
+        // in C++ both comparisons are false for a NaN, so the NaN went straight into
+        // GetIterativeHermite. THIS is the site the measured storm comes through -- issue #24 runs
+        // 1-4, byte-identical every time: 2,416 x "Bad interp" at GetSectionInterpPosition
+        // (.cpp:2616) feeding 2,416 x "Bad in interp" inside GetIterativeHermite (.cpp:1849), then
+        // 12,080 each of :1808 / :1826 / :1899 / :1906 and 302 x "NAN error in
+        // AIDriver::FindSignedAngleBetween2DVectors" from SteeringFan::UpdateWeightings -- 53,454
+        // asserts in one 275 s run, which starves the sim being measured.
+        // Written as explicit `>= 0.0f` tests so each line IS its fsel (a NaN comparison is false
+        // in C++ too, so the ternary's own else-arm reproduces FRB).
+        const f32 lfRawInterp = GetSectionInterpPosition(lpRacingLine, liSection, lTargetPos2D);
+        f32 lfInterp = (-lfRawInterp >= 0.0f) ? 0.0f : lfRawInterp;   // fsel f31, f0, f28, f1
 
         const SectionData* lpSectionData = GetSectionPointer(lpRacingLine, liSection);
         const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
@@ -1252,7 +1272,8 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
         Vector2 lOutVector;
         GenerateInOutVectors(lpRacingLine, liSection, lInVector, lOutVector);
 
-        const f32 lfClampedInterp = (lfInterp > 1.0f) ? 1.0f : lfInterp;   // fsel on 1.0 - interp
+        // fsel f1, f0, f31, f30 @0x8278EAD4 -- FRA is (1.0 - interp), so a NaN lands on FRB == 1.0.
+        const f32 lfClampedInterp = ((1.0f - lfInterp) >= 0.0f) ? lfInterp : 1.0f;
 
         Vector2 lPointOnCurve;
         const f32 lfCurveInterp = GetIterativeHermite(lEntrance, lExit, lInVector, lOutVector,
