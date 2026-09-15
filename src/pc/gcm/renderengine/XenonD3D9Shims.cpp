@@ -1536,8 +1536,164 @@ namespace renderengine
             lpDevice->SetVertexShaderConstantF(luRegister, static_cast<const float*>(lpData), luNumRegisters);
     }
 
-    // Bind one texture + the world's standard sampler set at a D3D sampler unit.
-    bool WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster)
+    // =========================================================================================
+    // [FLAG PC-platform leaf] THE WORLD SAMPLER BLOCK -- the fifth and largest case of the shape
+    // ApplyVolumeSamplerState / ApplyCubeSamplerState / ApplyRawDepthSamplerState already
+    // establish: SetSamplerStateLowLevel in this same TU is the documented no-op, so NOTHING a
+    // TextureState says about its sampler ever reached D3D9, and the two world bind paths below
+    // hardcoded "trilinear + WRAP + no LOD bias" for every material in the game.
+    //
+    // THE CONSOLE'S OWN SETTER IS sub_827E8950 (the function SetSamplerStateLowLevel stubs).
+    // It reads the 32-byte marshalled block renderengine::TextureState carries at +0x00
+    // (renderstates.h: `u8 mauSamplerState[32]; // +0x00 sampler params (filter / address / lod)`)
+    // and feeds, field by field:
+    //     *(f32*)(block+0x00) -> D3DDevice_SetSamplerState_MipMapLodBias
+    //     *(f32*)(block+0x04) -> D3DDevice_SetSamplerState_AnisotropyBias
+    //     block[0x08/0x09/0x0A] -> the Xenos CLAMP_X/Y/Z register fields
+    //                              ((*(a1+8) << 10) & 0x1C00, (<<13) & 0xE000, (<<16) & 0x70000)
+    //     block[0x12] -> MinFilter   block[0x14] -> MagFilter   block[0x17] -> MaxAnisotropy
+    //     block[0x18] -> MaxMipLevel block[0x19] -> MinMipLevel
+    //
+    // WHAT THE SHIPPED DATA ACTUALLY ASKS FOR -- census of all 39,021 TextureState (resource type
+    // 0xE) resources in the stock ARTIST TRK_UNIT*_GR.BNDL + GLOBALPROPS + GLOBALBACKDROPS, and
+    // the converted platform-4 bundles carry the same 32 bytes verbatim:
+    //     * MipMapLodBias is NEGATIVE on 34,116 of 39,021 (87.4%). The mode is -0.9 (28,940
+    //       states); the rest run -0.8, -1.0, -1.2, -1.3115, -1.5, -1.8, -2.0, -2.5, -3.0, -4.0.
+    //       D3D9's default is 0.0, so every one of those materials was being sampled from a
+    //       BLURRIER mip than the console picks -- by up to four whole levels.
+    //     * CLAMP_X == CLAMP_Y == 2 (GPUCLAMP_CLAMP_TO_LAST_TEXEL) on 1,660 of 39,021 (4.3%).
+    //       Those materials were getting D3DTADDRESS_WRAP, i.e. the texture REPEATS where the
+    //       console stretches its last texel -- a strip of geometry whose UVs leave [0,1] then
+    //       shows the map tiled instead of held, which is what "specific surfaces" looks like.
+    //     * MinFilter == MagFilter == 1 (LINEAR) and the mip-filter field block[0x0C] == 1
+    //       (LINEAR) on every block that uses the 0/1/2 register vocabulary, and MaxAnisotropy
+    //       == 1 (GPUANISOFILTER_MAX_1_1). So the existing trilinear/aniso-1 hardcode is RIGHT
+    //       and is kept; only the two fields above were wrong.
+    //
+    // THE VOCABULARY IS THE TREE'S OWN, not a new decode: ApplyVolumeSamplerState above reads
+    // rw::graphics::postfx::Tint::Initialize @0x82403B48's TextureState as "addressU = addressV =
+    // addressW = 2 and magFilter = minFilter = 1", i.e. 2 == CLAMP and 1 == LINEAR. This leaf
+    // therefore translates ONLY the two GPUCLAMP values the shipped data contains (0 == WRAP,
+    // 2 == CLAMP_TO_LAST_TEXEL); anything else keeps WRAP and says so once, rather than
+    // inventing a mapping for a value no bundle uses.
+    // DELETE WHEN SetSamplerStateLowLevel really applies a TextureState's sampler block.
+    // =========================================================================================
+    const u32 KU_TEXSTATE_LOD_BIAS   = 0x00u;   // f32
+    const u32 KU_TEXSTATE_CLAMP_X    = 0x08u;   // u8  GPUCLAMP
+    const u32 KU_TEXSTATE_CLAMP_Y    = 0x09u;   // u8  GPUCLAMP
+    const u32 KU_TEXSTATE_CLAMP_Z    = 0x0Au;   // u8  GPUCLAMP
+
+    // GPUCLAMP -> D3DTADDRESS. Only the two values the 39,021 shipped blocks contain are
+    // translated; lbKnownOut says whether the value was one of them.
+    DWORD XenonClampToD3D9(u8 lu8Clamp, bool* lpbKnownOut)
+    {
+        *lpbKnownOut = true;
+        switch (lu8Clamp)
+        {
+        case 0u: return static_cast<DWORD>(D3DTADDRESS_WRAP);    // GPUCLAMP_WRAP
+        case 2u: return static_cast<DWORD>(D3DTADDRESS_CLAMP);   // GPUCLAMP_CLAMP_TO_LAST_TEXEL
+        default: break;
+        }
+        *lpbKnownOut = false;
+        return static_cast<DWORD>(D3DTADDRESS_WRAP);
+    }
+
+    // Apply the address modes + mip LOD bias a TextureState's own 32-byte sampler block asks for.
+    // lpSamplerBlock may be null (a bind path that has the raster but not its state): the unit
+    // then keeps the standard WRAP set and an explicit ZERO bias, which is what this file did
+    // before this leaf existed -- never a STALE bias from the previous material.
+    void ApplyWorldSamplerBlock(IDirect3DDevice9* lpDevice, u32 luUnit,
+                                const void* lpSamplerBlock, bool lbCubeRaster)
+    {
+        DWORD luAddrU = static_cast<DWORD>(D3DTADDRESS_WRAP);
+        DWORD luAddrV = luAddrU;
+        DWORD luAddrW = luAddrU;
+        f32   lfLodBias = 0.0f;
+
+        if (lpSamplerBlock != nullptr)
+        {
+            const u8* const lpBlock = static_cast<const u8*>(lpSamplerBlock);
+            std::memcpy(&lfLodBias, lpBlock + KU_TEXSTATE_LOD_BIAS, sizeof(lfLodBias));
+            // A serialised blob whose import is unresolved can hold filler here; a bias outside
+            // the Xenos LOD_BIAS register's own range (+/-16) is not a bias, so ignore it and say
+            // so once rather than push a NaN into D3D9.
+            if (!(lfLodBias >= -16.0f && lfLodBias <= 16.0f))
+            {
+                LogOnce("wsampbias", "[WorldSamplers] TextureState LOD bias out of the Xenos "
+                                     "+/-16 register range -- ignored\n");
+                lfLodBias = 0.0f;
+            }
+            bool lbKnownU = true, lbKnownV = true, lbKnownW = true;
+            luAddrU = XenonClampToD3D9(lpBlock[KU_TEXSTATE_CLAMP_X], &lbKnownU);
+            luAddrV = XenonClampToD3D9(lpBlock[KU_TEXSTATE_CLAMP_Y], &lbKnownV);
+            luAddrW = XenonClampToD3D9(lpBlock[KU_TEXSTATE_CLAMP_Z], &lbKnownW);
+            if (!lbKnownU || !lbKnownV || !lbKnownW)
+            {
+                LogOnce("wsampclamp", "[WorldSamplers] TextureState GPUCLAMP value outside the "
+                                      "{0 WRAP, 2 CLAMP} pair the shipped bundles use -- WRAP kept\n");
+            }
+        }
+
+        // The cube exception this path already carried: a cube raster is addressed by a direction
+        // vector, and the console's own five cube-backed TextureStates ask for CLAMP on U and V.
+        // Keep that as the floor, so a cube can never end up on WRAP.
+        if (lbCubeRaster)
+        {
+            luAddrU = static_cast<DWORD>(D3DTADDRESS_CLAMP);
+            luAddrV = static_cast<DWORD>(D3DTADDRESS_CLAMP);
+            luAddrW = static_cast<DWORD>(D3DTADDRESS_CLAMP);
+        }
+
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU, luAddrU);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV, luAddrV);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW, luAddrW);
+        // Every shipped world block says LINEAR/LINEAR/LINEAR with MaxAnisotropy = MAX_1_1;
+        // keep the set this path already applied.
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+        // D3DSAMP_MIPMAPLODBIAS takes the float's BIT PATTERN as its DWORD.
+        DWORD luBiasBits;
+        std::memcpy(&luBiasBits, &lfLodBias, sizeof(luBiasBits));
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS, luBiasBits);
+
+        // [DIAG] NOT IN THE X360 BINARY. BRN_WSAMP_DIAG=1 only.
+        // NAMED FOR WHAT IT MEASURES: how many world sampler binds this run APPLIED a sampler
+        // block, and what was in it -- not "how many TextureStates exist" (the offline census
+        // answers that) and not "how many draws happened". The two counters that matter are the
+        // two fields this leaf restored: a NEGATIVE mip LOD bias, and a CLAMP address mode.
+        // POSITIVE CONTROL: lpSamplerBlock == nullptr is counted separately, so a run in which
+        // the block never arrives reports noblock == binds instead of silently reporting zeros.
+        {
+            static const bool skbDiag = (std::getenv("BRN_WSAMP_DIAG") != nullptr);
+            if (skbDiag)
+            {
+                static u32 suBinds = 0u, suNoBlock = 0u, suNegBias = 0u, suClamp = 0u;
+                static f32 sfMinBias = 0.0f, sfMaxBias = 0.0f;
+                ++suBinds;
+                if (lpSamplerBlock == nullptr)      ++suNoBlock;
+                if (lfLodBias < 0.0f)               ++suNegBias;
+                if (luAddrU == static_cast<DWORD>(D3DTADDRESS_CLAMP)
+                    || luAddrV == static_cast<DWORD>(D3DTADDRESS_CLAMP)) ++suClamp;
+                if (lfLodBias < sfMinBias) sfMinBias = lfLodBias;
+                if (lfLodBias > sfMaxBias) sfMaxBias = lfLodBias;
+                if ((suBinds % 20000u) == 0u)
+                {
+                    char lacMsg[224];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                                  "[wsamp] binds=%u noblock=%u negLodBias=%u clampUV=%u "
+                                  "bias[min=%.4f max=%.4f]\n",
+                                  suBinds, suNoBlock, suNegBias, suClamp,
+                                  (double)sfMinBias, (double)sfMaxBias);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+        }
+    }
+
+    // Bind one texture + the sampler set its TextureState asks for, at a D3D sampler unit.
+    // lpSamplerBlock is that TextureState's 32-byte block (its +0x00); null = no state in hand.
+    bool WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster, const void* lpSamplerBlock)
     {
         IDirect3DDevice9* lpDevice = Dev();
         if (lpDevice == nullptr || lpRaster == nullptr || luUnit >= 16u)
@@ -1548,9 +1704,9 @@ namespace renderengine
             return false;
 
         lpDevice->SetTexture(luUnit, lpD3DTexture);
-        // FLAG PC-platform leaf: the real sampler descriptor comes from the TextureState's
-        // 32-byte sampler block (renderengine::SamplerState); until that unpack lands, the
-        // world's standard trilinear/wrap set stands.
+        // The real sampler descriptor comes from the TextureState's 32-byte sampler block; see
+        // ApplyWorldSamplerBlock's banner above for what the console's own setter reads out of it
+        // and what the 39,021 shipped blocks say.
         //
         // ONE EXCEPTION, ADDED WITH THE CUBE CREATE PATH (reflections step 1): a CUBE raster is
         // addressed by a DIRECTION VECTOR whose face is chosen by the hardware, and WRAP is the
@@ -1568,15 +1724,7 @@ namespace renderengine
         // and a compare on a path that has already issued six device calls -- not an
         // IDirect3DBaseTexture9::GetType() per bind.
         const bool lbCubeRaster = (Texture::GetType(lpTexture) == Texture::E_TYPE_CUBE);
-        const DWORD luAddressMode =
-            lbCubeRaster ? (DWORD)D3DTADDRESS_CLAMP : (DWORD)D3DTADDRESS_WRAP;
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSU, luAddressMode);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSV, luAddressMode);
-        if (lbCubeRaster)
-            lpDevice->SetSamplerState(luUnit, D3DSAMP_ADDRESSW, D3DTADDRESS_CLAMP);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+        ApplyWorldSamplerBlock(lpDevice, luUnit, lpSamplerBlock, lbCubeRaster);
         // Record it for the fallback selector (see the two pointers' banner). Costs two
         // predictable stores on a path that has just done five device calls.
         if (luUnit == 0u)
@@ -1686,14 +1834,11 @@ namespace renderengine
                 }
             }
             lpDevice->SetTexture(lu16Unit, lpD3DTexture);
-            // FLAG PC-platform leaf: the real sampler descriptor comes from the TextureState's
-            // 32-byte sampler block (renderengine::SamplerState); until that unpack lands, the
-            // world's standard trilinear/wrap set stands.
-            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-            lpDevice->SetSamplerState(lu16Unit, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+            // The sampler descriptor is this TextureState's own 32-byte block at +0x00 --
+            // ApplyWorldSamplerBlock reads the address modes and the mip LOD bias out of it
+            // exactly as the console's sub_827E8950 does.
+            ApplyWorldSamplerBlock(lpDevice, lu16Unit, lpState,
+                                   Texture::GetType(lpTexture) == Texture::E_TYPE_CUBE);
 
             // [PC bring-up shim] The fallback pixel shader has a single sampler (s0), so the
             // FIRST material-scope texture is also mirrored onto unit 0 -- otherwise a material
@@ -1703,11 +1848,8 @@ namespace renderengine
             if (!lbBoundAny && lu16Unit != 0 && !sbRealProgramsBound)
             {
                 lpDevice->SetTexture(0, lpD3DTexture);
-                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSU, D3DTADDRESS_WRAP);
-                lpDevice->SetSamplerState(0, D3DSAMP_ADDRESSV, D3DTADDRESS_WRAP);
-                lpDevice->SetSamplerState(0, D3DSAMP_MAGFILTER, D3DTEXF_LINEAR);
-                lpDevice->SetSamplerState(0, D3DSAMP_MINFILTER, D3DTEXF_LINEAR);
-                lpDevice->SetSamplerState(0, D3DSAMP_MIPFILTER, D3DTEXF_LINEAR);
+                ApplyWorldSamplerBlock(lpDevice, 0u, lpState,
+                                       Texture::GetType(lpTexture) == Texture::E_TYPE_CUBE);
             }
             lbBoundAny = true;
         }
@@ -5488,6 +5630,10 @@ namespace
         // would change nothing and would read as an anisotropic filter that is not being asked for.
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        // 0.0f, explicitly: this helper writes a COMPLETE sampler set, and since
+        // ApplyWorldSamplerBlock started pushing the console's own (negative) mip LOD bias on
+        // world units, "the D3D9 default" is no longer what an untouched unit holds.
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);
     }
 
     // =========================================================================================
@@ -5527,6 +5673,7 @@ namespace
         // MAXANISOTROPY only while a filter is D3DTEXF_ANISOTROPIC, and neither is.
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);   // see the volume seam
     }
 
     void ApplyRawDepthSamplerState(IDirect3DDevice9* lpDevice, u32 luUnit)
@@ -5543,6 +5690,7 @@ namespace
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXMIPLEVEL,   0u);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_MAXANISOTROPY, 1u);
         lpDevice->SetSamplerState(luUnit, D3DSAMP_SRGBTEXTURE,   FALSE);
+        lpDevice->SetSamplerState(luUnit, D3DSAMP_MIPMAPLODBIAS,  0u);   // see the volume seam
     }
 
     // =========================================================================================
