@@ -1331,6 +1331,10 @@ namespace CgsGraphics
         // through -- the same observable pixel result as the console's masked program.
         int liMaskDepth = 0;
         bool lbMaskStageBound = false;
+        // The console's in-rect test as a scissor (see IM_CMD_PUSH_MASK): one rect per open
+        // mask, each intersected with the one enclosing it; the walk ends with the test off.
+        RECT laMaskScissor[4] = {};
+        bool lbMaskScissorOn = false;
         // ---- the boost-bar gradient program (SET_SHADER_PROGRAM 20 / PUSH_BOOST_BAR_COLOURS 21)
         // The console's program 3 is the boost-bar gradient pixel shader: it shades the fire
         // building blocks between an OUTER and an INNER colour (BoostBarRenderer pushes the
@@ -1591,6 +1595,54 @@ namespace CgsGraphics
                     lfMaskDU   = lpCorners[1].mv2Tex0UV.x - lpCorners[0].mv2Tex0UV.x;
                     lfMaskDV   = lpCorners[1].mv2Tex0UV.y - lpCorners[0].mv2Tex0UV.y;
 
+                    // ⭐ THE CONSOLE'S IN-RECT TEST (issue #25: sat-nav icons overhang the map
+                    // rect). The masked Im2d pixel program (guest 0x820D39F8, quoted below) ANDs
+                    // each mask sample with `sge r4.xy, c255.xxxx, r4.xy` -- a test on the
+                    // rect-normalised POSITION in r4, a register SEPARATE from the mask sample
+                    // UVs in r3. So the console does two things at once: it samples the mask with
+                    // the bound state's address modes (WRAP tiles the boost bar's twenty-repeat
+                    // window, CLAMP stretches the map mask's edge texel) AND it discards every
+                    // pixel outside the pushed rect. Until 2026-08-29 a border-black sampler stood
+                    // in for the test; honouring the state's address modes (right for the sample)
+                    // dropped the test, and a sat-nav icon whose centre is inside the rect overhung
+                    // it by half its width (scratch/issue25_log.md, x up to 1.049 of the rect).
+                    // A position test is a scissor rect here: the pushed rect in back-buffer
+                    // pixels, intersected with the enclosing mask's (the console's second mask
+                    // slot multiplies in), off again when the outermost mask ends.
+                    {
+                        const f32 lfX1 = lpCorners[1].mv2Pos.x;
+                        const f32 lfY1 = lpCorners[1].mv2Pos.y;
+                        const f32 lfMinX = (lfMaskX0 < lfX1) ? lfMaskX0 : lfX1;
+                        const f32 lfMaxX = (lfMaskX0 < lfX1) ? lfX1 : lfMaskX0;
+                        const f32 lfMinY = (lfMaskY0 < lfY1) ? lfMaskY0 : lfY1;
+                        const f32 lfMaxY = (lfMaskY0 < lfY1) ? lfY1 : lfMaskY0;
+                        RECT lRect;
+                        lRect.left   = static_cast<LONG>(lfMinX * lfScaleX);
+                        lRect.top    = static_cast<LONG>(lfMinY * lfScaleY);
+                        lRect.right  = static_cast<LONG>(lfMaxX * lfScaleX + 0.999f);
+                        lRect.bottom = static_cast<LONG>(lfMaxY * lfScaleY + 0.999f);
+                        if (lRect.left < 0) lRect.left = 0;
+                        if (lRect.top  < 0) lRect.top  = 0;
+                        if (lRect.right  > static_cast<LONG>(renderengine::gDisplayWidth))  lRect.right  = static_cast<LONG>(renderengine::gDisplayWidth);
+                        if (lRect.bottom > static_cast<LONG>(renderengine::gDisplayHeight)) lRect.bottom = static_cast<LONG>(renderengine::gDisplayHeight);
+                        const int liSlot = (liMaskDepth < 4) ? liMaskDepth - 1 : 3;
+                        if (liMaskDepth > 1 && lbMaskScissorOn)
+                        {
+                            const RECT& lrOuter = laMaskScissor[(liMaskDepth - 1 < 4) ? liMaskDepth - 2 : 3];
+                            if (lRect.left   < lrOuter.left)   lRect.left   = lrOuter.left;
+                            if (lRect.top    < lrOuter.top)    lRect.top    = lrOuter.top;
+                            if (lRect.right  > lrOuter.right)  lRect.right  = lrOuter.right;
+                            if (lRect.bottom > lrOuter.bottom) lRect.bottom = lrOuter.bottom;
+                        }
+                        // D3D9 refuses an empty scissor: a degenerate mask keeps one pixel.
+                        if (lRect.right  <= lRect.left) lRect.right  = lRect.left + 1;
+                        if (lRect.bottom <= lRect.top)  lRect.bottom = lRect.top + 1;
+                        laMaskScissor[liSlot] = lRect;
+                        lpDevice->SetScissorRect(&lRect);
+                        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+                        lbMaskScissorOn = true;
+                    }
+
                     // FLAG PC-platform leaf: the console tests the mask rectangle
                     // independently of its texture UVs. Untextured Apt masks have
                     // zero UVs; map their bounds over our opaque-white fallback.
@@ -1678,6 +1730,18 @@ namespace CgsGraphics
             case IM_CMD_END_MASK:          // case 19 - end the pixel mask (PS3 case 0x13)
                 if (liMaskDepth > 0)
                     --liMaskDepth;
+                if (lbMaskScissorOn)
+                {
+                    if (liMaskDepth > 0)
+                    {
+                        lpDevice->SetScissorRect(&laMaskScissor[(liMaskDepth < 4) ? liMaskDepth - 1 : 3]);
+                    }
+                    else
+                    {
+                        lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+                        lbMaskScissorOn = false;
+                    }
+                }
                 if (liMaskDepth == 0 && lbMaskStageBound)
                 {
                     lpDevice->SetTexture(1, nullptr);
@@ -2040,6 +2104,9 @@ namespace CgsGraphics
                 break;
             }
         }
+
+        if (lbMaskScissorOn)
+            lpDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 
     }
 
