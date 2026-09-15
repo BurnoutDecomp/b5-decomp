@@ -26,6 +26,15 @@
 
 #include <cstring>   // std::memset (the ctor's zero-init of the unmodelled interior) / std::strlen
 
+// includes folded in from the BrnGuiCache_w*.cpp partfiles (2026-09-15)
+#include "GameSource/Gui/BrnGuiWorldDataController.h"   // complete WorldDataController (GetFreeburnChallengeList callee)
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // SpecificGameModeEventInterface::Event (GetOnlineLandmarkIndex) + BrnGameState::LandmarkIndex
+#include "GameSource/Replays/BrnReplayStatusInterface.h"        // StatusInterface::GetReel (ReplayConvert...)
+#include <cstdint>
+#include "SharedClasses/Trigger/BrnLandmark.h"                 // BrnTrigger::Landmark (COMPLETE: field reads)
+#include "GameSource/GameState/BrnGameStateTypes.h"          // BrnGameState::LandmarkIndex
+#include "SharedClasses/Progression/BrnRaceEventData.h"      // RaceEventData / CheckpointData
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. StateLoadingHelper tracks how many of
 // its watched resources are pending an unload. Increment/Decrement adjust the count
 // and then run a debug consistency check: the count must equal the number of resources
@@ -2470,4 +2479,2036 @@ namespace BrnGui
     // narrower copy that lived here was a redefinition of that inline (C2084) and pinned a
     // strict subset of the same offsets, so it has been removed -- the header version is
     // canonical and supersedes it.
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_01.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. Three GuiCache event-snapshot accessors,
+// each a thin read of one cached member guarded by the game's debug assert (CGS_ASSERT is
+// a no-op in this build, matching the X360 release assert machinery). Offsets / branch
+// senses are taken straight from the X360 ARTIST asm; members are accessed BY NAME against
+// the recovered GuiCache layout in BrnGuiCache.h.
+
+namespace BrnGui
+{
+    // @ 0x8240F018 -- resolve the freeburn challenge list through the owned world-data
+    // controller. Asserts the controller is present, forwards to its accessor, then asserts
+    // the returned list is non-null. The X360 passes the controller pointer straight to
+    // WorldDataController::GetFreeburnChallengeList and tail-returns its r3 unchanged.
+    // [gateui r3] The reinterpret_cast that used to sit here is GONE: it only existed to
+    // bridge BrnGuiWorldDataController.h's phantom `BrnGui::ChallengeList` forward
+    // declaration (a type defined nowhere in the tree) to the real BrnResource::ChallengeList
+    // this header already spells. That header now names the real type, so both sides agree
+    // and the passthrough is a plain forward.
+    const BrnResource::ChallengeList* GuiCache::GetFreeburnChallengeList() const
+    {
+        CGS_ASSERT(mpWorldDataController != nullptr, "mpWorldDataController");
+        const BrnResource::ChallengeList* lpChallengeList =
+            mpWorldDataController->GetFreeburnChallengeList();
+        CGS_ASSERT(lpChallengeList != nullptr, "lpChallengeList");
+        return lpChallengeList;
+    }
+
+    // @ 0x8240F1C0 -- the checkpoint count for the current event. The X360 only requires a
+    // positive count (asserts 0 < muCheckpointsInEvent) for the checkpoint-carrying race
+    // modes; the nested mode-tests skip the assert entirely when meGameModeType is in
+    // {2,3,4,7,9,12,14,15,16,17}. Value read regardless.
+    u8 GuiCache::GetCheckpointsInEvent() const
+    {
+        const s32 leMode = meGameModeType;
+        // asm nesting: outer {3,9,7,4}, then {14,12,17}, then {2,16}, then {15,16}.
+        const bool lbCheckpointCountRequired =
+            (leMode != 3) && (leMode != 9) && (leMode != 7) && (leMode != 4)
+            && (leMode != 14) && (leMode != 12) && (leMode != 17)
+            && (leMode != 2) && (leMode != 16) && (leMode != 15);
+        CGS_ASSERT(!lbCheckpointCountRequired || (0 < muCheckpointsInEvent),
+                   "0 < muCheckpointsInEvent");
+        return static_cast<u8>(muCheckpointsInEvent);
+    }
+
+    // @ 0x8240F398 -- the distance-to-go for the current event. The X360 builds the assert
+    // text dynamically ("Event Distance=" + the value) before firing; the assert is a no-op
+    // here, so the guard collapses to the branch sense (fires when the distance is negative).
+    f32 GuiCache::GetDistanceInEvent() const
+    {
+        CGS_ASSERT(0.0f <= mfDistanceInEvent, "0.0f <= mfDistanceInEvent (Event Distance)");
+        return mfDistanceInEvent;
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_02.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. Online-player / stunt-list accessors that
+// index the cache's far member tables at their asm-proven offsets. CGS_ASSERT is a no-op
+// in this build (CgsAssert.h), matching the project convention for the X360 assert
+// machinery -- each getter fires the bounds assert on a bad index, then returns the raw
+// table element the release build would have.
+
+namespace BrnGui
+{
+    // @ 0x8240F770  ( maStuntToDisplay @+0xAC5C, stride 8, -1-terminated )
+    const StuntToDisplayInfo* GuiCache::GetStuntToDisplay(s32 liIndex) const
+    {
+        // GetNumberOfStuntsToDisplay() inlined: walk the list counting leading valid
+        // entries (miStuntId == -1 terminates); the X360 loop is bounded at 1.
+        s32 liNumberOfStuntsToDisplay = 0;
+        const StuntToDisplayInfo* lpStunt = maStuntToDisplay;
+        do
+        {
+            if (lpStunt->miStuntId == -1)
+            {
+                break;
+            }
+            ++liNumberOfStuntsToDisplay;
+            ++lpStunt;
+        }
+        while (liNumberOfStuntsToDisplay < 1);
+
+        CGS_ASSERT(liIndex < liNumberOfStuntsToDisplay, "liIndex < GetNumberOfStuntsToDisplay()");
+
+        return &maStuntToDisplay[liIndex];
+    }
+
+    // @ 0x8240F890  ( maPlayerInfo @+0xAC80, stride 312 == sizeof(InGamePlayerStatusData) )
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+        GuiCache::GetOnlinePlayerInfo(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex >= 0, "liPlayerInfoIndex >= 0");
+        CGS_ASSERT(liIndex < 8, "liPlayerInfoIndex < KI_MAX_PLAYERS");
+
+        return reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(
+            maPlayerInfo[liIndex]);
+    }
+
+    // @ 0x8240F910  ( maCurrentPlayerTeam @+0xB808, 4*(idx+11778)+this )
+    s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        return maCurrentPlayerTeam[leActiveRaceCarIndex];
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_03.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. Two ARCI-indexed online-player state
+// accessors from the GuiCache online-lobby table span (@0xB84C..). Each bounds-checks
+// the E_ACTIVE_RACE_CAR_INDEX argument via the debug assert front-end (a no-op through
+// CgsAssert.h in this build) and then reads the corresponding bool lane. Store-for-store
+// with the X360 asm; raw far offsets map to the frozen header's named members.
+
+namespace BrnGui
+{
+    // @ 0x8240F988 -- maOnlinePlayerDisconnected @ +0xB84C (47180)
+    bool GuiCache::GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        return maOnlinePlayerDisconnected[leActiveRaceCarIndex];
+    }
+
+    // @ 0x8240FA08 -- maOnlinePlayerEliminated @ +0xB85C (47196)
+    bool GuiCache::IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        return maOnlinePlayerEliminated[leActiveRaceCarIndex];
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_05.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. GuiCache race-car-info accessors
+// (mRaceCarInfo SoA, ARCI-indexed). Each reads one named lane at its asm-proven
+// offset, guarded by the game's debug asserts (CGS_ASSERT is a no-op in this
+// build, matching the X360 release assert machinery). Offsets / branch senses
+// come straight from the X360 ARTIST asm; members are accessed BY NAME against
+// the recovered GuiCache layout in BrnGuiCache.h.
+
+namespace BrnGui
+{
+    // @ 0x82443750
+    const Vector4& GuiCache::GetRaceCarPosition(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leActiveRaceCarIndex,
+                   "Invalid EActiveRaceCarIndex : ");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "Invalid EActiveRaceCarIndex : ");
+        CGS_ASSERT(maRaceCarUsed[leActiveRaceCarIndex],
+                   "true == mRaceCarInfo.mabCarsUsed[leActiveRaceCarIndex]");
+        return maRaceCarPositions[leActiveRaceCarIndex];
+    }
+
+    // @ 0x824438A8
+    bool GuiCache::IsRaceCarCrashing(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leActiveRaceCarIndex,
+                   "Invalid EActiveRaceCarIndex : ");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "Invalid EActiveRaceCarIndex : ");
+        CGS_ASSERT(maRaceCarUsed[leActiveRaceCarIndex],
+                   "true == mRaceCarInfo.mabCarsUsed[leActiveRaceCarIndex]");
+        return maRaceCarCrashing[leActiveRaceCarIndex];
+    }
+
+    // @ 0x82443A00
+    bool GuiCache::IsActiveRaceCarIndexUsed(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leActiveRaceCarIndex,
+                   "Invalid EActiveRaceCarIndex : ");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "Invalid EActiveRaceCarIndex : ");
+        return maRaceCarUsed[leActiveRaceCarIndex];
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_04.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. GuiCache online-mode accessors that index
+// the cache's far member tables at their asm-proven offsets. CGS_ASSERT is a no-op in this
+// build (CgsAssert.h), matching the project convention for the X360 assert machinery -- each
+// getter fires its bounds/validity assert, then returns the raw table element the release
+// build would have.
+
+namespace BrnGui
+{
+    // @ 0x8241E778 -- live count of preset (online) events. mEvents is a CgsArray whose
+    // count/ctor sentinel lives at +0x9E54 (mEventsCtorSentinel); -1 means the array was
+    // used before Construct/Clear. The X360 reads the same field for the assert and the
+    // return (base maEventsStorage @0x8040 + 7700).
+    s32 GuiCache::GetNumPresetEvents() const
+    {
+        CGS_ASSERT(mEventsCtorSentinel != -1, "Array used before Construct/Clear was called");
+        return mEventsCtorSentinel;
+    }
+
+    // @ 0x8240FB50 -- landmark index for the given online checkpoint slot in the current
+    // online round. Bounds-checks the checkpoint against KI_MAX_LANDMARKS_IN_MODE, asserts
+    // the online game-mode options table (@0xA800) is present, then bounds-checks the live
+    // round index (@0xA7FC) against KU_MAX_ONLINE_ROUNDS_IN_MODE and forwards to the round's
+    // Event::GetLandmark (base + 44*miOnlineRoundIndex; sizeof(Event) == 44).
+    BrnGameState::LandmarkIndex
+        GuiCache::GetOnlineLandmarkIndex(u32 luCheckpointIndex) const
+    {
+        typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event OnlineModeEvent;
+
+        CGS_ASSERT(luCheckpointIndex < static_cast<u32>(BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
+                   "( liCheckpointIndex >= 0 ) && ( liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE )");
+
+        const OnlineModeEvent* lpOnlineGameModeOptions =
+            reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
+        CGS_ASSERT(lpOnlineGameModeOptions != nullptr, "GetOnlineGameModeOptions()");
+
+        CGS_ASSERT(static_cast<u32>(miOnlineRoundIndex) < 10u,
+                   "( GetOnlineRoundIndex() >= 0 ) && ( static_cast<uint32_t>( GetOnlineRoundIndex() ) < "
+                   "BrnGameState::GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE )");
+
+        return lpOnlineGameModeOptions[miOnlineRoundIndex].GetLandmark(static_cast<s32>(luCheckpointIndex));
+    }
+
+    // @ 0x824436D0 -- is the given race car still in car-select. Bounds-checks the ARCI
+    // (>= 0, < 8), then returns maOnlinePlayerInCarSelect[idx] (@0xB854, stride 1).
+    bool GuiCache::GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+        return maOnlinePlayerInCarSelect[leActiveRaceCarIndex];
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_07.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (GuiCache accessor wave, part 07).
+// Offline profile-event CgsArray accessors, each a thin read/index of one named far
+// member guarded by the game's debug assert (CGS_ASSERT is a no-op in this build,
+// matching the X360 release assert machinery). Offsets / branch senses are taken
+// straight from the ARTIST asm; members are accessed BY NAME against the recovered
+// GuiCache layout in BrnGuiCache.h.
+
+namespace BrnGui
+{
+    // @ 0x82449820 -- live count of mProfileEventState.maEvents. The X360 asserts the
+    // embedded CgsArray was Construct/Clear'd (count word @0x13B54 != the -1 sentinel),
+    // then returns that count word (asm: *(this + 79324 + 1400) == miProfileEventsCount).
+    u32 GuiCache::GetNumProfileEvents() const
+    {
+        CGS_ASSERT(miProfileEventsCount != -1, "Array used before Construct/Clear was called");
+        return static_cast<u32>(miProfileEventsCount);
+    }
+
+    // @ 0x82449880 -- index mProfileEventState.maEvents. The X360 loads &maEvents
+    // (mProfileEventStateStorage @0x135DC), asserts the array was Construct/Clear'd
+    // (count word @0x13B54 != -1) and that luIndex is in range, then tail-forwards to the
+    // Array<ProfileEvent,175>::operator[] which returns &maElements[luIndex]. The element
+    // stride is 8 (ProfileEvent = { u32 muEventID; u16 muFlags; } + pad; 1400/175 == 8).
+    const BrnProgression::ProfileEvent* GuiCache::GetProfileEvent(u32 luIndex) const
+    {
+        CGS_ASSERT(miProfileEventsCount != -1, "Array used before Construct/Clear was called");
+        CGS_ASSERT(luIndex < static_cast<u32>(miProfileEventsCount),
+                   "luIndex < mProfileEventState.maEvents.GetLength()");
+        return reinterpret_cast<const BrnProgression::ProfileEvent*>(
+            mProfileEventStateStorage + 8 * luIndex);
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_09.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. GuiCache accessors/setters; each reads or
+// writes one named member at its asm-proven offset, guarded by the game's debug assert
+// (CGS_ASSERT is a no-op in this build, matching the X360 release assert machinery).
+
+namespace BrnGui
+{
+    // @ 0x824B2FE8 -- index the preset-race table. The X360 bounds-checks against
+    // miNumPresetRaces (@0x5280), then returns 120*(idx+170)+this, i.e. the stride-120
+    // element idx of maPresetRaces (base 120*170 == 0x4FB0 == maPresetRacesStorage).
+    const PresetRace* GuiCache::GetPresetRace(s32 liPresetRaceIndex) const
+    {
+        CGS_ASSERT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
+                   "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces");
+        return reinterpret_cast<const PresetRace*>(maPresetRacesStorage + 120 * liPresetRaceIndex);
+    }
+
+    // @ 0x824EC3C8 -- latch the map-icon manager pointer (v3[4120] = a2, i.e.
+    // mpMapIconManager @0x4060). Asserts the incoming pointer is non-null.
+    void GuiCache::SetMapIconManager(MapIconManager* lpMapIconManager)
+    {
+        CGS_ASSERT(lpMapIconManager != nullptr, "Invalid map icon manager");
+        mpMapIconManager = lpMapIconManager;
+    }
+
+    // @ 0x824EC4C8 -- has the given race car crossed the finish line. Bounds-checks the
+    // ARCI (>= 0, < 8), then returns maRaceCarFinished[idx] (@0xA138) only when the
+    // per-car position gate maEventPositionValid[idx] (@0xA140) is set, else false.
+    bool GuiCache::HasRaceCarFinished(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= 0, "Invalid EActiveRaceCarIndex");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "Invalid EActiveRaceCarIndex");
+        if (maEventPositionValid[leActiveRaceCarIndex])
+        {
+            return maRaceCarFinished[leActiveRaceCarIndex];
+        }
+        return false;
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_10.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. A trio of GuiCache leaves that walk
+// the profile / replay tables: the car-unlock-pending determination, the GUI-slot ->
+// replay-reel-index resolver, and the per-ARCI "replay actor rendered" flag read. Each
+// mirrors the X360 ARTIST asm store-for-store; the debug asserts are the game's release
+// CGS_ASSERT (a no-op in this build, matching the X360 assert machinery).
+
+extern "C"
+{
+    // Sign-in state for a controller/user index (the committed network managers compare the
+    // same way); 2 == signed in to the online service.
+    u32 XUserGetSigninState(u32 luUserIndex);
+
+    // Query one privilege for a user index. 0 == the query succeeded, and lpbResult is then
+    // filled with 1 when the user holds the privilege.
+    s32 XUserCheckPrivilege(u32 luUserIndex, u32 luPrivilegeType, u32* lpbResult);
+
+    // Fill the sign-in info block for a user index. 0 == success; the only field this caller
+    // reads is the privilege / guest flags word at +0x08.
+    s32 XUserGetSigninInfo(u32 luUserIndex, u32 luFlags, void* lpSigninInfo);
+}
+
+namespace BrnGui
+{
+    namespace
+    {
+        // XUserGetSigninState result for "signed in to the online service".
+        const u32 KU_SIGNIN_STATE_LIVE = 2;
+
+        // The privilege id the console passes for the multiplayer-sessions check.
+        // FLAG: named after the platform privilege; only the value 254 is attested.
+        const u32 KU_XPRIVILEGE_MULTIPLAYER_SESSIONS = 254;
+
+        // The guest bit of the sign-in flags word (the same mask the login manager tests).
+        const u32 KU_SIGNIN_INFO_GUEST_FLAG_MASK = 0x02;
+
+        // The sign-in info buffer XUserGetSigninInfo fills. The console builds a 40-byte stack
+        // buffer here and reads only the flags word at +0x08, so only that field is named and
+        // the surrounding bytes stay opaque rather than fabricated. FLAGGED: the full platform
+        // layout is not reproduced.
+        struct XUserSigninInfo
+        {
+            u8  maPad00[0x08];       // +0x00..+0x08 (user id + sign-in state; opaque)
+            u32 muFlags;             // +0x08 -- privilege / guest flags word
+            u8  maPad0C[40 - 0x0C];  // +0x0C..+0x28 (gamertag etc.; opaque)
+        };
+    }
+
+    // @ 0x824EC678 -- scan the player's profile car list for any unlocked car whose
+    // unlock sequence has not yet been shown. Sets mbCarUnlockDetermined on entry, then
+    // mbCarUnlockPending == true iff such a car exists (empty list -> pending == false).
+    void GuiCache::DetermineCarUnlockPending(BrnProgression::Profile* lpProfile)
+    {
+        mbCarUnlockDetermined = true;
+
+        s32 liCarCount = lpProfile->GetCarCount();          // Profile miCarCount @+0x26C
+        if (liCarCount <= 0)
+        {
+            mbCarUnlockPending = false;
+            return;
+        }
+
+        s32 liCarIndex = 0;
+        const BrnProgression::CarData* lpProfileCar = lpProfile->GetCarData(0);   // &maCars[0] @+0x280 (stride 0x18)
+        while (true)
+        {
+            CGS_ASSERT(liCarIndex >= 0 && liCarIndex < liCarCount,
+                       "liCarIndex >= 0 && liCarIndex < miCarCount");
+            CGS_ASSERT(lpProfileCar != nullptr, "lpProfileCar");
+
+            // CarData::mbUnlockSequenceAlreadyShown @+0x0A: 0 == unlock still to be shown.
+            if (!lpProfileCar->WasUnlockSequenceAlreadyShown())
+            {
+                mbCarUnlockPending = true;
+                return;
+            }
+
+            liCarCount = lpProfile->GetCarCount();
+            ++liCarIndex;
+            ++lpProfileCar;
+            if (liCarIndex >= liCarCount)
+            {
+                mbCarUnlockPending = false;
+                return;
+            }
+        }
+    }
+
+    // @ 0x824EEBE0 -- resolve a GUI replay slot index to the underlying reel index by
+    // linear-searching the embedded ReplayStatusInterface's reels for the one matching the
+    // slot's cached reel handle (maReplayReelForSlot). Bounds-asserts the slot, then asserts
+    // the reel was located.
+    s32 GuiCache::ReplayConvertGuiSlotIndexToReelIndex(s32 liSlotIndex) const
+    {
+        CGS_ASSERT(liSlotIndex >= 0, "liSlotIndex >= 0");
+        CGS_ASSERT(liSlotIndex < 6, "liSlotIndex < BrnReplays::KI_MAX_REELS");
+        CGS_ASSERT(liSlotIndex < miReplaySlotsUsed, "liSlotIndex < miReplaySlotsUsed");
+
+        const BrnReplays::ReplayIO::StatusInterface* lpStatus =
+            reinterpret_cast<const BrnReplays::ReplayIO::StatusInterface*>(mReplayStatusInterfaceStorage);
+
+        // The cached slot->reel entry is the X360 reel handle (a 32-bit word); compare it
+        // against each reel pointer StatusInterface::GetReel hands back (32-bit compare, as
+        // on the X360 target).
+        const s32 liReelForSlot = maReplayReelForSlot[liSlotIndex];
+        s32 liReelIndex = 0;
+        while (liReelForSlot
+               != static_cast<s32>(reinterpret_cast<std::uintptr_t>(lpStatus->GetReel(liReelIndex))))
+        {
+            if (++liReelIndex >= 6)
+            {
+                CGS_ASSERT(false, "Didn't find the reel thats requested");
+                break;
+            }
+        }
+        return liReelIndex;
+    }
+
+    // @ 0x824EEDA8 -- has the replay actor for the given active-race-car index been rendered
+    // (maReplayARCRendered @0x143E0). Range-asserts the ARCI.
+    bool GuiCache::IsReplayARCRendered(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        return maReplayARCRendered[leActiveRaceCarIndex];
+    }
+
+    // Is the active controller's profile allowed into multiplayer? Starts from "allowed", and
+    // only a signed-in profile whose multiplayer-sessions privilege query succeeds narrows that
+    // to the queried answer; a guest profile (the sign-in flags guest bit, read only when the
+    // sign-in info query succeeds) is refused outright. A failed query leaves the running
+    // answer alone -- so with no profile signed in the console answers "allowed".
+    bool GuiCache::IsMultiplayerAllowed() const
+    {
+        const u32 luUserIndex = static_cast<u32>(miActiveControllerIndex);   // +0x4B38
+
+        bool lbAllowed = true;
+        u32  lauPrivilegeResult[4] = { 0, 0, 0, 0 };
+        if (XUserGetSigninState(luUserIndex) == KU_SIGNIN_STATE_LIVE
+            && XUserCheckPrivilege(luUserIndex, KU_XPRIVILEGE_MULTIPLAYER_SESSIONS,
+                                   lauPrivilegeResult) == 0)
+        {
+            lbAllowed = (lauPrivilegeResult[0] == 1);
+        }
+
+        XUserSigninInfo lSigninInfo;
+        if (XUserGetSigninInfo(luUserIndex, 0, &lSigninInfo) != 0
+            || (lSigninInfo.muFlags & KU_SIGNIN_INFO_GUEST_FLAG_MASK)
+                   != KU_SIGNIN_INFO_GUEST_FLAG_MASK)
+        {
+            return lbAllowed;
+        }
+        return false;
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wH3b.cpp (wave H3b) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// BrnGuiCache_wH3b.cpp -- the sat-nav minimap slice's GuiCache leg (HUD H3b, 2026-08-25).
+// The "bodies link from the GuiCache TU" rows the SatNavRenderer / MapIconManager mounts
+// pulled onto the link closure:
+//   GetPresetEventDisplayInfo        @ 0x824F8838   GetProfileEventDisplayInfo @ 0x824F8AF0
+//   GetDriveThrough                  (X360-inlined; offsets from GetDriveThroughOrJunkyard-
+//   GetNumberOfDriveThroughs          AtIndex @0x824FAC10: entries cache+0x7790 stride 0x30,
+//                                     count cache+0x8030, bound assert BrnGuiCache.h:5164)
+//   GetOnlineLandmarkInfoAtPositionInList
+//   PresetEvent::GetPositionLookupId / GetEventId (word +0x20 / +0x28 of the 0x2C record)
+//
+// Recon: scratch h3b_dump8/9/10.txt (decomp + asm; the maEventStarts stride-48 indexer
+// @0x824F65E0 pins the display-record stride, the mEvents 7700-byte storage / 175 cap
+// pins the preset stride 0x2C).
+
+
+namespace BrnGui
+{
+
+// @ 0x824F8838 -- resolve a PRESET event id to its display record: walk the embedded
+// maEventStarts array (count == miEventStartsCount, the word the X360 reads at
+// interface+0x20D0) matching the +0x10 light-trigger id. The X360's failure path
+// builds "Unable to find event start with light trigger id: 0x%X" through the
+// StrStream; lowered to the static-message assert per convention.
+const SatNavEventDisplayInfo* GuiCache::GetPresetEventDisplayInfo(u32 luEventId) const
+{
+    CGS_ASSERT(miEventStartsCount != -1,
+               "Array used before Construct/Clear was called");   // CgsArray.h:336 (non-gating)
+    for (s32 liIndex = 0; liIndex < miEventStartsCount; ++liIndex)
+    {
+        if (maEventStarts[liIndex].muLightTriggerId == luEventId)
+            return &maEventStarts[liIndex];
+    }
+    CGS_ASSERT(false, "Unable to find event start with light trigger id: ");   // BrnGuiCache.cpp:3772 (non-gating)
+    return 0;
+}
+
+// @ 0x824F8AF0 -- the PROFILE flavour: same walk, matching the +0x18 event-instance id
+// ("Unable to find event start with event id: " on the X360 failure path).
+//
+// ⭐⭐ THIS ASSERT FIRES ON THIS BUILD, AND IT IS **FAITHFUL** -- SETTLED 2026-08-27, NOT SILENCED.
+// The X360 body @0x824F8AF0 is structurally identical: the same `!= -1` constructed-guard, the
+// same linear walk over the count at interface+0x20D0, and the same fall-through that opens an
+// assert and streams "Unable to find event start with event id: " before AppendFormat'ing the id.
+// (Ours drops the id only because CGS_ASSERT takes a plain `const char*`; that is this tree's
+// standing lowering convention, applied here as everywhere else.) So the assert is the console's,
+// at the console's site, on the console's condition.
+//
+// ⛔ WHY IT FIRES HERE AND NOT ON THE CONSOLE, named precisely rather than guessed:
+// `maEventStarts` is NEVER POPULATED on this build. Its only producer is
+// SetUpAllEventStartsInterface::AddEventStart @0x82361398 (Interface_SetUpAllEventStarts.cpp),
+// whose only caller is the console's GameStateModule::SendSetUpAllEventStartsMessage -- and that
+// function is UNRECONSTRUCTED (flagged at BrnGameStateModule.cpp, in ProcessGameEvents' latch
+// tail). The array is Construct'd, so the `!= -1` guard above passes and stays silent; the count
+// is simply 0, so EVERY profile lookup walks an empty array and falls through. The assert is
+// therefore reporting exactly what is true: this build cannot resolve any profile event id.
+// ⇒ There is nothing to fix IN THIS FUNCTION. Silencing it here -- a null-return without the
+// assert, an early `if (miEventStartsCount == 0) return 0;`, anything -- would delete the only
+// runtime report that a real producer is missing, which is the silent-drop-stub class.
+// The fix is to reconstruct SendSetUpAllEventStartsMessage (and the WDC progression binding its
+// consumer also needs); that is the progression/WDC wave's work, not the GuiCache's.
+//
+// ⚠️ NON-GATING, and checked rather than assumed: the sole live caller,
+// SatNavRenderer::RefreshSatNavIconInfo, already carries a FLAG'd PC bring-up guard
+// (BrnSatNavRenderer.cpp: `if (lpDisplay == 0 || lpRaceEventData == 0 || ...) return;`) with its
+// own DELETE-WHEN. No null is dereferenced; the run completes with the HUD up.
+// ⚠️ REACHABILITY CHANGED 2026-08-26 WITHOUT THIS CODE CHANGING: once the HUD began surviving
+// crashes, FBurnMain's sat-nav pre-pass kept running for the rest of a drive instead of stopping
+// at the first crash, so the lookup is now attempted far more often. Un-gating a consumer makes a
+// pre-existing fault reachable; it does not create it. (Control-run proven, endcrash wave §06.)
+//
+// ⭐⭐ THE PER-TICK STORM WAS A SEPARATE, CALLER-SIDE DEFECT -- FOUND AND FIXED 2026-08-27.
+// A run measured 3,178 fires of the assert below (12,712 across the four-site chain). That was
+// NOT this function repeating a legitimate report: SatNavRenderer::RefreshSatNavIconInfo's PC
+// bring-up guard was returning BEFORE the console's unconditional slot claim + count increment,
+// so its own "already cached" scan could never hit and every repost of the same event id redid
+// the lookup. The console's producer reposts action 201 -> GUI 311 EVERY SIM TICK while the
+// player car sits in a traffic-light trigger region, so one unresolvable id became an unbounded
+// storm. With the console's stores restored this assert fires ONCE PER DISTINCT EVENT ID, which
+// is the console's own shape. See BrnSatNavRenderer.cpp for the full measurement.
+const SatNavEventDisplayInfo* GuiCache::GetProfileEventDisplayInfo(u32 luEventId) const
+{
+    CGS_ASSERT(miEventStartsCount != -1,
+               "Array used before Construct/Clear was called");   // CgsArray.h:336 (non-gating)
+    for (s32 liIndex = 0; liIndex < miEventStartsCount; ++liIndex)
+    {
+        if (maEventStarts[liIndex].muEventInstanceId == luEventId)
+            return &maEventStarts[liIndex];
+    }
+    CGS_ASSERT(false, "Unable to find event start with event id: ");   // BrnGuiCache.cpp (non-gating)
+    return 0;
+}
+
+// (X360-inlined at GetDriveThroughOrJunkyardAtIndex @0x824FAC10.) The drive-through /
+// junkyard icon list the map selection walks.
+const GuiEventUpdateSatNav::SatNavIconInfo* GuiCache::GetDriveThrough(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex < miNumDriveThroughs, "liIndex < miNumDriveThroughs");   // BrnGuiCache.h:5164 (non-gating)
+    return &maDriveThroughInfo[liIndex];
+}
+
+s32 GuiCache::GetNumberOfDriveThroughs() const
+{
+    return miNumDriveThroughs;
+}
+
+// Fill lpOutIconInfo with the online-landmark record at a position-in-list slot -- the
+// ONLINE_CHECKPOINTS (display type 2) source for the sat-nav and crash-nav icon renderers.
+// Forwards to WorldDataController::GetOnlineLandmarkInfoAtPositionInList (the trigger data's
+// online-landmark table) and then packs the landmark into the icon record with exactly the
+// same store sequence as GetLandmarkInfoAtPositionInList / GetLandmarkInfoFromIndex in
+// BrnGuiCache_wJ_01.cpp: position lane, 0.0f rotation and speed, the whole 64-bit landmark
+// id, district then county (county read back OFF the record), type 4, -1 in the
+// active-race-car slot, design index, and the landmark's own region index @+0x20.
+void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
+         s32 liIndex,
+         GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+{
+    CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3586
+
+    // [FLAG PC bring-up guard] the trigger-data resource can be acquired-but-unbound on this
+    // build, and both asserts here are non-gating, so the two derefs below are guarded rather
+    // than turned into a crash; the caller's record is left exactly as it staged it.
+    // DELETE-WHEN asserts gate / the trigger-data landmark table is populated on this build.
+    if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
+    {
+        return;
+    }
+
+    const BrnTrigger::Landmark* lpLandmark =
+        mpWorldDataController->GetOnlineLandmarkInfoAtPositionInList(liIndex);
+    CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3589
+    if (lpLandmark == 0)
+    {
+        return;
+    }
+
+    const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+    const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                      lv3LandmarkPosition.z, 0.0f };
+    lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // -> +0x00
+    lpOutIconInfo->SetRotation(0.0f);                                   // -> +0x18
+    lpOutIconInfo->SetSpeedMph(0.0f);                                   // -> +0x1C
+    lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // -> +0x10
+    lpOutIconInfo->SetDistrict(
+        static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // -> +0x25
+    lpOutIconInfo->SetCounty(
+        BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+    lpOutIconInfo->SetIconType(
+        GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // -> +0x28
+    lpOutIconInfo->SetLandmarkIndexHalf(
+        static_cast<s16>(lpLandmark->GetRegionIndex()));                // -> +0x20
+    lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // -> +0x26
+    lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // -> +0x22
+}
+
+// @ 0x8241E520 (the GuiCache face over the mEvents CgsArray element accessor
+// @0x8241E430 -> CgsContainers::Arr). Stride 0x2C (the 7700-byte storage / 175 cap).
+// NOTE: BrnGuiCache_wB_res.cpp carries a declared-only twin behind a link-time helper
+// (GetPresetEventAtIndex) with two further unreconstructed deps; that TU stays
+// unmounted and THIS is the single mounted definition.
+const PresetEvent* GuiCache::GetPresetEvent(s32 liIndex) const
+{
+    CGS_ASSERT(mEventsCtorSentinel != -1,
+               "Array used before Construct/Clear was called");   // CgsArray.h:336 (non-gating)
+    CGS_ASSERT(liIndex >= 0 && liIndex < mEventsCtorSentinel,
+               "luEventIndex < maEvents.GetLength()");            // BrnGameStateSharedIO.h:2014 (non-gating)
+    return reinterpret_cast<const PresetEvent*>(&maEventsStorage[0x2C * liIndex]);
+}
+
+// The two preset-event record reads (X360 words +0x20 / +0x28 of the 0x2C-stride mEvents
+// element; offsets proven by the renderer's GetIconInformation preset branch).
+u32 PresetEvent::GetPositionLookupId() const
+{
+    return muPositionLookupId;
+}
+
+u32 PresetEvent::GetEventId() const
+{
+    return muEventId;
+}
+
+} // namespace BrnGui
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wJ_01.cpp (wave J) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// GameSource/Gui/BrnGuiCache_wJ_01.cpp -- the GuiCache MAP-SIDE closure (wave J, 2026-08-29).
+//
+// This partfile retires the FIVE GuiCache stand-ins that GameSource/Gui/SatNav/
+// BrnMainMapLinkGates.cpp has been carrying, plus the two GuiCache link holes the wave's
+// census measured. Every body here is reconstructed store-for-store from
+// .ida-exports/BURNOUT_X360_ARTIST.XEX; the assert texts and their BrnGuiCache.cpp line
+// numbers are the console's own.
+//
+//   GuiCache::AppendExpectedAptComponentList          @0x824EE538  (+ the helper @0x824ED920)
+//   GuiCache::ClearExpectedControlledAptComponentList @0x824EE798
+//   GuiCache::GetLandmarkInfoFromIndex                @0x82506688
+//   GuiCache::GetLandmarkInfoFromID                   @0x825067E0
+//   GuiCache::GetEventDestinationLandmarkIndex        @0x8240FA88  (MOVED, see below)
+//   GuiCache::HandleSetActiveLandmarksEvent           @0x824EE7D0
+//   GuiCache::UpdateTrackerInfo                       @0x82506F28
+//   GuiCache::UpdateTrackerInfoFromOnlineEvent        @0x82507070  (un-named on X360)
+//   GuiCache::RefreshMapState                         @0x82510F40
+//   GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID @0x825071C8
+//
+// ⭐ MOUNT CONTRACT -- these MUST be one change with the mount of this file, or the link
+// breaks with LNK2005 (a gate and its real body cannot coexist):
+//   DELETE from GameSource/Gui/SatNav/BrnMainMapLinkGates.cpp:
+//     GuiCache::GetLandmarkInfoFromIndex (:275), GuiCache::GetLandmarkInfoFromID (:302),
+//     GuiCache::GetEventDestinationLandmarkIndex (:332), GuiCache::RefreshMapState (:354),
+//     GuiCache::HACK_..._SetActiveLandmarksByEventID (:378), and the file-local
+//     FillInertIconInfo helper (:118), whose only two callers were the first two.
+//     ⚠️ The FOUR REMAINING gates in that file (MainMapComponent::Update / ::SetZoom,
+//     MapManager::RecvEvent, MapTransform::CalculateZoomFactor) and the BrnProgression
+//     block are NOT ours -- leave them and the file's bat line alone.
+//   DELETE from GameSource/Gui/BrnGuiCache_wB_res.cpp: GetEventDestinationLandmarkIndex
+//     (:69). That TU is UNMOUNTED so there is no link fault today, but leaving the body
+//     there re-arms one the moment anybody mounts wB_res -- and the gate's own banner
+//     already scheduled this move. (Done in this change; noted for the reviewer.)
+//
+// ⭐ THE TRACKER PUBLISH IS LIVE (park retired 2026-09-07). Three of the bodies below end by
+// publishing a 3088-byte GuiEventSetTracker to the sat-nav tracker. The console's call is
+// `RecEvent(cache->mpGuiTracker, &record, 232, 3088)` -- r3 the tracker off cache+0x4054, r4
+// the stack record, `li r5, 0xE8`, `li r6, 0xC10` (@0x82507050, @0x825071A8, @0x82507378) --
+// and all three now go straight through BrnGui::GuiTracker::RecEvent, whose real body lives at
+// GameSource/Gui/SatNav/BrnGuiTracker.cpp (the five-arm switch; the case-232 arm adopts the
+// record). The old GuiCacheTrackerBoundary::PublishSetTrackerEvent log-and-drop shim, and its
+// `[guicache-tracker-boundary]` print, are DELETED -- there is no longer anything to attribute.
+// The size argument is spelled `sizeof(lSetTrackerEvent)`, which the header pins to the
+// console's own 0xC10 with a static_assert; RecEvent itself accepts and ignores it, exactly as
+// the X360 body does.
+// ⚠️ WHAT A TESTER SEES NOW: the tracker latches, so the sat-nav ROUTE LINE and the tracker
+// icon come up on a set destination instead of staying empty. The opt-in `[satnav-tracker]`
+// witness below (BRN_SATNAV_DIAG) reports each publish that reaches RecEvent.
+//
+// ⛔ PUBLISH GUARD -- THE ONE PIECE STILL MISSING, NAMED RATHER THAN FAKED. Nothing in this
+// tree WRITES GuiCache::mpGuiTracker (X360 cache+0x4054); the member has readers only
+// (GetGuiTracker, BrnGuiCache.h:626). The console derefs it right after its non-gating
+// "Invalid tracker pointer" assert, so on this build an unguarded deref would turn a reported
+// miss into a crash on a path the offline map and the pre-race fly-by reach every run. All
+// three publishes therefore test the pointer and, when it is absent, report it ONCE through
+// LogAbsentGuiTrackerOnce ([[silent-drop-stubs]]) instead of dropping the record silently.
+// DELETE-WHEN the GuiCache binds its GuiTracker at construction.
+//
+// ⭐ CONSOLE BEHAVIOUR THAT WILL LOOK LIKE A REGRESSION AFTER THE MOUNT, pre-empted:
+// GetLandmarkInfoFromIndex / GetLandmarkInfoFromID now FIRE the console's `lpLandmark`
+// assert when the lookup misses, where the deleted gate silently filled a zeroed record.
+// That is correct: WorldDataController::GetLandmarkInfoFrom{Index,ID} return NULL on a miss
+// and already fire their own diagnostic, and the console asserts on top of it. The asserts
+// are non-gating in this build; the callers' behaviour on a miss is unchanged (the record is
+// left as the caller staged it), so nothing new is dereferenced.
+// ⚠️ AND: HACK_..._SetActiveLandmarksByEventID returns **-1**, not 0, when the event id does
+// not resolve -- the deleted gate returned 0. -1 is the console's own no-event answer
+// (`li r3, -1` @0x82507230). On this build WorldDataController::GetEventInfoFromEventId
+// answers NULL while mpProgressionData is an unbound ResourcePtr, so -1 is what the map will
+// actually see, and PreRaceFlyByState::UpdateIconManager's `miPreviousIconCount <
+// liNumActiveIcons` test stays false on -1 exactly as it did on 0 -- no spurious chirp.
+// =================================================================================================
+
+
+namespace
+{
+    // [FLAG PC bring-up guard, wave J] LOG-ONCE report that the landmark table is not
+    // resident. WorldDataController::GetLandmarkInfoFrom{Index,ID} go STRAIGHT through
+    // `mpTriggerData->...` with no null path of their own (their owning header says so at
+    // BrnGuiWorldDataController.h:140-149), and stage 2/3's "TriggerData" acquire is ANSWERED
+    // with a null memory pointer when Triggers.dat is not yet resident -- so an unbound
+    // ResourcePtr faults inside the container's operator->, not at a `== 0` test. The two
+    // fills below therefore ask HasTriggerData() first. The console has no such test because
+    // on the console the resource is always there.
+    // ⚠️ The test is HasMemoryResource()-shaped ON PURPOSE: `mpTriggerData == 0` is NOT the
+    // same question and would pass on an unbound-but-non-null ResourcePtr.
+    // DELETE-WHEN the TriggerData acquire reports a miss as a miss (the same DELETE-WHEN the
+    // sibling guard in WorldDataController::GetEventInfoFromEventId already carries).
+    void LogAbsentTriggerDataOnce(const char* lpacCaller)
+    {
+        static bool sbLogged = false;
+        if (sbLogged)
+        {
+            return;
+        }
+        sbLogged = true;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[guicache-landmark-fill] " << lpacCaller
+                << ": WorldDataController has no resident TriggerData -- the landmark record is "
+                   "left as the caller staged it [FLAG PC bring-up]\n";
+        }
+    }
+
+    // [FLAG PC bring-up guard, 2026-09-07] LOG-ONCE report that GuiCache::mpGuiTracker
+    // (X360 cache+0x4054) is not bound. The console derefs it straight after its non-gating
+    // "Invalid tracker pointer" assert; nothing in this tree WRITES that member yet, so an
+    // unguarded deref would turn a reported miss into a crash on the offline map / fly-by
+    // path. The three publishes below therefore test it and report the absence once, rather
+    // than dropping the record silently.
+    // DELETE-WHEN GuiCache::mpGuiTracker is bound at construction (that is the ONE remaining
+    // piece between here and a drawn route line -- the RecEvent side is real).
+    void LogAbsentGuiTrackerOnce(const char* lpacProducer)
+    {
+        static bool sbLogged = false;
+        if (sbLogged)
+        {
+            return;
+        }
+        sbLogged = true;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[guicache-tracker] " << lpacProducer
+                << ": GuiCache::mpGuiTracker is not bound -- the GuiEventSetTracker record was "
+                   "built but there is no GuiTracker to hand it to, so the sat-nav route line "
+                   "stays empty [FLAG PC bring-up]\n";
+        }
+    }
+
+    // [FLAG PC witness -- NOT IN THE X360 BINARY] `[satnav-tracker] <producer> -> RecEvent(232)
+    // items=<n> current=<i> entireRoute=<0|1>`. It exists so the conductor can prove the three
+    // publishers now reach BrnGui::GuiTracker::RecEvent (they used to build the record and drop
+    // it). Opt-in via BRN_SATNAV_DIAG and budgeted to the first 32 publishes a run, the same
+    // shape as the `[satnav-arrow]` witness in BrnMapIconManager.cpp.
+    // DELETE-WHEN the sat-nav route line has a standing runtime test.
+    void LogTrackerPublishWitness(const char* lpacProducer,
+                                  const BrnGui::GuiEventSetTracker& lrSetTrackerEvent)
+    {
+        static const bool sbDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+        static s32 siLinesLeft = 32;
+
+        if (!sbDiag || siLinesLeft <= 0 || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return;
+        }
+        --siLinesLeft;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[satnav-tracker] " << lpacProducer << " -> GuiTracker::RecEvent(232) items="
+            << lrSetTrackerEvent.miNumTrackedItems
+            << " current=" << lrSetTrackerEvent.miCurrentlyTrackedIndex
+            << " entireRoute=" << (lrSetTrackerEvent.mbIsEntireRoute ? 1 : 0) << "\n";
+    }
+}
+
+namespace BrnGui
+{
+    // =============================================================================================
+    //  1. The apt-component watcher pair (the two GuiCache link holes the census measured)
+    // =============================================================================================
+
+    // X360 BrnGui::StateLoadingHelper::AppendExpectedAptComponentList @0x824ED920.
+    // Store-for-store. The console's three asserts, in its order, all non-gating:
+    //   * `cmplwi flow, 2 ; bls` -> "Invalid GuiFlow of " << flow   (BrnGuiCache.cpp:755)
+    //   * `cmplwi count, 0xC0 ; blt` -> the list-full text          (BrnGuiCache.cpp:760)
+    //   * `add existing,count ; cmplwi 0xC0 ; ble` -> the total text (BrnGuiCache.cpp:762)
+    // The append loop is the X360's `v14[++*v14] = *v19++` -- the ids array starts one word
+    // after the count, so writing at the PRE-increment count is an append at the old length.
+    // ⚠️ The streamed flow value is dropped from the first message: CGS_ASSERT takes a plain
+    // `const char*`, which is this tree's standing lowering for the StrStream asserts.
+    void StateLoadingHelper::AppendExpectedAptComponentList(GuiFlow leFlow,
+                                                            const u32* lpauComponentNameHashes,
+                                                            u32 luCount)
+    {
+        CGS_ASSERT(static_cast<u32>(leFlow) <= 2u, "Invalid GuiFlow of ");   // cpp:755
+
+        ComponentsToWatch& lrWatch = maComponentsToWatch[leFlow];
+
+        CGS_ASSERT(luCount < ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                   "Component list is full. Consider increasing the size, or are we doing "
+                   "something silly?");                                       // cpp:760
+        CGS_ASSERT(lrWatch.muNumberOfComponentsToWatch + luCount
+                       <= ComponentsToWatch::KU_MAX_COMPONENTS_TO_WATCH,
+                   "Too many components to watch Consider increasing the size, or are we doing "
+                   "something silly?");                                       // cpp:762
+
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+        {
+            lrWatch.mauComponentsToWatchIds[lrWatch.muNumberOfComponentsToWatch] =
+                lpauComponentNameHashes[luIndex];
+            ++lrWatch.muNumberOfComponentsToWatch;
+        }
+    }
+
+    // X360 BrnGui::GuiCache::AppendExpectedAptComponentList @0x824EE538 -- a pure
+    // `addi r3, r3, 8` + tail-branch into the helper, exactly like the Set / Clear faces
+    // already in BrnGuiCache.cpp.
+    void GuiCache::AppendExpectedAptComponentList(GuiFlow leFlow,
+                                                  const u32* lpauComponentNameHashes,
+                                                  u32 luCount)
+    {
+        // [DIAG] NOT IN THE X360 BINARY -- [cnav-diag] the list form, first/last hash.
+        if (leFlow == E_GUIFLOW_SCREEN && luCount != 0 && getenv("BRN_SATNAV_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cnav-diag] expect list of " << luCount << " hashes " << lpauComponentNameHashes[0]
+                << " .. " << lpauComponentNameHashes[luCount - 1] << "\n";
+        mStateLoadingHelper.AppendExpectedAptComponentList(leFlow, lpauComponentNameHashes,
+                                                           luCount);
+    }
+
+    // X360 BrnGui::GuiCache::ClearExpectedControlledAptComponentList @0x824EE798 -- the whole
+    // body is `li r11, 0 ; stw r11, 0x404C(r3) ; blr`. cache+0x404C is the embedded helper's
+    // muControlledComponentCount (helper base +0x8, its tail is count @+0x4044 /
+    // pending-unload @+0x4048), so on the host it goes through the named face.
+    // ⚠️ It clears the COUNT ONLY -- the mpaControlledComponents / muControlledComponentNameHash
+    // slots keep their contents, to be overwritten by the next AppendExpectedControlledObject.
+    // That is the console's behaviour, not an omission.
+    void GuiCache::ClearExpectedControlledAptComponentList()
+    {
+        mStateLoadingHelper.ClearControlledComponentList();
+    }
+
+    // =============================================================================================
+    //  2. The two landmark-info fills
+    // =============================================================================================
+
+    // X360 BrnGui::GuiCache::GetLandmarkInfoFromIndex @0x82506688. Store-for-store.
+    //
+    // The out-record fill, in the console's own order (offsets are SatNavIconInfo's):
+    //   +0x00  the 16-byte lane  = { landmark position x, y, z, 0 }  (three `lfs` off the
+    //          landmark's BoxRegion + a `stw 0` for the w lane, then one `stvx128`)
+    //   +0x18  mfRotation  = 0.0f   } both from flt_82001CC0
+    //   +0x1C  mfSpeedMph  = 0.0f   }
+    //   +0x10  mCgsId      = sign-extended `lwz 0x24(landmark)`, i.e. TriggerRegion::GetId()
+    //          stored WHOLE with an `std` (the Xenon ABI's 64-bit CgsID)
+    //   +0x25  mu8District = `lbz 0x32(landmark)`, i.e. Landmark::GetDistrict()
+    //   +0x24  mu8County   = DistrictToCounty(GetDistrict())   -- read back off the record
+    //   +0x20  the landmark half = THE CALLER'S INDEX (`sth r27`), not the landmark's own
+    //   +0x28  mi8IconType = 4 == E_SATNAVICON_LANDMARK
+    //   +0x26  mi8ActiveRaceCarIndex = -1
+    //   +0x22  mu8DesignIndex = `lbz 0x31(landmark)`
+    // The two range asserts (`leDistrict >= 0` BrnGuiEventTypeDefs.h:1873, `leCounty >= 0`
+    // :1857) are inside the SetDistrict / SetCounty faces, which is where the console inlines
+    // them -- so they are reproduced by calling those setters rather than by hand.
+    //
+    // ⚠️ THE COUNTY IS DERIVED FROM THE RECORD, NOT FROM THE LOCAL. The console calls
+    // SatNavIconInfo::GetDistrict(icon) AFTER storing the district byte and feeds THAT to
+    // DistrictToCounty. Same value either way today, but the round-trip is the console's and
+    // it is what makes the `leDistrict >= 0` assert load-bearing; kept verbatim.
+    //
+    // Returns lpOutIconInfo. ⚠️ The X360's r3 at return is the DistrictToCounty leftover -- a
+    // decompiler artifact, not a result; the DWARF return is the out pointer.
+    GuiEventUpdateSatNav::SatNavIconInfo*
+        GuiCache::GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex lLandmarkIndex,
+                                           GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+    {
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3620
+
+        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
+        if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
+        {
+            LogAbsentTriggerDataOnce("GuiCache::GetLandmarkInfoFromIndex");
+            return lpOutIconInfo;
+        }
+
+        const BrnTrigger::Landmark* lpLandmark =
+            mpWorldDataController->GetLandmarkInfoFromIndex(lLandmarkIndex);
+        CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3623
+
+        // [FLAG PC bring-up guard, wave J] The console derefs lpLandmark unconditionally --
+        // its assert is a report, not a gate, and this build's asserts are non-gating. The
+        // lookup CAN answer NULL here (WorldDataController::GetLandmarkInfoFromIndex returns
+        // NULL on a miss, and its own diagnostic has already fired), so a null deref would
+        // turn a reported miss into a crash. The caller's record is left exactly as it staged
+        // it, which is what the console's non-fatal path effectively leaves too.
+        // DELETE-WHEN the trigger-data landmark table is populated on this build.
+        if (lpLandmark == 0)
+        {
+            return lpOutIconInfo;
+        }
+
+        // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
+        // then one `stvx128` -- the whole 16-byte lane in one store.
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                          lv3LandmarkPosition.z, 0.0f };
+        lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // stvx128 -> +0x00
+        lpOutIconInfo->SetRotation(0.0f);                                   // stfs    -> +0x18
+        lpOutIconInfo->SetSpeedMph(0.0f);                                   // stfs    -> +0x1C
+        lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // std     -> +0x10
+        lpOutIconInfo->SetDistrict(
+            static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // stb     -> +0x25
+        lpOutIconInfo->SetCounty(
+            BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+        lpOutIconInfo->SetLandmarkIndexHalf(
+            static_cast<s16>(static_cast<s32>(lLandmarkIndex)));            // sth     -> +0x20
+        lpOutIconInfo->SetIconType(
+            GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // stb 4   -> +0x28
+        lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // stb -1 -> +0x26
+        lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // stb     -> +0x22
+
+        return lpOutIconInfo;
+    }
+
+    // X360 BrnGui::GuiCache::GetLandmarkInfoFromID @0x825067E0. The id sibling of the above:
+    // byte-identical except for the two differences the asm shows --
+    //   * the forwardee is WorldDataController::GetLandmarkInfoFromID (asserts at
+    //     BrnGuiCache.cpp:3654 / :3657 instead of :3620 / :3623), and
+    //   * the +0x20 half-word is `lhz 0x28(landmark)` -- the RESOLVED landmark's own
+    //     TriggerRegion region index -- because the caller supplied an id, not an index.
+    // Return type is `void` per DWARF (BrnGuiCache.h:798); r3 at return is the
+    // DistrictToCounty leftover, NOT a result. Do not resurrect a return value.
+    void GuiCache::GetLandmarkInfoFromID(CgsID lLandmarkID,
+                                         GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+    {
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");   // cpp:3654
+
+        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
+        if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
+        {
+            LogAbsentTriggerDataOnce("GuiCache::GetLandmarkInfoFromID");
+            return;
+        }
+
+        const BrnTrigger::Landmark* lpLandmark =
+            mpWorldDataController->GetLandmarkInfoFromID(lLandmarkID);
+        CGS_ASSERT(lpLandmark != 0, "lpLandmark");                         // cpp:3657
+
+        // [FLAG PC bring-up guard, wave J] -- same guard, same reason, as the index sibling.
+        if (lpLandmark == 0)
+        {
+            return;
+        }
+
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                          lv3LandmarkPosition.z, 0.0f };
+        lpOutIconInfo->SetPositionLane(lv4PositionLane);
+        lpOutIconInfo->SetRotation(0.0f);
+        lpOutIconInfo->SetSpeedMph(0.0f);
+        lpOutIconInfo->SetCgsId(lpLandmark->GetId());
+        lpOutIconInfo->SetDistrict(
+            static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));
+        lpOutIconInfo->SetCounty(
+            BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));
+        lpOutIconInfo->SetIconType(
+            GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);
+        lpOutIconInfo->SetLandmarkIndexHalf(
+            static_cast<s16>(lpLandmark->GetRegionIndex()));               // lhz 0x28(lm) -> +0x20
+        lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID);
+        lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());
+    }
+
+    // =============================================================================================
+    //  3. The event-destination accessor (MOVED here from the unmounted BrnGuiCache_wB_res.cpp:69)
+    // =============================================================================================
+
+    // X360 BrnGui::GuiCache::GetEventDestinationLandmarkIndex @0x8240FA88. Two non-gating
+    // asserts, both sited in the HEADER on the console (BrnGuiCache.h:4055 / :4057):
+    //   * the race-style game-mode gate. The asm's test is `mode >= 2 && mode != 10 && mode != 6
+    //     && mode != 8 && mode != 5` -> fire; i.e. the PASSING set is {0, 1, 5, 6, 8, 10}, which
+    //     is the assert text's OFFLINE_RACE / FACE_OFF / ONLINE_RACE / ELIMINATOR / MARKED_MAN /
+    //     BURNING_ROUTE. Spelled as the positive membership test here.
+    //   * the sentinel gate: the stored index must not be K_INVALID_LANDMARK (word_82F25440,
+    //     the image's 0xFFFF).
+    // Then `*out = mEventDestinationLandmarkIndex` (@0x9F4C, a raw u16 copy).
+    BrnGameState::LandmarkIndex GuiCache::GetEventDestinationLandmarkIndex() const
+    {
+        CGS_ASSERT(
+            (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
+                || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
+            "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == "
+            "GsmIO::E_MODE_FACE_OFF ) || ( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || "
+            "( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || ( meGameModeType == "
+            "GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )");
+        CGS_ASSERT(mEventDestinationLandmarkIndex != 0xFFFFu,
+                   "mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK");
+        return BrnGameState::LandmarkIndex(mEventDestinationLandmarkIndex);
+    }
+
+    // =============================================================================================
+    //  4. The active-landmark latch
+    // =============================================================================================
+
+    // X360 BrnGui::GuiCache::HandleSetActiveLandmarksEvent @0x824EE7D0. Store-for-store:
+    // one non-gating bound assert (BrnGuiCache.cpp:4067), the copy loop into the +0x5288
+    // table, then the count with a BYTE store into +0x5286.
+    //
+    // ⭐ THE COUNT STORE IS A BYTE ON PURPOSE (`stb r11, 0x5286`). A list longer than 255 is
+    // TRUNCATED in the count while all its entries are written -- shipped console behaviour,
+    // preserved deliberately (see the muNumActiveLandmarks note on BrnGuiCache.h). The copy
+    // loop is `do { ... } while (++i < count)`, so a zero count copies nothing.
+    void GuiCache::HandleSetActiveLandmarksEvent(
+        const GuiEventSetActiveLandmarks* lpActiveLandmarksEvent)
+    {
+        CGS_ASSERT(lpActiveLandmarksEvent->muNumLandmarks
+                       <= GuiEventSetActiveLandmarks::KU_MAX_LANDMARKS_IN_GAME,
+                   "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( "
+                   "KI_MAX_LANDMARKS_IN_GAME )");                           // cpp:4067
+
+        for (u32 luIndex = 0; luIndex < lpActiveLandmarksEvent->muNumLandmarks; ++luIndex)
+        {
+            mau16ActiveLandmarks[luIndex] = static_cast<u16>(
+                static_cast<s32>(lpActiveLandmarksEvent->maLandmarkIndices[luIndex]));
+        }
+
+        muNumActiveLandmarks =
+            static_cast<u8>(lpActiveLandmarksEvent->muNumLandmarks);        // stb 0x5286
+    }
+
+    // =============================================================================================
+    //  5. The two tracker publishers + RefreshMapState
+    // =============================================================================================
+
+    // X360 BrnGui::GuiCache::UpdateTrackerInfo @0x82506F28. Store-for-store.
+    //
+    // Builds a GuiEventSetTracker on the stack:
+    //   mbIsEntireRoute       = true        (`stb 1` BEFORE the loop)
+    //   miCurrentlyTrackedIndex = 0         (`stw 0`, likewise before the loop)
+    //   per element i in [0, liCount):
+    //       GetLandmarkInfoFromIndex(lpLandmarkIndices[i], &lIconInfo)
+    //       item.meIconType           = 4   (`stw r27` where r27 == 4)
+    //       item.mv3Position          = the icon record's 16-byte lane (lvx128/stvx128)
+    //       item.mTargetLandmarkIndex = the icon record's +0x20 half-word
+    //   miNumTrackedItems     = liCount     (`stw r25` AFTER the loop)
+    // then asserts the tracker pointer and publishes with RecEvent(&record, 232, 3088).
+    //
+    // ⚠️ THE RECORD IS NOT ZEROED FIRST -- neither is the console's stack copy. Items beyond
+    // miNumTrackedItems carry whatever the frame held, and that is safe because RecEvent's
+    // case-232 arm copies EXACTLY miNumTrackedItems records. Faithfully reproduced (a
+    // defensive memset here would be a divergence, not a fix); the local is left
+    // default-initialised for the same reason the console leaves its frame alone.
+    void GuiCache::UpdateTrackerInfo(const u16* lpLandmarkIndices, s32 liCount)
+    {
+        CGS_ASSERT(lpLandmarkIndices != 0, "lpLandmarkIndices");            // cpp:3913
+
+        GuiEventSetTracker lSetTrackerEvent;
+        lSetTrackerEvent.miCurrentlyTrackedIndex = 0;
+        lSetTrackerEvent.mbIsEntireRoute         = true;
+
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        {
+            GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
+            GetLandmarkInfoFromIndex(BrnGameState::LandmarkIndex(lpLandmarkIndices[liIndex]),
+                                     &lLandmarkInfo);
+
+            GuiTracker::TrackerInformation& lrItem = lSetTrackerEvent.mTrackedDataInfo[liIndex];
+            lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
+            // `lvx128 v0, r0, <icon> ; stvx128 v0, <item>, -0x18` -- the WHOLE 16-byte
+            // lane, w included, not a three-component narrow.
+            const Vector4& lrv4Lane = lLandmarkInfo.GetPositionLane();
+            lrItem.mv3Position.x = lrv4Lane.x;
+            lrItem.mv3Position.y = lrv4Lane.y;
+            lrItem.mv3Position.z = lrv4Lane.z;
+            lrItem.mv3Position.w = lrv4Lane.w;
+            lrItem.mTargetLandmarkIndex =
+                static_cast<u16>(lLandmarkInfo.GetLandmarkIndexHalf());
+        }
+
+        lSetTrackerEvent.miNumTrackedItems = liCount;
+
+        CGS_ASSERT(mpGuiTracker != 0, "Invalid tracker pointer");           // cpp:3932
+
+        // X360 `lwz r3, 0x4054(cache) ; addi r4, r1, <record> ; li r5, 0xE8 ; li r6, 0xC10 ;
+        // bl BrnGui__GuiTracker__RecEvent` @0x82507050. See PUBLISH GUARD in the file banner
+        // for why the deref is behind a test the console does not have.
+        if (mpGuiTracker != 0)
+        {
+            LogTrackerPublishWitness("GuiCache::UpdateTrackerInfo", lSetTrackerEvent);
+            mpGuiTracker->RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+                lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
+                static_cast<s32>(sizeof(lSetTrackerEvent)));       // `li r6, 0xC10` == 3088
+        }
+        else
+        {
+            LogAbsentGuiTrackerOnce("GuiCache::UpdateTrackerInfo");
+        }
+    }
+
+    // X360 sub_82507070 (NO SYMBOL -- the name below is ours, see the header note). The ONLINE
+    // twin of UpdateTrackerInfo: identical record, identical publish, but the landmark indices
+    // come from a round's SpecificGameModeEventInterface::Event -- count from the event's
+    // `lwz +0x24` (miNumLandmarks) and each index from Event::GetLandmark(i) @0x8240E7E0.
+    // Asserts lpEvent (cpp:3947) and the tracker pointer (cpp:3967).
+    void GuiCache::UpdateTrackerInfoFromOnlineEvent(
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event* lpEvent)
+    {
+        CGS_ASSERT(lpEvent != 0, "lpEvent");                                // cpp:3947
+
+        // [FLAG PC bring-up guard, wave J] the console derefs immediately; the assert is
+        // non-gating here. Only RefreshMapState's online arm reaches this, and it hands a
+        // pointer into the cache's own +0xA800 mirror, so a null is not expected -- the guard
+        // exists only so a non-gating assert cannot become a crash. DELETE-WHEN asserts gate.
+        if (lpEvent == 0)
+        {
+            return;
+        }
+
+        const u32 luNumLandmarks = static_cast<u32>(lpEvent->GetNumLandmarks());
+
+        GuiEventSetTracker lSetTrackerEvent;
+        lSetTrackerEvent.miCurrentlyTrackedIndex = 0;
+        lSetTrackerEvent.mbIsEntireRoute         = true;
+
+        for (u32 luIndex = 0; luIndex < luNumLandmarks; ++luIndex)
+        {
+            GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
+            GetLandmarkInfoFromIndex(lpEvent->GetLandmark(static_cast<s32>(luIndex)),
+                                     &lLandmarkInfo);
+
+            GuiTracker::TrackerInformation& lrItem = lSetTrackerEvent.mTrackedDataInfo[luIndex];
+            lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
+            // `lvx128 v0, r0, <icon> ; stvx128 v0, <item>, -0x18` -- the WHOLE 16-byte
+            // lane, w included, not a three-component narrow.
+            const Vector4& lrv4Lane = lLandmarkInfo.GetPositionLane();
+            lrItem.mv3Position.x = lrv4Lane.x;
+            lrItem.mv3Position.y = lrv4Lane.y;
+            lrItem.mv3Position.z = lrv4Lane.z;
+            lrItem.mv3Position.w = lrv4Lane.w;
+            lrItem.mTargetLandmarkIndex =
+                static_cast<u16>(lLandmarkInfo.GetLandmarkIndexHalf());
+        }
+
+        lSetTrackerEvent.miNumTrackedItems = static_cast<s32>(luNumLandmarks);
+
+        CGS_ASSERT(mpGuiTracker != 0, "Invalid tracker pointer");           // cpp:3967
+
+        // The online twin of the publish above (X360 @0x825071A8, same four registers).
+        if (mpGuiTracker != 0)
+        {
+            LogTrackerPublishWitness("GuiCache::UpdateTrackerInfoFromOnlineEvent",
+                                     lSetTrackerEvent);
+            mpGuiTracker->RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+                lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
+                static_cast<s32>(sizeof(lSetTrackerEvent)));       // `li r6, 0xC10` == 3088
+        }
+        else
+        {
+            LogAbsentGuiTrackerOnce("GuiCache::UpdateTrackerInfoFromOnlineEvent");
+        }
+    }
+
+    // X360 BrnGui::GuiCache::RefreshMapState @0x82510F40. The whole body is the two-way
+    // dispatch below -- eight pseudocode lines, three functions deep:
+    //   if (mbOnlineStartInProgress)   // `lwz 0x4B4C`
+    //       sub_82507070(this, &maOnlineGameModeOptions[miOnlineRoundIndex]);
+    //                                  // `44 * *(this+0xA7FC) + this + 0xA800`
+    //   else
+    //       UpdateTrackerInfo(this, &maCheckpointLandmarks[0], muCheckpointsInEvent);
+    //                                  // `this+0x9F54`, count `this+0x9FB8`
+    // ⚠️ NO ASSERTS OF ITS OWN, and no gate on the count -- an event with zero checkpoints
+    // legitimately publishes an EMPTY tracker record, which is how the console clears the
+    // route line. Do not add an early-out.
+    // ⚠️ The online arm's stride 44 is sizeof(SpecificGameModeEventInterface::Event); the
+    // +0xA800 mirror is that Event array (see GetOnlineLandmarkIndex @0x8240FB50, which
+    // indexes it identically).
+    void GuiCache::RefreshMapState()
+    {
+        if (mbOnlineStartInProgress)
+        {
+            typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event
+                OnlineModeEvent;
+            const OnlineModeEvent* lpOnlineGameModeOptions =
+                reinterpret_cast<const OnlineModeEvent*>(maOnlineGameModeOptionsStorage);
+            UpdateTrackerInfoFromOnlineEvent(&lpOnlineGameModeOptions[miOnlineRoundIndex]);
+        }
+        else
+        {
+            UpdateTrackerInfo(maCheckpointLandmarks,
+                              static_cast<s32>(muCheckpointsInEvent));
+        }
+    }
+
+    // =============================================================================================
+    //  6. The HACK worker -- the map's active-landmark re-latch
+    // =============================================================================================
+
+    // X360 BrnGui::GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID @0x825071C8.
+    // Store-for-store, in the console's order.
+    //
+    // ⭐ THE PPC FLOAT-ARG GPR SKIP IS WHY HEX-RAYS HIDES THE THIRD ARGUMENT (THE recurring
+    // campaign bug, already flagged on the header): at the call site r4 = the event id,
+    // f1 = the clamped animation t, r6 = the bool -- r5 is DEAD because the float skips its
+    // GPR slot. The signature is `s32 (u32, f32, bool)` (DWARF BrnGuiCache.h:1476) and the
+    // asm confirms it: `fmr f31, f1` @0x825071E0 and `mr r30, r6` @0x825071E8.
+    //
+    // Shape:
+    //   assert mpWorldDataController                                (BrnGuiCache.h:2324)
+    //   lpEventData = WorldDataController::GetEventInfoFromEventId(luEventID)
+    //   if (!lpEventData) return -1;                                (`li r3, -1`)
+    //   lSetTrackerEvent.mbIsEntireRoute = true
+    //   miCurrentlyTrackedIndex = (lbFlag == 1) ? GetCheckpointReached() : 0
+    //       with the console's `>= 0` assert on the former            (cpp:4204)
+    //   liNumTracked = (s32)((f32)lpEventData->GetCheckpointCount() * lfT)
+    //       -- fcfid/frsp/fmuls/fctiwz: a truncating conversion, and `t` is the fraction of
+    //          the event's checkpoints to reveal
+    //   if (liNumTracked == 0) both counts = 0
+    //   else { both counts = liNumTracked; assert <= 64               (cpp:4227)
+    //          for i: GetLandmarkInfoFromID(GetCheckpointData(i)->GetLandmarkId(), &info)
+    //                 item.meIconType = 4; item.mv3Position = info lane
+    //                 lActiveLandmarks.maLandmarkIndices[i] = info +0x20 half
+    //                 item.mTargetLandmarkIndex             = the SAME half }
+    //   HandleSetActiveLandmarksEvent(&lActiveLandmarks)
+    //   mpGuiTracker->RecEvent(&lSetTrackerEvent, 232, 3088)
+    //   return liNumTracked
+    //
+    // ⚠️ THE `<= 64` ASSERT IS NON-GATING AND THE WRITE THAT FOLLOWS IS NOT BOUNDED BY IT ON
+    // THE CONSOLE. lSetTrackerEvent.mTrackedDataInfo holds KI_TRACKER_STACK_SIZE == 64 items
+    // and liNumTracked is `checkpointCount * t` -- a >64-checkpoint event would run off the
+    // stack record on the console too. This build's asserts do not halt, so the loop below is
+    // clamped to the array bound with an explicit FLAG rather than reproducing a stack smash:
+    // that is the one deliberate divergence in this function, and it changes nothing for any
+    // shipped event (the checkpoint tables are far shorter than 64).
+    s32 GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID(u32 luEventID, f32 lfT,
+                                                                        bool lbFlag)
+    {
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");    // BrnGuiCache.h:2324
+
+        // [FLAG PC bring-up guard] the console derefs straight through; the assert above is
+        // non-gating here. -1 is the console's own no-event answer, so this returns exactly
+        // what a missing event returns rather than inventing a third outcome.
+        if (mpWorldDataController == 0)
+        {
+            return -1;
+        }
+
+        const BrnProgression::RaceEventData* lpEventData =
+            mpWorldDataController->GetEventInfoFromEventId(luEventID);
+        if (lpEventData == 0)
+        {
+            // `li r3, -1` @0x82507230 -- the console's own "no such event" answer. NOT 0:
+            // 0 would read as "an event with no active landmarks", which is a different fact.
+            return -1;
+        }
+
+        GuiEventSetTracker lSetTrackerEvent;
+        lSetTrackerEvent.mbIsEntireRoute = true;                            // stb 1 (before all)
+
+        if (lbFlag)
+        {
+            lSetTrackerEvent.miCurrentlyTrackedIndex = GetCheckpointReached();
+            CGS_ASSERT(lSetTrackerEvent.miCurrentlyTrackedIndex >= 0,
+                       "lSetTrackerEvent.miCurrentlyTrackedIndex >= 0");    // cpp:4204
+        }
+        else
+        {
+            lSetTrackerEvent.miCurrentlyTrackedIndex = 0;
+        }
+
+        // fcfid / frsp / fmuls / fctiwz -- the count scaled by the animation parameter and
+        // TRUNCATED toward zero. Reproduced as the same widen-multiply-truncate chain.
+        const s32 liNumTracked = static_cast<s32>(
+            static_cast<f32>(lpEventData->GetCheckpointCount()) * lfT);
+
+        GuiEventSetActiveLandmarks lActiveLandmarksEvent;
+        lActiveLandmarksEvent.muNumLandmarks = 0;
+        lSetTrackerEvent.miNumTrackedItems   = 0;
+
+        if (liNumTracked != 0)
+        {
+            lActiveLandmarksEvent.muNumLandmarks = static_cast<u32>(liNumTracked);
+            lSetTrackerEvent.miNumTrackedItems   = liNumTracked;
+
+            CGS_ASSERT(liNumTracked <= GuiTracker::KI_TRACKER_STACK_SIZE,
+                       "lSetTrackerEvent.miNumTrackedItems <= "
+                       "GuiTracker::KI_TRACKER_STACK_SIZE");                // cpp:4227
+
+            // [FLAG deliberate divergence -- see the banner above] the console walks to
+            // liNumTracked regardless; we stop at the record's own capacity so a
+            // non-gating assert cannot become a stack overrun.
+            s32 liWriteLimit = liNumTracked;
+            if (liWriteLimit > GuiTracker::KI_TRACKER_STACK_SIZE)
+            {
+                liWriteLimit = GuiTracker::KI_TRACKER_STACK_SIZE;
+            }
+
+            for (s32 liIndex = 0; liIndex < liWriteLimit; ++liIndex)
+            {
+                const BrnProgression::CheckpointData* lpCheckpoint =
+                    lpEventData->GetCheckpointData(liIndex);
+
+                GuiEventUpdateSatNav::SatNavIconInfo lLandmarkInfo;
+                GetLandmarkInfoFromID(static_cast<CgsID>(lpCheckpoint->GetLandmarkId()),
+                                      &lLandmarkInfo);
+
+                GuiTracker::TrackerInformation& lrItem =
+                    lSetTrackerEvent.mTrackedDataInfo[liIndex];
+                lrItem.meIconType = GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK;
+                // The whole 16-byte lane (lvx128/stvx128), w included.
+                const Vector4& lrv4Lane = lLandmarkInfo.GetPositionLane();
+                lrItem.mv3Position.x = lrv4Lane.x;
+                lrItem.mv3Position.y = lrv4Lane.y;
+                lrItem.mv3Position.z = lrv4Lane.z;
+                lrItem.mv3Position.w = lrv4Lane.w;
+
+                // The SAME half-word lands in both records (`sth r11, 0(r29)` into the
+                // active-landmark list and `sth r11, 0(r31)` into the tracker item).
+                const s16 li16LandmarkIndex = lLandmarkInfo.GetLandmarkIndexHalf();
+                lActiveLandmarksEvent.maLandmarkIndices[liIndex] =
+                    BrnGameState::LandmarkIndex(li16LandmarkIndex);
+                lrItem.mTargetLandmarkIndex = static_cast<u16>(li16LandmarkIndex);
+            }
+        }
+
+        HandleSetActiveLandmarksEvent(&lActiveLandmarksEvent);
+
+        CGS_ASSERT(mpGuiTracker != 0, "Invalid tracker pointer");
+
+        // The map/fly-by publish (X360 @0x82507378, same four registers).
+        if (mpGuiTracker != 0)
+        {
+            LogTrackerPublishWitness(
+                "GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID",
+                lSetTrackerEvent);
+            mpGuiTracker->RecEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lSetTrackerEvent),
+                lSetTrackerEvent.GetEventType(),                   // `li r5, 0xE8`  == 232
+                static_cast<s32>(sizeof(lSetTrackerEvent)));       // `li r6, 0xC10` == 3088
+        }
+        else
+        {
+            LogAbsentGuiTrackerOnce(
+                "GuiCache::HACK_FindABetterPlaceForMe_SetActiveLandmarksByEventID");
+        }
+
+        return liNumTracked;
+    }
+
+    // =============================================================================================
+    // @0x8241E4C8 -- GuiCache::GetNumEventStarts. The live count of registered event-start
+    // records, read by CrashNavIconRenderer::GetNumIcons @0x82456C68 and by
+    // OnlineSelectRoute::UpdateAfterToggleChange @0x8249E558.
+    //
+    // ⭐ ADDRESS + SHAPE CORRECTION (this wave). An earlier split-out TU carried this as a
+    // tail-FORWARDER to SetUpAllEventStartsInterface::GetNumEventStarts, on the strength of
+    // a 0x824F8830 attribution the header has since retired. The real export
+    // at 0x8241E4C8 forwards to nothing at all -- it is four instructions plus the array
+    // guard:
+    //     addi r31, r3, 0x5690      ; &mSetUpAllEventStartsInterface
+    //     lwz  r11, 0x20D0(r31)     ; interface + 0x20D0 == cache + 0x7760 == miEventStartsCount
+    //     cmpwi r11, -1 / bne       ; the CgsArray "not constructed" sentinel
+    //     <BeginAssert / FireAssert("Array used before Construct/Clear was called",
+    //                               "..\..\..\GameShared\GameClasses\Containers/CgsArray.h", 336)
+    //      / EndAssert>
+    //     lwz  r3, 0x20D0(r31)      ; and return it (RE-LOADED after the assert, not cached)
+    // i.e. the count member is read BY NAME here, exactly as the already-inline
+    // GetEventStart(index) twin next to it in the header reads it. That also removes the
+    // include clash the forwarder was split into its own TU for: this body needs no
+    // BrnGameStateSharedIO.h type at all, so it belongs in this partfile.
+    //
+    // The assert is non-gating in this build (CGS_ASSERT), and the console likewise falls
+    // through and returns the sentinel -- reproduced rather than "fixed": a -1 answer is the
+    // console's own report that nothing ever called Construct on the array.
+    // =============================================================================================
+    u32 GuiCache::GetNumEventStarts() const
+    {
+        CGS_ASSERT(miEventStartsCount != -1,
+                   "Array used before Construct/Clear was called");   // CgsArray.h:336
+        return static_cast<u32>(miEventStartsCount);
+    }
+
+    // =============================================================================================
+    // @0x8241E7D8 -- GuiCache::GetNumOnlineFinishPoints. Total set bits across the 256-bit
+    // online finish-point bitmask (maOnlineFinishPointsMask @+0x7770, four doublewords loaded
+    // by the console at 0x7770 / 0x7778 / 0x7780 / 0x7788). Each word gets the classic 5-step
+    // 64-bit SWAR population count (`srdi 1 / and / subf`, `srdi 2 / and / and / add`,
+    // `srdi 4 / add / and`, `mulld 0x0101010101010101 / srdi 56`) and the four counts are
+    // summed. No assert, no branch -- the whole function is straight-line.
+    //
+    // The step-1 and step-2 masks the X360 materialises carry redundant HIGH bits set
+    // (0xD555555555555555 and 0xF333333333333333 rather than 0x5555... / 0x3333...); those
+    // extra bits only ever meet bits the shift has already zeroed, so each step is the
+    // canonical popcount step exactly. Kept as the console's constants rather than tidied,
+    // so the store-for-store reading is checkable against the asm.
+    //
+    // MOVED HERE this wave from the UNMOUNTED BrnGuiCache_wB_res.cpp (see the note left in
+    // that file). The two cannot coexist -- LNK2005.
+    // =============================================================================================
+    u32 GuiCache::GetNumOnlineFinishPoints() const
+    {
+        u32 luFinishPointCount = 0;
+        for (s32 liWord = 0; liWord < 4; ++liWord)
+        {
+            u64 luBits = maOnlineFinishPointsMask[liWord];
+            luBits = luBits - ((luBits >> 1) & 0xD555555555555555ULL);
+            luBits = ((luBits >> 2) & 0xF333333333333333ULL) + (luBits & 0x3333333333333333ULL);
+            luBits = (luBits + (luBits >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
+            luFinishPointCount += static_cast<u32>((luBits * 0x0101010101010101ULL) >> 56);
+        }
+        return luFinishPointCount;
+    }
+    // The online finish-point mask is a 256-bit set held as four 64-bit fields -- the shape
+    // CgsContainers::BitArray gives it, and the name the recovered assert texts below use
+    // for it (mEventsWithUniqueFinishPoints). GetOnlineFinishPoint walks it with the set's
+    // first/next-set-bit pair, which the recovered code inlines at the call site rather than
+    // calling; the cache holds the fields as a plain array, so the pair is reproduced here
+    // with internal linkage instead of being reached through the container.
+    namespace
+    {
+        const s32 KI_INVALID_BITINDEX     = -1;
+        const u32 KU_BITS_IN_FIELD        = 64;
+        const u32 KU_MAX_FINISH_POINTS    = 256;                                   // the set's capacity
+        const u32 KU_FINISH_POINT_FIELDS  = KU_MAX_FINISH_POINTS / KU_BITS_IN_FIELD;
+
+        // The PPC count-leading-zeros the two walkers below are built out of.
+        s32 CountLeadingZeros64(u64 lu64Value)
+        {
+            s32 liCount = 0;
+            while (liCount < 64
+                   && (lu64Value & (static_cast<u64>(1) << (63 - liCount))) == 0)
+            {
+                ++liCount;
+            }
+            return liCount;
+        }
+
+        // Index of the lowest set bit of a field, expressed the way the recovered code
+        // computes it: isolate the lowest set bit with `x - ((x - 1) & x)`, count its leading
+        // zeros, then `field*64 - clz + 63`. Value-identical to a count-trailing-zeros.
+        s32 LowestSetBitIndex(u32 luField, u64 lu64FieldBits)
+        {
+            const u64 lu64Lowest = lu64FieldBits - ((lu64FieldBits - 1) & lu64FieldBits);
+            return static_cast<s32>(luField * KU_BITS_IN_FIELD)
+                 - CountLeadingZeros64(lu64Lowest) + 63;
+        }
+
+        // Lowest set bit in the whole set, or KI_INVALID_BITINDEX when every field is zero.
+        s32 GetFirstSetBit(const u64* lpa64Fields)
+        {
+            for (u32 luField = 0; luField < KU_FINISH_POINT_FIELDS; ++luField)
+            {
+                if (lpa64Fields[luField] != 0)
+                {
+                    return LowestSetBitIndex(luField, lpa64Fields[luField]);
+                }
+            }
+            return KI_INVALID_BITINDEX;
+        }
+
+        // Lowest set bit strictly after liAfter, or KI_INVALID_BITINDEX when there is none.
+        // Two phases, exactly as the recovered code splits them: a linear probe to the end of
+        // liAfter's own field (the one that carries the set's bounds assert), then a
+        // field-at-a-time scan of the fields after it. liAfter == KI_INVALID_BITINDEX makes
+        // the first phase empty and starts the scan at field 0, which is what the recovered
+        // code's `(liAfter & ~63) + 64` arithmetic does with -1.
+        s32 GetNextSetBit(const u64* lpa64Fields, s32 liAfter)
+        {
+            const u32 luFieldEnd = static_cast<u32>((liAfter & ~63) + 64);
+            u32 luBit = static_cast<u32>(liAfter + 1);
+
+            for (; luBit < luFieldEnd; ++luBit)
+            {
+                CGS_ASSERT(luBit < KU_MAX_FINISH_POINTS, "invalid index");  // CgsBitArray.h:203
+                const u64 lu64Mask = static_cast<u64>(1) << (luBit & (KU_BITS_IN_FIELD - 1));
+                if ((lpa64Fields[luBit / KU_BITS_IN_FIELD] & lu64Mask) != 0)
+                {
+                    return static_cast<s32>(luBit);
+                }
+            }
+
+            for (u32 luField = luBit / KU_BITS_IN_FIELD;
+                 luField < KU_FINISH_POINT_FIELDS; ++luField)
+            {
+                if (lpa64Fields[luField] != 0)
+                {
+                    return LowestSetBitIndex(luField, lpa64Fields[luField]);
+                }
+            }
+            return KI_INVALID_BITINDEX;
+        }
+    }
+
+    // =============================================================================================
+    // GuiCache::GetOnlineFinishPoint -- the ONLINE_FINISH_POINTS icon accessor. Its only
+    // caller is CrashNavIconRenderer::GetIconInformation's ONLINE_FINISH_POINTS arm
+    // (BrnCrashNavIconRenderer_wK_01.cpp), which iterates GetNumOnlineFinishPoints() -- the
+    // popcount of the same mask -- and reads back the record's leading position lane and its
+    // sign-extended landmark half-word @+0x20.
+    //
+    // The producer of the mask is GuiCache::HandleSpecificPreSetRacesEvent
+    // (BrnGuiCache_wB_13.cpp): bit i is set for preset event i when event i's LAST landmark
+    // (its finish point) is not already the last landmark of an earlier event. So slot
+    // liIndexIn here means "the liIndexIn-th event with a distinct finish point", and the
+    // walk below turns that slot back into an event index.
+    //
+    // Step for step:
+    //   1. assert mpWorldDataController                                        (cpp:3695)
+    //   2. assert the slot against the mask's own set-bit count                (cpp:3696)
+    //      -- the recovered code inlines the SWAR popcount here; the named accessor next to
+    //      this body IS that popcount, so it is called by name.
+    //   3. first set bit, asserted valid                                       (cpp:3699)
+    //   4. advance to the next set bit liIndexIn times, each one asserted      (cpp:3703)
+    //   5. that bit indexes the adopted preset-event list; assert the record   (cpp:3708)
+    //   6. the record's LAST landmark index -> WorldDataController lookup, asserted
+    //                                                                          (cpp:3711)
+    //   7. fill the out record from the landmark.
+    //
+    // The out-record fill is byte-for-byte the same sequence as
+    // GetLandmarkInfoAtPositionInList / GetLandmarkInfoFromIndex above -- position lane,
+    // 0.0f rotation and speed, the whole 64-bit landmark id, district then county (county
+    // read back OFF the record, not off the local), type 4, -1 in the active-race-car slot,
+    // design index -- with ONE difference: the landmark half-word @+0x20 is the landmark's
+    // own region index, not the caller's slot.
+    //
+    // NOTE, deliberately not "fixed": step 6 reads landmark `count - 1` with no zero-count
+    // test of its own. The producer never sets a bit for an event with zero landmarks, so
+    // the count is >= 1 for every bit the walk can reach.
+    // =============================================================================================
+    void GuiCache::GetOnlineFinishPoint(s32 liIndexIn,
+                                        GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+    {
+        CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");       // cpp:3695
+        CGS_ASSERT(static_cast<u32>(liIndexIn) < GetNumOnlineFinishPoints(),
+                   "((uint32_t)liIndexIn) < mEventsWithUniqueFinishPoints.CountSetBits()");
+                                                                               // cpp:3696
+
+        s32 liSetBit = GetFirstSetBit(maOnlineFinishPointsMask);
+        CGS_ASSERT(liSetBit != KI_INVALID_BITINDEX,
+                   "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
+                   "::KI_INVALID_BITINDEX");                                   // cpp:3699
+
+        for (s32 liRemaining = liIndexIn; liRemaining > 0; --liRemaining)
+        {
+            liSetBit = GetNextSetBit(maOnlineFinishPointsMask, liSetBit);
+            CGS_ASSERT(liSetBit != KI_INVALID_BITINDEX,
+                       "liSetBit != CgsContainers::BitArray<KI_MAX_FINISH_POINTS>"
+                       "::KI_INVALID_BITINDEX");                               // cpp:3703
+        }
+
+        // [FLAG PC bring-up guard] the walk answers KI_INVALID_BITINDEX whenever the mask is
+        // empty -- which is every offline session, because nothing posts the preset-races
+        // event there -- and the asserts above are non-gating in this build, so without this
+        // the -1 would reach the list indexer. The caller's record is left exactly as it
+        // staged it, which is what the non-fatal path effectively leaves too.
+        // DELETE-WHEN asserts gate.
+        if (liSetBit == KI_INVALID_BITINDEX)
+        {
+            return;
+        }
+
+        const PresetEvent* lpEventWithUniqueFinish = GetPresetEvent(liSetBit);
+        CGS_ASSERT(lpEventWithUniqueFinish != 0, "lpEventWithUniqueFinish");    // cpp:3708
+        if (lpEventWithUniqueFinish == 0)
+        {
+            return;
+        }
+
+        const BrnGameState::LandmarkIndex lFinishLandmarkIndex =
+            lpEventWithUniqueFinish->GetLandmark(
+                lpEventWithUniqueFinish->GetNumLandmarks() - 1);
+
+        // [FLAG PC bring-up guard] see LogAbsentTriggerDataOnce above.
+        if (mpWorldDataController == 0 || !mpWorldDataController->HasTriggerData())
+        {
+            LogAbsentTriggerDataOnce("GuiCache::GetOnlineFinishPoint");
+            return;
+        }
+
+        const BrnTrigger::Landmark* lpLandmark =
+            mpWorldDataController->GetLandmarkInfoFromIndex(lFinishLandmarkIndex);
+        CGS_ASSERT(lpLandmark != 0, "lpLandmark");                             // cpp:3711
+
+        // [FLAG PC bring-up guard, wave J] same reasoning as GetLandmarkInfoFromIndex above:
+        // the lookup can answer NULL on a miss and has already reported it, and the assert is
+        // non-gating here, so the deref is guarded rather than turned into a crash.
+        // DELETE-WHEN the trigger-data landmark table is populated on this build.
+        if (lpLandmark == 0)
+        {
+            return;
+        }
+
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                          lv3LandmarkPosition.z, 0.0f };
+        lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // -> +0x00
+        lpOutIconInfo->SetRotation(0.0f);                                   // -> +0x18
+        lpOutIconInfo->SetSpeedMph(0.0f);                                   // -> +0x1C
+        lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // -> +0x10
+        lpOutIconInfo->SetDistrict(
+            static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // -> +0x25
+        lpOutIconInfo->SetCounty(
+            BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+        lpOutIconInfo->SetIconType(
+            GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // -> +0x28
+        lpOutIconInfo->SetLandmarkIndexHalf(
+            static_cast<s16>(lpLandmark->GetRegionIndex()));                // -> +0x20
+        lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // -> +0x26
+        lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // -> +0x22
+    }
+}
+
+namespace BrnGui
+{
+// ARTIST 0x825063C8. Unlike the index lookup, this stores the landmark's region index.
+void GuiCache::GetLandmarkInfoAtPositionInList(s32 liIndex,
+    GuiEventUpdateSatNav::SatNavIconInfo* lpOutIconInfo) const
+{
+    CGS_ASSERT(mpWorldDataController != 0, "mpWorldDataController");
+    const BrnTrigger::Landmark* lpLandmark =
+        mpWorldDataController->GetLandmarkInfoAtPositionInList(liIndex);
+    CGS_ASSERT(lpLandmark != 0, "lpLandmark");
+        // The three `lfs` off the landmark's BoxRegion position + `stw 0` for the w lane,
+        // then one `stvx128` -- the whole 16-byte lane in one store.
+        const Vector3 lv3LandmarkPosition = lpLandmark->GetBoxRegion()->GetPosition();
+        const Vector4 lv4PositionLane = { lv3LandmarkPosition.x, lv3LandmarkPosition.y,
+                                          lv3LandmarkPosition.z, 0.0f };
+        lpOutIconInfo->SetPositionLane(lv4PositionLane);                    // stvx128 -> +0x00
+        lpOutIconInfo->SetRotation(0.0f);                                   // stfs    -> +0x18
+        lpOutIconInfo->SetSpeedMph(0.0f);                                   // stfs    -> +0x1C
+        lpOutIconInfo->SetCgsId(lpLandmark->GetId());                       // std     -> +0x10
+        lpOutIconInfo->SetDistrict(
+            static_cast<BrnWorld::EDistrict>(lpLandmark->GetDistrict()));   // stb     -> +0x25
+        lpOutIconInfo->SetCounty(
+            BrnWorld::WorldRegion::DistrictToCounty(lpOutIconInfo->GetDistrict()));  // -> +0x24
+        lpOutIconInfo->SetLandmarkIndexHalf(
+            static_cast<s16>(lpLandmark->GetRegionIndex()));            // sth     -> +0x20
+        lpOutIconInfo->SetIconType(
+            GuiEventUpdateSatNav::SatNavIconInfo::E_SATNAVICON_LANDMARK);   // stb 4   -> +0x28
+        lpOutIconInfo->SetActiveRaceCarIndex(E_ACTIVE_RACE_CAR_INDEX_INVALID); // stb -1 -> +0x26
+        lpOutIconInfo->SetDesignIndex(lpLandmark->GetDesignIndex());        // stb     -> +0x22
+
+}
+}
+
+namespace BrnGui
+{
+// ARTIST 0x824EC610: the final authored event checkpoint is the finish landmark.
+BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
+{
+    const u8 luCount = GetCheckpointsInEvent();
+    CGS_ASSERT(luCount > 0, "lu8NumCheckpointsInEvent > 0");
+    return BrnGameState::LandmarkIndex(maCheckpointLandmarks[luCount - 1]);
+}
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_13.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// GuiCache map-event partfile. Reconstructed from the shipped console image.
+//
+// One function: the map-event EXIT producer, the arm of GuiCache::RecEvent that adopts a
+// whole per-mode preset-event interface and rebuilds the online finish-point bitmask the
+// sat-nav / crash-nav map counts its finish icons from. CGS_ASSERT is a no-op in this
+// build (CgsAssert.h), matching the project convention for the console assert machinery.
+//
+// Plus the two PresetEvent landmark reads this body needs. PresetEvent is the cache's
+// minimal slice of the same record the game-state interface calls
+// SpecificGameModeEventInterface::Event; the two offsets below (+0x24 count, +0x00 + 2*i
+// half-word) are the ones this function reads and they agree field-for-field with that
+// record's own maLandmarkIndices / miNumLandmarks.
+
+namespace BrnGui
+{
+    // The record's live landmark count (the console streams it as "GetNumLandmarks()" into
+    // the indexed read's bound assert).
+    s32 PresetEvent::GetNumLandmarks() const
+    {
+        return miNumLandmarks;
+    }
+
+    // One of the record's landmark indices by value, bounds-asserted into [0, count).
+    // Asserts: BrnGameStateSharedIO.h:1929 / :1930 (both non-gating in this build; the
+    // console streams the index and the live count into the second message).
+    BrnGameState::LandmarkIndex PresetEvent::GetLandmark(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+        CGS_ASSERT(liIndex < miNumLandmarks, "liIndex < GetNumLandmarks()");
+
+        return BrnGameState::LandmarkIndex(static_cast<s32>(
+            static_cast<s16>(mau16LandmarkIndices[liIndex])));
+    }
+
+    // The map-event exit handler: RecEvent arm 194, BrnGui::GuiEventSpecificPresetRaces.
+    // The queued payload is a verbatim 7704-byte copy of the game-state output buffer's own
+    // SpecificGameModeEventInterface (the bridge copies and posts it whenever the buffer's
+    // interface-is-valid flag is set), which is why it is spelled as that interface here.
+    // Store-for-store:
+    //
+    //   1. assert the payload pointer (BrnGuiCache.cpp:4095 -- the console's own message
+    //      still names the producer, OnlinePlay::HandleAllPreSetRacesEvent);
+    //   2. adopt the WHOLE interface by value over maEventsStorage + mEventsCtorSentinel
+    //      (one 7704-byte copy: the 175 x 44 element buffer AND the trailing count word,
+    //      so the array's constructed-ness travels with the payload);
+    //   3. zero the four doublewords of maOnlineFinishPointsMask;
+    //   4. walk the adopted events and set bit i for each event whose LAST landmark --
+    //      its finish point -- has not already been seen as the last landmark of an
+    //      EARLIER event. That de-duplication is what makes the mask a set of distinct
+    //      finish points rather than a set of events; GetNumOnlineFinishPoints popcounts
+    //      it and GetOnlineFinishPoint turns a slot back into a landmark index.
+    //
+    // Faithful details that look like inefficiencies and are NOT: the live count is
+    // re-read (with its array-constructed assert) on every iteration; the record for an
+    // index is fetched TWICE, once for the count and once for the indexed landmark read;
+    // and the inner scan re-fetches the earlier record twice per step as well. An event
+    // with zero landmarks is skipped entirely and claims no bit.
+    void GuiCache::HandleSpecificPreSetRacesEvent(
+        const BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface* lpEvent)
+    {
+        typedef BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface
+            PresetEventInterface;
+
+        // The adopted block is exactly the cache's mEvents pair -- element buffer plus the
+        // CgsArray count word that follows it.
+        static_assert(sizeof(PresetEventInterface)
+                          == sizeof(maEventsStorage) + sizeof(mEventsCtorSentinel),
+                      "the preset-event payload is the cache's mEvents storage + count");
+
+        CGS_ASSERT(lpEvent != 0,
+                   "Invalid event in OnlinePlay::HandleAllPreSetRacesEvent");   // cpp:4095
+
+        // [FLAG PC bring-up guard] the console derefs immediately after that assert, which
+        // is non-gating here, so a null payload would turn a reported miss into a crash on
+        // the map-event exit path. Guard only; no invented behaviour.
+        // DELETE-WHEN asserts gate.
+        if (lpEvent == 0)
+        {
+            return;
+        }
+
+        std::memcpy(maEventsStorage, lpEvent, sizeof(maEventsStorage));
+        std::memcpy(&mEventsCtorSentinel,
+                    reinterpret_cast<const u8*>(lpEvent) + sizeof(maEventsStorage),
+                    sizeof(mEventsCtorSentinel));
+
+        maOnlineFinishPointsMask[0] = 0;
+        maOnlineFinishPointsMask[1] = 0;
+        maOnlineFinishPointsMask[2] = 0;
+        maOnlineFinishPointsMask[3] = 0;
+
+        for (s32 liIndex = 0; liIndex < GetNumPresetEvents(); ++liIndex)
+        {
+            const s32 liNumLandmarks = GetPresetEvent(liIndex)->GetNumLandmarks();
+            if (liNumLandmarks == 0)
+            {
+                continue;
+            }
+
+            const s32 liFinishLandmark = static_cast<s32>(
+                GetPresetEvent(liIndex)->GetLandmark(liNumLandmarks - 1));
+
+            bool lbFinishAlreadyClaimed = false;
+            for (s32 liEarlier = 0; liEarlier < liIndex; ++liEarlier)
+            {
+                // NOTE, deliberately preserved: the inner scan has NO zero-landmark skip
+                // of its own, so an earlier event with an empty landmark set is read at
+                // index -1. That is the shipped behaviour; the read stays inside the
+                // cache object either way (the preceding record, or the word in front of
+                // the storage), and the comparison simply cannot match a real finish
+                // point. Do not "fix" it -- it changes which bits the mask carries.
+                const s32 liEarlierNumLandmarks =
+                    GetPresetEvent(liEarlier)->GetNumLandmarks();
+                const s32 liEarlierFinishLandmark = static_cast<s32>(
+                    GetPresetEvent(liEarlier)->GetLandmark(liEarlierNumLandmarks - 1));
+
+                if (liFinishLandmark == liEarlierFinishLandmark)
+                {
+                    lbFinishAlreadyClaimed = true;
+                    break;
+                }
+            }
+
+            if (lbFinishAlreadyClaimed)
+            {
+                continue;
+            }
+
+            CGS_ASSERT(static_cast<u32>(liIndex) < 256u,
+                       "Index < Number of bits");                    // CgsBitArray.h:222
+
+            maOnlineFinishPointsMask[liIndex >> 6] |=
+                static_cast<u64>(1) << (liIndex & 63);
+        }
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_06.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. Three GuiCache accessors over the
+// per-active-race-car / scoring-traffic tables. Each reads ONE named member at its
+// asm-proven offset, guarded by the game's debug assert (CGS_ASSERT is a no-op in this
+// build, matching the X360 release assert machinery). The two ARCI-indexed accessors
+// front-guard the index with the [0, E_ACTIVE_RACE_CAR_INDEX_COUNT) range check the
+// X360 emits (it builds an "Invalid EActiveRaceCarIndex : <n>" message); GetScoring
+// TrafficCount front-guards the CgsArray "used before Construct/Clear" sentinel.
+
+namespace BrnGui
+{
+    // @ 0x82443B28 -- maRaceCarConnecting[index] @0xA0EC. asm range-guards a2<0 (h:3886)
+    // and a2>=8 (h:3887), then returns the byte with no validity gate.
+    bool GuiCache::IsActiveRaceCarConnecting(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(0 <= leActiveRaceCarIndex, "Invalid EActiveRaceCarIndex");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "Invalid EActiveRaceCarIndex");
+        return maRaceCarConnecting[leActiveRaceCarIndex];
+    }
+
+    // @ 0x82443D78 -- maEventPositionOfRaceCar[index] @0xA130 (s8 place), gated on
+    // maEventPositionValid[index] @0xA140: returns the place only when the slot is valid,
+    // else 0. asm range-guards a2<0 (h:3960) and a2>=8 (h:3961).
+    s32 GuiCache::GetEventPositionOfRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const
+    {
+        CGS_ASSERT(0 <= leActiveRaceCarIndex, "Invalid EActiveRaceCarIndex");
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "Invalid EActiveRaceCarIndex");
+        if (maEventPositionValid[leActiveRaceCarIndex])
+            return maEventPositionOfRaceCar[leActiveRaceCarIndex];
+        return 0;
+    }
+
+    // @ 0x824497C0 -- the scoring-traffic CgsArray length (miScoringTrafficCount @0xA3D0).
+    // asm forms &maScoringTrafficDataStorage (@0xA150), then reads the count member 640
+    // bytes past it; the -1 sentinel means the array was used before Construct/Clear.
+    s32 GuiCache::GetScoringTrafficCount() const
+    {
+        CGS_ASSERT(miScoringTrafficCount != -1,
+                   "Array used before Construct/Clear was called");
+        return miScoringTrafficCount;
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wS1.cpp (wave S1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// BrnGuiCache_wS1.cpp -- the road-rule-shot slice's GuiCache leg (stunt-race UI wave,
+// 2026-08-27). Mounting BrnRoadRuleShotComponent.cpp -- so RaceMainHudState::OnEnter can
+// stop linking against the inert Construct scaffold in BrnHudStatesLinkStubs.cpp -- pulls
+// exactly two "bodies link from the GuiCache TU" rows onto the link closure:
+//     GuiCache::GetRoadRuleShotOpponentARCI      (BrnGuiCache.h:791)
+//     GuiCache::GetRoadRuleShotCapturedLineGate  (BrnGuiCache.h:797)
+// Neither is an exported X360 function -- the console inlines both into their one reader,
+// RoadRuleShotComponent::Snap @0x82415620, which is also where the offsets in the header
+// come from:
+//     if ( *(v8 + 44122) )                                 <- mbRoadRuleShotCapturedLineGate
+//     for ( i = (v8 + 44436); *i != *(v8 + 44104); ... )   <- meRoadRuleShotOpponentARCI
+// (v8 == the GuiCache; 44122 == +0xAC5A, 44104 == +0xAC48; 44436 == the records at
+// +0xAC80 plus the record's meActiveRaceCarIndex at +0x114.) The asm reads each member
+// once, with no bounds test and no assert, so the bodies are the bare named-member reads
+// -- unlike the indexed accessors in BrnGuiCache_wB_02.cpp / _wB_06.cpp, which do carry
+// the X360's range guards. Both members are already NAMED in BrnGuiCache.h (h:1479 /
+// h:1481); no pad carving was needed and no neighbour moved.
+//
+// Homed in this partfile rather than BrnGuiCache.cpp purely for wave hygiene (that file
+// is another agent's hot file); there is no include clash to work around.
+
+
+namespace BrnGui
+{
+    // X360-inlined at Snap @0x82415620 (`lwz` of cache+44104, compared against each
+    // online record's meActiveRaceCarIndex). Returns the raw latch -- the caller's scan
+    // is what tolerates a stale / unmatched value.
+    s32 GuiCache::GetRoadRuleShotOpponentARCI() const
+    {
+        return meRoadRuleShotOpponentARCI;
+    }
+
+    // X360-inlined at Snap @0x82415620 (`lbz` of cache+44122, branch-if-zero straight to
+    // the return). The whole "CAPTURED_FOR <ruler>" gamertag line hangs off this byte.
+    bool GuiCache::GetRoadRuleShotCapturedLineGate() const
+    {
+        return mbRoadRuleShotCapturedLineGate;
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnGuiCache_wB_08.cpp (wave B) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (GuiCache accessor wave, part 08).
+// Three snapshot/index accessors, each a thin read of one named far member guarded
+// by the game's debug assert (CGS_ASSERT is a no-op in this build, matching the X360
+// release assert machinery). Offsets / branch senses are taken straight from the ARTIST
+// asm; members are accessed BY NAME against the recovered GuiCache layout in BrnGuiCache.h.
+
+namespace BrnGui
+{
+    // @ 0x82472E78 -- maRoadRuleActiveByType[liRoadRuleType] (@0xAC44, idx 0..1). The X360
+    // brackets the read with two debug asserts (>= 0 and < E_SCORE_TYPE_COUNT == 2), each
+    // building an "Invalid score type : <n>" message that the no-op assert discards.
+    bool GuiCache::IsRoadRuleActive(s32 liRoadRuleType) const
+    {
+        CGS_ASSERT(liRoadRuleType >= 0, "Invalid score type");
+        CGS_ASSERT(liRoadRuleType < 2, "Invalid score type");
+        return maRoadRuleActiveByType[liRoadRuleType];
+    }
+
+    // @ 0x82472FD0 -- bump the sat-nav zoom level (miSatNavZoomLevel @0x803C / result[8207]),
+    // assert it did not overrun E_SAT_NAV_ZOOM_COUNT (2), then clamp the stored value to a max
+    // of 1. The X360 re-reads the member after the increment and writes back the clamped value.
+    void GuiCache::ZoomSatNavOut()
+    {
+        ++miSatNavZoomLevel;
+        CGS_ASSERT(miSatNavZoomLevel <= 2, "leEnumIndex <= E_SAT_NAV_ZOOM_COUNT");
+        if (miSatNavZoomLevel >= 1)
+        {
+            miSatNavZoomLevel = 1;
+        }
+    }
+
+    // @ 0x824827D8 -- resolve the fly-by pre-event record at liIndex: assert the index is in
+    // [0, mPreRaceData.miNumMessages), then return &maPreEventInfo[liIndex] (stride 580 storage
+    // @0x12F0C, count miNumMessages @0x135D8). X360: return 580 * liIndex + this + 77580.
+    const PreEventInfo* GuiCache::GetPreEventInfo(s32 liIndex) const
+    {
+        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+        CGS_ASSERT(liIndex < miNumMessages, "liIndex < mPreRaceData.miNumMessages");
+        return reinterpret_cast<const PreEventInfo*>(maPreEventInfoStorage[liIndex]);
+    }
 }
