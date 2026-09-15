@@ -12,6 +12,8 @@
 #include "GameSource/AttribSys/Generated/classes/songlist.h"
 #include "GameSource/AttribSys/Generated/classes/song.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"  // the JumpHpf crash gate
+#include <cmath>   // powf (JumpHpf::Update's exponential sweep, sub_82C09970)
 
 #include <cstdio>
 #include <cstdarg>
@@ -28,6 +30,22 @@ namespace
     // K_NULL_NAME is 0 (CgsCommon.h: "not a recon'd standalone ctor TU -- K_NULL_NAME
     // semantics are 0"). The X360 reads it out of dword_830082A8.
     const u32 KU_NULL_NAME = 0u;
+
+    // DWARF BrnMusicEffect.cpp:33/36/39 -- the jump high-pass constants, read out of
+    // the ARTIST image (tools/re/x360rd.py): flt_82F2CE70 / flt_82F2CE74 / flt_82F2CE78.
+    // Notify(14) opens towards 2 kHz over 3 s; Notify(14, closed) / a crash closes
+    // back to the 230 Hz rest (flt_820AA558) over 1 s.
+    const f32 KF_JUMP_HPF_OPEN_FREQUENCY = 2000.0f;
+    const f32 KF_JUMP_HPF_OPEN_TIME      = 3.0f;
+    const f32 KF_JUMP_HPF_CLOSE_TIME     = 1.0f;
+    const f32 KF_JUMP_HPF_REST_FREQUENCY = 230.0f;   // flt_820AA558
+
+    // RwMathFPU::IsZero as the console inlines it in JumpHpf::Prepare @0x82687530 /
+    // ::Release @0x82687690: |x| <= FLT_EPSILON (flt_820AA114 / flt_82002514).
+    inline bool JumpHpfIsZero(f32 afValue)
+    {
+        return afValue <= 1.1920929e-7f && afValue >= -1.1920929e-7f;
+    }
 
     // X360 MusicEffect.cpp KI_NUM_PICTURE_PARADISE_NAMES == 22, asserted at
     // UpdateParams @0x826FE5C8 ("miPicParadiseMusic < KI_NUM_PICTURE_PARADISE_NAMES").
@@ -238,6 +256,7 @@ void MusicEffect::EaTraxData::SetCurrentSong(s32 aiSong)
 
 MusicEffect::MusicEffect()
     : BrnEffectObject(), mpMixerControl(0), mfLastPublishedGuiVolume(0.0f),
+      mJumpHpf(),   // @0x826C8DB4 `stw 0, 0x34(r3)` -- DESTRUCTED until Attach
       mSecondaryStream(), mEATraxStream(), mMusicStreamMenu(),
       mJunkyardStream(), mEaTraxData(),
       mbPlaylistChanged(false), mbPreviewActive(false), meEventEndResult(0),
@@ -249,6 +268,127 @@ MusicEffect::MusicEffect()
       mbHoldVolumes(false), mbMenuStreamIsVideo(false), mbMenuStreamOverCustom(false) {}
 
 MusicEffect::~MusicEffect() {}
+
+// ---------------------------------------------------------------------------
+// MusicEffect::JumpHpf -- the exponential high-pass sweep (24 bytes @ MusicEffect+0x34).
+// ---------------------------------------------------------------------------
+
+// Inlined in MusicEffect::Attach @0x8269CE10..0x8269CE50:
+//   lfs f12, flt_820AA558 (230.0) ; li r9, 1 ; lfs f0, flt_82001CC0 (0.0)
+//   stfs f12, 0x38(r30) ; stfs f0, 0x40(r30) ; stw r9, 0x34(r30)
+void MusicEffect::JumpHpf::Construct()
+{
+    mfStartFrequency   = KF_JUMP_HPF_REST_FREQUENCY;
+    mfCurrentFrequency = 0.0f;
+    meState            = E_JUMPHPFSTATE_CONSTRUCTED;
+}
+
+// @0x82687480 (export hole; ppcdis). assert(lfTargetFrequency > 0.0f) :0x79D, then
+//   CONSTRUCTED / IDLE : mfCurrentFrequency = 230.0 (flt_820AA558)      ; fall into
+//   CLOSING            : mfStartFrequency = mfCurrentFrequency;
+//                        assert(!RwMathFPU::IsZero(mfStartFrequency)) :0x7AB;
+//                        mfFrequencyGain = lfTargetFrequency / mfStartFrequency;
+//                        mfTime = afTime; mfTimeThrough = 0; meState = OPENING
+//   OPENING / OPEN     : nothing
+//   default            : assert("Unhandled state ") :0x7BF
+// Every arm returns true.
+bool MusicEffect::JumpHpf::Prepare(f32 afTargetFrequency, f32 afTime)
+{
+    CGS_ASSERT(afTargetFrequency > 0.0f, "lfTargetFrequency > 0.0f");
+    switch (meState)
+    {
+    case E_JUMPHPFSTATE_CONSTRUCTED:
+    case E_JUMPHPFSTATE_IDLE:
+        mfCurrentFrequency = KF_JUMP_HPF_REST_FREQUENCY;
+        // fall through
+    case E_JUMPHPFSTATE_CLOSING:
+        mfStartFrequency = mfCurrentFrequency;
+        CGS_ASSERT(!JumpHpfIsZero(mfStartFrequency), "!RwMathFPU::IsZero(mfStartFrequency)");
+        mfFrequencyGain = afTargetFrequency / mfStartFrequency;
+        mfTime          = afTime;
+        mfTimeThrough   = 0.0f;
+        meState         = E_JUMPHPFSTATE_OPENING;
+        break;
+    case E_JUMPHPFSTATE_OPENING:
+    case E_JUMPHPFSTATE_OPEN:
+        break;
+    default:
+        CGS_ASSERT(false, "Unhandled state ");
+        break;
+    }
+    return true;
+}
+
+// @0x82687648.
+//   CONSTRUCTED / IDLE / CLOSING : nothing
+//   OPENING / OPEN               : mfStartFrequency = mfCurrentFrequency;
+//                                  assert(!RwMathFPU::IsZero(mfStartFrequency)) :2021;
+//                                  mfFrequencyGain = 230.0 / mfStartFrequency;
+//                                  mfTime = afTime; mfTimeThrough = 0; meState = CLOSING
+//   default                      : assert("Unhandled state ") :2034
+// Every arm returns true.
+bool MusicEffect::JumpHpf::Release(f32 afTime)
+{
+    switch (meState)
+    {
+    case E_JUMPHPFSTATE_CONSTRUCTED:
+    case E_JUMPHPFSTATE_IDLE:
+    case E_JUMPHPFSTATE_CLOSING:
+        break;
+    case E_JUMPHPFSTATE_OPENING:
+    case E_JUMPHPFSTATE_OPEN:
+        mfStartFrequency = mfCurrentFrequency;
+        CGS_ASSERT(!JumpHpfIsZero(mfStartFrequency), "!RwMathFPU::IsZero(mfStartFrequency)");
+        mfFrequencyGain = KF_JUMP_HPF_REST_FREQUENCY / mfStartFrequency;
+        mfTime          = afTime;
+        mfTimeThrough   = 0.0f;
+        meState         = E_JUMPHPFSTATE_CLOSING;
+        break;
+    default:
+        CGS_ASSERT(false, "Unhandled state ");
+        break;
+    }
+    return true;
+}
+
+// @0x826877E0.
+//   CONSTRUCTED / IDLE / OPEN : nothing
+//   OPENING / CLOSING         : mfTimeThrough += dt;
+//       if (mfTimeThrough >= mfTime) { mfCurrentFrequency = mfFrequencyGain * mfStartFrequency;
+//                                      meState = (OPENING ? OPEN : IDLE); }
+//       else mfCurrentFrequency = mfStartFrequency * powf(mfFrequencyGain, mfTimeThrough / mfTime)
+//   default                   : assert("Unhandled state ") :2097
+void MusicEffect::JumpHpf::Update(f32 afDeltaTime)
+{
+    switch (meState)
+    {
+    case E_JUMPHPFSTATE_CONSTRUCTED:
+    case E_JUMPHPFSTATE_IDLE:
+    case E_JUMPHPFSTATE_OPEN:
+        break;
+    case E_JUMPHPFSTATE_OPENING:
+    case E_JUMPHPFSTATE_CLOSING:
+    {
+        const EJumpFilterState lePrev = meState;
+        mfTimeThrough += afDeltaTime;
+        if (mfTimeThrough >= mfTime)
+        {
+            mfCurrentFrequency = mfFrequencyGain * mfStartFrequency;
+            meState = (lePrev == E_JUMPHPFSTATE_OPENING) ? E_JUMPHPFSTATE_OPEN
+                                                         : E_JUMPHPFSTATE_IDLE;
+        }
+        else
+        {
+            mfCurrentFrequency =
+                mfStartFrequency * powf(mfFrequencyGain, mfTimeThrough / mfTime);
+        }
+        break;
+    }
+    default:
+        CGS_ASSERT(false, "Unhandled state ");
+        break;
+    }
+}
 
 CgsSound::Logic::EffectObject* MusicEffect::CreateObject(u32)
 {
@@ -324,6 +464,9 @@ bool MusicEffect::Attach()
     mEATraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
     mMusicStreamMenu.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
     mJunkyardStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
+    // X360 0x8269CE48..0x8269CE50 (inlined JumpHpf::Construct): state CONSTRUCTED,
+    // start frequency flt_820AA558 = 230 Hz, current frequency flt_82001CC0 = 0.
+    mJumpHpf.Construct();
     return mEaTraxData.Prepare(lpModule);
 }
 
@@ -500,10 +643,20 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                     mePendingMusicType, meJunkyardAmbience);
     }
 
-    // X360: the JumpHpf open/close arm sits here (MusicEffect::JumpHpf::Prepare /
-    // Release / Update @0x82687648 / 0x826877E0, gated on the player car being in the
-    // air). NOT RECONSTRUCTED -- the JumpHpf sub-object has no declaration anywhere in
-    // this tree. It only filters the music while airborne; it does not start or stop it.
+    // X360 0x826FE6D8..0x826FE778: a crash closes the jump filter, then it ticks.
+    //   idx = iface+0x2858 (mePlayerActiveRaceCarIndex)
+    //   if (idx != -1 && car[idx]+0x77B /*mbIsFatalyCrashing*/) -> Release(CLOSE_TIME)
+    //   else if (idx != -1 && car[idx]+0x77A /*mbCrashing*/)     -> Release(CLOSE_TIME)
+    //   JumpHpf::Update(dt)
+    {
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpcIface =
+            lpInput->GetVehicleInterface();
+        const bool lbPlayerCrashing =
+            lpcIface && (lpcIface->IsPlayerCarFatalyCrashing() || lpcIface->IsPlayerCarCrashing());
+        if (lbPlayerCrashing)
+            mJumpHpf.Release(KF_JUMP_HPF_CLOSE_TIME);
+        mJumpHpf.Update(afDeltaTime);
+    }
 
     // X360 0x826FE5C8 (`v7[265] = v21; v7[169] = v21; v7[457] = v21;`): the same
     // "streams paused" byte goes into mEATraxStream / mSecondaryStream / mJunkyardStream
@@ -762,12 +915,9 @@ void MusicEffect::ProcessUpdate()
 
     mEATraxStream.SetVolume(
         GetRWACMixerOutputValue(mEATraxStream.GetOutputSlot(), DMixIO::DMX_VOL));
-    // FLAG: the X360 stores the JUMP HIGH-PASS frequency here (`*(a1+248) = *(a1+64)`,
-    // the JumpHpf sub-object at this+0x34 that UpdateParams Update()s/Release()s --
-    // JumpHpf::Update @0x826877E0 / ::Release @0x82687648). The JumpHpf is not
-    // reconstructed, so the constant 0 (its at-rest frequency) stands in; the music-jump
-    // filter on big air does not run. NOT a faithful body for this one line.
-    mEATraxStream.SetHighPassFreq(0.0f);
+    // X360 0x826F6E18: `lfs f13, 0x40(r31)` -> `*(a1+248) = *(a1+64)` -- the EA Trax
+    // high-pass follows the JumpHpf sub-object's current frequency (this+0x34+0xC).
+    mEATraxStream.SetHighPassFreq(mJumpHpf.GetFrequency());
     mEATraxStream.SetLowPassFreq(GetRWACMixerOutputValue(8, DMixIO::DMX_FREQ));
 
     // ⭐ X360 ProcessUpdate @0x826F6D70, immediately after the EA Trax volume stores:
@@ -952,13 +1102,38 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     }
 
     case 14:  // E_SOUNDMESSAGE_MUSIC_JUMP_FILTER.
-        // X360 opens/closes MusicEffect::JumpHpf (0x82687648 / 0x826877E0). The JumpHpf
-        // sub-object is NOT in this tree (no declaration anywhere); reconstructing it is
-        // its own unit of work. Reported, not silently dropped.
+    {
+        // X360 0x826BBDC8..0x826BBEC8: payload byte 0 (`lbz 0x10(msg)`) is "open".
+        //   open : if the player car is neither fatally crashing (car+0x77B) nor
+        //          crashing (car+0x77A) -> assert(mJumpHpf.Prepare(OPEN_FREQUENCY, OPEN_TIME))
+        //   close: assert(mJumpHpf.Release(CLOSE_TIME))
+        if (lpuPayload[0] != 0)
+        {
+            Module::SoundLogicModule* lpModule =
+                static_cast<Module::SoundLogicModule*>(mpLogicModule);
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpcIface =
+                lpModule->GetBrnInputStructure()->GetVehicleInterface();
+            const bool lbPlayerCrashing =
+                lpcIface && (lpcIface->IsPlayerCarFatalyCrashing() || lpcIface->IsPlayerCarCrashing());
+            if (!lbPlayerCrashing)
+            {
+                const bool lbPrepared =
+                    mJumpHpf.Prepare(KF_JUMP_HPF_OPEN_FREQUENCY, KF_JUMP_HPF_OPEN_TIME);
+                CGS_ASSERT(lbPrepared, "mJumpHpf.Prepare(KF_JUMP_HPF_OPEN_FREQUENCY, KF_JUMP_HPF_OPEN_TIME)");
+                (void)lbPrepared;
+            }
+        }
+        else
+        {
+            const bool lbReleased = mJumpHpf.Release(KF_JUMP_HPF_CLOSE_TIME);
+            CGS_ASSERT(lbReleased, "mJumpHpf.Release(KF_JUMP_HPF_CLOSE_TIME)");
+            (void)lbReleased;
+        }
         if (MusicDiagEnabled())
-            MusicDiagPrintf("[music]   id 14 (jump filter) has no JumpHpf in this tree "
-                        "-- X360 0x82687648/0x826877E0 not reconstructed\n");
+            MusicDiagPrintf("[music]   id 14 (jump filter) open=%d -> hpf %.1f Hz\n",
+                        lpuPayload[0] != 0, mJumpHpf.GetFrequency());
         break;
+    }
 
     case 15:  // E_SOUNDMESSAGE_HOLD_VOLUMES.
         mbHoldVolumes = (lpuPayload[0] != 0);
