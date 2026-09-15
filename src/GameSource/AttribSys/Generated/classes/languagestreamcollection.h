@@ -34,10 +34,21 @@ namespace Gen
     {
     public:
         explicit languagestreamcollection(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+        // SpeechEffect::Notify @0x826E7D40 builds one straight off an embedded RefSpec
+        // (speechdata.mpAttributeData + 368, the Atomika free-burn VO collection).
+        explicit languagestreamcollection(const RefSpec& lrRefSpec, void* lpOwner = nullptr)
+            : Instance(lrRefSpec, lpOwner) {}
+        bool IsValid() const { return Instance::IsValid(); }
 
         // languagestreamcollection.h:76 (DWARF): the number of entries in this instance's
         // "Items" array attribute. X360 @0x82687F00.
         unsigned int Num_Items() const;
+
+        // SOUND-C 2026-09-15: the indexed element of that same "Items" array — a 24-byte
+        // Attrib::RefSpec. SpeechEffect::Notify @0x826E7D64 (Atomika free-burn VOs) and
+        // @0x826E831C (the per-game-mode "lost again" banks) both do exactly:
+        //   lpSpec = GetAttributePointer(Items, index); if (!lpSpec) lpSpec = DefaultDataArea(0x18);
+        const RefSpec& Items(u32 luIndex) const;
     };
 
     // X360 ctor @0x8269E5A8: chain the Instance ctor, then assert the collection's class is
@@ -61,13 +72,10 @@ namespace Gen
     // -1965515439) — DWARF-attested at languagestreamcollection.h:100.
     inline unsigned int languagestreamcollection::Num_Items() const
     {
-        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
-        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
-        // the X360 stages the high half with a separate lis/ori pair that was not recorded
-        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
-        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
-        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
-        static const u64 KU_ITEMS_KEY = 0x8AD89D51ull; // Attrib::Hash::languagestreamcollection::Items (2329451857), low word only
+        // ⭐ KEY WIDTH PAID 2026-09-15 (SOUND-C): the high word is staged next to the low
+        // one at every call site -- `ori r4,r10,0x9D51` + `lis r10,0x67C4` / `ori r10,r10,0xA557`
+        // + `insrdi r4,r10,32,0` (SpeechEffect::Notify @0x826E7D64). The low-word-only key MISSED.
+        static const u64 KU_ITEMS_KEY = 0x67C4A5578AD89D51ull; // Attrib::Hash::languagestreamcollection::Items
 
         AttributeValue lScratch; // stack-resident Attrib::Attribute cursor, 4 machine words (attribinstance.h)
         // Get is non-const; Num_Items is const per DWARF -> const_cast the instance.
@@ -77,6 +85,17 @@ namespace Gen
         unsigned int luLength = static_cast<unsigned int>(lpCursor->GetLength());
         CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lScratch);
         return luLength;
+    }
+
+    inline const RefSpec& languagestreamcollection::Items(u32 luIndex) const
+    {
+        static const u64 KU_ITEMS_KEY = 0x67C4A5578AD89D51ull;
+        languagestreamcollection* lpSelf = const_cast<languagestreamcollection*>(this);
+        const RefSpec* lpSpec = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_ITEMS_KEY, luIndex));
+        if (!lpSpec)
+            lpSpec = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpSpec;
     }
 }
 }

@@ -45,6 +45,8 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16>::AddEvent
 
 #include <cstring>   // std::memset (the 48-byte junkyard-drive-thru record)
+#include <cstdlib>   // getenv / atof -- [DIAG] only
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the BRN_SPEECH_DIAG witness only
 
 // The XDK signin probe (PC stub in BrnBaselineLinkStubs.cpp returns 0 == signed out).
 extern "C" u32 XUserGetSigninState(u32 luUserIndex);
@@ -98,6 +100,79 @@ namespace
     //   dword_8202AE60: their alternative medal-count triggers
     //   dword_82032308: the per-progression-rank licence tips (rank 1..6 -> TRAFFIC_*_LICENSE)
     // ------------------------------------------------------------------------
+    // ---------------------------------------------------------------------------
+    // [DIAG] NOT IN THE X360 BINARY. Two opt-in harness knobs for the Atomika free-burn
+    // voice-over chain (the owner's "no Atomika lines are ever said in-game" report):
+    //
+    //  * BRN_SPEECH_DIAG=1 -- print, per RequestTraining, the training type and the FIRST
+    //    gate that rejected it, plus every PlayNewAtomikaFreeburnVO walk. Pairs with the
+    //    `[speech]` witnesses in BrnSpeechEffect.cpp so one run shows the whole chain:
+    //    producer -> game action 148 -> sound message 34 -> ContentSpec -> stream.
+    //
+    //  * BRN_ATOMIKA_VO_INTERVAL=<seconds> -- override ONLY the console's 600-second
+    //    spacing gate between free-burn VOs (BrnTrainingManager.cpp Update case 0). The
+    //    console's own value means the first Atomika free-burn line cannot be heard until
+    //    the profile has ten minutes of in-car time, which no harness run reaches; without
+    //    this knob the fix below is unobservable. Absent/unset == the console's 600.0f.
+    //    DELETE-WHEN: the chain has a cheaper positive control (e.g. a seeded profile).
+    // ---------------------------------------------------------------------------
+    bool TrainingDiagOn()
+    {
+        static const bool sbOn = (getenv("BRN_SPEECH_DIAG") != 0);
+        return sbOn;
+    }
+    bool TrainingDiagBudget()
+    {
+        static const s32 KI_MAX_LINES = 4000;
+        static s32 siLines = 0;
+        if (siLines >= KI_MAX_LINES)
+            return false;
+        ++siLines;
+        return CgsDev::Log::gpDebugPrint != 0;
+    }
+    // The INACTIVE arm re-runs the same four RequestTraining calls EVERY frame, so an
+    // unfiltered witness spends its whole budget in the first two seconds and never
+    // reaches the interesting part of the run. Each distinct (type, reason) pair is
+    // therefore printed ONCE; a gate that later flips for the same type prints again
+    // because the reason differs, and the free-burn gate keys on the whole second so it
+    // prints once per second.
+    bool TrainingDiagNew(s32 aiKeyA, const void* apcKeyB)
+    {
+        static const u32 KU_SLOTS = 512u;
+        static u64 sauSeen[KU_SLOTS] = { 0 };
+        static u32 suUsed = 0;
+        const u64 luKey = (static_cast<u64>(static_cast<u32>(aiKeyA)) << 32) ^
+                          static_cast<u64>(reinterpret_cast<uintptr_t>(apcKeyB));
+        for (u32 luIndex = 0; luIndex < suUsed; ++luIndex)
+        {
+            if (sauSeen[luIndex] == luKey)
+                return false;
+        }
+        if (suUsed < KU_SLOTS)
+            sauSeen[suUsed++] = luKey;
+        return true;
+    }
+    // [DIAG] one line per rejected / accepted RequestTraining.
+    void TrainingWitness(s32 aiType, const char* apcReason)
+    {
+        if (TrainingDiagOn() && TrainingDiagNew(aiType, apcReason) && TrainingDiagBudget())
+            *CgsDev::Log::gpDebugPrint << "[speech] RequestTraining type=" << aiType
+                                       << " -> " << apcReason << "\n";
+    }
+
+    f32 AtomikaFreeburnVoInterval()
+    {
+        static const f32 KF_CONSOLE_INTERVAL = 600.0f;   // X360 Update @0x823937D0
+        static const f32 sfInterval = []() -> f32 {
+            const char* lpcValue = getenv("BRN_ATOMIKA_VO_INTERVAL");
+            if (!lpcValue || !*lpcValue)
+                return KF_CONSOLE_INTERVAL;
+            const f32 lfValue = static_cast<f32>(atof(lpcValue));
+            return (lfValue > 0.0f) ? lfValue : KF_CONSOLE_INTERVAL;
+        }();
+        return sfInterval;
+    }
+
     const s32 KAI_TIMED_TIP_TYPES[4]      = { 38, 41, 42, 43 };            // dword_8202AE40
     const f32 KAF_TIMED_TIP_TIME[4]       = { 600.0f, 2700.0f, 5400.0f, 10800.0f }; // flt_8202AE50
     const s32 KAI_TIMED_TIP_MEDALS[4]     = { 1, 8, 20, 40 };              // dword_8202AE60
@@ -372,10 +447,25 @@ void TrainingManager::Update(GameStateModuleIO::GameActionQueue* lpGameActionQue
                     }
                 }
 
-                if ((lpProfile->GetInCarTimePlayed() - mfLastMessageFinishedTime) > 600.0f &&
-                    mpGameStateModule->GetModeManager()->GetTimeInFreeBurn() > 5.0f)
+                // The console's constant is 600.0f; BRN_ATOMIKA_VO_INTERVAL overrides it
+                // for the harness only ([DIAG] NOT IN THE X360 BINARY -- see the banner).
+                const f32 lfSinceLastTip =
+                    lpProfile->GetInCarTimePlayed() - mfLastMessageFinishedTime;
+                const f32 lfFreeBurnTime =
+                    mpGameStateModule->GetModeManager()->GetTimeInFreeBurn();
+                if (lfSinceLastTip > AtomikaFreeburnVoInterval() && lfFreeBurnTime > 5.0f)
                 {
                     PlayNewAtomikaFreeburnVO();
+                }
+                else if (TrainingDiagOn() &&
+                         TrainingDiagNew(-1 - static_cast<s32>(lfFreeBurnTime),
+                                         "freeburn-vo-gate") &&
+                         TrainingDiagBudget())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[speech] freeburn-vo gate: sinceLastTip=" << lfSinceLastTip
+                        << " need>" << AtomikaFreeburnVoInterval()
+                        << " freeBurnTime=" << lfFreeBurnTime << " need>5\n";
                 }
             }
 
@@ -516,6 +606,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
     // `if (!*v3 && !*(v3+20) && (v2 != 8 || *(gsm+42300) >= 30.0))`
     if (meTrainingState != E_TRAINING_STATE_INACTIVE || mbInPictureParadise)
     {
+        TrainingWitness(static_cast<s32>(luType), "REJECT state-busy-or-picture-paradise");
         return;
     }
     if (luType == BrnProgression::E_TRAINING_TYPE_DISCOVERS_EVENT &&
@@ -526,6 +617,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
 
     if (!IsTipAllowedInGameMode(leTrainingType))
     {
+        TrainingWitness(static_cast<s32>(luType), "REJECT IsTipAllowedInGameMode");
         return;
     }
 
@@ -608,6 +700,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
         static_cast<BrnProgression::ETrainingType>(luResolvedType);
     if (lpProfile->HasPlayerSeenTrainingType(leResolvedType))
     {
+        TrainingWitness(static_cast<s32>(luResolvedType), "REJECT already-seen");
         return;
     }
 
@@ -619,6 +712,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
         default:
             if ((lpProfile->GetInCarTimePlayed() - mfLastMessageFinishedTime) < 5.0f)
             {
+                TrainingWitness(static_cast<s32>(luResolvedType), "REJECT 5s-spacing");
                 return;
             }
             break;
@@ -671,6 +765,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
                 mfLastBoostMessagePlayTime = lpProfile->GetInCarTimePlayed();
             }
             meTrainingState = E_TRAINING_STATE_PENDING_MESSAGE;
+            TrainingWitness(static_cast<s32>(luResolvedType), "ACCEPT -> PENDING_MESSAGE");
         }
     }
     else
@@ -780,6 +875,7 @@ void TrainingManager::PlayNewAtomikaFreeburnVO()
 {
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
 
+    TrainingWitness(miNextAtomikaFreeburnVoIndex, "PlayNewAtomikaFreeburnVO entered at index");
     if (miNextAtomikaFreeburnVoIndex < 108)
     {
         for (;;)
@@ -788,12 +884,15 @@ void TrainingManager::PlayNewAtomikaFreeburnVO()
             if (!lpProfile->HasPlayerSeenTrainingType(
                     static_cast<BrnProgression::ETrainingType>(liVoTip)))
             {
+                TrainingWitness(liVoTip, "PlayNewAtomikaFreeburnVO picked");
                 RequestTraining(static_cast<BrnProgression::ETrainingType>(liVoTip));
                 ++miNextAtomikaFreeburnVoIndex;
                 return;
             }
             if (++miNextAtomikaFreeburnVoIndex >= 108)
             {
+                TrainingWitness(miNextAtomikaFreeburnVoIndex,
+                                "PlayNewAtomikaFreeburnVO EXHAUSTED -- every 128..235 tip is already seen");
                 return;
             }
         }

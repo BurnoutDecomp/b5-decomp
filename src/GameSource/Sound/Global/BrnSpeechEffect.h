@@ -5,6 +5,16 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"
 
+namespace Attrib
+{
+    struct RefSpec;
+    namespace Gen
+    {
+        class languagestreamcollection;
+        class languagestreamconfiguration;
+    }
+}
+
 namespace BrnSound
 {
 namespace Logic
@@ -46,8 +56,25 @@ public:
     const char* CompassDirectionToString(int aiDirection);
     const char* GameModeToString(int aiUnused, int aiMode);
 
+    // DWARF BrnSpeechEffect.cpp:344 -- CgsLanguage::ELanguage -> AttribSys::Enums::eLanguage.
+    // X360 @0x82687F80 (a bare switch; the console calls it on the message payload).
+    static s32 GetLanguage(s32 aeCgsLanguage);
+
 private:
-    u32 GetSpeechMapping(u32 auMappingName) const;
+    // X360 @0x826BCC68 (`PlaySpeech(const languagestreamconfiguration&, bool)`) and its
+    // RefSpec-taking sibling: ContentSpecs[meLanguage] -> PlayStream.
+    bool PlaySpeech(const Attrib::RefSpec& arRefSpec, bool abFirstTimeTip);
+    bool PlaySpeech(const Attrib::Gen::languagestreamconfiguration& arStream, bool abFirstTimeTip);
+    // X360 @0x826D3098: pick a random element of the collection's Items array.
+    bool PlayRandomSpeechVariation(const Attrib::Gen::languagestreamcollection& arVariations,
+                                   bool abFirstTimeTip);
+
+    // X360 @0x8269E6C8 / @0x8269E838.
+    bool IsOneOnOne() const;
+    bool IsLocalPlayerRunner() const;
+
+    // X360 @0x8269E918 -- DWARF `bool GetSpeechMapping(SoundLogicModule*, Name, RefSpec&)`.
+    bool GetSpeechMapping(u32 auMappingName, Attrib::RefSpec& arConfiguration) const;
     void PostSpeechFinished();
 
     Streaming::StreamingStateManager* mpStreamingManager;
@@ -55,6 +82,13 @@ private:
     EPlayState mePlayState;
     bool mbSpeechStillPlaying;
     bool mbFirstTimeTipPlaying;
+    // X360 this+128 -- AttribSys::Enums::eLanguage, zeroed by Attach @0x826F7D48 and
+    // rewritten by Notify case 0x21 (sound message 33, set language).
+    s32 meLanguage;
+    // X360 this+132 / this+136 -- Attach seeds both from the logic module's Random
+    // (`muSeed` @ module+79280) modulo the authored array length.
+    u32 muNextRoadRageIntroIndex;
+    u32 muNextStuntRunIntroIndex;
     u32 muQueuedContentSpec;
     bool mbQueuedSpeechIsFirstTimeTip;
 };
