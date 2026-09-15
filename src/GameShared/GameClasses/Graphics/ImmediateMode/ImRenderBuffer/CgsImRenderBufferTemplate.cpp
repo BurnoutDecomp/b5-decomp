@@ -35,7 +35,7 @@
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
-namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); }
+namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); extern u32 guDiagImBatches; extern u32 guDiagImFullBlack; }   // [DIAG] issue #30 counters
 // [boost-bar 2026-08-25] The GUI additive-blend IDENTITY (CgsBillboardRenderer.cpp's
 // dword_83010F24 sentinel). Declared locally instead of including the Gui header -- this
 // graphics-layer TU must not depend on the Gui tree; the dispatch's SET_STATE_BLEND case
@@ -1823,6 +1823,44 @@ namespace CgsGraphics
                                       luCount, saBatch[0].x, saBatch[0].y,
                                       luRaw, saBatch[0].color, lpTraceBoundTexture);
                         CgsDev::Log::WriteToLog(lacDiag);
+                    }
+                }
+
+                // [DIAG] NOT IN THE X360 BINARY -- issue #30 per-present counters: every 2D batch, and
+                // every batch that would paint the WHOLE back buffer opaque near-black (the shape of the
+                // 438 s blink: world + HUD gone, only the PC overlay drawn after this walk survives).
+                ++renderengine::guDiagImBatches;
+                if (luCount >= 3u)
+                {
+                    f32 lfBlkMinX = saBatch[0].x, lfBlkMaxX = saBatch[0].x;
+                    f32 lfBlkMinY = saBatch[0].y, lfBlkMaxY = saBatch[0].y;
+                    bool lbAllDark = true;
+                    for (u32 luB = 0; luB < luCount; ++luB)
+                    {
+                        if (saBatch[luB].x < lfBlkMinX) lfBlkMinX = saBatch[luB].x;
+                        if (saBatch[luB].x > lfBlkMaxX) lfBlkMaxX = saBatch[luB].x;
+                        if (saBatch[luB].y < lfBlkMinY) lfBlkMinY = saBatch[luB].y;
+                        if (saBatch[luB].y > lfBlkMaxY) lfBlkMaxY = saBatch[luB].y;
+                        const u32 luC = saBatch[luB].color;
+                        if (((luC >> 24) & 0xFFu) < 250u || ((luC >> 16) & 0xFFu) > 24u || ((luC >> 8) & 0xFFu) > 24u || (luC & 0xFFu) > 24u)
+                            lbAllDark = false;
+                    }
+                    const f32 lfDispW = static_cast<f32>(renderengine::gDisplayWidth);
+                    const f32 lfDispH = static_cast<f32>(renderengine::gDisplayHeight);
+                    if (lbAllDark && (lfBlkMaxX - lfBlkMinX) >= 0.9f * lfDispW && (lfBlkMaxY - lfBlkMinY) >= 0.9f * lfDispH)
+                    {
+                        ++renderengine::guDiagImFullBlack;
+                        static u32 suFullBlackPrinted = 0u;
+                        if (suFullBlackPrinted < 48u && renderengine::guPresentCount > 2000u)
+                        {
+                            ++suFullBlackPrinted;
+                            char lacBlk[200];
+                            std::snprintf(lacBlk, sizeof(lacBlk),
+                                          "[im2d-diag] present=%u FULLSCREEN-DARK batch n=%u bbox=(%.0f,%.0f)-(%.0f,%.0f) colour=%08X program=%d mask=%d tex=%p\n",
+                                          renderengine::guPresentCount, luCount, lfBlkMinX, lfBlkMinY, lfBlkMaxX, lfBlkMaxY,
+                                          saBatch[0].color, static_cast<int>(li8LatchedProgram), lbMaskStageBound ? 1 : 0, lpTraceBoundTexture);
+                            CgsDev::Log::WriteToLog(lacBlk);
+                        }
                     }
                 }
 
