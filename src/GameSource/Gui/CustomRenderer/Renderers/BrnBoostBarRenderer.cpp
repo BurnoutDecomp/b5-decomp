@@ -1,4 +1,5 @@
 #include "BrnBoostBarRenderer.h"
+#include <cstdlib>   // std::getenv (the [boost-bar] 206 witness)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT + the Begin/Fire/EndAssert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // StrStream (runtime-composed assert messages)
@@ -416,6 +417,25 @@ void BoostBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
                     << " amt=" << mGuiEventBoostInfo.mfBoostAmount
                     << " allowed=" << (mGuiEventBoostInfo.mbAllowedToBoost ? 1 : 0)
                     << " type=" << static_cast<s32>(mGuiEventBoostInfo.meBoostType) << "\n";
+            }
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_BOOST_TICKER_DIAG: every 30th 206 payload
+            // plus the bar's eased value, so a film of the bar can be read against what the
+            // game-state actually sent it (owner report 2026-09-15: "the boost bar is broken").
+            {
+                static const bool sbWanted = (std::getenv("BRN_BOOST_TICKER_DIAG") != 0);
+                static u32 suCount = 0;
+                if (sbWanted && CgsDev::Log::gpDebugPrint != 0 && (suCount++ % 30u) == 0u)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[boost-bar] 206 #" << suCount
+                        << " max=" << mGuiEventBoostInfo.mfMaxBoost
+                        << " amt=" << mGuiEventBoostInfo.mfBoostAmount
+                        << " allowed=" << (mGuiEventBoostInfo.mbAllowedToBoost ? 1 : 0)
+                        << " type=" << static_cast<s32>(mGuiEventBoostInfo.meBoostType)
+                        << " eased=" << mBoostAmountInterpolator.GetCurrentValue(mpGuiCache ? mpGuiCache->GetTime() : 0.0f)
+                        << " status=" << static_cast<s32>(meBoostBarStatus)
+                        << " mult=" << static_cast<s32>(meBoostBarMultiplier) << "\n";
+                }
             }
 
 
