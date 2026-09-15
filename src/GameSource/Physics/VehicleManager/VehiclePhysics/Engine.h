@@ -129,6 +129,16 @@ namespace Vehicle
             mbAllowToChangeDownGear = lbAllow;   // +0xC5
         }
 
+        // [PC-leaf accessor] The sound side's AI engine simulation (AIPhysicsControl::
+        // UpdateParams @0x826CE8D8, 0x826CE9B4..0x826CE9D4) forces the clutch-factor lane
+        // of the embedded engine to 1.0 before every Update:
+        //     lvx128 v13, engine+0xB0 ; vrlimi128 v13, splat(1.0), 8, 0 ; stvx128
+        // Exposed as a named setter so that write stays on the named member.
+        void SetClutchFactor(f32 lfClutchFactor)
+        {
+            mvClutchFactor_RPM_CurrentGearChangeTime.x = lfClutchFactor;   // +0xB0 lane 0
+        }
+
         // [PC-leaf accessor] The console's wheel cluster reads the embedded engine's gear word
         // directly off the owner (`lwz rX, 0xFC0(r31)` in UpdateWheels @0x8261E7B4 /
         // UpdateWheelInertia @0x825F67xx / UpdateBrakesAndGetBrakingFactor @0x825D02xx --

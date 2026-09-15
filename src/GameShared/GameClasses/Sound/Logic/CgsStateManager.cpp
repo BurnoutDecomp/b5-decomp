@@ -246,6 +246,46 @@ void StateManager::ProcessUpdate()
         lpState->ProcessUpdate();
 }
 
+// ---------------------------------------------------------------------------
+// StateManager::IsDataLoaded()  @ 0x826C4C60  (console vtable +0x24)
+//
+//   v1 = mpHeadState; if (!v1) return 1;
+//   while (!*(v1+72) || *(v1+56) == 5) { v1 = *(v1+24); if (!v1) return 1; }
+//   return 0;
+// i.e. false as soon as one ATTACHED state is not yet in E_UPDATE_ATTACHED.
+// ---------------------------------------------------------------------------
+bool StateManager::IsDataLoaded() const
+{
+    for (const State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
+    {
+        if (lpState->IsAttached()
+            && lpState->mauUpdateState[0] != State::E_UPDATE_ATTACHED)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// StateManager::GetStateObj(void*)  @ 0x8268D8E8
+//
+//   v2 = mpHeadState; if (!v2) return 0;
+//   while (!*(v2+72) || !(*(*v2+32))(v2, a2)) { v2 = *(v2+24); if (!v2) return 0; }
+//   return v2;
+// The +32 slot is State::IsAttachedToThis (the leaves override it: VehicleState
+// compares the RaceCarState entity id @0x82683D38).
+// ---------------------------------------------------------------------------
+State* StateManager::GetStateObj(void* apvAttachment) const
+{
+    for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
+    {
+        if (lpState->IsAttached() && lpState->IsAttachedToThis(apvAttachment))
+            return lpState;
+    }
+    return 0;
+}
+
 State* StateManager::CreateState(s32 liStateType)
 {
     ClassTypeInfo<State>* lpMatch = 0;
@@ -260,7 +300,13 @@ State* StateManager::CreateState(s32 liStateType)
         const s32 liDescriptorState = (lpDescriptor->ObjectID >> 16) & 0xFF;
         if (!IsStateAlias(liDescriptorState))
             continue;
-        if (!lpMatch || lpDescriptor->ObjectID == meMapState)
+        // PPC @ 0x826A5984..0x826A5994: `lhz r10,0(desc) ; lwz r11,0x14(this) ;
+        // clrlwi r10,r10,24 ; cmpw r10,r11` -- the EXACT-state test compares the same
+        // state byte (bits 16..23) against meMapState, NOT the whole ObjectID. With
+        // the whole-ObjectID compare an ALIASED descriptor scanned earlier (e.g.
+        // PlayerVehicleState 0x10000, an alias for the AI manager) kept the match
+        // over the exact AIVehicleState 0x20000.
+        if (!lpMatch || liDescriptorState == meMapState)
             lpMatch = lpDescriptor;
         if ((lpDescriptor->ObjectID & 0xFFFF) == liStateType)
         {

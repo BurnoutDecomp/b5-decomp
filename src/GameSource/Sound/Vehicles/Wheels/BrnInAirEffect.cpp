@@ -193,10 +193,18 @@ bool InAirEffect::Attach()
 
     if (GetInstanceId() == 1)
     {
+        // ARTIST InAirEffect::Attach @0x826F4598: `lwz r6, 0x2958(module)` -- the
+        // bank comes from mapStateManagers[1] (the PLAYER manager, which owns
+        // inair.abi), NOT from this state's own manager. The same effect is aliased
+        // into the AI vehicle state (mask bit 9), whose manager has no such content;
+        // reading `GetStateManager()` there asserted `lpContent` on every AI attach.
         CgsSound::Logic::Content* lpContent = nullptr;
-        if (GetStateBase() && GetStateBase()->GetStateManager())
+        CgsSound::Logic::StateManager* lpPlayerStateMan =
+            static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+                ->GetEnvironment().GetStateManager(1);
+        if (lpPlayerStateMan)
         {
-            lpContent = GetStateBase()->GetStateManager()->GetContent(
+            lpContent = lpPlayerStateMan->GetContent(
                 CgsSound::Playback::Name("inair.abi"));
         }
         CGS_ASSERT(lpContent != nullptr, "lpContent");

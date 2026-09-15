@@ -203,6 +203,12 @@ public:
     virtual bool          Prepare();                       // vtable +0x0C
     virtual State* GetFreeState(void* apvAttachment);       // vtable +0x14
 
+    // Console vtable +0x24 (slot 9, e.g. off_820B87A0+36) @ 0x826C4C60. True when no
+    // attached state is still initialising: walks mpHeadState and fails on the first
+    // state with mbIsAttached set whose update state is not E_UPDATE_ATTACHED.
+    // AIVehicleStateManager::UpdateParams @0x826CA578 gates its attach pass on it.
+    virtual bool IsDataLoaded() const;
+
     // DWARF :181 / :184 -- the per-frame drive pair Environment::Update @0x826C3F78
     // dispatches on every registered manager (console vtable +0x18/+0x1C):
     // UpdateParams(gameDt) between the time-field seeding and the mixer pass, then
@@ -268,6 +274,10 @@ public:
 
     State* GetHeadState() const { return mpHeadState; }
     s32 GetStateObjCount() const { return miNumStates; }
+
+    // @ 0x8268D8E8. The first attached state (mbIsAttached) whose virtual
+    // IsAttachedToThis(apvAttachment) (state vtable +0x20) holds, else null.
+    State* GetStateObj(void* apvAttachment) const;
     EPrepareState GetPrepareState() const { return mePrepareState; }
 
 protected:
