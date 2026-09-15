@@ -2134,6 +2134,8 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                                "RwMathVPU::IsValid( lCurrentRouteVec )");
                     if (!(lvDirection.x * lfRouteX + lvDirection.y * lfRouteY >= 0.0f))
                     {
+                        WreckLatchWitness( "Update.routeDot@0x822F7BFC",
+                                           static_cast<s32>( GetActiveRaceCarIndex() ), true );
                         mbIsWrecked = true;
                         mbCanDriveAwayFromCrash = false;
                     }
@@ -2414,10 +2416,35 @@ void ActiveRaceCar::ResetAfterCrash( bool lbKeepVerletOffsets )
     }
 
     mfTimeInWater          = 0.0f;   // flt_82001CC0
+    WreckLatchWitness( "ResetAfterCrash@0x822BF4BC", static_cast<s32>( GetActiveRaceCarIndex() ), false );
     mbIsWrecked            = false;
     mfTimeDriveableInCrash = 0.0f;
     mbCrashedIntoWater     = false;
     mbIsInShowtime         = false;
+}
+
+// =================================================================================================
+// [DIAG] NOT IN THE X360 BINARY -- see the banner on the declaration in BrnActiveRaceCar.h.
+// Opt in with BRN_WRECK_LATCH_DIAG=1. One line per STORE to mbIsWrecked, naming the console
+// address of the store it stands beside. Prints nothing when the variable is unset, which is the
+// control. DELETE-WHEN-STABLE.
+// =================================================================================================
+void WreckLatchWitness( const char* lpcSite, s32 liActiveRaceCarIndex, bool lbNewValue )
+{
+    static s32 siWreckLatchDiag = -1;
+    if( siWreckLatchDiag < 0 )
+    {
+        const char* lpcEnv = getenv( "BRN_WRECK_LATCH_DIAG" );
+        siWreckLatchDiag = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+    }
+    if( siWreckLatchDiag != 1 || CgsDev::Log::gpDebugPrint == 0 )
+    {
+        return;
+    }
+    *CgsDev::Log::gpDebugPrint
+        << "[wrecklatch] car=" << liActiveRaceCarIndex
+        << " <- " << ( lbNewValue ? 1 : 0 )
+        << " site=" << lpcSite << "\n";
 }
 
 // =================================================================================================
