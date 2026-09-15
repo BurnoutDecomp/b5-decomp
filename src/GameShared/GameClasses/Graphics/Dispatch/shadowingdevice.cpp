@@ -143,8 +143,10 @@ namespace renderengine
     bool  WorldShader_RealProgramsBound();
     // Upload luNumRegisters float4s at shader-constant register luRegister.
     void  WorldShaderConstants_Set(bool lbPixel, u32 luRegister, const void* lpData, u32 luNumRegisters);
-    // Bind one texture + the world sampler set at a D3D sampler unit.
-    bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster);
+    // Bind one texture + the sampler set its TextureState asks for, at a D3D sampler unit.
+    // lpSamplerBlock is that TextureState's own 32-byte sampler block (the object's +0x00, which
+    // the console's sub_827E8950 reads field by field); null when the caller has no state.
+    bool  WorldShader_BindTextureUnit(u32 luUnit, const void* lpRaster, const void* lpSamplerBlock);
     // [PC leaf, pc/gcm/renderengine/ImmediateModePCLeaf.cpp] Drain the immediate-mode
     // shader-constant rows staged by RenderEngineDeviceBeginShaderStates.
     void  ImShaderConstants_Flush();
@@ -1488,8 +1490,11 @@ namespace shadow
                 continue;
             }
 
+            // lpState IS the TextureState object, so its +0x00 is the 32-byte sampler block --
+            // the address modes and mip LOD bias the console applies for this material.
             if (renderengine::WorldShader_BindTextureUnit(
-                    lu16Unit, reinterpret_cast<const void*>(static_cast<uintptr_t>(luRasterSlot))))
+                    lu16Unit, reinterpret_cast<const void*>(static_cast<uintptr_t>(luRasterSlot)),
+                    lpState))
             {
                 if (lbTally) ++suBound;
             }
