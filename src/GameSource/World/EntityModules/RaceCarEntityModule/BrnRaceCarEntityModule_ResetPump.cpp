@@ -737,6 +737,8 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
                     if( lpActiveRaceCar->mfTimeInWater > KF_MAX_TIME_IN_WATER )
                     {
                         lpActiveRaceCar->mfTimeInWater = KF_ZERO;           // stfs f31, 0x784
+                        WreckLatchWitness( "CheckForResetOnTrackConditions.water@0x822CED44",
+                                           static_cast<s32>( leActiveRaceCarIndex ), true );
                         lpActiveRaceCar->mbIsWrecked   = true;              // stb 1, 0x782
                         lbNeedsReset = true;
                     }
@@ -745,6 +747,8 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
             }
             else if( lbIsSuperFatal )
             {
+                WreckLatchWitness( "CheckForResetOnTrackConditions.superfatal@0x822CED64",
+                                   static_cast<s32>( leActiveRaceCarIndex ), true );
                 lpActiveRaceCar->mbIsWrecked = true;                        // stb 1, 0x782
                 lbNeedsReset = true;
             }

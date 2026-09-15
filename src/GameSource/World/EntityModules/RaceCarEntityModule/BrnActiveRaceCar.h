@@ -92,6 +92,20 @@ namespace BrnWorld
 namespace RaceCarEntityModuleIO { struct GameEventQueue; }
 class RaceCar;
 
+// =================================================================================================
+// [DIAG] NOT IN THE X360 BINARY -- the WRECK-LATCH witness. Opt in with BRN_WRECK_LATCH_DIAG=1.
+//
+// WHAT IT MEASURES: every store to ActiveRaceCar::mbIsWrecked (+0x782) in this tree, named by the
+// CONSOLE ADDRESS of the store it stands beside. That member is a LATCH -- once true, IsWrecked()
+// @0x822BFDA0 returns true on its very first line and the whole crash verdict
+// (IsDriveableAfterCrash @0x822D48F8) is decided before it looks at anything else. A run that
+// shows "IsWrecked=1 isDriveable=1 upDot=+1" has that latch set and NOTHING else in the ladder
+// can explain it, so the only useful question is WHICH writer set it and when. The clears are
+// witnessed too, so the latch's whole lifetime reads as one timeline.
+// DELETE-WHEN-STABLE.
+// =================================================================================================
+void WreckLatchWitness(const char* lpcSite, s32 liActiveRaceCarIndex, bool lbNewValue);
+
 // DWARF BrnActiveRaceCar.h:58/:60. The 96 is the width of RenderParams' body-part
 // BitArray; the 12 is the glass-volume ceiling.
 const u32 KU_MAX_BODY_PARTS_PER_RACE_CAR    = 96;

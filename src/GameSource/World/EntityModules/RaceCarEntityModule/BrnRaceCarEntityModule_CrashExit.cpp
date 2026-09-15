@@ -361,6 +361,8 @@ void RaceCarEntityModule::ProcessRaceCarCrashEvents_PostPhysics(
                         // The console's bare `stb r14(1), 0x782(player)`; there is no setter in
                         // the export set, so the module writes the member by name (friend grant
                         // in BrnActiveRaceCar.h, reasoned there).
+                        WreckLatchWitness( "ProcessRaceCarCrashEvents_PostPhysics@0x822BDA18",
+                                           static_cast<s32>( mePlayerActiveRaceCarIndex ), true );
                         lpPlayerCar->mbIsWrecked = true;
                     }
                 }
