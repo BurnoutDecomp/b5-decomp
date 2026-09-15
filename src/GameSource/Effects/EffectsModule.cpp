@@ -29,6 +29,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                   // [diag] BRN_FRAME_DUMP_ARM=skid
+#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"                 // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 
 #include <cmath>    // std::fabs
@@ -1755,6 +1756,69 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
                     BrnDiag::gFilmLatch.mfLastSegX = lrWheel.mRoadContact.mPosition.x;
                     BrnDiag::gFilmLatch.mfLastSegY = lrWheel.mRoadContact.mPosition.y;
                     BrnDiag::gFilmLatch.mfLastSegZ = lrWheel.mRoadContact.mPosition.z;
+
+                    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAIL_HEIGHT_DIAG, issue #21's ONE
+                    // NUMBER: how far above the road the mark this call lays actually sits.
+                    // `dy` is (mark y) - (road y) in metres, where the mark y is the contact
+                    // point this call hands the trail system PLUS the 0.03 m
+                    // kTrailHeightAdjustment the trail system adds to it (BrnTrailSystem.cpp,
+                    // vaddfp @0x8227AA28), and the road y is the traction line test's own hit
+                    // for THIS wheel THIS step, latched before anything re-expressed it
+                    // (BrnDiagTrailHeight.h). `dxz` is the horizontal distance between the two
+                    // -- it is the honest check on the pairing itself: a large dxz means the
+                    // carried contact point and the raw hit are not the same place at all, and
+                    // then dy is not a height above "the road under the mark".
+                    // DELETE-WHEN-STABLE.
+                    if (BrnDiag::TrailHeightDiagEnabled())
+                    {
+                        const s32 liCarId = lpState->miRaceCarID;
+                        // SEARCH, do not index: the latch is indexed by VehicleManager SLOT and
+                        // this side only has the attribute id. See BrnDiagTrailHeight.h --
+                        // keying one on the other differenced the player's mark against another
+                        // car's road hit. slot == -1 means no entry claims this id.
+                        s32 liSlot = -1;
+                        for (s32 liS = 0; liS < BrnDiag::KI_TRAIL_HEIGHT_MAX_CARS; ++liS)
+                        {
+                            const BrnDiag::TrailHeightHit& lrCand =
+                                BrnDiag::gaTrailHeightHits[liS][luWheel & 3u];
+                            if (lrCand.muStamp != 0u && lrCand.miCarId == liCarId
+                                && (liSlot < 0
+                                    || lrCand.muStamp
+                                       > BrnDiag::gaTrailHeightHits[liSlot][luWheel & 3u].muStamp))
+                            {
+                                liSlot = liS;
+                            }
+                        }
+                        if (liSlot >= 0)
+                        {
+                            const BrnDiag::TrailHeightHit& lrHit =
+                                BrnDiag::gaTrailHeightHits[liSlot][luWheel & 3u];
+                            const f32 lfMarkY = lrWheel.mRoadContact.mPosition.y + 0.03f;
+                            const f32 lfDx    = lrWheel.mRoadContact.mPosition.x - lrHit.mfX;
+                            const f32 lfDz    = lrWheel.mRoadContact.mPosition.z - lrHit.mfZ;
+                            char lacHt[400];
+                            std::snprintf(lacHt, sizeof(lacHt),
+                                "[trailht] f=%u car=%d slot=%d w=%u t=%.3f mark=%.4f,%.4f,%.4f "
+                                "road=%.4f,%.4f,%.4f dy=%.4f dxz=%.4f n=%.4f,%.4f,%.4f "
+                                "roadNy=%.4f lineDist=%.4f stamp=%u hit=%u\n",
+                                gauSkidProbeFrame, liCarId, liSlot, luWheel,
+                                static_cast<double>(mParticleModule.mRenderData.mfCurrentTime),
+                                static_cast<double>(lrWheel.mRoadContact.mPosition.x),
+                                static_cast<double>(lfMarkY),
+                                static_cast<double>(lrWheel.mRoadContact.mPosition.z),
+                                static_cast<double>(lrHit.mfX), static_cast<double>(lrHit.mfY),
+                                static_cast<double>(lrHit.mfZ),
+                                static_cast<double>(lfMarkY - lrHit.mfY),
+                                static_cast<double>(std::sqrt(lfDx * lfDx + lfDz * lfDz)),
+                                static_cast<double>(lrWheel.mRoadContact.mNormal.x),
+                                static_cast<double>(lrWheel.mRoadContact.mNormal.y),
+                                static_cast<double>(lrWheel.mRoadContact.mNormal.z),
+                                static_cast<double>(lrHit.mfNormalY),
+                                static_cast<double>(lrWheel.mRoadContact.mfLineDistanceToRoad),
+                                lrHit.muStamp, lrHit.muHit);
+                            CgsDev::Log::WriteToLog(lacHt);
+                        }
+                    }
                 }
 
                 // [skid] SURFACE-CHANGE EDGE. The periodic sample below can drive across a
