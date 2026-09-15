@@ -27,10 +27,12 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"              // ResourcePtr (CreateFromHandle binding)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <cstdlib>   // getenv ([DIAG] BRN_ATTRIB_STALE_DIAG)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // SPrintf (resource-id hex in the load logs)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // StrStreamBase (debug prints)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // gpDebugPrint / gxMessageFilterFlags
-#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"        // Attrib::Database (export policies)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h"   // [DIAG] CollectionExportPolicy::DiagCountCollectionsOwnedBy        // Attrib::Database (export policies)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h" // Attrib::Vault
 
 #include <new>      // placement new (Vault over the package-allocator block)
@@ -164,12 +166,35 @@ void VaultSlot::DoUnload()
 {
     CGS_ASSERT(miRefCount == 1, "miRefCount == 1");                                // .cpp:259
 
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ATTRIB_STALE_DIAG: collections of this vault still
+    // filed in the class tables before / after the teardown (after must be 0).
+    static int siStaleDiag = -1;
+    if (siStaleDiag < 0)
+    {
+        const char* lpcEnv = getenv("BRN_ATTRIB_STALE_DIAG");
+        siStaleDiag = (lpcEnv != 0 && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
+    }
+    const unsigned int luOwnedBefore = (siStaleDiag == 1) ? Attrib::CollectionExportPolicy::DiagCountCollectionsOwnedBy(mpVault) : 0u;
+    Attrib::Vault* lpUnloadingVault = mpVault;
+
     mpVault->Deinitialize();
     if (mpVault->Release(0))
         Attrib::Vault_ScalarDeletingDtor(mpVault, 1);
 
     CGS_ASSERT(Attrib::Database::IsInitialized(), "Attribute database not initialized.");
     Attrib::Database::Get().CollectGarbage();
+
+    if (siStaleDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        const unsigned int luOwnedAfter = Attrib::CollectionExportPolicy::DiagCountCollectionsOwnedBy(lpUnloadingVault);
+        CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
+        lrStream << "[attrib-unload] vault ";
+        AppendResourceIdHex(lrStream, mResourceId);
+        lrStream << " collections in class tables before=" << luOwnedBefore
+                 << " after=" << luOwnedAfter
+                 << (luOwnedAfter != 0 ? "  <-- STALE (pointers into the freed vault block)" : "")
+                 << "\n";
+    }
 
     if (ContainsStreamedVault())
     {

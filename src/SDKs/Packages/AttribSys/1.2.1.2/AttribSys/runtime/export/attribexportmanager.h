@@ -77,6 +77,11 @@ namespace Attrib
     class CollectionExportPolicy : public ExportPolicy
     {
     public:
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_ATTRIB_STALE_DIAG: collections of a vault still
+        // filed in the class tables (a member so it can walk the same private tables the
+        // console's PrepareToDeinitialize walks). Body in attribdatabase.cpp.
+        static unsigned int DiagCountCollectionsOwnedBy(const Vault* lpVault);
+
         virtual bool IsExported(const TypeID& lrType);                               // own TU
         virtual void Initialize(Vault& lrVault, const TypeID& lrType,
                                 const ExportID& lrExport, void* lpData,
