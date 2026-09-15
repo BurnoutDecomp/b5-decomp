@@ -6,6 +6,7 @@
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 
@@ -630,8 +631,9 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     // approximated.
 
     // 0x826CC050..0x826CC064 -- the three primary-vtable per-frame hooks, in order.
-    // Slot +8 (UpdateCollisionPassbys @0x826B2628) and the folded-empty slot +12 are
-    // not landed yet; see the header.
+    // Slot +12 is the bare `blr` that is folded-empty in both vtables (see the header),
+    // so there is nothing between these two.
+    UpdateCollisionPassbys(afTimeStep);
     UpdateStartLineReving(afTimeStep);
 
     EngineParamWitness(afTimeStep);
@@ -795,6 +797,92 @@ PhysicsControl::EngineRevEntry PhysicsControl::UpdateEngRevDataSet(
     lResult.mfRpm = lfUnit * (lrNext.mfRpm - lrThis.mfRpm) + lrThis.mfRpm;
     lResult.mfThrottle = lfUnit * (lrNext.mfThrottle - lrThis.mfThrottle) + lrThis.mfThrottle;
     return lResult;
+}
+
+// ---------------------------------------------------------------------------
+// PhysicsControl::UpdateCollisionPassbys  @ 0x826B2628  (primary vtable slot +8)
+//
+// The car's own body-roll oscillator, and the COLLISION PASSBY it fires on each
+// rising zero crossing of it -- the "whoosh" as a car that has just landed rolls
+// past the microphone.
+//
+//   lwz    r11, 0x38(r31)              ; mpVehiclePhysicsData
+//   lvx128 v13, r11, 0x340             ; RaceCarState::mAngularVelocity (@832)
+//   vmsum3fp128 + vrsqrtefp + 2 Newton ; f29 = |mAngularVelocity|
+//   lfs    f0, 0x250(r31) / stfs f13, 0x254(r31)      ; accumulator.prev = cur
+//   fmadds f0, f29, f1, f0 / stfs f0, 0x250(r31)      ; accumulator.cur += |w| * dt
+//   fmuls  f1, f0, flt_82001D9C (2.0) / bl sin
+//   lfs    f0, 0x248(r31) / stfs f0, 0x24C(r31)       ; oscillator.prev = cur
+//   frsp / stfs f0, 0x248(r31)                        ; oscillator.cur = sin(acc * 2)
+//   <debug tty dump, gated on dword_82FFB85C -- 0 in the shipped image; not carried>
+//   if (|w| > flt_82F2FD08 0.25
+//       && mpWheelControl->mfTimeSinceLanding > flt_82F2FD04 0.5
+//       && oscillator.cur != 0 && oscillator.cur >= 0
+//       && oscillator.prev != 0 && oscillator.prev < 0)
+//       PostPassby(env.GetStateManager(4), Passby{ Vector3(0), mp3dCarControl,
+//                                                  |w|, Collision(12), false, 1.0f })
+//
+// +0x1DC / +0x1E0 on WheelControl are named by WheelControl::UpdateParams
+// @0x826D071C..0x826D0760: on the `mIsOnGround.cur != 0` arm +0x1E0 accumulates dt
+// and +0x1DC is zeroed, and on the airborne arm the reverse -- i.e. +0x1DC is
+// mfTimeInAir and +0x1E0 is mfTimeSinceLanding, in the tail declaration order this
+// header already carries. GetTimeSinceLanding() is the existing accessor.
+//
+// The manager is mapStateManagers[4]: the console loads `*(mpLogicModule + 0x2964)`,
+// the Environment sits at module + 0x2950 with mpAllocator at +0 and the map at +4
+// (CgsEnvironment.h), so +0x2964 is slot 4 -- and PassbyStateManager's own
+// ClassTypeInfo ObjectID is 4 (BrnPassbyStateManager.cpp:238), with slot 1 landing
+// on PlayerVehicleStateManager exactly as Attach's `*(module + 10584)` does.
+// ⚠️ PassbyStateManager::Prepare @0x826F9748 is still a `return true` stub with no
+// states, so the posted record is queued and nothing consumes it yet -- this lands
+// the producer, not the sound.
+// ---------------------------------------------------------------------------
+void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
+{
+    const BrnSound::Vehicles::VehicleData* lpRaw = mpVehiclePhysicsData;
+    const Vector3& lrAngularVelocity = lpRaw->mAngularVelocity;
+    const f32 lfAngularSpeed = std::sqrt(
+        lrAngularVelocity.x * lrAngularVelocity.x +
+        lrAngularVelocity.y * lrAngularVelocity.y +
+        lrAngularVelocity.z * lrAngularVelocity.z);
+
+    mfAngularVelocityAccumulator.Update(
+        mfAngularVelocityAccumulator.GetCurrent() + lfAngularSpeed * afTimeStep);
+    mfOscillator.Update(
+        std::sin(mfAngularVelocityAccumulator.GetCurrent() * 2.0f));
+
+    if (!(lfAngularSpeed > 0.25f))
+        return;
+    if (mpWheelControl == nullptr)
+        return;
+    if (!(mpWheelControl->GetTimeSinceLanding() > 0.5f))
+        return;
+
+    // The rising zero crossing: `fcmpu beq` then `blt` on the current value, and
+    // `fcmpu beq` then `bge` on the previous -- a bare `> 0` / `< 0` would let the
+    // exact-zero frame through, which the console explicitly excludes on both.
+    const f32 lfOscillator = mfOscillator.GetCurrent();
+    const f32 lfPrevOscillator = mfOscillator.GetPrevious();
+    if (lfOscillator == 0.0f || lfOscillator < 0.0f)
+        return;
+    if (lfPrevOscillator == 0.0f || lfPrevOscillator >= 0.0f)
+        return;
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    BrnSound::Logic::Passby::PassbyStateManager* lpPassbyStateManager =
+        static_cast<BrnSound::Logic::Passby::PassbyStateManager*>(
+            lpModule->GetEnvironment().GetStateManager(4));
+    if (lpPassbyStateManager == nullptr)
+        return;
+
+    const BrnSound::Logic::Passby::PassbyStateManager::Passby lPassby(
+        static_cast<const CgsSound::Logic::Cgs3dEffectControl*>(mp3dCarControl),
+        lfAngularSpeed,
+        AttribSys::Enums::ePassbyTypes::Collision,
+        false,
+        1.0f);
+    lpPassbyStateManager->PostPassby(lPassby);
 }
 
 // ---------------------------------------------------------------------------

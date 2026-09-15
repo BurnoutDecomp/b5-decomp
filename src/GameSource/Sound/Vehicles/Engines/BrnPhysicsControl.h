@@ -135,6 +135,7 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     // the same folded `blr`), so it has no recoverable name and no observable effect;
     // it is deliberately NOT declared here rather than given an invented one.
     // ------------------------------------------------------------------------
+    virtual void UpdateCollisionPassbys(f32 afTimeStep); // @ 0x826B2628
     virtual void UpdateStartLineReving(f32 afTimeStep); // @ 0x826CC0C0
 
     // @ 0x82682CA8 (DWARF h:266). Forward to VehicleState::GetEngineComponentName.
