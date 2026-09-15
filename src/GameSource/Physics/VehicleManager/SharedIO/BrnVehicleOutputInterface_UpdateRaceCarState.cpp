@@ -430,6 +430,58 @@ void VehicleOutputInterface::UpdateRaceCarState(s32 liRaceCarIndex,
     }
 
     // ================================================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- the DRIVABLE-INPUTS witness.  Opt in with
+    // BRN_DRIVABLE_DIAG=1 (or =N for one line every N crashing frames; 1 == every frame).
+    //
+    // WHAT IT MEASURES, and nothing else: the RAW OPERANDS of the two booleans this function
+    // publishes and that the whole crash verdict hangs off --
+    //   mbIsDriveable  = !GetDeformedBeyondDriveTimeLimitsInCrash()  AND  (wheel[i].mu8State == 0)
+    //   mbFullyDrivableFromCrash = crashing && timeCrashing > K && 4x mbHasTraction
+    //                              && mbIsDriveable && |roll|,|yaw| < K
+    // ActiveRaceCar::IsWrecked returns TRUE the instant mbIsDriveable is false, so "every crash
+    // ends wrecked" is answerable only by seeing WHICH term went false -- the deformation gate
+    // (`beyond`) or a TWISTED/DETACHED wheel (`wst`).  Printing the verdict again would say
+    // nothing new.  One line per crashing frame (sampled), player or not; nothing prints when no
+    // car is crashing, which is the control.  DELETE-WHEN-STABLE.
+    // ================================================================================================
+    {
+        static s32 siDrivableDiag = -1;
+        if (siDrivableDiag < 0)
+        {
+            const char* lpcEnv = getenv("BRN_DRIVABLE_DIAG");
+            siDrivableDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? ((atoi(lpcEnv) > 0) ? atoi(lpcEnv) : 1) : 0;
+        }
+        if (siDrivableDiag > 0 && lrState.mbCrashing && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siDrivableFrames = 0;
+            ++siDrivableFrames;
+            if ((siDrivableFrames % siDrivableDiag) == 0)
+            {
+                const f32 lfRollRate = Dot3(lrState.mAngularVelocity, lPhysicsTransform.xAxis);
+                const f32 lfYawRate  = Dot3(lrState.mAngularVelocity, lPhysicsTransform.zAxis);
+                *CgsDev::Log::gpDebugPrint
+                    << "[drivable] car=" << liRaceCarIndex
+                    << " tCrash=" << lrState.mfTimeCrashing
+                    << " beyond=" << (lrPhysics.GetDeformedBeyondDriveTimeLimitsInCrash() ? 1 : 0)
+                    << " wst=" << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(0)).mu8State)
+                    << ","     << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(1)).mu8State)
+                    << ","     << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(2)).mu8State)
+                    << ","     << static_cast<s32>(lrPhysics.GetWheel(static_cast<EVehicleDrivenWheel>(3)).mu8State)
+                    << " trac=" << (lrState.maWheels[0].mbHasTraction ? 1 : 0)
+                    << ","      << (lrState.maWheels[1].mbHasTraction ? 1 : 0)
+                    << ","      << (lrState.maWheels[2].mbHasTraction ? 1 : 0)
+                    << ","      << (lrState.maWheels[3].mbHasTraction ? 1 : 0)
+                    << " drivable=" << (lrState.mbIsDriveable ? 1 : 0)
+                    << " fully=" << (lrState.mbFullyDrivableFromCrash ? 1 : 0)
+                    << " roll=" << lfRollRate << " yaw=" << lfYawRate
+                    << " up.y=" << lrState.mTransform.yAxis.y
+                    << " mph=" << lrState.mfSpeedMPH
+                    << "\n";
+            }
+        }
+    }
+
+    // ================================================================================================
     // [DIAG] NOT IN THE X360 BINARY -- the VFX-FEED WITNESS.  Opt in with BRN_VFXFEED_PROBE=1.
     //
     // WHY IT IS HERE AND NOWHERE ELSE.  This function is the console's ONLY writer of RaceCarState,

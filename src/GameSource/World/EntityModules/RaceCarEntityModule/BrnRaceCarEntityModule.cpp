@@ -1301,8 +1301,8 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         //               forced and the byte cleared; otherwise the reset TYPE comes from +99536
         //               and the amount from +99544. Defaults (nothing pending) are -1 / 0.0f.
         //   0x822F4B2C  VehicleInputInterface::ResetRaceCar(...)                 ⭐ REPRODUCED
-        //   0x822F4B30+ the module's reset BitArray bit (+65760) and
-        //               ActiveRaceCar::ResetAfterCrash @0x822BF3A0                ⛔ PARKED
+        //   0x822F4B30+ the module's reset BitArray bit (+65760)                  ⛔ STILL PARKED
+        //   0x822F4C14  ActiveRaceCar::ResetAfterCrash @0x822BF3A0                ⭐ REPRODUCED
         //
         // ⛔ PARK 1 -- the CRASHING classification. ActiveRaceCar::IsDriveableAfterCrash and
         //    ::IsDeformationFixedAfterCrash have no declaration or body anywhere in this tree;
@@ -1318,9 +1318,36 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         //    junkyard car-select confirm -- so "nothing pending" stopped being true the moment
         //    the player picked a car. Passing the initialisers unconditionally is therefore a
         //    divergence, not a faithful default.
-        // ⛔ PARK 3 -- the reset BitArray + ResetAfterCrash, unchanged from the banner above.
-        //    Neither is on the transform path: the bit is read by the deformation legs and
-        //    ResetAfterCrash re-seats crash bookkeeping.
+        // ⛔⛔ PARK 3 -- HALF RETIRED 2026-09-15 (issue #28). The park said "neither is on the
+        //    transform path: the bit is read by the deformation legs and ResetAfterCrash re-seats
+        //    crash bookkeeping". THE SECOND HALF WAS THE BUG, and it is issue #28 in full:
+        //    ActiveRaceCar::ResetAfterCrash @0x822BF3A0 is the ONLY writer in the whole image that
+        //    clears ActiveRaceCar::mbIsWrecked (+0x782, `stb r25, 0x782` @0x822BF4BC), and that
+        //    member is a LATCH -- IsWrecked() @0x822BFDA0 returns true on its FIRST line when it is
+        //    set, so IsDriveableAfterCrash() @0x822D48F8 answers "wreck" before it looks at the
+        //    car's damage, orientation or driveability at all.
+        //    On this build the player's ResetAfterCrash NEVER RAN. Its only other call sites are in
+        //    ProcessRaceCarCrashCompleteEvents (BrnRaceCarEntityModule_CrashExit.cpp:180/:190) and
+        //    both are gated `!IsCrashing()` / network-typed -- and the log says the player's car is
+        //    ALWAYS still flagged crashing at its own crash-complete event
+        //    (`[crash-exit] CRASH COMPLETE received for active race car 0 crashing=1`), which is
+        //    exactly why the console puts the call HERE, at the end of the reset the crash-complete
+        //    event asked for. So the very first writer to latch +0x782 wrecked the car for the rest
+        //    of the session, and every later crash -- upright, undented, all four wheels on --
+        //    still read `IsWrecked=1 isDriveable=1 fullyDrivable=1` and reset as a wreck.
+        //    MEASURED before the fix (run i28_beforeB, a 10-shot wall ladder): shot 0 DRIVE_AWAY,
+        //    then every one of the remaining nine WRECK_RESET_DEFORM, seven of them with
+        //    `isDriveable=1 fullyDrivable=1 upDot=+0.99` and four of those with
+        //    `canDriveAwayLatch=1` -- i.e. the DRIVEAWAY banner up while the game respawns the car.
+        //    The call is landed below, with the console's own argument.
+        // ⛔ WHAT STAYS PARKED (both still unnamed in this tree, both gated, neither on the
+        //    wrecked-latch path):
+        //      * the module's reset BitArray bit at +65760 (0x822F4BE8..0x822F4C10) -- read by the
+        //        deformation legs;
+        //      * the `if (resetDeformation)` clear of ActiveRaceCar +0x1BF6 / +0x1BF8..+0x1C18
+        //        (0x822F4C18..0x822F4C40) -- 33 bytes inside the mRenderParams tail with no name
+        //        here yet.
+        //    DELETE-WHEN either is named.
         // ⭐ PARK 1 RETIRED 2026-08-25 (crash exit). The banner above said
         // "ActiveRaceCar::IsDriveableAfterCrash and ::IsDeformationFixedAfterCrash have no
         // declaration or body anywhere in this tree; guessing either would decide whether a
@@ -1553,6 +1580,15 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                 << " resetType=" << static_cast<s32>( leDeformationResetType )
                 << " amount=" << lfHowCloseToTotalled << "\n";
         }
+
+        // ---- 0x822F4C14 -- THE CRASH BOOK-KEEPING RE-SEAT. See PARK 3 above. --------------
+        // The console's argument is `cntlzw r9, (u8)r24 ; extrwi r4, r9, 1, 26` at
+        // 0x822F4C04/0x822F4C0C -- the standard "== 0" idiom on r24, and r24 is the same
+        // register it had just passed to ResetRaceCar as the resetDeformation bool
+        // (`mr r8, r24` @0x822F4B08). So lbKeepVerletOffsets == !lbResetDeformation: a reset
+        // that does NOT reset the deformation keeps the verlet offsets the dents live in.
+        lpActiveRaceCar->ResetAfterCrash( !lbResetDeformation );
+
         return;
     }
 
@@ -6622,6 +6658,8 @@ void RaceCarEntityModule::ProcessTakedownEvents(
             mNearMissManager.AddTakenDownRaceCar(lrEvent.meVictimIndex);
         if (lrEvent.meVictimIndex == mePlayerActiveRaceCarIndex)
         {
+            WreckLatchWitness("ProcessTakedownEvents@0x822F6D60",
+                              static_cast<s32>(mePlayerActiveRaceCarIndex), true);
             GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbIsWrecked = true;
             mBoostManager.GetBoostStrategy()->OnTakenDownByAIOrPlayer();
         }
