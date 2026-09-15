@@ -25,6 +25,13 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"  // GetHalfExtent / GetPosition
 #include <cmath>                                                               // std::sqrt (the rsqrt NR chain's answer)
 
+// includes folded in from the BrnPhysicalTrafficManager_w*.cpp partfiles (2026-09-15)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"               // PhysicsSimulationIO::OutputBuffer + OutJointSpyQueue
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"              // OutJointSpy
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                             // the witness below
+#include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface + the fine queue
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -1060,5 +1067,248 @@ void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
     ProcessJointSpys(lpSimModuleOutputBuffer);
 }
 
+}   // namespace Vehicle
+}   // namespace BrnPhysics
+
+// ============================================================================
+// FOLDED FROM BrnPhysicalTrafficManager_wG12_ArticulatedJoints.cpp (wave G12) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_wG12_ArticulatedJoints.cpp
+//
+// The articulated (cab + trailer) tail of UpdateTrafficPhysicsPostSimulation, which runs these two
+// back to back as the last thing it does.
+//
+// ResolveArticulatedJoints -- the per-frame positional fix-up of the hitch. For each live traffic
+// slot that is a CAB with a non-broken joint, find the trailer and move each half of the pair half
+// the separation between the two articulation points toward the other. Pose only: it writes the
+// two bodies' transform translation rows through ExternallySimulatedBody::Translate and touches no
+// velocity. Dormant by data until something puts a traffic vehicle into
+// E_ARTICULATE_JOINT_ATTACHED -- the joint-creation chain (CreateJoint and friends) is not
+// reconstructed.
+//
+// ProcessJointSpys -- walks the OutJointSpy queue on the READ-locked simulation output buffer.
+// THE LOOP BODY IS EMPTY ON PURPOSE: the console's only instruction in it is the checked
+// GetEvent(i) call with its result discarded. The walk still runs the queue's three tripwires.
+// =================================================================================================
+
+
+namespace
+{
+    // DIAG, off unless BRN_TRAFFIC_DIAG is set. DELETE-WHEN-STABLE.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    // Budget: without it this fires once per resolved pair per frame.
+    const s32 KI_JOINT_WITNESS_BUDGET = 24;
+    s32 giJointWitnessLinesLeft = KI_JOINT_WITNESS_BUDGET;
+
+    // Witness for "a joint was resolved". It cannot appear until the joint-creation chain lands.
+    // DELETE-WHEN-STABLE.
+    void JointResolveWitness(s32 liCab, s32 liTrailer, s32 liJointIndex)
+    {
+        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0
+            || giJointWitnessLinesLeft <= 0)
+        {
+            return;
+        }
+        --giJointWitnessLinesLeft;
+        *CgsDev::Log::gpDebugPrint
+            << "[T-joint] resolved cab=" << liCab
+            << " trailer=" << liTrailer
+            << " joint=" << liJointIndex
+            << "\n";
+    }
+}
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+
+void PhysicalTrafficManager::ResolveArticulatedJoints()
+{
+    for (s32 liTraffic = mUsedTrafficVehicles.GetFirstNonZeroBit();
+         liTraffic >= 0;
+         liTraffic = mUsedTrafficVehicles.GetNextNonZeroBit(liTraffic))
+    {
+        PhysicalTrafficVehicle* lpTrafficVehicle = GetTrafficVehicle(liTraffic);
+
+        // Raw field read, no range assert: this one test does not go through
+        // GetArticulatedVehicleType(), while every later read of the field below does.
+        if (lpTrafficVehicle->meArticulatedVehicleType
+                != PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB)
+        {
+            continue;
+        }
+        if (!lpTrafficVehicle->HasNonBrokenJoint())
+        {
+            continue;
+        }
+
+        CGS_ASSERT(rw::math::vpu::IsValid(lpTrafficVehicle->mpVehicleBody->GetTransform()),
+                   "Cab has invalid transform, ID ");                                   // :2570
+
+        const s32 liJointIndex = lpTrafficVehicle->miJointIndex;
+        const s32 liTrailerIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+            liJointIndex,
+            static_cast<s32>(lpTrafficVehicle->GetArticulatedVehicleType()));
+
+        CGS_ASSERT(static_cast<u32>(liTrailerIndex) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "invalid index : ");
+        if (!mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrailerIndex)))
+        {
+            continue;
+        }
+
+        PhysicalTrafficVehicle* lpCab     = lpTrafficVehicle;
+        PhysicalTrafficVehicle* lpTrailer = GetTrafficVehicle(liTrailerIndex);
+
+        CGS_ASSERT(rw::math::vpu::IsValid(lpTrailer->mpVehicleBody->GetTransform()),
+                   "Trailer has invalid transform, ID ");                                // :2596
+        CGS_ASSERT(lpCab->GetArticulatedVehicleType()
+                       == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB,
+                   "lpCab->GetArticulatedVehicleType() == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB");      // :2598
+        CGS_ASSERT(lpTrailer->GetArticulatedVehicleType()
+                       == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER,
+                   "lpTrailer->GetArticulatedVehicleType() == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER"); // :2599
+        CGS_ASSERT(mArticulatedJointPool.GetIndexOfOtherHalf(
+                       liJointIndex,
+                       static_cast<s32>(lpTrailer->GetArticulatedVehicleType())) == liTraffic,
+                   "mArticulatedJointPool.GetIndexOfOtherHalf( liJointIndex, lpTrailer->GetArticulatedVehicleType() ) == liTraffic"); // :2600
+
+        const Vector3 lCabArticulationPoint     = lpCab->GetArticulationPointWorldSpace();
+        const Vector3 lTrailerArticulationPoint = lpTrailer->GetArticulationPointWorldSpace();
+
+        // (cab - trailer) / 2 -- the console reaches 0.5f by refining a reciprocal of 2.0f.
+        const Vector3 lSeperationVectorWorld = rw::math::vpu::Mult(
+            rw::math::vpu::Subtract(lCabArticulationPoint, lTrailerArticulationPoint), 0.5f);
+
+        lpCab->mpVehicleBody->Translate(rw::math::vpu::Negate(lSeperationVectorWorld));
+        lpTrailer->mpVehicleBody->Translate(lSeperationVectorWorld);
+
+        JointResolveWitness(liTraffic, liTrailerIndex, liJointIndex);   // DIAG, not in the binary
+    }
+}
+
+void PhysicalTrafficManager::ProcessJointSpys(
+        const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer)
+{
+    const CgsPhysics::PhysicsSimulationIO::OutputBuffer::OutJointSpyQueue* lpJointSpies =
+        lpSimModuleOutputBuffer->GetJointSpyQueue();
+
+    const s32 liNumJointSpies = lpJointSpies->GetLength();
+    for (s32 liJointSpy = 0; liJointSpy < liNumJointSpies; ++liJointSpy)
+    {
+        // The checked accessor is the whole loop body -- see the banner.
+        (void)lpJointSpies->GetEvent(liJointSpy);
+    }
+}
+
+}
+}
+
+// ============================================================================
+// FOLDED FROM BrnPhysicalTrafficManager_wG_CrashingIds.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_wG_CrashingIds.cpp
+//
+// PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule -- the per-frame traffic
+// pass-by stage of VehicleManager::UpdateVehiclePhysics. Every live traffic slot that is CRASHING
+// and within the pass-by radius of the player car posts its GLOBAL traffic entity id into the
+// manager-output interface's 10-slot mFineTrafficCrashedEventQueue (distinct from the 20-slot
+// mCrashedTrafficEventQueue the crash-response arms fill). Its reader,
+// RaceCarEntityModule::UpdateNearMisses, is not reconstructed yet.
+// =================================================================================================
+
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    namespace
+    {
+        // The squared pass-by radius (a plain float literal in the console's constant pool,
+        // shared with several other bodies that also splat it into a vector lane).
+        const f32 KF_NEARBY_CRASHING_TRAFFIC_RANGE_SQUARED = 60.0f;
+
+        // DIAG, off unless BRN_TRAFFIC_DIAG is set. DELETE-WHEN-STABLE.
+        bool TrafficDiagEnabled()
+        {
+            static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+            return sbEnabled;
+        }
+    }
+
+    // lPlayerPosition is the player race car's transform translation row, passed by value by the
+    // sole caller. As shipped there is no "is there a player?" guard on the caller side.
+    void PhysicalTrafficManager::PassNearbyCrashingTrafficIdsToRaceCarModule(
+        VehicleManagerOutputInterface* lpVehicleManagerOutputInterface, Vector3 lPlayerPosition)
+    {
+        // DIAG only. Counts what this frame actually forwarded.
+        s32 liDiagPosted = 0;
+
+        for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+             liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+             liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+        {
+            // Unconditional, and BEFORE the crashing test -- see the faithfulness notes.
+            const Vector3 lvTrafficPosition =
+                GetTrafficVehicle(liVehicle)->mpVehicleBody->GetPosition();
+
+            // The console narrows the slot index here before the second accessor call.
+            const u16 lu16Vehicle = static_cast<u16>(liVehicle);
+            if (GetTrafficVehicle(static_cast<s32>(lu16Vehicle))->mePhysicalTrafficState
+                    != static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+            {
+                continue;
+            }
+
+            const Vector3 lvDelta =
+                rw::math::vpu::Subtract(lPlayerPosition, lvTrafficPosition);
+            const f32 lfSquareDist = rw::math::vpu::Dot(lvDelta, lvDelta);
+
+            // Written as a negated `<` so a NaN distance is skipped, as the console's compare
+            // does; do not rewrite this as `>=`.
+            if (!(lfSquareDist < KF_NEARBY_CRASHING_TRAFFIC_RANGE_SQUARED))
+            {
+                continue;
+            }
+
+            // Zeroed volume-instance slot + the GLOBAL traffic entity id in the second field,
+            // read straight out of the id table (no accessor -- see the notes).
+            TrafficCrashedEvent lEvent;
+            lEvent.mTrafficVolumeInstanceID.muId = 0;
+            lEvent.mCrasherEntityID              = maTrafficEntityIDs[liVehicle];
+
+            VehicleManagerOutputInterface::FineTrafficCrashedEventQueue& lrQueue =
+                lpVehicleManagerOutputInterface->GetFineTrafficCrashedEventQueue();
+
+            // Caller-side capacity gate: a full queue drops the id, it does not assert.
+            if (lrQueue.GetMaxLength() > lrQueue.GetLength())
+            {
+                lrQueue.AddEvent(lEvent);
+                ++liDiagPosted;
+            }
+        }
+
+        // [T-pass] DIAG, not in the shipped binary. DELETE-WHEN-STABLE.
+        if (liDiagPosted > 0 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T-pass] fineCrashedIdsPosted=" << liDiagPosted
+                << " queueLen="
+                << lpVehicleManagerOutputInterface->GetFineTrafficCrashedEventQueue().GetLength()
+                << "\n";
+        }
+    }
 }   // namespace Vehicle
 }   // namespace BrnPhysics
