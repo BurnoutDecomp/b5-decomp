@@ -966,7 +966,27 @@ void PhysicsControl::UpdateCollisionPassbys(f32 afTimeStep)
         AttribSys::Enums::ePassbyTypes::Collision,
         false,
         1.0f);
-    lpPassbyStateManager->PostPassby(lPassby);
+    const bool lbPosted = lpPassbyStateManager->PostPassby(lPassby);
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG. Capped at 32 lines. Without
+    // this the post is a claim: the gate is four conditions deep and the consumer
+    // (PassbyStateManager::Prepare @0x826F9748) is still a `return true` stub, so
+    // nothing downstream can show whether the producer ever fired.
+    if (BrnSound::Vehicles::EngineAudioDiagLive())
+    {
+        static u32 suPassbyCount = 0;
+        if (suPassbyCount++ < 32u)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[engine-passby] post#" << suPassbyCount
+                << " angularSpeed=" << lfAngularSpeed
+                << " timeSinceLanding=" << mpWheelControl->GetTimeSinceLanding()
+                << " osc=" << lfOscillator
+                << " oscPrev=" << lfPrevOscillator
+                << " accepted=" << static_cast<s32>(lbPosted ? 1 : 0)
+                << "\n";
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
