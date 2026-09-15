@@ -46,6 +46,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // gpDebugPrint ([traction] probe)
+#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h" // [diag] issue #21 mark-height latch
 
 #include <cstddef>                                                 // offsetof (the layout gates)
 #include <cstdlib>                                                 // getenv/atoi ([traction] opt-in)
@@ -292,6 +293,43 @@ namespace
                 }
             }
             // ---- end [traction] ---------------------------------------------------------------
+
+            // ---- [DIAG] NOT IN THE X360 BINARY -- the issue #21 mark-height latch. ------------
+            // The RAW road hit, stamped before AddTractionPoint re-expresses it. This is the only
+            // place in the program where the road surface under a wheel exists as a world point;
+            // everything downstream carries a body-frame copy. Write-only here, read only by the
+            // [trailht] line in EffectsModule::HandleWheels. DELETE-WHEN-STABLE.
+            //
+            // ⚠ THE KEY IS THE CAR'S OWN ID, NOT THE VEHICLE-MANAGER SLOT. The first cut of this
+            // latch keyed on `liCar` (the mUsedRaceCars bit index) while the reader keys on
+            // RaceCarState::miRaceCarID, and those are DIFFERENT INDEX SPACES: with two live race
+            // cars, run i21c_B differenced the player's mark against the OTHER car's road hit and
+            // reported dy up to 3.9 m with dxz ~270 m. Both sides now use
+            // `mpAttribs->mBaseAttribs.miRaceCarID`, which is literally what
+            // VehicleOutputInterface::UpdateRaceCarState @0x825EC808 copies into miRaceCarID.
+            const VehicleAttribs* const lpDiagAttribs = lrCar.mpAttribs;
+            const s32 liDiagCarId = (lpDiagAttribs != 0)
+                                    ? lpDiagAttribs->mBaseAttribs.miRaceCarID : -1;
+            if (BrnDiag::TrailHeightDiagEnabled()
+                && liCar >= 0 && liCar < BrnDiag::KI_TRAIL_HEIGHT_MAX_CARS)
+            {
+                ++BrnDiag::guTrailHeightStamp;
+                for (s32 liW = 0; liW < eNumDrivenWheels; ++liW)
+                {
+                    BrnDiag::TrailHeightHit& lrHit = BrnDiag::gaTrailHeightHits[liCar][liW];
+                    lrHit.miCarId = liDiagCarId;
+                    lrHit.muHit   = (lpResult->mau8HitFlags[liW] != 0) ? 1u : 0u;
+                    lrHit.muStamp = BrnDiag::guTrailHeightStamp;
+                    if (lrHit.muHit != 0u)
+                    {
+                        lrHit.mfX       = lpResult->mafHitPosition[liW][0];
+                        lrHit.mfY       = lpResult->mafHitPosition[liW][1];
+                        lrHit.mfZ       = lpResult->mafHitPosition[liW][2];
+                        lrHit.mfNormalY = lpResult->mafHitNormal[liW][1];
+                    }
+                }
+            }
+            // ---- end the mark-height latch ---------------------------------------------------
 
             for (s32 liWheel = 0; liWheel < eNumDrivenWheels; ++liWheel)
             {
