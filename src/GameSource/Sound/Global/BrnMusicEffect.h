@@ -77,6 +77,17 @@ public:
         }
     }
     void SetStreamPaused(bool abPaused) { mbStreamPaused = abPaused; }
+    // (d) the RESUME half of (c). PauseWithFade -> Update()'s E_PAUSING arm leaves the
+    //     stream in E_PLAYING with mbInternalPause SET; only this clears it again, and
+    //     UpdateVoiceParams turns the pair into the voice's PauseControl. The X360
+    //     writes the byte inline: UpdateParams @0x826FE5C8 case 1/14 does
+    //     `if (!Secondary.IsPlayingOrQueued()) *(this + 260) = 0` -- +260 is the EA Trax
+    //     stream's mbInternalPause (its base +88), NOT mbStreamPaused (+261, which the
+    //     prologue writes unconditionally for all three streams).
+    void SetInternalPaused(bool abPaused) { mbInternalPause = abPaused; }
+    // Either pause byte holds the voice's PauseControl at 1 (UpdateVoiceParams). The
+    // X360 tests them as a pair -- ProcessUpdate @0x826F6D70 `*(a1+261) || *(a1+260)`.
+    bool IsPaused() const { return mbStreamPaused || mbInternalPause; }
     EState GetState() const { return meState; }
 
     const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
