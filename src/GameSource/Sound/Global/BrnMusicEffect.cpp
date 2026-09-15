@@ -11,6 +11,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/AttribSys/Generated/classes/songlist.h"
 #include "GameSource/AttribSys/Generated/classes/song.h"
+#include "GameSource/AttribSys/Generated/classes/streammappings.h"               // GetStreamFromVideoName
+#include "GameSource/AttribSys/Generated/classes/languagestreamconfiguration.h"  // GetStreamFromVideoName
+#include "GameSource/Sound/Global/BrnSpeechEffect.h"                              // SpeechEffect::GetLanguage (message 33)
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"  // the JumpHpf crash gate
 #include <cmath>   // powf (JumpHpf::Update's exponential sweep, sub_82C09970)
@@ -265,7 +268,8 @@ MusicEffect::MusicEffect()
       meMusicType(E_MUSIC_TYPE_NONE), mePrevMusicType(E_MUSIC_TYPE_NONE),
       mePendingMusicType(E_MUSIC_TYPE_NONE),
       meJunkyardAmbience(E_JUNKYARD_AMBIENCE_NONE), miPicParadiseMusic(0),
-      mbHoldVolumes(false), mbMenuStreamIsVideo(false), mbMenuStreamOverCustom(false) {}
+      mbHoldVolumes(false), mbMenuStreamIsVideo(false), mbMenuStreamOverCustom(false),
+      meLanguage(0) {}
 
 MusicEffect::~MusicEffect() {}
 
@@ -460,14 +464,58 @@ bool MusicEffect::Attach()
     // cpp:515 "mpMixerControl" -- the controller must already have been attached by
     // State::CreateSFXCtrls before the effect attaches.
     CGS_ASSERT(mpMixerControl != 0, "mpMixerControl");
-    mSecondaryStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
-    mEATraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
-    mMusicStreamMenu.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
-    mJunkyardStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
+    // X360 @0x8269CC60: `stw 0, +4/+8` on each of the four streams (the voice-stage
+    // pair) right before the inlined MusicStream::Prepare of each.
+    mSecondaryStream.ResetVoiceStages();
+    mEATraxStream.ResetVoiceStages();
+    mMusicStreamMenu.ResetVoiceStages();
+    mJunkyardStream.ResetVoiceStages();
+    // Request priorities as the console's inlined Prepares seed them (@0x8269CC60:
+    // `stw 5,0xA0 / stw 5,0x100 / stw 5,0x160 / stw 0,0x1C0`): 5, 5, 5, junkyard 0.
+    mSecondaryStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 5);
+    mEATraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 5);
+    mMusicStreamMenu.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 5);
+    mJunkyardStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 0);
     // X360 0x8269CE48..0x8269CE50 (inlined JumpHpf::Construct): state CONSTRUCTED,
     // start frequency flt_820AA558 = 230 Hz, current frequency flt_82001CC0 = 0.
     mJumpHpf.Construct();
     return mEaTraxData.Prepare(lpModule);
+}
+
+// X360 0x826BB9B0.
+//     if (dword_830080AC != name) return name;                       // not the "intro" sentinel
+//     if (!SpeechEffect::GetSpeechMapping(module, name, &spec)) return name;
+//     languagestreamconfiguration ls(spec);  assert(IsValid)  assert(Num_ContentSpecs == 6)
+//     cs = ls.ContentSpecs[meLanguage];  return cs ? cs : name;
+// The GetSpeechMapping the console calls is `streammappings(GlobalData.StreamMappings())
+// .Find(name, spec)` (SpeechEffect::GetSpeechMapping @0x8269E918); it is inlined here by
+// value because the tree keeps that helper as a SpeechEffect member.
+u32 MusicEffect::GetStreamFromVideoName(u32 auName) const
+{
+    static const u32 KU_INTRO_VIDEO_NAME =
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("intro"));   // dword_830080AC
+    if (auName != KU_INTRO_VIDEO_NAME)
+        return auName;
+    const Module::SoundLogicModule* lpModule =
+        static_cast<const Module::SoundLogicModule*>(mpLogicModule);
+    CGS_ASSERT(lpModule != 0, "lpLogicModule");
+    if (!lpModule)
+        return auName;
+    Attrib::RefSpec lConfiguration;
+    Attrib::Gen::streammappings lMappings(lpModule->GetGlobalData().StreamMappings());
+    if (!lMappings.Find(auName, lConfiguration))
+        return auName;
+    Attrib::Gen::languagestreamconfiguration lLanguageStream(lConfiguration);
+    CGS_ASSERT(lLanguageStream.IsValid(), "lLanguageStream.IsValid()");
+    // (The console's second assert, Num_ContentSpecs() == eLanguage::Count (6), is the
+    // bound ContentSpec() applies itself: an out-of-range index reads the zeroed default.)
+    const u32 luContentSpec = lLanguageStream.ContentSpec(static_cast<u32>(meLanguage));
+    if (MusicDiagEnabled())
+        MusicDiagPrintf("[music]   video name 0x%08X -> language %d stream 0x%08X\n",
+                        auName, meLanguage, luContentSpec);
+    if (!luContentSpec)
+        return auName;
+    return luContentSpec;
 }
 
 // X360 0x8269CE70. The picture-paradise camera wins over everything; then any pending
@@ -885,11 +933,27 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             CGS_ASSERT(mMenuStreamName != KU_NULL_NAME,
                        "mMenuStreamName != CgsSound::Playback::K_NULL_NAME");
             mMusicStreamMenu.Queue(mMenuStreamName, 12);
-            mEaTraxData.miPreviewSong = -1;
-            mEaTraxData.miPreviousPreviewSong = -1;
+            // X360 @0x826FF68C..690: `stw r16(=0), 0x1FC(r18); stw r16, 0x200(r18)` -- the two
+            // preview cursors are ZEROED here (Notify's clear arm is the one that writes -1).
+            mEaTraxData.miPreviewSong = 0;
+            mEaTraxData.miPreviousPreviewSong = 0;
             if (MusicDiagEnabled())
                 MusicDiagPrintf("[music] menu stream spec=0x%08X -> Queue(Menu, slot 12)\n",
                             mMenuStreamName);
+        }
+        // X360 @0x826FF694..6D0:
+        //     if (menu.prevVoiceStage == menu.voiceStage || menu.voiceStage == 6)
+        //         AddEvent(module + 0x4EB0 /*PreUpdateOutput GuiOut*/, &byte, 504, 1);
+        // GuiOut 504 is the MovieManager's "audio ready" (RecvEvent @0x824F9688: 6 -> 7);
+        // the GuiModule feeds it from the sound module's GuiOut queue every frame.
+        if (mMusicStreamMenu.IsVoiceStageSettledOrPlaying())
+        {
+            u8 lu8AudioReady = 0;
+            CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
+                reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+                    lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+            lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8AudioReady),
+                               504, 1);
         }
         break;
 
@@ -1078,12 +1142,11 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
             else
             {
                 mePendingMusicType = E_MUSIC_TYPE_MENU;
-                // X360: MusicEffect::GetStreamFromVideoName @0x826BB9B0 -- a pass-through
-                // unless the name is the "video" sentinel, in which case it resolves the
-                // localised stream through SpeechEffect::GetSpeechMapping +
-                // Attrib::Gen::languagestreamconfiguration. Neither of those exists in this
-                // tree yet, so only the pass-through arm is live here.
-                u32 luContentSpec = luName;
+                // X360: `mMenuStreamName = GetStreamFromVideoName(name)` @0x826BB9B0 -- a
+                // pass-through unless the name is the "intro" video sentinel, which resolves
+                // the localised INTRO stream through the stream mappings +
+                // languagestreamconfiguration[meLanguage].
+                u32 luContentSpec = GetStreamFromVideoName(luName);
                 // FLAG (pre-existing, kept): the shipped title screen asks for
                 // "GunsAndRoses" while the streams registry holds "Guns_And_Roses".
                 const u32 luGunsAndRoses =
@@ -1175,13 +1238,17 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
     }
 
     case 33:  // E_SOUNDMESSAGE_SPEECH_SET_LANGUAGE.
-        // X360 stores SpeechEffect::GetLanguage(payload) for GetStreamFromVideoName's
-        // language lookup. Both of those are absent from this tree; the stored value has
-        // no consumer here, so there is nothing to keep. Reported, not silently dropped.
+    {
+        // X360 @0x826BBAF8 case 0x21: `meLanguage = SpeechEffect::GetLanguage(*(msg + 16))`
+        // -- the CgsLanguage payload word mapped onto AttribSys eLanguage, read back by
+        // GetStreamFromVideoName.
+        s32 liCgsLanguage = 0;
+        std::memcpy(&liCgsLanguage, lpuPayload, sizeof(liCgsLanguage));
+        meLanguage = SpeechEffect::GetLanguage(liCgsLanguage);
         if (MusicDiagEnabled())
-            MusicDiagPrintf("[music]   id 33 (set language) needs SpeechEffect::GetLanguage "
-                        "-- not reconstructed\n");
+            MusicDiagPrintf("[music]   id 33 set language cgs=%d -> %d\n", liCgsLanguage, meLanguage);
         break;
+    }
 
     case 40:  // E_SOUNDMESSAGE_IN_JUNKYARD.
     {

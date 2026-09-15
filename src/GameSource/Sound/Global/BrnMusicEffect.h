@@ -27,10 +27,16 @@ public:
     };
 
     MusicStream();
+    // X360 MusicEffect::Attach @0x8269CC60 inlines the four Prepares and seeds each
+    // stream's REQUEST PRIORITY (+0x54) there: EA Trax 5 (`stw 5, 0x100(r31)`), secondary
+    // 5 (+0xA0), menu 5 (+0x160), junkyard 0 (+0x1C0). Nothing else writes it -- Queue
+    // @0x8269CB88 stores only mbSongQueued (+0x5A) and the slot (+0x5B). Speech requests
+    // at 6 (SpeechEffect::PlayStream @0x8269EAF0), so StreamingStateManager::GetFreeState
+    // @0x826B0EB8 evicts a music stream for a voice-over rather than refusing it.
     void Prepare(Module::SoundLogicModule* apModule,
                  Streaming::StreamingStateManager* apStreamingManager,
-                 const char* apVoiceSpec);
-    void Queue(u32 auContentSpec, u8 auOutputSlot, u32 auPriority = 6);
+                 const char* apVoiceSpec, u32 auPriority);
+    void Queue(u32 auContentSpec, u8 auOutputSlot);
     void Stop(f32 afFadeOut = 0.25f);
     void Update(f32 afDeltaTime);
     void SetSongQueued(bool abSongQueued);
@@ -91,13 +97,31 @@ public:
     bool IsPaused() const { return mbStreamPaused || mbInternalPause; }
     EState GetState() const { return meState; }
 
+    // ---- X360 MusicStream +0x04 / +0x08 -----------------------------------------
+    // GetCreateParams @0x82687368 returns `this + 12`, so two words sit BETWEEN the
+    // IStreamUser vptr and mCreateParams: the voice's CURRENT and PREVIOUS update stage.
+    // UpdateVoiceParams @0x826BB6F0 opens with
+    //     *(this + 8) = *(this + 4);  *(this + 4) = voice.meUpdateStage;   // VoiceWrapper +0x48
+    // MusicEffect::Attach @0x8269CC60 zeroes both on all four streams, and UpdateParams
+    // @0x826FE5C8 case 12 (@0x826FF694..6D0) posts GuiOut 504 -- "menu-stream audio
+    // ready", the MovieManager's WAITING_FOR_AUDIO -> PLAYING trigger -- while
+    //     prev == current || current == 6 (VoiceWrapper::E_UPDATE_STAGE_PLAYING).
+    bool IsVoiceStageSettledOrPlaying() const
+    {
+        return mu32PrevVoiceUpdateStage == mu32VoiceUpdateStage ||
+               mu32VoiceUpdateStage == 6u;
+    }
+    void ResetVoiceStages() { mu32VoiceUpdateStage = 0; mu32PrevVoiceUpdateStage = 0; }
+
     const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
                            f32 afGain, f32 afElapsedTime) override;
     void StreamStopped() override;
 
 private:
-    CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;
+    u32 mu32VoiceUpdateStage;       // +0x04 (see IsVoiceStageSettledOrPlaying)
+    u32 mu32PrevVoiceUpdateStage;   // +0x08
+    CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;   // +0x0C
     Streaming::StreamingStateManager* mpStreamingManager;
     EState meState;
     f32 mfFadeTime;
@@ -266,6 +290,11 @@ private:
     // X360 0x8269D260. Drop the current song if the playlist stopped allowing it, and
     // take it out of mRemainingSongs. Runs only when message 7/8 changed the playlist.
     void UpdateSongs();
+    // X360 0x826BB9B0. A menu-stream name passes straight through unless it is the
+    // "intro" video sentinel (dword_830080AC, dynamically initialised to MakeHash("intro")),
+    // which resolves through the stream mappings + languagestreamconfiguration to the
+    // stream for meLanguage (the localised INTRO[_XX].SNS).
+    u32 GetStreamFromVideoName(u32 auName) const;
     // X360 0x8269CFC0 / 0x8269D0F0. Map the running game mode (and, for the end
     // stinger, whether the player won) onto the sting's ContentSpec.
     static u32 GetEventStartContentSpec(const void* apGameModeInterface);
@@ -308,6 +337,9 @@ private:
     bool mbHoldVolumes;          // +0x244  message 15 -- ProcessUpdate's early-out
     bool mbMenuStreamIsVideo;    // +0x245  message 13 payload +4
     bool mbMenuStreamOverCustom; // +0x246  message 13 payload +5
+    s32  meLanguage;             // +0x248  message 33 -> SpeechEffect::GetLanguage(payload);
+                                 //         read by GetStreamFromVideoName (@0x826BBA30 `lwz r4,0x24C(r30)`
+                                 //         off the MusicEffect-4 base == this+0x248)
 };
 
 } // namespace Logic

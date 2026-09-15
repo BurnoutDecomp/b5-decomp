@@ -13,17 +13,19 @@ namespace Logic
 {
 
 MusicStream::MusicStream()
-    : mCreateParams(), mpStreamingManager(0), meState(E_STOPPED), mfFadeTime(0.0f),
+    : mu32VoiceUpdateStage(0), mu32PrevVoiceUpdateStage(0),
+      mCreateParams(), mpStreamingManager(0), meState(E_STOPPED), mfFadeTime(0.0f),
       mfFadeDuration(0.25f), mfVolume(1.0f), mfHighPassFrequency(0.0f),
-      mfLowPassFrequency(96000.0f), muPriority(6), muQueuedContentSpec(0),
+      mfLowPassFrequency(96000.0f), muPriority(0), muQueuedContentSpec(0),
       mbInternalPause(false), mbStreamPaused(false), mbSongQueued(false),
       mu8QueuedOutputSlot(0), mu8OutputSlot(0),
       miDiagLastGainQ(-1) {}   // [DIAG] NOT IN THE X360 BINARY
 
 void MusicStream::Prepare(Module::SoundLogicModule* apModule,
                           Streaming::StreamingStateManager* apStreamingManager,
-                          const char* apVoiceSpec)
+                          const char* apVoiceSpec, u32 auPriority)
 {
+    muPriority = auPriority;   // X360 Attach @0x8269CC60: the per-stream request priority
     CGS_ASSERT(apModule != 0, "lpLogicModule");
     CGS_ASSERT(apStreamingManager != 0, "lpStreamingStateManager");
     mCreateParams.Clear();
@@ -49,13 +51,13 @@ void MusicStream::Prepare(Module::SoundLogicModule* apModule,
     mu8OutputSlot = 0;
 }
 
-void MusicStream::Queue(u32 auContentSpec, u8 auOutputSlot, u32 auPriority)
+void MusicStream::Queue(u32 auContentSpec, u8 auOutputSlot)
 {
     if (meState != E_STOPPED)
         Stop();
     mCreateParams.mContentSpecName = auContentSpec;
     muQueuedContentSpec = auContentSpec;
-    muPriority = auPriority;
+    // (the request priority is NOT an argument here -- X360 Queue @0x8269CB88 leaves +0x54 alone)
     mu8QueuedOutputSlot = auOutputSlot;
     if (!mbSongQueued)
         SetSongQueued(true);
@@ -136,6 +138,11 @@ const CgsSound::Logic::VoiceWrapper::CreateParams& MusicStream::GetCreateParams(
 void MusicStream::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
                                     f32 afGain, f32)
 {
+    // X360 @0x826BB6F0 first two stores: `*(this+8) = *(this+4); *(this+4) = *(voice+0x48)`
+    // -- the voice's update stage, latched for UpdateParams' 504 "audio ready" gate.
+    mu32PrevVoiceUpdateStage = mu32VoiceUpdateStage;
+    mu32VoiceUpdateStage = static_cast<u32>(arVoice.GetUpdateStage());
+
     const u32 luPauseControl = static_cast<u32>(CgsSound::Playback::Name::MakeHash("PauseControl"));
     const u32 luHighPassFrequency = static_cast<u32>(CgsSound::Playback::Name::MakeHash("HighPassFrequency"));
     const u32 luHighPassOrder = static_cast<u32>(CgsSound::Playback::Name::MakeHash("HighPassOrder"));

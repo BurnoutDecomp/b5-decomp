@@ -853,6 +853,27 @@ namespace BrnGame
                         mDispatchThreadInputBufferManager.GetWriteBuffer()->HideLoadingScreen();
                         CgsDev::Log::WriteToLog("[GameModule] in-game screen entered (65) -> "
                                                 "loading screen retired (world-load stand-in).\n");
+                        // [FLAG world-load stand-in, the same seat as the retirement above] X360:
+                        // FinishStreaming @0x82382258 -> RequestUnpause(1) releases the pause
+                        // WaitForStreaming took at the MemoryCard exit once all four
+                        // StreamingCompleteEvents (9) have landed after PreWorldUpdate's 192
+                        // countdown (@0x823A5328). Neither the countdown nor the four-slot tally is
+                        // landed on this build (the world side answers 192 -- BrnWorldEntityModule
+                        // .cpp:1332 -- but nothing posts it yet), so the reason-1 pause is released
+                        // at the same observable point the loading screen is retired. The real
+                        // FinishStreaming replaces this when that slice lands.
+                        {
+                            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                                mGameStateModule.GetOutputBuffer();
+                            if (lpGameStateOutput != 0)
+                            {
+                                lpGameStateOutput->LockForWrite();
+                                mGameStateModule.RequestUnpause(1, lpGameStateOutput->GetGameActionQueue());
+                                lpGameStateOutput->UnlockForWrite();
+                                CgsDev::Log::WriteToLog("[sim-pause] in-game screen entered (65) -> "
+                                                        "RequestUnpause(1) (FinishStreaming stand-in)\n");
+                            }
+                        }
                         break;
                     case 405:
                         // ⭐ THE CAR-SELECT SCREEN'S OWN DATA REQUEST. Every car-select screen
@@ -3961,6 +3982,34 @@ namespace BrnGame
                 // wave posted a perfectly correct ResetPlayerCarAction and NOTHING EVER SAW IT.
                 // On the console the arming EVENT cannot occur before the game is running, so
                 // this gate stands in for that ordering, not for the call.
+                // ⭐ X360 DoUpdate_GameStatePreWorld @0x823EE0E8, the +10094117 arm (outside the
+                // video states, i.e. under `!IsVideoState()`; the disk-error byte gates the whole
+                // leg):
+                //     if (gm+10094117) { gm+10094117 = 0; PreWorldInput.events += {8 /*1 byte*/}; }
+                // Game event 8 is drained by GameStateModule::PreWorldUpdate's ProcessGameEvents
+                // @0x823A0A18 case 8 -> WaitForStreaming @0x823900E8 -> RequestPause(1) -> action 86,
+                // which is how the console keeps the sim (and, through the sound dispatch's bit 0,
+                // the EA Trax song selection) paused from the MemoryCard exit across the post-title
+                // world load and the intro video, until FinishStreaming.
+                // [PC seat] this build's GameState drain is narrowed to E_MGS_IN_GAME (the banner
+                // above), so an event 8 posted here would be thrown away before InGame; the one
+                // hop is collapsed and WaitForStreaming is called in place -- same function, same
+                // argument, same sub-step the console would drain it in.
+                if (!mMainFlowStateMachine.IsVideoState() && !mbDiskError && mbRequestStreamingWait)
+                {
+                    mbRequestStreamingWait = false;
+                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                        mGameStateModule.GetOutputBuffer();
+                    if (lpGameStateOutput != 0)
+                    {
+                        lpGameStateOutput->LockForWrite();
+                        mGameStateModule.WaitForStreaming(lpGameStateOutput->GetGameActionQueue());
+                        lpGameStateOutput->UnlockForWrite();
+                        CgsDev::Log::WriteToLog("[sim-pause] MemoryCard exit -> game event 8 -> "
+                                                "WaitForStreaming (reason 1)\n");
+                    }
+                }
+
                 if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
                 {
                     // FLAG PC-platform leaf: the partial WorldModule update calls only

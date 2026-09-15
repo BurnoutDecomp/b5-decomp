@@ -1354,6 +1354,50 @@ void GameStateModule::RequestUnpause(s32 leUnpauseModule, GameStateModuleIO::Gam
 }
 
 // --------------------------------------------------------------------------------------------
+// X360 0x823900E8 -- WaitForStreaming. The boot-time pause (reason bit 1): from the MemoryCard
+// flow state's exit (game event 8) until FinishStreaming, i.e. across the post-title world load
+// and the intro video. Its audible consequence is the sound module's dispatch bit 0 (game
+// actions 86/87 -> SoundLogicModule::ProcessGameActionQueue), which MusicEffect::UpdateParams
+// @0x826FE5C8 reads as `lbStreamsPaused` in front of the EA Trax song selection -- with it set,
+// no song can be picked while the loading / video window is open.
+// --------------------------------------------------------------------------------------------
+void GameStateModule::WaitForStreaming(GameStateModuleIO::GameActionQueue* lpQueue)
+{
+    CGS_ASSERT(lpQueue != 0, "lpOutputActionQueue != NULL");   // BrnGameStateModule.cpp:6283
+    if (lpQueue == 0)
+        return;
+    miStreamingWaitCountdown = 2;
+    const GameMode* lpcMode = mModeManager.GetCurrentGameMode();
+    const bool lbModeIsOnline = (lpcMode != 0) && lpcMode->IsOnline();   // mode +172
+    if (mbWaitForStreaming || lbModeIsOnline)
+    {
+        if (lpcMode == 0 || lbModeIsOnline)
+            RequestPause(1, lpQueue, 0, 0);
+        mbWaitingForStreaming = true;
+        mabModuleStreamingComplete[0] = false;
+        mabModuleStreamingComplete[1] = false;
+        mabModuleStreamingComplete[2] = false;
+        mabModuleStreamingComplete[3] = false;
+    }
+    else
+    {
+        FinishStreaming(lpQueue);
+    }
+}
+
+// X360 0x82382258 -- FinishStreaming: the wait is over; tell the GUI (action 191, one zero
+// byte -- BridgeGameStateToGui turns it into the GUI's streaming-complete notice) and release
+// the reason-1 pause. The console then clears the byte at +42275; that member has no committed
+// name in this tree and nothing reads it here, so the store is reported rather than modelled.
+void GameStateModule::FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueue)
+{
+    mbWaitingForStreaming = false;
+    u8 lu8Payload = 0;
+    lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lu8Payload), 191, 1);
+    RequestUnpause(1, lpQueue);
+}
+
+// --------------------------------------------------------------------------------------------
 // ⭐ [tut-ticker] RequestPause (X360 0x82382010) -- the pause twin of RequestUnpause above.
 // Samples the CHECKED pause answer before and after ORing the reason bit in; a change there
 // broadcasts action 86, else a change in the RAW flags-nonzero answer broadcasts action 88.

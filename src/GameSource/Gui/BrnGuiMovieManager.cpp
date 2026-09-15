@@ -4,7 +4,8 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (VideoDefinition::Copy)
-#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"                     // PC EA-XMA movie/stream audio
+#include "GameShared/GameClasses/System/PC/CgsMovieAudioPC.h"                     // PC EA-XMA movie/stream audio [opt-in leaf]
+#include "GameSource/Sound/Global/BrnMusicEffect.h"                                // MusicEffect::IsCustomSoundtrackActive (Update @0x82507A98)
 
 #include <cstdlib>   // malloc / free
 #include <cstdio>    // snprintf (boot-video diagnostics)
@@ -56,6 +57,19 @@ namespace BrnGui
 
         // The PC movie/stream audio player (single movie at a time -> file-static, no header churn).
         CgsSystem::MovieAudioPC g_movieAudio;
+
+        // [PC leaf, OPT-IN] BRN_MOVIE_AUDIO_PC=1 restores the pre-2026-09-15 stand-in that
+        // decoded SOUND\STREAMS\<video>.SNS in the GUI and played it on its own XAudio2
+        // instance. The console plays a movie's sound as the sound module's MENU stream
+        // instead -- GuiModule::Update @0x82527A58 posts the VideoDefinition's sound-stream
+        // name (GuiEventPlayMusicOnMenuStream) when this manager reaches REQUESTING_AUDIO,
+        // MusicEffect queues it on slot 12 and answers GuiOut 504 -- and that path is now
+        // live (see Update's PREPARING arm). With the stand-in on, both would play.
+        bool MovieAudioPcLeafEnabled()
+        {
+            static const bool sbEnabled = std::getenv("BRN_MOVIE_AUDIO_PC") != 0;
+            return sbEnabled;
+        }
         char                    g_acSoundStreamPath[260] = { 0 };
 
         // The DEFAULT VIDEO SOUND NAME that VideoDefinition::Prepare seeds +0x18 from.
@@ -157,7 +171,8 @@ namespace BrnGui
     {
         miMoveMemoryReleaseDelay = 0;
         mMoviePlayer.Construct();
-        g_movieAudio.Construct();           // [PC] EA-XMA movie/stream audio player
+        if (MovieAudioPcLeafEnabled())
+            g_movieAudio.Construct();       // [PC leaf, opt-in] EA-XMA movie/stream audio player
         g_acSoundStreamPath[0] = 0;
         mPlayingMovie.Prepare();
         mQueuedMovie.Prepare();
@@ -289,7 +304,8 @@ namespace BrnGui
     bool MovieManager::Release()
     {
         mMoviePlayer.Release();
-        g_movieAudio.Release();            // [PC] free the decoded movie-audio buffer
+        if (MovieAudioPcLeafEnabled())
+            g_movieAudio.Release();        // [PC leaf, opt-in] free the decoded movie-audio buffer
         mPlayingMovie.Release();
         mQueuedMovie.Release();
         mReceiverQueue.Release();
@@ -490,7 +506,8 @@ namespace BrnGui
         // on during the (heavy, synchronous) decode and leave the audio lagging the video by the decode
         // time. Decoding here keeps the later Play()+Start() instant and frame-aligned.
         BuildSoundStreamPath(g_acSoundStreamPath, sizeof(g_acSoundStreamPath), lpVideoFile->GetName());
-        g_movieAudio.Load(g_acSoundStreamPath);
+        if (MovieAudioPcLeafEnabled())
+            g_movieAudio.Load(g_acSoundStreamPath);
         {
             char lac[300];
             std::snprintf(lac, sizeof(lac), "[MovieManager] QueueNextMovie: file '%s' (audio '%s')\n",
@@ -528,7 +545,8 @@ namespace BrnGui
 
         case E_MOVIEMANAGERSTATE_STOP_MOVIE:
             mMoviePlayer.Stop();
-            g_movieAudio.Stop();           // [PC] silence the movie sound stream
+            if (MovieAudioPcLeafEnabled())
+                g_movieAudio.Stop();       // [PC leaf, opt-in] silence the movie sound stream
             meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
             break;
 
@@ -544,7 +562,8 @@ namespace BrnGui
         case E_MOVIEMANAGERSTATE_RELEASING_MOVIE_PLAYER:
             if (!mMoviePlayer.Release())
                 break;
-            g_movieAudio.Stop();           // [PC] the movie finished -> stop its sound stream
+            if (MovieAudioPcLeafEnabled())
+                g_movieAudio.Stop();       // [PC leaf, opt-in] the movie finished -> stop its sound stream
             DestroyMemoryResourceAndDescriptor();   // [stub: MovieAllocator Heap+Linear destruct]
             if (mbKeepMemoryWhenFinished)
             {
@@ -633,14 +652,26 @@ namespace BrnGui
                 else
                 {
                     mMoviePlayer.Play();
-                    // X360 goes -> REQUESTING_AUDIO(5) -> [504] WAITING_FOR_AUDIO(6) -> PLAYING(7):
-                    // it requests the movie's EA sound stream, waits for it, then plays both together.
-                    // [PC] the stream was already decoded in QueueNextMovie; start it now in lock-step
-                    // with the video clock (Play() above). (The faithful SndStream/SndPlayer1 streaming
-                    // path + the SNR-by-id lookup are the deferred layers; see the movie-audio dossier.)
-                    if (g_movieAudio.IsLoaded())
-                        g_movieAudio.Start();
-                    meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
+                    // X360 @0x82507A98 LABEL_48: Play(), then REQUESTING_AUDIO(5). The GuiModule's
+                    // Update (@0x82527A58, its 5 -> 6 arm) posts this video's sound-stream name to
+                    // the sound module as the MENU stream (GuiEventPlayMusicOnMenuStream) and moves
+                    // the manager to WAITING_FOR_AUDIO(6); MusicEffect queues it on slot 12 and
+                    // answers GuiOut 504 as soon as that voice's stage is settled (UpdateParams
+                    // case 12), which RecvEvent turns into PLAYING(7). Then
+                    //     if (mbUsesXMPMusic) XMPOverrideBackgroundMusic();       // X360 dashboard music
+                    //     else if (MusicEffect::IsCustomSoundtrackActive()) state = PLAYING(7);
+                    meState = E_MOVIEMANAGERSTATE_REQUESTING_AUDIO;
+                    if (MovieAudioPcLeafEnabled())
+                    {
+                        // [PC leaf, opt-in] the old stand-in: own decoder, no sound-module hop.
+                        if (g_movieAudio.IsLoaded())
+                            g_movieAudio.Start();
+                        meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
+                    }
+                    else if (!mbUsesXMPMusic && BrnSound::Logic::MusicEffect::IsCustomSoundtrackActive())
+                    {
+                        meState = E_MOVIEMANAGERSTATE_PLAYING_MOVIE;
+                    }
                 }
             }
             else
@@ -651,7 +682,8 @@ namespace BrnGui
                 // path does, or the never-started stream pins the voice (g_finished stays false)
                 // and the menu-music stream can never reclaim the output afterwards -- the
                 // "menu music stops for good after the first missing-attract skip" fault.
-                g_movieAudio.Stop();
+                if (MovieAudioPcLeafEnabled())
+                    g_movieAudio.Stop();
                 meState = E_MOVIEMANAGERSTATE_REPORTING_FINISHED;
             }
             break;

@@ -1758,6 +1758,10 @@ void MainGameFlowStateMemoryCard::Update()
     if (BrnGame::GetMainGameModule()->IsGuiPhaseComplete() &&
         BrnGameMainFlowController::gpMainGameFlowController != 0)
     {
+        // X360 @0x823F2FD0..D8: `stb r11(=1), 0x9A02F5(gm)` -- gm+10094117, the streaming-wait
+        // request DoUpdate_GameStatePreWorld turns into game event 8 (-> WaitForStreaming ->
+        // the boot pause), stored right before the STATEEND SendEvent.
+        BrnGame::GetMainGameModule()->RequestStreamingWait();
         BrnGameMainFlowController::gpMainGameFlowController->SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
     }

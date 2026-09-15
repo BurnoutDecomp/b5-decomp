@@ -3430,18 +3430,48 @@ void GuiModule::Destruct()
             lpRecv->Clear();
         }
         // (MovieManager::Update advances from the render pass now -- the console's
-        // UpdateAndRenderMovieManager @0x82511240 -- so the finished check below reads
-        // the flag that pass raised.)
-        if (mMovieManager.HasFinishedReporting())
+        // UpdateAndRenderMovieManager @0x82511240 -- so the two arms below read the state
+        // that pass left.)
+        //
+        // X360 GuiModule::Update @0x82527A58, the two MovieManager arms it drives by hand,
+        // in the console's order (`*(gm + 301604)` == the manager's meState, `gm + 304976`
+        // == its playing VideoDefinition, dword_830082A8 == K_NULL_NAME == MakeHash("") == 0):
+        //     if (state == 12 /*REPORTING_FINISHED*/) { def = playing; state = 13 /*IDLE*/;
+        //         AddGuiOutEvent<GuiEventPlayMusicOnMenuStream>({K_NULL_NAME, 0, 0});  // stop the video's stream
+        //         modelInput.GetEventQueue().AddEvent(&def, 510, 48); }              // "video finished"
+        //     if (state == 5 /*REQUESTING_AUDIO*/)     { def = playing; state = 6 /*WAITING_FOR_AUDIO*/;
+        //         AddGuiOutEvent<GuiEventPlayMusicOnMenuStream>({def.mSoundStreamName, 0,
+        //                                                        def.mbDisableCustomSoundtracks}); }
+        // The movie's sound is the sound module's MENU stream: MusicEffect resolves the
+        // name (GetStreamFromVideoName), queues it on slot 12 and answers GuiOut 504, which
+        // case 504 above hands to MovieManager::RecvEvent (6 -> 7 PLAYING). The typed
+        // menu-stream event goes out on the module output buffer under its own id 23,
+        // exactly as the flow-originated channel-155 records are re-posted below.
+        if (mMovieManager.GetState() == MovieManager::E_MOVIEMANAGERSTATE_REPORTING_FINISHED)
         {
-            // Video finished -> feed 510 back to the flow (the real Update posts the
-            // finished VideoDefinition as event 510 into the model input event queue;
-            // the boot states key on the id alone). [FLAG: the 48-byte definition
-            // payload rides along when the movie-definition slice lands.]
-            CgsModule::Event lFinishedEvent;
-            RouteEventToFlow(&lFinishedEvent, 510, static_cast<s32>(sizeof(lFinishedEvent)));
-            mMovieManager.AcknowledgeFinishedAndReturnToIdle();
-            CgsDev::Log::WriteToLog("[GuiModule] video finished -> fed 510 to the flow.\n");
+            const MovieManager::VideoDefinition lFinished = mMovieManager.GetPlayingMovieDefinition();
+            mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_IDLE);
+            CgsGui::GuiEventPlayMusicOnMenuStream lStopStream(0u, false, false);
+            mpOutputBuffer->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStopStream),
+                                     23, static_cast<s32>(sizeof(lStopStream)));
+            RouteEventToFlow(reinterpret_cast<const CgsModule::Event*>(&lFinished), 510,
+                             static_cast<s32>(sizeof(lFinished)));
+            CgsDev::Log::WriteToLog("[GuiModule] video finished -> menu stream cleared, fed 510 to the flow.\n");
+        }
+        if (mMovieManager.GetState() == MovieManager::E_MOVIEMANAGERSTATE_REQUESTING_AUDIO)
+        {
+            const MovieManager::VideoDefinition lPlaying = mMovieManager.GetPlayingMovieDefinition();
+            mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO);
+            CgsGui::GuiEventPlayMusicOnMenuStream lVideoStream(
+                lPlaying.mSoundStreamName, false, lPlaying.mbDisableCustomSoundtracks);
+            mpOutputBuffer->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lVideoStream),
+                                     23, static_cast<s32>(sizeof(lVideoStream)));
+            char lac[160];
+            std::snprintf(lac, sizeof(lac),
+                          "[GuiModule] video audio requested: menu stream 0x%08X (disableCustom=%d) -> WAITING_FOR_AUDIO\n",
+                          static_cast<unsigned>(lPlaying.mSoundStreamName),
+                          lPlaying.mbDisableCustomSoundtracks ? 1 : 0);
+            CgsDev::Log::WriteToLog(lac);
         }
 
         // ---- 7. the view frame (the real per-frame owner) -----------------------------

@@ -1380,6 +1380,20 @@ public:
     // `RequestUnpause(true, q)` happened to produce the same bit only by accident.
     void RequestUnpause(s32 leUnpauseModule, GameStateModuleIO::GameActionQueue* lpQueue);
 
+    // X360 0x823900E8 -- the streaming wait. ProcessGameEvents @0x823A0A18 case 8 (the game
+    // module's DoUpdate_GameStatePreWorld @0x823EE0E8 posts event 8 once gm+10094117 is set,
+    // which MainGameFlowStateMemoryCard::Update @0x823F2F98 does on GUI phase complete) and
+    // ModeManager::SetupGameMode call it:
+    //     miStreamingWaitCountdown = 2;
+    //     if (mbWaitForStreaming || (mode && mode->mbIsOnline)) {
+    //         if (!mode || mode->mbIsOnline) RequestPause(1, q, 0, 0);
+    //         mbWaitingForStreaming = true; mabModuleStreamingComplete[0..3] = false;
+    //     } else FinishStreaming(q);
+    void WaitForStreaming(GameStateModuleIO::GameActionQueue* lpQueue);
+    // X360 0x82382258 -- mbWaitingForStreaming = false; action 191 (1 byte, 0); RequestUnpause(1, q);
+    // then the +42275 byte is cleared (no committed name for it here -- reported, not modelled).
+    void FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueue);
+
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the BrnGameState::ResetPlayerDebugComponent TU. The
     // "Reset Player Car" debug menu reads the loaded vehicle/wheel resources, the active track's
@@ -1543,6 +1557,18 @@ private:
     // :816 (the 16-aligned action below) lands on 232320, which is the OTHER offset this arm's asm
     // attests. Both ends of the DWARF span agree with the asm, so the byte is not a guess.
     bool mbWaitingToPutPlayerInJunkyard = false;
+
+    // ---- the streaming-wait block (X360 +0x38B6C..+0x38B7A; DWARF :808-:813) ----------------
+    // WaitForStreaming @0x823900E8 sets the countdown to 2 and PreWorldUpdate @0x823A5328
+    // (`if (mbWaitingForStreaming && --miStreamingWaitCountdown == 0) post action 192`) counts it
+    // down; the world modules answer 192 with StreamingCompleteEvent (9) per module and
+    // ProcessStreamingCompleteEvent @0x82390200 tallies the four slots into FinishStreaming.
+    // Construct @0x82384A78 seeds mbWaitForStreaming = 1; ClearData @0x82385AF0 seeds the four
+    // slots to 1 and the countdown/waiting to 0.
+    s32  miStreamingWaitCountdown = 0;                 // +232300 (0x38B6C)
+    bool mbWaitForStreaming = true;                    // +232304 (:809)
+    bool mbWaitingForStreaming = false;                // +232305 (:810)
+    bool mabModuleStreamingComplete[4] = { true, true, true, true };   // +232307..+232310
 
     // X360 +0x38B80 (232320). The CarSelectionChangedAction SendSetupPlayerCarEvent hands
     // EnterJunkyardAtStartOfGame as its sixth argument (the console passes `this + 0x38B80`); the
