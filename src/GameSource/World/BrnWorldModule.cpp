@@ -109,6 +109,8 @@ namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
 // with the knob off, the six queries and dispatch legs must not run either.
 namespace renderengine { extern s32 gEnvironmentMap; extern s32 gEnvironmentMap30Hz; }
 
+namespace renderengine { extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 (device.cpp)
+
 namespace BrnWorld
 {
 
@@ -7820,6 +7822,22 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             static s32 siDiagFrame = 0;
             static clock_t slDiagStart = 0;
             if ( siDiagFrame == 0 ) { slDiagStart = clock(); }
+            // [DIAG] NOT IN THE X360 BINARY -- issue #30: while the PC presenter's last present was
+            // black (BRN_BLACK_FRAME_WATCH), name the producer's camera and visibility every frame.
+            {
+                static u32 suBlackPrinted = 0u;
+                if ( renderengine::gbDiagLastPresentBlack && suBlackPrinted < 64u && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    ++suBlackPrinted;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[culling-diag] BLACK-PRESENT present=" << renderengine::guPresentCount
+                        << " frame " << siDiagFrame
+                        << " eye=(" << lEye.x << "," << lEye.y << "," << lEye.z
+                        << ") visibleWorld=" << liMainViewVisibleWorld
+                        << " list11=" << static_cast< s32 >( lpDispatchFrame->GetList( KI_WORLD_OPAQUE_LIST )->GetCount() )
+                        << "\n";
+                }
+            }
             if ( ( siDiagFrame++ % 120 ) == 0 && CgsDev::Log::gpDebugPrint != 0 )
             {
                 const f32 lfElapsed =

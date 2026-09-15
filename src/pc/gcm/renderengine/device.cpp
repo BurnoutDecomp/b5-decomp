@@ -278,7 +278,8 @@ namespace renderengine { u32 guPresentCount = 0; }
 // destination. A black present with draws == 0 is the game skipping its frame; one with the
 // usual thousands of draws and no resolve to the back buffer is a routing/composite defect.
 namespace renderengine { u32 guDiagDraws = 0; u32 guDiagResolves = 0; void* gpDiagLastResolveDest = nullptr;
-                         u32 guDiagWorldDraws = 0; u32 guDiagImBatches = 0; u32 guDiagImFullBlack = 0; u32 guDiagComposites = 0; }
+                         u32 guDiagWorldDraws = 0; u32 guDiagImBatches = 0; u32 guDiagImFullBlack = 0; u32 guDiagComposites = 0;
+                         bool gbDiagLastPresentBlack = false; }   // [DIAG] the watched present was black -- game-side prints key on it
 
 // [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every Nth present
 // (PrintWindow returns black against this device, so the game dumps its own frames).
@@ -394,6 +395,7 @@ static void WatchBlackFramesIfRequested()
     }
     spSys->UnlockRect();
     const f32 lfMean = static_cast<f32>(luSum) / static_cast<f32>(KU_W * KU_H * 3u);
+    renderengine::gbDiagLastPresentBlack = (lfMean < static_cast<f32>(siThreshold)) && renderengine::guPresentCount > 2000u;
 
     if (lfMean < static_cast<f32>(siThreshold))
     {

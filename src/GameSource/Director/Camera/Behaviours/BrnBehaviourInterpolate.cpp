@@ -13,6 +13,8 @@
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BehaviourManager (the two GetCamera resolves)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log::gpDebugPrint (bring-up measurement)
 
+namespace renderengine { extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 (device.cpp)
+
 namespace BrnDirector
 {
 namespace Camera
@@ -357,11 +359,14 @@ BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourShare
     {
         static u32 suBlendTraceCount = 0;
         ++suBlendTraceCount;
-        if ((suBlendTraceCount <= 4u || (suBlendTraceCount % 600u) == 0u)
+        static u32 suBlackTrace = 0u;   // [DIAG] issue #30: also print while the last present was black
+        const bool lbBlackPresent = renderengine::gbDiagLastPresentBlack && suBlackTrace < 64u;
+        if (lbBlackPresent) ++suBlackTrace;
+        if ((suBlendTraceCount <= 4u || (suBlendTraceCount % 600u) == 0u || lbBlackPresent)
             && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
-                << "[interp] #" << static_cast<s32>(suBlendTraceCount)
+                << (lbBlackPresent ? "[interp] BLACK-PRESENT #" : "[interp] #") << static_cast<s32>(suBlendTraceCount)
                 << " t=" << lfParametricTime
                 << " from (" << lFrom.mTransform.wAxis.x << ", " << lFrom.mTransform.wAxis.y
                 << ", " << lFrom.mTransform.wAxis.z << ") fov " << lFrom.mfFOV
