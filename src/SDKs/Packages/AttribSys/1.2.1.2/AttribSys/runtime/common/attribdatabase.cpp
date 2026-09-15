@@ -38,15 +38,12 @@ namespace Attrib
         }
 
         // TypeDesc::Lookup (codegen @0x821F00E8) -- the generated type-handler
-        // binary search. [FLAG] the PC generated tables (codegen.cpp) are empty
-        // placeholders, so the lookup yields no handler; identical observable
-        // result to running the generated search over empty tables. Recover the
-        // generated tables in the codegen TU to light type handlers up
-        // (RefSpec retain/release etc.).
+        // binary search. Recovered 2026-09-15 (codegen.cpp): one entry, "Attrib::RefSpec".
         void* TypeDesc_LookupHandler(u64 luType)
         {
-            (void)luType;
-            return NULL;
+            // 2026-09-15: the generated table is recovered (codegen.cpp) -- one entry, the
+            // Attrib::RefSpec handler. Every RefSpec-typed node now gets Clean/Release.
+            return TypeDesc::Lookup(luType);
         }
     }
 }
@@ -440,6 +437,41 @@ void CollectionExportPolicy::PrepareToDeinitialize(Vault& lrVault)
 // nothing. [FLAG] no schema class carries static data (the schema PtrN has no
 // mStaticData fixups), so the copy step is a data-attested no-op; recover the
 // generated table with the codegen TU when a static-bearing vault appears.
+// [DIAG] NOT IN THE X360 BINARY -- BRN_ATTRIB_STALE_DIAG witness (2026-09-15). Counts the
+// collections still present in the class tables whose mpSource is the given vault. Called by
+// VaultSlot::DoUnload before and after the teardown: "before" is the positive control (the
+// vault's live collections), "after" must be 0 -- any survivor is a pointer into a block that
+// is about to be freed, i.e. the rival-creation AV in VehicleAttribs::SetupAttribs.
+unsigned int CollectionExportPolicy::DiagCountCollectionsOwnedBy(const Vault* lpVault)
+{
+    unsigned int luCount = 0;
+    if (!Database::IsInitialized())
+        return 0;
+    auto& lrClasses = GetDatabasePrivate()->mClasses;
+    if (lrClasses.mpTable == NULL)
+        return 0;
+    for (u32 luClass = 0; luClass < lrClasses.muTableSize; ++luClass)
+    {
+        if (!lrClasses.mpTable[luClass].IsValid())
+            continue;
+        Class* lpClass = lrClasses.Find(lrClasses.mpTable[luClass].mKey);
+        if (lpClass == NULL || lpClass->GetPrivates() == NULL)
+            continue;
+        auto& lrCollections = static_cast<ClassPrivate*>(lpClass->GetPrivates())->mCollections;
+        if (lrCollections.mTable == NULL)
+            continue;
+        for (u32 luIndex = 0; luIndex < lrCollections.mTableSize; ++luIndex)
+        {
+            if (!lrCollections.mTable[luIndex].IsValid())
+                continue;
+            const Collection* lpCollection = lrCollections.mTable[luIndex].Get();
+            if (lpCollection != NULL && lpCollection->mpSource == lpVault)
+                ++luCount;
+        }
+    }
+    return luCount;
+}
+
 const ClassStaticDesc* ClassStaticDesc::GetTable(unsigned int& lruCount)
 {
     lruCount = 0;

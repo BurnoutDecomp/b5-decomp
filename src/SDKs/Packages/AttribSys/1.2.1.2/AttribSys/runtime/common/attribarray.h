@@ -66,6 +66,15 @@ namespace Attrib
 
         // The eastl::set<TypeDesc> ordering (less<TypeDesc>) keys on the type id.
         bool operator<(const TypeDesc& lrOther) const { return mType < lrOther.mType; }
+
+        // The GENERATED type-handler registry (GameSource/AttribSys/Generated/codegen.cpp):
+        //   Lookup     @0x821F00E8 -- binary search of the generated key table; returns the
+        //                             handler object for a type key, or NULL (most types have none).
+        //   NameToType @0x821F0150 -- StringToKey64 of a type name.
+        // The ARTIST image registers exactly ONE type: "Attrib::RefSpec" -> the RefSpec handler
+        // (retain / clone / clean / release of the cached collection reference).
+        static ITypeHandler* Lookup(u64 luType);
+        static u64           NameToType(const char* lpcName);
     };
 
     // The variable-length attribute-array header. 8-byte descriptor followed inline by

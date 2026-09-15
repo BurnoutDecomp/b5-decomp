@@ -1,5 +1,9 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"       // TypeDesc, ITypeHandler
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"    // RefSpec
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h"      // Attrib::Alloc
+#include <new>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   Attrib::Attrib_RefSpec_TypeHandler::Release @ 0x821F0300
@@ -15,36 +19,52 @@
 
 namespace Attrib
 {
-    // Generated type tables (defined by the AttribSys codegen).
-    namespace { struct TypeKey { u32 muKey; u32 muNodeCount; }; }
-    extern TypeKey gaTypeKeys[];
-    extern void*   gaTypeDescs[];
-    extern int     giTypeCount;
-    TypeKey gaTypeKeys[1] = {};
-    void*   gaTypeDescs[1] = {};
-    int     giTypeCount = 0;
+    // ---------------------------------------------------------------------------------------
+    // The generated type-handler registry, read off the image (2026-09-15, b5-decomp issue #30's
+    // rival-creation crash): TypeDesc::Lookup @0x821F00E8 walks a sorted key table
+    // (qword_82CDA330, count dword_82CD53AC) and returns the matching entry of a parallel
+    // handler-pointer table (off_82CDA340). The ARTIST build has ONE entry:
+    //     key 0x97C5113DE9BD1AD6 == StringToKey64("Attrib::RefSpec")  ->  off_82CDA348,
+    // a static Attrib_RefSpec_TypeHandler whose vtable (0x82000CEC) is
+    //     ~ @0x821F0308, Retain @0x821F02F8, Clone @0x821F0510, Clean @0x821F0300, Release @0x821F0300
+    // (Clean and Release are the same body: `mr r3,r4 ; b Attrib::RefSpec::Clean`).
+    //
+    // Why it matters: Collection::Clean (run for EVERY collection by
+    // CollectionExportPolicy::PrepareToDeinitialize at every vault unload) hands each node to
+    // its type's handler->Clean. RefSpec::Clean releases the collection reference the RefSpec
+    // cached in RefSpec::GetCollection. With this table EMPTY (the placeholder that lived here),
+    // those references were never released, a vault's collections never reached refcount zero at
+    // unload, Class::RemoveCollection never ran, and the class tables kept pointers into the
+    // freed vault block -- the next reload of the same vehicle's vault resolved the stale entry
+    // and VehicleAttribs::SetupAttribs faulted in Attrib::Instance::Instance (heap luck: it only
+    // fires when the freed block has been reused).
+    // ---------------------------------------------------------------------------------------
+    class Attrib_RefSpec_TypeHandler : public ITypeHandler
+    {
+    public:
+        virtual ~Attrib_RefSpec_TypeHandler() {}                                   // @0x821F0308
+        virtual void* Retain(void* lpObj) { return lpObj; }                        // @0x821F02F8
+        virtual void* Clone(void* lpObj)                                           // @0x821F0510
+        {
+            // Attrib::Alloc(24) (the accounting + linear-allocator assert are inlined there),
+            // then the RefSpec copy constructor in place.
+            void* lpBlock = Attrib::Alloc(sizeof(RefSpec));
+            return lpBlock != NULL ? new (lpBlock) RefSpec(*static_cast<const RefSpec*>(lpObj)) : NULL;
+        }
+        virtual void  Clean(void* lpObj)   { static_cast<RefSpec*>(lpObj)->Clean(); }   // @0x821F0300
+        virtual void  Release(void* lpObj) { static_cast<RefSpec*>(lpObj)->Clean(); }   // @0x821F0300
+    };
+
+    static Attrib_RefSpec_TypeHandler gRefSpecTypeHandler;                          // off_82CDA348
+    static const u64            gaTypeKeys[1]     = { 0x97C5113DE9BD1AD6ull };      // qword_82CDA330
+    static ITypeHandler* const  gaTypeHandlers[1] = { &gRefSpecTypeHandler };       // off_82CDA340
+    static const u32            KU_TYPE_COUNT     = 1u;                             // dword_82CD53AC
 
     // The shared default-data area; the largest generated type is 0x1D48 bytes.
     static u8 gaDefaultData[0x1D48] = {};
     static const u32 KU_MAX_DEFAULT_DATA_SIZE = 0x1D48;
 
-    int  RefSpec_Clean(int liRefSpec);
-    int  RefSpec_Clean(int) { __debugbreak(); return 0; }
-    // StringToKey: the real definition lives in the SDK attribhash64.cpp
-    // (Bob Jenkins lookup8, seed 0xABCDEF0011223344) -- the placeholder that
-    // lived here was removed at the AttribSys mount (LNK2005 otherwise).
-    // ⭐ 2026-07-31: this was a LOCAL `u32 StringToKey(const char*)` re-declaration. MSVC
-    // does not mangle free-function return types, so it linked against the real 64-bit
-    // body and then read only EAX -- a silent truncation at every call site in this TU.
-    // Use the canonical declaration instead of re-spelling it.
     u64  StringToKey(const char* pcName);
-
-    class Attrib_RefSpec_TypeHandler
-    {
-    public:
-        int Release(int liRefSpec) { return RefSpec_Clean(liRefSpec); }
-        int Retain(int liRefSpec)  { return liRefSpec; }
-    };
 
     void* DefaultDataArea(u32 luSize)
     {
@@ -52,37 +72,29 @@ namespace Attrib
         return gaDefaultData;
     }
 
-    namespace TypeDesc
+    // TypeDesc::Lookup @0x821F00E8 -- implicit binary search over the sorted key table
+    // (child of node i is 2i+1 / 2i+2 by the compare), the handler table parallel to it.
+    ITypeHandler* TypeDesc::Lookup(u64 luType)
     {
-        void* Lookup(u32 luType)
+        if (KU_TYPE_COUNT == 0u)
+            return NULL;
+        u32 luIndex = 0;
+        for (;;)
         {
-            if (giTypeCount == 0)
-                return nullptr;
-
-            u32 luIndex = 0;
-            for (;;)
-            {
-                const TypeKey& lEntry = gaTypeKeys[luIndex];
-                if (lEntry.muKey == luType)
-                {
-                    return (luIndex < lEntry.muNodeCount) ? gaTypeDescs[luIndex] : nullptr;
-                }
-                luIndex = 2 * luIndex + (lEntry.muKey < luType ? 1u : 0u) + 1;
-                if (luIndex >= lEntry.muNodeCount)
-                    return nullptr;
-            }
+            const u64 luKey = gaTypeKeys[luIndex];
+            if (luKey == luType)
+                break;
+            luIndex = 2u * luIndex + (luKey < luType ? 1u : 0u) + 1u;
+            if (luIndex >= KU_TYPE_COUNT)
+                return NULL;
         }
+        return (luIndex < KU_TYPE_COUNT) ? gaTypeHandlers[luIndex] : NULL;
+    }
 
-        u32 NameToType(const char* pcName)
-        {
-            // FLAG (2026-07-31): the narrowing is now EXPLICIT rather than hidden in a
-            // forked u32 declaration of StringToKey, so today's behaviour is unchanged.
-            // It is probably still wrong -- attribdatabase.cpp:29 records that the real
-            // TypeDesc::NameToType (codegen @0x821F0150) keys on the full 64-bit hash, and
-            // the type-id globals in that TU already use StringToKey64. Left as-is
-            // deliberately: this TU's gaTypeKeys[].muKey is u32, so widening it is its own
-            // slice, not a side effect of the StringToKey correction.
-            return static_cast<u32>(StringToKey(pcName));
-        }
+    // TypeDesc::NameToType @0x821F0150 -- the full 64-bit key (StringToKey64); the earlier
+    // u32 narrowing here was a leftover of a forked StringToKey declaration.
+    u64 TypeDesc::NameToType(const char* pcName)
+    {
+        return StringToKey(pcName);
     }
 }
