@@ -27,6 +27,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"   // [DIAG] BRN_DMIX_DIAG witness (opt-in)
 
 #include <cstdarg>
 #include <cstdio>
@@ -53,25 +54,43 @@ bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)
                "liStateManId < KI_MAX_NUMBER_OF_STATES");
 
     StateManager* lpManager = mpEnvironment->GetStateManager(liStateId);
-    if (!lpManager)
-        return false;
-
     const int liInstance = apDMixIO->GetInstanceNum();
+    const int liEffectId = apDMixIO->GetSFX_ID();
+    if (!lpManager)
+    {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): an endpoint no manager owns.
+        CgsSound::Diag::DMixDiagConnect(apDMixIO, "(no state manager)", liStateId, liInstance, liEffectId, false);
+        return false;
+    }
+
     State* lpState = lpManager->GetHeadState();
     while (lpState && lpState->GetInstanceID() != liInstance)
         lpState = lpState->GetNextState();
     if (!lpState)
+    {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): an endpoint with no live state instance.
+        CgsSound::Diag::DMixDiagConnect(apDMixIO, "(no state instance)", liStateId, liInstance, liEffectId, false);
         return false;
+    }
 
     EffectBase* lpEffect = apDMixIO->IsSFXObj()
         ? lpState->GetHeadEffectObject() : lpState->GetHeadEffectControl();
-    const int liEffectId = apDMixIO->GetSFX_ID();
     while (lpEffect && lpEffect->GetEffectID() != liEffectId)
         lpEffect = lpEffect->mpNextEffectBase;
     if (!lpEffect)
+    {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): an endpoint with no matching effect.
+        CgsSound::Diag::DMixDiagConnect(apDMixIO, "(no effect with this id)", liStateId, liInstance, liEffectId, false);
         return false;
+    }
 
     lpEffect->SetDMixIOPtr(apDMixIO);
+    // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1): the endpoint and the effect that
+    // now owns it -- the WRITER of its inputs, named.
+    CgsSound::Diag::DMixDiagConnect(apDMixIO,
+        apDMixIO->IsSFXObj() ? static_cast<EffectObject*>(lpEffect)->GetTypeName()
+                             : static_cast<EffectControl*>(lpEffect)->GetTypeName(),
+        liStateId, liInstance, liEffectId, true);
     return true;
 }
 
