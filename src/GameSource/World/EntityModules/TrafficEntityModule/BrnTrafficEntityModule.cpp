@@ -19,6 +19,89 @@
 
 #include <cstddef>   // offsetof / size_t
 
+// includes folded in from the BrnTrafficEntityModule_w*.cpp partfiles (2026-09-15)
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"          // BrnTraffic::TrafficData (+ mTrafficLights)
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"     // CgsResource::ResourcePtr<T>
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"             // CgsContainers::BitArray<N>
+#include <cstdlib>   // getenv
+#include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"              // BrnTraffic::VehicleAsset
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"               // BrnTraffic::VehicleTypeData
+#include "SharedClasses/DataLists/VehicleList.h"                       // BrnResource::VehicleList
+#include "SharedClasses/DataLists/VehicleListEntry.h"                  // BrnResource::VehicleListEntry
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // the spec Prepare reads
+#include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"   // EventReceiverQueue<4096,16>
+#include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"            // GetGameDataEvent
+#include "GameSource/Resource/SharedIO/BrnAssetIds.h"                  // BrnResource::EAssetSet
+#include "GameShared/GameClasses/Core/CgsID.h"                         // CgsIDUnCompress, KI_CGSID_STRING_LEN
+#include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"           // CgsSceneManager::VolumeId
+#include "vendor/renderware/collision/CollisionVolume.hpp"             // rw::collision::BoxVolume
+#include "rw/rwcore_structs.h"                                         // rw::Resource
+#include <cstring>   // strstr (the CgsIDUnCompress space truncation)
+#include "SharedClasses/Traffic/BrnTrafficPvs.h"                // Pvs (UpdateRaceCarHulls' grid walk)
+#include "SharedClasses/Traffic/BrnTrafficHull.h"               // Hull, StaticTrafficVehicle
+#include "SharedClasses/Traffic/BrnTrafficFlowType.h"           // FlowType
+#include "SharedClasses/Traffic/BrnTrafficSection.h"            // Section (the generator lane walk)
+#include "SharedClasses/Traffic/BrnTrafficSectionFlow.h"        // SectionFlow (per-section spawn rate)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
+#include "GameShared/GameClasses/Algorithms/CgsShuffle.h"        // CgsAlgorithms::Shuffle (Reset pool shuffles)
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTrackWitness.h"
+#include <cmath>   // sqrtf, for the witness' player distance
+#include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::IsValid
+#include <cfloat>    // FLT_MAX (the KF_MAX_FLOAT tuning seed)
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h" // KU_INVALID_HULL
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"// CgsModule::Event / AddEvent / Append
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"   // MakeTrafficEntityId, KU_TRAFFIC_SCENE_ENTITY_TYPE_FLAG
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"       // Param::IsZombie
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"     // Vehicle, GetVehicleSpecies
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
+#include "rw/math/vpu/vector3_operation.h"          // Magnitude
+#include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.h"
+#include "SharedClasses/Traffic/BrnTrafficVehicleTraits.h"      // VehicleTraits
+#include "rw/math/vpu/vector4_operation.h"                    // Splat
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTweakConstants.h"
+#include "SharedClasses/Traffic/Junctions/BrnTrafficStopLine.h"  // StopLine
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMathsUtils.h" // IsPointWithinSquishedCone
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicalVehicleInfo.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficRaceCarCache.h"
+#include "GameSource/Jobs/Traffic/TrafficCommon.h"          // UpdateVehiclesJobParams
+#include "GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.h"   // UpdateVehiclesJob
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMiscRuntimeClasses.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                       // KU_ENTITYTYPE_TRAFFIC_VEHICLE
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h"      // AddCrashingTrafficEvent
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
+#include "rw/physics/rigidbody.h"                                                         // rw::physics::ACTIVE_BODY
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                 // TrafficRemovedEvent
+#include "GameShared/GameClasses/Containers/CgsArray.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h"
+#include "GameSource/World/Traffic/BrnVehicleSoaData.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
+#include "GameSource/GameState/BrnGameActions.h"                       // PrepareForModeAction
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                 // EGameModeType
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
+#include "BrnTrafficEntityModule.h"
+#include "BrnTrafficEntityModuleIO.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarToTrafficInterface.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h"
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"
+#include "GameSource/World/BrnEntityTypes.h"                                       // EEntityTypeID
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                 // OutCoarseQueryResult
+
 namespace BrnTraffic
 {
     // Vehicle / param pool accessors. The three vehicle pools are one array (maVehicles)
@@ -401,3 +484,16731 @@ namespace BrnTraffic
                       "DEBUG_VehicleFuzzyLogic == 64 (Prepare stage 4 allocates 40 * 64 == 2560)");
     }
 }
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wQ7_01.cpp (wave Q7) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wQ7_01.cpp -- the traffic side of "a smashed traffic light changes
+// the traffic system".
+//
+//   * TrafficEntityModule::HandlePropModuleRequests @0x82720A90 (118 insns)  REAL
+//   * TrafficEntityModule::PrePhysicsUpdate         @0x8274C690 (120 insns)  PARTIAL
+//
+// The chain: the prop module's ChangePropState / SendTrafficLightRestoreEvents fill the two
+// PropToTrafficInterface rings, WorldModule::BridgePropModuleToTrafficModule_PrePhysics
+// @0x827AEA70 carries them into InputBuffer_PrePhysics, PrePhysicsUpdate calls
+// HandlePropModuleRequests, and TrafficLightManager::TrafficLightGot{Smashed,Restored} set
+// TrafficLightRuntimeState::muFlags bit 0x80.
+//
+// OPEN PARK: the VISIBLE consumer of bit 0x80 has no body anywhere in the tree.
+// TrafficLightManager::RenderLightsForHull @0x8275DBF0 and
+// ::RenderAllLightsToBeInStateForHull @0x8275DE50 skip RenderCoronasForInstance for a smashed
+// light; both are driven by RenderTrafficLightCoronas @0x8271EC80. None of the three is
+// reconstructed, so on this build a knock-down is provable in the log only. Do not promise a
+// dark traffic light.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // Console displacements for the members read below, kept as attestation only. They are
+    // 32-bit-pointer values and never valid on this LP64 host; every read is by name.
+    //   0x300 meState (:607) . 0x304 meStartingUpState (:608) . 0x310 meTearingDownState (:611)
+    //   0x53790 mTrafficLightManager (:661) . 0x71840 mpData (:752)
+    //   0x717DD mbPlayingShowtimeMode (:716) . 0x729FC miPerfMon_PrePhysicsUpdate (:898)
+
+    // BrnUpdateSet bit 0 == "the simulation did not step this frame", measured here as
+    // `clrlwi r29,r29,31` on the r8 parameter at 0x8274C6C0.
+    const BrnUpdateSet KU_UPDATESET_SIM_PAUSED = 0x1;
+
+    // One-shot leg gate, one named line per console leg with no body in the tree.
+    // [DIAG] NOT IN THE X360 BINARY.
+    inline void LogMissingLeg_Q7PrePhysics(bool& lrbAlreadyLogged, const char* lpcLegNameAndAddress)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[Q7-traffic-leg] TrafficEntityModule::PrePhysicsUpdate leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndAddress << " [FLAG PC partial gate]\n";
+        }
+    }
+}
+
+// ============================================================================
+// BrnTraffic::TrafficEntityModule::HandlePropModuleRequests  @ 0x82720A90  (118 insns)  REAL
+// DWARF :1443  void HandlePropModuleRequests(const InputBuffer_PrePhysics*,
+//                                            OutputBuffer_PrePhysics*)
+//
+// lpOutput is asserted and then never read: r31 holds it across the assert block
+// (0x82720AD4..0x82720AF4) and is reused as the loop counter from `li r31,0` @0x82720B30 on.
+// The parameter is in the DWARF signature and the assert is a real side effect, so both stay
+// and no use is invented.
+//
+// The two "lpEvent" asserts collapse: the console calls GetEvent(int) out of line and
+// null-checks the returned pointer, but in-tree GetEvent returns `const T&`
+// (CgsBaseEventQueue.h:146), so the check has no expressible subject.
+//
+// The restore ring is reached by name, not by the console's +0x8C == 12 + 32*4 ==
+// sizeof(EventQueue<TrafficLightKnockDownEvent,32>). The host queue's mpEvents is 8 bytes, so
+// that literal is wrong here; GetTrafficLightRestoreQueue() is the same expression correctly.
+//
+// operator-> runs once per event inside each loop (0x82720B90 / 0x82720C38) and the loop bound
+// is re-read from the queue every pass (0x82720BA8 / 0x82720C50). Neither is hoisted.
+//
+// The DWARF names the accessor TrafficLightRestoreEvent::GetInstanceID(); the tree spells the
+// member muPayload (BrnPropToTrafficInterface.h:47/:67), which is what is used.
+// ============================================================================
+void TrafficEntityModule::HandlePropModuleRequests(
+        const BrnTrafficIO::InputBuffer_PrePhysics* lpInput,
+        BrnTrafficIO::OutputBuffer_PrePhysics*      lpOutput )
+{
+    typedef BrnWorld::PropEntityIO::PropToTrafficInterface        PropToTrafficInterface;
+    typedef BrnWorld::PropEntityIO::TrafficLightKnockDownEvent    TrafficLightKnockDownEvent;
+    typedef BrnWorld::PropEntityIO::TrafficLightRestoreEvent      TrafficLightRestoreEvent;
+    typedef CgsModule::EventQueue<TrafficLightKnockDownEvent, 32> TrafficLightKnockDownQueue;
+    typedef CgsModule::EventQueue<TrafficLightRestoreEvent, 80>   TrafficLightRestoreQueue;
+
+    CGS_ASSERT( lpInput  != 0, "lpInput != NULL" );    // baked source line 0x1955 == 6485
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // baked source line 0x1956 == 6486
+
+    // mTrafficLightManager (console +0x53790, DWARF :661) and mpData (+0x71840, :752).
+    TrafficLightManager& lrTrafficLightManager = mTrafficLightManager;
+    CgsResource::ResourcePtr<TrafficData>& lrData = mpData;
+
+    // Ring 0: the traffic lights knocked down this frame. 0x82720AFC calls the const
+    // (read-lock) GetPropToTrafficInterface @0x827113B8. The console asserts that pointer under
+    // the QUEUE's name because the knock-down ring is the interface's first member (+0), so the
+    // two addresses coincide; the console's assert string is kept.
+    {
+        const PropToTrafficInterface* const lpInterface = lpInput->GetPropToTrafficInterface();
+        CGS_ASSERT( lpInterface != 0, "lpTrafficLightKnockDownQueue" );   // line 0x195B == 6491
+
+        const TrafficLightKnockDownQueue* const lpTrafficLightKnockDownQueue =
+            lpInterface->GetTrafficLightKnockDownQueue();
+
+        for ( s32 liEvent = 0; liEvent < lpTrafficLightKnockDownQueue->GetLength(); ++liEvent )
+        {
+            // 0x82720B60 == BaseEventQueue<TrafficLightKnockDownEvent>::GetEvent(int) const,
+            // stride 4. The console's "lpEvent" assert (line 6497) collapses; see the banner.
+            const TrafficLightKnockDownEvent& lrEvent =
+                lpTrafficLightKnockDownQueue->GetEvent( liEvent );
+
+            // 0x82720B90 is ResourcePtr<TrafficData>::operator->() then `addi r4,r11,0x3C` for
+            // TrafficData::mTrafficLights. That +0x3C is the console's 4-byte-pointer offset;
+            // the host's is +0x68 (BrnTrafficDataResourceType.h static_assert), so the member
+            // is reached by name.
+            lrTrafficLightManager.TrafficLightGotSmashed( &lrData->mTrafficLights,
+                                                          lrEvent.muPayload );
+        }
+    }
+
+    // Ring 1: the traffic lights being restored. 0x82720BBC calls the same const getter again
+    // (not cached), then null-checks the +0x8C-adjusted address, not the interface pointer,
+    // under the string "lpTrafficLightRestoreQueue". This asserts the interface pointer
+    // instead, because 0x8C is a console-only literal (the host EventQueue widens mpEvents
+    // 4 -> 8). Both conditions are vacuously equivalent: `lpInterface + 0x8C` is null only if
+    // lpInterface is.
+    {
+        const PropToTrafficInterface* const lpInterface = lpInput->GetPropToTrafficInterface();
+        CGS_ASSERT( lpInterface != 0, "lpTrafficLightRestoreQueue" );     // line 0x1969 == 6505
+
+        const TrafficLightRestoreQueue* const lpTrafficLightRestoreQueue =
+            lpInterface->GetTrafficLightRestoreQueue();
+
+        for ( s32 liEvent = 0; liEvent < lpTrafficLightRestoreQueue->GetLength(); ++liEvent )
+        {
+            // 0x82720C08 == BaseEventQueue<TrafficLightRestoreEvent>::GetEvent(int) const,
+            // stride 4. The console's "lpEvent" assert (line 6510) collapses; see the banner.
+            const TrafficLightRestoreEvent& lrEvent =
+                lpTrafficLightRestoreQueue->GetEvent( liEvent );
+
+            lrTrafficLightManager.TrafficLightGotRestored( &lrData->mTrafficLights,
+                                                            lrEvent.muPayload );
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. One-shot, opt-in behind BRN_PROP_DIAG. Fires the first
+    // frame either ring carries anything, which is the only proof on this build that the chain
+    // closed, since the corona render leg has no body. The logged instance index is the dense
+    // index the manager resolved from the persistent id, read through the manager TU's diag
+    // accessor; -1 means the id was not in the baked table. Every traffic-light prop posts a
+    // restore on load, so the restore ring is normally the one that fires.
+    {
+        static const bool sbPropDiag        = ( getenv( "BRN_PROP_DIAG" ) != 0 );
+        static bool       sbLoggedFirstFlip = false;
+
+        if ( sbPropDiag && !sbLoggedFirstFlip && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            const PropToTrafficInterface* const lpInterface = lpInput->GetPropToTrafficInterface();
+            const s32 liKnockDowns = lpInterface->GetTrafficLightKnockDownQueue()->GetLength();
+            const s32 liRestores   = lpInterface->GetTrafficLightRestoreQueue()->GetLength();
+
+            if ( liKnockDowns > 0 || liRestores > 0 )
+            {
+                sbLoggedFirstFlip = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[Q7-tlight] traffic module consumed knockdown " << liKnockDowns
+                    << " restore " << liRestores
+                    << " -> last resolved light instance " << Q7Diag_GetLastResolvedLightIndex()
+                    << ( liKnockDowns > 0 ? " smashed" : " restored" )
+                    << " (instance id " << Q7Diag_GetLastResolvedLightInstanceID()
+                    << ")\n";
+            }
+        }
+    }
+}
+
+// ============================================================================
+// BrnTraffic::TrafficEntityModule::PrePhysicsUpdate  @ 0x8274C690  (120 insns)  PARTIAL
+//
+// Every console leg is real except eight, which have no body and no declaration in the tree.
+// Each is a named one-shot gate at its console position inside this body, never a call to a
+// declared-but-bodyless member: `cl /c` cannot see an unresolved external, so the declaration
+// alone would turn a green gate into a broken link.
+//
+// Parameters, from the prologue 0x8274C69C..0x8274C6B0: r3 this, r4/r5 the two IOBufferStacks
+// (never touched), r6 lpInput, r7 lpOutput, r8 lUpdateSet with `clrlwi r29,r29,31` applied
+// immediately.
+//
+// SIGNATURE DIVERGENCE: DWARF :1094 spells the third parameter const. The committed
+// declaration is non-const and must stay so, since const changes the mangled name and orphans
+// the caller (BrnWorldModule.cpp:1714) and the WorldLinkStubs.cpp gate. Const is honoured
+// internally: HandlePropModuleRequests takes the const pointer, which is also what picks the
+// const/read-lock GetPropToTrafficInterface @0x827113B8 the console calls.
+//
+// UNLOCK ORDER: the console releases WRITE first, then READ (0x8274C854 / 0x8274C85C), the
+// opposite of PropEntityModule::PrePhysicsUpdate. Do not "fix" it.
+//
+// The perfmon handle is unseated on this build and that is safe: PerfMonCpu::StartMonitor is
+// `if (!IsValidHandle(h)) return;` with no assert (CgsPerfMonCpu.cpp:119).
+// ============================================================================
+void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack*/,
+                                            CgsModule::IOBufferStack* /*lpOutputBufferStack*/,
+                                            BrnTrafficIO::InputBuffer_PrePhysics*  lpInput,
+                                            BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                            BrnUpdateSet lUpdateSet )
+{
+    // 0x8274C6B4 `lwz r3,0(r27)` with r27 == this + 0x729FC.
+    CgsDev::PerfMonCpu::StartMonitor( miPerfMon_PrePhysicsUpdate );
+
+    // 0x8274C6C4 / 0x8274C6CC -- write lock the OUTPUT, then read lock the INPUT.
+    lpOutput->LockForWrite();
+    lpInput->LockForRead();
+
+    // 0x8274C6C0 `clrlwi r29,r29,31` -- the local the DWARF names lbSimPaused (:2641).
+    const bool lbSimPaused = ( ( lUpdateSet & KU_UPDATESET_SIM_PAUSED ) != 0 );
+
+    // 0x8274C6E0 republishes mbPlayingShowtimeMode (DWARF :716) into the output buffer's
+    // mbPlayingShowtime (console +0x24720, BrnTrafficEntityModuleIO.h:795). Both ends by name.
+    lpOutput->SetPlayingShowtime( mbPlayingShowtimeMode );
+
+    // 0x8274C6E8. The console emits an unsigned three-way ladder, i.e. cases 0/1/2 with an
+    // asserting default. E_STATE_INVALID (-1) lands in the default arm, comparing >= 3
+    // unsigned.
+    switch ( meState )
+    {
+    case E_STATE_STARTING_UP:
+        // 0x8274C818: nothing runs while starting up; the arm exists only to validate
+        // meStartingUpState (DWARF :608). Cases 0/1/2 are empty; the default asserts.
+        switch ( meStartingUpState )
+        {
+        case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
+        case E_STARTINGUPSTATE_POPULATING:
+        case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
+            break;
+        default:
+            CGS_ASSERT( false, "Invalid starting up state" );   // baked line 0xA6D == 2669
+            break;
+        }
+        break;
+
+    case E_STATE_RUNNING:
+        // 0x8274C760.
+        if ( lbSimPaused )
+        {
+            // 0x8274C80C: a paused frame runs the crashed-vehicle clean-up and nothing else.
+            // LANDED (was a gate) -- body in _wT3_02.cpp.
+            CleanUpCrashedVehiclePhysics( lpOutput );
+        }
+        else
+        {
+            HandlePropModuleRequests( lpInput, lpOutput );   // 0x8274C778
+
+            // 0x8274C77C..0x8274C794: ten 64-bit zero stores over the 80-byte stack local
+            // (601 bits -> 10 bit fields -> 80 bytes, CgsBitArray.h:23). DWARF names it
+            // lCreatedBodies (:2661).
+            // RETYPED: spelled through TrafficEntityModule::TotalTrafficBitArray
+            // (BitArray<KU_MAX_TOTAL_TRAFFIC>, the ship's 600) so it matches the parameter type
+            // of SendPhysicalRequests below. Same 10 bit fields, same 80 bytes; the DWARF's 601
+            // is the off-by-one it also carries on the index map.
+            TotalTrafficBitArray lCreatedBodies;
+            lCreatedBodies.UnSetAll();
+
+            // UN-GATED: BuildPotentialCollisionList @0x8274B378 is BODIED
+            // (_wT4_02.cpp). 0x8274C7A4, the FIRST leg of this arm -- it walks the scene's raw
+            // overlap-pair list and promotes every non-physical traffic half to a physics body
+            // BEFORE the driver inputs are generated, so a car the player is about to hit
+            // already owns a slot when contact generation runs. Mount _wT4_02.cpp in
+            // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
+            BuildPotentialCollisionList( lpInput, lpOutput, &lCreatedBodies );
+
+            // 0x8274C7B0 -- UN-GATED. The note that stood here said "no export dumped"; that
+            // was FALSE, the per-function export exists with 1365 asm lines
+            // (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x82745218.json) and the body is now in
+            // _wT5_01.cpp. It is the ONLY writer of mfJunctionFUP, so with it gated
+            // NeedToTakeActionAgainstJunctionFUP() was constant false and BOTH the traffic
+            // avoid arm (UpdateParams_TryAvoidCrashing) and SpawnNewTraffic's jam brake were
+            // unreachable. Mount _wT5_01.cpp in tools/build/build_game_exe.bat or this call is
+            // an LNK2019 at exe link.
+            UpdateJunctionFUP();
+
+            // 0x8274C7BC -- LIVE (cluster C3 owns the body).
+            GenerateDriverInputs( lpOutput );
+
+            // 0x8274C7CC -- LIVE (cluster C1, _wT3_01.cpp). lCreatedBodies stops
+            // being write-only here: it is this leg's OUT parameter.
+            SendPhysicalRequests( lpOutput, &lCreatedBodies );
+            {
+                static bool sbLogged = false;
+                LogMissingLeg_Q7PrePhysics( sbLogged,
+                    "SendEmergencyCrashEvents @0x82747BB8 (out, &lCreatedBodies)" );
+            }
+            {
+                static bool sbLogged = false;
+                LogMissingLeg_Q7PrePhysics( sbLogged,
+                    "CreateBodiesForCrashingNetworkTraffic @0x8274B4B0 (out, &lCreatedBodies)" );
+            }
+            // LANDED (was a gate) -- body in _wT3_02.cpp. THIS is the leg
+            // that turns the module's maNewRemovedVehicles into physics RemoveTrafficEvents,
+            // i.e. the only thing that ever frees a slot in the 20-car physical pool.
+            CleanUpCrashedVehiclePhysics( lpOutput );
+            {
+                static bool sbLogged = false;
+                LogMissingLeg_Q7PrePhysics( sbLogged, "StoreAISceneResultsForNextFrame (in) (no export dumped)" );
+            }
+        }
+        break;
+
+    case E_STATE_TEARING_DOWN:
+        // 0x8274C71C: validate meTearingDownState (DWARF :611) and, in the FLUSHING phase
+        // only, run the crashed-vehicle clean-up.
+        switch ( meTearingDownState )
+        {
+        case E_TEARINGDOWNSTATE_WIPING:
+            break;
+        case E_TEARINGDOWNSTATE_FLUSHING:
+        {
+            // 0x8274C750. LANDED (was a gate) -- body in _wT3_02.cpp.
+            CleanUpCrashedVehiclePhysics( lpOutput );
+            break;
+        }
+        case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
+            break;
+        default:
+            CGS_ASSERT( false, "Invalid tearing down state" );  // baked line 0xA8A == 2698
+            break;
+        }
+        break;
+
+    default:
+        // 0x8274C700.
+        CGS_ASSERT( false, "Invalid state in traffic system" ); // baked line 0xA93 == 2707
+        break;
+    }
+
+    // 0x8274C854 then 0x8274C85C -- WRITE released first (see the banner).
+    lpOutput->UnlockForWrite();
+    lpInput->UnlockForRead();
+
+    // 0x8274C860 `lwz r3,0(r27)`.
+    CgsDev::PerfMonCpu::StopMonitor( miPerfMon_PrePhysicsUpdate );
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wQ7_02.cpp (wave Q7) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wQ7_02.cpp -- the traffic module's prepare and resource ladders.
+//
+//   * TrafficEntityModule::FindVehicleTypeAttribKey_EXPENSIVE @0x8273F0B8  COMPLETE
+//   * TrafficEntityModule::LoadData @0x82746A88 (465 insns)  gate-free
+//   * TrafficEntityModule::Prepare  @0x8274A578 (252 insns)  PARTIAL, one gate left
+//
+// Prepare stages 0, 1, 2, 3 and 5 are real, with the console's fall-through chaining and the
+// default assert. Only stage 4's debug-UI half is gated, and it is the one LogMissingLeg_Q7Stage call
+// site in the file. LoadData runs the whole ladder: LoadTrafficLanes, bind mpData and publish
+// the streamer catalogue, GetVehicleList, N x LoadVehicle ATTRIBS, N x LoadVehicle PHYSICS,
+// bind maTrafficVehiclePhysicsSpecs, done.
+//
+// BOOT RISK: Prepare is a resumable multi-frame ladder that returns false until each reply
+// lands, so if a reply never arrives on this route the world Prepare ladder stalls at the
+// traffic stage and the game never finishes loading. The revert is per-leg: restore a
+// LogMissingLeg_Q7Stage call in whichever stage stalls.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // Is this queue's backing buffer bound yet? `mpBuffer` is protected on
+    // CgsModule::BaseEventReceiverQueue and that shared type exposes no accessor, so it is read
+    // through a derived-class pointer-to-member, the one form of protected access available
+    // without growing a type this file does not own. Zero-initialised module storage has
+    // mpBuffer == 0, BaseEventReceiverQueue::Construct binds it to the embedded maBuffer, and
+    // Clear() never touches it. So this is a per-object "already Constructed?" test.
+    struct ReceiverQueueBinding : public CgsModule::BaseEventReceiverQueue
+    {
+        static bool IsBound( const CgsModule::BaseEventReceiverQueue& lrQueue )
+        {
+            u8* CgsModule::BaseEventReceiverQueue::* const lpBufferMember =
+                &ReceiverQueueBinding::mpBuffer;
+            return (lrQueue.*lpBufferMember) != 0;
+        }
+    };
+
+    // Console offsets for the named members below, attestation only. They are 32-bit-pointer
+    // displacements and never valid on this LP64 host.
+    //   0x2F0  mePrepareStage (:602)    0x2F4  meReleaseStage (:603)   0x2F8 meResourceStage (:604)
+    //   0x300  meState (:607)           0x304  meStartingUpState (:608)
+    //   0x308  meRunningState (:609)    0x30C  meRunningStateToUseAfterStartup (:610)
+    //   0x314  mReceiverQueue (:613)    0x71840 mpData (:752)
+    //   0x713A0 maTrafficPhysicsInfoListBits (:686)   0x71B32 mbInReplay (:757)
+    // (the last two are the stage-0 zero stores -- see the attestation in Prepare stage 0).
+
+    // The resource-request ids the console bakes into LoadData case 0 / case 1
+    // (`LoadTrafficLanes(&mReceiverQueue, 1, 5)`, `cmpwi r10,0x37`, `cmpwi ...,1`). Same
+    // three values, same names, as BrnDirectorWorldMap.cpp:51-52 and
+    // BrnTriggerQueryManager_Prepare.cpp:71 -- which is the corroboration that 0x37 is the
+    // traffic-lanes response and not some other data reply.
+    const s32 KI_DATA_ACQUIRE_REQUEST       = 1;
+    const s32 KI_LANE_DATA_POOL_ID          = 5;
+    const s32 KI_RESPONSE_GET_TRAFFIC_LANES = 55;   // 0x37
+
+    // The vehicle-list request's event id: GetVehicleList passes literal 0 and the reply stage
+    // asserts the payload's miEventId is 0 (.cpp:1108).
+    const s32 KI_VEHICLE_LIST_REQUEST = 0;
+
+    // The receiver-record KIND word both asset drains guard against (.cpp:1214 for ATTRIBS,
+    // :1291 for PHYSICS). Same word position as EVENT_GET_TRAFFIC_LANES (55) and
+    // EVENT_GET_SURFACE_LIST (66); 50 is the LoadGameData "asset is resident" reply. Promote
+    // it to BrnGameDataEvents.h beside its two siblings when a wave that owns that header runs.
+    const s32 KI_RESPONSE_LOAD_GAMEDATA_ASSET = 50;
+
+    // The pool every per-vehicle-type asset request is posted to. Both inlined LoadVehicle
+    // expansions store the literal 1 into the record's miPoolId
+    // (`v149 = 1`, record +0x08) == BrnResource::E_POOL_PHYSICS.
+    const s32 KI_VEHICLE_ASSET_POOL_ID = 1;
+
+    // Prepare stage 3's two shrink constants, read into VMX splats at 0x8274A66C..0x8274A688.
+    // 0.49000001f is a frame immediate; unk_820BA4C4 == 0.44f is dumped rodata (the four floats
+    // at 0x820BA4BC are 50000 / 1.0 / 0.44 / 20.0), not a placeholder zero.
+    //
+    // SHIP-vs-LEAK, asm wins: Feb-2007 subtracts a fixed KF_VEHICLE_BBOX_FATNESS
+    // (BrnTrafficEntityModule.cpp:395-411); the ship clamps per vehicle type,
+    //     fatness = min( 0.44f, 0.49f * min( halfX, halfY, halfZ ) )
+    // which is what keeps the three `>= 0.0f` asserts satisfiable for a small vehicle type.
+    const f32 KF_VEHICLE_BBOX_FATNESS_SCALE = 0.49000001f;
+    const f32 KF_VEHICLE_BBOX_FATNESS_MAX   = 0.44f;
+
+    // `addi r11, r28, 0x24` @0x8274A834 -- the scene VOLUME key for vehicle type N is
+    // N + 36, zero-extended to the 64-bit VolumeId (`clrldi r11, r11, 32`), i.e. owner byte
+    // 0. Feb-2007 spells the base `KU_HACK_BASE_VOLUME_ID` (:395) and the name is kept.
+    const u32 KU_HACK_BASE_VOLUME_ID = 36u;
+
+    // `li r29, 8` @0x8274A684 -- the VolumeTypeFlags AddDynamicVolume tags each traffic
+    // vehicle-type box with. Feb-2007 names it E_ENTITYTYPEFLAG_TRAFFIC_VEHICLE and
+    // BrnEntityTypes.h:64 gives it 0x00000008, so leak and ship agree. That enum has no home
+    // in this tree, so the immediate is named rather than decomposed, the same way
+    // BrnActiveRaceCar_wQ5_01.cpp names KU8_RACECAR_VOLUME_TYPE_FLAG == 1.
+    const u8 KU8_TRAFFIC_VEHICLE_VOLUME_TYPE_FLAG = 8u;
+
+    // The console's stack scratch for the box image. AddDynamicVolume block-copies 128 bytes
+    // FROM the volume pointer (`li r5, 0x80` @0x822B1534), so the block must stay at least
+    // that large. 4,096 is the console's own size (Feb-2007's `Vector3 laResourceBuffer[256]`)
+    // and is kept.
+    const size_t KU_VOLUME_SCRATCH_BYTES = 4096;
+
+    // One-shot leg gate, one named line per console leg with no body in the tree.
+    // NOT IN THE X360 BINARY.
+    inline void LogMissingLeg_Q7Stage(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[Q7-traffic-leg] TrafficEntityModule stage NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
+        }
+    }
+
+    // Inlining reversal: LoadData's two per-vehicle-type request passes (ATTRIBS at LABEL_20,
+    // PHYSICS at LABEL_33) are identical apart from the asset set, so this is the shared "give
+    // me the bare asset name for vehicle type N" step.
+    //
+    // In the pseudocode, `__ROL4__(v52, 3)` is `assetId * 8`, the attested VehicleAsset stride,
+    // and the "+4" is Hex-Rays splitting the 8-byte CgsID load on a big-endian host, not a
+    // member at +4. TrafficCarStreamer::SetAssetList @0x82753A38 does the same read over the
+    // same array, which confirms the 8 bytes are one id and the truncation is at the first
+    // space.
+    void UnCompressVehicleAssetName( const TrafficData* lpData, u32 luVehicleType,
+                                     char* lpacName )
+    {
+        const u32 luAssetId = lpData->mpaVehicleTypes[luVehicleType].muAssetId;
+
+        CgsIDUnCompress( lpData->mpaVehicleAssets[luAssetId].GetVehicleId(), lpacName );
+
+        // CgsIDUnCompress right-pads with spaces; the asset name is the head.
+        char* lpcFirstSpace = strstr( lpacName, " " );
+        if ( lpcFirstSpace != 0 )
+        {
+            *lpcFirstSpace = '\0';
+        }
+    }
+
+    // The re-rolled body of both request passes. A free function rather than a member, because
+    // a member would need a declaration in BrnTrafficEntityModule.h; every value it needs is
+    // passed in.
+    //
+    // The console re-reads mpData->muNumVehicleTypes through ResourcePtr::operator-> on every
+    // iteration of the bound test (four separate operator-> calls appear in the loop). That is
+    // an artefact of the resource-pointer accessor, not a semantic, so the bound is read once.
+    void RequestVehicleAssetsForEveryType( BrnTrafficIO::OutputBuffer_Prepare*  lpOutputBuffer,
+                                           CgsModule::BaseEventReceiverQueue*   lpReceiverQueue,
+                                           const TrafficData*                   lpData,
+                                           s32*                                 lpiRequestCount,
+                                           BrnResource::EAssetSet               leAssetSet )
+    {
+        *lpiRequestCount = 0;
+
+        lpOutputBuffer->LockForWrite();
+
+        for ( u32 luVehicleType = 0;
+              luVehicleType < lpData->muNumVehicleTypes;
+              luVehicleType++ )
+        {
+            char lacAssetName[KI_CGSID_STRING_LEN];
+            UnCompressVehicleAssetName( lpData, luVehicleType, lacAssetName );
+
+            const s32 liEventId = ( *lpiRequestCount )++;
+
+            lpOutputBuffer->GetResourceRequestInterface()->LoadVehicle(
+                lpReceiverQueue, liEventId, KI_VEHICLE_ASSET_POOL_ID,
+                lacAssetName, leAssetSet );
+        }
+
+        lpReceiverQueue->Clear();
+        lpOutputBuffer->UnlockForWrite();
+    }
+
+    // The ATTRIBS drain (LABEL_27). Walks every queued record asserting its KIND word is 50 and
+    // binds nothing. The console's `if ( v78 != -8 )` guard is Hex-Rays rendering "the queue has
+    // no backing buffer" (mpBuffer + miStartOffset), which on the host is exactly "GetFirstEvent
+    // handed back a null record".
+    void DrainAssetReplies( CgsModule::BaseEventReceiverQueue* lpReceiverQueue )
+    {
+        if ( lpReceiverQueue->GetCount() <= 0 )
+        {
+            return;
+        }
+
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        s32 liKind = lpReceiverQueue->GetFirstEvent( &lpEvent, &liSize );
+
+        while ( lpEvent != 0 )
+        {
+            CGS_ASSERT( liKind == KI_RESPONSE_LOAD_GAMEDATA_ASSET,
+                        "Invalid event id received" );                   // baked line 1214
+
+            const CgsModule::Event* lpNext = 0;
+            liKind  = lpReceiverQueue->GetNextEvent( lpEvent, &lpNext, &liSize );
+            lpEvent = lpNext;
+        }
+    }
+
+    // LAYOUT: mReceiverQueue (BrnTrafficEntityModule.h:751) and mTrafficLightManager (:816) are
+    // ordinary named members, so the compiler places them and declaration order is the whole
+    // fact. What _AssertLayout pins is the ORDER of the ten-member state block this ladder
+    // reads, the run ending `meTearingDownState before mReceiverQueue`.
+}
+
+// ============================================================================
+// BrnTraffic::TrafficEntityModule::FindVehicleTypeAttribKey_EXPENSIVE @ 0x8273F0B8  COMPLETE
+//
+// Maps a traffic vehicle TYPE to the attribsys collection key of the car record it is skinned
+// from:
+//     type   -> mpData->mpaVehicleTypes[type].muAssetId          (byte at element +5)
+//            -> mpData->mpaVehicleAssets[assetId].GetVehicleId() (a CgsID)
+//            -> mpVehicleList->GetVehicleIndex(id)               (linear scan -- _EXPENSIVE)
+//            -> mpVehicleList->GetVehicleData(index)             (240-byte entry)
+//            -> entry->GetAttribCollectionKeyHash()              (AttribSysCollectionKey +0xA0)
+//
+// Console offsets, all resolved to named members: mpData +0x2C is mpaVehicleTypes, +0x34 is
+// mpaVehicleAssets, element +5 is VehicleTypeData::muAssetId, and 8 * assetId is the attested
+// VehicleAsset stride. The pseudocode's `__ROL4__(v7, 3)` is that * 8, and the loads at
+// `v8 + v9` / `v8 + v9 + 4` are one CgsID read split by Hex-Rays, not two values.
+//
+// Asserts: :17180 "Unable to find vehicle" and :17185 "The vehicle list is empty!!" are
+// reproduced; :17181 "has no AttribCollectionKey" is not, because it cannot fire (see the note
+// at the call site). The console builds the first two through a StrStream so the id prints;
+// CGS_ASSERT takes a literal, so the id is not interpolated.
+//
+// The fallback arm is not an error path. When the asset id is not in the vehicle list the
+// console asserts the list is non-empty and takes ENTRY 0's key. Traffic cars are often not
+// selectable player cars, so that is their ordinary path. It also skips the
+// "no AttribCollectionKey" check, jumping straight to LABEL_12.
+// ============================================================================
+VehicleTypeRuntime::AttribKey
+TrafficEntityModule::FindVehicleTypeAttribKey_EXPENSIVE( u32 luVehicleType ) const
+{
+    const VehicleTypeData* lpVehicleType = &mpData->mpaVehicleTypes[luVehicleType];
+    const CgsID lVehicleId = mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId();
+
+    const BrnResource::VehicleListEntry* lpEntry = 0;
+
+    const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex( lVehicleId );
+    if ( liVehicleIndex < 0 )
+    {
+        // 0x8273F148ff -- the not-in-the-list arm. Entry 0 is the key every traffic car that
+        // is not also a drivable car ends up with.
+        CGS_ASSERT( mpVehicleList->GetVehicleCount() > 0,
+                    "The vehicle list is empty!!" );          // baked line 17185
+        return mpVehicleList->GetVehicleData( 0 )->GetAttribCollectionKeyHash();
+    }
+
+    lpEntry = mpVehicleList->GetVehicleData( liVehicleIndex );
+    CGS_ASSERT( lpEntry != 0, "Unable to find vehicle" );     // baked line 17180
+
+    // The console's :17181 assert is NOT reproduced, because it can never fire:
+    //     0x8273F1C8  addic. r11, r22, 0xA0
+    //     0x8273F1CC  bne    loc_8273F2D8          -> straight to GetHashKey
+    // The test is on `r22 + 0xA0`, the ADDRESS of the entry's mAttribCollectionKey, so it is
+    // non-zero for every input including r22 == 0. Spelling it as a null-entry test would fire
+    // two released asserts on the null path where the console fires one (:17180).
+    //
+    // The pseudocode also invites a wrong reading of GetVehicleIndex: the console calls it
+    // twice with the same register (`mr r4, r30` at 0x8273F114 and 0x8273F12C), so Hex-Rays
+    // renders two calls whose arguments look different. One call is correct here.
+
+    return lpEntry->GetAttribCollectionKeyHash();
+}
+
+// ============================================================================
+// BrnTraffic::TrafficEntityModule::LoadData  @ 0x82746A88  (465 insns)
+// DWARF :1266  bool LoadData(OutputBuffer_Prepare*)
+//
+// The module's resource-acquire ladder, a resumable switch on meResourceStage
+// (EResourceAcquireStage, header :503).
+//
+// THE CONSOLE'S REAL STAGE ORDER, which is NOT the numeric order of the enum. Every arm falls
+// THROUGH to the next on the same tick; the numbered `case` labels exist only so a later frame
+// can re-enter mid-ladder:
+//     0  BASEDATA_NOT_STARTED   LoadTrafficLanes(&mReceiverQueue, 1, 5)
+//     1  BASEDATA_REQUESTED     await reply kind 55 -> mpData; mStreamer.SetAssetList(...)
+//     2  VEHICLELISTAQUIRE      GetVehicleList(&mReceiverQueue, 0)
+//     3  WFVEHICLELISTAQUIRE    await 1 reply -> mpVehicleList
+//     8  LOAD_ATTRIBS           N x LoadVehicle(..., E_ASSETSET_ATTRIBS)   [N = types]
+//     9  WFLOAD_ATTRIBS         await N replies, drain, BIND NOTHING
+//     6  LOAD_PHYSICS           N x LoadVehicle(..., E_ASSETSET_PHYSICS)
+//     7  WFLOAD_PHYSICS         await N replies -> maTrafficVehiclePhysicsSpecs[type]
+//                                                + VehicleTypeRuntime::Prepare
+//    12  ACQUIRE_COUNT          `return true`
+// Stages 4/5 (LOAD_VEHICLES / WFLOAD_VEHICLES) and 10/11 (LOAD_WHEELS / WFLOAD_WHEELS) have
+// NO case label in the shipped jump table at all -- they are enum slots the ship does not
+// walk (the graphics + wheel bundles are the STREAMER's job, TrafficCarStreamer, not this
+// ladder's). Reaching one lands in the default arm's "weird state" assert, faithfully.
+//
+// STAGE 9 BINDS NOTHING, and that is the console. The ATTRIBS drain (LABEL_27) walks every
+// reply, asserts its kind is 50, and discards it. Only the PHYSICS drain (LABEL_41) binds. Do
+// not "fix" this into a symmetric pair.
+//
+// ARRAY-BOUND MISMATCH, reproduced not fixed: stage 7 indexes maTrafficVehiclePhysicsSpecs,
+// sized [KU_MAX_VEHICLE_ASSETS == 64] (BrnTrafficEntityModule.h:939), by the vehicle TYPE
+// index, whose assert bound is mpData->muNumVehicleTypes (up to KU_MAX_VEHICLE_TYPES == 96).
+// The console has the same mismatch, its array spanning 2,088 bytes == 65 console ResourcePtrs,
+// so a data set with more than 64 vehicle types would overrun there too. Shipped
+// B5TRAFFIC.BNDL is well under.
+//
+// The traffic-light data is entirely inside the stage-1 payload: the reply binds the whole
+// TrafficData resource, and TrafficData::mTrafficLights is a by-value member of it
+// (BrnTrafficDataResourceType.h:75), already relocated by TrafficData::FixUp.
+// ============================================================================
+bool TrafficEntityModule::LoadData( BrnTrafficIO::OutputBuffer_Prepare* lpOutputBuffer )
+{
+    TrafficReceiverQueue& lrReceiverQueue = mReceiverQueue;             // console +0x314
+    CgsResource::ResourcePtr<TrafficData>& lrData = mpData;             // console +0x71840
+
+    switch ( meResourceStage )                                          // console +0x2F8
+    {
+    case E_RESOURCE_LOAD_BASEDATA_NOT_STARTED:
+        // Case 0: LoadTrafficLanes @0x827468C0 (event id 1, pool 5) inside a write lock, then
+        // straight into case 1. The console does not return here.
+        lpOutputBuffer->LockForWrite();
+        lpOutputBuffer->GetResourceRequestInterface()->LoadTrafficLanes(
+            &lrReceiverQueue, KI_DATA_ACQUIRE_REQUEST, KI_LANE_DATA_POOL_ID );
+        lpOutputBuffer->UnlockForWrite();
+        // fall through -- the console falls into LABEL_3 on the same tick.
+
+    case E_RESOURCE_LOAD_BASEDATA_REQUESTED:
+    {
+        // LABEL_3 sets the stage FIRST (it is the fall-through landing point as well as
+        // case 1's own entry), then tests the reply count.
+        meResourceStage = E_RESOURCE_LOAD_BASEDATA_REQUESTED;
+
+        if ( lrReceiverQueue.GetCount() != 1 )
+        {
+            if ( lrReceiverQueue.GetCount() >= 1 )
+            {
+                // More than one reply queued -- a non-gating tripwire, then bail.
+                CGS_ASSERT( lrReceiverQueue.GetCount() < 1,
+                            "mReceiverQueue.GetLength() < 1" );          // baked line 1064
+            }
+            return false;
+        }
+
+        // The console reads the record's TYPE word directly out of the queue buffer and takes
+        // the payload at +8. Expressed through the queue's accessor, as
+        // BrnTriggerQueryManager_Prepare.cpp:224 and BrnDirectorWorldMap.cpp:214 do for the
+        // identical reply.
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        const s32 liType = lrReceiverQueue.GetFirstEvent( &lpEvent, &liSize );
+
+        if ( liType != KI_RESPONSE_GET_TRAFFIC_LANES )
+        {
+            CGS_ASSERT( liType == KI_RESPONSE_GET_TRAFFIC_LANES,
+                        "TrafficEntityModule::LoadData has received a resource with an ID that wasn't requested" ); // line 1051
+        }
+
+        const BrnResource::GameDataIO::GetGameDataEvent* lpAcquire =
+            static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>( lpEvent );
+
+        CGS_ASSERT( lpAcquire->miEventId == KI_DATA_ACQUIRE_REQUEST,
+                    "lpAcquire->GetEventId() == KI_DATA_ACQUIRE_REQUEST" );   // baked line 1055
+
+        // The seat. The console reads the handle at payload +0x20; the host handle is 16 bytes
+        // where the console's is 8, so it is read by member.
+        lrData = lpAcquire->mHandle;
+
+        // ARGUMENT ORDER, measured at 0x82746C1C..0x82746C2C: r4 comes from
+        // `lbz r4,0x18(TrafficData)` (the u8 COUNT) and r5 from `lwz r31,0x34(TrafficData)`
+        // (the asset-array POINTER), so the count is first and the pointer second.
+        //
+        // This publishes the catalogue only. The bundle request comes from
+        // TrafficCarStreamer::Update, pumped by UpdateStreaming @0x82748848.
+        mStreamer.SetAssetList( mpData->muNumVehicleAssets, mpData->mpaVehicleAssets );
+
+        lrReceiverQueue.Clear();
+    }
+    // fall through -- the console does NOT return here; LABEL_3 runs straight into LABEL_10.
+
+    case E_RESOURCE_LOAD_VEHICLELISTAQUIRE:
+        // LABEL_10 (case 2). The Clear is inside the lock bracket and after the post: the
+        // console drops whatever the lane reply left behind before it waits for the list.
+        meResourceStage = E_RESOURCE_LOAD_VEHICLELISTAQUIRE;
+
+        lpOutputBuffer->LockForWrite();
+        lpOutputBuffer->GetResourceRequestInterface()->GetVehicleList(
+            &lrReceiverQueue, KI_VEHICLE_LIST_REQUEST );
+        lrReceiverQueue.Clear();
+        lpOutputBuffer->UnlockForWrite();
+        // fall through -- LABEL_11.
+
+    case E_RESOURCE_LOAD_WFVEHICLELISTAQUIRE:
+    {
+        // LABEL_11 (case 3). The console reads mpVehicleList from the payload's +0x20 word,
+        // the same slot stage 1 hands to CreateFromHandle, i.e. GameDataAssetEvent::mHandle.
+        // For a LIST resource it keeps the raw resource memory rather than a ResourcePtr, as
+        // GameStateModule::ReceiveListResource does for its own vehicle/wheel lists. The host
+        // ResourceHandle is 16 bytes where the console's is 8, so every literal offset past it
+        // shifts; read by member.
+        meResourceStage = E_RESOURCE_LOAD_WFVEHICLELISTAQUIRE;
+
+        if ( lrReceiverQueue.GetCount() < 1 )
+        {
+            return false;
+        }
+
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        lrReceiverQueue.GetFirstEvent( &lpEvent, &liSize );
+
+        const BrnResource::GameDataIO::GetGameDataEvent* lpListReply =
+            static_cast<const BrnResource::GameDataIO::GetGameDataEvent*>( lpEvent );
+
+        CGS_ASSERT( lpListReply->miEventId == KI_VEHICLE_LIST_REQUEST,
+                    "Invalid event id received" );                       // baked line 1108
+
+        mpVehicleList = static_cast<const BrnResource::VehicleList*>(
+            lpListReply->mHandle.mpResourceMemory );
+    }
+    // fall through -- LABEL_20. NOTE the console jumps to case 8, NOT case 4.
+
+    case E_RESOURCE_LOAD_ATTRIBS:
+        // LABEL_20 (case 8). The event id is the RUNNING REQUEST COUNTER, numerically the
+        // vehicle-type index for this loop; stage 7's assert spells it as a type index, and the
+        // counter is what the two WFLOAD stages compare their reply count against. Kept as the
+        // counter.
+        meResourceStage = E_RESOURCE_LOAD_ATTRIBS;
+
+        RequestVehicleAssetsForEveryType( lpOutputBuffer, &lrReceiverQueue,
+                                          mpData.operator->(), &miResourceRequestCount,
+                                          BrnResource::E_ASSETSET_ATTRIBS );
+        // fall through -- LABEL_27.
+
+    case E_RESOURCE_WFLOAD_ATTRIBS:
+        // LABEL_27 (case 9). The drain binds nothing: attrib replies are counted and discarded,
+        // asserting each record's KIND word is 50 (.cpp:1214). Only the PHYSICS drain below
+        // binds a handle.
+        meResourceStage = E_RESOURCE_WFLOAD_ATTRIBS;
+
+        if ( lrReceiverQueue.GetCount() < miResourceRequestCount )
+        {
+            return false;
+        }
+
+        DrainAssetReplies( &lrReceiverQueue );
+        // fall through -- LABEL_33.
+
+    case E_RESOURCE_LOAD_PHYSICS:
+        // LABEL_33 (case 6): LABEL_20 with meType 1 (PHYSICS) instead of 4, and with
+        // BaseEventReceiverQueue::Clear inlined rather than called. Same semantics, so the
+        // out-of-line Clear is used.
+        meResourceStage = E_RESOURCE_LOAD_PHYSICS;
+
+        RequestVehicleAssetsForEveryType( lpOutputBuffer, &lrReceiverQueue,
+                                          mpData.operator->(), &miResourceRequestCount,
+                                          BrnResource::E_ASSETSET_PHYSICS );
+        // fall through -- LABEL_41.
+
+    case E_RESOURCE_WFLOAD_PHYSICS:
+    {
+        // LABEL_41 (case 7): per reply, assert the kind and the type index, seat the spec
+        // handle, then read the spec back out and Prepare the runtime with it.
+        meResourceStage = E_RESOURCE_WFLOAD_PHYSICS;
+
+        if ( lrReceiverQueue.GetCount() < miResourceRequestCount )
+        {
+            return false;
+        }
+
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        s32 liKind = lrReceiverQueue.GetFirstEvent( &lpEvent, &liSize );
+
+        while ( lpEvent != 0 )
+        {
+            CGS_ASSERT( liKind == KI_RESPONSE_LOAD_GAMEDATA_ASSET,
+                        "Invalid event id received" );                   // baked line 1291
+
+            const BrnResource::GameDataIO::GetVehiclePhysicsResponse* lpReply =
+                static_cast<const BrnResource::GameDataIO::GetVehiclePhysicsResponse*>( lpEvent );
+
+            const s32 liVehicleType = lpReply->miEventId;
+
+            CGS_ASSERT( static_cast<u32>( liVehicleType ) < mpData->muNumVehicleTypes,
+                        "liEventId < mpData->muNumVehicleTypes" );       // baked line 1298
+
+            // The seat. Everything downstream that reads a traffic vehicle's deformation model
+            // gets it from here: VehicleTypeRuntime::Prepare's bbox/axle extraction, and
+            // through it Prepare stage 3's BoxVolume and Vehicle::InitialiseAsStatic's axle
+            // offsets.
+            maTrafficVehiclePhysicsSpecs[liVehicleType] =
+                lpReply->GetVehiclePhysicsObjectHandle();
+
+            // Console order at 0x82747210..0x82747238: bind the handle first, then read the
+            // spec pointer back out of the member just seated, then Prepare. Stage 7 binds and
+            // Prepares on the same reply, one vehicle type at a time; Prepare stage 3's
+            // AddDynamicVolume loop runs later, by which time every type has been through here.
+            const BrnPhysics::Deformation::StreamedDeformationSpec* lpPhysicsSpec =
+                maTrafficVehiclePhysicsSpecs[liVehicleType].operator->();
+
+            maVehicleTypeRuntime[liVehicleType].Prepare(
+                lpPhysicsSpec,
+                FindVehicleTypeAttribKey_EXPENSIVE( static_cast<u32>( liVehicleType ) ) );
+
+            const CgsModule::Event* lpNext = 0;
+            liKind = lrReceiverQueue.GetNextEvent( lpEvent, &lpNext, &liSize );
+            lpEvent = lpNext;
+        }
+    }
+    // fall through -- LABEL_49.
+
+    case E_RESOURCE_ACQUIRE_COUNT:
+        // LABEL_49 / case 12.
+        meResourceStage = E_RESOURCE_ACQUIRE_COUNT;
+        return true;
+
+    default:
+        // The console's own default arm. Stages 4/5 and 10/11 have no case label in the
+        // shipped jump table either, so landing here really is a weird state.
+        CGS_ASSERT( false, "TrafficEntityModule::LoadData in a weird state" );  // baked line 1320
+        return false;
+    }
+}
+
+// ============================================================================
+// BrnTraffic::TrafficEntityModule::Prepare  @ 0x8274A578  (252 insns)  PARTIAL
+// DWARF :1079 `virtual bool Prepare(OutputBuffer_Prepare*)`.
+//
+// A resumable six-stage ladder on mePrepareStage (EPrepareStage, header :486), driven once per
+// frame by WorldModule::Prepare stage eWorldPrepareTrafficEntityModule
+// (BrnWorldModule.cpp:966-999), which drains this module's request pipe on every FALSE. Stages
+// 0, 1, 2, 3 and 5 are real, along with the fall-through chaining and the default assert; only
+// stage 4's debug-UI half is gated.
+//
+// DECLARED NON-VIRTUAL, deliberately. The base `CgsModule::ModuleSingleBuffered::Prepare()`
+// takes no argument (CgsModuleSingleBuffered.h:42), so this one-argument overload hides rather
+// than overrides it, and marking it virtual would add a vtable slot the console does not have.
+// FLAG for the wave that reconstructs the module vtable. The base sub-object is at offset 0:
+// 0x8274A600 `mr r3,r26` passes `this` UNADJUSTED into the base Prepare at 0x8274A604.
+//
+// Stage 3 RETURNS FALSE after doing its work, so the console itself always spends one extra
+// frame there.
+// ============================================================================
+bool TrafficEntityModule::Prepare( BrnTrafficIO::OutputBuffer_Prepare* lpOutputBuffer )
+{
+    TrafficReceiverQueue& lrReceiverQueue = mReceiverQueue;             // console +0x314
+
+    switch ( mePrepareStage )                                           // console +0x2F0
+    {
+    case E_PREPARESTAGE_START:
+    {
+        // 0x8274A5D4. [FLAG PC bring-up] safety net, NOT IN THE X360 BINARY: the console binds
+        // mReceiverQueue inside TrafficEntityModule::Construct @0x82740220, which does not run
+        // while its WorldLinkStubs.cpp gate is live, leaving mpBuffer null when the GameData
+        // reply arrives. This logs and self-heals instead of copying through null.
+        // DELETE WHEN: that Construct gate is retired and a boot proves the queue is bound
+        // before Prepare stage 0 runs.
+        if ( !ReceiverQueueBinding::IsBound( lrReceiverQueue ) )
+        {
+            lrReceiverQueue.Construct();
+
+            static bool sbLoggedReceiverQueueConstruct = false;
+            if ( !sbLoggedReceiverQueueConstruct
+                 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0
+                 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                sbLoggedReceiverQueueConstruct = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T1-traffic-leg] TrafficEntityModule::Prepare stage 0 found an UNBOUND "
+                       "mReceiverQueue -- TrafficEntityModule::Construct @0x82740220 did not run "
+                       "(its WorldLinkStubs.cpp gate is still live). Binding it here as a "
+                       "safety net [FLAG PC bring-up]\n";
+            }
+        }
+
+        // The console's own stage-0 body.
+        lrReceiverQueue.Clear();                                    // BaseEventReceiverQueue::Clear
+
+        // The console's two stage-0 zero stores:
+        //   0x8274A5F4  std  r31, 0(this + 0x713A0)   ; one 64-bit zero -> the bit array
+        //   0x8274A5F8  stbx r31, this + 0x71B32      ; one byte zero   -> mbInReplay
+        //
+        // +0x713A0 == 463776 is maTrafficPhysicsInfoListBits (:686), pinned by UpdateSerialiser
+        // @0x8272DA80's `SetPhysicsData(serialiser, this + 463776, this + 360976)` where
+        // 463776 - 360976 == 102800 == 25 * sizeof(TrafficPhysicsInfo), so
+        // maTrafficPhysicsInfoList (:685) spans 360976..463776 and the bit array starts there.
+        // BitArray<25> is one 64-bit field, which is why one `std` clears it.
+        maTrafficPhysicsInfoListBits.Prepare();
+
+        // +0x71B32 == 465714 is mbInReplay (:757). mFuzzyBehaviours (:753) ends at 465712,
+        // where the u16 muUpdateCount (:755) lives: UpdateDecisionFrame @0x8274E508 increments
+        // *(this + 465712) and tests it >= 0x64, and UpdateRaceCarHulls @0x82721460 compares it
+        // against HullChangeInfo::muUpdateFrame. A u16 there puts :757/:758 at 465714/465715.
+        mbInReplay = false;
+
+        mePrepareStage = E_PREPARESTAGE_MANAGER;
+    }
+    // fall through -- 0x8274A600 is the case-1 entry AND the case-0 fall-through target.
+
+    case E_PREPARESTAGE_MANAGER:
+        // 0x8274A604 `bl CgsModule::ModuleSingleBuffered::Prepare` with `this` unadjusted, then
+        // the console's `if (!result) goto LABEL_22` early-out, which is what makes the ladder
+        // resumable.
+        //
+        // HARD PRECONDITION: TrafficEntityModule::Construct @0x82740220 must have run. Its last
+        // store is `mbIsNewModule = true` (0x82741758), and ModuleSingleBuffered::Prepare
+        // @0x8286E7A0 branches on that byte: non-zero skips the old-style DataStructure ladder
+        // and returns 1; zero calls CreateInputDataStructure through the vtable. This module
+        // overrides neither Create*DataStructure, so with mbIsNewModule false the base
+        // placeholder returns null and Prepare returns FALSE every frame, hanging the boot at
+        // WorldModule::Prepare's traffic stage. Construct only runs once its WorldLinkStubs.cpp
+        // gate (~:729) is retired, so retire that gate in the same build as this call.
+        if ( !CgsModule::ModuleSingleBuffered::Prepare() )
+        {
+            return false;                                // console: LABEL_22, `result = 0`
+        }
+
+        mePrepareStage = E_PREPARESTAGE_LOADINGWORLD;
+        // fall through -- 0x8274A61C.
+
+    case E_PREPARESTAGE_LOADINGWORLD:
+        // 0x8274A624 -- the resource ladder. REAL (partial body above).
+        if ( !LoadData( lpOutputBuffer ) )
+        {
+            return false;
+        }
+        mePrepareStage = E_PREPARESTAGE_VOLUMES;
+        // fall through -- 0x8274A63C.
+
+    case E_PREPARESTAGE_VOLUMES:
+    {
+        // 0x8274A63C..0x8274A880. Publishes one shared collision volume per vehicle TYPE into
+        // the scene manager, keyed KU_HACK_BASE_VOLUME_ID + type. Without it the scene has no
+        // volume for a traffic car to instance, so a spawned car cannot take part in the fine
+        // query.
+        //
+        // The loop iterates VEHICLE TYPES, not traffic-light instances: r27 walks
+        // &maVehicleTypeRuntime[0].mBBoxHalfSize with `addi r27, r27, 0x80` (stride 128 ==
+        // sizeof(VehicleTypeRuntime)) @0x8274A86C, bounded by muNumVehicleTypes read through
+        // TrafficData::operator-> @0x8274A870.
+        //
+        // The three tripwires are over the POST-SUBTRACTION half-extents, one per lane, baked
+        // .cpp lines 946/947/948. Each is a `vcmpgefp.` against zero and is non-gating: the
+        // console reloads the vector and carries on.
+        //
+        // The console passes the WHOLE 64-bit id in r4 (`addi r11, r28, 0x24 ; clrldi r11, r11,
+        // 32`), so the `AddDynamicVolume(VolumeId, const void*, VolumeTypeFlags)` overload is
+        // the right one. The high dword is zero here, but the narrow EntityId overload would
+        // bind the wrong mangled name for a key that is a VolumeId.
+        lpOutputBuffer->LockForWrite();
+
+        for ( u32 luVehicleType = 0;
+              luVehicleType < mpData->muNumVehicleTypes;
+              luVehicleType++ )
+        {
+            const CgsSceneManager::VolumeId lVolumeId(
+                static_cast<u64>( KU_HACK_BASE_VOLUME_ID + luVehicleType ) );
+
+            // The console inlines the accessor; read through it here.
+            const Vector3 lBBoxHalfSize =
+                maVehicleTypeRuntime[luVehicleType].GetBBoxHalfSize();
+
+            const f32 lfHalfX = lBBoxHalfSize.x;
+            const f32 lfHalfY = lBBoxHalfSize.y;
+            const f32 lfHalfZ = lBBoxHalfSize.z;
+
+            // min( hx, hy, hz ) * 0.49f, clamped to 0.44f.
+            f32 lfSmallestHalfExtent = lfHalfX;
+            if ( lfHalfY < lfSmallestHalfExtent ) { lfSmallestHalfExtent = lfHalfY; }
+            if ( lfHalfZ < lfSmallestHalfExtent ) { lfSmallestHalfExtent = lfHalfZ; }
+
+            f32 lfFatness = lfSmallestHalfExtent * KF_VEHICLE_BBOX_FATNESS_SCALE;
+            if ( KF_VEHICLE_BBOX_FATNESS_MAX < lfFatness )
+            {
+                lfFatness = KF_VEHICLE_BBOX_FATNESS_MAX;
+            }
+
+            const f32 lfBoxHalfX = lfHalfX - lfFatness;
+            const f32 lfBoxHalfY = lfHalfY - lfFatness;
+            const f32 lfBoxHalfZ = lfHalfZ - lfFatness;
+
+            CGS_ASSERT( lfBoxHalfX >= 0.0f, "lBBoxHalfSize.X() >= 0.0f" );   // baked line 946
+            CGS_ASSERT( lfBoxHalfY >= 0.0f, "lBBoxHalfSize.Y() >= 0.0f" );   // baked line 947
+            CGS_ASSERT( lfBoxHalfZ >= 0.0f, "lBBoxHalfSize.Z() >= 0.0f" );   // baked line 948
+
+            // The console's own stack block. AddDynamicVolume block-copies 128 bytes FROM the
+            // volume pointer (`li r5, 0x80` @0x822B1534), so 128 is the floor. This tree's
+            // other producer, BrnActiveRaceCar_wQ5_01.cpp, sizes its block to exactly that;
+            // 4096 here follows Feb-2007's `Vector3 laResourceBuffer[256]` and is a superset.
+            u8 laVolumeStorage[KU_VOLUME_SCRATCH_BYTES];
+
+            rw::Resource lVolumeResource = {};                      // 5x stw 0
+            lVolumeResource.m_baseResources[0] = laVolumeStorage;   // stw r11, var_10B0(r1)
+
+            rw::collision::BoxVolume* lpVolume = rw::collision::BoxVolume::Initialize(
+                lVolumeResource, lfBoxHalfX, lfBoxHalfY, lfBoxHalfZ );
+
+            // `stfs f0, 0x50(r30)` == Volume::mfRadius, Feb-2007's `SetRadius(fatness)`.
+            // BoxVolume::BoxVolume @0x82BAA0F0 has just written zero there.
+            lpVolume->mfRadius = lfFatness;
+
+            lpOutputBuffer->GetSceneInputInterface()->AddDynamicVolume(
+                lVolumeId, lpVolume, KU8_TRAFFIC_VEHICLE_VOLUME_TYPE_FLAG );
+        }
+
+        lpOutputBuffer->UnlockForWrite();
+
+        mePrepareStage = E_PREPARESTAGE_DEBUG;
+        return false;                                    // console: `result = 0` at 0x8274A880
+    }
+
+    case E_PREPARESTAGE_DEBUG:
+    {
+        // 0x8274A8A0..0x8274A918, PARTIAL. The second half is plain member seeding and is
+        // landed below; only the debug-allocator half is gated, on a missing wire.
+        //
+        // Offsets for the gated half, from the asm: Register's argument is the pointer LOADED
+        // FROM this + 0x727B0, not that address (0x8274A8A4); the AllocateMemoryResource(2560,
+        // 16, 0) result lands at this + 0x7286C (0x8274A8C8), and the neighbouring store into
+        // this + 0x72870 is a separate zero.
+        {
+            static bool sbLogged = false;
+            LogMissingLeg_Q7Stage( sbLogged,
+                "Prepare stage 4 FIRST half: DebugComponent::Register(mpDebugComponent) + "
+                "BrnResource::GetDebugAllocator() + rw::IResourceAllocator::"
+                "AllocateMemoryResource(2560, 16, 0) -> mpaDEBUGVehicleFuzzyLogic, plus the "
+                "companion muDEBUGVehicleFuzzyLogicCount = 0 store. All three members are real; "
+                "what is missing is the DebugComponent::Register / HeapResourceAllocator wire. "
+                "DEBUG-UI ONLY -- nothing on the parked-car path reads either member" );
+        }
+
+        // The console's second half, 0x8274A8E0..0x8274A918: this + 0x79388 is
+        // maStoredAITrafficData[0].meRaceCarIndex and +0x7938C its miNumTrafficIDs, stride 136
+        // == sizeof(StoredAITrafficData), bound 8 == E_ACTIVE_RACE_CAR_INDEX_COUNT. Feb-2007
+        // spells the same loop at BrnTrafficEntityModule.cpp:432-437; the console's
+        // `operator++(v55)` is the enum's increment operator, de-inlined to a plain loop.
+        for ( s32 liRaceCarIndex = 0;
+              liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+              liRaceCarIndex++ )
+        {
+            maStoredAITrafficData[liRaceCarIndex].meRaceCarIndex =
+                static_cast<EActiveRaceCarIndex>( liRaceCarIndex );
+            maStoredAITrafficData[liRaceCarIndex].miNumTrafficIDs = 0;
+        }
+
+        mePrepareStage = E_PREPARESTAGE_DONE;
+    }
+    // fall through -- LABEL_21.
+
+    case E_PREPARESTAGE_DONE:
+        // LABEL_21: `result = 1; *(this+0x2F4) = 0;`
+        meReleaseStage = E_RELEASESTAGE_START;
+
+        // No meState latch here, deliberately. An earlier bring-up set E_STATE_RUNNING at this
+        // point, which skipped the whole E_STATE_STARTING_UP ladder, and
+        // E_STARTINGUPSTATE_POPULATING is the only place in the module that ever creates a
+        // parked car. The module now walks its own state machine: Reset @0x8272CDA0 and
+        // PostPhysicsUpdate @0x8274E6D0's STARTING_UP arm are bodied in
+        // BrnTrafficEntityModule_wT1_01.cpp, and PreSceneUpdate @0x8274A968 owns the
+        // WAITING_FOR_PLAYER -> POPULATING transition in BrnTrafficEntityModule_wT1_02.cpp.
+        return true;
+
+    default:
+        CGS_ASSERT( false, "0" );                        // baked line 1003
+        return false;
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_01.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_01.cpp -- the traffic spawn legs.
+//
+// The console reaches a parked car through one chain, from the module's state machine to a
+// transform written into maVehicleTransforms:
+//
+//   Construct @0x82740220 -> ResetEventData @0x827088B8 -> Reset @0x8272CDA0
+//                                            -> EnterStartingUpState @0x82708038
+//   PostPhysicsUpdate @0x8274E6D0, state E_STATE_STARTING_UP
+//     E_STARTINGUPSTATE_POPULATING
+//       RecalculateActiveHulls @0x8274C870        -> the NEW hull set
+//       SpawnNewTraffic        @0x82748A40        -> per new hull
+//         FillNewHull          @0x82743600        -> per StaticTrafficVehicle record
+//           PickVehicleToSpawn @0x827235F8        -> a vehicle TYPE from the flow type
+//           StaticVehicles_Generate @0x82722680   -> pop a free StaticTrafficParam slot
+//       StaticVehicles_CreateNewVehicles @0x827229F0
+//         Vehicle::InitialiseAsStatic @0x827567F0
+//         SetVehicleTransform  @0x827142B8        -> the car now has a place in the world
+//     E_STARTINGUPSTATE_WAITING_FOR_STREAMING
+//       EnterRunningState      @0x827080E8
+//
+// That ladder runs once, on the POPULATING frame. In steady state PostPhysicsUpdate's RUNNING
+// arm dispatches to UpdateDecisionFrame @0x8274E508 or UpdateNonDecisionFrame @0x8274C1A8
+// (both in _wT1_06.cpp), and UpdateDecisionFrame re-runs RecalculateActiveHulls,
+// SpawnNewTraffic and the StaticVehicles_* updates bodied here.
+//
+// Every function on the STARTING_UP chain is bodied here. A leg that reaches code or data this
+// tree cannot recover is a NAMED one-shot gate, never an invented body or a silent omission.
+//
+// TWO KNOBS THE LEAK GETS WRONG OR HIDES:
+//   * mbDEBUGTurnTrafficOff ships FALSE, not the leak's true. Construct @0x82740220 stores
+//     zero at 0x82740D2C (`stbx r30`, r30 == 0, offset 0x7287E), in a run whose neighbours pin
+//     the offset with no slack. Ship traffic is on by default.
+//   * mfTrafficAmountScale gates the PARKED half too: FillNewHull's first act is
+//     `if (mfTrafficAmountScale == 0.0f) return;` @0x82743634. The chain is Construct's
+//     mfBaseDensityScale = 1.0f, ResetEventData copying it into mfGameModeDensityScale, and
+//     UpdateDensity copying that into mfTrafficAmountScale every frame, so a default-
+//     constructed module runs at density 1.0. Never suppress a spawn half by zeroing the
+//     density: it also gates the WAITING_FOR_PLAYER and POPULATING early-outs.
+//
+// Layout is host-native throughout: no member is reached by an X360 byte offset, and the
+// console displacements in the comments only attest which member a line resolves to.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // NAMED LEG GATE. One line per console leg with no body in this tree, logged once per
+    // process. [DIAG] NOT IN THE X360 BINARY.
+    inline void LogMissingLeg_T1(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T1-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
+        }
+    }
+
+    // BRN_TRAFFIC_DIAG bring-up probes -- NOT IN THE X360 BINARY. Every surviving probe is
+    // one-shot or capped, so steady state costs one env lookup per call.
+    bool TrafficDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        return sbEnabled;
+    }
+
+    CgsDev::Log::DebugPrint* TrafficDiagStream()
+    {
+        if (!TrafficDiagEnabled() || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+
+    // The X360 immediates this file needs that are not rodata reads. Each is an instruction
+    // operand, recovered rather than guessed.
+
+    // FillNewHull @0x82743600 / PickVehicleToSpawn @0x827235F8 both draw a 1..100 roll with
+    // the same magic-division sequence (`mulhwu r,x,0x51EB851F ; srwi r,r,5 ; mulli r,r,100`
+    // -- strength-reduced `% 100`), then `+ 1`. De-optimised back to the modulo it came from.
+    const u32 KU_PERCENTAGE_ROLL_MODULUS = 100u;
+
+    // PickVehicleToSpawn @0x82723880..0x8272388C builds a full 64-bit CgsID literal
+    //     lis r10, 0x6A16 ; lis r9, -0x40D2 ; ori r9, r9, 0xA6A4 ; insrdi r10, r9, 32, 0
+    // == 0xBF2EA6A4'6A160000, and in showtime mode accepts a picked vehicle type ONLY when
+    // its asset's CgsID equals that literal (`cmpld` + `li r11,1 / mr r11,r24(0)`).
+    // FLAG: the 12-character printable form of this CgsID is not decoded here -- the value is
+    // the recovered instruction immediate, and naming the asset would be a guess.
+    const u64 KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID = 0xBF2EA6A46A160000ull;
+
+    // StaticTrafficParam::Kill (inlined into StaticVehicles_KillParam @0x82721DC4):
+    // `andi. r11, r11, 0x8C ; ori r11, r11, 2`. 0x8C keeps three bits that have no attested
+    // enumerator in either the DWARF or the leak (E_FLAG_ALIVE/DYING/SHOULD_BE_REMOVED/
+    // ZOMBIE/DIVORCED account for 0x01/0x02/0x10/0x20/0x40 only), so the mask is spelled as
+    // the recovered literal rather than as an invented enum expression.
+    const u8 KU_STATIC_PARAM_KILL_KEEP_MASK = 0x8Cu;
+
+    // StaticVehicles_RemoveDeadParam @0x827163D0 appends `{ luParam, 5 }` to the static
+    // purgatory list. 5 == KU_PURGATORY_TIME_OFFLINE == KU_PURGATORY_TIME_ONLINE
+    // (BrnTrafficConstants.h, both already attested at 5), which is why the console can bake
+    // one immediate for both cases.
+    const u16 KU_STATIC_PURGATORY_DECISION_FRAMES = 5u;
+
+    // FillNewHull's driving half @0x827436B0 flt_820224B0. The random fractional car the
+    // section walk starts with, so a hull does not emit its whole row in lockstep.
+    const f32 KF_INITIAL_SPAWN_PHASE = 0.99000001f;
+
+    // FillNewHull @0x82743878 flt_820BA8BC. Per-car forward jitter, as a fraction of spacing.
+    // unk_8300CC90 == 1600.0f == 40 m squared (dyn-init thunk 0x82C662D0 squares the 40.0f
+    // splat at 0x8300CB80). FillNewHull parked-half proximity cull, 0x82743B18.
+    const f32 KF_PARKED_PROXIMITY_CULL_RADIUS_SQ = 1600.0f;
+
+    // 0x82722FE8: the per-second bulb-warmth step UpdateEffects @0x82756D48 takes.
+    const f32 KF_BULB_WARMTH_RATE = 5000.0f;
+
+    const f32 KF_SPAWN_JITTER_FRACTION = 0.30000001f;
+
+    // FillNewHull @0x82743698 flt_82001C98, the same clamp pair CalcTimeToNextGeneration
+    // @0x82721B08 uses: raise the scaled rate to this floor, never above the section's own.
+    const f32 KF_MIN_VEHICLES_PER_MINUTE = 1.0f;
+
+    // SpawnNewTraffic's generator half @0x82748?? -- the headway a generator demands behind the
+    // section's first param, expressed in seconds of lane speed (`fmuls f0, mfSpeed, 2.0`).
+    const f32 KF_GENERATOR_MIN_HEADWAY_SECONDS = 2.0f;
+
+    // Construct's tuning block writes each member as one 16-byte store; these two spell the
+    // `vspltw`-then-`stvx128` and the lane-wise forms. [DIAG-FREE] pure de-inlining.
+    inline void SetTuningSplat(Vector4& lrOut, f32 lfValue)
+    {
+        lrOut.x = lfValue;
+        lrOut.y = lfValue;
+        lrOut.z = lfValue;
+        lrOut.w = lfValue;
+    }
+
+    inline void SetTuningLanes(Vector4& lrOut, f32 lfX, f32 lfY, f32 lfZ, f32 lfW)
+    {
+        lrOut.x = lfX;
+        lrOut.y = lfY;
+        lrOut.z = lfZ;
+        lrOut.w = lfW;
+    }
+}
+
+// ============================================================================
+// SECTION 1 -- the state machine's leaf transitions.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::EnterStartingUpState  @ 0x82708038
+//
+// Store for store (0x8270804C..0x827080CC):
+//   assert(meState == E_STATE_INVALID)                       ; baked line 1697
+//   meState           = E_STATE_STARTING_UP                  ; stw 0, 0x300
+//   meStartingUpState = E_STARTINGUPSTATE_FIRST (== 0)       ; stw 0, 0x304
+//   mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode
+//                                                            ; lbzx 0x717DC / 0x717DD, stbx 0x717E7
+//   mpLogger-><byte 0>        = mbAllowDivergentBehaviour    ; lwzx 0x727B4 ; stb r11, 0(r10)
+//
+// The leak computes AllowDivergentBehaviour() as an inline predicate; the ship caches it in
+// the member at +0x717E7 here and ORs in the showtime case. It is the biggest behavioural
+// switch on this chain: offline it is TRUE, which is what lets PostPhysicsUpdate's POPULATING
+// arm create vehicles locally at all.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::EnterStartingUpState()
+{
+    CGS_ASSERT(meState == E_STATE_INVALID, "meState == E_STATE_INVALID");
+
+    meState           = E_STATE_STARTING_UP;
+    meStartingUpState = E_STARTINGUPSTATE_FIRST;
+
+    mbAllowDivergentBehaviour = (!mbIsOnlineGameMode) || mbPlayingShowtimeMode;
+
+    {
+        // GATE: the console's last store is a byte written through mpLogger (+0x727B4).
+        // BrnTrafficLogger.cpp is unmounted and does not compile, so the Logger type has no
+        // usable declaration. It locally redeclares KU_MAX_PARAMS (:32), HullRuntime (:58),
+        // ParamTransform (:81) and TrafficEntityModule (:90), all of which have real headers,
+        // so it fails C2374/C2086/C2011 first and the C2027s are the cascade.
+        // DELETE WHEN: those four local forks are replaced by the real includes and the file
+        // is mounted. That also un-gates the other two mpLogger legs here.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "EnterStartingUpState mpLogger-><leading byte> = mbAllowDivergentBehaviour "
+            "(X360 0x827080CC) -- BrnTrafficLogger.cpp is unmounted and does not compile. "
+            "CAUSE: it LOCALLY REDECLARES KU_MAX_PARAMS, HullRuntime, "
+            "ParamTransform and TrafficEntityModule, all of which have real headers, so it "
+            "fails C2374/C2086/C2011 first and the C2027s are the cascade. Fix = delete the "
+            "four local forks and include the real headers");
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::EnterRunningState  @ 0x827080E8
+//
+// 0x827080FC..0x82708150, store for store:
+//   assert((meState == E_STATE_STARTING_UP) && (meStartingUpState == E_STARTINGUPSTATE_LAST))
+//   r11 = meRunningStateToUseAfterStartup   (lwz 0x30C -- READ BEFORE the stores)
+//   meState = E_STATE_RUNNING (1)           (stw 0x300)
+//   meRunningState = r11                    (stw 0x308)
+//   meRunningStateToUseAfterStartup = 0     (stw 0x30C)
+//   meStartingUpState = -1                  (stw 0x304)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::EnterRunningState()
+{
+    CGS_ASSERT(meState == E_STATE_STARTING_UP && meStartingUpState == E_STARTINGUPSTATE_LAST,
+               "( meState == E_STATE_STARTING_UP ) && ( meStartingUpState == E_STARTINGUPSTATE_LAST )");
+
+    const ERunningState leRunningStateToUse = meRunningStateToUseAfterStartup;
+
+    meState                         = E_STATE_RUNNING;
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())   // [DIAG] see EnterTearingDownState
+    {
+        *lpDiag << "[traffic-diag] EnterRunningState: STARTING_UP -> RUNNING; densityScale "
+                << mfGameModeDensityScale << " amountScale " << mfTrafficAmountScale << "\n";
+    }
+    meRunningState                  = leRunningStateToUse;
+    meRunningStateToUseAfterStartup = E_RUNNINGSTATE_NORMAL;
+    meStartingUpState               = E_STARTINGUPSTATE_INVALID;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::EnterTearingDownState  @ 0x82708168
+//
+//   assert(meState == E_STATE_RUNNING)                       ; baked line 1746
+//   meState           = E_STATE_TEARING_DOWN (2)  ; v1[192]
+//   meTearingDownState= E_TEARINGDOWNSTATE_WIPING ; v1[196] == +0x310
+//   meRunningState    = E_RUNNINGSTATE_INVALID    ; v1[194] == +0x308
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::EnterTearingDownState()
+{
+    CGS_ASSERT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING");
+
+    meState            = E_STATE_TEARING_DOWN;
+    meTearingDownState = E_TEARINGDOWNSTATE_WIPING;
+    meRunningState     = E_RUNNINGSTATE_INVALID;
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness for the tear-down / reset chain
+    // (BurnoutDecomp/b5-decomp#22). One line per state entry, so a run's log shows whether the
+    // wipe reached Reset() and RUNNING again. Siblings in Reset() and EnterRunningState().
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        *lpDiag << "[traffic-diag] EnterTearingDownState: RUNNING -> TEARING_DOWN (WIPING); mode "
+                << meGameMode << " densityScale " << mfGameModeDensityScale << "\n";
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::IsDecisionFrame  @ 0x827074E0
+//
+//   meState == E_STATE_STARTING_UP (0)  -> TRUE unconditionally
+//   otherwise assert(meState == E_STATE_RUNNING)   ; header baked line 2113
+//   return mbDecisionFrame                          ; lbzx +463861
+//
+// The starting-up short-circuit is why every leg of the POPULATING arm can assert
+// IsDecisionFrame() and still run on the very first frame after Reset.
+// ----------------------------------------------------------------------------
+bool TrafficEntityModule::IsDecisionFrame()
+{
+    if (meState == E_STATE_STARTING_UP)
+    {
+        return true;
+    }
+
+    CGS_ASSERT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING");
+    return mbDecisionFrame;
+}
+
+// ============================================================================
+// SECTION 2 -- the console-inlined lookups the spawn ladder uses.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GetHull  @ 0x8271D8B0   (header baked line 2229)
+//   assert(luIndex < mpData->muNumHulls);  return mpData->mpapHulls[luIndex];
+// The console reads muNumHulls at TrafficData +0x02 and mpapHulls at +0x0C; both are named
+// members of the committed TrafficData, so the host form is a plain index.
+// ----------------------------------------------------------------------------
+const Hull* TrafficEntityModule::GetHull(u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < mpData->muNumHulls, "luIndex < (mpData->muNumHulls)");
+    return mpData->mpapHulls[luIndex];
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GetHullRuntime  @ 0x8271D9D0   (header baked lines 2267 / 2270)
+//   assert(luHull < mpData->muNumHulls);
+//   luRuntime = mauHullRuntimeDataIndices[luHull];
+//   assert(luRuntime != KU_INVALID_HULL_RUNTIME);
+//   return &maHullRuntimeData[luRuntime];      ; 1176 * luRuntime + this + 257216
+// ----------------------------------------------------------------------------
+HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull)
+{
+    CGS_ASSERT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)");
+
+    const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
+    CGS_ASSERT(luHullRuntime != KU_INVALID_HULL_RUNTIME, "luHullRuntime != KU_INVALID_HULL_RUNTIME");
+
+    return &maHullRuntimeData[luHullRuntime];
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GetHullRuntimeSafe  @ 0x8271DA70   (header baked line 2288)
+// Same lookup, but an unallocated slot yields NULL instead of firing the assert.
+// ----------------------------------------------------------------------------
+HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull)
+{
+    CGS_ASSERT(luHull < mpData->muNumHulls, "luHull < (mpData->muNumHulls)");
+
+    const u8 luHullRuntime = mauHullRuntimeDataIndices[luHull];
+    if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
+    {
+        return 0;
+    }
+    return &maHullRuntimeData[luHullRuntime];
+}
+
+// The const overloads (DWARF :2270 / :2274). Same lookup.
+const HullRuntime* TrafficEntityModule::GetHullRuntime(u32 luHull) const
+{
+    return const_cast<TrafficEntityModule*>(this)->GetHullRuntime(luHull);
+}
+
+const HullRuntime* TrafficEntityModule::GetHullRuntimeSafe(u32 luHull) const
+{
+    return const_cast<TrafficEntityModule*>(this)->GetHullRuntimeSafe(luHull);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SetVehicleTransform  @ 0x827142B8   (header baked line 2491, .cpp 2492)
+//
+//   assert(luIndex < KU_MAX_TOTAL_TRAFFIC);
+//   assert(RwMath::IsValid(lTransform));
+//   maVehicleTransforms[luIndex] = lTransform;      ; (luIndex + 0x7B2) << 6, four stvx128
+//
+// The console spells IsValid as a per-lane `vcmpeqfp` self-equality cascade over the x/y/z
+// lanes of all four rows, ANDed together, which is what rw::math::vpu::IsValid(Matrix44Affine)
+// reduces to. 0x7B2 * 64 == 126080 is the end of maVehicleAxles (87680 + 600*64), so the
+// transform array immediately follows it.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SetVehicleTransform(u32 luIndex, const Matrix44Affine& lTransform)
+{
+    CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
+
+    maVehicleTransforms[luIndex] = lTransform;
+}
+
+// ============================================================================
+// SECTION 3 -- density.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateDensity  @ 0x82716318
+//
+//   mfTrafficAmountScale = mfGameModeDensityScale;                 ; +464924 <- +464916
+//   if (!mbAllowDivergentBehaviour && mfGameModeDensityScale > 0)  ; lbzx +464871
+//       mfTrafficAmountScale =
+//           lerp(flt_82F2FDE0, flt_82F2FDDC, (mActiveHulls.GetLength() - 9) * 0.015873017);
+//
+// The first line is what the parked chain depends on. The online arm is gated: its two
+// endpoints are un-dumped .data floats at 0x82F2FDDC / 0x82F2FDE0 with no writer in the export
+// set, so writing the arm would mean inventing the density curve. It is dead offline anyway,
+// since mbAllowDivergentBehaviour is true whenever !mbIsOnlineGameMode. The 0.015873017f
+// (== 1/63) is an instruction immediate, so only the two floats are missing.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateDensity()
+{
+    const f32 lfGameModeDensityScale = mfGameModeDensityScale;
+    mfTrafficAmountScale = lfGameModeDensityScale;
+
+    if (!mbAllowDivergentBehaviour && lfGameModeDensityScale > 0.0f)
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateDensity ONLINE arm -- mfTrafficAmountScale = lerp(flt_82F2FDE0, "
+            "flt_82F2FDDC, (mActiveHulls.GetLength() - 9) * (1/63)) : both endpoints are "
+            "un-dumped X360 .data floats (0x82F2FDDC / 0x82F2FDE0); unreachable offline "
+            "because mbAllowDivergentBehaviour is true whenever !mbIsOnlineGameMode");
+    }
+}
+
+// ============================================================================
+// SECTION 4 -- the static (parked) vehicle sub-system.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_UpdatePurgatory  @ 0x827228A8
+//
+// Walks mStaticParamPurgatoryList (Array<PurgatoryInfo,199> @ +255500, live count @ +256296)
+// and ticks each record's countdown down; a record that reaches zero hands its slot back to
+// mFreeStaticParamStack (Stack<u8,199> @ +256300) and is erased.
+//   assert(!maStaticTrafficParams[lInfo.muIndex].IsAlive())   ; .cpp 8790
+//   assert(lInfo.muIndex <= 0xff)                             ; .cpp 8791
+// The console decrements IN PLACE (`*(result+1) = v5`), so the stored countdown really is
+// mutated, not just tested -- reproduced by taking the element by reference.
+// The `--v2` before `++v2` around Erase is Hex-Rays' spelling of "re-test this index after
+// an unordered erase", de-optimised back into the loop's own index handling.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_UpdatePurgatory()
+{
+    u32 luIndex = 0;
+    while (luIndex < mStaticParamPurgatoryList.GetLength())
+    {
+        PurgatoryInfo& lrInfo = mStaticParamPurgatoryList.GetItem(luIndex);
+
+        --lrInfo.muDecisionFramesLeft;
+        if (lrInfo.muDecisionFramesLeft != 0)
+        {
+            ++luIndex;
+            continue;
+        }
+
+        CGS_ASSERT(!maStaticTrafficParams[lrInfo.muIndex].IsAlive(),
+                   "!maStaticTrafficParams[lInfo.muIndex].IsAlive()");
+        CGS_ASSERT(lrInfo.muIndex <= 0xFFu, "lInfo.muIndex <= 0xff");
+
+        const u8 luFreedSlot = static_cast<u8>(lrInfo.muIndex);
+        mFreeStaticParamStack.Push(luFreedSlot);
+
+        mStaticParamPurgatoryList.Erase(luIndex);
+        // no ++ -- Array::Erase shifts the tail down, so slot `luIndex` now holds a record
+        // that has not been ticked yet. This is the console's own `Erase(v3, v2--); ++v2;`
+        // (post-decrement then re-increment == "leave the cursor where it is"), de-optimised.
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_RemoveDeadParam  @ 0x827163D0   (.cpp 9739)
+//
+//   assert((meState == E_STATE_TEARING_DOWN) || IsDecisionFrame());
+//   lpParam = GetStaticTrafficParam(luParam);
+//   if (lpParam->IsAlive())  return;                       ; (*(p+3) & 1) == 0 gate
+//   if (!lpParam->IsDying()) return;                       ; (*(p+3) & 2) != 0 gate
+//   if (mbAllowDivergentBehaviour
+//       && (vehicle->IsAlive() || vehicle->HasEntity() || vehicle->IsCollidable()))
+//       return;                                             ; the three &1 / &2 / &4 reads
+//   lpParam->ClearDying();
+//   mStaticParamPurgatoryList.Append({ luParam, KU_PURGATORY_TIME });
+//
+// The three vehicle flag bits are read at Vehicle +5 (mxFlags) as E_FLAG_ALIVE / _HASENTITY
+// / _COLLIDABLE -- i.e. "the param may only leave the world once its vehicle has fully let
+// go of its scene entity and its collidable registration".
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_RemoveDeadParam(u32 luParam)
+{
+    CGS_ASSERT(meState == E_STATE_TEARING_DOWN || IsDecisionFrame(),
+               "( meState == E_STATE_TEARING_DOWN ) || IsDecisionFrame()");
+
+    StaticTrafficParam* lpParam = GetStaticTrafficParam(luParam);
+    if (lpParam->IsAlive())
+    {
+        return;
+    }
+    if (!lpParam->IsDying())
+    {
+        return;
+    }
+
+    if (mbAllowDivergentBehaviour)
+    {
+        const Vehicle* lpVehicle = GetStaticVehicle(luParam);
+        const u8 lxFlags = lpVehicle->GetFlags();
+        if ((lxFlags & Vehicle::E_FLAG_ALIVE) != 0
+            || (lxFlags & Vehicle::E_FLAG_HASENTITY) != 0
+            || (lxFlags & Vehicle::E_FLAG_COLLIDABLE) != 0)
+        {
+            return;
+        }
+    }
+
+    GetStaticTrafficParam(luParam)->ClearDying();
+
+    PurgatoryInfo lInfo;
+    lInfo.muIndex              = static_cast<u16>(luParam);
+    lInfo.muDecisionFramesLeft = KU_STATIC_PURGATORY_DECISION_FRAMES;
+    mStaticParamPurgatoryList.Append(lInfo);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_UpdateStaticParams  @ 0x82722F28
+//
+//   StaticVehicles_UpdatePurgatory();
+//   for (luParam = 0; luParam < KU_MAX_STATIC_TRAFFIC; ++luParam)
+//       if (param.IsAlive() && param.ShouldBeRemoved())  StaticVehicles_KillParam(luParam);
+//       else                                             StaticVehicles_RemoveDeadParam(luParam);
+//
+// The console walks `this + 254307` (== &maStaticTrafficParams[0].mxFlags) at a 6-byte
+// stride and tests bits 0x01 / 0x10, which are E_FLAG_ALIVE / E_FLAG_SHOULD_BE_REMOVED.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_UpdateStaticParams()
+{
+    StaticVehicles_UpdatePurgatory();
+
+    for (u32 luParam = 0; luParam < KU_MAX_STATIC_TRAFFIC; ++luParam)
+    {
+        const StaticTrafficParam& lrParam = maStaticTrafficParams[luParam];
+        if (lrParam.IsAlive() && lrParam.ShouldBeRemoved())
+        {
+            StaticVehicles_KillParam(luParam);
+        }
+        else
+        {
+            StaticVehicles_RemoveDeadParam(luParam);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_KillParam  @ 0x82721C50   (.cpp 7856..7887)
+//
+// Asserts (in the console's order), then kills the param and, when the param was neither a
+// zombie nor divorced, kills the vehicle with it.
+//
+// FAITHFUL READ-AFTER-WRITE. The console loads mxFlags, applies the kill mask, stores it, and
+// only then tests bit 0x40 for "divorced" (0x82721DB8..0x82721DD0), i.e. on the POST-KILL
+// value. The kill mask clears 0x40, so that test can never be true and both divorced arms are
+// unreachable in the shipped binary. Kept as-is: the zombie flag is captured before the kill
+// (`extrwi r26,r11,1,26` @0x82721D5C), so only the divorced arms are dead, and making them
+// live would add behaviour the binary does not have.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_KillParam(u32 luParam)
+{
+    CGS_ASSERT(luParam < KU_MAX_STATIC_TRAFFIC, "luParam < KU_MAX_STATIC_TRAFFIC");
+    CGS_ASSERT(GetVehicleSpecies(luParam) == Vehicle::E_SPECIES_STANDARD,
+               "GetVehicleSpecies( luParam ) == Vehicle::E_SPECIES_STANDARD");
+    CGS_ASSERT(GetStaticVehicle(luParam)->IsAlive() || GetStaticTrafficParam(luParam)->IsZombie(),
+               "GetStaticVehicle( luParam )->IsAlive() || GetStaticTrafficParam( luParam )->IsZombie()");
+
+    StaticTrafficParam* lpParam = GetStaticTrafficParam(luParam);
+    const bool lbWasZombie = lpParam->IsZombie();
+
+    Vehicle* lpVehicle = GetStaticVehicle(luParam);
+
+    CGS_ASSERT(lpParam->IsAlive(), "IsAlive()");   // BrnTrafficStaticParam.h:170
+
+    // StaticTrafficParam::Kill, inlined by the console.
+    lpParam->mxFlags = static_cast<u8>((lpParam->mxFlags & KU_STATIC_PARAM_KILL_KEEP_MASK)
+                                       | StaticTrafficParam::E_FLAG_DYING);
+
+    const bool lbDivorced = (lpParam->mxFlags & StaticTrafficParam::E_FLAG_DIVORCED) != 0;
+
+    if (lbWasZombie)
+    {
+        if (!lbDivorced)
+        {
+            CGS_ASSERT(!lpVehicle->IsAlive(), "Static vehicle was alive when its param was a zombie");
+        }
+        else
+        {
+            CGS_ASSERT(!lpVehicle->IsAlive() || (lpVehicle->GetFlags() & Vehicle::E_FLAG_ORPHAN) != 0,
+                       "Static vehicle wasn't an orphan when the param was divorced");
+        }
+    }
+    else if (!lbDivorced)
+    {
+        lpVehicle->SetDead(GetVehicleIndexFromStaticIndex(luParam), mVehicleSoaData);
+
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "StaticVehicles_KillParam leg EnsureVehicleRemovedFromCrashModule("
+            "GetVehicleIndexFromStaticIndex(luParam)) -- no body in tree; it drains the "
+            "crash-module registration mVehiclesAddedToCrashModule tracks");
+    }
+    else
+    {
+        CGS_ASSERT(!lpVehicle->IsAlive() || (lpVehicle->GetFlags() & Vehicle::E_FLAG_ORPHAN) != 0,
+                   "Static param was divorced but its vehicle wasn't orphaned");
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_Generate  @ 0x82722680   (.cpp 8748 / 8764)
+//
+//   if (mFreeStaticParamStack.IsEmpty())  return;         ; the `if (v5[50])` length test
+//   luSlot = mFreeStaticParamStack.Peek(); Pop();
+//   assert(!maStaticTrafficParams[luSlot].IsAlive())      ; "Static param N was still alive..."
+//   maStaticTrafficParams[luSlot].Initialise(luVehicleType, luHull, luIndexOnHull);
+//   if (!mbAllowDivergentBehaviour && GetStaticVehicle(luSlot)->IsAlive())
+//   {   // ONLINE: the vehicle outlived its param -- divorce the pair instead of asserting
+//       param.SetZombie(); param.SetDivorced();
+//   }
+//   else assert(!GetStaticVehicle(luSlot)->IsAlive())     ; "Static vehicle N was still alive..."
+//
+// (The console's `if (X || !alive) {assert-arm} else {divorce-arm}` is the same predicate
+// written the other way round; de-Morganed here into the source form it came from.)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_Generate(u8 luVehicleType, u16 luHull, u8 luIndexOnHull)
+{
+    if (mFreeStaticParamStack.GetLength() == 0)
+    {
+        return;
+    }
+
+    const u32 luSlot = mFreeStaticParamStack.Peek();
+    mFreeStaticParamStack.Pop();
+
+    CGS_ASSERT(!maStaticTrafficParams[luSlot].IsAlive(),
+               "Static param was still alive when we tried to regenerate it");
+
+    maStaticTrafficParams[luSlot].Initialise(luVehicleType, luHull, luIndexOnHull);
+
+    if (!mbAllowDivergentBehaviour && GetStaticVehicle(luSlot)->IsAlive())
+    {
+        maStaticTrafficParams[luSlot].SetZombie();
+        maStaticTrafficParams[luSlot].SetDivorced();
+    }
+    else
+    {
+        CGS_ASSERT(!GetStaticVehicle(luSlot)->IsAlive(),
+                   "Static vehicle was still alive when its param was reallocated");
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_CreateNewVehicles  @ 0x827229F0
+// The parked-car maker. An earlier revision calls it StaticVehicles_MakeAliveTheDeadOnesWithAliveParams
+// and has no race-car proximity rejection; the ship renamed it and added that rejection, and
+// the shape below is the ship's.
+//
+// ARGUMENT MAP FROM THE PROLOGUE, NOT HEX-RAYS (0x82722E50..0x82722ED8). Hex-Rays renders the
+// 7th argument as literal 0; the asm builds `&mpaVehicleTypesUpdate[type]` (TrafficData +0x30,
+// element stride 20), a real pointer to the VehicleTypeUpdateData whose mfWheelRadius
+// VehicleAxles::SetFromVehicleTransform reads. Passing the zero null-dereferences on the first
+// parked car. The register that looks like the 4th argument (r6) is the PPC float-arg GPR skip
+// slot for f1.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_CreateNewVehicles(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    (void)lpInput;   // only read by the GATED race-car proximity arm below
+
+    if (mbWaitingForStreaming)
+    {
+        return;
+    }
+
+    const bool lbRejectNearPlayers =
+        mbDontCreateStaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour;
+
+    if (lbRejectNearPlayers)
+    {
+        // GATE (1 of 2 in this function): the race-car proximity rejection. Parked by choice,
+        // not by a blocker. Its guard is offline-dead, since EnterStartingUpState sets
+        // mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode, and its
+        // collection half walks every active race car, i.e. rival slots this build never fills.
+        // Both pieces it needs are already recovered for whoever writes online traffic: the
+        // getter is DWARF :358 (X360 0x82711850) and the radius is unk_8300CF70 lane 1 ==
+        // 900.0f == 30 m squared (lane 0 is 6400 == 80^2).
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "StaticVehicles_CreateNewVehicles race-car proximity rejection (mbDontCreate"
+            "StaticVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) -- ONLINE-ONLY and "
+            "UNREACHABLE offline, so kept parked by choice, not by blocker: the getter "
+            "(DWARF :358) and the radius (unk_8300CF70 lane 1 == 900.0f == 30m^2) are both "
+            "available now");
+    }
+
+
+    for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
+    {
+        StaticTrafficParam& lrParam = maStaticTrafficParams[luStatic];
+        Vehicle*            lpVehicle = &maVehicles[KU_STATIC_TRAFFIC_OFFSET + luStatic];
+
+        if (!lrParam.IsAlive() || lrParam.IsZombie() || lpVehicle->IsAlive())
+        {
+            continue;
+        }
+
+        CGS_ASSERT(lrParam.IsAlive(), "IsAlive()");   // BrnTrafficStaticParam.h:121
+        const VehicleTypeRuntime* lpVehicleTypeRuntime = GetVehicleTypeRuntime(lrParam.muVehicleType);
+
+        CGS_ASSERT(lrParam.IsAlive(), "IsAlive()");   // BrnTrafficStaticParam.h:114
+        const u8 luIndexInHull = lrParam.GetIndexInHull();
+
+        CGS_ASSERT(lrParam.IsAlive(), "IsAlive()");   // BrnTrafficStaticParam.h:107
+        const Hull* lpHull = GetHull(lrParam.GetHull());
+
+        const StaticTrafficVehicle* lpRecord = lpHull->GetStaticVehicle(luIndexInHull);
+
+        // THE ONE-METRE DROP. The authored StaticTrafficVehicle records sit deliberately one
+        // metre high: across the 583 shipped records with a WORLDCOL surface beneath them,
+        // recordY - groundY is +1.026 m median (p25 +1.014, p75 +1.049). The car model's origin
+        // is its wheel-contact plane, so the record must come down by one unit of its OWN up
+        // axis before it becomes a render transform, and this line is what does it. Drop it and
+        // every parked car hangs in the air.
+        //
+        // The console does it at 0x82722CD4..0x82722D20: `vsubfp v0, v13, v0` with v13 the
+        // wAxis row and v0 still holding the yAxis row, storing the difference over the raw
+        // wAxis. The yAxis is a unit up vector, which is why the correction is one metre and why
+        // it follows the car's tilt on a banked road rather than being a world-Y constant.
+        //
+        // The gated proximity leg below differences THIS transform's position, not the raw
+        // record's (the console reads back var_180 at 0x82722D90), so the drop belongs here.
+        Matrix44Affine lTransform = lpRecord->mTransform;
+        lTransform.wAxis = lTransform.wAxis - lTransform.yAxis;
+
+        if (lbRejectNearPlayers)
+        {
+            // Second half of the same gate: the reject itself (SetZombie + SetDivorced).
+            continue;
+        }
+
+        const u32 luVehicle = luStatic + KU_STATIC_TRAFFIC_OFFSET;
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT(lrParam.IsAlive(), "IsAlive()");   // BrnTrafficStaticParam.h:121
+
+        const u8  luVehicleType = lrParam.muVehicleType;
+
+        // DO NOT ADD A `- 1.0f` HERE. The console's expansion at 0x82722E7C..0x82722ED4 (read
+        // the [1,2) ring slot, refill it, step the LCG, then `fsubs f1, f0, f31` with f31 ==
+        // 1.0f) IS CgsNumeric::Random::RandomFloat(), whose committed body already ends on that
+        // subtraction and returns [0,1). Subtracting again hands InitialiseAsStatic a negative
+        // mfRandomVal, which nothing asserts on: consumers treat it as a 0..1 phase, so a
+        // [-1,0) value silently inverts wheel rotation and headlight phase on every parked car.
+        const f32 lfRandomVal   = mEffectRand.RandomFloat();
+
+        Matrix44Affine lOutMatrix;
+        lpVehicle->InitialiseAsStatic(&maVehicleAxles[luVehicle],
+                                      lOutMatrix,
+                                      lfRandomVal,
+                                      luVehicleType,
+                                      lpVehicleTypeRuntime,
+                                      &mpData->mpaVehicleTypesUpdate[luVehicleType],
+                                      lTransform,
+                                      luVehicle,
+                                      mVehicleSoaData);
+
+        SetVehicleTransform(luVehicle, lOutMatrix);
+
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            // [T4-static] ONE LINE PER CAR, capped, so the conductor can pick a ram target
+            // without a debugger: index, type, seated world position, the transform's zAxis
+            // (the direction the car faces, which is what a -Teleport heading has to match),
+            // and the hull it belongs to. The cap keeps a full junkyard populate from
+            // flooding BrnGame.log. DELETE-WHEN-STABLE.
+            static u32 suT4StaticLogged = 0;
+            const u32 KU_T4_STATIC_LOG_CAP = 64;
+            if (suT4StaticLogged < KU_T4_STATIC_LOG_CAP)
+            {
+                ++suT4StaticLogged;
+                const Vector3& lrPos = lOutMatrix.wAxis;
+                const Vector3& lrAt  = lOutMatrix.zAxis;
+                *lpDiag << "[T4-static] vehicle=" << static_cast<s32>(luVehicle)
+                        << " type=" << static_cast<s32>(luVehicleType)
+                        << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
+                        << " at=(" << lrAt.x << ", " << lrAt.y << ", " << lrAt.z << ")"
+                        << " hull=" << static_cast<s32>(lrParam.GetHull())
+                        << " indexInHull=" << static_cast<s32>(luIndexInHull)
+                        << " [DELETE-WHEN-STABLE]\n";
+            }
+        }
+    }
+
+    mbDontCreateStaticVehiclesNearAnyPlayers = false;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::StaticVehicles_UpdateVehicles  @ 0x82722F98
+//
+//   StaticVehicles_CreateNewVehicles(lpInput);
+//   for (luVehicle = KU_STATIC_TRAFFIC_OFFSET; luVehicle < KU_TRAILER_TRAFFIC_OFFSET; ++luVehicle)
+//       if (mVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle)
+//           && mVehicleSoaData.<4th set>.IsBitSet(luVehicle))
+//           vehicle->UpdateEffects(..., (s32)(mfSimTimeStep * 5000.0f), &mEffectRand, mfSimTimeStep);
+//
+// The loop bounds are the console's literals: it starts at 400 and runs while `< 0x257`
+// (== 599 == KU_TRAILER_TRAFFIC_OFFSET), i.e. the 199 static slots exactly.
+//
+// SIGNATURE: it takes lpInput and forwards it, despite IDA typing @0x82722F98 as
+// one-argument. That is a Hex-Rays artefact of a pass-through: the prologue saves only r3 and
+// never writes r4, so whatever r4 held on entry flows into StaticVehicles_CreateNewVehicles'
+// second parameter. UpdateDecisionFrame @0x8274E508 does `mr r4, r30` (r30 == lpInput) right
+// before the `bl`, and the DWARF spells it out at BrnTrafficEntityModule.h:1839. Passing a
+// literal 0 here is inert only while the race-car proximity arm stays gated.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::StaticVehicles_UpdateVehicles(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    StaticVehicles_CreateNewVehicles(lpInput);
+
+    // The bulb-warmth delta is hoisted out of the loop by the console (0x82722FE8).
+    const s32 liBulbWarmthDelta = static_cast<s32>(mfSimTimeStep * KF_BULB_WARMTH_RATE);
+
+    // The second set is mVehicleSoaData + 240 == mPhysicalVehicles (mVehicleSoaData is at
+    // module +164560 and each FastBitArray<601> is 80 bytes).
+    for (u32 luVehicle = KU_STATIC_TRAFFIC_OFFSET;
+         luVehicle < KU_TRAILER_TRAFFIC_OFFSET;
+         ++luVehicle)
+    {
+        if (!mVehicleSoaData.mAliveVehicles.IsBitSet(luVehicle)
+            || !mVehicleSoaData.mPhysicalVehicles.IsBitSet(luVehicle))
+        {
+            continue;
+        }
+
+        GetVehicle(luVehicle)->UpdateEffects(mfSimTimeStep, liBulbWarmthDelta, &mEffectRand);
+    }
+}
+
+// ============================================================================
+// SECTION 5 -- picking what to spawn.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::PickVehicleToSpawn  @ 0x827235F8   (.cpp 9152 / 9163)
+//
+//   assert(luFlowTypeId < mpData->muNumFlowTypes);
+//   if (miDEBUGFlowtypeOverride >= 0 && (u32)miDEBUGFlowtypeOverride < mpData->muNumFlowTypes)
+//       luFlowTypeId = miDEBUGFlowtypeOverride;
+//   lpFlowType = mpData->mpapFlowTypes[luFlowTypeId];
+//   assert(lpFlowType->muNumVehicleTypes > 0);
+//   luRoll = (u8)(mRand.RandomUInt());            ; srdi r11,seed,32 ; clrlwi r29, r11, 24
+//   for (i = 0; i < lpFlowType->muNumVehicleTypes; ++i)
+//       if (luRoll <= lpFlowType->mpauCumulativeProb[i]) -> PICK i
+//   if (nothing picked) { assert("Invalid flow type <id>"); return 0; }   ; li r3,0 -- a
+//                                                                        ; LITERAL 0, not
+//                                                                        ; mpauVehicleTypeIds[0]
+//   luType = (u8)lpFlowType->mpauVehicleTypeIds[i];
+//   lpType = &mpData->mpaVehicleTypes[luType];
+//   ok = true;
+//   if (lpType->muVehicleClass == E_VEHICLECLASS_BUS || == E_VEHICLECLASS_BIGRIG)
+//       if ((mRand.RandomUInt() % 100 + 1) > miBigVehicleAmount)  ok = false;
+//   if (mbPlayingShowtimeMode)
+//       ok = (mpData->mpaVehicleAssets[lpType->muAssetId].GetVehicleId()
+//             == KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID);
+//   return ok ? luType : (u8)lpFlowType->mpauVehicleTypeIds[0];
+//
+// The showtime comparand is a full 64-bit load (`ldx r11, mpaVehicleAssets, assetId*8` then
+// `cmpld`), not "the dword at +4"; that reading is a big-endian artefact, since on this host
+// the low half of a u64 lives at +0. Done by value through VehicleAsset::GetVehicleId(), which
+// is width- and endian-correct on both.
+//
+// The 8-bit roll is attested: `clrlwi r29, r11, 24` truncates the LCG's high word to a byte,
+// which is what makes it comparable against the 0..255 cumulative-probability table.
+// ----------------------------------------------------------------------------
+u8 TrafficEntityModule::PickVehicleToSpawn(u32 luFlowTypeId)
+{
+    CGS_ASSERT(luFlowTypeId < mpData->muNumFlowTypes, "luFlowTypeId < mpData->muNumFlowTypes");
+
+    if (miDEBUGFlowtypeOverride >= 0
+        && static_cast<u32>(miDEBUGFlowtypeOverride) < mpData->muNumFlowTypes)
+    {
+        luFlowTypeId = static_cast<u32>(miDEBUGFlowtypeOverride);
+    }
+
+    const FlowType* lpFlowType = mpData->mpapFlowTypes[luFlowTypeId];
+    CGS_ASSERT(lpFlowType->muNumVehicleTypes > 0, "lpFlowType->muNumVehicleTypes > 0");
+
+    const u8 luRoll = static_cast<u8>(mRand.RandomUInt());
+
+    u32  luEntry = 0;
+    bool lbFound = false;
+    for (luEntry = 0; luEntry < lpFlowType->muNumVehicleTypes; ++luEntry)
+    {
+        if (luRoll <= lpFlowType->mpauCumulativeProb[luEntry])
+        {
+            lbFound = true;
+            break;
+        }
+    }
+
+    if (!lbFound)
+    {
+        // TWO DISTINCT CONSOLE FALLBACKS, do not collapse them. This one (LABEL_12, assert
+        // .cpp 9209) returns a LITERAL zero at 0x82723A38 and never touches the type-id table.
+        // The `mpauVehicleTypeIds[0]` fallback is the other path, the not-acceptable tail at
+        // 0x827238CC. Returning it here would dereference a table the console avoids: LABEL_12
+        // is reached exactly when muNumVehicleTypes == 0 and the array may be empty.
+        CGS_ASSERT(false, "Invalid flow type");
+        return 0;
+    }
+
+    const u8 luVehicleType = static_cast<u8>(lpFlowType->mpauVehicleTypeIds[luEntry]);
+    const VehicleTypeData* lpType = &mpData->mpaVehicleTypes[luVehicleType];
+
+    bool lbAcceptable = true;
+
+    if (lpType->muVehicleClass == E_VEHICLECLASS_BUS
+        || lpType->muVehicleClass == E_VEHICLECLASS_BIGRIG)
+    {
+        const u32 luBigVehicleRoll = (mRand.RandomUInt() % KU_PERCENTAGE_ROLL_MODULUS) + 1u;
+        if (static_cast<s32>(luBigVehicleRoll) > miBigVehicleAmount)
+        {
+            lbAcceptable = false;
+        }
+    }
+
+    if (mbPlayingShowtimeMode)
+    {
+        lbAcceptable = (mpData->mpaVehicleAssets[lpType->muAssetId].GetVehicleId()
+                        == KU_SHOWTIME_ONLY_VEHICLE_ASSET_ID);
+    }
+
+    if (lbAcceptable)
+    {
+        return luVehicleType;
+    }
+    return static_cast<u8>(lpFlowType->mpauVehicleTypeIds[0]);
+}
+
+// ============================================================================
+// SECTION 6 -- filling a hull.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::FillNewHull  @ 0x82743600
+//
+//   lpHull = GetHull(luHull);
+//   if (mfTrafficAmountScale == 0.0f) return;        ; 0x82743634 vs flt_82001CC0 == 0.0f
+//   ---- DRIVING HALF (REAL, 0x82743640..0x827439F8) : per section, lay cars at even
+//        distance spacing and carry the leftover fractional car to the next section ----
+//   ---- PARKED HALF (REAL, 0x82743A74..0x82743B60) ----
+//   for (i = 0; i < lpHull->muNumStaticTraffic; ++i)
+//   {
+//       lpRec = &lpHull->mpaStaticTrafficVehicles[i];          ; base + 80*i
+//       if ((mRand.RandomUInt() % 100 + 1) > lpRec->mExistsAtAllChance)   continue;  ; +0x42
+//       if ((lpRec->muFlags & 2) != 0 && !mbPlayingShowtimeMode)          continue;  ; +0x43
+//       if (!mbAllowDivergentBehaviour) { if (lpRec->muFlags & 1) continue; }
+//       else { ...proximity cull vs *(this + 0x728C0)... }
+//       StaticVehicles_Generate(PickVehicleToSpawn(lpRec->mFlowTypeID), luHull, i);  ; +0x40
+//   }
+//
+// The `muFlags` byte at +0x43 is ship-only (it postdates the earlier record) and the retail binary tests
+// only these two bits, so no enumerator is invented for them.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::FillNewHull(u16 luHull)
+{
+    const Hull* lpHull = GetHull(luHull);
+
+    if (mfTrafficAmountScale == 0.0f)
+    {
+        return;
+    }
+
+    // ---- DRIVING HALF, 0x82743640..0x827439F8 --------------------------------------------
+    // The section loop lays cars along each lane at even DISTANCE spacing (the leak walks in
+    // param units and Modulos; the ship walks in metres through
+    // Section::CalcParamFromStartParamAndDistanceAlongSection) and carries the leftover
+    // fractional car from one section to the next. Two ship-only additions over the earlier revision:
+    // the initial phase is random, and each car gets a jitter of up to 0.3 spacings.
+    f32 lfVehiclesToSpawn = mRand.RandomFloat(0.0f, KF_INITIAL_SPAWN_PHASE);
+
+    for (u32 luSection = 0; luSection < lpHull->muNumSections; ++luSection)
+    {
+        const Section*     lpSection = lpHull->GetSection(luSection);
+        const SectionFlow* lpFlow    = &lpHull->mpaSectionFlows[luSection];  // Hull::GetFlowData, inlined
+
+        if (lpFlow->muVehiclesPerMinute == 0)
+        {
+            continue;
+        }
+
+        CGS_ASSERT(lpSection->muNumRungs > 0, "muNumRungs > 0");   // 0x82743784, GetNumSegments inlined
+
+        const f32 lfTimeToDrive = lpSection->mfLength / lpSection->mfSpeed;
+
+        // 0x827437E8 / 0x827437F0, the same two fsels CalcTimeToNextGeneration @0x82721B08
+        // uses: raise the scaled rate to the floor, never above the section's own rate.
+        f32 lfVehiclesPerMinute = 0.0f;
+        if (lpFlow->muVehiclesPerMinute != 0 && mfTrafficAmountScale > 0.0f)
+        {
+            const f32 lfSectionRate = static_cast<f32>(lpFlow->muVehiclesPerMinute);
+            const f32 lfFloor       = (lfSectionRate >= KF_MIN_VEHICLES_PER_MINUTE)
+                                          ? KF_MIN_VEHICLES_PER_MINUTE
+                                          : lfSectionRate;
+            const f32 lfScaled      = mfTrafficAmountScale * lfSectionRate;
+            lfVehiclesPerMinute     = (lfScaled >= lfFloor) ? lfScaled : lfFloor;
+        }
+        CGS_ASSERT(lfVehiclesPerMinute > 0.0f, "lfVehiclesPerMinute > 0.0f");
+
+        const f32 lfSecondsPerVehicle = KF_SECONDS_PER_MINUTE / lfVehiclesPerMinute;
+
+        lfVehiclesToSpawn += lfTimeToDrive / lfSecondsPerVehicle;
+
+        const f32 lfWholeVehicles     = std::floor(lfVehiclesToSpawn);   // 0x82743868 frsp f31
+        const f32 lfVehiclesLeftOver  = lfVehiclesToSpawn - lfWholeVehicles;
+
+        const f32 lfDistPerVehicle = lpSection->mfLength / lfWholeVehicles;
+        const f32 lfJitterRange    = lfDistPerVehicle * KF_SPAWN_JITTER_FRACTION;
+
+        const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+        f32 lfParamAlong = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                               0.0f, lfDistPerVehicle * lfVehiclesLeftOver, lpafRungLengths);
+
+        for (u32 luVehicle = static_cast<u32>(lfWholeVehicles); luVehicle != 0; --luVehicle)
+        {
+            const f32 lfJitter = mRand.RandomFloat(0.0f, lfJitterRange);
+            const f32 lfSpawnParam = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                                         lfParamAlong, lfJitter, lpafRungLengths);
+
+            GenerateNewVehicle(PickVehicleToSpawn(lpFlow->muFlowTypeId),
+                               luHull,
+                               luSection,
+                               lfSpawnParam);
+
+            lfParamAlong = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                               lfParamAlong, lfDistPerVehicle, lpafRungLengths);
+        }
+
+        lfVehiclesToSpawn = lfVehiclesLeftOver;   // 0x827439F0 fmr f30, f27
+    }
+
+    for (u32 luStatic = 0; luStatic < lpHull->muNumStaticTraffic; ++luStatic)
+    {
+        const StaticTrafficVehicle* lpRecord = lpHull->GetStaticVehicle(luStatic);
+
+        const u32 luExistsRoll = (mRand.RandomUInt() % KU_PERCENTAGE_ROLL_MODULUS) + 1u;
+        if (luExistsRoll > lpRecord->mExistsAtAllChance)
+        {
+            continue;
+        }
+
+        if ((lpRecord->muFlags & 0x02u) != 0 && !mbPlayingShowtimeMode)
+        {
+            continue;
+        }
+
+        if (!mbAllowDivergentBehaviour)
+        {
+            if ((lpRecord->muFlags & 0x01u) != 0)
+            {
+                continue;
+            }
+            // The console re-reads mbAllowDivergentBehaviour here and, finding it false,
+            // jumps straight to the spawn -- i.e. the proximity cull is the
+            // divergent-behaviour arm only. Fall through to the spawn.
+        }
+        else
+        {
+            // 0x82743AFC..0x82743B28. Reference position = the +0x728C0 lane == the
+            // mCameraLastFrame transform's Pos row. Radius unk_8300CC90 == 1600.0f == 40 m
+            // squared (dyn-init thunk 0x82C662D0 squares the 40.0f splat at 0x8300CB80).
+            const Vector3 lToRecord = lpRecord->mTransform.Pos() - mCameraLastFrame.GetPosition();
+            if (rw::math::vpu::Dot(lToRecord, lToRecord) < KF_PARKED_PROXIMITY_CULL_RADIUS_SQ)
+            {
+                continue;
+            }
+        }
+
+        StaticVehicles_Generate(PickVehicleToSpawn(lpRecord->mFlowTypeID),
+                                luHull,
+                                static_cast<u8>(luStatic));
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SpawnNewTraffic  @ 0x82748A40   (.cpp 8378)
+//
+//   assert(IsDecisionFrame());
+//   if (NeedToTakeActionAgainstJunctionFUP()) return;   ; the predicate is INLINED at
+//                                                       ; 0x82748A90..0x82748AF8, byte for
+//                                                       ; byte the committed
+//                                                       ; NeedToTakeActionAgainstJunctionFUP
+//   for (i = 0; i < lrNewActiveHulls.GetLength(); ++i)  FillNewHull(lrNewActiveHulls[i]);
+//   ---- GENERATOR HALF (REAL, 0x82748BB0..) : tick mafTimesTillNextGeneration, emit ----
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SpawnNewTraffic(const ActiveHullSet& lrNewActiveHulls)
+{
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");
+
+    if (NeedToTakeActionAgainstJunctionFUP())
+    {
+        return;
+    }
+
+    for (u32 luIndex = 0; luIndex < lrNewActiveHulls.GetLength(); ++luIndex)
+    {
+        FillNewHull(lrNewActiveHulls[luIndex]);
+    }
+
+    // ---- GENERATOR HALF, 0x82748BB0.. -----------------------------------------------------
+    // Each generator counts down by the decision-frame interval. On expiry the overshoot is
+    // turned back into a distance along the lane (speed * overshoot), the car is placed there,
+    // and the emission is skipped when the first param already on that section is closer than
+    // two seconds of lane speed behind it.
+    for (u32 luGenerator = 0; luGenerator < muNumGenerators; ++luGenerator)
+    {
+        mafTimesTillNextGeneration[luGenerator] -= mfSimTimeSinceLastDecision;
+
+        if (mafTimesTillNextGeneration[luGenerator] > 0.0f)
+        {
+            continue;
+        }
+
+        const u32 luHull    = maGenerators[luGenerator].muHull;
+        const u32 luSection = maGenerators[luGenerator].muSection;
+
+        const Hull*        lpHull    = GetHull(luHull);
+        const SectionFlow* lpFlow    = &lpHull->mpaSectionFlows[luSection];  // Hull::GetFlowData, inlined
+        const Section*     lpSection = lpHull->GetSection(luSection);
+
+        const u8  luVehicleType  = PickVehicleToSpawn(lpFlow->muFlowTypeId);
+        const f32 lfDistanceIn   = -(mafTimesTillNextGeneration[luGenerator] * lpSection->mfSpeed);
+        const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+        const f32 lfParamAlong = lpSection->CalcParamFromStartParamAndDistanceAlongSection(
+                                     0.0f, lfDistanceIn, lpafRungLengths);
+
+        bool lbGenerate = true;
+
+        const u16 luFirstParam = GetHullRuntime(luHull)->GetFirstParamInSection(luSection);
+        if (luFirstParam != static_cast<u16>(KU_INVALID_PARAM))
+        {
+            const Param* lpFirstParam = GetParam(luFirstParam);
+
+            const f32 lfFrontDist = lpSection->CalcDistanceAlongSection(lpFirstParam->mfParamAlong,
+                                                                        lpFirstParam->muCurrentSegment,
+                                                                        lpafRungLengths)
+                                    - lpFirstParam->mfBackDist;
+
+            if ((lfFrontDist - lfDistanceIn) < (lpSection->mfSpeed * KF_GENERATOR_MIN_HEADWAY_SECONDS))
+            {
+                lbGenerate = false;
+            }
+        }
+
+        if (lbGenerate)
+        {
+            GenerateNewVehicle(luVehicleType, luHull, luSection, lfParamAlong);
+        }
+
+        mafTimesTillNextGeneration[luGenerator] += CalcTimeToNextGeneration(luHull, luSection);
+    }
+}
+
+// ============================================================================
+// SECTION 7 -- the active-hull set.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::RecalculateActiveHulls  @ 0x8274C870   PARTIAL   (.cpp 7275..7367)
+//
+// Real here: the five entry asserts, the previous-set snapshot, the rebuild of mActiveHulls
+// from maaRaceCarHulls, the two SetDifferences that produce the caller's new/old sets, the
+// miDEBUGOverBudgetness reset, the same rebuild for mActiveHullsForLocalPlayer, and
+// UpdateRaceCarHulls @0x82721460's offline arm expanded at its single call site below.
+//
+// Gated, each with its own reason:
+//   * PredictHullChanges @0x827348E8 -- an export hole (no per-function JSON), and online-only
+//     (`!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING`).
+//   * the baked debug hull-override list (the bool at X360 +0x729F0 selecting the 15-entry
+//     table at unk_820BA81C) -- that byte sits in the un-emitted DWARF :892..:895 window
+//     between mfDEBUGAvoidance_PassScore and miPerfMon_PreSceneUpdate, so it has no name.
+//   * the std::_Sort of mActiveHulls -- ::Set<T,N> has no Sort. Order-only: SetDifference is
+//     order-independent, so only the order FillNewHull visits hulls in changes.
+//   * mHullsToAddTriggersFor / mHullsToRemoveTriggersFor -- they need ::Array<T,N>::AppendSet,
+//     which CgsArray.h does not declare (it has AppendArray only).
+//   * the light-manager events either side of the HullRuntime loops, and the stopline walk
+//     ending in HullRuntime::SetStoplineRed @0x8274D82C -- TrafficLightManager has no body.
+//
+// The per-old-hull HullRuntime::Release + free, the per-new-hull allocate + HullRuntime::Prepare
+// and the tail call to RebuildGeneratorList @0x8274D8F4 are LIVE.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::RecalculateActiveHulls(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput,
+    ActiveHullSet* lpOutNewHulls,
+    ActiveHullSet* lpOutOldHulls)
+{
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+    CGS_ASSERT(lpOutNewHulls != 0, "lpOutNewHulls != NULL");
+    CGS_ASSERT(lpOutOldHulls != 0, "lpOutOldHulls != NULL");
+
+    if (!mbAllowDivergentBehaviour && meState == E_STATE_RUNNING)
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "RecalculateActiveHulls leg PredictHullChanges @0x827348E8 -- EXPORT HOLE (no "
+            "per-function JSON in .ida-exports); ONLINE-only arm, dead offline");
+    }
+
+    // ====================================================================================
+    // THE BODY OF TrafficEntityModule::UpdateRaceCarHulls @0x82721460, expanded at its single
+    // call site. It is the only producer of maaRaceCarHulls, which mActiveHulls is rebuilt
+    // from, so without it the new-hull set is always empty and FillNewHull never runs.
+    //
+    // FLAG: OUTLINE-ME. The console has this as a member function with exactly one caller, but
+    // it is not declared in BrnTrafficEntityModule.h and a member cannot be defined without a
+    // declaration. A free function taking `TrafficEntityModule&` would be the shim
+    // anti-pattern the faithfulness gate catches, so it is expanded here instead. To outline
+    // it, add this line to BrnTrafficEntityModule.h beside RecalculateActiveHulls (private,
+    // like its caller) and move the block below into a partfile verbatim; it reads only
+    // lpInput and members, so nothing else changes:
+    //
+    //        void UpdateRaceCarHulls( const BrnTrafficIO::InputBuffer_PostPhysics* lpInput );
+    //
+    // WHAT THE CONSOLE DOES (0x82721484..0x827217FC):
+    //   assert(IsDecisionFrame());                                     ; baked .cpp 7575
+    //   lpActive = lpInput->GetActiveRaceCarOutputInterface();         ; sub_82711850
+    //   if (mbAllowDivergentBehaviour)              ; lbzx +0x717E7
+    //   {
+    //       if (lpActive->IsPlayerCarActive() == 1)
+    //       {
+    //           lePlay = lpActive->GetPlayerActiveRaceCarIndex();      ; 0x82277BF8
+    //           for (i = 0; i < 8; ++i) maaRaceCarHulls[i].Clear();    ; stw 0, +0x55820 stride 0x18
+    //           lCentre = <player car position | two DEBUG overrides>
+    //           lHalf   = Vector3(mfTrafficSimRadius)                  ; lvx +0x713B0, vperm/vrlimi
+    //           minCell = Pvs::GetHullIndexForPoint(lCentre - lHalf, &minX, &minZ);
+    //           maxCell = Pvs::GetHullIndexForPoint(lCentre + lHalf, &maxX, &maxZ);
+    //           for (x = minX; x <= maxX; ++x)
+    //               for (z = minZ; z <= maxZ; ++z)
+    //                   maaRaceCarHulls[lePlay].Append(Pvs::GetHullIndexForIndices(x, z));
+    //           if (!mbInOfflineCarSelect)                             ; lbzx +0x713C8
+    //               assert(maaRaceCarHulls[lePlay].GetLength() <= 4);  ; "We ended up with too many hulls turned on: "
+    //       }
+    //   }
+    //   else { ...the ONLINE predicted-hull-change replay, GATED below... }
+    //
+    // The return value of the two corner calls is discarded: the console keeps only the four
+    // grid coordinates and overwrites the linear cell index. The calls still happen, because
+    // their bounds assert is a real side effect.
+    // ====================================================================================
+    {
+        CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 7575
+
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
+            lpInput->GetActiveRaceCarOutputInterface();
+
+        if (mbAllowDivergentBehaviour)
+        {
+            if (lpActiveRaceCars->IsPlayerCarActive())
+            {
+                const EActiveRaceCarIndex lePlayerCar = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
+
+                // 0x82721508..0x82721550: eight Clear()s, one per active-race-car slot, with
+                // the enum-walk assert the console bakes from BurnoutConstants.h:39. The
+                // stride is 0x18 == sizeof(Array<u16,9>) and the base is the count word.
+                for (s32 liRaceCar = 0; liRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar)
+                {
+                    maaRaceCarHulls[liRaceCar].Clear();
+                    CGS_ASSERT(liRaceCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                }
+
+                // The sim-box centre, console default (0x82721590): the player car's world
+                // position, `GetRaceCarState(lePlay)->mTransform.wAxis` (asm `addi r11, state,
+                // 0x1F0 ; lvx128 v126, r11, 0x30`, where 0x1F0 is RaceCarState::mTransform and
+                // +0x30 its translation row). IDA names the call GetRaceCarStateMutable
+                // @0x8227D690 because the const twin was ICF-folded onto it; a const interface
+                // pointer needs the const form.
+                //
+                // ASSERT DELTA, deliberate: 0x8227D690 carries three asserts (index >= 0,
+                // index < COUNT, IsRaceCarActive(index)); the committed const :220 body carries
+                // only the two bounds ones. The third is unreachable here, since
+                // IsPlayerCarActive() already returned true. Same applies at
+                // PostPhysicsUpdate's tail, which reaches the same accessor.
+                const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
+                    lpPlayerState = lpActiveRaceCars->GetRaceCarState(lePlayerCar);
+                const Vector3 lSimCentre = lpPlayerState->mTransform.wAxis;
+
+                {
+                    // GATE: the two DEBUG sim-centre overrides @0x82721554 / 0x827215A8, both
+                    // substituting mCameraLastFrame.GetPosition() for lSimCentre.
+                    // BLOCKER: the selector word at X360 +0x729D4 is mCameraLastFrame+0x144,
+                    // an unnamed Camera field, and DebugComponent::+0x34 has no name either.
+                    // DELETE-WHEN both are named. DEBUG-ONLY; the live default is taken.
+                    static bool sbLogged = false;
+                    LogMissingLeg_T1(sbLogged,
+                        "UpdateRaceCarHulls DEBUG sim-centre overrides @0x82721554 / "
+                        "0x827215A8 -- selector words mCameraLastFrame+0x144 and "
+                        "DebugComponent+0x34 are unnamed. DEBUG-ONLY, no live effect");
+                }
+
+                // The box half-extent, 0x827215CC..0x82721604: mfTrafficSimRadius through the
+                // SDK's VecFloat -> Vector3 lane shuffle (w zeroed, y restored). Construct
+                // seeds the member as a splat of 195.0f, so every lane the shuffle can select
+                // is 195.0f, and only lanes 0 and 2 reach the Pvs. Written as the Vector3 it
+                // produces rather than transcribed as VMX.
+                Vector3 lHalfExtent;
+                lHalfExtent.x = mfTrafficSimRadius.x;
+                lHalfExtent.y = mfTrafficSimRadius.y;
+                lHalfExtent.z = mfTrafficSimRadius.z;
+                lHalfExtent.w = 0.0f;
+
+                Vector3 lBoxMin;                        // vsubfp128 v125, v126, v127
+                lBoxMin.x = lSimCentre.x - lHalfExtent.x;
+                lBoxMin.y = lSimCentre.y - lHalfExtent.y;
+                lBoxMin.z = lSimCentre.z - lHalfExtent.z;
+                lBoxMin.w = 0.0f;
+
+                Vector3 lBoxMax;                        // vaddfp128 v127, v126, v127
+                lBoxMax.x = lSimCentre.x + lHalfExtent.x;
+                lBoxMax.y = lSimCentre.y + lHalfExtent.y;
+                lBoxMax.z = lSimCentre.z + lHalfExtent.z;
+                lBoxMax.w = 0.0f;
+
+                // ---- corner -> grid coordinates -------------------------------------------
+                // Each corner goes through TrafficData::operator-> then `lwz r3, 8(r3)`, i.e.
+                // mpData->mpPvs (TrafficData +0x08, static_asserted in
+                // BrnTrafficDataResourceType.h).
+                const Pvs* lpPvs = mpData->mpPvs;
+
+                s32 liMinX = 0;
+                s32 liMinZ = 0;
+                lpPvs->GetHullIndexForPoint(lBoxMin, liMinX, liMinZ);
+
+                s32 liMaxX = 0;
+                s32 liMaxZ = 0;
+                lpPvs->GetHullIndexForPoint(lBoxMax, liMaxX, liMaxZ);
+
+                // ---- walk the rectangle ---------------------------------------------------
+                // Outer loop X (r29, 0x827216F4), inner loop Z (r31, 0x827216E8) -- that
+                // order is the asm's, and it decides the order FillNewHull later visits hulls
+                // in. Both bounds are INCLUSIVE (`ble`), and both loops are entered only when
+                // min <= max (`bgt` skips), which is why an empty box produces no hulls
+                // rather than wrapping.
+                for (s32 liCellX = liMinX; liCellX <= liMaxX; ++liCellX)
+                {
+                    for (s32 liCellZ = liMinZ; liCellZ <= liMaxZ; ++liCellZ)
+                    {
+                        const u16 luHull =
+                            static_cast<u16>(lpPvs->GetHullIndexForIndices(liCellX, liCellZ));
+                        maaRaceCarHulls[lePlayerCar].Append(luHull);
+                    }
+                }
+
+                if (!mbInOfflineCarSelect)
+                {
+                    // 0x82721700..0x827217FC. The console builds the message with the count
+                    // appended ("We ended up with too many hulls turned on: %u"); the budget
+                    // literal is `cmplwi r11, 4 ; ble ->`, i.e. the assert fires above FOUR
+                    // even though the array holds KU_MAX_ACTIVE_HULLS_PER_RACECAR (9).
+                    CGS_ASSERT(maaRaceCarHulls[lePlayerCar].GetLength() <= 4u,
+                               "We ended up with too many hulls turned on");
+                }
+            }
+        }
+        else
+        {
+            // GATE: the online arm from 0x82721870, which replays maPredictedHullChanges
+            // instead of computing the box locally so every client turns the same hulls on in
+            // the same frame, and on a miss latches mbHullSyncDivergence. Its producer
+            // PredictHullChanges @0x827348E8 is an ARTIST export hole, so the array is never
+            // filled here and replaying it would only assert. Dead offline anyway.
+            static bool sbLogged = false;
+            LogMissingLeg_T1(sbLogged,
+                "UpdateRaceCarHulls ONLINE arm (!mbAllowDivergentBehaviour) -- replays "
+                "maPredictedHullChanges, whose producer PredictHullChanges @0x827348E8 is an "
+                "ARTIST EXPORT HOLE. Dead offline");
+        }
+    }
+
+    // Snapshot the previous set, then rebuild it. The console memcpy's 148 bytes (Set<u16,72>:
+    // 144 element bytes plus the 4-byte length) into a stack temp before clearing.
+    const ActiveHullSet lPreviousActiveHulls = mActiveHulls;
+    mActiveHulls.Clear();
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "RecalculateActiveHulls DEBUG hull-override arm (the bool at X360 +0x729F0 "
+            "selects the baked 15-entry hull table at unk_820BA81C) -- that byte lies in the "
+            "DecFIGS un-emitted :892..:895 window, so it has no attested member name");
+    }
+
+    for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+         leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leRaceCar = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leRaceCar) + 1))
+    {
+        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
+            maaRaceCarHulls[leRaceCar];
+
+        for (u32 luIndex = 0; luIndex < lrRaceCarHulls.GetLength(); ++luIndex)
+        {
+            const u16 luRaceCarHull = lrRaceCarHulls.GetItem(luIndex);
+            CGS_ASSERT(luRaceCarHull < KU_MAX_HULLS, "luRaceCarHull < KU_MAX_HULLS");
+            mActiveHulls.Insert(luRaceCarHull);
+        }
+    }
+
+    if (mActiveHulls.GetLength() != 0)
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "RecalculateActiveHulls std::_Sort(mActiveHulls) -- ::Set<T,N> (CgsSet.h, not "
+            "this cluster's file) has no Sort. ORDER ONLY: SetDifference is order-independent "
+            "so the new/old sets are identical; only FillNewHull's visit order changes");
+    }
+
+    lpOutNewHulls->SetDifference(mActiveHulls, lPreviousActiveHulls);
+    lpOutOldHulls->SetDifference(lPreviousActiveHulls, mActiveHulls);
+
+    if (lpOutNewHulls->GetLength() != 0 || lpOutOldHulls->GetLength() != 0)
+    {
+        // LABEL_43: the debug over-budget counter resets whenever the active set moved.
+        // +468932 == miDEBUGOverBudgetness (:845), pinned by the debug block's run: mpLogger
+        // @+468916, mbDEBUGStopTrafficMoving @+468920, meDEBUGAirRamToFire @+468924,
+        // miDEBUGOverrideVehicleToSpawn @+468928.
+        miDEBUGOverBudgetness = 0;
+    }
+
+    // ---- the same computation for the LOCAL player's hulls -------------------------------
+    const ActiveHullSet lPreviousLocalHulls = mActiveHullsForLocalPlayer;
+    mActiveHullsForLocalPlayer.Clear();
+
+    if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrLocalHulls =
+            maaRaceCarHulls[meLocalPlayerIndex];
+
+        for (u32 luIndex = 0; luIndex < lrLocalHulls.GetLength(); ++luIndex)
+        {
+            const u16 luRaceCarHull = lrLocalHulls.GetItem(luIndex);
+            CGS_ASSERT(luRaceCarHull < KU_MAX_HULLS, "luRaceCarHull < KU_MAX_HULLS");
+            mActiveHullsForLocalPlayer.Insert(luRaceCarHull);
+        }
+    }
+
+    // [T-anchor] junkyard-anchored-traffic probe (user report 2026-08-24: "the traffic
+    // despawn, like it is anchored to the junkyard and doesn't follow the player").
+    // Per sampled decision frame: the sim-box anchor this pass ACTUALLY used (re-read from
+    // the same interface UpdateRaceCarHulls read), against the module's own camera latch,
+    // plus the hull-set churn and the free-param level. Env-gated BRN_TRAFFIC_DIAG.
+    // NOT IN THE X360 BINARY. DELETE-WHEN the anchor bug is closed with an A/B run.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suAnchorSample = 0;
+        if ((suAnchorSample % 10u) == 0u)   // decision frames are 0.1 s -> ~1 line/s
+        {
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpCars =
+                lpInput->GetActiveRaceCarOutputInterface();
+            const bool lbActive = (lpCars != 0) && lpCars->IsPlayerCarActive();
+
+            *lpDiag << "[T-anchor] d " << static_cast<s32>(suAnchorSample)
+                    << " divergent " << (mbAllowDivergentBehaviour ? 1 : 0)
+                    << " playerActive " << (lbActive ? 1 : 0);
+            if (lbActive)
+            {
+                const EActiveRaceCarIndex lePlayer = lpCars->GetPlayerActiveRaceCarIndex();
+                const Vector3 lAnchor = lpCars->GetRaceCarState(lePlayer)->mTransform.wAxis;
+                *lpDiag << " idx " << static_cast<s32>(lePlayer)
+                        << " anchor " << lAnchor.x << " " << lAnchor.y << " " << lAnchor.z;
+            }
+            const Vector3 lCamPos = mCameraLastFrame.GetPosition();
+            *lpDiag << " cam " << lCamPos.x << " " << lCamPos.y << " " << lCamPos.z
+                    << " hulls " << mActiveHulls.GetLength()
+                    << " +new " << lpOutNewHulls->GetLength()
+                    << " -old " << lpOutOldHulls->GetLength()
+                    << " freeParams " << mFreeParams.GetLength();
+
+            // The grid mapping itself, through the same public accessor the walk uses:
+            // the anchor box corners' clamped cells, the active hull ids, and (once) the
+            // grid extremes -- two far corner probes expose muNumCells_X/Z via the clamp.
+            if (lbActive && mpData->mpPvs != 0)
+            {
+                const Pvs* lpPvsDiag = mpData->mpPvs;
+                const Vector3 lAnchorDiag =
+                    lpCars->GetRaceCarState(lpCars->GetPlayerActiveRaceCarIndex())->mTransform.wAxis;
+                Vector3 lLo = lAnchorDiag;
+                Vector3 lHi = lAnchorDiag;
+                lLo.x -= mfTrafficSimRadius.x; lLo.y -= mfTrafficSimRadius.y; lLo.z -= mfTrafficSimRadius.z;
+                lHi.x += mfTrafficSimRadius.x; lHi.y += mfTrafficSimRadius.y; lHi.z += mfTrafficSimRadius.z;
+                s32 liLoX = 0, liLoZ = 0, liHiX = 0, liHiZ = 0;
+                lpPvsDiag->GetHullIndexForPoint(lLo, liLoX, liLoZ);
+                lpPvsDiag->GetHullIndexForPoint(lHi, liHiX, liHiZ);
+                *lpDiag << " simR " << mfTrafficSimRadius.x
+                        << " cells x " << liLoX << ".." << liHiX
+                        << " z " << liLoZ << ".." << liHiZ << " ids";
+                for (u32 luH = 0; luH < mActiveHulls.GetLength() && luH < 6u; ++luH)
+                {
+                    *lpDiag << " " << mActiveHulls[luH];
+                }
+                static bool sbGridPrinted = false;
+                if (!sbGridPrinted)
+                {
+                    sbGridPrinted = true;
+                    Vector3 lFarLo; lFarLo.x = -1.0e9f; lFarLo.y = 0.0f; lFarLo.z = -1.0e9f; lFarLo.w = 0.0f;
+                    Vector3 lFarHi; lFarHi.x =  1.0e9f; lFarHi.y = 0.0f; lFarHi.z =  1.0e9f; lFarHi.w = 0.0f;
+                    s32 liMinCX = 0, liMinCZ = 0, liMaxCX = 0, liMaxCZ = 0;
+                    lpPvsDiag->GetHullIndexForPoint(lFarLo, liMinCX, liMinCZ);
+                    const u32 luMaxIdx = lpPvsDiag->GetHullIndexForPoint(lFarHi, liMaxCX, liMaxCZ);
+                    *lpDiag << " GRID cellsX " << (liMaxCX + 1) << " cellsZ " << (liMaxCZ + 1)
+                            << " minClamp " << liMinCX << "," << liMinCZ
+                            << " maxIdx " << static_cast<s32>(luMaxIdx);
+                }
+            }
+            *lpDiag << " [DELETE-WHEN-STABLE]\n";
+        }
+        ++suAnchorSample;
+    }
+
+    {
+        // GATE: the two Array<u16,72>::AppendSet calls @0x8274?? that feed
+        // mHullsToAddTriggersFor / mHullsToRemoveTriggersFor. BLOCKER: ::Array<T,N>::AppendSet
+        // is absent from CgsArray.h, which declares AppendArray only.
+        // DELETE-WHEN CgsArray.h grows AppendSet. Triggers are not on the round-1 driving path.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "RecalculateActiveHulls trigger legs -- the two Array<u16,72>::AppendSet calls "
+            "feeding mHullsToAddTriggersFor / mHullsToRemoveTriggersFor need "
+            "::Array<T,N>::AppendSet, absent from CgsArray.h (it declares AppendArray only)");
+    }
+
+    // ---- HullRuntime free, one per hull that left the set ---------------------------------
+    // 0x8274?? .. `HullRuntime::Release(1176 * idx + this + 257216)` then the bit-array free
+    // and the index reset. mauHullRuntimeDataIndices / maHullRuntimeData are reached by name.
+    for (u32 luOld = 0; luOld < lpOutOldHulls->GetLength(); ++luOld)
+    {
+        const u16 luHull        = lpOutOldHulls->GetItem(luOld);
+        const u8  luHullRuntime = mauHullRuntimeDataIndices[luHull];
+
+        if (luHullRuntime == KU_INVALID_HULL_RUNTIME)
+        {
+            continue;
+        }
+
+        CGS_ASSERT(luHullRuntime < KU_MAX_ACTIVE_HULLS, "luIndex < NUMBITS");
+        CGS_ASSERT(mUsedHullRuntimeData.IsBitSet(luHullRuntime),
+                   "mUsedHullRuntimeData.IsBitSet( luHullRuntime )");
+
+        maHullRuntimeData[luHullRuntime].Release();
+        mUsedHullRuntimeData.UnSetBit(luHullRuntime);
+        mauHullRuntimeDataIndices[luHull] = KU_INVALID_HULL_RUNTIME;
+    }
+
+    // ---- HullRuntime allocate, one per hull that joined ------------------------------------
+    // The console picks the slot with a cntlzd scan for the first CLEAR bit of
+    // mUsedHullRuntimeData; CgsBitArray.h exposes no such primitive, so the scan is written
+    // as the linear loop it was strength-reduced from (same result: the lowest free slot).
+    for (u32 luNew = 0; luNew < lpOutNewHulls->GetLength(); ++luNew)
+    {
+        const u16 luHull = lpOutNewHulls->GetItem(luNew);
+
+        CGS_ASSERT(mauHullRuntimeDataIndices[luHull] == KU_INVALID_HULL_RUNTIME,
+                   "mauHullRuntimeDataIndices[luHull] == KU_INVALID_HULL_RUNTIME");
+
+        s32 liHullRuntime = -1;
+        for (u32 luSlot = 0; luSlot < KU_MAX_ACTIVE_HULLS; ++luSlot)
+        {
+            if (!mUsedHullRuntimeData.IsBitSet(luSlot))
+            {
+                liHullRuntime = static_cast<s32>(luSlot);
+                break;
+            }
+        }
+
+        CGS_ASSERT(liHullRuntime >= 0, "liHullRuntime >= 0");
+        if (liHullRuntime < 0)
+        {
+            continue;
+        }
+
+        maHullRuntimeData[liHullRuntime].Prepare(GetHull(luHull), luHull);
+        mUsedHullRuntimeData.SetBit(static_cast<u32>(liHullRuntime));
+        mauHullRuntimeDataIndices[luHull] = static_cast<u8>(liHullRuntime);
+    }
+
+    {
+        // GATE: the light-manager events either side of the two loops above, and the trailing
+        // per-hull stopline walk that ends in HullRuntime::SetStoplineRed.
+        // BLOCKER: TrafficLightManager has no Construct/Update body in this tree (see the
+        // Reset and PostPhysicsUpdate gates). DELETE-WHEN the light manager lands.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "RecalculateActiveHulls light-manager legs -- the per-hull add/remove events and "
+            "the stopline walk ending in HullRuntime::SetStoplineRed. TrafficLightManager has "
+            "no Construct/Update body in this tree; lights stay in their default phase");
+    }
+
+    // @0x8274D890..0x8274D8F4. The generator list is rebuilt only when the active-hull set
+    // actually moved; RecalculateActiveHulls is its ONLY xref, so muNumGenerators has no other
+    // producer. Both GetLength reads carry the Set's own "length != -1" assert (CgsSet.h 227).
+    if (lpOutNewHulls->GetLength() != 0 || lpOutOldHulls->GetLength() != 0)
+    {
+        RebuildGeneratorList();
+    }
+}
+
+// ============================================================================
+// SECTION 8 -- the per-frame driver.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::PostPhysicsUpdate  @ 0x8274E6D0   PARTIAL
+//
+// Real here: the buffer lock bracket, the streaming-complete latch, UpdateDensity, the
+// mbDEBUGTurnTrafficOff tear-down trigger, the whole E_STATE_STARTING_UP arm (POPULATING is
+// where parked cars are created), and the tail's local-player refresh (meLocalPlayerIndex,
+// mLocalPlayerPosition, mLocalPlayerDirection).
+//
+// Gated: the pre-state head (UpdateDEBUG, HandleExternalRequests), most of the
+// E_STATE_RUNNING arm, the E_STATE_TEARING_DOWN arm, and the rest of the tail (perfmon,
+// UpdateEventStarts, the network, traffic-type and replay legs). None is bodied in this tree
+// and none is on the parked-car path.
+//
+// DEPENDS ON PreSceneUpdate BEING MOUNTED. The console advances
+// E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING in PreSceneUpdate @0x8274A968, not here,
+// and its body lives in BrnTrafficEntityModule_wT1_02.cpp. That transition cannot be moved
+// here: it reads `lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive()` on the
+// PRE-SCENE input buffer, which this function does not have, and emitting it without that test
+// would advance to POPULATING before the player car exists, reaching RUNNING with an empty
+// world. So the POPULATING arm below runs only once _wT1_02.cpp is in
+// tools/build/build_game_exe.bat. Until then the exe fails to link with LNK2019 on
+// PreSceneUpdate; the per-TU `cl /c` gate cannot see the mount either way.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                                            CgsModule::IOBufferStack* lpOutputBufferStack,
+                                            BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                            BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput,
+                                            BrnUpdateSet lUpdateSet)
+{
+    (void)lpInputBufferStack;
+    (void)lpOutputBufferStack;
+
+    lpOutput->LockForWrite();
+    lpInput->LockForRead();
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PostPhysicsUpdate head leg UpdateDEBUG @0x8271DC78 -- not bodied in this tree");
+    }
+
+    // ⭐ GATE PARTIALLY REMOVED 2026-08-29 (jam-valve wave). HandleExternalRequests
+    // @0x8274B660 is now bodied in _wT6_03.cpp -- PARTIAL, but the one arm it runs for real is
+    // action 23 (PREPARE_FOR_MODE), which is the ONLY caller of HandlePrepareForModeAction and
+    // therefore the only route by which mbPlayingShowtimeMode is ever set outside the debug
+    // menu. Until this call existed the handler was not merely unreached, it was DISCARDED by
+    // /OPT:REF and absent from Burnout_PC.map.
+    //
+    // ⚠️ The old banner's consequence claim was HALF right and is corrected here: it said the
+    // module "never consumes game-mode requests, so mfGameModeDensityScale keeps the value
+    // ResetEventData seeded". mfGameModeDensityScale is written by TWO arms -- action 28
+    // (SetTrafficScaleBasedOnRank), still gated, AND action 23, which is now live and copies
+    // GameModeParams::mfTrafficDensityScale into it. So the density is no longer pinned at
+    // mfBaseDensityScale once a mode is prepared.
+    HandleExternalRequests(lpInput, lpOutput);
+
+    // The streamer pump, head call (`bl UpdateStreaming` @0x8274E740, before UpdateDensity's
+    // at 0x8274E7A0). This is what makes the game ASK for a VEH_T*_GR bundle: SetAssetList
+    // publishes the catalogue, and nothing is requested until TrafficCarStreamer::Update runs,
+    // whose only pump is UpdateStreaming (body in BrnTrafficEntityModule_wT1_04.cpp, which
+    // must be mounted or this is an LNK2019).
+    UpdateStreaming(lpOutput);
+
+    if (mbWaitingForStreaming && mStreamer.AreAllAssetsLoaded())
+    {
+        mbWaitingForStreaming = false;
+
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PostPhysicsUpdate StreamingCompleteEvent(E_MODULE_TRAFFIC_ENTITY) emit -- TWO "
+            "blockers, both one step: (a) the tree's EModule enum in BrnGameEvents.h carries "
+            "only an invented-name E_MODULE_WORLD_GRAPHICS=2, while the DecFIGS DWARF gives the "
+            "whole set (TRAFFIC_ENTITY=0, RACE_CAR_ENTITY=1, WORLD_ENTITY=2, GUI_SCREEN=3, "
+            "COUNT=4) and the X360 emit stores literal 0, so it needs an additive completion in "
+            "a header this wave does not own; (b) the console posts `AddEvent(&record, 9, 16)` "
+            "where 16 is the CONSOLE record size, so the host size must come from the host "
+            "type. The FLAG ITSELF is cleared, so the module does not wait forever");
+    }
+
+    UpdateDensity();
+
+    if (mbDEBUGTurnTrafficOff && meState == E_STATE_RUNNING && !IsPaused())
+    {
+        EnterTearingDownState();
+    }
+
+    switch (meState)
+    {
+    case E_STATE_STARTING_UP:
+        switch (meStartingUpState)
+        {
+        case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
+            // The console's arm is empty here; the transition lives in PreSceneUpdate
+            // @0x8274A968 (_wT1_02.cpp). PreScene runs before PostPhysics, so the state can
+            // flip and the next arm run on the same frame, which is why meLocalPlayerIndex,
+            // refreshed in this function's tail, is one frame old when POPULATING reads it.
+            // That is the console's ordering too.
+            break;
+
+        case E_STARTINGUPSTATE_POPULATING:
+        {
+            ActiveHullSet lNewActiveHulls;
+            ActiveHullSet lOldActiveHulls;
+            lNewActiveHulls.Construct();
+            lOldActiveHulls.Construct();
+
+            RecalculateActiveHulls(lpInput, lpOutput, &lNewActiveHulls, &lOldActiveHulls);
+
+            CGS_ASSERT(lOldActiveHulls.GetLength() == 0, "lOldActiveHulls.GetLength() == 0");
+
+            // 0x8274ED00..0x8274ED1C: `meLocalPlayerIndex != -1 || mbAllowDivergentBehaviour`.
+            // Offline the right-hand side is always true, so populating starts on the first
+            // decision frame; online it waits until the local player is seated, which is what
+            // keeps every client's population deterministic.
+            if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID || mbAllowDivergentBehaviour)
+            {
+                SpawnNewTraffic(lNewActiveHulls);
+
+                if (mbAllowDivergentBehaviour)
+                {
+                    // @0x8273A308.
+                    UpdateVehicles_CreateNewVehicles(lpInput);
+
+                    StaticVehicles_CreateNewVehicles(lpInput);
+                }
+
+                // The streamer pump, POPULATING call (`bl UpdateStreaming` @0x8274ED58, right
+                // after SpawnNewTraffic @0x8274ED28). The console places it OUTSIDE the
+                // mbAllowDivergentBehaviour block above, so an online client that created no
+                // vehicles locally still streams the assets its hull declares. It runs on the
+                // one frame the module populates, with the player's hull list freshly built by
+                // RecalculateActiveHulls, so AddVehiclesToTargetList has a hull to read.
+                UpdateStreaming(lpOutput);
+
+                // The POPULATING pass slices the WHOLE pool in one call ([0, 400), not the
+                // non-decision frame's 100), so muLastParamCalculated is 400 before the first
+                // decision frame. Body in _wT2_05.cpp.
+                UpdateParams_DoTimeSlicedLogic(0,
+                                               KU_MAX_PARAMS,
+                                               lpInput->GetActiveRaceCarOutputInterface());
+
+                meStartingUpState = E_STARTINGUPSTATE_WAITING_FOR_STREAMING;
+            }
+        }
+        break;
+
+        case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
+            // 0x8274EC38..0x8274EC70. The `!mbAllowDivergentBehaviour` short-circuit is the
+            // ship's addition over the earlier revision: an online client created no vehicles locally, so
+            // it has nothing to wait for.
+            if (!mbAllowDivergentBehaviour || mbDEBUGTurnTrafficOff || mStreamer.AreAllAssetsLoaded())
+            {
+                EnterRunningState();
+
+                if (mbWaitingForStreaming && mStreamer.AreAllAssetsLoaded())
+                {
+                    mbWaitingForStreaming = false;
+                    // Same StreamingCompleteEvent emit as above; already gated there.
+                }
+            }
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid starting up state");   // baked .cpp line 2934
+            break;
+        }
+        break;
+
+    // ====================================================================================
+    // THE STEADY-STATE ARM. It calls neither RecalculateActiveHulls, SpawnNewTraffic nor the
+    // StaticVehicles_* updates; it dispatches to UpdateDecisionFrame / UpdateNonDecisionFrame
+    // (_wT1_06.cpp), which call them. Writing them here would be a second, invented copy of
+    // the decision frame.
+    //
+    // Console order, 0x8274E7F0..0x8274E8FC, reproduced exactly:
+    //   StartMonitor(+0x72A0C)
+    //   HandleRecycledTraffic / HandleExternalResponses / HandleResetRaceCarEvents /
+    //   HandleContactPoints / ProcessDeformationData                       [all GATED]
+    //   StopMonitor(+0x72A0C)
+    //   if (IsPaused() || lbSimPaused)  { StartMonitor(+0x72A28); }
+    //   else { IsDecisionFrame() ? UpdateDecisionFrame : UpdateNonDecisionFrame ;
+    //          StartMonitor(+0x72A28);
+    //          GenerateSceneUpdateEvents ; TrafficLightManager::Update(mfSimTimeStep) }
+    //   ProcessNearbyTrafficSceneQueryResults                              [LIVE]
+    //   GenerateRemovedVehicleEvents / GenerateSlamRecoveryEvents /
+    //   GenerateVehicleCrashedEvents                                       [GATED]
+    //   three 80-byte soa->output copies                                   [GATED]
+    //   StopMonitor(+0x72A28)
+    // ====================================================================================
+    case E_STATE_RUNNING:
+    {
+        // 0x8274E870..0x8274E884 -- UNGATED as of 2026-09-06: HandleRecycledTraffic is bodied
+        // in _wT3_02.cpp. The console fetches the vehicle manager's output interface and hands
+        // it `interface + 0x7A0` == mRemovedTrafficEventQueue, reached here by name.
+        // ⭐ This is the PHYSICS-driven half of traffic demotion (the world-driven half is
+        // TryClearupOffscreenTraffic, inside GenerateDriverInputs). Both were gated, and with
+        // both gated the module's 25 TrafficPhysicsInfo slots only ever filled.
+        // ⛔ NO NULL TEST, deliberately: the console has none (0x8274E874 `bl <getter>` then
+        // 0x8274E880 `addi r4, r3, 0x7A0` with nothing in between), and the getter returns the
+        // address of an embedded member, so there is nothing to test. A guard here would be
+        // dead code that reads like a guard.
+        HandleRecycledTraffic(
+            lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
+
+        // HandleExternalResponses @0x82732C68 is the second of the five head legs and IS bodied
+        // (_wT3_04.cpp): it turns the physics side's PhysicalTrafficState queue back into world
+        // vehicle transforms, so a car the player hits actually moves. The other four legs keep
+        // their gate below.
+        HandleExternalResponses(lpInput);
+
+        // 0x8274E894..0x8274E8A4: `GetDeformationOutputInterfaceForEntityModules(lpInput)` ->
+        // ProcessDeformationData(this, r3). LIVE as of 2026-09-02 (traffic-deformation wave);
+        // body in BrnTrafficEntityModule_ProcessDeformationData.cpp.
+        ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
+
+        // The console's head-leg order at 0x8274E870..0x8274E8A4 is exactly those three calls
+        // (HandleRecycledTraffic / HandleExternalResponses / ProcessDeformationData) --
+        // HandleResetRaceCarEvents and HandleContactPoints are NOT in this arm. All three are
+        // now LIVE.
+
+        // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the sim-paused bit,
+        // fed straight into the `IsPaused() || ...` test below. FLAG (no enumerator):
+        // BrnUpdateSet is a bare `typedef u16` with no named bits, so the bit is written as a
+        // literal. Its name is unrecovered; the leak calls it E_HLA_UPDATE_PAUSED.
+        const bool lbSimPaused = ((lUpdateSet & 1u) != 0);
+
+        if (IsPaused() || lbSimPaused)
+        {
+            // The console's paused arm is genuinely empty apart from the perfmon bracket:
+            // a paused traffic sim advances nothing and posts nothing.
+        }
+        else
+        {
+            if (IsDecisionFrame())
+            {
+                UpdateDecisionFrame(lpInput, lpOutput);
+            }
+            else
+            {
+                UpdateNonDecisionFrame(lpInput, lpOutput);
+            }
+
+            // The per-frame scene MOVER; body @0x8273B568 belongs to cluster C3.
+            GenerateSceneUpdateEvents(lpOutput);
+
+            {
+                // GATE: TrafficLightManager::Update, declared at BrnTrafficLightManager.h:93
+                // and bodied nowhere. Traffic-light phase state, not parked cars.
+                static bool sbLogged = false;
+                LogMissingLeg_T1(sbLogged,
+                    "PostPhysicsUpdate RUNNING leg TrafficLightManager::Update(mfSimTimeStep) "
+                    "-- DECLARED at BrnTrafficLightManager.h:93 and bodied nowhere in this "
+                    "tree (ledger-done-but-bodyless). Light phases stay frozen; no parked-car "
+                    "consumer");
+            }
+        }
+
+        // LIVE 2026-09-11, at the console's own slot: both paths of the pause test above
+        // converge here, before the crash-module drains below. The NEAR-MISS / HORN / SOUND /
+        // traffic-director consumer of the 70 m sphere query PostNearbyTrafficSceneQueryRequest
+        // posts; body in _wG_NearbyTrafficResults.cpp. ⭐ It is the sole producer of
+        // mNearMissTrafficCollection / mNearMissRaceCarCollection, so with it gated no near
+        // miss could fire anywhere in the game.
+        ProcessNearbyTrafficSceneQueryResults(lpInput, lpOutput);
+
+        // 0x8274EB5C -- UN-GATED 2026-09-06. Body in _wT3_01.cpp. It hands each freshly crashed
+        // traffic car to the CRASH MODULE once (guarded by mVehiclesAddedToCrashModule) and
+        // clears its mbNeedsToBeSentToCrashModule flag -- which is exactly the flag
+        // GenerateCrashedVehicleEvents (PreSceneUpdate, now live) asserts is already clear.
+        // The two are one ordered pair; landing only the PreScene half would fire that assert
+        // on every record.
+        // 0x8274EB4C / 0x8274EB54 -- the two crash-module drains, immediately before the crashed
+        // publish on the console. LIVE 2026-09-10 (bodies below, this file).
+        GenerateRemovedVehicleEvents(lpOutput->GetCrashTrafficInputInterface());
+        GenerateSlamRecoveryEvents(lpOutput->GetCrashTrafficInputInterface());
+        GenerateVehicleCrashedEvents(lpOutput);
+
+        {
+            static bool sbLogged = false;
+            LogMissingLeg_T1(sbLogged,
+                "PostPhysicsUpdate E_STATE_RUNNING tail legs -- the three "
+                "80-byte mVehicleSoaData -> OutputBuffer_PostPhysics copies (soa members "
+                "mPhysicalVehicles / mVehiclesRenderedLastFrame / mPhysicalVehiclesFarFrom"
+                "Player into the crash-traffic input interface at console +3240/+3320/+3400). "
+                "GenerateVehicleCrashedEvents WAS in this list and is now live above; the rest are "
+                "not bodied and are crash-module surface (wave 3)");
+        }
+    }
+    break;
+
+    // ====================================================================================
+    // THE TEAR-DOWN, X360 0x8274E7A8..0x8274E8A4 -- LANDED 2026-09-10 (BurnoutDecomp/b5-decomp#22).
+    // HandlePrepareForModeAction enters this state at EVERY offline event start (only the two
+    // showtime modes carry KU_FLAG_DISABLE_TRAFFIC_RESET), so while this arm was a gate the
+    // traffic system parked itself here for the rest of the session: the wipe never ran, the
+    // flush never completed, Reset() was never reached, and no vehicle spawned again -- the
+    // "traffic disappears after event start and persists after event completion" report.
+    //
+    //   meTearingDownState == WIPING (0):
+    //     HandleRecycledTraffic / HandleExternalResponses / ProcessDeformationData (the three
+    //       head legs the RUNNING arm also runs),
+    //     KillParam every ALIVE param (0..0x190; `GetParam(i)->+0x40 & 1`),
+    //     RemoveVehicle every ORPHAN vehicle (0..0x258; `+0x2A85 + 0x80*i & 0x20`),
+    //     StaticVehicles_KillParam every ALIVE static vehicle (0..0xC7; `+0xF285 + 0x80*i & 1`),
+    //     meTearingDownState = FLUSHING;                                    ; stw 1, +0x310
+    //   then, for WIPING and FLUSHING (1) alike:
+    //     GenerateRemovedVehicleEvents / GenerateSlamRecoveryEvents into the crash interface,
+    //     if (mbAllVehiclesDead) { muNumFramesBeforeStateChange = 3 ; state = WAITING_TO_RESET ;
+    //                              fall into the WAITING arm the same frame }
+    //   WAITING_TO_RESET (2): if (muNumFramesBeforeStateChange) --it ; else Reset()
+    //   >= 3: "Invalid tearing down state" (baked .cpp 3032).
+    // mbAllVehiclesDead is published by KillDyingVehicleEntities, which PreSceneUpdate's FLUSHING
+    // arm (_wT1_02.cpp) runs -- that is the frame-coupled handshake between the two passes.
+    // ====================================================================================
+    case E_STATE_TEARING_DOWN:
+    {
+        bool lbRunFlushTail = false;
+
+        switch (meTearingDownState)
+        {
+        case E_TEARINGDOWNSTATE_WIPING:
+        {
+            HandleRecycledTraffic(
+                lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
+            HandleExternalResponses(lpInput);
+            ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
+
+            for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+            {
+                if (GetParam(luParam)->IsAlive())
+                {
+                    KillParam(luParam);
+                }
+            }
+            for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+            {
+                if ((maVehicles[luVehicle].GetFlags() & Vehicle::E_FLAG_ORPHAN) != 0)
+                {
+                    RemoveVehicle(luVehicle);
+                }
+            }
+            for (u32 luStaticParam = 0; luStaticParam < KU_MAX_STATIC_TRAFFIC; ++luStaticParam)
+            {
+                if (GetStaticVehicle(luStaticParam)->IsAlive())
+                {
+                    StaticVehicles_KillParam(luStaticParam);
+                }
+            }
+
+            meTearingDownState = E_TEARINGDOWNSTATE_FLUSHING;
+            lbRunFlushTail     = true;
+            break;
+        }
+
+        case E_TEARINGDOWNSTATE_FLUSHING:
+            lbRunFlushTail = true;
+            break;
+
+        case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
+            if (muNumFramesBeforeStateChange != 0)
+            {
+                --muNumFramesBeforeStateChange;
+            }
+            else
+            {
+                Reset();
+            }
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid tearing down state");   // baked .cpp line 3032
+            break;
+        }
+
+        if (lbRunFlushTail)
+        {
+            GenerateRemovedVehicleEvents(lpOutput->GetCrashTrafficInputInterface());
+            GenerateSlamRecoveryEvents(lpOutput->GetCrashTrafficInputInterface());
+
+            if (mbAllVehiclesDead)
+            {
+                muNumFramesBeforeStateChange = 3;
+                meTearingDownState           = E_TEARINGDOWNSTATE_WAITING_TO_RESET;
+
+                // LABEL_31 -- the WAITING arm runs once more in the same frame (3 -> 2).
+                if (muNumFramesBeforeStateChange != 0)
+                {
+                    --muNumFramesBeforeStateChange;
+                }
+                else
+                {
+                    Reset();
+                }
+            }
+        }
+    }
+    break;
+
+    default:
+        CGS_ASSERT(false, "Invalid state in traffic system");   // baked .cpp line 3041
+        break;
+    }
+
+    // ====================================================================================
+    // The local-player refresh, X360 0x8274ED90..0x8274EE88. meLocalPlayerIndex is what this
+    // function's POPULATING arm and RecalculateActiveHulls' mActiveHullsForLocalPlayer rebuild
+    // both key off; mLocalPlayerPosition / mLocalPlayerDirection are the module's cached copy
+    // of where the player is, read by the driving and streaming legs of later waves.
+    //
+    // The console calls the getter three times (0x8274ED94, 0x8274EE30, 0x8274EE5C) and re-reads
+    // the index from the member between them. Same buffer and interface each time, i.e. the
+    // compiler rematerialising an inlined accessor, so it is de-inlined to one local; the
+    // getter's read-lock assert is idempotent.
+    //
+    // +0x1F0 == RaceCarState::mTransform, +0x30 == wAxis (translation) and +0x20 == zAxis
+    // (forward). Two displacements off one base: position and DIRECTION, not one vector twice.
+    // ====================================================================================
+    {
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
+            lpInput->GetActiveRaceCarOutputInterface();
+
+        if (lpActiveRaceCars->IsPlayerCarActive())
+        {
+            meLocalPlayerIndex = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();
+
+            const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface::RaceCarState*
+                lpPlayerState = lpActiveRaceCars->GetRaceCarState(meLocalPlayerIndex);
+
+            mLocalPlayerPosition  = lpPlayerState->mTransform.wAxis;
+            mLocalPlayerDirection = lpPlayerState->mTransform.zAxis;
+
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                // [T4-player] every 60 frames: where the player is, how fast and which way.
+                // Read against [T4-static] it says whether a -Teleport put the car near a parked
+                // one. Seated in PostPhysicsUpdate's local-player refresh tail, the one place that
+                // already holds position, direction AND the RaceCarState the velocity comes from.
+                // DELETE-WHEN-STABLE.
+                static u32 suFrame = 0;
+                if ((suFrame % 60u) == 0u)
+                {
+                    const Vector3& lrVel = lpPlayerState->mLinearVelocity;
+                    *lpDiag << "[T4-player] idx=" << static_cast<s32>(meLocalPlayerIndex)
+                            << " pos=(" << mLocalPlayerPosition.x
+                            << ", " << mLocalPlayerPosition.y
+                            << ", " << mLocalPlayerPosition.z << ")"
+                            << " vel=(" << lrVel.x << ", " << lrVel.y << ", " << lrVel.z << ")"
+                            << " at=(" << mLocalPlayerDirection.x
+                            << ", " << mLocalPlayerDirection.y
+                            << ", " << mLocalPlayerDirection.z << ")"
+                            << " [DELETE-WHEN-STABLE]\n";
+                }
+                ++suFrame;
+            }
+        }
+        else
+        {
+            meLocalPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        }
+    }
+
+    // ========================================================================================
+    // [FLAG PC witness] [traffic-track] -- NOT IN THE X360 BINARY, OFF unless BRN_TRAFFIC_TRACK.
+    //
+    // The traffic_weird bug ("traffic disappears, teleports above the road, does other weird
+    // things") is not an assert, so the test needs the numbers it moves. Every 0.5 s of SIM
+    // time this prints, for each ALIVE traffic vehicle inside 120 m of the player: its slot id,
+    // world position, lifecycle state, whether the render pass considered it last frame, its
+    // distance and whether it is in front of the player. Plus one SAMPLE line carrying the
+    // population counts (the collapse check reads those).
+    //
+    // Seated at the very tail of PostPhysicsUpdate, AFTER the local-player refresh above, so
+    // mLocalPlayerPosition / mLocalPlayerDirection are this frame's and every vehicle transform
+    // has already been moved by the frame's update. Bounded three ways: 2 Hz, at most 64
+    // vehicles per sample, and a hard total-line cap -- an unbounded per-frame witness once
+    // flooded a run with 733k lines and aborted the harness at its 128 MB cap.
+    //
+    // ⛔ NO ASSERTING ACCESSOR IS USED HERE: Vehicle::IsCrashing() asserts IsAlive() and then
+    // IsPhysical(), which would turn a diagnostic into an assert storm on the very cars this is
+    // trying to observe. The raw crash-type byte (GetCrashTrafficTypeRaw) is the unasserted read
+    // the console itself uses at sites that may not require IsPhysical().
+    //
+    // DELETE-WHEN: see BrnTrafficTrackWitness.h.
+    // ========================================================================================
+    if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+    {
+        static const f32 KF_TRACK_SAMPLE_PERIOD   = 0.5f;
+        static const f32 KF_TRACK_RADIUS_SQ       = 120.0f * 120.0f;
+        static const u32 KU_TRACK_MAX_PER_SAMPLE  = 64u;
+        static const u32 KU_TRACK_MAX_LINES       = 60000u;
+
+        static f32 sfTrackTime  = 0.0f;
+        static f32 sfNextSample = 0.0f;
+        static u32 suTrackLines = 0u;
+
+        sfTrackTime += mfSimTimeStep;
+
+        if (sfTrackTime >= sfNextSample && suTrackLines < KU_TRACK_MAX_LINES)
+        {
+            sfNextSample = sfTrackTime + KF_TRACK_SAMPLE_PERIOD;
+
+            u32 luAlive    = 0u;
+            u32 luNear     = 0u;
+            u32 luPrinted  = 0u;
+
+            for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle =
+                     mVehicleSoaData.mAliveVehicles.Begin();
+                 lItVehicle != mVehicleSoaData.mAliveVehicles.End();
+                 ++lItVehicle)
+            {
+                const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+                ++luAlive;
+
+                if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
+                {
+                    continue;
+                }
+
+                const Vector3& lrPos = maVehicleTransforms[luVehicle].Pos();
+
+                const f32 lfDX = lrPos.x - mLocalPlayerPosition.x;
+                const f32 lfDY = lrPos.y - mLocalPlayerPosition.y;
+                const f32 lfDZ = lrPos.z - mLocalPlayerPosition.z;
+                const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
+
+                if (lfDistSq >= KF_TRACK_RADIUS_SQ)
+                {
+                    continue;
+                }
+
+                ++luNear;
+
+                if (luPrinted >= KU_TRACK_MAX_PER_SAMPLE)
+                {
+                    continue;
+                }
+
+                const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+                const char* lpcState = "param";
+                if (lpVehicle->IsPhysical())
+                {
+                    // eCrashTrafficType 0 is the crashing type; 255 is "not registered".
+                    lpcState = (lpVehicle->GetCrashTrafficTypeRaw() == 0u) ? "crashed" : "physical";
+                }
+                else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
+                {
+                    lpcState = "static";
+                }
+
+                const f32 lfAlong = lfDX * mLocalPlayerDirection.x
+                                  + lfDY * mLocalPlayerDirection.y
+                                  + lfDZ * mLocalPlayerDirection.z;
+
+                *lpTrack << "[traffic-track] t=" << sfTrackTime
+                         << " id=" << luVehicle
+                         << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
+                         << " state=" << lpcState
+                         << " vis=" << (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle) ? 1 : 0)
+                         << " dist=" << sqrtf(lfDistSq)
+                         << " infront=" << ((lfAlong > 0.0f) ? 1 : 0)
+                         << "\n";
+                ++luPrinted;
+                ++suTrackLines;
+            }
+
+            // mCameraLastFrame is on this line because it is the traffic module's BEHAVIOUR
+            // CENTRE, not a picture: TryClearupOffscreenTraffic / SpawnNewTraffic /
+            // UpdateSympatheticCrashing / UpdateJunctionFUP all measure from it, so a frame on
+            // which it is not where the player is is a frame that deletes and stops spawning
+            // traffic around him.
+            const Vector3 lCamera = mCameraLastFrame.GetPosition();
+
+            *lpTrack << "[traffic-track] SAMPLE t=" << sfTrackTime
+                     << " alive=" << luAlive
+                     << " near=" << luNear
+                     << " printed=" << luPrinted
+                     << " player=(" << mLocalPlayerPosition.x
+                     << ", " << mLocalPlayerPosition.y
+                     << ", " << mLocalPlayerPosition.z << ")"
+                     << " cam=(" << lCamera.x << ", " << lCamera.y << ", " << lCamera.z << ")"
+                     << "\n";
+            ++suTrackLines;
+        }
+    }
+
+    // ⭐ [traffic-type wave 2026-09-14] THE TRAFFIC-TYPE QUERY IS ANSWERED HERE, at exactly the
+    // console's position: after UpdateEventStarts / GenerateNetworkUpdateEvents and before the
+    // replay-serialiser registration, INSIDE the LockForRead/LockForWrite bracket
+    // (0x8274EEA4..0x8274EEC4):
+    //     mr   r3, r24 ; bl 0x82711700   -- InputBuffer_PostPhysics::GetVehicleManagerOutputInterface
+    //     mr   r3, r25 ; bl 0x82711EE0   -- OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue (WRITE)
+    //     addi r4, r30, 0x750            -- + mTrafficTypeRequestQueue
+    //     bl   0x8272B880                -- ProcessTrafficTypeRequests
+    // The `+ 0x750` is the console's inlining of VehicleManagerOutputInterface::
+    // GetTrafficTypeRequestQueue() const (DWARF BrnVehicleOutputInterface.h:235); the accessor
+    // is spelled out here because the member is private.
+    //
+    // ⛔ WHY IT MATTERS: this was the middle of three missing hops on the "takedown car / van /
+    // bus" chain. The request queue was being carried into this buffer every frame with NOBODY
+    // reading it, so the takedown manager's response queue was permanently empty, every
+    // traffic-caused takedown classified as INTO_CAR by fall-through, and
+    // "Missing traffic vehicle check!" (BrnTakedownManager.cpp:842) fired -- an assert that
+    // PAUSES the sim -- on each one. [[silent-drop-stubs]]
+    ProcessTrafficTypeRequests(
+        lpInput->GetVehicleManagerOutputInterface()->GetTrafficTypeRequestQueue(),
+        lpOutput->GetTrafficTypeResponseQueue());
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PostPhysicsUpdate remaining tail legs -- the perfmon bracket, UpdateEventStarts "
+            "@0x82743B80, GenerateNetworkUpdateEvents and the replay-serialiser "
+            "registration/write");
+    }
+
+    lpInput->UnlockForRead();
+    lpOutput->UnlockForWrite();
+}
+
+// ============================================================================
+// SECTION 9 -- construction / reset.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::ResetEventData  @ 0x827088B8
+//
+// The per-event default block, and the only thing that seeds the density the parked chain
+// gates on. LAYOUT ATTESTATION, every console offset resolved to its member:
+//   mTrafficLightTriggerId = -1              (+464852)   meGameMode = -1            (+464856)
+//   mbIsOnlineGameMode = false               (+464860)   mbPlayingShowtimeMode = false (+464861)
+//   mbGameModeAllowsSwerving = true          (+464862)   mbHardcoreSwerveForMode = false (+464863)
+//   mbGameModeAllowsKillzones = true         (+464864)   mbAtStartLineSoProtect... = false (+464865)
+//   mbEnsureTrafficLightDelay = false        (+464866)   mbGameModeClearsTraffic = false (+464867)
+//   mbNeedToSetUpLightsForEventStart = false (+464868)   mbAllowDivergentBehaviour = true (+464871)
+//   mfGameModeDensityScale = mfBaseDensityScale (+464916 <- +464912)
+//   mfTrafficAmountScale   = mfBaseDensityScale (+464924)
+//   miBigVehicleAmount = 100                 (+464928)   mfTimeSinceLastShowtimeSpawn = 0 (+464952)
+//   mfSpeedMultiplier = 1.0f                 (+469120)   mbNeedToBroadcastHullChange = false (+350430)
+//   mfTrafficLightChangeBackDelay = 0.0f     (+463880)
+//   maEventGridStartPositions[0..7] = 0      (+464720 .. +464832, eight stvx128 of a zero splat)
+//   muNumberOfParticipantsInCurrentEvent = 0 (+464848)
+//   mfCrashSliderCrashScore = 0 / Decay = 0.5f / Factor = 0.8f / FinalValue = 0
+//                                            (+467824 / +467828 / +467832 / +467836)
+//   mfShowtimeTimer = 0 / TimeNextCrashSpike = 0 / MisBounceTimer = 0
+//                                            (+468144 / +468148 / +468156)
+//   mfPlayerIdleTime = 0.0f                  (+468260)
+//
+// mfPlayerIdleTime at +468260 is forced, not guessed: 468144..468156 is :772..:775, the replay
+// serialiser occupies the un-emitted :776/:777 window from +468160 (the console registers it as
+// `RegisterSerialiser(..., this + 468160)`), and the next member is the 8-aligned
+// mVehiclesToUpdateCollidables at +468264, leaving exactly one 4-byte slot for :778.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::ResetEventData()
+{
+    mTrafficLightTriggerId = 0xFFFFFFFFu;
+    meGameMode             = -1;
+
+    mbIsOnlineGameMode                       = false;
+    mbPlayingShowtimeMode                    = false;
+    mbGameModeAllowsSwerving                 = true;
+    mbHardcoreSwerveForMode                  = false;
+    mbGameModeAllowsKillzones                = true;
+    mbAtStartLineSoProtectRaceCarsFromTraffic= false;
+    mbEnsureTrafficLightDelay                = false;
+    mbGameModeClearsTraffic                  = false;
+    mbNeedToSetUpLightsForEventStart         = false;
+    mbAllowDivergentBehaviour                = true;
+
+    mbNeedToBroadcastHullChange = false;
+
+    {
+        // GATE: `*mpLogger = 1`, the same unnamed leading Logger byte EnterStartingUpState
+        // writes, blocked the same way.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "ResetEventData mpLogger-><leading byte> = 1 -- Logger has no usable declaration "
+            "(BrnTrafficLogger.cpp is unmounted and does not compile; see the breakdown at "
+            "EnterStartingUpState)");
+    }
+
+    const f32 lfBaseDensityScale = mfBaseDensityScale;
+    mfGameModeDensityScale = lfBaseDensityScale;
+    mfTrafficAmountScale   = lfBaseDensityScale;
+
+    miBigVehicleAmount           = 100;
+    mfTimeSinceLastShowtimeSpawn = 0.0f;
+    mfSpeedMultiplier            = 1.0f;
+    mfTrafficLightChangeBackDelay= 0.0f;
+
+    for (u32 luIndex = 0; luIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luIndex)
+    {
+        maEventGridStartPositions[luIndex].SetZero();
+    }
+    muNumberOfParticipantsInCurrentEvent = 0;
+
+    mfCrashSliderCrashScore      = 0.0f;
+    mfCrashSliderCrashScoreDecay = 0.5f;
+    mfCrashSliderCrashScoreFactor= 0.80000001f;
+    mfCrashSliderFinalValue      = 0.0f;
+
+    mfShowtimeTimer              = 0.0f;
+    mfShowtimeTimeNextCrashSpike = 0.0f;
+    mfShowtimeMisBounceTimer     = 0.0f;
+
+    mfPlayerIdleTime = 0.0f;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::Reset  @ 0x8272CDA0   PARTIAL
+//
+// The pool constructor: what makes 199 static params and 600 vehicles exist in a usable state.
+// The order below is the console's; gated legs carry their reason at the site.
+//
+// The offset-to-member resolution this body rests on closes with no slack at three independent
+// anchors: maVehicles @+10880 and maVehicleAxles @+87680 (the Construct loop's two bases, with
+// their 128/64 strides); the six 160-array live-count words at
+// +357100/+359664/+359988/+360312/+360636/+360960 (deltas 2564, then 324 four times, which is
+// TrafficCrashInfo(16)*160+4 then u16(2)*160+4); and maHullRuntimeData @+257216 + 72*1176 ==
+// mUsedHullRuntimeData @+341888.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::Reset()
+{
+    // FLAG -- a known divergence, not an oversight. The console does not call the canonical
+    // Random::Construct here. At 0x8272CDB8..0x8272CE88 it seeds both generators with the
+    // traffic-specific literal 0x8FE06DC2, then primes all eight ring slots writing the CURRENT
+    // slot before advancing. Random::Construct() instead installs KU_RANDOM_DEFAULT_SEED,
+    // forces slot 0 to 1.0f, and primes slots 1..7 by advancing first. Both leave the ring
+    // valid, so what differs is WHICH pseudo-random stream the traffic module runs on, and
+    // therefore which parked record wins its mExistsAtAllChance roll and which vehicle type
+    // PickVehicleToSpawn draws. Construct() is called anyway, because an unprimed ring makes
+    // RandomFloat() return uninitialised storage.
+    // FIX: add `void ConstructWithSeed(u64)` to CgsRandom.h doing the block above, and call it
+    // here with 0x8FE06DC2ull.
+    mRand.Construct();
+    mEffectRand.Construct();
+
+    muFramesSinceDecision = 100;
+    mbDecisionFrame       = false;
+    mfSimTimeStep         = 0.0f;
+
+    meState            = E_STATE_INVALID;
+    meStartingUpState  = E_STARTINGUPSTATE_INVALID;
+    meRunningState     = E_RUNNINGSTATE_INVALID;
+    meTearingDownState = E_TEARINGDOWNSTATE_INVALID;
+
+    muUpdateCount = 0;
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())   // [DIAG] see EnterTearingDownState
+    {
+        *lpDiag << "[traffic-diag] Reset(): -> STARTING_UP; densityScale " << mfGameModeDensityScale
+                << " base " << mfBaseDensityScale << "\n";
+    }
+
+    EnterStartingUpState();
+
+    mfTrafficAmountScale               = mfGameModeDensityScale;
+    mfTimeSincePlayerHullChange        = 0.0f;
+    mfTimeSincePlayerWasDrivingQuickly = 0.0f;
+    muNumFramesBeforeStateChange       = 0xFFu;
+    mbAllVehiclesDead                  = true;
+    muPreviousPlayerHull               = 0xFFFFu;
+    mbNeedToKillAllZombies             = false;
+    miDEBUGOverBudgetness              = 0;
+
+    {
+        // GATE: the pseudocode's `BaseCollisionGenerator::Destruct(mpLogger)` is an ICF fold;
+        // the real callee is a Logger reset, and the Logger type is unusable here.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Reset leg <ICF-folded>(mpLogger) @0x8272CE9C -- IDA attributes the callee to "
+            "CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct, which is an "
+            "identical-code-folding artefact; the real callee is a Logger reset and "
+            "BrnTrafficLogger.cpp does not compile (see EnterStartingUpState)");
+    }
+
+    // ---- container resets ---------------------------------------------------------------
+    mFreeParams.Clear();
+    maPurgatoryList.Clear();
+    mParamsToReinsert.Clear();
+
+    mFreeStaticParamStack.Clear();
+    mStaticParamPurgatoryList.Clear();
+
+    mTrailerPurgatoryList.Clear();
+    mFreeTrailerStack.Clear();
+
+    maNewCrashedVehicles.Clear();
+    maEmergencyCrashingVehicles.Clear();
+    maNewCrashedNetworkVehicles.Clear();
+    maRecentlyRemovedVehicles.Clear();
+    maNewRemovedVehicles.Clear();
+    maRecentlyRecoveredSlammedTraffic.Clear();
+
+    muNumGenerators = 0;
+
+    mVehiclesAddedToCrashModule.UnSetAll();
+    maTrafficPhysicsInfoListBits.Prepare();
+
+    // The 25 physical-traffic scratch records; body in BrnTrafficEntityModule_wT1_03.cpp.
+    // The argument is the OWNING VEHICLE INDEX and Reset passes the "no owner" sentinel: the
+    // console literal is 0xFFFF here and a sign-extended -1 in Construct @0x82740220, the same
+    // 16 bits into the u16 member.
+    //
+    // This loop does not bind mDetachedPartQueue and never did: the console's Construct writes
+    // one zero byte at record +0x00 and nothing else in the queue's span. That park lives in
+    // wT1_03.cpp and at the Construct-tail gate below.
+    for ( u32 luSlot = 0; luSlot < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; luSlot++ )
+    {
+        maTrafficPhysicsInfoList[luSlot].Construct(
+            static_cast< s32 >( TrafficPhysicsInfo::KU16_NO_OWNING_VEHICLE ) );
+    }
+
+    // The param membership sets: three consecutive 10-qword zeroing blocks at this+251648 /
+    // +251728 / +251808. mParamSoaData is at +251648 and BrnTrafficParam.h pins mAliveParams
+    // @0x00, mDyingParams @0x50, mZombieParams @0xA0; FastBitArray<601> is exactly 10 u64
+    // fields (0x50 bytes), so the three offsets tile with no slack. The console inlines the
+    // clears rather than calling ParamSoaData::Construct, and UnSetAll() is that same loop.
+    // Without these, Param::IsAlive()/IsDying()/IsZombie() read uninitialised storage.
+    mParamSoaData.mAliveParams.UnSetAll();
+    mParamSoaData.mDyingParams.UnSetAll();
+    mParamSoaData.mZombieParams.UnSetAll();
+
+    mVehicleSoaData.Construct();
+
+    // ---- the lane-param pool. 0x8272D0FC..0x8272D148, one loop over 400 slots: the three
+    // Constructs at their own strides (maParams 0x80, maParamTransforms 0x40,
+    // maParamNeedToSlowData 0x10 -- that third one is ParamNeedToSlowData::Construct INLINED,
+    // storing FLT_MAX to +4/+8/+12 and the two sentinels to +0/+2), then the mFreeParams push.
+    // The maParamListNodes Constructs are a separate 400-iteration loop at 0x8272D158.
+    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+    {
+        maParams[luParam].Construct();
+        maParamTransforms[luParam].Construct();
+        maParamNeedToSlowData[luParam].Construct();
+        mFreeParams.Push(static_cast<u16>(luParam));
+    }
+
+    for (u32 luNode = 0; luNode < KU_MAX_PARAMS; ++luNode)
+    {
+        maParamListNodes[luNode].Construct();
+    }
+
+    // ---- the static (parked) param pool -- THE ONE THIS WAVE NEEDS ----------------------
+    for (u32 luStatic = 0; luStatic < KU_MAX_STATIC_TRAFFIC; ++luStatic)
+    {
+        maStaticTrafficParams[luStatic].Construct();
+        mFreeStaticParamStack.Push(static_cast<u8>(luStatic));
+    }
+
+    // The single trailer slot, pushed by FULL vehicle index (599 == KU_TRAILER_TRAFFIC_OFFSET).
+    mFreeTrailerStack.Push(static_cast<u16>(KU_TRAILER_TRAFFIC_OFFSET));
+
+    // The pool shuffles. The console's three instantiations are Shuffle<u16, Stack<u16,400>>
+    // @0x8271B110 (mFreeParams), Shuffle<u8, Stack<u8,199>> @0x8271B298
+    // (mFreeStaticParamStack) and Shuffle<u16, Stack<u16,1>> @0x8271B420 (mFreeTrailerStack).
+    //
+    // ARGUMENTS, from the asm (0x8272D204..0x8272D284), identical in all three calls:
+    // r3 = the stack, r4 = 0, r5 = the stack's own GetLength(), r6 = this + 0x1330 == mRand
+    // (:615, the first member after mReceiverQueue :613). The window is the whole live stack.
+    //
+    // The static one is on the parked-car path: unshuffled, StaticVehicles_CreateNewVehicles
+    // pops slots in reverse push order (198..0) every boot, so which record lands in which slot
+    // is deterministic instead of randomised. Nothing breaks, which is why it is easy to miss.
+    CgsAlgorithms::Shuffle<u16>( mFreeParams, 0, mFreeParams.GetLength(), mRand );
+    CgsAlgorithms::Shuffle<u8>( mFreeStaticParamStack, 0, mFreeStaticParamStack.GetLength(), mRand );
+    CgsAlgorithms::Shuffle<u16>( mFreeTrailerStack, 0, mFreeTrailerStack.GetLength(), mRand );
+
+    // ---- the vehicle pool ---------------------------------------------------------------
+    for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+    {
+        Matrix44Affine lTransform;
+        maVehicles[luVehicle].Construct(&maVehicleAxles[luVehicle], lTransform);
+        SetVehicleTransform(luVehicle, lTransform);
+    }
+
+    // ---- hulls ---------------------------------------------------------------------------
+    mActiveHulls.Clear();
+    mActiveHullsForLocalPlayer.Clear();
+    mHullsToAddTriggersFor.Clear();
+    mHullsToRemoveTriggersFor.Clear();
+    maPredictedHullChanges.Clear();
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Reset leg mHullsToRemoveTriggersFor.AppendSet(mActiveHullsForLocalPlayer) -- "
+            "::Array<T,N>::AppendSet is absent from CgsArray.h (AppendArray only). The set "
+            "is empty at this point on every boot path, so the call is a no-op today");
+    }
+
+    for (u32 luHull = 0; luHull < KU_MAX_HULLS; ++luHull)
+    {
+        mauHullRuntimeDataIndices[luHull] = KU_INVALID_HULL_RUNTIME;
+    }
+    for (u32 luRuntime = 0; luRuntime < KU_MAX_ACTIVE_HULLS; ++luRuntime)
+    {
+        maHullRuntimeData[luRuntime].Construct();
+    }
+    mUsedHullRuntimeData.Prepare();
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Reset leg TrafficLightManager::Construct(mTrafficLightManager) @0x8272D0F4 -- "
+            "BrnTrafficLightManager.h declares no Construct (the mounted light-manager slice "
+            "landed its Update/knock-down surface only)");
+    }
+
+    // ---- per-race-car scratch -------------------------------------------------------------
+    for (u32 luRaceCar = 0; luRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++luRaceCar)
+    {
+        maStoredAITrafficData[luRaceCar].meRaceCarIndex  = static_cast<EActiveRaceCarIndex>(luRaceCar);
+        maStoredAITrafficData[luRaceCar].miNumTrafficIDs = 0;
+        maaRaceCarHulls[luRaceCar].Clear();
+    }
+    muCurrentlyPredictedHull    = 0xFFFFu;
+    mbNeedToBroadcastHullChange = false;
+    mbHullSyncDivergence        = false;
+    mbNetworkHasDetectedDivergence = false;
+
+    {
+        // The `mau16HullsToActivateAfterReset` replay of the online hull set (guarded by
+        // mbActivateOnlineHullsAfterReset) walks mpData->mpPvs cell sets. It is online-only
+        // and is exactly the code path UpdateRaceCarHulls' online arm mirrors.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Reset mbActivateOnlineHullsAfterReset replay block (maaRaceCarHulls seeded from "
+            "mau16HullsToActivateAfterReset + Pvs::GetHullPvs) -- ONLINE only; the flag is "
+            "false on every offline boot, so the block does not execute");
+    }
+
+    // ---- collidable cache / avoidance -----------------------------------------------------
+    mCachedCollidableList.SetFullCount();
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Reset CollidableVehicleInfo4 lane pre-fill (16x vperm of KF_MAX_FLOAT through "
+            "the permute-control constant unk_8327F140) + PrecalculateAvoidanceFeelerData "
+            "@0x8272D9C4 -- the permute control is un-dumped rodata and "
+            "PrecalculateAvoidanceFeelerData has no body. Avoidance is driving-traffic "
+            "surface (wave 2)");
+    }
+
+    // The four crash-slider stores. The two zeros are `stfsx f31` with f31 == 0.0f; the two
+    // seeds come from flt_820BA62C (Decay) and flt_820BA5B4 (Factor), which IDA resolves as 0.5
+    // and 0.80000001 and which Construct's tail and ResetEventData load through the same two
+    // symbols.
+    //
+    // WHY THEY MATTER: PostPhysicsUpdate's TEARING_DOWN arm calls Reset() with no Construct,
+    // and UpdateCrashSlider @0x82715A18 overwrites both members at runtime, so dropping these
+    // stores leaves the tear-down path running on last frame's slider tuning.
+    mfCrashSliderCrashScore       = 0.0f;         // 0x72370  stfsx f31
+    mfCrashSliderCrashScoreDecay  = 0.5f;         // 0x72374  flt_820BA62C
+    mfCrashSliderCrashScoreFactor = 0.80000001f;  // 0x72378  flt_820BA5B4
+    mfCrashSliderFinalValue       = 0.0f;         // 0x7237C  stfsx f31
+
+    mfShowtimeTimer              = 0.0f;   // 0x724B0
+    mfShowtimeTimeNextCrashSpike = 0.0f;   // 0x724B4
+    mfShowtimeMisBounceTimer     = 0.0f;   // 0x724BC
+    mfPlayerIdleTime             = 0.0f;   // 0x72524
+
+    mShowtimePlayerGroundPos.SetZero();
+    mAveragePhysicalCentre.SetZero();
+
+    mfJunctionFUP                         = 0.0f;
+    mfJunctionFUP_TimeTillNextPhysicalKill= 1.0f;
+    mbInPictureParadise                   = false;
+
+    mVehiclesToUpdateCollidables.UnSetAll();
+    mVehiclesAvoidableLastFrame.UnSetAll();
+    // 0x8272D8xx sets the FIRST 300 bits of mVehiclesToUpdateCollidables, not all 600. No
+    // constant in BrnTrafficConstants.h spells 300, so the literal bound stands as it is.
+    for (u32 luBit = 0; luBit < 300u; ++luBit)
+    {
+        mVehiclesToUpdateCollidables.SetBit(luBit);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::Construct  @ 0x82740220   PARTIAL
+//
+// Real here: the base construct, the receiver queue, the streamer, the two density seeds, the
+// debug-flag defaults (including mbDEBUGTurnTrafficOff = false), the render caps, the 25
+// TrafficPhysicsInfo constructs, ResetEventData + Reset, and the 96 VehicleTypeRuntime
+// constructs.
+//
+// Gated: the ~25 vectorised tuning members (:799..:821), the four TrafficJobStub constructs
+// ([MEMBER HOLE 5]), the replay serialiser, the 102,800-byte
+// maTrafficPhysicsInfoList memset, the debug component and logger allocations, and the debug-render stream reader. Each is a named one-shot below.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::Construct()
+{
+    CgsModule::ModuleSingleBuffered::Construct();
+
+    // ---- the vectorised tuning members, DWARF :799..:821 ---------------------------------
+    // 0x8274028C..0x8274078C, one 16-byte store per member at this + 0x725F0 + 0x10*n. Every
+    // source float was recovered from .rdata (0x820BA23C+); the two runtime-computed ones are
+    // marked at their line. :816 mfVehicleRollFilterTime and :817 mTweakValues are NOT part of
+    // this run: the console leaves the first to UpdateTimers and hands the second to
+    // FuzzyBehaviourLogic::Construct (LANDED below -- it seeds all 21 mega-tweek constants).
+    SetTuningSplat(KF_TWO_PI,                            6.2831855f);      // 0x725F0 flt_820BA250
+    SetTuningSplat(KF_MAX_FLOAT,                         FLT_MAX);         // 0x72600 flt_820BA23C
+    SetTuningSplat(KF_APPROX_LANE_WIDTH,                 4.5f);            // 0x72610 flt_820BA580
+    SetTuningSplat(KF_MAX_DIST_ACROSS_LANE,              0.69999999f);     // 0x72620 flt_820BA4D0
+    SetTuningSplat(KF_VEHICLE_STOPLINE_SIDE_SPACE,       0.89999998f);     // 0x72630 flt_820BA540
+    SetTuningSplat(KF_VEHICLE_STOPLINE_SIDE_VARIATION,   0.25f);           // 0x72640 flt_820BA544
+    SetTuningSplat(KF_VEHICLE_MAX_DIST_FROM_LANE_CENTRE, 1.29999995f);     // 0x72650 flt_820BA554
+
+    // 0x72660, the one lane-wise Vector4 of the run (var_1E0 assembled at 0x82740370..0x827403B4).
+    SetTuningLanes(kfVehicle_OptimalDistFromTarget_SpeedBalanceFactor_DirectionDampingFactor_MinDistToMove,
+                   2.0f, 2.0f, 2.5f, 0.40000001f);
+
+    SetTuningSplat(KF_VEHICLE_MAX_STEERING_DELTA,        0.025f);          // 0x72670 flt_820BA524
+
+    // 0x72680: XMVectorSin(splat(flt_820BA528 == 25.0f) * splat(flt_820BA244 == KF_DEG_TO_RAD)).
+    SetTuningSplat(KF_VEHICLE_SIN_MAX_STEERING_ANGLE,
+                   std::sin(25.0f * 0.01745329238474369f));
+
+    // 0x72690: flt_8300CB58, seeded by the dyn-init thunk at 0x82C66280 as
+    // flt_82001C98(1.0f) / (flt_82F31928(0.44704f, mph->m/s) * flt_820BA5E4(10.0f)), i.e. the
+    // reciprocal of 10 mph in m/s.
+    SetTuningSplat(KF_VEHICLE_RECIP_ROLL_SPEED_MIN,      1.0f / (0.44704f * 10.0f));
+
+    SetTuningSplat(KF_VEHICLE_ROLL_FACTOR,               -0.1f);           // 0x726A0 flt_8200D530
+    SetTuningSplat(KF_VEHICLE_PITCH_RECIP_MAX_DECEL,     0.2f);            // 0x726B0 flt_82004744
+    SetTuningSplat(KF_VEHICLE_PITCH_DAMPING_FACTOR,      0.94999999f);     // 0x726C0 flt_820BA57C
+    SetTuningSplat(KF_VEHICLE_PITCH_SCALE,               0.050000001f);    // 0x726D0 flt_820047C8
+
+    // The four cones, {cos(half-angle), length, recip-Y-scale, w}. The console builds each with
+    // a read-modify-write of the member's own lanes, so the lanes it never stores keep whatever
+    // the record held; they are written as 0.0f here. Angles: dbl_8200D500 == 10 degrees,
+    // dbl_820BFBF0 == 20 degrees, both in radians.
+    SetTuningLanes(kfParamSympatheticCone_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.1745329238474369)), 30.0f, 0.25f, 0.0f);   // 0x726E0
+    SetTuningLanes(kfParamSympatheticConeShowTime_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.3490658476948738)), 50.0f, 0.0f, 0.0f);    // 0x726F0
+    SetTuningLanes(kfVehicle_AvoidancePassingFactor_Constants,
+                   4.0f, 10.0f, 10.0f, 3.0f);                                             // 0x72770
+    SetTuningLanes(kfVehicle_AvoidanceCone_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.1745329238474369)), 15.0f, 0.25f, 0.0f);   // 0x72780
+    SetTuningLanes(kfVehicle_Avoidance_Constants,
+                   10.0f, 50.0f, 0.0f, 0.0f);                                             // 0x72790
+    SetTuningLanes(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W,
+                   static_cast<f32>(std::cos(0.1745329238474369)), 30.0f, 0.25f, 0.0f);   // 0x727A0
+
+    // 0x827407B8..0x827407CC is `for (4) maJobs[i].Construct()`; 0x827407D8/0x827407F8 is
+    // `li r8, 4; stw r8, 0x2A00(r31)`. The stub Constructs live in the host job table in
+    // _wT2_04.cpp while [MEMBER HOLE 5] is open (blocker measured in the header).
+    muNumUpdateVehiclesJobs = KU_MAX_JOBS;
+
+    // The console inlines EventReceiverQueue<4096,16>::Construct at 0x827407E0..0x82740844
+    // (mpBuffer = &maBuffer, miCapacity = 0x1000, miAlignment = 0x10, miCount = 0, then the
+    // alignment fix-up Clear() repeats). This is the de-inlined form, and it is what binds the
+    // queue at construction time rather than in _wQ7_02.cpp's Prepare stage-0 safety net.
+    mReceiverQueue.Construct();
+
+    mStreamer.Construct();
+
+    // 0x8274087C..0x8274088C -- FuzzyBehaviourLogic::Construct(this+0x71860, this+0x72710),
+    // i.e. mFuzzyBehaviours.Construct(&mTweakValues). Without this call every fuzzy envelope
+    // and all 21 mega-tweek constants stay at their zero-init values, ProcessParamRules returns
+    // six zero scores, and the action pick (@0x827180FC, seeds best 0.0 / index 0 and replaces
+    // only on `>`) elects action 0 == DRIVE_AROUND_OBSTRUCTION for every param.
+    mFuzzyBehaviours.Construct(&mTweakValues);
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Construct sub-object legs TrafficEntitySerialiser::Construct, "
+            "CgsResource::BaseResourcePtr::CreateFromHandle(mpData-adjacent slot), "
+            "the 32-slot showtime "
+            "list seed, the DebugComponent and Logger allocations and DebugRenderStreamReader::"
+            "Construct -- none of those callees has a body or a usable declaration in this tree");
+    }
+
+    // ⭐⭐ THE 102,800-BYTE BULK CLEAR, RESTORED 2026-09-06 (traffic-demotion wave). It used to
+    // be inside the gate above, with a note saying "every field Construct does not touch is
+    // zero on the console and is whatever the host storage holds here. Every reader of those
+    // fields is a gated physical-traffic leg, so the loop is safe to run without the memset."
+    // THAT SECOND SENTENCE WENT STALE and nobody retired it: ProcessDeformationData
+    // (2026-09-02) and RenderTrafficCar are both live now, and between them they read
+    // maSkinningOffsets_Scratch, maWheelTransforms, mabWheelExists, maLightLocatorPositions and
+    // maLightTagPointTypes -- exactly the members TrafficPhysicsInfo::Construct @0x82751E88
+    // deliberately does NOT touch, precisely because this clear has already run
+    // (see _wT1_03.cpp's "NOT ZEROED, DELIBERATELY" list).
+    // ⚠️ AND THIS WAVE MADE IT MATTER MORE, not less. Until TryClearupOffscreenTraffic and
+    // HandleRecycledTraffic landed, no slot was ever freed, so each of the 25 records was
+    // claimed at most once per session; now they are RECYCLED, and a fresh occupant would
+    // otherwise inherit the previous car's dent, wheel and light-locator state for the frames
+    // before ProcessDeformationData refreshes them.
+    //
+    // ⛔⛔ THE "one-frame 4.86 m vertex spike" LEAD WAS ATTACHED HERE AND IS REFUTED (2026-09-06,
+    // A/B run tdef_ab, exe 095054d26174, 200 s, BRN_DEFORM_TRACE=1; 2,803 [tdef] + 400
+    // [tdef-upload] lines, so both probes are ARMED and this is not an absence).
+    // The spike is REAL and reproduces -- three occurrences, and every one is the FIRST [tdef]
+    // line for its vehicle, i.e. the promotion frame, pure +Y with x and z exactly 0:
+    //     frame  5180  veh 208 phys 3  maxVerlet  6.113039  sum 24.42  nnz 52  deforming 0
+    //     frame 10835  veh 122 phys 8  maxVerlet  6.044299  sum 24.15  nnz 52  deforming 0
+    //     frame 11361  veh 327 phys 9  maxVerlet 12.409976  sum 49.50  nnz 59  deforming 0
+    // and the next sample for each is 0.372 / 0.152 / 0.114 -- "gone the next frame", exactly the
+    // reported shape. But THIS memset is not its mechanism, for a reason visible in the code and
+    // not needing a run at all: ProcessDeformationData's copy loop overwrites ALL 128 rows of
+    // maSkinningOffsets_Scratch from lrSkin.mpSkinOffsets_Scratch on every call, so what [tdef]
+    // reads is the DeformationManager's OWN output for that frame and the record's prior contents
+    // are unreachable. sum/max is ~4.0 on the spike frame AND on the frame after it, so the whole
+    // block scales down uniformly -- a first-frame relaxation transient in the verlet points,
+    // not stale memory.
+    // ⭐ AND IT NEVER REACHES THE GPU. The render upload is gated on mbIsDeforming, which
+    // TrafficPhysicsInfo::Construct sets false on EVERY claim -- first or recycled (the promotion
+    // path calls it at 0x82721160, _wT3_01.cpp) -- and all three spikes read `deforming 0`.
+    // Across all 400 [tdef-upload] lines the largest maxVerlet actually handed to constant 22 was
+    // 0.312529 m. The console's head-leg order seals it: HandleExternalResponses (which sets
+    // mbIsDeforming) runs IMMEDIATELY before ProcessDeformationData (0x8274E870..0x8274E8A4), so
+    // the first frame a car can be flagged deforming is a frame whose offsets were already
+    // refreshed.
+    // ⚠️ WHAT THIS DOES NOT SETTLE: these probes only see the traffic deforming-arm upload. If a
+    // 4.86 m spike was ever seen ON SCREEN, it did not come through this path, and where it did
+    // come from is still open. Do not re-file it against this memset.
+    // The memset stays -- it is the console's own call and it is what makes a slot's FIRST claim
+    // read zeros instead of host storage. That is its whole justification; the spike never was.
+    // THE CONSOLE'S OWN CALL, read out of Construct @0x82740220 (nobody had opened it):
+    //     0x827408E8  addis r27, r31, 6       ; this + 0x60000
+    //     0x827408F0  addi  r27, r27, -0x7DF0 ; this + 0x58210 == 360976 == the array base
+    //     0x827408EC  lis   r5, 1
+    //     0x827408F4  ori   r5, r5, 0x9190    ; Size == 0x19190 == 102800
+    //     0x827408F8  li    r4, 0             ; Val
+    //     0x827408FC  mr    r3, r27           ; Dst
+    //     0x82740900  bl    memset
+    //     0x82740904  li    r29, 0x19         ; 25 -- the Construct loop below starts here
+    // The host record is byte-for-byte the console's size -- the eleven static_asserts in
+    // BrnTrafficEntityModule.cpp pin sizeof(TrafficPhysicsInfo) == 4112 and 25 * 4112 == 102,800
+    // -- so this is the console's memset, not an approximation of it.
+    std::memset(maTrafficPhysicsInfoList, 0, sizeof(maTrafficPhysicsInfoList));
+
+    // The 25 physical-traffic scratch records; body in BrnTrafficEntityModule_wT1_03.cpp. The
+    // console's literal is a sign-extended -1, the same 16 bits the u16 member takes.
+    // ORDER: the memset above runs FIRST, exactly as the console orders them.
+    for ( u32 luSlot = 0; luSlot < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; luSlot++ )
+    {
+        maTrafficPhysicsInfoList[luSlot].Construct(
+            static_cast< s32 >( TrafficPhysicsInfo::KU16_NO_OWNING_VEHICLE ) );
+    }
+
+    // The sim box and render caps. The source vector at .data 0x8300CF10 is
+    // { 195.0f, 395.0f, 62500.0f, 160000.0f }, seeded by an unnamed MSVC dynamic-initialiser
+    // thunk at 0x82C66F18 (not a function in the IDA database, so invisible to per-function
+    // export scans). Lanes 2 and 3 corroborate the naming: 62500 == 250^2, 160000 == 400^2.
+    //
+    // Construct decides which lane goes where, no inference:
+    //     0x8274079C  vspltw v0, v0, 0          ; SPLAT LANE 0 -> {195,195,195,195}
+    //     0x827407A0  stvx128 v0, r31, r10      ; 0x713B0 == mfTrafficSimRadius
+    //     0x827407A4  lfs f0, +8(r11)           ; LANE 2 == 62500
+    //     0x827407AC  stfsx f0, r31, r9         ; 0x713C4 == mfRenderCullDistanceSq
+    //     0x827407B0  stbx r30, r31, r7         ; 0x713C8 == mbInOfflineCarSelect (r30 == 0)
+    //     0x827407B4  stwx r11, r31, r8         ; 0x713C0 == muMaxVehiclesToRender = 32
+    // So mfTrafficSimRadius is a splat of lane 0, not the raw vector; lanes 1 and 3 are read by
+    // other functions and never reach this member. A zero here would collapse the sim box to
+    // one Pvs cell without ever producing a non-finite value.
+    // 195 m is the half-extent of the box UpdateRaceCarHulls builds around the player, which at
+    // the shipped Pvs cell size gives the handful of hulls its "> 4" assert polices.
+    mfTrafficSimRadius.x = 195.0f;
+    mfTrafficSimRadius.y = 195.0f;
+    mfTrafficSimRadius.z = 195.0f;
+    mfTrafficSimRadius.w = 195.0f;
+
+    muMaxVehiclesToRender  = 32;
+    mfRenderCullDistanceSq = 62500.0f;   // == 250.0f * 250.0f
+    mbInOfflineCarSelect   = false;
+
+    // ---- the debug flag defaults, measured (0x82740C58..0x82740D2C) ---------------------
+    mbDEBUGEnablePressureSystem = true;    // 0x72868 stbx r27 (r27 == 1)
+    mbDEBUGEnableAvoidance      = true;    // 0x72869 stbx r27
+    mbDEBUGTestSympCrash        = false;   // 0x7286A stbx r30 (r30 == 0 for the whole body)
+    mbDEBUGRenderContacts       = false;   // 0x7286B
+    mpaDEBUGVehicleFuzzyLogic   = 0;       // 0x7286C stwx r30
+    muDEBUGVehicleFuzzyLogicCount = 0;     // 0x72870 stwx r30
+    mbDEBUGShowtimeStuff        = false;   // 0x72874
+    mbDEBUGOverrideJunctionFUP  = false;   // 0x72875
+    mbDEBUGFakeShowtime         = false;   // 0x72876
+    mbDEBUGPickVehicleFromCamera= false;   // 0x72877
+
+    // [DIAG] NOT IN THE X360 BINARY -- but the FLAG is, and so is its checkbox. The console
+    // ships a debug-menu toggle literally labelled "Fake Showtime" bound to this very byte:
+    // BrnTraffic::DebugComponent::OnActivate @0x8276335C registers `&module + 0x72876` under
+    // that name. UpdateCrashSlider @0x82715A28 (LIVE, _wT5_01.cpp) then raises
+    // mbPlayingShowtimeMode from it every frame -- which is the whole showtime chain,
+    // including UpdateDecisionFrame's SpawnShowtimeTraffic leg and FillNewHull's
+    // showtime-only parked records.
+    // DebugComponent::OnActivate is not reconstructed and the debug UI is not built, so this
+    // env switch stands in for pressing that shipped checkbox. It writes the console's own
+    // member and nothing else; it invents no predicate. DELETE-WHEN the debug UI can set it.
+    if (getenv("BRN_TRAFFIC_FAKE_SHOWTIME") != 0)
+    {
+        mbDEBUGFakeShowtime = true;
+    }
+    muDEBUGPickedVehicle        = 0xFFFFFFFFu; // 0x72878 stwx r10 (r10 == -1)
+    mbDEBUGPick_StopVehicle     = false;   // 0x7287C
+    mbDEBUGPick_DontStopForPickedVehicle = false; // 0x7287D
+    mbDEBUGTurnTrafficOff       = false;   // 0x7287E  <-- THE SHIP DEFAULT. NOT the leak's `true`.
+
+    mbDEBUGStopTrafficMoving          = false;  // 0x727B8
+    miDEBUGOverrideVehicleToSpawn     = -1;     // 0x727C0 stwx r29 (r29 == -1)
+    mbDEBUGDontRenderMeshes           = false;  // 0x727C8
+    mbDEBUGAllowAnarchy               = false;  // 0x727C9
+    mfDEBUGTrafficLightTimeMultiplier = 1.0f;   // 0x727D0 stfsx flt_82001C98 == 1.0f
+    mbDEBUGEnableKillzones            = true;   // 0x727D4 stbx r27
+    // LOAD-BEARING: PickVehicleToSpawn gates on `miDEBUGFlowtypeOverride >= 0`, so dropping
+    // this store leaves the zero-initialised member reading as flow type 0 and forces every
+    // spawn in the world onto that flow type's vehicle mix. Nothing asserts; the city just
+    // looks like it owns one kind of car.
+    miDEBUGFlowtypeOverride           = -1;     // 0x727D8 stwx r29
+    mDEBUGRecentlyFiredKillZones.Clear();       // 0x72860 stwx r30 -- the live-count word
+
+    // ---- the remaining plain stores of the console's body, in offset order ---------------
+    mbAtStartLineSoProtectRaceCarsFromTraffic = false; // 0x717E1
+    mbPlayerIsPowerParking                    = false; // 0x717E5
+    mbShowtimePlayerOnGround                  = false; // 0x717E6
+    mbWaitingForStreaming                     = false; // 0x7180E
+    mbNeedToKillAllZombies                    = false; // 0x7180F
+    mfShowtimeTrafficDensityScale             = 1.0f;  // 0x71824 stfsx flt_82001C98
+    muLastParamCalculated                     = 0;     // 0x71830
+
+    muShowtimeVehicleInfoCount = 0;                    // 0x72480
+    mShowtimePlayerLandingPos2D.SetZero();             // 0x72490
+    mShowtimePlayerGroundPos.SetZero();                // 0x724A0
+
+    mbNetworkHasDetectedDivergence = false;            // 0x72B54
+    mbHullSyncDivergence           = false;            // 0x725EC
+
+    // X360 Construct 0x82740E14..0x82741330: page 2 counters, in registration order.
+    // AddMonitor receives name/r3, page/r4, minimum/r5, budget/f1, scaled/r7.
+    // The two unregistered subdivisions retain the original invalid handle.
+    miPerfMon_UpdateParam_IncParam = -1;
+    miPerfMon_UpdateParam_CalcSpeed = -1;
+    miPerfMon_PreSceneUpdate = CgsDev::PerfMonCpu::AddMonitor("PreSceneUpdate", CgsDev::E_PMP_2, false, 0.8f, true);
+    miPerfMon_UpdateCollidableVehicles = CgsDev::PerfMonCpu::AddMonitor("  UpdateCollidableVehicles", CgsDev::E_PMP_2, false, 0.8f, true);
+    miPerfMon_PostSceneUpdate = CgsDev::PerfMonCpu::AddMonitor("PostSceneUpdate", CgsDev::E_PMP_2, false, 1.1f, true);
+    miPerfMon_PrePhysicsUpdate = CgsDev::PerfMonCpu::AddMonitor("PrePhysicsUpdate", CgsDev::E_PMP_2, false, 0.6f, true);
+    miPerfMon_Driving = CgsDev::PerfMonCpu::AddMonitor("  Driving", CgsDev::E_PMP_2, false, 0.5f, true);
+    miPerfMon_PostPhysicsUpdate = CgsDev::PerfMonCpu::AddMonitor("PostPhysicsUpdate", CgsDev::E_PMP_2, false, 7.5f, true);
+    miPerfMon_PostPhysicsUpdate_Pre0 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Pre0", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_PostPhysicsUpdate_Pre1 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Pre1", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_ProcessDeformation = CgsDev::PerfMonCpu::AddMonitor("  ProcessDeformation", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_UpdateParam = CgsDev::PerfMonCpu::AddMonitor("  UpdateParam", CgsDev::E_PMP_2, false, 3.0f, true);
+    miPerfMon_UpdateParamNonDecision = CgsDev::PerfMonCpu::AddMonitor("  UpdateParamND", CgsDev::E_PMP_2, false, 3.0f, true);
+    miPerfMon_UpdateVehicle = CgsDev::PerfMonCpu::AddMonitor("  UpdateVehicle", CgsDev::E_PMP_2, false, 1.75f, true);
+    miPerfMon_PostPhysicsUpdate_Post0 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Post0", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_PostPhysicsUpdate_Post1 = CgsDev::PerfMonCpu::AddMonitor("  PostPhysicsUpdate Post1", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_UpdateDecision_Part0 = CgsDev::PerfMonCpu::AddMonitor("   UpdateDecisionFrame Part0", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_UpdateDecision_Part1 = CgsDev::PerfMonCpu::AddMonitor("   UpdateDecisionFrame Part1", CgsDev::E_PMP_2, false, 0.2f, true);
+    miPerfMon_RenderCoronas_ActiveHulls = CgsDev::PerfMonCpu::AddMonitor("Coronas_AH", CgsDev::E_PMP_2, true, 0.2f, true);
+    miPerfMon_RenderCoronas_InactiveHulls = CgsDev::PerfMonCpu::AddMonitor("Coronas_IH", CgsDev::E_PMP_2, true, 0.2f, true);
+    miPerfMon_RenderCoronas_Vehicles = CgsDev::PerfMonCpu::AddMonitor("Coronas_Veh", CgsDev::E_PMP_2, true, 0.2f, true);
+
+    CGS_ASSERT(miPerfMon_PreSceneUpdate >= 0, "miPerfMon_PreSceneUpdate >= 0");
+    CGS_ASSERT(miPerfMon_UpdateCollidableVehicles >= 0, "miPerfMon_UpdateCollidableVehicles >= 0");
+    CGS_ASSERT(miPerfMon_PostSceneUpdate >= 0, "miPerfMon_PostSceneUpdate >= 0");
+    CGS_ASSERT(miPerfMon_PrePhysicsUpdate >= 0, "miPerfMon_PrePhysicsUpdate >= 0");
+    CGS_ASSERT(miPerfMon_PostPhysicsUpdate >= 0, "miPerfMon_PostPhysicsUpdate >= 0");
+    CGS_ASSERT(miPerfMon_ProcessDeformation >= 0, "miPerfMon_ProcessDeformation >= 0");
+    CGS_ASSERT(miPerfMon_UpdateParam >= 0, "miPerfMon_UpdateParam >= 0");
+    CGS_ASSERT(miPerfMon_UpdateParamNonDecision >= 0, "miPerfMon_UpdateParamNonDecision >= 0");
+    CGS_ASSERT(miPerfMon_UpdateVehicle >= 0, "miPerfMon_UpdateVehicle >= 0");
+    CGS_ASSERT(miPerfMon_UpdateDecision_Part0 >= 0, "miPerfMon_UpdateDecision_Part0 >= 0");
+    CGS_ASSERT(miPerfMon_UpdateDecision_Part1 >= 0, "miPerfMon_UpdateDecision_Part1 >= 0");
+    CGS_ASSERT(miPerfMon_RenderCoronas_ActiveHulls >= 0, "miPerfMon_RenderCoronas_ActiveHulls >= 0");
+    CGS_ASSERT(miPerfMon_RenderCoronas_InactiveHulls >= 0, "miPerfMon_RenderCoronas_InactiveHulls >= 0");
+    CGS_ASSERT(miPerfMon_RenderCoronas_Vehicles >= 0, "miPerfMon_RenderCoronas_Vehicles >= 0");
+
+    // ---- the density seed (0x827413E0: stfsx flt_82001C98 -> this + 0x71810) -------------
+    mfBaseDensityScale = 1.0f;
+
+    ResetEventData();
+    Reset();
+
+    // ---- 96 per-vehicle-type runtimes (0x8274142C..0x82741440, `addi r26,r26,0x80`) -------
+    for (u32 luVehicleType = 0; luVehicleType < KU_MAX_VEHICLE_TYPES; ++luVehicleType)
+    {
+        maVehicleTypeRuntime[luVehicleType].Construct();
+    }
+
+    // 0x82741448 `stw r30, 0x2FC(r31)`.
+    meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_IDLE;
+
+    // ⭐ THE TWO NEAR-MISS COLLECTION CLEARS, RESTORED 2026-09-11. The console inlines both as
+    // a bare store of zero over each Array's live-count word -- +0x2A8, which is
+    // mNearMissTrafficCollection at +0x228 plus its 16*8 element buffer, and +0x2EC, which is
+    // mNearMissRaceCarCollection at +0x2AC plus its 8*8 -- in this same slot, right after the
+    // per-vehicle-type runtime loop and before the tail stores below.
+    // LOAD-BEARING as of this wave: GenerateNearMissOutput publishes both collections into the
+    // output buffer every pre-scene frame, INCLUDING the frames before the first sphere-query
+    // batch has ever filled them. Without these two clears the published Arrays carry the
+    // KI_UNCONSTRUCTED sentinel on those frames, and the race-car drain's GetLength() both
+    // trips "Array used before Construct/Clear was called" and then walks 4,294,967,295
+    // elements.
+    mNearMissTrafficCollection.Clear();
+    mNearMissRaceCarCollection.Clear();
+
+    // The console's tail stores (0x827414D4..0x8274175C): everything Construct re-seeds after
+    // ResetEventData and Reset have run. The crash-slider values and showtime timers are the
+    // same numbers ResetEventData writes; mfJunctionFUP's partner is flt_82001C98 == 1.0f, the
+    // datum mfBaseDensityScale is also seeded from.
+    mfCrashSliderCrashScore       = 0.0f;   // 0x72370
+    mfCrashSliderCrashScoreDecay  = 0.5f;   // 0x72374
+    mfCrashSliderCrashScoreFactor = 0.80000001f; // 0x72378
+    mfCrashSliderFinalValue       = 0.0f;   // 0x7237C
+
+    mfShowtimeTimer               = 0.0f;   // 0x724B0
+    mfShowtimeTimeNextCrashSpike  = 0.0f;   // 0x724B4
+    mfShowtimeMisBounceTimer      = 0.0f;   // 0x724BC
+    mfPlayerIdleTime              = 0.0f;   // 0x72524
+
+    mAveragePhysicalCentre.SetZero();       // 0x725D0
+    mfJunctionFUP                          = 0.0f; // 0x725E0
+    mfJunctionFUP_TimeTillNextPhysicalKill = 1.0f; // 0x725E4
+    mbTrafficIsHidden                        = false; // 0x725E8
+    mbDontCreateVehiclesNearAnyPlayers       = false; // 0x725E9
+    mbDontCreateStaticVehiclesNearAnyPlayers = false; // 0x725EA
+    mbInPictureParadise                      = false; // 0x725EB
+
+    {
+        // GATE: two stores inside the un-emitted DWARF :776/:777 window, i.e. the
+        // BrnReplays::TrafficEntitySerialiser member the console registers at `this + 468160`.
+        // Construct writes zero to +0x72520 and ONE to +0x72521, while EnterReplay @0x827081D8
+        // and LeaveReplay @0x82708248 both write zero to +0x72521. A flag that constructs to 1
+        // and clears on entering AND leaving replay is not mbInReplay, so it stays unnamed.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "Construct stores +0x72520 = 0 and +0x72521 = 1 -- both inside the replay "
+            "serialiser's DWARF un-emitted :776/:777 window; no attested member name "
+            "(the same byte EnterReplay/LeaveReplay clear)");
+    }
+
+    // 0x82741450..0x82741460. mLocalPlayerDirection @+0x713E0 is NOT written here; the console
+    // leaves it to PostPhysicsUpdate's tail.
+    mLocalPlayerPosition.SetZero();
+    meLocalPlayerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+    // The console's very last store, immediately before the epilogue: `li r11, 1 ; stb r11,
+    // 4(r31)` @0x82741758. Byte +4 is CgsModule::Module::mbIsNewModule, which the base
+    // Construct at the top of this function set to zero and the traffic module flips back.
+    //
+    // LOAD-BEARING for Prepare stage 1: ModuleSingleBuffered::Prepare @0x8286E7A0 tests that
+    // byte at every stage. Non-zero skips the old-style DataStructure ladder and returns 1;
+    // zero calls CreateInputDataStructure through the vtable, which this class does not
+    // override, so the base placeholder returns null and Prepare returns FALSE every frame,
+    // forever. That is a boot hang at WorldModule::Prepare's traffic stage.
+    mbIsNewModule = true;
+}
+
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateRemovedVehicleEvents  @ 0x827206E8
+//
+//   0x82720708  ["lpCrashInputInterface" :5240]
+//   loop i < maRecentlyRemovedVehicles.GetLength()   (module +0x57E38 count, records +0x57CF8):
+//     v = GetItem(i) ; ["luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC" interfaces.h:314]
+//     RemoveCrashedTrafficEvent{v} -> AddEvent(lpCrashInputInterface + 0xB5C)
+//   maRecentlyRemovedVehicles.Clear()
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateRemovedVehicleEvents(
+    BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
+{
+    CGS_ASSERT(lpCrashInputInterface != 0, "lpCrashInputInterface");   // baked .cpp 5240
+
+    for (u32 luIndex = 0; luIndex < maRecentlyRemovedVehicles.GetLength(); ++luIndex)
+    {
+        lpCrashInputInterface->AddRemoveCrashedTrafficEvent(maRecentlyRemovedVehicles.GetItem(luIndex));
+    }
+    maRecentlyRemovedVehicles.Clear();
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateSlamRecoveryEvents  @ 0x827207E0
+//
+//   0x82720800  ["lpCrashInputInterface" :5268]
+//   loop i < maRecentlyRecoveredSlammedTraffic.GetLength()   (module +0x580C0 count, +0x57F80):
+//     v = GetItem(i) ; ["luIndex < KU_MAX_TOTAL_TRAFFIC" BrnTrafficEntityModule.h:2459 -- the
+//                       GetVehicle bound]
+//     if (meState == RUNNING && vehicle.IsAlive() &&
+//         (vehicle.IsCrashing() || vehicle.IsSympatheticallyCrashing()))  continue;
+//     ["luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC" interfaces.h:294]
+//     RemoveSlammedTrafficEvent{v} -> AddEvent(lpCrashInputInterface + 0xA10)
+//   maRecentlyRecoveredSlammedTraffic.Clear()
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateSlamRecoveryEvents(
+    BrnWorld::CrashIO::TrafficInputInterface* lpCrashInputInterface)
+{
+    CGS_ASSERT(lpCrashInputInterface != 0, "lpCrashInputInterface");   // baked .cpp 5268
+
+    for (u32 luIndex = 0; luIndex < maRecentlyRecoveredSlammedTraffic.GetLength(); ++luIndex)
+    {
+        const u32      luVehicle = maRecentlyRecoveredSlammedTraffic.GetItem(luIndex);
+        const Vehicle* lpVehicle = GetVehicle(luVehicle);                  // carries the :2459 bound
+
+        if (meState == E_STATE_RUNNING && lpVehicle->IsAlive()
+            && (lpVehicle->IsCrashing() || lpVehicle->IsSympatheticallyCrashing()))
+        {
+            continue;
+        }
+
+        lpCrashInputInterface->AddRemoveSlammedTrafficEvent(luVehicle);
+    }
+    maRecentlyRecoveredSlammedTraffic.Clear();
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_02.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_02.cpp
+//
+//   TrafficEntityModule::PreSceneUpdate @0x8274A968  PARTIAL, ARTIST EXPORT HOLE
+//
+// This function owns E_STARTINGUPSTATE_WAITING_FOR_PLAYER -> _POPULATING, the only door into
+// the arm that creates parked cars (PostPhysicsUpdate's POPULATING arm, _wT1_01.cpp).
+//
+// FLAG rung-3: an earlier source revision is the primary source for this function's control flow.
+// There is no per-function export for it, so rung 1 has no body.
+// Control flow comes from the earlier revision of this function;
+// every member, constant and callee below is attested elsewhere, and which legs exist comes
+// from the ship's 36-entry `xrefs_to` inventory for 0x8274A968. An xref list carries no order,
+// but the image does: where a leg's slot has been read out of the instruction stream it is
+// placed (see the output-producer run below); the rest stay named gates.
+//
+// MOUNT REQUIRED (conductor-owned; agents may not edit the build script). Add
+//   echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT1_02.cpp"
+// to tools/build/build_game_exe.bat after the _wT1_01.cpp mount. The inert gate that defined
+// this symbol in GameSource/World/WorldLinkStubs.cpp is deleted (it could not be retired
+// separately: BrnUpdateSet is a bare `typedef u16`, so the gate's spelling mangled identically
+// to this body's), so until the mount lands the exe link fails with LNK2019 on PreSceneUpdate.
+// The per-TU `cl /c` gate sees neither the mount nor a duplicate definition; only a link does.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of LogMissingLeg_T1 was dropped here -- this TU defines it once, above)
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::PreSceneUpdate  @ 0x8274A968   PARTIAL, EXPORT HOLE
+//
+// Earlier-revision shape; the WAITING_FOR_PLAYER arm is its second half.
+// The signature is the header's, not the earlier revision's: that revision passes
+// `const InputBuffer_PreScene*` where BrnTrafficEntityModule.h takes a non-const pointer.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBufferStack,
+                                         CgsModule::IOBufferStack* lpOutputBufferStack,
+                                         BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                         BrnTrafficIO::OutputBuffer_PreScene* lpOutput,
+                                         BrnUpdateSet lUpdateSet)
+{
+    (void)lpInputBufferStack;
+    (void)lpOutputBufferStack;
+
+    // ⭐⭐ THE SIM-PAUSED BIT, RECOVERED FROM THE IMAGE (pauseresume wave, 2026-08-27).
+    // 0x8274A994 `mr r30, r8` puts the update set (the 6th argument) in r30, and the prologue
+    // splits it into the two bits this function cares about:
+    //     0x8274A9A4  rlwinm r11, r30, 24, 24, 31   ; (updateSet >> 8) & 0xFF
+    //     0x8274A9AC  rlwinm r29, r11, 0,  31, 31   ; r29 = BIT 8  -- mbInReplay; it drives the
+    //                                               ;   EnterReplay @0x827081D8 / LeaveReplay
+    //                                               ;   @0x82708248 latch at 0x8274A9C4..0x8274A9D8
+    //     0x8274A9B0  rlwinm r27, r30, 0,  31, 31   ; r27 = updateSet & 1 -- THE SIM-PAUSED BIT
+    // i.e. `clrlwi r27, r30, 31`, the same decode PostPhysicsUpdate does at 0x8274E710.
+    const bool lbSimPaused = ((lUpdateSet & 1u) != 0);
+
+    {
+        // GATE: the console's PerfMonCpu Start/StopMonitor(miPerfMon_PreSceneUpdate) bracket.
+        // The handle is never issued because Construct's twenty AddMonitor registrations are
+        // gated in the sibling partfile. DELETE WHEN those registrations land.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PreSceneUpdate PerfMonCpu Start/StopMonitor(miPerfMon_PreSceneUpdate) bracket -- "
+            "the handle is never issued because Construct's twenty AddMonitor registrations "
+            "are gated; same reason the sibling partfile gates PostPhysicsUpdate's bracket");
+    }
+
+    // ⛔ THE OLD NOTE HERE IS RETRACTED (2026-08-27). It said: "BrnUpdateSet is a bare
+    // `typedef u16` ... with no named bits, and the ARTIST body is an export hole, so THE MASKS
+    // CANNOT BE READ OFF ANYTHING." **An ARTIST export hole is not an IMAGE hole.** Both masks
+    // were read straight out of the instruction bytes at 0x8274A9A4..0x8274A9B0 (see the decode
+    // above); the export set simply carries no per-function JSON for this address. ⭐ "The export
+    // does not have it" is a fact about the export, never about the binary.
+    //
+    // The SIM-PAUSED half is LIVE now (it gates the block below, and it is what makes a paused
+    // traffic sim actually stop). The REPLAY half stays gated: bit 8 is decoded above in the
+    // console and drives EnterReplay @0x827081D8 / LeaveReplay @0x82708248, neither of which has
+    // a body in this tree, and replay is not this wave's surface.
+    // DELETE WHEN: EnterReplay/LeaveReplay are bodied.
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PreSceneUpdate REPLAY latch -- update-set BIT 8 (E_HLA_UPDATE_PLAYING_REPLAY) is "
+            "decoded by the console at 0x8274A9A4/0x8274A9AC and drives EnterReplay @0x827081D8 "
+            "/ LeaveReplay @0x82708248 at 0x8274A9C4..0x8274A9D8; neither callee is bodied in "
+            "this tree. The SIM-PAUSED half of the decode (bit 0, 0x8274A9B0) is LIVE");
+    }
+
+    lpOutput->LockForWrite();
+    lpInput->LockForRead();
+
+    if (mbHullSyncDivergence)
+    {
+        // GATE: the hull-sync 2D banner. Its four text/position/size/colour constants come
+        // from the earlier revision's BrnTrafficTweakConstants block with no binary attestation. Online-only
+        // (mbHullSyncDivergence is set only by UpdateRaceCarHulls' online arm), so offline
+        // cannot reach it. DELETE WHEN the four constants are attested on this build.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PreSceneUpdate mbHullSyncDivergence 2D banner (DebugInterface::Get2dRender()."
+            "Draw2DText) -- its four text/position/size/colour constants have no X360 "
+            "attestation on this build. ONLINE-only, unreachable offline");
+    }
+
+    // ⭐ THE PRODUCER BLOCK, AND ITS ORDER, ARE NOW MEASURED (2026-09-11). The old gate here
+    // said "their order in this function is unknown, so they are not placed" -- that was a
+    // claim about the EXPORT, not the image, and it was wrong the same way the update-set note
+    // above was. Disassembling this function straight out of the image shows the producers as a
+    // straight run right here, between the hull-sync banner and the state switch, each called
+    // with (this, lpInput, lpOutput):
+    //     GenerateSympatheticCrasherOutput
+    //     GenerateNearMissOutput                 <- LIVE below
+    //     GeneratePotentialLeapedAndStompedCarsOutput
+    //     GenerateNearbyParkedTrafficOutput
+    // then ManageTriggers, then the switch. GenerateRivalInActiveHullOutput is NOT among them
+    // on this build; nothing in this function calls it.
+    GenerateNearMissOutput(lpInput, lpOutput);
+
+    {
+        // GATE: the three remaining pre-scene output producers, none bodied in this tree. They
+        // are placed in the console's own order around the live call above. They write into
+        // OutputBuffer_PreScene. DELETE WHEN the bodies land.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "PreSceneUpdate output producers -- GenerateSympatheticCrasherOutput (before the "
+            "live GenerateNearMissOutput), GeneratePotentialLeapedAndStompedCarsOutput and "
+            "GenerateNearbyParkedTrafficOutput (after it). No bodies in this tree");
+    }
+
+    switch (meState)
+    {
+    // Leg order follows the earlier revision of this function.
+    //
+    // ✅ THE BEHAVIOUR DELTA THAT STOOD HERE IS CLOSED (2026-08-27, pauseresume wave).
+    // It said: "the earlier revision's guard is `!IsPaused() && !lbSimPaused`; only IsPaused() is written ...
+    // nothing attests that PreSceneUpdate decodes the same bit, and this function is an export
+    // hole ... IsPaused() alone runs the legs on a frame the console might have skipped, WHICH AT
+    // WORST REGISTERS A SCENE ENTITY ONE FRAME EARLY."
+    // ⛔⛔ THE RISK ASSESSMENT WAS WRONG, and instructively so. It rated the block by looking at
+    // CreateNewVehicleEntities and stopped there -- but `UpdateTimers` is in the SAME guarded
+    // block, and UpdateTimers is **the only writer of mbDecisionFrame in the whole image**, i.e.
+    // this module's frame clock. With only `!IsPaused()`, the clock FREE-RAN for the entire
+    // duration of a sim pause: PostPhysicsUpdate's paused arm (correctly empty) consumed nothing,
+    // so the param time-slice cursor stood still while decision frames kept being minted, and the
+    // first decision frame after the resume tripped `muLastParamCalculated >= KU_MAX_PARAMS`
+    // (UpdateParams, _wT2_02.cpp:96). Not one frame early -- an entire pause of free-running.
+    // ⭐ THE CLASS: a claim about ONE BRANCH of a block published as a claim about the block.
+    //
+    // The console's guard, read out of the image (the export hole notwithstanding):
+    //     0x8274ABC4  bl     TrafficEntityModule::IsPaused (0x82707560)
+    //     0x8274ABC8  rlwinm r11, r3, 0, 24, 31
+    //     0x8274ABD0  bc  -> 0x8274AC28        ; skip the block if IsPaused()
+    //     0x8274ABD4  rlwinm r11, r27, 0, 24, 31    ; r27 == lUpdateSet & 1 (prologue, above)
+    //     0x8274ABDC  bc  -> 0x8274AC28        ; skip the block if the SIM-PAUSED bit is set
+    //     0x8274ABE8  bl     TrafficEntityModule::UpdateTimers (0x82715858)
+    // -- exactly the earlier revision's `!IsPaused() && !lbSimPaused`. Restored below; a RESTORATION, not an
+    // invented arm. (The console's block also carries UpdateCrashSlider @0x82715A18 and
+    // GenerateCrashedVehicleEvents @0x82720030, which stay gated with the tail legs.)
+    case E_STATE_RUNNING:
+    {
+        {
+            // GATE: HandleIncomingNetworkData @0x82741AF8, no body; online-only.
+            static bool sbLogged = false;
+            LogMissingLeg_T1(sbLogged,
+                "PreSceneUpdate E_STATE_RUNNING leg HandleIncomingNetworkData @0x82741AF8 -- "
+                "no body in this tree; ONLINE-only (it drains the network hull-sync ring)");
+        }
+
+        if (!IsPaused() && !lbSimPaused)
+        {
+            // UpdateTimers @0x82715858 is the only writer of mbDecisionFrame in the image, so
+            // everything downstream of IsDecisionFrame() depends on this call -- and that is
+            // exactly why it must stand behind the sim-paused bit too. Body in _wT1_06.cpp.
+            UpdateTimers(lpInput);
+
+            // 0x8274ABF0 -- UN-GATED. Body in _wT5_01.cpp; it is the ONLY writer of
+            // mfCrashSliderFinalValue, so with it gated ShouldBeHollywoodAction() was constant
+            // false and the sympathetic-crash arm in UpdateParams was unreachable. Its slot is
+            // read straight out of the image (PreSceneUpdate is an ARTIST export hole):
+            // `bl 0x82715858` (UpdateTimers) then `bl 0x82715A18` two instructions later,
+            // before KillDyingVehicleEntities @0x8274ABF8. Mount _wT5_01.cpp in
+            // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
+            UpdateCrashSlider();
+
+            // The REMOVE half of the scene registration (bodies in
+            // BrnTrafficEntityModule_KillDyingVehicleEntities.cpp). Landing it closed the
+            // param-pool leak behind the "traffic is anchored to the junkyard" user report
+            // (2026-08-24): without it a killed driving car kept its entity/collision/physics
+            // registrations, UpdateParams_UpdateDead could never retire its param, and
+            // mFreeParams drained 400 -> 0 a few minutes into every session.
+            KillDyingVehicleEntities(lpOutput);
+
+            // The scene registration; body in BrnTrafficEntityModule_wT1_05.cpp, which must
+            // also be mounted in tools/build/build_game_exe.bat or this call is an LNK2019 at
+            // exe link. The per-TU `cl /c` gate cannot see that.
+            CreateNewVehicleEntities(lpOutput);
+
+            // UN-GATED: UpdateCollidableVehicles @0x827302C8 is BODIED
+            // (_wT4_01.cpp). It is the COLLISION-volume half of the registration above -- the
+            // only producer of mVehicleSoaData.mCollidableVehicles and the only caller of
+            // AddVolumeInstance / AddForCollision for a traffic vehicle. Without it a parked
+            // car has a scene entity and no volume, so nothing is solid and the broad phase
+            // never emits a race-car-vs-traffic overlap pair. Mount _wT4_01.cpp in
+            // tools/build/build_game_exe.bat or this call is an LNK2019 at exe link.
+            UpdateCollidableVehicles(lpInput, lpOutput);
+
+            // 0x8274AC20 -- UN-GATED 2026-09-06. Body in _wT3_01.cpp beside its one producer.
+            // ⭐ ITS TAIL IS THE ONLY THING THAT BOUNDS maNewCrashedVehicles: the array holds
+            // 160 TrafficCrashInfo, RecordTrafficVehicleIsPhysical appends one per promotion,
+            // and this Clear is the only shrink apart from HandleRecycledTraffic's single-entry
+            // erase and Reset(). With it gated, append #161 would have written an EntityId over
+            // the count word and #162 a store ~half a gigabyte past the record.
+            // It is INSIDE the `!IsPaused() && !lbSimPaused` guard, exactly where the console
+            // puts it -- the whole block sits between 0x8274ABD0/0x8274ABDC and 0x8274AC24.
+            GenerateCrashedVehicleEvents(lpOutput);
+        }
+
+        {
+            static bool sbLogged = false;
+            LogMissingLeg_T1(sbLogged,
+                "PreSceneUpdate E_STATE_RUNNING remaining legs -- ManageTriggers @0x82747518 / "
+                "UpdateSerialiser @0x8272DA80. Neither bodied; both are trigger/replay surface. "
+                "UpdateCrashSlider @0x82715A18 and GenerateCrashedVehicleEvents @0x82720030 "
+                "WERE in this list and are now live above. The earlier revision's "
+                "KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
+                "therefore not written");
+        }
+    }
+    break;
+
+    case E_STATE_STARTING_UP:
+    {
+        // Leak :1176..:1179. mbDEBUGTurnTrafficOff's ship default is false (Construct
+        // @0x82740220), so this early-out does not fire on a normal boot.
+        if (mbDEBUGTurnTrafficOff)
+        {
+            break;
+        }
+
+        switch (meStartingUpState)
+        {
+        case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
+        {
+            // The transition, leak :1188..:1201. Ship-attested: the callee inventory for
+            // 0x8274A968 has both IsPlayerCarActive @0x82277B90 and sub_82710BD8
+            // (== InputBuffer_PreScene::GetActiveRaceCarOutputInterface, DWARF :153).
+            //
+            // Guard polarity is easy to get backwards: the player test applies ONLY at
+            // non-zero density, so density 0 advances immediately. Dropping the test advances
+            // to POPULATING before a player car exists, RecalculateActiveHulls then builds its
+            // sim box around nothing, and the module reaches RUNNING with an empty world it
+            // never leaves, because POPULATING runs once.
+            //
+            // mbDEBUGTurnTrafficOff is re-tested here as the leak does, though the arm above
+            // already returned on it. Redundancy in the original, kept.
+            if (mfTrafficAmountScale > 0.0f && !mbDEBUGTurnTrafficOff)
+            {
+                if (!lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive())
+                {
+                    break;
+                }
+            }
+
+            meStartingUpState = E_STARTINGUPSTATE_POPULATING;
+        }
+        break;
+
+        case E_STARTINGUPSTATE_POPULATING:
+            // Leak :1203..:1206, empty. PostPhysicsUpdate does the populating and advances to
+            // WAITING_FOR_STREAMING.
+            break;
+
+        case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
+            // Leak :1208..:1211, empty. PostPhysicsUpdate owns the AreAllAssetsLoaded() latch
+            // and EnterRunningState.
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid starting up state");   // leak baked .cpp line 1224
+            break;
+        }
+    }
+    break;
+
+    // leak :1218..:1250 -- the three-way switch on meTearingDownState; its only non-empty arm
+    // (FLUSHING) runs KillDyingVehicleEntities, which is what publishes mbAllVehiclesDead for
+    // PostPhysicsUpdate's flush tail to advance on. LIVE 2026-09-10 -- the state producer
+    // (PostPhysicsUpdate's TEARING_DOWN arm, _wT1_01.cpp) landed the same day.
+    case E_STATE_TEARING_DOWN:
+    {
+        switch (meTearingDownState)
+        {
+        case E_TEARINGDOWNSTATE_WIPING:
+            break;
+        case E_TEARINGDOWNSTATE_FLUSHING:
+            KillDyingVehicleEntities(lpOutput);
+            break;
+        case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
+            break;
+        default:
+            break;
+        }
+    }
+    break;
+
+    default:
+        CGS_ASSERT(false, "Invalid state in traffic system");   // leak baked .cpp line 1259
+        break;
+    }
+
+    lpOutput->UnlockForWrite();
+    lpInput->UnlockForRead();
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_03.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_03.cpp -- part of the BrnTrafficEntityModule.cpp ledger TU.
+//
+//   * BrnTraffic::TrafficPhysicsInfo::Construct @0x82751E88 (14 insns) PARTIAL
+//   * BrnTraffic::TrafficPhysicsInfo::Destruct  @0x82751EE8 (2 insns)  COMPLETE
+//
+// OPEN PARK: nothing found so far binds mDetachedPartQueue.mpEvents. The console's
+// Construct writes one zero byte inside the queue's span and nothing else, so the
+// embedded EventQueue<DetachedPartRenderEvent,20> is constructed elsewhere if at all.
+// Candidates: TrafficEntityModule::Construct @0x82740220's tail, and the 102,800-byte
+// maTrafficPhysicsInfoList memset that runs before the 25 Construct calls.
+//
+// Shape from DecFIGS DWARF (BrnTrafficEntityModule.h:156-:224). Feb-2007 has no
+// TrafficPhysicsInfo, so the X360 asm arbitrates behaviour alone.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // One-shot leg gate, same pattern as the sibling partfiles. [DIAG] NOT IN THE X360 BINARY.
+    void LogMissingLeg_T1Phys( bool& lrbAlreadyLogged, const char* lpcLegNameAndReason )
+    {
+        if ( lrbAlreadyLogged )
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T1-phys] TrafficPhysicsInfo leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// BrnTraffic::TrafficPhysicsInfo::Construct  @ 0x82751E88  (14 insns)  PARTIAL
+// DWARF BrnTrafficEntityModule.h:214  `void Construct(int32_t)`.
+//
+// Seeds one physical-traffic scratch record. The argument is the OWNING VEHICLE INDEX, not a
+// slot index: RecordTrafficVehicleIsPhysical @0x82720EC0 picks a free bit out of
+// maTrafficPhysicsInfoListBits, computes `record = this + 360976 + 4112 * slot`, and passes
+// its own `luVehicle` (asserted < KU_MAX_TOTAL_TRAFFIC == 600). Destruct writes -1 to the
+// same field, so it is a "which vehicle owns this slot, 0xFFFF for none" back-pointer.
+//
+// LAYOUT ATTESTATION -- the stores, with the offsets the C++ cannot show
+// (r3 == this, r4 == the vehicle index, r11 == 0, f0 == flt_82001CC0 == 0.0f):
+//
+//   0x82751E9C  stfs f0, 0xFCC(r3)      4044   mfStuckTimeFront      = 0.0f
+//   0x82751EA0  stfs f0, 0xFD0(r3)      4048   mfStuckTimeBack       = 0.0f
+//   0x82751EA4  stfs f0, 0xFD4(r3)      4052   mfStuckTimerDebounce  = 0.0f
+//   0x82751EB4  stfs f0, 0xFD8(r3)      4056   mfTimeNotDriving      = 0.0f
+//   0x82751EA8  stfs f0, 0xFDC(r3)      4060   mfSteeringDirection   = 0.0f
+//   0x82751EAC  stfs f0, 0xFE0(r3)      4064   mfDrivingDirection    = 0.0f
+//   0x82751EB0  stb  r11, 0(r3)            0   mDetachedPartQueue.muNumParts = 0
+//   0x82751EC0  stb  r11, 0xFE4(r3)     4068   miNumLightLocators    = 0
+//   0x82751EB8  stb  r11, 0xFE5(r3)     4069   mbIsDeforming         = false
+//   0x82751EBC  stb  r11, 0xFE6(r3)     4070   mbIsFatallyCrashing   = false
+//   0x82751EC4  stb  r11, 0xFE7(r3)     4071   mu8RenderDamageFlags  = 0
+//   0x82751ED0  stw  r11, 0(r10)++ x8   4072   mafGlassPaneFractureAmounts[0..7] = 0
+//   0x82751EC8  stb  r11, 0x1008(r3)    4104   muContactSideFlags    = 0
+//   0x82751EDC  sth  r4, 0x100A(r3)     4106   <the owner index -- GATED, below>
+//
+// The record stride is 4112 bytes (RecordTrafficVehicleIsPhysical, and 463776 - 360976 ==
+// 102800 == 25 * 4112 from UpdateSerialiser @0x8272DA80); the DWARF order over the last eight
+// members tiles the last 68 bytes with no slack. Four slots are pinned independently:
+// UpdateVehicleStuckTimers @0x82708D48 passes +4104 as the contact-side flags and +4044/+4048
+// as the front/back stuck times, and RecordTrafficVehicleIsPhysical writes its two float
+// arguments to +4060 and +4064 (the steering/driving direction pair).
+//
+// NOT ZEROED, DELIBERATELY: mDetachedPartQueue's contents, mvRoadTestNormal_HeightAboveRoad,
+// maSkinningOffsets_Scratch, maWheelTransforms, maLightLocatorPositions, maLightTagPointTypes,
+// mabWheelExists. The owner bulk-clears the record once before the 25 Constructs run, so the
+// console leaves them alone. Do not "complete" this.
+// ----------------------------------------------------------------------------
+void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
+{
+    // `stb r11, 0(r3)` @0x82751EB0 -- the detached-part record COUNT. RESOLVED 2026-09-02
+    // (traffic-deformation wave): the xref walk the old gate asked for found the readers and
+    // the writer. ProcessDeformationData @0x8271DEB0 uses this byte as the slot index
+    // (`lbz r29, 0(info)`, asserted < KU_MAX_DETACHED_PARTS_PER_VEHICLE), zeroes it for all
+    // 25 records every frame @0x8271E984, and `stb ++count` @0x8271EB10; RenderTrafficCar
+    // reads it as the record count (pseudocode :1319). It was never the top byte of an
+    // EventQueue pointer -- ARTIST's record is the compact struct the header now declares.
+    mDetachedPartQueue.muNumParts = 0;
+
+    mfStuckTimeFront      = 0.0f;
+    mfStuckTimeBack       = 0.0f;
+    mfStuckTimerDebounce  = 0.0f;
+    mfTimeNotDriving      = 0.0f;
+    mfSteeringDirection   = 0.0f;
+    mfDrivingDirection    = 0.0f;
+
+    miNumLightLocators    = 0;
+    mbIsDeforming         = false;
+    mbIsFatallyCrashing   = false;
+    mu8RenderDamageFlags  = 0;
+
+    // The `mtctr 8` loop @0x82751ED0 stores integer zero with `stw`; same bit pattern as the
+    // float zero this member array takes.
+    for ( u32 luGlassPane = 0; luGlassPane < KU_NUM_GLASS_PANES; luGlassPane++ )
+    {
+        mafGlassPaneFractureAmounts[luGlassPane] = 0.0f;
+    }
+
+    muContactSideFlags    = 0;
+
+    // `sth r4, 0x100A(r3)` @0x82751EDC narrows the s32 argument to the u16 member; spelled as
+    // an explicit cast rather than a truncating store. Reader: HandleExternalResponses
+    // @0x82732C68.
+    muOwningVehicleIndex = static_cast< u16 >( liOwningVehicleIndex );
+}
+
+// ----------------------------------------------------------------------------
+// TrafficPhysicsInfo::Destruct  @ 0x82751EE8  COMPLETE
+// DWARF BrnTrafficEntityModule.h:218  `void Destruct();`.
+//
+// The whole console body is `li r11, -1 ; sth r11, 0x100A(r3)`: teardown just marks the slot
+// unowned. Nothing else in the 4112-byte record is touched, because the record is reused
+// rather than released. KU16_NO_OWNING_VEHICLE is the same 16 bits as the console's -1.
+// ----------------------------------------------------------------------------
+void TrafficPhysicsInfo::Destruct()
+{
+    muOwningVehicleIndex = KU16_NO_OWNING_VEHICLE;
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_04.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_04.cpp -- the traffic streamer pump.
+//
+//   * TrafficEntityModule::UpdateStreaming         @0x82748848  (DWARF :1554)
+//   * TrafficEntityModule::AddVehiclesToTargetList @0x82722470  PARTIAL
+//
+// SetAssetList publishes the catalogue but requests nothing. Bundles are requested by
+// TrafficCarStreamer::Update @0x8274F740 pushing entries into the base streamer's target
+// list, and its only caller in the image is UpdateStreaming, itself called from two arms of
+// PostPhysicsUpdate @0x8274E6D0.
+//
+// The DWARF scope tree names every blob the X360 inlined here (ClearAssetList, the
+// AreAllAssetsUnloaded/AreAllAssetsLoaded pair, GetGuiEventQueue, Append<2048>), so no
+// inlined loop below is a guess at its own name.
+//
+// DWARF-vs-SHIP DELTA, asm wins: the PS3 scope tree shows no call to
+// AddVehiclesToTargetList and none to TrafficCarStreamer::Update. The X360 asm has both
+// (0x82748944 / 0x82748984 and 0x827489F0), so both are here.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // THE GUI EVENT. X360 posts `AddEvent( guiQueue, &oneByte, 512, 1 )` at 0x82748920 and
+    // 0x8274896C: type 512, payload one byte. The DWARF names the payload
+    // BrnGui::GuiEventTrafficPoolEmptied with one `bool mbTrafficPoolEmpty` member
+    // (BrnGuiEventTypeDefs.h:234) deriving GuiEvent<502>; 502 is the PS3 id, 512 is the ship's.
+    //
+    // The payload is declared here rather than in BrnGuiEventTypeDefs.h because that header's
+    // events derive CgsGui::GuiEvent<N>, which this tree models with three u32 header words
+    // (CgsGuiEvent.h:32). That spelling would be 13+ bytes and the console posts one. Until
+    // CgsGui::GuiEvent<N> is fixed tree-wide, this uses the pattern already used for the same
+    // problem in BrnPaybackManager.cpp:33-42: a local payload over the empty CgsModule::Event
+    // plus a named id. Same bytes on the wire, no fabricated header.
+    // [FLAG PC-platform leaf: local GUI payload spelling; see above.]
+    const s32 KI_GUI_EVENT_TRAFFIC_POOL_EMPTIED = 512;   // X360 `li r5, 0x200`
+
+    struct GuiEventTrafficPoolEmptied : public CgsModule::Event
+    {
+        bool mbTrafficPoolEmpty;   // BrnGuiEventTypeDefs.h:236
+    };
+
+// (fold: an identical definition of LogMissingLeg_T1 was dropped here -- this TU defines it once, above)
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::AddVehiclesToTargetList  @ 0x82722470   PARTIAL
+//
+// Decide which traffic vehicle assets should be resident, and flag them in the streamer
+// (TrafficCarStreamer::AddVehiclesToTargetList @0x8274F6A0 ORs E_LOADFLAG_REQUESTED into
+// maxLoadFlags per id). UpdateStreaming has just cleared those flags, so this re-states the
+// whole desired set every frame; an unpumped streamer therefore unloads rather than keeps.
+//
+// miDEBUGFlowtypeOverride is module +0x727D8 == 468952 (`addis r31, r26, 7 ; addi r31, r31,
+// 0x27D8` @0x82722494). DebugComponent::OnActivate @0x82762530 binds that address as the
+// "Flowtype override" slider with range -1 .. muNumFlowTypes-1, so the branch below is "is the
+// override engaged?" and -1 is off. Construct @0x82740220 writes -1 (0x82740C48 `stwx r29`);
+// the only other reader is PickVehicleToSpawn @0x827235F8.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::AddVehiclesToTargetList()
+{
+    // 0x8272247C `lwz r11, 0x713F0(this) ; cmpwi r11, -1 ; beq` -- no local player, no camera
+    // to stream around.
+    if ( meLocalPlayerIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID )
+    {
+        return;
+    }
+
+    // The console's two-part test (0x8272249C, 0x827224B8) short-circuits exactly like this:
+    // mpData is dereferenced only when the override is >= 0. TrafficData +0x14 ==
+    // muNumFlowTypes.
+    if ( miDEBUGFlowtypeOverride >= 0
+         && static_cast<u32>( miDEBUGFlowtypeOverride ) < mpData->muNumFlowTypes )
+    {
+        // GATE -- the DEBUG flow-type-override arm body (0x827224A8..0x827225A8). The console
+        // streams one flow type's assets instead of the player's hull and then returns, which
+        // is why this gate returns too:
+        //     const FlowType* lpFlow = mpData->mpapFlowTypes[ miDEBUGFlowtypeOverride ];
+        //     Array<?,16> lAssetIds;  lAssetIds.Clear();
+        //     for (i < lpFlow->muNumVehicleTypes)
+        //         asset = mpData->mpaVehicleTypes[ lpFlow->mpauVehicleTypeIds[i] ].muAssetId;
+        //         if (!lAssetIds.Contains(asset)) lAssetIds.Append(asset);
+        //     mStreamer.AddVehiclesToTargetList( lAssetIds.GetLength(), &lAssetIds[0] );
+        //
+        // BLOCKER: the element type of that local array. The ledger and Array_char_16.cpp say
+        // `Array<char,16>`, but IDA's names for the four bodies are front-truncated
+        // ("char,16>::Append" at 0x8270B970) and no mangled name is exported, so a lost
+        // `unsigned ` cannot be ruled out. Both ends of the path are u8 (VehicleTypeData::
+        // muAssetId, and the sink AddVehiclesToTargetList(u32, const u8*)), so `char` would
+        // need a reinterpret_cast at the sink and a fresh `Array<u8,16>` would mint an
+        // unattested instantiation.
+        // DELETE WHEN: `idc.get_name(0x8270B970)` / `ida_name.get_name(0x8271B6F8)` in the .i64
+        // settles char vs unsigned char. The arm is ~15 lines of modelled types after that.
+        //
+        // Ship default -1 means this arm is never entered; engaging the slider streams nothing
+        // for that frame instead of silently streaming the hull's set.
+        static bool sbLogged = false;
+        LogMissingLeg_T1( sbLogged,
+            "AddVehiclesToTargetList DEBUG flow-type-override arm BODY (the selector, its -1 "
+            "ship default from Construct @0x82740220, FlowType::mpauVehicleTypeIds/"
+            "muNumVehicleTypes and VehicleTypeData::muAssetId are ALL modelled; the only open "
+            "item is whether the console's local Array<...,16> is char or unsigned char, which "
+            "the truncated IDA names at 0x8270B970/0x8271B6F8 do not settle and the sink "
+            "TrafficCarStreamer::AddVehiclesToTargetList(u32, const u8*) makes load-bearing)" );
+        return;
+    }
+
+    // The HULL arm (0x82722578..0x82722640): stream the assets the local player's current hull
+    // declares. Each Hull carries an inline asset-index table (Hull::mauVehicleAssets, X360
+    // hull+64, count at hull+6).
+    u16 luHull = KU_INVALID_HULL;
+
+    {
+        // GATE -- the replay-playback hull source (0x82722588..0x827225A0), i.e.
+        // `if (*(this + 0x72520)) luHull = *(sub_82707090(this + 0x724C0) + 74);`. Module
+        // +0x724C0 is the BrnReplays::TrafficEntitySerialiser and +0x72520 the replay-playback
+        // latch; both sit in the DWARF's un-emitted :776/:777 window with no member in
+        // BrnTrafficEntityModule.h, and the serialiser class has no owning header in this tree.
+        // Construct writes the latch zero, so live gameplay takes the arm below; this gate
+        // changes replay playback only.
+        // DELETE WHEN: the two members are modelled and the serialiser gets a header.
+        static bool sbLogged = false;
+        LogMissingLeg_T1( sbLogged,
+            "AddVehiclesToTargetList replay-playback hull source -- it reads the hull out of "
+            "BrnReplays::TrafficEntitySerialiser (module +0x724C0) under the replay latch at "
+            "module +0x72520, and BOTH sit in the DecFIGS un-emitted :776/:777 window with no "
+            "member in BrnTrafficEntityModule.h; the serialiser class has no owning header in "
+            "this tree at all. Construct writes the latch ZERO, so live gameplay takes the "
+            "per-player hull list below" );
+    }
+
+    // maaRaceCarHulls[meLocalPlayerIndex] -- the per-active-race-car active-hull list, X360
+    // this + 350220 + 24*index (Reset @0x8272CDA0 Appends into the same array at the same
+    // base). Entry 0 is the hull the car is in; the rest are neighbours.
+    const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
+        maaRaceCarHulls[meLocalPlayerIndex];
+
+    if ( lrPlayerHulls.GetLength() == 0 )
+    {
+        // 0x827225A8 `bne` -- before the first RecalculateActiveHulls the list is empty.
+        return;
+    }
+
+    luHull = lrPlayerHulls.GetItem( 0 );
+
+    if ( luHull != KU_INVALID_HULL )
+    {
+        const Hull* lpHull = GetHull( luHull );
+        CGS_ASSERT( lpHull != 0, "lpHull" );            // baked .cpp line 8287
+
+        mStreamer.AddVehiclesToTargetList( lpHull->muNumVehicleAssets,
+                                           lpHull->mauVehicleAssets );
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateStreaming  @ 0x82748848   COMPLETE except one arm
+// DWARF :1554 `void UpdateStreaming(OutputBuffer_PostPhysics *)`.
+//
+// Per-frame streamer pump, in the console's order: clear last frame's wanted bits, run the
+// pool-empty handshake with the GUI, pump the base streamer, latch "all loaded" for the replay
+// serialiser, then append the streamer's own GameData request queue into this frame's output
+// buffer.
+//
+// That last step is what reaches the resource system: the base streamer does not post its own
+// requests, Update() only fills mGDRequestInterface's queue. The console's source operand is
+// `this + 469872` == &mStreamer + 24, which lands on mGDRequestInterface because the base's
+// preceding fields are the vtable pointer plus mpTargetEntryList / mpPotentialList /
+// mpCurrentEntryList / miStreamListLength / miPotentialListLength, 6 x 4 on a 32-bit target
+// (BrnBaseStreamer.h:233-:238). Reached by name below, so no console offset survives.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateStreaming( BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    // 0x82748864: the console inlines this loop (`lbz / clrrwi r9,r9,2 / stb`, bounded by
+    // muNumAssets); the DWARF names it ClearAssetList. De-inlined.
+    mStreamer.ClearAssetList();
+
+    // The pool-empty handshake (0x82748898..0x827489AC). meEmptyTrafficPoolState is the
+    // module's half of a GUI conversation: tell the HUD when the pool empties (1 -> 2, payload
+    // true) and when it fills again (3 -> 0, payload false). States 0 and 3 also re-state the
+    // target list, which keeps assets resident while the pool drains and refills.
+    switch ( meEmptyTrafficPoolState )
+    {
+    case E_EMPTYTRAFFICPOOLSTATE_IDLE:
+        // jumptable case 0 @0x82748980.
+        AddVehiclesToTargetList();
+        break;
+
+    case E_EMPTYTRAFFICPOOLSTATE_EMPTYING:
+        // jumptable case 1 @0x827488D0. The inlined scan is "every mauLoadStates[i] == 0",
+        // i.e. AreAllAssetsUnloaded, not AreAllAssetsLoaded; the DWARF lists both names for
+        // this function, one per arm. An empty catalogue counts as all-unloaded (the console
+        // branches past the loop straight to `v9 = 1`).
+        if ( mStreamer.AreAllAssetsUnloaded() )
+        {
+            GuiEventTrafficPoolEmptied lTrafficPoolEmptiedEvent;   // DWARF local, .cpp:8081
+            lTrafficPoolEmptiedEvent.mbTrafficPoolEmpty = true;    // `li r11,1 ; stb`
+
+            lpOutput->GetGuiEventQueue()->AddEvent( &lTrafficPoolEmptiedEvent,
+                                                    KI_GUI_EVENT_TRAFFIC_POOL_EMPTIED,
+                                                    sizeof( bool ) );
+
+            meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_EMPTY;
+        }
+        break;
+
+    case E_EMPTYTRAFFICPOOLSTATE_EMPTY:
+        // jumptable case 2 @0x827489AC -- empty on the console. The pool stays empty until
+        // something else moves the state on.
+        break;
+
+    case E_EMPTYTRAFFICPOOLSTATE_FILLING:
+        // jumptable case 3 @0x82748940. Re-state the target list every frame while refilling,
+        // and tell the HUD the moment the assets are back.
+        AddVehiclesToTargetList();
+
+        if ( mStreamer.AreAllAssetsLoaded() )
+        {
+            GuiEventTrafficPoolEmptied lTrafficPoolEmptiedEvent;   // DWARF local, .cpp:8101
+            lTrafficPoolEmptiedEvent.mbTrafficPoolEmpty = false;   // `stb r31` with r31 == 0
+
+            lpOutput->GetGuiEventQueue()->AddEvent( &lTrafficPoolEmptiedEvent,
+                                                    KI_GUI_EVENT_TRAFFIC_POOL_EMPTIED,
+                                                    sizeof( bool ) );
+
+            meEmptyTrafficPoolState = E_EMPTYTRAFFICPOOLSTATE_IDLE;
+        }
+        break;
+
+    default:
+        CGS_ASSERT( false, "Unhandled case in switch" );   // baked .cpp line 8221
+        break;
+    }
+
+    // The pump (0x827489AC..0x827489F0). During replay playback the console replaces Update's
+    // bonus-asset list with the recorded one:
+    //     if (*(this + 0x72520)) {
+    //         luNumBonus = *(sub_82707090(this + 0x724C0) + 150);   // count byte
+    //         lpauBonus  = sub_82707090(this + 0x724C0) + 151;      // the bytes after it
+    //     }
+    //     mStreamer.Update(lpauBonus, luNumBonus);
+    {
+        // GATE -- same two un-modelled members as the replay leg above (+0x72520 latch,
+        // +0x724C0 serialiser); sub_82707090 is an unnamed serialiser accessor.
+        //
+        // The (0, 0) below is not a placeholder: it is the console's own value on every
+        // non-replay frame (both locals start zero, only the latched arm changes them,
+        // 0x827489B0). Live gameplay is unchanged; replay playback loses the recorded set.
+        // DELETE WHEN: the two members are modelled and the serialiser gets a header.
+        static bool sbLogged = false;
+        LogMissingLeg_T1( sbLogged,
+            "UpdateStreaming replay-playback bonus-asset override -- reads a count byte + "
+            "list out of BrnReplays::TrafficEntitySerialiser (module +0x724C0) under the "
+            "replay latch (module +0x72520); neither member exists in the keystone header "
+            "(DecFIGS un-emitted :776/:777 window) and the serialiser has no owning header. "
+            "The (0,0) passed to Update IS the console's own non-replay value, not a stand-in" );
+    }
+
+    mStreamer.Update( 0, 0 );
+
+    {
+        // GATE -- the "all loaded" latch (0x827489F4..0x82748A1C), console
+        // `if (*(this+0x72520) && !*(this+0x72521)) *(this+0x72521) = AreAllAssetsLoaded();`.
+        // Both bytes are in the same un-modelled :776/:777 window. The second is set to one by
+        // Construct and cleared by EnterReplay @0x827081D8 and LeaveReplay @0x82708248, i.e. a
+        // "replay assets have arrived" latch re-armed at each replay boundary. Dead on every
+        // live-gameplay frame. DELETE WHEN: the two members are modelled.
+        static bool sbLogged = false;
+        LogMissingLeg_T1( sbLogged,
+            "UpdateStreaming replay assets-arrived latch (module +0x72521, set from "
+            "AreAllAssetsLoaded under the +0x72520 replay latch) -- same un-modelled "
+            ":776/:777 window members. Dead on every non-replay frame" );
+    }
+
+    // 0x82748A20..0x82748A30: carry the streamer's requests into this frame's output buffer.
+    // This is the only statement that uses lpOutput, which is why the parameter stays.
+    //
+    // The return value is discarded on purpose: Append returns bool and the console leaves it
+    // in r3 at the tail, but the DWARF types this function `void` (:1554), and a tail-position
+    // value is not a return type. The overflow case it would report is Append's own assert.
+    lpOutput->GetResourceRequestInterface()->mRequestQueue.Append(
+        mStreamer.GetGameDataRequestInterface()->mRequestQueue );
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_05.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_05.cpp -- traffic scene presence.
+//
+//   TrafficEntityModule::CreateNewVehicleEntities @0x8272FA30  (DWARF :1317)
+//   TrafficEntityModule::IsVehiclesParamAZombie   @0x82715D70  (DWARF :1323)
+//
+// CreateNewVehicleEntities registers alive-but-entity-less vehicles with the scene manager:
+// bounding sphere from the vehicle-TYPE runtime record, then AddEntity into the pre-scene
+// output buffer. Its only caller in the image is PreSceneUpdate @0x8274A968's
+// E_STATE_RUNNING arm. Neither function has a gate; every console branch is reproduced.
+//
+// NO PER-FRAME POSITION LEG BELONGS HERE. AddEntity's fourth argument is the world-space
+// sphere centre, so an entity enters the scene already positioned and a parked car needs
+// nothing more. The per-frame mover is GenerateSceneUpdateEvents, called from
+// PostPhysicsUpdate's RUNNING arm (0x8274E5xx); it is gated in
+// BrnTrafficEntityModule_wT1_06.cpp.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::IsVehiclesParamAZombie  @ 0x82715D70   (.cpp 4656)
+//
+// Is the param that owns this vehicle a zombie? A zombie param is one whose slot went to a
+// new spawn while the old vehicle is still finishing. Which pool the param lives in follows
+// from the vehicle index range, i.e. from GetVehicleSpecies:
+//
+//   E_SPECIES_STANDARD -> GetParam(luVehicle)->IsZombie()
+//                         (`(*(param + 0x40) >> 5) & 1`; 0x40 == Param::mxFlags, bit 5 ==
+//                          Param::E_FLAG_ZOMBIE. Standard vehicle index == param index.)
+//   E_SPECIES_STATIC   -> GetStaticTrafficParamFro(luVehicle)->IsZombie()
+//                         (`(*(param + 3) >> 5) & 1`; 0x03 == StaticTrafficParam::mxFlags.
+//                          The full-index accessor subtracts KU_STATIC_TRAFFIC_OFFSET itself,
+//                          so the raw luVehicle is what it wants.)
+//   E_SPECIES_TRAILER  -> a trailer has no param, so ask its cab's param instead.
+//
+// The default arm asserts and returns false. GetVehicleSpecies is total over [0, 600), so it
+// is unreachable from here; the console still tests because the species also arrives from
+// serialised data. The console streams the species and index into the message buffer, which
+// CGS_ASSERT does not do; only the condition matters.
+// ----------------------------------------------------------------------------
+bool TrafficEntityModule::IsVehiclesParamAZombie(u32 luVehicle)
+{
+    const Vehicle::Species leSpecies = GetVehicleSpecies(luVehicle);
+
+    u32 luParamVehicle = luVehicle;
+
+    if (leSpecies == Vehicle::E_SPECIES_STATIC)
+    {
+        return GetStaticTrafficParamFro(luVehicle)->IsZombie();
+    }
+
+    if (leSpecies == Vehicle::E_SPECIES_TRAILER)
+    {
+        const u32 luCab = GetVehicle(luVehicle)->GetCabIndex();
+        CGS_ASSERT(luCab != KU_INVALID_VEHICLE, "luCab != KU_INVALID_VEHICLE");   // .cpp 4780
+        luParamVehicle = luCab;
+    }
+    else if (leSpecies != Vehicle::E_SPECIES_STANDARD)
+    {
+        CGS_ASSERT(false, "Encountered traffic vehicle with unknown species");   // .cpp 4786
+        return false;
+    }
+
+    // Both the STANDARD arm and the TRAILER arm's cab land here, reading the lane-param pool.
+    return GetParam(luParamVehicle)->IsZombie();
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::CreateNewVehicleEntities  @ 0x8272FA30   (.cpp 4525)
+//
+// The two bounds asserts are not duplicates: header 2459 is GetVehicle's own bound and header
+// 2483 belongs to the vehicle-TRANSFORM accessor. GetVehicle carries its copy, so only the
+// transform one is written out here; maVehicleTransforms is read directly because the console
+// inlines GetVehicleTransform and this tree has no declaration for it.
+//
+// SetHasEntity must stay inside the loop, after AddEntity. It is what drops the vehicle out of
+// the candidate set next frame; hoist or drop it and every traffic car re-registers every
+// frame, tripping its own `HasEntity() != lbHasEntity` assert on the second visit.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::CreateNewVehicleEntities(BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // .cpp 4631
+
+    // Candidate set: alive AND without an entity. Both locals are DWARF-named
+    // (BrnTrafficEntityModule.cpp:4529/:4530); SetInverse/SetAnd exist in CgsFastBitArray.h
+    // for this pair.
+    CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lVehicles_NoEntity;
+    lVehicles_NoEntity.SetInverse(mVehicleSoaData.mVehiclesWithEntities);
+
+    CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lVehicles_Alive_And_NoEntity;
+    lVehicles_Alive_And_NoEntity.SetAnd(mVehicleSoaData.mAliveVehicles, lVehicles_NoEntity);
+
+
+    for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle =
+             lVehicles_Alive_And_NoEntity.Begin();
+         lItVehicle != lVehicles_Alive_And_NoEntity.End();
+         ++lItVehicle)
+    {
+        const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+
+        Vehicle* lpVehicle = GetVehicle(luVehicle);          // carries header-2459's bound
+
+        CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");        // .cpp 4647
+        CGS_ASSERT(!lpVehicle->HasEntity(), "!lpVehicle->HasEntity()");  // .cpp 4648
+
+        // Skipping zombies is load-bearing: give one an entity and KillDyingVehicleEntity has
+        // to remove it again, and the SetHasEntity assert pair fires as soon as they disagree.
+        if (IsVehiclesParamAZombie(luVehicle))
+        {
+            continue;
+        }
+
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");        // BrnTrafficVehicle.h:786
+
+        const VehicleTypeRuntime* lpVehicleTypeRuntime =
+            GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+
+        // The console inlines a 3-lane vmsum3fp128 dot, rsqrt with two Newton steps, and a
+        // vcmpeqfp/vsel guard returning zero (not NaN) for zero length. Magnitude is that shape.
+        const f32 lfRadius = rw::math::vpu::Magnitude(lpVehicleTypeRuntime->GetBBoxHalfSize());
+
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");  // header 2483
+
+        // OPERAND ORDER, 0x8272FF04..0x8272FF44: IDA prints `vmaddfp` as (D, A, B, C) but
+        // `vmaddfp128` as (D, A, C, B) while both compute A*C + B. Read per its own printing,
+        // the three fmas are t = x*xAxis + wAxis, t = y*yAxis + t, t = z*zAxis + t, i.e. an
+        // affine transform-point. Reading them uniformly gives nonsense; do not "correct" this.
+        const Vector3 lCentre = rw::math::vpu::TransformPoint(
+            maVehicleTransforms[luVehicle], lpVehicleTypeRuntime->GetBBoxOffset());
+
+        // (luVehicle << 10) | 0x02000000. Carries the CgsEntityId.h:116 bound assert the
+        // console fires at 0x8272FF1C.
+        const EntityId lTrafficEntityId = MakeTrafficEntityId(luVehicle);
+
+        // `li r29, 0x488` is the traffic entity-type flag, sibling of prop 0x490 and race-car
+        // 0x484.
+        lpOutput->GetSceneInputInterface()->AddEntity(
+            CgsSceneManager::EntityId(lTrafficEntityId.muValue),
+            KU_TRAFFIC_SCENE_ENTITY_TYPE_FLAG,
+            lCentre,
+            lfRadius);
+
+        lpVehicle->SetHasEntity(true, luVehicle, mVehicleSoaData);
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_06.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_06.cpp -- the traffic steady-state loop.
+//
+//   TrafficEntityModule::UpdateTimers           @0x82715858  (DWARF :1287)
+//   TrafficEntityModule::UpdateDecisionFrame    @0x8274E508  (DWARF :1476)  PARTIAL
+//   TrafficEntityModule::UpdateNonDecisionFrame @0x8274C1A8  (DWARF :1479)  PARTIAL
+//
+// PostPhysicsUpdate's E_STATE_RUNNING arm @0x8274E6D0 calls none of the spawn ladder itself.
+// It is a two-way dispatch: paused does nothing, IsDecisionFrame() picks UpdateDecisionFrame,
+// otherwise UpdateNonDecisionFrame. The spawn ladder lives in UpdateDecisionFrame.
+//
+// Outside E_STATE_STARTING_UP, IsDecisionFrame() returns mbDecisionFrame, whose only writer in
+// the whole image is UpdateTimers here (the +0x713F5 store), itself called only from
+// PreSceneUpdate's E_STATE_RUNNING arm. Reset() seeds it false, so without UpdateTimers every
+// frame takes the non-decision branch for ever. That is why the three land together and why
+// _wT1_02.cpp un-gates the UpdateTimers call in the same change.
+//
+// Live legs: KillOutOfAreaTraffic, SpawnNewTraffic, SpawnShowtimeTraffic (_wT1_07.cpp),
+// UpdateParams, UpdateVehicles, UpdateLerpedParamTransforms and
+// UpdateParams_DoTimeSlicedLogic. Still gated: UpdateJunctions, UpdateTrailers,
+// KillTrafficOnStartGridWholeSale, NukeTrafficJams; each gate names its own blocker and cost.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of LogMissingLeg_T1 was dropped here -- this TU defines it once, above)
+
+    // The console's own .rdata literals. IsSimTimerFrequency50Hz() is the committed
+    // `GetCurrentTimeStep() == 0.02f`, the same compare the console inlines at 0x82715988.
+    const f32 KF_SIM_TIMESTEP_SQ_SCALE            = 360.0f;   // flt_820BA570
+    const f32 KF_ONLINE_SIM_TIME_SINCE_DECISION   = 0.1f;     // flt_82004014
+
+    // `cmplwi r11, 5` / `cmplwi r11, 6` at 0x827159A4 / 0x827159AC -- a decision frame every
+    // 5 frames at 50 Hz, every 6 at 60 Hz (both == 0.1 s).
+    const u32 KU_FRAMES_PER_DECISION_50HZ = 5;
+    const u32 KU_FRAMES_PER_DECISION_60HZ = 6;
+
+    // 0x8274E694 `cmplwi r11, 0x64` is KU_START_PROTECT_UPDATE_FRAME_ONLINE == 100, already in
+    // BrnTrafficConstants.h:153; the canonical one is used below.
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateTimers  @ 0x82715858   (.cpp 1922)
+//
+// The frame clock for the whole traffic sim. Offsets, since the C++ reaches these by name:
+//   +0x713F4  muFramesSinceDecision   +0x713F5  mbDecisionFrame
+//   +0x713F8  mfSimTimeSinceLastDecision
+//   +0x713FC  mfSimTimeStep           +0x71400  mfSimTimeStepMultiplier
+//   +0x71410  mfSimTimeStepVec        +0x717E7  mbAllowDivergentBehaviour
+//
+// ORDER IS LOAD-BEARING. mbDecisionFrame is cleared BEFORE the counter test and set again only
+// when the counter reaches its limit, so a frame is a decision frame for exactly one visit.
+// Clearing it after the test makes every frame a decision frame; clearing it in the else arm
+// leaves it latched high.
+//
+// The first frame is a decision frame: Reset() seeds muFramesSinceDecision = 100, so the first
+// increment gives 101, over both the 5- and 6-frame limits. The module does not wait 0.1 s for
+// its first RUNNING recalculation, so a POPULATING-time hull miss self-heals.
+//
+// The console calls GetTimerStatusInterface four times (0x82715894, 0x827158B8, 0x82715968,
+// 0x827159C0) and recomputes the same product each time. That is the compiler rematerialising
+// an inlined accessor, not four buffers; de-inlined to one local, and the getter's read-lock
+// assert is idempotent.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateTimers(const BrnTrafficIO::InputBuffer_PreScene* lpInput)
+{
+    if (IsDecisionFrame())
+    {
+        mfSimTimeSinceLastDecision = 0.0f;   // flt_82001CC0 == 0.0f
+    }
+
+    const CgsSystem::TimerStatusInterface* lpTimerStatus = lpInput->GetTimerStatusInterface();
+    const CgsSystem::TimerStatus* lpSimTimer = lpTimerStatus->GetSimTimerStatus();
+
+    // `lfs 0x20(r11)` * `lfs 0x1C(r11)` == the SIM block's multiplier * base step: sim block
+    // at interface+24, mfTimeStepMultiplier at +8 (== +32) and mfBaseTimeStep at +4 (== +28).
+    mfSimTimeStep           = lpSimTimer->GetCurrentTimeStep();
+    mfSimTimeStepMultiplier = lpSimTimer->GetTimeStepMultiplier();
+
+    // 0x8272158F0..0x82715924 builds a 4-lane splat of mfSimTimeStep through the stack
+    // (`lvx128` + `vspltw ,0`); the zero-word staging is just how the console gets a scalar
+    // into a lane.
+    mfSimTimeStepVec.x = mfSimTimeStep;
+    mfSimTimeStepVec.y = mfSimTimeStep;
+    mfSimTimeStepVec.z = mfSimTimeStep;
+    mfSimTimeStepVec.w = mfSimTimeStep;
+
+    {
+        // GATE -- the store at 0x82715928..0x82715954, `splat(mfSimTimeStep * mfSimTimeStep *
+        // 360.0f)` into a VecFloat member at X360 +0x72700. That offset falls in the DecFIGS
+        // un-emitted :822..:833 window (between :821 and mpDebugComponent :834 @+0x727B0), so
+        // the member has no attested name and inventing one would fake a keystone layout.
+        // Write-only on this build: an export-wide scan for 468736/0x72700 finds only this
+        // function, so no consumer is starved.
+        // DELETE WHEN: DWARF :822..:833 is named. The expression above lands in one line then.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateTimers' splat(mfSimTimeStep^2 * 360.0f) store to the VecFloat at X360 "
+            "+0x72700 -- that offset lies in the DecFIGS UN-EMITTED :822..:833 window (between "
+            "kfParamAvoidCrashCone... :821 and mpDebugComponent :834 @+0x727B0), so the member "
+            "has no attested name. WRITE-ONLY on this build: an export-wide scan for "
+            "468736/0x72700 finds this function and nothing else, so no consumer is starved");
+        (void)KF_SIM_TIMESTEP_SQ_SCALE;
+    }
+
+    // 0x82715958..0x82715964: read the counter, clear the flag, store counter+1. The clear
+    // sits BETWEEN the read and the store in the console too.
+    muFramesSinceDecision = static_cast<u8>(muFramesSinceDecision + 1);
+    mbDecisionFrame       = false;
+
+    const u32 luFramesPerDecision = lpTimerStatus->IsSimTimerFrequency50Hz()
+                                        ? KU_FRAMES_PER_DECISION_50HZ
+                                        : KU_FRAMES_PER_DECISION_60HZ;
+
+    if (muFramesSinceDecision >= luFramesPerDecision)
+    {
+        mbDecisionFrame       = true;
+        muFramesSinceDecision = 0;
+    }
+
+    // `fmadds f0, f0, f13, f12` -- the accumulate uses the timer's current step again, not
+    // the member just stored. Same value; transcribed as the console spells it.
+    mfSimTimeSinceLastDecision += lpSimTimer->GetCurrentTimeStep();
+
+    if (!mbAllowDivergentBehaviour)
+    {
+        // Online-only: offline mbAllowDivergentBehaviour is always true (EnterStartingUpState
+        // sets it from !mbIsOnlineGameMode), so this arm is dead on this build.
+        if (IsDecisionFrame())
+        {
+            mfSimTimeSinceLastDecision = KF_ONLINE_SIM_TIME_SINCE_DECISION;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateDecisionFrame  @ 0x8274E508   PARTIAL   (.cpp 7046)
+//
+// The steady-state spawn loop: everything the POPULATING arm does once, repeated every
+// decision frame (5 or 6 render frames, 10 Hz) while the module is RUNNING.
+//
+// ARGUMENT ORDER. RecalculateActiveHulls fills lNewActiveHulls (r6, 4th arg) and
+// lOldActiveHulls (r7, 5th). KillOutOfAreaTraffic takes the OLD set (0x8274E590 `addi r4, r1,
+// var_170`) and SpawnNewTraffic the NEW one (0x8274E5C0 `addi r4, r1, var_D0`). Crossing them
+// kills the hulls that just arrived and fills the ones that just left.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateDecisionFrame(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 7150
+
+    // 0x8274E564: `lhz / addi 1 / sth` on the u16 at +0x71B30, read back by the start-protect
+    // arm below.
+    ++muUpdateCount;
+
+    {
+        // GATE: the PerfMonCpu Start/StopMonitor brackets (+0x72A40 spawn half, +0x72A44
+        // update half). The handles are never issued because Construct's twenty AddMonitor
+        // registrations are gated. DELETE WHEN those registrations land.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateDecisionFrame PerfMonCpu Start/StopMonitor brackets (+0x72A40 spawn half, "
+            "+0x72A44 update half) -- the handles are never issued because Construct's twenty "
+            "AddMonitor registrations are gated; same disposition as PreSceneUpdate's");
+    }
+
+    ActiveHullSet lNewActiveHulls;
+    ActiveHullSet lOldActiveHulls;
+    lNewActiveHulls.Construct();
+    lOldActiveHulls.Construct();
+
+    RecalculateActiveHulls(lpInput, lpOutput, &lNewActiveHulls, &lOldActiveHulls);
+
+    if (lOldActiveHulls.GetLength() != 0)
+    {
+        // The retire half of the spawn ladder (DWARF :1539, @0x82734C78): it takes the OLD
+        // hull set, not the new one.
+        KillOutOfAreaTraffic(&lOldActiveHulls);
+    }
+
+    {
+        // GATE: KillTrafficOnStartGridWholeSale (DWARF :1794, takes a Vector3), no body. Its
+        // argument is the player position via sub_823102F0 on the post-physics active-race-car
+        // interface. Event-start-only; a free drive has no start grid to clear.
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateDecisionFrame leg KillTrafficOnStartGridWholeSale (DWARF :1794) -- no body; "
+            "event-start-only (it clears traffic off the race start grid). Its Vector3 "
+            "argument is the player position via sub_823102F0 on the post-physics active "
+            "race-car interface");
+    }
+
+    SpawnNewTraffic(lNewActiveHulls);
+
+    if (mbPlayingShowtimeMode)
+    {
+        // The showtime top-up (DWARF :1566, @0x82743038) -- LANDED, body in _wT1_07.cpp.
+        // It is a SECOND spawn source layered on SpawnNewTraffic above, refilling every
+        // active section at a fixed 20 vpm scaled by mfShowtimeTrafficDensityScale instead
+        // of the section's authored rate. Still inert on a normal boot: mbPlayingShowtimeMode
+        // is seeded false by ResetEventData and the console's only writers of it are
+        // HandlePrepareForModeAction @0x827480D8 (unreconstructed) and UpdateCrashSlider
+        // @0x82715A18's mbDEBUGFakeShowtime arm (_wT5_01.cpp, LIVE).
+        SpawnShowtimeTraffic();
+    }
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateDecisionFrame leg UpdateJunctions (DWARF :1617) -- no body; junction "
+            "give-way/priority logic for DRIVING traffic (wave 2)");
+    }
+
+    // The whole lane-param simulation for DRIVING traffic (DWARF :1626, @0x82744A80). It
+    // forwards lpInput to UpdateParams_BuildListOfCrashingThings, which asserts on it.
+    UpdateParams(lpInput);
+
+    // The parked param lifecycle: purgatory tick plus the kill/remove sweep.
+    StaticVehicles_UpdateStaticParams();
+
+    // The DRIVING vehicles' update (DWARF :1713, @0x82744F58). Its first statement is
+    // UpdateVehicles_CreateNewVehicles, which turns an alive lane PARAM into an alive standard
+    // VEHICLE via Vehicle::InitialiseAsStandard. Its PARKED counterpart
+    // StaticVehicles_UpdateVehicles is called below.
+    UpdateVehicles(lpInput, lpOutput);
+
+    // This is what makes parked cars exist in steady state: its first statement is
+    // StaticVehicles_CreateNewVehicles(lpInput), which turns an alive static PARAM into an
+    // alive static VEHICLE via Vehicle::InitialiseAsStatic.
+    StaticVehicles_UpdateVehicles(lpInput);
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body; the single "
+            "trailer slot follows its cab, which only exists once driving traffic does "
+            "(wave 2)");
+    }
+
+    // 0x8274E648..0x8274E674, in the console's order: clear the time-slice cursor, then raise
+    // the jam-nuker request that UpdateNonDecisionFrame consumes on a later frame.
+    muLastParamCalculated       = 0;      // stwx 0 -> +0x71830
+    mbNeedToRunTrafficJamNuker  = true;   // stbx 1 -> +0x71404
+
+    if (mbAtStartLineSoProtectRaceCarsFromTraffic && mbIsOnlineGameMode)
+    {
+        // 0x8274E67C..0x8274E6BC. Online-only start-line protection: it is dropped after
+        // KU_START_PROTECT_UPDATE_FRAME_ONLINE decision frames, and the console asserts the
+        // count lands on that frame exactly, since `>` would mean a frame was missed.
+        if (muUpdateCount >= KU_START_PROTECT_UPDATE_FRAME_ONLINE)
+        {
+            CGS_ASSERT(muUpdateCount == KU_START_PROTECT_UPDATE_FRAME_ONLINE,
+                       "KU_START_PROTECT_UPDATE_FRAME_ONLINE == muUpdateCount");   // .cpp 7209
+            mbAtStartLineSoProtectRaceCarsFromTraffic = false;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateNonDecisionFrame  @ 0x8274C1A8   PARTIAL   (.cpp 7124)
+//
+// The other four frames in five: no hull recalculation and no spawning, just per-frame
+// movement of what exists plus a slice of the param logic.
+//
+// The parked leg runs on every frame, not only decision frames. StaticVehicles_UpdateVehicles
+// appears in both functions, so StaticVehicles_CreateNewVehicles is attempted every frame and
+// a param generated on a decision frame becomes a live vehicle on the next frame rather than
+// 100 ms later.
+//
+// The time-slice cursor is not advanced here. The console reads muLastParamCalculated and
+// passes [cursor, cursor+100) to UpdateParams_DoTimeSlicedLogic, which is what advances it.
+// With that callee gated the cursor stays 0; advancing it locally would fake progress through
+// a pass that never ran.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateNonDecisionFrame(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(!IsDecisionFrame(), "!IsDecisionFrame()");   // baked .cpp 7228
+    CGS_ASSERT(lpInput != 0, "lpInput");                    // baked .cpp 7229
+
+    // Interpolates DRIVING params between decision frames (DWARF :1710, @0x82739CD8).
+    UpdateLerpedParamTransforms();
+
+    UpdateVehicles(lpInput, lpOutput);
+
+    StaticVehicles_UpdateVehicles(lpInput);
+
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T1(sbLogged,
+            "UpdateNonDecisionFrame leg UpdateTrailers (DWARF :1725) -- no body (wave 2)");
+    }
+
+    // 0x8274C2A4: [cursor, cursor + KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME); the callee
+    // advances the cursor. Body in _wT2_05.cpp.
+    if (muLastParamCalculated < KU_MAX_PARAMS)
+    {
+        UpdateParams_DoTimeSlicedLogic(
+            muLastParamCalculated,
+            muLastParamCalculated + KU_MAX_PARAMS_UPDATE_ON_NON_DECISION_FRAME,
+            lpInput->GetActiveRaceCarOutputInterface());
+    }
+
+    // ⭐ GATE REMOVED 2026-08-29 (jam-valve wave). NukeTrafficJams (DWARF :1551, @0x827353E8)
+    // is BODIED in _wT6_01.cpp, so the leg and its flag clear both run for real now. The
+    // consumer half was already live: UpdateParams (_wT2_02.cpp:223) tests
+    // E_FLAG_SHOULD_BE_REMOVED and calls the bodied KillParam, so the valve is closed
+    // end to end.
+    //
+    // ⚠️ THE OLD GATE'S BANNER SAID "ONLINE IT SKIPS THAT DISTANCE TEST ENTIRELY". That is
+    // not what the asm gates on. The camera test is behind mbAllowDivergentBehaviour
+    // (+0x717E7, `lbzx r11, r16, 0x717E7` @0x82735F60), and that flag is
+    // `!mbIsOnlineGameMode || mbPlayingShowtimeMode` (_wT1_01.cpp:207) -- so ONLINE SHOWTIME
+    // still runs it. The banner also missed the two facts that decide how the valve FEELS:
+    // a run must be longer than FOUR params to count as a jam (`cmplwi r11, 4 ; ble`
+    // @0x82735F0C), and the drain then marks only EVERY THIRD one (`addi r25, r25, 3`
+    // @0x827361FC). See _wT6_01.cpp for the full derivation.
+    if (mbNeedToRunTrafficJamNuker && !mbNeedToKillAllZombies)
+    {
+        NukeTrafficJams();
+        mbNeedToRunTrafficJamNuker = false;
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT1_07.cpp (wave T1) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT1_07.cpp -- the SHOWTIME traffic generator and the two
+// spacing helpers UpdateDecisionFrame's showtime leg needs.
+//
+//   TrafficEntityModule::CountParamsOnSection  @0x82723D10  (DWARF :1611)
+//   TrafficEntityModule::IsParamTooClose       @0x82726470  (DWARF :1548)
+//   TrafficEntityModule::SpawnShowtimeTraffic  @0x82743038  (DWARF :1566)
+//
+// WHAT THIS LEG IS. UpdateDecisionFrame runs SpawnNewTraffic (the authored generator
+// ladder) and then, only while showtime is running, SpawnShowtimeTraffic. The showtime
+// spawner is a SECOND, INDEPENDENT source: it walks every section of every active hull
+// and tops it up to a density derived from a fixed 20 vehicles-per-minute base rate
+// scaled by mfShowtimeTrafficDensityScale -- it does NOT read the section's authored
+// SectionFlow::muVehiclesPerMinute rate that FillNewHull / CalcTimeToNextGeneration use.
+// The authored rate only acts as an on/off mask (a section whose authored rate is zero is
+// skipped entirely). That substitution IS "the logic that increases the traffic for
+// showtime": a lane authored at, say, 4 vpm is refilled at 20 vpm while showtime is up.
+//
+// THE CADENCE. The whole body sits behind a 2.0 s accumulator
+// (mfTimeSinceLastShowtimeSpawn, +0x71838) so the top-up runs once every 2 s of sim time,
+// not on every decision frame.
+//
+// THE PLACEMENT RULE (the reason it can top up aggressively without popping). Each
+// candidate must survive, against mCameraLastFrame:
+//   * 50 m <= distance <= 130 m                      (unk_8300CBA0 / unk_8300C9E0)
+//   * NOT (within 20 deg of the view axis AND nearer than 110 m)  (unk_8300CED0/CAE0)
+//   * NOT more than 50 deg off the view axis                       (unk_8300CAF0)
+// plus IsParamTooClose, which enforces a 15 m gap to the car in front.
+//
+// ⚠️ Those five vector constants read as ZERO in the image: they are dyn-init splats,
+// built by five one-per-constant CRT thunks at 0x82C66A68..0x82C66B2C, each of which is
+// `lfs f0, <static .rdata float>` -> stack -> lvlx -> vspltw -> stvx. INIT-ORDER CHECKED:
+// every source float is a plain static .rdata constant (0x820BA5C0, 0x8200544C,
+// 0x820199F8, 0x820C07F4, 0x820C07F8), NOT another dyn-init global, so no thunk here can
+// observe a partially-initialised dependency and the shipped values are the ones below.
+//
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // [DIAG] NOT IN THE X360 BINARY. Same BRN_TRAFFIC_DIAG switch every sibling partfile
+    // uses; capped so a live showtime session costs one line per top-up, not per candidate.
+    CgsDev::Log::DebugPrint* ShowtimeDiagStream()
+    {
+        static const bool skbOn = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+
+    // ---- IsParamTooClose tuning (rodata, read per call site) -------------------------
+    // 0x82726574 flt_820BA2A8. Minimum clear road in front of a candidate param.
+    const f32 KF_PARAM_TOO_CLOSE_AHEAD  = 15.0f;
+    // 0x827265FC flt_820BA7E4. The wider gap demanded once the car in front has a car
+    // behind it on the same section (i.e. the candidate would land in a queue).
+    const f32 KF_PARAM_TOO_CLOSE_QUEUED = 20.0f;
+
+    // ---- SpawnShowtimeTraffic tuning -------------------------------------------------
+    // 0x827430F4 flt_820BA86C. Sim seconds between showtime top-ups.
+    const f32 KF_SHOWTIME_SPAWN_INTERVAL = 2.0f;
+    // 0x82743300 flt_820BA7E4. The showtime base generation rate. The section's own
+    // authored SectionFlow::muVehiclesPerMinute is NOT used -- only tested for zero.
+    const f32 KF_SHOWTIME_VEHICLES_PER_MINUTE = 20.0f;
+    // 0x82743120 flt_82001CC0. The per-hull leftover-vehicle accumulator's seed.
+    const f32 KF_SHOWTIME_CARRY_SEED = 0.0f;
+
+    // The five dyn-init splats, resolved through their CRT thunks (see the banner).
+    const f32 KF_SHOWTIME_SPAWN_MIN_RANGE      =  50.0f;  // unk_8300CBA0 <- 0x820BA5C0
+    const f32 KF_SHOWTIME_SPAWN_MAX_RANGE      = 130.0f;  // unk_8300C9E0 <- 0x8200544C
+    const f32 KF_SHOWTIME_SPAWN_NEAR_RANGE     = 110.0f;  // unk_8300CAE0 <- 0x820199F8
+    const f32 KF_SHOWTIME_SPAWN_NEAR_CONE_COS  = 0.9397000074386597f;  // unk_8300CED0, cos(20 deg)
+    const f32 KF_SHOWTIME_SPAWN_CONE_COS       = 0.642799973487854f;   // unk_8300CAF0, cos(50 deg)
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::CountParamsOnSection  @ 0x82723D10   (.cpp 9435 / 9436)
+//
+// Walk the section's ordered param list and count it. The two asserts are the list's
+// standing integrity pair: an out-of-range link, and a cycle (the counter can never
+// legitimately reach the pool size).
+// ----------------------------------------------------------------------------
+u32 TrafficEntityModule::CountParamsOnSection(u32 luHull, u32 luSection) const
+{
+    u32 luCount = 0;
+
+    // 0x82723D2C/0x82723D34: GetHullRuntime(luHull)->GetFirstParamInSection(luSection).
+    u32 luParam = GetHullRuntime(luHull)->GetFirstParamInSection(luSection);
+
+    while (luParam != KU_INVALID_PARAM)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "Out of range param in list: ");   // .cpp 9435
+        CGS_ASSERT(luCount < KU_MAX_PARAMS, "Param Loop!");                    // .cpp 9436
+
+        ++luCount;
+
+        // 0x82723E7C: `(luParam + 0x6CD0) * 8` indexed off `this` is maParamListNodes
+        // (stride 8) and its leading u16 is muNextParam.
+        luParam = maParamListNodes[luParam].muNextParam;
+    }
+
+    return luCount;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::IsParamTooClose  @ 0x82726470
+//
+// Would a car placed at lfParamAlong on (luHull, luSection) land on top of the traffic
+// already there? Measured in METRES along the lane, not in parameter units, so the answer
+// is independent of how long the section's segments happen to be.
+//
+// ⚠️⚠️ CONSOLE BUG REPRODUCED, NOT "FIXED": the second test is supposed to measure the
+// param BEHIND the one in front, and it re-measures the one IN FRONT. The asm is explicit
+// -- 0x827265E0 `lfs f1, 4(r29)` and 0x827265E4 `lbz r5, 3(r29)` read r29, which is still
+// the GetParam(luNextParam) pointer from 0x82726510; GetParamBehind's own result lives in
+// r3 and is used for the hull/section identity checks at 0x827265B0/0x827265BC and then
+// discarded. Hex-Rays agrees (it renders both as `v14`). The observable effect is that a
+// car in front which itself has a car behind it raises the required gap from 15 m to 20 m,
+// rather than measuring the trailing car. Do NOT "correct" this: the shipped spacing that
+// the rest of the traffic system is tuned against is the 15/20 m ladder below.
+// ----------------------------------------------------------------------------
+bool TrafficEntityModule::IsParamTooClose(u32 luHull, u32 luSection, f32 lfParamAlong)
+{
+    const Hull*    lpHull    = GetHull(luHull);
+    const Section* lpSection = lpHull->GetSection(luSection);
+
+    const u32 luNextParam = FindNextParam(luHull, luSection, lfParamAlong);
+
+    // 0x827264C8..0x827264F4. The candidate's own arc-length from the section start; the
+    // segment index is the parameter truncated toward zero (fctidz).
+    const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+    const f32  lfOurDistance   = lpSection->CalcDistanceAlongSection(
+                                     lfParamAlong,
+                                     static_cast<u32>(static_cast<s32>(lfParamAlong)),
+                                     lpafRungLengths);
+
+    if (luNextParam == KU_INVALID_PARAM)
+    {
+        return false;
+    }
+
+    const Param* lpNextParam = GetParam(luNextParam);
+
+    // 0x82726514..0x82726528. A param in front that is on some OTHER section does not
+    // constrain us; the end of our own section does.
+    f32 lfGapInFront;
+    if (lpNextParam->muHullIndex == luHull && lpNextParam->muSectionIndex == luSection)
+    {
+        lfGapInFront = lpSection->CalcDistanceAlongSection(lpNextParam->mfParamAlong,
+                                                           lpNextParam->muCurrentSegment,
+                                                           lpafRungLengths)
+                       - lfOurDistance;
+    }
+    else
+    {
+        lfGapInFront = lpSection->mfLength - lfOurDistance;
+    }
+
+    if (lfGapInFront < KF_PARAM_TOO_CLOSE_AHEAD)
+    {
+        return true;
+    }
+
+    // 0x82726590..0x82726608. Is the car in front itself queued behind something?
+    const u32 luParamBehind = GetParamBehind(luNextParam);
+    if (luParamBehind == KU_INVALID_PARAM)
+    {
+        return false;
+    }
+
+    const Param* lpParamBehind = GetParam(luParamBehind);
+    if (lpParamBehind->muHullIndex != luHull || lpParamBehind->muSectionIndex != luSection)
+    {
+        return false;
+    }
+
+    // See the banner: the console re-measures lpNextParam here, NOT lpParamBehind.
+    const f32 lfQueuedGap = lpSection->CalcDistanceAlongSection(lpNextParam->mfParamAlong,
+                                                                lpNextParam->muCurrentSegment,
+                                                                lpafRungLengths)
+                            - lfOurDistance;
+
+    return (lfQueuedGap < KF_PARAM_TOO_CLOSE_QUEUED);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SpawnShowtimeTraffic  @ 0x82743038   (.cpp 8468 / 8469 / 8508)
+//
+// The showtime top-up. Structure, per the asm:
+//
+//   assert(IsDecisionFrame());                              ; .cpp 8468
+//   assert(IsPlayingShowtimeGameMode());                    ; .cpp 8469
+//   if (!mbAllowDivergentBehaviour) return;                 ; 0x827430B8, +0x717E7
+//   mfTimeSinceLastShowtimeSpawn += mfSimTimeSinceLastDecision;  ; +0x71838 += +0x713F8
+//   if (mfTimeSinceLastShowtimeSpawn <= 2.0f) return;
+//
+// ⚠️ The accumulator advances by mfSimTimeSinceLastDecision (+0x713F8), the 0.1 s decision
+// period -- NOT by mfSimTimeStep, which is the next slot along at +0x713FC. This function
+// only ever runs on a decision frame, so a frame-step accumulator would under-count by 5x.
+//   mfTimeSinceLastShowtimeSpawn = 0.0f;
+//   for each hull in mActiveHulls: for each of its sections: top up to the showtime rate
+//
+// ⚠️ THE THIRD GATE IS mbAllowDivergentBehaviour (+0x717E7), NOT a second showtime flag.
+// EnterStartingUpState @0x827080C8 is its only writer and ResetEventData seeds it true, so
+// offline (mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode) it is
+// always true and the gate is transparent; online it is what stops an unsynchronised
+// client minting cars of its own.
+//
+// ⚠️ THE CARRY IS ASYMMETRIC AND THAT IS THE CONSOLE'S OWN SHAPE. lfCarry lives in f31.
+// The compiler puts floorf(lfVehiclesToSpawn) in that same register for the division, and
+// `fmr f31, f30` -- the assignment that makes the carry the FRACTION -- sits at 0x827435B0,
+// i.e. INSIDE the arm the `ble` at 0x827433B0 skips. So a section that is already full
+// enough carries floorf(total) into the next section, not the fraction. FillNewHull
+// @0x82743600 does the same computation with the assignment unconditional. Reproduced as
+// found; do not "tidy" it.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SpawnShowtimeTraffic()
+{
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");                       // .cpp 8468
+    CGS_ASSERT(IsPlayingShowtimeGameMode(), "IsPlayingShowtimeGameMode()");   // .cpp 8469
+
+    if (!mbAllowDivergentBehaviour)
+    {
+        return;
+    }
+
+    mfTimeSinceLastShowtimeSpawn += mfSimTimeSinceLastDecision;   // +0x713F8, not +0x713FC
+    if (mfTimeSinceLastShowtimeSpawn <= KF_SHOWTIME_SPAWN_INTERVAL)
+    {
+        return;
+    }
+    mfTimeSinceLastShowtimeSpawn = KF_SHOWTIME_CARRY_SEED;
+
+    u32 luDiagCandidates = 0;
+    u32 luDiagSpawned    = 0;
+
+    for (u32 luActiveHull = 0; luActiveHull < mActiveHulls.GetLength(); ++luActiveHull)
+    {
+        const u32   luHull = mActiveHulls[luActiveHull];
+        const Hull* lpHull = GetHull(luHull);
+
+        // 0x82743240 `fmr f31, f23`: the leftover-vehicle carry restarts at each hull.
+        f32 lfCarry = KF_SHOWTIME_CARRY_SEED;
+
+        for (u32 luSection = 0; luSection < lpHull->muNumSections; ++luSection)
+        {
+            // Hull::GetFlowData, inlined (0x8274327C, the +0x28 array at stride 4).
+            const SectionFlow* lpFlow = &lpHull->mpaSectionFlows[luSection];
+
+            // 0x827432AC. An authored rate of zero masks the section out even in showtime.
+            if (lpFlow->muVehiclesPerMinute == 0)
+            {
+                continue;
+            }
+
+            const Section* lpSection = lpHull->GetSection(luSection);
+
+            CGS_ASSERT(lpSection->muNumRungs > 0, "muNumRungs > 0");   // BrnTrafficSection.h 368
+
+            // 0x827432E0..0x8274331C. GetNumSegments() as a float, via fcfid/frsp.
+            const f32 lfNumSegments = static_cast<f32>(lpSection->GetNumSegments());
+
+            const f32 lfTimeToDrive = lpSection->mfLength / lpSection->mfSpeed;
+
+            // 0x82743300..0x8274330C. THE SHOWTIME SUBSTITUTION: a fixed base rate scaled
+            // by the showtime density, in place of the section's authored rate.
+            const f32 lfVehiclesPerMinute =
+                mfShowtimeTrafficDensityScale * KF_SHOWTIME_VEHICLES_PER_MINUTE;
+            CGS_ASSERT(lfVehiclesPerMinute > 0.0f, "lfVehiclesPerMinute > 0.0f");   // .cpp 8508
+
+            const f32 lfSecondsPerVehicle = KF_SECONDS_PER_MINUTE / lfVehiclesPerMinute;
+
+            // 0x82743354..0x82743398. Two separate inlined floorf()s, exactly as the
+            // console emits them (the fsel +/- 2^52 round, then the fsel 0/1 correction).
+            const f32 lfVehiclesToSpawn = lfCarry + lfTimeToDrive / lfSecondsPerVehicle;
+            const f32 lfWholeVehicles   = std::floor(lfVehiclesToSpawn);
+            const f32 lfLeftOver        = lfVehiclesToSpawn - std::floor(lfVehiclesToSpawn);
+
+            const u32 luVehiclesWanted = static_cast<u32>(lfWholeVehicles);
+
+            // 0x827433A4..0x827433B0. Top up, never thin out.
+            if (luVehiclesWanted <= CountParamsOnSection(luHull, luSection))
+            {
+                lfCarry = lfWholeVehicles;   // see the banner -- the console's own shape
+                continue;
+            }
+
+            // 0x827433B4..0x827433C0. Space them evenly across the section's segments and
+            // phase the first one by the fraction carried in from the previous section.
+            const f32 lfParamStep = lfNumSegments / lfWholeVehicles;
+            f32       lfParam     = lfParamStep * lfLeftOver;
+
+            for (u32 luRemaining = luVehiclesWanted; luRemaining != 0; --luRemaining)
+            {
+                // 0x827433CC..0x82743414. One RandomFloat() draw whose RESULT IS DISCARDED
+                // -- the asm keeps the ring-slot refill, the LCG step and the cursor
+                // advance, and never loads the value back. It is the sequence step that is
+                // load-bearing, so the call stays.
+                mRand.RandomFloat();
+
+                if (IsParamTooClose(luHull, luSection, lfParam))
+                {
+                    lfParam += lfParamStep;
+                    continue;
+                }
+
+                ++luDiagCandidates;
+
+                // 0x82743428..0x82743450. The full parameter goes in the vector lane, its
+                // truncation in the segment slot -- CalcPositionAtParameter asserts they
+                // agree.
+                const VecFloat lvParam = { lfParam, lfParam, lfParam, lfParam };
+                Vector3        lSpawnPosition;
+                lpSection->CalcPositionAtParameter(lpHull->mpaRungs,
+                                                   lvParam,
+                                                   static_cast<u32>(static_cast<s32>(lfParam)),
+                                                   lSpawnPosition);
+
+                // 0x82743458..0x82743568. The placement rule, against the camera transform
+                // latched last frame (+0x728C0 is its Pos row, +0x728B0 its At row).
+                const Vector3 lToSpawn  = lSpawnPosition - mCameraLastFrame.GetPosition();
+                const f32     lfRange   = rw::math::vpu::Magnitude(lToSpawn);
+
+                bool lbCanSpawn = true;
+                if (lfRange < KF_SHOWTIME_SPAWN_MIN_RANGE || lfRange > KF_SHOWTIME_SPAWN_MAX_RANGE)
+                {
+                    lbCanSpawn = false;
+                }
+
+                if (lbCanSpawn)
+                {
+                    const Vector3 lDirectionToSpawn = rw::math::vpu::Normalize(lToSpawn);
+                    const f32     lfCosToViewAxis   =
+                        rw::math::vpu::Dot(mCameraLastFrame.GetDirection(), lDirectionToSpawn);
+
+                    if (lfCosToViewAxis >= KF_SHOWTIME_SPAWN_NEAR_CONE_COS
+                        && lfRange < KF_SHOWTIME_SPAWN_NEAR_RANGE)
+                    {
+                        // Straight ahead and close enough to be watched arriving.
+                        lbCanSpawn = false;
+                    }
+                    else if (lfCosToViewAxis <= KF_SHOWTIME_SPAWN_CONE_COS)
+                    {
+                        // Outside the 50 deg cone the player is heading into.
+                        lbCanSpawn = false;
+                    }
+                }
+
+                if (lbCanSpawn)
+                {
+                    GenerateNewVehicle(PickVehicleToSpawn(lpFlow->muFlowTypeId),
+                                       luHull,
+                                       luSection,
+                                       lfParam);
+                    ++luDiagSpawned;
+                }
+
+                lfParam += lfParamStep;
+            }
+
+            lfCarry = lfLeftOver;   // 0x827435B0 `fmr f31, f30`
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. One line per 2 s top-up. DELETE-WHEN-STABLE.
+    if (CgsDev::Log::DebugPrint* lpDiag = ShowtimeDiagStream())
+    {
+        *lpDiag << "[T1-showtime] top-up hulls=" << static_cast<s32>(mActiveHulls.GetLength())
+                << " densityScale=" << mfShowtimeTrafficDensityScale
+                << " vpm=" << (mfShowtimeTrafficDensityScale * KF_SHOWTIME_VEHICLES_PER_MINUTE)
+                << " candidates=" << static_cast<s32>(luDiagCandidates)
+                << " spawned=" << static_cast<s32>(luDiagSpawned)
+                << " [DELETE-WHEN-STABLE]\n";
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT2_01.cpp (wave T2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT2_01.cpp -- driving-traffic generation and the lane-param list.
+//
+// The console makes a moving car through one chain:
+//   UpdateDecisionFrame -> RebuildGeneratorList @0x82742DD0 -> AddGenerator @0x82734B00
+//   SpawnNewTraffic     -> FillNewHull @0x82743600 (driving half) / the generator tick
+//                        -> GenerateNewVehicle @0x82736528
+//                             -> TryAllocateParamId @0x82723370 -> Param::Initialise
+//                             -> Section::CalcTransformAtParameter -> ParamTransform::Initialise
+//   UpdateParams_UpdateLinkedList -> InsertParamIntoList / SwapParamsInList / RemoveParamFromList
+//   KillOutOfAreaTraffic @0x82734C78 / KillAllZombies @0x82734DF8 -> KillParam @0x82721FB8
+//                        -> PutParamInPurgatory @0x82716510 (the free-param recycle loop)
+//   RecalculateActiveHulls @0x8274C870 tail -> RebuildGeneratorList (its only xref)
+//
+// Layout is host-native: every member is reached by name, and the console displacements in the
+// comments only attest which member a line resolves to.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
+    inline void LogMissingLeg_T2(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T2-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
+        }
+    }
+
+    // ---- the generation tuning constants, recovered per call site -------------------------
+    // AddGenerator @0x82734C18 flt_820BA4D0. Each generator on a hull is phase-shifted by this
+    // fraction of its own period so a freshly activated hull does not emit every car at once.
+    // unk_8300CC00 == 10000.0f == 100 m squared (dyn-init thunk 0x82C662B0 squares
+    // unk_8300C960 == splat(flt_820BA5C8 == 100.0f)). GenerateNewVehicle @0x827366D4.
+    const f32 KF_STARTLINE_SPAWN_CULL_RADIUS_SQ = 10000.0f;
+
+    const f32 KF_GENERATOR_PHASE_SHIFT = 0.69999999f;
+
+// (fold: an identical definition of KF_MIN_VEHICLES_PER_MINUTE was dropped here -- this TU defines it once, above)
+
+    // CalcTimeToNextGeneration @0x82721BD0 flt_820BA7DC. Divide-by-zero guard on the rate.
+    const f32 KF_MIN_VEHICLES_PER_MINUTE_EPSILON = 1.0e-15f;
+
+    // CalcTimeToNextGeneration @0x82721C14 flt_820BA5B4 and the inlined RandomFloat range
+    // flt_820138AC == 0.40000004 == (1.2f - 0.8f) in f32, which fixes the max exactly
+    // (the same min/range pair renders as `x * 0.40000004 + 0.80000001` at 0x826F99C0).
+    const f32 KF_MIN_GENERATION_FACTOR = 0.80000001f;
+    const f32 KF_MAX_GENERATION_FACTOR = 1.2f;
+}
+
+// ============================================================================
+// SECTION 1 -- the generator list.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::RebuildGeneratorList  @ 0x82742DD0   (leak BrnTrafficEntityModule.cpp:4183)
+//
+// One generator per lane section that traffic can enter the active-hull set through: either the
+// section behind it is outside the set, or there is no section behind it at all.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::RebuildGeneratorList()
+{
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");
+
+    f32 lfPhase = 0.0f;                 // 0x82742E30 flt_82001CC0 == 0.0f
+
+    muNumGenerators = 0;                // 0x82742E2C
+
+    for (u32 luActiveHull = 0; luActiveHull < mActiveHulls.GetLength(); ++luActiveHull)
+    {
+        const u32   luHull = mActiveHulls[luActiveHull];
+        const Hull* lpHull = GetHull(luHull);
+
+        for (u32 luSection = 0; luSection < lpHull->muNumSections; ++luSection)
+        {
+            // Hull::GetFlowData (BrnTrafficHull.h:264), console-inlined here as
+            // `lwz r11, 0x28(hull)` + the 4-byte stride; that method is declared in
+            // BrnTrafficHull.h, which this cluster does not own.
+            const SectionFlow* lpFlow = &lpHull->mpaSectionFlows[luSection];
+
+            if (lpFlow->muVehiclesPerMinute == 0)
+            {
+                continue;
+            }
+
+            const Section* lpSection = lpHull->GetSection(luSection);
+
+            // 0x82742FDC / 0x82742FE8. The console fuses the leak's two arms into one test.
+            if (mActiveHulls.Find(lpSection->mauBackwardHulls[E_DIR_STRAIGHT_ON]) == ActiveHullSet::KU_INVALID
+                || lpSection->mauBackwardSections[E_DIR_STRAIGHT_ON] == KU_INVALID_SECTION)
+            {
+                AddGenerator(luHull, luSection, &lfPhase);
+            }
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::AddGenerator  @ 0x82734B00   (leak :4237)
+//
+// Appends one generator and advances the shared emission phase by KF_GENERATOR_PHASE_SHIFT,
+// wrapped into [0, 1) with the console's inlined double-precision Floor.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::AddGenerator(u32 luHull, u32 luSection, f32* lpfTimeTillNextGeneration)
+{
+    CGS_ASSERT(muNumGenerators < KU_MAX_GENERATORS - 1, "muNumGenerators < KU_MAX_GENERATORS - 1");
+    CGS_ASSERT(*lpfTimeTillNextGeneration >= -0.001f, "*lpUpdatedPhase >= -0.001f");
+    CGS_ASSERT(*lpfTimeTillNextGeneration <= 1.001f, "*lpUpdatedPhase <= 1.001f");
+
+    maGenerators[muNumGenerators].muHull    = static_cast<u16>(luHull);
+    maGenerators[muNumGenerators].muSection = static_cast<u8>(luSection);
+
+    mafTimesTillNextGeneration[muNumGenerators] =
+        CalcTimeToNextGeneration(luHull, luSection) + *lpfTimeTillNextGeneration;
+
+    ++muNumGenerators;
+
+    const f32 lfNewPhase = *lpfTimeTillNextGeneration + KF_GENERATOR_PHASE_SHIFT;
+    *lpfTimeTillNextGeneration = lfNewPhase - std::floor(lfNewPhase);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::CalcTimeToNextGeneration  @ 0x82721B08   (leak :4266)
+//
+// Seconds until this section emits its next car. The leak multiplies the section rate by a
+// time-of-day GlobalTrafficDensity variable; the ship does not -- 0x82721B80 reads
+// mfTrafficAmountScale and nothing else.
+// ----------------------------------------------------------------------------
+f32 TrafficEntityModule::CalcTimeToNextGeneration(u32 luHull, u32 luSection)
+{
+    const Hull* lpHull = GetHull(luHull);
+    CGS_ASSERT(luSection < lpHull->muNumSections, "luIndex < muNumSections");
+
+    const SectionFlow* lpFlowData = &lpHull->mpaSectionFlows[luSection];
+
+    f32 lfVehiclesPerMinute = 0.0f;
+
+    if (lpFlowData->muVehiclesPerMinute != 0 && mfTrafficAmountScale > 0.0f)
+    {
+        const f32 lfSectionRate = static_cast<f32>(lpFlowData->muVehiclesPerMinute);
+
+        // 0x82721BA8 / 0x82721BB0, two fsels: raise the scaled rate to the floor, but never
+        // above the section's own unscaled rate.
+        const f32 lfFloor = (lfSectionRate >= KF_MIN_VEHICLES_PER_MINUTE)
+                                ? KF_MIN_VEHICLES_PER_MINUTE
+                                : lfSectionRate;
+        const f32 lfScaled = mfTrafficAmountScale * lfSectionRate;
+
+        lfVehiclesPerMinute = (lfScaled >= lfFloor) ? lfScaled : lfFloor;
+    }
+
+    if (lfVehiclesPerMinute < KF_MIN_VEHICLES_PER_MINUTE_EPSILON)   // 0x82721BFC fsel
+    {
+        lfVehiclesPerMinute = KF_MIN_VEHICLES_PER_MINUTE_EPSILON;
+    }
+
+    const f32 lfBaseTime   = KF_SECONDS_PER_MINUTE / lfVehiclesPerMinute;
+    const f32 lfModulation = mRand.RandomFloat(KF_MIN_GENERATION_FACTOR, KF_MAX_GENERATION_FACTOR);
+
+    return lfModulation * lfBaseTime;
+}
+
+// ============================================================================
+// SECTION 2 -- birth of one driving vehicle.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::TryAllocateParamId  @ 0x82723370   (leak :4878)
+//
+// Ledger files this under CgsStack.h; it is a real TrafficEntityModule member.
+// ----------------------------------------------------------------------------
+u32 TrafficEntityModule::TryAllocateParamId()
+{
+    if (!mFreeParams.IsEmpty())
+    {
+        const u32 luFreeParam = mFreeParams.Peek();
+
+        CGS_ASSERT(!GetParam(luFreeParam)->IsAlive(), "Param was alive when it was allocated");
+
+        mFreeParams.Pop();
+        return luFreeParam;
+    }
+
+    ++miDEBUGOverBudgetness;            // 0x827234A4, this + 0x727C4
+    return KU_INVALID_PARAM;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateNewVehicle  @ 0x82736528   (leak :4785)
+//
+// PARAMETER ORDER is the console's prologue, which is the leak's and NOT the keystone header's
+// parameter NAMES: 0x82736548 r4 = luVehicleTypeId, 0x82736550 r5 = luHullIndex, 0x82736558
+// r6 = luSectionIndex, f1 = lfParamAlong. All four declared types are identical, so the
+// declaration binds; only the names in BrnTrafficEntityModule.h (not this cluster's file) read
+// in the wrong order.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateNewVehicle(u32 luVehicleTypeId,
+                                             u32 luHullIndex,
+                                             u32 luSectionIndex,
+                                             f32 lfParamAlong)
+{
+    CGS_ASSERT(luVehicleTypeId < mpData->muNumVehicleTypes,
+               "luVehicleTypeId < mpData->muNumVehicleTypes");
+    CGS_ASSERT(lfParamAlong >= 0.0f, "lfParamAlong >= 0.0f");
+    CGS_ASSERT(lfParamAlong < static_cast<f32>(GetHull(luHullIndex)->GetSection(luSectionIndex)->muNumRungs),
+               "lfParamAlong < (float32_t)GetHull( luHullIndex )->GetSection( luSectionIndex )->muNumRungs");
+
+    const Hull*    lpHull    = GetHull(luHullIndex);
+    const Section* lpSection = lpHull->GetSection(luSectionIndex);
+
+    // 0x8273662C..0x8273663C. The debug forced type, seeded to -1 by Construct.
+    if (miDEBUGOverrideVehicleToSpawn >= 0)
+    {
+        luVehicleTypeId = static_cast<u32>(miDEBUGOverrideVehicleToSpawn);
+    }
+
+    if (mbAtStartLineSoProtectRaceCarsFromTraffic && mbAllowDivergentBehaviour)
+    {
+        // 0x82736670..0x827366E4. Reference lane +0x728C0 == mCameraLastFrame's Pos row;
+        // radius unk_8300CC00 == 10000.0f == 100 m squared (dyn-init thunk 0x82C662B0 squares
+        // unk_8300C960 == splat(flt_820BA5C8 == 100.0f)).
+        Vector3 lSpawnPos;
+        lpSection->CalcPositionAtParameter(lpHull->mpaRungs,
+                                           rw::math::vpu::Splat(lfParamAlong),
+                                           static_cast<u32>(lfParamAlong),
+                                           lSpawnPos);
+
+        const Vector3 lToSpawn = lSpawnPos - mCameraLastFrame.GetPosition();
+        if (rw::math::vpu::Dot(lToSpawn, lToSpawn) < KF_STARTLINE_SPAWN_CULL_RADIUS_SQ)
+        {
+            return;
+        }
+    }
+
+    const u32 luFreeSlot = TryAllocateParamId();
+    if (luFreeSlot == KU_INVALID_PARAM)
+    {
+        return;
+    }
+
+    Param* lpNewParam = GetParam(luFreeSlot);
+    CGS_ASSERT(!lpNewParam->IsAlive(), "Recycled param which was still alive");
+
+    // 0x827367A4..0x82736868. RandomFloat(0,1) inlined; its (v - 1.0f) is the raw ring float
+    // brought back into [0,1).
+    const f32 lfRandomVal = mRand.RandomFloat(0.0f, 1.0f);
+
+    const VehicleTypeData*    lpVehicleType        = &mpData->mpaVehicleTypes[luVehicleTypeId];
+    const VehicleTypeRuntime* lpVehicleTypeRuntime = GetVehicleTypeRuntime(luVehicleTypeId);
+    const VehicleTraits*      lpVehicleTraits      = mpData->GetVehicleTraitsForVehicleType(luVehicleTypeId);
+
+    lpNewParam->Initialise(luHullIndex,
+                           luSectionIndex,
+                           lfParamAlong,
+                           lfRandomVal,
+                           luVehicleTypeId,
+                           lpHull,
+                           lpVehicleType,
+                           lpVehicleTypeRuntime,
+                           lpVehicleTraits,
+                           luFreeSlot,
+                           mParamSoaData);
+
+    // 0x8273688C..0x827368DC. The third output of CalcTransformAtParameter is the RIGHT axis
+    // here (leak :4864 stores it into ParamTransform::mRight); the declaration in
+    // BrnTrafficSection.h names that parameter for its WorldMap consumer instead.
+    // 0x827368A0 vspltw v1, v0, 0 -- the parameter reaches Section as a broadcast lane.
+    const VecFloat lParamLane = { lfParamAlong, lfParamAlong, lfParamAlong, lfParamAlong };
+
+    Vector3 lPos;
+    Vector3 lDir;
+    Vector3 lRight;
+    lpSection->CalcTransformAtParameter(lpHull->mpaRungs,
+                                        lParamLane,
+                                        lpNewParam->muCurrentSegment,
+                                        lPos,
+                                        lDir,
+                                        lRight);
+
+    // 0x82736... GetParamTransform @0x82707700 (export hole) resolves to this same slot;
+    // the console indexes maParamTransforms inline here.
+    ParamTransform* lpTransform = &maParamTransforms[luFreeSlot];
+
+    VecFloat lfSpeed;
+    lfSpeed.x = lpNewParam->mfSpeed;
+    lfSpeed.y = lpNewParam->mfSpeed;
+    lfSpeed.z = lpNewParam->mfSpeed;
+    lfSpeed.w = lpNewParam->mfSpeed;
+    lpTransform->Initialise(lPos, lDir, lRight, lfSpeed);
+
+    // 0x827368E0. Offline (mbAllowDivergentBehaviour false) a still-alive recycled vehicle is
+    // divorced from its param rather than asserted about.
+    if (!mbAllowDivergentBehaviour)
+    {
+        Vehicle* lpVehicle = GetVehicle(luFreeSlot);
+        if (lpVehicle->IsAlive())
+        {
+            lpNewParam->SetZombie(luFreeSlot, mParamSoaData);
+            lpNewParam->SetDivorced();   // 0x8273691C
+        }
+    }
+    else
+    {
+        CGS_ASSERT(!GetVehicle(luFreeSlot)->IsAlive(),
+                   "Vehicle was still alive when its param was reallocated");
+    }
+}
+
+// ============================================================================
+// SECTION 3 -- the per-section ordered param list.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::InsertParamIntoList  @ 0x82725CB8   (leak :6766)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::InsertParamIntoList(u32 luParam, u32 luHull, u32 luSection, f32 lfParamAlong)
+{
+    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC, "luParam < KU_MAX_STANDARD_TRAFFIC");
+
+    const u32 luNextParamId = FindNextParam(luHull, luSection, lfParamAlong);
+    CGS_ASSERT(luNextParamId != luParam, "luNextParamId != luParam");
+
+    ParamListNode* lpParamNode = &maParamListNodes[luParam];
+    CGS_ASSERT(lpParamNode->mfParamAlong == lfParamAlong, "lpParamNode->mfParamAlong == lfParamAlong");
+
+    if (luNextParamId == KU_INVALID_PARAM)
+    {
+        lpParamNode->muNextParam = static_cast<u16>(KU_INVALID_PARAM);
+        lpParamNode->muPrevParam = static_cast<u16>(KU_INVALID_PARAM);
+
+        GetHullRuntime(luHull)->SetFirstParamInSection(luSection,
+                                                       static_cast<u16>(luParam),
+                                                       static_cast<u16>(KU_INVALID_PARAM));
+        return;
+    }
+
+    CGS_ASSERT(luNextParamId < KU_MAX_PARAMS, "Out of range param in list");
+
+    ParamListNode* lpNextParamNode = &maParamListNodes[luNextParamId];
+    CGS_ASSERT(GetParam(luParam)->muSectionIndex == GetParam(luNextParamId)->muSectionIndex,
+               "Param in front is in a different section");
+
+    if (lfParamAlong < lpNextParamNode->mfParamAlong
+        || (lfParamAlong == lpNextParamNode->mfParamAlong && luParam < luNextParamId))
+    {
+        lpParamNode->muNextParam     = static_cast<u16>(luNextParamId);
+        lpParamNode->muPrevParam     = lpNextParamNode->muPrevParam;
+        lpNextParamNode->muPrevParam = static_cast<u16>(luParam);
+
+        if (lpParamNode->muPrevParam != static_cast<u16>(KU_INVALID_PARAM))
+        {
+            ParamListNode* lpPrevParamNode = &maParamListNodes[lpParamNode->muPrevParam];
+            CGS_ASSERT(lpPrevParamNode->muNextParam == luNextParamId,
+                       "lpPrevParamNode->muNextParam == luNextParamId");
+            CGS_ASSERT(lpPrevParamNode->mfParamAlong <= lpNextParamNode->mfParamAlong,
+                       "lpPrevParamNode->mfParamAlong <= lpNextParamNode->mfParamAlong");
+            CGS_ASSERT(lpPrevParamNode->mfParamAlong <= lfParamAlong,
+                       "lpPrevParamNode->mfParamAlong <= lfParamAlong");
+            CGS_ASSERT(GetParam(lpParamNode->muPrevParam)->muSectionIndex == GetParam(luParam)->muSectionIndex,
+                       "GetParam( lpParamNode->muPrevParam )->muSectionIndex == GetParam( luParam )->muSectionIndex");
+
+            lpPrevParamNode->muNextParam = static_cast<u16>(luParam);
+
+            CGS_ASSERT(lpPrevParamNode->muNextParam == lpNextParamNode->muPrevParam,
+                       "lpPrevParamNode->muNextParam == lpNextParamNode->muPrevParam");
+        }
+        else
+        {
+            GetHullRuntime(luHull)->SetFirstParamInSection(luSection,
+                                                           static_cast<u16>(luParam),
+                                                           lpParamNode->muNextParam);
+        }
+    }
+    else
+    {
+        ParamListNode* lpPrevParamNode = lpNextParamNode;
+        const u32      luPrevParamId   = luNextParamId;
+
+        lpParamNode->muNextParam     = lpPrevParamNode->muNextParam;
+        lpParamNode->muPrevParam     = static_cast<u16>(luPrevParamId);
+        lpPrevParamNode->muNextParam = static_cast<u16>(luParam);
+
+        if (lpParamNode->muNextParam != static_cast<u16>(KU_INVALID_PARAM))
+        {
+            lpNextParamNode = &maParamListNodes[lpParamNode->muNextParam];
+            CGS_ASSERT(lpNextParamNode->muPrevParam == luPrevParamId,
+                       "lpNextParamNode->muPrevParam == luPrevParamId");
+            CGS_ASSERT(lpPrevParamNode->mfParamAlong <= lpNextParamNode->mfParamAlong,
+                       "lpPrevParamNode->mfParamAlong <= lpNextParamNode->mfParamAlong");
+            CGS_ASSERT(lpNextParamNode->mfParamAlong >= lfParamAlong,
+                       "lpNextParamNode->mfParamAlong >= lfParamAlong");
+            CGS_ASSERT(GetParam(luParam)->muSectionIndex == GetParam(luNextParamId)->muSectionIndex,
+                       "GetParam( luParam )->muSectionIndex == GetParam( luNextParamId )->muSectionIndex");
+
+            lpNextParamNode->muPrevParam = static_cast<u16>(luParam);
+
+            CGS_ASSERT(lpPrevParamNode->muNextParam == lpNextParamNode->muPrevParam,
+                       "lpPrevParamNode->muNextParam == lpNextParamNode->muPrevParam");
+        }
+    }
+
+    CGS_ASSERT(lpParamNode->muNextParam != lpParamNode->muPrevParam,
+               "lpParamNode->muNextParam != lpParamNode->muPrevParam");
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SwapParamsInList  @ 0x827261E8   (EXPORT HOLE; leak :6864)
+//
+// Signature taken from its two call sites inside UpdateParams_UpdateLinkedList @0x82739660
+// (0x82739A5C passes r4 = the current param and r5 = the one in front; 0x82739A98 passes
+// r4 = the one behind and r5 = the current param), so the pair is always (earlier, later).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SwapParamsInList(u32 luParam, u32 luNextParam)
+{
+    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC, "luParam < KU_MAX_STANDARD_TRAFFIC");
+    CGS_ASSERT(luNextParam < KU_MAX_STANDARD_TRAFFIC, "luNextParam < KU_MAX_STANDARD_TRAFFIC");
+
+    ParamListNode* lpNode     = &maParamListNodes[luParam];
+    ParamListNode* lpNextNode = &maParamListNodes[luNextParam];
+
+    CGS_ASSERT(lpNode->muNextParam == luNextParam, "lpNode->muNextParam == luNextParam");
+    CGS_ASSERT(luParam == lpNextNode->muPrevParam, "luParam == lpNextNode->muPrevParam");
+
+    const u32 luPrevParam = lpNode->muPrevParam;
+    lpNextNode->muPrevParam = static_cast<u16>(luPrevParam);
+
+    if (luPrevParam != KU_INVALID_PARAM)
+    {
+        maParamListNodes[luPrevParam].muNextParam = static_cast<u16>(luNextParam);
+    }
+    else
+    {
+        const Param* lpParam = GetParam(luParam);
+        GetHullRuntime(lpParam->muStartHullIndex)
+            ->SetFirstParamInSection(lpParam->muSectionIndex,
+                                     static_cast<u16>(luNextParam),
+                                     static_cast<u16>(luParam));
+    }
+
+    const u32 luNextNextParam = lpNextNode->muNextParam;
+    lpNode->muNextParam = static_cast<u16>(luNextNextParam);
+
+    if (luNextNextParam != KU_INVALID_PARAM)
+    {
+        maParamListNodes[luNextNextParam].muPrevParam = static_cast<u16>(luParam);
+    }
+
+    lpNextNode->muNextParam = static_cast<u16>(luParam);
+    lpNode->muPrevParam     = static_cast<u16>(luNextParam);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::RemoveParamFromList  @ 0x82726340   (leak :6915)
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::RemoveParamFromList(u32 luParam)
+{
+    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC, "luParam < KU_MAX_STANDARD_TRAFFIC");
+
+    ParamListNode* lpNode = &maParamListNodes[luParam];
+
+    if (lpNode->muNextParam != static_cast<u16>(KU_INVALID_PARAM))
+    {
+        ParamListNode* lpNextNode = &maParamListNodes[lpNode->muNextParam];
+        CGS_ASSERT(lpNextNode->muPrevParam == luParam, "lpNextNode->muPrevParam == luParam");
+
+        lpNextNode->muPrevParam = lpNode->muPrevParam;
+    }
+
+    if (lpNode->muPrevParam != static_cast<u16>(KU_INVALID_PARAM))
+    {
+        ParamListNode* lpPrevNode = &maParamListNodes[lpNode->muPrevParam];
+        CGS_ASSERT(lpPrevNode->muNextParam == luParam, "lpPrevNode->muNextParam == luParam");
+
+        lpPrevNode->muNextParam = lpNode->muNextParam;
+    }
+    else
+    {
+        // 0x8272642C / 0x82726450: the console reads muStartHullIndex (+0x66) and
+        // muStartSectionIndex (+0x65), i.e. where the param was LINKED IN, not where it is now.
+        const Param* lpParam = GetParam(luParam);
+        if (lpParam->muStartHullIndex != KU_INVALID_HULL)
+        {
+            HullRuntime* lpHullRuntime = GetHullRuntimeSafe(lpParam->muStartHullIndex);
+            if (lpHullRuntime != 0)
+            {
+                lpHullRuntime->SetFirstParamInSection(lpParam->muStartSectionIndex,
+                                                      lpNode->muNextParam,
+                                                      static_cast<u16>(luParam));
+            }
+        }
+    }
+
+    lpNode->muNextParam = static_cast<u16>(KU_INVALID_PARAM);
+    lpNode->muPrevParam = static_cast<u16>(KU_INVALID_PARAM);
+}
+
+// ============================================================================
+// SECTION 4 -- death.
+// ============================================================================
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::PutParamInPurgatory  @ 0x82716510   (.cpp 9821, .h 2350)
+//
+// Parks a dead param id for five decision frames before UpdateParams_UpdatePurgatoryList
+// @0x827244E0 returns it to mFreeParams. Two xrefs: KillParam and UpdateParams_UpdateDead.
+// Without it no param id is ever recycled and generation stops after 400 kills.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::PutParamInPurgatory(u32 luParam)
+{
+    CGS_ASSERT(meState == E_STATE_TEARING_DOWN || IsDecisionFrame(),
+               "( meState == E_STATE_TEARING_DOWN ) || IsDecisionFrame()");
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    Param* lpParam = GetParam(luParam);
+
+    // 0x82716594 lbz 0x40 / clrrwi 7: mxFlags bit 0x80 == E_FLAG_IN_PURGATORY.
+    if (lpParam->IsInPurgatory())
+    {
+        return;
+    }
+
+    // 0x827165A4 `li 5`, one emission for both callers: KU_PURGATORY_TIME_ONLINE and
+    // KU_PURGATORY_TIME_OFFLINE are both 5 in BrnTrafficConstants.h, so the pair folded and
+    // the asm cannot say which name the source used.
+    PurgatoryInfo lInfo;
+    lInfo.muIndex              = static_cast<u16>(luParam);
+    lInfo.muDecisionFramesLeft = 5;
+
+    maPurgatoryList.Append(lInfo);
+    lpParam->SetInPurgatory(true);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::KillParam  @ 0x82721FB8   PARTIAL   (the ship rewrote the leak's :4383)
+//
+// Marks the param dying, then either orphans or kills its vehicle, then purgatories the id.
+// One gate remains, the crash-module / trailer arm; it names its blocker at the site.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::KillParam(u32 luParam)
+{
+    CGS_ASSERT(meState == E_STATE_TEARING_DOWN || IsDecisionFrame(),
+               "( meState == E_STATE_TEARING_DOWN ) || IsDecisionFrame()");
+    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC, "luParam < KU_MAX_STANDARD_TRAFFIC");
+
+    Param*   lpParam   = GetParam(luParam);
+    Vehicle* lpVehicle = GetVehicle(luParam);
+
+    CGS_ASSERT(lpVehicle->IsAlive() || lpParam->IsZombie() || mbWaitingForStreaming
+                   || meState != E_STATE_RUNNING,
+               "Tried to kill a param that isn't a zombie but has a dead vehicle");
+
+    // 0x82721F?? mxFlags read once, before SetDyingState rewrites it.
+    const u32  lxParamFlags = lpParam->mxFlags;
+    const bool lbDivorced   = (lxParamFlags & Param::E_FLAG_DIVORCED) != 0;
+
+    bool lbKillVehicle = false;
+    if ((lxParamFlags & Param::E_FLAG_SHOULD_BE_REMOVED) == 0
+        || (lbDivorced && (!lpVehicle->IsAlive() || (lpVehicle->GetFlags() & Vehicle::E_FLAG_ORPHAN) == 0)))
+    {
+        lbKillVehicle = true;
+    }
+
+    lpParam->SetDyingState(luParam, mParamSoaData);
+
+    if (lpVehicle->IsAlive() && (lpVehicle->GetFlags() & Vehicle::E_FLAG_ORPHAN) == 0)
+    {
+        if (lbKillVehicle && (lpVehicle->GetFlags() & Vehicle::E_FLAG_PHYSICAL) != 0)
+        {
+            CGS_ASSERT(!lbDivorced, "Param is divorced, but it's vehicle isn't an orphan");
+            if (!lbDivorced)
+            {
+                lpVehicle->SetOrphan();
+            }
+        }
+        else
+        {
+            lpVehicle->SetDead(luParam, mVehicleSoaData);
+
+            {
+                // GATE: EnsureVehicleRemovedFromCrashModule @0x82721?? and, for a STANDARD
+                // vehicle with a trailer, the Vehicle::GetTrailerIndex / DetachArticulation
+                // pair. Blocker: none of the three is declared in this tree
+                // (BrnTrafficVehicle.h models muOtherHalfIndex but no accessor pair, and the
+                // crash-module helper has no declaration at all).
+                // DELETE-WHEN those declarations land (crash surface, wave 3 / trailers).
+                static bool sbLogged = false;
+                LogMissingLeg_T2(sbLogged,
+                    "KillParam leg EnsureVehicleRemovedFromCrashModule + the trailer detach "
+                    "(Vehicle::GetTrailerIndex / Vehicle::DetachArticulation) -- none of the "
+                    "three is declared in this tree. The vehicle is still marked dead, so the "
+                    "param slot recycles; a towed trailer stays alive one extra kill");
+            }
+        }
+    }
+
+    if (!mbAllowDivergentBehaviour)
+    {
+        CGS_ASSERT(lpParam->IsDying(), "Param wasn't dying when we expected it to be");
+
+        lpParam->ClearDying(luParam, mParamSoaData);
+        PutParamInPurgatory(luParam);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::KillAllZombies  @ 0x82734DF8
+//
+// Walks mParamSoaData.mZombieParams with the FastBitArray iterator and kills every set bit.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::KillAllZombies()
+{
+    const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrZombies = mParamSoaData.mZombieParams;
+
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIt = lrZombies.Begin();
+         lIt.GetIndex() != lrZombies.End();
+         ++lIt)
+    {
+        const u32 luParam = static_cast<u32>(lIt.GetIndex());
+
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        CGS_ASSERT(GetParam(luParam)->IsZombie(), "GetParam( luParam )->IsZombie()");
+
+        KillParam(luParam);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::KillOutOfAreaTraffic  @ 0x82734C78   (leak :4290)
+//
+// Ledger files this under CgsSet.h; it is a real TrafficEntityModule member. The argument is
+// the OLD hull set RecalculateActiveHulls just produced.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::KillOutOfAreaTraffic(ActiveHullSet* lpOldHulls)
+{
+    CGS_ASSERT(lpOldHulls != 0, "lpOldHulls != NULL");
+
+    if (lpOldHulls->GetLength() == 0)
+    {
+        return;
+    }
+
+    for (u32 luParam = 0; luParam < KU_MAX_STANDARD_TRAFFIC; ++luParam)
+    {
+        const Param* lpParam = GetParam(luParam);
+
+        if (lpParam->IsAlive() && lpOldHulls->Contains(lpParam->muHullIndex))
+        {
+            KillParam(luParam);
+        }
+    }
+
+    for (u32 luStaticParam = 0; luStaticParam < KU_MAX_STATIC_TRAFFIC; ++luStaticParam)
+    {
+        const StaticTrafficParam* lpStaticParam = &maStaticTrafficParams[luStaticParam];
+
+        if (lpStaticParam->IsAlive()
+            && lpOldHulls->Find(lpStaticParam->GetHull()) != ActiveHullSet::KU_INVALID)
+        {
+            StaticVehicles_KillParam(luStaticParam);
+        }
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT2_02.cpp (wave T2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT2_02.cpp -- the per-decision-frame param driver and the
+// ordered "params on this section" list.
+//
+//   TrafficEntityModule::UpdateParams                     @0x82744A80  PARTIAL
+//   TrafficEntityModule::UpdateParams_UpdateDead          @0x827369A8  PARTIAL
+//   TrafficEntityModule::UpdateParams_UpdatePurgatoryList @0x827244E0
+//   TrafficEntityModule::UpdateParams_UpdateLinkedList    @0x82739660
+//   TrafficEntityModule::UpdateParams_UpdateNeighbours    @0x82708AC8
+//   TrafficEntityModule::UpdateParams_TryToReinsertParam  @0x827247F0  GATED
+//   TrafficEntityModule::UpdatePressure_Reset             @0x8272BB88
+//   TrafficEntityModule::Pressure_PickSplitToTake         @0x8272BC68  PARTIAL
+//   BrnTraffic::Neighbour::ConvertOurParameterToTheirs    @0x82705710  (EXPORT HOLE)
+//
+// Layout is host-native: every member is reached by name; the console displacements in the
+// comments only attest which member a line resolves to.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of LogMissingLeg_T2 was dropped here -- this TU defines it once, above)
+
+    // .rdata literals this TU reads by value.
+    const f32 KF_LANE_CHANGE_DICE_ROLL_NUMERATOR = 1275.0f;   // flt_820BFF68 (255 * 5)
+
+    // [DIAG] NOT IN THE X360 BINARY. Reads a BRN_TRAFFIC_FORCE_* variable as "arm after this
+    // many decision frames"; absent or <= 0 means never. A bare "1" arms on the first frame.
+    s32 EnvDecisionFrameDelay(const char* lpcName)
+    {
+        const char* lpcValue = getenv(lpcName);
+        if (lpcValue == 0)
+        {
+            return 0;
+        }
+        const s32 liFrames = atoi(lpcValue);
+        return (liFrames > 0) ? liFrames : 0;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// BrnTraffic::Neighbour::ConvertOurParameterToTheirs  @0x82705710 (EXPORT HOLE: named bl
+// sites in UpdateParams_UpdatePlan @0x82737CE8 and UpdateParams_HandleLaneChanges
+// @0x82725880, no per-function JSON). Body from the Feb-2007 original
+// (SharedClasses/Traffic/BrnTrafficSection.h:323), whose three asserts are kept.
+// ----------------------------------------------------------------------------
+f32 Neighbour::ConvertOurParameterToTheirs(f32 lfOurParam) const
+{
+    CGS_ASSERT(lfOurParam >= static_cast<f32>(muOurStartRung),
+               "Parameter has a bad param for lane change");
+    CGS_ASSERT(lfOurParam < static_cast<f32>(muOurStartRung + muSharedLength),
+               "Parameter has a bad param for lane change");
+
+    const s32 liDelta = static_cast<s32>(muTheirStartRung) - static_cast<s32>(muOurStartRung);
+    const f32 lfTheirParam = lfOurParam + static_cast<f32>(liDelta);
+
+    CGS_ASSERT(lfTheirParam >= 0.0f, "Param has negative param after lane change");
+    return lfTheirParam;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams  @0x82744A80  (DWARF :1626, .cpp 10021)
+//
+// The per-decision-frame driver. TWO stack blocks in the console:
+//   * the Array<CrashingThingData,168> at var_15B0 feeds the two crash arms; its count word
+//     is Clear()ed at 0x82744C50 and the producer fills it immediately after.
+//   * the ten-quadword bit set at var_1600 is a FastBitArray<601> intersection built inline
+//     from mVehicleSoaData.mAliveVehicles (module +164560) AND .mPhysicalVehicles (+164800),
+//     named by DEBUGValidateSoaData @0x82714A60's assert strings. It is passed to
+//     UpdateParams_CalcDesiredSpeed and to the crash-list producer.
+//
+// [crash-surface wave 2026-08-28] THE THREE CRASH LEGS ARE LIVE. They were gated here as
+// "crash surface, wave 3 (needs the gated CrashingThingData list)"; that note was circular and
+// stale -- CrashingThingData is homed in the header, both Array<CrashingThingData,168>
+// accessors have been committed since 2026-07-04, and the list itself is just this function's
+// own stack local. Bodies: BrnTrafficEntityModule_wT2_06.cpp.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    // ---- [DIAG] NOT IN THE X360 BINARY, OFF BY DEFAULT -------------------------------------
+    // ✅ 2026-08-28: BOTH PRODUCERS NOW EXIST (_wT5_01.cpp) and both calls are live, so the
+    // paragraph that stood here -- "both predicates are constant false and both arms are
+    // unreachable" -- is CLOSED for the avoid arm. UpdateJunctionFUP @0x82745218 writes
+    // mfJunctionFUP from PrePhysicsUpdate every frame, so
+    // NeedToTakeActionAgainstJunctionFUP() is now a live measurement of the jam.
+    //
+    // ✅ AND IT IS CLOSED FOR THE HOLLYWOOD ARM TOO, which is NOT obvious from UpdateCrashSlider
+    // alone -- that function only decays/normalises the score and schedules showtime spikes, so
+    // it looks like a showtime-only feature. It is not. The chain in ordinary driving is:
+    //   Construct / Reset (_wT1_01.cpp)   seed mfCrashSliderCrashScoreFactor = 0.8, Decay = 0.5
+    //   HandleExternalResponses (_wT3_04.cpp, BODIED)  per crashed traffic car does
+    //       mfCrashSliderCrashScore += 0.8 * 50.0  == 40 points a car
+    //   UpdateCrashSlider (_wT5_01.cpp, THE MISSING LINK)  normalises that into
+    //       mfCrashSliderFinalValue = clamp((score - 10) / 90, 0, 1)
+    // Two crashed traffic cars is 80 points, i.e. a final value of ~0.78, and
+    // ShouldBeHollywoodAction() tests > 0.01. The score was ALREADY accumulating before this
+    // wave; nothing consumed it, because mfCrashSliderFinalValue had no writer at all.
+    // ⚠️ The window is short by design: decay 0.5 per second of proportional decay takes 80
+    // points back under the 10-point floor in about four seconds, so the hollywood arm is a
+    // few-second reaction to a fresh crash, not a mode.
+    // BRN_TRAFFIC_FORCE_SYMPCRASH stays only as a way to exercise the arm without crashing.
+    //
+    // These env switches set the CONSOLE'S OWN debug members -- mbDEBUGOverrideJunctionFUP (:866)
+    // and mbDEBUGTestSympCrash (:858), the exact overrides the two predicates already honour --
+    // so the arms can be exercised and measured meanwhile. Nothing here invents a value or a
+    // branch; with the vars unset the binary behaves identically to one without this block.
+    //
+    // ⚠️ THE VALUE IS A DELAY IN DECISION FRAMES (0.1 s each), and it is not decoration.
+    // NeedToTakeActionAgainstJunctionFUP() also gates SpawnNewTraffic @0x82748A40, which returns
+    // immediately when it is true -- so arming the junction-FUP override at frame 0 stops traffic
+    // generation and the pool drains to nothing, leaving nothing to swerve. Measured: a run armed
+    // from frame 0 went from 79 alive params at d=10 to 0 by d=1310. Arm it AFTER traffic has
+    // built up ("400" == 40 s) and there is a population to observe.
+    // DELETE-WHEN UpdateJunctionFUP and UpdateCrashSlider have bodies.
+    {
+        static const s32 skiForceJunctionFUPAt = EnvDecisionFrameDelay("BRN_TRAFFIC_FORCE_AVOID");
+        static const s32 skiForceSympCrashAt   = EnvDecisionFrameDelay("BRN_TRAFFIC_FORCE_SYMPCRASH");
+        static s32 siDiagDecisionFrame = 0;
+        ++siDiagDecisionFrame;
+
+        if (skiForceJunctionFUPAt > 0 && siDiagDecisionFrame >= skiForceJunctionFUPAt)
+        {
+            if (!mbDEBUGOverrideJunctionFUP && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T5-force] mbDEBUGOverrideJunctionFUP armed at decision frame "
+                    << siDiagDecisionFrame << " -- the AVOID arm is now reachable, and "
+                    << "SpawnNewTraffic is now off [DELETE-WHEN-STABLE]\n";
+            }
+            mbDEBUGOverrideJunctionFUP = true;
+        }
+        if (skiForceSympCrashAt > 0 && siDiagDecisionFrame >= skiForceSympCrashAt)
+        {
+            if (!mbDEBUGTestSympCrash && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[T5-force] mbDEBUGTestSympCrash armed at decision frame "
+                    << siDiagDecisionFrame << " [DELETE-WHEN-STABLE]\n";
+            }
+            mbDEBUGTestSympCrash = true;
+        }
+    }
+
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_UpdateParam);
+
+    CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS, "muLastParamCalculated >= KU_MAX_PARAMS");
+
+    if (mbNeedToKillAllZombies)              // +0x7180F
+    {
+        KillAllZombies();
+        mbNeedToKillAllZombies = false;
+    }
+
+    UpdateParams_UpdateDead();
+
+    // The avoid set the speed calculation reads: alive AND physical.
+    CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lPhysicalAliveVehicles;
+    lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mAliveVehicles,
+                                  mVehicleSoaData.mPhysicalVehicles);
+
+    // The per-frame list of things traffic reacts to. The console's own stack local: the
+    // Array at var_15B0, whose count word is cleared at 0x82744C50 (`stw r17(0), var_B0`,
+    // and var_15B0 - var_B0 == 0x1500 == 168 * sizeof(CrashingThingData)) -- i.e. Clear()
+    // immediately before the producer runs. Body in _wT2_06.cpp.
+    ::Array<CrashingThingData, 168u> laCurrentCrashingThings;
+    laCurrentCrashingThings.Clear();
+    UpdateParams_BuildListOfCrashingThings(&laCurrentCrashingThings, lpInput,
+                                           lPhysicalAliveVehicles);
+
+    const u32 luMaxLaneChangeDiceRoll =
+        static_cast<u32>(KF_LANE_CHANGE_DICE_ROLL_NUMERATOR / mfSimTimeSinceLastDecision);
+
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");
+
+    UpdateParams_UpdatePurgatoryList();
+
+    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+    {
+        Param* lpParam = &maParams[luParam];
+
+        // Where this param started the frame (the scene mover diffs against it).
+        lpParam->muStartSectionIndex = lpParam->muSectionIndex;
+        lpParam->muStartHullIndex    = lpParam->muHullIndex;
+
+        if (!lpParam->IsAlive())
+        {
+            continue;
+        }
+        if ((lpParam->mxEffectAndHistoryState & Param::E_HISTORY_BORN) != 0)
+        {
+            continue;   // born this frame -- it gets its first update next decision frame
+        }
+        if ((lpParam->mxFlags & Param::E_FLAG_SHOULD_BE_REMOVED) != 0)
+        {
+            KillParam(luParam);
+            continue;
+        }
+
+        const Hull*    lpHull    = GetHull(lpParam->muHullIndex);
+        const Section* lpSection = lpHull->GetSection(lpParam->muSectionIndex);
+
+        const u32 luOriginalSection = lpParam->muSectionIndex;
+
+        CGS_ASSERT(lpParam->IsAlive(), "IsAlive()");   // BrnTrafficParam.h 1062
+
+        if ((lpParam->mxEffectAndHistoryState & Param::E_HISTORY_NEEDS_NEW_PLAN) != 0)
+        {
+            UpdateParams_UpdatePlan(luParam, luMaxLaneChangeDiceRoll);
+        }
+
+        UpdateParams_UpdateBehaviour(luParam);
+        UpdateParams_CalcDesiredSpeed(luParam, lpSection, lpHull, lPhysicalAliveVehicles);
+        UpdateParams_IncrementParam(luParam, &lpHull, &lpSection);
+
+        // The two reactions. Bodies in _wT2_06.cpp; both were parked here as "crash surface,
+        // wave 3 (needs the gated CrashingThingData list)" -- a note whose blockers had all
+        // been false since wave T3 (see that file's banner).
+        if (NeedToTakeActionAgainstJunctionFUP())
+        {
+            UpdateParams_TryAvoidCrashing(luParam, &laCurrentCrashingThings);
+        }
+        else if (ShouldBeHollywoodAction())
+        {
+            UpdateParams_TryStartSympatheticCrashing(luParam, &laCurrentCrashingThings);
+        }
+
+        // IncrementParam can kill the param (it runs off the end of a dead-end section).
+        if (!lpParam->IsAlive())
+        {
+            continue;
+        }
+
+        UpdateParams_HandleLaneChanges(luParam, lpHull, &lpSection);
+
+        const u16 luParamAsElement = static_cast<u16>(luParam);
+        if (mParamsToReinsert.Contains(luParamAsElement))
+        {
+            UpdateParams_TryToReinsertParam(luParam);
+        }
+
+        lpParam->PushHistory(lpParam->muCurrentSegment + lpSection->muRungOffset,
+                             lpParam->muHullIndex);
+
+        CGS_ASSERT((luOriginalSection == lpParam->muSectionIndex) ||
+                       ((lpParam->mxEffectAndHistoryState & Param::E_HISTORY_CHANGED_SECTION) != 0),
+                   "( luOriginalSection == lpParam->muSectionIndex ) || "
+                   "( lpParam->HasChangedSection() )");
+    }
+
+    UpdatePressure_Reset();
+    UpdateParams_UpdateLinkedList();
+
+    mParamsToReinsert.Clear();   // +0x3D7F4 `stwx r17(0)`
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_UpdateParam);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_UpdateDead  @0x827369A8  (.cpp 9772)  PARTIAL
+//
+// Retires params whose vehicle has already been torn down: dying AND not alive AND without an
+// entity AND not collidable. The console builds the set as three inverse-and steps over
+// mVehicleSoaData; the ledger files this function under CgsFastBitArray.h (catch-all).
+//
+// The tail call PutParamInPurgatory @0x82716510 (0x827369A8's `if (*divergent)` arm, pseudocode
+// "ClearDying then if (v48) PutParamInPurgatory") was GATED here by a banner claiming the body
+// did not exist -- STALE: the body landed with the same wave in _wT2_01.cpp. The gate made every
+// offline param retirement leak its id (KillParam only purgatories in its ONLINE arm), so after
+// 400 kills mFreeParams hit 0 and traffic generation stopped for the rest of the session --
+// the user-visible "traffic is anchored to the junkyard" bug (2026-08-24).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_UpdateDead()
+{
+    CGS_ASSERT((meState == E_STATE_TEARING_DOWN) || IsDecisionFrame(),
+               "( meState == E_STATE_TEARING_DOWN ) || IsDecisionFrame()");
+
+    CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lNotVehicle;
+    CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lDeadParams;
+
+    lNotVehicle.SetInverse(mVehicleSoaData.mAliveVehicles);          // +164560
+    lDeadParams.SetAnd(mParamSoaData.mDyingParams, lNotVehicle);
+
+    lNotVehicle.SetInverse(mVehicleSoaData.mVehiclesWithEntities);   // +164640
+    lDeadParams.SetAnd(lDeadParams, lNotVehicle);
+
+    lNotVehicle.SetInverse(mVehicleSoaData.mCollidableVehicles);     // +164720
+    lDeadParams.SetAnd(lDeadParams, lNotVehicle);
+
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lItParam = lDeadParams.Begin();
+         lItParam != lDeadParams.End();
+         ++lItParam)
+    {
+        const u32 luParam = static_cast<u32>(lItParam.GetIndex());
+
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");   // .cpp 9791
+
+        Param* lpParam = GetParam(luParam);
+        CGS_ASSERT(lpParam->IsDying(), "lpParam->IsDying()");             // .cpp 9794
+
+        const Vehicle* lpVehicle = GetVehicle(luParam);
+        CGS_ASSERT(!lpVehicle->IsAlive(), "!GetVehicle( luParam )->IsAlive()");        // 9795
+        CGS_ASSERT(!lpVehicle->HasEntity(), "!GetVehicle( luParam )->HasEntity()");    // 9796
+        // Vehicle has no public IsCollidable(); DEBUGValidateSoaData @0x82714A60 pins the SoA
+        // set as the same bit ("GetVehicle( luVehicle )->IsCollidable() == mCollidableVehicles").
+        CGS_ASSERT(!mVehicleSoaData.mCollidableVehicles.IsBitSet(luParam),
+                   "!GetVehicle( luParam )->IsCollidable()");   // .cpp 9797
+
+        lpParam->ClearDying(luParam, mParamSoaData);
+
+        if (mbAllowDivergentBehaviour)   // +0x717E7
+        {
+            PutParamInPurgatory(luParam);   // @0x82716510; body in _wT2_01.cpp
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_UpdatePurgatoryList  @0x827244E0  (.cpp 10308)
+//
+// Ticks each purgatoried param down a decision frame and, at zero, returns its id to the free
+// stack. Erase-in-place: the index steps back so the compacted slot is revisited.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_UpdatePurgatoryList()
+{
+    for (u32 luPurgatoryParam = 0;
+         luPurgatoryParam < maPurgatoryList.GetLength();
+         ++luPurgatoryParam)
+    {
+        PurgatoryInfo& lrInfo = maPurgatoryList.GetItem(luPurgatoryParam);
+
+        --lrInfo.muDecisionFramesLeft;
+        if (lrInfo.muDecisionFramesLeft > 0)
+        {
+            continue;
+        }
+
+        const u32 luParam = lrInfo.muIndex;
+        Param* lpParam = GetParam(luParam);
+
+        CGS_ASSERT(!lpParam->IsAlive(), "Param was alive when it came out of purgatory");
+
+        const u16 luParamAsElement = static_cast<u16>(luParam);
+        CGS_ASSERT(!mFreeParams.Contains(luParamAsElement),
+                   "Trying to put param onto the free list twice");
+        mFreeParams.Push(luParamAsElement);
+
+        lpParam->SetInPurgatory(false);
+
+        maPurgatoryList.Erase(luPurgatoryParam);
+        --luPurgatoryParam;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_UpdateLinkedList  @0x82739660  (.cpp 12538..12710)
+//
+// Re-sorts the per-section doubly-linked param lists once per decision frame. One pass
+// classifies every param (died / born / alive / changed-section) and republishes its
+// mfParamAlong into maParamListNodes; then remove, bubble-sort by mfParamAlong, and re-insert.
+//
+// The classification pass also clears the three per-frame history bits (mxEffectAndHistoryState
+// &= 0xF1) and rebuilds the per-section-span occupancy counters the pressure system reads.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_UpdateLinkedList()
+{
+    // The console's own local names (its assert strings cite lauParamSections).
+    u8  lauParamSections[KU_MAX_PARAMS];
+    u8  labParamInList[KU_MAX_PARAMS];
+    u16 lauParamHulls[KU_MAX_PARAMS];
+
+    u16 lauDiedParams[KU_MAX_PARAMS];
+    u16 lauAliveParams[KU_MAX_PARAMS];
+    u16 lauNewParams[KU_MAX_PARAMS];
+    u16 lauChangedSectionParams[KU_MAX_PARAMS];
+
+    u32 luNumDied           = 0;
+    u32 luNumAlive          = 0;
+    u32 luNumNew            = 0;
+    u32 luNumChangedSection = 0;
+
+    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+        Param* lpParam = &maParams[luParam];
+
+        lauParamSections[luParam] = 0;
+        lauParamHulls[luParam]    = lpParam->muHullIndex;
+
+        if (lpParam->HasDied())
+        {
+            lauDiedParams[luNumDied++] = static_cast<u16>(luParam);
+            labParamInList[luParam]    = 0;
+        }
+        else if (lpParam->IsAlive())
+        {
+            maParamListNodes[luParam].mfParamAlong = lpParam->mfParamAlong;
+
+            lauParamSections[luParam] = lpParam->muSectionIndex;
+            labParamInList[luParam]   = 1;
+
+            if ((lpParam->mxEffectAndHistoryState & Param::E_HISTORY_BORN) != 0)
+            {
+                lauNewParams[luNumNew++] = static_cast<u16>(luParam);
+                labParamInList[luParam]  = 0;
+            }
+            else
+            {
+                lauAliveParams[luNumAlive++] = static_cast<u16>(luParam);
+                if ((lpParam->mxEffectAndHistoryState & Param::E_HISTORY_CHANGED_SECTION) != 0)
+                {
+                    lauChangedSectionParams[luNumChangedSection++] = static_cast<u16>(luParam);
+                    labParamInList[luParam] = 0;
+                }
+            }
+
+            const Hull* lpHull = GetHull(lpParam->muHullIndex);
+            CGS_ASSERT(lpHull != 0, "lpHull");                              // .cpp 12538
+            const Section* lpSection = lpHull->GetSection(lpParam->muSectionIndex);
+            CGS_ASSERT(lpSection != 0, "lpSection");                        // .cpp 12541
+            HullRuntime* lpHullRuntime = GetHullRuntime(lpParam->muHullIndex);
+            CGS_ASSERT(lpHullRuntime != 0, "lpHullRuntime");                // .cpp 12544
+
+            lpHullRuntime->IncrementSectionSpanVehicleCount(lpSection->muSpanIndex);
+        }
+        else
+        {
+            labParamInList[luParam] = 0;
+        }
+
+        // The three per-frame history bits are consumed here and only here.
+        lpParam->mxEffectAndHistoryState &= 0xF1u;
+    }
+
+    for (u32 luIndex = 0; luIndex < luNumDied; ++luIndex)
+    {
+        const u32 luParamIndex = lauDiedParams[luIndex];
+        CGS_ASSERT(luParamIndex < KU_MAX_STANDARD_TRAFFIC,
+                   "luParamIndex < KU_MAX_STANDARD_TRAFFIC");               // .cpp 12557
+        RemoveParamFromList(luParamIndex);
+    }
+
+    for (u32 luIndex = 0; luIndex < luNumChangedSection; ++luIndex)
+    {
+        const u32 luParamIndex = lauChangedSectionParams[luIndex];
+        CGS_ASSERT(luParamIndex < KU_MAX_STANDARD_TRAFFIC,
+                   "luParamIndex < KU_MAX_STANDARD_TRAFFIC");               // .cpp 12597
+        RemoveParamFromList(luParamIndex);
+    }
+
+    // Bubble pass: any swap restarts the sweep (the console sets the index to -1 then ++s).
+    for (u32 luIndex = 0; luIndex < luNumAlive; ++luIndex)
+    {
+        const u32 luParamIndex = lauAliveParams[luIndex];
+        CGS_ASSERT(luParamIndex < KU_MAX_STANDARD_TRAFFIC,
+                   "luParamIndex < KU_MAX_STANDARD_TRAFFIC");               // .cpp 12639
+
+        const ParamListNode* lpParamNode = &maParamListNodes[luParamIndex];
+        bool lbSwapped = false;
+
+        const u32 luNextParam = lpParamNode->muNextParam;
+        if (luNextParam != KU_INVALID_PARAM &&
+            lpParamNode->mfParamAlong > maParamListNodes[luNextParam].mfParamAlong)
+        {
+            SwapParamsInList(luParamIndex, luNextParam);
+            lbSwapped = true;
+        }
+
+        const u32 luPrevParam = lpParamNode->muPrevParam;
+        if (luPrevParam != KU_INVALID_PARAM &&
+            lpParamNode->mfParamAlong < maParamListNodes[luPrevParam].mfParamAlong)
+        {
+            SwapParamsInList(luPrevParam, luParamIndex);
+            lbSwapped = true;
+        }
+
+        if (lbSwapped)
+        {
+            luIndex = static_cast<u32>(-1);
+        }
+    }
+
+    for (u32 luIndex = 0; luIndex < luNumNew; ++luIndex)
+    {
+        const u32 luParamIndex = lauNewParams[luIndex];
+        CGS_ASSERT(luParamIndex < KU_MAX_STANDARD_TRAFFIC,
+                   "luParamIndex < KU_MAX_STANDARD_TRAFFIC");               // .cpp 12681
+
+        const ParamListNode* lpParamNode = &maParamListNodes[luParamIndex];
+        const u32 luSection = lauParamSections[luParamIndex];
+
+        InsertParamIntoList(luParamIndex, lauParamHulls[luParamIndex], luSection,
+                            lpParamNode->mfParamAlong);
+
+        lauAliveParams[luNumAlive + luIndex] = static_cast<u16>(luParamIndex);
+        labParamInList[luParamIndex] = 1;
+
+        CGS_ASSERT((lpParamNode->muNextParam == KU_INVALID_PARAM) ||
+                       (luSection == lauParamSections[lpParamNode->muNextParam]),
+                   "( lpParamNode->muNextParam == KU_INVALID_PARAM ) || "
+                   "( lauParamSections[luParamIndex] == lauParamSections[lpParamNode->muNextParam] )");
+        CGS_ASSERT((lpParamNode->muPrevParam == KU_INVALID_PARAM) ||
+                       (luSection == lauParamSections[lpParamNode->muPrevParam]),
+                   "( lpParamNode->muPrevParam == KU_INVALID_PARAM ) || "
+                   "( lauParamSections[luParamIndex] == lauParamSections[lpParamNode->muPrevParam] )");
+    }
+
+    for (u32 luIndex = 0; luIndex < luNumChangedSection; ++luIndex)
+    {
+        const u32 luParamIndex = lauChangedSectionParams[luIndex];
+        CGS_ASSERT(luParamIndex < KU_MAX_STANDARD_TRAFFIC,
+                   "luParamIndex < KU_MAX_STANDARD_TRAFFIC");               // .cpp 12701
+
+        const ParamListNode* lpParamNode = &maParamListNodes[luParamIndex];
+        const u32 luSection = lauParamSections[luParamIndex];
+
+        InsertParamIntoList(luParamIndex, lauParamHulls[luParamIndex], luSection,
+                            lpParamNode->mfParamAlong);
+
+        labParamInList[luParamIndex] = 1;
+
+        CGS_ASSERT((lpParamNode->muNextParam == KU_INVALID_PARAM) ||
+                       (luSection == lauParamSections[lpParamNode->muNextParam]),
+                   "( lpParamNode->muNextParam == KU_INVALID_PARAM ) || "
+                   "( lauParamSections[luParamIndex] == lauParamSections[lpParamNode->muNextParam] )");
+        CGS_ASSERT((lpParamNode->muPrevParam == KU_INVALID_PARAM) ||
+                       (luSection == lauParamSections[lpParamNode->muPrevParam]),
+                   "( lpParamNode->muPrevParam == KU_INVALID_PARAM ) || "
+                   "( lauParamSections[luParamIndex] == lauParamSections[lpParamNode->muPrevParam] )");
+    }
+
+    (void)labParamInList;   // the console keeps it only for the two asserts above
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_UpdateNeighbours  @0x82708AC8  (.cpp 10336)
+//
+// Refreshes the two cached side-neighbour handles when the cache is unknown (KU_UNKNOWN_NEIGHBOUR
+// == 0xFFFE) or the param has driven past the cached shared stretch.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_UpdateNeighbours(Param* lpParam,
+                                                        const Section* lpSection,
+                                                        const Hull* lpHull)
+{
+    CGS_ASSERT(lpParam != 0, "lpParam");
+
+    const u32 luRung = lpParam->muCurrentSegment;
+
+    for (u32 luSide = E_LEFT; luSide < E_SIDE_COUNT; ++luSide)
+    {
+        if (lpParam->mauNeighbourData[luSide] != KU_UNKNOWN_NEIGHBOUR &&
+            lpParam->mauNeighbourEndRung[luSide] >= (luRung + 1))
+        {
+            continue;
+        }
+
+        const u16 luNeighbour =
+            lpSection->FindNeighbourForRung(luRung, static_cast<Side>(luSide), lpHull);
+        lpParam->mauNeighbourData[luSide] = luNeighbour;
+
+        if (luNeighbour != KU_INVALID_PARAM)   // 0xFFFF == "no neighbour"
+        {
+            const Neighbour* lpNeighbour = lpHull->GetNeighbour(luNeighbour);
+            lpParam->mauNeighbourEndRung[luSide] =
+                static_cast<u8>(lpNeighbour->muOurStartRung + lpNeighbour->muSharedLength);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_TryToReinsertParam  @0x827247F0  (.cpp 10552)  GATED
+//
+// Online divergence repair: re-seats a param onto the nearest lane under the vehicle's actual
+// transform. Reached only through mParamsToReinsert, which nothing in the offline driving path
+// fills, and asserts AllowDivergentBehaviour() on entry.
+//
+// BLOCKERS (all three): TrafficData::FindNearestLaneForPoint has no declaration in
+// SharedClasses/Traffic/BrnTrafficDataResourceType.h; Param::ReinsertInLanes has no declaration
+// in BrnTrafficParam.h; muNumTrafficInsertionsThisFrame's <= 1 budget test at +232478 is the
+// only other read. DELETE-WHEN those two land.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_TryToReinsertParam(u32 luParam)
+{
+    CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");
+    (void)luParam;
+
+    static bool sbLogged = false;
+    LogMissingLeg_T2(sbLogged,
+                  "UpdateParams_TryToReinsertParam @0x827247F0 -- needs "
+                  "TrafficData::FindNearestLaneForPoint and Param::ReinsertInLanes, neither "
+                  "declared in the tree");
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdatePressure_Reset  @0x8272BB88
+//
+// Zeroes every active hull's per-section-span occupancy counters before
+// UpdateParams_UpdateLinkedList rebuilds them (the console's memset of 512 bytes at
+// HullRuntime+0x290 is exactly ResetSectionSpanVehicleCounts).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdatePressure_Reset()
+{
+    for (u32 luIndex = 0; luIndex < mActiveHulls.GetLength(); ++luIndex)
+    {
+        HullRuntime* lpHullRuntime = GetHullRuntime(mActiveHulls.GetItem(luIndex));
+        lpHullRuntime->ResetSectionSpanVehicleCounts();
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::Pressure_PickSplitToTake  @0x8272BC68  (.cpp 17230..17233)  PARTIAL
+//
+// Picks which of a section's three forward splits a param should take: lowest score wins, ties
+// keep the earlier direction. The base score is 0 for straight-on and 100 for a left/right
+// split whose turn probability is zero; the console then adds the destination span's occupancy
+// pressure.
+//
+// GATED LEG -- the pressure term. It is
+//   score += (f32)lpHullRuntime->GetSectionSpanVehicleCount(span) *
+//            lpHull->mpaSectionSpans[span].mfMaxVehicleRecip;
+// BLOCKER: BrnTraffic::SectionSpan is forward-declared only in SharedClasses/Traffic/
+// BrnTrafficHull.h. DWARF BrnTrafficSection.h:260 spells it (u16 muMaxVehicles @+0,
+// f32 mfMaxVehicleRecip @+4, record stride 8, plus Hull::GetSectionSpan at BrnTrafficHull.h:94)
+// -- home it there and this leg is a two-line edit. Until then the fallback is the console's
+// own no-hull-runtime value, 1.0f, so every split scores alike and direction 0 wins.
+// DELETE-WHEN SectionSpan is homed.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::Pressure_PickSplitToTake(const Section* lpSection,
+                                                   u8* lpuOutSection,
+                                                   u16* lpuOutHull,
+                                                   u8* lpuOutDirection) const
+{
+    CGS_ASSERT(lpSection != 0, "lpCurrentSection");
+    CGS_ASSERT(lpuOutSection != 0, "lpOutSection");
+    CGS_ASSERT(lpuOutHull != 0, "lpOutHull");
+    CGS_ASSERT(lpuOutDirection != 0, "lpOutDirection");
+
+    u8  luBestSection   = KU_INVALID_SECTION;
+    u16 luBestHull      = static_cast<u16>(KU_INVALID_PARAM);
+    u8  luBestDirection = 0;
+    f32 lfBestScore     = 3.4028235e38f;   // flt_8208F5EC == FLT_MAX (flt_82001C98 is 1.0 --
+                                           // the old "82001C98-adjacent" note named the wrong word)
+
+    // Base scores: a split whose change probability is zero starts 100 points down.
+    f32 lafScores[3];
+    lafScores[0] = 0.0f;
+    lafScores[1] = 0.0f;
+    lafScores[2] = 0.0f;
+    if (lpSection->muChangeLeftProb == 0)      // +0x20
+    {
+        lafScores[1] = 100.0f;                 // flt_820BA5C8
+    }
+    if (lpSection->muChangeRightProb == 0)     // +0x21
+    {
+        lafScores[2] = 100.0f;
+    }
+
+    for (u32 luDirection = 0; luDirection < 3; ++luDirection)
+    {
+        const u8  luSection = lpSection->mauForwardSections[luDirection];   // +0x14
+        const u16 luHull    = lpSection->mauForwardHulls[luDirection];      // +0x08
+
+        if (luSection == KU_INVALID_SECTION)
+        {
+            continue;
+        }
+
+        const Hull* lpTargetHull = GetHull(luHull);   // carries the muNumHulls bound
+
+        f32 lfScore = 1.0f;
+        if (mauHullRuntimeDataIndices[luHull] != KU_INVALID_HULL_RUNTIME)
+        {
+            CGS_ASSERT(luSection < lpTargetHull->muNumSections, "luIndex < muNumSections");
+            const Section* lpTargetSection = lpTargetHull->GetSection(luSection);
+            CGS_ASSERT(lpTargetSection->muSpanIndex < lpTargetHull->muNumSectionSpans,
+                       "luIndex < muNumSectionSpans");
+
+            lfScore = lafScores[luDirection];
+
+            static bool sbLogged = false;
+            LogMissingLeg_T2(sbLogged,
+                          "Pressure_PickSplitToTake @0x8272BC68 span-occupancy term -- "
+                          "BrnTraffic::SectionSpan is forward-declared only in "
+                          "SharedClasses/Traffic/BrnTrafficHull.h (DWARF BrnTrafficSection.h:260)");
+        }
+
+        if (lfScore < lfBestScore)
+        {
+            lfBestScore     = lfScore;
+            luBestSection   = luSection;
+            luBestHull      = luHull;
+            luBestDirection = static_cast<u8>(luDirection);
+        }
+    }
+
+    *lpuOutSection   = luBestSection;
+    *lpuOutHull      = luBestHull;
+    *lpuOutDirection = luBestDirection;
+}
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT2_03.cpp (wave T2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT2_03.cpp -- per-param behaviour, speed and THE ADVANCE.
+//
+//   TrafficEntityModule::UpdateParams_UpdatePlan          @0x82737CE8  PARTIAL
+//   TrafficEntityModule::UpdateParams_UpdateBehaviour     @0x82716C90
+//   TrafficEntityModule::UpdateParams_CalcDesiredSpeed    @0x82717928
+//   TrafficEntityModule::UpdateParams_CalcAcceleration    @0x827172B8  PARTIAL
+//   TrafficEntityModule::UpdateParams_IncrementParam      @0x82738C80
+//   TrafficEntityModule::UpdateParams_HandleLaneChanges   @0x82725880  PARTIAL
+//   TrafficEntityModule::UpdateParam_CheckIfInsideParamInFront @0x82717A70  GATED
+//   TrafficEntityModule::UpdateParams_PrecalcBehaviourParams   @0x82717C48  PARTIAL
+//   TrafficEntityModule::UpdateParam_CheckIfNeedToSlow    @0x82738468  PARTIAL
+//   TrafficEntityModule::DoesParamNeedToStopForStopline   @0x827249F8
+//   TrafficEntityModule::FindNearestParamInFront          @0x82725060
+//   TrafficEntityModule::EatParamsNextPlan                @0x827087D0
+//   TrafficEntityModule::FindNextParam                    @0x82723A48
+//   TrafficEntityModule::FindNextParamRelative            @0x82708400
+//   TrafficEntityModule::FindFirstParamAfterPos           @0x82723B80
+//
+// Layout is host-native: every member is reached by name; the console displacements in the
+// comments only attest which member a line resolves to.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of LogMissingLeg_T2 was dropped here -- this TU defines it once, above)
+
+    // [DIAG] NOT IN THE X360 BINARY. Same BRN_TRAFFIC_DIAG switch the crash-surface probes in
+    // _wT2_06.cpp use. DELETE-WHEN-STABLE.
+    CgsDev::Log::DebugPrint* LaneChangeDiagStream()
+    {
+        static const bool skbOn = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+        if (!skbOn || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return 0;
+        }
+        return CgsDev::Log::gpDebugPrint;
+    }
+
+    // .rdata literals this TU reads by value, each named by the expression it appears in.
+    const f32 KF_PARAM_MAX_PARAM_IN_SEGMENT = 0.999f;   // flt_82008984
+    // ⭐ SYMBOL CORRECTED 2026-09-06 (constant audit): the VALUE 80.0 is right, the symbol was
+    // not. flt_820BA5E8 is the .rdata word IDA anchors r20 on (`addi r20, r11, flt_820BA5E8@l`
+    // @0x82737D74) and reads 30.0; the two comparisons that actually use this distance load
+    // `flt_820BA4E0 - 0x820BA5E8` off that base at 0x827380A4 / 0x82738398, and flt_820BA4E0 is
+    // 0x42A00000 == 80.0. Anchor-register displacement, not a value error.
+    const f32 KF_PARAM_PLAN_LOOKAHEAD_DIST  = 80.0f;    // flt_820BA4E0 (read off the r20 anchor)
+    const f32 KF_PARAM_DEFAULT_MAX_SPEED    = 500.0f;   // flt_8200A034
+    const f32 KF_PARAM_BRAKE_LIGHT_ACCEL    = -0.6f;    // flt_820BC9D4
+    const f32 KF_PARAM_BRAKE_LIGHT_SPEED    = 2.5f;     // flt_82005548
+
+    // CalcAcceleration's E_BEHAVIOUR_SLOWING_FOR_CRASH arm (@0x82717870..0x82717898).
+    // ⚠️⚠️ BOTH ARE ZERO ON THE CONSOLE AND THAT IS NOT A PLACEHOLDER -- see the banner on
+    // UpdateParams_CalcAcceleration below. Their dyn-init thunks multiply flt_830180B0
+    // (m/s -> mph, 2.2369363f) by 80.0f and 2.0f, but the CRT runs those two thunks 527
+    // initialiser slots BEFORE the one that computes flt_830180B0, so both products are
+    // taken against its image 0.0f. Do not "restore" 178.955f / 4.4739f: that is the value
+    // the source intended and NOT the value the shipped game computes, and it would make the
+    // slow-for-crash arm accelerate.
+    const f32 KF_CRASH_SLOW_TARGET_SPEED = 0.0f;   // flt_8300C958 == flt_830180B0 * 80.0f
+    const f32 KF_CRASH_SLOW_MAX_ACCEL    = 0.0f;   // flt_8300C95C == flt_830180B0 *  2.0f
+
+    // UpdateParams_HandleLaneChanges' carry-out (@0x827259B0..0x82725C40).
+    // The first two are unk_8300CBB0 lanes 0/1 (dyn-init thunk @0x82C66360, from
+    // flt_820BA5C0 / flt_8200D514 -- both plain .rdata, so no initialiser-order hazard);
+    // the last two are plain .rdata read directly.
+    const f32 KF_LANE_CHANGE_MIN_DIST_FROM_PLAYER = 50.0f;         // unk_8300CBB0.x
+    const f32 KF_LANE_CHANGE_MIN_COS_TO_PLAYER    = 0.707099974f;  // unk_8300CBB0.y (45 deg)
+    const f32 KF_LANE_CHANGE_MIN_GAP_AHEAD        = 15.0f;         // flt_820BA2A8
+    const f32 KF_LANE_CHANGE_MIN_GAP_BEHIND       = 20.0f;         // flt_820BA7E4
+    // The two "none" sentinels the swap writes; 0xFFFE for the neighbour links, not 0xFFFF.
+    const u8  KU8_LANE_CHANGE_NO_STOPLINE   = 0xFFu;
+    const u16 KU16_LANE_CHANGE_NO_NEIGHBOUR = 0xFFFEu;
+
+    // UpdatePlan's lane-change arm (@0x827381D8 / @0x827382DC) and FindNearestParamInFront
+    // (@0x827252C4 / 0x82725840).
+    const f32 KF_PARAM_LANE_CHANGE_RUNG_LOOKAHEAD = 2.0f;    // the +2 rungs the carry-out books
+    const f32 KF_PARAM_LANE_CHANGE_MIN_ROOM       = 30.0f;
+    const f32 KF_FIND_NEAREST_MERGE_MAX_DIST      = 14.0f;
+    const f32 KF_FIND_NEAREST_MERGE_MIN_SPEED     = 5.0f;    // flt_8200426C
+    const u32 KU_FIND_NEAREST_MAX_EXTRA_SECTIONS   = 9;
+    const u32 KU_FIND_NEAREST_MAX_MERGING_SECTIONS = 3;
+
+    // UpdateParams_PrecalcBehaviourParams @0x82717C48. Every literal below is the value IDA
+    // folds for the named .rdata symbol in that function's listing.
+    const u32 KU_PARAM_NUM_BEHAVIOUR_SCORES     = 6;      // the ProcessParamRules output count
+    const u32 KU_PARAM_BUSY_PHYSICAL_TRAFFIC_COUNT = 5;   // 0x827180E8 cmplwi r11, 5
+    const f32 KF_PARAM_GIVE_UP_STOP_RADIUS      = 5.0f;   // flt_8200426C
+    const f32 KF_PARAM_DRIVE_AROUND_STOP_DIST   = 2.0f;   // flt_820BA86C
+    const f32 KF_PARAM_DRIVE_AROUND_SPEED_SCALE = 4.0f;   // flt_820BA8DC
+    const f32 KF_PARAM_CRASH_SLIDER_MIN_VALUE   = 0.01f;  // flt_820BA5D4
+    const f32 KF_PARAM_ACTION_SCORE_EPSILON     = 0.05f;  // flt_820047C8
+    const f32 KF_PARAM_NO_STOP_DIST             = 3.4028235e38f;   // flt_820BA23C
+
+    // UpdateParam_CheckIfNeedToSlow @0x82738468 / DoesParamNeedToStopForStopline @0x827249F8.
+    const f32 KF_STOP_LINE_REACTION_DISTANCE      = 40.0f;   // flt_820BA590
+    const f32 KF_SECTION_POSITION_TOLERANCE       = -0.1f;   // the "negative position" asserts
+    const f32 KF_PARAM_NEXT_PARAM_TIME_THRESHOLD  = 2.0f;    // flt_820BA86C
+    const f32 KF_PARAM_MIN_NEXT_PARAM_DIST        = 25.0f;   // flt_820BA4F0
+    const f32 KF_PARAM_LOOKAHEAD_SCALE            = 1.5f;    // flt_820BA5DC
+    const f32 KF_PARAM_AVOIDANCE_BIAS             = 3.0f;    // flt_820BA5F4 (also the space factor)
+    const f32 KF_PARAM_TIME_QUEUEING_RANDOM_SCALE = 2.5f;    // flt_82005548
+    const f32 KF_PARAM_DRIVE_AROUND_STICKINESS    = 0.15f;   // flt_820BA8D4
+    // The "which physical vehicle is interesting to me" cone (DWARF locals
+    // KF_PHYSICAL_INTEREST_CONE_ANGLE / _LENGTH / _RECIP_Y at .cpp 11061..11063).
+    const f32 KF_PHYSICAL_INTEREST_CONE_ANGLE   = 0.70709997f; // flt_8200D514
+    const f32 KF_PHYSICAL_INTEREST_CONE_LENGTH  = 30.0f;       // flt_820BA5E8
+    const f32 KF_PHYSICAL_INTEREST_CONE_RECIP_Y = 2.5f;        // flt_82005548
+
+    // mxEffectAndHistoryState bit 0, set/cleared by UpdateParams_CalcDesiredSpeed
+    // (`stb r11, 0x1A(r20)` at 0x82717A4C / 0x82717A60): the brake-light effect bit.
+    const u8 KX_EFFECT_BRAKING = 0x01;
+
+    inline VecFloat SplatLane(f32 lfValue)
+    {
+        const VecFloat lLane = { lfValue, lfValue, lfValue, lfValue };
+        return lLane;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_UpdatePlan  @0x82737CE8  (.cpp 10662..10787)  PARTIAL
+//
+// Fills the param's two-slot plan queue until it has looked KF_PARAM_PLAN_LOOKAHEAD_DIST
+// metres down the road. The second argument is the console's luMaxLaneChangeDiceRoll
+// (UpdateParams computes 255 * KF_LANE_CHANGE_DICE_ROLL_SCALE / mfSimTimeSinceLastDecision);
+// BrnTrafficEntityModule.h spells it luSectionIndex, which is a stale name.
+//
+// The lane-change arm (@0x82738144..0x8273837C) is LANDED: Section::FindNeighbourForRung
+// @0x82752B70 now has a real body in SharedClasses/Traffic/BrnTrafficSection.cpp.
+// FLAG (spelling only): the console inlines CgsNumeric::Random::RandomUInt(u32 luRange) --
+// draw the OLD seed's high word, step the LCG, reduce unsigned by luRange (0x82738170..A8),
+// asserting "luMod > 0" at CgsRandom.h:303. CgsRandom.h declares no single-argument overload
+// and is not owned here, so the identical draw is spelled RandomInt(0, luRange - 1), whose
+// body is that same expansion (CgsRandom.cpp). DELETE-WHEN CgsRandom.h gains RandomUInt(u32).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_UpdatePlan(u32 luParam, u32 luMaxLaneChangeDiceRoll)
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    const Param* lpParam = &maParams[luParam];
+
+    f32 lfDistanceSoFar = 0.0f;
+    u32 luPlan          = 0;
+    u32 luSegmentAlong  = lpParam->muCurrentSegment;
+    f32 lfParamAlong    = lpParam->mfParamAlong;
+    u32 luHull          = lpParam->muHullIndex;
+    u32 luSection       = lpParam->muSectionIndex;
+
+    for (;;)
+    {
+        ParamPlan* lpPlan = GetParamPlan(luParam, luPlan);
+
+        const Hull* lpHull = GetHull(luHull);              // carries the muNumHulls bound
+        CGS_ASSERT(luSection < lpHull->muNumSections, "luIndex < muNumSections");
+        const Section* lpSection = lpHull->GetSection(luSection);
+
+        if (lpPlan->muType == ParamPlan::E_TYPE_CHANGE_SECTION)
+        {
+            const f32 lfDistAlong =
+                lpSection->CalcDistanceAlongSection(lfParamAlong, luSegmentAlong,
+                                                    lpHull->GetRungLengthsForSection(lpSection));
+            lfDistanceSoFar += (lpSection->mfLength - lfDistAlong);
+
+            luSegmentAlong = 0;
+            lfParamAlong   = 0.0f;
+            luHull         = lpPlan->mChangeSectionData.muNewHull;
+            luSection      = lpPlan->mChangeSectionData.muNewSection;
+        }
+        else if (lpPlan->muType >= ParamPlan::E_TYPES_COUNT)
+        {
+            CGS_ASSERT(false, "Unknown param plan type");
+        }
+        else if (lpPlan->muType == ParamPlan::E_TYPE_NONE)
+        {
+            const f32 lfDistAlong =
+                lpSection->CalcDistanceAlongSection(lfParamAlong, luSegmentAlong,
+                                                    lpHull->GetRungLengthsForSection(lpSection));
+            lfDistanceSoFar += (lpSection->mfLength - lfDistAlong);
+
+            if (lfDistanceSoFar >= KF_PARAM_PLAN_LOOKAHEAD_DIST)
+            {
+                // 0x82738144..0x8273837C -- roll for a lane change into a neighbour section.
+                CGS_ASSERT(luMaxLaneChangeDiceRoll + 1u > 0u, "luMod > 0");
+                const u32 luRoll = static_cast<u32>(
+                    mRand.RandomInt(0, static_cast<s32>(luMaxLaneChangeDiceRoll)));
+
+                Side leSide         = E_LEFT;
+                u8   luPlanDirection = 0;
+                if (luRoll < lpSection->muChangeLeftProb)
+                {
+                    leSide          = E_LEFT;
+                    luPlanDirection = 1;
+                }
+                else if (luRoll < lpSection->muChangeRightProb)
+                {
+                    leSide          = E_RIGHT;
+                    luPlanDirection = 2;
+                }
+
+                const u32 luRungToCarryOut =
+                    luSegmentAlong + static_cast<u32>(KF_PARAM_LANE_CHANGE_RUNG_LOOKAHEAD);
+
+                if (luPlanDirection != 0 && luRungToCarryOut < lpSection->GetNumSegments())
+                {
+                    const u16 luNeighbour =
+                        lpSection->FindNeighbourForRung(luRungToCarryOut, leSide, lpHull);
+
+                    if (luNeighbour < KU_UNKNOWN_NEIGHBOUR)
+                    {
+                        const Neighbour* lpNeighbour = lpHull->GetNeighbour(luNeighbour);
+
+                        CGS_ASSERT(lpNeighbour->muSection != luSection,
+                                   "Section thinks it's its own neighbour");
+
+                        // 0x827382D4..0x827382F8: the shared stretch must still have
+                        // KF_PARAM_LANE_CHANGE_MIN_ROOM of lane left past where we are.
+                        const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+                        const f32  lfSharedEnd =
+                            lpafRungLengths[lpNeighbour->muOurStartRung +
+                                            lpNeighbour->muSharedLength];
+
+                        if ((lfDistAlong + KF_PARAM_LANE_CHANGE_MIN_ROOM) < lfSharedEnd)
+                        {
+                            lfParamAlong = lpNeighbour->ConvertOurParameterToTheirs(
+                                lfParamAlong + KF_PARAM_LANE_CHANGE_RUNG_LOOKAHEAD);
+
+                            lpPlan->muDirection                      = luPlanDirection;
+                            lpPlan->mChangeLaneData.muNeighbourData  = luNeighbour;
+                            lpPlan->muType                           = ParamPlan::E_TYPE_CHANGE_LANE;
+                            lpPlan->mChangeLaneData.muNewSection     = lpNeighbour->muSection;
+                            lpPlan->mChangeLaneData.muRungToCarryOut =
+                                static_cast<u8>(luRungToCarryOut);
+
+                            CGS_ASSERT(lpPlan->mChangeLaneData.muNewSection != luSection,
+                                       "Param came up with a stupid plan");
+
+                            // 0x82738370 fctidz/stfiwx -- truncate, not round.
+                            luSegmentAlong = static_cast<u32>(lfParamAlong);
+                        }
+                    }
+                }
+            }
+            else
+            {
+                lpPlan->muType = ParamPlan::E_TYPE_CHANGE_SECTION;
+                Pressure_PickSplitToTake(lpSection,
+                                         &lpPlan->mChangeSectionData.muNewSection,
+                                         &lpPlan->mChangeSectionData.muNewHull,
+                                         &lpPlan->muDirection);
+
+                CGS_ASSERT(!((lpPlan->mChangeSectionData.muNewHull == lpParam->muHullIndex) &&
+                             (lpPlan->mChangeSectionData.muNewSection == lpParam->muSectionIndex)),
+                           "Param came up with a stupid plan");
+
+                luSegmentAlong = 0;
+                lfParamAlong   = 0.0f;
+                luHull         = lpPlan->mChangeSectionData.muNewHull;
+                luSection      = lpPlan->mChangeSectionData.muNewSection;
+            }
+        }
+
+        if (lpPlan->muType == ParamPlan::E_TYPE_NONE ||
+            lpPlan->muType == ParamPlan::E_TYPE_CHANGE_LANE)
+        {
+            return;
+        }
+
+        if (lfDistanceSoFar >= KF_PARAM_PLAN_LOOKAHEAD_DIST)
+        {
+            CGS_ASSERT(maParams[luParam].IsAlive(), "IsAlive()");
+            maParams[luParam].mxEffectAndHistoryState &= ~Param::E_HISTORY_NEEDS_NEW_PLAN;
+        }
+
+        if (luHull == KU_INVALID_HULL)
+        {
+            CGS_ASSERT(maParams[luParam].IsAlive(), "IsAlive()");
+            maParams[luParam].mxEffectAndHistoryState &= ~Param::E_HISTORY_NEEDS_NEW_PLAN;
+            return;
+        }
+
+        CGS_ASSERT(luSection != KU_INVALID_SECTION, "luSection != KU_INVALID_SECTION");
+
+        ++luPlan;
+        if (luPlan >= KU_PARAM_NUM_PLANS)
+        {
+            return;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_UpdateBehaviour  @0x82716C90  (.cpp 10808..10818)
+//
+// Copies the behaviour the fuzzy pre-pass chose (and its target speed / stop distance) out of
+// maParamNeedToSlowData into the Param, then ticks the queueing timer.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_UpdateBehaviour(u32 luParam)
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    Param* lpParam = &maParams[luParam];
+    const ParamNeedToSlowData* lpParamNeedToSlowData = GetParamNeedToSlowData(luParam);
+
+    // 0x82716CE8 -- the console assert is `(u8)miBehaviour < 0x80`, i.e. miBehaviour >= 0. It
+    // is REACHABLE here: UpdateParams_DoTimeSlicedLogic @0x82743FE8 leaves Clear()'s -1 in the
+    // slot for any param that was dead or E_HISTORY_BORN when its 100-param slice ran
+    // (0x82744968 / 0x82744978), and nothing in this tree clears E_HISTORY_BORN yet. Demoted
+    // to a skip so it cannot break the 0-assert boot baseline; the console stores the -1 through.
+    // DELETE-WHEN the E_HISTORY_BORN clear lands and slice coverage is provable.
+    if (lpParamNeedToSlowData->miBehaviour < 0)
+    {
+        return;
+    }
+
+    CGS_ASSERT(lpParamNeedToSlowData->miBehaviour < Param::KI_BEHAVIOURS_COUNT,
+               "lpParamNeedToSlowData->miBehaviour < Param::E_BEHAVIOURS_COUNT"); // 0x82716D18
+
+    // .cpp 10815 / 10818, message-streamed on console as
+    // "Param <n> decided on divergent behaviour <b>".
+    CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic ||
+                   (lpParamNeedToSlowData->miBehaviour != 0 &&
+                    lpParamNeedToSlowData->miBehaviour != 1 &&
+                    lpParamNeedToSlowData->miBehaviour != 3),
+               "Param decided on divergent behaviour");
+    CGS_ASSERT(mbAllowDivergentBehaviour || lpParamNeedToSlowData->miBehaviour != 2,
+               "Param decided on divergent behaviour");
+
+    lpParam->miBehaviour   = lpParamNeedToSlowData->miBehaviour;              // 0x82716EA8
+    lpParam->mfStopDist    = lpParamNeedToSlowData->mfStopDist;               // 0x82716EB0
+    lpParam->mfTargetSpeed = lpParamNeedToSlowData->mfTargetSpeed;            // 0x82716EB8
+
+    if (lpParam->IsQueueing() && mbAllowDivergentBehaviour)
+    {
+        lpParam->mfTimeQueueing += mfSimTimeSinceLastDecision;
+    }
+    else
+    {
+        lpParam->mfTimeQueueing = 0.0f;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_CalcDesiredSpeed  @0x82717928  (.cpp 11059)
+//
+// Integrates one decision frame of the acceleration the arm below picks. lpHull is on the
+// console signature but the body never reads it.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
+        u32 luParam,
+        const Section* lpSection,
+        const Hull* lpHull,
+        const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet)
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+    (void)lpHull;
+
+    Param* lpParam = &maParams[luParam];
+
+    CGS_ASSERT(mbAllowDivergentBehaviour || lpParam->miBehaviour != 0,
+               "AllowDivergentBehaviour() || "
+               "( lpParam->miBehaviour != Param::E_BEHAVIOUR_SLOWING_FOR_CRASH )");
+
+    const f32 lfAcceleration =
+        UpdateParams_CalcAcceleration(luParam, lpParam, lpSection, lrAvoidSet);
+
+    lpParam->mfLastSpeed    = lpParam->mfSpeed;
+    lpParam->mfAcceleration = lfAcceleration;
+
+    f32 lfSpeed = mfSimTimeSinceLastDecision * lfAcceleration + lpParam->mfSpeed;
+    if (lfSpeed < 0.0f)
+    {
+        lfSpeed = 0.0f;
+    }
+    if (lfAcceleration <= 0.0f && lfSpeed < mTweakValues.GetMinSpeedForCutoff())
+    {
+        lfSpeed = 0.0f;
+    }
+    lpParam->mfSpeed = lfSpeed;
+
+    if (lfAcceleration < KF_PARAM_BRAKE_LIGHT_ACCEL ||
+        (lfSpeed < KF_PARAM_BRAKE_LIGHT_SPEED && lfAcceleration <= 0.0f))
+    {
+        lpParam->mxEffectAndHistoryState |= KX_EFFECT_BRAKING;
+    }
+    else
+    {
+        lpParam->mxEffectAndHistoryState &= static_cast<u8>(~KX_EFFECT_BRAKING);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_CalcAcceleration  @0x827172B8  (.cpp 10998..11030) PARTIAL
+//
+// The behaviour switch: NORMAL closes on the lane speed limit, the five slowing behaviours
+// solve v^2 = u^2 + 2as for the target speed at the stop distance, and behaviour 0
+// (SLOWING_FOR_CRASH) is a fixed-rate ramp.
+//
+// GATED LEGS, all three under the console's own `if (AllowDivergentBehaviour())`, so the
+// fallback is the shipped !divergent path (lfMaxSpeed 500, lfSpeedScale 1):
+//   * the showtime local-player proximity arm @0x82717370 -- BLOCKER: the unnamed .data
+//     vectors it reads and mRaceCarState's active-race-car position lane.
+//   * the slam / extreme-swerve arm @0x827174A0 -- BLOCKER: flt_8300CB50 and the
+//     unk_8300CB40 / unk_8300CA30 / unk_8300CCA0 / unk_8300CB20 lane block, all dyn-init
+//     .data (see scratchpad recovered_constants.md for the thunk-walk recipe).
+//   * ✅ switch case 0 @0x82717844 -- NO LONGER A BLOCKER, AND THE ANSWER IS THE OPPOSITE OF
+//     WHAT THE NOTE THAT STOOD HERE PREDICTED (2026-08-28). It said, of flt_8300C958 /
+//     flt_8300C95C: "reads 0.0 in the image and is therefore NOT its runtime value... ⛔ Do
+//     not take the image's 0.0". Walked to the end, the chain says the console's OWN runtime
+//     value is 0.0, for a reason the image alone cannot show -- a static-initialisation-ORDER
+//     bug in the shipped game.
+//
+//     The arm is  accel = clamp(flt_8300C958 - mfSpeed, -flt_8300C95C, +flt_8300C95C)
+//     (fsubs/fsel/fsel @0x82717888..0x82717898), and the two constants are dyn-init:
+//         @0x82C66BF0  flt_8300C958 = flt_830180B0 * flt_820BA4E0(80.0f)
+//         @0x82C66C10  flt_8300C95C = flt_830180B0 * flt_820BA86C( 2.0f)
+//         @0x82C6D0C0  flt_830180B0 = flt_82001C98(1.0f) / flt_82F31928(0.44703999f)
+//                                   = 2.2369363f, i.e. m/s -> mph.
+//     ⭐ BUT THE INITIALISER TABLE ORDERS THEM THE WRONG WAY ROUND. The CRT walks its
+//     function-pointer array ASCENDING, and in it
+//         0x82CD2400 -> 0x82C66BF0   (writes flt_8300C958)
+//         0x82CD2404 -> 0x82C66C10   (writes flt_8300C95C)
+//         0x82CD2C3C -> 0x82C6D0C0   (writes flt_830180B0)   <-- 527 entries LATER
+//     so both products are computed while flt_830180B0 is still its image 0.0. The console
+//     therefore runs this arm with 0.0f and 0.0f, and
+//         clamp(0 - mfSpeed, -0, +0) == 0
+//     for any speed >= 0. The reconstruction below writes the console's expression with the
+//     console's constants rather than a bare `0.0f`, so the zero is a RESULT and not a
+//     placeholder.
+//     ⛔ DO NOT "FIX" THE CONSTANTS TO 178.955f / 4.4739f. That is what the values would be
+//     if the initialisers ran in source order, and it is not what the shipped game does: it
+//     would give a stopped chain-crashing car +4.47 m/s^2 of acceleration -- the arm would
+//     ACCELERATE the car it is supposed to be slowing.
+//   * The lane block for the OTHER gate in this file is no longer unknown:
+//         unk_8300CBB0 == { 50.0f, 0.707099974f, 0.0f, 0.0f }  (thunk @0x82C66360)
+//     built from flt_820BA5C0(50.0) and flt_8200D514(0.70710) with two zero lanes.
+// ----------------------------------------------------------------------------
+f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
+        u32 luParam,
+        const Param* lpParam,
+        const Section* lpSection,
+        const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet) const
+{
+    (void)luParam;
+    (void)lrAvoidSet;
+
+    const f32 lfLaneSpeed  = mfSpeedMultiplier * lpSection->mfSpeed;   // +0x72880 * section+0x24
+    const f32 lfMaxSpeed   = KF_PARAM_DEFAULT_MAX_SPEED;
+    const f32 lfSpeedScale = 1.0f;
+
+    if (mbAllowDivergentBehaviour)
+    {
+        static bool sbLogged = false;
+        LogMissingLeg_T2(sbLogged,
+                      "UpdateParams_CalcAcceleration @0x827172B8 divergent arms (showtime "
+                      "@0x82717370 / slam-swerve @0x827174A0) -- unnamed dyn-init .data "
+                      "vectors flt_8300CB50, unk_8300CB40/CA30/CCA0/CB20");
+    }
+
+    f32 lfAcceleration = 0.0f;
+
+    switch (lpParam->miBehaviour)
+    {
+        case 0:   // E_BEHAVIOUR_SLOWING_FOR_CRASH
+        {
+            // 0x82717844..0x8271789C. UN-GATED 2026-08-28: both constants are recovered and
+            // both are 0.0f on the console, by the static-init ORDER bug documented in the
+            // banner (their dyn-init thunks read flt_830180B0 527 initialisers before it is
+            // written). Written as the console's expression so the zero is a result, not a
+            // placeholder -- and so that anyone tempted to "correct" the constants has to
+            // read the banner first.
+            CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");   // .cpp 11021
+
+            const f32 lfCrashSlowTargetSpeed = KF_CRASH_SLOW_TARGET_SPEED;   // flt_8300C958
+            const f32 lfCrashSlowMaxAccel    = KF_CRASH_SLOW_MAX_ACCEL;      // flt_8300C95C
+
+            lfAcceleration = lfCrashSlowTargetSpeed - lpParam->mfSpeed;
+            if (lfAcceleration < -lfCrashSlowMaxAccel)
+            {
+                lfAcceleration = -lfCrashSlowMaxAccel;
+            }
+            if (lfAcceleration > lfCrashSlowMaxAccel)
+            {
+                lfAcceleration = lfCrashSlowMaxAccel;
+            }
+            break;
+        }
+
+        case 1:
+        case 2:
+        case 3:
+        case 4:
+        case 5:
+        {
+            CGS_ASSERT(mbAllowDivergentBehaviour || lpParam->miBehaviour != 2,
+                       "AllowDivergentBehaviour() || "
+                       "lpParam->miBehaviour != Param::E_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION");
+            CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic ||
+                           lpParam->miBehaviour != 1,
+                       "AllowDivergentBehaviour() || mbAtStartLineSoProtectRaceCarsFromTraffic || "
+                       "lpParam->miBehaviour != Param::E_BEHAVIOUR_STOPPING_FOR_OBSTRUCTION");
+            CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic ||
+                           lpParam->miBehaviour != 3,
+                       "AllowDivergentBehaviour() || mbAtStartLineSoProtectRaceCarsFromTraffic || "
+                       "lpParam->miBehaviour != Param::E_BEHAVIOUR_FOLLOWING_RACE_CAR");
+
+            if (lpParam->mfStopDist < mTweakValues.GetMinStopDist())
+            {
+                lfAcceleration = mTweakValues.GetMinAcceleration();
+                break;
+            }
+
+            f32 lfTargetSpeed = lpParam->mfTargetSpeed * lfSpeedScale;
+            if (lfTargetSpeed < 0.0f)
+            {
+                lfTargetSpeed = 0.0f;
+            }
+            if (lfTargetSpeed > lfMaxSpeed)
+            {
+                lfTargetSpeed = lfMaxSpeed;
+            }
+
+            lfAcceleration = ((lfTargetSpeed * lfTargetSpeed) -
+                              (lpParam->mfSpeed * lpParam->mfSpeed)) /
+                             (lpParam->mfStopDist * 2.0f);
+
+            if (lfAcceleration < mTweakValues.GetMinAcceleration())
+            {
+                lfAcceleration = mTweakValues.GetMinAcceleration();
+            }
+            if (lfAcceleration > mTweakValues.GetMaxAcceleration())
+            {
+                lfAcceleration = mTweakValues.GetMaxAcceleration();
+            }
+            break;
+        }
+
+        case 6:   // KI_BEHAVIOUR_NORMAL
+        {
+            f32 lfDesiredSpeed = lfLaneSpeed * lfSpeedScale;
+            if (lfDesiredSpeed < 0.0f)
+            {
+                lfDesiredSpeed = 0.0f;
+            }
+            if (lfDesiredSpeed > lfMaxSpeed)
+            {
+                lfDesiredSpeed = lfMaxSpeed;
+            }
+
+            lfAcceleration = lfDesiredSpeed - lpParam->mfSpeed;
+
+            if (lfAcceleration < mTweakValues.GetMinNormalAcceleration())
+            {
+                lfAcceleration = mTweakValues.GetMinNormalAcceleration();
+            }
+            if (lfAcceleration > mTweakValues.GetMaxNormalAcceleration())
+            {
+                lfAcceleration = mTweakValues.GetMaxNormalAcceleration();
+            }
+            break;
+        }
+
+        default:
+            CGS_ASSERT(false, "Bad state in param behaviour");
+            break;
+    }
+
+    return lfAcceleration;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_IncrementParam  @0x82738C80  (.cpp 12164..12290)
+//
+// THE ADVANCE. Integrates s = ut + at^2/2 (u == mfLastSpeed, a == mfAcceleration, t ==
+// mfSimTimeSinceLastDecision), clamped at the stopping distance while decelerating, then walks
+// the param forward one lane segment at a time, taking the next planned section when it runs
+// off the end. Finishes by resampling the lane frame and republishing the ParamTransform.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_IncrementParam(u32 luParam,
+                                                      const Hull** lpapHull,
+                                                      const Section** lpapSection)
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    const Hull*    lpHull    = *lpapHull;
+    const Section* lpSection = *lpapSection;
+    Param*         lpParam   = &maParams[luParam];
+
+    f32 lfParamAlong  = lpParam->mfParamAlong;
+    u32 luCurrentRung = lpParam->muCurrentSegment;
+
+    // 0x82738D0C: the console re-resolves the param's own section to take its muRungOffset.
+    const Section* lpParamSection = lpHull->GetSection(lpParam->muSectionIndex);
+    const f32* lpafRungLengths = lpHull->GetRungLengthsForSection(lpParamSection);
+
+    CGS_ASSERT(lpSection->muNumRungs > 0, "muNumRungs > 0");
+    u32 luNumSegments   = lpSection->muNumRungs - 1u;
+    f32 lfSegmentLength = lpafRungLengths[luCurrentRung + 1] - lpafRungLengths[luCurrentRung];
+
+    const f32 lfDt = mfSimTimeSinceLastDecision;   // +0x713F8
+
+    f32 lfDistance = ((lfDt * lfDt) * lpParam->mfAcceleration) * 0.5f +
+                     (lfDt * lpParam->mfLastSpeed);
+
+    // Under braking, never travel past where the speed reaches zero.
+    const f32 lfStopDistance = -((lpParam->mfLastSpeed * lpParam->mfLastSpeed) /
+                                 (lpParam->mfAcceleration * 2.0f));
+    if (lpParam->mfAcceleration < 0.0f && lfStopDistance >= 0.0f)
+    {
+        if ((lfDistance - lfStopDistance) >= 0.0f)
+        {
+            lfDistance = lfStopDistance;
+        }
+    }
+
+    f32 lfDistanceToTravel = (lfDistance >= 0.0f) ? lfDistance : 0.0f;
+
+    if (mbDEBUGStopTrafficMoving)                                       // +0x727B8
+    {
+        lfDistanceToTravel = 0.0f;
+    }
+    if (mbDEBUGPick_StopVehicle && muDEBUGPickedVehicle == luParam)     // +0x7287C / +0x72878
+    {
+        lfDistanceToTravel = 0.0f;
+    }
+
+    bool lbChangedRung = false;
+
+    for (;;)
+    {
+        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s64>(lfParamAlong)),
+                   "Current rung got out of sync");
+
+        const f32 lfDistanceToEndOfSegment =
+            (KF_PARAM_MAX_PARAM_IN_SEGMENT - (lfParamAlong - std::floor(lfParamAlong))) *
+            lfSegmentLength;
+
+        if (lfDistanceToEndOfSegment > lfDistanceToTravel)
+        {
+            break;
+        }
+
+        lfDistanceToTravel -= lfDistanceToEndOfSegment;
+        ++luCurrentRung;
+        lfParamAlong = std::floor(lfParamAlong + 1.0f);
+
+        CGS_ASSERT(luCurrentRung == static_cast<u32>(static_cast<s64>(lfParamAlong)),
+                   "Current rung got out of sync(2)");
+
+        lbChangedRung = true;
+
+        if (luCurrentRung >= luNumSegments)
+        {
+            // A queued lane change never survives a section change.
+            while (GetParamPlan(luParam, 0)->muType == ParamPlan::E_TYPE_CHANGE_LANE)
+            {
+                EatParamsNextPlan(luParam);
+            }
+
+            ParamPlan* lpPlan = GetParamPlan(luParam, 0);
+
+            u8  luNewSection = KU_INVALID_SECTION;
+            u16 luNewHull    = static_cast<u16>(KU_INVALID_HULL);
+
+            if (lpPlan->muType == ParamPlan::E_TYPE_CHANGE_SECTION)
+            {
+                luNewSection = lpPlan->mChangeSectionData.muNewSection;
+                luNewHull    = lpPlan->mChangeSectionData.muNewHull;
+                lpParam->muCurrentSectionDirection = lpPlan->muDirection;
+                EatParamsNextPlan(luParam);
+            }
+            else
+            {
+                CGS_ASSERT(lpPlan->muType == ParamPlan::E_TYPE_NONE,
+                           "lpPlan->muType == ParamPlan::E_TYPE_NONE");
+                Pressure_PickSplitToTake(lpSection, &luNewSection, &luNewHull,
+                                         &lpParam->muCurrentSectionDirection);
+            }
+
+            if (luNewSection == KU_INVALID_SECTION)
+            {
+                KillParam(luParam);
+                return;
+            }
+            if (mActiveHulls.Find(luNewHull) == ActiveHullSet::KU_INVALID)
+            {
+                KillParam(luParam);
+                return;
+            }
+
+            const u16 luOldHull = lpParam->muHullIndex;
+            lpParam->muSectionIndex = luNewSection;
+
+            CGS_ASSERT(lpParam->IsAlive(), "IsAlive()");   // BrnTrafficParam.h 893
+
+            lpParam->muNextStopLineIndex = static_cast<u8>(KU_UNKNOWN_STOPLINE);   // 0xFE
+            lpParam->mxEffectAndHistoryState |= Param::E_HISTORY_CHANGED_SECTION;
+
+            lfParamAlong  = 0.0f;
+            luCurrentRung = 0;
+
+            if (luNewHull != luOldHull)
+            {
+                lpParam->muHullIndex = luNewHull;
+                lpHull = GetHull(luNewHull);
+                *lpapHull = lpHull;
+            }
+
+            CGS_ASSERT(luNewSection < lpHull->muNumSections, "luIndex < muNumSections");
+            lpSection = lpHull->GetSection(luNewSection);
+            *lpapSection = lpSection;
+
+            lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+            CGS_ASSERT(lpSection->muNumRungs > 0, "muNumRungs > 0");
+            luNumSegments = lpSection->muNumRungs - 1u;
+
+            lpParam->mauNeighbourData[E_LEFT]  = static_cast<u16>(KU_UNKNOWN_NEIGHBOUR);
+            lpParam->mauNeighbourData[E_RIGHT] = static_cast<u16>(KU_UNKNOWN_NEIGHBOUR);
+        }
+
+        lpParam->PushHistory(lpSection->muRungOffset + luCurrentRung, lpParam->muHullIndex);
+        lfSegmentLength = lpafRungLengths[luCurrentRung + 1] - lpafRungLengths[luCurrentRung];
+    }
+
+    const f32 lfNewParamAlong = (lfDistanceToTravel / lfSegmentLength) + lfParamAlong;
+
+    // The third output is the RIGHT axis here (ParamTransform::Update's third argument); the
+    // declaration in BrnTrafficSection.h names that parameter for its WorldMap consumer.
+    Vector3 lPos;
+    Vector3 lDir;
+    Vector3 lRight;
+    lpSection->CalcTransformAtParameter(lpHull->mpaRungs, SplatLane(lfNewParamAlong),
+                                        luCurrentRung, lPos, lDir, lRight);
+
+    CGS_ASSERT(lfNewParamAlong < static_cast<f32>(lpSection->GetNumSegments()),
+               "lfParamAlong < (float32_t) lpSection->GetNumSegments()");
+
+    maParamTransforms[luParam].Update(lPos, lDir, lRight,
+                                      SplatLane(lpParam->mfSpeed),
+                                      SplatLane(lpParam->mfAcceleration));
+
+    CGS_ASSERT(lfNewParamAlong >= 0.0f, "lfParamAlong >= 0.0f");
+    lpParam->SetParamAlong(lfNewParamAlong);
+
+    lpParam->PushHistory(lpParam->muCurrentSegment + lpSection->muRungOffset,
+                         lpParam->muHullIndex);
+
+    if (lbChangedRung)
+    {
+        UpdateParams_UpdateNeighbours(lpParam, lpSection, lpHull);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_HandleLaneChanges  @0x82725880  (.cpp 12321..12323) PARTIAL
+//
+// Carries out a queued E_TYPE_CHANGE_LANE plan once the param reaches the rung it was booked
+// for. The outer plan bookkeeping (drop a plan whose rung has already gone past) is real.
+//
+// ✅ COMPLETE as of 2026-08-28: the carry-out (@0x827259B0..0x82725C9C) is landed. It was the
+// last hole in the lane-change chain -- UpdateParams_UpdatePlan books the plans, GetParamBehind
+// and Section::CalcDistanceAlongSection are bodied, and unk_8300CBB0 is
+// { 50.0f, 0.707099974f, 0.0f, 0.0f } from its dyn-init thunk @0x82C66360.
+//
+// ⚠️⚠️ READ THIS BEFORE CITING IT AS "TRAFFIC STEERS". The carry-out is a re-parameterisation,
+// not a manoeuvre: Neighbour::ConvertOurParameterToTheirs maps the param onto the adjacent
+// lane's parameter space and the param is SNAPPED there in one frame, with its stop line and
+// both neighbour links invalidated. The console therefore refuses to do it anywhere the player
+// could see the snap -- the guard below carries it out only at 50 m or more, and only inside
+// the player's forward 45-degree cone. So a lane change is a traffic-pattern edit ahead of the
+// player, not a visible swerve, and miBehaviour == DRIVING_AROUND_OBSTRUCTION merely SUPPRESSES
+// it. Nothing in this file makes a car visibly steer aside near the camera.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
+                                                         const Hull* lpHull,
+                                                         const Section** lpapSection)
+{
+    CGS_ASSERT(lpHull != 0, "lpHull");
+    CGS_ASSERT(lpapSection != 0, "lppSection");
+    CGS_ASSERT(*lpapSection != 0, "*lppSection");
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    const Param* lpParam = &maParams[luParam];
+    const ParamPlan* lpPlan = GetParamPlan(luParam, 0);
+
+    if (lpPlan->muType == ParamPlan::E_TYPE_CHANGE_LANE)
+    {
+        const u32 luRungToCarryOut = lpPlan->mChangeLaneData.muRungToCarryOut;
+        if (luRungToCarryOut > lpParam->muCurrentSegment)
+        {
+            return;   // not there yet
+        }
+        if (luRungToCarryOut < lpParam->muCurrentSegment)
+        {
+            EatParamsNextPlan(luParam);   // missed it -- drop the plan
+        }
+    }
+
+    const ParamPlan* lpLanePlan = GetParamPlan(luParam, 0);
+    if (lpLanePlan->muType != ParamPlan::E_TYPE_CHANGE_LANE ||
+        lpParam->miBehaviour != Param::KI_BEHAVIOUR_NORMAL)   // 0x827259A4 `lbz 0x1B ; cmplwi 6`
+    {
+        return;
+    }
+
+    // ---- THE LOCAL-PLAYER PLACEMENT GUARD, 0x827259B0..0x82725AB4 -------------------------
+    // UN-GATED 2026-08-28. unk_8300CBB0 == { 50.0f, 0.707099974f, 0.0f, 0.0f } (dyn-init thunk
+    // @0x82C66360, built from flt_820BA5C0(50.0) / flt_8200D514(0.70710) / flt_82001CC0(0.0) --
+    // all three plain .rdata, so unlike the crash-slow pair this thunk has NO initialiser-order
+    // hazard: its table slot is 0x82CD2354 and it depends on nothing dynamic).
+    // The two lanes are selected by `vperm` with an `lvsl(0,0)` / `lvsl(0,4)` control, i.e.
+    // lane 0 broadcast then lane 1 broadcast -- 50 metres and cos(45 degrees).
+    //
+    // ⚠️ WHAT THE GUARD ACTUALLY SAYS, and it is the opposite of "hide it from the player":
+    // a lane change is carried out ONLY when the param is at least 50 m away AND inside the
+    // player's forward 45-degree cone. Both tests SKIP the carry-out when they fail
+    // (`bne cr6, loc_82725CA0`, the function's exit), so near the player nothing happens.
+    // That is because the carry-out is a discrete SNAP -- SetParamAlong + a section swap, not
+    // a steered manoeuvre -- so the console only performs it far enough ahead that the player
+    // never sees the jump, in the direction he is heading so the pattern is already right when
+    // he arrives. ⛔ Do not read this function as "traffic swerves"; it does not.
+    if (mbAllowDivergentBehaviour &&                                    // 0x827259B8 +0x717E7
+        meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)          // 0x827259CC +0x713F0
+    {
+        // 0x827259EC / 0x827259F0. The console calls GetDeterministicParamPos (@0x82714258,
+        // declaration-only here); its body is ParamTransform::GetDeterministicPos, reached the
+        // same way _wT2_06.cpp's cone tests reach it.
+        const Vector3 lParamPos = GetParamTransform(luParam)->GetDeterministicPos();
+        const Vector3 lPlayerToParam = lParamPos - mLocalPlayerPosition;   // +0x713D0
+
+        // 0x82725A34..0x82725A68: vmsum3fp + vrsqrtefp with two Newton-Raphson steps, then
+        // `v0 = v0 * rsqrt` -- the LENGTH, not the square -- with a vsel that maps a
+        // zero-length delta to 0 rather than to a NaN.
+        const f32 lfDistanceSq = rw::math::vpu::Dot(lPlayerToParam, lPlayerToParam);
+        const f32 lfDistance   = (lfDistanceSq > 0.0f) ? std::sqrt(lfDistanceSq) : 0.0f;
+
+        if (lfDistance < KF_LANE_CHANGE_MIN_DIST_FROM_PLAYER)
+        {
+            return;   // 0x82725A78 -- too close; the snap would be visible
+        }
+
+        // 0x82725A7C..0x82725AB4. The unit direction player -> param against the player's
+        // facing; cos >= 0.7071 is the forward 45-degree cone.
+        const Vector3 lPlayerToParamDir = lPlayerToParam * (1.0f / lfDistance);
+        const f32 lfCosToParam = rw::math::vpu::Dot(mLocalPlayerDirection,   // +0x713E0
+                                                    lPlayerToParamDir);
+        if (lfCosToParam < KF_LANE_CHANGE_MIN_COS_TO_PLAYER)
+        {
+            return;   // 0x82725AB4 -- behind or beside the player; not worth doing
+        }
+    }
+
+    // ---- THE CARRY-OUT, 0x82725AB8..0x82725C9C -------------------------------------------
+    const u32 luNewSectionIndex = lpLanePlan->mChangeLaneData.muNewSection;      // plan +4
+    const Section* const lpNewSection = lpHull->GetSection(luNewSectionIndex);   // 0x82725AC4
+
+    // 0x82725AD0/0x82725ADC. The neighbour record maps our parameter onto the adjacent lane's
+    // own parameter space -- this IS the lane change, expressed as a re-parameterisation.
+    const Neighbour* const lpNeighbour =
+        lpHull->GetNeighbour(lpLanePlan->mChangeLaneData.muNeighbourData);
+    const f32 lfNewParamAlong = lpNeighbour->ConvertOurParameterToTheirs(lpParam->mfParamAlong);
+
+    // 0x82725AFC `fctidz/stfiwx` -- the SEGMENT argument is the truncated parameter, not the
+    // param's own muCurrentSegment (which still belongs to the old lane). The two calls below
+    // pass the neighbour's muCurrentSegment instead, exactly as the console does.
+    const f32* const lpafNewRungLengths = lpHull->GetRungLengthsForSection(lpNewSection);
+    const f32 lfOurDistance = lpNewSection->CalcDistanceAlongSection(
+        lfNewParamAlong, static_cast<u32>(lfNewParamAlong), lpafNewRungLengths);
+
+    // 0x82725B34. The nearest param already in the target lane at that distance.
+    bool lbRoom = true;
+    const u32 luNextParam = FindNextParam(lpParam->muHullIndex, luNewSectionIndex,
+                                          lfNewParamAlong);
+    if (luNextParam != KU_INVALID_PARAM)
+    {
+        const Param* const lpNextParam = GetParam(luNextParam);
+
+        // 0x82725B54..0x82725BAC. A param that is not actually in this hull+section any more
+        // does not bound us; the section's own length does.
+        f32 lfGapAhead;
+        if (lpNextParam->muHullIndex == lpParam->muHullIndex &&
+            lpNextParam->muSectionIndex == luNewSectionIndex)
+        {
+            lfGapAhead = lpNewSection->CalcDistanceAlongSection(lpNextParam->mfParamAlong,
+                                                                lpNextParam->muCurrentSegment,
+                                                                lpafNewRungLengths)
+                       - lfOurDistance;
+        }
+        else
+        {
+            lfGapAhead = lpNewSection->mfLength - lfOurDistance;   // 0x82725BA8 `lfs 0x28`
+        }
+
+        if (lfGapAhead < KF_LANE_CHANGE_MIN_GAP_AHEAD)
+        {
+            return;   // 0x82725BC0
+        }
+
+        // 0x82725BC4..0x82725C40. And the car behind the gap has to be far enough back.
+        const u32 luParamBehind = GetParamBehind(luNextParam);
+        if (luParamBehind != KU_INVALID_PARAM)
+        {
+            const Param* const lpBehind = GetParam(luParamBehind);
+            if (lpBehind->muHullIndex == lpParam->muHullIndex &&
+                lpBehind->muSectionIndex == luNewSectionIndex)
+            {
+                const f32 lfGapBehind =
+                    lpNewSection->CalcDistanceAlongSection(lpBehind->mfParamAlong,
+                                                           lpBehind->muCurrentSegment,
+                                                           lpafNewRungLengths)
+                    - lfOurDistance;
+                lbRoom = (lfGapBehind >= KF_LANE_CHANGE_MIN_GAP_BEHIND);
+            }
+        }
+    }
+
+    if (!lbRoom)
+    {
+        return;
+    }
+
+    // 0x82725C44..0x82725C9C -- the swap itself.
+    *lpapSection = lpNewSection;                                     // `stw r29, 0(r21)`
+    Param* const lpMutableParam = &maParams[luParam];
+    lpMutableParam->SetParamAlong(lfNewParamAlong);
+    lpMutableParam->muSectionIndex = static_cast<u8>(luNewSectionIndex);
+    lpMutableParam->SetChangedSection();
+    lpMutableParam->PushHistory(lpMutableParam->muCurrentSegment + lpNewSection->muRungOffset,
+                                lpMutableParam->muHullIndex);
+
+    // 0x82725C90/0x82725C94/0x82725C98 -- the stop line and both neighbour links belong to the
+    // OLD lane, so all three are invalidated. 0xFFFE, not 0xFFFF: the neighbour table's own
+    // "none" sentinel (`lis r11,0 ; ori r11,r11,0xFFFE`).
+    lpMutableParam->muNextStopLineIndex = KU8_LANE_CHANGE_NO_STOPLINE;
+    lpMutableParam->mauNeighbourData[0] = KU16_LANE_CHANGE_NO_NEIGHBOUR;
+    lpMutableParam->mauNeighbourData[1] = KU16_LANE_CHANGE_NO_NEIGHBOUR;
+
+    // [DIAG] NOT IN THE X360 BINARY, off unless BRN_TRAFFIC_DIAG is set. Capped, because a
+    // carry-out that never happens and one that happens constantly are the two failure modes
+    // and only a count separates them. DELETE-WHEN-STABLE.
+    if (LaneChangeDiagStream() != 0)
+    {
+        static u32 suLaneChanges = 0;
+        ++suLaneChanges;
+        if (suLaneChanges <= 40u || (suLaneChanges % 50u) == 0u)
+        {
+            *LaneChangeDiagStream()
+                << "[T5-lane] param=" << static_cast<s32>(luParam)
+                << " -> section=" << static_cast<s32>(luNewSectionIndex)
+                << " newAlong=" << lfNewParamAlong
+                << " total=" << static_cast<s32>(suLaneChanges)
+                << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
+
+    EatParamsNextPlan(luParam);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::EatParamsNextPlan  @0x827087D0  (BrnTrafficParam.h 1092)
+//
+// Pops plan slot 0, shuffles slot 1 down, empties the tail slot and asks for a fresh plan.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::EatParamsNextPlan(u32 luParam)
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    Param* lpParam = &maParams[luParam];
+
+    for (u32 luPlan = 1; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+    {
+        lpParam->maPlans[luPlan - 1] = lpParam->maPlans[luPlan];
+    }
+    lpParam->maPlans[KU_PARAM_NUM_PLANS - 1].muType = ParamPlan::E_TYPE_NONE;
+
+    CGS_ASSERT(lpParam->IsAlive(), "IsAlive()");
+    lpParam->mxEffectAndHistoryState |= Param::E_HISTORY_NEEDS_NEW_PLAN;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::FindNextParam  @0x82723A48  (.cpp 9247 / 9253)
+//
+// The first argument is the HULL index (it goes straight into GetHullRuntime); the header
+// spells it luParam, which is a stale name.
+// ----------------------------------------------------------------------------
+u32 TrafficEntityModule::FindNextParam(u32 luHull, u32 luSectionIndex, f32 lfParamAlong) const
+{
+    const HullRuntime* lpHullRuntime = GetHullRuntime(luHull);
+
+    const u32 luFirstParam = lpHullRuntime->GetFirstParamInSection(luSectionIndex);
+    if (luFirstParam == KU_INVALID_PARAM)
+    {
+        return luFirstParam;
+    }
+
+    CGS_ASSERT(luFirstParam < KU_MAX_PARAMS, "Out of range param in list");
+
+    const u32 luNextParam = FindNextParamRelative(luFirstParam, lfParamAlong);
+    if (luNextParam == KU_INVALID_PARAM)
+    {
+        return luFirstParam;
+    }
+
+    CGS_ASSERT(luNextParam < KU_MAX_PARAMS, "Out of range param in list");
+    return luNextParam;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::FindNextParamRelative  @0x82708400  (.cpp 9290..9313)
+//
+// Walks the section's ordered param list from luCurrParam to the neighbour that straddles
+// lfParamAlong. Ties break on the param index, which is what keeps the walk deterministic.
+// ----------------------------------------------------------------------------
+u32 TrafficEntityModule::FindNextParamRelative(u32 luCurrParam, f32 lfParamAlong) const
+{
+    CGS_ASSERT(luCurrParam < KU_MAX_PARAMS, "Out of range param in list");
+
+    if (luCurrParam == KU_INVALID_PARAM)
+    {
+        return KU_INVALID_PARAM;
+    }
+
+    const ParamListNode* lpNode = &maParamListNodes[luCurrParam];
+    f32 lfNodeParamAlong = lpNode->mfParamAlong;
+
+    if (lfNodeParamAlong > lfParamAlong)
+    {
+        u32 luPrevParam = lpNode->muPrevParam;
+        while (luPrevParam != KU_INVALID_PARAM)
+        {
+            CGS_ASSERT(luPrevParam < KU_MAX_PARAMS, "Out of range param in list");
+
+            const ParamListNode* lpPrevNode = &maParamListNodes[luPrevParam];
+            CGS_ASSERT(lpPrevNode->muNextParam == luCurrParam,
+                       "lpPrevNode->muNextParam == luCurrParam");
+
+            const f32 lfPrevNodeParamAlong = lpPrevNode->mfParamAlong;
+            CGS_ASSERT(lfPrevNodeParamAlong <= lfNodeParamAlong,
+                       "lfPrevNodeParamAlong <= lfNodeParamAlong");
+
+            if (lfParamAlong > lfPrevNodeParamAlong)
+            {
+                break;
+            }
+            if (lfParamAlong == lfPrevNodeParamAlong && luCurrParam > luPrevParam)
+            {
+                break;
+            }
+
+            luCurrParam      = luPrevParam;
+            luPrevParam      = lpPrevNode->muPrevParam;
+            lfNodeParamAlong = lfPrevNodeParamAlong;
+        }
+        return luCurrParam;
+    }
+
+    u32 luNextParam = lpNode->muNextParam;
+    while (luNextParam != KU_INVALID_PARAM)
+    {
+        CGS_ASSERT(luNextParam < KU_MAX_PARAMS, "Out of range param in list");
+
+        const ParamListNode* lpNextNode = &maParamListNodes[luNextParam];
+        CGS_ASSERT(lpNextNode->muPrevParam == luCurrParam,
+                   "lpNextNode->muPrevParam == luCurrParam");
+
+        const f32 lfNextNodeParamAlong = lpNextNode->mfParamAlong;
+        CGS_ASSERT(lfNextNodeParamAlong >= lfNodeParamAlong,
+                   "lfNextNodeParamAlong >= lfNodeParamAlong");
+
+        if (lfNextNodeParamAlong > lfParamAlong)
+        {
+            return luNextParam;
+        }
+        if (lfNextNodeParamAlong == lfParamAlong && luNextParam > luCurrParam)
+        {
+            return luNextParam;
+        }
+
+        luCurrParam      = luNextParam;
+        luNextParam      = lpNextNode->muNextParam;
+        lfNodeParamAlong = lfNextNodeParamAlong;
+    }
+    return luCurrParam;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::FindFirstParamAfterPos  @0x82723B80  (.cpp 9385)
+//
+// First param on the section whose remaining distance to the end of the lane is at least
+// lfDistanceFromEndOfLane, with that remaining distance written back.
+// ----------------------------------------------------------------------------
+u32 TrafficEntityModule::FindFirstParamAfterPos(u32 luHull, u32 luSectionIndex,
+                                                f32 lfDistanceFromEndOfLane,
+                                                f32* lpfOutDistance) const
+{
+    CGS_ASSERT(lfDistanceFromEndOfLane >= 0.0f, "lfDistanceFromEndOfLane >= 0.0f");
+
+    const HullRuntime* lpHullRuntime = GetHullRuntimeSafe(luHull);
+    if (lpHullRuntime == 0)
+    {
+        return KU_INVALID_PARAM;
+    }
+
+    u32 luParam = lpHullRuntime->GetFirstParamInSection(luSectionIndex);
+
+    const Hull*    lpHull    = GetHull(luHull);
+    const Section* lpSection = lpHull->GetSection(luSectionIndex);
+
+    while (luParam != KU_INVALID_PARAM)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+        const ParamListNode* lpNode = &maParamListNodes[luParam];
+
+        CGS_ASSERT(luSectionIndex < lpHull->muNumSections, "luIndex < muNumSections");
+        const f32 lfDistAlong =
+            lpSection->CalcDistanceAlongSection(lpNode->mfParamAlong,
+                                                static_cast<u32>(lpNode->mfParamAlong),
+                                                lpHull->GetRungLengthsForSection(lpSection));
+
+        const f32 lfDistToEnd = lpSection->mfLength - lfDistAlong;
+        if (lfDistToEnd < lfDistanceFromEndOfLane)
+        {
+            *lpfOutDistance = lfDistToEnd;
+            return luParam;
+        }
+
+        luParam = lpNode->muNextParam;
+    }
+
+    return KU_INVALID_PARAM;
+}
+
+// ----------------------------------------------------------------------------
+// The behaviour pre-pass and its helpers. PrecalcBehaviourParams, FindNearestParamInFront,
+// UpdateParam_CheckIfNeedToSlow and DoesParamNeedToStopForStopline are all landed below, so
+// maParamNeedToSlowData carries a real behaviour and UpdateParams_UpdateBehaviour copies it.
+// ----------------------------------------------------------------------------
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_PrecalcBehaviourParams  @0x82717C48 (.cpp 11415..11667)
+//
+// Runs the fuzzy rule base for one param and turns the winning score into the
+// ParamNeedToSlowData that UpdateParams_UpdateBehaviour copies into the Param. The three
+// Vector4s are ProcessParamRules' inputs lane for lane (DWARF locals at .cpp 11476/11489/
+// 11507/11523 name every lane this switch reads):
+//   lConeA = RCDistance, RCHeight, RCClosingSpeed, RCLanePos
+//   lConeB = TLDistance, NPDistance, NPClosingSpeed, RCSpeedInOurLane
+//   lConeC = TimeQueueing, Obstructedness, DriveAroundStickiness, W
+// mTweakValues is at X360 +0x72710, so the three mega-tweek floats this function loads
+// (+0x72710 / +0x72714 / +0x72718) are indices 0/1/2: stopline variation, race-car stop
+// distance, gap-closing factor.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_PrecalcBehaviourParams(u32 luParam,
+                                                              const Section* lpSection,
+                                                              const Hull* lpHull,
+                                                              Vector4 lConeA,
+                                                              Vector4 lConeB,
+                                                              Vector4 lConeC)
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+    (void)lpHull;   // r6 is on the console signature; the body never reads it
+
+    Param*               lpParam      = &maParams[luParam];
+    ParamNeedToSlowData* lpNeedToSlow = &maParamNeedToSlowData[luParam];
+
+    // 0x82717CD8..0x82717D50 -- the sympathetic-crash HOLD. A param that UpdateParams_TryStart
+    // SympatheticCrashing put into SLOWING_FOR_CRASH keeps that behaviour, and its current stop
+    // distance and target speed, for as long as its latched target still resolves to a live
+    // position; the moment it does not, the param drops back to NORMAL and re-enters the fuzzy
+    // scoring below. Without this arm the crash decision was overwritten by NORMAL on the very
+    // next decision frame, so it could never last more than one frame.
+    //
+    // [crash-surface wave 2026-08-28] THE GATE THAT STOOD HERE WAS STALE. It read
+    // "GetSympCrashingTargetPos @0x82708C10 is an ARTIST export hole (no body)" -- but the
+    // per-function export exists (77 asm lines) and every member it reads was already homed.
+    // Body now in _wT2_06.cpp.
+    //
+    // ⚠️ THE OUT-POSITION IS DELIBERATELY DISCARDED. The console passes a stack Vector3
+    // (var_160) and never reads it back: `b loc_827185AC` leaves for the function tail straight
+    // after the three stores. Only the BOOL matters here -- the call is a liveness test, not a
+    // steering input. Do not "fix" this into an aim point.
+    if (lpParam->miBehaviour == Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH)
+    {
+        Vector3 lTargetPos;
+        if (GetSympCrashingTargetPos(lpParam->mSympCrashTarget, &lTargetPos))
+        {
+            CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");   // .cpp 11415
+
+            lpNeedToSlow->miBehaviour   = Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH; // 0x82717D38
+            lpNeedToSlow->mfStopDist    = lpParam->mfStopDist;                   // 0x82717D40
+            lpNeedToSlow->mfTargetSpeed = lpParam->mfTargetSpeed;                // 0x82717D48
+            return;                                                             // 0x82717D4C
+        }
+
+        lpNeedToSlow->miBehaviour = Param::KI_BEHAVIOUR_NORMAL;   // 0x82717D50
+    }
+
+    if (mbAllowDivergentBehaviour)
+    {
+        const Vehicle* lpVehicle = GetVehicle(luParam);
+        if (lpVehicle->IsAlive() && lpVehicle->IsPhysical())
+        {
+            const Vehicle::Manoeuvre leManoeuvre = lpVehicle->GetCurrentManoeuvre();
+
+            if (leManoeuvre == Vehicle::E_MANOEUVRE_GIVE_UP)
+            {
+                // 0x82717DE0..0x82717EB8 -- a given-up car close enough to its param just stops.
+                const Vector3 lVehiclePos = GetVehicleTransform(luParam).Pos();
+                const Vector3 lDiff       = GetParamTransform(luParam)->GetLerpedPos() - lVehiclePos;
+
+                if (Magnitude(lDiff) <= KF_PARAM_GIVE_UP_STOP_RADIUS)
+                {
+                    lpNeedToSlow->miBehaviour   = Param::KI_BEHAVIOUR_NORMAL;
+                    lpNeedToSlow->mfStopDist    = 0.0f;
+                    lpNeedToSlow->mfTargetSpeed = 0.0f;
+                    return;
+                }
+            }
+            else if (leManoeuvre == Vehicle::E_MANOEUVRE_STUCK_REVERSE)
+            {
+                // 0x82717DA8..0x82717DDC
+                lpNeedToSlow->miBehaviour   = 2;
+                lpNeedToSlow->mfStopDist    = KF_PARAM_DRIVE_AROUND_STOP_DIST;
+                lpNeedToSlow->mfTargetSpeed =
+                    (lpParam->mfRandomVal + 1.0f) * KF_PARAM_DRIVE_AROUND_SPEED_SCALE;
+                return;
+            }
+        }
+    }
+
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+
+    // 0x82717EDC..0x82717F24 -- cache the param position for the debug render, then score.
+    mFuzzyBehaviours.DEBUGSetCurrentParamPos(GetParamTransform(luParam)->GetDeterministicPos());
+
+    VecFloat lafScores[KU_PARAM_NUM_BEHAVIOUR_SCORES];
+    mFuzzyBehaviours.ProcessParamRules(lafScores, lConeA, lConeB, lConeC);
+
+    {
+        // GATE: DEBUG_AddFuzzyLogicData @0x82716040 (0x82717F34).
+        // BLOCKER: ARTIST export hole; it only fills the mpaDEBUGVehicleFuzzyLogic ring.
+        // DELETE-WHEN it lands. No scoring consequence.
+        static bool sbLoggedDebug = false;
+        LogMissingLeg_T2(sbLoggedDebug,
+                      "UpdateParams_PrecalcBehaviourParams DEBUG_AddFuzzyLogicData @0x82716040 -- "
+                      "export hole, debug ring only");
+    }
+
+    if (mbAtStartLineSoProtectRaceCarsFromTraffic)
+    {
+        lafScores[0] = SplatLane(0.0f);   // 0x82717F4C
+    }
+
+    // 0x82717F58..0x827180F8 -- the crash-slider cap, or the junction-FUP / physical-traffic
+    // suppression of the drive-around score when the slider is not running.
+    const bool lbCapScores =
+        mbDEBUGTestSympCrash ||
+        (mfCrashSliderFinalValue > KF_PARAM_CRASH_SLIDER_MIN_VALUE && mbAllowDivergentBehaviour);
+
+    if (lbCapScores)
+    {
+        const VecFloat lfCap = SplatLane(1.0f - mfCrashSliderFinalValue);
+
+        lafScores[1] = Min(lfCap, lafScores[1]);
+        lafScores[0] = Min(lfCap, lafScores[0]);
+        lafScores[2] = Min(lfCap, lafScores[2]);
+
+        if (meGameMode != -1)
+        {
+            lafScores[3] = SplatLane(0.0f);
+        }
+    }
+    else if (!NeedToTakeActionAgainstJunctionFUP() &&
+             maTrafficPhysicsInfoListBits.CountSetBits() >= KU_PARAM_BUSY_PHYSICAL_TRAFFIC_COUNT)
+    {
+        lafScores[0] = SplatLane(0.0f);
+    }
+
+    // 0x827180FC..0x8271816C -- pick the highest score; a winner has to beat the running best
+    // by more than KF_PARAM_ACTION_SCORE_EPSILON, which is added to the best as it is taken.
+    s32 liNewAction = 0;
+    f32 lfBestScore = 0.0f;
+    for (u32 luScore = 0; luScore < KU_PARAM_NUM_BEHAVIOUR_SCORES; ++luScore)
+    {
+        const f32 lfScore = lafScores[luScore].x;
+        if (lfScore > lfBestScore)
+        {
+            liNewAction = static_cast<s32>(luScore);
+            lfBestScore = lfScore + KF_PARAM_ACTION_SCORE_EPSILON;
+        }
+    }
+
+    CGS_ASSERT(liNewAction >= 0, "liNewAction >= 0");
+
+    const f32 lfLaneSpeed = mfSpeedMultiplier * lpSection->mfSpeed;   // +0x72880 * section+0x24
+
+    switch (liNewAction)
+    {
+    case 0:   // DRIVE_AROUND_OBSTRUCTION (0x827181E8)
+        CGS_ASSERT(mbAllowDivergentBehaviour, "Decided to DRIVE_AROUND_OBSTRUCTION online");
+
+        lpNeedToSlow->miBehaviour   = 2;
+        lpNeedToSlow->mfStopDist    = KF_PARAM_DRIVE_AROUND_STOP_DIST;
+        lpNeedToSlow->mfTargetSpeed =
+            (lpParam->mfRandomVal + 1.0f) * KF_PARAM_DRIVE_AROUND_SPEED_SCALE;
+        break;
+
+    case 1:   // STOP_FOR_PLAYER (0x8272725C)
+    {
+        CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic,
+                   "Decided to STOP_FOR_PLAYER online");
+
+        const f32 lfRCDistance        = lConeA.x;
+        const f32 lfStopForPlayerDist = lfRCDistance - mTweakValues.GetRaceCarStopDist();
+
+        lpNeedToSlow->mfTargetSpeed = 0.0f;
+        lpNeedToSlow->miBehaviour   = 1;
+        lpNeedToSlow->mfStopDist    = (lfStopForPlayerDist > 0.0f) ? lfStopForPlayerDist : 0.0f;
+        break;
+    }
+
+    case 2:   // FOLLOW_PLAYER (0x827182FC)
+    {
+        CGS_ASSERT(mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic,
+                   "Decided to FOLLOW_PLAYER online");
+
+        const f32 lfRCDistance       = lConeA.x;
+        const f32 lfNPDistance       = lConeB.y;
+        const f32 lfRCSpeedInOurLane = lConeB.w;
+
+        const f32 lfRaw              = lfRCDistance - mTweakValues.GetRaceCarStopDist();
+        const f32 lfFollowPlayerDist = (lfRaw > 0.0f) ? lfRaw : 0.0f;
+        const f32 lfTargetSpeed1     = lfNPDistance * mTweakValues.GetGapClosingFactor();
+        const f32 lfTargetSpeed2     = (lpParam->mfSpeed < lfRCSpeedInOurLane)
+                                           ? lpParam->mfSpeed
+                                           : lfRCSpeedInOurLane;
+        const f32 lfTargetSpeed      = (lfTargetSpeed2 > lfTargetSpeed1) ? lfTargetSpeed2
+                                                                        : lfTargetSpeed1;
+
+        lpNeedToSlow->miBehaviour   = 3;
+        lpNeedToSlow->mfStopDist    = lfFollowPlayerDist;
+        lpNeedToSlow->mfTargetSpeed = (lfTargetSpeed < lfLaneSpeed) ? lfTargetSpeed : lfLaneSpeed;
+        break;
+    }
+
+    case 3:   // STOP AT THE STOPLINE (0x82718494)
+    {
+        const f32 lfTLDistance = lConeB.x;
+
+        lpNeedToSlow->mfTargetSpeed = 0.0f;
+        lpNeedToSlow->miBehaviour   = 4;
+        lpNeedToSlow->mfStopDist =
+            lfTLDistance - mTweakValues.GetStoplineVariation() * lpParam->mfRandomVal;
+        break;
+    }
+
+    case 4:   // QUEUE BEHIND THE PARAM IN FRONT (0x82718430)
+    {
+        const Param* lpNextParam = GetParam(lpNeedToSlow->muParamInFront);
+
+        const f32 lfNPDistance   = lConeB.y;
+        const f32 lfTargetSpeed1 = mTweakValues.GetGapClosingFactor() * lfNPDistance;
+        const f32 lfTargetSpeed2 = (lpParam->mfSpeed < lpNextParam->mfSpeed)
+                                       ? lpParam->mfSpeed
+                                       : lpNextParam->mfSpeed;
+        const f32 lfTargetSpeed  = (lfTargetSpeed2 > lfTargetSpeed1) ? lfTargetSpeed2
+                                                                     : lfTargetSpeed1;
+
+        lpNeedToSlow->miBehaviour   = 5;
+        lpNeedToSlow->mfStopDist    = lfNPDistance;
+        lpNeedToSlow->mfTargetSpeed = (lfTargetSpeed < lfLaneSpeed) ? lfTargetSpeed : lfLaneSpeed;
+        break;
+    }
+
+    case 5:   // NORMAL (0x827184D8)
+        lpNeedToSlow->miBehaviour   = Param::KI_BEHAVIOUR_NORMAL;
+        lpNeedToSlow->mfTargetSpeed = lfLaneSpeed;
+        lpNeedToSlow->mfStopDist    = KF_PARAM_NO_STOP_DIST;
+        break;
+
+    default:
+        CGS_ASSERT(false, "Unknown param action");
+        break;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParam_CheckIfNeedToSlow  @0x82738468  (.cpp 10979..11175)
+//
+// Builds the three fuzzy input vectors for one param and hands them to
+// UpdateParams_PrecalcBehaviourParams. Lane names are the DWARF locals at .cpp 11028..11030.
+//
+// The three vperm control vectors the console uses are recovered, not guessed:
+//   unk_82CDA3C0 = 00 01 02 03 | 00 01 02 03 | 00 01 02 03 | 14 15 16 17
+//   unk_82CDA400 = 08 09 0A 0B | 1C 1D 1E 1F | 00 01 02 03 | 00 01 02 03
+// with `vsldoi128 v126, v11, v13, 8` those two assemble
+// {RCDistance, RCHeight, RCClosingSpeed, RCLanePos} -- i.e. cone A lane for lane.
+// unk_8327F140 is the ENGINE-WIDE SetLane permute table. INFERRED, not read: the table is
+// all zeros in the image (dyn-init, written at 0x82C741C8), so the lane mapping comes from
+// FuzzyEnvelopeSet4::SetEnvelope @0x827526C0's `slwi r9, r28, 6` stride, not from the data.
+// On that inference the +0x00 / +0x40 / +0x80 loads are SetLane<0/1/2> on cone C.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
+        u32 luParam,
+        const Hull* lpHull,
+        u32 luSectionIndex,
+        const Section* lpSection,
+        const ::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles)
+{
+    CGS_ASSERT(lpaPhysicalVehicles != 0, "lpPhysicalVehicleArray");      // .cpp 11110
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .h 2350
+
+    Param* const lpParam = &maParams[luParam];
+
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .h 2387
+    const ParamTransform* const lpParamTransform = GetParamTransform(luParam);
+    const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
+
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .cpp 11115
+    ParamNeedToSlowData* const lpNeedToSlow = &maParamNeedToSlowData[luParam];
+
+    // --- cone B lane 0: how far to the next red stop line -----------------------------
+    f32 lfStoplineStopDist = KF_PARAM_NO_STOP_DIST;                      // seeded @0x8273857C
+    DoesParamNeedToStopForStopline(luParam, luSectionIndex, lpSection, lpHull,
+                                   &lfStoplineStopDist);
+
+    // --- who is in front, and how far --------------------------------------------------
+    const f32 lfSpeedLookahead = lpParam->mfSpeed * KF_PARAM_NEXT_PARAM_TIME_THRESHOLD;
+    const f32 lfParamLookaheadDist =
+        ((lfSpeedLookahead >= KF_PARAM_MIN_NEXT_PARAM_DIST) ? lfSpeedLookahead
+                                                            : KF_PARAM_MIN_NEXT_PARAM_DIST) *
+        KF_PARAM_LOOKAHEAD_SCALE;
+
+    f32 lfNextParamDist = 0.0f;
+    u32 luNextParam = FindNearestParamInFront(luParam, lfParamLookaheadDist, &lfNextParamDist);
+
+    if (mbAllowDivergentBehaviour)
+    {
+        // 0x827385CC..0x82738728 -- a car that is recovering from a slam is something you
+        // drive AROUND, not something you queue behind; likewise the debug-picked vehicle.
+        if (luNextParam != KU_INVALID_PARAM &&
+            mVehicleSoaData.mPhysicalVehiclesTryingToRecover.IsBitSet(luNextParam))
+        {
+            luNextParam = KU_INVALID_PARAM;
+        }
+
+        if (mbDEBUGPick_DontStopForPickedVehicle && luNextParam == muDEBUGPickedVehicle)
+        {
+            luNextParam = KU_INVALID_PARAM;
+        }
+    }
+
+    lpNeedToSlow->muParamInFront  = static_cast<u16>(luNextParam);        // 0x82738738
+    lpNeedToSlow->mfNextParamDist = lfNextParamDist;                      // 0x82738740
+
+    f32 lfNPDistance     = KF_PARAM_NO_STOP_DIST;
+    f32 lfNPClosingSpeed = KF_PARAM_NO_STOP_DIST;
+
+    if (luNextParam != KU_INVALID_PARAM)
+    {
+        // 0x82738754..0x8273878C. One constant serves as both the avoidance bias and the
+        // per-car random spacing factor.
+        const f32 lfRaw = ((lfNextParamDist - lpParam->mfFrontDist) - KF_PARAM_AVOIDANCE_BIAS) -
+                          lpParam->mfRandomVal * KF_PARAM_AVOIDANCE_BIAS;
+        lfNPDistance     = (lfRaw >= 0.0f) ? lfRaw : 0.0f;
+        lfNPClosingSpeed = lpParam->mfSpeed - GetParam(luNextParam)->mfSpeed;
+    }
+
+    // --- the race-car ("physical vehicle") scalars -------------------------------------
+    // All five default to KF_MAX_FLOAT (the console loads this+0x72600 into v121/v120/v126/
+    // v122/v125 at 0x82738794).
+    f32 lfRCDistance       = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCHeight         = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCClosingSpeed   = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCLanePos        = KF_PARAM_NO_STOP_DIST;
+    f32 lfRCSpeedInOurLane = KF_PARAM_NO_STOP_DIST;
+
+    if (mbAllowDivergentBehaviour || mbAtStartLineSoProtectRaceCarsFromTraffic)
+    {
+        if (mbAtStartLineSoProtectRaceCarsFromTraffic)
+        {
+            // GATE: CalcRaceCarOnStartGridFuzzyScores @0x82716F10 (0x82738B18), the start-grid
+            // replacement for the cone scan below. BLOCKER: 233 insns, unreconstructed, and it
+            // only runs while the race is still on the grid.
+            // DELETE-WHEN it lands. COST: on the grid the five race-car lanes stay KF_MAX_FLOAT,
+            // so traffic scores NORMAL instead of protecting the grid.
+            static bool sbLoggedStartGrid = false;
+            LogMissingLeg_T2(sbLoggedStartGrid,
+                          "UpdateParam_CheckIfNeedToSlow @0x82738468 start-grid arm -- "
+                          "CalcRaceCarOnStartGridFuzzyScores @0x82716F10 is unreconstructed");
+        }
+        else if (!(GetVehicle(luParam)->IsAlive() && GetVehicle(luParam)->IsExtremeSwerving()))
+        {
+            // 0x827388AC..0x82738AFC -- pick the physical vehicle inside our interest cone
+            // with the smallest importance-weighted squared distance, then measure it.
+            const VecFloat lfConeAngle  = SplatLane(KF_PHYSICAL_INTEREST_CONE_ANGLE);
+            const VecFloat lfConeLength = SplatLane(KF_PHYSICAL_INTEREST_CONE_LENGTH);
+            const VecFloat lfConeRecipY = SplatLane(KF_PHYSICAL_INTEREST_CONE_RECIP_Y);
+
+            u32 luBestVehicle = 0xFFFFFFFFu;
+            f32 lfBestScore   = KF_PARAM_NO_STOP_DIST;
+
+            for (u32 luPhysicalVehicle = 0;
+                 luPhysicalVehicle < lpaPhysicalVehicles->GetLength();
+                 ++luPhysicalVehicle)
+            {
+                const PhysicalVehicleInfo& lInfo = (*lpaPhysicalVehicles)[luPhysicalVehicle];
+
+                Vector3 lTargetPos;
+                lTargetPos.x = lInfo.mPositionAndImportance.x;
+                lTargetPos.y = lInfo.mPositionAndImportance.y;
+                lTargetPos.z = lInfo.mPositionAndImportance.z;
+                lTargetPos.w = 0.0f;
+
+                if (!IsPointWithinSquishedCone(lpParamTransform->GetDeterministicPos(),
+                                               lpParamTransform->GetDirection(),
+                                               lfConeAngle, lfConeLength, lfConeRecipY,
+                                               lTargetPos))
+                {
+                    continue;
+                }
+
+                const Vector3 lDiff = lTargetPos - lpParamTransform->GetDeterministicPos();
+                const f32 lfImportance = lInfo.mPositionAndImportance.w;     // vspltw v0,v0,3
+                const f32 lfScore = rw::math::vpu::Dot(lDiff, lDiff) * lfImportance;
+
+                if (lfBestScore > lfScore)
+                {
+                    lfBestScore   = lfScore;
+                    luBestVehicle = luPhysicalVehicle;
+                }
+            }
+
+            if (luBestVehicle != 0xFFFFFFFFu)
+            {
+                const PhysicalVehicleInfo& lInfo = (*lpaPhysicalVehicles)[luBestVehicle];
+
+                Vector3 lInfoPos;
+                lInfoPos.x = lInfo.mPositionAndImportance.x;
+                lInfoPos.y = lInfo.mPositionAndImportance.y;
+                lInfoPos.z = lInfo.mPositionAndImportance.z;
+                lInfoPos.w = 0.0f;
+
+                const Vector3 lDiff = lInfoPos - lpParamTransform->GetDeterministicPos();
+
+                lfRCDistance = rw::math::vpu::Dot(lDiff, lpParamTransform->GetDirection());
+                lfRCHeight   = rw::math::vpu::Dot(lDiff, lpParamTransform->CalcUp());
+
+                // 0x82738A48..0x82738A84 -- the lateral offset, scaled up as the race car's
+                // own right vector lines up with ours: 0.5 + 0.5 * |alignment|.
+                const f32 lfAlignment =
+                    rw::math::vpu::Dot(lpParamTransform->GetRight(), lInfo.mRight);
+                const f32 lfAlignScale =
+                    0.5f + 0.5f * ((lfAlignment < 0.0f) ? -lfAlignment : lfAlignment);
+                lfRCLanePos =
+                    rw::math::vpu::Dot(lDiff, lpParamTransform->GetRight()) * lfAlignScale;
+
+                // 0x82738A94..0x82738AF0 -- closing speed along the unit separation.
+                const Vector3 lParamLinearVel =
+                    lpParamTransform->GetDirection() * lpParamTransform->GetSpeed();
+                const Vector3 lClosingVel = lParamLinearVel - lInfo.mLinearVelocity;
+
+                // FLAG (host guard, no console equivalent): the console does the raw rsqrt and
+                // lets a coincident vehicle produce a NaN closing speed. Zero kept here instead.
+                const f32 lfDistSq = rw::math::vpu::Dot(lDiff, lDiff);
+                if (lfDistSq > 0.0f)
+                {
+                    const Vector3 lUnitDiff = lDiff * (1.0f / std::sqrt(lfDistSq));
+                    lfRCClosingSpeed = rw::math::vpu::Dot(lUnitDiff, lClosingVel);
+                }
+
+                lfRCSpeedInOurLane =
+                    rw::math::vpu::Dot(lpParamTransform->GetDirection(), lInfo.mLinearVelocity);
+            }
+        }
+    }
+
+    // --- cone C: queueing / obstructedness / drive-around stickiness -------------------
+    const s8 liBehaviour = lpParam->miBehaviour;                              // Param+0x1B
+
+    // 0x82738B54 -- the raw queueing timer, biased by the car's own random value.
+    const f32 lfTimeQueueing =
+        lpParam->mfTimeQueueing + lpParam->mfRandomVal * KF_PARAM_TIME_QUEUEING_RANDOM_SCALE;
+
+    // 0x82738BD0 -- SetLane<2>: a car already driving around an obstruction wants to keep
+    // doing so.
+    const f32 lfDriveAroundStickiness =
+        (liBehaviour == 2) ? KF_PARAM_DRIVE_AROUND_STICKINESS : 0.0f;
+
+    // 0x82738BF0..0x82738C40 -- SetLane<1>: we count as obstructed while we are stopping for
+    // or following the player, or while queueing behind someone who is.
+    bool lbObstructed = (liBehaviour == 1) || (liBehaviour == 3);
+    if (!lbObstructed && liBehaviour == 5 && luNextParam != KU_INVALID_PARAM)
+    {
+        const s32 liNextParamBehaviour = GetParam(luNextParam)->miBehaviour;
+        lbObstructed = (liNextParamBehaviour == 1) || (liNextParamBehaviour == 3);
+    }
+
+    Vector4 lConeA;
+    lConeA.x = lfRCDistance;
+    lConeA.y = lfRCHeight;
+    lConeA.z = lfRCClosingSpeed;
+    lConeA.w = lfRCLanePos;
+
+    Vector4 lConeB;
+    lConeB.x = lfStoplineStopDist;
+    lConeB.y = lfNPDistance;
+    lConeB.z = lfNPClosingSpeed;
+    lConeB.w = lfRCSpeedInOurLane;
+
+    Vector4 lConeC;
+    lConeC.x = lfTimeQueueing;
+    lConeC.y = lbObstructed ? 1.0f : 0.0f;
+    lConeC.z = lfDriveAroundStickiness;
+    lConeC.w = KF_PARAM_NO_STOP_DIST;   // lane 3 of KF_MAX_FLOAT survives the three SetLanes
+
+    (void)lParamPos;   // the console loads it (0x82738530) but only the transform is read on
+
+    UpdateParams_PrecalcBehaviourParams(luParam, lpSection, lpHull, lConeA, lConeB, lConeC);
+}
+
+// @0x82717A70 (.cpp 11335). BLOCKER: unk_8300CAC0, a three-lane distance-squared threshold
+// vector seeded by an unnamed dyn-init thunk.
+void TrafficEntityModule::UpdateParam_CheckIfInsideParamInFront(u32 luParam)
+{
+    (void)luParam;
+
+    static bool sbLogged = false;
+    LogMissingLeg_T2(sbLogged,
+                  "UpdateParam_CheckIfInsideParamInFront @0x82717A70 -- unk_8300CAC0 lanes 0/1/2 "
+                  "are an unrecovered dyn-init .data vector");
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::DoesParamNeedToStopForStopline  @0x827249F8  (.cpp 11690..11840)
+//
+// True when a RED stop line lies within KF_STOP_LINE_REACTION_DISTANCE ahead of the param,
+// with the distance to it in *lpfOutStopDist. The param caches its next stop line
+// (muNextStopLineIndex / mfNextStopLineParam) and only re-scans once it has driven past it.
+// Structure matches the Feb-2007 leak (BrnTrafficEntityModule.cpp:6116) except for the
+// divergent-behaviour head arm, which retail adds.
+// ----------------------------------------------------------------------------
+bool TrafficEntityModule::DoesParamNeedToStopForStopline(u32 luParam,
+                                                         u32 luSectionIndex,
+                                                         const Section* lpSection,
+                                                         const Hull* lpHull,
+                                                         f32* lpfOutStopDist) const
+{
+    CGS_ASSERT(lpHull->GetSection(luSectionIndex) == lpSection,
+               "lpHull->GetSection( luSection ) == lpSection");             // .cpp 11698
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");         // .h 2365
+
+    Param* const lpParam = const_cast<Param*>(&maParams[luParam]);
+
+    // 0x82724A90..0x82724AE8 -- a slammed or extreme-swerving car ignores stop lines.
+    if (mbAllowDivergentBehaviour)
+    {
+        const Vehicle* const lpVehicle = GetVehicle(luParam);
+        if (lpVehicle->IsAlive() &&
+            (lpVehicle->IsRecoveringFromSlam() || lpVehicle->IsExtremeSwerving()))
+        {
+            return false;
+        }
+    }
+
+    u32 luStopline      = lpParam->muNextStopLineIndex;
+    f32 lfStoplineParam = lpParam->mfNextStopLineParam;
+    u32 luStoplineSegment;
+
+    if (luStopline == KU_UNKNOWN_STOPLINE || lfStoplineParam <= lpParam->mfParamAlong)
+    {
+        luStopline = lpSection->FindNextStopLineIndex(lpParam->mfParamAlong, lpHull);
+
+        if (luStopline == KU_INVALID_STOPLINE)
+        {
+            lfStoplineParam   = KF_PARAM_NO_STOP_DIST;
+            luStoplineSegment = 0xFFFFFFFFu;
+        }
+        else
+        {
+            const StopLine* const lpStopline = lpHull->GetStopLine(luStopline);
+            lfStoplineParam   = StopLine::ConvertToFloat(lpStopline->GetParameterAlongSection());
+            luStoplineSegment = lpStopline->GetSegmentAlongSection();
+        }
+
+        lpParam->mfNextStopLineParam = lfStoplineParam;
+        lpParam->muNextStopLineIndex = static_cast<u8>(luStopline);
+    }
+    else
+    {
+        // 0x82724B70 -- the cached param is the 8.8 value in float form, so its integer part
+        // is the segment (the console re-reads the same stack slot's high word).
+        luStoplineSegment = static_cast<u32>(lfStoplineParam);
+    }
+
+    CGS_ASSERT(lpHull->GetSection(luSectionIndex) == lpSection,
+               "lpHull->GetSection( luSection ) == lpSection");             // .cpp 11751
+
+    const f32* const lpafRungLengths = lpHull->GetRungLengthsForSection(lpSection);
+
+    f32 lfStopLineAlongSection = 0.0f;
+
+    if (luStopline != KU_INVALID_STOPLINE)
+    {
+        CGS_ASSERT(luStopline != KU_UNKNOWN_STOPLINE, "luStopline != KU_UNKNOWN_STOPLINE");
+
+        const HullRuntime* const lpHullRuntime = GetHullRuntime(lpParam->muHullIndex);
+        if (!lpHullRuntime->IsStoplineRed(luStopline))
+        {
+            return false;
+        }
+
+        lfStopLineAlongSection =
+            lpSection->CalcDistanceAlongSection(lfStoplineParam, luStoplineSegment, lpafRungLengths);
+        CGS_ASSERT(lfStopLineAlongSection >= KF_SECTION_POSITION_TOLERANCE,
+                   "Stopline is at a negative position along is section");  // .cpp 11764
+    }
+    else
+    {
+        // 0x82724D04 -- nothing on this section, so look one section down each queued plan.
+        const f32 lfDistFromEndOfSection =
+            lpSection->mfLength -
+            lpSection->CalcDistanceAlongSection(lpParam->mfParamAlong, lpParam->muCurrentSegment,
+                                                lpafRungLengths);
+        CGS_ASSERT(lfDistFromEndOfSection >= KF_SECTION_POSITION_TOLERANCE,
+                   "Param is well beyond the end of its section");          // .cpp 11770
+
+        if (lfDistFromEndOfSection >= KF_STOP_LINE_REACTION_DISTANCE)
+        {
+            return false;
+        }
+
+        for (u32 luPlan = 0; luPlan < KU_PARAM_NUM_PLANS; ++luPlan)
+        {
+            const ParamPlan* const lpPlan = GetParamPlan(luParam, luPlan);
+            CGS_ASSERT(lpPlan != 0, "lpPlan");                              // .cpp 11781
+
+            if (lpPlan->muType != ParamPlan::E_TYPE_CHANGE_SECTION ||
+                lpPlan->mChangeSectionData.muNewHull == KU_INVALID_HULL)
+            {
+                if (lpPlan->muType == ParamPlan::E_TYPE_NONE)
+                {
+                    return false;
+                }
+                continue;
+            }
+
+            const Hull* const    lpNextHull    = GetHull(lpPlan->mChangeSectionData.muNewHull);
+            const Section* const lpNextSection =
+                lpNextHull->GetSection(lpPlan->mChangeSectionData.muNewSection);
+
+            luStopline = lpNextSection->FindNextStopLineIndex(0.0f, lpNextHull);
+            if (luStopline == KU_INVALID_STOPLINE)
+            {
+                continue;
+            }
+
+            const HullRuntime* const lpNextHullRuntime =
+                GetHullRuntimeSafe(lpPlan->mChangeSectionData.muNewHull);
+            if (lpNextHullRuntime == 0 || !lpNextHullRuntime->IsStoplineRed(luStopline))
+            {
+                return false;
+            }
+
+            const StopLine* const lpStopline = lpNextHull->GetStopLine(luStopline);
+            lfStoplineParam = StopLine::ConvertToFloat(lpStopline->GetParameterAlongSection());
+
+            lfStopLineAlongSection = lpNextSection->CalcDistanceAlongSection(
+                lfStoplineParam, lpStopline->GetSegmentAlongSection(),
+                lpNextHull->GetRungLengthsForSection(lpNextSection));
+            CGS_ASSERT(lfStopLineAlongSection >= KF_SECTION_POSITION_TOLERANCE,
+                       "Stopline is at a negative position along is section");   // .cpp 11805
+
+            lfStopLineAlongSection += lpSection->mfLength;
+            break;
+        }
+
+        if (luStopline == KU_INVALID_STOPLINE)
+        {
+            return false;
+        }
+    }
+
+    CGS_ASSERT(lpHull->GetSection(luSectionIndex) == lpSection,
+               "lpHull->GetSection( luSection ) == lpSection");             // .cpp 11827
+
+    const f32 lfParamAlongSection =
+        lpSection->CalcDistanceAlongSection(lpParam->mfParamAlong, lpParam->muCurrentSegment,
+                                            lpafRungLengths);
+    CGS_ASSERT(lfParamAlongSection >= KF_SECTION_POSITION_TOLERANCE,
+               "Param is at a negative position along is section");         // .cpp 11829
+
+    const f32 lfCarFromStopLine = lfStopLineAlongSection - lfParamAlongSection;
+    CGS_ASSERT(lfCarFromStopLine >= 0.0f, "Next stopline was behind param"); // .cpp 11832
+
+    if (lfCarFromStopLine >= KF_STOP_LINE_REACTION_DISTANCE)
+    {
+        return false;
+    }
+
+    *lpfOutStopDist = lfCarFromStopLine;
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::FindNearestParamInFront  @0x82725060  (.cpp 11855..12070)
+//
+// Nearest param ahead of luParam within lfMaxDist, in four passes: the param's own list
+// successor, every forward section, those sections' own forward sections (the "extra" list,
+// up to 9) and their merging (backward) sections (up to 3). Each candidate scores as its
+// mfBackDist plus the arc distance to it.
+// ----------------------------------------------------------------------------
+u32 TrafficEntityModule::FindNearestParamInFront(u32 luParam, f32 lfMaxDist,
+                                                 f32* lpfOutDist) const
+{
+    CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_STANDARD_TRAFFIC");
+    CGS_ASSERT(lpfOutDist != 0, "lpfOutDistance");
+
+    u32 luNearestParam = KU_INVALID_PARAM;
+    f32 lfNearestDist  = lfMaxDist;
+
+    const Param*   lpParam   = &maParams[luParam];
+    const u32      luHull    = lpParam->muHullIndex;
+    const u32      luSection = lpParam->muSectionIndex;
+    const Hull*    lpHull    = GetHull(luHull);
+    const Section* lpSection = lpHull->GetSection(luSection);
+
+    // 1) the list successor, if it is still on our own section (0x827251B0).
+    const u32 luNextParam = maParamListNodes[luParam].muNextParam;
+    if (luNextParam != KU_INVALID_PARAM)
+    {
+        const Param* lpNextParam = &maParams[luNextParam];
+        if (lpNextParam->muHullIndex == lpParam->muHullIndex &&
+            lpNextParam->muSectionIndex == lpParam->muSectionIndex)
+        {
+            const f32 lfDistance = lpSection->CalcSignedDistanceAlongSection(
+                lpParam->mfParamAlong, lpParam->muCurrentSegment,
+                lpNextParam->mfParamAlong, lpNextParam->muCurrentSegment,
+                lpHull->GetRungLengthsForSection(lpSection));
+
+            CGS_ASSERT(lfDistance >= 0.0f, "lfDistance >= 0.0f");
+
+            if ((lpNextParam->mfBackDist + lfDistance) < lfMaxDist)
+            {
+                lfNearestDist  = lpNextParam->mfBackDist + lfDistance;
+                luNearestParam = luNextParam;
+            }
+        }
+    }
+
+    // Distance from us to the end of our own lane; every later candidate measures from it.
+    const f32 lfDistToEndOfSection =
+        lpSection->mfLength -
+        lpSection->CalcDistanceAlongSection(lpParam->mfParamAlong, lpParam->muCurrentSegment,
+                                            lpHull->GetRungLengthsForSection(lpSection));
+
+    if (lfDistToEndOfSection < lfMaxDist)
+    {
+        u16 lauExtraHullsToCheck[KU_FIND_NEAREST_MAX_EXTRA_SECTIONS];
+        u8  lauExtraSectionsToCheck[KU_FIND_NEAREST_MAX_EXTRA_SECTIONS];
+        f32 lafExtraDistances[KU_FIND_NEAREST_MAX_EXTRA_SECTIONS];
+        u32 luNumExtraSectionsToCheck = 0;
+
+        u16 lauMergingHullsToCheck[KU_FIND_NEAREST_MAX_MERGING_SECTIONS];
+        u8  lauMergingSectionsToCheck[KU_FIND_NEAREST_MAX_MERGING_SECTIONS];
+        u32 luNumMergingSectionsToCheck = 0;
+
+        // 2) every forward section of our own (0x82725238..0x827254B0).
+        for (u32 luForward = 0; luForward < 3; ++luForward)
+        {
+            const u32 luNextHull = lpSection->mauForwardHulls[luForward];
+            if (luNextHull == KU_INVALID_HULL)
+            {
+                continue;
+            }
+
+            const u32 luNextSection = lpSection->mauForwardSections[luForward];
+            CGS_ASSERT(luNextSection != KU_INVALID_SECTION, "luNextSection != KU_INVALID_SECTION");
+
+            const HullRuntime* lpNextHullRuntime = GetHullRuntimeSafe(luNextHull);
+            if (lpNextHullRuntime != 0)
+            {
+                const u32 luFirstParam = lpNextHullRuntime->GetFirstParamInSection(luNextSection);
+                if (luFirstParam != KU_INVALID_PARAM)
+                {
+                    const Hull*    lpFwdHull2    = GetHull(luNextHull);
+                    const Section* lpFwdSection2 = lpFwdHull2->GetSection(luNextSection);
+                    const Param*   lpFwdParam    = &maParams[luFirstParam];
+
+                    const f32 lfDistance =
+                        lpFwdSection2->CalcDistanceAlongSection(
+                            lpFwdParam->mfParamAlong, lpFwdParam->muCurrentSegment,
+                            lpFwdHull2->GetRungLengthsForSection(lpFwdSection2)) +
+                        lfDistToEndOfSection;
+
+                    CGS_ASSERT(lfDistance >= 0.0f, "lfDistance >= 0.0f");
+
+                    if ((lpFwdParam->mfBackDist + lfDistance) < lfNearestDist)
+                    {
+                        lfNearestDist  = lpFwdParam->mfBackDist + lfDistance;
+                        luNearestParam = luFirstParam;
+                    }
+                }
+            }
+
+            const Hull*    lpFwdHull    = GetHull(luNextHull);
+            const Section* lpFwdSection = lpFwdHull->GetSection(luNextSection);
+
+            // 2a) book that section's own forward sections for pass 3.
+            if ((lpFwdSection->mfLength + lfDistToEndOfSection) < lfMaxDist)
+            {
+                for (u32 luExtra = 0; luExtra < 3; ++luExtra)
+                {
+                    if (lpFwdSection->mauForwardHulls[luExtra] == KU_INVALID_HULL)
+                    {
+                        continue;
+                    }
+
+                    CGS_ASSERT(luNumExtraSectionsToCheck < KU_FIND_NEAREST_MAX_EXTRA_SECTIONS,
+                               "luNumExtraSectionsToCheck < KU_FIND_NEAREST_MAX_EXTRA_SECTIONS");
+
+                    lauExtraHullsToCheck[luNumExtraSectionsToCheck] =
+                        lpFwdSection->mauForwardHulls[luExtra];
+                    lauExtraSectionsToCheck[luNumExtraSectionsToCheck] =
+                        lpFwdSection->mauForwardSections[luExtra];
+                    lafExtraDistances[luNumExtraSectionsToCheck] =
+                        lpFwdSection->mfLength + lfDistToEndOfSection;
+                    ++luNumExtraSectionsToCheck;
+                }
+            }
+
+            // 2b) and its merging (backward) sections, but only from close in.
+            if (lfDistToEndOfSection < KF_FIND_NEAREST_MERGE_MAX_DIST)
+            {
+                for (u32 luMerge = 0; luMerge < 3; ++luMerge)
+                {
+                    const u32 luMergerHull = lpFwdSection->mauBackwardHulls[luMerge];
+                    if (luMergerHull == KU_INVALID_HULL)
+                    {
+                        continue;
+                    }
+
+                    const u32 luMergerSection = lpFwdSection->mauBackwardSections[luMerge];
+                    CGS_ASSERT(luMergerSection != KU_INVALID_SECTION,
+                               "luMergerSection != KU_INVALID_SECTION");
+                    CGS_ASSERT(luNumMergingSectionsToCheck < KU_FIND_NEAREST_MAX_MERGING_SECTIONS,
+                               "luNumMergingSectionsToCheck < KU_FIND_NEAREST_MAX_MERGING_SECTIONS");
+
+                    if (luMergerSection != luSection || luMergerHull != luHull)
+                    {
+                        lauMergingHullsToCheck[luNumMergingSectionsToCheck] =
+                            static_cast<u16>(luMergerHull);
+                        lauMergingSectionsToCheck[luNumMergingSectionsToCheck] =
+                            static_cast<u8>(luMergerSection);
+                        ++luNumMergingSectionsToCheck;
+                    }
+                }
+            }
+        }
+
+        // 3) the booked extra sections (0x827254D0..0x8272573C).
+        for (u32 luExtra = 0; luExtra < luNumExtraSectionsToCheck; ++luExtra)
+        {
+            const u32 luExtraHull    = lauExtraHullsToCheck[luExtra];
+            const u32 luExtraSection = lauExtraSectionsToCheck[luExtra];
+            const f32 lfDistToThem   = lafExtraDistances[luExtra];
+
+            const HullRuntime* lpExtraHullRuntime = GetHullRuntimeSafe(luExtraHull);
+            if (lpExtraHullRuntime == 0)
+            {
+                continue;
+            }
+
+            const u32 luFirstParam = lpExtraHullRuntime->GetFirstParamInSection(luExtraSection);
+            if (luFirstParam == KU_INVALID_PARAM)
+            {
+                continue;
+            }
+
+            const Hull*    lpExtraHull2   = GetHull(luExtraHull);
+            const Section* lpExtraSection = lpExtraHull2->GetSection(luExtraSection);
+            const Param*   lpExtraParam   = &maParams[luFirstParam];
+
+            const f32 lfDistance =
+                lpExtraSection->CalcDistanceAlongSection(
+                    lpExtraParam->mfParamAlong, lpExtraParam->muCurrentSegment,
+                    lpExtraHull2->GetRungLengthsForSection(lpExtraSection)) +
+                lfDistToThem;
+
+            CGS_ASSERT(lfDistance >= 0.0f, "lfDistance >= 0.0f");
+
+            if ((lpExtraParam->mfBackDist + lfDistance) < lfNearestDist)
+            {
+                lfNearestDist  = lpExtraParam->mfBackDist + lfDistance;
+                luNearestParam = luFirstParam;
+            }
+        }
+
+        // 4) the merging sections (0x82725760..0x82725860). A param already stopped at a
+        //    light (behaviour 4) below KF_FIND_NEAREST_MERGE_MIN_SPEED does not count.
+        for (u32 luMerge = 0; luMerge < luNumMergingSectionsToCheck; ++luMerge)
+        {
+            const u32 luMergerHull    = lauMergingHullsToCheck[luMerge];
+            const u32 luMergerSection = lauMergingSectionsToCheck[luMerge];
+
+            CGS_ASSERT(!(luMergerHull == lpParam->muHullIndex &&
+                         luMergerSection == lpParam->muSectionIndex),
+                       "!( lauMergingHullsToCheck[luMergingSection] == lpParam->muHullIndex && "
+                       "lauMergingSectionsToCheck[luMergingSection] == lpParam->muSectionIndex )");
+
+            f32 lfDistFromEnd = 0.0f;
+            const u32 luMergingParam = FindFirstParamAfterPos(luMergerHull, luMergerSection,
+                                                              lfDistToEndOfSection,
+                                                              &lfDistFromEnd);
+            if (luMergingParam == KU_INVALID_PARAM)
+            {
+                continue;
+            }
+
+            const f32 lfDistance = lfDistToEndOfSection - lfDistFromEnd;
+            CGS_ASSERT(lfDistance >= 0.0f, "lfDistance >= 0.0f");
+
+            const Param* lpMergingParam = &maParams[luMergingParam];
+            if ((lpMergingParam->mfBackDist + lfDistance) < lfNearestDist &&
+                (lpMergingParam->miBehaviour != 4 ||
+                 lpMergingParam->mfSpeed >= KF_FIND_NEAREST_MERGE_MIN_SPEED))
+            {
+                lfNearestDist  = lpMergingParam->mfBackDist + lfDistance;
+                luNearestParam = luMergingParam;
+            }
+        }
+    }
+
+    *lpfOutDist = lfNearestDist;
+    return luNearestParam;
+}
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT2_04.cpp (wave T2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT2_04.cpp -- the driving-traffic vehicle/scene wire.
+//
+//   TrafficEntityModule::UpdateVehicles_CreateNewVehicles @0x8273A308  PARTIAL
+//   TrafficEntityModule::UpdateVehicles                   @0x82744F58  PARTIAL
+//   TrafficEntityModule::CacheRaceCarState                @0x827185D0  (EXPORT HOLE)
+//   TrafficEntityModule::GenerateSceneUpdateEvents        @0x8273B568
+//   TrafficEntityModule::UpdateLerpedParamTransforms      @0x82739CD8  (EXPORT HOLE)
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of LogMissingLeg_T2 was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of TrafficDiagEnabled was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of TrafficDiagStream was dropped here -- this TU defines it once, above)
+
+    // HOST SEAT for [MEMBER HOLE 5] TrafficJobStub maJobs[4] (blocker measured in
+    // BrnTrafficEntityModule.h). FLAG PC-platform leaf: single-threaded job dispatch. The
+    // console's stub only snapshots the params and submits; TrafficJobStub::Execute
+    // @0x82752CB0 already runs the worker inline on this host, so the split runs it here.
+    // File scope, like the console's own gaTrafficJobs table -- no module member invented.
+    // DELETE-WHEN BrnTrafficJob.h stops pulling eajobs/job_scheduler.h.
+    }  // anonymous namespace -- the two host tables need external linkage (SendPhysicalRequests
+       // in _wT2_01 drains gaHostNewPhysicalRequests).
+    UpdateVehiclesJob       gaHostUpdateVehiclesJobs[KU_MAX_JOBS];
+    PhysicalRequestInfoList gaHostNewPhysicalRequests[KU_MAX_JOBS];
+    namespace
+    {
+
+    // Stands in for Construct's 4x TrafficJobStub::Construct @0x827407B8 (which only
+    // Constructs the request list and clears mbRunningJob).
+    void EnsureHostJobsConstructed()
+    {
+        static bool sbDone = false;
+        if (sbDone)
+        {
+            return;
+        }
+        sbDone = true;
+        for (u32 luJob = 0; luJob < KU_MAX_JOBS; ++luJob)
+        {
+            gaHostNewPhysicalRequests[luJob].Construct();
+        }
+    }
+
+    // Feb-2007 KF_MAX_DIST_ACROSS_LANE_lhs, folded by the ship into `ring * 1.4f -
+    // flt_820BA4D0(0.7f)` at 0x8273ABB0. Deliberately NOT the module member
+    // KF_MAX_DIST_ACROSS_LANE (DWARF :802): the spawn path uses the literal.
+    const f32 KF_SPAWN_DIST_ACROSS_LANE = 0.7f;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  PARTIAL  (.cpp 13477)
+//
+// Every param that is alive, not a zombie, and has no live vehicle
+// becomes a standard Vehicle. The candidate set is three FastBitArray terms, not a linear
+// scan (0x8273A468..0x8273A52C): mAliveParams & ~mZombieParams & ~mAliveVehicles.
+//
+// The two RNG draws come off mEffectRand in this order and both must stay: draw 1 is the
+// across-lane offset, draw 2 is mfRandomVal. Swapping them re-phases every car's lights.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    (void)lpInput;   // only read by the GATED race-car proximity arm below
+
+    CGS_ASSERT(IsDecisionFrame(), "IsDecisionFrame()");   // baked .cpp 13477
+
+    if (mbWaitingForStreaming)
+    {
+        return;
+    }
+
+    const bool lbRejectNearPlayers =
+        mbDontCreateVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour;
+
+    if (lbRejectNearPlayers)
+    {
+        // GATE: the race-car proximity reject @0x8273A3FC. BLOCKERS: the +0x220 state lane sits
+        // behind an IDA-truncated getter, and Param::SetDivorced is undeclared. Online-only.
+        // DELETE-WHEN online traffic lands.
+        static bool sbLogged = false;
+        LogMissingLeg_T2(sbLogged,
+            "UpdateVehicles_CreateNewVehicles race-car proximity rejection "
+            "(mbDontCreateVehiclesNearAnyPlayers && !mbAllowDivergentBehaviour) -- ONLINE-ONLY "
+            "and unreachable offline. Blockers: the getter behind the +0x220 race-car state "
+            "lane is IDA-truncated, and Param::SetDivorced is undeclared. Radius recovered: "
+            "unk_8300CF70 lane 0 == 6400.0f == 80m^2");
+    }
+
+    // mAliveParams & ~mZombieParams & ~mAliveVehicles, field for field, in the console's order.
+    CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lNotZombie;
+    lNotZombie.SetInverse(mParamSoaData.mZombieParams);
+
+    CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lParamsToCreate;
+    lParamsToCreate.SetAnd(mParamSoaData.mAliveParams, lNotZombie);
+
+    CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> lNoVehicle;
+    lNoVehicle.SetInverse(mVehicleSoaData.mAliveVehicles);
+    lParamsToCreate.SetAnd(lNoVehicle, lParamsToCreate);
+
+
+    for (CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItParam =
+             lParamsToCreate.Begin();
+         lItParam != lParamsToCreate.End();
+         ++lItParam)
+    {
+        const u32 luParam = static_cast<u32>(lItParam.GetIndex());
+
+        const Param* lpParam = GetParam(luParam);          // carries header-2350's bound
+        CGS_ASSERT(lpParam->IsAlive(), "lpParam->IsAlive()");        // .cpp 13526
+        CGS_ASSERT(!lpParam->IsZombie(), "!lpParam->IsZombie()");    // .cpp 13527
+
+        const ParamTransform* lpParamTransform = GetParamTransform(luParam);
+        const Vector3 lParamPos       = lpParamTransform->GetLerpedPos();
+        const Vector3 lParamDirection = lpParamTransform->GetDirection();
+
+        if (lbRejectNearPlayers)
+        {
+            // Second half of the same gate: without the reject the console would still fall
+            // through to the maker, so skipping the whole param is what keeps the two halves
+            // consistent.
+            continue;
+        }
+
+        Vehicle* lpVehicle = GetVehicle(luParam);          // carries header-2459's bound
+        CGS_ASSERT(!lpVehicle->IsAlive(), "!lpVehicle->IsAlive()");   // .cpp 13559
+
+        // The console keeps only the section's bounds assert; nothing reads the Section.
+        const Hull* lpHull = GetHull(lpParam->muHullIndex);
+        const Section* lpSection = lpHull->GetSection(lpParam->muSectionIndex);
+        (void)lpSection;
+
+        const u8 luVehicleType = lpParam->muVehicleType;
+        const VehicleTypeData*       lpVehicleType       = &mpData->mpaVehicleTypes[luVehicleType];
+        const VehicleTypeUpdateData* lpVehicleTypeUpdate = &mpData->mpaVehicleTypesUpdate[luVehicleType];
+        const VehicleTypeRuntime*    lpVehicleTypeRuntime = GetVehicleTypeRuntime(luVehicleType);
+        const VehicleTraits*         lpVehicleTraits =
+            mpData->GetVehicleTraitsForVehicleType(luVehicleType);
+
+        const f32 lfDistAcrossLane =
+            mEffectRand.RandomFloat(-KF_SPAWN_DIST_ACROSS_LANE, KF_SPAWN_DIST_ACROSS_LANE);
+
+        // The cab test is the console's, byte-for-byte: `mxVehicleFlags != 0` (not a mask test
+        // -- Feb-2007's `&&` typo survived to ship) AND a valid trailer flow type.
+        u16 luTrailerIndex = static_cast<u16>(KU_INVALID_VEHICLE);
+        if (lpVehicleType->mxVehicleFlags != 0
+            && lpVehicleType->muTrailerFlowTypeId != 0xFFFFu)
+        {
+            // GATE: the trailer half @0x8273ACA4. BLOCKERS: TryAllocateTrailerId is undeclared
+            // and InitialiseAsTrailer reaches the trapped Vehicle::CalcTowBarPos.
+            // DELETE-WHEN articulated traffic lands.
+            static bool sbLogged = false;
+            LogMissingLeg_T2(sbLogged,
+                "UpdateVehicles_CreateNewVehicles trailer half (TryAllocateTrailerId / "
+                "Vehicle::InitialiseAsTrailer / the muOtherHalfIndex cross-link) -- "
+                "TryAllocateTrailerId is undeclared and InitialiseAsTrailer reaches the "
+                "trapped Vehicle::CalcTowBarPos. luTrailerIndex stays KU_INVALID_VEHICLE, "
+                "which is the console's own no-trailer-available path");
+        }
+
+        const f32 lfRandomVal = mEffectRand.RandomFloat();
+
+        Matrix44Affine lOutMatrix;
+        lpVehicle->InitialiseAsStandard(&maVehicleAxles[luParam],
+                                        lOutMatrix,
+                                        lpParam,
+                                        lfRandomVal,
+                                        mpData->mpapHulls,
+                                        luVehicleType,
+                                        lpVehicleTypeRuntime,
+                                        lpVehicleTypeUpdate,
+                                        lpVehicleTraits,
+                                        lfDistAcrossLane,
+                                        lpParam->mfSpeed,
+                                        lParamPos,
+                                        lParamDirection,
+                                        luParam,
+                                        mVehicleSoaData,
+                                        luTrailerIndex);
+
+        SetVehicleTransform(luParam, lOutMatrix);
+    }
+
+    mbDontCreateVehiclesNearAnyPlayers = false;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::CacheRaceCarState  @ 0x827185D0   (EXPORT HOLE)
+//
+// One snapshot per UpdateVehicles of the race cars the traffic sim reacts to. Feb-2007 built
+// the four Append lists inline (BrnTrafficEntityModule.cpp:6976..:7025); the ship hoisted
+// them into mRaceCarState and added the two per-index tables.
+//
+// FLAG: the four lists are the leak verbatim. The fill of mabRaceCarActive /
+// maActiveRaceCarPositions is REASONED from their DWARF names, since the function has no
+// per-function export. DELETE-WHEN the export hole is filled.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::CacheRaceCarState(
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCars)
+{
+    CGS_ASSERT(lpRaceCars != 0, "lpActiveRaceCarOutputInterface");
+
+    mRaceCarState.mRaceCarPositions.Construct();
+    mRaceCarState.mRaceCarLinearVelocities.Construct();
+    mRaceCarState.mRaceCarSpeeds.Construct();
+    mRaceCarState.mRaceCarXZVelocityDirs.Construct();
+
+    for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+    {
+        const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(liIndex);
+
+        const bool lbActive = lpRaceCars->IsRaceCarActive(leIndex);
+        mRaceCarState.mabRaceCarActive[liIndex] = lbActive;
+
+        if (!lbActive)
+        {
+            continue;
+        }
+
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpRaceCars->GetRaceCarState(leIndex);
+        mRaceCarState.maActiveRaceCarPositions[liIndex] = lpRaceCarState->mTransform.Pos();
+
+        if (lpRaceCars->IsRaceCarRival(leIndex))
+        {
+            continue;
+        }
+
+        mRaceCarState.mRaceCarPositions.Append(lpRaceCarState->mTransform.Pos());
+        mRaceCarState.mRaceCarLinearVelocities.Append(lpRaceCarState->mLinearVelocity);
+
+        Vector3 lXZVelocity = lpRaceCarState->mLinearVelocity;
+        lXZVelocity.y = 0.0f;
+
+        if (!rw::math::vpu::IsZero(lXZVelocity))
+        {
+            Vector3 lVelocityDir;
+            const f32 lfSpeed =
+                rw::math::vpu::NormalizeReturnMagnitude(lXZVelocity, lVelocityDir);
+            mRaceCarState.mRaceCarXZVelocityDirs.Append(lVelocityDir);
+            mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(lfSpeed));
+        }
+        else
+        {
+            // The stalled-car fallback keeps the direction list index-parallel: fall back on
+            // the car's own At axis, and on world Z if that is flat too.
+            Vector3 lFacing = lpRaceCarState->mTransform.At();
+            lFacing.y = 0.0f;
+
+            if (!rw::math::vpu::IsZero(lFacing))
+            {
+                mRaceCarState.mRaceCarXZVelocityDirs.Append(lpRaceCarState->mTransform.At());
+            }
+            else
+            {
+                mRaceCarState.mRaceCarXZVelocityDirs.Append(rw::math::vpu::GetVector3_ZAxis());
+            }
+
+            mRaceCarState.mRaceCarSpeeds.Append(rw::math::vpu::Splat(0.0f));
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateVehicles  @ 0x82744F58   PARTIAL   (.cpp 7194)
+//
+// The job splitter. It creates this decision frame's vehicles, snapshots the race cars, then
+// hands [0, KU_MAX_PARAMS) to muNumUpdateVehiclesJobs workers in equal slices (the last slice
+// always ends at 400). The stubs are the host table above while [MEMBER HOLE 5] is open.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateVehicles(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    (void)lpOutput;   // the console reaches the physical-request list through the job stubs
+
+    {
+        // GATE: the PerfMonCpu bracket (miPerfMon_UpdateVehicle) and the
+        // DebugRenderStreamReader bracket over unk_8300CD00. BLOCKER: neither has a home in
+        // this tree, same disposition as every sibling partfile's. DELETE-WHEN either lands.
+        static bool sbLogged = false;
+        LogMissingLeg_T2(sbLogged,
+            "UpdateVehicles PerfMonCpu Start/StopMonitor bracket and the "
+            "DebugRenderStreamReader Begin/End bracket over unk_8300CD00 -- the monitor "
+            "handles are never issued and the debug render stream has no home in this tree");
+    }
+
+    if (IsDecisionFrame())
+    {
+        UpdateVehicles_CreateNewVehicles(lpInput);
+    }
+
+    CacheRaceCarState(lpInput->GetActiveRaceCarOutputInterface());
+
+    // The job split, 0x82745000..0x827451E4. Every argument below is the console's, read off
+    // the Construct call site: r8/r9/r10 are maParams/maParamTransforms/maVehicles; the six
+    // stack slots are maVehicleTransforms, maVehicleAxles, maVehicleTypeRuntime,
+    // &mRaceCarState, &mEffectRand and meLocalPlayerIndex; the three bytes are
+    // mbHardcoreSwerveForMode (+0x717DF), mbGameModeAllowsSwerving (+0x717DE) and
+    // mbDEBUGStopTrafficMoving (+0x727B8); f1/f2/f3 are mfSimTimeStep, mfSimTimeSinceLastDecision
+    // and mfCrashSliderFinalValue; and v1 is the +0x728C0 lane == mCameraLastFrame's Pos row.
+    EnsureHostJobsConstructed();
+
+    // Console `twllei r11, 0` -- the divide traps on a zero job count.
+    CGS_ASSERT(muNumUpdateVehiclesJobs != 0, "muNumUpdateVehiclesJobs != 0");
+
+    const u32 luParamsPerJob = (muNumUpdateVehiclesJobs != 0)
+                                   ? (KU_MAX_PARAMS / muNumUpdateVehiclesJobs)
+                                   : KU_MAX_PARAMS;
+    u32 luBeginParam = 0;
+
+    for (u32 luJob = 0; luJob < muNumUpdateVehiclesJobs; ++luJob)
+    {
+        // The last slice always ends at KU_MAX_PARAMS, whatever the division left over.
+        const u32 luEndParam = (luJob == muNumUpdateVehiclesJobs - 1)
+                                   ? KU_MAX_PARAMS
+                                   : (luBeginParam + luParamsPerJob);
+
+        UpdateVehiclesJobParams lJobParams;
+        lJobParams.Construct(
+            luBeginParam,
+            luEndParam,
+            mpData->mpapHulls,
+            mpData->muNumHulls,
+            maParams,
+            maParamTransforms,
+            maVehicles,
+            maVehicleTransforms,
+            maVehicleAxles,
+            maVehicleTypeRuntime,
+            &mRaceCarState,
+            mfSimTimeStep,
+            mfSimTimeSinceLastDecision,
+            &mEffectRand,
+            meLocalPlayerIndex,
+            mbHardcoreSwerveForMode,
+            mbGameModeAllowsSwerving,
+            mbDEBUGStopTrafficMoving,
+            mCameraLastFrame.GetPosition(),
+            mfCrashSliderFinalValue,
+            0);   // lpDebugStream: the console passes &unk_8300CD00, which has no home here
+
+        // SetOutputs, inlined exactly as TrafficJobStub::Execute @0x82752CB0 does it.
+        lJobParams.mpOutNewPhysicalRequests = &gaHostNewPhysicalRequests[luJob];
+
+        gaHostUpdateVehiclesJobs[luJob].Execute(&lJobParams);
+
+        // 0x82745178..0x827451A4: one bare LCG step on mEffectRand per job (ld/mulld/addi 1/std
+        // at +0x20, no ring touch) -- CgsNumeric::Random::RandomBool's step, result unused.
+        (void)mEffectRand.RandomBool();
+
+        luBeginParam = luEndParam;
+    }
+
+    // The console's second loop is 4x TrafficJobStub::WaitOn @0x827451CC..0x827451E4. Under the
+    // synchronous dispatch above every slice has already completed, so the join is a no-op.
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateLerpedParamTransforms  @ 0x82739CD8   (EXPORT HOLE)
+//
+// The between-decision-frames interpolator: one ParamTransform::UpdateLerpedPosition
+// @0x82712968 per live param, stepped by mfSimTimeStepVec.
+//
+// FLAG: the loop SHAPE is reasoned, not attested -- the function has no per-function JSON and
+// no Feb-2007 counterpart, and its only caller (UpdateNonDecisionFrame @0x8274C21C) passes
+// nothing but `this`. mAliveParams is the module's own liveness set and the only one a
+// per-param sweep could use. DELETE-WHEN the export hole is filled.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateLerpedParamTransforms()
+{
+    for (u32 luParam = 0; luParam < KU_MAX_PARAMS; ++luParam)
+    {
+        if (!mParamSoaData.mAliveParams.IsBitSet(luParam))
+        {
+            continue;
+        }
+        GetParamTransform(luParam)->UpdateLerpedPosition(mfSimTimeStepVec);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateSceneUpdateEvents  @ 0x8273B568   (.cpp 14131)
+//
+// THE PER-FRAME SCENE MOVER. Without it a traffic car's scene entity stays wherever
+// CreateNewVehicleEntities' AddEntity put it and the frustum filter culls it against the
+// wrong bounds.
+//
+// The console splits Feb-2007's single loop into two bit-set walks over
+// (mVehiclesWithEntities & mAliveVehicles), and the split is behavioural, not cosmetic:
+// the NON-collidable arm publishes the RAW transform position, while the collidable arm
+// publishes the bbox-offset position and, when not frozen, the whole bbox-offset transform.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateSceneUpdateEvents(BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // baked .cpp 14131
+
+    typedef BrnTrafficIO::OutputBuffer_PostPhysics::SceneInputInterface SceneInputInterface;
+    SceneInputInterface* lpSceneInputInterface = lpOutput->GetSceneInputInterface();
+    CGS_ASSERT(lpSceneInputInterface != 0, "lpSceneInputInterface");   // baked .cpp 14139
+
+    typedef CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> TrafficBitArray;
+
+    TrafficBitArray lVehiclesWithEntities;
+    lVehiclesWithEntities.SetAnd(mVehicleSoaData.mVehiclesWithEntities,
+                                 mVehicleSoaData.mAliveVehicles);
+
+    TrafficBitArray lCollidableWithEntities;
+    lCollidableWithEntities.SetAnd(mVehicleSoaData.mCollidableVehicles, lVehiclesWithEntities);
+
+    TrafficBitArray lNotCollidable;
+    lNotCollidable.SetInverse(mVehicleSoaData.mCollidableVehicles);
+    lVehiclesWithEntities.SetAnd(lNotCollidable, lVehiclesWithEntities);
+
+    u32 luMoved = 0;
+
+    for (TrafficBitArray::Iterator lIt = lVehiclesWithEntities.Begin();
+         lIt != lVehiclesWithEntities.End();
+         ++lIt)
+    {
+        const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+
+        lpSceneInputInterface->SetEntityPosition(
+            CgsSceneManager::EntityId(MakeTrafficEntityId(luVehicle).muValue),
+            GetVehicleTransform(luVehicle).Pos());
+        ++luMoved;
+    }
+
+    for (TrafficBitArray::Iterator lIt = lCollidableWithEntities.Begin();
+         lIt != lCollidableWithEntities.End();
+         ++lIt)
+    {
+        const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+
+        const Vehicle* lpVehicle = GetVehicle(luVehicle);
+        CGS_ASSERT(lpVehicle->HasEntity(), "lpVehicle->HasEntity()");   // baked .cpp 14180
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");                  // BrnTrafficVehicle.h:786
+
+        const VehicleTypeRuntime* lpVehicleTypeRuntime =
+            GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+
+        // Translate(mBBoxOffset) * transform. Only the position row changes: the translate
+        // matrix's rotation is identity, so the product's rows are the transform's own and its
+        // position is TransformPoint(transform, mBBoxOffset) -- the three fmas at
+        // 0x8273C0D8..0x8273C118, in the same order.
+        Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+        lTransform.wAxis = rw::math::vpu::TransformPoint(
+            lTransform, lpVehicleTypeRuntime->GetBBoxOffset());
+
+        const EntityId lTrafficEntityId = MakeTrafficEntityId(luVehicle);
+        lpSceneInputInterface->SetEntityPosition(
+            CgsSceneManager::EntityId(lTrafficEntityId.muValue), lTransform.Pos());
+
+        if (!lpVehicle->IsFrozen())
+        {
+            // The volume-instance id is the entity id in the high doubleword (`sldi r4, r11, 32`
+            // at 0x8273C1BC), which is what SetEntityIDOwner/SetEntityIDEntityIndex build.
+            CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
+            lVolumeInstanceId.muId = static_cast<u64>(lTrafficEntityId.muValue) << 32;
+            lpSceneInputInterface->SetVolumeInstanceTransform(lVolumeInstanceId, lTransform);
+        }
+        ++luMoved;
+    }
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        // [T4-clip] player-inside-a-traffic-car witness. NOT IN THE X360 BINARY. Each frame,
+        // test the local player's position against every alive vehicle's OBB (the type
+        // runtime's bbox, offset and expanded 0.5 m) and shout once per vehicle. The two
+        // strings MUST stay different: NON-physical == the car never got a physics slot
+        // (module-side break); PHYSICAL == promotion worked and the CONTACTS failed
+        // (physics-side break). DELETE-WHEN-STABLE.
+        if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+            mRaceCarState.mabRaceCarActive[meLocalPlayerIndex])
+        {
+            const Vector3 lPlayerPos = mRaceCarState.maActiveRaceCarPositions[meLocalPlayerIndex];
+
+            static bool sabReported[KU_MAX_TOTAL_TRAFFIC] = { false };
+
+            TrafficBitArray lAlivePresent;
+            lAlivePresent.SetAnd(mVehicleSoaData.mVehiclesWithEntities,
+                                 mVehicleSoaData.mAliveVehicles);
+
+            for (TrafficBitArray::Iterator lIt = lAlivePresent.Begin();
+                 lIt != lAlivePresent.End();
+                 ++lIt)
+            {
+                const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+                if (luVehicle >= KU_MAX_TOTAL_TRAFFIC || sabReported[luVehicle])
+                {
+                    continue;
+                }
+
+                const Vehicle* lpVehicle = GetVehicle(luVehicle);
+                const VehicleTypeRuntime* lpVehicleTypeRuntime =
+                    GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+
+                const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+                const Vector3 lCentre = rw::math::vpu::TransformPoint(
+                    lTransform, lpVehicleTypeRuntime->GetBBoxOffset());
+                const Vector3 lHalf = lpVehicleTypeRuntime->GetBBoxHalfSize();
+
+                const Vector3 lToPlayer = lPlayerPos - lCentre;
+                const f32 lfLocalX = rw::math::vpu::Dot(lToPlayer, lTransform.xAxis);
+                const f32 lfLocalY = rw::math::vpu::Dot(lToPlayer, lTransform.yAxis);
+                const f32 lfLocalZ = rw::math::vpu::Dot(lToPlayer, lTransform.zAxis);
+
+                const f32 KF_T4_CLIP_EXPAND = 0.5f;
+                const bool lbInside =
+                    (lfLocalX > -(lHalf.x + KF_T4_CLIP_EXPAND) && lfLocalX < (lHalf.x + KF_T4_CLIP_EXPAND)) &&
+                    (lfLocalY > -(lHalf.y + KF_T4_CLIP_EXPAND) && lfLocalY < (lHalf.y + KF_T4_CLIP_EXPAND)) &&
+                    (lfLocalZ > -(lHalf.z + KF_T4_CLIP_EXPAND) && lfLocalZ < (lHalf.z + KF_T4_CLIP_EXPAND));
+
+                if (!lbInside)
+                {
+                    continue;
+                }
+
+                sabReported[luVehicle] = true;
+
+                if (lpVehicle->IsPhysical())
+                {
+                    *lpDiag << "[T4-clip] player inside PHYSICAL traffic vehicle "
+                            << static_cast<s32>(luVehicle)
+                            << " at " << lPlayerPos.x << "," << lPlayerPos.y << "," << lPlayerPos.z
+                            << " -- promotion WORKED, the CONTACTS failed (physics side)"
+                               " [DELETE-WHEN-STABLE]\n";
+                }
+                else
+                {
+                    *lpDiag << "[T4-clip] player inside NON-physical traffic vehicle "
+                            << static_cast<s32>(luVehicle)
+                            << " at " << lPlayerPos.x << "," << lPlayerPos.y << "," << lPlayerPos.z
+                            << " (collidable=" << (lpVehicle->IsCollidable() ? 1 : 0)
+                            << ") -- no physics slot [DELETE-WHEN-STABLE]\n";
+                }
+            }
+        }
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT2_05.cpp (wave T2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT2_05.cpp
+//
+//   TrafficEntityModule::UpdateParams_DoTimeSlicedLogic @0x82743FE8  (asm, hole closed wave3 r2)
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of TrafficDiagEnabled was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of TrafficDiagStream was dropped here -- this TU defines it once, above)
+
+    // PhysicalVehicleInfo importance (lane 3 of mPositionAndImportance). CheckIfNeedToSlow
+    // keeps the SMALLEST Dot(diff,diff) * importance, so the smaller weight wins.
+    // 0x827441CC `vcfsx v0, <1>, 1` == 0.5 (player); 0x827441C4 `vcfsx v0, <1>, 0` == 1.0.
+    const f32 KF_IMPORTANCE_PLAYER = 0.5f;
+    const f32 KF_IMPORTANCE_OTHER  = 1.0f;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_DoTimeSlicedLogic  @ 0x82743FE8..0x82744A7C
+//
+// EXPORT HOLE CLOSED: dumped straight from the ARTIST .i64 with headless
+// idat -- see wave3r2/A/fix/dump1.txt. Every line below is now asm-attested; the previous
+// DWARF-shaped reconstruction had the importance weight INVERTED, was missing the rival gate
+// and the mbAllowDivergentBehaviour gate, and called an unbodied predicate.
+//
+// It caches every "physical vehicle" the params should react to (the active race cars, then
+// the physical traffic) into one Array<PhysicalVehicleInfo,33>, then runs
+// UpdateParam_CheckIfNeedToSlow @0x82738468 over its slice of the param pool.
+//
+// The slot is cleared through maParamNeedToSlowData directly, not through
+// GetParamNeedToSlowData: that accessor asserts muLastParamCalculated >= KU_MAX_PARAMS, which
+// is false by construction inside the slicer, and CheckIfNeedToSlow likewise indexes inline
+// (asm `16*(luParam+13528)`).
+//
+// muLastParamCalculated advance: 0x82744A4C..0x82744A70 stores luEndParam back to +0x71830.
+//
+// PhysicalVehicleInfo field assignments, now asm-attested (race-car block 0x82744190..
+// 0x827441F8, traffic block 0x827444F0..0x82744544): lane 0..2 of the first quadword is the
+// position (RaceCarState +0x220 / transform +0x30), lane 3 the importance; the second quadword
+// is the linear velocity (RaceCarState +0x330 / Vehicle::GetLinearVelocity) and the third the
+// body's right axis (RaceCarState +0x1F0 / transform +0x00).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
+    u32 luBeginParam,
+    u32 luEndParam,
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
+        lpActiveRaceCarInterface)
+{
+    CGS_ASSERT(luBeginParam < KU_MAX_PARAMS, "luBeginParam < KU_MAX_PARAMS");  // 0x82744024
+    CGS_ASSERT(luEndParam <= KU_MAX_PARAMS, "luEndParam <= KU_MAX_PARAMS");    // 0x82744054
+    CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface");     // 0x82744078
+
+    // .cpp 9778 -- the shared physical-vehicle cache.
+    ::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE> lPhysicalVehicleInfo;
+    lPhysicalVehicleInfo.Construct();
+
+    // 0x827440AC..0x827440C0 -- the WHOLE cache build is skipped when divergent behaviour is
+    // off (online, non-Showtime): the fuzzy pre-pass then sees no physical vehicles at all and
+    // cannot pick a divergent behaviour. Offline this is always true
+    // (mbAllowDivergentBehaviour = !mbIsOnlineGameMode || mbPlayingShowtimeMode, _wT1_01:208).
+    if (mbAllowDivergentBehaviour)
+    {
+        // 0x82744100..0x82744228 -- every active race car. The importance scalar multiplies the
+        // squared distance in CheckIfNeedToSlow's pick and the SMALLEST score wins
+        // (_wT2_03.cpp:1309), so the PLAYER's 0.5 beats everyone else's 1.0 at equal range.
+        // The weights are `vcfsx v0, <int 1>, 1` = 0.5 (player, 0x827441CC) and
+        // `vcfsx v0, <int 1>, 0` = 1.0 (0x827441C4) -- both asm-attested.
+        for (s32 liRaceCar = 0; liRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar)
+        {
+            const EActiveRaceCarIndex leRaceCar = static_cast<EActiveRaceCarIndex>(liRaceCar);
+
+            // 0x82744140: the console tests `maxRaceCarFlags[i] & 1` inline (IsRaceCarActive).
+            if (!lpActiveRaceCarInterface->IsRaceCarActive(leRaceCar))
+            {
+                continue;
+            }
+
+            // 0x82744158..0x8274417C -- a RIVAL only counts as something to react to while it
+            // is crashing (`lbz r11, 0x44A(state)` == RaceCarState::mbCrashing @1098).
+            if (lpActiveRaceCarInterface->IsRaceCarRival(leRaceCar)
+                && !lpActiveRaceCarInterface->GetRaceCarState(leRaceCar)->mbCrashing)
+            {
+                continue;
+            }
+
+            const BrnPhysics::Vehicle::RaceCarState* const lpRaceCarState =
+                lpActiveRaceCarInterface->GetRaceCarState(leRaceCar);
+
+            // The console calls IsRaceCarPlayer @0x82681DF0 (`maxRaceCarFlags[idx] >> 1 & 1`,
+            // E_RACE_CAR_OUTPUT_FLAG_PLAYER). That method is declared-only in this tree and its
+            // own TU is another owner's file, so calling it is a LINK HOLE; maxRaceCarFlags is
+            // private, so the bit cannot be read here either. Stand-in: the bodied public
+            // GetPlayerActiveRaceCarIndex @0x82277BF8 -- the same slot, set from the same
+            // muType == E_RACE_CAR_TYPE_PLAYER producer arm.
+            // DELETE-WHEN BrnRCEntityActiveRaceCarOutputInterface.cpp bodies IsRaceCarPlayer.
+            const bool lbIsPlayer =
+                (leRaceCar == lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex());
+
+            PhysicalVehicleInfo lInfo;
+            lInfo.mPositionAndImportance.SetVector3(lpRaceCarState->mTransform.Pos());
+            lInfo.mPositionAndImportance.SetPlus(lbIsPlayer ? KF_IMPORTANCE_PLAYER
+                                                            : KF_IMPORTANCE_OTHER);
+            lInfo.mLinearVelocity = lpRaceCarState->mLinearVelocity;
+            lInfo.mRight          = lpRaceCarState->mTransform.Right();
+
+            // FLAG (host guard): the console Appends unconditionally -- 8 race cars can never
+            // overflow the 33-slot array. Kept so a corrupt count cannot smash the stack.
+            if (lPhysicalVehicleInfo.GetLength() < KU_MAX_PHYSICAL_VEHICLES_TO_CACHE)
+            {
+                lPhysicalVehicleInfo.Append(lInfo);
+            }
+        }
+
+        // 0x827443EC..0x82744544 -- then every alive+physical traffic vehicle, all weighing 1.0
+        // (`vcsxwfp128 v125, <int 1>, 0` hoisted at 0x827443BC). The console asserts IsAlive()
+        // and IsPhysical() per element (0x82744490 / 0x827444B8); the intersection makes both
+        // true by construction here.
+        CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lVehiclesAlive_And_Physical;
+        lVehiclesAlive_And_Physical.SetAnd(mVehicleSoaData.mAliveVehicles,
+                                           mVehicleSoaData.mPhysicalVehicles);
+
+        for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lItVehicle =
+                 lVehiclesAlive_And_Physical.Begin();
+             lItVehicle != lVehiclesAlive_And_Physical.End();
+             ++lItVehicle)
+        {
+            // FLAG (host guard): no console equivalent -- 601 physical vehicles would overrun
+            // the 33-slot array, which on console is an Append assert. Bounded here instead.
+            if (lPhysicalVehicleInfo.GetLength() >= KU_MAX_PHYSICAL_VEHICLES_TO_CACHE)
+            {
+                break;
+            }
+
+            const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+            const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+            const Matrix44Affine lVehicleTransform = GetVehicleTransform(luVehicle);
+
+            PhysicalVehicleInfo lInfo;
+            lInfo.mPositionAndImportance.SetVector3(lVehicleTransform.Pos());
+            lInfo.mPositionAndImportance.SetPlus(KF_IMPORTANCE_OTHER);
+            lInfo.mLinearVelocity = lpVehicle->GetLinearVelocity();
+            lInfo.mRight          = lVehicleTransform.Right();
+
+            lPhysicalVehicleInfo.Append(lInfo);
+        }
+    }
+
+    // 0x827448C4..0x82744A48 -- the slice itself.
+    for (u32 luParam = luBeginParam; luParam < luEndParam && luParam < KU_MAX_PARAMS; ++luParam)
+    {
+        maParamNeedToSlowData[luParam].Clear();
+
+        // 0x82744968 (`lbz 0x3E(param+2)` & 1 == mxFlags @0x40 & E_FLAG_ALIVE) and 0x82744978
+        // (`lbz 0x18(param+2)` & 2 == mxEffectAndHistoryState @0x1A & E_HISTORY_BORN). Both
+        // gates are the console's, and both leave the slot on Clear()'s miBehaviour == -1.
+        const Param* const lpParam = &maParams[luParam];
+        if ((lpParam->mxFlags & Param::E_FLAG_ALIVE) == 0)
+        {
+            continue;
+        }
+        if ((lpParam->mxEffectAndHistoryState & Param::E_HISTORY_BORN) != 0)
+        {
+            continue;
+        }
+
+        const Hull* const    lpHull    = GetHull(lpParam->muHullIndex);
+        const Section* const lpSection = lpHull->GetSection(lpParam->muSectionIndex);
+
+        UpdateParam_CheckIfNeedToSlow(luParam, lpHull, lpParam->muSectionIndex, lpSection,
+                                      &lPhysicalVehicleInfo);
+        UpdateParam_CheckIfInsideParamInFront(luParam);   // the console's second per-param call
+    }
+
+    muLastParamCalculated = luEndParam;
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        // [T3-behaviour] first param that reaches DRIVE_AROUND_OBSTRUCTION (miBehaviour 2 --
+        // the ONLY value UpdateVehiclesJob::CalcSwerveAmount @0x8291CF18 turns into a
+        // normal-physical promotion), plus a ~5 s histogram of every behaviour value.
+        // DELETE-WHEN-STABLE.
+        static bool sbFirstBehaviour2 = true;
+        static u32  sauBehaviourCounts[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        static f32  sfHistogramTimer = 0.0f;
+
+        for (u32 luParam = luBeginParam; luParam < luEndParam && luParam < KU_MAX_PARAMS; ++luParam)
+        {
+            const s8 liBehaviour = maParamNeedToSlowData[luParam].miBehaviour;
+            if (liBehaviour >= 0 && liBehaviour < 8)
+            {
+                ++sauBehaviourCounts[liBehaviour];
+            }
+
+            if (sbFirstBehaviour2 && liBehaviour == 2)
+            {
+                sbFirstBehaviour2 = false;
+                *lpDiag << "[T3-behaviour] param " << static_cast<s32>(luParam)
+                        << " reached miBehaviour 2 (DRIVE_AROUND_OBSTRUCTION); stopDist "
+                        << maParamNeedToSlowData[luParam].mfStopDist
+                        << " targetSpeed " << maParamNeedToSlowData[luParam].mfTargetSpeed
+                        << "\n";
+            }
+        }
+
+        sfHistogramTimer += mfSimTimeStep;
+        if (sfHistogramTimer >= 5.0f)
+        {
+            sfHistogramTimer = 0.0f;
+            *lpDiag << "[T3-behaviour] histogram";
+            for (u32 luBehaviour = 0; luBehaviour < 8; ++luBehaviour)
+            {
+                *lpDiag << " [" << static_cast<s32>(luBehaviour) << "]="
+                        << static_cast<s32>(sauBehaviourCounts[luBehaviour]);
+                sauBehaviourCounts[luBehaviour] = 0;
+            }
+            // physSlots is the module's own 25-slot TrafficPhysicsInfo list, which
+            // StopVehicleBeingPhysical is the ONLY thing that ever frees. A monotonic
+            // physSlots means demotion is unreachable.
+            *lpDiag << " physSlots="
+                    << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
+                    << "\n";
+        }
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT2_06.cpp (wave T2) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT2_06.cpp -- THE CRASH SURFACE: what traffic reacts to, and
+// the two reactions.
+//
+//   TrafficEntityModule::UpdateParams_BuildListOfCrashingThings   @0x82737270
+//   TrafficEntityModule::UpdateParams_TryAvoidCrashing            @0x82716948
+//   TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing @0x827165D8
+//
+// These three were DECLARED in BrnTrafficEntityModule.h and defined NOWHERE; their live call
+// sites in _wT2_02.cpp's UpdateParams logged a missing leg instead. The park note there read
+// "crash surface, wave 3 (needs the gated CrashingThingData list)" -- STALE on every count:
+// CrashingThingData has been homed in BrnTrafficEntityModule.h since wave T2, both
+// Array<CrashingThingData,168> accessors have been committed since 2026-07-04
+// (Array_CrashingThingData_168.cpp), and IsPointWithinSquishedCone -- the geometric core of
+// both consumers -- landed with wave T3. The producer's OWN list is a plain stack local
+// UpdateParams clears; nothing was ever gating it but the note.
+//
+// The producer/consumer contract, straight off the ARTIST asm:
+//   BuildListOfCrashingThings fills an Array<CrashingThingData,168> from THREE sources --
+//     (1) every alive+physical traffic vehicle that is crashing, or (with the junction-FUP
+//         score up) is stopped near the physical centre;
+//     (2) every active race car that is crashing (or either debug force);
+//     (3) in showtime, every flagged entry of the showtime vehicle list.
+//   TryAvoidCrashing then SWERVES a param whose forward cone contains one of them
+//     (miBehaviour = 2, DRIVING_AROUND_OBSTRUCTION);
+//   TryStartSympatheticCrashing CHAIN-CRASHES a param whose cone contains one
+//     (miBehaviour = 0, SLOWING_FOR_CRASH, plus the target id in mSympCrashTarget).
+//
+// TUNING CONSTANTS. The two .data lane blocks these bodies read are dynamically initialised,
+// so their values are not in the pseudocode. Both are recovered from their dyn-init thunks in
+// the ARTIST image, and the DecFIGS PS3 build NAMES them (X360 leaves them `unk_`):
+//   unk_8300CAD0 == BrnTraffic::KF_JUNCTION_FUP_MAX_RADIUS_SQ
+//        dyn-init @0x82C65D08: splat(flt_8200D4E4 == 3600.0f) == 60 m squared.
+//   unk_8300CC40 == BrnTraffic::kfSympCrash_MaxDistFromCameraSq_
+//                                MaxDistFromCameraShowTimeSq_ZW
+//        dyn-init @0x82C66ED8: lane0 = flt_820BA810 == 1600.0f (40 m^2),
+//                              lane1 = flt_820BA4B8 == 10000.0f (100 m^2), lanes 2/3 = 0.
+//   flt_820BA8F8 == 6.0f, flt_820BA5E4 == 10.0f (both read out of .rdata).
+// The X360 lane->case mapping agrees with the PS3 name: showtime takes lane 1.
+//
+// FLAG (pre-existing, behaviour-neutral, NOT changed here). The ARTIST FastBitArray the SoA
+// vehicle sets use reports its capacity as 600, not 601: TryAvoidCrashing's inlined IsBitSet
+// range assert streams "max bits: 600" (`li r4, 0x258` @0x82716A3C) and
+// BuildListOfCrashingThings' iterator parks at 600 (`li r10, 0x258` @0x82737420). This tree
+// models VehicleSoaData::KU_MAX_VEHICLES as 601 (the DecFIGS DWARF value), which is the same
+// ten 64-bit fields and the same bytes; only End() differs, and bit 600 is never set because
+// the flat vehicle index space is KU_MAX_TOTAL_TRAFFIC == 600. The bound asserts below use
+// the console's own 600 (KU_MAX_TOTAL_TRAFFIC) so they fire where the console's fire.
+//
+// Layout is host-native: every member is reached by name; the console displacements in the
+// comments only attest which member a line resolves to.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // ---- recovered .data / .rdata constants (see the file banner for provenance) ---------
+
+    // unk_8300CAD0, PS3-named BrnTraffic::KF_JUNCTION_FUP_MAX_RADIUS_SQ. Splat of 3600.0f.
+    const f32 KF_JUNCTION_FUP_MAX_RADIUS_SQ = 3600.0f;
+
+    // unk_8300CC40 lanes 0/1, PS3-named
+    // BrnTraffic::kfSympCrash_MaxDistFromCameraSq_MaxDistFromCameraShowTimeSq_ZW.
+    const f32 KF_SYMP_CRASH_MAX_DIST_FROM_CAMERA_SQ           = 1600.0f;
+    const f32 KF_SYMP_CRASH_MAX_DIST_FROM_CAMERA_SHOWTIME_SQ  = 10000.0f;
+
+    // flt_820BA8F8. A physical traffic car that has not driven for this long is something the
+    // rest of the traffic has to get around, exactly like a crashing one. The same literal and
+    // the same pairing with mbIsFatallyCrashing drive
+    // JunctionFUP_TryClearupNonMovingPhysical @0x8273F2E8.
+    const f32 KF_NOT_DRIVING_TIME_TO_COUNT_AS_A_CRASH = 6.0f;
+
+    // flt_820BA5E4 (the module's shared 10.0f). Below this speed a param does not start a
+    // sympathetic crash -- there is nothing to chain off.
+    const f32 KF_MIN_SPEED_TO_START_SYMPATHETIC_CRASH = 10.0f;
+
+    // `subfic r11, r11, 0x19` then `cmplwi r11, 4 ; blt` -- both consumers bail unless at
+    // least this many of the 25 physical-traffic slots are still free. Reacting means possibly
+    // becoming a physics body, so a full pool means no reaction.
+    const u32 KU_MIN_FREE_PHYSICAL_SLOTS_TO_REACT = 4;
+
+    // The race-car EntityId BuildListOfCrashingThings packs at 0x82737B78 (`slwi r11,r30,10`
+    // then `oris r11,r11,0x100`). Same 14/10 split as MakeTrafficEntityId, owner byte 1 --
+    // the same pair UpdateExtremeSwerving uses in _wT3_02.cpp.
+    const u32 KU_RACE_CAR_PART_INDEX_SHIFT = 10;
+    const u32 KU_RACE_CAR_OWNER_PACKED     = 0x01000000u;
+    const u32 KU_NUM_BITS_FOR_ENTITY_NUM   = 14;
+
+    // The same two owner bytes, unpacked (GetSympCrashingTargetPos @0x82708C24 `srwi r11,id,24`
+    // then `cmplwi 2` / `cmplwi 1`).
+    const u32 KU_ENTITY_OWNER_RACE_CAR = 1;
+    const u32 KU_ENTITY_OWNER_TRAFFIC  = 2;
+
+    // A showtime list entry only becomes a crash magnet with this bit set
+    // (`lbz r11, 4(r29) ; rlwinm r11,r11,0,30,30` @0x82737C40). The producer,
+    // SpawnShowtimeTraffic @0x82743038, has no body in this tree yet, and nothing else in the
+    // image names the bit -- so it stays the console's own literal rather than an invented
+    // enumerator. DebugComponent::DrawShowtime @0x8275CA58 tests the same bit.
+    const u8 KU_SHOWTIME_INFO_FLAG_CRASH_MAGNET = 0x02u;
+
+    // Unpack a traffic/race-car EntityId back to its entity index (the inverse of the 14/10
+    // split above): `extrwi r5, r11, 14, 8` @0x827168CC.
+    inline u32 EntityIdToEntityIndex(EntityId lEntityId)
+    {
+        return (lEntityId.muValue >> KU_RACE_CAR_PART_INDEX_SHIFT) &
+               ((1u << KU_NUM_BITS_FOR_ENTITY_NUM) - 1u);
+    }
+
+// (fold: an identical definition of SplatLane was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of TrafficDiagEnabled was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of TrafficDiagStream was dropped here -- this TU defines it once, above)
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GetSympCrashingTargetPos  @0x82708C10  (.cpp 16518)
+//
+// Resolves the id TryStartSympatheticCrashing latched in Param::mSympCrashTarget back to a
+// world position -- the step that turns "I decided to chain off that crash" into somewhere to
+// aim. Two owners only, split off the id's high byte:
+//   owner 2 (traffic, MakeTrafficEntityId's byte): the target's own vehicle transform, but only
+//           while that vehicle is still alive;
+//   owner 1 (race car): the per-frame cache CacheRaceCarState fills -- mabRaceCarActive gates
+//           maActiveRaceCarPositions, both indexed by EActiveRaceCarIndex.
+// Anything else is the console's streamed assert and a zeroed out-slot.
+//
+// PARKED AS AN "ARTIST EXPORT HOLE WITH NO BODY" in _wT2_03.cpp's sympathetic arm. That was
+// STALE: 0x82708C10 has a per-function export, 77 asm lines, and every member it reads was
+// already homed. The header's `void f(u32, void*)` declaration was wrong too -- see there.
+// ----------------------------------------------------------------------------
+bool TrafficEntityModule::GetSympCrashingTargetPos(EntityId lTargetEntityId,
+                                                   Vector3* lpOutPos) const
+{
+    // `srwi r11, r28, 24` then `extrwi r30, r28, 14, 8` -- the same 8/14/10 split
+    // MakeTrafficEntityId packs.
+    const u32 luOwner = lTargetEntityId.muValue >> 24;
+    const u32 luIndex = EntityIdToEntityIndex(lTargetEntityId);
+
+    if (luOwner == KU_ENTITY_OWNER_TRAFFIC)
+    {
+        if (!GetVehicle(luIndex)->IsAlive())   // `lbz r11, 5(vehicle)` bit 0
+        {
+            return false;
+        }
+        *lpOutPos = GetVehicleTransform(luIndex).Pos();   // transform +0x30
+        return true;
+    }
+
+    if (luOwner == KU_ENTITY_OWNER_RACE_CAR)
+    {
+        if (!mRaceCarState.mabRaceCarActive[luIndex])              // +0x716C0 + index
+        {
+            return false;
+        }
+        *lpOutPos = mRaceCarState.maActiveRaceCarPositions[luIndex];// +0x716D0 + 16*index
+        return true;
+    }
+
+    CGS_ASSERT(false, "Unknown type of symp. crash target. Entity id=");   // .cpp 16518
+    lpOutPos->SetZero();
+    return false;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_BuildListOfCrashingThings  @0x82737270
+//   (DWARF :1631; .cpp 10179..10270)
+//
+// The shared producer. Three appends, in the console's order.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_BuildListOfCrashingThings(
+        ::Array<CrashingThingData, 168u>* lpaOutCurrentCrashingThings,
+        const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+        const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrVehicles_Alive_And_Physical)
+{
+    CGS_ASSERT(lpaOutCurrentCrashingThings != 0, "lpOutCurrentCrashingThings");   // .cpp 10179
+    CGS_ASSERT(lpInput != 0, "lpInput");                                          // .cpp 10180
+
+    if (!mbAllowDivergentBehaviour)   // +0x717E7
+    {
+        return;
+    }
+
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars =
+        lpInput->GetActiveRaceCarOutputInterface();   // 0x82711850
+
+    if (!lpActiveRaceCars->IsPlayerCarActive())
+    {
+        return;   // nobody to react around
+    }
+
+    u32 luDiagPhysical = 0;
+    u32 luDiagRaceCars = 0;
+    u32 luDiagShowtime = 0;
+
+    // --- source 1: the alive AND physical traffic vehicles -------------------------------
+    // The caller hands us the intersection it already built for UpdateParams_CalcDesiredSpeed.
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lItVehicle =
+             lrVehicles_Alive_And_Physical.Begin();
+         lItVehicle != lrVehicles_Alive_And_Physical.End();
+         ++lItVehicle)
+    {
+        const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+                   "Index is out of range (max bits: 600)");            // CgsFastBitArray.h 235
+
+        // The console's second bound assert here (.h 2459, "luIndex < KU_MAX_TOTAL_TRAFFIC"
+        // @0x82737524) is GetVehicle's own, inlined -- GetVehicle carries it verbatim, so
+        // calling it reproduces the assert rather than adding one.
+        const Vehicle* lpTargetVehicle = GetVehicle(luVehicle);
+        CGS_ASSERT(lpTargetVehicle->IsAlive(), "lpTargetVehicle->IsAlive()");        // .cpp 10203
+        CGS_ASSERT(lpTargetVehicle->IsPhysical(), "lpTargetVehicle->IsPhysical()");  // .cpp 10204
+
+        bool lbIsACrashingThing = false;
+
+        if (lpTargetVehicle->IsCrashing())
+        {
+            lbIsACrashingThing = true;
+        }
+        else if (NeedToTakeActionAgainstJunctionFUP())
+        {
+            // 0x82737664..0x827376F8. A physical car that is not crashing still counts when the
+            // junction-fouling-up score is high AND it is sitting near the physical centre and
+            // either deforming fatally or simply not driving.
+            const Matrix44Affine lTargetTransform = GetVehicleTransform(luVehicle);
+            const Vector3 lToCentre = mAveragePhysicalCentre - lTargetTransform.Pos();  // +0x725D0
+
+            if (KF_JUNCTION_FUP_MAX_RADIUS_SQ >= rw::math::vpu::Dot(lToCentre, lToCentre))
+            {
+                const TrafficPhysicsInfo* lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+                CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");                          // .cpp 10222
+
+                if (lpPhysInfo->mbIsFatallyCrashing ||                              // +0xFE6
+                    lpPhysInfo->mfTimeNotDriving >=                                 // +0xFD8
+                        KF_NOT_DRIVING_TIME_TO_COUNT_AS_A_CRASH)
+                {
+                    lbIsACrashingThing = true;
+                }
+            }
+        }
+
+        if (lbIsACrashingThing)
+        {
+            CrashingThingData lThing;
+            lThing.mEntityId             = MakeTrafficEntityId(luVehicle);
+            lThing.mbShowtimeCrashMagnet = false;
+            lThing.mPosition             = GetVehicleTransform(luVehicle).Pos();
+            lpaOutCurrentCrashingThings->Append(lThing);
+            ++luDiagPhysical;
+        }
+    }
+
+    // --- source 2: the active race cars ---------------------------------------------------
+    for (EActiveRaceCarIndex leRaceCar = E_ACTIVE_RACE_CAR_INDEX_0;
+         leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leRaceCar++)
+    {
+        CGS_ASSERT(leRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
+                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // OutputInterface.h 854
+        CGS_ASSERT(leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");// OutputInterface.h 855
+
+        // 0x82737AF0 -- `lhzx r11, 0x2780(iface) ; clrlwi r11,r11,31` == maxRaceCarFlags & 1.
+        if (!lpActiveRaceCars->IsRaceCarActive(leRaceCar))
+        {
+            continue;
+        }
+
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpActiveRaceCars->GetRaceCarState(leRaceCar);
+        CGS_ASSERT(lpRaceCarState != 0, "lpRaceCarState");                          // .cpp 10247
+
+        // 0x82737B34..0x82737B54. Either debug force, or the car really is crashing.
+        if (!mbDEBUGTestSympCrash &&                       // +0x7286A
+            !lpRaceCarState->mbCrashing &&                 // state +0x44A
+            !mbDEBUGFakeShowtime)                          // +0x72876
+        {
+            continue;
+        }
+
+        CGS_ASSERT(static_cast<u32>(leRaceCar) < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");   // CgsEntityId.h 116
+
+        CrashingThingData lThing;
+        lThing.mEntityId.muValue = (static_cast<u32>(leRaceCar) << KU_RACE_CAR_PART_INDEX_SHIFT) |
+                                   KU_RACE_CAR_OWNER_PACKED;
+        lThing.mbShowtimeCrashMagnet = false;
+        lThing.mPosition             = lpRaceCarState->mTransform.Pos();   // state +0x220
+        lpaOutCurrentCrashingThings->Append(lThing);
+        ++luDiagRaceCars;
+    }
+
+    // --- source 3: the showtime crash magnets ---------------------------------------------
+    if (!mbPlayingShowtimeMode)   // +0x717DD
+    {
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            static u32 suDiagFrame = 0;
+            if ((suDiagFrame++ % 10u) == 0u)   // decision frames are 0.1 s -> ~1 line/s
+            {
+                *lpDiag << "[T5-crash] things=" << static_cast<s32>(luDiagPhysical + luDiagRaceCars)
+                        << " physical=" << static_cast<s32>(luDiagPhysical)
+                        << " racecars=" << static_cast<s32>(luDiagRaceCars)
+                        << " showtime=0 [DELETE-WHEN-STABLE]\n";
+            }
+        }
+        return;
+    }
+
+    for (u32 luShowtime = 0; luShowtime < muShowtimeVehicleInfoCount; ++luShowtime)   // +0x72480
+    {
+        const ShowtimeVehicleInfo* lpShowtimeInfo = &maShowtimeVehicleInfoList[luShowtime]; // +0x72380
+        CGS_ASSERT(lpShowtimeInfo != 0, "lpShowtimeInfo");                          // .cpp 10270
+
+        if ((lpShowtimeInfo->muFlags & KU_SHOWTIME_INFO_FLAG_CRASH_MAGNET) == 0)
+        {
+            continue;
+        }
+
+        const u32 luVehicle = lpShowtimeInfo->muVehicleIndex;
+        CGS_ASSERT(luVehicle < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");   // CgsEntityId.h 116
+
+        CrashingThingData lThing;
+        lThing.mEntityId = MakeTrafficEntityId(luVehicle);
+
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+                   "luIndex < KU_MAX_TOTAL_TRAFFIC");                       // .h 2483
+
+        lThing.mbShowtimeCrashMagnet = true;
+        lThing.mPosition             = maVehicleTransforms[luVehicle].Pos();   // +0x1ECB0 + 64*i
+        lpaOutCurrentCrashingThings->Append(lThing);
+        ++luDiagShowtime;
+    }
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suDiagFrameShowtime = 0;
+        if ((suDiagFrameShowtime++ % 10u) == 0u)
+        {
+            *lpDiag << "[T5-crash] things="
+                    << static_cast<s32>(luDiagPhysical + luDiagRaceCars + luDiagShowtime)
+                    << " physical=" << static_cast<s32>(luDiagPhysical)
+                    << " racecars=" << static_cast<s32>(luDiagRaceCars)
+                    << " showtime=" << static_cast<s32>(luDiagShowtime)
+                    << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_TryAvoidCrashing  @0x82716948  (.cpp 10489)
+//
+// This is the function that makes traffic swerve. A param whose forward cone holds a crashing
+// thing other than itself drives AROUND it instead of through it. The cone is the member
+// kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W @+0x727A0, seeded by Construct as
+// { cos(10 deg), 30.0f, 0.25f, 0.0f } -- a 10-degree half-angle, 30 m long, with the vertical
+// axis squashed to a quarter before the test.
+//
+// ⭐ WHERE THE DECISION REACHES THE WHEELS (traced 2026-08-28; the note this replaces said the
+// steering half was "downstream and still gated", and that is NOT what the tree says).
+// Exactly fifteen X360 functions read Param+0x1B, and the one that steers is
+// BrnTraffic::UpdateVehiclesJob::CalcSwerveAmount @0x8291CF18 -- BODIED, in
+// GameSource/Jobs/Traffic/BrnUpdateVehiclesJob.cpp. Its tail (@0x8291D794) is
+//     if (GetCurrentParam()->miBehaviour == 2) { isExtreme = false;
+//                                                isNormalPhysical = true;
+//                                                swerveAmount = 1.0f; }
+// i.e. a drive-around param swerves at FULL amplitude, bypassing the usual proximity scaling.
+// UpdateVehicle then feeds that into CalcTargetPos, whose lateral term is
+// `lfSwerve.x * KF_APPROX_LANE_WIDTH` -- one whole lane width -- and MoveToTarget drives the
+// non-physical car there. So the chain from this decision to a moved car is COMPLETE, with
+// three live preconditions the console also has: within 150 m of mBehaviourCentre
+// (lbPartialUpdate), mbGameModeAllowsSwerving (Construct sets it true), and
+// FindInterestingRaceCar succeeding.
+// ⚠️ What IS still gated inside CalcSwerveAmount is only its predicted-intersection
+// refinement @0x8291D644 (GetLineLineIntersectionParamXZ), which polishes WHERE the swerve
+// aims -- not whether it happens.
+//
+// The three early-outs are the console's, in order: divergent behaviour off; the param has
+// already been promoted to a physics body (a body is steered by physics, not by this); and the
+// physical-traffic pool has fewer than four free slots.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_TryAvoidCrashing(
+        u32 luParam,
+        const ::Array<CrashingThingData, 168u>* lpaCrashingThings)
+{
+    CGS_ASSERT(lpaCrashingThings != 0, "lpCurrentCrashingThings");   // .cpp 10489
+
+    if (!mbAllowDivergentBehaviour)   // +0x717E7
+    {
+        return;
+    }
+
+    CGS_ASSERT(luParam < KU_MAX_TOTAL_TRAFFIC,
+               "Index is out of range (max bits: 600)");             // CgsFastBitArray.h 396
+
+    if (mVehicleSoaData.mPhysicalVehicles.IsBitSet(luParam))   // +164800
+    {
+        return;
+    }
+
+    if ((KU_MAX_PHYSICAL_TRAFFIC_VEHICLES - maTrafficPhysicsInfoListBits.CountSetBits()) <
+        KU_MIN_FREE_PHYSICAL_SLOTS_TO_REACT)
+    {
+        return;
+    }
+
+    Param* const lpParam = GetParam(luParam);
+    const ParamTransform* const lpParamTransform = GetParamTransform(luParam);
+    const EntityId lOurEntityId = MakeTrafficEntityId(luParam);
+
+    // 0x82716C10..0x82716C30 -- the cone comes from the member, one splat per lane.
+    const VecFloat lfConeCosAngle =
+        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.x);   // +0x727A0
+    const VecFloat lfConeLength =
+        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.y);
+    const VecFloat lfConeRecipYScale =
+        SplatLane(kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.z);
+
+    for (u32 luThing = 0; luThing < lpaCrashingThings->GetLength(); ++luThing)
+    {
+        const CrashingThingData& lrThing = (*lpaCrashingThings)[luThing];
+
+        if (lrThing.mEntityId.muValue == lOurEntityId.muValue)
+        {
+            continue;   // never swerve around yourself
+        }
+
+        if (!IsPointWithinSquishedCone(lpParamTransform->GetDeterministicPos(),
+                                       lpParamTransform->GetDirection(),
+                                       lfConeCosAngle, lfConeLength, lfConeRecipYScale,
+                                       lrThing.mPosition))
+        {
+            continue;
+        }
+
+        // 0x82716C78: `li r11, 2 ; stb r11, 0x1B(param)`.
+        lpParam->miBehaviour = Param::KI_BEHAVIOUR_DRIVING_AROUND_OBSTRUCTION;
+
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            static u32 suAvoidLogged = 0;
+            const u32 KU_AVOID_LOG_CAP = 64;
+            if (suAvoidLogged < KU_AVOID_LOG_CAP)
+            {
+                ++suAvoidLogged;
+                const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
+                const Vector3 lToThing  = lrThing.mPosition - lParamPos;
+                *lpDiag << "[T5-avoid] param=" << static_cast<s32>(luParam)
+                        << " thing=" << static_cast<s32>(luThing)
+                        << " ofNThings=" << static_cast<s32>(lpaCrashingThings->GetLength())
+                        << " distSq=" << rw::math::vpu::Dot(lToThing, lToThing)
+                        << " behaviour=DRIVING_AROUND_OBSTRUCTION"
+                        << " [DELETE-WHEN-STABLE]\n";
+            }
+        }
+        return;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. A run that swerves nothing has to say WHY, or "0 swerves"
+    // is indistinguishable from a dead function. This re-walks the same list and reports the
+    // closest miss against the cone's own two thresholds. DELETE-WHEN-STABLE.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suMissSample = 0;
+        if ((suMissSample++ % 2000u) == 0u && lpaCrashingThings->GetLength() != 0)
+        {
+            const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
+            const Vector3 lParamDir = lpParamTransform->GetDirection();
+            f32 lfBestDist = 3.4028235e38f;
+            f32 lfBestCos  = -1.0f;
+            for (u32 luThing = 0; luThing < lpaCrashingThings->GetLength(); ++luThing)
+            {
+                const Vector3 lToThing = (*lpaCrashingThings)[luThing].mPosition - lParamPos;
+                const f32 lfDistSq = rw::math::vpu::Dot(lToThing, lToThing);
+                if (lfDistSq <= 0.0f || lfDistSq >= lfBestDist * lfBestDist)
+                {
+                    continue;
+                }
+                lfBestDist = std::sqrt(lfDistSq);
+                lfBestCos  = rw::math::vpu::Dot(lToThing, lParamDir) / lfBestDist;
+            }
+            *lpDiag << "[T5-miss] param=" << static_cast<s32>(luParam)
+                    << " things=" << static_cast<s32>(lpaCrashingThings->GetLength())
+                    << " nearest=" << lfBestDist << "m cos=" << lfBestCos
+                    << " need dist<=" << kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.y
+                    << " cos>=" << kfParamAvoidCrashCone_CosAngle_Length_RecipYScale_W.x
+                    << " [DELETE-WHEN-STABLE]\n";
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing  @0x827165D8  (.cpp 10375)
+//
+// The chain-reaction half. A moving param close enough to the camera, with a crashing thing in
+// its cone, drops into E_BEHAVIOUR_SLOWING_FOR_CRASH and latches the thing's id as its
+// sympathetic-crash target (UpdateSympatheticCrashing @0x8273D378 is what consumes that).
+//
+// The camera proximity test is done on the VEHICLE transform (not the param's deterministic
+// pos), and it is two-part: within the squared radius AND in front of the camera. The showtime
+// case takes the wider radius (100 m vs 40 m) and the wider cone (cos 20 deg / 50 m).
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
+        u32 luParam,
+        const ::Array<CrashingThingData, 168u>* lpaCrashingThings)
+{
+    CGS_ASSERT(lpaCrashingThings != 0, "lpCurrentCrashingThings");   // .cpp 10375
+
+    if (!mbAllowDivergentBehaviour)   // +0x717E7
+    {
+        return;
+    }
+
+    if ((KU_MAX_PHYSICAL_TRAFFIC_VEHICLES - maTrafficPhysicsInfoListBits.CountSetBits()) <
+        KU_MIN_FREE_PHYSICAL_SLOTS_TO_REACT)
+    {
+        return;
+    }
+
+    Param* const lpParam = GetParam(luParam);
+
+    // 0x827166F0: a param already in behaviour 0 (SLOWING_FOR_CRASH) has nothing to start.
+    if (lpParam->miBehaviour == Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH)
+    {
+        return;
+    }
+
+    if (lpParam->mfSpeed < KF_MIN_SPEED_TO_START_SYMPATHETIC_CRASH)   // param +0x14
+    {
+        return;
+    }
+
+    // 0x8271673C..0x82716764 -- distance and in-front-ness relative to LAST FRAME's camera.
+    const Matrix44Affine lVehicleTransform = GetVehicleTransform(luParam);
+    const Vector3 lFromCamera = lVehicleTransform.Pos() - mCameraLastFrame.GetPosition(); // +0x728C0
+    const f32 lfAlongCamera =
+        rw::math::vpu::Dot(mCameraLastFrame.GetDirection(), lFromCamera);                 // +0x728B0
+    const f32 lfDistFromCameraSq = rw::math::vpu::Dot(lFromCamera, lFromCamera);
+    const bool lbBehindCamera = !(lfAlongCamera >= 0.0f);
+
+    Vector4 lCone;
+    if (mbPlayingShowtimeMode)   // +0x717DD
+    {
+        if (lfDistFromCameraSq >= KF_SYMP_CRASH_MAX_DIST_FROM_CAMERA_SHOWTIME_SQ)  // lane 1
+        {
+            return;
+        }
+        if (lbBehindCamera)
+        {
+            return;
+        }
+        lCone = kfParamSympatheticConeShowTime_CosAngle_Length_RecipYScale_W;   // +0x726F0
+    }
+    else
+    {
+        if (lfDistFromCameraSq >= KF_SYMP_CRASH_MAX_DIST_FROM_CAMERA_SQ)        // lane 0
+        {
+            return;
+        }
+        if (lbBehindCamera)
+        {
+            return;
+        }
+        lCone = kfParamSympatheticCone_CosAngle_Length_RecipYScale_W;           // +0x726E0
+    }
+
+    const VecFloat lfConeCosAngle    = SplatLane(lCone.x);
+    const VecFloat lfConeLength      = SplatLane(lCone.y);
+    const VecFloat lfConeRecipYScale = SplatLane(lCone.z);
+
+    const ParamTransform* const lpParamTransform = GetParamTransform(luParam);
+    const EntityId lOurEntityId = MakeTrafficEntityId(luParam);
+
+    for (u32 luThing = 0; luThing < lpaCrashingThings->GetLength(); ++luThing)
+    {
+        const CrashingThingData& lrThing = (*lpaCrashingThings)[luThing];
+
+        if (lrThing.mEntityId.muValue == lOurEntityId.muValue)
+        {
+            continue;
+        }
+
+        if (!IsPointWithinSquishedCone(lpParamTransform->GetDeterministicPos(),
+                                       lpParamTransform->GetDirection(),
+                                       lfConeCosAngle, lfConeLength, lfConeRecipYScale,
+                                       lrThing.mPosition))
+        {
+            continue;
+        }
+
+        // 0x827168A8..0x82716904. Outside showtime, and for any non-magnet entry, the cone hit
+        // is enough. A showtime CRASH MAGNET additionally has to be travelling roughly the way
+        // we are (`vcmpgtfp128. 0, dot` -> take the crash only when the dot is NOT negative),
+        // so the chain follows the flow of traffic instead of firing at oncoming cars.
+        if (mbPlayingShowtimeMode && lrThing.mbShowtimeCrashMagnet)
+        {
+            const Matrix44Affine lTargetTransform =
+                GetVehicleTransform(EntityIdToEntityIndex(lrThing.mEntityId));
+            const f32 lfFacing = rw::math::vpu::Dot(lTargetTransform.At(),
+                                                    lpParamTransform->GetDirection());
+            if (0.0f > lfFacing)
+            {
+                continue;
+            }
+        }
+
+        // 0x8271692C: `stb 0, 0x1B(param)` then `stw thingId, 0x48(param)`.
+        lpParam->miBehaviour     = Param::KI_BEHAVIOUR_SLOWING_FOR_CRASH;
+        lpParam->mSympCrashTarget = lrThing.mEntityId;
+
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            static u32 suSympLogged = 0;
+            const u32 KU_SYMP_LOG_CAP = 64;
+            if (suSympLogged < KU_SYMP_LOG_CAP)
+            {
+                ++suSympLogged;
+                const Vector3 lParamPos = lpParamTransform->GetDeterministicPos();
+                const Vector3 lToThing  = lrThing.mPosition - lParamPos;
+                *lpDiag << "[T5-symp] param=" << static_cast<s32>(luParam)
+                        << " target=" << static_cast<s32>(EntityIdToEntityIndex(lrThing.mEntityId))
+                        << " magnet=" << (lrThing.mbShowtimeCrashMagnet ? 1 : 0)
+                        << " distSq=" << rw::math::vpu::Dot(lToThing, lToThing)
+                        << " camDistSq=" << lfDistFromCameraSq
+                        << " [DELETE-WHEN-STABLE]\n";
+            }
+        }
+        return;
+    }
+}
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT3_00.cpp (wave T3) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT3_00.cpp -- PHYSICAL TRAFFIC keystone leaves.
+// The three tiny shared accessors every other wave-T3 cluster calls.
+//
+//   TrafficEntityModule::GetVehicle(u32) const                 DWARF :1230 (ICF twin of :1227)
+//   TrafficEntityModule::GetTrafficPhysicsInfoForVehicl  @0x82714500 (153)
+//   TrafficEntityModule::GetCarAssetAttribKey            @0x8273EFC8 (59)
+//   TrafficEntityModule::CalculateInitialPhysicalState   @0x8271DD30 (96)
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+    // DWARF BrnTrafficEntityModule.h:1230. The console ICF-folds it onto the non-const
+    // GetVehicle @leak :1590 (identical body); reproduced as a delegation.
+    const Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex) const
+    {
+        return const_cast<TrafficEntityModule*>(this)->GetVehicle(luIndex);
+    }
+
+    // @0x82714500 (153). DWARF :1242 `TrafficPhysicsInfo* GetTrafficPhysicsInfoForVehicle(u32)`
+    // -- the ledger/X360 symbol truncates the name, which is the spelling kept here.
+    // Six baked asserts, at the console's own file/lines (BrnTrafficEntityModule.h
+    // :2500 / :2501 / :2504 / :2505 / :2506 / :2510, plus the inlined GetVehicle :2459 twice
+    // and the BitArray.h:203 index message).
+    // ⚠️ GetPhysicalPartsIndex is ZERO-extended in this tree (BrnTrafficVehicle.h:291, matching
+    // the console's `lbz` with no extsb) while THIS caller sign-extends it (0x827145C4 extsb).
+    // A -1 index therefore reads 255 here and trips the < 25 assert instead of the >= 0 one.
+    // Same set of asserts fires either way; do not "fix" it by comparing against -1.
+    TrafficPhysicsInfo* TrafficEntityModule::GetTrafficPhysicsInfoForVehicl(u32 luVehicle)
+    {
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT(GetVehicle(luVehicle)->IsPhysical(), "GetVehicle( luVehicle )->IsPhysical()");
+
+        const s32 liPartsIndex = GetVehicle(luVehicle)->GetPhysicalPartsIndex();
+        CGS_ASSERT(liPartsIndex >= 0, "liPartsIndex >= 0");
+        CGS_ASSERT(liPartsIndex < static_cast<s32>(KU_MAX_PHYSICAL_TRAFFIC_VEHICLES),
+                   "liPartsIndex < (int32_t)KU_MAX_PHYSICAL_TRAFFIC_VEHICLES");
+        CGS_ASSERT(maTrafficPhysicsInfoListBits.IsBitSet(static_cast<u32>(liPartsIndex)),
+                   "maTrafficPhysicsInfoListBits.IsBitSet( liPartsIndex )");
+
+        TrafficPhysicsInfo* lpPhysicsInfo = &maTrafficPhysicsInfoList[liPartsIndex];
+
+        // 0x8271472C `lhz 0x100A` + `extsh` + `cmpw`: the record's owning-vehicle halfword,
+        // SIGN-extended, against luVehicle. The assert text names the DWARF's miVehicleIndex.
+        CGS_ASSERT(static_cast<s32>(static_cast<s16>(lpPhysicsInfo->muOwningVehicleIndex))
+                       == static_cast<s32>(luVehicle),
+                   "lpPhysicsInfo->miVehicleIndex == (int32_t)luVehicle");
+        return lpPhysicsInfo;
+    }
+
+    // The const twin (DWARF :1245). One console body serves both.
+    const TrafficPhysicsInfo* TrafficEntityModule::GetTrafficPhysicsInfoForVehicl(u32 luVehicle) const
+    {
+        return const_cast<TrafficEntityModule*>(this)->GetTrafficPhysicsInfoForVehicl(luVehicle);
+    }
+
+    // @0x8273EFC8 (59). DWARF :1812 `const Attribute::Key GetCarAssetAttribKey(uint32_t) const`.
+    // Asserts (BrnTrafficEntityModule.cpp:17130/:17131, the inlined GetVehicle .h:2467 and
+    // Vehicle::IsAlive BrnTrafficVehicle.h:786), then hands back the vehicle TYPE's attrib key.
+    VehicleTypeRuntime::AttribKey TrafficEntityModule::GetCarAssetAttribKey(u32 luVehicle) const
+    {
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT(mpVehicleList != 0, "mpVehicleList != NULL");
+
+        const Vehicle* lpVehicle = GetVehicle(luVehicle);
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");
+
+        return GetVehicleTypeRuntime(lpVehicle->GetVehicleType())->GetAttribKey();
+    }
+
+    // @0x8271DD30 (96). DWARF :1578. The Feb-2007 leak spells this body verbatim
+    // (BrnTrafficEntityModule.cpp:1410) and the asm agrees statement for statement.
+    void TrafficEntityModule::CalculateInitialPhysicalState(
+        const Vehicle* lpInVehicle,
+        Matrix44Affine lVehicleTransform,
+        Vector3& lOutInitialVelocity,
+        Vector3& lOutAngularVelocity,
+        u8* lpuOutAttribsId,
+        Matrix44Affine& lOutTransform) const
+    {
+        // 0x8271DD60 loads the transform row at +0x20 (zAxis == At()) and 0x8271DD7C scales it
+        // by GetSpeed's broadcast lane.
+        lOutInitialVelocity = rw::math::vpu::Mult(lVehicleTransform.At(),
+                                                  lpInVehicle->GetSpeed().x);
+
+        lOutAngularVelocity.SetZero();
+
+        *lpuOutAttribsId = 0;
+
+        CGS_ASSERT(lpInVehicle->IsAlive(), "IsAlive()");
+        const VehicleTypeRuntime* lpVehicleTypeRuntime =
+            GetVehicleTypeRuntime(lpInVehicle->GetVehicleType());
+
+        // lOutTransform = Matrix44AffineFromTranslation( mBBoxOffset ) * lVehicleTransform.
+        // The console emits the GENERIC affine product with the translation matrix's constant
+        // rows unfolded (0x8271DE20..0x8271DE98), which is why the first three result rows are
+        // the source rows and only the translation row picks the offset up in vehicle axes.
+        // ⚠️ SIGN: the read-back (HandleExternalResponses) applies Negate(mBBoxOffset). Adding
+        // here and subtracting there is the round trip; flipping either makes every promoted
+        // car jump by the bbox offset on its first physical frame.
+        // FLAG: rw::math::vpu has no Matrix44AffineFromTranslation on this tree; the identity
+        // seed plus the offset row IS that helper (the console's three constant rows are
+        // vspltisw/vcfsx-built at 0x8271DDE8..0x8271DE28, its fourth is the raw mBBoxOffset load).
+        Matrix44Affine lBBoxTranslate;
+        lBBoxTranslate.SetIdentity();
+        lBBoxTranslate.wAxis = lpVehicleTypeRuntime->GetBBoxOffset();
+
+        lOutTransform = rw::math::vpu::Mult(lBBoxTranslate, lVehicleTransform);
+    }
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT3_01.cpp (wave T3) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT3_01.cpp -- cluster C1: WORLD-SIDE PROMOTION.
+// The five-step chain that turns a driving traffic car into a physics body request.
+//
+//   TrafficEntityModule::SendPhysicalRequests           @0x8274C510 (96)   DWARF :1569
+//   TrafficEntityModule::SafeRequestMakeVehiclePhysical @0x8274AFD0 (234)  DWARF :1572
+//   TrafficEntityModule::MakeVehiclePhysical            @0x82747200 (162)  DWARF :1575
+//   TrafficEntityModule::AddVehicleToPhysics            @0x827425B0 (462)  DWARF :1405
+//   TrafficEntityModule::RecordTrafficVehicleIsPhysical @0x82720EC0 (188)  DWARF :1170
+//
+// None of the five is in the Feb-2007 leak; ARTIST pseudocode + asm are the only sources.
+// Every X360 displacement quoted below is reached BY NAME, never by offset.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // SafeRequestMakeVehiclePhysical's sympathetic-crash seed, 0x8274B340..0x8274B348.
+    // The modulus is the 0x446F8657 magic-multiply reciprocal's divisor and the split is the
+    // literal `cmpwi r11, 0x32`. Deliberately NOT shared with the identically-valued pair in
+    // _wT3_02.cpp: that seat's split is a computed percentage (slider*35 + 30) and this one is a
+    // hard 50, so they are two different constants that happen to share a modulus.
+    const u32 KU_SYMP_CRASH_PERCENT_MODULUS   = 101u;
+    const s32 KI_SYMP_CRASH_ACCELERATE_PERCENT = 50;
+
+    // ---- the two maNewCrashedVehicles drains --------------------------------------------
+    // The 14/10 traffic entity-id split MakeTrafficEntityId packs (BrnTrafficConstants.h),
+    // unpacked. Mirrored file-local exactly as _wT3_02.cpp / _wT3_04.cpp mirror it.
+    const u32 KU_ENTITY_INDEX_SHIFT   = 10;
+    const u32 KU_ENTITY_INDEX_MASK    = 0x3FFFu;
+    const u8  KU8_TRAFFIC_ENTITY_OWNER = 2;   // E_ENTITYTYPE_TRAFFIC
+
+    inline u32 EntityIndexOf(EntityId lId)
+    {
+        return (lId.muValue >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
+    }
+
+    // The console seeds the owner byte INLINE and calls only the index setter -- verbatim at
+    // KillDyingVehicleEntity 0x8272F678..0x8272F68C:
+    //     li     r11, 1
+    //     extldi r30, r11, 64,57      ; == 1 << 57 == owner 2 in the entity word's high byte
+    //     std    r30, var_1F8(r1)     ; muId seeded whole
+    //     bl     CgsSceneManager::VolumeInstanceId::SetEntityIDEntityIndex
+    // and again at 0x8272F6AC/0x8272F6B0. VolumeInstanceId::SetEntityIDOwner @0x822B0E00 is
+    // NOT called by either traffic body (the only EntityID call in 0x8272EB40's whole listing
+    // is SetEntityIDEntityIndex, twice), so seeding through it would be an arm the console
+    // does not have. THIS shape is therefore the one wave T3/T4/KillDying now share -- issue
+    // #20 folded the three copies and this is the one with the asm behind it.
+    //
+    // At THIS file's own call site the console folds the build differently again --
+    // GenerateCrashedVehicleEvents 0x827202C0 `sldi r27, r29, 32`, shifting the whole victim
+    // EntityId (owner 2 and the index already packed by MakeTrafficEntityId) into the high
+    // dword. That produces the identical 64-bit value: (2<<24 | idx<<10) << 32 ==
+    // 2 << 56 | idx << 42.
+    inline CgsSceneManager::VolumeInstanceId MakeTrafficVolumeInstanceId(u32 luVehicle)
+    {
+        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
+        lVolumeInstanceId.muId =
+            static_cast<u64>(KU8_TRAFFIC_ENTITY_OWNER)
+            << (CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX
+                + CgsSceneManager::VolumeInstanceId::KU_OWNER_BASE);
+        lVolumeInstanceId.SetEntityIDEntityIndex(luVehicle);
+        return lVolumeInstanceId;
+    }
+
+    // GenerateCrashedVehicleEvents' three literal arguments, `li r31,3` / `li r11,4` /
+    // `li r11,1` at 0x827204E4 / 0x827205CC / 0x827205C4.
+    // FLAG (name inferred, value asm-literal): culling group 3 has no symbol anywhere in this
+    // tree -- the named neighbours are 0 WORLD, 2 CARS, 7 PROPS, 8 PARTS, 9 the detached-part
+    // group (BrnPropEntityModule.cpp / BrnPhysicalWheel.cpp), and 3 is the one ordinary traffic
+    // does NOT use: UpdateCollidableVehicles (_wT4_01.cpp) registers a driving car in group 2.
+    // So a car that has just started crashing is moved into its own group.
+    const s32 KI_CULLING_GROUP_CRASHED_TRAFFIC = 3;
+
+// (fold: an identical definition of KU_HACK_BASE_VOLUME_ID was dropped here -- this TU defines it once, above)
+}
+
+// HOST SEAT REACHED ACROSS A TU BOUNDARY. The console walks maJobs[0..
+// muNumUpdateVehiclesJobs) (DWARF :619) and calls TrafficJobStub::GetNewPhysicalRequests on
+// each. That member is [MEMBER HOLE 5] on this tree (BrnTrafficJob.h cannot be included from
+// BrnTrafficEntityModule.h -- EAThread C2011), and its host stand-in lives in
+// BrnTrafficEntityModule_wT2_04.cpp, which seats it in an ANONYMOUS namespace. The producer
+// (UpdateVehicles' job split) writes that array and this consumer reads it, so the two must be
+// the same object: declared extern here rather than forked into a second array.
+// LINK BLOCKER for the conductor, one line in a file this cluster does not own: move
+// gaHostUpdateVehiclesJobs / gaHostNewPhysicalRequests out of _wT2_04.cpp's anonymous
+// namespace (into namespace BrnTraffic) so this declaration resolves. See REPORT section 2.
+extern PhysicalRequestInfoList gaHostNewPhysicalRequests[KU_MAX_JOBS];
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SendPhysicalRequests  @ 0x8274C510 (96)   DWARF :1569
+//
+// PrePhysicsUpdate's RUNNING arm. Drains each UpdateVehicles job's PhysicalRequestInfoList
+// into SafeRequestMakeVehiclePhysical, then clears the list.
+//
+// Register split from the prologue (0x8274C51C..0x8274C524): r3 this, r4 lpOutput,
+// r5 lpCreatedBodies. Hex-Rays LOSES r5 and renders the seventh argument of the inner call as
+// `*v7`; the asm is unambiguous -- 0x8274C618 `mr r10, r24` with r24 == r5.
+//
+// The inner call's argument build is 0x8274C608..0x8274C644:
+//   r4 lhz   var_70+0 == PhysicalRequestInfo::muVehicle (u16, zero-extended)
+//   r5 extsb var_70+2 == PhysicalRequestInfo::miReason  (s8,  SIGN-extended)
+//   r6 lwz   var_70+4 == PhysicalRequestInfo::mTargetEntityId
+//   r7 = 2 (E_TRAFFIC_TYPE_PHYSICAL)   r8 = 2 (eCrashTrafficType_Spontaneous)
+//   r9 = lpOutput                      r10 = lpCreatedBodies
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                              TotalTrafficBitArray* lpMadePhysical)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput");   // 0x8274C530, BrnTrafficEntityModule.cpp:2369
+
+    // 0x8274C550 `lwz 0x2A00` == muNumUpdateVehiclesJobs; the entry guard is signed (`ble`),
+    // the loop-back unsigned (`cmplw`). No clamp against the host array extent, matching the
+    // producer side in _wT2_04.cpp (muNumUpdateVehiclesJobs is only ever set to KU_MAX_JOBS).
+    for (u32 luJob = 0; luJob < muNumUpdateVehiclesJobs; ++luJob)
+    {
+        // Console: maJobs[luJob].GetNewPhysicalRequests(), with THREE `!mbRunningJob` asserts
+        // (BrnTrafficJob.h:97) -- one before the size read, one before each element read, one
+        // before the clear. The host split runs the worker inline inside TrafficJobStub::
+        // Execute, so no job is ever running here and TrafficJobStub is not a module member;
+        // the asserts have no host counterpart.
+        PhysicalRequestInfoList& lrRequests = gaHostNewPhysicalRequests[luJob];
+
+        // GetLength() re-evaluated per iteration, exactly as the console re-loads the count
+        // word (0x8274C5B4 / 0x8274C5D8) and re-fires the CgsArray.h:336 assert.
+        for (u32 luRequest = 0; luRequest < lrRequests.GetLength(); ++luRequest)
+        {
+            const PhysicalRequestInfo& lrInfo = lrRequests[luRequest];
+
+            SafeRequestMakeVehiclePhysical(lrInfo.muVehicle,
+                                           static_cast<PhysicalReason>(lrInfo.miReason),
+                                           lrInfo.mTargetEntityId,
+                                           BrnPhysics::Vehicle::E_TRAFFIC_TYPE_PHYSICAL,
+                                           BrnPhysics::Vehicle::eCrashTrafficType_Spontaneous,
+                                           lpOutput,
+                                           lpMadePhysical);
+        }
+
+        lrRequests.Clear();   // 0x8274C670 `stw r20, 0x548(r29)` == the count word
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SafeRequestMakeVehiclePhysical  @ 0x8274AFD0 (234)  DWARF :1572
+//
+// Every reason a promotion request is refused, in console order. Hex-Rays prints "local
+// variable allocation has failed" on this one, so the whole body is read off the asm.
+// Prologue 0x8274AFDC..0x8274AFFC: r3 this, r4 luVehicle, r5 leReason, r6 lTargetEntityId,
+// r7 leTrafficType, r8 leCrashType, r9 lpOutput, r10 lpCreatedBodies.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SafeRequestMakeVehiclePhysical(
+        u32 luVehicle,
+        PhysicalReason leReason,
+        EntityId lTargetEntityId,
+        BrnPhysics::Vehicle::ETrafficType leTrafficType,
+        BrnPhysics::Vehicle::eCrashTrafficType leCrashType,
+        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+        TotalTrafficBitArray* lpMadePhysical)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput");                 // 0x8274B00C, .cpp:2434
+    CGS_ASSERT(lpMadePhysical != 0, "lpCreatedBodies");    // 0x8274B030, .cpp:2435
+
+    // 0x8274B04C `lbzx r11, r27, 0x725E8` -- mbTrafficIsHidden (DWARF :789; its neighbour
+    // mfJunctionFUP :785 is the header's attested +0x725E0). Hidden traffic never promotes.
+    if (mbTrafficIsHidden)
+    {
+        return;
+    }
+
+    // 0x8274B060..0x8274B144 -- the inlined BitArray<601>::IsBitSet with its streamed bounds
+    // message ("invalid index : " << luVehicle << " < " << 600).
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "invalid index : ");   // CgsBitArray.h:203
+    if (lpMadePhysical->IsBitSet(luVehicle))
+    {
+        return;
+    }
+
+    Vehicle* lpVehicle = GetVehicle(luVehicle);
+
+    // 0x8274B158..0x8274B17C: one `lbz 5(vehicle)` (mxFlags) tested three ways -- bit0 ALIVE
+    // and bit1 HASENTITY must be set, bit3 PHYSICAL must be clear.
+    if (!lpVehicle->IsAlive() || !lpVehicle->HasEntity() || lpVehicle->IsPhysical())
+    {
+        return;
+    }
+
+    // 0x8274B184 `cmpwi r3, -1`. GetPhysicalReason is SIGN-extended at its source
+    // (0x82705540 lbz + extsb), so == -1 IS correct here. Never copy this idiom to
+    // GetPhysicalPartsIndex / GetCurrentManoeuvrePhase, which are zero-extended.
+    if (lpVehicle->GetPhysicalReason() != E_PHYSICALREASON_INVALID)
+    {
+        return;
+    }
+
+    // 0x8274B198..0x8274B204 -- the free-slot budget: the inlined BitArray<25>
+    // GetFirstZeroBit over maTrafficPhysicsInfoListBits must land in [0, 25).
+    // GATE trailers @0x8274B208: when Vehicle::muOtherHalfIndex != KU_INVALID_VEHICLE the
+    // console takes the OTHER budget -- CountSetBits() + 2 <= 25, two slots for the pair.
+    // BLOCKER: muOtherHalfIndex is private with no unconditional accessor and
+    // BrnTrafficVehicle.h is not this cluster's file. Unreachable today (generation is
+    // InitialiseAsStandard only, which seeds it to KU_INVALID_VEHICLE).
+    // DELETE-WHEN Vehicle gains the DWARF :338 GetTrailerIndex / other-half accessor.
+    const s32 liFreeSlot = maTrafficPhysicsInfoListBits.GetFirstClearBit();
+    if (liFreeSlot < 0 || liFreeSlot >= static_cast<s32>(KU_MAX_PHYSICAL_TRAFFIC_VEHICLES))
+    {
+        return;
+    }
+
+    MakeVehiclePhysical(luVehicle, lpOutput, lpMadePhysical, lTargetEntityId,
+                        leTrafficType, leCrashType);
+
+    lpVehicle->SetPhysicalReason(static_cast<s8>(leReason));   // 0x8274B2DC
+
+    if (leReason == E_PHYSICALREASON_SYMPATHETIC_CRASHING)     // 0x8274B2E0 cmpwi r25, 3
+    {
+        lpVehicle->SetSympatheticCrashTarget(lTargetEntityId); // 0x8274B2F0
+
+        // GATE DELETED 2026-08-29 (traffic-crash wave). Its blocker -- "Vehicle exposes no
+        // setter for either member" -- was STALE: BrnTrafficVehicle.h has carried
+        // SetSympCrashTime / SetSympCrashState since the Vehicle wave, and the sibling seed in
+        // UpdateExtremeSwerving (_wT3_02.cpp, @0x8273EA84) has been calling both all along.
+        // ⛔ CORRECTED 2026-08-29 (traffic-crash wave 2). This note used to say "meSympCrashState
+        // is the ONLY field Vehicle::IsSympatheticallyCrashing() reads". IT IS NOT: that
+        // predicate @0x82704B18 reads miPhysicalReason (+0x39) == 3, exactly like its twins
+        // IsExtremeSwerving (== 4) and IsNormalPhysical (== 5) -- read out of the image, see the
+        // banner on Vehicle::IsSympatheticallyCrashing in BrnTrafficVehicle.cpp.
+        // ⭐ WHAT THE GATE ACTUALLY COST: the seed below is the ONLY thing that gives a car
+        // promoted for reason 3 a VALID meSympCrashState. With it skipped the car still entered
+        // UpdateSympatheticCrashing (reason 3 alone is the ticket), switched on
+        // E_SYMPATHETIC_NONE(0), and fell into the console's `default:` arm -- "Invalid
+        // sympathetic crashing state." every frame, with no steering and no commit. The arm was
+        // reachable and useless, not unreachable.
+        //
+        // 0x8274B2F4..0x8274B36C, instruction for instruction: ONE mEffectRand LCG step
+        // (`ld/std 0x1380(this)` -- +0x1380 is mEffectRand's seed, NOT mRand's +0x1350; the old
+        // note named the wrong generator), the draw reduced mod 101 by the 0x446F8657
+        // magic-multiply reciprocal, `stfs flt_82001CC0(0.0f), 0x4C(veh)` unconditionally, then
+        // `< 50` picks ACCELERATE(2) and `>= 50` stores r30, which `li r30, 1` at 0x8274B114
+        // pins as HEADON(1).
+        const s32 liRoll =
+            static_cast<s32>(mEffectRand.RandomUInt() % KU_SYMP_CRASH_PERCENT_MODULUS);
+        lpVehicle->SetSympCrashTime(0.0f);
+        lpVehicle->SetSympCrashState(liRoll < KI_SYMP_CRASH_ACCELERATE_PERCENT
+                                         ? Vehicle::E_SYMPATHETIC_ACCELERATE
+                                         : Vehicle::E_SYMPATHETIC_HEADON);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::MakeVehiclePhysical  @ 0x82747200 (162)   DWARF :1575
+//
+// Six baked asserts, then the two halves of "this car is now a physics body": post the spawn
+// event, and record the world-side physics slot.
+// Prologue 0x82747210..0x8274722C: r3 this, r4 luVehicle, r5 lpOutput, r6 lpCreatedBodies,
+// r7 lTargetEntityId, r8 leTrafficType, r9 leCrashType.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::MakeVehiclePhysical(
+        u32 luVehicle,
+        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+        TotalTrafficBitArray* lpMadePhysical,
+        EntityId lTargetEntityId,
+        BrnPhysics::Vehicle::ETrafficType leTrafficType,
+        BrnPhysics::Vehicle::eCrashTrafficType leCrashType)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput");                 // 0x8274723C, .cpp:2522
+    CGS_ASSERT(lpMadePhysical != 0, "lpCreatedBodies");    // 0x82747260, .cpp:2523
+
+    // 0x827472AC: MakeTrafficEntityId inlined (its CgsEntityId.h:116 bound assert is baked).
+    CGS_ASSERT(MakeTrafficEntityId(luVehicle).muValue != lTargetEntityId.muValue,
+               "MakeTrafficEntityId( luVehicle ) != lCauserEntityId");   // .cpp:2524
+
+    // 0x82747308 / 0x8274735C: the SAME mxFlags byte read twice, once per assert, each with
+    // its own inlined GetVehicle bound assert (BrnTrafficEntityModule.h:2459).
+    CGS_ASSERT(GetVehicle(luVehicle)->IsAlive(),
+               "GetVehicle( luVehicle )->IsAlive()");                    // .cpp:2525
+    CGS_ASSERT(!GetVehicle(luVehicle)->IsPhysical(),
+               "!GetVehicle( luVehicle )->IsPhysical()");                // .cpp:2526
+
+    // 0x8274738C: the export symbol `OutputBuffer_PrePhysics::G...` is truncated; it is
+    // GetVehicleInputInterface (BrnTrafficEntityModuleIO.h:795).
+    AddVehicleToPhysics(luVehicle, lTargetEntityId, lpOutput->GetVehicleInputInterface(),
+                        leTrafficType, lpMadePhysical);
+
+    // 0x827473AC re-fires the MakeTrafficEntityId bound assert: the id is built a second time.
+    // f1/f2 are both flt_82001CC0 == 0.0f.
+    RecordTrafficVehicleIsPhysical(luVehicle, MakeTrafficEntityId(luVehicle), lTargetEntityId,
+                                   leCrashType, 0.0f, 0.0f);
+
+    // GATE trailer partner @0x82747414..0x82747478: when Vehicle::muOtherHalfIndex !=
+    // KU_INVALID_VEHICLE the console records the PARTNER too -- GetCabIndex() for a trailer,
+    // GetTrailerIndex() otherwise, then RecordTrafficVehicleIsPhysical on that index.
+    // BLOCKER: muOtherHalfIndex / GetTrailerIndex (DWARF :338) are not on Vehicle's host
+    // surface and BrnTrafficVehicle.h is not this cluster's file. Unreachable today.
+    // DELETE-WHEN the trailer wave lands.
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::AddVehicleToPhysics  @ 0x827425B0 (462)   DWARF :1405
+//
+// THE world -> physics hop. Builds the spawn event's payload and posts it on the
+// VehicleInputInterface, then marks the vehicle in lpCreatedBodies.
+// Prologue 0x827425BC..0x827425D4: r3 this, r4 luVehicle, r5 lTargetEntityId,
+// r6 lpVehicleInputInterface, r7 leTrafficType, r8 lpCreatedBodies.
+//
+// The console displacements, all reached BY NAME below:
+//   &v8[32*idx + 2720]               == &maVehicles[luVehicle]  (stride 128, base +10880)
+//   v8 + 116240                      == mpData                  (X360 +0x71840)
+//   TrafficData +0x2C / +0x34        == mpaVehicleTypes / mpaVehicleAssets
+//   v8 + ((32*type)&0x1FE0) + 482156 == maTrafficVehiclePhysicsSpecs[type] + 0x14, the
+//        {mpThis, muThreadId} pair BaseResourcePtr::CreateFromHandle seats the SOURCE handle
+//        in -- i.e. GetResourceHandle(). Same seat _Render.cpp:681 already documents.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::AddVehicleToPhysics(
+        u32 luVehicle,
+        EntityId lTargetEntityId,
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput,
+        BrnPhysics::Vehicle::ETrafficType leTrafficType,
+        TotalTrafficBitArray* lpMadePhysical)
+{
+    CGS_ASSERT(lpVehicleInput != 0, "lpVehicleInputInterface");   // 0x827425E4, .cpp:5632
+    CGS_ASSERT(lpMadePhysical != 0, "lpCreatedBodies");           // 0x82742608, .cpp:5633
+
+    const Vehicle* lpVehicle = GetVehicle(luVehicle);   // 0x8274262C bound assert .h:2459
+
+    // GATE articulated arm @0x827428C4: when Vehicle::muOtherHalfIndex != KU_INVALID_VEHICLE
+    // the console builds BOTH halves and posts VehicleInputInterface::CreateArticulatedTraffic
+    // (31 arguments) instead, logging "CreateArticulatedTrafficEventQueue is full" when that
+    // queue is full. BLOCKER: muOtherHalfIndex has no unconditional accessor
+    // (BrnTrafficVehicle.h is another cluster's file) and CreateArticulatedTraffic is itself a
+    // keystone gate. Unreachable today. DELETE-WHEN the trailer wave lands.
+
+    // GATE queue-full check @0x82742674..0x8274269C: the console compares
+    // mCreateTrafficEventQueue's length against its capacity and, when full, logs
+    // "CreateTrafficEventQueue is full\n" to gpDebugPrint and posts NOTHING.
+    // BLOCKER: that queue is private and VehicleInputInterface has no GetCreateTrafficEvents()
+    // accessor yet (C2's drain needs the same one). It cannot fire today -- the free-slot
+    // guard in SafeRequestMakeVehiclePhysical caps promotions at the 25 slots this 25-event
+    // queue holds and the physics drain empties it every frame; BaseEventQueue::AddEvent's own
+    // "Reached Max length" assert is the residual tripwire.
+    // DELETE-WHEN VehicleInputInterface exposes the queue.
+
+    // 0x827426BC / 0x827426DC. The transform is passed by value (large aggregate -> by
+    // reference on PPC); the four outs are the stack locals var_190/var_180/var_1D0/var_140.
+    Vector3        lInitialVelocity;
+    Vector3        lAngularVelocity;
+    u8             lu8AttribsId = 0;
+    Matrix44Affine lInitialTransform;
+    CalculateInitialPhysicalState(lpVehicle, GetVehicleTransform(luVehicle),
+                                  lInitialVelocity, lAngularVelocity,
+                                  &lu8AttribsId, lInitialTransform);
+
+    // 0x827426EC..0x82742728 -- two mpData->operator-> hops: the vehicle TYPE record names an
+    // asset id (VehicleTypeData +5), and the asset record holds the CgsID the event carries.
+    const u32   luVehicleType = lpVehicle->GetVehicleType();
+    const u8    lu8AssetId    = mpData->mpaVehicleTypes[luVehicleType].muAssetId;
+    const CgsID lCgsID        = mpData->mpaVehicleAssets[lu8AssetId].GetVehicleId();
+
+    // 0x8274272C..0x82742744 -- the console recomputes Vehicle::IsCab() here
+    // (muOtherHalfIndex != KU_INVALID_VEHICLE && !IsOfTrailerSpecies()). On this arm the first
+    // term is false by construction (the arm is entered only when muOtherHalfIndex ==
+    // KU_INVALID_VEHICLE), so the value is constant-false. Same trailer gate as above.
+    const bool lbIsCab = false;
+
+    // 0x8274274C..0x82742778 -- a `std` of the folded 0x0200000000000000 (owner byte 2) then
+    // the out-of-line index splice, spelled as the two field writes the compiler folded (the
+    // idiom BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp:78 already uses).
+    CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
+    lVolumeInstanceId.muId = 0;
+    lVolumeInstanceId.SetEntityIDOwner(
+        static_cast<u8>(BrnPhysics::Vehicle::KU_ENTITYTYPE_TRAFFIC_VEHICLE));
+    lVolumeInstanceId.SetEntityIDEntityIndex(luVehicle);
+
+    // 0x82742774 `ld 0x14(...)` -- the deformation-spec handle the physics side spawns from.
+    // FLAG (extent, same as _Render.cpp:694): the DWARF declares this array
+    // KU_MAX_VEHICLE_ASSETS long but the console indexes it by vehicle TYPE. Bounded here so a
+    // type past the extent hands over a null handle rather than reading off the end.
+    CgsResource::ResourceHandle lModelHandle;
+    lModelHandle.Clear();
+    if (luVehicleType < KU_MAX_VEHICLE_ASSETS)
+    {
+        lModelHandle = maTrafficVehiclePhysicsSpecs[luVehicleType].GetResourceHandle();
+    }
+
+    // 0x82742788 / 0x827427C0. r7 = the attrib key, r8 = the model handle, r9 = the traffic
+    // type, r10 = lbIsCab, one 8-byte stack slot = lCgsID; v1/v2 carry the two Vector3s.
+    lpVehicleInput->CreatePhysicalTraffic(lVolumeInstanceId,
+                                          lTargetEntityId,
+                                          lInitialTransform,
+                                          lInitialVelocity,
+                                          lAngularVelocity,
+                                          GetCarAssetAttribKey(luVehicle),
+                                          lModelHandle,
+                                          leTrafficType,
+                                          lbIsCab,
+                                          lCgsID);
+
+    // 0x827427C4..0x82742888 -- the inlined BitArray<601>::SetBit with its streamed bounds
+    // message ("Index: " << luVehicle << ", Number of bits: " << 600).
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Index: ");   // CgsBitArray.h:222
+    lpMadePhysical->SetBit(luVehicle);
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::RecordTrafficVehicleIsPhysical  @ 0x82720EC0 (188)  DWARF :1170
+//
+// The world-side half: claim a maTrafficPhysicsInfoList slot, Construct the record, and flip
+// the vehicle's physical flags.
+// Prologue 0x82720ED4..0x82720EEC: r3 this, r4 luVehicle, r5 lVictimId, r6 lCauserId,
+// r7 leCrashType, f1/f2 the two direction seeds (both 0.0f from MakeVehiclePhysical).
+//
+// ⚠️ THE TWO FLOAT SEATS ARE NOT THE STUCK TIMERS. The stores land at record +4060 / +4064
+// (`stfsx f31, r31, 0x591EC` / `stfsx f30, r31, 0x591F0`, array base +360976), and the
+// console layout puts mfStuckTimeFront/Back at +4044/+4048 -- pinned independently by
+// UpdateVehicleStuckTimers @0x82708D90/@0x82708DA8 (`addi r8, r31, 0xFCC` / `0xFD0`, with
+// muContactSideFlags read at `0x1008`). Walking the DWARF tail down from
+// muOwningVehicleIndex @+0x100A gives +4060 = mfSteeringDirection (:190) and
+// +4064 = mfDrivingDirection (:191), which is what a freshly promoted car zeroes.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::RecordTrafficVehicleIsPhysical(
+        u32 luVehicle,
+        EntityId lEntityId,
+        EntityId lTargetEntityId,
+        BrnPhysics::Vehicle::eCrashTrafficType leCrashType,
+        f32 lfSteeringDirection,
+        f32 lfDrivingDirection)
+{
+    Vehicle* lpVehicle = GetVehicle(luVehicle);   // 0x82720EF8 bound assert .h:2459
+
+    CGS_ASSERT(lEntityId.muValue != lTargetEntityId.muValue,
+               "lVictimId != lCauserId");                                // .cpp:6988
+
+    // 0x82720F50..0x82720F6C: four explicit equality tests, not a range check.
+    CGS_ASSERT(leCrashType == BrnPhysics::Vehicle::eCrashTrafficType_Checked ||
+               leCrashType == BrnPhysics::Vehicle::eCrashTrafficType_Standard ||
+               leCrashType == BrnPhysics::Vehicle::eCrashTrafficType_Spontaneous ||
+               leCrashType == BrnPhysics::Vehicle::eCrashTrafficType_Slammed,
+               "leCrashingTrafficType == BrnPhysics::Vehicle::eCrashTrafficType_Checked || ...");
+                                                                         // .cpp:6992
+
+    // 0x82720F8C..0x82720FDC. mbNeedsToBeSentToCrashModule is
+    // `cntlzw(leCrashType - 3) bit 5, inverted` == (leCrashType != Slammed).
+    if (!lpVehicle->IsPhysical() || lpVehicle->IsRecoveringFromSlam())
+    {
+        TrafficCrashInfo lCrashInfo;
+        lCrashInfo.mVictimId            = lEntityId;
+        lCrashInfo.mCauserId            = lTargetEntityId;
+        lCrashInfo.muCrashTrafficType   = static_cast<u32>(leCrashType);
+        lCrashInfo.mbNeedsToBeSentToCrashModule =
+            (leCrashType != BrnPhysics::Vehicle::eCrashTrafficType_Slammed);
+        // TRIPWIRE, not a gate: both console drains of this 160-slot array
+        // (GenerateCrashedVehicleEvents @0x82720030, GenerateVehicleCrashedEvents @0x82727768)
+        // are still gated, so only Reset clears it. Bounded below 160 -- the
+        // free-slot guard caps live promotions at 25 and demotion/recycling has not landed.
+        maNewCrashedVehicles.Append(lCrashInfo);
+    }
+
+    // 0x82720FE0: the SAME flag re-read. An already-physical vehicle claims no second slot.
+    if (!lpVehicle->IsPhysical())
+    {
+        // 0x82720FF0..0x82721050 -- inlined BitArray<25>::GetFirstZeroBit then `extsb`: an
+        // index of 25 or more (or a full array) becomes -1, which the next assert catches.
+        s32 liPartsIndex = maTrafficPhysicsInfoListBits.GetFirstClearBit();
+        if (liPartsIndex >= static_cast<s32>(KU_MAX_PHYSICAL_TRAFFIC_VEHICLES))
+        {
+            liPartsIndex = -1;
+        }
+
+        CGS_ASSERT(liPartsIndex >= 0, "liPartsIndex >= 0");                    // .cpp:7025
+        CGS_ASSERT(static_cast<u32>(liPartsIndex) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
+                   "Index: ");                                                 // CgsBitArray.h:222
+
+        maTrafficPhysicsInfoListBits.SetBit(static_cast<u32>(liPartsIndex));   // 0x8272115C
+
+        TrafficPhysicsInfo* lpPhysicsInfo = &maTrafficPhysicsInfoList[liPartsIndex];
+        lpPhysicsInfo->Construct(static_cast<s32>(luVehicle));                 // 0x82721160
+
+        // 0x82721184 / 0x8272118C -- record +4060 / +4064 (DWARF :190 / :191); see the banner.
+        lpPhysicsInfo->mfSteeringDirection = lfSteeringDirection;
+        lpPhysicsInfo->mfDrivingDirection  = lfDrivingDirection;
+
+        // 0x82721190 -- r6 is this + 164560 == &mVehicleSoaData.
+        lpVehicle->SetPhysical(static_cast<s8>(liPartsIndex), luVehicle, mVehicleSoaData);
+    }
+
+    lpVehicle->OnPhysical(leCrashType);   // 0x8272119C -- runs on BOTH paths
+}
+
+// ============================================================================================
+// THE TWO DRAINS of maNewCrashedVehicles, landed beside their one producer above.
+//
+// ⭐⭐ WHY THEY ARE HERE. RecordTrafficVehicleIsPhysical appends one TrafficCrashInfo per
+// promotion into a 160-slot ::Array, and until this wave NEITHER console drain had a body, so
+// nothing but Reset() ever shortened it. The array's count word sits immediately after its 160
+// records (X360 +0x572EC == this + 357100 == base + 0xA00), so append #161 does not fault -- it
+// writes an EntityId (>= 33.5 M for a traffic id) OVER THE COUNT, and #162 then indexes at that
+// count: a store roughly half a gigabyte past the record. Latent, not fired, and of exactly the
+// family the campaign has now hit three times (a write that only becomes reachable once some
+// other gate is opened). Landing the demotion valve makes promotions unbounded over a session,
+// which is precisely what would have taken this from latent to live.
+//
+// The two are NOT interchangeable and only one of them shortens anything:
+//   * GenerateVehicleCrashedEvents @0x82727768 (PostPhysicsUpdate) tells the CRASH MODULE about
+//     each record and clears its mbNeedsToBeSentToCrashModule flag. It never removes a record.
+//   * GenerateCrashedVehicleEvents @0x82720030 (PreSceneUpdate) re-registers the collision
+//     volume and then CLEARS THE WHOLE ARRAY at its tail. That Clear is the bound.
+// Their ORDER matters and the console encodes it as an assert: the PreScene drain fires
+// "We forgot to tell the crash module about ..." on any record still flagged, which can only
+// happen if the PostPhysics drain did not run first.
+// ============================================================================================
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::GenerateVehicleCrashedEvents  @0x82727768  (273 insns)
+//   DWARF `void GenerateVehicleCrashedEvents(OutputBuffer_PostPhysics*)` (BrnTrafficUnity.cpp
+//   :20156).
+//
+// One record per newly crashed traffic car handed to the crash module, guarded by
+// mVehiclesAddedToCrashModule so a car is announced once. That bit array is the module member
+// at X360 +164480 (`addis r22, r22, 3 ; addi r22, r22, -0x7D80`), i.e. the FastBitArray that
+// sits immediately BEFORE mVehicleSoaData -- reached by name here. Its other half is
+// EnsureVehicleRemovedFromCrashModule (_wT5_01.cpp), which clears the same bit.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateVehicleCrashedEvents(BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");                              // .cpp 14447
+
+    // The console re-reads the length every iteration (`lwz r11, 0xA00(r23)` inside the loop),
+    // exactly as CleanUpCrashedVehiclePhysics does.
+    for (u32 luIndex = 0; luIndex < maNewCrashedVehicles.GetLength(); ++luIndex)
+    {
+        TrafficCrashInfo& lrCrashInfo = maNewCrashedVehicles.GetItem(luIndex);
+
+        if (!lrCrashInfo.mbNeedsToBeSentToCrashModule)                          // lbz +0xC
+        {
+            continue;
+        }
+
+        const EntityId lVictimId          = lrCrashInfo.mVictimId;              // +0x00
+        const EntityId lCauserId          = lrCrashInfo.mCauserId;              // +0x04
+        const u32      luCrashTrafficType = lrCrashInfo.muCrashTrafficType;     // +0x08
+
+        // 0x827278A4 -- the flag is cleared BEFORE the assert and before every early-out, so a
+        // record is consumed exactly once whatever happens below.
+        lrCrashInfo.mbNeedsToBeSentToCrashModule = false;
+
+        // 0x827278A0..0x82727960. Streamed: "Someone has requested to send slammed traffic
+        // vehicle " << entityIndex << " to the crash module".
+        CGS_ASSERT(luCrashTrafficType !=
+                       static_cast<u32>(BrnPhysics::Vehicle::eCrashTrafficType_Slammed),
+                   "Someone has requested to send slammed traffic vehicle ");   // .cpp 14466
+
+        const u32 luVehicle = EntityIndexOf(lVictimId);
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC"); // 14471
+
+        // 0x827279A0..0x827279B4 -- a car that died between the promotion and this frame.
+        if (!GetVehicle(luVehicle)->IsAlive())
+        {
+            continue;
+        }
+
+        if (mVehiclesAddedToCrashModule.IsBitSet(luVehicle))                    // +164480
+        {
+            continue;
+        }
+
+        // 0x82727AAC..0x82727AC4 -- the 16-byte record, in the console's own field order.
+        BrnWorld::CrashIO::AddCrashingTrafficEvent lEvent;
+        lEvent.mVolumeInstanceId  = MakeTrafficVolumeInstanceId(luVehicle);
+        lEvent.mCrasherEntityId   = lCauserId;
+        lEvent.meCrashTrafficType =
+            static_cast<BrnPhysics::Vehicle::eCrashTrafficType>(luCrashTrafficType);
+
+        lpOutput->GetCrashTrafficInputInterface()
+                ->GetAddCrashingTrafficEventQueue().AddEvent(lEvent);
+
+        mVehiclesAddedToCrashModule.SetBit(luVehicle);                          // 0x82727B88
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::GenerateCrashedVehicleEvents  @0x82720030  (428 insns)
+//   DWARF `void GenerateCrashedVehicleEvents(OutputBuffer_PreScene*)` (BrnTrafficUnity.cpp:6847).
+//
+// The LAST leg of PreSceneUpdate's `!IsPaused() && !lbSimPaused` block -- 0x8274AC20, straight
+// after UpdateCollidableVehicles @0x827302C8. For each freshly crashed car whose PARAM is still
+// a live one it either (a) moves the existing collision volume into the crashed-traffic culling
+// group, or (b) registers one from scratch; then it CLEARS the array.
+//
+// THE LIVENESS TEST IS THE PARAM'S, NOT THE VEHICLE'S, and it is species-dispatched exactly the
+// way PreDispatchUpdate's is (BrnTrafficEntityModule_Render.cpp) -- alive AND not dying AND not
+// should-be-removed AND not zombie. The three arms come off the index/species ladder at
+// 0x827202E8 (`cmplwi r31, 0x190` -- the standard pool is [0, 400)) and 0x827203B8 /
+// 0x82720410 (GetVehicleSpecies == 1 STATIC / == 2 TRAILER).
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+
+    for (u32 luIndex = 0; luIndex < maNewCrashedVehicles.GetLength(); ++luIndex)
+    {
+        const TrafficCrashInfo& lrCrashInfo = maNewCrashedVehicles.GetItem(luIndex);
+
+        // 0x827201BC..0x82720268 -- a TRIPWIRE on ordering, not a gate: by the time PreScene
+        // runs, PostPhysics' GenerateVehicleCrashedEvents should have cleared every flag.
+        // Streamed: "We forgot to tell the crash module about " << index << ", vehicle flags = "
+        // << flags.
+        CGS_ASSERT(!lrCrashInfo.mbNeedsToBeSentToCrashModule,
+                   "We forgot to tell the crash module about ");
+
+        const u32 luVehicle = EntityIndexOf(lrCrashInfo.mVictimId);
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");
+
+        Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+        // 0x827202A8..0x827202BC -- the vehicle's own liveness, read off its flag byte.
+        if (!lpVehicle->IsAlive())
+        {
+            continue;
+        }
+
+        // 0x827202C0 -- the key the whole registration is done under.
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
+            MakeTrafficVolumeInstanceId(luVehicle);
+
+        // ---- the species-dispatched PARAM liveness test -------------------------------
+        bool lbParamStillLive = false;                                          // `mr r28, r20`
+
+        if (luVehicle < KU_MAX_STANDARD_TRAFFIC)                                // 0x827202E8
+        {
+            const Param* const lpParam = GetParam(luVehicle);                   // maParams[idx]
+
+            if (lpParam->IsAlive() && !lpParam->IsDying() &&
+                !lpParam->ShouldBeRemoved() && !lpParam->IsZombie())
+            {
+                // 0x82720330..0x827203AC. Streamed: "Param/vehicle got into a bizarre state:"
+                // << index << ", vehicle flags = " << flags.
+                CGS_ASSERT(lpVehicle->IsAlive(), "Param/vehicle got into a bizarre state:");
+                lbParamStillLive = true;                                        // `mr r28, r21`
+            }
+        }
+        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)     // 0x827203C0
+        {
+            const StaticTrafficParam* const lpParam = GetStaticTrafficParamFromFullV(luVehicle);
+
+            // Same four bits, in the console's own order for this arm (0x827203D8 alive,
+            // 0x827203E4 dying, 0x827203F0 zombie, 0x827203FC should-be-removed).
+            if (lpParam->IsAlive() && !lpParam->IsDying() &&
+                !lpParam->IsZombie() && !lpParam->ShouldBeRemoved())
+            {
+                lbParamStillLive = true;
+            }
+        }
+        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_TRAILER)    // 0x82720418
+        {
+            // 0x82720420..0x8272043C -- a trailer has no param of its own; the vehicle answers.
+            lbParamStillLive = GetVehicle(luVehicle)->IsAlive();
+        }
+        else
+        {
+            CGS_ASSERT(false, "Vehicle has unsupported species");
+        }
+
+        if (!lbParamStillLive)                                                  // 0x82720498
+        {
+            continue;
+        }
+
+        // ---- (a) it is ALREADY registered: just re-group and re-cache it ----------------
+        if (lpVehicle->IsCollidable())                                          // 0x827204D0
+        {
+            lpOutput->GetSceneInputInterface()->SetVolumeInstanceCullingGroup(
+                lVolumeInstanceId, KI_CULLING_GROUP_CRASHED_TRAFFIC);           // li r31, 3
+
+            lpOutput->GetSceneInputInterface()->AddVolumeInstanceForCaching(
+                lVolumeInstanceId,
+                CgsSceneManager::SceneManagerIO::E_ADD_TO_CACHE_MANAGER_AS_NON_CACHED); // li r31, 1
+            continue;
+        }
+
+        // ---- (b) register one from scratch ----------------------------------------------
+        CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");                          // 0x82720518
+
+        const CgsSceneManager::VolumeId lVolumeId(
+            static_cast<u64>(KU_HACK_BASE_VOLUME_ID + lpVehicle->GetVehicleType()));
+
+        // ⚠️ THE RAW VEHICLE TRANSFORM. UpdateCollidableVehicles' own AddVolumeInstance moves
+        // the translation row to TransformPoint(transform, mBBoxOffset) first; this site does
+        // NOT (0x82720558 hands GetVehicleTransform's result straight to r6). Reproduced as the
+        // console has it.
+        const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+
+        lpOutput->GetSceneInputInterface()->AddVolumeInstance(
+            lVolumeInstanceId, lVolumeId, lTransform);                          // 0x82720574
+
+        // 0x8272057C..0x827205E0 -- the swept padding: the car's own At axis times the distance
+        // it covers this frame. Same three factors UpdateCollidableVehicles uses.
+        const Vector3 lPadding =
+            lTransform.At() * (lpVehicle->GetSpeed().x * mfSimTimeStepVec.x);
+
+        lpOutput->GetSceneInputInterface()->AddForCollision(
+            lVolumeInstanceId,
+            static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
+                KI_CULLING_GROUP_CRASHED_TRAFFIC),                              // event +0x18 = 3
+            rw::physics::ACTIVE_BODY,                                           // event +0x1C = 4
+            lPadding,
+            CgsSceneManager::SceneManagerIO::E_ADD_TO_CACHE_MANAGER_AS_NON_CACHED); // +0x1D = 1
+
+        // 0x82720674..0x8272069C -- SetCollidable takes an ITERATOR, and this site has none to
+        // hand it, so the console builds an ORPHAN one on the stack: {miIndex = luVehicle,
+        // mpxSourceMasks = 0, mxMask = 1 << (luVehicle & 63)}. That is the DWARF's
+        // FastBitArray<601>::Iterator::ConstructOrphan(int) (CgsFastBitArray.h:211), recovered
+        // for this site.
+        CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator lItVehicle;
+        lItVehicle.ConstructOrphan(static_cast<s32>(luVehicle));
+
+        lpVehicle->SetCollidable(true, lItVehicle, mVehicleSoaData);
+    }
+
+    // 0x827206B8..0x827206C0 `lis r11, 5 ; ori r11, r11, 0x72EC ; stwx r20, r25, r11` -- a store
+    // of ZERO over the count word at this + 0x572EC == 357100, i.e. maNewCrashedVehicles.Clear().
+    // ⭐ THIS IS THE BOUND on the 160-slot array. See the section banner above.
+    maNewCrashedVehicles.Clear();
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT3_02.cpp (wave T3) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule_wT3_02.cpp
+//
+// The driver-input producer leg.
+//   TrafficEntityModule::UpdateVehicleStuckTimers @0x82708D48 (33 insns)
+//   TrafficEntityModule::GenerateDriverInputs     @0x82748E78 (1,439 insns)
+//   TrafficEntityModule::CalculateDriverGasBrake  @0x82718CD8
+//   TrafficEntityModule::CalculateAndSetSteering  @0x82718E48
+//   TrafficEntityModule::DriveTowardsTarget       @0x8273DFC0  PARTIAL
+//   TrafficEntityModule::UpdateNormalPhysical     @0x8273EF08
+//   TrafficEntityModule::UpdateExtremeSwerving    @0x8273E8D0
+// The NORMAL and EXTREME_SWERVE manoeuvre arms are live; the other five are gated at the
+// dispatch site.
+// =================================================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // UpdateVehicleStuckTimers' own RODATA (headless idat): flt_820BA86C == 2.0f (the value a
+    // side timer is RESET to when it starts accumulating) and flt_82004014 == 0.1f (the
+    // threshold). THEY ARE NOT PARAMETERS ON THE CONSOLE: the X360 body loads both itself
+    // (lfs at 0x82708DA0 / 0x82708D9C) and its one caller GenerateDriverInputs @0x827492F8 sets
+    // neither f1 nor f2. BrnTrafficEntityModule.h declares an (f32, f32) pair the console does
+    // not have; the body honours the declaration.
+    // PARK: retire that pair when the header is next opened.
+    const f32 KF_STUCK_SIDE_TIMER_RESET     = 2.0f;
+    const f32 KF_STUCK_SIDE_TIMER_THRESHOLD = 0.1f;
+
+    // The two bits of TrafficPhysicsInfo::muContactSideFlags the console tests (`li r5, 1` then
+    // `li r5, 2` at 0x82708D94 / 0x82708DB0), paired with mfStuckTimeFront (+0xFCC) and
+    // mfStuckTimeBack (+0xFD0) in that order.
+    const s32 KI_CONTACT_SIDE_FRONT = 1;
+    const s32 KI_CONTACT_SIDE_BACK  = 2;
+
+    // GenerateDriverInputs' own RODATA, dumped headless from the ARTIST image:
+    //   flt_820047C8 == 0.05f  stuck-timer threshold that forces gas/brake to zero and re-sends
+    //   flt_820BA5E4 == 10.0f  mfTimeNotDriving after which the car gives up
+    //   flt_820BA8BC == 0.3f   per-frame gas ramp on the Showtime divergent-behaviour leg
+    //   flt_82001C98 == 1.0f (f30)   flt_82001CC0 == 0.0f (f31)
+    const f32 KF_STUCK_SEND_THRESHOLD     = 0.05f;
+    const f32 KF_GIVE_UP_TIME_NOT_DRIVING = 10.0f;
+    const f32 KF_SHOWTIME_GAS_RAMP        = 0.3f;
+    const f32 KF_MAX_GAS                  = 1.0f;
+
+    // The record seeds at 0x827492FC..0x82749360. mfBoostMaxSpeedScale takes f30 (1.0f) and
+    // miVehicleIDToMerge takes `li r11,-1`; every other float takes f31 (0.0f) and every other
+    // bool takes r29 (0). mbToggle (+0x3A) is the one field the console does NOT write.
+    const s8 KI8_NO_VEHICLE_TO_MERGE = -1;
+
+    // The queue key at `li r5, 3` (0x82749774 and 0x8274982C). The consumer switch spells it
+    // E_DRIVER_TYPE_TRAFFIC (BrnVehicleManager_UpdateDrivers.cpp:152).
+    const s32 KI_DRIVER_EVENT_TYPE_TRAFFIC = 3;
+
+    // `li r4, 1` into Vehicle::SetCurrentManoeuvrePhase at 0x827497FC.
+    const s8 KI8_GIVE_UP_PHASE = 1;
+
+    // ---- the normal-physical driving leg's own RODATA (headless idat) --------
+    // CalculateDriverGasBrake @0x82718CD8
+    const f32 KF_DRIVER_OPTIMAL_TIME_TO_TARGET = 1.5f;    // flt_820BA5DC
+    const f32 KF_DRIVER_PEDAL_GAIN             = 0.5f;    // flt_820BA62C
+    const f32 KF_DRIVER_MIN_CLOSING_SPEED      = 0.1f;    // flt_82004014
+    const f32 KF_DRIVER_STALLED_TIME_TO_TARGET = 100.0f;  // flt_820BA5C8
+    // CalculateAndSetSteering @0x82718E48. The threshold is lane 3 of unk_8300CBE0, a dyn-init
+    // .data vector recovered from its thunk at 0x82C66E50: {0.2, 1.0, 0.94, 0.6}.
+    const f32 KF_STEERING_SCALE_THRESHOLD      = 0.6f;
+    const f32 KF_STEERING_SCALE_HIGH           = 1.3f;    // flt_820BA554
+    // DriveTowardsTarget @0x8273DFC0
+    const f32 KF_GIVE_UP_RANDOM_CHANCE             = 0.05f;   // flt_820047C8
+    // flt_8300C950, a dyn-init product recovered from its thunk at 0x82C66C30:
+    // flt_82F31928 (0.44704, mph->m/s) * flt_820BA5E4 (10.0) == 10 mph in m/s.
+    const f32 KF_GIVE_UP_SPEED                     = 4.4704f;
+    const f32 KF_DRIVER_FAR_FROM_TARGET_DIST       = 20.0f;   // flt_820BA7E4 @0x8273E2A4
+    const f32 KF_DRIVER_MIN_PHYSICAL_TIME_TO_RETURN = 5.0f;   // flt_8200426C
+    const f32 KF_DRIVER_RETURN_TO_TRAFFIC_DIST     = 1.5f;    // flt_820BA5DC
+    const f32 KF_DRIVER_RETURN_TO_TRAFFIC_DOT      = 0.98f;   // flt_820BA55C @0x8273E440
+    const f32 KF_DRIVER_SWERVE_STEERING_TIME       = 3.0f;    // flt_820BA5F4
+    const f32 KF_DRIVER_REVERSE_TURN_DIST          = -15.0f;  // folded -15.0
+
+    // ---- UpdateRecoveringFromSlam @0x8273E778 ----
+    // flt_82005548 (0x8273E868). Read out of the image: `x360rd.py 82005548` -> 40200000 == 2.5f.
+    // Seconds of PHYSICAL life for which a shoved car drives on the recorded slam direction
+    // before it falls through to DriveTowardsTarget.
+    const f32 KF_SLAM_RECOVERY_DRIVE_TIME          = 2.5f;    // flt_82005548
+
+    // ---- UpdateExtremeSwerving @0x8273E8D0's own RODATA (headless idat) ----
+    //   flt_8200473C  == 0.4f    the crash-slider level below which the arm just drives
+    //   unk_8300C9F0  == splat(1600.0f), dyn-init thunk 0x82C66C50 from flt_820BA810 (1600) --
+    //                            a SQUARED distance, so 40 m to the local player's car
+    //   flt_820BA5B4  == 0.8f    per-frame roll that keeps a far car driving instead of crashing
+    //   flt_82009D58  == 35.0f / flt_820BA5E8 == 30.0f  the (slider*35 + 30) percentage split
+    //                            between the two sympathetic-crash styles
+    const f32 KF_EXTREME_SWERVE_CRASH_SLIDER_MIN   = 0.4f;
+    const f32 KF_EXTREME_SWERVE_PLAYER_DIST_SQ     = 1600.0f;
+    const f32 KF_EXTREME_SWERVE_KEEP_DRIVING_ROLL  = 0.8f;
+    const f32 KF_SYMP_CRASH_STYLE_SLIDER_SCALE     = 35.0f;
+    const f32 KF_SYMP_CRASH_STYLE_BASE_PERCENT     = 30.0f;
+// (fold: an identical definition of KU_SYMP_CRASH_PERCENT_MODULUS was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KU_RACE_CAR_PART_INDEX_SHIFT was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KU_RACE_CAR_OWNER_PACKED was dropped here -- this TU defines it once, above)
+    const u32 KU_NUM_BITS_FOR_ENTITY_NUM_LOCAL     = 14;
+
+    // ---- TryClearupOffscreenTraffic @0x8273C4C8's own constants ----------------------------
+    // unk_8300CC80 is a .bss splat, so it reads 0 by definition; recovered through its
+    // dyn-init thunk, which is itself an EXPORT HOLE (no per-function JSON) and was read out
+    // of the image with tools/re/ppcdis.py:
+    //   0x82C662F8  lfs f0, -0x2AF4(r11)   ; r11 == 0x82010000  ->  flt_8200D50C
+    //   0x82C66308  addi r11, r11, -0x3380 ;                    ->  unk_8300CC80
+    //   0x82C6630C  vspltw v0, v0, 0 ; stvx128 v0, r0, r11
+    // and tools/re/x360rd.py reads 0x8200D50C == 22500.0f. It is a SQUARED distance: 150 m.
+    const f32 KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ  = 22500.0f;   // <- flt_8200D50C
+    // The two showtime-only bands, read straight out of .rdata (x360rd):
+    const f32 KF_CLEARUP_SHOWTIME_MIN_DIST_SQ     = 225.0f;     // flt_82018E3C   15 m
+    const f32 KF_CLEARUP_SHOWTIME_BUS_MAX_DIST_SQ = 1600.0f;    // flt_820BA810   40 m
+
+    // 0x8273C95C..0x8273C998 compares the vehicle asset's CgsID against two baked 64-bit
+    // literals, assembled `lis/ori` into the high word and `insrdi ...,32,0` into the low:
+    //   0xBF2E42A8A7700000 and 0xBF2E42A99B940000.
+    // Decoded with the project's own CgsID packing (tools/volatility CgsIDUtilities, base-40)
+    // they are the two US BUSES, "TUSB01" and "TUSB02" -- the only traffic types the showtime
+    // mid-band cull spares. FLAG (name inferred from the decode, not from a symbol).
+    const CgsID KX_VEHICLE_ID_BUS_01 = 0xBF2E42A8A7700000ULL;   // "TUSB01"
+    const CgsID KX_VEHICLE_ID_BUS_02 = 0xBF2E42A99B940000ULL;   // "TUSB02"
+
+// (fold: an identical definition of KU_ENTITY_INDEX_SHIFT was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KU_ENTITY_INDEX_MASK was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of EntityIndexOf was dropped here -- this TU defines it once, above)
+
+    inline VecFloat SplatDrive(f32 lfValue)
+    {
+        const VecFloat lLane = { lfValue, lfValue, lfValue, lfValue };
+        return lLane;
+    }
+
+    inline Vector3 ZeroVector3()
+    {
+        Vector3 lZero;
+        lZero.SetZero();
+        return lZero;
+    }
+
+// (fold: an identical definition of TrafficDiagEnabled was dropped here -- this TU defines it once, above)
+
+// (fold: an identical definition of TrafficDiagStream was dropped here -- this TU defines it once, above)
+
+    const s32 KI_DEMOTE_PRINT_CAP = 60;
+
+    s32 giDemoteCalls        = 0;   // every StopVehicleBeingPhysical
+    // clearupKills is NOT a partition member and the printed line says so.
+    // TryClearupOffscreenTraffic does not demote directly: it calls RemoveVehicle, which
+    // only MARKS the param, and the actual StopVehicleBeingPhysical comes a frame or more
+    // later through KillDyingVehicleEntity. So the partition of giDemoteCalls is
+    // recycle + return + killDying, and clearupKills is reported beside it as the upstream
+    // cause of most of the killDying column -- lagged, so the two never have to agree.
+    s32 giDemoteFromClearup  = 0;   // TryClearupOffscreenTraffic said kill (UPSTREAM, lagged)
+    s32 giDemoteFromRecycle  = 0;   // HandleRecycledTraffic
+    s32 giDemoteFromReturn   = 0;   // ReturnPhysicalVehicleToTraffic
+
+    // One-shot gate banner -- NOT IN THE X360 BINARY. Retire with the last gate below.
+    void LogMissingLeg_T3Drive(bool& lrbAlreadyLogged, const char* lpcLegNameAndAddress)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T3-drive] GenerateDriverInputs leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndAddress << "\n";
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateVehicleStuckTimers   @0x82708D48   (33 insns)
+//
+// Advance one physical traffic car's two "wedged against something" timers, one per contact
+// side. The whole body is two calls to the header-inline UpdateVehicleStuckSideTime, differing
+// only in the mask and the timer they point at:
+//   0x82708D88  lbz  r4, 0x1008(info)      == muContactSideFlags
+//   0x82708D90  addi r8, info, 0xFCC       == &mfStuckTimeFront   , mask 1
+//   0x82708DA8  addi r8, info, 0xFD0       == &mfStuckTimeBack    , mask 2
+// Both offsets are reached BY NAME here; the console record is 0x100C bytes and the host one is
+// not (the embedded DetachedPartRenderQueue widens), so an offset transcription would have
+// written past the front timer into the skinning scratch.
+//
+// muContactSideFlags IS RE-READ between the two calls (`lbz r4, 0x1008(r31)` at 0x82708DAC).
+// UpdateVehicleStuckSideTime writes only through lpfTimer, so the two reads cannot differ --
+// reproduced as two reads anyway, because that is what the console emits.
+// -------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfReset, f32 lfThreshold)
+{
+    CGS_ASSERT(lpPhysicsInfo != 0, "lpPhysicsInfo");        // .cpp:17412
+
+    TrafficPhysicsInfo* const lpInfo = static_cast<TrafficPhysicsInfo*>(lpPhysicsInfo);
+
+    UpdateVehicleStuckSideTime(static_cast<s32>(lpInfo->muContactSideFlags), KI_CONTACT_SIDE_FRONT,
+                               lfReset, lfThreshold, &lpInfo->mfStuckTimeFront);
+
+    UpdateVehicleStuckSideTime(static_cast<s32>(lpInfo->muContactSideFlags), KI_CONTACT_SIDE_BACK,
+                               lfReset, lfThreshold, &lpInfo->mfStuckTimeBack);
+}
+
+// -------------------------------------------------------------------------------------------
+// TrafficEntityModule::TryClearupOffscreenTraffic  @0x8273C4C8  (452 insns)
+//   DWARF BrnTrafficUnity.cpp:14258 -- and its local names are transcribed verbatim below
+//   (lVehiclePos / lDiff / lfDiffSq / lbKillVehicle / lbFarFromPlayer, and the inner scope's
+//   lpVehicleType / lTypeID / lbBus).
+//
+// ⭐⭐⭐ THE MISSING DEMOTION VALVE. GenerateDriverInputs @0x82749234 calls this for EVERY
+// alive physical traffic vehicle, every frame, BEFORE the manoeuvre dispatch, and `continue`s
+// when it returns true (0x82749238 `clrlwi r11,r3,24` + `bne loc_82749838`). It was the one
+// unbodied leg on that path, and with it gated the module's 25-slot maTrafficPhysicsInfoList
+// only ever filled: physSlots across a whole Showtime run measured strictly monotonic
+// (0, 0, 4, 6, 6, 7, 8, 10, 16), and the 26th promotion made
+// RecordTrafficVehicleIsPhysical's GetFirstClearBit return -1 and SetBit(-1) fault. The
+// console has THREE routes into StopVehicleBeingPhysical -- this one (via RemoveVehicle ->
+// the param sweep -> KillDyingVehicleEntity), HandleRecycledTraffic (below), and
+// ReturnPhysicalVehicleToTraffic -- and only the third was reachable here. The third is also
+// the one a crashed car can never take: GenerateDriverInputs sends a car whose reason is
+// E_PHYSICALREASON_CRASHED straight to its early-SEND label, so it never reaches a manoeuvre
+// arm at all.
+//
+// THE DECISION, register for register (0x8273C860..0x8273C9B4):
+//   * lfDiffSq is measured from mCameraLastFrame's POSITION lane (+0x728C0), not the player's
+//     car; lbFarFromPlayer is the console's own name for `lfDiffSq > 150 m` and it is computed
+//     BEFORE the rendered test because the tail uses it whether or not the car is killed.
+//   * A car the RENDER pass touched last frame is never cleared up. That predicate reads
+//     mVehicleSoaData.mVehiclesRenderedLastFrame, whose only writer is PreDispatchUpdate
+//     @0x8274D900 (an export hole; see BrnTrafficEntityModule_Render.cpp).
+//   * The extra showtime band is gated on mbPlayingShowtimeMode (+0x717DD): a car BEHIND the
+//     camera and more than 15 m away goes, unless it is between 15 m and 40 m AND is one of
+//     the two buses. Showtime wants big things to stay hittable and everything else recycled.
+// The console reads the bit with the ITERATOR'S CACHED MASK (`ld r10, 8(r29)` + `and`) rather
+// than recomputing 1 << (index & 63); the value is identical, so this reads by name.
+// -------------------------------------------------------------------------------------------
+bool TrafficEntityModule::TryClearupOffscreenTraffic(
+        const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle)
+{
+    bool lbKillVehicle = false;                        // `li r30, 0` @0x8273C500
+
+    CGS_ASSERT(lrItVehicle.GetIndex() >= 0 &&
+               lrItVehicle.GetIndex() < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC),
+               "Attempt to get index when out of range\n");        // CgsFastBitArray.h:235
+
+    const u32 luVehicle = static_cast<u32>(lrItVehicle.GetIndex());
+
+    // 0x8273C58C..0x8273C5F4 -- the whole distance block, done once and reused by both tests.
+    const Vector3 lVehiclePos = GetVehicleTransform(luVehicle).Pos();
+    const Vector3 lDiff       = lVehiclePos - mCameraLastFrame.GetPosition();   // +0x728C0
+    const f32     lfDiffSq    = rw::math::vpu::Dot(lDiff, lDiff);
+
+    const bool lbFarFromPlayer = (lfDiffSq > KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ);
+
+    // 0x8273C860..0x8273C890 -- rendered last frame: keep it, unconditionally.
+    if (!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle))
+    {
+        lbKillVehicle = lbFarFromPlayer;                            // `mr r16, r15`
+
+        if (mbPlayingShowtimeMode)                                  // +0x717DD
+        {
+            // 0x8273C8C0..0x8273C8F8 -- BEHIND the camera's At row (+0x728B0).
+            const f32 lfAlongCamera =
+                rw::math::vpu::Dot(mCameraLastFrame.GetDirection(), lDiff);
+
+            if (0.0f > lfAlongCamera && lfDiffSq > KF_CLEARUP_SHOWTIME_MIN_DIST_SQ)
+            {
+                if (lfDiffSq > KF_CLEARUP_SHOWTIME_BUS_MAX_DIST_SQ)
+                {
+                    lbKillVehicle = true;                           // 0x8273C91C
+                }
+                else
+                {
+                    // 0x8273C924..0x8273C9B0 -- mpaVehicleTypes[type].muAssetId then
+                    // mpaVehicleAssets[assetId].GetVehicleId(), both at the console's own
+                    // stride 8. lbKillVehicle is the INVERSE of the match (`cntlzw` + bit 26).
+                    const VehicleTypeData* const lpVehicleType =
+                        &mpData->mpaVehicleTypes[GetVehicle(luVehicle)->GetVehicleType()];
+                    const CgsID lTypeID =
+                        mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId();
+
+                    const bool lbBus = (lTypeID == KX_VEHICLE_ID_BUS_01) ||
+                                       (lTypeID == KX_VEHICLE_ID_BUS_02);
+
+                    lbKillVehicle = !lbBus;
+                }
+            }
+        }
+    }
+
+    if (lbKillVehicle)
+    {
+        // 0x8273CA68..0x8273CAC4 -- the console re-reads the bit and fires a streamed assert.
+        // It is a tripwire, not a gate: 0x8273CAC8 calls RemoveVehicle either way.
+        CGS_ASSERT(!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle),
+                   "!mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet( luVehicle )"); // .cpp 16050
+
+        ++giDemoteFromClearup;   // [T3-demote] census, NOT IN THE X360 BINARY
+
+        // [FLAG PC witness] [traffic-track] CLEARUP. NOT IN THE X360 BINARY, off unless
+        // BRN_TRAFFIC_TRACK. Prints the three numbers the decision above is made of, so a
+        // removal can be checked against the console's rule instead of guessed at: the
+        // BEHAVIOUR CENTRE this measured from (mCameraLastFrame, which is NOT necessarily
+        // where the player is on this build -- see the banner at the consume site in
+        // WorldModule::GenerateDispatchListsBringUp), the squared distance, and the constant.
+        // One line per kill, and kills are events. DELETE-WHEN: see BrnTrafficTrackWitness.h.
+        if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+        {
+            const Vector3 lCamera = mCameraLastFrame.GetPosition();
+            *lpTrack << "[traffic-track] id=" << luVehicle
+                     << " CLEARUP cam=(" << lCamera.x << ", " << lCamera.y
+                     << ", " << lCamera.z << ")"
+                     << " distSq=" << lfDiffSq
+                     << " limitSq=" << KF_CLEARUP_FAR_FROM_CAMERA_DIST_SQ
+                     << " far=" << (lbFarFromPlayer ? 1 : 0)
+                     << " showtime=" << (mbPlayingShowtimeMode ? 1 : 0)
+                     << "\n";
+        }
+
+        {
+            // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+            const TrafficRemoveReasonTag lTag("clearup-offscreen");
+            RemoveVehicle(luVehicle);                               // 0x8273CAD0
+        }
+        return true;                                                // 0x8273CAD4 `li r3, 1`
+    }
+
+    // 0x8273CAEC..0x8273CBC0 -- not killed, but far: publish it so the param sim can drive
+    // around it. This is the ONLY writer of mPhysicalVehiclesFarFromPlayer; its reader is
+    // TryClearupOffscreenTraffic's own caller-side census and the crash-traffic input
+    // interface copy at the tail of PostPhysicsUpdate.
+    if (lbFarFromPlayer)
+    {
+        mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.SetBit(luVehicle);
+    }
+
+    return false;                                                   // 0x8273CBC4 `li r3, 0`
+}
+
+// -------------------------------------------------------------------------------------------
+// TrafficEntityModule::GenerateDriverInputs   @0x82748E78   (1,439 insns)   DWARF :1356
+//
+// The producer of BrnTrafficDriverControls. Structure read off the ASM; the Hex-Rays view is
+// the degenerate "local variable allocation has failed" form and was not used.
+//
+// THE ITERATION SET IS AN INTERSECTION OF TWO SoA BIT SETS, built on the stack at
+// 0x82748F0C..0x82748F40 as ten doublewords of `this + 8*(0x5078+i) & this + 8*(0x505A+i)`.
+// The four console byte bases resolve against mVehicleSoaData at module +164560 (attested
+// independently by _wT1_01.cpp:876 and _wT2_02.cpp:100, both mounted), each FastBitArray<601>
+// being 80 bytes:
+//   164560 (+0)   mAliveVehicles                    164800 (+240) mPhysicalVehicles
+//   165040 (+480) mPhysicalVehiclesFarFromPlayer    165120 (+560) mPhysicalVehiclesTryingToRecover
+// The last two are the pair CLEARED in place at 0x82748F48/0x82748F68. Every access below is by
+// name; no console displacement reaches the host.
+//
+// The SEND label at 0x82749814 is taken whenever GetPhysicalReason() == E_PHYSICALREASON_CRASHED
+// (0x827493A4 `lbz r11, 0x39 ; cmplwi 0 ; beq`): a traffic car promoted because the player
+// crashed into it gets a ZERO-CONTROL record and never reaches a manoeuvre arm at all.
+// -------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutputBuffer != NULL");                       // .cpp:15794
+
+    BrnPhysics::Vehicle::VehicleDriverInputInterface* const lpDriverInputInterface =
+        lpOutput->GetVehicleDriverInterface();                                 // 0x82748EDC
+
+    CGS_ASSERT(lpDriverInputInterface != 0, "lpDriverInputInterface != NULL"); // .cpp:15801
+
+    CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lPhysicalAliveVehicles;
+    lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mAliveVehicles,
+                                  mVehicleSoaData.mPhysicalVehicles);
+
+    mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.UnSetAll();
+    mVehicleSoaData.mPhysicalVehiclesTryingToRecover.UnSetAll();
+
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIterator =
+             lPhysicalAliveVehicles.Begin();
+         lIterator != lPhysicalAliveVehicles.End();
+         ++lIterator)
+    {
+        const s32 liVehicle = lIterator.GetIndex();
+
+        // 0x827491C0 / 0x82749838 -- the console range-checks the index at BOTH ends of the
+        // body (CgsFastBitArray.h:235, "Index has gone out of range").
+        CGS_ASSERT(liVehicle >= 0 && liVehicle < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC),
+                   "Index has gone out of range");
+
+        // GATE TrafficEntityModule (second section) @0x82749B48 -- the >= 400 static/parked pool
+        // arm, ~600 insns with its own TryClearupOffscreenTraffic @0x8274A1E8.
+        // Blocker: parked cars are never promoted on this build (only standard traffic is).
+        // DELETE-WHEN the static pool gains physical promotion.
+        if (liVehicle >= static_cast<s32>(KU_MAX_STANDARD_TRAFFIC))            // 0x82749224
+        {
+            static bool sbLoggedStaticPool = false;
+            LogMissingLeg_T3Drive(sbLoggedStaticPool, "the static/parked pool section @0x82749B48");
+            continue;
+        }
+
+        // 0x82749230..0x82749240 -- UNGATED as of 2026-09-06: TryClearupOffscreenTraffic is
+        // bodied above in this file. The console passes the LIVE ITERATOR (`addi r4, r1,
+        // var_380`, the stack copy it keeps of it) and `continue`s on a true return.
+        // ⭐ This is the demotion valve. Without it maTrafficPhysicsInfoList only ever filled,
+        // and the 26th promotion faulted inside RecordTrafficVehicleIsPhysical.
+        if (TryClearupOffscreenTraffic(lIterator))
+        {
+            continue;
+        }
+
+        Vehicle* const lpVehicle = GetVehicle(static_cast<u32>(liVehicle));    // 0x82749244
+
+        CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");              // .cpp:15833
+        CGS_ASSERT(lpVehicle->IsPhysical(), "lpVehicle->IsPhysical()");        // .cpp:15834
+
+        // 0x827492A8..0x827492D4. DriveTowardsTarget reads mfPhysicalTime against 5.0 and 3.0,
+        // so both timers are armed now that BrnTrafficVehicle.h carries the accessors.
+        lpVehicle->AddPhysicalTime(mfSimTimeStep);
+        lpVehicle->AddManoeuvreTime(mfSimTimeStep);
+
+        TrafficPhysicsInfo* const lpInfo =
+            GetTrafficPhysicsInfoForVehicl(static_cast<u32>(liVehicle));       // 0x827492D8
+
+        lpInfo->mfTimeNotDriving += mfSimTimeStep;                             // 0x827492F4
+
+        UpdateVehicleStuckTimers(lpInfo, KF_STUCK_SIDE_TIMER_RESET,
+                                 KF_STUCK_SIDE_TIMER_THRESHOLD);              // 0x827492F8
+
+        // The record seeds, in the console's own field order.
+        BrnPhysics::Vehicle::BrnTrafficDriverControls lControls;
+        lControls.miVehicleID               = liVehicle;
+        lControls.mfGas                     = 0.0f;
+        lControls.mfBrake                   = 0.0f;
+        lControls.mfHandBrake               = 0.0f;
+        lControls.mfSteering                = 0.0f;
+        lControls.mfForwardSteering         = 0.0f;
+        lControls.mfSpin                    = 0.0f;
+        lControls.mfRequestedGas            = 0.0f;
+        lControls.mfAftertouchLevel         = 0.0f;
+        lControls.mfXSensor                 = 0.0f;
+        lControls.mfYSensor                 = 0.0f;
+        lControls.mfZSensor                 = 0.0f;
+        lControls.mfGSensor                 = 0.0f;
+        lControls.mfBoostMaxSpeedScale      = KF_MAX_GAS;
+        lControls.miVehicleIDToMerge        = KI8_NO_VEHICLE_TO_MERGE;
+        lControls.mbReset                   = false;
+        lControls.mbBoost                   = false;
+        lControls.mbIsInvulnerableToVehicles = false;
+        lControls.mbIsInvulnerableToWorld   = false;
+        lControls.mbForceDrift              = false;
+        lControls.mbBoostBounce             = false;
+        lControls.mbIsOnStartLine           = false;
+        lControls.mbIsSteeringWheel         = false;
+        lControls.mbHorn                    = false;
+
+        bool lbSend = true;                                                    // `li r23, 1`
+
+        const Vehicle::Manoeuvre leManoeuvre = lpVehicle->GetCurrentManoeuvre();
+
+        // 0x8274936C / 0x827493A4 -- the two early-SEND predicates. mbIsFatallyCrashing is the
+        // console's `lbz r11, 0xFE6(info)`: 0xFE4..0xFE7 are miNumLightLocators / mbIsDeforming /
+        // mbIsFatallyCrashing / mu8RenderDamageFlags, pinned by mfStuckTimeFront @0xFCC and
+        // muContactSideFlags @0x1008 on either side.
+        const bool lbEarlySend = lpInfo->mbIsFatallyCrashing
+                              || lpVehicle->GetPhysicalReason() == E_PHYSICALREASON_CRASHED;
+
+        if (!lbEarlySend)
+        {
+            // 0x827493B0..0x827496AC -- the console's manoeuvre dispatch, in its own order and
+            // with its own lbSend joins. Two arms REACH `lbSend = 0` (`mr r23, r29` @0x827496AC,
+            // r29 == 0) and send NOTHING that frame; STUCK_REVERSE branches over the join
+            // (0x827493DC `b loc_827496B0`) and is always sent.
+            if (leManoeuvre == Vehicle::E_MANOEUVRE_STUCK_REVERSE)              // 0x827493B0
+            {
+                // GATE UpdateStuckReverseManoeuvre @0x82719430 -- exported, no body.
+                // DELETE-WHEN it lands. The car keeps the zero-control record AND is sent.
+                static bool sbLoggedStuckArm = false;
+                LogMissingLeg_T3Drive(sbLoggedStuckArm,
+                              "GenerateDriverInputs arm UpdateStuckReverseManoeuvre "
+                              "@0x82719430 -- no body");
+            }
+            else if (lpVehicle->IsExtremeSwerving())                            // 0x82749478
+            {
+                // 0x8274949C, with the console's own argument set (r4 vehicle, r5 arg_1C ==
+                // lpOutput, r6 &lControls). Every promotion on this build arrives as reason
+                // SWERVING, so this is THE arm.
+                UpdateExtremeSwerving(static_cast<u32>(liVehicle), lpOutput, &lControls);
+            }
+            else if (leManoeuvre == Vehicle::E_MANOEUVRE_NONE)                  // 0x827494B4
+            {
+                if (lpVehicle->IsSympatheticallyCrashing())                     // 0x82749584
+                {
+                    // GATE DELETED 2026-08-29 (traffic-crash wave). UpdateSympatheticCrashing
+                    // @0x8273D378 is BODIED in BrnTrafficEntityModule_SympatheticCrash.cpp with
+                    // its commit CrashVehicleForSympatheticCrashState @0x8272BA08. The gate's
+                    // second blocker ("needs Vehicle::GetSympatheticCrashTarget @0x82705450")
+                    // was already STALE -- that accessor has had a body in BrnTrafficVehicle.cpp
+                    // since before this note was written.
+                    // Argument set is the console's own (0x82749594..0x827495C0): r4 luVehicle,
+                    // r5 the vehicle's latched sympathetic-crash target, r6 lpOutput,
+                    // r7 &lControls, f1 mfSimTimeStep.
+                    UpdateSympatheticCrashing(static_cast<u32>(liVehicle),
+                                              lpVehicle->GetSympatheticCrashTarget(),
+                                              lpOutput, &lControls, mfSimTimeStep);
+                }
+                else if (lpVehicle->IsRecoveringFromSlam())                     // 0x827495DC
+                {
+                    // 0x827495F4 -- UNGATED 2026-09-07 (issue #14, "traffic cars disappear
+                    // when we touch them"). The arm is bodied below in this file. WHAT THE
+                    // GATE COST, measured: with it skipped the shoved car kept the ZERO
+                    // control record for ever, so GenerateDriverInputs' own
+                    // `mfGas > 0 || mfBrake > 0` reset never ran, TrafficPhysicsInfo::
+                    // mfTimeNotDriving climbed monotonically from the shove, and at 6 s
+                    // (KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME) JunctionFUP_TryClearupNon-
+                    // MovingPhysical @0x8273F2E8 deleted the car -- at ANY distance from the
+                    // player, its only guard being mVehiclesRenderedLastFrame.
+                    UpdateRecoveringFromSlam(static_cast<u32>(liVehicle), &lControls);
+                }
+                else if (lpVehicle->IsNormalPhysical())                         // 0x82749618
+                {
+                    UpdateNormalPhysical(static_cast<u32>(liVehicle), &lControls); // 0x82749638
+                }
+                else if (lpVehicle->IsBeingChecked())                           // 0x82749654
+                {
+                    // 0x82749664 -- the console FIRES a streamed assert here and still sends
+                    // the zero record (lbSend stays 1). Reported once instead of aborting the
+                    // boot: a checked car is a normal in-game state on this build.
+                    static bool sbLoggedChecked = false;
+                    LogMissingLeg_T3Drive(sbLoggedChecked,
+                                  "GenerateDriverInputs: a BeingChecked vehicle with manoeuvre "
+                                  "NONE reached 0x82749664, where the console fires a streamed "
+                                  "assert and still sends the zero-control record");
+                }
+                else
+                {
+                    lbSend = false;                                             // 0x827496AC
+                }
+            }
+            else if (leManoeuvre == Vehicle::E_MANOEUVRE_EXTREME_SWERVE)        // jpt case 0
+            {
+                // Manoeuvre EXTREME_SWERVE without IsExtremeSwerving() sends nothing at all.
+                lbSend = false;                                                 // 0x827496AC
+            }
+            else if (leManoeuvre == Vehicle::E_MANOEUVRE_3_POINT_TURN)          // jpt case 1
+            {
+                // GATE Update3PointTurnManoeuvre @0x827190B0 -- exported, no body. Reached by
+                // DriveTowardsTarget's reverse-turn leg (SetCurrentManoeuvre(2) @0x8273E6F0).
+                static bool sbLogged3PtArm = false;
+                LogMissingLeg_T3Drive(sbLogged3PtArm,
+                              "GenerateDriverInputs arm Update3PointTurnManoeuvre @0x827190B0 "
+                              "-- no body");
+            }
+            else if (leManoeuvre == Vehicle::E_MANOEUVRE_GIVE_UP)               // jpt case 2
+            {
+                // GATE UpdateGiveUpManoeuvre @0x8273EB60 -- exported, no body. Reached by the
+                // ten-second no-driving latch at the tail of this loop.
+                static bool sbLoggedGiveUpArm = false;
+                LogMissingLeg_T3Drive(sbLoggedGiveUpArm,
+                              "GenerateDriverInputs arm UpdateGiveUpManoeuvre @0x8273EB60 "
+                              "-- no body");
+            }
+            else
+            {
+                CGS_ASSERT(false, "Unknown manoeuvre");                          // 0x82749540
+            }
+
+            // GATE TrafficEntityModule::DEBUG_ValidateEmDriverControls @0x82708FF8 (204) --
+            // debug-only validator the console runs after every arm and before every AddEvent.
+            // DELETE-WHEN it lands; it has no effect on the record.
+
+            // 0x827496B0 -- an arm can kill the vehicle, so the console re-checks liveness.
+            if (!lpVehicle->IsAlive())
+            {
+                continue;
+            }
+
+            // 0x827496C8 -- a wedged car has its gas and brake forced off and is always sent.
+            if (leManoeuvre != Vehicle::E_MANOEUVRE_STUCK_REVERSE
+                && (lpInfo->mfStuckTimeFront > KF_STUCK_SEND_THRESHOLD
+                    || lpInfo->mfStuckTimeBack > KF_STUCK_SEND_THRESHOLD))
+            {
+                lControls.mfGas   = 0.0f;
+                lControls.mfBrake = 0.0f;
+                lbSend            = true;
+            }
+
+            if (lbSend)
+            {
+                // 0x8274971C -- the Showtime scatter leg: ramp the gas by 0.3f per frame,
+                // clamped to 1.0f (`fsubs` + `fsel` against f30), and hold the brake off.
+                if (mbPlayingShowtimeMode && mbAllowDivergentBehaviour)
+                {
+                    const f32 lfRampedGas = lControls.mfGas + KF_SHOWTIME_GAS_RAMP;
+                    lControls.mfBrake = 0.0f;
+                    lControls.mfGas   = (lfRampedGas >= KF_MAX_GAS) ? KF_MAX_GAS : lfRampedGas;
+                }
+
+                lpDriverInputInterface->GetUpdateDriverQueue()
+                    ->AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(
+                        &lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);             // 0x8274977C
+
+                if (lControls.mfGas > 0.0f || lControls.mfBrake > 0.0f)
+                {
+                    lpInfo->mfTimeNotDriving = 0.0f;
+                }
+            }
+
+            // 0x8274979C -- ten seconds of no driving and the car gives up. The console open-
+            // codes Vehicle::SetCurrentManoeuvre (phase 0 on change, mfManoeuvreTime 0, then the
+            // manoeuvre byte) and follows it with SetCurrentManoeuvrePhase(1).
+            if (lpVehicle->GetCurrentManoeuvre() != Vehicle::E_MANOEUVRE_GIVE_UP
+                && lpInfo->mfTimeNotDriving >= KF_GIVE_UP_TIME_NOT_DRIVING)
+            {
+                lpVehicle->SetCurrentManoeuvre(Vehicle::E_MANOEUVRE_GIVE_UP);
+                lpVehicle->SetCurrentManoeuvrePhase(KI8_GIVE_UP_PHASE);
+                lpInfo->mfTimeNotDriving = 0.0f;
+            }
+        }
+        else
+        {
+            // SEND @0x82749814 -- DEBUG_ValidateEmDriverControls (gated above) then the same
+            // AddEvent, with none of the post-dispatch work.
+            lpDriverInputInterface->GetUpdateDriverQueue()
+                ->AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(
+                    &lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);                 // 0x82749834
+        }
+    }
+}
+
+// ============================================================================================
+// The normal-physical driving leg. UpdateNormalPhysical is the manoeuvre arm GenerateDriverInputs
+// dispatches to for a car promoted with E_PHYSICALREASON_NORMAL; everything below it is the
+// shared "drive at Vehicle::GetTargetPos" machinery.
+// ============================================================================================
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::CalculateDriverGasBrake  @0x82718CD8  (.cpp 16109..16130)
+//
+// One signed pedal value in [-1, 1]: positive is gas, negative is brake. It is a time-to-target
+// controller -- (distance / closing speed - the optimal 1.5 s) * 0.5, clamped -- so a car that
+// would arrive too soon lifts off and a car that is falling behind accelerates.
+// Every constant is the value IDA folds for the named .rdata symbol in the listing.
+// --------------------------------------------------------------------------------------------
+VecFloat TrafficEntityModule::CalculateDriverGasBrake(u32 luVehicle, VecFloat lfDistToTarget,
+                                                      Vector3 lParamLinearVelocity)
+{
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");  // .h 2467
+
+    const f32 lfOptimalTime = KF_DRIVER_OPTIMAL_TIME_TO_TARGET;   // flt_820BA5DC 1.5
+    const f32 lfGain        = KF_DRIVER_PEDAL_GAIN;               // flt_820BA62C 0.5
+    const f32 lfMinSpeed    = KF_DRIVER_MIN_CLOSING_SPEED;        // flt_82004014 0.1
+    const f32 lfStalledTime = KF_DRIVER_STALLED_TIME_TO_TARGET;   // flt_820BA5C8 100.0
+
+    const Vector3 lRelativeVelocity =
+        lParamLinearVelocity - GetVehicle(luVehicle)->GetLinearVelocity();
+
+    // 0x82718DC4..0x82718DFC -- |relative velocity|, with the exactly-zero case selected to 0.
+    const f32 lfSpeedSq = rw::math::vpu::Dot(lRelativeVelocity, lRelativeVelocity);
+    const f32 lfSpeed   = (lfSpeedSq == 0.0f) ? 0.0f : std::sqrt(lfSpeedSq);
+
+    // 0x82718E00..0x82718E18 -- below the epsilon the divide is meaningless, so the console
+    // substitutes a "practically stationary" time of 100 s.
+    const f32 lfTimeToTarget =
+        (lfSpeed > lfMinSpeed) ? (lfDistToTarget.x / lfSpeed) : lfStalledTime;
+
+    // 0x82718E1C..0x82718E28
+    f32 lfPedal = (lfTimeToTarget - lfOptimalTime) * lfGain;
+    lfPedal = (lfPedal < -1.0f) ? -1.0f : lfPedal;
+    lfPedal = (lfPedal >  1.0f) ?  1.0f : lfPedal;
+
+    return SplatDrive(lfPedal);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::CalculateAndSetSteering  @0x82718E48  (.cpp 16189..16220)
+//
+// Steer onto lTargetDirection. The turn magnitude is |cross(target, forward)| -- the sine of the
+// angle between them -- signed by the cross product's Y lane, rate-limited by
+// KF_VEHICLE_MAX_STEERING_DELTA and clamped to KF_VEHICLE_SIN_MAX_STEERING_ANGLE. The car keeps
+// the clamped ABSOLUTE steer; the driver record gets the raw DELTA, scaled by 1.3 when the
+// caller's lvfScale reaches 0.6 (unk_8300CBE0 lane 3, recovered from its dyn-init thunk at
+// 0x82C66E50: {0.2, 1.0, 0.94, 0.6}).
+// FLAG (VMX->portable): vrsqrtefp + two Newton steps -> exact 1/sqrt.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::CalculateAndSetSteering(u32 luVehicle, Vector3 lTargetDirection,
+                                                  BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls,
+                                                  VecFloat lvfScale)
+{
+    CGS_ASSERT(lpControls != 0, "lpOutControls");                                   // .cpp 16189
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+    CGS_ASSERT(lpVehicle != 0, "lpVehicle");                                        // .cpp 16192
+
+    const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+
+    // 0x82718F14..0x82718F4C -- the VMX three-instruction cross product (yzx permutes).
+    const Vector3 lCross = rw::math::vpu::Cross(lTargetDirection, lTransform.At());
+
+    const f32 lfCrossLenSq = rw::math::vpu::Dot(lCross, lCross);
+    const f32 lfSinAngle   = (lfCrossLenSq == 0.0f) ? 0.0f : std::sqrt(lfCrossLenSq);
+
+    // 0x82718F8C..0x82718FD4 -- Sgn(lCross.y) built from two compares and two vsels. Matches
+    // rw::math::fpu::Sgn<VecFloat> @0x825BC920 exactly: ==0 -> 0.0, >=0 -> 1.0, else -1.0.
+    const f32 lfSign = (lCross.y > 0.0f) ? 1.0f : ((lCross.y < 0.0f) ? -1.0f : 0.0f);
+
+    const f32 lfCurrentSteering = lpVehicle->GetSteering().x;
+    const f32 lfDelta           = lfSinAngle * lfSign - lfCurrentSteering;
+
+    const f32 lfMaxDelta = KF_VEHICLE_MAX_STEERING_DELTA.x;          // this+0x72670
+    const f32 lfMaxSin   = KF_VEHICLE_SIN_MAX_STEERING_ANGLE.x;      // this+0x72680
+
+    f32 lfClamped = (lfDelta < -lfMaxDelta) ? -lfMaxDelta : lfDelta;
+    lfClamped     = (lfClamped > lfMaxDelta) ? lfMaxDelta : lfClamped;
+
+    f32 lfNewSteering = lfCurrentSteering + lfClamped;
+    lfNewSteering = (lfNewSteering < -lfMaxSin) ? -lfMaxSin : lfNewSteering;
+    lfNewSteering = (lfNewSteering >  lfMaxSin) ?  lfMaxSin : lfNewSteering;
+
+    lpVehicle->SetSteering(lfNewSteering);
+
+    // 0x82719030..0x82719090 -- the record carries the DELTA, not the absolute.
+    const f32 lfRecordScale =
+        (lvfScale.x >= KF_STEERING_SCALE_THRESHOLD) ? KF_STEERING_SCALE_HIGH : 1.0f;
+    lpControls->mfSteering = lfDelta * lfRecordScale;
+
+    // GATE: DEBUG_ValidateEmDriverControls @0x82708FF8 (0x82719094) -- debug-only validator.
+    // DELETE-WHEN it lands; no effect on the record.
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::DriveTowardsTarget  @0x8273DFC0  (.cpp 16594..16700)   PARTIAL
+//
+// The shared driving body: give up if a slammed car is still moving, hand the car back to the
+// param sim once it is on top of its target and pointing the right way, then steer, pedal and
+// (when reversing) flip the steering sign.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnToTraffic,
+                                             BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    CgsDev::PerfMonCpu::StartMonitor(miPerfMon_Driving);            // this+0x72A00
+
+    CGS_ASSERT(lpControls != 0, "lpOutControls");                                   // .cpp 16594
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    CGS_ASSERT(lpVehicle->IsPhysical(), "lpVehicle->IsPhysical()");                 // .cpp 16597
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(), "lpVehicle->IsOfStandardSpecies()"); // .cpp 16598
+
+    // 0x8273E0AC..0x8273E144 -- a slammed standard car that is still rolling gives up, 5% of
+    // the time. KF_GIVE_UP_SPEED is flt_8300C950, a dyn-init product recovered from its thunk
+    // at 0x82C66C30: 0.44704 (mph->m/s) * 10 == 10 mph.
+    if (lpVehicle->IsRecoveringFromSlam() && lpVehicle->IsOfStandardSpecies() &&
+        lpVehicle->GetRandomVal() < KF_GIVE_UP_RANDOM_CHANCE &&
+        lpVehicle->GetSpeed().x > KF_GIVE_UP_SPEED)
+    {
+        lpVehicle->StartGiveUpManoeuvre();
+        CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
+        return;
+    }
+
+    // GATE: CheckIfPhysicalVehicleIsStuck @0x8272C010 (0x8273E150), 141 insns, unreconstructed.
+    // BLOCKER: needs the TrafficPhysicsInfo stuck-timer block and three module bools this
+    // cluster has not homed. DELETE-WHEN it lands. COST: a wedged physical car is not detected
+    // here (GenerateDriverInputs' own mfStuckTime send still catches it).
+    {
+        static bool sbLoggedStuck = false;
+        LogMissingLeg_T3Drive(sbLoggedStuck,
+                      "DriveTowardsTarget's CheckIfPhysicalVehicleIsStuck @0x8272C010 test -- "
+                      "unreconstructed; taken as not-stuck");
+    }
+
+    const Vector3 lTargetPos = lpVehicle->GetTargetPos();
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPos), "IsValid( lpVehicle->GetTargetPos() )"); // 16618
+
+    const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+    const Vector3 lDiff  = lTargetPos - lTransform.Pos();
+
+    // The distance guard is the console's own (0x8273E258 vcmpeqfp + 0x8273E288 vsel).
+    // FLAG (host guard): only the unit vector is unguarded on the console; zero vector here.
+    const f32 lfDistSq = rw::math::vpu::Dot(lDiff, lDiff);
+    const f32 lfDist   = (lfDistSq == 0.0f) ? 0.0f : std::sqrt(lfDistSq);
+    const Vector3 lUnitDiff = (lfDistSq == 0.0f) ? ZeroVector3() : lDiff * (1.0f / lfDist);
+
+    const ParamTransform* const lpParamTransform = GetParamTransform(luVehicle);
+
+    // 0x8273E2D8..0x8273E3CC -- 20 m off its own param and the car is TRYING TO RECOVER. The
+    // console base is `addis r26,r23,3 ; addi r26,r26,-0x7B00` == this + 0x28500 == 165120 ==
+    // mVehicleSoaData + 560 == mPhysicalVehiclesTryingToRecover (FarFromPlayer is +480 ==
+    // 165040, which TryClearupOffscreenTraffic @0x8273C4C8 reads instead). This is the ONLY
+    // writer of the bit in the image; its only reader is UpdateParam_CheckIfNeedToSlow
+    // @0x82738468, which drops such a car as a queueing target so the param drives AROUND it.
+    if (lfDist >= KF_DRIVER_FAR_FROM_TARGET_DIST)
+    {
+        mVehicleSoaData.mPhysicalVehiclesTryingToRecover.SetBit(luVehicle);
+    }
+
+    // 0x8273E27C..0x8273E32C -- sitting on its target, pointing the same way, and physical for
+    // more than five seconds: hand it back to the param sim.
+    if (lbAllowReturnToTraffic &&
+        lpVehicle->GetPhysicalTime() > KF_DRIVER_MIN_PHYSICAL_TIME_TO_RETURN &&
+        KF_DRIVER_RETURN_TO_TRAFFIC_DIST > lfDist &&
+        rw::math::vpu::Dot(lUnitDiff, lpParamTransform->GetDirection()) >
+            KF_DRIVER_RETURN_TO_TRAFFIC_DOT)
+    {
+        CGS_ASSERT(!lpVehicle->IsOfTrailerSpecies(), "!lpVehicle->IsOfTrailerSpecies()"); // 16648
+
+        // 0x8273E4B4 the call, 0x8273E4B8 the `b loc_8273E75C` that RETURNS out of the driver
+        // for this frame -- the car is no longer physical, so steering, pedals and the
+        // reverse-turn test below must not run on it. The perf-mon stop is the console's tail.
+        ReturnPhysicalVehicleToTraffic(luVehicle);
+        CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
+        return;
+    }
+
+    // 0x8273E634..0x8273E664 -- forward distance to the target, along the car's own At axis.
+    const f32 lfForwardDist = rw::math::vpu::Dot(lDiff, lTransform.At());
+
+    if (lpVehicle->IsExtremeSwerving() &&
+        lpVehicle->GetPhysicalTime() < KF_DRIVER_SWERVE_STEERING_TIME)
+    {
+        CalculateAndSetSteering(luVehicle, lUnitDiff, lpControls, SplatDrive(0.0f));
+    }
+    else
+    {
+        // GATE: CalculateAndSetSteeringUsingAvoidance @0x8273D258 (0x8273E6A0) -- unreconstructed
+        // (VMX feeler pipeline + the mbDEBUGEnableAvoidance block). FALLBACK: the console's own
+        // direct-target steering with lvfScale 0, i.e. avoidance disabled, not steering disabled.
+        // DELETE-WHEN it lands; it also outputs the score the gated handbrake leg reads.
+        static bool sbLoggedAvoid = false;
+        LogMissingLeg_T3Drive(sbLoggedAvoid,
+                      "DriveTowardsTarget's CalculateAndSetSteeringUsingAvoidance @0x8273D258 -- "
+                      "unreconstructed; falls back to CalculateAndSetSteering @0x82718E48");
+
+        CalculateAndSetSteering(luVehicle, lUnitDiff, lpControls, SplatDrive(0.0f));
+    }
+
+    // 0x8273E6C4..0x8273E70C -- one signed pedal split into gas and brake.
+    const Vector3 lParamLinearVelocity =
+        lpParamTransform->GetDirection() * lpParamTransform->GetSpeed();
+    const f32 lfPedal =
+        CalculateDriverGasBrake(luVehicle, SplatDrive(lfForwardDist), lParamLinearVelocity).x;
+
+    const f32 lfGas   = (lfPedal > 0.0f) ? ((lfPedal > 1.0f) ? 1.0f : lfPedal) : 0.0f;
+    const f32 lfBrake = (lfPedal < 0.0f) ? ((-lfPedal > 1.0f) ? 1.0f : -lfPedal) : 0.0f;
+
+    lpControls->mfGas   = lfGas;
+    lpControls->mfBrake = lfBrake;
+
+    // 0x8273E5B8..0x8273E624 -- the target is more than 15 m BEHIND us and we are not already
+    // in a manoeuvre: start the three-point turn.
+    if (KF_DRIVER_REVERSE_TURN_DIST > lfForwardDist &&
+        lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_NONE &&
+        0.0f > rw::math::vpu::Dot(lpParamTransform->GetDirection(), lTransform.At()))
+    {
+        lpVehicle->SetCurrentManoeuvre(Vehicle::E_MANOEUVRE_3_POINT_TURN);
+    }
+
+    // 0x8273E6F8..0x8273E71C -- reversing flips the steering sign.
+    const f32 lfSpeed = lpVehicle->GetSpeed().x;
+    const f32 lfSpeedSign = (lfSpeed > 0.0f) ? 1.0f : ((lfSpeed < 0.0f) ? -1.0f : 0.0f);
+    lpControls->mfSteering = lpControls->mfSteering * lfSpeedSign;
+
+    // GATE: the handbrake leg @0x8273E71C. It tests the avoidance score the gated
+    // CalculateAndSetSteeringUsingAvoidance writes back against unk_8300CEE0 (recovered from
+    // its dyn-init thunk at 0x82C66990: splat(0.7)), and sets mfHandBrake 0.5.
+    // DELETE-WHEN the avoidance leg lands.
+
+    // GATE: DEBUG_ValidateEmDriverControls @0x82708FF8 (0x8273E748) -- debug-only validator.
+
+    CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateExtremeSwerving  @0x8273E8D0  (164 insns, .cpp 16770..)
+//
+// The arm GenerateDriverInputs takes for ANY physical car whose reason is SWERVING (4), which
+// on this build is every promotion. Two outcomes:
+//   * crash slider < 0.4, or no local player, or the player is >40 m away AND this car's own
+//     mfRandomVal is above 0.8
+//       -> DriveTowardsTarget, i.e. the car actually gets gas/brake/steer. lbAllowReturnToTraffic
+//          is `manoeuvre != EXTREME_SWERVE` (0x8273EB38..0x8273EB50: cntlzw(m-1), extract bit 26,
+//          xori 1), so a swerving car whose manoeuvre has already wound back to NONE is the one
+//          allowed to hand its physical slot back.
+//   * otherwise -> flip the car into a sympathetic crash aimed at the local player's race car.
+// The console's r5 (lpOutput) is saved by neither the prologue nor the body: this arm never
+// posts an event. Kept in the signature because the declaration and the call site carry it.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateExtremeSwerving(
+        u32 luVehicle,
+        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+        BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    (void)lpOutput;   // console r5 -- passed in, never read by this arm
+
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");   // .h 2459
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);                                 // 0x8273E910
+
+    CGS_ASSERT(lpVehicle->IsExtremeSwerving(), "lpVehicle->IsExtremeSwerving()");      // .cpp 16770
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(), "lpVehicle->IsOfStandardSpecies()");  // .cpp 16771
+
+    // 0x8273E980..0x8273EA20 -- the three tests that decide whether this frame turns into a
+    // sympathetic crash. Written in the console's own short-circuit order: a low crash slider
+    // or no local player skips the transform fetch entirely.
+    bool lbStartSympatheticCrash = false;
+
+    if (mfCrashSliderFinalValue >= KF_EXTREME_SWERVE_CRASH_SLIDER_MIN &&
+        meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+
+        // GetSympCrashingTargetPos @0x82708C10 reads the same table for a race-car target:
+        // mabRaceCarActive @+0x716C0 then maActiveRaceCarPositions @+0x716D0, both indexed by
+        // EActiveRaceCarIndex. This site reads the position WITHOUT the active test.
+        const Vector3 lDiff =
+            mRaceCarState.maActiveRaceCarPositions[static_cast<s32>(meLocalPlayerIndex)]
+            - lTransform.Pos();
+
+        const f32 lfDistSq = rw::math::vpu::Dot(lDiff, lDiff);
+
+        // 0x8273E9F4 `vcmpgtfp. v0, dist2, splat(1600)` -> the CR6 "all lanes greater" bit.
+        // NEAR the player: crash. FAR: the car's OWN fixed mfRandomVal decides, and only a
+        // value ABOVE 0.8 keeps it driving (so ~20% of cars, permanently, not per frame).
+        // Polarity checked against the two branches at 0x8273EA0C/0x8273EA20.
+        const bool lbPlayerIsFar = (lfDistSq > KF_EXTREME_SWERVE_PLAYER_DIST_SQ);
+
+        lbStartSympatheticCrash =
+            !lbPlayerIsFar ||
+            !(lpVehicle->GetRandomVal() > KF_EXTREME_SWERVE_KEEP_DRIVING_ROLL);
+    }
+
+    if (!lbStartSympatheticCrash)
+    {
+        // 0x8273EB30..0x8273EB54 -- the ONLY route from a swerving car back into the shared
+        // driving body, and (through it) into ReturnPhysicalVehicleToTraffic.
+        const bool lbAllowReturnToTraffic =
+            (lpVehicle->GetCurrentManoeuvre() != Vehicle::E_MANOEUVRE_EXTREME_SWERVE);
+
+        DriveTowardsTarget(luVehicle, lbAllowReturnToTraffic, lpControls);
+        return;
+    }
+
+    // 0x8273EA24..0x8273EA58 -- the target id is built BEFORE the already-crashing test, so
+    // the bound assert fires either way. Owner byte 1 == race car, same 14/10 split as
+    // MakeTrafficEntityId.
+    const u32 luPlayerEntityIndex = static_cast<u32>(meLocalPlayerIndex);
+    CGS_ASSERT(luPlayerEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM_LOCAL),
+               "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");   // CgsEntityId.h:116
+
+    EntityId lTargetEntityId;
+    lTargetEntityId.muValue =
+        (luPlayerEntityIndex << KU_RACE_CAR_PART_INDEX_SHIFT) | KU_RACE_CAR_OWNER_PACKED;
+
+    if (lpVehicle->IsSympatheticallyCrashing())    // 0x8273EA5C -- already going: nothing to do
+    {
+        return;
+    }
+
+    lpVehicle->SetPhysicalReason(
+        static_cast<s8>(E_PHYSICALREASON_SYMPATHETIC_CRASHING));                     // 0x8273EA74
+    lpVehicle->SetSympatheticCrashTarget(lTargetEntityId);                           // 0x8273EA80
+
+    // 0x8273EA84..0x8273EB24 -- one mEffectRand LCG step (the module's SECOND Random, seed at
+    // X360 +0x1380 == mEffectRand.muSeed, mRand's being +0x1350), reduced mod 101 and compared
+    // against a signed (slider*35 + 30) truncated to int. Roll under the threshold accelerates
+    // into the player; otherwise it is a head-on. mfSympCrashTime is zeroed either way.
+    const s32 liRoll = static_cast<s32>(mEffectRand.RandomUInt() % KU_SYMP_CRASH_PERCENT_MODULUS);
+    const s32 liAcceleratePercent = static_cast<s32>(
+        mfCrashSliderFinalValue * KF_SYMP_CRASH_STYLE_SLIDER_SCALE
+        + KF_SYMP_CRASH_STYLE_BASE_PERCENT);
+
+    lpVehicle->SetSympCrashTime(0.0f);
+    lpVehicle->SetSympCrashState(liRoll < liAcceleratePercent
+                                     ? Vehicle::E_SYMPATHETIC_ACCELERATE
+                                     : Vehicle::E_SYMPATHETIC_HEADON);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateNormalPhysical  @0x8273EF08  (.cpp 17068..17073)
+//
+// The whole arm: three asserts and a DriveTowardsTarget with the return-to-traffic test armed.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateNormalPhysical(u32 luVehicle,
+                                               BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    CGS_ASSERT(lpControls != 0, "lpDriverControls");                                // .cpp 17068
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+    const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+    CGS_ASSERT(lpVehicle->IsNormalPhysical(), "lpVehicle->IsNormalPhysical()");     // .cpp 17073
+
+    DriveTowardsTarget(luVehicle, true, lpControls);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateRecoveringFromSlam  @0x8273E778  (85 insns)
+//   DWARF BrnTrafficEntityModule.h -- void UpdateRecoveringFromSlam(uint32_t,
+//   BrnTrafficDriverControls*); the header already carried the declaration.
+//
+// THE ARM A TRAFFIC CAR TAKES AFTER THE PLAYER HAS SHOVED IT. For the first 2.5 s of physical
+// life it drives itself along the direction the slam recorded; after that it falls through to
+// the ordinary DriveTowardsTarget, which is also the only path that hands it back to the param
+// sim (ReturnPhysicalVehicleToTraffic).
+//
+// WHY IT MATTERS (issue #14, measured on run tvan_r5 with this arm still gated): the arm writes
+// the ONLY non-zero pedals a slammed car ever gets. Without them GenerateDriverInputs sends a
+// zero-control record, its `mfGas > 0 || mfBrake > 0` reset never fires, and mfTimeNotDriving
+// runs monotonically from the shove -- 9 cars in one 260 s run reached the 6 s
+// KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME and were deleted by JunctionFUP_TryClearupNonMoving-
+// Physical @0x8273F2E8, five of them within 12-50 m of the player.
+//
+// Body, instruction for instruction (0x8273E778..0x8273E8C8):
+//   r3 this, r4 luVehicle, r5 lpDriverControls; three asserts, then
+//   0x8273E850  bl IsRecoveringFromSlam            -- re-called, not cached
+//   0x8273E864  lfs f13, 0x44(vehicle)             == Vehicle::GetPhysicalTime()
+//   0x8273E868  lfs f0,  flt_82005548              == 2.5f (x360rd: 82005548 -> 40200000)
+//   0x8273E870  bge -> DriveTowardsTarget(luVehicle, true, lpControls)
+//   0x8273E884  lfs f0, 0xFE0(info)                == TrafficPhysicsInfo::mfDrivingDirection
+//   0x8273E88C  fsel                               -- raw word FC00682E decodes
+//               (op 63, xo 23, frD f0, frA f0, frB f13, frC f0) => gas   = (drv >= 0) ? drv : 0
+//   0x8273E898  fsel                               -- raw word FC00036E
+//               (frD f0, frA f0, frB f0, frC f13)  => brake = (drv >= 0) ? 0 : drv
+//   0x8273E8A0  lfs f0, 0xFDC(info)                == mfSteeringDirection -> mfSteering (+0x10)
+// The two fsel operands were decoded from the raw instruction words rather than from IDA's
+// printed order (AGENTS.md: "fsel prints D,A,C,B"), so the sign convention is the image's own:
+// mfBrake receives the NEGATIVE driving direction, exactly as the console stores it.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateRecoveringFromSlam(
+        u32 luVehicle,
+        BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    CGS_ASSERT(lpControls != 0, "lpDriverControls");                                // .cpp 16732
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+    const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    CGS_ASSERT(lpVehicle->IsRecoveringFromSlam(),
+               "lpVehicle->IsRecoveringFromSlam()");                                // .cpp 16735
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(),
+               "lpVehicle->IsOfStandardSpecies()");                                 // .cpp 16736
+
+    // ---- [T5-slam] witness. NOT IN THE X360 BINARY, off unless BRN_TRAFFIC_DIAG.
+    // Printed BEFORE the control below so BOTH arms of the A/B produce rows: `wrote=0` is the
+    // pre-fix state (the arm reached, no pedal written), `wrote=1` is this landing. The row
+    // carries mfTimeNotDriving, which is the number the junction-FUP valve kills on.
+    // Budgeted; DELETE-WHEN the issue-#14 evidence is banked.
+    {
+        static s32 siSlamWitnessLines = 0;
+        const s32 KI_SLAM_WITNESS_CAP = 200;
+        if (siSlamWitnessLines < KI_SLAM_WITNESS_CAP)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++siSlamWitnessLines;
+                const TrafficPhysicsInfo* const lpWInfo =
+                    GetTrafficPhysicsInfoForVehicl(luVehicle);
+                const char* lpcEnvW = getenv("BRN_TRAFFIC_NO_SLAM_DRIVE");
+                const bool lbSuppressed = (lpcEnvW != 0 && lpcEnvW[0] != '0');
+                *lpDiag << "[T5-slam] veh=" << static_cast<s32>(luVehicle)
+                        << " physTime=" << lpVehicle->GetPhysicalTime()
+                        << " drv=" << (lpWInfo != 0 ? lpWInfo->mfDrivingDirection : 0.0f)
+                        << " steer=" << (lpWInfo != 0 ? lpWInfo->mfSteeringDirection : 0.0f)
+                        << " notDriving=" << (lpWInfo != 0 ? lpWInfo->mfTimeNotDriving : -1.0f)
+                        << " wrote=" << (lbSuppressed ? 0 : 1)
+                        << "\n";
+            }
+        }
+    }
+
+    // ---- [FLAG PC control] NOT IN THE X360 BINARY. BRN_TRAFFIC_NO_SLAM_DRIVE=1 restores the
+    // pre-2026-09-07 gate: the arm is still reached and still costs its asserts, but no pedal
+    // is written -- exactly the state issue #14 was measured in. It exists because the shared
+    // checkout is fast-forwarded by other lanes mid-session, so a "before" build and an "after"
+    // build are NOT comparable; this makes the A/B one binary and one recipe, differing in one
+    // store. DELETE-WHEN the issue-#14 evidence is banked.
+    static s32 siNoSlamDrive = -1;
+    if (siNoSlamDrive < 0)
+    {
+        const char* lpcEnv = getenv("BRN_TRAFFIC_NO_SLAM_DRIVE");
+        siNoSlamDrive = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+    }
+    if (siNoSlamDrive == 1)
+    {
+        return;
+    }
+
+    // 0x8273E850 -- the console calls the predicate a SECOND time here rather than reusing the
+    // assert's result, so the test is reproduced as a call, not as a cached bool.
+    if (lpVehicle->IsRecoveringFromSlam() &&
+        lpVehicle->GetPhysicalTime() < KF_SLAM_RECOVERY_DRIVE_TIME)
+    {
+        const TrafficPhysicsInfo* const lpInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+        CGS_ASSERT(lpInfo != 0, "lpPhysInfo");
+        if (lpInfo == 0)
+        {
+            return;   // PC-safety guard, as in the sibling arms in this file
+        }
+
+        const f32 lfDrivingDirection = lpInfo->mfDrivingDirection;   // +0xFE0
+
+        lpControls->mfGas   = (lfDrivingDirection >= 0.0f) ? lfDrivingDirection : 0.0f;
+        lpControls->mfBrake = (lfDrivingDirection >= 0.0f) ? 0.0f : lfDrivingDirection;
+        lpControls->mfSteering = lpInfo->mfSteeringDirection;        // +0xFDC
+        return;                                                     // 0x8273E8A8
+    }
+
+    DriveTowardsTarget(luVehicle, true, lpControls);                // 0x8273E8C0, r5 == 1
+}
+
+// =================================================================================================
+// THE DEMOTION CHAIN. Three functions, in call order. The console path is
+//   DriveTowardsTarget @0x8273DFC0 (car on its target, pointing the right way, physical > 5 s)
+//     -> ReturnPhysicalVehicleToTraffic @0x8273DCD0
+//       -> StopVehicleBeingPhysical @0x8271FED0  (frees the MODULE's TrafficPhysicsInfo slot and
+//                                                 queues the index in maNewRemovedVehicles)
+//   PrePhysicsUpdate @0x8274C690
+//     -> CleanUpCrashedVehiclePhysics @0x82720960 (drains that array into the physics
+//                                                  RemoveTrafficEvent queue, then clears it)
+//   -> PhysicalTrafficManager::ProcessRemoveEvents frees the PHYSICS slot.
+//
+// WHICH array is maNewRemovedVehicles (:682), not maRecentlyRecoveredSlammedTraffic (:683):
+// StopVehicleBeingPhysical's base is this+0x57F7C and CleanUpCrashedVehiclePhysics reads its
+// count at +0x140 (160 u16 elements). 0x57F7C + 324 + 324 + 12 bytes of padding == 0x58210 ==
+// maTrafficPhysicsInfoList, so exactly one Array<u16,160> sits between them.
+// =================================================================================================
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::StopVehicleBeingPhysical  @0x8271FED0  (88 insns)
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::StopVehicleBeingPhysical(u32 luVehicle, bool lbSuppressPhysicsRemoval)
+{
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");   // .h 2459
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    CGS_ASSERT(lpVehicle->IsPhysical(), "lpVehicle->IsPhysical()");   // .cpp baked 0x11F2
+    CGS_ASSERT(lpVehicle->HasEntity(),  "lpVehicle->HasEntity()");    // .cpp baked 0x11F3
+
+    // 0x8271FF7C..0x8271FF98 -- ONLY when the flag byte is zero. This is the half that reaches
+    // physics; everything below is module-local bookkeeping.
+    if (!lbSuppressPhysicsRemoval)
+    {
+        maNewRemovedVehicles.Append(static_cast<u16>(luVehicle));
+    }
+
+    // GATE: EnsureVehicleRemovedFromCrashModule (0x8271FFA4) -- no body in this tree (KillParam
+    // @_wT2_01.cpp:656 and StaticVehicles_KillParam already gate the same callee).
+    // COST: a car demoted mid-crash keeps its crash-module entry. DELETE-WHEN it lands.
+    {
+        static bool sbLoggedCrashModule = false;
+        LogMissingLeg_T3Drive(sbLoggedCrashModule,
+                      "StopVehicleBeingPhysical's EnsureVehicleRemovedFromCrashModule "
+                      "(0x8271FFA4) -- no body; the crash module keeps its entry");
+    }
+
+    // 0x8271FFAC..0x82720010 -- free the module-side physics record. The parts index is read
+    // BEFORE SetNotPhysical (which stores -1 over it); the console's `extsb` only serves the
+    // 25-bound compare.
+    const s32 liPartsIndex = lpVehicle->GetPhysicalPartsIndex();
+    CGS_ASSERT(static_cast<u32>(liPartsIndex) < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES,
+               "luIndex < NUMBITS");                                   // CgsBitArray.h:241
+
+    maTrafficPhysicsInfoListBits.UnSetBit(static_cast<u32>(liPartsIndex));
+    maTrafficPhysicsInfoList[liPartsIndex].Destruct();
+
+    // 0x82720024 -- clears E_FLAG_PHYSICAL, the mPhysicalVehicles bit, the parts index, the
+    // physical reason and the crash-traffic type.
+    lpVehicle->SetNotPhysical(luVehicle, mVehicleSoaData);
+
+    // [T3-demote] -- NOT IN THE X360 BINARY. See the census banner at the top of this file.
+    ++giDemoteCalls;
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        if (giDemoteCalls <= KI_DEMOTE_PRINT_CAP)
+        {
+            *lpDiag << "[T3-demote] #" << giDemoteCalls
+                    << " vehicle " << static_cast<s32>(luVehicle)
+                    << " slot " << liPartsIndex
+                    << " suppressPhysRemoval " << (lbSuppressPhysicsRemoval ? 1 : 0)
+                    << " physSlots " << static_cast<s32>(maTrafficPhysicsInfoListBits.CountSetBits())
+                    << " | recycle " << giDemoteFromRecycle
+                    << " return "    << giDemoteFromReturn
+                    << " killDying " << (giDemoteCalls - giDemoteFromRecycle
+                                         - giDemoteFromReturn)
+                    << " (clearupKills " << giDemoteFromClearup << ")"
+                    << " [DELETE-WHEN-STABLE]\n";
+
+            if (giDemoteCalls == KI_DEMOTE_PRINT_CAP)
+            {
+                *lpDiag << "[T3-demote] print cap " << KI_DEMOTE_PRINT_CAP
+                        << " reached -- later demotions still counted, not printed\n";
+            }
+        }
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::HandleRecycledTraffic  @0x82741780  (218 insns)
+//   DWARF BrnTrafficUnity.cpp:14952, whose locals are transcribed verbatim (lTrafficRemovedEvent
+//   / liEvent / luVehicle / lpVehicle / luI).
+//
+// THE SECOND DEMOTION ROUTE, and the one physics drives. PostPhysicsUpdate's FIRST RUNNING head
+// leg (0x8274E884) hands it the vehicle manager's mRemovedTrafficEventQueue (+0x7A0), which
+// PhysicalTrafficManager::RecycleTrafficVehicle and ::CheckForTrafficHittingWater fill when the
+// SIMULATION drops a traffic body. The world side then gives up its own half.
+//
+// TWO THINGS THE ASM SETTLES THAT THE PSEUDOCODE HIDES:
+//   * the suppression flag is `li r5, 1` (0x827418B0), i.e. StopVehicleBeingPhysical does NOT
+//     append to maNewRemovedVehicles. It must not: physics is the one telling us, so posting a
+//     RemoveTrafficEvent back at it would remove a slot that is already gone.
+//   * the switch is on the event's SECOND word. TrafficRemovedEvent is
+//     { EntityId, ETrafficType } (BrnVehicleEvents.h:356); the console loads the 8 bytes with a
+//     single `ld`, spills them, and reads the two halves back separately -- the high word for
+//     the entity index (`extrwi r30, r11, 14,8`) and the low word for the jump table
+//     (0x827418C4 `cmplwi r11, 3` + jpt_827418E0). Only E_TRAFFIC_TYPE_SLAMMED (3) is
+//     distinguished; 0/1/2 share one arm.
+// The default arm's baked message is "A traffic vehicle was recycled with an invalid physical
+// state" (.cpp 3575) -- the console's own words for a fourth ETrafficType value.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::HandleRecycledTraffic(
+        const CgsModule::EventQueue<BrnPhysics::Vehicle::TrafficRemovedEvent, 25>*
+            lpRemovedTrafficQueue)
+{
+    CGS_ASSERT(lpRemovedTrafficQueue != 0, "lpRemovedTrafficQueue != NULL");     // .cpp 3497
+
+    for (s32 liEvent = 0; liEvent < lpRemovedTrafficQueue->GetLength(); ++liEvent)
+    {
+        const BrnPhysics::Vehicle::TrafficRemovedEvent& lrTrafficRemovedEvent =
+            lpRemovedTrafficQueue->GetEvent(liEvent);                            // sub_82709AA8
+
+        const u32 luVehicle = EntityIndexOf(lrTrafficRemovedEvent.mRemovedVehicleEntityId);
+
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC"); // .h 2459
+
+        const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+        // 0x82741894..0x827418A0 -- a vehicle the world has already retired needs nothing.
+        if (!lpVehicle->IsAlive())
+        {
+            continue;
+        }
+
+        // 0x827418A4..0x827418BC -- `li r5, 1`: the physics half is SUPPRESSED (see banner).
+        if (lpVehicle->IsPhysical())
+        {
+            ++giDemoteFromRecycle;   // [T3-demote] census, NOT IN THE X360 BINARY
+            StopVehicleBeingPhysical(luVehicle, true);
+        }
+
+        switch (lrTrafficRemovedEvent.meTrafficType)                             // jpt_827418E0
+        {
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_POTENTIAL:                      // cases 0-2
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_CRASHING:
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_PHYSICAL:
+            {
+                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+                const TrafficRemoveReasonTag lTag("physics-recycled");
+                RemoveVehicle(luVehicle);                                        // 0x827418FC
+            }
+            break;
+
+        case BrnPhysics::Vehicle::E_TRAFFIC_TYPE_SLAMMED:                        // case 3
+        {
+            // 0x82741904..0x8274196C -- drop this car's pending crash record. This is one of
+            // the two things that ever shrinks maNewCrashedVehicles (the other is
+            // GenerateCrashedVehicleEvents' whole-array Clear), and the console breaks out of
+            // the scan on the FIRST match rather than erasing every instance.
+            for (u32 luI = 0; luI < maNewCrashedVehicles.GetLength(); ++luI)
+            {
+                if (EntityIndexOf(maNewCrashedVehicles.GetItem(luI).mVictimId) == luVehicle)
+                {
+                    maNewCrashedVehicles.Erase(luI);
+                    break;
+                }
+            }
+
+            // 0x82741970..0x82741AA4 -- a tripwire, not a gate. The console falls through to
+            // RemoveVehicle whether or not it fires.
+            CGS_ASSERT(!mVehiclesAddedToCrashModule.IsBitSet(luVehicle) ||
+                       lpVehicle->GetCrashTrafficTypeRaw() !=
+                           static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Slammed),
+                       "!mVehiclesAddedToCrashModule.IsBitSet( luVehicle ) || "
+                       "( GetVehicle( luVehicle )->GetCrashTrafficType() != "
+                       "BrnPhysics::Vehicle::eCrashTrafficType_Slammed )");      // .cpp 3568
+
+            {
+                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+                const TrafficRemoveReasonTag lTag("physics-recycled-slammed");
+                RemoveVehicle(luVehicle);                                        // 0x82741AB0
+            }
+            break;
+        }
+
+        default:
+            CGS_ASSERT(false,
+                       "A traffic vehicle was recycled with an invalid physical state"); // .cpp 3575
+            break;
+        }
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::ReturnPhysicalVehicleToTraffic  @0x8273DCD0  (188 insns)
+//
+// Re-seat the car's axles on the transform physics left it at, stop it being physical, and put
+// its param back on a normal behaviour. Recurses once into the articulated other half.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::ReturnPhysicalVehicleToTraffic(u32 luVehicle)
+{
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");   // .h 2459
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+    CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");                    // BrnTrafficVehicle.h 786
+
+    // 0x8273DD58..0x8273DDB4 -- the two per-type records SetFromVehicleTransform needs. The
+    // update record is TrafficData +0x30 (`lwz r10,0x30(r3)`, stride 20 == mpaVehicleTypesUpdate).
+    const u32 luVehicleType = lpVehicle->GetVehicleType();
+    const VehicleTypeUpdateData* const lpVehicleTypeUpdate =
+        &mpData->mpaVehicleTypesUpdate[luVehicleType];
+    const VehicleTypeRuntime* const lpVehicleTypeRuntime = GetVehicleTypeRuntime(luVehicleType);
+
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");   // .h 2475
+
+    // 0x8273DDE4..0x8273DE00 -- the axles are re-derived from where PHYSICS left the car, so the
+    // param sim picks it up in place instead of snapping it back.
+    const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+    GetVehicleAxles(luVehicle)->SetFromVehicleTransform(lTransform, lpVehicleTypeRuntime,
+                                                        lpVehicleTypeUpdate);
+
+    ++giDemoteFromReturn;   // [T3-demote] census, NOT IN THE X360 BINARY
+    StopVehicleBeingPhysical(luVehicle, false);                        // 0x8273DE10
+
+    CGS_ASSERT(luVehicle < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");  // .h 2350
+
+    Param* const lpParam = GetParam(luVehicle);
+    CGS_ASSERT(lpParam != 0, "Failed to GetParam for vehicle: ");      // streamed on console
+
+    // 0x8273DED4..0x8273DF14 -- a param that was driving around this car's obstruction has
+    // nothing to drive around any more. KI_BEHAVIOUR_NORMAL is 6, not 0.
+    if (lpParam->miBehaviour == 2)
+    {
+        CGS_ASSERT(mbAllowDivergentBehaviour, "AllowDivergentBehaviour()");
+        lpParam->miBehaviour = Param::KI_BEHAVIOUR_NORMAL;
+    }
+
+    // 0x8273DF18..0x8273DF7C -- the articulated other half comes back with it. The species test
+    // is what stops the recursion (the trailer half never recurses into its cab).
+    if (lpVehicle->GetOtherHalfIndex() != static_cast<u16>(KU_INVALID_VEHICLE) &&
+        !lpVehicle->IsOfTrailerSpecies())
+    {
+        CGS_ASSERT(lpVehicle->IsOfStandardSpecies(), "IsOfStandardSpecies()");
+        ReturnPhysicalVehicleToTraffic(lpVehicle->GetOtherHalfIndex());
+    }
+
+    // 0x8273DF80..0x8273DFB4 -- a car whose param died while it was physical is deleted, not
+    // handed back.
+    if (!lpVehicle->IsOfTrailerSpecies() && !GetParam(luVehicle)->IsAlive())
+    {
+        // 0x8273DFAC..0x8273DFB4 -- UNGATED: RemoveVehicle @0x8272E370 is bodied in
+        // _wT5_01.cpp. (Its park note here named GetVehicleSpecies /
+        // Vehicle::DetachArticulation / StaticTrafficParam::SetShouldBeRemoved as blockers;
+        // all three had already been landed by earlier waves and nobody retired the note.)
+        // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+        const TrafficRemoveReasonTag lTag("return-to-traffic-deadparam");
+        RemoveVehicle(luVehicle);
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::CleanUpCrashedVehiclePhysics  @0x82720960  (76 insns)
+//
+// Drain maNewRemovedVehicles into the physics RemoveTrafficEvent queue, then clear it. The
+// console re-reads the array length every iteration (`lwz 0x140(r26)` inside the loop).
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::CleanUpCrashedVehiclePhysics(
+        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // .cpp baked 0x167E
+
+    for (u32 luEntry = 0; luEntry < maNewRemovedVehicles.GetLength(); ++luEntry)
+    {
+        const u16 lu16Vehicle = maNewRemovedVehicles.GetItem(luEntry);
+
+        CGS_ASSERT(lu16Vehicle < 0x4000u,
+                   "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_INDEX)");
+
+        // 0x82720A18..0x82720A58 -- the folded 0x0200000000000000 owner splat plus the
+        // index<<10 splice, spelled as the two field writes (the same idiom
+        // AddVehicleToPhysics uses in _wT3_01.cpp).
+        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
+        lVolumeInstanceId.muId = 0;
+        lVolumeInstanceId.SetEntityIDOwner(
+            static_cast<u8>(BrnPhysics::Vehicle::KU_ENTITYTYPE_TRAFFIC_VEHICLE));
+        lVolumeInstanceId.SetEntityIDEntityIndex(lu16Vehicle);
+
+        lpOutput->GetVehicleInputInterface()->RemovePhysicalTraffic(lVolumeInstanceId);
+    }
+
+    maNewRemovedVehicles.Clear();   // 0x82720A78..0x82720A84 (`stwx 0` into the count word)
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT3_04.cpp (wave T3) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// =================================================================================================
+// BrnTrafficEntityModule_wT3_04.cpp -- PHYSICAL TRAFFIC, cluster C4.
+//
+//   BrnTraffic::TrafficEntityModule::HandleExternalResponses @0x82732C68 (1,302 insns, DWARF :1432)
+//
+// THE FUNCTION THAT MAKES THE HIT CAR MOVE ON SCREEN. PostPhysicsUpdate's RUNNING head leg
+// (_wT1_01.cpp) calls it once per frame with the traffic module's post-physics INPUT buffer, which
+// WorldModule::BridgePhysicsModuleToTrafficModule_PostPhysics @0x827AB910 has just staged from the
+// physics module's output buffer.
+//
+// The Feb-2007 leak has this function at BrnTrafficEntityModule.cpp:3652 and it is the STRUCTURAL
+// key only: the ship carries four drain loops where the leak has two, and the ship's
+// maTrafficPhysicsInfoList replaces the leak's maCrashingVehiclePartsList. Everything below is read
+// off the ARTIST asm/pseudocode; the leak settles the bbox-offset SIGN and nothing else.
+//
+// THE FOUR LOOPS, in console order:
+//   1  VehicleManagerOutputInterface::GetCrashedTrafficEventQueue()  (interface +0)
+//        -> RecordTrafficVehicleIsPhysical + the crash-slider score + the parked-car alarm
+//   2  VehicleManagerOutputInterface::GetSlammedTrafficEventQueue()  (interface +336 == 0x150)
+//        -> the same promotion, carrying the slam's crash type and its two direction floats
+//   3  VehicleOutputInterface::GetTrafficStateQueue()                (interface +9760 == 0x2620)
+//        -> THE POSE READ-BACK: the loop that makes a hit car move on screen.
+//   4  VehicleManagerOutputInterface::GetRaceCarCrashEventQueue()    (interface +928 == 0x3A0)
+//        -> the crash-slider score again, weighted by whether the crasher was AI
+//
+// THE BBOX ROUND TRIP (loop 3). CalculateInitialPhysicalState (_wT3_00.cpp) promotes with
+//     Matrix44AffineFromTranslation( mBBoxOffset ) * lVehicleTransform
+// and this reads back with
+//     Matrix44AffineFromTranslation( Negate(mBBoxOffset) ) * lEvent.mTransform
+// (asm 0x82733E1C `vslw v9,v9,v9` -> 0x80000000 per lane, `vxor v8,v8,v9` == the negate, then the
+// generic affine product at 0x82733E60..0x82733EE0). Flip either sign and every promoted car jumps
+// by the bbox offset on its first physical frame.
+//
+// TWO RECOVERED CONSTANTS (headless idat dump of the ARTIST image):
+//   flt_820BA5C0 == 50.0f     flt_820BA5C8 == 100.0f
+// Both feed mfCrashSliderCrashScore, whose factor member is mfCrashSliderCrashScoreFactor
+// (console +0x72370 / +0x72378 -- anchored by UpdateCrashSlider @0x82715A18, see
+// BrnTrafficEntityModule.cpp:195).
+//
+// NAMED GATE INSIDE THIS FILE:
+//   G-ARTIC      loop 1's cab/trailer pairing arms + Array<TrafficCrashInfo,160>::Append.
+//                Unreachable: generation builds InitialiseAsStandard cars only, so
+//                muOtherHalfIndex is always KU_INVALID_VEHICLE, and it needs
+//                Vehicle::GetTrailerIndex, which does not exist in this tree.
+//                DELETE-WHEN trailers land.
+// =================================================================================================
+
+
+// [T5-apply] DIAG state, DEFINED in
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficPhysics.cpp.
+// NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+namespace BrnPhysics { namespace Vehicle {
+    extern s32 gT5RamFramesLeft;
+    extern s32 gT5RamGlobalIndex;
+} }
+
+namespace BrnTraffic
+{
+namespace
+{
+    // The traffic owner byte MakeTrafficEntityId packs (BrnTrafficConstants.cpp: owner(2) << 24)
+    // and the 14-bit index field above the 10-bit part field. The console reads them back inline
+    // as `HIBYTE(id)` and `(id >> 10) & 0x3FFF`; spelled here through the same geometry rather
+    // than re-derived, because ::EntityId in this tree is the raw packed word.
+    // The owner byte is read back the same way on the volume-instance side:
+    // `srwi r11, r30, 24 ; cmplwi r11, 2` at 0x8274B44C / 0x8274B474 (wave T4's copy of this
+    // constant, folded away here by issue #20 -- same value, same type).
+    const u32 KU_TRAFFIC_ENTITY_OWNER      = 2u;
+    const u32 KU_ENTITY_OWNER_SHIFT        = 24u;
+// (fold: an identical definition of KU_ENTITY_INDEX_SHIFT was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KU_ENTITY_INDEX_MASK was dropped here -- this TU defines it once, above)
+
+    inline u32 EntityOwnerOf(EntityId lId) { return lId.muValue >> KU_ENTITY_OWNER_SHIFT; }
+// (fold: an identical definition of EntityIndexOf was dropped here -- this TU defines it once, above)
+
+    // The 64-bit VolumeInstanceId's embedded entity word lives in its HIGH dword
+    // (CgsVolumeInstanceId.h KU_ENTITY_ID_START_INDEX == 32); on the big-endian console that word
+    // is what a 32-bit load of the id's first four bytes yields, which is what the crashed-traffic
+    // loop reads. DWARF CgsVolumeInstanceId.h:85 names this accessor `EntityId GetEntityId() const`
+    // but it is not declared in this tree, so the geometry is spelled locally through the class's
+    // own named constant rather than adding an accessor to a header this cluster does not own.
+    inline EntityId EntityIdOfVolumeInstance(const CgsSceneManager::VolumeInstanceId& lrId)
+    {
+        EntityId lResult;
+        lResult.muValue = static_cast<u32>(
+            lrId.muId >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
+        return lResult;
+    }
+
+    // flt_820BA5C0 / flt_820BA5C8, dumped out of the ARTIST image with headless IDA 9.3
+    // (BE u32 0x42480000 / 0x42C80000).
+    const f32 KF_CRASH_SLIDER_TRAFFIC_CRASH_SCORE = 50.0f;   // flt_820BA5C0
+    const f32 KF_CRASH_SLIDER_PLAYER_CRASH_SCORE  = 100.0f;  // flt_820BA5C8
+
+    // `vmsum3fp128 v1, v0, v126` -- the 3-lane dot the speed publish uses.
+    inline f32 Dot3(const Vector3& lvA, const Vector3& lvB)
+    {
+        return lvA.x * lvB.x + lvA.y * lvB.y + lvA.z * lvB.z;
+    }
+
+    void LogGateOnce(bool& lrbLogged, const char* lpcText)
+    {
+        if (!lrbLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            lrbLogged = true;
+            *CgsDev::Log::gpDebugPrint << "[T3-gate] HandleExternalResponses: " << lpcText << "\n";
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// @0x82732C68  TrafficEntityModule::HandleExternalResponses
+//   DWARF spelling at the boundary: void HandleExternalResponses(const InputBuffer_PostPhysics*)
+//   The three `luVehicle >= KU_MAX_TOTAL_TRAFFIC` continues are HOST OOB NETS, not console
+//   branches (0x8273392C `blt` skips only the assert; the console indexes anyway). Unreachable
+//   today -- every entity id the physics side publishes is in range.
+// -------------------------------------------------------------------------------------------------
+void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");                                        // :6215
+    if (lpInput == 0)
+    {
+        return;
+    }
+
+    const BrnPhysics::Vehicle::VehicleManagerOutputInterface* lpManagerOutput =
+        lpInput->GetVehicleManagerOutputInterface();
+    const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput =
+        lpInput->GetVehicleOutputInterface();
+    if (lpManagerOutput == 0 || lpVehicleOutput == 0)
+    {
+        return;
+    }
+
+    // =============================================================================================
+    // LOOP 1 -- the CRASHED-traffic queue (interface +0). 0x82732D80..0x827334xx.
+    // =============================================================================================
+    {
+        const BrnPhysics::Vehicle::VehicleManagerOutputInterface::TrafficCrashedEventQueue*
+            lpCrashedQueue = lpManagerOutput->GetCrashedTrafficEventQueue();
+
+        for (s32 liEvent = 0; liEvent < lpCrashedQueue->GetLength(); ++liEvent)
+        {
+            const BrnPhysics::Vehicle::TrafficCrashedEvent& lrEvent =
+                lpCrashedQueue->GetEvent(liEvent);
+
+            const EntityId lTrafficId = EntityIdOfVolumeInstance(lrEvent.mTrafficVolumeInstanceID);
+            const EntityId lCrasherId = lrEvent.mCrasherEntityID;
+
+            CGS_ASSERT(lTrafficId.muValue != lCrasherId.muValue,
+                       "Vehicle crashed into itself");                                  // :6227
+            CGS_ASSERT(EntityOwnerOf(lTrafficId) == KU_TRAFFIC_ENTITY_OWNER,
+                       "Crashed traffic event not referring to traffic");                // :6230
+
+            const u32 luVehicle = EntityIndexOf(lTrafficId);
+            CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+                       "Crashed traffic event referring to invalid traffic vehicle");    // :6233
+            if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
+            {
+                continue;
+            }
+
+            const Vehicle* lpVehicle = GetVehicle(luVehicle);
+
+            // `(*(v40 + 5) & 1) == 0` -- physics crashed a vehicle the world already reaped.
+            // The console logs and skips (message filter bit 0); non-fatal either way.
+            if (!lpVehicle->IsAlive())
+            {
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "TRAF WARNING: Physics told us that vehicle "
+                        << static_cast<s32>(luVehicle) << " crashed, but it isn't even alive!\n";
+                }
+                continue;
+            }
+
+            RecordTrafficVehicleIsPhysical(luVehicle, lTrafficId, lCrasherId,
+                                           BrnPhysics::Vehicle::eCrashTrafficType_Standard,
+                                           0.0f, 0.0f);
+
+            mfCrashSliderCrashScore +=
+                mfCrashSliderCrashScoreFactor * KF_CRASH_SLIDER_TRAFFIC_CRASH_SCORE;
+
+            // 0x827330D8: species == E_SPECIES_STATIC (a PARKED car) and bit 1 of the vehicle
+            // index set -- the console's own "every other parked car has an alarm" selector.
+            if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC
+                && (luVehicle & 2u) == 2u)
+            {
+                GetVehicle(luVehicle)->SetAlarmOn(true);   // @0x8270FC10
+            }
+
+            // GATE G-ARTIC: the cab/trailer pairing arms and their
+            // Array<TrafficCrashInfo,160>::Append. BLOCKER: needs Vehicle::GetTrailerIndex, absent
+            // here; and the standard-species arm early-outs on muOtherHalfIndex == KU_INVALID_VEHICLE,
+            // which every generated car has. DELETE-WHEN trailers land.
+            {
+                static bool sbLoggedArticGate = false;
+                LogGateOnce(sbLoggedArticGate,
+                            "loop 1 cab/trailer pairing + Array<TrafficCrashInfo,160>::Append "
+                            "parked -- Vehicle::GetTrailerIndex is absent and no generated car "
+                            "carries a trailer this round");
+            }
+        }
+    }
+
+    // =============================================================================================
+    // LOOP 2 -- the SLAMMED-traffic queue (interface +336). 0x827335xx..0x82733Cxx.
+    // =============================================================================================
+    {
+        const BrnPhysics::Vehicle::VehicleManagerOutputInterface::TrafficSlammedEventQueue*
+            lpSlammedQueue = lpManagerOutput->GetSlammedTrafficEventQueue();
+
+        for (s32 liEvent = 0; liEvent < lpSlammedQueue->GetLength(); ++liEvent)
+        {
+            const BrnPhysics::Vehicle::TrafficSlammedEvent& lrEvent =
+                lpSlammedQueue->GetEvent(liEvent);
+
+            CGS_ASSERT(lrEvent.meCrashTrafficType == BrnPhysics::Vehicle::eCrashTrafficType_Slammed,
+                       "leCrashTrafficType == BrnPhysics::Vehicle::eCrashTrafficType_Slammed"); // :6341
+            CGS_ASSERT(EntityOwnerOf(lrEvent.mTrafficId) == KU_TRAFFIC_ENTITY_OWNER,
+                       "Slammed traffic event not referring to traffic");                       // :6344
+
+            const u32 luVehicle = EntityIndexOf(lrEvent.mTrafficId);
+            CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+                       "Slammed traffic event referring to invalid traffic vehicle");           // :6347
+            if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
+            {
+                continue;
+            }
+
+            const Vehicle* lpVehicle = GetVehicle(luVehicle);
+            if (!lpVehicle->IsAlive())
+            {
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "TRAF WARNING: Physics told us that vehicle "
+                        << static_cast<s32>(luVehicle) << " slammed, but it isn't even alive!\n";
+                }
+                continue;
+            }
+
+            if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC
+                && (luVehicle & 2u) == 2u)
+            {
+                GetVehicle(luVehicle)->SetAlarmOn(true);   // @0x8270FC10 (slam site)
+            }
+
+            // `(v143[5] & 8) == 0` -- only promote a car that is not already physical.
+            if (!lpVehicle->IsPhysical())
+            {
+                RecordTrafficVehicleIsPhysical(luVehicle, lrEvent.mTrafficId,
+                                               lrEvent.mEntityThatSlammedIt,
+                                               lrEvent.meCrashTrafficType,
+                                               lrEvent.mfSteeringDirection,
+                                               lrEvent.mfDriveDirection);
+            }
+        }
+    }
+
+    // =============================================================================================
+    // LOOP 3 -- THE POSE READ-BACK. mTrafficStateQueue (interface +9760). 0x82733Cxx..0x82734010.
+    // =============================================================================================
+    {
+        const BrnPhysics::Vehicle::VehicleOutputInterface::PhysicalTrafficStateQueue*
+            lpStateQueue = lpVehicleOutput->GetTrafficStateQueue();
+
+        for (s32 liEvent = 0; liEvent < lpStateQueue->GetLength(); ++liEvent)
+        {
+            const BrnPhysics::Vehicle::PhysicalTrafficState& lrState =
+                lpStateQueue->GetEvent(liEvent);
+
+            CGS_ASSERT(EntityOwnerOf(lrState.mEntityID) == KU_TRAFFIC_ENTITY_OWNER,
+                       "Crashed traffic state not referring to traffic");                // :6396
+
+            const u32 luVehicle = EntityIndexOf(lrState.mEntityID);
+            CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+                       "Crashed traffic update referring to invalid traffic vehicle");    // :6399
+            if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
+            {
+                continue;
+            }
+
+            Vehicle* lpVehicle = GetVehicle(luVehicle);
+
+            // `(v143[5] & 1) != 0` gates the whole body; a dead vehicle is silently skipped.
+            if (!lpVehicle->IsAlive())
+            {
+                continue;
+            }
+
+            // NON-GATING tripwire (:6405): the physics side published a state for a vehicle the
+            // world does not think is physical. Both paths reach the transform apply --
+            // 0x827339DC rlwinm r11,r11,0,28,28 (vehicle+5 & 8 == IsPhysical), 0x827339E4 bne
+            // SKIPS the assert when physical, and the not-physical arm falls out at 0x82733B00
+            // into the SAME 0x82733B04 / 0x82733B0C GetTrafficPhysicsInfoForVehicl.
+            // FIX ROUND: an invented `continue` used to sit here; it froze a promoted car at its
+            // promotion pose whenever the world flag lagged the publish by a frame.
+            CGS_ASSERT(lpVehicle->IsPhysical(), "Vehicle is alive but not physical");     // :6405
+
+            // 0x82733B0C. The accessor never returns null (it always hands back
+            // &maTrafficPhysicsInfoList[partsIndex]); this guard is a never-taken bring-up
+            // net, NOT a console branch. Do not read it as one.
+            TrafficPhysicsInfo* lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+            if (lpPhysicsInfo == 0)
+            {
+                continue;
+            }
+
+            const VehicleTypeRuntime* lpVehicleTypeRuntime =
+                GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+
+            // ---- the bbox round trip: Translate(-mBBoxOffset) * lrState.mTransform -------------
+            // Same shape as CalculateInitialPhysicalState's outbound product (_wT3_00.cpp), with
+            // the offset negated. Only the translation row changes; rows 0-2 pass straight through.
+            Matrix44Affine lBBoxTranslate;
+            lBBoxTranslate.SetIdentity();
+            {
+                const Vector3 lvOffset = lpVehicleTypeRuntime->GetBBoxOffset();
+                lBBoxTranslate.wAxis.x = -lvOffset.x;
+                lBBoxTranslate.wAxis.y = -lvOffset.y;
+                lBBoxTranslate.wAxis.z = -lvOffset.z;
+                lBBoxTranslate.wAxis.w = lvOffset.w;
+            }
+            const Matrix44Affine lTransform =
+                rw::math::vpu::Mult(lBBoxTranslate, lrState.mTransform);
+
+            // |delta| for the [T5-apply] probe below.
+            f32 lfDeltaLength = 0.0f;
+            {
+                const Matrix44Affine lPrevious = GetVehicleTransform(luVehicle);
+                const f32 lfDX = lTransform.wAxis.x - lPrevious.wAxis.x;
+                const f32 lfDY = lTransform.wAxis.y - lPrevious.wAxis.y;
+                const f32 lfDZ = lTransform.wAxis.z - lPrevious.wAxis.z;
+                lfDeltaLength = std::sqrt(lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ);
+            }
+
+            SetVehicleTransform(luVehicle, lTransform);
+
+            // `memcpy(info + 3376, event + 544, 256)` -- maWheelTransforms[4], whole-array copy.
+            for (s32 liWheel = 0; liWheel < TrafficPhysicsInfo::KU_NUM_WHEELS; ++liWheel)
+            {
+                lpPhysicsInfo->maWheelTransforms[liWheel] = lrState.maWheelTransforms[liWheel];
+            }
+
+            // The road-test normal, then its .w height corrected for the bbox shift the transform
+            // above just applied (`vsubfp` of the two translation rows, lane .y only).
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.x = lrState.mvRoadTestNormal_HeightAboveRoad.x;
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.y = lrState.mvRoadTestNormal_HeightAboveRoad.y;
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.z = lrState.mvRoadTestNormal_HeightAboveRoad.z;
+            lpPhysicsInfo->mvRoadTestNormal_HeightAboveRoad.w =
+                lrState.mvRoadTestNormal_HeightAboveRoad.w
+                - (lrState.mTransform.wAxis.y - lTransform.wAxis.y);
+
+            // `*(info + 4069) = info->mbIsDeforming || event.mbIsDeforming` -- an OR-accumulate,
+            // not a copy: the flag is cleared elsewhere in the deformation pass.
+            if (lpPhysicsInfo->mbIsDeforming || lrState.mbIsDeforming)
+            {
+                lpPhysicsInfo->mbIsDeforming = true;
+            }
+
+            lpVehicle->SetFrozen(lrState.mbFrozen);
+            lpVehicle->SetLinearVelocity(lrState.mLinearVelocity);
+
+            // `vmsum3fp128 v1, v0, v126` with v126 == the RESULT transform's row 2 (the At axis):
+            // the world-side speed is the forward component of the physics velocity, NOT the
+            // event's own mfSpeed field, which this function never reads.
+            {
+                const f32 lfForwardSpeed = Dot3(lrState.mLinearVelocity, lTransform.zAxis);
+                lpVehicle->SetSpeed(VecFloat{ lfForwardSpeed, lfForwardSpeed,
+                                              lfForwardSpeed, lfForwardSpeed });
+            }
+
+            lpVehicle->SetSteering(lrState.mfSteering);
+
+            // ---- [T5-apply] DIAG. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. ---------------
+            // The MODULE-side half of [T5-ram]: what the world (and therefore the renderer and
+            // the scene volume) actually believes about the rammed car, printed on the same
+            // 10-frame cadence as the physics-side probe.
+            if (BrnPhysics::Vehicle::gT5RamFramesLeft > 0
+                && static_cast<s32>(luVehicle) == BrnPhysics::Vehicle::gT5RamGlobalIndex)
+            {
+                static const bool skbT5Diag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+                static s32 s_iT5ApplyFrame = 0;
+                ++s_iT5ApplyFrame;
+                if (skbT5Diag && CgsDev::Log::gpDebugPrint != 0 && (s_iT5ApplyFrame % 10) == 1)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[T5-apply] f=" << s_iT5ApplyFrame
+                        << " vehicle=" << static_cast<s32>(luVehicle)
+                        << " |delta|=" << lfDeltaLength
+                        << " worldPos=(" << lTransform.wAxis.x << "," << lTransform.wAxis.y
+                        << "," << lTransform.wAxis.z << ")"
+                        << " vel=(" << lrState.mLinearVelocity.x << ","
+                        << lrState.mLinearVelocity.y << "," << lrState.mLinearVelocity.z << ")"
+                        << " frozen=" << static_cast<s32>(lrState.mbFrozen ? 1 : 0)
+                        << " physical=" << static_cast<s32>(lpVehicle->IsPhysical() ? 1 : 0)
+                        << " collidable=" << static_cast<s32>(lpVehicle->IsCollidable() ? 1 : 0)
+                        << "\n";
+                }
+            }
+        }
+    }
+
+    // =============================================================================================
+    // LOOP 4 -- the RACE-CAR crash queue (interface +928). 0x82733Fxx..0x827340A0.
+    // Nothing but the crash slider: a primary crash scores 50 when the crasher was AI and 100
+    // when it was not (`lbz +0x38` == mbIsPrimaryCrash, `lbz +0x3A` == mbCarIsAI).
+    // =============================================================================================
+    {
+        const BrnPhysics::Vehicle::VehicleManagerOutputInterface::RaceCarCrashEventQueue*
+            lpRaceCarCrashQueue = lpManagerOutput->GetRaceCarCrashEventQueue();
+
+        for (s32 liEvent = 0; liEvent < lpRaceCarCrashQueue->GetLength(); ++liEvent)
+        {
+            const BrnPhysics::Vehicle::RaceCarCrashEvent& lrEvent =
+                lpRaceCarCrashQueue->GetEvent(liEvent);
+
+            if (lrEvent.mbIsPrimaryCrash)
+            {
+                const f32 lfScore = lrEvent.mbCarIsAI ? KF_CRASH_SLIDER_TRAFFIC_CRASH_SCORE
+                                                      : KF_CRASH_SLIDER_PLAYER_CRASH_SCORE;
+                mfCrashSliderCrashScore += mfCrashSliderCrashScoreFactor * lfScore;
+            }
+        }
+    }
+}
+
+}  // namespace BrnTraffic
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT4_01.cpp (wave T4) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT4_01.cpp
+//
+//   TrafficEntityModule::UpdateCollidableVehicles @0x827302C8   (~1030 insns)
+//
+// THE COLLISION HALF OF THE SCENE REGISTRATION -- the wave-4 root break.
+// CreateNewVehicleEntities registers a traffic car as a scene ENTITY; nothing in the tree
+// gave it a collision VOLUME, so the broad phase never emitted a race-car-vs-traffic overlap
+// pair, nothing ever asked for a promotion, and the race car drove straight through. This
+// function is the only producer of mVehicleSoaData.mCollidableVehicles and the only caller of
+// AddVolumeInstance / AddForCollision for a traffic vehicle.
+//
+// MOUNT REQUIRED (conductor-owned): add
+//   echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT4_01.cpp"
+// to tools/build/build_game_exe.bat beside the other TrafficEntityModule mounts, in the SAME
+// change that retires the gate in _wT1_02.cpp, or the exe link fails with LNK2019.
+//
+// SHAPE, off the export. The console is VMX-heavy (vperm lane splices into a
+// struct-of-arrays packet, vrlimi128 masks, a vrefp + one Newton-Raphson step for the
+// reciprocal). It is written here as a plain scalar loop: behaviour
+// parity is the bar, mCachedCollidableList's only other readers are DebugComponent::
+// DrawAvoidance and the avoidance steering, and every lane assignment below is transcribed
+// from the vperm control-mask index (mask A == component x, B == y, C == z) rather than
+// guessed.
+//
+// THE THREE .data CONSTANTS, dumped from their dyn-init thunks (a dyn-init `unk_` reads ZERO
+// off the section -- the initialiser is the source of truth):
+//   unk_8300CEF0 = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W, seeded @0x82C66318..
+//                  0x82C6635C from { flt_820BA858, flt_8200889C, flt_820BA23C, flt_82001CC0 }
+//                  == { 2500.0f, 400.0f, FLT_MAX, 0.0f } -- a 50 m AVOID radius and a 20 m
+//                  COLLIDE radius. The console's own name for it comes from the baked assert
+//                  string at .cpp 4953.
+//   unk_8300C980 = splat(flt_82013F90) == 0.001f. NOT a radius:
+//                  it is the epsilon that decides whether a car's
+//                  velocity is worth caching or whether its facing direction should stand in.
+//   flt_82001CC0 = 0.0f (already attested in-tree).
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.
+    inline void LogMissingLeg_T4(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T4-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
+        }
+    }
+
+    // ---- the two .data constants (see the banner for their dyn-init provenance) ----------
+
+    // unk_8300CEF0. Lane 0 AvoidRadiusSq (50 m), lane 1 CollideRadiusSq (20 m), lane 2 the
+    // FLT_MAX the nearest-source search is seeded with, lane 3 unused. The console's spelling,
+    // straight off the baked assert string.
+    const Vector4 kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W =
+        { 2500.0f, 400.0f, 3.4028234663852886e+38f, 0.0f };
+
+    // unk_8300C980 == splat(0.001f).
+    const f32 KF_VEHICLE_MOTION_EPSILON = 0.001f;
+
+// (fold: an identical definition of KU8_TRAFFIC_ENTITY_OWNER was dropped here -- this TU defines it once, above)
+
+    // AddForCollision's three literal arguments (`li r5,2 ; li r6,4 ; li r7,2`). Culling group
+    // 2 == KU8_CULLING_GROUP_CARS; the body state is a LIVE body, not the props' FROZEN_BODY.
+    const u32 KU_TRAFFIC_CULLING_GROUP = 2;
+
+    // ---- lane helpers ---------------------------------------------------------------------
+    //
+    // The console's packet is a struct-of-arrays: each Vector4 member holds ONE field for FOUR
+    // vehicles, spliced in with vperm through three 16-byte control masks indexed by lane
+    // (unk_8327F140/150/160 + lane*64). Mask A selects component x, B y, C z -- read off the
+    // race-car fill, where v120 (mPosition_X) takes mask A, v119 (mPosition_Y) mask B and v118
+    // (mPosition_Z) mask C from the SAME source vector. mHalfLengths takes mask C (the box's z
+    // half-extent == half LENGTH) and mHalfWidths mask A (x == half WIDTH).
+    // One lane of a Vector4, by name rather than by pointer arithmetic (the host Vector4 is a
+    // plain x/y/z/w record; indexing it as f32[4] would be a layout assumption this file does
+    // not need to make).
+    inline void SetLane(Vector4& lrVector, u32 luLane, f32 lfValue)
+    {
+        switch (luLane)
+        {
+        case 0:  lrVector.x = lfValue; break;
+        case 1:  lrVector.y = lfValue; break;
+        case 2:  lrVector.z = lfValue; break;
+        default: lrVector.w = lfValue; break;
+        }
+    }
+
+    inline void SetPacketLane(CollidableVehicleInfo4& lrPacket,
+                              u32 luLane,
+                              Vector3 lPosition,
+                              Vector3 lMotion,
+                              Vector3 lHalfExtent)
+    {
+        CGS_ASSERT(luLane < 4u, "luLane < 4");
+
+        SetLane(lrPacket.mPosition_X, luLane, lPosition.x);
+        SetLane(lrPacket.mPosition_Y, luLane, lPosition.y);
+        SetLane(lrPacket.mPosition_Z, luLane, lPosition.z);
+
+        SetLane(lrPacket.mLinearVelocity_X, luLane, lMotion.x);
+        SetLane(lrPacket.mLinearVelocity_Y, luLane, lMotion.y);
+        SetLane(lrPacket.mLinearVelocity_Z, luLane, lMotion.z);
+
+        SetLane(lrPacket.mHalfLengths, luLane, lHalfExtent.z);
+        SetLane(lrPacket.mHalfWidths,  luLane, lHalfExtent.x);
+    }
+
+// (fold: an identical definition of MakeTrafficVolumeInstanceId was dropped here -- this TU defines it once, above)
+
+    inline Vector3 PickMotionLane(Vector3 lMotion, Vector3 lFacing)
+    {
+        const f32 lfAbsX = (lMotion.x < 0.0f) ? -lMotion.x : lMotion.x;
+        const f32 lfAbsY = (lMotion.y < 0.0f) ? -lMotion.y : lMotion.y;
+        const f32 lfAbsZ = (lMotion.z < 0.0f) ? -lMotion.z : lMotion.z;
+
+        if (lfAbsX > KF_VEHICLE_MOTION_EPSILON ||
+            lfAbsY > KF_VEHICLE_MOTION_EPSILON ||
+            lfAbsZ > KF_VEHICLE_MOTION_EPSILON)
+        {
+            return lMotion;
+        }
+        return lFacing;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::UpdateCollidableVehicles  @ 0x827302C8   (.cpp 4807)
+//
+// Three passes, in the console's order:
+//   1. build the collision SOURCE list -- every ACTIVE race car plus every ALIVE PHYSICAL
+//      traffic car -- into a 33-slot stack Array<Vector3,33> (8 race cars + the 25-slot
+//      physical-traffic budget), accumulating their average into mAveragePhysicalCentre and
+//      splicing each into the 4-wide mCachedCollidableList packets;
+//   2. walk (mAliveVehicles & mVehiclesWithEntities) and, for the half of the pool
+//      mVehiclesToUpdateCollidables selects this frame plus every physical car, find the
+//      nearest source and classify: inside 50 m == AVOIDABLE (cached for the avoidance
+//      steering), inside 20 m == COLLIDABLE (a real scene volume);
+//   3. flip mVehiclesToUpdateCollidables so the OTHER half of the pool is re-evaluated next
+//      frame -- Construct seeds its first 300 bits (_wT1_01.cpp:2294..:2298), so the wholesale
+//      `~` at the tail is a two-frame amortisation, not an on/off toggle.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::UpdateCollidableVehicles(
+        const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+        BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");     // 0x82730320, baked .cpp 4807
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // 0x82730344, baked .cpp 4808
+
+    if (lpInput == 0 || lpOutput == 0)   // PC-safety guard, as in the sibling partfiles
+    {
+        return;
+    }
+
+    {
+        // GATE: the console's PerfMonCpu Start/StopMonitor(miPerfMon_UpdateCollidableVehicles)
+        // bracket (0x82730300 / 0x827329C0). The handle is never issued because Construct's
+        // twenty AddMonitor registrations are gated. DELETE WHEN those registrations land.
+        static bool sbLogged = false;
+        LogMissingLeg_T4(sbLogged,
+            "UpdateCollidableVehicles PerfMonCpu Start/StopMonitor bracket -- the handle is "
+            "never issued because Construct's AddMonitor registrations are gated");
+    }
+
+    typedef CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> TrafficBitArray;
+    typedef BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
+            ActiveRaceCarOutputInterface;
+
+    // 0x82730388 `stwx r20, this, 0x72340` -- the count word of mCachedCollidableList.
+    // Reset order matters: Reset() SetFullCount()s this array (_wT1_01.cpp:2256), so the
+    // Clear() has to run before any GetLength() below (CgsArray.h:336 fires on the -1
+    // sentinel, not on 16).
+    mCachedCollidableList.Clear();
+
+    // ================================================================================
+    // PASS 1 -- the collision SOURCE list.
+    // ================================================================================
+
+    // 0x82730390 `stvx128 v122(zero), r0, r18` where r18 == this+0x725D0.
+    mAveragePhysicalCentre.SetZero();
+
+    // The console's own 33-slot stack list (Array<rw::math::vpu::Vector3,33>, the committed
+    // CgsArrayVpuVector3_33.cpp instantiation): 8 active race cars + the 25-slot physical
+    // traffic budget.
+    ::Array<Vector3, KU_MAX_PHYSICAL_TRAFFIC_VEHICLES + E_ACTIVE_RACE_CAR_INDEX_COUNT>
+        lSourcePositions;
+    lSourcePositions.Clear();
+
+    Vector3 lSourceSum;
+    lSourceSum.SetZero();
+    f32 lfSourceCount = 0.0f;   // v127, incremented by a splatted 1.0f per source
+
+    CollidableVehicleInfo4 lPacket = {};   // var_590..var_520, the 4-lane staging packet
+    u32 luPacketLane = 0;                  // r16 -- counts SOURCES, lane == luPacketLane & 3
+
+    const ActiveRaceCarOutputInterface* lpActiveRaceCars =
+        lpInput->GetActiveRaceCarOutputInterface();
+    CGS_ASSERT(lpActiveRaceCars != 0, "lpActiveRaceCarOutputInterface");   // baked .cpp 4833
+
+    if (lpActiveRaceCars != 0)
+    {
+        for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+        {
+            // The two bounds asserts the console folds in from BurnoutConstants.h:0x356/0x357.
+            CGS_ASSERT(liCar >= 0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID");
+            CGS_ASSERT(liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+            const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
+            if (!lpActiveRaceCars->IsRaceCarActive(leCar))
+            {
+                continue;   // 0x827304B8: the lane counter does NOT advance for an idle slot
+            }
+
+            const BrnPhysics::Vehicle::RaceCarState* lpState =
+                lpActiveRaceCars->GetRaceCarState(leCar);
+
+            // RaceCarState displacements, all reached BY NAME: +0x220 mTransform.wAxis,
+            // +0x210 mTransform.zAxis, +0x330 mLinearVelocity, +0x350 mHalfExtent.
+            const Vector3 lPosition = lpState->mTransform.Pos();
+
+            lSourcePositions.Append(lPosition);
+            lSourceSum = lSourceSum + lPosition;
+            lfSourceCount += 1.0f;
+
+            SetPacketLane(lPacket,
+                          luPacketLane & 3u,
+                          lPosition,
+                          PickMotionLane(lpState->mLinearVelocity, lpState->mTransform.At()),
+                          lpState->mHalfExtent);
+
+            if ((luPacketLane & 3u) == 3u &&
+                mCachedCollidableList.GetLength() != KU_MAX_COLLIDABLE_CACHED_TRAFFIC_ARRAY)
+            {
+                mCachedCollidableList.Append(lPacket);   // 0x82730630
+            }
+            ++luPacketLane;
+        }
+    }
+
+    // The ALIVE PHYSICAL traffic cars are collision sources too: a physical traffic car can
+    // hit another traffic car, so the cars around it must be solid as well.
+    // 0x82730668..0x827306A8 == `this[(0x505A+i)*8] & this[(0x5078+i)*8]`, soa+0 & soa+240.
+    TrafficBitArray lPhysicalAlive;
+    lPhysicalAlive.SetAnd(mVehicleSoaData.mAliveVehicles, mVehicleSoaData.mPhysicalVehicles);
+
+    for (TrafficBitArray::Iterator lIt = lPhysicalAlive.Begin();
+         lIt != lPhysicalAlive.End();
+         ++lIt)
+    {
+        const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+
+        // 0x827308D4: this + luVehicle*64 + 0x1ECB0 == maVehicleTransforms[i].wAxis.
+        const Vector3 lPosition = GetVehicleTransform(luVehicle).Pos();
+
+        lSourcePositions.Append(lPosition);
+        lSourceSum = lSourceSum + lPosition;
+        lfSourceCount += 1.0f;
+    }
+
+    // 0x82730C80..0x82730CAC: vrefp + one Newton-Raphson step == the reciprocal of the source
+    // count, times the accumulated sum.
+    // BEHAVIOUR DELTA, deliberate: the console does NOT guard the zero case, so with no active
+    // race car and no physical traffic it writes a NaN into mAveragePhysicalCentre. Guarded
+    // here -- a NaN centre would propagate silently into every consumer of the member, and
+    // "leave the placeholder zero" is the safe reading of an unreachable console path.
+    if (lfSourceCount > 0.0f)
+    {
+        mAveragePhysicalCentre = lSourceSum * (1.0f / lfSourceCount);
+    }
+
+    {
+        // GATE: the third source, 0x82730CB0..0x82730CE0 -- mCameraLastFrame's Pos row
+        // (this+0x728C0) appended when bit 27 of the selector word at this+0x729D4 ==
+        // mCameraLastFrame+0x144 is set. BLOCKER: that word is mCameraLastFrame's CameraState
+        // current-flag set and the flag's MEANING is unnamed, exactly as the sibling DEBUG
+        // sim-centre gate at _wT1_01.cpp:1376 already records. Omitting it can only make FEWER
+        // cars collidable, and never the ones near a race car. DELETE-WHEN the flag is named.
+        static bool sbLogged = false;
+        LogMissingLeg_T4(sbLogged,
+            "UpdateCollidableVehicles camera collision-source @0x82730CB0 -- the selector bit "
+            "is mCameraLastFrame+0x144 bit 27, an unnamed CameraState flag (same blocker as "
+            "the DEBUG sim-centre overrides). Race-car and physical-traffic sources are LIVE");
+    }
+
+    // ================================================================================
+    // PASS 2 -- classify every alive vehicle that owns a scene entity.
+    // ================================================================================
+
+    // 0x82730CE4..0x82730D1C == `this[(0x5064+i)*8] & this[(0x505A+i)*8]`, soa+80 & soa+0.
+    TrafficBitArray lAliveWithEntities;
+    lAliveWithEntities.SetAnd(mVehicleSoaData.mVehiclesWithEntities,
+                              mVehicleSoaData.mAliveVehicles);
+
+    // 0x82730D20..0x82730D88 builds the candidate set as a third stack bit array,
+    //   (mVehiclesToUpdateCollidables & mVehiclesWithEntities & mAliveVehicles) | (alive & physical)
+    // and then walks (alive & withEntities). The `& lAliveWithEntities` term is redundant with
+    // the walk itself, so the two remaining terms are tested per vehicle below instead of
+    // materialising the array -- value-identical, and it sidesteps the fact that
+    // mVehiclesToUpdateCollidables is a FastBitArray<600> while the SoA sets are
+    // FastBitArray<601> (same ten fields, different C++ types).
+
+    // ------------------------------------------------------------------------------------
+    // [PC SAFETY] NOT IN THE X360 BINARY. Retire the collision volume of any vehicle that has
+    // DIED while collidable.
+    //
+    // Vehicle::SetDead masks mxFlags with 0xDE -- it clears ALIVE and ORPHAN and deliberately
+    // leaves E_FLAG_COLLIDABLE and the SoA bit alone, because on the console the remove half
+    // (KillDyingVehicleEntities @0x82741E40) tears the scene registration down. The main walk
+    // below only visits (alive & withEntities), so a killed driving-traffic car would keep a
+    // live AddForCollision registration at its last position for the rest of the session -- an
+    // invisible solid car. KillParam (_wT2_01.cpp:653) reaches SetDead on a normal drive, so
+    // this is reachable, not theoretical.
+    //
+    // ⚠️ NOTE CORRECTED 2026-08-28. This note used to name RemoveVehicle @0x8272E370 as the
+    // other half of the teardown and say "DELETE-WHEN KillDyingVehicleEntities or RemoveVehicle
+    // lands". RemoveVehicle HAS NOW LANDED (_wT5_01.cpp) and this sweep is NOT retired by it:
+    // read end to end, RemoveVehicle frees no pool slot, deletes no param and touches no scene
+    // or collision registration at all -- it retires LIVENESS (Vehicle::SetDead), the
+    // crash-module bookkeeping and any articulation, and MARKS the param. The scene/collision
+    // teardown was always KillDyingVehicleEntities' alone.
+    // DELETE-WHEN KillDyingVehicleEntities' scene-remove leg is proven live on the shipped path.
+    // ------------------------------------------------------------------------------------
+    {
+        TrafficBitArray lStaleCollidable;
+        lStaleCollidable.SetInverse(mVehicleSoaData.mAliveVehicles);
+        lStaleCollidable.SetAnd(lStaleCollidable, mVehicleSoaData.mCollidableVehicles);
+
+        for (TrafficBitArray::Iterator lIt = lStaleCollidable.Begin();
+             lIt != lStaleCollidable.End();
+             ++lIt)
+        {
+            const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+            if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
+            {
+                continue;
+            }
+
+            const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
+                MakeTrafficVolumeInstanceId(luVehicle);
+            lpOutput->GetSceneInputInterface()->RemoveForCollision(lVolumeInstanceId);
+            lpOutput->GetSceneInputInterface()->RemoveVolumeInstance(lVolumeInstanceId);
+            GetVehicle(luVehicle)->SetCollidable(false, lIt, mVehicleSoaData);
+        }
+    }
+
+    for (TrafficBitArray::Iterator lIt = lAliveWithEntities.Begin();
+         lIt != lAliveWithEntities.End();
+         ++lIt)
+    {
+        const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+
+        bool lbCollidable = false;   // r15
+        bool lbAvoidable  = false;   // r25
+        bool lbCandidate  = false;   // r16
+
+        const bool lbPhysical = mVehicleSoaData.mPhysicalVehicles.IsBitSet(luVehicle);
+
+        if (mVehiclesToUpdateCollidables.IsBitSet(luVehicle) || lbPhysical)
+        {
+            lbCandidate = true;
+
+            if (lbPhysical)
+            {
+                // 0x827318F4: a physical car is unconditionally both, no distance test.
+                lbCollidable = true;
+                lbAvoidable  = true;
+                mVehiclesAvoidableLastFrame.SetBit(luVehicle);
+            }
+            else
+            {
+                // 0x82731634..0x827318E8. Nearest source, seeded with the constant's FLT_MAX
+                // lane so an empty source list leaves every car non-collidable.
+                const Vector3 lPosition = GetVehicleTransform(luVehicle).Pos();
+
+                f32 lfNearestSq = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.z;
+                for (u32 luSource = 0; luSource < lSourcePositions.GetLength(); ++luSource)
+                {
+                    const Vector3 lToSource = lPosition - lSourcePositions[luSource];
+                    const f32 lfDistSq = rw::math::vpu::Dot(lToSource, lToSource);
+                    if (lfDistSq < lfNearestSq)
+                    {
+                        lfNearestSq = lfDistSq;
+                    }
+                }
+
+                if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.x > lfNearestSq)
+                {
+                    lbAvoidable = true;
+                    mVehiclesAvoidableLastFrame.SetBit(luVehicle);
+
+                    CGS_ASSERT(kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.y <
+                               kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.x,
+                               "kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W[1] < "
+                               "kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W[0]");  // .cpp 4953
+
+                    if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.y > lfNearestSq)
+                    {
+                        lbCollidable = true;   // 0x827318EC
+                    }
+                }
+            }
+        }
+
+        // 0x82731D20: hidden traffic is never solid and never cached.
+        if (mbTrafficIsHidden)
+        {
+            lbAvoidable  = false;
+            lbCollidable = false;
+        }
+
+        // 0x82731D58: this + (luVehicle + 0x55)*128 == &maVehicles[luVehicle].
+        Vehicle* lpVehicle = GetVehicle(luVehicle);
+        CGS_ASSERT(lpVehicle->IsAlive(),    "lpVehicle->IsAlive()");     // baked .cpp 4987
+        CGS_ASSERT(lpVehicle->HasEntity(),  "lpVehicle->HasEntity()");   // baked .cpp 4988
+
+        if (lbAvoidable)
+        {
+            // 0x82731DE4..0x82731FF0 -- cache this car in the 4-wide packet list.
+            const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+            const Vector3 lFacing   = lTransform.At();    // +0x20, the zAxis row
+            const Vector3 lPosition = lTransform.Pos();   // +0x30
+
+            CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");   // BrnTrafficVehicle.h:0x26B
+            const f32 lfSpeed = lpVehicle->GetSpeed().x;
+
+            const VehicleTypeRuntime* lpVehicleTypeRuntime =
+                GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+            CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");   // baked .cpp 5020
+
+            SetPacketLane(lPacket,
+                          luPacketLane & 3u,
+                          lPosition,
+                          PickMotionLane(lFacing * lfSpeed, lFacing),
+                          lpVehicleTypeRuntime->GetBBoxHalfSize());
+
+            if ((luPacketLane & 3u) == 3u &&
+                mCachedCollidableList.GetLength() != KU_MAX_COLLIDABLE_CACHED_TRAFFIC_ARRAY)
+            {
+                mCachedCollidableList.Append(lPacket);   // 0x82731FE4
+            }
+            ++luPacketLane;
+        }
+
+        if (!lbCandidate && !mbTrafficIsHidden)
+        {
+            // 0x82731FF4..0x82732008: a car this frame's half does not cover keeps whatever
+            // collision state it already has. Next frame's `~` covers it.
+            continue;
+        }
+
+        // 0x8273222C: the CURRENT SoA bit, read through the iterator's own field/mask.
+        const bool lbWasCollidable = mVehicleSoaData.mCollidableVehicles.IsBitSet(luVehicle);
+
+        if (lbCollidable == lbWasCollidable)
+        {
+            // 0x8273228C: nothing to post; just tripwire the flag against the SoA bit.
+            CGS_ASSERT(lpVehicle->IsCollidable() == lbCollidable,
+                       "Collidable flag out of sync for vehicle");   // baked .cpp 5041
+            continue;
+        }
+
+        // 0x82732300.
+        const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
+            MakeTrafficVolumeInstanceId(luVehicle);
+
+        if (lbCollidable)
+        {
+            CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");   // BrnTrafficVehicle.h:0x312
+
+            const VehicleTypeRuntime* lpVehicleTypeRuntime =
+                GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+
+            // 0x82732360..0x82732424. The three axis rows are multiplied by a vector the
+            // console builds out of vspltisw 1 -> vcsxwfp == 1.0f, i.e. the rotation is
+            // UNCHANGED; the only real edit is the translation row, which becomes
+            // TransformPoint(transform, mBBoxOffset). That is the same bbox-offset transform
+            // GenerateSceneUpdateEvents' collidable arm publishes each frame -- the shared
+            // per-TYPE BoxVolume Prepare stage 3 registers already carries the real
+            // half-extents, so no scale belongs here.
+            Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
+            const Vector3 lForward = lTransform.At();
+            lTransform.wAxis = rw::math::vpu::TransformPoint(
+                lTransform, lpVehicleTypeRuntime->GetBBoxOffset());
+
+            CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");   // BrnTrafficVehicle.h:0x312
+
+            // 0x82732454 `addi r11, r11, 0x24` -- VolumeId(KU_HACK_BASE_VOLUME_ID + type), the
+            // id space Prepare stage 3 (_wQ7_02.cpp:721-792) already registered one shared
+            // rw::collision::BoxVolume per vehicle TYPE into.
+            const CgsSceneManager::VolumeId lVolumeId(
+                static_cast<u64>(36u + lpVehicle->GetVehicleType()));
+
+            lpOutput->GetSceneInputInterface()->AddVolumeInstance(
+                lVolumeInstanceId, lVolumeId, lTransform);
+
+            // 0x8273248C..0x827324BC: the swept padding == the car's facing axis times the
+            // distance it covers this frame (GetSpeed() * mfSimTimeStepVec, this+0x71410).
+            const Vector3 lPadding = lForward * (lpVehicle->GetSpeed().x * mfSimTimeStepVec.x);
+
+            lpOutput->GetSceneInputInterface()->AddForCollision(
+                lVolumeInstanceId,
+                static_cast<CgsSceneManager::SceneManagerIO::InEventAddForCollision::CullingGroup>(
+                    KU_TRAFFIC_CULLING_GROUP),                            // li r5, 2
+                rw::physics::ACTIVE_BODY,                                 // li r6, 4
+                lPadding,
+                CgsSceneManager::SceneManagerIO::E_DO_NOT_ADD_TO_CACHE_MANAGER);   // li r7, 2
+
+            lpVehicle->SetCollidable(true, lIt, mVehicleSoaData);
+        }
+        else
+        {
+            // 0x82732508: the exact mirror -- collision first, then the volume instance.
+            lpOutput->GetSceneInputInterface()->RemoveForCollision(lVolumeInstanceId);
+            lpOutput->GetSceneInputInterface()->RemoveVolumeInstance(lVolumeInstanceId);
+            lpVehicle->SetCollidable(false, lIt, mVehicleSoaData);
+        }
+    }
+
+    // ================================================================================
+    // PASS 3 -- flush the partial packet, then flip the half-pool selector.
+    // ================================================================================
+
+    // 0x8273284C..0x82732984. The unused lanes are padded with position == the constant's
+    // FLT_MAX lane (so the avoidance search can never pick them) and velocity == 0. The two
+    // half-extent lanes are deliberately left as they were: the console writes neither.
+    const u32 luPartialLanes = luPacketLane & 3u;
+    if (luPartialLanes != 0 &&
+        mCachedCollidableList.GetLength() != KU_MAX_COLLIDABLE_CACHED_TRAFFIC_ARRAY)
+    {
+        const f32 lfFar = kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.z;
+        for (u32 luLane = luPartialLanes; luLane < 4u; ++luLane)
+        {
+            SetLane(lPacket.mPosition_X, luLane, lfFar);
+            SetLane(lPacket.mPosition_Y, luLane, lfFar);
+            SetLane(lPacket.mPosition_Z, luLane, lfFar);
+
+            SetLane(lPacket.mLinearVelocity_X, luLane, 0.0f);   // flt_82001CC0
+            SetLane(lPacket.mLinearVelocity_Y, luLane, 0.0f);
+            SetLane(lPacket.mLinearVelocity_Z, luLane, 0.0f);
+        }
+        mCachedCollidableList.Append(lPacket);
+    }
+
+    // 0x82732988..0x827329B4: `this[(0xE4A5+i)*8] = ~this[(0xE4A5+i)*8]` over all ten fields.
+    // Construct seeds the first 300 bits, so this alternates which half of the 600-car pool is
+    // re-evaluated. It is NOT a clear-and-rebuild: dropping it pins the sweep to one half.
+    mVehiclesToUpdateCollidables.SetInverse(mVehiclesToUpdateCollidables);
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT4_02.cpp (wave T4) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT4_02.cpp
+//
+//   TrafficEntityModule::BuildPotentialCollisionList  @0x8274B378   (78 insns)
+//   TrafficEntityModule::HandleHalfPotentialContact   @0x82747F58   (~120 insns)
+//
+// THE OVERLAP-PAIR HALF OF THE PROMOTION CHAIN. Once UpdateCollidableVehicles (_wT4_01.cpp)
+// gives a traffic car a scene collision volume, the broad phase starts emitting race-car-vs-
+// traffic overlap pairs; the scene publishes them RAW (BridgeOverlapGenerationToOutputBuffer
+// deliberately ignores mbCull) and WorldModule::BridgeSceneContactsToTrafficModule_PrePhysics
+// @0x827ABC50 -- LIVE and mounted -- copies them into InputBuffer_PrePhysics. These two
+// functions are what turns such a pair into a physics body.
+//
+// MOUNT REQUIRED (conductor-owned): add
+//   echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT4_02.cpp"
+// to tools/build/build_game_exe.bat beside the other TrafficEntityModule mounts, in the SAME
+// change that retires the gate in _wQ7_01.cpp, or the exe link fails with LNK2019.
+//
+// DELIBERATELY NOT HARDENED. This route does NOT go through SafeRequestMakeVehiclePhysical:
+// it does not test mbTrafficIsHidden, does not read GetPhysicalReason and does not consult the
+// 25-slot maTrafficPhysicsInfoListBits budget. That is the console (0x827480AC jumps straight
+// to AddVehicleToPhysics). The real budget is the physics side's 20 slots, whose recycler
+// GetLeastInterestingFullyPhysicalVehicle + RecycleTrafficVehicle is already bodied.
+//
+// GLOBAL vs PHYSICAL, the recurring wave-3 bug: `(id >> 10) & 0x3FFF` is the scene EntityId's
+// 14-bit entity index, i.e. a GLOBAL traffic index in [0,600), and AddVehicleToPhysics's
+// luVehicle is global too. The 20-slot PHYSICAL index only exists on the far side of
+// PhysicalTrafficManager::mu8GlobalToPhysicalEntityIndexMap. Do not cross them.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of KU_TRAFFIC_ENTITY_OWNER was dropped here -- this TU defines it once, above)
+
+    inline u32 GetEntityWordOwner(u32 luEntityWord)
+    {
+        return luEntityWord >> 24;
+    }
+
+    // `extrwi r29, r4, 14, 8` == the EntityId's 14-bit entity index at bit 10.
+    inline u32 GetEntityWordIndex(u32 luEntityWord)
+    {
+        return (luEntityWord >> 10) & 0x3FFFu;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::BuildPotentialCollisionList  @ 0x8274B378   (.cpp 5550)
+//
+// Complete, 0x8274B408..0x8274B4AC. Each 24-byte OutOverlapPair carries two 64-bit
+// VolumeInstanceIds; the scene EntityId lives in each one's HIGH dword (`ld` then `srdi 32`),
+// and the owner byte is that word's top byte. Both halves are tested, so a traffic-vs-traffic
+// pair promotes BOTH cars.
+//
+// The console re-fetches the queue inside the loop (0x8274B420 calls the getter every
+// iteration); that is the compiler rematerialising an inlined accessor whose only side effect
+// is an idempotent read-lock assert, so it is hoisted to one local here.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::BuildPotentialCollisionList(
+        const BrnTrafficIO::InputBuffer_PrePhysics* lpInput,
+        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+        TotalTrafficBitArray* lpCreatedBodies)
+{
+    CGS_ASSERT(lpInput != 0,         "lpInput != NULL");           // baked .cpp 5550
+    CGS_ASSERT(lpOutput != 0,        "lpOutput != NULL");          // baked .cpp 5551
+    CGS_ASSERT(lpCreatedBodies != 0, "lpCreatedBodies != NULL");   // baked .cpp 5552
+
+    if (lpInput == 0 || lpOutput == 0 || lpCreatedBodies == 0)   // PC-safety guard
+    {
+        return;
+    }
+
+    typedef CgsSceneManager::SceneManagerIO::OutOverlapPair OutOverlapPair;
+
+    const BrnTrafficIO::InputBuffer_PrePhysics::OverlapPairsQueue* lpOverlapPairs =
+        lpInput->GetOverlapPairsQueue();
+
+    const s32 liLength = static_cast<s32>(lpOverlapPairs->GetLength());
+
+    for (s32 liPair = 0; liPair < liLength; ++liPair)
+    {
+        const OutOverlapPair& lrPair = lpOverlapPairs->GetEvent(liPair);
+
+        const u64 lu64IdA = lrPair.muVolumeInstanceIdA.muId;
+        const u64 lu64IdB = lrPair.muVolumeInstanceIdB.muId;
+
+        const u32 luWordA = static_cast<u32>(lu64IdA >> 32);
+        const u32 luWordB = static_cast<u32>(lu64IdB >> 32);
+
+        if (GetEntityWordOwner(luWordA) == KU_TRAFFIC_ENTITY_OWNER)
+        {
+            HandleHalfPotentialContact(luWordA, lu64IdA, luWordB, lpOutput, lpCreatedBodies);
+        }
+        if (GetEntityWordOwner(luWordB) == KU_TRAFFIC_ENTITY_OWNER)
+        {
+            HandleHalfPotentialContact(luWordB, lu64IdB, luWordA, lpOutput, lpCreatedBodies);
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HandleHalfPotentialContact  @ 0x82747F58
+//
+// Complete, 0x82747F64..0x827480CC. The two flag tests are the console's byte read of mxFlags
+// (`lbz r11,5(vehicle)` at this + (idx+0x55)*128 + 5, i.e. maVehicles base +10880 stride 128)
+// masked with 1 and 8 -- IsAlive() and !IsPhysical(), reached BY NAME here.
+//
+// The FOURTH argument the console passes -- the OTHER half's entity word -- becomes
+// AddVehicleToPhysics's lTargetEntityId, which is what the physics side records as the
+// vehicle that provoked the promotion.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandleHalfPotentialContact(
+        u32 luHalfEntityWord,
+        u64 lu64HalfVolumeInstanceId,
+        u32 luOtherHalfEntityWord,
+        BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+        TotalTrafficBitArray* lpCreatedBodies)
+{
+    // r5 is not even saved in the console prologue: the whole-qword id rides the call so the
+    // argument list matches the pair walker's, and nothing reads it.
+    (void)lu64HalfVolumeInstanceId;
+
+    const u32 luVehicle = GetEntityWordIndex(luHalfEntityWord);
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");  // .h:2459
+
+    if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)   // PC-safety guard: a bad id must not index the pool
+    {
+        return;
+    }
+
+    const Vehicle* lpVehicle = GetVehicle(luVehicle);
+
+    // 0x82747FB0 / 0x82747FBC. A dead car has nothing to promote; a car that is ALREADY
+    // physical has a slot, and re-posting a create event for it would spend one of the 25
+    // CreatePhysicalTrafficEvent ring slots for nothing.
+    if (!lpVehicle->IsAlive() || lpVehicle->IsPhysical())
+    {
+        return;
+    }
+
+    // 0x8274807C: the inlined BitArray<600>::IsBitSet, with its own "invalid index : " message
+    // (CgsBitArray.h:203). lpCreatedBodies is PrePhysicsUpdate's per-frame set, so one car is
+    // promoted at most once per frame however many pairs name it.
+    if (lpCreatedBodies->IsBitSet(luVehicle))
+    {
+        return;
+    }
+
+    // 0x827480AC..0x827480CC. NOTE the type: E_TRAFFIC_TYPE_POTENTIAL is NOT a lightweight
+    // proxy -- PhysicalTrafficManager::GetFreeTrafficVehicleWithPhysics hands out a FULL
+    // 20-slot body for it and PreparePhysical simply does not arm the body's crashing state.
+    EntityId lTargetEntityId;
+    lTargetEntityId.muValue = luOtherHalfEntityWord;
+
+    AddVehicleToPhysics(luVehicle,
+                        lTargetEntityId,
+                        lpOutput->GetVehicleInputInterface(),
+                        BrnPhysics::Vehicle::E_TRAFFIC_TYPE_POTENTIAL,
+                        lpCreatedBodies);
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT5_01.cpp (wave T5) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT5_01.cpp -- THE TWO PRODUCERS THE CRASH SURFACE WAS WAITING ON.
+//
+//   TrafficEntityModule::UpdateCrashSlider                      @0x82715A18  (133 insns)
+//   TrafficEntityModule::JunctionFUP_StopOffscreenTraffic       @0x82719868  (83 insns)
+//   TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical@0x8273F2E8  (75 insns)
+//   TrafficEntityModule::UpdateJunctionFUP                      @0x82745218  (1365 insns)
+//   TrafficEntityModule::EnsureVehicleRemovedFromCrashModule    @0x8271FBE8  (185 insns)
+//
+// WHY THIS FILE EXISTS. Wave T2/T6 landed the whole crash surface -- the crashing-things
+// producer and both reactions (UpdateParams_TryAvoidCrashing / _TryStartSympatheticCrashing,
+// _wT2_06.cpp) -- and measured them working when FORCED. On the shipped path both arms were
+// still dead, because their two GATE INPUTS had no producer anywhere in the tree:
+//
+//   NeedToTakeActionAgainstJunctionFUP()  reads mfJunctionFUP           <- UpdateJunctionFUP
+//   ShouldBeHollywoodAction()             reads mfCrashSliderFinalValue <- UpdateCrashSlider
+//
+// Both predicates were bodied and correct and both were CONSTANT FALSE. These are the writers.
+//
+// ⚠️ TWO STALE PARK NOTES, both false, both checked against the image before being deleted:
+//   * _wQ7_01.cpp logged `UpdateJunctionFUP (no export dumped)`. The per-function export
+//     EXISTS (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x82745218.json, 1365 asm lines).
+//   * BrnTrafficEntityModule.h declared
+//         void JunctionFUP_TryClearupNonMovingPhysical();
+//     with NO parameters and a void return. The console is
+//         bool JunctionFUP_TryClearupNonMovingPhysical(const FastBitArray<601>::Iterator&, bool)
+//     -- r4 is the live iterator (`lwz r11, 0(r28)` == miIndex), r5 the bool (`clrlwi r11,r5,24`),
+//     and r3 returns 0/1 at 0x8273F308 / 0x8273F408. Both DWARF dumps agree with the asm.
+//     Its sibling was declared `void f(void*, bool)`; the first parameter is the iterator too.
+//     Corrected in the header. This is the third wrong declaration found in this cluster.
+//
+// ⛔⛔ THE CONSTANT TRAP THIS FILE WALKED THROUGH. Every score/radius UpdateJunctionFUP uses is
+// a `VecFloat` in the DYNAMICALLY-INITIALISED .data page at 0x8300Cxxx. Reading that page out
+// of the image gives 0.0 for ALL of them -- the whole 0x8300C000..0x8300D000 page is zero in
+// the loaded image (verified word by word). Taking those zeros would have made every vehicle
+// score 0, left mfJunctionFUP identically 0, and produced a perfectly plausible "the avoid arm
+// still never fires" -- the project's placeholder-identity failure class, silent and total.
+// The values below come from the DYN-INIT THUNKS, each `lfs f0,<src> ; stfs -0x10(r1) ;
+// lvx v0,r0,r10 ; vspltw v0,v0,0 ; stvx128 v0,r0,r11` i.e. dst_quad = splat(src_scalar):
+//
+//   thunk @0x82C66CF0  0x8300CC50 <- splat(flt_8200426C) ==     5.0f
+//   thunk @0x82C66D18  0x8300CEC0 <- splat(flt_820BA5E8) ==    30.0f
+//   thunk @0x82C66D40  0x8300C9D0 <- splat(flt_820BA7E4) ==    20.0f
+//   thunk @0x82C66D68  0x8300CB00 <- splat(flt_820C07FC) == 14400.0f
+//   thunk @0x82C65D08  0x8300CAD0 <- splat(flt_8200D4E4) ==  3600.0f
+//
+// ⭐ THE MAPPING IS CONFIRMED TWICE, INDEPENDENTLY. (a) By behaviour: the 30.0f arm is the one
+// guarded by mbIsFatallyCrashing, the 20.0f arm by mfTimeNotDriving >= 6.0f, the 5.0f arm is
+// the fall-through. (b) By ORDER: C++ static initialisers run in declaration order within a
+// TU, and the thunks in the 0x82C66Cxx run fire 0.001 -> 5.0 -> 30.0 -> 20.0 -> 14400.0, which
+// is exactly the DecFIGS declaration order of
+//   KF_IS_SIMILAR_TOLLERANCE (.cpp:339), KF_JUNCTION_FUP_PHYSICAL_SCORE (:345),
+//   KF_JUNCTION_FUP_FATAL_SCORE (:346), KF_JUNCTION_FUP_NOT_DRIVING_SCORE (:347),
+//   KF_JUNCTION_FUP_FAR_FROM_BEHAVIOUR_CENTRE_SQ (:351).
+// The two derivations agree constant for constant, and 3600.0f reproduces the value an earlier
+// wave recovered for KF_JUNCTION_FUP_MAX_RADIUS_SQ from a different call site.
+// (The .rdata reader used is scratchpad/x360rd.py, re-verified against the
+// CrashedStuntHudState::GetResourcesToLoad @0x82508510 listing before any value was taken.)
+//
+// PLAIN .rdata constants (static, read directly, no thunk):
+//   flt_820BA290 ==  65.0f  KF_JUNCTION_FUP_SCORE_NEEDS_ACTION
+//   flt_820BA294 == 200.0f  KF_JUNCTION_FUP_ONLINE_SCORE_NEEDS_ACTION
+//   flt_820BA8F8 ==   6.0f  KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME
+//   flt_82001C98 ==   1.0f  KF_JUNCTION_FUP_TIME_TILL_NEXT_PHYSICAL_KILL
+//   flt_820BA62C ==   0.5f  KF_JUNCTION_FUP_TIME_TILL_NEXT_ONLINE_PHYSICAL_KILL
+//   flt_820BA5C8/5E4/5F4/5E8/5DC/8200426C/82004014/820BC59C -- the crash-slider set, below.
+//
+// MOUNT REQUIRED (conductor-owned): add
+//   echo "%SRC%\GameSource\World\EntityModules\TrafficEntityModule\BrnTrafficEntityModule_wT5_01.cpp"
+// to tools/build/build_game_exe.bat in the SAME change that retires the gates in _wQ7_01.cpp
+// and _wT1_02.cpp, or the exe link fails with LNK2019.
+//
+// Layout is host-native: every member is reached by name. The console displacements in the
+// comments only attest which member a line resolves to.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+// [FLAG PC witness] the removal-reason baton declared in BrnTrafficTrackWitness.h. NOT IN THE
+// X360 BINARY -- RemoveVehicle takes no reason argument on the console either; this is how the
+// witness names WHICH of the eleven callers vanished a car. DELETE-WHEN: see that header.
+const char* gpcTrafficRemoveReason = "unknown";
+
+namespace
+{
+    // ---- recovered constants (provenance in the file banner) -----------------------------
+
+// (fold: an identical definition of KF_JUNCTION_FUP_MAX_RADIUS_SQ was dropped here -- this TU defines it once, above)
+
+    // BrnTrafficEntityModule.cpp:345/:346/:347 (DecFIGS). The three per-vehicle scores.
+    const f32 KF_JUNCTION_FUP_PHYSICAL_SCORE    =  5.0f;   // unk_8300CC50 @0x82C66CF0
+    const f32 KF_JUNCTION_FUP_FATAL_SCORE       = 30.0f;   // unk_8300CEC0 @0x82C66D18
+    const f32 KF_JUNCTION_FUP_NOT_DRIVING_SCORE = 20.0f;   // unk_8300C9D0 @0x82C66D40
+
+    // BrnTrafficEntityModule.cpp:349 (DecFIGS). flt_820BA8F8, plain .rdata.
+    const f32 KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME = 6.0f;
+
+    // BrnTrafficEntityModule.cpp:351 (DecFIGS). unk_8300CB00, dyn-init @0x82C66D68.
+    // 14400 m^2 == 120 m from the behaviour centre (the DWARF locals in
+    // JunctionFUP_StopOffscreenTraffic call it lBCToVehicle -- "BC" is that centre, which the
+    // module keeps as mCameraLastFrame's Pos row, X360 +0x728C0).
+    const f32 KF_JUNCTION_FUP_FAR_FROM_BEHAVIOUR_CENTRE_SQ = 14400.0f;
+
+    // BrnTrafficEntityModule.cpp:353/:354 (DecFIGS). flt_82001C98 / flt_820BA62C.
+    const f32 KF_JUNCTION_FUP_TIME_TILL_NEXT_PHYSICAL_KILL        = 1.0f;
+    const f32 KF_JUNCTION_FUP_TIME_TILL_NEXT_ONLINE_PHYSICAL_KILL = 0.5f;
+
+    // BrnTrafficConstants.h:130 (DecFIGS). flt_820BA290. The threshold
+    // NeedToTakeActionAgainstJunctionFUP() (BrnTrafficEntityModule.cpp) already tests against;
+    // repeated here only so the diagnostic can name it.
+    const f32 KF_JUNCTION_FUP_SCORE_NEEDS_ACTION = 65.0f;
+
+    // BrnTrafficConstants.h:131 (DecFIGS). flt_820BA294. The SECOND, higher threshold: the
+    // physical-kill arm below runs on `NeedToTakeActionAgainstJunctionFUP() || score >= 200`.
+    // ⚠️ The console spells the second test INLINE rather than calling
+    // NeedToTakeActionAgainstOnlineJunctionFUP() (which exists, DWARF :1881, and is a
+    // different function); the inline test honours mbDEBUGOverrideJunctionFUP exactly as the
+    // offline predicate does (0x82745B3C..0x82745B70). Transcribed as the console wrote it.
+    const f32 KF_JUNCTION_FUP_ONLINE_SCORE_NEEDS_ACTION = 200.0f;
+
+    // ---- the crash-slider set, all plain .rdata ------------------------------------------
+    const f32 KF_CRASH_SLIDER_SPIKE_SCORE          = 100.0f;  // flt_820BA5C8
+    const f32 KF_CRASH_SLIDER_SPIKE_DECAY          =   0.0f;  // flt_82001CC0
+    const f32 KF_CRASH_SLIDER_SPIKE_FACTOR         =  10.0f;  // flt_820BA5E4
+    const f32 KF_CRASH_SLIDER_MISBOUNCE_SPIKE_TIME =   3.0f;  // flt_820BA5F4
+    const f32 KF_CRASH_SLIDER_SPIKE_GAP            =  30.0f;  // flt_820BA5E8
+    const f32 KF_CRASH_SLIDER_SPIKE_GAP_VARIATION  =  15.0f;  // flt_820BA2A8
+    const f32 KF_CRASH_SLIDER_SPIKE_HOLD_TIME      =   5.0f;  // flt_8200426C
+    const f32 KF_CRASH_SLIDER_DECAY_AFTER_SPIKE    =   0.1f;  // flt_82004014
+    const f32 KF_CRASH_SLIDER_FACTOR_AFTER_SPIKE   =   1.5f;  // flt_820BA5DC
+    const f32 KF_CRASH_SLIDER_MAX_SCORE            = 100.0f;  // flt_820BA5C8 again
+    const f32 KF_CRASH_SLIDER_MIN_INTERESTING      =   1.0f;  // flt_82001C98
+    const f32 KF_CRASH_SLIDER_ZERO_POINT           =  10.0f;  // flt_820BA5E4 again
+    // flt_820BC59C == 0.011111111f == 1/90, the reciprocal of (MAX_SCORE - ZERO_POINT).
+    const f32 KF_CRASH_SLIDER_RECIP_RANGE          = 0.011111111f;
+
+    // The sentinel UpdateJunctionFUP seeds luNextKillVehicle with. It is a 32-bit -1
+    // (`li r11, -1` @0x82745268, `cmpwi r11, -1` @0x82745BAC), NOT BrnTraffic's 16-bit
+    // KU_INVALID_VEHICLE (0xFFFF) -- the two are different values and this one is the
+    // console's.
+    const u32 KU_JUNCTION_FUP_NO_KILL_VEHICLE = 0xFFFFFFFFu;
+
+    typedef CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> TrafficBitArray;
+
+    // The tree's standard "this leg is not reconstructed" probe: one line, once.
+    inline void LogMissingLeg_T5Gate(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    {
+        if (!lrbAlreadyLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            lrbAlreadyLogged = true;
+            *CgsDev::Log::gpDebugPrint << "[TRAF-GATE] " << lpcLegNameAndReason << "\n";
+        }
+    }
+
+// (fold: an identical definition of TrafficDiagStream was dropped here -- this TU defines it once, above)
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateCrashSlider  @0x82715A18  (DWARF BrnTrafficEntityModule.h:1290)
+//
+// THE PRODUCER OF mfCrashSliderFinalValue -- the one input ShouldBeHollywoodAction() reads,
+// and therefore the gate on UpdateParams_TryStartSympatheticCrashing (_wT2_02.cpp).
+//
+// Called from PreSceneUpdate's E_STATE_RUNNING arm, immediately after UpdateTimers and inside
+// the `!IsPaused() && !lbSimPaused` guard. PreSceneUpdate is an ARTIST export hole, so the
+// position is read straight out of the image:
+//     0x8274ABC4  bl  IsPaused                 ; guard
+//     0x8274ABD0  bne -> 0x8274AC28            ; skip if paused
+//     0x8274ABDC  bne -> 0x8274AC28            ; skip if lUpdateSet & SIM_PAUSED
+//     0x8274ABE8  bl  UpdateTimers             (0x82715858)
+//     0x8274ABF0  bl  UpdateCrashSlider        (0x82715A18)   <-- here
+//     0x8274ABF8  bl  KillDyingVehicleEntities (0x82741E40)
+//     0x8274AC04  bl  CreateNewVehicleEntities (0x8272FA30)
+//     0x8274AC14  bl  UpdateCollidableVehicles (0x827302C8)
+//     0x8274AC20  bl  GenerateCrashedVehicleEvents (0x82720030)
+//
+// ⚠️ READ THE WHOLE CHAIN BEFORE CONCLUDING THIS IS SHOWTIME-ONLY -- it is not, and the first
+// draft of this banner said it was. The showtime block below only SCHEDULES spikes; the score
+// itself is raised in ORDINARY driving by HandleExternalResponses @0x82732C68 (BODIED, in
+// _wT3_04.cpp), which does `mfCrashSliderCrashScore += mfCrashSliderCrashScoreFactor * 50.0`
+// per crashed traffic car -- and Construct / Reset (_wT1_01.cpp) seed that factor to 0.8 and
+// the decay to 0.5. So a crashed traffic car is worth 40 points, two are 80, and the
+// normalisation at the bottom of this function turns 80 into ~0.78 against
+// ShouldBeHollywoodAction()'s 0.01 threshold.
+// ⇒ The score was already accumulating before this wave. What was missing was the ONLY writer
+// of mfCrashSliderFinalValue, which is the last line of this function -- so the arm was dead
+// for want of a normalisation, not for want of a score.
+// ⚠️ The window is short by design: proportional decay at 0.5 takes 80 points back under the
+// 10-point floor in about four seconds. Hollywood action is a few-second reaction to a fresh
+// crash, not a mode.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateCrashSlider()
+{
+    // 0x82715A28..0x82715A40. The debug switch forces showtime scheduling on.
+    if (mbDEBUGFakeShowtime)                       // +0x72876 (:868)
+    {
+        mbPlayingShowtimeMode = true;              // +0x717DD (:716)
+    }
+
+    if (mbPlayingShowtimeMode)
+    {
+        // 0x82715A8C..0x82715AB8.
+        mfShowtimeTimer += mfSimTimeStep;
+
+        // 0x82715AC4..0x82715AD8. Either the scheduled gap elapsed, or the player has been
+        // mis-bouncing for 3 s -- both mint a fresh crash spike.
+        if (mfShowtimeTimer >= mfShowtimeTimeNextCrashSpike ||
+            mfShowtimeMisBounceTimer >= KF_CRASH_SLIDER_MISBOUNCE_SPIKE_TIME)
+        {
+            // 0x82715AE0..0x82715AF0 -- score pinned at 100 with the decay switched OFF, so
+            // it HOLDS until the five-second block below turns the decay back on.
+            mfCrashSliderCrashScore      = KF_CRASH_SLIDER_SPIKE_SCORE;
+            mfCrashSliderCrashScoreDecay = KF_CRASH_SLIDER_SPIKE_DECAY;
+            mfCrashSliderCrashScoreFactor= KF_CRASH_SLIDER_SPIKE_FACTOR;
+
+            // 0x82715B08..0x82715B4C -- the ring draw is CgsNumeric::Random::RandomFloat()
+            // inlined on mEffectRand (this + 0x1360 == mRand + sizeof(Random)): read the
+            // oldest slot, refill THAT slot from the old seed's high word, step the LCG, then
+            // advance the cursor. The returned value is the one primed eight draws ago.
+            const f32 lfSpikeGapJitter = mEffectRand.RandomFloat();
+
+            // 0x82715B50..0x82715B68. The console contracts `jitter * 15 + timer` into one
+            // fmadds and adds the 30 after, so the gap is 30..45 s from now.
+            mfShowtimeMisBounceTimer     = 0.0f;
+            mfShowtimeTimeLastCrashSpike = mfShowtimeTimer;
+            mfShowtimeTimeNextCrashSpike = mfShowtimeTimer
+                                         + lfSpikeGapJitter * KF_CRASH_SLIDER_SPIKE_GAP_VARIATION
+                                         + KF_CRASH_SLIDER_SPIKE_GAP;
+        }
+
+        // 0x82715B6C..0x82715BA0. Five seconds after a spike, let it start decaying.
+        // ⚠️ The console parks mfShowtimeTimeLastCrashSpike at the NEXT spike time, not at
+        // "now" -- that is what makes this block fire exactly once per spike instead of every
+        // frame afterwards (`lfs f12, 0(r30)` reads +0x724B4, stores to +0x724B8).
+        if (mfShowtimeTimer - mfShowtimeTimeLastCrashSpike >= KF_CRASH_SLIDER_SPIKE_HOLD_TIME)
+        {
+            mfShowtimeTimeLastCrashSpike  = mfShowtimeTimeNextCrashSpike;
+            mfCrashSliderCrashScoreFactor = KF_CRASH_SLIDER_FACTOR_AFTER_SPIKE;
+            mfCrashSliderCrashScoreDecay  = KF_CRASH_SLIDER_DECAY_AFTER_SPIKE;
+        }
+    }
+
+    // 0x82715BA4..0x82715BDC. Below "1 point" the score is not interesting; otherwise it
+    // decays proportionally (`fnmsubs f0, f12, f0, f0` == score - decay*dt*score) and is
+    // clamped to [0, 100] with two fsels.
+    if (mfCrashSliderCrashScore <= KF_CRASH_SLIDER_MIN_INTERESTING)
+    {
+        mfCrashSliderCrashScore = 0.0f;
+    }
+    else
+    {
+        const f32 lfDecayThisFrame = mfCrashSliderCrashScoreDecay * mfSimTimeStep;
+        f32 lfScore = mfCrashSliderCrashScore - lfDecayThisFrame * mfCrashSliderCrashScore;
+
+        if (lfScore < 0.0f)                       { lfScore = 0.0f; }
+        if (lfScore > KF_CRASH_SLIDER_MAX_SCORE)  { lfScore = KF_CRASH_SLIDER_MAX_SCORE; }
+        mfCrashSliderCrashScore = lfScore;
+    }
+
+    // 0x82715BE0..0x82715BF4. A showtime player who has come to rest on the ground kills the
+    // slider outright.
+    if (mbShowtimePlayerOnGround)                  // +0x717E6 (:725)
+    {
+        mfCrashSliderCrashScore = 0.0f;
+    }
+
+    // 0x82715BF8..0x82715C24. The 0..1 normalisation ShouldBeHollywoodAction() tests against
+    // 0.01: everything below 10 points reads as zero, 100 points reads as one.
+    f32 lfFinal = (mfCrashSliderCrashScore - KF_CRASH_SLIDER_ZERO_POINT)
+                * KF_CRASH_SLIDER_RECIP_RANGE;
+    if (lfFinal < 0.0f) { lfFinal = 0.0f; }
+    if (lfFinal > 1.0f) { lfFinal = 1.0f; }
+    mfCrashSliderFinalValue = lfFinal;
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::EnsureVehicleRemovedFromCrashModule  @0x8271FBE8  (185 insns)
+//
+// LANDED HERE because it is one of the three blockers on RemoveVehicle @0x8272E370, which is
+// the junction-FUP RELIEF VALVE this file's UpdateJunctionFUP has to leave gated. It is also
+// named as a blocker by three other park notes (_wT1_01.cpp:582 StaticVehicles_KillParam,
+// _wT2_01.cpp:618 KillParam, _wT3_02.cpp:866 StopVehicleBeingPhysical). All four callers are
+// still gated, so this changes no behaviour today -- it shortens the next wave's path.
+//
+// Every offset in it resolves by name:
+//   +164480 == mVehiclesAddedToCrashModule       (:634, the FastBitArray<601> immediately
+//              before mVehicleSoaData -- 164560 minus one 80-byte set)
+//   +359992 == maRecentlyRemovedVehicles         (:681; maNewRemovedVehicles is at +0x57F7C
+//              and an Array<u16,160> is 324 bytes, so 0x57F7C - 0x144 == 0x57E38 == 359992)
+//   +360640 == maRecentlyRecoveredSlammedTraffic (:683 == 0x580C0, and the console's own
+//              assert string at .cpp 4389 names it)
+//   Vehicle +0x01 == muCrashTrafficType, tested against 3 == eCrashTrafficType_Slammed and
+//              reset to -1 == eCrashTrafficType_Invalid.
+// ⚠️ The console reads that byte BARE (`lbz r11,1(r35) ; cmplwi cr6, r11, 3`). Vehicle's
+// IsRecoveringFromSlam() tests the same byte but also asserts IsPhysical(), and this function
+// runs while a vehicle is being taken OUT of physics -- so it uses the unasserted accessor,
+// the same distinction GetOtherHalfIndex draws against GetCabIndex.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::EnsureVehicleRemovedFromCrashModule(u32 luVehicle)
+{
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
+               "luVehicle < KU_MAX_TOTAL_TRAFFIC");            // baked .cpp 4371
+
+    // 0x8271FC3C..0x8271FD5C. The IsBitSet / UnSetBit pair carries the console's two
+    // CgsFastBitArray.h range asserts (h:396 and h:452), streamed with the index.
+    if (mVehiclesAddedToCrashModule.IsBitSet(luVehicle))
+    {
+        mVehiclesAddedToCrashModule.UnSetBit(luVehicle);
+        maRecentlyRemovedVehicles.Append(static_cast<u16>(luVehicle));
+    }
+
+    // 0x8271FD84 -- the inlined GetVehicle, assert baked at BrnTrafficEntityModule.h:2459.
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    // 0x8271FD98..0x8271FE0C. A car that was mid-slam-recovery has to be told the recovery is
+    // over, or the slam bookkeeping keeps a dead index.
+    if (lpVehicle->GetCrashTrafficTypeRaw() ==
+        static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Slammed))
+    {
+        CGS_ASSERT(!maRecentlyRecoveredSlammedTraffic.Contains(static_cast<u16>(luVehicle)),
+                   "!maRecentlyRecoveredSlammedTraffic.Contains( luVehicle )");  // .cpp 4389
+        maRecentlyRecoveredSlammedTraffic.Append(static_cast<u16>(luVehicle));
+        lpVehicle->SetCrashTrafficTypeRaw(
+            static_cast<u8>(BrnPhysics::Vehicle::eCrashTrafficType_Invalid));
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::RemoveVehicle  @0x8272E370  (499 insns)
+//   DWARF BrnTrafficEntityModule.h:1797 -- `void RemoveVehicle(uint32_t)`
+//
+// THE MODULE'S SINGLE KILL ENTRY POINT, and the JUNCTION-FUP RELIEF VALVE this file's
+// UpdateJunctionFUP and JunctionFUP_TryClearupNonMovingPhysical have been logging a gate for.
+// Eleven callers (xrefs_to on 0x8272E370): UpdateJunctionFUP, JunctionFUP_TryClearupNonMoving-
+// Physical, ReturnPhysicalVehicleToTraffic, TryClearupOffscreenTraffic, ClearupCrashedTraffic,
+// CleanUpCrashedVehicles, HandleRecycledTraffic, KillAllTrafficInCylinder, FireKillZone,
+// HideAllTraffic, PostPhysicsUpdate.
+//
+// ⚠️ THE PARK NOTES THAT GUARDED THIS WERE WRONG, AND WRONG IN BOTH DIRECTIONS.
+// Four sites (_wT1_01.cpp, _wT2_01.cpp, _wT3_02.cpp, _wT5_01.cpp) all named the same three
+// blockers -- "GetVehicleSpecies / Vehicle::DetachArticulation /
+// StaticTrafficParam::SetShouldBeRemoved are not bodied". Checked against the tree, one by one:
+//   * GetVehicleSpecies                      -- bodied, and has been for a while, as a header
+//                                               inline in BrnTrafficVehicle.h:419.
+//   * Vehicle::DetachArticulation            -- bodied, BrnTrafficVehicle.cpp:1379.
+//   * StaticTrafficParam::SetShouldBeRemoved -- bodied, BrnTrafficStaticParam.cpp.
+// All three were STALE. Meanwhile the list omitted the two things that actually had to exist:
+//   * TrafficEntityModule::EnsureVehicleRemovedFromCrashModule -- called on FOUR of the six
+//     exit paths below; landed in this file by the previous wave, which is what made this
+//     function reachable at all.
+//   * Vehicle::IsOrphan() -- the predicate that selects the WHOLE first arm (0x8272E3DC
+//     `lbz r11,5(r30) ; rlwinm r11,r11,0,26,26`). E_FLAG_ORPHAN existed and SetOrphan existed,
+//     but nothing could READ the bit. Added to BrnTrafficVehicle.h beside IsAlive/IsPhysical;
+//     the console names it itself in the baked assert string "!lpVehicle->IsOrphan()".
+// ⇒ The park note was a list of names nobody re-checked. Every one of its three entries had
+//   been landed by an earlier wave that never went back to retire the notes.
+//
+// WHAT IT DOES NOT DO -- worth stating, because two other park notes assume otherwise.
+// RemoveVehicle does NOT free a pool slot, does NOT touch the scene/collision registration,
+// and does NOT delete a param. It retires LIVENESS (Vehicle::SetDead), retires the crash-module
+// bookkeeping, breaks articulation, and MARKS the param -- zombie on the normal path,
+// should-be-removed when divergent behaviour is allowed. The recycle and the
+// AddForCollision/AddVolumeInstance teardown remain KillDyingVehicleEntities' job, so
+// _wT4_01.cpp's stale-collidable PC-safety sweep is NOT retired by this landing.
+//
+// STRUCTURE, straight off the asm. Three top-level arms, selected before any species test:
+//   0x8272E3DC  IsOrphan()                -> loc_8272E9D4, the orphaned-half arm
+//   0x8272E3EC  mbAllowDivergentBehaviour -> the "offline, may diverge" species ladder
+//   otherwise                             -> loc_8272E728, the ordinary species ladder
+// The two ladders differ in three ways and the difference is the whole point of the function:
+//   STANDARD: divergent marks the param SetShouldBeRemoved(); ordinary marks it SetZombie().
+//   STATIC:   divergent SetShouldBeRemoved();                  ordinary SetZombie().
+//   TRAILER:  divergent detaches then kills the trailer immediately and RETURNS; ordinary
+//             detaches, calls SetOrphan @0x8272E900, and then FALLS THROUGH to the shared tail
+//             which kills it anyway.
+// ⛔ THE TRAILER ROW ABOVE SAID THE OPPOSITE FOR ONE COMMIT, AND A REVIEWER CAUGHT IT. It read
+// "ordinary detaches and ORPHANS it so a later RemoveVehicle takes the first arm". There is no
+// later call: 0x8272E900 `bl SetOrphan` is immediately followed by 0x8272E904 `b loc_8272E9B0`,
+// and the tail at 0x8272E9BC is `SetDead(r3 == r30 == the SUBJECT, r4 == r31 == luVehicle)`.
+// ⭐ AND THE ORPHAN BIT DOES NOT EVEN SURVIVE THE CALL. Vehicle::SetDead @0x8270E870 is
+// `andi. r11, r11, 0xDE` (0x8270EA04) -- 0xDE clears 0x01 (E_FLAG_ALIVE) AND 0x20
+// (E_FLAG_ORPHAN). So the ordinary TRAILER arm sets a flag that the next call in the same arm
+// erases, and SetOrphan's only lasting effect here is its own internal IsAlive() assert. That
+// is a console quirk worth knowing; the comment that hid it was written by the very wave that
+// spent its first hour on four OTHER notes saying things their own code contradicted.
+// The default (species >= 3) arms differ too: the divergent one RETURNS after the assert
+// (0x8272E48C `b __restgprlr_20`), the ordinary one FALLS THROUGH to the shared
+// SetDead + EnsureVehicleRemovedFromCrashModule tail at loc_8272E9B0 (0x8272E80C `b`).
+//
+// The two SoA references are the console's `this + 0x282D0` (mVehicleSoaData, built as
+// `lis 2 ; ori 0x82D0` at 0x8272E49C/0x8272E784 and as `addis 3 ; addi -0x7D30` at
+// 0x8272E6DC/0x8272E9FC -- the same address twice) and `this + 0x3D700` (mParamSoaData,
+// `addis 4 ; addi -0x2900` at 0x8272E91C). Both are reached by name here.
+//
+// The console composes four of the asserts through CgsDev::StrStream. Per this tree's
+// convention (see GetTrailerVehicle's "Out of range trailer vehicle") the baked literal
+// prefix is kept as the CGS_ASSERT message and the streamed tail is documented inline; the
+// CONDITION is transcribed exactly.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
+{
+    // 0x8272E388..0x8272E3CC. TWO asserts fire here on the console, back to back: this one and
+    // the `luIndex < KU_MAX_TOTAL_TRAFFIC` baked at BrnTrafficEntityModule.h:2459, which is
+    // GetVehicle's own bound -- the compiler inlined that one accessor at this site
+    // (`addi r11,r31,0x55 ; slwi r11,r11,7 ; add r30,r11,r23`) while calling it out of line
+    // everywhere else in the same function. Our GetVehicle carries the second assert.
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC");  // .cpp 4190
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+    // ---- [FLAG PC witness] [traffic-track] REMOVED. NOT IN THE X360 BINARY, off unless
+    // BRN_TRAFFIC_TRACK. This is the module's SINGLE kill entry point, so one line here names
+    // every car that vanishes, where it was relative to the player, and which caller did it
+    // (gpcTrafficRemoveReason, parked by the instrumented call sites). Unbounded per call is
+    // safe: removals are events, not frames -- a 160 s drive produces tens, not thousands.
+    // DELETE-WHEN: see BrnTrafficTrackWitness.h.
+    if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+    {
+        // maVehicleTransforms directly, not GetVehicleTransform(): that accessor returns a
+        // Matrix44Affine BY VALUE, so binding a reference to its .Pos() would dangle.
+        const Vector3& lrPos = maVehicleTransforms[luVehicle].Pos();
+
+        const f32 lfDX = lrPos.x - mLocalPlayerPosition.x;
+        const f32 lfDY = lrPos.y - mLocalPlayerPosition.y;
+        const f32 lfDZ = lrPos.z - mLocalPlayerPosition.z;
+        const f32 lfDistSq = lfDX * lfDX + lfDY * lfDY + lfDZ * lfDZ;
+        const f32 lfAlong  = lfDX * mLocalPlayerDirection.x
+                           + lfDY * mLocalPlayerDirection.y
+                           + lfDZ * mLocalPlayerDirection.z;
+
+        const char* lpcState = "param";
+        if (lpVehicle->IsPhysical())
+        {
+            lpcState = (lpVehicle->GetCrashTrafficTypeRaw() == 0u) ? "crashed" : "physical";
+        }
+        else if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
+        {
+            lpcState = "static";
+        }
+
+        *lpTrack << "[traffic-track] id=" << luVehicle
+                 << " REMOVED reason=" << gpcTrafficRemoveReason
+                 << " state=" << lpcState
+                 << " pos=(" << lrPos.x << ", " << lrPos.y << ", " << lrPos.z << ")"
+                 << " vis=" << (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle) ? 1 : 0)
+                 << " dist=" << sqrtf(lfDistSq)
+                 << " infront=" << ((lfAlong > 0.0f) ? 1 : 0)
+                 << "\n";
+    }
+
+    // ========================================================================================
+    // ARM 1 -- loc_8272E9D4. An ORPHAN: a trailer whose cab has already gone. There is nothing
+    // left to co-ordinate, so it dies immediately, regardless of mbAllowDivergentBehaviour.
+    // ========================================================================================
+    if (lpVehicle->IsOrphan())
+    {
+        CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");           // .cpp 4335
+
+        lpVehicle->SetDead(luVehicle, mVehicleSoaData);                     // 0x8272EA10
+        EnsureVehicleRemovedFromCrashModule(luVehicle);                     // 0x8272EA1C
+
+        // 0x8272EA24..0x8272EA2C `cmpwi cr6, r3, 0 ; bne` -- ONLY a standard vehicle goes on to
+        // look for a trailer. (A trailer that is itself an orphan has no cab by definition, and
+        // GetTrailerIndex asserts IsOfStandardSpecies(), so the species test is load-bearing.)
+        if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STANDARD)
+        {
+            if (lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+            {
+                const u32 luTrailer = lpVehicle->GetTrailerIndex();
+                Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+                // .cpp 4350. Streamed: "Mismatched artic parts: cab id=" << luVehicle
+                // << ", thinks trailer is " << luTrailer
+                // << ", trailer thinks cab is " << lpTrailer->GetCabIndex().
+                CGS_ASSERT(lpTrailer->GetCabIndex() == luVehicle,
+                           "Mismatched artic parts: cab id=");
+
+                lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);  // 0x8272EB04
+                lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);  // 0x8272EB14
+                lpTrailer->SetDead(luTrailer, mVehicleSoaData);             // 0x8272EB24
+                EnsureVehicleRemovedFromCrashModule(luTrailer);             // 0x8272EB30
+            }
+        }
+        return;
+    }
+
+    // ========================================================================================
+    // ARM 2 -- 0x8272E3EC..0x8272E724. mbAllowDivergentBehaviour (+0x717E7) is the offline /
+    // single-player switch: the module is free to make the world diverge from what a remote
+    // peer would see, so a removal is IMMEDIATE and the param is flagged should-be-removed.
+    // ========================================================================================
+    if (mbAllowDivergentBehaviour)
+    {
+        switch (GetVehicleSpecies(luVehicle))                               // 0x8272E404
+        {
+        case Vehicle::E_SPECIES_STANDARD:                                   // loc_8272E5CC
+            GetParam(luVehicle)->SetShouldBeRemoved();                      // 0x8272E5D8
+
+            if (lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+            {
+                const u32 luTrailer = lpVehicle->GetTrailerIndex();
+                Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+                // .cpp 4216. Streamed: "Mismatched artic parts: cab id=" << luVehicle
+                // << ", thinks trailer is " << lpVehicle->GetTrailerIndex()
+                // << ", trailer thinks cab is " << lpTrailer->GetCabIndex().
+                CGS_ASSERT(lpTrailer->GetCabIndex() == luVehicle,
+                           "Mismatched artic parts: cab id=");
+                CGS_ASSERT(lpTrailer->IsAlive(), "lpTrailer->IsAlive()");   // .cpp 4218
+
+                lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);  // 0x8272E6F0
+                lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);  // 0x8272E700
+                lpTrailer->SetDead(luTrailer, mVehicleSoaData);             // 0x8272E710
+                EnsureVehicleRemovedFromCrashModule(luTrailer);             // 0x8272E71C
+            }
+            // ⚠️ NOTE: this arm returns WITHOUT killing lpVehicle itself. The param is flagged
+            // and the pool sweep does the rest; only the TRAILER half is killed outright.
+            return;
+
+        case Vehicle::E_SPECIES_STATIC:                                     // loc_8272E5B4
+            GetStaticTrafficParamFromFullV(luVehicle)->SetShouldBeRemoved(); // 0x8272E5C0
+            return;
+
+        case Vehicle::E_SPECIES_TRAILER:                                    // loc_8272E490
+            if (lpVehicle->GetCabIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+            {
+                const u32 luCab = lpVehicle->GetCabIndex();
+                Vehicle* const lpCab = GetVehicle(luCab);
+
+                // .cpp 4246. Streamed: "Mismatched artic parts: trailer id=" << luVehicle
+                // << ", thinks cab is " << lpVehicle->GetCabIndex()
+                // << ", cab thinks trailer is " << lpCab->GetTrailerIndex().
+                CGS_ASSERT(lpCab->GetTrailerIndex() == luVehicle,
+                           "Mismatched artic parts: trailer id=");
+
+                lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);  // 0x8272E57C
+                lpCab->DetachArticulation(luCab, mVehicleSoaData);          // 0x8272E58C
+            }
+            // loc_8272E590 -- and here the trailer IS killed.
+            lpVehicle->SetDead(luVehicle, mVehicleSoaData);                 // 0x8272E59C
+            EnsureVehicleRemovedFromCrashModule(luVehicle);                 // 0x8272E5A8
+            return;
+
+        default:
+            // .cpp 4261. Streamed: "Traffic vehicle " << luVehicle
+            // << " has unknown species " << GetVehicleSpecies(luVehicle).
+            // 0x8272E48C `b __restgprlr_20` -- this arm RETURNS, unlike its ordinary twin.
+            CGS_ASSERT(false, "Traffic vehicle ");
+            return;
+        }
+    }
+
+    // ========================================================================================
+    // ARM 3 -- loc_8272E728. The ordinary (network-safe) path: mark the param a ZOMBIE and let
+    // the shared tail retire the vehicle. Every species arm here falls through to that tail, so
+    // the subject is always killed -- including the TRAILER arm, which calls SetOrphan first
+    // and then has the orphan bit cleared again by SetDead's 0xDE mask. See the banner.
+    // ========================================================================================
+    CGS_ASSERT(lpVehicle->IsAlive(), "lpVehicle->IsAlive()");               // .cpp 4269
+    CGS_ASSERT(!lpVehicle->IsOrphan(), "!lpVehicle->IsOrphan()");           // .cpp 4270
+
+    switch (GetVehicleSpecies(luVehicle))                                   // 0x8272E780
+    {
+    case Vehicle::E_SPECIES_STANDARD:                                       // loc_8272E91C
+        GetParam(luVehicle)->SetZombie(luVehicle, mParamSoaData);           // 0x8272E938
+
+        // ⚠️ NO mismatch assert in this arm -- the console does not check the back-reference
+        // here, only in the three arms above. Transcribed as written.
+        if (lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+        {
+            const u32 luTrailer = lpVehicle->GetTrailerIndex();
+            Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+            lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);      // 0x8272E980
+            lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);      // 0x8272E990
+            lpTrailer->SetDead(luTrailer, mVehicleSoaData);                 // 0x8272E9A0
+            EnsureVehicleRemovedFromCrashModule(luTrailer);                 // 0x8272E9AC
+        }
+        break;
+
+    case Vehicle::E_SPECIES_STATIC:                                        // loc_8272E908
+        GetStaticTrafficParamFromFullV(luVehicle)->SetZombie();            // 0x8272E914
+        break;
+
+    case Vehicle::E_SPECIES_TRAILER:                                       // loc_8272E810
+        if (lpVehicle->GetCabIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
+        {
+            const u32 luCab = lpVehicle->GetCabIndex();
+            Vehicle* const lpCab = GetVehicle(luCab);
+
+            // .cpp 4311. Streamed: "Mismatched artic parts: trailer id=" << luVehicle
+            // << ", thinks cab is " << luCab << ", cab thinks trailer is "
+            // << lpCab->GetTrailerIndex(). (This arm streams the LOCAL luCab through the
+            // u32 overload at 0x8272E8B0, where the divergent twin re-called GetCabIndex()
+            // and used the u16 one -- which is how the DWARF's `uint32_t luCab` local is
+            // visible in the encoding.)
+            CGS_ASSERT(lpCab->GetTrailerIndex() == luVehicle,
+                       "Mismatched artic parts: trailer id=");
+
+            lpCab->DetachArticulation(luCab, mVehicleSoaData);              // 0x8272E8E8
+            lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);      // 0x8272E8F8
+            lpVehicle->SetOrphan();                                         // 0x8272E900
+        }
+        break;
+
+    default:
+        // .cpp 4322, the same streamed message as the divergent twin -- but this one FALLS
+        // THROUGH to the shared tail (0x8272E80C `b loc_8272E9B0`).
+        CGS_ASSERT(false, "Traffic vehicle ");
+        break;
+    }
+
+    // loc_8272E9B0 -- the shared tail of arm 3.
+    lpVehicle->SetDead(luVehicle, mVehicleSoaData);                         // 0x8272E9BC
+    EnsureVehicleRemovedFromCrashModule(luVehicle);                         // 0x8272E9C8
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::JunctionFUP_StopOffscreenTraffic  @0x82719868
+//   DWARF BrnTrafficEntityModule.h:1884 --
+//     void JunctionFUP_StopOffscreenTraffic(const FastBitArray<601>::Iterator&, bool)
+//
+// A car nobody can see, a long way from the behaviour centre, is parked: its param's speed is
+// zeroed so it stops feeding the jam. Nothing is removed here.
+//
+// SIGNATURE, from the asm (the committed declaration was `void f(void*, bool)`):
+//   r3 this, r4 the LIVE iterator (`lwz r11, 0(r26)` reads miIndex twice, so it is the
+//   iterator object and not a bare index), r5 the bool (`clrlwi r11, r5, 24`).
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::JunctionFUP_StopOffscreenTraffic(
+        const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle,
+        bool lbRenderedLastFrame)
+{
+    // 0x82719874..0x82719884 -- on screen last frame, leave it alone.
+    if (lbRenderedLastFrame)
+    {
+        return;
+    }
+
+    // 0x82719888..0x82719914 -- the iterator's own GetIndex() range assert
+    // (CgsFastBitArray.h:235, streamed on the console).
+    const u32 luVehicle = static_cast<u32>(lrItVehicle.GetIndex());
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Attempt to get index when out of range");
+
+    // 0x82719918..0x82719954. GetVehicleTransform returns by value (sret at var_80); the
+    // console reads its Pos row at +0x30 and the behaviour centre out of the +0x728C0 lane,
+    // which is mCameraLastFrame's Pos row.
+    const Vector3 lVehiclePos = GetVehicleTransform(luVehicle).Pos();
+    const Vector3 lBCToVehicle = lVehiclePos - mCameraLastFrame.GetPosition();
+    const f32 lfDistanceFromBCSq = rw::math::vpu::Dot(lBCToVehicle, lBCToVehicle);
+
+    // 0x82719954..0x82719964 `vcmpgefp. v0, v0, v13` -- distSq >= 14400 (120 m).
+    if (lfDistanceFromBCSq >= KF_JUNCTION_FUP_FAR_FROM_BEHAVIOUR_CENTRE_SQ)
+    {
+        // 0x82719968..0x827199A8.
+        Param* const lpParam = GetParam(luVehicle);
+        CGS_ASSERT(lpParam != 0, "lpParam");     // baked .cpp 17569
+        lpParam->mfSpeed = 0.0f;                 // Param +0x14
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical  @0x8273F2E8
+//   DWARF BrnTrafficEntityModule.h:1887 --
+//     bool JunctionFUP_TryClearupNonMovingPhysical(const FastBitArray<601>::Iterator&, bool)
+//
+// The harder half: an offscreen physical car that is either fatally crashing or has not driven
+// for six seconds is DELETED, not parked. Returns whether it removed one.
+// --------------------------------------------------------------------------------------------
+bool TrafficEntityModule::JunctionFUP_TryClearupNonMovingPhysical(
+        const CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES>::Iterator& lrItVehicle,
+        bool lbRenderedLastFrame)
+{
+    // 0x8273F2F4..0x8273F310.
+    if (lbRenderedLastFrame)
+    {
+        return false;
+    }
+
+    // 0x8273F314..0x8273F3A0 -- the same CgsFastBitArray.h:235 assert.
+    const u32 luVehicle = static_cast<u32>(lrItVehicle.GetIndex());
+    CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Attempt to get index when out of range");
+
+    // 0x8273F3A4..0x8273F3D8.
+    const TrafficPhysicsInfo* const lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+    CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");   // baked .cpp 17597
+
+    // 0x8273F3DC..0x8273F3F8 -- still driving and not crashing, so it is not the problem.
+    if (!lpPhysInfo->mbIsFatallyCrashing &&                          // +0xFE6
+        lpPhysInfo->mfTimeNotDriving < KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME)  // +0xFD8
+    {
+        return false;
+    }
+
+    // 0x8273F3FC..0x8273F408 -- UNGATED: RemoveVehicle is bodied above in this file.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        *lpDiag << "[T5-kill] TryClearupNonMovingPhysical veh=" << luVehicle
+                << " fatal=" << (lpPhysInfo->mbIsFatallyCrashing ? 1 : 0)
+                << " notDriving=" << lpPhysInfo->mfTimeNotDriving << "\n";
+    }
+    {
+        // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+        const TrafficRemoveReasonTag lTag("junctionfup-nonmoving");
+        RemoveVehicle(luVehicle);
+    }
+    return true;
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::UpdateJunctionFUP  @0x82745218  (DWARF BrnTrafficEntityModule.h:1875)
+//
+// THE PRODUCER OF mfJunctionFUP -- the one input NeedToTakeActionAgainstJunctionFUP() reads,
+// and therefore the gate on UpdateParams_TryAvoidCrashing (_wT2_02.cpp) AND on SpawnNewTraffic
+// @0x82748A40.
+//
+// "FUP" is the module's own congestion score. It is rebuilt from zero every frame: every alive
+// PHYSICAL traffic car within 60 m of the average physical centre contributes 5 / 20 / 30
+// points depending on whether it is driving, stuck, or fatally crashing. At 65 points the
+// module decides the junction is jammed and switches traffic into avoidance; at 200 it also
+// starts deleting the furthest offender.
+//
+// Call site (PrePhysicsUpdate @0x8274C690, r3 == this only, no arguments):
+//     0x8274C7A8  bl  BuildPotentialCollisionList (0x8274B378)
+//     0x8274C7B0  bl  UpdateJunctionFUP           (0x82745218)   <-- here
+//     0x8274C7BC  bl  GenerateDriverInputs        (0x82748E78)
+//
+// DWARF locals (BrnTrafficUnity.cpp:21390): lfFurthestDistance, luNextKillVehicle, lItVehicle,
+// lVehicles_Alive_And_Physical, and per-iteration luVehicle / lpPhysInfo / lVehicleTransform /
+// lVehiclePosition / lVehicleToCentre / lfDistanceFromCentreSq / lbRenderedLastFrame.
+//
+// ⚠️ THE PREDICATE IS INLINED THREE TIMES, not called. The console expands
+// NeedToTakeActionAgainstJunctionFUP() at 0x82745AD0, 0x82745B3C and 0x82745BF0; the middle
+// one is the 200-point variant. All three honour mbDEBUGOverrideJunctionFUP first, which is
+// why the existing BRN_TRAFFIC_FORCE_AVOID switch keeps working unchanged.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateJunctionFUP()
+{
+    // 0x82745238..0x82745264. The score is a per-frame quantity, cleared before anything else
+    // -- including before the showtime early-out, so showtime leaves it at zero.
+    mfJunctionFUP = 0.0f;
+
+    if (mbPlayingShowtimeMode)
+    {
+        return;
+    }
+
+    // 0x82745268..0x8274526C.
+    f32 lfFurthestDistance   = 0.0f;
+    u32 luNextKillVehicle    = KU_JUNCTION_FUP_NO_KILL_VEHICLE;
+
+    // 0x82745278..0x827452B0 -- ten ld/and/std over the two SoA sets
+    // (this+0x282D0 == mAliveVehicles, this+0x283C0 == mPhysicalVehicles).
+    TrafficBitArray lVehicles_Alive_And_Physical;
+    lVehicles_Alive_And_Physical.SetAnd(mVehicleSoaData.mAliveVehicles,
+                                        mVehicleSoaData.mPhysicalVehicles);
+
+    u32 luDiagScored = 0;
+
+    // ============================================================================
+    // PASS 1 -- score the jam, and remember the furthest offender.
+    // 0x827454B4..0x82745ACC.
+    // ============================================================================
+    for (TrafficBitArray::Iterator lItVehicle = lVehicles_Alive_And_Physical.Begin();
+         lItVehicle != lVehicles_Alive_And_Physical.End();
+         ++lItVehicle)
+    {
+        const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Attempt to get index when out of range");
+
+        // 0x82745518..0x82745548. DWARF names this local `TrafficPhysicsInfo* lpPhysInfo`
+        // (non-const, unlike TryClearupNonMovingPhysical's).
+        TrafficPhysicsInfo* const lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+        CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");    // baked .cpp 17457
+        if (lpPhysInfo == 0)
+        {
+            continue;    // PC-safety guard, as in the sibling partfiles
+        }
+
+        // 0x8274556C..0x8274558C. GetVehicleTransform carries the
+        // `luIndex < KU_MAX_TOTAL_TRAFFIC` assert baked at BrnTrafficEntityModule.h:2483.
+        const Vector3 lVehiclePosition = GetVehicleTransform(luVehicle).Pos();
+        const Vector3 lVehicleToCentre = mAveragePhysicalCentre - lVehiclePosition;
+        const f32 lfDistanceFromCentreSq = rw::math::vpu::Dot(lVehicleToCentre, lVehicleToCentre);
+
+        // 0x82745590..0x827456BC `vcmpgefp128. v0, v13, v127` -- i.e. distSq <= 3600.
+        // ⚠️ THE THREE ADDENDS ARE THE dyn-init QUADS. Reading them off the image gives 0.0
+        // for all three and the whole score collapses to a plausible, silent zero. See the
+        // banner: 30 / 5 / 20, recovered from the thunks and cross-checked by declaration
+        // order.
+        if (lfDistanceFromCentreSq <= KF_JUNCTION_FUP_MAX_RADIUS_SQ)
+        {
+            if (lpPhysInfo->mbIsFatallyCrashing)                                      // +0xFE6
+            {
+                mfJunctionFUP += KF_JUNCTION_FUP_FATAL_SCORE;
+            }
+            else if (lpPhysInfo->mfTimeNotDriving < KF_JUNCTION_FUP_VEHICLE_NOT_DRIVING_TIME)
+            {
+                mfJunctionFUP += KF_JUNCTION_FUP_PHYSICAL_SCORE;
+            }
+            else
+            {
+                mfJunctionFUP += KF_JUNCTION_FUP_NOT_DRIVING_SCORE;
+            }
+            ++luDiagScored;
+        }
+
+        // 0x827456C4..0x827457DC. The kill candidate is the FURTHEST car from the centre --
+        // and, when divergent behaviour is allowed, one the player is not looking at.
+        // ⚠️ `lfFurthestDistance` starts at zero and is compared with `>`, so the first
+        // candidate must be strictly further than the centre itself; that is the console's
+        // own seeding (`vspltisw128 v126, 0` @0x8274526C).
+        if (lfDistanceFromCentreSq > lfFurthestDistance)
+        {
+            if (!mbAllowDivergentBehaviour ||
+                !mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle))
+            {
+                lfFurthestDistance = lfDistanceFromCentreSq;
+                luNextKillVehicle  = luVehicle;
+            }
+        }
+    }
+
+    // ============================================================================
+    // 0x82745AD0..0x82745BEC -- the physical-kill arm.
+    // ============================================================================
+    if (NeedToTakeActionAgainstJunctionFUP() ||
+        (mbDEBUGOverrideJunctionFUP ||
+         mfJunctionFUP >= KF_JUNCTION_FUP_ONLINE_SCORE_NEEDS_ACTION))
+    {
+        // 0x82745B80..0x82745BA4.
+        mfJunctionFUP_TimeTillNextPhysicalKill -= mfSimTimeStep;
+
+        if (mfJunctionFUP_TimeTillNextPhysicalKill <= 0.0f &&
+            luNextKillVehicle != KU_JUNCTION_FUP_NO_KILL_VEHICLE)
+        {
+            // 0x82745BB4..0x82745BC0 -- UNGATED: RemoveVehicle is bodied above in this file.
+            // This is THE RELIEF VALVE: the furthest offender leaves, the score drops below 65
+            // next frame, and SpawnNewTraffic comes off its brake.
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                *lpDiag << "[T5-kill] UpdateJunctionFUP score=" << mfJunctionFUP
+                        << " killing veh=" << luNextKillVehicle
+                        << " distSq=" << lfFurthestDistance << "\n";
+            }
+            {
+                // [FLAG PC witness] names this caller in the [traffic-track] REMOVED line.
+                const TrafficRemoveReasonTag lTag("junctionfup-jamvalve");
+                RemoveVehicle(luNextKillVehicle);
+            }
+
+            // 0x82745BC4..0x82745BEC. Offline (divergent behaviour allowed) waits a full
+            // second between kills; online only half.
+            mfJunctionFUP_TimeTillNextPhysicalKill =
+                mbAllowDivergentBehaviour ? KF_JUNCTION_FUP_TIME_TILL_NEXT_PHYSICAL_KILL
+                                          : KF_JUNCTION_FUP_TIME_TILL_NEXT_ONLINE_PHYSICAL_KILL;
+        }
+    }
+
+    // 0x82745BF0..0x82745C50 -- the third inline expansion of the predicate; below the
+    // threshold there is no jam and pass 2 does not run.
+    if (!NeedToTakeActionAgainstJunctionFUP())
+    {
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            static u32 suDiagFrame = 0;
+            if ((suDiagFrame++ % 300u) == 0u)
+            {
+                *lpDiag << "[T5-fup] score=" << mfJunctionFUP
+                        << " scored=" << luDiagScored
+                        << " (below " << KF_JUNCTION_FUP_SCORE_NEEDS_ACTION << ", no action)\n";
+            }
+        }
+        return;
+    }
+
+    // ============================================================================
+    // PASS 2 -- the jam is real. Park or delete the offscreen cars.
+    // 0x82745C54..0x8274674C. NOTE this walks mAliveVehicles DIRECTLY (the console takes
+    // Begin() off this + 0x282D0, not off a local intersection).
+    // ============================================================================
+    u32 luDiagOffscreen = 0;
+
+    for (TrafficBitArray::Iterator lItVehicle = mVehicleSoaData.mAliveVehicles.Begin();
+         lItVehicle != mVehicleSoaData.mAliveVehicles.End();
+         ++lItVehicle)
+    {
+        const u32 luVehicle = static_cast<u32>(lItVehicle.GetIndex());
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "Attempt to get index when out of range");
+
+        // 0x82745DEC `cmplwi r19, 0x190 ; bge` -- driving traffic only. The 400..599 band is
+        // the parked/static pool and is not this function's business.
+        if (luVehicle >= KU_MAX_PARAMS)
+        {
+            continue;
+        }
+
+        // 0x8274613C..0x8274615C. The console reads the bit with the ITERATOR'S cached mask
+        // rather than re-deriving one, and reuses the result for both calls.
+        const bool lbRenderedLastFrame =
+            mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle);
+
+        // 0x8274616C.
+        JunctionFUP_StopOffscreenTraffic(lItVehicle, lbRenderedLastFrame);
+        if (!lbRenderedLastFrame)
+        {
+            ++luDiagOffscreen;
+        }
+
+        // 0x8274641C..0x82746454 -- the delete pass is physical-only.
+        if (mVehicleSoaData.mPhysicalVehicles.IsBitSet(luVehicle))
+        {
+            JunctionFUP_TryClearupNonMovingPhysical(lItVehicle, lbRenderedLastFrame);
+        }
+    }
+
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suDiagActionFrame = 0;
+        if ((suDiagActionFrame++ % 60u) == 0u)
+        {
+            *lpDiag << "[T5-fup] ACTION score=" << mfJunctionFUP
+                    << " scored=" << luDiagScored
+                    << " offscreen=" << luDiagOffscreen
+                    << " killCand=" << static_cast<s32>(luNextKillVehicle) << "\n";
+        }
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT6_01.cpp (wave T6) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT6_01.cpp -- the traffic-jam relief valve.
+//
+//   TrafficEntityModule::NukeTrafficJams  @0x827353E8  (DWARF :1551, .cpp 8056)  1104 insns
+//
+// The console's answer to a self-inflicted jam. The reactive AI (swerve / give-up /
+// stop-for-obstruction) can wedge a run of cars nose-to-tail at walking pace, and once that
+// happens nothing else in the module can reach them: RemoveVehicle is driven by the junction
+// FUP score, which for a stalled junction pins below its 65 threshold and stays there.
+// NukeTrafficJams NEVER CONSULTS THAT SCORE. That is the whole point of it -- it is a second,
+// independent path to Param::SetShouldBeRemoved that a stuck junction cannot starve.
+//
+// The consumer half of the valve is ALREADY LIVE: UpdateParams (_wT2_02.cpp:223) tests
+// E_FLAG_SHOULD_BE_REMOVED and calls the bodied KillParam. So this one function closes it.
+//
+// ---- WHAT THE ASM ACTUALLY DOES (read 2026-08-29; Hex-Rays FAILED on this body) ------------
+// The IDA pseudocode carries "local variable allocation has failed, the output may be wrong!"
+// and it is wrong in ways that matter -- it aliases the stack iterator with the Vector3 out-
+// slot, renders the run-walk links through a u16* it never scales consistently, and drops the
+// early-outs. Every statement below is off the DISASSEMBLY, with the address range in-line.
+//
+// Outer walk: FastBitArray<600>::Iterator over mParamSoaData.mAliveParams (this+0x3D700).
+// For each alive param not already swallowed by an earlier run:
+//   1. walk the doubly-linked param list BOTH ways from it, collecting the maximal run of
+//      consecutive params that are (a) miBehaviour == 5 and (b) mfSpeed < 5.0 m/s;
+//   2. if the run is LONGER THAN FOUR params, it is a jam -- drain it;
+//   3. draining marks EVERY THIRD collected param SetShouldBeRemoved, skipping any the player
+//      can see (rendered last frame, or within 40 m of the camera).
+//
+// ⭐ THREE THINGS THE PROSE DESCRIPTION OF THIS FUNCTION HAS BEEN GETTING WRONG, all measured:
+//   * THE DRAIN STRIDE IS THREE, NOT ONE (`addi r25, r25, 3` @0x827361FC). The console thins a
+//     jam to a third of its cars; it does not delete it. A stride-1 reconstruction would empty
+//     a whole queue in one frame and read as a spawn bug.
+//   * A JAM IS FIVE CARS, NOT TWO (`cmplwi r11, 4 / ble` @0x82735F0C). Four stopped cars in a
+//     row are a red light, not a jam, and the console leaves them alone.
+//   * THE CAMERA TEST IS GATED ON mbAllowDivergentBehaviour (+0x717E7, @0x82735F5C), NOT on
+//     mbIsOnlineGameMode. Those are different conditions: the flag is
+//     `!mbIsOnlineGameMode || mbPlayingShowtimeMode` (_wT1_01.cpp:207), so ONLINE SHOWTIME
+//     still runs the camera test. "offline tests, online skips" is only true off-showtime.
+//
+// ---- what is NOT here, deliberately ---------------------------------------------------------
+// The console composes six of its asserts through CgsDev::StrStream ("Index " << i << " is out
+// of range (max bits: " << 600 << "\n"). Every one of those belongs to a FastBitArray or Array
+// accessor, not to this function -- per this tree's convention (see RemoveVehicle's banner in
+// _wT5_01.cpp) an accessor's own assert is NOT restated at the call site. The ONE assert baked
+// against BrnTrafficEntityModule.cpp -- "luCurrParam < KU_MAX_PARAMS" at .cpp 8056 -- is this
+// function's own and is kept.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+    // ---- the console's own .rdata literals -------------------------------------------------
+    // ⛔ INIT-ORDER CHECKED, BOTH EDGES (2026-08-29). Neither of these is a dyn-init splat:
+    // a scan of the ASSEMBLY of all 30,084 exported ARTIST functions finds ZERO store
+    // instructions referencing either symbol, so no CRT thunk writes them and no thunk can
+    // observe a half-built dependency. They are plain static .rdata, and the image byte IS
+    // the shipped value -- which also means "recovering a truer value" would be the WRONG
+    // move here. Values cross-confirmed against independent consumers that fold the same
+    // symbol (flt_8200426C: 101 functions, e.g. BehaviourRig::Parameters::Construct;
+    // flt_820BA590: DoesParamNeedToStopForStopline and UpdateSympatheticCrashing).
+
+    // flt_8200426C -- `lfs f13` @0x82735A58 / @0x82735CE0, compared against Param::mfSpeed.
+    const f32 KF_JAM_MAX_SPEED = 5.0f;
+
+    // flt_820BA590 -- held in f31 across the whole body (@0x82735580), splatted into the
+    // vector compare at 0x82736154. Metres from mCameraLastFrame.
+    const f32 KF_JAM_CAMERA_PROTECTION_RADIUS = 40.0f;
+
+    // `cmplwi r11, 4 ; ble` @0x82735F0C -- a run of FOUR OR FEWER is not a jam.
+    const s32 KI_JAM_MIN_RUN_LENGTH = 4;
+
+    // `addi r25, r25, 3` @0x827361FC -- the drain visits every third collected param.
+    const u32 KU_JAM_KILL_STRIDE = 3;
+
+    // The stack Array<u16,64> the run is collected into; the walk stops when it is full
+    // (`cmplwi r11, 0x40 ; beq` @0x82735A8C / @0x82735D14). N is the array's own capacity.
+    const u32 KU_JAM_RUN_CAPACITY = 64;
+
+    // Param::miBehaviour value 5, the state every car in a jam is in. ⛔ DO NOT NAME IT.
+    // BrnTrafficParam.h attests enumerators 0..3 (from the console's own baked assert strings)
+    // and 6; 4 and 5 carry no assert string anywhere in the image, and that header's standing
+    // instruction is "do NOT invent them". This function is new evidence about what 5 MEANS --
+    // it is the state a queueing/obstructed car sits in, since a run of them under 5 m/s is
+    // exactly what the console calls a traffic jam -- but evidence about meaning is not a name.
+    const s8 KI_JAM_BEHAVIOUR = 5;
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::NukeTrafficJams  @ 0x827353E8
+//
+// Caller: UpdateNonDecisionFrame @0x8274C1A8, behind
+// `mbNeedToRunTrafficJamNuker && !mbNeedToKillAllZombies`.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::NukeTrafficJams()
+{
+    // 0x82735400..0x82735428. Two stack locals, both cleared before the walk:
+    //   * a private FastBitArray<600> marking params already swallowed by an earlier run, so a
+    //     five-car jam is drained once and not once per member (the ten `stdx r24` fields at
+    //     0x8273540C..0x8273541C);
+    //   * the run collector (`stw r24, var_120` == Array<u16,64>::Clear at 0x82735428).
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. Counters + the A/B suppressor; read
+    // once so the env lookup is not in the per-param path.
+    static const bool sbDIAGSuppressFlagging = (getenv("BRN_TRAFFIC_NO_JAM_NUKE") != 0);
+    u32 luDIAGJamsFound  = 0;
+    u32 luDIAGAliveSeen  = 0;
+    u32 luDIAGLongestRun = 0;
+    u32 luDIAGWouldFlag  = 0;
+    u32 luDIAGFlagged    = 0;
+
+    CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lxParamsAlreadyInAJam;
+    lxParamsAlreadyInAJam.Construct();
+
+    ::Array<u16, KU_JAM_RUN_CAPACITY> laJamRun;
+    laJamRun.Clear();
+
+    // 0x82735424..0x8273554C. `addis r9,r16,4 ; addi r9,r9,-0x2900` == this+0x3D700 ==
+    // &mParamSoaData.mAliveParams -- the iterator's mpxSourceMasks. The whole loop is the
+    // console's inlined Begin()/operator++/!=End() over that set; End() is the literal 0x258
+    // it compares against at 0x8273650C.
+    const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAliveParams =
+        mParamSoaData.mAliveParams;
+
+    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lItParam = lrAliveParams.Begin();
+         lItParam != lrAliveParams.End();
+         ++lItParam)
+    {
+        const s32 liParam = lItParam.GetIndex();
+        ++luDIAGAliveSeen;   // [DIAG]
+
+        // 0x82735958..0x82735980. The console tests the local set with the ITERATOR'S cached
+        // mask rather than re-deriving 1<<(i&63) -- same bit, one instruction cheaper. Spelled
+        // through the attested IsBitSet here; GetMask() exists but there is no attested field
+        // accessor to pair it with.
+        if (lxParamsAlreadyInAJam.IsBitSet(static_cast<u32>(liParam)))
+        {
+            continue;
+        }
+
+        // 0x827359E8..0x82735A08. THIS function's own assert (baked file
+        // BrnTrafficEntityModule.cpp, line 8056) -- kept, unlike the accessor-owned ones.
+        CGS_ASSERT(static_cast<u32>(liParam) < KU_MAX_PARAMS, "luCurrParam < KU_MAX_PARAMS");
+
+        // ---- collect the maximal jam run through this param --------------------------------
+        // The console emits the run-walk body TWICE -- one source helper, inlined at both
+        // sites. It is kept as two blocks here rather than re-rolled: the two entries differ
+        // (backward starts AT liParam, forward starts at liParam's successor and must first
+        // test for the 0xFFFF terminator), and the helper's name is not recoverable, so an
+        // extracted method would be an invented member on a DWARF-attested class.
+
+        // ---- walk A: BACKWARD through muPrevParam, starting at liParam itself ---------------
+        // 0x82735A2C..0x82735C5C.
+        {
+            u32    luCurrParam = static_cast<u32>(liParam);
+            Param* lpParam     = GetParam(luCurrParam);
+
+            while (lpParam->miBehaviour == KI_JAM_BEHAVIOUR)
+            {
+                // 0x82735A50..0x82735A60. A car at or above 5 m/s is moving: the run ends here.
+                if (lpParam->mfSpeed >= KF_JAM_MAX_SPEED)
+                {
+                    break;
+                }
+
+                // 0x82735A88..0x82735A90. The collector is fixed at 64; a longer run is simply
+                // truncated (the console does NOT drain-and-continue).
+                if (laJamRun.GetCount() == static_cast<s32>(KU_JAM_RUN_CAPACITY))
+                {
+                    break;
+                }
+
+                // 0x82735A94..0x82735BEC.
+                laJamRun.Append(static_cast<u16>(luCurrParam));
+                lxParamsAlreadyInAJam.SetBit(luCurrParam);
+
+                // 0x82735C0C..0x82735C24. `lhz r11, 2(node)` == ParamListNode::muPrevParam.
+                const u16 lu16Prev = GetParamListNode(luCurrParam)->muPrevParam;
+                if (lu16Prev == KU_INVALID_PARAM)
+                {
+                    break;
+                }
+                luCurrParam = lu16Prev;
+                lpParam     = GetParam(luCurrParam);
+            }
+        }
+
+        // ---- walk B: FORWARD through muNextParam, starting at liParam's successor -----------
+        // 0x82735C80..0x82735EE0. liParam itself is deliberately NOT revisited -- walk A
+        // already collected it.
+        {
+            const u16 lu16First = GetParamListNode(static_cast<u32>(liParam))->muNextParam;
+
+            if (lu16First != KU_INVALID_PARAM)
+            {
+                u32    luCurrParam = lu16First;
+                Param* lpParam     = GetParam(luCurrParam);
+
+                while (lpParam->miBehaviour == KI_JAM_BEHAVIOUR)
+                {
+                    if (lpParam->mfSpeed >= KF_JAM_MAX_SPEED)
+                    {
+                        break;
+                    }
+
+                    if (laJamRun.GetCount() == static_cast<s32>(KU_JAM_RUN_CAPACITY))
+                    {
+                        break;
+                    }
+
+                    laJamRun.Append(static_cast<u16>(luCurrParam));
+                    lxParamsAlreadyInAJam.SetBit(luCurrParam);
+
+                    // 0x82735E94..0x82735EA8. `lhzx r11` at node+0 == muNextParam.
+                    const u16 lu16Next = GetParamListNode(luCurrParam)->muNextParam;
+                    if (lu16Next == KU_INVALID_PARAM)
+                    {
+                        break;
+                    }
+                    luCurrParam = lu16Next;
+                    lpParam     = GetParam(luCurrParam);
+                }
+            }
+        }
+
+        // [DIAG] the longest run collected THIS PASS, jam or not -- without it a session that
+        // reports no jams cannot distinguish "queues form but stay short" from "behaviour 5
+        // never happens at all", and those need completely different follow-up.
+        if (static_cast<u32>(laJamRun.GetCount()) > luDIAGLongestRun)
+        {
+            luDIAGLongestRun = static_cast<u32>(laJamRun.GetCount());
+        }
+
+        // ---- drain -------------------------------------------------------------------------
+        // 0x82735F08..0x82736200. FIVE cars or more, and then only every third one.
+        if (laJamRun.GetCount() > KI_JAM_MIN_RUN_LENGTH)
+        {
+            ++luDIAGJamsFound;
+
+            for (u32 luSlot = 0;
+                 luSlot < static_cast<u32>(laJamRun.GetCount());
+                 luSlot += KU_JAM_KILL_STRIDE)
+            {
+                const u32 luParamToKill = laJamRun.GetItem(luSlot);
+
+                // 0x82735F54..0x82735F68. mbAllowDivergentBehaviour is the gate, and the two
+                // player-visibility tests live entirely inside it: an online non-showtime
+                // event removes jammed cars with no regard to where anyone is looking, because
+                // there every client sees a different view and the console will not let one
+                // player's camera decide what the shared simulation does.
+                if (mbAllowDivergentBehaviour)
+                {
+                    // 0x82736090..0x827360D0. Never remove a car that was drawn last frame.
+                    // Standard-traffic vehicle index == param index (KU_MAX_PARAMS ==
+                    // KU_MAX_STANDARD_TRAFFIC), which is why a param index reads this set.
+                    if (mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luParamToKill))
+                    {
+                        continue;
+                    }
+
+                    // 0x827360F4..0x82736198. And never pop one within 40 m of the camera,
+                    // even if it happened not to be drawn. The console computes the magnitude
+                    // (vrsqrtefp + two Newton steps + a vsel zero-guard) and compares it, not
+                    // the square -- de-optimised to the exact form here, as BrnMathUtils.cpp
+                    // does for the same idiom.
+                    const Vector3 lToParam = GetParamTransform(luParamToKill)->GetLerpedPos()
+                                           - mCameraLastFrame.GetPosition();
+
+                    if (Magnitude(lToParam) < KF_JAM_CAMERA_PROTECTION_RADIUS)
+                    {
+                        continue;
+                    }
+                }
+
+                ++luDIAGWouldFlag;
+
+                // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The A/B switch the
+                // before/after capture needs: with BRN_TRAFFIC_NO_JAM_NUKE set, the walk, the
+                // run collection and every guard above still run exactly as the console does
+                // them -- only the flag store is withheld, so the two runs differ in ONE
+                // store and nothing else. That is the point: an A/B built from two different
+                // binaries, or one that also skipped the walk, would not isolate the valve.
+                if (sbDIAGSuppressFlagging)
+                {
+                    continue;
+                }
+
+                // 0x827361BC..0x827361F8. The whole point of the function. UpdateParams
+                // (_wT2_02.cpp) picks the flag up on its next pass and calls KillParam.
+                CGS_ASSERT(GetParam(luParamToKill)->IsAlive(), "IsAlive()");
+                GetParam(luParamToKill)->SetShouldBeRemoved();
+                ++luDIAGFlagged;
+            }
+        }
+
+        // 0x82736204. Reused for the next seed param, drained or not.
+        laJamRun.Clear();
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line per pass that found a jam,
+    // so the pixels have numbers beside them. ⚠️ The PIXELS are the evidence, not this: a jam
+    // that this line says was flagged has still only been PROVEN cleared when the cars are
+    // gone from a screenshot, because SetShouldBeRemoved is a request to UpdateParams, not a
+    // removal. Counting the request and calling it a removal is exactly the class of gate
+    // that has shipped broken work here three times.
+    static u32 suDIAGPass        = 0;
+    static u32 suDIAGBestEverRun = 0;
+    ++suDIAGPass;
+    if (luDIAGLongestRun > suDIAGBestEverRun)
+    {
+        suDIAGBestEverRun = luDIAGLongestRun;
+    }
+
+    // Print on a jam, on a NEW session-best run length, or as a 600-pass heartbeat -- so a
+    // session with no jams still says how close it got and how many params were alive to
+    // queue in the first place.
+    const bool lbReport = (luDIAGJamsFound != 0)
+                       || (luDIAGLongestRun >= 2 && luDIAGLongestRun == suDIAGBestEverRun)
+                       || ((suDIAGPass % 600u) == 0u);
+
+    if (lbReport && getenv("BRN_TRAFFIC_DIAG") != 0
+        && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[jam-nuke] pass="  << static_cast<s32>(suDIAGPass)
+            << " aliveParams="     << static_cast<s32>(luDIAGAliveSeen)
+            << " longestRun="      << static_cast<s32>(luDIAGLongestRun)
+            << " bestEver="        << static_cast<s32>(suDIAGBestEverRun)
+            << " jams="            << static_cast<s32>(luDIAGJamsFound)
+            << " passedGuards="    << static_cast<s32>(luDIAGWouldFlag)
+            << " flagged="         << static_cast<s32>(luDIAGFlagged)
+            << (sbDIAGSuppressFlagging ? " [SUPPRESSED]" : "")
+            << "\n";
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT6_02.cpp (wave T6) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT6_02.cpp -- the traffic module's per-event arming.
+//
+//   TrafficEntityModule::HandlePrepareForModeAction @0x827480D8 (DWARF .cpp 6808)  475 insns
+//
+// ⭐⭐⭐ THIS IS THE REAL SHOWTIME GATE. mbPlayingShowtimeMode (+0x717DD) has exactly TWO
+// writers in the whole ARTIST image: UpdateCrashSlider @0x82715A28's mbDEBUGFakeShowtime
+// mirror (bodied, _wT5_01.cpp) and this function. Everything downstream of showtime --
+// SpawnShowtimeTraffic, the crash-magnet list, the killzone suppression, the divergent-
+// behaviour split -- reads that one byte, so until this function existed a player who
+// entered showtime through the actual mode path got ordinary traffic. That is why the
+// previous wave had to drive showtime through the console's own "Fake Showtime" debug member
+// to measure the spawner at all.
+//
+// It is also where the mode's traffic personality is set, which is why it feeds the
+// responsive-traffic work as much as the showtime work:
+//   meGameMode, mbIsOnlineGameMode, mbGameModeAllowsSwerving, mbHardcoreSwerveForMode,
+//   mbGameModeAllowsKillzones, mbGameModeClearsTraffic, mbAllowDivergentBehaviour,
+//   mfGameModeDensityScale, miBigVehicleAmount, mfSpeedMultiplier, and the four crash-slider
+//   scalars.
+//
+// ---- THE PARAMETER LIST IS THREE, NOT FIVE -------------------------------------------------
+// Hex-Rays prints `(int result, unsigned __int8 *a2, int a3, int a4, int a5)`. The prologue
+// reads r3/r4/r5 and NOTHING else (`mr r16,r4` @0x827480EC, `mr r31,r3` @0x827480F4,
+// `mr r30,r5` @0x827480F8); a4/a5 are decompiler noise from the variadic-looking StrStream
+// call in the online-reset warning arm. The console's own assert strings name the two real
+// arguments: "lpInput" (.cpp 6808) and "lpPFMAction" (.cpp 6809).
+//
+// ---- lpGameModeParams IS EMBEDDED, NOT A POINTER -------------------------------------------
+// `addi r26, r30, 0x30` then the "lpGameModeParams != NULL" assert (.cpp 6812) on r26: the
+// GameModeParams sits INSIDE the action at +0x30, and the console still null-checks the
+// interior address (which can only be null if the action itself is at -0x30). The check is
+// reproduced, because it is what the binary does; it is not a bug worth "fixing".
+// BrnPhysicsModuleGameActions.cpp:109 records the identical `event + 0x30 ; lbz 0x94 ;
+// lwz 0x148 ; ld 0x860` triple from the physics module's own copy of this handler.
+//
+// ---- constants -----------------------------------------------------------------------------
+// ⛔ INIT-ORDER CHECKED, BOTH EDGES (2026-08-29). Every literal below is a plain static
+// .rdata constant: scanning the ASSEMBLY of all 30,084 exported ARTIST functions finds ZERO
+// store instructions targeting flt_820BA5C8 / flt_82001CC0 / flt_820BA5E4 / flt_82001C98 /
+// flt_820BA2A8 / flt_820BA5E8 / flt_82004744 / flt_820BA5DC / flt_820BA294. No CRT thunk
+// writes them, so no thunk can observe a half-built dependency and there is no init-order
+// question to answer -- the image value IS the shipped value, and "recovering a truer value"
+// would be the wrong move. Six of the nine are independently confirmed by _wT5_01.cpp's
+// already-committed crash-slider table, derived by a different wave from a different function.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of KF_CRASH_SLIDER_SPIKE_SCORE was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KF_CRASH_SLIDER_SPIKE_DECAY was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KF_CRASH_SLIDER_SPIKE_FACTOR was dropped here -- this TU defines it once, above)
+    const f32 KF_CRASH_SLIDER_SPIKE_FINAL_VALUE   =   1.0f;  // flt_82001C98
+// (fold: an identical definition of KF_CRASH_SLIDER_SPIKE_GAP was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of KF_CRASH_SLIDER_SPIKE_GAP_VARIATION was dropped here -- this TU defines it once, above)
+
+    // The ordinary (non-showtime) slider: it has to earn its score.
+    const f32 KF_CRASH_SLIDER_MODE_START_DECAY    =   0.2f;  // flt_82004744
+    const f32 KF_CRASH_SLIDER_MODE_START_FACTOR   =   1.5f;  // flt_820BA5DC
+
+    // The start-line traffic sweep. flt_820BA294 / flt_820BA5E4, `lfs f1` / `lfs f2`
+    // @0x827486F0..0x827486F4 -- a 200 m radius, 10 m tall cylinder on the player.
+    const f32 KF_START_LINE_CLEAR_RADIUS = 200.0f;
+    const f32 KF_START_LINE_CLEAR_HEIGHT =  10.0f;
+
+    // `lfs f13, flt_820BA5C8` @0x827481BC then fctiwz, clamped to [0, 100] by the
+    // srawi/and/andi sign-mask pair at 0x827481CC..0x827481F8. GameModeParams carries the
+    // large-vehicle share as a 0..1 probability; the module keeps it as a 0..100 integer.
+    const f32 KF_LARGE_VEHICLE_PERCENT_SCALE = 100.0f;       // flt_820BA5C8
+    const s32 KI_LARGE_VEHICLE_PERCENT_MAX   = 100;
+
+    // NAMED LEG GATE, file-local by this cluster's convention.
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
+    inline void LogMissingLeg_T6(bool& lrbAlreadyLogged, const char* lpcLegNameAndReason)
+    {
+        if (lrbAlreadyLogged)
+        {
+            return;
+        }
+        lrbAlreadyLogged = true;
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[T6-traffic-leg] TrafficEntityModule leg NOT RECONSTRUCTED, skipped: "
+                << lpcLegNameAndReason << " [FLAG PC partial gate]\n";
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HandlePrepareForModeAction  @ 0x827480D8
+//
+// Caller: HandleExternalRequests @0x8274B660, the game-action dispatch.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandlePrepareForModeAction(
+    const BrnTrafficIO::InputBuffer_PostPhysics*   lpInput,
+    const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction)
+{
+    // 0x827480FC..0x8274816C. Three tripwires, all non-gating on the console: it fires the
+    // assert and then dereferences anyway.
+    CGS_ASSERT(lpInput != 0, "lpInput");             // baked .cpp 6808
+    CGS_ASSERT(lpPFMAction != 0, "lpPFMAction");     // baked .cpp 6809
+
+    const BrnGameState::GameModeParams* lpGameModeParams = lpPFMAction->GetGameModeParams();
+    CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams != NULL");   // baked .cpp 6812
+
+    // ---- the mode identity block, 0x82748170..0x82748280 -----------------------------------
+    const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
+        lpGameModeParams->GetGameModeType();
+
+    meGameMode         = static_cast<s32>(leGameModeType);   // stwx -> +0x717D8
+    mbIsOnlineGameMode = lpGameModeParams->mbIsOnline;        // lbz 0x94 -> +0x717DC
+
+    mfGameModeDensityScale = lpGameModeParams->mfTrafficDensityScale;   // lfs 0x30 -> +0x71814
+
+    // 0x827481B8..0x827481F8. probability(0..1) * 100 -> truncate -> clamp to [0, 100]. The
+    // console builds the clamp branchlessly out of two sign masks; de-optimised here.
+    {
+        s32 liBigVehicleAmount = static_cast<s32>(lpGameModeParams->mfLargeVehicleProbability
+                                                  * KF_LARGE_VEHICLE_PERCENT_SCALE);
+        if (liBigVehicleAmount < 0)
+        {
+            liBigVehicleAmount = 0;
+        }
+        if (liBigVehicleAmount > KI_LARGE_VEHICLE_PERCENT_MAX)
+        {
+            liBigVehicleAmount = KI_LARGE_VEHICLE_PERCENT_MAX;
+        }
+        miBigVehicleAmount = liBigVehicleAmount;             // -> +0x71820
+    }
+
+    // 0x827481FC..0x82748278. Three flag bits out of GameModeParams::muFlags (+0x860). Note
+    // the FIRST one is INVERTED: the shipped flag is DISABLE_TRAFFIC_SWERVING, so the module's
+    // "allows swerving" member is its negation. The console spells that with a
+    // cntlzw-normalise instead of a branch; same value.
+    mbGameModeAllowsSwerving =
+        !lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_DISABLE_TRAFFIC_SWERVING);
+    mbHardcoreSwerveForMode =
+        lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_HARDCORE_TRAFFIC_SWERVING);
+    mbGameModeClearsTraffic =
+        lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_CLEAR_NEARBY_TRAFFIC);
+
+    mfSpeedMultiplier = lpGameModeParams->mfTrafficSpeedScale;          // lfs 0x38 -> +0x72880
+
+    // ---- ⭐ THE SHOWTIME GATE, 0x82748284..0x827482D4 ---------------------------------------
+    // `cmpwi r11, 2 / beq ; cmpwi r11, 0x10 / bne` -- 2 and 16 are E_MODE_OFFLINE_SHOWTIME and
+    // E_MODE_ONLINE_SHOWTIME (BrnGameStateSharedIO.h). This one store is the entire reason
+    // showtime traffic behaves differently from ordinary traffic.
+    mbPlayingShowtimeMode =
+        (leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME)
+     || (leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME);
+
+    // 0x827482B8..0x827482D4. Killzones are an ordinary-traffic mechanic: showtime turns them
+    // off. Same cntlzw-normalise, i.e. the exact negation of the byte above.
+    mbGameModeAllowsKillzones = !mbPlayingShowtimeMode;                 // -> +0x717E0
+
+    // 0x827482D8..0x827482EC. Online counts network players, offline counts rivals; +1 for the
+    // local player either way.
+    muNumberOfParticipantsInCurrentEvent = static_cast<u8>(
+        (mbIsOnlineGameMode ? lpGameModeParams->miNumNetworkPlayers
+                            : lpGameModeParams->miNumRivals) + 1);
+
+    CGS_ASSERT(muNumberOfParticipantsInCurrentEvent > 0,
+               "muNumberOfParticipantsInCurrentEvent > 0");                      // .cpp 6842
+    CGS_ASSERT(!mbWaitingForStreaming,
+               "Shouldn't be waiting for traffic streaming at mode start.");     // .cpp 6844
+
+    // ---- the traffic-reset decision, 0x82748348..0x82748524 --------------------------------
+    if (lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_DISABLE_TRAFFIC_RESET))
+    {
+        // 0x827484F8..0x82748520. No reset: just settle the divergence policy. Offline the
+        // simulation may diverge freely; online it must stay lockstep with the other clients
+        // -- UNLESS this is showtime, where every client is watching its own crash anyway.
+        mbAllowDivergentBehaviour = (!mbIsOnlineGameMode) || mbPlayingShowtimeMode;
+    }
+    else if (meState == E_STATE_RUNNING)
+    {
+        // 0x82748388..0x8274849C. Tear the world's traffic down and remember which hulls to
+        // bring back afterwards, so the event does not start inside a dead PVS region.
+        mbActivateOnlineHullsAfterReset = true;
+
+        if (lpGameModeParams->GetStartLocationCount() > 0)
+        {
+            // One hull per participant, taken from that participant's start-grid slot.
+            for (u32 luSlot = 0; luSlot < muNumberOfParticipantsInCurrentEvent; ++luSlot)
+            {
+                const Vector3 lStartPosition =
+                    lpGameModeParams->GetStartPosition(static_cast<s32>(luSlot));
+
+                mau16HullsToActivateAfterReset[luSlot] = static_cast<u16>(
+                    reinterpret_cast<const Pvs*>(mpData.operator->()->mpPvs)
+                        ->GetHullIndexForPoint(lStartPosition));
+            }
+        }
+        else if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            // 0x82748434..0x8274847C. No grid (a free-roam-style start): one hull, the one the
+            // local player is standing in, parked in that player's own slot.
+            mau16HullsToActivateAfterReset[meLocalPlayerIndex] = static_cast<u16>(
+                reinterpret_cast<const Pvs*>(mpData.operator->()->mpPvs)
+                    ->GetHullIndexForPoint(mLocalPlayerPosition));
+        }
+
+        // 0x82748480..0x8274849C.
+        mbDontCreateVehiclesNearAnyPlayers       = true;
+        mbDontCreateStaticVehiclesNearAnyPlayers = true;
+        EnterTearingDownState();
+    }
+    else if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        // 0x827484A4..0x827484E0. Already resetting: warn and carry on. Reproduced verbatim --
+        // it is a real console diagnostic, not a gate.
+        *CgsDev::Log::gpDebugPrint
+            << "TRAF WARNING: We want to reset the traffic as we're starting an online event, "
+               "but we're already resetting!! Our current state is "
+            << static_cast<s32>(meState) << "\n";
+    }
+
+    if (!lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_DISABLE_TRAFFIC_RESET)
+        && mbIsOnlineGameMode)
+    {
+        // 0x827484E4..0x827484F4. Both reset arms above fall into this; the DISABLE arm does
+        // not. ⚠️ The stored word is 1, and 1 is E_RUNNINGSTATE_PAUSED, not "running" -- an
+        // online event that resets its traffic comes back out of start-up PAUSED, and stays
+        // that way until something un-pauses it. Reading the `stw r17` (r17 == 1) as "resume"
+        // would invert the meaning of the whole arm.
+        meRunningStateToUseAfterStartup = E_RUNNINGSTATE_PAUSED;        // stw 1 -> +0x30C
+    }
+
+    // ---- traffic-light trigger + start-line protection, 0x82748524..0x82748604 -------------
+    mbAtStartLineSoProtectRaceCarsFromTraffic = mbGameModeClearsTraffic;   // -> +0x717E1
+    mbNeedToSetUpLightsForEventStart          = mbGameModeClearsTraffic;   // -> +0x717E4
+    mTrafficLightTriggerId = lpGameModeParams->mTrafficLightTriggerId;     // lwz 0x40 -> +0x717D4
+
+    // 0x82748550..0x82748584. The id is invalid when its middle 16 bits are all-ones OR its
+    // low byte is all-ones. ⚠️ Hex-Rays renders the second test as `v52 == 255` (a whole-word
+    // compare); the asm masks first (`clrlwi r11, r11, 24 ; cmplwi r11, 0xFF` @0x82748568),
+    // so it is the LOW BYTE. Asm wins.
+    {
+        const u32 luTriggerId  = mTrafficLightTriggerId;
+        const bool lbIsValidId = ((luTriggerId & 0x00FFFF00u) != 0x00FFFF00u)
+                              && ((luTriggerId & 0x000000FFu) != 0x000000FFu);
+
+        CGS_ASSERT(lbIsValidId || !mbGameModeClearsTraffic,
+                   "The Traffic Light Trigger Id is still invalid");                 // .cpp 6899
+    }
+
+    if (mbGameModeClearsTraffic)
+    {
+        // 0x82748618..0x82748680. Cache the grid so the spawner can keep clear of it.
+        for (u32 luSlot = 0; luSlot < muNumberOfParticipantsInCurrentEvent; ++luSlot)
+        {
+            maEventGridStartPositions[luSlot] =
+                lpGameModeParams->GetStartPosition(static_cast<s32>(luSlot));
+        }
+
+        mbEnsureTrafficLightDelay     = true;                          // -> +0x717E2
+        mfTrafficLightChangeBackDelay = 0.0f;                          // -> +0x71408
+
+        // 0x82748698..0x827486B0. Read unconditionally, used only by the arm below -- the
+        // console hoists it out because the accessor asserts and it wants that assert to fire
+        // whether or not the sweep runs.
+        const Vector3 lPlayerPosition =
+            lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();
+
+        // 0x827486B4..0x827486F8. Only on a decision frame, and only while actually running:
+        // sweep a 200 m x 10 m cylinder around the player so the grid is not pre-populated
+        // with traffic the event is about to launch cars into.
+        if (mbAtStartLineSoProtectRaceCarsFromTraffic
+            && meState == E_STATE_RUNNING
+            && IsDecisionFrame())
+        {
+            // GATE: KillAllTrafficInCylinder @0x82741C58 (121 insns) has no body in the tree
+            // yet. Its signature IS recovered from the prologue -- r3 this, v1 the centre,
+            // f1 the radius, f2 the height, r6 a bool (Hex-Rays' a4/a5 are the phantom slots
+            // f1/f2 ate) -- so this is a missing BODY, not a missing shape. Gated rather than
+            // trap-stubbed on purpose: this arm fires on every clear-nearby-traffic event
+            // start, so a __debugbreak() here would turn "showtime is reachable" into "showtime
+            // crashes", which is strictly worse than the console's traffic staying put.
+            static bool sbLogged = false;
+            LogMissingLeg_T6(sbLogged,
+                "HandlePrepareForModeAction leg KillAllTrafficInCylinder @0x82741C58 -- no "
+                "body; the start-line sweep of a 200 m x 10 m cylinder on the player does not "
+                "run, so an event that clears nearby traffic starts with the grid still "
+                "populated. Everything else in this handler is live");
+            (void)lPlayerPosition;
+        }
+    }
+
+    // ---- the crash slider, 0x827486FC..0x82748840 ------------------------------------------
+    if (mbPlayingShowtimeMode)
+    {
+        // Showtime opens with the slider ALREADY SPIKED -- score 100, no decay, factor 10 --
+        // which is the state UpdateCrashSlider otherwise only reaches when a spike fires.
+        mfCrashSliderCrashScore       = KF_CRASH_SLIDER_SPIKE_SCORE;
+        mfCrashSliderCrashScoreDecay  = KF_CRASH_SLIDER_SPIKE_DECAY;
+        mfCrashSliderCrashScoreFactor = KF_CRASH_SLIDER_SPIKE_FACTOR;
+        mfCrashSliderFinalValue       = KF_CRASH_SLIDER_SPIKE_FINAL_VALUE;
+
+        mfShowtimeTimer = 0.0f;
+
+        // 0x82748788..0x827487DC. Same inlined mEffectRand draw UpdateCrashSlider uses, and
+        // the same 30..45 s window -- but the console adds the literal 30 here rather than
+        // mfShowtimeTimer + 30, which is identical only because the timer was zeroed one
+        // instruction earlier. Transcribed as the console spells it.
+        const f32 lfSpikeGapJitter = mEffectRand.RandomFloat();
+
+        mfShowtimeTimeNextCrashSpike = KF_CRASH_SLIDER_SPIKE_GAP
+                                     + lfSpikeGapJitter * KF_CRASH_SLIDER_SPIKE_GAP_VARIATION;
+
+        mfShowtimeTimeLastCrashSpike = 0.0f;
+        mfShowtimeMisBounceTimer     = 0.0f;
+    }
+    else
+    {
+        // 0x827487F8..0x82748830. An ordinary mode earns its slider from zero.
+        mfCrashSliderCrashScore       = 0.0f;
+        mfCrashSliderCrashScoreDecay  = KF_CRASH_SLIDER_MODE_START_DECAY;
+        mfCrashSliderCrashScoreFactor = KF_CRASH_SLIDER_MODE_START_FACTOR;
+        mfCrashSliderFinalValue       = 0.0f;
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wT6_03.cpp (wave T6) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wT6_03.cpp -- the traffic module's game-action dispatch.
+//
+//   TrafficEntityModule::HandleExternalRequests @0x8274B660 (.cpp 5833)  491 insns  PARTIAL
+//
+// ⭐ WHY THIS EXISTS AS A PARTIAL. HandlePrepareForModeAction (_wT6_02.cpp) is the only
+// non-debug writer of mbPlayingShowtimeMode, and this is its ONLY caller. Without it the
+// handler is not merely unreached -- it is DISCARDED: /Gy + /OPT:REF drops a function with no
+// caller, and it is measurably absent from Burnout_PC.map. So "the showtime gate is bodied"
+// and "showtime is reachable through the real mode path" are two different claims, and only
+// this file joins them.
+//
+// PARTIAL, and honestly so. The console's switch has sixteen arms over the post-physics game-
+// action queue. Exactly ONE is reconstructed here -- action 23, E_ACTION_PREPARE_FOR_MODE.
+// Every other arm needs a callee with no body in this tree (HandleStopModeAction,
+// RestartTraffic, HideAllTraffic, UnhideAllTraffic, ClearupCrashedTraffic, FireKillZone,
+// KillAllTrafficInCylinder, TrafficLightManager::SetCountdownValue, IsPaused), so each is a
+// named gate rather than an invented body or a trap.
+//
+// ⭐ THIS CANNOT REGRESS ANYTHING, and that is worth stating plainly. Today the WHOLE function
+// is gated at its call site in PostPhysicsUpdate (_wT1_01.cpp), so zero arms run. Running one
+// real arm and logging the other fifteen is strictly closer to the console than running none.
+//
+// ---- the switch value is the ACTION ID, not the jump-table index ---------------------------
+// IDA labels the arm below "jumptable 8274B7EC case 10", which is the TABLE index; the console
+// biases the id by 13 before indexing (`cmplwi r11, 0xE7` @0x8274B7D0 bounds a 232-entry
+// table). The real id is 23 -- the same E_ACTION_PREPARE_FOR_MODE that
+// RaceCarEntityModule's own dispatch takes (BrnRaceCarEntityModule.cpp:2499). Reading the
+// table index as the case label would have wired this handler to action 10.
+// ============================================================================
+
+
+
+namespace BrnTraffic
+{
+namespace
+{
+// (fold: an identical definition of LogMissingLeg_T6 was dropped here -- this TU defines it once, above)
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HandleExternalRequests  @ 0x8274B660   PARTIAL
+//
+// Caller: PostPhysicsUpdate @0x8274E6D0, before the state machine runs.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandleExternalRequests(
+    const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+    BrnTrafficIO::OutputBuffer_PostPhysics*      lpOutput)
+{
+    // 0x8274B680..0x8274B6D0. Both tripwires, both non-gating on the console.
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");      // baked .cpp 5833
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");    // baked .cpp 5834
+
+    // 0x8274B6D4..0x8274B700. `bl BrnTrafficIO::Inp` is InputBuffer_PostPhysics::
+    // GetGameActionQueue() const @0x827117A8 (the read-locked &mGameActionQueue at this+62640),
+    // and GetFirstEvent RETURNS THE EVENT TYPE while writing the record pointer and its size
+    // through the two out-params.
+    const BrnTrafficIO::InputBuffer_PostPhysics::GameActionQueueStorage* lpQueue =
+        lpInput->GetGameActionQueue();
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        switch (liType)
+        {
+        // --------------------------------------------------------------------------------
+        // 0x8274BB90..0x8274BBE8 -- E_ACTION_PREPARE_FOR_MODE. THE SHOWTIME PATH.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_PREPARE_FOR_MODE:
+        {
+            const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::PrepareForModeAction*>(
+                    lpEvent);
+
+            CGS_ASSERT(lpPFMAction != 0, "lpPFMAction != NULL");   // baked .cpp 5852
+
+            // 0x8274BBB0..0x8274BBD4. `stage == 0 || stage == 1`, which IS
+            // PrepareForModeAction::IsFirstPrepareForMode() -- an all-in-one prepare and the
+            // first of a split pair both arm the mode; the second of two must not re-arm it.
+            if (lpPFMAction->IsFirstPrepareForMode())
+            {
+                HandlePrepareForModeAction(lpInput, lpPFMAction);
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BB18..0x8274BB4C -- E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK (28), a bare f32.
+        // `lfs f0, 0(record) ; stfs -> +0x71810 (mfBaseDensityScale)`, and when the simulation
+        // is lockstep-free (`lbz +0x717E7`, mbAllowDivergentBehaviour) ALSO `stfs -> +0x71814`
+        // (mfGameModeDensityScale), i.e. the rank scale takes effect immediately offline and only
+        // at the next ResetEventData online. ProgressionManager::OnEventFinishUpdateProfile posts
+        // it at every event finish, which is how the freeburn density is re-published after an
+        // event. Landed 2026-09-10 with the STOP_MODE arm below.
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_SET_TRAFFIC_SCALE_BASED_ON_RANK:
+        {
+            CGS_ASSERT(lpEvent != 0, "lpSetTrafficScaleAction");     // baked .cpp 5866
+            const f32 lfTrafficScale = *reinterpret_cast<const f32*>(lpEvent);
+            mfBaseDensityScale = lfTrafficScale;
+            if (mbAllowDivergentBehaviour)
+            {
+                mfGameModeDensityScale = lfTrafficScale;
+            }
+            break;
+        }
+
+        // --------------------------------------------------------------------------------
+        // 0x8274BE3C..0x8274BE44 -- E_ACTION_STOP_MODE (39): `HandleStopModeAction(this, lpInput,
+        // record)`. THE arm that ends an event's traffic regime -- without it the event's density
+        // scale, clear-traffic flags and start-line protection stayed latched for the rest of the
+        // session (BurnoutDecomp/b5-decomp#22).
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_STOP_MODE:
+            HandleStopModeAction(
+                lpInput,
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::StopModeAction*>(lpEvent));
+            break;
+
+        default:
+            break;
+        }
+
+        // 0x8274C0B4..0x8274C0CC. Same three-value contract as GetFirstEvent, seeded with the
+        // record just handled.
+        liType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+
+    {
+        // The fifteen arms this partial does not run, each blocked on a callee with no body in
+        // this tree. Listed by action id so the next wave can pick them off individually:
+        //   13  empty-pool state advance (meEmptyTrafficPoolState IDLE->EMPTY, no callee --
+        //       reconstructable today, left out only to keep this file to its one claim)
+        //   28  SetTrafficScaleBasedOnRank -- LIVE above (2026-09-10)
+        //   30  start-line sweep over every active race car  -> KillAllTrafficInCylinder
+        //   34  StartPlayingMode                             -> TrafficLightManager::SetCountdownValue
+        //   39  StopMode                                     -- LIVE above (2026-09-10)
+        //   47  traffic-light countdown + pause bookkeeping   -> SetCountdownValue / IsPaused
+        //   73  crash-camera proximity kill                   -> (inline, needs the +0x7143x block)
+        //   75  HideAllTraffic                                -> HideAllTraffic
+        //   77  UnhideAllTraffic / cylinder kill              -> UnhideAllTraffic, KillAllTrafficInCylinder
+        //   97..100  crash clean-up                           -> ClearupCrashedTraffic, KillAllTrafficInCylinder
+        //   110 kill-zone list                                -> FireKillZone
+        //   143 predicted-hull reset
+        //   192 streaming request / wait latch
+        //   225,226,236  RestartTraffic (+ the hull re-activation copy)
+        //   244 low-speed density halving
+        // and the post-loop tail at 0x8274C0D0 (the +0x72910 bit-14 edge that fires a 90 m
+        // KillAllTrafficInCylinder), also blocked on KillAllTrafficInCylinder.
+        static bool sbLogged = false;
+        LogMissingLeg_T6(sbLogged,
+            "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE) and "
+            "39 (STOP_MODE) are reconstructed. The other thirteen arms and the post-loop proximity "
+            "tail each need a callee with no body in this tree (KillAllTrafficInCylinder, RestartTraffic, "
+            "Hide/UnhideAllTraffic, ClearupCrashedTraffic, FireKillZone, "
+            "TrafficLightManager::SetCountdownValue, IsPaused). Nothing regresses: the whole "
+            "function was gated at its call site until now, so zero arms ran");
+    }
+}
+
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::HandleStopModeAction  @ 0x82716280  (export hole; image-read)
+//
+//   0x82716298  cmplwi r4, 0 ; bne  -> FireAssert("lpInput", BrnTrafficEntityModule.cpp, 6955)
+//   0x827162C0  cmplwi r5, 0 ; bne  -> FireAssert("lpStopModeAction", ..., 6956)
+//   0x827162EC  lbzx r11, this, 0x717E7   ; mbAllowDivergentBehaviour
+//   0x827162F4  bne -> skip ; else stbx 1, this, 0x7180F   ; mbNeedToKillAllZombies = true
+//   0x8271630C  bl ResetEventData
+// Only the two asserts read the arguments; the record's contents are not consumed here.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandleStopModeAction(
+    const BrnTrafficIO::InputBuffer_PostPhysics*           lpInput,
+    const BrnGameState::GameStateModuleIO::StopModeAction* lpStopModeAction)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput");                    // baked .cpp 6955
+    CGS_ASSERT(lpStopModeAction != 0, "lpStopModeAction");  // baked .cpp 6956
+
+    if (!mbAllowDivergentBehaviour)
+    {
+        mbNeedToKillAllZombies = true;
+    }
+
+    ResetEventData();
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wG_Stages.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wG_Stages.cpp -- TrafficEntityModule::PostSceneUpdate.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+
+// The update-set bit that says the simulation is paused this frame. Was mirrored here as a
+// file-scope `static const`; issue #20 folded this TU into BrnTrafficEntityModule.cpp, where
+// that mirror became AMBIGUOUS against the same constant in the module's anonymous namespace
+// (wQ7_01's copy, which carries the console attestation: `clrlwi r29,r29,31` on the r8
+// parameter at 0x8274C6C0). Same value, same type -- the attested one is used from here on.
+
+void TrafficEntityModule::PostSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack*/,
+                                           CgsModule::IOBufferStack* /*lpOutputBufferStack*/,
+                                           BrnTrafficIO::InputBuffer_PostScene*  lpInput,
+                                           BrnTrafficIO::OutputBuffer_PostScene* lpOutput,
+                                           BrnUpdateSet lUpdateSet )
+{
+    CgsDev::PerfMonCpu::StartMonitor( miPerfMon_PostSceneUpdate );
+
+    // Write-lock the OUTPUT first, then read-lock the INPUT (same order as PrePhysicsUpdate).
+    lpOutput->LockForWrite();
+    lpInput->LockForRead();
+
+    const bool lbSimPaused = ( ( lUpdateSet & KU_UPDATESET_SIM_PAUSED ) != 0 );
+
+    // Three republishes out of the race-car -> traffic interface, unconditional and BEFORE the
+    // state ladder. The first two are single-BYTE stores of bit 0 and bit 1 of the interface's
+    // one flags word; the third is a single-precision float copy.
+    {
+        typedef BrnWorld::RaceCarEntityModuleIO::RaceCarToTrafficInterface RaceCarToTrafficInterface;
+        const RaceCarToTrafficInterface* lpRaceCarToTraffic = lpInput->GetRaceCarToTrafficInterface();
+
+        mbPlayerIsPowerParking =
+            lpRaceCarToTraffic->IsFlagSet( RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_POWER_PARKING );
+        mbShowtimePlayerOnGround =
+            lpRaceCarToTraffic->IsFlagSet( RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_IN_SHOWTIME_ON_GROUND );
+        mfShowtimeTrafficDensityScale = lpRaceCarToTraffic->GetShowtimeTrafficDensityScale();
+    }
+
+    switch ( meState )
+    {
+    case E_STATE_STARTING_UP:
+        // Nothing runs while starting up; the arm exists only to validate meStartingUpState.
+        switch ( meStartingUpState )
+        {
+        case E_STARTINGUPSTATE_WAITING_FOR_PLAYER:
+        case E_STARTINGUPSTATE_POPULATING:
+        case E_STARTINGUPSTATE_WAITING_FOR_STREAMING:
+            break;
+        default:
+            CGS_ASSERT( false, "Invalid starting up state" );
+            break;
+        }
+        break;
+
+    case E_STATE_RUNNING:
+        if ( lbSimPaused )
+        {
+            // A paused frame runs the crashed-vehicle clean-up and nothing else -- the SAME
+            // call the tearing-down arm makes (the console folds the two into one tail).
+            CleanUpCrashedVehicles( lpInput );
+        }
+        else
+        {
+            PostNearbyTrafficSceneQueryRequest( lpInput, lpOutput );
+            CleanUpCrashedVehicles( lpInput );
+            if ( mbIsOnlineGameMode )
+            {
+                HandleCrashingNetworkTraffic( lpInput );
+            }
+            ConvertSceneResultsToTrafficDataForAI( lpOutput );
+            AIPostSceneQueryRequests( lpInput, lpOutput );
+        }
+        break;
+
+    case E_STATE_TEARING_DOWN:
+        switch ( meTearingDownState )
+        {
+        case E_TEARINGDOWNSTATE_WIPING:
+        case E_TEARINGDOWNSTATE_WAITING_TO_RESET:
+            break;
+        case E_TEARINGDOWNSTATE_FLUSHING:
+            CleanUpCrashedVehicles( lpInput );
+            break;
+        default:
+            CGS_ASSERT( false, "Invalid tearing down state" );
+            break;
+        }
+        break;
+
+    default:
+        CGS_ASSERT( false, "Invalid state in traffic system" );
+        break;
+    }
+
+    // Unlock order here is WRITE then READ -- the reverse of the lock order, and the reverse
+    // of what the trigger module's post-scene stage does. Store-for-store from the image.
+    lpOutput->UnlockForWrite();
+    lpInput->UnlockForRead();
+
+    CgsDev::PerfMonCpu::StopMonitor( miPerfMon_PostSceneUpdate );
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wG_PostScene.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wG_PostScene.cpp
+//
+// The post-scene stage helpers TrafficEntityModule::PostSceneUpdate calls, plus the
+// AI-entity builder one of them uses:
+//   PostNearbyTrafficSceneQueryRequest   -- the player-centred coarse sphere query
+//   CleanUpCrashedVehicles               -- drain the crash module's cleanup queue
+//   HandleCrashingNetworkTraffic         -- drain the network crash-start queue
+//   ConvertSceneResultsToTrafficDataForAI-- last frame's per-race-car nearby-traffic
+//                                           lists into the AI interface
+//   AIPostSceneQueryRequests             -- one coarse frustum query per active race car
+//   CreateTrafficAIEntity                -- build one AI-visible traffic record
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+
+namespace
+{
+    // The two scene-query ids this module registers for its own coarse queries. Both are
+    // image .data constants read back from the retail build; the matching result consumers
+    // (ProcessNearbyTrafficSceneQueryResults / StoreAISceneResultsForNextFrame, neither
+    // reconstructed yet) compare against the same two words, the AI one as a base plus the
+    // active-race-car index.
+    const u32 KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID = 99u;
+    const u32 KU_AI_FRUSTUM_QUERY_ID_BASE       = 31438u;
+
+    // The sphere query around the frame camera: radius, and the entity-type mask it carries.
+    const f32 KF_NEARBY_TRAFFIC_QUERY_RADIUS  = 70.0f;
+    const u32 KU_NEARBY_TRAFFIC_ENTITY_TYPES  = 12u;
+
+    // The per-race-car AI query camera: a wide, shallow slab centred ahead of the car.
+    const f32 KF_AI_QUERY_CAMERA_FOV_HORIZONTAL = 0.5f;
+    const f32 KF_AI_QUERY_CAMERA_ASPECT_RATIO   = 6.0f;
+    const f32 KF_AI_QUERY_CAMERA_NEAR_CLIP      = 26.0f;
+    const f32 KF_AI_QUERY_CAMERA_FAR_CLIP       = 130.0f;
+    // How far back along the car's At axis the query camera sits.
+    const f32 KF_AI_QUERY_CAMERA_PULLBACK       = 30.0f;
+    const u32 KU_AI_QUERY_ENTITY_TYPES          = 8u;
+
+    // The traffic-vehicle entity owner. FLAG: BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE has no
+    // home in the tree yet; the literal matches the same spelling already used by
+    // BrnCrashModeScoring.cpp. Fold both onto the enum when it lands.
+    const u32 KU_OWNER_TRAFFIC_VEHICLE = 2u;
+}
+
+// ----------------------------------------------------------------------------
+// PostNearbyTrafficSceneQueryRequest
+//
+// While the player car is active, post one coarse sphere test centred on last frame's
+// camera position. Its results come back through ProcessNearbyTrafficSceneQueryResults.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::PostNearbyTrafficSceneQueryRequest(
+    const BrnTrafficIO::InputBuffer_PostScene* lpInput,
+    BrnTrafficIO::OutputBuffer_PostScene*      lpOutput )
+{
+    if ( !lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive() )
+    {
+        return;
+    }
+
+    CgsSceneManager::SceneManagerIO::InEventSphereTest lEvent;
+    lEvent.mCentre                = mCameraLastFrame.GetPosition();
+    lEvent.mQueryId.mId           = KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID;
+    lEvent.mx32EntityTypeFlags    = KU_NEARBY_TRAFFIC_ENTITY_TYPES;
+    lEvent.mfRadius               = KF_NEARBY_TRAFFIC_QUERY_RADIUS;
+
+    lpOutput->GetSceneCoarseQueryQueue()->AddEvent(
+        &lEvent, CgsSceneManager::SceneManagerIO::E_IN_EVENT_SPHERE_TEST );
+}
+
+// ----------------------------------------------------------------------------
+// CleanUpCrashedVehicles
+//
+// The crash module hands back the traffic volumes it has finished with. Each one that is
+// still alive here is removed from the world and loses its "added to the crash module" bit.
+//
+// NOT CleanUpCrashedVehiclePhysics: that one takes the pre-physics OUTPUT buffer.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::CleanUpCrashedVehicles( const BrnTrafficIO::InputBuffer_PostScene* lpInput )
+{
+    CGS_ASSERT( lpInput != NULL, "lpInput != NULL" );
+
+    const BrnWorld::CrashIO::TrafficOutputInterface::CleanupTrafficEventQueue& lrQueue =
+        lpInput->GetCrashTrafficOutputInterface()->GetCleanupTrafficEventQueue();
+
+    for ( s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent )
+    {
+        const u32 luVehicle =
+            lrQueue.GetEvent( liEvent ).mVolumeInstanceId.GetEntityIDEntityIndex();
+        CGS_ASSERT( luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC" );
+
+        if ( GetVehicle( luVehicle )->IsAlive() )
+        {
+            RemoveVehicle( luVehicle );
+            mVehiclesAddedToCrashModule.UnSetBit( luVehicle );
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------
+// HandleCrashingNetworkTraffic
+//
+// Online only. The crash module names the network-replicated traffic vehicles that must
+// start crashing here; they are checked for duplicates, then queued for this frame's
+// crash pass.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::HandleCrashingNetworkTraffic( const BrnTrafficIO::InputBuffer_PostScene* lpInput )
+{
+    CGS_ASSERT( lpInput != NULL, "lpInput != NULL" );
+    CGS_ASSERT( mbIsOnlineGameMode, "IsPlayingOnlineGameMode()" );
+
+    const BrnWorld::CrashIO::TrafficOutputInterface::CrashNetworkTrafficQueue& lrQueue =
+        lpInput->GetCrashTrafficOutputInterface()->GetStartCrashingNetworkTrafficQueue();
+
+    for ( s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent )
+    {
+        const u16 lu16Vehicle = lrQueue.GetEvent( liEvent ).muVehicleId;
+
+        for ( s32 liOther = liEvent + 1; liOther < lrQueue.GetLength(); ++liOther )
+        {
+            CGS_ASSERT( lu16Vehicle != lrQueue.GetEvent( liOther ).muVehicleId,
+                        "Duplicate crash body message in input buffer" );
+        }
+    }
+
+    for ( s32 liEvent = 0; liEvent < lrQueue.GetLength(); ++liEvent )
+    {
+        const u32 luVehicle = lrQueue.GetEvent( liEvent ).muVehicleId;
+        CGS_ASSERT( luVehicle < KU_MAX_TOTAL_TRAFFIC, "luVehicle < KU_MAX_TOTAL_TRAFFIC" );
+
+        maNewCrashedNetworkVehicles.Append( static_cast<u16>( luVehicle ) );
+    }
+}
+
+// ----------------------------------------------------------------------------
+// CreateTrafficAIEntity
+//
+// Build one AI-visible record for traffic vehicle luIndex: its planar centre and velocity
+// (both world XZ) and its eight world-space bounding-box corners.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::CreateTrafficAIEntity( u32                             luIndex,
+                                                 const VehicleTypeRuntime*       lpVehicleTypeRuntime,
+                                                 EActiveRaceCarIndex             leRaceCarIndex,
+                                                 BrnTrafficIO::TrafficAIEntity*  lpOutEntity ) const
+{
+    CGS_ASSERT( luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC" );
+
+    const Matrix44Affine lTransform = GetVehicleTransform( luIndex );
+    const Vehicle*       lpVehicle  = GetVehicle( luIndex );
+
+    const Vector3 lBBoxOffset   = lpVehicleTypeRuntime->GetBBoxOffset();
+    const Vector3 lBBoxHalfSize = lpVehicleTypeRuntime->GetBBoxHalfSize();
+
+    lpOutEntity->meNearbyRaceCarIndex = leRaceCarIndex;
+    lpOutEntity->mVelocity.SetZero();
+
+    // The AI works in the world XZ plane: lane 0 is world X, lane 1 is world Z. Only those
+    // two lanes of mCentre are written -- the record's remaining centre lanes are not read.
+    lpOutEntity->mCentre.x = lTransform.Pos().x + lBBoxOffset.x;
+    lpOutEntity->mCentre.y = lTransform.Pos().z + lBBoxOffset.z;
+
+    const f32 lfSpeed = lpVehicle->GetSpeed().x;
+    lpOutEntity->mVelocity.x = lTransform.At().x * lfSpeed;
+    lpOutEntity->mVelocity.y = lTransform.At().z * lfSpeed;
+
+    // Corner i takes +X for bit 0, +Y for bit 1 and -Z for bit 2, all about the box offset,
+    // then rides the vehicle transform into world space.
+    for ( s32 liCorner = 0; liCorner < BrnTrafficIO::KI_BB_NUM_CORNERS; ++liCorner )
+    {
+        const f32 lfLocalX = lBBoxOffset.x
+                           + ( ( liCorner & 1 ) != 0 ?  lBBoxHalfSize.x : -lBBoxHalfSize.x );
+        const f32 lfLocalY = lBBoxOffset.y
+                           + ( ( liCorner & 2 ) != 0 ?  lBBoxHalfSize.y : -lBBoxHalfSize.y );
+        const f32 lfLocalZ = lBBoxOffset.z
+                           + ( ( liCorner & 4 ) != 0 ? -lBBoxHalfSize.z :  lBBoxHalfSize.z );
+
+        Vector3 lWorld;
+        lWorld.x = lTransform.Right().x * lfLocalX + lTransform.Up().x * lfLocalY
+                 + lTransform.At().x    * lfLocalZ + lTransform.Pos().x;
+        lWorld.y = lTransform.Right().y * lfLocalX + lTransform.Up().y * lfLocalY
+                 + lTransform.At().y    * lfLocalZ + lTransform.Pos().y;
+        lWorld.z = lTransform.Right().z * lfLocalX + lTransform.Up().z * lfLocalY
+                 + lTransform.At().z    * lfLocalZ + lTransform.Pos().z;
+        lWorld.w = 0.0f;
+
+        lpOutEntity->maBBCorners[ liCorner ] = lWorld;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// ConvertSceneResultsToTrafficDataForAI
+//
+// Turn last frame's per-race-car nearby-traffic id lists into this frame's AI interface
+// contents, then empty each list.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::ConvertSceneResultsToTrafficDataForAI( BrnTrafficIO::OutputBuffer_PostScene* lpOutput )
+{
+    CGS_ASSERT( lpOutput != NULL, "lpOutput != NULL" );
+
+    for ( s32 liRaceCar = 0; liRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar )
+    {
+        StoredAITrafficData& lrStored = maStoredAITrafficData[ liRaceCar ];
+
+        for ( s32 liEntry = 0; liEntry < lrStored.miNumTrafficIDs; ++liEntry )
+        {
+            const CgsSceneManager::EntityId lTrafficID( lrStored.maTrafficEntityIDs[ liEntry ].muValue );
+
+            CGS_ASSERT( lTrafficID.GetOwner() == KU_OWNER_TRAFFIC_VEHICLE,
+                        "lTrafficID.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE" );
+            CGS_ASSERT( lTrafficID.GetEntityIndex() < KU_MAX_TOTAL_TRAFFIC,
+                        "lTrafficID.GetEntityIndex() < KU_MAX_TOTAL_TRAFFIC" );
+
+            const u32      luIndex   = lTrafficID.GetEntityIndex();
+            const Vehicle* lpVehicle = GetVehicle( luIndex );
+
+            if ( lpVehicle->IsAlive() )
+            {
+                CGS_ASSERT( lpVehicle->HasEntity(), "lpVehicle->HasEntity()" );
+
+                BrnTrafficIO::TrafficAIEntity lEntity;
+                CreateTrafficAIEntity( luIndex,
+                                       GetVehicleTypeRuntime( lpVehicle->GetVehicleType() ),
+                                       static_cast<EActiveRaceCarIndex>( liRaceCar ),
+                                       &lEntity );
+
+                lpOutput->GetTrafficAIInterface()->AddTrafficEntity( lEntity );
+            }
+        }
+
+        lrStored.miNumTrafficIDs = 0;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// AIPostSceneQueryRequests
+//
+// One coarse frustum query per active race car, from a camera pulled back along the car's
+// At axis and looking down it. The results become next frame's maStoredAITrafficData.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::AIPostSceneQueryRequests(
+    const BrnTrafficIO::InputBuffer_PostScene* lpInput,
+    BrnTrafficIO::OutputBuffer_PostScene*      lpOutput )
+{
+    for ( s32 liRaceCar = 0; liRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar )
+    {
+        const EActiveRaceCarIndex leRaceCar = static_cast<EActiveRaceCarIndex>( liRaceCar );
+
+        if ( !lpInput->GetActiveRaceCarOutputInterface()->IsRaceCarActive( leRaceCar ) )
+        {
+            continue;
+        }
+
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpInput->GetActiveRaceCarOutputInterface()->GetRaceCarState( leRaceCar );
+
+        CgsGraphics::Camera lQueryCamera;
+        lQueryCamera.Construct( KF_AI_QUERY_CAMERA_FOV_HORIZONTAL,
+                                KF_AI_QUERY_CAMERA_ASPECT_RATIO,
+                                KF_AI_QUERY_CAMERA_NEAR_CLIP,
+                                KF_AI_QUERY_CAMERA_FAR_CLIP );
+        lQueryCamera.Release();
+
+        const Vector3& lAt  = lpRaceCarState->mTransform.At();
+        const Vector3& lUp  = lpRaceCarState->mTransform.Up();
+        const Vector3& lPos = lpRaceCarState->mTransform.Pos();
+
+        Vector3 lEye;
+        lEye.x = lPos.x - KF_AI_QUERY_CAMERA_PULLBACK * lAt.x;
+        lEye.y = lPos.y - KF_AI_QUERY_CAMERA_PULLBACK * lAt.y;
+        lEye.z = lPos.z - KF_AI_QUERY_CAMERA_PULLBACK * lAt.z;
+        lEye.w = lPos.w - KF_AI_QUERY_CAMERA_PULLBACK * lAt.w;
+
+        Vector3 lTarget;
+        lTarget.x = lPos.x + lAt.x;
+        lTarget.y = lPos.y + lAt.y;
+        lTarget.z = lPos.z + lAt.z;
+        lTarget.w = lPos.w + lAt.w;
+
+        lQueryCamera.LookAt( lEye, lUp, lTarget );
+
+        CgsGeometric::Frustum lFrustum;
+        lQueryCamera.GetCgsFrustum( lFrustum );
+
+        CgsSceneManager::SceneManagerIO::InEventFrustumTestVp lEvent;
+        lEvent.mViewProjection = lQueryCamera.GetViewProjectionMatrix();
+        for ( s32 liPlane = 0; liPlane < 8; ++liPlane )
+        {
+            lEvent.maFrustumPlanes[ liPlane ] = lFrustum.maSwizzledPlanes[ liPlane ];
+        }
+        lEvent.mQueryId.mId        = KU_AI_FRUSTUM_QUERY_ID_BASE + static_cast<u32>( liRaceCar );
+        lEvent.mx32EntityTypeFlags = KU_AI_QUERY_ENTITY_TYPES;
+        lEvent.mxQueryFlags        = 0u;
+
+        lpOutput->GetSceneCoarseQueryQueue()->AddEvent(
+            &lEvent, CgsSceneManager::SceneManagerIO::E_IN_EVENT_FRUSTUM_TEST_VP );
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wG_NearbyTrafficResults.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wG_NearbyTrafficResults.cpp
+//
+// TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults -- the post-physics drain of
+// the player-centred coarse sphere query PostNearbyTrafficSceneQueryRequest posts.
+//
+// One matching result batch carries the entity ids the sphere swept up. Per traffic id the
+// drain publishes a traffic->director record and a traffic->sound record; per traffic AND
+// race-car id it records a near-miss candidate. It is the SOLE producer of the module's two
+// near-miss collections.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+
+namespace
+{
+// (fold: an identical definition of KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID was dropped here -- this TU defines it once, above)
+
+    // The player has to be moving for a pass to count as a near miss at all.
+    const f32 KF_NEAR_MISS_MIN_PLAYER_SPEED_MPH = 30.0f;
+    // ...and has to pass this close. Traffic and race cars carry different bounds.
+    const f32 KF_NEAR_MISS_MAX_TRAFFIC_DISTANCE  = 5.0f;
+    const f32 KF_NEAR_MISS_MAX_RACE_CAR_DISTANCE = 10.0f;
+
+    // Showtime keeps at most this many traffic horns sounding at once, and only for cars
+    // inside a flat disc about the player's ground position. The radius is carried squared.
+    const s32 KI_MAX_HOOTING_VEHICLES           = 10;
+    const f32 KF_SHOWTIME_HORN_RADIUS_SQUARED   = 6400.0f;
+    const f32 KF_SHOWTIME_HORN_MAX_HEIGHT_DELTA = 4.0f;
+
+    // The per-lane tolerance the two "this position is not the origin" tripwires below use.
+    const f32 KF_POSITION_ZERO_TOLERANCE = 1.1920929e-07f;
+
+// (fold: an identical definition of TrafficDiagEnabled was dropped here -- this TU defines it once, above)
+
+    // One-shot: the first matching result batch that carried anything. This is the TRANSPORT
+    // witness -- query posted, sphere answered, bridge carried, drain reached -- and it is
+    // independent of whether any of those entities turns out to be close enough to be a near
+    // miss, which the drain witness on the consumer side reports.
+    bool s_bResultBatchLogged = false;
+
+    // The vector zero test both tripwires expand inline. rw::math::vpu::IsZero is declared in
+    // the vendor math home but has no body in this tree, so the lane comparison is written
+    // out here rather than left as an unresolved call. The ship's fourth lane is a copy of
+    // the first, so only x/y/z are distinct.
+    bool IsZeroPosition( const Vector3& lrPosition )
+    {
+        return std::fabs( lrPosition.x ) <= KF_POSITION_ZERO_TOLERANCE
+            && std::fabs( lrPosition.y ) <= KF_POSITION_ZERO_TOLERANCE
+            && std::fabs( lrPosition.z ) <= KF_POSITION_ZERO_TOLERANCE;
+    }
+}
+
+// ----------------------------------------------------------------------------
+// ProcessNearbyTrafficSceneQueryResults
+//
+// ⭐ THE ONLY WRITER OF mNearMissTrafficCollection / mNearMissRaceCarCollection. With it
+// absent both collections read empty for the whole session, so the race-car module's drain
+// (UpdateTrafficAndRaceCarNearMisses) and NearMissManager's tick ran on empty lists and no
+// near miss could ever fire.
+//
+// Asserts that belong to an accessor are left where they belong: the "IsAlive()" tripwires
+// the ship inlines ahead of GetVehicleType / GetSpeed / IsHornOn / IsAlarmOn live in those
+// accessors, and the "luIndex < KU_MAX_TOTAL_TRAFFIC" bounds live in GetVehicle /
+// GetVehicleTransform / GetVehicleSpecies. Only the ones this function owns are written here.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
+        const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+        BrnTrafficIO::OutputBuffer_PostPhysics*      lpOutput )
+{
+    CGS_ASSERT( lpOutput != NULL, "lpOutput != NULL" );                      // baked line 14212
+
+    const BrnTrafficIO::InputBuffer_PostPhysics::SceneResultQueue* lpResultQueue =
+        lpInput->GetSceneResultQueue();
+
+    if ( lpResultQueue->GetLength() == 0 )
+    {
+        return;
+    }
+
+    // The hooting tally spans the WHOLE drain: it is set up once, before the first batch, and
+    // is never reset per batch or per result.
+    s32 liHootingVehicles = 0;
+
+    const CgsModule::Event* lpEvent     = NULL;
+    s32                     liEventSize = 0;
+    lpResultQueue->GetFirstEvent( &lpEvent, &liEventSize );
+
+    while ( lpEvent != NULL )
+    {
+        const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* lpResults =
+            static_cast<const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult*>( lpEvent );
+
+        if ( lpResults->mQueryId.mId == KU_NEARBY_TRAFFIC_SPHERE_QUERY_ID )
+        {
+            // DIAG. NOT IN THE ORIGINAL BINARY. DELETE-WHEN-STABLE.
+            if ( !s_bResultBatchLogged && lpResults->miNumResults > 0
+                 && TrafficDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                s_bResultBatchLogged = true;
+                *CgsDev::Log::gpDebugPrint
+                    << "[T9-nm] results q=" << static_cast<s32>( lpResults->mQueryId.mId )
+                    << " n=" << lpResults->miNumResults
+                    << " [DELETE-WHEN-STABLE]\n";
+            }
+
+            const Vector3 lPlayerPosition =
+                lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();
+
+            const EActiveRaceCarIndex lePlayerCar =
+                lpInput->GetActiveRaceCarOutputInterface()->GetPlayerActiveRaceCarIndex();
+
+            const f32 lfPlayerSpeedMPH =
+                lpInput->GetActiveRaceCarOutputInterface()
+                       ->GetRaceCarState( lePlayerCar )->mfSpeedMPH;
+
+            // Both collections are rebuilt from scratch out of THIS batch.
+            mNearMissTrafficCollection.Clear();
+            mNearMissRaceCarCollection.Clear();
+
+            for ( s32 liResult = 0; liResult < lpResults->miNumResults; ++liResult )
+            {
+                const CgsSceneManager::EntityId lEntityId = lpResults->GetEntityIds()[ liResult ];
+                const u32                       luIndex   = lEntityId.GetEntityIndex();
+
+                if ( lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE )
+                {
+                    CGS_ASSERT( luIndex < KU_MAX_TOTAL_TRAFFIC,
+                                "lEntityId.GetEntityIndex() < KU_MAX_TOTAL_TRAFFIC" );  // baked line 14255
+
+                    // The duplicate tripwire walks the rest of the batch. ⚠️ Its bound is the
+                    // ATTEMPTED count, not the WRITTEN one -- the producer keeps the two equal,
+                    // and this is the bound the ship uses.
+                    for ( s32 liOther = liResult + 1;
+                          liOther < lpResults->miNumResultsAttempted;
+                          ++liOther )
+                    {
+                        CGS_ASSERT( static_cast<u32>( lpResults->GetEntityIds()[ liOther ] )
+                                        != static_cast<u32>( lEntityId ),
+                                    "Found duplicate traffic entity in scene query result" ); // baked line 14261
+                    }
+
+                    const Vehicle* lpVehicle = GetVehicle( luIndex );
+
+                    if ( lpVehicle->IsAlive() )
+                    {
+                        const Matrix44Affine lTransform = GetVehicleTransform( luIndex );
+
+                        CGS_ASSERT( lpVehicle->HasEntity(), "lpVehicle->HasEntity()" ); // baked line 14273
+
+                        const u32              luVehicleType = lpVehicle->GetVehicleType();
+                        const VehicleTypeData* lpVehicleTypeData =
+                            &mpData->mpaVehicleTypes[ luVehicleType ];
+                        const CgsID lVehicleId =
+                            mpData->mpaVehicleAssets[ lpVehicleTypeData->muAssetId ].GetVehicleId();
+
+                        const VehicleTypeRuntime* lpVehicleTypeRuntime =
+                            GetVehicleTypeRuntime( luVehicleType );
+                        const Vector3 lBBoxOffset   = lpVehicleTypeRuntime->GetBBoxOffset();
+                        const Vector3 lBBoxHalfSize = lpVehicleTypeRuntime->GetBBoxHalfSize();
+
+                        // The director is handed the BOX centre in world space, not the
+                        // vehicle origin; the rest of the transform rides through unchanged.
+                        BrnTrafficIO::TrafficDirectorEntity lDirectorEntity;
+                        lDirectorEntity.mLocalTransform       = lTransform;
+                        lDirectorEntity.mLocalTransform.Pos() = lTransform.Pos()
+                                                              + lTransform.Right() * lBBoxOffset.x
+                                                              + lTransform.Up()    * lBBoxOffset.y
+                                                              + lTransform.At()    * lBBoxOffset.z;
+                        lDirectorEntity.mVelocity       = lTransform.At() * lpVehicle->GetSpeed().x;
+                        lDirectorEntity.mHalfExtents    = lBBoxHalfSize;
+                        lDirectorEntity.mVehicleId      = lVehicleId;
+                        lDirectorEntity.mu16EntityIndex = static_cast<u16>( luIndex );
+
+                        Array<BrnTrafficIO::TrafficDirectorEntity, 32u>& lrDirectorEntities =
+                            lpOutput->GetTrafficDirectorOutputInterface()
+                                    ->GetTrafficDirectorEntityArray();
+
+                        if ( !lrDirectorEntities.IsFull() )
+                        {
+                            lrDirectorEntities.Append( lDirectorEntity );
+                        }
+
+                        // The sound system gets everything EXCEPT the trailer slot.
+                        if ( GetVehicleSpecies( luIndex ) != Vehicle::E_SPECIES_TRAILER )
+                        {
+                            CGS_ASSERT( lpVehicle->HasEntity(), "lpVehicle->HasEntity()" ); // baked line 14298
+
+                            const u8 lu8VehicleClass =
+                                mpData->mpaVehicleTypes[ lpVehicle->GetVehicleType() ].muVehicleClass;
+
+                            bool lbIsEngineOn = true;
+                            bool lbIsHooting  = lpVehicle->IsHornOn();
+                            u8   lu8AlarmType = BrnTrafficIO::TrafficSoundEntity::E_ALARM_NONE;
+
+                            if ( lpVehicle->IsOfStaticSpecies() )
+                            {
+                                // A parked car has no engine running and never sounds its horn
+                                // as a horn. What it can do is set an alarm off, and the two
+                                // alarm flavours alternate by vehicle index so a street of
+                                // parked cars does not all wail the same way.
+                                lbIsEngineOn = false;
+                                lbIsHooting  = false;
+
+                                if ( lpVehicle->IsAlarmOn() )
+                                {
+                                    if ( ( luIndex & 1 ) != 0 )
+                                    {
+                                        lbIsHooting  = lpVehicle->IsHornOn();
+                                        lu8AlarmType = BrnTrafficIO::TrafficSoundEntity::E_ALARM_HORN;
+                                    }
+                                    else
+                                    {
+                                        lu8AlarmType = BrnTrafficIO::TrafficSoundEntity::E_ALARM_CLASSIC;
+                                    }
+                                }
+                            }
+
+                            if ( mbPlayingShowtimeMode && lbIsHooting )
+                            {
+                                if ( liHootingVehicles >= KI_MAX_HOOTING_VEHICLES )
+                                {
+                                    lbIsHooting = false;
+                                }
+                                else
+                                {
+                                    const Vector3 lToShowtimePlayer =
+                                        lTransform.Pos() - mShowtimePlayerGroundPos;
+
+                                    if ( rw::math::vpu::Dot( lToShowtimePlayer, lToShowtimePlayer )
+                                             > KF_SHOWTIME_HORN_RADIUS_SQUARED
+                                         || std::fabs( lToShowtimePlayer.y )
+                                             > KF_SHOWTIME_HORN_MAX_HEIGHT_DELTA )
+                                    {
+                                        lbIsHooting = false;
+                                    }
+                                }
+                            }
+
+                            if ( lbIsHooting )
+                            {
+                                ++liHootingVehicles;
+                            }
+
+                            const bool lbIsPhysical = lpVehicle->IsPhysical();
+
+                            BrnTrafficIO::TrafficSoundEntity lSoundEntity;
+                            lSoundEntity.mLocalTransform   = lTransform;
+                            lSoundEntity.mEntityId.muValue = static_cast<u32>( lEntityId );
+                            lSoundEntity.mfSpeed           = lpVehicle->GetSpeed().x;
+                            lSoundEntity.mu16EntityIndex   = static_cast<u16>( luIndex );
+                            lSoundEntity.muVehicleClass    = lu8VehicleClass;
+                            lSoundEntity.mbIsEngineOn      = lbIsEngineOn;
+                            lSoundEntity.mbIsHooting       = lbIsHooting;
+                            lSoundEntity.mbIsCrashed       = lpVehicle->IsCrashing();
+                            lSoundEntity.mbIsPhysical      = lbIsPhysical;
+                            lSoundEntity.muAlarmType       = lu8AlarmType;
+
+                            lpOutput->GetTrafficSoundOutputInterface()->AddTrafficEntity( lSoundEntity );
+                        }
+                    }
+
+                    // ⚠️ OUTSIDE the IsAlive() arm, deliberately: the near-miss leg runs for
+                    // every traffic id the query returned, alive or not, and re-reads the
+                    // transform rather than reusing the one the alive arm loaded.
+                    if ( lfPlayerSpeedMPH > KF_NEAR_MISS_MIN_PLAYER_SPEED_MPH )
+                    {
+                        const f32 lfDistance = rw::math::vpu::Magnitude(
+                            GetVehicleTransform( luIndex ).Pos() - lPlayerPosition );
+
+                        if ( lfDistance <= KF_NEAR_MISS_MAX_TRAFFIC_DISTANCE )
+                        {
+                            BrnTrafficIO::NearMissData lNearMiss;
+                            lNearMiss.muCarId    = luIndex;
+                            lNearMiss.mfDistance = lfDistance;
+
+                            if ( !mNearMissTrafficCollection.IsFull() )
+                            {
+                                mNearMissTrafficCollection.Append( lNearMiss );
+                            }
+                        }
+                    }
+                }
+                else if ( lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR
+                          && lfPlayerSpeedMPH > KF_NEAR_MISS_MIN_PLAYER_SPEED_MPH )
+                {
+                    CGS_ASSERT( !IsZeroPosition( lPlayerPosition ),
+                                "!RwMathVPU::IsZero(lPlayerPosition)" );        // baked line 14402
+
+                    const Vector3 lActiveRaceCarPosition =
+                        lpInput->GetVehicleOutputInterface()->GetRaceCar( luIndex )->mTransform.Pos();
+
+                    CGS_ASSERT( !IsZeroPosition( lActiveRaceCarPosition ),
+                                "!RwMathVPU::IsZero(lActiveRaceCarPosition)" ); // baked line 14405
+
+                    // The player's own slot is not a near miss with itself.
+                    if ( static_cast<u16>( lePlayerCar ) != static_cast<u16>( luIndex ) )
+                    {
+                        const f32 lfDistance = rw::math::vpu::Magnitude(
+                            lPlayerPosition - lActiveRaceCarPosition );
+
+                        if ( lfDistance <= KF_NEAR_MISS_MAX_RACE_CAR_DISTANCE )
+                        {
+                            BrnTrafficIO::NearMissData lNearMiss;
+                            lNearMiss.muCarId    = luIndex;
+                            lNearMiss.mfDistance = lfDistance;
+
+                            if ( !mNearMissRaceCarCollection.IsFull() )
+                            {
+                                mNearMissRaceCarCollection.Append( lNearMiss );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        lpResultQueue->GetNextEvent( lpEvent, &lpEvent, &liEventSize );
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnTrafficEntityModule_wG_NearMissOutput.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ============================================================================
+// BrnTrafficEntityModule_wG_NearMissOutput.cpp
+//
+// TrafficEntityModule::GenerateNearMissOutput -- one of PreSceneUpdate's per-frame output
+// producers. It copies the module's two near-miss collections wholesale into the
+// traffic->race-car pre-scene interface, which is what carries them across the module
+// boundary to the race-car module's post-scene drain.
+//
+// The collections are filled by ProcessNearbyTrafficSceneQueryResults (the post-physics drain
+// of the player-centred sphere query). This publish is the only reader of them.
+// ============================================================================
+
+
+namespace BrnTraffic
+{
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::GenerateNearMissOutput
+//
+// Two whole-collection copies, each preceded by a non-NULL assert on the source. The console
+// folds both collection addresses to their member offsets and copies 132 bytes (the
+// Array<NearMissData,16>, +0x228 in this module) and then 68 bytes (the Array<NearMissData,8>,
+// +0x2AC) -- the whole Array including its trailing live-element count, which is what makes
+// the consumer's GetLength() see this frame's candidates.
+//
+// The write getter is called once per collection, exactly as the console does: each call runs
+// the output buffer's write-lock assert.
+//
+// ORDER NOTE: the collections this publishes were filled by the PREVIOUS frame's post-physics
+// drain -- pre-scene runs ahead of post-physics. That one-frame lag is the console's own and
+// is not corrected here.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreScene*  lpInput,
+                                                  BrnTrafficIO::OutputBuffer_PreScene* lpOutput )
+{
+    // The input buffer is the producer family's shared third argument; this member never reads
+    // it (the console does not even save the register). Kept so the argument list matches its
+    // siblings' and its caller's.
+    (void)lpInput;
+
+    typedef BrnTrafficIO::OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene
+            TrafficInterface;
+
+    // The copy sizes are the whole Array objects; pinned so a layout drift fails the compile
+    // instead of publishing a short collection.
+    static_assert( sizeof( TrafficInterface::NearMissTrafficCollection ) == 132,
+                   "NearMissTrafficCollection must stay 16 * 8 + 4 bytes" );
+    static_assert( sizeof( TrafficInterface::NearMissRaceCarCollection ) == 68,
+                   "NearMissRaceCarCollection must stay 8 * 8 + 4 bytes" );
+
+    {
+        TrafficInterface::NearMissTrafficCollection* lpNearMissTrafficCollection =
+                &mNearMissTrafficCollection;
+
+        TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
+
+        CGS_ASSERT( lpNearMissTrafficCollection != 0, "lpNearMissTrafficCollection != NULL" );
+
+        std::memcpy( lpInterface->GetNearMissTrafficCollection(),
+                     lpNearMissTrafficCollection,
+                     sizeof( TrafficInterface::NearMissTrafficCollection ) );
+    }
+
+    {
+        TrafficInterface::NearMissRaceCarCollection* lpNearMissRaceCarCollection =
+                &mNearMissRaceCarCollection;
+
+        TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
+
+        CGS_ASSERT( lpNearMissRaceCarCollection != 0, "lpNearMissRaceCarCollection != NULL" );
+
+        std::memcpy( lpInterface->GetNearMissRaceCarCollection(),
+                     lpNearMissRaceCarCollection,
+                     sizeof( TrafficInterface::NearMissRaceCarCollection ) );
+    }
+}
+
+}   // namespace BrnTraffic
