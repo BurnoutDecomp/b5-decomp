@@ -178,6 +178,45 @@ BrnSound::Logic::ResourceRegistrar& SoundLogicModule::GetResourceRegistrar()
     return mResourceRegistrar;
 }
 
+// ---------------------------------------------------------------------------
+// SoundLogicModule::GetUniqueId  @ 0x826838C8   (override of the engine's
+// CgsSound::Logic::Module::GetUniqueId @0x827E1078)
+//
+//   mr    r8, r3
+//   li    r9, -0x14                     ; 0xFFFFFFEC
+//   lwz   r11, 0x5214(r8)               ; muBrnUniqueId  (NOT the base's +0x230)
+// loop:
+//   addi  r3, r11, 1                    ; candidate = cursor + 1
+//   addi  r10, r3, -3                   ; candidate - 3
+//   mr    r11, r3
+//   subfc r10, r10, r9                  ; CA = (0xFFFFFFEC >= candidate-3) unsigned
+//   subfe r10, r10, r10                 ; 0 when CA, -1 otherwise
+//   clrlwi r10, r10, 31
+//   bne   cr6, loop                     ; loop while candidate-3 > 0xFFFFFFEC
+//   stw   r3, 0x5214(r8)
+//
+// i.e. hand out the next id, SKIPPING every candidate for which
+// (u32)(candidate - 3) > 0xFFFFFFEC -- that is candidate in
+// [0xFFFFFFF0 .. 0xFFFFFFFF] U {0, 1, 2}: the 19 RESERVED idents.  The reserve
+// set is exactly the idents this module's own three fixed voices carry
+// (mMasterVoice 1, mGlobalReverbVoice 2, mSubmixVoice -16 == 0xFFFFFFF0 ==
+// Playback::KU_INIT_SND9_SUBMIX_IDENT, which Playback::Module::CreateVoice
+// @0x826D7B00 tests by value), so no generated id can ever alias one of them.
+// From a zero cursor the first id handed out is 3.
+// ---------------------------------------------------------------------------
+u32 SoundLogicModule::GetUniqueId()
+{
+    u32 luCandidate = muBrnUniqueId;
+    do
+    {
+        ++luCandidate;
+    }
+    while ((luCandidate - 3u) > 0xFFFFFFECu);
+
+    muBrnUniqueId = luCandidate;
+    return luCandidate;
+}
+
 // Bring-up. The X360 ctor (0x827E3DA8) default-constructs the embedded ResourceRegistrar
 // (a1+21016); its queues/pools are then initialised by the bring-up Construct (0x826B0470).
 // (phase B5): the ENGINE base Construct runs FIRST -- ModuleSingleBuffered + the instance
@@ -192,6 +231,13 @@ void SoundLogicModule::Construct()
 
     mpBrnLogicInputBuffer  = 0;
     mpBrnLogicOutputBuffer = 0;
+
+    // The module's own unique-id cursor (X360 this+0x5214). The console's ctor
+    // @0x827E3DA8 does not write this word -- it relies on the module block being
+    // zero at allocation -- and its generator @0x826838C8 skips 0/1/2, so the first
+    // id it hands out is 3. Seeding 0 here reproduces that exactly; on the host the
+    // storage is not guaranteed zero, so the seed is explicit.
+    muBrnUniqueId = 0;
 
     // The per-frame trigger-action table starts empty (so GetSoundTriggerAction's
     // "used before Construct/Clear" assert is satisfied).

@@ -235,12 +235,34 @@ void Module::DetachBuffers()
 }
 
 // ---------------------------------------------------------------------------
-// Module::GetUniqueId  (DWARF decl; bodied phase B5 -- the trivial member read
-// of the id Construct seeds and the owner stamps; the vtable emission of this
-// TU demands the symbol.)
+// Module::GetUniqueId  @ 0x827E1078
+//
+//   if ( muInstanceIndex )   assert("muInstanceIndex == 0",   CgsSoundLogicModule.h:379);
+//   if ( muUniqueId == -1 )  assert("muUniqueId != 0xffffffff", CgsSoundLogicModule.h:380);
+//   muUniqueId = muUniqueId + 1;
+//   return muUniqueId;
+//
+// ⭐ IT IS A GENERATOR, NOT AN ACCESSOR. The previous body here was `return
+// muUniqueId;` -- no increment -- so every caller
+// (VoiceWrapper::Create @0x826EAEB0, Content::Create, CollisionEffect,
+// GlobalStateManager, DualGinsuEffect) received the SAME id 0 for every object it
+// ever made. The id is the Voice's mIdent (Playback::Module::CreateVoice
+// @0x826D7B00 does `voice->SetIdent(ident)`), which is also
+// Module::StreamBuffer::Ident -- the ONLY thing that matches a freed stream buffer
+// back to the effect that owns it (StreamingEffect::Notify's
+// `mData == mVoiceId`). With every ident 0 that match is universal: one freed
+// buffer released EVERY streaming effect. Zero is not the identity element of an
+// id sequence.
+//
+// The two asserts are the console's own (source path + line reproduced from its
+// FireAssert rodata) and are non-gating tripwires: the increment runs regardless.
 // ---------------------------------------------------------------------------
 u32 Module::GetUniqueId()
 {
+    CGS_ASSERT(muInstanceIndex == 0, "muInstanceIndex == 0");
+    CGS_ASSERT(muUniqueId != 0xFFFFFFFFu, "muUniqueId != 0xffffffff");
+
+    ++muUniqueId;
     return muUniqueId;
 }
 
