@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_BRN_MUSIC_EFFECT_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"
 
@@ -37,6 +38,47 @@ public:
     void SetHighPassFreq(f32 afFrequency) { mfHighPassFrequency = afFrequency; }
     void SetLowPassFreq(f32 afFrequency) { mfLowPassFrequency = afFrequency; }
 
+    // ---- the three X360-INLINED stream idioms MusicEffect uses ------------------
+    // Every MusicEffect call site folds these by hand; they are named here so the
+    // effect reads like the console's source instead of repeating the bit patterns.
+    //
+    // (a) "playing or waiting to play" -- `meState == E_PLAYING || meState == E_PAUSING
+    //     || mbSongQueued`, the guard in front of most of the console's stops
+    //     (e.g. MusicEffect::Notify @0x826BBAF8 case 10, UpdateParams @0x826FE5C8 case 1).
+    bool IsPlayingOrQueued() const
+    {
+        return meState == E_PLAYING || meState == E_PAUSING || mbSongQueued;
+    }
+    // (b) the folded Stop: `if (meState in [E_PLAYING..E_PAUSING]) { mfFadeDuration = f;
+    //     meState = E_STOP_REQUESTED; } mbSongQueued = false;`.  NOT MusicStream::Stop():
+    //     the console writes mbSongQueued directly (no SetSongQueued assert) and does not
+    //     reset mfFadeTime here -- Update()'s E_STOP_REQUESTED arm does that next tick.
+    void StopAndUnqueue(f32 afFadeOut)
+    {
+        if (meState == E_PLAYING || meState == E_STOP_REQUESTED ||
+            meState == E_FADING_OUT || meState == E_PAUSING)
+        {
+            mfFadeDuration = afFadeOut;
+            meState = E_STOP_REQUESTED;
+        }
+        mbSongQueued = false;
+    }
+    // (c) the folded Pause/duck: `if (meState == E_PLAYING || meState == E_PAUSING)
+    //     { mfFadeTime = 0; mfFadeDuration = f; meState = E_PAUSING; }` -- fade the voice
+    //     out over f and then internally pause it (Update()'s E_PAUSING arm, X360
+    //     MusicStream::Update @0x826871F8 case 4).
+    void PauseWithFade(f32 afFadeOut)
+    {
+        if (meState == E_PLAYING || meState == E_PAUSING)
+        {
+            mfFadeTime = 0.0f;
+            mfFadeDuration = afFadeOut;
+            meState = E_PAUSING;
+        }
+    }
+    void SetStreamPaused(bool abPaused) { mbStreamPaused = abPaused; }
+    EState GetState() const { return meState; }
+
     const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;
     void UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
                            f32 afGain, f32 afElapsedTime) override;
@@ -71,18 +113,64 @@ public:
         E_JUNKYARD_AMBIENCE_COUNT = 3
     };
 
+    // The music-type discriminant GetMusicType @0x8269CE70 returns and UpdateParams
+    // @0x826FE5C8 switches on. The values are the console's own switch labels; the
+    // names are from the arm each one drives (every one of them is attested by the
+    // stream + output slot it queues, e.g. type 2 -> GetEventStartContentSpec on
+    // mSecondaryStream slot 2). Types 7/8/9/10/13 never appear in either function.
+    enum EMusicType
+    {
+        E_MUSIC_TYPE_NONE             = 0,
+        E_MUSIC_TYPE_EATRAX_IN_GAME   = 1,   // EA Trax, inside a game mode
+        E_MUSIC_TYPE_EVENT_START      = 2,
+        E_MUSIC_TYPE_EVENT_END        = 3,
+        E_MUSIC_TYPE_JUNKYARD         = 4,   // (UpdateParams case 4: nothing to do)
+        E_MUSIC_TYPE_CAR_UNLOCKED     = 5,
+        E_MUSIC_TYPE_PICTURE_PARADISE = 6,
+        E_MUSIC_TYPE_SHOWTIME         = 11,
+        E_MUSIC_TYPE_MENU             = 12,
+        E_MUSIC_TYPE_EATRAX_FREEBURN  = 14   // EA Trax, no game mode running
+    };
+
+    // EA Trax play order, set by sound message 11 (GUI event 462). SelectSong
+    // @0x8269D5E8 branches on it: 1 == shuffle (random pick, never the current song),
+    // 0 == sequential (walk forward from the current index). Anything else asserts.
+    enum EPlayOrder
+    {
+        E_PLAY_ORDER_SEQUENTIAL = 0,
+        E_PLAY_ORDER_SHUFFLE    = 1
+    };
+
+    // X360 MusicEffect + 0x1CC. The EA Trax playlist state.
     struct EaTraxData
     {
         EaTraxData();
         bool Prepare(Module::SoundLogicModule* apLogicModule);
-        u64 maEaTraxHandles[4];
-        u8 maReserved0x20[16];
-        s32 miTrackIndex0;
-        s32 miTrackIndex1;
-        s32 miTrackIndex2;
-        Module::SoundLogicModule* mpLogicModule;
-        s32 miState;
-        u8 mbReserved0x44;
+
+        // X360 0x8269D5E8. Return the index of the next song to play out of
+        // [0, aiNumSongs), or -1 when no song is both still "remaining" and enabled
+        // for this music type. aeMusicType picks which enabled-song mask is used.
+        s32 SelectSong(s32 aiNumSongs, s32 aeMusicType);
+        // X360 0x8269DF30. Assert the song is still in mRemainingSongs, clear its bit
+        // (so the playlist does not repeat it) and record it as the current song.
+        void SetCurrentSong(s32 aiSong);
+
+        // +0x00 / +0x10: the two enabled-song masks the GUI publishes with sound
+        // message 7 (GUI event 458 GuiEventAudioTraxUpdate). SelectSong picks
+        // mEnabledSongsNoGameMode for music type 14 and mEnabledSongs for every other
+        // type (X360 0x8269D5E8: `if (aeMusicType == 14) mask = this + 0x10`).
+        // Notify @0x826BBAF8 case id 7 fills them from the payload: the payload's
+        // SECOND 16 bytes (+0x10) land at +0x00 and its FIRST 16 (+0x00) at +0x10.
+        CgsContainers::FastBitArray<128> mEnabledSongs;            // +0x00
+        CgsContainers::FastBitArray<128> mEnabledSongsNoGameMode;  // +0x10
+        // +0x20: songs not yet played this cycle. Set to all-ones by message 7 and
+        // restored wholesale by message 8 (GUI 459, the saved "last played" state).
+        CgsContainers::FastBitArray<128> mRemainingSongs;          // +0x20
+        s32 miPreviewSong;           // +0x30  message 9 (GUI 460)
+        s32 miPreviousPreviewSong;   // +0x34  message 9 pushes the old value here
+        s32 miCurrentSong;           // +0x38  SetCurrentSong's record
+        Module::SoundLogicModule* mpLogicModule;  // +0x3C
+        s32 mePlayOrder;             // +0x40  message 11 (GUI 462), EPlayOrder
     };
 
     MusicEffect();
@@ -96,12 +184,47 @@ public:
     void ProcessUpdate() override;
     void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
 
+    // X360 0x82687408. True while the player's own soundtrack (the dashboard music
+    // player) owns playback, in which case the game must not start a song of its own.
+    // On the PC build there is no XMP session, so this is always false -- the console
+    // body is `XMPTitleHasPlaybackControl(&lb); return lb == 0;`.
+    static bool IsCustomSoundtrackActive();
+
 private:
+    // X360 0x8269CE70. Derive the music type from the sound root input's game-mode
+    // interface, the pending one-shot type and the junkyard ambience.
+    s32 GetMusicType(const void* apGameModeInterface) const;
+    // X360 0x8269D260. Drop the current song if the playlist stopped allowing it, and
+    // take it out of mRemainingSongs. Runs only when message 7/8 changed the playlist.
+    void UpdateSongs();
+    // X360 0x8269CFC0 / 0x8269D0F0. Map the running game mode (and, for the end
+    // stinger, whether the player won) onto the sting's ContentSpec.
+    static u32 GetEventStartContentSpec(const void* apGameModeInterface);
+    u32 GetEventEndContentSpec(const void* apGameModeInterface) const;
+
     MusicStream mSecondaryStream;
     MusicStream mEATraxStream;
     MusicStream mMusicStreamMenu;
     MusicStream mJunkyardStream;
     EaTraxData mEaTraxData;
+
+    // ---- X360 MusicEffect tail (+0x210 .. +0x246) ------------------------------
+    bool mbPlaylistChanged;      // +0x210  set by message 7, consumed by UpdateSongs
+    bool mbPreviewActive;        // +0x211  message 9's second payload byte
+    s32  meEventEndResult;       // +0x214  message 23 payload +0x5C (rank 1..4 -> a
+                                 //         "00Race_End_RANK_0n" sting, else the mode sting)
+    bool mbEventWon;             // +0x218  message 23: mode-dependent "won" flag
+    bool mbEventEndPending;      // +0x219  message 23 arms the end sting for UpdateParams
+    u32  mCarUnlockName;         // +0x21C  message 28's ContentSpec
+    u32  mMenuStreamName;        // +0x220  message 13's ContentSpec
+    s32  meMusicType;            // +0x224
+    s32  mePrevMusicType;        // +0x228
+    s32  mePendingMusicType;     // +0x234  one-shot type pushed by Notify (5/11/12)
+    s32  meJunkyardAmbience;     // +0x238  message 40
+    s32  miPicParadiseMusic;     // +0x240  index into KA_CLASSICAL_MUSIC_DATA
+    bool mbHoldVolumes;          // +0x244  message 15 -- ProcessUpdate's early-out
+    bool mbMenuStreamIsVideo;    // +0x245  message 13 payload +4
+    bool mbMenuStreamOverCustom; // +0x246  message 13 payload +5
 };
 
 } // namespace Logic

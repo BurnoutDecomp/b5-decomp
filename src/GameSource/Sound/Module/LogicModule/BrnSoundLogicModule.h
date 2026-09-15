@@ -267,6 +267,39 @@ private:
 
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
 
+public:
+    // X360 SoundLogicModule + 0x13570 (79216): a two-element, 8-byte-stride block the
+    // game-action / GUI dispatch maintains. Every field below is attested by the
+    // instruction that writes or reads it; the block's DWARF NAME is not recovered, so
+    // the members are named for the offset they occupy plus what is known about them:
+    //   [0].mu32Flags  @+0x13570  bit 0 set by game actions 86/88, cleared by 87/89;
+    //                             bit 1 set/cleared by GUI event 33 (loading screen).
+    //   [0].mu8FlagAt4 @+0x13574  read by MusicEffect::UpdateParams @0x826FE5C8's
+    //                             stream-pause test (0x826FE7xx `while (!*(v19+4))`).
+    //   [1].mu32Flags  @+0x13578  the second half of that same test.
+    //   [1].mu8FlagAt1 @+0x13579  set to 1 by game action 16 when its +0x1C field != -1.
+    //   [1].mi32At4    @+0x1357C  that +0x1C field, stored by game action 16.
+    struct DispatchStateSlot
+    {
+        u32 mu32Flags;
+        u8  mu8FlagAt4;
+        u8  mu8FlagAt1;
+        u8  maReserved[2];
+        s32 mi32At4;
+    };
+    DispatchStateSlot maDispatchState[2];
+
+    // True while the sound module considers its music streams pausable -- X360
+    // MusicEffect::UpdateParams reads maDispatchState directly; exposed by name here so
+    // the effect does not reach into the module's private tail.
+    bool AreMusicStreamsPaused() const
+    {
+        const bool lbSlot0Clear = (maDispatchState[0].mu8FlagAt4 == 0);
+        return !lbSlot0Clear && maDispatchState[1].mu32Flags == 0;
+    }
+
+private:
+
     CgsSound::Logic::Voice mMasterVoice;       // X360 this+0x51F0, ident 1
     CgsSound::Logic::Voice mGlobalReverbVoice; // X360 this+0x51FC, ident 2
     CgsSound::Logic::Voice mSubmixVoice;       // X360 this+0x5208, ident -16
