@@ -77,14 +77,21 @@ struct PassbyState : public BrnSound::Logic::BrnState
     PassbyState();
     virtual ~PassbyState() {}
 
-    // — per-class RTTI. DEFERRED bodies (declared for the state vtable shape;
-    // the descriptor registration / id chaining lives in its own recon slice).
+    // - per-class RTTI. Bodied in BrnPassbyState.cpp (2026-09-15): they were
+    // "DEFERRED" while nothing ever instantiated this class, which is exactly why
+    // the omission was invisible -- MSVC only emits the vtable at an instantiation,
+    // so the missing definitions never produced a link error.
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetTypeInfo() const;
     virtual const char*                                            GetTypeName() const;
 
-    // @ 0x82688FC8 — returns &sTypeInfo (the static per-class RTTI descriptor).
+    // @ 0x82688FC8 - returns &sTypeInfo (the static per-class RTTI descriptor).
     // Bodied here. STATIC (the X360 body takes no `this`).
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* GetStaticTypeInfo();
+
+    // @ 0x826D4978 - the factory hook CgsSound::Logic::StateManager::CreateState
+    // calls through the registered descriptor. Must be STATIC so &CreateObject is
+    // storable in ClassTypeInfo<State>::mpfnCreateObject.
+    static CgsSound::Logic::State* CreateObject(u32 auType);
 
 private:
     // DWARF BrnPassbyState.h:73 `PassbyStateManager::Passby mPassbyData`. The

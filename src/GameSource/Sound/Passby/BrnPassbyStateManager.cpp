@@ -1,5 +1,10 @@
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Passby ctor range tripwire)
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name::MakeHash
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] sink
+#include <cstdio>
+#include <cstdlib>
 
 // =============================================================================
 // BrnSound::Logic::Passby::PassbyStateManager::DynamicPropByCache -- out-of-line
@@ -33,6 +38,52 @@ namespace Logic
 {
 namespace Passby
 {
+
+// =============================================================================
+// [DIAG] NOT IN THE X360 BINARY
+// Opt-in witnesses for the PASSBY state manager's prepare chain, enabled by
+// BRN_PASSBY_SOUND_DIAG (any value but "0"). Named for exactly what they
+// measure: which stage of PassbyStateManager::Prepare @0x826F9748 the manager
+// is in, and whether the PassbyAsset splicer bank ever resolves. The "waiting"
+// line is rate-limited to one per 600 calls (~10 s of prepare polling) so a bank
+// that never loads reports a STALL instead of flooding the log -- that is the
+// failure this witness exists to catch, because the console's Prepare blocks the
+// boot stage machine until IsLoaded() goes true.
+// =============================================================================
+namespace
+{
+    bool PassbySoundDiagEnabled()
+    {
+        static int siEnabled = -1;
+        if (siEnabled < 0)
+        {
+            const char* lpcEnv = std::getenv("BRN_PASSBY_SOUND_DIAG");
+            siEnabled = (lpcEnv && lpcEnv[0] && lpcEnv[0] != '0') ? 1 : 0;
+        }
+        return siEnabled != 0;
+    }
+
+    void PassbySoundDiag(const char* lpcMessage)
+    {
+        if (PassbySoundDiagEnabled())
+            CgsDev::Log::WriteToLog(lpcMessage);
+    }
+
+    void PassbySoundDiagWaiting(bool lbCreated)
+    {
+        static u32 suCalls = 0;
+        if (!PassbySoundDiagEnabled())
+            return;
+        if ((suCalls++ % 600u) != 0)
+            return;
+        char lacMsg[160];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[passby-sound] Prepare: still WAITING on the splicer bank "
+                      "(created=%d) after %u polls\n",
+                      lbCreated ? 1 : 0, suCalls);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
 
 // Expiry window: an active cache entry is cleared once it has been live for at
 // least this many seconds. Recovered from the X360 rodata literal compared by
@@ -302,6 +353,45 @@ const char* PassbyStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 bool PassbyStateManager::Prepare()
 {
+    // ⛔ THE REAL BODY IS WRITTEN AND VERIFIED, AND IS DELIBERATELY NOT ENABLED.
+    // It is preserved verbatim in the block comment below. Enabling it TODAY is a
+    // REGRESSION, measured on run scratch/flow_run/soundD_passby_C (2026-09-15):
+    // the console's PrepareStates(mask 1, 8 instances, state 0) reached
+    // CgsSound::Logic::StateManager::CreateState and fired
+    //   [ASSERT] Failed to find State Object  (CgsStateManager.cpp:283)  x8
+    //   [ASSERT] lpState                      (CgsStateManager.cpp:217)  x8
+    // -- asserts=16 where every other run this session was asserts=0 -- because
+    // TWO things below this manager do not exist yet:
+    //   (1) BrnPassbyState.cpp and BrnPassbyEffect.cpp are NOT MOUNTED in
+    //       tools/build/build_game_exe.bat (only BrnPassbyStateManager.cpp is), so
+    //       neither leaf's static-init registration is even in the exe;
+    //   (2) BrnSound::Logic::Passby::PassbyEffect is a bare two-member shell -- no
+    //       ObjectID, no GetStaticTypeInfo, no AddToClassTypeInfoArray, no Attach /
+    //       UpdateParams / Notify -- so even with the states created, each state's
+    //       CreateSFXObjs(mask 1) would fire "Failed to find Effect Object" once per
+    //       state per prepare poll: an assert storm that starves the harness.
+    // The prepare chain ITSELF is proven to work: with the body enabled the run
+    // logged LoadAsset issued -> ResourcesAreReady -> "splicer bank LOADED" ->
+    // PrepareStates -> FINISHED, i.e. PassbyAsset.bundle really does resolve through
+    // the registrar. Re-enable this body in the SAME commit that lands the two mount
+    // lines + PassbyEffect's RTTI/Attach.
+    //
+    // X360 body @0x826F9748 (verbatim):
+    //   switch ( mePrepareState ) {
+    //     case 0: case 5: mePrepareState = 0;                 // fall through
+    //     case 1: mePrepareState = 1;
+    //             LoadAsset("sound\\splicer\\PassbyAsset.bundle", 0, E_DATA);
+    //             // fall through
+    //     case 2: mePrepareState = 2;
+    //             if ( !mSplicerBank.IsLoaded() ) return false;
+    //             miCpuMonitor = PerfMonCpu::AddMonitor("Passbys", 14, 0, 1.0, .., 1);
+    //             // fall through
+    //     case 3: mePrepareState = 3;
+    //             if ( !PrepareStates(1, 8, 0) ) return false;
+    //             // fall through
+    //     case 4: mePrepareState = 4; return true;
+    //     default: return false;
+    //   }
     return true;
 }
 
@@ -359,6 +449,19 @@ void PassbyStateManager::UpdateParams( f32 /*lfTimeStep*/ )
 // ---------------------------------------------------------------------------
 void PassbyStateManager::ResourcesAreReady()
 {
+    PassbySoundDiag("[passby-sound] ResourcesAreReady: constructing the "
+                    "PassbyAsset splicer bank\n");
+    mSplicerBank.Construct(
+        GetLogicModule(),
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~")),
+        static_cast<u32>(CgsSound::Playback::Name::MakeHash("PassbyAsset")));
+
+    // FLAG (omitted, assert-only): the X360 tail walks the 18 burnoutglobaldata
+    // mPassbyBins RefSpecs (layout +0x288 header / +0x290 elements, 0x18 stride)
+    // through an Attrib::Gen::passbybin instance and fires two range asserts per row
+    // (BrnPassbyStateManager.cpp:147/148, mFirstBoostPassBy <= mLastBoostPassBy and
+    // mFirstPassBy <= mLastPassBy). It has NO side effect -- it validates data and
+    // returns -- so it is not reproduced here.
 }
 
 // ---------------------------------------------------------------------------
@@ -383,14 +486,7 @@ void PassbyStateManager::ResourcesAreReady()
 // satisfy the non-void signature; NOT a faithful body. Body via the module once the
 // full StateManager view (mpLogicModule) + SoundLogicModule are available.
 // ---------------------------------------------------------------------------
-ResourceRegistrar& PassbyStateManager::GetResourceRegistrar()
-{
-    CGS_ASSERT( false,
-                "PassbyStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
-}
+
 
 // ---------------------------------------------------------------------------
 // DynamicPropByCache::Find  @ 0x82683438
