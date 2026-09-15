@@ -3,7 +3,8 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // Vector3, EntityId
-#include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"     // BrnSound::Logic::BrnStateManager (committed base)
+#include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsContent.h"   // CgsSound::Logic::Content (mSplicerBank, BY NAME)     // BrnSound::Logic::BrnStateManager (committed base)
 
 // Cgs3dEffectControl is only referenced through a pointer (Passby::mp3dControl),
 // so a forward declaration suffices. Its committed home is Brn3DEffectControl.h,
@@ -90,13 +91,12 @@ namespace Passby
 class PassbyStateManager : public BrnSound::Logic::BrnStateManager
 {
 public:
-    // FLAG: NAME-only stand-in for the splicer-bank content object (DWARF type
-    // CgsSound::Playback::Content). Its committed home (CgsContent.h) does not
-    // currently compile (see GetSplicerBank's flag) and PostPassby never touches
-    // it, so the value member is modelled as opaque storage to keep this class a
-    // complete, instantiable type. Size is UNVERIFIED -- not an X360 fact. When
-    // CgsContent.h is fixed, replace this with the real Content by value.
-    struct ContentPlaceholder { u8 mOpaque[1]; };
+    // 2026-09-15: the NAME-only ContentPlaceholder is RETIRED. The DWARF type is
+    // CgsSound::Logic::Content (not CgsSound::Playback::Content), which HAS had a
+    // committed home since the TrafficStateManager TU attested its shape
+    // (GameShared/GameClasses/Sound/Logic/CgsContent.h) and which the sibling
+    // AIVehicleStateManager already embeds by value. mSplicerBank is now that real
+    // type, so Prepare/ResourcesAreReady can construct and probe it.
 
     // BrnPassbyStateManager.h:79 (DWARF). One posted passby request.
     struct Passby
@@ -173,28 +173,19 @@ public:
     virtual bool Release();
     virtual void UpdateParams( f32 lfTimeStep );
 
-    // DWARF qualifies this as CgsSound::Logic::Content; the committed home of the
-    // reference-counted content object is CgsSound::Playback::Content. PostPassby
-    // (this TU's only function) never touches mSplicerBank, and the committed
-    // CgsContent.h cannot be pulled in here: its `Content::DoDispose()` returns
-    // `int` while its local `Object::DoDispose()` returns `void`, an invalid
-    // covariant override that fails to compile under this gate.
-    // FLAG (committed-type defect, NOT applied here): CgsContent.h
-    // (CgsSound::Playback) -- Content::DoDispose return type must match its
-    // Object base (both should be `int`, or Object's should be the override
-    // target). Fix by GROWING that home, in its own group. Until then mSplicerBank
-    // is modelled as a NAME-only opaque placeholder of unverified size below.
-    const ContentPlaceholder& GetSplicerBank() const { return mSplicerBank; } // h:67
+    // h:67. The passby splicer bank. Prepare @0x826F9748 probes IsLoaded() on it
+    // before advancing, and ResourcesAreReady @0x826D4BA8 constructs it from
+    // "PassbyAsset" through the splicer factory.
+    const CgsSound::Logic::Content& GetSplicerBank() const { return mSplicerBank; }
     virtual void ResourcesAreReady();
 
-    // BrnStateManager (the committed base) inherits BrnSound::Logic::IResourceRequester,
-    // whose two pure virtuals are ResourcesAreReady() (above) + GetResourceRegistrar().
-    // BrnStateManager declares but does NOT body GetResourceRegistrar(), so the leaf must
-    // override+body it to be a CONCRETE (constructible) type -- required because CreateObject
-    // below `new`s a PassbyStateManager. @ recovered semantically from the sibling
-    // BrnEffectObject::GetResourceRegistrar @ 0x82696850 (route through the owning logic
-    // module's embedded ResourceRegistrar). Bodied in this TU's .cpp.
-    virtual ResourceRegistrar& GetResourceRegistrar();
+    // 2026-09-15: the leaf override of GetResourceRegistrar() is RETIRED. The premise
+    // it was written on ("BrnStateManager declares but does NOT body it") is false --
+    // BrnStateManager::GetResourceRegistrar @0x82696510 IS bodied
+    // (BrnStateManager.cpp:130, forwarding to mpLogicModule's embedded registrar), and
+    // the console has NO PassbyStateManager override at all. The leaf stub that was
+    // here asserted false and returned a TU-LOCAL EMPTY registrar, so every LoadAsset
+    // this manager issued would have been enqueued into a registrar nobody pumps.
 
     // BrnPassbyStateManager.h:206 (DWARF: `bool PostPassby(const Passby&)`).
     // @ 0x82683488 -- append rPassby to maPostedPassbys[muPostedPassbyCount] when
@@ -221,7 +212,7 @@ protected:
 
     Passby             maPostedPassbys[KU_MAX_PASSBY_POSTS]; // h:194
     u32                muPostedPassbyCount;                  // h:195
-    ContentPlaceholder  mSplicerBank;                        // h:196 (see FLAG)
+    CgsSound::Logic::Content mSplicerBank;                   // h:196
     DynamicPropByCache mDynamicPropCache;                    // h:197
 };
 

@@ -77,11 +77,50 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetStaticTy
     {
         0x40000,       // ObjectID        (PS3 0x85FA1C: PassbyState id = 0x40000)
         "PassbyState", // mpcTypeName
-        nullptr,       // mpBaseTypeInfo  (DEFERRED — BrnState descriptor chain)
-        nullptr,       // mpfnCreateObject(DEFERRED — CreateObject @ 0x826D4978)
+        nullptr,       // mpBaseTypeInfo  (DEFERRED -- BrnState descriptor chain)
+        &PassbyState::CreateObject,  // mpfnCreateObject @ 0x826D4978
     };
     return &sTypeInfo;
 }
+
+// ---------------------------------------------------------------------------
+// PassbyState::CreateObject(u32)  @ 0x826D4978  (the factory hook)
+//
+// The X360 allocates the state through CgsSound::MemBase::operator new tagged
+// "PassbyState" (the pool tag named in BrnPassbyState.h:35) and placement-
+// constructs into it; the `u32` argument is the operator-new flavour selector,
+// not `this`. Same treatment as every committed sibling (StreamingState,
+// CollisionState, EmitterState): the host `new` stands in for the sound
+// allocator, and the observable result -- a constructed PassbyState* handed back
+// to StateManager::CreateState -- matches.
+// ---------------------------------------------------------------------------
+CgsSound::Logic::State* PassbyState::CreateObject(u32 /*auType*/)
+{
+    return new PassbyState();
+}
+
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetTypeInfo() const
+{
+    return GetStaticTypeInfo();
+}
+
+const char* PassbyState::GetTypeName() const
+{
+    return "PassbyState";
+}
+
+// ---------------------------------------------------------------------------
+// File-scope registration. WITHOUT THIS the descriptor exists but is invisible:
+// CgsSound::Logic::StateManager::CreateState @0x826A595C walks the registry
+// (State::GetRegisteredTypeInfo) and stops at the first null slot, so an
+// unregistered PassbyState makes PrepareStates fire "Failed to find State Object"
+// (CgsStateManager.cpp:283) once per requested instance and create NOTHING --
+// measured 8+8 asserts on the first run that reached this code. Same shape and
+// same call as the committed StreamingState / CollisionState / EmitterState
+// registrations.
+// ---------------------------------------------------------------------------
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* const gpPassbyStateReg =
+    CgsSound::Logic::State::AddToClassTypeInfoArray(PassbyState::GetStaticTypeInfo());
 
 } // namespace Passby
 } // namespace Logic
