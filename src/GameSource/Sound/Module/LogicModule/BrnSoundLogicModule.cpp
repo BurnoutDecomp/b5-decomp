@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (attached-buffer guard)
+#include <cstdlib>   // std::getenv (the [music] GUI-33 witness)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the "Resource Registrar" monitor (Prepare case 0)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"  // Io::LogicPreUpdateOutputBuffer (PreUpdate; phase C1)
@@ -245,7 +246,7 @@ void SoundLogicModule::Construct()
     maTriggerActions.Clear();
 
     // The dispatch state block (X360 this+0x13570) starts zeroed.
-    std::memset(maDispatchState, 0, sizeof(maDispatchState));
+    std::memset(&mDispatchState, 0, sizeof(mDispatchState));
 
     // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
@@ -541,12 +542,20 @@ void SoundLogicModule::ProcessGuiEvents(
             break;
         }
 
-        case 33:  // Loading-screen enter/leave -- bit 1 of the dispatch state block.
+        case 33:  // GuiEventLoadingScreenState -- bit 1 of the dispatch flags word
+                  // (X360 @0x826EDCCC: `ld` / `ori 2` or `clrrdi`-style clear / `std`).
             CGS_ASSERT(lpEvent != 0, "lpLoadingScreenEvent");
             if (EventU8At(lpEvent, 0))
-                maDispatchState[0].mu32Flags |= 2u;
+                mDispatchState.mu64Flags |= 2u;
             else
-                maDispatchState[0].mu32Flags &= ~2u;
+                mDispatchState.mu64Flags &= ~static_cast<u64>(2u);
+            // [DIAG] NOT IN THE X360 BINARY -- the loading-screen witness the [music] lines
+            // were missing: this bit is half of MusicEffect::UpdateParams' stream-pause gate.
+            if (std::getenv("BRN_MUSIC_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint
+                    << "[music] GUI 33 loading screen visible=" << static_cast<s32>(EventU8At(lpEvent, 0))
+                    << " -> dispatch flags 0x" << static_cast<s32>(mDispatchState.mu64Flags & 0xFF)
+                    << " simPausedBit " << static_cast<s32>(mDispatchState.mu8SimPausedBit) << "\n";
             break;
 
         case 88:  // Stop / start the playback DAC outright. X360:
@@ -778,8 +787,8 @@ void SoundLogicModule::ProcessGameActionQueue(
             {
                 const s32 liField = EventS32At(lpEvent, 28);   // X360 *(v9 + 7), dwords
                 if (liField != -1)
-                    maDispatchState[1].mu8FlagAt1 = 1;
-                maDispatchState[1].mi32At4 = liField;
+                    mDispatchState.mu8FlagAt1 = 1;
+                mDispatchState.mi32At4 = liField;
             }
             break;
 
@@ -886,12 +895,12 @@ void SoundLogicModule::ProcessGameActionQueue(
 
         case 86:
         case 88:
-            maDispatchState[0].mu32Flags |= 1u;
+            mDispatchState.mu64Flags |= 1u;                       // @0x826ECEC8 `ori 1`
             break;
 
         case 87:
         case 89:
-            maDispatchState[0].mu32Flags &= ~1u;
+            mDispatchState.mu64Flags &= ~static_cast<u64>(1u);    // @0x826ECEE0 `clrrdi 1`
             break;
 
         case 97:  // PlayerCarRepaired -> HUD control.
@@ -1123,6 +1132,12 @@ void SoundLogicModule::UpdateFrameInformation(
         lpVehicles = apLogicInputBuffer->GetVehicleInterface();
     mFrameInformation.mIsHardStop.Update(lpVehicles->IsPlayerCarCrashing());
     mFrameInformation.mbInReplay = (aeUpdateSet & 0x0100u) != 0;
+
+    // X360 @0x826B01B4..0x826B01C4: `clrlwi r9, updateSet, 31` -> +0x13578 (the sim-paused
+    // bit, the other half of MusicEffect::UpdateParams' stream-pause gate) and `stb 0` ->
+    // +0x13579 (game action 16's one-shot flag, cleared every tick).
+    mDispatchState.mu8SimPausedBit = static_cast<u8>(aeUpdateSet & 1u);
+    mDispatchState.mu8FlagAt1      = 0;
 
     if (lpVehicles->IsPlayerCarActive())
     {

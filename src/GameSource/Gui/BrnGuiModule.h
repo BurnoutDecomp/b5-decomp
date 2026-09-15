@@ -124,6 +124,9 @@ namespace BrnGui
 
         // @ 0x82511240 -- MovieManager::Update + the movie frame draw (the movie pass).
         void UpdateAndRenderMovieManager(CgsGraphics::Im2dRenderBuffer* lpIm2dRenderBuffer);
+        // BridgeFromViewToOutput @0x8285DE10 -- after the view module's Update, append its
+        // own out-event queue (33 GuiEventLoadingScreenState lives there) onto the module out.
+        void BridgeFromViewToOutput();
 
         static void FlaptSoundTriggerCallback(void* lpUserData,
                                               const char* lpcComponentName,

@@ -273,34 +273,42 @@ private:
     Array<BrnGameState::GameStateModuleIO::SoundTriggerAction, 16> maTriggerActions; // h:372 (X360 this+0x4CA0)
 
 public:
-    // X360 SoundLogicModule + 0x13570 (79216): a two-element, 8-byte-stride block the
-    // game-action / GUI dispatch maintains. Every field below is attested by the
-    // instruction that writes or reads it; the block's DWARF NAME is not recovered, so
-    // the members are named for the offset they occupy plus what is known about them:
-    //   [0].mu32Flags  @+0x13570  bit 0 set by game actions 86/88, cleared by 87/89;
-    //                             bit 1 set/cleared by GUI event 33 (loading screen).
-    //   [0].mu8FlagAt4 @+0x13574  read by MusicEffect::UpdateParams @0x826FE5C8's
-    //                             stream-pause test (0x826FE7xx `while (!*(v19+4))`).
-    //   [1].mu32Flags  @+0x13578  the second half of that same test.
-    //   [1].mu8FlagAt1 @+0x13579  set to 1 by game action 16 when its +0x1C field != -1.
-    //   [1].mi32At4    @+0x1357C  that +0x1C field, stored by game action 16.
-    struct DispatchStateSlot
+    // X360 SoundLogicModule + 0x13570 (79216): the dispatch-state block the game-action /
+    // GUI dispatch maintains, read back by MusicEffect::UpdateParams and HUDEffect::Notify.
+    // Layout from the INSTRUCTIONS that touch it (the pseudocode renders the 64-bit word
+    // as two dwords and invented a "+4 byte" nothing ever wrote):
+    //   +0x13570  u64 mu64Flags  ONE 64-bit word (`ld`/`std` everywhere): bit 0 set by game
+    //                            actions 86/88 (`ori 1` @0x826ECEC8), cleared by 87/89
+    //                            (`clrrdi 1` @0x826ECEE0); bit 1 set/cleared by GUI event 33
+    //                            GuiEventLoadingScreenState (ProcessGuiEvents @0x826EDCCC),
+    //                            which CgsGui::ViewModule::ProcessIncomingAptEvent @0x8285EAE8
+    //                            posts for PlayAptLoadingMovie 19 / StopAptLoadingMovie 20.
+    //                            UpdateParams @0x826FE788 tests the WHOLE word (`ld`/`cmpldi`);
+    //                            HUDEffect::Notify @0x826F60B0 tests bit 1 (`ldx` + `rlwinm
+    //                            30,30`) and reads the word's high dword as a mixer output.
+    //   +0x13578  u8  mu8SimPausedBit  UpdateFrameInformation @0x826B01B8: `updateSet & 1`
+    //                            (the update set's sim-paused bit), stored every tick.
+    //   +0x13579  u8  mu8FlagAt1 set to 1 by game action 16 when its +0x1C field != -1
+    //                            (@0x826EC804); cleared every tick by UpdateFrameInformation.
+    //   +0x1357C  s32 mi32At4    that +0x1C field, stored by game action 16 (@0x826EC814).
+    struct DispatchState
     {
-        u32 mu32Flags;
-        u8  mu8FlagAt4;
+        u64 mu64Flags;
+        u8  mu8SimPausedBit;
         u8  mu8FlagAt1;
         u8  maReserved[2];
         s32 mi32At4;
     };
-    DispatchStateSlot maDispatchState[2];
+    DispatchState mDispatchState;
 
-    // True while the sound module considers its music streams pausable -- X360
-    // MusicEffect::UpdateParams reads maDispatchState directly; exposed by name here so
-    // the effect does not reach into the module's private tail.
+    // X360 MusicEffect::UpdateParams @0x826FE784..0x826FE7D0: the music streams are held
+    // (no new EA Trax song is selected; mbStreamPaused goes to the three streams) while the
+    // flags word is non-zero AND this tick's update set does not carry the sim-paused bit --
+    // a pause has been requested (86) or the loading screen is up (33), and the simulation
+    // itself is not what is paused.
     bool AreMusicStreamsPaused() const
     {
-        const bool lbSlot0Clear = (maDispatchState[0].mu8FlagAt4 == 0);
-        return !lbSlot0Clear && maDispatchState[1].mu32Flags == 0;
+        return mDispatchState.mu64Flags != 0 && mDispatchState.mu8SimPausedBit == 0;
     }
 
 private:
