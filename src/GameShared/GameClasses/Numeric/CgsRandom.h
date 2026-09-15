@@ -96,6 +96,22 @@ struct Vector4Randomiser;
 struct DebrisColourRandomiser;
 } }
 
+// Same situation, same grant (2026-09-15): the player-car start-line rev picks one of six
+// authored rev performances with a RAW LCG step over muSeed, inlined twice --
+// PhysicsControl::Attach's tail @0x826CB6E0.. and the EngRevDataSet picker @0x82684510:
+//     lwz    r11, 0x2C(r4)            ; mpLogicModule
+//     addis  r11, r11, 1 ; addi r11, r11, 0x3590   ; + 0x13590 == &mRandomGenerator
+//     ld     r10, 0x20(r11)           ; muSeed, the OLD value
+//     mulld  r8,  r10, r8 ; addi r8, r8, 1         ; * KU_RANDOM_MULTIPLIER + 1
+//     std    r8,  0x20(r11)
+//     srdi   r6,  r10, 32             ; the OLD seed's HIGH word ...
+//     ... % 6                         ; ... indexes the six-entry table
+// It does NOT touch the ring buffer, exactly like RandomBool below. The grant lets that
+// site name muSeed instead of reaching mpLogicModule + 0x135B0 by raw offset.
+namespace BrnSound { namespace Vehicles { namespace Engines {
+struct PhysicsControl;
+} } }
+
 namespace CgsNumeric
 {
 class alignas(16) Random
@@ -107,6 +123,7 @@ class alignas(16) Random
     friend struct BrnEffects::Utils::Vector3Randomiser;
     friend struct BrnEffects::Utils::Vector4Randomiser;
     friend struct BrnEffects::Utils::DebrisColourRandomiser;
+    friend struct BrnSound::Vehicles::Engines::PhysicsControl;
 
 public:
     // X360 (inlined at every Construct site, e.g. FlybyManager::Construct and the
