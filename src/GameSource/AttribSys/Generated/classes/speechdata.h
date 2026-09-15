@@ -57,6 +57,41 @@ namespace Gen
         // Indexed accessor into the "OnlineVoiceOvers" array (24-byte-stride opaque
         // element; field layout not attested). @0x82686E38.
         void* OnlineVoiceOvers(u32 luIndex);
+
+        // ---- SOUND-C 2026-09-15: the rest of the schema SpeechEffect::Notify reads ----
+        // Every key below is the FULL 64-bit attribute key, read off the
+        // `ori r4,rN,<lo>` / `insrdi r4,rN,32,0` pair at the named Notify call site.
+        unsigned int Num_RoadRageIntrosShort() const;       // @0x82686EF8 (Notify 0x826E86F4)
+
+        // RefSpec arrays (24-byte elements; GetAttributePointer + DefaultDataArea(0x18)
+        // fallback, exactly as Notify does it).
+        const RefSpec& LicenseUpgradeVoiceOvers(u32 luIndex) const;  // Notify @0x826E8098
+        const RefSpec& RoadRageIntros(u32 luIndex) const;            // Notify @0x826E8730
+        const RefSpec& RoadRageIntrosShort(u32 luIndex) const;       // Notify @0x826E8798
+        const RefSpec& StuntRunIntros(u32 luIndex) const;            // Notify @0x826E887C
+        const RefSpec& StuntRunIntrosShort(u32 luIndex) const;       // Notify @0x826E8814
+
+        // Five per-game-mode "you lost again" RefSpecs and the Atomika free-burn VO
+        // collection are EMBEDDED RefSpec fields, not array attributes: Notify reaches
+        // them as `mSpeechData.mpAttributeData + <byte offset>` and hands the address
+        // straight to Attrib::Instance::ChangeWithDefault / the languagestreamcollection
+        // ctor (0x826E7EA0..0x826E7F40 and 0x826E7D40).  The offsets are 24 apart, i.e.
+        // one RefSpec each, and all sit inside the 0x188-byte speechdata data area.
+        const RefSpec& StuntRunLostVoiceOvers()      const { return EmbeddedRefSpec(248); }
+        const RefSpec& RoadRageLostVoiceOvers()      const { return EmbeddedRefSpec(272); }
+        const RefSpec& RaceLostVoiceOvers()          const { return EmbeddedRefSpec(296); }
+        const RefSpec& MarkedManLostVoiceOvers()     const { return EmbeddedRefSpec(320); }
+        const RefSpec& BurningRouteLostVoiceOvers()  const { return EmbeddedRefSpec(344); }
+        const RefSpec& AtomikaFreeburnVos()          const { return EmbeddedRefSpec(368); }
+
+    private:
+        // `lwz r11, 0x74(r31)` (mSpeechData.mpAttributeData) + `addi rX, r11, <off>`.
+        const RefSpec& EmbeddedRefSpec(u32 luByteOffset) const
+        {
+            return *reinterpret_cast<const RefSpec*>(
+                static_cast<const u8*>(mpAttributeData) + luByteOffset);
+        }
+    public:
     };
 
     // X360 ctor @0x8269CAE0: chain the Instance ctor, assert the collection's class is
@@ -74,7 +109,7 @@ namespace Gen
 
     inline const RefSpec& speechdata::FirstTimeTips(u32 luIndex) const
     {
-        static const u64 KU_FIRST_TIME_TIPS_KEY = 0x564FC966ull;
+        static const u64 KU_FIRST_TIME_TIPS_KEY = 0x9DFB2D73564FC966ull;
         speechdata* lpSelf = const_cast<speechdata*>(this);
         const RefSpec* lpTip = static_cast<const RefSpec*>(
             lpSelf->GetAttributePointer(KU_FIRST_TIME_TIPS_KEY, luIndex));
@@ -88,13 +123,10 @@ namespace Gen
     // the low 32 bits of a 64-bit immediate; the high half is a dead upper word.
     inline unsigned int speechdata::Num_LicenseUpgradeVoiceOvers() const
     {
-        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
-        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
-        // the X360 stages the high half with a separate lis/ori pair that was not recorded
-        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
-        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
-        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
-        static const u64 KU_KEY = 0x3216CDCCull; // 840355276 (low word only)
+        // ⭐ KEY WIDTH PAID 2026-09-15 (SOUND-C): the full 64-bit key is staged by the
+        // `ori r4,rN,<lo>` + `insrdi r4,rN,32,0` pair at SpeechEffect::Notify's own call
+        // sites (see the per-key address below). The old low-word-only key MISSED.
+        static const u64 KU_KEY = 0xDC7D75833216CDCCull; // Attrib::Hash::speechdata::LicenseUpgradeVoiceOvers
         AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
@@ -106,13 +138,10 @@ namespace Gen
 
     inline unsigned int speechdata::Num_RoadRageIntros() const
     {
-        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
-        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
-        // the X360 stages the high half with a separate lis/ori pair that was not recorded
-        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
-        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
-        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
-        static const u64 KU_KEY = 0x3E25C262ull; // 1042661986 (low word only)
+        // ⭐ KEY WIDTH PAID 2026-09-15 (SOUND-C): the full 64-bit key is staged by the
+        // `ori r4,rN,<lo>` + `insrdi r4,rN,32,0` pair at SpeechEffect::Notify's own call
+        // sites (see the per-key address below). The old low-word-only key MISSED.
+        static const u64 KU_KEY = 0x214BFB693E25C262ull; // Attrib::Hash::speechdata::RoadRageIntros
         AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
@@ -124,13 +153,10 @@ namespace Gen
 
     inline unsigned int speechdata::Num_StuntRunIntros() const
     {
-        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
-        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
-        // the X360 stages the high half with a separate lis/ori pair that was not recorded
-        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
-        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
-        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
-        static const u64 KU_KEY = 0xBC65B3FBull; // 3160781819 (low word only)
+        // ⭐ KEY WIDTH PAID 2026-09-15 (SOUND-C): the full 64-bit key is staged by the
+        // `ori r4,rN,<lo>` + `insrdi r4,rN,32,0` pair at SpeechEffect::Notify's own call
+        // sites (see the per-key address below). The old low-word-only key MISSED.
+        static const u64 KU_KEY = 0x0858BBD8BC65B3FBull; // Attrib::Hash::speechdata::StuntRunIntros
         AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
@@ -142,13 +168,10 @@ namespace Gen
 
     inline unsigned int speechdata::Num_StuntRunIntrosShort() const
     {
-        // ⚠️ WIDENED 2026-07-31: Attrib::Instance::Get's key is 64 bits (the attribute
-        // table hashes the whole doubleword). Only the LOW word of this key is recovered --
-        // the X360 stages the high half with a separate lis/ori pair that was not recorded
-        // when this accessor was reconstructed. Zero-extended so it cannot sign-extend into
-        // garbage; FLAG: the lookup will still MISS until the high word is read back off the
-        // call site (the same defect shotgroup::Num_ShotList and surfacelist::Num_Surfaces had).
-        static const u64 KU_KEY = 0xFE958E6Bull; // 4271214187 (low word only)
+        // ⭐ KEY WIDTH PAID 2026-09-15 (SOUND-C): the full 64-bit key is staged by the
+        // `ori r4,rN,<lo>` + `insrdi r4,rN,32,0` pair at SpeechEffect::Notify's own call
+        // sites (see the per-key address below). The old low-word-only key MISSED.
+        static const u64 KU_KEY = 0x5C56AC73FE958E6Bull; // Attrib::Hash::speechdata::StuntRunIntrosShort
         AttributeValue lCursor; // stack-resident Attrib::Attribute cursor (4 machine words)
         speechdata* lpSelf = const_cast<speechdata*>(this);
         Attribute* lpAttribute = reinterpret_cast<Attribute*>(
@@ -167,6 +190,76 @@ namespace Gen
         if (luIndex >= lpArrayHeader->GetLength())
             return DefaultDataArea(0x18u);
         return reinterpret_cast<u8*>(lpArrayHeader) + 8 + 24 * luIndex;
+    }
+
+    // ---- SOUND-C bodies ----------------------------------------------------------
+    inline unsigned int speechdata::Num_RoadRageIntrosShort() const
+    {
+        static const u64 KU_KEY = 0x91D3F2CAF1C8CEBCull; // Notify @0x826E86F4/0x826E8704
+        AttributeValue lCursor;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        Attribute* lpAttribute = reinterpret_cast<Attribute*>(
+            lpSelf->Get(&lCursor, reinterpret_cast<int*>(lpSelf), KU_KEY));
+        unsigned int luLength = static_cast<unsigned int>(lpAttribute->GetLength());
+        CgsSceneManager::CgsCollision::BaseCollisionGenerator_Destruct(&lCursor);
+        return luLength;
+    }
+
+    // The shared RefSpec-array body Notify open-codes at every one of these call sites:
+    //   lpSpec = GetAttributePointer(key, index);  if (!lpSpec) lpSpec = DefaultDataArea(0x18);
+    inline const RefSpec& speechdata::LicenseUpgradeVoiceOvers(u32 luIndex) const
+    {
+        static const u64 KU_KEY = 0xDC7D75833216CDCCull;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        const RefSpec* lpSpec = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_KEY, luIndex));
+        if (!lpSpec)
+            lpSpec = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpSpec;
+    }
+
+    inline const RefSpec& speechdata::RoadRageIntros(u32 luIndex) const
+    {
+        static const u64 KU_KEY = 0x214BFB693E25C262ull;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        const RefSpec* lpSpec = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_KEY, luIndex));
+        if (!lpSpec)
+            lpSpec = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpSpec;
+    }
+
+    inline const RefSpec& speechdata::RoadRageIntrosShort(u32 luIndex) const
+    {
+        static const u64 KU_KEY = 0x91D3F2CAF1C8CEBCull;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        const RefSpec* lpSpec = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_KEY, luIndex));
+        if (!lpSpec)
+            lpSpec = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpSpec;
+    }
+
+    inline const RefSpec& speechdata::StuntRunIntros(u32 luIndex) const
+    {
+        static const u64 KU_KEY = 0x0858BBD8BC65B3FBull;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        const RefSpec* lpSpec = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_KEY, luIndex));
+        if (!lpSpec)
+            lpSpec = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpSpec;
+    }
+
+    inline const RefSpec& speechdata::StuntRunIntrosShort(u32 luIndex) const
+    {
+        static const u64 KU_KEY = 0x5C56AC73FE958E6Bull;
+        speechdata* lpSelf = const_cast<speechdata*>(this);
+        const RefSpec* lpSpec = static_cast<const RefSpec*>(
+            lpSelf->GetAttributePointer(KU_KEY, luIndex));
+        if (!lpSpec)
+            lpSpec = static_cast<const RefSpec*>(DefaultDataArea(0x18u));
+        return *lpSpec;
     }
 }
 }
