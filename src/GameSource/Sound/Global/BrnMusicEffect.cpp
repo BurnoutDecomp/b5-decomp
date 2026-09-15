@@ -520,9 +520,26 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             if (mePrevMusicType == E_MUSIC_TYPE_PICTURE_PARADISE)
                 mSecondaryStream.StopAndUnqueue(0.1f);
         }
+        // ⭐ X360 UpdateParams @0x826FE5C8, case 1/14 (pseudocode lines 340-344):
+        //     v48 = *(a1 + 136);                      // mSecondaryStream.meState
+        //     v49 = v48 == 1 || v48 == 4 || *(a1 + 166);  // Secondary.IsPlayingOrQueued()
+        //     if ( !v49 ) *(a1 + 260) = 0;            // mEATraxStream.mbInternalPause = false
+        // +260 is the EA TRAX stream's mbInternalPause (its base +88); +261 is
+        // mbStreamPaused, which the prologue above already writes for all three streams
+        // every frame. This arm used to call SetStreamPaused(false) -- the WRONG BYTE, and
+        // the only writer of mbInternalPause anywhere is MusicStream::Update's
+        // "new song from E_STOPPED" arm. So once any sting ducked EA Trax with
+        // PauseWithFade(0.1f) (event start/end, car unlocked, picture paradise, showtime)
+        // the EA Trax voice's PauseControl stayed at 1 FOR THE REST OF THE SESSION: the
+        // stream still streamed and still had send gain, and was simply never unpaused
+        // again.
         if (!mSecondaryStream.IsPlayingOrQueued())
-            mEATraxStream.SetStreamPaused(false);
-        if (!mEATraxStream.IsPlayingOrQueued() && !mSecondaryStream.IsPlayingOrQueued())
+            mEATraxStream.SetInternalPaused(false);
+        // X360 line 348-353: the select-song gate is `!EATrax.IsPlayingOrQueued() &&
+        // !Secondary.IsPlayingOrQueued() && !v22`, where v22 is the same "streams paused"
+        // flag the prologue publishes -- a paused mix must not start a new song.
+        if (!mEATraxStream.IsPlayingOrQueued() && !mSecondaryStream.IsPlayingOrQueued() &&
+            !lbStreamsPaused)
         {
             // The console passes the RefSpec straight in (its Instance base ctor
             // resolves it); this tree's generated ctors take the resolved Collection,
