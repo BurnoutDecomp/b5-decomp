@@ -1,6 +1,8 @@
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
 #include "GameSource/Sound/Streaming/BrnStreamingState.h"
+#include "GameSource/Sound/Streaming/BrnIStreamUser.h"   // [DIAG] GetCreateParams for the witness
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
 
 namespace CgsSystem { namespace HardwareSku { s32 FindLanguage(); } }
 
@@ -31,6 +33,22 @@ namespace Logic
 {
 namespace Streaming
 {
+
+namespace
+{
+    // [DIAG] NOT IN THE X360 BINARY -- the ContentSpec a stream user is asking for.
+    // Named for what it reads: the user's own CreateParams content-spec hash, the
+    // single value that decides which .SNS the StreamsRegistry resolves.
+    u32 DiagSpecOf(const IStreamUser* apUser)
+    {
+        return apUser ? static_cast<u32>(apUser->GetCreateParams().mContentSpecName) : 0u;
+    }
+
+    // [DIAG] A refused request is RE-POSTED and retried every tick, so its witness
+    // would storm the log (and starve the harness). Cap it hard and say so.
+    u32 guDiagRefusals = 0;
+    const u32 KU_DIAG_REFUSAL_CAP = 40;
+}
 
 StreamRequest::StreamRequest()
     : mpAttachment(0), mu32Priority(0), mfLagTolerance(0.0f), mfTimeStamp(0.0f),
@@ -340,6 +358,15 @@ void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamReque
     ++muUniqueId;
 
     ++muPlayRequestCount;
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). Witnesses the PLAY request
+    // as posted: which user, which ContentSpec, what priority, which ring slot.
+    CgsSound::Diag::StreamDiagPrintf(
+        "[sndstream] post PLAY user=%p spec=0x%08X prio=%u id=%u ring=%u/%u t=%.2f\n",
+        static_cast<const void*>(lStreamRequest.mpAttachment),
+        DiagSpecOf(lStreamRequest.mpAttachment), lStreamRequest.mu32Priority,
+        muUniqueId - 1u, muPlayRequestCount,
+        static_cast<u32>(E_MAX_STREAM_REQUESTS), mfCurrentTime);
 }
 
 // ---------------------------------------------------------------------------
@@ -390,6 +417,12 @@ void StreamingStateManager::PostStreamRequest(const StreamStopRequest& lStopRequ
     lStamped.mfTimeStamp = mfCurrentTime;
     lStamped.mu32UniqueId = muUniqueId++;
     PostStreamRequestInternal(lStamped);
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1).
+    CgsSound::Diag::StreamDiagPrintf(
+        "[sndstream] post STOP user=%p spec=0x%08X fade=%.2f id=%u\n",
+        static_cast<const void*>(lStamped.mpAttachment),
+        DiagSpecOf(lStamped.mpAttachment), lStamped.mfFadeOut, lStamped.mu32UniqueId);
 }
 
 void StreamingStateManager::PostStreamRequestInternal(const StreamStopRequest& arRequest)
@@ -530,9 +563,27 @@ void StreamingStateManager::UpdateParams(f32 af32GameDt)
         if (lpState)
         {
             lpState->Attach(&lrRequest);
+            // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The request was
+            // ACCEPTED: a StreamingState took it and will bring a voice up.
+            CgsSound::Diag::StreamDiagPrintf(
+                "[sndstream] accept spec=0x%08X id=%u prio=%u -> state=%p\n",
+                DiagSpecOf(lrRequest.mpAttachment), lrRequest.mu32UniqueId,
+                lrRequest.mu32Priority, static_cast<const void*>(lpState));
         }
         else
         {
+            // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). REFUSED: no free
+            // state and no lower-priority victim -- the request is re-posted and
+            // will be retried next tick (this is how a stream can queue forever).
+            if (guDiagRefusals < KU_DIAG_REFUSAL_CAP)
+            {
+                ++guDiagRefusals;
+                CgsSound::Diag::StreamDiagPrintf(
+                    "[sndstream] REFUSED (no free state) spec=0x%08X id=%u prio=%u -> repost%s\n",
+                    DiagSpecOf(lrRequest.mpAttachment), lrRequest.mu32UniqueId,
+                    lrRequest.mu32Priority,
+                    guDiagRefusals == KU_DIAG_REFUSAL_CAP ? " [last refusal witness]" : "");
+            }
             RePostStreamRequest(lrRequest);
         }
     }

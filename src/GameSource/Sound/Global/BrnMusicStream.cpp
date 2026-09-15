@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
 #include <cmath>
 
 namespace BrnSound
@@ -16,7 +17,8 @@ MusicStream::MusicStream()
       mfFadeDuration(0.25f), mfVolume(1.0f), mfHighPassFrequency(0.0f),
       mfLowPassFrequency(96000.0f), muPriority(6), muQueuedContentSpec(0),
       mbInternalPause(false), mbStreamPaused(false), mbSongQueued(false),
-      mu8QueuedOutputSlot(0), mu8OutputSlot(0) {}
+      mu8QueuedOutputSlot(0), mu8OutputSlot(0),
+      miDiagLastGainQ(-1) {}   // [DIAG] NOT IN THE X360 BINARY
 
 void MusicStream::Prepare(Module::SoundLogicModule* apModule,
                           Streaming::StreamingStateManager* apStreamingManager,
@@ -171,6 +173,33 @@ void MusicStream::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
     const u32 luSend = mCreateParams.mSendName;
     arVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex),
                     afGain * lfVolume, &luSend);
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). THE decisive number for a
+    // "queues but is inaudible" stream: the gain this stream actually writes to its
+    // send, factored into the effect's streamsettings gain and mfVolume -- and
+    // mfVolume is whatever MusicEffect::ProcessUpdate read out of the DYNAMIC MIXER
+    // at this stream's own output slot.
+    {
+        // Edge key: the output slot, the ContentSpec, and -- the whole point --
+        // whether the send gain is AUDIBLE or a hard zero. A stream whose mixer slot
+        // reads 0 logs exactly one line and stops; a normally-jittering gain does not
+        // storm the log.
+        const f32 lfSend = afGain * lfVolume;
+        const int liKey = static_cast<int>(mu8OutputSlot) * 4
+                        + (lfSend > 0.0009765625f ? 1 : 0) * 2
+                        + (meState == E_PLAYING ? 1 : 0);
+        if (liKey != miDiagLastGainQ)
+        {
+            miDiagLastGainQ = liKey;
+            CgsSound::Diag::StreamDiagPrintf(
+                "[sndstream] gain slot=%u spec=0x%08X effectGain=%.4f vol=%.4f "
+                "-> send=%.4f state=%d pause=%d\n",
+                static_cast<u32>(mu8OutputSlot),
+                static_cast<u32>(mCreateParams.mContentSpecName),
+                afGain, lfVolume, afGain * lfVolume, static_cast<int>(meState),
+                (mbInternalPause || mbStreamPaused) ? 1 : 0);
+        }
+    }
 }
 
 void MusicStream::StreamStopped()

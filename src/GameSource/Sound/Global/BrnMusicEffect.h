@@ -112,6 +112,12 @@ private:
     bool mbSongQueued;
     u8 mu8QueuedOutputSlot;
     u8 mu8OutputSlot;
+
+    // [DIAG] NOT IN THE X360 BINARY. Edge-detector for the opt-in BRN_STREAM_DIAG
+    // send-gain witness in UpdateVoiceParams (the gain quantised to 1/1000), so a
+    // steady stream logs one line rather than one per frame. Never read by any
+    // behavioural arm.
+    int miDiagLastGainQ;
 };
 
 class MusicEffect : public BrnEffectObject

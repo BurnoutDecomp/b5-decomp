@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Streaming/BrnStreamingEffect.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lpState / IsAttached tripwires)
+#include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
 #include <algorithm>
 
 // =============================================================================
@@ -78,6 +79,7 @@ StreamingEffect::StreamingEffect()
     , mfGainPreFade(0.0f)
     , mVoiceId(static_cast<CgsSound::Logic::Command::QueueElement>(-1))
     , mbBufferReleased(false)
+    , meDiagLastStage(CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE)  // [DIAG]
 {
 }
 
@@ -180,6 +182,19 @@ bool StreamingEffect::Attach()
     mfTimeThroughFade = 0.0f;
     mfGainPreFade = 0.0f;
     mbBufferReleased = false;
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The voice bring-up, in the
+    // order the arithmetic runs: the ContentSpec asked for, whether a Playback::Content
+    // object exists for it, the voice object + ident, and the streamsettings gain this
+    // effect will multiply the user's volume by.
+    CgsSound::Diag::StreamDiagPrintf(
+        "[sndstream] attach spec=0x%08X voicespec=0x%08X voiceobj=%d ident=%u "
+        "settings=%d gain=%.4f\n",
+        static_cast<u32>(mCreateParams.mContentSpecName),
+        static_cast<u32>(mCreateParams.mVoiceSpecName),
+        mVoice.HasLiveVoice() ? 1 : 0,
+        static_cast<u32>(mVoiceId),
+        mStreamSettings.GetCollection() ? 1 : 0, mfGain);
     return true;
 }
 
@@ -198,6 +213,20 @@ void StreamingEffect::ProcessUpdate()
 
     mVoice.Update();
     const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStage = mVoice.GetUpdateStage();
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). EDGE-TRIGGERED: one line per
+    // VoiceWrapper stage transition for this effect. Names the stage number, so a
+    // stream stuck at 4 (E_UPDATE_STAGE_WAIT, content never IsLoaded) is visible as a
+    // stage that stops advancing, not as an absence of sound.
+    if (leStage != meDiagLastStage)
+    {
+        meDiagLastStage = leStage;
+        CgsSound::Diag::StreamDiagPrintf(
+            "[sndstream] stage spec=0x%08X ident=%u stage=%d t=%.2f\n",
+            static_cast<u32>(mCreateParams.mContentSpecName),
+            static_cast<u32>(mVoiceId), static_cast<int>(leStage), mfElapsedTime);
+    }
+
     if (leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE &&
         leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED)
     {
@@ -207,7 +236,13 @@ void StreamingEffect::ProcessUpdate()
 
     StreamingState* lpState = static_cast<StreamingState*>(mpState);
     if (lpState && lpState->Detach())
+    {
+        CgsSound::Diag::StreamDiagPrintf(
+            "[sndstream] finished spec=0x%08X ident=%u after %.2f s -> StreamStopped\n",
+            static_cast<u32>(mCreateParams.mContentSpecName),
+            static_cast<u32>(mVoiceId), mfElapsedTime);
         lRequest.mpAttachment->StreamStopped();
+    }
 }
 
 f32 StreamingEffect::GetFadeOut() const

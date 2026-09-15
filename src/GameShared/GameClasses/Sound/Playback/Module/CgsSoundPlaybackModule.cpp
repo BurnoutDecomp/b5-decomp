@@ -26,6 +26,7 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacSystemLock (phase B4)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"        // AemsFactory::Create (the stage-3 create, cascade slice 2)
 #include "GameShared/GameClasses/Sound/Playback/Splicer/CgsSplicerFactory.h"  // SplicerFactory::Create (the stage-3 create, cascade slice 3)
+#include "GameShared/GameClasses/Sound/CgsStreamDiag.h"                       // [DIAG] NOT IN THE X360 BINARY
 
 #include <cstddef>
 
@@ -1033,6 +1034,11 @@ void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuf
 
             if (lrBuffer.mfGraceWaitTime > 0.0f)
             {
+                // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The record has
+                // completed the grace period and is going back to E_FREE_BUFFER; its
+                // voice id is appended to the freed list the logic module consumes.
+                CgsSound::Diag::StreamDiagPrintf(
+                    "[sndstream] buffer FREE idx=%u voice=%u\n", lu, lrBuffer.mVoiceId);
                 arFreedBuffers.Append(lrBuffer.mVoiceId);
                 lrBuffer.mfGraceWaitTime  = 0.0f;
                 lrBuffer.mReadStream      = CgsFileSystem::ReadStream();
@@ -1122,6 +1128,19 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     }
     if (liIndex < 0)
     {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). Print WHAT the three
+        // records are holding at the moment of exhaustion -- the status of each and
+        // the voice id it belongs to. Without this the console's assert says only
+        // that none were free, never which stage they are stuck in.
+        CgsSound::Diag::StreamDiagPrintf(
+            "[sndstream] BUFFERS EXHAUSTED: [0]=st%d v%u qc%d [1]=st%d v%u qc%d "
+            "[2]=st%d v%u qc%d\n",
+            static_cast<int>(maStreamBuffers[0].GetStatus()), maStreamBuffers[0].mVoiceId,
+            maStreamBuffers[0].GetQueuedForClose() ? 1 : 0,
+            static_cast<int>(maStreamBuffers[1].GetStatus()), maStreamBuffers[1].mVoiceId,
+            maStreamBuffers[1].GetQueuedForClose() ? 1 : 0,
+            static_cast<int>(maStreamBuffers[2].GetStatus()), maStreamBuffers[2].mVoiceId,
+            maStreamBuffers[2].GetQueuedForClose() ? 1 : 0);
         CGS_ASSERT(false, "We've run out of Audio Stream Buffers.");
         mStreamMutex.Unlock();
         return 0;
@@ -1140,6 +1159,14 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
     lrBuffer.mVoiceId         = lhVoice.GetObject()->GetIdent();
     lrBuffer.mbQueuedForClose = false;
     *lrSpec.mppvBuffer = lrBuffer.mpBuffer;
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). Which of the 3 records this
+    // stream took, for which voice, and the .SNS filename actually opened -- the
+    // ContentSpec -> file resolution, at the only point the filename is known.
+    CgsSound::Diag::StreamDiagPrintf(
+        "[sndstream] buffer OPEN idx=%d voice=%u file='%s'\n",
+        liIndex, lrBuffer.mVoiceId,
+        lrSpec.mpFilename ? lrSpec.mpFilename : "<null>");
 
     // Build + post the open request (event type 16) into the deferred queue.
     CgsResource::Events::OpenReadStreamRequest lRequest;
