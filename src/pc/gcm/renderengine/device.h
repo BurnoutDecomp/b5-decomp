@@ -9,6 +9,7 @@ struct IDirect3DDevice9;
 namespace renderengine
 {
     extern bool gFullscreen;
+    float DiagTextureMeanLuma(void* lpD3DBaseTexture);   // [DIAG] issue #30 (device.cpp)
     extern s32 gDisplayWidth;
     extern s32 gDisplayHeight;
     extern s32 gAdapterIndex;

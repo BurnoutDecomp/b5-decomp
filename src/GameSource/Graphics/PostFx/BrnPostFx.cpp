@@ -3,7 +3,10 @@
 #include <new>                                                                  // placement new (the carved effects)
 #include <cstdio>                                                               // std::snprintf (the seam's sampled diag)
 #include "GameSource/Graphics/BrnRendererMemory.h"                              // the render-target pool
-namespace renderengine { extern u32 guDiagComposites; }   // [DIAG] issue #30 per-present counters (device.cpp)
+namespace renderengine { extern u32 guDiagComposites; extern u32 guPresentCount; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 per-present counters (device.cpp)
+#include "pc/gcm/renderengine/device.h"    // [DIAG] renderengine::DiagTextureMeanLuma
+#include "pc/gcm/renderengine/texture.h"   // [DIAG] renderengine::Texture::mpD3DTexture
+#include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"   // [DIAG] RenderTarget::maColourTargets
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"                     // CgsRenderTarget::GetRenderTarget
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"        // saDepthStencilStates[1] (Render)
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"          // saRasterizerStates[2]   (Render)
@@ -1046,6 +1049,24 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
     // BrnRendererModule::Render loads the global (`_R20 = mPostFxVault;`, pseudocode line 500) and
     // passes it as r3 at 0x8240DE0C. GetInstance() has no body in this tree, so calling it would
     // also have added an unresolved external for nothing.
+    // [DIAG] NOT IN THE X360 BINARY -- issue #30: the mean luminance of the composite's SOURCE
+    // (the down-sample buffer's colour texture) on the presents the black-frame watch calls black.
+    {
+        static u32 suSourcePrinted = 0u;
+        if (renderengine::gbDiagLastPresentBlack && suSourcePrinted < 64u)
+        {
+            ++suSourcePrinted;
+            const rw::graphics::postfx::RenderTarget* lpSrcRt = lpSceneTarget->GetRenderTarget();
+            renderengine::Texture* lpSrcTex = (lpSrcRt != 0) ? lpSrcRt->maColourTargets[0].mpTexture : 0;
+            const float lfSrcMean = renderengine::DiagTextureMeanLuma(lpSrcTex != 0 ? static_cast<void*>(lpSrcTex->mpD3DTexture) : 0);
+            renderengine::Texture* lpBbTex = (lpBackBuffer->GetRenderTarget() != 0) ? lpBackBuffer->GetRenderTarget()->maColourTargets[0].mpTexture : 0;
+            const float lfBbMean = renderengine::DiagTextureMeanLuma(lpBbTex != 0 ? static_cast<void*>(lpBbTex->mpD3DTexture) : 0);
+            char lacMsg[200];
+            std::snprintf(lacMsg, sizeof(lacMsg), "[composite-diag] present=%u source(down-sample) mean=%.1f backbuffer-target mean(before composite)=%.1f srcRt=%p\n",
+                          renderengine::guPresentCount, (double)lfSrcMean, (double)lfBbMean, static_cast<const void*>(lpSrcRt));
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
     msPostFx.Render(lrRendererMemory,
                     lpSceneTarget->GetRenderTarget(),
                     lpBackBuffer->GetRenderTarget(),

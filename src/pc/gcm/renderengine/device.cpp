@@ -327,6 +327,48 @@ namespace renderengine
 // present counter + wall clock on one log line is what pairs the blink with the streaming / save /
 // GUI lines around it. ~2 MB/frame of GPU copy plus a 2 KB read-back: cheap, but still opt-in.
 // Inert unless the variable names a value. DELETE-WHEN-STABLE.
+// [DIAG] NOT IN THE X360 BINARY -- issue #30: mean 8-bit luminance of a D3D texture's level 0
+// (a 32x18 StretchRect + readback, the black-frame watch's own method), so the composite's SOURCE
+// can be measured on the presents the watch calls black. Returns -1 when it cannot sample.
+float renderengine::DiagTextureMeanLuma(void* lpD3DBaseTexture)
+{
+    static IDirect3DSurface9* spSmall = nullptr;
+    static IDirect3DSurface9* spSys   = nullptr;
+    if (gDevice == nullptr || lpD3DBaseTexture == nullptr)
+        return -1.0f;
+    IDirect3DBaseTexture9* lpBase = static_cast<IDirect3DBaseTexture9*>(lpD3DBaseTexture);
+    if (lpBase->GetType() != D3DRTYPE_TEXTURE)
+        return -1.0f;
+    IDirect3DTexture9* lpTex = static_cast<IDirect3DTexture9*>(lpBase);
+    IDirect3DSurface9* lpLevel = nullptr;
+    const HRESULT lhrLevel = lpTex->GetSurfaceLevel(0, &lpLevel);
+    if (FAILED(lhrLevel) || lpLevel == nullptr)
+        return -1.0f;
+    if (spSmall == nullptr
+        && (FAILED(gDevice->CreateRenderTarget(32, 18, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0, FALSE, &spSmall, nullptr))
+            || FAILED(gDevice->CreateOffscreenPlainSurface(32, 18, D3DFMT_A8R8G8B8, D3DPOOL_SYSTEMMEM, &spSys, nullptr))))
+    {
+        lpLevel->Release();
+        return -1.0f;
+    }
+    const HRESULT lhrStretch = gDevice->StretchRect(lpLevel, nullptr, spSmall, nullptr, D3DTEXF_LINEAR);
+    lpLevel->Release();
+    if (FAILED(lhrStretch) || FAILED(gDevice->GetRenderTargetData(spSmall, spSys)))
+        return -1.0f;
+    D3DLOCKED_RECT lLock;
+    if (FAILED(spSys->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+        return -1.0f;
+    u64 luSum = 0u;
+    for (u32 luY = 0u; luY < 18u; ++luY)
+    {
+        const u8* lpRow = static_cast<const u8*>(lLock.pBits) + luY * lLock.Pitch;
+        for (u32 luX = 0u; luX < 32u; ++luX)
+            luSum += lpRow[luX * 4u] + lpRow[luX * 4u + 1u] + lpRow[luX * 4u + 2u];
+    }
+    spSys->UnlockRect();
+    return static_cast<float>(luSum) / static_cast<float>(32u * 18u * 3u);
+}
+
 static void WatchBlackFramesIfRequested()
 {
     static int                siThreshold = -2;   // -2 = not read yet, -1 = off
@@ -478,9 +520,10 @@ static void WatchBlackFramesIfRequested()
     {
         char lacMsg[200];
         std::snprintf(lacMsg, sizeof(lacMsg),
-                      "[black-frame] END present=%u tick=%llu after=%u presents mean=%.1f\n",
+                      "[black-frame] END present=%u tick=%llu after=%u presents mean=%.1f (this present: world=%u im2d=%u composites=%u)\n",
                       renderengine::guPresentCount,
-                      static_cast<unsigned long long>(GetTickCount64()), suBlackRun, lfMean);
+                      static_cast<unsigned long long>(GetTickCount64()), suBlackRun, lfMean,
+                      renderengine::guDiagWorldDraws, renderengine::guDiagImBatches, renderengine::guDiagComposites);
         CgsDev::Log::WriteToLog(lacMsg);
         suBlackRun = 0u;
     }
