@@ -5,6 +5,8 @@
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 #include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 
 #include <cmath>
@@ -30,6 +32,228 @@ namespace Vehicles
 {
 namespace Engines
 {
+
+// =============================================================================
+// THE START-LINE REV SEQUENCE (ARTIST 0x826CC0C0 / 0x82684510 / 0x826C8708)
+//
+// Before a race starts the player's car does not run its live engine model: it
+// PLAYS BACK one of six authored rev performances, picked at random, and hands
+// back to the live model when the mode reaches E_GMS_IN_PROGRESS. The three
+// pieces below are that sequence; none of them had a body in this tree, so the
+// car sat at idle on every start line.
+//
+// The six performances are STATIC DATA in the console image, not generated: the
+// picker indexes a stride-16 table of EngRevDataSet records at unk_82F2F508, and
+// each record's mpDataPoints is a relocated pointer into .data. Transcribed here
+// verbatim from the image (tools/re/x360rd.py), 25/20/16/39/31/31 points at a
+// 0.08 s spacing, RPM 1000..9964, throttle 0..1:
+//     82F2F508  { 0x19, 82F2E920, 0, 0 }      82F2F538  { 0x27, 82F2EEC8, 0, 0 }
+//     82F2F518  { 0x14, 82F2EA50, 0, 0 }      82F2F548  { 0x1F, 82F2F0A0, 0, 0 }
+//     82F2F528  { 0x10, 82F2EB40, 0, 0 }      82F2F558  { 0x1F, 82F2F218, 0, 0 }
+// The point arrays sit end to end at the 12-byte EngineRevEntry stride
+// (82F2E920 + 25*12 == 82F2EA4C, the next array starting at 82F2EA50, and so on),
+// which is the independent check that the counts and the stride are right.
+// =============================================================================
+
+namespace {
+// 82F2E920 -- 25 points
+static const PhysicsControl::EngineRevEntry KA_START_LINE_REV_0[25] = {
+    { 0.0f, 1000.0f, 0.0f },
+    { 0.08f, 1631.0f, 0.83f },
+    { 0.16f, 2833.0f, 1.0f },
+    { 0.24f, 4250.0f, 1.0f },
+    { 0.32f, 5856.0f, 1.0f },
+    { 0.4f, 6746.0f, 0.7f },
+    { 0.48f, 6098.0f, 0.0f },
+    { 0.56f, 5970.0f, 0.3f },
+    { 0.64f, 7556.0f, 1.0f },
+    { 0.72f, 9337.0f, 1.0f },
+    { 0.8f, 9939.0f, 1.0f },
+    { 0.88f, 9946.0f, 1.0f },
+    { 0.96f, 9964.0f, 1.0f },
+    { 1.04f, 9906.0f, 1.0f },
+    { 1.12f, 9348.0f, 0.16f },
+    { 1.2f, 8678.0f, 0.0f },
+    { 1.28f, 7979.0f, 0.0f },
+    { 1.36f, 6551.0f, 0.0f },
+    { 1.44f, 5830.0f, 0.0f },
+    { 1.52f, 5111.0f, 0.0f },
+    { 1.6f, 3676.0f, 0.0f },
+    { 1.68f, 2959.0f, 0.0f },
+    { 1.76f, 2377.0f, 0.0f },
+    { 1.84f, 1897.0f, 0.0f },
+    { 1.92f, 1000.0f, 0.0f },
+};
+
+// 82F2EA50 -- 20 points
+static const PhysicsControl::EngineRevEntry KA_START_LINE_REV_1[20] = {
+    { 0.0f, 1000.0f, 0.0f },
+    { 0.08f, 1052.0f, 0.1f },
+    { 0.16f, 2010.0f, 0.96f },
+    { 0.24f, 3285.0f, 1.0f },
+    { 0.32f, 4770.0f, 1.0f },
+    { 0.4f, 6427.0f, 1.0f },
+    { 0.48f, 7965.0f, 0.9f },
+    { 0.56f, 7571.0f, 0.3f },
+    { 0.64f, 6864.0f, 0.0f },
+    { 0.72f, 6219.0f, 0.1f },
+    { 0.8f, 7544.0f, 0.96f },
+    { 0.88f, 9154.0f, 0.9f },
+    { 0.96f, 8831.0f, 0.3f },
+    { 1.04f, 8154.0f, 0.0f },
+    { 1.12f, 6727.0f, 0.0f },
+    { 1.2f, 6008.0f, 0.0f },
+    { 1.28f, 5291.0f, 0.0f },
+    { 1.36f, 3853.0f, 0.0f },
+    { 1.44f, 3137.0f, 0.0f },
+    { 1.52f, 2193.0f, 0.0f },
+};
+
+// 82F2EB40 -- 16 points
+static const PhysicsControl::EngineRevEntry KA_START_LINE_REV_2[16] = {
+    { 0.0f, 1037.0f, 0.47f },
+    { 0.08f, 1192.0f, 0.54f },
+    { 0.16f, 1674.0f, 0.72f },
+    { 0.24f, 2496.0f, 0.85f },
+    { 0.32f, 3506.0f, 0.87f },
+    { 0.4f, 4960.0f, 1.0f },
+    { 0.48f, 6634.0f, 1.0f },
+    { 0.56f, 8375.0f, 0.97f },
+    { 0.64f, 8146.0f, 0.12f },
+    { 0.72f, 7455.0f, 0.0f },
+    { 0.8f, 6022.0f, 0.0f },
+    { 0.88f, 5304.0f, 0.0f },
+    { 0.96f, 3872.0f, 0.0f },
+    { 1.04f, 3272.0f, 0.2f },
+    { 1.12f, 2302.0f, 0.0f },
+    { 1.2f, 1822.0f, 0.0f },
+};
+
+// 82F2EEC8 -- 39 points
+static const PhysicsControl::EngineRevEntry KA_START_LINE_REV_3[39] = {
+    { 0.0f, 1588.0f, 0.0f },
+    { 0.08f, 1546.0f, 0.49f },
+    { 0.16f, 1580.0f, 0.5f },
+    { 0.24f, 1701.0f, 0.76f },
+    { 0.32f, 1983.0f, 0.94f },
+    { 0.4f, 2410.0f, 1.0f },
+    { 0.48f, 2856.0f, 1.0f },
+    { 0.56f, 3318.0f, 1.0f },
+    { 0.64f, 3785.0f, 1.0f },
+    { 0.72f, 4266.0f, 1.0f },
+    { 0.8f, 4759.0f, 1.0f },
+    { 0.88f, 5266.0f, 1.0f },
+    { 0.96f, 5597.0f, 0.7f },
+    { 1.04f, 5379.0f, 0.0f },
+    { 1.12f, 5193.0f, 0.28f },
+    { 1.2f, 5612.0f, 1.0f },
+    { 1.28f, 6160.0f, 1.0f },
+    { 1.36f, 6729.0f, 1.0f },
+    { 1.44f, 7335.0f, 1.0f },
+    { 1.52f, 7977.0f, 0.94f },
+    { 1.6f, 7922.0f, 0.7f },
+    { 1.68f, 7648.0f, 0.0f },
+    { 1.76f, 7363.0f, 0.0f },
+    { 1.84f, 7294.0f, 0.3f },
+    { 1.92f, 7890.0f, 1.0f },
+    { 2.0f, 8600.0f, 1.0f },
+    { 2.08f, 9347.0f, 1.0f },
+    { 2.16f, 9884.0f, 0.9f },
+    { 2.24f, 9648.0f, 0.3f },
+    { 2.32f, 9380.0f, 0.0f },
+    { 2.4f, 7550.0f, 0.0f },
+    { 2.48f, 7170.0f, 0.0f },
+    { 2.56f, 5827.0f, 0.0f },
+    { 2.64f, 5105.0f, 0.0f },
+    { 2.72f, 3339.0f, 0.0f },
+    { 2.8f, 3644.0f, 0.0f },
+    { 2.88f, 2799.0f, 0.0f },
+    { 2.96f, 1847.0f, 0.0f },
+    { 3.04f, 1004.0f, 0.0f },
+};
+
+// 82F2F0A0 -- 31 points
+static const PhysicsControl::EngineRevEntry KA_START_LINE_REV_4[31] = {
+    { 0.0f, 1864.0f, 0.96f },
+    { 0.08f, 3111.0f, 1.0f },
+    { 0.16f, 4570.0f, 1.0f },
+    { 0.24f, 6211.0f, 1.0f },
+    { 0.32f, 7707.0f, 0.81f },
+    { 0.4f, 8127.0f, 0.47f },
+    { 0.48f, 8455.0f, 0.49f },
+    { 0.56f, 8571.0f, 0.38f },
+    { 0.64f, 8611.0f, 0.38f },
+    { 0.72f, 8650.0f, 0.38f },
+    { 0.8f, 8689.0f, 0.38f },
+    { 0.88f, 8731.0f, 0.38f },
+    { 0.96f, 8629.0f, 0.24f },
+    { 1.04f, 8023.0f, 0.0f },
+    { 1.12f, 7315.0f, 0.0f },
+    { 1.2f, 6590.0f, 0.0f },
+    { 1.28f, 5879.0f, 0.0f },
+    { 1.36f, 5290.0f, 0.21f },
+    { 1.44f, 6618.0f, 1.0f },
+    { 1.52f, 6547.0f, 0.16f },
+    { 1.6f, 5839.0f, 0.0f },
+    { 1.68f, 7064.0f, 0.83f },
+    { 1.76f, 7489.0f, 0.37f },
+    { 1.84f, 6814.0f, 0.0f },
+    { 1.92f, 6098.0f, 0.0f },
+    { 2.0f, 5376.0f, 0.0f },
+    { 2.08f, 3947.0f, 0.0f },
+    { 2.16f, 3227.0f, 0.0f },
+    { 2.24f, 2525.0f, 0.0f },
+    { 2.32f, 2187.0f, 0.0f },
+    { 2.4f, 1227.0f, 0.0f },
+};
+
+// 82F2F218 -- 31 points
+static const PhysicsControl::EngineRevEntry KA_START_LINE_REV_5[31] = {
+    { 0.0f, 1148.0f, 0.3f },
+    { 0.08f, 2207.0f, 1.0f },
+    { 0.16f, 3517.0f, 1.0f },
+    { 0.24f, 5035.0f, 1.0f },
+    { 0.32f, 6716.0f, 1.0f },
+    { 0.4f, 8489.0f, 1.0f },
+    { 0.48f, 9788.0f, 1.0f },
+    { 0.56f, 9508.0f, 0.16f },
+    { 0.64f, 8852.0f, 0.0f },
+    { 0.72f, 8161.0f, 0.0f },
+    { 0.8f, 7450.0f, 0.0f },
+    { 0.88f, 6733.0f, 0.0f },
+    { 0.96f, 6013.0f, 0.0f },
+    { 1.04f, 6603.0f, 0.6f },
+    { 1.12f, 8317.0f, 1.0f },
+    { 1.2f, 8107.0f, 0.16f },
+    { 1.28f, 7414.0f, 0.0f },
+    { 1.36f, 7371.0f, 0.3f },
+    { 1.44f, 9029.0f, 1.0f },
+    { 1.52f, 9892.0f, 1.0f },
+    { 1.6f, 9783.0f, 0.7f },
+    { 1.68f, 9170.0f, 0.0f },
+    { 1.76f, 8492.0f, 0.0f },
+    { 1.84f, 7793.0f, 0.0f },
+    { 1.92f, 7077.0f, 0.0f },
+    { 2.0f, 6360.0f, 0.0f },
+    { 2.08f, 5646.0f, 0.0f },
+    { 2.16f, 4927.0f, 0.0f },
+    { 2.24f, 4209.0f, 0.0f },
+    { 2.32f, 3496.0f, 0.0f },
+    { 2.4f, 2776.0f, 0.0f },
+};
+
+// unk_82F2F508 -- the six EngRevDataSet records the draw indexes (stride 16;
+// {mnNumPoints, mpDataPoints, mfTime, mnCurrentPoint}, the last two 0 on disk).
+static const PhysicsControl::EngRevDataSet KA_START_LINE_REV_SETS[PhysicsControl::KI_START_LINE_REV_SETS] = {
+    PhysicsControl::EngRevDataSet(25, KA_START_LINE_REV_0, 0.0f, 0),   // 82F2E920
+    PhysicsControl::EngRevDataSet(20, KA_START_LINE_REV_1, 0.0f, 0),   // 82F2EA50
+    PhysicsControl::EngRevDataSet(16, KA_START_LINE_REV_2, 0.0f, 0),   // 82F2EB40
+    PhysicsControl::EngRevDataSet(39, KA_START_LINE_REV_3, 0.0f, 0),   // 82F2EEC8
+    PhysicsControl::EngRevDataSet(31, KA_START_LINE_REV_4, 0.0f, 0),   // 82F2F0A0
+    PhysicsControl::EngRevDataSet(31, KA_START_LINE_REV_5, 0.0f, 0),   // 82F2F218
+};
+} // namespace
+
 
 // ---------------------------------------------------------------------------
 // PhysicsControl::PhysicsControl  @ 0x826C8890  (default ctor)
@@ -191,6 +415,18 @@ bool PhysicsControl::Attach()
             lpManager->AddRegistry(GetEngineComponentName(BrnSound::Vehicles::VehicleState::E_EXHAUST), false);
         }
     }
+
+    // ARTIST tail @0x826CB6D0..0x826CB704 -- the SAME LCG step the picker inlines,
+    // followed by the four-word copy into mEngineDataSet and `stw 0, 0x258(r31)`:
+    //     ld r10, 0x20(module + 0x13590)   ; muSeed
+    //     mulld/addi                        ; * KU_RANDOM_MULTIPLIER + 1, stored back
+    //     v13 = 16 * (highword % 6) + unk_82F2F508
+    //     *(a1+600..612) = v13[0..3]        ; mEngineDataSet
+    //     *(a1+596) = 0                     ; meIntroRevingState = E_NIS_REVING_STATE_OFF
+    // Every attach re-rolls which of the six authored start-line rev performances
+    // this car will play, and re-arms the machine at OFF.
+    meIntroRevingState = E_NIS_REVING_STATE_OFF;
+    mEngineDataSet = PickStartLineRevDataSet();
     return true;
 }
 
@@ -323,6 +559,11 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     // BrnRootSoundModuleIo.h today), so it is left unwritten rather than
     // approximated.
 
+    // 0x826CC050..0x826CC064 -- the three primary-vtable per-frame hooks, in order.
+    // Slot +8 (UpdateCollisionPassbys @0x826B2628) and the folded-empty slot +12 are
+    // not landed yet; see the header.
+    UpdateStartLineReving(afTimeStep);
+
     EngineParamWitness(afTimeStep);
 }
 
@@ -391,6 +632,216 @@ f32 PhysicsControl::UnityPhysicsRpm(f32 afPhysicsRPM) const
                          lMap.zAxis.y * lfUnity +
                          lMap.wAxis.y;
     return (std::max)(0.0f, (std::min)(1.0f, lfMapped));
+}
+
+
+// ---------------------------------------------------------------------------
+// PhysicsControl::PickStartLineRevDataSet  @ 0x82684510
+//
+//   lwz    r11, 0x2C(r4)                 ; mpLogicModule
+//   addis  r11, r11, 1 ; addi r11, r11, 0x3590    ; + 0x13590 == &mRandomGenerator
+//   ld     r10, 0x20(r11)                ; muSeed (the OLD value)
+//   lis/ori/insrdi                       ; r8 = 0x5851F42D4C957F2D == KU_RANDOM_MULTIPLIER
+//   mulld  r8, r10, r8 ; addi r8, r8, 1  ; next = seed * K + 1
+//   srdi   r6, r10, 32                   ; the OLD seed's HIGH word
+//   std    r8, 0x20(r11)
+//   mulhwu/srwi/slwi/subf                ; r11 = high % 6   (the 0xAAAAAAAB reciprocal)
+//   slwi   r11, r11, 4 ; add r11, r11, r9 ; entry = unk_82F2F508 + 16 * index
+//   lwz x4 / stw x4                      ; copy the 16-byte EngRevDataSet out
+//
+// The step does NOT touch the ring buffer and the value used is the seed BEFORE
+// the step -- the same shape as CgsNumeric::Random::RandomBool (which is why this
+// class holds that header's friend grant rather than reaching muSeed by offset).
+// ---------------------------------------------------------------------------
+PhysicsControl::EngRevDataSet PhysicsControl::PickStartLineRevDataSet()
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    CGS_ASSERT(lpModule != nullptr, "lpLogicModule");
+
+    CgsNumeric::Random& lrRandom = lpModule->GetRandomGenerator();
+    const u64 luOldSeed = lrRandom.muSeed;
+    lrRandom.muSeed = luOldSeed * CgsNumeric::KU_RANDOM_MULTIPLIER + 1ull;
+
+    const u32 luDraw = static_cast<u32>(luOldSeed >> 32);
+    const u32 luIndex = luDraw % static_cast<u32>(KI_START_LINE_REV_SETS);
+    return KA_START_LINE_REV_SETS[luIndex];
+}
+
+// ---------------------------------------------------------------------------
+// PhysicsControl::UpdateEngRevDataSet  @ 0x826C8708
+//
+//   if (!mpDataPoints || mnCurrentPoint >= mnNumPoints)
+//       return mpDataPoints[mnCurrentPoint];             ; 0x826C8758.. (verbatim copy)
+//   ; else bracket [cur, cur+1] and interpolate BOTH lanes over the same x pair:
+//   sub_826BF998(&rpmSlope,      p[cur].mfTime, p[cur+1].mfTime, p[cur].mfRpm,      p[cur+1].mfRpm)
+//   sub_826BF998(&throttleSlope, p[cur].mfTime, p[cur+1].mfTime, p[cur].mfThrottle, p[cur+1].mfThrottle)
+//   mfTime += dt ; if (mfTime > p[cur+1].mfTime) mnCurrentPoint = cur + 1
+//   result.mfTime     = mfTime
+//   result.mfThrottle = clamp01((mfTime - x0)/(x1 - x0)) * (y1 - y0) + y0     ; 0x826C886C
+//   result.mfRpm      = same with the rpm pair                               ; 0x826C8874
+//
+// sub_826BF998 is the four-float CgsSound::Utils::Slope ctor shape -- it stores
+// {minIn, maxIn, minOut, maxOut} and nudges maxIn by 1e-6 when the input span is
+// degenerate, the same guard the committed Slope(const SlopeParams&) @0x826A1F70
+// carries. Reproduced inline here (as the console emits it) rather than through
+// Slope, whose 4-float ctor / GetValue have no body in this tree.
+// ⚠️ The clamp is the two-fsel idiom (0x826C8850..0x826C8868): fsel(-u, 0, u) then
+// fsel(1 - u, u, 1), i.e. max then min, in that order.
+// ---------------------------------------------------------------------------
+PhysicsControl::EngineRevEntry PhysicsControl::UpdateEngRevDataSet(
+    EngRevDataSet& arSet, f32 afTimeStep)
+{
+    const EngineRevEntry* lpPoints = arSet.mpDataPoints;
+    if (lpPoints == nullptr || arSet.mnCurrentPoint >= arSet.mnNumPoints)
+    {
+        // Non-gating tripwire: the console reads mpDataPoints[mnCurrentPoint] on this
+        // arm WITHOUT a null check (0x826C8758 `add r11, r11, r9` with r9 possibly 0),
+        // and its only caller re-picks the set before every call, so the null half is
+        // unreachable. Kept verbatim rather than guarded with an arm the console lacks.
+        CGS_ASSERT(lpPoints != nullptr, "mpDataPoints");
+        return lpPoints[arSet.mnCurrentPoint];
+    }
+
+    const EngineRevEntry& lrThis = lpPoints[arSet.mnCurrentPoint];
+    const EngineRevEntry& lrNext = lpPoints[arSet.mnCurrentPoint + 1];
+
+    // sub_826BF998 twice: the shared time span, then the two output pairs.
+    f32 lfMinTime = lrThis.mfTime;
+    f32 lfMaxTime = lrNext.mfTime;
+    if (std::fabs(lfMaxTime - lfMinTime) < 0.000001f)
+        lfMaxTime += 0.000001f;
+
+    arSet.mfTime += afTimeStep;
+    if (arSet.mfTime > lrNext.mfTime)
+        arSet.mnCurrentPoint = arSet.mnCurrentPoint + 1;
+
+    const f32 lfRaw = (arSet.mfTime - lfMinTime) / (lfMaxTime - lfMinTime);
+    const f32 lfLow = (-lfRaw >= 0.0f) ? 0.0f : lfRaw;              // fsel(-u, 0, u)
+    const f32 lfUnit = ((1.0f - lfLow) >= 0.0f) ? lfLow : 1.0f;     // fsel(1-u, u, 1)
+
+    EngineRevEntry lResult;
+    lResult.mfTime = arSet.mfTime;
+    lResult.mfRpm = lfUnit * (lrNext.mfRpm - lrThis.mfRpm) + lrThis.mfRpm;
+    lResult.mfThrottle = lfUnit * (lrNext.mfThrottle - lrThis.mfThrottle) + lrThis.mfThrottle;
+    return lResult;
+}
+
+// ---------------------------------------------------------------------------
+// PhysicsControl::UpdateStartLineReving  @ 0x826CC0C0  (primary vtable slot +16)
+//
+// A three-state machine over meIntroRevingState, gated on the CURRENT game-mode
+// state published in the GameModeOutputInterface's +0xC word (see
+// BrnRootSoundModuleIo.h): E_GMS_COUNTDOWN(0) / E_GMS_INTRO(1) are the start line,
+// E_GMS_IN_PROGRESS(2) and beyond are the race.
+//
+//   OFF (0)        0x826CC3D8: state = OFF; if (mode is 0 or 1) { state = STARTLINE;
+//                  mEngineDataSet = PickStartLineRevDataSet(); }
+//   STARTLINE (1)  0x826CC220: state = STARTLINE; re-pick the performance when the
+//                  current one is null or exhausted; step it and DRIVE THE PHYSICS
+//                  DATA from the authored sample -- mThrottle and mNormalizedRpm are
+//                  overwritten, mDeltaThrottle is Flush'd to the throttle delta and
+//                  mGear is Flush'd to 1. When the mode has reached >= 2, step the
+//                  performance once more, arm mEngineStartLineRPM as a 0.5 s
+//                  (flt_82F2CC24 500.0 * flt_82013F90 0.001, floor flt_82002138 0.01)
+//                  curve-2 ramp from that sample's RPM to the live normalized RPM,
+//                  and go to RESUMING.
+//   RESUMING (2)   0x826CC180: run that ramp each frame with its finish re-aimed at
+//                  the live normalized RPM, publish it into mNormalizedRpm, and drop
+//                  to OFF once the ramp completes.
+//
+// ⚠️ THE GATE IS FED BY A PARKED PRODUCER. Nothing in this tree writes
+// GameStateModuleIO::OutputBuffer + 176344 (BrnModeManager_WorldTick.cpp:728), so
+// the mode word reads 0 == E_GMS_COUNTDOWN permanently and this machine sits in
+// STARTLINE. See the report; the layout half of that park is lifted by the typed
+// GameModeOutputInterface this file now reads.
+// ---------------------------------------------------------------------------
+void PhysicsControl::UpdateStartLineReving(f32 afTimeStep)
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    CGS_ASSERT(lpModule != nullptr, "lpLogicModule");
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
+        lpGameModeInterface = lpModule->GetBrnInputStructure()->GetGameModeInterface();
+    CGS_ASSERT(lpGameModeInterface != nullptr, "lpGameModeInterface");
+    const s32 liModeState = lpGameModeInterface->miCurrentGameModeState;
+
+    PhysicsData& lrData = mProcessedPhysicsData;
+
+    if (meIntroRevingState < E_NIS_REVING_STATE_STARTLINE)           // 0x826CC3D8
+    {
+        meIntroRevingState = E_NIS_REVING_STATE_OFF;
+        if (liModeState == 1 || liModeState == 0)
+        {
+            meIntroRevingState = E_NIS_REVING_STATE_STARTLINE;
+            mEngineDataSet = PickStartLineRevDataSet();
+        }
+        return;
+    }
+
+    if (meIntroRevingState == E_NIS_REVING_STATE_STARTLINE)          // 0x826CC220
+    {
+        meIntroRevingState = E_NIS_REVING_STATE_STARTLINE;
+        if (mEngineDataSet.mpDataPoints == nullptr
+            || mEngineDataSet.mnCurrentPoint >= mEngineDataSet.mnNumPoints)
+        {
+            mEngineDataSet = PickStartLineRevDataSet();
+        }
+
+        const EngineRevEntry lSample = UpdateEngRevDataSet(mEngineDataSet, afTimeStep);
+
+        // 0x826CC2A8 / 0x826CC2C0: Update(GetPrevious()) on both DataPoints -- the
+        // console's own swap-then-push, so the sample lands as the current value and
+        // the genuine previous frame's value survives as the previous.
+        lrData.mThrottle.Update(lrData.mThrottle.GetPrevious());
+        lrData.mNormalizedRpm.Update(lrData.mNormalizedRpm.GetPrevious());
+        lrData.mThrottle.Update(lSample.mfThrottle);
+        // 0x826CC2E4..0x826CC308: every mDeltaThrottle slot takes the same delta and
+        // the cursor resets -- Average<5,f32>::Flush.
+        lrData.mDeltaThrottle.Flush(lrData.mThrottle.GetCurrent() - lrData.mThrottle.GetPrevious());
+        lrData.mNormalizedRpm.Update(lSample.mfRpm);
+        // 0x826CC320: `stw r29(1), 0x44/0x48(r31)` -- both halves of mGear take 1.
+        lrData.mGear.Flush(1);
+
+        if (liModeState == 1 || liModeState == 0)
+            return;
+
+        // 0x826CC334: mode >= E_GMS_IN_PROGRESS -- arm the hand-back ramp.
+        const EngineRevEntry lHandover = UpdateEngRevDataSet(mEngineDataSet, afTimeStep);
+        const f32 lfUnityRpm = UnityPhysicsRpm(GetRawPhysicsData()->mfRPM);
+        f32 lfLength = 500.0f * 0.001f;                 // flt_82F2CC24 * flt_82013F90
+        if (!(lfLength > 0.0f))
+            lfLength = 0.01f;                           // flt_82002138
+        mEngineStartLineRPM.mfLength = lfLength;
+        mEngineStartLineRPM.mfFinish = lfUnityRpm * 9000.0f + 1000.0f;
+        mEngineStartLineRPM.mbComplete = false;
+        mEngineStartLineRPM.mfStart = lHandover.mfRpm;
+        mEngineStartLineRPM.mfCurrentValue = lHandover.mfRpm;
+        mEngineStartLineRPM.mfElapsedTime = 0.0f;
+        mEngineStartLineRPM.meCurveTypes = static_cast<CgsSound::Utils::Curve::ECurveType>(2);
+        meIntroRevingState = E_NIS_REVING_STATE_RESUMING;
+        return;
+    }
+
+    if (static_cast<s32>(meIntroRevingState) >= 3)                   // 0x826CC178
+        return;
+
+    // RESUMING (2)                                                  // 0x826CC180
+    if (mEngineStartLineRPM.IsFinished())
+    {
+        meIntroRevingState = E_NIS_REVING_STATE_OFF;
+        return;
+    }
+
+    const f32 lfLiveNormalizedRpm =
+        UnityPhysicsRpm(GetRawPhysicsData()->mfRPM) * 9000.0f + 1000.0f;
+    mEngineStartLineRPM.mfFinish = lfLiveNormalizedRpm;
+    mEngineStartLineRPM.Update(afTimeStep);
+    if (mEngineStartLineRPM.IsFinished())
+        mEngineStartLineRPM.mfCurrentValue = lfLiveNormalizedRpm;
+
+    lrData.mNormalizedRpm.Update(lrData.mNormalizedRpm.GetPrevious());
+    lrData.mNormalizedRpm.Update(mEngineStartLineRPM.GetValueFloat());
 }
 
 // ---------------------------------------------------------------------------

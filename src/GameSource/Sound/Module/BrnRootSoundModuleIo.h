@@ -248,7 +248,35 @@ namespace Io
         typedef CgsModule::EventQueue<BrnSound::Module::Io::SoundWorldLoadEvent, 25>
                                                 SoundWorldLoadInterface;
         struct GuiEventQueue                 { u8 mData[4]; };
-        struct GameModeOutputInterface       { u8 mData[0x10]; };    // 4-word copy (SetGameModeInterface)
+        // ⭐ TYPED 2026-09-15 (was `u8 mData[0x10]`). The four words are named by the
+        // PRODUCER's asm, already transcribed in BrnModeManager_WorldTick.cpp:723 --
+        // `addis r11, r16, 3 ; addi r11, r11, -0x4F28` == lpOutputBuffer + 176344, the
+        // GameStateModuleIO::OutputBuffer GameModeOutputInterface seat
+        // (BrnGameStateModuleIO.h:270, console span 16), published in this order:
+        //     +0  mePreviousGameModeType     +4  mePreviousGameModeState
+        //     +8  meCurrentGameModeType      +12 meCurrentGameModeState
+        // The two consumers on this side agree with that naming independently:
+        //   * CollisionStateManager::MapGameModesToBinFlags switches the +8 word over
+        //     0..17, which is GameStateModuleIO::EGameModeType (E_MODE_COUNT == 17);
+        //   * PhysicsControl::UpdateStartLineReving @0x826CC0C0 and UpdateParams'
+        //     DMix slot 6 @0x826CBFBC both gate on the +12 word being 0 or 1, i.e.
+        //     E_GMS_COUNTDOWN / E_GMS_INTRO of GameStateModuleIO::EGameModeState
+        //     (E_GMS_INVALID == -1 when there is no current mode) -- the start-line
+        //     rev plays through the countdown and intro and stops at E_GMS_IN_PROGRESS.
+        // Held as s32 rather than the GameState enums so this header keeps standing
+        // alone; sizeof stays 0x10, so SetGameModeInterface's 16-byte copy is unchanged.
+        // ⚠️ THE PRODUCER IS PARKED: nothing in this tree writes OutputBuffer +176344
+        // (BrnModeManager_WorldTick.cpp:728 "[!] [stuntrace] PARKED (header)"), so every
+        // field below reads 0 until that park is lifted. The park's stated reason was
+        // that the layout could not be written "without inventing a layout" -- this
+        // declaration is that layout, recovered from the same asm the park quotes.
+        struct GameModeOutputInterface
+        {
+            s32 miPreviousGameModeType;    // +0   GameStateModuleIO::EGameModeType
+            s32 miPreviousGameModeState;   // +4   GameStateModuleIO::EGameModeState
+            s32 miCurrentGameModeType;     // +8   GameStateModuleIO::EGameModeType
+            s32 miCurrentGameModeState;    // +12  EGameModeState, -1 (E_GMS_INVALID) with no mode
+        };
         struct UpdateInfo                    { u8 mData[1]; };       // single-byte copy (SetUpdateInfo)
         struct AICarOutputInterface          { u8 mData[0x14E8]; };  // memcpy 0x14E8 (SetAICarOutputInterface)
         struct GuiAudioEventResults          { u8 mData[4]; };
