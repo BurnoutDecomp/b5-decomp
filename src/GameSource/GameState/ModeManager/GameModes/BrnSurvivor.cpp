@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
+#include <cstdlib>   // [DIAG] getenv -- BRN_MM_DIAG only
 
 namespace BrnGameState
 {
@@ -70,6 +71,24 @@ void SurvivorMode::Start(const StartGameModeParams* lpStartGameModeParams,
     mbInShortcut = false;
     // VMX vmaddfp encodes A*C+B: (max-min)*rank + min.
     mfMaxRampTimer = std::fma(5.0f - 5.0f, lpGameModeParams->mfProgressionRankAsRatio, 5.0f);
+
+    // ---- [DIAG] NOT IN THE X360 BINARY -- issue #24, BRN_MM_DIAG=1 ---------------------------
+    // The rival COUNT is arithmetic on the profile's rank ratio (ARTIST 0x823323A0:
+    // (dword_82CDB7C0 + 1 - dword_82CDB7BC) * ratio + dword_82CDB7BC, capped at dword_82CDB7C0;
+    // the image holds 2 and 4 there, so this is fma(3, ratio, 2) capped at 4). Printing the ratio
+    // AND the result is the only way to say whether "barely any enemies" is the console's own
+    // number or a lost rival. DELETE-WHEN issue #24 is closed.
+    if (std::getenv("BRN_MM_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[mm-start] MARKED MAN rankRatio " << lpStartGameModeParams->GetProgressionRankAsRatio()
+            << " maxOpponents " << miMaxOpponentCount
+            << " numRivals " << lpGameModeParams->GetNumRivals()
+            << " startLocations " << lpGameModeParams->GetStartLocationCount()
+            << " maxRampTimer " << mfMaxRampTimer
+            << "\n";
+    }
+    // ---- end [DIAG] --------------------------------------------------------------------------
 }
 
 // ARTIST 0x8234D188. Update the threat ramp before publishing it to the HUD.
@@ -102,6 +121,51 @@ void SurvivorMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
         if (liOpponentCount > miMaxOpponentCount)
             liOpponentCount = miMaxOpponentCount;
     }
+    // ---- [DIAG] NOT IN THE X360 BINARY -- issue #24, BRN_MM_DIAG=1 ---------------------------
+    // Why HERE: `UpdateOpponents` is the ONLY producer of action 129, and action 129 is the ONLY
+    // writer of RaceCar::mbIsAllowedInRoadRage, which IsRaceCarWrappable @0x822E9E18 tests third.
+    // Run 1 measured allowedRR 0 for the whole event and rivals 2.7-5.6 km away, so the question
+    // is exactly which term of this arithmetic is pinning liOpponentCount to miBroadcastOpponent-
+    // Count. Sampled once per second off the mode's own time step.
+    // DELETE-WHEN issue #24 is closed.
+    {
+        static const bool sbMarkedManDiag = (std::getenv("BRN_MM_DIAG") != 0);
+        static f32 sfDiagClock = 0.0f;
+        static s32 siDiagCalls = 0;
+        if (sbMarkedManDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            // The first 20 calls ALWAYS print. A purely dt-driven sample cannot distinguish
+            // "this function never ran" from "dt is 0" -- and dt being 0 was the whole defect.
+            ++siDiagCalls;
+            sfDiagClock += lfTimeStep;
+            if (siDiagCalls <= 20 || sfDiagClock >= 1.0f
+                || miBroadcastOpponentCount != liOpponentCount)
+            {
+                sfDiagClock = 0.0f;
+                *CgsDev::Log::gpDebugPrint
+                    << "[mm-pre] call " << siDiagCalls
+                    << " state " << GetCurrentState()
+                    << " dt " << lfTimeStep
+                    << " rate " << lpTimer->maEntries[1].mfValue04
+                    << " scale " << lpTimer->maEntries[1].mfValue08
+                    << " ramp " << mfRampTimer << "/" << mfMaxRampTimer
+                    << " maxOpp " << miMaxOpponentCount
+                    << " distToFinish "
+                    << lpScoringSystem->GetRaceCarDistanceToFinish(
+                           lpActiveRaceCars->GetPlayerActiveRaceCarIndex())
+                    << " count " << liOpponentCount
+                    << " bcast " << miBroadcastOpponentCount
+                    << " shortcut " << static_cast<s32>(mbInShortcut ? 1 : 0)
+                    << " playerCrashing "
+                    << static_cast<s32>(lpActiveRaceCars->GetPlayerRaceCarState()->mbCrashing ? 1 : 0)
+                    << " playerActive "
+                    << static_cast<s32>(lpActiveRaceCars->IsPlayerCarActive() ? 1 : 0)
+                    << "\n";
+            }
+        }
+    }
+    // ---- end [DIAG] --------------------------------------------------------------------------
+
     mbInShortcut = false;
     if (miBroadcastOpponentCount != liOpponentCount)
     {

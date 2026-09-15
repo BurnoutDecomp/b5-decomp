@@ -4042,6 +4042,65 @@ namespace BrnGame
                                     }
                                 }
                             }
+
+                            // ⭐⭐⭐ THE TIMER-STATUS PUBLISH -- the console's OWN arm, restored
+                            // 2026-09-15 (issue #24). DoUpdate_GameStatePreWorld @0x823EE0E8 runs
+                            //     ... BridgeControllerToGameState(a1, v16, a4, IsPlaying);
+                            //     ... PreWorldInputBuffer::SetTimerStatusInterface(v16, a1 + 10095372);
+                            //     ... sub_823B7060(v16, a4);
+                            //     ... GameStateModule::PreWorldUpdate(a1 + 6722816, ...);
+                            // and `a1 + 10095372` IS BrnGameModule::mTimerStatusInterface -- the
+                            // same object BridgeTimers hands StoreTimers (see the BridgeTimers
+                            // banner above: `StoreTimers(gm+10095372, gm+10095316, gm+10095344)`).
+                            // 0x823EE0E8 is the ONLY xref_to of SetTimerStatusInterface @0x823B8D08
+                            // in the whole image, so with this one call missing the buffer's timer
+                            // block stayed at GameStateModule::Construct's ZERO-FILL for ever.
+                            //
+                            // ⛔⛔ WHAT THAT COST (measured, issue #24 runs 1 and 2). Every game mode
+                            // takes its per-frame delta from
+                            //   lpInput->GetTimerStatusInterface()->maEntries[1].mfValue08 * .mfValue04
+                            // so that product was exactly 0.0f and every MODE clock stood still.
+                            // In MARKED MAN that pins SurvivorMode::PreWorldUpdate @0x8234D188's
+                            // mfRampTimer at 0, so liOpponentCount == 0 == miBroadcastOpponentCount
+                            // for ever, SurvivorMode::UpdateOpponents @0x823451F8 is NEVER called,
+                            // game action 129 is never posted, RaceCar::mbIsAllowedInRoadRage stays
+                            // false, and IsRaceCarWrappable @0x822E9E18's third gate
+                            // (`!IsAllowedInRoadRage()`) can never open -- so marked-man rivals are
+                            // never wrapped back to the player and finish the event 2.7-6.3 km away
+                            // with DecideToAttack called ZERO times. RoadRageMode::UpdateHiddenRivals
+                            // (BrnRoadRageMode.cpp:394) and StuntAttackMode read the same pair and
+                            // were frozen the same way.
+                            //
+                            // The two declarations are a padding fork of one another (CgsSystem's
+                            // {miFrameCount, mfBaseTimeStep, mfTimeStepMultiplier, mbRunning, Time}
+                            // vs GameStateModuleIO's {miWord00, mfValue04, mfValue08, mbFlag0C,
+                            // miWord10, mfValue14}), so the console's raw 48-byte copy is spelled
+                            // out BY NAME here instead of reinterpret_cast. Entry 0 is the GAME
+                            // timer and entry 1 the SIM timer -- the order
+                            // TimerStatusInterface::StoreTimers @0x828D7518 writes them in.
+                            {
+                                BrnGameState::GameStateModuleIO::TimerStatusInterface lTimerStatus;
+                                const CgsSystem::TimerStatus* const lapSource[2] =
+                                {
+                                    mTimerStatusInterface.GetGameTimerStatus(),
+                                    mTimerStatusInterface.GetSimTimerStatus()
+                                };
+                                for (s32 liEntry = 0; liEntry < 2; ++liEntry)
+                                {
+                                    const CgsSystem::TimerStatus* const lpSource = lapSource[liEntry];
+                                    BrnGameState::GameStateModuleIO::TimerStatusInterface::Entry& lrDest =
+                                        lTimerStatus.maEntries[liEntry];
+                                    lrDest.miWord00  = lpSource->GetFrameCount();
+                                    lrDest.mfValue04 = lpSource->GetBaseTimeStep();
+                                    lrDest.mfValue08 = lpSource->GetTimeStepMultiplier();
+                                    lrDest.mbFlag0C  = lpSource->IsRunning() ? 1u : 0u;
+                                    lrDest.miWord10  = lpSource->GetTime().GetSeconds();
+                                    lrDest.mfValue14 = lpSource->GetTime().GetFraction();
+                                }
+                                lpGsPreWorld->LockForWrite();
+                                lpGsPreWorld->SetTimerStatusInterface(&lTimerStatus);
+                                lpGsPreWorld->UnlockForWrite();
+                            }
                         }
                     }
 

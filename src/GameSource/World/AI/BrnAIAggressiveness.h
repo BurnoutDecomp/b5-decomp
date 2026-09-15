@@ -34,6 +34,12 @@ namespace BrnAI
         void SetAggression(f32 lfAggression);             // :39
         s32  GetTakedownCount();                          // :42
         f32  GetAggressionLevel() const;                  // :45
+
+        // [DIAG] NOT IN THE X360 BINARY -- the same +0x00 load WITHOUT GetAggressionLevel's
+        // "Aggression levels need to be set up" assert, so the BRN_MM_DIAG witness (issue #24)
+        // can report the seeded level on a car whose level was never set without PAUSING the sim.
+        // DELETE-WHEN issue #24 is closed.
+        f32  DiagAggressionLevel() const             { return mfAggressionLevel; }
         f32  GetRandomNumber() const;                     // :48
 
         // @0x827645E0 -- store the speed-match proximity (asserts lfValue in [0,1]).
