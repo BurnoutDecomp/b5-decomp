@@ -73,6 +73,11 @@ namespace CgsGraphics
     class DispatchFrame;   // pointer-only use (dispatch-list generation); class matches CgsDispatcher.h:211 (mangling)
 }
 
+namespace CgsGeometric
+{
+    struct Frustum;        // [DIAG] reference-only use (BRN_BACKDROP_DIAG report)
+}
+
 namespace BrnWorld
 {
 
@@ -310,6 +315,40 @@ private:
                             WorldEntityIO::OutputBuffer_PreScene* lpOutputBuffer );
     void RemoveBackdropEntity( s32 liListIndex, s32 liInstanceIndex,     // @0x822C34B8
                                WorldEntityIO::OutputBuffer_PreScene* lpOutputBuffer );
+
+public:
+    // ---- [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 ---------------
+    // b5-decomp issue #26 ("Backdrops Culling"). The registry records exactly what
+    // AddBackdropEntity handed the scene manager for every backdrop stand-in that is
+    // CURRENTLY in the scene (list/instance index, the source instance transform and
+    // its maximum scale, the renderable LOD0 bounding sphere, and the centre/radius the
+    // entity was given). BackdropDiagReport re-runs the SAME eight-lane plane batch the
+    // octree leaf runs (CgsGeometric::Frustum::IsSphereInFrustum @0x828AF020) against the
+    // frame's main-view frustum and prints, per backdrop, the rejecting plane if any.
+    // It measures the CULL DECISION, not "is something on screen": a backdrop reported
+    // `in=1` here was accepted by the coarse query, so a backdrop that is still missing
+    // from the frame is a RENDER-side defect, not a culling one. DELETE-WHEN issue #26
+    // is closed.
+    static bool BackdropDiagEnabled();
+    static void BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
+                                    u32 luBackdropZoneNumber,
+                                    const Matrix44Affine& lrTransform,
+                                    const Vector3& lRenderableSphereCentre,
+                                    f32 lfRenderableSphereRadius,
+                                    const Vector3& lEntityCentre, f32 lfEntityRadius,
+                                    f32 lfMaxDrawDistanceSq,
+                                    u32 luEntityFlags );
+    static void BackdropDiagForget( s32 liListIndex, s32 liInstanceIndex );
+    static void BackdropDiagReport( const CgsGeometric::Frustum& lrFrustum,
+                                    const Vector3& lCameraPosition,
+                                    const Vector3& lCameraForward );
+    // The DOWNSTREAM half: the camera pass of GenerateDispatchLists marks every backdrop
+    // id the scene manager handed it (`lbDispatched` == it survived the distance cull and
+    // reached RenderInstance), so the report can say WHICH stage lost a backdrop --
+    // coarse cull, the 4500-id filter cap, the max-draw-distance cull, or nothing at all.
+    static void BackdropDiagNoteVisible( s32 liListIndex, s32 liInstanceIndex,
+                                         f32 lfScaledDistanceSq, bool lbDispatched );
+    static void BackdropDiagBeginDispatch( u32 luNumVisibleEntities );
 
     // ---- collision world ---------------------------------------------------
 public:

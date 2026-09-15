@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsPackedOobb.h"
 
 #include <cmath>
+#include <cstring>   // memcpy (the bit-pattern reads below)
 
 // ===========================================================================
 // CgsGraphics::PackedOobb::ToMatrix @ 0x827EE300 -- reconstructed from
@@ -31,12 +32,31 @@
 //     stvx128 r4+0x10  -> yAxis
 //     stvx128 r4+0x20  -> zAxis
 //
-// FLAGGED: the exact bit-field placement within mPackedBB (which lanes/bits
-// carry position vs quaternion vs scale and the per-axis scale exponent) is
-// recovered from the vperm/vcfsx/vcfux shapes, not from valued .rdata permute
-// constants. The quaternion->matrix algebra below is the standard unit-quat
-// rotation reproduced faithfully; the precise on-disk packed-field encoding is
-// inferred and marked for strong review.
+// UN-FLAGGED 2026-09-15 (b5-decomp issue #26). The banner here used to say the
+// bit-field placement was "recovered from the vperm/vcfsx/vcfux shapes, not from
+// valued .rdata permute constants ... inferred and marked for strong review", and
+// the body it justified read mauLane[0..3] for the quaternion, mauLane[0..2] for
+// the scale AND mauLane[0..2] for the position -- THE SAME BYTES THREE TIMES. Every
+// mesh therefore decoded to the same ~1-unit box beside the model origin whatever
+// the model was, and DrawRenderable::Interpret culled meshes against it.
+//
+// The five permute vectors ARE recoverable: they are dyn-init .bss (PackedOobb's
+// five `static` members), so x360rd reads them as zero BY DEFINITION and only the
+// CRT thunk has the values. findinit.py names the writers and ppcdis disassembles
+// them at 0x82C6C598..0x82C6C6E4 (+ the vand w-mask at 0x82C740B0):
+//   stru_83011130 = 0C0C0C0C 0D0D0D0D 0E0E0E0E 0F0F0F0F   quaternion
+//   stru_83011370 = 11090909 110A0A0A 110B0B0B 11111111   scale mantissa
+//   stru_83011220 = 08111111 x4                           scale exponent
+//   stru_830113A0 = 02030203 04050405 06070607 11111111   position
+//   unk_830113C0  = 00011111 x4                           position scale
+//   unk_8327F130  = FFFFFFFF FFFFFFFF FFFFFFFF 00000000   the axis-row w mask
+// which resolve mPackedBB to (console byte order):
+//   [0..1] position scale (top 16 bits of a float)   [2..7] s16 position x/y/z
+//   [8] shared scale exponent (2^(b-127))            [9..11] u8 scale mantissa x/y/z
+//   [12..15] u8 quaternion x/y/z/w
+// The quaternion->matrix algebra below was already correct and is unchanged; only
+// the three unpacks are. LESSON: "the export has no data section" is a statement
+// about the EXPORT -- the same one CgsFrustum.cpp records for SetFromRwFrustum.
 // ===========================================================================
 
 namespace CgsGraphics
@@ -44,33 +64,52 @@ namespace CgsGraphics
 
 namespace
 {
-    // Reinterpret a 32-bit packed lane as a signed fixed-point fraction in
-    // [-1, 1): the asm's `vcfsx v, v, 0x1F` (signed int -> float, scaled by
-    // 2^-31). Quaternion components are stored this way.
-    inline f32 SignedFixedToFloat(u32 luBits)
+    // One byte of the packed register, in the CONSOLE's byte order.
+    //
+    // mPackedBB is ONE 16-byte big-endian VMX value on the X360 and every vperm mask
+    // below indexes it BYTE BY BYTE (0..15). The world porter transcodes it as four u32
+    // LANES -- tools/assets/bundles/renderable_transcode.py reads `>4I` (:229) and writes
+    // `<4I` (:386) -- so each lane's NUMERIC value is the console's word, and console
+    // byte k is the (k & 3)-th byte of lane (k >> 2) counted from the TOP.
+    inline u32 PackedByte(const u32* lpauLane, u32 luIndex)
     {
-        const s32 liSigned = static_cast<s32>(luBits);
-        return static_cast<f32>(liSigned) * (1.0f / 2147483648.0f); // /2^31
+        return (lpauLane[luIndex >> 2] >> (8u * (3u - (luIndex & 3u)))) & 0xFFu;
     }
 
-    // Reinterpret a 32-bit packed lane as an unsigned fixed-point fraction:
-    // the asm's `vcfux v, v, 0x18` (unsigned int -> float, scaled by 2^-24).
-    // Scale magnitudes are stored this way (before the exponent multiply).
-    inline f32 UnsignedFixedToFloat(u32 luBits)
+    // Reinterpret a word as a float (the console simply keeps it in a VMX lane and
+    // multiplies; the bit pattern IS the float).
+    inline f32 BitsToFloat(u32 luBits)
     {
-        return static_cast<f32>(luBits) * (1.0f / 16777216.0f); // /2^24
+        f32 lfValue;
+        std::memcpy(&lfValue, &luBits, sizeof(lfValue));
+        return lfValue;
+    }
+
+    // `vcfsx vD, vS, 0x1F` -- signed int -> float, scaled by 2^-31.
+    inline f32 SignedFixed31(u32 luWord)
+    {
+        return static_cast<f32>(static_cast<s32>(luWord)) * (1.0f / 2147483648.0f);
+    }
+
+    // `vcfux vD, vS, 0x18` -- unsigned int -> float, scaled by 2^-24.
+    inline f32 UnsignedFixed24(u32 luWord)
+    {
+        return static_cast<f32>(luWord) * (1.0f / 16777216.0f);
     }
 }
 
 void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
 {
-    // --- unpack the quaternion (signed fixed-point lanes) ---
-    // FLAGGED: lane assignment recovered from the K_QUAT_PERMUTE shuffle shape;
-    // lanes [0..3] are taken here as (x, y, z, w).
-    f32 lfQx = SignedFixedToFloat(mPackedBB.mauLane[0]);
-    f32 lfQy = SignedFixedToFloat(mPackedBB.mauLane[1]);
-    f32 lfQz = SignedFixedToFloat(mPackedBB.mauLane[2]);
-    f32 lfQw = SignedFixedToFloat(mPackedBB.mauLane[3]);
+    const u32* const lpauLane = mPackedBB.mauLane;
+
+    // --- unpack the quaternion: vperm stru_83011130 -> vcfsx 0x1F ---
+    // stru_83011130 = { 0C0C0C0C, 0D0D0D0D, 0E0E0E0E, 0F0F0F0F } -- byte 12/13/14/15
+    // broadcast across its own word, so each component is ONE byte read as a signed
+    // fraction. (The absolute scale is irrelevant: the quaternion is normalised below.)
+    f32 lfQx = SignedFixed31(PackedByte(lpauLane, 12) * 0x01010101u);
+    f32 lfQy = SignedFixed31(PackedByte(lpauLane, 13) * 0x01010101u);
+    f32 lfQz = SignedFixed31(PackedByte(lpauLane, 14) * 0x01010101u);
+    f32 lfQw = SignedFixed31(PackedByte(lpauLane, 15) * 0x01010101u);
 
     // normalise: lenSq = dot4(q,q); inv = 1/sqrt(lenSq) (vrsqrtefp + 2 NR).
     // The asm is straight-line VMX with no compare/branch guarding lenSq == 0
@@ -82,12 +121,18 @@ void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
     lfQz *= lfInv;
     lfQw *= lfInv;
 
-    // --- unpack the per-axis scale (unsigned fixed-point * exponent) ---
-    // FLAGGED: scale lanes recovered from K_SCALE_PERMUTE / vcfux / vsrw; taken
-    // here as one magnitude per axis from lanes [0..2].
-    const f32 lfScaleX = UnsignedFixedToFloat(mPackedBB.mauLane[0]);
-    const f32 lfScaleY = UnsignedFixedToFloat(mPackedBB.mauLane[1]);
-    const f32 lfScaleZ = UnsignedFixedToFloat(mPackedBB.mauLane[2]);
+    // --- unpack the per-axis scale: mantissa vperm stru_83011370 -> vcfux 0x18,
+    //     times the shared exponent vperm stru_83011220 -> vsrw 1 ---
+    // stru_83011370 = { 11090909, 110A0A0A, 110B0B0B, 11111111 } -- byte 9/10/11 into the
+    // low THREE bytes of its word (mask index 0x11 >= 16 selects the vperm's ZERO source),
+    // i.e. a u8 mantissa that vcfux 0x18 turns into [0, 1).
+    // stru_83011220 = { 08111111 x4 } -- byte 8 into the TOP byte of every word; `vsrw v0,
+    // v7, 1` then lands it at bit 23, which IS the IEEE single exponent field, so the three
+    // axes share one exponent and the scale is mantissa * 2^(byte8 - 127).
+    const f32 lfScaleExponent = BitsToFloat(PackedByte(lpauLane, 8) << 23);
+    const f32 lfScaleX = UnsignedFixed24(PackedByte(lpauLane,  9) * 0x00010101u) * lfScaleExponent;
+    const f32 lfScaleY = UnsignedFixed24(PackedByte(lpauLane, 10) * 0x00010101u) * lfScaleExponent;
+    const f32 lfScaleZ = UnsignedFixed24(PackedByte(lpauLane, 11) * 0x00010101u) * lfScaleExponent;
 
     // --- build the scaled rotation rows (standard unit-quaternion -> 3x3) ---
     // The asm forms these via component permutes and fused multiply-adds with
@@ -121,11 +166,27 @@ void PackedOobb::ToMatrix(rw::math::vpu::Matrix44& roMatrix) const
     roMatrix.zAxis.z = (1.0f - 2.0f * (lfXx + lfYy)) * lfScaleZ;
     roMatrix.zAxis.w = 0.0f;
 
-    // --- unpack the position into the translation row (this+0x30, stored
-    //     first in the asm). w lane forced to 1.0 (vrlimi128 v13, v11, 1, 0). ---
-    roMatrix.wAxis.x = SignedFixedToFloat(mPackedBB.mauLane[0]);
-    roMatrix.wAxis.y = SignedFixedToFloat(mPackedBB.mauLane[1]);
-    roMatrix.wAxis.z = SignedFixedToFloat(mPackedBB.mauLane[2]);
+    // --- unpack the position into the translation row (this+0x30, stored first in the
+    //     asm): vperm stru_830113A0 -> vcfsx 0x1F, times vperm unk_830113C0.
+    //     w lane forced to 1.0 (vrlimi128 v13, v11, 1, 0). ---
+    // stru_830113A0 = { 02030203, 04050405, 06070607, 11111111 } -- a 16-BIT signed fixed
+    // component per axis, from byte pairs (2,3) / (4,5) / (6,7), the halfword duplicated
+    // into both halves of the word (which is what makes vcfsx 0x1F read it as ~h/2^15).
+    // unk_830113C0 = { 00011111 x4 } -- bytes 0 and 1 become the TOP 16 bits of a float
+    // (the rest zero), i.e. the position's own scale, and `vmulfp128 v13, v3, v13` applies
+    // it. So the box centre is NOT a unit-range number: it is a real model-space position.
+    const f32 lfPositionScale = BitsToFloat(  ( PackedByte(lpauLane, 0) << 24 )
+                                            | ( PackedByte(lpauLane, 1) << 16 ) );
+    const u32 luPosX = ( PackedByte(lpauLane, 2) << 24 ) | ( PackedByte(lpauLane, 3) << 16 )
+                     | ( PackedByte(lpauLane, 2) <<  8 ) |   PackedByte(lpauLane, 3);
+    const u32 luPosY = ( PackedByte(lpauLane, 4) << 24 ) | ( PackedByte(lpauLane, 5) << 16 )
+                     | ( PackedByte(lpauLane, 4) <<  8 ) |   PackedByte(lpauLane, 5);
+    const u32 luPosZ = ( PackedByte(lpauLane, 6) << 24 ) | ( PackedByte(lpauLane, 7) << 16 )
+                     | ( PackedByte(lpauLane, 6) <<  8 ) |   PackedByte(lpauLane, 7);
+
+    roMatrix.wAxis.x = SignedFixed31(luPosX) * lfPositionScale;
+    roMatrix.wAxis.y = SignedFixed31(luPosY) * lfPositionScale;
+    roMatrix.wAxis.z = SignedFixed31(luPosZ) * lfPositionScale;
     roMatrix.wAxis.w = 1.0f;
 }
 

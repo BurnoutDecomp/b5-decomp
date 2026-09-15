@@ -55,6 +55,7 @@
 #include "BrnCommonTypes.h"                                                // Vector4 / Matrix44
 
 #include <cstring>   // memcpy
+#include <cmath>     // [DIAG] std::sqrt (BRN_OOBB_DIAG, issue #26)
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"  // [diag] BrnDiag::IsSceneColourPass
 #include <cstdio>    // [diag] snprintf (the [vpcmp] view-projection probe)
 #include <cstdlib>   // [diag] getenv  (BRN_VP_PROBE)
@@ -683,6 +684,63 @@ static void EmitObjectMeshCommands(const Renderable* lpRenderable, DispatchFrame
         {
             // Fully visible -- skip the per-mesh tests.
             lbFrustumTest = false;
+        }
+    }
+
+    // =====================================================================
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_OOBB_DIAG=1 (b5-decomp issue #26).
+    //
+    // MEASURES THE PER-MESH CULL BOX, NOT "is something on screen". For the first
+    // renderables of a boot it decodes every mesh's PackedOobb and compares the box it
+    // yields with the renderable's OWN LOD0 bounding sphere -- which is independently
+    // known good (the world entity module hands the identical sphere to the scene
+    // manager and the coarse query answers correctly with it).
+    //
+    // POSITIVE CONTROL, and it is the whole point: a CORRECT decode puts every mesh's
+    // box centre inside that sphere and its half-extents at or under the sphere radius,
+    // for models of every size. A decode that reads the wrong bytes cannot do that --
+    // it produces the same tiny box near the model origin whatever the model is, so
+    // `posOverR` and `extOverR` come out ~0 on a kilometre-scale mesh and the line says
+    // so without any judgement call. DELETE-WHEN issue #26 is closed.
+    // =====================================================================
+    {
+        static s32 siOobbDiag = -1;
+        if (siOobbDiag < 0)
+        {
+            const char* lpcEnv = std::getenv("BRN_OOBB_DIAG");
+            siOobbDiag = (lpcEnv != 0 && lpcEnv[0] != '0') ? 1 : 0;
+        }
+        static s32 siOobbSamples = 0;
+        if (siOobbDiag != 0 && siOobbSamples < 120 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const f32 lfSphereR = lpRenderable->mBoundingSphere.w;
+            if (lfSphereR > 50.0f)      // only the big meshes -- a backdrop is hundreds of metres
+            {
+                ++siOobbSamples;
+                for (u32 luM = 0; luM < luNumMeshes && luM < 8u; ++luM)
+                {
+                    rw::math::vpu::Matrix44 lBox;
+                    lpRenderable->mppMeshes[luM]->mPackedBoundingBox.ToMatrix(lBox);
+                    const f32 lfEx = std::sqrt(lBox.xAxis.x * lBox.xAxis.x + lBox.xAxis.y * lBox.xAxis.y + lBox.xAxis.z * lBox.xAxis.z);
+                    const f32 lfEy = std::sqrt(lBox.yAxis.x * lBox.yAxis.x + lBox.yAxis.y * lBox.yAxis.y + lBox.yAxis.z * lBox.yAxis.z);
+                    const f32 lfEz = std::sqrt(lBox.zAxis.x * lBox.zAxis.x + lBox.zAxis.y * lBox.zAxis.y + lBox.zAxis.z * lBox.zAxis.z);
+                    const f32 lfDx = lBox.wAxis.x - lpRenderable->mBoundingSphere.x;
+                    const f32 lfDy = lBox.wAxis.y - lpRenderable->mBoundingSphere.y;
+                    const f32 lfDz = lBox.wAxis.z - lpRenderable->mBoundingSphere.z;
+                    const f32 lfPos = std::sqrt(lfDx * lfDx + lfDy * lfDy + lfDz * lfDz);
+                    const f32 lfExt = (lfEx > lfEy ? (lfEx > lfEz ? lfEx : lfEz) : (lfEy > lfEz ? lfEy : lfEz));
+                    *CgsDev::Log::gpDebugPrint
+                        << "[oobb] meshes=" << static_cast<s32>(luNumMeshes)
+                        << " mesh=" << static_cast<s32>(luM)
+                        << " sphC=(" << lpRenderable->mBoundingSphere.x << "," << lpRenderable->mBoundingSphere.y
+                        << "," << lpRenderable->mBoundingSphere.z << ") sphR=" << lfSphereR
+                        << " boxPos=(" << lBox.wAxis.x << "," << lBox.wAxis.y << "," << lBox.wAxis.z << ")"
+                        << " boxExt=(" << lfEx << "," << lfEy << "," << lfEz << ")"
+                        << " posOverR=" << (lfPos / lfSphereR)
+                        << " extOverR=" << (lfExt / lfSphereR)
+                        << "\n";
+                }
+            }
         }
     }
 
