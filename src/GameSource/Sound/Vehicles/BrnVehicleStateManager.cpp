@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"
+#include "GameSource/Sound/Vehicles/BrnEngineAudioDiag.h"   // [DIAG] NOT IN THE X360 BINARY
 
 #include <cstdio>
 #include <cstring>
@@ -109,6 +110,20 @@ void VehicleStateManager::AddRegistry(const char* lpcEngineName, bool lbUseFileP
                       static_cast<u32>(luName));
         lpHandle = GetResourceRegistrar().GetResource(lacBundle, lacRegistry);
     }
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG. A null handle here is an
+    // engine/exhaust playback registry that never reached the registrar, i.e. the
+    // voices fall back to whatever registry is already loaded.
+    if (EngineAudioDiagLive())
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[engine-registry] name=" << lpcEngineName
+            << " registry=" << lacRegistry
+            << " bundle=" << (lpcBundle ? lpcBundle : "<resource-only>")
+            << " useFilePath=" << static_cast<s32>(lbUseFilePath ? 1 : 0)
+            << " resolved=" << static_cast<s32>(lpHandle ? 1 : 0)
+            << "\n";
+    }
+
     CGS_ASSERT(lpHandle != nullptr, "lpResourceHandle");
     if (!lpHandle)
         return;

@@ -417,7 +417,13 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
 void AudioOutputPC::Close()
 {
-    CaptureFinish();   // [DIAG] BRN_AUDIO_CAPTURE
+    // [DIAG] BRN_AUDIO_CAPTURE -- do NOT close the capture here. The device is opened and
+    // closed many times in one boot (ReleasePrimaryFill() around every movie), and closing
+    // the file on the first of those ended the capture for the whole run (g_captureTried
+    // stays true, so CaptureWrite never reopens): a 120 s run captured 0.79 s. Just make the
+    // header describe what is on disk; CaptureFinish still runs from the atexit handler.
+    if (g_capture)
+        CapturePatchHeader();
     if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
     if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
     if (g_pXAudio2) { g_pXAudio2->Release(); g_pXAudio2 = nullptr; }
