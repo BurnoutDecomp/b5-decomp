@@ -59,6 +59,7 @@ namespace Gen
         // the ARTIST call sites (Presentation +0x4d8, StreamMappings +0x458,
         // SpeechData +0x470).
         RefSpec PresentationActions() const;
+        const RefSpec& StreamSettings() const;
         const RefSpec& StreamMappings() const;
         const RefSpec& SpeechData() const;
         const RefSpec& WorldEmitterList() const;
@@ -136,6 +137,20 @@ namespace Gen
         const u64 luCollectionKey = *reinterpret_cast<const u64*>(
             static_cast<const u8*>(mpAttributeData) + 0x4D8u);
         return RefSpec(KU_PRESENTATION_ACTION_LIST_CLASS, luCollectionKey);
+    }
+
+    inline const RefSpec& burnoutglobaldata::StreamSettings() const
+    {
+        // StreamingEffect::Attach @ ARTIST 0x826EE8D0 (an IDA export hole; read
+        // from the image with ppcdis) hands Attrib::Instance::ChangeWithDefault
+        // the address <BurnoutGlobalData layout> + 0x440:
+        //     lwz  r11, 0x28(r31)        ; mpLogicModule
+        //     lwzx r11, r11, 0x1350C     ; mBurnoutGlobalData.mpAttributeData
+        //     addi r4,  r11, 0x440       ; -> ChangeWithDefault(&mStreamSettings, r4)
+        // The DecFIGS _LayoutStruct order is `RefSpec StreamSettings; RefSpec
+        // StreamMappings;` -- one 0x18 stride before StreamMappings (+0x458).
+        return *reinterpret_cast<const RefSpec*>(
+            static_cast<const u8*>(mpAttributeData) + 0x440u);
     }
 
     inline const RefSpec& burnoutglobaldata::StreamMappings() const

@@ -1,6 +1,8 @@
 #include "GameSource/Sound/Streaming/BrnStreamingEffect.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"  // GetGlobalData().StreamSettings()
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lpState / IsAttached tripwires)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (FindStreamSettings' own miss print)
 #include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
 #include <algorithm>
 
@@ -60,13 +62,10 @@ namespace Streaming
 // raw-offset-hacked: only the base construction, mpState's nullptr-init, the
 // VoiceWrapper construction and the streamsettings construction are bodied.
 //
-// FLAG (Attrib::Gen::streamsettings not yet homed): the tail
-// `Attrib::Gen::streamsettings::streamsettings(this+0xB8, 0, 0)` is an AttribSys-
-// generated attribute-table ctor (same (ptr,0,0) shape as the committed
-// CollisionStateManager siblings). No `streamsettings` generated-class home exists
-// yet, so it is modelled as an opaque, correctly-sized byte span (maStreamSettings)
-// explicitly zeroed to mirror the generated ctor's default-data-area construction
-// -- without fabricating the generated class's body.
+// The tail `Attrib::Gen::streamsettings::streamsettings(this+0xB8, 0, 0)` is the
+// AttribSys-generated ctor (@0x82697400, homed in Generated/classes/streamsettings.h)
+// constructing the instance with NO collection: the console binds it later, on every
+// Attach @0x826EE8D0, from BurnoutGlobalData's `StreamSettings` RefSpec (see Attach).
 // ---------------------------------------------------------------------------
 StreamingEffect::StreamingEffect()
     : BrnEffectObject()   // installs the base vptrs + zero-inits the base members (BY NAME)
@@ -166,16 +165,26 @@ bool StreamingEffect::Attach()
     mVoice.Create(mCreateParams);
     mVoice.Play(0);
 
-    if (mStreamSettings.GetCollection())
-    {
-        CGS_ASSERT(mStreamSettings.Num_ContentSpecs() == mStreamSettings.Num_Volumes(),
-                   "mStreamSettings.Num_ContentSpecs() == mStreamSettings.Num_Volumes()");
-        mfGain = FindStreamSettings(mStreamSettings, mCreateParams.mContentSpecName);
-    }
-    else
-    {
-        mfGain = 1.0f;
-    }
+    // @0x826EE97C..0x826EEA30 (export hole, read from the image): the console binds
+    // mStreamSettings HERE, on every attach, to the BurnoutGlobalData `StreamSettings`
+    // RefSpec (layout +0x440, reached through mpLogicModule+0x1350C ==
+    // SoundLogicModule::mBurnoutGlobalData), asserts the two arrays are the same
+    // length, then looks this stream's ContentSpec up for its authored volume:
+    //     lwz  r11, 0x28(r31) ; lwzx r11, r11, 0x1350C ; addi r4, r11, 0x440
+    //     bl   Attrib::Instance::ChangeWithDefault(&mStreamSettings, r4)
+    //     Get/GetLength(ContentSpecs) == Get/GetLength(Volumes)   ; assert :0x87
+    //     bl   FindStreamSettings(&mStreamSettings, mCreateParams.mContentSpecName)
+    //     stfs f1, 0xCC(r31)                                      ; mfGain
+    // There is no "collection present?" guard on the console: an unresolved RefSpec
+    // leaves the instance empty, both lengths read 0 and FindStreamSettings returns
+    // its not-found 1.0f (flt_82001C98) -- the same value the old invented else-arm
+    // produced, which is why every stream in the build sat at gain 1.0.
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
+    mStreamSettings.ChangeWithDefault(lpModule->GetGlobalData().StreamSettings());
+    CGS_ASSERT(mStreamSettings.Num_ContentSpecs() == mStreamSettings.Num_Volumes(),
+               "mStreamSettings.Num_ContentSpecs() == mStreamSettings.Num_Volumes()");
+    mfGain = FindStreamSettings(mStreamSettings, mCreateParams.mContentSpecName);
 
     mVoiceId = static_cast<CgsSound::Logic::Command::QueueElement>(mVoice.GetVoice().GetIdent());
     mfElapsedTime = 0.0f;
@@ -189,12 +198,69 @@ bool StreamingEffect::Attach()
     // effect will multiply the user's volume by.
     CgsSound::Diag::StreamDiagPrintf(
         "[sndstream] attach spec=0x%08X voicespec=0x%08X voiceobj=%d ident=%u "
-        "settings=%d gain=%.4f\n",
+        "settings=%d n=%u gain=%.4f\n",
         static_cast<u32>(mCreateParams.mContentSpecName),
         static_cast<u32>(mCreateParams.mVoiceSpecName),
         mVoice.HasLiveVoice() ? 1 : 0,
         static_cast<u32>(mVoiceId),
-        mStreamSettings.GetCollection() ? 1 : 0, mfGain);
+        mStreamSettings.GetCollection() ? 1 : 0,
+        mStreamSettings.Num_ContentSpecs(), mfGain);
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). The settings TABLE as the
+    // binary search sees it: is ContentSpecs ascending (the search's precondition),
+    // and does a LINEAR scan find this spec where the search did not? Printed once
+    // per session for the shape, once per attach for the scan.
+    if (CgsSound::Diag::StreamDiagEnabled())
+    {
+        const u32 luCount = mStreamSettings.Num_ContentSpecs();
+        static bool sbShapePrinted = false;
+        if (!sbShapePrinted && luCount)
+        {
+            sbShapePrinted = true;
+            u32 luDescents = 0, luZeroSpecs = 0, luNotUnity = 0;
+            f32 lfMin = mStreamSettings.Volumes(0), lfMax = lfMin;
+            u32 luFirstNotUnity = 0;
+            for (u32 i = 0; i < luCount; ++i)
+            {
+                if (i && mStreamSettings.ContentSpecs(i) < mStreamSettings.ContentSpecs(i - 1))
+                    ++luDescents;
+                if (mStreamSettings.ContentSpecs(i) == 0)
+                    ++luZeroSpecs;
+                const f32 lfVol = mStreamSettings.Volumes(i);
+                if (lfVol != 1.0f)
+                {
+                    if (!luNotUnity)
+                        luFirstNotUnity = i;
+                    ++luNotUnity;
+                }
+                lfMin = lfVol < lfMin ? lfVol : lfMin;
+                lfMax = lfVol > lfMax ? lfVol : lfMax;
+            }
+            CgsSound::Diag::StreamDiagPrintf(
+                "[sndstream] settings-table n=%u volumes=%u descents=%u zeros=%u "
+                "spec[0]=0x%08X vol[0]=%.4f spec[1]=0x%08X spec[n-1]=0x%08X vol[n-1]=%.4f "
+                "notUnity=%u first=%u(0x%08X %.4f) min=%.4f max=%.4f\n",
+                luCount, mStreamSettings.Num_Volumes(), luDescents, luZeroSpecs,
+                mStreamSettings.ContentSpecs(0), mStreamSettings.Volumes(0),
+                luCount > 1 ? mStreamSettings.ContentSpecs(1) : 0u,
+                mStreamSettings.ContentSpecs(luCount - 1), mStreamSettings.Volumes(luCount - 1),
+                luNotUnity, luFirstNotUnity, mStreamSettings.ContentSpecs(luFirstNotUnity),
+                mStreamSettings.Volumes(luFirstNotUnity), lfMin, lfMax);
+        }
+        s32 liLinearHit = -1;
+        for (u32 i = 0; i < luCount; ++i)
+        {
+            if (mStreamSettings.ContentSpecs(i) == static_cast<u32>(mCreateParams.mContentSpecName))
+            {
+                liLinearHit = static_cast<s32>(i);
+                break;
+            }
+        }
+        CgsSound::Diag::StreamDiagPrintf(
+            "[sndstream] settings-scan spec=0x%08X linearHit=%d vol=%.4f\n",
+            static_cast<u32>(mCreateParams.mContentSpecName), liLinearHit,
+            liLinearHit >= 0 ? mStreamSettings.Volumes(static_cast<u32>(liLinearHit)) : -1.0f);
+    }
     return true;
 }
 
@@ -330,6 +396,13 @@ f32 StreamingEffect::FindStreamSettings(const Attrib::Gen::streamsettings& arSet
             liLow = liMiddle + 1;
         else
             return arSettings.Volumes(static_cast<u32>(liMiddle));
+    }
+    // @0x82683CAC: the console's own miss report, gated on message-filter bit 0, then
+    // flt_82001C98 == 1.0f.
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint)
+    {
+        *CgsDev::Log::gpDebugPrint << "FindStreamSettings : Not found for "
+                                   << static_cast<s32>(auContentSpec) << "\n";
     }
     return 1.0f;
 }

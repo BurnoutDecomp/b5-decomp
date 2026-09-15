@@ -60,6 +60,16 @@ namespace Gen
         }
 
         using Instance::GetCollection;
+
+        // The X360 StreamingEffect::Attach @0x826EE8D0 calls
+        // Attrib::Instance::ChangeWithDefault(&mStreamSettings, <globaldata>+0x440)
+        // -- the burnoutglobaldata `StreamSettings` RefSpec. Re-published here (the
+        // base is PRIVATE) in the same shape as the presentationcomponent sibling;
+        // the attested base @0x8280D258 does the resolve-with-default + Change.
+        void ChangeWithDefault(const RefSpec& lrRefSpec)
+        {
+            Instance::ChangeWithDefault(const_cast<RefSpec*>(&lrRefSpec));
+        }
     };
 
     // Chain the Instance ctor, then assert the collection's class is
