@@ -636,6 +636,12 @@ public:
     // switch that sets the env var. Full note at the body.
     void HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
 
+    // [car] HARNESS-ONLY, NOT an X360 function, permanent: BRN_DEBUG_PLAYER_CAR=<vehicle id or
+    // name> swaps the player into that car once, through the console's OWN debug path (the
+    // ChangePlayerCarEvent ResetPlayerDebugComponent::ChangeCar @0x82382B20 posts from the
+    // "Change player car" development menu). Full note at the body.
+    void HarnessInjectPlayerCarBringUp();
+
     // ==============================================================================================
     // ⭐⭐⭐ [showtime S7b-a wave, 2026-08-27] THE SHOWTIME START. Both bodies live in
     // GameStateModule_Showtime.cpp.
