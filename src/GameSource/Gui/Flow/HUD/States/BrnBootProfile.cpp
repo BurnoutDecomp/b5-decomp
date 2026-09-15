@@ -388,7 +388,11 @@ namespace BrnGui
         {
             if (mpGuiCache != 0)
                 mpGuiCache->UnloadResources(maResourcesToLoad, muNumResourcesToLoad);
-            if (mpGuiCache == 0 || !mpGuiCache->IsLoadingScreenVisible())
+            // ARTIST 0x824785C0 `lbz r11, 0x4B4F(r11)`: the +0x4B4F byte is the OnlinePlay
+            // wave's mbPerformingInvite (the DWARF's mbIsLoadingScreenVisible lives at
+            // +0x13B90 -- see the GuiCache.h note at +0x4B4F, issue #29 wave). Same byte
+            // as before, read under its real name.
+            if (mpGuiCache == 0 || !mpGuiCache->IsPerformingInvite())
                 PostCommand16<507>(mpStateInterface, KI_CHANNEL_GUI_OUT);
         }
         else

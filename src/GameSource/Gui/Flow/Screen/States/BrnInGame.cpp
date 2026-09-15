@@ -270,13 +270,17 @@ namespace BrnGui
         // The existing cache accessor has the earlier consumer name OnlineStartPending.
         void CacheSetEnteredOnlineViaEasyDrive(GuiCache* lpCache) { lpCache->SetOnlineStartPending(true); }
 
-        // FLAG PC-platform leaf: GuiCache::mbIsInJunkyard (DWARF h:1675; X360 +0x4B57)
-        // pause gate; the PC boot is not in the junkyard.
-        bool CacheIsInJunkyard(const GuiCache* /*lpCache*/) { return false; }
-
-        // FLAG PC-platform leaf: GuiCache::mbMugshotActive (DWARF h:1677; X360 +0x4B59)
-        // pause gate; no mugshot capture on PC yet.
-        bool CacheIsMugshotActive(const GuiCache* /*lpCache*/) { return false; }
+        // The five PauseAllowed @0x824B8DF8 gate bytes, read off the cache BY NAME
+        // (issue #29 wave, 2026-09-15). These used to be five `return false` leaves, which
+        // is why the START button opened Driver Details during an event intro: the console's
+        // `lbz cache+0xA015` (the pre-race fly-by) and `+0xA014` (event prepared, not yet
+        // started) both said "no pausing" and neither was read here.
+        //   +0x4B57  DWARF h:1675 mbIsInJunkyard        +0x4B59  h:1677 mbMugshotActive
+        //   +0x13B90 DWARF h:1895 mbIsLoadingScreenVisible
+        //   +0xA014  mbEventPreparedForModeStart (name inferred; GuiCache::RecEvent 93 sets,
+        //            237/322 clear)                     +0xA015  h:569 mbIsPreRaceFlyByActive
+        bool CacheIsInJunkyard(const GuiCache* lpCache)    { return lpCache->IsInJunkyard(); }
+        bool CacheIsMugshotActive(const GuiCache* lpCache) { return lpCache->IsMugshotActive(); }
 
         // FLAG PC-platform leaf: GuiCache::mbCarUnlockPending (DWARF h:1689; X360 +0x4B74)
         // boundary read; no car-unlock sequence pending on the PC boot.
@@ -288,20 +292,18 @@ namespace BrnGui
         s16 CacheGetCurrentLandmarkIndex(const GuiCache* /*lpCache*/)
         { return KI_NO_EVENT_START_LANDMARK; }
 
-        // FLAG PC-platform leaf: unnamed GuiCache pause-gate byte @+0xA014 (X360; no
-        // DWARF member maps onto this far offset in the recovered slice). Clear on PC.
-        bool CacheFarPauseGateA(const GuiCache* /*lpCache*/) { return false; }
-
-        // FLAG PC-platform leaf: unnamed GuiCache pause-gate byte @+0xA015 (X360).
-        bool CacheFarPauseGateB(const GuiCache* /*lpCache*/) { return false; }
+        // +0xA014 / +0xA015 -- see the block above CacheIsInJunkyard. PauseGame @0x824DF05C
+        // re-reads +0xA014 on the online arm (set == suppress the "ON_PAUSE" state event).
+        bool CacheFarPauseGateA(const GuiCache* lpCache) { return lpCache->IsEventPreparedForModeStart(); }
+        bool CacheFarPauseGateB(const GuiCache* lpCache) { return lpCache->IsPreRaceFlyByActive(); }
 
         // FLAG PC-platform leaf: unnamed GuiCache byte @+0xA9E0 the X360
         // SelectOnlineMenuOption sets to 1 with the join bookkeeping; no-op boundary.
         void CacheMarkOnlineMenuActionPending(GuiCache* /*lpCache*/) {}
 
-        // FLAG PC-platform leaf: unnamed GuiCache far gate byte @+0x13B90 (X360; it
-        // suppresses both HandleControllerInput and PauseAllowed while set). Clear on PC.
-        bool CacheIsInputSuppressed(const GuiCache* /*lpCache*/) { return false; }
+        // +0x13B90 == DWARF mbIsLoadingScreenVisible: it suppresses both HandleControllerInput
+        // and PauseAllowed while the loading screen is up (see the block above CacheIsInJunkyard).
+        bool CacheIsInputSuppressed(const GuiCache* lpCache) { return lpCache->IsLoadingScreenVisible(); }
 
         // GuiCache::ClearExpectedAptComponentList (X360 @0x824EE528, called with flow
         // 0) is not declared on the committed GuiCache (same as BrnBootProfile.cpp's).
