@@ -2,6 +2,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
+#include "GameSource/Sound/Global/BrnMixerControl.h"   // mpMixerControl (the +0x230 controller)
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
@@ -236,7 +237,8 @@ void MusicEffect::EaTraxData::SetCurrentSong(s32 aiSong)
 // ---------------------------------------------------------------------------------
 
 MusicEffect::MusicEffect()
-    : BrnEffectObject(), mSecondaryStream(), mEATraxStream(), mMusicStreamMenu(),
+    : BrnEffectObject(), mpMixerControl(0), mfLastPublishedGuiVolume(0.0f),
+      mSecondaryStream(), mEATraxStream(), mMusicStreamMenu(),
       mJunkyardStream(), mEaTraxData(),
       mbPlaylistChanged(false), mbPreviewActive(false), meEventEndResult(0),
       mbEventWon(false), mbEventEndPending(false),
@@ -278,6 +280,31 @@ bool MusicEffect::IsCustomSoundtrackActive()
     return false;
 }
 
+// X360 0x82685D38: `return (a2 == 0) - 1;`
+s32 MusicEffect::GetController(s32 aiIndex)
+{
+    return aiIndex == 0 ? 0 : -1;
+}
+
+// X360 0x826873A0:
+//   if ( (*(a2 + 20) & 0x7F0) != 0 ) assert("Unexpected control.", BrnMusicEffect.cpp:483);
+//   else                             result[140] = a2 - 4;      // this+0x230
+// `(*(ctrl + 20) & 0x7F0) != 0` is GetEffectID() != 0 (the id field is bits [10:4] of
+// the packed effect id -- the same extraction DMixIO::GetSFX_ID uses), so the console
+// accepts exactly the effect-control whose id is 0: MixerControl (ClassTypeInfo
+// ObjectID 0). The `- 4` is the primary-base adjustment of the EffectBase sub-object
+// pointer, expressed here as the ordinary derived cast.
+void MusicEffect::AttachController(CgsSound::Logic::EffectBase* apController)
+{
+    CGS_ASSERT(apController != 0, "lpController");
+    if (!apController)
+        return;
+    if (apController->GetEffectID() == 0)
+        mpMixerControl = static_cast<MixerControl*>(apController);
+    else
+        CGS_ASSERT(false, "Unexpected control.");
+}
+
 bool MusicEffect::Attach()
 {
     if (!CgsSound::Logic::EffectBase::Attach())
@@ -289,6 +316,10 @@ bool MusicEffect::Attach()
     CGS_ASSERT(lpStreaming != 0, "lpStreamingStateManager");
     if (!lpStreaming)
         return false;
+    // X360 Attach @0x8269CC60 asserts BOTH: cpp:514 "mpStreamingStateManager" and
+    // cpp:515 "mpMixerControl" -- the controller must already have been attached by
+    // State::CreateSFXCtrls before the effect attaches.
+    CGS_ASSERT(mpMixerControl != 0, "mpMixerControl");
     mSecondaryStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
     mEATraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
     mMusicStreamMenu.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec");
@@ -532,7 +563,9 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
         // PauseWithFade(0.1f) (event start/end, car unlocked, picture paradise, showtime)
         // the EA Trax voice's PauseControl stayed at 1 FOR THE REST OF THE SESSION: the
         // stream still streamed and still had send gain, and was simply never unpaused
-        // again.
+        // again. Measured: run 2 t=18..160 s sat at RMS ~300 with
+        // `[sndstream] gain slot=1 ... state=1 pause=1`, against RMS ~1800 in the
+        // no-event run 1.
         if (!mSecondaryStream.IsPlayingOrQueued())
             mEATraxStream.SetInternalPaused(false);
         // X360 line 348-353: the select-song gate is `!EATrax.IsPlayingOrQueued() &&
@@ -729,8 +762,33 @@ void MusicEffect::ProcessUpdate()
 
     mEATraxStream.SetVolume(
         GetRWACMixerOutputValue(mEATraxStream.GetOutputSlot(), DMixIO::DMX_VOL));
+    // FLAG: the X360 stores the JUMP HIGH-PASS frequency here (`*(a1+248) = *(a1+64)`,
+    // the JumpHpf sub-object at this+0x34 that UpdateParams Update()s/Release()s --
+    // JumpHpf::Update @0x826877E0 / ::Release @0x82687648). The JumpHpf is not
+    // reconstructed, so the constant 0 (its at-rest frequency) stands in; the music-jump
+    // filter on big air does not run. NOT a faithful body for this one line.
     mEATraxStream.SetHighPassFreq(0.0f);
     mEATraxStream.SetLowPassFreq(GetRWACMixerOutputValue(8, DMixIO::DMX_FREQ));
+
+    // ⭐ X360 ProcessUpdate @0x826F6D70, immediately after the EA Trax volume stores:
+    //     v7 = *(a1 + 232);                                   // mEATraxStream.meState
+    //     if ( v7 == 1 || v7 == 4 || *(a1 + 262) ) v8 = 1;    // ... || mbSongQueued
+    //     if ( !v8 ) goto LABEL_19;                           // -> v10 = 0
+    //     if ( *(a1 + 261) || *(a1 + 260) ) goto LABEL_19;    // mbStreamPaused | mbInternalPause
+    //     v10 = 0x7FFF * *(*(a1 + 560) + 72) / 11;            // mpMixerControl's music volume
+    //     CgsSound::Logic::EffectBase::SetMixerInputValue(a1, 0, v10);
+    // This effect's own dynamic-mixer INPUT 0 -- "EA Trax is audible right now, at this
+    // music-volume setting". It had NO producer in this tree, so the mix map's music
+    // input read 0 for the whole session and every mixer output derived from it stayed
+    // at its silent-music rest value.
+    s32 liMusicInput = 0;
+    if (mEATraxStream.IsPlayingOrQueued() && !mEATraxStream.IsPaused())
+    {
+        CGS_ASSERT(mpMixerControl != 0, "mpMixerControl");
+        if (mpMixerControl)
+            liMusicInput = 0x7FFF * mpMixerControl->GetMusicVolumeForMixer() / 11;
+    }
+    SetMixerInputValue(0, liMusicInput);
 
     mSecondaryStream.SetVolume(
         GetRWACMixerOutputValue(mSecondaryStream.GetOutputSlot(), DMixIO::DMX_VOL));
@@ -746,6 +804,29 @@ void MusicEffect::ProcessUpdate()
         GetRWACMixerOutputValue(mJunkyardStream.GetOutputSlot(), DMixIO::DMX_VOL));
     mJunkyardStream.SetHighPassFreq(0.0f);
     mJunkyardStream.SetLowPassFreq(96000.0f);
+
+    // ⭐ X360 ProcessUpdate @0x826F6D70 tail:
+    //     v16 = GetRWACMixerOutputValue(a1, 9, 0);
+    //     if ( v16 != *(a1 + 572) ) {
+    //         AddEvent(*(a1 + 40) + 20144, &v16, 513, 4);   // the module's PreUpdateOutput
+    //         *(a1 + 572) = v16;                            // GuiOut queue, event 513
+    //     }
+    // Mixer output slot 9 is the music level the FRONT END shows; the effect republishes
+    // it as GuiOut event 513 only when it CHANGES. `*(a1 + 40) + 20144` is
+    // mpLogicModule + 0x4EB0 == SoundLogicModule::mPreUpdateOutput, whose first member is
+    // the GuiOut VariableEventQueue<256,16>. It had no producer in this tree.
+    const f32 lfGuiVolume = GetRWACMixerOutputValue(9, DMixIO::DMX_VOL);
+    if (lfGuiVolume != mfLastPublishedGuiVolume)
+    {
+        Module::SoundLogicModule* lpGuiModule =
+            static_cast<Module::SoundLogicModule*>(mpLogicModule);
+        CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
+            reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+                lpGuiModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+        lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lfGuiVolume),
+                           513, static_cast<s32>(sizeof(f32)));
+        mfLastPublishedGuiVolume = lfGuiVolume;
+    }
 }
 
 // X360 0x826BBAF8. Thirteen message ids (jump table 0x826BBB64, cases 0..33 == ids
