@@ -5797,12 +5797,17 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
     return 0;
 }
 
+// [DIAG] NOT IN THE X360 BINARY -- per-present submission counters for the black-frame watch
+// (issue #30): reset by device.cpp after every Present, printed in [black-frame] lines.
+extern "C++" { namespace renderengine { extern u32 guDiagDraws; extern u32 guDiagResolves; extern void* gpDiagLastResolveDest; } }   // C++ linkage: this file sits in an extern "C" region
+
 void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
                                    u32 lePrimitiveType,
                                    u32 luBaseVertexIndex,
                                    u32 luMinVertexIndex,
                                    u32 luNumVertices)
 {
+    ++renderengine::guDiagDraws;   // [DIAG] issue #30 black-frame counters
     // Xenon signature: (PrimitiveType, BaseVertexIndex, StartIndex, IndexCount).
     renderengine::WorldDraw_IndexedUP(lePrimitiveType, luBaseVertexIndex,
                                       luMinVertexIndex, luNumVertices);
@@ -5828,6 +5833,7 @@ void D3DDevice_DrawVertices(IDirect3DDevice9* /*lpDeviceArg*/,
                             u32 luStartVertex,
                             u32 luVertexCount)
 {
+    ++renderengine::guDiagDraws;   // [DIAG] issue #30 black-frame counters
     renderengine::WorldDraw_NonIndexedUP(luPrimitiveType, luStartVertex, luVertexCount);
 }
 
@@ -9254,6 +9260,7 @@ int D3DDevice_Resolve(void* /*lpDevice*/, u32 luFlags, const void* lpSourceRect,
                       u32 luDestSliceOrFace, const void* lpClearColour, f32 lfClearZ,
                       u32 luClearStencil, const void* /*lpParameters*/)
 {
+    ++renderengine::guDiagResolves; renderengine::gpDiagLastResolveDest = lpDestTexture;   // [DIAG] issue #30 black-frame counters
     IDirect3DDevice9* const lpD3DDevice = Dev();
     if (lpD3DDevice == nullptr)
         return 0;

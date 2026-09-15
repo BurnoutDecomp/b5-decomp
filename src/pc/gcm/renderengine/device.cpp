@@ -273,6 +273,11 @@ bool renderengine::Device::FrameBeginNoClear()
 // [diag] present counter shared with the draw-trace diagnostics (CgsIm2d.cpp reads it to
 // stamp traced draws with their frame). Plain u32; single render thread on the PC boot.
 namespace renderengine { u32 guPresentCount = 0; }
+// [DIAG] NOT IN THE X360 BINARY -- what the game submitted during the present being watched
+// (issue #30): draws through the two Xenon draw shims, EDRAM resolves and the last resolve's
+// destination. A black present with draws == 0 is the game skipping its frame; one with the
+// usual thousands of draws and no resolve to the back buffer is a routing/composite defect.
+namespace renderengine { u32 guDiagDraws = 0; u32 guDiagResolves = 0; void* gpDiagLastResolveDest = nullptr; }
 
 // [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every Nth present
 // (PrintWindow returns black against this device, so the game dumps its own frames).
@@ -395,12 +400,22 @@ static void WatchBlackFramesIfRequested()
         {
             char lacMsg[200];
             std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[black-frame] BEGIN present=%u tick=%llu mean=%.1f prevMean=%.1f\n",
+                          "[black-frame] BEGIN present=%u tick=%llu mean=%.1f prevMean=%.1f draws=%u resolves=%u lastResolveDest=%p\n",
                           renderengine::guPresentCount,
-                          static_cast<unsigned long long>(GetTickCount64()), lfMean, sfPrevMean);
+                          static_cast<unsigned long long>(GetTickCount64()), lfMean, sfPrevMean,
+                          renderengine::guDiagDraws, renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest);
             CgsDev::Log::WriteToLog(lacMsg);
         }
         ++suBlackRun;
+        if (suBlackRun > 1u && suBlackRun <= 16u)
+        {
+            char lacRun[160];
+            std::snprintf(lacRun, sizeof(lacRun),
+                          "[black-frame]   present=%u mean=%.1f draws=%u resolves=%u lastResolveDest=%p\n",
+                          renderengine::guPresentCount, lfMean, renderengine::guDiagDraws,
+                          renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest);
+            CgsDev::Log::WriteToLog(lacRun);
+        }
 
         // Keep the PICTURE of the first two black presents of a window (mid-drive only: presents
         // before 2000 are the boot's loading screens), as top-down 32-bit BMPs beside the exe
@@ -757,4 +772,7 @@ void renderengine::Device::ShowPixelBuffer()
     WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
     gDevice->Present(nullptr, nullptr, nullptr, nullptr);
     ++renderengine::guPresentCount;
+    renderengine::guDiagDraws = 0;   // [DIAG] issue #30 per-present counters
+    renderengine::guDiagResolves = 0;
+    renderengine::gpDiagLastResolveDest = nullptr;
 }
