@@ -41,9 +41,15 @@ namespace BrnAI
     // TU-LOCAL helpers.
     // ====================================================================================
 
-    // RwMath::IsValid( x ) -- the X360 finiteness check (vcmpeqfp x,x == "x is not NaN"; the
-    // engine treats inf as invalid too).
-    static inline bool IsFinite(f32 lfValue) { return std::isfinite(lfValue); }
+    // RwMath::IsValid( x ) -- the X360 check is a NaN SELF-COMPARE and nothing else.
+    // ⛔ CORRECTED (issue #31): the second half of the old note ("the engine treats inf as invalid
+    // too") was not true of the binary, and `std::isfinite` acted on it. Every recovered site is a
+    // `vcmpeqfp. vX,vX,vX` (e.g. AIModule::StoreDrivenCarData's "Invalid car matrix"/"Invalid car
+    // velocity"/"Invalid car speed" cascade @0x82795A04 / 0x82795BD4 / 0x82795C70, and
+    // FindSignedAngleBetween2DVectors @0x82771730 / 0x827717C0), and `Inf == Inf` is TRUE -- so
+    // ARTIST does NOT assert on an infinite value. `rw::math::vpu::IsValid` in the SDK headers is
+    // already the self-compare; this local helper was the outlier.
+    static inline bool IsFinite(f32 lfValue) { return lfValue == lfValue; }
 
     // de-inlined planar (x,y) normalise -- v / |v| over the (x,y) lanes (the rsqrt + 2x
     // Newton-Raphson refine idiom the X360 emits inline).

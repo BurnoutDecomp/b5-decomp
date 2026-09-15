@@ -47,8 +47,11 @@ namespace BrnAI
     // edgeY0 @+0x10, coefA @+0x20, coefB @+0x30).
     bool IsInsideSectionFast(const void* lpSectionEdges, f32 lfX, f32 lfY);
 
-    // 0x82766B20 - unsigned planar angle between two 2D unit vectors: acos(a.x*b.x + a.y*b.y),
-    // or 0.0 when |dot| >= 1.0 (the X360 returns ZERO there -- it does not clamp the acos).
+    // 0x82766B20 - unsigned planar angle between two 2D unit vectors: acos(a.x*b.x + a.y*b.y)
+    // ONLY when |dot| < 1.0; ANYTHING ELSE returns 0.0 (the X360 does not clamp the acos).
+    // ⛔ "anything else" INCLUDES a NaN dot: the console's gate is `fcmpu ; blt` @0x82766B58/5C, and
+    // an unordered compare leaves LT clear, so `blt` is not taken. Spelling this as `|dot| >= 1.0`
+    // is NOT equivalent and was the whole of issue #31 -- see the body's banner.
     // Bodied in BrnAIUtils_Angles.cpp (partfile of this TU).
     f32 FindUnsignedAngleBetween2DVectors(Vector2 lA, Vector2 lB);
 

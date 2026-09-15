@@ -8,7 +8,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan_TrafficConstants.h" // KF_GUESSED_MAX_SPEED (CalculateFanAngle)
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [DIAG] CgsDev::Log::gpDebugPrint
+
 #include <cmath>    // std::sin / std::cos (the XMVectorSinCos polynomial), std::fabs, std::sqrt
+#include <cstdlib>  // [DIAG] getenv (the BRN_AI_NAN witness below)
 
 // BrnAI::SteeringFan -- partfile 2 of 2 for the weighting half (aiwave R6 lane). This TU owns the
 // per-round-robin weighting pass AIDriver::DoRoundRobinWork @0x82796340 drives:
@@ -166,7 +169,55 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
     lReference.z = 0.0f;
     lReference.w = 0.0f;
 
-    const Vector2 lCarDirection2D = Normalize2DFan(To2DFan(lUseful));
+    // [DIAG ai-nan, issue #31] NOT IN THE X360 BINARY. Env-gated (BRN_AI_NAN=1) witness that names
+    // the PRODUCER of the non-finite 2D heading the console's own asserts then report from inside
+    // FindSignedAngleBetween2DVectors (its two "NAN error in AIDriver::..." gates, X360
+    // BrnAIUtils.cpp:65 / :70). It measures exactly one thing
+    // -- the squared length of the (x,z) useful direction that GenerateFanVectors is about to feed
+    // to the unguarded 2D normalise @0x82779370 -- and prints the whole upstream state that decided
+    // it. The POSITIVE CONTROL is the `first` line: it fires on the first fan pass of the run
+    // whatever the numbers are, so a run with no `degenerate` line is a run where the probe was
+    // live and the length was healthy, not a run where the probe was dead.
+    // Members are read directly (never through the GetX() accessors) so the witness cannot itself
+    // fire the console's validity asserts and change what the run reports.
+    // DELETE-WHEN issue #31 is closed.
+    const Vector2 lCarDirection2DRaw = To2DFan(lUseful);
+    {
+        static const bool sbAiNan = (std::getenv("BRN_AI_NAN") != 0);
+        static s32 siReported = 0;
+        static bool sbFirstDone = false;
+        const f32 lfLengthSq2D = lCarDirection2DRaw.x * lCarDirection2DRaw.x
+                               + lCarDirection2DRaw.y * lCarDirection2DRaw.y;
+        const bool lbDegenerate = !(lfLengthSq2D > 0.0f);   // 0, underflowed-to-0, or NaN
+        if (sbAiNan && CgsDev::Log::gpDebugPrint != 0 &&
+            ((lbDegenerate && siReported < 64) || !sbFirstDone))
+        {
+            if (lbDegenerate) ++siReported;
+            const char* lpcTag = lbDegenerate ? "degenerate" : "first(control)";
+            const f32 lfVelSq = lpCar->mVelocity.x * lpCar->mVelocity.x
+                              + lpCar->mVelocity.y * lpCar->mVelocity.y
+                              + lpCar->mVelocity.z * lpCar->mVelocity.z;
+            *CgsDev::Log::gpDebugPrint
+                << "[ai-nan] " << lpcTag << " car=" << lpCar->miRaceCarIndex
+                << " state=" << static_cast<s32>(lpCar->meCarState)
+                << " inAir=" << (lpCar->mbIsInAir ? 1 : 0)
+                << " crashing=" << (lpCar->mbIsCrashing ? 1 : 0)
+                << " lenSq2D=" << lfLengthSq2D
+                << " useful=(" << lUseful.x << "," << lUseful.y << "," << lUseful.z << ")"
+                << " vel=(" << lpCar->mVelocity.x << "," << lpCar->mVelocity.y
+                << "," << lpCar->mVelocity.z << ") velSq=" << lfVelSq
+                << " dir=(" << lpCar->mDirection.x << "," << lpCar->mDirection.y
+                << "," << lpCar->mDirection.z << ")"
+                << " right=(" << lpCar->mRight.x << "," << lpCar->mRight.y
+                << "," << lpCar->mRight.z << ")"
+                << " pos=(" << lpCar->mPosition.x << "," << lpCar->mPosition.y
+                << "," << lpCar->mPosition.z << ")"
+                << " speedInRange=" << lpCar->mfSpeedInRange << "\n";
+            sbFirstDone = true;
+        }
+    }
+
+    const Vector2 lCarDirection2D = Normalize2DFan(lCarDirection2DRaw);
     const f32 lfBaseAngle = FindSignedAngleBetween2DVectors(lCarDirection2D, lReference);
 
     f32 lfT = 0.0f;
