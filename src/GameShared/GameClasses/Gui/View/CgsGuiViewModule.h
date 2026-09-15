@@ -230,6 +230,12 @@ namespace CgsGui
         CgsLanguage::LanguageManager mLanguageManager;
         GuiEventQueueBase<256, 16> mOutputEventQueue;
 
+    public:
+        // The module's OWN out-event queue (X360 ViewModule +56768): ProcessIncomingAptEvent
+        // @0x8285EAE8 posts 33 GuiEventLoadingScreenState into it, and GuiModule::
+        // BridgeFromViewToOutput @0x8285DE10 appends it onto the module output every frame.
+        const GuiEventQueueBase<256, 16>& GetOutputEventQueue() const { return mOutputEventQueue; }
+
     private:
         EPrepareStage mePrepareStage;
         EReleaseStage meReleaseStage;

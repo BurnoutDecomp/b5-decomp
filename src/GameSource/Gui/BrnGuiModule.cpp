@@ -1566,6 +1566,7 @@ namespace BrnGui
         }
         mViewInputBuffer.UnlockForWrite();
         mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+        BridgeFromViewToOutput();
         mViewInputBuffer.LockForWrite();
         mViewInputBuffer.GetViewStateQueue()
             .CgsModule::VariableEventQueue<65536, 16>::Clear();
@@ -1627,6 +1628,7 @@ namespace BrnGui
         // Both type-7 and type-10 completion records were bridged in load order.
         // Processing the queue registers main with Apt and FLAPTHUD with FlaptManager.
         mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+        BridgeFromViewToOutput();
         mViewInputBuffer.LockForWrite();
         mViewInputBuffer.GetViewStateQueue()
             .CgsModule::VariableEventQueue<65536, 16>::Clear();
@@ -3510,6 +3512,7 @@ void GuiModule::Destruct()
             mViewInputBuffer.UnlockForWrite();
 
             mViewModule.Update(0, 0, &mViewInputBuffer, &mViewOutputBuffer);
+            BridgeFromViewToOutput();
 
             // ⭐ [boost-bar gate 2026-08-25] THE PER-FRAME COMPONENT PUMP. The console
             // drives CustomRendererManager::Update @0x82450908 once per frame from the
@@ -3790,6 +3793,25 @@ void GuiModule::Destruct()
         // PostTitleScreenLoad post StopAptLoadingMovie before playing and re-raise it
         // after), so nothing else needs to hide for the video's duration.
         UpdateAndRenderMovieManager(lpIm2dRenderBuffer);
+    }
+
+    // BridgeFromViewToOutput @0x8285DE10 -- an export hole, read with tools/re/ppcdis.py:
+    //     Append<18432,16>(this + 111644, ViewIO::OutputBuffer::GetGuiEventQueue(viewOut));
+    //     OutputBuffer::AddGuiOutEvents(moduleOut, *(view + 57352) + 12);
+    //     OutputBuffer::AddGuiOutEvents(moduleOut, view + 56768);   // ViewModule::mOutputEventQueue
+    // (called from CgsGui::GuiModule::Update @0x82860548, right after the view Update).
+    // The first two carry the view OUTPUT buffer's queue -- the Apt trigger records 21/22
+    // that Update above already drains by hand. The third had NO PC seat: the view module's
+    // OWN out queue, where ProcessIncomingAptEvent @0x8285EAE8 posts 33
+    // GuiEventLoadingScreenState {visible} for PlayAptLoadingMovie 19 / StopAptLoadingMovie
+    // 20. The sound logic module drains the module out queue (BridgeGuiToSound @0x823C0A58)
+    // and turns 33 into bit 1 of its dispatch flags word -- half of MusicEffect::
+    // UpdateParams' stream-pause gate -- so on PC that gate could never hold while the
+    // loading screen was up, and HUDEffect::Notify's loading-screen test never tripped.
+    void GuiModule::BridgeFromViewToOutput()
+    {
+        CGS_ASSERT(mpOutputBuffer != 0, "mpOutputBuffer");
+        mpOutputBuffer->Append(mViewModule.GetOutputEventQueue());
     }
 
     // @ 0x82511240 -- pump the movie manager (the movie pass of the GUI render).

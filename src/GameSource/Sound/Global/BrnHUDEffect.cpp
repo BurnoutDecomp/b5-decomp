@@ -718,16 +718,16 @@ void HUDEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     }
     else if (lrEvent.miComponentType == 2)
     {
-        // The console reads the sound module's own dispatch-state block here
-        // (module + 0x13570 / + 0x13574): bit 1 of the +4 byte gates the whole
-        // arm (the loading-screen flag GUI event 33 maintains), and the first
-        // word supplies the mixer output slot.
+        // X360 @0x826F60B0: `ldx` the sound module's 64-bit dispatch flags word
+        // (module + 0x13570); bit 1 -- the loading screen, GUI event 33 -- gates the
+        // whole arm (`rlwinm 30,30`), and the word's HIGH dword is taken as the mixer
+        // output (IDA's `*(module + 79216)`); nothing ever writes those bits, so it is 0.
         const BrnSound::Module::SoundLogicModule* lpModule =
             static_cast<const BrnSound::Module::SoundLogicModule*>(GetLogicModule());
-        if (lpModule && (lpModule->maDispatchState[0].mu8FlagAt4 & 2) == 0)
+        if (lpModule && (lpModule->mDispatchState.mu64Flags & 2u) == 0)
         {
             lu8ChokeGroup  = 0;
-            lu8MixerOutput = static_cast<u8>(lpModule->maDispatchState[0].mu32Flags);
+            lu8MixerOutput = static_cast<u8>(lpModule->mDispatchState.mu64Flags >> 32);
             liSpliceIndex  = (lrEvent.miAction != 0) ? 2 : 1;
             lbFound        = true;
         }
