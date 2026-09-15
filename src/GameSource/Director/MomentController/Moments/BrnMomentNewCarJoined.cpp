@@ -1,7 +1,67 @@
-#include "GameSource/Director/MomentController/Moments/BrnMomentNewCarJoined.h"
+// GameSource/Director/MomentController/Moments/BrnMomentNewCarJoined.cpp
+//
+// Created 2026-09-15 by tools/work/fold_partfiles.py --create-parent (b5-decomp issue #20).
+// This family had NO parent TU: its bodies lived in 3 wave partfile(s), each
+// with its own hand-written mount line in tools/build/build_game_exe.bat. They are folded
+// here in MOUNT ORDER; every partfile's own header comment block is kept verbatim above
+// its bodies (the address annotations are the evidence trail). No body was edited.
+//
+// Folded, in mount order:
+//     BrnMomentNewCarJoined_wN_01.cpp
+//     BrnMomentNewCarJoined_wN_02.cpp
+//     BrnMomentNewCarJoined_wO_01.cpp
 
+// the union of the BrnMomentNewCarJoined_w*.cpp partfiles' #include lines, first occurrence wins, mount order (2026-09-15)
+#include "GameSource/Director/MomentController/Moments/BrnMomentNewCarJoined.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (the unhandled-case assert)
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::Timestep::E_WORLD_NO_SLOMO
+
+// ============================================================================
+// FOLDED FROM BrnMomentNewCarJoined_wN_01.cpp (wave N) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+// BrnDirector::MomentNewCarJoined -- reconstructed from the console executable
+// (home file BrnMomentNewCarJoined.cpp; member/method names verbatim
+// from the declarations). Wave-N partfile 01.
+//
+// Bodied here (2 of this partfile's 3 assigned ledger functions):
+//   GetName
+//   GetInstanceType
+//
+// Construct is fully decoded but CANNOT compile in
+// this tree: it calls Camera::BehaviourLooseAttachment::Parameters::Construct()
+// and that member is not declared in the
+// committed BrnBehaviourLooseAttachment.h. The complete body is parked at
+// scratchpad/waveN/parked/BrnMomentNewCarJoined_01_Construct.cpp with the exact
+// one-line header edit that unblocks it (spec section 7, request B).
+
+namespace BrnDirector
+{
+
+// The whole function: load the address of the string "MomentNewCarJoined" and return it.
+const char* MomentNewCarJoined::GetName() const
+{
+    return "MomentNewCarJoined";
+}
+
+// The whole function: return the constant 0xA.
+// 0xA == Moment::E_MOMENT_NEW_CAR_JOINED (the enumerator is committed in
+// BrnMoment.h with exactly this value; the console immediate is the VALUE, not
+// an offset, so it carries over to the host unchanged).
+Moment::EType MomentNewCarJoined::GetInstanceType()
+{
+    return E_MOMENT_NEW_CAR_JOINED;
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnMomentNewCarJoined_wN_02.cpp (wave N) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
 
 // BrnDirector::MomentNewCarJoined -- reconstructed from the console executable
 // (home file BrnMomentNewCarJoined.cpp; member names verbatim from
@@ -275,6 +335,63 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
         GetNonConstCamera().GetEffects().SetStartHookName("Rival_Join", 1.0f);
     }
     mfTimeInState += MomentSharedInfo_GetFrameTimestep(lSharedInfo);
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnMomentNewCarJoined_wO_01.cpp (wave O) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+
+namespace BrnDirector
+{
+
+// Seed the moment: the inlined base construct, the three
+// behaviour-handle clears (the loose-attachment one is stored TWICE by the
+// console), the interpolate blend style, the loose-attachment parameter defaults,
+// and the cleared parameter pointer.
+void MomentNewCarJoined::Construct()
+{
+    // The inlined base: 0 -> +0x174 (meState = INACTIVE); the live-vtable slot 7
+    // call (GetInstanceType -> 10) stored to +0x170 (meType); 0 -> +0x17B
+    // (mbIsInhibited = false); and Camera::Camera::Construct on +0x10 (mCamera).
+    Moment::Construct();
+
+    mInterpolaterA.Clear();     // zeroes +0x184 and +0x188/0x18C/0x190/0x194
+    mInterpolaterB.Clear();     // zeroes +0x198 and +0x19C/0x1A0/0x1A4/0x1A8
+    mLooseAttachment.Clear();   // zeroes +0x1AC and +0x1B0/0x1B4/0x1B8/0x1BC
+
+    // The committed Parameters::Construct inline: 0 -> +0x1C4 (debug name),
+    // 8 -> +0x1C0 (mType), 1 -> +0x1CC (mapping = SINUSOIDAL),
+    // 0 -> +0x1C8 (method = SLERP).
+    mInterpolateParams.Construct();
+    // ...immediately overwritten: 1 -> +0x1C8 and 3 -> +0x1CC. Blend the camera
+    // by rotating about the player car, on the exponential-out-x-cubed curve.
+    // INFERENCE (inherited from BrnBehaviourInterpolate.h's own flag): the
+    // method/mapping LABELS on +0x08/+0x0C are unproven -- which of the two is
+    // "method" and which is "mapping" is not attested. Only the VALUES 1 and 3
+    // and their offsets 0x1C8/0x1CC are measured.
+    mInterpolateParams.meInterpolationMethod =
+        Camera::BehaviourInterpolate::E_METHOD_ROTATE_ABOUT_PLAYER_CAR;   // 0x1C8 = 1
+    mInterpolateParams.meInterpolationMapping =
+        Camera::BehaviourInterpolate::E_MAPPING_EXPONENTIAL_OUT_X_CUBED;  // 0x1CC = 3
+
+    // The console emits the loose-attachment handle clear a SECOND time
+    // (byte-for-byte the same five stores as above).
+    // Redundant, but faithful -- kept.
+    mLooseAttachment.Clear();
+
+    // Called on this + 0x1D0 (== &mLooseAttachmentParameters).
+    mLooseAttachmentParameters.Construct();
+
+    mpParameters = 0;                                  // 0 -> +0x180
+
+    // The loose-attachment framing defaults, in the console build's store order:
+    mLooseAttachmentParameters.mfHeight   = 0.75f;     // -> +0x21C (params +0x4C)
+    mLooseAttachmentParameters.mfField54  = 40.0f;     // -> +0x224 (params +0x54)
+    mLooseAttachmentParameters.mfDistance = 3.0f;      // -> +0x220 (params +0x50)
 }
 
 }
