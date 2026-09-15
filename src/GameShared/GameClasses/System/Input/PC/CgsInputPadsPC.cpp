@@ -383,14 +383,14 @@ namespace
         { 40, 44, -1, 17 },   //  3 E_PADBUTTON_RIGHT     GUI_DPAD_RIGHT, GUI_RIGHT, dbg
         {  8, 45, -1, -1 },   //  4 E_PADBUTTON_START     START, GUI_START
         { 50, 46, -1, 36 },   //  5 E_PADBUTTON_SELECT    GUI_CANCEL, GUI_BACK, DEBUG_STEP   (the Back button)
-        { 13, 47, -1, 34 },   //  6 E_PADBUTTON_LTHUMB    HORN, GUI_LTHUMB, dbg              (L3)
+        { 13, 47, -1, 34 },   //  6 E_PADBUTTON_LTHUMB    HORN, GUI_LTHUMB, dbg              (L3; PC adds 7 RESET, see KA_PC_PAD_OVERRIDES)
         { 12, 48, -1, 35 },   //  7 E_PADBUTTON_RTHUMB    SCREENSHOT, GUI_RTHUMB, dbg        (R3)
         {  3, 49, -1, 19 },   //  8 E_PADBUTTON_CROSS     BOOST, GUI_SELECT, dbg             (A)
         { 11, 53, 50, 21 },   //  9 E_PADBUTTON_CIRCLE    DIRTY_TRICK, GUI_OPTION2, GUI_CANCEL, dbg (B)
         {  2, 51, -1, 20 },   // 10 E_PADBUTTON_SQUARE    HANDBRAKE, GUI_OPTION0, dbg        (X)
         {  5, 52, -1, 18 },   // 11 E_PADBUTTON_TRIANGLE  CHANGEVIEW, GUI_OPTION1, dbg       (Y)
         {  6, 54, -1, 24 },   // 12 E_PADBUTTON_L1        LOOKBACK, GUI_LSHOULDER, dbg
-        {  7, 55, -1, 25 },   // 13 E_PADBUTTON_R1        RESET, GUI_RSHOULDER, dbg
+        {  7, 55, -1, 25 },   // 13 E_PADBUTTON_R1        RESET, GUI_RSHOULDER, dbg  (PC: RESET moved to L3, see KA_PC_PAD_OVERRIDES)
         {  1, 56, -1, 22 },   // 14 E_PADBUTTON_L2        BRAKE, GUI_LTRIGGER, dbg           (left trigger)
         {  0, 57, -1, 23 },   // 15 E_PADBUTTON_R2        ACCELERATE, GUI_RTRIGGER, dbg      (right trigger)
         { -1, 41, -1, 26 },   // 16 E_PADBUTTON_ANALOGUE_0_UP     GUI_UP, dbg               (left stick)
@@ -406,6 +406,85 @@ namespace
         { -1, 43, -1, 32 },   // 26 E_WHEELBUTTON_LEFT_PADDLE     wheel only
         { -1, 44, -1, 33 },   // 27 E_WHEELBUTTON_RIGHT_PADDLE    wheel only
     };
+
+    // ====================================================================================
+    // FLAG PC binding choice (owner request, 2026-09-15): the debug RESET / fly-around
+    // control moves from R1 to L3.
+    //
+    // The ARTIST image binds action 7 RESET to R1 (row 13 above). Action 7 is the dev
+    // "reset and fly around" control: BridgeControllerToWorld @0x823CD890 copies its held
+    // bit into PlayerVehicleControls::mbReset, RaceCarEntityModule hands that on as
+    // BrnPlayerDriverControls::mbReset (+0x39), and VehiclePhysics::UpdateDriving
+    // @0x82638604 runs HackedResetAndFlyAround @0x825D0008 on it -- the car is levelled
+    // onto world up, lifted 0.1 m per call and flown from the stick. R1 also carries
+    // 55 GUI_RSHOULDER, which InGame::HandleControllerInput turns into the in-game
+    // "next EA Trax" request (command 461), so on the pad every song skip also lifted the
+    // car. (The same action's pressed edge is the director's cycle-camera bit --
+    // BridgeControllerToDirector @0x823C0F70 `v31[1] = (*(pad+0x54) & 2) != 0` -- and it
+    // moves with it; that pairing is the console's own.)
+    //
+    // On PC the RESET id leaves row 13 and joins row 6 (E_PADBUTTON_LTHUMB, the L3 click)
+    // in that row's free slot, beside its console ids 13 HORN / 47 GUI_LTHUMB / 34 dbg.
+    // Nothing else moves: the console table above stays a verbatim transcription (the
+    // offline test still diffs it against the image), the keyboard's 'R' still emits 7,
+    // and the pad walk reads the DERIVED table GetPcPadMapping() builds from the two. The
+    // [input-map] dump prints the derived rows (what this build binds) plus one
+    // `override` line per edit, which tools/tests/offline/input_mapping_coverage.py
+    // applies to the image before diffing -- a build that binds the edit without
+    // declaring it is still a red test.
+    // ====================================================================================
+    struct PcPadOverride
+    {
+        u8          muControl;        // the EPadButton row the edit applies to
+        s8          miRemoveAction;   // action id to unbind from that row (-1 == none)
+        s8          miAddAction;      // action id to bind into the row's first free slot (-1 == none)
+        const char* mpcWhy;
+    };
+    const PcPadOverride KA_PC_PAD_OVERRIDES[] =
+    {
+        { 13,  7, -1, "7 RESET (debug reset / fly-around) off R1; R1 stays 55 GUI_RSHOULDER, the next-EA-Trax button" },
+        {  6, -1,  7, "7 RESET (debug reset / fly-around) on L3, beside 13 HORN" },
+    };
+    const u32 KU_NUM_PC_PAD_OVERRIDES = sizeof(KA_PC_PAD_OVERRIDES) / sizeof(KA_PC_PAD_OVERRIDES[0]);
+
+    typedef s8 PcPadMapping[KU_NUM_PAD_CONTROLS][KU_MAPPING_SLOTS];
+
+    // The console table with KA_PC_PAD_OVERRIDES applied. Built once, on first use.
+    const PcPadMapping& GetPcPadMapping()
+    {
+        static PcPadMapping saMapping;
+        static bool         sbBuilt = false;
+        if (!sbBuilt)
+        {
+            std::memcpy(saMapping, KA_DEFAULT_GAME_INPUT_MAPPING, sizeof(saMapping));
+            for (u32 luOverride = 0; luOverride < KU_NUM_PC_PAD_OVERRIDES; ++luOverride)
+            {
+                const PcPadOverride& lrOverride = KA_PC_PAD_OVERRIDES[luOverride];
+                s8* lpRow = saMapping[lrOverride.muControl];
+                if (lrOverride.miRemoveAction >= 0)
+                {
+                    for (u32 luSlot = 0; luSlot < KU_MAPPING_SLOTS; ++luSlot)
+                        if (lpRow[luSlot] == lrOverride.miRemoveAction)
+                            lpRow[luSlot] = -1;
+                }
+                if (lrOverride.miAddAction >= 0)
+                {
+                    for (u32 luSlot = 0; luSlot < KU_MAPPING_SLOTS; ++luSlot)
+                    {
+                        if (lpRow[luSlot] == lrOverride.miAddAction)
+                            break;                                   // already bound
+                        if (lpRow[luSlot] == -1)
+                        {
+                            lpRow[luSlot] = lrOverride.miAddAction;  // the row's first free slot
+                            break;
+                        }
+                    }
+                }
+            }
+            sbBuilt = true;
+        }
+        return saMapping;
+    }
 
     // CgsInput::EPadButton (CgsInputDevicePS3Pad.h:40) -- names for the [input-map] dump only.
     const char* const KAPC_CONTROL_NAMES[KU_NUM_PAD_CONTROLS] =
@@ -582,7 +661,7 @@ namespace
         {  2, KAI_KEYS_HANDBRAKE  }, // HANDBRAKE   (LCtrl)  pad X
         {  3, KAI_KEYS_BOOST      }, // BOOST       (LShift) pad A
         {  5, KAI_KEYS_CHANGEVIEW }, // CHANGEVIEW  (C)      pad Y
-        {  7, KAI_KEYS_RESET      }, // RESET       (R)      pad R1  -- restored by the console table
+        {  7, KAI_KEYS_RESET      }, // RESET       (R)      pad L3  -- console R1, moved by KA_PC_PAD_OVERRIDES
         {  8, KAI_KEYS_START      }, // START       (P)      pad START
         { 13, KAI_KEYS_HORN       }, // HORN        (H)      pad L3
         { 54, KAI_KEYS_SPIN_LEFT  }, // GUI_LSHOULDER -> -mfSpin (Q) pad L1
@@ -625,8 +704,10 @@ namespace
             return;
         sbDumped = true;
 
+        const PcPadMapping& lrMapping = GetPcPadMapping();
         *CgsDev::Log::gpDebugPrint
-            << "[input-map] pad = gaDefaultGameInputMapping @0x82CDBEB8 (X360), "
+            << "[input-map] pad = gaDefaultGameInputMapping @0x82CDBEB8 (X360) + "
+            << static_cast<s32>(KU_NUM_PC_PAD_OVERRIDES) << " PC override(s), "
             << static_cast<s32>(KU_NUM_PAD_CONTROLS) << " controls x "
             << static_cast<s32>(KU_MAPPING_SLOTS) << " action slots; -1 == unbound\n";
         for (u32 luControl = 0; luControl < KU_NUM_PAD_CONTROLS; ++luControl)
@@ -634,10 +715,20 @@ namespace
             *CgsDev::Log::gpDebugPrint
                 << "[input-map] control " << static_cast<s32>(luControl) << " "
                 << KAPC_CONTROL_NAMES[luControl] << " -> actions "
-                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][0]) << ","
-                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][1]) << ","
-                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][2]) << ","
-                << static_cast<s32>(KA_DEFAULT_GAME_INPUT_MAPPING[luControl][3]) << "\n";
+                << static_cast<s32>(lrMapping[luControl][0]) << ","
+                << static_cast<s32>(lrMapping[luControl][1]) << ","
+                << static_cast<s32>(lrMapping[luControl][2]) << ","
+                << static_cast<s32>(lrMapping[luControl][3]) << "\n";
+        }
+        for (u32 luOverride = 0; luOverride < KU_NUM_PC_PAD_OVERRIDES; ++luOverride)
+        {
+            const PcPadOverride& lrOverride = KA_PC_PAD_OVERRIDES[luOverride];
+            *CgsDev::Log::gpDebugPrint
+                << "[input-map] override control " << static_cast<s32>(lrOverride.muControl) << " "
+                << KAPC_CONTROL_NAMES[lrOverride.muControl]
+                << " -> remove " << static_cast<s32>(lrOverride.miRemoveAction)
+                << " add " << static_cast<s32>(lrOverride.miAddAction)
+                << " -- FLAG PC binding choice: " << lrOverride.mpcWhy << "\n";
         }
         for (u32 luBind = 0; luBind < KU_NUM_BINDINGS; ++luBind)
         {
@@ -1209,12 +1300,15 @@ namespace CgsInput
         {
             f32 lafRawControls[KU_NUM_PAD_CONTROLS];
             FillPadRawControls(lXState.Gamepad, lafRawControls);
+            // The console table plus the PC overrides (RESET on L3, not R1) -- see
+            // KA_PC_PAD_OVERRIDES above the walk's names table.
+            const PcPadMapping& lrMapping = GetPcPadMapping();
             for (u32 luControl = 0; luControl < KU_NUM_PAD_CONTROLS; ++luControl)
             {
                 const f32 lfRaw = lafRawControls[luControl];
                 for (u32 luSlot = 0; luSlot < KU_MAPPING_SLOTS; ++luSlot)
                 {
-                    const s32 liAction = KA_DEFAULT_GAME_INPUT_MAPPING[luControl][luSlot];
+                    const s32 liAction = lrMapping[luControl][luSlot];
                     // FLAG PC-platform leaf: the `< 0` half is the console's own `cmpwi -1`
                     // skip; the upper half is a transcription guard, not console behaviour --
                     // the console indexes maActionInfo[] unchecked, and the largest id in the
