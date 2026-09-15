@@ -43,8 +43,11 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
+#include "GameShared/GameClasses/Geometric/Primitives/CgsFrustum.h"   // [DIAG] BRN_BACKDROP_DIAG plane batch
+
 #include <cmath>   // sqrtf (the [FLAG PC bring-up] loaded-world bounds helper)
 #include <cstdio>  // snprintf (the [skid-bind] surfacelist resolve probe)
+#include <cstdlib> // getenv ([DIAG] BRN_BACKDROP_DIAG opt-in)
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // bodied by the CgsShaderConstants TU). Slot 0 holds the per-draw world transform.
@@ -1467,6 +1470,316 @@ WorldEntityModule::InvalidateCollision(
 }
 
 // =============================================================================
+// [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 (b5-decomp issue #26).
+//
+// A registry of the backdrop stand-in entities that are currently in the scene, holding
+// EXACTLY the numbers AddBackdropEntity @0x822D8380 handed CgsSceneManager, plus the two
+// inputs they were derived from (the instance transform's maximum basis scale and the
+// renderable's LOD0 bounding sphere). BackdropDiagReport re-runs the octree leaf's own
+// accept test -- the eight-lane SoA plane batch of CgsGeometric::Frustum::IsSphereInFrustum
+// @0x828AF020 -- against the frame's MAIN-VIEW frustum, so `in=0` here is the coarse query
+// culling that backdrop and `in=1` is it being accepted (and therefore a render-side
+// absence, not a cull).
+//
+// POSITIVE CONTROL: every backdrop in the scene is printed every sample, so the ones that
+// ARE on screen appear as in=1 lines in the same block. A report where everything says
+// in=0, or where nothing is registered at all, is the diagnostic failing, not a finding.
+// DELETE-WHEN issue #26 is closed.
+// =============================================================================
+namespace
+{
+    struct BackdropDiagEntry
+    {
+        s32     miListIndex;
+        s32     miInstanceIndex;
+        u32     muBackdropZoneNumber;
+        u32     muEntityFlags;
+        Vector3 mTranslation;
+        f32     mfMaxScale;
+        Vector3 mSphereCentre;       // the renderable LOD0 sphere, model space
+        f32     mfSphereRadius;
+        Vector3 mEntityCentre;       // what AddEntity was given
+        f32     mfEntityRadius;
+        f32     mfMaxDrawDistanceSq; // the instance's own draw-distance cull (Instance +0x0C)
+        // Downstream, refreshed every camera-pass GenerateDispatchLists:
+        bool    mbVisibleThisFrame;  // the id reached WorldEntityModule::GenerateDispatchLists
+        bool    mbDispatchedThisFrame;
+        f32     mfLastScaledDistanceSq;
+        bool    mbUsed;
+    };
+
+    const s32 KI_BACKDROP_DIAG_MAX = 256;
+    BackdropDiagEntry gaBackdropDiag[ KI_BACKDROP_DIAG_MAX ];
+    s32               giBackdropDiagCount = 0;
+    u32               guBackdropDiagNumVisibleEntities = 0;
+}
+
+bool
+WorldEntityModule::BackdropDiagEnabled()
+{
+    static s32 siEnabled = -1;
+    if ( siEnabled < 0 )
+    {
+        const char* lpcEnv = std::getenv( "BRN_BACKDROP_DIAG" );
+        siEnabled = ( lpcEnv != 0 && lpcEnv[ 0 ] != '0' ) ? 1 : 0;
+    }
+    return siEnabled != 0;
+}
+
+void
+WorldEntityModule::BackdropDiagRecord( s32 liListIndex, s32 liInstanceIndex,
+                                       u32 luBackdropZoneNumber,
+                                       const Matrix44Affine& lrTransform,
+                                       const Vector3& lRenderableSphereCentre,
+                                       f32 lfRenderableSphereRadius,
+                                       const Vector3& lEntityCentre, f32 lfEntityRadius,
+                                       f32 lfMaxDrawDistanceSq,
+                                       u32 luEntityFlags )
+{
+    if ( !BackdropDiagEnabled() )
+    {
+        return;
+    }
+
+    s32 liSlot = -1;
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        BackdropDiagEntry& lrEntry = gaBackdropDiag[ liEntry ];
+        if ( lrEntry.mbUsed && lrEntry.miListIndex == liListIndex
+             && lrEntry.miInstanceIndex == liInstanceIndex )
+        {
+            liSlot = liEntry;
+            break;
+        }
+        if ( !lrEntry.mbUsed && liSlot < 0 )
+        {
+            liSlot = liEntry;
+        }
+    }
+    if ( liSlot < 0 )
+    {
+        if ( giBackdropDiagCount >= KI_BACKDROP_DIAG_MAX )
+        {
+            return;
+        }
+        liSlot = giBackdropDiagCount++;
+    }
+
+    BackdropDiagEntry& lrOut = gaBackdropDiag[ liSlot ];
+    lrOut.miListIndex          = liListIndex;
+    lrOut.miInstanceIndex      = liInstanceIndex;
+    lrOut.muBackdropZoneNumber = luBackdropZoneNumber;
+    lrOut.muEntityFlags        = luEntityFlags;
+    lrOut.mTranslation         = lrTransform.wAxis;
+    // The factor ordinary instances multiply their sphere radius by
+    // (BrnWorldEntityModule.cpp:868) and backdrops do NOT -- printed so the reader can
+    // see whether the console's unscaled radius is the whole story for this instance.
+    lrOut.mfMaxScale           = GetMaximumScale( lrTransform );
+    lrOut.mSphereCentre        = lRenderableSphereCentre;
+    lrOut.mfSphereRadius       = lfRenderableSphereRadius;
+    lrOut.mEntityCentre        = lEntityCentre;
+    lrOut.mfEntityRadius       = lfEntityRadius;
+    lrOut.mfMaxDrawDistanceSq  = lfMaxDrawDistanceSq;
+    lrOut.mbVisibleThisFrame    = false;
+    lrOut.mbDispatchedThisFrame = false;
+    lrOut.mfLastScaledDistanceSq = -1.0f;
+    lrOut.mbUsed               = true;
+
+    if ( CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[backdrop-add] list=" << liListIndex
+            << " inst=" << liInstanceIndex
+            << " bzone=" << static_cast< s32 >( luBackdropZoneNumber )
+            << " flags=" << static_cast< s32 >( luEntityFlags )
+            << " trans=(" << lrOut.mTranslation.x << "," << lrOut.mTranslation.y
+            << "," << lrOut.mTranslation.z << ")"
+            << " maxScale=" << lrOut.mfMaxScale
+            << " sphC=(" << lRenderableSphereCentre.x << "," << lRenderableSphereCentre.y
+            << "," << lRenderableSphereCentre.z << ")"
+            << " sphR=" << lfRenderableSphereRadius
+            << " entC=(" << lEntityCentre.x << "," << lEntityCentre.y
+            << "," << lEntityCentre.z << ")"
+            << " entR=" << lfEntityRadius
+            << "\n";
+    }
+}
+
+void
+WorldEntityModule::BackdropDiagForget( s32 liListIndex, s32 liInstanceIndex )
+{
+    if ( !BackdropDiagEnabled() )
+    {
+        return;
+    }
+
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        BackdropDiagEntry& lrEntry = gaBackdropDiag[ liEntry ];
+        if ( lrEntry.mbUsed && lrEntry.miListIndex == liListIndex
+             && lrEntry.miInstanceIndex == liInstanceIndex )
+        {
+            lrEntry.mbUsed = false;
+            return;
+        }
+    }
+}
+
+void
+WorldEntityModule::BackdropDiagBeginDispatch( u32 luNumVisibleEntities )
+{
+    if ( !BackdropDiagEnabled() )
+    {
+        return;
+    }
+
+    guBackdropDiagNumVisibleEntities = luNumVisibleEntities;
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        gaBackdropDiag[ liEntry ].mbVisibleThisFrame    = false;
+        gaBackdropDiag[ liEntry ].mbDispatchedThisFrame = false;
+    }
+}
+
+void
+WorldEntityModule::BackdropDiagNoteVisible( s32 liListIndex, s32 liInstanceIndex,
+                                            f32 lfScaledDistanceSq, bool lbDispatched )
+{
+    if ( !BackdropDiagEnabled() )
+    {
+        return;
+    }
+
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        BackdropDiagEntry& lrEntry = gaBackdropDiag[ liEntry ];
+        if ( lrEntry.mbUsed && lrEntry.miListIndex == liListIndex
+             && lrEntry.miInstanceIndex == liInstanceIndex )
+        {
+            lrEntry.mbVisibleThisFrame     = true;
+            lrEntry.mfLastScaledDistanceSq = lfScaledDistanceSq;
+            if ( lbDispatched )
+            {
+                lrEntry.mbDispatchedThisFrame = true;
+            }
+            return;
+        }
+    }
+}
+
+void
+WorldEntityModule::BackdropDiagReport( const CgsGeometric::Frustum& lrFrustum,
+                                       const Vector3& lCameraPosition,
+                                       const Vector3& lCameraForward )
+{
+    if ( !BackdropDiagEnabled() || CgsDev::Log::gpDebugPrint == 0 )
+    {
+        return;
+    }
+
+    s32 liLive = 0;
+    s32 liIn   = 0;
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        if ( gaBackdropDiag[ liEntry ].mbUsed )
+        {
+            liLive++;
+        }
+    }
+
+    *CgsDev::Log::gpDebugPrint
+        << "[backdrop-frustum] live=" << liLive
+        << " worldIdsLastFrame=" << static_cast< s32 >( guBackdropDiagNumVisibleEntities )
+        << " camPos=(" << lCameraPosition.x << "," << lCameraPosition.y
+        << "," << lCameraPosition.z << ")"
+        << " camFwd=(" << lCameraForward.x << "," << lCameraForward.y
+        << "," << lCameraForward.z << ")"
+        << "\n";
+
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        const BackdropDiagEntry& lrEntry = gaBackdropDiag[ liEntry ];
+        if ( !lrEntry.mbUsed )
+        {
+            continue;
+        }
+
+        // The octree leaf's own test, un-rolled so the REJECTING PLANE is named.
+        // maSwizzledPlanes is the SoA batch: lane (plane & 3) of maSwizzledPlanes
+        // [batch + component]; distance = Nx*cx + Ny*cy + Nz*cz - offset, and the plane
+        // rejects when distance > radius (CgsFrustum.cpp:374-399).
+        s32 liRejectPlane = -1;
+        f32 lfRejectDist  = 0.0f;
+        for ( u32 luPlane = 0; luPlane < 8; luPlane++ )
+        {
+            const u32 luBatch = ( luPlane >= 4 ) ? 4u : 0u;
+            const u32 luLane  = luPlane & 3u;
+
+            const f32* lapLane0 = reinterpret_cast< const f32* >( &lrFrustum.maSwizzledPlanes[ luBatch + 0 ] );
+            const f32* lapLane1 = reinterpret_cast< const f32* >( &lrFrustum.maSwizzledPlanes[ luBatch + 1 ] );
+            const f32* lapLane2 = reinterpret_cast< const f32* >( &lrFrustum.maSwizzledPlanes[ luBatch + 2 ] );
+            const f32* lapLane3 = reinterpret_cast< const f32* >( &lrFrustum.maSwizzledPlanes[ luBatch + 3 ] );
+
+            const f32 lfDistance = lapLane0[ luLane ] * lrEntry.mEntityCentre.x
+                                 + lapLane1[ luLane ] * lrEntry.mEntityCentre.y
+                                 + lapLane2[ luLane ] * lrEntry.mEntityCentre.z
+                                 - lapLane3[ luLane ];
+            if ( lfDistance > lrEntry.mfEntityRadius )
+            {
+                liRejectPlane = static_cast< s32 >( luPlane );
+                lfRejectDist  = lfDistance;
+                break;
+            }
+        }
+
+        if ( liRejectPlane < 0 )
+        {
+            liIn++;
+        }
+
+        const f32 lfDx = lrEntry.mEntityCentre.x - lCameraPosition.x;
+        const f32 lfDy = lrEntry.mEntityCentre.y - lCameraPosition.y;
+        const f32 lfDz = lrEntry.mEntityCentre.z - lCameraPosition.z;
+        const f32 lfDistance = sqrtf( lfDx * lfDx + lfDy * lfDy + lfDz * lfDz );
+        const f32 lfAhead = lfDx * lCameraForward.x + lfDy * lCameraForward.y + lfDz * lCameraForward.z;
+
+        *CgsDev::Log::gpDebugPrint
+            << "[backdrop-test] list=" << lrEntry.miListIndex
+            << " inst=" << lrEntry.miInstanceIndex
+            << " bzone=" << static_cast< s32 >( lrEntry.muBackdropZoneNumber )
+            << " entC=(" << lrEntry.mEntityCentre.x << "," << lrEntry.mEntityCentre.y
+            << "," << lrEntry.mEntityCentre.z << ")"
+            << " entR=" << lrEntry.mfEntityRadius
+            << " sphR=" << lrEntry.mfSphereRadius
+            << " maxScale=" << lrEntry.mfMaxScale
+            << " dist=" << lfDistance
+            << " ahead=" << lfAhead
+            << " in=" << ( liRejectPlane < 0 ? 1 : 0 )
+            << " rejPlane=" << liRejectPlane
+            << " rejDist=" << lfRejectDist
+            << " vis=" << ( lrEntry.mbVisibleThisFrame ? 1 : 0 )
+            << " disp=" << ( lrEntry.mbDispatchedThisFrame ? 1 : 0 )
+            << " sDistSq=" << lrEntry.mfLastScaledDistanceSq
+            << " maxDrawSq=" << lrEntry.mfMaxDrawDistanceSq
+            << "\n";
+    }
+
+    s32 liVis  = 0;
+    s32 liDisp = 0;
+    for ( s32 liEntry = 0; liEntry < giBackdropDiagCount; liEntry++ )
+    {
+        if ( !gaBackdropDiag[ liEntry ].mbUsed ) { continue; }
+        if ( gaBackdropDiag[ liEntry ].mbVisibleThisFrame ) { liVis++; }
+        if ( gaBackdropDiag[ liEntry ].mbDispatchedThisFrame ) { liDisp++; }
+    }
+
+    *CgsDev::Log::gpDebugPrint
+        << "[backdrop-frustum] accepted=" << liIn << " of " << liLive
+        << " reachedDispatchList=" << liVis
+        << " drawn=" << liDisp << "\n";
+}
+
+// =============================================================================
 // AddBackdropEntity  @ 0x822D8380  (cpp:2567)
 // =============================================================================
 void
@@ -1498,6 +1811,12 @@ WorldEntityModule::AddBackdropEntity( CgsGraphics::Instance* lpInstance, s32 liL
     lpOutputBuffer->GetSceneInputInterface()->AddEntity(
         lEntityId, luEntityFlags, lCentre, lfRadius );
 
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 (issue #26).
+    BackdropDiagRecord( liListIndex, liInstanceIndex, lpInstance->muBackdropZoneNumber,
+                        lpInstance->mTransform,
+                        lpRenderable->mBoundingSphere.GetVector3(), lfRadius,
+                        lCentre, lfRadius, lpInstance->mfMaxDrawDistanceSq, luEntityFlags );
+
     mIsBackdropInstanceInScene.SetBit( liInstanceIndex );
 }
 
@@ -1516,6 +1835,9 @@ WorldEntityModule::RemoveBackdropEntity( s32 liListIndex, s32 liInstanceIndex,
                    static_cast<u32>( liListIndex ), liInstanceIndex );
 
     lpOutputBuffer->GetSceneInputInterface()->RemoveEntity( lEntityId, 0 );
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 (issue #26).
+    BackdropDiagForget( liListIndex, liInstanceIndex );
 
     mIsBackdropInstanceInScene.UnSetBit( liInstanceIndex );
 }
@@ -1814,6 +2136,15 @@ WorldEntityModule::GenerateDispatchLists(
     const f32 lfInvScaleSq = 1.0f / ( lfDrawDistanceScale * lfDrawDistanceScale );
     const u32 luNumEntities = lrVisibleEntities.GetLength();
 
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 (issue #26). Clear the
+    // per-frame backdrop marks and publish how many world ids the 4500-cap filter
+    // actually handed us (a length of exactly 4500 means the cap BOUND and the surplus ids
+    // were discarded without a word; see WorldModule::FilterFrustumTestResults).
+    if ( !lbShadowPass )
+    {
+        BackdropDiagBeginDispatch( luNumEntities );
+    }
+
     if ( lbShadowPass )
     {
         const f32 lfShadowLodModifier = lpShadowMap->CalcLodDistanceModifier().x;
@@ -1872,8 +2203,15 @@ WorldEntityModule::GenerateDispatchLists(
 
             if ( lfScaledDistanceSq > lpInstance->mfMaxDrawDistanceSq )
             {
+                // [DIAG] BRN_BACKDROP_DIAG=1 (issue #26): seen, then distance-culled.
+                BackdropDiagNoteVisible( lEntityId.GetEntityIndex(), lEntityId.GetPartIndex(),
+                                         lfScaledDistanceSq, false );
                 continue;
             }
+
+            // [DIAG] BRN_BACKDROP_DIAG=1 (issue #26): seen AND dispatched.
+            BackdropDiagNoteVisible( lEntityId.GetEntityIndex(), lEntityId.GetPartIndex(),
+                                     lfScaledDistanceSq, true );
 
             RenderInstance( lpInstance, false, lCameraPosition, lfScaledDistanceSq,
                             liList, liSortLayer, liSortKey, lu8PreZList,

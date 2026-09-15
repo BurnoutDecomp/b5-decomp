@@ -6610,6 +6610,21 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sQueryInput.GetInCoarseQueryQueue()->FrustumTestVp(
                 KA_FRUSTUM_QUERY_IDS[ 0 ], luEntityTypeFlags,
                 lFrustum.maSwizzledPlanes, lViewProjection, 0u );
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_BACKDROP_DIAG=1 (b5-decomp issue #26).
+            // Re-runs the octree leaf's accept test against THE SAME frustum this query
+            // was just staged with, over the backdrop stand-ins the world entity module
+            // has in the scene, and names the rejecting plane. Once a second.
+            if ( WorldEntityModule::BackdropDiagEnabled() )
+            {
+                static s32 siBackdropDiagPass = 0;
+                if ( ( siBackdropDiagPass++ % 60 ) == 0 )
+                {
+                    // lEye / lForward are the very values this frame's camera was framed
+                    // with above (lForward is already normalised at :5909).
+                    WorldEntityModule::BackdropDiagReport( lFrustum, lEye, lForward );
+                }
+            }
         }
 
         // ==================================================================
