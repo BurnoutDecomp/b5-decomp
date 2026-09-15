@@ -64,6 +64,7 @@ namespace Gen
         const RefSpec& WorldEmitterList() const;
         const RefSpec& InAirCrashBin() const;
         const RefSpec& GlobalEngineData() const;
+        const RefSpec& HudMessages() const;
         u64 CollisionCrashBinListKey() const;
         u64 PropsCrashBinListKey() const;
         u64 PropToMaterialMappingsKey() const;
@@ -168,6 +169,17 @@ namespace Gen
         // Brn3DEffectControl::Prepare @ ARTIST 0x82696870 reads this RefSpec.
         return *reinterpret_cast<const RefSpec*>(
             static_cast<const u8*>(mpAttributeData) + 0x518u);
+    }
+
+    inline const RefSpec& burnoutglobaldata::HudMessages() const
+    {
+        // HUDEffect::Attach @ ARTIST 0x8269C3C8 hands
+        // Attrib::Instance::ChangeWithDefault the address
+        // <BurnoutGlobalData layout> + 1280 (0x500) -- the mHudMessages RefSpec,
+        // which sits one 0x18 stride after mInAirCrashBin (0x4E8) and one before
+        // mGlobalEngineData (0x518) in the DWARF _LayoutStruct order.
+        return *reinterpret_cast<const RefSpec*>(
+            static_cast<const u8*>(mpAttributeData) + 0x500u);
     }
 
     inline u64 burnoutglobaldata::CollisionCrashBinListKey() const

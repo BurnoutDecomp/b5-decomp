@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"     // CgsSound::Logic::VoiceWrapper element (BY NAME)
+#include "GameSource/Sound/Global/BrnGlobalStateManager.h"        // GlobalStateManager (the cached splice-bank owner)
 
 // =============================================================================
 // BrnSound::Logic::FxEffect
@@ -104,8 +105,20 @@ struct FxMessage_ResetOnTrack : public FxMessage { FxMessage_ResetOnTrack() : Fx
 // do/while sub-object construction (4x, stride 0x50, base +0x38).
 struct FxEffect : public BrnEffectObject
 {
+    enum { KI_NUM_VOICES = 4 };
+
     FxEffect();
     virtual ~FxEffect();
+
+    // @ 0x8269E158 -- cache the Global state manager and seed the per-voice
+    // volume/mixer arrays.
+    virtual bool Attach();
+    // @ 0x826F71D8 -- release all four wrappers after the base detach.
+    virtual bool Detach();
+    // @ 0x826E74F8 -- pump the four wrappers and re-apply their DMix gains.
+    virtual void ProcessUpdate();
+    // @ 0x826F7248 -- the FX message (sound message 4) entry point.
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
     const char* GetTypeName() const override;
@@ -116,7 +129,28 @@ struct FxEffect : public BrnEffectObject
     // constructs 4 sub-objects at +0x38/+0x88/+0xD8/+0x128. Reused BY NAME from the
     // minimal CgsVoiceWrapper home (same wrapper the committed ExplosionEffect embeds
     // a single instance of).
-    CgsSound::Logic::VoiceWrapper mVoiceWrappers[4];
+    CgsSound::Logic::VoiceWrapper mVoiceWrappers[KI_NUM_VOICES];
+
+    // +0x178 (376) -- the per-voice authored gain the SampleTag carried, applied
+    // every ProcessUpdate (`*&v6[v8 + 93] = v41` in Notify, `v3 = a1 + 372` in
+    // ProcessUpdate/Attach).
+    f32 mafVolumes[KI_NUM_VOICES];
+    // +0x188 (392) -- the per-voice dynamic-mixer output slot (Attach seeds 0,
+    // every handled Notify case stamps 3).
+    u8  mau8MixerOutputs[KI_NUM_VOICES];
+    // +0x18C (396) -- the Global state manager Attach caches
+    // (`*(a1 + 392) = *(*(a1 + 8) + 36)`, asserted "mpGlobalStateManager",
+    // BrnFxEffect.cpp:213). Notify reads +176 / +188 off it: mFxSpliceBank and
+    // mPresentationSpliceBank.
+    GlobalStateManager* mpGlobalStateManager;
+    // +0x190 (400) -- the word Attach zeroes and UpdateParams @0x826BC338
+    // decrements through CgsSound::Utils::IntClamp. UpdateParams itself is
+    // DEFERRED (it walks the logic input buffer + the player race-car index),
+    // so this only ever holds 0 in this slice.
+    s32 miCooldown;
+
+    // The four-slot free scan the console inlines at the head of Notify.
+    s32 FindFreeVoice() const;
 
     // FLAG: the ctor additionally zero-inits un-homed LEAF scalar members at
     // +0x08/+0x0C/+0x10/+0x12/+0x1C/+0x20/+0x30(byte)/+0x34 (pre-array) and
