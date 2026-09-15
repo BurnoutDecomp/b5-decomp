@@ -303,7 +303,24 @@ void RaceCarEntityModule::Construct()
         maRaceCars[liGlobal].Construct( static_cast<EGlobalRaceCarIndex>( liGlobal ) );
     }
 
+    // ⭐⭐⭐ 0x822FDB20 `stwx r29, r30, r9` with r9 == 0x18368 and r29 == -1 (`li r29, -1`
+    // @0x822FDA58, not touched again before the store) -- the console SEEDS meGameModeType to
+    // E_MODE_NONE here. This tree did not, so on a fresh boot the member held the module pool's
+    // zero, which is E_MODE_OFFLINE_RACE (0), and NOTHING sets it back: the only other writers are
+    // ArmGameMode (a mode START) and HandleStopModeAction (a mode STOP), neither of which ever
+    // runs in free burn.
+    // WHY IT MATTERS, and it is issue #28's other half: ActiveRaceCar::Update @0x822F7A18 branches
+    // the crash drive-away decision on exactly this value -- `cmpwi r11, 0 ; beq` / `cmpwi r11, 5 ;
+    // beq` select the PLAYER ROUTE-DIRECTION test (modes 0 OFFLINE_RACE and 5 BURNING_ROUTE, the
+    // two route-following modes) instead of free burn's plain `if (!mbIsWrecked) canDriveAway`.
+    // So every free-burn player crash was being judged against a racing line that does not exist,
+    // and whenever dot(carDirection, routeDirection) came out negative the console's own
+    // `stb r30, 0x782` @0x822F7BFC latched mbIsWrecked on a car that was upright, undented and
+    // fully drivable. MEASURED (run i28_afterB, BRN_WRECK_LATCH_DIAG=1):
+    //   [wrecklatch] car=0 <- 1 site=Update.routeDot@0x822F7BFC
+    //   [crash-verdict] ... IsWrecked=1 isDriveable=1 fullyDrivable=1 upDot=0.999441
     mbIsInGameMode            = false;
+    meGameModeType            = BrnGameState::GameStateModuleIO::E_MODE_NONE;   // stwx -1, +0x18368
     mbIsInOnlineGameMode      = false;
     mbOnlineModeJustFinished  = false;
     mbWaitingForStreaming    = false;
