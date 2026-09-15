@@ -729,6 +729,12 @@ void SoundLogicModule::ProcessCarDataLoadingQueue(
         CGS_ASSERT(lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA ||
                    lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA,
                    "lAudioCarDataLoadedEvent.GetMessageType() == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA || lAudioCarDataLoadedEvent.GetMessageType() == AudioCarDataLoadedEvent::E_REQUEST_UNLOAD_DATA");
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG car-audio request witness.
+        if (std::getenv("BRN_ENGINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[car-audio] sound recv type=" << static_cast<s32>(lrEvent.meMessageType)
+                                       << " car=" << static_cast<s32>(lrEvent.miActiveRaceCarIndex)
+                                       << " asset=" << lrEvent.mAssetID
+                                       << " isPlayer=" << (lrEvent.mbIsPlayer ? 1 : 0) << "\n";
         if (lrEvent.meMessageType == AudioCarDataLoadedEvent::E_REQUEST_LOAD_DATA)
         {
             BrnSound::Vehicles::VehicleStateManager::AddEntry(

@@ -277,6 +277,12 @@ void VehicleStateManager::OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsP
     gaAttachedAssetIds[luUserId] = lAssetId;
     if (lbIsPlayer)
         guAttachedPlayerMask |= luBit;
+    if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
+        *CgsDev::Log::gpDebugPrint << "[car-audio] sound OnAssetLoaded car=" << luUserId << " asset=" << lAssetId
+                                   << " isPlayer=" << (lbIsPlayer ? 1 : 0)
+                                   << " added=" << (((guAddedMask & luBit) != 0) ? 1 : 0)
+                                   << " desired=" << gaDesiredAssetIds[luUserId]
+                                   << " -> reply=" << ((((guAddedMask & luBit) != 0) && gaDesiredAssetIds[luUserId] == lAssetId) ? 1 : 0) << "\n";
 
     if ((guAddedMask & luBit) != 0 && gaDesiredAssetIds[luUserId] == lAssetId)
     {
@@ -305,6 +311,9 @@ void VehicleStateManager::OnAssetUnloaded(CgsID lAssetId, u32 luUserId)
     gaAttachedAssetIds[luUserId] = 0;
     guAttachedMask &= static_cast<u8>(~luBit);
     guAttachedPlayerMask &= static_cast<u8>(~luBit);
+    if (EngineAudioDiagLive())   // [DIAG] NOT IN THE X360 BINARY
+        *CgsDev::Log::gpDebugPrint << "[car-audio] sound OnAssetUnloaded car=" << luUserId << " asset=" << lAssetId
+                                   << " -> reply UNLOADED posted\n";
     static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
         ->GetPreUpdateOutput().GetCarDataLoadedQueue().AddEvent(lEvent);
 }

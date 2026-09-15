@@ -2329,6 +2329,9 @@ namespace BrnResource
 
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
+        if (std::getenv("BRN_ENGINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)   // [DIAG] NOT IN THE X360 BINARY
+            *CgsDev::Log::gpDebugPrint << "[car-audio] gamedata LOAD vehicle '" << lacVehicleID
+                                       << "' type=" << static_cast<s32>(lpEvent->meType) << " slot=" << liSlotIndex << "\n";
 
         CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
@@ -2421,6 +2424,10 @@ namespace BrnResource
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpEvent->mId, lacVehicleID);
+        if (std::getenv("BRN_ENGINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)   // [DIAG] NOT IN THE X360 BINARY
+            *CgsDev::Log::gpDebugPrint << "[car-audio] gamedata UNLOAD vehicle '" << lacVehicleID
+                                       << "' type=" << static_cast<s32>(lpEvent->meType) << " slot=" << liSlotIndex
+                                       << " loadedSoundBundles=" << muLoadedSoundBundlesCount << "\n";
         CGS_ASSERT(lpEvent->meType == E_ASSETSET_GRAPHICS
                        || lpEvent->meType == E_ASSETSET_PHYSICS
                        || lpEvent->meType == E_ASSETSET_SOUND

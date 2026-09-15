@@ -370,13 +370,22 @@ void State::UpdateParams(f32 af32DeltaTime)
         while (mpCurrentEffect && AttachEffect()) {}
         if (mpCurrentEffect)
             return;
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_UPDATE_ATTACHED;
+        // X360 @0x826C4850 LABEL_10 -> LABEL_18: ONE store pair when the effects have
+        // attached -- `v11 = *(+56); *(+56) = 5; *(+60) = v11` -- shared with case 5 below.
+        // The pair used to be written HERE as well as inside the case, which left
+        // mauUpdateState[1] == E_UPDATE_ATTACHED on the very frame the state arrived
+        // there: the one-update HasChangedTo(E_UPDATE_ATTACHED) edge that
+        // PlayerVehicleState::UpdateParams @0x826EF0B0 keys VehicleStateManager::
+        // OnAssetLoaded on never existed, the E_DATA_IS_LOADED reply never reached
+        // RaceCarAudioStreamer, its slot sat in E_RACECARSTREAMINGSOUND_ATTACHING for
+        // the whole session, and a car change could never detach and re-stream the
+        // new car's ENGINES bundles (the engine note stayed at idle: mfMaxRpm 0).
         // fall through
     case E_UPDATE_ATTACHED:
         // DataPoint<EUpdateState>::Set writes the old value to its history word
-        // even when the new value is unchanged. PlayerVehicleState relies on this
-        // to observe HasChangedTo(E_UPDATE_ATTACHED) for exactly one update.
+        // even when the new value is unchanged (the console's LABEL_18 for case 5):
+        // in the steady state [1] == [0] == E_UPDATE_ATTACHED, on the arrival frame
+        // [1] == E_INITIALIZE_EFFECTS_UPDATE -- exactly one update of HasChangedTo.
         mauUpdateState[1] = mauUpdateState[0];
         mauUpdateState[0] = E_UPDATE_ATTACHED;
         for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
