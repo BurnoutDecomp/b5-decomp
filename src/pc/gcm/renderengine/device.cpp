@@ -818,7 +818,31 @@ void renderengine::Device::ShowPixelBuffer()
     gDevice->EndScene();
     DumpBackBufferIfRequested();
     WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
-    gDevice->Present(nullptr, nullptr, nullptr, nullptr);
+    const HRESULT lhrPresent = gDevice->Present(nullptr, nullptr, nullptr, nullptr);
+    // [DIAG] NOT IN THE X360 BINARY -- issue #30: Present's result and the cooperative level, on every
+    // present that is not S_OK and on every black present (the watch's flag), rate-limited.
+    {
+        static u32 suPrinted = 0u;
+        static HRESULT shrLast = S_OK;
+        if ((lhrPresent != S_OK && lhrPresent != shrLast) || (renderengine::gbDiagLastPresentBlack && suPrinted < 64u))
+        {
+            shrLast = lhrPresent;
+            ++suPrinted;
+            IDirect3DSurface9* lpRt0 = nullptr;
+            IDirect3DSurface9* lpBb  = nullptr;
+            gDevice->GetRenderTarget(0, &lpRt0);
+            gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBb);
+            char lacMsg[200];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[present-diag] present=%u hrPresent=0x%08X coop=0x%08X rt0=%p backbuffer=%p%s\n",
+                          renderengine::guPresentCount, static_cast<unsigned>(lhrPresent),
+                          static_cast<unsigned>(gDevice->TestCooperativeLevel()), static_cast<void*>(lpRt0), static_cast<void*>(lpBb),
+                          renderengine::gbDiagLastPresentBlack ? " (black present)" : "");
+            if (lpRt0 != nullptr) lpRt0->Release();
+            if (lpBb != nullptr) lpBb->Release();
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
     ++renderengine::guPresentCount;
     renderengine::guDiagDraws = 0;   // [DIAG] issue #30 per-present counters
     renderengine::guDiagResolves = 0;
