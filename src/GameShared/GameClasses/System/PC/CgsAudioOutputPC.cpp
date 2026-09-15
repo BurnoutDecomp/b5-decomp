@@ -54,6 +54,79 @@ void*                   g_engineUser  = nullptr;
 s16                     g_buf[kBuffers][kFrames * kMaxChannels];
 s16                     g_engineBuf[kFrames * kMaxChannels];
 
+// [DIAG] NOT IN THE X360 BINARY -- BRN_AUDIO_CAPTURE=<path.wav>: every packet handed to the
+// source voice (primary + engine mix, BEFORE the mastering volume, so it works with the
+// harness mute on) is appended to a 16-bit PCM WAV at that path. The header is written with
+// the rate/channels of the first packet and patched with the final sizes at Close/exit; a
+// re-Open at another rate keeps appending (the header keeps the first rate -- read the log's
+// "[Audio] XAudio2 opened" lines if a run re-opened). Measurement oracle for the sound lanes.
+FILE* g_capture       = nullptr;
+bool  g_captureTried  = false;
+u32   g_captureBytes  = 0u;
+int   g_captureRate   = 0;
+int   g_captureChans  = 0;
+
+void CapturePatchHeader()
+{
+    const u32 luData = g_captureBytes;
+    const u32 luRiff = 36u + luData;
+    const long liPos = std::ftell(g_capture);
+    std::fseek(g_capture, 4, SEEK_SET);  std::fwrite(&luRiff, 4, 1, g_capture);
+    std::fseek(g_capture, 40, SEEK_SET); std::fwrite(&luData, 4, 1, g_capture);
+    std::fseek(g_capture, liPos, SEEK_SET);
+    std::fflush(g_capture);
+}
+
+void CaptureFinish()
+{
+    if (!g_capture)
+        return;
+    CapturePatchHeader();
+    std::fclose(g_capture);
+    g_capture = nullptr;
+}
+
+void CaptureWrite(const s16* lpBuf, int liValues)
+{
+    if (!g_captureTried)
+    {
+        g_captureTried = true;
+        const char* lpcPath = std::getenv("BRN_AUDIO_CAPTURE");
+        if (lpcPath && *lpcPath)
+        {
+            g_capture = std::fopen(lpcPath, "wb");
+            if (g_capture)
+            {
+                g_captureRate  = (g_openRate > 0) ? g_openRate : 48000;
+                g_captureChans = g_channels;
+                const u32 luZero = 0u, luFmtLen = 16u;
+                const u16 luFmt = 1u, luCh = static_cast<u16>(g_captureChans), luBits = 16u;
+                const u32 luRate = static_cast<u32>(g_captureRate);
+                const u16 luAlign = static_cast<u16>(g_captureChans * 2);
+                const u32 luByteRate = luRate * luAlign;
+                std::fwrite("RIFF", 1, 4, g_capture); std::fwrite(&luZero, 4, 1, g_capture);
+                std::fwrite("WAVE", 1, 4, g_capture);
+                std::fwrite("fmt ", 1, 4, g_capture); std::fwrite(&luFmtLen, 4, 1, g_capture);
+                std::fwrite(&luFmt, 2, 1, g_capture);  std::fwrite(&luCh, 2, 1, g_capture);
+                std::fwrite(&luRate, 4, 1, g_capture); std::fwrite(&luByteRate, 4, 1, g_capture);
+                std::fwrite(&luAlign, 2, 1, g_capture); std::fwrite(&luBits, 2, 1, g_capture);
+                std::fwrite("data", 1, 4, g_capture); std::fwrite(&luZero, 4, 1, g_capture);
+                std::atexit(&CaptureFinish);
+                AUDIO_LOG << "[Audio] capture -> " << lpcPath << " (" << g_captureRate << " Hz, "
+                          << g_captureChans << " ch, 16-bit; sizes patched at exit)\n";
+            }
+        }
+    }
+    if (g_capture)
+    {
+        std::fwrite(lpBuf, sizeof(s16), static_cast<size_t>(liValues), g_capture);
+        g_captureBytes += static_cast<u32>(liValues * sizeof(s16));
+        static u32 suPackets = 0u;
+        if ((++suPackets & 31u) == 0u)   // the harness ends a run with TerminateProcess: keep the header valid
+            CapturePatchHeader();
+    }
+}
+
 // Saturating add of one already-filled mix source into the outgoing buffer.
 void MixInto(s16* lpDst, const s16* lpSrc, int liValues)
 {
@@ -80,6 +153,7 @@ void SubmitBuffer(int liIndex)
         g_engineFill(g_engineBuf, kFrames, g_engineUser);
         MixInto(lpBuf, g_engineBuf, liValues);
     }
+    CaptureWrite(lpBuf, liValues);   // [DIAG] BRN_AUDIO_CAPTURE
 
     XAUDIO2_BUFFER lBuf;
     std::memset(&lBuf, 0, sizeof(lBuf));
@@ -343,6 +417,7 @@ bool AudioOutputPC::Open(int liSampleRate, int liChannels, FillFn lpFill, void* 
 
 void AudioOutputPC::Close()
 {
+    CaptureFinish();   // [DIAG] BRN_AUDIO_CAPTURE
     if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
     if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
     if (g_pXAudio2) { g_pXAudio2->Release(); g_pXAudio2 = nullptr; }
