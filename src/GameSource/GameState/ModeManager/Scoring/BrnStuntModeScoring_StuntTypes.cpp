@@ -284,10 +284,22 @@ namespace BrnGameState
         // (Y) and roll (Z) lanes for the gate + rating.
         Vector3 lCurrentRotation = lpActiveRaceCarInterface->GetCurrentInAirRotations(lePlayerIndex);
 
-        if (rw::math::vpu::GetX(lCurrentRotation) > KF_STILL_ROTATING_RATE_THRESHOLD)
+        // X360 0x8232C984..0x8232C9C0: abs the accumulated rotation (vandc against the sign
+        // mask), duplicate lane X into W (`vrlimi128 v10, v13, 1, 1`), then
+        // `vcmpgtfp. v10, splat(flt_82020B30)` and branch on CR6 bit 26 ("no lane true").
+        // So the SKIP arm is taken only when EVERY lane |x|, |y|, |z| is <= the epsilon, i.e.
+        // nothing has been accumulated at all; any non-zero lane falls through to the commit.
+        // ⛔ [issue #23 wave 2026-09-15] This read `if (x > eps) skip; else commit` -- the
+        // polarity was inverted AND only lane X (pitch) was tested. Invisible while the in-air
+        // rotation accumulator was always zero; once ActiveRaceCar::UpdateInAirRotations landed
+        // (3eb66679) any pitch made the landing pass unreachable, so a barrel roll could never be
+        // rated or scored and the roll stayed "in progress" for the rest of the run.
+        const Vector3 lAbsRotation = rw::math::vpu::Abs(lCurrentRotation);
+        if (!(rw::math::vpu::GetX(lAbsRotation) > KF_STILL_ROTATING_RATE_THRESHOLD
+              || rw::math::vpu::GetY(lAbsRotation) > KF_STILL_ROTATING_RATE_THRESHOLD
+              || rw::math::vpu::GetZ(lAbsRotation) > KF_STILL_ROTATING_RATE_THRESHOLD))
         {
-            // (X360 vcmpgtfp branch) -- still airborne / mid-rotation: nothing to commit yet.
-            // The rotation accumulator carries over; return the air-stunt result as-is.
+            // Nothing accumulated: nothing to commit. Return the air-stunt result as-is.
         }
         else
         {
