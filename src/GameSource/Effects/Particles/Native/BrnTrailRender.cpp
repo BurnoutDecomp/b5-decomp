@@ -36,6 +36,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"       // [diag] BrnDiag::gFilmLatch (frames.csv NDC columns)
+#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"     // [diag] BRN_TRAIL_HEIGHT_DIAG (issue #21)
 
 #include <cstdio>   // [diag] snprintf (the [trailpass] transform probe)
 #include <cstdlib>  // [diag] getenv / atoi (the BRN_SKID_LOUD discriminator)
@@ -73,20 +74,36 @@ namespace Native
     namespace
     {
         // ---- BrnTrailRender.cpp:31-34 (DWARF) -----------------------------------------------
-        // kvHalfTrailSize / kvMinusHalfTrailSize / krTrailBaseLife / kvOneOverTrailBaseLife. The
-        // three vectors are dynamically-initialised X360 .data objects (unk_82FAB920 / 930 / 940
-        // all read 0.0 in the image; their CRT-init thunk is an export hole, not located this
-        // wave). Values are the DecFIGS static initialiser's (__static_initialization_and_
-        // destruction_0 @0xE2B5C: the 0x3E000000 == 0.125 lanes, their sign-flipped copy, and
-        // the 0.1 splat), corroborated by the X360's own EndOfFrame life of 10.0 s.
+        // kvHalfTrailSize / kvMinusHalfTrailSize / krTrailBaseLife / kvOneOverTrailBaseLife.
         //
-        // Which .data word is which is pinned by USE in Render @0x82295930: v123 (unk_82FAB920)
-        // multiplies the (now - timeLaid) age (vmulfp128 @0x82295B28) so it is the 1/life
-        // splat; v122 (unk_82FAB940) and v121 (unk_82FAB930) scale the tangent for the two edge
-        // vertices. The .data order is therefore the DWARF declaration order REVERSED
-        // (1/life, minus-half, half), i.e. the first vertex of a pair (uv.y == 0) is the
-        // +half edge. Cull is none for this pass, so the winding cannot change the picture
-        // either way. FLAG: the +/- assignment rests on that reversed-order inference.
+        // ⭐ THE FLAG THAT STOOD HERE IS DISCHARGED (2026-09-15, issue #21). The three vectors
+        // are dynamically-initialised .data objects that read 0.0 straight out of the image, and
+        // this banner used to carry the DecFIGS values plus an INFERRED +/- assignment ("the
+        // .data order is the DWARF declaration order REVERSED ... FLAG: the +/- assignment rests
+        // on that inference"). The CRT-init thunks are now HOMED in the X360 image
+        // (tools/re/findinit.py + ppcdis.py) and they settle it -- the inference was BACKWARDS:
+        //
+        //   0x82C4AEA8  lfs f0,[0x82004014] (== 0.1)   ; vspltw ; stvx -> unk_82FAB920
+        //   0x82C4AE48  lfs f0,[0x82004010] (== 0.125) ; x/y/z lanes, w = 0 ; stvx -> unk_82FAB930
+        //   0x82C4AE80  vspltisw v0,-1 ; vslw v0,v0,v0 (== 0x80000000 splat) ;
+        //               lvx v13,[unk_82FAB930] ; vxor v0,v13,v0 ; stvx -> unk_82FAB940
+        //
+        // so unk_82FAB920 == 0.1 (1/life), unk_82FAB930 == +0.125 and unk_82FAB940 == -0.125
+        // (the sign-flipped COPY of 930, which is why it is the one the DWARF calls
+        // kvMinusHalfTrailSize). Render @0x82295930 loads v123 <- 920, v122 <- 940, v121 <- 930
+        // (0x82295A30/0x82295A3C/0x82295A48), and BOTH extrude blocks pair the MINUS edge with
+        // uv.y == 0:
+        //   segment 0   @0x82295B38  vmr128 v10,v122 ; vmaddcfp128 v10 = tangent*v10 + pos   (-half)
+        //               @0x82295B40  vmaddfp128 v12 = tangent*v121 + pos                     (+half)
+        //               @0x82295B4C  stvx v10 -> vertex[i].pos with uv v0   (uv.y == 0)
+        //               @0x82295B68  stvx v12 -> vertex[i+2].pos with uv v0 + {0,1,0,0}
+        //   segments 1+ @0x82295BC4/0x82295BC8 the same two products, then
+        //               @0x82295BD8 stvx v10 (-half) with uv.y == 0 and
+        //               @0x82295BE8 stvx v12 (+half) with uv.y == 1.
+        // The tree had the two swapped, which mirrors the tread texture's V across the strip and
+        // reverses the winding. Cull is none for this pass so the silhouette was unaffected --
+        // which is exactly why only the image could settle it.
+        //
         // The console vectors are xyz splats of +/-0.125 (w == 0); the tree's Vector3 * f32 is the
         // same lane-wise product, so they are carried as the scalar they splat.
         const f32     KR_HALF_TRAIL_SIZE          =  0.125f;   // kvHalfTrailSize
@@ -286,6 +303,24 @@ namespace Native
         const f32               lfNow         = mfCurrentTime;                 // v125
         const f32               lfDiagLift    = SkidLiftMetres();               // [diag] 0.0 normally
 
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAIL_HEIGHT_DIAG's render half. issue #21.
+        // The [trailht] line in HandleWheels measures where a segment was LAID; this measures
+        // what the strip builder then DRAWS from it, because those are not the same claim: a
+        // segment laid on the road still draws in the air if the quad is extruded along the
+        // wrong axis. Per segment it prints the segment position, the half-width axis (the
+        // tangent AddTrailSegment stored, which the console builds as
+        // Cross(direction, contactNormal) @0x8227AAE0 -- so it must lie IN the contact plane,
+        // i.e. its y is ~0 on flat road and tilts with a bank), and BOTH extruded vertices.
+        // The two vertices' y difference is the quad's own tilt in metres across its 0.25 m
+        // width; a quad in the road plane has |dy| <= the road's own slope over 0.25 m.
+        // Rate-limited to one whole emitter every KU_QUAD_DIAG_PERIOD render calls.
+        // DELETE-WHEN-STABLE.
+        static u32 suQuadDiagCall = 0u;
+        const u32  KU_QUAD_DIAG_PERIOD = 120u;
+        const bool lbQuadDiag = BrnDiag::TrailHeightDiagEnabled()
+                                && ((++suQuadDiagCall % KU_QUAD_DIAG_PERIOD) == 0u);
+        bool lbQuadDiagSpent = false;
+
         for (s32 lnEmitter = 0; lnEmitter < lnEmitterCount; ++lnEmitter)
         {
             const TrailEmitter* const lpEmitter    = lppEmitter[lnEmitter];
@@ -320,8 +355,9 @@ namespace Native
                 }
                 const Vector4 lUvA = MakeUvTimeAlpha(0.0f, 0.0f, lfAge, lfStrength);   // u == segment index 0
                 const Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
-                const Vector3 lEdgeA = lTangent * KR_HALF_TRAIL_SIZE + lPosition;       // vmaddcfp128 v10 = v11 * v122 + v12
-                const Vector3 lEdgeB = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition; // vmaddfp128 v12 = v11 * v121 + v12
+                // uv.y == 0 is the MINUS edge (v122 == unk_82FAB940 == -0.125) -- see the banner.
+                const Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition; // vmaddcfp128 v10 = v11 * v122 + v12
+                const Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;       // vmaddfp128  v12 = v11 * v121 + v12
 
                 laVertices[lnVertexCount].mv3Pos         = lEdgeA;
                 laVertices[lnVertexCount].mv4UvTimeAlpha = lUvA;
@@ -346,14 +382,40 @@ namespace Native
                 }
                 const Vector4 lUvA = MakeUvTimeAlpha(lfSegmentU, 0.0f, lfAge, lfStrength);
                 const Vector4 lUvB = Add(lUvA, K_UV_SECOND_EDGE);
-                const Vector3 lEdgeA = lTangent * KR_HALF_TRAIL_SIZE + lPosition;
-                const Vector3 lEdgeB = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition;
+                // uv.y == 0 is the MINUS edge (0x82295BC8/0x82295BD8) -- see the banner.
+                const Vector3 lEdgeA = lTangent * KR_MINUS_HALF_TRAIL_SIZE + lPosition;
+                const Vector3 lEdgeB = lTangent * KR_HALF_TRAIL_SIZE + lPosition;
 
                 laVertices[lnVertexCount].mv3Pos             = lEdgeA;
                 laVertices[lnVertexCount].mv4UvTimeAlpha     = lUvA;
                 laVertices[lnVertexCount + 1].mv3Pos         = lEdgeB;
                 laVertices[lnVertexCount + 1].mv4UvTimeAlpha = lUvB;
                 lnVertexCount += 2;
+
+                // [DIAG] see the banner at lbQuadDiag. DELETE-WHEN-STABLE.
+                if (lbQuadDiag && !lbQuadDiagSpent)
+                {
+                    char lacQ[320];
+                    std::snprintf(lacQ, sizeof(lacQ),
+                        "[trailquad] e=%d/%d s=%d/%d seg=%.4f,%.4f,%.4f tan=%.4f,%.4f,%.4f "
+                        "vA=%.4f,%.4f,%.4f vB=%.4f,%.4f,%.4f tilt=%.4f age=%.3f str=%.3f\n",
+                        lnEmitter, lnEmitterCount, lnSegment, lnNumSegments,
+                        static_cast<double>(lPosition.x), static_cast<double>(lPosition.y),
+                        static_cast<double>(lPosition.z),
+                        static_cast<double>(lTangent.x), static_cast<double>(lTangent.y),
+                        static_cast<double>(lTangent.z),
+                        static_cast<double>(lEdgeA.x), static_cast<double>(lEdgeA.y),
+                        static_cast<double>(lEdgeA.z),
+                        static_cast<double>(lEdgeB.x), static_cast<double>(lEdgeB.y),
+                        static_cast<double>(lEdgeB.z),
+                        static_cast<double>(lEdgeA.y - lEdgeB.y),
+                        static_cast<double>(lfAge), static_cast<double>(lfStrength));
+                    CgsDev::Log::WriteToLog(lacQ);
+                    if (lnSegment == lnNumSegments - 1)
+                    {
+                        lbQuadDiagSpent = true;
+                    }
+                }
             }
 
             // ---- the last vertex repeated: closes this emitter's strip with a degenerate ----

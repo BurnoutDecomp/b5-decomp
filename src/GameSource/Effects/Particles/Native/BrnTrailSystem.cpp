@@ -42,11 +42,39 @@
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [diag] CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Development/BrnDiagBoundSurfaces.h"      // [diag] BrnDiag::LogBoundSurfaces (the pass-boundary RT probe)
+#include "GameShared/GameClasses/Development/BrnDiagTrailHeight.h"        // [diag] the mark-height latch (issue #21)
 
 #include <cstring>   // memset / memcpy (the X360 calls both by name)
 #include <cstdio>    // [diag] snprintf (the [trailpass] render probe)
 #include <cstdlib>   // [diag] getenv  (BRN_SKID_PROBE gates the render probe too)
 #include <cmath>     // [diag] sqrt    ([trailseg] prints metres beside the console's squared test)
+
+// ============================================================================================
+// [DIAG] NOT IN THE X360 BINARY -- the issue #21 mark-height latch. See BrnDiagTrailHeight.h for
+// why the two halves of "mark y minus road y" cannot see each other without it.
+// DELETE-WHEN-STABLE.
+// ============================================================================================
+namespace BrnDiag
+{
+    TrailHeightHit gaTrailHeightHits[KI_TRAIL_HEIGHT_MAX_CARS][KI_TRAIL_HEIGHT_NUM_WHEELS] = {};
+    u32            guTrailHeightStamp = 0u;
+
+    bool TrailHeightDiagEnabled()
+    {
+        static int siEnabled = -1;
+        if (siEnabled < 0)
+        {
+            const char* lpcValue = std::getenv("BRN_TRAIL_HEIGHT_DIAG");
+            siEnabled = (lpcValue != 0 && lpcValue[0] != 0 && lpcValue[0] != '0') ? 1 : 0;
+            if (siEnabled == 1)
+            {
+                CgsDev::Log::WriteToLog("[trailht] BRN_TRAIL_HEIGHT_DIAG=1 ARMED:"
+                                        " mark height vs the traction line test's road hit\n");
+            }
+        }
+        return siEnabled != 0;
+    }
+}
 
 namespace BrnParticle
 {
@@ -55,12 +83,19 @@ namespace Native
     // ---- file-scope constants (DWARF BrnTrailSystem.cpp:32-38) --------------------------
     namespace
     {
-        // krTrailHeightAdjustment / kTrailHeightAdjustment (BrnTrailSystem.cpp:33/34). The X360
-        // vector is a dynamically-initialised .data object (unk_82FAC1E0 reads 0.0 in the image;
-        // its CRT-init thunk is an export hole, not located this wave). The value is the DecFIGS
-        // static initialiser's (__static_initialization_and_destruction_0 @0xE2B5C, the stvx
-        // @0xE4950 of {0, 0x3CF5C28F, 0, .}): a 3 cm lift along +Y. FLAG: X360 value corroborated
-        // only through the PS3 near-ancestor, not read out of the X360 image.
+        // krTrailHeightAdjustment / kTrailHeightAdjustment (BrnTrailSystem.cpp:33/34).
+        //
+        // ⭐ THE FLAG THAT STOOD HERE IS DISCHARGED (2026-09-15, issue #21). unk_82FAC1E0 reads
+        // 0.0 straight out of the image because a CRT thunk fills it, and the value used to be
+        // corroborated only through the PS3 DecFIGS near-ancestor. The thunk is now HOMED in the
+        // X360 image itself (tools/re/findinit.py 82FAC1E0 -> 0x82C4AED0, disassembled with
+        // ppcdis.py):
+        //     0x82C4AEDC  lfs  f0,[0x82001CC0]   ; == 0.0   -> stfs -0x10(r1) (x), -8(r1) (z)
+        //     0x82C4AEEC  lfs  f13,[0x8200E00C]  ; == 0.03  -> stfs -0xc(r1)  (y)
+        //     0x82C4AEF4  stw  r9(0),-4(r1)                  (w)
+        //     0x82C4AF08  stvx128 v0 -> unk_82FAC1E0
+        // i.e. exactly {0, 0.03, 0, 0} -- a 3 cm lift along WORLD +Y (not along the contact
+        // normal), read out of the X360 image. The committed value was right.
         const f32     KR_TRAIL_HEIGHT_ADJUSTMENT = 0.03f;
         const Vector3 K_TRAIL_HEIGHT_ADJUSTMENT  = { 0.0f, KR_TRAIL_HEIGHT_ADJUSTMENT, 0.0f, 0.0f };
 
