@@ -7271,6 +7271,36 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
     // interface's first member, which is why the console passes the interface pointer straight
     // to VariableEventQueue<5040,16>::AddEvent<BrnPlayerDriverControls>.
 
+    // [DIAG] NOT IN THE X360 BINARY. BRN_STARTLINE_DIAG=1 only. The PUBLISH half of the
+    // start-line witness: what this module actually puts in the record the physics side reads,
+    // next to the slot state it was derived from. Pairs with "[startline]" in
+    // VehiclePhysics::Update, so a flag that is true here and false there is a transport
+    // defect and a flag that is false in both is a state-machine defect.
+    {
+        static const char* const kspSLW = getenv( "BRN_STARTLINE_DIAG" );
+        if( kspSLW != 0 )
+        {
+            static u32 sluSLW = 0;
+            if( ( sluSLW++ % 15u ) == 0u && CgsDev::Log::gpDebugPrint != 0 )
+                *CgsDev::Log::gpDebugPrint
+                    << "[startline-publish] id=" << lControls.miVehicleID
+                    << " onLineState=" << ( lpActiveRaceCar->IsOnRaceStartState(
+                           ActiveRaceCar::E_RACE_START_STATE_ON_START_LINE ) ? 1 : 0 )
+                    << " racingState=" << ( lpActiveRaceCar->IsOnRaceStartState(
+                           ActiveRaceCar::E_RACE_START_STATE_RACING ) ? 1 : 0 )
+                    << " publishedOnLine=" << ( lControls.mbIsOnStartLine ? 1 : 0 )
+                    << " engineState=" << static_cast<s32>( lpActiveRaceCar->GetEngineState() )
+                    << " controllerActive=" << ( lbControllerActive ? 1 : 0 )
+                    << " donutsOnStart=" << static_cast<s32>( mbPlayerDonutsOnEventStart )
+                    << " rollsOnStart=" << static_cast<s32>( mbPlayerRollsOnEventStart )
+                    << " inGameMode=" << ( mbIsInGameMode ? 1 : 0 )
+                    << " gas=" << lControls.mfGas
+                    << " steer=" << lControls.mfSteering
+                    << " boost=" << ( lControls.mbBoost ? 1 : 0 )
+                    << "\n";
+        }
+    }
+
     lpOutput->GetVehicleDriverInterface()->GetUpdateDriverQueue()->AddEvent( &lControls, 0 );
 }
 
