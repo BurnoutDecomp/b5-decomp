@@ -38,6 +38,7 @@
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasic2dColouredTexturedVertex.h" // vertex
 
 #include <cstring> // memcpy
+#include <cstdlib> // getenv ([DIAG] opt-in gate only)
 
 namespace BrnGui
 {
@@ -186,16 +187,38 @@ void CalculateUVsForIndex(s32 liFrameNumber,
 // NOT call Construct(); the manager runs the virtual Construct() as a separate pass afterwards.
 SatNavRenderer::SatNavRenderer()
 {
-    // Member range the X360 ctor zeroes before the manager's Construct pass fills it.
-    mpGuiCache                 = 0;   // +0x98
-    mpMapTextureState          = 0;   // +0xAC
-    mpMapBlendState            = 0;   // +0xC4 region
-    mpMaskTextureState         = 0;
-    mpMaskBlendState           = 0;
-    mpRouteSegmentTextureState = 0;
-    mpRouteSegmentBlendState   = 0;
-    mapIconTextureStates[0]    = 0;   // +0x128 stride-0x14 loop, 2 entries
-    mapIconTextureStates[1]    = 0;
+    // ⭐ 2026-09-15 (issue #25): read off the ctor's own asm. It zeroes the six RESOURCE
+    // DESCRIPTOR blocks -- +0x98 / +0xB0 / +0xC8 / +0xE0 / +0xF8 / +0x110, five words each
+    // (0x827DD490..0x827DD538) -- and then the 2-entry maIconResources array in a stride-0x14
+    // loop (0x827DD53C..0x827DD560). It does NOT touch the TextureState*/BlendState* slots or
+    // mRenderSatNavEvent: Construct() owns those (see below). The previous body had it exactly
+    // backwards (it zeroed the pointers and left the descriptors alone).
+    u32* const lapResources[7] =
+    {
+        mMapTextureStateResource,          // +0x98
+        mMapBlendStateResource,            // +0xB0
+        mMaskTextureStateResource,         // +0xC8
+        mMaskBlendStateResource,           // +0xE0
+        mRouteSegmentTextureStateResource, // +0xF8
+        mRouteSegmentBlendStateResource,   // +0x110
+        maIconResources[0],                // +0x128 (stride-0x14 loop, 2 entries)
+    };
+    for (u32 luBlock = 0; luBlock < 7; ++luBlock)
+    {
+        for (u32 luWord = 0; luWord < 5; ++luWord)
+            lapResources[luBlock][luWord] = 0;
+    }
+    for (u32 luWord = 0; luWord < 5; ++luWord)
+        maIconResources[1][luWord] = 0;
+
+    // The two members neither the console ctor nor Construct() stores to: mpGuiCache (event 64
+    // fills it) and mpMapBlendState (RenderComponent creates it on its own null test). The X360
+    // gets them zero from the pool the CustomRendererManager aggregate is carved out of; this
+    // host has no such guarantee, and Prepare()/RenderComponent both READ them, so they are
+    // zeroed here. FLAG PC-platform leaf: reproduces the console's zeroed backing store, not a
+    // console instruction -- there is no store to +0x90 or +0xC4 anywhere in either function.
+    mpGuiCache       = 0;   // +0x90
+    mpMapBlendState  = 0;   // +0xC4
 }
 
 // 0x8245F6C8
@@ -203,57 +226,74 @@ void SatNavRenderer::Construct()
 {
     CustomRenderComponentInterface::Construct();
 
-    // ---- stage machines + cached pointers ----
+    // ⭐⭐ 2026-09-15 (issue #25): THIS BODY IS NOW THE ASM, STORE FOR STORE.
+    // The previous transcription came from the Hex-Rays listing, which renders the
+    // `li r11, 0` / `li r10, 6` / `li r9, 5` register preload as literal doubleword
+    // CONSTANTS (`*(a1 + 296) = 0x600000000LL`). There is no such constant: every `std`
+    // in 0x8245F710..0x8245F78C stores r11, and r11 is ZERO for the whole run
+    // (0x8245F6E0 `li r11, 0`, never rewritten). Reading them as {0,6} put a 6 into six
+    // resource descriptors and a 1.0 into four UV tables, and -- much worse -- it moved
+    // six real stores onto the wrong members, so the FIVE the console makes into
+    // mRenderSatNavEvent were dropped altogether. The asm, in order:
+    //   0x50/0x54 = 0                      mePrepareStage / meReleaseStage
+    //   0x94 = 0                           mpHeapAllocator      (NOT mpGuiCache)
+    //   0xAC 0xDC 0xF4 0x10C 0x124 = 0     the five state pointers Release() frees
+    //   0x128..0x157 = 0 (six `std`)       maIconResources[2] + mapIconTextureStates[2]
+    //   0x158 = 5, 0x15C = 6               meIconDisplayType / meGameModeFilter
+    //   0x5A0 = 0 (stb)                    mbRenderEventStarts
+    //   0x160/0x210/0x2C0/0x370 + 0x28     the first FIVE entries of each full-icon UV table
+    //   0x7C 0x80 0x84 = 0                 mRenderSatNavEvent map/mask/route TEXTURES
+    //   0x88 = 0, 0x89 = 1 (stb)           mRenderSatNavEvent mbRotateMap / mbUseTrajectory
+    //   0x78 = 0                           mRenderSatNavEvent miZoomLevel
+    //   0x1878 = 0 (stb), 0x5A1 = 1 (stb), 0x1870 = 0, 0x8 = 0xE5FFFFFF
     mePrepareStage = E_PREPARESTAGE_START;       // +0x50
     meReleaseStage = E_RELEASESTAGE_START;       // +0x54
-    mpGuiCache     = 0;                           // +0x90
+    mpHeapAllocator            = 0;              // +0x94
     mpMapTextureState          = 0;              // +0xAC
-    mpMapBlendState            = 0;              // +0xDC
-    mpMaskTextureState         = 0;              // +0xF4
-    mpMaskBlendState           = 0;              // +0x10C
-    mpRouteSegmentTextureState = 0;              // +0x124
+    mpMaskTextureState         = 0;              // +0xDC
+    mpMaskBlendState           = 0;              // +0xF4
+    mpRouteSegmentTextureState = 0;              // +0x10C
+    mpRouteSegmentBlendState   = 0;              // +0x124
+    // (+0xC4 mpMapBlendState is deliberately NOT cleared here -- the console skips it in
+    //  both Construct and Release; RenderComponent creates it lazily on its own null test,
+    //  and the ctor above zeroes only descriptors, so it starts null from the pool memory.)
 
-    // The six texture/blend resource descriptors are primed to a {count=0, type=6} head (the
-    // X360 stores the 0x600000000 doubleword: low dword 0, high dword 6). Cleared by name.
-    u32* const lapResourceHeads[6] =
+    // +0x128..+0x157: maIconResources[2] and mapIconTextureStates[2], six zero doublewords.
+    for (u32 luEntry = 0; luEntry < 2; ++luEntry)
     {
-        mMapTextureStateResource,          // +0x128
-        mMapBlendStateResource,            // +0x130
-        mMaskTextureStateResource,         // +0x138
-        mMaskBlendStateResource,           // +0x140
-        mRouteSegmentTextureStateResource, // +0x148
-        mRouteSegmentBlendStateResource,   // +0x150
-    };
-    for (u32 lu = 0; lu < 6; ++lu)
-    {
-        lapResourceHeads[lu][0] = 0;
-        lapResourceHeads[lu][1] = 6;
-        lapResourceHeads[lu][2] = 0;
-        lapResourceHeads[lu][3] = 0;
-        lapResourceHeads[lu][4] = 0;
+        for (u32 luWord = 0; luWord < 5; ++luWord)
+            maIconResources[luEntry][luWord] = 0;
+        mapIconTextureStates[luEntry] = 0;
     }
 
     meIconDisplayType = GuiEventEnableSatNavIcons::E_ICON_DISPLAY_TYPE_COUNT; // +0x158 = 5
     meGameModeFilter  = 6;                        // +0x15C
 
-    // The four icon-UV corner table heads are primed to a {1,0} doubleword (the X360 stores
-    // the 0x100000000 head of each table); the InitEventTypeUvs pass overwrites the rest.
-    mav2IconUvTopLeft[0][0].x     = 1.0f; mav2IconUvTopLeft[0][0].y     = 0.0f; // +0x160
-    mav2IconUvBottomLeft[0][0].x  = 1.0f; mav2IconUvBottomLeft[0][0].y  = 0.0f;
-    mav2IconUvTopRight[0][0].x    = 1.0f; mav2IconUvTopRight[0][0].y    = 0.0f;
-    mav2IconUvBottomRight[0][0].x = 1.0f; mav2IconUvBottomRight[0][0].y = 0.0f;
+    mbRenderEventStarts = false;                  // +0x5A0 (stb 0)
 
-    // ---- icon textures + flags (X360 +0x78..+0x89) ----
-    maIconResources[0][0]   = 0;
-    maIconResources[1][0]   = 0;
-    mapIconTextureStates[0] = 0;                  // +0x84
-    mapIconTextureStates[1] = 0;
-    mbRenderEventStarts     = false;              // +0x88
-    mMapQuadColour          = 0;                  // +0x78 group head
+    // +0x160/+0x210/+0x2C0/+0x370, five doublewords each: the first five entries of each
+    // full-icon UV corner table are zeroed. InitEventTypeUvs fills all eleven at Prepare.
+    for (u32 luEntry = 0; luEntry < 5; ++luEntry)
+    {
+        mav2IconUvTopLeft[0][luEntry].x     = 0.0f; mav2IconUvTopLeft[0][luEntry].y     = 0.0f;
+        mav2IconUvBottomLeft[0][luEntry].x  = 0.0f; mav2IconUvBottomLeft[0][luEntry].y  = 0.0f;
+        mav2IconUvTopRight[0][luEntry].x    = 0.0f; mav2IconUvTopRight[0][luEntry].y    = 0.0f;
+        mav2IconUvBottomRight[0][luEntry].x = 0.0f; mav2IconUvBottomRight[0][luEntry].y = 0.0f;
+    }
 
-    mbDrawRoute           = false;                // +0x1878
+    // +0x78..+0x89 -- the LATCHED RENDER PAYLOAD. RenderComponent's very first gate reads
+    // mpMapTexture / mpMaskTexture, so these five stores are what keep the renderer on the
+    // empty-bracket path until a real 212 arrives. They were absent entirely before.
+    mRenderSatNavEvent.miZoomLevel           = 0;      // +0x78
+    mRenderSatNavEvent.mpMapTexture          = 0;      // +0x7C
+    mRenderSatNavEvent.mpMaskTexture         = 0;      // +0x80
+    mRenderSatNavEvent.mpRouteSegmentTexture = 0;      // +0x84
+    mRenderSatNavEvent.mbRotateMap           = false;  // +0x88 (stb 0)
+    mRenderSatNavEvent.mbUseTrajectory       = true;   // +0x89 (stb 1)
+
+    mbDrawRoute           = false;                // +0x1878 (stb 0)
     muNumberOfSatNavIcons = 0;                    // +0x1870
-    mbRefreshSatNavIcons  = true;                 // +0x5A1 = 1 (refresh on construct)
+    mbRefreshSatNavIcons  = true;                 // +0x5A1 (stb 1) -- refresh on construct
 
     // Map-quad colour: white at alpha 0xE5 (0xE5FFFFFF), stored at +0x08.
     mMapQuadColour = 0xE5FFFFFFu;
@@ -337,11 +377,16 @@ bool SatNavRenderer::Release()
         // Free each owned texture/blend state through the resource allocator's destroy slot
         // (X360 (*(*mpHeapAllocator + 0x14))(mpHeapAllocator, &resource)). The allocator type is
         // uncommitted, so the dispatch is omitted but the null-out side effects are reproduced.
+        // ⭐ 2026-09-15 (issue #25): the descriptor/pointer PAIRS the asm actually frees are
+        // (+0x98,+0xAC) (+0xC8,+0xDC) (+0xE0,+0xF4) (+0xF8,+0x10C) (+0x110,+0x124) -- FIVE, and
+        // mpMapBlendState (+0xC4) is NOT among them (0x824456E0 has no test of 0xC4 at all).
+        // This list was shifted one slot: it freed mpMapBlendState and never freed
+        // mpRouteSegmentBlendState. Same off-by-one as Construct.
         if (mpMapTextureState)          mpMapTextureState = 0;
-        if (mpMapBlendState)            mpMapBlendState = 0;
         if (mpMaskTextureState)         mpMaskTextureState = 0;
         if (mpMaskBlendState)           mpMaskBlendState = 0;
         if (mpRouteSegmentTextureState) mpRouteSegmentTextureState = 0;
+        if (mpRouteSegmentBlendState)   mpRouteSegmentBlendState = 0;
         break;
 
     case E_RELEASESTAGE_DONE:
@@ -1124,6 +1169,26 @@ void SatNavRenderer::RenderSatNavIcon(f32 lfX, f32 lfHalfWidth, f32 lfY, f32 lfH
     // Bind this icon-type's texture state + the default blend state, then submit the quad
     // (X360 SetState(texture) @0x8245A5B4, SetState(blend, dword_83010F20) @0x8245A5C4,
     // Render(6, verts, 4) @0x8245A5D8). On the PC fold the ImRenderer<V> API is reached by name.
+    // [DIAG] NOT IN THE X360 BINARY -- [satnav-quad] the first 8 icon quads a run submits:
+    // the four device-space corners the caller computed and the four atlas UV corners the
+    // tables answered. Opt-in via BRN_SATNAV_DIAG. Named for exactly what it prints.
+    {
+        static const bool sbQuadDiag = (getenv("BRN_SATNAV_DIAG") != 0);
+        static s32 siQuadsLogged = 0;
+        if (sbQuadDiag && siQuadsLogged < 8 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siQuadsLogged;
+            *CgsDev::Log::gpDebugPrint
+                << "[satnav-quad] mini=" << static_cast<s32>(lbMiniIcons)
+                << " row=" << static_cast<s32>(luRow)
+                << " tix=" << static_cast<s32>(luEventTypeIndex)
+                << " pos=(" << lfLeft << "," << lfTop << ")-(" << lfRight << "," << lfBottom
+                << ") uvTL=(" << lv2UvTopLeft.x << "," << lv2UvTopLeft.y
+                << ") uvBR=(" << lv2UvBottomRight.x << "," << lv2UvBottomRight.y
+                << ") texState=" << static_cast<s32>(mapIconTextureStates[luRow] != 0) << "\n";
+        }
+    }
+
     lpRenderBuffer->SetState(mapIconTextureStates[luRow]);
     lpRenderBuffer->SetState(gpDefaultImBlendState);
     lpRenderBuffer->Render(static_cast<renderengine::PrimitiveType>(6), laVertices, 4);
