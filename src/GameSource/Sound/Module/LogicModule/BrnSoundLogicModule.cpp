@@ -88,6 +88,7 @@ namespace
     struct GuiAudioTraxIndexesPayload  { u8 maData[24]; };  // sound message 8  (GUI 459)
     struct GuiAudioTraxPreviewPayload  { u8 maData[8];  };  // sound message 9  (GUI 460)
     struct GuiAudioEventIntrosPayload  { u8 maData[24]; };  // sound message 31 (GUI 464)
+    struct GuiAudioSettingsPayload     { u8 maData[8];  };  // sound message 12 (GUI 463): {music, sfx}
     struct ShowModeResultsPayload      { u8 maData[232]; }; // sound message 23 (action 37)
     struct RoadRageDamagePayload       { u8 maData[8];  };  // sound message 20 (action 205)
 
@@ -650,11 +651,19 @@ void SoundLogicModule::ProcessGuiEvents(
             break;
 
         case 463:  // GuiEventAudioSettings -> the mixer CONTROL (effect id 0).
+        {
             CGS_ASSERT(lpEvent != 0, "lpSettingsEvent");
+            // The console (0x826EE508: `ld r11,0(r30); std r11,var_1E0`) copies the
+            // payload's EIGHT bytes {music, sfx} into Message<GuiEventAudioSettings>
+            // (AddEvent size 12 words == 16 + 8). MixerControl::Notify @0x826D2480 reads
+            // BOTH (+16 music, +20 sfx); a 4-byte Message<s32> here left the consumer's
+            // sfx word past the record -- the mixer scaled every SFX channel by garbage.
+            GuiAudioSettingsPayload lPayload;
+            std::memcpy(lPayload.maData, lpuPayload, sizeof(lPayload.maData));
             PostSoundMessage(mMessageQueue, 12, 0, 0, 0,
-                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL,
-                             EventS32At(lpEvent, 0));
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL, lPayload);
             break;
+        }
 
         case 464:  // GuiEventAudioEventIntros -> speech.
         {
