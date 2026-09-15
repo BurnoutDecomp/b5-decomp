@@ -1651,7 +1651,30 @@ void EffectsModule::HandleWheels(CarState& lrCarState, RaceCarParticleEffectHelp
         WheelStateMachine&                     lrMachine = lrData.mWheelStateMachine[luWheel];
 
         if (lpState->mbResetCarTransform)                          // +1102
+        {
             lrEmitter.mrLastTrailTime = -1.0f;
+
+            // [DIAG] NOT IN THE X360 BINARY -- the RESET WITNESS, gated on BRN_SKID_PROBE.
+            // DELETE-WHEN-STABLE.
+            // The sentinel above is the ONLY thing that can end a wheel's strip across a
+            // place-on-track / event-start grid placement, and it only bites through
+            // TrailSystem::AddTrailSegment's `now > 1.5*step + lastTrailTime` gate. A run that
+            // sees an 18 m segment bridge a placement cannot tell "the flag never arrived"
+            // from "the flag arrived and the gate swallowed it" without this line, and those
+            // two have completely different fixes. One line per (wheel, frame) the flag is up.
+            if (SkidProbeEnabled())
+            {
+                char lacRst[160];
+                std::snprintf(lacRst, sizeof(lacRst),
+                    "[skid] f=%u w=%u RESETXFORM mrLastTrailTime<-(-1) t=%.3f pos=%.2f,%.2f,%.2f\n",
+                    gauSkidProbeFrame, luWheel,
+                    static_cast<double>(mParticleModule.mRenderData.mfCurrentTime),
+                    static_cast<double>(lrWheel.mRoadContact.mPosition.x),
+                    static_cast<double>(lrWheel.mRoadContact.mPosition.y),
+                    static_cast<double>(lrWheel.mRoadContact.mPosition.z));
+                CgsDev::Log::WriteToLog(lacRst);
+            }
+        }
 
         bool lbTrailEnded = true;
         f32  lfNormalDrift = 0.0f;   // [skid probe] hoisted so the OFFGATE arm can print it
