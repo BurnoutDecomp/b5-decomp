@@ -818,8 +818,9 @@ u32 CollisionStateManager::MapGameModesToBinFlags(const void* lpGameMode) const
         lpInterface = static_cast<const
             BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*>(
                 lpGameMode);
-    s32 liState = 0;
-    std::memcpy(&liState, lpInterface->mData + 8u, sizeof(liState));
+    // The +8 word is now named (BrnRootSoundModuleIo.h): meCurrentGameModeType. The
+    // switch below is unchanged -- it was already this field, reached by raw offset.
+    const s32 liState = lpInterface->miCurrentGameModeType;
     switch (liState)
     {
     case 0:  return 0x0002u;

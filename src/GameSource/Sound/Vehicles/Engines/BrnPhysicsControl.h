@@ -90,11 +90,20 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     struct EngRevDataSet
     {
         EngRevDataSet() : mnNumPoints(0), mpDataPoints(nullptr), mfTime(0.0f), mnCurrentPoint(0) {}
+        // ADDITIVE: the four-field init the console's six static records at
+        // unk_82F2F508 carry on disk (see BrnPhysicsControl.cpp).
+        EngRevDataSet(s32 aiNumPoints, const EngineRevEntry* apPoints, f32 afTime, s32 aiCurrent)
+            : mnNumPoints(aiNumPoints), mpDataPoints(apPoints)
+            , mfTime(afTime), mnCurrentPoint(aiCurrent) {}
         s32 mnNumPoints;
         const EngineRevEntry* mpDataPoints;
         f32 mfTime;
         s32 mnCurrentPoint;
     };
+
+    // The six authored start-line rev performances the draw @0x82684510 picks from
+    // (the `% 6` of the LCG's high word).
+    static const s32 KI_START_LINE_REV_SETS = 6;
 
     // BrnPhysicsControl.h:278 (DWARF). Intro-reving (start-line rev) sub-state.
     enum eIntroRevingState
@@ -113,6 +122,20 @@ struct PhysicsControl : public BrnSound::Logic::BrnEffectControl
     virtual bool Attach(); // @ 0x826CB540
     virtual void UpdateParams(f32 afTimeStep); // @ 0x826CB710
     virtual void ProcessUpdate(); // @ 0x826E3B68
+
+    // ------------------------------------------------------------------------
+    // The PRIMARY vtable (off_820AF214, installed at this+0 by the ctor's
+    // `stw r10, 0(r31)` @0x826C8900 -- off_820AF1E0 at this+4 is the EffectBase
+    // sub-object's) carries three per-frame hooks, and UpdateParams @0x826CB710
+    // calls all three through it at 0x826CC050..0x826CC064:
+    //     vtable +8   0x826B2628  UpdateCollisionPassbys   (AI override 0x826B4DF8)
+    //     vtable +12  0x8284CB38  an ICF-folded `blr` leaf in BOTH vtables
+    //     vtable +16  0x826CC0C0  UpdateStartLineReving    (AI override 0x826CEC90)
+    // The +12 slot is empty in the base AND in AIPhysicsControl (off_820AF4B4+12 is
+    // the same folded `blr`), so it has no recoverable name and no observable effect;
+    // it is deliberately NOT declared here rather than given an invented one.
+    // ------------------------------------------------------------------------
+    virtual void UpdateStartLineReving(f32 afTimeStep); // @ 0x826CC0C0
 
     // @ 0x82682CA8 (DWARF h:266). Forward to VehicleState::GetEngineComponentName.
     const char* GetEngineComponentName( BrnSound::Vehicles::VehicleState::EEngineComponentType aeComponentType );
@@ -153,6 +176,16 @@ protected:
     // The repeated speed-ramp DMix value of UpdateParams (ARTIST 0x826CBD20 and
     // its three copies): clamp(mph, 0, limit) * reciprocal * 32767.
     static s32 SpeedRampMixerValue(f32 afSpeedMPH, f32 afLimit, f32 afReciprocal);
+
+    // @ 0x82684510 (IDA-truncated "BrnSound::Vehicles::Engines::Physic"). Step the
+    // sound module's LCG and return the authored start-line rev performance the
+    // draw lands on, one of the six at unk_82F2F508. Also inlined in Attach's tail.
+    EngRevDataSet PickStartLineRevDataSet();
+
+    // @ 0x826C8708 (IDA-truncated "BrnSound::Vehicles::Engines::PhysicsC"). Advance
+    // a rev performance by afTimeStep and return the interpolated {time, rpm,
+    // throttle} sample.
+    static EngineRevEntry UpdateEngRevDataSet(EngRevDataSet& arSet, f32 afTimeStep);
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_ENGINE_DIAG (see BrnEngineAudioDiag.h).
     void EngineParamWitness(f32 afTimeStep);
