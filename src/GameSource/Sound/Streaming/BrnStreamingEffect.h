@@ -110,6 +110,12 @@ protected:
     f32 mfGainPreFade;
     CgsSound::Logic::Command::QueueElement mVoiceId;
     bool mbBufferReleased;
+
+    // [DIAG] NOT IN THE X360 BINARY. Edge-detector for the opt-in BRN_STREAM_DIAG
+    // stage witness in ProcessUpdate -- the last VoiceWrapper stage this effect
+    // reported, so the log carries one line per TRANSITION instead of one per frame.
+    // Never read by any behavioural arm.
+    CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE meDiagLastStage;
 };
 
 } // namespace Streaming
