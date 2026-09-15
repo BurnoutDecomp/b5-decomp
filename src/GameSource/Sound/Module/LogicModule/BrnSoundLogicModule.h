@@ -162,6 +162,11 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // AddStateManager registrations in CreateStateManagers demand exactly the 9.
     virtual s32 GetNumberOfStates() override { return KI_NUM_STATE_MANAGERS; }
 
+    // @ 0x826838C8. The Burnout override of the engine's id generator: hand out the
+    // next id from THIS module's own cursor (X360 this+0x5214), skipping the 19
+    // RESERVED idents. Bodied in BrnSoundLogicModule.cpp.
+    virtual u32 GetUniqueId() override;
+
     // @ 0x826E1F10 (DWARF :152; phase C1). Publish the module's accumulated
     // pre-update output block into the caller's scratch buffer (write-locked
     // SetPreUpdateOutput copy; assert cpp:495).
@@ -303,6 +308,12 @@ private:
     CgsSound::Logic::Voice mMasterVoice;       // X360 this+0x51F0, ident 1
     CgsSound::Logic::Voice mGlobalReverbVoice; // X360 this+0x51FC, ident 2
     CgsSound::Logic::Voice mSubmixVoice;       // X360 this+0x5208, ident -16
+
+    // X360 this+0x5214 (the word between mSubmixVoice's 12 bytes and
+    // mResourceRegistrar @+0x5218): SoundLogicModule's OWN unique-id cursor, the
+    // one GetUniqueId @0x826838C8 reads and writes. It is DISTINCT from the engine
+    // base's muUniqueId @+0x230 -- the override never touches that one.
+    u32 muBrnUniqueId;
 
     BrnSound::Logic::ResourceRegistrar mResourceRegistrar; // h:383 (+0x588 from the IResourceRequester sub-object == X360 this+0x5218)
 
