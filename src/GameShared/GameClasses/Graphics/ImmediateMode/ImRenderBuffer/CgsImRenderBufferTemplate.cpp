@@ -35,7 +35,7 @@
 // and stamps each line with the present counter that lives in device.cpp so a traced batch can
 // be correlated against the BRN_FRAME_DUMP image of the SAME frame.
 namespace CgsDev { namespace Log { void WriteToLog(const char*); } }
-namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); extern u32 guDiagImBatches; extern u32 guDiagImFullBlack; }   // [DIAG] issue #30 counters
+namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); extern u32 guDiagImBatches; extern u32 guDiagImFullBlack; extern bool gbDiagLastPresentBlack; }   // [DIAG] issue #30 counters
 // [boost-bar 2026-08-25] The GUI additive-blend IDENTITY (CgsBillboardRenderer.cpp's
 // dword_83010F24 sentinel). Declared locally instead of including the Gui header -- this
 // graphics-layer TU must not depend on the Gui tree; the dispatch's SET_STATE_BLEND case
@@ -1996,7 +1996,25 @@ namespace CgsGraphics
                     CgsDev::Log::WriteToLog(lacDispMsg);
                 }
 
-                lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
+                const HRESULT lhrImDraw = lpDevice->DrawPrimitiveUP(leTopology, luPrimCount, saBatch, sizeof(DispatchScreenVertex));
+                // [DIAG] NOT IN THE X360 BINARY -- issue #30: on black presents, where did this batch go and did it fail.
+                {
+                    static u32 suImBlackPrinted = 0u;
+                    if (renderengine::gbDiagLastPresentBlack && suImBlackPrinted < 48u)
+                    {
+                        ++suImBlackPrinted;
+                        IDirect3DSurface9* lpRt0 = nullptr;
+                        IDirect3DSurface9* lpBb  = nullptr;
+                        lpDevice->GetRenderTarget(0, &lpRt0);
+                        lpDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBb);
+                        char lacIm[200];
+                        std::snprintf(lacIm, sizeof(lacIm), "[im2d-diag] present=%u batch n=%u hr=0x%08X rt0=%p backbuffer=%p program=%d\n",
+                                      renderengine::guPresentCount, luCount, static_cast<unsigned>(lhrImDraw), static_cast<void*>(lpRt0), static_cast<void*>(lpBb), static_cast<int>(li8LatchedProgram));
+                        if (lpRt0 != nullptr) lpRt0->Release();
+                        if (lpBb != nullptr) lpBb->Release();
+                        CgsDev::Log::WriteToLog(lacIm);
+                    }
+                }
 
                 if (lpBoostPs != nullptr)
                 {
