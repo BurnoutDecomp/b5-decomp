@@ -12,6 +12,7 @@ namespace Module { struct SoundLogicModule; }
 namespace Logic
 {
 namespace Streaming { class StreamingStateManager; }
+struct MixerControl;   // BrnMixerControl.h -- the +0x230 controller (effect id 0)
 
 class MusicStream : public Streaming::IStreamUser
 {
@@ -195,6 +196,16 @@ public:
     void ProcessUpdate() override;
     void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
 
+    // @ 0x82685D38: `return (a2 == 0) - 1;` -- controller slot 0 is effect-control id 0
+    // (MixerControl, whose ClassTypeInfo ObjectID is 0), every other slot ends the
+    // State::CreateSFXCtrls walk.
+    s32 GetController(s32 aiIndex) override;
+    // @ 0x826873A0: assert the control's effect id is 0 ("Unexpected control.",
+    // BrnMusicEffect.cpp:483 -- the console tests `(*(ctrl+20) & 0x7F0) != 0`, which is
+    // GetEffectID() != 0), then store it at this+0x230 (`result[140] = a2 - 4`, the
+    // primary-base adjustment of the EffectBase sub-object pointer).
+    void AttachController(CgsSound::Logic::EffectBase* apController) override;
+
     // X360 0x82687408. True while the player's own soundtrack (the dashboard music
     // player) owns playback, in which case the game must not start a song of its own.
     // On the PC build there is no XMP session, so this is always false -- the console
@@ -212,6 +223,16 @@ private:
     // stinger, whether the player won) onto the sting's ContentSpec.
     static u32 GetEventStartContentSpec(const void* apGameModeInterface);
     u32 GetEventEndContentSpec(const void* apGameModeInterface) const;
+
+    // X360 MusicEffect +0x230, stored by AttachController @0x826873A0 and asserted
+    // non-null by Attach @0x8269CC60 ("mpMixerControl", BrnMusicEffect.cpp:515).
+    // ProcessUpdate reads its cached music-volume setting to publish this effect's
+    // dynamic-mixer INPUT 0.
+    MixerControl* mpMixerControl;
+
+    // X360 MusicEffect +0x23C. The last slot-9 mixer output this effect published as
+    // GuiOut event 513; the publish is edge-triggered on it (ProcessUpdate's tail).
+    f32 mfLastPublishedGuiVolume;
 
     MusicStream mSecondaryStream;
     MusicStream mEATraxStream;
