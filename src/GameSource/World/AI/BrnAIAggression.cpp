@@ -8,6 +8,8 @@
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu vector ops
 
 #include <cmath>   // std::fabs, std::sqrt where the de-SIMD'd math needs scalar helpers
+#include <cstdlib>  // [DIAG] getenv -- BRN_MM_DIAG only
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] CgsDev::Log::gpDebugPrint -- BRN_MM_DIAG only
 
 // BrnAI::AIAggression -- the rival-AI aggression / slam-lineup state machine (Burnout's
 // "shunting" AI brain). This TU bodies the 35 state-machine functions against the AICar
@@ -23,6 +25,43 @@
 namespace BrnAI
 {
     namespace vpu = rw::math::vpu;
+
+// =================================================================================================
+// [DIAG] NOT IN THE X360 BINARY -- the MARKED-MAN aggression witness (issue #24), opt-in via
+// BRN_MM_DIAG=1.  It measures, once per second PER AI CAR, exactly the quantities the report is
+// about: how close each rival is to the player, what route-finding style it was given, whether
+// the module judged it suitable for aggression, what aggression level it was seeded with, and
+// which aggression state its machine is sitting in -- plus a running tally of DecideToAttack's
+// FOUR exits, so "the AI is not aggressive" can be attributed to a specific reject.
+//
+// The per-car clock is the car's OWN accumulated lfTimeStep, not a global frame counter: a car
+// whose Update stops being called simply stops printing, which is itself the answer to "is the
+// aggression machine running at all?".
+//
+// ⛔ It must NOT call Aggressiveness::GetAggressionLevel(): that accessor CGS_ASSERTs
+// mbAggressionLevelSet, and an assert PAUSES the sim -- a witness that can stall the run it is
+// measuring is worse than no witness.  DiagAggressionLevel() is the same load without the assert.
+// DELETE-WHEN issue #24 is closed.
+// =================================================================================================
+namespace
+{
+    bool MarkedManDiagOn()
+    {
+        static const bool sbOn = (std::getenv("BRN_MM_DIAG") != 0);
+        return sbOn;
+    }
+
+    // DecideToAttack exit tally.  Every call lands in exactly one bucket.
+    s32 gsiAttackCalls        = 0;   // total calls
+    s32 gsiAttackProxReject   = 0;   // miProximityIndex < 0
+    s32 gsiAttackMarkedManYes = 0;   // MARKED_MAN + player slower than KF_MARKED_MAN_ATTACK_SPEED
+    s32 gsiAttackRaceReject   = 0;   // RACE + within 1000 of the checkpoint
+    s32 gsiAttackRollYes      = 0;   // die roll beat the aggression level
+    s32 gsiAttackRollNo       = 0;   // die roll lost
+
+    f32 gsafDiagClock[35] = { 0.0f };
+}
+
 
 
     // ===== file-local tuning constants (see header note; flagged where unrecovered) =====
@@ -318,23 +357,34 @@ void AIAggression::CheckForCarVeeringAwayFromPlayer(f32 lfTimeStep)
 // because the draw mutates the shared static mRandom.
 bool AIAggression::DecideToAttack()
 {
+    ++gsiAttackCalls;   // [DIAG] NOT IN THE X360 BINARY -- BRN_MM_DIAG tally only
+
     if (mpCar->miProximityIndex < 0)
+    {
+        ++gsiAttackProxReject;   // [DIAG]
         return false;
+    }
 
     if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN && mpPlayerCar != NULL)
     {
         if (mpPlayerCar->GetSpeed() < KF_MARKED_MAN_ATTACK_SPEED)
+        {
+            ++gsiAttackMarkedManYes;   // [DIAG]
             return true;
+        }
     }
 
     if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE &&
         mpCar->mfDistanceToCheckpoint < 1000.0f)
     {
+        ++gsiAttackRaceReject;   // [DIAG]
         return false;
     }
 
     const f32 lfRoll = mRandom.RandomFloat();
-    return mpCar->GetAggressiveness()->GetAggressionLevel() > lfRoll;
+    const bool lbAttack = mpCar->GetAggressiveness()->GetAggressionLevel() > lfRoll;
+    if (lbAttack) { ++gsiAttackRollYes; } else { ++gsiAttackRollNo; }   // [DIAG]
+    return lbAttack;
 }
 
 // BrnAI::AIAggression::DetermineAttackSide @0x82771408.
@@ -848,6 +898,50 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
 {
     if ( mpCar->mbIsPlayer )
         return;
+
+    // ---- [DIAG] NOT IN THE X360 BINARY -- BRN_MM_DIAG, one line per AI car per second -------
+    if ( MarkedManDiagOn() && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        const s32 liIndex = mpCar->GetRaceCarIndex();
+        if ( liIndex >= 0 && liIndex < 35 )
+        {
+            gsafDiagClock[liIndex] += lfTimeStep;
+            if ( gsafDiagClock[liIndex] >= 1.0f )
+            {
+                gsafDiagClock[liIndex] = 0.0f;
+                const f32 lfDistance = (lpPlayerCar != 0)
+                    ? vpu::Magnitude(lpPlayerCar->GetPosition() - mpCar->GetPosition())
+                    : -1.0f;
+                *CgsDev::Log::gpDebugPrint
+                    << "[mm-ai] car " << liIndex
+                    << " style " << static_cast<s32>(mpCar->meRouteFindingStyle)
+                    << " beh " << static_cast<s32>(mpCar->meBehaviour)
+                    << " carState " << static_cast<s32>(mpCar->meCarState)
+                    << " inMode " << static_cast<s32>(mpCar->mbIsInGameMode ? 1 : 0)
+                    << " suit " << static_cast<s32>(mbIsSuitableForAggression ? 1 : 0)
+                    << " aggr " << mpCar->GetAggressiveness()->DiagAggressionLevel()
+                    << " prox " << mpCar->miProximityIndex
+                    << " aggState " << static_cast<s32>(meAggressionState)
+                    << " stateTime " << mfStateTime
+                    << " tgt " << static_cast<s32>(mpTargetCar != 0 ? 1 : 0)
+                    << " sm " << static_cast<s32>(meSpeedMatchType)
+                    << " dist " << lfDistance
+                    << " spd " << mpCar->GetSpeed()
+                    << " playerSpd " << ((lpPlayerCar != 0) ? lpPlayerCar->GetSpeed() : -1.0f)
+                    << " notSuit " << static_cast<s32>(NotSuitableForAggression() ? 1 : 0)
+                    << "\n";
+                *CgsDev::Log::gpDebugPrint
+                    << "[mm-ai] decide calls " << gsiAttackCalls
+                    << " proxRej " << gsiAttackProxReject
+                    << " mmYes " << gsiAttackMarkedManYes
+                    << " raceRej " << gsiAttackRaceReject
+                    << " rollYes " << gsiAttackRollYes
+                    << " rollNo " << gsiAttackRollNo
+                    << "\n";
+            }
+        }
+    }
+    // ---- end [DIAG] -------------------------------------------------------------------------
 
     CheckForCarVeeringAwayFromPlayer(lfTimeStep);
     mpPlayerCar = lpPlayerCar;
