@@ -3519,10 +3519,31 @@ namespace BrnGame
         mbCarSelectionPublished = true;
 
         // ---- GUI event 406 (GuiPlayerInfoResponse, 0x40 bytes; car id at +0x20) --------------
+        // ⭐ [issue #3 wave 2026-09-15] byte +0x38 is the "car needs repair" word the livery
+        // screen latches (CarSelectLivery::HandlePlayerInfoResponse @0x824C8758, `lbz 0x38`):
+        // set, it disables the whole modify surface, fades the screen and posts the
+        // CAR_REPAIR_REQUIRED ticker. The console computes it in ProcessGameEvents @0x823A0A18
+        // case 81, right after PlayerInfo::Construct and before posting game action 182 (which
+        // TranslateGameActionsToGuiEvents @0x823E9CE0 case 182 forwards as GUI 406, seven words
+        // plus this byte):
+        //     v547 = Profile::FindCar(profile, carId)
+        //            ? (Profile::GetPlayerBaseDeformAmount(profile, carId) != 0.0) : 1;
+        // It was left ZERO here, so a damaged car's paint screen was fully interactive.
         {
+            u8 lu8CarNeedsRepair = 1;
+            {
+                BrnProgression::Profile* lpRepairProfile =
+                    mGameStateModule.GetProgressionManager()->GetProfile();
+                if (lpRepairProfile->FindCar(lPlayerCarId) != 0)
+                {
+                    lu8CarNeedsRepair =
+                        (lpRepairProfile->GetPlayerBaseDeformAmount(lPlayerCarId) != 0.0f) ? 1 : 0;
+                }
+            }
             u8 laRecord[0x40];
             std::memset(laRecord, 0, sizeof(laRecord));
             *reinterpret_cast<CgsID*>(&laRecord[0x20]) = lPlayerCarId;
+            laRecord[0x38] = lu8CarNeedsRepair;
             mpGuiInputBuffer->GetGuiEvents()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(laRecord), 406,
                 static_cast<s32>(sizeof(laRecord)));
