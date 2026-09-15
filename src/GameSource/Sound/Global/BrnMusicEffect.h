@@ -131,6 +131,47 @@ public:
         E_JUNKYARD_AMBIENCE_COUNT = 3
     };
 
+    // DWARF BrnMusicEffect.h:571 -- the music JUMP HIGH-PASS: an exponential frequency
+    // sweep the EA Trax stream's high-pass follows while the player is airborne
+    // (message 14 opens it towards KF_JUMP_HPF_OPEN_FREQUENCY, closes it back to the
+    // 230 Hz rest). 24 bytes at MusicEffect+0x34. Bodies in BrnMusicEffect.cpp:
+    //   Prepare @0x82687480 (export hole; read from the image), Release @0x82687648,
+    //   Update @0x826877E0. Construct is the inlined seed in MusicEffect::Attach
+    //   @0x8269CE48 (state 1, start 230 Hz, current 0); the ctor @0x826C8DB4 zeroes
+    //   the state (DESTRUCTED).
+    struct JumpHpf
+    {
+        enum EJumpFilterState
+        {
+            E_JUMPHPFSTATE_DESTRUCTED  = 0,
+            E_JUMPHPFSTATE_CONSTRUCTED = 1,
+            E_JUMPHPFSTATE_IDLE        = 2,
+            E_JUMPHPFSTATE_OPENING     = 3,
+            E_JUMPHPFSTATE_OPEN        = 4,
+            E_JUMPHPFSTATE_CLOSING     = 5,
+            E_JUMPHPFSTATE_MAX         = 6
+        };
+
+        JumpHpf() : meState(E_JUMPHPFSTATE_DESTRUCTED), mfStartFrequency(0.0f),
+                    mfFrequencyGain(0.0f), mfCurrentFrequency(0.0f), mfTimeThrough(0.0f),
+                    mfTime(0.0f) {}
+
+        void Construct();                                  // :574 (inlined @0x8269CE48)
+        bool Prepare(f32 afTargetFrequency, f32 afTime);   // :579 @0x82687480
+        void Update(f32 afDeltaTime);                      // :583 @0x826877E0
+        bool Release(f32 afTime);                          // :587 @0x82687648
+        void Destruct();                                   // :590
+        f32  GetFrequency() const { return mfCurrentFrequency; }   // :593 (+0xC, read by ProcessUpdate @ this+0x40)
+
+    private:
+        EJumpFilterState meState;          // +0x00
+        f32              mfStartFrequency; // +0x04
+        f32              mfFrequencyGain;  // +0x08  target / start (the sweep's ratio)
+        f32              mfCurrentFrequency; // +0x0C
+        f32              mfTimeThrough;    // +0x10
+        f32              mfTime;           // +0x14
+    };
+
     // The music-type discriminant GetMusicType @0x8269CE70 returns and UpdateParams
     // @0x826FE5C8 switches on. The values are the console's own switch labels; the
     // names are from the arm each one drives (every one of them is attested by the
@@ -239,6 +280,10 @@ private:
     // X360 MusicEffect +0x23C. The last slot-9 mixer output this effect published as
     // GuiOut event 513; the publish is edge-triggered on it (ProcessUpdate's tail).
     f32 mfLastPublishedGuiVolume;
+
+    // X360 MusicEffect +0x34 (DWARF BrnMusicEffect.h:618). Notify(14) opens/closes it,
+    // UpdateParams ticks it, ProcessUpdate hands its frequency to mEATraxStream.
+    JumpHpf mJumpHpf;
 
     MusicStream mSecondaryStream;
     MusicStream mEATraxStream;
