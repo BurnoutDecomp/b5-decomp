@@ -1214,7 +1214,61 @@ namespace BrnParticle
         {
             // TrailSystem::Update, INLINED at the console's head of this arm (the two stores
             // at module +141312/+141316 and the four-row matrix copy at +141248).
-            mTrailSystem.Update(lpRenderData->mfCurrentTimeStep,
+            //
+            // ⭐⭐⭐ THE TIME STEP IS DIFFERENCED, EXACTLY AS THE SPARK RING'S IS (issue #21).
+            // The console's `lfs f13, 0xC(r31) ; stfsx f13, r11, 0x190F4` at 0x8228AD10/
+            // 0x8228AD2C hands TrailSystem::mfCurrentTimeStep the render data's
+            // mfCurrentTimeStep VERBATIM -- and that field is the MONOTONIC ACCUMULATOR
+            // ParticleModule::Update builds (`lfs/fadds/stfs` on module+0x8E0C at
+            // 0x8228185C..0x82281870; the exhaustive four-spelling scan of the ARTIST export
+            // set finds no clear anywhere -- see the spark ring's banner above, which hit the
+            // same contradiction on the same field and resolved it the same way).
+            //
+            // ITS ONE CONSUMER PROVES IT WANTS A PER-FRAME DELTA, from the console's own
+            // arithmetic. TrailSystem::AddTrailSegment @0x8228C310 computes
+            //     0x8228C3B8  lfs   f13, 0x14(r27)          emitterData->mrLastTrailTime
+            //     0x8228C3D4  lfsx  f12, r31, 0x190F4       mfCurrentTimeStep
+            //     0x8228C3DC  fmadds f0, f12, f0, f13       f0 = step * 1.5 + lastTrailTime
+            //     0x8228C3EC  fcmpu cr6, f31, f0 ; bgt      tooMuchTimePassed = now > f0
+            // i.e. "more than 1.5 TIME STEPS since this wheel's last mark -> drop the emitter
+            // and start an unseeded strip". The sentinel that feeds it is written by
+            // EffectsModule::HandleWheels @0x82296D1C (`stfs f31(-1.0), 0(r30)` on
+            // TrailEmitterData+0x14) on mbResetCarTransform and on every frame the wheel lays
+            // nothing -- so -1.0 MEANS "this strip has ended". Both constructs are inert the
+            // moment the field carries elapsed time instead of a step: with the accumulator at
+            // 18.55 s the gate is `now > lastTrailTime + 27.8 s`, which no sentinel and no gap
+            // can cross, so a wheel keeps ONE emitter across ANY interruption and the next
+            // segment BRIDGES it.
+            // MEASURED, this build, scratch/flow_run/i21_A (the stunt-run start of b5 issue #21):
+            //     [trailseg] c=1 e=..B9B9C0 APPEND n=0 dist=0.0000  t=21.000 pos=2642.066,..,-1722.159
+            //     [trailseg] c=3 e=..B9B9C0 APPEND n=1 dist=18.3256 t=21.017 pos=2624.737,..,-1728.119
+            // -- ONE emitter, two consecutive segments 18.33 m apart one frame apart, because
+            // the event-start grid placement moved the car and nothing could end the strip:
+            // an 18 m tyre mark drawn straight across the junction. The same construct draws
+            // the take-off-point-to-landing-point strip the reporter calls "marks in midair".
+            //
+            // THE FIRST DIFFERENCE IS RIGHT UNDER BOTH READINGS OF THE CONSOLE, which is why
+            // it is taken here rather than a clear being invented (AGENTS.md rule 2): if the
+            // console clears the accumulator after publishing (the export set is known to have
+            // holes), the field IS that frame's sum of sim steps and the difference equals it;
+            // if it does not clear, the difference is still exactly the sim time that elapsed
+            // between this render frame and the last. Either way the number handed over is the
+            // console's own published quantity, differenced -- nothing is fabricated. This arm
+            // runs behind the once-per-frame muCurrentFrame guard above, so the difference is
+            // one render frame's worth of sim time and no more.
+            // ⚠ mfCurrentTime is NOT differenced: it is an ASSIGNMENT on the console
+            // (`stfsx f31, r31, 0x8E08`) and is already the trail clock HandleWheels stamps
+            // segments with.
+            // DELETE-WHEN the missing clear is found, or the module scheduler drives the real
+            // per-sub-step Update cadence -- the same DELETE-WHEN the spark ring carries.
+            static f32 sfLastTrailTimeStepSum = 0.0f;
+            const f32  lfTrailAccumulated = lpRenderData->mfCurrentTimeStep;
+            f32        lfTrailTimeStep    = lfTrailAccumulated - sfLastTrailTimeStepSum;
+            sfLastTrailTimeStepSum = lfTrailAccumulated;
+            if (lfTrailTimeStep < 0.0f)   // the accumulator was re-seeded (a module rebuild)
+                lfTrailTimeStep = 0.0f;
+
+            mTrailSystem.Update(lfTrailTimeStep,
                                 lpRenderData->mfCurrentTime,
                                 lrViewProjection);
 
