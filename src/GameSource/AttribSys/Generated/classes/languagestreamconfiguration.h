@@ -37,6 +37,7 @@ namespace Gen
         // pointer into the block: 4*(luIndex+2) + base — an 8-byte header skip
         // (count/capacity words) followed by 4-byte-stride elements, i.e.
         // &((u32*)mpAttributeData)[luIndex + 2].
+        bool IsValid() const { return Instance::IsValid(); }
         const void* GetContentSpecsData(u32 luIndex) const;
         u32 ContentSpec(u32 luIndex) const
         {

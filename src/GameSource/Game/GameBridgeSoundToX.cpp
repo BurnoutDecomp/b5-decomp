@@ -48,7 +48,24 @@ namespace BrnGame
         while (lpEvent)
         {
             if (liEventType == KI_AUDIO_EFFECTS_MESSAGE_VOICEOVER_FINISHED)
-                mpTrainingManager->OnVoiceoverFinished();
+            {
+                // â­ 2026-09-15 (SOUND-C): the console notifies the manager EMBEDDED at
+                // `a1 + 6769456`, which its own member comment already places "inside the
+                // game-state region" -- i.e. mGameStateModule's TrainingManager, the object
+                // TrainingManager::Update / RequestTraining actually run on. The PC stand-in
+                // pointer BrnGameModule::mpTrainingManager has NO writer anywhere in the
+                // tree, so this call dereferenced null. It never fired before because the
+                // only producer of audio-effects message 2 is SpeechEffect::PostSpeechFinished
+                // on a FIRST-TIME TIP, and no first-time tip could reach PlayStream until the
+                // Notify fix in this branch: `EXIT self code=-1073741819 (0xC0000005)` at
+                // TrainingManager::OnVoiceoverFinished+0x6 on the first Atomika free-burn line.
+                // FLAG PC null-tolerance: the console member cannot be absent; the PC manager
+                // is constructed by the game-state module, so skip the notify before that.
+                BrnGameState::TrainingManager* lpTrainingManager =
+                    mGameStateModule.GetTrainingManager();
+                if (lpTrainingManager)
+                    lpTrainingManager->OnVoiceoverFinished();
+            }
             lQueue.GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
     }
