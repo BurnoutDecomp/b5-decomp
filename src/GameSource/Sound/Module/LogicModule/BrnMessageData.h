@@ -61,6 +61,26 @@ enum ESoundMessages
     E_SOUNDMESSAGE_100PERCENT                 = 44,
 };
 
+// The payload of sound message 13 (E_SOUNDMESSAGE_PLAY_MUSIC_ON_MENU_STREAM).
+// X360-attested by its ONE consumer, MusicEffect::Notify @0x826BBAF8 case id 13
+// (0x826BBEF4..0x826BBFC0), which reads exactly three fields off the message:
+//     lwz r9,  0x10(msg)   -> the stream ContentSpec / Name  (payload +0x00)
+//     lbz r11, 0x14(msg)   -> "this stream came from a video" (payload +0x04)
+//     lbz r11, 0x15(msg)   -> "play over a custom soundtrack" (payload +0x05)
+// ⚠️ This is NOT CgsGui::GuiEventPlayMusicOnMenuStream: that type is the GUI WIRE
+// record and carries a 12-byte GuiEvent<23> header in front of the same three fields.
+// Posting the wire record as the payload (what this tree did) puts the name 12 bytes
+// too deep, so every message-13 producer that is not a GUI-23 forward -- ProcessGuiEvents
+// case 469 and ProcessGameActionQueue case 99, the one that CLEARS the menu stream --
+// delivered garbage: a run read `name=0x654D3542 isVideo=1` from a clear whose name was 0.
+struct MusicOnMenuStreamData
+{
+    u32 muStreamNameHash;              // +0x00
+    u8  mbFromVideo;                   // +0x04
+    u8  mbPlayOverCustomSoundtrack;    // +0x05
+    u8  maReserved[2];
+};
+
 // BrnMessageData.h:104 (DWARF). Two floats -> 8 bytes -> Message<FxVolumes> == 24
 // (arg 0x18).
 struct FxVolumes

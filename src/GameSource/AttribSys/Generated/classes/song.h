@@ -10,6 +10,7 @@
 // accessor / `using` API away, so the constructor is the only song function in the
 // ledger (minimal X360-faithful recon). Derives from Attrib::Instance.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
+#include <cstring>
 
 namespace Attrib
 {
@@ -19,6 +20,27 @@ namespace Gen
     {
     public:
         explicit song(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // The song's stream NAME, a const char* stored at +0x04 inside the 0x14-byte
+        // data area. X360-attested by MusicEffect::UpdateParams @0x826FE5C8 --
+        // 0x826FEC9C..0x826FECA8:
+        //     lwz r11, var_13C(r1)   ; the song Instance's mpAttributeData
+        //     lwz r3,  4(r11)        ; -> CgsSound::Playback::Name::MakeHash
+        // (the generated accessor itself is inlined away on the console).
+        // The 4-byte slot is read and widened the way every committed generated text
+        // accessor does it (crashbin::TextAt, propscrashbin::TextAt): attribute data
+        // keeps its console 32-bit pointer slots and the game heap lives below 4 GB.
+        const char* Stream() const
+        {
+            const unsigned char* lpData =
+                static_cast<const unsigned char*>(GetLayoutPointer());
+            if (!lpData)
+                return 0;
+            unsigned int luAddress = 0;
+            std::memcpy(&luAddress, lpData + 4, sizeof(luAddress));
+            return reinterpret_cast<const char*>(
+                static_cast<unsigned long long>(luAddress));
+        }
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::song

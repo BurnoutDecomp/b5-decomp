@@ -59,6 +59,62 @@ namespace
         arQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&arMessage),
                          arMessage.GetEventId(), static_cast<s32>(sizeof(arMessage)));
     }
+
+    // Construct + queue in one statement, the way the X360 dispatch folds it (every
+    // case builds the 16-byte header on the stack, drops the payload at +0x10 and
+    // calls VariableEventQueue<8192,16>::AddEvent with the event id).
+    template <typename T>
+    void PostSoundMessage(CgsModule::VariableEventQueue<8192, 16>& arQueue,
+                          s16 ai16EventId, u16 au16StateManagerId, u16 au16InstanceId,
+                          u16 au16EffectId,
+                          CgsSound::Io::MessageHeader::eEffectTypes aeEffectType,
+                          const T& arPayload)
+    {
+        CgsSound::Io::Message<T> lMessage;
+        lMessage.Construct(ai16EventId, au16StateManagerId, au16InstanceId,
+                           au16EffectId, aeEffectType);
+        lMessage.mData = arPayload;
+        QueueSoundMessage(arQueue, lMessage);
+    }
+
+    // Size-attested opaque payloads (house style: the record's SIZE is X360-attested by
+    // the AddEvent arg / the memcpy width; the internal field names are not recovered
+    // here, and the consumer reads them at the console's own byte offsets).
+    struct GuiAudioTraxUpdatePayload   { u8 maData[32]; };  // sound message 7  (GUI 458)
+    struct GuiAudioTraxIndexesPayload  { u8 maData[24]; };  // sound message 8  (GUI 459)
+    struct GuiAudioTraxPreviewPayload  { u8 maData[8];  };  // sound message 9  (GUI 460)
+    struct GuiAudioEventIntrosPayload  { u8 maData[24]; };  // sound message 31 (GUI 464)
+    struct ShowModeResultsPayload      { u8 maData[232]; }; // sound message 23 (action 37)
+    struct RoadRageDamagePayload       { u8 maData[8];  };  // sound message 20 (action 205)
+
+    // Read a 4-byte field out of an event record at the console's own byte offset.
+    s32 EventS32At(const CgsModule::Event* apEvent, u32 auOffset)
+    {
+        s32 liValue = 0;
+        std::memcpy(&liValue, reinterpret_cast<const u8*>(apEvent) + auOffset,
+                    sizeof(liValue));
+        return liValue;
+    }
+    u8 EventU8At(const CgsModule::Event* apEvent, u32 auOffset)
+    {
+        return reinterpret_cast<const u8*>(apEvent)[auOffset];
+    }
+    u64 EventU64At(const CgsModule::Event* apEvent, u32 auOffset)
+    {
+        u64 lu64Value = 0;
+        std::memcpy(&lu64Value, reinterpret_cast<const u8*>(apEvent) + auOffset,
+                    sizeof(lu64Value));
+        return lu64Value;
+    }
+
+    // X360 unk_82F2FD38: eleven 8-byte records whose SECOND word is the key game action
+    // 56 matches its own +4 field against (read with tools/re/x360rd.py). A hit posts the
+    // stunt-jump FX message.
+    const u32 KA_STUNT_JUMP_KEYS[11] =
+    {
+        0x00075542u, 0x00075540u, 0x00075541u, 0x000782CDu, 0x000782CEu, 0x000782A8u,
+        0x0007725Au, 0x00077255u, 0x0007FC80u, 0x0004E38Cu, 0x0007B999u
+    };
 }
 
 void SoundLogicModule::ResourcesAreReady()
@@ -136,6 +192,9 @@ void SoundLogicModule::Construct()
     // The per-frame trigger-action table starts empty (so GetSoundTriggerAction's
     // "used before Construct/Clear" assert is satisfied).
     maTriggerActions.Clear();
+
+    // The dispatch state block (X360 this+0x13570) starts zeroed.
+    std::memset(maDispatchState, 0, sizeof(maDispatchState));
 
     // The streaming-resource broker: bring up its request queues + requested/queued pools.
     mResourceRegistrar.Construct();
@@ -327,11 +386,20 @@ void SoundLogicModule::ProcessGuiEvents(
         {
         case 23:
         {
+            // X360 0x826ED6C8 case 23 copies the wire record's three fields into the
+            // message payload at +0x00 / +0x04 / +0x05 -- NOT the wire record itself
+            // (which carries a 12-byte GuiEvent<23> header here). See
+            // BrnSound::MusicOnMenuStreamData.
             const CgsGui::GuiEventPlayMusicOnMenuStream* lpGuiEvent =
                 reinterpret_cast<const CgsGui::GuiEventPlayMusicOnMenuStream*>(lpEvent);
-            CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream> lMessage(*lpGuiEvent);
-            lMessage.Construct(13, 0, 0, 2, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
-            QueueSoundMessage(mMessageQueue, lMessage);
+            BrnSound::MusicOnMenuStreamData lData;
+            lData.muStreamNameHash = lpGuiEvent->muStreamNameHash;
+            lData.mbFromVideo = lpGuiEvent->mbFlagA ? 1u : 0u;
+            lData.mbPlayOverCustomSoundtrack = lpGuiEvent->mbFlagB ? 1u : 0u;
+            lData.maReserved[0] = 0;
+            lData.maReserved[1] = 0;
+            PostSoundMessage(mMessageQueue, 13, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lData);
             break;
         }
         case 201: // PC's typed GuiAudioTriggerEvent id
@@ -384,12 +452,177 @@ void SoundLogicModule::ProcessGuiEvents(
         }
         case 469:
         {
+            // X360 0x826ED6C8 case 469: BOTH the 100%-complete flag AND the menu stream
+            // that goes with it. The stream is "Guns_And_Roses" when the flag is set and
+            // K_NULL_NAME (0, read from dword_83008228) when it is clear -- the string
+            // pointer is the .rdata word at 0x82F2CE5C. Effect type is CONTROL (2) for
+            // the flag message; the tree previously used OBJECT and dropped the second
+            // message entirely.
+            const bool lbHundredPercent = (*lpuPayload != 0);
             CgsSound::Io::Message<bool> lMessage;
-            lMessage.Construct(44, 0, 0, 1, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
-            lMessage.mData = (*lpuPayload != 0);
+            lMessage.Construct(44, 0, 0, 1, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+            lMessage.mData = lbHundredPercent;
             QueueSoundMessage(mMessageQueue, lMessage);
+
+            BrnSound::MusicOnMenuStreamData lMenu;
+            lMenu.muStreamNameHash =
+                lbHundredPercent
+                    ? static_cast<u32>(CgsSound::Playback::Name::MakeHash("Guns_And_Roses"))
+                    : 0u;
+            lMenu.mbFromVideo = 1;
+            lMenu.mbPlayOverCustomSoundtrack = 0;
+            lMenu.maReserved[0] = 0;
+            lMenu.maReserved[1] = 0;
+            PostSoundMessage(mMessageQueue, 13, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lMenu);
             break;
         }
+
+        // ---- the twelve cases this function used to drop ---------------------------
+        case 31:  // GuiEventSetLanguage -- to the speech effect AND the music effect.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpLanguageEvent");
+            const s32 leLanguage = EventS32At(lpEvent, 0);
+            PostSoundMessage(mMessageQueue, 33, 0, 0, 5,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, leLanguage);
+            PostSoundMessage(mMessageQueue, 33, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, leLanguage);
+            break;
+        }
+
+        case 33:  // Loading-screen enter/leave -- bit 1 of the dispatch state block.
+            CGS_ASSERT(lpEvent != 0, "lpLoadingScreenEvent");
+            if (EventU8At(lpEvent, 0))
+                maDispatchState[0].mu32Flags |= 2u;
+            else
+                maDispatchState[0].mu32Flags &= ~2u;
+            break;
+
+        case 88:  // Stop / start the playback DAC outright. X360:
+                  //   lpEnv = CgsSound::Playback::Module::Module::GetEnvironment(this+568);
+                  //   *payload ? Playback::Environment::StopDac(lpEnv)
+                  //            : Playback::Environment::StartDac(lpEnv);
+                  // The PLAYBACK module the logic module reaches at +0x238 has no named
+                  // accessor in this tree (GetEnvironment() here is the LOGIC
+                  // environment, a different object), and StartDac/StopDac
+                  // (0x82680F50 / 0x82680FE8) are declaration-only on
+                  // CgsSound::Playback::Environment. NOT reconstructed; reported rather
+                  // than pointed at the wrong environment -- silencing the DAC through
+                  // the wrong object would kill ALL audio.
+            break;
+
+        case 256:  // A GUI state whose +440 word is 15 asks for online VO 1.
+            if (EventS32At(lpEvent, 440) == 15)
+            {
+                PostSoundMessage(mMessageQueue, 37, 0, 0, 5,
+                                 CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                                 static_cast<s32>(1));
+            }
+            break;
+
+        case 298:  // A sequence + its 64-bit "new rival" payload.
+            PostSoundMessage(mMessageQueue, 28, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                             CgsSound::Playback::Name(
+                                 static_cast<uintptr_t>(
+                                     static_cast<u32>(EventS32At(lpEvent, 0)))));
+            PostSoundMessage(mMessageQueue, 25, 0, 0, 5,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                             EventU64At(lpEvent, 8));
+            break;
+
+        case 302:  // Speech: the "car won" 64-bit id.
+            PostSoundMessage(mMessageQueue, 35, 0, 0, 5,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                             EventU64At(lpEvent, 0));
+            break;
+
+        case 303:  // Rank-up: rank 6 with the "elite" flag gets its own trigger VO.
+            if (EventS32At(lpEvent, 4) && EventS32At(lpEvent, 0) == 6)
+            {
+                PostSoundMessage(mMessageQueue, 36, 0, 0, 5,
+                                 CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                                 CgsSound::Playback::Name(
+                                     CgsSound::Playback::Name::MakeHash(
+                                         "100_Percent_And_Elite")));
+            }
+            else
+            {
+                PostSoundMessage(mMessageQueue, 27, 0, 0, 5,
+                                 CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                                 EventS32At(lpEvent, 0));
+            }
+            break;
+
+        case 458:  // GuiEventAudioTraxUpdate -- the EA Trax playlist masks. ⭐ This is
+                   // the event that tells the music effect which songs it may play; with
+                   // it dropped both masks stayed zero and SelectSong could only ever
+                   // return -1.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpTraxEvent");
+            GuiAudioTraxUpdatePayload lPayload;
+            std::memcpy(lPayload.maData, lpuPayload, sizeof(lPayload.maData));
+            PostSoundMessage(mMessageQueue, 7, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lPayload);
+            break;
+        }
+
+        case 459:  // GuiEventAudioTraxLastPlayedIndexes -- the saved playlist cursor.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpTraxEvent");
+            GuiAudioTraxIndexesPayload lPayload;
+            std::memcpy(lPayload.maData, lpuPayload, sizeof(lPayload.maData));
+            PostSoundMessage(mMessageQueue, 8, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lPayload);
+            break;
+        }
+
+        case 460:  // GuiEventAudioTraxPreview.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpPreviewEvent");
+            GuiAudioTraxPreviewPayload lPayload;
+            std::memcpy(lPayload.maData, lpuPayload, sizeof(lPayload.maData));
+            PostSoundMessage(mMessageQueue, 9, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lPayload);
+            break;
+        }
+
+        case 461:  // "Next track".
+            PostSoundMessage(mMessageQueue, 10, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, true);
+            break;
+
+        case 462:  // GuiEventAudioTraxPlayOrder.
+            CGS_ASSERT(lpEvent != 0, "lpPlayOrderEvent");
+            PostSoundMessage(mMessageQueue, 11, 0, 0, 2,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT,
+                             EventS32At(lpEvent, 0));
+            break;
+
+        case 463:  // GuiEventAudioSettings -> the mixer CONTROL (effect id 0).
+            CGS_ASSERT(lpEvent != 0, "lpSettingsEvent");
+            PostSoundMessage(mMessageQueue, 12, 0, 0, 0,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL,
+                             EventS32At(lpEvent, 0));
+            break;
+
+        case 464:  // GuiEventAudioEventIntros -> speech.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpIntroEvent");
+            GuiAudioEventIntrosPayload lPayload;
+            std::memcpy(lPayload.maData, lpuPayload, sizeof(lPayload.maData));
+            PostSoundMessage(mMessageQueue, 31, 0, 0, 5,
+                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, lPayload);
+            break;
+        }
+
+        case 465:  // GuiEventAudioResults: the console writes the event's first two
+                   // words straight into the sound root INPUT buffer at +79664 (the
+                   // GUI-audio results slot the effects poll), not into a message. That
+                   // slot has no named accessor in this tree; NOT reconstructed, and
+                   // reported rather than guessed at.
+            break;
+
         default:
             break;
         }
@@ -442,32 +675,300 @@ void SoundLogicModule::ProcessCarDataLoadingQueue(
     }
 }
 
-// ARTIST 0x826EC400, collision-binding case of ProcessGameActionQueue.
-// Game action 297 constructs Message<ESoundMessages> with event 2, addressed
-// to state-manager 5 (CollisionStateManager), and payload value 2.  That
-// message makes the manager request PRP_PHYSICS_, whose prop-type table is the
-// authoritative source for prop crash materials.  The other switch cases are
-// independent sound features and remain owned by their respective effects.
+// X360 0x826EC400. The game -> sound dispatch: every game action the game module posts
+// is turned into the sound message(s) the console builds for it. THIS FUNCTION HANDLED
+// EXACTLY ONE OF THE CONSOLE'S 28 CASES (297) before 2026-09-15, which is why most
+// in-game one-shot audio never sounded -- the speech, HUD, FX, music and mixer cues were
+// all dropped on the floor here, silently.
+//
+// Message construction convention, read off the console's stack images: each case fills
+// a CgsSound::Io::Message<T> whose header is { +0x04 effect type, +0x08 event id,
+// +0x0A state-manager id, +0x0C instance id, +0x0E effect id } and whose payload starts
+// at +0x10, then calls VariableEventQueue<8192,16>::AddEvent(mMessageQueue, msg, id).
+// Effect type 1 == E_EFFECT_TYPE_OBJECT, 2 == E_EFFECT_TYPE_CONTROL.
+//
+// Cases that route into an effect this wave does not own (speech 34/36/37/38, HUD 21/24,
+// FX 4, collision 2, ...) are routed EXACTLY as the console routes them; the effect body
+// on the far end belongs to its own owner.
 void SoundLogicModule::ProcessGameActionQueue(
     EActiveRaceCarIndex /*aePlayerCarIndex*/,
     const Io::RootInputBuffer::GameActionQueue& arEvents)
 {
+    typedef CgsSound::Io::MessageHeader MH;
+
     const CgsModule::Event* lpEvent = nullptr;
     s32 liSize = 0;
     s32 liType = arEvents.GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent)
     {
-        if (liType == 297)
+        switch (liType)
+        {
+        case 0:   // ResetPlayerCarAction -- reset the junkyard car, twice (two effects).
+        {
+            const s32 leCarSelectType = EventS32At(lpEvent, 60);
+            PostSoundMessage(mMessageQueue, 41, 0, 0, 6, MH::E_EFFECT_TYPE_OBJECT,
+                             leCarSelectType);
+            PostSoundMessage(mMessageQueue, 41, 1, 0, 9, MH::E_EFFECT_TYPE_OBJECT,
+                             leCarSelectType);
+            break;
+        }
+
+        case 16:  // The action's flag-0x80 arm: publish its +0x1C field into the module's
+                  // dispatch state block (see maDispatchState's banner).
+            if ((EventU8At(lpEvent, 0) & 0x80u) == 0x80u)
+            {
+                const s32 liField = EventS32At(lpEvent, 28);   // X360 *(v9 + 7), dwords
+                if (liField != -1)
+                    maDispatchState[1].mu8FlagAt1 = 1;
+                maDispatchState[1].mi32At4 = liField;
+            }
+            break;
+
+        case 29:  // GameModeStarted.
+            if (EventU8At(lpEvent, 149) < 10)
+            {
+                // Speech fade-stop over 2 s before the mode's own VO starts.
+                PostSoundMessage(mMessageQueue, 38, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
+                                 2.0f);
+            }
+            // X360 falls straight through into the generic broadcast below.
+            PostSoundMessage(mMessageQueue, 3, 0, 0, 1, MH::E_EFFECT_TYPE_CONTROL,
+                             liType);
+            break;
+
+        case 33:
+        case 35:
+        case 39:
+            // The generic "this game action happened" broadcast (message 3, addressed to
+            // control 1). The payload IS the game action id.
+            PostSoundMessage(mMessageQueue, 3, 0, 0, 1, MH::E_EFFECT_TYPE_CONTROL,
+                             liType);
+            break;
+
+        case 37:  // ShowModeResultsAction -- the results screen.
+        {
+            CGS_ASSERT(lpEvent != 0, "lpModeResultsAction");
+            ShowModeResultsPayload lResults;
+            std::memcpy(lResults.maData, lpEvent, sizeof(lResults.maData));
+            PostSoundMessage(mMessageQueue, 23, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
+                             lResults);
+
+            const s32 leGameMode = EventS32At(lpEvent, 0);
+            if (leGameMode < 10)
+            {
+                const bool lbSkip = (leGameMode == 5) ? (EventU8At(lpEvent, 225) == 0)
+                                                      : (EventU8At(lpEvent, 224) != 0);
+                if (!lbSkip)
+                {
+                    BrnSound::GameModeLostResults lLost;
+                    lLost.meGameMode = leGameMode;
+                    lLost.miNumLossesForGameMode = EventS32At(lpEvent, 212);
+                    PostSoundMessage(mMessageQueue, 32, 0, 0, 5,
+                                     MH::E_EFFECT_TYPE_OBJECT, lLost);
+                }
+            }
+            // X360: mode 12 (the 8-racer online mode) walks the AI-car input block
+            // comparing two accumulated scores and only reports a loss when the player's
+            // is the lower one. That scan reads the root input's AI-car interface at
+            // +2612 / +212 (296-byte stride, 8 entries) through two getters this tree
+            // does not expose; NOT reconstructed, and reported rather than approximated.
+            break;
+        }
+
+        case 40:  // QuitEvent -> FxEffect.
+            PostSoundMessage(mMessageQueue, 4, 0, 0, 3, MH::E_EFFECT_TYPE_OBJECT,
+                             static_cast<s32>(7));
+            break;
+
+        case 56:  // Stunt jump: only for the eleven authored jump keys.
+        {
+            const u32 luKey = static_cast<u32>(EventS32At(lpEvent, 4));
+            for (u32 luEntry = 0; luEntry < 11; ++luEntry)
+            {
+                if (KA_STUNT_JUMP_KEYS[luEntry] == luKey)
+                {
+                    PostSoundMessage(mMessageQueue, 4, 0, 0, 3,
+                                     MH::E_EFFECT_TYPE_OBJECT, static_cast<s32>(4));
+                }
+            }
+            break;
+        }
+
+        case 58:  // Stunt smash / stunt.
+        {
+            const s32 liKind = EventS32At(lpEvent, 8);
+            if (liKind == 1)
+                PostSoundMessage(mMessageQueue, 4, 0, 0, 3, MH::E_EFFECT_TYPE_OBJECT,
+                                 static_cast<s32>(2));
+            else if (liKind == 2)
+                PostSoundMessage(mMessageQueue, 4, 0, 0, 3, MH::E_EFFECT_TYPE_OBJECT,
+                                 static_cast<s32>(3));
+            break;
+        }
+
+        case 62:  // Unlock sting: "shutdown" for kind 3, "liveryunlock" otherwise.
+        {
+            const s32 liKind = EventS32At(lpEvent, 8);
+            const char* lpcName = (liKind != 3) ? "liveryunlock" : "shutdown";
+            PostSoundMessage(mMessageQueue, 28, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
+                             CgsSound::Playback::Name(
+                                 CgsSound::Playback::Name::MakeHash(lpcName)));
+            break;
+        }
+
+        case 73:  // Mixer snapshot 6 on.
+            if (EventU8At(lpEvent, 0))
+                GetEnvironment().GetDynamicMixer().SetSnapshot(6, true);
+            break;
+
+        case 77:  // Mixer snapshot 6 off.
+            GetEnvironment().GetDynamicMixer().SetSnapshot(6, false);
+            break;
+
+        case 86:
+        case 88:
+            maDispatchState[0].mu32Flags |= 1u;
+            break;
+
+        case 87:
+        case 89:
+            maDispatchState[0].mu32Flags &= ~1u;
+            break;
+
+        case 97:  // PlayerCarRepaired -> HUD control.
+            PostSoundMessage(mMessageQueue, 21, 1, 0, 3, MH::E_EFFECT_TYPE_CONTROL,
+                             true);
+            break;
+
+        case 99:  // Entering / leaving the junkyard.
+        {
+            const u8 lu8InJunkyard = EventU8At(lpEvent, 0);
+            s32 leAmbience = 0;
+            if (lu8InJunkyard)
+            {
+                leAmbience = 2;
+            }
+            else
+            {
+                leAmbience = 0;
+                // Leaving also clears the menu stream (K_NULL_NAME == 0).
+                BrnSound::MusicOnMenuStreamData lClear;
+                lClear.muStreamNameHash = 0u;
+                lClear.mbFromVideo = 0;
+                lClear.mbPlayOverCustomSoundtrack = 0;
+                lClear.maReserved[0] = 0;
+                lClear.maReserved[1] = 0;
+                PostSoundMessage(mMessageQueue, 13, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
+                                 lClear);
+            }
+            PostSoundMessage(mMessageQueue, 40, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
+                             leAmbience);
+            PostSoundMessage(mMessageQueue, 40, 0, 0, 6, MH::E_EFFECT_TYPE_OBJECT,
+                             leAmbience);
+            break;
+        }
+
+        case 106:  // Junkyard, standard ambience, unconditionally.
+            PostSoundMessage(mMessageQueue, 40, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT,
+                             static_cast<s32>(2));
+            PostSoundMessage(mMessageQueue, 40, 0, 0, 6, MH::E_EFFECT_TYPE_OBJECT,
+                             static_cast<s32>(2));
+            break;
+
+        case 146:  // Showtime intro.
+            PostSoundMessage(mMessageQueue, 24, 0, 0, 2, MH::E_EFFECT_TYPE_OBJECT, true);
+            break;
+
+        case 148:  // GameTrainingAction -- the first-time tip VO for this training type.
+            CGS_ASSERT(lpEvent != 0, "lpGameTrainingAction");
+            PostSoundMessage(mMessageQueue, 34, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
+                             static_cast<s32>(EventU8At(lpEvent, 0)));
+            break;
+
+        case 153:  // Online voice-over triggers.
+        {
+            const s32 liKind = EventS32At(lpEvent, 8);
+            if (liKind == 1)
+            {
+                const s32 leVo = (EventU8At(lpEvent, 28) == 0) ? 0 : 3;
+                PostSoundMessage(mMessageQueue, 37, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
+                                 leVo);
+            }
+            else if (liKind == 5)
+            {
+                const s32 liSub = EventS32At(lpEvent, 12);
+                if (liSub != 2 || EventU8At(lpEvent, 29))
+                {
+                    if (liSub == 1)
+                        PostSoundMessage(mMessageQueue, 37, 0, 0, 5,
+                                         MH::E_EFFECT_TYPE_OBJECT, static_cast<s32>(5));
+                }
+                else
+                {
+                    PostSoundMessage(mMessageQueue, 37, 0, 0, 5,
+                                     MH::E_EFFECT_TYPE_OBJECT, static_cast<s32>(4));
+                }
+            }
+            break;
+        }
+
+        case 202:  // "Find all events" trigger VO.
+            PostSoundMessage(mMessageQueue, 36, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
+                             CgsSound::Playback::Name(
+                                 CgsSound::Playback::Name::MakeHash("Find_All_Events")));
+            break;
+
+        case 204:  // TrophyUnlockData.
+            PostSoundMessage(mMessageQueue, 30, 0, 0, 5, MH::E_EFFECT_TYPE_OBJECT,
+                             EventS32At(lpEvent, 8));
+            break;
+
+        case 205:  // RoadRagePlayerDamageAction -> the player-damage control.
+        {
+            RoadRageDamagePayload lDamage;
+            std::memcpy(lDamage.maData, lpEvent, sizeof(lDamage.maData));
+            PostSoundMessage(mMessageQueue, 20, 1, 0, 3, MH::E_EFFECT_TYPE_CONTROL,
+                             lDamage);
+            break;
+        }
+
+        case 218:  // SoundTriggerAction -- the per-frame trigger table
+                   // GetSoundTriggerAction searches. (X360 also mirrors it into
+                   // BrnReplays::SoundSerialiser's 512-event queue while the replay
+                   // recorder state is 1/2/3; that serialiser is not in this tree, so
+                   // only the live half runs.)
+        {
+            BrnGameState::GameStateModuleIO::SoundTriggerAction lAction;
+            std::memset(&lAction, 0, sizeof(lAction));
+            const size_t luCopy = (liSize > 0 &&
+                                   static_cast<size_t>(liSize) < sizeof(lAction))
+                                      ? static_cast<size_t>(liSize) : sizeof(lAction);
+            std::memcpy(&lAction, lpEvent, luCopy);
+            maTriggerActions.Append(lAction);
+            break;
+        }
+
+        case 287:  // Mixer snapshot 15 from the action's own flag.
+            GetEnvironment().GetDynamicMixer().SetSnapshot(
+                15, EventU8At(lpEvent, 0) != 0);
+            break;
+
+        case 297:  // Bind the collision resolver to the prop-physics table.
         {
             CgsSound::Io::Message<BrnSound::ESoundMessages> lMessage;
             lMessage.Construct(
                 BrnSound::E_SOUNDMESSAGE_COLLISION_BIND_TO_PROPS,
                 5,
-                CgsSound::Io::MessageHeader::KU16_NO_DESTINATION,
-                CgsSound::Io::MessageHeader::KU16_NO_DESTINATION,
-                CgsSound::Io::MessageHeader::E_EFFECT_TYPE_NONE);
+                MH::KU16_NO_DESTINATION,
+                MH::KU16_NO_DESTINATION,
+                MH::E_EFFECT_TYPE_NONE);
             lMessage.mData = BrnSound::E_SOUNDMESSAGE_COLLISION_BIND_TO_PROPS;
             QueueSoundMessage(mMessageQueue, lMessage);
+            break;
+        }
+
+        default:
+            break;
         }
 
         liType = arEvents.GetNextEvent(lpEvent, &lpEvent, &liSize);
