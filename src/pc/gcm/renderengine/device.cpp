@@ -311,6 +311,110 @@ namespace renderengine
     }
 }
 
+// [diag] BRN_BLACK_FRAME_WATCH=<threshold 0..255>: after EVERY present, shrink the back buffer to
+// 32x18 on the GPU (StretchRect, linear filter), read that tiny surface back and log ONE
+// `[black-frame] BEGIN` line the first present whose mean 8-bit luminance falls below the
+// threshold, and one `[black-frame] END` line when it recovers. NOT IN THE X360 BINARY. It exists
+// for b5-decomp issue #30 ("around every 5 minutes the screen briefly turns black"): a frame dump
+// cannot film a ten-minute drive (16 GB per 130 s, and filming that hard starves the sim), while a
+// present counter + wall clock on one log line is what pairs the blink with the streaming / save /
+// GUI lines around it. ~2 MB/frame of GPU copy plus a 2 KB read-back: cheap, but still opt-in.
+// Inert unless the variable names a value. DELETE-WHEN-STABLE.
+static void WatchBlackFramesIfRequested()
+{
+    static int                siThreshold = -2;   // -2 = not read yet, -1 = off
+    static IDirect3DSurface9* spSmall     = nullptr;
+    static IDirect3DSurface9* spSys       = nullptr;
+    static u32                suBlackRun  = 0u;
+    static f32                sfPrevMean  = -1.0f;
+    const u32 KU_W = 32u, KU_H = 18u;
+
+    if (siThreshold == -2)
+    {
+        char lacValue[32];
+        DWORD luLen = GetEnvironmentVariableA("BRN_BLACK_FRAME_WATCH", lacValue, sizeof(lacValue));
+        siThreshold = (luLen != 0 && luLen < sizeof(lacValue)) ? atoi(lacValue) : -1;
+        if (siThreshold >= 0)
+        {
+            char lacMsg[160];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[black-frame] watch armed: threshold=%d (mean 8-bit luminance of a 32x18 shrink of every present)\n",
+                          siThreshold);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+    }
+    if (siThreshold < 0 || renderengine::gDevice == nullptr)
+    {
+        return;
+    }
+
+    IDirect3DSurface9* lpBack = nullptr;
+    if (FAILED(renderengine::gDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &lpBack)) || lpBack == nullptr)
+    {
+        return;
+    }
+    if (spSmall == nullptr)
+    {
+        if (FAILED(renderengine::gDevice->CreateRenderTarget(KU_W, KU_H, D3DFMT_A8R8G8B8, D3DMULTISAMPLE_NONE, 0,
+                                                             FALSE, &spSmall, nullptr))
+            || FAILED(renderengine::gDevice->CreateOffscreenPlainSurface(KU_W, KU_H, D3DFMT_A8R8G8B8,
+                                                                         D3DPOOL_SYSTEMMEM, &spSys, nullptr)))
+        {
+            CgsDev::Log::WriteToLog("[black-frame] watch DISARMED: could not create the 32x18 surfaces\n");
+            siThreshold = -1;
+            lpBack->Release();
+            return;
+        }
+    }
+    const HRESULT lhrStretch = renderengine::gDevice->StretchRect(lpBack, nullptr, spSmall, nullptr, D3DTEXF_LINEAR);
+    lpBack->Release();
+    if (FAILED(lhrStretch) || FAILED(renderengine::gDevice->GetRenderTargetData(spSmall, spSys)))
+    {
+        return;
+    }
+    D3DLOCKED_RECT lLock;
+    if (FAILED(spSys->LockRect(&lLock, nullptr, D3DLOCK_READONLY)))
+    {
+        return;
+    }
+    u64 luSum = 0u;
+    for (u32 luY = 0u; luY < KU_H; ++luY)
+    {
+        const u8* lpRow = static_cast<const u8*>(lLock.pBits) + luY * lLock.Pitch;
+        for (u32 luX = 0u; luX < KU_W; ++luX)
+        {
+            luSum += lpRow[luX * 4u] + lpRow[luX * 4u + 1u] + lpRow[luX * 4u + 2u];   // B, G, R
+        }
+    }
+    spSys->UnlockRect();
+    const f32 lfMean = static_cast<f32>(luSum) / static_cast<f32>(KU_W * KU_H * 3u);
+
+    if (lfMean < static_cast<f32>(siThreshold))
+    {
+        if (suBlackRun == 0u)
+        {
+            char lacMsg[200];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                          "[black-frame] BEGIN present=%u tick=%llu mean=%.1f prevMean=%.1f\n",
+                          renderengine::guPresentCount,
+                          static_cast<unsigned long long>(GetTickCount64()), lfMean, sfPrevMean);
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        ++suBlackRun;
+    }
+    else if (suBlackRun != 0u)
+    {
+        char lacMsg[200];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+                      "[black-frame] END present=%u tick=%llu after=%u presents mean=%.1f\n",
+                      renderengine::guPresentCount,
+                      static_cast<unsigned long long>(GetTickCount64()), suBlackRun, lfMean);
+        CgsDev::Log::WriteToLog(lacMsg);
+        suBlackRun = 0u;
+    }
+    sfPrevMean = lfMean;
+}
+
 static void DumpBackBufferIfRequested()
 {
     static char sacDir[512];
@@ -598,6 +702,7 @@ void renderengine::Device::ShowPixelBuffer()
     }
     gDevice->EndScene();
     DumpBackBufferIfRequested();
+    WatchBlackFramesIfRequested();   // [diag] BRN_BLACK_FRAME_WATCH (issue #30)
     gDevice->Present(nullptr, nullptr, nullptr, nullptr);
     ++renderengine::guPresentCount;
 }
