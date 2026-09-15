@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"  // CgsRenderTarget (+ serialise-side setters)
 #include "GameSource/Graphics/BrnAntiAliasTiling.h"         // BrnGraphics::AntiAliasTilingPlan + the two plans
 #include "pc/gcm/renderengine/device.h"                     // renderengine::gDisplayWidth/gDisplayHeight (PC bring-up extent)
+namespace renderengine { extern u32 guDiagComposites; }   // [DIAG] issue #30 per-present counters (device.cpp)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "SDKs/RenderEngineClub/MAIN/components/include/postfx/rwgpfxrendertarget.h"  // postfx::RenderTarget + gpDefaultRenderTargetState
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"  // renderengine::ProgramBuffer
@@ -1490,6 +1491,7 @@ void BrnRendererMemory::BlitDepth(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTarget*
 void BrnRendererMemory::BlitComposite(CgsGraphics::Im2d& /*lIm2d*/, CgsRenderTarget* lpSource0,
                                       CgsRenderTarget* lpSource1, bool /*lbFlag0*/, bool /*lbFlag1*/)
 {
+    ++renderengine::guDiagComposites;   // [DIAG] issue #30 per-present counters
     if (lpSource0 == nullptr || lpSource0->GetRenderTarget() == nullptr
         || lpSource1 == nullptr || lpSource1->GetRenderTarget() == nullptr)
         return;

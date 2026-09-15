@@ -49,6 +49,7 @@
 #include <unordered_map>
 #include <map>
 #include <vector>
+extern "C++" { namespace renderengine { extern u32 guDiagWorldDraws; } }   // [DIAG] issue #30 per-present counters (device.cpp); declared up here because the world draw sites precede the later extern block
 
 // The renderengine D3D device singleton alias the fast-path callers name
 // (X360 off_83271608 dereferenced). Defined here; refreshed from
@@ -4421,6 +4422,7 @@ namespace renderengine
         // offsets the vertex POINTER by baseVertex * stride and passes base 0, the retained
         // form passes BaseVertexIndex = baseVertex against the whole mirrored buffer, so the
         // run's index values address the same vertices either way.
+        ++renderengine::guDiagWorldDraws;   // [DIAG] issue #30 per-present counters
         const HRESULT lhrDraw =
             lbRetained
                 ? static_cast<HRESULT>(WorldGeometry_Submit(lRetained, luBaseVertexIndex))
@@ -4912,6 +4914,7 @@ namespace renderengine
                 const u8* const lpChunk = lpRun
                     + static_cast<size_t>(luFirstQuad) * 4u * suVertexStride;
 
+                ++renderengine::guDiagWorldDraws;   // [DIAG] issue #30 per-present counters
                 const HRESULT lhr = lpDevice->DrawIndexedPrimitiveUP(
                     D3DPT_TRIANGLELIST,
                     0,                                  // MinVertexIndex
@@ -4944,6 +4947,7 @@ namespace renderengine
                 }
                 return;
             }
+            ++renderengine::guDiagWorldDraws;   // [DIAG] issue #30 per-present counters
             lhrDraw = lpDevice->DrawPrimitiveUP(lePrim, luPrimCount, lpRun, suVertexStride);
             luPrimsDrawn = luPrimCount;
         }
@@ -5947,7 +5951,7 @@ unsigned int D3DDevice_SetTexture(IDirect3DDevice9* /*lpDeviceArg*/, u32 luSampl
 
 // [DIAG] NOT IN THE X360 BINARY -- per-present submission counters for the black-frame watch
 // (issue #30): reset by device.cpp after every Present, printed in [black-frame] lines.
-extern "C++" { namespace renderengine { extern u32 guDiagDraws; extern u32 guDiagResolves; extern void* gpDiagLastResolveDest; } }   // C++ linkage: this file sits in an extern "C" region
+extern "C++" { namespace renderengine { extern u32 guDiagDraws; extern u32 guDiagResolves; extern void* gpDiagLastResolveDest; extern u32 guDiagWorldDraws; } }   // C++ linkage: this file sits in an extern "C" region
 
 void D3DDevice_DrawIndexedVertices(IDirect3DDevice9* /*lpDeviceArg*/,
                                    u32 lePrimitiveType,

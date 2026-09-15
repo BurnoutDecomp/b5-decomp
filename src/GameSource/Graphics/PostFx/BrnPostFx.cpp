@@ -3,6 +3,7 @@
 #include <new>                                                                  // placement new (the carved effects)
 #include <cstdio>                                                               // std::snprintf (the seam's sampled diag)
 #include "GameSource/Graphics/BrnRendererMemory.h"                              // the render-target pool
+namespace renderengine { extern u32 guDiagComposites; }   // [DIAG] issue #30 per-present counters (device.cpp)
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"                     // CgsRenderTarget::GetRenderTarget
 #include "GameShared/GameClasses/Graphics/CgsDepthStencilStateFactory.h"        // saDepthStencilStates[1] (Render)
 #include "GameShared/GameClasses/Graphics/CgsRasterizerStateFactory.h"          // saRasterizerStates[2]   (Render)
@@ -965,6 +966,7 @@ bool PCBringUpRenderPostFxComposite(BrnRendererMemory& lrRendererMemory,
                                     bool lbMotionBlurEnabled,
                                     renderengine::Texture* lpOverrideSourceTexture)
 {
+    ++renderengine::guDiagComposites;   // [DIAG] issue #30 per-present counters
     // The console's own source and destination: BrnRendererModule::Render @0x8240BFA8 loads
     // `lwz r27, 0x248(r31)` and `lwz r29, 0x24C(r31)` off mAllocatedRenderTargets at this+0x238,
     // i.e. mapRenderTarget[4] E_RENDER_TARGET_DOWN_SAMPLE and mapRenderTarget[5]

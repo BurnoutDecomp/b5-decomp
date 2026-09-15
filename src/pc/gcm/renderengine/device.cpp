@@ -277,7 +277,8 @@ namespace renderengine { u32 guPresentCount = 0; }
 // (issue #30): draws through the two Xenon draw shims, EDRAM resolves and the last resolve's
 // destination. A black present with draws == 0 is the game skipping its frame; one with the
 // usual thousands of draws and no resolve to the back buffer is a routing/composite defect.
-namespace renderengine { u32 guDiagDraws = 0; u32 guDiagResolves = 0; void* gpDiagLastResolveDest = nullptr; }
+namespace renderengine { u32 guDiagDraws = 0; u32 guDiagResolves = 0; void* gpDiagLastResolveDest = nullptr;
+                         u32 guDiagWorldDraws = 0; u32 guDiagImBatches = 0; u32 guDiagImFullBlack = 0; u32 guDiagComposites = 0; }
 
 // [diag] BRN_FRAME_DUMP=<dir>: save the back buffer as BMP into <dir> every Nth present
 // (PrintWindow returns black against this device, so the game dumps its own frames).
@@ -400,10 +401,11 @@ static void WatchBlackFramesIfRequested()
         {
             char lacMsg[200];
             std::snprintf(lacMsg, sizeof(lacMsg),
-                          "[black-frame] BEGIN present=%u tick=%llu mean=%.1f prevMean=%.1f draws=%u resolves=%u lastResolveDest=%p\n",
+                          "[black-frame] BEGIN present=%u tick=%llu mean=%.1f prevMean=%.1f draws=%u resolves=%u lastResolveDest=%p world=%u im2d=%u imFullBlack=%u composites=%u\n",
                           renderengine::guPresentCount,
                           static_cast<unsigned long long>(GetTickCount64()), lfMean, sfPrevMean,
-                          renderengine::guDiagDraws, renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest);
+                          renderengine::guDiagDraws, renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest,
+                          renderengine::guDiagWorldDraws, renderengine::guDiagImBatches, renderengine::guDiagImFullBlack, renderengine::guDiagComposites);
             CgsDev::Log::WriteToLog(lacMsg);
         }
         ++suBlackRun;
@@ -411,9 +413,10 @@ static void WatchBlackFramesIfRequested()
         {
             char lacRun[160];
             std::snprintf(lacRun, sizeof(lacRun),
-                          "[black-frame]   present=%u mean=%.1f draws=%u resolves=%u lastResolveDest=%p\n",
+                          "[black-frame]   present=%u mean=%.1f draws=%u resolves=%u lastResolveDest=%p world=%u im2d=%u imFullBlack=%u composites=%u\n",
                           renderengine::guPresentCount, lfMean, renderengine::guDiagDraws,
-                          renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest);
+                          renderengine::guDiagResolves, renderengine::gpDiagLastResolveDest,
+                          renderengine::guDiagWorldDraws, renderengine::guDiagImBatches, renderengine::guDiagImFullBlack, renderengine::guDiagComposites);
             CgsDev::Log::WriteToLog(lacRun);
         }
 
@@ -775,4 +778,5 @@ void renderengine::Device::ShowPixelBuffer()
     renderengine::guDiagDraws = 0;   // [DIAG] issue #30 per-present counters
     renderengine::guDiagResolves = 0;
     renderengine::gpDiagLastResolveDest = nullptr;
+    renderengine::guDiagWorldDraws = 0; renderengine::guDiagImBatches = 0; renderengine::guDiagImFullBlack = 0; renderengine::guDiagComposites = 0;
 }
