@@ -9,6 +9,8 @@
 #include "rw/audio/core/Send.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 namespace CgsSound
 {
@@ -153,6 +155,35 @@ void GenericRwacVoice::Update(rw::audio::core::System* apSystem, Voice& arVoice)
             {
                 const f32 lfValue = std::max(lrInput.GetMin(),
                     std::min(lrInput.GetMax(), lrInput.GetValueRaw()));
+                // [DIAG] NOT IN THE X360 BINARY -- BRN_RWAC_PARAM_DIAG=1. The clamp above is
+                // silent: a schema whose maximum is below the value the game computed turns a
+                // live parameter into a constant, with no symptom anywhere else. Print what
+                // was asked for and what was actually pushed.
+                {
+                    static int siDiag = -1;
+                    if (siDiag < 0)
+                    {
+                        const char* lpcEnv = std::getenv("BRN_RWAC_PARAM_DIAG");
+                        siDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
+                    }
+                    if (siDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        static u32 suCount = 0u;
+                        if ((suCount++ % 64u) == 0u)
+                        {
+                            *CgsDev::Log::gpDebugPrint
+                                << "[rwac-param] name=" << static_cast<s32>(
+                                       static_cast<u32>(lrInput.GetName().GetValue()))
+                                << " attr=" << static_cast<s32>(lrMap.mu8Attribute)
+                                << " raw=" << lrInput.GetValueRaw()
+                                << " min=" << lrInput.GetMin()
+                                << " max=" << lrInput.GetMax()
+                                << " pushed=" << lfValue
+                                << (lfValue != lrInput.GetValueRaw() ? "  <-- CLAMPED" : "")
+                                << "\n";
+                        }
+                    }
+                }
                 rw::audio::core::PlugIn::SetAttribute(lpPlugin,
                                                        lrMap.mu8Attribute,
                                                        lfValue);

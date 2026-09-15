@@ -17,6 +17,8 @@
 // =====================================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/GinsuPlayer.h"
+#include <cstdlib>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Playback/Plugins/Ginsu/CgsGinsuSlot.h"
 
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
@@ -884,6 +886,37 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
         const f32 lfPeriod = self->mSynthData.CyclePeriod(lfCycle);
         const f32 lfSamplesPerCycle = (self->mSampleRate * KF_CYCLES_PER_MINUTE)
             / self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue;
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_GINSU_DIAG=1.
+        {
+            static int siGinsuDiag = -1;
+            if (siGinsuDiag < 0)
+            {
+                const char* lpcEnv = std::getenv("BRN_GINSU_DIAG");
+                siGinsuDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
+            }
+            if (siGinsuDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static unsigned suGinsuCalls = 0u;
+                if ((suGinsuCalls++ % 400u) == 0u)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[ginsu] freq="
+                        << self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue
+                        << " rate=" << self->mSampleRate
+                        << " minF=" << self->mSynthData.mMinFrequency
+                        << " maxF=" << self->mSynthData.mMaxFrequency
+                        << " cycle=" << lfCycle
+                        << " period=" << lfPeriod
+                        << " samplesPerCycle=" << lfSamplesPerCycle
+                        << " pitchRatio=" << (lfSamplesPerCycle > 0.0f
+                                                  ? lfPeriod / lfSamplesPerCycle
+                                                  : 0.0f)
+                        << " pos=" << static_cast<s32>(self->mPlaybackPos)
+                        << "\n";
+                }
+            }
+        }
 
         int liInCount =
             TruncToInt((static_cast<f32>(liOutCount) / lfSamplesPerCycle) * lfPeriod);
