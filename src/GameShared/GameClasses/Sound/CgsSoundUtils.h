@@ -123,6 +123,38 @@ struct Average
     T   mfAverage;              // CgsSoundUtils.h:645
 };
 
+// CgsSound::Utils::Average<9, rw::math::vpu::Vector3>::Record  @ 0x8268F1A0
+// (IDA truncates the name to "rw::math::vpu::Vector3>::Record"; it is the
+// instantiation AIPhysicsControl::UpdateParams @0x826CEA10 `bl`s for its
+// mAverageVelocity window). The generic body above cannot instantiate for a
+// vector (no scalar casts / operator*=), so the console's own lane-wise body is
+// spelled out: samples[cursor] = v (stvx128 at cursor*16, +0x00); cursor =
+// (cursor + 1) % 9 (the 0x38E38E39 mulhw); the accumulator at +0xA0 is zeroed
+// then the nine samples are vaddfp'd into it; finally it is scaled by the
+// vrefp+2-Newton reciprocal of flt_82004EF8 (== 9.0).
+template <>
+inline void Average<9u, Vector3>::Record(Vector3 aSample)
+{
+    maPoints[muNextPoint] = aSample;
+    muNextPoint = static_cast<u8>(static_cast<u8>(muNextPoint + 1) % 9u);
+
+    Vector3 lSum = { 0.0f, 0.0f, 0.0f, 0.0f };
+    mfAverage = lSum;
+    for (u32 lu = 0; lu < 9u; ++lu)
+    {
+        lSum.x += maPoints[lu].x;
+        lSum.y += maPoints[lu].y;
+        lSum.z += maPoints[lu].z;
+        lSum.w += maPoints[lu].w;
+        mfAverage = lSum;   // faithful in-loop member store (stvx128 each pass)
+    }
+    const f32 lfReciprocal = 1.0f / 9.0f;
+    mfAverage.x = lSum.x * lfReciprocal;
+    mfAverage.y = lSum.y * lfReciprocal;
+    mfAverage.z = lSum.z * lfReciprocal;
+    mfAverage.w = lSum.w * lfReciprocal;
+}
+
 // ===== ADDITIVE GROW (Wave 5: RoadnoiseEffect::TransitionEnvelope) =====
 // CgsSound::Utils::Curve::ECurveType (DWARF CgsSoundUtils.h:83). The interpolation
 // curve selector shared by PathLine / InterpolateLine stages. Additive, zero-risk.

@@ -35,6 +35,18 @@ public:
 // "liVehicleIndex >= 0 && liVehicleIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT").
     static const s32 KI_ACTIVE_RACE_CAR_COUNT = 8;
 
+    // @ 0x82683D50 (console StateManager vtable slot 10, +40):
+    //     return a2 == 1 && *(this+20) == 2 || *(this+20) == a2;
+    // The AI vehicle manager (meMapState 2) treats the PLAYER registrations (state 1
+    // descriptors: PlayerVehicleState, PhysicsControl, DualGinsuExhaustEffect, ...) as
+    // aliases of its own, so CreateState / CreateEffectObject / CreateEffectControl
+    // fall back to the player family wherever no AI-specific class (0x2xxxx) exists.
+    // For the player manager (meMapState 1) this is the base compare.
+    virtual bool IsStateAlias(s32 liState) const
+    {
+        return (liState == 1 && meMapState == 2) || meMapState == liState;
+    }
+
 // BrnVehicleStateManager.h:143 (assert site). Map an active-race-car index to its
 // AI engine-voice assignment via the static lookup table. Asserts the index is in
 // [0, E_ACTIVE_RACE_CAR_INDEX_COUNT). Returns the assigned voice (a u8 from the
@@ -50,6 +62,12 @@ public:
     static bool IsEntryAdded(u32 luUserId);
     static bool IsDesiredEntryPlayer(u32 luUserId);
     static bool IsAssetAttached(u32 luUserId);
+    // The two remaining module-wide tables AIVehicleStateManager::UpdateVehicleLoading
+    // @0x826B1C70 reads by name: the attached-as-player bit array (qword_82FFB378)
+    // and the attached asset ids (qword_82FFB3C8), both written by OnAssetLoaded /
+    // OnAssetUnloaded below.
+    static bool  IsAttachedEntryPlayer(u32 luUserId);
+    static CgsID GetAttachedAssetId(u32 luUserId);
 
     void OnAssetLoaded(CgsID lAssetId, u32 luUserId, bool lbIsPlayer);
     void OnAssetUnloaded(CgsID lAssetId, u32 luUserId);

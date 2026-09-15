@@ -1,24 +1,43 @@
 #include "GameSource/Sound/Vehicles/BrnAIVehicleStateManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameSource/Sound/Vehicles/BrnVehicleState.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/AttribSys/Generated/classes/vehicleengine.h"
+#include "GameSource/AttribSys/Generated/attrib_findcollection.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysCollectionKey.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "SharedClasses/Sound/Engines/BrnSoundLoopModelData.h"
+#include "SharedClasses/DataLists/VehicleListEntry.h"
+#include "GameSource/Sound/Vehicles/BrnAISoundDiag.h"   // [DIAG] NOT IN THE X360 BINARY
+
+#include <cstdio>
+#include <cstring>
 
 // =============================================================================
 // BrnSound::Vehicles::AIVehicleStateManager -- out-of-line bodies.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
-// This canonical home brings the AI-car engine sound-logic state manager up as a
-// CONCRETE, registrable leaf the StateManager factory CreateStateMan @ 0x826A5B60
-// can construct. The deep AI-engine audio domain (loading, per-frame voices) is
-// deferred -- see the per-function FLAGs.
 //
 // Sources:
-//   AIVehicleStateManager::CreateObject       @ 0x82702358  (real)
-//   AIVehicleStateManager::Prepare            @ 0x826EFC18  (stub -- domain cascade)
-//   AIVehicleStateManager::GetTypeName        @ 0x82684028  (real)
-//   AIVehicleStateManager::ResourcesAreReady  @ 0x82684038  (real -- self-contained!)
-//   ctor                                      @ 0x82700EB8  (JSON ABSENT -- minimal)
-// GetTypeInfo / GetStaticTypeInfo / GetResourceRegistrar were NOT individually
-// exported; reconstructed from the established in-tree RTTI pattern + the sibling
-// BrnEffectObject::GetResourceRegistrar @ 0x82696850.
+//   AIVehicleStateManager::CreateObject             @ 0x82702358
+//   AIVehicleStateManager::Prepare                  @ 0x826EFC18
+//   AIVehicleStateManager::PrepareAIEngineLoading   @ 0x826E2708
+//   AIVehicleStateManager::ResourcesAreReady        @ 0x82684038
+//   AIVehicleStateManager::UpdateParams             @ 0x826CA578
+//   AIVehicleStateManager::UpdateVehicleLoading     @ 0x826B1C70
+//   AIVehicleStateManager::GetFreeState             @ 0x826B1B28
+//   AIVehicleStateManager::GetLoopModelContent      @ 0x826987A8
+//   AIVehicleStateManager::GetDecelGinsuContent     @ 0x82698910
+//   AIVehicleStateManager::GetTypeName              @ 0x82684028
+//   AIVehicleStateManager::~AIVehicleStateManager   @ 0x82700FE0
+//   ctor                                            @ 0x82700EB8 (export-set hole)
+//   sTypeInfo registration                          @ 0x82C61D98 (CRT init bank)
 // =============================================================================
 
 namespace BrnSound
@@ -26,134 +45,146 @@ namespace BrnSound
 namespace Vehicles
 {
 
+namespace
+{
+
+// X360 rodata off_82F2CBDC[5] (read through tools/re/x360rd.py).
+static const char* const KAPC_AI_ENGINE_NAMES[AIVehicleStateManager::KI_NUMBER_OF_AUDIO_AI_ENGINES] =
+{
+    "AIROD_EX",
+    "AI_CIVIC_EX",
+    "AI_GT_ENG",
+    "AI_MUST_EX",
+    "AI_F1_EX",
+};
+
+// X360 rodata dword_820AA4B4[5] -- the vehicleengine attribute-collection ids the
+// console renders in decimal (rw::core::stdc::ConvertI64ToA(id, buf, 10)) and
+// hashes with Attrib::StringToKey.
+static const s32 KAI_AI_ENGINE_ATTRIB_IDS[AIVehicleStateManager::KI_NUMBER_OF_AUDIO_AI_ENGINES] =
+{
+    563494,
+    613976,
+    565137,
+    576566,
+    564456,
+};
+
+// The SQUARED listener radius inside which an AI car gets an engine state:
+// unk_830085D0, a .bss VecFloat the CRT thunk @0x82C61D88 fills from flt_8201C214
+// == 32400.0 (180 m). Both UpdateParams @0x826CA694 and GetFreeState @0x826B1B54
+// compare `vmsum3fp128(car - listener)` against it.
+static const f32 KF_AI_VEHICLE_RANGE_SQUARED = 32400.0f;
+
+// vehicleengine's AttribSys class id, as PhysicsControl::Attach @0x826CB540 passes
+// it to Attrib::FindCollectionWithDefault.
+static const u64 KU64_VEHICLE_ENGINE_CLASS_ID = 0x7F161D94482CB3BFull;
+
+// The listener the AI domain measures against: the PLAYER microphone of player 1
+// (module + 0x2AF0 == Environment::mMicrophoneSystem.maMicrophones[E_MIC_PLAYER]
+// [E_PLAYER_1]; its current matrix wAxis sits at module + 0x2B20, the address
+// UpdateParams / GetFreeState load with `lvx128 vX, module, 0x2B20`).
+static const rw::math::vpu::Vector3& AIListenerPosition( CgsSound::Logic::Module* apModule )
+{
+    CgsSound::Logic::MicrophoneSystem::Microphone* lpMicrophone =
+        static_cast<BrnSound::Module::SoundLogicModule*>( apModule )
+            ->GetEnvironment().GetMicrophoneSystem().GetMicrophone(
+                CgsSound::Logic::MicrophoneSystem::E_MIC_PLAYER,
+                CgsSound::Logic::MicrophoneSystem::E_PLAYER_1 );
+    return lpMicrophone->GetMicrophoneMatrix().Pos();
+}
+
+// vmsum3fp128 of (a - b) -- the three-lane squared distance.
+static f32 DistanceSquared3( const rw::math::vpu::Vector3& arA, const rw::math::vpu::Vector3& arB )
+{
+    const f32 lfX = arA.x - arB.x;
+    const f32 lfY = arA.y - arB.y;
+    const f32 lfZ = arA.z - arB.z;
+    return lfX * lfX + lfY * lfY + lfZ * lfZ;
+}
+
+// "Engines\\%08x.bundle" of CgsResource::ID::HashString(name) -- the bundle every
+// loader stage in PrepareAIEngineLoading spells with CgsCore::SPrintf.
+static void AIEngineBundleName( char* apcBuffer, u32 auSize, const char* apcEngineName )
+{
+    std::snprintf( apcBuffer, auSize, "Engines\\%08x.bundle",
+                   static_cast<u32>( CgsResource::ID::HashString(
+                       reinterpret_cast<const u8*>( apcEngineName ) ) ) );
+}
+
+} // namespace
+
+const char* AIVehicleStateManager::GetAIEngineName( s32 liAIEngineIndex )
+{
+    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+                "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
+    return KAPC_AI_ENGINE_NAMES[liAIEngineIndex];
+}
+
+// rw::core::stdc::ConvertI64ToA(dword_820AA4B4[i], buf, 10) then Attrib::StringToKey.
+u64 AIVehicleStateManager::GetAIEngineAttribKey( s32 liAIEngineIndex )
+{
+    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+                "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
+    char lacDecimal[32];
+    std::snprintf( lacDecimal, sizeof( lacDecimal ), "%d", KAI_AI_ENGINE_ATTRIB_IDS[liAIEngineIndex] );
+    return static_cast<u64>( Attrib::StringToKey( lacDecimal ) );
+}
+
 // ---------------------------------------------------------------------------
-// AIVehicleStateManager::AIVehicleStateManager()  ctor @ 0x82700EB8  (JSON ABSENT)
-//
-// FLAG (ctor JSON absent -- minimal reconstruction): the individual ctor export
-// for 0x82700EB8 is not present in the IDA dump (only its address is confirmed, as
-// the xref target of CreateObject @ 0x82702358, which placement-news an 880-byte /
-// 0x370 AIVehicleStateManager then `bl`s this ctor). The real ctor forwards to the
-// BrnStateManager base ctor (-> CgsSound::Logic::StateManager ctor @ 0x826FAA18,
-// the foundation), installs this class's vtables, then zero/seed-initialises the
-// AI-engine members. Reproduced here as the implicit base construction + by-name
-// init of the one modelled member (meAIEngineLoadingState = idle). The deferred
-// AI-engine state (maDeferredAIEngineState) is left default-initialised; its real
-// per-member seed is not recovered (see header FLAG).
+// ctor @ 0x82700EB8 (export-set hole). CreateObject @0x82702358 `bl`s it into an
+// 880-byte block; the dtor @0x82700FE0 unwinds exactly the base content pool and
+// the 60 Content sub-objects (5x10 loop, 5 accel, 5 decel), so the ctor is the
+// VehicleStateManager base construction + the 60 Content default constructions +
+// the loading state at BEGIN.
 // ---------------------------------------------------------------------------
 AIVehicleStateManager::AIVehicleStateManager()
-    : meAIEngineLoadingState( E_AI_ENGINE_LOADING_IDLE )
+    : BrnSound::Vehicles::VehicleStateManager()
+    , meAIEngineLoadingState( E_AI_ENGINE_LOADING_BEGIN )
 {
 }
 
 // ---------------------------------------------------------------------------
-// AIVehicleStateManager::~AIVehicleStateManager()  (the X360 `vector deleting destructor`)
-//
-// FLAG (minimal): the matching dtor was not individually exported. The base
-// BrnStateManager / CgsSound::Logic::StateManager virtual destructor tears down the
-// base content pool, re-installs the MemBase vtable and routes storage back to the
-// sound allocator (off_82FFB954) -- all re-synthesised by the host toolchain from
-// this virtual destructor. No leaf member teardown is modelled (the deferred
-// AI-engine state owns no recovered resources in this slice).
+// ~AIVehicleStateManager @ 0x82700FE0: releases maGinsuDecelContentSpecs[4..0],
+// maGinsuAccelContentSpecs[4..0], maLoopContentSpecs[49..0] (each `&off_820B3250 ;
+// Release if refcount hits 0`), then the base RegisteredContent pool. The host
+// compiler emits the same reverse member destruction from the Content destructor.
 // ---------------------------------------------------------------------------
 AIVehicleStateManager::~AIVehicleStateManager()
 {
 }
 
-// ---------------------------------------------------------------------------
-// AIVehicleStateManager::CreateObject(u32)  @ 0x82702358   (the factory hook)
-//
-//   if ( a1 ) { if ( MemBase::operator new(880, "AIVehicleStateManager", 1) ) return new'd ctor; }
-//   else      { if ( MemBase::operator new(880, "AIVehicleStateManager", 0) ) return new'd ctor; }
-//   return 0;
-//
-// The X360 allocates an 880-byte (0x370) block through CgsSound::MemBase::operator
-// new(size, tag, flavour) tagged "AIVehicleStateManager" (off_82F2E890) and
-// placement-constructs an AIVehicleStateManager into it. Both arms call the SAME
-// size+ctor; the `a1` argument only selects the operator-new flavour (0/1). The
-// factory CreateStateMan @ 0x826A5B60 calls this as createObject(0).
-//
-// FLAG (allocator gate): CgsSound::MemBase (CgsMemBase.h) does NOT model
-// operator new(size, tag, flavour) -- the sound allocator (off_82FFB954) is not
-// homed in this group -- so a faithful placement-new through that allocator is not
-// yet expressible. This reconstruction uses the host `new` (global operator new, NOT
-// the sound allocator); the observable result -- a constructed AIVehicleStateManager*
-// (or null) handed to the factory -- matches. Replace with the sound-allocator
-// placement-new once MemBase::operator new is homed. The 880-byte size is the X360
-// 0x370; on the 64-bit host the real object is larger, so the literal size is
-// documentation only and is NOT passed to the host new.
-// ---------------------------------------------------------------------------
+// CreateObject @ 0x82702358: MemBase::operator new(880, "AIVehicleStateManager",
+// flavour) + ctor; the int argument only picks the operator-new flavour.
 CgsSound::Logic::StateManager* AIVehicleStateManager::CreateObject( u32 /*luType*/ )
 {
     return new AIVehicleStateManager();
 }
 
-// ---------------------------------------------------------------------------
-// AIVehicleStateManager::GetStaticTypeInfo()  (RTTI descriptor)
-//
-// Mirrors the in-tree GetStaticTypeInfo convention (CgsStateManager.cpp:230,
-// CgsEffectBase.cpp:130): a function-local static ClassTypeInfo<StateManager>
-// seeded with (ObjectID, typeName, baseTypeInfo, createObject) so the factory
-// CreateStateMan can match descriptor->ObjectID and call ->createObject.
-//
-// FLAG (ObjectID UNRESOLVED): the per-leaf registration static-init that calls
-// StateManager::AddToClassTypeInfoArray(@0x8268DFE8) with the explicit ObjectID was
-// NOT exported (CreateObject @ 0x82702358 has no xrefs_to) and no map-state enum
-// names the id in-tree. Per the established in-tree placeholder convention (every
-// committed GetStaticTypeInfo uses 0), the ObjectID is seeded 0 here and MUST be
-// replaced with the real id at integration -- the id is this manager's slot in the
-// CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
-//
-// FLAG (registry hookup deferred): the minimal CgsSound::Logic::StateManager view
-// pulled via BrnStateManager.h (this TU's base) does NOT declare
-// AddToClassTypeInfoArray (that lives in the full CgsStateManager.h view, ODR-
-// incompatible with BrnStateManager.h and not co-includable here). So this
-// descriptor is produced here but its insertion into the static registry
-// (dword_82FFBC58) must be done by a registration site using the full StateManager
-// view (the conductor-owned CreateStateMan TU). &CreateObject is an ABI-compatible
-// StateManager*(*)(u32) across both views.
-// ---------------------------------------------------------------------------
+// Descriptor 0x82F2E88C: {ObjectID 2, "AIVehicleStateManager", base
+// StateManager::sTypeInfo (0x82F2FAA0), &CreateObject @0x82702358}.
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateManager::GetStaticTypeInfo()
 {
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        2,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: AIVehicleStateManager=2)
-        "AIVehicleStateManager",    // typeName
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo())
-        &AIVehicleStateManager::CreateObject // createObject
-    );
+        2,
+        "AIVehicleStateManager",
+        CgsSound::Logic::StateManager::GetStaticTypeInfo(),
+        &AIVehicleStateManager::CreateObject );
     return &sTypeInfo;
 }
 
-// ---------------------------------------------------------------------------
-// File-scope registration (Part D): land this leaf's descriptor in the shared
-// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
-// dword_82FFBC58) at load time, so StateManager::CreateStateMan (0x826A5B60) can
-// find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
-// registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
-//
-// ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): AIVehicleStateManager::sTypeInfo
-// .ObjectID = 2. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
-// baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
-// id. NOTE (2026-08-25): this TU IS in the game build -- the registration runs at
-// static-init and CreateStateManagers constructs this manager at boot.
-// ---------------------------------------------------------------------------
+// CRT init bank @0x82C61D98: `addi r3, r11, 82F2E88C ; b StateManager::AddToClassTypeInfoArray`.
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
     gpAIVehicleStateManagerReg =
         CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            AIVehicleStateManager::GetStaticTypeInfo());
+            AIVehicleStateManager::GetStaticTypeInfo() );
 
-// ---------------------------------------------------------------------------
-// AIVehicleStateManager::GetTypeInfo() const  (vtable RTTI hook)
-//   Returns this leaf's static descriptor.
-// ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateManager::GetTypeInfo() const
 {
     return GetStaticTypeInfo();
 }
 
-// ---------------------------------------------------------------------------
-// AIVehicleStateManager::GetTypeName() const  @ 0x82684028
-//   X360: `lwz r3, off_82F2E890` -> returns the literal "AIVehicleStateManager".
-// ---------------------------------------------------------------------------
+// @ 0x82684028: `lwz r3, off_82F2E890` -> the descriptor's name.
 const char* AIVehicleStateManager::GetTypeName() const
 {
     return "AIVehicleStateManager";
@@ -162,44 +193,208 @@ const char* AIVehicleStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 // AIVehicleStateManager::Prepare()  @ 0x826EFC18   (vtable +0x0C)
 //
-// X360 body: a switch on the +0x24 prepare-state (cases 0/5 -> 0, 1, 2, 3, 4):
-//   state 0: mCpuMonitor = PerfMonCpu::AddMonitor("AI Cars", 14, 0, 1.0, ...)
-//   state 1: if (!PrepareAIEngineLoading(this)) return 0;
-//   state 3: if (!StateManager::PrepareStates(this, 16920, 3, 0)) return 0;
-//   state 4: return 1;
-//
-// FLAG (stub -- domain cascade): the real body cascades into
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor),
-//   * AIVehicleStateManager::PrepareAIEngineLoading @ 0x826E2708 (loads the per-AI-car
-//     engine components -- the deep AI engine audio domain), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     itself a declared-only stub in the foundation).
-// None reconstructed in this slice. PrepareStateManagersOnBoot (0x826837F8) only
-// needs Prepare() to return true to advance boot, so this stub returns true
-// (boot-ready) WITHOUT running the AI-engine load / state bring-up. NOT an
-// X360-faithful body -- the prepare state machine is deferred. X360 addr above.
+//   switch (mePrepareState) {
+//     case 0: case 5: mePrepareState = 0;
+//             miCpuMonitor = PerfMonCpu::AddMonitor("AI Cars", 14, 0, 1.0, r7, 1);
+//     case 1: mePrepareState = 1; if (!PrepareAIEngineLoading()) return 0;
+//     case 2: mePrepareState = 2;
+//     case 3: mePrepareState = 3; if (!StateManager::PrepareStates(this, 16920, 3, 0)) return 0;
+//     case 4: mePrepareState = 4; return 1;
+//     default: return 0; }
 // ---------------------------------------------------------------------------
 bool AIVehicleStateManager::Prepare()
 {
-    return true;
+    switch ( mePrepareState )
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor( "AI Cars", 14, 0, 1.0, 0, 1 );
+        // fall through
+    case E_PREPARE_BEGIN:
+        mePrepareState = E_PREPARE_BEGIN;
+        if ( !PrepareAIEngineLoading() )
+            return false;
+        // fall through
+    case E_PREPARE_UPDATING:
+        mePrepareState = E_PREPARE_UPDATING;
+        // fall through
+    case E_PREPARE_STATES:
+        mePrepareState = E_PREPARE_STATES;
+        if ( !PrepareStates( KI_AI_STATE_EFFECT_MASK, KI_NUMBER_OF_AUDIO_AI_CAR_STATES, 0 ) )
+            return false;
+        // fall through
+    case E_PREPARE_FINISHED:
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    default:
+        return false;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AIVehicleStateManager::PrepareAIEngineLoading()  @ 0x826E2708  (DWARF cpp:167)
+//
+// The seven-state loader over meAIEngineLoadingState (this+0x98):
+//   0 BEGIN: for each of the 5 engines: assert strlen < 64 ("String too long",
+//     CgsStringUtils.h:55); bundle = "Engines\%08x.bundle" of HashString(name);
+//     LoadAsset(bundle, name, E_ATTRIBSYS); LoadAsset(bundle, "%sRegistry", E_DATA).
+//   1 WAITING_FOR_LOAD_ATTRIB: return false (ResourcesAreReady moves 1 -> 2).
+//   2 BEGIN_LOADING_ENGINE_COMPONENTS: for each: vehicleengine attribs of
+//     StringToKey(decimal id); assert LoopModel() non-null and non-empty ("Bad
+//     Engine Data", cpp:231/232); LoadAsset(bundle, LoopModel(), E_DATA).
+//   3 WAITING_LOADING_ENGINE_COMPONENTS: return false (ResourcesAreReady 3 -> 4).
+//   4 CREATING_CONTENT_SPECS: for each: AddRegistry(name, true); GetAsset(bundle,
+//     LoopModel()) -> LoopModelData; assert muNumOfPartials <= KI_MAX_LOOPS
+//     (cpp:272); maLoopContentSpecs[i][j].Construct(module, factory,
+//     partial[j].mWaveName.mHash); maGinsuAccelContentSpecs[i] <- MakeHash(
+//     GinsuFileAccel()); maGinsuDecelContentSpecs[i] <- MakeHash(GinsuFileDecel()).
+//   5 WAITING_FOR_CONTENT_SPECS: every created loop spec, the accel and the decel
+//     spec of every engine must report loaded ((content+30 & 0x7F) == 3), else
+//     return false; then state = 6, return true.
+//   6 FINISHED: return true.   default: return false.
+// ---------------------------------------------------------------------------
+bool AIVehicleStateManager::PrepareAIEngineLoading()
+{
+    CgsSound::Logic::Module* lpModule = GetLogicModule();
+    char lacBundle[64];
+    char lacRegistry[64];
+
+    switch ( meAIEngineLoadingState )
+    {
+    case E_AI_ENGINE_LOADING_BEGIN:
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_BEGIN;
+        for ( s32 liEngine = 0; liEngine < KI_NUMBER_OF_AUDIO_AI_ENGINES; ++liEngine )
+        {
+            const char* lpcName = KAPC_AI_ENGINE_NAMES[liEngine];
+            CGS_ASSERT( std::strlen( lpcName ) < 64, "String too long" );
+            AIEngineBundleName( lacBundle, sizeof( lacBundle ), lpcName );
+            LoadAsset( lacBundle, lpcName, BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS );
+            std::snprintf( lacRegistry, sizeof( lacRegistry ), "%sRegistry", lpcName );
+            LoadAsset( lacBundle, lacRegistry, BrnSound::Logic::ResourceRegistrar::E_DATA );
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
+            if ( AISoundDiagLive() )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[ai-sound-load] request engine=" << lpcName
+                    << " bundle=" << lacBundle
+                    << " registry=" << lacRegistry
+                    << "\n";
+            }
+        }
+        // fall through
+    case E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB:
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB;
+        return false;
+
+    case E_AI_ENGINE_LOADING_BEGIN_LOADING_ENGINE_COMPONENTS:
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_BEGIN_LOADING_ENGINE_COMPONENTS;
+        for ( s32 liEngine = 0; liEngine < KI_NUMBER_OF_AUDIO_AI_ENGINES; ++liEngine )
+        {
+            Attrib::Gen::vehicleengine lAttribs(
+                Attrib::FindCollectionWithDefault( KU64_VEHICLE_ENGINE_CLASS_ID,
+                                                   GetAIEngineAttribKey( liEngine ) ),
+                0 );
+            AIEngineBundleName( lacBundle, sizeof( lacBundle ), KAPC_AI_ENGINE_NAMES[liEngine] );
+            const char* lpcLoopModel = lAttribs.LoopModel();
+            CGS_ASSERT( lpcLoopModel != 0, "Bad Engine Data" );
+            CGS_ASSERT( lpcLoopModel == 0 || std::strcmp( lpcLoopModel, "" ) != 0, "Bad Engine Data" );
+            LoadAsset( lacBundle, lpcLoopModel, BrnSound::Logic::ResourceRegistrar::E_DATA );
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
+            if ( AISoundDiagLive() )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[ai-sound-load] request loopmodel engine=" << KAPC_AI_ENGINE_NAMES[liEngine]
+                    << " resource=" << ( lpcLoopModel ? lpcLoopModel : "<null>" )
+                    << "\n";
+            }
+        }
+        // fall through
+    case E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS:
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS;
+        return false;
+
+    case E_AI_ENGINE_LOADING_CREATING_CONTENT_SPECS:
+    {
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_CREATING_CONTENT_SPECS;
+        const u32 luFactoryName = static_cast<u32>(
+            CgsSound::Playback::GenericRwacFactorySkName().GetValue() );   // dword_83008650
+        for ( s32 liEngine = 0; liEngine < KI_NUMBER_OF_AUDIO_AI_ENGINES; ++liEngine )
+        {
+            Attrib::Gen::vehicleengine lAttribs(
+                Attrib::FindCollectionWithDefault( KU64_VEHICLE_ENGINE_CLASS_ID,
+                                                   GetAIEngineAttribKey( liEngine ) ),
+                0 );
+            AddRegistry( KAPC_AI_ENGINE_NAMES[liEngine], true );
+            AIEngineBundleName( lacBundle, sizeof( lacBundle ), KAPC_AI_ENGINE_NAMES[liEngine] );
+
+            CgsResource::ResourceHandle lHandle = GetAsset( lacBundle, lAttribs.LoopModel() );
+            CgsResource::ResourcePtr<BrnSound::Vehicles::Engines::LoopModelData> lLoopModel( lHandle );
+            const BrnSound::Vehicles::Engines::LoopModelData* lpLoopModel = lLoopModel.GetMemoryResource();
+            const u32 luNumberOfLoops = lpLoopModel ? lpLoopModel->muNumOfPartials : 0;
+            CGS_ASSERT( luNumberOfLoops <= static_cast<u32>( KI_MAX_LOOPS ),
+                        "liNumberOfLoops <= BrnSound::Vehicles::Engines::DualGinsuEffect::KI_MAX_LOOPS" );
+            for ( u32 luLoop = 0; luLoop < luNumberOfLoops && luLoop < static_cast<u32>( KI_MAX_LOOPS ); ++luLoop )
+            {
+                maLoopContentSpecs[liEngine][luLoop].Construct(
+                    lpModule, luFactoryName, lpLoopModel->mpaPartials[luLoop].mWaveName.mHash );
+            }
+            maGinsuAccelContentSpecs[liEngine].Construct(
+                lpModule, luFactoryName,
+                static_cast<u32>( CgsSound::Playback::Name::MakeHash( lAttribs.GinsuFileAccel() ) ) );
+            maGinsuDecelContentSpecs[liEngine].Construct(
+                lpModule, luFactoryName,
+                static_cast<u32>( CgsSound::Playback::Name::MakeHash( lAttribs.GinsuFileDecel() ) ) );
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
+            if ( AISoundDiagLive() )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[ai-sound-load] specs engine=" << KAPC_AI_ENGINE_NAMES[liEngine]
+                    << " loopmodel=" << ( lpLoopModel ? "resolved" : "MISSING" )
+                    << " loops=" << static_cast<s32>( luNumberOfLoops )
+                    << " accel=" << ( lAttribs.GinsuFileAccel() ? lAttribs.GinsuFileAccel() : "<null>" )
+                    << " decel=" << ( lAttribs.GinsuFileDecel() ? lAttribs.GinsuFileDecel() : "<null>" )
+                    << "\n";
+            }
+        }
+        // fall through
+    }
+    case E_AI_ENGINE_LOADING_WAITING_FOR_CONTENT_SPECS:
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_WAITING_FOR_CONTENT_SPECS;
+        for ( s32 liEngine = 0; liEngine < KI_NUMBER_OF_AUDIO_AI_ENGINES; ++liEngine )
+        {
+            for ( s32 liLoop = 0; liLoop < KI_MAX_LOOPS && maLoopContentSpecs[liEngine][liLoop].IsCreated(); ++liLoop )
+            {
+                if ( !maLoopContentSpecs[liEngine][liLoop].IsLoaded() )
+                    return false;
+            }
+            if ( !( maGinsuAccelContentSpecs[liEngine].IsCreated() && maGinsuAccelContentSpecs[liEngine].IsLoaded() ) )
+                return false;
+            if ( !( maGinsuDecelContentSpecs[liEngine].IsCreated() && maGinsuDecelContentSpecs[liEngine].IsLoaded() ) )
+                return false;
+        }
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_FINISHED;
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
+        if ( AISoundDiagLive() )
+            *CgsDev::Log::gpDebugPrint << "[ai-sound-load] all AI engine content specs loaded\n";
+        return true;
+
+    case E_AI_ENGINE_LOADING_FINISHED:
+        return true;
+
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
 // AIVehicleStateManager::ResourcesAreReady()  @ 0x82684038
-//
-// X360 body (SELF-CONTAINED -- decompiled faithfully): the AI-engine-loading
-// completion callback advances meAIEngineLoadingState (the +0x8 member):
-//   assert( meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB ||
-//           meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS )
-//   if      ( meAIEngineLoadingState == 1 ) meAIEngineLoadingState = 2;
-//   else if ( meAIEngineLoadingState == 3 ) meAIEngineLoadingState = 4;
-//   else      return;                      // (unreachable after the assert)
-//
-// This one IS reconstructable in full -- it only touches the modelled
-// meAIEngineLoadingState member (no domain cascade). Store-for-store with the asm
-// (result[2] read twice; 1->2, 3->4; the !=1 && !=3 branch fires the assert at
-// BrnAIVehicleStateManager.cpp:354 then re-reads). The assert is the non-gating
-// tripwire. Reached BY NAME (member), no raw +0x8 cast.
+//   assert(state == WAITING_FOR_LOAD_ATTRIB || state == WAITING_LOADING_ENGINE_COMPONENTS)
+//   1 -> 2 ; 3 -> 4   (BrnAIVehicleStateManager.cpp:354)
 // ---------------------------------------------------------------------------
 void AIVehicleStateManager::ResourcesAreReady()
 {
@@ -210,100 +405,260 @@ void AIVehicleStateManager::ResourcesAreReady()
 
     if ( meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_FOR_LOAD_ATTRIB )
     {
-        meAIEngineLoadingState = E_AI_ENGINE_LOADING_LOADING_ENGINE_COMPONENTS;        // 1 -> 2
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_BEGIN_LOADING_ENGINE_COMPONENTS;
     }
     else if ( meAIEngineLoadingState == E_AI_ENGINE_LOADING_WAITING_LOADING_ENGINE_COMPONENTS )
     {
-        meAIEngineLoadingState = E_AI_ENGINE_LOADING_DONE;                             // 3 -> 4
+        meAIEngineLoadingState = E_AI_ENGINE_LOADING_CREATING_CONTENT_SPECS;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
+    if ( AISoundDiagLive() )
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[ai-sound-load] resources ready -> loading state " << static_cast<s32>( meAIEngineLoadingState )
+            << "\n";
     }
 }
 
 // ---------------------------------------------------------------------------
-// AIVehicleStateManager::GetResourceRegistrar()  (IResourceRequester slot 1)
+// AIVehicleStateManager::UpdateParams(f32)  @ 0x826CA578  (vtable +0x18)
 //
-// Recovered semantically from the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850: load this->mpLogicModule (+0x2C), tail-call the IResourceRequester
-// slot-1 of the module's embedded ResourceRegistrar (SoundLogicModule::
-// mResourceRegistrar @ module+0x4C90). The state-manager leaves share the +0x2C
-// module back-pointer (stamped by CreateStateMan).
-//
-// FLAG (module opaque): the minimal CgsSound::Logic::StateManager view in this TU
-// (via BrnStateManager.h) does not expose mpLogicModule (+0x2C), and the
-// SoundLogicModule home is not reconstructed in this slice -- so this cannot be
-// bodied faithfully here. Provided as a non-cascading stub that abort-asserts if
-// ever reached on boot (PrepareStateManagersOnBoot does NOT call it; it is only used
-// on the per-frame attach/detach path this slice never exercises). Returns a
-// TU-local empty registrar purely to satisfy the non-void signature; NOT a faithful
-// body. Body via the module once the full StateManager view (mpLogicModule) +
-// SoundLogicModule are available.
+//   if (mePrepareState != 4) return;
+//   PerfMonCpu::StartMonitor(miCpuMonitor);
+//   StateManager::UpdateParams(this, mfTimeStepSimulation);      ; lfs f1, 0x10(this)
+//   input = module->mpBrnLogicInputBuffer (assert); vehicles = input->GetVehicleInterface() (assert "lpInput")
+//   player = vehicles->IsPlayerCarActive() ? vehicles->GetPlayerActiveRaceCarIndex() : -1;
+//   UpdateVehicleLoading(player);
+//   if (IsDataLoaded()) {                                        ; vtable +0x24
+//     for (i = 0; i < 8; ++i)
+//       if (i != player && vehicles->IsRaceCarActive(i) && gaDesiredAssetIds[i].lo != 0) {
+//         rc = vehicles->GetRaceCarState(i);
+//         if (state = GetStateObj(rc)) { if (|rc.pos - listener|^2 > 32400) state->Detach(); }
+//         else if (state = GetFreeState(rc)) {
+//           AttachInfo::Construct(gaDesiredAssetIds[i], gapLoadedVehicleEntries[i], i);
+//           state->Attach(&info); StopMonitor; return; }              ; ONE attach per frame
+//     dword_82F2CBD8 = -1; <dev-only nearest-state DebugRender::DrawSphere, gated on
+//     byte_82FFB812 || byte_82FFB813 -- not carried, it draws nothing the PC build has>
+//   }
+//   PerfMonCpu::StopMonitor(miCpuMonitor);
 // ---------------------------------------------------------------------------
-BrnSound::Logic::ResourceRegistrar& AIVehicleStateManager::GetResourceRegistrar()
+void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
 {
-    CGS_ASSERT( false,
-                "AIVehicleStateManager::GetResourceRegistrar reached without a homed "
-                "SoundLogicModule (boot path does not call this)" );
-    static BrnSound::Logic::ResourceRegistrar sUnhomedRegistrar;
-    return sUnhomedRegistrar;
+    if ( mePrepareState != E_PREPARE_FINISHED )
+        return;
+
+    CgsDev::PerfMonCpu::StartMonitor( miCpuMonitor );
+    CgsSound::Logic::StateManager::UpdateParams( mfTimeStepSimulation );
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
+    BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    CGS_ASSERT( lpInput != 0, "mpBrnLogicInputBuffer" );
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicles =
+        lpInput->GetVehicleInterface();
+    CGS_ASSERT( lpVehicles != 0, "lpInput" );
+
+    const s32 liPlayer = lpVehicles->IsPlayerCarActive()
+        ? static_cast<s32>( lpVehicles->GetPlayerActiveRaceCarIndex() ) : -1;
+    UpdateVehicleLoading( static_cast<EActiveRaceCarIndex>( liPlayer ) );
+
+    if ( IsDataLoaded() )
+    {
+        const rw::math::vpu::Vector3& lrListener = AIListenerPosition( lpModule );
+        for ( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+        {
+            const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>( liCar );
+            if ( liCar == liPlayer
+                 || !lpVehicles->IsRaceCarActive( leCar )
+                 || GetLoadedAssetId( static_cast<u32>( liCar ) ) == 0 )
+            {
+                continue;
+            }
+
+            const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState = lpVehicles->GetRaceCarState( leCar );
+            CgsSound::Logic::State* lpState = GetStateObj( const_cast<BrnPhysics::Vehicle::RaceCarState*>( lpRaceCarState ) );
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG. The live entity id
+            // GetStateObj keys on (VehicleState::IsAttachedToThis @0x82683D38), once per
+            // car: an id of 0 on every car makes every attached state match every car.
+            if ( AISoundDiagLive() )
+            {
+                static u8 sau8Seen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { 0 };
+                if ( !sau8Seen[liCar] )
+                {
+                    sau8Seen[liCar] = 1;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[ai-sound-attach] car=" << liCar
+                        << " live entity=" << CgsDev::E_PRINTMODE_HEXONCE
+                        << static_cast<u64>( lpRaceCarState->mEntityId.muValue )
+                        << " d2=" << DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener )
+                        << " state=" << ( lpState ? lpState->GetInstanceID() : -1 )
+                        << "\n";
+                }
+            }
+            if ( lpState )
+            {
+                if ( DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener ) > KF_AI_VEHICLE_RANGE_SQUARED )
+                {
+                    // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG
+                    if ( AISoundDiagLive() )
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[ai-sound-detach] car=" << liCar << " out of range (d2="
+                            << DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener ) << ")\n";
+                    }
+                    lpState->Detach();
+                }
+            }
+            else
+            {
+                lpState = GetFreeState( const_cast<BrnPhysics::Vehicle::RaceCarState*>( lpRaceCarState ) );
+                if ( lpState )
+                {
+                    VehicleState::AttachInfo lInfo;
+                    lInfo.Construct( GetLoadedAssetId( static_cast<u32>( liCar ) ),
+                                     const_cast<BrnResource::VehicleListEntry*>(
+                                         GetLoadedVehicleEntry( static_cast<u32>( liCar ) ) ),
+                                     static_cast<u32>( liCar ) );
+                    lpState->Attach( &lInfo );
+                    CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
+                    return;
+                }
+            }
+        }
+    }
+
+    CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
 }
 
 // ---------------------------------------------------------------------------
-// AIVehicleStateManager::GetLoopModelContent(s32, u32)  @ 0x826987A8
+// AIVehicleStateManager::UpdateVehicleLoading(EActiveRaceCarIndex)  @ 0x826B1C70  (DWARF cpp:614)
 //
-// X360 body (SELF-CONTAINED -- decompiled store-for-store): returns the address of
-// the per-(AI-engine, loop) loop-model content spec, guarded by three tripwires:
-//   assert( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES );
-//   assert( lLoopIndex < DualGinsuEffect::KI_MAX_LOOPS );
-//   lpContent = &maLoopContentSpecs[liAIEngineIndex][lLoopIndex];
-//   assert( lpContent->IsLoaded() );
-//   return lpContent;
+// Walks the eight active-race-car slots of the module-wide VehicleStateManager
+// tables (X360 globals: qword_82FFB380 desired ids, qword_82FFB3C8 attached ids,
+// qword_82FFB370 added mask, qword_82FFB3C0 desired-player mask, qword_82FFB408
+// attached mask, qword_82FFB378 attached-player mask -- the names Nathan V.'s
+// AddEntry / OnAssetLoaded / OnAssetUnloaded reconstructions gave them) and, per
+// slot, with the console's own TTY strings:
+//   a) attached && !attachedPlayer && desiredPlayer
+//        -> "OnAssetUnloaded becahse desired is player and loaded is not. Car idx"
+//   b) attachedId != desiredId && attached
+//        -> "OnAssetUnloaded because desired does not mach loaded. Car idx"
+//   c) desiredId != 0 && !desiredPlayer && attachedId == 0 && !attached
+//        -> "OnAssetLoaded because desired does mach loaded. Car idx"
+//           OnAssetLoaded(desiredId, i, false): the AI engines are preloaded, so an
+//           AI entry counts as loaded the moment it is desired, and the game gets
+//           its AudioCarDataLoadedEvent straight away.
+// The player index argument is not read by the console body (r4 is dead).
+// ---------------------------------------------------------------------------
+void AIVehicleStateManager::UpdateVehicleLoading( EActiveRaceCarIndex /*leActiveRaceCarIndex*/ )
+{
+    for ( u32 luCar = 0; luCar < static_cast<u32>( E_ACTIVE_RACE_CAR_INDEX_COUNT ); ++luCar )
+    {
+        const bool  lbAttached       = IsAssetAttached( luCar );
+        const bool  lbAttachedPlayer = IsAttachedEntryPlayer( luCar );
+        const bool  lbDesiredPlayer  = IsDesiredEntryPlayer( luCar );
+        const CgsID lDesiredId       = GetLoadedAssetId( luCar );
+        const CgsID lAttachedId      = GetAttachedAssetId( luCar );
+
+        if ( lbAttached && !lbAttachedPlayer && lbDesiredPlayer )
+        {
+            OnAssetUnloaded( lAttachedId, luCar );
+        }
+
+        if ( GetAttachedAssetId( luCar ) != GetLoadedAssetId( luCar ) )
+        {
+            if ( IsAssetAttached( luCar ) )
+                OnAssetUnloaded( GetAttachedAssetId( luCar ), luCar );
+        }
+
+        if ( GetLoadedAssetId( luCar ) != 0 )
+        {
+            if ( !IsDesiredEntryPlayer( luCar ) && GetAttachedAssetId( luCar ) == 0 )
+            {
+                if ( !IsAssetAttached( luCar ) )
+                    OnAssetLoaded( GetLoadedAssetId( luCar ), luCar, false );
+            }
+        }
+        (void)lDesiredId;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AIVehicleStateManager::GetFreeState(void*)  @ 0x826B1B28  (vtable +0x14; DWARF cpp:540)
 //
-// Address arithmetic: the asm computes `this + 12*(10*liAIEngineIndex + lLoopIndex
-// + 13)` -- 13 is the maLoopContentSpecs base in Content units, 10 the inner
-// dimension (KI_MAX_LOOPS), 12 the Content stride. Expressed BY NAME as the natural
-// row-major access. The assert STRING names DualGinsuEffect::KI_MAX_LOOPS verbatim
-// (X360 rodata); the assert CONDITION uses this class's KI_MAX_LOOPS (== 10 == the
-// X360 DualGinsuEffect::KI_MAX_LOOPS). Called by DualGinsuEffect::Attach.
+//   rc = (RaceCarState*)apv;
+//   if (|rc->mTransform.pos - listener|^2 > 32400) return 0;          ; unk_830085D0
+//   for (s = mpHeadState; s; s = s->next) if (!s->mbIsAttached) return s;
+//   for (s = mpHeadState; s; s = s->next)
+//     if (s->mbIsAttached
+//         && |s->mVehiclePhysicsData.mTransform.pos - listener|^2 > |rc.pos - listener|^2
+//         && s->Detach())                                             ; vtable +0x18
+//       return s;                                                     ; steal the farther car's state
+//   return 0;
+// ---------------------------------------------------------------------------
+CgsSound::Logic::State* AIVehicleStateManager::GetFreeState( void* apvAttachment )
+{
+    const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+        static_cast<const BrnPhysics::Vehicle::RaceCarState*>( apvAttachment );
+    const rw::math::vpu::Vector3& lrListener = AIListenerPosition( GetLogicModule() );
+
+    const f32 lfCandidateDistanceSquared = DistanceSquared3( lpRaceCarState->mTransform.Pos(), lrListener );
+    if ( lfCandidateDistanceSquared > KF_AI_VEHICLE_RANGE_SQUARED )
+        return 0;
+
+    for ( CgsSound::Logic::State* lpState = GetHeadState(); lpState; lpState = lpState->GetNextState() )
+    {
+        if ( !lpState->IsAttached() )
+            return lpState;
+    }
+
+    for ( CgsSound::Logic::State* lpState = GetHeadState(); lpState; lpState = lpState->GetNextState() )
+    {
+        if ( !lpState->IsAttached() )
+            continue;
+        const VehicleState* lpVehicleState = static_cast<const VehicleState*>( lpState );
+        if ( DistanceSquared3( lpVehicleState->GetVehicleData()->mTransform.Pos(), lrListener )
+             > lfCandidateDistanceSquared )
+        {
+            if ( lpState->Detach() )
+                return lpState;
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// GetLoopModelContent @ 0x826987A8 / GetDecelGinsuContent @ 0x82698910 /
+// GetAccelGinsuContent (DWARF h:168, the "12*(i+63)" row of the same pattern).
 // ---------------------------------------------------------------------------
 const CgsSound::Logic::Content* AIVehicleStateManager::GetLoopModelContent( s32 liAIEngineIndex, u32 lLoopIndex )
 {
     CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
                 "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
-
     CGS_ASSERT( lLoopIndex < static_cast<u32>( KI_MAX_LOOPS ),
                 "lLoopIndex < BrnSound::Vehicles::Engines::DualGinsuEffect::KI_MAX_LOOPS" );
-
-    const CgsSound::Logic::Content* lpContent = &maLoopContentSpecs[ liAIEngineIndex ][ lLoopIndex ];
-
-    CGS_ASSERT( lpContent->IsLoaded(),
-                "maLoopContentSpecs[liAIEngineIndex][lLoopIndex].IsLoaded()" );
-
+    const CgsSound::Logic::Content* lpContent = &maLoopContentSpecs[liAIEngineIndex][lLoopIndex];
+    CGS_ASSERT( lpContent->IsLoaded(), "maLoopContentSpecs[liAIEngineIndex][lLoopIndex].IsLoaded()" );
     return lpContent;
 }
 
-// ---------------------------------------------------------------------------
-// AIVehicleStateManager::GetDecelGinsuContent(s32)  @ 0x82698910
-//
-// X360 body (SELF-CONTAINED -- decompiled store-for-store): returns the address of
-// the per-AI-engine Ginsu deceleration content spec, guarded by two tripwires:
-//   assert( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES );
-//   lpContent = &maGinsuDecelContentSpecs[liAIEngineIndex];
-//   assert( lpContent->IsLoaded() );
-//   return lpContent;
-//
-// Address arithmetic: the asm computes `this + 12*(liAIEngineIndex + 68)` -- 68 is
-// the maGinsuDecelContentSpecs base in Content units (12-byte stride). Expressed BY
-// NAME as &maGinsuDecelContentSpecs[idx]. Called by DualGinsuEffect::Attach.
-// ---------------------------------------------------------------------------
+const CgsSound::Logic::Content* AIVehicleStateManager::GetAccelGinsuContent( s32 liAIEngineIndex )
+{
+    CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
+                "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
+    const CgsSound::Logic::Content* lpContent = &maGinsuAccelContentSpecs[liAIEngineIndex];
+    CGS_ASSERT( lpContent->IsLoaded(), "maGinsuAccelContentSpecs[liAIEngineIndex].IsLoaded()" );
+    return lpContent;
+}
+
 const CgsSound::Logic::Content* AIVehicleStateManager::GetDecelGinsuContent( s32 liAIEngineIndex )
 {
     CGS_ASSERT( liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES,
                 "liAIEngineIndex >= 0 && liAIEngineIndex < KI_NUMBER_OF_AUDIO_AI_ENGINES" );
-
-    const CgsSound::Logic::Content* lpContent = &maGinsuDecelContentSpecs[ liAIEngineIndex ];
-
-    CGS_ASSERT( lpContent->IsLoaded(),
-                "maGinsuDecelContentSpecs[liAIEngineIndex].IsLoaded()" );
-
+    const CgsSound::Logic::Content* lpContent = &maGinsuDecelContentSpecs[liAIEngineIndex];
+    CGS_ASSERT( lpContent->IsLoaded(), "maGinsuDecelContentSpecs[liAIEngineIndex].IsLoaded()" );
     return lpContent;
 }
 

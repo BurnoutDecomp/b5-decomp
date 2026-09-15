@@ -231,6 +231,18 @@ CgsID VehicleStateManager::GetLoadedAssetId(u32 luUserId)
     return gaDesiredAssetIds[luUserId];
 }
 
+bool VehicleStateManager::IsAttachedEntryPlayer(u32 luUserId)
+{
+    CGS_ASSERT(luUserId < KI_ACTIVE_RACE_CAR_COUNT, "luUserId < KI_ACTIVE_RACE_CAR_COUNT");
+    return (guAttachedPlayerMask & static_cast<u8>(1u << luUserId)) != 0;
+}
+
+CgsID VehicleStateManager::GetAttachedAssetId(u32 luUserId)
+{
+    CGS_ASSERT(luUserId < KI_ACTIVE_RACE_CAR_COUNT, "luUserId < KI_ACTIVE_RACE_CAR_COUNT");
+    return gaAttachedAssetIds[luUserId];
+}
+
 bool VehicleStateManager::IsLoadedEntryPlayer(u32 luUserId)
 {
     CGS_ASSERT(luUserId < KI_ACTIVE_RACE_CAR_COUNT, "luUserId < KI_ACTIVE_RACE_CAR_COUNT");
