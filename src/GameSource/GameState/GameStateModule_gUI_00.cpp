@@ -61,6 +61,10 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::Update (THE scoring tick)
 #include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"     // HUDMessageLogic::PostWorldUpdate (THE latch drain)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"  // CgsSystem::TimerStatusInterface (the pump's new argument)
+#include "GameShared/GameClasses/Core/CgsID.h"                          // CgsIDCompress ([car] BRN_DEBUG_PLAYER_CAR)
+#include "SharedClasses/DataLists/VehicleList.h"                        // VehicleList::GetVehicleCount/GetVehicleData ([car])
+#include "SharedClasses/DataLists/VehicleListEntry.h"                   // VehicleListEntry::GetId/GetName/GetDefaultWheelName ([car])
+#include "SharedClasses/DataLists/WheelList.h"                          // WheelList::FindWheelIndexFromName/GetWheelData ([car])
 
 namespace BrnGameState
 {
@@ -2040,6 +2044,7 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         // DetectModeStarts, inside the same read-lock bracket, because it stands in for exactly
         // what DetectModeStarts' gesture gate decides. Env-gated off; see the body.
         HarnessInjectEventStartBringUp(mpOutputBuffer);
+        HarnessInjectPlayerCarBringUp();   // [car] BRN_DEBUG_PLAYER_CAR (harness-only, see the body)
 
         // ✅ [showtime S7b-b, 2026-08-27] THE HARNESS SHOWTIME INJECTION IS GONE, and this is
         // the line that used to call it. Its DELETE-WHEN was "ShouldStartShowtimeMode and the
@@ -2520,6 +2525,92 @@ void GameStateModule::HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBu
     // is the same bracket DetectModeStarts runs under one line above.
     StartModeAtLights(mpPreWorldInputBuffer, lpOutputBuffer,
                       E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS);
+}
+
+// ============================================================================
+// [car] HarnessInjectPlayerCarBringUp -- NOT an X360 function, and DELIBERATELY PERMANENT.
+//
+// `BRN_DEBUG_PLAYER_CAR=<vehicle id or name>` (e.g. PDDK01, or P_DLC_DirtKing_01) swaps the
+// player into that car, once, through the console's OWN debug path: the ChangePlayerCarEvent that
+// ResetPlayerDebugComponent::ChangeCar @0x82382B20 posts from the "Change player car" development
+// menu, into the same debug game-event queue, drained by the same E_EVENT_CHANGE_PLAYER_CAR case
+// (OnPlayerCarChange + the ResetPlayerCarAction + the colour action). The harness has no pad to
+// open that menu with, and b5-decomp issue #19 ("some cars' meshes / shadows are corrupted")
+// can only be reproduced by standing in the reporter's cars.
+//
+// GATES, and it fires AT MOST ONCE per process: the env var set (read once); the player car
+// attached (GetActivePlayerCarId() != 0); not in the junkyard; no game mode running (the menu's
+// own gate); then KI_CAR_SWAP_ARM_UPDATES pre-world updates with all of those holding, so the car
+// is on the road when it is swapped. A name that matches no vehicle is a HARD REFUSAL with a log
+// line, never a silent no-op. Inert unless the variable is set; a default run is byte-identical.
+// ============================================================================
+void GameStateModule::HarnessInjectPlayerCarBringUp()
+{
+    static const char* spcSpec  = getenv("BRN_DEBUG_PLAYER_CAR");
+    static bool        sbDone   = false;
+    static s32         siArmed  = 0;
+    const s32 KI_CAR_SWAP_ARM_UPDATES = 180;
+
+    if (spcSpec == 0 || spcSpec[0] == '\0' || sbDone)
+    {
+        return;
+    }
+    if (GetActivePlayerCarId() == 0 || mCarSelectManager.IsInJunkyard()
+        || mModeManager.GetCurrentGameMode() != 0)
+    {
+        siArmed = 0;
+        return;
+    }
+    if (++siArmed < KI_CAR_SWAP_ARM_UPDATES)
+    {
+        return;
+    }
+    sbDone = true;
+
+    const BrnResource::VehicleList* lpVehicles = GetVehicleList();
+    const CgsID lWantedId = CgsIDCompress(spcSpec);
+    const BrnResource::VehicleListEntry* lpEntry = 0;
+    for (s32 liVehicle = 0; lpVehicles != 0 && liVehicle < lpVehicles->GetVehicleCount(); ++liVehicle)
+    {
+        const BrnResource::VehicleListEntry* lpCandidate = lpVehicles->GetVehicleData(liVehicle);
+        if (lpCandidate != 0
+            && (lpCandidate->GetId() == lWantedId || _stricmp(lpCandidate->GetName(), spcSpec) == 0))
+        {
+            lpEntry = lpCandidate;
+            break;
+        }
+    }
+    if (lpEntry == 0)
+    {
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[car] FAIL: BRN_DEBUG_PLAYER_CAR=\"" << spcSpec
+                << "\" matches no vehicle id or name in the vehicle list -- the car is NOT swapped\n";
+        }
+        return;
+    }
+
+    const BrnResource::WheelList* lpWheels = GetWheelList();
+    const s32 liWheel = (lpWheels != 0) ? lpWheels->FindWheelIndexFromName(lpEntry->GetDefaultWheelName()) : -1;
+    const CgsID lWheelId = (liWheel >= 0) ? lpWheels->GetWheelData(liWheel)->mID : mActivePlayerWheelId;
+
+    GameStateModuleIO::ChangePlayerCarEvent lEvent = {};
+    lEvent.mCarModelId        = lpEntry->GetId();
+    lEvent.mWheelModelId      = lWheelId;
+    lEvent.mbResetPlayerCamera = true;
+    lEvent.mbKeepResetSection  = true;
+    GetDebugGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                                       GameStateModuleIO::E_EVENT_CHANGE_PLAYER_CAR, sizeof(lEvent));
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[car] ***** HARNESS-ONLY PLAYER CAR SWAP (BRN_DEBUG_PLAYER_CAR) ***** -> '"
+            << lpEntry->GetName() << "' wheel index " << liWheel
+            << " -- posted ChangePlayerCarEvent exactly as the development menu does; everything "
+            << "downstream is the console's own. One-shot; will not fire again this process.\n";
+    }
 }
 
 }
