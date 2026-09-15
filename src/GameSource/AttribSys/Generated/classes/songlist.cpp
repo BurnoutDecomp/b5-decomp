@@ -7,6 +7,7 @@
 // the committed generated-class convention (a per-class .cpp for the out-of-line bodies).
 
 #include "GameSource/AttribSys/Generated/classes/songlist.h"
+#include <cstring>
 
 namespace Attrib
 {
@@ -41,5 +42,19 @@ void* songlist::Songs(unsigned int luIndex) const
     return lpData + 8 + 24u * luIndex;
 }
 
+// Num_Songs -- X360 MusicEffect::UpdateParams @0x826FEBBC / @0x826FEC60:
+//     lwz r11, var_14C(r1)   ; the songlist Instance's mpAttributeData
+//     lwz r4,  0x968(r11)    ; -> EaTraxData::SelectSong's aiNumSongs
+s32 songlist::Num_Songs() const
+{
+    const u8* lpData = static_cast<const u8*>(GetLayoutPointer());
+    if (!lpData)
+        return 0;
+    s32 liCount = 0;
+    std::memcpy(&liCount, lpData + 0x968, sizeof(liCount));
+    return liCount;
+}
+
 }
 }
+

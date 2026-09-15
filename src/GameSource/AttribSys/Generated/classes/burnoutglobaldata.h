@@ -37,6 +37,23 @@ namespace Gen
         void* ReverbSettings(u32 luIndex);  // @0x82682120
         void* ShiftPatterns(u32 luIndex);   // @0x82682188
 
+        // The EA Trax song list REFSPEC at +0x548 in this instance's data area, in the
+        // same shape as StreamMappings()/SpeechData() above. X360-attested by
+        // MusicEffect::UpdateParams @0x826FE5C8 -- 0x826FEB90..0x826FEBA8:
+        //     lwzx r11, r15, 0x1350C   ; mBurnoutGlobalData.mpAttributeData
+        //     addi r4,  r11, 0x548     ; -> Attrib::Gen::songlist::songlist(this, r4, 0)
+        // ⚠️ The console's generated ctors take a REFSPEC, not a Collection: their
+        // Attrib::Instance base ctor is sub_8280A248 @0x8280A248, whose first act is
+        // `Attrib::RefSpec::GetCollection(a2)`. Reading +0x548 as a Collection* (this
+        // accessor's first shape) walked garbage and access-violated inside
+        // Instance::GetClass. The generated accessor itself is inlined away on the
+        // console, so only the offset and the RefSpec shape are recovered.
+        const RefSpec& SongList() const
+        {
+            return *reinterpret_cast<const RefSpec*>(
+                static_cast<const u8*>(GetLayoutPointer()) + 0x548u);
+        }
+
         // Named access to the three RefSpecs used by the global audio objects.
         // The offsets are the generated _LayoutStruct positions from DecFIGS and
         // the ARTIST call sites (Presentation +0x4d8, StreamMappings +0x458,

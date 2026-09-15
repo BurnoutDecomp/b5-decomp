@@ -99,6 +99,25 @@ void MusicStream::Update(f32 afDeltaTime)
             meState = E_STOPPED;
         }
     }
+    // ⭐ MISSING ARM, RESTORED 2026-09-15. X360 MusicStream::Update @0x826871F8 case 4:
+    //     v8 = mfFadeTime + dt; v9 = mfFadeDuration; mfFadeTime = v8;
+    //     if (v8 >= v9) { *(this + 88) = 1;   // mbInternalPause
+    //                     *(this + 60) = 1; } // meState = E_PLAYING
+    // E_PAUSING is how the effect DUCKS a stream it wants to keep alive (every
+    // MusicEffect::UpdateParams arm that starts a sting first pauses mEATraxStream with
+    // a 0.1 s fade). Without this arm a paused stream sat in E_PAUSING forever: never
+    // internally paused, never resumed, and -- because IsPlayingOrQueued() counts
+    // E_PAUSING -- never re-queued either. The stream is left in E_PLAYING with
+    // mbInternalPause set, which UpdateVoiceParams turns into the voice's PauseControl.
+    else if (meState == E_PAUSING)
+    {
+        mfFadeTime += afDeltaTime;
+        if (mfFadeTime >= mfFadeDuration)
+        {
+            mbInternalPause = true;
+            meState = E_PLAYING;
+        }
+    }
 }
 
 void MusicStream::SetSongQueued(bool abSongQueued)

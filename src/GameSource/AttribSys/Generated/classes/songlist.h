@@ -17,6 +17,7 @@
 // sibling song::song exactly.
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include "GameSource/AttribSys/Generated/attrib_private.h"   // Attrib::Private (canonical)
+#include "types.hpp"
 
 namespace Attrib
 {
@@ -36,6 +37,14 @@ namespace Gen
         // (unsigned) >= length falls back to the shared zero-initialised default block
         // (one Song record, 0x18 bytes); otherwise indexes the array (stride 0x18, base +8).
         void* Songs(unsigned int luIndex) const;
+
+        // The songlist's own element COUNT attribute, at +0x968 inside the 0x970-byte
+        // data area (the Songs array occupies +0x08 .. +0x967: 8 + 100*0x18 == 0x968).
+        // X360-attested by MusicEffect::UpdateParams @0x826FE5C8 -- 0x826FEBBC
+        // `lwz r4, 0x968(r11)` with r11 == mpAttributeData, feeding
+        // EaTraxData::SelectSong's aiNumSongs. The X360 inlines this generated
+        // accessor away, which is why it was not recovered with Songs().
+        s32 Num_Songs() const;
     };
 }
 }
