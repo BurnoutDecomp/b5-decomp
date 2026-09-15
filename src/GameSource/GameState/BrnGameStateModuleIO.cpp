@@ -666,6 +666,14 @@ const GameModeOutputInterface* OutputBuffer::GetGameModeOutputInterface() const
     return reinterpret_cast<const GameModeOutputInterface*>(&mGameModeOutputInterfaceStorage);
 }
 
+// The write-lock twin: ModeManager::PreWorldUpdate @0x823537B8 stores the four words at
+// `outputBuffer + 176344` under GameStateModule::PreWorldUpdate's write lock (@0x823A5328).
+GameModeOutputInterface* OutputBuffer::GetGameModeOutputInterface()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return reinterpret_cast<GameModeOutputInterface*>(&mGameModeOutputInterfaceStorage);
+}
+
 // =====================  OutputBuffer (OutputBuffer TU)  =====================
 
 // X360 0x8231D560 - write-lock accessor for the resource-request interface (this+0x3414).
