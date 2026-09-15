@@ -267,7 +267,22 @@ namespace GameStateModuleIO
     // pointer only, so incomplete declarations keep this widely-included header off that chain.
     struct ScoringOutputInterface;         // OutputBuffer +173240 (console span 2736)
     struct OnlineScoringOutputInterface;   // OutputBuffer +175976 (console span 164)
-    struct GameModeOutputInterface;        // OutputBuffer +176344 (console span 16; phase C3b)
+    // OutputBuffer +176344 (console span 16; phase C3b). COMPLETE as of the sound pass
+    // (2026-09-15): the layout is attested from BOTH ends -- the writer ModeManager::
+    // PreWorldUpdate @0x823537B8 (BrnModeManager_WorldTick.cpp: +0 previous type, +4 previous
+    // state, +8 current type, +12 current state or -1 with no mode) and the readers
+    // MusicEffect::GetMusicType @0x8269CE70 (+8/+12), CollisionStateManager (+8) and
+    // PhysicsControl (+12). BridgeGameStateToSound copies the 16 bytes verbatim into
+    // RootInputBuffer::mGameModeInterface (its own same-layout record). Four 4-byte enum words:
+    // EGameModeType / EGameModeState values stored as s32 so the record is 16 bytes by
+    // construction on the host.
+    struct GameModeOutputInterface
+    {
+        s32 miPreviousGameModeType;    // +0   EGameModeType
+        s32 miPreviousGameModeState;   // +4   EGameModeState
+        s32 miCurrentGameModeType;     // +8   EGameModeType
+        s32 miCurrentGameModeState;    // +12  EGameModeState, or -1 with no current mode
+    };
 
     // OutputBuffer +169068. The console's OutputBuffer::Construct runs
     // `VariableEventQueue<4096,16>::Construct(this + 169068)` on it and BridgeGameStateToWorld
@@ -640,6 +655,8 @@ namespace GameStateModuleIO
         OnlineScoringOutputInterface*          GetOnlineScoringOutputInterface();
         // INLINED on X360 (BridgeGameStateToSound @0x823CDE50 computes this+176344; phase C3b).
         const GameModeOutputInterface*         GetGameModeOutputInterface() const;
+        // The write-lock twin (the ModeManager publish; same idiom as the scoring accessors).
+        GameModeOutputInterface*               GetGameModeOutputInterface();
 
         // ---- OutputBuffer TU accessors ----
         // X360 0x8231D560 (write-lock; line 269) -- non-const twin of GetResourceRequestInterface()
