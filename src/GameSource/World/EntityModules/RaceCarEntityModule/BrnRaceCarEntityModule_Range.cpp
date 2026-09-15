@@ -63,6 +63,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // gpDebugPrint
 #include <cmath>                                                                          // std::fabs (the vandc sign-mask ABS at 0x822E9FFC)
+#include <cstdlib>                                                                        // [DIAG] getenv -- BRN_MM_DIAG only
 #include "rw/math/vpu/vector3_operation.h"                                               // Dot / Cross / Normalize / Magnitude / IsValid / GetVector3_*Axis
 
 namespace BrnWorld
@@ -549,6 +550,62 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
 {
     s32 liAttachedCars = 0;
+
+    // ---- [DIAG] NOT IN THE X360 BINARY -- the RIVAL CENSUS for issue #24, BRN_MM_DIAG=1 ------
+    // This function already runs at 1 Hz on the console (PreSceneUpdate's frame-count gate), so
+    // one line per call IS a one-second sample.  It is placed BEFORE every early-out and names
+    // which early-out fired, because "barely any enemies are here" has to be able to distinguish
+    // "the rivals were never spawned" from "the range loop never ran".
+    // DELETE-WHEN issue #24 is closed.
+    {
+        static const bool sbMarkedManDiag = (std::getenv("BRN_MM_DIAG") != 0);
+        if (sbMarkedManDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            s32 liInWorldAI = 0, liInMode = 0, liInRangeRival = 0, liOutOfRangeRival = 0,
+                liAllowedRR = 0;
+            for (s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal)
+            {
+                RaceCar* lpCar = GetGlobalRaceCar(static_cast<EGlobalRaceCarIndex>(liGlobal));
+                if (lpCar == 0 || !lpCar->IsInWorld() || !lpCar->IsAIDriven())
+                {
+                    continue;
+                }
+                ++liInWorldAI;
+                if (lpCar->IsInCurrentGameMode())   { ++liInMode; }
+                if (lpCar->IsInRangeRival())        { ++liInRangeRival; }
+                if (lpCar->IsOutOfRangeRival())     { ++liOutOfRangeRival; }
+                if (lpCar->IsAllowedInRoadRage())   { ++liAllowedRR; }
+            }
+            s32 liAttached = 0, liActive = 0;
+            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+            {
+                ActiveRaceCar* lpActive = GetActiveRaceCar(static_cast<EActiveRaceCarIndex>(liSlot));
+                if (lpActive == 0) { continue; }
+                if (lpActive->IsAttached()) { ++liAttached; }
+                if (lpActive->IsActive())   { ++liActive; }
+            }
+            const char* lpcEarlyOut = "none";
+            if (mbIsInOnlineGameMode)                                        { lpcEarlyOut = "online"; }
+            else if (!mbModeStartedPlaying && mbIsInGameMode)                 { lpcEarlyOut = "mode-not-playing"; }
+            else if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID) { lpcEarlyOut = "no-player-slot"; }
+            *CgsDev::Log::gpDebugPrint
+                << "[mm-rival] mode " << static_cast<s32>(meGameModeType)
+                << " inGameMode " << static_cast<s32>(mbIsInGameMode ? 1 : 0)
+                << " started " << static_cast<s32>(mbModeStartedPlaying ? 1 : 0)
+                << " aiInWorld " << liInWorldAI
+                << " inMode " << liInMode
+                << " inRange " << liInRangeRival
+                << " outOfRange " << liOutOfRangeRival
+                << " allowedRR " << liAllowedRR
+                << " attached " << liAttached
+                << " active " << liActive
+                << " wrapFlag " << static_cast<s32>(GetGameModeFlag(
+                       BrnGameState::GameModeParams::KU_FLAG_WRAP_AI_CARS_WHEN_OUT_OF_RANGE) ? 1 : 0)
+                << " earlyOut " << lpcEarlyOut
+                << "\n";
+        }
+    }
+    // ---- end [DIAG] --------------------------------------------------------------------------
 
     if (mbIsInOnlineGameMode)                                       // +0x18345
     {
