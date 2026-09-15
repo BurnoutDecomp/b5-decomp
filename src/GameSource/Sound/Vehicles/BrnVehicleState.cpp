@@ -91,13 +91,22 @@ void VehicleState::Attach(void* apvAttachment)
     CgsSound::Logic::State::Attach(apvAttachment);
 }
 
+// VehicleState::IsAttachedToThis  @ 0x82683D38  (state vtable +0x20; an export-set
+// hole, read with ppcdis):
+//     lwz  r10, 0x428(r3)     ; this + 96 + 968  == mVehiclePhysicsData.mEntityId
+//     lwz  r11, 0x3C8(r4)     ; apv + 968        == ((RaceCarState*)apv)->mEntityId
+//     subf ; cntlzw ; rlwinm  -> (r10 == r11)
+// The attachment the managers probe with is the RaceCarState the entity module
+// publishes (AIVehicleStateManager::UpdateParams @0x826CA578 passes
+// GetRaceCarState(i) to GetStateObj), and the match is on the ENTITY ID copied into
+// the state's own physics snapshot -- not on the AttachInfo (whose pointer is a
+// caller-stack temporary once Attach returns). The previous body compared the
+// AttachInfo token/index, so GetStateObj could never find an attached AI state.
 bool VehicleState::IsAttachedToThis(void* apvAttachment)
 {
-    if (!IsAttached() || !apvAttachment)
-        return false;
-    const AttachInfo* lpInfo = static_cast<const AttachInfo*>(apvAttachment);
-    return lpInfo->mAttachToken == mAttachInfo.mAttachToken
-        && lpInfo->muVehicleIndex == mAttachInfo.muVehicleIndex;
+    const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+        static_cast<const BrnPhysics::Vehicle::RaceCarState*>(apvAttachment);
+    return mVehiclePhysicsData.mEntityId.muValue == lpRaceCarState->mEntityId.muValue;
 }
 
 void VehicleState::Clear()
