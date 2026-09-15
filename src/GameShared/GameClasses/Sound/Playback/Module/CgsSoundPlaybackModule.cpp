@@ -929,9 +929,28 @@ void Module::ProcessResourceReceiverQueue()
                 lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
                 CGS_ASSERT(lpTarget != 0, "lpResponse->GetUserData()");
                 ResourcePtrBinder::Bind(lpTarget, &lHandle);
-                CGS_ASSERT(lHandle.mpResourceMemory != 0 &&
-                           *static_cast<void* const*>(lHandle.mpResourceMemory) != 0,
-                           "lpResponse->GetHandle().GetResource()->GetMemoryResource()");
+                // [FLAG PC bring-up] A CONTENT ACQUIRE THAT FAILED BECAUSE ITS BUNDLE IS NOT IN
+                // THIS PORT must not halt the game. The console cannot reach this -- its asset
+                // set is complete -- but build/game/sound/aems has 7 of the retail 17 AEMS banks,
+                // so e.g. a Super car's Boost_Bank_Super acquire replies with a null resource.
+                // Assert::Manager::DoAssert freezes the process on a dialog until END; measured,
+                // the null handle itself is survivable (the run drives on for its full duration
+                // after dismissal), so this is a missing SOUND, not a defect in the game.
+                // The lpTarget assert above is untouched. DELETE-WHEN the bank set is ported.
+                if (lHandle.mpResourceMemory == 0 ||
+                    *static_cast<void* const*>(lHandle.mpResourceMemory) == 0)
+                {
+                    static bool sbSaidIt = false;
+                    if (!sbSaidIt && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        sbSaidIt = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] sound content acquire returned no resource "
+                               "(its bundle is not present in this port) -- continuing without "
+                               "that sound\n";
+                    }
+                    break;
+                }
                 break;
             }
             case 16:  // stream-open response

@@ -51,7 +51,7 @@ namespace CgsResource
         long  llFileSize = 0;
         char* lpcBundle  = ReadBundleFile(lpcFileName, &llFileSize);
         if (lpcBundle == 0)
-            return -1;
+            return KI_LOAD_FILE_MISSING;   // [FLAG PC bring-up] -- see the header
         if (llFileSize <= static_cast<long>(sizeof(BundleV2)))
         {
             free(lpcBundle);

@@ -135,7 +135,29 @@ namespace CgsResource
                 *CgsDev::Log::gpDebugPrint << "[stream] LoadBundle '" << lrRequest.macFileName
                                           << "' -> pool " << (s32)lrRequest.miPoolId
                                           << ": " << (s32)liLoaded << " resources\n";
-                if (liLoaded < 0)
+                if (liLoaded == BundleLoader::KI_LOAD_FILE_MISSING)
+                {
+                    // [FLAG PC bring-up] NOT A DEFECT IN THE GAME: this bundle was never
+                    // converted into build/game. Asserting here HALTS the process on a dialog
+                    // (Assert::Manager::DoAssert waits for END), which on a player's machine
+                    // turns a missing sound into a frozen game -- e.g. every car class whose
+                    // soundems\Boost_Bank_<class>.bundle is unported (7 of the retail 17
+                    // AEMS banks are in build/game; aems_native64_port.py needs the Xbox One
+                    // bank bodies and [inputs].xb1_root is unset here). The failure reply below
+                    // is unchanged, so the requester still runs its own error path.
+                    // DELETE-WHEN the asset set is complete.
+                    static bool sbSaidIt = false;
+                    if (!sbSaidIt && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        sbSaidIt = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[FLAG PC bring-up] bundle '" << lrRequest.macFileName
+                            << "' is not present in this port -- continuing without it "
+                               "(further missing bundles show only as a [stream] line)\n";
+                    }
+                    lResponse.meResult = Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY;
+                }
+                else if (liLoaded < 0)
                 {
                     // The request's OWN failure policy, finally consumed. Every producer in
                     // the tree fills mbAllowFailiure (from the GameData request's fail flag,
