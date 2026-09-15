@@ -2364,8 +2364,19 @@ EActiveRaceCarIndex RaceCarEntityModule::AttachActiveRaceCar(
     // clears the car-select flag on the console is the junkyard EXIT's own ResetPlayerCarAction --
     // the player is not *stuck* in the junkyard on the console, they drive out of it, and this
     // build's returning path could not because its entry never completed.
-    const bool lbInGameMode = mbIsInGameMode ||
-        ( lpRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER && !mbInCarSelectScreen );
+    // ⛔ [issue #13 wave 2026-09-15] THE STAND-IN IS RETIRED. This used to OR in
+    // `(player && !mbInCarSelectScreen)`, i.e. it told the player's ActiveRaceCar it was in a
+    // game mode whenever it was not on the car-select podium. UpdateEngineState @0x822A4FD0
+    // then took the force-RUNNING early-out on every free-burn frame, so the engine could never
+    // be OFF: the car left the junkyard already running, never idled itself off, and the pad
+    // ignition (hold the gas, 1.2 s crank) was unreachable -- b5-decomp issue #13 ("vehicle's
+    // ignition is always on"). The console copies the MODULE byte and nothing else (the
+    // `lbz this+99140 / stb car+0x777` pair this line transcribes), and in offline free burn
+    // that byte is FALSE (the four-fact proof at the head of this comment) -- which is exactly
+    // what makes the pad ignition the free-burn behaviour: engine OFF at the junkyard-exit
+    // attach, cranked by the throttle, idled off after 15 s. The returning-player defect the
+    // stand-in was covering for was fixed at its real site (the case-78 arm) on 2026-08-28.
+    const bool lbInGameMode = mbIsInGameMode;
     lpActiveRaceCar->SetInGameMode( lbInGameMode );            // this[99140] -> car+0x777
 
     // [DIAG] NOT IN THE X360 BINARY. The IGNITION-SEED rung: every input the two engine
