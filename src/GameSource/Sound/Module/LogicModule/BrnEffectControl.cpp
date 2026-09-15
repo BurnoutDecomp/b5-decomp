@@ -58,14 +58,52 @@ ResourceRegistrar& BrnEffectControl::GetResourceRegistrar()
     return lpModule->GetResourceRegistrar();
 }
 
+// ---------------------------------------------------------------------------
+// BrnEffectControl::Detach  @ 0x826EB8B0
+//
+//   if ( *(a1 + 45) )                       ; the outstanding-request byte
+//   {
+//     v2 = (*(*(a1 - 4) + 4))(a1 - 4);      ; IResourceRequester::GetResourceRegistrar
+//     ResourceRegistrar::RemoveRequests(v2, a1 - 4);
+//   }
+//   *(a1 + 45) = 0;
+//   *(a1 + 36) = 3;                         ; this+0x28  meDetachState = E_DETACH_STATE_FINISHED
+//   *(a1 + 32) = 0;                         ; this+0x24  meAttachState = E_ATTACH_STATE_NONE
+//   return 1;
+//
+// (a1 is the IResourceRequester sub-object -- note the `a1 - 4` -- so +36/+32 are this+0x28 /
+// this+0x24: the same two members the vector deleting destructor @0x826AEF68 stores 3 and 0
+// into. The body is byte-for-byte the sibling BrnEffectObject::Detach @0x826EBF88, which this
+// tree already writes as "clear the request byte, then EffectBase::Detach()".)
+//
+// ⭐⭐⭐ THE ENGINE SOUND OF EVERY CAR BUT THE FIRST ONE (owner, 2026-09-15: "the Revenge Racer
+// stays at idle"; "the Cavalry is the ONLY car that has working engine sounds"). This body used
+// to end with
+//     meAttachState = E_ATTACH_STATE_FINISHED;   // and no meDetachState store
+// -- the console's FINISHED written into the ATTACH member instead of the DETACH one. It is a
+// DEAD state for re-attachment: State::AttachEffect @CgsState.cpp answers
+// E_ATTACH_STATE_FINISHED with a bare `break`, so it never calls Attach() again. Every sound
+// EffectControl therefore attached EXACTLY ONCE per session, while the EffectObjects around it
+// (whose Detach resets the pair correctly) re-attached on every car change.
+// HybridExhaustControl::Attach() is the only thing that re-resolves the player car's
+// `vehicleengine` collection -- FindCollectionWithDefault(0x7F161D94482CB3BF,
+// PhysicsControl::GetEngineComponentKey(component)) -- so from the second car of a session
+// onwards the whole engine graph kept the FIRST car's attributes: its GinsuFileAccel /
+// GinsuFileDecel / LoopModel recordings, its IdleRpm / MaxRpm mapping, its EQ and its decel
+// crossfade points. Measured with BRN_GINSU_DIAG (scratch/eng_audio/run7_BrnGame.log): after
+// swapping to the Revenge Racer, `[engine-attach] car=Revenge Racer engineName=CARRGT_EN` is
+// followed by `[ginsu-prep] CREATE_VOICES ... DragMustang2_en_acl.gin` -- the Hunter Cavalry's
+// engine, on the Revenge Racer.
+// ---------------------------------------------------------------------------
 bool BrnEffectControl::Detach()
 {
     if (mbResourceRequestActive)
         GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
     mbResourceRequestActive = false;
-    meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_FINISHED;
-    mfDeltaTime = 0.0f;
-    return true;
+    // meDetachState = E_DETACH_STATE_FINISHED; meAttachState = E_ATTACH_STATE_NONE --
+    // the console's two stores, which is exactly what the shared base does. Same expression
+    // as the sibling BrnEffectObject::Detach, whose X360 body is identical.
+    return CgsSound::Logic::EffectBase::Detach();
 }
 
 // ---------------------------------------------------------------------------

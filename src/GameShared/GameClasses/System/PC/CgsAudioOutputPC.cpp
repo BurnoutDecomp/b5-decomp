@@ -127,6 +127,110 @@ void CaptureWrite(const s16* lpBuf, int liValues)
     }
 }
 
+// [DIAG] NOT IN THE X360 BINARY -- the ENGINE-ONLY oracle.
+// The existing BRN_AUDIO_CAPTURE writes the FINAL mix, in which EA Trax and the UI
+// (the primary fill) sit on top of the engine; a quiet or dead engine is invisible in
+// it. These two knobs measure the engine fill buffer BY ITSELF:
+//   BRN_ENGINE_MIX_DIAG=1           one line per ~0.5 s: rms/peak of the engine frame.
+//   BRN_AUDIO_CAPTURE_ENGINE=<wav>  that same buffer as its own 16-bit PCM WAV.
+FILE* g_engCapture      = nullptr;
+bool  g_engCaptureTried = false;
+u32   g_engCaptureBytes = 0u;
+int   g_engMixDiag      = -1;   // -1 = unread, 0 = off, 1 = on
+
+void EngineCapturePatchHeader()
+{
+    const u32 luData = g_engCaptureBytes;
+    const u32 luRiff = 36u + luData;
+    const long liPos = std::ftell(g_engCapture);
+    std::fseek(g_engCapture, 4, SEEK_SET);  std::fwrite(&luRiff, 4, 1, g_engCapture);
+    std::fseek(g_engCapture, 40, SEEK_SET); std::fwrite(&luData, 4, 1, g_engCapture);
+    std::fseek(g_engCapture, liPos, SEEK_SET);
+    std::fflush(g_engCapture);
+}
+
+void EngineCaptureFinish()
+{
+    if (!g_engCapture)
+        return;
+    EngineCapturePatchHeader();
+    std::fclose(g_engCapture);
+    g_engCapture = nullptr;
+}
+
+// Called with the engine fill's own buffer, before it is mixed into the outgoing frame.
+void EngineMeasure(const s16* lpBuf, int liValues)
+{
+    if (g_engMixDiag < 0)
+    {
+        const char* lpcDiag = std::getenv("BRN_ENGINE_MIX_DIAG");
+        g_engMixDiag = (lpcDiag && *lpcDiag && *lpcDiag != '0') ? 1 : 0;
+    }
+
+    if (!g_engCaptureTried)
+    {
+        g_engCaptureTried = true;
+        const char* lpcPath = std::getenv("BRN_AUDIO_CAPTURE_ENGINE");
+        if (lpcPath && *lpcPath)
+        {
+            g_engCapture = std::fopen(lpcPath, "wb");
+            if (g_engCapture)
+            {
+                const int liRate  = (g_openRate > 0) ? g_openRate : 48000;
+                const u32 luZero = 0u, luFmtLen = 16u;
+                const u16 luFmt = 1u, luCh = static_cast<u16>(g_channels), luBits = 16u;
+                const u32 luRate = static_cast<u32>(liRate);
+                const u16 luAlign = static_cast<u16>(g_channels * 2);
+                const u32 luByteRate = luRate * luAlign;
+                std::fwrite("RIFF", 1, 4, g_engCapture); std::fwrite(&luZero, 4, 1, g_engCapture);
+                std::fwrite("WAVE", 1, 4, g_engCapture);
+                std::fwrite("fmt ", 1, 4, g_engCapture); std::fwrite(&luFmtLen, 4, 1, g_engCapture);
+                std::fwrite(&luFmt, 2, 1, g_engCapture);  std::fwrite(&luCh, 2, 1, g_engCapture);
+                std::fwrite(&luRate, 4, 1, g_engCapture); std::fwrite(&luByteRate, 4, 1, g_engCapture);
+                std::fwrite(&luAlign, 2, 1, g_engCapture); std::fwrite(&luBits, 2, 1, g_engCapture);
+                std::fwrite("data", 1, 4, g_engCapture); std::fwrite(&luZero, 4, 1, g_engCapture);
+                std::atexit(&EngineCaptureFinish);
+                AUDIO_LOG << "[engine-mix] capture -> " << lpcPath << "\n";
+            }
+        }
+    }
+
+    if (g_engCapture)
+    {
+        std::fwrite(lpBuf, sizeof(s16), static_cast<size_t>(liValues), g_engCapture);
+        g_engCaptureBytes += static_cast<u32>(liValues * sizeof(s16));
+        static u32 suEngPackets = 0u;
+        if ((++suEngPackets & 31u) == 0u)
+            EngineCapturePatchHeader();
+    }
+
+    if (g_engMixDiag != 1)
+        return;
+
+    // ~0.5 s of 256-frame packets at 48 kHz == 94; round to 96 so the line rate is steady.
+    static double sdSumSq   = 0.0;
+    static int    siPeak    = 0;
+    static u32    suPackets = 0u;
+    static u32    suLines   = 0u;
+    for (int li = 0; li < liValues; ++li)
+    {
+        const int liV = lpBuf[li] < 0 ? -lpBuf[li] : lpBuf[li];
+        if (liV > siPeak) siPeak = liV;
+        sdSumSq += double(lpBuf[li]) * double(lpBuf[li]);
+    }
+    if (++suPackets >= 96u)
+    {
+        const f32 lfRms = static_cast<f32>(
+            std::sqrt(sdSumSq / (double(suPackets) * double(liValues))));
+        AUDIO_LOG << "[engine-mix] line=" << static_cast<s32>(suLines++)
+                  << " rms=" << lfRms << " peak=" << static_cast<s32>(siPeak)
+                  << " (0 == the engine fill produced SILENCE for ~0.5 s)\n";
+        sdSumSq   = 0.0;
+        siPeak    = 0;
+        suPackets = 0u;
+    }
+}
+
 // Saturating add of one already-filled mix source into the outgoing buffer.
 void MixInto(s16* lpDst, const s16* lpSrc, int liValues)
 {
@@ -151,6 +255,7 @@ void SubmitBuffer(int liIndex)
     if (g_engineFill)
     {
         g_engineFill(g_engineBuf, kFrames, g_engineUser);
+        EngineMeasure(g_engineBuf, liValues);   // [DIAG] BRN_ENGINE_MIX_DIAG / _CAPTURE_ENGINE
         MixInto(lpBuf, g_engineBuf, liValues);
     }
     CaptureWrite(lpBuf, liValues);   // [DIAG] BRN_AUDIO_CAPTURE

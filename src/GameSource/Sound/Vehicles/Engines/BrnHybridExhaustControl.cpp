@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
+#include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnEngineControl.h"
@@ -163,6 +164,27 @@ bool HybridExhaustControl::Attach()
         0x7F161D94482CB3BFull, luCollectionKey);
     mVehicleEngineAttributes.Change(lpCollection);
     mMasterVehicleEngineComponentAttributes.Change(lpCollection);
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_GINSU_DIAG=1.
+    {
+        static int siDiag = -1;
+        if (siDiag < 0)
+        {
+            const char* lpcEnv = std::getenv("BRN_GINSU_DIAG");
+            siDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
+        }
+        if (siDiag == 1 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[engine-attrib] control Attach component="
+                << (leComponent == BrnSound::Vehicles::VehicleState::E_ENGINE ? "ENGINE" : "EXHAUST")
+                << " key=" << CgsDev::E_PRINTMODE_HEXONCE << luCollectionKey
+                << " collection=" << (lpCollection != 0 ? "found" : "NULL")
+                << " accel=" << (mVehicleEngineAttributes.GinsuFileAccel()
+                                     ? mVehicleEngineAttributes.GinsuFileAccel() : "<null>")
+                << "\n";
+        }
+    }
+
 
     CGS_ASSERT(mVehicleEngineAttributes.LoopModel() != nullptr,
                "mVehicleEngineAttributes.LoopModel()");

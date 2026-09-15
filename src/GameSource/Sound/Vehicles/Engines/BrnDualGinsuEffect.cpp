@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnDualGinsuEffect.h"
+#include <cstdlib>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnHybridExhaustControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
@@ -415,6 +416,18 @@ void DualGinsuEffect::SetupLoadData()
               BrnSound::Logic::ResourceRegistrar::E_DATA);
 }
 
+// [DIAG] NOT IN THE X360 BINARY -- one env read for the prepare narration below.
+static bool GinsuPrepDiag()
+{
+    static int siDiag = -1;
+    if (siDiag < 0)
+    {
+        const char* lpcEnv = std::getenv("BRN_GINSU_DIAG");
+        siDiag = (lpcEnv && *lpcEnv && *lpcEnv != '0') ? 1 : 0;
+    }
+    return siDiag == 1;
+}
+
 bool DualGinsuEffect::Attach()
 {
     CgsSound::Logic::Module* lpModule = GetLogicModule();
@@ -532,6 +545,17 @@ bool DualGinsuEffect::Attach()
         lParams.mSendName = guSend01Name;
         lParams.mSubMixVoiceID = mSubmixIdent;
         lParams.miSendIndex = 0;
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_GINSU_DIAG=1.
+        if (GinsuPrepDiag() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ginsu-prep] CREATE_VOICES stateId=" << GetStateId()
+                << " accel=" << (lrAttribs.GinsuFileAccel() ? lrAttribs.GinsuFileAccel() : "<null>")
+                << " decel=" << (lrAttribs.GinsuFileDecel() ? lrAttribs.GinsuFileDecel() : "<null>")
+                << " loopModel=" << (lrAttribs.LoopModel() ? lrAttribs.LoopModel() : "<null>")
+                << " partials=" << static_cast<s32>(miNumberOfLoops) << "\n";
+        }
+
         lParams.mContentSpecName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash(lrAttribs.GinsuFileAccel()));
         mAccelGinsuVoice.Create(lParams);
@@ -551,7 +575,23 @@ bool DualGinsuEffect::Attach()
         {
             if (!mapLoopContentSpecs[liPartial] ||
                 !mapLoopContentSpecs[liPartial]->IsLoaded())
+            {
+                // [DIAG] NOT IN THE X360 BINARY -- BRN_GINSU_DIAG=1: a partial that never
+                // loads parks the whole engine effect here for ever (no Ginsu note at all).
+                if (GinsuPrepDiag() && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    static u32 suWait = 0u;
+                    if ((suWait++ % 200u) == 0u)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[ginsu-prep] WAITING stateId=" << GetStateId()
+                            << " partial=" << static_cast<s32>(liPartial)
+                            << " spec=" << (mapLoopContentSpecs[liPartial] ? "ok" : "NULL")
+                            << " waits=" << static_cast<s32>(suWait) << "\n";
+                    }
+                }
                 return false;
+            }
         }
         mDecelGinsuVoice.Update();
         mAccelGinsuVoice.Update();
@@ -563,6 +603,11 @@ bool DualGinsuEffect::Attach()
 
         for (s32 liVoice = 0; liVoice < KI_LOOP_VOICE_COUNT; ++liVoice)
             mLoopModelVoice[liVoice].Connect(guSend01Name, mSubmixIdent);
+        if (GinsuPrepDiag() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[ginsu-prep] FINISHED stateId=" << GetStateId() << "\n";
+        }
         meDualGinsuPrepareState = E_GINSU_PREPARE_STATE_FINISHED;
         return true;
 
@@ -825,6 +870,11 @@ bool DualGinsuEffect::Detach()
     mDecGinsuResource.Clear();
     mAttribs.Clear();
     miNumberOfLoops = 0;
+    if (GinsuPrepDiag() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[ginsu-prep] DETACH stateId=" << GetStateId() << "\n";
+    }
     meDualGinsuPrepareState = E_GINSU_PREPARE_STATE_NONE;
     return BrnSound::Logic::BrnEffectObject::Detach();
 }
