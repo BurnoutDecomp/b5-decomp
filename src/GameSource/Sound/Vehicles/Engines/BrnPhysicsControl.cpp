@@ -593,6 +593,18 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     if (lpDMix)
         lpDMix->SetDMixInput(7, 0x7FFF);
 
+    // Slot 6 below needs the director camera and the current game-mode STATE; the
+    // console re-fetches both through mpLogicModule->GetBrnInputStructure() at
+    // 0x826CBEE0 / 0x826CBF8C (and asserts each), so they are read once here.
+    BrnSound::Module::Io::LogicInputBuffer* lpBrnInput =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+            ->GetBrnInputStructure();
+    CGS_ASSERT(lpBrnInput != nullptr, "mpBrnLogicInputBuffer");
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
+        lpGameModeInterface = lpBrnInput->GetGameModeInterface();
+    CGS_ASSERT(lpGameModeInterface != nullptr, "lpGameModeInterface");
+    const s32 liModeState = lpGameModeInterface->miCurrentGameModeState;
+
     // 0x826CBD20/0x826CBD70/0x826CBDB4/0x826CBDFC -- four speed ramps off
     // mSpeedMPH, each `clamp(v, 0, LIMIT) * (1/LIMIT) * 32767.0`. The clamp is
     // the two-fsel idiom (`fsel(-v, 0, v)` = max(v,0); `fsel(L-v, v, L)` =
@@ -620,15 +632,74 @@ void PhysicsControl::UpdateParams(f32 afTimeStep)
     // 0x826CBE84  lbz r11,0x44C(rawdata) -> 0x7FFF / 0
     SetMixerInputValue(8, lrRaw.mbIsDriveable ? 0x7FFF : 0);
 
-    // OPEN (not landed here): slot 6, ARTIST 0x826CBEA8..0x826CC04C -- the
-    // director-camera engine gain. It needs two reads this tree cannot yet make
-    // BY NAME: the camera's +0x140 flag word bits 3 and 4 (both set => 0x7FFF),
-    // and the GameModeOutputInterface's +0xC mode word (0 or 1 => 0). Its third
-    // branch is clamp((1 - dot3(mTransform.zAxis, camera.mTransform.zAxis)) *
-    // 0.5, 0, 1) * 32767, latched into PhysicsData+0x1D0. Landing it needs the
-    // GameModeOutputInterface typed (it is u8[0x10] opaque in
-    // BrnRootSoundModuleIo.h today), so it is left unwritten rather than
-    // approximated.
+    // 0x826CBEA8..0x826CC04C -- slot 6, the DIRECTOR-CAMERA engine gain, the last of
+    // the nine and the one left unwritten by the first pass of this work:
+    //     cam = RootInputBuffer::GetDirectorCamera(mpLogicModule->GetBrnInputStructure())
+    //     ld     r10, 0x140(cam)
+    //     rlwinm r11, r10, 0,27,27      ; the 0x10 bit of the flag word
+    //     rlwinm r11, r10, 0,28,28      ; the 0x08 bit
+    //     if (both set) { mfRotation = 1.0 ; value = 0x7FFF }          0x826CBF2C
+    //     else {
+    //         mode = GetGameModeInterface(brnInput)->miCurrentGameModeState
+    //         if (mode == 1 || mode == 0) { mfRotation = 0.0 ; value = 0 }  0x826CC030
+    //         else {
+    //             lvx128 v13, cam + 0x20        ; the camera's mTransform.zAxis
+    //             lvx128 v0,  r31 + 0x19C       ; PhysicsData + 0x160 == the CAR's
+    //                                           ; mTransform.GetCurrent().zAxis
+    //             vmsum3fp128 v0, v0, v13       ; dot3
+    //             f13 = (1.0 - dot) * flt_82001DA0 (0.5)
+    //             fsel(-u, 0, u) then fsel(1 - u, u, 1)   ; max then min -- clamp01
+    //             mfRotation = u ; value = u * 32767
+    //         }
+    //     }
+    //     SetMixerInputValue(6, value)
+    // So the gain rises as the camera comes round to face the car head-on (dot -> -1)
+    // and falls to nothing when it looks the same way the car points (dot -> +1), and
+    // the countdown/intro states mute it outright.
+    //
+    // ⚠️ PhysicsData's +0x1D0 is spelt mfRotation in this header, but this is its ONLY
+    // writer and what it latches is the camera gain, not a rotation. The name is left
+    // alone (renaming a DWARF-ordered member is a separate change); the role is here.
+    //
+    // FLAG on the flag word: the console's `ld` is a 64-bit load at cam + 0x140 and the
+    // two rlwinm masks test the LOW 32 bits of that register, i.e. the bytes at
+    // cam + 0x144 on the big-endian console. Camera.h models that same current-flag set
+    // as the single s32 `mState_uFlags` (its banner: "the low 32 bits of the
+    // camera-state current-flag set (CameraState +0x08 == camera +0x140)"), which is
+    // the word ICECamera's `mCamera.mState_uFlags |= 2` and Camera::IsInJunkyard's
+    // `+0x140 & 0x400000` already use. This reads the same alias those do. The MEANING
+    // of bits 0x10 and 0x08 is not recovered -- no site in the export set names them --
+    // so they are tested numerically, exactly as IsInJunkyard tests 0x400000.
+    {
+        const BrnDirector::Camera::Camera* lpCamera = lpBrnInput->GetDirectorCamera();
+        CGS_ASSERT(lpCamera != nullptr, "lpDirectorCamera");
+        const s32 liCameraFlags = lpCamera->mState_uFlags;
+        s32 liCameraGain = 0;
+        if ((liCameraFlags & 0x10) != 0 && (liCameraFlags & 0x8) != 0)
+        {
+            lrData.mfRotation = 1.0f;
+            liCameraGain = 0x7FFF;
+        }
+        else if (liModeState == 1 || liModeState == 0)
+        {
+            lrData.mfRotation = 0.0f;
+            liCameraGain = 0;
+        }
+        else
+        {
+            const Vector3& lrCarForward = lrData.mTransform.GetCurrent().At();
+            const Vector3& lrCameraForward = lpCamera->GetTransform().At();
+            const f32 lfDot = lrCarForward.x * lrCameraForward.x
+                            + lrCarForward.y * lrCameraForward.y
+                            + lrCarForward.z * lrCameraForward.z;
+            const f32 lfRaw = (1.0f - lfDot) * 0.5f;
+            const f32 lfLow = (-lfRaw >= 0.0f) ? 0.0f : lfRaw;           // fsel(-u, 0, u)
+            const f32 lfUnit = ((1.0f - lfLow) >= 0.0f) ? lfLow : 1.0f;  // fsel(1-u, u, 1)
+            lrData.mfRotation = lfUnit;
+            liCameraGain = static_cast<s32>(lfUnit * 32767.0f);
+        }
+        SetMixerInputValue(6, liCameraGain);
+    }
 
     // 0x826CC050..0x826CC064 -- the three primary-vtable per-frame hooks, in order.
     // Slot +12 is the bare `blr` that is folded-empty in both vtables (see the header),
@@ -659,8 +730,21 @@ void PhysicsControl::EngineParamWitness(f32 afTimeStep)
     const BrnSound::Vehicles::VehicleData& lrRaw = *mpVehiclePhysicsData;
     const PhysicsData& lrData = mProcessedPhysicsData;
 
+    // The game-mode STATE and the intro-reving state are what gate the start-line rev
+    // machine and DMix slot 6, so the witness carries both: "modeState=0 reving=1" is
+    // the car sitting on the grid, "modeState=2 reving=0" is the live engine.
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameMode =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())
+            ->GetBrnInputStructure()->GetGameModeInterface();
+
     *CgsDev::Log::gpDebugPrint
         << "[engine-param] state=" << GetStateId()
+        << " modeType=" << (lpGameMode ? lpGameMode->miCurrentGameModeType : -99)
+        << " modeState=" << (lpGameMode ? lpGameMode->miCurrentGameModeState : -99)
+        << " reving=" << static_cast<s32>(meIntroRevingState)
+        << " yaw=" << lrData.mYaw.GetCurrent()
+        << " accelMag=" << lrData.mAccelerationMagnitude.GetCurrent()
+        << " osc=" << mfOscillator.GetCurrent()
         << " rpm=" << lrRaw.mfRPM
         << " unity=" << lrData.mUnityRpm.GetCurrent()
         << " norm=" << lrData.mNormalizedRpm.GetCurrent()
