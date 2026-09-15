@@ -85,6 +85,14 @@
 #include <cmath>    // sqrtf / tanf ([FLAG PC bring-up] the dispatch producer's camera) + std::sqrt (vehicle LODs)
 #include <cstddef>  // offsetof (the VehicleRenderInfo layout pins)
 
+// includes folded in from the BrnWorldModule_w*.cpp partfiles (2026-09-15)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"    // InEventLineTestFine
+#include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"
+#include "GameSource/World/BrnWorldModuleIO.h"                                      // BrnWorldIO::UpdateOutputBuffer
+#include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"                       // BrnWorld::CrashIO::OutputBuffer_PostPhysics
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray
+#include "GameShared/GameClasses/Containers/CgsArray.h"                                   // Array<short,25> (the GUI record's byte image)
+
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
@@ -8037,3 +8045,448 @@ void WorldModule::HarnessArmAIDrivesPlayer()
     }
 }
 }
+
+// ============================================================================
+// FOLDED FROM BrnWorldModule_wG_Bridges_01.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===========================================================================
+// BrnWorldModule_wG_Bridges_01.cpp -- four WorldModule per-frame bridge seams:
+// each takes one module's output-buffer queue or interface and merges or latches
+// it into the next module's input buffer.
+//
+// Source getter first, then destination getter, then the merge -- both getters are
+// lock tripwires, so the order is observable. Null tripwires appear only where the
+// console body has one; two of the four have no compare at all.
+// FLAG: the console brackets two of these in a CPU perf monitor taken out of the
+// world-module context, which arrives here as an untyped pointer; the monitors are
+// not modelled, the standing disposition of every landed sibling in Bridges/.
+// ===========================================================================
+
+
+namespace WorldModule
+{
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeRaceCarModuleToTrafficModule_PrePhysics
+//
+// One latch: read the race car's pre-physics player-reset interface out of its own
+// output buffer (read-lock getter) and hand it to the traffic module's pre-physics
+// input buffer (write-lock setter, which copies it into its member seat).
+// No null tripwires: the console body has no compare and no assert, unlike its
+// three siblings.
+// ---------------------------------------------------------------------------
+void BridgeRaceCarModuleToTrafficModule_PrePhysics(
+    void* lpWorldModule,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics* lpTrafficInputBuffer_PrePhysics,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpRaceCarOutputBuffer_PrePhysics)
+{
+    (void)lpWorldModule;   // the world-module context: copied out of its register and never read
+
+    // Source getter (read-lock), then destination setter (write-lock) -- the console's order.
+    lpTrafficInputBuffer_PrePhysics->SetPlayerResetInterface(
+        lpRaceCarOutputBuffer_PrePhysics->GetPlayerResetInterface());
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeSceneQueryResultsToTriggerModule_PrePhysics
+//
+// The trigger module's half of the scene-query results fan-out: append the scene
+// manager's results ring into the trigger module's pre-physics scene-result queue.
+// Both are the same variable-event-queue instantiation, so the merge is the queue's
+// own Append. No null tripwires -- this body has no compare at all.
+// It is the inbound half of the round trip BridgeTriggerModuleToSceneModule_PostScene
+// below opens.
+// ---------------------------------------------------------------------------
+void BridgeSceneQueryResultsToTriggerModule_PrePhysics(
+    void* lpWorldModule,
+    BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics* lpTriggerInputBuffer_PrePhysics,
+    const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneQueryOutput)
+{
+    (void)lpWorldModule;
+
+    const CgsSceneManager::SceneManagerIO::OutputBuffer::SceneQueryResultsQueue* lpResults =
+        lpSceneQueryOutput->GetSceneQueryResultsQueue();
+
+    lpTriggerInputBuffer_PrePhysics->GetSceneResultQueue()->Append(*lpResults);
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeRaceCarEntityInfoToOutput_PrePhysics
+//
+// The race car's pre-physics game-event flush: append the race-car module's own
+// game-event queue into the world update-output buffer's game-event queue, which
+// the game-state module drains.
+// Both asserts are the console's and both are NON-gating -- it fires and falls
+// through into the transfer. The strings are verbatim ("lpOutputBuffer" carries no
+// "!= NULL" tail; not a typo).
+// The source queue DERIVES from the shared variable-event-queue instantiation while
+// the destination is a direct alias of it, so the source is bound to the base
+// reference explicitly rather than deduced through the derived type.
+// ---------------------------------------------------------------------------
+void BridgeRaceCarEntityInfoToOutput_PrePhysics(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpRaceCarOutput_PrePhysics)
+{
+    (void)lpWorldModule;   // read only for the perf-monitor handle, which is not modelled
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
+    CGS_ASSERT(lpRaceCarOutput_PrePhysics != 0, "lpRaceCarOutputBuffer_PrePhysics");
+
+    // Source getter (read-lock) first, destination getter (write-lock) second -- the
+    // console's order, and both are lock tripwires.
+    const CgsModule::VariableEventQueue<1536, 16>& lrSourceEvents =
+        *lpRaceCarOutput_PrePhysics->GetGameEventQueue();
+
+    lpOutputBuffer->GetGameEventQueue()->Append(lrSourceEvents);
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeTriggerModuleToSceneModule_PostScene
+//
+// The trigger module's post-scene query staging. The trigger module posts its
+// line queries into a VARIABLE event queue (heterogeneous, records tagged with a
+// type id); the scene manager wants them in its TYPED fine-line-test queue. So
+// this bridge cannot be a queue Append -- it walks the source record by record
+// and re-adds each one.
+//
+// The loop guard is the record POINTER, not the type id: a type id of 0 still
+// iterates, a null record ends the walk. Both asserts, and the "Invalid event type."
+// arm, are non-gating -- the walk continues either way.
+//
+// The record is reinterpreted rather than cast through a hierarchy: the variable
+// queue hands back a pointer into its own packed byte buffer and the scene-manager
+// query element is an unrelated type -- the sanctioned external-byte-stream case.
+// The literal 5 is the console's compare immediate, left a literal on purpose: it is
+// the record id the trigger producer stamps, and the scene manager's query-result
+// enumeration's 5 is a COUNT, so naming it after that would be invention.
+// ---------------------------------------------------------------------------
+void BridgeTriggerModuleToSceneModule_PostScene(
+    void* lpWorldModule,
+    CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneQueryInput,
+    const BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene* lpTriggerOutputBuffer_PostScene)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL");
+    CGS_ASSERT(lpTriggerOutputBuffer_PostScene != 0, "lpTriggerOutput_PostScene != NULL");
+
+    const BrnWorld::TriggerEntityModuleIO::SceneFineQueryQueue* lpTriggerQueries =
+        lpTriggerOutputBuffer_PostScene->GetSceneFineQueryQueue();
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+
+    s32 liType = lpTriggerQueries->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent != 0)
+    {
+        if (liType == 5)   // the trigger module's fine line-test record id
+        {
+            const CgsSceneManager::SceneManagerIO::InEventLineTestFine* lpQuery =
+                reinterpret_cast<const CgsSceneManager::SceneManagerIO::InEventLineTestFine*>(lpEvent);
+
+            lpSceneQueryInput->GetFineLineTestQueue()->AddEvent(*lpQuery);
+        }
+        else
+        {
+            // Non-gating on the console: it fires and then falls into the next step.
+            CGS_ASSERT(false, "Invalid event type.");
+        }
+
+        liType = lpTriggerQueries->GetNextEvent(lpEvent, &lpEvent, &liSize);
+    }
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnWorldModule_wG_Bridges_02.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===========================================================================
+// BrnWorldModule_wG_Bridges_02.cpp -- two WorldModule per-frame output bridges:
+// the traffic module's pre-scene score-target list posted as a GUI event, and the
+// crash module's post-physics network interface + game events merged into the
+// update output buffer.
+//
+// Source getter first, then destination getter, then the transfer -- the getters
+// are lock tripwires, so the order is observable. Neither console body carries a
+// null compare or an assert.
+// FLAG: the console brackets the traffic bridge in a CPU perf monitor taken out of
+// the world-module context, which arrives here as an untyped pointer; the monitor is
+// not modelled, the standing disposition of every landed sibling in Bridges/.
+// ===========================================================================
+
+
+namespace WorldModule
+{
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeTrafficEntityInfoToOutput_PreScene
+//
+// Copy the traffic module's score-target array out of its pre-scene output buffer
+// (a bare-displacement read on the console, no lock check) into a local, then post
+// the local as one GUI traffic-car-info event on the update output buffer's GUI event
+// queue (write-lock getter). The event carries no header: the payload IS the array,
+// and the console's byte count is the array's size (656).
+// The record id 208 is the console's immediate; the same event type in the
+// bare-array form the GUI cache reads its score targets from.
+// ---------------------------------------------------------------------------
+void BridgeTrafficEntityInfoToOutput_PreScene(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_PreScene* lpTrafficOutput_PreScene)
+{
+    (void)lpWorldModule;   // read only for the perf-monitor handle, which is not modelled
+
+    BrnTraffic::BrnTrafficIO::ScoringVehicleArray lScoreTargets =
+        *lpTrafficOutput_PreScene->GetPotentialScorees();
+
+    lpOutputBuffer->GetGuiEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lScoreTargets),
+        208,
+        static_cast<s32>(sizeof(lScoreTargets)));
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeCrashModuleToOutput
+//
+// Two transfers from the crash module's post-physics output buffer into the update
+// output buffer: latch the crash network output interface (the setter clears the
+// destination queue and appends the source's owned crashing-traffic updates), then
+// append the crash module's game-event queue into the world's.
+// ---------------------------------------------------------------------------
+void BridgeCrashModuleToOutput(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnWorld::CrashIO::OutputBuffer_PostPhysics* lpCrashOutput_PostPhysics)
+{
+    (void)lpWorldModule;   // copied out of its register and never read
+
+    // Source getter (read-lock) first, destination setter (write-lock) second.
+    const BrnWorld::CrashIO::NetworkOutputInterface* lpNetworkOutput =
+        lpCrashOutput_PostPhysics->GetNetworkOutputInterface();
+    lpOutputBuffer->SetCrashNetworkOutputInterface(lpNetworkOutput);
+
+    // Same order for the queue leg: source getter, then destination getter, then Append.
+    const BrnWorld::CrashIO::OutputBuffer_PostPhysics::GameEventQueue* lpSourceEvents =
+        lpCrashOutput_PostPhysics->GetGameEventQueue();
+    lpOutputBuffer->GetGameEventQueue()->Append(*lpSourceEvents);
+}
+
+}
+
+// ============================================================================
+// FOLDED FROM BrnWorldModule_wG_Bridges_03.cpp (wave G) on 2026-09-15 by tools/work/fold_partfiles.py.
+// The partfile's own header follows verbatim (its address annotations are the
+// evidence trail); its bodies come after it.
+// ============================================================================
+// ===========================================================================
+// BrnWorldModule_wG_Bridges_03.cpp -- four WorldModule per-frame bridge seams: two
+// that stage a module's own query queues into the scene manager's query input buffer,
+// one that fans the scene manager's results back out to the traffic module's two
+// pre-physics input buffers, and one that posts the traffic module's removed-car list
+// to the GUI as a single update-output event.
+//
+// Source getter first, then destination getter, then the merge -- both getters are
+// lock tripwires, so the order is observable. Null tripwires appear only where the
+// console body has one.
+// FLAG: the console brackets these in CPU perf monitors taken out of the world-module
+// context, which arrives here as an untyped pointer; the monitors are not modelled,
+// the standing disposition of every landed sibling in Bridges/.
+// ===========================================================================
+
+
+namespace WorldModule
+{
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeRaceCarModuleToSceneModule_PostScene
+//
+// Two merges, in the console's order: the race car's coarse query queue into the
+// scene query input buffer's coarse queue, then its fine line-test queue into the
+// matching typed fine queue. Each leg is source getter (read-lock) then destination
+// getter (write-lock) then the queue's own Append -- the coarse pair are the same
+// variable-event-queue instantiation, the fine pair the same typed event queue.
+//
+// Both null tripwires are the console's and both are NON-gating: it fires and falls
+// through into the transfer.
+//
+// The coarse source DERIVES from the shared variable-event-queue instantiation
+// (InCoarseQueryQueue<16384> adds only enqueue helpers), so it is bound to the base
+// reference explicitly rather than deduced through the derived type -- the same
+// binding the landed BridgeRaceCarEntityInfoToOutput_PrePhysics needs.
+// ---------------------------------------------------------------------------
+void BridgeRaceCarModuleToSceneModule_PostScene(
+    void* lpWorldModule,
+    CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneQueryInput,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene* lpRaceCarOutputBuffer_PostScene)
+{
+    (void)lpWorldModule;   // the world-module context: copied out of its register and never read
+
+    CGS_ASSERT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL");                    // :123
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene != NULL"); // :124
+
+    const CgsModule::VariableEventQueue<16384, 16>& lrCoarseSource =
+        *lpRaceCarOutputBuffer_PostScene->GetSceneCoarseQueryQueue();
+    lpSceneQueryInput->GetCoarseQueryQueue()->Append(lrCoarseSource);
+
+    lpSceneQueryInput->GetFineLineTestQueue()->Append(
+        *lpRaceCarOutputBuffer_PostScene->GetSceneFineLineTestQueue());
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeTrafficModuleToSceneModule_PostScene
+//
+// The traffic module's half of the same staging, coarse queue only: its post-scene
+// output buffer carries no fine line-test queue, so there is one merge and one
+// tripwire. The console asserts the DESTINATION only -- there is no compare on the
+// traffic output buffer at all, and the assert that is there is non-gating.
+// ---------------------------------------------------------------------------
+void BridgeTrafficModuleToSceneModule_PostScene(
+    void* lpWorldModule,
+    CgsSceneManager::SceneManagerIO::InputBuffer_Query* lpSceneQueryInput,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_PostScene* lpTrafficOutputBuffer_PostScene)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL");   // :144
+
+    const CgsModule::VariableEventQueue<16384, 16>& lrCoarseSource =
+        *lpTrafficOutputBuffer_PostScene->GetSceneCoarseQueryQueue();
+
+    lpSceneQueryInput->GetCoarseQueryQueue()->Append(lrCoarseSource);
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeSceneQueryResultsToTrafficModule_PrePhysics
+//
+// The traffic module's half of the scene-query results fan-out, and the only one of
+// the family with TWO destinations: the SAME results ring is appended onto the
+// traffic module's pre-physics scene-result queue and onto its post-physics one.
+// Both are the same variable-event-queue instantiation as the source, so each merge
+// is the queue's own Append. The source getter runs again for the second leg -- it is
+// a read-lock tripwire, so the repeat is observable and kept.
+//
+// Only the SOURCE has a null tripwire on the console (and it is non-gating); neither
+// destination is compared.
+//
+// ⚠️ MEASURED, and left as it stands: the console reaches its second argument's
+// scene-result queue at +166960 and its third argument's through the other buffer's
+// accessor, i.e. the two traffic input buffers arrive in the opposite order to the
+// spelling this declaration has carried since it was first declared. Because BOTH
+// destinations receive an Append of the SAME source ring, the two orders are
+// byte-identical in effect, so the parameter names are left alone rather than
+// churning the call site in BrnWorldModule.cpp for a no-op.
+// ---------------------------------------------------------------------------
+void BridgeSceneQueryResultsToTrafficModule_PrePhysics(
+    void* lpWorldModule,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics* lpTrafficInputBuffer_PostPhysics,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PrePhysics* lpTrafficInputBuffer_PrePhysics,
+    const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneQueryOutput)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpSceneQueryOutput != 0, "lpSceneModuleOutputBuffer != NULL");   // :119
+
+    lpTrafficInputBuffer_PostPhysics->GetSceneResultQueue()->Append(
+        *lpSceneQueryOutput->GetSceneQueryResultsQueue());
+
+    lpTrafficInputBuffer_PrePhysics->GetSceneResultQueue()->Append(
+        *lpSceneQueryOutput->GetSceneQueryResultsQueue());
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics
+//
+// The only bridge in this TU that BUILDS a record instead of merging a queue: it
+// walks the traffic module's remove-crashed-traffic request queue, pulls the 14-bit
+// entity index out of each request's volume-instance handle, and posts the whole
+// list to the GUI as one event on the world update-output buffer's GUI event queue.
+//
+// The whole body is gated on the pre-physics output buffer's showtime flag -- when it
+// is clear nothing is read and nothing is posted (this IS a gate, unlike the asserts).
+//
+// Both null tripwires are the console's and both are NON-gating; the strings are
+// verbatim ("lpOutputBuffer" carries no "!= NULL" tail, as on its pre-physics sibling).
+//
+// The record is an Array<short,25> by its own byte image: the console Clears the count
+// word, Appends one short per request through Array<short,25>::Append, and passes 56 --
+// sizeof(Array<short,25>) -- as the event size. The record id 209 is the console's
+// immediate, kept a literal exactly as its 208 sibling
+// (BridgeTrafficEntityInfoToOutput_PreScene) keeps its own.
+//
+// The loop re-reads the queue length each iteration, as the console does; the guard is
+// a separate ">0" test before the first pass (a do/while walk under an if).
+// ---------------------------------------------------------------------------
+void BridgeTrafficCarEntityInfoToOutput_PrePhysics(
+    void* lpWorldModule,
+    BrnWorldIO::UpdateOutputBuffer* lpOutputBuffer,
+    const BrnTraffic::BrnTrafficIO::OutputBuffer_PrePhysics* lpTrafficOutput_PrePhysics)
+{
+    (void)lpWorldModule;   // read only for the perf-monitor handle, which is not modelled
+
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");                              // :355
+    CGS_ASSERT(lpTrafficOutput_PrePhysics != 0, "lpTrafficOutput_PrePhysics");      // :356
+
+    if (!lpTrafficOutput_PrePhysics->GetPlayingShowtime())
+        return;
+
+    const BrnPhysics::Vehicle::VehicleInputInterface::RemoveTrafficEventQueue* lpRemoveRequests =
+        lpTrafficOutput_PrePhysics->GetVehicleInputInterface()->GetRemoveTrafficEvents();
+
+    Array<short, 25> lCrashedCars;
+    static_assert(sizeof(lCrashedCars) == 56,
+                  "the GUI record's byte image must match the console's baked event size");
+    lCrashedCars.Clear();
+
+    if (lpRemoveRequests->GetLength() > 0)
+    {
+        s32 liIndex = 0;
+        do
+        {
+            const short lsEntityIndex = static_cast<short>(
+                lpRemoveRequests->GetEvent(liIndex).mVolumeInstanceID.GetEntityIDEntityIndex());
+            lCrashedCars.Append(lsEntityIndex);
+            ++liIndex;
+        }
+        while (liIndex < lpRemoveRequests->GetLength());
+    }
+
+    lpOutputBuffer->GetGuiEventQueue()->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lCrashedCars),
+        209,
+        static_cast<s32>(sizeof(lCrashedCars)));
+}
+
+// ---------------------------------------------------------------------------
+// WorldModule::BridgeRaceCarModuleToTrafficModule_PostScene
+//
+// One publish: read the race car's post-scene race-car-to-traffic interface out of its
+// own output buffer (read-lock getter) and hand it to the traffic module's post-scene
+// input buffer (write-lock setter, which Clear+Appends the two rival queues onto its
+// member seat and copies the flag word and the showtime density scale).
+//
+// Both null tripwires are the console's and both are NON-gating; the strings are
+// verbatim (neither carries a "!= NULL" tail).
+// ---------------------------------------------------------------------------
+void BridgeRaceCarModuleToTrafficModule_PostScene(
+    void* lpWorldModule,
+    BrnTraffic::BrnTrafficIO::InputBuffer_PostScene* lpTrafficInputBuffer_PostScene,
+    const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PostScene* lpRaceCarOutputBuffer_PostScene)
+{
+    (void)lpWorldModule;
+
+    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0, "lpTrafficInputBuffer_PostScene");   // :61
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene"); // :62
+
+    // Source getter (read-lock) first, destination setter (write-lock) second -- the
+    // console's order, and both are lock tripwires.
+    lpTrafficInputBuffer_PostScene->SetRaceCarToTrafficInterface(
+        lpRaceCarOutputBuffer_PostScene->GetRaceCarToTrafficInterface());
+}
+
+}   // namespace WorldModule
