@@ -193,6 +193,24 @@ namespace BrnGui
         // in the DWARF and was a fabrication; do not reintroduce it.
         void ResetScroll() { mbResetScroll = true; }
 
+        // ADDITIVE GROW (BrnGui::CrashNavAccountManagement's TOS-scroll kernel, the
+        // event-26 arm of UpdatePermanent @0x824DE948): step the field's scroll by one
+        // line. The X360 inlines each to a single `stw <+/-1>, 0x90(field)` followed by
+        // OutputAptData. NO-ARG per the DecFIGS DWARF (BrnTextField.h:101/104/233/236
+        // `void ScrollDown(); void ScrollUp();`), which lists exactly these two names
+        // beside ResetScroll -- and miScroll is the only member either could touch.
+        //
+        // [FLAG] WHICH NAME CARRIES WHICH SIGN IS INFERRED, NOT ATTESTED. Both bodies are
+        // inlined at every call site, so neither has a ledger entry to read. The mapping
+        // below rests on one premise: the X360 left-stick Y axis is POSITIVE UP, so the
+        // account-management kernel -- which stores +1 when its integrated axis goes
+        // NEGATIVE past -0.2 and -1 when it goes positive past +0.2 -- is scrolling DOWN
+        // on a stick pushed down. If the input layer ever pins that axis sign the other
+        // way, swap these two bodies; nothing else changes, because the caller invokes
+        // them in the console's own order and the queued bytes are identical either way.
+        void ScrollDown() { miScroll = 1; }
+        void ScrollUp()   { miScroll = -1; }
+
     private:
         u32  muTextColour;          // +0x8C  (set by SetColour)
         s32  miScroll;              // +0x90

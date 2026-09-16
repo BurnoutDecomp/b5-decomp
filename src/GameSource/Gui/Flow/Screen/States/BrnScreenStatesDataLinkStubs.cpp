@@ -83,10 +83,9 @@ namespace BrnGui
         { { 151, CgsGui::E_GUI_RESOURCETYPE_APT }, { 94, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const u32 CarSelectOnlineEnd::muNumResourcesToLoad = 2;
 
-    // .rdata @0x82F26FDC / count @0x82F26FE4
-    const CgsGui::sResourceTuple CrashNavAccountManagement::maResourcesToLoad[] =
-        { { 142, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 CrashNavAccountManagement::muNumResourcesToLoad = 1;
+    // CrashNavAccountManagement's pair moved to its own TU (BrnCrashNavAccountManagement.cpp)
+    // when that screen landed. The values here were { 142, APT } / 1 -- byte-identical to
+    // the image read at 0x82F26FDC, so the two derivations corroborate each other.
 
     // .rdata @0x82F27008 / count @0x82F27018
     const CgsGui::sResourceTuple CrashNavColourCalibrate::maResourcesToLoad[] =
@@ -253,13 +252,26 @@ namespace BrnGui
     void CarSelectOnlineEnd::OnLeave() {}
     void CarSelectOnlineEnd::Update()  {}
 
-    // ---- CrashNavAccountManagement ----------------------------------------------------
-    void CrashNavAccountManagement::OnEnter() { LogUnreconstructedState("CrashNavAccountManagement", "OnEnter"); }
-    void CrashNavAccountManagement::OnLeave() {}
-    void CrashNavAccountManagement::Update()  {}
+    // ---- CrashNavAccountManagement: RECONSTRUCTED, no longer stubbed -------------------
+    // OnEnter/OnLeave/Update (and the other 13 ledger bodies) live in
+    // BrnCrashNavAccountManagement.cpp. This was the last header-only shell in the
+    // reachable crash-nav pause ring.
 
     // ---- CrashNavEnterOnline variants (Mod TU landed NoTitle only) --------------------
-    void CrashNavEnterOnlineFull::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineFull", "OnEnter"); }
+    // CrashNavEnterOnlineFull::OnEnter -> BrnCrashNavEnterOnlineMod.cpp (@0x824CB0A8).
+    //
+    // ⛔ CrashNavEnterOnlineX360::OnEnter STAYS STUBBED, AND NOT FOR WANT OF A BODY.
+    // X360/BrnCrashNavEnterOnlineX360.cpp has carried OnEnter @0x82487E68, OnLeave
+    // @0x82487EA0 and ShowSignInUI @0x82488010 for some time. Mounting it was tried
+    // on 2026-09-16 and the link fails with
+    //     LNK2019: unresolved external symbol XShowSigninUI
+    // because that TU calls the Xbox 360 XDK sign-in UI directly (XShowSigninUI /
+    // XNotifyCreateListener). Those entry points do not exist on Windows, so the TU
+    // cannot join this build until someone decides what the PC stand-in for a console
+    // sign-in IS -- a product decision, not a decompilation one. Inventing one here
+    // would be inventing an arm. (Mounting it also collides with the OnLeave /
+    // ShowSignInUI stubs in BrnScreenStatesLinkStubs.cpp, which would go at the same
+    // time.) This stub is the one link still in front of CN_ACCT_MAN.
     void CrashNavEnterOnlineX360::OnEnter() { LogUnreconstructedState("CrashNavEnterOnlineX360", "OnEnter"); }
 
     // ---- OnlineGameOptionsSummary ------------------------------------------------------
