@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"                // CgsSound::Io::Message<T>
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"         // Environment::GetDynamicMixer
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"           // [DIAG] BRN_DMIX_DIAG witness
 #include <cmath>                                                       // std::fabs (the inlined |delta|)
 
 // =============================================================================
@@ -406,6 +407,34 @@ void CameraControl::UpdateParams(f32 /*af32DeltaTime*/)
     }
     SetMixerInputValue(0, liExternalCamera);                        // 826F6690 / 826F66A8
     SetMixerInputValue(1, liInternalCamera);                        // 826F66B8
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). Says whether this control is
+    // actually ticking and what it is telling the mixer the player is looking through.
+    // Placed here because these two inputs are written on EVERY path, so the line is
+    // meaningful on every call, and it precedes the snapshot/FX work below.
+    // Rate limited: the first three calls, then every 600th.
+    if (CgsSound::Diag::DMixDiagEnabled())
+    {
+        static u32 suUpdates = 0;
+        ++suUpdates;
+        if (suUpdates <= 3 || (suUpdates % 600) == 0)
+        {
+            CgsSound::Diag::DMixDiagPrintf(
+                "[dmix] CameraControl::UpdateParams #%u mode=%d prev=%d ext=%d int=%d "
+                "racegameplay=%d crash=%d takedown=%d\n",
+                suUpdates,
+                static_cast<int>(mCameraMode.GetCurrent()),
+                static_cast<int>(mCameraMode.GetPrevious()),
+                static_cast<int>(liExternalCamera),
+                static_cast<int>(liInternalCamera),
+                static_cast<int>(lrCameraState.IsFlagSet(
+                    CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA)),
+                static_cast<int>(lrCameraState.IsFlagSet(
+                    CameraState::E_FLAG_CRASH_CAMERA)),
+                static_cast<int>(lrCameraState.IsFlagSet(
+                    CameraState::E_FLAG_TAKEDOWN_CAMERA)));
+        }
+    }
 
     // ---- the race-end effect level, rate-limited ------------------------------
     const BrnDirector::Camera::Camera* lpCamera = lpInputBuffer->GetDirectorCamera();  // 826F66C0

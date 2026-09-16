@@ -788,16 +788,37 @@ void SpeechEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
 
     case 0x26:   // 38 -- fade / stop whatever is playing
     {
+        // ⛔ CORRECTED 2026-09-16 -- the SAME invented arm that Detach @0x826F7F50
+        // carried, in the one place that is actually REACHABLE in normal play
+        // (Detach is only dispatched from State::UpdateParams' E_UPDATE_DETATCHING
+        // arm, and nothing in the tree ever detaches the GlobalState that owns this
+        // effect). The console @0x826E83AC:
+        //   826E83AC  lwz r11, 0x38(r31)     ; mePlayState
+        //   826E83B4  beq -> 0x826E88C4      ; the early break below
+        //   826E83B8  lwz r11, 0x28(r31)     ; mpLogicModule, read LIVE
+        //   826E83BC  lwz r29, 0x296C(r11)   ; GetEnvironment().GetStateManager(6)
+        //   826E83C0  cmplwi r29, 0 / bne -> 0x826E83E4
+        //   826E83C8..  BeginAssert/FireAssert (li r5, 0x2F5 == cpp:757) / EndAssert
+        //   826E83E4  addic. r10, r31, -4    ; the null-preserving (IStreamUser*)this
+        //   826E83FC  lfs f0, 0x10(r30)      ; lpMessage->mData, the fade time
+        //   826E841C  bl 0x826835D8          ; PostStreamRequest -- UNCONDITIONAL
+        // It reads the manager LIVE off the module rather than from the cached
+        // mpStreamingManager, and it does NOT guard the post.
         if (mePlayState == E_STOPPED)   // console `if (*(this+56))`
             break;
         const CgsSound::Io::Message<f32>* lpMessage =
             static_cast<const CgsSound::Io::Message<f32>*>(apMessage);
-        CGS_ASSERT(mpStreamingManager != 0, "lpStreamingStateMan");
-        if (mpStreamingManager)
-        {
-            mpStreamingManager->PostStreamRequest(
-                Streaming::StreamStopRequest(this, lpMessage->mData));
-        }
+
+        // 826E83B8 / 826E83BC -- live off the module, not the cached member.
+        Streaming::StreamingStateManager* lpStreamingStateMan =
+            static_cast<Streaming::StreamingStateManager*>(
+                static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+                    ->GetEnvironment().GetStateManager(6));
+        CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");   // 826E83C8.. (cpp:757)
+
+        // 826E83E4..826E841C -- unconditional.
+        lpStreamingStateMan->PostStreamRequest(
+            Streaming::StreamStopRequest(this, lpMessage->mData));
         break;
     }
 
