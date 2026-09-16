@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSubmixesEffect.h"
+#include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"   // [DIAG] BRN_DMIX_DIAG witness
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"   // CgsSound::Io::MessageHeader
 
 // =============================================================================
@@ -40,6 +41,18 @@ namespace Logic
 
 CgsSound::Logic::EffectObject* SubmixesEffect::CreateObject(u32)
 {
+    // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). Does the sound data ever ASK for
+    // effect type 0x40? Attach @0x826D2DA8 and ProcessUpdate @0x826D2E48 are the tail of
+    // the volume chain -- the mixer's outputs only reach a submix voice through them -- and
+    // neither is declared on this leaf yet, so today the base's do-nothing versions run.
+    // Writing them is only worth doing if an instance exists; this line answers that.
+    if (CgsSound::Diag::DMixDiagEnabled())
+    {
+        static u32 suCreated = 0;
+        CgsSound::Diag::DMixDiagPrintf(
+            "[dmix] SubmixesEffect::CreateObject #%u -- effect type 0x40 instantiated\n",
+            ++suCreated);
+    }
     return new SubmixesEffect();
 }
 
