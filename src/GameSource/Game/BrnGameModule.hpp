@@ -1105,6 +1105,18 @@ namespace BrnGame
         s32  miLanguageCycleTimerLo;     // @ +10095388 (whole seconds)
         f32  mfLanguageCycleTimerFrac;   // @ +10095392 (fractional seconds, added as float)
 
+        // THE LOOKBACK HOLD TIMER. X360 gm+0x9A12B0 (10097328), read AND WRITTEN every
+        // frame by BridgeControllerToDirector @0x823C0F70: while the lookback action is
+        // held (action 6 down, action 7 up) it counts down by the director timer's delta,
+        // and any frame it is NOT held it is reset to 0.1 (flt_82CDC074). ControllerInfo
+        // ::mbLookback is `timer <= 0`, i.e. the button must be held 0.1 s -- a debounce,
+        // not an instantaneous read.
+        // It has to PERSIST ACROSS FRAMES to mean anything; the bridge previously read it
+        // out of the pad record's mfAxis10 and never stored it back, so it was 0 on every
+        // frame and mbLookback was stuck TRUE for the whole session (measured: 23/23
+        // [cam-input] samples across a 120 s run, before and after every bumper press).
+        f32  mfLookbackHoldTimer;        // @ +10097328 (X360 gm+0x9A12B0)
+
         // [PC stand-in] The input module's per-frame OUTPUT buffer the controller bridges read.
         // On the X360 this comes off the module scheduler's IO stacks and is filled by the
         // input module's own pass (InputPads::Update -> binding tables); that pass is

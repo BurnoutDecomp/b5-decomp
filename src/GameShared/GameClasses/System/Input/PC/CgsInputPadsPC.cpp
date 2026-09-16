@@ -607,6 +607,7 @@ namespace
     const int KAI_KEYS_HANDBRAKE[]  = { 0xA2 /*VK_LCONTROL*/, 0 };
     const int KAI_KEYS_BOOST[]      = { 0xA0 /*VK_LSHIFT*/, 0 };
     const int KAI_KEYS_CHANGEVIEW[] = { 'C', 0 };
+    const int KAI_KEYS_LOOKBACK[]   = { 'V', 0 };
     const int KAI_KEYS_RESET[]      = { 'R', 0 };
     const int KAI_KEYS_START[]      = { 'P', 0 };
     const int KAI_KEYS_HORN[]       = { 'H', 0 };
@@ -661,6 +662,15 @@ namespace
         {  2, KAI_KEYS_HANDBRAKE  }, // HANDBRAKE   (LCtrl)  pad X
         {  3, KAI_KEYS_BOOST      }, // BOOST       (LShift) pad A
         {  5, KAI_KEYS_CHANGEVIEW }, // CHANGEVIEW  (C)      pad Y
+        // FLAG PC binding choice (keyboard only -- the console has no keyboard, so there is
+        // no table to recover for one). LOOKBACK had NO keyboard row at all, which meant
+        // two things: a keyboard player had no rear-view control, and -- because this loop
+        // only consults ConsumeHarnessAction for actions that HAVE a row here -- the
+        // harness's lookback channel could never be polled, so no run could exercise the
+        // rear-view camera end to end. 'V' is chosen next to CHANGEVIEW's 'C'. The PAD
+        // path is unaffected either way: KA_DEFAULT_GAME_INPUT_MAPPING row 12 already
+        // emits action 6 from L1.
+        {  6, KAI_KEYS_LOOKBACK   }, // LOOKBACK    (V)      pad L1
         {  7, KAI_KEYS_RESET      }, // RESET       (R)      pad L3  -- console R1, moved by KA_PC_PAD_OVERRIDES
         {  8, KAI_KEYS_START      }, // START       (P)      pad START
         { 13, KAI_KEYS_HORN       }, // HORN        (H)      pad L3
@@ -937,6 +947,22 @@ namespace
         //    bumpers; nothing here writes a game-state flag.
         case 54: lpcEventName = "Local\\BurnoutPC_Input_ShoulderL";  break;
         case 55: lpcEventName = "Local\\BurnoutPC_Input_ShoulderR";  break;
+
+        // ---- THE TWO CAMERA BUTTONS -------------------------------------------------
+        // These are the GAME actions, not the GUI shoulder rows above, and that distinction
+        // is the whole point: KA_DEFAULT_GAME_INPUT_MAPPING row 12 (E_PADBUTTON_L1) emits
+        // BOTH 6 (LOOKBACK) and 54 (GUI_LSHOULDER) from one physical press. The harness could
+        // only ever drive 54, so -ShoulderAt exercised the GUI lane and left the DIRECTOR's
+        // lookback untouched -- which is why a rear-view press could not be verified end to
+        // end. BridgeControllerToDirector @0x823C0F70 reads action 6 (held 0.1 s) for
+        // ControllerInfo::mbLookback and action 5 for the camera-change pair
+        // (mbCameraButtonHeldDown / mbCycleCameras).
+        // MANUAL-RESET like the driving rows: Set() is press-and-hold, Reset() is release --
+        // a lookback you can only tap for one frame cannot clear a 0.1 s debounce.
+        case E_GAMEINPUTACTIONS_LOOKBACK:
+            lpcEventName = "Local\\BurnoutPC_Input_Lookback";   break;   // 6
+        case E_GAMEINPUTACTIONS_CHANGEVIEW:
+            lpcEventName = "Local\\BurnoutPC_Input_ChangeView"; break;   // 5
         default: return false;
         }
 

@@ -249,19 +249,50 @@ namespace BrnGame
         lImage.mabFlags[8]  = static_cast<u8>(lpActions[3].muStatus & 1);        // +0x34 bit0
         lImage.mabFlags[9]  = static_cast<u8>(lpActions[2].mfValue > 0.1f);      // +0x28 throttle
 
-        // Steering-curve latch (X360: meControllerState gate; mfAxis10 timer decay vs Director timer).
-        // FLAG: the steering-response curve is a polynomial approximation inlined on X360 (VMX); here
-        // the steering source is taken store-for-store and the timer-decay branch is reproduced.
-        f32 lfSteeringTimer = lpPad->mfAxis10; // X360 reads/writes a1+10097328 (a game-module timer field)
-        if ((lpActions[6].muStatus & 1) != 0 && (lpActions[7].muStatus & 1) == 0)
+        // ---- THE LOOKBACK DEBOUNCE (X360 0x823C1040..0x823C10C8) ---------------------
+        // This is the producer of ControllerInfo::mbLookback -- the rear-view camera's ONE
+        // input. It was previously described as a "steering-curve latch" and read its timer
+        // out of the PAD record (lpPad->mfAxis10) without ever storing it back. Two things
+        // were wrong with that and both are fixed here:
+        //   * the console's timer is a GAME-MODULE field (r28 = r29 + 0x9A12B0, i.e.
+        //     gm+10097328) that it READS AND WRITES each frame -- it has to persist, or the
+        //     countdown restarts from scratch every frame and can never expire;
+        //   * the NOT-HELD arm was missing entirely. The console branches to 0x823C1084 and
+        //     stores flt_82CDC074 == 0.1f whenever the action is not held. Without that
+        //     reset the latch had no way back, and with the pad-axis source reading 0 it sat
+        //     permanently expired: mbLookback was TRUE on every frame of every session
+        //     (measured -- 23 of 23 [cam-input] samples over 120 s, including before the
+        //     first bumper press ever fired).
+        //
+        // The console's shape, branch for branch:
+        //   0x823C1048  beq  -> reset      (action 6 not held)
+        //   0x823C1054  bne  -> reset      (action 7 held)
+        //   0x823C1068  ble  -> skip       (timer already <= 0: leave it, do not store)
+        //   0x823C107C  fsubs timer, delta (GetTimerStatusInterface()+0x1C)
+        //   0x823C1094  stfs  timer        (both arms land here)
+        //   0x823C10A4  flags[4] = (timer <= 0)
+        // On PC action 6 is E_PADBUTTON_L1, which CgsInputPadsPC's binding table names
+        // LOOKBACK -- so this is "hold L1 for 0.1 s".
+        const bool lbLookbackHeld = (lpActions[6].muStatus & 1) != 0
+                                 && (lpActions[7].muStatus & 1) == 0;
+        if (lbLookbackHeld)
         {
-            // GetTimerStatusInterface()+28 holds a delta the timer is decremented by.
-            const void* lpTimer = lpDirectorInput->GetTimerStatusInterface();
-            f32 lfDelta = *(reinterpret_cast<const f32*>(static_cast<const u8*>(lpTimer) + 28));
-            if (lfSteeringTimer > 0.0f)
-                lfSteeringTimer = lfSteeringTimer - lfDelta;
+            if (mfLookbackHoldTimer > 0.0f)
+            {
+                // GetTimerStatusInterface()+28 holds the delta the timer is decremented by.
+                const void* lpTimer = lpDirectorInput->GetTimerStatusInterface();
+                const f32 lfDelta =
+                    *(reinterpret_cast<const f32*>(static_cast<const u8*>(lpTimer) + 28));
+                mfLookbackHoldTimer = mfLookbackHoldTimer - lfDelta;
+            }
         }
-        lImage.mabFlags[4] = static_cast<u8>(lfSteeringTimer <= 0.0f);
+        else
+        {
+            // flt_82CDC074, dumped = 0.1f.
+            const f32 KF_LOOKBACK_HOLD_SECONDS = 0.1f;
+            mfLookbackHoldTimer = KF_LOOKBACK_HOLD_SECONDS;
+        }
+        lImage.mabFlags[4] = static_cast<u8>(mfLookbackHoldTimer <= 0.0f);
         lImage.mabFlags[6] = static_cast<u8>(lpSecondaryPad->maActionInfo[100 / 8].muStatus & 1); // asm *(r26+0x64), r26=secondary maActionInfo base -> slot 12 status
 
         // Fill the debug-controller image from the player's action slots, then append the 4 axis
@@ -270,6 +301,24 @@ namespace BrnGame
         // +0x9C/+0xA0/+0xA4/+0xA8 (39*4 .. 42*4), past the 22 action-value floats, then memcpy 0xAC.
         // asm passes r5 = secondaryPad->maActionInfo (the SECONDARY controller port pad), not the
         // primary -- matching the sibling ToWorld bridge.
+        // ---- THE TWO ANALOGUE STICKS -------------------------------------------------
+        // X360 0x823C10E8..0x823C1114: two 16-byte vector moves out of the bridge's own
+        // stack pairs into image+0x10 and image+0x20.
+        //     r1+0x70 = { pad+0x00, pad+0x04 }  ->  image+0x10  (mCarModifier)
+        //     r1+0x60 = { pad+0x08, pad+0x0C }  ->  image+0x20  (mCameraModifier)
+        // THESE WERE NEVER STORED. Their absence is why no camera in the game could be
+        // moved by the player: BehaviourGameplayExternal::Update feeds
+        // lrSharedInfo.mCameraModifier straight into CameraSphericalRotationController
+        // ::Update as its stick vector, and BehaviourRotateAboutVehicle (the orbit camera)
+        // reads the same value back out through mSphericalRotationController
+        // .GetRawStickVector(). A zero stick means the yaw integrator is fed nothing, so
+        // mfYawDegs never leaves 0 and the camera never rotates.
+        // The z/w lanes are the console's: the stvx128 moves whatever the two stfs pairs
+        // left in the other half of each quadword, and only x/y are ever read (Vector2's
+        // consumers are 2-lane dots and the yaw/pitch integrators). Zeroed here.
+        lImage.mCarModifier    = Vector2{ lpPad->mfStickLX, lpPad->mfStickLY, 0.0f, 0.0f };
+        lImage.mCameraModifier = Vector2{ lpPad->mfStickRX, lpPad->mfStickRY, 0.0f, 0.0f };
+
         MapActionInfoToDebugController(&lImage.mDebugController, lpSecondaryPad->maActionInfo);
         {
             f32* lpTail = reinterpret_cast<f32*>(
