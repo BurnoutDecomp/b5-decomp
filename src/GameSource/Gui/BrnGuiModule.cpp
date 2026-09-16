@@ -3156,8 +3156,20 @@ void GuiModule::Destruct()
         // (@0x82527A58) advances its Prepare state machine each frame, and the interpreter's
         // UpdateObservers runs its Update against the queue the subscription filter filled
         // (RouteEventToFlow above delivers the ids its Prepare registered -- 64, 355, ...).
-        mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
+        // 0x8252A278. Prepare's BOOL RETURN IS A GATE, not a status byte to drop: the
+        // console skips the whole overlay tick below until the prepare state machine reaches
+        // DONE (`clrlwi r11, r3, 0x18 ; cmplwi 0 ; beq 0x8252A2CC`).
+        const bool lbAlwaysAvailReady =
+            mAlwaysAvailableComponentsManager.Prepare(&s_GuiAccessPointers);
         mAlwaysAvailableComponentsManager.Update();
+        if (lbAlwaysAvailReady)
+        {
+            // 0x8252A288..0x8252A2CC -- the EATrax chyron / achievement popup timeout tick.
+            // Runs AFTER the queue pump above so a notification raised this frame is ticked
+            // with this frame's clock; the console reaches the manager's own Update from
+            // UpdateObservers instead, so Prepare -> overlays stays adjacent either way.
+            mAlwaysAvailableComponentsManager.UpdateTimedComponents();
+        }
         mAlwaysAvailInQueue.Clear();
 
         // ---- 3c. the colour-calibration screen (X360 GuiModule::Update @0x82529B04) -----

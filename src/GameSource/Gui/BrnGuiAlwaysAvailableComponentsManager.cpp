@@ -368,4 +368,41 @@ namespace BrnGui
             }
         }
     }
+
+    // =======================================================================================
+    // AlwaysAvailableComponentsManager::UpdateTimedComponents  -- GuiModule::Update's own
+    // gated overlay tick, 0x8252A27C..0x8252A2CC. NOT a console function: the console INLINES
+    // this block into GuiModule::Update. It is a named method here only because every member
+    // it touches is private to this class.
+    //
+    // WHY IT EXISTS (owner report 2026-09-16, "the EA Trax popup is stuck"): the in-game
+    // chyron was decompiled, mounted and shown -- and then never ticked. EATraxInGameComponent
+    // ::Update @0x82439E70 is what notices the game clock has passed mfAnimOutTime_Seconds,
+    // plays AnimOut, hides the clip and publishes GuiEATraxChyronActive(false). With no caller
+    // the chyron animated IN and stayed on screen for the rest of the session, overlapping the
+    // HUD. `bl 0x82439E70` has exactly ONE caller in the image -- GuiModule::Update -- and
+    // this is that call site. The omission was mine, in the commit that landed the chyron.
+    // =======================================================================================
+    void AlwaysAvailableComponentsManager::UpdateTimedComponents()
+    {
+        // 0x8252A288..0x8252A298. The console compares against 1 exactly, not "non-zero".
+        if (mbContainerMovieClipPlaying != true)
+            return;
+
+        mEATraxInGameComponent.Update();       // 0x8252A2A4  (this + 0x10020)
+        mAchievementPopupComponent.Update();   // 0x8252A2B0  (this + 0x10060)
+
+        // 0x8252A2BC  (this + 0x10124 == mSaveIconComponent). DELIBERATELY NOT CALLED: the
+        // console's target 0x8284CB38 is a bare `blr` that ICF folded with
+        // BaseCollisionGenerator::Destruct, i.e. SaveIconComponent::Update is EMPTY on the
+        // console. This tree declares BrnSaveIconComponent::Update (:42) and defines it
+        // nowhere, so the two agree: the slot does nothing.
+
+        // [FLAG PC bring-up] 0x8252A2C8  OnlineInviteMessageComponent::Update @0x82439FF0
+        // (this + 0x100B8) -- the fourth tick under this same gate. OnlineInviteMessage
+        // Component has no Update in this tree (no .cpp), so there is nothing to call and
+        // nothing is invented here. It drives the online-invite toast's own timeout only;
+        // the EATrax and achievement overlays above are unaffected.
+        // DELETE-WHEN OnlineInviteMessageComponent::Update lands.
+    }
 }
