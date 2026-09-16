@@ -125,6 +125,33 @@ bool DualGinsuExhaustEffect::Attach()
         // ARTIST constructs the reverse-whine voice immediately once the base attaches.
     case E_CONSTRUCTING_VOICE:
     {
+        // ================ [FLAG PC bring-up] THE SUBMIX THE BASE NEVER BUILT ================
+        // mSubMixVoiceID below is mSubmixIdent, and mSubmixIdent is mCarSubmix.GetIdent() --
+        // set by DualGinsuEffect::Prepare's E_GINSU_PREPARE_STATE_INITIALIZE_SUBMIX case. That
+        // case is PARKED for every state except the player (b5 c7ac3724, "AI content pooling
+        // remains owned by AIVehicleStateManager"): for stateId != 1 it jumps straight to
+        // E_GINSU_PREPARE_STATE_FINISHED without constructing mCarSubmix, so mSubmixIdent stays
+        // 0 and there is no submix to send to.
+        //
+        // The base class ALREADY declines to run in that condition -- both
+        // DualGinsuEffect::UpdateParams and DualGinsuEffect::ProcessUpdate gate on
+        // `!mCarSubmix.GetVoiceObject()`. This subclass did not, so it built a voice aimed at
+        // submix 0 and drove it every frame: Voice::Connect -> Module::ConnectVoice ->
+        // Environment::GetVoice(0) == null -> the four-assert cluster (lhVoice / mpObject /
+        // lpSubmixVoice / lhVoice->Connect), 13 times each in a 275 s run, witnessed by
+        // `[voice-connect] FAILED submixId 0 sendName 65462079 voice 1 submixVoice 0`.
+        //
+        // The predicate is the BASE CLASS'S OWN, reproduced from the X360 bodies; it is applied
+        // here at the one place it was missing. On the console mCarSubmix always exists (there
+        // is no park), so this gate never fires and behaviour is identical.
+        // DELETE-WHEN DualGinsuEffect::Prepare builds the AI car submix -- that is also what
+        // makes AI cars AUDIBLE, since the park skips E_GINSU_PREPARE_STATE_CREATE_VOICES too.
+        if (!mCarSubmix.GetVoiceObject())
+        {
+            meState = E_ATTACHED;
+            return true;
+        }
+
         CgsSound::Logic::VoiceWrapper::CreateParams lParams;
         lParams.mpLogicModule = GetLogicModule();
         lParams.mFactoryName = static_cast<u32>(
@@ -178,6 +205,12 @@ bool DualGinsuExhaustEffect::Detach()
 void DualGinsuExhaustEffect::ProcessUpdate()
 {
     DualGinsuEffect::ProcessUpdate();
+
+    // [FLAG PC bring-up] the same base-class predicate as the Attach guard above -- with the
+    // AI submix parked there is no mReverseWhineVoice to drive, and driving one aimed at
+    // submix 0 is what fired the ConnectVoice assert cluster. See the banner in Attach.
+    if (!mCarSubmix.GetVoiceObject())
+        return;
 
     CGS_ASSERT(mpPhysicsControl != nullptr, "mpPhysicsControl");
     if (!mpPhysicsControl)

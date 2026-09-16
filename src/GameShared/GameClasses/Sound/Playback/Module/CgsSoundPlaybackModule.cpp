@@ -641,6 +641,22 @@ void Module::ConnectVoice(Handle<Voice>* lphVoice, u32 lu32SendName, u32 lu32Sub
     if (lhSubmixLookup.GetObject())
         lhSubmixLookup.GetObject()->Release();
 
+    // [DIAG] NOT IN THE X360 BINARY -- prints ONLY when a lookup actually failed, so it is
+    // silent on a healthy frame. The console streams "Submix ID: <id>" into the assert below;
+    // this tree's CGS_ASSERT text is a fixed literal, so the id (the one thing that identifies
+    // WHICH submix the environment could not resolve) was being thrown away. The owner's
+    // 2026-09-16 session shows this failing once from
+    // DualGinsuExhaustEffect::ProcessUpdate -> VoiceWrapper::Update -> Voice::Connect, and
+    // cascading into the mpObject / lpSubmixVoice / Connect asserts that follow it.
+    if ((!lphVoice->GetObject() || !lpSubmixVoice) && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[voice-connect] FAILED submixId " << lu32SubmixId
+            << " sendName " << lu32SendName
+            << " voice " << (lphVoice->GetObject() ? 1 : 0)
+            << " submixVoice " << (lpSubmixVoice ? 1 : 0)
+            << " environment " << (lpEnvironment ? 1 : 0) << "\n";
+    }
     CGS_ASSERT(lphVoice->GetObject(), "lhVoice");
     CGS_ASSERT(lpSubmixVoice, "lhVoice");  // X360 streams "Submix ID: <id>" here
 

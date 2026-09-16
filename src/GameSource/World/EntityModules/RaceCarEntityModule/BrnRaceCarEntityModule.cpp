@@ -4683,6 +4683,26 @@ void RaceCarEntityModule::ReadUpdatedActiveRaceCarDataFromPhysics(
             {
                 // ⭐ THE RETURN PATH. `bl ActiveRaceCar::UpdatePhysicsState` @0x822E8844,
                 // r4 = GetRaceCar(i), r5 = this + 0x18300 == &mWorldMap2D.
+                // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG, once per slot. Splits
+                // the mEntityId chain in half. MEASURED so far: the PHYSICS end is correct
+                // (`[racecar-id] slot 1 entityWord 0x01000400`), the SOUND end reads 0. This
+                // prints the value as it arrives on the POST-PHYSICS input buffer, i.e. after
+                // the module IO handoff -- so a 0 here puts the loss in the handoff, and a
+                // good value here puts it in the publish below.
+                {
+                    static const bool sbHopDiag = (getenv("BRN_AI_SOUND_DIAG") != 0);
+                    static bool sabHopSeen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { false };
+                    if( sbHopDiag && !sabHopSeen[liCar] && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        sabHopSeen[liCar] = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[rc-hop] slot " << liCar
+                            << " inputBuffer entityWord " << CgsDev::E_PRINTMODE_HEXONCE
+                            << static_cast<u32>( lpVehicleOutput->GetRaceCar(
+                                   static_cast<u32>( liCar ) )->mEntityId.muValue )
+                            << "\n";
+                    }
+                }
                 lpActiveRaceCar->UpdatePhysicsState(
                     lpVehicleOutput->GetRaceCar( static_cast<u32>( liCar ) ),
                     &mWorldMap2D );

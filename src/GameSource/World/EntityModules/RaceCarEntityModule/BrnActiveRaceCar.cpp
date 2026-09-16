@@ -1137,6 +1137,49 @@ void ActiveRaceCar::SeedPhysicsStateFromCreateEventBringUp(const Matrix44Affine&
     CGS_ASSERT(IsAttached(), "IsAttached()");
     mPhysicsState.mTransform = lrTransform;
 
+    // ============ THE IDENTITY GOES WITH THE POSE ============
+    // Seeding mTransform alone shipped a RaceCarState that is positioned but ANONYMOUS:
+    // mEntityId stayed 0 for every car whose physics slot is never claimed. That field is
+    // not decoration -- VehicleState::IsAttachedToThis @0x82683D38 is an IDENTITY TEST on
+    // it, and nothing else:
+    //     lwz r10, 0x428(r3)   ; state->mVehiclePhysicsData.mEntityId
+    //     lwz r11, 0x3C8(r4)   ; ((RaceCarState*)attachment)->mEntityId
+    //     subf ; cntlzw ; rlwinm   -> equal?
+    // With every AI car reading 0, `0 == 0` made EVERY attached sound state match EVERY
+    // car. In the owner's 2026-09-16 session that turned AIVehicleStateManager::UpdateParams
+    // into a loop: car 1's out-of-range test resolved to car 2's state and detached it, car 2
+    // re-attached on the next frame, and the two alternated 236 times (measured, strictly
+    // interleaved: `[ai-sound-detach] car=1 out of range` / `[ai-sound-attach] car=2`). Each
+    // re-attach re-requested 'sound\aems\InAir.bundle' and the car's engine bundle without
+    // releasing, so the 16-node per-resource requester pool filled and AddTail fired
+    // "We've run out of nodes." 468 times. The same all-zero mEntityId is already on record
+    // one hop away -- BrnPhysicsModuleUpdateFunctions.cpp's PC-BUILD GUARD #2 measured 663
+    // assert dialogs from it sailing through the console's own sentinel test.
+    //
+    // NOTHING IS INVENTED. This is the car's own identity, already built two ways in this
+    // same class and module:
+    //   * Attach (:314) does SetEntityIDOwner(E_ENTITYTYPE_RACECAR) +
+    //     SetEntityIDEntityIndex(meActiveRaceCarIndex) into mHandlingBodyVolumeId;
+    //   * VehicleManager::ProcessCreateEvents stores that same word into
+    //     maRaceCarEntityIDs[slot], and WriteOutVehicleStats publishes it back through
+    //     SetEntityID -- which is the value UpdatePhysicsState would memcpy in here the
+    //     moment the physics slot IS claimed.
+    // MEASURED AGREEMENT: the player's slot (the one car that does get a physics slot) reads
+    // entityWord 0x01000000, owner 1, entityIndex 0 -- exactly what Set(1, 0, 0) builds.
+    // So this seat writes the value the real path would write, for the cars the real path
+    // has not reached yet; when it does reach them, UpdatePhysicsState overwrites it with
+    // the identical word.
+    // DELETE-WHEN VehicleManager::ProcessCreateEvents claims a physics slot for AI cars too
+    // (the same condition this file's sibling seats already carry).
+    // BrnCommonTypes.h's EntityId is the 32-bit STORAGE word only, so the packing is done by
+    // the real CgsSceneManager::EntityId and the word handed over -- the same two-step
+    // WriteOutVehicleStats uses in reverse (`CgsSceneManager::EntityId lEntityID(...muValue)`).
+    CgsSceneManager::EntityId lSeatedEntityId;
+    lSeatedEntityId.Set(static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR),
+                        static_cast<u32>(meActiveRaceCarIndex),
+                        0u);
+    mPhysicsState.mEntityId.muValue = static_cast<u32>(lSeatedEntityId);
+
     // ⚠️ FLAG PC quality-of-life: THIS IS A TELEPORT, so drop the interpolation history.
     // The car is being placed, not moved -- blending from wherever it was before would smear
     // it across the world for one frame. This is the honest place to say so: the producer
