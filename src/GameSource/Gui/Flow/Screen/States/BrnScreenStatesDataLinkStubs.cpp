@@ -108,10 +108,9 @@ namespace BrnGui
         { { 139, CgsGui::E_GUI_RESOURCETYPE_APT } };
     const s32 CrashNavSettings::miNumResourcesToLoad = 1;
 
-    // .rdata @0x82F26D88 / count @0x82F26D90
-    const CgsGui::sResourceTuple CrashNavStats::maResourcesToLoad[] =
-        { { 137, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 CrashNavStats::muNumResourcesToLoad = 1;
+    // CrashNavStats' pair is NOT here any more: BrnCrashNavStats.cpp was mounted 2026-09-16
+    // and defines both (same .rdata @0x82F26D88 / count @0x82F26D90, same { 137, APT }, which
+    // this stub and the image read agree on). Two definitions is LNK2005, so the stub goes.
 
     // .rdata @0x82F27278 / count @0x82F27288
     const CgsGui::sResourceTuple CrashNavTrax::maResourcesToLoad[] =

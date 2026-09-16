@@ -3,7 +3,8 @@
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   HandleStatData @0x824B5D18, HandleTriggers @0x824B6370, OnEnter @0x824B5BE0,
 //   OnLeave @0x824CA8E0, SetExpectedAptComponents @0x824B6408, UpdateInitSetup @0x824CA970,
-//   UpdateInitialising @0x824B5C60, UpdateLoading @0x824CAAA0, UpdatePermanent @0x824C1690.
+//   UpdateInitialising @0x824B5C60, UpdateLoading @0x824CAAA0, UpdatePermanent @0x824C1690,
+//   Update @0x824D8318.
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavStats.h"
@@ -16,29 +17,55 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"           // VariableEventQueue<18432,16> (in-queue view)
 #include "GameSource/Gui/BrnGuiCache.h"                   // BrnGui::GuiCache
+#include "GameSource/Gui/Events/BrnGuiEventStatsResponse.h"  // GuiEventStatsResponse (id 436)
 
 #include <cstring>   // std::strcpy
 
 namespace BrnGui
 {
     // ---- static out-of-line definitions -------------------------------------------
-    // Four observed stat event ids (values not decoded; placeholders so the state links).
-    const s32 CrashNavStats::maiEventToObserve[4] = { 0, 0, 0, 0 };   // @ 0x820660CC (values not recovered)
+    // .rdata @0x820660CC, read out of the image: { 6, 0x15, 0x40, 0x1B4 }. These are the four
+    // ids UpdateInitSetup / UpdatePermanent actually switch on -- controller input (6), apt
+    // trigger (21), GuiCache handover (64) and the stats response (436). 436 is corroborated
+    // independently by its producer: AddGuiEvent<GuiEventStatsResponse> @0x823D71D8 posts
+    // `AddEvent(&event, 436, 432)`.
+    // A state that registers for the WRONG ids receives nothing, so the placeholder this
+    // replaces would have left the tab blank and unnavigable even once it compiled.
+    const s32 CrashNavStats::maiEventToObserve[4] = { 6, 21, 64, 436 };   // @ 0x820660CC
     const s32 CrashNavStats::miNumEventsObserved  = 4;
 
-    // Apt-clip names of the 36 stat text fields (off_82F26DB0[]; names not recovered).
+    // Apt-clip names of the 36 stat text fields, read out of the pointer table at .rdata
+    // 0x82F26DB0 (36 entries, the exact span OnEnter's `addi r28, r10, 0x6db0` .. `addi r11,
+    // r28, 0x90` loop walks). ⭐ AN EMPTY NAME IS A TOTAL NO-OP IN THE APT PATH: the component
+    // hash of "" matches no clip, so every field would bind to nothing and the tab would draw
+    // with all 36 numbers missing. That is exactly what the placeholder this replaces did.
+    //
+    // ⭐⭐ THESE NAMES CROSS-VALIDATE THE RECORD LAYOUT. Every one of the 36 matches, by
+    // meaning, the GuiEventStatsResponse member HandleStatData reads into it below -- e.g.
+    // index 24 is "nem_cpt" (nemesis) against mGreatestRivalId, 34/35 are "timeRR_cpt"/
+    // "crashRR_cpt" against mRoadsRuledTime/mRoadsRuledCrash. Two independently recovered
+    // tables agreeing 36 times is what pins both.
     const char* const CrashNavStats::KAPC_STAT_TEXTFIELD_NAMES[CrashNavStats::KU_NUM_STAT_TEXTFIELDS] =
     {
-        "", "", "", "", "", "", "", "", "", "", "", "",
-        "", "", "", "", "", "", "", "", "", "", "", "",
-        "", "", "", "", "", "", "", "", "", "", "", "",
+        "distOff_cpt",    "distOn_cpt",       "totTime_cpt",    "carsWon_cpt",
+        "carsTotal_cpt",  "allMedal_cpt",     "allMedalTot_cpt", "eventMedal_cpt",
+        "eventMedalTot_cpt", "RR_cpt",        "totalRR_cpt",    "drivers_cpt",
+        "driversTot_cpt", "golds_cpt",        "silvers_cpt",    "bronzes_cpt",
+        "jumps_cpt",      "jumpsTot_cpt",     "smash_cpt",      "smashTot_cpt",
+        "stunt_cpt",      "stuntTot_cpt",     "faveCar_cpt",    "forCar_cpt",
+        "nem_cpt",        "totTd_cpt",        "tdStd_cpt",      "tdVert_cpt",
+        "tdTBone_cpt",    "tdAfter_cpt",      "tdCar_cpt",      "tdVan_cpt",
+        "tdBus_cpt",      "tdBig_cpt",        "timeRR_cpt",     "crashRR_cpt",
     };
 
-    // Single-APT resource list (unk_82F26D88, count 1). The tuple id/type are not attested in
-    // scope; every sibling state's list is one {apt-id, E_GUI_RESOURCETYPE_APT} tuple.
+    // Single-APT resource list, read out of the image at .rdata 0x82F26D88: { 0x89, 4 } ==
+    // { apt id 137, E_GUI_RESOURCETYPE_APT }, with the count word at 0x82F26D90 == 1 (the two
+    // addresses UpdateLoading @0x824CAAA0 loads: `addi r4, r11, 0x6d88` / `lwz r5, 0x6d90`).
+    // Resource id 0 -- the placeholder this replaces -- is a different resource, so the screen
+    // would have waited on, and then drawn, the wrong movie.
     const CgsGui::sResourceTuple CrashNavStats::maResourcesToLoad[] =
     {
-        { 0u, CgsGui::E_GUI_RESOURCETYPE_APT },   // FLAG: id unattested in scope
+        { 137u, CgsGui::E_GUI_RESOURCETYPE_APT },
     };
     const u32 CrashNavStats::muNumResourcesToLoad = 1;
 
@@ -95,15 +122,13 @@ namespace BrnGui
     {
         CGS_ASSERT(lpStatsEvent != 0, "lpStatsEvent");   // cpp:447
 
-        // File-local boundary over the opaque stats-response event (layout not DWARF-attested).
-        const u8* lpcEvent = reinterpret_cast<const u8*>(lpStatsEvent);
-        struct StatsReader
-        {
-            const u8* mpBase;
-            s32   Word(u32 luOffset) const { return *reinterpret_cast<const s32*>(mpBase + luOffset); }
-            CgsID Id(u32 luOffset)   const { return *reinterpret_cast<const CgsID*>(mpBase + luOffset); }
-            u64   U64(u32 luOffset)  const { return *reinterpret_cast<const u64*>(mpBase + luOffset); }
-        } lReader = { lpcEvent };
+        // READ BY NAME, NOT BY OFFSET. GuiEventStatsResponse (BrnGuiEventStatsResponse.h)
+        // names every field of this 432-byte record, and its own banner calls out BOTH of its
+        // consumers for having read it through file-local byte cursors -- this TU was the
+        // second one. The offsets that cursor used are preserved in that header's comments.
+        // The 39 SetLocalisedText calls below are the console's 39, in the console's order
+        // (which writes golds/silvers/bronzes TWICE -- that repeat is the X360's, not a slip
+        // here; the body has exactly 39 `bl ...SetLocalisedText` at 0x824B5D18).
 
         char lacBuffer[128];   // X360 sp scratch (formatter capped at 63)
         char lacId[16];        // X360 CgsID expansion buffer
@@ -111,46 +136,46 @@ namespace BrnGui
 
         typedef CgsLanguage::LanguageManager LM;
 
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x1C)); maStatTextfields[0].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x18)); maStatTextfields[1].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x20)); maStatTextfields[2].SetLocalisedText(lacBuffer, LM::E_FORMAT_MINUTES_SECONDS);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x24)); maStatTextfields[3].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x28)); maStatTextfields[4].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x5C)); maStatTextfields[13].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x60)); maStatTextfields[14].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x64)); maStatTextfields[15].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x34)); maStatTextfields[5].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x38)); maStatTextfields[6].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x3C)); maStatTextfields[7].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x40)); maStatTextfields[8].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x4C)); maStatTextfields[9].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x50)); maStatTextfields[10].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x54)); maStatTextfields[11].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x58)); maStatTextfields[12].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x5C)); maStatTextfields[13].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x60)); maStatTextfields[14].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x64)); maStatTextfields[15].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x68)); maStatTextfields[16].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x6C)); maStatTextfields[17].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x70)); maStatTextfields[18].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x74)); maStatTextfields[19].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x78)); maStatTextfields[20].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x7C)); maStatTextfields[21].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miDistanceOffline);      maStatTextfields[0].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miDistanceOnline);       maStatTextfields[1].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miTimePlayed);           maStatTextfields[2].SetLocalisedText(lacBuffer, LM::E_FORMAT_MINUTES_SECONDS);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miCarsCollected);        maStatTextfields[3].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miCarsTotal);            maStatTextfields[4].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miGolds);                maStatTextfields[13].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miSilvers);              maStatTextfields[14].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miBronzes);              maStatTextfields[15].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miAllMedalsEarned);      maStatTextfields[5].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miAllMedalsTotal);       maStatTextfields[6].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miEventMedalsEarned);    maStatTextfields[7].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miEventMedalsTotal);     maStatTextfields[8].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miRoadRules);            maStatTextfields[9].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->mRoadsRuledTotal);       maStatTextfields[10].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miDrivers);              maStatTextfields[11].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miDriversTot);           maStatTextfields[12].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miGolds);                maStatTextfields[13].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miSilvers);              maStatTextfields[14].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miBronzes);              maStatTextfields[15].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miJumps);                maStatTextfields[16].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miJumpTot);              maStatTextfields[17].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miSmashes);              maStatTextfields[18].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miSmashTot);             maStatTextfields[19].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miStunts);               maStatTextfields[20].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miStuntTot);             maStatTextfields[21].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
 
         // ---- car ids (CAR_<id>) ----
-        CgsIDConvertToString(lReader.Id(0x00), lacId);
+        CgsIDConvertToString(lpStatsEvent->mFaveCarId, lacId);
         CgsCore::SPrintf(lacBuffer, 63, "CAR_%s", lacId);
         maStatTextfields[22].SetLocalisedText(lacBuffer, LM::E_FORMAT_ID_LOOKUP);
-        CgsIDConvertToString(lReader.Id(0x08), lacId);
+        CgsIDConvertToString(lpStatsEvent->mForgottenCarId, lacId);
         CgsCore::SPrintf(lacBuffer, 63, "CAR_%s", lacId);
         maStatTextfields[23].SetLocalisedText(lacBuffer, LM::E_FORMAT_ID_LOOKUP);
 
-        // ---- rival id (RVL_<u64>) or a placeholder when absent ----
-        const u64 luRivalId = lReader.U64(0x10);
+        // ---- "nem_cpt": the nemesis id (RVL_<u64>), or a dash when there is no rival yet ----
+        const CgsID lRivalId = lpStatsEvent->mGreatestRivalId;
         LM::ParameterFormatType leRivalFormat;
-        if (luRivalId != 0)
+        if (lRivalId != 0)
         {
-            CgsCore::SPrintf(lacBuffer, 63, "RVL_%llu", luRivalId);
+            CgsCore::SPrintf(lacBuffer, 63, "RVL_%llu", lRivalId);
             leRivalFormat = LM::E_FORMAT_ID_LOOKUP;
         }
         else
@@ -160,24 +185,26 @@ namespace BrnGui
         }
         maStatTextfields[24].SetLocalisedText(lacBuffer, leRivalFormat);
 
-        // ---- running total of the eight per-medal counts (event +0x8C .. +0xA8) ----
-        const s32 liTotal = lReader.Word(0x8C) + lReader.Word(0x90) + lReader.Word(0x94) +
-                            lReader.Word(0x98) + lReader.Word(0x9C) + lReader.Word(0xA0) +
-                            lReader.Word(0xA4) + lReader.Word(0xA8);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", liTotal);
+        // ---- "totTd_cpt": the running total of the eight per-type takedown counts ----
+        const s32 liTotalTakedowns =
+            lpStatsEvent->miStandardTakedowns + lpStatsEvent->miVerticalTakedowns +
+            lpStatsEvent->miTBoneTakedowns    + lpStatsEvent->miAftertouchTakedowns +
+            lpStatsEvent->miCarTakedowns      + lpStatsEvent->miVanTakedowns +
+            lpStatsEvent->miBusTakedowns      + lpStatsEvent->miBigRigTakedowns;
+        CgsCore::SPrintf(lacBuffer, 63, "%d", liTotalTakedowns);
         maStatTextfields[25].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
 
-        // ---- the ten per-medal counts themselves (+0x8C .. +0xB0) ----
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x8C)); maStatTextfields[26].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x90)); maStatTextfields[27].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x94)); maStatTextfields[28].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x98)); maStatTextfields[29].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0x9C)); maStatTextfields[30].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0xA0)); maStatTextfields[31].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0xA4)); maStatTextfields[32].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0xA8)); maStatTextfields[33].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0xAC)); maStatTextfields[34].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
-        CgsCore::SPrintf(lacBuffer, 63, "%d", lReader.Word(0xB0)); maStatTextfields[35].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        // ---- the eight counts themselves, then the two road-rule columns ----
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miStandardTakedowns);    maStatTextfields[26].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miVerticalTakedowns);    maStatTextfields[27].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miTBoneTakedowns);       maStatTextfields[28].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miAftertouchTakedowns);  maStatTextfields[29].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miCarTakedowns);         maStatTextfields[30].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miVanTakedowns);         maStatTextfields[31].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miBusTakedowns);         maStatTextfields[32].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->miBigRigTakedowns);      maStatTextfields[33].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->mRoadsRuledTime);        maStatTextfields[34].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
+        CgsCore::SPrintf(lacBuffer, 63, "%d", lpStatsEvent->mRoadsRuledCrash);       maStatTextfields[35].SetLocalisedText(lacBuffer, LM::E_FORMAT_INTEGER);
     }
 
     // ---- HandleTriggers @ 0x824B6370 ----------------------------------------------
@@ -264,6 +291,74 @@ namespace BrnGui
         }
 
         return true;
+    }
+
+    // ---- Update @ 0x824D8318 ------------------------------------------------------
+    // The family's fall-through sub-state ladder: each rung re-stamps meCurrentState and,
+    // when its Update* returns true, falls straight into the next rung in the SAME frame, so
+    // a fast load settles in one Update. The X360 dispatches 0..4 through the jump table at
+    // 0x824D8350 and asserts above it.
+    //
+    // THIS LADDER IS NOT CrashNavColourCalibrate'S. There, every early rung clears the
+    // "run permanent" flag. Here `li r27, 1` runs BEFORE the switch and ONLY the LEAVING arm
+    // clears it (`li r27, 0` @0x824D83C4), so UpdatePermanent runs on frames where the screen
+    // is still loading -- which is how the stats response (event 436) gets latched into
+    // mbDataReceived before the apt components exist, ready for UpdateInitialising to push
+    // into the fields. Copying the sibling's shape here would drop that event.
+    void CrashNavStats::Update()
+    {
+        bool lbRunPermanent = true;   // `li r27, 1` before the switch
+
+        switch (meCurrentState)
+        {
+        case E_INTERNALSCREENSTATE_SETUP:
+            meCurrentState = E_INTERNALSCREENSTATE_SETUP;
+            if (!UpdateInitSetup())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSCREENSTATE_LOADING:
+            meCurrentState = E_INTERNALSCREENSTATE_LOADING;
+            if (!UpdateLoading())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSCREENSTATE_INITIALISING:
+            meCurrentState = E_INTERNALSCREENSTATE_INITIALISING;
+            if (!UpdateInitialising())
+            {
+                break;
+            }
+            // fall through
+
+        case E_INTERNALSCREENSTATE_RUNNING:
+            // The DWARF's UpdateRunning (cpp:374) is folded to exactly this by the X360
+            // compiler -- stay in RUNNING, no call.
+            meCurrentState = E_INTERNALSCREENSTATE_RUNNING;
+            break;
+
+        case E_INTERNALSCREENSTATE_LEAVING:
+            meCurrentState = E_INTERNALSCREENSTATE_LEAVING;
+            lbRunPermanent = false;
+            break;
+
+        default:
+            // X360 cpp:207 -- the streamed form, "Invalid internal state (" << state << ").
+            CGS_ASSERT(false, "Invalid internal state");
+            break;
+        }
+
+        if (lbRunPermanent)
+        {
+            UpdatePermanent();
+        }
+
+        // The in-queue is cleared unconditionally, so an event no rung consumed is dropped.
+        reinterpret_cast<CrashNavStatsInQueue*>(mpInGuiEventQueue)->Clear();
     }
 
     // ---- UpdatePermanent @ 0x824C1690 ---------------------------------------------
