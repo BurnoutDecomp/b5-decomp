@@ -182,6 +182,78 @@ public:
     //   fires (measured, four times per run) because a zeroed tag reads as the EXTERNAL
     //   camera's tag.
     //   DELETE-WHEN: @0x82226778 is transcribed.
+    //
+    // ============ THE FIELD MAP IS RECOVERED (2026-09-16, camera-input wave) ============
+    // The body is NOT transcribed yet, but every operand it touches is now named, so the
+    // next pass is a TRANSCRIPTION rather than a discovery. 686 instructions,
+    // 0x82226778..0x8222722C. It ALWAYS returns true (`li r3, 1` at 0x82227214); the
+    // invalid-parameters case branches straight there.
+    //
+    // WHY THIS MATTERS MORE THAN THE FLAG ABOVE SAYS: SharedCameraContainer
+    // ::GetSelectedGameplayCamera returns THIS camera, not the external one, whenever
+    // mbLookbackOverride is set -- so this untranscribed body IS the rear view. It could
+    // never be observed until the controller bridge started delivering lookback at all
+    // (b5 e82b28f5); the owner's first press showed a frozen camera, which is this.
+    //
+    // ONE non-inlined callee, and it is bodied: Utils::EulerAnglesZXYFromMatrix44Affine
+    // @0x82222180. Everything else is inlined library math -- a normalise, a look-at basis,
+    // an XMVectorSinCos polynomial (coefficient tables unk_82000BD0..unk_82000C60) -- plus
+    // sub_82222598, which IS Utils::GetSmallestDifferenceBetweenRadAngles(Vector3, Vector3)
+    // (it splats three lanes through the scalar overload @0x821F8988).
+    //
+    // SHARED-INFO READS (r31; mPlayerInfo is at sharedInfo +96, so subtract 0x60 for the
+    // VehicleInfo offset, and mRaceCarState is VehicleInfo +0):
+    //   +0x070 / +0x088   maWheels[0].mRoadContact.mNormal / .mbIsOnGround
+    //   +0x0E0 / +0x0F8   maWheels[1].mRoadContact.mNormal / .mbIsOnGround
+    //   +0x240 / +0x248   mAboveGroundTestResult (+32 / +40)
+    //   +0x260            mTransform.yAxis      (the car's up)
+    //   +0x270            mTransform.zAxis      (the car's forward)
+    //   +0x280            mTransform.wAxis      (the car's position)
+    //   +0x3B0            mHalfExtent
+    //   +0x42C            mfSpeedMPH
+    //   +0x4AE            the crash byte the spring branch tests
+    //   +0x500 / +0x510   mAABB's two corners (lane 2 == z)
+    //   +0x540            mfHardestImpact       (the shake amplitude source, via fsqrts)
+    //   +0x5B0 / +0x5B4   mfTempFOVBoostAmount / mfSpeedRatio
+    //
+    // PARAMETER READS (mpParameters, this +0x828):
+    //   +0x08 mfYOffset      +0x0C mfZOffset        (the eye placement, vs mHalfExtent.z)
+    //   +0x10 mfAccelerationDampening              +0x14 mfAccelerationResponse
+    //   +0x18 mfPitchSpring  +0x1C mfYawSpring      +0x20 mfRollSpring (x 0.1f)
+    //   +0x24 mfFOV          +0x30 mfBoostFOV       +0x38 mImpactShakeParams
+    //
+    // OWN MEMBERS: mfImpactShakeFactor (+0x14) read+written, mbJumping (+0x1C) read+written,
+    // mImpactShake (+0x20) driven through CameraShake::Update, mLastCameraAngles (+0x810)
+    // passed to EulerAnglesZXYFromMatrix44Affine as its lpLastAngles, mfLastSpeed (+0x820)
+    // latched from mfSpeedMPH at the end, and mfDampenedAcceleration (+0x824) low-passed by
+    //     mfDampenedAcceleration += (speedMPH - mfLastSpeed - mfDampenedAcceleration)
+    //                               * mfAccelerationDampening;
+    //
+    // THE SHAPE, in order:
+    //   1. assert mpParameters ("Updating with no parameters", :115); return true if
+    //      !mpParameters->mbIsValid.
+    //   2. average the road normal under the FRONT wheels (0 and 1), each gated on its own
+    //      mbIsOnGround; if neither is grounded take mTransform.yAxis instead. Normalise it,
+    //      falling back to world up (0,1,0) when no lane exceeds FLT_EPSILON.
+    //   3. lerp that surface up toward the car's own up, build the look-at basis from the
+    //      car's forward, and set bit 1 of the camera's state word (+0x140 |= 2).
+    //   4. EulerAnglesZXYFromMatrix44Affine(basis, &mLastCameraAngles) -> target angles
+    //      (assert "IsValid(lTargetCameraAngles)", :179).
+    //   5. springs = crashing ? (1,1,1) : (mfPitchSpring, mfYawSpring, mfRollSpring*0.1f);
+    //      diff = GetSmallestDifferenceBetweenRadAngles(mLastCameraAngles, target)
+    //      (assert "IsValid(lCameraDiffAngles)", :204).
+    //   6. the acceleration low-pass above, scaled by mfAccelerationResponse.
+    //   7. place the eye from mHalfExtent.z / mfZOffset / mfYOffset against the mAABB corner
+    //      (which corner depends on the all-wheels-grounded test), then
+    //      RotateMatrix44AffineByEulerAnglesZXY by the sprung angles.
+    //   8. Camera::ValidateTransformWithDebugInfo, then
+    //      SetFOV(mfFOV + ((mfBoostFOV + mfTempFOVBoostAmount*flt_820054CC) - mfFOV)
+    //             * mfSpeedRatio).
+    //   9. the jump latch (all four wheels off the ground, plus the above-ground test)
+    //      drives mbJumping and decays mfImpactShakeFactor.
+    //  10. mImpactShake.Update(camera, mpParameters->mImpactShakeParams, ...), then the tail
+    //      writes SetImpactShake(0, f, type) and the state word.
+    // ====================================================================================
 
 private:
     // ---- layout (DWARF h:88..:100; every offset asm-pinned -- see the file banner) -------
