@@ -80,11 +80,14 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // the two scoreboard request events
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // the scoreboard request / gamercard / ev-score-target payloads
 
-// DirtySock SDK import: the lobby-safe gamertag compare the X360 bl's here. The tree
-// already declares it this way (never defines it) in CgsServerInterfaceGames.cpp -- it
-// links from the SDK, so declare, do not stub.
-namespace CgsNetwork { namespace DirtySock { s32 LobbyNameCmp(const char* pNameA, const char* pNameB); } }
-using CgsNetwork::DirtySock::LobbyNameCmp;
+// ⭐ 2026-09-16 -- the file-local `CgsNetwork::DirtySock::LobbyNameCmp` declaration plus its
+// `using` that used to sit here are GONE. They were written when no header exposed the
+// comparator; CgsStringUtils.h:27 now declares the real one, and it is `extern "C"` at
+// GLOBAL scope because the X360 exports one plain symbol. Keeping the namespaced stand-in
+// and `using`-ing it into the global namespace put TWO candidates in the overload set, so
+// every call -- even `::`-qualified -- was a hard C2668 the moment this TU was mounted, and
+// the non-extern-"C" copy would have been a different symbol at link time anyway.
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // the REAL extern "C" LobbyNameCmp
 
 namespace BrnGui
 {
@@ -209,8 +212,13 @@ namespace BrnGui
                         lRequestEvScoreTarget.mbIsCurrentTarget = false;
 
                         mTable.GetHighlightedGamertag(lRequestEvScoreTarget.mPlayerName.macName);
-                        if (LobbyNameCmp(lRequestEvScoreTarget.mPlayerName.macName,
-                                         mCurrentTargetScorePlayerName.macName) == 0)
+                        // ::-qualified: the X360 exports ONE plain global symbol for this
+                        // (CgsStringUtils.h:21-27 says so, and its body home wraps the
+                        // definition in extern "C"). Unqualified, the DirtySock file-scope
+                        // re-declaration also enters the overload set and the call is
+                        // ambiguous. CgsNetworkUtils.cpp:89 resolves it exactly this way.
+                        if (::LobbyNameCmp(lRequestEvScoreTarget.mPlayerName.macName,
+                                           mCurrentTargetScorePlayerName.macName) == 0)
                         {
                             lRequestEvScoreTarget.mbIsCurrentTarget = true;
                         }
