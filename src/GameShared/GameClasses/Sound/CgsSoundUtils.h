@@ -50,6 +50,14 @@ struct DataPoint
     const T& GetPrevious() const { return mPreviousValue; }
     bool     HasChanged() const  { return mCurrentValue != mPreviousValue; }
 
+    // DWARF CgsSoundUtils.h:43 / :46. "It changed, and it changed TO this value" --
+    // FxEffect::UpdateParams @0x826BC444..0x826BC468 is the attested shape:
+    //   cmp prev,cur ; beq -> skip ; cmpwi cur,1 ; bne -> skip
+    bool HasChangedTo(const T& lValue) const
+    { return mCurrentValue != mPreviousValue && mCurrentValue == lValue; }
+    bool HasChangedFrom(const T& lValue) const
+    { return mCurrentValue != mPreviousValue && mPreviousValue == lValue; }
+
     // Push a new sample: the old current becomes previous. (X360 paired-store
     // semantics from FrameInformation::UpdateFatalityFlag.)
     void Update(const T& lValue)

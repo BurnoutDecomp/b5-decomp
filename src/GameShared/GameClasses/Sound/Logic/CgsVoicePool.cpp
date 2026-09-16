@@ -186,7 +186,7 @@ void VoicePoolBase::SetGain(s32 liSendNameHash, f32 lfGain, s32 liReserved, cons
             const f32 lfScaledGain = lrSlot.mfSecondaryGain * lfGain;
             u32 luSendNameCopy = *lpSendName;
             lrSlot.mWrapper.GetVoice().SetGain(
-                static_cast<u32>(liSendNameHash), lfScaledGain, liReserved, &luSendNameCopy);
+                static_cast<u32>(liSendNameHash), lfScaledGain, &luSendNameCopy);
         }
     }
 }
@@ -208,7 +208,7 @@ void VoicePoolBase::SetParameter(s32 liSendNameHash, f32 lfValue, s32 liReserved
         {
             u32 luSendNameCopy = *lpSendName;
             lrSlot.mWrapper.GetVoice().SetParameter(
-                static_cast<u32>(liSendNameHash), lfValue, liReserved, &luSendNameCopy);
+                liSendNameHash, lfValue, &luSendNameCopy);
         }
     }
 }

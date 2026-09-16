@@ -44,72 +44,33 @@ namespace Logic
 // gate these definitions on the SAME guard macro -- whichever header is included first
 // defines them; the second skips. BrnEffectObject.h's EffectBase is a superset of
 // BrnEffectControl.h's (adds miObjectId/GetObjectId), so it satisfies both consumers.
-#ifndef CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
-#define CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
-
-// Per-class RTTI descriptor. CgsEffectBase.h:313 (DWARF). CANONICAL definition
-// folded into GameShared/.../Sound/Logic/CgsClassTypeInfo.h (2026-08-25,
-// audio-faithfulness wave 1 -- the per-header aggregate copies were an ODR
-// violation; canonical member names: typeName / baseTypeInfo / createObject).
-
-// CgsEffectBase.h:379 (DWARF). Engine effect base: owns the attach/detach state
-// machine + back-pointer to the owning logic module. Only the members this TU
-// touches (by name) are reconstructed; member ORDER mirrors the DWARF and the
-// X360 access sequence.
-// FLAG: minimal reconstruction of an un-homed base; absolute offsets not asserted.
-struct EffectBase
-{
-    enum EAttachState
-    {
-        E_ATTACH_STATE_NONE             = 0,
-        E_ATTACH_STATE_WAITING_FOR_DATA = 1,
-        E_ATTACH_STATE_PREPARING        = 2,
-        E_ATTACH_STATE_FINISHED         = 3,
-    };
-
-    enum EDetachState
-    {
-        E_DETACH_STATE_NONE     = 0,
-        E_DETACH_STATE_BEGIN    = 1,
-        E_DETACH_STATE_UPDATING = 2,
-        E_DETACH_STATE_FINISHED = 3,
-    };
-
-    EffectBase()
-        : miObjectId(0)
-        , mfDeltaTime(0.0f)
-        , meAttachState(E_ATTACH_STATE_NONE)
-        , meDetachState(E_DETACH_STATE_NONE)
-        , mpLogicModule(nullptr)
-    {
-    }
-
-    virtual ~EffectBase() {}
-
-    EAttachState GetAttachState() const { return meAttachState; }
-
-    // CgsEffectBase.h:739 (DWARF) — the per-instance class/object id. The X360
-    // reads it at +0x14 (`*(controller+20)`) when a controller-attach hook tests a
-    // supplied controller's class; exposed BY NAME for those tests (e.g.
-    // SingleGinsuEffect::AttachController). FLAG: ADDITIVE home-grow of this minimal
-    // base for the controller-attach TUs; the canonical full home is CgsEffectBase.h.
-    s32 GetObjectId() const { return miObjectId; }
-
-    // ORDER mirrors the X360 access pattern:
-    //   +0x14 -> miObjectId     (controller-attach hooks read this on a controller)
-    //   +0x20 -> mfDeltaTime    (Detach stores 0 here)
-    //   +0x24 -> meAttachState  (Detach/ResourcesAreReady/dtor read+write here)
-    //   +0x28 -> meDetachState  (dtor stores E_DETACH_STATE_FINISHED here)
-    //   +0x2C -> mpLogicModule  (GetResourceRegistr reads here)
-    // FLAG: X360 byte offsets; not asserted on the 64-bit host.
-    s32          miObjectId;
-    f32          mfDeltaTime;
-    EAttachState meAttachState;
-    EDetachState meDetachState;
-    void*        mpLogicModule; // CgsSound::Logic::Module* (opaque here)
-};
-
-#endif // CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED
+// ⛔⛔ THE REDUCED CgsSound::Logic::EffectBase / EffectObject / EffectControl BLOCK THAT
+// STOOD HERE IS GONE -- IT WAS UNREACHABLE, AND IT LIED ABOUT THE BASE SURFACE.
+//
+// This header includes the CANONICAL engine home,
+// GameShared/GameClasses/Sound/Logic/CgsEffectBase.h, at the top of the file. That header
+// defines EffectBase (the full DWARF surface: mpNextEffectBase / mpState / mu16RefCount /
+// mu16AttachCount / mu16AllocatorIndex / miObjectId / mfRunningTime / mfDeltaTime /
+// meAttachState / meDetachState / mpLogicModule / mbEnabled / mbHasLoadedData /
+// mpDynamicMixIo, and the virtuals Prepare / Attach / GetController / AttachController /
+// SetupLoadData / UpdateParams / ProcessUpdate / Detach / Notify / Destroy) plus
+// EffectObject and EffectControl. The block that used to sit here re-declared the same
+// three types, in the same namespace, with FEWER members and NO virtuals, behind
+// `#ifndef CGS_SOUND_LOGIC_EFFECT_ENGINE_TYPES_DEFINED`.
+//
+// PROVEN DEAD 2026-09-16 by compile gate: a probe deriving from CameraControl (this
+// header's family) and from SubmixesEffect (the sibling's) resolves mu16AttachCount,
+// mu16RefCount, mfRunningTime and mpDynamicMixIo and overrides Attach / UpdateParams /
+// ProcessUpdate / Notify. Every one of those exists ONLY in the canonical header, so the
+// canonical definition is what every leaf has always seen; if a reduced block had ever
+// won, each of those would have been a compile error instead.
+//
+// ⚠️ THE COST OF LEAVING IT: the reduced block's own banner claimed it was the definition
+// in use, and grepping THIS FILE for the base surface is what produced the false finding
+// "BrnEffectControl declares neither `virtual bool Attach()` nor mu16AttachCount, so
+// CameraControl::Attach cannot be written without growing every sound control" -- a
+// blocker that never existed and that stopped a wave. Derive the base surface from
+// CgsEffectBase.h, or from a compile gate; never from a re-declaration.
 
 // CgsEffectBase.h:772 (DWARF). EffectObject : public EffectBase. Carries the
 // per-class RTTI hook used by BrnEffectObject's GetTypeInfo/CreateObject.

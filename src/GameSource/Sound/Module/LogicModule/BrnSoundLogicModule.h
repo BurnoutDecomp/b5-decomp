@@ -314,6 +314,16 @@ public:
 private:
 
     CgsSound::Logic::Voice mMasterVoice;       // X360 this+0x51F0, ident 1
+
+public:
+    // The console reaches this member by address (`addi rN, module, 0x51F0`) from
+    // SubmixesEffect::Attach @0x826D2DD4 and ::ProcessUpdate @0x826D2F80; the DWARF
+    // names the accessor BrnSound::Module::SoundLogicModule::GetMasterVoice. Added
+    // so those bodies reach it BY NAME rather than by a raw +0x51F0 cast.
+    CgsSound::Logic::Voice&       GetMasterVoice()       { return mMasterVoice; }
+    const CgsSound::Logic::Voice& GetMasterVoice() const { return mMasterVoice; }
+
+private:
     CgsSound::Logic::Voice mGlobalReverbVoice; // X360 this+0x51FC, ident 2
     CgsSound::Logic::Voice mSubmixVoice;       // X360 this+0x5208, ident -16
 

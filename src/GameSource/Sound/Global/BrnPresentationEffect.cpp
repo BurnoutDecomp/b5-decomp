@@ -440,5 +440,80 @@ PresentationEffect::AgingVoice* PresentationEffect::FindOrStealAVoice(const Pres
     return 0;
 }
 
+
+// ---------------------------------------------------------------------------
+// PresentationEffect::Detach  @ 0x826F77D0   (vtable 0x820B5F10 slot +0x20)
+//
+// BASE POINTER: this == primary + 4 (the IResourceRequester sub-object). Three
+// independent tells:
+//   * slot 0 of the table this body lives in (0x820B5F10) is
+//     PresentationEffect::`vector deleting destructor'`adjustor{4}' @0x826E7728;
+//   * 0x826F788C `addic. r11, r27, -4` -- the body itself materialises the primary;
+//   * 0x826F785C `lwz r11, 0x28(r27)` == primary +0x2C == mpLogicModule, exactly the
+//     committed BrnEffectObject model.
+//
+//   826F77E0  bl 0x826EBF88             ; BrnEffectObject::Detach, r3 passed through
+//   826F77E4  clrlwi/bne ; 826F77F0 li r3,0  -> return false
+//   826F77FC  addi r31, r27, 0x88       ; cursor = &maVoices[0].mVoice.meUpdateStage
+//   826F7800  li   r30, 4               ; four iterations
+//   826F7850  addi r31, r31, 0x80       ; stride 0x80 == sizeof(AgingVoice)
+//   the loop body is CgsSound::Logic::VoiceWrapper::Stop() @0x826DC570 INLINED:
+//       lwz 0(cursor)      meUpdateStage      (VoiceWrapper +0x48)
+//       stb 0, 4(cursor)   mbPlay = false     (VoiceWrapper +0x4C)
+//       if (stage == 6 && mVoiceObject.mVoiceHandle != 0)
+//            Voice::Stop() @0x826C5148 ; meUpdateStage = 7
+//       else if (stage < 6)
+//            VoiceWrapper::Release() @0x826C5270
+//   826F785C  lwz r11, 0x28(r27) / lwz r31, 0x296C(r11)
+//   826F786C  assert "lpStreamingStateMan"   (BrnPresentationEffect.cpp:234)
+//   826F788C  addic./addi/bne/mr        ; the null-preserving (IStreamUser*)this adjust
+//   826F78B0  lfs f0, [0x82003F40] = 0.25f   ; the stop request's fade-out
+//   826F78C4  bl 0x826835D8             ; StreamingStateManager::PostStreamRequest
+//   826F78C8  li r3, 1
+//
+// module+0x296C is GetEnvironment().GetStateManager(6) -- the same expression this TU's
+// Play() and SpeechEffect::Attach already write. (CreateStateManagers @0x826AFF18 does
+// `addi r26, r29, 0x2950` before Environment::AddStateManager, so the Environment
+// sub-object is module+0x2950, and the committed CgsEnvironment.h puts
+// mapStateManagers[0] at Environment+0x04: 0x2950 + 0x1C == 0x296C.)
+//
+// ⚠️ NOTE THE ASSERT IS NOT A GUARD. The console asserts the manager and then posts
+// UNCONDITIONALLY. The sibling SpeechEffect::Detach in this tree replaces that with a
+// silent `if (mpStreamingManager)`, which is an invented arm -- deliberately not
+// copied here.
+//
+// [FLAG] KF_STREAM_STOP_FADE_OUT: the NAME is ours. .rdata 0x82003F40 == 0.25f carries no
+// symbol and the DWARF has no constant for it; the value and the address are the console's.
+// [FLAG] The state-manager slot is written as the literal 6, matching this TU's existing
+// Play()/Attach() sites; no enumerator name for the streaming slot was recovered.
+// ---------------------------------------------------------------------------
+bool PresentationEffect::Detach()
+{
+    static const f32 KF_STREAM_STOP_FADE_OUT = 0.25f;   // .rdata 0x82003F40
+
+    // 826F77E0 / 826F77EC / 826F77F0
+    if (!BrnEffectObject::Detach())
+        return false;
+
+    // 826F77FC..826F7858 -- VoiceWrapper::Stop() @0x826DC570 inlined over maVoices[4].
+    for (s32 liVoice = 0; liVoice < 4; ++liVoice)
+        maVoices[liVoice].mVoice.Stop();
+
+    // 826F785C / 826F7860
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    Streaming::StreamingStateManager* lpStreamingStateMan =
+        static_cast<Streaming::StreamingStateManager*>(
+            lpModule->GetEnvironment().GetStateManager(6));
+    // 826F786C..826F7888 -- the console's own expression string; NO guard follows it.
+    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
+
+    // 826F788C..826F78C4
+    lpStreamingStateMan->PostStreamRequest(
+        Streaming::StreamStopRequest(this, KF_STREAM_STOP_FADE_OUT));
+
+    return true;                                        // 826F78C8  li r3, 1
+}
+
 } // namespace Logic
 } // namespace BrnSound

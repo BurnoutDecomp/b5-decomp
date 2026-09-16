@@ -6,6 +6,8 @@
 
 // Forward decl -- Notify takes a message header by pointer only (read by offset).
 namespace CgsSound { namespace Io { class MessageHeader; } }
+namespace CgsSound { namespace Logic { class Voice; } }
+namespace BrnSound { namespace Logic { class GlobalStateManager; } }
 
 // =============================================================================
 // BrnSound::Logic::SubmixesEffect
@@ -70,7 +72,10 @@ namespace Logic
 // member clears).
 struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
 {
-    SubmixesEffect() : mbHoldVolumes(false) {}
+    SubmixesEffect()
+        : mpStateManager(0)
+        , mbIsSurround(false)
+        , mbHoldVolumes(false) {}
     virtual ~SubmixesEffect();
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetTypeInfo() const override;
@@ -78,13 +83,34 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectObject* CreateObject(u32 auType);
 
+    // @ 0x826D2DA8 -- DWARF BrnSubmixesEffect.cpp:100. Vtable 0x820B2530 slot +0x14.
+    // Bumps the base attach count, caches the owning GlobalStateManager off mpState,
+    // latches the surround flag from the playback Environment's audio mode, and programs
+    // the master voice's static plugin parameters.
+    virtual bool Attach() override;
+
+    // @ 0x826D2E48 -- DWARF BrnSubmixesEffect.cpp:142. Vtable 0x820B2530 slot +0x1C.
+    // ⭐ THE TAIL OF THE VOLUME CHAIN: four dynamic-mixer outputs onto the two submix
+    // voices and the master voice, every frame.
+    virtual void ProcessUpdate() override;
+
     // @ 0x82687EE8 -- overrides EffectBase::Notify. Type-15 messages carry a single-byte
     // hold-volumes flag in their body at +0x10 (past the 12-byte MessageHeader); Notify
-    // latches it into mbHoldVolumes. NOT marked `override`: the committed minimal EffectBase
-    // reconstruction (BrnEffectObject.h) elides the engine Notify virtual, so this is declared
-    // as a plain virtual on the leaf (grow-additive, no base re-home) until that base surface
-    // is materialised.
-    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);
+    // latches it into mbHoldVolumes.
+    //
+    // (This used to carry a note saying it could NOT be marked `override` because the
+    // committed minimal EffectBase reconstruction elides the engine Notify virtual. That
+    // was wrong for the same reason the layout note above it was: the minimal
+    // reconstruction never wins. GameShared/.../CgsEffectBase.h -- which BrnEffectObject.h
+    // includes at the top of the file -- declares Notify, Attach, UpdateParams and
+    // ProcessUpdate, and `override` compiles on all four.)
+    virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader) override;
+
+    // @ 0x826BC6B0 -- DWARF BrnSubmixesEffect.cpp:233, and THE NAME IS THE CONSOLE'S,
+    // not ours. Not virtual: no vtable slot in the image holds it. Tail-called by BOTH
+    // Attach (0x826D2E34) and ProcessUpdate (0x826D3084), each of which recovers the
+    // primary object first with `addi r3, rN, -4`.
+    void UpdateStaticPluginParameters(CgsSound::Logic::Voice& arMasterVoice);
 
 private:
     // The "hold submix volumes" latch. Written by Notify (type-15 message) and, once
@@ -178,7 +204,12 @@ private:
     //  it is the leaf's SECOND byte -- Attach sets the one before it (+0x3C) from
     //  `Environment::GetAudioMode() == 1`. The member is pinned BY NAME here, so the bodies
     //  are unaffected; only the number was.
-    bool mbHoldVolumes;
+    // DWARF BrnSubmixesEffect.h:97/98/99, in layout order; primary +0x38 / +0x3C / +0x3D.
+    // mbHoldVolumes used to be declared FIRST here, which put it at +0x38 instead of
+    // +0x3D -- harmless while nothing else existed, wrong as soon as the other two land.
+    GlobalStateManager* mpStateManager;   // +0x38  Attach: mpState->GetStateManager()
+    bool                mbIsSurround;     // +0x3C  Attach: GetAudioMode() == SURROUND
+    bool                mbHoldVolumes;    // +0x3D  Notify @0x82687EE8, type-15 payload
 };
 
 } // namespace Logic

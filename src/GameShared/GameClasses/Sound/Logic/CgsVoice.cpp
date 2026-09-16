@@ -215,43 +215,57 @@ f32 Voice::GetGain(const s32* lpSendName) const
 }
 
 // ----------------------------------------------------------------------------
-// Voice::SetGain(luSendNameHash, lfGain, liReserved, lpSendName)  @ 0x826942C0
-//   Dereference guard, GetSend(obj, hash), assert the send's name matches, store the
+// Voice::SetGain(luSendIndex, lfGain, lpSendName)  @ 0x826942C0
+//   Dereference guard, GetSend(obj, index), assert the send's name matches, store the
 //   gain at send+0x04 and a "changed" flag at send+0x08.
 //     asm: send=Playback::Voice::GetSend(*(a1+4),a2); if(*a5!=*send)<assert>;
 //          changed = (send[1]!=a3); send[1]=a3; *(send+8)=changed;
-// FLAG: STUB -- depends on the Playback layer.
-//   BLOCKS ON: CgsSound::Playback::Voice::GetSend (returns a Send descriptor whose
-//   name(+0x00)/gain(+0x04)/changed-flag(+0x08) this method writes). Not reconstructed.
+//
+// ⭐ THREE PARAMETERS, NOT FOUR, AND THE FIRST IS AN INDEX. DWARF CgsVoice.h:216 reads
+// `void SetGain(uint32_t, float32_t, Name);`. The `s32 liReserved` that used to sit
+// third here was a PHANTOM from the documented "an f32 arg eats the rN slot" trap: a
+// float argument consumes f1 AND the r5 integer slot, so (this, u32, f32, const u32*)
+// is r3, r4, f1/r5, r6 and a register-counting decompiler invents an r5 parameter. The
+// first argument was also MISNAMED `luSendNameHash` -- 0x8269430C hands it straight to
+// Playback::Voice::GetSend as an INDEX, and the last argument is only ever used to
+// ASSERT the fetched send's name matches it.
+//
+// (The earlier "FLAG: STUB -- BLOCKS ON CgsSound::Playback::Voice::GetSend" note is
+// retired: GetSend is reconstructed and this body calls it. The flag was stale.)
 // ----------------------------------------------------------------------------
-void Voice::SetGain(u32 luSendNameHash, f32 lfGain, s32 liReserved, const u32* lpSendName)
+void Voice::SetGain(u32 luSendIndex, f32 lfGain, const u32* lpSendName)
 {
     CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)liReserved;
-    Playback::Send& lrSend = mVoiceHandle.GetObject()->GetSend(luSendNameHash);
+    Playback::Send& lrSend = mVoiceHandle.GetObject()->GetSend(luSendIndex);
     CGS_ASSERT(lrSend.GetName() == Playback::Name(static_cast<uintptr_t>(*lpSendName)),
                "lSend.GetName() == lSendName");
     lrSend.Set(lfGain);
 }
 
 // ----------------------------------------------------------------------------
-// Voice::SetParameter(luSendNameHash, lfValue, liReserved, lpSendName)
-//   The broadcast target of VoicePoolBase::SetParameter (@ 0x826B6628): the pool
-//   forwards a raw parameter value to every live pooled voice's logic Voice. The
-//   underlying set is a Playback-layer call (parallel to SetGain).
-// FLAG: STUB -- depends on the Playback layer.
-//   BLOCKS ON: the CgsSound::Playback parameter-set path (parallel to
-//   Playback::Voice::GetSend). Not reconstructed. Added additively so the pool
-//   broadcast compiles + names the call BY NAME.
+// Voice::SetParameter(liParameterIndex, lfValue, lpParamName)  @ 0x826AD8C0
+//   The broadcast target of VoicePoolBase::SetParameter (@ 0x826B6628) and the
+//   out-of-line callee SubmixesEffect uses. Its own asserts name the parameters:
+//   "liParameterIndex >= 0" (0x820B0E3C, CgsVoice.h:611) then "Voice not yet created!"
+//   (0x820B0E24, CgsVoice.h:612); it then forwards through the handle to
+//   Playback::Voice::SetParameter @0x826ACD38.
+//
+// ⭐ THREE PARAMETERS, NOT FOUR -- same phantom-r5 correction as SetGain above; DWARF
+// CgsVoice.h:219 reads `void SetParameter(int32_t, float32_t, Name);`, and the first
+// argument is a signed INDEX (hence that ">= 0" assert), not a name hash.
+//
+// (The earlier "FLAG: STUB -- BLOCKS ON the CgsSound::Playback parameter-set path" note
+// is retired: the path is reconstructed and this body calls it. The flag was stale --
+// the ledger simply carries no address for this function.)
 // ----------------------------------------------------------------------------
-void Voice::SetParameter(u32 luSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName)
+void Voice::SetParameter(s32 liParameterIndex, f32 lfValue, const u32* lpParamName)
 {
-    CGS_ASSERT(mVoiceHandle.GetObject(), "mpObject");
-    (void)liReserved;
+    CGS_ASSERT(liParameterIndex >= 0, "liParameterIndex >= 0");   // CgsVoice.h:611
+    CGS_ASSERT(mVoiceHandle.GetObject(), "Voice not yet created!");  // CgsVoice.h:612
     mVoiceHandle.GetObject()->SetParameter(
-        static_cast<s32>(luSendNameHash),
+        liParameterIndex,
         lfValue,
-        Playback::Name(static_cast<uintptr_t>(*lpSendName)));
+        Playback::Name(static_cast<uintptr_t>(*lpParamName)));
 }
 
 // ----------------------------------------------------------------------------
