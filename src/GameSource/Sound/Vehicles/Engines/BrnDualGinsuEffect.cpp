@@ -797,6 +797,29 @@ void DualGinsuEffect::UpdateAccelGinsu()
     const f32 lfGain =
         GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL) *
         mpHybridControl->GetFinalEngineVolume().AccelGinsu;
+    // [DIAG] NOT IN THE X360 BINARY (BRN_ENGINE_GAIN_DIAG=1). "No engine sound" has two
+    // independent causes at this one line and they look identical from outside: a wrong RPM
+    // (the synth plays the wrong note) or a zero GAIN (the synth plays nothing at all).
+    // lfGain is the PRODUCT of the dynamic mixer's engine VOL output and the hybrid
+    // control's own AccelGinsu volume -- either being 0 silences the engine while the rest
+    // of the mix carries on, which is exactly the reported symptom. Print both factors
+    // separately, plus the RPM actually handed to the Ginsu. One line per ~1 s.
+    if (getenv("BRN_ENGINE_GAIN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static u32 suGainCall = 0;
+        if ((suGainCall++ % 60) == 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[enggain] rpm " << lfRpm
+                << " minRpm " << mfMinRpm
+                << " pitch " << lfPitch
+                << " mixerVol " << GetRWACMixerOutputValue(1, Nicotine::DMixIO::DMX_VOL)
+                << " ctlVol " << mpHybridControl->GetFinalEngineVolume().AccelGinsu
+                << " gain " << lfGain
+                << "\n";
+        }
+    }
+
     mAccelGinsuVoice.SetParameter(3, 0.0f, &guGinsuPauseName);
     mAccelGinsuVoice.SetGain(0, lfGain, &guSend01Name);
     mAccelGinsuVoice.SetParameter(0, lfRpm, &guGinsuFrequencyName);
