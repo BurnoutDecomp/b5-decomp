@@ -605,6 +605,122 @@ void MusicEffect::UpdateSongs()
     mbPlaylistChanged = false;
 }
 
+// ---- UpdatePreviewTrack @0x826F6FD0 ---------------------------------------------
+// ⭐ THE EA TRAX MENU'S AUDITION, AND IT WAS A SILENT DROP. The whole chain into this
+// function already existed and was bodied -- CrashNavTrax posts GUI event 460,
+// SoundLogicModule::ProcessGuiEvents case 460 turns it into sound message 9, and Notify's
+// case 9 stores miPreviewSong / miPreviousPreviewSong / mbPreviewActive. This is the body
+// that turns that stored state into a queued stream, and it had no definition anywhere in
+// the tree, so the state was captured every time and then dropped. Pressing RB on the EA
+// Trax tab did nothing.
+//
+// The function is a no-op on every frame except the one where the previewed track CHANGES
+// (miPreviousPreviewSong != miPreviewSong), which is why UpdateParams can call it
+// unconditionally.
+void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
+{
+    // ⚠️ THE AUDITION PLAYS ON THE *MENU* STREAM, NOT THE EA TRAX STREAM, and that is
+    // asm-pinned rather than inferred. Every stream this body touches is r31+0x110, and
+    // MusicEffect::UpdateParams -- which calls this with `mr r3, r30` @0x826FE7EC, i.e. the
+    // SAME base -- writes the three mbStreamPaused bytes (+0x59) at r30+0xA9 / 0x109 /
+    // 0x1C9, which the committed note at the head of this file already attributes to
+    // mSecondaryStream / mEATraxStream / mJunkyardStream. Those put the four stream bases at
+    // r30+0x50 / 0xB0 / 0x110 / 0x170, so r31+0x110 is the THIRD one: mMusicStreamMenu.
+    // It has to be: previewing on mEATraxStream would fight the in-game playlist for the
+    // same slot, and the preview is a front-end audition.
+    //
+    // A custom soundtrack owns the menu stream unless it is allowed over it: kill any
+    // audition and leave. (X360 `if (!a2 || *(r31 + 0x24A)) goto <main>`; r31 is the -4 base
+    // this file's other bodies use, so that byte is this+0x246 == mbMenuStreamOverCustom.)
+    if (abCustomSoundtrack && !mbMenuStreamOverCustom)
+    {
+        if (mMusicStreamMenu.IsPlayingOrQueued())
+        {
+            mMusicStreamMenu.StopAndUnqueue(0.0f);
+            return;
+        }
+    }
+
+    if (mEaTraxData.miPreviousPreviewSong == mEaTraxData.miPreviewSong)
+    {
+        return;
+    }
+
+    // The previewed track changed: fade the previous one out over a second.
+    mMusicStreamMenu.StopAndUnqueue(1.0f);
+
+    const s32 liPreviewSong = mEaTraxData.miPreviewSong;
+
+    // -1 is the menu's "stop previewing" value (CrashNavTrax::PreviewTrack posts it on
+    // ACCEPT and on the cancel flow), and a custom soundtrack never auditions.
+    if (liPreviewSong != -1 && !abCustomSoundtrack)
+    {
+        Module::SoundLogicModule* lpModule =
+            static_cast<Module::SoundLogicModule*>(mpLogicModule);
+        CGS_ASSERT(lpModule, "lpLogicModule");   // BrnMusicEffect.cpp:1755
+
+        // The console hands the RefSpec straight to each generated ctor (its Instance base
+        // takes one); this tree's generated ctors take the resolved Collection, so it is
+        // resolved here -- the committed UpdateParams idiom a few hundred lines above.
+        Attrib::Gen::songlist lSongList(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(
+                    lpModule->GetGlobalData().SongList()).GetCollection()), 0);
+        Attrib::RefSpec* lpSongSpec = reinterpret_cast<Attrib::RefSpec*>(
+            lSongList.Songs(static_cast<u32>(liPreviewSong)));
+        Attrib::Gen::song lSong(
+            lpSongSpec ? const_cast<Attrib::Collection*>(lpSongSpec->GetCollection()) : 0, 0);
+
+        const char* lpcStream = lSong.Stream();
+        const u32 luContentSpec = lpcStream
+            ? static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcStream)) : 0u;
+
+        // ⚠️ THE OUTPUT SLOT IS THE PREVIEW FLAG, INVERTED. X360 0x826F7150..0x826F7170
+        // reads mbPreviewActive, turns it into 0 or -1, clears bit 3 (`rlwinm r11,r11,0,
+        // 29,27`) and adds 10 -- i.e. slot 1 when the preview is active and slot 10 when it
+        // is not. Slot 1 is the menu-music output the preview is meant to be heard on.
+        mMusicStreamMenu.Queue(luContentSpec,
+                            static_cast<u8>(mbPreviewActive ? 1 : 10));
+
+        // [DIAG] NOT IN THE X360 BINARY -- opt-in witness (BRN_MUSIC_DIAG=1) that the EA
+        // Trax menu's audition reached the stream, which is the whole point of this body.
+        if (MusicDiagEnabled())
+        {
+            MusicDiagPrintf("[music] PREVIEW track %d stream='%s' spec=0x%08X -> Queue(MenuStream, "
+                            "slot %d)\n", liPreviewSong, lpcStream ? lpcStream : "<null>",
+                            luContentSpec, mbPreviewActive ? 1 : 10);
+        }
+
+        // Tell the GUI what is auditioning: 24 bytes on the module's GuiOut queue as event
+        // 502 -- the "now playing" chyron BrnGuiAlwaysAvailableComponentsManager's case 502
+        // drives. The payload is the playlist's remaining-songs mask followed by the track
+        // index and a set flag (X360 copies this+0x1EC/0x1F4 then stores the index at +0x10
+        // and 1 at +0x14).
+        struct GuiEaTraxNowPlaying
+        {
+            CgsContainers::FastBitArray<128> mRemainingSongs;   // +0x00
+            s32 miSong;                                         // +0x10
+            u8  mbPlaying;                                      // +0x14
+        } lRecord;
+        lRecord.mRemainingSongs = mEaTraxData.mRemainingSongs;
+        lRecord.miSong          = liPreviewSong;
+        lRecord.mbPlaying       = 1;
+
+        CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
+            reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+                lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+        lpGuiOut->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), 502, 24);
+    }
+
+    // Latch, so the change is handled exactly once. The console spells it as a swap
+    // (`lwz r11,0x200 ; stw r30,0x200 ; stw r11,0x204`) whose net effect is
+    // miPreviousPreviewSong = miPreviewSong, because r30 IS miPreviewSong.
+    const s32 liOld = mEaTraxData.miPreviewSong;
+    mEaTraxData.miPreviewSong         = liPreviewSong;
+    mEaTraxData.miPreviousPreviewSong = liOld;
+}
+
+
 // X360 0x8269CFC0.
 u32 MusicEffect::GetEventStartContentSpec(const void* apGameModeInterface)
 {
@@ -716,8 +832,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
     mJunkyardStream.SetStreamPaused(lbStreamsPaused);
 
     UpdateSongs();
-    // X360: UpdatePreviewTrack(this, lbCustomSoundtrack) @0x826F6FD0 runs here -- the
-    // EA Trax menu's per-track preview. NOT RECONSTRUCTED this wave (front-end only).
+    UpdatePreviewTrack(lbCustomSoundtrack);   // X360 `bl 0x826F6FD0` @0x826FE7F0
 
     switch (meMusicType)
     {

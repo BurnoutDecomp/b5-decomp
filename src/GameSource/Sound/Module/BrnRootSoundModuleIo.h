@@ -279,7 +279,18 @@ namespace Io
         };
         struct UpdateInfo                    { u8 mData[1]; };       // single-byte copy (SetUpdateInfo)
         struct AICarOutputInterface          { u8 mData[0x14E8]; };  // memcpy 0x14E8 (SetAICarOutputInterface)
-        struct GuiAudioEventResults          { u8 mData[4]; };
+        // ⭐ GROWN 2026-09-16 from the nominal `u8 mData[4]`: it is EIGHT bytes, and this
+        // header's own Construct note already said so and FLAG'd it -- the console's
+        // RootInputBuffer::Construct writes `0` as a u32 at this+0x13730 AND flt_82001CC0
+        // (0.0f) at this+0x13734. Both slots have readers: HUDEffect::UpdateStuntRun
+        // @0x82701598 takes the s32 at +0x00 as the live stunt-run result score, and
+        // HUDEffect::UpdateShowtime @0x82701830 takes the f32 at +0x04 as the showtime
+        // score. It is the LAST member of RootInputBuffer, so widening it moves nothing.
+        struct GuiAudioEventResults
+        {
+            s32 miStuntResultScore;   // +0x00
+            f32 mfShowtimeScore;      // +0x04
+        };
 
         // InputBuffer::GameActionQueue typedef (BrnRootSoundModuleIo.h:49). Modelled as
         // correctly-sized opaque storage: its span is +0x3084 .. +0x6494 (internal layout
@@ -466,8 +477,9 @@ namespace Io
     //   35x { flt_82F2E758 -> AICar+0x140C+4i ; 0x7FFF -> AICar+0x1498+2i } [FLAG deferred:
     //     inside the opaque AICarOutputInterface; SetAICarOutputInterface's 0x14E8 copy
     //     overwrites the whole span on every bridged frame]
-    //   this+0x13730 := 0 (u32) + flt_82001CC0 @+0x13734 [the results word cleared below;
-    //     the float slot is past the nominal 4-byte model -- FLAG deferred with it]
+    //   this+0x13730 := 0 (u32) + flt_82001CC0 @+0x13734 [BOTH slots, and the FLAG that
+    //     used to stand here is retired: GuiAudioEventResults is the 8-byte pair above,
+    //     and the memset below now covers the float as the console's store does]
     //   stw 0, this+0x2F10                              -> mePlayerActiveRaceCarIndex
     inline void RootInputBuffer::Construct()
     {
