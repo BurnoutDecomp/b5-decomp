@@ -193,6 +193,16 @@ public:
         // over / set up out of range / add car to mode / remove car from mode.
         void HandleManagementEvents( const AIModuleIO::InputBuffer* lpInputBuffer );
 
+        // @0x8279A1E0. The SIM-PAUSED arm of Update: the console branches to it at
+        // 0x8279B4B0 (`if (lUpdateSet & 1)`) INSTEAD of the running body, and it still
+        // drains the per-frame queues -- HandleGameActions at 0x8279A348 and
+        // HandleManagementEvents at 0x8279A37C. Dropping it dropped every management
+        // event posted on a paused frame; see the body for the assert that cost.
+        void PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                           CgsModule::IOBufferStack* lpOutputBufferStack,
+                           const AIModuleIO::InputBuffer* lpInputBuffer,
+                           AIModuleIO::OutputBuffer* lpOutputBuffer );
+
         // ---- the game-action handlers HandleGameActions calls (DWARF :251..:272) --------------
         void OnRaceCarReachedFinish( const BrnGameState::GameStateModuleIO::RaceCarReachedFinishAction* lpAction );      // @0x8277B8D0
         void OnRaceCarReachedCheckpoint( const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpAction ); // @0x8278A658 (ARTIST export hole -- parked)
