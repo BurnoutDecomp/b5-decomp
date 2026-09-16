@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cfloat>   // FLT_MAX (the -3.4028235e38 / +3.4028235e38 seeds)
+#include <cstdlib>  // [DIAG] getenv (BRN_AI_FAN_DIAG)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_AI_FAN_DIAG witness
 
 // BrnAI::SteeringFan -- partfile 1 of 2 for the weighting/target half (aiwave R6 lane).
 // This TU owns the TARGET SELECTION path plus the kfBias table every contributor is scaled by:
@@ -143,6 +145,63 @@ SteeringFan* SteeringFan::AccumulateWeightings()
     {
         const f32 lfCumulative = mfCumulativeWeighting[liStep];
         mfCumulativeWeighting[liStep] = lfCumulative + (lafAccumulated[liStep] - lfCumulative) * 0.5f;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). mfCumulativeWeighting measured ALL
+    // ZERO in every sample, which pins every AI car at a quarter of its speed via
+    // CalculateDesiredSpeed's (ratio*0.75 + 0.25) tail. This is the only writer of that array,
+    // so the question is whether it runs at all and, if it does, whether the CONTRIBUTOR rows
+    // it folds are themselves empty. Print the bias mode, how many bias entries are live, and
+    // the largest absolute contributor weight -- that separates "never called" from "called
+    // with nothing to fold" from "folded but the bias row is zero".
+    if (getenv("BRN_AI_FAN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static u32 suAccumCall = 0;
+        if ((suAccumCall++ % 240) == 0)
+        {
+            f32 lfMaxRow = 0.0f;
+            s32 liLiveRows = 0;
+            for (s32 liC = 0; liC < E_FAN_CONTRIBUTORS_COUNT; ++liC)
+            {
+                bool lbLive = false;
+                for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
+                {
+                    const f32 lfA = (mfWeighting[liC][liS] < 0.0f) ? -mfWeighting[liC][liS]
+                                                                   :  mfWeighting[liC][liS];
+                    if (lfA > lfMaxRow) lfMaxRow = lfA;
+                    if (lfA != 0.0f)    lbLive = true;
+                }
+                if (lbLive) ++liLiveRows;
+            }
+            s32 liLiveBias = 0;
+            for (s32 liC = 0; liC < E_FAN_CONTRIBUTORS_COUNT; ++liC)
+                if (kfBias[meBiasMode][liC] != 0.0f) ++liLiveBias;
+
+            f32 lfMaxAccum = 0.0f;
+            for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
+            {
+                const f32 lfA = (lafAccumulated[liS] < 0.0f) ? -lafAccumulated[liS] : lafAccumulated[liS];
+                if (lfA > lfMaxAccum) lfMaxAccum = lfA;
+            }
+            *CgsDev::Log::gpDebugPrint
+                << "[aiaccum] fan " << static_cast<s32>(reinterpret_cast<intptr_t>(this) & 0xFFFFFF)
+                << " call " << static_cast<s32>(suAccumCall)
+                << " biasMode " << static_cast<s32>(meBiasMode)
+                << " liveBias " << liLiveBias << "/" << static_cast<s32>(E_FAN_CONTRIBUTORS_COUNT)
+                << " liveRows " << liLiveRows << " maxRow " << lfMaxRow
+                << " maxAccum " << lfMaxAccum;
+            // The POST-LERP cumulative, read back off the object we just wrote. If this is
+            // non-zero here but GetSpeedRatio sees zero, something clears the array between
+            // the two; if it is zero here, the write itself never landed.
+            f32 lfMaxCumNow = 0.0f;
+            for (s32 liS = 0; liS < KI_FAN_STEPS; ++liS)
+            {
+                const f32 lfA = (mfCumulativeWeighting[liS] < 0.0f) ? -mfCumulativeWeighting[liS]
+                                                                     :  mfCumulativeWeighting[liS];
+                if (lfA > lfMaxCumNow) lfMaxCumNow = lfA;
+            }
+            *CgsDev::Log::gpDebugPrint << " maxCumAfterWrite " << lfMaxCumNow << "\n";
+        }
     }
 
     return this;

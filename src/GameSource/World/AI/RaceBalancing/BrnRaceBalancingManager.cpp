@@ -18,6 +18,8 @@
 #include <cstddef>                                   // offsetof (layout pins)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_RACEBAL_DIAG witness
+#include <cstdlib>                                           // [DIAG] getenv
 #include "GameSource/World/AI/BrnAICar.h"            // BrnAI::AICar + its accessors
 #include "GameSource/World/AI/BrnAISharedConstants.h"// EAICarState
 #include "GameSource/World/AI/Route/BrnRoute.h"      // BrnAI::RouteNode (GetNextRouteNode deref)
@@ -168,23 +170,53 @@ f32 RaceBalancingManager::ComputeTargetSpeed(const AICar* lpAICar,
                                              const AISectionsData* lpAISectionsData,
                                              bool /*lbPlayerIsCrashing*/) const
 {
+    // [DIAG] NOT IN THE X360 BINARY (BRN_RACEBAL_DIAG=1). EVERY early return here hands the
+    // opponent KF_DEFAULT_SPEED == 60 mph, which is both "the AI is too slow" and "the AI
+    // never boosts" at once: AIDriver::CheckForBoosting only boosts when the desired speed is
+    // above 130 mph or more than 50 mph above the current speed, and a 60 mph target can
+    // reach neither. So WHICH guard fires is the whole question. Rate limited to one line per
+    // (reason, opponent) pair so a per-frame path cannot storm the log.
+    #define BRN_RACEBAL_BAIL(reason)                                                        \
+        do {                                                                                \
+            if (getenv("BRN_RACEBAL_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)           \
+            {                                                                               \
+                static u32 suSeen[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };                          \
+                const s32 liOpp = lpAICar->GetOpponentIndex();                              \
+                const u32 luBit = 1u << (reason);                                           \
+                const s32 liSlot = (liOpp >= 0 && liOpp < 8) ? liOpp : 0;                   \
+                if ((suSeen[liSlot] & luBit) == 0)                                           \
+                {                                                                           \
+                    suSeen[liSlot] |= luBit;                                                \
+                    *CgsDev::Log::gpDebugPrint                                              \
+                        << "[racebal] opp " << liOpp << " -> DEFAULT 60mph, reason "        \
+                        << (reason)                                                          \
+                        << " (0 notInRace 1 styleNotRace 2 noValidRoute 3 nodeBeyondTimes)\n"; \
+                }                                                                           \
+            }                                                                               \
+        } while (0)
+
     if (!mbInRace)
     {
+        BRN_RACEBAL_BAIL(0);
         return KF_DEFAULT_SPEED;
     }
     if (lpAICar->GetRouteFindingStyle() != E_ROUTE_FINDING_RACE)
     {
+        BRN_RACEBAL_BAIL(1);
         return KF_DEFAULT_SPEED;
     }
     if (!lpAICar->HasValidRoute())
     {
+        BRN_RACEBAL_BAIL(2);
         return KF_DEFAULT_SPEED;
     }
     const RaceBalancingRoute& lrRoute = maRaceBalancingRoutes[static_cast<u32>(lpAICar->GetOpponentIndex())];
     if (lpAICar->GetNextRouteNodeIndex() >= lrRoute.GetTimeCount())
     {
+        BRN_RACEBAL_BAIL(3);
         return KF_DEFAULT_SPEED;
     }
+    #undef BRN_RACEBAL_BAIL
     const f32 KF_AHEAD_GRAPH_DISTANCE = 80.0f;   // flt_82004A18
     const GraphType leGraphType = (lpAICar->GetDistanceAheadOfPlayer() > KF_AHEAD_GRAPH_DISTANCE)
                                       ? E_GRAPH_TYPE_AHEAD : E_GRAPH_TYPE_BEHIND;
