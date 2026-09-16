@@ -418,10 +418,14 @@ bool HUDEffect::Detach()
 // at +0x40, mStuntScore at +0x44, mStuntResultScore at +0x54, mShowtimeScore at
 // +0x5C, mShowtimeBoostDelta at +0x64, mbTimeExtended at +0x6C) and the showtime /
 // stunt thresholds are .rdata 0x82F2CE48/4C/50 == 3.5 / 1.5 / 1.0 with the
-// re-trigger gate 0x82F2CE54 == 0.379 s. What is NOT yet settled is the shape of
-// RootInputBuffer::GuiAudioEventResults: this tree models it as u8[4], and
-// UpdateShowtime reads a float at +4, so that member has to be re-measured before
-// the showtime arm can be trusted.
+// re-trigger gate 0x82F2CE54 == 0.379 s. RootInputBuffer::GuiAudioEventResults was
+// the one open shape and it is settled too (same wave): it is EIGHT bytes,
+// { s32 miStuntResultScore @+0x00; f32 mfShowtimeScore @+0x04 }, which is what
+// RootInputBuffer::Construct writes (0 as a u32 at +0x13730, flt_82001CC0 at
+// +0x13734) and what these two arms read. The mode-5 arm's own arguments are
+// pinned as well -- UpdateGameModeHud @0x827027F0 gates on the scoring interface's
+// byte at +0xAA8 and passes (scoring[+0xA98] - scoring[+0xA90], 10.0f, tag 21,
+// mixer output 3).
 // ---------------------------------------------------------------------------
 void HUDEffect::UpdateParams(f32 af32DeltaTime)
 {
