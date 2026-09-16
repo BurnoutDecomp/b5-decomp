@@ -285,6 +285,11 @@ void SoundLogicModule::Construct()
     meBrnPrepareStage = E_PREPSTAGE_PERFMON;
     mbConstructed     = true;
 
+    // [marked deviation -- PC DRIVER LATCH] Seeds the one-shot
+    // PrepareStateManagersOnEnteringGameplay(4) poll Update() runs; see that function's
+    // banner for the console chain it stands in for.
+    mbEnteringGameplayPrepared = false;
+
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "[Sound] SoundLogicModule::Construct (registrar live)\n";
 }
@@ -404,6 +409,7 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         CGS_ASSERT(false, "Invalid Stage\n");
         break;
     }
+
 
     // Console: every exit detaches the per-call buffers (vtbl+0x54).
     DetachBuffers();
@@ -1227,10 +1233,86 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
     AttachBuffers(apInputBuffer, apOutputBuffer);
     mpBrnLogicOutputBuffer->LockForWrite();
     mpBrnLogicInputBuffer->LockForWrite();
+
+    // [marked deviation -- DRIVER ONLY] Poll the console's own
+    // PrepareStateManagersOnEnteringGameplay(4) until it reports ready. Boot's
+    // PrepareStateManagersOnBoot(4) SKIPS slot 2 (AIVehicleStateManager) by design, and the
+    // console's LoadSoundModuleAgain -> RootSoundModule::PrepareOnEnteringGameplay ->
+    // SoundLogicModule::PrepareOnEnteringGameplay chain that prepares it has no body in this
+    // tree yet. 0x82703FA8..0x82704000 wraps that same call in LockForWrite / [on retry]
+    // ResourceBridging / UnlockForWrite -- which is exactly the bracket this drain already
+    // holds, so the poll sits inside it and the registrar Update below services the AI engine
+    // bundle requests the prepare issues. One-shot: once it answers true it is never called
+    // again, matching the console's stage machine parking at DONE.
+    // See PrepareStateManagersOnEnteringGameplay's banner for the full chain and the
+    // measurement. RETIRE THIS when that chain is reconstructed.
+    if (!mbEnteringGameplayPrepared)
+    {
+        mbEnteringGameplayPrepared = PrepareStateManagersOnEnteringGameplay(4);
+    }
+
     ResourceBridging();
     mpBrnLogicOutputBuffer->UnlockForWrite();
     mpBrnLogicInputBuffer->UnlockForWrite();
     DetachBuffers();
+}
+
+// ===========================================================================================
+// X360 0x826EC108. PrepareStateManagersOnEnteringGameplay -- THE CALL THAT STARTS AI CAR AUDIO.
+//
+// The twin of PrepareStateManagersOnBoot above, with the mask sense INVERTED. X360:
+//   826EC130  slw   r11, r30, r29     ; 1 << i
+//   826EC134  and   r11, r11, r26     ; & mask
+//   826EC13C  beq   -> next slot      ; bit NOT set -> SKIP  (the boot twin skips when SET)
+// so it prepares ONLY the slots named by the mask, and a manager that answers false aborts
+// the pass (826EC168 -> 826EC240 `li r3,0`) so the caller retries next tick.
+//
+// WHY IT MATTERS: boot calls PrepareStateManagersOnBoot(4), whose mask means SKIP, and bit 2
+// is AIVehicleStateManager (registered ObjectIDs: 0 Global, 1 PlayerVehicle, 2 AIVehicle,
+// 3 Traffic, 4 Passby, 5 Collision, 6 Streaming, 7 Emitter). Boot deliberately leaves the AI
+// vehicle manager unprepared and THIS function, with the same literal 4, is what prepares it.
+// Until it runs, AIVehicleStateManager::UpdateParams returns on its first line
+// (`if (mePrepareState != E_PREPARE_FINISHED) return;`), so UpdateVehicleLoading never runs,
+// so no NON-PLAYER audio entry is ever answered with OnAssetLoaded. Measured 2026-09-16: a
+// car picked in the junkyard is registered non-player for the duration of the podium swap
+// (CarSelectManager::TeleportCurrentVehicle writes mbCarSelectDontStreamAudio = 1, faithfully
+// -- console 0x82392F78), its audio slot parks at E_RACECARSTREAMINGSOUND_ATTACHING forever,
+// its ENGINES bundles are never streamed and PlayerVehicleState::Attach never runs for it.
+// That is the owner's "every single car that is not the Cavalry doesn't have any sound", and
+// the same hole silences AI opponents.
+//
+// [marked deviation -- DRIVER, not body] The console reaches this from
+//   LoadingScriptedState::LoadSoundModuleAgain        @0x823E7700   (no body in this tree)
+//    -> RootSoundModule::PrepareOnEnteringGameplay    @0x82704188   (no body in this tree)
+//       -> SoundLogicModule::PrepareOnEnteringGameplay@0x82703F18   (no body in this tree)
+//          -> this(4), inside LockForWrite / [retry: ResourceBridging] / UnlockForWrite.
+// None of those three exists yet, so the poll is driven from Update()'s existing
+// registrar-drain bracket, which is the SAME lock/bridge/unlock shape 0x82703FA8..0x82704000
+// uses. Retire this driver when that chain lands; the body below is the console's own.
+//
+// [FLAG] the console's SUCCESS tail (0x826EC17C..0x826EC234) is NOT reproduced: three
+// CgsSound::Io::Message<bool> posts into mMessageQueue -- {event 15, E_EFFECT_TYPE_OBJECT,
+// state-manager 0, effect 2}, {event 15, object, effect 4} and {event 43,
+// E_EFFECT_TYPE_CONTROL, effect 0}, all payload true -- plus `*(this+0x135D0) = 1` and
+// `*(f32*)(this+0x135CC) = [0x82001C98]`. Neither member has a reconstructed name in this
+// header and neither event id has an identified consumer, so they are named here rather than
+// guessed. The prepare loop is the load-bearing half and is reproduced exactly.
+// ===========================================================================================
+bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 luPrepareMask)
+{
+    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+    {
+        const bool lbPrepareThisOne = (((1 << liIndex) & luPrepareMask) != 0);
+        if (lbPrepareThisOne && mapStateManagers[liIndex] != 0)
+        {
+            if (!mapStateManagers[liIndex]->Prepare())   // vtable +0x0C
+            {
+                return false;   // still loading -> the caller retries next tick
+            }
+        }
+    }
+
+    return true;
 }
 
 // X360 0x826AFEF8. Create the 9 sound-logic state managers and register them in the

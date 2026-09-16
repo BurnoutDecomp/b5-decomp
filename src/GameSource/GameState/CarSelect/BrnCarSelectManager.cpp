@@ -2,6 +2,7 @@
 
 #include <cstddef>   // offsetof (layout asserts)
 #include <cstring>   // memset/memcpy (opaque action payloads)
+#include <cstdlib>   // std::getenv ([car-audio] BRN_DEBUG_UNLOCK_CARS harness arm)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16> (game-action queue)
@@ -176,6 +177,30 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
     mbDEBUG_DisableUnlock                = false;
     mbDEBUG_UnlockTrophyCarsForTesting   = false;
     mbDEBUG_UnlockShutdownCarsForTesting = false;
+
+    // [car-audio] HARNESS-ONLY, NOT an X360 store: `BRN_DEBUG_UNLOCK_CARS=1` arms the
+    // console's OWN two development cheats above, which EnterJunkyard already reads to call
+    // DEBUG_UnlockCarsForTesting() (ProgressionManager::AddCar on up to 3 trophy + 3 shutdown
+    // cars).  WHY IT EXISTS: the harness creates a FRESH profile every run, a fresh profile
+    // owns exactly ONE car (the Cavalry), so the junkyard carousel has a single entry and
+    // -CarSelectTaps has nothing to move to -- measured 2026-09-16, three runs with Next:3 /
+    // DPadRight:3 / no taps all left the player on VEH_PUSMC01.  The owner's bug is "every car
+    // that is not the Cavalry has no sound", so a one-car profile cannot reproduce it at all.
+    // Inert unless the variable is set; a default run is byte-identical.
+    if (const char* lpcUnlock = std::getenv("BRN_DEBUG_UNLOCK_CARS"))
+    {
+        if (lpcUnlock[0] != '\0' && lpcUnlock[0] != '0')
+        {
+            mbDEBUG_UnlockTrophyCarsForTesting   = true;
+            mbDEBUG_UnlockShutdownCarsForTesting = true;
+            if (CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[car-audio] ***** HARNESS-ONLY DEBUG CAR UNLOCK (BRN_DEBUG_UNLOCK_CARS) "
+                    << "***** -- EnterJunkyard will run the console's DEBUG_UnlockCarsForTesting\n";
+            }
+        }
+    }
 }
 
 // ============================================================================
