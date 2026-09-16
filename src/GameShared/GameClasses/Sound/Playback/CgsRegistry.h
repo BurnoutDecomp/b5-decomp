@@ -108,6 +108,11 @@ private:
     const Entity* mapEntity[1];
 
     // CgsRegistry.h:215-224. Named starts of the three in-place regions.
+    // [FLAG PC bring-up] NOT an X360 method. True when this blob's header is the PORTED
+    // (48-byte header, 8-byte slot) layout rather than the console's (0x1C / 4-byte) one.
+    // Checks the converter's own three invariants; see the banner on FixUp.
+    bool IsPortedLayout() const;
+
     const Entity** GetFirstEntity() { return mapEntity; }
     const Entity* const* GetFirstEntity() const { return mapEntity; }
     u8* GetDataStart()
