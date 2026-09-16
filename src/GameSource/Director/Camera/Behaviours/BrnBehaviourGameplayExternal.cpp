@@ -24,6 +24,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"
+#include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
 
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
                                                         // VehicleTracker::GetImplicitVelocity()
@@ -1723,6 +1724,28 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
             mbJumping ? true : lrSharedInfo.mbUseControlPauseBehaviour,
             -10.0f,
             mbJumping ? 20.0f : (10.0f - lfPitchLimitReduction));
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The far end of the rear-view
+        // chain: this is THE camera the player drives behind, and these are the values it
+        // rotates by a few lines below (.cpp:681 / :692). Prints on change only.
+        {
+            static const bool sbLookDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+            static s32 siLastLookState = -1;
+            const s32 liLookState = (mRotationController.IsLookback() ? 1 : 0)
+                                  + (mRotationController.IsRotated()  ? 2 : 0);
+            if (sbLookDiag && liLookState != siLastLookState && CgsDev::Log::gpDebugPrint != 0)
+            {
+                siLastLookState = liLookState;
+                *CgsDev::Log::gpDebugPrint
+                    << "[cam-look] GameplayExternal isLookback "
+                    << (mRotationController.IsLookback() ? 1 : 0)
+                    << " isRotated " << (mRotationController.IsRotated() ? 1 : 0)
+                    << " yawRads " << mRotationController.GetYawRotationAngleRads()
+                    << " pitchRads " << mRotationController.GetPitchRotationAngleRads()
+                    << " sharedLookback " << (lrSharedInfo.mbLookback ? 1 : 0)
+                    << "\n";
+            }
+        }
 
         // ---- .cpp:230..:240 -- THE VELOCITY FRAME -------------------------------------
         // A right-handed frame whose forward IS the car's velocity direction. Its up axis is

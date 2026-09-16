@@ -28,6 +28,8 @@
 // ============================================================================
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector2 (the two stick slots of the director image)
+#include <cstddef>        // offsetof (the image layout asserts)
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO::ActionInfo (action slot read by name)
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"       // CgsGui::GuiEventControllerInput* / ActiveUserIndex / Axis / SetLanguage
 
@@ -64,15 +66,45 @@ namespace BrnGame
     // DirectorIO::InputBuffer::SetControllerInfo(&image) which memcpy's 224 bytes. Modelled as the
     // matching POD so every store is by-name. FLAG: the flag bit assignments are named from the
     // bridge's source ActionInfo status bits; the 224-byte total matches SetControllerInfo's copy.
+    // ================ THE TWO STICK SLOTS WERE MISSING, AND THE DEBUG BLOCK SAT ON TOP OF
+    // THEM. This image is memcpy'd 224 bytes into DirectorIO::InputBuffer's controller
+    // snapshot, so its byte layout IS DirectorIO::ControllerInfo's -- and that type pins
+    // mCarModifier at 16 and mCameraModifier at 32 with its own static_asserts. The previous
+    // shape put mDebugController at +0x10, i.e. 32 bytes early, directly over both vectors.
+    //
+    // X360 0x823C10E8..0x823C1120 settles every offset -- the bridge builds the two pairs on
+    // its own stack and moves them in with 16-byte vector stores:
+    //     addi r10, r1, 0x70 ; addi r11, r1, 0x90 ; lvx128 ; stvx128   image+0x10 <- pad+0x00/+0x04
+    //     addi r10, r1, 0x60 ; addi r11, r1, 0xa0 ; lvx128 ; stvx128   image+0x20 <- pad+0x08/+0x0C
+    //     addi r3,  r1, 0xb0                                          image+0x30 <- memcpy 0xAC
+    // (the image base is r1+0x80: the flag stores land at 0x80..0x89). pad+0x00/+0x04 are
+    // mfStickLX/LY and pad+0x08/+0x0C are mfStickRX/RY, so the LEFT stick drives the car
+    // modifier and the RIGHT stick drives the CAMERA modifier.
     struct DirectorControllerInfoImage
     {
         // 16-byte leading flag block (X360 v31[0..15]); each is a 1-byte controller-state flag.
-        u8   mabFlags[16];        // +0x00 .. +0x10
+        u8   mabFlags[16];                     // +0x00 .. +0x10
+        // The two analogue stick vectors. Vector2 is alignas(16) {x,y,z,w}, which is exactly
+        // the 16-byte slot each stvx128 above writes.
+        Vector2 mCarModifier;                  // +0x10  <- pad mfStickLX / mfStickLY
+        Vector2 mCameraModifier;               // +0x20  <- pad mfStickRX / mfStickRY
         // 172-byte debug-controller image (X360 v34) -- the MapActionInfoToDebugController output,
         // with the 4 trailing axis floats (v35[39..42]) appended by the bridge before the memcpy.
-        DebugControllerImage mDebugController; // +0x10 .. (172B)
-        u8   maPadTo224[224 - 16 - 172];       // close to SetControllerInfo's 224-byte copy
+        DebugControllerImage mDebugController; // +0x30 .. (172B)
+        u8   maPadTo224[224 - 48 - 172];       // close to SetControllerInfo's 224-byte copy
     };
+
+    // The image is a BYTE-FOR-BYTE stand-in for DirectorIO::ControllerInfo (that type carries
+    // the same three asserts); if either drifts, this stops compiling instead of silently
+    // publishing the sticks into the wrong fields again.
+    static_assert(offsetof(DirectorControllerInfoImage, mCarModifier) == 16,
+                  "ControllerInfo::mCarModifier is at +16");
+    static_assert(offsetof(DirectorControllerInfoImage, mCameraModifier) == 32,
+                  "ControllerInfo::mCameraModifier is at +32");
+    static_assert(offsetof(DirectorControllerInfoImage, mDebugController) == 48,
+                  "ControllerInfo::mDebugController is at +48 (X360 addi r3, r1, 0xb0)");
+    static_assert(sizeof(DirectorControllerInfoImage) == 224,
+                  "SetControllerInfo copies 224 bytes");
 
     // ---- world player-vehicle-controls image (X360 60-byte block) -----------
     // The ToWorld bridge fills a local controls block (steering/throttle/brake/handbrake/boost +

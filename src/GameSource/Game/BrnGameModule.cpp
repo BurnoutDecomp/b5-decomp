@@ -158,6 +158,7 @@ namespace BrnGame
         , mbGuiSuppressMenuAccept(false)
         , miLanguageCycleTimerLo(0)
         , mfLanguageCycleTimerFrac(0.0f)
+        , mfLookbackHoldTimer(0.0f)
         , miRenderMetricsRequested(0)
     {
         // (The X360 ctor does not touch mCpuMonitors -- Construct() sentinel-fills and
@@ -2179,6 +2180,42 @@ namespace BrnGame
         //       -> BridgeWorldToDirector                                   (into the director)
         // If no player car is active the bridge publishes index -1, which is the console's own
         // "no live player car" answer -- an honest fail instead of a silently wrong camera.
+        // ==== THE CONTROLLER -> DIRECTOR BRIDGE (X360 BridgeControllerToDirector
+        // @0x823C0F70). THE PLAYER'S PAD NEVER REACHED THE DIRECTOR ON THIS BUILD.
+        // The function was fully bodied, declared, and its TU mounted -- and it had ZERO
+        // callers; its only reference in the whole tree was the _embed_check taking its
+        // address. So DirectorIO::InputBuffer's 224-byte controller snapshot stayed at
+        // DoUpdate_Director's zero-fill every frame, which means:
+        //     mCameraModifier == (0,0)  -> the free-look / orbit stick is dead
+        //     mbLookback      == false  -> the rear-view (L1) camera can never engage
+        //     mbCycleCameras  == false  -> the camera-change button does nothing
+        // Every consumer downstream was already complete and waiting on this one call:
+        //   BehaviourManager::PublishControllerState  copies both into BehaviourSharedInfo
+        //   BehaviourGameplayExternal::Update         -> CameraSphericalRotationController
+        //                                               ::Update(stick, lookback, ...)
+        //   BehaviourRotateAboutVehicle::Update       -> the car-select orbit
+        //   Arbitrator                                -> mbLookbackOverride
+        //
+        // POSITION IS THE CONSOLE'S: DoUpdate_Director runs it on the PRE-GUI pass
+        // immediately BEFORE BridgeWorldToDirector -- which is what the banner on that
+        // bridge below has said all along ("run by DoUpdate_Director on the PRE-GUI pass,
+        // right after BridgeControllerToDirector").
+        //
+        // The lock bracket matches the sibling BridgeControllerToGameState call: the pad
+        // buffer read-locked, the director input write-locked.
+        // [FLAG PC bring-up] the pad record is ONE SUB-STEP STALE here, exactly as the
+        // game-state leg already documents -- InputPadsPC::UpdatePlayer0 refills
+        // mPcInputOutputBuffer later in the frame. One frame of camera-stick latency.
+        // DELETE-WHEN the input fill moves to the top of the frame where the console has it.
+        if (!lbPostGui)
+        {
+            mPcInputOutputBuffer.LockForRead();
+            lpDirectorInput->LockForWrite();
+            BridgeControllerToDirector(lpDirectorInput, &mPcInputOutputBuffer);
+            lpDirectorInput->UnlockForWrite();
+            mPcInputOutputBuffer.UnlockForRead();
+        }
+
         if (!lbPostGui && mpWorldUpdateOutputBuffer != 0)
         {
             mpWorldUpdateOutputBuffer->LockForRead();

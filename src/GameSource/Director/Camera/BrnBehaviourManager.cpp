@@ -11,6 +11,7 @@
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"      // Behaviour::GetDebugParametersName / GetName
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // gpDebugPrint / gxMessageFilterFlags
+#include <cstdlib>   // getenv (BRN_CAM_INPUT_DIAG)
 
 // The behaviour-type homes, pulled in so each AllocateBehaviour<TBehaviour> explicit
 // instantiation (below) sees a COMPLETE TBehaviour (AllocateVoid<T> needs sizeof(T) + a
@@ -837,6 +838,51 @@ namespace Camera
         // VMX vperm 82CDA350 selects {-x, y, -x, -x}.
         info.mCarModifier = {-controller.mCarModifier.x, controller.mCarModifier.y,
                             -controller.mCarModifier.x, -controller.mCarModifier.x};
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. Sits HERE, in
+        // PublishControllerState, because it is the one point BOTH update passes go
+        // through (UpdateAllBehaviours and PostCollisionUpdateAllBehaviours) -- an earlier
+        // placement in UpdateAllBehaviours alone printed ONCE in a 130 s run and said
+        // nothing about the in-game frames, which take the PostCollision path.
+        //
+        // It reads the values as the CONSUMER receives them, so it proves the whole
+        // pad -> BridgeControllerToDirector -> SetControllerInfo -> BehaviourSharedInfo
+        // path, not merely that the bridge ran. Prints on CHANGE only: a held stick or
+        // bumper gives one line down and one up. Before the bridge had a caller at all,
+        // every field below read zero/false for the entire session.
+        {
+            static const bool sbCamInputDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+            if (sbCamInputDiag && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static s32 siLastKey = -1;
+                static s32 siCalls   = 0;   // heartbeat: prove this runs in-game at all
+                ++siCalls;
+                const s32 liKey =
+                    static_cast<s32>(controller.mCameraModifier.x * 50.0f) * 1000
+                    + static_cast<s32>(controller.mCameraModifier.y * 50.0f)
+                    + (controller.mbLookback            ? 2000000 : 0)
+                    + (controller.mbCycleCameras        ? 4000000 : 0)
+                    + (controller.mbCameraButtonHeldDown ? 8000000 : 0)
+                    + (info.mbLookback                  ? 16000000 : 0);
+                if (liKey != siLastKey || (siCalls % 600) == 0)
+                {
+                    siLastKey = liKey;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[cam-input] camStick " << controller.mCameraModifier.x
+                        << "," << controller.mCameraModifier.y
+                        << " carStick " << controller.mCarModifier.x
+                        << "," << controller.mCarModifier.y
+                        << " lookback " << (controller.mbLookback ? 1 : 0)
+                        << " cycle " << (controller.mbCycleCameras ? 1 : 0)
+                        << " camBtn " << (controller.mbCameraButtonHeldDown ? 1 : 0)
+                        << " anyInput " << (controller.mbAnyInput ? 1 : 0)
+                        << " | published lookback " << (info.mbLookback ? 1 : 0)
+                        << " paused " << (info.mbUseControlPauseBehaviour ? 1 : 0)
+                        << " calls " << siCalls
+                        << "\n";
+                }
+            }
+        }
     }
 
     // ARTIST 82251960: responders, controllers, then every live behaviour.
