@@ -16,6 +16,7 @@
 #include "GameSource/Sound/Global/BrnSpeechEffect.h"                              // SpeechEffect::GetLanguage (message 33)
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"  // the JumpHpf crash gate
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"   // BrnGui::GuiEATraxNewTrackEvent (GUI event 502)
 #include <cmath>   // powf (JumpHpf::Update's exponential sweep, sub_82C09970)
 
 #include <cstdio>
@@ -696,15 +697,15 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
         // drives. The payload is the playlist's remaining-songs mask followed by the track
         // index and a set flag (X360 copies this+0x1EC/0x1F4 then stores the index at +0x10
         // and 1 at +0x14).
-        struct GuiEaTraxNowPlaying
-        {
-            CgsContainers::FastBitArray<128> mRemainingSongs;   // +0x00
-            s32 miSong;                                         // +0x10
-            u8  mbPlaying;                                      // +0x14
-        } lRecord;
+        // The record type moved to its DWARF-named home (Gui/Events/BrnGuiEventAudioTrax.h)
+        // when case 502 was wired up, so producer and consumer share ONE definition. The
+        // +0x14 byte was locally called `mbPlaying` here; the DWARF calls it mbPreview, and
+        // the consumer settles it -- a set byte means "audition, do not persist to profile".
+        // This body only posts from the preview path, so 1 is correct either way.
+        BrnGui::GuiEATraxNewTrackEvent lRecord;
         lRecord.mRemainingSongs = mEaTraxData.mRemainingSongs;
-        lRecord.miSong          = liPreviewSong;
-        lRecord.mbPlaying       = 1;
+        lRecord.miSongIndex     = liPreviewSong;
+        lRecord.mbPreview       = 1;
 
         CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
             reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
@@ -928,9 +929,35 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                 const u32 luContentSpec = lpcStream
                     ? static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcStream)) : 0u;
                 mEATraxStream.Queue(luContentSpec, 1);
+
+                // ⭐ THE IN-GAME "NOW PLAYING" POST (X360 @0x826FECCC..0x826FECF4). This is
+                // the arm that actually puts the chyron on screen during play; the preview
+                // post further down only fires while auditioning in the EA Trax menu, which
+                // is why the overlay never appeared in game. Immediately after the Queue:
+                //   826FECC4  addi r10, r18, 0x1EC  ; &mEaTraxData.mRemainingSongs
+                //   826FECCC  li   r6, 0x18         ; 24-byte record
+                //   826FECD0  li   r5, 0x1F6        ; GUI event 502
+                //   826FECE4/E8  std/std            ; the 128-bit mask copied in two halves
+                //   826FECEC  stw  r31, 0xE0(r1)    ; +0x10 miSongIndex == liTrack
+                //   826FECF0  stb  r16, 0xE4(r1)    ; +0x14 mbPreview == 0 (li r16,0 @0x826FE6D4)
+                // mbPreview is ZERO here -- that is what lets the consumer's tail persist the
+                // track to the profile, which an audition must not do.
+                {
+                    BrnGui::GuiEATraxNewTrackEvent lNewTrack;
+                    lNewTrack.mRemainingSongs = mEaTraxData.mRemainingSongs;
+                    lNewTrack.miSongIndex     = liTrack;
+                    lNewTrack.mbPreview       = 0;
+
+                    CgsModule::VariableEventQueue<256, 16>* lpGuiOut =
+                        reinterpret_cast<CgsModule::VariableEventQueue<256, 16>*>(
+                            lpModule->GetPreUpdateOutput().maGuiOutEventQueueStorage);
+                    lpGuiOut->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lNewTrack), 502, 24);
+                }
+
                 if (MusicDiagEnabled())
                     MusicDiagPrintf("[music] select song %d/%d type=%d stream='%s' spec=0x%08X "
-                                "-> Queue(EATrax, slot 1)\n",
+                                "-> Queue(EATrax, slot 1) + GUI 502 now-playing\n",
                                 liTrack, liNumSongs, meMusicType,
                                 lpcStream ? lpcStream : "<null>", luContentSpec);
             }
