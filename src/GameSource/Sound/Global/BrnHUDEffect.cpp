@@ -381,20 +381,53 @@ bool HUDEffect::Detach()
 }
 
 // ---------------------------------------------------------------------------
-// HUDEffect::UpdateParams(f32)
+// HUDEffect::UpdateParams(f32)   @ 0x827037E0
 //
-// NOT an exported X360 symbol (the compiler folded the one-line body), but the
-// DWARF declares it at BrnHUDEffect.cpp:86 and IsReTrigger @0x82686858 reads
-// mfTimeSinceLastTrigger as a SECONDS accumulator with a 0.5 s guard, so the
-// accumulator has to be advanced on the per-frame params pass. The base
-// UpdateParams is a no-op, so this adds exactly the accumulate.
-// FLAG: the X360 body for this one function is not in the export set; the
-// accumulate is DERIVED from the invariant (Attach seeds 0.5, Notify clears to
-// 0.0, IsReTrigger compares < 0.5). No other behaviour is added.
+// ⭐⭐⭐ CORRECTED 2026-09-16 -- THE X360 BODY *IS* IN THE IMAGE, AND IT IS THREE
+// STATEMENTS, NOT ONE. The note that used to stand here said "the X360 body for
+// this one function is not in the export set" and derived the accumulate from
+// IsReTrigger's invariant. It is in the image; it is simply UNNAMED in the
+// ledger, which is the documented "missing body == a NAME search failing" trap.
+// It sits at 0x827037E0, between TrafficStateManager::UpdateParams and
+// CollisionStateManager::GetRandomSampleID, and it reads:
+//     827037F8  addi r30, r31, -4          ; r31 is the EffectBase sub-object,
+//     82703800  lfs  f0, 0x4CC(r31)        ;   so 0x4CC(r31) == this+0x4D0 ==
+//     82703804  fadds f0, f1, f0           ;   mfTimeSinceLastTrigger
+//     82703808  stfs f0, 0x4CC(r31)
+//     8270380C  bl   0x82701BA8            ; HUDEffect::UpdateSlipStreaming
+//     82703814  lwz  r4, 0x28(r31)         ; this+0x2C == mpLogicModule
+//     82703818  bl   0x82702670            ; HUDEffect::UpdateGameModeHud
+//
+// ⛔ SO THE ACCUMULATE IS RIGHT AND THE OTHER TWO THIRDS ARE MISSING, AND THIS IS
+// THE ONLY ENTRY POINT THE WHOLE HUD-AUDIO LANE HAS. UpdateGameModeHud
+// @0x82702670 is what dispatches on the live game mode to UpdateShowtime
+// @0x82701830 (modes 2/16), UpdateRoadRage @0x82701AA0 (mode 3),
+// UpdateEventTimeRemaining @0x826FE400 (mode 5) and UpdateStuntRun @0x82701598
+// (mode 7), and UpdateSlipStreaming @0x82701BA8 is the slipstream whoosh. None of
+// those five has a definition in this tree, so none of them can be called from
+// here yet -- the calls land with the bodies, not before, or the link breaks.
+// Until then the slipstream cue, the road-rage countdown and takedown stings, the
+// showtime score ticks, the stunt-run score ticks and the event-timer warnings are
+// all SILENT, and the cause is this function, not any of them.
+//
+// [FLAG] Two of three statements. The two calls are REPORTED, not stubbed: adding
+// them needs the five callees above, which is a wave of its own. Every offset they
+// need is already pinned -- mGameModeData's members line up one-for-one with the
+// console's a1+1072.. cursors (mEventScoreDelta.mfAverage at +0x2C,
+// mEventTimeRemaining at +0x30, mEventBoostAmount at +0x38, mfTimeSinceScoreTick
+// at +0x40, mStuntScore at +0x44, mStuntResultScore at +0x54, mShowtimeScore at
+// +0x5C, mShowtimeBoostDelta at +0x64, mbTimeExtended at +0x6C) and the showtime /
+// stunt thresholds are .rdata 0x82F2CE48/4C/50 == 3.5 / 1.5 / 1.0 with the
+// re-trigger gate 0x82F2CE54 == 0.379 s. What is NOT yet settled is the shape of
+// RootInputBuffer::GuiAudioEventResults: this tree models it as u8[4], and
+// UpdateShowtime reads a float at +4, so that member has to be re-measured before
+// the showtime arm can be trusted.
 // ---------------------------------------------------------------------------
 void HUDEffect::UpdateParams(f32 af32DeltaTime)
 {
     mfTimeSinceLastTrigger += af32DeltaTime;
+    // UpdateSlipStreaming();            <- @0x8270380C, see the banner
+    // UpdateGameModeHud(mpLogicModule); <- @0x82703818, see the banner
 }
 
 // ---------------------------------------------------------------------------

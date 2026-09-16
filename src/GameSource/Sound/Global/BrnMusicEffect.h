@@ -290,6 +290,11 @@ private:
     // X360 0x8269D260. Drop the current song if the playlist stopped allowing it, and
     // take it out of mRemainingSongs. Runs only when message 7/8 changed the playlist.
     void UpdateSongs();
+
+    // @0x826F6FD0 -- the EA Trax menu's per-track AUDITION. UpdateParams calls it every
+    // frame right after UpdateSongs; it only does anything on the frame the GUI changes
+    // which track is being previewed (sound message 9 / GUI event 460).
+    void UpdatePreviewTrack(bool abCustomSoundtrack);
     // X360 0x826BB9B0. A menu-stream name passes straight through unless it is the
     // "intro" video sentinel (dword_830080AC, dynamically initialised to MakeHash("intro")),
     // which resolves through the stream mappings + languagestreamconfiguration to the
