@@ -392,7 +392,7 @@ void Camera::SetShowtimeBlurAndBars(f32 lfCarsBlurAmount, f32 lfWorldBlurAmount,
 // ----------------------------------------------------------------------------
 void Camera::SetRequestedPostFX(f32 lfAmount)
 {
-    mEffects.mfRaceEndEffectAmount = lfAmount;   // stfs -> mEffects +0xA8 (== mfBlackBarAmount)
+    mEffects.mfBlackBarAmount = lfAmount;        // stfs -> mEffects +0xA8
 }
 
 // ----------------------------------------------------------------------------
@@ -458,7 +458,7 @@ void Camera::RequestMotionBlurShake(f32 lfAmount, f32 lfBlend, u8 lu8ShakeType)
 // ----------------------------------------------------------------------------
 void Camera::SetRequestedBorderPostFX(f32 lfAmount)
 {
-    mEffects.mfRaceEndEffectAmount = lfAmount;   // stfs -> mEffects +0xA8 (camera +0x110)
+    mEffects.mfBlackBarAmount = lfAmount;        // stfs -> mEffects +0xA8 (camera +0x110)
 }
 
 // ----------------------------------------------------------------------------

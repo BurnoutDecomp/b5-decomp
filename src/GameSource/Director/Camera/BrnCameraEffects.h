@@ -87,7 +87,12 @@ struct CameraEffects
     //   until a consumer attests each one. NOTE the +0x84 mfRaceEndEffectAmount is the REAL
     //   race-end amount; the member this file already calls mfRaceEndEffectAmount at +0xA8 is
     //   the DWARF's mfBlackBarAmount (:317) -- see the FLAG on that member.
-    u8  maReserved84[0x90 - 0x84];
+    // +0x84 -- CARVED for its first attested consumer: CameraControl::UpdateParams
+    // @0x826F66F8 reads it (`lfs f13, 0xEC(camera)`, i.e. mEffects + 0x84) as the ramp
+    // target whenever CameraState::E_FLAG_APPLYING_RACE_END_EFFECT is set. The comment
+    // above already named it; this is the consumer it was waiting for.
+    f32 mfRaceEndEffectAmount;         // +0x84
+    u8  maReserved88[0x90 - 0x88];     // +0x88 muFadeColor, +0x8C meOverlay
 
     // +0x90 / +0x94: the per-camera BLOOM MODIFIERS (DWARF :309 mfBloomThreshold, :310
     //   mfBloomLuminance). CARVED 2026-08-16 out of the old maReserved84 span, X360-attested by
@@ -139,7 +144,13 @@ struct CameraEffects
     //   Interpolate @0x8220B050 lerps this float the same way as mfSimTimeScale
     //   (fsubs/fmadds pair at +0xA8, alongside the +0x9C pair) -- a real interpolated
     //   field, not filler. Construct zeroes it.
-    f32 mfRaceEndEffectAmount;                  // +0xA8
+    // ⭐ RENAMED 2026-09-16. This member was committed as `mfRaceEndEffectAmount`, and
+    // both this header (see the +0x84 note above) and Camera.cpp:265 already recorded
+    // that the DWARF calls the field at +0xA8 mfBlackBarAmount (:317, with the
+    // Set/GetShowBlackBarsAmount accessors) while the REAL race-end amount is the
+    // +0x84 field. Carving +0x84 for CameraControl::UpdateParams turned that latent
+    // duplicate name into a hard redefinition, so the name is now the DWARF's.
+    f32 mfBlackBarAmount;                       // +0xA8
 
     // +0xAC / +0xB0 / +0xB4: the camera-shake request triple (DWARF names
     //   mfShakeAmplitude / mfShakeFrequency / mu8ShakeType, BrnCameraEffects.cpp's DWARF
@@ -259,6 +270,9 @@ struct CameraEffects
 
     // DWARF BrnCameraEffects.h:289. Header-inline in the original; sound uses
     // this value to distinguish impact-time and ordinary slow motion.
+    // @0x826F66F8's source expression. See mfRaceEndEffectAmount above.
+    f32 GetRaceEndEffectAmount() const { return mfRaceEndEffectAmount; }
+
     f32 GetSimTimeScale() const { return mfSimTimeScale; }
 
     // ADDITIVE GROW (MomentPlayerJumping::Update @0x82275AA4..: the moment registers
