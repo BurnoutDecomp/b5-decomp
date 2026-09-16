@@ -145,6 +145,11 @@ public:
     // @0x821F9640 -- clear the last-frame tracking and report ready (cannot fail).
     virtual bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo);
 
+    // @0x82226778 -- THE BUMPER RIG, and the rear view (see the recovered map below).
+    // Slot 2. Transcribed 2026-09-16; before that the slot kept Behaviour::Update's
+    // default and this camera never moved.
+    virtual bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo);
+
     // @0x821F9670.
     virtual const char* GetName() const;
 

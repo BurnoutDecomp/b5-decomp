@@ -51,7 +51,12 @@ namespace Utils
         Vector2 GetRawStickVector() const;
         f32     GetRotationAngleDegs() const;
         f32     GetRotationAngleRads() const;
-        bool    IsLookback() const;
+        // BODIED INLINE (2026-09-16). The console has no standalone symbol for it: every
+        // caller inlines the single byte fetch -- BehaviourGameplayBumper::Update
+        // @0x82226778 reads it as `lbz r9, 0x26(r31)` straight off the shared info, and
+        // 0x26 is this member at its asm-pinned offset. Same treatment, and the same
+        // justification, as the sibling CameraSphericalRotationController::IsLookback.
+        bool    IsLookback() const { return mbIsLookback; }                     // +0x26
         bool    IsStartingLookbackThisFrame() const;
         bool    IsEndingLookbackThisFrame() const;
 

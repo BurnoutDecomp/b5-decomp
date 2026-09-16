@@ -17,6 +17,14 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // BehaviourSharedInfo
+#include "GameSource/Director/Camera/Camera.h"                      // Camera::SetFOV / mState_uFlags
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"           // the Euler / rotate / angle-diff helpers
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"      // VehicleInfo (mAABB)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "rw/math/fpu/scalar_operation.h"                         // Abs / Cos / Sin
+#include "rw/math/vpu/vector3_operation.h"                        // operator+/-/* , Cross, Normalize, IsValid
+#include "rw/math/vpu/matrix44affine_operation.h"                 // Mult(Matrix44Affine, Matrix44Affine)
 
 // NOTE -- BehaviourGameplayBumper::Parameters::Serialise<S> (the field-walk visitor:
 //   Serialise<DebugMenuSerialiser> @0x822308B8, <TextFileWriteSerialiser> @0x82230B68,
@@ -193,6 +201,199 @@ void BehaviourGameplayBumper_SetParametersAnchor(
     const BehaviourGameplayBumper::Parameters* lpParameters)
 {
     lrBehaviour.SetParameters(lpParameters);
+}
+
+
+// ============================================================================================
+// BehaviourGameplayBumper::Update  @0x82226778   (686 insns, 0x82226778..0x8222722C)
+//
+// THE BUMPER CAMERA -- and, because SharedCameraContainer::GetSelectedGameplayCamera hands out
+// mGameplayBumper whenever mbLookbackOverride is set, THE REAR VIEW. It was never transcribed
+// and not even declared, so the vtable slot kept Behaviour::Update's default (return true,
+// touch nothing) and the camera froze wherever BehaviourHelper::Prepare left it. That is what
+// the owner saw the first time lookback could actually engage (b5 e82b28f5).
+//
+// PROVENANCE. Control flow and every scalar expression are transcribed from the ARTIST
+// Hex-Rays export (.ida-exports/BURNOUT_X360_ARTIST.XEX/0x82226778.json), which lifts the
+// scalar half exactly and leaves the VMX as __asm. The vector half is therefore written as the
+// OPERATIONS that asm performs, through this tree's own named helpers, rather than instruction
+// for instruction: a normalise, an orthonormal basis, a constant-angle yaw, and a transform
+// compose. Each is marked below with the asm range it stands for.
+//
+// The two asserts and their source lines are the console's own (:115, :179, :204), as is the
+// unconditional `return true` (li r3, 1 @0x82227214) -- including the invalid-parameters path,
+// which branches straight to it.
+// ============================================================================================
+bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
+{
+    // @0x822267A0..0x822267DC
+    CGS_ASSERT(mpParameters != 0, "Updating with no parameters");   // :115
+    if (mpParameters == 0 || !mpParameters->mbIsValid)
+        return true;
+
+    const BrnPhysics::Vehicle::RaceCarState& lrCar = lrInfo.mPlayerInfo.mRaceCarState;
+    const Matrix44Affine& lrCarTransform = lrCar.mTransform;
+
+    // ---- 1. the surface the FRONT wheels are standing on -----------------------------------
+    // @0x822267E4..0x82226850. Each front wheel contributes its road normal only while it is
+    // actually on the ground; with neither grounded the car's own up axis stands in.
+    const BrnPhysics::Vehicle::Wheel::RoadContact& lrFrontL = lrCar.maWheels[0].mRoadContact;
+    const BrnPhysics::Vehicle::Wheel::RoadContact& lrFrontR = lrCar.maWheels[1].mRoadContact;
+
+    Vector3 lSurfaceUp = { 0.0f, 0.0f, 0.0f, 0.0f };
+    if (lrFrontL.mbIsOnGround)
+        lSurfaceUp = lSurfaceUp + lrFrontL.mNormal;
+    if (lrFrontR.mbIsOnGround)
+        lSurfaceUp = lSurfaceUp + lrFrontR.mNormal;
+    if (!lrFrontL.mbIsOnGround && !lrFrontR.mbIsOnGround)
+        lSurfaceUp = lrCarTransform.yAxis;
+
+    // @0x82226854..0x822268F4. `vandc` against the splatted sign mask is a per-lane absolute
+    // value; the compare is `vcmpgtfp.` against a splat of flt_82001770 (dumped: FLT_EPSILON)
+    // and the branch taken is the CR6 "none true" bit -- i.e. fall back only when NO lane
+    // exceeds it. The fallback is world up, built on the stack as {0, 1, 0}.
+    const f32 KF_DEGENERATE_EPSILON = 1.1920928955078125e-07f;   // flt_82001770, dumped
+    Vector3 lBlendedUp;
+    if (rw::math::fpu::Abs(lSurfaceUp.x) > KF_DEGENERATE_EPSILON
+        || rw::math::fpu::Abs(lSurfaceUp.y) > KF_DEGENERATE_EPSILON
+        || rw::math::fpu::Abs(lSurfaceUp.z) > KF_DEGENERATE_EPSILON)
+    {
+        lBlendedUp = rw::math::vpu::Normalize(lSurfaceUp);   // vrsqrtefp + two Newton steps
+    }
+    else
+    {
+        lBlendedUp = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+    }
+
+    // ---- 2. lean that surface back toward the car's own up ---------------------------------
+    // @0x82226900..0x82226960:  vsubfp(carUp, surfaceUp) then vmaddcfp128 against a splat of
+    // unk_82008758 (dumped: 0.6f) with the surface up as the addend -- a plain lerp.
+    const f32 KF_UP_BLEND_TOWARD_CAR = 0.6f;                     // unk_82008758, dumped
+    lBlendedUp = lBlendedUp
+               + (lrCarTransform.yAxis - lBlendedUp) * KF_UP_BLEND_TOWARD_CAR;
+
+    // ---- 3. the orthonormal frame the camera starts from -----------------------------------
+    // @0x82226964..0x82226A4C. The console open-codes it: two cross products (the vpermwi128
+    // 0x63 swizzles) with a vrsqrtefp normalise between them, against the car's forward
+    // (mTransform.zAxis) and the blended up. Written here as those operations.
+    Vector3 lForward = lrCarTransform.zAxis;
+    Vector3 lRight   = rw::math::vpu::Normalize(rw::math::vpu::Cross(lBlendedUp, lForward));
+    Vector3 lUp      = rw::math::vpu::Cross(lForward, lRight);
+
+    Matrix44Affine lCameraFrame;
+    lCameraFrame.xAxis = lRight;
+    lCameraFrame.yAxis = lUp;
+    lCameraFrame.zAxis = lForward;
+    lCameraFrame.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 1.0f };
+
+    // @0x8222691C..0x82226994: `ld r7, 0x140(camera)` / `ori r6, r7, 2` / `std r6, 0x140` --
+    // the camera's own state-flag word gains bit 1 for this frame.
+    lrCamera.mState_uFlags |= 2;
+
+    // ---- 4. the angles that frame implies --------------------------------------------------
+    // @0x82226A50. lpLastAngles disambiguates the near-vertical branch toward last frame's
+    // answer; the epsilon is flt_82002138 (dumped 0.01f), which is this helper's own default.
+    const Vector3 lTargetCameraAngles =
+        Utils::EulerAnglesZXYFromMatrix44Affine(lCameraFrame, &mLastCameraAngles, 0.0099999998f);
+
+    // @0x82226A54..0x82226ADC -- three per-lane self-compares (vcmpeqfp., the NaN test).
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetCameraAngles), "IsValid(lTargetCameraAngles)");  // :179
+
+    // ---- 5. the springs --------------------------------------------------------------------
+    // @0x82226AE0..0x82226B30. While the car is crashing every axis springs at 1 (the camera
+    // is pinned to the target); otherwise each axis uses its authored rate, and ROLL is scaled
+    // by a tenth (`lfs +0x20` then fmuls against flt_82004014, dumped 0.1f).
+    const f32 KF_ROLL_SPRING_SCALE = 0.1f;                       // flt_82004014, dumped
+    Vector3 lSprings;
+    if (lrCar.mbResetCarTransform)                                 // sharedInfo +0x4AE
+    {
+        lSprings = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f };
+    }
+    else
+    {
+        lSprings = Vector3{ mpParameters->mfPitchSpring,
+                            mpParameters->mfYawSpring,
+                            mpParameters->mfRollSpring * KF_ROLL_SPRING_SCALE,
+                            0.0f };
+    }
+    const Vector3 lOneMinusSprings = Vector3{ 1.0f, 1.0f, 1.0f, 0.0f } - lSprings;
+
+    // @0x82226B64 -- sub_82222598, which splats three lanes through the scalar
+    // Utils::GetSmallestDifferenceBetweenRadAngles @0x821F8988.
+    Vector3 lCameraDiffAngles =
+        Utils::GetSmallestDifferenceBetweenRadAngles(mLastCameraAngles, lTargetCameraAngles);
+    CGS_ASSERT(rw::math::vpu::IsValid(lCameraDiffAngles), "IsValid(lCameraDiffAngles)");      // :204
+
+    // ---- 6. the acceleration the camera pitches against ------------------------------------
+    // @0x82226BF0..0x82226C2C, transcribed from the Hex-Rays scalar line verbatim: a one-pole
+    // low-pass on (this frame's speed - last frame's speed).
+    mfDampenedAcceleration =
+        ((lrCar.mfSpeedMPH - mfLastSpeed) - mfDampenedAcceleration)
+            * mpParameters->mfAccelerationDampening
+        + mfDampenedAcceleration;
+
+    // @0x82226C40..0x82226C50: the response lands on the PITCH lane only (`vrlimi128 v0, v13,
+    // 8, 0` inserts lane 0 of the broadcast into the diff angles).
+    lCameraDiffAngles.x += mpParameters->mfAccelerationResponse * mfDampenedAcceleration;
+
+    // ---- 7. LOOKBACK: swing the frame through half a turn -----------------------------------
+    // @0x82226C54..0x82226E14, gated on sharedInfo +0x26 == mRotationController.mbIsLookback.
+    // The console feeds the CONSTANT flt_82004964 (dumped: -pi) through the inlined
+    // XMVectorSinCos polynomial and rotates the frame's xAxis and zAxis by the result --
+    //     xAxis' = xAxis*cos - zAxis*sin
+    //     zAxis' = xAxis*sin + zAxis*cos
+    // -- which for -pi is exactly a 180-degree yaw about the frame's up. THIS is the rear view.
+    const bool lbLookback = lrInfo.mRotationController.IsLookback();
+    if (lbLookback)
+    {
+        const f32 KF_LOOKBACK_YAW_RADS = -3.1415927410125732f;   // flt_82004964, dumped
+        const f32 lfCos = rw::math::fpu::Cos(KF_LOOKBACK_YAW_RADS);
+        const f32 lfSin = rw::math::fpu::Sin(KF_LOOKBACK_YAW_RADS);
+
+        const Vector3 lRotatedX = lCameraFrame.xAxis * lfCos - lCameraFrame.zAxis * lfSin;
+        const Vector3 lRotatedZ = lCameraFrame.xAxis * lfSin + lCameraFrame.zAxis * lfCos;
+        lCameraFrame.xAxis = lRotatedX;
+        lCameraFrame.zAxis = lRotatedZ;
+    }
+
+    // ---- 8. where the eye sits ---------------------------------------------------------------
+    // @0x82226E18..0x82226EB8. The Z reach is (mHalfExtent.z - mfZOffset), measured from the
+    // REAR corner of the car's AABB while looking back and from the FRONT corner otherwise --
+    // so the rear view rides the back bumper. Y is the authored offset; X is zero.
+    const f32 lfZReach = lrCar.mHalfExtent.z - mpParameters->mfZOffset;
+    const f32 lfEyeZ = lbLookback ? (lrInfo.mPlayerInfo.mAABB.mMin.z + lfZReach)
+                                  : (lrInfo.mPlayerInfo.mAABB.mMax.z - lfZReach);
+
+    lCameraFrame.wAxis = Vector3{ 0.0f, mpParameters->mfYOffset, lfEyeZ, 1.0f };
+
+    // @0x82226EB0/0x82226EBC -- the sprung angles are carried forward, and the frame is turned
+    // back by the UNsprung remainder (`vxor` against the sign mask is the negation).
+    mLastCameraAngles = mLastCameraAngles + rw::math::vpu::Mult(lCameraDiffAngles, lSprings);
+    const Vector3 lResidualAngles = rw::math::vpu::Mult(
+        Vector3{ 0.0f, 0.0f, 0.0f, 0.0f } - lCameraDiffAngles, lOneMinusSprings);
+
+    // @0x82226EC0
+    Utils::RotateMatrix44AffineByEulerAnglesZXY(lCameraFrame, lResidualAngles);
+
+    // ---- 9. compose into world space and publish --------------------------------------------
+    // @0x82226EC4..0x82226F80 -- the vmaddfp128 ladder over v126/v127/v120 is the frame times
+    // the car's transform, row by row; the console then validates what it wrote.
+    lrCamera.mTransform = rw::math::vpu::Mult(lCameraFrame, lrCarTransform);
+    lrCamera.ValidateTransformWithDebugInfo();
+
+    // ---- 10. the FOV -------------------------------------------------------------------------
+    // @0x82226F84..0x82226FB8. The boosted FOV is the authored one plus the director's own
+    // temp-boost amount scaled by flt_820054CC (dumped 20.0f), and the frame's FOV is a lerp
+    // from the resting FOV toward it by mfSpeedRatio.
+    mfLastSpeed = lrCar.mfSpeedMPH;                               // stfs 0x42C -> this+0x820
+
+    const f32 KF_FOV_BOOST_SCALE = 20.0f;                         // flt_820054CC, dumped
+    const f32 lfBoostedFOV =
+        lrInfo.mfTempFOVBoostAmount * KF_FOV_BOOST_SCALE + mpParameters->mfBoostFOV;
+    lrCamera.SetFOV((lfBoostedFOV - mpParameters->mfFOV) * lrInfo.mfSpeedRatio
+                    + mpParameters->mfFOV);
+
+    return true;                                                  // li r3, 1 @0x82227214
 }
 
 } // namespace Camera
