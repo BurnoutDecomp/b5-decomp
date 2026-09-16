@@ -18,6 +18,8 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_RWAC_VOICE_DIAG
+#include <cstdlib>                                            // [DIAG] getenv
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoiceConfig.h"
@@ -701,6 +703,26 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
                 reinterpret_cast<rw::audio::core::PlugIn**>(lpCommand->maOperand);
             if (lppSubmix != 0 && *lpppPlugin != 0)
                 *lppSubmix = (*lpppPlugin)[0];
+
+            // [DIAG] NOT IN THE X360 BINARY (BRN_RWAC_VOICE_DIAG=1). This store is the ONLY
+            // thing that gives a SubmixVoice its rw PlugIn, and a null one is what the engine
+            // audio dies on: GenericRwacVoice::ConnectSend returns false for a null submix, so
+            // Module::ConnectVoice's "lhVoice->Connect(lSendName, lhSubmixVoice)" assert fires,
+            // and Splice's ctor reports "There's no sub mix plugin" for the same null. Both
+            // stormed (46 asserts in one run) the moment a NON-DEFAULT car was selected. So
+            // print what CreateInstance actually handed back, per voice.
+            if (getenv("BRN_RWAC_VOICE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[rwacv] type " << static_cast<s32>(lpConfig->GetVoiceType())
+                    << " stage " << static_cast<s32>(lpConfig->GetProcessingStage())
+                    << " plugins " << static_cast<s32>(lpConfig->GetPluginCount())
+                    << " rwVoice " << ((*lppRwacVoice != 0) ? 1 : 0)
+                    << " pluginArray " << ((*lpppPlugin != 0) ? 1 : 0)
+                    << " wantsSubmix " << ((lppSubmix != 0) ? 1 : 0)
+                    << " submixSet "
+                    << ((lppSubmix != 0 && *lppSubmix != 0) ? 1 : 0) << "\n";
+            }
 
             if (lpConfig->GetVoiceType() == E_MASTER_VOICE &&
                 *lppRwacVoice != 0 && lpConfig->GetPluginCount() != 0)

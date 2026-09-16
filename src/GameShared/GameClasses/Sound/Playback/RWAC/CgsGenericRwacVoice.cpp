@@ -172,7 +172,9 @@ void GenericRwacVoice::Update(rw::audio::core::System* apSystem, Voice& arVoice)
                         if ((suCount++ % 64u) == 0u)
                         {
                             *CgsDev::Log::gpDebugPrint
-                                << "[rwac-param] name=" << static_cast<s32>(
+                                << "[rwac-param] plug " << static_cast<s32>(
+                                       reinterpret_cast<intptr_t>(lpPlugin) & 0xFFFFFF)
+                                << " name=" << static_cast<s32>(
                                        static_cast<u32>(lrInput.GetName().GetValue()))
                                 << " attr=" << static_cast<s32>(lrMap.mu8Attribute)
                                 << " raw=" << lrInput.GetValueRaw()

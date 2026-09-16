@@ -901,7 +901,9 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
                 if ((suGinsuCalls++ % 400u) == 0u)
                 {
                     *CgsDev::Log::gpDebugPrint
-                        << "[ginsu] freq="
+                        << "[ginsu] plug " << static_cast<s32>(
+                               reinterpret_cast<intptr_t>(self) & 0xFFFFFF)
+                        << " freq="
                         << self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue
                         << " rate=" << self->mSampleRate
                         << " minF=" << self->mSynthData.mMinFrequency
