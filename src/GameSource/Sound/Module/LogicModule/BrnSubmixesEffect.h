@@ -87,15 +87,62 @@ struct SubmixesEffect : public BrnSound::Logic::BrnEffectObject
     virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);
 
 private:
-    // +0x39 (X360) -- "hold submix volumes" latch. Written by Notify (type-15 message) and,
-    // once SubmixesEffect::Attach is homed, by Attach. NOTE: SubmixesEffect::Attach @ 0x826D2DA8
-    // is BLOCKED this wave -- its ASM proves the CANONICAL CgsEffectBase EffectBase layout
-    // (mpState@+0x08, mu16AttachCount@+0x0E, meDetachState@+0x24, mpLogicModule@+0x28), which is
-    // IRRECONCILABLE with the committed BrnEffectObject base model this leaf's ~SubmixesEffect
-    // destructor is written against (meDetachState@+0x28, mpLogicModule@+0x2C, no mpState). Homing
-    // Attach requires re-basing SubmixesEffect + rewriting the committed destructor + several
-    // un-homed types (GlobalStateManager/Environment accessors, UpdateStaticPluginParameters) --
-    // out of scope for this slice. Only mbHoldVolumes (which Notify needs) is added here.
+    // The "hold submix volumes" latch. Written by Notify (type-15 message) and, once
+    // SubmixesEffect::Attach is homed, by Attach.
+    //
+    // ⭐⭐ THE "IRRECONCILABLE LAYOUT" THAT BLOCKED Attach IS THE ±4 BASE-OFFSET TRAP, AND
+    // THERE IS NO CONFLICT. The note that stood here said Attach's asm proves a canonical
+    // EffectBase layout (mpState@+0x08, mu16AttachCount@+0x0E, meDetachState@+0x24,
+    // mpLogicModule@+0x28) that cannot be reconciled with the committed BrnEffectObject model
+    // (meAttachState@+0x24, meDetachState@+0x28, mpLogicModule@+0x2C). Both readings are of the
+    // SAME object -- Attach simply does not receive the primary pointer.
+    //
+    // MEASURED 2026-09-16, three independent ways:
+    //
+    //  (1) THE VTABLE. Attach/ProcessUpdate/Notify each appear in EXACTLY ONE pointer slot in
+    //      the whole image, and it is the same table -- 0x820B2530, immediately after the
+    //      ":VolumeStream" string:
+    //        +0x00  0x826BC600   `vector deleting destructor'`adjustor{4}'   <-- SLOT 0
+    //        +0x04  0x82661058
+    //        +0x08  0x8284CB38   (the shared do-nothing body)
+    //        +0x0C  0x8268CEC8
+    //        +0x10  0x826805E0
+    //        +0x14  0x826D2DA8   Attach
+    //        +0x18  0x8284CB38   UpdateParams (the shared do-nothing body)
+    //        +0x1C  0x826D2E48   ProcessUpdate
+    //        +0x20  0x826EBF88   Detach
+    //        +0x24  0x82687EE8   Notify
+    //      That order is the DWARF EffectBase virtual order (Prepare, SetupLoadData, Attach,
+    //      UpdateParams, ProcessUpdate, Detach, Notify) one-for-one. Slot 0 being the
+    //      `adjustor{4}' thunk (`addi r3, r3, -4; b 0x826BC608`) is what pins the base: every
+    //      virtual reached through this table is entered with `this == <primary> + 4`.
+    //
+    //  (2) APPLY THE +4 AND EVERY OFFSET LANDS ON THE COMMITTED MODEL:
+    //        Attach  lwz  r11, 8(r31)    -> this+0x0C  mpState
+    //        Attach  lhz  r11, 0xE(r31)  -> this+0x12  mu16AttachCount   (++, i.e. an ATTACH)
+    //        Attach  stw  r29, 0x24(r31) -> this+0x28  meDetachState = 0 (E_DETACH_STATE_NONE)
+    //        Attach  lwz  r30, 0x28(r31) -> this+0x2C  mpLogicModule     (+0x2490 == Environment)
+    //        PU      lwz  r3,  0x30(r30) -> this+0x34  mpDynamicMixIo    (-> DMixIO::GetDMixOutput)
+    //      meDetachState is the clincher: Attach writes 0 (NONE) at the SAME primary offset
+    //      +0x28 where ~SubmixesEffect writes 3 (FINISHED). Read without the +4 it is a
+    //      pointer-typed field being cleared in one function and enum-typed in the other.
+    //
+    //  (3) A SECOND LANE FOUND THE SAME SHIFT INDEPENDENTLY. BrnHUDEffect.cpp:406 annotates
+    //      `82703814  lwz r4, 0x28(r31)` as `this+0x2C == mpLogicModule` -- the identical
+    //      sub-object base, in a different TU, derived from different asm.
+    //
+    //  [FLAG] Attach @0x826D2DA8 and ProcessUpdate @0x826D2E48 are still REPORTED, not written.
+    //  What is removed is the false blocker, not the work: ProcessUpdate is four
+    //  DMixIO::GetDMixOutput(bus, preset) reads scaled by 820AA8F8 feeding Voice::SetGain on
+    //  the voices hanging off mpState->+0x24 (stored into this+0x38 by Attach), and it needs
+    //  CgsSound::Logic::Voice plus that State member homed first. Neither needs the class
+    //  re-based and neither touches the committed destructor.
+    //
+    //  ⚠️ The offset in this member's own comment was wrong for the same reason: Notify's
+    //  `stb r11, 0x39(r3)` is sub-object-relative, so mbHoldVolumes is at PRIMARY +0x3D, and
+    //  it is the leaf's SECOND byte -- Attach sets the one before it (+0x3C) from
+    //  `Environment::GetAudioMode() == 1`. The member is pinned BY NAME here, so the bodies
+    //  are unaffected; only the number was.
     bool mbHoldVolumes;
 };
 
