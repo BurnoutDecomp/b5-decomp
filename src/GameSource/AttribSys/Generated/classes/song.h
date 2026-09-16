@@ -30,17 +30,38 @@ namespace Gen
         // The 4-byte slot is read and widened the way every committed generated text
         // accessor does it (crashbin::TextAt, propscrashbin::TextAt): attribute data
         // keeps its console 32-bit pointer slots and the game heap lives below 4 GB.
-        const char* Stream() const
+        const char* Stream() const { return TextAt(0x04u); }
+
+        // The three EA-Trax display strings, X360-attested by the three EaTraxHelper
+        // accessors, each of which builds a song Instance from GetSongRefSpec and then
+        // reads ONE word out of its attribute data:
+        //     GetSongName   @0x826B0380 -> `lwz r31, 0(r11)`     +0x00
+        //     GetArtistName @0x826B03D0 -> `lwz r31, 8(r11)`     +0x08
+        //     GetAlbumName  @0x826B0420 -> `lwz r31, 0xC(r11)`   +0x0C
+        // (r11 is the Instance's mpAttributeData in all three.) That places Stream's
+        // +0x04 between Name and Artist, and the four together fill the first 16 bytes
+        // of the 0x14-byte record.
+        const char* Name() const   { return TextAt(0x00u); }
+        const char* Artist() const { return TextAt(0x08u); }
+        const char* Album() const  { return TextAt(0x0Cu); }
+
+    private:
+        // The committed generated-text-accessor idiom (crashbin::TextAt /
+        // propscrashbin::TextAt): attribute data keeps its console 32-bit pointer slots
+        // and the game heap lives below 4 GB, so the slot is read and widened.
+        const char* TextAt(unsigned int luOffset) const
         {
             const unsigned char* lpData =
                 static_cast<const unsigned char*>(GetLayoutPointer());
             if (!lpData)
                 return 0;
             unsigned int luAddress = 0;
-            std::memcpy(&luAddress, lpData + 4, sizeof(luAddress));
+            std::memcpy(&luAddress, lpData + luOffset, sizeof(luAddress));
             return reinterpret_cast<const char*>(
                 static_cast<unsigned long long>(luAddress));
         }
+
+    public:
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::song

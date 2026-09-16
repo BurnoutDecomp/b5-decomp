@@ -627,11 +627,13 @@ namespace BrnGui
     // BrnMixerControl.h is BrnSound::Logic::GuiEventAudioSettings, a different type). id 463 size 8,
     // OutputGuiEvent offset 12 (payload 4-aligned per @0x82493728).
     struct GuiEventAudioSettings { u8 maData[8]; s32 GetEventType() const { return 463; } };  // id 463 size 8
-    // Mirror of BrnGui::GuiEventAudioTraxUpdate (real home BrnGuiOptionsDataProfile.h). That header
-    // carries several other-namespace redefinitions (EBoostType / GameStateModuleIO) that clash with
-    // the event-queue instantiation TUs' other includes, so the payload is mirrored here (its .cpp
-    // consumers do not include this header). id 458 size 32, OutputGuiEvent off16 (8-aligned).
-    struct alignas(8) GuiEventAudioTraxUpdate : public CgsGui::GuiEvent<458> { u8 maPayload[20]; };  // id 458 size 32 [8-aligned: OGE off16]
+    // [EA Trax wave 2026-09-16] GuiEventAudioTraxUpdate (id 458) has been RECOVERED and now
+    // lives in GameSource/Gui/Events/BrnGuiEventAudioTrax.h with its real 32-byte field set
+    // (two FastBitArray<128>, no GuiEvent header -- OutputGuiEvent<T> @0x824C30A0 copies four
+    // 8-byte words from the object's offset 0 and posts { 32, 458, 16 } as 48 bytes). The
+    // opaque `GuiEvent<458> + u8[20]` mirror that stood here had the WRONG shape and was a
+    // hard C2011 against the profile header's slice, so it is DELETED rather than left to
+    // shadow the real home -- the same move GuiAutosaveRequestEvent got above.
     struct alignas(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[12]; };  // id 459 size 24 [8-aligned: OGE off16]
     struct GuiEventAudioTraxPreview { u8 maData[8]; s32 GetEventType() const { return 460; } };  // id 460 size 8
     struct GuiEventAudioVoiceOver { u8 maData[4]; s32 GetEventType() const { return 466; } };  // id 466 size 4

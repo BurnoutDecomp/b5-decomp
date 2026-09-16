@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"   // EaTraxHelper::SetGlobalDataKey
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
@@ -127,6 +128,20 @@ void SoundLogicModule::ResourcesAreReady()
 {
     const bool lbResolved = mBurnoutGlobalData.ResolveLoadedCollection();
     CGS_ASSERT(lbResolved, "mBurnoutGlobalData.IsValid()");
+
+    // ⭐ PUBLISH THE EA-TRAX GLOBAL-DATA KEY. Every BrnSound::Module::Io::EaTraxHelper
+    // accessor opens with `CGS_ASSERT(mGlobalDataKey != 0)` -- the console's own gate on
+    // the .data word at 0x82FFB820 -- and the X360 writes that word from a sound logic
+    // module body (`std r3, -0x47E0(r11)` @0x826C9788, inside the unnamed function at
+    // 0x826C9330), i.e. from exactly here. Nothing in this tree wrote it, so the EA Trax
+    // menu fired that assert once per song-list read the moment CN_TRAX opened -- 16 in
+    // the first frame the tab drew. The value is the BurnoutGlobalData collection key,
+    // the same one ResolveLoadedCollection just looked the collection up with, and it is
+    // published only when that lookup SUCCEEDED so the gate keeps meaning "the global
+    // data is bound".
+    BrnSound::Module::Io::EaTraxHelper lEaTraxHelper;
+    lEaTraxHelper.SetGlobalDataKey(
+        lbResolved ? Attrib::Gen::burnoutglobaldata::KU_COLLECTION_KEY : 0ull);
 }
 
 // X360 0x826AFF88. Search the per-frame trigger-action table for the entry whose
