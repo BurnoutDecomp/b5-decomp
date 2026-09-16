@@ -998,6 +998,34 @@ namespace BrnAI
         const f32 lfSpeed   = mpCarHost->GetSpeed();
         const f32 lfDesired = mfDesiredSpeed;                 // 0x1D10
 
+        // [DIAG] NOT IN THE X360 BINARY (BRN_AI_SPEED_DIAG=1). The payoff line for "the AI is
+        // too slow and never boosts": the speed it HAS, the speed it WANTS (post-limiters),
+        // the car's own uncapped top, and whether the boost latch is set. mph as well as m/s
+        // because every tuning constant in this subsystem is authored in mph.
+        // Rate limited to one line per car per ~2 s.
+        // NOTE: the accumulator is a file-local static keyed by opponent index, NOT a member --
+        // AIDriver's layout is pinned by offsetof static_asserts and must not grow.
+        if (getenv("BRN_AI_SPEED_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static f32 safAiSpeedDiagAccum[8] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+            const s32 liOpp  = mpCarHost->GetOpponentIndex();
+            const s32 liSlot = (liOpp >= 0 && liOpp < 8) ? liOpp : 0;
+            safAiSpeedDiagAccum[liSlot] += lfTimeStep;
+            if (safAiSpeedDiagAccum[liSlot] >= 2.0f)
+            {
+                safAiSpeedDiagAccum[liSlot] = 0.0f;
+                *CgsDev::Log::gpDebugPrint
+                    << "[aispeed] opp " << mpCarHost->GetOpponentIndex()
+                    << " speed " << (lfSpeed * 2.23694f)
+                    << " desired " << (lfDesired * 2.23694f)
+                    << " top " << (mfTopSpeed * 2.23694f)
+                    << " mph boost " << static_cast<s32>(mbBoosting)
+                    << " forced " << static_cast<s32>(mbUseForcedSpeed)
+                    << " aggr " << static_cast<s32>(GetAggression()->GetAggressionState())
+                    << "\n";
+            }
+        }
+
         if (lfSpeed < lfDesired)
         {
             // under speed -> accelerate. ramp = clamp((desired - speed) / 20 mph, 0, 1).
