@@ -64,6 +64,10 @@ namespace BrnGui
         Selectable* GetHighlighted();
         // @ 0x8241EA28 -- assert a row is highlighted, return its id.
         u64 GetHighlightedId();
+        // The highlight cursor itself (-1 == none). ADDITIVE ACCESSOR, no standalone X360
+        // symbol: callers that need the INDEX rather than the item read the member inline
+        // -- e.g. CrashNavOptions::HandleOptionChanged @0x824D9408 switches on it.
+        s32 GetHighlightedIndex() const { return static_cast<s32>(miHighlightedIndex); }
         // @ 0x824E4158 -- linear-search the items for one whose id matches, return its index
         // (-1 if none).
         s32 GetIndexFromId(u64 luId);
