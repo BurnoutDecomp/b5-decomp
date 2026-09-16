@@ -123,8 +123,8 @@ namespace Camera
 
         lResult.mfSimTimeScale =
             Lerp(lLhs.mfSimTimeScale, lRhs.mfSimTimeScale, lfT);
-        lResult.mfRaceEndEffectAmount =
-            Lerp(lLhs.mfRaceEndEffectAmount, lRhs.mfRaceEndEffectAmount, lfT);
+        lResult.mfBlackBarAmount =
+            Lerp(lLhs.mfBlackBarAmount, lRhs.mfBlackBarAmount, lfT);
         lResult.mMotionBlurData =
             MotionBlurData::Interpolate(lLhs.mMotionBlurData, lRhs.mMotionBlurData, lfT);
 
@@ -161,7 +161,7 @@ namespace Camera
         maReservedBA[0]           = 0;                  // stb 0 @+0xBA
         mfShakeFrequency          = 1.0f;               // stfs 1.0 @+0xB0
         mStartHookNameString.mHookNameString[0] = '\0'; // stb 0 @+0x00
-        mfRaceEndEffectAmount     = 0.0f;               // stfs 0 @+0xA8
+        mfBlackBarAmount          = 0.0f;               // stfs 0 @+0xA8
         mStopHookNameString.mHookNameString[0]  = '\0'; // stb 0 @+0x21
         mu8ShakeType              = 0;                  // stb 0 @+0xB4
         muRequestedPostFxId       = 0;                  // stw 0 @+0x7C

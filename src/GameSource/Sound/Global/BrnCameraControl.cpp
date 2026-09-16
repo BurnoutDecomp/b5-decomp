@@ -1,4 +1,11 @@
 #include "GameSource/Sound/Global/BrnCameraControl.h"
+#include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"   // SoundLogicModule
+#include "GameSource/Sound/Global/BrnFxEffect.h"                       // FxMessage_* records
+#include "GameSource/GameState/BrnGameActions.h"                       // EGameActionType (X360-pinned)
+#include "GameShared/GameClasses/Sound/IO/CgsMessage.h"                // CgsSound::Io::Message<T>
+#include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"         // Environment::GetDynamicMixer
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <cmath>                                                       // std::fabs (the inlined |delta|)
 
 // =============================================================================
 // BrnSound::Logic::CameraControl — out-of-line bodies.
@@ -68,6 +75,482 @@ CameraControl::~CameraControl()
 // FLAG: thunk reproduced structurally by the inheritance declaration in the
 // header (CameraControl : public BrnEffectControl); not a hand-bodied function.
 // ---------------------------------------------------------------------------
+
+
+// =============================================================================
+// CameraControl -- the reconstructed bodies.
+//
+// ⭐⭐ BASE-POINTER CALIBRATION, settled by CreateObject @0x826D25C8:
+//     826D25E0  li   r3, 0x48       ; sizeof(CameraControl) == 72
+//     826D2658  stw  <0x820B2368>, 0(r9)   ; the 2-slot IResourceRequester vtable
+//     826D265C  stw  <0x820B2334>, 4(r9)   ; the 13-slot EffectControl/EffectBase vtable,
+//                                            whose slot 0 is the `adjustor{4}'
+// So IResourceRequester is the base at +0 and EffectBase sits at +4. Every virtual below
+// is entered on the EffectBase sub-object, so an asm offset here is 4 LOWER than the
+// object offset -- and that is why Notify/UpdateParams do `addi r3, rN, -4` before the
+// private helpers, which take the most-derived `this`.
+// Cross-checked against the DWARF EffectBase member order:
+//   EffectBase +0x0E/+0x20/+0x24/+0x28/+0x30  ==  object +0x12/+0x24/+0x28/+0x2C/+0x34
+//   == mu16AttachCount / meAttachState / meDetachState / mpLogicModule / mpDynamicMixIo.
+// =============================================================================
+
+// BrnCameraControl.cpp:29 (DWARF `extern bool KB_DEBUG_CAMERA_STATE`). A namespace-scope
+// bool at .data 0x82FFB8D1; the image byte reads 0 and tools/re/findinit.py finds no
+// writer, so it ships false. NOT const -- the console keeps the branch (0x826F65F4 lbz).
+bool KB_DEBUG_CAMERA_STATE = false;
+
+namespace
+{
+    // The mixer-input full scale. The console uses the immediate 0x7FFF at every integer
+    // site (e.g. 0x826F6694 `li r5, 0x7FFF`) and the float form at the one float site.
+    const s32 KI_MIXER_INPUT_MAX = 0x7FFF;
+    const f32 KF_MIXER_INPUT_MAX = 32767.0f;            // .rdata 0x820AD310
+    // The per-call step the race-end effect level walks toward its target.
+    const f32 KF_RACE_END_EFFECT_STEP = 0.1f;           // .rdata 0x820ABB14
+    // The sim-timestep scale at or below which the camera counts as slow motion.
+    const f32 KF_SLOW_MOTION_TIMESTEP_SCALE = 0.033333335f;   // .rdata 0x820AA358
+
+    // The destination effect id every FX message in this TU addresses (`sth r31, 0xE`
+    // with r31 == 3 at 0x826F695C / 0x826F69D8 / 0x826F6AA8).
+    // [FLAG] the symbolic name of that Global state-manager effect seat is unrecovered;
+    // the tree's existing message producers (BrnSoundLogicModule.cpp:476 and siblings)
+    // also spell it as a literal, so this is house-consistent.
+    const u16 KU_FX_EFFECT_SEAT = 3;
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::Attach  @ 0x8269C518   (14 instructions, no calls)
+//
+//   8269C518  mr   r11, r3         ; r11 = the EffectBase sub-object (object + 4)
+//   8269C524  li   r3, 1           ; return true
+//   8269C528  lhz  r9, 0xE(r11)    ; mu16AttachCount              (object +0x12)
+//   8269C52C  stw  r10, 0x24(r11)  ; meDetachState = 0            (object +0x28)
+//   8269C530  addi r9, r9, 1
+//   8269C534  lfs  f0, 0x1CC0(r8)  ; flt_82001CC0 == 0.0f
+//   8269C538  sth  r9, 0xE(r11)    ; ++mu16AttachCount
+//   8269C53C  stw  r10, 0x34(r11)  ; mCameraMode.mCurrentValue  = 0  (object +0x38)
+//   8269C540  stw  r10, 0x38(r11)  ; mCameraMode.mPreviousValue = 0  (object +0x3C)
+//   8269C544  stfs f0,  0x3C(r11)  ; mfRaceEndEffect = 0.0f          (object +0x40)
+//   8269C548  stb  r10, 0x40(r11)  ; mbLockedFor100Percent = false   (object +0x44)
+//   8269C54C  blr
+//
+// The +0x24 store, the +0x0E increment and `li r3, 1` ARE CgsSound::Logic::EffectBase::
+// Attach @0x826A1138 INLINED -- that body is exactly those three operations and nothing
+// else. De-inlined here as the explicit base call, as the landed MixerControl::Attach does.
+// NOTE it sets meDetachState, not meAttachState.
+// -----------------------------------------------------------------------------
+bool CameraControl::Attach()
+{
+    CgsSound::Logic::EffectBase::Attach();          // 8269C528 / 8269C52C / 8269C538
+
+    mCameraMode.Flush(BrnSound::E_CAMERA_MODE_DRIVING);   // 8269C53C / 8269C540 (0)
+    mfRaceEndEffect       = 0.0f;                         // 8269C544
+    mbLockedFor100Percent = false;                        // 8269C548
+
+    return true;                                          // 8269C524
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::ProcessUpdate   (DWARF BrnCameraControl.cpp:260)
+//
+// [FLAG] THE CONSOLE'S BODY IS EMPTY AND ITS SOURCE IS UNRECOVERABLE. Vtable slot 7
+// (0x820B2350) holds 0x8284CB38, a bare `blr` that the linker ICF-folded across the whole
+// image. The DWARF places ~18 source lines between .cpp:260 and Notify at .cpp:279, so
+// something was written there -- most likely a debug-only body compiled out of the
+// shipping build -- but it emitted no code and cannot be recovered.
+// -----------------------------------------------------------------------------
+void CameraControl::ProcessUpdate()
+{
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::ClearEventSnapshots  @ 0x82686D00   (BrnCameraControl.cpp:470)
+//
+// Entered with the MOST-DERIVED this (its two callers pass `this - 4` off the EffectBase
+// sub-object): 0x82686D10 `lwz r11, 0x2C(r3)` == mpLogicModule at the OBJECT offset.
+//   0x82686D1C  addi r31, r11, 0x2C30  ; Module::mEnvironment (+0x2950) +
+//                                        Environment::mDynamicMixer (+0x2E0)
+// -----------------------------------------------------------------------------
+void CameraControl::ClearEventSnapshots()
+{
+    Nicotine::IDynamicMixer& lrMixer =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+            ->GetEnvironment().GetDynamicMixer();
+
+    lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_SHOW_TIME,  false);   // 82686D18 li r4,0xA
+    lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_IN_RACE,    false);   // 82686D2C li r4,0xB
+    lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_ROAD_RAGE,  false);   // 82686D3C li r4,0xC
+    lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_STUNT,      false);   // 82686D4C li r4,0xD
+    lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_MARKED_MAN, false);   // 82686D5C li r4,0xE
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::GetEventSnapshot  @ 0x82686C80   (BrnCameraControl.cpp:360)
+//
+//   0x82686C80  lwz r11, 8(r4)    ; GameModeOutputInterface +0x08 == miCurrentGameModeType
+//   0x82686C84  cmplwi r11, 0xB   ; a 12-entry jump table (jpt_82686CA0)
+// `this` (r3) is never touched -- it is a member by declaration only.
+// -----------------------------------------------------------------------------
+BrnSound::ESnapshotTypes CameraControl::GetEventSnapshot(
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameModeInterface)
+{
+    using namespace BrnGameState::GameStateModuleIO;
+
+    switch (lpGameModeInterface->miCurrentGameModeType)
+    {
+    case E_MODE_OFFLINE_RACE:                                  // 0
+    case E_MODE_ONLINE_RACE:                                   // 10
+        return BrnSound::E_SNAPSHOT_TYPE_IN_RACE;              // 82686CD4 li r3, 0xB
+    case E_MODE_ROAD_RAGE:                                     // 3
+    case E_MODE_ONLINE_ROAD_RAGE:                              // 11
+        return BrnSound::E_SNAPSHOT_TYPE_ROAD_RAGE;            // 82686CDC li r3, 0xC
+    case E_MODE_STUNT_ATTACK:                                  // 7
+        return BrnSound::E_SNAPSHOT_TYPE_STUNT;                // 82686CE4 li r3, 0xD
+    case E_MODE_MARKED_MAN:                                    // 8
+        return BrnSound::E_SNAPSHOT_TYPE_MARKED_MAN;           // 82686CEC li r3, 0xE
+    default:
+        return BrnSound::E_SNAPSHOT_TYPE_BASE;                 // 82686CF4 li r3, 0
+    }
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::GetCameraMode  @ 0x8269C6E0   (BrnCameraControl.cpp:395)
+//
+// STATIC: the asm's r3 is the CameraState, not a `this`. 0x8269C724 `ld r10, 8(r31)`
+// loads CameraState::mCurrentFlags ONCE and every test below is an rlwinm on its low
+// word, i.e. bit N == CameraState::EFlag index N:
+//   rlwinm 0,24,24 -> bit  7  E_FLAG_JUMP_CAMERA
+//   rlwinm 0,21,21 -> bit 10  E_FLAG_CRASH_CAMERA
+//   rlwinm 0,17,17 -> bit 14  E_FLAG_IS_PICTURE_PARADISE
+//   rlwinm 0,20,20 -> bit 11  E_FLAG_TAKEDOWN_CAMERA
+//   rlwinm 0,19,19 -> bit 12  E_FLAG_INTERNAL_CAR_CAMERA
+//   rlwinm 0,27,27 -> bit  4  E_FLAG_BUMPER_CAM
+// -----------------------------------------------------------------------------
+BrnSound::ECameraModes CameraControl::GetCameraMode(
+    const BrnDirector::Camera::CameraState& lrCameraState,
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameModeInterface)
+{
+    using BrnDirector::Camera::CameraState;
+
+    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");   // 8269C704.. (cpp:397)
+
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_JUMP_CAMERA))            // 8269C728
+        return BrnSound::E_CAMERA_MODE_JUMP;                                 // 8269C748 li r3,3
+
+    if (lpGameModeInterface->miCurrentGameModeType ==
+        BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME)            // 8269C750 cmpwi 2
+        return BrnSound::E_CAMERA_MODE_SHOWTIME;                             // 8269C75C li r3,6
+
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_CRASH_CAMERA))           // 8269C764
+        return BrnSound::E_CAMERA_MODE_CRASH;                                // 8269C784 li r3,4
+
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_IS_PICTURE_PARADISE))    // 8269C78C
+        return BrnSound::E_CAMERA_MODE_PICTURE_PARADISE;                     // 8269C7AC li r3,2
+
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_TAKEDOWN_CAMERA))        // 8269C7B4
+        return BrnSound::E_CAMERA_MODE_TAKE_DOWN;                            // 8269C7D4 li r3,5
+
+    // Short-circuit OR: 8269C7F8 `bne -> 8269C820` skips the second test when the
+    // internal-car flag is already set; both arms land on `li r3, 1`.
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_INTERNAL_CAR_CAMERA) ||  // 8269C7DC
+        lrCameraState.IsFlagSet(CameraState::E_FLAG_BUMPER_CAM))             // 8269C7FC
+        return BrnSound::E_CAMERA_MODE_INTERNAL;                             // 8269C820 li r3,1
+
+    return BrnSound::E_CAMERA_MODE_DRIVING;                                  // 8269C814 li r3,0
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::GetCameraModeFromLogicModule  @ 0x8269C840  (BrnCameraControl.cpp:443)
+//
+// STATIC. Its callers -- MusicEffect::GetMusicType @0x8269CE70 and
+// AmbienceControl::SelectSpecialAmbience @0x826B9858 -- both pass a module pointer in r3.
+// -----------------------------------------------------------------------------
+BrnSound::ECameraModes CameraControl::GetCameraModeFromLogicModule(
+    BrnSound::Module::SoundLogicModule* lpLogicModule)
+{
+    CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");             // 8269C868.. (cpp:446)
+
+    // 8269C884 `lwz r11, 0x4C94(r31)` + the "mpBrnLogicInputBuffer" assert is
+    // GetBrnInputStructure() @0x82682518 inlined; 8269C8B0 re-loads the same member.
+    BrnSound::Module::Io::RootInputBuffer* lpInputBuffer = lpLogicModule->GetBrnInputStructure();
+    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");             // 8269C8BC.. (cpp:451)
+
+    // 8269C8DC / 8269C8E8 / 8269C8F0 (`addi r3, r30, 0x138` == Camera::mState).
+    return GetCameraMode(lpInputBuffer->GetDirectorCamera()->GetState(),
+                         lpInputBuffer->GetGameModeInterface());  // 8269C8F4
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::Notify  @ 0x8269C550   (BrnCameraControl.cpp:279)
+//
+// Entered on the EffectBase sub-object, which is why 0x8269C5E0 does `addi r3, r30, -4`
+// before calling ClearEventSnapshots. ⚠️ THE TWO ASSERTS ARE NON-GATING: the console
+// falls straight through into `lhz 8(r31)` on a null header, so no early-out is added.
+// -----------------------------------------------------------------------------
+void CameraControl::Notify(const CgsSound::Io::MessageHeader* lpMessageHeader)
+{
+    using namespace BrnGameState::GameStateModuleIO;   // EGameActionType
+
+    // 8269C574..8269C58C -- string .rdata 0x820ABF40, BrnCameraControl.cpp line 0x119 == 281
+    CGS_ASSERT(lpMessageHeader != 0, "lpMessageHeader");
+
+    // 8269C5A8..8269C5C0 -- the console's own expression string, read from .rdata
+    // 0x820AF858, line 0x11D == 285. Message ids 3 and 0x2C are the only two accepted.
+    CGS_ASSERT(lpMessageHeader->GetEventId() == 3 || lpMessageHeader->GetEventId() == 44,
+               "lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_GAMEACTION || "
+               "lpMessageHeader->GetEventId() == E_SOUNDMESSAGE_100PERCENT");
+
+    if (lpMessageHeader->GetEventId() == 3)            // 8269C5C4  E_SOUNDMESSAGE_GAMEACTION
+    {
+        // 8269C62C `lwz r11, 0x10(r31)` + jump table jpt_8269C654 (base 0x1D, bound 0xA).
+        // ⭐ THE IDS ARE X360-NUMBERED, NOT DWARF-NUMBERED. BrnGameActions.h carries both
+        // and annotates the shift itself ("DWARF 25 (+4 X360)", "DWARF 34 (+5 X360)").
+        // Taken with the DWARF's numbering these four would decode to STOP_MODE_COUNTDOWN /
+        // FINISHED_MODE_RESULTS / QUIT_MODE_OFFLINE / SET_IN_MODE_START_REGION -- an
+        // incoherent set. Taken as X360 values they are two clean windows: intro opens and
+        // the countdown closes input 6; finished opens and stop closes input 7.
+        switch (static_cast<const CgsSound::Io::Message<s32>*>(lpMessageHeader)->mData)
+        {
+        case E_ACTION_START_MODE_INTRO:        // 29 (0x1D) -- open the mode-intro window
+            SetMixerInputValue(6, KI_MIXER_INPUT_MAX);     // 8269C680
+            break;
+        case E_ACTION_STOP_MODE_COUNTDOWN:     // 33 (0x21) -- close it
+            SetMixerInputValue(6, 0);                      // 8269C698
+            break;
+        case E_ACTION_FINISHED_MODE_NOTIFY:    // 35 (0x23) -- open the mode-finished window
+            SetMixerInputValue(7, KI_MIXER_INPUT_MAX);     // 8269C6B0
+            break;
+        case E_ACTION_STOP_MODE:               // 39 (0x27) -- close it
+            SetMixerInputValue(7, 0);                      // 8269C6C8
+            break;
+        default:
+            break;                                         // 8269C6D8
+        }
+    }
+    else if (lpMessageHeader->GetEventId() == 44)      // 8269C5D4  E_SOUNDMESSAGE_100PERCENT
+    {
+        // 8269C5DC `lbz r10, 0x10(r31)` -- a ONE-BYTE payload at MessageHeader +0x10.
+        // [FLAG] no producer for message 44 exists in this tree yet, so nothing
+        // corroborates the exact Message<T> instantiation from the other end; the asm
+        // proves only that the payload is one byte.
+        mbLockedFor100Percent =
+            static_cast<const CgsSound::Io::Message<bool>*>(lpMessageHeader)->mData;  // 8269C5EC
+
+        Nicotine::IDynamicMixer& lrMixer =
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+                ->GetEnvironment().GetDynamicMixer();      // 8269C5E4 / 8269C5E8
+
+        ClearEventSnapshots();                                                     // 8269C5F0
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_EVENT_START, false);         // 8269C5F8
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_ONLINE_JOIN, false);         // 8269C60C
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_EVENT_END,
+                            mbLockedFor100Percent);                                // 8269C614
+    }
+}
+
+// -----------------------------------------------------------------------------
+// CameraControl::UpdateParams  @ 0x826F6540   (BrnCameraControl.cpp:77)
+//
+// Entered on the EffectBase sub-object: 0x826F6C84 and 0x826F6D50 both do
+// `addi r31, r28, -4` before the private-helper calls.
+// -----------------------------------------------------------------------------
+void CameraControl::UpdateParams(f32 /*af32DeltaTime*/)
+{
+    using BrnDirector::Camera::CameraState;
+    using namespace BrnGameState::GameStateModuleIO;
+
+    // 826F6550 lwz 0x28(this) == mpLogicModule ; 826F6554 lwz 0x4C94 + the
+    // BrnSoundLogicModule.h:432 assert == GetBrnInputStructure() inlined.
+    BrnSound::Module::SoundLogicModule* lpLogicModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    BrnSound::Module::Io::RootInputBuffer* lpInputBuffer = lpLogicModule->GetBrnInputStructure();
+
+    const CameraState& lrCameraState = lpInputBuffer->GetDirectorCamera()->GetState();  // 826F6588
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameModeInterface =
+        lpInputBuffer->GetGameModeInterface();                                          // 826F6598
+    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");   // 826F65A8.. (cpp:83)
+
+    // ---- camera mode -> the dynamic mixer's camera state ----------------------
+    // 826F65D4 lwz 0x34 (old current) ; 826F65E0 stw -> 0x38 (previous) ;
+    // 826F65E8 stw new -> 0x34 (current)   ==  DataPoint<T>::Update.
+    mCameraMode.Update(GetCameraMode(lrCameraState, lpGameModeInterface));
+    if (mCameraMode.HasChanged())                                   // 826F65EC cmpw; beq
+    {
+        if (KB_DEBUG_CAMERA_STATE)                                  // 826F65F4 lbz byte_82FFB8D1
+        {
+            // [FLAG] 826F6604..826F661C streams the .rdata literal "Camera State Change.
+            // Idx: " and then the mode ordinal, through
+            // CgsDev::StrStreamBase::operator<<(const char*) @0x821F01A8 and
+            // ::operator<<(s32) @0x821F0E50. THE STREAM OBJECT HAS NO NAME: it is the
+            // global at .data 0x82F2F9BC (vptr 0x82000D00, a StrStreamBase-family table)
+            // and it appears in neither identity.json, the DWARF, nor the image's symbol
+            // pool. The statement is left unwritten rather than given an invented name.
+            // The arm is inert in the shipped build (KB_DEBUG_CAMERA_STATE == false).
+        }
+        // 826F6620 / 826F6628 / 826F662C
+        lpLogicModule->GetEnvironment().GetDynamicMixer().SetCameraState(
+            static_cast<int>(mCameraMode.GetCurrent()));
+    }
+
+    // ---- external vs internal gameplay camera --------------------------------
+    // 826F663C rlwinm 0,28,28 (bit 3) ; 826F6664 rlwinm 0,27,27 (bit 4). Both inputs are
+    // written on EVERY path, exactly once, in this order.
+    s32 liExternalCamera = 0;
+    s32 liInternalCamera = 0;
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA))
+    {
+        if (lrCameraState.IsFlagSet(CameraState::E_FLAG_BUMPER_CAM))
+            liInternalCamera = KI_MIXER_INPUT_MAX;                  // 826F6694
+        else
+            liExternalCamera = KI_MIXER_INPUT_MAX;                  // 826F669C
+    }
+    SetMixerInputValue(0, liExternalCamera);                        // 826F6690 / 826F66A8
+    SetMixerInputValue(1, liInternalCamera);                        // 826F66B8
+
+    // ---- the race-end effect level, rate-limited ------------------------------
+    const BrnDirector::Camera::Camera* lpCamera = lpInputBuffer->GetDirectorCamera();  // 826F66C0
+
+    f32 lfRaceEndTarget = 0.0f;                                     // 826F66D0 flt_82001CC0
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_APPLYING_RACE_END_EFFECT))   // 826F66D4 bit 19
+        lfRaceEndTarget = lpCamera->GetEffects().GetRaceEndEffectAmount();       // 826F66F8
+
+    // 826F6704 fsubs ; 826F670C fabs ; 826F6710 fcmpu flt_820ABB14 (0.1f)
+    const f32 lfDelta = lfRaceEndTarget - mfRaceEndEffect;          // 826F66FC lfs 0x3C
+    if (std::fabs(lfDelta) <= KF_RACE_END_EFFECT_STEP)
+    {
+        mfRaceEndEffect = lfRaceEndTarget;                          // 826F6748 fmr f0, f13
+    }
+    else
+    {
+        // 826F6718 tests lfDelta == 0.0f -> sign 0.0f; otherwise 826F673C
+        // `fsel f0, f0, f13, f12` with flt_82001C98 == +1.0f and flt_820037C8 == -1.0f,
+        // then 826F6740 `fmadds f0, f0, 0.1f, current`.
+        // [FLAG] the console's three-way sign helper is INLINED and its name is
+        // unrecovered -- there is no Sign/Approach helper in CgsNumeric or CgsSoundUtils
+        // -- so the arithmetic is written out.
+        f32 lfSign = 0.0f;
+        if (lfDelta > 0.0f)      lfSign =  1.0f;
+        else if (lfDelta < 0.0f) lfSign = -1.0f;
+        mfRaceEndEffect += lfSign * KF_RACE_END_EFFECT_STEP;
+    }
+    // 826F6750 stfs 0x3C ; 826F6764 fmuls flt_820AD310 ; 826F6768 fctiwz ; 826F676C stfiwx
+    // -- that IS the DWARF's EffectBase::SetMixerInputValue(int32_t, float32_t) overload
+    // (CgsEffectBase.h:609) inlined. Only the int overload is homed here, so the
+    // conversion is written out.
+    SetMixerInputValue(11, static_cast<s32>(mfRaceEndEffect * KF_MIXER_INPUT_MAX));  // 826F6774
+
+    // ---- the per-flag mixer inputs -------------------------------------------
+    // The `subfic/subfe/clrlwi 17` tails are the branchless `cond ? 0x7FFF : 0`.
+    SetMixerInputValue(4, lpCamera->GetEffects().GetSimTimeScale() <= KF_SLOW_MOTION_TIMESTEP_SCALE
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F677C / 826F67AC
+    SetMixerInputValue(2, lrCameraState.IsFlagSet(CameraState::E_FLAG_JUMP_CAMERA)
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F67B4 bit 7
+    SetMixerInputValue(5, lrCameraState.IsFlagSet(CameraState::E_FLAG_TUMBLING_PLAYER_FOCUSED)
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F67E8 bit 9
+    SetMixerInputValue(3, lrCameraState.IsFlagSet(CameraState::E_FLAG_CRASH_CAMERA)
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F681C bit 10
+    SetMixerInputValue(8, lrCameraState.IsFlagSet(CameraState::E_FLAG_TAKEDOWN_CAMERA)
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F6850 bit 11
+    SetMixerInputValue(9, lrCameraState.IsFlagSet(CameraState::E_FLAG_INTERNAL_CAR_CAMERA)
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F6884 bit 12
+    SetMixerInputValue(10, lrCameraState.IsFlagSet(CameraState::E_FLAG_IS_PICTURE_PARADISE)
+                              ? KI_MIXER_INPUT_MAX : 0);            // 826F68B8 bit 14
+
+    // ---- the three FX messages ------------------------------------------------
+    // Each builds a 20-byte Message<FxMessage_*> on the stack and posts it with event id 4
+    // to effect seat 3. The header stores are +0x04 meEffectType = 1, +0x08 mi16EventId = 4,
+    // +0x0A/+0x0C = 0, +0x0E mu16EffectId = 3, +0x10 = the FxType.
+
+    // 826F68EC bit 6 (NEW_THIS_FRAME) && 826F6914 bit 7 (JUMP_CAMERA)
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_NEW_THIS_FRAME) &&
+        lrCameraState.IsFlagSet(CameraState::E_FLAG_JUMP_CAMERA))
+    {
+        CgsSound::Io::Message<FxMessage_CameraCut> lMessage;
+        lMessage.Construct(4, 0, 0, KU_FX_EFFECT_SEAT,
+                           CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+        lpLogicModule->PostMessage(lMessage);                       // 826F6968
+    }
+
+    // The RISING EDGE of E_FLAG_JUMP_PHOTO: 826F6970 reads mCurrentFlags bit 20 and
+    // 826F6994 requires mPreviousFlags bit 20 CLEAR.
+    if (lrCameraState.IsFlagSet(CameraState::E_FLAG_JUMP_PHOTO) &&
+        lrCameraState.HasChanged(CameraState::E_FLAG_JUMP_PHOTO))
+    {
+        CgsSound::Io::Message<FxMessage_CameraPhoto> lMessage;
+        lMessage.Construct(4, 0, 0, KU_FX_EFFECT_SEAT,
+                           CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+        lpLogicModule->PostMessage(lMessage);                       // 826F69EC
+    }
+
+    // 826F69F0..826F6A80: RACING_GAMEPLAY_CAMERA must have CHANGED (826F6A28) and be SET
+    // (826F6A44), while IS_PICTURE_PARADISE must NOT have changed (826F6A7C).
+    if (lrCameraState.HasChanged(CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA) &&
+        lrCameraState.IsFlagSet(CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA) &&
+        !lrCameraState.HasChanged(CameraState::E_FLAG_IS_PICTURE_PARADISE))
+    {
+        CgsSound::Io::Message<FxMessage_ResetOnTrack> lMessage;
+        lMessage.Construct(4, 0, 0, KU_FX_EFFECT_SEAT,
+                           CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+        lpLogicModule->PostMessage(lMessage);                       // 826F6ABC
+    }
+
+    // ---- edge-triggered snapshots ---------------------------------------------
+    Nicotine::IDynamicMixer& lrMixer =
+        lpLogicModule->GetEnvironment().GetDynamicMixer();           // 826F6AC4 / 826F6ACC
+
+    if (lrCameraState.HasChanged(CameraState::E_FLAG_JUMP_CAMERA))                    // 826F6AC8
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_IN_AIR,
+                            lrCameraState.IsFlagSet(CameraState::E_FLAG_JUMP_CAMERA));    // 826F6B20
+    if (lrCameraState.HasChanged(CameraState::E_FLAG_CRASH_CAMERA))                   // 826F6B2C
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_CRASH,
+                            lrCameraState.IsFlagSet(CameraState::E_FLAG_CRASH_CAMERA));   // 826F6B7C
+    if (lrCameraState.HasChanged(CameraState::E_FLAG_TAKEDOWN_CAMERA))                // 826F6B88
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_TAKEDOWN,
+                            lrCameraState.IsFlagSet(CameraState::E_FLAG_TAKEDOWN_CAMERA)); // 826F6BD8
+    if (lrCameraState.HasChanged(CameraState::E_FLAG_IS_PICTURE_PARADISE))            // 826F6BE4
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_PICTURE_PARADISE,
+                            lrCameraState.IsFlagSet(CameraState::E_FLAG_IS_PICTURE_PARADISE)); // 826F6C34
+
+    // ---- game-mode driven inputs and snapshots --------------------------------
+    // 826F6C38 lwz 8(r25) vs 826F6C3C lwz 0(r25) ; 826F6C48 cmpwi 0xA.
+    // ⚠️ NOTE the value here is a plain 0/1, NOT 0x7FFF (`clrlwi r5, r11, 24`).
+    if (lpGameModeInterface->miCurrentGameModeType != lpGameModeInterface->miPreviousGameModeType)
+        SetMixerInputValue(12,
+            lpGameModeInterface->miCurrentGameModeType >= E_MODE_ONLINE_MODE_START ? 1 : 0);  // 826F6C64
+
+    // 826F6C68 lwz 0xC(r25) vs 826F6C6C lwz 4(r25) ; 826F6C78 lbz 0x40(this)
+    if (lpGameModeInterface->miCurrentGameModeState !=
+            lpGameModeInterface->miPreviousGameModeState &&
+        !mbLockedFor100Percent)
+    {
+        ClearEventSnapshots();                                                  // 826F6C8C
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_EVENT_START, false);      // 826F6C9C
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_EVENT_END,   false);      // 826F6CAC
+        lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_ONLINE_JOIN, false);      // 826F6CBC
+
+        switch (lpGameModeInterface->miCurrentGameModeState)       // 826F6CC0, jpt_826F6CE0 (0..7)
+        {
+        case E_GMS_COUNTDOWN:                                      // 0
+        case E_GMS_INTRO:                                          // 1
+            lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_EVENT_START, true);   // 826F6D10
+            break;
+        case E_GMS_IN_PROGRESS:                                    // 2
+            lrMixer.SetSnapshot(GetEventSnapshot(lpGameModeInterface), true);   // 826F6D54
+            break;
+        case E_GMS_OUTRO:                                          // 3
+        case E_GMS_RESULTS:                                        // 4
+        case E_GMS_QUIT:                                           // 5
+            lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_EVENT_END, true);     // 826F6D28
+            break;
+        case E_GMS_ONLINE_LOADING:                                 // 6
+        case E_GMS_ONLINE_SPLASH:                                  // 7
+            lrMixer.SetSnapshot(BrnSound::E_SNAPSHOT_TYPE_ONLINE_JOIN, true);   // 826F6D40
+            break;
+        default:
+            break;                                                 // 826F6D68
+        }
+    }
+}
 
 } // namespace Logic
 } // namespace BrnSound

@@ -3,6 +3,12 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectControl.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"      // CgsSound::Utils::DataPoint<T>
+#include "GameSource/Sound/BrnMixerData.h"                   // ECameraModes / ESnapshotTypes
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"    // RootInputBuffer + the director camera types
+
+// GetCameraModeFromLogicModule takes the module by pointer only.
+namespace BrnSound { namespace Module { struct SoundLogicModule; } }
 
 // =============================================================================
 // BrnSound::Logic::CameraControl
@@ -50,13 +56,50 @@ namespace Logic
 // @ 0x826BB438) are generated structurally from the dual-base layout.
 struct CameraControl : public BrnSound::Logic::BrnEffectControl
 {
-    CameraControl() {}
+    CameraControl() : mCameraMode(), mfRaceEndEffect(0.0f), mbLockedFor100Percent(false) {}
     virtual ~CameraControl();
 
     CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetTypeInfo() const override;
     const char* GetTypeName() const override;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectControl>* GetStaticTypeInfo();
     static CgsSound::Logic::EffectControl* CreateObject(u32 auType);
+
+    // ---- EffectBase virtuals. X360 vtable @0x820B2334, slots 5 / 6 / 7 / 9 --------
+    // ⭐⭐ THE BASE ORDER IS THE OTHER WAY ROUND FROM THE SIBLING EFFECT-OBJECT LEAVES.
+    // CreateObject @0x826D25C8 settles it: `li r3, 0x48` (sizeof == 72), then
+    // `stw <0x820B2368>, 0(r9)` and `stw <0x820B2334>, 4(r9)`. The 2-slot table at
+    // 0x820B2368 is IResourceRequester ([ResourcesAreReady][GetResourceRegistrar]); the
+    // 13-slot table at 0x820B2334 is EffectControl/EffectBase and ITS slot 0 is the
+    // `adjustor{4}'. So IResourceRequester is the base at +0 and EffectBase sits at +4,
+    // which is why Notify and UpdateParams do `addi r3, rN, -4` before calling the
+    // private helpers (those take the MOST-DERIVED this) while every member offset in
+    // those bodies is EffectBase-relative, i.e. 4 LOWER than the object offset.
+    bool Attach() override;                                              // @0x8269C518
+    void UpdateParams(f32 af32DeltaTime) override;                       // @0x826F6540
+    void ProcessUpdate() override;                                       // slot 7
+    void Notify(const CgsSound::Io::MessageHeader* apMessage) override;  // @0x8269C550
+
+    // ---- BrnCameraControl.cpp:395 / :443 -- STATIC: the asm's r3 is not a `this` ---
+    static BrnSound::ECameraModes GetCameraMode(
+        const BrnDirector::Camera::CameraState& lrCameraState,
+        const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
+            lpGameModeInterface);                                        // @0x8269C6E0
+    static BrnSound::ECameraModes GetCameraModeFromLogicModule(
+        BrnSound::Module::SoundLogicModule* lpLogicModule);              // @0x8269C840
+
+private:
+    void ClearEventSnapshots();                                          // @0x82686D00
+    BrnSound::ESnapshotTypes GetEventSnapshot(
+        const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
+            lpGameModeInterface);                                        // @0x82686C80
+
+    // DWARF member order == X360 layout order. Offsets are from the MOST-DERIVED
+    // object; an EffectBase-relative asm offset is 4 LOWER. Pinned by CreateObject
+    // (`li r3,0x48` sizeof, `stw 0,0x38(r9)`, `stw 0,0x3C(r9)`) and by Attach's four
+    // stores at EffectBase +0x34/+0x38/+0x3C/+0x40.
+    CgsSound::Utils::DataPoint<BrnSound::ECameraModes> mCameraMode;  // h:93 (+0x38/+0x3C)
+    f32  mfRaceEndEffect;                                            // h:94 (+0x40)
+    bool mbLockedFor100Percent;                                      // h:96 (+0x44)
 };
 
 } // namespace Logic

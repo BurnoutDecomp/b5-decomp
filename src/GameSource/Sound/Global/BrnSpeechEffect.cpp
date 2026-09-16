@@ -185,12 +185,38 @@ bool SpeechEffect::Attach()
     return mpStreamingManager != 0;
 }
 
+// ---------------------------------------------------------------------------
+// SpeechEffect::Detach  @ 0x826F7F50
+//
+// ⛔ CORRECTED 2026-09-16 -- this body had an INVENTED ARM and read the wrong source.
+// It used to be `if (mpStreamingManager) ...`, i.e. a silent skip on a CACHED member.
+// The console does neither:
+//   826F7F68  bl 0x826EBF88            ; BrnEffectObject::Detach
+//   826F7F80  lwz r11, 0x28(r31)       ; mpLogicModule, read LIVE
+//   826F7F84  lwz r30, 0x296C(r11)     ; GetEnvironment().GetStateManager(6)
+//   826F7F88  cmplwi r30, 0 / bne      ; ...and on NULL it ASSERTS (BrnSpeechEffect.cpp:225,
+//   826F7F90..  BeginAssert/FireAssert ;    li r5, 0xE1) -- it does not skip
+//   826F7FB0  addic. r11, r31, -4      ; the null-preserving (IStreamUser*)this adjust
+//   826F7FD0  lfs f0, [0x82003F40]     ; 0.25f, the stop request's fade-out
+//   ...then PostStreamRequest UNCONDITIONALLY.
+// A silent `if` where the console asserts is the documented invented-arm defect class:
+// it converts a loud programming error into a missing sound. The identical tail is at
+// PresentationEffect::Detach @0x826F785C and AmbienceEffect::Detach @0x826F50DC.
+// ---------------------------------------------------------------------------
 bool SpeechEffect::Detach()
 {
-    if (!BrnEffectObject::Detach())
+    if (!BrnEffectObject::Detach())                          // 826F7F68 / 826F7F78
         return false;
-    if (mpStreamingManager)
-        mpStreamingManager->PostStreamRequest(Streaming::StreamStopRequest(this, 0.25f));
+
+    // 826F7F80 / 826F7F84 -- read LIVE off the module, not from a cached member.
+    Streaming::StreamingStateManager* lpStreamingStateMan =
+        static_cast<Streaming::StreamingStateManager*>(
+            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)
+                ->GetEnvironment().GetStateManager(6));
+    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");   // 826F7F90.. (cpp:225)
+
+    // 826F7FB0..826F7FEC -- unconditional. .rdata 0x82003F40 == 0.25f.
+    lpStreamingStateMan->PostStreamRequest(Streaming::StreamStopRequest(this, 0.25f));
     return true;
 }
 
