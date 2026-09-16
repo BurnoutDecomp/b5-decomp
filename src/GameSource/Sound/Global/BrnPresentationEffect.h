@@ -108,6 +108,10 @@ struct PresentationEffect : public BrnEffectObject,
     virtual bool Attach() override;
     virtual void UpdateParams(f32 afDeltaTime) override;
     virtual void ProcessUpdate() override;
+
+    // @ 0x826F77D0 -- vtable 0x820B5F10 slot +0x20. Runs the base detach, stops all
+    // four aging voices, then posts a StreamStopRequest for this IStreamUser.
+    virtual bool Detach() override;
     virtual void Notify(const CgsSound::Io::MessageHeader* apMessage) override;
 
     virtual const CgsSound::Logic::VoiceWrapper::CreateParams& GetCreateParams() const override;

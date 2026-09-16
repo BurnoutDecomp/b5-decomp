@@ -112,7 +112,7 @@ public:
 
     // SetGain(sendNameHash, gain, ..., sendNameCheck)  @ 0x826942C0. Look up the send
     // by hash, assert its name matches, store the new gain and a "changed" flag.
-    void SetGain(u32 luSendNameHash, f32 lfGain, s32 liReserved, const u32* lpSendName);
+    void SetGain(u32 luSendIndex, f32 lfGain, const u32* lpSendName);
 
     // IsPlaying  @ 0x826943F8. true iff (playbackState & 0x7F) == 2.
     bool IsPlaying() const;
@@ -149,7 +149,7 @@ public:
     // value to each live slot's logic Voice. Playback-layer-dependent stub in
     // CgsVoice.cpp (mirrors SetGain). Added additively -- not in the original 6-fn
     // batch surface; its own X360 body is a separate slice.
-    void SetParameter(u32 luSendNameHash, f32 lfValue, s32 liReserved, const u32* lpSendName);
+    void SetParameter(s32 liParameterIndex, f32 lfValue, const u32* lpParamName);
 
     // Raw owned-playback-voice accessor. The embedding VoiceWrapper reads the logic
     // Voice's owned pointer directly (X360 `*(wrapper+0x38)` == the handle's mpObject)

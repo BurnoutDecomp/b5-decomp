@@ -184,7 +184,7 @@ bool FxEffect::Attach()
         GetStateBase() ? GetStateBase()->GetStateManager() : 0);
     CGS_ASSERT(mpGlobalStateManager != 0, "mpGlobalStateManager");
 
-    miCooldown = 0;
+    miFrameCountBeforeRetrigger = 0;
     return true;
 }
 
@@ -433,6 +433,93 @@ void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     mVoiceWrappers[liSlot].Create(lParams);
     mVoiceWrappers[liSlot].Play(static_cast<u32>(lTag.miSampleIndex));
     mafVolumes[liSlot] = lTag.mfVolume;
+}
+
+
+// ---------------------------------------------------------------------------
+// FxEffect::UpdateParams  @ 0x826BC338   (vtable 0x820B37CC slot +0x18)
+//
+// BASE POINTER: this == primary + 4. Slot 0 of table 0x820B37CC is
+// FxEffect::`vector deleting destructor'`adjustor{4}' @0x826C9328 (`addi r3,r3,-4`), and
+// 0x826BC348 `lwz r30, 0x28(r31)` == primary +0x2C == mpLogicModule.
+//
+// The f32 parameter is UNUSED -- there is not one floating-point instruction in
+// 0x826BC338..0x826BC4DC.
+//
+//   826BC348  lwz r30, 0x28(r31)      ; mpLogicModule
+//   826BC34C  lwz r11, 0x4C94(r30)    ; + the "mpBrnLogicInputBuffer" assert
+//   826BC378  bl 0x82694D30           ; RootInputBuffer::GetVehicleInterface() const
+//   826BC380/8C/94                    ; --miFrameCountBeforeRetrigger
+//   826BC388/90/98                    ; CgsSound::Utils::IntClamp(v, 0, 256)
+//   826BC3A0..3F0                     ; RCEntityActiveRaceCarOutputInterface::
+//                                     ;   IsPlayerCarActive() inlined
+//   826BC3FC                          ; GetPlayerActiveRaceCarIndex() inlined + its assert
+//   826BC420  bl 0x823A7BC8           ; HasCrashedIntoWater(EActiveRaceCarIndex)
+//   826BC42C/30                       ; DataPoint<bool>::Update -- previous = current
+//   826BC440 / 826BC4D4               ; ...then current = true / false
+//   826BC444..68                      ; (previous != current) && (current == true)
+//   826BC46C                          ; if (miFrameCountBeforeRetrigger != 0) return
+//   826BC49C  stw 0x78 (120)          ; miFrameCountBeforeRetrigger = 120
+//   826BC4A0..C0                      ; the stack Message: id 4, dest 0xFFFF x3, data 8
+//   826BC494/C4/C8                    ; an indirect call through the vptr, slot +0x24 ==
+//                                     ;   FxEffect::Notify @0x826F7248
+//
+// [FLAG] KI_MAX_RETRIGGER_FRAMES / KI_RETRIGGER_FRAMES: the NAMES are ours. Both are `li`
+// immediates (0x826BC388, 0x826BC49C), not .rdata, so there is nothing for findinit.py to
+// find and no DWARF constant exists in BrnFxEffect.h besides KI_NUMBER_OF_FX_VOICES.
+// ---------------------------------------------------------------------------
+void FxEffect::UpdateParams(f32 /*af32DeltaTime*/)
+{
+    const s32 KI_MAX_RETRIGGER_FRAMES = 256;   // 826BC388  li r5, 0x100
+    const s32 KI_RETRIGGER_FRAMES     = 120;   // 826BC49C  li r9, 0x78
+
+    // 826BC348
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    // 826BC34C..826BC374 -- the inlined GetBrnInputStructure() assert.
+    CGS_ASSERT(lpModule->GetBrnInputStructure() != 0, "mpBrnLogicInputBuffer");
+
+    // 826BC378 / 826BC37C
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpkVehicle =
+        lpModule->GetBrnInputStructure()->GetVehicleInterface();
+
+    // 826BC380 / 826BC38C / 826BC394 then 826BC388 / 826BC390 / 826BC398 / 826BC39C
+    --miFrameCountBeforeRetrigger;
+    miFrameCountBeforeRetrigger = CgsSound::Utils::IntClamp(
+        miFrameCountBeforeRetrigger, 0, KI_MAX_RETRIGGER_FRAMES);
+
+    // 826BC3A0..826BC3F0
+    if (!lpkVehicle->IsPlayerCarActive())
+        return;
+
+    // 826BC3F4..826BC430 + 826BC440 / 826BC4D4. MSVC specialised DataPoint<bool>::Update
+    // across the branch: `previous = current` is emitted once and `current` is then stored
+    // as 1 or 0 in the two arms. The false arm falls out because HasChangedTo(true) cannot
+    // hold when current is false.
+    mbHasCrashedIntoWater.Update(
+        lpkVehicle->HasCrashedIntoWater(lpkVehicle->GetPlayerActiveRaceCarIndex()));
+
+    // 826BC444..826BC468 -- (previous != current) && (current == true)
+    if (!mbHasCrashedIntoWater.HasChangedTo(true))
+        return;
+
+    // 826BC46C / 826BC474
+    if (miFrameCountBeforeRetrigger != 0)
+        return;
+
+    // 826BC49C
+    miFrameCountBeforeRetrigger = KI_RETRIGGER_FRAMES;
+
+    // 826BC4A0/84/A8/B0/B4/B8/C0 -- the stack message. mData == 8 is
+    // FxMessage::E_CRASH_IN_WATER; the three 0xFFFF destination words are
+    // MessageHeader::Construct's KU16_NO_DESTINATION.
+    CgsSound::Io::Message<s32> lMessage;
+    lMessage.Construct(4);   // E_SOUNDMESSAGE_FXMESSAGE -- this TU spells ids as
+                            // literals with the name in a comment (cf. Notify's assert)
+    lMessage.mData = 8;
+
+    // 826BC494 / 826BC4C4 / 826BC4C8 -- a real indirect call through the sub-object vptr.
+    Notify(&lMessage);
 }
 
 } // namespace Logic

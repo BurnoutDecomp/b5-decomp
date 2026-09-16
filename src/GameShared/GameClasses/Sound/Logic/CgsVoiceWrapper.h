@@ -113,7 +113,24 @@ public:
     {
         meUpdateStage = static_cast<E_UPDATE_STAGE>(as32Stage);
     }
-    bool IsAlive() const { return meUpdateStage != E_UPDATE_STAGE_IDLE; }
+    // ⛔ CORRECTED 2026-09-16. This used to read `meUpdateStage != E_UPDATE_STAGE_IDLE`,
+    // which reports a FINISHED wrapper as ALIVE. The console inlines IsAlive() at
+    // 0x826F79FC (inside PresentationEffect::Play, guarding the assert whose string is
+    // .rdata 0x820B7840 == "!lpVoice->mVoice.IsAlive()" -- so the source itself names
+    // the function being inlined):
+    //     826F79FC  lwz  r11, 0x48(r27)     ; meUpdateStage
+    //     826F7A00  cmpwi r11, 7            ; E_UPDATE_STAGE_FINISHED
+    //     826F7A04  beq  -> result = 0
+    //     826F7A08  cmpwi r11, 0            ; E_UPDATE_STAGE_IDLE
+    //     826F7A0C  li   r11, 1
+    //     826F7A10  bne  -> result = 1
+    //     826F7A14  mr   r11, r30 (== 0)
+    // i.e. BOTH terminal stages are dead, not just IDLE.
+    bool IsAlive() const
+    {
+        return meUpdateStage != E_UPDATE_STAGE_IDLE &&
+               meUpdateStage != E_UPDATE_STAGE_FINISHED;
+    }
     bool IsPlaying() const { return meUpdateStage == E_UPDATE_STAGE_PLAYING; }
     const CreateParams& GetCreateParams() const { return mCreateParams; }
     u32 GetOptionalParam() const { return mu32OptionalPlayParam; }

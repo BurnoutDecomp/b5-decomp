@@ -314,9 +314,9 @@ void CollisionEffect::ProcessUpdate()
         CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Pitch~"));
     const u32 luAzimuth = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Azimuth~"));
-    mCrashVoice.SetGain(0, lfGain, 0, &luSend01);
-    mCrashVoice.SetParameter(1, lfAzimuth, 0, &luAzimuth);
-    mCrashVoice.SetParameter(0, lfPitch, 0, &luPitch);
+    mCrashVoice.SetGain(0, lfGain, &luSend01);
+    mCrashVoice.SetParameter(1, lfAzimuth, &luAzimuth);
+    mCrashVoice.SetParameter(0, lfPitch, &luPitch);
 }
 
 bool CollisionEffect::Detach()

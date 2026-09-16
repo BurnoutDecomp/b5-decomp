@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"          // CgsSound::Utils::DataPoint<T>
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"     // CgsSound::Logic::VoiceWrapper element (BY NAME)
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"        // GlobalStateManager (the cached splice-bank owner)
 
@@ -115,6 +116,10 @@ struct FxEffect : public BrnEffectObject
     virtual bool Attach();
     // @ 0x826F71D8 -- release all four wrappers after the base detach.
     virtual bool Detach();
+    // @ 0x826BC338 -- vtable 0x820B37CC slot +0x18. The f32 is UNUSED by the console
+    // body (there is not one FP instruction in 0x826BC338..0x826BC4DC); it exists
+    // because this overrides EffectBase::UpdateParams(f32).
+    virtual void UpdateParams(f32 af32DeltaTime);
     // @ 0x826E74F8 -- pump the four wrappers and re-apply their DMix gains.
     virtual void ProcessUpdate();
     // @ 0x826F7248 -- the FX message (sound message 4) entry point.
@@ -143,11 +148,17 @@ struct FxEffect : public BrnEffectObject
     // BrnFxEffect.cpp:213). Notify reads +176 / +188 off it: mFxSpliceBank and
     // mPresentationSpliceBank.
     GlobalStateManager* mpGlobalStateManager;
-    // +0x190 (400) -- the word Attach zeroes and UpdateParams @0x826BC338
-    // decrements through CgsSound::Utils::IntClamp. UpdateParams itself is
-    // DEFERRED (it walks the logic input buffer + the player race-car index),
-    // so this only ever holds 0 in this slice.
-    s32 miCooldown;
+    // +0x190/+0x191 -- DWARF BrnFxEffect.h:199. The ctor @0x826C9318/1C zeroes BOTH
+    // bytes here; UpdateParams reads +0x18C and writes +0x18D through `this ==
+    // primary + 4`. This member was MISSING and miCooldown sat on top of it.
+    CgsSound::Utils::DataPoint<bool> mbHasCrashedIntoWater;
+
+    // +0x194 -- DWARF BrnFxEffect.h:200. RENAMED from the invented `miCooldown`, and
+    // moved one slot up: Attach @0x8269E1E8 does a FULL-WORD `stw r30, 0x190(r31)`
+    // which, at `this == primary + 4`, is primary +0x194 -- while the ctor's two
+    // stores there are BYTES. The two only reconcile with the DataPoint<bool> above
+    // occupying +0x190/+0x191, which is exactly the DWARF's declaration order.
+    s32 miFrameCountBeforeRetrigger;
 
     // The four-slot free scan the console inlines at the head of Notify.
     s32 FindFreeVoice() const;

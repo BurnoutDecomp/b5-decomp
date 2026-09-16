@@ -274,8 +274,8 @@ bool GlobalStateManager::Prepare()
         {
             maSubmixVoices[liVoice].Connect(luSend01, 1);
             maSubmixVoices[liVoice].Connect(luReverbSend, 2);
-            maSubmixVoices[liVoice].SetGain(1, 0.0f, 0, &luReverbSend);
-            maSubmixVoices[liVoice].SetGain(0, 1.0f, 0, &luSend01);
+            maSubmixVoices[liVoice].SetGain(1, 0.0f, &luReverbSend);
+            maSubmixVoices[liVoice].SetGain(0, 1.0f, &luSend01);
         }
         // The profiling monitor has no gameplay semantics on the PC host.
         // fall through

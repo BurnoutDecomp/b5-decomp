@@ -641,17 +641,17 @@ void DualGinsuEffect::UpdateParams(f32 /*afTimeStep*/)
     mfMinRpm = lrAttribs.MinRpm();
     mfDecelMinRpm = lrAttribs.DecelMinRpm();
 
-    mCarSubmix.SetParameter(miCarSubmixPanningDistanceIndex, 0.75f, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningDistanceIndex, 0.75f,
                             &guPanningDistanceName);
-    mCarSubmix.SetParameter(miCarSubmixPanningSizeIndex, 1.0f, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningSizeIndex, 1.0f,
                             &guPanningSizeName);
-    mCarSubmix.SetParameter(miCarSubmixPanningTwistIndex, 0.0f, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningTwistIndex, 0.0f,
                             &guPanningTwistName);
-    mCarSubmix.SetParameter(miCarSubmixPanningCentreLevelIndex, 1.0f, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningCentreLevelIndex, 1.0f,
                             &guPanningCentreLevelName);
-    mCarSubmix.SetParameter(miCarSubmixPanningMainLevelIndex, 1.0f, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningMainLevelIndex, 1.0f,
                             &guPanningMainLevelName);
-    mCarSubmix.SetParameter(miCarSubmixPanningLfeLevelIndex, 1.0f, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningLfeLevelIndex, 1.0f,
                             &guPanningLfeLevelName);
 }
 
@@ -667,25 +667,25 @@ void DualGinsuEffect::ProcessUpdate()
     const f32 lfSubmixGain =
         GetRWACMixerOutputValue(5, Nicotine::DMixIO::DMX_VOL);
 
-    mCarSubmix.SetParameter(miCarSubmixPanningAngleIndex, lfPanningAngle, 0,
+    mCarSubmix.SetParameter(miCarSubmixPanningAngleIndex, lfPanningAngle,
                             &guPanningAngleName);
-    mCarSubmix.SetParameter(miCarSubmixLowShelfFreq, mfLowShelfFreq, 0,
+    mCarSubmix.SetParameter(miCarSubmixLowShelfFreq, mfLowShelfFreq,
                             &guLowShelfFreqName);
-    mCarSubmix.SetParameter(miCarSubmixLowShelfGain, mfLowShelfGain, 0,
+    mCarSubmix.SetParameter(miCarSubmixLowShelfGain, mfLowShelfGain,
                             &guLowShelfGainName);
-    mCarSubmix.SetParameter(miCarSubmixHighShelfFreq, mfHighShelfFreq, 0,
+    mCarSubmix.SetParameter(miCarSubmixHighShelfFreq, mfHighShelfFreq,
                             &guHighShelfFreqName);
-    mCarSubmix.SetParameter(miCarSubmixHighShelfGain, mfHighShelfGain, 0,
+    mCarSubmix.SetParameter(miCarSubmixHighShelfGain, mfHighShelfGain,
                             &guHighShelfGainName);
-    mCarSubmix.SetParameter(miCarSubmixPeakingFreq, mfPeakingFreq, 0,
+    mCarSubmix.SetParameter(miCarSubmixPeakingFreq, mfPeakingFreq,
                             &guPeakingFreqName);
-    mCarSubmix.SetParameter(miCarSubmixPeakingGain, mfPeakingGain, 0,
+    mCarSubmix.SetParameter(miCarSubmixPeakingGain, mfPeakingGain,
                             &guPeakingGainName);
-    mCarSubmix.SetParameter(miCarSubmixPeakingQ, mfPeakingQ, 0,
+    mCarSubmix.SetParameter(miCarSubmixPeakingQ, mfPeakingQ,
                             &guPeakingQName);
-    mCarSubmix.SetGain(miCarSubmixReverbIndex, lfSubmixGain, 0,
+    mCarSubmix.SetGain(miCarSubmixReverbIndex, lfSubmixGain,
                        &guReverbSendName);
-    mCarSubmix.SetParameter(miCarSubmixCutoffFreq, lfCutoff, 0,
+    mCarSubmix.SetParameter(miCarSubmixCutoffFreq, lfCutoff,
                             &guCutoffFreqName);
 
     UpdateAccelGinsu();
@@ -763,9 +763,9 @@ void DualGinsuEffect::UpdateLoopModelParams()
                     lrOutput.mafOutputs[LoopOutputs::E_GAIN] * lfGainScale;
                 const f32 lfPitch = (std::max)(0.0f, (std::min)(4.0f,
                     lrOutput.mafOutputs[LoopOutputs::E_PITCH] * lfPitchScale));
-                mLoopModelVoice[liVoice].SetGain(0, lfGain, 0, &guSend01Name);
+                mLoopModelVoice[liVoice].SetGain(0, lfGain, &guSend01Name);
                 mLoopModelVoice[liVoice].SetParameter(
-                    0, lfPitch, 0, &guLoopPitchParameterName);
+                    0, lfPitch, &guLoopPitchParameterName);
             }
         }
         else if (maiPartialToVoice[liPartial] != -1)

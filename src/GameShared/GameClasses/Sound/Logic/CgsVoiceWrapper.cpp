@@ -87,15 +87,14 @@ void VoiceWrapper::SetGain(u32 au32SendIndex, f32 af32Gain,
                            const u32* apSendName)
 {
     if (mVoice.GetVoiceObject())
-        mVoice.SetGain(au32SendIndex, af32Gain, 0, apSendName);
+        mVoice.SetGain(au32SendIndex, af32Gain, apSendName);
 }
 
 void VoiceWrapper::SetParameter(s32 as32ParamIndex, f32 af32Value,
                                 const u32* apParamName)
 {
     if (mVoice.GetVoiceObject())
-        mVoice.SetParameter(static_cast<u32>(as32ParamIndex), af32Value,
-                            0, apParamName);
+        mVoice.SetParameter(static_cast<u32>(as32ParamIndex), af32Value, apParamName);
 }
 
 // ARTIST @ 0x826DC5E0.
@@ -147,7 +146,7 @@ void VoiceWrapper::Update()
             {
                 u32 luSendName = mCreateParams.mSendName;
                 mVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex),
-                               0.0f, 0, &luSendName);
+                               0.0f, &luSendName);
                 mVoice.Play(static_cast<s32>(mu32OptionalPlayParam));
                 meUpdateStage = E_UPDATE_STAGE_PLAYING;
             }
