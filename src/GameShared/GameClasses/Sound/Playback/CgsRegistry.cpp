@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([registry-stale])
 
 // CgsSound::Playback::Registry out-of-line members.
 //
@@ -155,8 +156,70 @@ bool Registry::Contains(const Entity& arEntity) const
     return lpu8Entity >= GetDataStart() && lpu8Entity < mpu8Data;
 }
 
+// ===============================================================================================
+// [FLAG PC bring-up] IsPortedLayout -- NOT an X360 function.
+//
+// A Registry arrives as a RAW BLOB out of a bundle: a header, then mu32EntityCapacity slots,
+// then the entity arena. The X360 blob has a 0x1C header and FOUR-byte slots; the ported blob
+// has a 48-byte header and EIGHT-byte slots (tools/assets/bundles/engine_transcode.py,
+// REG64_SLOT_OFFSET = 48, landed in 9faabd56). Nothing in the blob says which it is, and FixUp
+// cannot tell by looking at a slot -- so fed the console layout it reads slot pairs as single
+// 64-bit pointers and dereferences the result.
+//
+// THAT IS NOT HYPOTHETICAL. Two crash reports from another player's PC, 2026-09-16, both:
+//     access violation READING 0x000024180380E444
+//     Registry::FixUp -> Module::AddRegistry -> VehicleStateManager::AddRegistry
+//        -> AIVehicleStateManager::PrepareAIEngineLoading -> ::Prepare
+// 0x0000241800000000 is two adjacent 32-bit slots read as one pointer: low dword 0, high dword
+// the next entry's offset. Their Engines bundles are 8192 and 8320 bytes SMALLER than the same
+// files here -- i.e. game data converted before the 64-bit Registry port.
+//
+// It only began crashing when AIVehicleStateManager::Prepare started running at all (b5
+// f017e677); before that nothing ever asked an engine bundle for its Registry, so stale data
+// sat there harmlessly. The guard belongs here rather than in the AI sound path because ANY
+// consumer of a stale Registry has the same problem.
+//
+// The test is the CONVERTER'S OWN invariant, checked on the same three header fields it
+// validates when it writes the blob: the capacity is a power of two, the mask is capacity-1,
+// and the live count does not exceed the capacity. Read through a mis-sized header those are
+// garbage and the test fails; read correctly they hold by construction.
+// ===============================================================================================
+bool Registry::IsPortedLayout() const
+{
+    if (mu32EntityCapacity == 0 || (mu32EntityCapacity & (mu32EntityCapacity - 1)) != 0)
+        return false;
+    if (muNameHashMask != static_cast<uintptr_t>(mu32EntityCapacity) - 1)
+        return false;
+    if (mu32EntityCount > mu32EntityCapacity)
+        return false;
+    return true;
+}
+
 void Registry::FixUp()
 {
+    // [FLAG PC bring-up] refuse a blob whose header cannot be this host's. Reporting it and
+    // returning leaves the registry EMPTY, which every consumer already handles (a lookup
+    // simply misses); dereferencing it does not survive. See the banner above.
+    if (!IsPortedLayout())
+    {
+        static bool sbReportedStaleRegistry = false;
+        if (!sbReportedStaleRegistry && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbReportedStaleRegistry = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[registry-stale] THIS GAME DATA IS OUT OF DATE. A sound Registry arrived"
+                   " with a header this build cannot read: count " << mu32EntityCount
+                << " capacity " << mu32EntityCapacity
+                << " mask " << static_cast<u32>(muNameHashMask)
+                << " (the mask must be capacity-1 and the capacity a power of two).\n"
+                   "[registry-stale] That is the signature of data converted before the"
+                   " 64-bit Registry port. RE-CONVERT YOUR GAME DATA (`build data`) --"
+                   " the engine bundles in particular. Skipping this registry; AI engine"
+                   " audio will be missing until the data is rebuilt.\n";
+        }
+        return;
+    }
+
     const uintptr_t luBase = reinterpret_cast<uintptr_t>(this);
     mpcStringTable = reinterpret_cast<char*>(
         luBase + reinterpret_cast<uintptr_t>(mpcStringTable));
