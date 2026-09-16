@@ -6,7 +6,7 @@
 //   AlwaysAvailableComponentsManager::Prepare         @ 0x824F3760
 //   AlwaysAvailableComponentsManager::PrepareFlapt    @ 0x824F3858
 //   AlwaysAvailableComponentsManager::SetInEventQueue @ 0x824F3920  (virtual)
-//   AlwaysAvailableComponentsManager::Update          @ 0x82509338  (virtual) [BLOCKED]
+//   AlwaysAvailableComponentsManager::Update          @ 0x82509338  (virtual)
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX for SEMANTIC PARITY. All five methods are
 // non-static members (asm: r3 = this). Member access is BY NAME throughout; the X360
@@ -18,14 +18,25 @@
 // prepare/register state machine; PrepareFlapt binds each to its named clip in a flapt
 // movie file; SetInEventQueue latches the input event queue Update pumps.
 //
-// Update (@0x82509338) is the large per-frame event pump. Its reconstruction is BLOCKED:
-// it switches on ~15 distinct GUI event-payload types (read by field off the live event
-// record) and reaches GuiCache / BrnGui::OptionsDataProfile FAR MEMBERS (cache +0xB878
-// profile sub-object, cache +0x12BC0 active-track slot, profile +0x7344 trax id) plus the
-// BrnSound EaTraxHelper text accessors -- none of which have a reconstructable type home
-// in this dossier. Faithfully restoring it would require inventing those layouts, which the
-// project forbids; it is left as a trap stub (NO raw-offset poke, NO faked types) for the
-// TU that recovers the event-payload + cache/profile homes.
+// Update (@0x82509338) is the large per-frame event pump, switching on ~15 distinct GUI
+// event-payload types read by field off the live event record.
+//
+// ⭐ 2026-09-16 -- THE "BLOCKED" BANNER THAT USED TO SIT HERE WAS STALE, AND IT WAS THE ONLY
+// THING KEEPING THE IN-GAME EATRAX CHYRON OFF THE SCREEN. It said the EATrax cases could not
+// be written because EaTraxHelper, OptionsDataProfile and GuiEventTimeInfo::GetTime had "no
+// reconstructable type home". Every one of them has a home with bodies today:
+//   * BrnSound::Module::Io::EaTraxHelper   -> BrnPreUpdateSharedIo.h:80   (mounted)
+//   * BrnGui::OptionsDataProfile           -> BrnGuiOptionsDataProfile.h  (mounted)
+//   * CgsGui::GuiEventTimeInfo::GetTime    -> CgsGuiEventTypeDefs.cpp:14  (TU was simply not
+//     MOUNTED, which is a build-list gap, not a missing body -- now mounted)
+// The cache far members the banner listed are just the profile reached positionally:
+// cache+0xB878 IS GetOptionsDataProfile() (BrnGuiCache.h:1001/:2116), and profile+0x7344 is
+// miLastPlayedSongIndex. Cases 26 and 502 are now written from the asm; see each in place.
+//
+// STILL DEFERRED, and honestly so: the online-invite family (175/43/105), whose
+// OnlineInviteMessageComponent::ShowMessage is genuinely not committed, and case 503 (the
+// CLASSICAL chyron -- a different overlay, DWARF GuiClassicalChyronEvent, carrying two
+// 48-char text ids and writing cache+0x12BC0 == the profile's picture-paradise index).
 // ===================================================================================
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h"
 
@@ -35,6 +46,12 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the in-queue Update walks
 #include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache (event 64 connect)
+#include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"              // CgsGui::GuiEventTimeInfo (event 26)
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"                   // GuiEATraxNewTrackEvent (event 502)
+#include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile (case 502 tail)
+#include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"        // Io::EaTraxHelper (case 502)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [DIAG] gpDebugPrint witness
+#include <cstdlib>                                                       // [DIAG] getenv
 
 namespace BrnGui
 {
@@ -194,11 +211,35 @@ namespace BrnGui
                 break;
 
             case 26:   // per-frame time-step: stamp the timed (in-game) overlays
+                // ⭐ RESTORED 2026-09-16. The old FLAG said GuiEventTimeInfo::GetTime()
+                // "is not committed to the link". Its body was in the tree all along
+                // (CgsGuiEventTypeDefs.cpp:14) -- the TU simply was not MOUNTED, so the
+                // flag was stale rather than true. Mounted, and the console's two stamps
+                // restored. Without them mfCurrentGameTime_Seconds never advances, so the
+                // EATrax chyron's anim-out timer can never expire and the overlay could
+                // never hide itself even once something showed it.
+                //   82509840  stbx r10, r28, 0x101B9   ; mbGameLoadStateCompleted = true
+                //   82509844  bl 0x8240E328            ; GuiEventTimeInfo::GetTime
+                //   82509848  add r3, r28, r27         ; r27 == 0x10020, the EATrax chyron
+                //   8250984C  bl 0x82415C18            ; EATraxInGameComponent::SetTime
+                //   82509854  bl 0x8240E328            ; GetTime again (the console re-reads)
+                //   82509858  add r3, r28, r31         ; r31 == 0x10060, the achievement popup
+                //   8250985C  bl 0x82415D60            ; AchievementPopupComponent::SetTime
                 mbGameLoadStateCompleted = true;
-                // FLAG PC-platform leaf: the console stamps the EATrax/achievement timers
-                // from GuiEventTimeInfo::GetTime() (@0x8240E328), whose body is not committed
-                // to the link. Those overlays are in-game only (never on the boot/front-end
-                // path the save icon runs on); the flag above is the observable this frame.
+                {
+                    // GuiEventTimeInfo is a PLAIN 8-byte payload, not GuiEvent<N>-derived,
+                    // so the queue pointer IS the record -- the console passes r25 straight
+                    // to GetTime. Same reinterpret the tree already uses at
+                    // BrnGuiModule.cpp:1936 and BrnOnlineScoreboards_wI_06.cpp:328.
+                    const CgsGui::GuiEventTimeInfo* lpTimeInfo =
+                        reinterpret_cast<const CgsGui::GuiEventTimeInfo*>(lpEvent);
+                    // The console calls GetTime once per consumer (826E: two separate bl's);
+                    // it is a pure accessor, so the two reads are the same value.
+                    mEATraxInGameComponent.SetTime(
+                        static_cast<f32>(lpTimeInfo->GetTime()));
+                    mAchievementPopupComponent.SetTime(
+                        static_cast<f32>(lpTimeInfo->GetTime()));
+                }
                 break;
 
             case 44:   // buddy notification cleared
@@ -239,17 +280,86 @@ namespace BrnGui
                     reinterpret_cast<const AchievementPopupComponent::AchievementsBitArray*>(lpEvent));
                 break;
 
-            // The online-invite chyron (175/43/105) and the EATrax "now playing" cases
-            // (502/503) drive in-game-only overlays that do not fire on the boot/front-end
-            // path. Their console bodies reach OnlineInviteMessageComponent::ShowMessage (not
-            // yet committed) and BrnSound::Module::Io::EaTraxHelper + BrnGui::OptionsDataProfile
-            // / GuiCache far members with no committed type home. The dispatch is kept; the
-            // un-homed accessor calls are FLAG'd deferrals until those TUs land.
-            // FLAG PC-platform leaf: in-game EATrax/online-invite overlays (un-homed callees).
+            // ⭐ RESTORED 2026-09-16 -- the EATrax "now playing" chyron. The old FLAG said
+            // BrnSound::Module::Io::EaTraxHelper had "no committed type home"; that was true
+            // when it was written and is not any more (the EA Trax wave gave it a home at
+            // BrnPreUpdateSharedIo.h:80, with all three getters bodied and the TU mounted).
+            // The stale flag was the only thing keeping the chyron off the screen.
+            //
+            // Console @0x82509908 (the 0x1F6 arm of the id dispatch at 0x82509884):
+            //   82509910  bl 0x826B0420   ; EaTraxHelper::GetAlbumName (event->miSong)
+            //   82509920  bl 0x826B0380   ; EaTraxHelper::GetSongName
+            //   82509930  bl 0x826B03D0   ; EaTraxHelper::GetArtistName
+            //   82509934  lbzx r11, r28, r23   ; r23 == 0x101BA, mbContainerMovieClipPlaying
+            //   82509940  beq  -> 0x82509958   ; ...the chyron only shows while it is set
+            //   82509944  li r7, 0             ; lbLocalised = false (raw metadata strings)
+            //   82509950  add r3, r28, r27     ; r27 == 0x10020, mEATraxInGameComponent
+            //   82509954  bl 0x82439F08        ; DisplayNewTrackNotification(artist,song,album)
+            // Argument order is settled by the register assignment: r4 artist, r5 song,
+            // r6 album -- note the GETTERS are called album/song/artist, the reverse.
+            // The producer is already in the tree: MusicEffect posts this record as event
+            // 502, 24 bytes, with miSong at +0x10 and the set flag at +0x14
+            // (BrnMusicEffect.cpp:699-713), and 502 is already in this manager's
+            // RegisterForEvents list above.
+            case 502:
+            {
+                const GuiEATraxNewTrackEvent* lpNewTrack =
+                    reinterpret_cast<const GuiEATraxNewTrackEvent*>(lpEvent);
+                const BrnSound::Module::Io::EaTraxHelper lHelper;   // stateless (static key)
+                const char* lpcAlbum  = lHelper.GetAlbumName(lpNewTrack->miSongIndex);
+                const char* lpcSong   = lHelper.GetSongName(lpNewTrack->miSongIndex);
+                const char* lpcArtist = lHelper.GetArtistName(lpNewTrack->miSongIndex);
+                if (mbContainerMovieClipPlaying)
+                    mEATraxInGameComponent.DisplayNewTrackNotification(
+                        lpcArtist, lpcSong, lpcAlbum, false);
+
+                // [DIAG] NOT IN THE X360 BINARY (BRN_MUSIC_DIAG=1). The producer's own
+                // witness only proves the event was POSTED; this one proves it arrived,
+                // survived the sound->GUI append, and that the chyron was actually asked to
+                // draw with real metadata. Rare by construction (one per track change).
+                if (getenv("BRN_MUSIC_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[trax] GUI 502 song " << lpNewTrack->miSongIndex
+                        << " preview " << static_cast<s32>(lpNewTrack->mbPreview)
+                        << " gate " << static_cast<s32>(mbContainerMovieClipPlaying)
+                        << " artist '" << (lpcArtist ? lpcArtist : "<null>")
+                        << "' song '" << (lpcSong ? lpcSong : "<null>")
+                        << "' album '" << (lpcAlbum ? lpcAlbum : "<null>") << "'\n";
+                }
+
+                // 82509958..82509960 -- an AUDITION stops here; only a real track change
+                // persists to the profile.
+                if (lpNewTrack->mbPreview != 0)
+                    break;
+
+                // 8250996C..825099CC -- the profile tail. This was FLAG'd too, on the same
+                // stale "OptionsDataProfile has no committed type home" claim; it has a home
+                // (BrnGuiOptionsDataProfile.h) and GetOptionsDataProfile/SetTraxRemaining are
+                // both bodied. The console reaches the profile as a GuiCache FAR member --
+                // `addi r31, r31, -0x4788` on cache+0x10000 is cache+0xB878, which is exactly
+                // where GetOptionsDataProfile() points (BrnGuiCache.h:1001/:2116).
+                CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                       // cpp:486
+                OptionsDataProfile* lpOptionsDataProfile =
+                    mpGuiCache->GetOptionsDataProfile();
+                CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");   // cpp:489
+                // 825099C8  stw r11, 0x7344(r31) -- the setter, inlined by the console.
+                lpOptionsDataProfile->SetLastPlayedSongIndex(lpNewTrack->miSongIndex);
+                // 825099CC  bl 0x824F0180
+                lpOptionsDataProfile->SetTraxRemaining(&lpNewTrack->mRemainingSongs);
+                break;
+            }
+
+            // The online-invite chyron (175/43/105) and the EATrax rich-presence case (503)
+            // drive in-game-only overlays that do not fire on the boot/front-end path. Their
+            // console bodies reach OnlineInviteMessageComponent::ShowMessage (not yet
+            // committed) and BrnGui::OptionsDataProfile / GuiCache far members with no
+            // committed type home. The dispatch is kept; the un-homed accessor calls are
+            // FLAG'd deferrals until those TUs land.
+            // FLAG PC-platform leaf: in-game online-invite overlay + 503 (un-homed callees).
             case 175:
             case 43:
             case 105:
-            case 502:
             case 503:
                 break;
 

@@ -64,6 +64,40 @@ namespace BrnGui
     //     is 0 and RANDOM is 1.
     // The DEFAULT enumerator is what OptionsDataProfile::Construct resets to and is the same
     // value as SEQUENTIAL, which is what a fresh profile plays.
+    // GUI event 502 -- the new-track record that drives the in-game EATrax chyron.
+    //
+    // ⭐ THE DWARF'S OWN NAME. references/DecFIGS/.../BrnGuiEventTypeDefs.h:11734 declares
+    // `GuiEATraxNewTrackEvent : GuiEvent<492>`; 492 is the PS3 id and the X360 ships 502.
+    // That +10 drift is already established in this tree -- BrnTrafficEntityModule.cpp:5115
+    // records the same pair for GuiEventTrafficPoolEmptied (PS3 502 -> X360 512).
+    //
+    // Posted by MusicEffect's preview/track-change path as a 24-byte record, and consumed by
+    // AlwaysAvailableComponentsManager::Update case 502, which reads miSongIndex at +0x10 and
+    // mbPreview at +0x14 (X360 @0x8250990C `lwz r4, 0x10(r25)` / @0x82509958
+    // `lbz r11, 0x14(r25)`). Given a home here -- rather than left as the local struct the
+    // producer declared inline -- because BOTH ends now need it, and this file exists to stop
+    // exactly that kind of EA Trax payload from being defined twice (see the banner).
+    struct GuiEATraxNewTrackEvent
+    {
+        // The playlist's remaining-songs mask; the X360 copies it from the effect's
+        // mEaTraxData at +0x1EC/+0x1F4 before stamping the two scalars.
+        CgsContainers::FastBitArray<128> mRemainingSongs;   // +0x00
+        s32 miSongIndex;                                    // +0x10
+
+        // ⛔ NOT "is playing" -- the DWARF calls this mbPreview, and the consumer proves the
+        // DWARF right: @0x82509958..0x82509960 SKIPS the profile persist when this byte is
+        // non-zero, i.e. an AUDITION must not overwrite the player's last-played track. The
+        // producer only posts from the preview path, so it always sets it.
+        u8  mbPreview;                                      // +0x14
+
+        s32 GetEventType() const { return 502; }
+    };
+
+    static_assert(sizeof(GuiEATraxNewTrackEvent) == 24,
+                  "MusicEffect posts this record as AddEvent(&r, 502, 24)");
+
+    // GUI event 462 -- the trax play-order selector (the profile stores it as a 4-byte word
+    // at +0x7340).
     struct GuiEventAudioTraxPlayOrder
     {
         enum ETraxPlayOrderMode
