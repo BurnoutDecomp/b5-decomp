@@ -118,6 +118,16 @@ public:
     // raw field.
     bool IsFlagSet(u32 luIndex) const { return mCurrentFlags.IsBitSet(luIndex); }
 
+    // @0x82694478 -- "this flag was set last frame and is clear now". A real X360 function
+    // (`!IsFlagSet(flag) && HasChanged(flag)`, two calls and a fold) that progress/identity
+    // .json does not carry, so a name search for it comes back empty; IDA has the symbol.
+    // Its one caller is HUDEffect::UpdateRoadRage, which waits on E_FLAG_TAKEDOWN_CAMERA
+    // going unset before playing the "time added" sting -- i.e. as the replay cuts back.
+    bool HasChangedToUnset(u32 luIndex) const
+    {
+        return !IsFlagSet(luIndex) && HasChanged(luIndex);
+    }
+
     // ADDITIVE GROW (BrnDirector::MomentFailSafe::Update @0x8220A2B0): set one bit of
     // the head bookkeeping set (see mHeadFlags below).
     void SetHeadFlag(u32 luIndex) { mHeadFlags.SetBit(luIndex); }

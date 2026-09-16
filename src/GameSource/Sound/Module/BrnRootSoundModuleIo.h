@@ -265,11 +265,11 @@ namespace Io
         //     rev plays through the countdown and intro and stops at E_GMS_IN_PROGRESS.
         // Held as s32 rather than the GameState enums so this header keeps standing
         // alone; sizeof stays 0x10, so SetGameModeInterface's 16-byte copy is unchanged.
-        // ⚠️ THE PRODUCER IS PARKED: nothing in this tree writes OutputBuffer +176344
-        // (BrnModeManager_WorldTick.cpp:728 "[!] [stuntrace] PARKED (header)"), so every
-        // field below reads 0 until that park is lifted. The park's stated reason was
-        // that the layout could not be written "without inventing a layout" -- this
-        // declaration is that layout, recovered from the same asm the park quotes.
+        // [x] THE PRODUCER PARK IS DISCHARGED (2026-09-15): ModeManager's world tick now
+        // publishes all four words every frame (BrnModeManager_WorldTick.cpp, the
+        // GetGameModeOutputInterface() write-lock block). The note that stood here said
+        // the fields "read 0 until that park is lifted"; they carry the live mode now,
+        // which is what lets HUDEffect::UpdateGameModeHud dispatch at all.
         struct GameModeOutputInterface
         {
             s32 miPreviousGameModeType;    // +0   GameStateModuleIO::EGameModeType

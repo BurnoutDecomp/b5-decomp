@@ -1,4 +1,9 @@
 #include "GameSource/Sound/Global/BrnHUDEffect.h"
+// ---- the game-mode HUD audio lane's callees (2026-09-16) -------------------
+#include "GameSource/AttribSys/Generated/classes/sampletags.h"   // FirstIndices/LastIndices/Volumes
+#include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h"   // CgsSound::Utils::IntClamp
+#include "GameSource/Director/Camera/BrnCameraState.h"          // CameraState::E_FLAG_TAKEDOWN_CAMERA
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"         // CgsSound::Io::Message / MessageHeader
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // State -> StateManager walk
@@ -263,6 +268,9 @@ namespace
     u32 guHudDiagMessages = 0;
     u32 guHudDiagPlays = 0;
     u32 guHudDiagVoices = 0;
+    u32 guHudDiagModes = 0;
+    u32 guHudDiagCues = 0;
+    s32 giHudDiagLastMode = -2;   // -2: nothing seen yet (-1 is E_MODE_NONE)
 }
 
 // ---------------------------------------------------------------------------
@@ -430,8 +438,485 @@ bool HUDEffect::Detach()
 void HUDEffect::UpdateParams(f32 af32DeltaTime)
 {
     mfTimeSinceLastTrigger += af32DeltaTime;
-    // UpdateSlipStreaming();            <- @0x8270380C, see the banner
-    // UpdateGameModeHud(mpLogicModule); <- @0x82703818, see the banner
+    // UpdateSlipStreaming();   <- @0x8270380C. STILL REPORTED, see the banner: its body is
+    //                             the convoy/slipstream VMX kernel and it is its own wave.
+    //   What that wave already has: the cue is a "SlipStream" stream QUEUED on mMusicStream
+    //   (this+0x3A0) at mixer output 17 plus splice tag 24 -- which is ONE PAST this class's
+    //   ePresentationSampleTags enum, so the enum needs a 24th enumerator when it lands. It
+    //   is gated on the music type being 12, 14 or 17 and on the module byte at +0x13579,
+    //   and the geometry it needs is GetSlipstreamAmount @0x82686BA8, ALREADY BODIED above.
+    UpdateGameModeHud(static_cast<Module::SoundLogicModule*>(mpLogicModule));   // @0x82703818
+}
+
+// ---------------------------------------------------------------------------
+// The GAME-MODE HUD AUDIO LANE  (2026-09-16)
+//
+// ⭐⭐⭐ THIS WHOLE LANE WAS DEAD, AND ITS ENTRY POINT IS WHY. HUDEffect::UpdateParams
+// @0x827037E0 is three statements -- accumulate, UpdateSlipStreaming, UpdateGameModeHud --
+// and this tree had only the first, because that function is UNNAMED in the ledger and a
+// name search for it came back empty. Nothing below could ever run.
+//
+// The console's dispatch is UpdateGameModeHud @0x82702670: it takes the live game mode from
+// the input buffer's GameModeOutputInterface, resets the per-mode block when the mode
+// changes, and hands off to one updater per scoring mode. Every cue these play goes through
+// PlaySound(ePresentationSampleTags, u8), i.e. the presentation splice bank.
+//
+// THE SCORING INTERFACE IS AN OPAQUE BLOB IN THIS TREE (u8 mData[0xAB0], the exact bytes
+// SetScoringInterface XMemCpy's), so the five fields these bodies read are reached through
+// the file-local cursor below, at the console's own offsets. It is a fixed-width POD block
+// -- no member widens on the host -- so the offsets stay valid; this is the same
+// external-record boundary the committed GUI states use over their opaque event payloads.
+// ---------------------------------------------------------------------------
+namespace
+{
+    // The five ScoringOutputInterface fields the HUD audio reads, at the offsets the X360
+    // bodies load them from. Named for what their readers do with them.
+    struct ScoringCursor
+    {
+        const u8* mpBase;
+
+        s32 Word(u32 luOffset) const
+        {
+            return *reinterpret_cast<const s32*>(mpBase + luOffset);
+        }
+        f32 Float(u32 luOffset) const
+        {
+            return *reinterpret_cast<const f32*>(mpBase + luOffset);
+        }
+
+        // UpdateStuntRun @0x82701598
+        s32 StuntComboMultiplier() const { return Word(0xA70u); }   // *(a2 + 2672)
+        s32 StuntRunSentinel()     const { return Word(0xA7Cu); }   // *(a2 + 2684), -1 == idle
+        s32 StuntScore()           const { return Word(0xA80u); }   // *(a2 + 2688)
+
+        // The event clock. ⭐ These four are NAMED on the producer side -- the same words
+        // are GameStateModuleIO::ScoringOutputInterface's mfModeTimeElapsed (+0xA90),
+        // mfModeTimeRemaining (+0xA94, which BrnGameStateModule.cpp calls "THE number the
+        // stunt-run HUD clock counts down"), mfCurrentTargetModeTime (+0xA98) and
+        // mbTimerActive (+0xAA8), written by GameStateModule::CopyScoringDataToOutput
+        // behind ScoringSystem::IsTimeLimitActive(). The SOUND side keeps the block opaque
+        // on purpose, hence this cursor; the offsets are the producer's own.
+        // UpdateGameModeHud's mode-5 arm takes the remaining time as (duration - elapsed)
+        // @0x82702800; UpdateRoadRage and UpdateStuntRun read +0xA94 directly.
+        f32 EventElapsed()   const { return Float(0xA90u); }        // v6[676]
+        f32 TimeRemaining()  const { return Float(0xA94u); }        // *(a2 + 2708)
+        f32 EventDuration()  const { return Float(0xA98u); }        // v6[678]
+        bool IsTimedEvent()  const { return mpBase[0xAA8u] != 0; }  // *(v6 + 2728)
+    };
+
+    // .rdata: the three showtime/stunt score-rate thresholds and the re-trigger gate, plus
+    // the boost-earn threshold and the event-timer window.
+    const f32 KF_SCORE_RATE_FAST      = 3.5f;    // flt_82F2CE48
+    const f32 KF_SCORE_RATE_MEDIUM    = 1.5f;    // flt_82F2CE4C
+    const f32 KF_SCORE_RATE_SLOW      = 1.0f;    // flt_82F2CE50
+    const f32 KF_SCORE_TICK_GAP       = 0.379f;  // flt_82F2CE54 -- seconds between ticks
+    const f32 KF_BOOST_EARN_THRESHOLD = 0.1f;    // flt_82F2CE58
+    const f32 KF_EVENT_TIMER_WINDOW   = 10.0f;   // flt_82004A20 -- the countdown window
+
+    // The X360 compares the previous boost delta against +/-FLT_EPSILON to mean "was zero".
+    const f32 KF_EPSILON = 1.1920929e-7f;
+
+    // The HUD message CgsID UpdateStuntRun consumes for the multiplier sting. The X360
+    // stages it as a 64-bit immediate (0x82701740: lis 0x5AB7 / ori 0xC340, lis 0xB939 /
+    // ori 0x0CF4, rldimi), compares it against mLastReceivedHudMessage and CLEARS that
+    // member on a hit so the sting fires once per message.
+    const CgsID KU_HUD_MESSAGE_STUNT_MULTIPLIER = 0xB9390CF45AB7C340ull;
+
+    // The scoring modes this lane answers, as GameStateModuleIO::EGameModeType values.
+    // The sound-side GameModeOutputInterface deliberately holds the word as an s32 so that
+    // header stands alone, so the four the console switches on are named here.
+    const s32 KI_MODE_OFFLINE_SHOWTIME = 2;    // E_MODE_OFFLINE_SHOWTIME
+    const s32 KI_MODE_ROAD_RAGE        = 3;    // E_MODE_ROAD_RAGE
+    const s32 KI_MODE_BURNING_ROUTE    = 5;    // E_MODE_BURNING_ROUTE -- the timed event
+    const s32 KI_MODE_STUNT_ATTACK     = 7;    // E_MODE_STUNT_ATTACK
+    const s32 KI_MODE_ONLINE_SHOWTIME  = 16;   // E_MODE_ONLINE_SHOWTIME
+
+    // The mixer outputs each lane plays on (X360 `li r5/r7, N` at the call sites).
+    const u8 KU8_MIXER_OUTPUT_ROAD_RAGE = 3;
+    const u8 KU8_MIXER_OUTPUT_STUNT     = 17;
+    const u8 KU8_MIXER_OUTPUT_SHOWTIME  = 18;
+}
+
+// ---- PlaySound(ePresentationSampleTags, u8)   @ 0x826FE540 ----------------------
+// The splice-bank overload: resolve one sample out of the presentation bank (tag set 4)
+// with the round-robin cursor, then hand it to the SampleTag overload.
+// ⚠️ THE CURSOR ADVANCES WHETHER OR NOT THE LOOKUP SUCCEEDED -- the X360 increments
+// this+0x4D4 between the call and the test (`bl GetSampleTag ; ++*(a1+1236) ; if (result)`).
+void HUDEffect::PlaySound(ePresentationSampleTags aeTag, u8 au8MixerOutput)
+{
+    BrnEffectObject::SampleTag lTag;
+    lTag.mfVolume      = 0.0f;
+    lTag.miSampleIndex = 0;
+
+    const bool lbResolved = GetSampleTag(4u, static_cast<u32>(aeTag), muRoundRobin, lTag);
+    ++muRoundRobin;
+
+    if (lbResolved)
+    {
+        // [DIAG] NOT IN THE X360 BINARY -- the cue witness (BRN_HUD_SOUND_DIAG=1).
+        if (HudSoundDiagBudget(guHudDiagCues))
+        {
+            HudSoundDiagPrintf("[hud-cue] splice tag %d -> mixer out %u (sample %d)\n",
+                               static_cast<s32>(aeTag), static_cast<u32>(au8MixerOutput),
+                               static_cast<s32>(lTag.miSampleIndex));
+        }
+        PlaySound(lTag, au8MixerOutput);
+    }
+}
+
+// ---- UpdateEventTimeRemaining   @ 0x826FE400 ------------------------------------
+// The shared countdown cue: tick once per whole second as the clock falls through the last
+// afWindow seconds. The X360 floors the time with an `fsel` pair rather than a call, and
+// that floor is the whole trick -- mEventTimeRemaining holds the FLOORED value, so
+// "current < previous" is true exactly once per second rather than every frame.
+//
+// The sample INDEX is the second itself, clamped into the tag's own first/last range, so a
+// bank with N samples counts down the last N seconds and repeats the last one below that.
+void HUDEffect::UpdateEventTimeRemaining(f32 afTimeRemaining, f32 afWindow,
+                                         ePresentationSampleTags aeTag, u8 au8MixerOutput)
+{
+    mGameModeData.mEventTimeRemaining.mPreviousValue =
+        mGameModeData.mEventTimeRemaining.mCurrentValue;
+
+    // X360 0x826FE41C..0x826FE438: the branchless round-to-integer idiom (`fsel` picks the
+    // round magic for a non-negative input and 0.0 otherwise, then `x - magic + magic`, then
+    // a second `fsel` corrects a round-up back down). For a NON-NEGATIVE input that is a
+    // floor; for a negative one the first fsel selects 0.0, so the value passes through
+    // unrounded. Both halves are spelled out rather than replaced with std::floor, because
+    // std::floor would turn a negative clock into the NEXT whole second down and change
+    // which frame the "current < previous" edge lands on.
+    const f32 lfFloored = (afTimeRemaining >= 0.0f)
+        ? static_cast<f32>(static_cast<s32>(afTimeRemaining))
+        : afTimeRemaining;
+    mGameModeData.mEventTimeRemaining.mCurrentValue = lfFloored;
+
+    const f32 lfPrevious = mGameModeData.mEventTimeRemaining.mPreviousValue;
+    if (lfFloored >= 0.0f && lfFloored <= afWindow &&
+        lfFloored < lfPrevious && (lfFloored - lfPrevious) > -2.0f)
+    {
+        Attrib::Gen::sampletags lTags(
+            const_cast<Attrib::Collection*>(
+                const_cast<Attrib::RefSpec&>(
+                    static_cast<Module::SoundLogicModule*>(mpLogicModule)
+                        ->GetSampleTags(4u)).GetCollection()), 0);
+
+        const u32 luTag   = static_cast<u32>(aeTag);
+        const s16 li16First = *static_cast<const s16*>(lTags.FirstIndices(luTag));
+        const s16 li16Last  = lTags.LastIndices(luTag);
+
+        BrnEffectObject::SampleTag lSampleTag;
+        lSampleTag.mfVolume = *static_cast<const f32*>(lTags.Volumes(luTag));
+        lSampleTag.miSampleIndex = static_cast<s16>(CgsSound::Utils::IntClamp(
+            static_cast<s32>(lfFloored) + li16First, li16First, li16Last));
+
+        PlaySound(lSampleTag, au8MixerOutput);
+    }
+}
+
+// ---- UpdateShowtime   @ 0x82701830 ----------------------------------------------
+// Showtime's two cues: a score TICK whose urgency comes from the averaged score rate, and a
+// one-shot when the run earns a chunk of boost.
+void HUDEffect::UpdateShowtime()
+{
+    Module::SoundLogicModule* lpModule =
+        static_cast<Module::SoundLogicModule*>(mpLogicModule);
+    Module::Io::RootInputBuffer* lpInputBuffer = lpModule->GetBrnInputStructure();
+    CGS_ASSERT(lpInputBuffer, "lpInputBuffer");   // cpp:718
+
+    // The player's live boost bar, or zero when there is no player car this frame.
+    f32 lfBoostAmount = 0.0f;
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicle =
+        lpInputBuffer->GetVehicleInterface();
+    if (lpVehicle->IsPlayerCarActive())
+    {
+        const EActiveRaceCarIndex leIndex = lpVehicle->GetPlayerActiveRaceCarIndex();
+        const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo* lpBoost =
+            lpVehicle->GetBoostOutputInfoN(leIndex);
+        if (lpBoost)
+        {
+            lfBoostAmount = lpBoost->mfBoostAmount;
+        }
+    }
+
+    const Module::Io::RootInputBuffer::GuiAudioEventResults* lpResults =
+        lpInputBuffer->GetGuiAudioEventResults();
+
+    const f32 lfPreviousScore = mGameModeData.mShowtimeScore.mCurrentValue;
+    const f32 lfScore         = lpResults->mfShowtimeScore;
+    mGameModeData.mShowtimeScore.Update(lfScore);
+    mGameModeData.mEventScoreDelta.Record(lfScore - lfPreviousScore);
+
+    mGameModeData.mEventBoostAmount.Update(lfBoostAmount);
+    mGameModeData.mShowtimeBoostDelta.Update(
+        lfBoostAmount - mGameModeData.mEventBoostAmount.mPreviousValue);
+
+    const f32 lfRate = mGameModeData.mEventScoreDelta.GetAverage();
+    if (mGameModeData.mfTimeSinceScoreTick > KF_SCORE_TICK_GAP)
+    {
+        s32 leTag = -1;
+        if (lfRate >= KF_SCORE_RATE_FAST)
+        {
+            leTag = E_SPLICE_SHOWTIME_SCORE_FAST;
+        }
+        else if (lfRate >= KF_SCORE_RATE_MEDIUM)
+        {
+            leTag = E_SPLICE_SHOWTIME_SCORE_MEDIUM;
+        }
+        else if (lfRate >= KF_SCORE_RATE_SLOW)
+        {
+            leTag = E_SPLICE_SHOWTIME_SCORE_SLOW;
+        }
+        else if ((mGameModeData.mShowtimeScore.mCurrentValue -
+                  mGameModeData.mShowtimeScore.mPreviousValue) > 0.0f)
+        {
+            // Scoring at all, however slowly, still ticks.
+            leTag = E_SPLICE_SHOWTIME_SCORE_V_SLOW;
+        }
+
+        if (leTag != -1)
+        {
+            PlaySound(static_cast<ePresentationSampleTags>(leTag), KU8_MIXER_OUTPUT_SHOWTIME);
+            mGameModeData.mfTimeSinceScoreTick = 0.0f;
+        }
+    }
+    mGameModeData.mfTimeSinceScoreTick += mfDeltaTime;
+
+    // The RISING EDGE of a boost chunk: the previous delta was zero and this one is not.
+    const f32 lfPreviousDelta = mGameModeData.mShowtimeBoostDelta.mPreviousValue;
+    const bool lbWasZero = (lfPreviousDelta <= KF_EPSILON) && (lfPreviousDelta >= -KF_EPSILON);
+    if (lbWasZero &&
+        mGameModeData.mShowtimeBoostDelta.mCurrentValue > KF_BOOST_EARN_THRESHOLD)
+    {
+        PlaySound(E_SPLICE_SHOWTIME_BOOST_EARN, KU8_MIXER_OUTPUT_SHOWTIME);
+    }
+}
+
+// ---- UpdateRoadRage   @ 0x82701AA0 ----------------------------------------------
+// Road Rage's clock: the shared countdown, plus the "time added" sting when a takedown
+// finishes and the "time up" sting when the clock reaches zero.
+void HUDEffect::UpdateRoadRage(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring)
+{
+    const ScoringCursor lScoring = { reinterpret_cast<const u8*>(apScoring) };
+
+    UpdateEventTimeRemaining(lScoring.TimeRemaining(), KF_EVENT_TIMER_WINDOW,
+                             E_SPLICE_ROAD_RAGE_COUNT_DOWN, KU8_MIXER_OUTPUT_ROAD_RAGE);
+
+    // The clock going UP is a takedown award; latch it and wait for the camera.
+    if (mGameModeData.mEventTimeRemaining.mCurrentValue >
+        mGameModeData.mEventTimeRemaining.mPreviousValue)
+    {
+        mGameModeData.mbTimeExtended = true;
+    }
+
+    // ⭐ THE STING WAITS FOR THE TAKEDOWN CAMERA TO END, not for the award. The X360 asks
+    // the director camera's state whether E_FLAG_TAKEDOWN_CAMERA has just gone from set to
+    // clear (`!IsFlagSet(11) && HasChanged(11)`, @0x82694478), so the cue lands as the
+    // replay cuts back rather than underneath it.
+    if (mGameModeData.mbTimeExtended)
+    {
+        Module::SoundLogicModule* lpModule =
+            static_cast<Module::SoundLogicModule*>(mpLogicModule);
+        Module::Io::RootInputBuffer* lpInputBuffer = lpModule->GetBrnInputStructure();
+        const Module::Io::RootInputBuffer::DirectorCamera* lpCamera =
+            lpInputBuffer->GetDirectorCamera();
+
+        if (lpCamera->GetState().HasChangedToUnset(
+                BrnDirector::Camera::CameraState::E_FLAG_TAKEDOWN_CAMERA))
+        {
+            mGameModeData.mbTimeExtended = false;
+            PlaySound(E_SPLICE_ROAD_RAGE_TIME_ADD, KU8_MIXER_OUTPUT_ROAD_RAGE);
+        }
+    }
+
+    if (mGameModeData.mEventTimeRemaining.mCurrentValue <= 0.0f &&
+        mGameModeData.mEventTimeRemaining.mPreviousValue > 0.0f)
+    {
+        PlaySound(E_SPLICE_ROAD_RAGE_TIME_ENDED, KU8_MIXER_OUTPUT_ROAD_RAGE);
+    }
+}
+
+// ---- UpdateStuntRun   @ 0x82701598 ----------------------------------------------
+// Stunt Run's three cues: the score tick, the multiplier sting, and the shared countdown.
+void HUDEffect::UpdateStuntRun(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring)
+{
+    const ScoringCursor lScoring = { reinterpret_cast<const u8*>(apScoring) };
+
+    Module::SoundLogicModule* lpModule =
+        static_cast<Module::SoundLogicModule*>(mpLogicModule);
+    const Module::Io::RootInputBuffer::GuiAudioEventResults* lpResults =
+        lpModule->GetBrnInputStructure()->GetGuiAudioEventResults();
+
+    // The live stunt score, or zero while the run is idle (the -1 sentinel).
+    mGameModeData.mStuntScore.Update(
+        lScoring.StuntRunSentinel() == -1 ? 0 : lScoring.StuntScore());
+    mGameModeData.mEventScoreDelta.Record(
+        static_cast<f32>(mGameModeData.mStuntScore.mCurrentValue -
+                         mGameModeData.mStuntScore.mPreviousValue));
+
+    // ⚠️ THE TICK RATE COMES FROM THE *RESULT* SCORE WHEN ONE IS LANDING, and from the
+    // running average otherwise. The X360 takes the result delta only when the result score
+    // went UP from a non-zero previous value -- i.e. while a landed run is counting up.
+    const s32 liPreviousResult = mGameModeData.mStuntResultScore.mCurrentValue;
+    mGameModeData.mStuntResultScore.Update(lpResults->miStuntResultScore);
+    f32 lfRate;
+    if (mGameModeData.mStuntResultScore.mCurrentValue > liPreviousResult &&
+        liPreviousResult > 0)
+    {
+        lfRate = static_cast<f32>(mGameModeData.mStuntResultScore.mCurrentValue -
+                                  mGameModeData.mStuntResultScore.mPreviousValue);
+    }
+    else
+    {
+        lfRate = mGameModeData.mEventScoreDelta.GetAverage();
+    }
+
+    if (mGameModeData.mfTimeSinceScoreTick > KF_SCORE_TICK_GAP)
+    {
+        s32 leTag = -1;
+        if (lfRate >= KF_SCORE_RATE_FAST)
+        {
+            leTag = E_SPLICE_STUNT_SCORE_FAST;
+        }
+        else if (lfRate >= KF_SCORE_RATE_MEDIUM)
+        {
+            leTag = E_SPLICE_STUNT_SCORE_MEDIUM;
+        }
+        else if (lfRate >= KF_SCORE_RATE_SLOW)
+        {
+            leTag = E_SPLICE_STUNT_SCORE_SLOW;
+        }
+        else if ((mGameModeData.mStuntScore.mCurrentValue -
+                  mGameModeData.mStuntScore.mPreviousValue) > 0)
+        {
+            leTag = E_SPLICE_STUNT_SCORE_V_SLOW;
+        }
+
+        if (leTag != -1)
+        {
+            PlaySound(static_cast<ePresentationSampleTags>(leTag), KU8_MIXER_OUTPUT_STUNT);
+            mGameModeData.mfTimeSinceScoreTick = 0.0f;
+        }
+    }
+    mGameModeData.mfTimeSinceScoreTick += mfDeltaTime;
+
+    // The multiplier sting, gated on the HUD message rather than on the number: the sample
+    // INDEX is the multiplier, clamped into the tag's range, so x2/x3/x4 are distinct cues.
+    if (lScoring.StuntComboMultiplier() > 1)
+    {
+        if (mLastReceivedHudMessage == KU_HUD_MESSAGE_STUNT_MULTIPLIER)
+        {
+            mLastReceivedHudMessage = 0;
+            mGameModeData.mStuntComboMultiplier.Update(lScoring.StuntComboMultiplier());
+
+            Attrib::Gen::sampletags lTags(
+                const_cast<Attrib::Collection*>(
+                    const_cast<Attrib::RefSpec&>(
+                        lpModule->GetSampleTags(4u)).GetCollection()), 0);
+
+            const u32 luTag = static_cast<u32>(E_SPLICE_STUNT_MULTIPLIERS);
+            const s16 li16First = *static_cast<const s16*>(lTags.FirstIndices(luTag));
+
+            const s16 li16Last = lTags.LastIndices(luTag);
+
+            BrnEffectObject::SampleTag lSampleTag;
+            lSampleTag.mfVolume = *static_cast<const f32*>(lTags.Volumes(luTag));
+            // X360 0x827017AC..0x827017D0: IntClamp(first - previous + current - 1,
+            // first, last). The index walks the multiplier bank by HOW FAR the multiplier
+            // moved, so x1->x2 and x3->x4 pick different samples, and the clamp keeps it
+            // inside the tag's own range.
+            lSampleTag.miSampleIndex = static_cast<s16>(CgsSound::Utils::IntClamp(
+                li16First - mGameModeData.mStuntComboMultiplier.mPreviousValue +
+                mGameModeData.mStuntComboMultiplier.mCurrentValue - 1,
+                li16First, li16Last));
+
+            PlaySound(lSampleTag, KU8_MIXER_OUTPUT_STUNT);
+        }
+    }
+    else
+    {
+        mGameModeData.mStuntComboMultiplier.Update(lScoring.StuntComboMultiplier());
+    }
+
+    // ⚠️ THE TAG REALLY IS THE ROAD-RAGE ONE (X360 0x82701818 `li r6, 0x15`), on the STUNT
+    // mixer output. Tag 21 is the generic last-ten-seconds countdown bank and all three
+    // timed lanes reuse it -- E_SPLICE_EVENT_COUNTDOWN (14) is a different cue and is NOT
+    // what any of these pass. Do not "correct" this to 14.
+    UpdateEventTimeRemaining(lScoring.TimeRemaining(), KF_EVENT_TIMER_WINDOW,
+                             E_SPLICE_ROAD_RAGE_COUNT_DOWN, KU8_MIXER_OUTPUT_STUNT);
+}
+
+// ---- UpdateGameModeHud   @ 0x82702670 -------------------------------------------
+// The lane's dispatcher. The mode numbers are the scoring system's, taken from the input
+// buffer's GameModeOutputInterface: its word at +0x08 is the CURRENT mode and the one at
+// +0x00 is the mode the block was last reset for.
+void HUDEffect::UpdateGameModeHud(Module::SoundLogicModule* apModule)
+{
+    CGS_ASSERT(apModule != 0, "lpLogicModule");                       // cpp:542
+    CGS_ASSERT(apModule->GetBrnInputStructure(), "mpBrnLogicInputBuffer");
+
+    Module::Io::RootInputBuffer* lpInputBuffer = apModule->GetBrnInputStructure();
+    const Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameMode =
+        lpInputBuffer->GetGameModeInterface();
+    const Module::Io::RootInputBuffer::ScoringOutputInterface* lpScoring =
+        lpInputBuffer->GetScoringInterface();
+    CGS_ASSERT(lpGameMode && lpScoring,
+               "( lpGameModeInterface ) && ( lpScoringInterface )");   // cpp:547
+    if (!lpGameMode || !lpScoring)
+    {
+        return;
+    }
+
+    const s32 liCurrentMode = lpGameMode->miCurrentGameModeType;
+
+    // A new mode starts from a clean block -- otherwise the first frame's score delta is
+    // the whole of the previous event's score.
+    if (liCurrentMode != lpGameMode->miPreviousGameModeType)
+    {
+        mGameModeData.Reset();
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- opt-in witness (BRN_HUD_SOUND_DIAG=1) that this
+    // lane is being reached AND which mode it dispatched to. It fires on CHANGE only, so
+    // a whole event costs one line.
+    if (liCurrentMode != giHudDiagLastMode && HudSoundDiagBudget(guHudDiagModes))
+    {
+        giHudDiagLastMode = liCurrentMode;
+        HudSoundDiagPrintf("[hud-mode] game mode %d (previous %d, state %d)\n",
+                           liCurrentMode, lpGameMode->miPreviousGameModeType,
+                           lpGameMode->miCurrentGameModeState);
+    }
+
+    switch (liCurrentMode)
+    {
+    case KI_MODE_OFFLINE_SHOWTIME:
+    case KI_MODE_ONLINE_SHOWTIME:
+        UpdateShowtime();
+        break;
+
+    case KI_MODE_ROAD_RAGE:
+        UpdateRoadRage(lpScoring);
+        break;
+
+    case KI_MODE_BURNING_ROUTE:
+    {
+        const ScoringCursor lScoring = { reinterpret_cast<const u8*>(lpScoring) };
+        if (lScoring.IsTimedEvent())
+        {
+            UpdateEventTimeRemaining(lScoring.EventDuration() - lScoring.EventElapsed(),
+                                     KF_EVENT_TIMER_WINDOW,
+                                     E_SPLICE_ROAD_RAGE_COUNT_DOWN,
+                                     KU8_MIXER_OUTPUT_ROAD_RAGE);
+        }
+        break;
+    }
+
+    case KI_MODE_STUNT_ATTACK:
+        UpdateStuntRun(lpScoring);
+        break;
+
+    default:
+        break;
+    }
 }
 
 // ---------------------------------------------------------------------------
