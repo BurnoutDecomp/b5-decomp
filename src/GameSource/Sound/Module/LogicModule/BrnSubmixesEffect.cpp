@@ -293,6 +293,32 @@ void SubmixesEffect::ProcessUpdate()
     CgsSound::Logic::Voice& lrMasterVoice =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule)->GetMasterVoice();
 
+    // [DIAG] NOT IN THE X360 BINARY (BRN_DMIX_DIAG=1). This lane's whole claim is that
+    // the mixer outputs now reach a LIVE voice instead of the base's do-nothing update.
+    // Voice::IsReady (@0x82694378) is what actually says so -- it is false when the
+    // handle has no Playback::Voice, which is exactly the case where SetGain below
+    // would assert rather than write. Printed BEFORE the first SetGain so the witness
+    // survives that assert. cutoff is the RAW getter value (the second clamp is below).
+    // Rate limited: the first three calls, then every 600th.
+    if (CgsSound::Diag::DMixDiagEnabled())
+    {
+        static u32 suUpdates = 0;
+        ++suUpdates;
+        if (suUpdates <= 3 || (suUpdates % 600) == 0)
+        {
+            CgsSound::Diag::DMixDiagPrintf(
+                "[dmix] SubmixesEffect::ProcessUpdate #%u revb=%.4f cutoffRaw=%.1f "
+                "passby=%.4f mastergain=%.4f hold=%d surround=%d "
+                "ready(coll=%d passby=%d master=%d)\n",
+                suUpdates, lfCollisionReverbSend, lfCollisionFilterCutOff,
+                lfPassbyReverbSend, lfMasterGain,
+                static_cast<int>(mbHoldVolumes), static_cast<int>(mbIsSurround),
+                static_cast<int>(lrCollisionSubmix.IsReady()),
+                static_cast<int>(lrPassbySubmix.IsReady()),
+                static_cast<int>(lrMasterVoice.IsReady()));
+        }
+    }
+
     // 826D2F84  lwz r9, 4(0x8300817C) == gaCollisionSubmixVoiceSpecSendNames[1]
     // 826D2F78  li r4, 1 ; 826D2F90  bl 0x826942C0
     lrCollisionSubmix.SetGain(1, lfCollisionReverbSend, &KU_COLLISION_SUBMIX_SENDS[1]);
