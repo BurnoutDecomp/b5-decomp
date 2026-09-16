@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 
 #include <cstring>   // strncpy
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([reg-pool] witness)
 
 // BrnSound::Logic::ResourceRegistrar -- the sound-logic streaming-resource broker. Faithfully
 // decompiled from BURNOUT_X360_ARTIST.XEX (per-function addresses cited at each body). The
@@ -710,6 +711,27 @@ namespace Logic
                     }
                     else if (lpQueued->mData.mpRequester != 0) // data +0x138
                     {
+                        // [DIAG] NOT IN THE X360 BINARY -- always on, but it only prints as the
+                        // 16-node per-resource requester pool runs out. THIS IS THE LIST THAT
+                        // CRASHED THE OWNER'S 2026-09-16 SESSION ("We've run out of nodes." ->
+                        // EXCEPTION_ACCESS_VIOLATION in AddTail); AddTail now refuses the node
+                        // instead of writing through null, so the next occurrence survives AND
+                        // names itself. A resource whose requester count climbs toward 16 is one
+                        // that is being re-requested without ever being released -- print the
+                        // bundle, the resource type and the requester so the leak has an owner.
+                        {
+                            const s32 liRefs = lpRequested->mData.GetNumberOfReferences();
+                            if (liRefs >= 12 && CgsDev::Log::gpDebugPrint != 0)
+                            {
+                                *CgsDev::Log::gpDebugPrint
+                                    << "[reg-pool] requester list NEARLY FULL: " << liRefs
+                                    << "/16 for bundle '" << lpRequested->mData.macBundleName
+                                    << "' type " << lpRequested->mData.miResourceType
+                                    << " adding requester "
+                                    << static_cast<void*>(lpQueued->mData.mpRequester) << "\n";
+                            }
+                        }
+
                         // Transfer the queued requester onto the requested node's list.
                         lpRequested->mData.mRequesterList.AddTail(lpQueued->mData.mpRequester);
 

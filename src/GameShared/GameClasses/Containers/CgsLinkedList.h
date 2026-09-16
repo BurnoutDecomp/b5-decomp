@@ -159,10 +159,30 @@ namespace CgsContainers
         // (X360 0x826A5E88 = a BrnSound::Logic::ResourceRegistrar AddTail, CgsLinkedList.h:307):
         // pull a node off the free list, assert the pool was not exhausted, copy the value
         // into the node's payload, then chain the node onto the tail of the live list.
+        // [marked deviation -- HOST HARDENING, the X360 CRASHES HERE] The console's AddTail
+        // @0x826A5E88 tests the node, fires the assert, and then FALLS THROUGH into
+        // `stw r11, 8(r28)` with r28 == 0 (826A5EAC `bne` skips only the assert block, not
+        // the store), so an exhausted pool is an access violation on the console too. The
+        // owner hit exactly that on 2026-09-16: "[ASSERT 9] We've run out of nodes." followed
+        // 19 lines later by EXCEPTION_ACCESS_VIOLATION writing 0x10 --
+        // LinkedListHelper<IResourceRequester*,16>::AddTail <- ResourceRegistrar::
+        // UpdateRequests <- ResourceBridging <- SoundLogicModule::Update (0x10 is mData on
+        // the 64-bit host, the +8 the console stores to). Returning 0 instead of writing
+        // through null keeps the assert (the real signal) and drops the crash; both call
+        // sites in BrnResourceRegistrar.cpp discard the return value, so a refused node is a
+        // dropped request rather than a dead process. Same precedent as
+        // GameDataModule::ProcessLoadVehicleRequest's "the X360 assert is non-fatal and the
+        // next load would fault on the null entry; guard the host instead".
+        // THIS IS NOT THE FIX for the exhaustion -- see the [reg-pool] witness at the
+        // UpdateRequests call site, which names the bundle and the requester that filled it.
         Node* AddTail(const T& lrElement)
         {
             Node* lpNode = static_cast<Node*>(maFreeList.InternalRemoveHead());
             CGS_ASSERT(lpNode != 0, "We've run out of nodes.");
+            if (lpNode == 0)
+            {
+                return 0;
+            }
             lpNode->mData = lrElement;
             maLiveList.InternalAddTail(lpNode);
             return lpNode;
@@ -172,10 +192,16 @@ namespace CgsContainers
         // appends recycled unloading items via AddHead, asserting the pool was not exhausted:
         // "mUnLoadingQueuedResourceList.AddHead( lUnloadingItem )" @ BrnResourceRegistrar.cpp:320).
         // Pull a node off the free list, copy the payload, chain onto the live-list head.
+        // [marked deviation -- HOST HARDENING] Same null-node guard as AddTail above, for the
+        // same console reason; see that banner.
         Node* AddHead(const T& lrElement)
         {
             Node* lpNode = static_cast<Node*>(maFreeList.InternalRemoveHead());
             CGS_ASSERT(lpNode != 0, "We've run out of nodes.");
+            if (lpNode == 0)
+            {
+                return 0;
+            }
             lpNode->mData = lrElement;
             maLiveList.InternalAddHead(lpNode);
             return lpNode;

@@ -6,6 +6,7 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnShiftControl.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnClutchControl.h"
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint ([engvol] witness)
 
 #include <algorithm>
 #include <cmath>
@@ -480,6 +481,38 @@ void HybridExhaustControl::UpdateMix(f32 /*afTimeStep*/)
     else
     {
         mFinalEngineVolume = lNewVolume;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_ENGINE_GAIN_DIAG=1, the same variable [enggain]
+    // uses so the two lines interleave). THE DRIFT STALL (owner, 2026-09-16: "when we drift,
+    // the engine kinda stalls and doesn't make the noise it should"). Every engine voice's
+    // gain is a PRODUCT, so exactly one factor going to zero silences all three and they are
+    // indistinguishable from outside:
+    //   audioVol  = EngineControl::GetAudioEngVolume().GetCurrent()   (multiplies all three)
+    //   masterGain= MasterGain() * MasterCarVolume()                  (multiplies all three)
+    //   thrMix    = the accel/decel crossfade position
+    //   mix.*     = mFinalEngineMix after the clutch/shift smoothing
+    //   clutch/shift = the two states that select smoothing, and the pair a drift disturbs
+    // One line per ~1 s of attached time.
+    if (getenv("BRN_ENGINE_GAIN_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        static u32 suVolCall = 0;
+        if ((suVolCall++ % 60) == 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[engvol] thrMix " << lfThrottleMix
+                << " audioVol " << lfAudioVolume
+                << " masterGain " << lfMasterGain
+                << " mixLoop " << mFinalEngineMix.Loop
+                << " mixAccel " << mFinalEngineMix.AccelGinsu
+                << " mixDecel " << mFinalEngineMix.DecelGinsu
+                << " volAccel " << mFinalEngineVolume.AccelGinsu
+                << " volDecel " << mFinalEngineVolume.DecelGinsu
+                << " clutch " << static_cast<s32>(mpClutchControl->GetClutchState())
+                << " shift " << static_cast<s32>(mpShiftControl->GetShiftingState())
+                << " smoothing " << (lbUseSmoothing ? 1 : 0)
+                << "\n";
+        }
     }
 
     const f32 lfAccelDecelMix = Lerp(
