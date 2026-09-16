@@ -14,6 +14,8 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([opt])
+#include <cstdlib>                                           // getenv ([opt])
 
 namespace BrnGui
 {
@@ -340,6 +342,22 @@ namespace BrnGui
             break;
         }
 
+        // [DIAG] NOT IN THE X360 BINARY -- [opt] the ladder stage, once per change.
+        // Function-local because there is exactly one CrashNavOptions instance (the
+        // pool state ScreenFlow constructs) and the header's layout is pinned.
+        {
+            static s32 siDiagLastStage = -1;
+            if (static_cast<s32>(meState) != siDiagLastStage &&
+                getenv("BRN_OPTIONS_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[opt] stage " << siDiagLastStage
+                    << " -> " << static_cast<s32>(meState)
+                    << " (0 initsetup 1 loading 2 wfinit 3 main 4 leaving)\n";
+            }
+            siDiagLastStage = static_cast<s32>(meState);
+        }
+
         if (lbRunPermanent)
         {
             UpdatePermanent();
@@ -640,6 +658,17 @@ namespace BrnGui
             CGS_ASSERT(false, "Unknown option ");   // cpp:837
             break;
         }
+
+        // [DIAG] NOT IN THE X360 BINARY -- [opt] the edited model, per keypress.
+        if (getenv("BRN_OPTIONS_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[opt] EDIT row " << liRow
+                << " (0 camera 1 music 2 sfx 3 tips) id " << static_cast<s32>(luSelectedId)
+                << " -> model music=" << static_cast<s32>(mOptionsData.GetMusicVolume())
+                << " sfx=" << static_cast<s32>(mOptionsData.GetSFXVolume())
+                << " changed=" << (mbSettingsChanged ? 1 : 0) << "\n";
+        }
     }
 
     // ---- ApplyAndSaveSettings @0x824CDD00 ------------------------------------------
@@ -654,6 +683,20 @@ namespace BrnGui
 
         mOptionsData.SetToProfile(mpGuiCache->GetOptionsDataProfile());
         mOptionsData.OutputEvents(mpGuiCache->GetOptionsDataProfile(), mpStateInterface);
+
+        // [DIAG] NOT IN THE X360 BINARY -- [opt] what was PERSISTED, read back out
+        // of the profile block so this line proves the WRITE, not the model.
+        if (getenv("BRN_OPTIONS_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            OptionsDataProfile* lpDiagProfile = mpGuiCache->GetOptionsDataProfile();
+            *CgsDev::Log::gpDebugPrint
+                << "[opt] SAVE profile camera=" << static_cast<s32>(lpDiagProfile->GetCameraFeed())
+                << " music=" << lpDiagProfile->GetMusicVolume()
+                << " sfx=" << lpDiagProfile->GetSFXVolume()
+                << " tips=" << (lpDiagProfile->GetTips() ? 1 : 0)
+                << " ffb=" << (lpDiagProfile->GetForceFeedback() ? 1 : 0)
+                << " -- published 278/463x2/472/475/473/356\n";
+        }
     }
 
     // ---- UpdateSoundSettings @0x824CDF10 -------------------------------------------
