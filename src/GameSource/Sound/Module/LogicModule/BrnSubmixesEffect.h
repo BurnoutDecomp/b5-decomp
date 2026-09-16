@@ -131,12 +131,47 @@ private:
     //      `82703814  lwz r4, 0x28(r31)` as `this+0x2C == mpLogicModule` -- the identical
     //      sub-object base, in a different TU, derived from different asm.
     //
-    //  [FLAG] Attach @0x826D2DA8 and ProcessUpdate @0x826D2E48 are still REPORTED, not written.
-    //  What is removed is the false blocker, not the work: ProcessUpdate is four
-    //  DMixIO::GetDMixOutput(bus, preset) reads scaled by 820AA8F8 feeding Voice::SetGain on
-    //  the voices hanging off mpState->+0x24 (stored into this+0x38 by Attach), and it needs
-    //  CgsSound::Logic::Voice plus that State member homed first. Neither needs the class
-    //  re-based and neither touches the committed destructor.
+    //  [FLAG] Attach @0x826D2DA8 and ProcessUpdate @0x826D2E48 are still REPORTED, not
+    //  written. What is removed is the false blocker, not the work. THE REAL BLOCKER, found
+    //  2026-09-16 by reading both bodies end to end:
+    //
+    //    * ProcessUpdate is four DMixIO::GetDMixOutput(bus, preset) reads -- buses/presets
+    //      (0,4) (1,2) (5,4) (8,0) -- scaled by .rdata 820AA8F8, clamped against 820AA8F0 /
+    //      820B4150, then pushed through CgsSound::Playback::Voice::SetParameter @0x826ACD38
+    //      and CgsSound::Logic::Voice::SetGain @0x826942C0 onto the voices hanging off
+    //      mpState->+0x24 (which Attach stores into this+0x38), at +0x98 and +0xA4.
+    //    * Both bodies END in the same private helper @0x826BC6B0, called as
+    //      Helper(this, mpLogicModule + 0x51F0), and that helper picks its send names out of
+    //      DYNAMICALLY-INITIALISED tables at .data 0x83005F50 / 0x83006000 / 0x83008158, all
+    //      of which read ZERO straight out of the image. ⭐ THEY ARE RECOVERED -- the CRT
+    //      initialisers (@0x82C63CC0 and @0x82C63690) fill them with
+    //      CgsSound::Playback::Name::MakeHash(<string literal>) @0x82689A50, so the console
+    //      stores no magic constant at all and NOTHING HAS TO BE GUESSED: this tree can call
+    //      MakeHash on the same literals. Found with tools/re/findinit.py:
+    //          0x83008158      = MakeHash("CutoffFreq")
+    //          0x83005F50+0x00 = MakeHash("LowShelfFreq")    +0x04 = MakeHash("LowShelfGain")
+    //                    +0x08..+0x1C = MakeHash("Gain0".."Gain5")
+    //                    +0x20 = MakeHash("Gain")            +0x24 = MakeHash("LimiterThreshold")
+    //                    +0x28 = MakeHash("LimiterReleaseTime")
+    //                    +0x2C = MakeHash("LimiterChannelMode")
+    //          0x83006000+0x00 = MakeHash("Send01")          +0x04 = MakeHash("ReverbSend")
+    //      So ProcessUpdate's three sends are, in order: SetParameter(.., 0, .., "CutoffFreq"),
+    //      SetGain(.., 1, .., "ReverbSend"), and -- only when mbHoldVolumes is clear --
+    //      a "Gain" send on bus 8 scaled by .rdata 0x82F2CE94.
+    //
+    //      WHAT IS ACTUALLY LEFT is the type work, not the data: CgsSound::Logic::Voice and
+    //      CgsSound::Playback::Voice have to be usable here, the State member at +0x24 that
+    //      holds the two voices (+0x98 and +0xA4) needs a home, and 0x826AD8C0 needs naming.
+    //
+    //  ⭐ AND THE LANE IS LIVE, MEASURED not assumed: with BRN_DMIX_DIAG=1 a boot logs
+    //      [dmix] SubmixesEffect::CreateObject #1 -- effect type 0x40 instantiated
+    //  exactly once. So one instance exists for the whole session, and because neither
+    //  Attach nor ProcessUpdate is declared on this leaf today, that instance runs the
+    //  BASE's do-nothing versions -- i.e. the dynamic mixer's outputs (which MixerControl
+    //  demonstrably updates when the options screen moves a volume slider) currently reach
+    //  no submix voice at all. This is the TAIL of the volume chain.
+    //
+    //  Neither body needs the class re-based and neither touches the committed destructor.
     //
     //  ⚠️ The offset in this member's own comment was wrong for the same reason: Notify's
     //  `stb r11, 0x39(r3)` is sub-object-relative, so mbHoldVolumes is at PRIMARY +0x3D, and
