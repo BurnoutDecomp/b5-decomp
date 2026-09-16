@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"   // GuiEventAudioTraxUpdate / GuiEventAudioTraxPlayOrder (single home)
 
 // ---------------------------------------------------------------------------
 // BrnGui::OptionsDataProfile
@@ -35,29 +36,12 @@ namespace BrnGui
     const s32 KI_DEFAULT_CONTRAST    = 50;
 
     // ---- Supporting types referenced by OptionsDataProfile -----------------
-    // These have no committed home in the tree yet; they are declared here at the
-    // shape the X360 build attests (DWARF nesting + asm-confirmed sizes) so this
-    // header is a coherent compilable slice. When their real owning TUs are
-    // reconstructed, these definitions move there and this header includes them.
-
-    // GuiEventAudioTraxUpdate::EATraxArrayType is a 128-bit fixed bit set: the X360
-    // stores/loads it as two adjacent u64 fields (16 bytes) per array. It is a
-    // CgsContainers::FastBitArray<128>.
-    struct GuiEventAudioTraxUpdate
-    {
-        typedef CgsContainers::FastBitArray<128> EATraxArrayType;
-    };
-
-    // GuiEventAudioTraxPlayOrder::ETraxPlayOrderMode -- the trax play-order selector
-    // (stored as a 4-byte word at +0x7340).
-    struct GuiEventAudioTraxPlayOrder
-    {
-        enum ETraxPlayOrderMode
-        {
-            E_TRAX_PLAY_ORDER_MODE_DEFAULT = 0,
-        };
-    };
-
+    // GuiEventAudioTraxUpdate (and its nested EATraxArrayType) and
+    // GuiEventAudioTraxPlayOrder used to be declared here as compile-only slices. They
+    // MOVED to GameSource/Gui/Events/BrnGuiEventAudioTrax.h on 2026-09-16, which is
+    // included above -- they had a second, differently-shaped definition in
+    // BrnGuiDemangledEventTypes.h and the pair was a hard C2011 in any TU that saw both.
+    // See that header's banner for the asm that settles the real 32-byte shape.
     class GuiCache;
     struct GuiEventNetworkGameParams;
     class GuiEventQueueSmall;

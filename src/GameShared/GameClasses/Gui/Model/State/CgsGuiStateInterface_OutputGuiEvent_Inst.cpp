@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
+#include "GameSource/Gui/Events/BrnGuiEventAudioTrax.h"   // GuiEventAudioTraxUpdate (moved out of the demangled header)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/BrnGuiVideoEvents.h"
 #include "GameSource/Gui/Events/BrnGuiEventNetworkCreateGame.h"

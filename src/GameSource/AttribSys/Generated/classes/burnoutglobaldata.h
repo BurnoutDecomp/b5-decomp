@@ -71,6 +71,13 @@ namespace Gen
         u64 PropToMaterialMappingsKey() const;
         const RefSpec& SampleTags(u32 luIndex) const;
 
+        // BurnoutGlobalData.bin's one collection for this class, read directly from that
+        // vault's CollectionLoadData export. Published here because the EA-Trax helper
+        // needs the same value: the X360 hands this key to BrnSound::Module::Io::
+        // EaTraxHelper::mGlobalDataKey (.data @0x82FFB820) from the sound logic module,
+        // and every EaTraxHelper accessor asserts on it.
+        static const u64 KU_COLLECTION_KEY = 0x34690FE28DBD2FEFull;
+
         // The sound module is constructed before BurnoutGlobalData.bin is
         // registered. Rebind the generated instance after the AttribSys load
         // completion callback, matching SoundLogicModule::ResourcesAreReady.
@@ -239,11 +246,8 @@ namespace Gen
         // X360 constructor receives this key through r4 (the runtime
         // mGlobalDataKey); it is not the zero/default collection.  The value is
         // read directly from that vault's CollectionLoadData export.
-        static const u64 KU_BURNOUTGLOBALDATA_COLLECTION_KEY =
-            0x34690FE28DBD2FEFull;
         Collection* lpCollection =
-            FindCollection(KU_BURNOUTGLOBALDATA_CLASS_KEY,
-                           KU_BURNOUTGLOBALDATA_COLLECTION_KEY);
+            FindCollection(KU_BURNOUTGLOBALDATA_CLASS_KEY, KU_COLLECTION_KEY);
         Change(lpCollection);
         return lpCollection != nullptr;
     }
