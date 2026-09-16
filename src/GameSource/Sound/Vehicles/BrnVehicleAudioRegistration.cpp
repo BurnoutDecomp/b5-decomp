@@ -26,6 +26,7 @@
 #include "GameSource/Sound/Vehicles/Environment/BrnAmbienceEffect.h"
 #include "GameSource/Sound/Vehicles/Environment/BrnReverbEffect.h"
 #include "GameSource/Sound/Vehicles/Deformation/BrnDeformationEffect.h"
+#include "GameSource/Sound/Vehicles/Environment/BrnCarStereoEffect.h"
 
 // The original Unity translation unit's static initializer registers the complete
 // player-car control/effect family before the sound module constructs its state
@@ -134,4 +135,23 @@ static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpDe
     RegisterEffect<Deformation::DeformationEffect>(0x100F0, "DeformationEffect");
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpSweetenersEffect =
     RegisterEffect<Engines::SweetenersEffect>(0x10100, "SweetenersEffect");
+
+// ---------------------------------------------------------------------------------------
+// THE AI STATE'S OWN EFFECT OBJECT. ObjectID 0x200E0 == state 2 (AIVehicleStateManager),
+// effect 14 -- CONSOLE-ATTESTED: the descriptor at 0x82F2F808 carries ObjectID 0x200E0 and
+// the name string "CarStereoEffect", exactly as 0x82F2F774 carries 0x20040 "AISkidEffect".
+//
+// AIVehicleStateManager::Prepare passes PrepareStates the mask 0x4218 == effects 3, 4, 9 and
+// 14, and State::CreateSFXObjs makes an EffectObject for EVERY bit. 3 and 9 resolve onto the
+// PLAYER family through VehicleStateManager::IsStateAlias (@0x82683D50: state 1 is an alias
+// of state 2) -> DualGinsuExhaustEffect / InAirEffect; 4 is AISkidEffect. 14 had NO
+// registration in this tree, so CreateEffectFromRegistry found nothing and fired
+// "Failed to find Effect Object" (CgsStateManager.cpp:387) ONCE PER AI STATE -- and
+// KI_NUMBER_OF_AUDIO_AI_CAR_STATES is 3, which is exactly the three asserts in the owner's
+// 2026-09-16 session. The class was fully reconstructed at
+// Vehicles/Environment/BrnCarStereoEffect.{h,cpp} and was simply never registered NOR
+// mounted -- the registration below and the build_game_exe.bat row are both new.
+// It only became reachable when the AI vehicle sound manager started preparing (f017e677).
+static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const gpCarStereoEffect =
+    RegisterEffect<Environment::CarStereoEffect>(0x200E0, "CarStereoEffect");
 }

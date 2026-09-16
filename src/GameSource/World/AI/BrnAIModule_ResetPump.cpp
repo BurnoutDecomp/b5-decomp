@@ -292,10 +292,11 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
 {
     if ((lUpdateSet & 1) != 0)
     {
-        // [FLAG PC bring-up] AIModule::PausedUpdate @0x8279A1E0 -- absent. It runs the same
-        // ProcessRequestInterface drain plus the paused-frame route bookkeeping. Dropping it
-        // means a request posted on a PAUSED frame waits for the next running frame; the crash
-        // exit never posts on a paused frame (the crash module's tick is itself pause-gated).
+        // 2026-09-16: PausedUpdate IS RECONSTRUCTED NOW (below). The banner that stood here
+        // said a request posted on a paused frame "waits for the next running frame" --
+        // THAT WAS WRONG, and it cost an assert in the owner's session: the management queue
+        // is a PER-FRAME buffer, so an event nobody drains is DESTROYED, not deferred.
+        PausedUpdate(lpInputBufferStack, lpOutputBufferStack, lpInputBuffer, lpOutputBuffer);
         return;
     }
 
@@ -429,6 +430,73 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
 
     lpInputBuffer->UnlockForRead();
     lpOutputBuffer->UnlockForWrite();
+}
+
+
+// ================================================================================
+// AIModule::PausedUpdate  @0x8279A1E0   -- THE SIM-PAUSED ARM OF Update.
+//
+// Update branches here at 0x8279B4B0 (`clrlwi r11, r8, 31` then `beq` -> `bl 0x8279A1E0`)
+// INSTEAD of running its body, and the console's paused frame STILL DRAINS THE PER-FRAME
+// QUEUES:
+//   0x8279A2F0  LockForRead (lpInputBuffer)
+//   0x8279A2F8  LockForWrite(lpOutputBuffer)
+//   0x8279A334  LockForWrite(route input buffer)       assert @:238 (0xEE)
+//   0x8279A348  HandleGameActions(in, out, routeIn)
+//   0x8279A370  UnlockForWrite(route input buffer)     assert @:248 (0xF8)
+//   0x8279A37C  HandleManagementEvents(in)
+// -- i.e. exactly rows 13..16 of the running spine, with the same Route INPUT buffer
+// bracket around HandleGameActions.
+//
+// WHY IT MATTERS (owner session 2026-09-16, [ASSERT 4]):
+//     lpCar->GetState() == E_AI_CAR_STATE_OUT_OF_RANGE   (BrnAIModule_Events.cpp:332)
+// The player's car is spawned while the sim is PAUSED (`[sim-pause] action 87 -> RESUMED`
+// lands AFTER the spawn in that log). RaceCarEntityModule::SpawnRaceCar posts an
+// AttachAIControlEvent into the AI interface's management queue on that paused frame. With
+// this function absent the frame returned immediately, nobody drained the queue, and the
+// queue is PER-FRAME -- so the ATTACH was destroyed, not deferred. The first frame the
+// running body executed (`[resetpump] ... mbPlayerDataSet is SET`) therefore handled an
+// ACTIVATE_RACE_CAR for a car whose AI control had never been attached, and
+// HandleManagementEvents' `meCarState == OUT_OF_RANGE` assert fired. Every LATER
+// attach/activate cycle in that same log is correctly ordered -- that is the tell: it is
+// the BOOT one, on the paused frame, that went missing.
+//
+// [FLAG PC bring-up] the TAIL is not reproduced: from 0x8279A390 the console creates the
+// Route OUTPUT buffer and does the paused-frame route bookkeeping (the RaceRouteRequest
+// Append at 0x8279A3FC and the RouteMap update behind it). That is the route slice, it
+// needs no management queue, and nothing in this tree consumes it on a paused frame. The
+// two drains above are the load-bearing half and are reproduced in the console's order.
+// ================================================================================
+void AIModule::PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
+                             CgsModule::IOBufferStack* lpOutputBufferStack,
+                             const AIModuleIO::InputBuffer* lpInputBuffer,
+                             AIModuleIO::OutputBuffer* lpOutputBuffer )
+{
+    CGS_ASSERT(lpInputBuffer  != 0, "lpInputBuffer != NULL");    // X360 :767 (0x2FF)
+    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :768 (0x300)
+    (void)lpOutputBufferStack;   // used only by the parked Route OUTPUT leg (see the banner)
+
+    if (lpInputBuffer == 0 || lpOutputBuffer == 0)
+    {
+        return;
+    }
+
+    lpInputBuffer->LockForRead();      // 0x8279A2F0
+    lpOutputBuffer->LockForWrite();    // 0x8279A2F8
+
+    {
+        CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");
+        RouteMapModuleIO::InputBuffer* lpRouteIn = lRouteIn;
+
+        lpRouteIn->LockForWrite();                                   // 0x8279A334
+        HandleGameActions(lpInputBuffer, lpOutputBuffer, lpRouteIn);  // 0x8279A348
+        lpRouteIn->UnlockForWrite();                                 // 0x8279A370
+
+        HandleManagementEvents(lpInputBuffer);                       // 0x8279A37C
+    }
+
+    lpOutputBuffer->UnlockForWrite();
+    lpInputBuffer->UnlockForRead();
 }
 
 }   // namespace BrnAI
