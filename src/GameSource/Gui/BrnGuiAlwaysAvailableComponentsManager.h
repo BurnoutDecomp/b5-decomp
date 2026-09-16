@@ -79,6 +79,14 @@ namespace BrnGui
         // cases are FLAG'd deferrals for their un-homed callees -- see the .cpp).
         virtual void Update();
 
+        // @0x8252A27C..0x8252A2CC -- THE PER-FRAME OVERLAY TICK. GuiModule::Update runs it
+        // immediately after Prepare returns, under TWO gates the console spells out:
+        //   0x8252A27C  clrlwi r11, r3, 0x18 ; cmplwi 0 ; beq  -> Prepare returned true
+        //   0x8252A290  lbzx r11, r31, 0x101BA ; cmplwi 1 ; bne -> mbContainerMovieClipPlaying
+        // Expressed as ONE named manager method because the components are private members
+        // (this tree's convention: a named setter, not N pokes from GuiModule).
+        void UpdateTimedComponents();
+
     private:
         // The five always-available GUI components, embedded by value. Guest offsets
         // (relative to `this`) are noted for provenance only.
