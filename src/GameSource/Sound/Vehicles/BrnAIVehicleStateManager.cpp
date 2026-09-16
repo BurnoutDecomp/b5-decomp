@@ -477,6 +477,45 @@ void AIVehicleStateManager::UpdateParams( f32 /*af32DeltaTime*/ )
             }
 
             const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState = lpVehicles->GetRaceCarState( leCar );
+
+            // =============== [FLAG PC bring-up] DO NOT ATTACH TO A CAR THAT DOES NOT EXIST YET.
+            // The console has no test here, because its own flow makes one unnecessary:
+            // VehicleManager::ProcessCreateEvents creates the entity-module slot and the physics
+            // slot TOGETHER, so a car that reports IsRaceCarActive always has a populated
+            // RaceCarState. On this build it does not -- the same split the race-car readback's
+            // mUsedRaceCars gate already documents (BrnRaceCarEntityModule.cpp: "nothing
+            // populates VehicleOutputInterface::maRaceCarStates yet").
+            //
+            // MEASURED, owner-flow run 2026-09-16 (scratch/flow_run/carT), by log line number:
+            //   7264  [ai-sound-attach] car=1 live entity=0x0  <- we attach here
+            //   7521  [seat] car 1 ...                         <- the car is CREATED here
+            //   7525  [racecar-id] slot 1 entityWord 0x01000400 <- and gets its identity here
+            // i.e. the attach ran 257 log lines BEFORE the car existed, over an all-zero slot.
+            //
+            // WHY THAT ZERO IS EXPENSIVE. VehicleState::Attach copies the snapshot ONCE
+            // (mVehiclePhysicsData = *lpRaceCarState) and VehicleState::UpdateParams only
+            // refreshes it after meUpdateState reaches E_UPDATE_ATTACHED -- so the state keeps
+            // the zero across the whole attach/load window. VehicleState::IsAttachedToThis
+            // @0x82683D38 is an IDENTITY TEST on exactly that field, so every zero-id state
+            // matches every zero-id car: in the owner's session car 1's out-of-range test
+            // resolved to car 2's state and detached it, car 2 re-attached next frame, and the
+            // two alternated 236 times (strictly interleaved in the log). Each re-attach
+            // re-requested InAir.bundle + the engine bundle without releasing, filling the
+            // 16-node requester pool -- "We've run out of nodes." x468.
+            //
+            // THE TEST IS THE CONSOLE'S OWN, on the same struct. VehicleState::UpdateParams
+            // (BrnVehicleState.cpp) already spells "this RaceCarState is real" as
+            //     IsRaceCarActive(idx) && lpState != 0 && lpState->mCarAssetAttribKey != 0
+            // and that is reproduced from the X360 body. Applied here it is the same predicate
+            // at the one place that needs it, in the shape this loop already uses for
+            // "not ready yet" (the GetLoadedAssetId(liCar) == 0 continue above).
+            // DELETE-WHEN ProcessCreateEvents claims the physics slot at entity-module
+            // activation, making IsRaceCarActive sufficient again as it is on the console.
+            if ( lpRaceCarState == 0 || lpRaceCarState->mCarAssetAttribKey == 0 )
+            {
+                continue;
+            }
+
             CgsSound::Logic::State* lpState = GetStateObj( const_cast<BrnPhysics::Vehicle::RaceCarState*>( lpRaceCarState ) );
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG. The live entity id

@@ -269,6 +269,33 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
             }
         }
 
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_AI_SOUND_DIAG, one line per race-car slot,
+        // ONCE. Pins where RaceCarState::mEntityId loses its value. The sound side's
+        // VehicleState::IsAttachedToThis @0x82683D38 is an IDENTITY TEST on this field
+        // (`lwz r10,0x428(r3) ; lwz r11,0x3C8(r4) ; subf/cntlzw/rlwinm`), and in the owner's
+        // 2026-09-16 session EVERY AI car read 0 -- so 0 == 0 matched every state against
+        // every car, car 1's out-of-range test detached car 2's state, car 2 re-attached on
+        // the next frame, and the pair alternated 236 times, filling the 16-node requester
+        // pool ('We've run out of nodes.' x468). This probe prints the value at the SOURCE:
+        // if muValue is non-zero here the break is downstream of SetEntityID; if it is 0 the
+        // break is in the create path (ProcessCreateEvents' luEntityWord).
+        {
+            static const bool sbIdDiag = (getenv("BRN_AI_SOUND_DIAG") != 0);
+            static bool sabIdSeen[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { false };
+            if (sbIdDiag && !sabIdSeen[liRaceCar] && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sabIdSeen[liRaceCar] = true;
+                const CgsSceneManager::EntityId lId(maRaceCarEntityIDs[liRaceCar].muValue);
+                *CgsDev::Log::gpDebugPrint
+                    << "[racecar-id] slot " << liRaceCar
+                    << " entityWord " << CgsDev::E_PRINTMODE_HEXONCE
+                    << static_cast<u32>(maRaceCarEntityIDs[liRaceCar].muValue)
+                    << " owner " << static_cast<s32>(lId.GetOwner())
+                    << " entityIndex " << static_cast<s32>(lId.GetEntityIndex())
+                    << " isPlayer " << (lbIsLocalPlayer ? 1 : 0)
+                    << "\n";
+            }
+        }
         lpOutputInterface->SetEntityID(liRaceCar, maRaceCarEntityIDs[liRaceCar]);
         lpOutputInterface->SetRaceCarHidden(liRaceCar, IsRaceCarHidden(liRaceCar));
 
