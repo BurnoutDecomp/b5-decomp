@@ -54,21 +54,14 @@
 // The four Demangled payload shapes needed here are carried as file-local wire views below.
 // CgsGui::GuiEventNetworkSuspension lives in CgsGuiStateInterface.h and is safe either way.
 
-namespace BrnNetwork
-{
-    namespace BrnNetworkModuleIO
-    {
-        // X360 BrnNetwork::BrnNetworkModuleIO::TelemetryData::AddParameter -- appends one
-        // (SPrintf'd) parameter string to the telemetry record a GUI event builds. The record
-        // layout and the AddParameter body are owned by the network telemetry TU; modelled
-        // here as an opaque record with the attested member, exactly as the committed
-        // GameSource/Game/GameBridgeGUIToX.cpp:59 does. No fields invented.
-        struct TelemetryData
-        {
-            void AddParameter(const char* lpcParameter);
-        };
-    }
-}
+// ⭐ 2026-09-16 -- the reduced local re-declaration of
+// BrnNetwork::BrnNetworkModuleIO::TelemetryData that used to sit here is GONE. It existed
+// because "the record layout is owned by the network telemetry TU"; that TU has since
+// landed and owns the real type (Network/SharedIO/BrnNetworkSharedIO.h:197, with meHook,
+// macBuffer[16], Construct, both AddParameter overloads and a size static_assert). Keeping
+// the stripped copy made this TU a hard C2011 redefinition the moment it was mounted --
+// the documented reduced-re-declaration trap. Include the real home instead.
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // the REAL TelemetryData
 
 namespace BrnGui
 {
