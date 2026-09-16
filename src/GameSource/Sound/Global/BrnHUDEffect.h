@@ -8,6 +8,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (BY NAME)
 #include "GameSource/Sound/Global/BrnMusicEffect.h"                // BrnSound::Logic::MusicStream (mMusicStream)
 #include "GameSource/AttribSys/Generated/classes/presentationcomponent.h"
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"   // RootInputBuffer::ScoringOutputInterface (the game-mode HUD lane's argument)
 
 // =============================================================================
 // BrnSound::Logic::HUDEffect
@@ -56,7 +57,11 @@
 //     +0x22B ( 555)  mau8ChokeGroups[3]     (Attach `*v6++ = 0`)
 //     +0x230 ( 560)  maGameModeVoices[4]    (Detach `a1 + 556`, stride 92)
 //     +0x3A0 ( 928)  mMusicStream           (Attach LP 96000.0 / priority 2)
-//     +0x400 (1024)  mGameModeData          (Attach's 10-float loop @ a1+1020)
+//     +0x430 (1072)  mGameModeData          (Reset @0x8270275C `addi r3, r26, 0x430`;
+//                                           every member below lines up with the
+//                                           console's a1+1072.. cursors, e.g.
+//                                           mEventTimeRemaining at 0x460(r31) in
+//                                           UpdateRoadRage @0x82701AD0)
 //     +0x4A0 (1184)  mHudMessageData        (Attach ChangeWithDefault(a1 + 1180))
 //     +0x4B0 (1200)  mLastPlayedEvent       (Notify `*(a1 + 1196) = *v15`)
 //     +0x4C8 (1224)  mLastReceivedHudMessage(Notify `*(a1 + 1220) = *(a2 + 32)`)
@@ -198,6 +203,20 @@ private:
                           s32& ariSpliceIndex, u8& aru8MixerOutput, u8& aru8ChokeGroup);
     // @ 0x82686858 (DWARF BrnHUDEffect.cpp:351).
     bool IsReTrigger(const GuiAudioEventRecord* apAudioEvent) const;
+
+    // ---- the game-mode HUD audio lane (landed 2026-09-16) ----------------------
+    // Reached ONLY from UpdateParams @0x827037E0 -> UpdateGameModeHud, which is why
+    // none of it ran while that function was one statement short. See the banner over
+    // UpdateParams in the .cpp.
+    void UpdateGameModeHud(Module::SoundLogicModule* apModule);   // @0x82702670
+    void UpdateShowtime();                                        // @0x82701830
+    void UpdateRoadRage(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring);   // @0x82701AA0
+    void UpdateStuntRun(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring);   // @0x82701598
+    // @0x826FE400 -- the countdown cue Road Rage, Stunt Attack and the timed events share.
+    void UpdateEventTimeRemaining(f32 afTimeRemaining, f32 afWindow,
+                                  ePresentationSampleTags aeTag, u8 au8MixerOutput);
+    // @0x826FE540 -- the splice-bank PlaySound overload (DWARF's second one).
+    void PlaySound(ePresentationSampleTags aeTag, u8 au8MixerOutput);
     // @ 0x826D2530 (DWARF BrnHUDEffect.cpp:480).
     s32 GetFreeVoice(u8 au8ChokeGroup);
     // @ 0x826F6338 (DWARF BrnHUDEffect.cpp:911) -- the game-mode HUD voice lane.

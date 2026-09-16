@@ -29,6 +29,15 @@ namespace Utils
 // previous word). All methods are header-inline (the X360 build inlines every
 // DataPoint instantiation at its call site); zero-risk additive (no change to the
 // existing Slope/SlopeParams surface).
+
+// @0x826895D0 -- the signed clamp the sound code shares: Min(Max(value, low), high),
+// built by inlining the branchless CgsNumeric::Max/Min. ⭐ IT WAS DEFINED WITH NO
+// DECLARATION: the body has lived in GameShared/GameClasses/Numeric/
+// CgsBranchlessOperations.cpp since that TU landed and no header ever published it, so
+// every would-be caller outside that file saw an undeclared identifier. Declared here,
+// in its own namespace's home, 2026-09-16 (the HUD game-mode audio lane needs it twice).
+s32 IntClamp(s32 liValue, s32 liLow, s32 liHigh);
+
 template <typename T>
 struct DataPoint
 {
