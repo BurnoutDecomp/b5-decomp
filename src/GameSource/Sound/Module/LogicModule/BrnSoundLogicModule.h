@@ -197,6 +197,16 @@ struct SoundLogicModule : public CgsSound::Logic::Module,
     // +0x14 -> if non-null, the child's Prepare(), vtable +0x0C). Returns true on success.
     bool PrepareStateManagersOnBoot(s32 luSkipMask);
 
+    // X360 0x826EC108. The TWIN of PrepareStateManagersOnBoot, with the OPPOSITE mask
+    // sense: it prepares ONLY the slots whose bit is SET. Boot calls the skip-variant with
+    // mask 4, so slot 2 -- AIVehicleStateManager -- is the one manager boot never prepares;
+    // this is the call that prepares it, and the console passes it the same literal 4.
+    // Its console caller chain is SoundLogicModule::PrepareOnEnteringGameplay @0x82703F18
+    // <- RootSoundModule::PrepareOnEnteringGameplay @0x82704188 <-
+    // LoadingScriptedState::LoadSoundModuleAgain @0x823E7700; see the body for why the
+    // poll is driven from Update() here instead.
+    bool PrepareStateManagersOnEnteringGameplay(s32 luPrepareMask);
+
     // BrnSoundLogicModule.cpp:964 (DWARF). Linear-search the per-frame trigger-action
     // table for the entry that matches (leEntityId, leType), returning it (or null).
     // X360 0x826AFF88: walks maTriggerActions[0..count), comparing element.mEntityId
@@ -375,6 +385,14 @@ private:
     // DWARF member name un-dumped; held by usage. Same element type as the
     // playback FreedBuffersArray so AppendArray matches instantiations.
     CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray mFreedStreamBufferIds;
+
+    // [marked deviation -- PC DRIVER LATCH, NOT AN X360 MEMBER] The one-shot latch for the
+    // PrepareStateManagersOnEnteringGameplay(4) poll in Update(). On the console the
+    // equivalent state is the LoadSoundModuleAgain / RootSoundModule::
+    // PrepareOnEnteringGameplay stage machine (0x823E7700 / 0x82704188), which has no body in
+    // this tree; this latch stands in for "that stage has completed". Appended LAST so no
+    // named member's sequence moves. Delete it with the driver when that chain lands.
+    bool mbEnteringGameplayPrepared;
 };
 
 } // namespace Module

@@ -64,6 +64,8 @@
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsIDCompress ([car] BRN_DEBUG_PLAYER_CAR)
 #include "SharedClasses/DataLists/VehicleList.h"                        // VehicleList::GetVehicleCount/GetVehicleData ([car])
 #include "SharedClasses/DataLists/VehicleListEntry.h"                   // VehicleListEntry::GetId/GetName/GetDefaultWheelName ([car])
+#include "GameShared/GameClasses/System/Resource/CgsResourceID.h"          // CgsResource::ID::HashString ([car-audio] audit)
+#include "GameSource/GameState/Progression/BrnProgressionCarData.h"   // CarData::GetId ([car-audio] junkyard pick)
 #include "SharedClasses/DataLists/WheelList.h"                          // WheelList::FindWheelIndexFromName/GetWheelData ([car])
 
 namespace BrnGameState
@@ -2045,6 +2047,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         // what DetectModeStarts' gesture gate decides. Env-gated off; see the body.
         HarnessInjectEventStartBringUp(mpOutputBuffer);
         HarnessInjectPlayerCarBringUp();   // [car] BRN_DEBUG_PLAYER_CAR (harness-only, see the body)
+        HarnessAuditVehicleAudioBringUp();   // [car-audio] BRN_VEHICLE_AUDIO_AUDIT (harness-only, see the body)
+        HarnessInjectJunkyardCarBringUp();    // [car-audio] BRN_DEBUG_JUNKYARD_CAR (harness-only, see the body)
 
         // ✅ [showtime S7b-b, 2026-08-27] THE HARNESS SHOWTIME INJECTION IS GONE, and this is
         // the line that used to call it. Its DELETE-WHEN was "ShouldStartShowtimeMode and the
@@ -2525,6 +2529,202 @@ void GameStateModule::HarnessInjectEventStartBringUp(GameStateModuleIO::OutputBu
     // is the same bracket DetectModeStarts runs under one line above.
     StartModeAtLights(mpPreWorldInputBuffer, lpOutputBuffer,
                       E_GAMEMODESTARTMECHANISM_SPIN_WHEELS_AT_LIGHTS);
+}
+
+// ============================================================================
+// [car-audio] HarnessInjectJunkyardCarBringUp -- NOT an X360 function.
+//
+// `BRN_DEBUG_JUNKYARD_CAR=<vehicle id>` (e.g. PUSCC01) picks that car WHILE THE PLAYER
+// IS IN THE JUNKYARD, through the console's OWN path: SelectPlayerCarEvent, the event
+// ProcessGameEvents case E_EVENT_SELECT_PLAYER_CAR turns into
+// CarSelectManager::RequestChangeCar -- exactly what the car-select carousel posts when
+// the player moves the selection.  The following Accept then exits the junkyard through
+// UpdateExitState with the NEW mDesiredCarId, which is the owner's own sequence.
+//
+// WHY IT EXISTS: the harness makes a FRESH profile every run and a fresh profile owns
+// exactly ONE car, so the carousel has a single entry and -CarSelectTaps has nothing to
+// move to (measured 2026-09-16: Next:3, DPadRight:3 and no taps all ended on
+// VEH_PUSMC01).  The owner's report is "every car that is NOT the Cavalry has no
+// sound", so a one-car profile cannot reproduce it.  BRN_DEBUG_PLAYER_CAR swaps the car
+// MID-DRIVE instead and takes the ChangePlayerCarEvent path, which measured CLEAN -- so
+// the junkyard path needed its own lever.
+//
+// If the profile does not own the car, it is added first with the console's own
+// ProgressionManager::AddCar(id, 0) -- the same call CarSelectManager::
+// DEBUG_UnlockCarsForTesting makes for a car the profile lacks -- because
+// CarSelectManager::GetProfileCarData asserts the desired car IS owned.
+//
+// Fires at most ONCE per process, KI_JUNKYARD_ARM_UPDATES updates after IsInJunkyard()
+// first holds.  A name that matches no vehicle is a HARD REFUSAL with a log line, never
+// a silent no-op.  Inert unless the variable is set; a default run is byte-identical.
+// ============================================================================
+void GameStateModule::HarnessInjectJunkyardCarBringUp()
+{
+    static const char* spcSpec = getenv("BRN_DEBUG_JUNKYARD_CAR");
+    static bool        sbDone  = false;
+    static s32         siArmed = 0;
+    // The gate above is the CarSelectManager's own state, not a frame count: the pick must
+    // land while the carousel is live (E_STATE_CAR_SELECT). RequestChangeCar overwrites
+    // meState, so firing during E_STATE_TRANSITION_IN derails the entry and the GUI
+    // car-select screen never opens -- measured 2026-09-16, four frame-counted runs never
+    // printed "Entering Car Select". These 20 updates are only a settling margin once the
+    // state gate already holds.
+    const s32 KI_JUNKYARD_ARM_UPDATES = 20;
+
+    if (spcSpec == 0 || spcSpec[0] == '\0' || sbDone)
+    {
+        return;
+    }
+    if (!mCarSelectManager.IsInJunkyard() || !mCarSelectManager.IsAtCarSelect())
+    {
+        siArmed = 0;
+        return;
+    }
+    if (++siArmed < KI_JUNKYARD_ARM_UPDATES)
+    {
+        return;
+    }
+    sbDone = true;
+
+    const BrnResource::VehicleList* lpVehicles = GetVehicleList();
+    const CgsID lWantedId = CgsIDCompress(spcSpec);
+    const BrnResource::VehicleListEntry* lpEntry = 0;
+    for (s32 liVehicle = 0; lpVehicles != 0 && liVehicle < lpVehicles->GetVehicleCount(); ++liVehicle)
+    {
+        const BrnResource::VehicleListEntry* lpCandidate = lpVehicles->GetVehicleData(liVehicle);
+        if (lpCandidate != 0
+            && (lpCandidate->GetId() == lWantedId || _stricmp(lpCandidate->GetName(), spcSpec) == 0))
+        {
+            lpEntry = lpCandidate;
+            break;
+        }
+    }
+    if (lpEntry == 0)
+    {
+        if (CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[car-audio] FAIL: BRN_DEBUG_JUNKYARD_CAR=\"" << spcSpec
+                << "\" matches no vehicle id or name in the vehicle list -- the car is NOT picked\n";
+        }
+        return;
+    }
+
+    // CarSelectManager::GetProfileCarData asserts the desired car is in the profile, so own
+    // it first if it is not -- the console's own AddCar, unlock type 0 (the trophy-pass type
+    // DEBUG_UnlockCarsForTesting uses).
+    bool lbOwned = false;
+    BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+    if (lpProfile != 0)
+    {
+        const s32 liCarCount = lpProfile->GetCarCount();
+        for (s32 liCar = 0; liCar < liCarCount; ++liCar)
+        {
+            const BrnProgression::CarData* lpCandidate = lpProfile->GetCarData(liCar);
+            if (lpCandidate != 0 && lpCandidate->GetId() == lpEntry->GetId())
+            {
+                lbOwned = true;
+                break;
+            }
+        }
+    }
+    if (!lbOwned)
+    {
+        mProgressionManager.AddCar(lpEntry->GetId(), 0);
+    }
+
+    const BrnResource::WheelList* lpWheels = GetWheelList();
+    const s32 liWheel = (lpWheels != 0) ? lpWheels->FindWheelIndexFromName(lpEntry->GetDefaultWheelName()) : -1;
+    const CgsID lWheelId = (liWheel >= 0) ? lpWheels->GetWheelData(liWheel)->mID : mActivePlayerWheelId;
+
+    GameStateModuleIO::SelectPlayerCarEvent lEvent = {};
+    lEvent.mCarModelId   = lpEntry->GetId();
+    lEvent.mWheelModelId = lWheelId;
+    GetDebugGameEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                                       GameStateModuleIO::E_EVENT_SELECT_PLAYER_CAR, sizeof(lEvent));
+
+    if (CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[car-audio] ***** HARNESS-ONLY JUNKYARD CAR PICK (BRN_DEBUG_JUNKYARD_CAR) ***** -> '"
+            << lpEntry->GetName() << "' wheel index " << liWheel
+            << " owned=" << (lbOwned ? 1 : 0)
+            << " -- posted SelectPlayerCarEvent exactly as the car-select carousel does; "
+            << "everything downstream is the console's own. One-shot.\n";
+    }
+}
+
+// ============================================================================
+// [car-audio] HarnessAuditVehicleAudioBringUp -- NOT an X360 function.
+//
+// `BRN_VEHICLE_AUDIO_AUDIT=1` dumps the WHOLE VehicleList once: for every entry, the
+// car id, the display name, and the two audio bank names the sound chain keys off
+// (mEngineName / mExhaustName), each with the "Engines\\%08x.bundle" path the loader
+// will actually ask for.  Those two paths are built exactly as the three console sites
+// build them --
+//   GameDataModule::ProcessLoadVehicleRequest  (SOUND leg) -> HashString(mExhaustName)
+//   GameDataModule::ProcessGetVehicleRequest   (SOUND leg) -> HashString(mEngineName)
+//   PhysicsControl::SetupLoadData                          -> both
+// -- so a line here whose bundle is not on disk under Engines\\ is a car that CANNOT
+// have engine audio, whatever the rest of the chain does.
+//
+// Fires at most ONCE per process, as soon as the vehicle list is resolvable.  Inert
+// unless the variable is set; a default run is byte-identical.
+// ============================================================================
+void GameStateModule::HarnessAuditVehicleAudioBringUp()
+{
+    static const char* spcOn = getenv("BRN_VEHICLE_AUDIO_AUDIT");
+    static bool        sbDone = false;
+
+    if (spcOn == 0 || spcOn[0] == '\0' || sbDone || CgsDev::Log::gpDebugPrint == 0)
+    {
+        return;
+    }
+
+    const BrnResource::VehicleList* lpVehicles = GetVehicleList();
+    if (lpVehicles == 0 || lpVehicles->GetVehicleCount() <= 0)
+    {
+        return;   // not resolvable yet -- try again next update
+    }
+    sbDone = true;
+
+    *CgsDev::Log::gpDebugPrint
+        << "[car-audio] ***** VEHICLE AUDIO AUDIT ***** " << lpVehicles->GetVehicleCount()
+        << " entries; columns: index id name engineName engineBundle exhaustName exhaustBundle\n";
+
+    for (s32 liVehicle = 0; liVehicle < lpVehicles->GetVehicleCount(); ++liVehicle)
+    {
+        const BrnResource::VehicleListEntry* lpEntry = lpVehicles->GetVehicleData(liVehicle);
+        if (lpEntry == 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "[car-audio] audit " << liVehicle << " <null entry>\n";
+            continue;
+        }
+
+        char lacId[KI_CGSID_STRING_LEN];
+        char lacEngine[KI_CGSID_STRING_LEN];
+        char lacExhaust[KI_CGSID_STRING_LEN];
+        CgsIDConvertToString(lpEntry->GetId(), lacId);
+        CgsIDConvertToString(lpEntry->GetEngineName(), lacEngine);
+        CgsIDConvertToString(lpEntry->GetExhaustName(), lacExhaust);
+
+        const u32 luEngineHash = static_cast<u32>(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>(lacEngine)));
+        const u32 luExhaustHash = static_cast<u32>(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>(lacExhaust)));
+
+        *CgsDev::Log::gpDebugPrint
+            << "[car-audio] audit " << liVehicle
+            << " id=" << lacId
+            << " name=" << (lpEntry->GetName() ? lpEntry->GetName() : "?")
+            << " engine=" << lacEngine
+            << " engineBundle=" << CgsDev::E_PRINTMODE_HEXONCE << luEngineHash
+            << " exhaust=" << lacExhaust
+            << " exhaustBundle=" << CgsDev::E_PRINTMODE_HEXONCE << luExhaustHash
+            << "\n";
+    }
+
+    *CgsDev::Log::gpDebugPrint << "[car-audio] ***** VEHICLE AUDIO AUDIT END *****\n";
 }
 
 // ============================================================================

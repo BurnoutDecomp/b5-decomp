@@ -642,6 +642,17 @@ public:
     // "Change player car" development menu). Full note at the body.
     void HarnessInjectPlayerCarBringUp();
 
+    // [car-audio] HARNESS-ONLY, NOT an X360 function: BRN_VEHICLE_AUDIO_AUDIT=1 dumps, once,
+    // every VehicleList entry's ENGINE and EXHAUST bank names together with the two
+    // "Engines\\%08x.bundle" paths the streamer will ask the registrar for. Full note at the body.
+    void HarnessAuditVehicleAudioBringUp();
+
+    // [car-audio] HARNESS-ONLY, NOT an X360 function: BRN_DEBUG_JUNKYARD_CAR=<vehicle id>
+    // picks that car IN THE JUNKYARD, through the console's own SelectPlayerCarEvent (the
+    // event the car-select carousel posts) -> CarSelectManager::RequestChangeCar. Full note
+    // at the body.
+    void HarnessInjectJunkyardCarBringUp();
+
     // ==============================================================================================
     // ⭐⭐⭐ [showtime S7b-a wave, 2026-08-27] THE SHOWTIME START. Both bodies live in
     // GameStateModule_Showtime.cpp.

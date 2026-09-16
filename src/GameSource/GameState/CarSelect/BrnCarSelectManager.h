@@ -123,6 +123,15 @@ public:
     bool IsInJunkyard() const;
     // Inlined in ProcessStreamingCompleteEvent @0x82390200: manager +0x58.
     bool IsWaitingForStreaming() const { return mbWaitingForStreaming; }
+
+    // [car-audio] HARNESS-ONLY accessor -- NO console symbol (meState is private and the
+    // X360 reads it in-class). True once the junkyard has finished transitioning IN and the
+    // carousel is live, which is the only moment a RequestChangeCar behaves like the player
+    // moving the selection: firing during E_STATE_TRANSITION_IN overwrites meState and the
+    // GUI car-select screen then never enters (measured 2026-09-16 -- four runs whose
+    // BRN_DEBUG_JUNKYARD_CAR pick was frame-counted instead of state-gated never printed
+    // "Entering Car Select"). Used only by GameStateModule::HarnessInjectJunkyardCarBringUp.
+    bool IsAtCarSelect() const { return meState == E_STATE_CAR_SELECT; }
     void Prepare(const BrnResource::VehicleList* lpVehicleList,
                  const BrnResource::WheelList* lpWheelList);
     void Update(GameStateModuleIO::GameActionQueue* lpActionQueue,
