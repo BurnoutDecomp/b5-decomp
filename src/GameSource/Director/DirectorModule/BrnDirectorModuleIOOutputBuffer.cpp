@@ -55,6 +55,8 @@ namespace DirectorIO
         // "Not Constructed" on its first AddEvent (and would inherit the previous IO-stack
         // tenant's write position).
         mVaultRequestInterface.mRequestQueue.Construct();
+        mbRequestHookEnumeration  = false;
+        mbDirectorSettingsChanged = false;
     }
 
     // ---- read-lock-asserted getters ---------------------------------------------------------
@@ -108,6 +110,19 @@ namespace DirectorIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         return mDirectorOutputInterface;
+    }
+
+    // The @0x0750 request byte (MainDirector::Update writes it, BridgeDirectorToGui reads it).
+    void OutputBuffer::SetRequestHookEnumeration(bool lbRequest)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        mbRequestHookEnumeration = lbRequest;
+    }
+
+    bool OutputBuffer::GetRequestHookEnumeration() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return mbRequestHookEnumeration;
     }
 
     // X360 0x82206A58: return &mReplayRequestInterface (this+0x724). Tests the WRITE lock (bit 3).

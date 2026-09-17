@@ -589,6 +589,13 @@ namespace BrnGame
         //   4 -> BrnBFProFsm (HUD)      5 -> BrnScreenFsm@LOADING (SCREEN) + BrnFBFsm (HUD)
         void BridgeGameToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer);
 
+        // X360 BridgeDirectorToGui @0x823DD5C0 (home GameBridgeDirectorToX.cpp): the director
+        // output's camera post-FX requests -> GUI events 495/496/498/499, the director's
+        // enumeration request byte -> 500. Called under the GUI-input write lock with the
+        // director output read-locked.
+        void BridgeDirectorToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
+                                 const BrnDirector::DirectorIO::OutputBuffer* lpDirectorOutputBuffer);
+
         // ---- the world -> GUI vehicle-data bridge family (home GameBridgeWorldToGui.cpp) --
         // X360 BridgeWorldToGui @0x823EDD50 (called from DoUpdate_GUI @0x823F0758): the four
         // sub-bridges (VehicleData @0x823E5768, RouteInformation, TrafficAndPropData,

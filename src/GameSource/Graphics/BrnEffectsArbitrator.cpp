@@ -1,4 +1,6 @@
 #include "GameSource/Graphics/BrnEffectsArbitrator.h"
+#include <cstdlib>                                             // [diag] getenv
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint (BRN_PFX_DIAG)
 #include "SharedClasses/Graphics/BrnEffectsData.h"        // BrnEffectsFrame
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT machinery
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
@@ -298,6 +300,15 @@ namespace
             // Fold this layer in: the accumulated result keeps (1 - layerWeight) of itself.
             // Self-blend is safe (and is what the console does -- r3 == r4 at 0x823FA034):
             // every output member is written only after its own inputs are read.
+            // [diag] BRN_PFX_DIAG: the FX-events layer's weight as it reaches the blend.
+            if (lu8Layer == E_EFLAYER_FXEVENTS && lrAltWeight > 0.0f)
+            {
+                static const bool sbPfxDiag = (getenv("BRN_PFX_DIAG") != 0);
+                static u32 suPfxDiagCalls = 0;
+                if (sbPfxDiag && (suPfxDiagCalls++ % 100u) == 0 && CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint << "[postfx-fx] FX-events layer blend: type-size " << static_cast<u32>(sizeof(T))
+                                               << " weight " << lrAltWeight << "\n";
+            }
             lRes.SetToBlend(lRes, KF_MAX_LAYER_WEIGHT_SUM - lrAltWeight, lAltData, lrAltWeight);
         }
     }

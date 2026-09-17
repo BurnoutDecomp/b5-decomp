@@ -2009,6 +2009,33 @@ RaceCarEntityModule::GenerateDispatchLists(
                 continue;
             }
 
+            // ---- the director's HIDE_PLAYER flag -- console @0x822E7D30..0x822E7D44 ----------
+            // (*(GetCameraInput() + 324) & 4) != 0 && entity == mePlayerActiveRaceCarIndex
+            // clears the render bool the console hands RenderRaceCar (its v24 ->
+            // lbRenderAttachedGeometry): the player's geometry is dropped for as long as a
+            // camera raises E_FLAG_HIDE_PLAYER -- the bumper camera's own request
+            // (BrnBehaviourGameplayBumper.cpp, step 13). Nothing on PC read the flag before
+            // 2026-09-17, so the bumper view drew the car's shell from the inside.
+            const BrnDirector::Camera::Camera* lpHideCamera = lpInput->GetCameraInput();
+            const bool lbPlayerHidden =
+                lpHideCamera != 0
+                && lpHideCamera->GetState().IsFlagSet( BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER )
+                && mePlayerActiveRaceCarIndex == static_cast< EActiveRaceCarIndex >( liCar );
+            // [cam-hide] BRN_CAM_INPUT_DIAG witness -- the flag as it reaches this consumer.
+            {
+                static const bool sbHideDiag = ( getenv( "BRN_CAM_INPUT_DIAG" ) != 0 );
+                static u32 suHideDiagCalls = 0;
+                if ( sbHideDiag && ( suHideDiagCalls++ % 120u ) == 0 && CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[cam-hide] car " << liCar << " player " << static_cast< s32 >( mePlayerActiveRaceCarIndex )
+                        << " camera " << ( lpHideCamera != 0 ? 1 : 0 )
+                        << " hideFlag " << ( lpHideCamera != 0 && lpHideCamera->GetState().IsFlagSet( BrnDirector::Camera::CameraState::E_FLAG_HIDE_PLAYER ) ? 1 : 0 )
+                        << " bumperFlag " << ( lpHideCamera != 0 && lpHideCamera->GetState().IsFlagSet( BrnDirector::Camera::CameraState::E_FLAG_BUMPER_CAM ) ? 1 : 0 )
+                        << " hidden " << ( lbPlayerHidden ? 1 : 0 ) << "\n";
+                }
+            }
+
             // |camera - car|: the console's vmsum3fp128 / vrsqrtefp / Newton-step / vmulfp
             // chain over (cameraPosition - transform.wAxis), with the vcmpeqfp/vsel128
             // selecting zero when the squared length is exactly zero.
@@ -2052,7 +2079,7 @@ RaceCarEntityModule::GenerateDispatchLists(
                            liOpaqueMeshList,
                            liTransparentMeshList,
                            lpShadowMap,
-                           true,
+                           !lbPlayerHidden,      // console v24: 0 only for the hidden player
                            lfDistance,
                            lvFogScattering,
                            lvFogColourPlusWhiteLevel );

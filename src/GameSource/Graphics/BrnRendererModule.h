@@ -397,6 +397,10 @@ public:
     // as "no effects frame this frame" rather than dereferencing it.
     // DELETE-WHEN the RendererIO buffers are created on PC and Update publishes for real.
     BrnEffectsFrame* GetWorldEffectsFrameBringUp(u8 luSlot);
+    // [FLAG PC bring-up] the FX-EVENTS layer twin (two slots): the frames the GUI's
+    // BrnGui::EffectsArbitrator::GenerateEffectFrameEvents fills every dispatch. Same
+    // stand-in shape, staged from the same place. DELETE-WHEN the RendererIO buffers are real.
+    BrnEffectsFrame* GetFXEventsEffectsFrameBringUp(u8 luSlot);
 
     // [FLAG PC bring-up] The corona SUBMISSION INTERFACE for the world's race-car producer
     // (SubmitCoronasForRaceCar). On the console this crosses in the RendererIO output buffer:

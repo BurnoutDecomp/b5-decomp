@@ -38,6 +38,7 @@
 // ============================================================================
 
 #include "GameSource/Director/BrnMainDirector.h"
+#include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                  // BrnGui::GuiPFXHookEnumeration (the 501 record PostGuiUpdate consumes)
 
 #include "GameSource/Director/DirectorModule/BrnDirectorInputOutput.h" // BrnDirector::DirectorInputOutput
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"    // DirectorIO::InputBuffer
@@ -65,6 +66,13 @@
 #include <cstring>   // std::memcpy (the game actions' packed CgsID / word payloads)
 #include <cstdlib>   // [diag] getenv -- BRN_SLOMO_DIAG
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
+#include <cstdlib>
+// [diag] BRN_PFX_DIAG -- the director-side witness of the post-FX hook hand-over.
+static bool PfxDirDiag()
+{
+    static const bool sbOn = (getenv("BRN_PFX_DIAG") != 0);
+    return sbOn && CgsDev::Log::gpDebugPrint != 0;
+}
 
 // FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
 //   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
@@ -296,6 +304,8 @@ namespace BrnDirector
         // The published graphics camera (+0x349D0).
         mCgsCamera.Construct();
         mCgsCamera.UpdatePerspectiveProjectionMatrix();
+        // @0x8225B448 pseudocode 35..39 -- the EffectInterface's own Construct, inlined there.
+        reinterpret_cast<EffectInterface*>(maEffectInterface)->Construct();
 
         // mLastCamera (+0x32F10) -- the carried-over frame camera Update reads and writes.
         // Without this the director would publish RAW UNINITIALISED STORAGE on frame 1 and
@@ -2322,7 +2332,66 @@ namespace BrnDirector
             // [diag] BRN_SLOMO_DIAG -- where the published time scale comes from.
             BrnDiag_ReportSimTimeScale("post-arbitrator", lCamera.GetEffects().mfSimTimeScale);
 
-            // ⚠️ GATE: the ~550-line VMX / effect-hook / world-map remainder (lines 271-823).
+            // ⭐ X360 @0x82274070 pseudocode 602..653 -- THE HOOK-REQUEST HAND-OVER. The camera
+            // the arbitrator just produced carries this frame's post-FX requests (its
+            // CameraEffects: a start name + blend, a stop name, the background request); this
+            // is where they are registered on the director's EffectInterface -- the record
+            // Camera::EnsureEffectIsPlaying compares against next frame (without it every
+            // frame re-requests the same hook and BridgeDirectorToGui restarts it every
+            // frame). A request naming a hook the GUI has not enumerated is dropped by
+            // clearing its presence flag on the camera, so the bridge never posts it.
+            // (v216 == sp+0x128 == lCamera+0x68 == its CameraEffects; v217 == +0xB8 == the
+            // background request; v224/v225 == the two presence flags -- IDA's frame split.)
+            {
+                EffectInterface* lpEffectInterface =
+                    reinterpret_cast<EffectInterface*>(maEffectInterface);          // this + 212112
+                Camera::CameraEffects& lrEffects = lCamera.GetEffects();
+
+                if (PfxDirDiag() && (lrEffects.mbHasStartHookNameString || lrEffects.mbHasStopHookNameString))
+                {
+                    *CgsDev::Log::gpDebugPrint << "[pfx-dir] hand-over: start "
+                        << (lrEffects.mbHasStartHookNameString ? lrEffects.GetStartHookNameString().mHookNameString : "-")
+                        << " exists " << (lrEffects.mbHasStartHookNameString && lpEffectInterface->HookExists(lrEffects.GetStartHookNameString().mHookNameString) ? 1 : 0)
+                        << " stop " << (lrEffects.mbHasStopHookNameString ? lrEffects.GetStopHookNameString().mHookNameString : "-")
+                        << " gotHooks " << (lpEffectInterface->HasGotHooks() ? 1 : 0) << "\n";
+                }
+                if (lrEffects.mbHasStartHookNameString)                             // +0xB7
+                {
+                    // v123: a stop is also requested this frame AND it names a different hook.
+                    const bool lbStartDiffersFromStop =
+                        lrEffects.mbHasStopHookNameString &&
+                        strcmp(lrEffects.GetStartHookNameString().mHookNameString,
+                               lrEffects.GetStopHookNameString().mHookNameString) != 0;
+                    if (lpEffectInterface->HookExists(lrEffects.GetStartHookNameString().mHookNameString))
+                    {
+                        if (!lbStartDiffersFromStop)
+                            lpEffectInterface->RegisterStartingEffectWithName(
+                                lrEffects.GetStartHookNameString(),
+                                lrEffects.GetStartHookNameBlendAmount());
+                    }
+                    else
+                    {
+                        lrEffects.mbHasStartHookNameString = false;                 // v224 = 0
+                    }
+                }
+                lrEffects.GetBackgroundEffectRequest().RegisterAndUpdateRequest(lpEffectInterface);
+                if (lrEffects.mbHasStopHookNameString)                              // +0xB8
+                {
+                    if (lpEffectInterface->HookExists(lrEffects.GetStopHookNameString().mHookNameString))
+                    {
+                        if (!lrEffects.mbHasStartHookNameString)
+                            lpEffectInterface->RegisterStoppingEffectWithName(
+                                lrEffects.GetStopHookNameString());
+                    }
+                    else
+                    {
+                        lrEffects.mbHasStopHookNameString = false;                  // v225 = 0
+                    }
+                }
+            }
+
+            // ⚠️ GATE: the rest of the ~550-line VMX / world-map remainder (lines 271-823; the
+            //   effect-hook hand-over above is live since 2026-09-17).
         }
 
         // Finalise: camera inertia + shake (the CameraFinaliser owns the InertiaController).
@@ -2371,6 +2440,17 @@ namespace BrnDirector
 
         lpIO->mpOutputBuffer->SetCgsCamera(mCgsCamera);
         lpIO->mpOutputBuffer->SetCameraOutput(lCamera);
+        {   // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as published.
+            static const bool sbCamDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+            static u32 suCamDiagCalls = 0;
+            if (sbCamDiag && (suCamDiagCalls++ % 60u) == 0 && CgsDev::Log::gpDebugPrint != 0)
+                *CgsDev::Log::gpDebugPrint << "[cam-flags] director publish flags " << lCamera.mState_uFlags << "\n";
+        }
+        // @0x82274070 pseudocode 255 (`*(out + 1872) = *(this + 218166)`): publish the
+        // hook-enumeration request byte. The console stores it in the un-paused branch right
+        // after UpdateDebugPrinters; the value is PostGuiUpdate's latch either way.
+        lpIO->mpOutputBuffer->SetRequestHookEnumeration(
+            maStateFlagTail[E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION] != 0);
 
         // ⭐⭐ X360 lines 871-875 (@0x82275128..0x82275148) -- THE TIME-DILATION PUBLISH, and the
         // whole reason a camera can slow the game down. It was GATED here with the note "none of
@@ -2584,8 +2664,27 @@ namespace BrnDirector
             maGameState.mbJunkyardCarModActive = false;
         }
 
-        // ⚠️ GATE: the hook-enumeration leg -> EffectInterface::Update (un-homed), and its
-        //    else-arm's flag-tail store.
+        // @0x82236F88 pseudocode 30..40 -- the GUI's hook enumeration (event 501, copied whole
+        // into the input buffer by BridgeGuiToGame) feeds EffectInterface::Update, whose
+        // out-flag is the "enumerate again" request; with no enumeration this frame the
+        // request is simply "the hooks have not arrived yet".
+        if (lpInput->HasGotHookEnumeration())
+        {
+            const BrnGui::GuiPFXHookEnumeration* lpEnumeration =
+                reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpInput->GetHookEnumeration());
+            bool lbRequestEnumeration = false;
+            reinterpret_cast<EffectInterface*>(maEffectInterface)->Update(
+                lpEnumeration->miHookNameCount, lpEnumeration->mapHookNames, &lbRequestEnumeration);
+            maStateFlagTail[E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION] = lbRequestEnumeration ? 1 : 0;
+            if (PfxDirDiag())
+                *CgsDev::Log::gpDebugPrint << "[pfx-dir] enumeration received: " << lpEnumeration->miHookNameCount
+                                           << " hooks, request again " << (lbRequestEnumeration ? 1 : 0) << "\n";
+        }
+        else
+        {
+            maStateFlagTail[E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION] =
+                reinterpret_cast<const EffectInterface*>(maEffectInterface)->HasGotHooks() ? 0 : 1;
+        }
 
         // GUI command 303 -- the rank-up handshake's WAITING bit + the new rank.
         if (lpInput->GetRankUpThisFrame())

@@ -49,20 +49,24 @@ namespace Gen
         static const u64 KU_BLOOMASSET_CLASS_KEY = 0xB632EC178CFDE613ULL;
 
         // Construct over the bloomasset collection, optionally owned by lpOwner.
-        explicit bloomasset(void* lpOwner = nullptr);
+        // luCollectionKey is the caller's r4 the X360 ctor passes straight through to
+        // FindCollection (the ctor never writes r4). PFXNodeFader::Initialise @0x82504378
+        // hands it Attrib::StringToKey(<the PFX group's bloomasset id>); the old
+        // default (0) is what every earlier call site resolved.
+        // [PC] the collection key is the FULL u64 Attrib::StringToKey hash. The X360 ctor takes
+        // the low word (its vaults key collections by that word); this build's vaults and
+        // Attrib::FindCollection(u64, u64) compare the whole key, so a truncated key never
+        // resolves (POSTFXVAULT.BIN: e.g. FF8129C8E1D9E071, whose low word is the console key).
+        explicit bloomasset(u64 luCollectionKey = 0, void* lpOwner = nullptr);
+        using Instance::IsValid;
+        using Instance::GetLayoutPointer;
     };
 
     // X360 ctor @0x82677E70: Collection = FindCollection(KI_BLOOMASSET_CLASS); chain the
     // Instance ctor over it; then give the instance a default data area (0x20 bytes) if it
     // has none. No class-check assert in this ctor (unlike debrisparams/iceanim).
-    inline bloomasset::bloomasset(void* lpOwner)
-                // FLAG (collection key): the X360 ctor never writes r4, so the CALLER's key
-        // argument passes straight through to FindCollection as the collection key.
-        // This ctor does not model that parameter yet (no call site in this repo
-        // supplies one), so it resolves the class's collection key 0 -- exactly what
-        // the previous `FindCollection(KI_..., nullptr)` form did. Add the parameter
-        // when a real call site needs a named collection.
-    : Instance(FindCollection(KU_BLOOMASSET_CLASS_KEY, 0), lpOwner)
+    inline bloomasset::bloomasset(u64 luCollectionKey, void* lpOwner)
+    : Instance(FindCollection(KU_BLOOMASSET_CLASS_KEY, luCollectionKey), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x20u);

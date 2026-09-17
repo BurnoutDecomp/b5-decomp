@@ -122,6 +122,9 @@ namespace DirectorIO
         // renderer/world bridge (BridgeRendererToWorld @0x823CDD20); the setter beside it is
         // @0x8224EF70. Same member, same buffer, opposite lock.
         const BrnDirector::Camera::Camera* GetCameraOutput() const;
+        // --- the hook-enumeration request byte @0x0750 (write / read lock asserted) ---
+        void SetRequestHookEnumeration(bool lbRequest);
+        bool GetRequestHookEnumeration() const;
 
     private:
         // @0x0001 .. 0x0010: the IOBuffer base is 1 byte (FlagSet8); pad up to the 16-byte-aligned
@@ -165,6 +168,16 @@ namespace DirectorIO
         CgsAttribSys::AttribSysIO::AttribSysRequestInterface<512> mVaultRequestInterface;  // @0x0510 (console)
         u8  mDirectorInterface[0x0724 - 0x0720];                 // @0x0720 (console) 4-byte word
         u8  mReplayRequestInterface[4];                          // @0x0724 (console) 4-byte handle word
+        // @0x0728 .. @0x074F (console): unrecovered span between the replay handle and the two
+        // request bytes BridgeDirectorToGui @0x823DD5C0 reads (a3[1872] / a3[1873]).
+        u8  maReserved0728[0x0750 - 0x0728];
+        // @0x0750 (console): "GUI, enumerate your post-FX hooks" -- MainDirector::Update
+        // @0x82274070 stores its flag-tail latch here (`*(out + 1872) = *(this + 218166)`);
+        // the bridge posts GUI event 500 while it is set.
+        bool mbRequestHookEnumeration;
+        // @0x0751 (console): the bridge posts GuiEventDirectorSettings (from GetDir()) while
+        // it is set. FLAG: writer not recovered; the name is inferred from that consumer.
+        bool mbDirectorSettingsChanged;
 
         // Pin ONLY the console==host-stable facts (before the widening camera).
         static void _AssertLayout();

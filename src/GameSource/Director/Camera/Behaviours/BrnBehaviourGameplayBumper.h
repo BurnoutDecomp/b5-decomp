@@ -160,37 +160,18 @@ public:
     // @0x821F91A8 takes Behaviour::Parameters and IS the override).
     void SetParameters(const Parameters* lpParameters);
 
-    // FLAG (not transcribed): the DWARF also declares `virtual bool Update(Camera&, const
-    //   BehaviourSharedInfo&)` (BrnBehaviourGameplayBumper.cpp:85, X360 @0x82226778, ~230
-    //   lines: the acceleration-dampened spring rig that rides the player car) and
-    //   `virtual void SetupTweaker(Tweaker&)` (.cpp:314). Neither is declared here, so both
-    //   vtable slots keep the base's defaults (Update returns true and leaves the camera
-    //   untouched; SetupTweaker does nothing). That is a DOCUMENTED GAP, not a fabrication --
-    //   the alternative would be inventing a camera rig.
-    //
-    // ⚠️ THE CLOSING CLAUSE OF THIS FLAG WAS WRONG (retired 2026-08-02). It read: "Nothing
-    //   dispatches slot 2 today anyway: MainDirector::UpdateCameraBehavioursPostScene
-    //   @0x8224FD30 (the only caller of UpdateAllBehaviours) is itself still gated." Both
-    //   clauses are false since the 2026-08-01 PreScene/PostScene split -- `BrnMainDirector.cpp
-    //   :1153` calls UpdateAllBehaviours from UpdateCameraBehavioursPreScene @0x82255318,
-    //   un-gated. SLOT 2 IS DISPATCHED.
-    //   ⭐ UPDATED 2026-08-02: "its parameter block is never validated" is ALSO no longer true.
-    //   The parameter chain landed (camera parameter-chain wave): one
-    //   SharedCameraContainer::Prepare binds both gameplay cameras and one
-    //   MainDirector::ProcessNewVehicleEvents seeds both, so THIS block's mbIsValid is true on
-    //   the same frame the external one's is (measured: "bumperValid 1"). This behaviour is now
-    //   inert for exactly ONE reason: @0x82226778 is not transcribed. The full link-by-link
-    //   state is in BrnBehaviourGameplayExternal.h's matching FLAG -- read it there.
-    //   ⭐ Parameters::Construct @ (inlined in BehaviourParameterBank::Construct @0x8223DC90)
-    //   IS BODIED NOW, in this class's own TU, and one of its stores is load-bearing: it
-    //   stamps mType = eBehaviourGameplayBumper. Without it SetParameters' own tripwire below
-    //   fires (measured, four times per run) because a zeroed tag reads as the EXTERNAL
-    //   camera's tag.
-    //   DELETE-WHEN: @0x82226778 is transcribed.
+    // ============ RETIRED 2026-09-17 ============
+    // This slot used to carry the 'FLAG (not transcribed)' banner for `virtual bool
+    // Update(Camera&, const BehaviourSharedInfo&)` @0x82226778 (with its 2026-08-02
+    // corrections). Update IS transcribed now (BrnBehaviourGameplayBumper.cpp: the spring
+    // rig, the jump latch + impact-shake floor, CameraShake::Update, the HIDE_PLAYER /
+    // SMALL_NEAR_CLIP / RACING_GAMEPLAY_CAMERA / BUMPER_CAM flags, SetImpactShake(0, 0.2, 1),
+    // mu8BlendCurve = 0) and RaceCarEntityModule::GenerateDispatchLists consumes HIDE_PLAYER.
+    // Still not declared here: `virtual void SetupTweaker(Tweaker&)` (.cpp:314) -- the base
+    // default (a no-op) stands, a documented gap, not a fabrication.
     //
     // ============ THE FIELD MAP IS RECOVERED (2026-09-16, camera-input wave) ============
-    // The body is NOT transcribed yet, but every operand it touches is now named, so the
-    // next pass is a TRANSCRIPTION rather than a discovery. 686 instructions,
+    // The body IS transcribed (2026-09-17); this map is its provenance. 686 instructions,
     // 0x82226778..0x8222722C. It ALWAYS returns true (`li r3, 1` at 0x82227214); the
     // invalid-parameters case branches straight there.
     //

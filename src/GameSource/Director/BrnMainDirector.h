@@ -507,6 +507,12 @@ namespace BrnDirector
         // nothing open-codes a raw number at the use site.
         enum EStateFlagTailByte
         {
+            // +0x35436. "Ask the GUI to enumerate its post-FX hooks": PostGuiUpdate
+            // @0x82236F88 writes it (EffectInterface::Update's out-flag when an enumeration
+            // arrived, else !mbGotHooks) and Update @0x82274070 publishes it into the director
+            // output buffer (out + 0x750), where BridgeDirectorToGui @0x823DD5C0 turns it into
+            // GUI event 500.
+            E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION = 0x06,
             // +0x35439. Raised when the GUI reports the player ENTERED the online post-event
             // screen, cleared when it reports they left. While it is set, a prepare-for-mode
             // action is deferred instead of run (the stop-mode arm also skips its ACTIVE push

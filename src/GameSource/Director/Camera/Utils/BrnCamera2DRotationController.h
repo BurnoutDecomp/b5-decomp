@@ -57,8 +57,13 @@ namespace Utils
         // 0x26 is this member at its asm-pinned offset. Same treatment, and the same
         // justification, as the sibling CameraSphericalRotationController::IsLookback.
         bool    IsLookback() const { return mbIsLookback; }                     // +0x26
-        bool    IsStartingLookbackThisFrame() const;
-        bool    IsEndingLookbackThisFrame() const;
+        // The two edge tests, bodied from their only ARTIST reader that spells them out --
+        // BehaviourGameplayBumper::Update @0x82227158..0x82227178, which tests the shared
+        // controller's bytes directly (`lbz +0x26` / `lbz +0x25`): starting == lookback now
+        // and not last frame; ending == not now and last frame. Declared here since
+        // 2026-08-02, bodied 2026-09-17 when the bumper's flag tail landed.
+        bool    IsStartingLookbackThisFrame() const { return mbIsLookback && !mbIsLookbackLastFrame; }
+        bool    IsEndingLookbackThisFrame() const   { return !mbIsLookback && mbIsLookbackLastFrame; }
 
     private:
         Vector2 mStickVector;                 // +0x00 (h:95)  normalised held stick dir (16B)

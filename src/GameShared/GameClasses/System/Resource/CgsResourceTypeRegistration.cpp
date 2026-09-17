@@ -11,6 +11,7 @@
 #include "GameShared/GameClasses/Graphics/Instances/CgsInstanceListResourceType.h"
 #include "GameShared/GameClasses/System/Resource/CgsEntryListResource.h"
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoupListResourceType.h"
+#include "GameSource/Gui/PFX/Resource/BrnGuiPFXHooksResource.h"   // CgsResource::PFXHookBundleResourceType (0x31)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceHierarchyResourceType.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsSnrResourceType.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistryResourceType.h"
@@ -169,6 +170,13 @@ namespace CgsResource
         // acquire access-violates.
         static IdListResourceType          sIdList;            // 0x25 (37) IdList (zone-collision lists)
         TypeRegistry::Register(&sIdList, "IdList");
+        // [FLAG PC bring-up] THE PFX HOOK BUNDLE (PostFx\PFXHOOKS.PFX, resource type 0x31 == 49).
+        // The type class has existed since the PFX resource TU landed, but nothing registered it,
+        // so every boot logged "[bundle] UNREGISTERED resource type id 49" and the bundle loaded
+        // with ZERO resources -- BrnGui::EffectsArbitrator::ResourceUpdate never saw request 228
+        // and no screen filter could ever start. The console registers it with the game types.
+        static PFXHookBundleResourceType   sPfxHookBundle;     // 0x31 (49) PFXHookBundle (screen-filter hooks)
+        TypeRegistry::Register(&sPfxHookBundle, "PFXHookBundle");
         // The four world-prop/sound types. The console registers all four, PropPhysics
         // immediately before PropGraphicsList; id-keyed lookup is order-independent.
         //

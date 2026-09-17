@@ -48,7 +48,11 @@ namespace Gen
         // luUnusedKey mirrors the ctor's dead middle argument (r4, clobbered before use --
         // same provenance pattern as shotgroup's luGroupNameKey). lpOwner is the optional
         // owning object the AttribSys collection resolve threads through (arrives in r5).
-        explicit vignetteasset(u32 luCollectionKey = 0, void* lpOwner = nullptr);
+        // [PC] the collection key is the FULL u64 Attrib::StringToKey hash. The X360 ctor takes
+        // the low word (its vaults key collections by that word); this build's vaults and
+        // Attrib::FindCollection(u64, u64) compare the whole key, so a truncated key never
+        // resolves (POSTFXVAULT.BIN: e.g. FF8129C8E1D9E071, whose low word is the console key).
+        explicit vignetteasset(u64 luCollectionKey = 0, void* lpOwner = nullptr);
 
         // The base validity test and the attribute-data slot, re-exported past the PRIVATE
         // inheritance -- the same pair cameradefaults.h:71/:79 and cameraexternalbehaviour.h
@@ -68,7 +72,7 @@ namespace Gen
     // X360 ctor @0x82677F70: Collection = FindCollection(0x9C02B73F); chain the Instance
     // ctor over it; give the instance a default data area (0x50 bytes) if construction left
     // it without one. No class-check assert in this ctor (unlike debrisparams/surfacelist).
-    inline vignetteasset::vignetteasset(u32 luCollectionKey, void* lpOwner)
+    inline vignetteasset::vignetteasset(u64 luCollectionKey, void* lpOwner)
         : Instance(FindCollection(KU_VIGNETTEASSET_CLASS_KEY, luCollectionKey), lpOwner)
     {
         if (!mpAttributeData)

@@ -113,6 +113,13 @@ private:
     // Checks the converter's own three invariants; see the banner on FixUp.
     bool IsPortedLayout() const;
 
+public:
+    // [FLAG PC bring-up] NOT an X360 method. IsPortedLayout, plus a one-shot report to the
+    // log when it fails. True means: refuse this blob, do not walk it. Public because
+    // Module::AddRegistry is the one consumer that sees every blob first.
+    bool IsStaleBlob() const;
+private:
+
     const Entity** GetFirstEntity() { return mapEntity; }
     const Entity* const* GetFirstEntity() const { return mapEntity; }
     u8* GetDataStart()

@@ -558,6 +558,13 @@ void Module::ImportStringTable(const Registry& arRegistry)
 
 void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
 {
+    // [FLAG PC bring-up] a Registry blob still in the X360 layout (0x1C header, 4-byte slots)
+    // cannot be read through the ported struct: FixUp and Resolve walk the slot array, and
+    // ImportStringTable memcpys from a header-derived pointer and size. All four steps below
+    // dereference the blob, so the refusal belongs here, once, rather than in each of them.
+    if (arRegistry.IsStaleBlob())
+        return;
+
     arRegistry.FixUp();
     arRegistry.Resolve(arRegistry);
     ImportStringTable(arRegistry);

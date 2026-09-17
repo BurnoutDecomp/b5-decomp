@@ -203,6 +203,11 @@ namespace DirectorIO
         // --- mutators: all write-lock-asserted ---
         void AppendContacts(const void* lpContacts);
         void SetControllerInfo(const void* lpControllerInfo);
+        // The 501 record's size: console 404 == 4 + 100 * 4 (count + name pointers); host
+        // 816 == 12 (GuiEvent header) + 4 + 100 * 8. BrnGameModule's case 501 static_asserts
+        // the host figure against sizeof(BrnGui::GuiPFXHookEnumeration).
+        static const u32 KU_HOOK_ENUMERATION_BYTES    = 816;
+        static const u32 KU_HOOK_ENUMERATION_WIDENING = KU_HOOK_ENUMERATION_BYTES - 404;
         void SetHookEnumeration(const void* lpHookEnumeration);
         void SetRaceCarInfo(u32 luIndex, const BrnDirector::Camera::VehicleInfo& lrInfo);
         void SetCrashingCentreOfMass(u32 luIndex, const Matrix44Affine& lrCentreOfMass);
@@ -340,7 +345,10 @@ namespace DirectorIO
 
         // @0x7910 (30992): the GUI PFX hook enumeration, 404 (0x194) bytes (SetHookEnumeration
         // memcpy). HONEST opaque, padded out to the scalar/flag tail @0x7AA8.
-        u8  mHookEnumeration[404];                       // @0x7910 .. 0x7AA4
+        // [PC widening] the record is BrnGui::GuiPFXHookEnumeration -- an s32 count + 100 hook
+        // NAME POINTERS; the members after it shift by KU_HOOK_ENUMERATION_WIDENING (the
+        // layout asserts in the TU carry the same term).
+        u8  mHookEnumeration[KU_HOOK_ENUMERATION_BYTES]; // @0x7910 .. 0x7AA4 (console)
 
         // @0x7AA4 (31396): the DWARF's mDirectorProfileData, which on this build is exactly the
         // four bytes between the hook enumeration and the car index. BridgeGuiToDirector's

@@ -3,6 +3,15 @@
 #include <cstring>                                   // strcmp (the open-coded console compares)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameSource/Director/Camera/Camera.h"       // Camera::Camera / GetEffects (EnsureEffectIsPlaying)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
+#include <cstdlib>                                   // [diag] getenv
+
+// [diag] BRN_PFX_DIAG -- the director-side witness of the post-FX hook hand-over.
+static bool PfxDirDiag()
+{
+    static const bool sbOn = (getenv("BRN_PFX_DIAG") != 0);
+    return sbOn && CgsDev::Log::gpDebugPrint != 0;
+}
 
 // BrnDirector::EffectInterface.
 //
@@ -225,6 +234,13 @@ void EnsureEffectIsPlaying(Camera& lrCamera, const EffectInterface& lrSource,
             && lrSource.GetCurrentEffectBlendAmount() != lfBlend))
     {
         lrEffects.SetStartHookName(lpcHook, lfBlend);
+        if (PfxDirDiag())
+        {
+            *CgsDev::Log::gpDebugPrint << "[pfx-dir] EnsureEffectIsPlaying requests '" << lpcHook
+                                       << "' blend " << lfBlend << " (current "
+                                       << (lrSource.HasCurrentEffectName() ? lrSource.GetCurrentEffectName() : "<none>")
+                                       << " gotHooks " << (lrSource.HasGotHooks() ? 1 : 0) << ")\n";
+        }
     }
 }
 
@@ -359,4 +375,18 @@ void RequestStartEffectHookReset(Camera& lrCamera, const char* lpcHook, f32 lfBl
 }
 
 }
+// ----------------------------------------------------------------------------
+// BrnDirector::EffectInterface::Construct -- inlined into MainDirector::Construct
+// @0x8225B448 (pseudocode 35..39): the hook table's count word (+0xCE4) and the four
+// trailing flag bytes (+0xD36..+0xD39) are zeroed; nothing else is touched.
+// ----------------------------------------------------------------------------
+void EffectInterface::Construct()
+{
+    maHookNames.Clear();                            // *(this + 3300) = 0
+    mbGotHooks                       = false;       // +0xD36
+    mbHasCurrentEffectName           = false;       // +0xD37
+    mbHasCurrentEffectId             = false;       // +0xD39
+    mbHasCurrentBackgroundEffectName = false;       // +0xD38
+}
+
 }

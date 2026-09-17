@@ -19,6 +19,9 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // BehaviourSharedInfo
 #include "GameSource/Director/Camera/Camera.h"                      // Camera::SetFOV / mState_uFlags
+#include "GameSource/Director/Camera/BrnCameraState.h"              // CameraState::E_FLAG_* (the flag tail)
+#include "GameSource/Director/Utils/BrnDirectorTimestep.h"          // Timestep::E_TIMESTEP_* (the shake tripwire)
+#include <cmath>                                                   // sqrtf -- the console fsqrts
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"           // the Euler / rotate / angle-diff helpers
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"      // VehicleInfo (mAABB)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
@@ -366,6 +369,23 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
 
     lCameraFrame.wAxis = Vector3{ 0.0f, mpParameters->mfYOffset, lfEyeZ, 1.0f };
 
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The eye's inputs, every 60th call.
+    {
+        static const bool sbEyeDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+        static u32 suEyeCalls = 0;
+        if (sbEyeDiag && (suEyeCalls++ % 60) == 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[cam-bumper] lookback " << (lbLookback ? 1 : 0)
+                << " zOff " << mpParameters->mfZOffset << " yOff " << mpParameters->mfYOffset
+                << " halfExt " << lrCar.mHalfExtent.x << "," << lrCar.mHalfExtent.y << "," << lrCar.mHalfExtent.z
+                << " aabbZ " << lrInfo.mPlayerInfo.mAABB.mMin.z << ".." << lrInfo.mPlayerInfo.mAABB.mMax.z
+                << " zReach " << lfZReach << " eyeZ " << lfEyeZ
+                << " fov " << mpParameters->mfFOV << " boostFov " << mpParameters->mfBoostFOV
+                << "\n";
+        }
+    }
+
     // @0x82226EB0/0x82226EBC -- the sprung angles are carried forward, and the frame is turned
     // back by the UNsprung remainder (`vxor` against the sign mask is the negation).
     mLastCameraAngles = mLastCameraAngles + rw::math::vpu::Mult(lCameraDiffAngles, lSprings);
@@ -392,6 +412,91 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
         lrInfo.mfTempFOVBoostAmount * KF_FOV_BOOST_SCALE + mpParameters->mfBoostFOV;
     lrCamera.SetFOV((lfBoostedFOV - mpParameters->mfFOV) * lrInfo.mfSpeedRatio
                     + mpParameters->mfFOV);
+
+    // ---- 11. the jump latch and the impact-shake floor -----------------------------------------
+    // @0x82226FC4..0x822270EC, read from the asm (Hex-Rays drops every fsel operand here). The
+    // same latch BehaviourGameplayExternal::UpdateJumping carries, minus its dutch/yaw drift:
+    // all four wheels off the road, the above-ground query invalid or >= 1.0 m, and airtime
+    // running -> jumping; the frame the latch drops, the landing feeds the shake floor with
+    // min(airtime, 2.0) * 3.0 (flt_82001D9C / flt_82004270, both dumped).
+    const f32 KF_IMPACT_FORCE_SCALE = 3.0f;                       // flt_82004270, dumped
+    {
+        bool lbAllWheelsOffGround = true;
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            lbAllWheelsOffGround = lbAllWheelsOffGround
+                                && !lrCar.maWheels[liWheel].mRoadContact.mbIsOnGround;
+        }
+        const bool lbHighEnough = !lrCar.mAboveGroundTestResult.mbValid
+                                || lrCar.mAboveGroundTestResult.mfVerticalDistance >= 1.0f;
+        if (lrCar.mfTimeInAir > 0.0f && lbHighEnough && lbAllWheelsOffGround)
+        {
+            mbJumping = true;                                     // stb 1, +0x1C
+        }
+        else if (mbJumping)
+        {
+            mbJumping = false;                                    // stb 0, +0x1C
+            const f32 lfImpactForce =
+                ((lrCar.mfTimeInAir >= 2.0f) ? 2.0f : lrCar.mfTimeInAir) * KF_IMPACT_FORCE_SCALE;
+            mfImpactShakeFactor = (mfImpactShakeFactor >= lfImpactForce) ? mfImpactShakeFactor
+                                                                         : lfImpactForce;
+        }
+
+        // @0x82227074..0x822270EC -- the running floor: the hardest impact's square root scaled
+        // by flt_82008718 (0.0002), and below 40 mph (flt_82004D0C) by |speed| * 0.025 as well
+        // (flt_82008714); clamped to [0, 0.7] (flt_82004C68), never below the carried factor,
+        // and the whole thing decays 6% a frame (flt_820047B8). Each fsel is spelled as the
+        // compare it encodes: fsel(a, b, c) == (a >= 0) ? b : c.
+        const f32 lfSpeedAbs = rw::math::fpu::Abs(lrCar.mfSpeedMPH);
+        f32 lfFloor = sqrtf(lrInfo.mPlayerInfo.mfHardestImpact) * 0.00019999999f;
+        if (lfSpeedAbs < 40.0f)
+        {
+            lfFloor = lfSpeedAbs * lfFloor * 0.025f;
+        }
+        lfFloor = (-lfFloor >= 0.0f) ? 0.0f : lfFloor;                          // fsel @0x822270C8
+        lfFloor = (0.69999999f - lfFloor >= 0.0f) ? lfFloor : 0.69999999f;      // fsel @0x822270D4
+        lfFloor = (mfImpactShakeFactor - lfFloor >= 0.0f) ? mfImpactShakeFactor  // fsel @0x822270E0
+                                                          : lfFloor;
+        mfImpactShakeFactor = -lfFloor * 0.059999999f + lfFloor;                // fmadds @0x822270E8
+    }
+
+    // ---- 12. the impact shake ------------------------------------------------------------------
+    // @0x822270B8..0x82227154. The timestep-type tripwire is the console's own assert; the shake
+    // runs on the authored impact parameters (Parameters +0x38), the shared random stream, the
+    // behaviour's timestep times flt_82004C88 (8.0) and the factor times 3.0 -- the argument
+    // order is the one CameraShake::Update declares (f1 = the timestep slot, f2 = the amplitude).
+    CGS_ASSERT(GetTimestepType() > BrnDirector::Timestep::E_TIMESTEP_INVALID
+               && GetTimestepType() < BrnDirector::Timestep::E_TIMESTEP_COUNT,
+               "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT");
+    const f32 KF_IMPACT_SHAKE_FREQ_MUL = 8.0f;                    // flt_82004C88, dumped
+    mImpactShake.Update(lrCamera.mTransform,
+                        mpParameters->mImpactShakeParams,
+                        *lrInfo.mpRandom,
+                        lrInfo.GetTimestep(GetTimestepType()) * KF_IMPACT_SHAKE_FREQ_MUL,
+                        mfImpactShakeFactor * KF_IMPACT_FORCE_SCALE);
+
+    // ---- 13. the camera-state flags and the per-frame shake request ---------------------------
+    // @0x82227158..0x822271F0. NEW_THIS_FRAME follows a lookback EDGE on the shared 2D
+    // controller (its bytes +0x25 / +0x26); then the four flags this camera always raises --
+    // HIDE_PLAYER (the bumper view draws no car), SMALL_NEAR_CLIP, RACING_GAMEPLAY_CAMERA and
+    // BUMPER_CAM -- and the effects block's shake request {0.0, 0.2, type 1, curve 0}.
+    // THIS TAIL WAS THE FRONT-CAMERA BUG (2026-09-17): without HIDE_PLAYER the world drew the
+    // player car around an eye that sits INSIDE it (eyeZ == mfZOffset == 1.3 m, by the
+    // console's own arithmetic above), so the bumper view showed the shell from within.
+    {
+        const bool lbLookbackEdge = lrInfo.mRotationController.IsStartingLookbackThisFrame()
+                                 || lrInfo.mRotationController.IsEndingLookbackThisFrame();
+        if (lbLookbackEdge)
+            lrCamera.mState_uFlags |=  (1 << CameraState::E_FLAG_NEW_THIS_FRAME);
+        else
+            lrCamera.mState_uFlags &= ~(1 << CameraState::E_FLAG_NEW_THIS_FRAME);
+        lrCamera.mState_uFlags |= (1 << CameraState::E_FLAG_HIDE_PLAYER);              // | 4
+        lrCamera.mState_uFlags |= (1 << CameraState::E_FLAG_SMALL_NEAR_CLIP);          // | 0x10000
+        lrCamera.mState_uFlags |= (1 << CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA);   // | 8
+        lrCamera.mState_uFlags |= (1 << CameraState::E_FLAG_BUMPER_CAM);               // | 0x10
+        lrCamera.SetImpactShake(0.0f, 0.2f, 1);                   // +0xAC / +0xB0 / +0xB4
+        lrCamera.mEffects.mu8BlendCurve = 0;                      // stb 0, +0xB5
+    }
 
     return true;                                                  // li r3, 1 @0x82227214
 }

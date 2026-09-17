@@ -208,6 +208,51 @@ namespace CgsGui
             return &s_GuiTexturesBankPool;
         }
 
+        // ---- the GLOBAL-TEXTURE bank (id 7): the post-FX colour-cube dictionary ----------
+        // GuiResourceModule::AddBundleToQueue routes ARTIST type 22 (pfx colour cube,
+        // KAAC_RESOURCE_TEMPLATES[21] == PostFx/colourcubedictionary.bin) to
+        // miGlobalTexturePoolId. Until 2026-09-17 that bank was one of the 'completed
+        // without IO' ones, so BrnGui::EffectsArbitrator's four cube requests (229..232)
+        // came back as handles with no main memory -- every 3D-tint hook (Crash, Wrecked,
+        // Damage_Crit ...) then asserted `mTint3DData.mpColourCube != NULL` and desaturated
+        // nothing. The dictionary is a 394 KB bnd2 of four RwColourCube (0x2B) resources,
+        // 0x18010 main-memory bytes each.
+        const u32 KU_GLOBAL_TEXTURE_BANK_BYTES     = 2u * 1024u * 1024u;
+        const u32 KU_GLOBAL_TEXTURE_BANK_MAX_NODES = 64u;
+        u8 s_aGlobalTextureBankBacking[CgsResource::E_MEMTYPE_NUMTYPES][KU_GLOBAL_TEXTURE_BANK_BYTES];
+        CgsResource::Pool s_GlobalTextureBankPool;
+        bool s_bGlobalTextureBankLive = false;
+
+        CgsResource::Pool* MaterialiseGlobalTextureBankPool(s32 liPoolId)
+        {
+            if (!s_bGlobalTextureBankLive)
+            {
+                CgsResource::RegisterAllResourceTypes();
+                CgsResource::Pool::InitOptions lOptions;
+                lOptions.miId    = liPoolId;
+                lOptions.mpcName = "GuiResourceGlobalTextureBank";
+                for (u32 lt = 0; lt < CgsResource::E_MEMTYPE_NUMTYPES; ++lt)
+                {
+                    lOptions.maHeapInfo[lt].muMaxNodes       = KU_GLOBAL_TEXTURE_BANK_MAX_NODES;
+                    lOptions.maHeapInfo[lt].muHeapMemorySize = KU_GLOBAL_TEXTURE_BANK_BYTES - KU_GLOBAL_TEXTURE_BANK_MAX_NODES * 1024u;
+                    lOptions.maHeapInfo[lt].muHeapAlignment  = 16u;
+                    lOptions.mResource.m_baseResources[lt]   = s_aGlobalTextureBankBacking[lt];
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_size      = KU_GLOBAL_TEXTURE_BANK_BYTES;
+                    lOptions.mDescriptor.m_baseResourceDescriptors[lt].m_alignment = 16u;
+                }
+                lOptions.muMaxResources         = KU_GLOBAL_TEXTURE_BANK_MAX_NODES;
+                lOptions.muMaxImports           = KU_GLOBAL_TEXTURE_BANK_MAX_NODES;
+                lOptions.miRefCountThreshold    = 0;
+                lOptions.miNumDependencies      = 0;
+                lOptions.miBankId               = 0;
+                lOptions.mbAllowDefragmentation = false;
+                s_GlobalTextureBankPool.InitPool(&lOptions);
+                s_bGlobalTextureBankLive = true;
+                CgsDev::Log::WriteToLog("[GuiResourceModule] global-texture bank pool materialised.\n");
+            }
+            return &s_GlobalTextureBankPool;
+        }
+
         // The FONT bank (type 16 -- E_FONT_RESOURCETYPE_FONTDATA; container type 14
         // "Language\Fonts\%s.font"). The console's GuiModule::Prepare stage 13 requests
         // the locale's font table ({17,16},{18,16},{19,16} for the western SKU) through
@@ -624,6 +669,19 @@ namespace CgsGui
                                       liLoaded, lpRequest->miPoolId);
                         CgsDev::Log::WriteToLog(lac);
                     }
+                    else if (lpRequest->miPoolId == miGlobalTexturePoolId)
+                    {
+                        CgsResource::Pool* lpPool = MaterialiseGlobalTextureBankPool(lpRequest->miPoolId);
+                        CgsResource::BundleLoader lLoader;
+                        const s32 liLoaded =
+                            lLoader.LoadBundle(lpRequest->macFileName, lpPool, CgsResource::ResolveResourceType);
+                        char lac[192];
+                        std::snprintf(lac, sizeof(lac),
+                                      "[GuiResourceModule] global-texture bundle '%s' -> %s (%d resources, bank %d).\n",
+                                      lpRequest->macFileName, liLoaded > 0 ? "loaded" : "MISSING",
+                                      liLoaded, lpRequest->miPoolId);
+                        CgsDev::Log::WriteToLog(lac);
+                    }
                     else
                     {
                         // The bank is not materialised on PC yet (font/language) --
@@ -765,6 +823,21 @@ namespace CgsGui
                         // bundle-queue overflow assert (measured, 2026-08-24 run 3).
                         s32 liIndex = -1;
                         CgsResource::Entry* lpEntry = s_GuiTexturesBankPool.FindResource(
+                            lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
+                        if (lpEntry != 0)
+                        {
+                            lResponse.mResourceHandle.mpResourceMemory =
+                                &lpEntry->mResource.m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY];
+                            lResponse.mResourceHandle.mpSourceEntry = lpEntry;
+                        }
+                    }
+                    else if (lpRequest->miPoolId == miGlobalTexturePoolId && s_bGlobalTextureBankLive)
+                    {
+                        // The post-FX colour cubes (EffectsArbitrator::Acquire3dTints, requests 229..)
+                        // resolve by their u64 resource id out of the dictionary the load arm above put in
+                        // the bank -- the same FindResource walk the other banks use.
+                        s32 liIndex = -1;
+                        CgsResource::Entry* lpEntry = s_GlobalTextureBankPool.FindResource(
                             lpRequest->mResourceId, lpRequest->mbCheckRefCount, 2, &liIndex);
                         if (lpEntry != 0)
                         {

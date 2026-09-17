@@ -1,9 +1,15 @@
 #include "types.hpp"
+#include <cstdlib>                                             // [diag] getenv
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint (BRN_PFX_DIAG)
 #include "SharedClasses/Graphics/BrnEffectsData.h"
 // The asset-keyed VignetteData::Construct @0x826780D0 builds one of these. Kept out of
 // BrnEffectsData.h so the AttribSys runtime does not follow the data structs into every
 // consumer TU.
 #include "GameSource/AttribSys/Generated/classes/vignetteasset.h"   // Attrib::Gen::vignetteasset
+#include "GameSource/AttribSys/Generated/classes/bloomasset.h"      // Attrib::Gen::bloomasset      (BloomData::Construct(key))
+#include "GameSource/AttribSys/Generated/classes/depthoffieldasset.h" // Attrib::Gen::depthoffieldasset (DepthOfFieldData::Construct(key))
+#include "GameSource/AttribSys/Generated/classes/b4blurasset.h"     // Attrib::Gen::b4blurasset     (BlurData::Construct(key))
+#include "GameSource/AttribSys/Generated/classes/tint2dasset.h"     // Attrib::Gen::tint2dasset     (TintData2d::Construct(key))
 
 // Post-FX data blend helpers. Declaration shape from the DecFIGS DWARF
 // (SharedClasses/Graphics/BrnEffectsData.h:113/:120, :161/:168, :210/:217, :260/:267,
@@ -168,11 +174,96 @@ void BloomData::SetToBlend(const BloomData& lA, f32 lfWa,
 // (This closes the "vignetteasset DefaultDataArea bytes unattested" park that
 // BrnRendererModule::PCBringUpProduceBaseEffectsFrame carried.)
 // ==========================================================================
+// ==========================================================================
+// The four sibling ASSET-KEYED Constructs (all ARTIST, all the same shape as the vignette
+// one below: construct the generated asset over the collection the LOW word of the key
+// names, copy its layout block into the members lane by lane, let the instance go).
+// Their one caller is BrnGui::PFXNodeFader::Initialise @0x82504378, which hands each the
+// Attrib::StringToKey of the PFX group's collection id. The layout offsets are the ones
+// the console bodies load (`lwz r11, 4(this)` then the fixed displacements); the
+// destinations are these structs' members by name.
+// ==========================================================================
+
+// BrnEffects::BloomData::Construct(const u64&) @0x82678070:
+//     out[0] (mfLuminance) = *(data + 20); out[1] (mfThreshold) = *(data + 16);
+//     lvx128 v0,[data+0x00] -> stvx128 [out+0x10]   mv4Scale <- layout +0x00
+void BloomData::Construct(const u64& lruAssetKey)
+{
+    Attrib::Gen::bloomasset lAsset(lruAssetKey, 0);
+    const u8* const lpLayout = static_cast<const u8*>(lAsset.GetLayoutPointer());
+    const f32* const lpScale = reinterpret_cast<const f32*>(lpLayout + 0x00);
+    mfLuminance = *reinterpret_cast<const f32*>(lpLayout + 20);
+    mfThreshold = *reinterpret_cast<const f32*>(lpLayout + 16);
+    mv4Scale.x = lpScale[0]; mv4Scale.y = lpScale[1]; mv4Scale.z = lpScale[2]; mv4Scale.w = lpScale[3];
+}
+
+// BrnEffects::DepthOfFieldData::Construct(const u64&) @0x82678158: five scalar loads,
+//     out[0] = data[3], out[1] = data[2], out[2] = data[1], out[3] = data[0], out[4] = data[4].
+void DepthOfFieldData::Construct(const u64& lruAssetKey)
+{
+    Attrib::Gen::depthoffieldasset lAsset(lruAssetKey, 0);
+    const f32* const lpData = static_cast<const f32*>(lAsset.GetLayoutPointer());
+    mfNearPlane   = lpData[3];
+    mfFocalPlane  = lpData[2];
+    mfFocalPlane2 = lpData[1];
+    mfFarPlane    = lpData[0];
+    mfDofAmount   = lpData[4];
+}
+
+// BrnEffects::BlurData::Construct(const u64&) @0x826781C8: four vector copies then five scalars,
+//     [data+0x30] -> [out+0x20] mv2BlendAmount   [data+0x10] -> [out+0x30] mv2BlurAmount
+//     [data+0x20] -> [out+0x40] mv2BlendCentre   [data+0x00] -> [out+0x50] mv2BlurCentre
+//     out[0] mfOpacity = data[18], out[1] mfVelocity = data[16], out[2] mfSharpness = data[17],
+//     out[3] mfNoise = data[19], out[4] mfAngle = data[20].
+void BlurData::Construct(const u64& lruAssetKey)
+{
+    Attrib::Gen::b4blurasset lAsset(lruAssetKey, 0);
+    const u8* const  lpLayout = static_cast<const u8*>(lAsset.GetLayoutPointer());
+    const f32* const lpData   = reinterpret_cast<const f32*>(lpLayout);
+    const f32* const lpBlendAmount = reinterpret_cast<const f32*>(lpLayout + 0x30);
+    const f32* const lpBlurAmount  = reinterpret_cast<const f32*>(lpLayout + 0x10);
+    const f32* const lpBlendCentre = reinterpret_cast<const f32*>(lpLayout + 0x20);
+    const f32* const lpBlurCentre  = reinterpret_cast<const f32*>(lpLayout + 0x00);
+    mv2BlendAmount.x = lpBlendAmount[0]; mv2BlendAmount.y = lpBlendAmount[1];
+    mv2BlendAmount.z = lpBlendAmount[2]; mv2BlendAmount.w = lpBlendAmount[3];
+    mv2BlurAmount.x  = lpBlurAmount[0];  mv2BlurAmount.y  = lpBlurAmount[1];
+    mv2BlurAmount.z  = lpBlurAmount[2];  mv2BlurAmount.w  = lpBlurAmount[3];
+    mv2BlendCentre.x = lpBlendCentre[0]; mv2BlendCentre.y = lpBlendCentre[1];
+    mv2BlendCentre.z = lpBlendCentre[2]; mv2BlendCentre.w = lpBlendCentre[3];
+    mv2BlurCentre.x  = lpBlurCentre[0];  mv2BlurCentre.y  = lpBlurCentre[1];
+    mv2BlurCentre.z  = lpBlurCentre[2];  mv2BlurCentre.w  = lpBlurCentre[3];
+    mfOpacity   = lpData[18];
+    mfVelocity  = lpData[16];
+    mfSharpness = lpData[17];
+    mfNoise     = lpData[19];
+    mfAngle     = lpData[20];
+}
+
+// BrnEffects::TintData2d::Construct(const u64&) @0x82678268: one vector, [data+0x00] -> mv4Colour.
+void TintData2d::Construct(const u64& lruAssetKey)
+{
+    Attrib::Gen::tint2dasset lAsset(lruAssetKey, 0);
+    const f32* const lpColour = static_cast<const f32*>(lAsset.GetLayoutPointer());
+    mv4Colour.x = lpColour[0]; mv4Colour.y = lpColour[1]; mv4Colour.z = lpColour[2]; mv4Colour.w = lpColour[3];
+}
+
 void VignetteData::Construct(const u64& lruAssetKey)
 {
-    Attrib::Gen::vignetteasset lAsset(static_cast<u32>(lruAssetKey), 0);
+    Attrib::Gen::vignetteasset lAsset(lruAssetKey, 0);
 
     const u8* const lpLayout = static_cast<const u8*>(lAsset.GetLayoutPointer());
+    {   // [diag] BRN_PFX_DIAG: did the vault collection resolve, and what did it say?
+        static const bool sbDiag = (getenv("BRN_PFX_DIAG") != 0);
+        if (sbDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            const f32* lpF = reinterpret_cast<const f32*>(lpLayout);
+            *CgsDev::Log::gpDebugPrint << "[pfx-data] VignetteData::Construct key " << static_cast<u32>(lruAssetKey)
+                                       << " valid " << (lAsset.IsValid() ? 1 : 0) << " layout";
+            for (u32 lu = 0; lu < 18; ++lu)
+                *CgsDev::Log::gpDebugPrint << " " << lpF[lu];
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
+    }
 
     // Lane by lane, NOT by casting the block to a Vector2/Vector4. rw::math::vpu::VectorIntrinsic
     // is `alignas(16)`, so a whole-vector cast would tell the compiler the layout block is

@@ -156,6 +156,30 @@ bool Registry::Contains(const Entity& arEntity) const
     return lpu8Entity >= GetDataStart() && lpu8Entity < mpu8Data;
 }
 
+// [FLAG PC bring-up] NOT an X360 method. One-shot reporting wrapper around IsPortedLayout
+// so that every consumer of a raw blob refuses it with the same message. See the banner above.
+bool Registry::IsStaleBlob() const
+{
+    if (IsPortedLayout())
+        return false;
+    static bool sbReportedStaleRegistry = false;
+    if (!sbReportedStaleRegistry && CgsDev::Log::gpDebugPrint != 0)
+    {
+        sbReportedStaleRegistry = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[registry-stale] THIS GAME DATA IS OUT OF DATE. A sound Registry arrived"
+               " with a header this build cannot read: count " << mu32EntityCount
+            << " capacity " << mu32EntityCapacity
+            << " mask " << static_cast<u32>(muNameHashMask)
+            << " (the mask must be capacity-1 and the capacity a power of two).\n"
+               "[registry-stale] That is the signature of data converted before the"
+               " 64-bit Registry port. RE-CONVERT YOUR GAME DATA (`build data`) --"
+               " the engine bundles in particular. Skipping this registry; AI engine"
+               " audio will be missing until the data is rebuilt.\n";
+    }
+    return true;
+}
+
 // ===============================================================================================
 // [FLAG PC bring-up] IsPortedLayout -- NOT an X360 function.
 //
@@ -200,25 +224,8 @@ void Registry::FixUp()
     // [FLAG PC bring-up] refuse a blob whose header cannot be this host's. Reporting it and
     // returning leaves the registry EMPTY, which every consumer already handles (a lookup
     // simply misses); dereferencing it does not survive. See the banner above.
-    if (!IsPortedLayout())
-    {
-        static bool sbReportedStaleRegistry = false;
-        if (!sbReportedStaleRegistry && CgsDev::Log::gpDebugPrint != 0)
-        {
-            sbReportedStaleRegistry = true;
-            *CgsDev::Log::gpDebugPrint
-                << "[registry-stale] THIS GAME DATA IS OUT OF DATE. A sound Registry arrived"
-                   " with a header this build cannot read: count " << mu32EntityCount
-                << " capacity " << mu32EntityCapacity
-                << " mask " << static_cast<u32>(muNameHashMask)
-                << " (the mask must be capacity-1 and the capacity a power of two).\n"
-                   "[registry-stale] That is the signature of data converted before the"
-                   " 64-bit Registry port. RE-CONVERT YOUR GAME DATA (`build data`) --"
-                   " the engine bundles in particular. Skipping this registry; AI engine"
-                   " audio will be missing until the data is rebuilt.\n";
-        }
+    if (IsStaleBlob())
         return;
-    }
 
     const uintptr_t luBase = reinterpret_cast<uintptr_t>(this);
     mpcStringTable = reinterpret_cast<char*>(
