@@ -42,32 +42,32 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
         static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
         static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
-        static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4, "miDirectorProfileData @0x7AA4");
-        static_assert(offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8, "mePlayerCarIndex @0x7AA8");
-        static_assert(offsetof(InputBuffer, miRankUpNewRank)      == 0x7AB4, "miRankUpNewRank @0x7AB4");
-        static_assert(offsetof(InputBuffer, miCameraType)         == 0x7AB8, "miCameraType @0x7AB8");
-        static_assert(offsetof(InputBuffer, mbRankUpThisFrame)      == 0x7ABC, "mbRankUpThisFrame @0x7ABC");
-        static_assert(offsetof(InputBuffer, mbStartNewProfileIntro) == 0x7ABD, "mbStartNewProfileIntro @0x7ABD");
-        static_assert(offsetof(InputBuffer, mbStartGameIntroFlyby)  == 0x7ABE, "mbStartGameIntroFlyby @0x7ABE");
-        static_assert(offsetof(InputBuffer, mbStopGameIntroFlyby)   == 0x7ABF, "mbStopGameIntroFlyby @0x7ABF");
-        static_assert(offsetof(InputBuffer, mbHasGotHookEnumeration)           == 0x7AC1, "mbHasGotHookEnumeration @0x7AC1");
-        static_assert(offsetof(InputBuffer, mbEndOfCarSelect)                  == 0x7AC2, "mbEndOfCarSelect @0x7AC2");
-        static_assert(offsetof(InputBuffer, mbGotCrashNavShownEvent)           == 0x7AC3, "mbGotCrashNavShownEvent @0x7AC3");
-        static_assert(offsetof(InputBuffer, mbGotCrashNavHiddenEvent)          == 0x7AC4, "mbGotCrashNavHiddenEvent @0x7AC4");
-        static_assert(offsetof(InputBuffer, mbGotColourCalibrationShownEvent)  == 0x7AC5, "mbGotColourCalibrationShownEvent @0x7AC5");
-        static_assert(offsetof(InputBuffer, mbGotColourCalibrationHiddenEvent) == 0x7AC6, "mbGotColourCalibrationHiddenEvent @0x7AC6");
-        static_assert(offsetof(InputBuffer, mbSimPaused)                       == 0x7AC8, "mbSimPaused @0x7AC8");
-        static_assert(offsetof(InputBuffer, mbHasNewDirectorProfileData)       == 0x7AC9, "mbHasNewDirectorProfileData @0x7AC9");
-        static_assert(offsetof(InputBuffer, mbCarSelectionChangedThisFrame)    == 0x7ACB, "mbCarSelectionChangedThisFrame @0x7ACB");
-        static_assert(offsetof(InputBuffer, mbCarSelectTickerClosedThisFrame)  == 0x7ACC, "mbCarSelectTickerClosedThisFrame @0x7ACC");
-        static_assert(offsetof(InputBuffer, mbGotShortcutMenuEvent)            == 0x7ACD, "mbGotShortcutMenuEvent @0x7ACD");
-        static_assert(offsetof(InputBuffer, mbShortcutMenuState)              == 0x7ACE, "mbShortcutMenuState @0x7ACE");
-        static_assert(offsetof(InputBuffer, mbLeftOnlinePostEvent)             == 0x7ACF, "mbLeftOnlinePostEvent @0x7ACF");
-        static_assert(offsetof(InputBuffer, mbEnteredOnlinePostEvent)          == 0x7AD0, "mbEnteredOnlinePostEvent @0x7AD0");
-        static_assert(offsetof(InputBuffer, mbFinishedOnlineEventLoading)      == 0x7AD1, "mbFinishedOnlineEventLoading @0x7AD1");
-        static_assert(offsetof(InputBuffer, mbStartedOnlineEventLoading)       == 0x7AD2, "mbStartedOnlineEventLoading @0x7AD2");
-        static_assert(offsetof(InputBuffer, mbStarting100PercentSequence)      == 0x7AD3, "mbStarting100PercentSequence @0x7AD3");
-        static_assert(offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4, "mbFinished100PercentSequence @0x7AD4");
+        static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miDirectorProfileData @0x7AA4");
+        static_assert(offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mePlayerCarIndex @0x7AA8");
+        static_assert(offsetof(InputBuffer, miRankUpNewRank)      == 0x7AB4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miRankUpNewRank @0x7AB4");
+        static_assert(offsetof(InputBuffer, miCameraType)         == 0x7AB8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miCameraType @0x7AB8");
+        static_assert(offsetof(InputBuffer, mbRankUpThisFrame)      == 0x7ABC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbRankUpThisFrame @0x7ABC");
+        static_assert(offsetof(InputBuffer, mbStartNewProfileIntro) == 0x7ABD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartNewProfileIntro @0x7ABD");
+        static_assert(offsetof(InputBuffer, mbStartGameIntroFlyby)  == 0x7ABE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartGameIntroFlyby @0x7ABE");
+        static_assert(offsetof(InputBuffer, mbStopGameIntroFlyby)   == 0x7ABF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStopGameIntroFlyby @0x7ABF");
+        static_assert(offsetof(InputBuffer, mbHasGotHookEnumeration)           == 0x7AC1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbHasGotHookEnumeration @0x7AC1");
+        static_assert(offsetof(InputBuffer, mbEndOfCarSelect)                  == 0x7AC2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbEndOfCarSelect @0x7AC2");
+        static_assert(offsetof(InputBuffer, mbGotCrashNavShownEvent)           == 0x7AC3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotCrashNavShownEvent @0x7AC3");
+        static_assert(offsetof(InputBuffer, mbGotCrashNavHiddenEvent)          == 0x7AC4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotCrashNavHiddenEvent @0x7AC4");
+        static_assert(offsetof(InputBuffer, mbGotColourCalibrationShownEvent)  == 0x7AC5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotColourCalibrationShownEvent @0x7AC5");
+        static_assert(offsetof(InputBuffer, mbGotColourCalibrationHiddenEvent) == 0x7AC6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotColourCalibrationHiddenEvent @0x7AC6");
+        static_assert(offsetof(InputBuffer, mbSimPaused)                       == 0x7AC8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbSimPaused @0x7AC8");
+        static_assert(offsetof(InputBuffer, mbHasNewDirectorProfileData)       == 0x7AC9 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbHasNewDirectorProfileData @0x7AC9");
+        static_assert(offsetof(InputBuffer, mbCarSelectionChangedThisFrame)    == 0x7ACB + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbCarSelectionChangedThisFrame @0x7ACB");
+        static_assert(offsetof(InputBuffer, mbCarSelectTickerClosedThisFrame)  == 0x7ACC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbCarSelectTickerClosedThisFrame @0x7ACC");
+        static_assert(offsetof(InputBuffer, mbGotShortcutMenuEvent)            == 0x7ACD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotShortcutMenuEvent @0x7ACD");
+        static_assert(offsetof(InputBuffer, mbShortcutMenuState)              == 0x7ACE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbShortcutMenuState @0x7ACE");
+        static_assert(offsetof(InputBuffer, mbLeftOnlinePostEvent)             == 0x7ACF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbLeftOnlinePostEvent @0x7ACF");
+        static_assert(offsetof(InputBuffer, mbEnteredOnlinePostEvent)          == 0x7AD0 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbEnteredOnlinePostEvent @0x7AD0");
+        static_assert(offsetof(InputBuffer, mbFinishedOnlineEventLoading)      == 0x7AD1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbFinishedOnlineEventLoading @0x7AD1");
+        static_assert(offsetof(InputBuffer, mbStartedOnlineEventLoading)       == 0x7AD2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartedOnlineEventLoading @0x7AD2");
+        static_assert(offsetof(InputBuffer, mbStarting100PercentSequence)      == 0x7AD3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStarting100PercentSequence @0x7AD3");
+        static_assert(offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbFinished100PercentSequence @0x7AD4");
     }
 
     // ---- Construct @0x822393D0 --------------------------------------------------------------
@@ -442,7 +442,7 @@ namespace DirectorIO
     void InputBuffer::SetHookEnumeration(const void* lpHookEnumeration)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        std::memcpy(mHookEnumeration, lpHookEnumeration, sizeof(mHookEnumeration)); // 404 bytes
+        std::memcpy(mHookEnumeration, lpHookEnumeration, sizeof(mHookEnumeration)); // KU_HOOK_ENUMERATION_BYTES
         mbHasGotHookEnumeration = true;
     }
 

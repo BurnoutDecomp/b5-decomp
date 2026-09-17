@@ -150,6 +150,10 @@ namespace BrnDirector
         // for +0xCE8 is muRequestedPostFxId -- the interface stores the requested id and the
         // getter's original name is GetCurrentEffectId; same word.)
         bool HasCurrentEffectId() const { return mbHasCurrentEffectId; }
+        // The +0xD36 byte, read inline by MainDirector::PostGuiUpdate @0x82236F88's else-arm
+        // (`*(this + 218166) = *(this + 215494) == 0` -- keep asking for an enumeration
+        // until the hooks have arrived).
+        bool HasGotHooks() const { return mbGotHooks; }
         u32  GetCurrentEffectId() const { return muRequestedPostFxId; }
         u32  GetNullEffectId() const    { return 507078u; }   // 0x7BEC6
 

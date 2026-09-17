@@ -147,8 +147,8 @@ namespace Camera
     void CameraEffects::Construct()
     {
         mMotionBlurData.Construct();                    // stfs 0 @+0x44/+0x48, stb 0 @+0x4C/+0x4D
-        maReserved78[0]           = 0;                  // stb 0 @+0x78
-        maReserved50[0]           = 0;                  // stb 0 @+0x50
+        mBackgroundEffectRequest.mbStartRequested             = false;   // stb 0 @+0x78
+        mBackgroundEffectRequest.mHookName.mHookNameString[0] = 0;       // stb 0 @+0x50
         mfBloomThreshold          = 0.0f;               // stfs 0 @+0x90 (carved 2026-08-16 out of
         mfBloomLuminance          = 0.0f;               // stfs 0 @+0x94  the maReserved84 span)
         mfGameCameraBlend         = 0.0f;               // stfs 0 @+0xA0 (carved from maReservedA0)

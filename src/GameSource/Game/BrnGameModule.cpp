@@ -1,4 +1,5 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"
+#include "GameSource/Gui/Events/BrnGuiPFXEvents.h"                     // BrnGui::GuiPFXHookEnumeration (case 501 size pin)
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert
@@ -1193,11 +1194,19 @@ namespace BrnGame
                             // memcpys all 404 bytes off the payload unconditionally; the size
                             // guard is ours, because a short record here would read past the
                             // queue entry (the exact class of bug that cost this project the
-                            // intro AV). No producer posts 501 on this build yet.
-                    if (liSize >= static_cast<s32>(404 + (reinterpret_cast<const u8*>(lpuPayload)
+                            // intro AV). BrnGui::EffectsArbitrator::EventUpdate posts it (the
+                            // reply to 500) since 2026-09-17; the record is copied WHOLE (header
+                            // included), so the director reads it back as the same struct.
+                    static_assert(sizeof(BrnGui::GuiPFXHookEnumeration) ==
+                                  BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES,
+                                  "the director copies the whole 501 record");
+                    if (liSize >= static_cast<s32>(BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES
+                                                   + (reinterpret_cast<const u8*>(lpuPayload)
                                                           - reinterpret_cast<const u8*>(lpEvent))))
                     {
                         lpDirectorInput->SetHookEnumeration(lpuPayload);
+                        if (getenv("BRN_PFX_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                            *CgsDev::Log::gpDebugPrint << "[pfx-dir] 501 record (" << liSize << " bytes) -> director input\n";
                     }
                     break;
 
@@ -2475,6 +2484,12 @@ namespace BrnGame
                 mPreviousTickCamera = mCurrentTickCamera;
 
             mCurrentTickCamera       = *lpCamera;
+            {   // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as latched for dispatch.
+                static const bool sbCamDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+                static u32 suCamDiagCalls = 0;
+                if (sbCamDiag && (suCamDiagCalls++ % 60u) == 0 && CgsDev::Log::gpDebugPrint != 0)
+                    *CgsDev::Log::gpDebugPrint << "[cam-flags] game tick flags " << mCurrentTickCamera.mState_uFlags << "\n";
+            }
             mbCurrentTickCameraValid = true;
         }
         mpDirectorOutputBuffer->UnlockForRead();
@@ -2806,7 +2821,8 @@ namespace BrnGame
                     mWorldModule.SetBringUpCameraOverride(
                         lrXform, lpCamera->GetFOV(), lpCamera->IsInJunkyard(),
                         lpCamera->GetEffects().IsTimeOfDaySet(),
-                        lpCamera->GetEffects().GetTimeOfDay());
+                        lpCamera->GetEffects().GetTimeOfDay(),
+                        lpCamera->mState_uFlags);
 
                     static bool sbLoggedHandover = false;
                     if (!sbLoggedHandover && CgsDev::Log::gpDebugPrint != 0)
@@ -2838,6 +2854,17 @@ namespace BrnGame
                                              mRenderModule.GetWorldEffectsFrameBringUp(1),
                                              mRenderModule.GetWorldEffectsFrameBringUp(2),
                                              mRenderModule.GetWorldEffectsFrameBringUp(3));
+        // X360 GuiModule::Render(renderOut) -> BrnGui::EffectsArbitrator::GenerateEffectFrameEvents
+        // @0x82503060: the screen-filter blend into the renderer's two FX-EVENTS frames. The
+        // RendererIO seat (BrnRendererModule::Update) is not live on this build, so the frames
+        // are handed across here, beside the world layer's. [FLAG PC bring-up] DELETE-WHEN the
+        // RendererIO buffers are real.
+        if (BrnGui::gpActiveGuiModule != 0 && BrnGui::gpActiveGuiModule->IsPrepared())
+        {
+            BrnGui::gpActiveGuiModule->GenerateEffectFrameEvents(
+                mRenderModule.GetFXEventsEffectsFrameBringUp(0),
+                mRenderModule.GetFXEventsEffectsFrameBringUp(1));
+        }
 
         // ---- stage the DISPATCH-THREAD input buffer for the world's env-map arm ----------
         // [FLAG PC bring-up] STANDS IN FOR BrnWorldIO::DispatchInputBuffer::
@@ -3398,6 +3425,12 @@ namespace BrnGame
                     lpRendererOut->LockForRead();
                     mpReusableLoadingScreenAllocator =
                         lpRendererOut->GetReusableLoadingScreenAllocator();
+                    // X360 GuiModule::Render(renderOut) -> EffectsArbitrator::GenerateEffectFrameEvents
+                    // @0x82503060: the GUI's post-FX hook blend fills the renderer's two FX-events
+                    // effects frames (published just above by RendererModule::Update; the
+                    // frame getters assert the read lock this bracket holds).
+                    if (BrnGui::gpActiveGuiModule != 0 && BrnGui::gpActiveGuiModule->IsPrepared())
+                        BrnGui::gpActiveGuiModule->GenerateEffectFrameEvents(lpRendererOut);
                     lpRendererOut->UnlockForRead();
                 }
                 if (lpRendererOut != 0) mpUpdateOutputBufferStack->DestroyIOBuffer(&lpRendererOut);
@@ -4656,6 +4689,15 @@ namespace BrnGame
                     // write bracket the console's LoadingScriptedState::Update uses): post
                     // any pending GuiEventRunFsm stage the main flow requested.
                     BridgeGameToGui(mpGuiInputBuffer);
+
+                    // X360 DoUpdate_GUI: BridgeDirectorToGui @0x823DD5C0 -- the camera's
+                    // post-FX hook requests and the hook-enumeration request (495..500).
+                    if (mpDirectorOutputBuffer != 0)
+                    {
+                        mpDirectorOutputBuffer->LockForRead();
+                        BridgeDirectorToGui(mpGuiInputBuffer, mpDirectorOutputBuffer);
+                        mpDirectorOutputBuffer->UnlockForRead();
+                    }
 
                     // ⭐ [boost-bar 206 wave] the world->GUI vehicle bridge (the console's
                     // DoUpdate_GUI @0x823F0758 calls BridgeWorldToGui under its own GUI-input

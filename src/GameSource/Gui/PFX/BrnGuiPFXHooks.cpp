@@ -20,6 +20,21 @@ namespace BrnGui
         return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
     }
 
+    // @ 0x8250B038 (inlined into PFXHookBundleResourceType::FixUp): the relocate twin of
+    // FixDown below -- table pointer, then each entry, then each node's group link, all
+    // by the load base. Lived in BrnGuiPFXHooksResource.cpp with a private copy of this
+    // struct until 2026-09-17; homed here so the type has ONE definition.
+    void PFXHook::FixUp(u32 luBaseValue)
+    {
+        mpaNodes += luBaseValue;
+        u32* lpaNodeAddresses = PointerFromU32<u32>(mpaNodes);
+        for (s32 liIndex = 0; liIndex < miNodeCount; ++liIndex)
+        {
+            lpaNodeAddresses[liIndex] += luBaseValue;
+            PointerFromU32<PFXHookNode>(lpaNodeAddresses[liIndex])->mpGroup += luBaseValue;
+        }
+    }
+
     // @ 0x8250AFD8
     void PFXHook::FixDown(u32 luBaseValue)
     {

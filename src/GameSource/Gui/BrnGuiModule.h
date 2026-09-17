@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"               // BrnGui::ColourCalibrationScreen (embedded; DWARF BrnGuiModule.h:506)
+#include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"                  // BrnGui::EffectsArbitrator (embedded; X360 gm+1546880)
 #include "GameSource/Gui/BrnGuiViewModule.h"                             // BrnGui::ViewModule (embedded)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                  // CgsGui::CgsGuiModuleIO::InputBuffer (the inbound GUI event buffer)
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"          // CgsGui::ModelIO Input/OutputBuffer (the FSM controller's IO pair)
@@ -162,6 +163,18 @@ namespace BrnGui
         // OUTPUT buffer's out-event queue the bridge reads. Cleared by the bridge.
         CgsModule::VariableEventQueue<18432, 16>* GetGuiOutQueue() { return &mGuiOutQueue; }
 
+        // X360 GuiModule::Render(renderOut) -> EffectsArbitrator::GenerateEffectFrameEvents
+        // @0x82503060 (on PC BrnGameModule calls it under the renderer output read lock).
+        void GenerateEffectFrameEvents(RendererIO::OutputBuffer* lpRenderOutput)
+        {
+            mEffectsArbitrator.GenerateEffectFrameEvents(lpRenderOutput);
+        }
+        // [FLAG PC bring-up] the frame-pointer form BrnGameModule::DoDispatch drives.
+        void GenerateEffectFrameEvents(BrnEffectsFrame* lpFrame1, BrnEffectsFrame* lpFrame2)
+        {
+            mEffectsArbitrator.GenerateEffectFrameEvents(lpFrame1, lpFrame2);
+        }
+
         // The module's profile manager (X360 module+681696). Exposed so the game module's
         // per-sub-step GUI bridge can read back the progression pair the console's
         // GameState module publishes as game action 193 -- see the FLAG in
@@ -314,6 +327,12 @@ namespace BrnGui
         bool mbCustomRenderersPrepared;
         // (AptRuntimeHost RETIRED: the Apt bring-up + PC render buffer live in
         // BrnGuiModule.cpp's transplanted block -- the console GuiModule ownership.)
+        // X360 gm+1546880 -- THE SCREEN-FILTER SYSTEM (BrnGuiEffectsArbitrator.h): the post-FX
+        // hook blender the director's crash / wreck / stunt requests reach through GUI events
+        // 495..500. Construct'd right before MovieManager::Construct (GuiModule::Construct
+        // @0x82518B18); Update runs its ResourceUpdate + EventUpdate, the render drive its
+        // GenerateEffectFrameEvents.
+        EffectsArbitrator mEffectsArbitrator;
         AlwaysAvailableComponentsManager mAlwaysAvailableComponentsManager;
 
         // ---- the real flow-controller chain (X360 GuiModule members) --------------------

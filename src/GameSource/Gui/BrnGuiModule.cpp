@@ -971,6 +971,9 @@ namespace BrnGui
                               KA_ALTERNATE_TEXT_COLOURS, 8);
         mViewModule.GetFlaptManager()->SetSoundTriggerHandler(
             &GuiModule::FlaptSoundTriggerCallback, this);
+        // X360 GuiModule::Construct @0x82518B18: EffectsArbitrator::Construct just ahead of
+        // MovieManager::Construct + ColourCalibrationScreen::Construct.
+        mEffectsArbitrator.Construct();
         mMovieManager.Construct();
         // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
         // followed by ColourCalibrationScreen::Construct (gm+301600 then gm+306752), with
@@ -2996,6 +2999,16 @@ void GuiModule::Destruct()
         mModelOutputBuffer.UnlockForRead();
         mModelInputBuffer.UnlockForWrite();
 
+        // X360 GuiModule::Update: EffectsArbitrator::ResourceUpdate(modelIn, modelOut)
+        // @0x825177E8 -- the hook bundle (request 228) and colour-cube (229..) load
+        // notifications, consumed before the tail clears the queue; a fresh bundle posts the
+        // cube requests onto the model input.
+        mModelInputBuffer.LockForWrite();
+        mModelOutputBuffer.LockForRead();
+        mEffectsArbitrator.ResourceUpdate(&mModelInputBuffer, &mModelOutputBuffer);
+        mModelOutputBuffer.UnlockForRead();
+        mModelInputBuffer.UnlockForWrite();
+
         // The real Update clears the notification queue at its tail (the per-frame IO
         // buffer lifecycle); the controller has consumed this frame's records.
         mModelOutputBuffer.LockForWrite();
@@ -3236,6 +3249,22 @@ void GuiModule::Destruct()
                                                 &mGuiOutQueue, mpTextureAllocator);
                 lpGameDataInput->UnlockForWrite();
             }
+        }
+
+        // ---- 3c'. THE SCREEN-FILTER ARBITRATOR (X360 GuiModule::Update @0x82527A58) --------
+        // EffectsArbitrator::EventUpdate @0x825125C0: the 495..500 hook events this frame's
+        // bridge posted (start / stop / background / enumeration request -> the 501 reply on
+        // the out queue), then UpdateHooks. The GuiCache hand-over is the console's event-64
+        // case; this build posts 64 outside the module queue, so the cache is handed over by
+        // name. The update set is the same gameplay-HUD stand-in step 2 uses for bit 8.
+        mEffectsArbitrator.SetGuiCache(&mGuiCache);
+        if (mpGuiEventInputBuffer != 0)
+        {
+            const BrnUpdateSet leUpdateSet =
+                static_cast<BrnUpdateSet>(mGuiCache.IsGameplayHudActive() ? 8 : 0);
+            mpGuiEventInputBuffer->LockForRead();
+            mEffectsArbitrator.EventUpdate(leUpdateSet, mpGuiEventInputBuffer, &mGuiOutQueue);
+            mpGuiEventInputBuffer->UnlockForRead();
         }
 
         // ---- 3d. THE HUD-MESSAGE PUMP (gateui wave, round 2) --------------------------

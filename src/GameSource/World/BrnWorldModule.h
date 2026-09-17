@@ -307,11 +307,19 @@ namespace BrnWorld
         // (GenerateDispatchListsBringUp), so the request has to be carried across explicitly
         // or the restored override in Update can never fire. LEVEL, like lbIsInJunkyard and
         // for the same reason. DELETE with GenerateDispatchListsBringUp.
+        // + luCameraStateFlags (2026-09-17): the director camera's mState_uFlags word
+        // (camera+0x140 -- HIDE_PLAYER / BUMPER_CAM / SMALL_NEAR_CLIP ...). On the console it
+        // rides the whole-record copies BridgeRendererToWorld @0x823CDD20 ->
+        // BrnWorldIO::DispatchInputBuffer -> WorldBridgeToEntityModules ->
+        // RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists::SetCameraInput, and
+        // RaceCarEntityModule::GenerateDispatchLists @0x822E7D30 reads bit 2 (HIDE_PLAYER)
+        // off it. LEVEL, like the junkyard bit.
         void SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTransform,
                                        f32 lfFOVDegrees,
                                        bool lbIsInJunkyard,
                                        bool lbSetTimeOfDay,
-                                       f32 lfTimeOfDayHours );
+                                       f32 lfTimeOfDayHours,
+                                       u32 luCameraStateFlags );
 
         // [FLAG PC bring-up] Hand the bring-up producer the renderer's four WORLD-layer
         // effects frames for this frame, so EnvironmentManager::GenerateEffects @0x827BE698
@@ -810,6 +818,10 @@ namespace BrnWorld
         // DELETE with GenerateDispatchListsBringUp.
         bool                          mbBringUpCameraSetTimeOfDayBringUp;
         f32                           mfBringUpCameraTimeOfDayHoursBringUp;
+        // [FLAG PC bring-up] the director camera's STATE FLAGS word, staged by the same
+        // setter and latched into mLastCameraInput.mState_uFlags by GenerateDispatchListsBringUp
+        // (see the setter's note). DELETE with GenerateDispatchListsBringUp.
+        u32                           muBringUpCameraStateFlagsBringUp;
         // [FLAG PC bring-up] the four world-layer effects frames staged by
         // SetBringUpEffectsFrames (see the header entry). DELETE with it.
         BrnEffectsFrame*              mapBringUpEffectsFrames[ 4 ];

@@ -584,6 +584,7 @@ WorldModule::Construct( const BrnGame::BrnCpuMonitors& lrCpuMonitors )
     // mLastCameraInput before the director ever publishes -- so "no request" is the state.
     mbBringUpCameraSetTimeOfDayBringUp   = false;
     mfBringUpCameraTimeOfDayHoursBringUp = 0.0f;
+    muBringUpCameraStateFlagsBringUp     = 0u;
     mbForceOnlyBackdrops = false;                   // X360 +6167330
     mbRenderBackdrops = true;                       // X360 +6167331
     mfCarKeyLightMultiplier = 1.175f;               // X360 +6167332
@@ -5082,8 +5083,11 @@ WorldModule::SetBringUpCameraOverride( const rw::math::vpu::Matrix44Affine& lrTr
                                        f32 lfFOVDegrees,
                                        bool lbIsInJunkyard,
                                        bool lbSetTimeOfDay,
-                                       f32 lfTimeOfDayHours )
+                                       f32 lfTimeOfDayHours,
+                                       u32 luCameraStateFlags )
 {
+    // LEVEL: the camera record's own flag word (see the header).
+    muBringUpCameraStateFlagsBringUp = luCameraStateFlags;
     mBringUpCameraOverride       = lrTransform;
     mfBringUpCameraOverrideFOV   = lfFOVDegrees;
     mbBringUpCameraOverrideValid = true;
@@ -5914,6 +5918,9 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
     // DELETE with the rest of this producer.
     mLastCameraInput.GetEffects().mbSetTimeOfDay = mbBringUpCameraSetTimeOfDayBringUp;
     mLastCameraInput.GetEffects().mfTimeOfDay    = mfBringUpCameraTimeOfDayHoursBringUp;
+    // ... and its STATE FLAGS word (HIDE_PLAYER / BUMPER_CAM / ...): the console's whole-record
+    // copy carries camera+0x140 too; the race-car producer reads bit 2 off it.
+    mLastCameraInput.mState_uFlags               = muBringUpCameraStateFlagsBringUp;
 
     Vector3 lForward;
     lForward.x = lLookAt.x - lEye.x;
@@ -7108,6 +7115,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
             sRaceCarDispatchInput.LockForWrite();
             sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );
             sRaceCarDispatchInput.SetShadowMap( &mShadowMap );
+            // The console seeds the camera from BrnWorldIO::DispatchInputBuffer::GetCameraInput()
+            // (WorldBridgeToEntityModules -> SetCameraInput @0x827A9BF8); the bring-up's
+            // reassembled director camera is the same record. Until 2026-09-17 nothing set
+            // it, so RaceCarEntityModule::GenerateDispatchLists read a Construct()'d camera
+            // (flags == 1) and the bumper's HIDE_PLAYER never reached the renderer.
+            sRaceCarDispatchInput.SetCameraInput( &mLastCameraInput );
             // [FLAG PC bring-up] the corona submission interface (SubmitCoronasForRaceCar's
             // sink), staged by BrnGameModule::DoDispatch this frame. On the console
             // BrnWorldIO::DispatchInputBuffer carries it in from the renderer's Update; here it
@@ -7688,6 +7701,12 @@ WorldModule::GenerateDispatchListsBringUp( CgsGraphics::DispatchFrame* lpDispatc
                 }
                 sRaceCarDispatchInput.SetDispatchFrame( lpDispatchFrame );
                 sRaceCarDispatchInput.SetShadowMap( &mShadowMap );
+            // The console seeds the camera from BrnWorldIO::DispatchInputBuffer::GetCameraInput()
+            // (WorldBridgeToEntityModules -> SetCameraInput @0x827A9BF8); the bring-up's
+            // reassembled director camera is the same record. Until 2026-09-17 nothing set
+            // it, so RaceCarEntityModule::GenerateDispatchLists read a Construct()'d camera
+            // (flags == 1) and the bumper's HIDE_PLAYER never reached the renderer.
+            sRaceCarDispatchInput.SetCameraInput( &mLastCameraInput );
                 sRaceCarDispatchInput.UnlockForWrite();
                 gShadowPerf.mfCascadeFilterUs += ShadowPerfUsSince( lCascFilterStart );
                 if ( luCascade < 3u )

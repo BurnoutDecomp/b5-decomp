@@ -2,6 +2,7 @@
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include <cstring>
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (ValidateBundleOffsets)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsResource::PFXHookBundleResourceType::Serialise @ 0x82512478
@@ -15,65 +16,16 @@
 // then re-relocates both. The worker logic is shared between the virtuals (base from
 // the rw::Resource) and Serialise (base = the buffer's own address).
 
+#include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"   // THE BrnGui::PFXHook / PFXHookBundle -- this TU
+                                                //   carried a private copy of both until 2026-09-17
+                                                //   (an ODR fork; see the note in BrnGuiPFXHooks.cpp)
+
 namespace BrnGui
 {
     template <typename T>
     static T* PointerFromU32(u32 luAddress)
     {
         return reinterpret_cast<T*>(static_cast<uintptr_t>(luAddress));
-    }
-
-    struct PFXHookNode
-    {
-        f32 mfStartTime;
-        u32 mpGroup;
-    };
-
-    struct PFXHook
-    {
-        void FixUp(u32 luBaseValue);
-        void FixDown(u32 luBaseValue);
-
-        char macName[32];
-        u32  muId;
-        s32  miPriority;
-        u32  meTransitionMode;
-        f32  mfTransitionTime;
-        u8   mbIsMenu;
-        u8   maPad53[3];
-        u32  mpaNodes;
-        s32  miNodeCount;
-    };
-
-    struct PFXHookBundle
-    {
-        s32 miHookCount;
-        s32 miGroupCount;
-        u32 mpaHooks;
-        u32 mpaGroups;
-        u32 mSizeOfBundle;
-    };
-
-    void PFXHook::FixUp(u32 luBaseValue)
-    {
-        mpaNodes += luBaseValue;
-        u32* lpaNodeAddresses = PointerFromU32<u32>(mpaNodes);
-        for (s32 liIndex = 0; liIndex < miNodeCount; ++liIndex)
-        {
-            lpaNodeAddresses[liIndex] += luBaseValue;
-            PointerFromU32<PFXHookNode>(lpaNodeAddresses[liIndex])->mpGroup += luBaseValue;
-        }
-    }
-
-    void PFXHook::FixDown(u32 luBaseValue)
-    {
-        u32* lpaNodeAddresses = PointerFromU32<u32>(mpaNodes);
-        for (s32 liIndex = 0; liIndex < miNodeCount; ++liIndex)
-        {
-            PointerFromU32<PFXHookNode>(lpaNodeAddresses[liIndex])->mpGroup -= luBaseValue;
-            lpaNodeAddresses[liIndex] -= luBaseValue;
-        }
-        mpaNodes -= luBaseValue;
     }
 }
 
@@ -85,43 +37,23 @@ namespace CgsResource
 
     static const uint32_t KU_PFX_HOOK_BUNDLE_RESOURCE_TYPE_ID = 49;
 
-    static u32 AddressFromPointer(const void* lpPointer)
+    // ---- the console relocation, kept for the record --------------------------------------
+    //   FixUpBundle   @0x8250B038: hooks/groups tables += base; each hook slot += base, then
+    //                 PFXHook::FixUp; each group slot += base.
+    //   FixDownBundle @0x8250B128: the exact inverse, in the inverse order.
+    // [FLAG PC bring-up] NEITHER RUNS ON THE x64 HOST. The slots are 32-bit and the GUI
+    // resource bank sits above 4 GB (measured 2026-09-17: base 0x1668CD23AE0; the truncated
+    // rebase wrote through 0x00000000423AB2D0 and the first registered boot crashed here),
+    // so the blob keeps the file-relative offsets the converter wrote and PFXHookBundle's
+    // accessors add the bundle's own address at read time -- see the banner in
+    // GameSource/Gui/PFX/BrnGuiPFXHooks.h. What is left of FixUp on PC is the console's
+    // implicit contract, checked: the tables and the recorded size lie inside the blob.
+    static void ValidateBundleOffsets(const PFXHookBundle* lpBundle)
     {
-        return static_cast<u32>(reinterpret_cast<uintptr_t>(lpPointer));
-    }
-
-    static void FixUpBundle(PFXHookBundle* lpBundle, u32 luBaseValue)
-    {
-        lpBundle->mpaHooks += luBaseValue;
-        lpBundle->mpaGroups += luBaseValue;
-
-        u32* lpaHookAddresses = PointerFromU32<u32>(lpBundle->mpaHooks);
-        for (s32 liIndex = 0; liIndex < lpBundle->miHookCount; ++liIndex)
-        {
-            lpaHookAddresses[liIndex] += luBaseValue;
-            PointerFromU32<PFXHook>(lpaHookAddresses[liIndex])->FixUp(luBaseValue);
-        }
-
-        u32* lpaGroupAddresses = PointerFromU32<u32>(lpBundle->mpaGroups);
-        for (s32 liIndex = 0; liIndex < lpBundle->miGroupCount; ++liIndex)
-            lpaGroupAddresses[liIndex] += luBaseValue;
-    }
-
-    static void FixDownBundle(PFXHookBundle* lpBundle, u32 luBaseValue)
-    {
-        u32* lpaHookAddresses = PointerFromU32<u32>(lpBundle->mpaHooks);
-        for (s32 liIndex = 0; liIndex < lpBundle->miHookCount; ++liIndex)
-        {
-            PointerFromU32<PFXHook>(lpaHookAddresses[liIndex])->FixDown(luBaseValue);
-            lpaHookAddresses[liIndex] -= luBaseValue;
-        }
-
-        u32* lpaGroupAddresses = PointerFromU32<u32>(lpBundle->mpaGroups);
-        for (s32 liIndex = 0; liIndex < lpBundle->miGroupCount; ++liIndex)
-            lpaGroupAddresses[liIndex] -= luBaseValue;
-
-        lpBundle->mpaHooks -= luBaseValue;
-        lpBundle->mpaGroups -= luBaseValue;
+        CGS_ASSERT(lpBundle->mpaHooks + 4u * static_cast<u32>(lpBundle->miHookCount) <= lpBundle->mSizeOfBundle,
+                   "PFX hook table lies inside the bundle");
+        CGS_ASSERT(lpBundle->mpaGroups + 4u * static_cast<u32>(lpBundle->miGroupCount) <= lpBundle->mSizeOfBundle,
+                   "PFX group table lies inside the bundle");
     }
 
     uint32_t PFXHookBundleResourceType::GetTypeID() const
@@ -129,26 +61,23 @@ namespace CgsResource
         return KU_PFX_HOOK_BUNDLE_RESOURCE_TYPE_ID;
     }
 
-    void PFXHookBundleResourceType::FixUp(void* lpResource, const rw::Resource& lrResource) const
+    void PFXHookBundleResourceType::FixUp(void* lpResource, const rw::Resource& /*lrResource*/) const
     {
-        FixUpBundle(static_cast<PFXHookBundle*>(lpResource), CgsResource::GetLoadBase(lrResource));
+        ValidateBundleOffsets(static_cast<const PFXHookBundle*>(lpResource));   // offsets stay (banner above)
     }
 
-    void PFXHookBundleResourceType::FixDown(void* lpResource, const rw::Resource& lrResource) const
+    void PFXHookBundleResourceType::FixDown(void* /*lpResource*/, const rw::Resource& /*lrResource*/) const
     {
-        FixDownBundle(static_cast<PFXHookBundle*>(lpResource), CgsResource::GetLoadBase(lrResource));
+        // nothing to un-relocate: the blob never leaves its file-relative form on PC
     }
 
     void* PFXHookBundleResourceType::Serialise(const void* lpResource, const rw::Resource& lrDest) const
     {
-        PFXHookBundle* lpBundle = const_cast<PFXHookBundle*>(static_cast<const PFXHookBundle*>(lpResource));
-        void*          lpDest   = lrDest.m_baseResources[0];
-
-        FixDownBundle(lpBundle, AddressFromPointer(lpBundle));
+        // @0x82512478 fixes the source DOWN, copies, and fixes both back UP; with the blob
+        // held file-relative on PC the copy IS the serialisation.
+        const PFXHookBundle* lpBundle = static_cast<const PFXHookBundle*>(lpResource);
+        void*                lpDest   = lrDest.m_baseResources[0];
         std::memcpy(lpDest, lpBundle, lpBundle->mSizeOfBundle);
-        FixUpBundle(static_cast<PFXHookBundle*>(lpDest), AddressFromPointer(lpDest));
-        FixUpBundle(lpBundle, AddressFromPointer(lpBundle));
-
         return lpDest;
     }
 }

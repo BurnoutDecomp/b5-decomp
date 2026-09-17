@@ -65,11 +65,15 @@ struct CameraEffects
     //   from BrnEffectsData.h.
     MotionBlurData mMotionBlurData;             // +0x44 (12 bytes -> ends +0x50)
 
-    // +0x50 .. +0x77: background-effect request + leading post-FX scalars. Construct
-    //   zeroes bytes/words at +0x50/+0x78. NOMINAL span.
-    u8  maReserved50[0x78 - 0x50];
-
-    u8  maReserved78[4];                          // +0x78 (Construct zeroes it)
+    // +0x50 .. +0x7B: the staged BACKGROUND post-FX hook request (BrnDirectorEffectTrigger.h
+    //   BackgroundEffectRequest: name @+0x50, blend @+0x74, mbStartRequested @+0x78,
+    //   mbStopRequest @+0x79). Attested by MainDirector::Update @0x82274070
+    //   (RegisterAndUpdateRequest(camera + 0xB8 == effects + 0x50)) and by
+    //   BridgeDirectorToGui @0x823DD5C0 (its 498/499 legs test camera+224/+225 and read the
+    //   blend through GetBackgroundStartRequestBlendAmount(camera + 184)). Construct zeroes
+    //   the name's first byte (+0x50) and the start flag (+0x78) -- the two stores the old
+    //   reserved span kept. TYPED 2026-09-17 (was maReserved50[0x28] + maReserved78[4]).
+    BackgroundEffectRequest mBackgroundEffectRequest;   // +0x50 (0x2C -> ends +0x7C)
 
     // +0x7C: the requested camera post-FX id (Construct zeroes it; MomentPlayerStunt
     //   @0x82272750 compares it against the 2dFlash id 575791 to publish state flag
@@ -256,6 +260,10 @@ struct CameraEffects
         CGS_ASSERT(mbHasStopHookNameString, "mbHasStopHookNameString");     // :524 (non-gating)
         return mStopHookNameString;
     }
+    // The background request (DWARF: the request sub-object MainDirector::Update hands to
+    // BackgroundEffectRequest::RegisterAndUpdateRequest and the GUI bridge reads).
+    const BackgroundEffectRequest& GetBackgroundEffectRequest() const { return mBackgroundEffectRequest; }
+    BackgroundEffectRequest&       GetBackgroundEffectRequest()       { return mBackgroundEffectRequest; }
     f32 GetCameraLag() const      { return mfCameraLag; }
 
     // The bloom-modifier accessors (DWARF BrnCameraEffects.h:115/:119/:122/:126). Header inlines:

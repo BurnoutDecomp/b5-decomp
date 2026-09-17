@@ -89,6 +89,8 @@ struct BloomData
 
     // 2-way per-member weighted blend (DWARF BrnEffectsData.h:113). Inlined by the X360
     // compiler; recovered from EvalEffectData<BloomData> @0x823F9C0C-0x823F9CB4.
+    // @0x82678070 -- the ASSET-KEYED Construct (the bloomasset collection named by a PFX group). Body in BrnEffectsData.cpp.
+    void Construct(const u64& lruAssetKey);
     void SetToBlend(const BloomData& lA, f32 lfWa,
                     const BloomData& lB, f32 lfWb);
 
@@ -172,6 +174,8 @@ struct DepthOfFieldData
     // ⭐ They blend the FOUR PLANES ONLY: neither expansion touches mfDofAmount (the 2-way
     // reads/writes 0x90,0x94,0x98,0x9C of the frame and nothing at 0xA0), and the fold-in
     // at 0x823FA31C likewise writes only lRes+0,+4,+8,+0xC.
+    // @0x82678158 -- the ASSET-KEYED Construct (the depthoffieldasset collection named by a PFX group). Body in BrnEffectsData.cpp.
+    void Construct(const u64& lruAssetKey);
     void SetToBlend(const DepthOfFieldData& lA, f32 lfWa,
                     const DepthOfFieldData& lB, f32 lfWb);
     void SetToBlend(const DepthOfFieldData& lA, f32 lfWa,
@@ -217,6 +221,8 @@ struct BlurData
     }
 
     // DWARF :260, X360 @0x823F3A50.
+    // @0x826781C8 -- the ASSET-KEYED Construct (the b4blurasset collection named by a PFX group). Body in BrnEffectsData.cpp.
+    void Construct(const u64& lruAssetKey);
     void SetToBlend(const BlurData& lA, f32 lfWa,
                     const BlurData& lB, f32 lfWb);
     // DWARF :267, X360 sub_823F3C30 (called by EvalEffectData<BlurData> @0x823FA540).
@@ -272,6 +278,8 @@ struct TintData2d
 
     // DWARF :314 / :321. Both inlined on X360 -- recovered from
     // EvalEffectData<TintData2d> @0x823FA7F8 (2-way) and @0x823FA700 (4-way).
+    // @0x82678268 -- the ASSET-KEYED Construct (the tint2dasset collection named by a PFX group). Body in BrnEffectsData.cpp.
+    void Construct(const u64& lruAssetKey);
     void SetToBlend(const TintData2d& lA, f32 lfWa,
                     const TintData2d& lB, f32 lfWb);
     void SetToBlend(const TintData2d& lA, f32 lfWa,

@@ -43,20 +43,24 @@ namespace Gen
         // registry is keyed by the whole doubleword, so the low word alone MISSES.
         static const u64 KU_B4BLURASSET_CLASS_KEY = 0xEF9F6F047362D8CFULL;
 
-        explicit b4blurasset(void* lpOwner = nullptr);
+        // luCollectionKey is the caller's r4 the X360 ctor passes straight through to
+        // FindCollection (the ctor never writes r4). PFXNodeFader::Initialise @0x82504378
+        // hands it Attrib::StringToKey(<the PFX group's b4blurasset id>); the old
+        // default (0) is what every earlier call site resolved.
+        // [PC] the collection key is the FULL u64 Attrib::StringToKey hash. The X360 ctor takes
+        // the low word (its vaults key collections by that word); this build's vaults and
+        // Attrib::FindCollection(u64, u64) compare the whole key, so a truncated key never
+        // resolves (POSTFXVAULT.BIN: e.g. FF8129C8E1D9E071, whose low word is the console key).
+        explicit b4blurasset(u64 luCollectionKey = 0, void* lpOwner = nullptr);
+        using Instance::IsValid;
+        using Instance::GetLayoutPointer;
     };
 
     // X360 ctor @0x8227FA30: Collection = FindCollection(1935857871); chain the
     // Instance ctor over it (Instance(this, Collection, lpOwner)); then give the
     // instance a default data area (0x60 bytes) if construction left it without one.
-    inline b4blurasset::b4blurasset(void* lpOwner)
-                // FLAG (collection key): the X360 ctor never writes r4, so the CALLER's key
-        // argument passes straight through to FindCollection as the collection key.
-        // This ctor does not model that parameter yet (no call site in this repo
-        // supplies one), so it resolves the class's collection key 0 -- exactly what
-        // the previous `FindCollection(KI_..., nullptr)` form did. Add the parameter
-        // when a real call site needs a named collection.
-    : Instance(FindCollection(KU_B4BLURASSET_CLASS_KEY, 0), lpOwner)
+    inline b4blurasset::b4blurasset(u64 luCollectionKey, void* lpOwner)
+    : Instance(FindCollection(KU_B4BLURASSET_CLASS_KEY, luCollectionKey), lpOwner)
     {
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x60u);

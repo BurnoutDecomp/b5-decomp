@@ -11,6 +11,7 @@
 #include "types.hpp"
 #include "GameSource/Network/SharedIO/BrnBuddyInformation.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // CgsGui::GuiEvent<N> (12-byte event header)
+#include "GameSource/Gui/Events/BrnGuiPFXEvents.h"   // GuiPFXHookEvent / ...StopEvent / ...Background... / GuiPFXHookEnumeration (495..501, RECOVERED 2026-09-17)
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"  // CgsNetwork::PlayerName (scoreboard request payloads)        // CgsID (GuiPlayerInfoResponse::mCarId)
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"  // BrnTraffic::VehicleClass / VehicleScoreCategory (GuiHitVehicleEvent)
@@ -469,10 +470,6 @@ namespace BrnGui
 
         s32 GetEventType() const { return 382; }
     };  // id 382 size 8 (consumer-pinned)
-    struct GuiPFXHookEvent : public CgsGui::GuiEvent<495> { u8 maPayload[52]; };  // id 495 size 64 (12B GuiEvent header + opaque payload)
-    struct GuiPFXHookStopEvent : public CgsGui::GuiEvent<496> { u8 maPayload[28]; };  // id 496 size 40 (12B GuiEvent header + opaque payload)
-    struct GuiPFXStartBackgroundHookEvent : public CgsGui::GuiEvent<498> { u8 maPayload[32]; };  // id 498 size 44 (12B GuiEvent header + opaque payload)
-    struct GuiPFXStopBackgroundHookEvent : public CgsGui::GuiEvent<499> { u8 maPayload[28]; };  // id 499 size 40 (12B GuiEvent header + opaque payload)
     struct GuiPaybackReceivedEvent { u8 maData[4]; s32 GetEventType() const { return 182; } };  // id 182 size 4 (raw; size not GuiEvent-shaped)
     struct GuiPlayerCarColourResponse { u8 maData[8]; s32 GetEventType() const { return 414; } };  // id 414 size 8 (raw; size not GuiEvent-shaped)
     struct GuiPlayerEliminatedEvent { u8 maData[4]; s32 GetEventType() const { return 450; } };  // id 450 size 4 (raw; size not GuiEvent-shaped)
@@ -887,7 +884,6 @@ namespace BrnGui
     struct GuiImageGalleryRequestEvent : public CgsGui::GuiEvent<517> { u8 maPayload[4]; };  // id 517 size 16
     struct GuiMuteDac { u8 maData[1]; s32 GetEventType() const { return 88; } };  // id 88 size 1
     struct GuiNetworkCustomRouteCreated { u8 maData[8]; s32 GetEventType() const { return 286; } };  // id 286 size 8
-    struct GuiPFXHookEnumeration : public CgsGui::GuiEvent<501> { u8 maPayload[392]; };  // id 501 size 404
     struct GuiReplayDeleteReelEvent { u8 maData[4]; s32 GetEventType() const { return 527; } };  // id 527 size 4
     struct GuiReplayRegisterSerialiser { u8 maData[4]; s32 GetEventType() const { return 595; } };  // id 595 size 4
     struct GuiReplaySetModeEvent { u8 maData[4]; s32 GetEventType() const { return 525; } };  // id 525 size 4

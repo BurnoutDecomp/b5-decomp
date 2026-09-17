@@ -2007,6 +2007,16 @@ BrnEffectsFrame* BrnRendererModule::GetWorldEffectsFrameBringUp(u8 luSlot)
         static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_WORLD), luSlot);
 }
 
+// [FLAG PC bring-up] see the declaration. The FX-events layer has TWO slots
+// (kau8SlotsPerEffectsLayer[2] == 2) -- the GUI's current/menu pair.
+BrnEffectsFrame* BrnRendererModule::GetFXEventsEffectsFrameBringUp(u8 luSlot)
+{
+    if (!EnsureEffectsArbitratorBringUp(mEffectsArbitrator))
+        return 0;
+    return mEffectsArbitrator.GetExternalEffectsFrame(
+        static_cast<u8>(BrnGraphics::EffectsArbitrator::KU_EFFECTS_LAYER_FX_EVENTS), luSlot);
+}
+
 // @ 0x823FC678 - BrnRendererModule::SwapBuffers (called by EndOfFrame @0x823FFE28).
 // X360 order: the GDL ring Swap (vtable slot 4), two ShaderConstantTable
 // Destruct calls, EffectsArbitrator::EndOfFrame, the shader-constants frame
@@ -6935,7 +6945,14 @@ void BrnRendererModule::Update(CgsModule::IOBufferStack* /*lpUpdateInputStack*/,
 
     // @0x82405EA4-B0 -- the camera crosses first.
     if (const BrnDirector::Camera::Camera* lpCamera = lpInput->GetBrnCamera())
+    {
         lpOutput->SetBrnCamera(*lpCamera);
+        // [cam-flags] BRN_CAM_INPUT_DIAG: the state flags as handed to the world dispatch.
+        static const bool sbCamDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+        static u32 suCamDiagCalls = 0;
+        if (sbCamDiag && (suCamDiagCalls++ % 60u) == 0 && CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[cam-flags] renderer output flags " << lpCamera->mState_uFlags << "\n";
+    }
 
     // @0x82405EBC-C0 -- THE LATCH SOURCE.  The console lends the ADDRESS of its embedded
     // allocator; the game module stores that pointer at gm+0x9A0630 and FreeAll's it once per
