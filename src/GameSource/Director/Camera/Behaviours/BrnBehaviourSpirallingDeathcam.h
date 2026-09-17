@@ -2,34 +2,68 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BRN_BEHAVIOUR_SPIRALLING_DEATHCAM_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the Start !mbStarted tripwire)
-#include "GameSource/Director/Camera/Utils/BrnLooker.h"       // Utils::Looker::Parameters (by value)
-#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"  // Utils::CameraShake::Parameters (by value)
+#include "BrnCommonTypes.h"                                         // Vector3 / Vector4
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (the Start !mbStarted tripwire)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE canonical Camera::Behaviour base
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // CollisionPolicyAttachedToVehicle
+#include "GameSource/Director/Camera/Utils/BrnLooker.h"             // Utils::Looker (+ ::Parameters, by value)
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"        // Utils::CameraShake (+ ::Parameters, by value)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h
 //
-// BrnDirector::Camera::BehaviourSpirallingDeathcam -- the post-crash "spiralling deathcam"
-// behaviour the crashing/testbed arbitrator states drive. HOME for the class slices owned by
-// this TU set:
-//   - BehaviourSpirallingDeathcam::Prepare @0x821FB3F8  (resets a state field; defined in the
-//     .cpp)
-//   - BehaviourSpirallingDeathcam::Start   @0x821F5620  (latches mbStarted; defined in the .cpp)
+// BrnDirector::Camera::BehaviourSpirallingDeathcam -- the post-wreck "spiralling deathcam":
+// once the player's car is totalled (Road Rage / Marked Man: the last crash) the crashing
+// arbitrator state swaps its crash camera for this one, which parks an attachment point on
+// the car, orbits it about the world Y axis at a radius/height that grow over time, looks at
+// the car through a Looker, shakes, blurs, and asks for the "Player_Shutdown" screen hook.
 //
-// The full behaviour (Construct/Update and the rest of the rig) lands with its own TU; this
-// header models only the members these two functions touch, BY NAME, at their asm-attested
-// offsets.
+// Owner: ArbStateCrashing (NewBehaviour<BehaviourSpirallingDeathcam> @0x822655E8, Start from
+// its Update, Release at teardown) and ArbStateTestbed.
+//
+// ⭐ REBUILT 2026-09-17. Until then this class had NO Behaviour base: it was a hollow shell
+//   modelling only the two members Prepare()/Start() wrote, at console offsets. Nothing
+//   reached it because the director's action-205 arm (the road-rage damage action) was
+//   missing, so mbRoadRageTotalled never went true. The moment that arm landed, the fourth
+//   crash of a Road Rage allocated this behaviour and BehaviourHelper::Prepare dispatched
+//   Behaviour::Construct through a vtable the object did not have -- the
+//   EXCEPTION_ACCESS_VIOLATION reading 0x0 the owner reported. This is an instance of the
+//   "hollow-shell class" defect class: the DecFIGS DWARF for this header (:52) says
+//   `struct BehaviourSpirallingDeathcam : public Behaviour` with the member list below.
+//
+// LAYOUT (X360, from Construct @0x8222C088 / Update @0x8224A528, member NAMES from the DWARF
+// :135..:149; host offsets differ by the widened pointers, so nothing here is reached by
+// displacement):
+//   +0x000 Behaviour base (vtable, meTimestepType, the five flags, mpcDebugParametersName)
+//   +0x020 mCollisionPolicy   CollisionPolicyAttachedToVehicle (Construct(this+0x20, 0))
+//   +0x270 mVectorData        two Vector4 lanes-as-fields (see VectorData)
+//   +0x290 mAttachmentPos     Vector3
+//   +0x2A0 mLooker            Utils::Looker (0x20)
+//   +0x2C0 mShake             Utils::CameraShake (0x10)
+//   +0x2D0 mpParameters       const Parameters*
+//   +0x2D4 mAttachment        Behaviour::VehicleRef (0x10)
+//   +0x2E4 mfBlurAmount       f32
+//   +0x2E8 mfShakeAmount      f32
+//   +0x2EC mfLookOffsetFactor f32
+//   +0x2F0 mfRunningTime      f32
+//   +0x2F4 mbStarted          bool
+// (760 bytes on the console; the manager's small pool (1600-byte buckets) holds it.)
+//
+// VTABLE (DWARF): Construct @0x8222C088, Prepare(info) @0x821FB3F8, Update @0x8224A528,
+// GetCollisionPolicy (cpp:225, ICF-folded: `addi r3, r3, 0x20`), GetName @0x821FB600. No
+// X360 export exists for SetupTweaker (cpp:266) -- the base default stands and it is flagged
+// in the .cpp. The DWARF also lists virtual Get/SetParameters(Behaviour::Parameters*); the PC
+// base holds NO slot for that pair (see Behaviour.h), so the typed SetParameters below hides
+// the base's non-virtual one, exactly as the sibling behaviours do.
 // ----------------------------------------------------------------------------
-
 namespace BrnDirector
 {
 namespace Camera
 {
 
-class BehaviourSpirallingDeathcam
+class BehaviourSpirallingDeathcam : public Behaviour
 {
 public:
-
     // ------------------------------------------------------------------------
     // The deathcam parameter block. HOME here because the ledger nests it under this behaviour
     // (BrnDirector::Camera::BehaviourSpirallingDeathcam::Parameters) and the camera-tunings bank
@@ -43,9 +77,6 @@ public:
     //   visitor below is therefore an empty (zero-field) walk, faithful to the attested asm; NO
     //   field offsets are fabricated.
     //
-    // ⭐ THE LAYOUT IS NO LONGER "lands with the deathcam rig TU" (2026-08-29, crash-camera wave).
-    // ArbStateCrashing::Prepare @0x822655E8 hands this behaviour a block out of the shared
-    // NamedParameters bank, so SetParameters -- and with it this type -- had to become real.
     // MEMBER NAMES AND ORDER are the DecFIGS DWARF for this file (:158..:176), verbatim;
     // DEFAULTS are Parameters::Construct @0x821FB498, store for store. The pin is that the
     // thirteen trailing floats the asm writes and the DWARF's thirteen trailing names line up
@@ -97,6 +128,34 @@ public:
         f32 mfShakeTime;                           // +0xAC
     };
 
+    // ------------------------------------------------------------------------
+    // The orbit state (DWARF :105..:132): two Vector4s whose LANES are the fields. The console
+    // keeps them as VMX registers and reaches every field through a VecFloatRef accessor
+    // (`vrlimi128` lane inserts in Construct / Update); the accessors below name the same
+    // lanes. mVector1 = { YRotationDegs, YRotationSpeedDegsPS, Height, HeightIncreaseSpeed },
+    // mVector2 = { Radius, RadiusIncreaseSpeed, LookOffsetAmount, (unused) }.
+    // ------------------------------------------------------------------------
+    struct VectorData
+    {
+        f32&       YRotationDegs()             { return mVector1.x; }   // :109  lane X of mVector1
+        f32&       YRotationSpeedDegsPS()      { return mVector1.y; }   // :112  lane Y
+        f32&       Height()                    { return mVector1.z; }   // :115  lane Z
+        f32&       HeightIncreaseSpeed()       { return mVector1.w; }   // :118  lane W
+        f32&       Radius()                    { return mVector2.x; }   // :121  lane X of mVector2
+        f32&       RadiusIncreaseSpeed()       { return mVector2.y; }   // :124  lane Y
+        f32&       LookOffsetAmount()          { return mVector2.z; }   // :127  lane Z
+        const f32& YRotationDegs()       const { return mVector1.x; }
+        const f32& YRotationSpeedDegsPS() const { return mVector1.y; }
+        const f32& Height()              const { return mVector1.z; }
+        const f32& HeightIncreaseSpeed() const { return mVector1.w; }
+        const f32& Radius()              const { return mVector2.x; }
+        const f32& RadiusIncreaseSpeed() const { return mVector2.y; }
+        const f32& LookOffsetAmount()    const { return mVector2.z; }
+
+        Vector4 mVector1;   // :131  console +0x270
+        Vector4 mVector2;   // :132  console +0x280
+    };
+
     // The behaviour type tag this class's parameter blocks carry. The VALUE is asm
     // (SetParameters @0x821F5680 compares the block's first word against 0x13).
     enum EBehaviourTypeSpirallingDeathcam
@@ -104,41 +163,39 @@ public:
         eBehaviourSpirallingDeathcam = 19
     };
 
+    // ---- the Behaviour virtual interface (see the vtable note in the banner) ----
+    void Construct() override;                                                      // @0x8222C088
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;         // @0x821FB3F8
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;      // @0x8224A528
+    CollisionPolicy* GetCollisionPolicy() override;                                 // cpp:225
+    const char* GetName() const override;                                           // @0x821FB600
+
     // Adopt an authored parameter block. @0x821F5680: assert the block's type tag, then store
-    // the pointer at +0x2D0.
+    // the pointer (console +0x2D0). Hides Behaviour::SetParameters (no base slot; see banner).
     void SetParameters(const Parameters* lpParameters);
+    const Parameters* GetParameters() const { return mpParameters; }                // cpp:238
 
-    // Has this activation already been started. ⭐ ADDED 2026-08-29: ArbStateCrashing::Update
-    // gates its Start() call on exactly this byte (`lbz r11, 0x2F4(behaviour)`), and the byte is
-    // private -- a named reader keeps that gate off a raw offset.
-    bool IsStarted() const { return mbStarted != 0; }
-
-    // Reset the per-activation state word. @0x821FB3F8. The asm writes 0 to a state field near
-    // the head of the object (`*(this + 8) = 0`) and returns true.
-    bool Prepare();
+    // Has this activation already been started (DWARF h:96). ArbStateCrashing::Update gates its
+    // Start() call on exactly this byte (`lbz r11, 0x2F4(behaviour)`).
+    bool HasStarted() const { return mbStarted; }
 
     // Latch the "started" flag for this activation. @0x821F5620: asserts !mbStarted (the behaviour
     // must not be double-started), then stores mbStarted = 1.
     void Start();
 
 private:
-
-    // FLAG: only the members Prepare/Start write are modelled at their asm-attested offsets; the
-    //   rest of the deathcam rig lands with the full behaviour TU. Reserved spans place the two
-    //   written members exactly:
-    //     +0x00 .. +0x07  opaque base head (Behaviour vtable + shared head)
-    //     +0x08           muStateField  (Prepare: stw 0, 8(this))
-    //     +0x09 .. +0x2F3 rig members not modelled here
-    //     +0x2F4          mbStarted     (Start: stb 1, 0x2F4(this); asserted clear on entry)
-    u8  maReserved00[0x08];               // +0x00 .. +0x07  opaque base head
-    u32 muStateField;                     // +0x08           reset on Prepare
-    u8  maReserved0C[0x2D0 - 0x0C];       // +0x0C .. +0x2CF rig members not modelled here
-    // The adopted parameter block (DWARF :141). SetParameters @0x821F5680 stores it with
-    // `stw r31, 0x2D0(this)`. The host pointer is 8 bytes against the console's 4, so the span
-    // below is sized from the END of the pointer -- which keeps mbStarted at +0x2F4 on both.
-    const Parameters* mpParameters;       // +0x2D0
-    u8  maReserved2D8[0x2F4 - 0x2D8];     // +0x2D8 .. +0x2F3 rig members not modelled here
-    u8  mbStarted;                        // +0x2F4          latched by Start, asserted clear on entry
+    CollisionPolicyAttachedToVehicle mCollisionPolicy;   // :135  console +0x020
+    VectorData                       mVectorData;        // :137  console +0x270
+    Vector3                          mAttachmentPos;     // :138  console +0x290
+    Utils::Looker                    mLooker;            // :139  console +0x2A0
+    Utils::CameraShake               mShake;             // :140  console +0x2C0
+    const Parameters*                mpParameters;       // :141  console +0x2D0
+    Behaviour::VehicleRef            mAttachment;        // :142  console +0x2D4
+    f32                              mfBlurAmount;       // :144  console +0x2E4
+    f32                              mfShakeAmount;      // :145  console +0x2E8
+    f32                              mfLookOffsetFactor; // :146  console +0x2EC
+    f32                              mfRunningTime;      // :147  console +0x2F0
+    bool                             mbStarted;          // :149  console +0x2F4
 };
 
 } // namespace Camera

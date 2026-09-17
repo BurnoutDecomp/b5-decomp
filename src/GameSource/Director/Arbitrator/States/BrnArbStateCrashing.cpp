@@ -262,6 +262,16 @@ namespace BrnDirector
         // GameState +0x1C1 == mbRoadRageTotalled: the spiralling deathcam is the totalled-car
         // camera, so the flag that decides whether to use it is the totalled flag.
         mbShouldUseDeathcam = lrSharedInfo.mpGameState->mbRoadRageTotalled;   // stb +0x3BE
+        {
+            // [harness lever, PC only] BRN_DEBUG_DEATHCAM=1 takes the totalled branch on EVERY
+            // crash, so a free-burn -CrashPlayer run exercises BehaviourSpirallingDeathcam
+            // (the retail path needs a Road Rage / Marked Man wreck the harness cannot stage).
+            static const bool sbForceDeathcam = (std::getenv("BRN_DEBUG_DEATHCAM") != 0);
+            if (sbForceDeathcam)
+            {
+                mbShouldUseDeathcam = true;
+            }
+        }
 
         // The tracker classified this crash's energy band last frame (tracker +0x298).
         meCrashType = lrSharedInfo.mpPlayerTracker->GetCrashType();           // stw +0x3AC
@@ -931,7 +941,7 @@ namespace BrnDirector
         {
             GetNonConstCamera() = mDeathcam.GetProducedCamera();
 
-            if (!mDeathcam.GetBehaviour()->IsStarted())     // behaviour +0x2F4
+            if (!mDeathcam.GetBehaviour()->HasStarted())    // behaviour +0x2F4
             {
                 mDeathcam.GetBehaviour()->Start();
             }

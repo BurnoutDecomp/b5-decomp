@@ -1972,6 +1972,8 @@ void GuiModule::Destruct()
                 case 204:   // [H3b] the sat-nav event-filter pair (the ch40 mirror)
                 case 207:   // [H3b] GuiRaceCarInfoEvent -- the mRaceCarInfo SoA feed
                 case 376:   // [H3b] GuiPlayerRaceCarIdEvent -- the player index pair (case-199 gate)
+                case 377:   // GuiPlayerCrashingStateChangeEvent -- the crash-bar state latch + the
+                            // gameplay-HUD-active drop (RecEvent @0x8250F58C; was misfiled as 132)
                 case 379:   // [reveal gate] GuiPlayerEngineEvent -- the ignition latch (+0x4B20)
                 case 238:   // Race positions, finished flags and per-slot validity.
                 case 380:   // Player entered or left a shortcut.

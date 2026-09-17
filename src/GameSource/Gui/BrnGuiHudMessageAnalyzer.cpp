@@ -15,6 +15,24 @@
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDUnCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [td-msg] PC witness
 #include <cstdlib>                                      // std::getenv ([td-msg] switch)
+
+namespace
+{
+    // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the damage-critical / crash-boundary chain.
+    inline bool HudMsgDiag()
+    {
+        static const bool sbDiag = (std::getenv("BRN_HUDMSG_DIAG") != 0);
+        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
+    }
+    // [harness lever, PC only] BRN_DEBUG_RR_DAMCRIT=1: every crash bar arms the road-rage
+    // "one more crash to totalled" message, so a free-burn crash fires RRDamCrit through the
+    // production path (348 cannot be posted outside a Road Rage / Marked Man).
+    inline bool DebugForceDamCrit()
+    {
+        static const bool sbForce = (std::getenv("BRN_DEBUG_RR_DAMCRIT") != 0);
+        return sbForce;
+    }
+}
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::StrCpy (the parked-name copy)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // GuiDirtyTrick* payloads + GuiHudMessage
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"         // CgsModule::Event, GuiEventQueueBase, GuiStackEventQueue
@@ -744,6 +762,14 @@ void HudMessageAnalyzer::HandleCrashedEvent(
 
     GuiHudMessage lMessage;
 
+    if (HudMsgDiag())
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[hudmsg] analyzer: HandleCrashedEvent state=" << static_cast<s32>(leCrashBarState)
+            << " pending: delayed=" << (mbDelayedForAfterCrashHudMessagePending ? 1 : 0)
+            << " timeExt=" << (mbTimeExtMsgPending ? 1 : 0)
+            << " damCrit=" << (mbRoadOneMoreCrashToTotalledPending ? 1 : 0) << "\n";
+    }
     switch (leCrashBarState)
     {
     case GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_LEAVE_CRASHED:   // 1
@@ -765,6 +791,10 @@ void HudMessageAnalyzer::HandleCrashedEvent(
         {
             mbRoadOneMoreCrashToTotalledPending = false;
             lMessage.Construct("RRDamCrit");
+            if (HudMsgDiag())
+            {
+                *CgsDev::Log::gpDebugPrint << "[hudmsg] analyzer: triggering RRDamCrit\n";
+            }
             TriggerMessage(&lMessage);
         }
         break;
@@ -1840,6 +1870,11 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                     HandleFailedToStartBurningRoute(reinterpret_cast<const GuiEventFailedToStartEvent*>(lpEvent));
                     break;
                 case 322:
+                    if (HudMsgDiag() && mbRoadOneMoreCrashToTotalledPending)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[hudmsg] analyzer: gui 322 (stop mode) clears the RRDamCrit pending flag\n";
+                    }
                     mbTimeExtMsgPending = false;
                     mbRoadOneMoreCrashToTotalledPending = false;
                     mbRoadRageTargetReached = false;
@@ -1851,6 +1886,14 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                     HandleNewRoadRulesHighScore(reinterpret_cast<const GuiEventRoadRuleNewHighScore*>(lpEvent));
                     break;
                 case 348:   // road-rage "one more crash to totalled" flag (byte @ record+4)
+                    if (HudMsgDiag())
+                    {
+                        const GuiEventRoadRagePlayerDamage* lpDamage =
+                            reinterpret_cast<const GuiEventRoadRagePlayerDamage*>(lpEvent);
+                        *CgsDev::Log::gpDebugPrint
+                            << "[hudmsg] analyzer: gui 348 oneMore=" << static_cast<s32>(lpDamage->maData[4])
+                            << " totalled=" << static_cast<s32>(lpDamage->maData[5]) << "\n";
+                    }
                     if (reinterpret_cast<const GuiEventRoadRagePlayerDamage*>(lpEvent)->maData[4])
                         mbRoadOneMoreCrashToTotalledPending = true;
                     break;
@@ -1890,6 +1933,13 @@ void HudMessageAnalyzer::Update(const CgsGui::GuiEventQueueBase<32768, 16>* lpGu
                         reinterpret_cast<const GuiPlayerCrashingStateChangeEvent*>(lpEvent);
                     mbCrashBoundaryMessagePending = true;
                     meCrashEntryState = static_cast<s32>(lpCrashEvent->meCurrentState);
+                    // [harness lever] BRN_DEBUG_RR_DAMCRIT=1: a start-crash record arms the
+                    // road-rage pending flag exactly where a real 348 would have set it.
+                    if (DebugForceDamCrit() && lpCrashEvent->meCurrentState ==
+                            GuiPlayerCrashingStateChangeEvent::E_CRASHBARSTATE_START_CRASHED)
+                    {
+                        mbRoadOneMoreCrashToTotalledPending = true;
+                    }
                     if (lpCrashEvent->meCurrentState != 0)
                         mbShowDrivableMessage = true;
                     break;

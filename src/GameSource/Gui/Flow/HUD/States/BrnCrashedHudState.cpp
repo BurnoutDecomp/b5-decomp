@@ -271,7 +271,15 @@ bool CrashedHudState::UpdateSetupState()
     mShowTimeButton2.SetButton(mbShowTime ? ButtonIconComponent::E_PADBUTTON_RSHOULDER : ButtonIconComponent::E_PADBUTTON_INVISIBLE, ButtonIconComponent::E_PADBUTTON_STATE_ACTIVE);
     if (mbSkipPrompt && mbCrashIsSkippable) mSkipPromptAnimator.Run("transIn");
     mSkipPromptButton.SetItem("$HUD_END_CRASH", FlaptButtonIconComponent::E_PADBUTTON_SELECT, FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE, true);
-    mpCache->SetGameplayHudActive(true);
+    // REMOVED 2026-09-17: `mpCache->SetGameplayHudActive(true)` had been carried over from the
+    // STUNT sibling (CrashedStuntHudState::UpdateSetupState @0x8247D9E0 stores 1 at cache
+    // +0x407C); the plain crash HUD @0x8247CF60 has no such store, and every scan of the
+    // image finds only the stunt state, RaceMainHudState::UpdateWFInit and FBurnMainHudState
+    // raising it. It mattered: HudMessageAnalyzer defers HandleCrashedEvent until the
+    // gameplay HUD is active, so with the flag raised HERE the road-rage "RRDamCrit" (and
+    // every other leave-crash message) was triggered while this state was still up, queued
+    // behind "CRASHED", and wiped by OnExit's WAITING-slot cancel before the main HUD could
+    // start it -- the "Damage Critical" banner never showed.
     return true;
 }
 

@@ -50,6 +50,17 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                // CgsIDCompress / CgsIDConvertToString
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // gpDebugPrint, gxMessageFilterFlags
+#include <cstdlib>                                              // std::getenv ([hudmsg] switch)
+
+namespace
+{
+    // [hudmsg] PC witness (BRN_HUDMSG_DIAG): every exit of FilterAndSendOffMessage by name.
+    inline bool HudMsgDiag()
+    {
+        static const bool sbDiag = (std::getenv("BRN_HUDMSG_DIAG") != 0);
+        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
+    }
+}
 
 // The platform high-resolution timer pair (GameShared/GameClasses/System/Timer/
 // CgsTimeUtils.cpp @0x828D75A0 / @0x828D75C8). Declared locally, exactly as the two other
@@ -229,6 +240,15 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
     CGS_ASSERT(mpController != 0, "mpController");   // cpp:222
 
     const s32 liIndex = mpController->GetIndexFromMessageHash(lpMessage->mMessageIdHash);
+    if (HudMsgDiag())
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[hudmsg] director: filter \"" << lacMessageId << "\" index=" << liIndex
+            << " force=" << (lbForce ? 1 : 0)
+            << " stopFlags blackBar=" << (mbStopFlagBlackBar ? 1 : 0)
+            << " camera=" << (mbStopFlagCamera ? 1 : 0)
+            << " payback=" << static_cast<s32>(meStopFlagPaybackSequence) << "\n";
+    }
     if (liIndex == -1)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
@@ -239,7 +259,11 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
     if (!lbForce)
     {
         if (!CheckMessageIsAvailable(mpController->GetMessageAvailabilityBitset(liIndex)))
+        {
+            if (HudMsgDiag())
+                *CgsDev::Log::gpDebugPrint << "[hudmsg] director:   dropped: not available\n";
             return false;
+        }
 
         // The per-message repeat rate: mfTimeToWait SECONDS converted to timer ticks
         // against the platform counter frequency (the X360 does the multiply in double
@@ -251,12 +275,18 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
         // 64-bit throughout, matching the console's ldx/stdx/cmpld at 0x825117E4..0x825117F0.
         if (mauMessagesLastTriggered[liIndex] + lu64WaitTicks > CgsSystem::GetSystemTimerBaseTime64())
         {
+            if (HudMsgDiag())
+                *CgsDev::Log::gpDebugPrint << "[hudmsg] director:   dropped: repeat rate\n";
             return false;
         }
     }
 
     if (!IsMessageAllowed(lpMessage->mMessageIdHash))
+    {
+        if (HudMsgDiag())
+            *CgsDev::Log::gpDebugPrint << "[hudmsg] director:   dropped: stop flag\n";
         return false;
+    }
 
     mauMessagesLastTriggered[liIndex] = CgsSystem::GetSystemTimerBaseTime64();
 
@@ -266,6 +296,8 @@ bool HudMessageDirector::FilterAndSendOffMessage(const GuiHudMessage* lpMessage,
     mHudMessageQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(lpMessage),
                               KI_HUD_MESSAGE_EVENT_TYPE,
                               static_cast<s32>(sizeof(GuiHudMessage)));
+    if (HudMsgDiag())
+        *CgsDev::Log::gpDebugPrint << "[hudmsg] director:   queued (event 154)\n";
     return true;
 }
 
