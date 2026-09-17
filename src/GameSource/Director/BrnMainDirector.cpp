@@ -1583,6 +1583,20 @@ namespace BrnDirector
             // `stwx r29, r31, r20` with r29 == 0. This is the EXIT edge -- without it
             // mbDriveThruActive would latch on and ArbStateRoaming would re-enter
             // E_STATE_DRIVETHRU on every update after the first shop.
+            // ---- 205  E_ACTION_ROAD_RAGE_PLAYER_DAMAGE (8 bytes) ------------------------
+            // X360 ProcessInputQueue @0x822372F8 pseudocode 782..786: the three stores off the
+            // record ({f32 how close to totalled @+0, one-more-crash @+4, totalled @+5}, the
+            // same RoadRagePlayerDamageAction the GUI sees as event 348). This is the ONLY
+            // writer of mfHowCloseToTotalled / mbRoadRageOneMoreCrashToWrecked outside the
+            // resets, and ArbStateRoaming::ProcessPossibleFX scales the Damage_Crit hook's
+            // blend by it -- the screen desaturating a step per crash in Road Rage / Marked
+            // Man. Missing until 2026-09-17, so the blend stayed 0 and the hook never showed.
+            case 205:
+                maGameState.mfHowCloseToTotalled            = *reinterpret_cast<const f32*>(lpacPayload + 0x00);   // +0x1BC
+                maGameState.mbRoadRageOneMoreCrashToWrecked = (lpacPayload[0x04] != 0);                          // +0x1C0
+                maGameState.mbRoadRageTotalled              = (lpacPayload[0x05] != 0);                          // +0x1C1
+                break;
+
             case 102:
             {
                 maGameState.mbDriveThruActive = false;                       // +0x0D0 = 0
