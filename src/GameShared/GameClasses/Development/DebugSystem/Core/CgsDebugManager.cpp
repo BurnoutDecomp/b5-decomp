@@ -233,6 +233,21 @@ namespace CgsDev
 
         HANDLE lhFile = CreateFileA(lacFileName, GENERIC_READ, FILE_SHARE_READ, nullptr,
                                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        // [PC] The console's "D:\<command line>" is its disc-root path to the running image; on
+        // this host that never opens, which sent every build to the __DATE__/__TIME__ fallback
+        // -- the compile stamp of THIS translation unit, i.e. whenever this file last changed,
+        // not when the executable was linked (the owner saw a nine-day-old date on a fresh
+        // build). The host names the running image directly; the timestamp read below is the
+        // console's own logic, on the console's own intended file.
+        if (lhFile == INVALID_HANDLE_VALUE)
+        {
+            char lacModuleName[0x104];
+            if (GetModuleFileNameA(nullptr, lacModuleName, 0x104) != 0)
+            {
+                lhFile = CreateFileA(lacModuleName, GENERIC_READ, FILE_SHARE_READ, nullptr,
+                                     OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            }
+        }
         if (lhFile == INVALID_HANDLE_VALUE)
         {
             CgsCore::SPrintf(macBuildDate, 0x24, "Build Date: %s %s", __DATE__, __TIME__);

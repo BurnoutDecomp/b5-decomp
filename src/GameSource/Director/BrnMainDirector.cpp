@@ -2719,7 +2719,18 @@ namespace BrnDirector
             maGameState.mbNewProfileIntroActive = false;
         }
 
-        // ⚠️ GATE: HasNewDirectorProfileData (opaque sub-object word + an arbitrator field).
+        // ---- GUI command 475 -- the profile's camera preference. X360 PostGuiUpdate
+        // @0x82236F88 pseudocode 64..68: the payload word lands in DirectorProfileData's
+        // +0x08 word (GameState +0x1F0) and the shared camera container's
+        // mbUseGameplayExternal becomes (payload == 1). Landed 2026-09-18 -- until then the
+        // director always started in the external view whatever the profile said, and only
+        // the in-game view toggle (ArbStateRoaming) ever moved the flag.
+        if (lpInput->HasNewDirectorProfileData())
+        {
+            const s32 liProfileData = lpInput->GetDirectorProfileData();
+            maGameState.mDirectorProfileData.miCameraModeWord     = liProfileData;         // +0x1F0
+            mArbitrator.GetSharedCameras().mbUseGameplayExternal  = (liProfileData == 1);  // +0x166A0
+        }
 
         // ⭐ THE ONLINE POST-EVENT HANDSHAKE, and the fourth producer of the event-state
         // journal. Entering the post-event arms the latch and clears any stale deferral;
