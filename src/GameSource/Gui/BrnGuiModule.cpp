@@ -973,6 +973,7 @@ namespace BrnGui
             &GuiModule::FlaptSoundTriggerCallback, this);
         // X360 GuiModule::Construct @0x82518B18: EffectsArbitrator::Construct just ahead of
         // MovieManager::Construct + ColourCalibrationScreen::Construct.
+        muFrameUpdateSet = 0;
         mEffectsArbitrator.Construct();
         mMovieManager.Construct();
         // X360 GuiModule::Construct @0x82518B18-24: MovieManager::Construct is immediately
@@ -2882,9 +2883,11 @@ void GuiModule::Destruct()
             // are unrecovered. [FLAG PC stand-in] the update set is not threaded into this
             // PC-shaped Update and the two producers are unknown, so all three follow the
             // gameplay-HUD flag the cache already maintains -- the same "in gameplay" condition
-            // the update-set bit models. DELETE-WHEN the update-set threading + the two
-            // producers are recovered.
-            mGuiCache.SetGameplayHudReady(mGuiCache.IsGameplayHudActive());
+            // the update-set bit models. DELETE-WHEN the two producers are recovered.
+            // 2026-09-17: the update set IS threaded now (SetFrameUpdateSet); the first byte
+            // follows the console's `(a2 & 8) != 0` (@0x82527A58 -> +0xFA294). The other two
+            // ride along as before.
+            mGuiCache.SetGameplayHudReady((muFrameUpdateSet & 8) != 0);
             GuiEventCache lCacheEvent;
             lCacheEvent.mpGuiCache = &mGuiCache;
             // Delivery to every subscriber -- the three flows AND the always-available
@@ -3258,12 +3261,11 @@ void GuiModule::Destruct()
         // bridge posted (start / stop / background / enumeration request -> the 501 reply on
         // the out queue), then UpdateHooks. The GuiCache hand-over is the console's event-64
         // case; this build posts 64 outside the module queue, so the cache is handed over by
-        // name. The update set is the same gameplay-HUD stand-in step 2 uses for bit 8.
+        // name. The update set is the scheduler's own (SetFrameUpdateSet), as on the console.
         mEffectsArbitrator.SetGuiCache(&mGuiCache);
         if (mpGuiEventInputBuffer != 0)
         {
-            const BrnUpdateSet leUpdateSet =
-                static_cast<BrnUpdateSet>(mGuiCache.IsGameplayHudActive() ? 8 : 0);
+            const BrnUpdateSet leUpdateSet = muFrameUpdateSet;
             mpGuiEventInputBuffer->LockForRead();
             mEffectsArbitrator.EventUpdate(leUpdateSet, mpGuiEventInputBuffer, &mGuiOutQueue);
             mpGuiEventInputBuffer->UnlockForRead();
