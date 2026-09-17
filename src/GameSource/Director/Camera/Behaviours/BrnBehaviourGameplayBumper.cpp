@@ -283,10 +283,25 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     Vector3 lRight   = rw::math::vpu::Normalize(rw::math::vpu::Cross(lBlendedUp, lForward));
     Vector3 lUp      = rw::math::vpu::Cross(lForward, lRight);
 
+    // The BASIS the frame is composed with at the end: right / up / forward (v126 / v127 /
+    // v122) seated at the car (v120 <- mTransform.wAxis @+0x280). The Euler target below is
+    // measured on THIS matrix (EulerAnglesZXYFromMatrix44Affine(v173) @0x82226C24).
+    Matrix44Affine lCarBasis;
+    lCarBasis.xAxis = lRight;
+    lCarBasis.yAxis = lUp;
+    lCarBasis.zAxis = lForward;
+    lCarBasis.wAxis = lrCarTransform.wAxis;
+    // The camera FRAME starts as the IDENTITY (v169 / v170 / v171 <- (1,0,0) / (0,1,0) /
+    // (0,0,1), the stack constants v160.. / v168 / v156..): it only ever carries the unsprung
+    // residual rotation, the lookback half-turn and the LOCAL eye offset, and the basis turns
+    // it into world space in the vmaddfp128 ladder @0x82226EC4. (Until 2026-09-17 this frame
+    // was built from the world axes AND then multiplied by the car transform -- the car's
+    // rotation applied twice, i.e. the 'front camera points at a fixed world direction' the
+    // owner reported.)
     Matrix44Affine lCameraFrame;
-    lCameraFrame.xAxis = lRight;
-    lCameraFrame.yAxis = lUp;
-    lCameraFrame.zAxis = lForward;
+    lCameraFrame.xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+    lCameraFrame.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+    lCameraFrame.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
     lCameraFrame.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 1.0f };
 
     // @0x8222691C..0x82226994: `ld r7, 0x140(camera)` / `ori r6, r7, 2` / `std r6, 0x140` --
@@ -297,7 +312,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // @0x82226A50. lpLastAngles disambiguates the near-vertical branch toward last frame's
     // answer; the epsilon is flt_82002138 (dumped 0.01f), which is this helper's own default.
     const Vector3 lTargetCameraAngles =
-        Utils::EulerAnglesZXYFromMatrix44Affine(lCameraFrame, &mLastCameraAngles, 0.0099999998f);
+        Utils::EulerAnglesZXYFromMatrix44Affine(lCarBasis, &mLastCameraAngles, 0.0099999998f);
 
     // @0x82226A54..0x82226ADC -- three per-lane self-compares (vcmpeqfp., the NaN test).
     CGS_ASSERT(rw::math::vpu::IsValid(lTargetCameraAngles), "IsValid(lTargetCameraAngles)");  // :179
@@ -398,7 +413,7 @@ bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo
     // ---- 9. compose into world space and publish --------------------------------------------
     // @0x82226EC4..0x82226F80 -- the vmaddfp128 ladder over v126/v127/v120 is the frame times
     // the car's transform, row by row; the console then validates what it wrote.
-    lrCamera.mTransform = rw::math::vpu::Mult(lCameraFrame, lrCarTransform);
+    lrCamera.mTransform = rw::math::vpu::Mult(lCameraFrame, lCarBasis);   // frame x [right, up, forward, carPos]
     lrCamera.ValidateTransformWithDebugInfo();
 
     // ---- 10. the FOV -------------------------------------------------------------------------
