@@ -4938,6 +4938,9 @@ namespace BrnGame
                 const bool lbGuiPrepared = mGuiModule.IsPrepared();
                 if (lbGuiPrepared)
                 {
+                    // The scheduler's second argument to GuiModule::Update on the console: this
+                    // frame's update set (bit 8 == in-game).
+                    mGuiModule.SetFrameUpdateSet(ConstructUpdateSetFromFsm());
                     mGuiModule.Update();
                     // The GUI->game out-event consumer (X360 0x823CB758): latch the flow
                     // commands (70/71, the loading screen 19/20, ...) the states posted.

@@ -5,7 +5,8 @@
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"  // CgsGui::ViewIO Input/OutputBuffer (the per-frame bridge pair)
 #include "GameSource/Gui/BrnGuiMovieManager.h"                          // BrnGui::MovieManager (embedded)
 #include "GameSource/Gui/BrnGuiColourCalibrationScreen.h"               // BrnGui::ColourCalibrationScreen (embedded; DWARF BrnGuiModule.h:506)
-#include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"                  // BrnGui::EffectsArbitrator (embedded; X360 gm+1546880)
+#include "GameSource/Gui/PFX/BrnGuiEffectsArbitrator.h"
+#include "SharedClasses/BrnSharedConstants.h"                 // BrnUpdateSet (the frame update set)                  // BrnGui::EffectsArbitrator (embedded; X360 gm+1546880)
 #include "GameSource/Gui/BrnGuiViewModule.h"                             // BrnGui::ViewModule (embedded)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                  // CgsGui::CgsGuiModuleIO::InputBuffer (the inbound GUI event buffer)
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"          // CgsGui::ModelIO Input/OutputBuffer (the FSM controller's IO pair)
@@ -86,6 +87,19 @@ namespace BrnGui
         bool Release() override;
         void Destruct() override;
         void Update() override;
+
+        // The frame's simulation update set. X360 GuiModule::Update @0x82527A58 receives it as
+        // its second argument from the module scheduler (`a2`) and reads ONE bit of it: bit 8
+        // (0x08, set while the main flow FSM is in an in-game state -- see
+        // BrnGameModule::ConstructUpdateSetFromFsm) is stored at +0xFA294 (== the cache's
+        // 'gameplay HUD ready' byte) and handed to EffectsArbitrator::EventUpdate, whose
+        // UpdateHooks tail runs only while it is set. The PC scheduler ticks Update() with no
+        // arguments, so BrnGameModule::GameMain latches the set here first. (Until 2026-09-17
+        // both readers were fed a stand-in, GuiCache::IsGameplayHudActive, which the console
+        // DROPS across every crash bar -- so once the crash-bar event reached the cache the
+        // screen-filter hooks stopped advancing during a crash and only ran for the frames
+        // between the HUD's return and the hook's stop.)
+        void SetFrameUpdateSet(BrnUpdateSet luUpdateSet) { muFrameUpdateSet = luUpdateSet; }
 
         // ⭐ 2026-08-16 (boot audit F-P1-1). Prepare no longer runs from BrnGameModule::Construct;
         // it runs from loading stage 2, with the loading screen already up, exactly as the
@@ -325,6 +339,7 @@ namespace BrnGui
         // scheduler re-calls Prepare until every stage passes); this build's Prepare runs once,
         // so Update owns the pump (see the seat note at the call).
         bool mbCustomRenderersPrepared;
+        BrnUpdateSet muFrameUpdateSet;        // the scheduler's `a2` (see SetFrameUpdateSet)
         // (AptRuntimeHost RETIRED: the Apt bring-up + PC render buffer live in
         // BrnGuiModule.cpp's transplanted block -- the console GuiModule ownership.)
         // X360 gm+1546880 -- THE SCREEN-FILTER SYSTEM (BrnGuiEffectsArbitrator.h): the post-FX
