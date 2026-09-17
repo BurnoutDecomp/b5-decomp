@@ -1194,12 +1194,21 @@ namespace BrnGui
                 mStateLoadingHelper.MarkAptComponentInitialised(lpTrigger);
             break;
         }
-        case 132:
-            // ⭐ [boost-bar gate 2026-08-25] X360 case 132 @0x8250F58C: the game-flow-state
-            // change. Latch the new state word (+0x4B30), DROP the gameplay-HUD-active gate
-            // (+0x407C -- the flow states' UpdateWFInit/UpdateSetupState re-raise it, see the
-            // header's SetGameplayHudActive note), clear the +0x4B34 byte when the new state
-            // is 1 or 3, and reset the +0x9FD4/+0x9FD8 last-score pair to -1.
+        case 377:
+            // ⭐ [boost-bar gate 2026-08-25] X360 @0x8250F58C. Latch the new state word
+            // (+0x4B30), DROP the gameplay-HUD-active gate (+0x407C -- the flow states'
+            // UpdateWFInit/UpdateSetupState re-raise it, see the header's SetGameplayHudActive
+            // note), clear the +0x4B34 byte when the new state is 1 or 3, and reset the
+            // +0x9FD4/+0x9FD8 last-score pair to -1.
+            // ⛔ RE-ATTRIBUTED 2026-09-17: this arm is the console's `case 377` (GuiPlayer-
+            //   CrashingStateChangeEvent -- the CRASH-BAR state 0..3, which is what the
+            //   "+0x4B30 game flow state" word holds: HudMessageDirector::CheckMessageIsAvailable
+            //   reads it as 'crashed' for 0/2), NOT case 132 (GuiEventInviteComplete, whose
+            //   console arm is two byte clears at +0x4B4D/+0x4B4F). Under 132 it never ran, so
+            //   mbGameplayHudActive was never dropped on a crash bar, HudMessageAnalyzer's
+            //   crash-boundary deferral never deferred, and every leave-crash message (the
+            //   road-rage "RRDamCrit" among them) was fired while the crash HUD was still up and
+            //   cancelled by its OnExit. 377 is forwarded to RecEvent by GuiModule::Update.
             {
                 const s32 liNewFlowState = *reinterpret_cast<const s32*>(lpEvent);
                 miGameFlowState     = liNewFlowState;             // stw +0x4B30

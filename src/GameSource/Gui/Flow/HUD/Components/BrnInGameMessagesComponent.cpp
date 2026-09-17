@@ -6,6 +6,16 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"           // [gateui r3] CgsIDUnCompress (StartMessage's log line)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // [gateui r3] gpDebugPrint / gxMessageFilterFlags
+
+namespace
+{
+    // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the in-game message queue state machine.
+    inline bool HudMsgDiag()
+    {
+        static const bool sbDiag = (getenv("BRN_HUDMSG_DIAG") != 0);
+        return sbDiag && CgsDev::Log::gpDebugPrint != 0;
+    }
+}
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // [gateui r3] CgsGui::GuiEvent<N> (the two output records)
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"        // BrnFlapt::FileRef::FindComponent (Prepare)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // BrnFlapt::MovieClipInstance::ResetTimeline
@@ -308,6 +318,8 @@ namespace
             if (CgsSystem::GetSystemTimerBaseTime64() >=
                 mpInGameMessagesQueue->muCurrentEventEndTime)
             {
+                if (HudMsgDiag())
+                    *CgsDev::Log::gpDebugPrint << "[hudmsg] component: Update: message duration over -> EndMessage\n";
                 EndMessage();
             }
         }
@@ -339,6 +351,9 @@ namespace
         }
         else if (leState == E_MESSAGESTATE_TRANSOUT)
         {
+            if (HudMsgDiag())
+                *CgsDev::Log::gpDebugPrint << "[hudmsg] component: EndTransition: TRANSOUT done -> next slot state "
+                    << static_cast<s32>(mpInGameMessagesQueue->maeMessageState[1 - GetCurrentIndex()]) << "\n";
             mpInGameMessagesQueue->maeMessageState[GetCurrentIndex()] = E_MESSAGESTATE_NOMESSAGE;
             SwitchCurrentIndex();
         }
@@ -390,6 +405,16 @@ namespace
     void InGameMessagesComponent::AddMessage(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(lpEvent != NULL, "Invalid event passed in");
+        // [hudmsg] PC witness (BRN_HUDMSG_DIAG): the consumer end of the HUD message chain.
+        static const bool sbHudMsgDiag = (getenv("BRN_HUDMSG_DIAG") != 0);
+        if (sbHudMsgDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            char lacMessageId[24];
+            CgsIDUnCompress(reinterpret_cast<const GuiHudMessage*>(lpEvent)->mMessageIdHash, lacMessageId);
+            *CgsDev::Log::gpDebugPrint
+                << "[hudmsg] component: AddMessage \"" << lacMessageId << "\" controller="
+                << (mpMessageController != NULL ? 1 : 0) << "\n";
+        }
 
         if (mpMessageController != NULL)
         {
@@ -404,16 +429,26 @@ namespace
                             mpInGameMessagesQueue->maMessages[GetCurrentIndex()].mHudMessageId
                         && IsMessageUpdatable(lOutMessage.mHudMessageId))
                     {
+                        if (HudMsgDiag())
+                            *CgsDev::Log::gpDebugPrint << "[hudmsg] component:   -> UpdateInPlace\n";
                         UpdateInPlace(&lOutMessage);
                         return;
                     }
                     if (lOutMessage.miForceRemoveThreshold <
                             mpInGameMessagesQueue->maMessages[GetCurrentIndex()].miPriority)
                     {
+                        if (HudMsgDiag())
+                            *CgsDev::Log::gpDebugPrint
+                                << "[hudmsg] component:   -> QueueMessage (current state "
+                                << static_cast<s32>(mpInGameMessagesQueue->maeMessageState[luIndex])
+                                << " prio " << mpInGameMessagesQueue->maMessages[GetCurrentIndex()].miPriority
+                                << " vs forceRemove " << lOutMessage.miForceRemoveThreshold << ")\n";
                         QueueMessage(&lOutMessage);
                         return;
                     }
                 }
+                if (HudMsgDiag())
+                    *CgsDev::Log::gpDebugPrint << "[hudmsg] component:   -> StartMessage\n";
                 StartMessage(&lOutMessage);
             }
         }

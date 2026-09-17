@@ -388,7 +388,13 @@ namespace BrnDirector
         //           64-bit LCG state (+0x32F00) and its index (+0x32F08). This IS the
         //           `Random* mpRandom` slot ArbStateSharedInfo carries. FLAG: BrnDirector::
         //           Random is un-homed; named opaque span.
-        u8 maRandom[0x32F10 - 0x32EE0];
+        //           ALIGNED 2026-09-17: the console seats it 16-aligned (+0x32EE0) and
+        //           CgsNumeric::Random is a 16-byte-aligned type; every by-value copy of
+        //           it (Looker::Update takes `Random` by value) is a movaps, which #GP-faults
+        //           on the 8-aligned host offset this span used to land on (the deathcam's
+        //           first Update: ACCESS_VIOLATION reading 0xFFFFFFFFFFFFFFFF). The next
+        //           member (mLastCamera) is already 16-aligned, so nothing after it moves.
+        alignas(16) u8 maRandom[0x32F10 - 0x32EE0];
 
         // +0x32F10  the frame camera the director carries over between frames.
         Camera::Camera mLastCamera;
