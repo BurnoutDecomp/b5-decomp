@@ -116,7 +116,13 @@ struct GameState
         u8  maOpaque[0x04];        // +0x1D0..+0x1D3 (road-rage critical/totalled bools, opaque)
     };
     struct ShowTimeInfo        { u8 maOpaque[0x14]; };   // FLAG: opaque (DWARF field layout unreliable)
-    struct DirectorProfileData { u8 maOpaque[0x0C]; };   // FLAG: opaque (DWARF incomplete + unreliable)
+    struct DirectorProfileData
+    {
+        u8  maOpaque[0x08];      // +0x00..+0x07  FLAG: opaque (DWARF names one meCameraMode; the asm
+                                 //               reads six per-frame BYTES here -- see the consumers)
+        s32 miCameraModeWord;    // +0x08 (GameState +0x1F0): MainDirector::PostGuiUpdate @0x82236F88
+                                 //       stores GUI command 475's payload here; Clear stores 1
+    };
 
     // --- members, DWARF order (BrnDirectorGameState.h:85..252) ---------------------
     const BrnTraffic::JunctionLogicBox* mpEventJLBox;            // :85

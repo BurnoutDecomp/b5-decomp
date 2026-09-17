@@ -155,7 +155,7 @@ namespace BrnDirector
         // until the hooks have arrived).
         bool HasGotHooks() const { return mbGotHooks; }
         u32  GetCurrentEffectId() const { return muRequestedPostFxId; }
-        u32  GetNullEffectId() const    { return 507078u; }   // 0x7BEC6
+        u32  GetNullEffectId() const    { return 507590u; }   // 0x7BEC6
 
     private:
         Array<HookNameStringWrapper, 100> maHookNames;             // +0x000 (count at +0xCE4)
