@@ -327,6 +327,8 @@ void RaceCarEntityModule::Construct()
     mbSendStreamingComplete  = false;
     mbCarSelectAllowedInGameMode = false;
     mbInCarSelectScreen       = false;
+    mbInCarModScreen          = false;
+    meCarSelectResetType      = 0;     // E_CAR_SELECT_DONT_DROP
     mbCarSelectDontStreamAudio = false;
 
     mpVehicleList        = 0;
@@ -2863,9 +2865,12 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
     // ---- 3. the three module flags the record carries ----------------------------------
     mbInCarSelectScreen        = lpAction->mbInCarSelectScreen;         // +0x40 -> +0x186C9
     mbCarSelectDontStreamAudio = lpAction->mbCarSelectDontStreamAudio;  // +0x41 -> +0x186D0
-    // [FLAG] the +0x3C word (miInCarModification) is copied to the module's +0x186CC word,
-    // which this header does not model yet (it is inside maTailPadB1). Nothing reconstructed
-    // reads it; dropped rather than aimed at an unnamed pad byte.
+    // `*(module + 100044) = *(action + 60)` -- the car-select reset type (DWARF
+    // meCarSelectResetType). PlaceOnTrackManager::GetValuesForCarSelect reads it when the car
+    // is placed: 1/2 release the car at the authored anchor (the junkyard DROP). Landed
+    // 2026-09-18; until then the word was dropped here and every junkyard swap seated the new
+    // car on the ground intersection ("the car just appears out of nowhere").
+    meCarSelectResetType       = static_cast<s32>( lpAction->meCarSelectType );  // +0x3C -> +0x186CC
 
     if( lpAction->mCarModelId != KU_CGSID_NULL )
     {
@@ -3500,12 +3505,16 @@ void RaceCarEntityModule::HandleGameActions(
         // The two stats bytes sit in VehicleListEntry's opaque gameplay header -- read raw
         // with the SAME offsets GameStateModule::ApplyCarStats already documents (its payload
         // +0x0C <- entry+0x98, +0x08 <- entry+0x9A pair).
-        // ⚠️ FLAG (documented, not emulated): the three zeroed tail bytes live in this
-        // module's un-homed maTailPadB1 region (no member name recovered); their reset is
-        // dropped and named rather than poked through the pad.
+        // The three zeroed tail bytes are mbInCarModScreen / mbInCarSelectScreen /
+        // mbCarSelectDontStreamAudio (DWARF :445/:444/:447) -- stored below since 2026-09-18.
         case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED: // 77
         {
             const EActiveRaceCarIndex lePlayerIndex = mePlayerActiveRaceCarIndex;
+            // The three tail byte stores (X360 pseudocode 1032..1034: +0x186CA, +0x186C9,
+            // +0x186D0 = 0), landed 2026-09-18 now the members are named.
+            mbInCarModScreen           = false;
+            mbInCarSelectScreen        = false;
+            mbCarSelectDontStreamAudio = false;
             ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(lePlayerIndex);
             CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveCar");                       // :6699
             if (lpActiveRaceCar == 0)

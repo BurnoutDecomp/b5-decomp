@@ -30,6 +30,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (RandomInt's two baked bounds asserts)
 
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"   // VecFloat -- RandomVecFloat's return type
 #include "rw/math/vpu/types.h"   // Vector3 -- RandomVector's DEFINITION needs the complete
                                  //   type (the header itself deliberately only forward-declares
                                  //   it, to stay standalone)
@@ -189,6 +190,26 @@ namespace CgsNumeric
         muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
 
         return (lfMax - lfMin) * lfUnitValue + lfMin;
+    }
+
+    // RandomVecFloat -- DWARF CgsRandom.h:94. Pinned by its expansion in
+    // PlaceOnTrackManager::GetValuesForCarSelect @0x822D3540..0x822D3590 (and the PS3 DecFIGS
+    // twin @0x1332F0): the ring slot is the VECTOR slot ((muOldestBufferIndex + 3) & 4), the
+    // value is LANE 0 of the quad already there (`lvx128` + `vperm` splat of word 0, then
+    // `vsubfp` 1.0), ONE LCG step refills that one lane from the OLD seed's high word, and the
+    // cursor becomes slot + 1. It is RandomFloat() on the vector slot, not RandomVector().
+    rw::math::vpu::VecFloat Random::RandomVecFloat()
+    {
+        const u32 luSlot = (muOldestBufferIndex + 3) & 4;
+        const f32 lfRandomFraction = mafFloatBuffer[luSlot] - 1.0f;
+        const u64 luOldSeed = muSeed;
+
+        muSeed = luOldSeed * KU_RANDOM_MULTIPLIER + 1;
+        mauIntegerBuffer[luSlot] =
+            ConvertUnsignedFixed32ToFloatRepresentation(static_cast<u32>(luOldSeed >> 32));
+        muOldestBufferIndex = luSlot + 1;
+
+        return rw::math::vpu::VecFloat(lfRandomFraction);
     }
 
     // The bounded VECTOR draw (X360 0x822214F8..0x82221628):
