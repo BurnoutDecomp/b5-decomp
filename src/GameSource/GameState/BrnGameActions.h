@@ -1167,9 +1167,20 @@ struct alignas(16) ResetPlayerCarAction : public GameAction<E_ACTION_RESET_PLAYE
     // EnterJunkyardAtStartOfGame leaves this field UNWRITTEN (its -0x50 record is not
     // memset), safe precisely because it posts the -1.0 sentinel at +0x34.
     s32     miBaseDeformationType;     // +0x38  (1 on the car-select path)
-    s32     miInCarModification;       // +0x3C  copied to the module's +0x186CC word.
-                                       //        TeleportCurrentVehicle sets it on the in-car-mod
-                                       //        path, UpdateUnlockState posts 2. Name provisional.
+    // +0x3C -- DWARF BrnGameActions.h:558/:667 ResetPlayerCarAction::CarSelectType
+    // meCarSelectType (was the provisional `miInCarModification`). Copied by
+    // HandleResetPlayerCarAction @0x82304FE8 into RaceCarEntityModule::meCarSelectResetType
+    // (+0x186CC), which PlaceOnTrackManager::GetValuesForCarSelect @0x822D3470 reads: 1/2 =
+    // release the car at the authored anchor with a randomised tilt (the junkyard DROP), 0 =
+    // seat it on the ground intersection. TeleportCurrentVehicle posts `!mbInCarModScreen`
+    // (1 in the junkyard), UpdateUnlockState posts 2, EnterJunkyardAtStartOfGame 0.
+    enum CarSelectType
+    {
+        E_CAR_SELECT_DONT_DROP     = 0,
+        E_CAR_SELECT_DROP_NORMAL   = 1,
+        E_CAR_SELECT_DROP_SHUTDOWN = 2,
+    };
+    CarSelectType meCarSelectType;     // +0x3C  (4 bytes: an int-backed enum)
     bool    mbInCarSelectScreen;       // +0x40  -> RaceCarEntityModule::mbInCarSelectScreen
     bool    mbCarSelectDontStreamAudio;// +0x41  -> RaceCarEntityModule::mbCarSelectDontStreamAudio
     u8      muReserved0x42;            // +0x42  written 0 by every producer; NO consumer reads it

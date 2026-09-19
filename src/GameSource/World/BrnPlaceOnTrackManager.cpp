@@ -4,6 +4,8 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/Math/BrnMathUtils.h"             // BrnMath::BuildTransform / IsNormal
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::IsValid(Matrix44Affine)
+#include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::Cross / Normalize (GetValuesForCarSelect)
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h"   // rw::math::vpu::VecFloat (Random::RandomVecFloat)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint
 
@@ -45,11 +47,10 @@ static const s32 KI_OUT_EVENT_LINE_TEST_FINE_RESULT = 1;
 // The console's own per-lane "are these two vectors the same" test, inlined at three
 // points of PrePhysicsUpdate (asm `vsubfp128` + `vandc` against the sign mask +
 // `vcmpgtfp.` against flt_82014430, then the >>5 &1 read of CR6 == "no lane exceeded the
-// tolerance"). flt_82014430 is an un-valued .rdata float; the rw convention for
-// IsSimilar's epsilon elsewhere in this tree is 1e-4f, which is what is used here.
-// [FLAG] the epsilon is the convention, not the read constant.
+// tolerance"). flt_82014430 READ from the image 2026-09-18 (tools/re/x360rd.py): 0x37800000
+// == 2^-16 == 1.52587890625e-05, not the 1e-4 rw convention this file carried until then.
 // ---------------------------------------------------------------------------
-static const f32 KF_PLACE_ON_TRACK_SIMILAR_EPSILON = 1.0e-4f;
+static const f32 KF_PLACE_ON_TRACK_SIMILAR_EPSILON = 1.52587890625e-05f;
 
 static bool AreVectorsSimilar(const Vector3& lrA, const Vector3& lrB)
 {
@@ -59,6 +60,57 @@ static bool AreVectorsSimilar(const Vector3& lrA, const Vector3& lrB)
     return ((lfDx < 0.0f ? -lfDx : lfDx) <= KF_PLACE_ON_TRACK_SIMILAR_EPSILON)
         && ((lfDy < 0.0f ? -lfDy : lfDy) <= KF_PLACE_ON_TRACK_SIMILAR_EPSILON)
         && ((lfDz < 0.0f ? -lfDz : lfDz) <= KF_PLACE_ON_TRACK_SIMILAR_EPSILON);
+}
+
+// ---------------------------------------------------------------------------
+// The car-select drop tables -- DWARF BrnPlaceOnTrackManager.cpp:32/:34/:41/:48 (names from
+// the PS3 DecFIGS export of GetValuesForCarSelect @0x1331E8). On X360 they are .bss splat
+// slots (0x82FAD400 / 0x82FAD5B0 / 0x82FAD560 / 0x82FAD4E0) filled by the CRT dyn-init thunks
+// @0x82C4BF10 / 0x82C4BF38 / 0x82C4BFC8 / 0x82C4C058 from these rodata floats (found with
+// tools/re/findinit.py, read with tools/re/ppcdis.py + x360rd.py, 2026-09-18):
+//   flt_82001C94 = 6.2831855   flt_82014A98 = 0.2   flt_820148D4 = 0.55
+//   flt_8201497C = 0.05        flt_820147E0 = 0.1   flt_82001C98 = 1.0   flt_82001CC0 = 0.0
+// Indexed by ResetPlayerCarAction::CarSelectType (0 dont-drop, 1 normal, 2 shutdown).
+// ---------------------------------------------------------------------------
+static const f32 KVF_TWO_PI = 6.2831855f;
+static const Vector3 KA_CAR_SELECT_NORMAL_ADD[3] =
+{
+    Vector3{ 0.0f, 0.0f, 0.0f,  0.0f },
+    Vector3{ 0.0f, 0.0f, 0.2f,  0.0f },
+    Vector3{ 0.0f, 0.0f, 0.55f, 0.0f },
+};
+static const Vector3 KA_CAR_SELECT_NORMAL_RANDOMISE[3] =
+{
+    Vector3{ 0.0f,  0.0f, 0.0f,  0.0f },
+    Vector3{ 0.05f, 0.0f, 0.05f, 0.0f },
+    Vector3{ 0.1f,  0.0f, 0.1f,  0.0f },
+};
+static const Vector3 K_CAR_SELECT_DROP_WORLD_RIGHT = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+
+// ---------------------------------------------------------------------------
+// XMMatrixRotationAxis @0x82203610 (== XMMatrixRotationNormal(Normalize(axis), angle)) followed
+// by the console's row-vector transform of a vector by that matrix (asm 0x822D35D0..0x822D3608:
+// vspltw x/y/z ; row0*x ; vmaddfp row1*y ; vmaddfp row2*z). Rows of XMMatrixRotationNormal with
+// s = sin, c = cos, t = 1 - c and n the unit axis:
+//   r0 = ( t.nx.nx + c,     t.nx.ny + s.nz,  t.nx.nz - s.ny )
+//   r1 = ( t.nx.ny - s.nz,  t.ny.ny + c,     t.ny.nz + s.nx )
+//   r2 = ( t.nx.nz + s.ny,  t.ny.nz - s.nx,  t.nz.nz + c    )
+// ---------------------------------------------------------------------------
+static Vector3 RotateAboutAxis( const Vector3& lrV, const Vector3& lrAxis, f32 lfAngle )
+{
+    const Vector3 lN = rw::math::vpu::Normalize( lrAxis );
+    const f32 lfS = sinf( lfAngle );
+    const f32 lfC = cosf( lfAngle );
+    const f32 lfT = 1.0f - lfC;
+    const f32 lfX = lN.x, lfY = lN.y, lfZ = lN.z;
+
+    const Vector3 lRow0 = Vector3{ lfT * lfX * lfX + lfC,       lfT * lfX * lfY + lfS * lfZ, lfT * lfX * lfZ - lfS * lfY, 0.0f };
+    const Vector3 lRow1 = Vector3{ lfT * lfX * lfY - lfS * lfZ, lfT * lfY * lfY + lfC,       lfT * lfY * lfZ + lfS * lfX, 0.0f };
+    const Vector3 lRow2 = Vector3{ lfT * lfX * lfZ + lfS * lfY, lfT * lfY * lfZ - lfS * lfX, lfT * lfZ * lfZ + lfC,       0.0f };
+
+    return Vector3{ lRow0.x * lrV.x + lRow1.x * lrV.y + lRow2.x * lrV.z,
+                    lRow0.y * lrV.x + lRow1.y * lrV.y + lRow2.y * lrV.z,
+                    lRow0.z * lrV.x + lRow1.z * lrV.y + lRow2.z * lrV.z, 0.0f };
 }
 
 
@@ -163,16 +215,16 @@ const PlaceOnTrackCandidate* PlaceOnTrackManager::ComputeBestPlaceOnT(
 // ===========================================================================
 // Construct @ 0x822EA188.
 //
-// [FLAG] the console's two mRandom calls (CgsNumeric::Random::Construct + one
-// RandomFloat to prime the stream, per the DecFIGS call list) are not made: mRandom is
-// still opaque storage here, and its ONLY consumer is GetValuesForCarSelect @0x822D3470
-// (the car-select drop), which is not reconstructed. Zeroing the storage keeps it
-// deterministic instead of leaving module memory in it.
+// Construct @0x822EA188: store the module, then the two mRandom calls the DecFIGS call list
+// names -- CgsNumeric::Random::Construct (index 0, seed, slot 0 = 1.0, seven refills, bump)
+// and ONE RandomFloat to prime the stream (the pseudocode's trailing draw + `(idx + 1) & 7`).
+// Landed 2026-09-18 with GetValuesForCarSelect, mRandom's only consumer.
 // ===========================================================================
 void PlaceOnTrackManager::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 {
     mpRaceCarEntityModule = lpRaceCarEntityModule;
-    std::memset(maRandomStorage, 0, sizeof(maRandomStorage));
+    mRandom.Construct();
+    mRandom.RandomFloat();
 }
 
 // ===========================================================================
@@ -280,46 +332,30 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         lResetNormal   = Vector3{ lpBestIntersection->mNormal.x, lpBestIntersection->mNormal.y,
                                   lpBestIntersection->mNormal.z, 0.0f };
 
-        // [FLAG] the car-select branch: when mbInCarSelectScreen the console overrides all
-        // three vectors through GetValuesForCarSelect @0x822D3470 (a randomised drop pose
-        // built from KA_CAR_SELECT_NORMAL_ADD / KA_CAR_SELECT_NORMAL_RANDOMISE and mRandom).
-        // Not reconstructed -- it is ~60 vector intrinsics against three un-homed rodata
-        // Vector3[3] tables.
-        //
-        // ⚠️⚠️ THE SECOND HALF OF THAT JUSTIFICATION HAS EXPIRED, AND IT IS NOW A VISIBLE
-        //   DEFECT (task #127, 2026-08-04). It used to end "...and this build never enters the
-        //   car-select screen". IT DOES -- every boot: "=== CarSelectManager: Car Select" fires
-        //   at ~64 s on a plain dh_run/cs_run, and this very function places the car it frames.
-        //   Corrected in place rather than left to expire silently.
-        //
-        // ⭐ WHAT THE MISSING BRANCH ACTUALLY DOES, read from the asm (not inferred):
-        //   GetValuesForCarSelect's whole body is gated on `v14 = *(module + 100044)` with
-        //   `if (v14 && v14 < 3)`, and its LAST act is
-        //       _R11 = 1952 ; lvx128 v0, r26, r11 ; stvx128 v0, r0, r25
-        //   i.e. it writes `lpActiveRaceCar + 1952` == mPlaceOnTrackPosition (+0x7A0) -- THE
-        //   FREE-AIR QUERY ANCHOR -- back over lResetPosition, and randomises the up-normal
-        //   from unk_82FAD5B0[16*v14] / unk_82FAD560[16*v14]. So on console the car-select car
-        //   is DROPPED IN from the anchor with a random tilt and FALLS to the yard floor; the
-        //   junkyard's authored anchors sit 3.3-6.2 m above their own floor for exactly that.
-        //
-        // ⛔ DO NOT "fix" the car-select camera by restoring this position here. The console's
-        //   drop is a drop: the vehicle physics catches the car and settles it on its
-        //   suspension. That physics is inert on this build (task #121, the physics wall), so
-        //   restoring the anchor alone would hang the car in mid-air for ever -- which is the
-        //   defect 28eb8e42 removed.
-        //
-        // ⭐⭐ WHY THIS MATTERS TO THE CAMERA. BehaviourRotateAboutVehicle (the car-select
-        //   orbit) has NO pitch and NO height term of its own: BecomeSimilarTo flattens the
-        //   orbit seed to the car's horizontal plane AND calls mRotationController.Construct(),
-        //   which zeroes the pitch mover; Update then drives it paused with centering off, so
-        //   with no stick the pitch stays 0 for ever and the eye's Y is IDENTICALLY the car's
-        //   transform-origin Y (measured: dY 0.000000 every frame). The shot's height IS the
-        //   car's height. Since this function writes the origin to the raw ground intersection
-        //   with no seating, the eye sits on the junkyard floor and the screen shows the car's
-        //   underside. The console's own AABB arm (GameBridgeWorldToX.cpp:288, min = -halfExtent
-        //   / max = +halfExtent) says that origin is meant to be the BODY CENTRE, ~0.75 m up.
-        //   ⇒ closing this needs the drop AND the seating, i.e. the physics -- not a camera edit
-        //   and not a fabricated offset here.
+        // X360 0x822F7250..0x822F7274: `if (mbInCarSelectScreen)` the three vectors go
+        // through GetValuesForCarSelect @0x822D3470 -- the junkyard DROP pose (the reset
+        // position becomes the authored anchor above the yard floor and the car falls onto
+        // its suspension). Landed 2026-09-18; until then every car swap seated the new car
+        // on the ground intersection and it "appeared out of nowhere".
+        if( mpRaceCarEntityModule->IsInCarSelectScreen() )
+        {
+            GetValuesForCarSelect( lpBestIntersection, lpActiveRaceCar,
+                                   &lResetPosition, &lResetNormal, &lResetDirection );
+            if( CgsDev::Log::gpDebugPrint != 0 )
+                *CgsDev::Log::gpDebugPrint << "    Selecting special values for car select\n";
+        }
+        // The console's own "    Selected reset data: lResetPosition=" line (v205 in the
+        // export), printed lane by lane; the intersection's own height beside it so a log
+        // shows the DROP height at a glance.
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "    Selected reset data: lResetPosition=("
+                << lResetPosition.x << ", " << lResetPosition.y << ", " << lResetPosition.z
+                << ") lResetNormal=(" << lResetNormal.x << ", " << lResetNormal.y << ", "
+                << lResetNormal.z << ") intersection.y=" << lpBestIntersection->mPosition.y
+                << " carSelect=" << ( mpRaceCarEntityModule->IsInCarSelectScreen() ? 1 : 0 )
+                << " resetType=" << mpRaceCarEntityModule->GetCarSelectResetType() << "\n";
+        }
     }
     else
     {
@@ -389,9 +425,21 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
     const f32 lfSpeed = lpActiveRaceCar->GetPlaceOnTrackSpeed();
     lpActiveRaceCar->ClearPlaceOnTrack();                                       // +0x7C4 = 0
 
-    // [FLAG] `if (index == mePlayerActiveRaceCarIndex)` the console also posts game event
-    // 13 (one byte) into lpOutput->GetGameEventQueue() -- a VariableEventQueue<1536,16>.
-    // The event's id has no recovered name and nothing on PC drains that queue yet.
+    // X360 0x822F7808..0x822F7838: for the PLAYER's car (`index == GetActiveRaceCar(
+    // mePlayerActiveRaceCarIndex)->meActiveRaceCarIndex`) the console posts game event 13
+    // -- one byte, mbInCarSelectScreen -- into the output buffer's game-event queue (+149312,
+    // the "Not locked for writing" accessor @0x822B5EA0). Posted since 2026-09-18.
+    // [FLAG] no PC consumer names id 13 yet (GameStateModule::ProcessGameEvents has no arm).
+    {
+        const ActiveRaceCar* lpPlayerCar = mpRaceCarEntityModule->GetActiveRaceCar(
+            mpRaceCarEntityModule->GetPlayerActiveRaceCarIndex() );
+        if( lpPlayerCar != 0 && lpPlayerCar->GetActiveRaceCarIndex() == leActiveRaceCarIndex )
+        {
+            const u8 lbInCarSelectScreen = mpRaceCarEntityModule->IsInCarSelectScreen() ? 1 : 0;
+            lpOutput->GetGameEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>( &lbInCarSelectScreen ), 13, 1 );
+        }
+    }
 
     // asm: v1 = lResetDirection * splat(mfPlaceOnTrackSpeed).
     const Vector3 lVelocity = Vector3{ lResetDirection.x * lfSpeed,
@@ -403,6 +451,79 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
 
     if( CgsDev::Log::gpDebugPrint != 0 )
         *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Place on track request complete\n";
+}
+
+// ===========================================================================
+// GetValuesForCarSelect @0x822D3470 (DWARF BrnPlaceOnTrackManager.cpp:359; PS3 DecFIGS
+// @0x1331E8 with the table names). The car-select DROP pose, landed 2026-09-18.
+//
+//   if (meCarSelectResetType && meCarSelectResetType < 3)            `v14 && v14 < 3`
+//     angle     = RandomVecFloat() * KVF_TWO_PI                        [0, 2pi)
+//     rot       = XMMatrixRotationAxis(axis = lResetNormal, angle)     (the GROUND normal)
+//     normal    = (lResetNormal + KA_CAR_SELECT_NORMAL_ADD[type]) * rot
+//     GetRandomVector(mRandom, normal, normal, KA_CAR_SELECT_NORMAL_RANDOMISE[type])
+//     normal    = Normalize(normal)                                    vmsum3fp + vrsqrtefp
+//     if (type == 2) direction = Normalize(Cross(normal, K_CAR_SELECT_DROP_WORLD_RIGHT))
+//     position  = lpActiveRaceCar->mPlaceOnTrackPosition               `lvx128 v0, r26, 1952`
+//
+// The position is the REQUEST anchor, not lpBestIntersection->mPosition: the junkyard's
+// authored car-select anchors sit 3.3-6.2 m above their own floor, so the car is released
+// in the air with a small random tilt and the vehicle physics catches it.
+// ===========================================================================
+void PlaceOnTrackManager::GetValuesForCarSelect(
+        const PlaceOnTrackCandidate* lpBestIntersection,
+        const ActiveRaceCar* lpActiveRaceCar,
+        Vector3* const lResetPosition,
+        Vector3* const lResetNormal,
+        Vector3* const lResetDirection )
+{
+    CGS_ASSERT( lpBestIntersection != 0, "lpBestIntersection" );   // :361
+    CGS_ASSERT( lpActiveRaceCar != 0,    "lpActiveRaceCar" );      // :362
+    if( lpActiveRaceCar == 0 )
+    {
+        return;
+    }
+
+    const s32 liType = mpRaceCarEntityModule->GetCarSelectResetType();   // +0x186CC (100044)
+    if( liType != 0 && liType < 3 )
+    {
+        const f32 lfAngle = mRandom.RandomVecFloat().GetFloat() * KVF_TWO_PI;
+
+        const Vector3 lAxis = *lResetNormal;                       // `lvx128 v1, r0, r30` before the call
+        Vector3 lNormal = Vector3{ lResetNormal->x + KA_CAR_SELECT_NORMAL_ADD[liType].x,
+                                   lResetNormal->y + KA_CAR_SELECT_NORMAL_ADD[liType].y,
+                                   lResetNormal->z + KA_CAR_SELECT_NORMAL_ADD[liType].z, 0.0f };
+        lNormal = RotateAboutAxis( lNormal, lAxis, lfAngle );
+
+        GetRandomVector( mRandom, lNormal, lNormal, KA_CAR_SELECT_NORMAL_RANDOMISE[liType] );
+        *lResetNormal = rw::math::vpu::Normalize( lNormal );
+
+        if( liType == 2 )
+        {
+            *lResetDirection = rw::math::vpu::Normalize(
+                rw::math::vpu::Cross( *lResetNormal, K_CAR_SELECT_DROP_WORLD_RIGHT ) );
+        }
+
+        *lResetPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();   // +0x7A0 (1952)
+    }
+}
+
+// ===========================================================================
+// BrnWorld::GetRandomVector @0x822BE358 (DWARF BrnPlaceOnTrackManager.cpp:418).
+// out = in + (RandomFloat(-range.x, +range.x), RandomFloat(-range.y, +range.y),
+//             RandomFloat(-range.z, +range.z)); the negated bounds are the `vslw`/`vxor` sign
+// flips of the range's three splats. The console draws the Z lane FIRST, then Y, then X
+// (PPC right-to-left evaluation of the three constructor arguments: the ring reads at
+// 0x822BE3D8 / 0x822BE430 / 0x822BE47C feed `fmadds` into z, y, x respectively). Written out
+// in that order so the ring advances identically on every compiler.
+// ===========================================================================
+void GetRandomVector( CgsNumeric::Random& lrRandom, Vector3& lrOut,
+                      const Vector3& lrIn, const Vector3& lrRange )
+{
+    const f32 lfZ = lrRandom.RandomFloat( -lrRange.z, lrRange.z );
+    const f32 lfY = lrRandom.RandomFloat( -lrRange.y, lrRange.y );
+    const f32 lfX = lrRandom.RandomFloat( -lrRange.x, lrRange.x );
+    lrOut = Vector3{ lrIn.x + lfX, lrIn.y + lfY, lrIn.z + lfZ, 0.0f };
 }
 
 // ===========================================================================
@@ -424,12 +545,14 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
 // lpBestIntersection->mPosition: the GROUND, not the anchor.
 //
 // ⚠️ AND THE CAR-SELECT OVERRIDE DOES NOT SAVE THE ANCHOR ON THIS PATH.
-// GetValuesForCarSelect @0x822D3470 does copy mPlaceOnTrackPosition back over the reset
-// position (its tail is `li r11, 1952 ; lvx128 v0, r26, r11 ; stvx128 v0, r0, r25`), but
-// that copy is INSIDE `if (v14 && v14 < 3)` where `v14 = *(module + 100044)`.
-// HandleResetPlayerCarAction @0x82304FE8 seeds that member from the action's +0x3C
-// (miInCarModification) and CarSelectManager::EnterJunkyardAtStartOfGame writes `stw 0`
-// there. At start of game the override is a NO-OP and the intersection stands.
+// GetValuesForCarSelect @0x822D3470 (reconstructed above, 2026-09-18) does copy
+// mPlaceOnTrackPosition back over the reset position, but only INSIDE `if (v14 && v14 < 3)`
+// where `v14 = *(module + 100044)` == meCarSelectResetType. HandleResetPlayerCarAction
+// @0x82304FE8 seeds that member from the action's +0x3C (meCarSelectType) and
+// CarSelectManager::EnterJunkyardAtStartOfGame posts E_CAR_SELECT_DONT_DROP. At start of
+// game the override is a NO-OP and the intersection stands; on a car SWAP
+// (TeleportCurrentVehicle posts E_CAR_SELECT_DROP_NORMAL) the anchor is restored and the
+// car drops.
 //
 // MEASURED, both ends, over the shipped collision (the junkyard the player starts in):
 //     authored anchor  maSpawnLocations[1] = (2986.933105, 1.009405, -2011.417969)

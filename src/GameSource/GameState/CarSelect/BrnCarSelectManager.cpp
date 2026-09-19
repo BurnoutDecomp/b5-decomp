@@ -1425,7 +1425,7 @@ void CarSelectManager::EnterJunkyardAtStartOfGame(GameStateModuleIO::GameActionQ
         lReset.mWheelModelId        = lWheelId;
         lReset.mePlayerScoringIndex = leScoringIndex;
         lReset.mfDeformationAmount  = KF_STARTOFGAME_DEFORM_SENTINEL;   // -1.0
-        lReset.miInCarModification  = 0;
+        lReset.meCarSelectType      = GameStateModuleIO::ResetPlayerCarAction::E_CAR_SELECT_DONT_DROP;
         lReset.mbInCarSelectScreen  = true;                             // X360 v27 = 1
         AsActionQueue(lpActionQueue)->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lReset), KI_ACTION_RESET_PLAYER_CAR,

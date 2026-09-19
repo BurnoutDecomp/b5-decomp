@@ -81,6 +81,7 @@ class Random;
 // Forward-declared for the bounded RandomVector draws below; the complete types live in
 // rw/math/vpu/types.h and are NOT pulled in here (see the note on those declarations).
 namespace rw { namespace math { namespace vpu {
+class  VecFloat;
 struct Vector2;
 struct Vector3;
 struct Vector4;
@@ -179,6 +180,10 @@ public:
     s32  RandomInt(s32 liMin, s32 liMax);
     f32  RandomFloat();
     f32  RandomFloat(f32 lfMin, f32 lfMax);
+    // DWARF CgsRandom.h:94. Header-inline on the console; the vector-slot draw
+    // PlaceOnTrackManager::GetValuesForCarSelect @0x822D3470 expands (see CgsRandom.cpp).
+    // Returns the [0, 1) fraction, splatted, like RandomFloat().
+    rw::math::vpu::VecFloat RandomVecFloat();
     f32  RandomSignedFloat();
 
     // ADDITIVE 2026-08-01 (DWARF CgsRandom.h:143/:148/:153) -- the bounded VECTOR draws of the

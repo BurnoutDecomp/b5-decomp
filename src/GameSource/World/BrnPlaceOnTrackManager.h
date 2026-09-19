@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector4
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random mRandom (DWARF :69)
 
 // =============================================================================
 // BrnWorld::PlaceOnTrackManager
@@ -162,11 +163,29 @@ private:
     // BrnPlaceOnTrackManager.h:67 (DWARF). Set by Construct.
     RaceCarEntityModule* mpRaceCarEntityModule;
 
-    // BrnPlaceOnTrackManager.h:69 (DWARF) -- CgsNumeric::Random mRandom. Only
-    // GetValuesForCarSelect (the car-select drop, not reconstructed) consumes it; kept as
-    // correctly-named opaque storage rather than dragging CgsRandom into this header.
-    u8 maRandomStorage[16];
+    // GetValuesForCarSelect @0x822D3470 (DWARF BrnPlaceOnTrackManager.cpp:359) -- the
+    // car-select DROP pose: when the module's meCarSelectResetType is 1 or 2 the reset
+    // position becomes the authored anchor (mPlaceOnTrackPosition, above the yard floor), the
+    // normal is tilted by KA_CAR_SELECT_NORMAL_ADD[type], spun by a random angle about the
+    // ground normal and jittered by KA_CAR_SELECT_NORMAL_RANDOMISE[type]; type 2 also points
+    // the car along Normalize(Cross(normal, K_CAR_SELECT_DROP_WORLD_RIGHT)). Landed 2026-09-18.
+    void GetValuesForCarSelect(const PlaceOnTrackCandidate* lpBestIntersection,
+                               const ActiveRaceCar* lpActiveRaceCar,
+                               Vector3* const lResetPosition,
+                               Vector3* const lResetNormal,
+                               Vector3* const lResetDirection);
+
+    // BrnPlaceOnTrackManager.h:69 (DWARF) -- CgsNumeric::Random mRandom (X360 this+16, 48
+    // bytes: the 8-float ring, the u64 seed, the cursor). Construct @0x822EA188 seeds it
+    // (Random::Construct + one RandomFloat); GetValuesForCarSelect draws from it.
+    CgsNumeric::Random mRandom;
 };
+
+// BrnPlaceOnTrackManager.cpp:418 (DWARF) -- BrnWorld::GetRandomVector @0x822BE358:
+// lrOut = lrIn + (RandomFloat(-range.x, +range.x), RandomFloat(-range.y, +range.y),
+// RandomFloat(-range.z, +range.z)). lrOut and lrIn may be the same object.
+void GetRandomVector(CgsNumeric::Random& lrRandom, Vector3& lrOut,
+                     const Vector3& lrIn, const Vector3& lrRange);
 
 // BrnPlaceOnTrackManager.h:57..59 (DWARF). The line test runs KF_LINE_TEST_LENGTH metres
 // up and the same distance down through the requested position; KI_LINE_TEST_OWNER is the

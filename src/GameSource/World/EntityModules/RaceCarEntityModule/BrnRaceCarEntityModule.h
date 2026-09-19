@@ -648,6 +648,11 @@ public:
         // -> lbIgnoreFatal). Named accessor rather than an offset read from another class.
         bool IsInCarSelectScreen() const { return mbInCarSelectScreen; }
 
+        // X360 inlined at PlaceOnTrackManager::GetValuesForCarSelect @0x822D3470 (`*(module +
+        // 100044)`, three reads). DWARF :446 meCarSelectResetType, a
+        // ResetPlayerCarAction::CarSelectType (0 = seat on the ground, 1/2 = the junkyard DROP).
+        s32  GetCarSelectResetType() const { return meCarSelectResetType; }
+
     // X360 0x822A34A8 -- &maActiveRaceCars[leActiveRaceCarIndex], in-range checked.
     inline ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex);
 
@@ -1196,6 +1201,14 @@ private:
     // and uses `(!mbInCarSelectScreen || !mbCarSelectDontStreamAudio) && IsPlayerDriven()`
     // as RaceCarStreamer::AddVehicleData's "stream this car's audio" flag.
     bool mbInCarSelectScreen;
+    // X360 +0x186CA (100042). DWARF :445. HandleGameActions case 76 writes it from the
+    // payload's +4 byte, case 77 clears it. Landed 2026-09-18 with the junkyard drop.
+    bool mbInCarModScreen;
+    // X360 +0x186CC (100044). DWARF :446, type ResetPlayerCarAction::CarSelectType -- held as
+    // the s32 the console stores (`stw`) so this header does not pull BrnGameActions.h in.
+    // HandleResetPlayerCarAction copies the action's +0x3C here; HandleGameActions case 73
+    // clears it. Read by PlaceOnTrackManager::GetValuesForCarSelect (the junkyard drop).
+    s32  meCarSelectResetType;
     bool mbCarSelectDontStreamAudio;
 
     // ========================================================================
