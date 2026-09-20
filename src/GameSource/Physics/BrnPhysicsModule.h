@@ -347,11 +347,10 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
 
         // @0x825A5618 (PS3 DecFIGS 0x699594 -- same TU, immediately before the bridge driver).
         // Forward the simple-traffic-with-world potential contacts into the sim add-contact
-        // queue. FLAG: DECLARED for the bridge driver's closure; body still a TRAP STUB
-        // (484 X360 asm lines to reconstruct -- named, not landed, this wave).
+        // queue. Bodied in BrnPhysicsModuleBridgeFunctions.cpp.
         void BridgeSimpleTrafficWithWorldContactsToSimulation(
-            CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue,
-            const PhysicsModuleIO::PotentialContactInterface* lpContactInterface );
+            CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpSimContactQueue,
+            const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface );
 
         // :552 @0x825A1100. Diagnostics: when the sim contact queue is FULL, dump a per-owner
         // histogram and assert. Caller: BridgeContactsToSimulation.
@@ -362,8 +361,14 @@ namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehi
         void ValidateSimulationContacts( const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue );
 
         // :649 @0x8259C3F8. The per-pair entity-type legality matrix (13-case switch on type A).
-        void ValidateSimulationContactTypes( BrnWorld::EEntityTypeID leEntityTypeA,
-                                             BrnWorld::EEntityTypeID leEntityTypeB );
+        // STATIC, and that is asm-proven, not inferred: the console body takes the A type in the
+        // FIRST argument register and the B type in the second -- there is no `this` slot at all,
+        // and the body reads no member. The control that rules out a compiler-dropped `this` is
+        // the sibling CheckContactQueueSize below: also private, also non-virtual, and it reads
+        // NOTHING through its own `this` -- yet the console still passes one. So this build does
+        // not strip an unused `this`, and the missing slot here is the declaration's.
+        static void ValidateSimulationContactTypes( BrnWorld::EEntityTypeID leEntityTypeA,
+                                                    BrnWorld::EEntityTypeID leEntityTypeB );
 
         // :1313 @0x825AB968. Forward the vehicle manager's per-frame joint requests into the
         // sim input buffer (remove-joint only; the add-joint queue must already be empty).

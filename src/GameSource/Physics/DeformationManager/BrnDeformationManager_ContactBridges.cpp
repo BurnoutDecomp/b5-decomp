@@ -20,8 +20,9 @@
 //     structural oracle (debug names lPotentialContact/lContactId/lpSimInput,
 //     liModelIndexA/B from its baked asserts).
 //   * BridgeBodyPartCarContactsToSimulation @0x825DD7D0 + BridgeDetachedWheelCar-
-//     ContactsToSimulation @0x825DDD48 -- GATES, not traps (log-once, live every frame;
-//     348/392 X360 asm lines each, not reconstructed). RECONSTRUCT-NEXT.
+//     ContactsToSimulation -- REAL (landed 2026-09-20; 348/392 console lines each). They
+//     drain the two DETACHED part/wheel-vs-car potential-contact queues into the
+//     simulation's add-contact queue.
 //   * AddRaceCarBodyPartPair @0x82605928 + AddHingedBodyPartPairs @0x82605A98 -- REAL.
 //     AddRaceCarWheelPair @0x82605BE8 is a NAMED GATE (one missing cylinder-vs-box appender).
 //
@@ -39,6 +40,11 @@
 #include "rw/math/vpu/vector3_operation.h"                                                // Normalize / IsValid
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder::AddPrimitivePair (+ CgsGeometric::Box)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"     // IKBodyPart::GetPartPoolIndex (the hinged-panel walk)
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"  // PhysicalWheel::GetVolumeInstanceId (the detached-wheel bridge)
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"            // PotentialContactInterface::GetDetached*Queue (the two drained queues)
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"                // InputBuffer::GetAddContactQueue
+#include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"               // InAddPotentialContact (the queued record)
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                            // EntityId::Set (the proxy-body id pack)
 
 namespace BrnPhysics
 {
@@ -67,6 +73,39 @@ namespace Deformation
         const u32 KU_MAX_NUM_RACE_CARS     = 8;      // Vehicle::ku8MaxNumRaceCars
         const u32 KU_MAX_TOTAL_TRAFFIC     = 0x258;  // BrnTraffic::KU_MAX_TOTAL_TRAFFIC (600)
 
+        // The two contact-BRIDGE owner sets and pool bounds (the bodies' own assert strings).
+        const u32 KU_OWNER_RACECAR_DEFORMABLE_PART = 6;   // BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART
+        const u32 KU_OWNER_TRAFFIC_DEFORMABLE_PART = 7;   // BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART
+        const u32 KU_OWNER_DETACHED_RACECAR_WHEEL  = 9;   // BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL
+        const u32 KU_OWNER_DETACHED_TRAFFIC_WHEEL  = 10;  // BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL
+
+        // The PROXY ("dummy car") owners the two bridges retarget the car's handling body onto
+        // before handing the contact to the simulation. Same retarget PropManager::
+        // RoutePropVsRaceCarContactToDummyCar performs for a prop-vs-car contact.
+        const u32 KU_OWNER_PROP_COLLISION_RACECAR  = 11;  // BrnWorld::E_ENTITYTYPE_PROP_COLLISION_RACECAR
+        const u32 KU_OWNER_PROP_COLLISION_TRAFFIC  = 12;  // BrnWorld::E_ENTITYTYPE_PROP_COLLISION_TRAFFIC
+
+        const u32 KU_MAX_DETACHED_PARTS      = 0x32;   // 50   (`cmplwi r31, 0x32`)
+        const u32 KU_MAX_DETACHED_WHEELS     = 0x70;   // 112  (`cmplwi r31, 0x70`)
+        // The model-pool bound (0x1C == 28) is the namespace-scope
+        // BrnPhysics::Deformation::KU_MAX_DEFORMATION_MODELS homed by BrnDeformationState.h --
+        // not re-declared here (a file-local copy makes every use ambiguous).
+
+        // Material constants the two bridges stamp into every record they post.
+        //   part-vs-car : 0.5 / 0.5 / 0.5        (one float, flt_82001DA0, stored three times)
+        //   wheel-vs-car: 0.9 / 0.5 / 0.8        (flt_82005450 / flt_82001DA0 / flt_8208F9C8)
+        const f32 KF_PART_CAR_FRICTION            = 0.5f;
+        const f32 KF_PART_CAR_RESTITUTION         = 0.5f;
+        const f32 KF_WHEEL_CAR_STATIC_FRICTION    = 0.89999998f;
+        const f32 KF_WHEEL_CAR_DYNAMIC_FRICTION   = 0.5f;
+        const f32 KF_WHEEL_CAR_RESTITUTION        = 0.80000001f;
+
+        // The detached-wheel bridge's maximum tolerated penetration before it rebuilds the
+        // contact off the car's own body axis. A SILENT-ZERO splat in the image (a broadcast
+        // vector filled by a start-up thunk from the 0.0099999998f literal, not a zero), so it
+        // is spelled here as the value the thunk writes.
+        const f32 KF_MAX_WHEEL_PENETRATION        = 0.0099999998f;
+
         // Pair-builder feeder constants, read off the three bodies' asm.
         const f32 KF_PART_VS_CAR_CONTACT_PADDING  = 0.5f;   // flt_82001DA0 @0x82605A88
         const f32 KF_HINGED_PART_CONTACT_PADDING  = 1.0f;   // flt_82001C98 @0x82605B20
@@ -75,6 +114,41 @@ namespace Deformation
         // Per-lane NaN self-compare (the asm's vspltw + vcmpeqfp. over lanes x/y/z) -- the
         // vendor vpu tree's own IsValid(Vector3).
         inline bool IsValidVec3Lanes(const Vector3& lrV) { return rw::math::vpu::IsValid(lrV); }
+
+        // Both contact bridges resolve the car side of the event the same way: take the
+        // contacted model's handling-body word (the 8-byte handle at model +0x6710), keep its
+        // 14-bit entity index, and re-stamp the owner as the car's PROP-COLLISION PROXY body --
+        // racecar -> 11, traffic -> 12 -- with a zero part index. The finished 32-bit word is
+        // then widened into the event's 8-byte B-side id as the HIGH dword, leaving the low
+        // dword zero. The console inlines this in both bodies; written once here so the two
+        // cannot drift.
+        //
+        // ⚠️ THE RETARGET IS THE POINT, not a detail: the record the simulation receives does
+        // NOT name the car's handling body, it names the car's prop-collision proxy ("dummy
+        // car") body -- the same proxy a prop-vs-car contact is routed onto.
+        inline u64 BuildProxyCarBodyId(u64 lu64HandlingBodyId)
+        {
+            const u32 luCarEntityWord  = static_cast<u32>(lu64HandlingBodyId >> 32);
+            const u32 luCarOwner       = (luCarEntityWord >> 24) & 0xFFu;
+            const u32 luCarEntityIndex = (luCarEntityWord >> 10) & 0x3FFFu;
+
+            u32 luProxyOwner = KU_OWNER_PROP_COLLISION_RACECAR;
+            if (luCarOwner != KU_OWNER_RACECAR)
+            {
+                // Fire-and-continue, exactly as the console: the traffic arm is taken either
+                // way (the tripwire does not gate the branch it sits in).
+                CGS_ASSERT(luCarOwner == KU_OWNER_TRAFFIC_VEHICLE,
+                           "lAddContactEvent.mIDB.GetEntityId().GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+                luProxyOwner = KU_OWNER_PROP_COLLISION_TRAFFIC;
+            }
+
+            // EntityId::Set carries the console's own entity-index tripwire
+            // ("luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)"), which is why the pack is
+            // spelled through it rather than as loose shifts.
+            CgsSceneManager::EntityId lProxyEntityId;
+            lProxyEntityId.Set(luProxyOwner, luCarEntityIndex, 0);
+            return static_cast<u64>(static_cast<u32>(lProxyEntityId)) << 32;
+        }
 
         // The consoles' "Un-normalised ..." tripwire predicate.
         // ⭐⭐ CORRECTED 2026-08-27 (traffic-bus ram wave): this used to RENORMALISE the vector and
@@ -339,54 +413,252 @@ namespace Deformation
     }
 
     // =================================================================================================
-    // DeformationManager::BridgeBodyPartCarContactsToSimulation  @0x825DD7D0  (PS3 DecFIGS 0x6F728C)
+    // DeformationManager::BridgeBodyPartCarContactsToSimulation
     //
-    // GATE (not a trap; log-once boot gate). Blocker: the real body (348 X360 asm lines, 11
-    // callees) is not reconstructed. LIVE every frame: BridgeContactsToSimulation @0x825A99E8:933
-    // <- PhysicsModule::Update @0x825B0640, both REAL. DELETE-WHEN the body lands.
+    // Drain custom potential-contact queue [3] -- DETACHED body part vs car -- into the simulation's
+    // add-contact queue. Live every frame from PhysicsModule::BridgeContactsToSimulation, which is
+    // itself reached every frame from PhysicsModule::Update.
+    //
+    // Per queued contact, in the console's order:
+    //   * an 80-byte stack copy of the record (the console's ten-doubleword copy loop);
+    //   * the three material constants (0.5 / 0.5 / 0.5, all from one float);
+    //   * owner tripwires -- A is a racecar/traffic DEFORMABLE PART (:2366), B is a racecar/
+    //     traffic vehicle (:2369) -- and the part-slot bound muPolyTagA < 50 (:2373);
+    //   * the pool gate: an unused part slot SKIPS the contact entirely (the whole tail sits
+    //     inside `if (IsPartIndexUsed)`);
+    //   * the event's A-side id <- the part's own packed 64-bit handle, read whole from +0x1D0;
+    //   * mIDB <- the contacted car model's PROXY body id (see BuildProxyCarBodyId), reached
+    //     through muPolyTagB with the model-slot bound (:2381), the bit-array index tripwire
+    //     and the mModelsAdded live-slot tripwire (:2382);
+    //   * the geometry: normal NEGATED into the event (the console's sign-bit splat over all
+    //     four lanes), and a CROSSED (penetrating) pair collapsed -- if dot3(mPointOnB - mPointOnA,
+    //     mNormal) is negative the event's mPointOnB is replaced by mPointOnA (threshold 0.0f);
+    //   * muTag <- the event index tagged with this queue's owner byte, 0x03000000, behind the
+    //     ContactId range tripwire (BrnContactId.h:122);
+    //   * the queue-headroom tripwire (:2412) then the bounds-gated AddEventSafe.
     // =================================================================================================
     void DeformationManager::BridgeBodyPartCarContactsToSimulation(
-        CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
         const BrnPhysics::PhysicsModuleIO::InputBuffer* /*lpInputBuffer*/,
-        PhysicsModuleIO::PotentialContactInterface* /*lpContacts*/)
+        PhysicsModuleIO::PotentialContactInterface* lpContacts)
     {
-        // BOOT GATE (conductor wave 2026-08-09; was a trap while the caller chain was dead):
-        // reached every frame by the landed BridgeContactsToSimulation. Reconstruct and
-        // DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
+        // ⛔ THE UNUSED lpInputBuffer IS FAITHFUL -- DO NOT "FIX" IT. The prologue spills only
+        // `this`, the sim input and the contact interface; the module input buffer's register is
+        // never read again across the whole body. The declaration keeps the parameter because the
+        // recovered signature and every sibling Bridge* in this family carry it.
+        typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
+
+        const Queue& lrQueue = lpContacts->GetDetachedBodyPartCarQueue();
+
+        // The loop bound is a SNAPSHOT: the console reads the length once into a stack slot
+        // before the loop and compares against that copy at the bottom.
+        const s32 liQueueLength = lrQueue.GetLength();
+
+        for (s32 liEventIndex = 0; liEventIndex < liQueueLength; ++liEventIndex)
         {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: DeformationManager::"
-                                              "BridgeBodyPartCarContactsToSimulation @0x825DD7D0 "
-                                              "inert [FLAG PC boot gate]\n";
+            const CgsSceneManager::SceneManagerIO::PotentialContact lContact =
+                lrQueue.GetEvent(liEventIndex);   // 80-byte stack copy
+
+            CgsPhysics::PhysicsSimulationIO::InAddPotentialContact lAddContactEvent;
+            lAddContactEvent.mStaticFriction  = KF_PART_CAR_FRICTION;
+            lAddContactEvent.mDynamicFriction = KF_PART_CAR_FRICTION;
+            lAddContactEvent.mRestitution     = KF_PART_CAR_RESTITUTION;
+
+            const u32 luOwnerA = GetVolumeInstanceOwner(lContact.muVolumeInstanceIdA);
+            CGS_ASSERT(luOwnerA == KU_OWNER_RACECAR_DEFORMABLE_PART
+                           || luOwnerA == KU_OWNER_TRAFFIC_DEFORMABLE_PART,
+                       "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART || "
+                       "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART");   // :2366
+
+            const u32 luOwnerB = GetVolumeInstanceOwner(lContact.muVolumeInstanceIdB);
+            CGS_ASSERT(luOwnerB == KU_OWNER_RACECAR || luOwnerB == KU_OWNER_TRAFFIC_VEHICLE,
+                       "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR || "
+                       "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");           // :2369
+
+            const u32 luPartSlot = lContact.muPolyTagA;
+            CGS_ASSERT(luPartSlot < KU_MAX_DETACHED_PARTS,
+                       "lContact.muPolyTagA < KU_MAX_DETACHED_PARTS");                                                         // :2373
+
+            // A dead pool slot drops the contact -- the console's `beq` jumps straight to the
+            // loop increment.
+            if (!mDetachedPartManager.IsPartIndexUsed(static_cast<s32>(luPartSlot)))
+            {
+                continue;
+            }
+
+            // The part's own packed handle, read whole (the console's single `ld 0x1D0(part)`).
+            const PhysicalBodyPart* lpPart =
+                mDetachedPartManager.GetPartFromIndex(static_cast<u16>(luPartSlot));
+            lAddContactEvent.mIDA = lpPart->GetRigidBodyId().GetBaseRigidBodyID();
+
+            // The contacted car's deformable-model slot.
+            const u32 luModelIndex = lContact.muPolyTagB;
+            CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS,
+                       "lContact.muPolyTagB < BrnPhysics::Deformation::KU_MAX_DEFORMATION_MODELS");                            // :2381
+            CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS, "invalid index : ");        // CgsBitArray.h:203
+            if (luModelIndex >= KU_MAX_DEFORMATION_MODELS)
+            {
+                // Host bounds guard only. The console's tripwires above are fire-and-continue and
+                // it indexes mModelsAdded / mpaModels with the out-of-range tag anyway, then posts
+                // a contact built from that out-of-range entry; the host refuses to read past the
+                // pool and drops the contact.
+                continue;
+            }
+            CGS_ASSERT(mModelsAdded.IsBitSet(luModelIndex),
+                       "mModelsAdded.IsBitSet(lContact.muPolyTagB)");                                                          // :2382
+
+            lAddContactEvent.mIDB =
+                BuildProxyCarBodyId(mpaModels[luModelIndex].GetHandlingBodyVolumeInstanceId().muId);
+
+            // Geometry. dot3(B - A, N) is the SIGNED separation along the contact normal; a
+            // negative one means the pair is penetrating, and the console then collapses the
+            // event's second point onto the first rather than shipping the crossed pair.
+            const f32 lfSeparation =
+                rw::math::vpu::Dot(lContact.mPointOnB - lContact.mPointOnA, lContact.mNormal);
+
+            lAddContactEvent.mNormal   = rw::math::vpu::Negate(lContact.mNormal);
+            lAddContactEvent.mPointOnA = lContact.mPointOnA;
+            lAddContactEvent.mPointOnB =
+                (lfSeparation < 0.0f) ? lContact.mPointOnA : lContact.mPointOnB;
+
+            CGS_ASSERT(liEventIndex >= 0 && liEventIndex < 65535,
+                       "liEventIndex >= 0 && liEventIndex < 65535");                          // BrnContactId.h:122
+            lAddContactEvent.muTag = static_cast<u32>(
+                BrnPhysics::ContactId((static_cast<u32>(liEventIndex) & 0xFFFFu) | 0x03000000u));
+
+            CGS_ASSERT(lpSimInput->GetAddContactQueue()->GetLength() + 1
+                           < lpSimInput->GetAddContactQueue()->GetMaxLength(),
+                       "lpSimModuleInputBuffer->GetAddContactQueue()->GetLength() + 1 < "
+                       "lpSimModuleInputBuffer->GetAddContactQueue()->GetMaxLength()");                                        // :2412
+            lpSimInput->GetAddContactQueue()->AddEventSafe(lAddContactEvent);
         }
     }
 
     // =================================================================================================
-    // DeformationManager::BridgeDetachedWheelCarContactsToSimulation  @0x825DDD48  (PS3 0x741E28)
+    // DeformationManager::BridgeDetachedWheelCarContactsToSimulation
     //
-    // GATE (not a trap; log-once boot gate). Blocker: the real body (392 X360 asm lines, 12
-    // callees) is not reconstructed. LIVE every frame: BridgeContactsToSimulation @0x825A99E8:935.
-    // DELETE-WHEN the body lands.
+    // The detached-WHEEL sibling of the body above: drain custom potential-contact queue [4] into
+    // the simulation's add-contact queue. Live every frame from the same caller. Same shape as the
+    // part bridge with four differences, all console-attested:
+    //   * the owner set on side A is DETACHED_RACECAR_WHEEL / DETACHED_TRAFFIC_WHEEL (:2458) and
+    //     the slot bound is muPolyTagA < 112 (:2465);
+    //   * the slot lookup is DetachedWheelManager::IsSlotUsed / GetWheel; the console calls
+    //     IsSlotUsed TWICE -- once as the gate, once as GetWheel's own inlined tripwire
+    //     (BrnDetachedWheelManager.h:114) -- and the A-side id is the wheel's packed handle,
+    //     read whole from +0x70;
+    //   * the materials are 0.9 / 0.5 / 0.8, not the part bridge's 0.5 / 0.5 / 0.5;
+    //   * instead of collapsing a separating pair, a DEEPLY penetrating one is REBUILT: when the
+    //     separation is worse than -0.01, the contact normal is replaced by the car's own body
+    //     RIGHT axis (mTransform.xAxis of the model's vehicle physics) signed to agree with the
+    //     original normal, the depth is clamped to 0.01, and mPointOnB is re-derived as
+    //     mPointOnA - normal*depth. This is what stops a wheel that has ended up inside a car
+    //     from being pushed out along a garbage mesh normal.
+    //   ⚠️ Note the model-slot leg carries NO KU_MAX_DEFORMATION_MODELS assert of its own here
+    //     (the part bridge's :2381) -- only the bit-array index tripwire. Reproduced as issued.
     // =================================================================================================
     void DeformationManager::BridgeDetachedWheelCarContactsToSimulation(
-        CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/,
+        CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
         const BrnPhysics::PhysicsModuleIO::InputBuffer* /*lpInputBuffer*/,
-        PhysicsModuleIO::PotentialContactInterface* /*lpContacts*/)
+        PhysicsModuleIO::PotentialContactInterface* lpContacts)
     {
-        // BOOT GATE (conductor wave 2026-08-09; was a trap while the caller chain was dead):
-        // reached every frame by the landed BridgeContactsToSimulation. Reconstruct and
-        // DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
+        // Same faithful-unused-parameter note as the body above: the module input buffer's
+        // register is never read across the whole body.
+        typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
+
+        const Queue& lrQueue = lpContacts->GetDetachedWheelCarQueue();
+        const s32 liQueueLength = lrQueue.GetLength();   // snapshot, as above
+
+        for (s32 liEventIndex = 0; liEventIndex < liQueueLength; ++liEventIndex)
         {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "conductor gate: DeformationManager::"
-                                              "BridgeDetachedWheelCarContactsToSimulation @0x825DDD48 "
-                                              "inert [FLAG PC boot gate]\n";
+            const CgsSceneManager::SceneManagerIO::PotentialContact lContact =
+                lrQueue.GetEvent(liEventIndex);   // 80-byte stack copy
+
+            CgsPhysics::PhysicsSimulationIO::InAddPotentialContact lAddContactEvent;
+            lAddContactEvent.mStaticFriction  = KF_WHEEL_CAR_STATIC_FRICTION;
+            lAddContactEvent.mDynamicFriction = KF_WHEEL_CAR_DYNAMIC_FRICTION;
+            lAddContactEvent.mRestitution     = KF_WHEEL_CAR_RESTITUTION;
+
+            const u32 luOwnerA = GetVolumeInstanceOwner(lContact.muVolumeInstanceIdA);
+            CGS_ASSERT(luOwnerA == KU_OWNER_DETACHED_RACECAR_WHEEL
+                           || luOwnerA == KU_OWNER_DETACHED_TRAFFIC_WHEEL,
+                       "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || "
+                       "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL");    // :2458
+
+            const u32 luOwnerB = GetVolumeInstanceOwner(lContact.muVolumeInstanceIdB);
+            CGS_ASSERT(luOwnerB == KU_OWNER_RACECAR || luOwnerB == KU_OWNER_TRAFFIC_VEHICLE,
+                       "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR || "
+                       "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");           // :2461
+
+            CGS_ASSERT(lContact.muPolyTagA < KU_MAX_DETACHED_WHEELS,
+                       "lContact.muPolyTagA < KU_MAX_DETACHED_WHEELS");                                                        // :2465
+
+            const u16 lu16WheelSlot = static_cast<u16>(lContact.muPolyTagA);
+            if (!mDetachedWheelManager.IsSlotUsed(lu16WheelSlot))
+            {
+                continue;
+            }
+
+            // GetWheel re-runs IsSlotUsed as its own tripwire -- that is the console's second
+            // call, not a duplicated gate.
+            const PhysicalWheel* lpWheel = mDetachedWheelManager.GetWheel(lu16WheelSlot);
+            lAddContactEvent.mIDA = lpWheel->GetVolumeInstanceId().muId;
+
+            const u32 luModelIndex = lContact.muPolyTagB;
+            CGS_ASSERT(luModelIndex < KU_MAX_DEFORMATION_MODELS, "invalid index : ");        // CgsBitArray.h:203
+            if (luModelIndex >= KU_MAX_DEFORMATION_MODELS)
+            {
+                continue;   // host bounds guard only -- see the part bridge's note
+            }
+            CGS_ASSERT(mModelsAdded.IsBitSet(luModelIndex),
+                       "mModelsAdded.IsBitSet(lContact.muPolyTagB)");                                                          // :2473
+
+            DeformableObject& lrCarModel = mpaModels[luModelIndex];
+            lAddContactEvent.mIDB = BuildProxyCarBodyId(lrCarModel.GetHandlingBodyVolumeInstanceId().muId);
+
+            const f32 lfSeparation =
+                rw::math::vpu::Dot(lContact.mPointOnB - lContact.mPointOnA, lContact.mNormal);
+
+            Vector3 lNormal   = lContact.mNormal;
+            Vector3 lPointOnB = lContact.mPointOnB;
+            if (lfSeparation < -KF_MAX_WHEEL_PENETRATION)
+            {
+                // Depth, clamped to the tolerance (the console's vminfp against the same splat;
+                // inside this branch the clamp always wins, but the min is spelled as issued).
+                const f32 lfPenetration = -lfSeparation;
+                const f32 lfDepth = (KF_MAX_WHEEL_PENETRATION < lfPenetration)
+                                        ? KF_MAX_WHEEL_PENETRATION : lfPenetration;
+
+                // The car's body RIGHT axis -- the first row of the vehicle-physics transform.
+                const Vector3 lCarRightAxis = lrCarModel.GetVehiclePhysics()->GetTransform().xAxis;
+
+                // sign(dot3(N, right)) via the console's two-compare vsel ladder: an unordered
+                // compare falls through to -1.0, which is why this is not written as a plain
+                // ternary on (lfAlong < 0.0f).
+                const f32 lfAlong = rw::math::vpu::Dot(lNormal, lCarRightAxis);
+                f32 lfSign = -1.0f;
+                if (lfAlong >= 0.0f)
+                {
+                    lfSign = (lfAlong > 0.0f) ? 1.0f : 0.0f;
+                }
+
+                lNormal   = lCarRightAxis * lfSign;
+                lPointOnB = lContact.mPointOnA - lNormal * lfDepth;
+            }
+
+            lAddContactEvent.mPointOnA = lContact.mPointOnA;
+            lAddContactEvent.mPointOnB = lPointOnB;
+            lAddContactEvent.mNormal   = rw::math::vpu::Negate(lNormal);
+
+            CGS_ASSERT(liEventIndex >= 0 && liEventIndex < 65535,
+                       "liEventIndex >= 0 && liEventIndex < 65535");                          // BrnContactId.h:122
+            lAddContactEvent.muTag = static_cast<u32>(
+                BrnPhysics::ContactId((static_cast<u32>(liEventIndex) & 0xFFFFu) | 0x04000000u));
+
+            CGS_ASSERT(lpSimInput->GetAddContactQueue()->GetLength() + 1
+                           < lpSimInput->GetAddContactQueue()->GetMaxLength(),
+                       "lpSimModuleInputBuffer->GetAddContactQueue()->GetLength() + 1 < "
+                       "lpSimModuleInputBuffer->GetAddContactQueue()->GetMaxLength()");                                        // :2513
+            lpSimInput->GetAddContactQueue()->AddEventSafe(lAddContactEvent);
         }
     }
 

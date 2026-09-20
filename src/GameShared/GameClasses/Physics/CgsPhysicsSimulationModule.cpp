@@ -642,43 +642,63 @@ namespace CgsPhysics
     // the K_INVALID_RIGID_BODY_ID sentinel, so a match on a real id already implies the slot
     // is live. The two post-match asserts below re-check exactly that.
     //
-    // The remaining ~120 instructions are three diagnostics. All three are reconstructed as
-    // CGS_ASSERTs in the established style of this file (the id that the console formats into
-    // the message via StrStreamBase is dropped; the message text is kept verbatim, including
-    // its original spelling):
-    //   * .cpp:2537 "Bad search"  -- fires ONLY when the miss is on an id whose owner field is
-    //     3. The console computes that owner as `srdi r11,r30,32` then `srwi r11,r11,24`,
-    //     i.e. bits 56..63 of the 64-bit handle. ⚠️ Recorded precisely because that is NOT
-    //     the same as a `>>24` on a 32-bit value -- see the open RigidBodyId item.
+    // The remaining ~120 instructions are FOUR diagnostics -- three asserts and one log line:
+    //   * :2537 "\nPhysics: Bad search for a Rigid body ID " -- on the MISS path, and it
+    //     fires ONLY when the miss is on an id whose owner field is 3. The console computes
+    //     that owner as `srdi r11,r30,32` then `srwi r11,r11,24`, i.e. bits 56..63 of the
+    //     64-bit handle. ⚠️ Recorded precisely because that is NOT the same as a `>>24` on a
+    //     32-bit value -- and ProcessUpdateRigidBodyQueue's diagnostic re-learned it the hard
+    //     way (`>>32` selects the entity word's LOW byte, not the owner).
     //   * .cpp:2544 "ID's dont match" and .cpp:2545 "Slot not used" -- both on the HIT path.
+    //     The three message texts are kept verbatim, including their original spelling and
+    //     trailing whitespace/newline; the id the console formats into the assert BUFFER via
+    //     StrStreamBase::AppendFormat("0x%08X"/"%08X") is dropped, per this file's standing
+    //     plain-literal convention (CgsAssert.h records why).
+    //   * the flag-gated log line at the tail of the miss path, which re-streams the same text
+    //     plus the id to the debug-print stream when bit 0 of the message filter is set. That
+    //     IS reconstructed here -- gpDebugPrint and the `mePrintMode = 2` push
+    //     (E_PRINTMODE_HEXONCE) both exist in this tree now, and the drains at the end of this
+    //     file already stream through them. It has no effect on the return value.
     //
-    // ⚠️ NOT MODELLED, and recorded here rather than left unmentioned: a second, flag-gated debug
-    // print at 0x828A01EC..0x828A0220 on the miss path, which re-streams the same "Bad search"
-    // text to a global stream object (`off_82F31904`) when bit 0 of `qword_82F31908` is set.
-    // It is a log write with no effect on the return value, and modelling it would mean
-    // inventing a logging entry point this tree does not have.
+    // ⚠️ ONE DELIBERATE DIFFERENCE FROM THE CONSOLE, and it is inert. The console's loop tests
+    // the slot BEFORE the bound -- the id compare sits at the top of the body and the 200-limit
+    // only at the latch -- so a full table probes ONE element past the end of maGameIDs. That
+    // probe can never be accepted: the trailing bound test below is exactly what rejects it.
+    // The bound is therefore tested first here, instead of reading out of range on the host.
     s32 RigidBodyData::GetIndexFromGameID(RigidBodyId lId)
     {
-        for (s32 li = 0; li < KI_SIZE; ++li)
+        s32 liIndex = 0;
+        while (liIndex < KI_SIZE && static_cast<u64>(maGameIDs[liIndex]) != static_cast<u64>(lId))
         {
-            if (static_cast<u64>(maGameIDs[li]) == static_cast<u64>(lId))
-            {
-                // 0x828A0230.. -- the console re-reads the slot and re-checks it, which is
-                // only reachable when the table was mutated under it.
-                CGS_ASSERT(static_cast<u64>(maGameIDs[li]) == static_cast<u64>(lId),
-                           "ID's dont match: Andy H has meesed up the physics: ");   // .cpp:2544
-                CGS_ASSERT(!maGameIDs[li].IsInvalid(),
-                           "Slot not used: Andy H has meesed up the physics: ");     // .cpp:2545
-                return li;
-            }
+            ++liIndex;
+        }
+
+        if (liIndex < KI_SIZE)
+        {
+            // The console re-reads the slot and re-checks it on the hit path, which is
+            // only reachable when the table was mutated under it.
+            CGS_ASSERT(static_cast<u64>(maGameIDs[liIndex]) == static_cast<u64>(lId),
+                       "ID's dont match: Andy H has meesed up the indexing \n");   // :2544
+            CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(),
+                       "Slot not used: Andy H has meesed up the indexing \n");     // :2545
+            return liIndex;
         }
 
         // 0x828A0150 -- the owner-gated miss diagnostic. `srdi 32` then `srwi 24` == the top
         // byte of the 64-bit handle; the console only complains for owner 3.
         if (static_cast<u32>(static_cast<u64>(lId) >> 56) == 3u)
         {
-            CGS_ASSERT(false, "\nPhysics: Bad search for a Rigid body ");            // .cpp:2537
+            CGS_ASSERT(liIndex < KI_SIZE, "\nPhysics: Bad search for a Rigid body ID ");   // :2537
         }
+
+        // The same text and id, un-gated by the owner byte, to the log.
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "\nPhysics: Bad search for a Rigid body ID "
+                << CgsDev::E_PRINTMODE_HEXONCE << static_cast<u64>(lId) << "\n";
+        }
+
         return -1;
     }
 
@@ -1572,17 +1592,19 @@ namespace CgsPhysics
     // joint drain instead fires an assert first and then skips. Both behaviours are
     // transcribed as shipped; do not harmonise them.
     //
-    // ⚠️ WHAT IS DELIBERATELY NOT RECONSTRUCTED, AND WHY. The console builds those miss
-    // messages by STREAMING: `CgsDev::StrStreamBase::AppendFormat("0x%08X")` on the high word
-    // of the id followed by `AppendFormat("%08X")` on the low word, into
-    // `CgsDev::Assert::gpcMessageBuffer`, and ProcessRemoveJointQueue additionally guards a
-    // debug-TTY print on a global flag (`ld 0x1908(r11)` & 1 at 0x8289FA74) before firing.
-    // This tree has only `CGS_ASSERT(cond, "literal")`, and CgsAssert.h already records why:
-    // "The original streamed the message into the assert buffer via StrStream; the call sites
-    // all pass a plain string". The console's own message TEXT and the exact control flow
-    // (assert, then skip the event) are kept; the formatting machinery belongs to whoever
-    // reconstructs CgsDev::StrStreamBase. ⭐ Incidentally the two-halves format is itself a
-    // third witness that JointId is 64 bits wide.
+    // ⚠️ THE ASSERT-BUFFER FORMATTING IS DELIBERATELY DROPPED, AND WHY. The console builds
+    // those miss messages by STREAMING: `CgsDev::StrStreamBase::AppendFormat("0x%08X")` on the
+    // high word of the id followed by `AppendFormat("%08X")` on the low word, into
+    // `CgsDev::Assert::gpcMessageBuffer`. This tree has only `CGS_ASSERT(cond, "literal")`,
+    // and CgsAssert.h already records why: "The original streamed the message into the assert
+    // buffer via StrStream; the call sites all pass a plain string". The console's own message
+    // TEXT and the exact control flow (assert, then skip the event) are kept; the assert
+    // buffer's formatting machinery belongs to whoever reconstructs CgsDev::StrStreamBase.
+    // ⭐ Incidentally the two-halves format is itself a third witness that JointId is 64 bits
+    // wide.
+    // ⚠️ ProcessRemoveJointQueue's SEPARATE log line -- the one guarded on bit 0 of the message
+    // filter -- is a different thing and IS reconstructed: it streams to
+    // CgsDev::Log::gpDebugPrint, which this tree has.
     //
     // ⭐ THE FIVE QUEUE ACCESSORS ARE A 5-FOR-5 CONTROL on the queue table landed in task #142:
     // every drain's opening `bl` resolves to exactly the address CgsPhysicsSimulationModuleIO.h
@@ -1704,8 +1726,17 @@ namespace CgsPhysics
             const s32 liJointIndex = mJointData.GetIndexFromGameID(JointId{ lrEvent.mu64Id });
             if (liJointIndex == -1)
             {
-                // .cpp:1792. Console text preserved; see the group banner for the streamed
-                // id and the flag-guarded TTY print that are not reconstructed.
+                // The flag-gated log line comes FIRST, then the assert, and the two use
+                // DIFFERENT literals: the log one carries a leading newline, the assert one
+                // does not.
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "\nPhysics: Bad search for a joint ID "
+                        << CgsDev::E_PRINTMODE_HEXONCE << lrEvent.mu64Id << "\n";
+                }
+                // :1792. Console text preserved; the id the console formats into the assert
+                // BUFFER is dropped, per the group banner.
                 CGS_ASSERT(liJointIndex != -1, "Physics: Bad search for a joint ID ");
                 continue;
             }
@@ -1921,8 +1952,9 @@ namespace CgsPhysics
                     // Body A: <idA> Body B: <idB>" from three checked lookups, in THIS order
                     // (B's id first, then A's, then the joint id -- 0x828A2FBC/0x828A302C/
                     // 0x828A3108). The lookups are kept because their tripwires are real
-                    // behaviour; the streamed formatting is not reconstructed (this file's
-                    // standing plain-literal convention).
+                    // behaviour; the streamed formatting is dropped, because it streams into
+                    // the ASSERT BUFFER (this file's standing plain-literal convention -- see
+                    // the joint-group banner).
                     const RigidBodyId lIdB = mBodyData.GetGameID(static_cast<s32>(lpJoint->GetParent()->GetTag()));   // h:585/h:586
                     const RigidBodyId lIdA = mBodyData.GetGameID(static_cast<s32>(lpJoint->GetChild()->GetTag()));    // h:585/h:586
                     const JointId     lJId = mJointData.GetGameID(liJoint);                                           // h:612/h:613

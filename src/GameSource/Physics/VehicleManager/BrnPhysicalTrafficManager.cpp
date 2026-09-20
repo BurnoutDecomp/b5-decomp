@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                             // the witness below
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface + the fine queue
+#include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"     // PotentialContactInterface::AddEvent + the custom-queue ids (AddArticulatedJointContacts)
 
 namespace BrnPhysics
 {
@@ -1193,6 +1194,146 @@ void PhysicalTrafficManager::ResolveArticulatedJoints()
         lpTrailer->mpVehicleBody->Translate(lSeperationVectorWorld);
 
         JointResolveWitness(liTraffic, liTrailerIndex, liJointIndex);   // DIAG, not in the binary
+    }
+}
+
+// =================================================================================================
+// AddArticulatedJointContacts -- the CONTACT half of the hitch, and the tail call of
+// VehicleManager::EndPartContactGeneration. ResolveArticulatedJoints above is its near-twin: the
+// same walk (live slot -> CAB -> unbroken joint -> resolve the other half through the pool -> the
+// other half must be live too) and the same four tripwires, but where Resolve MOVES the two bodies
+// this one posts ONE PotentialContact per surviving pair and touches nothing.
+//
+// The record it builds, field by field (the record is the scene-manager PotentialContact, 80 bytes
+// on this host -- the same sizeof the queue's own element stride is built from):
+//   mPointOnA -- the anchor in the CAB's OWN LOCAL space, straight out of the cab's accessor.
+//   mPointOnB -- the SAME anchor in the TRAILER's local space. NOT the trailer's own articulation
+//                point: the console takes the CAB's WORLD-space point (GetArticulationPointWorldSpace
+//                is passed the cab, not the trailer) and pushes it through the trailer transform's
+//                inverse. So the pair's two points are one physical anchor expressed in each half's
+//                frame, and the vector between them once both are re-expanded to world space is the
+//                hitch separation the penetration solver is being asked to close.
+//   mNormal   -- the NEGATED "at" row of the CAB's body transform, i.e. the cab pointing backwards,
+//                down the train towards the trailer. All four lanes are flipped (the console
+//                materialises the sign mask and xors the whole row), the unused w with them.
+//   the two volume-instance ids -- each half's PHYSICS entity id in the high dword, low dword zero
+//                (no volume index is spliced in: the joint is not a volume contact).
+//
+// Then it routes the record by whether EITHER half is a SIMPLE (box) traffic vehicle, and the two
+// arms differ in MORE than the queue they post to -- they also swap which field pair carries the
+// two traffic slot indices. That is not a transcription slip, it is what the stores say:
+//   neither simple -> the ARTICULATED-JOINT queue, indices in mu16PrimitiveIndexA/B, poly tags 0.
+//                     Its consumer, DeformationManager::AddArticulatedJointContacts, reads only the
+//                     two ids and the three vectors, so the indices are carried for the record.
+//   either simple  -> the SIMPLE-TRAFFIC-WITH-CAR queue, indices in muPolyTagA/B (32-bit), both
+//                     16-bit primitive indices 0.
+// The console INLINES the queue append in the simple arm and CALLS it in the other; both are the
+// same PotentialContactInterface::AddEvent(queueId, record) -- the inlined copy is that body
+// instruction for instruction (the full-queue warning with its message-filter gate, then the
+// bounds-gated AddEventSafe), minus only the queue-id assert, which constant-folded away. Written
+// here as the one call both arms make, per the standing inlining-reversal rule.
+// =================================================================================================
+void PhysicalTrafficManager::AddArticulatedJointContacts(
+    BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface)
+{
+    CGS_ASSERT(lpPotentialContactsInterface != nullptr,
+               "lpPotentialContactsInterface != NULL");                                     // :3986
+
+    for (s32 liTraffic = mUsedTrafficVehicles.GetFirstNonZeroBit();
+         liTraffic >= 0;
+         liTraffic = mUsedTrafficVehicles.GetNextNonZeroBit(liTraffic))
+    {
+        PhysicalTrafficVehicle* lpCab = GetTrafficVehicle(liTraffic);
+
+        // Raw field read, no range assert -- the same one test ResolveArticulatedJoints leaves
+        // outside GetArticulatedVehicleType(); every later read of the field goes through the
+        // accessor, which is where the repeated :506 range assert below comes from.
+        if (lpCab->meArticulatedVehicleType != PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB)
+        {
+            continue;
+        }
+        if (!lpCab->HasNonBrokenJoint())
+        {
+            continue;
+        }
+
+        const s32 liJointIndex = lpCab->miJointIndex;
+        const s32 liTrailerIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+            liJointIndex,
+            static_cast<s32>(lpCab->GetArticulatedVehicleType()));
+
+        CGS_ASSERT(static_cast<u32>(liTrailerIndex) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "invalid index : ");
+        if (!mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrailerIndex)))
+        {
+            continue;
+        }
+
+        PhysicalTrafficVehicle* lpTrailer = GetTrafficVehicle(liTrailerIndex);
+
+        CGS_ASSERT(lpCab->GetArticulatedVehicleType()
+                       == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB,
+                   "lpCab->GetArticulatedVehicleType() == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB");      // :4017
+        CGS_ASSERT(lpTrailer->GetArticulatedVehicleType()
+                       == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER,
+                   "lpTrailer->GetArticulatedVehicleType() == PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER"); // :4018
+        CGS_ASSERT(mArticulatedJointPool.GetIndexOfOtherHalf(
+                       liJointIndex,
+                       static_cast<s32>(lpTrailer->GetArticulatedVehicleType())) == liTraffic,
+                   "mArticulatedJointPool.GetIndexOfOtherHalf( liJointIndex, lpTrailer->GetArticulatedVehicleType() ) == liTraffic"); // :4019
+
+        const Matrix44Affine lCabTransform     = lpCab->mpVehicleBody->GetTransform();
+        const Matrix44Affine lTrailerTransform = lpTrailer->mpVehicleBody->GetTransform();
+
+        CgsSceneManager::SceneManagerIO::PotentialContact lContact;
+
+        // The cab's backward axis: the "at" row, sign-flipped in all four lanes.
+        lContact.mNormal.x = -lCabTransform.zAxis.x;
+        lContact.mNormal.y = -lCabTransform.zAxis.y;
+        lContact.mNormal.z = -lCabTransform.zAxis.z;
+        lContact.mNormal.w = -lCabTransform.zAxis.w;
+
+        lContact.mPointOnA = lpCab->GetArticulationPointLocalSpace();
+
+        // The cab's anchor re-expressed in the trailer's frame. The console emits the orthonormal
+        // affine inverse and the point transform fused into one lane-merge + multiply-add cascade
+        // (the 3x3 transpose assembled with the vmrgh/vmrgl pairs, the negated translation row
+        // accumulated against it first, then the three broadcasts of the incoming point); these
+        // two named helpers are exactly those two steps, in that order.
+        lContact.mPointOnB = rw::math::vpu::TransformPoint(
+            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lTrailerTransform),
+            lpCab->GetArticulationPointWorldSpace());
+
+        lContact.muVolumeInstanceIdA.muId =
+            static_cast<u64>(GetPhysicsEntityId(liTraffic).muValue)
+                << CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX;
+        lContact.muVolumeInstanceIdB.muId =
+            static_cast<u64>(GetPhysicsEntityId(liTrailerIndex).muValue)
+                << CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX;
+
+        // The cab's IsSimple() is inlined at the call site (its :382 range assert and the
+        // == SIMPLE compare are emitted here); the trailer's is the out-of-line call, reached only
+        // when the cab is not simple -- i.e. the ordinary short-circuit of the two accessors.
+        if (lpCab->IsSimple() || lpTrailer->IsSimple())
+        {
+            lContact.muPolyTagA          = static_cast<u32>(liTraffic);
+            lContact.muPolyTagB          = static_cast<u32>(liTrailerIndex);
+            lContact.mu16PrimitiveIndexA = 0;
+            lContact.mu16PrimitiveIndexB = 0;
+
+            lpPotentialContactsInterface->AddEvent(
+                BrnPhysics::PhysicsModuleIO::E_QUEUE_TYPE_SIMPLE_TRAFFIC_WITH_CAR, lContact);
+        }
+        else
+        {
+            lContact.muPolyTagA          = 0;
+            lContact.muPolyTagB          = 0;
+            lContact.mu16PrimitiveIndexA = static_cast<u16>(liTraffic);
+            lContact.mu16PrimitiveIndexB = static_cast<u16>(liTrailerIndex);
+
+            lpPotentialContactsInterface->AddEvent(
+                BrnPhysics::PhysicsModuleIO::E_QUEUE_TYPE_TRAFFIC_ARTICULATED_JOINTS, lContact);
+        }
     }
 }
 

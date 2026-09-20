@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventOutOverlapPair.h"    // OutOverlapPair (promoted ids)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"          // TriangleCacheInterface
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h" // CollisionGenerator (+ the collide-stream family)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"                           // Box::Set + BoxOverlappingTest (the unhide tail's OBB re-test)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsSphereList.h"       // SphereList (DoRaceCarWorld's sphere pass)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsSweptSphereList.h"  // SweptSphereList (the swept pass)
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsTriangleList.h"     // TriangleList (CheckAlignment/ValidateTriangles)
@@ -134,6 +135,29 @@ namespace Vehicle
         // DoTrafficWorldContactOrdering @0x825C8F18 owner tags.
         const u32 KU_OWNER_WORLD                     = 0;    // BrnWorld::E_ENTITYTYPE_WORLD
         const u32 KU_OWNER_TRAFFIC_VEHICLE           = 2;    // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE
+
+        // ---- EndVehicleContactGeneration's HIDE_ONLINE unhide tail -------------------------------
+        // The race-car slot count the unhide tail's inner partner walk covers; it is the width of
+        // mHiddenRaceCars / maeRaceCarTypes / mauNetworkCarHiddenFramesRemaining and the row stride
+        // of the 8x8 mOverlappingRaceCars matrix that Start fills.
+        const s32 KI_NUM_RACE_CAR_SLOTS = 8;
+
+        // The unhide OBB re-test does NOT use each car's true half extents: it grows them by this
+        // factor first, so a car is not made visible the instant its real hull clears its partner.
+        // A SILENT-ZERO CONSTANT in the image -- the slot the body loads reads as four zero words
+        // because a startup initialiser splats this value into all four lanes; the value comes from
+        // that initialiser's source float, not from the slot.
+        const f32 KF_UNHIDE_OVERLAP_EXTENT_SCALE = 1.05f;
+
+        // The whole-register multiply the box build performs on the half extents (all four lanes;
+        // Box::Set consumes only xyz, the w lane rides along).
+        inline Vector3 ScaleHalfExtentForUnhideTest(Vector3 lHalfExtent)
+        {
+            return Vector3{ lHalfExtent.x * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
+                            lHalfExtent.y * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
+                            lHalfExtent.z * KF_UNHIDE_OVERLAP_EXTENT_SCALE,
+                            lHalfExtent.w * KF_UNHIDE_OVERLAP_EXTENT_SCALE };
+        }
     }
 
     // ==========================================================================================
@@ -635,14 +659,18 @@ namespace Vehicle
                                        EntityId{ static_cast<u32>(lCarIdB) },
                                        KU8_CARCAR_VOL_INST_OFFSET, KU8_CARCAR_VOL_INST_OFFSET);
 
-            // ---- [Q7-carcar] one-shot bring-up witness --------------------------------------
-            // [DIAG] NOT IN THE X360 BINARY. Opt-in (BRN_PROP_DIAG), one-shot, never per frame.
+            // ---- [Q7-carcar] bring-up witness, one line PER QUEUE ID ---------------------------
+            // [DIAG] NOT IN THE CONSOLE BINARY. Opt-in (BRN_PROP_DIAG or BRN_SHOWTIME_WATCH), never
+            // per frame. One line for the whole process could never report queue 7: the first
+            // pair of any race is race-car-vs-traffic (queue 8).
             {
-                static const bool sbPropDiag  = (getenv("BRN_PROP_DIAG") != 0);
-                static bool       sbFirstPair = true;
-                if (sbPropDiag && sbFirstPair && CgsDev::Log::gpDebugPrint != 0)
+                static const bool sbPropDiag = (getenv("BRN_PROP_DIAG") != 0
+                                                || getenv("BRN_SHOWTIME_WATCH") != 0);
+                static bool       sabFirstForQueue[14] = { false };
+                const u32         luDiagQueue = (lu16QueueID < 14u) ? lu16QueueID : 13u;
+                if (sbPropDiag && !sabFirstForQueue[luDiagQueue] && CgsDev::Log::gpDebugPrint != 0)
                 {
-                    sbFirstPair = false;
+                    sabFirstForQueue[luDiagQueue] = true;
                     *CgsDev::Log::gpDebugPrint
                         << "[Q7-carcar] first car-car pair A=" << static_cast<u32>(lCarPhysicsIdA)
                         << " B=" << static_cast<u32>(lCarPhysicsIdB)
@@ -1151,19 +1179,30 @@ namespace Vehicle
     //      DataStreamCommandPoster::End(producer+0x80) + the mbIsStreaming drop, which is
     //      byte-for-byte SimpleDataStreamProducer::End());
     //   3) AddContactResultsToQueue — the harvest (above);
-    //   4) the HIDE_ONLINE tail: unhide network race cars that stopped overlapping (BitArray walk
-    //      over mHiddenRaceCars; per car: OBB overlap re-test via Box::Set + BoxOverlappingTest
-    //      against every mOverlappingRaceCars partner, the mRaceCarsAddedForCollision /
-    //      mNetworkCarsAddedForCollisionThisFrame / mNetworkCarsRecievedFirstUpdate gates, the
-    //      mauNetworkCarHiddenFramesRemaining countdown, the mbPlayerCarInJunkYard hold, then
-    //      "HIDE_ONLINE: Making race car N, type T visible and collidable\n" + UnSetBit).
-    // GATED, NOT RECONSTRUCTED, and the gate is PROVABLY UNREACHABLE TODAY: the only
-    //      in-tree writer of mHiddenRaceCars is Construct's UnSetAll (grep witness, walls leg 3),
-    //      so no bit can be set on this offline build — the tail is network-only behaviour.
-    //      The only blocker on this tail is the network bookkeeping path itself --
-    //      mHiddenRaceCars / mRaceCarsAddedForCollision / mNetworkCarsAddedForCollisionThisFrame /
-    //      mNetworkCarsRecievedFirstUpdate / mauNetworkCarHiddenFramesRemaining /
-    //      mbPlayerCarInJunkYard.
+    //   4) the HIDE_ONLINE unhide tail: give every race car still flagged hidden one chance per
+    //      frame to come back. Walking mHiddenRaceCars, a car is made visible only when ALL of:
+    //        * it no longer overlaps ANY partner this frame's overlap pass paired it with. That is
+    //          re-tested geometrically, not taken from the pair list: each side is turned into an
+    //          oriented box from its graphics transform and its body-space half extents grown by
+    //          KF_UNHIDE_OVERLAP_EXTENT_SCALE (zero fatness), and the two are run through
+    //          CgsGeometric::BoxOverlappingTest -- so the partner bit in mOverlappingRaceCars only
+    //          selects WHO to test, and a car that is merely near but no longer intersecting
+    //          passes;
+    //        * mRaceCarsAddedForCollision has it (it is already in the collision world);
+    //        * mNetworkCarsAddedForCollisionThisFrame does NOT (it was not (re-)added this frame);
+    //        * mNetworkCarsRecievedFirstUpdate has it (a network car with no state yet stays out);
+    //        * mauNetworkCarHiddenFramesRemaining[car] has run down to zero.
+    //      Any failed gate instead burns one frame off that countdown (when it is non-zero) and
+    //      leaves the car hidden. A player car in the junk yard holds the whole tail: the car stays
+    //      hidden AND the countdown is not decremented. Unhiding logs
+    //      "HIDE_ONLINE: Making race car N, type T visible and collidable" and clears the bit.
+    //      RECONSTRUCTED 2026-09-20 (contact-wave lane C); its loud named gate is gone with it.
+    //      ⚠️ STILL DORMANT ON THIS BUILD, and that is a property of the CALLERS, not of this code:
+    //      the only in-tree writer of mHiddenRaceCars is Construct's UnSetAll, so no bit is ever
+    //      set offline and the walk finds nothing. It lands now because it is the console's
+    //      behaviour and every member and callee it needs is real and attested; it will start
+    //      doing work the moment the network hide path (SetNetworkRaceCarHidden and the
+    //      mRaceCarsAddedForCollision / mNetworkCars* bookkeeping) lands.
     // ==============================================================================================
     void VehicleManager::EndVehicleContactGeneration(
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* /*lpTriangleCacheInterface*/,
@@ -1207,21 +1246,86 @@ namespace Vehicle
             }
         }
 
-        // ---- (4) the HIDE_ONLINE tail — LOUD NAMED GATE (see the banner: provably dead) --------
-        if (mHiddenRaceCars.GetFirstNonZeroBit() != -1)
+        // ---- (4) the HIDE_ONLINE unhide tail ----------------------------------------------------
+        for (s32 liHiddenCar = mHiddenRaceCars.GetFirstNonZeroBit();
+             liHiddenCar != -1;
+             liHiddenCar = mHiddenRaceCars.GetNextNonZeroBit(liHiddenCar))
         {
-            static bool sbLoggedHideOnlineGate = false;
-            if (!sbLoggedHideOnlineGate)
+            // Re-test the geometry against every partner the overlap pass paired this car with.
+            // mOverlappingRaceCars is the symmetric 8x8 matrix StartVehicleContactGeneration fills
+            // (row-major, 8 * carA + carB), so the row for this car names its partners.
+            bool lbStillOverlapping = false;
+            for (s32 liOtherCar = 0; liOtherCar < KI_NUM_RACE_CAR_SLOTS; ++liOtherCar)
             {
-                sbLoggedHideOnlineGate = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: EndVehicleContactGeneration's HIDE_ONLINE unhide tail "
-                           "@0x8261AC38 reached (a hidden race car exists) but not reconstructed "
-                           "-- car NOT unhidden [FLAG PC boot gate]. The geometry it needs is real "
-                           "(Box::Set + both BoxOverlappingTest overloads); what is missing is the "
-                           "network bookkeeping path. Reported once, not per frame\n";
+                if (liOtherCar == liHiddenCar)
+                {
+                    continue;
+                }
+                if (!mOverlappingRaceCars.IsBitSet(
+                        static_cast<u32>(KI_NUM_RACE_CAR_SLOTS * liHiddenCar + liOtherCar)))
+                {
+                    continue;
+                }
+
+                const RaceCarPhysics& lrHiddenPhysics = maRaceCarVehicles[liHiddenCar];
+                const RaceCarPhysics& lrOtherPhysics  = maRaceCarVehicles[liOtherCar];
+
+                CgsGeometric::Box lHiddenBox;
+                lHiddenBox.Set(lrHiddenPhysics.GetGraphicsVehicleTransform(),
+                               ScaleHalfExtentForUnhideTest(lrHiddenPhysics.GetHalfExtent()),
+                               VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+
+                CgsGeometric::Box lOtherBox;
+                lOtherBox.Set(lrOtherPhysics.GetGraphicsVehicleTransform(),
+                              ScaleHalfExtentForUnhideTest(lrOtherPhysics.GetHalfExtent()),
+                              VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+
+                // MaskScalar::GetBool is exactly the lane-compare-against-zero the console folds
+                // in here: any non-zero lane == the six face-axis tests all passed == overlapping.
+                if (CgsGeometric::BoxOverlappingTest(lHiddenBox, lOtherBox).GetBool())
+                {
+                    lbStillOverlapping = true;
+                    break;
+                }
             }
+
+            const u32 luHiddenFramesRemaining = mauNetworkCarHiddenFramesRemaining[liHiddenCar];
+
+            // The gate chain, in the console's own short-circuit order: the first failure skips
+            // straight to the countdown.
+            const bool lbReadyToUnhide =
+                !lbStillOverlapping
+                && mRaceCarsAddedForCollision.IsBitSet(static_cast<u32>(liHiddenCar))
+                && !mNetworkCarsAddedForCollisionThisFrame.IsBitSet(static_cast<u32>(liHiddenCar))
+                && mNetworkCarsRecievedFirstUpdate.IsBitSet(static_cast<u32>(liHiddenCar))
+                && luHiddenFramesRemaining == 0u;
+
+            if (!lbReadyToUnhide)
+            {
+                if (luHiddenFramesRemaining != 0u)
+                {
+                    --mauNetworkCarHiddenFramesRemaining[liHiddenCar];
+                }
+                continue;
+            }
+
+            // The junk-yard hold sits BELOW the countdown, not above it: it leaves the car hidden
+            // without spending a frame of the countdown.
+            if (mbPlayerCarInJunkYard)
+            {
+                continue;
+            }
+
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "HIDE_ONLINE: "
+                    << "Making race car " << liHiddenCar
+                    << ", type " << static_cast<s32>(maeRaceCarTypes[liHiddenCar])
+                    << " visible and collidable\n";
+            }
+
+            mHiddenRaceCars.UnSetBit(static_cast<u32>(liHiddenCar));
         }
     }
 
@@ -1331,7 +1435,8 @@ namespace Vehicle
     //      mbIsStreaming drop -- 0x8261B6C4..0x8261B6E4);
     //   2) walk the contact-gen entries [miFirstPartContactGenEntry, GetNumEntries()) -- exactly the
     //      window the Start stamped -- and post one PotentialContact per result;
-    //   3) PhysicalTrafficManager::AddArticulatedJointContacts (see the FLAG below).
+    //   3) tail-call PhysicalTrafficManager::AddArticulatedJointContacts, the articulated-traffic
+    //      (cab + trailer) joint contacts.
     //
     // ⚠️⚠️ IT IS **NOT** AddContactResultsToQueue WITH A DIFFERENT WINDOW, and reusing that body
     // would have been wrong in two measured ways. Read against 0x8261BA00..0x8261BA78:
@@ -1399,6 +1504,9 @@ namespace Vehicle
 
             for (u16 lu16Result = 0; lu16Result < lu16NumResults; ++lu16Result)
             {
+                // The console's per-record cursor bound, fired at the head of this loop exactly as
+                // AddContactResultsToQueue's twin does (CgsCollisionResultList.h:148).
+                CGS_ASSERT(lu16Result < lResultList.mu16NumResults, "lu16Index < mu16NumResults");
                 const PrimitiveTestResult& lrRecord = lpaResults[lu16Result];
 
                 PotentialContact lContact;
@@ -1439,30 +1547,11 @@ namespace Vehicle
         }
 
         // ---- (3) the articulated-joint tail -------------------------------------------------------
-        // FLAG (scoped deferral, named not silent): the console tail-calls
-        // BrnPhysics::Vehicle::PhysicalTrafficManager::AddArticulatedJointContacts @0x825F3000 --
-        // 508 instructions, NO body anywhere in this tree and no declaration on
-        // PhysicalTrafficManager (checked, not assumed; the only AddArticulatedJointContacts here is
-        // DeformationManager's unrelated @0x825DB190). It drains the ARTICULATED-TRAFFIC joints --
-        // trailers and the like -- and is orthogonal to detached car parts, which is why this wave
-        // scoped it out rather than half-landing 508 instructions of traffic articulation inside a
-        // deformation change. The log-once below is what makes it a NAMED absence rather than a
-        // quiet one -- an omitted call that says nothing is the failure mode this project treats
-        // as an audit failure.
-        {
-            static bool sbLoggedArticulatedJointGate = false;
-            if (!sbLoggedArticulatedJointGate)
-            {
-                sbLoggedArticulatedJointGate = true;
-                if (CgsDev::Message::gxMessageFilterFlags & 1)
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: EndPartContactGeneration's tail call "
-                           "PhysicalTrafficManager::AddArticulatedJointContacts @0x825F3000 (508) "
-                           "is NOT reconstructed -- articulated TRAFFIC joint contacts are not "
-                           "drained [FLAG PC boot gate]. The detached-part harvest above it is "
-                           "complete. Reported once, not per frame\n";
-            }
-        }
+        // The console's tail call. The receiver is attested twice over: the `this + 44768` it
+        // builds is the same embedded-manager base the already-committed GetUpdatedVehicleBodies
+        // tail call uses. It produces the articulated-TRAFFIC (cab + trailer) joint contacts; it is
+        // orthogonal to the detached car parts harvested above.
+        mPhysicalTrafficManager.AddArticulatedJointContacts(lpPotentialContactInterface);
     }
 
     // [kerb] PC bring-up instrument -- DELETE-WHEN the kerb response is proven 1:1. Owned by the
