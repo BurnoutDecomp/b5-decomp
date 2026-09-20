@@ -252,6 +252,10 @@ namespace CgsMemory { struct SimpleDataStreamProducer; struct SimpleDataStreamRe
 // Class key matches CgsPhysicsSimulationModuleIO.h.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutputBuffer; } }
 
+// AddArticulatedJointContacts' only parameter, pointer use only. Class key `struct`, matching the
+// single home BrnPhysicsModuleIO_PotentialContactInterface.h:54 (MSVC mangles struct vs class).
+namespace BrnPhysics { namespace PhysicsModuleIO { struct PotentialContactInterface; } }
+
 // The physics resource allocator Prepare carves the three traffic pools from. Class key
 // `struct` per rwcore_structs.h:168 (MSVC mangles struct vs class).
 namespace rw { struct IResourceAllocator; }
@@ -907,6 +911,16 @@ private:
     // DecFIGS-named ProcessJointSpys pass over lpSimModuleOutputBuffer.
     void ProcessJointSpys(const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer);
     void ResolveArticulatedJoints();
+
+    // Recovered declaration (header :248), `void AddArticulatedJointContacts(
+    // PotentialContactInterface*)` -- non-const, right after GetGlobalTrafficEntityId. The CONTACT
+    // half of the hitch, and the near-twin of ResolveArticulatedJoints above: the same walk over
+    // mUsedTrafficVehicles for live CAB slots with an unbroken joint, but instead of moving the
+    // two bodies it posts ONE PotentialContact per pair into the module's custom contact queues.
+    // Called as the tail of VehicleManager::EndPartContactGeneration (the friend below reaches it
+    // through the embedded manager). Body beside ResolveArticulatedJoints in the .cpp.
+    void AddArticulatedJointContacts(
+            BrnPhysics::PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface);
 
     // ---- WAVE T3 ROUND 1, CLUSTER C2 -- the private create/remove chain -----------------------
     // Signatures verbatim from DWARF BrnPhysicalTrafficManager.h:291..:330. Bodies in

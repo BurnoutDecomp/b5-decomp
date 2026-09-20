@@ -141,6 +141,22 @@ namespace PhysicsModuleIO
         const CustomPotentialContactQueue& GetHingedBodyPartWithWorldQueue() const { return maCustomEventQueues[1]; }
         const CustomPotentialContactQueue& GetHingedBodyPartWithCarQueue()   const { return maCustomEventQueues[2]; }
 
+        // The two DETACHED (no longer hinged) part/wheel-vs-car queues, [3] and [4]. Same
+        // ADDITIVE inline pattern as [1]/[2] above, and bound THREE ways over:
+        //   * offsets: DeformationManager::BridgeBodyPartCarContactsToSimulation opens on
+        //     `ifc + 491584` == 16 + 3*0x28010 and BridgeDetachedWheelCarContactsToSimulation on
+        //     `ifc + 655440` == 16 + 4*0x28010;
+        //   * the per-queue ContactId owner byte those two bodies stamp into the sim event's
+        //     muTag -- 0x03000000 and 0x04000000, the queue index again (the same
+        //     index==owner-byte identity the [5]..[13] accessors above are bound by);
+        //   * the committed BrnContactId.h enum, whose E_QUEUE_TYPE_DETACHED_BODYPART_WITH_CAR
+        //     == 3 and E_QUEUE_TYPE_DETACHED_WHEEL_WITH_CAR == 4 sit exactly after the two
+        //     HINGED_BODYPART_WITH_* entries that [1]/[2] carry.
+        // NAMES are the recovered accessor names in that same order, as declared right after
+        // the two GetHingedBodyPart*Queue entries this class already carries.
+        const CustomPotentialContactQueue& GetDetachedBodyPartCarQueue() const { return maCustomEventQueues[3]; }
+        const CustomPotentialContactQueue& GetDetachedWheelCarQueue()    const { return maCustomEventQueues[4]; }
+
         // Three more custom-queue accessors, same
         // ADDITIVE pattern as [6] above -- byte offsets (indices) are asm-proven from
         // PhysicsModule::FixUpVehicleContacts @0x825A6010, which walks:
@@ -185,6 +201,23 @@ namespace PhysicsModuleIO
         CustomPotentialContactQueue&       GetTrafficWithWorldQueue()       { return maCustomEventQueues[9]; }
         const CustomPotentialContactQueue& GetSimpleTrafficWithWorldQueue() const { return maCustomEventQueues[10]; }
         CustomPotentialContactQueue&       GetSimpleTrafficWithWorldQueue()       { return maCustomEventQueues[10]; }
+
+        // [11], the SIMPLE-traffic-vs-car queue -- the [10] pair's sibling, and the last custom
+        // index without a named view. Bound three ways, exactly like [3]/[4] above:
+        //   * offset: PhysicalTrafficManager::AddArticulatedJointContacts' either-half-is-SIMPLE
+        //     arm appends at `ifc + 1802432` == 16 + 11 * 0x28010, and reads the full-queue
+        //     warning's length field at `ifc + 1802440` == that base + miLength's own +8;
+        //   * the committed BrnContactId.h enum, whose E_QUEUE_TYPE_SIMPLE_TRAFFIC_WITH_CAR == 11
+        //     sits exactly between the E_QUEUE_TYPE_SIMPLE_TRAFFIC_WITH_WORLD ([10]) and
+        //     E_QUEUE_TYPE_TRAFFIC_ARTICULATED_JOINTS ([12]) entries either side of it here;
+        //   * its consumer, VehicleManager::BridgeSimpleTrafficWithCarContactsToSimulation -- the
+        //     "car" half of the pair of simple-traffic bridges BridgeContactsToSimulation runs
+        //     back to back, the "world" half of which drains [10] through the accessor above.
+        // NAME is the recovered accessor at that spot in the same declaration order
+        // (BrnPhysicsModuleIO.h :116 GetSimpleTrafficWithCarQueue), which the enum entry's own
+        // spelling matches word for word. Only the CONST overload is attested for this index
+        // (unlike [9]/[10], attested both ways), so only the const one is declared here.
+        const CustomPotentialContactQueue& GetSimpleTrafficWithCarQueue() const { return maCustomEventQueues[11]; }
 
         // ====================================================================================
         // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN the traffic contact queue is proven to

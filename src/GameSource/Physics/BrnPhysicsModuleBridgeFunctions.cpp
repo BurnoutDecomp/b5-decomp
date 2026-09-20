@@ -249,10 +249,12 @@ namespace BrnPhysics
         //       BrnVehicleManagerContactGeneration.cpp:174 is the console's own
         //       `!(A == TRAFFIC_VEHICLE && B == RACECAR)` assert, fired AFTER the router
         //       canonicalises the race car to side A -- so (2,1) is illegal by the console's own
-        //       rule and path 1 has no need to repeat it. Nor can the merged queue carry the pair
-        //       in the first place: VehicleManager's overlap-pair walk CONSUMES every pair with
-        //       owner 1 or 2 on both sides into custom queues [7]/[8]/[13] before the narrow phase,
-        //       which is why the merged view measures only prop/part/world owners.
+        //       rule and path 1 has no need to repeat it. VehicleManager's overlap-pair walk COPIES
+        //       every pair with owner 1 or 2 on both sides into custom queues [7]/[8]/[13]; it only
+        //       READS the pair queue (GetEvent) and consumes nothing, so the scene manager's narrow
+        //       phase still sees the same pairs. Why the merged view measures only prop/part/world
+        //       owners is therefore an open question about the scene manager's own
+        //       vehicle-vs-vehicle filter, not something that walk decides.
         //
         // ⇒ WHAT IS ACTUALLY LEFT. "Cars Crashed" cannot be reached through the contact spies at
         //   all. Either the retail count is produced by a path that does not run through
@@ -684,6 +686,13 @@ namespace BrnPhysics
     // B of type %d") through the gpcMessageBuffer / StrStream machinery; lowered to CGS_ASSERT with
     // the static prefix per the standing project rule. Fire-and-continue diagnostics throughout.
     // Legal sets are branch-for-branch from the asm (each case's line number cited).
+    //
+    // AUDITED 2026-09-20. All thirteen arms and the default are present and branch-for-branch
+    // identical to the console; the whole instruction-count gap is the per-arm message BUILDER
+    // (a StrStream over the shared message buffer + one AppendFormat of the B type, ~14 insns in
+    // each of the 13 arms) that the standing static-prefix lowering removes. No branch of the
+    // console body is missing here. The declaration was corrected to STATIC in the same pass --
+    // see the header for the asm proof and the control that rules out a dropped `this`.
     // =================================================================================================
     void PhysicsModule::ValidateSimulationContactTypes( BrnWorld::EEntityTypeID leEntityTypeA,
                                                         BrnWorld::EEntityTypeID leEntityTypeB )
@@ -783,7 +792,16 @@ namespace BrnPhysics
     // miMaxLength): tally every queued contact's two entity-type owners into a per-owner
     // histogram, dump the histogram to the debug log, then assert "Contact Queue is full".
     // No-op when the queue is not full. (One parameter per the DWARF; the old facade's third
-    // `luOwnerId` argument was an IDA register artifact.)
+    // `luOwnerId` argument was a decompiler register artifact -- re-confirmed against the asm:
+    // the queue arrives in the SECOND argument register and the first, the `this` slot, is dead
+    // on entry, so there is exactly one parameter.)
+    //
+    // AUDITED 2026-09-20, nothing dropped. The bucket index is the owner byte scaled to the s32
+    // stride (the console folds the shift and the *4 into one rotate-and-mask), both bound
+    // asserts are here with their own owner, the tally skips a zero-length queue, the report loop
+    // re-tests the message filter every row, and the width is 35 in all three places. The
+    // instruction-count gap is entirely the two inlined AppendFormat format-state dispatches
+    // (the "%d" vs "0x%X" selection the stream operators hide here) plus assert scaffolding.
     // =================================================================================================
     void PhysicsModule::CheckContactQueueSize(
         const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue )
@@ -1306,32 +1324,81 @@ namespace BrnPhysics
     }
 
     // =================================================================================================
-    // BrnPhysics::PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation  @0x825A5618
+    // BrnPhysics::PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation
+    // (TU lines :500..:535)
     //
-    // GATE (2026-08-06 big-five #2 wave) -- the REAL body (484 X360 asm lines; PS3 DecFIGS
-    // 0x699594, same TU) is NOT reconstructed. Reached every frame from BridgeContactsToSimulation
-    // (Update @0x825B0640 is real); the one-shot log below is the gate.
-    // SCOPE (wave 4, 2026-08-23): its queue is EMPTY BY CONSTRUCTION. No create path -- console or
-    // host -- ever allocates an E_PHYSICAL_TRAFFIC_TYPE_SIMPLE slot (GetFreeTrafficVehicleWithPhysics
-    // @0x82637608 has no simple arm), so this gate drops nothing. Not a crash-into-traffic blocker.
+    // Leg (4a) of BridgeContactsToSimulation: turn every SIMPLE-traffic-vs-world potential contact
+    // into a simulation add-contact event. Unlike the merged leg (1) this bridge has NO gate of any
+    // kind -- no prop validation, no friction override, no IsValid tripwire, no drop path: every
+    // queued contact becomes exactly one InAddPotentialContact.
+    //
+    //   * source queue: custom queue [10] == E_QUEUE_TYPE_SIMPLE_TRAFFIC_WITH_WORLD, and the
+    //     ContactId owner byte the event carries is 0x0A -- the same queue-index == owner-byte
+    //     binding the five loops of BridgeContactsToSimulation confirm.
+    //   * owner tripwires: A is TRAFFIC_VEHICLE (:518), B is WORLD (:519). Fire-and-continue.
+    //   * A side: the traffic vehicle's GLOBAL entity id is rewritten to its LOCAL PHYSICS id via
+    //     VehicleManager::GetPhysicsEntityIDFromGlobalEntityID (the console inlines the whole
+    //     helper here, all three arms -- the traffic map lookup, the race-car validation walk and the
+    //     unsupported-type assert; its own asserts are the BrnPhysicalTrafficManager.h/
+    //     BrnVehicleManager.h/CgsEntityId.h/CgsBitArray.h lines this body no longer repeats). An
+    //     unmapped traffic vehicle yields K_INVALID_ENTITY_ID and the contact is STILL queued --
+    //     the console has no drop arm here. Only the entity word rides into the rigid-body handle
+    //     (`sldi 32`), the volume index is dropped.
+    //   * B side: the world body handle, mWorldRigidBodyId, verbatim.
+    //   * ⚠️ FRICTIONS ARE NOT THE MERGED LEG'S. The merged leg (1) seats static 0.5 / dynamic 0.4;
+    //     this bridge seats static 0.4 / dynamic 0.5 off the SAME two float constants, with the two
+    //     stores transposed. Carried as measured, not smoothed to the sibling.
+    //   * the sim queue's headroom tripwire is this bridge's OWN (`GetLength() + 1 <
+    //     GetMaxLength()`, :535) -- it does NOT call CheckContactQueueSize the way leg (1) does.
     // =================================================================================================
     void PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation(
-        CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* /*lpContactQueue*/,
-        const PhysicsModuleIO::PotentialContactInterface* /*lpContactInterface*/ )
+        CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpSimContactQueue,
+        const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface )
     {
-        // BOOT GATE (conductor wave 2026-08-09): REACHED every frame by
-        // BridgeContactsToSimulation now that PhysicsModule::Update is real. Was a
-        // CGS_ASSERT(false) trap while the caller chain was dead; a per-frame assert would
-        // block the sim, so the deferral is a one-shot log instead -- the simple-traffic
-        // world contacts are DROPPED until the real 484-insn body (@0x825A5618, PS3 DecFIGS
-        // 0x699594) lands. Reconstruct and DELETE this gate.
-        static bool s_bLogged = false;
-        if (!s_bLogged)
+        CGS_ASSERT(lpSimContactQueue != nullptr, "lpSimContactQueue != NULL");                       // :500
+        CGS_ASSERT(lpPotentialContactsInterface != nullptr, "lpPotentialContactsInterface != NULL"); // :501
+
+        const PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue& lrQueue =
+            lpPotentialContactsInterface->GetSimpleTrafficWithWorldQueue();
+
+        for (s32 liEventIndex = 0; liEventIndex < lrQueue.GetLength(); ++liEventIndex)
         {
-            s_bLogged = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint << "PhysicsModule::BridgeSimpleTrafficWithWorldContactsToSimulation:"
-                                              " inert [FLAG PC boot gate @0x825A5618, 484 insns]\n";
+            // 80-byte stack copy (the console's ctr=10 qword copy).
+            const PotentialContact lContact = lrQueue.GetEvent(liEventIndex);
+
+            // Inlined ContactId construction tripwire (BrnContactId.h:122).
+            CGS_ASSERT(liEventIndex >= 0 && liEventIndex < 65535,
+                       "liEventIndex >= 0 && liEventIndex < 65535");
+
+            const CgsSceneManager::EntityId lGlobalEntityIdA(
+                static_cast<u32>(lContact.muVolumeInstanceIdA.muId >> 32));
+
+            CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u,
+                       "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :518
+            CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 0u,
+                       "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD");           // :519
+
+            InAddPotentialContact lAddContactEvent;
+            lAddContactEvent.mPointOnA = lContact.mPointOnA;
+            lAddContactEvent.mPointOnB = lContact.mPointOnB;
+            lAddContactEvent.mNormal   = lContact.mNormal;
+
+            // Global -> local physics id for the traffic side; only the entity word survives.
+            const CgsSceneManager::EntityId lPhysicsEntityIdA =
+                mVehicleManager.GetPhysicsEntityIDFromGlobalEntityID(lGlobalEntityIdA);
+            lAddContactEvent.mIDA = static_cast<u64>(static_cast<u32>(lPhysicsEntityIdA)) << 32;
+            lAddContactEvent.mIDB = mWorldRigidBodyId;
+
+            lAddContactEvent.mStaticFriction  = 0.40000001f;
+            lAddContactEvent.mDynamicFriction = 0.5f;
+            lAddContactEvent.mRestitution     = 0.5f;
+            lAddContactEvent.muTag =
+                ContactId(static_cast<u32>(liEventIndex) | 0x0A000000u);
+
+            CGS_ASSERT(lpSimContactQueue->GetLength() + 1 < lpSimContactQueue->GetMaxLength(),
+                       "lpSimContactQueue->GetLength() + 1 < lpSimContactQueue->GetMaxLength()");     // :535
+
+            lpSimContactQueue->AddEventSafe(lAddContactEvent);
         }
     }
 
