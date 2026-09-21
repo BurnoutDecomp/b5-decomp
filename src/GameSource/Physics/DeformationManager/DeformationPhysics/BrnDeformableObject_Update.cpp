@@ -716,6 +716,17 @@ namespace Deformation
                                                    lParams.mImpulsePosition,
                                                    lParams.mePositionSpace,
                                                    lParams.mbWorldContact);
+            // PC diagnostic only: witness a completed, nonzero world-contact call.
+            // Restitution and bounce flags elsewhere do not prove this handler ran.
+            static const bool sbWatchShowtimeContact = (std::getenv("BRN_SHOWTIME_WATCH") != nullptr);
+            static u32 suReportedShowtimeContacts = 0;
+            if (sbWatchShowtimeContact && lParams.mbWorldContact && lvfImpulseMagnitude.x > 0.0f &&
+                suReportedShowtimeContacts < 8 && CgsDev::Log::gpDebugPrint != nullptr)
+            {
+                ++suReportedShowtimeContacts;
+                *CgsDev::Log::gpDebugPrint << "[showtime-contact] world=1 magnitude="
+                    << lvfImpulseMagnitude.x << " handler=ApplyShowtimeContactImpulse\n";
+            }
         }
 
         // The vehicle's crashed byte (asm: `*(vehicle + 1808)`), read separately from the vtable+0x10
