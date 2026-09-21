@@ -98,9 +98,6 @@ namespace Deformation
     // i.e. the non-degenerate path the asm takes when the flag is set).
     static const bool gbDeformationPartsEnabled = true;   // FLAG: byte_82F2A345
 
-    // FLAGGED-0 .rodata placeholders (NEVER fabricated). Shapes are authoritative; values stay inert.
-    //   unk_82FB9B80 -- ResetDeformation per-axis initial-damage->bbox scale (vmulfp into the spec BB).
-    //   unk_82FB9AB0 -- UpdateAbsorptionSet extreme-crash speed margin (vsubfp from crash-speed delta).
     // ⭐ RECOVERED 2026-08-03. unk_82FB9B80's initialiser @82C5D7D0 is a RECIPROCAL, not a splat:
     // `vrefp` + two Newton-Raphson steps over unk_82FB9770 (0.2), i.e. 1/0.2 = 5.0. A static-init
     // scan that only recognises the splat idiom cannot resolve it, which is why it stayed flagged.
@@ -998,22 +995,15 @@ namespace Deformation
         // sensor slice must not land on top of an unbound slot 0.
         mImpulsePasser.SetCollidableBodyMap(0, &mVehicleBody);
 
-        // No-damage cooldown: an extreme initial-damage reset arms the cooldown band (asm: if (v43 &&
-        // v155) { spec-bbox *= unk_82FB9B80; +26417 = bbox.x + 1 } else +26417 = 0). FLAG: unk_82FB9B80
-        // is the unrecovered per-axis scale (FLAGGED-0); the +26417 latch path is preserved by shape.
-        // ⭐ RE-HOMED 2026-08-27: +26417 is mi8NumPartsToForceHinging -- the SAME member
-        // CheckForForcedDetachment differences against mi16NumHingedParts. The "bbox latch" and the
-        // "forced-hinge budget" were never two things.
-        // ⚠️ THE ARMED ARM STAYS UNLANDED, DELIBERATELY: `+26417 = scaledBBox.x + 1` needs the
-        // per-axis scale unk_82FB9B80, which is still FLAGGED-0. Landing it with a zero scale would
-        // write 0*bbox + 1 == 1, which is NOT the identity of this expression -- it would OPEN the
-        // forced-hinge gate on every damaged reset with a fabricated budget.
-        // [[placeholder-identity-element]], the same trap the joint multipliers were.
-        // The `else` arm needs no rodata and IS landed: the console clears the latch.
+        // The X360 stores a forced-hinge budget at +0x6731 when damage is present and the
+        // reset-parts branch is selected. v125 still holds the incoming initial-damage vector
+        // (vmr128 @0x82639D90); @0x8263A5C4 multiplies it by unk_82FB9B80 (5.0),
+        // fctidz truncates lane x toward zero, and @0x8263A5DC/E0 adds one and stores a byte.
+        // CheckForForcedDetachment compares this budget with mi16NumHingedParts.
         if (lbDamagePresent && lbDamageZeroOrType1)
         {
-            (void)KVF_INITIAL_DAMAGE_BBOX_SCALE;   // FLAG: spec-bbox *= unk_82FB9B80 (value unrecovered)
-            // mi8NumPartsToForceHinging = scaledBBox.x + 1;  // FLAG: NOT landed -- see above
+            mi8NumPartsToForceHinging = static_cast<s8>(
+                static_cast<s32>(lvfTime.x * KVF_INITIAL_DAMAGE_BBOX_SCALE.x) + 1);
         }
         else
         {
