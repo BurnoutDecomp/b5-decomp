@@ -2038,7 +2038,7 @@ namespace Vehicle
                                          rw::physics::InputSpace leImpulseSpace,
                                          Vector3 lvContactPosition,
                                          rw::physics::InputSpace lePositionSpace,
-                                         bool lbZeroResponse);                                               // @0x825D4E00
+                                         bool lbWorldContact);                                               // @0x825D4E00
         s8 AddSlam(bool lbTaper, f32 lfDuration, f32 lfSteer, f32 lfRecoveryTime, s8 li8RaceCarId);          // @0x825D4870
         // __fastcall with three VMX128 args the Hex-Rays signature drops: magnitude,
         // shunt direction (stored verbatim, not normalized), and speed-increase-to-quit.

@@ -35,6 +35,9 @@ namespace Vehicle
     // DecFIGS VehiclePhysics.cpp:103; Breaker unk_82FB9EC0, initialised by the
     // unmarked thunk at 0x82C5C3C0 from flt_8200473C (0.4f).
     VecFloat KF_SHOWTIME_GRIP_SCALE{0.4f, 0.4f, 0.4f, 0.4f};
+    // DecFIGS VehiclePhysics.cpp:104; ARTIST unk_82FB8B10. The initializer
+    // 0x82C5C3E8..0x82C5C40C splats flt_82004C68 (0.7f) into this vector.
+    VecFloat KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE{0.7f, 0.7f, 0.7f, 0.7f};
     bool VehiclePhysics::msbInShowtime = false;
     // @0x825B2FE0  BrnPhysics::Vehicle::VehiclePhysics::GetNumberOfWheelsOnTheGround
     //   The X360 reads the four driven wheels' road-contact on-ground flags at +0x158/+0x238/+0x318/
@@ -5870,73 +5873,62 @@ namespace Vehicle
     (void)lePositionSpace;
     }
 
-// [partial] ApplyShowtimeContactImpulse  @ FLAGS: INLINE literals {0.30, 0.0, 0.97} (dword_82FBA1D0 lazily-cached tunables) are EXACT, used as literal values; the 3-axis velocity-removal STRUCTURE + the binary 0.0-vs-0.97 restitution pick are recovered; the precise VMX lane routing of the residual-direction threshold is structural
-    // @0x825D4E00  BrnPhysics::Vehicle::VehiclePhysics::ApplyShowtimeContactImpulse
-    //   ++miNumCollisions(+0x1354) ; if ( lbZeroResponse ): ++mi8NumWorldCollisions(+0x1353) +
-    //   zero +0x1070 lane .x. GetImpulsesFromLocalImpulse -> (J, rxJ).
-    //   Three process-wide tunables are lazily cached into dword_82FBA1D0 (bits 1/2/4 mark each
-    //   seeded): K0 = 0.30000001, K1 = 0.0, K2 = 0.97000003 (INLINE literals). The impulse J then
-    //   has its velocity stripped along the three body axes (at this+0x50/+0x20/+0x30) by K0, and a
-    //   residual-direction dot vs a normalized blend (unk_82FB9050) selects the binary restitution
-    //   K1 (0.0) vs K2 (0.97) for the tangential rebound. The angular part is scaled by unk_82FB8B10.
-    //   AddWorldSpaceImpulse(J) ; AddWorldSpaceAngularImpulse(rxJ).
-    //
-    // FIDELITY: PARTIAL. The counter bumps, the lane-zero, the {0.30, 0.0, 0.97} inline tunables and
-    // the binary 0.0-vs-0.97 restitution pick are recovered; the exact per-lane VMX routing of the
-    // residual-direction threshold + the angular unk_82FB8B10 scale is structural. The K* constants
-    // are the literal values seen in the asm (NOT flagged-0). NEVER fabricated.
+    // ARTIST 0x825D4E00: preserve linear impulse and damp the angular impulse.
+    // The output pointers at 0x825D4E54/58 put angular in var_50 and linear in
+    // var_30. All projection stores target var_50; var_30 reaches the linear bank
+    // unchanged at 0x825D5060. The former body modified the wrong output vector.
     void VehiclePhysics::ApplyShowtimeContactImpulse(Vector3 lvLocalImpulse,
                                                      rw::physics::InputSpace leImpulseSpace,
                                                      Vector3 lvContactPosition,
                                                      rw::physics::InputSpace lePositionSpace,
-                                                     bool lbZeroResponse)
+                                                     bool lbWorldContact)
     {
-    ++miNumCollisions;   // +0x1354
-    if (lbZeroResponse)
-    {
-        ++mi8NumWorldCollisions;   // +0x1353
-        // mask 1 -> lane .w (SecondsSinceLastWallContact); 0x825D4E44-4C.
-        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w = 0.0f;
-    }
+        ++miNumCollisions;
+        if (lbWorldContact)
+        {
+            ++mi8NumWorldCollisions;
+            mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.w = 0.0f;
+        }
 
-    Vector3 lvJ;
-    Vector3 lvAngularJ;
-    // r4/r5 untouched before the `bl` at 0x825D4E60 -> both tags are passed through.
-    GetImpulsesFromLocalImpulse(lvLocalImpulse, leImpulseSpace,
-                                lvContactPosition, lePositionSpace, &lvJ, &lvAngularJ);
+        Vector3 lvJ;
+        Vector3 lvAngularJ;
+        GetImpulsesFromLocalImpulse(lvLocalImpulse, leImpulseSpace,
+                                    lvContactPosition, lePositionSpace, &lvJ, &lvAngularJ);
 
-    // Process-wide cached Showtime restitution tunables (inline literals).
-    // 2026-09-06 constant audit: value confirmed, SYMBOL corrected. dword_82FBA1D0 is the lazy
-    // first-call cache's GUARD word (`lwz r11, -0x5e30(r10)` @0x825D4E68, bit 0 tested then set
-    // back @0x825D4E98); the value slot is unk_82FBA1C0 and its source is flt_82004740 == 0.3
-    // (`lfs f0, 0x4740(r8)` @0x825D4E8C, splatted to 0x82FBA1C0 @0x825D4EA0). Same shape as
-    // GetDownForce's lazy cache -- a game-code writer, invisible to a CRT-bank static-init scan.
-    static const f32 KF_SHOWTIME_FRICTION = 0.30000001f;   // unk_82FBA1C0 <- flt_82004740 (guard 82FBA1D0)
-    static const f32 KF_SHOWTIME_RESTITUTION_LOW  = 0.0f;          // K1
-    static const f32 KF_SHOWTIME_RESTITUTION_HIGH = 0.97000003f;   // K2
+        // The three lazy cached constants guarded by dword_82FBA1D0:
+        // unk_82FBA1C0 <- flt_82004740, unk_82FBA1B0 <- flt_82001CC0,
+        // unk_82FBA1A0 <- flt_82094B68 (0x825D4E80..0x825D4F74).
+        static const f32 KF_SHOWTIME_ANGULAR_DAMPING = 0.30000001f;
+        static const f32 KF_SHOWTIME_NEGATIVE_PROJECTION_DAMPING = 0.0f;
+        static const f32 KF_SHOWTIME_POSITIVE_PROJECTION_DAMPING = 0.97000003f;
 
-    // Strip velocity along the three body axes by the friction scalar (Gram-Schmidt-style removal).
-    const Vector3 laAxes[3] = { mTransform.Right(), mTransform.Up(), mTransform.At() };
-    for (s32 li = 0; li < 3; ++li)
-    {
-        const Vector3& lvAxis = laAxes[li];
-        const f32 lfT = lvAxis.x * lvJ.x + lvAxis.y * lvJ.y + lvAxis.z * lvJ.z;
-        lvJ.x -= lvAxis.x * lfT * KF_SHOWTIME_FRICTION;
-        lvJ.y -= lvAxis.y * lfT * KF_SHOWTIME_FRICTION;
-        lvJ.z -= lvAxis.z * lfT * KF_SHOWTIME_FRICTION;
-    }
+        // 0x825D4ECC..0x825D4F0C: sequentially remove 30% of the angular
+        // projection along At, Up, then Right, preserving the console's order.
+        const Vector3 laAxes[3] = { mTransform.At(), mTransform.Up(), mTransform.Right() };
+        for (s32 li = 0; li < 3; ++li)
+        {
+            const Vector3& lrAxis = laAxes[li];
+            const Vector3 lProjection = vpu::Mult(lrAxis, vpu::Dot(lvAngularJ, lrAxis));
+            lvAngularJ = vpu::Subtract(lvAngularJ, vpu::Mult(lProjection, KF_SHOWTIME_ANGULAR_DAMPING));
+        }
 
-    // Residual-direction threshold picks the binary restitution. The exact normalized blend
-    // (unk_82FB9050) lane routing is the structural part; the pick between 0.0 and 0.97 is faithful.
-    const f32 lfResidualMagSq = lvJ.x * lvJ.x + lvJ.y * lvJ.y + lvJ.z * lvJ.z;
-    const f32 lfRestitution = (lfResidualMagSq > 0.0f) ? KF_SHOWTIME_RESTITUTION_HIGH
-                                                       : KF_SHOWTIME_RESTITUTION_LOW;
-    lvJ.x *= lfRestitution;
-    lvJ.y *= lfRestitution;
-    lvJ.z *= lfRestitution;
+        // unk_82FB9050 is world up: its initializer 0x82C5C4B0..0x82C5C4EC
+        // writes {0,1,0,0}. The cross at 0x825D4FBC..D8 is velocity x up.
+        // Normalize's zero-vector result reproduces the vsel guard at 0x825D5010..18.
+        const Vector3 lWorldUp = {0.0f, 1.0f, 0.0f, 0.0f};
+        const Vector3 lPitchAxis = vpu::Normalize(vpu::Cross(mLinearVelocity, lWorldUp));
+        const f32 lfProjection = vpu::Dot(lvAngularJ, lPitchAxis);
+        const f32 lfDamping = lfProjection < 0.0f ? KF_SHOWTIME_NEGATIVE_PROJECTION_DAMPING
+                                                 : KF_SHOWTIME_POSITIVE_PROJECTION_DAMPING;
+        const Vector3 lPitchImpulse = vpu::Mult(lPitchAxis, lfProjection);
+        lvAngularJ = vpu::Subtract(lvAngularJ, vpu::Mult(lPitchImpulse, lfDamping));
 
-    AddWorldSpaceImpulse(lvJ);
-    AddWorldSpaceAngularImpulse(lvAngularJ);
+        AddWorldSpaceImpulse(lvJ);
+        // 0x825D5070..84: final elementwise angular scale, recovered from the CRT initializer.
+        lvAngularJ.x *= KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE.x;
+        lvAngularJ.y *= KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE.y;
+        lvAngularJ.z *= KF_SHOWTIME_PLAYER_ANGULAR_IMPULSE_SCALE.z;
+        AddWorldSpaceAngularImpulse(lvAngularJ);
     }
 
 // [clean] AddSlam  @ FLAGS: none -- flt_82F2A294 (the air-time taper denominator) is image-read = 150.0 and landed (KF_SLAM_TAPER_DENOM below); the rate-limit 0.5, base 4.0, fsel clamps and all member stores are exact. (Banner refreshed 2026-08-24, showtime wave: it still said "flagged-0 placeholder" after the value landed.)
