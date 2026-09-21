@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"                 // IsCrashing (X360 vehicle+0x710)
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"        // IKBodyPart::CheckForDetachment / GetTagPoint / GetNumberOf* / SetActiveJointIndex / GetActiveJointSpec
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalBodyPart.h"   // PhysicalBodyPart::GetIKPartIndex / SetJoinedToVehicle / AddToSim
@@ -163,15 +164,6 @@ namespace Deformation
     // MakeDetachedPart / TestJointForBreaking free hooks REMOVED 2026-08-27 -- both real bodies are
     // mounted and are now called by name on lpPartMgr (see the file header).
     // EmitDetachedPartNotification's free hook is GONE (2026-08-27) -- see the file header.
-
-    // FLAG: the +1808 "is the body actively simulating" flag the asm reads off the attached body
-    // (*(*(this+6476)+1808)). The attached-body slice does not expose that flag by name yet; modelled
-    // as the inverse of the body's frozen state (a frozen body is not simulating), reached through the
-    // committed GetVehicleBody() accessor + the base IsFrozen(). Re-home when the flag is named.
-    static bool IsAttachedBodySimulating(const DeformableObject& lrObj)
-    {
-        return !lrObj.GetVehicleBody().IsFrozen();
-    }
 
     namespace
     {
@@ -530,8 +522,8 @@ namespace Deformation
     // UpdateSpinningDetachment @ 0x8263A748 -- decay the per-frame spin accumulator and, if it is
     // still spinning above the threshold, force a random attached jointed part to hinge off.
     //
-    // Gate: the global kbAllowRandomPartDetachment master switch. If off (or the attached body is not
-    // actively simulating, *(body+1808) == 0), zero the spin accumulator and return.
+    // Gate: the global kbAllowRandomPartDetachment master switch. If off, return. If the
+    // attached vehicle is not crashing (body+0x710 == 0), zero the spin accumulator and return.
     //   1) Decay the spin accumulator (+3904) by pow(0.99, timeStep * 60) -- the vexptefp/vlogefp
     //      polynomial the asm builds, with the 60.0 reference rate loaded in the same block.
     //   2) Compare the decayed spin magnitude-squared against KF_ANGULAR_VELOCITY_FOR_DETACHMENT
@@ -552,10 +544,10 @@ namespace Deformation
         if ( !kbAllowRandomPartDetachment )
             return;
 
-        // "is the body actively simulating" gate (*(body+1808) == 0). Only on the master-ON-but-body-not-
-        // simulating branch does the asm zero +3904 (vspltisw v0,0 / stvx128 v0,r29,3904) before falling
-        // into LABEL_17 (return).
-        if ( !IsAttachedBodySimulating(*this) )
+        // @0x8263A780/A784 loads the attached VehiclePhysics at this+0x194C, then
+        // mbCrashing at vehicle+0x710. The old !IsFrozen proxy also ran this arm
+        // during ordinary driving, which the original explicitly excludes.
+        if ( !GetVehiclePhysics()->IsCrashing() )
         {
             mAngularVelocitySum.SetZero();   // stvx128 0 -> +3904
             return;
