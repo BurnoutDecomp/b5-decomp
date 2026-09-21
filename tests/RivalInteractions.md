@@ -65,6 +65,21 @@ It also saves frames for visual inspection; a HUD message alone cannot pass it.
 The relevant ARTIST paths are `UpdateBoost` at `0x82304BF0..0x82304C90`,
 `GetDamagedCarCount` at `0x822A4958`, and `ProcessTakedownEvents` at `0x822F6CF8`.
 
+The driving case also requires the credited victim to crash on the AI_CRASHING (1) or
+SHUTDOWN (3) absorption set and never on NORMAL (0), read from the `[absorb]` witness that
+`BRN_CRASH_RESPONSE_DIAG=1` arms. The selector is `DeformableObject::UpdateAbsorptionSet` at
+ARTIST `0x825DF9A0` (PS3 `0x6BEDEC`): a non-player driver type with a crashing race car takes
+set 1, or set 3 plus ten forced hinges in `E_MODE_NONE`; a player takes PLAYER_EXTREME_CRASH
+only when the crash speed is within `KVF_SPEED_BELOW_MAX_FOR_EXTREME_DEFORMATION` (5.0) of the
+car's top speed. Until 2026-09-21 all three vehicle reads were pinned and every car crashed on
+set 0, so victims absorbed on the 80 mph row instead of the 30 mph row: less deformation, and
+the unabsorbed impulse launched the car. Measured on `rival_damage_absorb` (same recipe, same
+exe apart from the fix): before, 59/59 samples of the credited victim on set 0 and every
+crashing race car on set 0; after, 0 race-car samples on set 0 while AI-driven, the credited
+victims on set 1 (56 and 98 samples), and the victims' summed sensor displacement squared
+0.155 before against 0.21 and 0.41 after (different collisions; the set is the witness, the
+displacement is the direction).
+
 ## Road steering and wall regression
 
 ```powershell

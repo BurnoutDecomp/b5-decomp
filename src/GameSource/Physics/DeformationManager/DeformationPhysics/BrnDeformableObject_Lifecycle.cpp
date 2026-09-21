@@ -105,7 +105,7 @@ namespace Deformation
     // `vrefp` + two Newton-Raphson steps over unk_82FB9770 (0.2), i.e. 1/0.2 = 5.0. A static-init
     // scan that only recognises the splat idiom cannot resolve it, which is why it stayed flagged.
     static const Vector3 KVF_INITIAL_DAMAGE_BBOX_SCALE = { 5.0f, 5.0f, 5.0f, 5.0f }; // unk_82FB9B80 = 1/unk_82FB9770
-    static const f32     KF_EXTREME_CRASH_SPEED_MARGIN = 5.0f;                        // unk_82FB9AB0 @82C5D8B8 <- flt_8200426C
+    static const f32     KF_EXTREME_CRASH_SPEED_MARGIN = 5.0f;                        // unk_82FB9AB0 @82C5D8B8 <- flt_8200426C; PS3 KVF_SPEED_BELOW_MAX_FOR_EXTREME_DEFORMATION
 
     // ⭐ RECOVERED 2026-08-14 (deformation-mount wave): the three compression/scratch ratio vectors
     // GetInitialCompressionScalesAndLimits selects between (PS3 names them verbatim:
@@ -1575,95 +1575,85 @@ namespace Deformation
     }
 
     // =================================================================================================
-    // UpdateAbsorptionSet @ 0x825DF9A0
-    //   Pick this car's active per-frame energy-absorption profile (meAbsorptionSet), which keys the
-    //   AbsorptionTable. The asm branches on whether the attached vehicle physics is in a crash state
-    //   (vehicle+4308), the player/game-mode (the +26384 packed word HIGH byte == 1), the vehicle's
-    //   "is shutdown / extreme" flag (vehicle+1808), the supplied game mode (a2 == -1 selects the
-    //   extreme/player path), the cooldown timer (+26396 >= 0), and the speed-below-max margin
-    //   (vehicle crash-speed delta vs unk_82FB9AB0). meAbsorptionSet ends up one of
-    //   NORMAL(0)/AI_CRASHING(1)/PLAYER_EXTREME_CRASH(2)/INVINCIBLE(4-as-cooldown)/...
+    // UpdateAbsorptionSet @ 0x825DF9A0   (PS3 DecFIGS twin @0x6BEDEC names the argument
+    //   `EGameModeType leGameMode` and the margin `KVF_SPEED_BELOW_MAX_FOR_EXTREME_DEFORMATION`)
+    //   Pick this car's per-frame energy-absorption profile (meAbsorptionSet), the row key of the
+    //   AbsorptionTable. Decoded from the raw words (tools/re/ppcdis.py 825DF9A0):
+    //     lwz  r11, 0x194C(r3)          the attached VehiclePhysics
+    //     lwz  r10, 0x10D4(r11) ; bne   mPreviousControls.meDriverType != E_DRIVER_TYPE_PLAYER(0):
+    //       ld 0x6710 ; srdi 32 ; srwi 24 ; cmplwi 1    handling-body owner byte != RACECAR -> set 0
+    //       lbz 0x710(r11) ; beq                         !mbCrashing                         -> set 0
+    //       cmpwi r4, -1                                 E_MODE_NONE -> set 3 (SHUTDOWN) and
+    //                                                    +0x6731 (mi8NumPartsToForceHinging) = 10
+    //                                                    any mode    -> set 1 (AI_CRASHING)
+    //     player driver (0x825DF9B0..0x825DFA40):
+    //       lwz 0x675C ; cmpwi 4          INVINCIBLE holds while lfs 0x671C (mfNoDamageTimer) >= 0.0,
+    //                                     else set 0
+    //       lbz 0x710 ; beq               !mbCrashing -> set 0
+    //       lvx128 [r11+0xEF0]  vspltw 0  mvSpeedOnLastCrashMPH_...  .x
+    //       lvx128 [mpAttribs+0x70] vspltw 2   mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z
+    //       vsubfp max - unk_82FB9AB0 ; vcmpgtfp. crash > that -> set 2 (PLAYER_EXTREME_CRASH) else 0
     //
-    //   FLAG: the vehicle-physics crash/shutdown/speed accessors (GetMaxNonBoostSpeedMPH /
-    //   GetSpeedMPHOnLastCrash + the +4308/+1808/+1824/+3824 flags) are NOT exposed on the frozen
-    //   VehiclePhysics; the branch structure + the meAbsorptionSet writes are exact, with the
-    //   accessor reads pinned to their asm-equivalent sub-expressions and FLAGGED. unk_82FB9AB0 is a
-    //   FLAGGED-0 .rodata margin. The arg is the plain-s32 game-mode (frozen-header convention).
+    //   REWRITTEN 2026-09-21 (rival-interaction pass). The previous body pinned every vehicle read to
+    //   a constant ("FLAG: not exposed on the frozen VehiclePhysics"): `lbVehicleInCrash = false`
+    //   made the first test permanently false, so no car -- rival or player -- could ever leave
+    //   NORMAL while crashing. Every AI takedown victim therefore absorbed on the NORMAL row (full
+    //   absorption only at 80 mph closing) instead of AI_CRASHING / SHUTDOWN (30 mph), which is the
+    //   owner's "rivals deform far less and fly far more when taken down": whatever the sensors do
+    //   not absorb, the rigid body keeps. The old banner also misread +4308 as an "in a damaging
+    //   crash" flag -- VehiclePhysics_layout_check.cpp pins 0x10D4 to mPreviousControls.meDriverType,
+    //   and +1808 (0x710) is mbCrashing. The margin was already recovered as
+    //   KF_EXTREME_CRASH_SPEED_MARGIN (5.0, dyn-init @82C5D8B8); the PS3 twin confirms its role.
     // =================================================================================================
     void DeformableObject::UpdateAbsorptionSet(s32 liGameMode)
     {
-        BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        const BrnPhysics::Vehicle::VehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();   // lwz 0x194C
 
-        // asm: v3 = *(this+6476) (the attached vehicle physics). *(v3 + 4308) is the "in a damaging
-        // crash" flag. FLAG: read via a declared accessor when exposed; here pinned false.
-        const bool lbVehicleInCrash = false;   // FLAG: = lpVehicle crash-state flag (vehicle+4308)
-        (void)lpVehicle;
-
-        if (lbVehicleInCrash)
+        if (lpVehicle->GetPreviousControls()->GetType() != BrnPhysics::Vehicle::E_DRIVER_TYPE_PLAYER)   // lwz 0x10D4 ; bne
         {
-            // In a crash. If NOT (player byte == 1 AND vehicle "extreme eligible" flag set), fall to
-            // NORMAL. (asm: if (HIBYTE(*(this+26384)) != 1 || !*(v3+1808)) -> +26460 = 0; return.) The
-            // player selector is the HIGH byte of the handling-body-id word (+26384), NOT the +26392
-            // game-mode word -> read it via GetHandlingBodyIdHighByte().
-            const bool lbPlayerMode      = (GetHandlingBodyIdHighByte() == 1u); // asm: HIBYTE(*(this+26384))
-            const bool lbExtremeEligible = false;   // FLAG: = vehicle "extreme eligible" flag (vehicle+1808)
-            if (!lbPlayerMode || !lbExtremeEligible)
+            // 0x825DFA44: only a crashing RACE CAR gets a crash profile; anything else is NORMAL.
+            if (GetHandlingBodyIdHighByte() != 1u || !lpVehicle->IsCrashing())   // HIBYTE(+26384) ; lbz 0x710
             {
-                meAbsorptionSet = E_ABSORPTIONSET_NORMAL;   // asm: +26460 = 0
+                meAbsorptionSet = E_ABSORPTIONSET_NORMAL;   // +26460 = 0
                 return;
             }
-
-            // Eligible: game-mode -1 selects the PLAYER_EXTREME path (+ arms the +26417 cooldown to 10);
-            // any other mode is the AI_CRASHING set. (asm: if (a2 == -1) { +26460 = 3; +26417 = 10 }
-            // else +26460 = 1.) NOTE the asm stores 3 here; meAbsorptionSet enum maps 3 -> SHUTDOWN.
-            if (liGameMode == -1)
+            if (liGameMode == -1)   // cmpwi r4, -1 == E_MODE_NONE: a rival shut down in free burn
             {
-                meAbsorptionSet = E_ABSORPTIONSET_SHUTDOWN;   // asm: +26460 = 3
-                // ⭐ RE-HOMED 2026-08-27: +26417 == mi8NumPartsToForceHinging (it always had a named
-                // member). This is the PLAYER_EXTREME / showtime arm arming the forced-hinge budget
-                // to 10 -- i.e. "shed up to ten panels". It is UNREACHABLE today because
-                // lbExtremeEligible above is a FLAGGED false, so landing it changes nothing yet;
-                // landed anyway so the member stops being a mystery in a third place.
-                mi8NumPartsToForceHinging = 10;   // asm: +26417 = 10
+                meAbsorptionSet           = E_ABSORPTIONSET_SHUTDOWN;   // +26460 = 3
+                mi8NumPartsToForceHinging = 10;                         // +26417 = 10
             }
             else
             {
-                meAbsorptionSet = E_ABSORPTIONSET_AI_CRASHING;   // asm: +26460 = 1
+                meAbsorptionSet = E_ABSORPTIONSET_AI_CRASHING;   // +26460 = 1
             }
             return;
         }
 
-        // Not in a crash. If the absorption cooldown is still armed (current set == 4 / INVINCIBLE) and
-        // the cooldown timer is non-negative, hold it; once it expires drop to NORMAL. (asm: if
-        // (+26460 == 4) { if (+26396 >= 0.0) return; else { +26460 = 0; return; } }.)
-        if (meAbsorptionSet == E_ABSORPTIONSET_INVINCIBLE)
+        // Player-driven car. The post-reset cooldown (INVINCIBLE) holds until its timer runs out.
+        if (meAbsorptionSet == E_ABSORPTIONSET_INVINCIBLE)   // lwz 0x675C ; cmpwi 4
         {
-            if (mfNoDamageTimer >= 0.0f)
+            if (mfNoDamageTimer >= 0.0f)                     // lfs 0x671C ; fcmpu vs flt_82001CC0 (0.0)
                 return;
-            meAbsorptionSet = E_ABSORPTIONSET_NORMAL;   // asm: +26460 = 0
+            meAbsorptionSet = E_ABSORPTIONSET_NORMAL;        // +26460 = 0
             return;
         }
 
-        // Otherwise: only an "extreme eligible" vehicle can enter the PLAYER_EXTREME_CRASH set, and only
-        // when its speed is far enough below max (crash-speed delta exceeds the unk_82FB9AB0 margin).
-        // (asm: if (!*(v3+1808)) -> +26460 = 0; else compare (crashSpeedDelta - unk_82FB9AB0) > scratch
-        // -> +26460 = 2 ? 0.)
-        const bool lbExtremeEligible = false;   // FLAG: = vehicle "extreme eligible" flag (vehicle+1808)
-        if (!lbExtremeEligible)
+        if (!lpVehicle->IsCrashing())                        // lbz 0x710 ; beq
         {
-            meAbsorptionSet = E_ABSORPTIONSET_NORMAL;   // asm: +26460 = 0
+            meAbsorptionSet = E_ABSORPTIONSET_NORMAL;        // +26460 = 0
             return;
         }
 
-        // Speed-below-max margin test (asm: vsubfp crashSpeedDelta - unk_82FB9AB0; vcmpgtfp.). FLAG:
-        // GetMaxNonBoostSpeedMPH / GetSpeedMPHOnLastCrash not exposed -> the delta is pinned, the
-        // margin is the FLAGGED-0 unk_82FB9AB0; the branch + the writes are exact.
-        const f32 lfSpeedBelowMaxMargin = 0.0f;   // FLAG: = (maxNonBoostSpeed - speedOnLastCrash)
-        const bool lbFarBelowMax = (lfSpeedBelowMaxMargin - KF_EXTREME_CRASH_SPEED_MARGIN) > 0.0f;
-        if (lbFarBelowMax)
-            meAbsorptionSet = E_ABSORPTIONSET_PLAYER_EXTREME_CRASH;   // asm: +26460 = 2
+        // Crashing player: the EXTREME profile when the crash began within the margin of the car's
+        // top speed (lane 0 of +0xEF0 against lane 2 of mpAttribs+0x70, less unk_82FB9AB0).
+        const f32 lfSpeedOnLastCrashMPH =
+            lpVehicle->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.x;
+        const f32 lfMaxSpeed =
+            lpVehicle->GetAttribs()->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.z;
+        if (lfSpeedOnLastCrashMPH > lfMaxSpeed - KF_EXTREME_CRASH_SPEED_MARGIN)   // vsubfp ; vcmpgtfp.
+            meAbsorptionSet = E_ABSORPTIONSET_PLAYER_EXTREME_CRASH;   // +26460 = 2
         else
-            meAbsorptionSet = E_ABSORPTIONSET_NORMAL;                 // asm: +26460 = 0
+            meAbsorptionSet = E_ABSORPTIONSET_NORMAL;                 // +26460 = 0
     }
     // ==============================================================================================
     // ConstructUpdatePerformanceMonitors @0x825B99A0, ConstructUpdateIKAndLocatorsPerformanceMonitors
