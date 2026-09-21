@@ -35,7 +35,7 @@ const char* const KPC_PARAMS_FILE =
 }
 
 // -----------------------------------------------------------------------------
-// Construct - reset every field to its "no event configured" default.
+// Construct - initialize the fields written by the console's mode reset.
 //
 // The X360 body is a single flat initialiser (the compiler interleaved the writes and
 // hoisted the array-count loop). Reconstructed as the logical member-by-member reset.
@@ -48,12 +48,18 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
 
     // Scalars / flags.
     meStartMechanism                  = E_GAMEMODESTARTMECHANISM_DEFAULT;
+    // 0x8231C3A4: modes without start lights must carry the invalid sentinel.
+    // PrepareForModeAction copies this word and MainDirector tests it before lookup.
+    mTrafficLightTriggerId            = 0xFFFFFFFFu;
     muFlags                           = 0;
-    mePursuedCarGlobalIndex           = E_GLOBALRACECARINDEX_STUB;
+    // 0x8231C3E8..0x8231C3F0: all three words are -1, not zero.
+    miRoadRageThreshold               = -1;
+    miPursuitRivalTotalDamage          = -1;
+    mePursuedCarGlobalIndex           = static_cast<EGlobalRaceCarIndex_Stub>(-1);
+    mSpecialEventCarId                = 0; // 0x8231C3C8: std r11,0x28(r3)
     mfProgressionRankAsRatio          = 0.0f;
     mbIsOnline                        = false;
     mbInfiniteBoost                   = false;
-    mfOnlineFreeburnDeformationAmount = 0.0f;
     mfModeTimeLimit                   = 0.0f;
     mfTrafficDensityScale             = 1.0f;
     mfLargeVehicleProbability         = 1.0f;
@@ -63,7 +69,7 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
     // The X360 tail clears the player wreck count to 0 (it lands in the trailing all-zero
     // store cluster @ 0x838-0x860, just before the u64 muFlags `std` @ 0x860 -- there is no
     // -1 store in the tail). The only -1 stores are the four head-region words @ 0x40/0x4C/
-    // 0x50/0x54 and the per-slot maModelIds in the loop. (Was -1; see LOW-CONFIDENCE note.)
+    // 0x50/0x54 and the per-slot maNetworkPlayerID in the loop.
     miPlayerWreckCount                = 0;
     // Console `stw r11(0), 0x854(r3)` @0x8231C408's tail: under the corrected +0x850/854/858
     // run that word is meAStarDistanceFunction. The console never writes 0x850
@@ -95,32 +101,33 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
     meAISpeedSelectionMethod          = E_AISPEEDSEL_STUB;          // 0x848 == 0
     miAIAggressiveCarCount            = 0;                          // 0x84C
 
-    // Per-event identity / counts cleared.
-    muEventJunctionID            = 0;
-    muJunctionID                 = 0;
+    // ARTIST does not write the junction IDs here. The DecFIGS-only online
+    // freeburn deformation member also has no attested ARTIST initializer store.
     muNumberOfCheckpointsInEvent = 0;
 
-    // Per-slot grade thresholds and difficulty cleared.
+    // ARTIST's medal/time run is +0x60/+0x64/+0x68/+0x6C. UpdateCurrentMode
+    // 0x823512AC..0x823512B8 passes the three medal fields to SetMedalModeTimer;
+    // StuntAttackMode::Start 0x82332288 writes the time limit at +0x6C.
     mfNeedForBronze = 0.0f;
     mfNeedForSilver = 0.0f;
     mfNeedForGold   = 0.0f;
 
     // Per-slot reset. The X360 hoisted these into one 8-iteration loop (@ 0x8231C418..0x8231C444):
     // each pass writes six per-slot members --
-    //   std  r11=0  -> maNetworkPlayerID[i]        (network player id cleared to 0)
+    //   std  r11=0  -> maModelIds[i]               (8-byte CgsID cleared to 0)
     //   sth  r11=0  -> mau16CarColourIndex[i]      (colour index cleared to 0)
     //   sth  r11=0  -> mau16CarPaintFinishIndex[i] (paint-finish index cleared to 0)
     //   stfs f0=-1.0 -> mfOvertakingDifficulty[i]  ("no handicap" sentinel, -1)
     //   stw  r11=0  -> maePlayerTeam[i]            (team cleared to 0)
-    //   stw  r6=-1  -> maModelIds[i]               ("no model" sentinel, -1)
+    //   stw  r6=-1  -> maNetworkPlayerID[i]        (4-byte signed invalid player id)
     for (u32 luCar = 0; luCar < KU_MAX_ACTIVE_RACE_CARS; ++luCar)
     {
-        maNetworkPlayerID[luCar]           = 0;
+        maNetworkPlayerID[luCar]           = -1;
         mau16CarColourIndex[luCar]         = 0;
         mau16CarPaintFinishIndex[luCar]    = 0;
         mfOvertakingDifficulty[luCar]      = -1.0f;
         maePlayerTeam[luCar]               = E_PLAYERTEAM_STUB;     // 0
-        maModelIds[luCar]                  = static_cast<CgsID>(-1);
+        maModelIds[luCar]                  = 0;
     }
 
     // Reset the two embedded fixed-size arrays to empty-but-usable: the X360 stores 0 to each

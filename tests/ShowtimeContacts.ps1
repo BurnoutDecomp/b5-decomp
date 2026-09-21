@@ -21,7 +21,7 @@
         # Fresh profiles play the junkyard introduction before car selection.
         MaxSeconds = 140
     }
-    DiagEnv = 'BRN_SHOWTIME_WATCH=1,BRN_ROLL_PROBE=1'
+    DiagEnv = 'BRN_SHOWTIME_WATCH=1,BRN_ROLL_PROBE=1,BRN_SLOMO_DIAG=1'
     Checks = @(
         @{ Kind = 'NewAsserts'; Name = 'no new assertions' }
         @{ Kind = 'LogCount'; Name = 'no exceptions'; Pattern = '\[EXCEPTION\]'; Max = 0 }
@@ -33,11 +33,10 @@
         @{ Kind = 'Script'; Name = 'Showtime world contact response ran'; Script = {
             param($ctx)
             $contacts = @($ctx.LogLines | Where-Object {
-                $_ -match '\[restit\].* FIRED=[1-9][0-9]*' -or
-                $_ -match '\[showtime-watch\].* justBounced=1'
+                $_ -match '\[showtime-contact\] world=1 magnitude=.* handler=ApplyShowtimeContactImpulse'
             })
             @{ Pass = $contacts.Count -gt 0;
-               Detail = "$($contacts.Count) restitution/bounce witnesses from the Showtime world-contact path" }
+               Detail = "$($contacts.Count) completed nonzero world-contact calls to ApplyShowtimeContactImpulse" }
         } }
         @{ Kind = 'Script'; Name = 'game survived the contact run'; Script = {
             param($ctx)
