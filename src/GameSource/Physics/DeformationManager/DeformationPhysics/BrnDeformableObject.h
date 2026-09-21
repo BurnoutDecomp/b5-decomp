@@ -523,7 +523,7 @@ namespace Deformation
         IKDrivenPoint&       GetDrivenPointDebug(s32 liIndex) { return maDrivenPoints[liIndex]; }
         const IKDrivenPoint& GetDrivenPointDebug(s32 liIndex) const { return maDrivenPoints[liIndex]; }
 
-        // Live IK-part pool (asm rig+26232 count, rig+25388 base).
+        // Live IK-part pool (asm rig+26232 count, rig+25380 base; mpSpec is at part+8).
         s32               GetNumIKPartsDebug() const { return miNumIKBodyParts; }
         IKBodyPart&       GetIKPartDebug(s32 liIndex) { return maIKParts[liIndex]; }
         const IKBodyPart& GetIKPartDebug(s32 liIndex) const { return maIKParts[liIndex]; }

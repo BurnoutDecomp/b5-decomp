@@ -54,7 +54,7 @@ namespace renderengine { extern u32 guPresentCount; }
 //   this+6480  -> maDeformationSensors[] (stride 432 == sizeof(DeformationSensor))
 //   this+4320  -> maVerletOffsets_Scratch[128]  (Vector3Plus; dword index 4*i)
 //   this+19216 -> miNumDrivenPoints
-//   this+25388 -> maIKParts[50]          (stride 16; mpSpec field at +8)
+//   this+25380 -> maIKParts[50]          (stride 16; mpSpec field at +8 == this+25388)
 //   this+26180 -> maPartStates[50]
 //   this+26232 -> miNumIKBodyParts
 //   this+26384 -> mHandlingBodyID (8B)   / this+26392 -> mGlobalEntityId (the header's duplicate
@@ -498,64 +498,48 @@ namespace Deformation
     //      each locator, advancing the transform slot by 64 bytes (one Matrix44Affine) and the locator
     //      spec by 80 bytes (one LocatorPointSpec).
     // The per-group bounds, the strides + the asserts are exact.
-    // FLAG (count source): the asm reads each group's live count from the SPEC's three private
-    // LocatorPointSpecList members -- generic *(spec+36), light *(spec+52), camera *(spec+44) (asm
-    // 7477/7513/7549). StreamedDeformationSpec exposes NO public accessor for mGenericTags/mLightTags/
-    // mCameraTags and editing that shared (concurrently-touched) header here would race, so the counts
-    // are read from the live mLocatorData mirror (miNumGeneric/Light/CameraLocators) instead. These are
-    // the copies Prepare() seeds FROM those spec lists, so they agree at runtime; promote to the spec
-    // counts when StreamedDeformationSpec grows a generic/light/camera-locator-list accessor.
-    // FLAG (spec arg): the per-locator LocatorPointSpec the asm passes (*(spec+40/56/48) + 80*index)
-    // comes from the same private spec lists, so the spec arg is passed as nullptr here (UpdateLocator
-    // handles the no-spec case) -- promote alongside the count source above.
-    // FLAG (parent transform): the asm sources the parent from the INVERTED
-    // SimpleVehiclePhysics::GetGraphicsVehicleTransform() of the attached vehicle (the vsubfp/vmrglw
-    // inverse-affine block @ 7428-7467; COM-adjusted), which the minimal VehiclePhysics slice does not
-    // expose; the un-inverted body transform (GetTransform) is used as the parent here -- swap to the
-    // inverted graphics transform when it is homed.
     // =============================================================================================
     void DeformableObject::UpdateLocators(DetachedPartManager* lpPartMgr)
     {
-        // (1) parent space passed to each UpdateLocator (see FLAG above).
-        Matrix44Affine lParent;
-        GetTransform(lParent);
-
         CGS_ASSERT(mpDeformationSpec != nullptr, "mpDeformationSpec");   // line 4202 (non-gating)
+        const Matrix44Affine lInverseGraphics =
+            rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(
+                GetVehiclePhysics()->GetGraphicsVehicleTransform());
 
         // (2a) GENERIC locators (max KI_MAX_GENERIC_LOCATORS == 15).
-        const s32 liNumGeneric = mLocatorData.miNumGenericLocators;
+        const LocatorPointSpecList& lrGeneric = mpDeformationSpec->mGenericTags;
+        const s32 liNumGeneric = static_cast<s32>(lrGeneric.GetNumLocatorPoints());
         CGS_ASSERT(liNumGeneric <= 15, "(int32_t)luNumLocators <= KI_MAX_GENERIC_LOCATORS");  // line 4205
         for ( s32 li = 0; li < liNumGeneric; ++li )
         {
-            CGS_ASSERT(static_cast<u32>(li) < static_cast<u32>(mLocatorData.miNumGenericLocators),
+            CGS_ASSERT(static_cast<u32>(li) < lrGeneric.GetNumLocatorPoints(),
                        "luIndex < muNumLocators");  // BrnStreamedDeformationSpec.h:104
             UpdateLocator(mLocatorData.maGenericLocators[li], mLocatorData.maGenericLocatorTypes[li],
-                          nullptr /* spec list private to StreamedDeformationSpec -- see FLAG */,
-                          lParent, lpPartMgr);
+                          lrGeneric.GetLocatorSpec(static_cast<u32>(li)), lInverseGraphics, lpPartMgr);
         }
 
         // (2b) LIGHT locators (max KI_MAX_LIGHT_LOCATORS == 24).
-        const s32 liNumLight = mLocatorData.miNumLightLocators;
+        const LocatorPointSpecList& lrLight = mpDeformationSpec->mLightTags;
+        const s32 liNumLight = static_cast<s32>(lrLight.GetNumLocatorPoints());
         CGS_ASSERT(liNumLight <= 24, "(int32_t)luNumLocators <= KI_MAX_LIGHT_LOCATORS");  // line 4220
         for ( s32 li = 0; li < liNumLight; ++li )
         {
-            CGS_ASSERT(static_cast<u32>(li) < static_cast<u32>(mLocatorData.miNumLightLocators),
+            CGS_ASSERT(static_cast<u32>(li) < lrLight.GetNumLocatorPoints(),
                        "luIndex < muNumLocators");  // BrnStreamedDeformationSpec.h:104
             UpdateLocator(mLocatorData.maLightLocators[li], mLocatorData.maLightLocatorTypes[li],
-                          nullptr /* spec list private to StreamedDeformationSpec -- see FLAG */,
-                          lParent, lpPartMgr);
+                          lrLight.GetLocatorSpec(static_cast<u32>(li)), lInverseGraphics, lpPartMgr);
         }
 
         // (2c) CAMERA locators (max KI_MAX_CAMERA_LOCATORS == 1).
-        const s32 liNumCamera = mLocatorData.miNumCameraLocators;
+        const LocatorPointSpecList& lrCamera = mpDeformationSpec->mCameraTags;
+        const s32 liNumCamera = static_cast<s32>(lrCamera.GetNumLocatorPoints());
         CGS_ASSERT(liNumCamera <= 1, "(int32_t)luNumLocators <= KI_MAX_CAMERA_LOCATORS");  // line 4236
         for ( s32 li = 0; li < liNumCamera; ++li )
         {
-            CGS_ASSERT(static_cast<u32>(li) < static_cast<u32>(mLocatorData.miNumCameraLocators),
+            CGS_ASSERT(static_cast<u32>(li) < lrCamera.GetNumLocatorPoints(),
                        "luIndex < muNumLocators");  // BrnStreamedDeformationSpec.h:104
             UpdateLocator(mLocatorData.maCameraLocators[li], mLocatorData.maCameraLocatorTypes[li],
-                          nullptr /* spec list private to StreamedDeformationSpec -- see FLAG */,
-                          lParent, lpPartMgr);
+                          lrCamera.GetLocatorSpec(static_cast<u32>(li)), lInverseGraphics, lpPartMgr);
         }
     }
 
