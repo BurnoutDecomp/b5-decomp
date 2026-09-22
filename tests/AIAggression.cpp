@@ -445,6 +445,55 @@ static void GroupFodderTimeFloor()
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// G00-C5  UpdateAggressionPassive @0x82793830: `mr r5,r4` @0x82793850 keeps the ARGUMENT for
+// bl OutOfSpeedMatchRange @0x827938D0 -- the range test is on the dispatched (player) car, never
+// on the member mpTargetCar. Window at proximity 1.0: 60 m apart, lead in [-60, 40]
+// (0x820C42EC / 0x820C42E4, OutOfSpeedMatchRange @0x8278B680).
+// ------------------------------------------------------------------------------------------------
+static void GroupPassive()
+{
+    BeginGroup("G00-C5 UpdateAggressionPassive");
+    AICar lCar{}, lPlayer{}, lDecoy{};
+    PlaceStateCars(lCar, lPlayer);   // the player 5 m ahead, inside the window
+    lDecoy.mPosition = V(0.0f, 0.0f, 500.0f);
+    lDecoy.mDirection = V(0.0f, 0.0f, 1.0f);
+    AIAggression lAggression{};
+    lAggression.mpCar = &lCar;
+    lAggression.mpPlayerCar = &lPlayer;
+    auto Rearm = [&](const AICar* lpTargetMember, f32 lfStateTime) {
+        lAggression.mpTargetCar = lpTargetMember;
+        lAggression.meAggressionState = E_AI_AGGRESSION_STATE_PASSIVE;
+        lAggression.mfStateTime = lfStateTime;
+        lAggression.mbTargetPosValid = true;
+        lAggression.meSpeedMatchType = ESpeedMatch_Enabled;
+    };
+
+    // Road Rage PASSIVE entered from OUT_OF_RANGE's miProximityIndex < 0 arm: no target member.
+    Rearm(nullptr, 3.0f);
+    lAggression.UpdateAggressionPassive(&lPlayer);
+    Check(lAggression.meAggressionState == E_AI_AGGRESSION_STATE_PASSIVE && lAggression.mfStateTime == 3.0f,
+          "NULL mpTargetCar: the player inside the window holds PASSIVE");
+    Check(lAggression.meSpeedMatchType == ESpeedMatch_Disabled && !lAggression.mbTargetPosValid,
+          "speed match off and lineup point dropped every frame");
+    Rearm(&lDecoy, 3.0f);
+    lAggression.UpdateAggressionPassive(&lPlayer);
+    Check(lAggression.meAggressionState == E_AI_AGGRESSION_STATE_PASSIVE && lAggression.mfStateTime == 3.0f,
+          "a stale target member 500 m away does not end PASSIVE");
+    Rearm(&lPlayer, 3.0f);
+    lPlayer.mPosition = V(0.0f, 0.0f, 100.0f);
+    lAggression.UpdateAggressionPassive(&lPlayer);
+    Check(lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OUT_OF_RANGE && lAggression.mfStateTime == -1.0f,
+          "the player 100 m ahead (out of the window) ends PASSIVE");
+    lPlayer.mPosition = V(0.0f, 0.0f, 5.0f);
+    Rearm(nullptr, 0.0f);
+    lAggression.UpdateAggressionPassive(&lPlayer);
+    Check(lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OUT_OF_RANGE, "timeout ends PASSIVE");
+    Rearm(nullptr, 3.0f);
+    lAggression.UpdateAggressionPassive(nullptr);
+    Check(lAggression.meAggressionState == E_AI_AGGRESSION_STATE_PASSIVE, "no dispatched car: PASSIVE held");
+}
+
 int main()
 {
     std::printf("AIAggression regression\n");
@@ -454,6 +503,7 @@ int main()
     GroupSlower();
     GroupLineupPointDrop();
     GroupFodderTimeFloor();
+    GroupPassive();
     EndGroup();
     std::printf("%s: %u checks, %u failures\n", guFailures ? "FAIL" : "PASS", guChecks, guFailures);
     return guFailures ? 1 : 0;

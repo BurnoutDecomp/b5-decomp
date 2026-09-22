@@ -1073,23 +1073,32 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
 // ===== UpdateAggressionPassive =====
 // BrnAI::AIAggression::UpdateAggressionPassive @0x82793830.
 //
-// PASSIVE state handler. Clears speed-matching and target-pos validity. If a valid
-// non-self player car is engaged (and it is either not the local player or is a
-// human-driven player), then once this state has timed out or speed-matching has dropped
-// out of range, it resets the machine back to OUT_OF_RANGE.
-void BrnAI::AIAggression::UpdateAggressionPassive(const AICar* lpPlayerCar)
+// PASSIVE state handler. Clears speed-matching and target-pos validity. If the dispatched car
+// (DWARF lpTargetCar; Update passes its lpPlayerCar, `mr r4,r30` @0x82799C8C) is usable -- not
+// our own car, and not a player car the player is not driving -- then once this state has
+// timed out or that car has left the speed-match window, it resets the machine back to
+// OUT_OF_RANGE.
+//
+// X360: `mr r5,r4` @0x82793850 parks the ARGUMENT in r5, lwz r4,8 @0x82793864 loads mpCar, and
+// nothing writes r5 again before bl OutOfSpeedMatchRange @0x827938D0 -- so the range test is
+// OutOfSpeedMatchRange(mpCar, lpTargetCar), never the member mpTargetCar. PS3 0xA04F2C agrees.
+// Road Rage enters PASSIVE for 6 s from OUT_OF_RANGE's miProximityIndex < 0 arm without running
+// FindTarget, so mpTargetCar is often NULL here; reading it made OutOfSpeedMatchRange(.., NULL)
+// return true and the rival flipped PASSIVE -> OUT_OF_RANGE every other frame (crash-parity
+// audit G00-C5).
+void BrnAI::AIAggression::UpdateAggressionPassive(const AICar* lpTargetCar)
 {
-    meSpeedMatchType = ESpeedMatch_Disabled;
-    mbTargetPosValid = false;
+    meSpeedMatchType = ESpeedMatch_Disabled;   // stw r30(0),0x58 @0x82793858
+    mbTargetPosValid = false;                   // stb r30,0x44 @0x8279385C
 
-    if (lpPlayerCar != nullptr &&
-        lpPlayerCar != mpCar &&
-        (!lpPlayerCar->mbIsPlayer || lpPlayerCar->mbIsDrivenByPlayer))
+    if (lpTargetCar != nullptr &&
+        lpTargetCar != mpCar &&
+        (!lpTargetCar->mbIsPlayer || lpTargetCar->mbIsDrivenByPlayer))
     {
         const f32 lfStateTime = mfStateTime;
         const bool lbTimedOut = (lfStateTime != -1.0f && lfStateTime <= 0.0f);
 
-        if (lbTimedOut || OutOfSpeedMatchRange(mpCar, mpTargetCar))
+        if (lbTimedOut || OutOfSpeedMatchRange(mpCar, lpTargetCar))
         {
             mfStateTime       = -1.0f;
             meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
