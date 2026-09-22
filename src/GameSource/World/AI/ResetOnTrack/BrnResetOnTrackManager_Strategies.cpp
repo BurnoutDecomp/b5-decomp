@@ -46,8 +46,10 @@
 // ENCODING field order (vD, vA, vB, vC), not in mnemonic order (vD, vA, vC, vB). Read
 // `vnmsubfp v11, v8, v11, v7` @0x827942BC as "v11 - v8*v7" and AvoidObstacles' lateral vector comes
 // out as garbage; read it as the encoding order (vB - vA*vC == v11 - v8*v7 with vB==v11) and the
-// whole block is the standard single-shuffle cross product `(a.yzx*b - a*b.yzx).yzx` with
-// b == the world Y axis (the {0,1,0,0} literal at unk_82181510), i.e. the road's RIGHT vector.
+// whole block is the single-shuffle cross form `(a.yzx*b - a*b.yzx).yzx` with a == the reset
+// direction and b == the world Y axis (the {0,1,0,0} literal at unk_82181510). That form evaluates
+// to Cross(b, a), so the result is Cross(worldUp, dir) == (dir.z, 0, -dir.x) -- corrected 2026-09-22
+// (G08-D1); it used to be labelled a "right vector" and carried the opposite sign in AvoidObstacles.
 // The same reading is what makes DeterminePositionBetweenNodes' lerp come out as a lerp.
 // =================================================================================================
 

@@ -19,18 +19,23 @@
 //
 // ⚠️ THE OPERAND-ORDER TRAP. IDA prints the PowerPC A-form multiply-add family in ENCODING order
 // (vD, vA, vB, vC), not mnemonic order (vD, vA, vC, vB). The lateral vector this whole function is
-// built around comes out of 0x8279428C..0x827942C0:
-//     v10 = dir.yzx                          (vpermwi128 ..., 0x63)
-//     v11 = {0,1,0,0}                        (unk_82181510, the world Y axis)
-//     v8  = v11.yzx = {1,0,0,0}
-//     v11 = v11 * v10                        (== up * dir.yzx)
-//     vnmsubfp v11, v8, v11, v7              (== vB - vA*vC == v11 - v8*v7 in ENCODING order)
-//     v124 = v11.yzx                         (vpermwi128 ..., 0x63)
-// which is the standard single-shuffle cross product `(a.yzx*b - a*b.yzx).yzx` with a == the reset
-// direction and b == world up -- i.e. the ROAD'S RIGHT VECTOR, (-dir.z, 0, dir.x). Read the operands
+// built around comes out of 0x8279428C..0x827942C0 (raw words checked with tools/re/ppcdis.py):
+//     v7  = dir                              (0x82794288 `vor v7,v10,v10`, before the shuffle)
+//     v10 = dir.yzxw                         (0x8279428C 194352D0 vpermwi128 v10,v10,0x63)
+//     v11 = {0,1,0,0}                        (unk_82181510, the world Y axis -- x360rd)
+//     v8  = v11.yzxw = {1,0,0,0}             (0x82794294 19035AD0)
+//     v11 = v11 * v10 = (0, dir.z, 0, 0)     (0x827942A8 156B5090 vmulfp128 v11,v11,v10)
+//     vnmsubfp v11, v8, v11, v7              (0x827942BC 116859EF, raw fields D=11 A=8 B=11 C=7:
+//                                             vD = vB - vA*vC = v11 - v8*v7 = (-dir.x, dir.z, 0, 0))
+//     v124 = v11.yzxw = (dir.z, 0, -dir.x, 0) (0x827942C0 1B835ADC vpermwi128 v124,v11,0x63)
+// The single-shuffle form `(a.yzx*b - a*b.yzx).yzx` with a == the reset direction and b == world up
+// evaluates to Cross(b, a), NOT Cross(a, b): v124 == Cross(worldUp, dir) == (dir.z, 0, -dir.x).
+// ⛔ CORRECTED 2026-09-22 (crash parity, G08-D1): this banner used to call it "the road's right
+// vector (-dir.z, 0, dir.x)" -- the NEGATION of v124 -- and the body carried that sign, so the sweep
+// tried the console's side 1 first and the fallback shove went the opposite way. Read the operands
 // in mnemonic order instead and the same block "computes" the direction itself, so the sweep would
 // nudge the car FORWARD along the road instead of sideways off the obstacle. The value below is
-// written as the cross product it is, not transcribed.
+// written as the cross product it is, not transcribed, and not named left or right.
 // =================================================================================================
 
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
@@ -236,7 +241,7 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
 //   0x82794238  lpAICar = GetAICar(lpRequest->GetGlobalRaceCarIndex())
 //   0x8279427C  lPosition2D  = Flatten(lpResetData->mPosition)                    (v126)
 //   0x827942FC  lDirection2D = Normalise(Flatten(lpResetData->mDirection))        (v125)
-//   0x827942C0  lLateral     = Cross(lpResetData->mDirection, worldUp)            (v124) -- see banner
+//   0x827942C0  lLateral     = Cross(worldUp, lpResetData->mDirection)            (v124) -- see banner
 //   0x827942A8  lbIsNotRaceStart = (lpRequest->GetResetType() != 6)               (r19)
 //   0x82794318  if (!lpAICar->IsActive()) return false                            ⭐ THE GATE
 //   0x82794330  laNearbyVehicles = (carState == IN_RANGE) ? lpAICar->mpDriver : 0
@@ -291,10 +296,11 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
         }
     }
 
-    // Cross(mDirection, worldUp) == the road's right vector -- see the file banner for why this is
-    // written as a cross product rather than transcribed from the shuffle pair.
+    // v124 == Cross(worldUp, mDirection) == (dir.z, 0, -dir.x) -- X360 0x8279428C..0x827942C0; see
+    // the file banner for why this is written as a cross product rather than transcribed from the
+    // shuffle pair, and why it is NOT (-dir.z, 0, dir.x) (the pre-2026-09-22 sign).
     const Vector3 lResetDirection = lpResetData->mDirection;
-    const Vector3 lLateral = { -lResetDirection.z, 0.0f, lResetDirection.x, 0.0f };
+    const Vector3 lLateral = { lResetDirection.z, 0.0f, -lResetDirection.x, 0.0f };
 
     const bool lbIsNotRaceStart =
         (lpRequest->GetResetType() != E_RESET_TYPE_BEHIND_PLAYER_RACE_START);
