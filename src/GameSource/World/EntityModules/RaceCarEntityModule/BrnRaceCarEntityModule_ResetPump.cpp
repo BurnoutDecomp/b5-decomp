@@ -78,16 +78,18 @@ namespace
     const f32 KF_MPH_TO_METRES_PER_SECOND = 0.44704f;
 
     // flt_82FAD610. ProcessResetOnTrackResultQueue's FAILURE arm clamps the requested reset
-    // speed to this: `fsubs f12, speed, K ; fsel f1, f12, K, speed` == min(speed, K).
+    // speed to this: `fsubs f12, speed, K ; fsel f1, f12, K, speed` == min(speed, K)
+    // (0x822F46C4..0x822F46DC).
     //
-    // ⚠️ FLAGGED, NOT GUESSED. The symbol lives in BSS and READS 0.0 out of the decrypted
-    // ARTIST image, and a whole-image scan of the export set finds EXACTLY ONE reference to
-    // it -- this read. So no function in the image writes it, and 0.0f is the value the
-    // shipped binary runs with. Effect: a car recovered through the FAILURE arm is placed
-    // STATIONARY, which is also what the arm means (the AI found no on-track pose, so the car
-    // is put back where it last was, at rest). If a data-driven writer is ever found, this
-    // becomes a real tunable.
-    const f32 KF_FAILURE_RESET_SPEED_CAP = 0.0f;
+    // ⛔ IT IS NOT 0.0 (corrected 2026-09-22, crash-parity FX-RCEM). The word is BSS and reads
+    // 0.0 out of the image, and the export-set scan found only this reader -- but its writer is a
+    // CRT dynamic initialiser, which no export covers (tools/re/findinit.py: two sites, the
+    // reader and `stfs` @0x82C4BB28): the thunk 0x82C4BB10..0x82C4BB2C stores
+    // flt_82F31928 (0.44704) * flt_820149B0 (10.0) == 10 mph in m/s. The DWARF name is
+    // KF_RESET_ON_TRACK_SPEED_FAILURE (BrnRaceCarEntityModule.cpp:231), first of the four
+    // reset speeds that bank initialises in declaration order (then 50, 75 and 120 mph). The 0.0
+    // placed every FAILURE-recovered car at rest; the console rolls it back in at up to 10 mph.
+    const f32 KF_FAILURE_RESET_SPEED_CAP = 0.44704f * 10.0f;
 
     // The console's `li r5, 0x25 ; li r6, 1` game event: type 37, payload size 1 -- i.e. an
     // EMPTY CgsModule::Event derivative (sizeof(empty struct) == 1), raised on the frame the
@@ -370,8 +372,10 @@ void RaceCarEntityModule::SendResetOnTrackRequests(
 // or two of the world origin, which is exactly the failure four earlier briefs PREDICTED for
 // this arm for an unrelated (and now retracted) reason.
 //
-// ⭐ AND THE FAILURE ARM IS NOT AN ERROR PATH. On this build EVERY result is a FAILURE (see the
-// file banner), so this is the arm that actually recovers the car.
+// ⭐ AND THE FAILURE ARM IS NOT AN ERROR PATH. It recovers every car the AI cannot place --
+// measured 2026-09-22 over two Road Rage runs: 84 of 227 applied results were FAILURE (own reset
+// coords), the rest SUCCESS -- so its speed cap (KF_FAILURE_RESET_SPEED_CAP, 10 mph) decides how
+// a large share of rivals come back after a reset.
 //
 // ---- ring 2: the place-on-track REQUESTS (0x822F4734..0x822F486C) ------------------------------
 //   The same shape over results->mPlaceOnTrackRequestQueue (the console reaches it as
