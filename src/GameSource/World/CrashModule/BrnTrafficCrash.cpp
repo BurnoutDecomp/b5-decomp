@@ -1,63 +1,48 @@
 #include "GameSource/World/CrashModule/BrnTrafficCrash.h"
-
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
-#include <cstddef>   // offsetof
-
-// BrnWorld::TrafficCrash::Construct, reconstructed from BURNOUT_X360_ARTIST.XEX.
-//
-//   Construct @ 0x827B1608  (World/CrashModule/BrnCrashModule.cpp)
-//
-// Initialises one tracked crashing-traffic entry. The X360 body asserts three non-gating
-// tripwires, then writes the four fields store-for-store:
-//   bge  liOwner,0 / blt liOwner,8  -> CGS_ASSERT(0 <= liOwner < 8)  (BrnCrashModule.cpp:211/212)
-//   cmplwi muVehicleIndex,0x258     -> CGS_ASSERT(muVehicleIndex < 600) (BrnCrashModule.cpp:216)
-//   stb  liOwner,        0(this)    -> mliOwner       (byte @0)
-//   sth  muVehicleIndex, 2(this)    -> muVehicleIndex (halfword @2)
-//   stfs f31,            4(this)    -> mfStartTime    (the double ctor arg as f32, @4)
-//   stb  0,              1(this)    -> meCrashState = 0   (byte @1)
-//   if (lbFlag) stb 2,   1(this)    -> meCrashState = 2   (byte @1)
-//
-// Note the Hex-Rays render collapses all four stores onto `*(v8 + 1)` -- the ASSEMBLY store
-// widths/offsets (stb @0, stb @1, sth @2, stfs @4) are authoritative. The fifth Hex-Rays arg
-// (a5 / liUnused) is loaded into r28 but the body never stores it. The owner bound is the
-// active-race-car index range (E_ACTIVE_RACE_CAR_INDEX_0 .. _COUNT == 0..8); the vehicle bound
-// is BrnTraffic::KU_MAX_TOTAL_TRAFFIC == 600 (0x258). Called by
-// CrashModule::HandleNetworkCrashingTraffic and CrashModule::AddCrashingTrafficVehicle.
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include <cstddef>
 
 namespace BrnWorld
 {
-    void TrafficCrash::OnOwnerDisconnected()
-    {
-        // ARTIST: network flags 4 (confirmed) or 2 (unconfirmed), then force expiry.
-        CGS_ASSERT((meCrashState & 4) != 0 || (meCrashState & 2) != 0,
-                   "IsConfirmedNetwork() || IsUnconfirmedNetwork()");
-        mfStartTime = -1.0f; // DWARF mfTimeTillClearup; existing member name retained.
-        meCrashState |= 1;
-    }
-    void TrafficCrash::Construct(s32 liOwner, u16 luVehicleIndex, f64 lfStartTime, s32 /*liUnused*/, bool lbFlag)
+    // ARTIST827B1608: owner r4, vehicle r5, float f1 (argument slot r6), bool r7.
+    // DecFIGS confirms four explicit arguments; Hex-Rays invented a double and extra integer.
+    void TrafficCrash::Construct(s32 liOwner, u16 luVehicleIndex, f32 lfTimeTillClearup, bool lbNetwork)
     {
         CGS_ASSERT(liOwner >= 0, "liOwner >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(liOwner < 8,  "liOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-
-        mliOwner       = static_cast<s8>(liOwner);   // stb @0
-        muVehicleIndex = luVehicleIndex;             // sth @2
-
-        CGS_ASSERT(luVehicleIndex < 0x258u, "muVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
-
-        mfStartTime  = static_cast<f32>(lfStartTime); // stfs @4
-        meCrashState = 0;                             // stb @1
-        if (lbFlag)
-            meCrashState = 2;                         // stb @1
+        CGS_ASSERT(liOwner < 8, "liOwner < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        miOwner = static_cast<s8>(liOwner);
+        muVehicleIndex = luVehicleIndex;
+        CGS_ASSERT(luVehicleIndex < 600u, "muVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+        mfTimeTillClearup = lfTimeTillClearup;
+        mxFlags = lbNetwork ? 2 : 0;
     }
 
-    // Layout pins (X360 Construct store offsets/widths).
+    // Inlined ARTIST TickCrashes827C6798..827C67C4; DWARF TrafficCrash::Tick(float).
+    void TrafficCrash::Tick(f32 lfTimeStep)
+    {
+        mfTimeTillClearup -= lfTimeStep;
+        // fcmpu/bgt: unordered also takes the request path, as on the console.
+        if (!(mxFlags & 1) && !(mfTimeTillClearup > 0.0f))
+        {
+            mxFlags |= 1;
+            mfTimeTillClearup = 1.0f; // flt_82001C98: one grace period, never restarted here
+        }
+    }
+
+    void TrafficCrash::OnOwnerDisconnected()
+    {
+        CGS_ASSERT((mxFlags & 4) != 0 || (mxFlags & 2) != 0,
+                   "IsConfirmedNetwork() || IsUnconfirmedNetwork()");
+        mfTimeTillClearup = -1.0f;
+        mxFlags |= 1;
+    }
+
     void TrafficCrash::_AssertLayout()
     {
-        static_assert(offsetof(TrafficCrash, mliOwner)       == 0, "mliOwner @0");
-        static_assert(offsetof(TrafficCrash, meCrashState)   == 1, "meCrashState @1");
+        static_assert(offsetof(TrafficCrash, miOwner) == 0, "miOwner @0");
+        static_assert(offsetof(TrafficCrash, mxFlags) == 1, "mxFlags @1");
         static_assert(offsetof(TrafficCrash, muVehicleIndex) == 2, "muVehicleIndex @2");
-        static_assert(offsetof(TrafficCrash, mfStartTime)    == 4, "mfStartTime @4");
+        static_assert(offsetof(TrafficCrash, mfTimeTillClearup) == 4, "mfTimeTillClearup @4");
         static_assert(sizeof(TrafficCrash) == 8, "TrafficCrash size 8");
     }
 }

@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include <memory>
 #include <cstring>
+#include <limits>
 
 static unsigned assertions=0;
 namespace CgsDev { namespace Assert {
@@ -40,6 +41,7 @@ struct CrashFixture
     bool mbFastCrashesForAI=false, mbIsOnlineGameMode=false, mbIsShowtimeGameMode=false;
     bool mbClearUpEnabled=true, mbIsInAGameMode=false;
     s8 miNumCrashExtensions=10;
+    bool mbNeedToSendEndingMessage=false;
     CrashFixture(){
         mRaceCarCrashes.Clear();mTrafficCrashes.Clear();mCrashingRaceCars.UnSetAll();
         mCrashingTraffic.UnSetAll();mCrashingNetworkTraffic.UnSetAll();
@@ -47,6 +49,7 @@ struct CrashFixture
         for(auto& set:maCrashingTrafficForPlayers)set.Clear();
     }
     void HandleGameActions(const CrashIO::InputBuffer_PreScene*,CrashIO::OutputBuffer_PreScene*);
+    void TickCrashes(const CrashIO::InputBuffer_PreScene*);
     void ClearupCrashes(const CrashIO::InputBuffer_PreScene*,CrashIO::OutputBuffer_PreScene*);
     void ForceClearupAllCrashes(CrashIO::OutputBuffer_PreScene*);
     void OnNetworkPlayerDisconnected(EActiveRaceCarIndex,CrashIO::OutputBuffer_PreScene*);
@@ -135,12 +138,12 @@ int main()
     module.mbIsOnlineGameMode=true;module.mRaceCarCrashes.GetItem(0).mfSecondsBeforeCleanup=9;Run(205,damage);
     Check(module.mRaceCarCrashes.GetItem(0).mfSecondsBeforeCleanup==9,"online totalled action leaves timers alone");
     AddRace(2);AddRace(3);
-    TrafficCrash network{};network.mliOwner=2;network.meCrashState=2;network.muVehicleIndex=17;network.mfStartTime=4;
+    TrafficCrash network{};network.miOwner=2;network.mxFlags=2;network.muVehicleIndex=17;network.mfTimeTillClearup=4;
     module.mTrafficCrashes.Append(network);
     RemotePlayerDisconnectedAction disconnect{};disconnect.meActiveRaceCarIndex=static_cast<EActiveRaceCarIndex>(2);Run(11,disconnect);
     Check(module.mRaceCarCrashes.GetLength()==1&&module.mRaceCarCrashes.GetItem(0).GetOwner()==3,"disconnect removes all matching records despite swap erase");
     Check(race->GetLength()==3&&race->GetEvent(1).mbRemoveRaceCar&&race->GetEvent(2).mbRemoveRaceCar,"disconnect posts removal completions");
-    Check(module.mTrafficCrashes.GetItem(0).mfStartTime==-1&&(module.mTrafficCrashes.GetItem(0).meCrashState&1),"disconnect expires network traffic");
+    Check(module.mTrafficCrashes.GetItem(0).mfTimeTillClearup==-1&&(module.mTrafficCrashes.GetItem(0).mxFlags&1),"disconnect expires network traffic");
     module.mCrashingTraffic.SetBit(17);module.mCrashingNetworkTraffic.SetBit(17);
     module.maiSlammedTrafficOwners[17]=2;module.maCrashingTrafficForPlayers[2].Insert(17);
     ResetCrashingAction resetAll{};Run(9,resetAll);
@@ -187,6 +190,34 @@ int main()
     Check(Cleanup(0,0,80,0,true,true,true,false),"zero timer has not expired");
     Check(Cleanup(0,0,80,-1,true,true,false,false),"no active player suppresses cleanup");
     Check(!Cleanup(0,0,80,-1,true,true,true,true)&&race->GetEvent(0).mbRemoveRaceCar,"network cleanup requests removal");
+    // Traffic record state transitions: positive timer, exact expiry, grace expiry,
+    // and preservation of every unrelated flag bit, owner and vehicle identity.
+    for(unsigned flags=0;flags<256;++flags){
+        TrafficCrash timer{};timer.Construct(7,599,0.25f,false);timer.mxFlags=static_cast<u8>(flags);
+        timer.Tick(0.125f);
+        Check(timer.mfTimeTillClearup==0.125f&&timer.mxFlags==flags,"positive traffic countdown leaves flags alone");
+        timer.Tick(0.125f);
+        const bool requested=(flags&1)!=0;
+        Check(timer.mfTimeTillClearup==(requested?0.f:1.f)&&timer.mxFlags==(flags|1),"expiry requests one grace period only");
+        timer.Tick(1.5f);
+        Check(timer.mfTimeTillClearup==(requested?-1.5f:-0.5f)&&timer.mxFlags==(flags|1),"requested grace continues through zero without restarting");
+        Check(timer.GetOwner()==7&&timer.GetVehicleIndex()==599,"tick preserves record identity");
+    }
+    TrafficCrash timer{};timer.Construct(2,43,3.5f,true);
+    Check(timer.mxFlags==2&&timer.mfTimeTillClearup==3.5f,"constructor uses original float and network flag signature");
+    timer.Tick(0);Check(timer.mfTimeTillClearup==3.5f&&timer.mxFlags==2,"zero step preserves positive timer");
+    timer.Construct(0,0,std::numeric_limits<float>::quiet_NaN(),false);timer.Tick(0);
+    Check(timer.mxFlags==1&&timer.mfTimeTillClearup==1,"unordered compare follows original expiry branch");
+    timer.Construct(2,43,3.5f,true);timer.OnOwnerDisconnected();timer.Tick(.25f);
+    Check(timer.mxFlags==3&&timer.mfTimeTillClearup==-1.25f,"disconnected traffic does not get another grace period");
+    module.mRaceCarCrashes.Clear();module.mTrafficCrashes.Clear();module.mbClearUpEnabled=true;
+    timer.Construct(0,7,.125f,false);module.mTrafficCrashes.Append(timer);
+    timer.Construct(1,8,4,true);module.mTrafficCrashes.Append(timer);
+    input->mTimerStatusInterface.mSimTimerStatus.mfBaseTimeStep=.25f;
+    input->mTimerStatusInterface.mSimTimerStatus.mfTimeStepMultiplier=.5f;
+    module.TickCrashes(input.get());
+    Check(module.mTrafficCrashes.GetItem(0).mxFlags==1&&module.mTrafficCrashes.GetItem(0).mfTimeTillClearup==1,"module ticks expired traffic from published simulation step");
+    Check(module.mTrafficCrashes.GetItem(1).mxFlags==2&&module.mTrafficCrashes.GetItem(1).mfTimeTillClearup==3.875f,"module visits every traffic record with scaled step");
     Check(assertions==0,"valid actions and queues produce no assertions");
     std::printf("CrashActions: %u checks, %u failures\n",checks,failures);
     return failures?1:0;
