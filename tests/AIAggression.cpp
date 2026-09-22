@@ -278,6 +278,140 @@ static void GroupSlower()
     Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_NO_PASSING_SPEED), "a car out of range: flt_8300D6F4");
 }
 
+// ------------------------------------------------------------------------------------------------
+// G00-D5 / D6 / C1 / C2 / C3 / C4: six state handlers byte-store 0 to +0x44 (mbTargetPosValid)
+// and never touch +0x68 (mfHangingAroundTimer) -- Hex-Rays prints `*(this + 68) = 0`, and that
+// 68 is DECIMAL. Each case arms the flag plus a +0x68 sentinel and runs the handler once.
+// ------------------------------------------------------------------------------------------------
+static const f32 KF_TEST_SENTINEL = 7.0f;
+
+static void Arm(AIAggression& lrAggression, EAIAggressionState leState, f32 lfStateTime)
+{
+    lrAggression.meAggressionState = leState;
+    lrAggression.mfStateTime = lfStateTime;
+    lrAggression.mbTargetPosValid = true;
+    lrAggression.mfHangingAroundTimer = KF_TEST_SENTINEL;
+}
+
+static void PlaceStateCars(AICar& lrCar, AICar& lrPlayer)
+{
+    lrCar.mPosition = V(0.0f, 0.0f, 0.0f);
+    lrCar.mDirection = V(0.0f, 0.0f, 1.0f);
+    lrCar.mRight = V(1.0f, 0.0f, 0.0f);
+    lrCar.mfSpeedInRange = 30.0f;
+    lrCar.meRouteFindingStyle = E_ROUTE_FINDING_FREE_ROAM;
+    lrCar.mAggressiveness.mfProximitySpeedMatch = 1.0f;   // speed-match window: 60 m apart, lead in [-60, 40]
+    lrPlayer.mPosition = V(0.0f, 0.0f, 5.0f);             // 5 m ahead of the rival
+    lrPlayer.mDirection = V(0.0f, 0.0f, 1.0f);
+    lrPlayer.mfSpeedInRange = 40.0f;                      // above KF_CLIP_OFF_MIN_SPEED (flt_8300D720, 80 mph)
+}
+
+static void GroupLineupPointDrop()
+{
+    AICar lCar{}, lPlayer{};
+    PlaceStateCars(lCar, lPlayer);
+    {
+        BeginGroup("G00-D5 SpurtForward");
+        AIAggression lAggression{};
+        lAggression.mpCar = &lCar;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_SPURT_FORWARD, 0.5f);
+        lAggression.UpdateAggressionStateSpurtForward();
+        Check(!lAggression.mbTargetPosValid, "drops the lineup point (stb 0,0x44 @0x82770DF4)");
+        Check(lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL, "does not write +0x68");
+        Check(lAggression.meSpeedMatchType == ESpeedMatch_OvertakeSlowly && Near(lAggression.mFixedPassingSpeed, 130.0f * 0.44704f) &&
+              lAggression.meAggressionState == E_AI_AGGRESSION_STATE_SPURT_FORWARD && lAggression.mfStateTime == 0.5f,
+              "speed match 5, passing speed 130 mph (flt_82F31928 * flt_820C436C), state held");
+        Arm(lAggression, E_AI_AGGRESSION_STATE_SPURT_FORWARD, 0.0f);
+        lAggression.UpdateAggressionStateSpurtForward();
+        Check(!lAggression.mbTargetPosValid && lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OUT_OF_RANGE &&
+              lAggression.mfStateTime == -1.0f, "timeout: OUT_OF_RANGE / -1 with the point dropped");
+    }
+    {
+        BeginGroup("G00-D6 FallPast");
+        AIAggression lAggression{};
+        lAggression.mpCar = &lCar;
+        lAggression.mpTargetCar = &lPlayer;
+        lAggression.mpPlayerCar = &lPlayer;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_FALL_PAST, 5.0f);
+        lAggression.UpdateAggressionStateFallPast(nullptr);   // in range, not timed out: returns at the lpPlayerCar test
+        Check(!lAggression.mbTargetPosValid, "drops the lineup point (stb r26,0x44 @0x8279359C)");
+        Check(lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL, "does not write +0x68");
+        Check(lAggression.meSpeedMatchType == ESpeedMatch_Slower && lAggression.meAggressionState == E_AI_AGGRESSION_STATE_FALL_PAST,
+              "speed match 2, state held");
+        Arm(lAggression, E_AI_AGGRESSION_STATE_FALL_PAST, 5.0f);
+        lAggression.mpTargetCar = nullptr;
+        lAggression.UpdateAggressionStateFallPast(nullptr);
+        Check(!lAggression.mbTargetPosValid && lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OUT_OF_RANGE,
+              "out of speed-match range: the point is dropped before the exit");
+    }
+    {
+        BeginGroup("G00-C1 VeerExtreme");
+        AIAggression lAggression{};
+        lAggression.mpCar = &lCar;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_VEER_EXTREME, 0.5f);
+        lAggression.UpdateAggressionStateVeerExtreme();
+        Check(!lAggression.mbTargetPosValid, "drops the stale VEER point every frame (stb 0,0x44 @0x82770EC8)");
+        Check(lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL, "does not write +0x68");
+        Check(lAggression.meSpeedMatchType == ESpeedMatch_SlowToClip &&
+              lAggression.meAggressionState == E_AI_AGGRESSION_STATE_VEER_EXTREME && lAggression.mfStateTime == 0.5f,
+              "speed match 3, state held");
+        Arm(lAggression, E_AI_AGGRESSION_STATE_VEER_EXTREME, 0.0f);
+        lAggression.UpdateAggressionStateVeerExtreme();
+        Check(!lAggression.mbTargetPosValid && lAggression.meAggressionState == E_AI_AGGRESSION_STATE_WAIT &&
+              lAggression.mfStateTime == 1.0f, "timeout: WAIT for flt_82001C98 (1 s), point dropped");
+    }
+    {
+        BeginGroup("G00-C2 BeFodder");
+        AIAggression lAggression{};
+        lAggression.mpCar = &lCar;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_BE_FODDER, 0.5f);
+        lAggression.UpdateAggressionStateBeFodder();
+        Check(!lAggression.mbTargetPosValid, "drops the lineup point (stb 0,0x44 @0x8277DC9C)");
+        Check(lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL, "does not write +0x68");
+        Check(lAggression.meSpeedMatchType == ESpeedMatch_Enabled && lAggression.mfRelativePositionAhead == 2.0f &&
+              lAggression.meAggressionState == E_AI_AGGRESSION_STATE_BE_FODDER, "speed match 1, +2 m ahead, state held");
+        Arm(lAggression, E_AI_AGGRESSION_STATE_BE_FODDER, 0.0f);
+        lAggression.UpdateAggressionStateBeFodder();
+        Check(!lAggression.mbTargetPosValid && lAggression.meAggressionState == E_AI_AGGRESSION_STATE_CLIP_OFF_BEHIND &&
+              lAggression.mfStateTime == 3.0f, "timeout (not PURSUIT): CLIP_OFF_BEHIND for 3 s, point dropped");
+    }
+    {
+        BeginGroup("G00-C3 ClipOffBehind");
+        AIAggression lAggression{};
+        lAggression.mpCar = &lCar;
+        lAggression.mpTargetCar = &lPlayer;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_CLIP_OFF_BEHIND, 0.5f);
+        lAggression.UpdateAggressionStateClipOffBehind();
+        Check(!lAggression.mbTargetPosValid, "with a target: drops the lineup point (stb r30,0x44 @0x82770C2C)");
+        Check(lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL, "does not write +0x68");
+        Check(lAggression.meSpeedMatchType == ESpeedMatch_SlowToClip &&
+              lAggression.meAggressionState == E_AI_AGGRESSION_STATE_CLIP_OFF_BEHIND, "speed match 3, state held");
+        lAggression.mpTargetCar = nullptr;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_CLIP_OFF_BEHIND, 0.5f);
+        lAggression.UpdateAggressionStateClipOffBehind();
+        Check(lAggression.mbTargetPosValid && lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL &&
+              lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OUT_OF_RANGE && lAggression.mfStateTime == -1.0f,
+              "no target: OUT_OF_RANGE and neither field is stored (0x82770C00..0x82770C08)");
+    }
+    {
+        BeginGroup("G00-C4 OvertakeFast");
+        AIAggression lAggression{};
+        lAggression.mpCar = &lCar;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_OVERTAKE_FAST, 5.0f);
+        lAggression.UpdateAggressionStateOvertakeFast();   // mpPlayerCar NULL
+        Check(!lAggression.mbTargetPosValid, "drops the lineup point before the player test (stb r30,0x44 @0x8278B468)");
+        Check(lAggression.mfHangingAroundTimer == KF_TEST_SENTINEL, "does not write +0x68");
+        Check(lAggression.meSpeedMatchType == ESpeedMatch_OvertakeFast &&
+              lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OUT_OF_RANGE && lAggression.mfStateTime == -1.0f,
+              "no player: speed match 4, OUT_OF_RANGE / -1");
+        lAggression.mpPlayerCar = &lPlayer;
+        Arm(lAggression, E_AI_AGGRESSION_STATE_OVERTAKE_FAST, 5.0f);
+        lAggression.UpdateAggressionStateOvertakeFast();
+        Check(!lAggression.mbTargetPosValid && lAggression.meAggressionState == E_AI_AGGRESSION_STATE_OVERTAKE_FAST,
+              "player 5 m ahead: state held, point dropped");
+    }
+}
+
 int main()
 {
     std::printf("AIAggression regression\n");
@@ -285,6 +419,7 @@ int main()
     GroupAcrossSeparation();
     GroupSlowToClip();
     GroupSlower();
+    GroupLineupPointDrop();
     EndGroup();
     std::printf("%s: %u checks, %u failures\n", guFailures ? "FAIL" : "PASS", guChecks, guFailures);
     return guFailures ? 1 : 0;

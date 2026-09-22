@@ -1152,8 +1152,8 @@ void BrnAI::AIAggression::UpdateAggressionStateAttackSlam()
 // BE_FODDER handler: the AI offers itself as a takedown target. On state-timeout it
 // either (E_ROUTE_FINDING_PURSUIT target) sets the slow-overtaking speed and transitions to
 // OVERTAKE_SLOWLY (state 11, 8s), or otherwise drops to CLIP_OFF_BEHIND (state 9, 3s).
-// Each frame it forces speed-match Enabled, a +2.0 relative-position-ahead bias, and
-// clears the hanging-around timer.
+// Each frame it forces speed-match Enabled, a +2.0 relative-position-ahead bias, and drops
+// the slam lineup point (mbTargetPosValid) -- console store order +0x5C, +0x58, +0x44.
 void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
 {
     if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
@@ -1171,17 +1171,17 @@ void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
         }
     }
 
-    mfRelativePositionAhead = 2.0f;          // +0x5C
-    meSpeedMatchType = ESpeedMatch_Enabled;  // +0x58 = 1
-    mfHangingAroundTimer = 0.0f;             // +0x68
+    mfRelativePositionAhead = 2.0f;          // +0x5C (stfs @0x8277DC90)
+    meSpeedMatchType = ESpeedMatch_Enabled;  // +0x58 = 1 (stw @0x8277DC94)
+    mbTargetPosValid = false;                // +0x44 (li r11,0 @0x8277DC98; stb r11,0x44 @0x8277DC9C)
 }
 
 // BrnAI::AIAggression::UpdateAggressionStateClipOffBehind @0x82770B88.
 //
 // CLIP_OFF_BEHIND handler: shadow-clip the target from behind. With no valid target,
 // or once the state times out, or if the target slows below KF_CLIP_OFF_MIN_SPEED, it
-// resets to OUT_OF_RANGE. Otherwise it holds speed-match mode SlowToClip and clears the
-// hanging-around timer.
+// resets to OUT_OF_RANGE. With a target it holds speed-match mode SlowToClip and drops the
+// slam lineup point (mbTargetPosValid); the no-target arm stores neither.
 void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
 {
     if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
@@ -1197,8 +1197,8 @@ void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
             mfStateTime = -1.0f;
             meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
         }
-        mfHangingAroundTimer = 0.0f;             // +0x68
-        meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3
+        mbTargetPosValid = false;                    // +0x44 (li r30,0 @0x82770BA8; stb r30,0x44 @0x82770C2C)
+        meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3 (stw @0x82770C30)
     }
     else
     {
@@ -1327,7 +1327,8 @@ void BrnAI::AIAggression::UpdateAggressionStateDropBackToSlam(const AICar* /*lpP
 // BrnAI::AIAggression::UpdateAggressionStateFallPast @0x82793568.
 //
 // FALL_PAST handler: the AI deliberately drops behind the player. Forces speed-match
-// mode 2 (Slower), clears the boost flag, and -- for a E_ROUTE_FINDING_MARKED_MAN target going slower
+// mode 2 (Slower), drops the slam lineup point (mbTargetPosValid), and -- for a
+// E_ROUTE_FINDING_MARKED_MAN target going slower
 // than its decent speed -- diverts to SPURT_FORWARD (state 12). Bails to OUT_OF_RANGE
 // when the speed-match window is exceeded. On state-timeout it either re-rolls a short
 // SPURT_FORWARD time (E_ROUTE_FINDING_ROAD_RAGE/E_ROUTE_FINDING_MARKED_MAN) via the shared mRandom draw, or resets to
@@ -1338,8 +1339,8 @@ void BrnAI::AIAggression::UpdateAggressionStateFallPast(const AICar* lpPlayerCar
 {
     AICar* const lpThisCar = mpCar;
 
-    meSpeedMatchType = ESpeedMatch_Slower;   // +0x58 = 2
-    mfHangingAroundTimer = 0.0f;             // +0x68
+    meSpeedMatchType = ESpeedMatch_Slower;   // +0x58 = 2 (stw @0x82793598)
+    mbTargetPosValid = false;                // +0x44 (li r26,0 @0x82793588; stb r26,0x44 @0x8279359C)
 
     // E_ROUTE_FINDING_MARKED_MAN target that has dropped below its decent cruising speed -> spurt past.
     if (lpThisCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)   // ==6
@@ -1554,13 +1555,14 @@ void BrnAI::AIAggression::UpdateAggressionStateOutOfRange(const AICar* lpPlayerC
 // OUT_OF_RANGE. Otherwise it measures the leading separation to the player; if that
 // exceeds the style-dependent cap (5.0 for E_ROUTE_FINDING_ROAD_RAGE/E_ROUTE_FINDING_MARKED_MAN, else 20.0) it diverts
 // to FALL_PAST (state 7, 12s). On state-timeout it resets to OUT_OF_RANGE. Each frame it
-// forces speed-match OvertakeFast and clears the hanging-around timer.
+// forces speed-match OvertakeFast and drops the slam lineup point (mbTargetPosValid), both
+// before the player-car test.
 void BrnAI::AIAggression::UpdateAggressionStateOvertakeFast()
 {
     const AICar* const lpPlayerCar = mpPlayerCar;
 
-    meSpeedMatchType = ESpeedMatch_OvertakeFast;   // +0x58 = 4
-    mfHangingAroundTimer = 0.0f;                   // +0x68
+    meSpeedMatchType = ESpeedMatch_OvertakeFast;   // +0x58 = 4 (stw @0x8278B464)
+    mbTargetPosValid = false;                      // +0x44 (li r30,0 @0x8278B45C; stb r30,0x44 @0x8278B468)
 
     if (lpPlayerCar == NULL)
     {
@@ -1637,15 +1639,16 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeToSlam(const AICar* /*lpP
 // BrnAI::AIAggression::UpdateAggressionStateSpurtForward @0x82770DD8.
 //
 // SPURT_FORWARD handler: a timed burst to pull ahead. Forces speed-match mode
-// OvertakeSlowly, clears the hanging-around timer, and sets the fixed passing speed to
-// KF_SPURT_PASSING_SPEED_SCALE * 130.0. On state-timeout it resets to OUT_OF_RANGE.
+// OvertakeSlowly, drops the slam lineup point (mbTargetPosValid) so the racing line stops
+// steering at it, and sets the fixed passing speed to KF_SPURT_PASSING_SPEED_SCALE * 130.0.
+// On state-timeout it resets to OUT_OF_RANGE.
 void BrnAI::AIAggression::UpdateAggressionStateSpurtForward()
 {
     const f32 lfStateTime = mfStateTime;
 
-    meSpeedMatchType = ESpeedMatch_OvertakeSlowly;   // +0x58 = 5
-    mfHangingAroundTimer = 0.0f;                     // +0x68
-    mFixedPassingSpeed = KF_SPURT_PASSING_SPEED_SCALE * 130.0f;   // +0x48
+    meSpeedMatchType = ESpeedMatch_OvertakeSlowly;   // +0x58 = 5 (stw @0x82770DE4)
+    mbTargetPosValid = false;                        // +0x44 (li r10,0 @0x82770DE0; stb r10,0x44 @0x82770DF4)
+    mFixedPassingSpeed = KF_SPURT_PASSING_SPEED_SCALE * 130.0f;   // +0x48 (flt_82F31928 * flt_820C436C, stfs @0x82770E04)
 
     if (lfStateTime != -1.0f && lfStateTime <= 0.0f)
     {
@@ -1701,14 +1704,16 @@ void BrnAI::AIAggression::UpdateAggressionStateVeer()
 
 // BrnAI::AIAggression::UpdateAggressionStateVeerExtreme @0x82770EB8.
 //
-// VEER_EXTREME handler: a hard swerve. Forces speed-match SlowToClip and clears the
-// hanging-around timer. On state-timeout it transitions to WAIT (state 4, 1s).
+// VEER_EXTREME handler: a hard swerve. Forces speed-match SlowToClip and drops the slam
+// lineup point (mbTargetPosValid) every frame, so a rival that has been grinding the player
+// for over a second peels away instead of steering at the stale VEER point. On state-timeout
+// it transitions to WAIT (state 4, 1s).
 void BrnAI::AIAggression::UpdateAggressionStateVeerExtreme()
 {
     const f32 lfStateTime = mfStateTime;
 
-    meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3
-    mfHangingAroundTimer = 0.0f;                 // +0x68
+    meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3 (stw @0x82770EC0)
+    mbTargetPosValid = false;                    // +0x44 (li r11,0 @0x82770EC4; stb r11,0x44 @0x82770EC8)
 
     if (lfStateTime != -1.0f && lfStateTime <= 0.0f)
     {
