@@ -134,11 +134,36 @@ def checks_prepare(tree):
            re.search(r"mbHighTakenDownPenalty\s*=\s*false\s*;", stage4) is not None)
 
 
+def checks_paused(tree):
+    pump = tree.read(PUMP)
+    paused = optional_body(pump, "void AIModule::PausedUpdate(")
+    update = code_only(function_body(pump, "void AIModule::Update("))
+    # G05-D2: 0x8279A390..0x8279A4D8 -- the route round trip, then ProcessRequestInterface(r6 = lUpdateSet)
+    sequence = ["HandleManagementEvents(lpInputBuffer)",
+                "IOHelper<RouteMapModuleIO::OutputBuffer>",
+                "AIModuleRoutes::AppendRaceRouteRequests(",
+                "mRouteMapModule.Update(",
+                "AIModuleRoutes::AppendRouteResponses(",
+                "ProcessRequestInterface(lpInputBuffer, lpOutputBuffer, lUpdateSet)",
+                "lpInputBuffer->UnlockForRead()",
+                "lpOutputBuffer->UnlockForWrite()"]
+    positions = [paused.find(item) for item in sequence]
+    yield ("G05-D2 PausedUpdate runs the route round trip and ProcessRequestInterface (0x8279A390..0x8279A4C8)",
+           all(p >= 0 for p in positions[:6]))
+    yield ("G05-D2 ...in the console's order, unlocking input then output (0x8279A4D0/0x8279A4D8)",
+           all(p >= 0 for p in positions) and positions == sorted(positions))
+    yield ("G05-D2 PausedUpdate has no UpdateCarRoutes (the paused path only appends)",
+           paused != "" and "UpdateCarRoutes(" not in paused)
+    yield ("G05-D2 Update forwards lUpdateSet to PausedUpdate (0x8279B49C..0x8279B4B8)",
+           re.search(r"PausedUpdate\([^;]*lUpdateSet\s*\)", update) is not None)
+
+
 def checks(tree):
     """Yield (name, passed) pairs."""
     yield from checks_routes(tree)
     yield from checks_route_requests(tree)
     yield from checks_prepare(tree)
+    yield from checks_paused(tree)
     events = tree.read(EVENTS)
     mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
     # G04-D2: 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> stbx 0x4EB7C and 0x82791E24 lbz 0x94 -> stbx 0x4EB7D
