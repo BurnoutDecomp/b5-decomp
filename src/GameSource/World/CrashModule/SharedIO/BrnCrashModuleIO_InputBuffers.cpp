@@ -119,12 +119,21 @@ namespace CrashIO
         mActiveRaceCarInterface = *lpInterface;
     }
 
-    // 0x827A2328 (DWARF :88) -- write-lock tripwire; blind-copy the 0x3410-byte game-action queue
+    // 0x827A2328 (DWARF :88) -- write-lock tripwire; copy the game-action queue
     // into mGameActionQueue (X360 this+0x7A70). Caller WorldModule::BridgeInputToCrashModule.
-    void InputBuffer_PreScene::SetGameActionQueue(const GameActionQueueStorage* lpQueue)
+    void InputBuffer_PreScene::SetGameActionQueue(const GameActionQueue* lpQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        memcpy(&mGameActionQueue, lpQueue, sizeof(mGameActionQueue));
+        // FLAG PC-platform leaf: rebuild the copied queue's address-dependent alignment
+        // offset for its host address. Event payloads and order remain unchanged.
+        mGameActionQueue.Construct();
+        mGameActionQueue.Append(*lpQueue);
+    }
+
+    const InputBuffer_PreScene::GameActionQueue* InputBuffer_PreScene::GetGameActionQueue() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mGameActionQueue;
     }
 
     // ====================================================================================
@@ -216,22 +225,6 @@ namespace CrashIO
         mTrafficInputInterface.Construct();
         mVehicleOutputInterface.Construct();
         mVehicleManagerOutputInterface.Construct();
-    }
-
-    // ====================================================================================
-    // InputBuffer_HandleGameActions (DWARF BrnCrashModuleIO.h:87) -- single read accessor,
-    // still modelled as an opaque read view (no setters/typed members recovered by this slice).
-    // ====================================================================================
-    void InputBuffer_HandleGameActions::_AssertLayout()
-    {
-        static_assert(offsetof(InputBuffer_HandleGameActions, mReadInterface) == 0x7A70,
-                      "InputBuffer_HandleGameActions::mReadInterface @0x7A70");
-    }
-    const InputBuffer_HandleGameActions::ReadInterfaceStorage*
-    InputBuffer_HandleGameActions::GetReadInterface() const   // 0x827BB528
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mReadInterface;
     }
 
     // ====================================================================================

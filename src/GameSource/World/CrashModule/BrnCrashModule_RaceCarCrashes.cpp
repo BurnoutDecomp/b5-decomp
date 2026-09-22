@@ -25,12 +25,6 @@
 // one is TRAFFIC- or NETWORK-side; not one is on the race-car crash-exit path. They are parked
 // with a one-shot log apiece rather than dropped, and each park is justified by a live invariant:
 //
-//   HandleGameActions          228  -- game-mode tunables. ⭐ PARKING IT IS BEHAVIOURALLY EXACT IN
-//                                      FREE BURN: its case 39 (GAME MODE STOP) writes precisely the
-//                                      values CrashModule::Construct already installed
-//                                      (mfPlayerCrashTime 4.0f, mbClearUpEnabled true,
-//                                      mbIsInAGameMode false, miNumCrashExtensions 10, online
-//                                      false, showtime false), and no game mode ever starts here.
 //   ClearUpRecycledTraffic      54  -- walks mRecycledTrafficQueue and drops the matching
 //                                      TrafficCrash. mTrafficCrashes is only ever filled by
 //                                      HandleNewCrashingTraffic/AddCrashingTrafficVehicle, both
@@ -58,6 +52,7 @@
 // =================================================================================================
 
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
+#include "rw/math/vpu/vector3_operation.h"
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
@@ -282,20 +277,14 @@ void CrashModule::TickCrashes( const CrashIO::InputBuffer_PreScene* lpInput )
 //               else if (!IsRaceCarRival(owner)) -> clean up
 //               else if (mfSecondsBeforeCleanup <= -20.0f) -> clean up (the hard backstop)
 //               else the two VMX tests: keep the wreck alive only while it is BOTH within a
-//               radius of the player AND in front of the player.
+//               40-unit radius AND ahead of the plane 5 units behind the player.
 //   0x827CE0xx  ResetRaceCarFromCrashIndex(lpOutput, luCrash--, IsRaceCarNetwork(owner))
 //
-// ⛔ THE RIVAL-PROXIMITY ARM IS PARKED, and this is the one park inside a reconstructed body.
-// It is reachable only when mbIsInAGameMode is TRUE, which on this build means never (only
-// CrashModule::HandleGameActions case 23 raises it, and that is the parked handler, and no game
-// mode starts in free burn). Its two thresholds are `unk_8300F3B0` (the radius^2) and
-// `unk_8300E9C0` (the facing dot, negated by the vspltisw/vslw/vxor sign-flip idiom) -- and BOTH
-// READ 0.0 FROM THE IMAGE because they are BSS, runtime-written by something not traced here.
-// ⭐ Guessing them would be exactly the [[placeholder-identity-element]] trap: a radius^2 of 0
-// means "never near", a facing threshold of 0 means "any hemisphere" -- the two zeros push the
-// branch in OPPOSITE directions, so there is no safe stand-in. The arm therefore logs once and
-// falls through to the console's own `else` (clean the wreck up), which is what a
-// mbIsInAGameMode==false build does anyway.
+// Rival hold constants are initialized by ARTIST startup thunks, not zero defaults:
+// 0x82C6AC60 splats 5.0 (8200426C) to 8300E9C0; 0x82C6AC88 splats 40.0
+// (82004D0C) to 8300EA30; 0x82C6ACB0 squares it into 8300F3B0 (1600.0).
+// The unnormalized forward projection must exceed -5.0, and distance squared
+// must be strictly below 1600.0. The hold ends at the -20-second backstop.
 // =================================================================================================
 void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
                                   CrashIO::OutputBuffer_PreScene* lpOutput )
@@ -309,6 +298,8 @@ void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
 
     if( lpActiveRaceCarInterface->IsPlayerCarActive() )
     {
+        const Vector3 lPlayerPosition = lpActiveRaceCarInterface->GetPlayerPosition();
+        const Vector3 lPlayerDirection = lpActiveRaceCarInterface->GetPlayerDirection();
         for( u32 luCrash = 0; luCrash < mRaceCarCrashes.GetLength(); ++luCrash )
         {
             RaceCarCrash& lrCrash = mRaceCarCrashes.GetItem( luCrash );
@@ -327,12 +318,10 @@ void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
                 if( lpActiveRaceCarInterface->IsRaceCarRival( leOwner ) &&
                     lrCrash.GetSecondsBeforeCleanup() > -20.0f )
                 {
-                    static bool sbLoggedRivalProximityPark = false;
-                    LogCrashPark( sbLoggedRivalProximityPark,
-                                  "[crash-exit] ClearupCrashes PARK: the in-a-game-mode RIVAL"
-                                  " proximity/facing hold needs unk_8300F3B0 + unk_8300E9C0, both of"
-                                  " which are BSS and read 0 -- the wreck is cleaned up (the"
-                                  " console's own else arm) [FLAG]\n" );
+                    const Vector3 lSeparation =
+                        lpActiveRaceCarInterface->GetRaceCarState(leOwner)->mTransform.Pos() - lPlayerPosition;
+                    lbClearUp = !(rw::math::vpu::Dot(lSeparation, lSeparation) < 1600.0f &&
+                                  rw::math::vpu::Dot(lSeparation, lPlayerDirection) > -5.0f);
                 }
             }
 
@@ -412,7 +401,7 @@ void CrashModule::ResetRaceCarFromCrashIndex( CrashIO::OutputBuffer_PreScene* lp
 //   0x827D3A90  lpInput->GetActiveRaceCarInterface(): latch the player's slot into
 //               meLocalActiveRaceCarIndex, but ONLY when the interface says a player car is active
 //               (0x827D3AD8 `lbz r11, 0x2860` == mbIsPlayerCarActive; :967/:980 tripwires)
-//   0x827D3B30  HandleGameActions                                     [PARKED]
+//   0x827D3B30  HandleGameActions                                     [LIVE]
 //   0x827D3B44  if (!(lUpdateSet & 1)) {
 //   0x827D3B48      ClearUpRecycledTraffic                            [PARKED]
 //   0x827D3B4C      if (mbIsOnlineGameMode) { HandleNetworkCrashingTraffic ;
@@ -443,14 +432,7 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
         }
     }
 
-    {
-        static bool sbLoggedHandleGameActionsPark = false;
-        LogCrashPark( sbLoggedHandleGameActionsPark,
-                      "[crash-exit] CrashModule::HandleGameActions PARK: the game-mode crash"
-                      " tunables (ids 6/9/10/11/23/39/205) are not reconstructed. In free burn the"
-                      " console's own case-39 values ARE the Construct defaults this module already"
-                      " holds, so this is a no-op here [FLAG]\n" );
-    }
+    HandleGameActions(lpInput, lpOutput);
 
     if( ( lUpdateSet & 1 ) == 0 )
     {

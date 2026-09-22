@@ -91,6 +91,8 @@ enum EGameActionType
     E_ACTION_PLAYER_INVULNERABLE        = 111,   // DWARF 106 (+5 X360); size 4
     E_ACTION_SHUTDOWN_FINISHED          = 121,   // DWARF 116 (+5 X360); size 4
     E_ACTION_REMOTE_PLAYER_DISCONNECTED = 11,
+    E_ACTION_RESET_CRASHING             = 9,  // ARTIST CrashModule::HandleGameActions
+    E_ACTION_RESET_RACE_CAR_CRASHING     = 10,
     E_ACTION_SOUND_TRIGGER              = 210,
     E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
     E_ACTION_SETUP_NETWORK_CAR          = 5,     // DWARF BrnGameActions.h (was placeholder 221)
@@ -1284,6 +1286,14 @@ struct RemotePlayerDisconnectedAction : public GameAction<E_ACTION_REMOTE_PLAYER
 
     void SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex);
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lPlayerID);
+};
+
+// DecFIGS BrnGameActions.h:2243/2246; ARTIST action 9 has no payload reads,
+// action 10 reads the active race-car index at record+0 (0x827D0E90).
+struct ResetCrashingAction : public GameAction<E_ACTION_RESET_CRASHING> {};
+struct ResetRaceCarCrashingAction : public GameAction<E_ACTION_RESET_RACE_CAR_CRASHING>
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;
 };
 
 // X360 0x82355088 (Construct). DWARF: 6 members / 0x38 bytes.

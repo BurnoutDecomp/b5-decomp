@@ -142,6 +142,12 @@ namespace BrnWorld
         // additively grow this class with their own declarations.
 
     private:
+        void HandleGameActions(const CrashIO::InputBuffer_PreScene* lpInput,
+                               CrashIO::OutputBuffer_PreScene* lpOutput); // 0x827D08D0
+        void ForceClearupAllCrashes(CrashIO::OutputBuffer_PreScene* lpOutput); // 0x827CDD28
+        void OnNetworkPlayerDisconnected(EActiveRaceCarIndex lePlayer,
+                                         CrashIO::OutputBuffer_PreScene* lpOutput); // 0x827CCEE8
+        void OnTrafficCarRemovedFromCrash(u32 luVehicleIndex, EActiveRaceCarIndex leOwner); // 0x827C67E0
         // ---- the RACE-CAR crash half, landed 2026-08-25. Bodies in
         //      BrnCrashModule_RaceCarCrashes.cpp. (The traffic/network helpers PreSceneUpdate and
         //      PostPhysicsUpdate also call are PARKED there, with a loud one-shot each.)
