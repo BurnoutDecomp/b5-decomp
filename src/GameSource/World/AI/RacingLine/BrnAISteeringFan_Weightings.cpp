@@ -365,6 +365,36 @@ void SteeringFan::IncludeCentreLineTracking(RacingLineGenerator* lpRacingLineGen
         else
             mfWeighting[eFan_SteerToCentre][liStep] = 0.0f;
     }
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). Crash-parity G03-D1 witness: until
+    // 2026-09-22 AIDriver::Prepare skipped its RandomFloat draw, so every rival reached this loop
+    // with mfCentreLineAhead/Recip == 0/0 and wrote -((dot - 0) * 0) == 0 into every ray -- the
+    // eFan_SteerToCentre row was dead. The line reports the threshold the loop just used and
+    // whether the row came out non-zero, so a live run shows the draw reached the rivals.
+    // Members are read only; nothing here feeds back into the weights.
+    {
+        static const bool sbFanDiag = (std::getenv("BRN_AI_FAN_DIAG") != 0);
+        static u32 suComputed = 0, suLive = 0, suPrinted = 0;
+        if (sbFanDiag && CgsDev::Log::gpDebugPrint != 0)
+        {
+            f32 lfMinRow = 0.0f;
+            for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
+                if (mfWeighting[eFan_SteerToCentre][liStep] < lfMinRow)
+                    lfMinRow = mfWeighting[eFan_SteerToCentre][liStep];
+            ++suComputed;
+            if (lfMinRow < 0.0f)
+                ++suLive;
+            if ((lfMinRow < 0.0f && suPrinted < 16) || (suComputed % 240) == 0)
+            {
+                ++suPrinted;
+                *CgsDev::Log::gpDebugPrint
+                    << "[aidrv] centre-row fan " << static_cast<s32>(reinterpret_cast<intptr_t>(this) & 0xFFFFFF)
+                    << " ahead " << lfAhead << " recip " << lfAheadRecip
+                    << " minRow " << lfMinRow
+                    << " live " << suLive << "/" << suComputed << "\n";
+            }
+        }
+    }
 }
 
 // ========================================================================================
