@@ -1430,6 +1430,27 @@ void ActiveRaceCar::UpdateDeformationState(
                 << " angular=" << mPhysicsState.mAngularVelocity.x << "," << mPhysicsState.mAngularVelocity.y
                 << "," << mPhysicsState.mAngularVelocity.z << "\n";
         }
+        // FLAG PC diagnostic ([td-flight], same gate): the 48-frame window above ends 0.8 s after
+        // the takedown, before most of a wreck's flight, tumble and settling. Sample the whole
+        // episode (every 6th frame, up to 900 frames = 15 s) with the linear velocity and the up
+        // axis, so "flies more / reacts less" can be measured on the victim, not inferred.
+        static u32 sauTakedownFlightFrames[E_ACTIVE_RACE_CAR_INDEX_COUNT] = {};
+        u32& lruFlight = sauTakedownFlightFrames[meActiveRaceCarIndex];
+        if (!mbTakenDown) lruFlight = 0;
+        else if (lruFlight < 900 && (lruFlight++ % 6) == 0 && CgsDev::Log::gpDebugPrint)
+        {
+            *CgsDev::Log::gpDebugPrint << "[td-flight] slot=" << static_cast<s32>(meActiveRaceCarIndex)
+                << " f=" << (lruFlight - 1)
+                << " crashing=" << (mPhysicsState.mbCrashing ? 1 : 0)
+                << " pos=" << mPhysicsState.mTransform.Pos().x << "," << mPhysicsState.mTransform.Pos().y
+                << "," << mPhysicsState.mTransform.Pos().z
+                << " vel=" << mPhysicsState.mLinearVelocity.x << "," << mPhysicsState.mLinearVelocity.y
+                << "," << mPhysicsState.mLinearVelocity.z
+                << " upy=" << mPhysicsState.mTransform.Up().y
+                << " angular=" << mPhysicsState.mAngularVelocity.x << "," << mPhysicsState.mAngularVelocity.y
+                << "," << mPhysicsState.mAngularVelocity.z
+                << " displacement=" << lpCarState->GetSummedDisplacementSquared() << "\n";
+        }
     }
 
     // [deform-readback] one-shot measurement: the first NON-ZERO summed displacement seen
