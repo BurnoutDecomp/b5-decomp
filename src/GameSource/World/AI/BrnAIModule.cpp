@@ -271,11 +271,10 @@ void AIModule::Construct()
 // ⭐ `ld r4, 0(this+295880)` is ONE 64-bit load: the console passes the whole 8-byte
 // ResourceHandle by value in a single GPR.
 //
-// ⚠️ [FLAG PC boot gate] stage 4 is PARKED WHOLE: AIDriver::Prepare over the 8 active race cars
-// (BrnAIDriver.cpp is not mounted; its Prepare pulls in the racing-line/aggression stack), plus
-// the block of owner pointers and flags at +322400..+322832 and the nine flt_8300D5A0.. globals,
-// none of which have named homes in this class's pad spine. The stage still ADVANCES, exactly as
-// the console's does, so the machine reaches DONE and the world prepare moves on.
+// Stage 4 is whole since 2026-09-22 (crash parity G05-D1): AIDriver::Prepare x8, the cursor /
+// closest-car / take-down-penalty stores, and the inlined BuzzBy::Prepare -- including the
+// Construct of BuzzBy's file-static Random (the flt_8300D5A0.. words, which are that Random's ring,
+// not independent globals).
 // =================================================================================================
 bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
                         AIModuleIO::OutputBuffer* lpOutputBuffer )
@@ -384,12 +383,18 @@ bool AIModule::Prepare( BrnResource::GameDataIO::AllocatorList* lpAllocatorList,
             {
                 maAIDrivers[liDriver].Prepare(GetAISectionsData(), liDriver, &mRandom);
             }
-            meCurrentRoundRobin[0] = E_ACTIVE_RACE_CAR_INDEX_0;
-            meCurrentRoundRobin[1] = E_ACTIVE_RACE_CAR_INDEX_0;
-            meProximityGlobalRaceCarIndexRoundRobin = E_GLOBAL_RACE_CAR_INDEX_0;
-            mfClosestDistance = 3.4028235e38f;
-            mpClosestCar      = 0;
-            mBuzzBy.Prepare(maAICars, &mResetOnTrackManager);
+            // The stage-4 tail, 0x8279827C..0x8279838C (every store r30 == 0 unless noted):
+            miLineUpdateTokenCounter = 0;                                   // 0x8279829C stwx +0x4EB60
+            meCurrentRoundRobin[0] = E_ACTIVE_RACE_CAR_INDEX_0;             // 0x827982BC (this+0x4EBC8)
+            meCurrentRoundRobin[1] = E_ACTIVE_RACE_CAR_INDEX_0;             // 0x827982C4
+            meProximityGlobalRaceCarIndexRoundRobin = E_GLOBAL_RACE_CAR_INDEX_0;   // 0x827982E0 +0x4EBD8
+            mBuzzBy.Prepare(maAICars, &mResetOnTrackManager);               // 0x827982EC..0x82798380 (inlined)
+            mfClosestDistance = 3.4028235e38f;                              // 0x82798384 flt_8204F664 (FLT_MAX)
+            mpClosestCar      = 0;                                          // 0x82798388
+            mbHighTakenDownPenalty = false;                                 // 0x8279838C stbx +0x4EB81
+            // (0x82798218/0x82798224 also zero +0x4EBD0/+0x4EBD4 -- the DWARF's meAggressorIndex /
+            //  meVictimIndex (:389/:390); no console body reads either and this host class does not
+            //  carry them.)
             mePrepareStage++;
         }
         // fall through
