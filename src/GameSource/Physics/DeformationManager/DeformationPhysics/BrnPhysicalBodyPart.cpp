@@ -2011,12 +2011,27 @@ namespace Deformation
             return false;
         }
 
+        // ARTIST8260C1F8..8260C290 seeds detachment from the owning vehicle's
+        // rigid motion at the part origin, before either breaking-force arm.
+        // v121 is vehicle angular velocity; v124 = velocity + omega x lever.
+        const ExternalPhysicsBody& lrVehicleBody = mpDeformableObject->GetVehicleBody();
+        const Matrix44Affine lVehicleTransform = lrVehicleBody.GetTransform();
+        const Vector3 lPartPosition = mRwBody.GetTransform().wAxis;
+        const Vector3 lVehicleAngularVelocity = lrVehicleBody.GetAngularVelocity();
+        const Vector3 lDetachVelocity = lrVehicleBody.GetLinearVelocity()
+            + rw::math::vpu::Cross(lVehicleAngularVelocity, lPartPosition - lVehicleTransform.wAxis);
+
+        // These tripwires precede both stress tests at8260C294..8260C304.
+        CGS_ASSERT(mbJoinedToVehicle, "IsJoinedToVehicle()");
+        CGS_ASSERT(mpIKPart != 0, "mpIKPart != NULL");
+        CGS_ASSERT(mpIKPart->GetActiveJointSpec() != 0, "mpIKPart->GetActiveJointSpec() != NULL");
+
         // (4) break predicate. Compute the joint force vector (the asm builds it from the body's velocity
         // /transform and the joint's rotation axis -- GetActiveJointSpec()'s rotation-axis lane). The
         // force-along-axis magnitude and the accumulated penetration magnitude (+400 w lane,
         // mLocalInitialJointPositionPlusLimitStress packing, reached as the joint penetration) are each
         // scaled by their multiplier and compared against GetMaxStress().
-        const f32 lfMaxStress = lpActiveJoint ? lpActiveJoint->GetMaxStress() : 0.0f;
+        const f32 lfMaxStress = lpActiveJoint->GetMaxStress();
 
         bool lbBreak = false;   // v34
 
@@ -2054,28 +2069,11 @@ namespace Deformation
 
             if ( lbAxisEngaged )
             {
-                // v124 = omega x (partPos - bodyPos) + v  -- the world velocity of the part's origin
-                // under the vehicle's rigid motion (the decoded cross-product chain).
-                const ExternalPhysicsBody& lrVehicleBody = mpDeformableObject->GetVehicleBody();
-                const Vector3 lBodyPos = lrVehicleBody.GetTransform().wAxis;        // body +0x30
-                const Vector3 lBodyLinVel = lrVehicleBody.GetLinearVelocity();      // body +0x40
-                const Vector3 lBodyAngVel = lrVehicleBody.GetAngularVelocity();     // body +0x50
-                const Vector3 lLever = { lPartTransform.wAxis.x - lBodyPos.x,
-                                         lPartTransform.wAxis.y - lBodyPos.y,
-                                         lPartTransform.wAxis.z - lBodyPos.z, 0.0f };
-
-                const Vector3 lPointVelocity = {
-                    lBodyAngVel.y * lLever.z - lBodyAngVel.z * lLever.y + lBodyLinVel.x,
-                    lBodyAngVel.z * lLever.x - lBodyAngVel.x * lLever.z + lBodyLinVel.y,
-                    lBodyAngVel.x * lLever.y - lBodyAngVel.y * lLever.x + lBodyLinVel.z,
-                    0.0f
-                };
-
                 // vmsum3fp128 @0x8260C3D4, vandc @0x8260C410 (abs), vmulfp128 @0x8260C414
                 // (* kfJointForceMultiplier), vcmpgtfp. @0x8260C418 (> maxStress).
-                const f32 lfJointForceMagnitude = lPointVelocity.x * lWorldAxis.x
-                                                + lPointVelocity.y * lWorldAxis.y
-                                                + lPointVelocity.z * lWorldAxis.z;
+                const f32 lfJointForceMagnitude = lDetachVelocity.x * lWorldAxis.x
+                                                + lDetachVelocity.y * lWorldAxis.y
+                                                + lDetachVelocity.z * lWorldAxis.z;
                 const f32 lfScaledForce = lfAbs(lfJointForceMagnitude) * kfJointForceMultiplier;
                 ++gxJbForceHist[JbDecade(lfMaxStress > 0.0f ? (lfScaledForce / lfMaxStress) : 0.0f)];  // [DIAG]
                 if ( lfScaledForce > lfMaxStress )
@@ -2103,15 +2101,8 @@ namespace Deformation
 
         ++gxJbBreak;   // [DIAG]
 
-        // (5) break path tripwires.
-        CGS_ASSERT(mbJoinedToVehicle, "IsJoinedToVehicle()");
-        CGS_ASSERT(mpIKPart != 0, "mpIKPart != NULL");
-        CGS_ASSERT(mpIKPart->GetActiveJointSpec() != 0, "mpIKPart->GetActiveJointSpec() != NULL");
-
-        // Hand the part to the sim as a free body: AddToSim(this, transform, velocity). The asm passes
-        // v4 (the body transform) and &v67 (the assembled detach velocity). Use the body's current
-        // transform + linear/angular velocity (the recovered detach seed).
-        AddToSim(lpSimInput, GetRigidBodyTransform(), GetLinearVelocity(), mRwBody.GetAngularVelocity());
+        //8260C4A0..8260C4B4 passes v124/v121, not the part's cached velocities.
+        AddToSim(lpSimInput, lVehicleTransform, lDetachVelocity, lVehicleAngularVelocity);
 
         // *(this+484) = 0 (no longer joined).
         mbJoinedToVehicle = false;
