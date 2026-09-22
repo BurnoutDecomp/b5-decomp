@@ -13,6 +13,9 @@ namespace BrnWorld
         static void _AssertLayout();
         EActiveRaceCarIndex GetOwner() const { return static_cast<EActiveRaceCarIndex>(miOwner); }
         u32 GetVehicleIndex() const { return muVehicleIndex; }
+        bool WantsToBeClearedUp() const { return (mxFlags & 1) != 0; }
+        bool IsAllowedToBeClearedUp() const { return WantsToBeClearedUp() && mfTimeTillClearup <= 0.0f; }
+        void MarkVehicleAsOnscreen();
         void OnOwnerDisconnected(); // inlined ARTIST827CD0A8..827CD0F0
 
     private:

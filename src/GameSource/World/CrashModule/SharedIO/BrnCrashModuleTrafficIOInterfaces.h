@@ -67,7 +67,7 @@ namespace CrashIO
 
     // Crash-module traffic INPUT interface (DWARF home BrnCrashModuleTrafficIOInterfaces.h:148;
     // member layout :187-192). The crash module's per-frame view of traffic state: three
-    // EventQueue<...,160> input queues plus three FastBitArray<601> per-traffic-vehicle bit
+    // EventQueue<...,160> input queues plus three FastBitArray<600> per-traffic-vehicle bit
     // masks. The X360 layout (Construct @0x827609F0, operator= @0x827AA4E8) is:
     //   mAddCrashingTrafficEventQueue   @ 0x000  EventQueue<AddCrashingTrafficEvent,160>
     //                                            (16-byte element + 12-byte base, 16-aligned ->
@@ -77,18 +77,21 @@ namespace CrashIO
     //                                             next member at 0xB5C)
     //   mRemoveCrashedTrafficEventQueue @ 0xB5C  EventQueue<RemoveCrashedTrafficEvent,160>
     //                                            (u16 element -> 332 bytes, next at 0xCA8)
-    //   mRenderingBits                  @ 0xCA8  FastBitArray<601> (10 u64 fields == 80 bytes)
-    //   mFarFromCameraBits              @ 0xCF8  FastBitArray<601> (80 bytes)
-    //   mPhysicalBits                   @ 0xD48  FastBitArray<601> (80 bytes; ends at 0xD98)
+    //   mRenderingBits                  @ 0xCA8  FastBitArray<600> (10 u64 fields == 80 bytes)
+    //   mFarFromCameraBits              @ 0xCF8  FastBitArray<600> (80 bytes)
+    //   mPhysicalBits                   @ 0xD48  FastBitArray<600> (80 bytes; ends at 0xD98)
     // The three 80-byte bit masks at 0xCA8/0xCF8/0xD48 are exactly the 30 qwords Construct
-    // zeroes and the 30 qwords operator= copies (3 loops of 10), confirming FastBitArray<601>
-    // == 80 bytes (ceil(601/64) == 10 u64 fields).
+    // zeroes and the 30 qwords operator= copies (3 loops of 10), confirming FastBitArray<600>
+    // == 80 bytes (ceil(600/64) == 10 u64 fields).
+    // ARTIST uses 600 vehicles (KillAllTrafficInCylinder 82741CB4: cmplwi 0x258),
+    // matching VehicleSoaData and the bounds checks below; DecFIGS used 601.
+    // Both capacities occupy 10 u64 fields, so this preserves the attested layout.
     struct TrafficInputInterface
     {
         typedef CgsModule::EventQueue<AddCrashingTrafficEvent,  160> AddCrashingTrafficEventQueue;   // :66
         typedef CgsModule::EventQueue<RemoveSlammedTrafficEvent, 160> RemoveSlammedTrafficEventQueue; // :82
         typedef CgsModule::EventQueue<RemoveCrashedTrafficEvent, 160> RemoveCrashedTrafficEventQueue; // :98
-        typedef CgsContainers::FastBitArray<601>                      TrafficVehicleBits;             // :135
+        typedef CgsContainers::FastBitArray<600>                      TrafficVehicleBits;             // :135
 
         // Point each input queue at its inline storage (maxLength 160, length 0) and zero the
         // three traffic-vehicle bit masks (X360 Construct @0x827609F0).
@@ -107,6 +110,17 @@ namespace CrashIO
         // r3 unchanged) -- i.e. the queue at offset 0. Reached by name here.
         const AddCrashingTrafficEventQueue& GetAddCrashingTrafficEventQueue() const { return mAddCrashingTrafficEventQueue; }
         AddCrashingTrafficEventQueue&       GetAddCrashingTrafficEventQueue()       { return mAddCrashingTrafficEventQueue; }
+
+        // DWARF const accessors; ARTIST consumers inline these member addresses.
+        const RemoveSlammedTrafficEventQueue* GetRemoveSlammedTrafficEventQueue() const { return &mRemoveSlammedTrafficEventQueue; }
+        const RemoveCrashedTrafficEventQueue* GetRemoveCrashedTrafficEventQueue() const { return &mRemoveCrashedTrafficEventQueue; }
+        const TrafficVehicleBits* GetRenderingBits() const { return &mRenderingBits; }
+        const TrafficVehicleBits* GetFarFromCameraBits() const { return &mFarFromCameraBits; }
+        const TrafficVehicleBits* GetPhysicalBits() const { return &mPhysicalBits; }
+        void SetRenderingBits(const TrafficVehicleBits* bits) { mRenderingBits = *bits; }
+        void SetFarFromCameraBits(const TrafficVehicleBits* bits) { mFarFromCameraBits = *bits; }
+        void SetPhysicalBits(const TrafficVehicleBits* bits) { mPhysicalBits = *bits; }
+
 
         // The two per-vehicle publishes TrafficEntityModule::GenerateSlamRecoveryEvents @0x827207E0
         // and ::GenerateRemovedVehicleEvents @0x827206E8 make on this interface. Each is the

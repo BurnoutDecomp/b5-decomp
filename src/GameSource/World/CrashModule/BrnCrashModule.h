@@ -162,6 +162,15 @@ namespace BrnWorld
         // X360 0x827C6AD8. Linear search of mRaceCarCrashes for the crash record owned by the
         // given active-race-car slot; returns its index, or KU_INVALID_CRASH (-1) if none.
         u32 FindCrashForRaceCar(EActiveRaceCarIndex leActiveRaceCarIndex) const;
+        u32 FindCrashForTrafficVehicle(u32 luVehicleIndex) const;
+        void AddCrashingTrafficVehicle(CgsSceneManager::VolumeInstanceId lVehicle, EntityId lCrasher,
+                                       BrnPhysics::Vehicle::eCrashTrafficType leType);
+        void ProcessSlammedTrafficEvents(const CrashIO::InputBuffer_PostPhysics* lpInput);
+        void HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput);
+        void HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput);
+        void HandleCleanedUpTrafficEvents(const CrashIO::InputBuffer_PostPhysics* lpInput);
+        void ClearUpRecycledTraffic(CrashIO::OutputBuffer_PreScene* lpOutput);
+
 
         // X360 0x827BBB10. True when the traffic vehicle (luVehicle, < KU_MAX_TOTAL_TRAFFIC == 600)
         // is present in mRecycledTrafficQueue, i.e. it will be removed/recycled next frame.

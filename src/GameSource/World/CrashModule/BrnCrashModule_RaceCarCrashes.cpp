@@ -18,30 +18,9 @@
 // DWARF home is World/CrashModule/BrnCrashModule.cpp; same file-split rationale as
 // BrnCrashModule_Lifecycle.cpp. DELETE-WHEN the home TU becomes mountable whole.
 //
-// =================================================================================================
-// ⛔ WHAT IS DELIBERATELY PARKED HERE, AND WHY EACH PARK IS SAFE ON THIS BUILD
-// =================================================================================================
-// PreSceneUpdate and PostPhysicsUpdate each call helpers this slice does not reconstruct. Every
-// one is TRAFFIC- or NETWORK-side; not one is on the race-car crash-exit path. They are parked
-// with a one-shot log apiece rather than dropped, and each park is justified by a live invariant:
-//
-//   ClearUpRecycledTraffic      54  -- walks mRecycledTrafficQueue and drops the matching
-//                                      TrafficCrash. mTrafficCrashes is only ever filled by
-//                                      HandleNewCrashingTraffic/AddCrashingTrafficVehicle, both
-//                                      parked, so it is permanently empty and this is a no-op loop.
-//   HandleNetworkCrashingTraffic 1268 / ResetCrashedNetworkRaceCars 193
-//                                   -- BOTH already gated behind mbIsOnlineGameMode, which
-//                                      Construct sets false and only an online game mode raises.
-//   ProcessSlammedTrafficEvents 449 / HandleNewCrashingTraffic 37 /
-//   HandleRecoveredSlammedTraffic 46 / HandleCleanedUpTrafficEvents 228 /
-//   GenerateOwnedTrafficUpdates 957 -- the crashing-TRAFFIC bookkeeping. Traffic cars already
-//                                      crash and recover through the physical-traffic manager on
-//                                      this build; the crash module's traffic ledger is a separate
-//                                      slice and is inert today either way.
-//
-// The recycled-traffic queue and traffic bitmask copies remain parked with their consumers.
-// The crash-ending game event42 is published through the canonical typed output queue.
-// =================================================================================================
+// Traffic producers, ownership, countdown and cleanup now run through the original phases.
+// Network replication (HandleNetworkCrashingTraffic, ResetCrashedNetworkRaceCars,
+// GenerateOwnedTrafficUpdates) remains parked and is not certified by the offline lifecycle pass.
 
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
 #include "rw/math/vpu/vector3_operation.h"
@@ -324,8 +303,38 @@ void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
         }
     }
 
-    // The TRAFFIC arm of ClearupCrashes (the second half of the console body) is parked with the
-    // rest of the traffic ledger -- see the file banner. mTrafficCrashes is empty on this build.
+    // ARTIST827CE208..827CE5DC: offline wrecks are retired only offscreen and far away.
+    for (u32 i = 0; i < mTrafficCrashes.GetLength();)
+    {
+        TrafficCrash& crash = mTrafficCrashes.GetItem(i);
+        if (!crash.IsAllowedToBeClearedUp()) { ++i; continue; }
+        const u32 vehicle = crash.GetVehicleIndex();
+        bool clear = mbIsOnlineGameMode;
+        if (!clear)
+        {
+            CGS_ASSERT(vehicle < 600, "Index is out of range (max bits: 600)");
+            if (!mTrafficRenderedLastFrame.IsBitSet(vehicle))
+            {
+                CGS_ASSERT(vehicle < 600, "Index is out of range (max bits: 600)");
+                clear = mTrafficFarFromCameraLastFrame.IsBitSet(vehicle);
+            }
+        }
+        if (clear)
+        {
+            CGS_ASSERT(crash.IsAllowedToBeClearedUp(), "lpTrafficCrash->IsAllowedToBeClearedUp()");
+            const auto owner = crash.GetOwner();
+            CGS_ASSERT(vehicle < 0x4000, "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+            CrashIO::CleanupTrafficEvent event;
+            event.mVolumeInstanceId.muId = static_cast<u64>(0x02000000u | (vehicle << 10)) << 32;
+            lpOutput->GetTrafficOutputInterface()->GetCleanupTrafficEventQueue().AddEvent(event);
+            OnTrafficCarRemovedFromCrash(vehicle, owner);
+            mTrafficCrashes.EraseFast(i);
+            if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[traffic-crash] cleanup vehicle=" << vehicle << " owner=" << static_cast<s32>(owner) << "\n";
+        }
+        else { crash.MarkVehicleAsOnscreen(); ++i; }
+    }
+
 }
 
 // =================================================================================================
@@ -386,7 +395,7 @@ void CrashModule::ResetRaceCarFromCrashIndex( CrashIO::OutputBuffer_PreScene* lp
 //               (0x827D3AD8 `lbz r11, 0x2860` == mbIsPlayerCarActive; :967/:980 tripwires)
 //   0x827D3B30  HandleGameActions                                     [LIVE]
 //   0x827D3B44  if (!(lUpdateSet & 1)) {
-//   0x827D3B48      ClearUpRecycledTraffic                            [PARKED]
+//   0x827D3B48      ClearUpRecycledTraffic                            [LIVE]
 //   0x827D3B4C      if (mbIsOnlineGameMode) { HandleNetworkCrashingTraffic ;
 //                                             ResetCrashedNetworkRaceCars }   [PARKED, unreachable]
 //   0x827D3B78      if (mbClearUpEnabled)  { TickCrashes ; ClearupCrashes }   <-- THE EXIT
@@ -419,13 +428,7 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
 
     if( ( lUpdateSet & 1 ) == 0 )
     {
-        {
-            static bool sbLoggedRecycledTrafficPark = false;
-            LogCrashPark( sbLoggedRecycledTrafficPark,
-                          "[crash-exit] CrashModule::ClearUpRecycledTraffic PARK: the crashing-"
-                          "TRAFFIC ledger is a separate slice; mTrafficCrashes is permanently"
-                          " empty on this build [FLAG]\n" );
-        }
+        ClearUpRecycledTraffic(lpOutput);
 
         if( mbIsOnlineGameMode )
         {
@@ -455,10 +458,9 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
 //     0x827D3BDC  ProcessCrashedRaceCarEvents                          <-- THE ENTRY
 //     0x827D3BE8  mRecycledTrafficQueue.Clear() then .Append(vmOut->mRemovedTrafficEventQueue)
 //                 and the two 80-byte traffic bitmask copies from the traffic input interface
-//                                                                       [PARKED -- feeds only
-//                                                                        parked helpers]
+//                                                                       [LIVE]
 //     0x827D3C40  ProcessSlammedTrafficEvents / HandleNewCrashingTraffic /
-//                 HandleRecoveredSlammedTraffic / HandleCleanedUpTrafficEvents  [PARKED]
+//                 HandleRecoveredSlammedTraffic / HandleCleanedUpTrafficEvents  [LIVE]
 //     0x827D3C58  if (mbIsOnlineGameMode) GenerateOwnedTrafficUpdates            [PARKED]
 //     0x827D3C68  if (mbNeedToSendEndingMessage) { VariableEventQueue<1536,16>::AddEvent(
 //                     lpOutput->GetGameEventQueue(), &record, 42, 1);
@@ -479,12 +481,19 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
     {
         ProcessCrashedRaceCarEvents( lpInput, lpOutput );
 
+        mRecycledTrafficQueue.Clear();
+        mRecycledTrafficQueue.Append(*lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
+        const auto* traffic = lpInput->GetTrafficInputInterface();
+        mTrafficRenderedLastFrame = *traffic->GetRenderingBits();
+        mTrafficFarFromCameraLastFrame = *traffic->GetFarFromCameraBits();
+        ProcessSlammedTrafficEvents(lpInput);
+        HandleNewCrashingTraffic(lpInput);
+        HandleRecoveredSlammedTraffic(lpInput);
+        HandleCleanedUpTrafficEvents(lpInput);
+        if (mbIsOnlineGameMode)
         {
-            static bool sbLoggedTrafficMirrorPark = false;
-            LogCrashPark( sbLoggedTrafficMirrorPark,
-                          "[crash-exit] CrashModule::PostPhysicsUpdate PARK: the recycled-traffic"
-                          " mirror, the two traffic bitmask copies and the five crashing-traffic"
-                          " handlers are the traffic ledger slice [FLAG]\n" );
+            static bool logged = false;
+            LogCrashPark(logged, "[crash-exit] GenerateOwnedTrafficUpdates PARK: network replication remains unreconstructed [FLAG]\n");
         }
 
         if( mbNeedToSendEndingMessage )
