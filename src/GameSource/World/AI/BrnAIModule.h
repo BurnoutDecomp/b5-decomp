@@ -399,26 +399,20 @@ private:
     // zero. Flagged there, loudly.
     AICar maAICars[35];
 
-    // X360 +322040 (0x4EB78) / +322044 (0x4EB7C) -- the two player-car cursors AIModule::Update
-    // latches at the top of its body and every later leg reads back.
+    // X360 +322040 (0x4E9F8) / +322044 (0x4E9FC) -- the two player-car cursors AIModule::Update
+    // latches at the top of its body and every later leg reads back. (Corrected 2026-09-22: this
+    // banner used to say 0x4EB78/0x4EB7C, which are muNumAggressiveCars / mbEnableDrivingInput.)
     //
     //   mePlayerActiveRaceCarIndex  <- lpInputBuffer->GetRaceCarAIInterface()
-    //                                    ->GetPlayerActiveRaceCarIndex()  (asm 0x8279B5F8)
-    //   mePlayerGlobalRaceCarIndex  <- the AI DRIVER chain: only written when the player's slot
-    //                                  HAS an AIDriver whose +7529 flag is set, as
+    //                                    ->GetPlayerActiveRaceCarIndex()  (asm 0x8279B5F0..0x8279B604)
+    //   mePlayerGlobalRaceCarIndex  <- the AI DRIVER chain: only written while the player's slot's
+    //                                  AIDriver is ACTIVE, as
     //                                  `driver->mpAICar ? driver->mpAICar->miRaceCarIndex : -1`
-    //                                  (asm 0x8279B640..0x8279B6A0).
+    //                                  (asm 0x8279B618..0x8279B664).
     //
-    // ⛔ [FLAG PC bring-up] NOTHING ON THIS BUILD WRITES THE SECOND ONE. AIModule::GetAIDriver
-    // and the eight AIDriver objects are absent (AIDriver::Prepare is Prepare stage 4's parked
-    // leg), so the console's writer arm cannot run. Its resting value here is the CONSOLE'S OWN
-    // resting value: the module lives in .bss and the console never stores anything else into
-    // +322044 on a free-burn drive, so E_GLOBAL_RACE_CAR_INDEX_0 (== 0) is what the console
-    // reads too. It feeds only ResetOnTrackManager::Update's two range asserts and its
-    // "player sent a non-STANDARD request" tripwire, both of which pass at 0.
-    // ⚠️ It is NOT "the player's global race-car index" today, and no code here treats it as
-    // one -- the request itself carries the real index (RCEM::SendResetOnTrackRequests writes
-    // it), which is what ProcessResetOnTrackRequest actually resolves against.
+    // AIModule::Construct stores 0 to BOTH (0x827952F4 / 0x8279530C, r30 == 0 from 0x82794D34) --
+    // the seed is the console's own store, not a .bss rationale. The active cursor is read before
+    // Update ever writes it on one path: PausedUpdate -> HandleManagementEvents case 4.
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;   // X360 +322040
     EGlobalRaceCarIndex mePlayerGlobalRaceCarIndex;   // X360 +322044
 

@@ -1235,20 +1235,15 @@ void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
         return;   // [GUARD] the console reads params+0x94 two instructions later.
     }
 
-    // [FLAG PC bring-up] AIModule::OnModeStart @0x82791DF4..0x82791E38 also derives
-    //   mbEnableDrivingInput  = (*(u8*)(lpGameModeParams + 0x94) == 0)
-    //   mbIsInOnlineGameMode  =  *(u8*)(lpGameModeParams + 0x94)
-    // and +0x94 has NO pinned member name: BrnGameModeParams.h states outright that
-    // GameModeParams' real layout is NOT its DWARF source order (see the meGameModeType banner
-    // there, pinned to +0x148 by the asm), and walking the declared order from the one other
-    // anchor this tree has (maePlayerTeam[8] @ +0x118, BrnOnlineStuntRunMode.cpp:297) puts no
-    // 1-byte member at +0x94. Semantically it can only be `mbIsOnline`, but "can only be" is not
-    // a pin, so the two flags are LEFT AT THEIR CONSTRUCT VALUES (mbEnableDrivingInput = 1,
-    // mbIsInOnlineGameMode = 0) instead of being written from a guessed offset. That IS the
-    // console's outcome for every OFFLINE mode -- the byte is 0 there, so the console writes
-    // exactly those two values. An ONLINE mode diverges (its AI would keep driving input enabled).
-    // DELETE-WHEN GameModeParams' offset -> member map pins +0x94.
-
+    // +0x94 IS GameModeParams::mbIsOnline (crash parity G04-D2, 2026-09-22 -- the old park said it
+    // had no pinned member): GameModeParams::Construct @0x8231C370 zeroes it (`stb 0, 0x94(r3)`),
+    // every online mode's Start stores 1 there (OnlineRaceMode 0x82338F24, OnlineRoadRageMode
+    // 0x8233951C, OnlineStuntRunMode 0x82339ECC, OnlineShowtimeMode 0x823222B4,
+    // OnlineFreeBurnLobbyMode 0x82322374), and the PC online Starts already write
+    // `lpGameModeParams->mbIsOnline = true`. Offline the byte is 0, so these store exactly the
+    // Construct values; an online mode now turns the AI's driving input off as the console does.
+    mbEnableDrivingInput     = !lpGameModeParams->mbIsOnline;                                  // 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> 0x82791E1C stbx 0x4EB7C
+    mbIsInOnlineGameMode     = lpGameModeParams->mbIsOnline;                                   // 0x82791E24 lbz 0x94 -> 0x82791E38 stbx 0x4EB7D
     mbIsInGameMode           = true;                                                          // 0x82791E34 (stb 1, 0x4EB7E)
     mfProgressionRankAsRatio = lpGameModeParams->mfProgressionRankAsRatio;                    // 0x82791E3C/40 (lfs 4)
 
