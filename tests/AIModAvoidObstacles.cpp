@@ -13,6 +13,7 @@
 #define protected public
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"
 #undef protected
