@@ -662,24 +662,40 @@ namespace BrnAI
     // DetermineDriftSteeringAngle @0x827931D0
     //
     // Signed planar angle from the car's chosen direction (velocity for CAR_MOVING, facing for
-    // CAR_FACING) to the racing line's final drift direction. Returns 0 when the racing line is
-    // not initialised or the drift direction cannot be found -- on the console fp1 is simply left
-    // untouched on those two paths, which the two consumers (EstimateNeedForDrifting and
-    // DoDrivingBehaviour case 2) both compare with fabs against a small threshold; 0.0 is the
-    // value that makes both read "no drift needed".
-    // [FLAG PC bring-up] the console leaves fp1 UNSET on the two early-outs; 0.0 here is the host
-    // stand-in. DELETE-WHEN the racing-line stack lands and the early-outs stop being taken.
+    // CAR_FACING) to the racing line's final drift direction. Every early-out returns an
+    // EXPLICIT 0.0 (loc_827931F4: `lfs f1, flt_82001CC0`):
+    //   0x827931E8  racing line not initialised (lbz 0x1AF0)             -> 0.0
+    //   0x8279322C  CAR_MOVING: lFrom = (vel.x, vel.z) (vrlimi128 8,0 / 4,1); when BOTH lanes fail
+    //               |lane| > flt_820C3B70 (vandc sign mask, vcmpgtfp, 0x82793270..0x827932E0) the
+    //               `b 0x827932F8` at 0x827932E4 takes the FACING instead
+    //   0x827932F8  CAR_FACING (and that fallback): lFrom = (dir.x, dir.z) from GetDirection
+    //   0x82793310..0x827933AC  the SAME per-lane test on the chosen vector, both selections:
+    //               degenerate -> `bne loc_827931F4` -> 0.0, BEFORE FindFinalDriftDirection
+    //   0x827933F8  FindFinalDriftDirection(this+0x1C70 == mSteeringTargetVector) false -> 0.0
+    //   0x82793420  FindSignedAngleBetween2DVectors(normalised lFrom, mSteeringTargetVector)
+    // (The rsqrt normalise is split around the FindFinalDriftDirection call on the console; it is
+    // a pure function of lFrom, so it is written once here.) `!(|x| > eps)` keeps vcmpgtfp's NaN
+    // lanes on the degenerate side.
     // ================================================================================
     f32 AIDriver::DetermineDriftSteeringAngle(EDriftDirectionSelection leSelection)
     {
         if (!GetRacingLine().mbIsInitialised)                       // lbz 0x1AF0
-            return 0.0f;
+            return 0.0f;                                            // loc_827931F4
 
         Vector2 lFrom;
-        if (leSelection == E_DRIFT_DIRECTION_SELECTION_CAR_FACING)
-            lFrom = To2DU(mpCarHost->GetDirection());               // @0x8276B488
-        else
+        if (leSelection == E_DRIFT_DIRECTION_SELECTION_CAR_MOVING)  // cmpwi r4,0
+        {
             lFrom = To2DU(mpCarHost->GetVelocity());                // @0x8276B570
+            if (!(std::fabs(lFrom.x) > KF_STEERING_VECTOR_EPSILON) &&
+                !(std::fabs(lFrom.y) > KF_STEERING_VECTOR_EPSILON))
+                lFrom = To2DU(mpCarHost->GetDirection());           // b 0x827932F8 -> @0x8276B488
+        }
+        else
+            lFrom = To2DU(mpCarHost->GetDirection());               // @0x8276B488
+
+        if (!(std::fabs(lFrom.x) > KF_STEERING_VECTOR_EPSILON) &&
+            !(std::fabs(lFrom.y) > KF_STEERING_VECTOR_EPSILON))
+            return 0.0f;                                            // bne loc_827931F4 @0x827933AC
         lFrom = Normalize2DU(lFrom);
 
         // The out slot the X360 hands FindFinalDriftDirection is this+7280 == mSteeringTargetVector.
