@@ -91,9 +91,43 @@ def checks_routes(tree):
            0 <= clock < actions)
 
 
+RRM = "src/GameSource/World/AI/BrnRouteRequestManager.cpp"
+
+
+def checks_route_requests(tree):
+    events = tree.read(EVENTS)
+    mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
+    mode_end = code_only(function_body(events, "void AIModule::OnModeEnd("))
+    # G04-D1: 0x82791E4C lwz 0x854(params) -> 0x82791E64 stwx this+0x424A8 (RRM+0x240), after
+    #         SetupRaceBalancingManager (0x82791E44)
+    astar = re.search(r"mRouteRequestManager\.SetDefaultAStarDistanceFunction\([^;]*GetAStarDistanceFunction\(\)", mode_start)
+    balance = mode_start.find("SetupRaceBalancingManager(")
+    yield ("G04-D1 OnModeStart sets the RRM default A* function from the mode (0x82791E64)",
+           astar is not None and 0 <= balance < astar.start())
+    # G04-D3: 0x8277BAAC stwx 0 -> +0x424A8 BEFORE the lbRestoreDrivingInput test (0x8277BAB0) and the
+    #         inlined ClearBlockSections 0x8277BB8C..0x8277BBC8
+    reset = re.search(r"mRouteRequestManager\.SetDefaultAStarDistanceFunction\(\s*E_ASTAR_DISTANCE_EUCLIDEAN\s*\)", mode_end)
+    restore = mode_end.find("if (lbRestoreDrivingInput)")
+    yield ("G04-D3 OnModeEnd resets the RRM default A* function first (0x8277BAAC)",
+           reset is not None and 0 <= restore and reset.start() < restore)
+    yield ("G04-D3 OnModeEnd clears every checkpoint's block sections (0x8277BB8C..0x8277BBC8)",
+           "mRouteRequestManager.ClearBlockSections()" in mode_end)
+    rrm = tree.read(RRM)
+    construct = optional_body(rrm, "void RouteRequestManager::Construct(")
+    yield ("G04-D1 RRM::Construct constructs the file-static mRandom (0x8278A3B0..0x8278A434)",
+           "mRandom.Construct()" in construct)
+    yield ("G04-D1 RRM::Construct zeroes every slot count and +0x240 (0x8278A438..0x8278A454)",
+           re.search(r"mauBlockSectionIds\[\w+\]\.Construct\(\)", construct) is not None
+           and re.search(r"meDefaultAStarDistanceFunction\s*=\s*E_ASTAR_DISTANCE_EUCLIDEAN", construct) is not None)
+    setter = optional_body(rrm, "void RouteRequestManager::SetBlockSections(")
+    yield ("G04-D1 RRM::SetBlockSections: :101 assert, count = 0, AppendArray<8> (0x82791ED4..0x82791F08)",
+           "KI_MAX_LANDMARKS_IN_MODE" in setter and ".Construct()" in setter and ".AppendArray(" in setter)
+
+
 def checks(tree):
     """Yield (name, passed) pairs."""
     yield from checks_routes(tree)
+    yield from checks_route_requests(tree)
     events = tree.read(EVENTS)
     mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
     # G04-D2: 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> stbx 0x4EB7C and 0x82791E24 lbz 0x94 -> stbx 0x4EB7D

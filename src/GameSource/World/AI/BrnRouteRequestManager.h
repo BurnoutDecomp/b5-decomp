@@ -16,12 +16,13 @@
 // (BrnRouteRequestManager.h) supplies the member names/types/order and the method
 // signatures; it marks mRandom `extern` -- i.e. mRandom is a FILE-SCOPE static, not a
 // member (it is not part of the per-instance layout). The recovered member layout is:
-//   +0x000  Array<u32,8> mauBlockSectionIds[16]   (16 * 36 == 576 bytes)
+//   +0x000  Array<u32,8> mauBlockSectionIds[16]   (16 * 36 == 576 bytes; count word at +0x20)
 //   +0x240  AStarDistanceFunction meDefaultAStarDistanceFunction
-// Construct() (X360 @0x8278A3B0, KEPT verbatim) seeds a file-scope weight/bound table
-// and clears each block-id slot's head word; the +0x240 default heuristic is set by
-// SetDefaultAStarDistanceFunction. The standard/alternative builders read
-// meDefaultAStarDistanceFunction as `*(this+0x240)`.
+// Construct() (X360 @0x8278A3B0) Constructs the file-static mRandom (0x8300D570), zeroes every
+// block-section COUNT (+0x20 + 36*i) and the +0x240 default heuristic. AIModule::OnModeStart
+// sets the heuristic (SetDefaultAStarDistanceFunction) and the per-checkpoint block sections
+// (SetBlockSections, inlined there); OnModeEnd resets both (ClearBlockSections, inlined there).
+// The standard/alternative builders read meDefaultAStarDistanceFunction as `*(this+0x240)`.
 //
 // The not-yet-homed collaborators ComputeSectionBehind/GenerateFreeRoamingDestination
 // call (RacingLineGenerator::GetForwardPortalIndex, BuzzBy::IsPositionInNoBuzzZone) are
@@ -36,6 +37,7 @@
 #include "GameSource/World/AI/Route/BrnAStar.h"           // BrnAI::AStarDistanceFunction
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"// RaceRouteRequest / InputBuffer / queues
 #include "SharedClasses/AI/AISectionsResourceType.h"      // BrnAI::AISectionsData / AISection / Portal
+#include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<u32,8u> (mauBlockSectionIds, DWARF :157)
 
 namespace BrnAI
 {
@@ -54,29 +56,29 @@ enum EUTurns
 class RouteRequestManager
 {
 public:
-    // Per-checkpoint block-section-id list. Each entry is the X360 Array<u32,8>:
-    // 8 inline ids + a trailing u32 count (36-byte stride, == the Construct loop's
-    // 9-word slot). KEEP this shape so the committed Construct body still compiles.
-    struct RequestSlot
-    {
-        u32 mWords[9];   // [0..7] ids, [8] count
-
-        // X360 int_8_::GetItem / the +32 length read: named views over the slot.
-        u32 GetBlockSectionCount() const { return mWords[8]; }
-        u32 GetBlockSectionId(u32 luIndex) const { return mWords[luIndex]; }
-    };
-
-    RouteRequestManager* Construct();
+    // DWARF :68 `void Construct()` (X360 @0x8278A3B0).
+    void Construct();
 
     // DWARF :76 -- per-frame entry. Walks the 36-car roster; for each car that
     // GenerateRoute's mode applies to and that NeedsNewRoute(), issues a request.
     void Update(AICar* lpaAICars, AICar* lpPlayerCar, const AISectionsData* lpAISectionData,
                 RouteMapModuleIO::InputBuffer* lpRouteInputBuffer, BuzzBy* lpBuzzByManager);
 
+    // DWARF :80. Inlined on X360: AIModule::OnModeStart 0x82791E64 (`stwx` of the mode's
+    // A* type into +0x240) and AIModule::OnModeEnd 0x8277BAAC (`stwx 0`).
     void SetDefaultAStarDistanceFunction(AStarDistanceFunction leFunction)
     {
         meDefaultAStarDistanceFunction = leFunction;
     }
+
+    // DWARF :85 / BrnRouteRequestManager.cpp:99. Inlined on X360 in AIModule::OnModeStart's
+    // checkpoint loop (0x82791ED4..0x82791F08): assert (:101), `stw 0, 0x20(slot)` == Construct,
+    // then Array<u32,8>::AppendArray<8>(slot, ids) @0x8278A108.
+    void SetBlockSections(s32 liCheckpointIndex, const Array<u32, 8u>* laBlockSectionIds);
+
+    // DWARF :88 / BrnRouteRequestManager.cpp:116. Inlined on X360 in AIModule::OnModeEnd
+    // (0x8277BB8C..0x8277BBC8): 16 x `stw 0, 0(r9); r9 += 0x24` from this+0x20 == every count.
+    void ClearBlockSections();
 
 private:
     // DWARF :99 -- dispatch one car to the request builder for its route-finding style.
@@ -121,8 +123,10 @@ private:
                                                  u16 luDestinationSectionIndex);
 
     // ---- storage (declaration order == X360 layout order) -------------------------------
-    RequestSlot           mauBlockSectionIds[16];          // +0x000 (16 * 36 == 576)
-    AStarDistanceFunction meDefaultAStarDistanceFunction;  // +0x240 (576) DWARF :159
+    // One slot per mode checkpoint: 16 == BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE
+    // (the DWARF spells the extent as the literal; SetBlockSections asserts against the constant).
+    Array<u32, 8u>        mauBlockSectionIds[16];                          // +0x000 (16 * 36 == 576) DWARF :157
+    AStarDistanceFunction meDefaultAStarDistanceFunction;                 // +0x240 (576) DWARF :159
 };
 }
 
