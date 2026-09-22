@@ -124,10 +124,21 @@ def checks_route_requests(tree):
            "KI_MAX_LANDMARKS_IN_MODE" in setter and ".Construct()" in setter and ".AppendArray(" in setter)
 
 
+def checks_prepare(tree):
+    prepare = code_only(function_body(tree.read(AIMODULE), "bool AIModule::Prepare("))
+    stage4 = prepare[prepare.find("case E_PREPARESTAGE_AICARS"):prepare.find("case E_PREPARESTAGE_DONE")]
+    # G05-D1 (stage-4 tail): 0x8279829C stwx 0 -> +0x4EB60 and 0x8279838C stbx 0 -> +0x4EB81
+    yield ("G05-D1 Prepare stage 4 zeroes miLineUpdateTokenCounter (0x8279829C)",
+           re.search(r"miLineUpdateTokenCounter\s*=\s*0\s*;", stage4) is not None)
+    yield ("G05-D1 Prepare stage 4 zeroes mbHighTakenDownPenalty (0x8279838C)",
+           re.search(r"mbHighTakenDownPenalty\s*=\s*false\s*;", stage4) is not None)
+
+
 def checks(tree):
     """Yield (name, passed) pairs."""
     yield from checks_routes(tree)
     yield from checks_route_requests(tree)
+    yield from checks_prepare(tree)
     events = tree.read(EVENTS)
     mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
     # G04-D2: 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> stbx 0x4EB7C and 0x82791E24 lbz 0x94 -> stbx 0x4EB7D

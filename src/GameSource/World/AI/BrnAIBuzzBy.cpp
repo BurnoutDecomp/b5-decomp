@@ -353,12 +353,36 @@ namespace BrnAI
     }
 
 
-    // Prepare (DWARF BrnAIBuzzBy.h:60) -- no export; inlined in AIModule::Prepare @0x82798070 stage 4 as the
-    // two pointer stores into +0x008 / +0x128 of the module's BuzzBy (+322524). Conductor, 2026-09-03.
+    // Prepare (DWARF BrnAIBuzzBy.h:60) -- no X360 export; AIModule::Prepare @0x82798070 stage 4 inlines
+    // the WHOLE body off r10 = module + 0x50000 - 0x1424 == +0x4EBDC (mBuzzBy), and the PS3 DecFIGS
+    // keeps it standalone (0x9BAD3C, same field set, ending in ClearCarsAwaitingCollection):
+    //   0x827982EC  stfs 0.0 -> +0x000   mfTimeInFreeRoam
+    //   0x827982F0  stb  0   -> +0x004   mbIsInGameMode
+    //   0x827982F4  stb  0   -> +0x005   mbIsInJunkyard
+    //   0x827982FC  stw  0   -> +0x124   miNumActiveCars
+    //   0x82798304..0x82798370           mRandom.Construct() on the file-static at 0x8300D5A0,
+    //                                    constant-folded: ring 3F800000 3FE43E6C 3F98B09C 3FDA23E0
+    //                                    3FE21EDC 3FDDEB96 3F9C9A72 3F923D76, seed 0xB5E330D0_2EC654DA
+    //                                    (insrdi 0x82798358), index 0
+    //   0x82798374  stw  maAICars -> +0x008    0x82798378  stw ROTM -> +0x128
+    //   0x8279837C  stb  1   -> +0x006   mbResetBuzzTimers
+    //   0x82798380  stw  0   -> +0x12C   miCarsAwaitingCollection
+    // findinit 0x8300D5A0 finds exactly two sites -- this writer (0x827982D8) and the reader
+    // ChooseAheadOrBehind @0x827718D0 -- so no CRT thunk seeds the Random.
+    // ⛔ CORRECTED 2026-09-22 (crash parity G05-D1): only the two pointer stores were here. The
+    // file-static Random was never Constructed, so its first 8 draws were 0.0 - 1.0 and every early
+    // buzz-by took the BEHIND arm; mbResetBuzzTimers was left 0.
     void BuzzBy::Prepare(AICar* lpGlobalRaceCars, ResetOnTrackManager* lpResetOnTrackManager)
     {
+        mfTimeInFreeRoam      = 0.0f;
+        mbIsInGameMode        = false;
+        mbIsInJunkyard        = false;
+        miNumActiveCars       = 0;
+        mRandom.Construct();
         mpGlobalRaceCars      = lpGlobalRaceCars;
         mpResetOnTrackManager = lpResetOnTrackManager;
+        mbResetBuzzTimers     = true;
+        ClearCarsAwaitingCollection();
     }
 
 }
