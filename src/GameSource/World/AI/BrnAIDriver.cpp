@@ -235,14 +235,13 @@ namespace BrnAI
     //
     // Per-race-entry init: store the sections-data pointer + active-car index, reset the
     // attrib-sys values, clear the per-race timers/flags/nearby-vehicle count/drift state, clear
-    // the racing-line section cache, draw a random tuning value from the supplied Random (an
-    // inlined LCG advance + range-lerp), seed the perpendicular-target tuning, and prepare the
-    // embedded SteeringFan.
+    // the racing-line section cache, draw this driver's centre-line-ahead threshold from the
+    // supplied Random (AIModule::mRandom, &AIModule+294784 from AIModule::Prepare @0x82798070)
+    // into the embedded RacingLine, and prepare the embedded SteeringFan.
     // ====================================================================================
     void AIDriver::Prepare(AISectionsData* lpSectionsData, s32 leRelatedActiveCarIndex,
                            CgsNumeric::Random* lpRandom)
     {
-        (void)lpRandom;
         mpSectionsDataHost = lpSectionsData;            // 0x1CE4
         ResetAttribSysValues();
         meRelatedActiveCarIndexHost = leRelatedActiveCarIndex; // 0x1CF4
@@ -260,12 +259,20 @@ namespace BrnAI
         GetRacingLine().mbIsInitialised       = false;
         GetRacingLine().mbCentreLineHereKnown = false;
 
-        // X360 draws a per-car random tuning float in a [lo,hi] range (the inlined LCG advance:
-        // multiplier 0x5851F42D, increment +1; then a vector lerp of two rodata bounds, minus 1.0)
-        // and seeds the perpendicular-target tuning from it. The exact range bounds are
-        // rodata-by-address (UNRECOVERED); the LCG advance touches the supplied Random's state.
-        // Restored store-for-store would require the Random + RacingLineGenerator homes, so the
-        // perpendicular-tuning seed is left at its zero-init here and FLAGGED.
+        // 0x82792D10..0x82792DB8: CgsNumeric::Random::RandomFloat(CLOSE, FAR) inlined on lpRandom
+        // (r30 = r6): lwz oldest +0x28 ; ld seed +0x20 ; lfsx f13 = ring[oldest] ; stwx
+        // ring[oldest] = 0x3F800000 | (oldSeed.hi >> 9) (inslwi 23,9) ; std seed*0x5851F42D4C957F2D
+        // + 1 ; stw (oldest+1)&7 ; fsubs t = f13 - 1.0 (flt_82001C98) ; then vsubfp FAR - CLOSE and
+        // vmaddfp (FAR - CLOSE)*t + CLOSE (raw fields vD=0 vA=12 vB=0 vC=13). CLOSE = flt_820C3DDC
+        // (0x3F7F5C29, 0.9975), FAR = 0x820C3DE0 (0x3F7C28F6, 0.985); the PS3 twin @0x9C30D4 names
+        // them KF_CENTRE_LINE_AHEAD_CLOSE / _FAR. The embedded RacingLine is r28 = this+0xF20:
+        //   0x82792DB0 stfs f13, 0xC04(r28)                    mfCentreLineAhead
+        //   0x82792DAC fsubs 1.0 - v ; 0x82792DB4 fdivs ; 0x82792DB8 stfs 0xC08(r28)  mfCentreLineAheadRecip
+        // The only other writer is AICar::OnModeStart's player-only pair (0x8277BEBC/0x8277BEC4),
+        // and the only reader is SteeringFan::IncludeCentreLineTracking (0x82786D00/0x82786D04).
+        const f32 lfCentreLineAhead = lpRandom->RandomFloat(KF_CENTRE_LINE_AHEAD_CLOSE, KF_CENTRE_LINE_AHEAD_FAR);
+        GetRacingLine().mfCentreLineAhead      = lfCentreLineAhead;
+        GetRacingLine().mfCentreLineAheadRecip = 1.0f / (1.0f - lfCentreLineAhead);
 
         mSteeringFan.Prepare();                      // @0x82778E40
 
