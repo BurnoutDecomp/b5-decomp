@@ -667,20 +667,30 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             return KF_NO_PASSING_SPEED;
 
         case ESpeedMatch_SlowToClip:        // 3
-            if (mpPlayerCar != NULL && GetLeadingSeparation(mpCar, mpTargetCar) >= -15.0f)
-            {
-                const f32 lfTarget = mpPlayerCar->GetSpeed() - KF_SLOW_TO_CLIP_SPEED_DROP;
-                return StepTo(mpCar->GetSpeed(), lfTarget, lfTimeStep * 10.0f);
-            }
-            return KF_SLOW_TO_CLIP_FALLBACK;
+            // Our lead in the PLAYER's frame: lwz r4,0x10 (mpPlayerCar, NULL -> flt_8300D754)
+            // @0x8277E108, lwz r5,8 (mpCar) @0x8277E124, bl GetLeadingSeparation @0x8277E128,
+            // blt against flt_82013FB4 (-15.0) @0x8277E138 -> the fallback. mpTargetCar is never
+            // read here. (Crash-parity audit G00-D3: we measured the target's lead in OUR frame,
+            // so we gave up 15 m AHEAD of the player instead of 15 m behind, and dereferenced a
+            // NULL mpTargetCar when VEER_EXTREME set this mode with no target.)
+            if (mpPlayerCar == NULL || GetLeadingSeparation(mpPlayerCar, mpCar) < -15.0f)
+                return KF_SLOW_TO_CLIP_FALLBACK;
+
+            return StepTo(mpCar->GetSpeed(), mpPlayerCar->GetSpeed() - KF_SLOW_TO_CLIP_SPEED_DROP,
+                          lfTimeStep * 10.0f);
 
         case ESpeedMatch_Slower:            // 2
         {
             if (mpPlayerCar == NULL || mpCar->meCarState != E_AI_CAR_STATE_IN_RANGE)
                 return KF_NO_PASSING_SPEED;
 
+            // Our lead in the PLAYER's frame again: lwz r4,0x10 @0x8277E180, lwz r5,8 @0x8277E18C,
+            // bl GetLeadingSeparation @0x8277E1A0, bge against 0.0 @0x8277E1B0 -> lfs 0x48
+            // (mFixedPassingSpeed), else flt_8300D784. Still ahead of the player we ease to the
+            // passing speed; only once behind do we drop to 40 mph (crash-parity audit G00-D4:
+            // the (mpCar, mpTargetCar) reading chose the opposite branch for the whole FALL_PAST).
             f32 lfTarget;
-            if (GetLeadingSeparation(mpCar, mpTargetCar) >= 0.0f)
+            if (GetLeadingSeparation(mpPlayerCar, mpCar) >= 0.0f)
                 lfTarget = mFixedPassingSpeed;
             else
                 lfTarget = KF_SLOWER_BEHIND_SPEED;
