@@ -122,18 +122,36 @@ namespace BrnAI
     // ⚠️ THE OLD TWIN HAD THE SEED'S HIGH WORD WRONG (0x00000001 instead of 0xB5E330D0): the
     // `rldimi r10, r4, 0x20, 0` at 0x82792954 packs r4 -- built by `lis r4,-0x4A1D ; ori
     // r4,r4,0x30D0` at 0x827928C8/0x827928D0 == 0xB5E330D0 -- into the HIGH half. Fixed here.
-    // ⭐ THE CONSUMER IS `AICar::GetRandomNumber()` (DWARF BrnAICar.h:550), which the console
-    // INLINES into its callers -- which is why the only ARTIST code that touches 0x8300D5D0 by
-    // address is BrnAI::ResetOnTrackManager (ResetAwayFromPlayer @0x827841BC and the two other
-    // DWARF BrnResetOnTrackManager.cpp AICar::GetRandomNumber call sites), never BrnAICar.cpp
-    // itself. Its sibling at 0x8300D5A0 is BuzzBy's, already homed as BrnAIBuzzBy.cpp's mRandom.
-    // [FLAG PC bring-up] SHARED HOME STILL OWED: BrnResetOnTrackManager_Strategies.cpp keeps its
-    // own lazily-Construct'ed `lsGlobalResetRandom_8300D5D0` copy of this same object, so a draw
-    // there does not step the object this file seeds. Both start from the identical console
-    // seed, so each stream is console-correct in isolation; only the interleaving differs.
-    // DELETE-WHEN AICar::GetRandomNumber lands (it needs CgsNumeric::Random::RandomFloat, which
-    // is declared-only in CgsRandom.h) and the ROT strategies draw through it.
+    // ⭐ THE CONSUMER IS `AICar::GetRandomNumber()` (DWARF BrnAICar.h:476, dump :550), bodied just
+    // below. The console INLINES it into its callers -- which is why the only ARTIST code that
+    // reads 0x8300D5D0 is BrnAI::ResetOnTrackManager (findinit: ResetAwayFromPlayer 0x827841BC,
+    // ResetAheadFromSideTurnings 0x82790A60, and the ScanForwardsAndAlongJunction export hole
+    // 0x82785314 -- the three DWARF BrnResetOnTrackManager.cpp AICar::GetRandomNumber call sites),
+    // while the only writers are AICar::Construct 0x827926F8 and AICar::Reset 0x827928F0. Its
+    // sibling at 0x8300D5A0 is BuzzBy's, already homed as BrnAIBuzzBy.cpp's mRandom.
+    // DWARF HOME (PS3 DecFIGS, for the eventual rename -- NOT a behaviour difference): the PS3
+    // symbol for this object is `BrnAI::Aggressiveness::mRandom` (_ZN5BrnAI14Aggressiveness7mRandomE).
+    // PS3 AICar::Reset @0x9C68EC calls Aggressiveness::Construct(this+5132) (@0x9BB010: re-seeds
+    // mRandom), and ResetAwayFromPlayer @0xA122A8 draws via Aggressiveness::GetRandomNumber
+    // (lpPlayerAICar+5132) @0x9BADD8 -- i.e. AICar::GetRandomNumber is mAggressiveness.
+    // GetRandomNumber(). Neither Aggressiveness body exists in this tree yet (BrnAIAggressiveness.cpp),
+    // so the stream stays homed here; moving it there is a pure refactor of this block + the two
+    // Construct() call sites below.
+    // [FLAG PC bring-up] CONSUMER NOT ROUTED YET: BrnResetOnTrackManager_Strategies.cpp's
+    // ResetAwayFromPlayer still draws from its own lazily-Construct'ed `lsGlobalResetRandom_8300D5D0`
+    // copy, so a draw there does not step this stream and no Reset re-seeds it (crash-parity
+    // G01-D3 / G07-D6). DELETE-WHEN ResetAwayFromPlayer draws `lpPlayerAICar->GetRandomNumber()`.
     static CgsNumeric::Random gAICarRandom;
+
+    // GetRandomNumber (DWARF BrnAICar.h:476, inlined on the console). The inline expansion in
+    // ResetAwayFromPlayer 0x827841C0..0x82784220 is exactly Random::RandomFloat() on 0x8300D5D0:
+    // ld seed +0x20 ; lwz oldest +0x28 ; lfsx f31 = ring[oldest] ; stwx ring[oldest] =
+    // 0x3F800000 | (oldSeed.hi >> 9) (inslwi 23,9) ; std seed*0x5851F42D4C957F2D+1 ;
+    // stw (oldest+1)&7 ; fsubs f0 = f31 - 1.0 (flt_82001C98).
+    f32 AICar::GetRandomNumber() const
+    {
+        return gAICarRandom.RandomFloat();
+    }
 
     // ==================================================================================
     // Update @0x82798F68 -- the per-frame AI brain tick. See the banner for the callee order.
