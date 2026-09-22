@@ -811,15 +811,10 @@ void BridgeWorldEntityInfoToOutput(
 //    5  UpdateOutputBuffer::AppendGameEventQueue(out, OutputBuffer::Ge(phys) + 26096)
 //    6  UpdateOutputBuffer::AppendPropUpdateNotificationQueue(out, GetProp(phys) + 64048)
 //
-// ⭐ LEGS 1-3 ARE LANDED HERE AND 4-6 ARE NOT. Leg 2 is a whole-object copy of a
-// one-pointer handle (ContactSpyInterface is `ContactSpyData* mpData`), so it is
-// host-safe as written -- the console's own `*dst = *src`, no byte count involved.
-//
-// [!] NOT REPRODUCED, named rather than faked. Legs 4-6 need three UpdateOutputBuffer
-// setters/appenders whose sources are still opaque spans on this tree. Behaviour still
-// lost: the deformation interface, and the physics module's own game events and
-// prop-update notifications.
-// DELETE-WHEN a wave lands legs 4-6: this banner shrinks to the function's own.
+// ⭐ ALL SIX LEGS ARE LANDED (legs 4-6 on 2026-09-22, crash-parity campaign: the banner that
+// parked them said their sources were opaque spans; BrnPhysicsModuleIO.h had long since typed
+// all three, so the park was stale). Leg 2 is a whole-object copy of a one-pointer handle
+// (ContactSpyInterface is `ContactSpyData* mpData`), so it is host-safe as written.
 //
 // ⚠️ WHY THIS MATTERS BEYOND THIS WAVE. Nothing else in the tree writes
 // UpdateOutputBuffer::mContactSpyInterface, so before this the world's published contact
@@ -899,9 +894,38 @@ void BridgePhysicsToOutput(
     // (the tree's body: clear + Append each of the eight queues, copy the three GUI bools and the
     // two FF-spring floats). This is what carries the RaceCarCrashEvent queue (+0x3A0) that
     // SetRaceCarCrashing posts into out of the physics buffer, so ModeManager::ProcessPlayerCrashes
-    // (via the game-state post-world seam) can see a player wreck. Legs 4-6 stay parked.
+    // (via the game-state post-world seam) can see a player wreck.
     *lpOutputBuffer->GetVehicleManagerOutputInterface() =
         *lpPhysicsOutputBuffer->GetVehicleManagerOutputInterface();
+
+    // ---- leg 4: the deformation output (0x827AEBBC..0x827AEBCC) ---------------------------
+    // `bl 0x8279F6E8` (PhysicsModuleIO::OutputBuffer::GetDeformationOutputInterface const) ->
+    // `bl 0x827AA658` UpdateOutputBuffer::SetDeformationOutputInterface, i.e.
+    // DeformationOutputInterface::operator= @0x823C8900 onto the world copy (+158080). That copy
+    // is what BridgeWorldToDirector (0x823E403C), the effects module's vehicle-locator lookup and
+    // the sound module's deformation interface read. Its five queues are bound by
+    // UpdateOutputBuffer::Construct (0x827CA2C4), so the operator='s Appends have somewhere to go.
+    lpOutputBuffer->SetDeformationOutputInterface(lpPhysicsOutputBuffer->GetDeformationOutputInterface());
+
+    // ---- leg 5: the physics game events into the WORLD game-event queue (0x827AEBD0..0x827AEBE4)
+    // `bl 0x8279F598` (GetVehicleOutputInterface const) ; `addi r4, r11, 0x65F0` ;
+    // `bl 0x827AD3C8` UpdateOutputBuffer::AppendGameEventQueue. This is a DIFFERENT queue from the
+    // one leg 1 copies (that is the world's VehicleOutputInterface copy): the world main
+    // VariableEventQueue<1536,16> (+216116) is what BridgeWorldToGameState hands to
+    // GameStateModule::ProcessGameEvents and what BridgeWorldImpactInformationToGui reads. It is
+    // the only route by which VehicleManager::HandleRaceCarRaceCarContact's world event 31
+    // (VEHICLE_IMPACT, AddEventSafe @0x82643808 / AddEvent @0x82643B58 onto physics +0x65F0)
+    // reaches SendVehicleImpactMessages (the aggressor's boost award, action 53, and the
+    // victim's action 54), GUI event 365 (the TRADING PAINT / NUDGE / SLAM / SHUNT hint) and the
+    // impact rumble. Without it none of those ever fired.
+    lpOutputBuffer->AppendGameEventQueue(lpPhysicsOutputBuffer->GetVehicleOutputInterface()->GetGameEventQueue());
+
+    // ---- leg 6: prop update notifications (0x827AEBE8..0x827AEC00) --------------------------
+    // `bl 0x8279F640` (GetPropManagerOutputInterface const) ; `addis r4,r11,1 ; addi r4,r4,-0x5D0`
+    // (+0xFA30, PropOutputInterface::mPropUpdateNotificationQueue) ;
+    // `bl 0x827AA9F0` UpdateOutputBuffer::AppendPropUpdateNotificationQueue.
+    lpOutputBuffer->AppendPropUpdateNotificationQueue(
+        &lpPhysicsOutputBuffer->GetPropManagerOutputInterface()->GetUpdatePropNotifications());
 }
 
 }   // namespace WorldModule

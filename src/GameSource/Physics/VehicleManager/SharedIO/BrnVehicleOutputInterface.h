@@ -164,6 +164,13 @@ namespace Vehicle
             return reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
                 &mGameEventQueueStorage[0]);
         }
+        // The read twin: WorldModule::BridgePhysicsToOutput @0x827AEB18 leg 5 reaches the same
+        // queue through the read-locked physics buffer (`addi r4, r11, 0x65F0` @0x827AEBE0).
+        const CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueue() const
+        {
+            return reinterpret_cast<const CgsModule::VariableEventQueue<1536, 16>*>(
+                &mGameEventQueueStorage[0]);
+        }
 
         // MOVED HERE 2026-08-24 (physics mount wave B3b) from VehicleManagerOutputInterface,
         // where task #110 proved it was minted on the wrong class: the two driver-feedback

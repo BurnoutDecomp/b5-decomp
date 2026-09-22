@@ -84,6 +84,12 @@ void UpdateOutputBuffer::Construct()
     mAttribSysVaultRequestInterface.mRequestQueue.Clear();
     mTrafficTypeResponseQueue.Construct();                  // X360 TrafficTypeResponse<32> +155616
     mCrashNetworkOutputInterface.Construct();               // CrashingTrafficUpdateEvent<24> +156144
+    // X360 0x827CA2B8..0x827CA2C4 `addis r3,r31,2 ; addi r3,r3,0x6980 ; bl 0x8228F1B0` ==
+    // DeformationOutputInterface::Construct(this+0x26980 == +158080): binds its five queues
+    // (capacities 10/50/50/20/50) to their inline buffers. The zero-fill left them NULL/0, which
+    // was inert only while BridgePhysicsToOutput's leg 4 (SetDeformationOutputInterface, whose
+    // operator= Clears + Appends into them) was parked.
+    mDeformationOutputInterface.Construct();                // X360 +158080 (0x827CA2C4)
     mSoundWorldLoadInterface.Construct();                   // X360 SoundWorldLoadEvent<25> +169096
     mGameEventQueue.Construct();                            // X360 VEQ<1536,16> +216116
     mPropVFXLocatorQueue.Construct();                       // X360 PropVFXLocatorEvent<10> +169360

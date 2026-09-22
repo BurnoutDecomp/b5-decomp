@@ -101,3 +101,20 @@ ARTIST `GenerateFanVectors` at `0x827792C0` stores `{sin(angle), cos(angle)}`:
 the shuffle bytes at `0x82CDA3C0` and instructions `0x827796C0..0x827796C8`
 pin the sign and lane order. `IncludeCentreLineTracking` flattens world XZ at
 `0x82786C3C/0x82786C4C` before subtracting the planar road centre.
+
+## Rival impact events reach the game state
+
+```powershell
+python b5-decomp/tests/run_bridge_physics_to_output.py
+python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/RivalImpactEvents.ps1 --run-name rival_impact_events
+```
+
+`WorldModule::BridgePhysicsToOutput` (ARTIST `0x827AEB18`) has six legs. Legs 4-6
+(`0x827AEBBC..0x827AEC00`) were parked on PC: the deformation output copy, the append of the
+physics game-event queue (`VehicleOutputInterface+0x65F0`) into the world game-event queue, and the
+prop update notifications. Leg 5 is the only route by which world event 31 (VEHICLE_IMPACT, posted by
+`HandleRaceCarRaceCarContact`) reaches `SendVehicleImpactMessages` (aggressor boost award action 53,
+victim action 54), GUI 365 (the TRADING PAINT / NUDGE / SLAM / SHUNT hint) and the impact rumble.
+`UpdateOutputBuffer::Construct` must construct the world deformation interface first (`0x827CA2C4`).
+The structural check fails 3/10 on the pre-fix bridge; the live case failed with 1 classified
+impact and 0 deliveries before the fix and passed with 13 deliveries after it.
