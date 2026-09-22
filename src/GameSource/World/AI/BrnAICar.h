@@ -148,6 +148,13 @@ namespace BrnAI
         Aggressiveness*       GetAggressiveness()       { return &mAggressiveness; }
         const Aggressiveness* GetAggressiveness() const { return &mAggressiveness; }
 
+        // DWARF BrnAICar.h:476 (dump :550) `float32_t GetRandomNumber() const`: one [0,1) draw from
+        // the ONE shared stream at .data 0x8300D5D0 that Construct / Reset re-seed. No X360 symbol:
+        // the console inlines it into its ResetOnTrackManager callers (ResetAwayFromPlayer
+        // 0x827841C0..0x82784220, ResetAheadFromSideTurnings 0x82790A60, the ScanForwardsAndAlong-
+        // Junction hole 0x82785314). Bodied beside the stream in BrnAICar_Update.cpp.
+        f32 GetRandomNumber() const;
+
         // ---- accessors the RaceBalancingManager (rubber-band) bodies call -------------------
         // All X360-attested separate TUs (or trivial inlined-away getters); declare-only here so
         // the manager .cpp compiles against named calls instead of raw `*(car+offset)` loads.
