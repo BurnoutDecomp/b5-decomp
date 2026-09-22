@@ -266,8 +266,22 @@ namespace BrnAI
         // (the car is placed on-coming).
         bool ResetFixedDistanceAheadOfPlayer(ResetOnTrackCoords* lpResetData, f32 lfResetDistance);
 
-        // @0x827909F0 (DWARF :236). Reset type 5. PARKED -- see the body.
+        // @0x827909F0 (DWARF :236). Reset type 5 (and type 3 while the player looks backwards):
+        // join the player's route from a side turning ahead, else 160..200 m ahead on the route,
+        // else 25 m behind it.
         bool ResetAheadFromSideTurnings(ResetOnTrackCoords* lpResetData);
+
+        // @0x827852C0 (DWARF :282; an X360 EXPORT HOLE -- ppcdis 0x827852C0..0x82785DC8, PS3
+        // witness 0xA164E4). Type 5's first try: the first junction >= 100 m up the player's route,
+        // the side road that runs back into it, walked outwards until the join point leaves the
+        // player's 20-degree cone.
+        bool ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpResetData);
+
+        // @0x82784FD8 (DWARF :365). The point on the entrance->exit portal segment whose bearing
+        // from the player crosses lfAngleToJoin (a cosine), clamped to the segment's ends.
+        Vector3 InterpolatePositionFromAngle(Vector2 lPlayerPosition, Vector2 lPlayerDirection,
+                                             Vector3 lEntranceNodePosition,
+                                             Vector3 lExitNodePosition, f32 lfAngleToJoin);
 
         // @0x82784148 (DWARF :326). Reset type 7, and the fallback of the two fixed-distance
         // strategies: pick a random AI section more than 2 km away and face its middle.

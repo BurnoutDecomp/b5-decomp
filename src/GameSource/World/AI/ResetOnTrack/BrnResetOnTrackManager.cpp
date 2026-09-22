@@ -392,10 +392,10 @@ namespace BrnAI
     // AISection::GetPortal/PassesThrough, Portal::GetBoundaryLine, BoundaryLine::GetInterp/
     // GetLength, RacingLineGenerator::ExtrapolateRoute*), and BrnAICar.h now names the five AICar
     // members they read. The bodies live in BrnResetOnTrackManager_Strategies.cpp and
-    // BrnResetOnTrackManager_AvoidObstacles.cpp. TWO leaves remain parked and BOTH report
-    // themselves once: ResetAheadFromSideTurnings (needs ScanForwardsAndAlongJunction) and
-    // PlayerIsLookingBackwards (reads mCamera, which nothing fills) -- type 5 is the only reset
-    // type that still cannot be answered.
+    // BrnResetOnTrackManager_AvoidObstacles.cpp. ResetAheadFromSideTurnings (type 5) is real
+    // since 2026-09-22 (crash parity G07-D2, with ScanForwardsAndAlongJunction and
+    // InterpolatePositionFromAngle); PlayerIsLookingBackwards is the leaf that still reports
+    // itself parked until the camera reaches this object.
     // [FLAG PC boot gate] the two PerfMonCpu Start/StopMonitor calls -- miInitialCoordinatesPM is
     // never registered (see Construct's flag), so starting a monitor on handle 0 would time an
     // unnamed row.

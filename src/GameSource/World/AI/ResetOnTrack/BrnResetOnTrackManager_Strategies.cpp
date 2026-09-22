@@ -13,7 +13,9 @@
 //   BrnAI::ResetOnTrackManager::ResetFixedDistanceBehindPlayerAtStartOfRace @0x827908F0  (type 6)
 //   BrnAI::ResetOnTrackManager::ResetFixedDistanceBehindPlayer           @0x82790628     (types 2/3)
 //   BrnAI::ResetOnTrackManager::ResetFixedDistanceAheadOfPlayer          @0x827907D8     (type 4)
-//   BrnAI::ResetOnTrackManager::ResetAheadFromSideTurnings               @0x827909F0     (type 5, PARKED)
+//   BrnAI::ResetOnTrackManager::ResetAheadFromSideTurnings               @0x827909F0     (type 5)
+//   BrnAI::ResetOnTrackManager::ScanForwardsAndAlongJunction             @0x827852C0     (export hole)
+//   BrnAI::ResetOnTrackManager::InterpolatePositionFromAngle             @0x82784FD8
 //   BrnAI::ResetOnTrackManager::PlayerIsLookingBackwards                 @0x82778000     (PARKED)
 //
 // WHY THIS TU EXISTS. Before it, ComputeResetOnTrack answered every non-STANDARD reset type with a
@@ -169,6 +171,64 @@ namespace
     u8 GetHelperNodePortalIndex(const RouteNode& lrNode)
     {
         return static_cast<u8>(lrNode.muPad0x0E);        // [FLAG header_request]
+    }
+
+    // ---- reset type 5: ResetAheadFromSideTurnings @0x827909F0 + ScanForwardsAndAlongJunction
+    //      @0x827852C0 + InterpolatePositionFromAngle @0x82784FD8 (crash parity G07-D2/D4) -------
+    // The ADDRESS on each line is what the console loads. The NAMES are the DecFIGS DWARF's
+    // file-scope list (BrnResetOnTrackManager.h:309/:314, BrnResetOnTrackManager.cpp:58/:60/
+    // :61/:62/:67, local :1988) matched to the reader by ROLE -- the two 100.0 readers share one
+    // rodata literal, so which DWARF name owns which read is not provable from the image.
+    const f32 KF_NEAR_PLAYER_RESET_AHEAD_DISTANCE = 160.0f;   // flt_820C482C @0x82790AE4
+    const f32 KF_RESET_AHEAD_VARIABILITY          = 40.0f;    // flt_82004D0C @0x82790A70
+    const f32 KF_MIN_RESET_DISTANCE_BEHIND        = -25.0f;   // flt_820C4860 @0x82790B1C
+    const f32 KF_TOO_CLOSE_TO_JOIN_FROM_SIDE      = 100.0f;   // flt_820C3FAC @0x82785434 (junction search)
+    const f32 KF_TOO_CLOSE_DISTANCE               = 50.0f;    // flt_820C4244 @0x82785B68
+    const f32 KF_TOO_CLOSE_TO_SPAWN_IN_VIEW       = 100.0f;   // flt_820C3FAC @0x82785CE8 (pop-up test)
+    // .bss, written by the CRT initialisers (findinit): XMVectorCos of the rodata radians.
+    const f32 KF_ANGLE_TO_JOIN_FROM_SIDE_ROAD     = 0.9396926f;   // flt_8300D7A8 = cos(flt_8201ED84 0.3490658 rad, 20 deg), init 0x82C69210
+    const f32 KF_ASSUMED_FOV_FOR_RESET_AHEAD      = 0.76604444f;  // flt_8300D780 = cos(flt_820C8C30 0.6981317 rad, 40 deg), init 0x82C69260
+    const s32 KI_SIDE_SCAN_BAIL_OUT               = 10;           // `cmpwi r20, 0xA` @0x82785B00
+
+    // `vspltw ; vandc(sign) ; vcmpgtfp ; vperm 0x0004080C` on lane x, then lane y
+    // (ScanForwardsAndAlongJunction 0x82785530..0x827855D8, InterpolatePositionFromAngle
+    // 0x82785014..0x827850C0): a 2D vector is ZERO when neither lane's magnitude exceeds
+    // FLT_EPSILON (flt_820C3B70). A NaN lane counts as zero, as vcmpgtfp does.
+    bool IsZero2D(Vector2 lVector)
+    {
+        return !(fabsf(lVector.x) > KF_NORMALISE_EPSILON) &&
+               !(fabsf(lVector.y) > KF_NORMALISE_EPSILON);
+    }
+
+    // The 3-lane form: `vandc ; vrlimi128 (w <- x) ; vcmpgtfp.` and the CR6 "none true" bit
+    // (0x82785C20..0x82785C7C, 0x82785D3C..0x82785D64).
+    bool IsZero3D(Vector3 lVector)
+    {
+        return !(fabsf(lVector.x) > KF_NORMALISE_EPSILON) &&
+               !(fabsf(lVector.y) > KF_NORMALISE_EPSILON) &&
+               !(fabsf(lVector.z) > KF_NORMALISE_EPSILON);
+    }
+
+    // `vmulfp ; vspltw x/y ; vaddfp ; vrsqrtefp + two Newton-Raphson steps ; vmulfp` with NO zero
+    // guard -- every caller has already refused a zero vector through IsZero2D.
+    Vector2 Normalise2D(Vector2 lVector)
+    {
+        const f32 lfInverse = 1.0f / sqrtf(lVector.x * lVector.x + lVector.y * lVector.y);
+        return Vector2{ lVector.x * lfInverse, lVector.y * lfInverse, 0.0f, 0.0f };
+    }
+
+    // |v| through the same rsqrt pipeline (d2 * rsqrt(d2)) with its `vcmpeqfp ; vsel` zero guard
+    // (0x82785904..0x8278595C for the 2-lane sum, 0x82785B88..0x82785BCC for vmsum3fp128).
+    f32 Length2D(Vector2 lVector)
+    {
+        const f32 lfLengthSquared = lVector.x * lVector.x + lVector.y * lVector.y;
+        return (lfLengthSquared == 0.0f) ? 0.0f : sqrtf(lfLengthSquared);
+    }
+
+    f32 Length3D(Vector3 lVector)
+    {
+        const f32 lfLengthSquared = Dot3D(lVector, lVector);
+        return (lfLengthSquared == 0.0f) ? 0.0f : sqrtf(lfLengthSquared);
     }
 }
 
@@ -1022,40 +1082,414 @@ bool ResetOnTrackManager::ResetFixedDistanceAheadOfPlayer(ResetOnTrackCoords* lp
 }
 
 // =================================================================================================
-// ResetAheadFromSideTurnings @0x827909F0 (DWARF :236) -- reset type 5.
+// InterpolatePositionFromAngle @0x82784FD8 (DWARF :365, source :1737; PS3 witness 0x9CA490)
 //
-// ⛔ [FLAG PC bring-up] PARKED, and it is the ONLY strategy of the seven that still is. Two of its
-// three legs are absent from this tree:
-//   * ScanForwardsAndAlongJunction @(DWARF :282, 300+ pseudocode lines) -- the first thing it tries,
-//     and the only consumer of InterpolatePositionFromAngle @0x82784FD8. It walks a junction's side
-//     turnings, which needs the junction-geometry helpers (ComputeAISectionWidth @0x82778250,
-//     DeterminePositionBetweenNodes' junction sibling) none of which is reconstructed;
-//   * its distance draw comes from the SAME global Random at .data 0x8300D5D0 that
-//     ResetAwayFromPlayer's banner flags (`lfResetDistance = RandomFloat() * 40.0 + 160.0`,
-//     flt_82004D0C / flt_820C482C @0x82790AE8), which has no shared home yet;
-//   * and its second fallback is gated on PlayerIsLookingBackwards, itself parked below.
-// Answering "no coordinates" is the honest result and it costs nothing on the paths this wave
-// exists for: PlaceRaceCarOnLoad sends type 6, the crash exit sends type 1 or 3, and type 3's own
-// route into here is via PlayerIsLookingBackwards, which parks to false.
-// DELETE-WHEN ScanForwardsAndAlongJunction lands and the 0x8300D5D0 Random gets a shared home.
+//   r3 is the hidden return slot; v1 = lPlayerPosition, v2 = lPlayerDirection, v3 = the entrance
+//   node, v4 = the exit node, f1 = lfAngleToJoin (a COSINE); `this` is unused.
+//   0x82785008  lVectorFromPlayer = Flatten(entrance) - player           (0x82785010 vsubfp128)
+//   0x82785014  zero (both lanes <= FLT_EPSILON)          -> return the EXIT node (0x827850C4)
+//   0x827850CC  lfEntranceDot = |Dot2D(Normalise(lVectorFromPlayer), dir)|   (vandc sign)
+//   0x82785144  the same for the exit node; zero           -> return the EXIT node
+//   0x8278525C  lfRange = lfExitDot - lfEntranceDot ; == 0.0 (flt_82001CC0) -> the EXIT node
+//   0x8278526C  lfInterp = (lfAngleToJoin - lfEntranceDot) / lfRange
+//   0x8278527C  lfInterp < 0.0 -> the ENTRANCE node ; 0x8278528C  > 1.0 (flt_82001C98) -> EXIT
+//   0x827852A0  vmaddfp128 v121 = (exit - entrance) * lfInterp + entrance   (all four lanes)
+// =================================================================================================
+Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPosition,
+                                                          Vector2 lPlayerDirection,
+                                                          Vector3 lEntranceNodePosition,
+                                                          Vector3 lExitNodePosition,
+                                                          f32 lfAngleToJoin)
+{
+    const Vector2 lFlatEntrance = BrnMath::Flatten(lEntranceNodePosition);
+    Vector2 lVectorFromPlayer = { lFlatEntrance.x - lPlayerPosition.x,
+                                  lFlatEntrance.y - lPlayerPosition.y, 0.0f, 0.0f };
+    if (IsZero2D(lVectorFromPlayer))
+    {
+        return lExitNodePosition;
+    }
+    const f32 lfEntranceDot = fabsf(Dot2D(Normalise2D(lVectorFromPlayer), lPlayerDirection));
+
+    const Vector2 lFlatExit = BrnMath::Flatten(lExitNodePosition);
+    lVectorFromPlayer = Vector2{ lFlatExit.x - lPlayerPosition.x,
+                                 lFlatExit.y - lPlayerPosition.y, 0.0f, 0.0f };
+    if (IsZero2D(lVectorFromPlayer))
+    {
+        return lExitNodePosition;
+    }
+    const f32 lfExitDot = fabsf(Dot2D(Normalise2D(lVectorFromPlayer), lPlayerDirection));
+
+    const f32 lfRange = lfExitDot - lfEntranceDot;
+    if (lfRange == KF_ZERO)
+    {
+        return lExitNodePosition;
+    }
+
+    const f32 lfUse    = lfAngleToJoin - lfEntranceDot;
+    const f32 lfInterp = lfUse / lfRange;
+    if (lfInterp < KF_ZERO)
+    {
+        return lEntranceNodePosition;
+    }
+    if (lfInterp > 1.0f)
+    {
+        return lExitNodePosition;
+    }
+
+    return Vector3{ (lExitNodePosition.x - lEntranceNodePosition.x) * lfInterp + lEntranceNodePosition.x,
+                    (lExitNodePosition.y - lEntranceNodePosition.y) * lfInterp + lEntranceNodePosition.y,
+                    (lExitNodePosition.z - lEntranceNodePosition.z) * lfInterp + lEntranceNodePosition.z,
+                    (lExitNodePosition.w - lEntranceNodePosition.w) * lfInterp + lEntranceNodePosition.w };
+}
+
+// =================================================================================================
+// ScanForwardsAndAlongJunction @0x827852C0 (DWARF :282, source :1803) -- reset type 5's FIRST try.
+// X360 EXPORT HOLE: read with tools/re/ppcdis.py 0x827852C0 706 (to 0x82785DC8); PS3 DecFIGS
+// export 0xA164E4 is the second witness and carries the DWARF local names used below.
+//
+//   0x827852E4  lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex)      (lpRoute == the car +0)
+//   0x827852F0  liPlayerNextNodeIndex = miNextRouteNodeIndex (+0x1524), minus one when > 0
+//   0x82785300  liLastNodeIndex = lpRoute->GetNodeCount() - 1              (lwz +0x1400)
+//   0x82785304..0x82785374  ONE RandomFloat on the 0x8300D5D0 stream -- the ring slot is
+//               refilled, the seed stepped and the cursor advanced, but the drawn value is never
+//               loaded (no lfsx): the draw is DEAD on the console and still CONSUMES a number.
+//               PS3 0xA164E4 calls Aggressiveness::GetRandomNumber and drops f1 the same way.
+//   0x827853A8  for each node from liPlayerNextNodeIndex while < liLastNodeIndex:
+//                 section = GetAISection(node->muSectionIndex)
+//                 if (|playerPos - section->GetMiddle()| >= 100.0 && section->IsJunction())
+//                     lbJunctionFound, stop                                  (flag 0x10 @+0x17)
+//                 lpEntrySection = section                                   (r24)
+//   0x827854B8  no junction, or the junction is the FIRST node scanned (no entry) -> false
+//   0x827854CC  lJunctionMiddle = Flatten(junction->GetMiddle())                     (v121)
+//   0x827854E4  node + 1 must exist; lSectionAfterJunctionMiddle from ITS section
+//   0x8278552C  lfRouteDirection = Normalise(afterMiddle - junctionMiddle); zero -> false  (v123)
+//   0x82785658  for each junction portal: the linked section, skipping the entry section and
+//               any SHORTCUT (bit 0x01); lfAheadness = Dot2D(Normalise(junctionMiddle - side),
+//               lfRouteDirection); keep the largest POSITIVE one (`blt f30` then `ble f31`), and
+//               the junction portal's own position as lEntranceNodePosition            (v120)
+//   0x82785848  no side road -> false
+//   0x82785850  lPlayerDirection = Flatten(player->GetDirection())         (v123 reused)
+//   0x82785874  up to KI_SIDE_SCAN_BAIL_OUT (10) steps OUT along the side road: from the current
+//               section take the linked section (never the junction itself) whose middle is
+//               FARTHEST from lJunctionMiddle, remembering that portal as lExitNodePosition
+//               (v122); none -> false; a section with no portals -> false. Then, unless the exit
+//               portal sits on the player (both lanes <= FLT_EPSILON), stop as soon as its
+//               bearing |Dot2D(Normalise(Flatten(exit - playerPos)), lPlayerDirection)| drops
+//               below cos 20 deg; otherwise the exit becomes the next entrance (0x82785AF8).
+//   0x82785B34  lpResetData->mPosition = InterpolatePositionFromAngle(Flatten(playerPos),
+//               lPlayerDirection, entrance, exit, cos 20 deg)
+//   0x82785B50  lfSeparation = |mPosition - playerPos|; 50.0 > it -> false (vcmpgtfp. all)
+//   0x82785BE4  lfAheadness = Dot(Normalise-unless-zero(mPosition - playerPos), player direction);
+//               neither `>= cos 40 deg` nor lfSeparation >= 100.0 -> "Pop up prevented\n"
+//               (printed when gxMessageFilterFlags bit 0 is set, 0x82785CF8) -> false
+//   0x82785D28  lDirection3D = entrance - exit, STORED to mDirection before the zero test;
+//               zero -> false; else mpAISection = the last side section, mDirection normalised
+// =================================================================================================
+bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpResetData)
+{
+    const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
+    const Route* lpRoute = lpPlayerAICar->GetRoute();
+
+    s32 liPlayerNextNodeIndex = lpPlayerAICar->GetNextRouteNodeIndex();
+    if (liPlayerNextNodeIndex > 0)
+    {
+        liPlayerNextNodeIndex = liPlayerNextNodeIndex - 1;
+    }
+    const s32 liLastNodeIndex = lpRoute->GetNodeCount() - 1;
+
+    // DWARF local lfResetAheadDistance (:1825). Dead on the console; the draw itself is not.
+    (void)lpPlayerAICar->GetRandomNumber();
+
+    s32 liResetNodeIndex = liPlayerNextNodeIndex;
+    bool lbJunctionFound = false;
+    const AISection* lpJunctionSection = 0;
+    const AISection* lpEntrySection = 0;
+
+    for (; liResetNodeIndex < liLastNodeIndex; ++liResetNodeIndex)
+    {
+        const RouteNode* lpNextNode = lpRoute->GetNode(liResetNodeIndex);
+        lpJunctionSection = mpAISectionData.operator->()->GetAISection(lpNextNode->muSectionIndex);
+
+        const Vector3 lMiddle   = lpJunctionSection->GetMiddle();
+        const Vector3 lPosition = lpPlayerAICar->GetPosition();
+        const Vector3 lOffset   = { lPosition.x - lMiddle.x, lPosition.y - lMiddle.y,
+                                    lPosition.z - lMiddle.z, 0.0f };
+
+        // `fcmpu ; blt` @0x82785484: only a section NOT closer than 100 m is tested for the flag.
+        if (!(Length3D(lOffset) < KF_TOO_CLOSE_TO_JOIN_FROM_SIDE) && lpJunctionSection->IsJunction())
+        {
+            lbJunctionFound = true;
+            break;
+        }
+        lpEntrySection = lpJunctionSection;
+    }
+
+    if (!lbJunctionFound || lpEntrySection == 0)
+    {
+        return false;
+    }
+
+    const Vector2 lJunctionMiddle = BrnMath::Flatten(lpJunctionSection->GetMiddle());
+
+    const s32 liNextSectionNodeIndex = liResetNodeIndex + 1;
+    if (liNextSectionNodeIndex >= lpRoute->GetNodeCount())
+    {
+        return false;
+    }
+    const s32 liNextSectionIndex = lpRoute->GetNode(liNextSectionNodeIndex)->muSectionIndex;
+    const AISection* lpSectionAfterJunction =
+        mpAISectionData.operator->()->GetAISection(static_cast<u32>(liNextSectionIndex));
+    const Vector2 lSectionAfterJunctionMiddle =
+        BrnMath::Flatten(lpSectionAfterJunction->GetMiddle());
+
+    const Vector2 lRouteDelta = { lSectionAfterJunctionMiddle.x - lJunctionMiddle.x,
+                                  lSectionAfterJunctionMiddle.y - lJunctionMiddle.y, 0.0f, 0.0f };
+    if (IsZero2D(lRouteDelta))
+    {
+        return false;
+    }
+    const Vector2 lfRouteDirection = Normalise2D(lRouteDelta);
+
+    // ---- the side road that runs back into the junction -----------------------------------------
+    f32 lfBestAheadness = KF_ZERO;
+    const AISection* lpSideRouteSection = 0;
+    Vector3 lEntranceNodePosition = { 0.0f, 0.0f, 0.0f, 0.0f };   // vmr128 v120, v124 (zero)
+
+    for (s32 liPortal = 0; liPortal < lpJunctionSection->mu8NumPortals; ++liPortal)
+    {
+        const Portal* lpPortal = lpJunctionSection->GetPortal(static_cast<u8>(liPortal));
+        const AISection* lpCandidate =
+            mpAISectionData.operator->()->GetAISection(lpPortal->GetLinkSectionIndex());
+
+        if (lpCandidate == lpEntrySection || lpCandidate->IsShortcut())
+        {
+            continue;
+        }
+
+        const Vector2 lCandidateMiddle = BrnMath::Flatten(lpCandidate->GetMiddle());
+        const Vector2 lToJunction = { lJunctionMiddle.x - lCandidateMiddle.x,
+                                      lJunctionMiddle.y - lCandidateMiddle.y, 0.0f, 0.0f };
+        if (IsZero2D(lToJunction))
+        {
+            continue;
+        }
+
+        const f32 lfAheadness = Dot2D(Normalise2D(lToJunction), lfRouteDirection);
+        if (lfAheadness < KF_ZERO)
+        {
+            continue;
+        }
+        const f32 lfAbsAheadness = fabsf(lfAheadness);
+        if (lfAbsAheadness <= lfBestAheadness)
+        {
+            continue;
+        }
+
+        lfBestAheadness = lfAbsAheadness;
+        lpSideRouteSection = lpCandidate;
+        lEntranceNodePosition = lpJunctionSection->GetPortal(static_cast<u8>(liPortal))->GetPosition();
+    }
+
+    if (lpSideRouteSection == 0)
+    {
+        return false;
+    }
+
+    // ---- walk out along it until the join point leaves the player's 20-degree cone ------------
+    const Vector2 lPlayerDirection = BrnMath::Flatten(lpPlayerAICar->GetDirection());
+    Vector3 lExitNodePosition = { 0.0f, 0.0f, 0.0f, 0.0f };        // vmr128 v122, v124 (zero)
+    const AISection* lpNextSideRouteSection = 0;
+
+    for (s32 liSideScan = 0; ; )
+    {
+        if (lpSideRouteSection->mu8NumPortals == 0)
+        {
+            return false;
+        }
+
+        f32 lfFurthest = KF_ZERO;
+        lpNextSideRouteSection = 0;
+
+        for (s32 liPortal = 0; liPortal < lpSideRouteSection->mu8NumPortals; ++liPortal)
+        {
+            const Portal* lpPortal = lpSideRouteSection->GetPortal(static_cast<u8>(liPortal));
+            const AISection* lpCandidate =
+                mpAISectionData.operator->()->GetAISection(lpPortal->GetLinkSectionIndex());
+
+            if (lpCandidate == lpJunctionSection)
+            {
+                continue;
+            }
+
+            const Vector2 lCandidateMiddle = BrnMath::Flatten(lpCandidate->GetMiddle());
+            const Vector2 lFromJunction = { lCandidateMiddle.x - lJunctionMiddle.x,
+                                            lCandidateMiddle.y - lJunctionMiddle.y, 0.0f, 0.0f };
+            const f32 lfDistance = Length2D(lFromJunction);
+            if (lfDistance <= lfFurthest)
+            {
+                continue;
+            }
+
+            lfFurthest = lfDistance;
+            lpNextSideRouteSection = lpCandidate;
+            lExitNodePosition =
+                lpSideRouteSection->GetPortal(static_cast<u8>(liPortal))->GetPosition();
+        }
+
+        if (lpNextSideRouteSection == 0)
+        {
+            return false;
+        }
+        lpSideRouteSection = lpNextSideRouteSection;
+
+        const Vector3 lPlayerPosition3D = lpPlayerAICar->GetPosition();
+        const Vector2 lExitFromPlayer = BrnMath::Flatten(Vector3{
+            lExitNodePosition.x - lPlayerPosition3D.x, lExitNodePosition.y - lPlayerPosition3D.y,
+            lExitNodePosition.z - lPlayerPosition3D.z, lExitNodePosition.w - lPlayerPosition3D.w });
+
+        if (!IsZero2D(lExitFromPlayer))
+        {
+            const f32 lfBearing = fabsf(Dot2D(Normalise2D(lExitFromPlayer), lPlayerDirection));
+            if (lfBearing < KF_ANGLE_TO_JOIN_FROM_SIDE_ROAD)
+            {
+                break;
+            }
+            lEntranceNodePosition = lExitNodePosition;
+        }
+
+        ++liSideScan;
+        if (liSideScan >= KI_SIDE_SCAN_BAIL_OUT)
+        {
+            break;
+        }
+    }
+
+    // ---- the join point, and the two "would the player see it pop in" tests -------------------
+    lpResetData->mPosition = InterpolatePositionFromAngle(
+        BrnMath::Flatten(lpPlayerAICar->GetPosition()), lPlayerDirection, lEntranceNodePosition,
+        lExitNodePosition, KF_ANGLE_TO_JOIN_FROM_SIDE_ROAD);
+
+    const Vector3 lPlayerPosition = lpPlayerAICar->GetPosition();
+    Vector3 lRelativePosition = { lpResetData->mPosition.x - lPlayerPosition.x,
+                                  lpResetData->mPosition.y - lPlayerPosition.y,
+                                  lpResetData->mPosition.z - lPlayerPosition.z,
+                                  lpResetData->mPosition.w - lPlayerPosition.w };
+
+    if (KF_TOO_CLOSE_DISTANCE > Length3D(lRelativePosition))
+    {
+        return false;
+    }
+
+    const f32 lfSeparation = Length3D(lRelativePosition);
+    if (!IsZero3D(lRelativePosition))
+    {
+        const f32 lfInverse = 1.0f / sqrtf(Dot3D(lRelativePosition, lRelativePosition));
+        lRelativePosition = Vector3{ lRelativePosition.x * lfInverse, lRelativePosition.y * lfInverse,
+                                     lRelativePosition.z * lfInverse, lRelativePosition.w * lfInverse };
+    }
+    const f32 lfAheadness = Dot3D(lRelativePosition, lpPlayerAICar->GetDirection());
+
+    if (!(lfAheadness >= KF_ASSUMED_FOV_FOR_RESET_AHEAD) &&
+        !(lfSeparation >= KF_TOO_CLOSE_TO_SPAWN_IN_VIEW))
+    {
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "Pop up prevented\n";
+        }
+        return false;
+    }
+
+    const Vector3 lDirection3D = { lEntranceNodePosition.x - lExitNodePosition.x,
+                                   lEntranceNodePosition.y - lExitNodePosition.y,
+                                   lEntranceNodePosition.z - lExitNodePosition.z,
+                                   lEntranceNodePosition.w - lExitNodePosition.w };
+    lpResetData->mDirection = lDirection3D;   // 0x82785D40: stored BEFORE the zero test
+    if (IsZero3D(lDirection3D))
+    {
+        return false;
+    }
+
+    lpResetData->mpAISection = lpNextSideRouteSection;
+    const f32 lfInverse = 1.0f / sqrtf(Dot3D(lDirection3D, lDirection3D));
+    lpResetData->mDirection = Vector3{ lDirection3D.x * lfInverse, lDirection3D.y * lfInverse,
+                                       lDirection3D.z * lfInverse, lDirection3D.w * lfInverse };
+    return true;
+}
+
+// =================================================================================================
+// ResetAheadFromSideTurnings @0x827909F0 (DWARF :236) -- reset type 5, and reset type 3 when the
+// player is looking backwards (ComputeResetOnTrack 0x82797E34 / 0x82797E78).
+//
+//   0x82790A14  section = best, else default; still 0x7FFF -> false
+//   0x82790A48  ScanForwardsAndAlongJunction(lpResetData) -> true, as is (no direction fix-up)
+//   0x82790A58  lfResetDistance = RandomFloat(0x8300D5D0) * 40.0 + 160.0   (fmadds, 0x82790AE8)
+//   0x82790AF0  ScanForwardsAlongExtrapolatedRoute(prev, next, lfResetDistance); on failure:
+//   0x82790B0C      PlayerIsLookingBackwards() -> false
+//   0x82790B1C      lfResetDistance = -25.0 (flt_820C4860) -- ALSO the Convert distance below
+//   0x82790B34      ScanBackwardsAlongExtrapolatedRoute(prev, next, -25.0, `li r7,1` RoadRage);
+//                   failure -> ResetAwayFromPlayer(lpResetData)                     (0x82790B4C)
+//   0x82790B78  ConvertNodesToPositionAndDirection(prev, next, 0.5, lfResetDistance, out);
+//               failure -> ResetAwayFromPlayer(lpResetData)                         (0x82790B90)
+//   0x82790BA8  EnsureAIIsDrivingSameDirectionAsPlayer(player, out)
+//   0x82790BC4  out->mpAISection = GetAISection(next->muSectionIndex) ; return true
+//
+// ⛔ CORRECTED 2026-09-22 (crash parity G07-D2/G07-D4): this was a parked stub answering false,
+// so every type-5 wrap (Road Rage: half of the out-of-range wraps; Marked Man: one in five)
+// resolved to FAILURE and the rival was put back at its own last pose, still out of range.
+// The draw comes from the stream AICar::Construct/Reset re-seed (AICar::GetRandomNumber,
+// FX-AIDRV 1a611271), which ScanForwardsAndAlongJunction has already stepped once.
 // =================================================================================================
 bool ResetOnTrackManager::ResetAheadFromSideTurnings(ResetOnTrackCoords* lpResetData)
 {
-    (void)lpResetData;
+    const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
 
-    static bool sbReportedParked = false;
-    if (!sbReportedParked)
+    u16 luSection = lpPlayerAICar->muBestSectionIndex;
+    if (luSection == KU_INVALID_SECTION_INDEX)
     {
-        sbReportedParked = true;
-        if (CgsDev::Log::gpDebugPrint != 0)
+        luSection = lpPlayerAICar->muDefaultSectionIndex;
+    }
+    if (luSection == KU_INVALID_SECTION_INDEX)
+    {
+        return false;
+    }
+
+    if (ScanForwardsAndAlongJunction(lpResetData))
+    {
+        return true;
+    }
+
+    f32 lfResetDistance = lpPlayerAICar->GetRandomNumber() * KF_RESET_AHEAD_VARIABILITY +
+                          KF_NEAR_PLAYER_RESET_AHEAD_DISTANCE;
+
+    const RouteNode* lpPrevNode = 0;
+    const RouteNode* lpNextNode = 0;
+
+    if (!ScanForwardsAlongExtrapolatedRoute(lpPrevNode, lpNextNode, lfResetDistance))
+    {
+        if (PlayerIsLookingBackwards())
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[rot] PARKED strategy: ResetAheadFromSideTurnings (X360 0x827909F0) needs "
-                   "ScanForwardsAndAlongJunction, which is not reconstructed. Answering 'no "
-                   "coordinates', which is NOT the same claim as 'the AI looked and found none'.\n";
+            return false;
+        }
+
+        lfResetDistance = KF_MIN_RESET_DISTANCE_BEHIND;
+        if (!ScanBackwardsAlongExtrapolatedRoute(lpPrevNode, lpNextNode, lfResetDistance,
+                                                 eExtrapolateType_RoadRage))
+        {
+            return ResetAwayFromPlayer(lpResetData);
         }
     }
-    return false;
+
+    if (!ConvertNodesToPositionAndDirection(lpPrevNode, lpNextNode, KF_ROAD_CENTRE, lfResetDistance,
+                                            lpResetData))
+    {
+        return ResetAwayFromPlayer(lpResetData);
+    }
+
+    EnsureAIIsDrivingSameDirectionAsPlayer(lpPlayerAICar, lpResetData);
+
+    lpResetData->mpAISection =
+        mpAISectionData.operator->()->GetAISection(lpNextNode->muSectionIndex);
+    return true;
 }
 
 // =================================================================================================

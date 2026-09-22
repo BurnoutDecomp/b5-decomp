@@ -112,6 +112,10 @@ struct AISection
     // exactly IsShortcut() || IsAIShortcut(). Inline so no other TU has to grow.
     bool IsShortcut() const   { return (mx8Flags & 0x01) != 0; }   // :377
     bool IsAIShortcut() const { return (mx8Flags & 0x40) != 0; }   // :380
+    // ADDITIVE (crash parity G07-D2, 2026-09-22): DWARF AISectionsData.h:290 over
+    // KX_SECTION_FLAG_JUNCTION = 16 (:69). ResetOnTrackManager::ScanForwardsAndAlongJunction
+    // tests it inline at 0x82785488..0x82785494 (`lbz 0x17 ; rlwinm r11,r11,0,27,27`).
+    bool IsJunction() const   { return (mx8Flags & 0x10) != 0; }   // :290
 };
 
 // KU_AI_SECTIONS_DATA_VERSION (DWARF AISectionsData.h). NOTE the console's
