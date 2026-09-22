@@ -206,7 +206,7 @@ namespace BrnAI
         // lines. Return true when the candidate was taken.
         bool AddNearbyTrafficToAvoidance(const BrnTraffic::BrnTrafficIO::TrafficAIEntity* lpEntity); // @0x8277D4F8 (DWARF :279)
         bool AddNearbyAIToAvoidance(const AICar* lpCar);        // @0x8277D6E0 (DWARF :283)
-        s32  GetIndexOfFurthestVehicle(Vector2 lCentre);        // @0x8277D2E0 (DWARF :463)
+        s32  GetIndexOfFurthestVehicle(Vector2 lNewPosition);   // @0x8277D2E0 (DWARF :463)
 
         // ---- DWARF-declared accessors the X360 inlines away (the field reads AIModule::
         //      ProcessAIVehicleInputs @0x82795E10 performs directly) --------------------------
