@@ -225,7 +225,7 @@ namespace CgsNetwork
         }
 
         // While the host link is up, re-send our sync request periodically.
-        if (mpPlayerManager->GetConnectionStatus(mHostPlayerID) == E_CONNECTION_SUCCESS)
+        if (mpPlayerManager->mConnectionManager.GetConnectionStatus(mHostPlayerID) == E_CONNECTION_SUCCESS)
         {
             if (mu16LastSyncSentFrame == 0xFFFF ||
                 GetFrameDiffWrapped16(lu16FrameNum, mu16LastSyncSentFrame) >= KU16_SYNC_SEND_FRAME_TIMEOUT)

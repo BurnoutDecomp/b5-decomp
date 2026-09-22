@@ -1,7 +1,6 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnRoadRulesMessage.h"
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"  // TestConnectionMessage::GetPackedMessageSize delegate
 #include "SharedClasses/StreetData/BrnChallengeData.h"                                    // BrnStreetData::ScoreList::KAI_MIN/MAX_SCORES, E_SCORE_TYPE_COUNT
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstring>
@@ -48,7 +47,7 @@ namespace BrnNetwork
     // packed field of every record is zeroed (the two scores + the challenge index; the
     // 64-bit road-rules id is left untouched, matching the asm's three stores per record),
     // then the street-data version is zeroed, before deferring to the bare-ReliableMessage
-    // size query (ICF tail-call to TestConnectionMessage::GetPackedMessageSize == base size).
+    // size query (identically folded with TestConnectionMessage::GetPackedMessageSize).
     s32 RoadRulesMessage::GetPackedMessageSize()
     {
         miNumRoadRulesScores = KI_MAX_ROAD_RULES_MESSAGE_ENTRIES;   // stw 10, +0x118
@@ -66,10 +65,8 @@ namespace BrnNetwork
 
         miStreetDataVersion = 0;   // stw 0, +0x11C
 
-        // @0x8257B800: b CgsNetwork__TestConnectionMessage__GetPackedMessageSize -- a bare
-        // ReliableMessage probe (no extra payload), so this measures the base size with
-        // `this` reinterpreted as that sibling (matches the X360 tail call).
-        return reinterpret_cast<CgsNetwork::TestConnectionMessage*>(this)->GetPackedMessageSize();
+        // Tail call to the reliable-base size probe.
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     // BrnNetwork::RoadRulesMessage::PackOrUnpack @ 0x8257B808

@@ -220,6 +220,35 @@ bool NetworkTextureDXTCompress::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc,
 }
 
 // ---------------------------------------------------------------------------
+// Release
+//
+// Hand both double-buffer pairs back to the heap (compressed slot first, then the
+// uncompressed one, per buffer index), then drop the heap and the buffer sizes.
+// ---------------------------------------------------------------------------
+bool NetworkTextureDXTCompress::Release()
+{
+    for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
+    {
+        if (mapCompressedBuffers[liBufferIndex])
+        {
+            mpHeapMalloc->Free(mapCompressedBuffers[liBufferIndex]);
+            mapCompressedBuffers[liBufferIndex] = nullptr;
+        }
+
+        if (mapUncompressedBuffers[liBufferIndex])
+        {
+            mpHeapMalloc->Free(mapUncompressedBuffers[liBufferIndex]);
+            mapUncompressedBuffers[liBufferIndex] = nullptr;
+        }
+    }
+
+    mpHeapMalloc             = nullptr;
+    miUncompressedBufferSize = 0;
+    miCompressedBufferSize   = 0;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // SetNewTextureToCompress @ 0x8287EF60
 //
 // Validates the source pointer, the write-index bounds, that no callback is
@@ -237,7 +266,7 @@ void NetworkTextureDXTCompress::SetNewTextureToCompress(
     s32              liQuality,
     s32              leSourceFormat,
     s8               lbInputIsUncompressedYUYV,
-    CompressCallback lCompressionCompleteCallback,
+    CompressionCompleteCallback lCompressionCompleteCallback,
     void*            lpCompressionCompleteData)
 {
     if (!lpNewSourcePixels)
@@ -312,7 +341,7 @@ void NetworkTextureDXTCompress::SetNewTextureToDecompress(
     s32              liCompressedPixelSize,
     s32              liCompressedWidth,
     s32              liCompressedHeight,
-    CompressCallback lDecodeCompleteCallback,
+    CompressionCompleteCallback lDecodeCompleteCallback,
     void*            lpDecodeCompleteData)
 {
     if (!lpCompressedPixels)

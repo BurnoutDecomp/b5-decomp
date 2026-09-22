@@ -28,7 +28,7 @@ NetworkAdapterPrepareParams* NetworkAdapterPrepareParams::Construct(
     meServerType     = leServerType;      // +0x04
     mpHeapMalloc     = lpHeapMalloc;      // +0x08
     mpNetworkManager = lpNetworkManager;  // +0x0C
-    mpField_10       = lpField_10;        // +0x10 (a5)
+    mpServerInterface = static_cast<ServerInterfaceDirtySock*>(lpField_10);   // +0x10 (a5)
 
     return this;
 }

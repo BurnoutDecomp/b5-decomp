@@ -103,5 +103,10 @@ namespace CgsNetwork
         // Age-out helpers driven every Update (bodies in their own TUs).
         void  CheckForReliableMessageTimeout();
         void  UpdateReliableMessagesReceived();
+
+        // Report a buffered reliable message as nacked to its sender's delivery callback
+        // (used when the message is dropped on timeout or when its player leaves).
+        void  FakeNackMessage(Message* lpMessage, NetworkPlayerID lSendingPlayerID,
+                              NetworkPlayerID lRecvingPlayerID, bool lbAck);
     };
 }

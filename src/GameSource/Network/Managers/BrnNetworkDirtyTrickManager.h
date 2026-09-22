@@ -36,9 +36,9 @@
 
 namespace CgsNetwork
 {
-    class PlayerManager;       // pointer-only (DWARF h:120)
-    class TimeManager;         // pointer-only (DWARF h:121)
-    class ReliableMessage;     // callback parameter (DWARF h:151)
+    struct PlayerManager;       // pointer-only
+    struct TimeManager;         // pointer-only
+    struct ReliableMessage;     // callback parameter
     struct SignalMessage;      // callback parameter (DWARF h:160)
 }
 
@@ -97,7 +97,18 @@ namespace BrnNetwork
         BrnNetworkModule*          mpNetworkModule;                       // (DWARF h:119)
         CgsNetwork::PlayerManager* mpPlayerManager;                       // (DWARF h:120)
         CgsNetwork::TimeManager*   mpTimeManager;                         // (DWARF h:121)
+
+        // Console layout (0x300 bytes), pinned in a 32-bit build; inert on the x64 host. The
+        // record stride is 0x6C once DirtyTrickMessage reproduces its 0x34 console bytes; until
+        // then the manager is pinned relative to the message size.
+        static void _AssertLayout();
     };
+
+    inline void NetworkDirtyTrickManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || sizeof(DirtyTrickData) == 4 + 2 * sizeof(DirtyTrickMessage), "DirtyTrickData is the id plus two messages");
+        static_assert(sizeof(void*) != 4 || sizeof(NetworkDirtyTrickManager) == KI_MAX_DIRTY_TRICK_PLAYERS * sizeof(DirtyTrickData) + 12, "NetworkDirtyTrickManager tail is three pointers");
+    }
 
     // NOTE on the X360 record stride: GetDirtyTrickDataEntry @0x825486A8 walks this table
     // at a 0x6C (108) byte stride -- mPlayerID(4) + DirtyTrickMessage(52) + DirtyTrickMessage(52),

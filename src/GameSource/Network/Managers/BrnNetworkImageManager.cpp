@@ -390,7 +390,7 @@ namespace BrnNetwork
     }
 
     // FLAG: declaration-only -- maps the round results to the per-player mugshot/photo-finish slots.  @ 0x82573778
-    void NetworkImageManager::HandleRoundResults(const OnlineRoundResults* /*lpResults*/)
+    void NetworkImageManager::HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* /*lpResults*/)
     {
     }
 
@@ -401,7 +401,7 @@ namespace BrnNetwork
     }
 
     // FLAG: declaration-only -- drains the VariableEventQueue<14000,16> and dispatches mugshot events.  @ 0x8255DAB0
-    void NetworkImageManager::ProcessNetworkEvents(const NetworkEventQueue* /*lpQueue*/)
+    void NetworkImageManager::ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* /*lpQueue*/)
     {
     }
 

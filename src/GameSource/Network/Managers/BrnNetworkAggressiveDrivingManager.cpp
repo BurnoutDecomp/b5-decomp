@@ -31,6 +31,14 @@ namespace BrnNetwork
     static const s32 KI_AGGRESSIVE_DRIVING_MESSAGE_TYPE = 17;
 
     // ---------------------------------------------------------------------------------
+    // Constructor: the console body only runs the member constructors (each slot's two
+    // messages and the three AggressiveMoveData arrays, whose element constructor is empty).
+    // ---------------------------------------------------------------------------------
+    NetworkAggressiveDrivingManager::NetworkAggressiveDrivingManager()
+    {
+    }
+
+    // ---------------------------------------------------------------------------------
     // Construct / Destruct  (X360 @ 0x82542DF8 / 0x82542E68 -- identical reset loop)
     // ---------------------------------------------------------------------------------
     void NetworkAggressiveDrivingManager::Construct(BrnNetworkModule* lpNetworkModule,
@@ -416,7 +424,7 @@ namespace BrnNetwork
     bool NetworkAggressiveDrivingManager::AddImpactEvent(
             const BrnPhysics::Vehicle::ImpactEvent* lpImpactEvent)
     {
-        if (mpPlayerManager->GetNumberNetworkPlayers(false) == 0)
+        if (mpPlayerManager->GetNumberNetworkPlayers(CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED) == 0)
         {
             return false;
         }
@@ -515,7 +523,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool NetworkAggressiveDrivingManager::AddTakedownEvent(const BrnGameState::TakedownEvent* lpTakedownEvent)
     {
-        if (mpPlayerManager->GetNumberNetworkPlayers(false) == 0)
+        if (mpPlayerManager->GetNumberNetworkPlayers(CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED) == 0)
         {
             return false;
         }
@@ -589,7 +597,7 @@ namespace BrnNetwork
 
         // Buffer the takedown move against every tracked player.
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
-        const s32 liNumPlayers = lpNetworkManager->GetPlayerManager()->GetNumberNetworkPlayers(false);
+        const s32 liNumPlayers = lpNetworkManager->GetPlayerManager()->GetNumberNetworkPlayers(CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED);
         for (s32 liIndex = 0; liIndex < liNumPlayers; ++liIndex)
         {
             AggressiveDrivingData* lpEntry = &maAggressiveDrivingData[liIndex];
@@ -659,8 +667,11 @@ namespace BrnNetwork
         CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
         CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
 
+        // FLAG: VehicleOutputInterface exposes only a non-const GetImpactEventQueue(); the queue
+        // is read through the const post-sim buffer here (request filed for a const accessor).
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactQueue =
-            lpInput->GetImpactEventQueue();
+            &const_cast<BrnPhysics::Vehicle::VehicleOutputInterface*>(
+                lpInput->GetVehicleOutputInterface())->GetImpactEventQueue();
         for (s32 liIndex = 0; liIndex < lpImpactQueue->GetLength(); ++liIndex)
         {
             BrnPhysics::Vehicle::ImpactEvent lImpactEvent = lpImpactQueue->GetEvent(liIndex);
@@ -668,7 +679,7 @@ namespace BrnNetwork
         }
 
         const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>* lpTakedownQueue =
-            lpInput->GetTakedownEventQueue();
+            lpInput->GetTakedownEventInputQueue();
         for (s32 liEventIndex = 0; liEventIndex < lpTakedownQueue->GetLength(); ++liEventIndex)
         {
             BrnGameState::TakedownEvent lTakedownEvent = lpTakedownQueue->GetEvent(liEventIndex);
@@ -744,10 +755,13 @@ namespace BrnNetwork
     {
         CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
 
+        // FLAG: VehicleInputInterface exposes only a const GetImpactEventQueue(); the output
+        // buffer's queue is written here (request filed for the non-const accessor).
         CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactEventQueue =
-            lpOutput->GetVehicleManagerImpactEventQueue();
+            const_cast<BrnPhysics::Vehicle::VehicleInputInterface::ImpactEventQueue*>(
+                lpOutput->GetVehicleInputInterface()->GetImpactEventQueue());
         CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>* lpTakedownEventQueue =
-            lpOutput->GetNetworkToGameStateTakedownEventQueue();
+            lpOutput->GetTakedownEventOutputQueue();
 
         BrnNetworkModuleIO::GameStateToNetworkInterface* lpInterface =
             mpNetworkModule->GetGameStateToNetworkInterface();

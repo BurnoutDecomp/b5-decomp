@@ -264,6 +264,47 @@ void GameParams::SetVehicleLevelLimit(s32 liLevelLimit)
               | (lruWord & ~luMask);
 }
 
+// Pack the 6-bit skill level into muCustomFlags bits 2..7 (mask 0xFC).
+void GameParams::SetSkillLevel(u32 luSkillLevel)
+{
+    muCustomFlags = ((luSkillLevel << 2) & 0xFCu) | (muCustomFlags & 0xFFFFFF03u);
+}
+
+// Store the 2-bit security level in the low bits of muCustomFlags.
+void GameParams::SetSecurity(s32 leSecurity)
+{
+    muCustomFlags = (muCustomFlags & ~((1u << KU_BRN_GAMESEARCHDATA_SECURITY_NUM_BITS) - 1u))
+                  | (static_cast<u32>(leSecurity) & ((1u << KU_BRN_GAMESEARCHDATA_SECURITY_NUM_BITS) - 1u));
+}
+
+// Store the traffic-on flag in muCustomFlags bit 17.
+void GameParams::SetTrafficOn(bool lbTrafficOn)
+{
+    const u32 luMask = 1u << KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_BASE_BIT;
+    muCustomFlags = ((static_cast<u32>(lbTrafficOn) << KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_BASE_BIT) & luMask)
+                  | (muCustomFlags & ~luMask);
+}
+
+// Store the traffic-checking flag in muCustomFlags bit 23.
+void GameParams::SetTrafficCheckingOn(bool lbTrafficCheckingOn)
+{
+    const u32 luMask = 1u << KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_BASE_BIT;
+    muCustomFlags = ((static_cast<u32>(lbTrafficCheckingOn) << KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_BASE_BIT) & luMask)
+                  | (muCustomFlags & ~luMask);
+}
+
+// Range-check the time limit, then pack it into the leaf game-params word bits 15..19
+// (mask 0xF8000).
+void GameParams::SetTimeLimit(s32 liTimeLimit)
+{
+    CGS_ASSERT(liTimeLimit >= 0, "liTimeLimit >= 0");
+    CGS_ASSERT(liTimeLimit < (1 << KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS),
+               "liTimeLimit < (1<<KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS)");
+    u32& lruGameParamFlags = GameParamFlags();
+    lruGameParamFlags = ((static_cast<u32>(liTimeLimit) << KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT) & 0xF8000u)
+                      | (lruGameParamFlags & 0xFFF07FFFu);
+}
+
 // X360 @ 0x82584068. Read the 5-bit TIME_LIMIT field (bits 15..19) of the leaf
 // game-params word at +0x15C.
 s32 GameParams::TimeLimit() const

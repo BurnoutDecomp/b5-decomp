@@ -26,6 +26,8 @@
 // Array<...,49>::Append/Erase/EraseFast emit.
 // ===================================================================================
 
+#include <cstddef>                                               // offsetof (_AssertLayout)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsArray.h"          // Array<T,N> maPendingUploads
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"         // CgsSystem::Time mUploadRetryTimer
@@ -33,16 +35,15 @@
 
 namespace CgsNetwork { struct ServerInterfaceDirtySock; }
 
-// VariableEventQueue<14000,16> is the network-event queue type ProcessNetworkEvents walks; only
-// a pointer is named in this header, so forward-declare the class template (full def in
-// CgsVariableEventQueue.h, included by the .cpp).
-namespace CgsModule { template <s32 BUFSIZE, s32 ALIGN> class VariableEventQueue; }
-
 namespace BrnNetwork
 {
     // The post-sim module-IO input buffer ProcessAfterSimulation reads its queue from
     // (pointer-only here; full def in BrnNetworkModuleIO.h, included by the .cpp).
-    namespace BrnNetworkModuleIO { class PostSimulationInputBuffer; }
+    namespace BrnNetworkModuleIO
+    {
+        struct PostSimulationInputBuffer;
+        struct NetworkEventQueue;               // ProcessNetworkEvents param
+    }
 
     struct LocalEventScoreUploadData
     {
@@ -70,7 +71,7 @@ namespace BrnNetwork
     //   LAYOUT (X360-AUTHORITATIVE; offsets from this, read off Construct @ 0x82556AB0 and the
     //   member TU functions):
     //     +0x000  maPendingUploads   Array<LocalEventScoreUploadData,49>  (count word @ +0x310)
-    //     +0x314  (reserved -- not touched by any reconstructed function)
+    //     +0x314  (tail padding of maPendingUploads: its 64-bit records make the array 8-aligned)
     //     +0x318  mUploadRetryTimer  CgsSystem::Time   (SetFloatVal(this+0x318), miSeconds @ +0x318)
     //     +0x320  miUploadCount      s32               (per-batch element counter; stw 0 in Construct)
     //     +0x324  meState            s32               (the upload state machine; stw 0 in Construct)
@@ -113,7 +114,7 @@ namespace BrnNetwork
     private:
         // X360 @ 0x82561520: walk the network-event queue, storing score-leaderboard events for
         // upload and absorbing the persisted non-uploaded-scores snapshot.
-        void ProcessNetworkEvents( const CgsModule::VariableEventQueue<14000, 16>* lpNetworkEventQueue );
+        void ProcessNetworkEvents( const BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue );
 
         // X360 @ 0x8255DFB0: merge one (eventID, score, gameMode) score into the pending list,
         // updating an existing record's best score (game mode 5 keeps the min, 7 the max) or
@@ -133,12 +134,22 @@ namespace BrnNetwork
         static s32 GetScoreboardIndexForEvent( u64 lu64EventID, s32 leGameMode );
 
         Array<LocalEventScoreUploadData, 49> maPendingUploads;   // +0x000 (count word @ +0x310)
-        u8                    mPad314[0x318 - 0x314];             // +0x314 (reserved)
         CgsSystem::Time       mUploadRetryTimer;                  // +0x318
         s32                   miUploadCount;                      // +0x320
         s32                   meState;                            // +0x324
         BrnNetworkModule*     mpNetworkModule;                    // +0x328
         BrnServerInterfaceBase* mpServerInterface;                // +0x32C
         EventScoresManagerDebugComponent mDebugComponent;         // +0x330
+
+        // Console layout, pinned in a 32-bit build; inert on the x64 host.
+        static void _AssertLayout();
     };
+
+    inline void EventScoresManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(EventScoresManager, mUploadRetryTimer) == 0x318, "mUploadRetryTimer @ +0x318");
+        static_assert(sizeof(void*) != 4 || offsetof(EventScoresManager, mpNetworkModule) == 0x328, "mpNetworkModule @ +0x328");
+        static_assert(sizeof(void*) != 4 || offsetof(EventScoresManager, mDebugComponent) == 0x330, "mDebugComponent @ +0x330");
+        static_assert(sizeof(void*) != 4 || sizeof(EventScoresManager) == 0x340, "EventScoresManager is 0x340 bytes");
+    }
 } // namespace BrnNetwork

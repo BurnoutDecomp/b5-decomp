@@ -12,4 +12,10 @@ namespace BrnNetwork
     PlayerInfoData::~PlayerInfoData()
     {
     }
+
+    // Chain to the platform prepare; true on success.
+    bool PlayerInfoData::Prepare()
+    {
+        return CgsNetwork::ServerInterfacePlayerInfoDataX360::Prepare();
+    }
 }

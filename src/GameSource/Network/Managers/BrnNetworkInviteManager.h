@@ -23,10 +23,8 @@
 //                                          the server-interface player-info component fills in.
 //                                          UpdateGettingGameID passes &this+0xA0 as the
 //                                          ServerInterfacePlayerInfoDataBase* out-param of
-//                                          GetPlayerInfoByName. The full record's layout is homed
-//                                          in BrnNetworkPlayerInfoData.{h,cpp}; here the 256-byte
-//                                          span (ends at the player-name @ +0x1A0) is reserved so
-//                                          later members keep their pinned offsets.
+//                                          GetPlayerInfoByName. Embedded by value (homed in
+//                                          BrnNetworkPlayerInfoData.h).
 //   +0x1A0 (16)  mPlayerNameToGetGameID   BrnNetwork::PlayerName (16B, X360-authoritative width).
 //                                          DownloadPlayersGameIDFromServer memcpy's the caller's
 //                                          name here (this+0x1A0, 16 bytes); UpdateGettingGameID
@@ -45,6 +43,8 @@
 // IsInInvite compares meInviteState against 7). Naming follows
 // references/CXX_NAMING_CONVENTIONS.md.
 // ===================================================================================
+
+#include <cstddef>                                             // offsetof (_AssertLayout)
 
 #include "types.hpp"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"        // InviteOrJoinParams, PlayerName
@@ -151,15 +151,24 @@ namespace BrnNetwork
         void UpdateGettingGameID();
 
         // -- members (offsets pinned above) ----------------------------------------------------
-        BrnNetworkModuleIO::InviteOrJoinParams mInviteOrJoinParams;     // +0x000 (sizeof 0x9C)
-        u8                                     maInviteParamsPad[0xA0 - sizeof(BrnNetworkModuleIO::InviteOrJoinParams)]; // -> +0xA0
-        // The server player-info record (BrnNetwork::PlayerInfoData) embedded by value. Its full
-        // 256-byte layout is homed in BrnNetworkPlayerInfoData.{h,cpp}; reserved as opaque storage
-        // here so the later members keep their X360-pinned offsets and we do not fork the type.
-        u8                                     maPlayerInfoData[0x1A0 - 0xA0];  // +0x0A0 (256B)
+        BrnNetworkModuleIO::InviteOrJoinParams mInviteOrJoinParams;     // +0x000 (0x9C bytes)
+        // The server player-info record embedded by value. Its 64-bit XUID makes it (and so this
+        // manager) 8-byte aligned: the params block pads to +0xA0 and the object to 0x1C0.
+        PlayerInfoData                         mPlayerInfoData;        // +0x0A0 (0x100 bytes)
         PlayerName                             mPlayerNameToGetGameID; // +0x1A0 (16B)
         EGetGameIDState                        meGetGameIDState;       // +0x1B0
         EInviteState                           meInviteState;          // +0x1B4
         BrnNetworkModule*                      mpNetworkModule;        // +0x1B8
+
+        // Console layout, pinned in a 32-bit build; inert on the x64 host.
+        static void _AssertLayout();
     };
+
+    inline void NetworkInviteManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkInviteManager, mPlayerInfoData) == 0xA0, "mPlayerInfoData @ +0xA0");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkInviteManager, mPlayerNameToGetGameID) == 0x1A0, "mPlayerNameToGetGameID @ +0x1A0");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkInviteManager, mpNetworkModule) == 0x1B8, "mpNetworkModule @ +0x1B8");
+        static_assert(sizeof(void*) != 4 || sizeof(NetworkInviteManager) == 0x1C0, "NetworkInviteManager is 0x1C0 bytes");
+    }
 }

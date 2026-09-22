@@ -53,33 +53,43 @@
 //   +0x3648  mpNetworkModule                        -- BrnNetwork::BrnNetworkModule*
 //   +0x364C  mbDownloadedLocalScores                -- bool
 //   +0x364D  mbForceOverwriteServerRecords          -- bool
-//   +0x3650  mRoadRulesDebugComponent               -- RoadRulesManagerDebugComponent (opaque; ctor installs its vtable)
+//   +0x3650  mRoadRulesDebugComponent               -- RoadRulesManagerDebugComponent (0x10 bytes; ctor installs its vtable)
+//   sizeof 0x3660 (8-byte aligned by mu64RoadRulesID)
 //
-// No fixed-byte sizeof/offset static_assert is emitted for the class as a whole: the PC gate
-// targets x64, where the embedded pointers and per-slot sub-objects widen and shift every
-// absolute byte offset relative to the X360 32-bit layout the bodies were read from. The
-// by-name member walk the compiler emits is identical. The X360 absolute offsets are quoted
-// in the .cpp only as provenance. RoadRulesData's OWN stride (0x2B8, pointer-free) and its key
-// sub-offset (+0x2B0) ARE pointer-invariant and are pinned by a static_assert below.
+// The class-wide offsets and sizeof are pinned only in a 32-bit build (_AssertLayout); on the x64
+// host the embedded pointers widen and shift every absolute byte offset, so members are reached
+// by name. RoadRulesData's OWN stride (0x2B8, pointer-free) and its key sub-offset (+0x2B0) ARE
+// pointer-invariant and are pinned unconditionally.
 #pragma once
 
 #include <cstddef>                                        // offsetof (uncalled _AssertLayout)
 
 #include "types.hpp"
+#include "SharedClasses/BrnSharedConstants.h"                // BrnUpdateSet (ProcessBeforeSimulation)
 #include "SharedClasses/StreetData/BrnChallengeData.h"   // BrnStreetData::ChallengePlayerScoreEntry (HandleNewPersonalBest param)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"  // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"     // CgsSystem::Time (mTimeUntilNextResult*)
+#include "GameSource/Network/Debug Components/BrnNetworkRoadRulesManagerDebugComponent.h"  // mRoadRulesDebugComponent
 
 namespace BrnNetwork
 {
     class BrnNetworkModule;    // pointer-only forward (mpNetworkModule)
     class BrnServerInterface;  // pointer-only forward (mpServerInterface)
+    class RoadRulesUploadData; // GetRoadRulesDataToUpload param (Parameters/BrnNetworkRoadRulesData.h)
 
     namespace BrnNetworkModuleIO
     {
         struct PostSimulationInputBuffer;  // pointer-only forward (ProcessAfterSimulation param)
-        class  NetworkEventQueue;          // pointer-only forward (ProcessNetworkEvents param)
+        struct OutputBuffer;               // pointer-only forward (ProcessBeforeSimulation param)
+        struct NetworkEventQueue;          // pointer-only forward (ProcessNetworkEvents param)
+        struct NetworkInRoadRulesPBEvent;  // UpdateLocal*WithNewPB param (no class home yet)
     }
+}
+
+namespace CgsNetwork
+{
+    struct ReliableMessage;    // message-arrived callback param
+    struct SignalMessage;      // message-delivered callback param
 }
 
 namespace CgsNetwork
@@ -97,6 +107,18 @@ namespace BrnNetwork
         // and clears the manager's own score/time scalar pair. Distinct from any Brn lifecycle
         // Construct().
         NetworkRoadRulesManager();
+
+        // ---- lifecycle / per-frame / per-player (called by BrnNetworkManager) ----------------
+        // Re-run every slot's message constructors, clear the slot keys and the local score
+        // tables, and reset the scalar state.
+        void Construct();
+        bool Release();
+        void Destruct();
+        void ProcessBeforeSimulation( BrnNetworkModuleIO::OutputBuffer* lpOutput, f32 lfTimeStep,
+                                      BrnUpdateSet luUpdateSet );
+        void AddPlayer( NetworkPlayerID lPlayerID );
+        void RemovePlayer( NetworkPlayerID lPlayerID );
+        void Disconnected();
 
         // Debug "Trigger Personal Best": feed a fabricated personal-best record through the normal
         // new-PB pipeline (the debug component builds the record on the stack and hands it over).
@@ -193,6 +215,28 @@ namespace BrnNetwork
         // or nullptr when the player has no slot. Reached by RemovePlayer.
         RoadRulesData* GetRoadRulesDataForPlayer( NetworkPlayerID lPlayerID );
 
+        void StartSendingRoadRulesScoresToPlayer( RoadRulesData* lpRoadRulesData );
+        void UpdateLocalRoadRulesScoresWithNewPB( const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpPBEvent );
+        void UpdateLocalLobbyScoresWithNewPB( const BrnNetworkModuleIO::NetworkInRoadRulesPBEvent* lpPBEvent );
+        // Fill lpMessageData with the next batch of lobby scores from lStartIndex on; returns the
+        // challenge index to continue from.
+        Road::ChallengeIndex GetRoadRulesDataToSend( RoadRulesMessageData* lpMessageData, s32* lpiNumScores,
+                                                     Road::ChallengeIndex lStartIndex );
+        void GetRoadRulesDataToUpload( RoadRulesUploadData* lpUploadData );
+
+        // Reliable-message callbacks registered per player by AddPlayer (the user data is the
+        // manager).
+        static void _RoadRulesMessageArrivedCallback( CgsNetwork::ReliableMessage* lpMessage,
+                                                      NetworkPlayerID lSendingPlayerID, void* lpUserData );
+        static void _RoadRulesMessageDeliveredCallback( bool lbDelivered, bool lbFakeNack,
+                                                        CgsNetwork::SignalMessage* lpAck,
+                                                        NetworkPlayerID lRecvingPlayerID, void* lpUserData );
+        static void _RoadRulesPersonalBestArrivedCallback( CgsNetwork::ReliableMessage* lpMessage,
+                                                           NetworkPlayerID lSendingPlayerID, void* lpUserData );
+        static void _RoadRulesPersonalBestDeliveredCallback( bool lbDelivered, bool lbFakeNack,
+                                                             CgsNetwork::SignalMessage* lpAck,
+                                                             NetworkPlayerID lRecvingPlayerID, void* lpUserData );
+
         // ---- helpers homed in THIS TU's .cpp; declared (callees of OnAutoLogin) ---------------
         // Bodies belong to this manager's own behavioural TUs (no ground-truth asm in this TU),
         // so they are declared-only here and as sibling forwards in the .cpp.
@@ -247,7 +291,7 @@ namespace BrnNetwork
         bool          mbDownloadedLocalScores;                        // +0x364C
         bool          mbForceOverwriteServerRecords;                  // +0x364D
         u8            maPadToDebugComponent[0x3650 - 0x364E];          // -> +0x3650
-        void*         mRoadRulesDebugComponentVtable;                  // +0x3650 (opaque RoadRulesManagerDebugComponent)
+        RoadRulesManagerDebugComponent mRoadRulesDebugComponent;       // +0x3650
 
         // Uncalled layout pin. RoadRulesData holds no pointers, so its stride (X360 slot stride
         // 0x2B8) and the key offset (slot-relative +0x2B0) are pointer-INVARIANT and hold on the
@@ -260,6 +304,16 @@ namespace BrnNetwork
                            "RoadRulesData key must sit at slot-relative +0x2B0" );
             static_assert( offsetof(RoadRulesData, mIndexOfNextChallengeToSend) == 0x2B4,
                            "RoadRulesData next-challenge-to-send must sit at slot-relative +0x2B4" );
+
+            // Console layout, pinned in a 32-bit build; inert on the x64 host.
+            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mu64RoadRulesID) == 0x3608,
+                           "mu64RoadRulesID @ +0x3608" );
+            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mpTimeManager) == 0x363C,
+                           "mpTimeManager @ +0x363C" );
+            static_assert( sizeof(void*) != 4 || offsetof(NetworkRoadRulesManager, mRoadRulesDebugComponent) == 0x3650,
+                           "mRoadRulesDebugComponent @ +0x3650" );
+            static_assert( sizeof(void*) != 4 || sizeof(NetworkRoadRulesManager) == 0x3660,
+                           "NetworkRoadRulesManager is 0x3660 bytes" );
         }
     };
 }

@@ -9,7 +9,7 @@
 #include "GameSource/Network/BrnNetworkModule.h"                        // BrnNetwork::BrnNetworkModule
 #include "GameSource/Network/BrnNetworkManager.h"                       // BrnNetwork::BrnNetworkManager
 #include "GameSource/Network/BrnServerInterface.h"                      // BrnNetwork::BrnServerInterface::GetGameComponent
-#include "GameSource/Network/BrnNetworkModuleIO.h"                      // BrnNetworkModuleIO::PostSim / PostSimulationInputBuffer
+#include "GameSource/Network/BrnNetworkModuleIO.h"                      // BrnNetworkModuleIO::PostSimulationInputBuffer
 #include "GameSource/Network/BrnNetworkGameParams.h"                    // BrnNetwork::GameParams
 
 // ---- XDK / Xbox-LIVE entry points -------------------------------------------
@@ -55,15 +55,12 @@ namespace BrnNetwork
 {
     namespace
     {
-        // The CgsModule queue the BrnNetwork IN-event AddEvent call sites actually drive (the
-        // module's GetNetworkEventQueue() returns the forward-declared NetworkEventQueue; the
-        // concrete instantiation is VariableEventQueue<14000,16>). Mirrors the base TU's
-        // AsNetworkQueue helper.
+        // The CgsModule queue base the BrnNetwork IN-event AddEvent call sites drive.
         typedef CgsModule::VariableEventQueue<14000, 16> NetworkEventQueueConcrete;
 
         inline NetworkEventQueueConcrete* AsNetworkQueue(BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
         {
-            return reinterpret_cast<NetworkEventQueueConcrete*>(lpQueue);
+            return lpQueue;
         }
 
         // ---- network IN-event payloads ----------------------------------------
@@ -306,11 +303,10 @@ namespace BrnNetwork
     // platform leaf's ShowProfile and the online/offline/join events into a buddy-list-updated
     // poke, then defer every event to the game base ProcessEvent.
     // =======================================================================
-    void BuddyManagerX360::ProcessNetworkQueue(const NetworkEventQueue* lpInQueue,
-                                               NetworkEventQueue* /*lpOutQueue*/)
+    void BuddyManagerX360::ProcessNetworkQueue(const BrnNetworkModuleIO::NetworkEventQueue* lpInQueue,
+                                               BrnNetworkModuleIO::NetworkEventQueue* /*lpOutQueue*/)
     {
-        const NetworkEventQueueConcrete* lpQueue =
-            reinterpret_cast<const NetworkEventQueueConcrete*>(lpInQueue);
+        const NetworkEventQueueConcrete* lpQueue = lpInQueue;
 
         const CgsModule::Event* lpEvent = NULL;
         s32 liSize = 0;
@@ -344,14 +340,13 @@ namespace BrnNetwork
     // =======================================================================
     // Update @ 0x82573A40
     // =======================================================================
-    u32 BuddyManagerX360::Update(BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
+    u32 BuddyManagerX360::Update(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
                                  bool lbProcessInvites, bool lbCanBlock, f32 lfTimeStep)
     {
         BuddyManagerBase::Update(lbCanBlock, lfTimeStep);
 
-        ProcessNetworkQueue(
-            reinterpret_cast<const NetworkEventQueue*>(BrnNetworkModuleIO::PostSim(lpInputBuffer)),
-            reinterpret_cast<NetworkEventQueue*>(GetNetworkModule()->GetNetworkEventQueue()));
+        ProcessNetworkQueue(lpInputBuffer->GetNetworkEventQueue(),
+                            GetNetworkModule()->GetNetworkEventQueue());
 
         ProcessDebugEvents();
 

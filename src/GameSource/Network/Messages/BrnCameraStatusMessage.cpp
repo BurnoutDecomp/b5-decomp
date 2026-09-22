@@ -1,72 +1,41 @@
 #include "types.hpp"
 
+#include "GameSource/Network/Messages/BrnCameraStatusMessage.h"
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CameraStatusMessage::Construct            @ 0x8257AD20
 //   BrnNetwork::CameraStatusMessage::GetPackedMessageSize @ 0x8257C378
 //   BrnNetwork::CameraStatusMessage::PackOrUnpack         @ 0x8257AD58
 //
-// A network message carrying a single 32-bit camera-status word (at offset 32).
-// Construct/GetPackedMessageSize delegate to the CgsNetwork::Message base after
-// resetting that word. PackOrUnpack serialises the word through the message's
-// pack/unpack primitive, OR-ing in the PVS debug "is simple" flag (always false).
-
-namespace CgsNetwork
-{
-    // Base message (other TU); declared for the compile-only gate.
-    struct Message
-    {
-        void* Construct();
-        int   GetPackedMessageSize();
-    };
-}
+// A network message carrying a single camera-status word (meCameraStatus, +0x20 on the
+// console). Construct/GetPackedMessageSize delegate to the CgsNetwork::Message base after
+// resetting that word. PackOrUnpack ORs the base Message::PackOrUnpack() status with the
+// word serialised through the 32-bit int field primitive in [0, E_CAMERA_STATUS_COUNT].
 
 namespace BrnNetwork
 {
-    namespace
+    void CameraStatusMessage::Construct()
     {
-        // sub_82881370: the message field pack/unpack primitive (other TU).
-        int PackField(void* /*pMessage*/, int* /*pField*/, int /*liMode*/, int /*liBytes*/)
-        {
-            __debugbreak();
-            return 0;
-        }
+        CgsNetwork::Message::Construct();
+        meCameraStatus = E_CAMERA_STATUS_NONE;
     }
 
-    struct CameraStatusMessage : CgsNetwork::Message
+    s32 CameraStatusMessage::GetPackedMessageSize()
     {
-        void* Construct();
-        int   GetPackedMessageSize();
-        int   PackOrUnpack();
-    };
-
-    void* CameraStatusMessage::Construct()
-    {
-        void* lpResult = CgsNetwork::Message::Construct();
-        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 32) = 0;
-        return lpResult;
-    }
-
-    int CameraStatusMessage::GetPackedMessageSize()
-    {
-        reinterpret_cast<u32*>(this)[8] = 0;
+        meCameraStatus = E_CAMERA_STATUS_NONE;
         return CgsNetwork::Message::GetPackedMessageSize();
     }
 
-    int CameraStatusMessage::PackOrUnpack()
+    CgsNetwork::PackOrUnpackResult CameraStatusMessage::PackOrUnpack()
     {
-        // asm calls BrnWorld__PVSDebugComponent__IsSimple with `this` as the argument, but
-        // CameraStatusMessage does not derive from PVSDebugComponent (whose IsSimple() is
-        // `protected` besides). The X360 linker identical-code-folds trivial `return false`
-        // leaf functions together; this call site landed on PVSDebugComponent::IsSimple's
-        // address purely by ICF, not by any real relationship. IsSimple()'s body is a
-        // constant `return false` (BrnPVSDebugComponent.h:102), so the call's observable
-        // result -- 0 -- is reproduced directly rather than performing the (illegal, and
-        // semantically bogus) cross-class cast.
-        u8 lbIsSimple = 0;
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
 
-        int liField = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 32);
-        int liResult = PackField(this, &liField, 0, 4) | lbIsSimple;
-        *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 32) = liField;
-        return liResult;
+        // The enum travels through the int primitive via a stack temporary.
+        s32 liCameraStatus = static_cast<s32>(meCameraStatus);
+        const CgsNetwork::PackOrUnpackResult lxStatus =
+            CgsNetwork::PackOrUnpackInt(this, &liCameraStatus, 0, E_CAMERA_STATUS_COUNT);
+        meCameraStatus = static_cast<ECameraStatus>(liCameraStatus);
+
+        return lxStatus | lxBase;
     }
-}
+} // namespace BrnNetwork

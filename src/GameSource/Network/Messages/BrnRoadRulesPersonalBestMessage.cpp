@@ -1,7 +1,6 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnRoadRulesPersonalBestMessage.h"
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"  // TestConnectionMessage::GetPackedMessageSize delegate
 #include "SharedClasses/StreetData/BrnChallengeData.h"                                    // BrnStreetData::ScoreList::KAI_MIN/MAX_SCORES, E_SCORE_TYPE_COUNT
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
@@ -42,8 +41,8 @@ namespace BrnNetwork
     // the reported size is the worst-case packed size: each score is set to its per-type
     // KAI_MIN_SCORES seed (the X360 build copies the min-range table into maiScores), the
     // challenge index and street-data version are zeroed, then the bare-ReliableMessage
-    // size query is delegated (ICF-tail-call to TestConnectionMessage::GetPackedMessageSize,
-    // which is a bare ReliableMessage probe == the base size).
+    // size query is delegated (identically folded with
+    // TestConnectionMessage::GetPackedMessageSize).
     s32 RoadRulesPersonalBestMessage::GetPackedMessageSize()
     {
         s32 liEnumIndex = 0;
@@ -60,10 +59,8 @@ namespace BrnNetwork
         mChallengeIndex     = 0;
         miStreetDataVersion = 0;
 
-        // @0x8257BA1C: b CgsNetwork__TestConnectionMessage__GetPackedMessageSize -- a bare
-        // ReliableMessage probe (no extra payload), so this measures the base size with
-        // `this` reinterpreted as that sibling (matches the X360 tail call).
-        return reinterpret_cast<CgsNetwork::TestConnectionMessage*>(this)->GetPackedMessageSize();
+        // Reliable-base size probe.
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     // BrnNetwork::RoadRulesPersonalBestMessage::PackOrUnpack @ 0x8257BA28

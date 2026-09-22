@@ -226,7 +226,7 @@ namespace BrnNetwork
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
         CGS_ASSERT(lpInput != nullptr, "lpInput");
-        ProcessNetworkEvents(BrnNetworkModuleIO::PostSim(lpInput));
+        ProcessNetworkEvents(lpInput->GetNetworkEventQueue());
         CheckForNewUpdateMessages();
     }
 

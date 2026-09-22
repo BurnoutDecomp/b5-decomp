@@ -14,14 +14,8 @@
 //
 // SIBLING SPLIT (2026-08-25, P1 sim-pause) -- the same pattern as
 // GameBridgeGameStateToX_TrainingStringIds.cpp. This function was MOVED here (not copied)
-// out of GameBridgeGUIToX.cpp, which CANNOT be mounted: its other two members
-// (BridgeGuiToReplay_PostSim / TranslateGuiEventsToNetworkEvents) reference six symbols
-// with no home in the linked set -- BrnReplays::ReplayIO::InputBuffer_PostSim::
-// GetRequestInterface / GetGuiEventQueue, the three NetworkInSelectScoreboardEvent statics,
-// and BrnNetwork::BrnNetworkModuleIO::TelemetryData::AddParameter (that last one has NO
-// reconstructed home ANYWHERE in the tree, so the parent TU cannot link at any price today).
-// MEASURED, not guessed: mounting the whole TU produced exactly those 6 LNK2019s and nothing
-// from this function. Folding it back later is a delete, not a merge.
+// out of GameBridgeGUIToX.cpp so it could mount before that TU's other two members had
+// their callees homed. Folding it back later is a delete, not a merge.
 //
 // BridgeGuiToGameState is the ONE producer of game event 93 (the crash-nav activate/
 // deactivate pause event) and therefore the head of the sim-pause spine:

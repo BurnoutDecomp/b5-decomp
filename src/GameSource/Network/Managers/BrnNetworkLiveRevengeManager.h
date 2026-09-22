@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>                                                                      // offsetof (_AssertLayout)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                 // Array<T, N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"                          // CgsContainers::FastBitArray<10>
@@ -10,7 +12,18 @@
 #include "GameSource/Network/Messages/BrnLiveRevengeSyncMessage.h"                     // BrnNetwork::LiveRevengeSyncMessage
 
 // Forward declarations for heavy pointer-only members.
-namespace BrnNetwork { struct BrnNetworkManager; struct BrnNetworkModule; }
+namespace BrnNetwork
+{
+    class BrnNetworkManager;
+    class BrnNetworkModule;
+
+    namespace BrnNetworkModuleIO
+    {
+        struct OutputBuffer;                 // ProcessBeforeSimulation param
+        struct PostSimulationInputBuffer;    // ProcessAfterSimulation param
+    }
+}
+namespace BrnGameState { namespace GameStateModuleIO { struct OnlineRoundResults; } }   // HandleRoundResults param
 namespace CgsMemory  { class  HeapMalloc; }
 
 // BrnNetwork::LiveRevengeManager + LiveRevengeProfile
@@ -18,7 +31,8 @@ namespace CgsMemory  { class  HeapMalloc; }
 // (references/DecFIGS/dwarfdump/GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h),
 // gated against the X360 ARTIST binary.
 //
-// The PC gate targets x64 (8-byte pointers) so no fixed-byte sizeof/offset assert is used.
+// The console offsets are pinned in a 32-bit build only (_AssertLayout); members are reached by
+// name on the x64 host.
 
 namespace BrnNetwork
 {
@@ -101,7 +115,8 @@ namespace BrnNetwork
         bool Release();
         void Destruct();
 
-        void ProcessBeforeSimulation(BrnNetworkModule* lpOutputBuffer);
+        void ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
+        void ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer);
         void ProcessTakedownQueue(void* lpOutputBuffer);
         void ProcessGameDirtyTrickInterface();
 
@@ -110,11 +125,19 @@ namespace BrnNetwork
         void Disconnected();
         void OnRoundStart();
         void OnRoundFinish();
+        // BrnNetworkManager::OnLeaveGame / OnGameFinish call these; both console bodies are
+        // empty (folded) functions.
+        void OnLeaveGame();
+        void OnGameFinish();
+        void HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpResults);
 
         s32  GetNumberOfRivals() const;
         s32  GetNumberOfRelationships() const;
 
         LiveRevengeRelationship* GetNonConstRevengeRelationship(NetworkPlayerID lPlayerID);
+        // The console export of the non-const per-player accessor (reached from
+        // BrnNetworkManager::OutputPlayerStatusInfo and the aggressive-driving manager).
+        LiveRevengeRelationship* GetNonConstRevengeRelation(NetworkPlayerID lPlayerID);
 
         // @ 0x8258C540 -- const table-index accessor (DWARF-truncated "GetRevengeRelationshi").
         // Caller: BrnNetwork::GameSearchParamsBase::FillInRivals.
@@ -158,7 +181,6 @@ namespace BrnNetwork
         void  UpdatePaybacksData(s32 liNetworkPlayerID, s32 liAggressorIndex, s32 liPaybackFlag);
         void  GetUniqueIDByName(const char* lpcPlayerName, void* lpUniqueID) const;
         void  GetUniqueIDByPlayerID(NetworkPlayerID lNetworkPlayerID, void* lpUniqueID) const;
-        LiveRevengeRelationship* GetNonConstRevengeRelation(NetworkPlayerID lPlayerID);
 
         static s32 _SortTopRivals(const void* lpRival1, const void* lpRival2);
         static void _SyncMessageArrivedCallback();
@@ -189,5 +211,25 @@ namespace BrnNetwork
         bool                                            mbAreWeInOnlineGame;    // DWARF :317
         bool                                            mbProfileIsDirty;       // DWARF :318
         bool                                            mbNeedToUpdateMarksForCurrentRound; // DWARF :319
+
+        // Console layout (0xAA8 bytes), pinned in a 32-bit build; inert on the x64 host. The
+        // mapping-entry stride is 0x148 once LiveRevengeSyncMessage reproduces its 0xA0 console
+        // bytes; until then the members past the table are pinned relative to the entry size.
+        static void _AssertLayout();
     };
+
+    inline void LiveRevengeManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeMappingEntry, mSendMessage) == 0x8, "LiveRevengeMappingEntry::mSendMessage @ +0x8");
+        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeMappingEntry) == 8 + 2 * sizeof(LiveRevengeSyncMessage), "LiveRevengeMappingEntry is two ids plus two messages");
+        static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, maPlayerToTableIndexData) == 0x10, "maPlayerToTableIndexData @ +0x10");
+#define BRN_LRM_AT(member, off)         static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, member) == 0x10 + KI_MAX_PLAYERS * sizeof(LiveRevengeMappingEntry) + (off), #member)
+        BRN_LRM_AT(maTopIndexes,              0x00);   // +0x908
+        BRN_LRM_AT(mpLiveRevengeProfile,      0x2C);   // +0x934
+        BRN_LRM_AT(mTakedownEventQueue,       0x30);   // +0x938
+        BRN_LRM_AT(mpNetworkManager,          0x180);  // +0xA88
+        BRN_LRM_AT(meLiveRevengeUploadStatus, 0x18C);  // +0xA94
+#undef BRN_LRM_AT
+        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeManager) == 0x10 + KI_MAX_PLAYERS * sizeof(LiveRevengeMappingEntry) + 0x1A0, "LiveRevengeManager tail is 0x1A0 bytes");
+    }
 }

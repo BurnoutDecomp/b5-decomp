@@ -8,31 +8,28 @@
 // the mirror image of the controller bridges in GameBridgeControllerToX.cpp and the
 // replay bridges in GameBridgeReplayToX.cpp.
 //
-// Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
-//   TranslateNetworkInterfaceToGuiEvents  0x823DF938
-//   TranslateNetworkEventsToGameEvents    0x823DF9E0
-//   TranslateNetworkEventsToGuiEvents     0x823E0900
-//   BridgeNetworkToGui                    0x823E9518
+// Reconstructed store-for-store from the console build:
+//   TranslateNetworkInterfaceToGuiEvents, TranslateNetworkEventsToGameEvents,
+//   TranslateNetworkEventsToGuiEvents (with its inlined scoreboard-response arm) and
+//   BridgeNetworkToGui.
 //
-// HONEST PLACEHOLDERS (FLAGGED):
-//   * The CgsGui::GuiModule event sink + its AddGuiEvent<T>(event, buffer) template are
-//     the committed by-name placeholders from GameBridgeControllerToX.h. The X360 forms
-//     the sink as (this + 7252512) == mpCgsGuiModule (BrnGameModule.hpp @ +7252512);
-//     reached here by that committed pointer member (GetGuiEventSink()). The placeholder
-//     AddGuiEvent<T> returns void, so the translators return the queue-walk status
-//     (GetNextEvent result), exactly as the X360 returns r3 from the final queue call.
-//   * The ~50 GUI / game-state event payloads the translators synthesise are NOT homed.
-//     Per HARD RULE 3 each is built store-for-store in a correctly-sized RAW local buffer
-//     (the exact stack span the asm writes) and passed by name to the templated sink; the
-//     event-type TAGS selecting each template instantiation are the real ones (attested by
-//     the mangled X360 AddGuiEvent<...> / AddEvent symbols). No field names are invented.
-//     The tag types are declared as opaque records in GameBridgeNetworkToX.h.
-//   * The network OUTPUT buffer + its NetworkEventQueue (VariableEventQueue<14000,16>),
-//     NetworkToGuiInterface, InGamePlayerStatusInterface, and OutputBuffer flag accessors
-//     are the REAL committed types (BrnNetworkModuleIO.h), reached by their committed
-//     member accessors. Where the Hex-Rays helper (sub_823BC450 / BrnNetworkMo / Net /
-//     BrnNetwo / OutputB) has no committed name yet, it is reached by the committed
-//     accessor it corresponds to (see inline FLAG) -- byte-offset-faithful, no fabrication.
+// WHAT IS NAMED AND WHAT IS NOT:
+//   * The network side is reached only through the real OutputBuffer accessors
+//     (GetNetworkEventQueue / GetNetworkToGuiInterface / GetInGamePlayerStatusInterface /
+//     GetOnlineLobbyPlayerStatusInterface / GetGuiEventQueue / IsPlaying / IsConnected /
+//     GetPlayerActiveRaceCarIndex) and the interfaces' own members. Nothing is read at a
+//     console offset of the IO buffer, whose host layout is pointer-widened.
+//   * The game-state events with a home in BrnGameEvents.h (OnlinePlayerAdded / Removed /
+//     Finalised, ChangeNetworkCar, RemotePlayerDisconnected) are built through their real
+//     setters and members. Where the home does not carry a member yet, the remaining bytes
+//     are written at their record offset and marked at the store.
+//   * The records drained from the NetworkEventQueue (the network OUT events) have no header
+//     in the tree, and most of the game-state / GUI records the translators build are still
+//     opaque in their homes. Those are pointer-free wire images (host layout == console
+//     layout), so each is read / built at its record offsets inside a buffer of the size the
+//     console posts. No field names are invented for them.
+//   * The GUI records are queued through the shared BrnGame::PushGuiEvent (the whole object
+//     at offset 0, sizeof(T) as the size), byte-for-byte what the console publisher stores.
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -49,80 +46,69 @@
 #include "GameSource/GameState/BrnGameStateModule.h"                // GameStateModule::GetPreWorldInputBuffer
 #include "GameSource/GameState/BrnCgsPlayerName.h"                  // CgsNetwork::PlayerName (Mole4Avril debug roster)
 #include "GameShared/GameClasses/Core/CgsID.h"                      // CgsIDCompress (the overlay wait-finish record)
+#include "GameSource/GameState/BrnGameEvents.h"                     // the game-state network events (OnlinePlayerAddedEvent ...)
+#include "GameSource/Network/SharedIO/BrnNetworkToGuiIOInterfaces.h" // NetworkToGuiInterface (live-revenge update queue)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"     // InGamePlayerStatusInterface / Data
+#include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // OnlineLobbyPlayerStatusInterface / LobbyPlayerStatusData
 
-#include <cstring>   // std::memcpy / std::strncpy (PASS bodies)
+#include <cstddef>   // offsetof (record layout pins)
+#include <cstring>   // std::memcpy / std::strncpy
 
-// -------------------------------------------------------------------------
-// File-scope debug switches (X360 byte_82FB5090..92): default-off (retail path unchanged).
-// -------------------------------------------------------------------------
-namespace BrnGame
+namespace
 {
-    bool byte_82FB5090 = false;
-    bool byte_82FB5091 = false;
-    u8   byte_82FB5092 = 0;
-}
+    // The three debug switches BridgeNetworkToGui reads. Their real homes are static members of
+    // the GUI records it posts: BrnGui::GuiEventNetworkPlayerList::msbWorstCaseHudActive,
+    // BrnGui::GuiEventNetworkPlayerStatus::msbWorstCaseHudActive and
+    // BrnGui::GuiEventNetworkPlayerStatus::msbStatusSwitch, written only by
+    // BrnGui::GuiDebugComponent::UpdateWorstCaseHUD. Those records are still opaque in
+    // BrnGuiDemangledEventTypes.h, so the flags are held here under the member names until the
+    // statics are declared there. Nothing else stores to them, so they start false.
+    bool msbPlayerListWorstCaseHudActive   = false;   // GuiEventNetworkPlayerList::msbWorstCaseHudActive
+    bool msbPlayerStatusWorstCaseHudActive = false;   // GuiEventNetworkPlayerStatus::msbWorstCaseHudActive
+    bool msbPlayerStatusSwitch             = false;   // GuiEventNetworkPlayerStatus::msbStatusSwitch
 
-// -------------------------------------------------------------------------
-// FLAGGED placeholder bodies for the un-homed by-name event setters + accessors the bridge
-// references. Each corresponds to a de-inlined X360 helper / committed accessor whose real
-// home is a not-yet-reconstructed TU; provided here as minimal stubs so this TU LINKS (the
-// honest-placeholder pattern, mirroring GameBridgeControllerToX.cpp's placeholder tables).
-// Promote each to its real home when that subsystem is reconstructed.
-// -------------------------------------------------------------------------
-namespace BrnGameState
-{
-    // De-inlined single-word network-player-id setters. FLAG: the within-record store offset
-    // is owned by the real event type (unattested); modelled as a store into record word 0
-    // (the X360 setters that write a non-zero slot are immediately overwritten there by the
-    // bridge's explicit stores, so word-0 is the faithful de-inline for the parity contract).
-    void OnlinePlayerAddedEvent::SetNetworkPlayerID(void* lpRecord, s32 liId)      { *reinterpret_cast<s32*>(lpRecord) = liId; }
-    void OnlinePlayerRemovedEvent::SetNetworkPlayerID(void* lpRecord, s32 liId)    { *reinterpret_cast<s32*>(lpRecord) = liId; }
-    void OnlinePlayerFinalisedEvent::SetNetworkPlayerID(void* lpRecord, s32 liId)  { *reinterpret_cast<s32*>(lpRecord) = liId; }
-    void ChangeNetworkCarEvent::SetNetworkPlayerID(void* lpRecord, s32 liId)       { *reinterpret_cast<s32*>(lpRecord) = liId; }
-    void RemotePlayerDisconnectedEvent::SetNetworkPlayerID(void* lpRecord, s32 liId){ *reinterpret_cast<s32*>(lpRecord) = liId; }
-}
-
-namespace BrnNetwork
-{
-    namespace BrnNetworkModuleIO
+    // NetworkOutScoreboardHeadingList::GetHeadingType() (network OUT event 52): returns the
+    // record's meHeadingType (+0x4) after asserting it is not E_HEADING_COUNT (3). The record
+    // type has no header in the tree, so its accessor is reproduced here, file-local.
+    u32 GetScoreboardHeadingType(const unsigned char* lpHeadingList)
     {
-        // NetworkToGuiInterface live-revenge record accessor (Hex-Rays "Net"). FLAG: reaches the
-        // index-th 16-byte record after the interface header (record array @ +16, stride 16);
-        // exact base/stride land with the NetworkToGuiInterface TU.
-        const s32* GetLiveRevengeRecord(const void* lpInterface, int liIndex)
-        {
-            return reinterpret_cast<const s32*>(
-                reinterpret_cast<const unsigned char*>(lpInterface) + 16 + liIndex * 16);
-        }
-        // InGamePlayerStatusInterface player-status-data accessor (Hex-Rays "In"). FLAG: reaches
-        // the index-th 312-byte status record (array @ +0, stride 312); exact base lands with the
-        // status-interface TU.
-        const void* In(const void* lpStatusInterface, int liIndex)
-        {
-            return reinterpret_cast<const unsigned char*>(lpStatusInterface) + liIndex * 312;
-        }
+        const s32 leHeadingType = *reinterpret_cast<const s32*>(lpHeadingList + 0x4);
+        CGS_ASSERT(leHeadingType != 3, "meHeadingType != E_HEADING_COUNT");
+        return static_cast<u32>(leHeadingType);
     }
 
-    // Scoreboard-response record heading-type accessor (Hex-Rays "BrnNetwo"). FLAG: the heading
-    // type is a record field (exact offset lands with the network scoreboard TU); modelled as
-    // the record's +4 word.
-    unsigned int GetScoreboardResponseHeadingType(const void* lpRecord)
-    {
-        return *reinterpret_cast<const unsigned int*>(
-            reinterpret_cast<const unsigned char*>(lpRecord) + 4);
-    }
-
-    // Online-lobby player-status interface base (Hex-Rays "BrnNetworkMo"). FLAG: exact sub-
-    // interface offset within the OutputBuffer lands with the OutputBuffer TU.
-    const void* GetOnlineLobbyPlayerStatusInterface(const void* lpOutputBuffer)
-    {
-        return lpOutputBuffer;
-    }
+    // Layout pins for the records this TU writes by member name into console-sized buffers.
+    // All are pointer-free, so the host offsets equal the console ones.
+    typedef BrnGameState::GameStateModuleIO::OnlinePlayerAddedEvent        PinAdded;
+    typedef BrnGameState::GameStateModuleIO::OnlinePlayerRemovedEvent      PinRemoved;
+    typedef BrnGameState::GameStateModuleIO::OnlinePlayerFinalisedEvent    PinFinalised;
+    typedef BrnGameState::GameStateModuleIO::ChangeNetworkCarEvent         PinChangeCar;
+    typedef BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedEvent PinDisconnected;
+    typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData         PinStatus;
+    static_assert(offsetof(PinAdded, mModelID)               == 0x00, "OnlinePlayerAddedEvent mModelID @ +0x00");
+    static_assert(offsetof(PinAdded, mWheelID)               == 0x08, "OnlinePlayerAddedEvent mWheelID @ +0x08");
+    static_assert(offsetof(PinAdded, mNetworkPlayerID)       == 0x10, "OnlinePlayerAddedEvent mNetworkPlayerID @ +0x10");
+    static_assert(offsetof(PinRemoved, mNetworkPlayerID)      == 0, "OnlinePlayerRemovedEvent mNetworkPlayerID @ +0x0");
+    static_assert(offsetof(PinFinalised, mNetworkPlayerID)    == 0, "OnlinePlayerFinalisedEvent mNetworkPlayerID @ +0x0");
+    static_assert(offsetof(PinChangeCar, mNetworkPlayerID)    == 0, "ChangeNetworkCarEvent mNetworkPlayerID @ +0x0");
+    static_assert(offsetof(PinDisconnected, mNetworkPlayerID) == 0, "RemotePlayerDisconnectedEvent mNetworkPlayerID @ +0x0");
+    static_assert(sizeof(PinStatus) == 312, "InGamePlayerStatusData record stride (0x138)");
+    static_assert(offsetof(PinStatus, mPlayerName)          == 0x100, "mPlayerName @ +0x100");
+    static_assert(offsetof(PinStatus, mNetworkPlayerID)     == 0x110, "mNetworkPlayerID @ +0x110");
+    static_assert(offsetof(PinStatus, meActiveRaceCarIndex) == 0x114, "meActiveRaceCarIndex @ +0x114");
+    static_assert(offsetof(PinStatus, mbIsInLocalGameWorld) == 0x12F, "mbIsInLocalGameWorld @ +0x12F");
+    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData) == 56, "LobbyPlayerStatusData record stride (0x38)");
 }
 
 namespace BrnGame
 {
     using BrnNetwork::BrnNetworkModuleIO::OutputBuffer;
+    using BrnNetwork::BrnNetworkModuleIO::NetworkEventQueue;
+    using BrnNetwork::BrnNetworkModuleIO::NetworkToGuiInterface;
+    using BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface;
+    using BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData;
+    using BrnNetwork::BrnNetworkModuleIO::OnlineLobbyPlayerStatusInterface;
+    using BrnNetwork::BrnNetworkModuleIO::LobbyPlayerStatusData;
 
     // Every GUI record below is queued through the shared BrnGame::PushGuiEvent
     // (GameBridgeGameStateToX.h): the whole object at offset 0, with the type's own
@@ -141,87 +127,58 @@ namespace BrnGame
         return reinterpret_cast<unsigned char*>(&lrEvent);
     }
 
-    // GameState-bound network-event records land in the PreWorld input buffer's game-event
-    // queue (VariableEventQueue<1536,16>).
-    typedef CgsModule::VariableEventQueue<1536, 16>  GameStateEventQueue;
-    // The network output's NetworkEventQueue (BrnNetworkModuleIO.h:106).
-    typedef CgsModule::VariableEventQueue<14000, 16> NetworkEventQueue;
-
-    // The network OUTPUT buffer's NetworkEventQueue accessor (Hex-Rays "OutputB",
-    // X360 free-function shim). FLAG: named in BrnNetworkModuleIO.h as the mGameEventQueue
-    // accessor (DWARF GetGameEventQueue); reached here as a const NetworkEventQueue* at the
-    // committed +184080 offset until the OutputBuffer TU exposes the exact getter name.
-    static inline const NetworkEventQueue* GetNetworkEventQueue(const OutputBuffer* lpOut)
-    {
-        return reinterpret_cast<const NetworkEventQueue*>(
-            reinterpret_cast<const unsigned char*>(lpOut) + 184080);   // OutputBuffer @ +184080
-    }
-
-    // The PreWorld input buffer's game-event queue: the committed module accessor
-    // GameStateModule::GetPreWorldInputBuffer() then the committed
-    // PreWorldInputBuffer::GetGameEventQueue(). The console also uses this pointer's
-    // non-null-ness as the case-15 assertion.
-    static inline GameStateEventQueue* GetGameEventQueue(BrnGameState::GameStateModule* lpModule)
-    {
-        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpBuffer =
-            lpModule->GetPreWorldInputBuffer();
-        return reinterpret_cast<GameStateEventQueue*>(lpBuffer->GetGameEventQueue());
-    }
-
-    // The GUI module's input event queue the bridge bulk-appends the network GUI event queue into
-    // (X360 sub_8284F238(lpGuiBuffer)). VariableEventQueue<32768,16>. FLAG: the exact queue offset
-    // within the GUI IO buffer lands with the GUI module TU; reached here at the buffer base.
-    typedef CgsModule::VariableEventQueue<32768, 16> GuiInputEventQueue;
-    // The network output's small GUI event queue (OutputBuffer::GetGuiEventQueue() @ +16,
-    // GuiEventQueueSmall == VariableEventQueue<4096,16>): the Append source.
-    typedef CgsModule::VariableEventQueue<4096, 16>  NetworkGuiEventQueue;
-
-    static inline GuiInputEventQueue* GetGuiInputEventQueue(void* lpGuiBuffer)
-    {
-        return reinterpret_cast<GuiInputEventQueue*>(lpGuiBuffer);   // FLAG: buffer base (see above)
-    }
-
     // =========================================================================
-    // TranslateNetworkInterfaceToGuiEvents  (X360 0x823DF938)
+    // TranslateNetworkInterfaceToGuiEvents
+    // Walk the NetworkToGuiInterface's live-revenge update queue (the length is read once,
+    // before the loop) and post one BrnGui::GuiLiveRevengeUpdateEvent per update.
     // =========================================================================
     int BrnGameModule::TranslateNetworkInterfaceToGuiEvents(
-        void* lpGuiBuffer, const void* lpNetworkToGuiInterface)
+        void* lpGuiBuffer, const void* lpNetworkToGuiInterfaceIn)
     {
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput =
             static_cast<CgsGui::CgsGuiModuleIO::InputBuffer*>(lpGuiBuffer);
+        const NetworkToGuiInterface* lpNetworkToGuiInterface =
+            static_cast<const NetworkToGuiInterface*>(lpNetworkToGuiInterfaceIn);
 
-        // Live-revenge record count @ interface+8.
-        const int liCount = *reinterpret_cast<const int*>(
-            reinterpret_cast<const unsigned char*>(lpNetworkToGuiInterface) + 8);
+        // The queue accessor is inlined on the console: the length is its miLength, and each
+        // element is fetched through BaseEventQueue::GetEvent(index) (with its three asserts).
+        const NetworkToGuiInterface::LiveRevengeUpdateQueue* lpUpdateQueue =
+            lpNetworkToGuiInterface->GetLiveRevengeUpdateQueue();
+        const s32 liCount = lpUpdateQueue->GetLength();
 
-        for (int liIndex = 0; liIndex < liCount; ++liIndex)
+        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
         {
-            // BrnNetwork::Net(interface, index) -> const s32[4] record. FLAG: Hex-Rays "Net"
-            // helper == NetworkToGuiInterface::GetLiveRevengeRecord(index); reached by name.
-            const int* lpRecord = reinterpret_cast<const int*>(
-                BrnNetwork::BrnNetworkModuleIO::GetLiveRevengeRecord(lpNetworkToGuiInterface, liIndex));
+            const BrnNetwork::NetworkToGuiLiveRevengeUpdate& lUpdate = lpUpdateQueue->GetEvent(liIndex);
 
-            // BrnGui::GuiLiveRevengeUpdateEvent (flat 16-byte record). The source record's four
-            // words are shuffled into the event's four fields.
+            // The GUI record orders the four fields differently from the network update.
             BrnGui::GuiLiveRevengeUpdateEvent lEvent;
-            lEvent.miDifference                  = lpRecord[3];
-            lEvent.meNewStatus                   = lpRecord[2];
-            lEvent.meAggressorActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(lpRecord[0]);
-            lEvent.meVictimActiveRaceCarIndex    = static_cast<EActiveRaceCarIndex>(lpRecord[1]);
+            lEvent.miDifference                  = lUpdate.miDifference;
+            lEvent.meNewStatus                   = lUpdate.meNewStatus;
+            lEvent.meAggressorActiveRaceCarIndex = lUpdate.meAggressorActiveRaceCarIndex;
+            lEvent.meVictimActiveRaceCarIndex    = lUpdate.meVictimActiveRaceCarIndex;
 
             PushGuiEvent(lEvent, lpGuiInput);
         }
-        return liCount;
+        // The console function returns nothing (the declaration's int is not the console's
+        // void); the caller discards it.
+        return 0;
     }
 
     // =========================================================================
-    // TranslateNetworkEventsToGameEvents  (X360 0x823DF9E0)
+    // TranslateNetworkEventsToGameEvents
+    // Drain the network OUTPUT buffer's NetworkEventQueue and translate each game-state-bound
+    // network event into the matching game-state event, AddEvent'd into the PreWorld input
+    // buffer's game-event queue under the console's event id and record size.
     // =========================================================================
     int BrnGameModule::TranslateNetworkEventsToGameEvents(
         BrnGameState::GameStateModule* lpGameStateModule, const OutputBuffer* lpNetworkOutput)
     {
-        // GameBridgeNetworkToX.cpp:465 -- the network event queue.
-        const NetworkEventQueue* lpNetworkEventQueue = GetNetworkEventQueue(lpNetworkOutput);
+        // The console function receives the PreWorld input buffer itself; the declaration hands
+        // over its owning module, so the buffer is fetched once here.
+        BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput =
+            lpGameStateModule->GetPreWorldInputBuffer();
+
+        const NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
         CGS_ASSERT(lpNetworkEventQueue != 0, "lpNetworkEventQueue");
 
         const CgsModule::Event* lpEvent = 0;
@@ -230,6 +187,8 @@ namespace BrnGame
 
         while (lpEvent)
         {
+            // The network OUT event records have no header in the tree; they are read at their
+            // record offsets (pointer-free, host == console).
             const unsigned char* lpRecord = reinterpret_cast<const unsigned char*>(lpEvent);
             const int* lpW = reinterpret_cast<const int*>(lpRecord);
 
@@ -257,38 +216,55 @@ namespace BrnGame
                     break;
                 case 15:  // player-car-select status -> 8-byte {status,flag}
                     CGS_ASSERT(lpRecord != 0, "lpEvent");
-                    reinterpret_cast<s32*>(lOut)[0] = lpW[110];        // status word (+0x1B8)
-                    lOut[4] = lpRecord[476];                           // flag byte (+0x1DC)
-                    CGS_ASSERT(lpGameStateModule != 0, "lpGameStateInput");
-                    CGS_ASSERT(GetGameEventQueue(lpGameStateModule) != 0,
+                    lOut[4] = lpRecord[0x1DC];                                              // flag byte
+                    reinterpret_cast<s32*>(lOut)[0] = *reinterpret_cast<const s32*>(lpRecord + 0x1B8); // status word
+                    CGS_ASSERT(lpGameStateInput != 0, "lpGameStateInput");
+                    CGS_ASSERT(lpGameStateInput->GetGameEventQueue() != 0,
                                "lpGameStateInput->GetGameEventQueue()");
                     liOutSize = 8; liOutType = 125; lbEmit = true;
                     break;
-                case 16:  // OnlinePlayerAdded -> 40-byte record
-                    BrnGameState::OnlinePlayerAddedEvent::SetNetworkPlayerID(lOut, lpW[4]);
-                    reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[0];
-                    reinterpret_cast<u64*>(lOut)[1] = reinterpret_cast<const u64*>(lpW)[1];
-                    reinterpret_cast<s32*>(lOut)[5] = lpW[5];
-                    *reinterpret_cast<float*>(lOut + 24) = *reinterpret_cast<const float*>(lpRecord + 24);
-                    reinterpret_cast<s16*>(lOut)[14] = reinterpret_cast<const s16*>(lpW)[14];
-                    reinterpret_cast<s16*>(lOut)[15] = reinterpret_cast<const s16*>(lpW)[15];
-                    lOut[32] = lpRecord[32];
+                case 16:  // OnlinePlayerAdded -> OnlinePlayerAddedEvent (40-byte record)
+                {
+                    BrnGameState::GameStateModuleIO::OnlinePlayerAddedEvent* lpAdded =
+                        reinterpret_cast<BrnGameState::GameStateModuleIO::OnlinePlayerAddedEvent*>(lOut);
+                    lpAdded->SetNetworkPlayerID(*reinterpret_cast<const s32*>(lpRecord + 0x10));
+                    lpAdded->mModelID = *reinterpret_cast<const CgsID*>(lpRecord + 0x00);
+                    lpAdded->mWheelID = *reinterpret_cast<const CgsID*>(lpRecord + 0x08);
+                    // +0x14..+0x20 have no member in BrnGameEvents.h yet (meTeam, a float, the car
+                    // colour and paint-finish indices, mbIsLocalPlayer); stored at their offsets.
+                    *reinterpret_cast<s32*>(lOut + 0x14) = *reinterpret_cast<const s32*>(lpRecord + 0x14);
+                    *reinterpret_cast<f32*>(lOut + 0x18) = *reinterpret_cast<const f32*>(lpRecord + 0x18);
+                    *reinterpret_cast<u16*>(lOut + 0x1C) = *reinterpret_cast<const u16*>(lpRecord + 0x1C);
+                    *reinterpret_cast<u16*>(lOut + 0x1E) = *reinterpret_cast<const u16*>(lpRecord + 0x1E);
+                    lOut[0x20] = lpRecord[0x20];
                     liOutSize = 40; liOutType = 127; lbEmit = true;
                     break;
-                case 17:  // OnlinePlayerRemoved -> 8-byte record
-                    BrnGameState::OnlinePlayerRemovedEvent::SetNetworkPlayerID(lOut, lpW[0]);
-                    reinterpret_cast<s32*>(lOut)[1] = lpW[5];   // v51[4]=*(v6+20)
+                }
+                case 17:  // OnlinePlayerRemoved -> OnlinePlayerRemovedEvent (8-byte record)
+                {
+                    BrnGameState::GameStateModuleIO::OnlinePlayerRemovedEvent* lpRemoved =
+                        reinterpret_cast<BrnGameState::GameStateModuleIO::OnlinePlayerRemovedEvent*>(lOut);
+                    lpRemoved->SetNetworkPlayerID(lpW[0]);
+                    lOut[0x4] = lpRecord[0x14];   // mbIsLocalPlayerInGame (+0x4): no member in BrnGameEvents.h yet
                     liOutSize = 8; liOutType = 129; lbEmit = true;
                     break;
-                case 18:  // ChangeNetworkCar -> 32-byte record
-                    BrnGameState::ChangeNetworkCarEvent::SetNetworkPlayerID(lOut, lpW[5]);
-                    reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[0];
-                    reinterpret_cast<u64*>(lOut)[1] = reinterpret_cast<const u64*>(lpW)[1];
-                    *reinterpret_cast<float*>(lOut + 16) = *reinterpret_cast<const float*>(lpRecord + 16);
+                }
+                case 18:  // ChangeNetworkCar -> ChangeNetworkCarEvent (32-byte record)
+                {
+                    BrnGameState::GameStateModuleIO::ChangeNetworkCarEvent* lpChange =
+                        reinterpret_cast<BrnGameState::GameStateModuleIO::ChangeNetworkCarEvent*>(lOut);
+                    lpChange->SetNetworkPlayerID(*reinterpret_cast<const s32*>(lpRecord + 0x14));
+                    // mCarModelId (+0x08), mWheelModelId (+0x10) and a trailing float (+0x18) have no
+                    // member in BrnGameEvents.h yet; stored at their offsets.
+                    *reinterpret_cast<u64*>(lOut + 0x08) = *reinterpret_cast<const u64*>(lpRecord + 0x00);
+                    *reinterpret_cast<u64*>(lOut + 0x10) = *reinterpret_cast<const u64*>(lpRecord + 0x08);
+                    *reinterpret_cast<f32*>(lOut + 0x18) = *reinterpret_cast<const f32*>(lpRecord + 0x10);
                     liOutSize = 32; liOutType = 7; lbEmit = true;
                     break;
-                case 20:  // OnlinePlayerFinalised -> 4-byte record
-                    BrnGameState::OnlinePlayerFinalisedEvent::SetNetworkPlayerID(lOut, lpW[0]);
+                }
+                case 20:  // OnlinePlayerFinalised -> OnlinePlayerFinalisedEvent (4-byte record)
+                    reinterpret_cast<BrnGameState::GameStateModuleIO::OnlinePlayerFinalisedEvent*>(lOut)
+                        ->SetNetworkPlayerID(lpW[0]);
                     liOutSize = 4; liOutType = 128; lbEmit = true;
                     break;
                 case 21:  // TeamSelection -> 32-byte record
@@ -296,11 +272,12 @@ namespace BrnGame
                     std::memcpy(lOut, lpRecord, 32);
                     liOutSize = 32; liOutType = 154; lbEmit = true;
                     break;
-                case 23:  // PlayerDisconnected (only when subtype==2) -> 4-byte record
+                case 23:  // PlayerDisconnected (only when subtype==2) -> RemotePlayerDisconnectedEvent
                     CGS_ASSERT(lpRecord != 0, "lpPlayerDisconnectedEvent");
                     if (lpW[1] != 2)
                         break;
-                    BrnGameState::RemotePlayerDisconnectedEvent::SetNetworkPlayerID(lOut, lpW[0]);
+                    reinterpret_cast<BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedEvent*>(lOut)
+                        ->SetNetworkPlayerID(lpW[0]);
                     liOutSize = 4; liOutType = 121; lbEmit = true;
                     break;
                 case 24:  // empty 1-byte notify
@@ -308,9 +285,9 @@ namespace BrnGame
                     break;
                 case 27:  // Launched -> 8-byte {id, flagA, flagB}
                     CGS_ASSERT(lpRecord != 0, "lpLaunchedEvent");
+                    lOut[5] = lpRecord[5];
                     reinterpret_cast<s32*>(lOut)[0] = lpW[0];
-                    lOut[4] = lpRecord[16];
-                    lOut[5] = lpRecord[20];
+                    lOut[4] = lpRecord[4];
                     liOutSize = 8; liOutType = 126; lbEmit = true;
                     break;
                 case 34:  // StuntMultiplier -> 16-byte record
@@ -352,26 +329,26 @@ namespace BrnGame
                 case 44:  // Collectable -> 16-byte record
                     CGS_ASSERT(lpRecord != 0, "lpCollectableEvent");
                     reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[0];
-                    reinterpret_cast<s32*>(lOut)[2] = lpW[2];
                     reinterpret_cast<s32*>(lOut)[3] = lpW[3];
+                    reinterpret_cast<s32*>(lOut)[2] = lpW[2];
                     liOutSize = 16; liOutType = 135; lbEmit = true;
                     break;
-                case 45:  // NetworkNewHost -> 2-byte record
+                case 45:  // NetworkNewHost -> 2-byte record (two adjacent bytes)
                     CGS_ASSERT(lpRecord != 0, "lpNetworkNewHostEvent");
                     lOut[0] = lpRecord[0];
-                    lOut[1] = lpRecord[4];
+                    lOut[1] = lpRecord[1];
                     liOutSize = 2; liOutType = 140; lbEmit = true;
                     break;
                 case 46:  // NetworkCheckpoint -> 8-byte {w0,w1}
                     CGS_ASSERT(lpRecord != 0, "lpNetworkCheckpointEvent");
-                    reinterpret_cast<s32*>(lOut)[0] = lpW[0];
                     reinterpret_cast<s32*>(lOut)[1] = lpW[1];
+                    reinterpret_cast<s32*>(lOut)[0] = lpW[0];
                     liOutSize = 8; liOutType = 141; lbEmit = true;
                     break;
                 case 47:  // NetworkStuntScoreUpdated -> 8-byte {w0,w1}
                     CGS_ASSERT(lpRecord != 0, "lpNetworkStuntScoreUpdatedEvent");
-                    reinterpret_cast<s32*>(lOut)[0] = lpW[0];
                     reinterpret_cast<s32*>(lOut)[1] = lpW[1];
+                    reinterpret_cast<s32*>(lOut)[0] = lpW[0];
                     liOutSize = 8; liOutType = 142; lbEmit = true;
                     break;
                 case 49:  // NetworkRivalCount -> 4-byte word
@@ -382,14 +359,11 @@ namespace BrnGame
                 case 50:  // empty 1-byte notify
                     liOutSize = 1; liOutType = 146; lbEmit = true;
                     break;
-                case 53:  // TargetScore -> 40-byte record (shuffled vector + trailing words)
+                case 53:  // TargetScore -> 40-byte record: a straight copy of its first 0x25 bytes
                     CGS_ASSERT(lpRecord != 0, "lpTargetScoreEvent");
-                    reinterpret_cast<u32*>(lOut)[0] = lpW[1];
-                    reinterpret_cast<u32*>(lOut)[1] = lpW[4];
-                    reinterpret_cast<u32*>(lOut)[2] = lpW[2];
-                    reinterpret_cast<u32*>(lOut)[3] = lpW[3];
-                    reinterpret_cast<s32*>(lOut)[8] = lpW[8];
-                    lOut[36] = lpRecord[36];
+                    std::memcpy(lOut, lpRecord, 0x20);                      // three + one qwords
+                    reinterpret_cast<s32*>(lOut)[8] = lpW[8];               // +0x20
+                    lOut[0x24] = lpRecord[0x24];
                     liOutSize = 40; liOutType = 152; lbEmit = true;
                     break;
                 case 54:  // DldChallengeable -> 8-byte record
@@ -400,20 +374,18 @@ namespace BrnGame
                 case 55:  // empty 1-byte notify
                     liOutSize = 1; liOutType = 79; lbEmit = true;
                     break;
-                case 57:  // ImageReceived -> 16-byte record
+                case 57:  // ImageReceived -> 16-byte record: {rec+0x8, rec+0xC, qword rec+0x0}
                     CGS_ASSERT(lpRecord != 0, "lpImageReceivedEvent");
-                    reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[0];
-                    reinterpret_cast<s32*>(lOut)[2] = lpW[2];
-                    reinterpret_cast<s32*>(lOut)[3] = lpW[3];
+                    reinterpret_cast<s32*>(lOut)[0] = lpW[2];
+                    reinterpret_cast<s32*>(lOut)[1] = lpW[3];
+                    *reinterpret_cast<u64*>(lOut + 0x8) = *reinterpret_cast<const u64*>(lpRecord);
                     liOutSize = 16; liOutType = 136; lbEmit = true;
                     break;
-                case 58:  // MugshotToSave -> 32-byte record (shuffled vector + trailing words)
+                case 58:  // MugshotToSave -> 32-byte record: a straight copy
                     CGS_ASSERT(lpRecord != 0, "lpMugshotToSaveEvent");
-                    reinterpret_cast<u32*>(lOut)[0] = lpW[1];
-                    reinterpret_cast<u32*>(lOut)[1] = lpW[4];
-                    reinterpret_cast<u32*>(lOut)[2] = lpW[2];
-                    reinterpret_cast<s32*>(lOut)[6] = lpW[6];
-                    reinterpret_cast<s32*>(lOut)[7] = lpW[7];
+                    std::memcpy(lOut, lpRecord, 0x18);                      // three qwords
+                    reinterpret_cast<s32*>(lOut)[6] = lpW[6];               // +0x18
+                    reinterpret_cast<s32*>(lOut)[7] = lpW[7];               // +0x1C
                     liOutSize = 32; liOutType = 156; lbEmit = true;
                     break;
                 case 59:  // AbortCapture -> 1-byte record
@@ -429,10 +401,11 @@ namespace BrnGame
                     reinterpret_cast<s32*>(lOut)[0] = lpW[0];
                     liOutSize = 4; liOutType = 155; lbEmit = true;
                     break;
-                case 62:  // BurnoutSkillz -> 64-byte record {word + 57-byte tail}
+                case 62:  // BurnoutSkillz -> 64-byte record {word, 56-byte block, byte}
                     CGS_ASSERT(lpRecord != 0, "lpBurnoutSkillzNetworkEvent");
                     reinterpret_cast<s32*>(lOut)[0] = lpW[0];
-                    std::memcpy(lOut + 4, lpRecord + 4, 57);
+                    std::memcpy(lOut + 4, lpRecord + 4, 56);
+                    lOut[0x3C] = lpRecord[0x3C];
                     liOutSize = 64; liOutType = 139; lbEmit = true;
                     break;
                 case 63:  // ShowtimeUpdate -> 8-byte {w0,w1}
@@ -448,7 +421,7 @@ namespace BrnGame
                     lOut[8] = lpRecord[8];
                     liOutSize = 12; liOutType = 50; lbEmit = true;
                     break;
-                case 65:  // FreeburnChallenge -> variant sub-switch on record[4]
+                case 65:  // FreeburnChallenge -> variant sub-switch on the +0x10 word
                 {
                     CGS_ASSERT(lpRecord != 0, "lpFreeburnChallengeNetworkEvent");
                     const int liVariant = lpW[4];
@@ -462,12 +435,6 @@ namespace BrnGame
                         reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[1];
                         liOutSize = 8; liOutType = 164;
                     }
-                    else if (liVariant == 2)
-                    {
-                        reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[1];
-                        reinterpret_cast<s32*>(lOut)[2] = lpW[6];
-                        liOutSize = 16; liOutType = 165;
-                    }
                     else if (liVariant == 3)
                     {
                         reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[1];
@@ -480,6 +447,12 @@ namespace BrnGame
                         reinterpret_cast<s32*>(lOut)[2] = lpW[6];
                         liOutSize = 16; liOutType = 167;
                     }
+                    else if (liVariant == 2)
+                    {
+                        reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[1];
+                        reinterpret_cast<s32*>(lOut)[2] = lpW[6];
+                        liOutSize = 16; liOutType = 165;
+                    }
                     else
                     {
                         reinterpret_cast<u64*>(lOut)[0] = reinterpret_cast<const u64*>(lpW)[1];
@@ -490,11 +463,10 @@ namespace BrnGame
                     break;
                 }
                 case 66:  // ActiveFreeburnChallenge -> 48-byte record
-                    // v100[32] = XMemCpy(v6,28); v101(qword)@+32 = *(v6+4); v102(word)@+40 = v6[10].
                     CGS_ASSERT(lpRecord != 0, "lpActiveFreeburnChallengeEvent");
+                    *reinterpret_cast<u64*>(lOut + 0x20) = *reinterpret_cast<const u64*>(lpRecord + 0x20);
+                    *reinterpret_cast<s32*>(lOut + 0x28) = *reinterpret_cast<const s32*>(lpRecord + 0x28);
                     std::memcpy(lOut, lpRecord, 28);
-                    reinterpret_cast<u64*>(lOut + 32)[0] = reinterpret_cast<const u64*>(lpRecord + 16)[0];
-                    reinterpret_cast<s32*>(lOut + 40)[0] = lpW[10];
                     liOutSize = 48; liOutType = 173; lbEmit = true;
                     break;
                 case 67:  // FburnChallengeSuccessUpdate -> 24-byte record
@@ -507,11 +479,11 @@ namespace BrnGame
                     break;
                 case 68:  // FburnChallengeSuccess -> 20-byte record
                     CGS_ASSERT(lpRecord != 0, "lpFburnChallengeSuccessEvent");
+                    reinterpret_cast<s32*>(lOut)[3] = lpW[2];               // +0xC <- +0x8
                     std::memcpy(lOut, lpRecord, 8);
-                    std::memcpy(lOut + 8, lpRecord + 16, 2);
-                    std::memcpy(lOut + 10, lpRecord + 72, 2);
-                    reinterpret_cast<s32*>(lOut)[3] = lpW[2];
-                    reinterpret_cast<s32*>(lOut)[4] = lpW[3];
+                    std::memcpy(lOut + 0x8, lpRecord + 0x10, 2);
+                    std::memcpy(lOut + 0xA, lpRecord + 0x12, 2);
+                    reinterpret_cast<s32*>(lOut)[4] = lpW[3];               // +0x10 <- +0xC
                     liOutSize = 20; liOutType = 172; lbEmit = true;
                     break;
                 case 74:  // UploadedModeScores -> 128-byte record
@@ -525,8 +497,7 @@ namespace BrnGame
 
             if (lbEmit)
             {
-                GameStateEventQueue* lpGameEventQueue = GetGameEventQueue(lpGameStateModule);
-                lpGameEventQueue->AddEvent(
+                lpGameStateInput->GetGameEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(lOut), liOutType, liOutSize);
             }
 
@@ -552,15 +523,16 @@ namespace BrnGame
 
     // =========================================================================
     // TranslateScoreboardResponse -- the case-52 heading-type sub-switch (inlined into
-    // 0x823E0900). The scoreboard-response record carries a count word @ +0 and a packed
-    // list of 31-byte names @ +8. The heading type (record accessor, Hex-Rays "BrnNetwo")
-    // selects which scoreboard GUI event the names are copied into.
+    // TranslateNetworkEventsToGuiEvents). The scoreboard heading-list record carries a count
+    // word @ +0 and a packed list of 31-byte names @ +8. Its heading type
+    // (NetworkOutScoreboardHeadingList::GetHeadingType) selects which scoreboard GUI event the
+    // names are copied into.
     // =========================================================================
     void BrnGameModule::TranslateScoreboardResponse(void* lpGuiBuffer, const unsigned char* lpRecord)
     {
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput =
             static_cast<CgsGui::CgsGuiModuleIO::InputBuffer*>(lpGuiBuffer);
-        const unsigned int luHeadingType = BrnNetwork::GetScoreboardResponseHeadingType(lpRecord);
+        const unsigned int luHeadingType = GetScoreboardHeadingType(lpRecord);
         const int liCount = *reinterpret_cast<const int*>(lpRecord);
 
         if (luHeadingType == 0)
@@ -621,7 +593,7 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput =
             static_cast<CgsGui::CgsGuiModuleIO::InputBuffer*>(lpGuiBuffer);
 
-        const NetworkEventQueue* lpNetworkEventQueue = GetNetworkEventQueue(lpNetworkOutput);
+        const NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
         CGS_ASSERT(lpNetworkEventQueue != 0, "lpNetworkEventQueue");
 
         const CgsModule::Event* lpEvent = 0;
@@ -939,7 +911,7 @@ namespace BrnGame
     }
 
     // =========================================================================
-    // BridgeNetworkToGui  (X360 0x823E9518)
+    // BridgeNetworkToGui
     // Top-level per-frame network->GUI bridge: run both translators, bulk-append the network
     // GUI event queue into the GUI input queue, then synthesise the three player-snapshot GUI
     // events (player-list / player-status / lobby-player-list). Called by DoUpdate_GUI /
@@ -950,58 +922,65 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput =
             static_cast<CgsGui::CgsGuiModuleIO::InputBuffer*>(lpGuiBuffer);
 
-        const void* lpNetworkToGui = lpNetworkOutput->GetNetworkToGuiInterface();
-        const unsigned char* lpStatus =
-            reinterpret_cast<const unsigned char*>(lpNetworkOutput->GetInGamePlayerStatusInterface());
+        const NetworkToGuiInterface*       lpNetworkToGuiInterface = lpNetworkOutput->GetNetworkToGuiInterface();
+        const InGamePlayerStatusInterface* lpStatusInterface       = lpNetworkOutput->GetInGamePlayerStatusInterface();
 
-        CGS_ASSERT(lpStatus != 0, "lpNetworkOutput->GetInGamePlayerStatusInterface()");
-        CGS_ASSERT(lpNetworkToGui != 0, "lpNetworkToGuiInterface");
+        CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface() != 0,
+                   "lpNetworkOutput->GetInGamePlayerStatusInterface()");
+        CGS_ASSERT(lpNetworkToGuiInterface != 0, "lpNetworkToGuiInterface");
         CGS_ASSERT(lpNetworkOutput->GetGuiEventQueue() != 0, "lpNetworkOutput->GetGuiEventQueue()");
 
-        TranslateNetworkInterfaceToGuiEvents(lpGuiBuffer, lpNetworkToGui);
+        TranslateNetworkInterfaceToGuiEvents(lpGuiBuffer, lpNetworkToGuiInterface);
         TranslateNetworkEventsToGuiEvents(lpGuiBuffer, lpNetworkOutput);
 
-        // Bulk-append the network output's GUI event queue into the GUI module input queue.
-        GetGuiInputEventQueue(lpGuiBuffer)->Append(
-            *reinterpret_cast<const NetworkGuiEventQueue*>(lpNetworkOutput->GetGuiEventQueue()));
+        // Bulk-append the network output's GUI event queue into the GUI input buffer's queue.
+        lpGuiInput->GetGuiEvents()->Append(*lpNetworkOutput->GetGuiEventQueue());
 
-        int liNumPlayers = *reinterpret_cast<const int*>(lpStatus + 2532);
+        // Read once; the debug roster below replaces it for all three snapshots.
+        s32 liNumPlayers = lpStatusInterface->GetNumPlayers();
 
-        // -------- GuiEventNetworkPlayerList (8 x {index(4), PlayerName(16)} + two count words) -----
+        // -------- GuiEventNetworkPlayerList --------------------------------------------------
+        // Record: PlayerNameInfo[8] {NetworkPlayerID +0x0, PlayerName +0x4} (20-byte stride),
+        // miNumPlayers +0xA0, total player count +0xA4. The GUI home is still opaque, so the
+        // record is built at those offsets.
         {
             BrnGui::GuiEventNetworkPlayerList lListEvent;
             unsigned char* lpList = RecordBytes(lListEvent);
             bool lbBuiltList = false;
 
-            if (byte_82FB5090)
+            if (msbPlayerListWorstCaseHudActive)
             {
                 liNumPlayers = 8;
                 CgsNetwork::PlayerName lName;
                 lName.Construct("Mole4Avril");
-                for (int i = 0; i < 8; ++i)
+                for (s32 i = 0; i < 8; ++i)
                 {
                     unsigned char* lpEntry = lpList + 20 * i;
                     std::memcpy(lpEntry + 4, &lName, 16);
-                    *reinterpret_cast<int*>(lpEntry) = i;
+                    *reinterpret_cast<s32*>(lpEntry) = i;
                 }
-                *reinterpret_cast<int*>(lpList + 160) = 8;
-                *reinterpret_cast<int*>(lpList + 164) = 8;
+                *reinterpret_cast<s32*>(lpList + 0xA0) = 8;
+                *reinterpret_cast<s32*>(lpList + 0xA4) = 8;
                 lbBuiltList = true;
             }
             else if (!lpNetworkOutput->IsPlaying() && lpNetworkOutput->IsConnected())
             {
-                int i = 0;
+                s32 i = 0;
                 for (; i < liNumPlayers; ++i)
                 {
-                    const unsigned char* lpRec = lpStatus + 312 * i;   // In(statusInterface, i)
+                    const InGamePlayerStatusData* lpPlayer = lpStatusInterface->GetPlayerStatusData(i);
                     unsigned char* lpEntry = lpList + 20 * i;
-                    std::memcpy(lpEntry + 4, lpRec + 256, 16);
-                    *reinterpret_cast<int*>(lpEntry) = *reinterpret_cast<const int*>(lpRec + 272);
+                    std::memcpy(lpEntry + 4, &lpPlayer->mPlayerName, 16);
+                    *reinterpret_cast<s32*>(lpEntry) = lpPlayer->mNetworkPlayerID;
                 }
                 for (; i < 8; ++i)
-                    *reinterpret_cast<int*>(lpList + 20 * i) = -1;
-                *reinterpret_cast<int*>(lpList + 160) = liNumPlayers;
-                *reinterpret_cast<int*>(lpList + 164) = *reinterpret_cast<const int*>(lpStatus + 2536);
+                    *reinterpret_cast<s32*>(lpList + 20 * i) = -1;
+                *reinterpret_cast<s32*>(lpList + 0xA0) = liNumPlayers;
+                // InGamePlayerStatusInterface::miTotalNumberPlayers (+0x9E8) is private and has no
+                // accessor yet; the interface is pointer-free (host == console), so it is read at
+                // its offset until the header grows the getter.
+                *reinterpret_cast<s32*>(lpList + 0xA4) = *reinterpret_cast<const s32*>(
+                    reinterpret_cast<const unsigned char*>(lpStatusInterface) + 0x9E8);
                 lbBuiltList = true;
             }
 
@@ -1009,117 +988,125 @@ namespace BrnGame
                 PushGuiEvent(lListEvent, lpGuiInput);
         }
 
-        // -------- GuiEventNetworkPlayerStatus (8 x InGamePlayerStatusData(312) + trailing) --------
+        // -------- GuiEventNetworkPlayerStatus ------------------------------------------------
+        // Record: InGamePlayerStatusData maPlayerInfo[8], macGameName[36] +0x9C4 (after the
+        // count), miNumPlayers +0x9C0, mbLocalPlayerIsHost +0x9E8.
         {
             BrnGui::GuiEventNetworkPlayerStatus lStatusEvent;
             unsigned char* lpBuf = RecordBytes(lStatusEvent);
+            InGamePlayerStatusData* laPlayerInfo = reinterpret_cast<InGamePlayerStatusData*>(lpBuf);
 
-            // X360 float pre-init loop: per record, {int@+96, float@+100} = 0.
-            for (int i = 0; i < 8; ++i)
+            // The event's construction: each record's NetworkPlayerStats::mTimeStamp (+0x60, a
+            // CgsSystem::Time, private) is default-constructed to {0, 0.0f}; then the scalar
+            // tail is zeroed.
+            for (s32 i = 0; i < 8; ++i)
             {
-                *reinterpret_cast<int*>(lpBuf + 312 * i + 96) = 0;
-                *reinterpret_cast<float*>(lpBuf + 312 * i + 100) = 0.0f;
+                unsigned char* lpTimeStamp = reinterpret_cast<unsigned char*>(&laPlayerInfo[i].mPlayerStats) + 0x60;
+                *reinterpret_cast<s32*>(lpTimeStamp)     = 0;
+                *reinterpret_cast<f32*>(lpTimeStamp + 4) = 0.0f;
             }
-            *reinterpret_cast<int*>(lpBuf + 2496) = 0;
-            lpBuf[2500] = 0;
-            lpBuf[2536] = 0;
-            for (int i = 0; i < 8; ++i)
-                reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*>(lpBuf + 312 * i)->Clear();
+            lpBuf[0x9C4] = 0;
+            lpBuf[0x9E8] = 0;
+            *reinterpret_cast<s32*>(lpBuf + 0x9C0) = 0;
+            for (s32 i = 0; i < 8; ++i)
+                laPlayerInfo[i].Clear();
 
-            int liFilled;
-            if (byte_82FB5091)
+            s32 liFilled;
+            if (msbPlayerStatusWorstCaseHudActive)
             {
                 CgsNetwork::PlayerName lName;
                 lName.Construct("Mole4Avril");
-                int i = 0;
+                s32 i = 0;
                 for (; i < liNumPlayers; ++i)
                 {
-                    unsigned char* lpRec = lpBuf + 256 + 312 * i;
-                    std::memcpy(lpRec, &lName, 16);
-                    *reinterpret_cast<int*>(lpRec + 16) = i;
-                    *reinterpret_cast<int*>(lpRec + 20) = i;
-                    *reinterpret_cast<int*>(lpRec + 24) = byte_82FB5092;
-                    *reinterpret_cast<int*>(lpRec + 28) = byte_82FB5092;
-                    *reinterpret_cast<int*>(lpRec + 32) = -1;
-                    *reinterpret_cast<int*>(lpRec + 36) = -1;
-                    *reinterpret_cast<int*>(lpRec + 40) = 8;
-                    lpRec[44] = 0;
-                    lpRec[45] = 0;
-                    lpRec[46] = 0;
-                    lpRec[47] = 1;
-                    if (i == static_cast<int>(lpNetworkOutput->GetPlayerActiveRaceCarIndex()))
+                    InGamePlayerStatusData& lrPlayer = laPlayerInfo[i];
+                    lrPlayer.meActiveRaceCarIndex = static_cast<BrnNetwork::EActiveRaceCarIndex>(i);
+                    std::memcpy(&lrPlayer.mPlayerName, &lName, 16);
+                    lrPlayer.mNetworkPlayerID               = i;
+                    lrPlayer.meDistrict                     = 8;
+                    lrPlayer.mMarkedManPlayerID             = -1;
+                    lrPlayer.meMarkedManActiveRaceCarIndex  = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                    lrPlayer.mbMarkedMan                    = false;
+                    lrPlayer.mbIsHost                       = false;
+                    lrPlayer.mbIsLocalPlayer                = false;
+                    lrPlayer.mbIsInLocalGameWorld           = true;
+                    lrPlayer.meVOIPStatus                   = msbPlayerStatusSwitch;
+                    lrPlayer.meCameraStatus                 = static_cast<BrnNetwork::ECameraStatus>(msbPlayerStatusSwitch);
+                    if (i == static_cast<s32>(lpNetworkOutput->GetPlayerActiveRaceCarIndex()))
                     {
-                        lpRec[45] = 1;
-                        lpRec[46] = 1;
+                        lrPlayer.mbIsHost        = true;
+                        lrPlayer.mbIsLocalPlayer = true;
                     }
                 }
                 liFilled = i;
             }
             else
             {
-                int i = 0;
+                s32 i = 0;
                 for (; i < liNumPlayers; ++i)
                 {
-                    CGS_ASSERT(i >= 0, "liIndex >= 0");
-                    CGS_ASSERT(i < *reinterpret_cast<const int*>(lpStatus + 2532), "liIndex < miNumPlayers");
-                    std::memcpy(lpBuf + 312 * i, lpStatus + 312 * i, 312);
+                    // A raw 312-byte block copy, not InGamePlayerStatusData::operator=.
+                    std::memcpy(&laPlayerInfo[i], lpStatusInterface->GetPlayerStatusData(i),
+                                sizeof(InGamePlayerStatusData));
                 }
                 liFilled = i;
             }
 
-            // Empty-slot marker: record[i]+276 = -1.
-            for (int i = liFilled; i < 8; ++i)
-                *reinterpret_cast<int*>(lpBuf + 312 * i + 276) = -1;
+            // Empty slots carry no race car.
+            for (s32 i = liFilled; i < 8; ++i)
+                laPlayerInfo[i].meActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
 
-            // Interface name copy (CgsStringUtils length guard) + flag + count.
-            const char* lpcName = reinterpret_cast<const char*>(lpStatus + 2496);
+            // Game name (CgsStringUtils length guard, 36-byte slot), host flag, count.
+            const char* lpcName = lpStatusInterface->GetGameName();
             const char* lpcScan = lpcName;
             while (*lpcScan++)
             {
             }
             CGS_ASSERT((lpcScan - lpcName - 1) < 0x24, "String too long: ");
-            std::strncpy(reinterpret_cast<char*>(lpBuf + 2500), lpcName, 36);
-            lpBuf[2536] = lpStatus[2540];
-            *reinterpret_cast<int*>(lpBuf + 2496) = liNumPlayers;
+            std::strncpy(reinterpret_cast<char*>(lpBuf + 0x9C4), lpcName, 36);
+            lpBuf[0x9E8] = lpStatusInterface->GetLocalPlayerIsHost();
+            *reinterpret_cast<s32*>(lpBuf + 0x9C0) = liNumPlayers;
 
             PushGuiEvent(lStatusEvent, lpGuiInput);
         }
 
-        // -------- GuiEventNetworkLobbyPlayerList (8 x 56-byte lobby record + count word) ----------
+        // -------- GuiEventNetworkLobbyPlayerList ---------------------------------------------
+        // Record: LobbyPlayerStatusData[8] then the player count (+0x1C0).
         {
             BrnGui::GuiEventNetworkLobbyPlayerList lLobbyEvent;
             unsigned char* lpLobby = RecordBytes(lLobbyEvent);
-            const unsigned char* lpLobbyInterface = reinterpret_cast<const unsigned char*>(
-                BrnNetwork::GetOnlineLobbyPlayerStatusInterface(lpNetworkOutput));
+            LobbyPlayerStatusData* laLobbyData = reinterpret_cast<LobbyPlayerStatusData*>(lpLobby);
 
-            int i = 0;
+            s32 i = 0;
             for (; i < liNumPlayers; ++i)
             {
-                CGS_ASSERT(i >= 0, "liPlayerIndex >= 0");
-                CGS_ASSERT(i < 8, "liPlayerIndex < KI_MAX_PLAYERS");
-                std::memcpy(lpLobby + 56 * i, lpLobbyInterface + 56 * i, 56);
+                // The interface accessor runs once per player.
+                const OnlineLobbyPlayerStatusInterface* lpLobbyInterface =
+                    lpNetworkOutput->GetOnlineLobbyPlayerStatusInterface();
+                std::memcpy(&laLobbyData[i], lpLobbyInterface->GetPlayerLobbyData(i),
+                            sizeof(LobbyPlayerStatusData));
             }
             for (; i < 8; ++i)
             {
-                unsigned char* lpRec = lpLobby + 56 * i;
-                *reinterpret_cast<int*>(lpRec + 16) = -1;
-                *reinterpret_cast<int*>(lpRec + 20) = 4;
-                *reinterpret_cast<int*>(lpRec + 24) = 0;
-                *reinterpret_cast<int*>(lpRec + 28) = 0;
-                *reinterpret_cast<int*>(lpRec + 32) = 0;
-                *reinterpret_cast<int*>(lpRec + 36) = -1;
-                lpRec[48] = 0;
-                lpRec[49] = 0;
-                lpRec[50] = 0;
-                lpRec[51] = 0;
+                LobbyPlayerStatusData& lrSlot = laLobbyData[i];
+                lrSlot.mPlayerID             = -1;
+                lrSlot.mbLocalPlayer         = false;
+                lrSlot.mbIsHost              = false;
+                lrSlot.mbFinalSelection      = false;
+                lrSlot.mbIsCriterion         = false;
+                lrSlot.meReadyStatus         = LobbyPlayerStatusData::E_READY_STATUS_COUNT;
+                lrSlot.mePlayerTeam          = 0;
+                lrSlot.meGameConnectionType  = 0;
+                lrSlot.meVoipConnectionType  = 0;
+                lrSlot.miPlayerColourIndex   = -1;
             }
-            *reinterpret_cast<int*>(lpLobby + 448) = liNumPlayers;
+            *reinterpret_cast<s32*>(lpLobby + 8 * sizeof(LobbyPlayerStatusData)) = liNumPlayers;
 
             PushGuiEvent(lLobbyEvent, lpGuiInput);
         }
 
-        // FLAG: the X360 returns r3 from the final AddGuiEvent<...LobbyPlayerList>; the placeholder
-        // sink returns void, so the bridge returns 0 (the caller discards the result).
+        // The console function returns nothing (the declaration's int is not the console's
+        // void); the caller discards it.
         return 0;
     }
 }

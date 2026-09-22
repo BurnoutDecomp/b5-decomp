@@ -87,7 +87,19 @@ namespace BrnNetwork
         };
 
     public:
-        void Construct();                                   // own TU
+        // Header-inline (the console inlines it into InGamePlayerStatusData::Clear). Clears the
+        // same field set as Destruct / Release: both stat blocks, the two timestamp words, the
+        // unique-id byte and 8-byte field, and the two trailing counters.
+        void Construct()
+        {
+            mbUniqueID_88  = 0;
+            muUniqueID_104 = 0;
+            mLastTimeChanged.Clear();
+            mOverallStats.mPlayerStats = CommonRelationshipStats();
+            mOverallStats.mRivalStats  = CommonRelationshipStats();
+            miCurrentScoreForPlayersPointOfView = 0;
+            miTotalEvents                       = 0;
+        }
         bool Release();                                     // own TU
         void Destruct();                                    // own TU
         void Clear();                                       // own TU

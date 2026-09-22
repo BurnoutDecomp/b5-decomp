@@ -54,11 +54,14 @@ namespace CgsNetwork
     public:
         ServerInterfaceComponent();
 
+        // Vtable order (five slots): Construct, the deleting destructor, OnEvent,
+        // StartActionCore, EndActionCore. The console OnEvent slot is pure and every leaf
+        // component overrides it; it stays a plain declaration here while a game-side
+        // component in the tree still derives from this base directly.
+        virtual void Construct();
+
         // CgsServerInterfaceComponent.h:55 -- vector deleting destructor @ 0x827DB3E8.
         virtual ~ServerInterfaceComponent();
-
-        // Declared-only virtual (body owned by a dedicated component TU; not bodied here).
-        virtual void Construct();
 
         // CgsServerInterfaceComponent.h:61
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
@@ -97,10 +100,10 @@ namespace CgsNetwork
         //  had migrated up from ServerInterfaceDirtySock since the Feb-2007 source.)
 
         // Begin an action: stash the human-readable action name and reset the error.
-        void StartActionCore(const char* lpcAction);
+        virtual void StartActionCore(const char* lpcAction);
 
         // End an action: record liError as the last error and mark the component idle.
-        void EndActionCore(int liError);
+        virtual void EndActionCore(int liError);
 
         // Map a DirtySock error code to an EServerInterfaceError using the supplied table
         // (falling back to the shared default 'nfnd' table when the code is not present).

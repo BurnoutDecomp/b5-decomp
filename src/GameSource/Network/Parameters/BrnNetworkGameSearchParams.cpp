@@ -92,14 +92,43 @@ namespace BrnNetwork
         static_cast<CgsNetwork::ServerInterfaceGameSearchParams&>(*this) =
             static_cast<const CgsNetwork::ServerInterfaceGameSearchParams&>(lrhs);
 
-        // 2. Bulk game-side block: memcpy(this+0x6C, rhs+0x6C, 0x2A0).
-        memcpy(maGameSearchPayload, lrhs.maGameSearchPayload, sizeof(maGameSearchPayload));
+        // 2. The search payload, copied whole.
+        memcpy(&mSearchData, &lrhs.mSearchData, sizeof(mSearchData));
 
-        // 3. Trailing block: 0x83 bytes copied one at a time (asm lbzx/stb loop).
-        for (s32 li = 0; li < static_cast<s32>(sizeof(maGameSearchTail)); ++li)
-            maGameSearchTail[li] = lrhs.maGameSearchTail[li];
+        // 3. The pattern string, copied one byte at a time.
+        for (s32 li = 0; li < KI_PATTERN_SIZE; ++li)
+            macPattern[li] = lrhs.macPattern[li];
 
         return *this;
+    }
+
+    // The pattern Prepare built.
+    const char* GameSearchParamsBase::GetPattern() const
+    {
+        return macPattern;
+    }
+
+    // The pattern buffer's length.
+    s32 GameSearchParamsBase::GetPatternLength() const
+    {
+        return KI_PATTERN_SIZE;
+    }
+
+    // The replicated payload's size (0x2A0).
+    u32 GameSearchParamsBase::GetDataSize() const
+    {
+        return sizeof(mSearchData);
+    }
+
+    // The replicated payload. The const overload shares the body.
+    void* GameSearchParamsBase::GetData()
+    {
+        return &mSearchData;
+    }
+
+    const void* GameSearchParamsBase::GetData() const
+    {
+        return &mSearchData;
     }
 
     // ========================================================================

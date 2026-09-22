@@ -9,6 +9,11 @@
 struct LobbyApiRefT;
 struct LobbyApiMsgT;
 
+namespace CgsMemory
+{
+    class HeapMalloc;
+}
+
 // ===========================================================================
 // CgsNetwork::ServerInterfaceDirtySock
 //   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/
@@ -281,6 +286,16 @@ namespace CgsNetwork
         // `this`). Declared-only here; the bodies live in this facade's own behavioural TU.
         static void* MemAlloc(s32 liSize, s32 liAlignment, s32 liPool);
         static void  MemFree(void* lpBlock, s32 liAlignment, s32 liPool);
+        // The shared DirtySock allocator block MemAlloc / MemFree draw from.
+        void SetMemoryBuffer(CgsMemory::HeapMalloc* lpHeapMalloc);
+        void ReleaseMemoryBuffer();
+
+        ServerInterfaceComponent* GetComponent(EComponents leComponent);
+        bool IsSuspended() const;
+        // Per-component last error; E_COMPONENTS_COUNT addresses the facade's own record.
+        s32  GetLastError(EComponents leComponent) const;
+        void ClearLastError(EComponents leComponent);
+        s32  GetAndClearLastError(EComponents leComponent);
         void SetConnApiGameCallback(ServerInterfaceComponentData::ServerInterfaceConnApiCallback lpfnCallback)
         {
             maComponents[E_COMPONENTS_GAMES].mConnApiCallback = lpfnCallback;
@@ -293,6 +308,20 @@ namespace CgsNetwork
                                                    int liCount) const;
 
     private:
+        void AllocateDirtySock();
+        void FreeDirtySock();
+        void CreateLobbyApi();
+        void CreateConnApi();
+        void StartActionCore(const char* lpcAction);
+        void ClearRegisteredComponents();
+        void RegisterComponents(ServerInterfaceComponent* const* lapComponents);
+
+        // DirtySDK callbacks registered by address (user data = the facade).
+        static void ResumeSelectCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        static void SuspendSelectCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        static void ConnApiCallback(DirtySock::ConnApiRefT* lpConnApi, DirtySock::ConnApiCbInfoT* lpCbInfo,
+                                    void* lpUserData);
+
         // ---- Data members, DWARF order (CgsServerInterfaceDirtySock.h). The vptr
         // sits at +0 (this struct's first non-static data). On the X360 build
         // mpacMessageBuffer lands at +148; not asserted (see header note).
@@ -308,9 +337,9 @@ namespace CgsNetwork
         bool                         mbWaitingToSuspend;                // :487
         s32                          miSuspendUpdateFlags;              // :488
         char*                        mpacMessageBuffer;                 // :490 (this+148 on X360)
-        // mpMemoryBlock (CgsMemory::HeapMalloc*):
-        // FLAGGED opaque; modelled as void* to avoid pulling an un-homed allocator.
-        void*                        mpMemoryBlock;
+        // Class-static on the console (Construct, SetMemoryBuffer and ReleaseMemoryBuffer
+        // address one global word, not an instance slot).
+        static CgsMemory::HeapMalloc* mpMemoryBlock;
         const char*                  mpcCurrentAction;                  // :496
         EStatus                      meStatus;                          // :497
         s32                          miLastError;                       // :498
@@ -319,13 +348,10 @@ namespace CgsNetwork
         const char*                  mpcSKU;                            // :505
         const char*                  mpcSLUS;                           // :506
         s32                          miLanguage;                        // :507
-        bool                         mbRecreateDirtySock;               // :509
-        // mNetStreamLogChannelOutput
-        // (CgsDev::Log::LogChannelOutput): FLAGGED opaque; modelled by storage so the
-        // trailing member offset (miCgsNetworkServerInterfacePM1) is preserved. Two
-        // pointers wide is sufficient for the named-member contract on this TU.
-        void*                        maNetStreamLogChannelOutput[2];
-        s32                          miCgsNetworkServerInterfacePM1;    // :517
+        bool                         mbRecreateDirtySock;               // :509 (+0xB8)
+        // The net-stream log channel output of the debug build is not present in the
+        // console object: Construct stores the perfmon id straight after the bool.
+        s32                          miCgsNetworkServerInterfacePM1;    // +0xBC
     };
 }
 

@@ -1,7 +1,6 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnStatsUpdateMessage.h"
-#include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"   // base pack/unpack stub (COMDAT-folded)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -17,9 +16,8 @@
 // Destruct / GetPackedMessageSize all zero the four counters; GetPackedMessageSize then
 // defers to the base Message size.
 //
-// PackOrUnpack ORs the base pack/unpack status (the X360 build resolves the base-stub call
-// to a COMDAT-folded copy reported as BrnWorld::PVSDebugComponent::IsSimple, which returns
-// false == 0 == success) with the four quantised int counters in their wire ranges
+// PackOrUnpack ORs the base Message::PackOrUnpack() status (a constant success: the base
+// virtual serialises nothing) with the four quantised int counters in their wire ranges
 // ([0,2000] / [0,250] / [0,50] / [0,0x7FFFFFFF]).
 //
 // PrepareForSend inlines the base Message frame-stamp (the X360 build does not call
@@ -65,8 +63,7 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult StatsUpdateMessage::PackOrUnpack()
     {
-        const CgsNetwork::PackOrUnpackResult lxBase =
-            reinterpret_cast<BrnWorld::PVSDebugComponent*>(this)->IsSimple() ? 1 : 0;
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxChallenges =
             CgsNetwork::PackOrUnpackInt(this, &miNumberOfChallenges, 0, 2000) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxRivals =

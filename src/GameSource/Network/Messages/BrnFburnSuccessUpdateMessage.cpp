@@ -1,7 +1,6 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnFburnSuccessUpdateMessage.h"
-#include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"   // base pack/unpack stub (COMDAT-folded)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -18,9 +17,8 @@
 // Destruct restores the two ints to -1; GetPackedMessageSize re-zeroes the bit set and the
 // two ints before deferring to the base Message size.
 //
-// PackOrUnpack ORs the base pack/unpack status (the X360 build resolves the base-stub call
-// to a COMDAT-folded copy reported as BrnWorld::PVSDebugComponent::IsSimple, which returns
-// false == 0 == success) with: the 8-byte buffer field, the frames-since-start int
+// PackOrUnpack ORs the base Message::PackOrUnpack() status (a constant success: the base
+// virtual serialises nothing) with: the 8-byte buffer field, the frames-since-start int
 // ([0, 0x7FFFFFFF]) and the action index int ([0, 2]). Message type id 36 (0x24).
 
 namespace BrnNetwork
@@ -56,11 +54,10 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult FburnSuccessUpdateMessage::PackOrUnpack()
     {
-        const CgsNetwork::PackOrUnpackResult lxBase =
-            reinterpret_cast<BrnWorld::PVSDebugComponent*>(this)->IsSimple() ? 1 : 0;
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxBuffer =
-            CgsNetwork::PackOrUnpackBuffer(this,
-                                           reinterpret_cast<u8*>(&mSuccessBitArray),
+            CgsNetwork::Message::PackOrUnpackBuffer(
+                                           reinterpret_cast<char*>(&mSuccessBitArray),
                                            8) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxFrames =
             CgsNetwork::PackOrUnpackInt(this, &miFramesSinceStart, 0, 0x7FFFFFFF);

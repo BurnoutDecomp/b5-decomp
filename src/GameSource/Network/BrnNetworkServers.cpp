@@ -71,13 +71,7 @@ namespace BrnNetwork
         }
     }
 
-    void NetworkServers::SetServerType(CgsNetwork::EServerType leServerType)
-    {
-        meServerType = leServerType;
-        SetIPAndPort();
-
-        mpNetworkManager->mVersionDisplay.meServerType = meServerType;
-        mpNetworkManager->GetServerInterface()->GetConnectionComponent()->DisconnectFromServer();
-        mpNetworkManager->mNetworkAdapter.SetServerType(meServerType);
-    }
+    // SetServerType is declared only: it writes the version display's server type and
+    // re-targets the network adapter, both members of the CgsNetwork::NetworkManager base,
+    // which BrnNetworkManager still holds as raw storage.
 }

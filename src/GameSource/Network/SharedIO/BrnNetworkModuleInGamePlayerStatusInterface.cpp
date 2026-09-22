@@ -102,12 +102,9 @@ namespace BrnNetwork
         MarkedManInterface& MarkedManInterface::SetFromPlayerStatusInterface(
                 const InGamePlayerStatusInterface& lPlayerStatusInterface)
         {
-            const s32 liNumPlayers = lPlayerStatusInterface.GetNumPlayers();
-            for (s32 liIndex = 0; liIndex < liNumPlayers; ++liIndex)
+            // GetPlayerStatusData (header-inline) carries the two index asserts.
+            for (s32 liIndex = 0; liIndex < lPlayerStatusInterface.GetNumPlayers(); ++liIndex)
             {
-                CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-                CGS_ASSERT(liIndex < liNumPlayers, "liIndex < miNumPlayers");
-
                 const InGamePlayerStatusData* lpPlayerStatusData =
                         lPlayerStatusInterface.GetPlayerStatusData(liIndex);
 

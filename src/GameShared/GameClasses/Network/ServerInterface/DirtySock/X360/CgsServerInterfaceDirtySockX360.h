@@ -30,6 +30,7 @@ namespace CgsNetwork
     public:
         ServerInterfaceDirtySockX360();
 
+        virtual void Construct();
         virtual void Destruct();
         virtual bool Prepare(ServerInterfacePrepareParams* lpParams);
         virtual void Resume();

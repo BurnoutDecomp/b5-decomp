@@ -9,12 +9,13 @@
 // file itself (references/DecFIGS/dwarfdump/GameSource/GameState/SharedIO/
 // BrnGameStateToGuiIOInterfaces.cpp), so this is the file's real home rather than a convenience
 // seat. Only the members the mounted event core actually calls are reconstructed here; the
-// other eight publishers, Clear() and the ten queue/index accessors stay declared-only in the
+// other seven publishers, Clear() and the ten queue/index accessors stay declared-only in the
 // header until they have live callers to check them against.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   AddFinishedRaceEvent  @ 0x8236EA60
 //   Construct             @ 0x82379908   (added 2026-08-27, stunt-races frontier round 2 -- see D2)
+//   AddDirtyTrickEnding   (no own body; inlined into PaybackManager::ProcessDirtyTrickEventQueue)
 // (the interface's remaining out-of-line X360 symbol, AppendRaceCarCrashes @0x82379980, is NOT
 // reconstructed here -- it is not an unresolved external today and it reaches the opaque
 // trailing crash queue.)
@@ -157,6 +158,28 @@ void GameStateToGuiInterface::AddFinishedRaceEvent(BrnGui::EFinishType leFinishT
     lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x04  (`stw r5,  var_C`)
 
     mFinishedRaceEventQueue.AddEvent(lEvent);             // this + 244    (`addi r3, r3, 0xF4`)
+}
+
+// -----------------------------------------------------------------------------
+// AddDirtyTrickEnding (declared in BrnGameStateToGuiIOInterfaces.h) -- publish "this dirty trick
+// ended" to the GUI. No out-of-line console body: PaybackManager::ProcessDirtyTrickEventQueue
+// inlines it at both of its call sites (dirty-trick status 3 and 4). Each site builds the
+// 16-byte record on the stack -- aggressor at +0x0, victim at +0x4, trick type at +0x8, the
+// survived byte at +0xC (1 for status 3, 0 for status 4) -- and appends it to the queue at
+// interface +0x7C, i.e. mDirtyTrickEndingQueue.
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::AddDirtyTrickEnding(::EActiveRaceCarIndex leAggressor,
+                                                  ::EActiveRaceCarIndex leVictim,
+                                                  BrnNetwork::EPaybackType leTrickType,
+                                                  bool lbSurvived)
+{
+    GameStateToGuiEndingDirtyTrick lEvent;
+    lEvent.meAggressorActiveRaceCarIndex = leAggressor;   // record +0x0
+    lEvent.meVictimActiveRaceCarIndex    = leVictim;      // record +0x4
+    lEvent.meTrickType                   = leTrickType;   // record +0x8
+    lEvent.mbSurvived                    = lbSurvived;    // record +0xC
+
+    mDirtyTrickEndingQueue.AddEvent(lEvent);              // this + 0x7C
 }
 
 }

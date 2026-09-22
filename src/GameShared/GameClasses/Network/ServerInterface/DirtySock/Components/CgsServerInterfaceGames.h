@@ -59,6 +59,8 @@ namespace CgsNetwork
 
     namespace DirtySock
     {
+        struct ConnApiCbInfoT;
+
         // A single player record inside a LobbyApiPlayT (X360 stride = 164 bytes;
         // the DWARF generic copy is 168). Only the fields this TU reads/compares are
         // named; the rest is reserved with padding to keep their offsets exact.
@@ -138,11 +140,20 @@ namespace CgsNetwork
         // Establishes the vtable slot at +0 (the X360 type is polymorphic).
         virtual ~ServerInterfaceGames();
 
-        // ---- Lifecycle (vtable + plain) -------------------------------------------
+        // ---- Lifecycle ------------------------------------------------------------
+        // Vtable: after the five component slots the games component appends Destruct,
+        // Prepare, Release, Update, Suspend, Resume, CreateGame, JoinGame, QuickJoinGame,
+        // SearchForGames, UpdateGameParameters, EndGame and ReceivedGameEvent, in that
+        // order. Update / Suspend / Resume / EndGame have no base bodies in the console
+        // image (only the platform leaf implements them).
         virtual void Construct();
-        void Destruct();
-        bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
-        bool Release();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        virtual void Destruct();
+        virtual bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
+        virtual bool Release();
+        virtual void Update() = 0;
+        virtual void Suspend() = 0;
+        virtual void Resume() = 0;
 
         // ---- Actions --------------------------------------------------------------
         // CreateGame / JoinGame / QuickJoinGame / SearchForGames / UpdateGameParameters
@@ -158,6 +169,11 @@ namespace CgsNetwork
         virtual void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams);
         void CancelSearchForGames();
         virtual void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);
+        virtual void EndGame(ServerInterfaceEndGameDataBase* lpEndGameData) = 0;
+        // Lobby game event: ends the pending create/join/quick-join action when the event
+        // carries our game ident. lpauMsg is the DirtySDK lobby message (word 3 the error,
+        // word 4 the tagfield payload).
+        virtual s32 ReceivedGameEvent(s32* lpauMsg);
         void UpdatePlayerParameters(s32 liPlayerID,
                                     ServerInterfacePlayerParamsBase* lpPlayerParams);
         void LockGame();
@@ -185,6 +201,8 @@ namespace CgsNetwork
         bool GetGameParameters(ServerInterfaceGameParamsBase* lpOut);
         s32  GetHostPlayerID();
         s32  GetNumberOfFoundGames();
+        // Copy found game liIndex's parameters into lpOut; false if there is no such game.
+        bool GetFoundGame(s32 liIndex, ServerInterfaceGameParamsBase* lpOut) const;
         s32  GetNumberPlayersInGame();
         void* GetPlayerParametersByIndex(s32 liIndex, ServerInterfacePlayerParamsBase* lpOut);
         void* GetPlayerParametersByPlayerID(s32 liPlayerID, ServerInterfacePlayerParamsBase* lpOut);
@@ -192,6 +210,7 @@ namespace CgsNetwork
                                               ServerInterfacePlayerParamsBase* lpOut);
         bool IsLocalPlayerInGame();
         bool IsLocalPlayerHost();
+        bool IsLocalPlayerLeavingGame() const;
         bool IsPlayerInGame(const char* lpcName);
 
         // ADDITIVE GROW (flagged by the BrnNetworkTeamSelectionManager group): is the player with
@@ -245,9 +264,12 @@ namespace CgsNetwork
 
         // Static action-thunks (used as DirtySDK callbacks). Match the X360 ABI shapes.
         static s32   DefaultCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
+        // ConnApi status callback registered in the games component slot of the server
+        // interface (see ServerInterfaceDirtySock::SetConnApiGameCallback).
+        static void  ConnApiCallback(DirtySock::ConnApiCbInfoT* lpCbInfo,
+                                     ServerInterfaceComponent* lpComponent);
         static s32   LeaveGameCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
         static s32   SearchForGamesCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
-        static s32   ReceivedGameEvent(ServerInterfaceGames* lpSelf, s32* a2);
         static void  EventStatusCallback(s32 a1, s32* a2, ServerInterfaceGames* a3);
         static void* GameManagerCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
         static s32   FoundGamesSort(ServerInterfaceGames* lpSelf, void* a2,

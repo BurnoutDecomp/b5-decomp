@@ -8,11 +8,8 @@
 // adds NO new data members of its own -- it only overrides the scoring lifecycle and declares one
 // file-private qsort comparator. Virtual override ORDER mirrors the base vtable.
 //
-// MINIMAL SLICE: of the eight virtuals + one private comparator the DWARF lists, only the three
-// this TU reconstructs (UpdatePlayerPoints, WriteDataToOutput,
-// _BurningHomeRunPlayerFinishTimesCompare) carry bodies in the .cpp; the remaining five lifecycle
-// virtuals (Construct/Prepare/Release/Destruct/ClearData/Update) are declared-only and land with the
-// rest of this class's TU. Declared here so the vtable is complete.
+// Every base pure virtual is overridden here (bodies in the .cpp); the lifecycle ones forward to
+// the base halves.
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                       // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
@@ -30,7 +27,7 @@ namespace BrnGameState
     class OnlineBurningHomeRunModeScoring : public BaseOnlineModeScoring
     {
     public:
-        // Lifecycle virtuals (declared-only here; bodies belong to the wider class TU).
+        // Lifecycle virtuals.
         virtual void Construct();                                          // .cpp:62
         virtual bool Prepare();                                            // .cpp:92
         virtual bool Release();                                            // .cpp:107
@@ -42,8 +39,7 @@ namespace BrnGameState
         // each car's finishing position back into the scoring system + the base position table.
         virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumActiveCars);
 
-        // X360 @ 0x82315650 (.cpp:133). Copies this scorer's award/award-variable/team arrays into
-        // the network output interface (overrides the base, omitting maiNumEliminations).
+        // Forwards to the base half (award / award-variable / team arrays; no maiNumEliminations).
         virtual void WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput);
 
     private:

@@ -9,10 +9,10 @@
 // words. AddBits/GetBits are exact bitwise inverses: GetBits reads back exactly
 // what AddBits wrote (including the two-word-spanning and 64-bit-aligned cases).
 //
-// This is the canonical class home. The .cpp in this directory defines only the
-// three reconstructed functions; the remaining four methods (Release,
-// GetBitLength, GetBitLengthRemaining, DebugPrint) are reconstructed in their
-// own translation units.
+// This is the canonical class home. The .cpp in this directory defines Prepare,
+// Release, AddBits and GetBits; the remaining three methods (GetBitLength,
+// GetBitLengthRemaining, DebugPrint) are reconstructed in their own translation
+// units.
 
 namespace CgsNetwork
 {

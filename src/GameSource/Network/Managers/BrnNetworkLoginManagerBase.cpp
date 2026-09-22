@@ -73,14 +73,6 @@ namespace BrnNetwork
         // (X360 cmpwi 18 after GetAndClearLastError); a non-18 error prints a dev-only diagnostic.
         const s32 KI_CONNECTING_BENIGN_ERROR = 18;
 
-        // The login-event codes raised to the rest of the manager via TriggerEventFromLogin
-        // (X360 r4 immediates at the call sites). The event-code enum's home is the manager's own
-        // TU; the grounded raw values live here.
-        const s32 KI_LOGIN_EVENT_TOS_DOWNLOADED   = 0;  // UpdateDownloadingTOS
-        const s32 KI_LOGIN_EVENT_SELECT_ACCOUNT   = 1;  // UpdateLoggingIn (case 6, non-silent)
-        const s32 KI_LOGIN_EVENT_DECLINED         = 4;  // Answer*/CancelLogin decline path
-        const s32 KI_LOGIN_EVENT_AGREED           = 7;  // Answer* agree path
-
         // The default terms-of-service URL used when the server provides none (X360 rodata).
         const char* const KPC_DEFAULT_TOS_URL =
             "http://sdevbesl01.online.ea.com/easo/editorial/common/2006/tos/tos.jsp"
@@ -250,13 +242,13 @@ namespace BrnNetwork
         if (lbAgree)
         {
             meSubState = E_SUBSTATE_LOGGING_IN;
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_AGREED, 0);
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_PROCEED, 0);
             mpNetworkManager->GetServerInterface()->GetConnectionComponent()->AgreeShareInfo(mbAgreeShare1, mbAgreeShare2);
         }
         else
         {
             meSubState = E_SUBSTATE_NO_AGREEMENT;
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_DECLINED, 0);
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_NO_AGREEMENT, 0);
         }
     }
 
@@ -266,13 +258,13 @@ namespace BrnNetwork
         if (lbAgree)
         {
             meSubState = E_SUBSTATE_LOGGING_IN;
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_AGREED, 0);
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_PROCEED, 0);
             mpNetworkManager->GetServerInterface()->GetConnectionComponent()->AgreeTOS(true);
         }
         else
         {
             meSubState = E_SUBSTATE_NO_AGREEMENT;
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_DECLINED, 0);
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_NO_AGREEMENT, 0);
         }
 
         // Re-publish the terms-of-service text to the front end and suspend the config download.
@@ -320,7 +312,7 @@ namespace BrnNetwork
         else
         {
             meSubState = E_SUBSTATE_NO_AGREEMENT;
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_DECLINED, 0);
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_NO_AGREEMENT, 0);
         }
 
         mpNetworkManager->GetServerInterface()->GetDownloadableConfigComponent()->Suspend();
@@ -558,7 +550,7 @@ namespace BrnNetwork
                 mbAgreeShare1 = false;
                 mbAgreeShare2 = false;
                 meSubState = E_SUBSTATE_WAITING_SELECTION;
-                mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_SELECT_ACCOUNT, 0);
+                mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_CREATE_ACCOUNT, 0);
             }
             break;
 
@@ -612,7 +604,7 @@ namespace BrnNetwork
 
             PublishTosText(mpNetworkModule, mpTOS);
             lpHttp->DestroyHttpsDownload();
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_TOS_DOWNLOADED, 0);
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_TOS, 0);
             meSubState = E_SUBSTATE_WAITING_SELECTION;
         }
         else if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_HTTP) == 1)

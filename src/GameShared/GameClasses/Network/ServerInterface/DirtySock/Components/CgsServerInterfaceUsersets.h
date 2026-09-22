@@ -26,8 +26,16 @@
 // name from the committed ServerInterfaceComponent -- not re-forked here.
 // ===========================================================================
 
+// DirtySDK handles (vendor SDK, global namespace like LobbyApiRefT).
+struct LobbyApiRefT;
+struct LobbyApiMsgT;
+struct LobbyApiUserSetT;
+struct DispListRef;
+
 namespace CgsNetwork
 {
+    struct ServerInterfaceUsersetParamsBase;
+
     class ServerInterfaceUsersets : public ServerInterfaceComponent
     {
     public:
@@ -56,6 +64,36 @@ namespace CgsNetwork
         // bodies are homed in the usersets component's own behavioural TU.
         bool IsPlayerInOurUserset(const char* lpcPlayerName) const;
         void KickPlayer(const char* lpcPlayerName, EKickReason leReason);
+        void KickPlayerByID(s32 lPlayerID, EKickReason leReason);
+
+        // --- component overrides and lifecycle ---
+        virtual void Construct();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        void Destruct();
+        bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
+        bool Release();
+        void Update();
+        void Suspend();
+        void Resume();
+
+        // --- userset actions and queries ---
+        void CreateUserset(ServerInterfaceUsersetParamsBase* lpParams);
+        void JoinUserset(ServerInterfaceUsersetParamsBase* lpParams);
+        void LeaveUserset();
+        void UpdateUserSetParams(ServerInterfaceUsersetParamsBase* lpParams);
+        bool GetUserSetParams(ServerInterfaceUsersetParamsBase* lpParams) const;
+        const LobbyApiUserSetT* GetUserSet() const;
+        bool IsLocalPlayerInUserset() const;
+        bool IsLocalPlayerHost() const;
+
+    private:
+        void AllocDisplayLists();
+        void StartAction(EAction leAction);
+        static void DefaultCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+
+        ServerInterfaceDirtySock* mpServerInterface;       // +0x10
+        EAction                   meCurrentAction;         // +0x14
+        DispListRef*              mpUsersInUsersetList;    // +0x18
     };
 }
 

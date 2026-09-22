@@ -57,5 +57,15 @@ namespace BrnNetwork
         // (mirrors BuddyManagerX360::mhNotifier / GamerCardManagerX360::mNotifyListener); the
         // Xbox HANDLE typedef is not modelled in types.hpp.
         void* mhNotifier;   // +0x08
+
+        // Console layout, pinned in a 32-bit build; inert on the x64 host. The object is 0xC
+        // bytes; the word after it inside BrnNetworkManager (+0x3D114) is alignment padding for
+        // the 8-byte-aligned invite manager that follows.
+        static void _AssertLayout();
     };
+
+    inline void NetworkNotificationManagerX360::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || sizeof(NetworkNotificationManagerX360) == 0xC, "NetworkNotificationManagerX360 is 0xC bytes");
+    }
 }

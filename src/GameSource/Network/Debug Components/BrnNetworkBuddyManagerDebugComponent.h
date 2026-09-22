@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (real base)
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                    // CgsModule::VariableEventQueue<14000,16>
+#include "GameSource/Network/BrnNetworkModuleIO.h"                                  // BrnNetworkModuleIO::NetworkEventQueue
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                         // BrnNetwork::PlayerName (16B), BrnNetwork::Event
 
 // ===========================================================================
@@ -43,12 +43,6 @@ namespace BrnNetwork
 {
     class BuddyManagerBase;   // back-pointer member only (pointer-only use; its full header embeds
                               // this component by value, so including it would cycle).
-
-    // NetworkEventQueue is the BrnNetwork module-IO event queue: the X360 AddEvent call sites in
-    // this TU resolve to CgsModule::VariableEventQueue<14000,16>::AddEvent, so the queue IS that
-    // instantiation. (BrnNetworkModuleIO.h forward-declares "class NetworkEventQueue" against the
-    // same family; aliased here so this TU compiles against the concrete queue it actually drives.)
-    typedef CgsModule::VariableEventQueue<14000, 16> NetworkEventQueue;
 
     // ForceServerFriendsOverwrite reaches deep into the buddy manager (its buddy count / per-buddy
     // name + full-buddy queries and the maBuddyListAtUpload[] / miNumBuddiesAtUpload upload scratch,
@@ -122,7 +116,7 @@ namespace BrnNetwork
         s32                miMessageIndex;                      // +0x02A4
         s32                miFeedbackIndex;                     // +0x02A8
         PlayerName         mInviteBuddy;                        // +0x02AC
-        NetworkEventQueue* mpEventQueue;                        // +0x02BC
+        BrnNetworkModuleIO::NetworkEventQueue* mpEventQueue;    // +0x02BC
         BuddyManagerBase*  mpBuddyManager;                      // +0x02C0
     };
 }

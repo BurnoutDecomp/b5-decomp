@@ -108,6 +108,10 @@ namespace BrnNetwork
         // bool return rather than the earlier standalone void form.
         virtual bool Prepare() override;
 
+        // Serialise the platform game record, then let each of the seven player-param
+        // records read its own player entry of the lobby record.
+        virtual void SerialiseFromGame(const void* lpGame) override;
+
         // Burnout game-mode discriminant (E_GAME_MODE_*).
         s32  GameMode() const;                               // @0x82584098
         void SetPreviousGameMode(s32 liGameMode);            // @0x82583FD0
@@ -125,6 +129,10 @@ namespace BrnNetwork
         void SetNumRunnerCrashes(s32 liNumRunnerCrashes);    // @0x82584038  bits 27..29
         void SetVehicleChoice(s32 liVehicleChoice);          // @0x82584028  bit  30 (DWARF EVehicleChoice)
         void SetVehicleLevelLimit(s32 liLevelLimit);         // @0x82583DB8  bits 13..16
+        void SetSkillLevel(u32 luSkillLevel);                // bits 2..7
+        void SetSecurity(s32 leSecurity);                    // bits 0..1 (BrnNetwork::EBrnGameSecurity)
+        void SetTrafficOn(bool lbTrafficOn);                 // bit  17
+        void SetTrafficCheckingOn(bool lbTrafficCheckingOn); // bit  23
 
         // --- Leaf game-params (+0x15C) packed-flag accessors. Non-virtual, X360-attested. ---
         s32  NumberRounds() const;                           // @0x82584078  bits 11..14
@@ -132,6 +140,7 @@ namespace BrnNetwork
         bool InfiniteBoost() const;                          // @0x82584058  bit  7
         void SetInfiniteBoost(bool lbInfiniteBoost);         // @0x82583EA8  bit  7
         void SetNumberRounds(s32 liNumRounds);               // @0x82583F48  bits 11..14
+        void SetTimeLimit(s32 liTimeLimit);                  // bits 15..19
         void SetRagerVehicleLevelLimit(s32 liLevelLimit);    // @0x82583E30  bits 3..6
 
     private:

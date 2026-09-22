@@ -25,7 +25,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsID.h"                                 // CgsID (== u64)
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"           // CgsNetwork::PlayerMenuData (base), NetworkPlayerID
-#include "GameSource/Network/Messages/BrnCameraStatusMessage.h"                // BrnNetwork::ECameraStatus
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // BrnNetwork::ECameraStatus
 
 namespace BrnNetwork
 {

@@ -93,6 +93,10 @@ namespace CgsNetwork
         // true on success (the pump flags the player paused on the first failure). DWARF :191.
         bool SendTo(void* lpData, s32 liLength, ConnectionData lConnectionData);
 
+        // Pull the next received packet: *lppData points into the receive buffer; returns
+        // the packet length (0 when nothing is pending).
+        s32  ReceiveFrom(void** lppData, ConnectionData lConnectionData);
+
         bool HadDuplicateLogin() const;
 
         // --- layout (X360 asm offsets) ----------------------------------------------------
@@ -116,8 +120,10 @@ namespace CgsNetwork
                                              //        subclasses (e.g. NetworkAdapterX360::Update)
                                              //        reach its components via GetConnectionComponent()
                                              //        etc. instead of raw offset casts.
-        u8              mPad10[8];           // +0x10  FLAGGED reserve (FakeNetworkConditions
-                                             //        + meLastError region, not field-attested)
+        // The fake-network-conditions block: 4 console bytes that no console function
+        // touches (the debug conditions simulator is not built in); kept as storage.
+        u8              maNetworkConditions[4]; // +0x10
+        ENetworkError   meLastError;         // +0x14  (Construct stores E_NET_ERROR_NONE)
         EServerType     meServerType;        // +0x18
         bool            mbDuplicateLogin;    // +0x1C
         u8              mPad1D[3];           // +0x1D  pad to word
@@ -151,10 +157,11 @@ namespace CgsNetwork
                                                void* lpNetworkManager,
                                                void* lpField_10, void* lpField_00);
 
-        void* mpField_00;        // +0x00  (6th ctor arg, a6)
+        void* mpField_00;        // +0x00  (6th ctor arg, a6; the platform title ids)
         u32   meServerType;      // +0x04  EServerType
         void* mpHeapMalloc;      // +0x08
         void* mpNetworkManager;  // +0x0C
-        void* mpField_10;        // +0x10  (5th ctor arg, a5)
+        // +0x10: NetworkAdapterBase::Prepare copies this word into its mpServerInterface.
+        ServerInterfaceDirtySock* mpServerInterface;
     };
 }

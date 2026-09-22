@@ -18,12 +18,17 @@
 //   GetVectorFromAngles  @ 0x82870D78
 //   PackOrUnpack         @ 0x82880F50
 //   PackOrUnpackBuffer   @ 0x8288EA70
+//   PackOrUnpack()       (base virtual, folded `return 0` leaf)
+//   GetPackedMessageSize
 //
 // All offsets/stores are store-for-store faithful to the X360 pseudocode + asm.
 // Members are referenced by name; asserts use the house CGS_ASSERT machinery.
 
 namespace CgsNetwork
 {
+    // Largest packed message in bytes (file-scope in this TU).
+    const s32 KI_MAX_PACKED_MESSAGE_SIZE = 1400;
+
     // ---- Construct @ 0x82870B90 ------------------------------------------------
     // Field initialiser the X360 build calls "Construct": stores the invalid
     // sentinels into the trailing scalars and returns the object. The asm writes
@@ -91,78 +96,202 @@ namespace CgsNetwork
         return liValue;
     }
 
-    // ---- PackOrUnpack @ 0x82880F50 ---------------------------------------------
-    // (De)serialise one quantised signed-byte field in [liMin, liMax] through the
-    // message's bitstream (which lives at this+8; the four cursor words modelled
-    // here reinterpreted as the BitStream object the asm addresses with
-    // `addi r3, r31, 8`). The lifecycle word decides direction: 0 packs (quantise
-    // the sign-extended field via IntQuantiser::Pack, then BitStream::AddBits the
-    // packed offset for the reported number of bits), 1 unpacks (read the value
-    // back via the quantised-int helper and store it into the byte field), any
-    // other value is the "called without telling it which it is doing" assert
-    // (CgsMessage.cpp:518). The pack path returns (AddBits(...) == 0): the asm
-    // treats a zero result as success and a non-zero result as failure.
-    // FLAGGED: the committed BitStream::AddBits returns a true/false sense
-    // (true == success); this caller's asm compares its result against 0, so the
-    // boolean polarity is reproduced exactly as the asm dictates rather than
-    // re-interpreted against AddBits's own convention.
-    bool Message::PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax)
-    {
-        BitStream* lpStream =
-            reinterpret_cast<BitStream*>(&muBitstreamCursor0);   // this + 8
+    // ---- quantised-integer field primitives --------------------------------------
+    // Every integer PackOrUnpack overload has the same shape: the lifecycle word picks
+    // the direction. Packing (0) quantises the widened field into [liMin, liMax] with
+    // IntQuantiser::Pack and appends the reported number of bits (a full stream reports
+    // KX_PACK_FAILED_NO_SPACE); unpacking (1) reads the value back through the
+    // quantised-int reader above and narrows it into the field; any other state fires
+    // the "called without telling it which it is doing" assert and reports success.
+    // The overloads differ only in the field width and the widening (sign- or
+    // zero-extension) of the value handed to the quantiser.
 
-        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)          // *(a1+4) == 0
+    // int8_t field.
+    PackOrUnpackResult Message::PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax)
+    {
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
             u32 luPacked  = 0;
             s32 liNumBits = 0;
-            IntQuantiser::Pack(*lpi8Field, liMin, liMax, &luPacked, &liNumBits);
-            return lpStream->AddBits(luPacked, liNumBits) == 0;
+            IntQuantiser::Pack(static_cast<s32>(*lpi8Field), liMin, liMax, &luPacked, &liNumBits);
+            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                           : KX_PACK_FAILED_NO_SPACE;
         }
 
-        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)        // *(a1+4) == 1
+        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            *lpi8Field = static_cast<s8>(UnPackQuantisedInt(lpStream, liMin, liMax));
-            return false;
+            *lpi8Field = static_cast<s8>(UnPackQuantisedInt(&mBitstream, liMin, liMax));
+            return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
         CGS_ASSERT(false,
                    "CgsNetwork::Message::PackOrUnpack called without telling "
-                   "it which it is doing");
-        return false;
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
-    // ---- PackOrUnpackBuffer @ 0x8288EA70 ---------------------------------------
-    // (De)serialise a raw byte buffer through the message's SmartBitStream (which
-    // lives at this+8; modelled here as the four cursor words, reinterpreted as the
-    // SmartBitStream object the asm addresses with `addi r3, r3, 8`). The lifecycle
-    // word decides direction: 0 packs (AddRawData), 1 unpacks (GetRawData), any
-    // other value is the "called without telling it which it is doing" assert
-    // (CgsMessage.cpp:1417). The pack path returns (AddRawData(...) == 0): the asm
-    // treats a zero result as success and a non-zero result as failure.
-    // FLAGGED: the committed SmartBitStream::AddRawData returns a true/false sense
-    // (true == success); this caller's asm compares its result against 0, so the
-    // boolean polarity is reproduced exactly as the asm dictates rather than
-    // re-interpreted against AddRawData's own convention.
-    bool Message::PackOrUnpackBuffer(char* lpcBuffer, s32 liNumBytes)
+    // uint8_t field.
+    PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax)
     {
-        SmartBitStream* lpStream =
-            reinterpret_cast<SmartBitStream*>(&muBitstreamCursor0);   // this + 8
-
-        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)          // *(a1+4) == 0
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
         {
-            return lpStream->AddRawData(lpcBuffer, liNumBytes) == 0;
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(static_cast<s32>(*lpu8Field), liMin, liMax, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
         }
 
-        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)        // *(a1+4) == 1
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
         {
-            lpStream->GetRawData(lpcBuffer, liNumBytes);
-            return false;
+            *lpu8Field = static_cast<u8>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // int16_t field. This overload fires a plain assert string instead of the
+    // assembled one.
+    PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax)
+    {
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(static_cast<s32>(*lps16Field), liMin, liMax, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            *lps16Field = static_cast<s16>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false, "PackOrUnpack called without telling it which operation to do\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // uint16_t field.
+    PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax)
+    {
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(static_cast<s32>(*lpu16Field), liMin, liMax, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            *lpu16Field = static_cast<u16>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // int32_t field.
+    PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax)
+    {
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(*lpiField, liMin, liMax, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            *lpiField = UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax);
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // uint32_t field (the word goes to the quantiser unchanged).
+    PackOrUnpackResult PackOrUnpackUInt(Message* lpMessage, u32* lpu32Field, s32 liMin, s32 liMax)
+    {
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(static_cast<s32>(*lpu32Field), liMin, liMax, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            *lpu32Field = static_cast<u32>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // bool field: travels as a u8 in [0, 1]. When packing, the flag is normalised into
+    // the temporary first; when unpacking, the field becomes (value == 1). The
+    // lifecycle word is re-read after the u8 call.
+    PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField)
+    {
+        u8 lu8Value = 0;   // left unset by the console when the lifecycle word is invalid
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            lu8Value = (*lpbField != false) ? 1 : 0;
+        }
+
+        const PackOrUnpackResult lxResult = PackOrUnpackU8(lpMessage, &lu8Value, 0, 1);
+
+        if (lpMessage->mePackOrUnpack != Message::E_PACK_INTO_BITSTREAM)
+        {
+            *lpbField = (lu8Value == 1);
+        }
+        return lxResult;
+    }
+
+    // ---- PackOrUnpackBuffer --------------------------------------------------------
+    // (De)serialise a raw byte buffer through the message's SmartBitStream
+    // (mBitstream, +0x08): 0 packs (AddRawData; a full stream reports
+    // KX_PACK_FAILED_NO_SPACE), 1 unpacks (GetRawData), any other state fires the
+    // "called without telling it which it is doing" assert.
+    PackOrUnpackResult Message::PackOrUnpackBuffer(char* lpcBuffer, s32 liNumBytes)
+    {
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
+        {
+            return mBitstream.AddRawData(lpcBuffer, liNumBytes) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
+        {
+            mBitstream.GetRawData(lpcBuffer, liNumBytes);
+            return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
         CGS_ASSERT(false,
                    "CgsNetwork::Message::PackOrUnpackBuffer called without telling "
-                   "it which it is doing");
-        return false;
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
     // ---- GetGameID @ 0x8286F3E8 ------------------------------------------------
@@ -221,92 +350,100 @@ namespace CgsNetwork
         mx8Flags |= KX8_FLAGS_VALID;
     }
 
-    // ---- Pack @ 0x82880160 -----------------------------------------------------
-    // Lays the bitstream cursor words out for a pack pass, calls the virtual
-    // PackOrUnpack() (vtable slot +0x10), records how many bits were written, then
-    // resets the cursor words and marks the message done (mePackOrUnpack = 2).
-    // Returns true when PackOrUnpack reported success (result == 0).
-    bool Message::Pack(s32 liA, s32 liB, s32 liC, s32* lpiBitsWritten)
+    // ---- PackOrUnpack() ----------------------------------------------------------
+    // vtable slot 4. The base message carries no fields of its own: it serialises
+    // nothing and reports success. The console folds this `return 0` leaf with every
+    // other identical leaf in the image.
+    PackOrUnpackResult Message::PackOrUnpack()
     {
-        // X360 0x82880160 masks the FIRST arg (liA=r4): liByteBits=8*(liA&7), cursor2=liA-(liA&7);
-        // cursor0/cursor1 = liByteBits+liB (r5); cursor3 = liByteBits+liC (r6).
-        const s32 liByteBits = 8 * (liA & 7);
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
 
-        mePackOrUnpack    = E_PACK_INTO_BITSTREAM;   // a1[1] = 0
-        muBitstreamCursor0 = static_cast<u32>(liByteBits + liB);          // a1[2]
-        muBitstreamCursor1 = static_cast<u32>(liByteBits + liB);          // a1[3]
-        muBitstreamCursor2 = static_cast<u32>(liA - (liA & 7));           // a1[4]
-        muBitstreamCursor3 = static_cast<u32>(liByteBits + liC);          // a1[5]
+    // ---- Pack --------------------------------------------------------------------
+    // Attach mBitstream to the caller's buffer (Prepare is inlined: the byte
+    // misalignment of the buffer is folded into both cursors and the length), run the
+    // virtual PackOrUnpack() (vtable slot 4, +0x10), report how far the write cursor
+    // advanced, then detach the stream (Release, inlined as four zero stores) and mark
+    // the message idle. Returns true when PackOrUnpack reported success.
+    bool Message::Pack(u8* lpu8Buffer, s32 liBufferOffsetInBits, s32 liBufferLengthInBits,
+                       s32* lpiBitsWritten)
+    {
+        mePackOrUnpack = E_PACK_INTO_BITSTREAM;
+        mBitstream.Prepare(lpu8Buffer, liBufferOffsetInBits, liBufferOffsetInBits,
+                           liBufferLengthInBits);
 
-        const s32 liStart = static_cast<s32>(muBitstreamCursor0);
+        const s32 liStartWritePosition = mBitstream.miBitWritePosition;
 
-        // virtual PackOrUnpack() -- vtable entry 4 (+0x10).
         typedef PackOrUnpackResult (*PackOrUnpackFn)(Message*);
         PackOrUnpackFn* lpVTable = static_cast<PackOrUnpackFn*>(mpVTable);
         const PackOrUnpackResult lxResult = lpVTable[4](this);
 
-        *lpiBitsWritten = static_cast<s32>(muBitstreamCursor0) - liStart;
+        *lpiBitsWritten = mBitstream.miBitWritePosition - liStartWritePosition;
 
-        muBitstreamCursor0 = 0;
-        muBitstreamCursor1 = 0;
-        muBitstreamCursor2 = 0;
-        muBitstreamCursor3 = 0;
-        mePackOrUnpack     = E_PACK_OR_UNPACK_COUNT;  // a1[1] = 2
+        mBitstream.Release();
+        mePackOrUnpack = E_PACK_OR_UNPACK_COUNT;
 
         return lxResult == KX_PACK_OR_UNPACK_SUCCESS;
     }
 
-    // ---- UnPack @ 0x828801F0 ---------------------------------------------------
-    // Symmetric to Pack for an unpack pass. Sets mePackOrUnpack = 1, lays the
-    // cursor words, calls virtual PackOrUnpack() (+0x10) to deserialise, then calls
-    // the first virtual slot (vtable+0x00) for post-unpack processing; that second
-    // call's truthy result sets the RELIABLE flag bit. Records bits read, resets
-    // the cursors, marks done, and asserts the pack/unpack succeeded.
-    Message* Message::UnPack(s32 liA, s32 liB, s32 liC, s32* lpiBitsRead)
+    // ---- UnPack ------------------------------------------------------------------
+    // Symmetric to Pack for an unpack pass: the read cursor starts at
+    // liBufferReadOffsetInBits and the write cursor and length both sit at
+    // liBufferLengthInBits. The flags are cleared, the virtual PackOrUnpack() (slot 4)
+    // deserialises the fields, the message is marked VALID and, when the virtual
+    // IsReliable() (slot 0) says so, RELIABLE. The bits consumed are the growth of
+    // (read - write) across the call. The stream is then detached, the message marked
+    // idle, and a failed unpack asserts.
+    void Message::UnPack(u8* lpu8Buffer, s32 liBufferReadOffsetInBits, s32 liBufferLengthInBits,
+                         s32* lpiBitsRead)
     {
-        mePackOrUnpack = E_UNPACK_FROM_BITSTREAM;   // *(a1+4) = 1
-
-        // X360 0x828801F0 masks the FIRST arg (liA=r4): liByteBits=8*(liA&7), cursor2=liA-(liA&7);
-        // cursor0/cursor3 = liByteBits+liC (r6); cursor1 = liByteBits+liB (r5).
-        const s32 liByteBits = 8 * (liA & 7);
-        muBitstreamCursor2 = static_cast<u32>(liA - (liA & 7));          // *(a1+0x10)
-        muBitstreamCursor0 = static_cast<u32>(liByteBits + liC);         // *(a1+8)
-        muBitstreamCursor3 = static_cast<u32>(liByteBits + liC);         // *(a1+0x14)
-        muBitstreamCursor1 = static_cast<u32>(liByteBits + liB);         // *(a1+0xC)
+        mePackOrUnpack = E_UNPACK_FROM_BITSTREAM;
+        mBitstream.Prepare(lpu8Buffer, liBufferReadOffsetInBits, liBufferLengthInBits,
+                           liBufferLengthInBits);
 
         typedef PackOrUnpackResult (*PackOrUnpackFn)(Message*);
-        typedef Message* (*PostUnpackFn)(Message*);
+        typedef bool (*IsReliableFn)(const Message*);
         void** lpVTable = static_cast<void**>(mpVTable);
 
-        const u32 luStartHi = muBitstreamCursor0;
-        const u32 luStartLo = muBitstreamCursor1;
-        const s32 liDelta    = static_cast<s32>(luStartHi - luStartLo);
+        const s32 liStartUnread = mBitstream.miBitWritePosition - mBitstream.miBitReadPosition;
 
         mx8Flags = 0;
 
-        // virtual PackOrUnpack() -- vtable entry 4 (+0x10).
         PackOrUnpackFn lpPackOrUnpack = reinterpret_cast<PackOrUnpackFn>(lpVTable[4]);
         const PackOrUnpackResult lxResult = lpPackOrUnpack(this);
 
-        // virtual slot 0 (+0x00) -- post-unpack handler; truthy => RELIABLE.
-        PostUnpackFn lpPostUnpack = reinterpret_cast<PostUnpackFn>(lpVTable[0]);
         mx8Flags |= KX8_FLAGS_VALID;
-        Message* lpResult = lpPostUnpack(this);
-        if (lpResult)
+        IsReliableFn lpIsReliable = reinterpret_cast<IsReliableFn>(lpVTable[0]);
+        if (lpIsReliable(this))
         {
             mx8Flags |= KX8_FLAGS_RELIABLE;
         }
 
-        *lpiBitsRead = static_cast<s32>(muBitstreamCursor1) - static_cast<s32>(muBitstreamCursor0) + liDelta;
+        *lpiBitsRead = (mBitstream.miBitReadPosition - mBitstream.miBitWritePosition) + liStartUnread;
 
-        muBitstreamCursor0 = 0;
-        muBitstreamCursor1 = 0;
-        muBitstreamCursor2 = 0;
-        muBitstreamCursor3 = 0;
-        mePackOrUnpack     = E_PACK_OR_UNPACK_COUNT;  // *(a1+4) = 2
+        mBitstream.Release();
+        mePackOrUnpack = E_PACK_OR_UNPACK_COUNT;
 
         CGS_ASSERT(lxResult == KX_PACK_OR_UNPACK_SUCCESS,
                    "lxPackOrUnpackResult == KX_PACK_OR_UNPACK_SUCCESS");
-        return lpResult;
+    }
+
+    // ---- GetPackedMessageSize ------------------------------------------------------
+    // Pack the message into a stack scratch buffer of KI_MAX_PACKED_MESSAGE_SIZE bytes
+    // (asserting the pack succeeded) and return the packed length rounded up to whole
+    // bytes. The console also streams "CgsNetwork::Message::GetPackedMessageSize
+    // returning <n>" into the global debug-print stream; that stream has no home in
+    // the tree, so the log line is dropped (same precedent as GetGameID).
+    s32 Message::GetPackedMessageSize()
+    {
+        u8  lacTmpBuffer[KI_MAX_PACKED_MESSAGE_SIZE];
+        s32 liMessageSizeInBits = 0;
+
+        const bool lbPacked = Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE * 8,
+                                   &liMessageSizeInBits);
+        CGS_ASSERT(lbPacked,
+                   "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)");
+
+        return (liMessageSizeInBits + 7) / 8;
     }
 }

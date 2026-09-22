@@ -43,6 +43,9 @@ namespace CgsNetwork
         // operator delete is the compiler-synthesised thunk half; the source body is
         // the empty out-of-line virtual destructor).
         virtual ~DefaultPlayerParameters();
+
+        // Vtable slot 6: reset the record to its defaults before a new game.
+        virtual bool Prepare();
     };
 } // namespace CgsNetwork
 

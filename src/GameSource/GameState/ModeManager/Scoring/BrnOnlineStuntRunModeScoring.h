@@ -19,12 +19,9 @@
 // required (no own instance state is reached), so none is reserved. When this scorer's full TU lands
 // it GROWS this home additively if the wider build proves it carries private state.
 //
-// MINIMAL SLICE: of the lifecycle virtuals only UpdatePlayerPoints is reconstructed by this TU; the
-// remaining lifecycle virtuals (Construct/Prepare/Release/Destruct/ClearData/Update/WriteDataToOutput)
-// are declared-only so the vtable slot order matches the base/siblings -- their bodies land with the
-// rest of this class's TU. The two file-private qsort comparators (Compare / CompareTeams) and the two
-// public team-tally helpers (GetNumPlayersOnTeam / GetTeamScore / GetWinnerTeam) the keystone and this
-// TU call are declared here.
+// Every base pure virtual is overridden here (bodies in the .cpp). The two file-private qsort
+// comparators (Compare / CompareTeams) and the public team-tally helpers (GetNumPlayersOnTeam /
+// GetTeamScore / GetWinnerTeam) the keystone and this TU call are declared here.
 
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                       // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
@@ -52,8 +49,7 @@ const s32 KI_MAX_PLAYER_TEAMS = 9;
 class OnlineStuntRunModeScoring : public BaseOnlineModeScoring
 {
 public:
-    // ---- virtual lifecycle (declared-only here; bodies belong to the wider class TU) ----
-    // Override ORDER mirrors the base/sibling vtable so the slots line up in this TU's relative order.
+    // ---- virtual lifecycle (bodies in the .cpp) ----
     virtual void Construct();
     virtual bool Prepare();
     virtual bool Release();
@@ -73,7 +69,7 @@ public:
     // artifact -- the function is void.
     virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars);
 
-    // X360 BrnOnlineStuntRunModeScoring.cpp WriteDataToOutput. Declared-only.
+    // Forwards to the base half.
     virtual void WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput);
 
     // ---- team-tally helpers (public non-virtual; the keystone + this TU call them) ----

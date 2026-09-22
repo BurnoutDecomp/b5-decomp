@@ -114,16 +114,41 @@ namespace BrnNetwork
             // stride 312), then macGameName[36], miNumPlayers, mbLocalPlayerIsHost. Body in BrnNetworkModuleIO.cpp.
             InGamePlayerStatusInterface& operator=(const InGamePlayerStatusInterface& lOther);
 
+            // Header-inline on the console: every reader (ModeManager, MugshotManager, OnlineFlyby-
+            // Manager, MarkedManInterface, the GameModule's gui bridge) carries the two index asserts
+            // and the stride-312 address computation in its own body.
+            const InGamePlayerStatusData* GetPlayerStatusData(s32 liIndex) const
+            {
+                CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+                CGS_ASSERT(liIndex < miNumPlayers, "liIndex < miNumPlayers");
+                return &maInGamePlayerData[liIndex];
+            }
+
+            // Header-inline on the console (callers read the +0x9E4 word directly, no assert).
+            s32 GetNumPlayers() const { return miNumPlayers; }
+
             // ---- declared-only API (bodies are separate TUs) ----
-            const InGamePlayerStatusData* GetPlayerStatusData(s32 liIndex) const;
             const InGamePlayerStatusData* GetPlayerStatusDataByActiveRaceCarIndex(EActiveRaceCarIndex leIndex) const;
             const InGamePlayerStatusData* GetPlayerStatusDataByPlayerID(NetworkPlayerID lPlayerID) const;
-            s32                           GetNumPlayers() const;
-            void                          Clear();
+            // Header-inline on the console (the output buffer's Construct carries it): clear every
+            // record, empty the game name, zero the player count. +0x9E8 / +0x9EC are left alone.
+            void Clear()
+            {
+                for (s32 i = 0; i < 8; ++i)
+                {
+                    maInGamePlayerData[i].Clear();
+                }
+                macGameName[0] = 0;
+                miNumPlayers = 0;
+            }
             void                          SetNumPlayers(s32 liNumPlayers);
-            const char*                   GetGameName() const;
+            // Header-inline on the console: the gui bridge reads +0x9C0 / +0x9E8 directly.
+            const char*                   GetGameName() const { return macGameName; }
+            s32                           GetTotalNumberPlayers() const { return miTotalNumberPlayers; }
             void                          SetGameName(const char* lpcName);
-            bool                          GetLocalPlayerIsHost() const;
+            // Header-inline on the console: ModeManager::PreWorldUpdate reads the +0x9EC byte
+            // directly (plain lbz, no assert) and passes it to ChallengeManager::PreWorldUpdate.
+            bool                          GetLocalPlayerIsHost() const { return mbLocalPlayerIsHost; }
             void                          SetLocalPlayerIsHost(bool lbIsHost);
             NetworkPlayerID               GetNetworkIDFromPlayerName(PlayerName lName) const;
 
@@ -131,8 +156,14 @@ namespace BrnNetwork
             InGamePlayerStatusData maInGamePlayerData[8]; // +0     (8 * 312 == 2496 bytes)
             char                   macGameName[36];        // +2496
             s32                    miNumPlayers;           // +2532 (In() bounds-checks against this)
-            bool                   mbLocalPlayerIsHost;    // +2536
-            // +2540 trailing pad word follows mbLocalPlayerIsHost.
+            // +2536: a second player count the console build carries beyond the reference member
+            // list. BrnNetworkManager::OutputPlayerStatusInfo stores
+            // CgsNetwork::PlayerManager::GetTotalNumberPlayers() here, and the copy-assignment
+            // copies it as a word. Named from that producer; no reader is reconstructed yet.
+            s32                    miTotalNumberPlayers;   // +2536
+            // +2540: OutputPlayerStatusInfo stores ServerInterfaceGames::IsLocalPlayerHost() here
+            // (stb), so this is mbLocalPlayerIsHost, not the +2536 word.
+            bool                   mbLocalPlayerIsHost;    // +2540 (console sizeof 0x9F0)
         };
 
         // ===================================================================

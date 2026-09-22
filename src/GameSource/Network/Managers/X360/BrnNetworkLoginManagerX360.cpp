@@ -166,7 +166,7 @@ namespace BrnNetwork
             // Raise the sign-in / gamertag-selection front end and wait for it.
             mePlatformSpecificSubState = E_PLATFORM_SPECIFIC_SUBSTATE_GAMERTAG_SELECTION;  // li 1 ; stw 0x24
             meSignInState              = E_SIGN_IN_STATE_SIGNING_IN;                       // li 0 ; stw 0x10
-            mpNetworkManager->TriggerEventFromLogin(KI_LOGIN_EVENT_SHOW_SIGN_IN_UI, 0);    // li 5 / li 0
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_SIGN_IN, 0);
         }
     }
 

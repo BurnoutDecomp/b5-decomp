@@ -9,8 +9,8 @@
 // (GetName @ 0x8257C330 is inline in the header.)
 //
 // A RELIABLE message carrying one player's 56-byte BurnoutSkillzData payload (@+0x28)
-// plus an initial-data marker (@+0x60). Its immediate base is TestConnectionMessage (a
-// ReliableMessage with no data of its own); see the header note for the base drift.
+// plus an initial-data marker (@+0x60). Its immediate base is ReliableMessage; see the
+// header note for the evidence.
 
 namespace BrnNetwork
 {
@@ -18,7 +18,7 @@ namespace BrnNetwork
     {
         mSkillzData.Clear();          // addi r3,r31,0x28 ; bl BurnoutSkillzData::Clear
         mbInitialData = false;        // li r11,0 ; stb r11,0x60(r31)
-        return CgsNetwork::TestConnectionMessage::GetPackedMessageSize();
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     void BurnoutSkillzMessage::PrepareForSend(u16 lu16FrameCount,

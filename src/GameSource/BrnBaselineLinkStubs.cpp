@@ -11,73 +11,18 @@
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                      // BrnPhysics::Vehicle::RaceCarState
-#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"          // InGamePlayerStatusInterface (+ NetworkPlayerStats / LiveRevengeRelationship)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"                // DebugUI
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
 #include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
 
-namespace BrnNetwork
-{
-    // Link stubs: the controller-bridge closure links BrnGameStateModuleIO.cpp ->
-    // BrnNetworkModuleIO.cpp -> the in-game-player-status interface TU, whose record
-    // Clear/operator= call these "own TU" (unreconstructed) leaves. All are network/
-    // multiplayer state -- OFF the boot/title/menu path. Inert until the real bodies
-    // land; DELETE each when its TU is reconstructed.
-    void NetworkPlayerStats::Clear() {}
-    void LiveRevengeRelationship::Construct() {}
-
-namespace BrnNetworkModuleIO
-{
-    s32 InGamePlayerStatusInterface::GetNumPlayers() const { return 0; }
-    const InGamePlayerStatusData* InGamePlayerStatusInterface::GetPlayerStatusData(s32) const { return 0; }
-}
-}
-
 namespace BrnGameState
 {
-    // Online scoring virtuals with no body anywhere in src (the scoring TUs are mounted and
-    // define the rest). Each dies when its real body lands in its own TU.
-
-    // --- BaseOnlineModeScoring: the 9 bodiless virtuals ---
-    void BaseOnlineModeScoring::Construct() {}
-    bool BaseOnlineModeScoring::Prepare()  { return false; }
-    bool BaseOnlineModeScoring::Release()  { return false; }
-    void BaseOnlineModeScoring::Destruct() {}
-    void BaseOnlineModeScoring::ClearData() {}
-    void BaseOnlineModeScoring::Update(const ScoringSystem*, s32) {}
-    void BaseOnlineModeScoring::UpdatePlayerPoints(ScoringSystem*, s32) {}
+    // DELETE-WHEN BrnBaseOnlineModeScoring_wN1_01.cpp is mounted: it holds the real body, which
+    // needs the four header-inline ScoringSystem accessors (GetNumberOfCrashes,
+    // GetTotalDistanceDriven, IsNetworkCarsDistanceDrivenValid, GetLongestDrift) defined first.
+    // Until then no online event hands out awards.
     void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem*, u32) {}
-    void BaseOnlineModeScoring::WriteDataToOutput(OnlineScoringOutputInterface*) {}
-
-    // --- OnlineRaceModeScoring: 5 bodiless ---
-    void OnlineRaceModeScoring::Construct() {}
-    bool OnlineRaceModeScoring::Prepare()  { return false; }
-    bool OnlineRaceModeScoring::Release()  { return false; }
-    void OnlineRaceModeScoring::Destruct() {}
-    void OnlineRaceModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface*) {}
-
-    // --- OnlineRoadRageModeScoring: 3 bodiless ---
-    bool OnlineRoadRageModeScoring::Release()  { return false; }
-    void OnlineRoadRageModeScoring::Destruct() {}
-    void OnlineRoadRageModeScoring::Update(const ScoringSystem*, s32) {}
-
-    // --- OnlineStuntRunModeScoring: 7 bodiless ---
-    void OnlineStuntRunModeScoring::Construct() {}
-    bool OnlineStuntRunModeScoring::Prepare()  { return false; }
-    bool OnlineStuntRunModeScoring::Release()  { return false; }
-    void OnlineStuntRunModeScoring::Destruct() {}
-    void OnlineStuntRunModeScoring::ClearData() {}
-    void OnlineStuntRunModeScoring::Update(const ScoringSystem*, s32) {}
-    void OnlineStuntRunModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface*) {}
-
-    // --- OnlineBurningHomeRunModeScoring: 6 bodiless ---
-    void OnlineBurningHomeRunModeScoring::Construct() {}
-    bool OnlineBurningHomeRunModeScoring::Prepare()  { return false; }
-    bool OnlineBurningHomeRunModeScoring::Release()  { return false; }
-    void OnlineBurningHomeRunModeScoring::Destruct() {}
-    void OnlineBurningHomeRunModeScoring::ClearData() {}
-    void OnlineBurningHomeRunModeScoring::Update(const ScoringSystem*, s32) {}
 }
 
 namespace CgsSound

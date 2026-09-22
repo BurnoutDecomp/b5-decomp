@@ -110,8 +110,8 @@ namespace CgsNetwork
     struct PlayerManager;
     struct TimeManager;
     struct NetworkManager;
-    struct ServerInterface;
-    struct BuddyManagerBase;
+    class  ServerInterface;
+    class  BuddyManagerBase;
 
     struct VoIPManager
     {
@@ -133,6 +133,29 @@ namespace CgsNetwork
         bool                 mbIsChatRestricted;         // +0x278
         bool                 mbGameIsHandlingHeadsetStatus; // +0x279
 
+        // --- lifecycle ---
+        void Construct(NetworkManager* lpNetworkManager);
+        bool Prepare(PlayerManager* lpPlayerManager, TimeManager* lpTimeManager,
+                     ServerInterface* lpServerInterface, BuddyManagerBase* lpBuddyManager,
+                     bool lbIsVoiceAllowed);
+        bool Release();
+        void Destruct();
+        void Update(bool lbIsLocalPlayerInGame);
+
+        // --- talkers ---
+        bool AddPlayer(VoIPNetworkPlayerID lPlayerID);
+        void RemotePlayerFinalised(ServerInterface* lpServerInterface, VoIPNetworkPlayerID lPlayerID);
+        bool RemovePlayer(ServerInterface* lpServerInterface, VoIPNetworkPlayerID lPlayerID);
+
+        // --- settings ---
+        void SetControllerPort(s32 liControllerPort);
+        void SetVoipVolume(s32 liVoipVolumePercent);
+        s32  GetVoipVolume();
+        void SetChatRestricted(bool lbIsChatRestricted);
+        void HandleReceivedHeadsetStatus(VoIPNetworkPlayerID lPlayerID,
+                                         ENetworkHeadsetPlayerStatus leStatus);
+        void SetGameSendingHeadsetStatus(bool lbGameIsHandlingHeadsetStatus);
+
         // Connection bitmask for the talker's server connection (external TU).
         u32 GetConnectionMask();
 
@@ -148,6 +171,18 @@ namespace CgsNetwork
         // EnableAllComms @ 0x82893868: re-enable mbCanTalk for every talker and
         // restore full speaker/microphone routing.
         VoIPManager* EnableAllComms();
+
+    private:
+        void ClearData();
+        void UpdateLocalPlayer();
+        void UpdateHeadsetStatusMessages(bool lbIsLocalPlayerInGame);
+        void RegisterMessage(VoIPNetworkPlayerID lPlayerID);
+        void UnregisterMessage(VoIPNetworkPlayerID lPlayerID);
+        bool DoesLocalPlayerHaveHeadset();
+        void SetBroadcastClients(u32 luConnectionMask);
+        s32  GetIndexFromID(VoIPNetworkPlayerID lPlayerID);
+        s32  GetIndexFromPlayerName(const char* lpcName) const;
+        void UpdateConnectionIDsAndSendMask(ServerInterface* lpServerInterface);
     };
 } // namespace CgsNetwork
 

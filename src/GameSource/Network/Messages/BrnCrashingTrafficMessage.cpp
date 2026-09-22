@@ -54,11 +54,8 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult CrashingTrafficMessage::PackOrUnpack()
     {
-        // The X360 body opens with a bl to a trivial `return 0` leaf that the linker
-        // identical-code-folded onto BrnWorld::PVSDebugComponent::IsSimple's address (the
-        // same ICF artifact seen in BrnCameraStatusMessage::PackOrUnpack). It is not a real
-        // relationship: the observable result is 0, seeded into the OR accumulator.
-        const u8 lbIsSimple = 0;
+        // Base Message::PackOrUnpack() status seeds the OR accumulator.
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
 
         const rw::math::vpu::Vector3 lPosMin = KV_CRASHING_TRAFFIC_POS_MIN;
         const rw::math::vpu::Vector3 lPosMax = KV_CRASHING_TRAFFIC_POS_MAX;
@@ -68,7 +65,7 @@ namespace BrnNetwork
         CgsNetwork::PackOrUnpackResult lxResult =
             CgsNetwork::PackOrUnpackInt(this, &miCrashingTrafficDataCount,
                                         KI_MIN_CRASHING_TRAFFIC_IN_MESSAGE,
-                                        KI_MAX_CRASHING_TRAFFIC_IN_MESSAGE) | lbIsSimple;
+                                        KI_MAX_CRASHING_TRAFFIC_IN_MESSAGE) | lxBase;
         lxResult =
             CgsNetwork::PackOrUnpackU16(this, &mu16FramesSinceRoundStart,
                                         KU16_CRASHING_TRAFFIC_MIN_FRAMES_SINCE_SRT,

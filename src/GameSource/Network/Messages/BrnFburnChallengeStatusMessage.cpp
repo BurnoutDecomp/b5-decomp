@@ -59,8 +59,8 @@ namespace BrnNetwork
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxBuffer =
-            CgsNetwork::PackOrUnpackBuffer(this,
-                                           reinterpret_cast<u8*>(&mCompletedChallenges),
+            CgsNetwork::Message::PackOrUnpackBuffer(
+                                           reinterpret_cast<char*>(&mCompletedChallenges),
                                            0x100);
         return lxBuffer | lxBase;
     }

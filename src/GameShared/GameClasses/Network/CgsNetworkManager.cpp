@@ -1,132 +1,49 @@
-#include "types.hpp"
+#include "GameShared/GameClasses/Network/CgsNetworkManager.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsNetwork::NetworkManager::NetworkManager @ 0x827E3F38
-
-namespace CgsSystem
-{
-    enum EFrameRate
-    {
-        E_FRAMERATE_UNKNOWN = 0
-    };
-}
+// CgsNetwork::NetworkManager -- the platform-independent core of the online hub. See the
+// header for the layout.
+//
+// Bodied here: the constructor, OnGameStart, OnGameFinish, OnRoundFinish and the
+// StartTimeMessageArrivedLate callback. Construct, Destruct, Prepare, Release, Update,
+// PostUpdate, OnEnterGame, OnLeaveGame and OnRoundStart reach the player manager or the
+// start-time manager, which are still pinned storage here, so they stay declared-only.
 
 namespace CgsNetwork
 {
-    struct VersionDisplay
-    {
-        VersionDisplay() {}
-        u8 maStorage[28];
-    };
+    // Registered by Construct (the only writer), read by Update.
+    s32 NetworkManager::_miPlayerManagerUpdatePerfMon;
+    s32 NetworkManager::_miNetworkAdapterUpdatePerfMon;
+    s32 NetworkManager::_miHostMigrationManagerUpdatePerfMon;
+    s32 NetworkManager::_miStartTimeManagerUpdatePerfMon;
+    s32 NetworkManager::_miVOIPManagerUpdatePerfMon;
 
-    struct NetworkAdapter
-    {
-        NetworkAdapter() {}
-        u8 maStorage[72];
-    };
-
-    struct PlayerManager
-    {
-        PlayerManager();
-        u8 maStorage[9476];
-    };
-
-    struct HostMigrationManager
-    {
-        HostMigrationManager() {}
-        u8 maStorage[1516];
-    };
-
-    struct StartTimeManager
-    {
-        StartTimeManager();
-        u8 maStorage[1960];
-    };
-
-    struct SyncTimeMessageManager
-    {
-        SyncTimeMessageManager();
-        u8 maStorage[816];
-    };
-
-    struct Time
-    {
-        Time() : muFrame(0), mfSeconds(0.0f) {}
-
-        u32 muFrame;
-        f32 mfSeconds;
-    };
-
-    struct TimeManager
-    {
-        TimeManager() : mStartTime(), mCurrentTime() {}
-
-        Time mStartTime;
-        Time mCurrentTime;
-        u8 maStorage[64];
-    };
-
-    struct VoIPManager
-    {
-        VoIPManager() {}
-    };
-
-    struct NetworkManager
-    {
-        enum EPrepareStage
-        {
-            E_PREPARESTAGE_START = 0,
-            E_PREPARESTAGE_NETWORK_ADAPTER = 1,
-            E_PREPARESTAGE_PLAYER_MANAGER = 2,
-            E_PREPARESTAGE_HOST_MIGRATION_MANGER = 3,
-            E_PREPARESTAGE_START_TIME_MANAGER = 4,
-            E_PREPARESTAGE_DONE = 5
-        };
-
-        enum EReleaseStage
-        {
-            E_RELEASESTAGE_START = 0,
-            E_RELEASESTAGE_VOIP_MANAGER = 1,
-            E_RELEASESTAGE_START_TIME_MANAGER = 2,
-            E_RELEASESTAGE_HOST_MIGRATION_MANGER = 3,
-            E_RELEASESTAGE_PLAYER_MANAGER = 4,
-            E_RELEASESTAGE_NETWORK_ADAPTER = 5,
-            E_RELEASESTAGE_DONE = 6
-        };
-
-        NetworkManager();
-
-        VersionDisplay mVersionDisplay;
-        NetworkAdapter mNetworkAdapter;
-        s32 miActiveControllerPort;
-        bool mbSysMenuOnScreen;
-        u8 maPad105[3];
-        EPrepareStage mePrepareStage;
-        EReleaseStage meReleaseStage;
-        CgsSystem::EFrameRate meLocalConsoleFrameRate;
-        PlayerManager mPlayerManager;
-        HostMigrationManager mHostMigrationManager;
-        StartTimeManager mStartTimeManager;
-        SyncTimeMessageManager mSyncTimeMessageManager;
-        TimeManager mTimeManager;
-        VoIPManager mVoIPManager;
-    };
-
+    // Only the sub-objects' own constructors run here (vtables, embedded messages, the
+    // network clocks); every manager field is seeded later by Construct.
     NetworkManager::NetworkManager()
-        : mVersionDisplay(),
-          mNetworkAdapter(),
-          miActiveControllerPort(0),
-          mbSysMenuOnScreen(false),
-          maPad105(),
-          mePrepareStage(E_PREPARESTAGE_START),
-          meReleaseStage(E_RELEASESTAGE_START),
-          meLocalConsoleFrameRate(CgsSystem::E_FRAMERATE_UNKNOWN),
-          mPlayerManager(),
-          mHostMigrationManager(),
-          mStartTimeManager(),
-          mSyncTimeMessageManager(),
-          mTimeManager(),
-          mVoIPManager()
+    {
+    }
+
+    // Empty on the console: the base keeps no per-game state to start.
+    void NetworkManager::OnGameStart(CgsSystem::Time lStartTime, u16 lu16CurrentFrame)
+    {
+    }
+
+    // The game is over: forget the start frame so frame-since-start queries go invalid.
+    // The time step is not read on the invalid path.
+    void NetworkManager::OnGameFinish(CgsSystem::Time lFinishTime, u16 lu16CurrentFrame)
+    {
+        mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_INVALID, nullptr, 0.0f);
+    }
+
+    // The round is over: forget the start frame, as at the end of a game.
+    void NetworkManager::OnRoundFinish(CgsSystem::Time lFinishTime, u16 lu16CurrentFrame)
+    {
+        mTimeManager.SetStartFrame(TimeManager::E_START_FRAME_INVALID, nullptr, 0.0f);
+    }
+
+    // Registered with the start-time manager; the base class does nothing when the start
+    // message arrives late.
+    void NetworkManager::StartTimeMessageArrivedLate()
     {
     }
 }

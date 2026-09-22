@@ -2,16 +2,9 @@
 
 namespace CgsNetwork
 {
+// The console ctor only seeds the embedded members of the seven entries: the test-connection
+// and connection-status message objects and the test timestamp (CgsSystem::Time's own ctor).
 PlayersConnectionManager::PlayersConnectionManager()
 {
-    for (ConnectionRecord& lConnection : maConnections)
-    {
-        lConnection.muReadyVTable0 = 0x820CF5E0;
-        lConnection.muReadyVTable1 = 0x820CF5E0;
-        lConnection.muConnectionState = 0;
-        lConnection.mfConnectionTime = 0.0f;
-        lConnection.muTimerVTable0 = 0x820CF60C;
-        lConnection.muTimerVTable1 = 0x820CF60C;
-    }
 }
 }

@@ -1,40 +1,27 @@
 #pragma once
 
 // ===================================================================================
-// BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent -- owning header
+// BrnNetwork::BrnNetworkModuleIO network IN-event leaves -- owning header
 //   b5-decomp/src/GameSource/Network/BrnNetworkInEventTypeDefs.h
 //
-// The "select scoreboard" network IN-event the GUI raises to drive the scoreboard browser
-// (BrnGame::BrnGameModule::TranslateGuiEventsToNetworkEvents and the
-// BrnNetwork::ScoreboardDebugComponent forward into these three factory builders).
-//
-// SHAPE recovered from the X360 builder bodies (GetIndexes @ 0x823A6350, GetVariations
-// @ 0x823A63B8, GetScoreboard @ 0x823A6420; asserts cited against
-// GameSource/Network/BrnNetworkInEventTypeDefs.h:1031/1048/1065). Each builder takes one
-// selection value and a discriminator, storing exactly two 32-bit words:
-//
-//   +0x00 (4)  miCategory    set by GetIndexes(liCategory)     (asm `stw r30, 0(r31)`)
-//   +0x04 (4)  miIndex       set by GetVariations(liIndex)     (asm `stw r30, 4(r31)`)
-//   +0x08 (4)  miVariation   set by GetScoreboard(liVariation) (asm `stw r30, 8(r31)`)
-//   +0x0C (4)  meSelectType  the level the event selects       (asm `li r11, N; stw r11, 0xC(r31)`)
-//
-// Each builder writes ONLY its own value field + meSelectType (the other value fields are
-// left untouched, matching the two-store-each asm). meSelectType takes 2/3/4 for
-// Indexes/Variations/Scoreboard respectively (the asm `li r11, 2|3|4`).
-//
-// DWARF spells the event BrnNetwork::BrnNetworkModuleIO::NetworkEvent<N> (the empty Event
-// spine + a GetEventType() that returns the compile-time tag N). The concrete tag N for this
-// leaf is not reachable from this slice (the three builders never store it), so the event is
-// modelled here on the empty BrnNetwork::Event base directly -- which is byte-identical to the
-// NetworkEvent<N> base (no data members, first field at +0x00). FLAG: re-base onto
-// NetworkEvent<N> with the recovered tag when the BrnNetwork module-IO event-type table lands
-// (the field offsets must not move).
+// Each leaf is a NetworkEvent<N> (the empty Event spine + the compile-time event-type tag
+// N it is queued under). N is the console tag the producers pass to
+// VariableEventQueue<14000,16>::AddEvent, which drifts from the reference numbering for the
+// later leaves (the select-scoreboard event is queued as 49, the reference says 47).
+// A leaf whose tag is not yet attested is modelled on the empty Event base directly; both
+// bases are byte-identical (no data members, first field at +0x00).
 // ===================================================================================
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (builder >= 0 guards)
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::Event (empty event spine base)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::Event, NetworkEvent<N>, TelemetryData
 #include "GameSource/Network/Shared Server Types/BrnNetworkSharedServerTypes.h" // ServerGeneratedTypes::OfflineProgressionT
+#include "pc/gcm/renderengine/pixelformat.h"                     // renderengine::PixelFormat (NetworkInReqCamPicEvent)
+
+namespace CgsNetwork
+{
+    class NetworkTexture;   // GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h (held by pointer only)
+}
 
 namespace BrnNetwork
 {
@@ -44,7 +31,7 @@ namespace BrnNetworkModuleIO
     // accumulated offline-play progress to the network player-stats manager. DWARF spells it
     // `: public NetworkEvent<33>` (tag 33); the empty BrnNetwork::Event base is byte-identical
     // to that NetworkEvent<N> base (no data members, first field at +0x00 -- see the
-    // NetworkInSelectScoreboardEvent note below), so it is modelled on Event directly.
+    // banner), so it is modelled on Event directly.
     //
     // LAYOUT is X360-AUTHORITATIVE from NetworkPlayerStatsManager::HandleOfflineProgressionEvent
     // (@0x82546BB0): that body memcpy's exactly 0x44 == 68 bytes of this event into its buffered
@@ -59,27 +46,93 @@ namespace BrnNetworkModuleIO
         s32                                       miFreeburnChallengeSuccessCount; // +0x40 (asm-recovered)
     };
 
-    struct NetworkInSelectScoreboardEvent : public Event
+    // The select-scoreboard IN-event (reference home line 668). The GUI bridge and the
+    // scoreboard debug component build it on the stack: Prepare() (inlined: the three headings
+    // to KI_INVALID_HEADING, meType to E_TYPE_NONE), then ONE selector, then AddEvent. The
+    // debug component skips Prepare, so its unset headings are stack garbage exactly as on the
+    // console. ScoreboardManager::ProcessEventQueue pops it and reads it back through the
+    // GetChosen* accessors (their asserts sit at the reference header's lines 1109/1124/1139).
+    //
+    //   +0x00 miCategory   GetIndexes     (asserts >= 0; reference line 1031)
+    //   +0x04 miIndex      GetVariations  (asserts >= 0; reference line 1048)
+    //   +0x08 miVariation  GetScoreboard  (asserts >= 0; reference line 1065)
+    //   +0x0C meType       every selector
+    //
+    // GetIndexes / GetVariations / GetScoreboard are out of line on the console (their
+    // asserts keep them from inlining); the rest inline at every call site.
+    struct NetworkInSelectScoreboardEvent : public NetworkEvent<49>
     {
-        // Which scoreboard browsing level this event selects (the +0xC discriminator).
-        enum ESelectType
+        enum EScoreboardEventType
         {
-            E_SELECT_INDEXES    = 2,   // GetIndexes    set category, browse indexes
-            E_SELECT_VARIATIONS = 3,   // GetVariations set index, browse variations
-            E_SELECT_SCOREBOARD = 4,   // GetScoreboard set variation, show scoreboard
+            E_TYPE_NONE           = 0,
+            E_TYPE_GET_CATEGORY   = 1,
+            E_TYPE_GET_INDEX      = 2,
+            E_TYPE_GET_VARIATION  = 3,
+            E_TYPE_GET_SCOREBOARD = 4,
+            E_TYPE_PAGE_UP        = 5,
+            E_TYPE_PAGE_DOWN      = 6,
+            E_TYPE_COUNT          = 7,
         };
 
-        s32 miCategory;     // +0x00
-        s32 miIndex;        // +0x04
-        s32 miVariation;    // +0x08
-        s32 meSelectType;   // +0x0C (ESelectType)
+        static const s32 KI_INVALID_HEADING = -1;
 
-        // @ 0x823A6350 -- build a "select indexes" event for liCategory (asserts liCategory >= 0).
-        static NetworkInSelectScoreboardEvent GetIndexes(s32 liCategory);
-        // @ 0x823A63B8 -- build a "select variations" event for liIndex (asserts liIndex >= 0).
-        static NetworkInSelectScoreboardEvent GetVariations(s32 liIndex);
-        // @ 0x823A6420 -- build a "show scoreboard" event for liVariation (asserts liVariation >= 0).
-        static NetworkInSelectScoreboardEvent GetScoreboard(s32 liVariation);
+        void Prepare()
+        {
+            miCategory  = KI_INVALID_HEADING;
+            miIndex     = KI_INVALID_HEADING;
+            miVariation = KI_INVALID_HEADING;
+            meType      = E_TYPE_NONE;
+        }
+
+        void GetCategories() { meType = E_TYPE_GET_CATEGORY; }
+        void GetIndexes(s32 liCategory);
+        void GetVariations(s32 liIndex);
+        void GetScoreboard(s32 liVariation);
+        void PageUp()        { meType = E_TYPE_PAGE_UP; }
+        void PageDown()      { meType = E_TYPE_PAGE_DOWN; }
+
+        s32 GetChosenCategory() const
+        {
+            CGS_ASSERT(miCategory != KI_INVALID_HEADING, "miCategory != KI_INVALID_HEADING");
+            return miCategory;
+        }
+        s32 GetChosenIndex() const
+        {
+            CGS_ASSERT(miIndex != KI_INVALID_HEADING, "miIndex != KI_INVALID_HEADING");
+            return miIndex;
+        }
+        s32 GetChosenVariation() const
+        {
+            CGS_ASSERT(miVariation != KI_INVALID_HEADING, "miVariation != KI_INVALID_HEADING");
+            return miVariation;
+        }
+        EScoreboardEventType GetScoreboardEventType() { return meType; }
+
+    private:
+        s32                  miCategory;    // +0x00
+        s32                  miIndex;       // +0x04
+        s32                  miVariation;   // +0x08
+        EScoreboardEventType meType;        // +0x0C
+
+        static void _AssertLayout();
+    };
+
+    // The telemetry IN-event (reference home line 273, tag 16 on both builds): one
+    // TelemetryData record, queued with its full 20-byte size.
+    struct NetworkInTelemetryEvent : public NetworkEvent<16>
+    {
+        TelemetryData mEventData;   // +0x00
+    };
+    static_assert(sizeof(NetworkInTelemetryEvent) == 20, "NetworkInTelemetryEvent is queued as 20 bytes");
+
+    // The compressed camera-picture request (reference home line 776). Queued as tag 53 with
+    // the console size 12; the texture pointer makes the host record wider, so producers queue
+    // sizeof().
+    struct NetworkInReqCamPicEvent : public NetworkEvent<53>
+    {
+        s32                         miQualitySetting;            // +0x00
+        renderengine::PixelFormat   meCompressedFormat;          // +0x04
+        CgsNetwork::NetworkTexture* mpTextureToCompressedInto;   // +0x08 (4 bytes on the console)
     };
 }
 } // namespace BrnNetwork

@@ -67,8 +67,8 @@ namespace CgsNetwork
 void ServerInterfaceServerInfo::Construct()
 {
     miLastError          = 0;                              // +0x0C
-    mpErrorData          = gpcErrorData;                   // +0x04
-    miStatus             = 2;                              // +0x08
+    mpcCurrentAction     = static_cast<const char*>(static_cast<const void*>(gpcErrorData)); // +0x04
+    meStatus             = 2;                              // +0x08
     mpServerInterface    = 0;                              // +0x10
     meCurrentAction      = E_ACTION_COUNT;                 // +0x1C
 }

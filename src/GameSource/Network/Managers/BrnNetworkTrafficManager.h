@@ -1,95 +1,310 @@
 // ============================================================================
 // b5-decomp/src/GameSource/Network/Managers/BrnNetworkTrafficManager.h
 // ============================================================================
-// BrnNetwork::TrafficManager::BufferedMessage -- one buffered traffic-replication
-// message record held in the TrafficManager's fixed-capacity buffered-message ring
-// (BrnNetworkTrafficManager.cpp). The manager keeps an array of these records; the
-// consumer BrnNetwork::TrafficManager::RemoveBufferedMessage (X360 0x82559840) walks
-// the array at a 1936-byte (0x790) stride, so sizeof(BufferedMessage) == 1936.
+// BrnNetwork::TrafficManager -- the online traffic synchroniser embedded in
+// BrnNetworkManager at +0x6B00 (console sizeof 0x184C0 == 99,520 bytes).
 //
-// No source or DWARF is available for this TU, so the SHAPE is recovered purely from
-// the X360 asm:
-//   * the copy-assignment BufferedMessage::operator= @ 0x82551D50 -- a plain whole-
-//     object struct copy. Its body copies a 10-byte head (a u16 @ +0, an s32 @ +4,
-//     an s32 @ +8) and then an array of 24 fixed 80-byte (0x50) records starting at
-//     +0x10. Each record copy is a u16 head @ record+0 plus a 64-byte body @
-//     record+0x10..+0x50 (emitted as four aligned 16-byte lvx128/stvx128 block moves
-//     -- a wide memcpy of the record body, NOT a VMX math pipeline).
-//   * RemoveBufferedMessage stamps the two head s32 fields (@ +4 and @ +8) with -1 on
-//     removal (the X360 `*(... - 1932) = -1; *(... - 1928) = -1`), so those two words
-//     are the record's id/index slots; the u16 @ +0 is a message-type/length tag.
+// It keeps one TrafficSyncData slot per remote network player (7 slots, each with a
+// send/receive copy of the four traffic messages: hull sync, crashing traffic,
+// restart traffic and traffic hash), a 35-deep buffer of crashing-traffic messages
+// received ahead of the local frame, the pending traffic-restart request, and a
+// 128-deep ring of the local traffic hashes used to detect a diverged simulation.
 //
-// The 24 x 80-byte body records and the 64 payload bytes inside each are modelled as
-// offset-pinned opaque storage (their finer field types are not recoverable from a
-// pure copy/clear); every byte the X360 copies is preserved at its exact offset so a
-// later finer reconstruction can subdivide the storage without moving anything. The
-// copy is reproduced as an ordinary memberwise copy (= the X360's store-for-store
-// whole-object copy) over that layout.
+// LAYOUT
+// ------
+// Class key, member names and member order follow the reference type dump
+// (struct BrnNetwork::TrafficManager). Every console offset below is attested by the
+// constructor, Construct, Destruct, ResetData, ClearCrashingTraffic and the per-frame
+// functions; _AssertLayout() pins them in a 32-bit build, where the committed message
+// headers reproduce their console widths. On the x64 host pointers widen, so code
+// reaches every member by name only.
+//
+// The per-slot CrashingTrafficData arrays are default-constructed by the constructor
+// (the console runs a vector-constructor loop over each 24-record array whose element
+// constructor is an empty, identical-code-folded body); the aggregate is homed in
+// BrnCrashingTrafficMessage.h next to the message that carries it.
+// ============================================================================
 #pragma once
 
+#include <cstddef>                                                                // offsetof (_AssertLayout)
+
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"   // CgsContainers::RingBuffer<TrafficHashEntry> (TrafficHash ring)
+#include "GameSource/BurnoutConstants.h"                                          // EActiveRaceCarIndex
+#include "GameShared/GameClasses/Containers/CgsRingBuffer.h"                      // CgsContainers::FixedRingBuffer<T,N>
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"                        // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"                     // CgsSystem::EFrameRate
+#include "GameSource/CompilerDefines/gameshared_network_defines.h"                // ::KI_MAX_NETWORK_PLAYERS
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::NetworkPlayerID
+#include "GameSource/Network/Messages/BrnHullSyncMessage.h"                       // HullSyncMessage, BufferedHullsToActivate
+#include "GameSource/Network/Messages/BrnCrashingTrafficMessage.h"                // CrashingTrafficMessage, CrashingTrafficData
+#include "GameSource/Network/Messages/BrnRestartTrafficMessage.h"                 // RestartTrafficMessage
+#include "GameSource/Network/Messages/BrnTrafficHashMessage.h"                    // TrafficHashMessage
+
+namespace CgsNetwork
+{
+    struct PlayerManager;       // pointer-only (mpPlayerManager)
+    struct TimeManager;         // pointer-only (mpTimeManager)
+    struct NetworkPlayer;       // RegisterMessages parameter
+    struct ReliableMessage;     // arrived-callback parameter
+    struct SignalMessage;       // delivered-callback parameter
+}
 
 namespace BrnNetwork
 {
-namespace TrafficManager
-{
+    class BrnNetworkModule;     // pointer-only (mpNetworkModule)
 
-    // ------------------------------------------------------------------------
-    // BrnNetwork::TrafficManager::TrafficHash element. The TrafficHash ring is a
-    // CgsContainers::RingBuffer<TrafficHashEntry>; its Push @ 0x8254DC90 copies each entry
-    // as exactly two halfwords (`lhz/sth` @ entry+0 and entry+2) at a 4-byte stride
-    // (`slwi r11, r11, 2`), i.e. sizeof(TrafficHashEntry) == 4. Only the two u16 lanes are
-    // attested by the asm; their finer meaning is not recoverable from the Push body alone,
-    // so they are modelled as offset-pinned halfwords (the producer BrnTrafficHashMessage
-    // pairs a synced-frame index with a 16-bit traffic-determinism hash, which is the
-    // plausible {frame, hash} pairing this ring records -- but the names below are kept
-    // neutral to avoid asserting an unverified field semantics).
-    // ------------------------------------------------------------------------
-    struct TrafficHashEntry
+    struct TrafficManager
     {
-        u16 mu16Lane0;   // +0x00  (lhz/sth head halfword copied per Push)
-        u16 mu16Lane1;   // +0x02  (lhz/sth second halfword copied per Push)
-    };
-    static_assert(sizeof(TrafficHashEntry) == 4, "TrafficHash ring entry stride (4 bytes)");
+    public:
+        // One per-player synchronisation slot. Console stride 0x1160.
+        struct TrafficSyncData
+        {
+            NetworkPlayerID         mPlayerID;                        // +0x0000
+            HullSyncMessage         mHullSyncMessageSend;             // +0x0004
+            HullSyncMessage         mHullSyncMessageRecv;             // +0x005C
+            CrashingTrafficMessage  mCrashingTrafficMessageSend;      // +0x00C0
+            CrashingTrafficMessage  mCrashingTrafficMessageRecv;      // +0x0870
+            RestartTrafficMessage   mRestartTrafficMessageSend;       // +0x1020
+            RestartTrafficMessage   mRestartTrafficMessageRecv;       // +0x107C
+            TrafficHashMessage      mTrafficHashMessageSend;          // +0x10D8
+            TrafficHashMessage      mTrafficHashMessageRecv;          // +0x1100
+            BufferedHullsToActivate mBufferedHullActivates;           // +0x1128
+            bool                    mbIsThereCrashingTrafficToSend;   // +0x1158
+        };
 
-    // The TrafficHash ring records the recent traffic-determinism hashes. Push @ 0x8254DC90
-    // is the generic CgsContainers::RingBuffer<Type>::Push (CgsRingBuffer.h): the layout the
-    // asm walks is exactly RingBuffer<Type> -- mpData@+0, miMaxLength@+4, miReadPos@+8,
-    // miWritePos@+0xC, miLength@+0x10 -- and the full-buffer invariant assert it fires is
-    // CgsRingBuffer.h:137 ("Read pos should equal write pos if buffer is full").
-    typedef CgsContainers::RingBuffer<TrafficHashEntry> TrafficHash;
-    // ------------------------------------------------------------------------
-    // One 80-byte (0x50) buffered-message body record. The copy reads a u16 head
-    // (@ +0) and then copies the 64-byte body @ +0x10..+0x50 as a block; +0x02..+0x10
-    // is head padding the copy skips. Modelled as offset-pinned storage.
-    // ------------------------------------------------------------------------
-    struct BufferedMessageRecord
+        // A crashing-traffic message received for a frame the local simulation has not
+        // reached yet. Console stride 0x790.
+        struct BufferedMessage
+        {
+            u16                 mu16FramesSinceRoundStart;                              // +0x00
+            NetworkPlayerID     mOwningNetworkPlayerID;                                 // +0x04
+            s32                 miCrashingTrafficDataCount;                             // +0x08
+            CrashingTrafficData maCrashingTrafficData[KI_MAX_CRASHING_TRAFFIC_IN_MESSAGE]; // +0x10
+
+            BufferedMessage& operator=(const BufferedMessage& lOther);
+        };
+
+        // The pending traffic-restart request (console 18 bytes).
+        struct BufferedRestartMessage
+        {
+            u16 mau16ActiveHulls[8];                                  // +0x00
+            u16 mu16RestartFrame;                                     // +0x10
+        };
+
+        // One stored local traffic hash (console 4 bytes).
+        struct TrafficHash
+        {
+            u16 muTrafficHash;                                        // +0x00
+            u16 muUpdate10HzFrame;                                    // +0x02
+        };
+
+        TrafficManager();
+
+        // ---- lifecycle ----------------------------------------------------------------
+        void Construct(BrnNetworkModule* lpNetworkModule,
+                       CgsNetwork::PlayerManager* lpPlayerManager,
+                       CgsNetwork::TimeManager* lpTimeManager);
+        bool Prepare();
+        bool Release();
+        void Destruct();
+
+        // ---- per-frame -------------------------------------------------------------------
+        void Update(bool lbInGame);
+
+        // ---- session hooks ---------------------------------------------------------------
+        void AddPlayer(NetworkPlayerID lPlayerID);
+        void RemovePlayer(NetworkPlayerID lPlayerID);
+        void Disconnected();
+        void ClearCrashingTraffic();
+        void OnGameLaunching();
+        void OnGameStart();
+        void OnRoundStart(bool lbSuppressHullSyncsUntilReset);
+        void OnRoundFinish();
+        void OnLeaveGame();
+        void SuppressTrafficRestart(bool lbSuppress);
+        void RestartNetworkTraffic(NetworkPlayerID lPlayerID);
+
+    private:
+        static const s32 KI_REPORT_CRASHING_TRAFFIC_DELAY_50HZ     = 50;
+        static const s32 KI_REPORT_CRASHING_TRAFFIC_DELAY_60HZ     = 60;
+        static const s32 KI_MAX_BUFFERED_CRASHING_TRAFFIC_MESSAGES = 35;
+        static const s32 KI_NUM_TRAFFIC_HASH_TO_STORE              = 128;
+        static const s32 KI_UPDATE_FRAME_WRAP_MARGIN               = 10000;
+
+        void ResetData();
+        TrafficSyncData* GetTrafficSyncDataEntry(NetworkPlayerID lPlayerID);
+
+        // Inlined at every call site: the index of the slot owned by lPlayerID, or -1.
+        s32 GetIndexOfPlayerInTrafficData(NetworkPlayerID lPlayerID)
+        {
+            for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
+            {
+                if (maTrafficData[liIndex].mPlayerID == lPlayerID)
+                {
+                    return liIndex;
+                }
+            }
+            return -1;
+        }
+
+        void RegisterMessages(CgsNetwork::NetworkPlayer* lpNetworkPlayer, TrafficSyncData* lpDataEntry);
+
+        void UpdateHullSync();
+        void HandleHullSyncMessage(EActiveRaceCarIndex leActiveRaceCarIndex,
+                                   u16 lu16TrafficUpdateToActivate, s32 liHull);
+        void SendHullSyncMessages();
+
+        void SendCrashingTrafficMessages(bool lbInGame);
+        bool GetCrashingTrafficData(CrashingTrafficData* lpaCrashingTrafficData, s32* lpiCount);
+        void ReceiveCrashingTrafficMessages();
+        void StoreBufferedMessage(NetworkPlayerID lPlayerID, CrashingTrafficMessage* lpMessage,
+                                  CgsSystem::EFrameRate leLocalConsoleFrameRate,
+                                  CgsSystem::EFrameRate leRemoteConsoleFrameRate);
+        BufferedMessage* RetrieveBufferedMessage(u16 lu16Frame);
+        u16  ConvertReceivedMessageFrameToLocalFrame(u16 lu16Frame,
+                                                     CgsSystem::EFrameRate leLocalConsoleFrameRate,
+                                                     CgsSystem::EFrameRate leRemoteConsoleFrameRate);
+        u16  ConvertLocalFrameToReceivedMessageFrame(u16 lu16Frame,
+                                                     CgsSystem::EFrameRate leLocalConsoleFrameRate,
+                                                     CgsSystem::EFrameRate leRemoteConsoleFrameRate);
+        bool IsMessageFromBeforeTrafficReset(u16 lu16MessageFrame, NetworkPlayerID lPlayerID);
+        bool IsTrafficSystemResetPending();
+        void RemoveBufferedMessage(BufferedMessage* lpBufferedMessage);
+        void DeleteOutOfDateBufferedMesssages(u16 lu16Frame);
+
+        void UpdateRestartTraffic();
+        void OnTrafficRestarted();
+        void HandleSendingRestartTrafficMessages();
+        void ProcessBufferedRestartTrafficMessages();
+        void BufferRestartTrafficMessage(BufferedRestartMessage lRestartMessage);
+        bool IsTrafficRestartRequired(u16* lpauOutActiveHulls, u16* lpuOutRestartFrame);
+
+        static void _HullSyncMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                    NetworkPlayerID lPlayerID, void* lpUserData);
+        static void _HullSyncMessageDeliveredCallback(bool lbDelivered, bool lbWasReliable,
+                                                      CgsNetwork::SignalMessage* lpMessage,
+                                                      NetworkPlayerID lPlayerID, void* lpUserData);
+        static void _RestartTrafficMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                          NetworkPlayerID lPlayerID, void* lpUserData);
+        static void _RestartTrafficMessageDeliveredCallback(bool lbDelivered, bool lbWasReliable,
+                                                            CgsNetwork::SignalMessage* lpMessage,
+                                                            NetworkPlayerID lPlayerID, void* lpUserData);
+
+        void UpdateTrafficHashing(bool lbInGame);
+        void StoreTrafficHash(u16 lu16Update10HzFrame, u16 lu16TrafficHash);
+        void SendTrafficHashingMessage(bool lbInGame);
+        void ReceiveTrafficHashingMessages();
+        bool FindHashForFrame(u16 lu16Update10HzFrame, u16* lpu16OutHash) const;
+
+        // Inlined at its call site: the signed distance between two 16-bit update frames,
+        // unwrapping whichever one lags the other by more than the wrap margin.
+        s32 CalcWrappedUpdateFrameDifference(s32 liFrameA, s32 liFrameB) const
+        {
+            if (liFrameA + KI_UPDATE_FRAME_WRAP_MARGIN < liFrameB)
+            {
+                liFrameA += 0x10000;
+            }
+            else if (liFrameB + KI_UPDATE_FRAME_WRAP_MARGIN < liFrameA)
+            {
+                liFrameB += 0x10000;
+            }
+            return liFrameA - liFrameB;
+        }
+
+        // Console offsets pinned in a 32-bit build; inert on the x64 host.
+        static void _AssertLayout();
+
+        BufferedMessage             maBufferedCrashingTrafficMessages[KI_MAX_BUFFERED_CRASHING_TRAFFIC_MESSAGES]; // +0x00000
+        TrafficSyncData             maTrafficData[::KI_MAX_NETWORK_PLAYERS];      // +0x108B0
+        BufferedRestartMessage      mBufferedRestartTrafficMessage;             // +0x18250
+        s32                         miNumMessagesBuffered;                      // +0x18264
+        s32                         miNumRestartMessagesBuffered;               // +0x18268
+        u16                         mu16LastBufferReadFrame;                    // +0x1826C
+        u16                         mu16LastTrafficResetFrame;                  // +0x1826E
+        u16                         mu16NumFramesSinceLastReset;                // +0x18270
+        CgsContainers::BitArray<7>  mPendingTrafficResetBitArray;               // +0x18278
+        bool                        mbHasRoundStarted;                          // +0x18280
+        bool                        mbRestartNetworkTraffic;                    // +0x18281
+        bool                        mbSuppressTrafficRestart;                   // +0x18282
+        bool                        mbSuppressingHullSyncsUntilReset;           // +0x18283
+        BrnNetworkModule*           mpNetworkModule;                            // +0x18284
+        CgsNetwork::PlayerManager*  mpPlayerManager;                            // +0x18288
+        CgsNetwork::TimeManager*    mpTimeManager;                              // +0x1828C
+        bool                        mbSyncingTime;                              // +0x18290
+        u16                         muLastHashUpdate10HzFrame;                  // +0x18292
+        u16                         muLastTrafficHash;                          // +0x18294
+        bool                        mbLastHashDataValid;                        // +0x18296
+        CgsContainers::FixedRingBuffer<TrafficHash, KI_NUM_TRAFFIC_HASH_TO_STORE> maStoredTrafficHashes; // +0x18298
+        u16                         muCurrentTrafficUpdateFrame;                // +0x184AC
+        bool                        mbHasTrafficDiverged;                       // +0x184AE
+        bool                        mbIsThisMachineInThePast;                   // +0x184AF
+        bool                        mbShowTrafficDivergence;                    // +0x184B0
+        s32                         miInThePastAmount;                          // +0x184B4
+    };
+
+    inline void TrafficManager::_AssertLayout()
     {
-        u16 muTag;              // +0x00  (lhz/sth head copied per record)
-        u8  maHeadPad[0x10 - 2];// +0x02  head padding (not touched by the copy)
-        u8  maBody[0x40];       // +0x10  64-byte body block (4x aligned 16B moves)
-    };
-    static_assert(sizeof(BufferedMessageRecord) == 0x50, "BufferedMessage record stride (0x50)");
+        // The embedded message types must match their console widths first; a failure here
+        // points at the message header, not at this class.
+        static_assert(sizeof(void*) != 4 || sizeof(HullSyncMessage)        == 0x58,  "HullSyncMessage console size");
+        static_assert(sizeof(void*) != 4 || sizeof(CrashingTrafficMessage) == 0x7B0, "CrashingTrafficMessage console size");
+        static_assert(sizeof(void*) != 4 || sizeof(RestartTrafficMessage)  == 0x5C,  "RestartTrafficMessage console size");
+        static_assert(sizeof(void*) != 4 || sizeof(TrafficHashMessage)     == 0x28,  "TrafficHashMessage console size");
+        static_assert(sizeof(void*) != 4 || sizeof(CrashingTrafficData)    == 0x50,  "CrashingTrafficData console size");
 
-    // ------------------------------------------------------------------------
-    // BrnNetwork::TrafficManager::BufferedMessage -- a single buffered traffic
-    // message: a 10-byte head (type tag + two id/index words) followed by 24 body
-    // records. sizeof == 1936 (the manager's array stride).
-    // ------------------------------------------------------------------------
-    struct BufferedMessage
-    {
-        u16 muType;                     // +0x00  message-type/length tag (lhz/sth head)
-        u8  maHeadPad[2];               // +0x02  alignment to the +4 id word
-        s32 miId0;                      // +0x04  id/index word (stamped -1 on remove)
-        s32 miId1;                      // +0x08  id/index word (stamped -1 on remove)
-        u8  maHeadTail[0x10 - 0x0C];    // +0x0C  pad to the +0x10 record array
-        BufferedMessageRecord maRecords[24]; // +0x10  24 x 0x50 body records
+#define BRN_TM_SLOT_AT(member, off) \
+        static_assert(sizeof(void*) != 4 || offsetof(TrafficSyncData, member) == off, "TrafficSyncData::" #member " @ " #off)
+        BRN_TM_SLOT_AT(mPlayerID,                     0x0000);
+        BRN_TM_SLOT_AT(mHullSyncMessageSend,          0x0004);
+        BRN_TM_SLOT_AT(mHullSyncMessageRecv,          0x005C);
+        BRN_TM_SLOT_AT(mCrashingTrafficMessageSend,   0x00C0);
+        BRN_TM_SLOT_AT(mCrashingTrafficMessageRecv,   0x0870);
+        BRN_TM_SLOT_AT(mRestartTrafficMessageSend,    0x1020);
+        BRN_TM_SLOT_AT(mRestartTrafficMessageRecv,    0x107C);
+        BRN_TM_SLOT_AT(mTrafficHashMessageSend,       0x10D8);
+        BRN_TM_SLOT_AT(mTrafficHashMessageRecv,       0x1100);
+        BRN_TM_SLOT_AT(mBufferedHullActivates,        0x1128);
+        BRN_TM_SLOT_AT(mbIsThereCrashingTrafficToSend, 0x1158);
+#undef BRN_TM_SLOT_AT
+        static_assert(sizeof(void*) != 4 || sizeof(TrafficSyncData) == 0x1160, "TrafficSyncData stride 0x1160");
 
-        // X360 0x82551D50 -- whole-object copy. Reproduced as a memberwise copy
-        // (the X360 emits the equivalent store-for-store wide copy).
-        BufferedMessage& operator=(const BufferedMessage& lOther);
-    };
-    static_assert(sizeof(BufferedMessage) == 1936, "BufferedMessage array stride (0x790)");
-}
+        static_assert(offsetof(BufferedMessage, mu16FramesSinceRoundStart)  == 0x00, "BufferedMessage +0x00");
+        static_assert(offsetof(BufferedMessage, mOwningNetworkPlayerID)     == 0x04, "BufferedMessage +0x04");
+        static_assert(offsetof(BufferedMessage, miCrashingTrafficDataCount) == 0x08, "BufferedMessage +0x08");
+        static_assert(offsetof(BufferedMessage, maCrashingTrafficData)      == 0x10, "BufferedMessage +0x10");
+        static_assert(sizeof(void*) != 4 || sizeof(BufferedMessage) == 0x790, "BufferedMessage stride 0x790");
+        static_assert(offsetof(BufferedRestartMessage, mu16RestartFrame) == 0x10, "BufferedRestartMessage +0x10");
+        static_assert(sizeof(TrafficHash) == 4, "TrafficHash stride 4");
+
+#define BRN_TM_AT(member, off) \
+        static_assert(sizeof(void*) != 4 || offsetof(TrafficManager, member) == off, "TrafficManager::" #member " @ " #off)
+        BRN_TM_AT(maBufferedCrashingTrafficMessages, 0x00000);
+        BRN_TM_AT(maTrafficData,                     0x108B0);
+        BRN_TM_AT(mBufferedRestartTrafficMessage,    0x18250);
+        BRN_TM_AT(miNumMessagesBuffered,             0x18264);
+        BRN_TM_AT(miNumRestartMessagesBuffered,      0x18268);
+        BRN_TM_AT(mu16LastBufferReadFrame,           0x1826C);
+        BRN_TM_AT(mu16LastTrafficResetFrame,         0x1826E);
+        BRN_TM_AT(mu16NumFramesSinceLastReset,       0x18270);
+        BRN_TM_AT(mPendingTrafficResetBitArray,      0x18278);
+        BRN_TM_AT(mbHasRoundStarted,                 0x18280);
+        BRN_TM_AT(mbRestartNetworkTraffic,           0x18281);
+        BRN_TM_AT(mbSuppressTrafficRestart,          0x18282);
+        BRN_TM_AT(mbSuppressingHullSyncsUntilReset,  0x18283);
+        BRN_TM_AT(mpNetworkModule,                   0x18284);
+        BRN_TM_AT(mpPlayerManager,                   0x18288);
+        BRN_TM_AT(mpTimeManager,                     0x1828C);
+        BRN_TM_AT(mbSyncingTime,                     0x18290);
+        BRN_TM_AT(muLastHashUpdate10HzFrame,         0x18292);
+        BRN_TM_AT(muLastTrafficHash,                 0x18294);
+        BRN_TM_AT(mbLastHashDataValid,               0x18296);
+        BRN_TM_AT(maStoredTrafficHashes,             0x18298);
+        BRN_TM_AT(muCurrentTrafficUpdateFrame,       0x184AC);
+        BRN_TM_AT(mbHasTrafficDiverged,              0x184AE);
+        BRN_TM_AT(mbIsThisMachineInThePast,          0x184AF);
+        BRN_TM_AT(mbShowTrafficDivergence,           0x184B0);
+        BRN_TM_AT(miInThePastAmount,                 0x184B4);
+#undef BRN_TM_AT
+        static_assert(sizeof(void*) != 4 || sizeof(TrafficManager) == 0x184C0, "TrafficManager console size 0x184C0");
+    }
 }

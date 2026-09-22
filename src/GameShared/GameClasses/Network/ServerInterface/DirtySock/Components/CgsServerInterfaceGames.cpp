@@ -366,8 +366,9 @@ namespace CgsNetwork
         return liError;
     }
 
-    s32 ServerInterfaceGames::ReceivedGameEvent(ServerInterfaceGames* lpSelf, s32* a2)
+    s32 ServerInterfaceGames::ReceivedGameEvent(s32* a2)
     {
+        ServerInterfaceGames* lpSelf = this;
         if (static_cast<u32>(lpSelf->meCurrentAction) < 3u)
         {
             void* lpField = TagFieldFind(reinterpret_cast<const char*>(a2[4]), "IDENT");

@@ -14,10 +14,10 @@ namespace BrnGameState
 // declaration suffices for this header. Full layout lands with BrnScoringSystem's own TU.
 class ScoringSystem;
 
-// Forward-only: WriteDataToOutput receives it by pointer only and has no reconstructable home
-// in the X360 ledger yet, so an incomplete declaration suffices (documented pointer-only
-// exception). It self-completes when that TU is worked.
-class OnlineScoringOutputInterface;
+// The scorers' output record is the shared-IO GameStateModuleIO::OnlineScoringOutputInterface. The
+// class spells it unqualified; a separate forward-declared BrnGameState::OnlineScoringOutputInterface
+// made the derived WriteDataToOutput overloads instead of overrides (an eleventh vtable slot).
+using GameStateModuleIO::OnlineScoringOutputInterface;
 
 // Max players in a network game (== BrnWorld::KI_MAX_ACTIVE_RACE_CARS on this build). Modelled as a
 // file-visible constant rather than pulling in the BrnWorld header for a single bound
@@ -25,11 +25,15 @@ class OnlineScoringOutputInterface;
 const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
 
 // Base scorer for the online game modes (OnlineRaceModeScoring, OnlineRoadRageModeScoring, ...). Root
-// polymorphic type (DWARF: vptr at offset 0, no explicit base). MINIMAL SLICE: only the members +
-// methods touched by this TU's three reconstructed functions are declared. The award tables, the rest
-// of the virtual lifecycle (Construct/Prepare/Release/Update/...) and the ~40 other methods belong to
-// the wider BrnBaseOnlineModeScoring TU. Byte offsets are NOT X360-faithful on the x64 PC gate (the
-// vptr is 8 bytes); member ORDER + named access are preserved for semantic parity.
+// polymorphic type (vptr at offset 0, no base). Abstract: the reference build's own
+// base vtable carries the pure-virtual handler in the eight lifecycle slots and real entries only for
+// AwardNetworkRatings and GetCurrentPlayerTeam; the console never emits a base vtable at all. Byte
+// offsets are NOT console-faithful on the x64 host (the vptr is 8 bytes); member ORDER + named access
+// are preserved for semantic parity.
+//
+// Pure virtuals with a body: Prepare / Release / ClearData / Update / WriteDataToOutput are the shared
+// halves the derived overrides call by qualified name. Construct / Destruct / UpdatePlayerPoints are
+// pure with no body: no override calls them and the console image carries no copy.
 //
 // DWARF layout (BrnBaseOnlineModeScoring.h:46/193-199):
 //   off 0x00  vptr
@@ -40,21 +44,22 @@ const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
 class BaseOnlineModeScoring
 {
 public:
-    // ---- polymorphic lifecycle (DWARF vtable slots 0..9, BrnBaseOnlineModeScoring.h:46) --------
-    // DECLARE-ONLY: bodies live in the wider BrnBaseOnlineModeScoring TU (not yet reconstructed).
-    // Declared in exact DWARF vtable order so the slot layout is correct ahead of GetCurrentPlayerTeam
-    // (the previously-declared slot, which DWARF places last). The ScoringSystem dispatches through
-    // mpCurrentOnlineModeScoring into these: its UpdateCumulativeResults tail calls vtable+0x1C
-    // (== AwardNetworkRatings, slot 7) and UpdateNetworkPlayerResults drives Update/UpdatePlayerPoints.
-    virtual void Construct();                                        // slot 0  (.cpp:91)
-    virtual bool Prepare();                                          // slot 1  (.cpp:123)
-    virtual bool Release();                                          // slot 2  (.cpp:145)
-    virtual void Destruct();                                         // slot 3  (.cpp:109)
-    virtual void ClearData();                                       // slot 4  (.cpp:157)
-    virtual void Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars);            // slot 5  (.cpp:191)
-    virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars);      // slot 6  (.cpp:230)
-    virtual void AwardNetworkRatings(const ScoringSystem* lpScoringSystem, u32 luNumActiveRaceCars); // slot 7  (.cpp:244)
-    virtual void WriteDataToOutput(OnlineScoringOutputInterface* lpOutput);                   // slot 8  (.cpp:171)
+    // ---- polymorphic lifecycle (vtable slots 0..8; GetCurrentPlayerTeam below is slot 9) ----------
+    // Declared in vtable order; every console derived vtable has exactly these ten slots. The
+    // ScoringSystem dispatches through mpCurrentOnlineModeScoring into these: UpdateCumulativeResults
+    // calls vtable+0x1C (== AwardNetworkRatings, slot 7) and UpdateNetworkPlayerResults drives
+    // Update/UpdatePlayerPoints.
+    virtual void Construct() = 0;                                    // slot 0
+    virtual bool Prepare() = 0;                                      // slot 1  (body: shared half)
+    virtual bool Release() = 0;                                      // slot 2  (body: shared half)
+    virtual void Destruct() = 0;                                     // slot 3
+    virtual void ClearData() = 0;                                    // slot 4  (body: shared half)
+    virtual void Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars) = 0;       // slot 5  (body: shared half)
+    virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars) = 0; // slot 6
+    // Slot 7, never overridden. luNumActiveRaceCars is unused: the body reads the scoring system's own
+    // active-car count. Body in BrnBaseOnlineModeScoring_wN1_01.cpp.
+    virtual void AwardNetworkRatings(const ScoringSystem* lpScoringSystem, u32 luNumActiveRaceCars);
+    virtual void WriteDataToOutput(OnlineScoringOutputInterface* lpOutput) = 0;              // slot 8  (body: shared half)
 
     // X360 @ 0x823106F8 (BrnBaseOnlineModeScoring.h:341). Finishing position recorded for slot.
     s32 GetPlayerPosition(s32 liRaceCarIndex);
@@ -100,6 +105,62 @@ protected:
     GameStateModuleIO::EPlayerTeam maePlayerTeams[KI_MAX_ACTIVE_RACE_CARS];
 
 private:
+    // ---- end-of-event award rating (AwardNetworkRatings and its helpers) ---------------------------
+    // One row per active race car, gathered from the scoring system then re-sorted once per award by
+    // that award's rating comparator. 68-byte stride (qsort element size +0x44); pointer-free, so the
+    // host layout matches the console one.
+    struct NetworkAwardData
+    {
+        EActiveRaceCarIndex meRaceCarIndex;             // +0x00
+        s32                 miRaceCarPosition;          // +0x04
+        s32                 miTakedownsFor;             // +0x08
+        s32                 miTakedownsAgainst;         // +0x0C
+        s32                 miNumberOfCrashes;          // +0x10
+        CgsSystem::Time     mFastestLap;                // +0x14
+        f32                 mfDistanceDriven;           // +0x1C
+        bool                mbFinishedRace;             // +0x20
+        CgsSystem::Time     mTimeInLastPlace;           // +0x24
+        CgsSystem::Time     mTimeInFirstPlace;          // +0x2C
+        CgsSystem::Time     mTimeBoosting;              // +0x34
+        f32                 mfLongestDrift;             // +0x3C
+        s32                 miOverallStandingsPosition; // +0x40
+    };
+    static_assert(sizeof(NetworkAwardData) == 0x44, "NetworkAwardData is the 68-byte qsort row");
+
+    // Indexed by EOnlineAwardID. The rating comparators order the rows best-first for that award; the
+    // give-award tests then decide whether the leading row has earned it. maAwardPriorities is the
+    // order the awards are tried in.
+    static int (* const maAwardRatingFunctions[E_ONLINE_AWARD_COUNT])(const void* lpData1, const void* lpData2);
+    static bool (* const maGiveAwardFunctions[E_ONLINE_AWARD_COUNT])(const NetworkAwardData* lpaNetworkAwardData,
+                                                                     s32 liNumberOfRaceCars);
+    static const EOnlineAwardID maAwardPriorities[E_ONLINE_AWARD_COUNT];
+
+    s32 GetAwardParameter(const NetworkAwardData* lpAwardData, EOnlineAwardID leAwardID);
+
+    static bool _GiveRaceWinnerAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveTakedownsForAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveTakedownsAgainstAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveMostCrashesAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveFastestLapAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveShortestDistanceAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveLongestDistanceAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveTimeInLastPlaceAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveTimeInFirstPlaceAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveMostTimeBoostingAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+    static bool _GiveLongestDriftAward(const NetworkAwardData* lpaNetworkAwardData, s32 liNumberOfRaceCars);
+
+    static int _RaceWinnerCompare(const void* lpData1, const void* lpData2);
+    static int _TakedownsForCompare(const void* lpData1, const void* lpData2);
+    static int _TakedownsAgainstCompare(const void* lpData1, const void* lpData2);
+    static int _MostCrashesCompare(const void* lpData1, const void* lpData2);
+    static int _FastestLapCompare(const void* lpData1, const void* lpData2);
+    static int _ShortestDistanceLapCompare(const void* lpData1, const void* lpData2);
+    static int _LongestDistanceLapCompare(const void* lpData1, const void* lpData2);
+    static int _TimeInFirstPlaceCompare(const void* lpData1, const void* lpData2);
+    static int _TimeInLastPlaceCompare(const void* lpData1, const void* lpData2);
+    static int _MostTimeBoostingAwardCompare(const void* lpData1, const void* lpData2);
+    static int _LongestDriftCompare(const void* lpData1, const void* lpData2);
+
     // DWARF BrnBaseOnlineModeScoring.h:199 (this+0x64). Written by SetPlayerPosition, read by GetPlayerPosition.
     s32 maiPlayerPositions[KI_MAX_ACTIVE_RACE_CARS];
 };

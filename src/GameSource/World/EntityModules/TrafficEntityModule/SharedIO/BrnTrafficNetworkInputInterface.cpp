@@ -65,5 +65,14 @@ namespace BrnTrafficIO
     {
         return mbDiverged;
     }
+
+    // No out-of-line console copy: the network module's Construct and the network output buffer's
+    // Construct both inline it as the queue's Construct followed by a zero byte store just past the
+    // queue (mbDiverged).
+    void TrafficNetworkInputInterface::Construct()
+    {
+        mActivateHullQueue.Construct();
+        mbDiverged = false;
+    }
 }
 }

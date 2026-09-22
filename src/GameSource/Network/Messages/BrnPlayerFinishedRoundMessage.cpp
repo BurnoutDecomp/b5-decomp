@@ -3,7 +3,6 @@
 #include "GameSource/Network/Messages/BrnPlayerFinishedRoundMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"                                       // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"               // CgsNetwork::PackOrUnpack* field primitives
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h" // base-size delegate (ICF-folded reliable size)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -91,9 +90,9 @@ namespace BrnNetwork
 
     // BrnNetwork::PlayerFinishedRoundMessage::GetPackedMessageSize @ 0x8257A348
     // Re-seeds the same payload fields to their Construct defaults (worst-case-neutral
-    // reset) before reporting the bare reliable size. The X360 build tail-calls a
-    // COMDAT-folded copy resolved to TestConnectionMessage::GetPackedMessageSize, which is a
-    // bare ReliableMessage size probe (== the base size). Note the asm sets only round
+    // reset) before reporting ReliableMessage::GetPackedMessageSize (the call carries the
+    // TestConnectionMessage name only because the two bodies are identically folded). Note
+    // the asm sets only round
     // number / both bools / eliminations / distance / finish time and eliminator id here;
     // it does NOT reset the player ids (those are reliable-base state).
     s32 PlayerFinishedRoundMessage::GetPackedMessageSize()
@@ -106,10 +105,9 @@ namespace BrnNetwork
         mbWonRound                 = 0;                      // stb  0, +0x3E
         mfDistanceFromFinish       = KF_UNSET_DISTANCE;      // stfs flt_82F299C8, +0x38
 
-        // @0x8257A39C: b CgsNetwork__TestConnectionMessage__GetPackedMessageSize -- a bare
-        // ReliableMessage probe (no extra payload) measuring the base size with `this`
-        // reinterpreted as that sibling (matches the X360 ICF tail call).
-        return reinterpret_cast<CgsNetwork::TestConnectionMessage*>(this)->GetPackedMessageSize();
+        // Reliable-base size probe (identically folded with
+        // TestConnectionMessage::GetPackedMessageSize).
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     // BrnNetwork::PlayerFinishedRoundMessage::PackOrUnpack @ 0x8257A1E8

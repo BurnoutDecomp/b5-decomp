@@ -471,24 +471,48 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
 
 // ---------------------------------------------------------------------------
 // CheckForSuccessfulPayback. Scan the network dirty-trick queue for a
-// completed payback (type 4) the local player pulled off, and start a payback mugshot.
+// completed payback (status 4, the victim crashed) the local player pulled off, and start a
+// payback mugshot of the victim.
 //
-// NOTE: the dirty-trick queue lives on the PreWorldInputBuffer's NetworkToGameStateInterface
-// (this+0x2268 region in the console). That interface is still a named-opaque placeholder
-// (BrnGameStateModuleIO.h NetworkToGameStateInterface), so the iteration over its dirty-trick
-// records cannot yet be spelled by named members. The control flow + the per-record action are
-// reconstructed; FLAG: the queue walk is gated behind GetNetworkToGameStateInterface and is a
-// no-op until that interface's real layout (dirty-trick record array) is homed.
+// The queue is the NetworkToGameStateInterface's dirty-trick queue (console +0x2268 of the
+// interface). Per record the console tests, in order: status == 4, aggressor == the local player,
+// and DoesPlayerHaveACamera(local player); then StartMugshotCapture(lpOutput,
+// E_IMAGE_TYPE_PAYBACK_MUGSHOT, victim, local player, false). The local player index is fetched
+// afresh for each of the three uses, and the loop re-reads the queue length every pass.
 // ---------------------------------------------------------------------------
 void MugshotManager::CheckForSuccessfulPayback(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
-                                               GameStateModuleIO::OutputBuffer* /*lpOutput*/)
+                                               GameStateModuleIO::OutputBuffer* lpOutput)
 {
     CGS_ASSERT(lpInput != nullptr, "lpInput");
     CGS_ASSERT(lpInput->GetNetworkToGameStateInterface() != nullptr,
                "lpInput->GetNetworkToGameStateInterface()");
-    // The console also asserts the dirty-trick queue is non-null; that sub-accessor is not yet on the
-    // opaque NetworkToGameStateInterface, so the record walk + StartMugshotCapture(..., PAYBACK ...)
-    // per matched dirty-trick (type 4) lands when that interface is homed (see FLAG above).
+    CGS_ASSERT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue() != nullptr,
+               "lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue()");
+
+    const GameStateModuleIO::NetworkToGameStateInterface::DirtyTrickQueue* lpDirtyTrickQueue =
+        lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue();
+
+    for (s32 liIndex = 0; liIndex < lpDirtyTrickQueue->GetLength(); ++liIndex)
+    {
+        const BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent lEvent = lpDirtyTrickQueue->GetEvent(liIndex);
+
+        if (static_cast<s32>(lEvent.meDirtyTrickStatus) != 4)
+        {
+            continue;
+        }
+        if (mpGameStateModule->GetPlayerActiveRaceCarIndex() != lEvent.meAggressorActiveRaceCarIndex)
+        {
+            continue;
+        }
+        if (!DoesPlayerHaveACamera(mpGameStateModule->GetPlayerActiveRaceCarIndex()))
+        {
+            continue;
+        }
+
+        StartMugshotCapture(lpOutput, GameStateModuleIO::E_IMAGE_TYPE_PAYBACK_MUGSHOT,
+                            lEvent.meVictimActiveRaceCarIndex,
+                            mpGameStateModule->GetPlayerActiveRaceCarIndex(), false);
+    }
 }
 
 // ---------------------------------------------------------------------------

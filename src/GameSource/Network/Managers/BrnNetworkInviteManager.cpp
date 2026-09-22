@@ -220,7 +220,7 @@ namespace BrnNetwork
                 // X360 passes the raw this+0x1A0 pointer to the Cgs query.
                 lpQueryManager->GetServerInterface()->GetPlayerInfoComponent()->GetPlayerInfoByName(
                     reinterpret_cast<const CgsNetwork::PlayerName*>(&mPlayerNameToGetGameID),
-                    reinterpret_cast<CgsNetwork::ServerInterfacePlayerInfoDataBase*>(maPlayerInfoData));
+                    &mPlayerInfoData);
                 lbReachedLabel12 = true;
             }
         }

@@ -125,7 +125,7 @@ namespace BrnNetwork
 
         miActionIndex         = 0;
         mpfCompletionCallback = 0;
-        mCompletionUserData   = 0;
+        mpCompletionUserData  = 0;
         meUpdateState         = 0;
         meCurrentProcess      = KI_PROCESS_NONE;   // 4
         meSubState            = KI_SUBSTATE_IDLE;   // 2
@@ -145,7 +145,7 @@ namespace BrnNetwork
         meCurrentProcess      = KI_PROCESS_NONE;    // 4
         meUpdateState         = 0;
         mpfCompletionCallback = 0;
-        mCompletionUserData   = 0;
+        mpCompletionUserData  = 0;
         miActionIndex         = 0;
         mpNetworkManager      = 0;
 
@@ -273,12 +273,12 @@ namespace BrnNetwork
     //   process selector, resets the action cursor, and arms the update state machine.
     // ---------------------------------------------------------------------------------
     void TeamSelectionManager::StartProcess( s32 leProcess, CompletionCallback lpfCompletionCallback,
-                                             s32 liUserData )
+                                             void* lpUserData )
     {
         CGS_ASSERT(mpfCompletionCallback == 0, "Process already started!");
 
         mpfCompletionCallback = lpfCompletionCallback;
-        mCompletionUserData   = liUserData;
+        mpCompletionUserData  = lpUserData;
         meCurrentProcess      = leProcess;
         miActionIndex         = 0;
         meUpdateState         = 1;
@@ -290,9 +290,9 @@ namespace BrnNetwork
     //   local player is the host) and starts it. For any other launch type just fires the
     //   completion callback with success.
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::StartTeamSelection( s32 liLaunchType,
-                                                  CompletionCallback lpfCompletionCallback,
-                                                  s32 liUserData )
+    void TeamSelectionManager::StartTeamSelection( s32 liLaunchType,
+                                                   CompletionCallback lpfCompletionCallback,
+                                                   void* lpUserData )
     {
         s32 leProcess;
         switch (liLaunchType)
@@ -306,19 +306,19 @@ namespace BrnNetwork
                     mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost();
                 leProcess = lbIsLocalPlayerHost ? KI_PROCESS_AUTOBALANCE_HOST    // 2
                                                 : KI_PROCESS_AUTOBALANCE_CLIENT; // 3
-                StartProcess(leProcess, lpfCompletionCallback, liUserData);
-                return 1; // X360 returns r3==`this`; caller truthiness-tests only -> non-zero token
+                StartProcess(leProcess, lpfCompletionCallback, lpUserData);
+                return;
             }
             case KI_LAUNCH_TYPE_FFA: // 14
-                StartProcess(KI_PROCESS_FFA, lpfCompletionCallback, liUserData);
-                return 1; // X360 returns r3==`this`; caller truthiness-tests only -> non-zero token
+                StartProcess(KI_PROCESS_FFA, lpfCompletionCallback, lpUserData);
+                return;
             case KI_LAUNCH_TYPE_COOP: // 17
-                StartProcess(KI_PROCESS_COOP, lpfCompletionCallback, liUserData);
-                return 1; // X360 returns r3==`this`; caller truthiness-tests only -> non-zero token
+                StartProcess(KI_PROCESS_COOP, lpfCompletionCallback, lpUserData);
+                return;
             default:
                 if (lpfCompletionCallback != 0)
-                    return lpfCompletionCallback(1, liUserData);
-                return 1; // X360 returns r3==`this`; caller truthiness-tests only -> non-zero token
+                    lpfCompletionCallback(true, lpUserData);
+                return;
         }
     }
 
@@ -329,7 +329,7 @@ namespace BrnNetwork
     //   reset and fire the completion callback with success. Otherwise run the action; on success
     //   advance the cursor, on failure reset and fire the completion callback with failure.
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::SetNextAction()
+    void TeamSelectionManager::SetNextAction()
     {
         const s32 liActionCursor = miActionIndex;
         const s32 leAction = maProcessActions[KI_ACTIONS_PER_PROCESS * meCurrentProcess + liActionCursor];
@@ -337,41 +337,40 @@ namespace BrnNetwork
         if (liActionCursor == KI_ACTIONS_PER_PROCESS || leAction == KI_NO_ACTION)
         {
             CompletionCallback lpfCallback = mpfCompletionCallback;
-            const s32          liUserData  = mCompletionUserData;
+            void*              lpUserData  = mpCompletionUserData;
             meUpdateState         = 0;
             mpfCompletionCallback = 0;
-            mCompletionUserData   = 0;
-            if (lpfCallback == 0)
-                return 1; // X360 returns r3==`this`; caller truthiness-tests only -> non-zero token
-            return lpfCallback(1, liUserData);
+            mpCompletionUserData  = 0;
+            if (lpfCallback != 0)
+                lpfCallback(true, lpUserData);
+            return;
         }
 
         const int liResult = maActionFunctions[leAction](this);
         if (liResult != 0)
         {
             ++miActionIndex;
-            return liResult;
+            return;
         }
 
         CompletionCallback lpfCallback = mpfCompletionCallback;
-        const s32          liUserData  = mCompletionUserData;
+        void*              lpUserData  = mpCompletionUserData;
         meUpdateState         = 0;
         mpfCompletionCallback = 0;
-        mCompletionUserData   = 0;
+        mpCompletionUserData  = 0;
         if (lpfCallback != 0)
-            return lpfCallback(0, liUserData);
-        return liResult;
+            lpfCallback(false, lpUserData);
     }
 
     // ---------------------------------------------------------------------------------
     // ProcessAfterSimulation @ 0x8254B8B0
     //   Runs the current update-state driver (asserting it is present).
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::ProcessAfterSimulation()
+    void TeamSelectionManager::ProcessAfterSimulation()
     {
         CGS_ASSERT(maUpdateFunctions[meUpdateState] != 0,
                    "No update function supplied for the current process substate");
-        return maUpdateFunctions[meUpdateState](this);
+        maUpdateFunctions[meUpdateState](this);
     }
 
     // ---------------------------------------------------------------------------------
@@ -671,8 +670,8 @@ namespace BrnNetwork
     // The X360 stores each method's address directly into the function-pointer tables (the C ABI
     // there passes `this` as the first integer arg, so a free `(TeamSelectionManager*)` thunk is
     // the faithful PC equivalent; it has no body of its own beyond the forward).
-    int TeamSelectionManager::UpdateIdleNoOp( TeamSelectionManager* /*lpThis*/ ) { return 1; }
-    int TeamSelectionManager::UpdateWaitIdleThunk( TeamSelectionManager* lpThis ) { return lpThis->UpdateWaitIdle(); }
+    void TeamSelectionManager::UpdateIdleNoOp( TeamSelectionManager* /*lpThis*/ ) {}
+    void TeamSelectionManager::UpdateWaitIdleThunk( TeamSelectionManager* lpThis ) { lpThis->UpdateWaitIdle(); }
     int TeamSelectionManager::ActionAssignFFAThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionAssignFFAStuntRunTeams(); }
     int TeamSelectionManager::ActionAssignCoopThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionAssignCoopStuntRunTeams(); }
     int TeamSelectionManager::ActionAutobalanceThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionAutobalanceStuntRunTeams(); }

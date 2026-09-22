@@ -1,7 +1,6 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnTrafficHashMessage.h"
-#include "GameSource/World/DebugComponents/BrnPVSDebugComponent.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -12,9 +11,9 @@
 //   BrnNetwork::TrafficHashMessage::Retrieve             @ 0x8257DF50
 //
 // Three 16-bit fields serialised through the shared u16 primitive. The first field's
-// pack/unpack status is OR-ed with the PVS "is simple" flag (always false here) exactly
-// as the X360 build does. The VALID flag (inherited Message::mx8Flags bit) gates
-// send/receive as for the other unreliable messages.
+// pack/unpack status is OR-ed with the base Message::PackOrUnpack() status (a constant
+// success: the base virtual serialises nothing). The VALID flag (inherited
+// Message::mx8Flags bit) gates send/receive as for the other unreliable messages.
 
 namespace BrnNetwork
 {
@@ -36,11 +35,10 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult TrafficHashMessage::PackOrUnpack()
     {
-        const CgsNetwork::PackOrUnpackResult lxIsSimple =
-            reinterpret_cast<BrnWorld::PVSDebugComponent*>(this)->IsSimple() ? 1 : 0;
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
 
         const CgsNetwork::PackOrUnpackResult lxSynced =
-            CgsNetwork::PackOrUnpackU16(this, &mu16SyncedFrameSinceStart, 0, 0xFFFF) | lxIsSimple;
+            CgsNetwork::PackOrUnpackU16(this, &mu16SyncedFrameSinceStart, 0, 0xFFFF) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxUpdate =
             CgsNetwork::PackOrUnpackU16(this, &mu16Update10HzFrame, 0, 0xFFFF);
         return CgsNetwork::PackOrUnpackU16(this, &mu16TrafficHash, 0, 0xFFFF) | (lxUpdate | lxSynced);

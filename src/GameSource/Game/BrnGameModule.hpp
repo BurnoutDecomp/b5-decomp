@@ -96,6 +96,8 @@ namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
 // declared here (the bridge body includes the real home) to keep the heavy network IO header out
 // of this keystone header.
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct OutputBuffer; } }
+// The network post-sim INPUT buffer the GameState/World -> Network bridges fill (same home).
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct PostSimulationInputBuffer; } }
 // Sound-bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) parameter/member types:
 // the sound root pre-update OUTPUT buffer (home GameSource/Sound/Module/SharedIO/
 // BrnSoundRootSharedIO.h) and the training manager (home GameSource/GameState/TrainingManager/
@@ -193,6 +195,10 @@ namespace BrnGame
         // at E_LOADINGSTAGE_DIRECTORMODULE; the per-frame spine then drives its
         // PreSceneQueryUpdate/Update/PostGuiUpdate).
         BrnDirector::DirectorModule& GetDirectorModule() { return mDirectorModule; }
+        // The network module (LoadingScriptedState::LoadNetworkModule drives its staged Prepare at
+        // E_LOADINGSTAGE_NETWORK; the per-frame spine drives ProcessBeforeSimulation /
+        // ProcessAfterSimulation through DoUpdate_NetworkPreSim / DoUpdate_NetworkPostSim).
+        BrnNetwork::BrnNetworkModule& GetNetworkModule() { return mNetworkModule; }
 
         // Per-frame spines the in-game flow state drives directly (non-virtual; each returns
         // an int status the void flow-state Update/Render slots discard):
@@ -814,6 +820,62 @@ namespace BrnGame
         // BrnGui::GuiLiveRevengeUpdateEvent per record through the GUI module.
         int TranslateNetworkInterfaceToGuiEvents(void* lpGuiBuffer, const void* lpNetworkToGuiInterface);
 
+        // ---- the network legs of the per-frame cascade and their bridges ------------------------
+        // DoUpdate_NetworkPreSim (called by DoUpdate): perf monitors; carve a
+        // PreSimulationInputBuffer "NetworkPreSim" off the INPUT stack; under the W(pre-sim input) +
+        // R(input output) lock pair stage player 0's controller port and pad-idle flag, the game
+        // timer status and the system-menu flag; mNetworkModule.ProcessBeforeSimulation(both stacks,
+        // the buffer, lpNetworkOutputBuffer, lUpdateSet), whose result is latched; destroy the buffer.
+        void DoUpdate_NetworkPreSim(CgsModule::IOBufferStack* lpInputBufferStack,
+                                    CgsModule::IOBufferStack* lpOutputBufferStack,
+                                    const CgsInput::InputIO::OutputBuffer* lpInputOutputBuffer,
+                                    BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutputBuffer,
+                                    BrnUpdateSet lUpdateSet);
+
+        // DoUpdate_NetworkPostSim (called by DoUpdate): perf monitors; carve a
+        // PostSimulationInputBuffer "NetworkPostSim" off the INPUT stack; under the W(post-sim
+        // input) + R(game-state / world / GUI outputs) locks run BridgeWorldToNetwork (skipped when
+        // lUpdateSet carries 0x20), BridgeGameStateToNetwork, append the GUI out-event queue into the
+        // buffer's GUI queue and TranslateGuiEventsToNetworkEvents; unlock;
+        // mNetworkModule.ProcessAfterSimulation(both stacks, the buffer, lUpdateSet); destroy it.
+        void DoUpdate_NetworkPostSim(CgsModule::IOBufferStack* lpInputBufferStack,
+                                     CgsModule::IOBufferStack* lpOutputBufferStack,
+                                     const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutputBuffer,
+                                     const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer,
+                                     const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer,
+                                     BrnUpdateSet lUpdateSet);
+
+        // Called by DoUpdate_World: TranslateNetworkEventsToWorld, then append the network output's
+        // vehicle driver-input and vehicle-input interfaces into the world input and install its
+        // crash and traffic network interfaces.
+        void BridgeNetworkToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+                                  const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+
+        // Called first by BridgeNetworkToWorld: walk the network output's event queue and hand the
+        // world-bound events on -- car colour / paint finish, lost / regained contact and car-select
+        // status into the world input's per-car arrays, local-player-left / local-player-disconnected
+        // and restart-traffic onto the world input's game-action queue.
+        void TranslateNetworkEventsToWorld(BrnWorldIO::UpdateInputBuffer* lpWorldInput,
+                                           const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+
+        // Called by DoUpdate_GameStatePreWorld: append the network output's game-event and takedown
+        // queues into the pre-world input, merge its NetworkToGameStateInterface, install the player
+        // status and player-results interfaces, then TranslateNetworkEventsToGameEvents.
+        void BridgeNetworkToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
+                                      const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+
+        // Called by DoUpdate_NetworkPostSim: walk the game-state output's game-action queue and
+        // translate each network-bound action into the post-sim input's network queue.
+        void BridgeGameStateToNetwork(BrnNetwork::BrnNetworkModuleIO::PostSimulationInputBuffer* lpNetworkInput,
+                                      const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput);
+
+        // Called by DoUpdate_NetworkPostSim: copy the world output's player controls, vehicle output,
+        // active-race-car, traffic and crash network interfaces into the post-sim input, then walk
+        // the vehicle output's event queue and, for the player car's crash events, queue a network
+        // event onto the post-sim network-event queue.
+        void BridgeWorldToNetwork(BrnNetwork::BrnNetworkModuleIO::PostSimulationInputBuffer* lpNetworkInput,
+                                  const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
+
     private:
         // Case-52 helper for TranslateNetworkEventsToGuiEvents: scoreboard-response heading sub-switch
         // (category/variation/index) -- copy the per-name string list into the matching scoreboard event
@@ -1066,6 +1128,15 @@ namespace BrnGame
         // It has no reconstructed reader yet; published anyway because dropping a store the
         // bridge makes every frame is a silent divergence, and the field is one byte.
         bool mbPlayerCarCrashing;
+
+        // +0x9A0635 (reference name mbOnline). DoUpdate_NetworkPreSim latches
+        // BrnNetworkModule::ProcessBeforeSimulation's result here every sub-step; DoUpdate_Director
+        // and DoUpdate_GameStatePreWorld read it. Construct / Prepare zero it.
+        bool mbOnline = false;
+        // +0x9A0636 (reference name mbIsSysMenuShowing). DoUpdate_NetworkPreSim forwards it into the
+        // network pre-sim input (SetSysMenuOnScreen). Construct / Prepare / Release / Destruct
+        // clear it; no writer that raises it has been recovered yet, so it reads false.
+        bool mbIsSysMenuShowing = false;
 
         // [FLAG PC drive point] (no console member): latched once BrnGui::WorldDataController::
         // Prepare reports done, so ResourceUpdateThread stops re-entering it. On the console

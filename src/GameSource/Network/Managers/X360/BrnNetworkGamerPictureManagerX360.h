@@ -59,8 +59,8 @@ namespace CgsMemory { class HeapMalloc; }
 namespace CgsNetwork
 {
     class NetworkTextureDXTCompress;
-    // The compress-complete callback shape used by NetworkTextureDXTCompress::SetNewTextureToCompress.
-    typedef void (*CompressCallback)(char*, void*);
+    // The compress-complete callback shape (NetworkTextureDXTCompress::CompressionCompleteCallback).
+    typedef void (*CompressCallback)(void*, void*);
 }
 
 namespace BrnNetwork

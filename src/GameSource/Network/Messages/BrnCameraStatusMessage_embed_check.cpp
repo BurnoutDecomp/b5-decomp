@@ -14,8 +14,8 @@ namespace
     static_assert(std::is_base_of<CgsNetwork::Message, CameraStatusMessage>::value,
                   "CameraStatusMessage : CgsNetwork::Message");
 
-    // Status enum bounds (DWARF BrnCameraStatusMessage.h:48).
-    static_assert(BrnNetwork::E_CAMERA_STATUS_COUNT == 3, "E_CAMERA_STATUS_COUNT == 3");
+    // Status enum bound: PackOrUnpack serialises the status in [0, E_CAMERA_STATUS_COUNT].
+    static_assert(BrnNetwork::E_CAMERA_STATUS_COUNT == 4, "E_CAMERA_STATUS_COUNT == 4");
 
     // Exercise the bodied ledger func: returns the X360 rodata literal.
     bool CheckGetName()
@@ -32,7 +32,7 @@ namespace
 
     void TouchStatus()
     {
-        BrnNetwork::ECameraStatus leStatus = BrnNetwork::E_CAMERA_STATUS_AVAILABLE;
+        BrnNetwork::ECameraStatus leStatus = BrnNetwork::E_CAMERA_STATUS_NONE;
         (void)leStatus;
         (void)CheckGetName();
     }

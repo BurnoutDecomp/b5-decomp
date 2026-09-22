@@ -2,31 +2,27 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
 #include "rw/math/vpu/types.h"
 
 // CgsNetwork::Message
 //
-// Canonical class home for the network-message base. The X360 layout is taken
-// from the FULL dwarfdump struct cross-checked against the per-function asm
-// (offsets below are the byte offsets the asm dereferences):
+// Canonical class home for the network-message base. Console layout (byte
+// offsets the per-function asm dereferences):
 //
-//   0x00  vptr
-//   0x04  mePackOrUnpack   (EPackOrUnpack; used as a 3-state lifecycle marker:
-//                           0 = idle, 1 = packing/unpacking, 2 = done)
-//   0x08  mBitstream       (CgsNetwork::SmartBitStream, by value) -- Pack/UnPack
-//                          drive its four 32-bit cursor words directly at
-//                          +0x08/+0x0C/+0x10/+0x14, so they are modelled by name
-//                          here as a faithful cursor view rather than pulling in
-//                          the full BitStream layout (which this TU never touches
-//                          by anything but these four words).
-//   0x18  mu8GameID        (uint8)
-//   0x19  mx8Flags         (uint8 bit-set: VALID|RELIABLE|ACK|NACK)
-//   0x1A  mi8Type          (int8 EMessageType)
-//   0x1C  mu16Frame        (uint16)
+//   +0x00  vptr
+//   +0x04  mePackOrUnpack   (EPackOrUnpack; used as a 3-state lifecycle marker:
+//                           0 = packing, 1 = unpacking, 2 = idle)
+//   +0x08  mBitstream       (CgsNetwork::SmartBitStream, by value, 0x10 bytes:
+//                           write position, read position, buffer, size)
+//   +0x18  mu8GameID        (uint8)
+//   +0x19  mx8Flags         (uint8 bit-set: VALID|RELIABLE|ACK|NACK)
+//   +0x1A  mi8Type          (int8 EMessageType)
+//   +0x1C  mu16Frame        (uint16)
 //
-// The Pack/UnPack/PackOrUnpack engine and the SmartBitStream's own methods live
-// in other TUs; here the SmartBitStream is reduced to the four cursor words this
-// TU manipulates plus padding to the 0x18 boundary the trailing scalars sit on.
+// The bitstream holds a buffer pointer, so on a 64-bit host every member from
+// mBitstream on sits later than its console offset; members are addressed by
+// name only.
 
 // Forward declaration for the PackOrUnpackTime field primitive below; the concrete
 // CgsSystem::Time layout lives in GameShared/GameClasses/System/Timer/CgsTime.h.
@@ -51,6 +47,7 @@ namespace CgsNetwork
     // PackOrUnpack result (CgsMessage.h:85-88). 0 == success.
     typedef u8 PackOrUnpackResult;
     const PackOrUnpackResult KX_PACK_OR_UNPACK_SUCCESS = 0;
+    const PackOrUnpackResult KX_PACK_FAILED_NO_SPACE   = 1;
 
     struct Message
     {
@@ -63,24 +60,23 @@ namespace CgsNetwork
         };
 
         // --- layout (frozen) ---
-        void* mpVTable;                 // 0x00
-        s32   mePackOrUnpack;           // 0x04
-        // mBitstream @ 0x08: the four 32-bit cursor words Pack/UnPack drive.
-        u32   muBitstreamCursor0;       // 0x08
-        u32   muBitstreamCursor1;       // 0x0C
-        u32   muBitstreamCursor2;       // 0x10
-        u32   muBitstreamCursor3;       // 0x14
-        u8    mu8GameID;                // 0x18
-        u8    mx8Flags;                 // 0x19
-        s8    mi8Type;                  // 0x1A
-        u16   mu16Frame;                // 0x1C
+        void*          mpVTable;                 // +0x00
+        s32            mePackOrUnpack;           // +0x04
+        SmartBitStream mBitstream;               // +0x08 (0x10 console bytes)
+        u8             mu8GameID;                // +0x18
+        u8             mx8Flags;                 // +0x19
+        s8             mi8Type;                  // +0x1A
+        u16            mu16Frame;                // +0x1C
 
         // --- reconstructed members (this TU) ---
-        // Placement-style initialiser the X360 build calls "Construct" (returns this);
-        // and the packed-size query. Both have their bodies in their own TUs; declared
-        // here so every subclass ctor / GetPackedMessageSize can chain to the base.
+        // Placement-style initialiser the console build calls "Construct" (returns this).
         Message* Construct();
+        // Packs the message into a scratch buffer of KI_MAX_PACKED_MESSAGE_SIZE bytes
+        // (CgsMessage.cpp) and returns the packed length in whole bytes.
         s32      GetPackedMessageSize();
+        // vtable slot 4 (+0x10): the base serialises nothing and reports success.
+        // Subclasses shadow it and OR this base status into their own.
+        PackOrUnpackResult PackOrUnpack();
         u8   GetGameID() const;
         // vtable slot 0 in the X360 build: the base reports "not reliable"; only
         // ReliableMessage overrides it. Subclass PrepareForSend asserts on it.
@@ -107,22 +103,26 @@ namespace CgsNetwork
         void PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID);
         void PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID);
 
-        // Pack/UnPack call the virtual PackOrUnpack() through the vtable; the slot
-        // is at vtable+0x10 (4th entry) and returns a PackOrUnpackResult.
-        bool Pack(s32 liA, s32 liB, s32 liC, s32* lpiBitsWritten);
-        Message* UnPack(s32 liA, s32 liB, s32 liC, s32* lpiBitsRead);
+        // Pack/UnPack attach mBitstream to the caller's buffer, call the virtual
+        // PackOrUnpack() through the vtable (slot 4, +0x10), report the bits
+        // written / read, and detach the stream again. UnPack also re-derives the
+        // VALID and RELIABLE flags (IsReliable, slot 0).
+        bool Pack(u8* lpu8Buffer, s32 liBufferOffsetInBits, s32 liBufferLengthInBits,
+                  s32* lpiBitsWritten);
+        void UnPack(u8* lpu8Buffer, s32 liBufferReadOffsetInBits, s32 liBufferLengthInBits,
+                    s32* lpiBitsRead);
 
         // (De)serialise a raw byte buffer through the message's SmartBitStream:
         // mePackOrUnpack == 0 packs (AddRawData), == 1 unpacks (GetRawData),
-        // anything else asserts. Returns true on success.
-        bool PackOrUnpackBuffer(char* lpcBuffer, s32 liNumBytes);
+        // anything else asserts. KX_PACK_OR_UNPACK_SUCCESS on success.
+        PackOrUnpackResult PackOrUnpackBuffer(char* lpcBuffer, s32 liNumBytes);
 
         // (De)serialise one quantised signed-byte field in [liMin, liMax] through
-        // the message's bitstream (@0x82880F50). mePackOrUnpack == 0 packs (quantise
-        // via IntQuantiser::Pack, write via BitStream::AddBits), == 1 unpacks (read
-        // the quantised bits back into the field), anything else asserts. Returns
-        // true on success.
-        bool PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax);
+        // the message's bitstream. mePackOrUnpack == 0 packs (quantise via
+        // IntQuantiser::Pack, write via BitStream::AddBits), == 1 unpacks (read the
+        // quantised bits back into the field), anything else asserts.
+        // KX_PACK_OR_UNPACK_SUCCESS on success.
+        PackOrUnpackResult PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax);
 
         // Build a scaled direction vector from two angles: the X360 build computes
         // (cos(B)*cos(A), sin(B), cos(B)*sin(A), 0) and scales it by lfMagnitude.
@@ -158,6 +158,8 @@ namespace CgsNetwork
     // landmark ids respectively. Bodies live in their own not-yet-reconstructed TU.)
     // The field to (de)serialise is passed by pointer; the return is a per-field
     // status the callers bitwise-OR together into the message's PackOrUnpackResult.
+    // Int / U8 / S16 / U16 / UInt / Bool are bodied in CgsMessage.cpp; CgsID, Float,
+    // Time, Matrix and Vector are still declaration-only.
     PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax);
@@ -180,12 +182,6 @@ namespace CgsNetwork
     //                        is forward-declared to keep this base header light -- the
     //                        callers already include CgsTime.h for the concrete type.)
     PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField, f32 lfResolution);
-    //   PackOrUnpackBuffer -- the Message method that (de)serialises a raw byte buffer of a
-    //                        fixed length (used by the fixed-size bitset payloads). Declared
-    //                        here as a free helper mirroring the other primitives so the leaf
-    //                        messages can route a buffer field by name; body lives in its own
-    //                        bitstream TU. liNumBytes is the buffer length in bytes.
-    PackOrUnpackResult PackOrUnpackBuffer(Message* lpMessage, u8* lpu8Buffer, s32 liNumBytes);
     //   PackOrUnpackMatrix -- sub_8288E078: quantise an affine's rotation (roll/pitch/yaw
     //                        bit-widths) and its translation row (per-axis bit-widths) into
     //                        [lPosMin, lPosMax], returning the per-field OR status. First
