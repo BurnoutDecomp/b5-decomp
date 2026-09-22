@@ -206,13 +206,20 @@ void AIModule::Construct()
     // the Random prime, RouteRequestManager::Construct, 8x AIDriver::Construct and the
     // +322400 flag block land just below.)
 
-    // ⭐ The two player cursors (resetpump wave 2026-08-26). The console does NOT store them in
-    // Construct -- it relies on the module's .bss being zero and on Update overwriting the first
-    // one every frame. On the host the module is not zero-initialised, so both are seeded here
-    // to the values the console's .bss holds: INVALID for the active index (which Update always
-    // overwrites before anything reads it) and 0 for the global index, whose only writer arm
-    // (the AI driver chain) does not exist on this build. See the members' banner.
-    mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    // ⭐ The two player cursors. The console DOES store both here, and both are 0:
+    //     0x82794D34  li   r30, 0                 (the only write to r30 in the whole body)
+    //     0x827952C4/0x827952D4  lis/ori r11 = 0x4E9F8 ; 0x827952F4  stwx r30, r31, r11
+    //                                            -> mePlayerActiveRaceCarIndex = 0
+    //     0x827952F8/0x827952FC  lis/ori r10 = 0x4E9FC ; 0x8279530C  stwx r30, r31, r10
+    //                                            -> mePlayerGlobalRaceCarIndex = 0
+    // ⛔ CORRECTED 2026-09-22 (crash parity, G04-D6): the active cursor was seeded to INVALID (-1)
+    // on the claim that "the console does not store them in Construct" and that "Update always
+    // overwrites it before anything reads it". Both claims were false: PausedUpdate @0x8279A1E0
+    // calls HandleManagementEvents at 0x8279A37C with no mbPlayerDataSet gate and never writes this
+    // field, and case 4 (PLAYER_TAKEN_OVER, 0x82798C58..0x82798C80) reads it -- a boot-time paused
+    // drain handed GetAIDriver(-1) to the "Invalid driver index" assert where the console acts on
+    // driver 0.
+    mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
     mePlayerGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
 
     // ⭐ 2026-09-03 (aiwave): the rest of the console Construct @0x82794D08 that now has named homes --
