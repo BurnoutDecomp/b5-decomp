@@ -242,21 +242,10 @@ void CrashModule::TickCrashes( const CrashIO::InputBuffer_PreScene* lpInput )
                                                  &mbNeedToSendEndingMessage );
     }
 
-    // 0x827C6748..0x827C67C0 -- the traffic-crash tail. Each live TrafficCrash counts its timer
-    // down by the same step; the first tick that takes a not-yet-flagged entry to <= 0 sets its
-    // flag bit and PINS the timer to 1.0f.
-    // ⛔ PARKED with the rest of the traffic ledger. It is not just "unreachable": the committed
-    // BrnWorld::TrafficCrash is an 8-byte record with only muVehicleIndex/mfStartTime named, and
-    // the console tail reads a FLAG BIT AT +1 that this tree's TrafficCrash does not model at all.
-    // Writing it would mean inventing a field. mTrafficCrashes is empty on this build (every
-    // producer is parked), so the loop body is unreachable in either case.
-    if( mTrafficCrashes.GetLength() != 0 )
-    {
-        static bool sbLoggedTrafficTickPark = false;
-        LogCrashPark( sbLoggedTrafficTickPark,
-                      "[crash-exit] TickCrashes traffic tail PARK: BrnWorld::TrafficCrash does not"
-                      " model the +1 flag byte the console's countdown reads [FLAG]\n" );
-    }
+    // ARTIST827C6748..827C67CC: the same simulation step ticks each traffic record.
+    for (u32 luCrash = 0; luCrash < mTrafficCrashes.GetLength(); ++luCrash)
+        mTrafficCrashes.GetItem(luCrash).Tick(lfTimeStep);
+
 }
 
 // =================================================================================================
