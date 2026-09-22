@@ -65,6 +65,7 @@
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"              // Attrib::FindCollectionWithDefault
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"    // Attrib::StringToKey (the surface-list collection key)
 #include "SharedClasses/World/BrnCollisionTag.h"                        // the KU_COLLISION_* masks
+#include <cstdlib>                                                      // getenv (the [showtime-ai] witness)
 
 namespace BrnWorld
 {
@@ -109,7 +110,7 @@ namespace
 //   0x822D20D0    if (!GetActiveRaceCar(i)->IsActive()) continue
 //   0x822D20E4    assert(IsAttached())                          (BrnActiveRaceCar.h:1096)
 //   0x822D2110    assert(&mPhysicsState != NULL)                         (:5553)
-//   0x822D2130    showtime = (i == mePlayerActiveRaceCarIndex) && mbIsInShowtimeMode
+//   0x822D2130    showtime = (i == mePlayerActiveRaceCarIndex) && mCrashPlayManager.IsInShowtime()
 //   0x822D2158    inAir    = mPhysicsState.mfTimeInAir > 0.0f            (phys+0x404)
 //   0x822D216C    drifting = mPhysicsState.mfTimeDrifting > 0.0f         (car +0x4E0)
 //   0x822D2170    touchPlayer / touchCar / frontRayOccluded              (+0x773/+0x772/+0x530)
@@ -186,8 +187,30 @@ void RaceCarEntityModule::WriteUpdatedAIData( RaceCarEntityModuleIO::OutputBuffe
         const BrnPhysics::Vehicle::RaceCarState* lpPhysicsState = lpCar->GetPhysicsState();
         CGS_ASSERT( lpPhysicsState != 0, "lpPhysicsState" );   // X360 :5553
 
+        // 0x822D2130..0x822D2154: `cmpw r22, player ; bne -> 0` then `lbzx r11, r28, 0x1823D`
+        // with r28 == this -- module +0x1823D is mCrashPlayManager (+0x180F0) . mbIsInShowtime
+        // (+0x14D), the byte HandlePrepareForModeAction's showtime arm sets (@0x823099C8) and
+        // HandleStopModeAction clears (@0x82307BE4).
         const bool lbIsInShowtime =
-            ( leCar == mePlayerActiveRaceCarIndex ) && mbIsInShowtimeMode;
+            ( leCar == mePlayerActiveRaceCarIndex ) && mCrashPlayManager.IsInShowtime();
+
+        // [DIAG] BRN_SHOWTIME_WATCH -- NOT IN THE X360 BINARY. One line per EDGE of the showtime
+        // bit the player's slot publishes to the AI (AICar::mbIsInShowtime downstream), so a
+        // Showtime run proves the read reaches the manager's byte. Bounded: two edges per session.
+        if( leCar == mePlayerActiveRaceCarIndex )
+        {
+            static const bool sbShowtimeWatch = ( getenv( "BRN_SHOWTIME_WATCH" ) != 0 );
+            static bool       sbLastPublished = false;
+            if( sbShowtimeWatch && lbIsInShowtime != sbLastPublished
+                && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[showtime-ai] player slot " << liCar << " publishes showtime "
+                    << ( sbLastPublished ? 1 : 0 ) << " -> " << ( lbIsInShowtime ? 1 : 0 )
+                    << " (mCrashPlayManager.IsInShowtime)\n";
+            }
+            sbLastPublished = lbIsInShowtime;
+        }
 
         // =========================================================================================
         // [FLAG PC witness] NOT IN THE X360 BINARY. THE PRODUCER END OF THE RIVAL ROUTE PATH.
@@ -773,10 +796,12 @@ void RaceCarEntityModule::CheckForResetOnTrackConditions()
             lbNeedsReset = true;
         }
 
-        // (5) hung in the air. ⚠️ ASSIGNS lbNeedsReset -- see the banner.
+        // (5) hung in the air. ⚠️ ASSIGNS lbNeedsReset -- see the banner. The showtime term is
+        // `lbzx r11, r21, 0x1823D` @0x822CEE18..0x822CEE20 with r21 == this: module +0x1823D is
+        // mCrashPlayManager (+0x180F0) . mbIsInShowtime (+0x14D).
         if( lpState->mfTimeInAir > KF_MAX_TIME_IN_AIR && !mPlayerVehicleControls.mbReset )
         {
-            lbNeedsReset = ( !mbIsInShowtimeMode && gsiDebugSuppressInAirReset == 0 );
+            lbNeedsReset = ( !mCrashPlayManager.IsInShowtime() && gsiDebugSuppressInAirReset == 0 );
         }
 
         if( lbNeedsReset )
