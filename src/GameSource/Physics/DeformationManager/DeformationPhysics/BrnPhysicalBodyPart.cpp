@@ -241,8 +241,8 @@ namespace Deformation
         // ----- LimitVelocities curve constants (recovered from the function's fsel/immediate soup) --
         // The asm computes time-scaled linear/angular velocity caps from a flag-guarded one-shot
         // static init (flt_82FB9FB8/.B4). These literals are the recovered immediates.
-        const f32 KF_MAX_LIN_VEL_AT_60  = 120.0f;
-        const f32 KF_MAX_ANG_VEL_AT_60  = 100.0f;
+        const f32 KF_MAX_LIN_VEL_AT_60  = 60.0f;    // 0x82092BC4
+        const f32 KF_MAX_ANG_VEL_AT_60  = 5.0f;     // 0x8200426C
         const f32 KF_MAX_LIN_VEL_AT_INF = 120.0f;   // upper assert bound (lfMaxLinVel <= this)
         const f32 KF_MAX_ANG_VEL_AT_INF = 100.0f;   // upper assert bound (lfMaxAngVel <= this)
         const f32 KF_PROPORTION_OF_MAX_TO_CAP_TO = 0.80000001f;   // the v55/v51 = 0.8 store
@@ -811,33 +811,23 @@ namespace Deformation
             return false;
         }
 
-        // Time-step-dependent velocity-cap curve (asm @0x825BA5C0 fsel/immediate cascade). The two
-        // gradient immediates flt_82FB9FB8 = -3599.9998 and flt_82FB9FB4 = -5699.9995 are RECOVERED
-        // literals (the lazy one-shot static init caches them in dword_82FB9FBC, but the VALUES are the
-        // visible immediates -- NOT rodata). The cascade computes, with dt = lvfTimeStep:
-        //   _FP8 = 60  - (dt*(-3599.9998) + 120)     // linear slope test
-        //   _FP7 = 5   - (dt*(-5699.9995) + 100)     // angular slope test
-        //   _FP12 = (_FP8 >= 0) ? 120 : (dt*(-3599.9998)+120)   // fsel f12,f8,f10,f12
-        //   _FP11 = (_FP7 >= 0) ? 100 : (dt*(-5699.9995)+100)   // fsel f11,f7,f9,f11
-        //   lfMaxLinVel = (120 - _FP12 >= 0) ? _FP12 : 120      // fsel f31,f10,f12,f0  (clamp to [.,120])
-        //   lfMaxAngVel = (100 - _FP11 >= 0) ? _FP11 : 100      // fsel f29,f9,f11,f13  (clamp to [.,100])
-        // i.e. the per-step cap is the time-scaled value (dt*grad + cap) clamped at the at-60 ceiling
-        // (KF_MAX_LIN_VEL_AT_60 = 120 / KF_MAX_ANG_VEL_AT_60 = 100), and floored at the same ceiling when
-        // the slope test goes non-negative (small dt -> ceiling). fsel(a,b,c) == (a >= 0) ? b : c.
+        // ARTIST 0x825BA684..0x825BA6C8: fused slopes start at the zero-step
+        // ceilings (120 / 100), then fsel clamps them to [60,120] / [5,100].
+        // Keep the two selects explicit: an unordered test takes the third operand.
         const f32 lfTimeStep = lvfTimeStep.x;
         auto lfFSel = [](f32 lfA, f32 lfB, f32 lfC) { return (lfA >= 0.0f) ? lfB : lfC; };
 
-        const f32 lfLinSlope = lfTimeStep * -3599.9998f + KF_MAX_LIN_VEL_AT_60;   // dt*v22 + 120
-        const f32 lfAngSlope = lfTimeStep * -5699.9995f + KF_MAX_ANG_VEL_AT_60;   // dt*v23 + 100
+        const f32 lfLinSlope = std::fma(lfTimeStep, -3599.9998f, KF_MAX_LIN_VEL_AT_INF);
+        const f32 lfAngSlope = std::fma(lfTimeStep, -5699.9995f, KF_MAX_ANG_VEL_AT_INF);
 
-        const f32 lfLinTest  = 60.0f - lfLinSlope;                               // _FP8 = 60 - lfLinSlope
-        const f32 lfAngTest  =  5.0f - lfAngSlope;                               // _FP7 = 5  - lfAngSlope
+        const f32 lfLinTest  = KF_MAX_LIN_VEL_AT_60 - lfLinSlope;
+        const f32 lfAngTest  = KF_MAX_ANG_VEL_AT_60 - lfAngSlope;
 
         const f32 lfLinSel   = lfFSel(lfLinTest, KF_MAX_LIN_VEL_AT_60, lfLinSlope);   // _FP12
         const f32 lfAngSel   = lfFSel(lfAngTest, KF_MAX_ANG_VEL_AT_60, lfAngSlope);   // _FP11
 
-        f32 lfMaxLinVel = lfFSel(KF_MAX_LIN_VEL_AT_60 - lfLinSel, lfLinSel, KF_MAX_LIN_VEL_AT_60);  // _FP31
-        f32 lfMaxAngVel = lfFSel(KF_MAX_ANG_VEL_AT_60 - lfAngSel, lfAngSel, KF_MAX_ANG_VEL_AT_60);  // _FP29
+        const f32 lfMaxLinVel = lfFSel(KF_MAX_LIN_VEL_AT_INF - lfLinSel, lfLinSel, KF_MAX_LIN_VEL_AT_INF);
+        const f32 lfMaxAngVel = lfFSel(KF_MAX_ANG_VEL_AT_INF - lfAngSel, lfAngSel, KF_MAX_ANG_VEL_AT_INF);
 
         // Range tripwires (non-gating).
         CGS_ASSERT(lfMaxLinVel >= 0.0f && lfMaxLinVel <= KF_MAX_LIN_VEL_AT_INF,
@@ -863,6 +853,7 @@ namespace Deformation
                 lLinVel.x *= lfScale;
                 lLinVel.y *= lfScale;
                 lLinVel.z *= lfScale;
+                lLinVel.w *= lfScale;   // full stvx128 at 0x825BA804
                 mRwBody.SetLinearVelocity(lLinVel);
                 lbRequiresUpdate = true;   // v19 = 1
             }
@@ -880,6 +871,7 @@ namespace Deformation
                 lAngVel.x *= lfScale;
                 lAngVel.y *= lfScale;
                 lAngVel.z *= lfScale;
+                lAngVel.w *= lfScale;   // full stvx128 at 0x825BA8D4
                 mRwBody.SetAngularVelocity(lAngVel);
                 lbRequiresUpdate = true;
             }
