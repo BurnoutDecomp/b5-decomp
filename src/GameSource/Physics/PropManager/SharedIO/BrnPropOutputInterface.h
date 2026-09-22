@@ -83,7 +83,7 @@ namespace Props
         const UpdatePropEventQueue&        GetUpdatedProps() const { return mUpdatedProps; }  // :65
 
         // Remaining DWARF-attested methods, bodied in their own TUs; not owned by this slice.
-        // ⚠ NONE of these five appears in the X360 ledger either -- they are folded/unused in
+        // ⚠ NONE of these four appears in the X360 ledger either -- they are folded/unused in
         // the ARTIST image -- so they are declaration-only here and are LINK HOLES the moment
         // anything calls them. Nothing in the tree does today (grepped 2026-08-19).
         bool Prepare();                                                    // :43
@@ -91,7 +91,10 @@ namespace Props
         void Destruct();                                                   // :51
         void Append(const PropOutputInterface* lpSource);                  // :55
         void Clear();                                                      // :62
-        const PropUpdateNotificationQueue& GetUpdatePropNotifications() const; // :68
+        // :68 -- INLINE, like GetUpdatedProps above: WorldModule::BridgePhysicsToOutput reaches
+        // this queue as a bare `addis r4,r11,1 ; addi r4,r4,-0x5D0` (+0xFA30 == +64048, the
+        // member's seat) at 0x827AEBF8/0x827AEBFC -- the accessor folded into its caller.
+        const PropUpdateNotificationQueue& GetUpdatePropNotifications() const { return mPropUpdateNotificationQueue; }
 
     private:
         InAddRigidBodyQueue         mAddRigidBodyQueue;            // +0      :73
