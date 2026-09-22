@@ -61,6 +61,9 @@ namespace CrashIO
             return &mNetworkOutputInterface;
         }
 
+        // ARTIST sub_827BBA68, DWARF :211: mutable queue, write-lock tripwire.
+        GameEventQueue* GetGameEventQueue();
+
         // :210 -- read-lock tripwire; the post-physics game events (+0x7A0) the world's
         // crash-to-output bridge appends into the update output buffer.
         const GameEventQueue* GetGameEventQueue() const
@@ -82,38 +85,6 @@ namespace CrashIO
     private:
         NetworkOutputInterface mNetworkOutputInterface;   // at offset +0x10 (16-aligned member)
         GameEventQueue         mGameEventQueue;           // console +0x7A0
-    };
-
-    // ========================================================================
-    // The class:BrnWorld::CrashIO group also homes the read-side accessor of the crash module's
-    // post-physics output buffer (DWARF BrnCrashModuleIO.h:210, @ 0x827A2680 -> this + 0x7A0,
-    // caller WorldModule::BridgeCrashModuleToOutput). The DWARF places this getter in the same
-    // OutputBuffer_PostPhysics type as GetNetworkOutputInterface (line 208) above, but the
-    // returned member sits at +0x7A0 -- just past the embedded NetworkOutputInterface
-    // (~EventQueue<CrashingTrafficUpdateEvent,24>) at +0x10. To keep this slice's layout
-    // deterministic without depending on the exact sizeof that foreign queue, the read view is
-    // modelled here as a self-contained buffer whose preceding region (the network-output
-    // payload, owned by GetNetworkOutputInterface above) is opaque padding up to the +0x7A0
-    // read member. The getter tests the read-lock bit (`extrwi r11,r11,1,27` == bit 4) and on
-    // failure fires "Not locked for reading\n".
-    //
-    // NAME (PS3 DecFIGS reconcile): the PS3 DWARF (BrnCrashModuleIO.h:210/216) identifies this
-    // second OutputBuffer_PostPhysics accessor as GetGameEventQueue() returning the member
-    // mGameEventQueue. Names adopted here; the slice is kept as a separate read-view struct
-    // (NOT restructured into OutputBuffer_PostPhysics) so the +0x7A0 offset stays exact without
-    // depending on the foreign NetworkOutputInterface sizeof.
-    struct OutputBuffer_PostPhysics_ReadView : public CgsModule::IOBuffer
-    {
-        struct GameEventQueueStorage { unsigned char maBytes[1]; };
-
-        // 0x827A2680 -- read-lock tripwire; returns this + 0x7A0 (PS3: GetGameEventQueue).
-        const GameEventQueueStorage* GetGameEventQueue() const;
-
-        static void _AssertLayout();
-
-    private:
-        unsigned char         maPrecedingPayload[0x7A0 - 1];   // +1..+0x79F
-        GameEventQueueStorage mGameEventQueue;                 // +0x7A0
     };
 
     // ========================================================================

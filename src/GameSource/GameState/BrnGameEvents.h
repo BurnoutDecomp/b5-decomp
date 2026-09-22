@@ -84,6 +84,7 @@ enum EGameEventType
     E_EVENT_PLAYER_FINISHED_MODE    = 32,    // X360 case 32 @0x823A27F4 (PS3 DWARF 33)
     E_EVENT_PLAYER_PAUSE_STATE_CHANGED = 33, // X360 (PS3 DWARF 34)
     E_EVENT_ENTER_REPLAY            = 35,    // X360 (PS3 DWARF 36)
+    E_EVENT_PLAYER_CRASH_ENDING     = 42,    // ARTIST PostPhysicsUpdate 827D3CDC; DWARF 43
     E_EVENT_LEAVE_REPLAY            = 36,    // X360 (PS3 DWARF 37)
     E_EVENT_CRASHNAV_STATE_CHANGED  = 93,    // X360 (PS3 DWARF 94)
     // ⭐⭐⭐ [returning-player wave 2026-08-28] THE JUNKYARD-ENTRY COMPLETION EVENT.
@@ -213,6 +214,10 @@ enum EGameEventType
 
 template <EGameEventType T>
 struct GameEvent { };
+
+// DWARF BrnGameEvents.h:400; ARTIST posts a one-byte empty signal.
+struct PlayerCrashEndingEvent : public GameEvent<E_EVENT_PLAYER_CRASH_ENDING> {};
+static_assert(sizeof(PlayerCrashEndingEvent) == 1, "empty crash-ending signal");
 
 // ARTIST debug callbacks and ProcessGameEvents cases 1/2; DWARF member names.
 struct TeleportPlayerCarEvent : public GameEvent<E_EVENT_TELEPORT_PLAYER_CAR>

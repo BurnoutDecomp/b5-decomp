@@ -93,6 +93,7 @@ enum EGameActionType
     E_ACTION_REMOTE_PLAYER_DISCONNECTED = 11,
     E_ACTION_RESET_CRASHING             = 9,  // ARTIST CrashModule::HandleGameActions
     E_ACTION_RESET_RACE_CAR_CRASHING     = 10,
+    E_ACTION_PLAYER_CRASH_ENDING_SOON   = 17, // ARTIST ProcessGameEvents case42
     E_ACTION_SOUND_TRIGGER              = 210,
     E_ACTION_ONLINE_PLAYER_ADDED        = 211,   // DWARF BrnGameActions.h (was placeholder 220)
     E_ACTION_SETUP_NETWORK_CAR          = 5,     // DWARF BrnGameActions.h (was placeholder 221)
@@ -872,6 +873,10 @@ enum EGameActionType
 
 template <EGameActionType T>
 struct GameAction { };
+
+// DWARF BrnGameActions.h: empty action; ARTIST case42 posts size1.
+struct PlayerCrashEndingSoonAction : public GameAction<E_ACTION_PLAYER_CRASH_ENDING_SOON> {};
+static_assert(sizeof(PlayerCrashEndingSoonAction) == 1, "empty crash-ending action");
 
 // =============================================================================================
 // ⭐⭐⭐ ShowtimeModeSwitchAction -- action 143, 16 bytes. THE ONLY WRITER, ANYWHERE IN THE IMAGE,

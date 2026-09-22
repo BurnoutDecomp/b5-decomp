@@ -39,20 +39,14 @@
 //                                      this build; the crash module's traffic ledger is a separate
 //                                      slice and is inert today either way.
 //
-// ⚠️ TWO REAL BEHAVIOURS ARE PARKED, NOT NO-OPS -- named so they are findable:
-//   (a) the mRecycledTrafficQueue Append + the two 80-byte traffic bitmask copies at the head of
-//       PostPhysicsUpdate. They feed only the parked traffic helpers.
-//   (b) the "crash is ending" GAME EVENT (id 42) PostPhysicsUpdate posts on
-//       mbNeedToSendEndingMessage. Its sink is OutputBuffer_PostPhysics' game-event queue, which
-//       this tree still models as an opaque GameEventQueueStorage on a separate read-view struct.
-//       ⭐ IT IS NOT ON THE RESET PATH -- the reset is driven entirely by
-//       ClearupCrashes -> ResetRaceCarFromCrashIndex -> the RaceCarCrashCompleteEvent ring.
-//       RaceCarCrash::Tick still computes and stores mbNeedToSendEndingMessage exactly as the
-//       console does, so the flag is live and correct the day that queue is homed.
+// The recycled-traffic queue and traffic bitmask copies remain parked with their consumers.
+// The crash-ending game event42 is published through the canonical typed output queue.
 // =================================================================================================
 
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
 #include "rw/math/vpu/vector3_operation.h"
+#include "GameSource/GameState/BrnGameEvents.h"
+#include <cstdlib>
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
@@ -479,7 +473,7 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
 //     0x827D3C58  if (mbIsOnlineGameMode) GenerateOwnedTrafficUpdates            [PARKED]
 //     0x827D3C68  if (mbNeedToSendEndingMessage) { VariableEventQueue<1536,16>::AddEvent(
 //                     lpOutput->GetGameEventQueue(), &record, 42, 1);
-//                   mbNeedToSendEndingMessage = false; }                [PARKED -- see banner (b)]
+//                   mbNeedToSendEndingMessage = false; }                [LIVE]
 //   }
 //   0x827D3C8C  UnlockForRead ; UnlockForWrite
 // =================================================================================================
@@ -506,12 +500,13 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
 
         if( mbNeedToSendEndingMessage )
         {
-            static bool sbLoggedEndingMessagePark = false;
-            LogCrashPark( sbLoggedEndingMessagePark,
-                          "[crash-exit] CrashModule 'crash ending' GAME EVENT (id 42) PARK: its sink"
-                          " is OutputBuffer_PostPhysics' game-event queue, still opaque in this"
-                          " tree. NOT on the reset path -- the reset rides the"
-                          " RaceCarCrashCompleteEvent ring [FLAG]\n" );
+            // ARTIST 827D3CD0..827D3CE8: publish the empty signal, then consume the latch.
+            const BrnGameState::GameStateModuleIO::PlayerCrashEndingEvent lEvent{};
+            lpOutput->GetGameEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                BrnGameState::GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING, sizeof(lEvent));
+            if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[crash-ending] event 42 posted\n";
             mbNeedToSendEndingMessage = false;
         }
     }
