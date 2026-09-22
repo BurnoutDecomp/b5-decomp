@@ -802,18 +802,18 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
 //                       mDirection  = {1, 0, 0}                       ⭐ a LITERAL +X facing
 //   0x82784314  ten misses -> return false
 //
-// ⚠️ [FLAG PC bring-up] THE DRAW COMES FROM A **GLOBAL** CgsNumeric::Random AT .data 0x8300D5D0,
-// NOT from this object's mRandom (@this+0x4F0, which GetRoadSideForStartingLine does use -- the two
-// are three functions apart and both are unrolled inline, which is exactly how a shared stream gets
-// forked by accident). That global has no shared home in this tree yet: AICar::Reset re-seeds the
-// same block and BrnAICar_Update.cpp models it as a FILE-LOCAL `static u32
-// gauResetSeededBlock_8300D5D0[11]`, so it is already forked once. A second file-local copy here
-// would make it three streams instead of one. The instance below is therefore named for the
-// address and carries the request to give the block ONE shared home (see ## header_requests).
-// Behaviour cost of the fork: this arm picks a different pseudo-random section than the console
-// would, from the same uniform distribution over the same 7,639 sections. It is a fallback of a
-// fallback -- nothing on the race-start path reaches it.
-// DELETE-WHEN the 0x8300D5D0 Random gets a shared home.
+// ⭐ THE DRAW COMES FROM THE **GLOBAL** CgsNumeric::Random AT .data 0x8300D5D0 (0x827841A8/0x827841BC
+// `lis/addi r31`; the inline RandomFloat at 0x827841C0..0x82784220), NOT from this object's mRandom
+// (@this+0x4F0, which GetRoadSideForStartingLine uses). DWARF: the draw is AICar::GetRandomNumber()
+// (BrnAICar.h:476; PS3 0xA122A8 calls Aggressiveness::GetRandomNumber on lpPlayerAICar+5132), and the
+// stream is the one AICar::Construct (0x82792754..) and AICar::Reset (0x82792900..) re-seed -- so
+// after any car's attach (HandleManagementEvents case 0 -> Reset, before this frame's
+// UpdateResetOnTrackManager) the next draws are exactly 0.0, 0.783, 0.193 ... again.
+// ⛔ CORRECTED 2026-09-22 (crash parity G07-D6): the draw came from a function-local copy
+// (`lsGlobalResetRandom_8300D5D0`) Constructed once per process and never re-seeded, so every
+// Marked Man load placement / fixed-distance fallback after the first probed a different section
+// than the console. It now draws lpPlayerAICar->GetRandomNumber() (FX-AIDRV 1a611271 homed the
+// stream beside AICar::Construct/Reset).
 //
 // ⚠️ THE SECTION INDEX IS DRAWN FROM A **u16-TRUNCATED** COUNT. 0x82784230 is
 // `lwz r11, 0x30(data) ; clrlwi r11, r11, 16` -- muNumSections is narrowed to 16 bits BEFORE the
@@ -822,15 +822,6 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
 // =================================================================================================
 bool ResetOnTrackManager::ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData)
 {
-    // [FLAG PC bring-up] the console's global Random at .data 0x8300D5D0 -- see the banner.
-    static CgsNumeric::Random lsGlobalResetRandom_8300D5D0;
-    static bool sbGlobalResetRandomConstructed = false;
-    if (!sbGlobalResetRandomConstructed)
-    {
-        sbGlobalResetRandomConstructed = true;
-        lsGlobalResetRandom_8300D5D0.Construct();
-    }
-
     if (lpResetData == 0 || !mpAISectionData.HasMemoryResource())
     {
         return false;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
@@ -843,7 +834,7 @@ bool ResetOnTrackManager::ResetAwayFromPlayer(ResetOnTrackCoords* lpResetData)
 
     for (s32 liRepeats = 0; liRepeats < KI_AWAY_FROM_PLAYER_MAX_REPEATS; ++liRepeats)
     {
-        const f32 lfRandom = lsGlobalResetRandom_8300D5D0.RandomFloat();   // [0, 1)
+        const f32 lfRandom = lpPlayerAICar->GetRandomNumber();   // [0, 1) -- 0x8300D5D0, 0x827841C0..0x82784220
 
         const u32 luSectionIndex = static_cast<u32>(
             static_cast<f32>(static_cast<u16>(lpAISectionsData->muNumSections)) * lfRandom);
