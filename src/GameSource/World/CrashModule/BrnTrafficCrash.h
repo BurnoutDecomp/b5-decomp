@@ -15,6 +15,7 @@
 //   +0x04  f32  mfStartTime     (stfs @4 -- the ctor's double arg stored as float)
 // => sizeof 8 (f32 @4 naturally ends at +8; 4-byte alignment from the u16/f32 fields).
 #include "types.hpp"   // s8, u16, f32
+#include "GameSource/BurnoutConstants.h"
 
 namespace BrnWorld
 {
@@ -29,6 +30,10 @@ namespace BrnWorld
 
         // Layout pins (X360 Construct store offsets/widths); defined in BrnTrafficCrash.cpp.
         static void _AssertLayout();
+
+        EActiveRaceCarIndex GetOwner() const { return static_cast<EActiveRaceCarIndex>(mliOwner); }
+        u32 GetVehicleIndex() const { return muVehicleIndex; }
+        void OnOwnerDisconnected(); // inlined in ARTIST 0x827CD0A8..0x827CD0F0
 
     private:
         s8  mliOwner;         // +0x00

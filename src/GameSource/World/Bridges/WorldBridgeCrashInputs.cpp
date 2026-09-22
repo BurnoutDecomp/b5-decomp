@@ -62,15 +62,8 @@ namespace WorldModule
 // spelling is unverified) -- but the SOURCE is the bounce button and the asm is unambiguous.
 // [[diagnostics-that-lie]]: read what a field actually carries, not what its name says.
 //
-// ⛔ THREE LEGS ARE PARKED, and NOT because they are hard -- because wiring them would be a
-// GENUINE OUT-OF-BOUNDS COPY. InputBuffer_PreScene models mNetworkInputInterface's three siblings
-// (mVehicleDriverInterface 0x14B0, mGameActionQueue 0x3410) as CONSOLE-SIZED opaque blobs, and the
-// setters memcpy sizeof(blob) bytes out of a HOST type of a different size. That is precisely the
-// defect this same wave had to fix on mActiveRaceCarInterface (see BrnCrashModuleIO.h). Each of
-// the three feeds ONLY a parked consumer -- the game-action queue feeds CrashModule::
-// HandleGameActions, the vehicle-driver view feeds ResetCrashedNetworkRaceCars, the network view
-// feeds HandleNetworkCrashingTraffic -- so parking them costs nothing today and inventing them
-// would corrupt memory. DELETE-WHEN those three members are promoted to their real types.
+// The game-action queue uses its canonical host type and is copied below. Network
+// and vehicle-driver inputs still feed the separately parked network processing paths.
 // =================================================================================================
 void BridgeInputToCrashModule(
     void* lpWorldModule,
@@ -101,6 +94,8 @@ void BridgeInputToCrashModule(
             lpUpdateInputBuffer->GetPlayerVehicleControls() );
     lpCrashInputBuffer_PreScene->SetPlayerPressingBoost( lpControls->mbBoostBounce );
 
+    lpCrashInputBuffer_PreScene->SetGameActionQueue(lpUpdateInputBuffer->GetGameActionQueue());
+
     lpCrashInputBuffer_PreScene->SetTimerStatusInterface(
         reinterpret_cast<const CgsSystem::TimerStatusInterface*>(
             lpUpdateInputBuffer->GetTimerStatusInterface() ) );
@@ -111,9 +106,9 @@ void BridgeInputToCrashModule(
         {
             s_bLoggedBlobPark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] BridgeInputToCrashModule PARK: the network / game-action /"
+                << "[crash-exit] BridgeInputToCrashModule PARK: the network /"
                    " vehicle-driver legs are skipped -- their destinations are still console-sized"
-                   " opaque blobs and the copy would read out of bounds. All three feed parked"
+                   " opaque blobs and the copy would read out of bounds. Both feed parked"
                    " consumers [FLAG]\n";
         }
     }

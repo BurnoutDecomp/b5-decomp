@@ -27,6 +27,14 @@
 
 namespace BrnWorld
 {
+    void TrafficCrash::OnOwnerDisconnected()
+    {
+        // ARTIST: network flags 4 (confirmed) or 2 (unconfirmed), then force expiry.
+        CGS_ASSERT((meCrashState & 4) != 0 || (meCrashState & 2) != 0,
+                   "IsConfirmedNetwork() || IsUnconfirmedNetwork()");
+        mfStartTime = -1.0f; // DWARF mfTimeTillClearup; existing member name retained.
+        meCrashState |= 1;
+    }
     void TrafficCrash::Construct(s32 liOwner, u16 luVehicleIndex, f64 lfStartTime, s32 /*liUnused*/, bool lbFlag)
     {
         CGS_ASSERT(liOwner >= 0, "liOwner >= E_ACTIVE_RACE_CAR_INDEX_0");

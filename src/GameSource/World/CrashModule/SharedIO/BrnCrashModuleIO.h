@@ -1,4 +1,5 @@
 #pragma once
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 
 // Canonical (DWARF) home for the crash-module IO buffers (BrnCrashModuleIO.h). MINIMAL-COMPLETE
 // slice: it currently homes only BrnWorld::CrashIO::OutputBuffer_PostPhysics, scoped to the single
@@ -142,7 +143,8 @@ namespace CrashIO
     {
         // Blind-copied foreign types (own homes elsewhere); correctly-sized opaque storage.
         struct VehicleDriverInterfaceStorage { unsigned char maBytes[0x14B0]; };   // 5296
-        struct GameActionQueueStorage        { unsigned char maBytes[0x3410]; };   // 13328
+        typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;
+        const GameActionQueue* GetGameActionQueue() const; // ARTIST 0x827BB528
 
         // ---- read-side getters (read-lock tripwire "Not locked for reading") ----
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;    // 0x827BB288 -> +0x4
@@ -178,7 +180,7 @@ namespace CrashIO
         // The member is now the real committed type, the copy goes through the interface's own
         // operator= (already bodied in BrnRCEntityActiveRaceCarOutputInterface.cpp:105, and it is
         // what the console inlines here), and the crash module reads it BY NAME.
-        void SetGameActionQueue(const GameActionQueueStorage* lpQueue);                     // 0x827A2328
+        void SetGameActionQueue(const GameActionQueue* lpQueue);                            // 0x827A2328
 
         static void _AssertLayout();
 
@@ -188,24 +190,8 @@ namespace CrashIO
         VehicleDriverInterfaceStorage   mVehicleDriverInterface;  // X360 +0x3CD0
         BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
                                         mActiveRaceCarInterface;  // X360 +0x5180 (widens on host)
-        GameActionQueueStorage          mGameActionQueue;         // X360 +0x7A70
+        GameActionQueue                 mGameActionQueue;         // X360 +0x7A70
         bool                            mbPlayerPressingBoost;    // X360 +0xAE80
-    };
-
-    // BrnCrashModuleIO.h:87 -- crash-module input buffer (read-side accessor @ 0x827BB528 ->
-    // this + 0x7A70; caller CrashModule::HandleGameActions).
-    struct InputBuffer_HandleGameActions : public CgsModule::IOBuffer
-    {
-        struct ReadInterfaceStorage { unsigned char maBytes[1]; };
-
-        // 0x827BB528 -- read-lock tripwire; returns this + 0x7A70.
-        const ReadInterfaceStorage* GetReadInterface() const;
-
-        static void _AssertLayout();
-
-    private:
-        unsigned char        maPrecedingPayload[0x7A70 - 1];   // +1..+0x7A6F
-        ReadInterfaceStorage mReadInterface;                   // +0x7A70
     };
 
     // BrnCrashModuleIO.h:156 (DWARF) -- crash-module post-physics input buffer. DWARF-authoritative
