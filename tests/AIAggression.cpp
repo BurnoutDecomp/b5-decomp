@@ -118,10 +118,72 @@ static void GroupLineupSide()
     Check(gAssertions == luAssertions, "valid positions raise no RwMath::IsValid assertion");
 }
 
+// ------------------------------------------------------------------------------------------------
+// G00-D2  CalcSeparationAcrossToTarget @0x82771248 and its only caller CanSlam @0x8277DFC8.
+// Console: diff = flat(pos(mpCar) - pos(mpTargetCar)); right = GetRight(mpCar) with y = 0
+// (stfs @0x82771324) BEFORE the degenerate test and the normalise; no flat lane above
+// flt_820C3B70 -> flt_8204F664 (0x7F7FFFFF, FLT_MAX); else fabs(dot(diff, normalise(right)))
+// (vandc @0x827713D0). CanSlam: lead > -3 (ble exit), lead < 2 (bge exit), across < 30 (blt).
+// ------------------------------------------------------------------------------------------------
+static bool IsFltMax(f32 lfValue)
+{
+    u32 luBits = 0;
+    std::memcpy(&luBits, &lfValue, sizeof(luBits));
+    return luBits == 0x7F7FFFFFu;
+}
+
+static void GroupAcrossSeparation()
+{
+    BeginGroup("G00-D2 CalcSeparationAcrossToTarget");
+    const unsigned luAssertions = gAssertions;
+    const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+    AIAggression lAggression{};
+    AICar lCar{}, lTarget{};
+    lAggression.mpCar = &lCar;
+    lAggression.mpTargetCar = &lTarget;
+    lCar.mPosition = V(0.0f, 0.0f, 0.0f);
+    lCar.mDirection = V(0.0f, 0.0f, 1.0f);
+    lCar.mRight = V(1.0f, 0.0f, 0.0f);
+    lCar.miProximityIndex = 1;
+
+    lTarget.mPosition = V(35.0f, 0.0f, 0.5f);
+    Check(Near(lAggression.CalcSeparationAcrossToTarget(), 35.0f), "a target 35 m on the car's +right reads 35 (fabs)");
+    lTarget.mPosition = V(-35.0f, 0.0f, 0.5f);
+    Check(Near(lAggression.CalcSeparationAcrossToTarget(), 35.0f), "a target 35 m on the car's -right reads 35");
+
+    // Banked 60 degrees: the right axis is flattened before it is normalised.
+    lCar.mRight = V(0.5f, 0.8660254f, 0.0f);
+    lTarget.mPosition = V(-10.0f, 4.0f, 0.0f);
+    Check(Near(lAggression.CalcSeparationAcrossToTarget(), 10.0f), "a banked right axis is flattened before normalising");
+
+    lCar.mRight = V(0.0f, 1.0f, 0.0f);
+    Check(IsFltMax(lAggression.CalcSeparationAcrossToTarget()), "a vertical right axis returns FLT_MAX (flt_8204F664)");
+    lCar.mRight = V(1.0e-8f, 1.0f, -1.0e-8f);
+    Check(IsFltMax(lAggression.CalcSeparationAcrossToTarget()), "a flat right axis under flt_820C3B70 returns FLT_MAX");
+    lCar.mRight = V(lfNaN, 0.0f, lfNaN);
+    Check(IsFltMax(lAggression.CalcSeparationAcrossToTarget()), "a NaN right axis returns FLT_MAX (vcmpgtfp all-false)");
+
+    // CanSlam: lead 0.5 m is inside (-3, 2), so only the across test decides.
+    lCar.mRight = V(1.0f, 0.0f, 0.0f);
+    lTarget.mPosition = V(35.0f, 0.0f, 0.5f);
+    Check(!lAggression.CanSlam(), "CanSlam refuses a target 35 m to the car's right");
+    lTarget.mPosition = V(-35.0f, 0.0f, 0.5f);
+    Check(!lAggression.CanSlam(), "CanSlam refuses a target 35 m to the car's left");
+    lTarget.mPosition = V(10.0f, 0.0f, 0.5f);
+    Check(lAggression.CanSlam(), "CanSlam accepts a target 10 m across");
+    lCar.mRight = V(0.0f, 1.0f, 0.0f);
+    Check(!lAggression.CanSlam(), "CanSlam refuses while the car's right axis is vertical");
+    lCar.mRight = V(1.0f, 0.0f, 0.0f);
+    lTarget.mPosition = V(lfNaN, 0.0f, 0.5f);
+    Check(!lAggression.CanSlam(), "CanSlam refuses an unordered (NaN) separation (ble/bge/blt polarity)");
+    Check(gAssertions == luAssertions, "valid cars raise no assertion");
+}
+
 int main()
 {
     std::printf("AIAggression regression\n");
     GroupLineupSide();
+    GroupAcrossSeparation();
     EndGroup();
     std::printf("%s: %u checks, %u failures\n", guFailures ? "FAIL" : "PASS", guChecks, guFailures);
     return guFailures ? 1 : 0;

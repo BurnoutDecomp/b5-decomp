@@ -77,10 +77,10 @@ const f32 KF_MAX_POST_ATTACK_WAIT_TIME = 1.0f; // rodata 0x820C4270 == 0x3F80000
 // BrnAICar_Constants.h as KF_CAR_TOO_SLOW_SPEED / KF_MARKED_MAN_ATTACK_SPEED.
 
 // --- G2-geometry ---
-// CalcSeparationAcrossToTarget uses a small epsilon to reject a degenerate (near-zero) right
-// vector before normalising. The X360 loads it from rodata flt_820C3B70, an un-valued .rdata
-// float not present in the available exports.
+// CalcSeparationAcrossToTarget uses a small epsilon to reject a degenerate (near-zero) flattened
+// right vector before normalising, and returns FLT_MAX for one.
 const f32 KF_QUERY_POS_EPSILON = 1.1920929e-7f; // rodata 0x820C3B70 == 0x34000000 (read from image.bin) -- guards the degenerate-right-vector branch
+const f32 KF_ACROSS_SEPARATION_DEGENERATE = 3.40282347e+38f; // rodata 0x8204F664 == 0x7F7FFFFF == FLT_MAX (read from image.bin) -- CalcSeparationAcrossToTarget's degenerate return, lfs @0x82771374
 
 // --- G3-speedmatch ---
 // --- BrnAIAggression.cpp file-local speed-match tuning constants (group G3-speedmatch) ---
@@ -185,33 +185,42 @@ bool AIAggression::AcrossSeparationTooBig(const AICar* lpThisCar, const AICar* l
 
 // BrnAI::AIAggression::CalcSeparationAcrossToTarget @0x82771248.
 //
-// Lateral (across-track) separation between mpCar and mpTargetCar: the ground-plane offset
-// from the target to our car projected onto our car's normalised right axis. Sign indicates
-// which side the target sits on.
+// UNSIGNED lateral separation between mpCar and mpTargetCar: the ground-plane offset from the
+// target to our car, projected onto our car's FLATTENED, normalised right axis, magnitude only.
+// When the flattened right axis is (near) zero -- the car on its side -- it returns FLT_MAX,
+// which the only caller, CanSlam (`>= 30`), refuses.
 //
-// X360 ASM: diff = pos(mpCar) - pos(mpTargetCar) with its Y lane explicitly zeroed (flatten
-// to XZ); right = mpCar->GetRight(). A vcmpgtfp epsilon guard on |right| skips the projection
-// when the right vector is degenerate (~zero); otherwise vrsqrtefp + two Newton steps
-// normalise right and vmsum3fp128 dots the flattened diff with the unit right axis.
-// De-SIMD'd to a guarded XZ dot.
+// X360 ASM: v127 = GetPosition(mpTargetCar), v126 = GetPosition(mpCar). GetRight(mpCar) goes to
+// the stack quad and its Y lane is overwritten with flt_82001CC0 (0.0) by the stfs @0x82771324,
+// BEFORE the lvx128 v12 reload @0x8277132C, so the right axis is flattened ahead of both the
+// degenerate test and the normalisation; vsubfp128 v0,v126,v127 @0x82771318 (pos(mpCar) -
+// pos(mpTargetCar)) gets the same Y store @0x8277134C. The degenerate test is the SDK IsZero:
+// vandc against the 0x80000000 mask (|right|) @0x82771350, vrlimi128 @0x82771358 copies |x| into
+// the w lane, vcmpgtfp. against splat(flt_820C3B70) @0x8277135C, and the CR6 "all false" bit
+// (extrwi 26 @0x82771364) branches to lfs f1, flt_8204F664 @0x82771374. "No lane above the
+// tolerance" also holds for NaN lanes, so the test is spelt that way round. Otherwise vrsqrtefp
+// + two Newton steps normalise the flat right, vmsum3fp128 @0x827713CC dots the flat offset with
+// it and vandc v0,v0,v13 @0x827713D0 clears the sign bit (fabs). PS3 0xA05E3C matches (insrdi
+// 0.0 into right.y, the FLT_MAX literal, a closing vandc); the DWARF lists two Vector3::SetY and
+// Abs<VecFloat>. Until 2026-09-22 this returned the SIGNED dot of an unflattened right (and
+// lvAcross.x when degenerate), so a target 30+ m on the car's right passed CanSlam
+// (crash-parity audit G00-D2).
 f32 AIAggression::CalcSeparationAcrossToTarget()
 {
     CGS_ASSERT(mpTargetCar != NULL, "mpTargetCar != NULL");
     CGS_ASSERT(mpCar != NULL, "mpCar != NULL");
 
-    // Ground-plane offset from the target car to our car.
-    Vector3 lvAcross = mpCar->GetPosition() - mpTargetCar->GetPosition();
-    lvAcross.y = 0.0f;
+    Vector3 lvDiff = mpCar->GetPosition() - mpTargetCar->GetPosition();
+    Vector3 lvRight = mpCar->GetRight();
+    lvRight.y = 0.0f;
+    lvDiff.y = 0.0f;
 
-    // Our car's right axis; the X360 guards against a degenerate (near-zero) right vector
-    // before normalising it -- if it is effectively zero, there is no across component.
-    const Vector3 lvRight = mpCar->GetRight();
-    if (rw::math::vpu::MagnitudeSquared(lvRight) <= KF_QUERY_POS_EPSILON)
+    if (!(std::fabs(lvRight.x) > KF_QUERY_POS_EPSILON || std::fabs(lvRight.z) > KF_QUERY_POS_EPSILON))
     {
-        return lvAcross.x;
+        return KF_ACROSS_SEPARATION_DEGENERATE;
     }
 
-    return rw::math::vpu::Dot(lvAcross, rw::math::vpu::Normalize(lvRight));
+    return std::fabs(rw::math::vpu::Dot(lvDiff, rw::math::vpu::Normalize(lvRight)));
 }
 
 // ===== CalcSpeedMatchSpeed =====
@@ -257,6 +266,9 @@ f32 AIAggression::CalcSpeedMatchSpeed(f32 lfTimeStep, f32 lfTargetSpeed)
 //
 // X360: leadingSep = GetLeadingSeparation(mpCar, mpTargetCar) (computed first, its result held
 // in fp1 across the early-outs); the proximity gate reads mpCar->miProximityIndex.
+// The three float tests are the console's own polarity, so an unordered (NaN) separation
+// refuses the slam: `ble` @0x8277E00C against flt_820C42DC (-3.0) and `bge` @0x8277E018 against
+// flt_820C41F4 (2.0) exit, and only `blt` @0x8277E030 against flt_820C3FA8 (30.0) accepts.
 bool AIAggression::CanSlam()
 {
     const f32 lfLeadingSeparation = GetLeadingSeparation(mpCar, mpTargetCar);
@@ -265,20 +277,16 @@ bool AIAggression::CanSlam()
     {
         return false;
     }
-    if (lfLeadingSeparation <= -3.0f)
+    if (!(lfLeadingSeparation > -3.0f))
     {
         return false;
     }
-    if (lfLeadingSeparation >= 2.0f)
+    if (!(lfLeadingSeparation < 2.0f))
     {
         return false;
     }
 
-    if (CalcSeparationAcrossToTarget() >= 30.0f)
-    {
-        return false;
-    }
-    return true;
+    return CalcSeparationAcrossToTarget() < 30.0f;
 }
 
 // BrnAI::AIAggression::CarIsTooSlow @0x82766948.
@@ -463,7 +471,9 @@ bool AIAggression::FindTarget(const AICar* lpCandidateTarget)
 // The tail is the part that matters: vspltisw v12, -1 followed by vslw v12, v12, v12 builds
 // 0x80000000 in every lane and vandc v0, v0, v12 clears the sign bit -- i.e. fabs(). So this
 // returns a MAGNITUDE, which is why AcrossSeparationTooBig's `> 20.0f` is a one-sided test.
-// CalcSeparationAcrossToTarget @0x82771248 is the SIGNED sibling: same dot, no vandc.
+// CalcSeparationAcrossToTarget @0x82771248 is the member sibling (mpCar -> mpTargetCar): also a
+// magnitude, but it flattens the right axis first and returns FLT_MAX for a degenerate one; this
+// function normalises the right axis unflattened (GetRight -> v13 -> vmsum3fp128 v13,v13 @0x827711E8).
 f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 {
     CGS_ASSERT(lpThisCar != NULL, "lpThisCar != NULL");
