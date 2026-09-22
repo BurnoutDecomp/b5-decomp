@@ -28,15 +28,15 @@
 
 namespace BrnAI
 {
-    // PassesThrough parallel-edge cull threshold. In the X360 asm this is a single
-    // rodata float, splatted from &unk_820A36A0, compared against abs(cross) via
-    // `vcmpgtfp`. Its literal value is NOT present in the supplied IDA exports (the
-    // rodata word at 0x820A36A0 is referenced only by this function and was not dumped),
-    // so it is declared here as a FLAGGED PLACEHOLDER rather than fabricated -- see
-    // open_questions. The placeholder uses the smallest positive normal f32, the
-    // conventional "treat as parallel only when the cross product is effectively zero"
-    // epsilon; the real constant must be read from rodata @0x820A36A0 to be byte-faithful.
-    static const f32 KF_INTERSECTION_EPSILON = 1.17549435e-38f;   // PLACEHOLDER (rodata @0x820A36A0 unread)
+    // PassesThrough parallel-edge cull threshold: FLT_EPSILON. The X360 loads it once
+    // (0x82677398/0x8267739C `lis/addi r27 = 0x820A36A0`), splats lane 0 of that 16-aligned
+    // block (0x82677430 `lvlx v0, r0, r27` ; 0x8267743C `vspltw v13, v0, 0`) and keeps an edge
+    // only when |cross| > eps (0x8267747C `vandc128` sign strip ; 0x82677480 `vcmpgtfp`).
+    // tools/re/x360rd.py 820A36A0 == 0x34000000 == 1.1920928955078125e-07 -- initialised .rdata,
+    // not a .bss dyn-init slot. (Until 2026-09-22 this was a FLT_MIN placeholder, so edges with
+    // |cross| in (1.2e-38, 1.19e-7] were intersected with a huge 1/cross instead of skipped --
+    // crash parity G07-D5.)
+    static const f32 KF_INTERSECTION_EPSILON = 1.1920928955078125e-07f;
 
     // GetMiddle averages the four corners: 1 / KI_AI_SECTION_EDGES.
     static const f32 KF_CORNER_MEAN_SCALE = 0.25f;
