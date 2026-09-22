@@ -179,11 +179,112 @@ static void GroupAcrossSeparation()
     Check(gAssertions == luAssertions, "valid cars raise no assertion");
 }
 
+// ------------------------------------------------------------------------------------------------
+// G00-D3 / G00-D4  GetSpeedMatchSpeed @0x8277E058, arms 3 and 2. Both measure OUR lead in the
+// PLAYER's frame: GetLeadingSeparation(r4 = lwz 0x10 mpPlayerCar, r5 = lwz 8 mpCar), where
+// GetLeadingSeparation @0x8277DEA0 is flat(pos(r5) - pos(r4)) on the flat unit heading of r4.
+//   arm 3 @0x8277E100: NULL player or lead < flt_82013FB4 (-15) -> flt_8300D754, else
+//         StepTo(speed(car), speed(player) - flt_8300D7F0, dt * flt_820C4150 (10)).
+//   arm 2 @0x8277E178: lead >= 0 -> lfs 0x48 (mFixedPassingSpeed), else flt_8300D784;
+//         StepTo(speed(car), that, dt * flt_820C42C0 (90)).
+// Player at the origin heading +Z at 30 m/s, the rival at 25 m/s, dt 0.1 -- every StepTo
+// below snaps onto its target.
+// ------------------------------------------------------------------------------------------------
+static bool GuardedSpeedMatch(AIAggression* lpAggression, f32 lfTimeStep, f32* lpfResult)
+{
+    __try
+    {
+        *lpfResult = lpAggression->GetSpeedMatchSpeed(lfTimeStep);
+        return true;
+    }
+    __except (EXCEPTION_EXECUTE_HANDLER)
+    {
+        return false;
+    }
+}
+
+static void PlaceSpeedMatchCars(AICar& lrCar, AICar& lrPlayer, AICar& lrDecoy)
+{
+    lrPlayer.mPosition = V(0.0f, 0.0f, 0.0f);
+    lrPlayer.mDirection = V(0.0f, 0.0f, 1.0f);
+    lrPlayer.mfSpeedInRange = 30.0f;
+    lrCar.mDirection = V(0.0f, 0.0f, 1.0f);
+    lrCar.mfSpeedInRange = 25.0f;
+    lrDecoy.mPosition = V(0.0f, 0.0f, 500.0f);
+    lrDecoy.mDirection = V(0.0f, 0.0f, 1.0f);
+}
+
+static void GroupSlowToClip()
+{
+    BeginGroup("G00-D3 GetSpeedMatchSpeed SlowToClip");
+    const unsigned luAssertions = gAssertions;
+    AIAggression lAggression{};
+    AICar lCar{}, lPlayer{}, lDecoy{};
+    PlaceSpeedMatchCars(lCar, lPlayer, lDecoy);
+    lAggression.mpCar = &lCar;
+    lAggression.mpPlayerCar = &lPlayer;
+    lAggression.mpTargetCar = &lPlayer;
+    lAggression.meSpeedMatchType = ESpeedMatch_SlowToClip;
+    const f32 lfTracked = 30.0f - KF_SLOW_TO_CLIP_SPEED_DROP;
+
+    lCar.mPosition = V(0.0f, 0.0f, -20.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOW_TO_CLIP_FALLBACK),
+          "20 m behind the player: gives up to flt_8300D754 (20 mph)");
+    lCar.mPosition = V(0.0f, 0.0f, 20.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), lfTracked),
+          "20 m ahead of the player: steps to player speed - flt_8300D7F0");
+    lCar.mPosition = V(0.0f, 0.0f, -10.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), lfTracked), "10 m behind the player: still tracks");
+
+    lCar.mPosition = V(0.0f, 0.0f, -20.0f);
+    lAggression.mpTargetCar = &lDecoy;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOW_TO_CLIP_FALLBACK),
+          "mpTargetCar is not read (a decoy 500 m ahead changes nothing)");
+    lAggression.mpTargetCar = nullptr;
+    f32 lfResult = 0.0f;
+    const bool lbRan = GuardedSpeedMatch(&lAggression, 0.1f, &lfResult);
+    Check(lbRan && Near(lfResult, KF_SLOW_TO_CLIP_FALLBACK),
+          "no target (VEER_EXTREME entered from WAIT/OUT_OF_RANGE): no fault, gives up");
+    lAggression.mpPlayerCar = nullptr;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOW_TO_CLIP_FALLBACK), "no player car: flt_8300D754");
+    Check(gAssertions == luAssertions, "no GetLeadingSeparation NULL-car assertion");
+}
+
+static void GroupSlower()
+{
+    BeginGroup("G00-D4 GetSpeedMatchSpeed Slower");
+    AIAggression lAggression{};
+    AICar lCar{}, lPlayer{}, lDecoy{};
+    PlaceSpeedMatchCars(lCar, lPlayer, lDecoy);
+    lAggression.mpCar = &lCar;
+    lAggression.mpPlayerCar = &lPlayer;
+    lAggression.mpTargetCar = &lPlayer;
+    lAggression.meSpeedMatchType = ESpeedMatch_Slower;
+    lAggression.mFixedPassingSpeed = 22.0f;
+    lCar.meCarState = E_AI_CAR_STATE_IN_RANGE;
+
+    lCar.mPosition = V(0.0f, 0.0f, 10.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), 22.0f),
+          "10 m ahead of the player: eases to the passing speed (lfs 0x48)");
+    lCar.mPosition = V(0.0f, 0.0f, -10.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOWER_BEHIND_SPEED),
+          "10 m behind the player: drops to flt_8300D784 (40 mph)");
+    lCar.mPosition = V(5.0f, 0.0f, 0.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), 22.0f), "level with the player (lead 0): bge keeps the passing speed");
+    lCar.mPosition = V(0.0f, 0.0f, -10.0f);
+    lAggression.mpTargetCar = &lDecoy;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOWER_BEHIND_SPEED), "mpTargetCar is not read");
+    lCar.meCarState = E_AI_CAR_STATE_OUT_OF_RANGE;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_NO_PASSING_SPEED), "a car out of range: flt_8300D6F4");
+}
+
 int main()
 {
     std::printf("AIAggression regression\n");
     GroupLineupSide();
     GroupAcrossSeparation();
+    GroupSlowToClip();
+    GroupSlower();
     EndGroup();
     std::printf("%s: %u checks, %u failures\n", guFailures ? "FAIL" : "PASS", guChecks, guFailures);
     return guFailures ? 1 : 0;
