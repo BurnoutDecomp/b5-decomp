@@ -29,6 +29,13 @@ namespace BrnWorld
         }
     }
 
+    // Inlined ClearupCrashes827CE4E4..827CE518: postpone requested cleanup while visible/near.
+    void TrafficCrash::MarkVehicleAsOnscreen()
+    {
+        CGS_ASSERT(WantsToBeClearedUp(), "WantsToBeClearedUp()");
+        mfTimeTillClearup = 1.0f;
+    }
+
     void TrafficCrash::OnOwnerDisconnected()
     {
         CGS_ASSERT((mxFlags & 4) != 0 || (mxFlags & 2) != 0,

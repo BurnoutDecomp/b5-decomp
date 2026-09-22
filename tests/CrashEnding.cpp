@@ -26,9 +26,18 @@ using namespace BrnGameState;
 using namespace BrnGameState::GameStateModuleIO;
 static void LogCrashPark(bool&, const char*) {}
 struct CrashFixture {
-    bool mbNeedToSendEndingMessage=false;
+    bool mbNeedToSendEndingMessage=false,mbIsOnlineGameMode=false;
+    decltype(CrashModule::mRecycledTrafficQueue) mRecycledTrafficQueue;
+    decltype(CrashModule::mTrafficRenderedLastFrame) mTrafficRenderedLastFrame;
+    decltype(CrashModule::mTrafficFarFromCameraLastFrame) mTrafficFarFromCameraLastFrame;
+    unsigned phases[16]{},phaseCount=0;
+    CrashFixture(){mRecycledTrafficQueue.Construct();mTrafficRenderedLastFrame.UnSetAll();mTrafficFarFromCameraLastFrame.UnSetAll();}
+    void ProcessSlammedTrafficEvents(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=1;}
+    void HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=2;}
+    void HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=3;}
+    void HandleCleanedUpTrafficEvents(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=4;}
     unsigned processed=0;
-    void ProcessCrashedRaceCarEvents(const CrashIO::InputBuffer_PostPhysics*,CrashIO::OutputBuffer_PostPhysics*){++processed;}
+    void ProcessCrashedRaceCarEvents(const CrashIO::InputBuffer_PostPhysics*,CrashIO::OutputBuffer_PostPhysics*){++processed;phases[phaseCount++]=0;}
     void PostPhysicsUpdate(CgsModule::IOBufferStack*,CgsModule::IOBufferStack*,
         const CrashIO::InputBuffer_PostPhysics*,CrashIO::OutputBuffer_PostPhysics*,BrnUpdateSet);
 };
@@ -45,6 +54,10 @@ int main(){
     auto output=std::make_unique<CrashIO::OutputBuffer_PostPhysics>();
     input->CgsModule::IOBuffer::Construct();output->CgsModule::IOBuffer::Construct();
     output->mGameEventQueue.Construct();
+    input->mVehicleManagerOutputInterface.mRemovedTrafficEventQueue.Construct();
+    input->mVehicleManagerOutputInterface.mRemovedTrafficEventQueue.AddEvent({EntityId{0x02001400},static_cast<BrnPhysics::Vehicle::ETrafficType>(0)});
+    input->mTrafficInputInterface.mRenderingBits.UnSetAll();input->mTrafficInputInterface.mRenderingBits.SetBit(12);
+    input->mTrafficInputInterface.mFarFromCameraBits.UnSetAll();input->mTrafficInputInterface.mFarFromCameraBits.SetBit(34);
     CrashFixture crash;GameStateFixture state;
     crash.mbNeedToSendEndingMessage=true;
     crash.PostPhysicsUpdate(nullptr,nullptr,input.get(),output.get(),1);
@@ -53,6 +66,9 @@ int main(){
     const CgsModule::Event* event=nullptr;s32 size=0;
     Check(output->mGameEventQueue.GetFirstEvent(&event,&size)==-1&&!event,"skip posts nothing");
     crash.PostPhysicsUpdate(nullptr,nullptr,input.get(),output.get(),2);
+    Check(crash.phaseCount==5&&crash.phases[0]==0&&crash.phases[1]==1&&crash.phases[2]==2&&crash.phases[3]==3&&crash.phases[4]==4,"original traffic handler order after race crash processing");
+    Check(crash.mRecycledTrafficQueue.GetLength()==1&&crash.mRecycledTrafficQueue.GetEvent(0).mRemovedVehicleEntityId.muValue==0x02001400,"recycled queue mirror copies real removal payload");
+    Check(crash.mTrafficRenderedLastFrame.IsBitSet(12)&&crash.mTrafficFarFromCameraLastFrame.IsBitSet(34),"post-physics mirrors traffic visibility and distance");
     Check(!crash.mbNeedToSendEndingMessage&&crash.processed==1,"non-skip update consumes latch after processing");
     Check(!input->IsBufferLocked()&&!output->IsBufferLocked(),"normal update releases locks");
     Check(output->mGameEventQueue.GetFirstEvent(&event,&size)==42&&event&&size==1,"original one-byte event42 published");

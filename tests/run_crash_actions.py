@@ -16,6 +16,12 @@ def main():
         "    void CrashModule::HandleGameActions(", "    void CrashModule::ForceClearupAllCrashes(",
         "    void CrashModule::OnNetworkPlayerDisconnected(", "    void CrashModule::OnTrafficCarRemovedFromCrash(",
         "    u32 CrashModule::FindCrashForRaceCar("))
+    traffic_module = (base / "BrnCrashModule_TrafficCrashes.cpp").read_text(encoding="utf-8-sig")
+    for name in ("FindCrashForTrafficVehicle", "AddCrashingTrafficVehicle", "ProcessSlammedTrafficEvents", "HandleNewCrashingTraffic", "HandleRecoveredSlammedTraffic", "HandleCleanedUpTrafficEvents", "ClearUpRecycledTraffic"):
+        prefix = "    u32 " if name == "FindCrashForTrafficVehicle" else "    void "
+        methods += "\n" + definition(traffic_module, prefix + "CrashModule::" + name + "(").replace("CrashModule::", "CrashFixture::")
+    if "--baseline-traffic-lifecycle" in sys.argv:
+        methods = methods.replace(definition(methods, "    void CrashFixture::HandleNewCrashingTraffic("), "void CrashFixture::HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics*) {}")
     if "--baseline" in sys.argv:
         methods = methods.replace(definition(methods, "    void CrashFixture::HandleGameActions("),
             "void CrashFixture::HandleGameActions(const CrashIO::InputBuffer_PreScene*, CrashIO::OutputBuffer_PreScene*) {}")
@@ -36,6 +42,7 @@ def main():
     methods += definition(body, "    void RaceCarCrash::Tick(")
     methods += definition(traffic, "    void TrafficCrash::Construct(")
     methods += definition(traffic, "    void TrafficCrash::Tick(")
+    methods += definition(traffic, "    void TrafficCrash::MarkVehicleAsOnscreen()")
     methods += definition(traffic, "    void TrafficCrash::OnOwnerDisconnected()") + "\n}"
     io = (base / "SharedIO/BrnCrashModuleIO_InputBuffers.cpp").read_text(encoding="utf-8-sig")
     out = (base / "SharedIO/BrnCrashModuleIO_OutputBuffer_PreScene.cpp").read_text(encoding="utf-8-sig")
@@ -46,6 +53,8 @@ def main():
     methods += "\nRaceCarOutputInterface* " + definition(out, "    OutputBuffer_PreScene::GetRaceCarOutputInterface()         ") + "\n}}"
     methods += "\nnamespace BrnWorld { namespace CrashIO {\nconst RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* " + definition(io, "    InputBuffer_PreScene::GetActiveRaceCarInterface()") + "\n}}"
     methods += "\nnamespace BrnWorld { namespace CrashIO {\nconst CgsSystem::TimerStatusInterface* " + definition(io, "    InputBuffer_PreScene::GetTimerStatusInterface()") + "\n}}"
+    methods += "\nnamespace BrnWorld { namespace CrashIO {\nconst TrafficInputInterface* " + definition(io, "    InputBuffer_PostPhysics::GetTrafficInputInterface()")
+    methods += "const InputBuffer_PostPhysics::VehicleManagerOutputInterface* " + definition(io, "    InputBuffer_PostPhysics::GetVehicleManagerOutputInterface()") + "\n}}"
     active = (REPO / "src/GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRCEntityActiveRaceCarOutputInterface.cpp").read_text(encoding="utf-8-sig")
     methods += "\nnamespace BrnWorld { namespace RaceCarEntityModuleIO {\n"
     for signature in ("EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetPlayerActiveRaceCarIndex(", "bool RCEntityActiveRaceCarOutputInterface::IsCarInShowtime(", "bool RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive(", "bool RCEntityActiveRaceCarOutputInterface::IsRaceCarRival(", "bool RCEntityActiveRaceCarOutputInterface::IsRaceCarNetwork(", "Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerPosition(", "Vector3 RCEntityActiveRaceCarOutputInterface::GetPlayerDirection("):

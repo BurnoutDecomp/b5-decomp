@@ -3490,16 +3490,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         GenerateSlamRecoveryEvents(lpOutput->GetCrashTrafficInputInterface());
         GenerateVehicleCrashedEvents(lpOutput);
 
-        {
-            static bool sbLogged = false;
-            LogMissingLeg_T1(sbLogged,
-                "PostPhysicsUpdate E_STATE_RUNNING tail legs -- the three "
-                "80-byte mVehicleSoaData -> OutputBuffer_PostPhysics copies (soa members "
-                "mPhysicalVehicles / mVehiclesRenderedLastFrame / mPhysicalVehiclesFarFrom"
-                "Player into the crash-traffic input interface at console +3240/+3320/+3400). "
-                "GenerateVehicleCrashedEvents WAS in this list and is now live above; the rest are "
-                "not bodied and are crash-module surface (wave 3)");
-        }
+        // ARTIST8274EB60..8274EC20: publish three 80-byte traffic masks after crash events.
+        auto* crashTraffic = lpOutput->GetCrashTrafficInputInterface();
+        crashTraffic->SetRenderingBits(&mVehicleSoaData.mVehiclesRenderedLastFrame);
+        crashTraffic->SetFarFromCameraBits(&mVehicleSoaData.mPhysicalVehiclesFarFromPlayer);
+        crashTraffic->SetPhysicalBits(&mVehicleSoaData.mPhysicalVehicles);
+
     }
     break;
 

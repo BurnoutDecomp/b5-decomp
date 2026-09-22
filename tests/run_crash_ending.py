@@ -26,6 +26,9 @@ def main():
     source = (base / "SharedIO/BrnCrashModuleIO_OutputBuffer_PostPhysics.cpp").read_text(encoding="utf-8-sig")
     getter = definition(source, "    OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()")
     methods = producer + relay + "\nnamespace BrnWorld { namespace CrashIO {\n" + getter + "\n}}"
+    io = (base / "SharedIO/BrnCrashModuleIO_InputBuffers.cpp").read_text(encoding="utf-8-sig")
+    methods += "\nnamespace BrnWorld { namespace CrashIO {\nconst TrafficInputInterface* " + definition(io, "    InputBuffer_PostPhysics::GetTrafficInputInterface()")
+    methods += "const InputBuffer_PostPhysics::VehicleManagerOutputInterface* " + definition(io, "    InputBuffer_PostPhysics::GetVehicleManagerOutputInterface()") + "\n}}"
     with tempfile.TemporaryDirectory(prefix="brn_crash_ending_") as directory:
         output = Path(directory)
         (output / "crash_ending_methods.inc").write_text(methods, encoding="utf-8")
