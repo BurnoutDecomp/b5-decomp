@@ -13,6 +13,10 @@
 
 #include "rw/math/vpu/vector3_operation.h"                 // vpu::Magnitude / vpu::Dot
 
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclesteeringattribs.h"
+#include <cstdlib>
 #include <cmath>   // std::sqrt, std::fabs, std::isfinite
 
 // =================================================================================================
@@ -1164,19 +1168,19 @@ namespace BrnAI
 
         if (mpCarHost != 0)
         {
-            // [FLAG PC bring-up] the console walks
-            //   sub_82204998(&inst, mpCar->mCarAssetAttribKey (ld 0x14D8), 0)
-            //   -> Attrib::RefSpec::GetCollection(inst.data + 0x158)
-            //   -> Attrib::Gen::physicsvehiclehandling(collection, 0)
-            //   -> Attrib::RefSpec::GetCollection(handling.data + 0x18)
-            //   -> Attrib::Gen::physicsvehiclesteeringattribs(collection, 0)
-            //   -> mfTimeToLookAheadForDrift = data[+0x34]; mfMinDistanceToLookAheadForDrift = data[+0x30]
-            // sub_82204998 (the burnoutcarasset instance ctor from an Attribute::Key) has no name
-            // and no reconstruction in this tree, so the attrib read is PARKED and the rodata
-            // defaults below are used for every car. DELETE-WHEN sub_82204998 @0x82204998 is
-            // identified and the burnoutcarasset generated class lands.
-            mfMinDistanceToLookAheadForDrift = KF_DEFAULT_MIN_DIST_LOOK_AHEAD_FOR_DRIFT;  // 10.0
-            mfTimeToLookAheadForDrift        = KF_DEFAULT_TIME_TO_LOOK_AHEAD_FOR_DRIFT;   // 1.1
+            // ARTIST8278B2D4..8278B344: keyed car -> handling -> steering.
+            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, nullptr);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), nullptr);
+            Attrib::Gen::physicsvehiclesteeringattribs lSteering(
+                const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), nullptr);
+            mfTimeToLookAheadForDrift = lSteering.GetDriverTimeToLookAheadForDrift();
+            mfMinDistanceToLookAheadForDrift = lSteering.GetDriverMinDistanceToLookAheadForDrift();
+            // FLAG PC witness: report actual authored values only when requested.
+            if (std::getenv("BRN_AI_ATTRIB_DIAG") && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[ai-steer-attrib] distance="
+                    << mfMinDistanceToLookAheadForDrift << " time=" << mfTimeToLookAheadForDrift << "\n";
+
             return;
         }
 
@@ -1193,10 +1197,20 @@ namespace BrnAI
     // The console ALSO constructs and immediately destructs the burnoutcarasset ->
     // physicsvehiclehandling -> physicsvehiclesteeringattribs Attrib chain when a car is bound
     // (0x8277DA68..0x8277DAC4) WITHOUT reading a single field out of it -- the whole block is the
-    // Attrib layer's own class-check assert, with no effect on this object. Not reproduced.
+    // Attrib layer's own validation/lifetime sequence, preserved before the PID prepares.
     // ================================================================================
     void AIDriver::ResetPIDTuningState()
     {
+        if (mpCarHost != nullptr)
+        {
+            //8277DA68..8277DAC4: preserve both validation and balanced instance lifetimes.
+            Attrib::Gen::burnoutcarasset lAsset(mpCarHost->mCarAssetAttribKey, nullptr);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(lAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), nullptr);
+            Attrib::Gen::physicsvehiclesteeringattribs lSteering(
+                const_cast<Attrib::Collection*>(lHandling.PhysicsVehicleSteeringAttribs().GetCollection()), nullptr);
+        }
+
         const f32 lafNormal[3] = { KF_PID_NORMAL_P, KF_PID_NORMAL_I, KF_PID_NORMAL_D };
         const f32 lafDrift[3]  = { KF_PID_DRIFT_P,  KF_PID_DRIFT_I,  KF_PID_DRIFT_D  };
 
