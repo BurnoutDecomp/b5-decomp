@@ -1117,9 +1117,10 @@ namespace BrnAI
 
         if (!lbKeepTransform)                                                               // 0x82792898
         {
-            muResetOnTrackSectionIndex = KI_INVALID_SECTION_INDEX;                          // 0x1530
-            muResetOnTrackStartPortal  = 1;                                                 // 0x1538
-            meResetSpeedType           = E_RESET_SPEED_TYPE_COUNT;                          // 0x14D0 <- 20
+            muResetOnTrackSectionIndex = KI_INVALID_SECTION_INDEX;                          // 0x827928A8 sth r11(0x7FFF),0x1530
+            muResetOnTrackStartPortal  = 0;                                                 // 0x827928AC stb r30(li 0 @0x82792848),0x1538
+            muResetOnTrackEndPortal    = 1;                                                 // 0x827928B0 stb r9(li 1 @0x82792850),0x1539
+            meResetSpeedType           = E_RESET_SPEED_TYPE_COUNT;                          // 0x827928B4 stw r8(0x14),0x14D0 <- 20
             mPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };                                          // vspltisw 0 -> stvx128 0x1430
         }
 

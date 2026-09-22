@@ -384,8 +384,8 @@ namespace BrnAI
         u16 muDefaultSectionIndex;                      // +0x1532 (5426) -- best-section fallback (muCurrentSectionIndex)
         u16 muBestSectionIndex;                         // +0x1534 (5428) -- 0x7FFF == invalid (muUnderCarSectionIndex)
         u16 muDestinationSectionIndex;                  // +0x1536 (5430) -- route end / free-roam target
-        u8 muResetOnTrackStartPortal;                   // +0x1538 (5432) DWARF :712 -- Reset -> 1
-        u8 muResetOnTrackEndPortal;                     // +0x1539 (5433) DWARF :713
+        u8 muResetOnTrackStartPortal;                   // +0x1538 (5432) DWARF :712 -- Reset -> 0 (stb r30 @0x827928AC)
+        u8 muResetOnTrackEndPortal;                     // +0x1539 (5433) DWARF :713 -- Reset -> 1 (stb r9 @0x827928B0)
         s8 miOpponentIndex;                             // +0x153A (5434) DWARF :714
         bool mbIsAheadOfPlayer;                         // +0x153B (5435) DWARF :715
         bool mbPlaceOnTrackRequested;                   // +0x153C (5436) DWARF :716 -- Reset clears
