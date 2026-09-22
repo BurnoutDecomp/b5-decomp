@@ -32,7 +32,9 @@ namespace BrnAI
 // about: how close each rival is to the player, what route-finding style it was given, whether
 // the module judged it suitable for aggression, what aggression level it was seeded with, and
 // which aggression state its machine is sitting in -- plus a running tally of DecideToAttack's
-// FOUR exits, so "the AI is not aggressive" can be attributed to a specific reject.
+// FOUR exits, so "the AI is not aggressive" can be attributed to a specific reject. While a slam
+// lineup point is valid it adds an `[mm-ai] lineup` line: the point's and the car's lateral
+// offsets in the target's frame (crash parity 2026-09-22, tests/AIAggressionLive.ps1).
 //
 // The per-car clock is the car's OWN accumulated lfTimeStep, not a global frame counter: a car
 // whose Update stops being called simply stops printing, which is itself the answer to "is the
@@ -974,6 +976,22 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
                     << " rollYes " << gsiAttackRollYes
                     << " rollNo " << gsiAttackRollNo
                     << "\n";
+                // The live slam lineup point (last frame's GetPositionNextToTarget result), as
+                // lateral offsets in the TARGET's right-axis frame: pointLat is the signed
+                // alignment (+-4 / +-6 / +-7.5 / +-8), carLat is where our car sits. The console
+                // puts ATTACK_SLAM's -8 on the far side of the target (opposite signs) and the
+                // positive alignments on our side (same sign) -- crash-parity audit G00-D1.
+                if ( mbTargetPosValid && mpTargetCar != 0 )
+                {
+                    const Vector3 lvTargetPosition = mpTargetCar->GetPosition();
+                    const Vector3 lvTargetRight = mpTargetCar->GetRight();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[mm-ai] lineup car " << liIndex
+                        << " aggState " << static_cast<s32>(meAggressionState)
+                        << " pointLat " << vpu::Dot(mTargetPos - lvTargetPosition, lvTargetRight)
+                        << " carLat " << vpu::Dot(mpCar->GetPosition() - lvTargetPosition, lvTargetRight)
+                        << "\n";
+                }
             }
         }
     }
