@@ -15,6 +15,7 @@
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingGraph.h" // ComputeSpeedRatio
 #include "GameSource/World/AI/Route/BrnRoute.h"                      // Route / RouteNode
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameSource/Math/BrnMathUtils.h"                            // BrnMath::Flatten (Prepare's first segment)
 
 #include <cmath>   // sqrtf
 #include <cstddef> // offsetof
@@ -150,11 +151,16 @@ bool RaceBalancingRoute::Prepare(Vector3 lPosition,
     mfDistance = (lpRoute->GetNodeCount() > 0) ? lpRoute->GetDistance() : 0.0f;
     miTimeCount = lpRoute->GetNodeCount();
 
-    // The running reference position for the first segment is the racer position;
-    // it advances to each visited node afterwards. Only the (x,y) plane is used,
-    // matching the VMX segment-length computation in the X360 form.
-    f32 lfPrevX = lPosition.x;
-    f32 lfPrevY = lPosition.y;
+    // The running reference position for the first segment is the racer position FLATTENED to
+    // the route's 2D plane -- 0x82789404 `vperm128 v124, v1, v1, unk_82CDA450`, and that mask
+    // (x360rd: 00010203 18191A1B ...) is BrnMath::Flatten: lane 0 = world X, lane 1 = world Z.
+    // Route nodes store exactly that pair in mfX / mfY. It advances to each visited node after.
+    // ⛔ CORRECTED 2026-09-22 (crash parity, with G04-D4 making this body reachable): it read
+    // (lPosition.x, lPosition.y) -- world HEIGHT against a node's world Z -- so the first
+    // segment was ~|Z| metres long and every par time of the race carried that bogus offset.
+    const Vector2 lFlatPosition = BrnMath::Flatten(lPosition);
+    f32 lfPrevX = lFlatPosition.x;
+    f32 lfPrevY = lFlatPosition.y;
 
     const s32 liNodeCount = lpRoute->GetNodeCount();
     for (s32 liNode = 0; liNode < liNodeCount; ++liNode)

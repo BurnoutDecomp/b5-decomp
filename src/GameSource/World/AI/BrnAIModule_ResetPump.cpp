@@ -370,7 +370,11 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
         }
         AICar* lpPlayerCar = (mePlayerGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID)
                                  ? GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex)) : 0;   // row 12
-        // (row 12's AIDebugComponent timer block: no named home -- [FLAG PC bring-up], see the banner)
+        // row 12's tail, 0x8279B678..0x8279B6C0: RaceBalancingManager::Update inlined off
+        // `addis r11,r31,4 ; addi -0x2630` == &mRaceBalancingManager -- THE RACE CLOCK. It was
+        // misfiled as an AIDebugComponent accumulator (+270912 == 0x3D9D0 + 0x4870 == mfRaceTime)
+        // and dropped until 2026-09-22 (crash parity G05-D4).
+        mRaceBalancingManager.Update(lpPlayerCar, lfDt);
 
         {
             CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // row 4
@@ -396,7 +400,10 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
 
                 mRouteMapModule.Update(lpInputBufferStack, lpOutputBufferStack, lpRouteIn, lpRouteOut);   // row 24
 
-                AIModuleRoutes::ProcessRouteResponses(this, lpOutputBuffer, lpRouteOut, lpPlayerCar);   // rows 25..27
+                lpRouteOut->LockForRead();                                                // row 25 (0x8279B7D4)
+                UpdateCarRoutes(lpOutputBuffer, lpRouteOut);                              // row 26 (0x8279B7E4)
+                AIModuleRoutes::AppendRouteResponses(lpOutputBuffer, lpRouteOut);         // row 27 (0x8279B7E8..0x8279B800)
+                lpRouteOut->UnlockForRead();                                              //        (0x8279B808)
             }
 
             UpdateDrivers(lpInputBuffer, lpOutputBuffer, lPlayerCarPosition, lfDt);       // row 28

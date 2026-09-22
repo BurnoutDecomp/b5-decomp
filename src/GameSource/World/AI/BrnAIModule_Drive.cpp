@@ -48,11 +48,14 @@
 //                   (asm 0x8279B640..0x8279B6A0; reads +7392/+7529/+5316)           LANDED (GetAIDriver;
 //                                                                                  the arm itself is 6 lines
 //                                                                                  for the conductor)
-// 12  0x8279B6B0  lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
-//                 if (+270920 && !+270921)  +270912 += (player->mbIsCrashing(+5442)
-//                                           ? lfDt*0.5 : lfDt)   (the AIDebugComponent's
-//                 time accumulator @+270908.. -- BrnAIDebugComponent.h)              ABSENT (debug
-//                                                                                  component; drop-safe)
+// 12  0x8279B674  lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
+//     0x8279B678  if (+270920 && !+270921)  +270912 += (player->mbIsCrashing(+5442)
+//                                           ? lfDt*0.5 : lfDt)
+//                 CORRECTED 2026-09-22: +270920/+270921/+270912 are 0x3D9D0 + 0x4878/0x4879/0x4870
+//                 == mRaceBalancingManager.{mbInRace, mbOnStartLine, mfRaceTime} -- the inlined
+//                 RaceBalancingManager::Update (the race clock), NOT an AIDebugComponent
+//                 accumulator. It was dropped as "drop-safe" and froze every rival's par-time
+//                 comparison at 0.                                                 LANDED (ResetPump)
 // 13  0x8279B6F0  CgsModule::LockBuffersForIO(lRouteIn.mpBuffer)                    ABSENT (with #4)
 // 14  0x8279B6FC  HandleGameActions(this, in, out, lRouteIn)        @0x82791FD0     ABSENT (owner lane:
 //                                                                                  mode start/end/
