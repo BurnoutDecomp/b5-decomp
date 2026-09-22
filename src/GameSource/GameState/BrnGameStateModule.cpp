@@ -233,6 +233,21 @@ void GameStateModule::Construct()
     mDriveThruManager.Construct(&mCarSelectManager, mpTrainingManager, &mModeManager,
                                 this, &mProgressionManager);
 
+    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D5] RumbleManager::Construct @0x82378A70 -- call
+    // #19 of X360 0x82380388 (0x823805C8), IMMEDIATELY after DriveThruManager::Construct (#18,
+    // 0x82380578), which is why it sits here: `addis r3,r31,1 ; addi r3,r3,-0x49A8` == &mRumbleManager.
+    // The manager's ONLY initialiser: rumble enabled, wheel force-feedback on, the six other flags
+    // clear, and the four inline event queues bound (a queue that never ran Construct has a NULL
+    // mpEvents, and the first AddEventSafe on it fires "mpEvents != NULL").
+    mRumbleManager.Construct();
+
+    // ⭐ [FX-RUMBLE] ContactSpyInterface::Construct(gsm+250800) -- call #25 of the same function
+    // (0x8238065C), the first of the per-frame input caches' Constructs that precede the
+    // carry-queue Construct below (#30). Clears the handle RumbleManager::Update reads (mpData = 0),
+    // so the first pre-world before any post-world sees an UNBOUND spy and UpdateImpacts returns on
+    // its own `mpData == NULL` test (0x823793D8), exactly as the console's first frame does.
+    mContactSpyInterface.Construct();
+
     // ⭐ [gateui] THE GAME-EVENT CARRY QUEUE (X360 this+248384). The console Constructs it right
     // here: `CgsModule::VariableEventQueue<1536,16>::Construct(a1 + 248384)` @0x82380388, in the
     // block of queue Constructs near the end of the body. This is the never-Constructed-queue
@@ -366,6 +381,8 @@ void GameStateModule::Destruct()
 //   stages 7/8 and 9/10 -> the vehicle / wheel list GETs.
 //   stage 23 E_PREPARESTAGE_STREET_MANAGER    -> StreetManager::Prepare @0x82350900
 //            (LoadAIData + LoadDistrictMap -> mDistrictMapResourceHandle), added 2026-08-11.
+//   stage 25 E_PREPARESTAGE_RUMBLE_MANAGER    -> RumbleManager::Prepare @0x823648D0 (FX-RUMBLE,
+//            2026-09-22).
 //   stage 26 -> the car-select / progression list publish.
 // Every other stage logs once and advances, naming its X360 call. In console order they are:
 //   0  START                    ClearData @(not exported by name) + DebugComponent::Register x2
@@ -698,8 +715,18 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // fall through
 
     case E_PREPARESTAGE_IMAGE_MANAGER:
+        LogPrepareStageOnce(24, "GameStateImageManagerBase::Prepare [deferred]");
+        // fall through
+
     case E_PREPARESTAGE_RUMBLE_MANAGER:
-        LogPrepareStageOnce(24, "GameStateImageManagerBase / RumbleManager::Prepare [deferred]");
+        // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D5] REAL. X360 LABEL_53 (0x8239EC14..0x8239EC30):
+        //     *(this+552) = 25;
+        //     if (!RumbleManager::Prepare(this + 46680)) break;
+        // Prepare @0x823648D0 resets the per-wheel surface/rumble slots (0xFF / 0 / 0.0 / -1) and
+        // Clears the four queues; it always returns true, so the stage always falls through.
+        mePrepareStage = E_PREPARESTAGE_RUMBLE_MANAGER;
+        if (!mRumbleManager.Prepare())
+            break;
         // fall through
     case E_PREPARESTAGE_DONE:
         // [diagnostic, one-shot] print BOTH ENDS of the two list stages -- a non-null pointer

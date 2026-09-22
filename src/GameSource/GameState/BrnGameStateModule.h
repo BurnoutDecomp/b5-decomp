@@ -32,6 +32,9 @@
 // (`*(a1 + 181680) = &off_820CE768`) -- an EMBEDDED subobject, not a pointer.
 #include "GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h" // BrnGameState::AchievementManagerX360 (mAchievementManager, by value)
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"                       // BrnGameState::StreetManager (mStreetManager, by value)
+// [FX-RUMBLE 2026-09-22] the force-feedback manager, held BY VALUE as the console holds it (DWARF
+// BrnGameStateModule.h:775, X360 gsm+46680). Its header does not include this one back.
+#include "GameSource/GameState/RumbleManager/BrnRumbleManager.h"                             // BrnGameState::RumbleManager (mRumbleManager, by value)
 
 // The module's cached read-only snapshot of the active race cars (mLastActiveRaceCarInterface,
 // X360 this+0x397E0) is held BY VALUE exactly as the console holds it, so this is a full include
@@ -1812,8 +1815,35 @@ private:
     // DELETE-WHEN the cycle is broken (BrnTrainingManager.h forward-declaring GameStateModule and
     // moving its inline bodies out would do it) -- then this becomes `TrainingManager mTrainingManager;`.
     TrainingManager*                        mpTrainingManager = 0;
+    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1/D5] DWARF BrnGameStateModule.h:775
+    // `RumbleManager mRumbleManager;`, the line after mTrainingManager (:774) -- X360 gsm+46680
+    // (0xB658), the `addis r3,rX,1 ; addi r3,r3,-0x49A8` every console call site builds:
+    //     GameStateModule::Construct  @0x82380388 -> RumbleManager::Construct        (0x823805C8)
+    //     GameStateModule::Prepare    @0x8239E578 -> RumbleManager::Prepare  stage 25 (0x8239EC24)
+    //     GameStateModule::PreWorldUpdate @0x823A5328 -> RumbleManager::Update       (0x823A5800)
+    //                                              -> RumbleManager::UpdatePauseState (0x823A5AC4)
+    //     GameStateModule::ProcessGameEvents case 31 -> OnVehicleAggressorImpact x2 (0x823A27C8/EC)
+    //     GameStateModule::BridgeRumbleToInput @0x8236B570 -> RumbleManager::BridgeRumbleToInput
+    //                                              [X] not on PC yet (G10-D4, see BrnRumbleManager.h)
+    // Unlike mpTrainingManager there is no include cycle, so it is embedded exactly as the console
+    // embeds it. The module lives in static storage (BrnMain.cpp's gGameModule), and Construct()
+    // seeds every flag and queue the console seeds before anything reads them.
+    RumbleManager                           mRumbleManager;
     TakedownManager*        mpTakedownManager = 0;   // [takedown wave] X360 gsm+568 by value; heap here (GameStateModule_gTD_00.cpp)
     TakedownPostWorldCache* mpTakedownCache = 0;     // [takedown wave] X360 gsm+249936/+250272/+250816 by value; heap here
+    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1/D2] DWARF BrnGameStateModule.h:828
+    // `ContactSpyInterface mContactSpyInterface;` -- X360 gsm+250800, the one-pointer handle
+    // between mRaceCarCrashEventQueue (:827, gsm+250272, in mpTakedownCache here) and
+    // mVehicleOutputInterface (:829, gsm+250816). The console WRITES it post-world, inside
+    // CacheTakedownManagerPostWorldInputData @0x82375E70 (`stw 0` at 0x82375EE0, then
+    // `*(gsm+250800) = *GetContactSpyInterface(lpInput)` at 0x82375F1C), and READS it the next
+    // pre-world as RumbleManager::Update's contact spy (r7 = gsm+250800 @0x823A57EC) -- the only
+    // reader, and the only route the impact jolt has to the contacts. Constructed (mpData = 0) at
+    // the console's Construct seat (0x8238065C, ContactSpyInterface::Construct @0x82A61A18).
+    // The pointee is the physics module's own mContactData (BrnPhysicsModule.h), a persistent
+    // member, so the handle stays valid from one sub-step's post-world to the next's pre-world --
+    // the same lifetime the console relies on.
+    BrnPhysics::ContactSpy::ContactSpyInterface mContactSpyInterface;
     // [takedown wave F2] The two managers the module embeds immediately after the TakedownManager
     // (gsm +0x500 and gsm +0x570; the module's Construct runs MugshotManager::Construct(gsm +0x500,
     // gsm) and PaybackManager::Construct(gsm +0x570, gsm) back to back, and PreWorldUpdate ticks

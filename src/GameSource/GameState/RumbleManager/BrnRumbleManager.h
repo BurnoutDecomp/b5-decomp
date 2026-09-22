@@ -27,26 +27,67 @@
 // touches, NOT a byte-exact offset (which the pointer-width difference makes unattainable
 // without an ABI hack) -- the same rule as CgsInputModuleIO.h's IO buffers.
 //
-// MINIMAL METHOD SLICE (additive-grow, flagged): only the two methods reconstructed by this
-// TU pass -- Prepare() and UpdatePauseState() -- are declared. The remaining methods
-// (Construct/Update/UpdateSurfaceRumble/UpdateImpacts/OnVehicle*Impact/PlayJolt/PlayRumble/
-// ChangeRumbleVolume/StopRumble/BridgeRumbleToInput/Set|GetWheelForceFeedback/...) are left
-// for their own reconstruction passes; a future TU MUST GROW this class ADDITIVELY (add the
-// remaining DWARF-attested methods) rather than redefine it -- do NOT fork.
+// The owner embeds it BY VALUE: DWARF BrnGameStateModule.h:775 `RumbleManager mRumbleManager;`
+// (X360 gsm+46680 == 0xB658, the `addis 1 / addi -0x49A8` every console call site builds).
+//
+// METHOD SLICE (additive-grow; DWARF order, X360-attested methods only). Bodied:
+//   Construct                @0x82378A70   (FX-RUMBLE / G10-D5)
+//   Prepare                  @0x823648D0
+//   Update                   @0x82386A98   (FX-RUMBLE / G10-D1)
+//   UpdatePauseState         @0x8236E728
+//   OnVehicleAggressorImpact @0x823795C8   (FX-RUMBLE / G10-D3)
+//   OnVehicleVictimImpact    ICF-folded onto 0x823795C8 on the X360 (G10-D3)
+//   UpdateImpacts            @0x82379370   (FX-RUMBLE / G10-D2)
+//   PlayJolt                 @0x8236E7F8   (FX-RUMBLE / G10-D7)
+// ⛔ NOT DECLARED, deliberately -- each is BLOCKED on a file this TU does not own, and a
+// declaration without a body is exactly the silent link-time drop this campaign keeps finding:
+//   UpdateSurfaceRumble @0x82378AE0 (G10-D6) -- needs Attrib::Gen::rumblesurface's 0x3C-byte
+//       data layout + accessors and a surface::RumbleSurface() RefSpec accessor (surface layout
+//       +0x28) in GameSource/AttribSys/Generated/classes/, then mSurfaceList retyped to
+//       Attrib::Gen::surfacelist. See Update's FLAG.
+//   BridgeRumbleToInput @0x82364978 (G10-D4) -- needs CgsInput::InputIO::PreWorldInputBuffer's
+//       Post{PlayJolt,StopRumble,PlayRumble,ChangeVolumeRumble}EffectByPlayer (0x828EF370 /
+//       0x828EF758 / 0x828EF4B0 / 0x828EF608), SetRumblePaused / SetRumbleEnabled /
+//       SetWheelForceFeedbackEnabled and the ChangeVolume/Stop queues + three tail flags
+//       (CgsInputModuleIO.h), plus an input-side consumer (InputModule::ProcessRumbleRequests
+//       @0x828FFE50 and a PC pad motor leaf). Until it lands NOTHING drains the four queues.
+// A future TU MUST GROW this class ADDITIVELY rather than redefine it -- do NOT fork.
 // ============================================================================
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"  // CgsInput::InputIO event payloads + EventQueue<T,N>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // CgsModule::VariableEventQueue<13312,16> (the GameActionQueue), CgsModule::Event
+#include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // BrnPhysics::Vehicle::EImpactType (OnVehicle*Impact)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface (+ RaceCarCrashEvent via BrnVehicleEvents.h)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // BrnPhysics::ContactSpy::ContactSpyInterface
 
 namespace BrnGameState
 {
     class RumbleManager
     {
     public:
+        // @ 0x82378A70 -- DWARF BrnRumbleManager.h:52. Seed the eight tail flags (rumble ENABLED
+        // and wheel force-feedback ON, everything else clear) and bind the four inline event
+        // queues. Sole caller GameStateModule::Construct @0x82380388 (0x823805C8).
+        void Construct();
+
         // @ 0x823648D0 -- reset per-driven-wheel surface/rumble state and clear the four
         // pending rumble-event queues. Returns true.
         bool Prepare();
+
+        // @ 0x82386A98 -- DWARF BrnRumbleManager.h:65 (PS3 mangling
+        //   _ZN...6UpdateEPN8BrnWorld...RCEntityActiveRaceCarOutputInterfaceEPN9CgsModule10EventQueueIN10
+        //   BrnPhysics7Vehicle17RaceCarCrashEventELi8EEE19EActiveRaceCarIndexPNS7_10ContactSpy19
+        //   ContactSpyInterfaceEf -- every pointer non-const). The per-frame producer: the impact,
+        //   crash-start and landing jolts. Called from GameStateModule::PreWorldUpdate @0x823A5800.
+        //   lpCrashEventQueue and lfGameTimeStep are NOT read by the console body (r5 is overwritten
+        //   before the first call, f1 is never read); kept for the declaration's shape.
+        void Update(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                    CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>*     lpCrashEventQueue,
+                    EActiveRaceCarIndex                                                    lePlayerCarIndex,
+                    BrnPhysics::ContactSpy::ContactSpyInterface*                           lpContactSpyInterface,
+                    f32                                                                    lfGameTimeStep);
 
         // @ 0x8236E728 -- track the paused/unpaused transition (mbGameWasPaused latch) and,
         // while paused, scan the game-action queue to mirror the pause request into
@@ -54,7 +95,26 @@ namespace BrnGameState
         // GameActionQueue == CgsModule::VariableEventQueue<13312,16>.
         void UpdatePauseState(bool lbPaused, CgsModule::VariableEventQueue<13312, 16>* lpGameActionQueue);
 
+        // @ 0x823795C8 -- DWARF BrnRumbleManager.h:87. The player slammed / shunted / traded paint
+        // with a race car: one KN_RUMBLE_VEHICLE_IMPACT_PRIORITY jolt scaled by the impact type.
+        // Caller ProcessGameEvents case 31 (0x823A27C8).
+        void OnVehicleAggressorImpact(BrnPhysics::Vehicle::EImpactType leImpactType);
+
+        // DWARF BrnRumbleManager.h:91. The same jolt when the PLAYER is the victim. The X360 has no
+        // separate body (ProcessGameEvents 0x823A27EC `bl`s 0x823795C8 for this leg: ICF fold);
+        // the PS3 twin 0x2401D4 is a thunk onto OnVehicleAggressorImpact.
+        void OnVehicleVictimImpact(BrnPhysics::Vehicle::EImpactType leImpactType);
+
     private:
+        // @ 0x82379370 -- DWARF BrnRumbleManager.h:137. The hardest contact on the player's run of
+        // the race-car contact queue this frame -> one KN_RUMBLE_IMPACT_PRIORITY jolt.
+        void UpdateImpacts(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                           EActiveRaceCarIndex                                                    lePlayerCarIndex,
+                           BrnPhysics::ContactSpy::ContactSpyInterface*                           lpContactSpyInterface);
+
+        // @ 0x8236E7F8 -- DWARF BrnRumbleManager.h:159. Queue one jolt for player 0 on any port.
+        void PlayJolt(s32 liRumblePriority, const CgsInput::InputIO::JoltEffect& lJoltEffect);
+
         // +0x000 -- surfacelist (Attrib-generated surface-list handle, un-homed). Held as
         // opaque storage sized to the X360 record: this TU's reconstructed methods do not
         // touch it, and its full type belongs to the Attrib codegen TU. Promote to the real

@@ -549,6 +549,26 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     CacheTakedownTrafficTypeResponses(lpTrafficTypeResponseQueue);
     CacheTakedownManagerPostWorldInputData(lpVehicleOutputInterface, lpRaceCarCrashEventQueue);
 
+    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1/D2] THE CONTACT-SPY CACHE (gsm+250800).
+    // It is part of the call on the line above on the console: CacheTakedownManagerPostWorldInputData
+    // @0x82375E70 clears the handle (`stw r30, 0(r27)`, r27 == gsm+250800, 0x82375EE0) and then
+    // copies the post-world input's contact spy into it (`bl sub_82362988` ==
+    // PostWorldInputBuffer::GetContactSpyInterface; `lwz r11,0(r11) ; stw r11,0(r27)`,
+    // 0x82375F0C..0x82375F1C). Its one reader is RumbleManager::Update's UpdateImpacts, NEXT
+    // pre-world (PreWorldUpdate passes r7 = gsm+250800, 0x823A57EC) -- a second feed of the same
+    // interface ProcessContacts gets directly below, which the console has too (ProcessContacts
+    // reads the post-world buffer, the rumble reads this cache).
+    // [FLAG PC placement] the statements are the console's; only their HOME moves: the body of
+    // CacheTakedownManagerPostWorldInputData belongs to the takedown lane
+    // (GameStateModule_gTD_00.cpp), whose banner records the handle as deliberately uncached while
+    // ProcessContacts was its only consumer. Placed immediately after that call, so the store
+    // lands at the same point of the frame. DELETE-WHEN the cache function takes the spy itself.
+    mContactSpyInterface.Construct();
+    if (lpContactSpyInterface != 0)   // the argument route's null test, the same one leg 5 carries;
+    {                                 // the console reads a buffer member and cannot see a null
+        mContactSpyInterface = *lpContactSpyInterface;
+    }
+
     // ---- [takedown wave] LEG 6 -- THE TAKEDOWN + CRASH SCORING ARM ------------------------
     // CONSOLE POSITION, exact, and it is this one: GameStateModule::PostWorldUpdate's `bl` stream
     // runs CacheTakedownManagerPostWorldInputData (#18) and then, with no instruction in between
@@ -1048,11 +1068,12 @@ void GameStateModule::ProcessGameEventsBoostTickerBringUp(
 //     if (event->meVictimActiveRaceCarIndex == GetPlayerActiveRaceCarIndex())
 //         RumbleManager::OnVehicleAggressorImpact(&mRumbleManager, event->meImpactType);
 //
-// ⚠️ THE TWO RUMBLE LEGS ARE NOT REPRODUCED, AND THEY ARE NAMED HERE RATHER THAN DROPPED
-// SILENTLY: BrnGameState::RumbleManager::OnVehicleAggressorImpact has NO DEFINITION anywhere in
-// this tree (`tools/re/hasbody.py` -- one mention, a comment). Both console call sites go
-// through the same `bl`, i.e. the aggressor and victim bodies ICF-folded, so a single landed
-// body unblocks both. They change the PAD, not the boost or the hint strip.
+// ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D3] THE TWO RUMBLE LEGS ARE REPRODUCED NOW. Both
+// console call sites `bl` the same address (0x823795C8) -- the aggressor and victim bodies
+// ICF-folded -- so the victim leg calls the DWARF's own OnVehicleVictimImpact (:793), whose PS3
+// twin 0x2401D4 is a thunk onto the aggressor body. They change the PAD, not the boost or the
+// hint strip. The teardown stub on this+0x1DD0 (0x823A27B8 -> 0x8284CB38) is a bare `blr` in the
+// image (ppcdis) and has nothing to reproduce.
 //
 // ⚠️ IT DOES NOT Clear() THE QUEUE -- PreWorldUpdateStuntBringUp owns the console's Clear, later
 // in the same sub-step, exactly as for every sibling arm.
@@ -1078,6 +1099,19 @@ void GameStateModule::ProcessGameEventsVehicleImpactBringUp(
             const GameStateModuleIO::VehicleImpactEvent* lpImpact =
                 reinterpret_cast<const GameStateModuleIO::VehicleImpactEvent*>(lpEvent);
             SendVehicleImpactMessages(lpImpact, lpActionQueue);
+
+            // 0x823A279C..0x823A27C8: GetPlayerActiveRaceCarIndex() vs event+4 (the aggressor).
+            if (lpImpact->meAggressorActiveRaceCarIndex == GetPlayerActiveRaceCarIndex())
+            {
+                mRumbleManager.OnVehicleAggressorImpact(
+                    static_cast<BrnPhysics::Vehicle::EImpactType>(lpImpact->meImpactType));
+            }
+            // 0x823A27CC..0x823A27EC: GetPlayerActiveRaceCarIndex() vs event+8 (the victim).
+            if (lpImpact->meVictimActiveRaceCarIndex == GetPlayerActiveRaceCarIndex())
+            {
+                mRumbleManager.OnVehicleVictimImpact(
+                    static_cast<BrnPhysics::Vehicle::EImpactType>(lpImpact->meImpactType));
+            }
         }
 
         else if (liType == GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING)
@@ -1623,6 +1657,29 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         /*lbInviteInProgress*/ false,
         GetVehicleList());
 
+    // ---- 0b) THE RUMBLE PRODUCERS (console #55) ----------------------------------------------
+    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1] RumbleManager::Update @0x82386A98. X360
+    // PreWorldUpdate @0x823A5328 `bl` #55 (0x823A5800), straight-line (no branch in
+    // 0x823A5328..0x823A5800 skips it), OUTSIDE the IsSimPaused block, right after
+    // TrainingManager::Update (#54) and BEFORE the event merge + ProcessGameEvents (#57..#68):
+    //     r3 = gsm+46680 (&mRumbleManager)          r4 = r23 = gsm+235488 (&mLastActiveRaceCarInterface)
+    //     r5 = gsm+250272 (the crash-queue cache)   r6 = *(gsm+208304) (mePlayerActiveRaceCarIndex)
+    //     r7 = gsm+250800 (&mContactSpyInterface)   f1 = f31 (the frame's game timestep)
+    // ⓘ POSITION: this pump has no TrainingManager leg (that one runs later, from
+    // PreWorldUpdateTrainingBringUp -- its own documented deviation); what the rumble needs is its
+    // console order against its NEIGHBOURS, which this seat keeps: it runs before this frame's
+    // case-31 arm posts the race-car-impact jolt (so the queue order is the console's) and before
+    // UpdatePauseState (#88, below), so it reads the PREVIOUS frame's mbRumblePaused, as the
+    // console does.
+    // [FLAG PC] the crash-queue argument is the takedown lane's heap cache of gsm+250272; the
+    // console body never reads it (r5 is overwritten before its first call), so a missing cache
+    // passes NULL rather than inventing one.
+    mRumbleManager.Update(&mLastActiveRaceCarInterface,
+                          mpTakedownCache != 0 ? &mpTakedownCache->mRaceCarCrashEventQueue : 0,
+                          mePlayerActiveRaceCarIndex,
+                          &mContactSpyInterface,
+                          lfGameTimestep);
+
     // ---- 1) the merged queue -> ProcessGameEvents (case 111 LATCHES) ------------------------
     // X360 lines 239-245 Construct a LOCAL <1536,16> queue and Append THREE sources into it -- the
     // carry queue (+248384), the PreWorldInputBuffer's queue, and the InviteManager's (+2032) --
@@ -1858,6 +1915,18 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // the console reads its "now" from). Fully written up at the declaration in
     // BrnGameStateModule.h. DELETE-WHEN DoUpdate_GameStatePreWorld stages a real
     // PreWorldInputBuffer whose timer block is filled.
+    //
+    // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1] ...AND THE CALL THE MAP ABOVE NAMES FIRST:
+    // RumbleManager::UpdatePauseState @0x8236E728, `bl` #88 (0x823A5AC4), between
+    // EmmPreWorldUpdate (#86) and this function's StartMonitor. Its arguments, from the asm:
+    //     r4 = (*(gsm+232288) != 0)   lwz 0(r14) ; cntlzw ; extrwi 1,26 ; xori 1  (0x823A5AA0..AB0)
+    //          == miSimPauseFlags != 0 -- the RAW pause word, not IsSimPaused's online-masked answer
+    //     r5 = GameStateModuleIO::OutputBuffer::GetGameActionQueue(lpOutput)  (0x8231D4B8, the
+    //          same accessor the top of this function already called for lpActionQueue)
+    // It is the only writer of mbRumblePaused / mbGameWasPaused after Construct, and the gate
+    // Update's crash jolt and UpdateImpacts read.
+    mRumbleManager.UpdatePauseState(miSimPauseFlags != 0, lpActionQueue);
+
     CopyScoringDataToOutput(mpOutputBuffer, lrTimerStatusInterface);
 
     // ---- 2) TriggerQueryManager: ARM the trigger set -----------------------------------------
