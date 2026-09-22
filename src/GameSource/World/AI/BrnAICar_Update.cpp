@@ -301,23 +301,34 @@ namespace BrnAI
     }
 
     // ==================================================================================
-    // GetUsefulDirection @0x82770028
+    // GetUsefulDirection @0x82770028 (DWARF BrnAICar.cpp:2268, local `Vector3 lXZSpeed` :2270)
     //
-    // A direction the aggression geometry can trust: the normalised velocity once the car is
-    // moving faster than KF_USEFUL_DIRECTION_MIN_SPEED (vcmpgefp. |vel| >= threshold, zero-
-    // guarded magnitude); otherwise the stored direction if it has any length (> 0.01);
-    // otherwise Cross(direction, right) if THAT has length (vpermwi 0x63 = yzx twice around a
-    // vmulfp/vnmsubfp = the SDK cross), and finally the X axis (1,0,0).
+    // A direction the aggression geometry can trust. BOTH gates measure a FLATTENED copy (the
+    // DWARF's Vector3::SetY(0) before each Magnitude); what they return is the full 3D vector:
+    //   0x82770050  bl GetVelocity -> sp+0x60 ; 0x8277008C stvx128 the copy back to sp+0x60
+    //   0x827700A4  stfs f31 (flt_82001CC0 == 0.0) -> sp+0x64, the copy's Y lane
+    //   0x827700BC  vmsum3fp128 v0,v0,v0 on the reloaded copy; rsqrt magnitude, vsel 0 guard
+    //   0x827700FC  vcmpgefp. |xz| >= splat(flt_8300D964 == KF_USEFUL_DIRECTION_MIN_SPEED)
+    //   0x82770118  bl GetVelocity AGAIN -> Normalize of the unflattened velocity
+    //   0x82770164  bl GetDirection -> sp+0x70 ; 0x827701A0 stfs f31 (0.0) -> sp+0x74 (Y lane)
+    //   0x827701F4  vcmpgtfp. |xz| > flt_82002138 (0.01)
+    //   0x82770210  bl GetDirection into the sret -> the unflattened facing
+    // then Cross(direction, right) if THAT has length (0x8277027C: unflattened, unnormalised;
+    // vpermwi 0x63 = yzx twice around a vmulfp/vnmsubfp = the SDK cross), and finally the X axis
+    // (1,0,0). So a car whose speed is mostly vertical (bounced by a hit, landing) still reports
+    // its facing, and a near-vertical facing falls through to the cross.
     // ==================================================================================
     Vector3 AICar::GetUsefulDirection() const
     {
-        const Vector3 lVelocity = GetVelocity();
-        if (vpu::Magnitude(lVelocity) >= KF_USEFUL_DIRECTION_MIN_SPEED)
-            return vpu::Normalize(GetVelocity());
+        Vector3 lXZSpeed = GetVelocity();
+        lXZSpeed.y = 0.0f;                                                                  // 0x827700A4
+        if (vpu::Magnitude(lXZSpeed) >= KF_USEFUL_DIRECTION_MIN_SPEED)                      // 0x827700FC
+            return vpu::Normalize(GetVelocity());                                           // 0x82770118
 
-        const Vector3 lDirection = GetDirection();
-        if (vpu::Magnitude(lDirection) > KF_USEFUL_DIRECTION_MIN_LENGTH)
-            return GetDirection();
+        lXZSpeed = GetDirection();
+        lXZSpeed.y = 0.0f;                                                                  // 0x827701A0
+        if (vpu::Magnitude(lXZSpeed) > KF_USEFUL_DIRECTION_MIN_LENGTH)                      // 0x827701F4
+            return GetDirection();                                                          // 0x82770210
 
         const Vector3 lRight = GetRight();
         const Vector3 lCross = vpu::Cross(GetDirection(), lRight);
