@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                 // InSceneUpdateInterface remove/set producers
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                                   // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                             // CGS_ASSERT
+#include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/vpu/vector3_operation.h"                                                     // rw::math::vpu::IsValid (UpdateRW finiteness tripwires)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"                       // InputBuffer::GetAddRigidBodyQueue (AddToSim)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"                      // InAddRigidBody / NewRigidBody / OutUpdateRigidBody
@@ -2176,14 +2177,11 @@ namespace Deformation
     //      self-equality NaN checks, ANDed across lanes/rows): IsValid(angularVel), IsValid(vel),
     //      IsValid(transform) -- in that asm order.
     //   4) Emit the event onto the sim InputBuffer's InUpdateExternalBody queue
-    //      (`CgsPhysi`(InputBuffer) -> channel; channel->AddEvent(&event)), modelled through the
-    //      flagged EmitUpdateExternalBodyEvent hook.
+    //      through its write accessor and AddEvent.
     //   5) Clear mbNeedsWritingIntoRenderware (+487 = 0).
     //
-    // The packed event layout (16-byte-aligned stack slots the asm builds at &v110.., handed to
-    // AddEvent) is reproduced as a POD blob here; the concrete InUpdateExternalBody event type +
-    // the queue's AddEvent are owned by the CgsPhysics sim-IO TU (not homed in this family), so
-    // the emit goes through the provisional hook exactly as the detach-notification emit does.
+    // The canonical InUpdateExternalBody type preserves the original 112-byte record:
+    // body ID at +0, transform at +16, linear velocity at +80, angular velocity at +96.
     // =========================================================================================
     void PhysicalBodyPart::UpdateRW(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
                                     VecFloat lvfTimeStep)
@@ -2205,19 +2203,9 @@ namespace Deformation
         // take it; without it the body's forces integrated over a zero step.
         mRwBody.CalculateNewVelocity(lvfTimeStep);
 
-        // Assemble the InUpdateExternalBody event blob (the stacked &v110.. slots). 16-byte-aligned
-        // POD matching the asm's stvx128 store layout: id qword, then the 4 transform rows, then the
-        // linear + angular velocity rows.
-        struct UpdateExternalBodyEvent
-        {
-            BurnoutBodyPartID mBodyId;        // event+0  (the `ld r7,0x1D0` qword, 16-byte slot)
-            Matrix44Affine    mTransform;     // event+16 (rows from this+0/+16/+32/+48)
-            Vector3           mVel;           // event+80 (this+64 linear velocity)
-            Vector3           mAngularVel;    // event+96 (this+80 angular velocity)
-        };
-
-        UpdateExternalBodyEvent lEvent;
-        lEvent.mBodyId      = mRigidBodyId;                 // event id == this+464
+        // ARTIST 0x825E79E0 onward builds the canonical 112-byte simulation event.
+        CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody lEvent;
+        lEvent.mID = mRigidBodyId.GetBaseRigidBodyID();
         lEvent.mTransform   = mRwBody.GetTransform();       // 4 rows, this+0/+16/+32/+48
         lEvent.mVel         = mRwBody.GetLinearVelocity();  // this+64
         lEvent.mAngularVel  = mRwBody.GetAngularVelocity(); // this+80
@@ -2234,10 +2222,13 @@ namespace Deformation
                        && rw::math::vpu::IsValid(lEvent.mTransform.wAxis),
                    "rw::math::IsValid( lUpdateEvent.mTransform )");
 
-        // Emit the event onto the sim InputBuffer's InUpdateExternalBody queue (the asm's
-        // `bl CgsPhysi`(InputBuffer) -> channel ; channel->AddEvent(&event)). Modelled through the
-        // flagged emit hook with the packed event blob.
-        EmitUpdateExternalBodyEvent(lpSimInput, &lEvent);
+        // 0x825E7D04 calls the write accessor 0x825BCEB0, then AddEvent at 0x825E4340.
+        lpSimInput->GetUpdateExternalBodyQueue()->AddEvent(lEvent);
+
+        static const bool lbTrace = std::getenv("BRN_RIVAL_DAMAGE_DIAG") != nullptr;
+        static u32 luTraceCount = 0;
+        if (lbTrace && luTraceCount++ < 8)
+            CgsDev::Log::WriteToLog("[part-motion] simulation update queued\n");
 
         // *(this+487) = 0 -- the part is no longer dirty for RW.
         mbNeedsWritingIntoRenderware = false;
@@ -2666,15 +2657,17 @@ namespace Deformation
 
     void PhysicalBodyPart::PostVehicleUpdate()
     {
-        static bool sbLoggedPVU = false;
-        if ( !sbLoggedPVU )
-        {
-            sbLoggedPVU = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: PhysicalBodyPart::PostVehicleUpdate reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
-        }
-        
+        // ARTIST 0x825BA91C..0x825BA9D4: transform the part by the owner's
+        // previous-to-current transform delta, then clear both contact accumulators.
+        const Matrix44Affine lDelta = mpDeformableObject->GetVehiclePhysics()->GetTransformDelta();
+        const Matrix44Affine lTransform = mRwBody.GetTransform() * lDelta;
+        mWorldPenetrationPlusCollisionMagnitude.SetZero();
+        mAverageCollisionPointPlusNumCollisions.SetZero();
+        mRwBody.SetTransform(lTransform);
+        static const bool lbTrace = std::getenv("BRN_RIVAL_DAMAGE_DIAG") != nullptr;
+        static u32 luTraceCount = 0;
+        if (lbTrace && luTraceCount++ < 8)
+            CgsDev::Log::WriteToLog("[part-motion] vehicle transform delta applied\n");
     }
 
     void RemoveTriangleCacheSlot(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* /*lpSceneInput*/, u16 /*lu16TriangleCacheSlot*/)
@@ -2696,19 +2689,6 @@ namespace Deformation
     // Deformation::DetachedPartNotificationEvent and AddEventSafe it onto the deformation output
     // interface's +0x3A0 queue, exactly as the console does. The hook took a `const void*` blob,
     // which was never a real parameter of anything.
-
-    void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/, const void* /*lpEventBlob*/)
-    {
-        static bool sbLoggedEUEB = false;
-        if ( !sbLoggedEUEB )
-        {
-            sbLoggedEUEB = true;
-            if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                *CgsDev::Log::gpDebugPrint << "conductor gate: EmitUpdateExternalBodyEvent hook reached but not "
-                                              "reconstructed [FLAG PC boot gate]\n";
-        }
-        
-    }
 
 }
 }

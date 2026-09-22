@@ -237,6 +237,7 @@ namespace PhysicsSimulationIO
         const InUpdateDriveDynamicsQueue*    GetUpdateDriveDynamicsQueue()    const;  // @0x8289EDE0
         const InSetDriveSpyQueue*            GetSetDriveSpyQueue()            const;  // @0x8289EE88  ⚠️ export HOLE
         const InUpdateExternalBodyQueue*     GetUpdateExternalBodyQueue()     const;  // @0x8289EF30
+        InUpdateExternalBodyQueue*           GetUpdateExternalBodyQueue();            // @0x825BCEB0, write-lock guard
 
         // ⛔⛔ RETRACTED 2026-08-05 (the rigid-body drain group). The note that stood here said
         // a const GetChangeRigidBodyInertiaQueue() does NOT exist in the image ("no room in

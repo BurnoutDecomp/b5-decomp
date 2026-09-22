@@ -1128,7 +1128,10 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
             {
                 static s32 saiRivalWitnessTick[E_ACTIVE_RACE_CAR_INDEX_COUNT] = { 0 };
                 static s32 siRivalWitnessLines = 0;
-                if (!lbIsPlayer && lpCar != 0 && CgsDev::Log::gpDebugPrint != 0 && siRivalWitnessLines < 150
+                // The pad pursuit harness consumes these positions throughout the run.
+                static const bool sbPursuitTrace = std::getenv("BRN_RIVAL_PURSUIT_DIAG") != nullptr;
+                if (!lbIsPlayer && lpCar != 0 && CgsDev::Log::gpDebugPrint != 0
+                    && (sbPursuitTrace || siRivalWitnessLines < 150)
                     && (saiRivalWitnessTick[leSlot]++ % 60) == 0)
                 {
                     ++siRivalWitnessLines;

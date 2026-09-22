@@ -83,8 +83,7 @@ namespace PhysicsSimulationIO
 //     built at the two call sites out of its three named fields.
 //   * The "update external body" event emit at the tail of UpdateRW @0x825E7998 (the asm fetches the
 //     sim InputBuffer's InUpdateExternalBody queue -- `bl CgsPhysi`(InputBuffer) returning the channel
-//     -- and AddEvent's a packed {bodyId, transform, linearVel, angularVel} event onto it). Modelled
-//     as a free hook taking the input buffer + the packed event blob.
+//     -- and AddEvent posts the canonical InUpdateExternalBody record directly).
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
 // ⚠ CLASS-KEYS FIXED 2026-08-06 (big-five #2): `struct` per CgsPhysicsSimulationModuleIO.h.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; struct OutputBuffer; } }
@@ -112,8 +111,6 @@ namespace Deformation
     // for a NAMED 32-byte record (Deformation::DetachedPartNotificationEvent, three named fields).
     // Both console sites build that record inline and AddEventSafe it onto the deformation output
     // interface's +0x3A0 queue; the two call sites now do the same. See either one's banner.
-    void EmitUpdateExternalBodyEvent(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-                                     const void* lpEventBlob);                                  // FLAG: provisional
 }
 }
 
