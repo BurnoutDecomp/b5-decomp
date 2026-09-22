@@ -16,6 +16,13 @@ namespace BrnWorld
 {
 namespace CrashIO
 {
+    // ARTIST sub_827BBA68: bit3 write-lock assertion, return member at console+0x7A0.
+    OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        return &mGameEventQueue;
+    }
+
     NetworkOutputInterface* OutputBuffer_PostPhysics::GetNetworkOutputInterface()
     {
         // The interface offset is load-bearing for this getter (the X360 returns this+0x10).

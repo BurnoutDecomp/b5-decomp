@@ -3,8 +3,8 @@
 #include <cstddef>   // offsetof
 #include <cstring>   // memcpy (the blind-copy setters model the Xbox XMemCpy intrinsic)
 
-// class:BrnWorld::CrashIO group -- the crash module's input-buffer accessors (plus the
-// post-physics output buffer's read view). Reconstructed from BURNOUT_X360_ARTIST.XEX + the
+// class:BrnWorld::CrashIO group -- the crash module's input-buffer accessors.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX + the
 // DecFIGS DWARF. Every accessor tests a lock bit on the IOBuffer status byte:
 //   read-lock  (`lbz r11,0(this); extrwi r11,r11,1,27` == bit 4 == IsBufferLockedForReading())
 //              -> on failure streams "Not locked for reading\n";
@@ -227,20 +227,5 @@ namespace CrashIO
         mVehicleManagerOutputInterface.Construct();
     }
 
-    // ====================================================================================
-    // OutputBuffer_PostPhysics_ReadView (DWARF BrnCrashModuleIO.h:210)
-    // ====================================================================================
-    void OutputBuffer_PostPhysics_ReadView::_AssertLayout()
-    {
-        static_assert(offsetof(OutputBuffer_PostPhysics_ReadView, mGameEventQueue) == 0x7A0,
-                      "OutputBuffer_PostPhysics_ReadView::mGameEventQueue @0x7A0");
-    }
-    // PS3 DecFIGS: OutputBuffer_PostPhysics::GetGameEventQueue (BrnCrashModuleIO.h:210).
-    const OutputBuffer_PostPhysics_ReadView::GameEventQueueStorage*
-    OutputBuffer_PostPhysics_ReadView::GetGameEventQueue() const   // 0x827A2680
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mGameEventQueue;
-    }
 }
 }

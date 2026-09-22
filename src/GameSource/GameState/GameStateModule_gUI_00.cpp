@@ -1057,6 +1057,7 @@ void GameStateModule::ProcessGameEventsBoostTickerBringUp(
 // ⚠️ IT DOES NOT Clear() THE QUEUE -- PreWorldUpdateStuntBringUp owns the console's Clear, later
 // in the same sub-step, exactly as for every sibling arm.
 // ============================================================================
+// This partial dispatcher also restores the original crash-ending case42.
 void GameStateModule::ProcessGameEventsVehicleImpactBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
@@ -1077,6 +1078,16 @@ void GameStateModule::ProcessGameEventsVehicleImpactBringUp(
             const GameStateModuleIO::VehicleImpactEvent* lpImpact =
                 reinterpret_cast<const GameStateModuleIO::VehicleImpactEvent*>(lpEvent);
             SendVehicleImpactMessages(lpImpact, lpActionQueue);
+        }
+
+        else if (liType == GameStateModuleIO::E_EVENT_PLAYER_CRASH_ENDING)
+        {
+            // ARTIST ProcessGameEvents 823A0A18 case42: one-byte action17, no payload fields.
+            const GameStateModuleIO::PlayerCrashEndingSoonAction lAction{};
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
+                GameStateModuleIO::E_ACTION_PLAYER_CRASH_ENDING_SOON, sizeof(lAction));
+            if (std::getenv("BRN_CRASH_ACTION_DIAG") && CgsDev::Log::gpDebugPrint)
+                *CgsDev::Log::gpDebugPrint << "[crash-ending] event 42 relayed as action 17\n";
         }
 
         const CgsModule::Event* lpCurrent = lpEvent;
@@ -1639,7 +1650,8 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // updates on the frame the trick happens, not a frame later.
     ProcessGameEventsBoostTickerBringUp(&mGameEventCarryQueue, lpActionQueue);
     // ⭐⭐⭐ [boost-wave2 2026-09-14] the dispatcher's CASE-31 arm (the rival-impact family),
-    // same walk, same must-run-before-the-Clear constraint. It posts actions 53/54 + 48 onto the
+    // same walk, same must-run-before-the-Clear constraint. It also relays crash-ending event42
+    // to action17. The impact arm posts actions53/54 +48 onto the
     // action queue this function already holds the write lock for; RaceCarEntityModule::
     // HandleGameActions turns 53 into the OnPlayerAttacksRival boost award in the SAME sub-step.
     ProcessGameEventsVehicleImpactBringUp(&mGameEventCarryQueue, lpActionQueue);
