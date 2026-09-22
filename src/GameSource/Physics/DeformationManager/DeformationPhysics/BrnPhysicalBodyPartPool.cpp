@@ -47,11 +47,9 @@ namespace renderengine { extern u32 guPresentCount; }
 // past a failed assert exactly as the asm does. They are modelled as CGS_ASSERT and the lookup /
 // store that follows runs regardless. The original source file paths/line numbers are dropped.
 //
-// FLAGGED-0 PLACEHOLDER: KF_PART_EXTRA_GRAVITY (DWARF namespace-scope f32 @ BrnPhysicalBodyPartPool
-// .h:34) is rodata that is NOT present in the exports -- carried as an honest zero (NEVER
-// fabricated). UpdateRWBodies' extra-gravity force therefore stays inert until the real value is
-// recovered from the XEX rodata; its application SHAPE (build a local-frame force, scale by a body
-// orientation row, AddLocalSpaceForce) is faithful.
+// Extra gravity is the zero-initialized debug variable at ARTIST 0x82FB7E14.
+// Its only image references are UpdateRWBodies and debug registration at 0x82623B70.
+// UpdateRWBodies multiplies the local gravity vector by the body's mass splat.
 //
 // Callers (X360 xrefs): Create <- DetachedPartManager::MakePart; GetPart/IsPartIndexUsed <-
 // DeformationManager + DetachedPartManager (many); UpdateRWBodies <- DeformationManager::Update;
@@ -62,10 +60,7 @@ namespace BrnPhysics
 {
 namespace Deformation
 {
-    // FLAGGED-0 PLACEHOLDER for the namespace-scope extra-gravity constant at
-    // BrnPhysicalBodyPartPool.h:34 (DWARF `float32_t KF_PART_EXTRA_GRAVITY`). The numeric value is
-    // NOT in the per-function exports; carried as an honest zero (NEVER fabricated). Used only by
-    // UpdateRWBodies below.
+    // ARTIST debug variable; zero is the original default, not a missing constant.
     f32 kfPartExtraGravity = 0.0f;   // ARTIST .bss default at 0x82FB7E14
 
     // X360 deformation-part owner tags written into the contact volume-instance id (see
@@ -178,16 +173,13 @@ namespace Deformation
     //   Walk every used part (GetFirstNonZeroBit / GetNextNonZeroBit over mUsedParts), and for each:
     //     1) PhysicalBodyPart::UpdateRW(lpSimInput, lvfTimeStep) -- push its transform into RW.
     //     2) Build the extra-gravity force in the part's local frame: a (0, KF_PART_EXTRA_GRAVITY,
-    //        0, 0) vector lane-multiplied by a body orientation row (asm: `lvx128 v0,[r31+0xD0];
+    //        0, 0) vector lane-multiplied by the body mass splat (asm: `lvx128 v0,[r31+0xD0];
     //        vmulfp128 v1,v13,v0`), then ExternalPhysicsBody::AddLocalSpaceForce(force).
     //   The mid-walk "invalid index : N < 50" StrStream assert is the inlined GetNextNonZeroBit
     //   bounds tripwire (non-gating). lvfTimeStep arrives in v1/v127 and is threaded into UpdateRW.
     //
-    //   FLAG: the +0xD0 source loaded into the force multiply is a body orientation row whose exact
-    //   accessor is not cleanly exposed; the force here is scaled by the part's render-transform
-    //   up-row (GetRenderTransform().up), preserving the asm's "rotate local gravity by a body row"
-    //   shape. With KF_PART_EXTRA_GRAVITY == 0 (flagged placeholder) the accumulated force is zero
-    //   regardless of the row, so this stays observably inert until the rodata is recovered.
+    //   +0xD0 is ExternalPhysicsBody::mfMass. AddLocalSpaceForce performs the
+    //   orientation transform after this multiply; GetRenderTransform is not called.
     // ------------------------------------------------------------------------------------------
     void PhysicalBodyPartPool::UpdateRWBodies(
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput, VecFloat lvfTimeStep)
@@ -200,16 +192,14 @@ namespace Deformation
 
             lpPart->UpdateRW(lpSimInput, lvfTimeStep);
 
-            // Local-frame extra-gravity force == (0, KF_PART_EXTRA_GRAVITY, 0) rotated by a body
-            // orientation row (asm vmulfp128 against the +0xD0 row). See the FLAG above.
-            const Matrix44Affine lRenderTransform = lpPart->GetRenderTransform();
-            const Vector3& lvUpRow = lRenderTransform.Up();
+            // 0x825E7FBC..0x825E7FC8: gravity times mass, then rotate/accumulate.
+            const VecFloat lvfMass = lpPart->GetExternalBody()->GetMass();
             const Vector3 lvLocalGravity = { 0.0f, kfPartExtraGravity, 0.0f, 0.0f };
             const Vector3 lvForce = {
-                lvLocalGravity.x * lvUpRow.x,
-                lvLocalGravity.y * lvUpRow.y,
-                lvLocalGravity.z * lvUpRow.z,
-                0.0f
+                lvLocalGravity.x * lvfMass.x,
+                lvLocalGravity.y * lvfMass.y,
+                lvLocalGravity.z * lvfMass.z,
+                lvLocalGravity.w * lvfMass.w
             };
             lpPart->GetExternalBody()->AddLocalSpaceForce(lvForce);
         }
