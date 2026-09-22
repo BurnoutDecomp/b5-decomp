@@ -2,6 +2,9 @@
 #define CGS_SERVER_INTERFACE_RANKINGS_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+
+struct LobbyApiMsgT;   // DirtySDK lobby message (vendor SDK, global namespace)
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceRankings
@@ -13,15 +16,13 @@
 // BrnServerInterfaceBase::mRankings). Like every other DirtySock component it is a
 // polymorphic leaf over the shared ServerInterfaceComponent base.
 //
-// LAYOUT: the leading members mirror the committed ServerInterfaceComponent base
-// (CgsServerInterfaceComponent.h) exactly. Modelled here as the leading members --
-// rather than via C++ inheritance -- to stay member-by-name without re-forking that
-// type's standalone header, matching the existing sibling-component homes
-// (CgsServerInterfaceServerInfo.h) in this directory:
-//   +0x00  vptr
-//   +0x04  mpcCurrentAction  (const char*)
-//   +0x08  meStatus          (s32; 2 == "no error")
-//   +0x0C  miLastError       (s32)
+// LAYOUT: the ServerInterfaceComponent base (+0x00..+0x0F), then
+//   +0x10  mpServerInterface
+//   +0x14  meCurrentAction
+//   +0x18  mpLobbyRank       (the downloaded rank table; every getter reads it)
+//   +0x1C  miUserType
+// The leaf appends two virtuals to the component vtable: Suspend and Resume (the
+// console Resume slot is the shared empty handler).
 //
 // The scalar deleting destructor @ 0x827DE238-sibling 0x827DE310 restores the shared
 // component vtable slot (off_820CDBF8) at this+0, then conditionally frees -- i.e. the
@@ -33,12 +34,19 @@
 
 namespace CgsNetwork
 {
-    // Event enum used by the OnEvent vtable slot (full set in the events home).
-    enum EServerInterfaceEvent : s32;
+    class ServerInterface;
+    namespace DirtySock { struct LobbyRankT; }
 
-    class ServerInterfaceRankings
+    class ServerInterfaceRankings : public ServerInterfaceComponent
     {
     public:
+        enum EAction
+        {
+            E_ACTION_FETCH_CATEGORIES = 0,
+            E_ACTION_FETCH_RANK       = 1,
+            E_ACTION_COUNT            = 2,
+        };
+
         ServerInterfaceRankings();
 
         // Scalar deleting destructor @ 0x827DE310 (restores off_820CDBF8, conditional free).
@@ -48,6 +56,14 @@ namespace CgsNetwork
         // not bodied here). Mirror the ServerInterfaceComponent vtable order.
         virtual void Construct();
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        virtual void Suspend();
+        virtual void Resume();
+
+        bool Prepare(ServerInterface* lpServerInterface);
+        void Update();
+        bool Release();
+        void Destruct();
+        void DownloadScoreboardData(const char** lapcUserNames, s32 liNumUsers);
 
         // === ADDITIVE GROW (flagged by the BrnNetworkScoreboardManager group) ============
         // The downloaded-scoreboard query surface. The bodies live in this component's own
@@ -56,32 +72,32 @@ namespace CgsNetwork
         // under cl /c. Signatures are pinned from the BrnNetworkScoreboardManager X360 call
         // sites: PPC Hex-Rays drops the trailing index args, so they are restored from the
         // register usage at each call (e.g. GetColumnType(mpRankings, liColumn)).
-        bool        IsBusy() const;                                        // meStatus != E_STATUS_IDLE (2)
-        s32         GetNumberOfCategories() const;
-        s32         GetNumberOfIndexes(s32 liCategory) const;
-        s32         GetNumberOfVariations(s32 liCategory, s32 liIndex) const;
+        bool        IsBusy();                                        // meStatus != E_STATUS_IDLE (2)
+        s32         GetNumberOfCategories();
+        s32         GetNumberOfIndexes(s32 liCategory);
+        s32         GetNumberOfVariations(s32 liCategory, s32 liIndex);
         // Heading-name getters (pinned from the BrnNetwork::ScoreboardManager::CopyCategories /
         // CopyIndexes X360 call sites @ 0x82562590 / 0x82562638 -- GetCategoryName(liCategory) and
         // GetIndexName(liCategory, liIndex) feed NetworkOutScoreboardHeadingList::AddHeading).
-        const char* GetCategoryName(s32 liCategory) const;
-        const char* GetIndexName(s32 liCategory, s32 liIndex) const;
+        const char* GetCategoryName(s32 liCategory);
+        const char* GetIndexName(s32 liCategory, s32 liIndex);
         // Variation heading name (pinned from the BrnNetwork::ScoreboardManager::CopyVariations X360
         // call site @ 0x825626D8 -- GetVariationName(liCategory, liIndex, liVariation) feeds
         // NetworkOutScoreboardHeadingList::AddHeading). ADDITIVE GROW (BrnNetworkScoreboardManager TU).
-        const char* GetVariationName(s32 liCategory, s32 liIndex, s32 liVariation) const;
-        s32         GetNumberOfColumns() const;
-        s32         GetNumberOfRows() const;
-        s32         GetColumnType(s32 liColumn) const;
-        s32         GetColumnStyle(s32 liColumn) const;
-        s32         GetColumnWidth(s32 liColumn) const;
-        const char* GetColumnTitle(s32 liColumn) const;
-        bool        ScoreboardHasParam(s32 liParam) const;
+        const char* GetVariationName(s32 liCategory, s32 liIndex, s32 liVariation);
+        s32         GetNumberOfColumns();
+        s32         GetNumberOfRows();
+        s32         GetColumnType(s32 liColumn);
+        s32         GetColumnStyle(s32 liColumn);
+        s32         GetColumnWidth(s32 liColumn);
+        const char* GetColumnTitle(s32 liColumn);
+        bool        ScoreboardHasParam(s32 liParam);
         // Point the rankings component at the target scoreboard (category / index / variation).
         // Called by BrnNetwork::ScoreboardManager::HandleEvScoreTargetEvent. Declared-only here;
         // body lands with this component's own TU. ADDITIVE GROW (BrnNetworkScoreboardManager TU).
         void        SelectScoreboard(s32 liCategory, s32 liIndex, s32 liVariation);
-        s32         GetRowThatContainsLocalUser() const;
-        void        GetCell(s32 liColumn, s32 liRow, char* lpcBuffer, s32 liBufferSize) const;
+        s32         GetRowThatContainsLocalUser();
+        void        GetCell(s32 liColumn, s32 liRow, char* lpcBuffer, s32 liBufferSize);
         s32         GetUserType(s32 liVariation, const char** lapcUserListNames,
                                 s32* lpiUserListCount) const;
         bool        DownloadHeadings(void* lpHeadingType);
@@ -89,10 +105,16 @@ namespace CgsNetwork
         // =================================================================================
 
     private:
-        // --- ServerInterfaceComponent base layout (see header note) ---
-        const char* mpcCurrentAction;   // +0x04
-        s32         meStatus;           // +0x08
-        s32         miLastError;        // +0x0C
+        void EndAction(s32 liError);
+        static void FetchCategoriesCallback(DirtySock::LobbyRankT* lpLobbyRank, LobbyApiMsgT* lpMsg,
+                                            void* lpUserData);
+        static void FetchRankCallback(DirtySock::LobbyRankT* lpLobbyRank, LobbyApiMsgT* lpMsg,
+                                      void* lpUserData);
+
+        ServerInterface*       mpServerInterface;   // +0x10
+        EAction                meCurrentAction;     // +0x14
+        DirtySock::LobbyRankT* mpLobbyRank;         // +0x18
+        s32                    miUserType;          // +0x1C
     };
 }
 

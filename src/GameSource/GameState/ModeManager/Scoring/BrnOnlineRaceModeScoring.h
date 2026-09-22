@@ -9,9 +9,7 @@
 // IndexToFinishTuple only), so its object layout is identical to the base; ClearData below
 // writes BASE members.
 //
-// MINIMAL SLICE: only the four reconstructed functions get full bodies in the .cpp; the rest of the
-// virtual lifecycle (Construct/Prepare/Release/Destruct/WriteDataToOutput) is declared-only so the
-// vtable slots exist in this TU's relative order. Override order matches the base vtable.
+// Every base pure virtual is overridden here; the lifecycle ones forward to the base halves.
 
 #include "types.hpp"
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h" // base + Compare*/UpdatePlayerTeams/SetPlayerPosition + fwd-decl `class ScoringSystem`
@@ -31,7 +29,7 @@ namespace BrnGameState
 class OnlineRaceModeScoring : public BaseOnlineModeScoring
 {
 public:
-    // ---- virtual lifecycle (declared-only; bodies belong to the rest of this TU) ----
+    // ---- virtual lifecycle ----
     virtual void Construct();                                       // BrnOnlineRaceModeScoring.cpp:42
     virtual bool Prepare();                                         //                          .cpp:72
     virtual bool Release();                                         //                          .cpp:87
@@ -45,7 +43,7 @@ public:
     // (Update's is const); honored.
     virtual void UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars);
 
-    virtual void WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput); // declared-only (.cpp:322)
+    virtual void WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput);
 
     // X360 0x82315610 (.cpp:335). Resets the per-slot online award + team arrays (base members).
     virtual void ClearData();

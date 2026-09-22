@@ -207,6 +207,41 @@ namespace BrnNetwork
     }
 
     // =======================================================================
+    // RequestFeed(liPlayerID)
+    //
+    // Select whose camera feed to watch. Nothing happens when the player is already the one
+    // requested. Otherwise the feed requested from the previous player is released, the
+    // request is cleared, and then re-latched: a local player (or -1, "none") at once with the
+    // timer zeroed; a remote player only when it owns a feed slot, with the request timer
+    // stamped from the manager's current network time.
+    // =======================================================================
+    void CameraX360::RequestFeed(s32 liPlayerID)
+    {
+        if (liPlayerID == miRequestedPlayerID)
+        {
+            return;
+        }
+
+        if (miRequestedPlayerID != KI_INVALID_PLAYER_ID)
+        {
+            ReleaseFeed(miRequestedPlayerID);
+        }
+        miRequestedPlayerID = KI_INVALID_PLAYER_ID;
+        mRequestTimer = 0.0f;
+
+        if (mpNetworkManager->IsLocalPlayer(liPlayerID) || liPlayerID == KI_INVALID_PLAYER_ID)
+        {
+            miRequestedPlayerID = liPlayerID;
+            mRequestTimer = 0.0f;
+        }
+        else if (GetSlotForPlayer(liPlayerID) != NULL)
+        {
+            miRequestedPlayerID = liPlayerID;
+            mRequestTimer = mpNetworkManager->GetTime();
+        }
+    }
+
+    // =======================================================================
     // GetLocalCameraStatus @ 0x82587390
     //
     // 0 when the camera is not prepared / not ready / not user-enabled; otherwise 3 (connecting)
@@ -370,7 +405,7 @@ namespace BrnNetwork
 
     s32 CameraX360::GetCompressedLocalCameraPicture(
         CgsNetwork::NetworkTexture* lpDstTexture,
-        CgsNetwork::NetworkTextureDXTCompress::CompressCallback /*lCompleteCallback*/,
+        CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback /*lCompleteCallback*/,
         void* /*lpCompleteData*/)
     {
         // Faithful spine: assert lpDstTexture is non-null + already DXT1; when XCamGetStatus()==2,
@@ -394,7 +429,8 @@ namespace BrnNetwork
     { /* BLOCKED: stream-engine vtable + response send */ }
 
     void CameraX360::_RequestMessageDeliveredCallback(bool /*lbDelivered*/, bool /*lbWasReliable*/,
-                                                      void* /*lpMessage*/, void* /*lpUserData*/)
+                                                      CgsNetwork::SignalMessage* /*lpMessage*/,
+                                                      s32 /*liToPlayerID*/, void* /*lpUserData*/)
     { /* BLOCKED: un-homed debug log sink */ }
 
     void CameraX360::_RequestResponseMessageArrivedCallback(CgsNetwork::ReliableMessage* /*lpMessage*/,
@@ -410,6 +446,38 @@ namespace BrnNetwork
     // =======================================================================
     void CameraX360::_AssertLayout()
     {
+        // Console offsets, pinned in a 32-bit build (inert on the 64-bit host).
+#define BRN_CAM_AT(type, member, off) \
+        static_assert(sizeof(void*) != 4 || offsetof(type, member) == off, #member " @ " #off)
+        BRN_CAM_AT(VideoPacket, maOverlapped,             0x410);
+        BRN_CAM_AT(VideoPacket, mbInUse,                  0x42C);
+        BRN_CAM_AT(RemotePlayerData, mXuid,               0x28);
+        BRN_CAM_AT(RemotePlayerData, miPlayerID,          0x34);
+        BRN_CAM_AT(RemotePlayerData, mLastVideoFrameTime, 0x40);
+        BRN_CAM_AT(RemotePlayerData, mDecodedTexture,     0x50);
+        BRN_CAM_AT(RemotePlayerData, mbFeedActive,        0x6C);
+        BRN_CAM_AT(RemotePlayerData, mStatusMessageSend,  0x70);
+        BRN_CAM_AT(RemotePlayerData, mStatusMessageRecv,  0x94);
+        BRN_CAM_AT(RemotePlayerData, mRequestMessageSend, 0xB8);
+        BRN_CAM_AT(RemotePlayerData, mResponseMessageSend, 0x110);
+        BRN_CAM_AT(RemotePlayerData, mResponseMessageRecv, 0x13C);
+        static_assert(sizeof(void*) != 4 || sizeof(RemotePlayerData) == 0x168, "sizeof(RemotePlayerData) == 0x168");
+        BRN_CAM_AT(CameraX360, mpStreamEngine,            0x43000);
+        BRN_CAM_AT(CameraX360, maRemotePlayers,           0x43008);
+        BRN_CAM_AT(CameraX360, mpNetworkManager,          0x43B48);
+        BRN_CAM_AT(CameraX360, mVDPSocket,                0x43B4C);
+        BRN_CAM_AT(CameraX360, mLocalCameraTexture,       0x43B50);
+        BRN_CAM_AT(CameraX360, mReceivedCameraTexture,    0x43B6C);
+        BRN_CAM_AT(CameraX360, miNumberActiveFeeds,       0x43B88);
+        BRN_CAM_AT(CameraX360, mRequestTimer,             0x43B8C);
+        BRN_CAM_AT(CameraX360, miRequestedPlayerID,       0x43B94);
+        BRN_CAM_AT(CameraX360, mpTextureCompressor,       0x43B98);
+        BRN_CAM_AT(CameraX360, miUserSetting,             0x43B9C);
+        BRN_CAM_AT(CameraX360, mbPrepared,                0x43BA0);
+        BRN_CAM_AT(CameraX360, mbFeedActiveAny,           0x43BA2);
+        static_assert(sizeof(void*) != 4 || sizeof(CameraX360) == 0x43BA8, "sizeof(CameraX360) == 0x43BA8");
+#undef BRN_CAM_AT
+
         // VideoPacket field order: the receive buffer precedes the overlapped, which precedes the
         // in-use flag.
         static_assert(offsetof(VideoPacket, maOverlapped) > offsetof(VideoPacket, maReceiveBuffer),

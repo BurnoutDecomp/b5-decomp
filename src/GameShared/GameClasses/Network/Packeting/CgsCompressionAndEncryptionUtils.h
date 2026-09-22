@@ -69,5 +69,26 @@ namespace CgsNetwork
                   Message** lpapSendMessages, s32 liNumSendMessages,
                   SignalMessage** lpapSignalMessages, s32 liNumSignalMessages,
                   u8* lpu8Buffer, s32 liMaxBytes, s32* lpiBytesPacked);
+
+        // One unpacked message slot handed to UnPack (layout not modelled yet).
+        struct RecvMessageData;
+
+        // Unpack a received packet from liPlayerID into the per-type receive slots and the
+        // signal-message array.
+        void UnPack(NetworkPlayerID liPlayerID, RecvMessageData* lpaRecvMessageData,
+                    s32 liNumRecvMessageData, SignalMessage** lpapSignalMessages,
+                    s32 liNumSignalMessages, u8* lpu8Buffer, s32 liBufferSize);
+
+        // Read the sending player's id out of a packed packet's header.
+        static NetworkPlayerID ExtractSendingPlayerID(u8* lpacBufferToUnPackFrom, s32 liBufferSize);
+
+    private:
+        void UpdateMaxBandwidth();
+        void UpdateBandwidthHistory();
+        void RecordBitsTransmitted(ESendRecv leSendRecv, NetworkPlayerID liPlayerID,
+                                   s32 leMessageType, s32 liBits);
+        s32  GetEntryIndex(NetworkPlayerID liPlayerID);
+
+        u8* mpu8TmpBuffer;   // +0x00
     };
 }

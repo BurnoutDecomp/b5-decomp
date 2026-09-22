@@ -87,5 +87,17 @@ namespace BrnNetwork
         DataEntry          maPlayers[KI_MAX_MARKED_MAN_PLAYERS];  // :110  (+0x000)
         BrnNetworkManager* mpNetworkManager;                      // :112  (+0x2BC)
         s32                miNumberOfPlayersFinishedMarking;      // :113  (+0x2C0)
+
+        // Console layout (0x2C4 bytes; the word after it inside BrnNetworkManager is alignment
+        // padding for the 8-byte-aligned state manager), pinned in a 32-bit build; inert on the
+        // x64 host. The record stride is 0x64 once MarkedManMessage reproduces its 0x30 console
+        // bytes; until then the manager is pinned relative to the message size.
+        static void _AssertLayout();
     };
+
+    inline void MarkedManManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || sizeof(DataEntry) == 4 + 2 * sizeof(MarkedManMessage), "DataEntry is the id plus two messages");
+        static_assert(sizeof(void*) != 4 || sizeof(MarkedManManager) == KI_MAX_MARKED_MAN_PLAYERS * sizeof(DataEntry) + 8, "MarkedManManager tail is 8 bytes");
+    }
 } // namespace BrnNetwork

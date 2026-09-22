@@ -24,36 +24,41 @@ void OnlineRoadRageModeScoring::Construct()
     }
 }
 
-// X360 @ 0x82314B28. Reset the per-slot team table to NONE and the per-slot finishing position to
-// 8 (== one past last of an 8-car field). Both are BASE (BaseOnlineModeScoring) members:
-// maePlayerTeams @ this+0x44 and maiPlayerPositions @ this+0x64 (written via SetPlayerPosition).
-bool OnlineRoadRageModeScoring::Prepare()
+// The same eight-slot zeroing as Construct (the console points both vtable slots at one body).
+void OnlineRoadRageModeScoring::Destruct()
 {
     for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
     {
-        maePlayerTeams[li] = GameStateModuleIO::E_PLAYER_TEAM_NONE;
-        SetPlayerPosition(li, KI_MAX_ACTIVE_RACE_CARS);
+        maiEliminationCount[li] = 0;
     }
-    return true;
 }
 
-// X360 @ 0x82314E68. Reset every per-slot scoring array to its cleared sentinel:
-//   maOnlineAwards[8]          (base +0x04) <- E_ONLINE_AWARD_INVALID (-1)
-//   maePlayerTeams[8]          (base +0x44) <- E_PLAYER_TEAM_NONE (0)
+// Nothing of its own: the base half resets the team table and the finishing positions.
+bool OnlineRoadRageModeScoring::Prepare()
+{
+    return BaseOnlineModeScoring::Prepare();
+}
+
+bool OnlineRoadRageModeScoring::Release()
+{
+    return BaseOnlineModeScoring::Release();
+}
+
+// Forwards to the base team-tracking pass (the console slot is the shared tail branch to
+// UpdatePlayerTeams).
+void OnlineRoadRageModeScoring::Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
+{
+    BaseOnlineModeScoring::Update(lpScoringSystem, liNumberOfCars);
+}
+
+// The base half (awards to INVALID, teams to NONE), then this scorer's own arrays:
 //   mbRedTeamWon                            <- false
 //   maiEliminationCount[8]                  <- 0
 //   maeBlueTeamFinishTypes[8]               <- 0x03030303 per slot (byte-fill with
 //                                              E_BLUE_TEAM_FINISH_TYPE_COUNT == 3; X360 stw 0x03030303)
 void OnlineRoadRageModeScoring::ClearData()
 {
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        maOnlineAwards[li] = E_ONLINE_AWARD_INVALID;
-    }
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        maePlayerTeams[li] = GameStateModuleIO::E_PLAYER_TEAM_NONE;
-    }
+    BaseOnlineModeScoring::ClearData();
 
     mbRedTeamWon = false;
 
@@ -67,31 +72,16 @@ void OnlineRoadRageModeScoring::ClearData()
                 sizeof(maeBlueTeamFinishTypes));
 }
 
-// X360 @ 0x82314EE0. Copy this scorer's per-slot arrays into the network output interface. The
-// X360 code is five unrolled 8-word copy loops + one scalar store; reconstructed as the equivalent
-// named array copies. Unlike the Burning-Home-Run override, the Road-Rage scorer also writes
-// maiNumEliminations[] (from maiEliminationCount[]), mbRedTeamWon and maeBlueTeamFinishTypes[].
+// The base half (award / award-variable / team tables), then this scorer's own
+// arrays. Unlike the other online scorers, Road Rage also writes maiNumEliminations[] (from
+// maiEliminationCount[]), mbRedTeamWon and maeBlueTeamFinishTypes[].
 //
 //   dst maiNumEliminations[8]   (+0x00) <- maiEliminationCount[8]   (this+0x88)
-//   dst maOnlineAwards[8]       (+0x20) <- maOnlineAwards[8]        (this+0x04, base)
-//   dst maiOnlineAwardVariables (+0x40) <- maiOnlineAwardVariables  (this+0x24, base)
-//   dst maePlayerTeam[8]        (+0x60) <- maePlayerTeams[8]        (this+0x44, base)
 //   dst maeBlueTeamFinishTypes  (+0x80) <- maeBlueTeamFinishTypes   (this+0xA8)
 //   dst mbRedTeamWon            (+0xA0) <- mbRedTeamWon             (this+0x84)
 void OnlineRoadRageModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput)
 {
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        lpOutput->maOnlineAwards[li]          = maOnlineAwards[li];
-    }
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        lpOutput->maiOnlineAwardVariables[li] = maiOnlineAwardVariables[li];
-    }
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        lpOutput->maePlayerTeam[li]           = maePlayerTeams[li];
-    }
+    BaseOnlineModeScoring::WriteDataToOutput(lpOutput);
 
     lpOutput->mbRedTeamWon = mbRedTeamWon;
 

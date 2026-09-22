@@ -47,7 +47,7 @@
 
 namespace BrnNetwork
 {
-    namespace BrnNetworkModuleIO { struct PostSimulationInputBuffer; class NetworkEventQueue; }
+    namespace BrnNetworkModuleIO { struct PostSimulationInputBuffer; struct NetworkEventQueue; }
 
     // The launch / soft-reboot data block handed to Prepare. Only the two fields the X360
     // Prepare reads are modelled (the requesting controller port @ +0x00 and the session-ID
@@ -90,7 +90,7 @@ namespace BrnNetwork
         // polls the Live notification listener for a freshly accepted cross-title invite and acts
         // on it. Called by BrnNetworkManager::ProcessAfterSimulation. lbProcessInvites (r6) gates
         // the invite handling; lbCanBlock (r7) + lfTimeStep (f1) forward to the base Update.
-        u32 Update(BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
+        u32 Update(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
                    bool lbProcessInvites, bool lbCanBlock, f32 lfTimeStep);
 
     protected:
@@ -98,8 +98,8 @@ namespace BrnNetwork
         // "show profile" event (type 13) through the platform leaf's ShowProfile and the
         // online/offline/join events (types 8/9/11) into a "buddy list updated" poke, then defer
         // to the game base ProcessEvent for every event.
-        virtual void ProcessNetworkQueue(const NetworkEventQueue* lpInQueue,
-                                         NetworkEventQueue* lpOutQueue) override;
+        virtual void ProcessNetworkQueue(const BrnNetworkModuleIO::NetworkEventQueue* lpInQueue,
+                                         BrnNetworkModuleIO::NetworkEventQueue* lpOutQueue) override;
 
     private:
         // X360 0x825700A8 -- begin a Live invite/join for the given launch parameters. If the

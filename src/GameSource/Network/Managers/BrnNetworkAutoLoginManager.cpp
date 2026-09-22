@@ -24,7 +24,8 @@
 #include "GameSource/Network/BrnNetworkManager.h"     // BrnNetworkManager
 #include "GameSource/Network/BrnServerInterface.h"    // BrnServerInterface (GetConnectionComponent / GetGameComponent / GetDownloadableConfigComponent)
 #include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h"
-#include "GameSource/Network/Managers/BrnNetworkStateManager.h"  // StateManager::HandleConnectEvent / GetConnectionStatus
+#include "GameSource/Network/Managers/BrnNetworkStateManager.h"  // StateManager::HandleConnectEvent / IsIdle
+#include "GameSource/Gui/BrnGuiDemangledEventTypes.h"            // BrnGui::GuiEventNetworkConnect
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"  // GameStateToNetworkInterface::GetCurrentGameMode
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
@@ -38,10 +39,6 @@ namespace BrnNetwork
         // sign-in" (X360 cmpwi 0xF / 0xE in UpdateWaitAutoLogin / UpdateConnecting).
         const s32 KI_NETWORK_LOGIN_STATE_SIGNING_IN = 14;   // 0xE
         const s32 KI_NETWORK_LOGIN_STATE_SIGNED_IN  = 15;   // 0xF
-
-        // The state manager's connection status the auto-login flow waits for before it will
-        // connect (X360 cmpwi 23 in UpdateWaitAutoLogin).
-        const s32 KI_STATE_MANAGER_STATUS_READY = 23;
 
         // The auto-login flow only disconnects when the current game mode is below this value
         // (X360 cmpwi 0xA against GetGameStateToNetworkInterface()'s current-game-mode field).
@@ -177,7 +174,7 @@ namespace BrnNetwork
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 
         if (mTimer.GetFloatVal() <= 0.0f
-            && lpNetworkManager->GetStateManager()->GetConnectionStatus() == KI_STATE_MANAGER_STATUS_READY)
+            && lpNetworkManager->GetStateManager()->IsIdle())
         {
             CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != nullptr,
                        "mpServerInterface->GetDownloadableConfigComponent()\n");
@@ -196,8 +193,7 @@ namespace BrnNetwork
             {
                 // (dev log) "NetworkRoadRulesManager::ProcessBeforeSimulation() - NOT logged in -
                 //            triggering signing in"
-                StateManager::ConnectEvent lConnectEvent;
-                lConnectEvent.mbTriggerSignIn = true;
+                const BrnGui::GuiEventNetworkConnect lConnectEvent(LoginManagerBase::E_SIGN_IN_TYPE_SILENT);
                 lpNetworkManager->GetStateManager()->HandleConnectEvent(&lConnectEvent);
             }
         }

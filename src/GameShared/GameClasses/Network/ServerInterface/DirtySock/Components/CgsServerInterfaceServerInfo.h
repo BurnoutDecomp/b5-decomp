@@ -2,6 +2,7 @@
 #define CGS_SERVER_INTERFACE_SERVER_INFO_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
 
 struct LobbyApiRefT;   // DirtySDK opaque lobby handle (vendor/dirtysdk/include/lobbyapi.h)
 
@@ -14,16 +15,8 @@ struct LobbyApiRefT;   // DirtySDK opaque lobby handle (vendor/dirtysdk/include/
 // for URLs (TOS, news, telemetry auth) and per-key config strings, and tracks news
 // freshness. Derives from CgsNetwork::ServerInterfaceComponent.
 //
-// ServerInterfaceComponent has no committed standalone header (it is defined inline
-// in CgsServerInterfaceComponent.cpp, another component TU). To stay member-by-name
-// without forking that type, the component's documented data layout is modelled here
-// as the leading members (matching the X360 ServerInterfaceComponent offsets used by
-// Construct/Prepare/Release):
-//   +0x00  vptr
-//   +0x04  mpErrorData    (const void*)  static error-string table pointer
-//   +0x08  miStatus       (s32)          2 == "no error"
-//   +0x0C  miLastError    (s32)
-// then this component's own members:
+// Layout: the ServerInterfaceComponent base (+0x00..+0x0F: vptr, mpcCurrentAction,
+// meStatus, miLastError), then this component's own members:
 //   +0x10  mpServerInterface  (ServerInterfaceDirtySock*)
 //   +0x14  mpGameNewsCallback (CgsLobbyGameNewsCallback)
 //   +0x18  mpGameNewsData     (void*)
@@ -43,7 +36,7 @@ namespace CgsNetwork
     //  *call* GetLobbyAPIRef -- e.g. this component's own .cpp -- includes that header.)
     struct ServerInterfaceDirtySock;
 
-    class ServerInterfaceServerInfo
+    class ServerInterfaceServerInfo : public ServerInterfaceComponent
     {
     public:
         // CgsServerInterfaceServerInfo.h:53
@@ -67,12 +60,15 @@ namespace CgsNetwork
 
         // Lifecycle (CgsServerInterfaceServerInfo.cpp).
         virtual void Construct();
+        // The console slot is the shared empty handler: server info reacts to no event.
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
         void Destruct();
         bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
         bool Release();
 
         // Queries.
         void GetTosUrl(char* lpcOut, s32 liOutLen);
+        void GetNewsUrl(char* lpcOut, s32 liOutLen);
         void GetTelemetryAuthString(char* lpcOut, s32 liOutLen);
         void GetStringFromClientConfig(const char* lpcKey, char* lpcOut, s32 liOutLen);
 
@@ -81,7 +77,7 @@ namespace CgsNetwork
         // OnAutoLogin for "ROAD_RULES_RESET_DATE"). Returns the parsed timestamp word that the
         // caller stores into a 4-byte network event payload. Declared-only here; the body lives
         // in this component's own .cpp.
-        s32 GetTimeStampFromClientConfig(const char* lpcKey);
+        u32 GetTimeStampFromClientConfig(const char* lpcKey);
 
         bool IsNewsUpdated() const;
 
@@ -90,11 +86,7 @@ namespace CgsNetwork
         // substituting the language code.
         void FindUrl(const char* lpcUrlKey, char* lpcOut, s32 liOutLen);
 
-        // --- ServerInterfaceComponent base layout (see header note) ---
-        const void* mpErrorData;        // +0x04
-        s32         miStatus;           // +0x08
-        s32         miLastError;        // +0x0C
-        // --- own members ---
+        // --- own members (after the ServerInterfaceComponent base, +0x00..+0x0F) ---
         ServerInterfaceDirtySock* mpServerInterface;   // +0x10
         CgsLobbyGameNewsCallback  mpGameNewsCallback;   // +0x14
         void*                     mpGameNewsData;        // +0x18

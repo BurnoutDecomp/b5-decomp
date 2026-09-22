@@ -15,8 +15,10 @@
 // SHAPE authoritative from the DecFIGS DWARF
 //   (references/DecFIGS/dwarfdump/.../BrnNetworkImageManager.h), gated against the X360 binary.
 // The X360 manager-`this` member offsets pin the trailing scalar block exactly:
-//   maMugshotData[8]   @ +0x028  (8 * 64-byte MugshotData stride)
-//   maImageData[7]     @ +0x208  (7 * 1144-byte ImageMessageData stride)
+//   maMugshotData[8]   @ +0x000  (8 * 64-byte MugshotData stride; Construct walks it from +0x28
+//                                  == the first record's aggressor id)
+//   maImageData[7]     @ +0x200  (7 * 1144-byte ImageMessageData stride; the messages sit at
+//                                  entry +0x8 and +0x240)
 //   mTakedownVictimPlayerID    @ +0x2148   (8520)
 //   mTakedownAggressorPlayerID @ +0x214C   (8524)
 //   meState                    @ +0x2150   (8528)  (Construct = 5 == E_..._STATE_COUNT)
@@ -35,8 +37,7 @@
 // This project targets SEMANTIC parity on the host (x64, 8-byte pointers/vtables), so the host
 // sizeof of NetworkTexture / ImageMessage / the debug component differs from the X360 widths;
 // members are accessed strictly BY NAME, which is stride-correct on either target. The X360
-// 64/1144 strides are documented from the asm only and intentionally NOT static_asserted on the
-// host. The committed CgsNetwork::NetworkTexture, BrnNetwork::ImageMessage and
+// 64/1144 strides are pinned in a 32-bit build only (_AssertLayout). The committed CgsNetwork::NetworkTexture, BrnNetwork::ImageMessage and
 // BrnNetwork::ImageManagerDebugComponent are reused BY NAME -- not forked.
 //
 // FUNCTION OWNERSHIP (this TU has 30 X360 functions):
@@ -49,6 +50,7 @@
 // ===================================================================================
 #pragma once
 
+#include <cstddef>                                                            // offsetof (_AssertLayout)
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                                // CgsID
@@ -62,11 +64,19 @@
 
 namespace CgsNetwork
 {
-    class PlayerManager;                 // pointer-only
-    class TimeManager;                   // pointer-only
+    struct PlayerManager;                 // pointer-only
+    struct TimeManager;                   // pointer-only
     class NetworkTextureDXTCompress;     // Construct param (pointer-only)
     struct ReliableMessage;              // _ImageMessageArrivedCallback param (committed home: CgsReliableMessage.h)
     struct SignalMessage;                // _ImageMessageDeliveredCallback param
+}
+
+namespace BrnGameState
+{
+    namespace GameStateModuleIO
+    {
+        struct OnlineRoundResults;       // HandleRoundResults param (home: BrnGameActions.h)
+    }
 }
 
 namespace BrnNetwork
@@ -77,11 +87,10 @@ namespace BrnNetwork
     {
         struct OutputBuffer;                 // ProcessBeforeSimulation / OutputMugshotData param
         struct PostSimulationInputBuffer;    // ProcessAfterSimulation param
+        struct NetworkEventQueue;            // ProcessNetworkEvents param
     }
 
     // Forward-only network event / message types touched through committed homes.
-    class  NetworkEventQueue;            // ProcessNetworkEvents param
-    struct OnlineRoundResults;           // HandleRoundResults param
     struct NetworkInPaybackMugshotEvent; // HandleMugshotEvent param
 
     // DWARF BrnNetworkImageManager.cpp:45 -- the reliable-message budget gate.
@@ -116,8 +125,8 @@ namespace BrnNetwork
         struct ImageMessageData
         {
             NetworkPlayerID mPlayerID;          // +0x000
-            ImageMessage    mImageMessageSend;  // +0x004
-            ImageMessage    mImageMessageRecv;  // (X360 +0x238 within the entry)
+            ImageMessage    mImageMessageSend;  // +0x008 (the message is 8-byte aligned)
+            ImageMessage    mImageMessageRecv;  // +0x240
         };
 
         // DWARF BrnNetworkImageManager.h:196 -- one player's reassembled mugshot picture + state.
@@ -153,7 +162,7 @@ namespace BrnNetwork
         CgsNetwork::NetworkTexture* GetPhotoFinishImageByRoundWinner(NetworkPlayerID lRoundWinnerID,
                                                                      bool* lpbIsPhotoFinish);               // @ 0x8254ACA0  // FLAG: declaration-only
         void OnRoundStart();                                          // @ 0x8255DC98  (bodied)
-        void HandleRoundResults(const OnlineRoundResults* lpResults); // @ 0x82573778  // FLAG: declaration-only
+        void HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpResults); // FLAG: declaration-only
 
     private:
         // ---- internals ------------------------------------------------------------------
@@ -162,7 +171,7 @@ namespace BrnNetwork
         ImageMessageData* GetImageMessageDataEntry(NetworkPlayerID lPlayerID);           // @ 0x8254A8B8 (DWARF GetImageMes)
         // @ 0x8254A9C8 -- local communications-privilege gate for mugshot exchange.
         EMugshotPrivilege CheckMugshotPrivilege();
-        void         ProcessNetworkEvents(const NetworkEventQueue* lpQueue);             // @ 0x8255DAB0  // FLAG: declaration-only (reaches VariableEventQueue<14000,16>)
+        void         ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue); // FLAG: declaration-only
         void         OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* lpOutput);      // @ 0x82564E38  // FLAG: declaration-only
         void         HandleMugshotEvent(const NetworkInPaybackMugshotEvent* lpEvent);    // @ 0x82555188  // FLAG: declaration-only
         void         AbortMugshotCapture();                                             // @ 0x825649A8  (bodied)
@@ -212,5 +221,23 @@ namespace BrnNetwork
         bool              mbAbortShowThisFrame;                     // X360 @ +0x2177
         bool              mbMugshotsEnabled;                        // X360 @ +0x2178
         ImageManagerDebugComponent mDebugComponent;                // X360 @ +0x217C
+
+        // Console layout (0x21D8 bytes), pinned in a 32-bit build; inert on the x64 host. The
+        // message record stride is 0x478 once ImageMessage reproduces its 0x238 console bytes;
+        // until then the offsets past maImageData are pinned relative to the record size.
+        static void _AssertLayout();
     };
+
+    inline void NetworkImageManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || sizeof(MugshotData) == 0x40, "MugshotData stride is 0x40");
+        static_assert(sizeof(void*) != 4 || offsetof(MugshotData, mReceivedPhotoPackets) == 0x20, "MugshotData::mReceivedPhotoPackets @ +0x20");
+        static_assert(sizeof(void*) != 4 || offsetof(ImageMessageData, mImageMessageSend) == 0x8, "ImageMessageData::mImageMessageSend @ +0x8");
+        static_assert(sizeof(void*) != 4 || sizeof(ImageMessageData) == 8 + 2 * sizeof(ImageMessage), "ImageMessageData is the id plus two messages");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, maImageData) == 0x200, "maImageData @ +0x200");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, mTakedownVictimPlayerID) == 0x200 + KI_MAX_IMAGE_PLAYERS * sizeof(ImageMessageData), "mTakedownVictimPlayerID follows maImageData");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, mRoadRuleBeatenID) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x18, "mRoadRuleBeatenID @ +0x2160");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkImageManager, mDebugComponent) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x34, "mDebugComponent @ +0x217C");
+        static_assert(sizeof(void*) != 4 || sizeof(NetworkImageManager) == offsetof(NetworkImageManager, mTakedownVictimPlayerID) + 0x90, "NetworkImageManager is 0x21D8 bytes");
+    }
 } // namespace BrnNetwork

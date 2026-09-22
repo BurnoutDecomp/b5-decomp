@@ -72,10 +72,7 @@ namespace BrnNetwork
     UpdateMessage& UpdateMessage::operator=(const UpdateMessage& lOther)
     {
         mePackOrUnpack     = lOther.mePackOrUnpack;       // +0x04 (lwz/stw)
-        muBitstreamCursor0 = lOther.muBitstreamCursor0;   // +0x08 (lwz/stw)
-        muBitstreamCursor1 = lOther.muBitstreamCursor1;   // +0x0C (lwz/stw)
-        muBitstreamCursor2 = lOther.muBitstreamCursor2;   // +0x10 (lwz/stw)
-        muBitstreamCursor3 = lOther.muBitstreamCursor3;   // +0x14 (lwz/stw)
+        mBitstream         = lOther.mBitstream;           // +0x08..+0x14 (four word copies)
         mu8GameID          = lOther.mu8GameID;            // +0x18 (lbz/stb)
         mx8Flags           = lOther.mx8Flags;             // +0x19 (lbz/stb)
         mi8Type            = lOther.mi8Type;              // +0x1A (lbz/stb)

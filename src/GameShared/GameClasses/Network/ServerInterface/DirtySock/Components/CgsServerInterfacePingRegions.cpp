@@ -20,20 +20,20 @@ namespace CgsNetwork
 {
 
 ServerInterfacePingRegions::ServerInterfacePingRegions()
-    : miField_D8(0)
-    , miField_DC(0)
-    , mpPingManager(0)
+    : mpServerInterface(0)
+    , mpPingManagerRefT(0)
+    , mpHostAddress(0)
     , miCurrentRegion(0)
-    , miField_E8(-1)
-    , miField_EC(2)
-    , miField_F0(1)
+    , miPingRequest(-1)
+    , meState(E_STATE_COUNT)
+    , meCurrentAction(E_ACTION_COUNT)
 {
     // Per the X360 init (Construct @ 0x8287C8A8): every region ping starts at -1.
     // The full field initialisation (error-data ptr / status word, etc.) is performed by the
     // ServerInterfacePingRegions::Construct virtual, reconstructed in its own TU.
     for (s32 liRegion = 0; liRegion < KI_MAX_PING_REGIONS; ++liRegion)
     {
-        maRegionPings[liRegion] = -1;
+        maiPingResults[liRegion] = -1;
     }
 }
 
@@ -46,7 +46,7 @@ s32 ServerInterfacePingRegions::GetPingValue(s32 liRegion) const
     CGS_ASSERT(liRegion >= 0, "liRegion >= 0");
     CGS_ASSERT(liRegion < miCurrentRegion, "liRegion < miCurrentRegion");
 
-    return maRegionPings[liRegion];   // this+0x10+liRegion*4
+    return maiPingResults[liRegion];
 }
 
 }

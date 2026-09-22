@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::StateManager::CurrentPlayerXUIDs::SetXUID  @ 0x82542540
@@ -15,8 +16,7 @@
 
 namespace BrnNetwork
 {
-    StateManager::CurrentPlayerXUIDs*
-    StateManager::CurrentPlayerXUIDs::SetXUID(s32 liPlayerId, u64 lqXUID)
+    void StateManager::CurrentPlayerXUIDs::SetXUID(s32 liPlayerId, u64 lqXUID)
     {
         s32 liSlot = 0;
         while (maSlots[liSlot].miPlayerId != KI_FREE_SLOT)
@@ -24,17 +24,15 @@ namespace BrnNetwork
             if (++liSlot >= KI_NUM_SLOTS)
             {
                 CGS_ASSERT(false, "No free slots!\n");
-                return this;
+                return;
             }
         }
 
         maSlots[liSlot].miPlayerId = liPlayerId;   // stw r4, 0(slot)
         maSlots[liSlot].mu64XUID   = lqXUID;        // std r5, 8(slot)
-        return this;
     }
 
-    StateManager::CurrentPlayerXUIDs*
-    StateManager::CurrentPlayerXUIDs::GetXUID(s32 liPlayerId, u64* lpXUID)
+    void StateManager::CurrentPlayerXUIDs::GetXUID(s32 liPlayerId, u64* lpXUID)
     {
         CGS_ASSERT(lpXUID != 0, "lpXUID");
 
@@ -44,31 +42,25 @@ namespace BrnNetwork
             if (++liSlot >= KI_NUM_SLOTS)
             {
                 CGS_ASSERT(false, "Couldn't find player!\n");
-                return this;
+                return;
             }
         }
 
         *lpXUID = maSlots[liSlot].mu64XUID;          // ld 8(slot); std 0(lpXUID)
-        return this;
     }
 
-    // BrnNetwork::StateManager::TeamSelectionFinishedCallback @ 0x82549870
+    // StateManager::TeamSelectionFinishedCallback
     //
-    // Menu-flow completion callback fired when team selection has finished. The X360 body
-    // guards its two arguments then advances the state manager's state machine to 12:
-    //   - result handle non-null, else the streamed assert "Team selection has failed somehow\n"
-    //     (the BeginAssert + BasePriorityQueue::Clear + off_82000D00 StrStream-into-buffer
-    //     inlining collapses to one CGS_ASSERT per project convention);
-    //   - lpStateManager non-null, else CGS_ASSERT(..., "lpStateManager") (cpp:5663);
-    //   - then `stw 12, 0x90(lpStateManager)` sets miState = 12.
-    // The asserts are non-fatal, so the state store runs on every path. Returns the result
-    // handle it was passed (r3 preserved as the callback's return value).
-    void* StateManager::TeamSelectionFinishedCallback(void* lpResult, StateManager* lpStateManager)
+    // Completion callback handed to the team-selection flow. Asserts that selection
+    // succeeded and that the user data is the state manager, then moves the state machine
+    // on to the car-select wait. The asserts are non-fatal, so the store runs on every path.
+    void StateManager::TeamSelectionFinishedCallback(bool lbSuccess, void* lpUserData)
     {
-        CGS_ASSERT(lpResult != nullptr, "Team selection has failed somehow\n");
+        CGS_ASSERT(lbSuccess, "Team selection has failed somehow\n");
+
+        StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         CGS_ASSERT(lpStateManager != nullptr, "lpStateManager");
 
-        lpStateManager->miState = 12;   // stw r11(=0xC), 0x90(r27)
-        return lpResult;
+        lpStateManager->meState = E_STATE_WAIT_CAR_SELECT;
     }
 } // namespace BrnNetwork

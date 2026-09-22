@@ -33,6 +33,8 @@
 //     assert send>=0; stw send@0x20; assert recv>=0; stw recv@0x24;
 //     type/frame/gameID as above; Message::PrepareNack(type,frame,gameID).
 // All members are referenced by name through the committed base layout.
+//
+// PackOrUnpack (header-carrying field list) is bodied here as well.
 
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsSignalMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -85,5 +87,20 @@ namespace CgsNetwork
         const u8  lu8GameID = lpMessage->GetGameID();
 
         Message::PrepareNack(liType, lu16Frame, lu8GameID);
+    }
+
+    // A signal carries the header of the message it acknowledges, so every base scalar
+    // travels: the game id and flag byte as full u8s, the type in
+    // [0, E_MESSAGE_TYPE_COUNT], the frame in [0, 65534], then both player ids in
+    // [-1, 0x7FFFFFFF]. Each field's status is OR-accumulated.
+    PackOrUnpackResult SignalMessage::PackOrUnpack()
+    {
+        PackOrUnpackResult lxResult = PackOrUnpackU8(this, &mu8GameID, 0, 0xFF);
+        lxResult = PackOrUnpackU8(this, &mx8Flags, 0, 0xFF) | lxResult;
+        lxResult = static_cast<PackOrUnpackResult>(
+                       Message::PackOrUnpack(&mi8Type, 0, KI_E_MESSAGE_TYPE_COUNT)) | lxResult;
+        lxResult = PackOrUnpackU16(this, &mu16Frame, 0, 0xFFFE) | lxResult;
+        lxResult = PackOrUnpackInt(this, &mSendingPlayerID, -1, 0x7FFFFFFF) | lxResult;
+        return PackOrUnpackInt(this, &mRecvingPlayerID, -1, 0x7FFFFFFF) | lxResult;
     }
 } // namespace CgsNetwork

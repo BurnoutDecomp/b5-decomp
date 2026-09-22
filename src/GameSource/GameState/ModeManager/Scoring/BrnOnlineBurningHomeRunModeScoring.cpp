@@ -34,20 +34,42 @@ struct ComparisonData
     // +0x23 (1) implicit tail pad -> 36-byte (0x24) stride
 };
 
-// X360 @ 0x82315650. Push this scorer's three online-result arrays into the network output
-// interface. Unlike the base WriteDataToOutput (which also writes maiNumEliminations[]), this
-// Burning-Home-Run override copies only the award id / award variable / player team arrays.
-// The X360 code is three unrolled 8-word copy loops (src this+0x04/0x24/0x44 -> dst +0x20/0x40/0x60);
-// reconstructed as the equivalent named array copies (each KI_MAX_ACTIVE_RACE_CARS == 8 wide).
+// ---- lifecycle ----------------------------------------------------------------------------------
+// Forwarders to the base halves; the console's vtable points Prepare / Release / ClearData / Update /
+// WriteDataToOutput at the shared folded bodies and Construct / Destruct at an empty function.
+void OnlineBurningHomeRunModeScoring::Construct()
+{
+}
+
+void OnlineBurningHomeRunModeScoring::Destruct()
+{
+}
+
+bool OnlineBurningHomeRunModeScoring::Prepare()
+{
+    return BaseOnlineModeScoring::Prepare();
+}
+
+bool OnlineBurningHomeRunModeScoring::Release()
+{
+    return BaseOnlineModeScoring::Release();
+}
+
+void OnlineBurningHomeRunModeScoring::ClearData()
+{
+    BaseOnlineModeScoring::ClearData();
+}
+
+void OnlineBurningHomeRunModeScoring::Update(const ScoringSystem* lpScoringSystem, s32 liNumActiveCars)
+{
+    BaseOnlineModeScoring::Update(lpScoringSystem, liNumActiveCars);
+}
+
+// The award id / award variable / player team arrays only; maiNumEliminations[] is Road Rage's.
 void
 OnlineBurningHomeRunModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput)
 {
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        lpOutput->maOnlineAwards[li]          = maOnlineAwards[li];
-        lpOutput->maiOnlineAwardVariables[li] = maiOnlineAwardVariables[li];
-        lpOutput->maePlayerTeam[li]           = maePlayerTeams[li];
-    }
+    BaseOnlineModeScoring::WriteDataToOutput(lpOutput);
 }
 
 // X360 @ 0x823156C0. qsort comparator that ranks two cars for the Burning-Home-Run finishing order.

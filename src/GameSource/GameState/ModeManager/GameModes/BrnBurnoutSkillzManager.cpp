@@ -136,27 +136,6 @@ static const s32 KI_ACTION_UPDATE_PLAYER_SKILLS_SIZE = 68;
 // The "road-rule beaten" net event (type 169 / 0x18 bytes): the beaten road id quadword.
 struct RoadRuleBeatenNetEvent { u64 mu64RoadID; u8 maPad[0x18 - 8]; };
 
-// The received-road-rules queue (NetworkToGameStateInterface::RoadRulesReceivedQueue). The console
-// reads the entry count at +0x08 and reaches the idx-th RoadRulesRecvData (264 bytes) via
-// BrnNetwork::RoadRulesRecvDa(queue, idx). Modelled here as the count + a contiguous entry array
-// (the console stride is sizeof(RoadRulesRecvData) == 264). No declared shape exists for the queue
-// header, so the two leading words are opaque storage; the count + entries are console-attested.
-struct RoadRulesRecvQueueView
-{
-    u8                            maHeader[0x08]; // +0x00 opaque queue header
-    s32                           miCount;        // +0x08 received-entry count
-    s32                           miPad0C;        // +0x0C padding to the entry array
-    BrnNetwork::RoadRulesRecvData maEntries[1];   // +0x10 first entry (flexible run)
-};
-
-// Address of the idx-th received road-rules entry (the console BrnNetwork::RoadRulesRecvDa helper).
-static const BrnNetwork::RoadRulesRecvData*
-RoadRulesRecvQueueGetEntry(const GameStateModuleIO::NetworkToGameStateInterface* lpQueue, s32 liIndex)
-{
-    const RoadRulesRecvQueueView* lpView = reinterpret_cast<const RoadRulesRecvQueueView*>(lpQueue);
-    return &lpView->maEntries[liIndex];
-}
-
 // ----------------------------------------------------------------------------
 // Construct.
 // ----------------------------------------------------------------------------
@@ -841,18 +820,15 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
 // merging each remote player's scores into our records and kicking skill updates.
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
-    const GameStateModuleIO::NetworkToGameStateInterface* lpRoadRulesRecvQueue)
+    const GameStateModuleIO::NetworkToGameStateInterface::RoadRulesReceivedQueue* lpRoadRulesRecvQueue)
 {
     CGS_ASSERT(lpRoadRulesRecvQueue, "lpRoadRulesRecvQueue");
 
-    // The interface front-loads a count (console *(queue+8)); each entry is a RoadRulesRecvData.
-    const RoadRulesRecvQueueView* lpQueueView =
-        reinterpret_cast<const RoadRulesRecvQueueView*>(lpRoadRulesRecvQueue);
-
-    for (s32 liEntry = 0; liEntry < lpQueueView->miCount; ++liEntry)
+    // The received road-rules queue sits at +0x0 of the network interface; the console tests its
+    // length (+0x8 of the queue header) and takes a whole-record copy of each entry.
+    for (s32 liEntry = 0; liEntry < lpRoadRulesRecvQueue->GetLength(); ++liEntry)
     {
-        BrnNetwork::RoadRulesRecvData lRecvData;
-        std::memcpy(&lRecvData, RoadRulesRecvQueueGetEntry(lpRoadRulesRecvQueue, liEntry), 264);
+        const BrnNetwork::RoadRulesRecvData lRecvData = lpRoadRulesRecvQueue->GetEvent(liEntry);
 
         if (lRecvData.miNumRoadRulesScoresRecv > 0)
         {
@@ -1033,7 +1009,7 @@ void BurnoutSkillzManager::PreWorldUpdate(
 
     ProcessGameEventInputQueuePreWorld(lpInput->GetGameEventQueue(), lpOutput->GetGameActionQueue(),
                                        leLocalPlayerActiveRaceCarIndex);
-    UpdateLobbyRoadRulesScores(lpInput->GetNetworkToGameStateInterface());
+    UpdateLobbyRoadRulesScores(lpInput->GetNetworkToGameStateInterface()->GetRoadRulesReceivedQueue());
 
     // Flush a buffered road score (unless we are leaving the lobby).
     if (!lbExitingFreeburnLobby && mBufferedScoreChallengeIndex != -1)

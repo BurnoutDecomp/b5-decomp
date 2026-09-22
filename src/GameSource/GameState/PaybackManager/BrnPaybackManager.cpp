@@ -451,16 +451,13 @@ namespace BrnGameState
         CGS_ASSERT(lpInput, "lpInput");
         CGS_ASSERT(lpInput->GetNetworkToGameStateInterface(),
                    "lpInput->GetNetworkToGameStateInterface()");
+        CGS_ASSERT(lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue(),
+                   "lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue()");
 
-        // FLAG parked: NetworkToGameStateInterface::GetDirtyTrickQueue and GameStateToGuiInterface::
-        // AddDirtyTrickEnding are both declared with no body anywhere in the tree, so the whole drain
-        // below cannot be linked yet. The body is kept intact behind this gate; delete the gate when
-        // those two land.
-        const CgsModule::EventQueue<BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent, 28>* lpDirtyTrickQueue = 0;
-        if (lpDirtyTrickQueue == 0)
-        {
-            return;
-        }
+        // The inbound queue is the network interface's own dirty-trick queue (console +0x2268 of
+        // the interface). The loop re-reads its length every pass, as the console does.
+        const GameStateModuleIO::NetworkToGameStateInterface::DirtyTrickQueue* lpDirtyTrickQueue =
+            lpInput->GetNetworkToGameStateInterface()->GetDirtyTrickQueue();
 
         for (s32 liIndex = 0; liIndex < lpDirtyTrickQueue->GetLength(); ++liIndex)
         {

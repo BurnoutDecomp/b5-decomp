@@ -19,15 +19,14 @@
 //                                   i.e. mpNetworkManager->GetPlayerManager() != null at +120)
 //   mpTimeManager       @ +1288   (a1[322]; SendPlayerFinishedRoundMessage reads frame/start-frame)
 //
-// X360-vs-DWARF ORDER DIVERGENCE (rung 1 arbitrates): the PS3 DWARF lists mfCountDownTimer
-// BEFORE the three manager pointers, but the X360 asm places the pointers immediately after
-// maStandingsData (module @ +1280, manager @ +1284, timeManager @ +1288). The remaining scalar
-// state (mfCountDownTimer / meCountdownState / mbLocalPlayerFinished) therefore follows the
-// pointers in the X360 build; they are ordered that way below. This project targets SEMANTIC
-// parity on the host (x64, 8-byte pointers), so the host sizeof of StandingsData and the manager
-// differ from the X360 layout; every member is accessed strictly BY NAME (stride-correct on
-// either target). The 160-byte StandingsData stride is documented from the X360 asm only and is
-// intentionally NOT static_asserted.
+// REFERENCE DIVERGENCE (the console build arbitrates): the reference declaration lists
+// mfCountDownTimer BEFORE the three manager pointers and meCountdownState / mbLocalPlayerFinished
+// after them, but the console places the pointers immediately after maStandingsData (module @
+// +1280, manager @ +1284, timeManager @ +1288) and no console function touches anything past
+// +0x50C. The console object is 0x50C bytes; the word before the traffic manager
+// (BrnNetworkManager +0x6AFC) is alignment padding for that 16-byte-aligned neighbour. The
+// countdown state is not in this build. On the x64 host every member is accessed strictly BY
+// NAME; the console sizes are pinned in a 32-bit build only (_AssertLayout).
 //
 // StandingsData layout (X360, from ClearStandingsData @ 0x82545278 / AddPlayer @ 0x82550980 /
 // _RoundFinishedMessageArrivedCallback @ 0x82545530 / HandlePlayerFinishedMode @ 0x82550BB8):
@@ -61,6 +60,8 @@
 // ===================================================================================
 #pragma once
 
+#include <cstddef>                                                    // offsetof (_AssertLayout)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"            // BrnNetwork::NetworkPlayerID
@@ -77,7 +78,7 @@ namespace BrnGameState
 
 namespace CgsNetwork
 {
-    class  TimeManager;        // pointer-only (DWARF h:206)
+    struct TimeManager;        // pointer-only
     struct ReliableMessage;    // _RoundFinishedMessageArrivedCallback param (committed in CgsReliableMessage.h)
     struct SignalMessage;      // _RoundFinishedMessageDeliveredCallback param
 }
@@ -151,6 +152,8 @@ namespace BrnNetwork
         bool          Prepare();
         bool          Release();
         void          Destruct();
+        // Per-frame tick. BrnNetworkManager::ProcessBeforeSimulation calls it with its
+        // disk-read-error flag; the console body is an empty (folded) function.
         void          Update(bool lbDiskEjected);
         void          AddPlayer(NetworkPlayerID lPlayerID);
         void          RemovePlayer(NetworkPlayerID lPlayerID);
@@ -205,8 +208,18 @@ namespace BrnNetwork
         BrnNetworkModule*          mpNetworkModule;                 // X360 @ +1280 (a1[320])
         BrnNetworkManager*         mpNetworkManager;                // X360 @ +1284 (a1[321])
         CgsNetwork::TimeManager*   mpTimeManager;                   // X360 @ +1288 (a1[322])
-        f32                        mfCountDownTimer;                // DWARF :203 (after the pointers on X360)
-        ECountDownState            meCountdownState;                // DWARF :207
-        bool                       mbLocalPlayerFinished;           // DWARF :208
+
+        // Console layout (0x50C bytes), pinned in a 32-bit build; inert on the x64 host. The
+        // record stride is 0xA0 once PlayerFinishedRoundMessage reproduces its 0x40 console
+        // bytes; until then the manager is pinned relative to the record size.
+        static void _AssertLayout();
     };
+
+    inline void StandingsManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(StandingsData, mFinishTime) == 2 * sizeof(PlayerFinishedRoundMessage), "StandingsData::mFinishTime follows the two messages");
+        static_assert(sizeof(void*) != 4 || sizeof(StandingsData) == 2 * sizeof(PlayerFinishedRoundMessage) + 0x20, "StandingsData tail is 0x20 bytes");
+        static_assert(sizeof(void*) != 4 || offsetof(StandingsManager, mpNetworkModule) == KI_MAX_PLAYERS * sizeof(StandingsData), "mpNetworkModule follows maStandingsData");
+        static_assert(sizeof(void*) != 4 || sizeof(StandingsManager) == KI_MAX_PLAYERS * sizeof(StandingsData) + 0x0C, "StandingsManager tail is three pointers");
+    }
 } // namespace BrnNetwork

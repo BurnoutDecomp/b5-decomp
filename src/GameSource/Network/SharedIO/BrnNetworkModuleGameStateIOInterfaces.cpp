@@ -18,6 +18,84 @@ namespace BrnNetwork
 {
     namespace BrnNetworkModuleIO
     {
+        // Copy assignment (called by BrnNetworkModule::ProcessAfterSimulation). The console body
+        // is the implicit member-wise copy: the dirty-trick queue's operator= (length reset, then
+        // Append of the other queue's live events), then the mapping table, the eight
+        // free-burn-challenge flags, the game mode and the two state bytes, in member order.
+        GameStateToNetworkInterface& GameStateToNetworkInterface::operator=(const GameStateToNetworkInterface& lOther)
+        {
+            mDirtyTrickQueue.Clear();
+            mDirtyTrickQueue.Append(lOther.mDirtyTrickQueue);
+
+            for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
+            {
+                maMapping[li] = lOther.maMapping[li];
+            }
+            for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
+            {
+                mabPlayersInFreeburnChallenge[li] = lOther.mabPlayersInFreeburnChallenge[li];
+            }
+            meCurrentGameMode    = lOther.meCurrentGameMode;
+            mbIsInOnlineGameMode = lOther.mbIsInOnlineGameMode;
+            mbIsInCarSelect      = lOther.mbIsInCarSelect;
+            return *this;
+        }
+
+        // Copy assignment (called by BrnNetworkModule::ProcessBeforeSimulation). The console body
+        // is the implicit member-wise copy with each queue's operator= inlined as a length reset
+        // followed by an Append of the other queue's live events, then the frame counter.
+        NetworkToGameStateInterface& NetworkToGameStateInterface::operator=(const NetworkToGameStateInterface& lOther)
+        {
+            mRoadRulesReceivedQueue.Clear();
+            mRoadRulesReceivedQueue.Append(lOther.mRoadRulesReceivedQueue);
+            mRoadRulesDownloadedQueue.Clear();
+            mRoadRulesDownloadedQueue.Append(lOther.mRoadRulesDownloadedQueue);
+            mLocalRoadRulesDownloadedQueue.Clear();
+            mLocalRoadRulesDownloadedQueue.Append(lOther.mLocalRoadRulesDownloadedQueue);
+            mCompletedChallengesQueue.Clear();
+            mCompletedChallengesQueue.Append(lOther.mCompletedChallengesQueue);
+            mDirtyTrickEventQueue.Clear();
+            mDirtyTrickEventQueue.Append(lOther.mDirtyTrickEventQueue);
+            miNetworkFrameSinceStart = lOther.miNetworkFrameSinceStart;
+            return *this;
+        }
+
+        // No out-of-line console body: every owner (the network module and its post-simulation
+        // input buffer) inlines it as the dirty-trick queue's Construct followed by a call to
+        // the out-of-line Clear.
+        void GameStateToNetworkInterface::Construct()
+        {
+            mDirtyTrickQueue.Construct();
+            Clear();
+        }
+
+        // No out-of-line console body: OutputBuffer::Construct inlines it as the five queue
+        // Constructs (in this order, not member order) and a zero frame counter.
+        void NetworkToGameStateInterface::Construct()
+        {
+            mDirtyTrickEventQueue.Construct();
+            mRoadRulesDownloadedQueue.Construct();
+            mLocalRoadRulesDownloadedQueue.Construct();
+            mRoadRulesReceivedQueue.Construct();
+            mCompletedChallengesQueue.Construct();
+            miNetworkFrameSinceStart = 0;
+        }
+
+        // Merge another interface onto this one: assert the source, append its dirty-trick
+        // queue first, then the other four queues in member order (no length reset, so this
+        // interface's own events stay in front), then take its frame counter.
+        void NetworkToGameStateInterface::Append(const NetworkToGameStateInterface* lpCopyFrom)
+        {
+            CGS_ASSERT(lpCopyFrom != nullptr, "lpCopyFrom");
+
+            mDirtyTrickEventQueue.Append(lpCopyFrom->mDirtyTrickEventQueue);
+            mRoadRulesReceivedQueue.Append(lpCopyFrom->mRoadRulesReceivedQueue);
+            mRoadRulesDownloadedQueue.Append(lpCopyFrom->mRoadRulesDownloadedQueue);
+            mLocalRoadRulesDownloadedQueue.Append(lpCopyFrom->mLocalRoadRulesDownloadedQueue);
+            mCompletedChallengesQueue.Append(lpCopyFrom->mCompletedChallengesQueue);
+            miNetworkFrameSinceStart = lpCopyFrom->miNetworkFrameSinceStart;
+        }
+
         // @ 0x82362528 -- reset the interface to empty. Drops every queued dirty-trick event
         // (mDirtyTrickQueue.miLength = 0; the asm writes the queue's +8 length word directly),
         // clears the mode/online/car-select state, and sets every mapping row to "none" (-1/-1)

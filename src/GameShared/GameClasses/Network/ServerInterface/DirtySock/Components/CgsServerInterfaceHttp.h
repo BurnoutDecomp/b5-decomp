@@ -32,7 +32,7 @@
 
 namespace CgsNetwork
 {
-    class ServerInterfaceDirtySock;       // forward; pointer member only
+    struct ServerInterfaceDirtySock;      // forward; pointer member only
     namespace DirtySock { struct ProtoHttpRefT; }
 
     class ServerInterfaceHttp : public ServerInterfaceComponent
@@ -67,8 +67,19 @@ namespace CgsNetwork
         void StartHttpsDownload(const char* lpcUrl, s32 liBufferSize, s16 li16TimeoutMs);
         u8*  GetHttpsDownloadBuffer();
         void DestroyHttpsDownload();
+        void StopHttpDownload();
+
+        // --- component overrides and lifecycle ---
+        virtual void Construct();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        void Destruct();
+        bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
+        bool Release();
+        void Update();
 
     private:
+        void EndAction(s32 liError);
+
         ServerInterfaceDirtySock*    mpServerInterface;       // +0x10
         EAction                      meCurrentAction;          // +0x14
         DirtySock::ProtoHttpRefT*    mpHttp;                   // +0x18

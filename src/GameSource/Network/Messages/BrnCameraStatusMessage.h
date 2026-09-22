@@ -24,18 +24,10 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"  // CgsNetwork::Message (committed base)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // BrnNetwork::ECameraStatus (its one home)
 
 namespace BrnNetwork
 {
-    // DWARF BrnCameraStatusMessage.h:48 -- the advertised camera-feed status.
-    enum ECameraStatus
-    {
-        E_CAMERA_STATUS_NONE      = 0,
-        E_CAMERA_STATUS_AVAILABLE = 1,
-        E_CAMERA_STATUS_IN_USE    = 2,
-        E_CAMERA_STATUS_COUNT     = 3,
-    };
-
     struct CameraStatusMessage : public CgsNetwork::Message
     {
         // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
@@ -43,10 +35,12 @@ namespace BrnNetwork
         void          Destruct();
         void          PrepareForSend(u16 lu16CurrentFrame, ECameraStatus leCameraStatus);
         bool          Retrieve(ECameraStatus* lpeCameraStatus);
-        virtual s32   GetPackedMessageSize();   // DWARF :149 (sibling .cpp)
+        // Message-table entries (the base carries the table pointer, so these are plain
+        // methods; a C++ vtable would add a second pointer and break the 36-byte span).
+        s32           GetPackedMessageSize();
 
         // LEDGER func @ 0x827DE0B8 -- bodied in this TU (DWARF BrnCameraStatusMessage.h:90).
-        virtual const char* GetName() const;
+        const char*   GetName() const;
 
     protected:
         CgsNetwork::PackOrUnpackResult PackOrUnpack();

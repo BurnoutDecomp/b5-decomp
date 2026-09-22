@@ -45,6 +45,63 @@ BaseOnlineModeScoring::GetCurrentPlayerTeam(s32 liRaceCarIndex)
     return maePlayerTeams[liRaceCarIndex];
 }
 
+// ---- shared halves of the pure-virtual lifecycle ------------------------------------------------
+// The derived overrides call these by qualified name. The console inlines each into its callers and
+// folds the identical results, so every derived vtable slot that only forwards here points at one
+// shared body.
+
+// Every slot back to no team and to position 8 (one past the last of an eight-car field).
+bool BaseOnlineModeScoring::Prepare()
+{
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        maiPlayerPositions[liSlot] = KI_MAX_ACTIVE_RACE_CARS;
+        maePlayerTeams[liSlot]     = GameStateModuleIO::E_PLAYER_TEAM_NONE;
+    }
+    return true;
+}
+
+bool BaseOnlineModeScoring::Release()
+{
+    return true;
+}
+
+// Awards back to INVALID, teams back to NONE. The award variables and the positions are left alone.
+void BaseOnlineModeScoring::ClearData()
+{
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        maOnlineAwards[liSlot] = E_ONLINE_AWARD_INVALID;
+    }
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        maePlayerTeams[liSlot] = GameStateModuleIO::E_PLAYER_TEAM_NONE;
+    }
+}
+
+void BaseOnlineModeScoring::Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
+{
+    UpdatePlayerTeams(lpScoringSystem, liNumberOfCars);
+}
+
+// The award, award-variable and team tables into the output (+0x20 / +0x40 / +0x60). The eliminations
+// block at +0x00 is the road-rage scorer's to write.
+void BaseOnlineModeScoring::WriteDataToOutput(OnlineScoringOutputInterface* lpOutput)
+{
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        lpOutput->maOnlineAwards[liSlot] = maOnlineAwards[liSlot];
+    }
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        lpOutput->maiOnlineAwardVariables[liSlot] = maiOnlineAwardVariables[liSlot];
+    }
+    for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
+    {
+        lpOutput->maePlayerTeam[liSlot] = maePlayerTeams[liSlot];
+    }
+}
+
 // ---- per-field tie-break comparators ------------------------------------------------------------
 // Each derived qsort comparator chains these helpers together and folds ONE decisive comparison into
 // the running *lpiResult, but only while *lpiResult is still 0 (so the first non-zero comparison in

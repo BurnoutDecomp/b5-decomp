@@ -4,6 +4,7 @@
 
 #include "GameSource/BurnoutConstants.h"                                          // ::EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                        // BrnNetwork::NetworkPlayerID (s32), BrnNetwork::Road::ChallengeIndex
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // NetworkToGameStateInterface::RoadRulesReceivedQueue (UpdateLobbyRoadRulesScores param)
 #include "SharedClasses/StreetData/BrnChallengeData.h"                            // BrnStreetData::{ChallengeData, ChallengePlayerScoreEntry, ScoreType}
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"           // BrnStreetData::ChallengeHighScoreEntry
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"        // BrnGameState::BurnoutSkillzData
@@ -142,7 +143,7 @@ private:
                            EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex);
 
     // BrnBurnoutSkillzManager.h:169 / X360 0x8233A668
-    void UpdateLobbyRoadRulesScores(const GameStateModuleIO::NetworkToGameStateInterface* lpRoadRulesRecvQueue);
+    void UpdateLobbyRoadRulesScores(const GameStateModuleIO::NetworkToGameStateInterface::RoadRulesReceivedQueue* lpRoadRulesRecvQueue);
 
     // BrnBurnoutSkillzManager.h:176 / X360 0x82345740
     void ProcessNetworkRoadRulePB(GameStateModuleIO::GameActionQueue* lpActionQueue,

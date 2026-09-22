@@ -33,7 +33,7 @@
 #include "GameSource/Network/BrnNetworkModule.h"                    // BrnNetworkModule::GetNetworkManager / GetNetworkEventQueue
 #include "GameSource/Network/BrnNetworkManager.h"                   // BrnNetworkManager::OnAutoLoginProcessComplete
 #include "GameSource/Network/BrnServerInterfaceBase.h"              // GetCustomCommandsComponent / GetDownloadableConfigComponent / GetStatus
-#include "GameSource/Network/BrnNetworkModuleIO.h"                  // BrnNetworkModuleIO::PostSim, PostSimulationInputBuffer, NetworkEventQueue
+#include "GameSource/Network/BrnNetworkModuleIO.h"                  // PostSimulationInputBuffer, NetworkEventQueue
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h" // UploadEventScoreData
 #include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h" // GetEventScoreUploadRetryInterval
 #include "GameSource/Network/Parameters/BrnNetworkEventScoreData.h" // EventScoreData
@@ -71,21 +71,6 @@ namespace BrnNetwork
 
     namespace
     {
-        // The BrnNetworkModuleIO::NetworkEventQueue accessor/PostSim return are typed against an
-        // incomplete forward; the concrete queue is the 14000/16 variable-event queue (same pattern
-        // as BrnNetworkPlayer.cpp's AsConcreteQueue).
-        typedef CgsModule::VariableEventQueue<14000, 16> NetworkEventQueueConcrete;
-
-        inline const NetworkEventQueueConcrete* AsConcreteQueue( const BrnNetworkModuleIO::NetworkEventQueue* lpQueue )
-        {
-            return reinterpret_cast<const NetworkEventQueueConcrete*>( lpQueue );
-        }
-
-        inline NetworkEventQueueConcrete* AsConcreteQueue( BrnNetworkModuleIO::NetworkEventQueue* lpQueue )
-        {
-            return reinterpret_cast<NetworkEventQueueConcrete*>( lpQueue );
-        }
-
         // ---- network-event payloads (queue protocol; private to this manager) -------------------
         // The score-leaderboard event posted per scored event (type 0x38). Layout from the X360
         // ProcessNetworkEvents call site @ 0x82561678: ld 0(event)=eventID, lwz 0x8(event)=gameMode,
@@ -220,7 +205,7 @@ namespace BrnNetwork
     void EventScoresManager::ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput )
     {
         CGS_ASSERT( lpInput != nullptr, "lpInput" );
-        ProcessNetworkEvents( AsConcreteQueue( BrnNetworkModuleIO::PostSim( lpInput ) ) );
+        ProcessNetworkEvents( lpInput->GetNetworkEventQueue() );
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -243,7 +228,7 @@ namespace BrnNetwork
     // Walk the inbound network-event queue: store each score-leaderboard event for upload (gated on
     // the DLC/entitlement capability flags) and absorb the persisted non-uploaded-scores snapshot.
     // ---------------------------------------------------------------------------------------------
-    void EventScoresManager::ProcessNetworkEvents( const CgsModule::VariableEventQueue<14000, 16>* lpNetworkEventQueue )
+    void EventScoresManager::ProcessNetworkEvents( const BrnNetworkModuleIO::NetworkEventQueue* lpNetworkEventQueue )
     {
         CGS_ASSERT( lpNetworkEventQueue != nullptr, "lpNetworkEventQueue" );
 
@@ -455,7 +440,7 @@ namespace BrnNetwork
                         "lpEventScoresManager->mpNetworkModule" );
             CGS_ASSERT( lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue() != nullptr,
                         "lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue()" );
-            AsConcreteQueue( lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue() )->AddEvent(
+            lpEventScoresManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>( &lUploadedScoresEvent ),
                 KI_NETEVENT_UPLOADED_SCORES, KI_UPLOADED_SCORES_PAYLOAD_SIZE );
 

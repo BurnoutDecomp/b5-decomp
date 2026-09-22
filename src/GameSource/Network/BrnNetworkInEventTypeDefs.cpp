@@ -1,50 +1,44 @@
 #include "GameSource/Network/BrnNetworkInEventTypeDefs.h"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::GetIndexes    @ 0x823A6350
-//   BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::GetVariations @ 0x823A63B8
-//   BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::GetScoreboard @ 0x823A6420
-//     (each called by BrnGame::BrnGameModule::TranslateGuiEventsToNetworkEvents and the
-//      matching BrnNetwork::ScoreboardDebugComponent builder)
-//
-// Three factory builders for the select-scoreboard IN-event. Each takes one non-negative
-// selection value (asserted >= 0) and writes EXACTLY two 32-bit words into the constructed
-// event: its own value field plus the meSelectType discriminator (2 / 3 / 4). The remaining
-// value fields are deliberately left unwritten -- the X360 bodies emit only the two `stw`
-// stores per builder, so the other fields are not initialised here either.
+#include <cstddef>   // offsetof
+
+// NetworkInSelectScoreboardEvent's three out-of-line selectors. Each asserts its heading is
+// non-negative, then stores exactly two words: its own heading and meType. The other headings
+// keep whatever the caller left there (Prepare()'s KI_INVALID_HEADING in the GUI bridge, stack
+// contents in the scoreboard debug component).
 
 namespace BrnNetwork
 {
 namespace BrnNetworkModuleIO
 {
-    NetworkInSelectScoreboardEvent NetworkInSelectScoreboardEvent::GetIndexes(s32 liCategory)
+    void NetworkInSelectScoreboardEvent::_AssertLayout()
+    {
+        static_assert(offsetof(NetworkInSelectScoreboardEvent, miCategory) == 0x00, "miCategory @+0x00");
+        static_assert(offsetof(NetworkInSelectScoreboardEvent, miIndex) == 0x04, "miIndex @+0x04");
+        static_assert(offsetof(NetworkInSelectScoreboardEvent, miVariation) == 0x08, "miVariation @+0x08");
+        static_assert(offsetof(NetworkInSelectScoreboardEvent, meType) == 0x0C, "meType @+0x0C");
+        static_assert(sizeof(NetworkInSelectScoreboardEvent) == 16, "queued as 16 bytes");
+    }
+
+    void NetworkInSelectScoreboardEvent::GetIndexes(s32 liCategory)
     {
         CGS_ASSERT(liCategory >= 0, "liCategory >= 0");
-
-        NetworkInSelectScoreboardEvent lEvent;
-        lEvent.miCategory   = liCategory;            // stw r30, 0(this)
-        lEvent.meSelectType = E_SELECT_INDEXES;       // li r11, 2; stw r11, 0xC(this)
-        return lEvent;
+        miCategory = liCategory;
+        meType     = E_TYPE_GET_INDEX;
     }
 
-    NetworkInSelectScoreboardEvent NetworkInSelectScoreboardEvent::GetVariations(s32 liIndex)
+    void NetworkInSelectScoreboardEvent::GetVariations(s32 liIndex)
     {
         CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-
-        NetworkInSelectScoreboardEvent lEvent;
-        lEvent.miIndex      = liIndex;                // stw r30, 4(this)
-        lEvent.meSelectType = E_SELECT_VARIATIONS;    // li r11, 3; stw r11, 0xC(this)
-        return lEvent;
+        miIndex = liIndex;
+        meType  = E_TYPE_GET_VARIATION;
     }
 
-    NetworkInSelectScoreboardEvent NetworkInSelectScoreboardEvent::GetScoreboard(s32 liVariation)
+    void NetworkInSelectScoreboardEvent::GetScoreboard(s32 liVariation)
     {
         CGS_ASSERT(liVariation >= 0, "liVariation >= 0");
-
-        NetworkInSelectScoreboardEvent lEvent;
-        lEvent.miVariation  = liVariation;            // stw r30, 8(this)
-        lEvent.meSelectType = E_SELECT_SCOREBOARD;    // li r11, 4; stw r11, 0xC(this)
-        return lEvent;
+        miVariation = liVariation;
+        meType      = E_TYPE_GET_SCOREBOARD;
     }
 }
 } // namespace BrnNetwork

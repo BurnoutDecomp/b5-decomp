@@ -5,7 +5,7 @@
 #include <cstddef>   // offsetof
 #include "GameShared/GameClasses/Network/Buddies/DirtySock/X360/CgsBuddyManagerDirtySockX360.h"  // CgsNetwork::BuddyManagerX360 (real base)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                                          // CgsSystem::Time (embedded by value)
-#include "GameSource/Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.h"             // BrnNetwork::BuddyManagerDebugComponent (embedded by value), NetworkEventQueue
+#include "GameSource/Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.h"             // BrnNetwork::BuddyManagerDebugComponent (embedded by value), BrnNetworkModuleIO::NetworkEventQueue
 #include "GameSource/GameState/BrnCgsPlayerName.h"                                                // CgsNetwork::PlayerName (16B; the base buddy-query type)
 
 // ===========================================================================
@@ -83,6 +83,10 @@ namespace BrnNetwork
         virtual CgsNetwork::EBuddyErrorCodes Disconnect();
         void Update(bool lbCanBlock, f32 lfTimeStep);
 
+        // The first virtual this class adds (vtable +0x80 of the leaf, just before
+        // ProcessNetworkQueue at +0x84). The leaf's slot holds an empty (folded) body.
+        virtual void OnLeaveGame();
+
     protected:
         virtual void BuddyListHasChanged();
 
@@ -93,8 +97,8 @@ namespace BrnNetwork
         // ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU): the body is homed in this base's own
         // TU; declared here so the X360 override (which calls through this slot via the vtable)
         // matches the base virtual signature.
-        virtual void ProcessNetworkQueue(const NetworkEventQueue* lpInQueue,
-                                         NetworkEventQueue* lpOutQueue);
+        virtual void ProcessNetworkQueue(const BrnNetworkModuleIO::NetworkEventQueue* lpInQueue,
+                                         BrnNetworkModuleIO::NetworkEventQueue* lpOutQueue);
 
         BrnNetworkModule* GetNetworkModule() { return mpNetworkModule; }
 
@@ -109,8 +113,8 @@ namespace BrnNetwork
         void StartInvite(BrnNetworkModuleIO::InviteOrJoinParams lInviteOrJoinParams);
 
     private:
-        void SendEmptyBuddyInformation(NetworkEventQueue* lpEventQueue);
-        void SendBuddyInformation(NetworkEventQueue* lpEventQueue);
+        void SendEmptyBuddyInformation(BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue);
+        void SendBuddyInformation(BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue);
         void GetServerFriends();
         void UploadServerFriends();
         void GetBuddiesToAddAndRemoveFromServer(CgsNetwork::PlayerName* lpaPlayerNamesToAdd,

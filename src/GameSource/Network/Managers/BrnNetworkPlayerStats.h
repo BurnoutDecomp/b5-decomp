@@ -26,6 +26,7 @@
 #include "BrnCommonTypes.h"                                   // s32 / f32
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"      // CgsSystem::Time
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (operator++ range check)
 
 namespace BrnNetwork
 {
@@ -134,6 +135,14 @@ namespace BrnNetwork
         // +130..132 trailing pad to 4-byte alignment (struct size == 132)
     };
 
-    // DWARF BrnNetworkPlayerStats.h:218 -- post-increment over the stat-value enum.
-    NetworkPlayerStats::EStatsValue operator++(NetworkPlayerStats::EStatsValue& leValue, int);
+    // Post-increment over the stat-value enum. Header-inline:
+    // Clear carries the range check at its loop tail.
+    inline NetworkPlayerStats::EStatsValue operator++(NetworkPlayerStats::EStatsValue& leEnumIndex, int)
+    {
+        const NetworkPlayerStats::EStatsValue leOldEnumIndex = leEnumIndex;
+        leEnumIndex = static_cast<NetworkPlayerStats::EStatsValue>(static_cast<s32>(leEnumIndex) + 1);
+        CGS_ASSERT(leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT,
+                   "leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT");
+        return leOldEnumIndex;
+    }
 }

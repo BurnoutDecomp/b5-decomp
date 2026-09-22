@@ -4,6 +4,10 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+#include "lobbylogin.h"   // LobbyLoginRefT, LobbyLoginContextE, LobbyLoginStatusE (callback shapes)
+
+struct LobbyApiRefT;
+struct LobbyApiMsgT;
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceConnection
@@ -34,7 +38,7 @@
 
 namespace CgsNetwork
 {
-    class ServerInterfaceDirtySock;   // forward; pointer member only
+    struct ServerInterfaceDirtySock;  // forward; pointer member only
 
     class ServerInterfaceConnection : public ServerInterfaceComponent
     {
@@ -81,7 +85,17 @@ namespace CgsNetwork
         // BrnNetwork::LoginManagerBase::UpdateLoggingIn.
         ELoginStatus GetLoginStatus();
         bool IsLoggedIn() const;
+        bool IsFirstLogin() const;
+        bool IsConnectedToNetworkService() const;
         void DisconnectFromServer();
+
+        // --- component overrides and lifecycle ---
+        virtual void Construct();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        void Destruct();
+        bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
+        bool Release();
+        void Update();
 
         // ADDITIVE GROW (CgsNetworkAdapterX360 group): the owning DirtySock server
         // interface (== mpServerInterface, the +0x10 member). CgsNetwork::NetworkAdapterX360
@@ -110,6 +124,19 @@ namespace CgsNetwork
         void AgreeShareInfo(bool lbAgreeShare1, bool lbAgreeShare2);
 
     private:
+        void EndAction(s32 liError);
+        // Maps a lobby-login alert (the DirtySDK login-alert enum, not modelled yet, so an
+        // s32 here) for the current action onto an EServerInterfaceError.
+        EServerInterfaceError ConvertError(s32 liLoginAlert, EAction leAction);
+
+        // DirtySDK callbacks registered by address (user data = the component).
+        static void ServerConnectCallback(LobbyLoginRefT* lpLoginRef, LobbyLoginContextE leContext,
+                                          LobbyLoginStatusE leStatus, void* lpUserData);
+        static void ServerLoginCallback(LobbyLoginRefT* lpLoginRef, LobbyLoginContextE leContext,
+                                        LobbyLoginStatusE leStatus, void* lpUserData);
+        static void ConnStatusCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        static void DefaultCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+
         ServerInterfaceDirtySock* mpServerInterface;   // +0x10
         EAction                   meCurrentAction;       // +0x14
         s32                       miConnectCallback;     // +0x18

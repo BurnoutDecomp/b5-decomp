@@ -438,7 +438,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
 // state, and unregister every message type.
 bool NetworkPlayer::Release()
 {
-    mpPlayerManager->GetReliableMessageManager().ClearPlayersSendReliableMessages(mPlayerID);
+    mpPlayerManager->mReliableMessageManager.ClearPlayersSendReliableMessages(mPlayerID);
 
     mPlayerID        = KI_INVALID_PLAYER_ID;
     mpNetworkAdapter = nullptr;
@@ -515,7 +515,7 @@ void NetworkPlayer::SendMessages()
     // We are "in our send window" if it is our round-robin turn OR the connection is up.
     bool lbCanSendToPlayer = false;
     if (lpPlayerManager->IsPlayerTurnToSendRoundRobinMessage(liPlayerID, true, 0) ||
-        lpPlayerManager->GetConnectionStatus(liPlayerID) != KI_CONNECTION_STATUS_CONNECTED)
+        lpPlayerManager->mConnectionManager.GetConnectionStatus(liPlayerID) != KI_CONNECTION_STATUS_CONNECTED)
     {
         lbCanSendToPlayer = true;
     }
@@ -566,7 +566,7 @@ void NetworkPlayer::SendMessages()
             // the serialised connection blob (mConnectionData[0] != 0).
             if (!mbNetworkPlayerPaused && ConnectionDataIsLive(mConnectionData))
             {
-                lpPlayerManager->GetReliableMessageManager().AddBufferedReliableMessage(
+                lpPlayerManager->mReliableMessageManager.AddBufferedReliableMessage(
                     mPlayerID, lpMsg, maSendMessageData[liIndex].miLength);
             }
             lpMsg->SetMessageInvalid();
@@ -590,7 +590,7 @@ void NetworkPlayer::SendMessages()
     CgsDev::PerfMonCpu::StartMonitor(s_iNetworkPlayerResendReliablePM);
     CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
 
-    ReliableMessageManager& lReliableManager = mpPlayerManager->GetReliableMessageManager();
+    ReliableMessageManager& lReliableManager = mpPlayerManager->mReliableMessageManager;
     s32 liResendIndex = lReliableManager.GetNextReliableMessageToResend(
         mPlayerID, mu16CurrentFrame, -1);
     while (liResendIndex != -1)

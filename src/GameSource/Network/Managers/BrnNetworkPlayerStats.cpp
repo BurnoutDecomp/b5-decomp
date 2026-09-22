@@ -44,3 +44,25 @@ BrnNetwork::NetworkPlayerStats::operator=(const NetworkPlayerStats& lOther)
 
     return *this;
 }
+
+namespace BrnNetwork
+{
+    // Empty record: no name, every stat 0 and typed as a plain number, a zero timestamp, not prepared,
+    // not calculated, not the local player, no player id.
+    void NetworkPlayerStats::Clear()
+    {
+        macName[0] = 0;
+
+        for (EStatsValue leValue = E_STATS_VALUE_START; leValue < E_STATS_VALUE_COUNT; leValue++)
+        {
+            maiValues[leValue]   = 0;
+            maeStatType[leValue] = E_STAT_TYPE_NUMBER;
+        }
+
+        mTimeStamp       = 0.0f;
+        meStatsStatus    = E_STATS_AGE_UNPREPARED;
+        mbIsCalulated    = false;
+        mbIsLocalPlayer  = false;
+        mNetworkPlayerID = -1;
+    }
+}

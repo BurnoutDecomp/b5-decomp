@@ -51,13 +51,14 @@
 //     +0x3C  meVideoFrameState       s32   (0 idle / 1 first-frame / 2 timed; +0x3C == S+60)
 //     +0x40  mLastVideoFrameTime     CgsSystem::Time (8B; S+64)
 //     +0x44  mLastReceiveTime        CgsSystem::Time (8B; S+72)
-//     +0x50  mDecodedTexture         CgsNetwork::NetworkTexture (28B X360; S+80)
-//     +0x6C  mStatusMessageSend      BrnNetwork::CameraStatusMessage (36B; S+108? see note)
-//     ...    the four reliable messages + the request/response pair follow (S+60/96/132/176/
-//            220/264 in ResetRemotePlayers' Construct calls); the message bodies live in their
-//            committed sibling TUs and are embedded BY NAME here.
+//     +0x50  mDecodedTexture         CgsNetwork::NetworkTexture (28 bytes; S+80)
 //     +0x6C  mbFeedActive            bool  (S+108: a remote feed is currently being received)
 //     +0x6D  mbFeedRequested         bool  (S+109: our feed request has been accepted)
+//     +0x70  mStatusMessageSend / +0x94 Recv      CameraStatusMessage (0x24 each)
+//     +0xB8  mRequestMessageSend / +0xE4 Recv     CameraRequestMessage (0x2C each)
+//     +0x110 mResponseMessageSend / +0x13C Recv   CameraRequestResponseMessage (0x2C each)
+//     (ResetRemotePlayers constructs the six messages at these offsets; the constructor
+//     stores their message-table pointers at the same places.)
 //
 //   After the table (this + 277320 == 0x43B48):
 //     +277320 (0x43B48)  mpNetworkManager   BrnNetworkManager*
@@ -73,6 +74,11 @@
 //     +277408 (0x43BA0)  mbPrepared              bool
 //     +277409 (0x43BA1)  mbGameEnabled           bool
 //     +277410 (0x43BA2)  mbFeedActiveAny         bool   (any remote feed currently active)
+//   sizeof == 0x43BA8 (8-byte alignment from mXuid). BrnNetworkManager reserves 0x43C20 for it
+//   because the texture compressor that follows is 128-byte aligned.
+//
+// The constructor is compiler-generated: it only default-constructs the per-slot timers,
+// the request timer and the message-table pointers of the six per-slot messages.
 //
 // The X360 byte offsets are 32-bit-pointer/Xenon layout facts; on a 64-bit host the embedded
 // NetworkTexture / message sub-objects and the pointers widen, so the absolute offsets are NOT
@@ -98,13 +104,14 @@
 #include "GameSource/Network/Messages/BrnCameraStatusMessage.h"           // CameraStatusMessage
 #include "GameSource/Network/Messages/BrnCameraRequestMessage.h"          // CameraRequestMessage
 #include "GameSource/Network/Messages/BrnCameraRequestResponseMessage.h"  // CameraRequestResponseMessage
-#include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"      // NetworkTextureDXTCompress + CompressCallback
+#include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"      // NetworkTextureDXTCompress + CompressionCompleteCallback
 
 namespace CgsMemory { class HeapMalloc; }
 
 namespace CgsNetwork
 {
     struct ReliableMessage;
+    struct SignalMessage;       // pointer-only (delivered-callback arg)
 }
 
 namespace BrnNetwork
@@ -161,14 +168,14 @@ namespace BrnNetwork
             CgsSystem::Time               mLastVideoFrameTime;    // +0x40
             CgsSystem::Time               mLastReceiveTime;       // +0x48
             CgsNetwork::NetworkTexture    mDecodedTexture;        // +0x50
-            CameraStatusMessage           mStatusMessageSend;     // (ResetRemotePlayers +60)
-            CameraStatusMessage           mStatusMessageRecv;     // (ResetRemotePlayers +96)
-            CameraRequestMessage          mRequestMessageSend;    // (ResetRemotePlayers +132)
-            CameraRequestMessage          mRequestMessageRecv;    // (ResetRemotePlayers +176)
-            CameraRequestResponseMessage  mResponseMessageSend;   // (ResetRemotePlayers +220)
-            CameraRequestResponseMessage  mResponseMessageRecv;   // (ResetRemotePlayers +264)
             bool                          mbFeedActive;           // +0x6C (== S+108)
             bool                          mbFeedRequested;        // +0x6D (== S+109)
+            CameraStatusMessage           mStatusMessageSend;     // +0x70
+            CameraStatusMessage           mStatusMessageRecv;     // +0x94
+            CameraRequestMessage          mRequestMessageSend;    // +0xB8
+            CameraRequestMessage          mRequestMessageRecv;    // +0xE4
+            CameraRequestResponseMessage  mResponseMessageSend;   // +0x110
+            CameraRequestResponseMessage  mResponseMessageRecv;   // +0x13C
         };
 
         // X360 0x8258B410 -- latch the manager + compressor, placement-construct the local /
@@ -229,6 +236,12 @@ namespace BrnNetwork
         // X360 0x825977C0 -- GetCameraPicture(miRequestedPlayerID).
         CgsNetwork::NetworkTexture* GetRequestedCameraPicture();
 
+        // Select whose feed to watch (the manager's server-interface events and the state
+        // manager call it). A change first releases the feed requested from the previous
+        // player; a local player or -1 is latched at once, a remote player only when it owns
+        // a feed slot, with the request timer stamped from the manager's current time.
+        void RequestFeed(s32 liPlayerID);
+
         // X360 0x82587390 -- the local camera availability/status (0 none / 1 available /
         // 2 in-use / 3 connecting) advertised to the lobby.
         s32 GetLocalCameraStatus();
@@ -240,7 +253,7 @@ namespace BrnNetwork
         // DECLARATION-ONLY (depends on the un-homed XCamGetStatus + stream-engine geometry).
         s32 GetCompressedLocalCameraPicture(
             CgsNetwork::NetworkTexture* lpDstTexture,
-            CgsNetwork::NetworkTextureDXTCompress::CompressCallback lCompleteCallback,
+            CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback lCompleteCallback,
             void* lpCompleteData);
 
         // X360 0x82587370 -- store the user's camera on/off setting.
@@ -257,7 +270,9 @@ namespace BrnNetwork
                                                     s32 liFromPlayerID,
                                                     void* lpCamera);
         static void _RequestMessageDeliveredCallback(bool lbDelivered, bool lbWasReliable,
-                                                      void* lpMessage, void* lpUserData);
+                                                      CgsNetwork::SignalMessage* lpMessage,
+                                                      s32 liToPlayerID,
+                                                      void* lpUserData);
         static void _RequestResponseMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
                                                             s32 liFromPlayerID,
                                                             void* lpCamera);

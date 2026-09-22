@@ -19,15 +19,15 @@
 // LAYOUT (X360 asm @ 0x8287C8A8 Construct + @ 0x82877968 GetPingValue + @ 0x8287CC18
 // HandlePingResults), after the 4-word Component base:
 //     +0x00  (Component base: vptr / mpcCurrentAction / meStatus / miLastError)
-//     +0x10  maRegionPings[KI_MAX_PING_REGIONS]   -- per-region ping values; ctor fills -1
-//     +0xD8  miField_D8        (s32)   ctor stores 0
-//     +0xDC  miField_DC        (s32)   ctor stores 0
-//     +0xE0  mpPingManager     (void*) ctor stores 0; a refcounted callback object
-//                                       (HandlePingResults calls its vtable slot +0xC, frees it)
-//     +0xE4  miCurrentRegion   (s32)   ctor stores 0; the count of regions filled so far
-//     +0xE8  miField_E8        (s32)   ctor stores -1
-//     +0xEC  miField_EC        (s32)   ctor stores 2
-//     +0xF0  miField_F0        (s32)   ctor stores 1
+//     +0x10  maiPingResults[KI_MAX_PING_REGIONS] -- per-region ping values; ctor fills -1
+//     +0xD8  mpServerInterface  (Prepare stores its argument)
+//     +0xDC  mpPingManagerRefT  (Prepare stores the PingManagerCreate result)
+//     +0xE0  mpHostAddress      (the pending ProtoNameAsync lookup; HandlePingResults
+//                                calls its free slot +0xC)
+//     +0xE4  miCurrentRegion    (the count of regions filled so far)
+//     +0xE8  miPingRequest      (ctor stores -1)
+//     +0xEC  meState            (ctor stores 2 == E_STATE_COUNT, idle)
+//     +0xF0  meCurrentAction    (ctor stores 1 == E_ACTION_COUNT, idle)
 //
 // KI_MAX_PING_REGIONS == 0x32 (50) is grounded in HandlePingResults
 // (@ 0x8287CC18: `cmpwi miCurrentRegion, 0x32` -- the "miCurrentRegion < KI_MAX_PING_REGIONS"
@@ -41,11 +41,32 @@
 // StartPingRegions / ...) are declared for layout fidelity but bodied in their own TUs.
 // ===========================================================================
 
+// DirtySDK handles (vendor SDK, global namespace like LobbyApiRefT).
+struct LobbyApiRefT;
+struct LobbyApiMsgT;
+struct HostentT;
+
 namespace CgsNetwork
 {
+    struct ServerInterfaceDirtySock;
+    namespace DirtySock { struct PingManagerRefT; }
+
     class ServerInterfacePingRegions : public ServerInterfaceComponent
     {
     public:
+        enum EAction
+        {
+            E_ACTION_PING_REGIONS = 0,
+            E_ACTION_COUNT        = 1,
+        };
+
+        enum EState
+        {
+            E_STATE_RESOLVING = 0,
+            E_STATE_PINGING   = 1,
+            E_STATE_COUNT     = 2,
+        };
+
         // CgsServerInterfacePingRegions.h -- max number of ping regions (asm literal 0x32).
         static const s32 KI_MAX_PING_REGIONS = 50;
 
@@ -69,16 +90,31 @@ namespace CgsNetwork
         // and calls StartPingRegions once the DirtySock interface reports idle). Declared-only
         // here; the body lives in this component's own (DirtySock) TU.
         void StartPingRegions();
+        void StopPingRegions();
+
+        // --- component overrides and lifecycle ---
+        virtual void Construct();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        void Destruct();
+        bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
+        bool Release();
+        void Update();
 
     private:
-        s32   maRegionPings[KI_MAX_PING_REGIONS];   // +0x10 (50 words; ctor fills -1)
-        s32   miField_D8;                           // +0xD8
-        s32   miField_DC;                           // +0xDC
-        void* mpPingManager;                        // +0xE0
-        s32   miCurrentRegion;                      // +0xE4
-        s32   miField_E8;                           // +0xE8
-        s32   miField_EC;                           // +0xEC
-        s32   miField_F0;                           // +0xF0
+        void EndAction(s32 liError);
+        bool ResolveRegion(s32 liRegion);
+        void HandlePingResults(s32 liRegion);
+        // PingManager result callback: (host address, ping, user data = the component).
+        static void PingManagerCallback(void* lpAddress, u32 luPing, void* lpUserData);
+
+        s32                         maiPingResults[KI_MAX_PING_REGIONS];   // +0x10 (ctor fills -1)
+        ServerInterfaceDirtySock*   mpServerInterface;                     // +0xD8
+        DirtySock::PingManagerRefT* mpPingManagerRefT;                     // +0xDC
+        HostentT*                   mpHostAddress;                         // +0xE0
+        s32                         miCurrentRegion;                       // +0xE4
+        s32                         miPingRequest;                         // +0xE8
+        EState                      meState;                               // +0xEC
+        EAction                     meCurrentAction;                       // +0xF0
     };
 }
 

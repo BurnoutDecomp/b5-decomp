@@ -22,29 +22,31 @@
 //   mpPlayerManager              @ +12112
 //   mpTimeManager               @ +12116
 //   mbAreWeInOnlineGame          @ +12120  (the "are we live" gate ProcessBefore/After check)
-// (X360 stride proof: AggressiveDrivingData == mPlayerID(4) + 2 AggressiveDrivingMessage +
-//  AggressiveMoveData maBuffer[10] (80B stride, @ +912 within the entry) + miBufferCount
-//  (@ +1712 within the entry); 7 * 1728 == 12096 places mfNoImpactTime at +12096.) This
-//  project targets SEMANTIC parity on the host (x64, 8-byte vtable pointers), so the host
-//  sizeof of AggressiveDrivingMessage differs from the X360 454-byte half; members are
-//  accessed strictly BY NAME, which is stride-correct on either target. The 1728/912/1712
-//  strides are documented from the X360 asm only and intentionally NOT static_asserted.
+// (Console stride proof, Construct / AddPlayer: AggressiveDrivingData == mPlayerID(4) + pad to the
+//  16-byte-aligned send message @ +0x10, recv message @ +0x1D0 (0x1C0 bytes each), the
+//  AggressiveMoveData maBuffer[10] (80B stride, @ +912 within the entry) and miBufferCount
+//  (@ +1712 within the entry), padded to 1728; 7 * 1728 == 12096 places mfNoImpactTime at
+//  +12096; the object is 0x2F60 bytes.) Members are accessed strictly BY NAME; the console
+//  strides are pinned in a 32-bit build only (_AssertLayout).
 //
 // FUNCTION OWNERSHIP: all 17 functions in this TU are bodied in the sibling .cpp.
 // ===================================================================================
 #pragma once
 
+#include <cstddef>                                                 // offsetof (_AssertLayout)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::NetworkPlayerID, EActiveRaceCarIndex
+#include "GameSource/CompilerDefines/gameshared_network_defines.h"       // KI_MAX_NETWORK_PLAYERS
 #include "GameSource/Network/Messages/BrnAggressiveDrivingMessage.h" // AggressiveDrivingMessage, AggressiveMoveData
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::ImpactEvent
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent
 
 namespace CgsNetwork
 {
-    class PlayerManager;   // pointer-only (DWARF h:145)
-    class TimeManager;     // pointer-only (DWARF h:146)
+    struct PlayerManager;   // pointer-only
+    struct TimeManager;     // pointer-only
 }
 
 namespace BrnNetwork
@@ -66,9 +68,6 @@ namespace BrnNetwork
     const s32 KI_MAX_NUMBER_OF_AGGRESSIVE_MOVE_SENDS = 3;
     const f32 KF_BATTLING_IMPACT_DELAY               = 8.0f;
     const s32 KI_CONSECUTIVE_IMPACTS_FOR_BATTLING    = 5;
-    // The player-table width (the X360 asserts spell KI_MAX_NETWORK_PLAYERS; the manager loops
-    // run 7 times). Modelled locally (no committed shared home), mirroring the DirtyTrick sibling.
-    const s32 KI_MAX_NETWORK_PLAYERS = 7;
 
     struct NetworkAggressiveDrivingManager
     {
@@ -77,11 +76,15 @@ namespace BrnNetwork
         struct AggressiveDrivingData
         {
             NetworkPlayerID          mPlayerID;                    // +0x000 (DWARF :132)
-            AggressiveDrivingMessage mAggressiveDrivingMessageSend; // +0x004 (DWARF :133)
-            AggressiveDrivingMessage mAggressiveDrivingMessageRecv; // (DWARF :134)
+            AggressiveDrivingMessage mAggressiveDrivingMessageSend; // +0x010
+            AggressiveDrivingMessage mAggressiveDrivingMessageRecv; // +0x1D0
             AggressiveMoveData       maBuffer[KI_MAX_PLAYER_AGGRESSIVE_MOVES_BUFFER]; // X360 @ +912 (DWARF :136)
             s32                      miBufferCount;                // X360 @ +1712 (DWARF :137)
         };
+
+        // The C++ constructor (called from BrnNetworkManager's constructor): member construction
+        // only (the per-slot messages and their move arrays). Distinct from Construct().
+        NetworkAggressiveDrivingManager();
 
         // ---- lifecycle / per-frame API (bodied in this TU) -------------------------
         void Construct(BrnNetworkModule* lpNetworkModule,
@@ -121,5 +124,19 @@ namespace BrnNetwork
         CgsNetwork::PlayerManager* mpPlayerManager;                            // X360 @ +12112
         CgsNetwork::TimeManager*   mpTimeManager;                              // X360 @ +12116
         bool                  mbAreWeInOnlineGame;                             // X360 @ +12120
+
+        // Console layout, pinned in a 32-bit build; inert on the x64 host. The record stride is
+        // 0x6C0 once AggressiveDrivingMessage reproduces its 0x1C0 console bytes; until then the
+        // records are pinned relative to the message size.
+        static void _AssertLayout();
     };
+
+    inline void NetworkAggressiveDrivingManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(AggressiveDrivingData, mAggressiveDrivingMessageSend) == 0x10, "AggressiveDrivingData::mAggressiveDrivingMessageSend @ +0x10");
+        static_assert(sizeof(void*) != 4 || sizeof(AggressiveMoveData) == 0x50, "AggressiveMoveData stride is 0x50");
+        static_assert(sizeof(void*) != 4 || offsetof(AggressiveDrivingData, maBuffer) == 0x10 + 2 * sizeof(AggressiveDrivingMessage), "AggressiveDrivingData::maBuffer follows the messages");
+        static_assert(sizeof(void*) != 4 || sizeof(AggressiveDrivingData) == 0x10 + 2 * sizeof(AggressiveDrivingMessage) + 0x330, "AggressiveDrivingData tail is 0x330 bytes");
+        static_assert(sizeof(void*) != 4 || sizeof(NetworkAggressiveDrivingManager) == KI_MAX_NETWORK_PLAYERS * sizeof(AggressiveDrivingData) + 0x20, "NetworkAggressiveDrivingManager tail is 0x20 bytes");
+    }
 } // namespace BrnNetwork

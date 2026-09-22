@@ -31,6 +31,8 @@
 //     +0xD0  mRoundsReceived              (BitArray<10>, 8B)
 #pragma once
 
+#include <cstddef>                                                  // offsetof (_AssertLayout)
+
 #include "types.hpp"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"        // BrnNetwork::NetworkPlayerID (== s32)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"             // SpecificGameModeEventInterface::Event
@@ -124,7 +126,20 @@ namespace BrnNetwork
         CgsNetwork::TimeManager* mpTimeManager;                     // +0x7A4  DWARF :140
         s32                miNumRounds;                             // +0x7A8  DWARF :142
         bool               mbRoutesChanged;                         // +0x7AC  DWARF :144
+
+        // Console layout (0x7B0 bytes), pinned in a 32-bit build; inert on the x64 host. The
+        // record stride is 0xD8 once SelectedRoutesMessage reproduces its 0x58 console bytes;
+        // until then the records are pinned relative to the message size.
+        static void _AssertLayout();
     };
+
+    inline void SelectedRoutesManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(SelectedRoutesData, mMessageSend) == 0x18, "SelectedRoutesData::mMessageSend @ +0x18");
+        static_assert(sizeof(void*) != 4 || sizeof(SelectedRoutesData) == 0x18 + 2 * sizeof(SelectedRoutesMessage) + 0x10, "SelectedRoutesData is two messages plus 0x28 bytes");
+        static_assert(sizeof(void*) != 4 || offsetof(SelectedRoutesManager, maSelectedRoutesData) == 0x1B8, "maSelectedRoutesData @ +0x1B8");
+        static_assert(sizeof(void*) != 4 || sizeof(SelectedRoutesManager) == 0x1B8 + KI_MAX_PLAYERS * sizeof(SelectedRoutesData) + 0x10, "SelectedRoutesManager tail is 0x10 bytes");
+    }
 
     // ---- Release @ 0x82548B98 -------------------------------------------------------------
     // X360: mbRoutesChanged = false; return true;  (single-byte store of 0 at the trailing

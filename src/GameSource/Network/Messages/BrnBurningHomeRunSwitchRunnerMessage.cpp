@@ -2,7 +2,7 @@
 
 #include "GameSource/Network/Messages/BrnBurningHomeRunSwitchRunnerMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -30,14 +30,13 @@ namespace BrnNetwork
     }
 
     // BrnNetwork::BurningHomeRunSwitchRunnerMessage::GetPackedMessageSize @ 0x8257C288
-    // Re-seeds the runner id to the -1 sentinel, then tail-calls a COMDAT-folded copy of
-    // the bare reliable-base size probe (the binary resolved the shared stub to
-    // TestConnectionMessage::GetPackedMessageSize). `this` is reinterpreted as that sibling
-    // to match the X360 ICF tail call.
+    // Re-seeds the runner id to the -1 sentinel, then tail-calls the reliable-base size probe
+    // (identically folded with TestConnectionMessage::GetPackedMessageSize, which is why the
+    // tail call carries that sibling's name).
     s32 BurningHomeRunSwitchRunnerMessage::GetPackedMessageSize()
     {
         mNewRunnerID = KI_INVALID_PLAYER_ID;   // stw -1, +0x28
-        return reinterpret_cast<CgsNetwork::TestConnectionMessage*>(this)->GetPackedMessageSize();
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     // BrnNetwork::BurningHomeRunSwitchRunnerMessage::PackOrUnpack @ 0x8257C238

@@ -21,6 +21,8 @@ namespace BrnNetwork
         const char* GetServerIP() const;
         s32 GetServerPort() const;
         CgsNetwork::EServerType GetServerType() const { return meServerType; }
+        // Store the type, re-resolve the address, mirror the type into the version display,
+        // drop the server connection and re-target the network adapter.
         void SetServerType(CgsNetwork::EServerType leServerType);
 
     private:

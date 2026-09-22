@@ -123,14 +123,14 @@ namespace BrnNetwork
         // The team id co-op assigns every in-game player to (X360 ActionAssignCoop: li 2).
         static const s32 KI_COOP_TEAM = 2;
 
-        // Completion callback invoked when a process finishes (1 == success, 0 == failure) with
-        // the user-data StartProcess captured. X360: v5(liResult, lUserData).
-        typedef int (*CompletionCallback)(int liResult, int liUserData);
+        // Completion callback invoked when a process finishes, with the user data StartProcess
+        // captured.
+        typedef void (*CompletionCallback)(bool lbSuccess, void* lpUserData);
 
         // The per-substate process-action driver (the maActionFunctions[] elements) and the
         // per-update-state driver (the maUpdateFunctions[] elements). Both take the manager.
         typedef int (*ActionFunction)(TeamSelectionManager* lpThis);
-        typedef int (*UpdateFunction)(TeamSelectionManager* lpThis);
+        typedef void (*UpdateFunction)(TeamSelectionManager* lpThis);
 
         // Per-player reliable-message slot (X360 236B stride): the outbound + inbound team-select
         // messages plus the player this slot tracks. mPlayerID @ +0xE8 (sentinel -1) is the
@@ -162,18 +162,18 @@ namespace BrnNetwork
         // === driving the state machine ===
         // Kick off team selection for the given launch type; a3/a4 are the completion
         // callback + its user data routed to StartProcess.
-        int  StartTeamSelection( s32 liLaunchType, CompletionCallback lpfCompletionCallback,
-                                 s32 liUserData );
-        void StartProcess( s32 leProcess, CompletionCallback lpfCompletionCallback, s32 liUserData );
-        int  SetNextAction();
+        void StartTeamSelection( s32 liLaunchType, CompletionCallback lpfCompletionCallback,
+                                 void* lpUserData );
+        void StartProcess( s32 leProcess, CompletionCallback lpfCompletionCallback, void* lpUserData );
+        void SetNextAction();
 
         // === per-frame module hooks ===
         void ProcessBeforeSimulation( BrnNetworkModuleIO::OutputBuffer* lpOutput );
-        int  ProcessAfterSimulation();
+        void ProcessAfterSimulation();
 
         // === update-state drivers (registered into maUpdateFunctions) ===
         // @ 0x82556EE8 / @ 0x8254BE60 -- both inline below.
-        int  UpdateWaitIdle();
+        void UpdateWaitIdle();
         int  ActionWaitFinalTeamSelection();
 
         // === process-action drivers (registered into maActionFunctions) ===
@@ -201,8 +201,8 @@ namespace BrnNetwork
         // Free-function thunks stored into maUpdateFunctions / maActionFunctions. On the X360 the
         // member addresses go straight into the tables (the platform C ABI passes `this` first);
         // these thunks are the faithful PC equivalent of those table entries.
-        static int UpdateIdleNoOp( TeamSelectionManager* lpThis );
-        static int UpdateWaitIdleThunk( TeamSelectionManager* lpThis );
+        static void UpdateIdleNoOp( TeamSelectionManager* lpThis );
+        static void UpdateWaitIdleThunk( TeamSelectionManager* lpThis );
         static int ActionAssignFFAThunk( TeamSelectionManager* lpThis );
         static int ActionAssignCoopThunk( TeamSelectionManager* lpThis );
         static int ActionAutobalanceThunk( TeamSelectionManager* lpThis );
@@ -221,7 +221,7 @@ namespace BrnNetwork
         s32                meCurrentProcess;                                       // +0x6FC
         s32                miActionIndex;                                          // +0x700
         CompletionCallback mpfCompletionCallback;                                  // +0x704
-        s32                mCompletionUserData;                                    // +0x708
+        void*              mpCompletionUserData;                                   // +0x708
         BrnNetworkManager* mpNetworkManager;                                       // +0x70C
         bool               mbReceivedFinalSelection;                              // +0x710
 
@@ -234,14 +234,11 @@ namespace BrnNetwork
     };
 
     // ---- UpdateWaitIdle @ 0x82556EE8 -----------------------------------------------------------
-    // X360: if (meSubState == 2) return SetNextAction(); else return (int)this.
-    inline int TeamSelectionManager::UpdateWaitIdle()
+    // Runs the next action once the sub-state machine is idle.
+    inline void TeamSelectionManager::UpdateWaitIdle()
     {
         if (meSubState == KI_SUBSTATE_IDLE)
-            return SetNextAction();
-        // X360 returns r3 == `this` here; the value is only ever truthiness-tested by the caller,
-        // so a non-zero success token is the faithful (pointer-width-safe) equivalent.
-        return 1;
+            SetNextAction();
     }
 
     // ---- ActionWaitFinalTeamSelection @ 0x8254BE60 ---------------------------------------------

@@ -223,4 +223,41 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 }
+
+// ---- lifecycle ----------------------------------------------------------------------------------
+// The console's stunt-run vtable points Construct / Destruct / ClearData at an empty function and
+// Prepare / Release at a bare `return true`. Unlike its siblings, Prepare does NOT run the base half
+// (the team and position tables are not reset here) and ClearData leaves the award and team tables
+// alone. Update and WriteDataToOutput share the base halves.
+void OnlineStuntRunModeScoring::Construct()
+{
+}
+
+void OnlineStuntRunModeScoring::Destruct()
+{
+}
+
+bool OnlineStuntRunModeScoring::Prepare()
+{
+    return true;
+}
+
+bool OnlineStuntRunModeScoring::Release()
+{
+    return BaseOnlineModeScoring::Release();
+}
+
+void OnlineStuntRunModeScoring::ClearData()
+{
+}
+
+void OnlineStuntRunModeScoring::Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
+{
+    BaseOnlineModeScoring::Update(lpScoringSystem, liNumberOfCars);
+}
+
+void OnlineStuntRunModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput)
+{
+    BaseOnlineModeScoring::WriteDataToOutput(lpOutput);
+}
 }

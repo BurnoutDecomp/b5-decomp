@@ -78,17 +78,14 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult AggressiveDrivingMessage::PackOrUnpack()
     {
-        // The X360 body opens with a bl to a trivial `return 0` leaf the linker identical-code-
-        // folded onto BrnWorld::PVSDebugComponent::IsSimple's address (the same ICF artifact
-        // seen in BrnCrashingTrafficMessage::PackOrUnpack). It is not a real relationship: the
-        // observable result is 0, seeded into the OR accumulator.
-        const u8 lbIsSimple = 0;
+        // Base Message::PackOrUnpack() status seeds the OR accumulator.
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
 
         // Record count [0, KI_MAX_AGGRESSIVE_MOVES]; each per-field status is OR-accumulated
         // (0 == KX_PACK_OR_UNPACK_SUCCESS == all succeeded).
         CgsNetwork::PackOrUnpackResult lxResult =
             CgsNetwork::PackOrUnpackInt(this, &miNumberOfAggressiveMoves,
-                                        KI_MIN_AGGRESSIVE_MOVES, KI_MAX_AGGRESSIVE_MOVES) | lbIsSimple;
+                                        KI_MIN_AGGRESSIVE_MOVES, KI_MAX_AGGRESSIVE_MOVES) | lxBase;
 
         for (s32 liIndex = 0; liIndex < miNumberOfAggressiveMoves; ++liIndex)
         {

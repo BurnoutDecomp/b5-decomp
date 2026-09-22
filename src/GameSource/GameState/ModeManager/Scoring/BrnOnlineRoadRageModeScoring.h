@@ -43,8 +43,8 @@ namespace BrnGameState
 class OnlineRoadRageModeScoring : public BaseOnlineModeScoring
 {
 public:
-    // ---- virtual lifecycle (Construct/Prepare/Release/ClearData/UpdatePlayerPoints/WriteDataToOutput
-    //      have real bodies in the .cpp; Destruct/Update are declared-only here) ----
+    // ---- virtual lifecycle (all bodied in the .cpp; Prepare/Release/Update forward to the base
+    //      halves, ClearData/WriteDataToOutput run the base half then this scorer's arrays) ----
     // Override order matches the base/sibling vtable so the slots line up in this TU's relative order.
     virtual void Construct();   // BrnOnlineRoadRageModeScoring.cpp:41  / X360 0x82314E48
     virtual bool Prepare();     //                              .cpp:75 / X360 0x82314B28
@@ -52,8 +52,7 @@ public:
     virtual void Destruct();    //                              .cpp:58
     virtual void ClearData();   //                              .cpp:102 / X360 0x82314E68
 
-    // X360 BrnOnlineRoadRageModeScoring.cpp:145. DWARF types the ScoringSystem param CONST here.
-    // Declared-only (the team-tracking pass body belongs to a later slice).
+    // The ScoringSystem param is const here (UpdatePlayerPoints' is not).
     virtual void Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars);
 
     // X360 BrnOnlineRoadRageModeScoring.cpp:373 / 0x8232EF00. DWARF types the ScoringSystem param

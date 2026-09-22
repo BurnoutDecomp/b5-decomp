@@ -30,4 +30,14 @@ MessageWithPlayerIDs::NetworkPlayerID MessageWithPlayerIDs::GetSendingPlayerID()
     return mSendingPlayerID;
 }
 
+// Zero both player ids (their packed width is fixed, so the value does not matter) and
+// size the message through the base. The shipping build only has this inlined inside
+// the ReliableMessage / TestConnectionMessage::GetPackedMessageSize fold.
+s32 MessageWithPlayerIDs::GetPackedMessageSize()
+{
+    mSendingPlayerID = 0;
+    mRecvingPlayerID = 0;
+    return Message::GetPackedMessageSize();
+}
+
 }

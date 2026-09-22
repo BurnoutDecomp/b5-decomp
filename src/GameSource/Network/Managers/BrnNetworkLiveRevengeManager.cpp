@@ -764,9 +764,9 @@ void LiveRevengeManager::ProcessGameDirtyTrickInterface()
 // ============================================================================
 // LiveRevengeManager::ProcessBeforeSimulation  @0x8256D868
 // ============================================================================
-void LiveRevengeManager::ProcessBeforeSimulation(BrnNetworkModule* /*lpOutputBuffer*/)
+void LiveRevengeManager::ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    BrnNetwork::LiveRevengeManager::ProcessTakedownQueue(nullptr);
+    BrnNetwork::LiveRevengeManager::ProcessTakedownQueue(lpOutputBuffer);
 
     if (meLiveRevengeUploadStatus == E_LIVE_REVENGE_UPLOAD_STATUS_PENDING)
         BrnNetwork::LiveRevengeManager::SendLiveRevengeRivalsToServer();

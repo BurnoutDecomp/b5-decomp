@@ -3,6 +3,7 @@
 
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"   // ::EActiveRaceCarIndex (the one and only)
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"   // CgsModule::EventQueue<T,N> (the road-rules queue typedefs)
 
 namespace BrnNetwork
 {
@@ -171,6 +172,13 @@ namespace BrnNetwork
             char       macSessionID[128];         // +0x18 .. +0x98
             bool       mbIsLocalUserChangeNeeded; // +0x98
         };
+
+        // The two road-rules download queues the network hands the game state inside
+        // NetworkToGameStateInterface (+0xE80 and +0x1750 on the console). Element strides are
+        // 56 and 24 bytes; both queue spans (2256 and 976 bytes) are the 16-byte header plus
+        // 40 elements.
+        typedef CgsModule::EventQueue<RoadRulesDownloadEvent, 40> RoadRulesDownloadedQueue;
+        typedef CgsModule::EventQueue<RoadRulesMessageData, 40>   LocalRoadRulesDownloadedQueue;
 
         struct DirtyTrickEvent
         {

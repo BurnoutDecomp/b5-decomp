@@ -105,10 +105,6 @@ namespace BrnNetwork
         // committed BuddyManagerX360 / GamerCardManagerX360 (XUserSigninState_SignedInToLive == 2).
         static const s32 KI_SIGNIN_STATE_LIVE              = 2;
 
-        // The login-event code raised to the manager to pop the sign-in / gamertag-selection front
-        // end (X360 li r4, 5 at the UpdateSignInToLive TriggerEventFromLogin call site).
-        static const s32 KI_LOGIN_EVENT_SHOW_SIGN_IN_UI    = 5;
-
         // XUserGetSigninInfo fills an XUSER_SIGNIN_INFO; the privilege/guest flags are the WORD at
         // +0x08 (XUserSigninInfo::muFlags). The leaf finishes the flow when bit 1 (mask 2) is set
         // (X360 lwz +0x08, rlwinm ...,0,30,30 -> isolate bit 1, cmplwi 2). Grounded asm immediates.

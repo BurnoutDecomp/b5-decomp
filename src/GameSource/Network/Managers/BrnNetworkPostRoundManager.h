@@ -1,6 +1,8 @@
 #ifndef BRN_NETWORK_POST_ROUND_MANAGER_H
 #define BRN_NETWORK_POST_ROUND_MANAGER_H
 
+#include <cstddef>                                     // offsetof (_AssertLayout)
+
 #include "types.hpp"
 
 // ===========================================================================
@@ -149,7 +151,21 @@ namespace BrnNetwork
         EProcess        meCurrentProcess;                           // +188
         bool            mbDidTheUserQuit;                           // +192
         GameResults     mGameResults;                               // +196
+
+        // Console layout (0x1A4 bytes), pinned in a 32-bit build; inert on the x64 host. The
+        // object is 0x1A4 bytes once GameResults reproduces its 0xE0 console bytes; until then the
+        // tail is pinned relative to it.
+        static void _AssertLayout();
     };
+
+    inline void PostRoundManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, maUpdateFunctions) == 0x78, "maUpdateFunctions @ +0x78");
+        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mpNetworkManager) == 0xA8, "mpNetworkManager @ +0xA8");
+        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mbDidTheUserQuit) == 0xC0, "mbDidTheUserQuit @ +0xC0");
+        static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mGameResults) == 0xC4, "mGameResults @ +0xC4");
+        static_assert(sizeof(void*) != 4 || sizeof(PostRoundManager) == 0xC4 + sizeof(GameResults), "PostRoundManager ends with mGameResults");
+    }
 }
 
 #endif // BRN_NETWORK_POST_ROUND_MANAGER_H

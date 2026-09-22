@@ -43,6 +43,29 @@ namespace CgsNetwork
     static const RGBA KU_TEXT_COLOUR = 0xFFFFFFFFu;
     static const f32  KF_TEXT_SIZE   = 12.0f;
 
+    // Two-phase init, inlined into NetworkManager::Construct: the base first, then no version
+    // string, no count, an out-of-range server type and no rebroadcast note.
+    void VersionDisplay::Construct()
+    {
+        DebugComponent::Construct();
+
+        mpcVersion       = nullptr;
+        muField_04       = 0;
+        meServerType     = E_SERVER_TYPE_COUNT;
+        mbGameServerGame = false;
+    }
+
+    // Teardown, inlined into NetworkManager::Destruct: clear the banner state, then the base.
+    void VersionDisplay::Destruct()
+    {
+        mpcVersion       = nullptr;
+        muField_04       = 0;
+        meServerType     = E_SERVER_TYPE_COUNT;
+        mbGameServerGame = false;
+
+        DebugComponent::Destruct();
+    }
+
     // X360 0x8286FA60. The component's debug-menu display name (rodata "Network Version Display").
     const char* VersionDisplay::GetName() const
     {

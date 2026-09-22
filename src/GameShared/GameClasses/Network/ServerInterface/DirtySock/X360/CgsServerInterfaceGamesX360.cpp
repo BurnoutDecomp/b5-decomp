@@ -138,9 +138,8 @@ namespace CgsNetwork
 
     // Suspend @ 0x8288C0D0 -- free the found-games display list; if an action is in
     // flight, cancel the outstanding lobby request and end the action.
-    void ServerInterfaceGamesX360::Suspend(s32 liUpdateFlags)
+    void ServerInterfaceGamesX360::Suspend()
     {
-        (void)liUpdateFlags;
         ServerInterfaceGames::FreeDisplayLists();
 
         if (meCurrentAction != E_ACTION_COUNT)
@@ -152,18 +151,13 @@ namespace CgsNetwork
 
     // Resume @ 0x8288C128 -- rebuild the found-games display list; if a search-result
     // sort callback is registered, re-sort the found-games list through FoundGamesSort.
-    void* ServerInterfaceGamesX360::Resume()
+    void ServerInterfaceGamesX360::Resume()
     {
-        // asm: r3 = AllocDisplayLists(this) is the no-callback return. The committed base
-        // declares AllocDisplayLists() as void (homed in a sibling wave), so its result
-        // cannot be surfaced here; this lifecycle-slot return is ignored by callers.
         AllocDisplayLists();
         if (mpSearchSortCallback)
         {
-            return reinterpret_cast<void*>(
-                DispListSort(mpFoundGames, this, 0, reinterpret_cast<void*>(&FoundGamesSort)));
+            DispListSort(mpFoundGames, this, 0, reinterpret_cast<void*>(&FoundGamesSort));
         }
-        return 0;
     }
 
     // ===================================================================
@@ -389,7 +383,7 @@ namespace CgsNetwork
     s32 ServerInterfaceGamesX360::ReceivedGameEvent(s32* lpauMsg)
     {
         if (static_cast<u32>(meCurrentAction) > 2u)
-            return ServerInterfaceGames::ReceivedGameEvent(this, lpauMsg);
+            return ServerInterfaceGames::ReceivedGameEvent(lpauMsg);
 
         if (TagFieldFind(reinterpret_cast<const char*>(lpauMsg[4]), "SESS") != 0) // msg->pData (+0x10)
         {

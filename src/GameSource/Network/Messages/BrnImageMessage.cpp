@@ -6,7 +6,6 @@
 #include "GameSource/Network/BrnNetworkManager.h"                                       // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"              // PackOrUnpackU8/U16/CgsID/Buffer field primitives
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"      // ReliableMessage::PackOrUnpack base
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h" // GetPackedMessageSize ICF-folded base probe
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                      // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -28,10 +27,8 @@
 // GetPackedMessageSize seeds the payload with worst-case representative values (segment
 // length == KI_PHOTO_SEGMENT_SIZE == 500 so the variable buffer measures full, image
 // type == E_IMAGE_TYPE_COUNT == 6 == the max enum value, every id/counter zeroed) and
-// then delegates to the bare-ReliableMessage size probe. The X360 build tail-calls
-// CgsNetwork::TestConnectionMessage::GetPackedMessageSize (ICF-folded with the
-// ReliableMessage base probe -- a bare ReliableMessage carries no extra payload), so the
-// delegate is taken with `this` reinterpreted as that sibling, matching the binary.
+// then delegates to ReliableMessage::GetPackedMessageSize (the tail call carries the
+// TestConnectionMessage name only because the two bodies are identically folded).
 //
 // NOTE: the Hex-Rays pseudocode renders the +0x220 `std 0` and the +0x236 `stb 6` as a
 // single `*(a1 + 544) = 0x600000000LL`; the ASM proves they are two independent stores
@@ -60,10 +57,9 @@ namespace BrnNetwork
         mu8ImageType                 = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT; // 6 -- max enum value
         mu16NumberOfBytesOfPhotoData = KI_PHOTO_SEGMENT_SIZE;                               // 500 -- worst-case buffer
 
-        // @0x8257C0F8: b CgsNetwork__TestConnectionMessage__GetPackedMessageSize -- a bare
-        // ReliableMessage size probe (no extra payload), ICF-folded with the base. Taken
-        // with `this` reinterpreted as that sibling, matching the X360 tail call.
-        return reinterpret_cast<CgsNetwork::TestConnectionMessage*>(this)->GetPackedMessageSize();
+        // Tail call to the reliable-base size probe (identically folded with
+        // TestConnectionMessage::GetPackedMessageSize).
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     // BrnNetwork::ImageMessage::PackOrUnpack @ 0x8257C100
@@ -82,7 +78,7 @@ namespace BrnNetwork
         CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE,
                    "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE");
 
-        lxResult |= CgsNetwork::PackOrUnpackBuffer(this, reinterpret_cast<u8*>(macPhotoBuffer),
+        lxResult |= CgsNetwork::Message::PackOrUnpackBuffer(reinterpret_cast<char*>(macPhotoBuffer),
                                                    mu16NumberOfBytesOfPhotoData);
         return lxResult;
     }

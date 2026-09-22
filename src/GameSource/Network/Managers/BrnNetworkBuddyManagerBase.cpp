@@ -122,12 +122,10 @@ namespace BrnNetwork
         return static_cast<BrnServerInterface*>(lpServerInterface);
     }
 
-    // -- the network module's IN-event queue typed as the concrete instantiation
-    //    it actually is (the module's accessor returns its forward-declared
-    //    NetworkEventQueue; the driven queue is CgsModule::VariableEventQueue<14000,16>).
-    static NetworkEventQueue* GetEventQueue(BrnNetworkModule* lpNetworkModule)
+    // -- the network module's IN-event queue.
+    static BrnNetworkModuleIO::NetworkEventQueue* GetEventQueue(BrnNetworkModule* lpNetworkModule)
     {
-        return reinterpret_cast<NetworkEventQueue*>(lpNetworkModule->GetNetworkEventQueue());
+        return lpNetworkModule->GetNetworkEventQueue();
     }
 
     // =======================================================================
@@ -191,6 +189,13 @@ namespace BrnNetwork
         miNextBuddyToSend = 100;
 
         CgsNetwork::BuddyManagerX360::Destruct();
+    }
+
+    // =======================================================================
+    // OnLeaveGame -- the console vtable slot holds an empty body.
+    // =======================================================================
+    void BuddyManagerBase::OnLeaveGame()
+    {
     }
 
     // =======================================================================
@@ -556,7 +561,7 @@ namespace BrnNetwork
                 StateManager* lpStateManager = mpNetworkModule->GetNetworkManager()->GetStateManager();
                 if (lpStateManager->IsInLimbo())
                 {
-                    lpStateManager->SetRetryGetServerBuddies(true);
+                    lpStateManager->CloseLimboGame();
                 }
                 mfTimeUntilRetryGetServerBuddies = -1.0f;
             }
@@ -566,7 +571,7 @@ namespace BrnNetwork
     // =======================================================================
     // SendEmptyBuddyInformation @ 0x825637E0
     // =======================================================================
-    void BuddyManagerBase::SendEmptyBuddyInformation(NetworkEventQueue* lpEventQueue)
+    void BuddyManagerBase::SendEmptyBuddyInformation(BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue)
     {
         CGS_ASSERT(GetNumBuddies() == 0, "Too Many buddies to send empty info : ");
 
@@ -583,7 +588,7 @@ namespace BrnNetwork
     // =======================================================================
     // SendBuddyInformation @ 0x825638D8
     // =======================================================================
-    void BuddyManagerBase::SendBuddyInformation(NetworkEventQueue* lpEventQueue)
+    void BuddyManagerBase::SendBuddyInformation(BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue)
     {
         BuddyInformationEvent lEvent;
 

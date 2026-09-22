@@ -32,6 +32,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // CgsID
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <cstddef>   // offsetof (stride pin in _AssertLayout)
 
@@ -77,8 +78,18 @@ namespace BrnNetwork
         struct OnlineLobbyPlayerStatusInterface
         {
             LobbyPlayerStatusData*       GetPlayerLobbyData(s32 liIndex);        // :115
-            const LobbyPlayerStatusData* GetPlayerLobbyData(s32 liIndex) const;  // :120
+
+            // Header-inline on the console: the gui bridge carries both range asserts and the
+            // stride-56 address computation in its own body.
+            const LobbyPlayerStatusData* GetPlayerLobbyData(s32 liPlayerIndex) const
+            {
+                CGS_ASSERT(liPlayerIndex >= 0, "liPlayerIndex >= 0");
+                CGS_ASSERT(liPlayerIndex < KI_MAX_PLAYERS, "liPlayerIndex < KI_MAX_PLAYERS");
+                return &maPlayerData[liPlayerIndex];
+            }
             void Clear();                                                        // :124
+
+            static const s32 KI_MAX_PLAYERS = 8;
 
         private:
             LobbyPlayerStatusData maPlayerData[8];   // :127

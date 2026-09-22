@@ -35,7 +35,7 @@
 
 namespace CgsNetwork
 {
-    class ServerInterfaceDirtySock;          // forward; pointer member only
+    struct ServerInterfaceDirtySock;         // forward; pointer member only
 
     namespace DirtySock
     {
@@ -78,7 +78,7 @@ namespace CgsNetwork
         // Declared-only here; the bodies live in this component's own (DirtySock) TU.
         void SetDisabledCountryList(s32 liDisabledCountryList);
         void SetEventFilters(const u8* lpFirstUsageFilters, const u8* lpNormalUsageFilters);
-        s32  Connect(bool lbFirstUsage);
+        EServerInterfaceError Connect(bool lbFirstUsage);
 
         // ---- ADDITIVE GROW (BrnServerInterfaceTelemetry TU) -------------------------------
         // The base lifecycle/behaviour entries the game leaf BrnServerInterfaceTelemetry
@@ -92,17 +92,28 @@ namespace CgsNetwork
         //   CaptureEvent @ cpp:363 -- record one telemetry event {id, payload}.
         //   SetEventMappingTable @ cpp:779 (protected) -- latch the event-id -> keys table.
         // Declared-only here; bodies live in this component's own (DirtySock) TU.
+        // Vtable: the leaf appends Destruct, Prepare, Release and Update (in that order) after
+        // the five component slots.
+        virtual void Construct();
+        virtual void Destruct();
         virtual bool Prepare(ServerInterfaceDirtySock* lpServerInterface, bool lbConnectImmediately,
                              const char* lpcDisabledCountryList,
                              s32 liMaxFirstUsageBufferSize, s32 liMaxNormalUsageBufferSize);
         virtual bool Release();
         virtual void Update();
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
         void CaptureEvent(s32 liEventID, const char* lpacEventData);
 
     protected:
         void SetEventMappingTable(EventDataKeys* lpaEventIDsToKeysMapping);
 
     private:
+        void AbandonFirstUsageBuffer();
+        EServerInterfaceError AuthAndConnect();
+        // DirtySDK telemetry buffer callbacks (user data = the component).
+        static void _FirstUsageBufferFull(TelemetryApiRefT* lpTelemetry, void* lpUserData);
+        static void _FirstUsageBufferSendComplete(TelemetryApiRefT* lpTelemetry, void* lpUserData);
+
         u32                muMaxFirstUsageBufferSize;        // +0x10
         bool               mbDidSuspendHaltCurrentBuffer;    // +0x14
         TelemetryApiRefT*  mpTelemetryFirstUsage;            // +0x18

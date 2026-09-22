@@ -91,6 +91,9 @@ namespace CgsNetwork
         // CgsServerInterfaceGameParams.h:443 -- true if muGameFlags bit 10 set.
         bool IsRankedGame() const;
 
+        // Store the public and private slot counts (miNumPublicSlots / miNumPrivateSlots).
+        void SetTotalSlots(s32 liNumPublicSlots, s32 liNumPrivateSlots);
+
         // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the lobby-record
         // (de)serialisers, matching the sibling param families (PlayerParams / GameSearch /
         // QuickJoin all expose SerialiseToString). ServerInterfaceGames create/join/update

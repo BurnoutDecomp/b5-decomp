@@ -11,28 +11,43 @@
 
 namespace BrnGameState
 {
-// X360 @ 0x8232F948. Online-race Update is a thin forward to the base team-tracking pass
-// (tail-call to BaseOnlineModeScoring::UpdatePlayerTeams with both arguments unchanged).
-void OnlineRaceModeScoring::Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
+// The lifecycle overrides below only forward to the base halves; the console's race vtable points
+// Prepare / Release / ClearData / Update / WriteDataToOutput at the shared folded bodies, and
+// Construct / Destruct at an empty function.
+void OnlineRaceModeScoring::Construct()
 {
-    UpdatePlayerTeams(lpScoringSystem, liNumberOfCars);
 }
 
-// X360 @ 0x82315610. Resets the per-slot online-award table to INVALID and the per-slot team
-// table to NONE. Both arrays are BASE (BaseOnlineModeScoring) members: maOnlineAwards @ this+0x04
-// (8 dwords <- -1) and maePlayerTeams @ this+0x44 (8 dwords <- 0); asm confirms the two stw loops.
-// The award-variables array (+0x24) and the player-positions array (+0x64) are deliberately NOT
-// touched here. This override does NOT chain to BaseOnlineModeScoring::ClearData.
+void OnlineRaceModeScoring::Destruct()
+{
+}
+
+bool OnlineRaceModeScoring::Prepare()
+{
+    return BaseOnlineModeScoring::Prepare();
+}
+
+bool OnlineRaceModeScoring::Release()
+{
+    return BaseOnlineModeScoring::Release();
+}
+
+// Forwards to the base team-tracking pass (the console body is a single tail branch to
+// UpdatePlayerTeams).
+void OnlineRaceModeScoring::Update(const ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
+{
+    BaseOnlineModeScoring::Update(lpScoringSystem, liNumberOfCars);
+}
+
+// Awards back to INVALID and teams back to NONE, nothing of its own.
 void OnlineRaceModeScoring::ClearData()
 {
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        maOnlineAwards[li] = E_ONLINE_AWARD_INVALID;
-    }
-    for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
-    {
-        maePlayerTeams[li] = GameStateModuleIO::E_PLAYER_TEAM_NONE;
-    }
+    BaseOnlineModeScoring::ClearData();
+}
+
+void OnlineRaceModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOutputInterface* lpOutput)
+{
+    BaseOnlineModeScoring::WriteDataToOutput(lpOutput);
 }
 
 // X360 @ 0x82314B58. qsort comparator establishing finishing order between two race-car rows.

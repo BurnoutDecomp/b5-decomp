@@ -422,6 +422,13 @@ namespace GameStateModuleIO
         // the network-to-game-state input interface (this+0x7B0). class:BrnGameState catch-all TU;
         // BurnoutSkillzManager::PreWorldUpdate reads it read-locked.
         const NetworkToGameStateInterface*    GetNetworkToGameStateInterface() const;
+        // Merges the network module's interface onto this buffer's copy at +0x7B0. Header inline
+        // with no lock assert of its own: BrnGameModule::BridgeNetworkToGameState calls
+        // NetworkToGameStateInterface::Append on this+0x7B0 directly.
+        void AppendGetNetworkToGameStateInterface(const NetworkToGameStateInterface* lpNetworkToGameStateInterface)
+        {
+            mNetworkToGameStateInterface.Append(lpNetworkToGameStateInterface);
+        }
         // X360 0x8231CF78 -- read-side accessor for the embedded in-game player-status interface
         // (this+0x2CC8). ADDITIVE GROW (declare-only) for the BrnMugshotManager TU:
         // UpdateCameraStatusData reads each player's active-race-car slot + camera status off it.
@@ -453,7 +460,11 @@ namespace GameStateModuleIO
         // mTakedownEventInputQueueStorage stays pinned at +0x660 (asserted below).
         u8  maPadAfterGameEventQueue[(0x660 - 0x4C) - sizeof(GameEventQueue)];
         u8  mTakedownEventInputQueueStorage[0x7B0 - 0x660];            // TakedownEventQueue@ +0x0660
-        NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (named opaque)
+        NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (real type; console span 0x2438, host span larger -- see below)
+        // The console region +0x7B0..+0x2CC8 (0x2518) is this interface (0x2438) followed by the
+        // 0xE0-byte ControllerToGameStateInterface at +0x2BE8. On the host the interface's five
+        // queue headers each carry a pointer, so it is a few bytes wider and the pad below is
+        // that much narrower; +0x2CC8 stays pinned (asserted in _AssertLayout).
         u8  maPadToPlayerStatus[0x2CC8 - (0x7B0 + sizeof(NetworkToGameStateInterface))]; // -> +0x2CC8
         BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface mPlayerStatusInterface; // @ +0x2CC8
         // mPlayerStatusInterface (0x9F0 bytes) ends flush at +0x36B8, so the gap to the next

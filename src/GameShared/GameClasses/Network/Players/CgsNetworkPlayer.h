@@ -153,6 +153,11 @@ namespace CgsNetwork
         virtual bool Release();
         virtual void Update(const CgsSystem::TimerStatus* lpTimerStatus,
                             u16 lu16CurrentFrame, bool lbInGame);
+        // Round edges and the connection-telemetry hook: vtable slots 4..6, overridden by
+        // the game's network player. No standalone base bodies exist in the console image.
+        virtual void OnRoundLoadingStart();
+        virtual void OnRoundStart();
+        virtual void SendDirtySockConnectionTelemetry(u32 luValue0, u32 luValue1);
 
         void Destruct();
 
@@ -171,6 +176,12 @@ namespace CgsNetwork
         // --- per-frame send pump ---
         void SendMessages();
 
+        // --- receive path ---
+        // Unpack one received packet from lSendingPlayerID into the registered messages.
+        void ReceiveMessage(u8* lpBuffer, s32 liLength, NetworkPlayerID lSendingPlayerID);
+        // Deliver an ack (lbAck) or nack for one of our reliable messages to its callback.
+        void ReceiveAckOrNack(SignalMessage* lpMessage, bool lbAck);
+
         // --- connection / identity accessors ---
         NetworkPlayerID GetPlayerID() const;
         void            SetConnectionData(ConnectionData lConnectionData);
@@ -180,7 +191,7 @@ namespace CgsNetwork
         void            SetRemoteConsoleFrameRate(CgsSystem::EFrameRate leFrameRate);
         CgsSystem::EFrameRate GetLocalConsoleFrameRate();
         CgsSystem::EFrameRate GetRemoteConsoleFrameRate();
-        bool            HasConnectionFailed() const;
+        bool            HasConnectionFailed() const { return mbHasConnectionFailed; }
 
     protected:
         void CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus* lpTimerStatus);
@@ -196,6 +207,9 @@ namespace CgsNetwork
                         bool lbInGame);
         void UpdateMessagesReceived();
 
+        // Unpack callback handed to the packet packer (user data = the player).
+        static void OnMessageUnpackedCallback(Message* lpMsg, void* lpUserData);
+
         // --- layout (frozen against the ARTIST asm offsets) ---
         // (vptr occupies +0x00)
         NetworkAdapter*       mpNetworkAdapter;          // +0x004
@@ -209,14 +223,15 @@ namespace CgsNetwork
         NetMessageData        maSendMessageData[KI_MAX_MESSAGE_TYPES]; // +0x090
         NetMessageData        maRecvMessageData[KI_MAX_MESSAGE_TYPES]; // +0x610
         s32                   miNumberMessagesRegistered;// +0xB90
-        // The per-player packet packer. CompressionAndEncryptionUtils is a thin stateless
-        // helper (its accumulated-bandwidth ledger is file-scope static), so the X360 reserves
-        // just the 4-byte slot here; the explicit pad keeps macName at +0xB98.
+        // The per-player packet packer (one scratch-buffer pointer; its accumulated
+        // bandwidth ledger is class-static).
         CompressionAndEncryptionUtils mPacketPacker;     // +0xB94
-        u8                    mPadB95[3];                // +0xB95 (pad to the 4-byte slot)
         char                  macName[16];               // +0xB98
         bool                  mbHasConnectionFailed;     // +0xBA8
+    public:
+        // Public in the class declaration: the start-time manager reads it directly.
         bool                  mbNetworkPlayerPaused;     // +0xBA9
+    private:
         u8                    mPadBAA[2];                // +0xBAA (align f32 to +0xBAC)
         f32                   mfPingInMs;                // +0xBAC
         PingMessage           mPingMessageSend;          // +0xBB0 (0x24)

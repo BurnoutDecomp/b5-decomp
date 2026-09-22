@@ -27,10 +27,9 @@
 
 namespace CgsNetwork
 {
+    // The base ServerInterfaceComponent ctor brings mpcCurrentAction / meStatus /
+    // miLastError to their "no error" state.
     ServerInterfaceRankings::ServerInterfaceRankings()
-        : mpcCurrentAction(0)
-        , meStatus(2)        // ServerInterfaceDirtySock::EStatus "no error"
-        , miLastError(0)
     {
     }
 

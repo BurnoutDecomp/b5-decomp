@@ -71,6 +71,9 @@ namespace CgsNetwork
             E_MESSAGE_MODE_COUNT  = 2,
         };
 
+        // Seeds the embedded send/receive message objects only.
+        SyncTimeMessageManager();
+
         void Construct();
         void Destruct();
 

@@ -4,55 +4,22 @@
 #include "GameSource/Replays/BrnReplayModuleIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
-#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
-#include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress ("GMInvAccept" / "GMStrOffline")
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"               // CgsCore::SPrintf (telemetry "%i")
-#include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (formatted default-case asserts)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (the invite-action assert)
 #include "GameSource/GameState/BrnCgsPlayerName.h"                    // CgsNetwork::PlayerName
-#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"  // BrnGameState::TrainingManager
-#include "SharedClasses/Progression/BrnTrainingTypes.h"              // BrnProgression::ETrainingType
-#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"            // BrnNetwork::...::NetworkInSelectScoreboardEvent
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"           // TelemetryData, ETelemetryHook
+#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"             // the typed network IN-event leaves
 
-#include <cstring>   // std::memcpy / std::memset (models the Xbox XMemCpy / memcpy block-copies)
+#include <cstring>   // std::memcpy (the console's memcpy block-copies)
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnGame::BrnGameModule::BridgeGuiToReplay_PostSim      @ 0x823CCA00
-//   BrnGame::BrnGameModule::BridgeGuiToSound               @ 0x823C0A58
-//     ^^ MOVED OUT (faithful-audio-engine phase C4) to GameBridgeGUIToX_Sound.cpp -- same
-//        split, same reason, now that the C4 spine wiring gave it a caller.
-//   BrnGame::BrnGameModule::BridgeGuiToGameState           @ 0x823DDB78
-//     ^^ MOVED OUT (2026-08-25, P1 sim-pause) to GameBridgeGUIToX_GameState.cpp so it can be
-//        MOUNTED on its own: this TU's other two members reference six symbols with no home
-//        in the linked set (see that file's banner), one of which -- TelemetryData::
-//        AddParameter -- has no reconstructed home anywhere. Moved, not copied.
-//   BrnGame::BrnGameModule::TranslateGuiEventsToNetworkEvents @ 0x823DEEB8
+// GUI-output bridge family (reference home GameSource/Game/GameBridgeGUIToX.cpp). Each bridge
+// walks the GUI output buffer's out-event queue (VariableEventQueue<18432,16> at +0x814, via
+// GetGuiOutEventQueue) and republishes or translates the queued GUI events into a downstream
+// module's INPUT buffer.
 //
-// GUI-output bridge family: each per-frame bridge walks the GUI output buffer's out-event
-// queue (VariableEventQueue<18432,16> @ +0x814, via GetGuiOutEventQueue) and re-publishes /
-// translates the queued GUI events into a downstream subsystem's INPUT buffer.
-//
-// The two event-translating members (BridgeGuiToGameState -- now next door -- and
-// TranslateGuiEventsToNetworkEvents)
-// drain the GUI queue and, per recognised GUI event type, build a downstream event into a
-// correctly-sized RAW local buffer (the exact stack span the X360 writes) and AddEvent it with
-// the attested integer event-type TAG + byte size. This mirrors the committed
-// GameBridgeNetworkToX.cpp translators. Event-type tags + sizes are asm-authoritative; the
-// downstream event payload layouts are opaque (no field names invented). One-byte "signal"
-// events carry an uninitialised payload byte, exactly as the X360 passes a pointer to
-// uninitialised stack.
-
-// ---------------------------------------------------------------------------
-// FLAG (by-name, un-homed collaborators). Declared here so this TU compiles/links against the
-// real X360 symbols; their homes are the not-yet-reconstructed GameState / Network module-IO TUs.
-// ---------------------------------------------------------------------------
-// [P1 sim-pause] PostWorldInput's declaration moved to its single canonical home
-// (BrnGameStateModule.h, included via BrnGameModule.hpp above); the PC body lives in
-// GameStateModule_gUI_00.cpp and returns the carry queue (the named reduction there).
-
-// (The file-local TelemetryData stub that stood here was retired 2026-09-03: the real record --
-//  DWARF BrnNetworkSharedIO.h:542, 20 B -- and AddParameter(const char*) @0x82354010 now live in
-//  Network/SharedIO/BrnNetworkSharedIO.h / BrnNetworkSharedIO_Telemetry.cpp.)
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
+// Siblings split out so they could mount first: BridgeGuiToGameState lives in
+// GameBridgeGUIToX_GameState.cpp and BridgeGuiToSound in GameBridgeGUIToX_Sound.cpp.
+// This TU keeps BridgeGuiToReplay_PostSim and TranslateGuiEventsToNetworkEvents.
 
 namespace BrnGame
 {
@@ -100,245 +67,339 @@ namespace BrnGame
         }
     }
 
-    // @ 0x823C0A58 BridgeGuiToSound: MOVED OUT (faithful-audio-engine phase C4) to
-    // GameBridgeGUIToX_Sound.cpp so it can be MOUNTED on its own, exactly as
-    // BridgeGuiToGameState was before it (this TU's remaining members still reference
-    // the six un-homed symbols). Moved, not copied.
-
     // =========================================================================
-    // TranslateGuiEventsToNetworkEvents  (X360 0x823DEEB8)
+    // TranslateGuiEventsToNetworkEvents
     //
-    // Drain a GUI event queue (VariableEventQueue<18432,16>) and translate each network-bound
-    // GUI event into the matching network IN-event, AddEvent'd into the network module's in-event
-    // queue (VariableEventQueue<14000,16>). Returns the final queue-walk status. Called by
-    // DoUpdate_NetworkPostSim. (The X360 method receives + uses only the two queue pointers; the
-    // implicit `this` is unreferenced.)
+    // Drain the GUI out-event queue and translate each network-bound GUI event into the
+    // matching network IN-event, AddEvent'd into the network module's in-event queue
+    // (VariableEventQueue<14000,16>). Called by DoUpdate_NetworkPostSim; `this` is unused.
+    //
+    // Leaves with a typed home (select-scoreboard, telemetry, camera-picture request) are
+    // built by name and queued at sizeof(); the rest are copied as the console's byte spans.
+    // The one-byte "signal" events queue an unwritten stack byte, as the console does.
+    // FLAG: the 353 -> 24 word is, by the reference's naming, a LiveRevengeProfile pointer
+    // (NetworkInLiveRevengeProfileLoaded); it stays a 4-byte copy until its GUI producer and
+    // network consumer have host homes.
+    //
+    // FLAG PC-ABI adapter (the BridgeGuiToGameState / BridgeGuiToDirector one): the PC GUI
+    // module leaves records on their channel (40) with the event type in the record's second
+    // word, the payload size in its first and the payload offset in its third -- the three
+    // words GuiEventWrapper::GetRawEvent() unwraps on the console. A console-style queue
+    // (type = event id, pointer = payload) passes through unchanged.
+    //
+    // FLAG return type: the reference declares this void and the only caller never reads the
+    // result; the int return (the final GetNextEvent status) follows the BrnGameModule.hpp
+    // declaration until that header changes.
     // =========================================================================
     int BrnGameModule::TranslateGuiEventsToNetworkEvents(
-        CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputQueue,
+        CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputEventQueue,
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
     {
+        namespace IO = BrnNetwork::BrnNetworkModuleIO;
+
         const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
-        int liResult = lpGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
+        s32 liEventId = lpGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
 
         while (lpEvent)
         {
-            const unsigned char* lp = reinterpret_cast<const unsigned char*>(lpEvent);
+            // ---- resolve (command, payload, payload size) -- the PC-ABI adapter above ----
+            const u8* lp            = reinterpret_cast<const u8*>(lpEvent);
+            s32       liCommand     = liEventId;
+            s32       liPayloadSize = liEventSize;
+            if (liEventId == 40 && liEventSize >= 12)
+            {
+                const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
+                liCommand = static_cast<s32>(lpuRecord[1]);
+                const u32 luOffset = lpuRecord[2];
+                if (luOffset >= 12u && static_cast<s32>(luOffset) < liEventSize)
+                {
+                    lp            = reinterpret_cast<const u8*>(lpEvent) + luOffset;
+                    liPayloadSize = static_cast<s32>(lpuRecord[0]);
+                }
+            }
             const s32* lpW = reinterpret_cast<const s32*>(lp);
 
-            alignas(16) unsigned char lBuf[64];
-            unsigned char* lpOut = lBuf;
-            s32 liType = 0;
-            s32 liSize = 0;
-            bool lbEmit = false;
+            u8 lSignal;   // the one-byte signal events' payload (never written)
 
-            switch (liResult)
+            switch (liCommand)
             {
-                case 120:   // gamercard
-                    CGS_ASSERT(lp != 0, "lpGuiGamercardEvent");
-                    std::memcpy(lpOut, lp, 16);
-                    liType = 47; liSize = 16; lbEmit = true;
-                    break;
-
                 case 49:
-                    liType = 27; liSize = 1; lbEmit = true;    // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 27, 1);
                     break;
                 case 80:
-                    liType = 28; liSize = 1; lbEmit = true;    // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 28, 1);
                     break;
-                case 94:
+                case 94:   // easy-drive opened: a parameterless telemetry event, only when the flag byte is set
+                {
                     if (lp[0] == 0)
                         break;
-                    reinterpret_cast<s32*>(lpOut)[0] = 45;
-                    lpOut[4] = 0;
-                    liType = 16; liSize = 20; lbEmit = true;
+                    IO::NetworkInTelemetryEvent lTelemetryEvent;
+                    lTelemetryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_EASY_DRIVE_OPENED);
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTelemetryEvent),
+                                                       IO::NetworkInTelemetryEvent::KI_EVENT_TYPE,
+                                                       sizeof(lTelemetryEvent));
                     break;
+                }
                 case 97:
-                    liType = 1; liSize = 1; lbEmit = true;     // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 1, 1);
                     break;
                 case 98:
-                    liType = 2; liSize = 1; lbEmit = true;     // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 2, 1);
                     break;
-                case 99:
+                case 99:   // show profile: the friend's PlayerName
+                {
                     CGS_ASSERT(lp != 0, "lpGuiProfileEvent");
-                    std::memcpy(lpOut, lp, 16);
-                    liType = 13; liSize = 16; lbEmit = true;
+                    CgsNetwork::PlayerName lShowProfile;
+                    std::memcpy(&lShowProfile, lp, sizeof(lShowProfile));
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lShowProfile), 13,
+                                                       sizeof(lShowProfile));
                     break;
-                case 100:   // invite action sub-switch on src word 0
+                }
+                case 100:  // invite action (payload word 0), the friend's PlayerName at +4
                     switch (lpW[0])
                     {
-                        case 0:
-                            std::memcpy(lpOut, lp + 4, 16);
-                            liType = 8; liSize = 16; lbEmit = true;
+                        case 0:   // send
+                        {
+                            CgsNetwork::PlayerName lSendInvite;
+                            std::memcpy(&lSendInvite, lp + 4, sizeof(lSendInvite));
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSendInvite), 8,
+                                                               sizeof(lSendInvite));
                             break;
-                        case 1:
-                            std::memcpy(lpOut, lp + 4, 16);
-                            lpOut[16] = lp[20];
-                            liType = 9; liSize = 17; lbEmit = true;
+                        }
+                        case 1:   // revoke: the name + the has-the-online-game-started byte at +20
+                        {
+                            u8 lacRevokeInvite[17];
+                            std::memcpy(lacRevokeInvite, lp + 4, 16);
+                            lacRevokeInvite[16] = lp[20];
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacRevokeInvite), 9,
+                                                               sizeof(lacRevokeInvite));
                             break;
-                        case 2:
-                            std::memcpy(lpOut, lp + 4, 16);
-                            liType = 10; liSize = 16; lbEmit = true;
+                        }
+                        case 2:   // accept
+                        {
+                            CgsNetwork::PlayerName lAcceptInvite;
+                            std::memcpy(&lAcceptInvite, lp + 4, sizeof(lAcceptInvite));
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAcceptInvite), 10,
+                                                               sizeof(lAcceptInvite));
                             break;
-                        case 3:
-                            std::memcpy(lpOut, lp + 4, 16);
-                            liType = 11; liSize = 16; lbEmit = true;
+                        }
+                        case 3:   // decline
+                        {
+                            CgsNetwork::PlayerName lDeclineInvite;
+                            std::memcpy(&lDeclineInvite, lp + 4, sizeof(lDeclineInvite));
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lDeclineInvite), 11,
+                                                               sizeof(lDeclineInvite));
                             break;
-                        case 4:
-                            std::memcpy(lpOut, lp + 4, 16);
-                            liType = 12; liSize = 16; lbEmit = true;
+                        }
+                        case 4:   // join
+                        {
+                            CgsNetwork::PlayerName lJoinBuddy;
+                            std::memcpy(&lJoinBuddy, lp + 4, sizeof(lJoinBuddy));
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lJoinBuddy), 12,
+                                                               sizeof(lJoinBuddy));
                             break;
-                        case 5:
-                            reinterpret_cast<CgsNetwork::PlayerName*>(lpOut)->Construct("");
-                            liType = 8; liSize = 16; lbEmit = true;
+                        }
+                        case 5:   // send, to an empty name
+                        {
+                            CgsNetwork::PlayerName lSendInvite;
+                            lSendInvite.Construct("");
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSendInvite), 8,
+                                                               sizeof(lSendInvite));
                             break;
+                        }
                         case 6:
-                            liType = 14; liSize = 1; lbEmit = true;   // signal
+                            lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 14, 1);
                             break;
                         default:
                         {
+                            CgsDev::Assert::BeginAssert();
                             char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
                             CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
                             lStream << "Invalid invite action : " << lpW[0] << "\n";
-                            CgsDev::Assert::BeginAssert();
                             CgsDev::Assert::FireAssert(lStream.GetBuffer(), __FILE__, __LINE__);
                             CgsDev::Assert::EndAssert();
                             break;
                         }
                     }
                     break;
-                case 110:   // select-scoreboard: fixed selector 1
-                    std::memset(lpOut, 0xFF, 12);
-                    reinterpret_cast<s32*>(lpOut)[3] = 1;
-                    liType = 49; liSize = 16; lbEmit = true;
-                    break;
-                case 111:   // select indexes (category = src word 0)
+                case 110:  // scoreboard: list the categories
                 {
-                    std::memset(lpOut, 0xFF, 16);
-                    BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent lSel =
-                        BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::GetIndexes(lpW[0]);
-                    reinterpret_cast<s32*>(lpOut)[0] = lSel.miCategory;
-                    reinterpret_cast<s32*>(lpOut)[3] = lSel.meSelectType;
-                    liType = 49; liSize = 16; lbEmit = true;
+                    IO::NetworkInSelectScoreboardEvent lScoreboardEvent;
+                    lScoreboardEvent.Prepare();
+                    lScoreboardEvent.GetCategories();
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                                                       IO::NetworkInSelectScoreboardEvent::KI_EVENT_TYPE,
+                                                       sizeof(lScoreboardEvent));
                     break;
                 }
-                case 112:   // select variations (index = src word 0)
+                case 111:  // scoreboard: list the indexes of a category
                 {
-                    std::memset(lpOut, 0xFF, 16);
-                    BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent lSel =
-                        BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::GetVariations(lpW[0]);
-                    reinterpret_cast<s32*>(lpOut)[1] = lSel.miIndex;
-                    reinterpret_cast<s32*>(lpOut)[3] = lSel.meSelectType;
-                    liType = 49; liSize = 16; lbEmit = true;
+                    IO::NetworkInSelectScoreboardEvent lScoreboardEvent;
+                    lScoreboardEvent.Prepare();
+                    lScoreboardEvent.GetIndexes(lpW[0]);
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                                                       IO::NetworkInSelectScoreboardEvent::KI_EVENT_TYPE,
+                                                       sizeof(lScoreboardEvent));
                     break;
                 }
-                case 113:   // show scoreboard (variation = src word 0)
+                case 112:  // scoreboard: list the variations of an index
                 {
-                    std::memset(lpOut, 0xFF, 16);
-                    BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent lSel =
-                        BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::GetScoreboard(lpW[0]);
-                    reinterpret_cast<s32*>(lpOut)[2] = lSel.miVariation;
-                    reinterpret_cast<s32*>(lpOut)[3] = lSel.meSelectType;
-                    liType = 49; liSize = 16; lbEmit = true;
+                    IO::NetworkInSelectScoreboardEvent lScoreboardEvent;
+                    lScoreboardEvent.Prepare();
+                    lScoreboardEvent.GetVariations(lpW[0]);
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                                                       IO::NetworkInSelectScoreboardEvent::KI_EVENT_TYPE,
+                                                       sizeof(lScoreboardEvent));
                     break;
                 }
-                case 114:   // select-scoreboard: fixed selector 5
-                    std::memset(lpOut, 0xFF, 12);
-                    reinterpret_cast<s32*>(lpOut)[3] = 5;
-                    liType = 49; liSize = 16; lbEmit = true;
+                case 113:  // scoreboard: show a variation's table
+                {
+                    IO::NetworkInSelectScoreboardEvent lScoreboardEvent;
+                    lScoreboardEvent.Prepare();
+                    lScoreboardEvent.GetScoreboard(lpW[0]);
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                                                       IO::NetworkInSelectScoreboardEvent::KI_EVENT_TYPE,
+                                                       sizeof(lScoreboardEvent));
                     break;
-                case 115:   // select-scoreboard: fixed selector 6
-                    std::memset(lpOut, 0xFF, 12);
-                    reinterpret_cast<s32*>(lpOut)[3] = 6;
-                    liType = 49; liSize = 16; lbEmit = true;
+                }
+                case 114:  // scoreboard: page up
+                {
+                    IO::NetworkInSelectScoreboardEvent lScoreboardEvent;
+                    lScoreboardEvent.Prepare();
+                    lScoreboardEvent.PageUp();
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                                                       IO::NetworkInSelectScoreboardEvent::KI_EVENT_TYPE,
+                                                       sizeof(lScoreboardEvent));
                     break;
-
-                case 121:   // req score target (36-byte record)
+                }
+                case 115:  // scoreboard: page down
+                {
+                    IO::NetworkInSelectScoreboardEvent lScoreboardEvent;
+                    lScoreboardEvent.Prepare();
+                    lScoreboardEvent.PageDown();
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                                                       IO::NetworkInSelectScoreboardEvent::KI_EVENT_TYPE,
+                                                       sizeof(lScoreboardEvent));
+                    break;
+                }
+                case 120:  // scoreboard gamercard: the highlighted PlayerName
+                {
+                    CGS_ASSERT(lp != 0, "lpGuiGamercardEvent");
+                    CgsNetwork::PlayerName lShowGamerCard;
+                    std::memcpy(&lShowGamerCard, lp, sizeof(lShowGamerCard));
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lShowGamerCard), 47,
+                                                       sizeof(lShowGamerCard));
+                    break;
+                }
+                case 121:  // scoreboard score target: payload {score, category, index, variation, name[16], flag}
+                {          // -> {name[16], score, category, index, variation, flag}, 36 bytes
                     CGS_ASSERT(lp != 0, "lpGuiReqScoreTargetEvent");
-                    std::memcpy(lpOut, lp + 16, 16);
-                    reinterpret_cast<s32*>(lpOut)[4] = lpW[0];
-                    reinterpret_cast<s32*>(lpOut)[5] = lpW[1];
-                    reinterpret_cast<s32*>(lpOut)[6] = lpW[2];
-                    reinterpret_cast<s32*>(lpOut)[7] = lpW[3];
-                    lpOut[32] = lp[32];
-                    liType = 50; liSize = 36; lbEmit = true;
+                    s32 laiScoreTarget[9];
+                    u8* lpScoreTarget = reinterpret_cast<u8*>(laiScoreTarget);
+                    std::memcpy(lpScoreTarget, lp + 16, 16);
+                    laiScoreTarget[4] = lpW[0];
+                    laiScoreTarget[5] = lpW[1];
+                    laiScoreTarget[6] = lpW[2];
+                    laiScoreTarget[7] = lpW[3];
+                    lpScoreTarget[32] = lp[32];
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laiScoreTarget), 50, 36);
                     break;
+                }
                 case 124:
-                    liType = 51; liSize = 1; lbEmit = true;    // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 51, 1);
                     break;
-                case 126:
-                    lpOut[0] = lp[0]; lpOut[1] = lp[1]; lpOut[2] = lp[2];
-                    liType = 52; liSize = 3; lbEmit = true;
+                case 126:  // three flag bytes
+                {
+                    u8 lacAccountUpdate[3];
+                    lacAccountUpdate[0] = lp[0];
+                    lacAccountUpdate[1] = lp[1];
+                    lacAccountUpdate[2] = lp[2];
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacAccountUpdate), 52,
+                                                       sizeof(lacAccountUpdate));
                     break;
+                }
                 case 270:
-                    liType = 21; liSize = 1; lbEmit = true;    // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 21, 1);
                     break;
                 case 278:
-                    reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
-                    liType = 23; liSize = 4; lbEmit = true;
-                    break;
-                case 281:
-                    liType = 25; liSize = 1; lbEmit = true;    // signal
-                    break;
-
-                case 286:   // telemetry (two "%i" parameters)
                 {
-                    reinterpret_cast<s32*>(lpOut)[0] = 44;
-                    lpOut[4] = 0;
-                    BrnNetwork::BrnNetworkModuleIO::TelemetryData* lpTelemetry =
-                        reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::TelemetryData*>(lpOut);
-
-                    char lacParam0[16];
-                    CgsCore::SPrintf(lacParam0, 16, "%i", lpW[1]);
-                    lpTelemetry->AddParameter(lacParam0);
-
-                    char lacParam1[16];
-                    CgsCore::SPrintf(lacParam1, 16, "%i", lpW[0]);
-                    lpTelemetry->AddParameter(lacParam1);
-
-                    liType = 16; liSize = 20; lbEmit = true;
+                    s32 liValue = lpW[0];
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 23, 4);
                     break;
                 }
+                case 281:
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 25, 1);
+                    break;
+                case 286:  // custom route created: telemetry with the payload's second then first word
+                {
+                    IO::NetworkInTelemetryEvent lTelemetryEvent;
+                    lTelemetryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_CUSTOM_ROUTE_CREATED);
 
+                    char lacParameter0[16];
+                    CgsCore::SPrintf(lacParameter0, 16, "%i", lpW[1]);
+                    lTelemetryEvent.mEventData.AddParameter(lacParameter0);
+
+                    char lacParameter1[16];
+                    CgsCore::SPrintf(lacParameter1, 16, "%i", lpW[0]);
+                    lTelemetryEvent.mEventData.AddParameter(lacParameter1);
+
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTelemetryEvent),
+                                                       IO::NetworkInTelemetryEvent::KI_EVENT_TYPE,
+                                                       sizeof(lTelemetryEvent));
+                    break;
+                }
                 case 287:
-                    liType = 6; liSize = 1; lbEmit = true;     // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 6, 1);
                     break;
                 case 293:
-                    liType = 26; liSize = 1; lbEmit = true;    // signal
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSignal), 26, 1);
                     break;
-                case 323:
-                    std::memcpy(lpOut, lp, 20);
-                    liType = 16; liSize = 20; lbEmit = true;
+                case 323:  // a ready-made telemetry record
+                {
+                    IO::NetworkInTelemetryEvent lTelemetryEvent;
+                    std::memcpy(&lTelemetryEvent.mEventData, lp, sizeof(lTelemetryEvent.mEventData));
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTelemetryEvent),
+                                                       IO::NetworkInTelemetryEvent::KI_EVENT_TYPE,
+                                                       sizeof(lTelemetryEvent));
                     break;
+                }
                 case 353:
-                    reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
-                    liType = 24; liSize = 4; lbEmit = true;
+                {
+                    s32 liValue = lpW[0];
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 24, 4);
                     break;
-
+                }
                 case 474:
-                    reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
-                    liType = 17; liSize = 4; lbEmit = true;
+                {
+                    s32 liValue = lpW[0];
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liValue), 17, 4);
                     break;
-                case 568:
+                }
+                case 568:  // compressed camera-picture request: {quality, format, target texture}
+                {
                     CGS_ASSERT(lp != 0, "lpReqCompCamPicEvent");
-                    reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
-                    reinterpret_cast<s32*>(lpOut)[1] = lpW[1];
-                    reinterpret_cast<s32*>(lpOut)[2] = lpW[2];
-                    liType = 53; liSize = 12; lbEmit = true;
+                    IO::NetworkInReqCamPicEvent lReqCamPicEvent;
+                    lReqCamPicEvent.miQualitySetting   = lpW[0];
+                    lReqCamPicEvent.meCompressedFormat = static_cast<renderengine::PixelFormat>(lpW[1]);
+                    // FLAG PC-ABI: the texture pointer is the payload's last member, so it is read
+                    // from the payload's end -- +0x08 in the console's 12-byte payload; the host
+                    // producer's pointer alignment puts it after padding.
+                    std::memcpy(&lReqCamPicEvent.mpTextureToCompressedInto,
+                                lp + liPayloadSize - sizeof(lReqCamPicEvent.mpTextureToCompressedInto),
+                                sizeof(lReqCamPicEvent.mpTextureToCompressedInto));
+                    lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lReqCamPicEvent),
+                                                       IO::NetworkInReqCamPicEvent::KI_EVENT_TYPE,
+                                                       sizeof(lReqCamPicEvent));
                     break;
-
+                }
                 default:
                     break;
             }
 
-            if (lbEmit)
-                lpNetworkInputQueue->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(lpOut), liType, liSize);
-
-            liResult = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+            liEventId = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
 
-        return liResult;
+        return liEventId;
     }
 }

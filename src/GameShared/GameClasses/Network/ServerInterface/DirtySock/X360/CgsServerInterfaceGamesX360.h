@@ -81,10 +81,10 @@ namespace CgsNetwork
         // @ 0x8287F748 -- drive the found-games display list.
         virtual void Update();
         // @ 0x8288C0D0 -- cancel the outstanding lobby request.
-        virtual void Suspend(s32 liUpdateFlags);
+        virtual void Suspend();
         // @ 0x8288C128 -- (re)build the found-games display list; re-sort it when a
         // search-result sort callback is registered.
-        virtual void* Resume();
+        virtual void Resume();
 
         // ---- Action overrides (add the XNCONTEXT* / XNRANK matchmaking tagfields) --
         void CreateGame(ServerInterfaceGameParamsBase* lpGameParams,
@@ -95,7 +95,7 @@ namespace CgsNetwork
                            ServerInterfacePlayerParamsBase* lpPlayerParams); // 0x8288C300
         void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams); // 0x8288C460
         void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);   // 0x8288C770
-        void EndGame(ServerInterfaceEndGameDataBase* lpEndGameData);       // 0x8288C5B8
+        virtual void EndGame(ServerInterfaceEndGameDataBase* lpEndGameData);
 
         // Set the game-server "session flags" word through ConnApi ('sflg').
         void SetSessionFlags(s32 liFlags);                                 // 0x8287F7B0
@@ -104,7 +104,7 @@ namespace CgsNetwork
         // @ 0x8288C808 -- end the current create/join/quick-join action once the lobby
         // message carries a "SESS" tagfield; otherwise chain to the base.
         // lpauMsg points at the DirtySDK lobby message (msg[3]==error, msg[4]==pData).
-        s32 ReceivedGameEvent(s32* lpauMsg);
+        virtual s32 ReceivedGameEvent(s32* lpauMsg);
 
         // ---- X360 queries ---------------------------------------------------------
         // @ 0x8288C880 -- resolve a player id to its XUID/host-address.

@@ -1,7 +1,7 @@
 // ============================================================================
 // b5-decomp/src/GameSource/Network/Managers/BrnNetworkStatsRequestEventQueue.h
 // ============================================================================
-// BrnNetwork::StatsRequestEvent + the fixed-capacity ring queue the
+// The fixed-capacity BrnNetwork::StatsRequestEvent ring queue the
 // NetworkPlayerStatsManager embeds for it. The X360 demangled TU name
 // `BrnNetwork::StatsRequestEvent,32>` is the truncated spelling of the template
 // instance BrnNetwork::EventQueue<StatsRequestEvent, 32> (the manager's `mEventQueue`,
@@ -21,24 +21,17 @@
 //   +0x288  miLength      -- live element count (>=32 rejects Push; <=0 rejects Pop)
 // sizeof == 640 + 12 == 652 bytes.
 //
-// StatsRequestEvent is a 20-byte (5 x s32-word) value the manager copies whole into /
-// out of the queue. Its finer field types are not recoverable from the pure word-copy
-// loop, so it is modelled as five offset-pinned s32 words (a later finer
-// reconstruction can retype them without moving anything).
+// StatsRequestEvent (home: BrnStatsRequestEvent.h) is the 20-byte value the manager copies
+// whole into / out of the queue.
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/Network/Managers/BrnStatsRequestEvent.h"   // BrnNetwork::StatsRequestEvent (the real home)
 
 namespace BrnNetwork
 {
-    // ------------------------------------------------------------------------
-    // StatsRequestEvent -- a 20-byte stats-request record (5 words). Copied whole
-    // word-for-word by the queue's Push/Pop. Modelled as five pinned words.
-    // ------------------------------------------------------------------------
-    struct StatsRequestEvent
-    {
-        s32 maWords[5];   // 5 x s32 (20-byte element stride proven by the X360 index math)
-    };
+    // StatsRequestEvent (BrnStatsRequestEvent.h) is the 20-byte element the queue's Push/Pop
+    // copy whole.
     static_assert(sizeof(StatsRequestEvent) == 20, "StatsRequestEvent element stride (20 bytes)");
 
     // ------------------------------------------------------------------------

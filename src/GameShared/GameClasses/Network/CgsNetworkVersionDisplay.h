@@ -17,6 +17,11 @@
 // authoritative and carries a third value param stored at +0x10 (stw r28,0x10) that RenderHUD reads
 // back (lwz r6,0x10; SnPrintf "/%d"), so muField_04 is materialised here.
 
+namespace BrnNetwork
+{
+    class NetworkServers;   // friend: SetServerType writes meServerType directly
+}
+
 namespace CgsNetwork
 {
     // The 7 human-readable server-type names indexed by EServerType (X360 off_82F33478 /
@@ -26,6 +31,9 @@ namespace CgsNetwork
 
     struct VersionDisplay : public CgsDev::DebugComponent
     {
+        // Switching servers rewrites the displayed server type in place.
+        friend class BrnNetwork::NetworkServers;
+
     public:
         void Construct();
 

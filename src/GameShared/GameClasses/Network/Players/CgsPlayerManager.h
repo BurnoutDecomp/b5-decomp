@@ -1,42 +1,130 @@
 #pragma once
 
 // ===================================================================================
-// CgsNetwork::PlayerManager -- minimal owning header
+// CgsNetwork::PlayerManager -- owning header
 //   b5-decomp/src/GameShared/GameClasses/Network/Players/CgsPlayerManager.h
 //
-// The session-wide player registry. CgsNetworkPlayer.cpp drives a handful of its
-// queries during the per-frame send pump (round-robin turn, connection status, ack/nack
-// scheduling, the local-player/game ids, and the per-message-type ack/nack SignalMessage
-// objects), plus reaches the embedded ReliableMessageManager.
+// The session-wide player registry (embedded in CgsNetwork::NetworkManager at +0x78).
+// It owns the connection-test manager and the reliable-message queue, the per-slot
+// ack/nack signal messages, the active/inactive player tables, the event callbacks and
+// the per-frame send/receive pumps.
 //
-// This header is INTENTIONALLY MINIMAL: it declares only the X360-attested members/methods
-// CgsNetworkPlayer.cpp uses, with signatures from the DecFIGS DWARF
-//   (references/DecFIGS/dwarfdump/.../CgsPlayerManager.h), gated against the ARTIST binary.
-// The full registry layout (player records, NAT data, host-migration state, ~9.5 KB) is
-// reconstructed in CgsPlayerManager.cpp's own TU; each method body below lives there.
+// Console layout (0x2500 bytes, 8-aligned by the reliable-message bit array). Every
+// offset is the one Construct / Prepare / Release and the lookups address:
+//   +0x0000  mConnectionManager                 (PlayersConnectionManager, 0xE38)
+//   +0x0E38  mReliableMessageManager            (ReliableMessageManager, 0x11B8)
+//   +0x1FF0  maAckMessage[10]                   (SignalMessage, 0x28 each)
+//   +0x2180  maNackMessage[10]
+//   +0x2310  maInactivePlayers[8]               (PlayerData, 12 each)
+//   +0x2370  maActivePlayers[8]
+//   +0x23D0  maEventCallbacks[1]
+//   +0x23D8  miNumEventCallbacks
+//   +0x23DC  mePrepareState
+//   +0x23E0  miNumActivePlayers
+//   +0x23E4  miNumInactivePlayers
+//   +0x23E8  mpServerInterface
+//   +0x23EC  mpNetworkAdapter
+//   +0x23F0  mpTimeManager
+//   +0x23F4  meLocalConsoleFrameRate
+//   +0x23F8  mHostPlayerID
+//   +0x23FC  mLocalPlayerID
+//   +0x2400  mpfOnReceivedFromWrongIPCallback
+//   +0x2404  mpfConnectionFinalisedCallback
+//   +0x2408  mpConnectionFinalisedUserData
+//   +0x240C  mu16CurrentFrame
+//   +0x240E  mu8GameID
+//   +0x240F  mbDiskAccessible
+//   +0x2410  mbPlayerListIsValid
+//   +0x2414  miPLAYERManagerSendMessagesPM
+//   +0x2418  mDebugComponent                    (PlayerManagerDebugComponent, 0x24)
+//   +0x243C  miBytesUsedForAcks
+//   +0x2440  miBytesUsedForUnreliableMessages
+//   +0x2444  miBytesUsedForReliableMessages
+//   +0x2448  miBytesUsedForReliableResendMessages
+//   +0x244C  maMessageBytes[44]                 (Construct clears 44 words)
 //
-// The ack/nack ring sizes are the bounds the player pump asserts against
-// (KI_MAX_ACKS_TO_BUFFER == KI_MAX_NACKS_TO_BUFFER == 10).
+// Members are reached by name; the offsets above are console facts (the host widens
+// every pointer).
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"                         // CgsSystem::EFrameRate
+#include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsReliableMessageManager.h"
-#include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"  // EConnectionStatus
+#include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"          // EConnectionStatus
+#include "GameShared/GameClasses/Network/Players/CgsPlayerDescriptionsArray.h"          // PlayerData
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsSignalMessage.h"
+#include "GameShared/GameClasses/Network/Debug Components/CgsNetworkPlayerManagerDebugComponent.h"
+
+namespace CgsSystem
+{
+    class TimerStatus;
+}
+
+namespace CgsMemory
+{
+    class HeapMalloc;
+}
 
 namespace CgsNetwork
 {
-    struct SignalMessage;
+    struct Message;
     struct NetworkPlayer;
+    struct NetworkAdapter;
     struct PlayerMenuData;
+    struct TimeManager;
+    struct CgsNetworkPlayerConstructParams;
+    class  ServerInterface;
     class  PlayersConnectionManager;
+
+    // Tables handed to PlayerManager::Construct: per remote slot the player's construct
+    // params, the NetworkPlayer object and its menu-data object.
+    struct PlayerManagerConstructParams
+    {
+        CgsNetworkPlayerConstructParams* mapConstructParams[8];   // +0x00
+        NetworkPlayer*                   mapPlayerList[8];        // +0x20
+        PlayerMenuData*                  mapMenuData[8];          // +0x40
+    };
+
+    // The block PlayerManager::Prepare reads (0x20 console bytes).
+    struct PlayerManagerPrepareParams
+    {
+        typedef void OnReceivedFromWrongIPCallback(NetworkPlayer* lpPlayer, s32 liExpectedIP,
+                                                   s32 liReceivedIP);
+
+        NetworkAdapter*                 mpNetworkAdapter;                    // +0x00
+        ServerInterface*                mpServerInterface;                   // +0x04
+        TimeManager*                    mpTimeManager;                       // +0x08
+        CgsSystem::EFrameRate           meLocalConsoleFrameRate;             // +0x0C
+        OnReceivedFromWrongIPCallback*  mpfOnReceivedFromWrongIPCallback;    // +0x10
+        PlayersConnectionManager::ConnMgrConnectionFinalisedCallback
+                                        mpfConnectionFinalisedCallback;      // +0x14
+        void*                           mpConnectionFinalisedUserData;       // +0x18
+        CgsMemory::HeapMalloc*          mpNetworkHeapAllocator;              // +0x1C
+    };
 
     struct PlayerManager
     {
         static const s32 KI_MAX_ACKS_TO_BUFFER  = 10;
         static const s32 KI_MAX_NACKS_TO_BUFFER = 10;
+        static const s32 KI_MAX_PLAYERS         = 8;
+        static const s32 KI_NUM_EVENT_CALLBACKS = 1;
+        static const s32 KI_NUM_MESSAGE_BYTE_COUNTERS = 44;
 
-        // Which players a registry walk should visit. DWARF CgsPlayerManager.h:18.
-        // GetNextPlayerID's second arg in the host-migration walks is 0 (finalised players).
+        // Registry events broadcast to the registered callbacks.
+        enum EEvent
+        {
+            E_EVENT_PLAYER_ADDED            = 0,
+            E_EVENT_START_PLAYER_REMOVAL    = 1,
+            E_EVENT_END_PLAYER_REMOVAL      = 2,
+            E_EVENT_PLAYER_FINALISED        = 3,
+            E_EVENT_PLAYER_LOST_CONTACT     = 4,
+            E_EVENT_PLAYER_REGAINED_CONTACT = 5,
+            E_EVENT_PLAYER_DISCONNECTED     = 6,
+            E_EVENT_COUNT                   = 7,
+        };
+
+        // Which players a registry walk should visit.
         enum EPlayersToConsider
         {
             E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED = 0,
@@ -44,92 +132,151 @@ namespace CgsNetwork
             E_CONSIDER_PLAYERS_COUNT              = 2,
         };
 
-        // --- registry iteration / lookup (host-migration view) ---
-        // Iterate registered player ids: seed *lpPlayerID with -1, then call repeatedly;
-        // returns false when the walk is exhausted. DWARF :212 / :217 / :226 / :273.
+        enum EPrepareState
+        {
+            E_CONSTRUCTED                        = 0,
+            E_RELEASED                           = 1,
+            E_PREPARING_CONNECTION_MANAGER       = 2,
+            E_PREPARING_RELIABLE_MESSAGE_MANAGER = 3,
+            E_FULLY_PREPARED                     = 4,
+            E_PREPARING_COUNT                    = 5,
+        };
+
+        typedef void (*EventCallbackFunction)(EEvent leEvent, void* lpEventData, void* lpUserData);
+
+        struct EventCallback
+        {
+            EventCallbackFunction mCallback;     // +0x00
+            void*                 mpUserData;    // +0x04
+        };
+
+        PlayerManager();
+
+        // --- lifecycle ---
+        void Construct(PlayerManagerConstructParams* lpConstructParams);
+        void Destruct();
+        bool Prepare(PlayerManagerPrepareParams* lpPrepareParams);
+        bool Release();
+        void Update(const CgsSystem::TimerStatus* lpTimerStatus, u16 lu16CurrentFrame, bool lbInGame);
+        void PostUpdate(u16 lu16CurrentFrame);
+
+        // --- players ---
+        void AddPlayer(const CgsSystem::TimerStatus* lpTimerStatus, const char* lpcName,
+                       NetworkPlayerID lPlayerID, s32 liConnectionIndex,
+                       CgsSystem::EFrameRate leRemoteConsoleFrameRate, bool lbLocal);
+        void RemovePlayer(NetworkPlayerID lPlayerID);
+
+        // Iterate player ids: seed *lpPlayerID with -1, then call repeatedly; false when the
+        // walk is exhausted.
         bool GetNextPlayerID(NetworkPlayerID* lpPlayerID, EPlayersToConsider leConsider) const;
         bool GetNextLocalPlayerID(NetworkPlayerID* lpPlayerID) const;
-        // Total number of players matching leConsider (DWARF CgsPlayerManager.h:289).
-        // ADDITIVE GROW (BrnNetworkLaunchManager TU): the launch state machine compares the
-        // total finalised player count (leConsider == E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED)
-        // against the minimum-players-to-launch threshold. Declared-only; body is the
-        // registry TU.
-        s32 GetTotalNumberPlayers(EPlayersToConsider leConsider) const;
-        NetworkPlayer* GetPlayerByID(NetworkPlayerID liPlayerID) const;
-        void SetHostPlayerID(NetworkPlayerID liPlayerID);
+        bool GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const;
 
-        // The connection-table view of this same registry object. On the X360 the player
-        // registry IS-A PlayersConnectionManager: the NAT-kick walk drives the registry
-        // iterators (GetNextPlayerID/GetPlayerByID) and the connection-table queries
-        // (AreAllConnectionsSuccessful/HavePlayersFailedToConnect/GetIDOfPlayerToKick) through
-        // one and the same pointer (X360 UpdateNATData @ 0x8256CFF0 passes *(manager+0x78) to
-        // both). Surfaced as a named accessor (rather than re-modelling the inheritance in this
-        // minimal slice) so callers reach the connection API by name. Declared-only; body is the
-        // registry TU. ADDITIVE GROW (BrnNetworkConnectionManager TU).
-        PlayersConnectionManager* GetPlayersConnectionManager();
+        NetworkPlayer*  GetPlayerByID(NetworkPlayerID lPlayerID) const;
+        NetworkPlayer*  GetPlayerByName(const char* lpcName);
+        PlayerMenuData* GetMenuDataByID(NetworkPlayerID lPlayerID) const;
 
-        // The id of the session host (-1 when there is none). X360-attested
-        // (DWARF CgsPlayerManager.h GetHostPlayerID; TimeManager reads it at +0x23F8).
-        // ADDITIVE GROW (CgsTimeManager TU): declared-only; body is the registry TU.
-        NetworkPlayerID GetHostPlayerID() const;
+        // --- message pumps ---
+        void SendMessages();
+        void ReceiveMessages();
 
-        // Whether liPlayerID names one of this machine's local players. X360-attested
-        // (DWARF CgsPlayerManager.h IsLocalPlayer). ADDITIVE GROW (CgsTimeManager TU):
-        // declared-only; body is the registry TU.
-        bool IsLocalPlayer(NetworkPlayerID liPlayerID) const;
-
-        // The lobby/menu view of the player registered under liPlayerID (the registry stores
-        // game-specific PlayerMenuData-derived objects; the Burnout build downcasts the result
-        // to BrnNetwork::PlayerMenuData at the call sites). DWARF CgsPlayerManager.h:256.
-        PlayerMenuData* GetMenuDataByID(NetworkPlayerID liPlayerID) const;
-
-        // Count of registered network players. The X360 call sites pass a single bool flag
-        // (0 == count all players, not just the in-game subset). DWARF CgsPlayerManager.h.
-        // ADDITIVE GROW (BrnNetworkAggressiveDrivingManager TU): declared-only; body is the
-        // CgsPlayerManager.cpp registry TU.
-        s32 GetNumberNetworkPlayers(bool lbInGameOnly) const;
-
-        // --- round-robin / connection scheduling (player-pump view) ---
-        // Is it liPlayerID's turn to piggy-back a round-robin message this frame? DWARF :364.
-        bool IsPlayerTurnToSendRoundRobinMessage(NetworkPlayerID liPlayerID, bool lbInGame,
-                                                 s32 liArg);
-        // Connection lifecycle state for liPlayerID (==E_CONNECTION_SUCCESS means linked).
-        // X360-attested on the PlayersConnectionManager base; surfaced here for the pump.
-        EConnectionStatus GetConnectionStatus(NetworkPlayerID liPlayerID) const;
-
-        // Does liPlayerID have a pending ack/nack queued at slot liIndex this frame? DWARF :253/258.
-        bool AckNeedsSending(NetworkPlayerID liPlayerID, s32 liIndex) const;
-        bool NackNeedsSending(NetworkPlayerID liPlayerID, s32 liIndex) const;
-
-        // The buffered ack/nack control message for the given slot. DWARF :262/266.
+        bool AckNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const;
+        bool NackNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const;
+        // Inlined on the console with two range asserts; declared-only until those strings
+        // are recovered.
         SignalMessage* GetAck(s32 liIndex);
         SignalMessage* GetNack(s32 liIndex);
 
-        // --- bandwidth accounting (PlayerManagerDebugComponent HUD view) ---
-        // The per-frame DirtySock send-byte tallies the bandwidth overlay reads (in bytes):
-        // the application payload, the actual sent bytes, and the estimated bytes-with-overhead.
-        // ADDITIVE GROW (CgsNetworkPlayerManagerDebugComponent TU): the network PlayerManager
-        // bandwidth HUD (RenderHUD @ 0x82893C88) calls these on mpPlayerManager. Declared-only;
-        // the bodies live in the CgsPlayerManager.cpp registry TU.
-        s32 GetTotalBytesSentToDirtySock() const;
-        s32 GetTotalBytesSent() const;
-        s32 GetTotalBytesSentWithOverhead() const;
-        // Iterate the remote (non-local) player ids: seed *lpPlayerID with -1, then call; returns
-        // false when the walk is exhausted. ADDITIVE GROW (same HUD TU): declared-only, body in
-        // the registry TU.
-        bool GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const;
+        // --- host / identity ---
+        NetworkPlayerID GetHostPlayerID();
+        void            SetHostPlayerID(NetworkPlayerID lPlayerID);
+        bool            AmIHost();
+        NetworkPlayerID GetLocalPlayerID() const { return mLocalPlayerID; }
+        bool            IsLocalPlayer(NetworkPlayerID lPlayerID) const;
 
-        // --- identity ---
-        NetworkPlayerID GetLocalPlayerID() const;   // reads mLocalPlayerID (DWARF h:162)
-        u8              GetGameID() const;           // DWARF :297
+        s32  GetTotalNumberPlayers(EPlayersToConsider leConsider) const;
+        s32  GetNumberNetworkPlayers(EPlayersToConsider leConsider) const;
+        s32  GetNumberLocalPlayers() const;
 
-        // True when the local console is the session host. ADDITIVE GROW (BrnNetworkBuddy-
-        // ManagerX360 TU): BuddyManagerX360::DoInvite gates the invite vs. join decision on it
-        // (X360 DoInvite @ 0x825700A8 calls CgsNetwork::PlayerManager::AmIHost on
-        // &GetNetworkManager()->mpPlayerManager). Declared-only; body is the CgsPlayerManager TU.
-        bool AmIHost();
+        void SetGameID(s32 liGameID);
+        u8   GetGameID() const { return mu8GameID; }
 
-        // --- embedded reliable-message queue (DWARF h:110 mReliableMessageManager by value) ---
-        ReliableMessageManager& GetReliableMessageManager();
+        bool IsPlayerFinalised(NetworkPlayerID lPlayerID) const;
+        bool IsPlayerTurnToSendRoundRobinMessage(NetworkPlayerID lPlayerID, bool lbInGame,
+                                                 s32 liFrameOffset);
+
+        // --- round / session edges ---
+        void OnRoundStart();
+        void OnRoundFinish();
+        void OnLobbyApiCreated();
+        void Disconnected();
+
+        void RegisterEventCallback(EventCallbackFunction lpfCallback, void* lpUserData);
+        void UnRegisterEventCallback(EventCallbackFunction lpfCallback);
+
+        // Receive-side filters: consume an incoming ack / nack signal, accept or drop a
+        // received message.
+        bool CheckForAck(Message* lpMessage);
+        bool CheckForNack(Message* lpMessage);
+        void AcceptMessage(Message* lpMessage);
+        void ThrowAwayMessage(Message* lpMessage);
+
+        // --- bandwidth accounting (the debug HUD reads these) ---
+        u32 GetTotalBytesSent();
+        u32 GetTotalBytesSentWithOverhead();
+        u32 GetTotalBytesSentToDirtySock();
+
+        // The connection-test manager embedded at +0x0000. Declared-only: the console has
+        // no such accessor (its callers reach mConnectionManager directly).
+        PlayersConnectionManager* GetPlayersConnectionManager();
+
+        PlayersConnectionManager mConnectionManager;                         // +0x0000
+        ReliableMessageManager   mReliableMessageManager;                    // +0x0E38
+
+    private:
+        PlayerData* AssignActiveLocalPlayer(s32 liConnectionIndex);
+        PlayerData* AssignActiveNetworkPlayer(s32 liConnectionIndex);
+        void        ReleasePlayer(s32 liActiveIndex);
+        void        BroadcastEvent(EEvent leEvent, void* lpEventData);
+
+        // Callbacks registered with the connection manager (user data = the registry).
+        static void ConnectionFinalisedCallback(bool lbSuccess, NetworkPlayerID lPlayerID,
+                                                ConnectionData lConnectionData, void* lpUserData);
+        static void PlayerDisconnectedCallback(NetworkPlayerID lPlayerID, void* lpUserData);
+
+        SignalMessage   maAckMessage[KI_MAX_ACKS_TO_BUFFER];                  // +0x1FF0
+        SignalMessage   maNackMessage[KI_MAX_NACKS_TO_BUFFER];                // +0x2180
+        PlayerData      maInactivePlayers[KI_MAX_PLAYERS];                    // +0x2310
+        PlayerData      maActivePlayers[KI_MAX_PLAYERS];                      // +0x2370
+        EventCallback   maEventCallbacks[KI_NUM_EVENT_CALLBACKS];             // +0x23D0
+        s32             miNumEventCallbacks;                                  // +0x23D8
+        EPrepareState   mePrepareState;                                       // +0x23DC
+        s32             miNumActivePlayers;                                   // +0x23E0
+        s32             miNumInactivePlayers;                                 // +0x23E4
+        ServerInterface* mpServerInterface;                                   // +0x23E8
+        NetworkAdapter* mpNetworkAdapter;                                     // +0x23EC
+        TimeManager*    mpTimeManager;                                        // +0x23F0
+        CgsSystem::EFrameRate meLocalConsoleFrameRate;                        // +0x23F4
+        NetworkPlayerID mHostPlayerID;                                        // +0x23F8
+        NetworkPlayerID mLocalPlayerID;                                       // +0x23FC
+        PlayerManagerPrepareParams::OnReceivedFromWrongIPCallback*
+                        mpfOnReceivedFromWrongIPCallback;                     // +0x2400
+        PlayersConnectionManager::ConnMgrConnectionFinalisedCallback
+                        mpfConnectionFinalisedCallback;                       // +0x2404
+        void*           mpConnectionFinalisedUserData;                        // +0x2408
+        u16             mu16CurrentFrame;                                     // +0x240C
+        u8              mu8GameID;                                            // +0x240E
+        bool            mbDiskAccessible;                                     // +0x240F
+        bool            mbPlayerListIsValid;                                  // +0x2410
+        s32             miPLAYERManagerSendMessagesPM;                        // +0x2414
+        PlayerManagerDebugComponent mDebugComponent;                          // +0x2418
+        // The committed PlayerManagerDebugComponent ends 4 console bytes short of its 0x24
+        // span (its trailing mCompressionUtils member is not modelled yet).
+        u8              maDebugComponentReserve[4];                           // +0x2438
+        s32             miBytesUsedForAcks;                                   // +0x243C
+        s32             miBytesUsedForUnreliableMessages;                     // +0x2440
+        s32             miBytesUsedForReliableMessages;                       // +0x2444
+        s32             miBytesUsedForReliableResendMessages;                 // +0x2448
+        s32             maMessageBytes[KI_NUM_MESSAGE_BYTE_COUNTERS];         // +0x244C
     };
 }

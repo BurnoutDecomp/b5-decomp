@@ -18,12 +18,16 @@
 // across DIE copies. On X360 this is the single committed top-level typedef
 // BrnNetwork::NetworkPlayerID (== s32) from BrnNetworkSharedIO.h; we use that throughout.
 //
-// No fixed-byte sizeof/offset static_assert is emitted: the PC gate targets x64, where the
-// embedded pointers, sub-objects and NetworkPlayerStats records widen and shift every
-// absolute byte offset relative to the X360 32-bit layout the bodies were read from. The
-// by-name member walk the compiler emits is identical. The X360 absolute offsets are quoted
-// in the .cpp only as provenance for the recovered bodies.
+// The console offsets and sizeof (0x1788) are pinned only in a 32-bit build (_AssertLayout); on
+// the x64 host the embedded pointers widen and shift every absolute byte offset, so members are
+// reached by name.
+//
+// The reference declaration lists a `Time mTimeSinceUploadedOfflineProgression` after
+// mBufferedOfflineProgression; this build has no such member: the offline-progression memcpy
+// target is +0x1728 (0x44 bytes) and mpNetworkModule follows directly at +0x176C.
 #pragma once
+
+#include <cstddef>                                                           // offsetof (_AssertLayout)
 
 #include "types.hpp"
 #include "GameSource/Network/Managers/BrnNetworkStatsRequestEventQueue.h"   // StatsRequestEvent / EventQueue<,32>
@@ -150,10 +154,9 @@ namespace BrnNetwork
         StatsRequestEvent         mCurrentEventBeingProcessed;
         NetworkPlayerStatsResults mPlayerStatsCache;                                 // +0x578 (this+1400)
         BrnGameState::GameStateModuleIO::OnlineGameResults mBufferedOnlineStats;
-        BrnNetworkModuleIO::NetworkInOfflineProgression mBufferedOfflineProgression; // memcpy target (68 B)
-        Time                      mTimeSinceUploadedOfflineProgression;
+        BrnNetworkModuleIO::NetworkInOfflineProgression mBufferedOfflineProgression; // +0x1728 memcpy target (68 B)
 
-        BrnNetworkModule*         mpNetworkModule;
+        BrnNetworkModule*         mpNetworkModule;                                   // +0x176C
         BrnNetworkManager*        mpNetworkManager;
         BrnServerInterface*       mpServerInterface;
         CgsNetwork::ServerInterfacePlayerInfo* mpServerInterfacePlayerInfo;
@@ -168,5 +171,21 @@ namespace BrnNetwork
         // The C++ constructor (@ 0x827E1110) -- installs the embedded sub-objects and clears the
         // manager's own scalar state. Distinct from Construct() (the Brn lifecycle method).
         NetworkPlayerStatsManager();
+
+    private:
+        // Console layout, pinned in a 32-bit build; inert on the x64 host.
+        static void _AssertLayout();
     };
+
+    inline void NetworkPlayerStatsManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, maStatsUpdateEntry) == 0x28C, "maStatsUpdateEntry @ +0x28C");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mPlayerStatsCache) == 0x578, "mPlayerStatsCache @ +0x578");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mBufferedOnlineStats) == 0x1620, "mBufferedOnlineStats @ +0x1620");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mBufferedOfflineProgression) == 0x1728, "mBufferedOfflineProgression @ +0x1728");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mpNetworkModule) == 0x176C, "mpNetworkModule @ +0x176C");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, meCurrentStatus) == 0x177C, "meCurrentStatus @ +0x177C");
+        static_assert(sizeof(void*) != 4 || offsetof(NetworkPlayerStatsManager, mbWaitingToUploadStats) == 0x1784, "mbWaitingToUploadStats @ +0x1784");
+        static_assert(sizeof(void*) != 4 || sizeof(NetworkPlayerStatsManager) == 0x1788, "NetworkPlayerStatsManager is 0x1788 bytes");
+    }
 }

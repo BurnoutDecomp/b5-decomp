@@ -36,8 +36,8 @@
 //
 // This project targets SEMANTIC parity on the host (x64, 8-byte vtable pointers), so the host
 // sizeof of the embedded messages differs from the X360 32-bit halves; members are accessed
-// strictly BY NAME, which is stride-correct on either target. The 0xD8/0x30/0x38 strides are
-// documented from the X360 asm only and intentionally NOT static_asserted.
+// strictly BY NAME, which is stride-correct on either target. The console strides and offsets
+// are pinned in a 32-bit build only (_AssertLayout).
 //
 // FUNCTION OWNERSHIP: 13 functions are bodied in the sibling .cpp (the two reliable-message
 // callbacks _ChallengeSuccessMessageArrived/DeliveredCallback are static; the delivered one is
@@ -47,9 +47,11 @@
 // ===================================================================================
 #pragma once
 
+#include <cstddef>                                                      // offsetof (_AssertLayout)
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"            // BrnNetwork::NetworkPlayerID, EActiveRaceCarIndex
+#include "GameSource/CompilerDefines/gameshared_network_defines.h"       // KI_MAX_NETWORK_PLAYERS
 #include "GameSource/Network/Messages/BrnFburnSuccessUpdateMessage.h"  // FburnSuccessUpdateMessage, FburnChallengeSuccessUpdateAction::LastSecondChallengeSuccess
 #include "GameSource/Network/Messages/BrnFburnChallengeSuccessMessage.h" // FburnChallengeSuccessMessage
 
@@ -69,7 +71,7 @@ namespace BrnNetwork
     {
         struct OutputBuffer;               // ProcessBeforeSimulation param
         struct PostSimulationInputBuffer;  // ProcessAfterSimulation param
-        class  NetworkEventQueue;          // ProcessNetworkEvents param (CgsModule::VariableEventQueue<14000,16>)
+        struct NetworkEventQueue;          // ProcessNetworkEvents param
     }
 
     // The "last-second challenge success" 8-byte bit set the update message carries. Reuse the
@@ -79,10 +81,6 @@ namespace BrnNetwork
     typedef BrnGameState::FburnChallengeSuccessUpdateAction::LastSecondChallengeSuccess
         LastSecondChallengeSuccess;
 
-    // The player-table width (the X360 loops run 7 times; the asserts spell KI_MAX_NETWORK_PLAYERS).
-    // Modelled locally (no committed shared home), mirroring the AggressiveDriving / DirtyTrick
-    // siblings.
-    const s32 KI_MAX_NETWORK_PLAYERS = 7;
 
     struct ChallengeSuccessManager
     {
@@ -146,5 +144,17 @@ namespace BrnNetwork
         CgsNetwork::PlayerManager* mpPlayerManager;                          // X360 @ +1528
         CgsNetwork::TimeManager*   mpTimeManager;                            // X360 @ +1532
         bool                 mbSendUpdateSuccessMessage;                     // X360 @ +1536
+
+        // Console layout, pinned in a 32-bit build; inert on the x64 host.
+        static void _AssertLayout();
     };
+
+    inline void ChallengeSuccessManager::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || sizeof(ChallengeSuccessData) == 0xD8, "ChallengeSuccessData stride is 0xD8");
+        static_assert(sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mLastSecondChallengeSuccess) == 0x5E8, "mLastSecondChallengeSuccess @ +0x5E8");
+        static_assert(sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mpNetworkModule) == 0x5F4, "mpNetworkModule @ +0x5F4");
+        static_assert(sizeof(void*) != 4 || offsetof(ChallengeSuccessManager, mbSendUpdateSuccessMessage) == 0x600, "mbSendUpdateSuccessMessage @ +0x600");
+        static_assert(sizeof(void*) != 4 || sizeof(ChallengeSuccessManager) == 0x608, "ChallengeSuccessManager is 0x608 bytes");
+    }
 } // namespace BrnNetwork

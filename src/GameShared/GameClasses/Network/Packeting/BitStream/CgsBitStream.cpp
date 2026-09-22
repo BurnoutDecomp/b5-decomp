@@ -43,6 +43,19 @@ namespace CgsNetwork
         return true;
     }
 
+    // Detach the stream from its buffer. The shipping build has no standalone copy: it is
+    // inlined into Message::Pack / Message::UnPack as four zero stores over the whole
+    // stream (+0x0 write position, +0x4 read position, +0x8 buffer, +0xC size). The
+    // out-of-line build of the same source returns true.
+    bool BitStream::Release()
+    {
+        miBufferSizeInBits = 0;
+        miBitWritePosition = 0;
+        miBitReadPosition  = 0;
+        mpuBuffer          = nullptr;
+        return true;
+    }
+
     bool BitStream::AddBits(u64 luValue, s32 liNumBits)
     {
         CGS_ASSERT(liNumBits > 0 && liNumBits <= KI_MAX_BITS,
