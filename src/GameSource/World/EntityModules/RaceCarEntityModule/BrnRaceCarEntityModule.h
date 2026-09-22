@@ -518,8 +518,8 @@ public:
 
         // X360 0x82304440. Take a global race car out of the world: clear the module's player
         // slot if this WAS the player's car, detach its active slot (if it has one), detach AI
-        // control, and RaceCar::RemoveFromWorld it. Eight console callers; only
-        // HandleResetPlayerCarAction is live on this build (see the .cpp banner).
+        // control, and RaceCar::RemoveFromWorld it. Eight console callers; see the .cpp banner
+        // for which are live on this build.
         void RemoveRaceCar( EGlobalRaceCarIndex leGlobalRaceCarIndex,
                             RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 

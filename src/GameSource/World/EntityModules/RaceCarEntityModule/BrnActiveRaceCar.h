@@ -1057,6 +1057,11 @@ public:
     bool IsTakenDown() const                         { return mbTakenDown; }                   // +0x789
     void SetTakenDown(bool lbTakenDown)              { mbTakenDown = lbTakenDown; }            // +0x789
     f32  GetInvulnerabilityTime() const              { return mfInvulnerablityTime; }          // +0x724
+    // DWARF BrnActiveRaceCar.h:871 `void SetInvulnerabilityTime(float32_t)`. The X360 inlines it
+    // at its one caller, RaceCarEntityModule::HandleGameActions case 111
+    // (`lfs f0, 0(record) ; stfs f0, 0x724(car)` @0x8230D23C..0x8230D240).
+    void SetInvulnerabilityTime(f32 lfInvulnerabilityTime)
+    { mfInvulnerablityTime = lfInvulnerabilityTime; }                                          // +0x724
 
     // ADDITIVE 2026-08-18 (wave Q5, car-registration finisher). DWARF-attested, and the DWARF
     // spells it BY VALUE, not by const-reference:

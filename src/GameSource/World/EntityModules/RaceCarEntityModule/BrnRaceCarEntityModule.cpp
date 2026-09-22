@@ -2597,17 +2597,18 @@ void RaceCarEntityModule::DetachActiveRaceCar(
 // "Not locked for writing" tripwire; re-ordering them would change which assert a mis-locked
 // buffer reports.
 //
-// THE OTHER SEVEN CONSOLE CALLERS (xrefs_to) and whether they are live on PC:
+// THE OTHER SEVEN CONSOLE CALLERS (xrefs_to) and whether they are live on PC
+// (re-checked with tools/re/hasbody.py 2026-09-22):
 //   0x82304580 RemoveAllRaceCars              not reconstructed -- DEAD
 //   0x82305688 HandleSetupNetworkCarAction    not reconstructed -- DEAD (game action 5)
-//   0x823058F8 SetUpPlayerCarForMode          not reconstructed -- DEAD
-//   0x82305E00 RemoveRivals                   not reconstructed -- DEAD
-//   0x82305F28 RemoveAllRivalsFromWorld       not reconstructed -- DEAD
+//   0x823058F8 SetUpPlayerCarForMode          bodied (BrnRaceCarEntityModule_ModeArming.cpp)
+//   0x82305E00 RemoveRivals                   bodied (BrnRaceCarEntityModule_Rivals.cpp)
+//   0x82305F28 RemoveAllRivalsFromWorld       bodied (BrnRaceCarEntityModule_Rivals.cpp)
 //   0x82306028 RemoveAllNetworkCarsFromWorld  not reconstructed -- DEAD
-//   0x8230BE08 HandleGameActions              PRESENT but a partial slice: only cases 0 and 79
-//                                             are reproduced, and case 0 reaches RemoveRaceCar
-//                                             only through HandleResetPlayerCarAction below.
-// So HandleResetPlayerCarAction is the ONE live caller on this build.
+//   0x8230BE08 HandleGameActions              a partial slice; it reaches RemoveRaceCar through
+//                                             case 0 (HandleResetPlayerCarAction below) and
+//                                             directly from case 121 (SHUTDOWN_FINISHED, the
+//                                             free-burn rival removal @0x8230D2A8).
 // ============================================================================
 void RaceCarEntityModule::RemoveRaceCar(
         EGlobalRaceCarIndex leGlobalRaceCarIndex,
@@ -3029,10 +3030,13 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 // boost actions 15, 34, 70, 71 and 198. Those latter cases are the retail state seam
 // that enables earning once play starts, applies an explicit earning gate, and cancels a
 // boost in progress; dropping them leaves a prepared strategy permanently unable to earn.
+// Also reproduced (crash-parity 2026-09-22): the takedown flow's four world-side consumers,
+// 3 (player reset on track), 111 (player invulnerability), 120 (free-burn SHUTDOWN: damage
+// rendering on an AI victim) and 121 (SHUTDOWN_FINISHED: remove the victim, reset the player).
 //
 // [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
 // console dispatches to and that are still un-reconstructed:
-//   3   RaceCar::RequestResetOnTrack        4   HandleSetPlayerOpponentsAction
+//                                           4   HandleSetPlayerOpponentsAction
 //   5   HandleSetupNetworkCarAction         7   the player-control-changed AI publish
 //   11  HandleRemotePlayerDisconnected      23  HandlePrepareForModeAction
 //   39  HandleStopModeAction
@@ -3091,6 +3095,27 @@ namespace
     };
     static_assert(sizeof(AllowCarToJoinRoadRageActionRecord) == 8,
                   "X360 posts action 129 as 8 bytes (li r6, 8)");
+
+    // ---- flt_82FAD720 == DWARF KF_RESET_ON_TRACK_SPEED (BrnRaceCarEntityModule.cpp:232) ----
+    // The speed action 121's arm hands RequestResetOnTrack for the player. The word is BSS and
+    // reads 0x00000000 out of the image; its writer is the CRT dynamic initialiser
+    // 0x82C4BB30..0x82C4BB48: `lfs flt_82F31928 (3EE4E26D == 0.44704) ; lfs flt_820138DC
+    // (42480000 == 50.0) ; fmuls ; stfs -> 0x82FAD720` == 50 mph in m/s. The NAME is the DWARF's:
+    // that dyn-init bank runs in declaration order, and the thunks either side are
+    // 0x82C4BB10 -> flt_82FAD610 (10 mph, KF_RESET_ON_TRACK_SPEED_FAILURE :231),
+    // 0x82C4BB50 -> flt_82FAD8C0 (75 mph, KF_RESET_ON_TRACK_SPEED_ONLINE :233) and
+    // 0x82C4BB70 -> flt_82FAD728 (120 mph, KF_RESET_ON_TRACK_IN_RANGE_SPEED :234).
+    // BrnRaceCarEntityModule_Rivals.cpp holds the same word TU-locally as KF_POST_MODE_RESET_SPEED.
+    const f32 KF_RESET_ON_TRACK_SPEED = 0.44704f * 50.0f;
+
+    // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY. The takedown-flow switch shared (by env
+    // name) with TakedownManager's classifier trace: one [td-action] line per consumed takedown
+    // action, so a live run proves the arms below were DISPATCHED, not merely compiled.
+    bool TakedownActionDiagEnabled()
+    {
+        static const bool sbOn = ( getenv( "BRN_TD_DIAG" ) != 0 );
+        return sbOn;
+    }
 }
 
 void RaceCarEntityModule::HandleGameActions(
@@ -3589,6 +3614,153 @@ void RaceCarEntityModule::HandleGameActions(
                 reinterpret_cast<const BrnGameState::GameStateModuleIO::AddRivalCarAction*>(lpEvent),
                 lpOutput);
             break;
+
+        // ====================================================================================
+        // THE TAKEDOWN FLOW'S FOUR WORLD-SIDE CONSUMERS (crash-parity 2026-09-22). Their producer,
+        // BrnGameState::TakedownManager, has posted all four since the takedown wave landed
+        // (BrnTakedownManager.cpp / BrnTakedownManager_Detect.cpp), and until this change every
+        // one of them fell into `default:` below: the player was never protected after a
+        // takedown, never put back on the road by the takedown camera, a free-burn SHUTDOWN
+        // victim was drawn without its damage, and the beaten rival was never removed.
+        // f30 in these arms is flt_82001CC0 (image-read 0.0), loaded once in the prologue
+        // @0x8230BF98; r23 is the literal 1 (`li r23, 1` @0x8230BFA0).
+        // ====================================================================================
+
+        // ARTIST low jump table, case 3 (0x8230C720..0x8230C744):
+        //     mr r3,r31 ; lwzx r4,r31,0x182F8 ; bl GetActiveRaceCar     -- the PLAYER's slot
+        //     lfs f31, 0(record)                                         -- mfSpeed
+        //     bl ActiveRaceCar::GetGlobalRaceCar
+        //     li r5,1 ; fmr f1,f31 ; fmr f2,f30 ; bl RaceCar::RequestResetOnTrack
+        // Producer: TakedownManager::UpdatePlayerResetStatus @0x82388AC0, during the takedown
+        // camera, when the player car is slow (in a mode), airborne or spinning; the speed is the
+        // takedown speed clamped to [40, 140] mph.
+        case BrnGameState::GameStateModuleIO::E_ACTION_RESET_PLAYER_CAR_ON_TRACK: // 3
+        {
+            const BrnGameState::GameStateModuleIO::ResetPlayerCarOnTrackAction* lpResetAction =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::ResetPlayerCarOnTrackAction*>(lpEvent);
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetGlobalRaceCar()->RequestResetOnTrack(
+                lpResetAction->mfSpeed,             // f1 = lfs 0(record)
+                BrnAI::E_RESET_TYPE_STANDARD,       // li r5, 1
+                0.0f);                              // f2 = f30 = flt_82001CC0
+
+            if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[td-action] 3 RESET_PLAYER_CAR_ON_TRACK player slot "
+                    << static_cast<s32>(mePlayerActiveRaceCarIndex)
+                    << " speed " << lpResetAction->mfSpeed << " -> RequestResetOnTrack\n";
+            }
+            break;
+        }
+
+        // ARTIST high jump table (index = id - 107), case 4 == 111 (0x8230D230..0x8230D244):
+        //     mr r3,r31 ; lwzx r4,r31,0x182F8 ; bl GetActiveRaceCar     -- the PLAYER's slot
+        //     lfs f0, 0(record) ; stfs f0, 0x724(r3)                     -- mfInvulnerablityTime
+        // Producer: TakedownManager::StartTakedownCamera @0x82388DD8, the camera time plus
+        // KF_POST_TAKEDOWN_INVULNERABLE_TIME (2.5, flt_8202AEB8). ActiveRaceCar::Update ticks it
+        // down, and ProcessPlayerVehicleInput turns `> 0` into mbIsInvulnerableToVehicles/World,
+        // which VehicleManager::SetRaceCarCrashing reads to suppress the player's crashes.
+        case BrnGameState::GameStateModuleIO::E_ACTION_PLAYER_INVULNERABLE: // 111
+        {
+            const BrnGameState::GameStateModuleIO::PlayerInvulnerableAction* lpInvulnerable =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::PlayerInvulnerableAction*>(lpEvent);
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetInvulnerabilityTime(
+                lpInvulnerable->mfInvulnerableTime);
+
+            if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[td-action] 111 PLAYER_INVULNERABLE player slot "
+                    << static_cast<s32>(mePlayerActiveRaceCarIndex)
+                    << " time " << lpInvulnerable->mfInvulnerableTime << "\n";
+            }
+            break;
+        }
+
+        // ARTIST high jump table, case 13 == 120 (0x8230D09C..0x8230D0E8):
+        //     mr r3,r31 ; lwz r4, 0x10(record) ; bl GetActiveRaceCar    -- meVictimIndex
+        //     assert(lpVictim)                                           -- :6671 (0x1A0F)
+        //     bl ActiveRaceCar::GetGlobalRaceCar ; bl RaceCar::IsAIDriven ; beq -> break
+        //     stb r23, 0x1BE4(victim)       -- mRenderParams (+0x7E0) . mbDamaged (+0x1404) = 1
+        // Producer: TakedownManager::ProcessTakedownEvent posts 120 (size 24) for a player
+        // takedown with NO current game mode (@0x823940AC..0x823940D0) INSTEAD of queuing the
+        // TakedownEvent, so UpdateBoost's damage switch-on never sees a free-burn SHUTDOWN and
+        // this arm is its only one. There is no five-damaged-car budget here (UpdateBoost's
+        // GetDamagedCarCount() < 5 is that path's alone).
+        case BrnGameState::GameStateModuleIO::E_ACTION_SHUTDOWN: // 120
+        {
+            const BrnGameState::GameStateModuleIO::ShutdownAction* lpShutdown =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::ShutdownAction*>(lpEvent);
+            ActiveRaceCar* lpVictim = GetActiveRaceCar(lpShutdown->meVictimIndex);
+            CGS_ASSERT(lpVictim != 0, "lpVictim");                              // :6671
+
+            const bool lbAIDriven = lpVictim->GetGlobalRaceCar()->IsAIDriven();
+            if (lbAIDriven)
+            {
+                lpVictim->GetRenderParams()->SetDamaged(true);                  // stb r23, 0x1BE4
+            }
+
+            if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[td-action] 120 SHUTDOWN victim slot "
+                    << static_cast<s32>(lpShutdown->meVictimIndex)
+                    << " aiDriven " << (lbAIDriven ? 1 : 0)
+                    << " -> damaged " << (lpVictim->GetRenderParams()->IsDamaged() ? 1 : 0)
+                    << "\n";
+            }
+            break;
+        }
+
+        // ARTIST high jump table, case 14 == 121 (0x8230D26C..0x8230D2D4):
+        //     GetActiveRaceCar(record word 0)->IsAttached() ; beq -> break
+        //     RemoveRaceCar(GetActiveRaceCar(record word 0)->GetGlobalRaceCar()
+        //                       ->GetGlobalRaceCarIndex(), r20 == lpOutput)
+        //     GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetGlobalRaceCar()
+        //         ->RequestResetOnTrack(f1 = flt_82FAD720, r5 = 1, f2 = f30)
+        // Both the removal and the player reset sit inside the IsAttached gate, and the player
+        // index is re-read AFTER RemoveRaceCar (`lwzx r4, r31, r26` @0x8230D2B0).
+        // Producer: TakedownManager::EndTakedownCamera @0x82388ED8 (free burn, a victim other
+        // than the player), right after it hands the car back to the player (action 7).
+        case BrnGameState::GameStateModuleIO::E_ACTION_SHUTDOWN_FINISHED: // 121
+        {
+            const BrnGameState::GameStateModuleIO::ShutdownFinishedAction* lpFinished =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::ShutdownFinishedAction*>(lpEvent);
+            const EActiveRaceCarIndex leVictimIndex =
+                static_cast<EActiveRaceCarIndex>(lpFinished->meActiveRaceCarIndex);   // lwz 0(record)
+
+            const bool lbAttached = GetActiveRaceCar(leVictimIndex)->IsAttached();
+            if (lbAttached)
+            {
+                const EGlobalRaceCarIndex leVictimGlobalIndex =
+                    GetActiveRaceCar(leVictimIndex)->GetGlobalRaceCar()->GetGlobalRaceCarIndex();
+                RemoveRaceCar(leVictimGlobalIndex, lpOutput);
+
+                GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetGlobalRaceCar()->RequestResetOnTrack(
+                    KF_RESET_ON_TRACK_SPEED,        // f1 = flt_82FAD720 (50 mph)
+                    BrnAI::E_RESET_TYPE_STANDARD,   // li r5, 1
+                    0.0f);                          // f2 = f30 = flt_82001CC0
+
+                if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[td-action] 121 SHUTDOWN_FINISHED victim slot "
+                        << static_cast<s32>(leVictimIndex)
+                        << " -> RemoveRaceCar(global " << static_cast<s32>(leVictimGlobalIndex)
+                        << ") + player reset speed " << KF_RESET_ON_TRACK_SPEED << "\n";
+                }
+            }
+            else if (TakedownActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[td-action] 121 SHUTDOWN_FINISHED victim slot "
+                    << static_cast<s32>(leVictimIndex) << " not attached -> nothing\n";
+            }
+            break;
+        }
 
         default:
             break;   // [FLAG PC bring-up] see the banner
