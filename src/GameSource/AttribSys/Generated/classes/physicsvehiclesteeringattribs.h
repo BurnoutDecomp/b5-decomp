@@ -23,6 +23,14 @@ namespace Gen
         // consumer (VehicleAttribs::SetupAttribs @0x825F4CD8) reads the record through
         // `lwz +4` == mpAttributeData, which is what GetLayoutPointer returns.
         using Instance::GetLayoutPointer;
+
+        // Consumer-derived accessor names. ARTIST AIDriver::ResetAttribSysValues
+        //8278B324/8278B32C reads these f32 fields from the 0x38-byte steering record.
+        f32 GetDriverTimeToLookAheadForDrift() const
+        { return static_cast<const f32*>(GetLayoutPointer())[0x34 / sizeof(f32)]; }
+        f32 GetDriverMinDistanceToLookAheadForDrift() const
+        { return static_cast<const f32*>(GetLayoutPointer())[0x30 / sizeof(f32)]; }
+
     };
 
     // Chain the Instance ctor, assert the collection's class is
