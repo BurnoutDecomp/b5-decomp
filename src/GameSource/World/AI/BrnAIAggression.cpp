@@ -389,17 +389,24 @@ bool AIAggression::DecideToAttack()
 
 // BrnAI::AIAggression::DetermineAttackSide @0x82771408.
 //
-// Returns the signed projection of (pos(lpCarB) - pos(lpCarA)) onto lpCarB's right axis.
-// The caller (GetPositionNextToTarget) only tests the sign: > 0 means lpCarA is on lpCarB's
-// left, so the offset is flipped to approach from that side.
+// Which side of lpTargetCar the attacking car lpCar is on (DWARF DetermineAttackSide(mpCar,
+// mpTargetCar)): +1.0 when dot(pos(lpTargetCar) - pos(lpCar), right(lpTargetCar)) > 0 -- lpCar
+// sits on the target's -right side -- and -1.0 otherwise.
 //
-// X360 ASM: GetPosition(lpCarA)=v127, GetPosition(lpCarB)=v126, right=lpCarB->GetRight()=v12;
-// vsubfp128 v13 = v126 - v127; vmsum3fp128(v13, v12) = full 3D dot; the trailing vcmpgtfp vs
-// a splat-0 is just the caller's >0 test materialised. De-SIMD'd to a plain Dot.
-f32 AIAggression::DetermineAttackSide(const AICar* lpCarA, const AICar* lpCarB)
+// X360 ASM: GetPosition(r4 = lpCar) -> v127 @0x82771430, GetPosition(r5 = lpTargetCar) -> v126
+// @0x82771444, GetRight(lpTargetCar) -> v12 @0x8277147C; vsubfp128 v13,v126,v127 @0x82771480
+// (vmx128 fields vD=13 vA=126 vB=127) is pos(lpTargetCar) - pos(lpCar), vmsum3fp128 @0x82771494
+// the 3D dot, vcmpgtfp. against splat(flt_82001CC0 = 0.0) @0x82771498, then lfs flt_82001C98
+// (+1.0) @0x827714B0 or flt_820037C8 (-1.0) @0x827714BC. A NaN dot compares false and returns
+// -1.0, as the vcmpgtfp does.
+f32 AIAggression::DetermineAttackSide(const AICar* lpCar, const AICar* lpTargetCar)
 {
-    const Vector3 lvDelta = lpCarB->GetPosition() - lpCarA->GetPosition();
-    return rw::math::vpu::Dot(lvDelta, lpCarB->GetRight());
+    const Vector3 lvSeparation = lpTargetCar->GetPosition() - lpCar->GetPosition();
+    if (rw::math::vpu::Dot(lvSeparation, lpTargetCar->GetRight()) > 0.0f)
+    {
+        return 1.0f;
+    }
+    return -1.0f;
 }
 
 // ===== FindTarget =====
@@ -569,24 +576,33 @@ f32 AIAggression::GetMinFallBackSpeed()
 // ===== GetPositionNextToTarget =====
 // BrnAI::AIAggression::GetPositionNextToTarget @0x827714E8.
 //
-// Computes a world position alongside lpCarA, offset by lfOffset along lpCarA's right axis.
-// The offset sign is chosen by DetermineAttackSide(lpCarA, lpCarB) so the AI lines up on the
-// correct side of lpCarA relative to lpCarB before a slam.
+// The world-space lineup point beside lpTargetCar: lpTargetCar's position moved lfAlignment
+// metres along lpTargetCar's right axis, with the sign set by the side lpCar is on.
+// DetermineAttackSide(lpCar, lpTargetCar) > 0 (lpCar on the target's -right side) negates the
+// offset, so a positive alignment -- VEER +6, OVERTAKE_TO_SLAM +4, DROP_BACK_TO_SLAM +7.5 -- lines
+// up on lpCar's own side of the target, and ATTACK_SLAM's -8 aims past the target on its far
+// side, i.e. through it.
 //
-// X360 ASM: if DetermineAttackSide(lpCarA, lpCarB) > 0 the offset is negated; then
-// vmaddcfp128 computes pos(lpCarA) + right(lpCarA) * offset (the asm uses a3 == lpCarA for
-// both GetPosition and GetRight; a4 == lpCarB is only consumed by DetermineAttackSide). A
-// per-lane vcmpeqfp self-equality cascade is the inlined RwMath::IsValid NaN guard (folded
-// into one assert here). De-SIMD'd to scalar Vector3 math.
-Vector3 AIAggression::GetPositionNextToTarget(const AICar* lpCarA, const AICar* lpCarB, f32 lfOffset)
+// X360 ASM: r3 = the sret slot, r4 = this, r5 = lpTargetCar, r6 = lpCar, f1 = lfAlignment
+// (every caller loads r5 = lwz 0xC mpTargetCar, r6 = lwz 8 mpCar: 0x8277DDFC, 0x827939A8,
+// 0x82793BBC, 0x82796974). `mr r3,r4 ; mr r4,r6` @0x82771508/0x8277150C leave r5 alone, so the
+// call @0x82771514 is DetermineAttackSide(lpCar, lpTargetCar) -- the DWARF spells it
+// DetermineAttackSide(mpCar, mpTargetCar). Hex-Rays prints DetermineAttackSide(a2, a4) with the
+// r5 argument dropped; reading that as (lpTargetCar, lpCar) put every lineup point on the wrong
+// side of the player (crash-parity audit 2026-09-22, G00-D1). ble @0x82771524 skips the
+// fneg f31 @0x82771528. GetRight and GetPosition then read r30 = lpTargetCar (@0x82771534,
+// @0x82771560) and vmaddcfp128 v127,v0,v127,v13 @0x82771578 forms pos + right * offset. The
+// per-lane vcmpeqfp self-equality cascade is the inlined RwMath::IsValid NaN guard (folded into
+// one assert here).
+Vector3 AIAggression::GetPositionNextToTarget(const AICar* lpTargetCar, const AICar* lpCar, f32 lfAlignment)
 {
-    f32 lfSignedOffset = lfOffset;
-    if (DetermineAttackSide(lpCarA, lpCarB) > 0.0f)
+    f32 lfSignedOffset = lfAlignment;
+    if (DetermineAttackSide(lpCar, lpTargetCar) > 0.0f)
     {
         lfSignedOffset = -lfSignedOffset;
     }
 
-    const Vector3 lvTargetPosition = lpCarA->GetPosition() + (lpCarA->GetRight() * lfSignedOffset);
+    const Vector3 lvTargetPosition = lpTargetCar->GetPosition() + (lpTargetCar->GetRight() * lfSignedOffset);
 
     CGS_ASSERT(rw::math::vpu::IsValid(lvTargetPosition), "RwMath::IsValid( lTargetPosition )");
     return lvTargetPosition;
