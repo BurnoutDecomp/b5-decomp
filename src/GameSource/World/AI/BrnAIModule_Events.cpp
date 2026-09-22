@@ -8,8 +8,9 @@
 //   BrnAI::AIModule::OnModeStartRacing           @0x8276E4B0  (69 insns;  whole)
 //   BrnAI::AIModule::OnModeFinished              @0x8277B970  (67 insns;  whole)
 //   BrnAI::AIModule::OnRaceCarReachedFinish      @0x8277B8D0  (40 insns;  whole)
-//   BrnAI::AIModule::OnModeStart                 @0x82791DB8  (133 insns; 2 named parks inside)
-//   BrnAI::AIModule::OnModeEnd                   @0x8277BA80  (96 insns;  1 named park inside)
+//   BrnAI::AIModule::OnModeStart                 @0x82791DB8  (133 insns; 1 named park inside:
+//                                                              the checkpoint block-section loop)
+//   BrnAI::AIModule::OnModeEnd                   @0x8277BA80  (96 insns;  whole since 2026-09-22)
 //  BrnAI::AIModule::OnPlayerTakedown  (34 insns;  whole)
 //   BrnAI::AIModule::OnRaceCarReachedCheckpoint  @0x8278A658  (NAMED PARK -- ARTIST export hole)
 //  BrnAI::AIModule::SetupRaceBalancingManager  (125 insns; whole)
@@ -1249,18 +1250,23 @@ void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
 
     SetupRaceBalancingManager(lpGameModeParams);                                              // 0x82791E44
 
-    // [FLAG PC bring-up] asm 0x82791E64 stores the mode's meAStarDistanceFunction into
-    // this+271528 == mRouteRequestManager.meDefaultAStarDistanceFunction (the manager is at
-    // console +270952 and its default heuristic at +0x240), and the loop at 0x82791E90..0x82791F14
-    // clears + refills mRouteRequestManager.mauBlockSectionIds[checkpoint] from each
-    // CheckpointData's own block-section array. AIModule has NO named mRouteRequestManager member
-    // on this host (DWARF BrnAIModule.h:71; lane A1 flagged the same gap for AIModule::Update row
-    // #22) and RouteRequestManager exposes no public "clear/append this checkpoint's block
-    // sections" API, so BOTH are parked. Consequence: standard race routes are built with the
-    // manager's own default heuristic and with NO blocked sections, i.e. U-turn blocking through
-    // checkpoints is off. Not on the activation path.
-    // DELETE-WHEN BrnAIModule.h grows `RouteRequestManager mRouteRequestManager;` and
-    // BrnRouteRequestManager.h grows the per-checkpoint block-section setter.
+    // 0x82791E4C `lwz r11, 0x854(params)` -> 0x82791E64 `stwx r11, this, 0x424A8`: the mode's A*
+    // heuristic into mRouteRequestManager (console +270952) + 0x240 == meDefaultAStarDistanceFunction
+    // -- the inlined SetDefaultAStarDistanceFunction. GenerateStandardRouteRequest @0x82791490 reads
+    // it for every non-player RACE route. ModeManager::SetupPathfinding writes the 0/1/2 it copies.
+    // (Crash parity G04-D1, 2026-09-22 -- the park that stood here called the member absent.)
+    mRouteRequestManager.SetDefaultAStarDistanceFunction(
+        static_cast<AStarDistanceFunction>(static_cast<s32>(lpGameModeParams->GetAStarDistanceFunction())));
+
+    // ⛔ [FLAG blocked: BrnCheckpointData.h is not this lane's file] 0x82791E90..0x82791F14: for
+    // (i = 0; i < params->GetCheckpointCount() /* re-read every pass */; ++i)
+    //     mRouteRequestManager.SetBlockSections(i, params->GetCheckpointData(i)->GetBlockSectionIds());
+    // (CheckpointData_16__ @0x822AE100 then `addi r4, cp, 8` == &CheckpointData::mauBlockSectionIds,
+    // then the inlined SetBlockSections -- now bodied in BrnRouteRequestManager.cpp.)
+    // CheckpointData::GetBlockSectionIds() is DECLARED ONLY in BrnGameState's BrnCheckpointData.h
+    // (the console inlines it; its inline body `return &mauBlockSectionIds;` belongs in that header),
+    // so calling it here would not link. Until it is bodied there, standard race routes still carry
+    // NO per-checkpoint blocked sections. DELETE-WHEN BrnCheckpointData.h bodies the accessor.
 
     muNumAggressiveCars              = static_cast<u8>(lpGameModeParams->GetAIAggressiveCarCount());  // 0x82791F38 (lbz 0x84C)
     meDefaultPlayerRouteFindingStyle = static_cast<ERouteFindingStyle>(
@@ -1290,16 +1296,11 @@ void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
 // =================================================================================================
 void AIModule::OnModeEnd(bool lbRestoreDrivingInput)
 {
-    // [FLAG PC bring-up] the console's first store (asm 0x8277BA90, this+271528 = 0) resets
-    // mRouteRequestManager.meDefaultAStarDistanceFunction and the loop
-    // clears all 16 mRouteRequestManager per-checkpoint block-section counts; those two rest on
-    // RouteRequestManager's internal layout, which this host class does not carry yet.
-    // (The four stores that an earlier note filed under a debug overlay
-    // are landed below: all four hang off the single base `addis r11,r30,4 ; addi r11,r11,-0x2630`
-    // == this + 0x3D9D0 == &mRaceBalancingManager and land on named members of it -- +0x1C0
-    // maRaceBalancingGraphs count, +0x486C maRaceBalancingRoutes count, +0x4874 miCheckpointCount
-    // and +0x4878 mbInRace.)
-    // DELETE-WHEN RouteRequestManager carries its internal layout.
+    // The console's FIRST store, unconditional and before the lbRestoreDrivingInput test:
+    // 0x8277BA90/0x8277BA98 `lis 4 ; ori 0x24A8` -> 0x8277BAAC `stwx r31(0), this, r11` ==
+    // mRouteRequestManager.meDefaultAStarDistanceFunction = 0 (EUCLIDEAN). (Crash parity G04-D3,
+    // 2026-09-22 -- parked until then as "layout not carried".)
+    mRouteRequestManager.SetDefaultAStarDistanceFunction(E_ASTAR_DISTANCE_EUCLIDEAN);
 
     if (lbRestoreDrivingInput)                                                                // 0x8277BA9C
     {
@@ -1336,10 +1337,18 @@ void AIModule::OnModeEnd(bool lbRestoreDrivingInput)
         lpCar->mAggressiveness.SetAggression(0.0f);                                             // car+0x140C/0x1410
     }
 
-    meSpeedSelectionMethod = E_AI_SPEED_SELECTION_METHOD_FREE_ROAM;                            // 0x8277BBC8 (stw 0, 0x4EB6C)
+    meSpeedSelectionMethod = E_AI_SPEED_SELECTION_METHOD_FREE_ROAM;                            // 0x8277BBA0 (stw 0, 0x4EB6C)
 
-    // The four stores off `module + 0x3D9D0`: the manager's race teardown.
+    // The four stores off `module + 0x3D9D0` (0x8277BBA8..0x8277BBB4, all four hang off the single
+    // base `addis r11,r30,4 ; addi r11,r11,-0x2630` == &mRaceBalancingManager): the manager's race
+    // teardown -- mbInRace, both table counts and miCheckpointCount.
     mRaceBalancingManager.OnRaceEnd();
+
+    // 0x8277BB8C/0x8277BB98 r9 = this + 0x42288 (== mRouteRequestManager + 0x20, slot 0's count),
+    // then 0x8277BBB8..0x8277BBC8 16 x `stw 0, 0(r9); r9 += 0x24`: the inlined ClearBlockSections.
+    // The compiler interleaves these independent stores with OnRaceEnd's; order is immaterial.
+    // (Crash parity G04-D3, 2026-09-22.)
+    mRouteRequestManager.ClearBlockSections();
 
     mMasterRoute.miNodeCount = 0;                                                              // 0x8277BC10 (+0x1400)
     mMasterRoute.meStatus    = Route::E_STATUS_UNINITIALISED;                                  // 0x8277BC0C (+0x1408)

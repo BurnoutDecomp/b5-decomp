@@ -8,9 +8,12 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (default-case assert)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"        // CgsNumeric::Random (mRandom)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (witnesses)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"      // BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   BrnAI::RouteRequestManager::Construct                          @ 0x8278A3B0 (KEPT verbatim)
+//   BrnAI::RouteRequestManager::Construct                          @ 0x8278A3B0 (corrected 2026-09-22)
+//   BrnAI::RouteRequestManager::SetBlockSections / ClearBlockSections (inlined in AIModule::OnModeStart
+//                                                                  / OnModeEnd; DWARF :85 / :88)
 //   BrnAI::RouteRequestManager::ChooseDistanceFunction             @ 0x82788CC0
 //   BrnAI::RouteRequestManager::ComputeSectionBehind               @ 0x827892C0
 //   BrnAI::RouteRequestManager::GenerateAlternativeRouteRequest    @ 0x82788F58
@@ -28,8 +31,8 @@
 // RouteMapModuleIO request records (the X360 inlined those setters as direct stores into the
 // request byte image; their offsets are pinned in BrnRouteMapModuleIO.h). The block-section-id
 // append loop reverses int_16_::Append back to RaceRouteRequest::AddBlockSectionId, and the
-// per-checkpoint source list (int_8_::GetItem on mauBlockSectionIds[checkpoint]) to the slot's
-// GetBlockSectionCount()/GetBlockSectionId() views.
+// per-checkpoint source list (int_8_::GetItem on mauBlockSectionIds[checkpoint]) to the
+// Array<u32,8>'s own GetLength()/GetItem().
 //
 // "2D" here is the XZ ground plane: BrnMath::Flatten(Vector3) -> Vector2 with .x == world X and
 // .y == world Z, exactly as the X360 vsubfp/vmaxfp lane math operates.
@@ -42,23 +45,16 @@ namespace BrnAI
 //  BrnRacingLineGenerator_GetForwardPortalIndex.cpp). The `class` shim also mangled BuzzBy with the
 //  wrong class-key, which made RouteRequestManager::Update unresolvable from AIModule::Update.)
 
-// Module-global weight/bound table written during construction (guest 0x8300D570..).
-float gRouteRequestWeights[8] = {
-    1.0f,         // 0x3F800000
-    1.78315496f,  // 0x3FDC4FAC
-    1.19288969f,  // 0x3F98B2DC
-    1.70421982f,  // 0x3FDA2520
-    1.76656675f,  // 0x3FE21A5C
-    1.73375201f,  // 0x3FDDEAD6
-    1.22346330f,  // 0x3F9C9FB2
-    1.14250064f,  // 0x3F924336
-};
-float gRouteRequestBoundLo = 9.0190702e-11f; // 0x2EC3A75A
-float gRouteRequestBoundHi = 0.0f;
-float gRouteRequestPad     = 0.0f;
-
 // DWARF BrnRouteRequestManager.h:158 marks mRandom `extern` -- it is a file-scope static, NOT a
-// per-instance member. GenerateFreeRoamingDestination draws section indices from it.
+// per-instance member, at X360 0x8300D570 (findinit: exactly two sites, the Construct below at
+// 0x8278A3B8 and GenerateFreeRoamingDestination's draw at 0x82769670). GenerateFreeRoamingDestination
+// draws section indices from it.
+// ⛔ CORRECTED 2026-09-22 (crash parity, found with G04-D1): Construct used to write an unread
+// "gRouteRequestWeights" table (0x3F800000, 0x3FDC4FAC, ...) and never Construct this object, so
+// every free-roam destination was drawn from an all-zero Random. The console's stores at
+// 0x8278A3B0..0x8278A434 are exactly CgsNumeric::Random::Construct() constant-folded: the ring
+// 3F800000 3FE43E6C 3F98B09C 3FDA23E0 3FE21EDC 3FDDEB96 3F9C9A72 3F923D76, the seed
+// 0xB5E330D0_2EC654DA at +0x20 (insrdi at 0x8278A418) and index 0 at +0x28.
 static CgsNumeric::Random mRandom;
 
 // [FLAG PC witness] NOT IN THE X360 BINARY -- the "[route-req]" instrument's budgets.
@@ -82,27 +78,48 @@ static const s32 KI_ROUTE_REQ_WITNESS_PERIOD = 600;
 // (BrnRouteRequestManager.cpp:364). Value 200.0 attested in the pseudocode (`v64[0] = 200.0`).
 static const f32 KF_HACK_CONTRYSIDE_DIVIDE = 200.0f;
 
-RouteRequestManager* RouteRequestManager::Construct()
+// X360 @0x8278A3B0 (DWARF :68). Three things, in the console's order:
+//   0x8278A3B0..0x8278A434  mRandom.Construct()  (the file-static at 0x8300D570, constant-folded)
+//   0x8278A438..0x8278A450  for 16 slots: `stw 0, 0x20(slot)` -- each Array<u32,8>'s COUNT word
+//   0x8278A454              `stw 0, 0x240(this)` -- meDefaultAStarDistanceFunction = EUCLIDEAN (0)
+// ⛔ CORRECTED 2026-09-22: the body zeroed each slot's FIRST ID (mWords[0]) and slot 15's second,
+// never the counts, and never touched +0x240 or the Random -- harmless only while the module sat
+// in zero-initialised static storage and nothing ever filled a slot.
+void RouteRequestManager::Construct()
 {
-    gRouteRequestWeights[0] = 1.0f;
-    gRouteRequestWeights[1] = 1.78315496f;
-    gRouteRequestWeights[2] = 1.19288969f;
-    gRouteRequestWeights[3] = 1.70421982f;
-    gRouteRequestWeights[4] = 1.76656675f;
-    gRouteRequestWeights[5] = 1.73375201f;
-    gRouteRequestWeights[6] = 1.22346330f;
-    gRouteRequestWeights[7] = 1.14250064f;
-    gRouteRequestBoundLo    = 9.0190702e-11f;
-    gRouteRequestBoundHi    = 0.0f;
-    gRouteRequestPad        = 0.0f;
-
-    for (int i = 0; i < 16; ++i)
+    mRandom.Construct();
+    for (s32 liCheckpointIndex = 0; liCheckpointIndex < BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE;
+         ++liCheckpointIndex)
     {
-        mauBlockSectionIds[i].mWords[0] = 0;
+        mauBlockSectionIds[liCheckpointIndex].Construct();
     }
-    mauBlockSectionIds[15].mWords[1] = 0;
+    meDefaultAStarDistanceFunction = E_ASTAR_DISTANCE_EUCLIDEAN;
+}
 
-    return this;
+// DWARF :85 / BrnRouteRequestManager.cpp:99. No standalone symbol: AIModule::OnModeStart inlines it
+// per checkpoint (0x82791ED4..0x82791F08) -- the caller evaluates the ids pointer FIRST (its
+// CheckpointData accessor runs before this assert, as on the console), then:
+//   0x82791ED4..0x82791EF8  assert(0 <= i < KI_MAX_LANDMARKS_IN_MODE)   (:101, li r5,0x65)
+//   0x82791F04              `stw 0, 0x20(slot)`                          -- Construct (count = 0)
+//   0x82791F08              Array<u32,8>::AppendArray<8>(slot, ids)      @0x8278A108
+void RouteRequestManager::SetBlockSections(s32 liCheckpointIndex, const Array<u32, 8u>* laBlockSectionIds)
+{
+    CGS_ASSERT(liCheckpointIndex >= 0
+               && liCheckpointIndex < BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE,
+               "liCheckpointIndex >= 0 && liCheckpointIndex < KI_MAX_LANDMARKS_IN_MODE");   // :101
+    mauBlockSectionIds[liCheckpointIndex].Construct();
+    mauBlockSectionIds[liCheckpointIndex].AppendArray(*laBlockSectionIds);
+}
+
+// DWARF :88 / BrnRouteRequestManager.cpp:116. No standalone symbol: AIModule::OnModeEnd inlines it
+// at 0x8277BB8C..0x8277BBC8 -- r9 = this + 0x20 (slot 0's count), 16 x `stw 0, 0(r9); r9 += 0x24`.
+void RouteRequestManager::ClearBlockSections()
+{
+    for (s32 liCheckpointIndex = 0; liCheckpointIndex < BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE;
+         ++liCheckpointIndex)
+    {
+        mauBlockSectionIds[liCheckpointIndex].Clear();
+    }
 }
 
 // X360 @0x82788CC0. Pick the A* heuristic for routing lpAICar to luDestinationSectionIndex.
@@ -257,12 +274,13 @@ void RouteRequestManager::GenerateStandardRouteRequest(
 
         lRouteRequest.SetQuality(E_ASTAR_QUALITY_MEDIUM);   // X360 stores 1 == the medium preset
 
-        const RequestSlot& lrSlot = mauBlockSectionIds[liCheckpoint];
-        for (u32 luIndex = 0; luIndex < lrSlot.GetBlockSectionCount(); ++luIndex)
+        // 0x82791600..0x82791678: slot = this + 36*checkpoint; for (i < slot.GetLength()) -- the
+        // length is re-read (and its "Array used before Construct/Clear" assert re-run, CgsArray.h
+        // :336) every pass -- AddBlockSectionId(slot.GetItem(i)) (int_8_::GetItem, the checked get).
+        const Array<u32, 8u>& lrBlockSectionIds = mauBlockSectionIds[liCheckpoint];
+        for (u32 luIndex = 0; luIndex < lrBlockSectionIds.GetLength(); ++luIndex)
         {
-            CGS_ASSERT(lrSlot.GetBlockSectionCount() != 0xFFFFFFFFu,
-                       "Array used before Construct/Clear was called");
-            lRouteRequest.AddBlockSectionId(lrSlot.GetBlockSectionId(luIndex));
+            lRouteRequest.AddBlockSectionId(lrBlockSectionIds.GetItem(luIndex));
         }
     }
 
