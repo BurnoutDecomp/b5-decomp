@@ -122,7 +122,7 @@ const f32 KF_SPEED_MATCH_SEP_PROX0  =  0.0f; // rodata 0x820C42F0 == 0x00000000 
 // the rodata is dumped. Literal immediates visible in the pseudocode (2.0/3.0/8.0/10.0/
 // 12.0/20.0/30.0/5.0/130.0/1.0) are used inline in the bodies, not listed here.
 
-const f32 KF_FALL_PAST_SPURT_MIN_TIME = -1.0f;  // rodata 0x820037C8 == 0xBF800000 -- UpdateAggressionStateFallPast @0x82793568 keeps f31 = flt_820037C8 live from 0x82793620 through the `fsel f0, f0, f0, f31` at 0x82793704 (the same -1 it stores at 0x82793818)
+const f32 KF_FALL_PAST_SPURT_MIN_TIME = -1.0f;  // rodata 0x820037C8 == 0xBF800000 -- UpdateAggressionStateFallPast @0x82793568 keeps f31 = flt_820037C8 live from 0x82793620 through BOTH fsel floors, the spurt time's `fsel f0, f0, f0, f31` at 0x82793704 and the BE_FODDER time's at 0x827937C4 (the same -1 it stores at 0x82793818)
 const f32 KF_FALL_PAST_TIME_LERP_LO   = 0.0f;   // rodata 0x820C4288 == 0x00000000 (read from image.bin) -- low endpoint of the BE_FODDER state-time lerp in FallPast
 const f32 KF_FALL_PAST_TIME_LERP_HI   = 2.0f;   // rodata 0x820C428C == 0x40000000 (read from image.bin) -- high endpoint of the BE_FODDER state-time lerp in FallPast
 // 0x82F31928 is INITIALISED .data (not .bss): 0x3EE4E26D == 0.44704, the mph -> m/s factor.
@@ -1332,9 +1332,9 @@ void BrnAI::AIAggression::UpdateAggressionStateDropBackToSlam(const AICar* /*lpP
 // than its decent speed -- diverts to SPURT_FORWARD (state 12). Bails to OUT_OF_RANGE
 // when the speed-match window is exceeded. On state-timeout it either re-rolls a short
 // SPURT_FORWARD time (E_ROUTE_FINDING_ROAD_RAGE/E_ROUTE_FINDING_MARKED_MAN) via the shared mRandom draw, or resets to
-// OUT_OF_RANGE. While close behind a non-player-driven player it can flip to
-// CLIP_OFF_BEHIND geometry (state 8) and, for a separating road-rage/marked target,
-// to HANG_AROUND_AHEAD (state 14).
+// OUT_OF_RANGE. Within 10 m of a usable player car (not our own, and not a player car the
+// player is not driving) it flips to BE_FODDER (state 8) and, for a road-rage/marked car with
+// no proximity slot that is ahead and separating, to HANG_AROUND_AHEAD (state 14).
 void BrnAI::AIAggression::UpdateAggressionStateFallPast(const AICar* lpPlayerCar)
 {
     AICar* const lpThisCar = mpCar;
@@ -1394,17 +1394,21 @@ void BrnAI::AIAggression::UpdateAggressionStateFallPast(const AICar* lpPlayerCar
     if (mpPlayerCar == NULL)
         return;
 
-    const f32 lfSeparation = GetSeparation(lpCar, lpPlayerCar);
+    // The member, as the console passes it: lwz r5,0x10 (mpPlayerCar) @0x82793754, null-tested
+    // @0x82793758, then bl GetSeparation @0x82793764 with r4 = mpCar.
+    const f32 lfSeparation = GetSeparation(lpCar, mpPlayerCar);
     if (lfSeparation > 0.0f && lfSeparation < 10.0f)
     {
-        // Lerp a clip-off-behind state time using the target's speed-match time knob.
-        // KF_FALL_PAST_TIME_LERP_LO/HI are the two rodata endpoints; the blend factor is
-        // mpCar->GetTimeForSpeedMatch().
+        // The BE_FODDER time: lerp(flt_820C4288, flt_820C428C, t) with t = OUR car's speed-match
+        // time knob (lfs 0x1418(mpCar) @0x827937A0 == mAggressiveness.mfTimeForSpeedMatch),
+        // vmaddfp @0x827937B8, then `fsel f0,f0,f0,f31` @0x827937C4: a negative or NaN time
+        // falls back to f31 == flt_820037C8 (-1.0), loaded @0x82793620 -- the same floor as the
+        // spurt time above (crash-parity audit G00-D6b; we selected 0.0).
         const f32 lfTimeFactor = mpCar->GetAggressiveness()->GetTimeForSpeedMatch();
-        meAggressionState = E_AI_AGGRESSION_STATE_BE_FODDER;   // 8 (X360 *a1 = 8)
-        const f32 lfClipTime = KF_FALL_PAST_TIME_LERP_LO +
-                               (KF_FALL_PAST_TIME_LERP_HI - KF_FALL_PAST_TIME_LERP_LO) * lfTimeFactor;
-        mfStateTime = (lfClipTime >= 0.0f) ? lfClipTime : 0.0f;
+        meAggressionState = E_AI_AGGRESSION_STATE_BE_FODDER;   // 8 (stw @0x827937A8)
+        const f32 lfFodderTime = KF_FALL_PAST_TIME_LERP_LO +
+                                 (KF_FALL_PAST_TIME_LERP_HI - KF_FALL_PAST_TIME_LERP_LO) * lfTimeFactor;
+        mfStateTime = (lfFodderTime >= 0.0f) ? lfFodderTime : KF_FALL_PAST_SPURT_MIN_TIME;
     }
 
     const AICar* const lpStyleCar = mpCar;

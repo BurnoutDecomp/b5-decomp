@@ -412,6 +412,39 @@ static void GroupLineupPointDrop()
     }
 }
 
+// ------------------------------------------------------------------------------------------------
+// G00-D6b  UpdateAggressionStateFallPast @0x82793568, the BE_FODDER state time: lerp(0.0 @0x820C4288,
+// 2.0 @0x820C428C, mfTimeForSpeedMatch) then `fsel f0,f0,f0,f31` @0x827937C4 with f31 =
+// flt_820037C8 (-1.0) loaded @0x82793620: negative or NaN -> -1.0.
+// ------------------------------------------------------------------------------------------------
+static void GroupFodderTimeFloor()
+{
+    BeginGroup("G00-D6b FallPast BE_FODDER time floor");
+    AICar lCar{}, lPlayer{};
+    PlaceStateCars(lCar, lPlayer);   // the player 5 m ahead: inside the (0, 10) m BE_FODDER band
+    AIAggression lAggression{};
+    lAggression.mpCar = &lCar;
+    lAggression.mpTargetCar = &lPlayer;
+    lAggression.mpPlayerCar = &lPlayer;
+    const f32 lafFactor[] = { 0.7f, 0.0f, -0.25f, std::numeric_limits<f32>::quiet_NaN() };
+    const f32 lafExpected[] = { 1.4f, 0.0f, -1.0f, -1.0f };
+    const char* const lapcLabel[] = {
+        "time knob 0.7 -> BE_FODDER for 1.4 s",
+        "time knob 0.0 -> BE_FODDER for 0.0 s (fsel keeps +0)",
+        "negative lerp falls back to f31 = flt_820037C8 (-1.0), not 0.0",
+        "NaN lerp falls back to f31 = -1.0",
+    };
+    for (s32 liCase = 0; liCase < 4; ++liCase)
+    {
+        lAggression.meAggressionState = E_AI_AGGRESSION_STATE_FALL_PAST;
+        lAggression.mfStateTime = 5.0f;
+        lCar.mAggressiveness.mfTimeForSpeedMatch = lafFactor[liCase];
+        lAggression.UpdateAggressionStateFallPast(&lPlayer);
+        Check(lAggression.meAggressionState == E_AI_AGGRESSION_STATE_BE_FODDER &&
+              Near(lAggression.mfStateTime, lafExpected[liCase]), lapcLabel[liCase]);
+    }
+}
+
 int main()
 {
     std::printf("AIAggression regression\n");
@@ -420,6 +453,7 @@ int main()
     GroupSlowToClip();
     GroupSlower();
     GroupLineupPointDrop();
+    GroupFodderTimeFloor();
     EndGroup();
     std::printf("%s: %u checks, %u failures\n", guFailures ? "FAIL" : "PASS", guChecks, guFailures);
     return guFailures ? 1 : 0;
