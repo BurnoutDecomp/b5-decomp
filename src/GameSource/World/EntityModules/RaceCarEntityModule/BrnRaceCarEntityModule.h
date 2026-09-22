@@ -905,23 +905,15 @@ private:
     // members at their X360-asm-proven byte offsets. The bodied tail functions
     // (scoring map, GetGameModeFlag, AddTrainingRequest, UpdateTailgateTimer) are the
     // only ones in this TU that touch the tail.
-    u8 maTailPadA0a[0x1823D - 0x100E0];  // +0x100E0 (65760) .. +0x1823D (98877)
-
-    // X360 +0x1823D (98877). ⭐ NAMED 2026-08-26 (resetpump wave), carved out of the pad above
-    // with the pad's total byte count unchanged, so no named offset below it moves.
-    // WRITER/READER SET, all from the image (nine sites):
-    //   HandlePrepareForModeAction @0x823092F0 sets it to 1 in the SAME arm that sets the
-    //     player ActiveRaceCar's mbIsWrecked (+0x782) -- i.e. the game-mode flag 0x200 arm,
-    //     which is Showtime; HandleStopModeAction @0x82307A30 clears it.
-    //   Read by WriteUpdatedAIData (the "is in showtime" bit it publishes for the PLAYER slot),
-    //     UpdateBoost, ProcessPlayerVehicleInput, ProcessLeapedAndStompedCars,
-    //     CheckForResetOnTrackConditions, UpdateCrashingPlayerContacts, PostSceneUpdate.
-    // ⚠️ NEITHER WRITER EXISTS IN THIS TREE, so it is false for the whole free-burn drive --
-    // which is CORRECT for free burn, and is why the showtime bit WriteUpdatedAIData publishes
-    // is always clear here.
-    bool mbIsInShowtimeMode;             // +0x1823D (98877)
-
-    u8 maTailPadA0b[0x182F0 - 0x1823E];  // +0x1823E (98878) .. +0x182F0 (99056)
+    // ⛔ X360 +0x1823D (98877) IS NOT A MEMBER OF ITS OWN: it is mCrashPlayManager (+0x180F0) .
+    // mbIsInShowtime (+0x14D) -- CrashPlayManager::Activate's `this` is module + 0x180F0
+    // (0x8230994C..0x82309954) and ProcessPlayerVehicleInput reads the byte both ways (`lbz
+    // 0x14D(module+0x180F0)` @0x823000D8, `lbzx module+0x1823D` @0x823001A4). Read it through the
+    // manager: mCrashPlayManager.IsInShowtime(). A phantom `bool mbIsInShowtimeMode` carved here
+    // (2026-08-26) had no writer while the real set/clear (ModeArming.cpp / Rivals.cpp) landed
+    // on the manager, so WriteUpdatedAIData and CheckForResetOnTrackConditions read showtime as
+    // false for good; retired 2026-09-22 (crash-parity FX-RCEM), the pad's span unchanged.
+    u8 maTailPadA0[0x182F0 - 0x100E0];   // +0x100E0 (65760) .. +0x182F0 (99056)
 
     // X360 +0x182F0 (99056). Seconds the player has been continuously tailgating another
     // race car; UpdateTailgateTimer accumulates dt into it while tailgating, else zeroes
