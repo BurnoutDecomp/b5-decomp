@@ -60,6 +60,7 @@ namespace BrnAI
 namespace AIModuleIO { struct OutputBuffer; struct InputBuffer; struct InputBuffer_PostPhysics; }
 namespace AIModuleIO { struct RaceCarAIInterface; }      // SetSuitabilityForAggression arg (BrnRaceCarAIInterfaces.h)
 namespace RouteMapModuleIO { struct InputBuffer; }        // UpdateCars arg: the transient "Route" IO buffer (BrnRouteMapModuleIO.h:239)
+namespace RouteMapModuleIO { struct OutputBuffer; }       // UpdateCarRoutes arg: the transient "Route" OUTPUT buffer
 
 // DWARF BrnAIModule.h:58/:59 -- the two roster caps the module's arrays and loops are sized by.
 // The console bakes them as literals (35 / 8) into every GetAICar/GetAIDriver and loop bound.
@@ -300,6 +301,14 @@ private:
     // X360 @0x8276E7C0 (~70 insns) -- DWARF :1244.
     void SetSuitabilityForAggression( EActiveRaceCarIndex leActiveRaceCarIndex,
                                       const AIModuleIO::RaceCarAIInterface* lpCarInterface );
+    // X360 @0x827955F0 (127 insns) -- DWARF BrnAIModule.cpp:1495 `UpdateCarRoutes(OutputBuffer*,
+    // const OutputBuffer*)`: r4 = the AI output buffer (event 117), r5 = the transient "Route"
+    // output buffer (read-locked by Update at 0x8279B7D4). Hands each AI-owned RouteResponse to its
+    // car, feeds the race balancer, and posts E_EVENT_PLAYER_ROUTE_UPDATED. Body in
+    // BrnAIModule_Routes.cpp. (A member again since 2026-09-22 -- it reads the two player cursors
+    // and mRaceBalancingManager, which the aiwave free-function form could not reach.)
+    void UpdateCarRoutes( AIModuleIO::OutputBuffer* lpOutputBuffer,
+                          const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer );
 
     struct RouteRequestSlot
     {

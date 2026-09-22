@@ -49,10 +49,51 @@ def code_only(text):
 
 AIMODULE = "src/GameSource/World/AI/BrnAIModule.cpp"
 EVENTS = "src/GameSource/World/AI/BrnAIModule_Events.cpp"
+ROUTES = "src/GameSource/World/AI/BrnAIModule_Routes.cpp"
+PUMP = "src/GameSource/World/AI/BrnAIModule_ResetPump.cpp"
+
+
+def optional_body(source, signature):
+    try:
+        return code_only(function_body(source, signature))
+    except ValueError:
+        return ""
+
+
+def checks_routes(tree):
+    routes = tree.read(ROUTES)
+    member = optional_body(routes, "void AIModule::UpdateCarRoutes(")
+    # G04-D4: 0x82795710..0x8279575C -- opponent != -1 && !player && in game mode ->
+    #         RaceBalancingManager::UpdateOpponentRoute(car, GetAISectionsData()) off this+0x3D9D0
+    yield ("G04-D4 UpdateCarRoutes is the AIModule member (DWARF BrnAIModule.cpp:1495)", member != "")
+    call = re.search(r"mRaceBalancingManager\.UpdateOpponentRoute\(\s*lpAICar\s*,\s*GetAISectionsData\(\)\s*\)", member)
+    gate = re.search(r"GetOpponentIndex\(\)\s*!=\s*-1\s*&&\s*!\s*lpAICar->IsPlayerCar\(\)\s*&&\s*lpAICar->mbIsInGameMode", member)
+    yield ("G04-D4 UpdateCarRoutes calls mRaceBalancingManager.UpdateOpponentRoute (0x8279575C)", call is not None)
+    yield ("G04-D4 ...under the console's opponent/player/in-mode gate (0x82795710..0x82795744)",
+           call is not None and gate is not None and gate.start() < call.start())
+    # G04-D5 / G05-D5: 0x8279577C GetAIDriver(mePlayerActiveRaceCarIndex) ; 0x82795780 lwz 0x1CE0 (mpCar)
+    driver = re.search(r"GetAIDriver\(\s*mePlayerActiveRaceCarIndex\s*\)", member)
+    getcar = re.search(r"->GetCar\(\)\s*!=\s*0", member)
+    player = re.search(r"GetAICar\(\s*static_cast<u32>\(\s*mePlayerGlobalRaceCarIndex\s*\)\s*\)", member)
+    event = member.find("KI_EVENT_PLAYER_ROUTE_UPDATED")
+    yield ("G04-D5/G05-D5 event 117 gated on the player's active-slot driver mpCar (0x8279577C..0x82795788)",
+           driver is not None and getcar is not None and player is not None and 0 <= event
+           and driver.start() < getcar.start() < player.start() < event)
+    pump = tree.read(PUMP)
+    update = code_only(function_body(pump, "void AIModule::Update("))
+    yield ("G04-D5/G05-D5 Update no longer hands UpdateCarRoutes a pre-computed player car",
+           "ProcessRouteResponses(this, lpOutputBuffer, lpRouteOut, lpPlayerCar)" not in update)
+    # G05-D4: 0x8279B678..0x8279B6C0 -- RaceBalancingManager::Update inlined right after row 12,
+    #         before the route-input lock / HandleGameActions (0x8279B6CC / 0x8279B6E0)
+    clock = update.find("mRaceBalancingManager.Update(lpPlayerCar, lfDt)")
+    actions = update.find("HandleGameActions(")
+    yield ("G05-D4 Update runs the race clock (RaceBalancingManager::Update) before HandleGameActions",
+           0 <= clock < actions)
 
 
 def checks(tree):
     """Yield (name, passed) pairs."""
+    yield from checks_routes(tree)
     events = tree.read(EVENTS)
     mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
     # G04-D2: 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> stbx 0x4EB7C and 0x82791E24 lbz 0x94 -> stbx 0x4EB7D

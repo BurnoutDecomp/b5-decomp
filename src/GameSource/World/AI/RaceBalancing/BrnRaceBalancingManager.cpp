@@ -8,12 +8,14 @@
 //   ComputeParSpeed (private)    @0x82789EC0
 //   ComputeTargetSpeed (private) @0x827916E0
 //   CalculateScheduleOffset      @0x82789E00
+//   UpdateOpponentRoute          @0x82789C48  (export hole; ppcdis)          -- 2026-09-22
+//   Update                       (inlined in AIModule::Update 0x8279B678..)  -- 2026-09-22
 //
-// The remaining DWARF methods were inlined on X360 (no standalone symbol) and are bodied
-// in their own TUs. The baked d:\p4 assert file/line are dropped in favour of
-// __FILE__/__LINE__ by CGS_ASSERT; the assert MESSAGE strings are verbatim from the asm.
+// The baked d:\p4 assert file/line are dropped in favour of __FILE__/__LINE__ by CGS_ASSERT; the
+// assert MESSAGE strings are verbatim from the asm.
 
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingManager.h"
+#include "GameSource/World/BrnWorldSharedConstants.h"   // BrnWorld::KI_MAX_RIVALS_IN_MODE (UpdateOpponentRoute's :185 assert)
 
 #include <cstddef>                                   // offsetof (layout pins)
 
@@ -98,6 +100,92 @@ void RaceBalancingManager::OnRaceEnd()
     maRaceBalancingGraphs.Clear();        // +0x01C0 count -> 0
     maRaceBalancingRoutes.Clear();        // +0x486C count -> 0
     miCheckpointCount = 0;                // +0x4874
+}
+
+// ===========================================================================================
+// Update -- DWARF BrnRaceBalancingManager.cpp:149. The X360 has no standalone symbol: its one
+// caller, AIModule::Update, inlines the whole body at 0x8279B678..0x8279B6C0 off
+// `addis r11,r31,4 ; addi r11,r11,-0x2630` == module + 0x3D9D0 == this (the PS3 DecFIGS keeps it
+// out of line at 0x9B4DF8, the identical body):
+//     0x8279B680  lbz 0x4878 (mbInRace)      beq -> skip
+//     0x8279B68C  lbz 0x4879 (mbOnStartLine) bne -> skip
+//     0x8279B698  lbz 0x1542(player)         (AICar::mbIsCrashing)
+//     crashing:   0x8279B6B0 fmadds f0 = dt * flt_820C4168 (0.5) + [0x4870]
+//     otherwise:  0x8279B6BC fadds  f0 = dt + [0x4870]
+//     0x8279B6C0  stfs f0 -> +0x4870 (mfRaceTime)
+// THE RACE CLOCK. Until 2026-09-22 (crash parity G05-D4) nothing on PC advanced it: the block
+// was misfiled as an AIDebugComponent accumulator and dropped, so every par-time comparison
+// (ComputeTargetSpeed / CalculateScheduleOffset) ran against a clock frozen at OnRaceStart's 0.
+// ===========================================================================================
+void RaceBalancingManager::Update(const AICar* lpPlayerCar, f32 lfTimeStep)
+{
+    if (mbInRace && !mbOnStartLine)
+    {
+        // [GUARD] host-only null test: the PC's INVALID-index mapping can hand over a null
+        // player car where the console reads an in-object byte. It sits inside the gate, as the
+        // console reads +0x1542 only after the two flag tests.
+        if (lpPlayerCar != 0 && lpPlayerCar->IsCrashing())
+        {
+            mfRaceTime = lfTimeStep * KF_PLAYER_CRASHING_TIME_FACTOR + mfRaceTime;
+        }
+        else
+        {
+            mfRaceTime = lfTimeStep + mfRaceTime;
+        }
+    }
+}
+
+// ===========================================================================================
+// UpdateOpponentRoute @0x82789C48 -- an ARTIST export HOLE (no JSON); read with
+// tools/re/ppcdis.py 82789C48 0x50 (0x82789C48..0x82789D80). DWARF BrnRaceBalancingManager.cpp:
+//     0x82789C60  lbz 0x4878 (mbInRace); beq -> return
+//     0x82789C6C  assert !IsPlayerCar()                         (lbz 0x1549; :183, li r5,0xB7)
+//     0x82789C9C  assert GetOpponentIndex() >= 0                (lbz 0x153A; cmplwi 0x80; :184)
+//     0x82789CC4  assert GetOpponentIndex() < KI_MAX_RIVALS_IN_MODE (extsb; cmpwi 7; :185)
+//     0x82789CF0  lwz 0x1400(car) -- the car's own Route (AICar+0) node count; <= 1 -> return
+//     0x82789D08  route = Array<RaceBalancingRoute,7>::GetItem(this+0x1C4, idx)  @0x8276A7F8
+//     0x82789D1C  graph = Array<RaceBalancingGraph,7>::GetItem(this, idx)        @0x8276A5E8
+//     0x82789D20  lbz 0xA14(route) (mbValid)
+//       set:   0x82789D44 RaceBalancingRoute::Recalculate(route, sections, graph, car-route,
+//                                                          lwz 0x4874 miCheckpointCount)
+//       clear: 0x82789D58 v1 = AICar::GetPosition(car)
+//              0x82789D78 RaceBalancingRoute::Prepare(route, v1, sections, graph, car-route,
+//                                                      miCheckpointCount)
+// Its ONLY caller is AIModule::UpdateCarRoutes (0x8279575C), and it is the ONLY caller of
+// Prepare and Recalculate: until 2026-09-22 (crash parity G04-D4) it had no body, every
+// opponent route stayed miTimeCount == 0 / mbValid == false, and the public ComputeTargetSpeed
+// answered KF_DEFAULT_SPEED (60 mph) for every rival in every balanced race.
+// ===========================================================================================
+void RaceBalancingManager::UpdateOpponentRoute(const AICar* lpAICar, const AISectionsData* lpAISectionsData)
+{
+    if (!mbInRace)
+    {
+        return;
+    }
+
+    CGS_ASSERT(!lpAICar->IsPlayerCar(), "!lpAICar->IsPlayerCar()");                                 // :183
+    CGS_ASSERT(lpAICar->GetOpponentIndex() >= 0, "lpAICar->GetOpponentIndex() >= 0");               // :184
+    CGS_ASSERT(lpAICar->GetOpponentIndex() < BrnWorld::KI_MAX_RIVALS_IN_MODE,
+               "lpAICar->GetOpponentIndex() < BrnWorld::KI_MAX_RIVALS_IN_MODE");                     // :185
+
+    const Route* lpRoute = lpAICar->GetRoute();
+    if (lpRoute->GetNodeCount() > 1)
+    {
+        const u32 luOpponentIndex = static_cast<u32>(static_cast<s32>(lpAICar->GetOpponentIndex()));
+        RaceBalancingRoute*       lpRaceBalancingRoute = &maRaceBalancingRoutes.GetItem(luOpponentIndex);
+        const RaceBalancingGraph* lpRaceBalancingGraph = &maRaceBalancingGraphs.GetItem(luOpponentIndex);
+
+        if (lpRaceBalancingRoute->mbValid)
+        {
+            lpRaceBalancingRoute->Recalculate(lpAISectionsData, lpRaceBalancingGraph, lpRoute,
+                                              miCheckpointCount);
+        }
+        else
+        {
+            lpRaceBalancingRoute->Prepare(lpAICar->GetPosition(), lpAISectionsData,
+                                          lpRaceBalancingGraph, lpRoute, miCheckpointCount);
+        }
+    }
 }
 
 // ===========================================================================================
@@ -351,5 +439,8 @@ const f32 KF_MAX_SPEED_MULTIPLIER_IN_RANGE       = 1.1f;               // flt_82
 const f32 KF_MIN_SPEED_MULTIPLIER_IN_RANGE       = 0.9f;               // flt_820C48A0
 const f32 KF_MAX_SPEED_MULTIPLIER_OUT_OF_RANGE   = 1.2f;               // flt_820C48A4
 const f32 KF_MIN_SPEED_MULTIPLIER_OUT_OF_RANGE   = 0.8f;               // flt_820C4330
+// DWARF :109. The multiplier Update applies to the race clock while the player is crashing:
+// AIModule::Update 0x8279B6A4/0x8279B6AC `lfs f0, flt_820C4168` -- x360rd 820C4168 == 0x3F000000.
+const f32 KF_PLAYER_CRASHING_TIME_FACTOR         = 0.5f;               // flt_820C4168
 
 }

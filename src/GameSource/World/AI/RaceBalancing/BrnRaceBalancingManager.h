@@ -20,12 +20,13 @@
 //   ComputeParSpeed (private)    @0x82789EC0
 //   ComputeTargetSpeed (private) @0x827916E0
 //   CalculateScheduleOffset      @0x82789E00
+//   UpdateOpponentRoute          @0x82789C48 (an ARTIST export hole, read with ppcdis)
+//   Update                       (no standalone symbol; AIModule::Update inlines the whole body
+//                                 at 0x8279B678..0x8279B6C0 -- PS3 DecFIGS 0x9B4DF8)
 //   OnRaceStartPlaying / OnRaceEnd  (no standalone symbol; recovered from the single caller
 //                                    that inlines each -- see the bodies for the asm range)
-// The remaining declaration reference methods (Construct / Update / UpdateOpponentRoute / OnOpponentTakenDown /
-// the public ComputeTargetSpeed overload) were INLINED on console with no standalone symbol and
-// no caller that pins their whole body -> declared here, bodied in their own TUs (or inline at
-// their call sites). Not bodied here; do not fabricate.
+//   the public ComputeTargetSpeed overload (sub_82794AA0, an export hole)
+// Construct / OnOpponentTakenDown have no caller that pins their whole body -> declared only.
 
 #include <cstddef>   // offsetof
 

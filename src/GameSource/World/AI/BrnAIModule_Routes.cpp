@@ -7,13 +7,12 @@
 //   + the two queue appends AIModule::Update @0x8279B478 inlines around it (0x8279B744 and
 //     0x8279B800) and the read-lock bracket they share with it (0x8279B7D4 / 0x8279B808).
 //
-// ⭐ WHY THESE ARE FREE FUNCTIONS. The console's UpdateCarRoutes is an AIModule member that
-// reads two private cursors (mePlayerActiveRaceCarIndex / mePlayerGlobalRaceCarIndex) and the
-// embedded RaceBalancingManager; BrnAIModule.h is lane A1's file this wave, so nothing here can
-// be declared on the class. Every leg is therefore a free function in BrnAI::AIModuleRoutes that
-// takes what the member would have read as explicit arguments, and the spine (AIModule::Update)
-// calls them in the console's order. The `## header_requests` in the lane report carries the
-// member declaration if the conductor prefers to fold them back in; nothing else changes.
+// ⭐ UpdateCarRoutes IS AN AIModule MEMBER (again, 2026-09-22): the console's body reads the two
+// private player cursors and the embedded RaceBalancingManager, and the aiwave free-function form
+// that took them as arguments could neither reach the manager (so the rubber-band route update was
+// an empty park) nor evaluate the console's own event-117 gate. The two queue appends stay free
+// functions in BrnAI::AIModuleRoutes -- they touch no module state -- and AIModule::Update /
+// PausedUpdate call them in the console's order.
 //
 // =================================================================================================
 // THE TRANSIENT "Route" IO BUFFER PAIR -- what AIModule::Update @0x8279B478 does, precisely
@@ -65,10 +64,11 @@
 //                                                 == AppendRouteResponses() below
 //   0x8279B808  IOBuffer::UnlockForRead(routeOut)
 //   0x8279B810  ~IOHelper<OutputBuffer>           (routeOut is gone from here on)
-// ProcessRouteResponses() below is the 0x8279B7D4..0x8279B808 bracket as one call.
 // =================================================================================================
 
 #include "GameSource/World/AI/BrnAIModule.h"                             // AIModule / AICar
+#include "GameSource/World/AI/BrnAIModule_Routes.h"                      // the two free appends
+#include "GameSource/World/AI/BrnAIDriver.h"                             // AIDriver::GetCar (event-117 gate)
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO.h"                  // AIModuleIO::InputBuffer
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"     // AIModuleIO::OutputBuffer
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"               // the "Route" buffer pair
@@ -139,8 +139,10 @@ void AppendRaceRouteRequests(RouteMapModuleIO::InputBuffer* lpRouteInputBuffer,
     lpDestination->Append(*lpSource);
 }
 
+}   // namespace AIModuleRoutes
+
 // =================================================================================================
-// UpdateCarRoutes @0x827955F0 -- hand every AI-owned RouteResponse of the frame to its car.
+// AIModule::UpdateCarRoutes @0x827955F0 -- hand every AI-owned RouteResponse of the frame to its car.
 //
 //   r29 = this, r22 = lpOutputBuffer (aiOut), r31 = lpRouteOutputBuffer (routeOut)
 //   0x8279560C  assert(lpRouteOutputBuffer != NULL)                             (:1503)
@@ -159,37 +161,32 @@ void AppendRaceRouteRequests(RouteMapModuleIO::InputBuffer* lpRouteInputBuffer,
 //   0x82795710    if (car->miOpponentIndex (+0x153A) != -1 && !car->mbIsPlayer (+0x1549)
 //   0x8279573C        && car->mbIsInGameMode (+0x154B))
 //   0x8279575C      mRaceBalancingManager.UpdateOpponentRoute(car, GetAISectionsData())
-//                                                                    (this + 252368; @0x82789C48)
+//                                        (add r3, r29, 0x3D9D0; the accessor is CALLED AGAIN)
 //   0x8279577C  driver = GetAIDriver(mePlayerActiveRaceCarIndex)  (+0x4E9F8)
-//   0x82795780  if (driver->mpCar (+0x1CE0) != NULL)
-//   0x8279579C    car = GetAICar(mePlayerGlobalRaceCarIndex)          (+0x4E9FC)
+//   0x82795780  if (driver->mpCar (+0x1CE0) != NULL)             -- no mbIsActive test here
+//   0x8279579C    car = GetAICar(mePlayerGlobalRaceCarIndex)          (+0x4E9FC, re-read here)
 //   0x827957A0    if (car->mRoute.meStatus (+0x1408) != UNINITIALISED && miNodeCount (+0x1400) > 0)
 //   0x827957E0      aiOut->GetGameEventQueue()->AddEvent(<1 uninitialised stack byte>, 117, 1)
 //                                                                    == E_EVENT_PLAYER_ROUTE_UPDATED
 //
-// lpPlayerAICar is the console's `GetAICar(mePlayerGlobalRaceCarIndex)` -- the caller passes it
-// ONLY when `GetAIDriver(mePlayerActiveRaceCarIndex)->mpCar != NULL` (the +0x1CE0 gate), else
-// NULL. ⛔ [FLAG PC bring-up] on this build AIModule::GetAIDriver @0x82765B90 and the eight
-// AIDriver objects are absent (lane A3), so the spine has nothing to pass yet: the player-route
-// game event (the HUD compass / minimap route consumer) stays silent. DELETE-WHEN GetAIDriver lands.
-//
-// ⛔ [FLAG PC bring-up] RaceBalancingManager::UpdateOpponentRoute @0x82789C48 is declared
-// (RaceBalancing/BrnRaceBalancingManager.h:86) but has NO body in the tree and its TU is not
-// mounted, and the manager itself has no named home in BrnAIModule.h (X360 +252368 sits inside
-// mPad0). The rubber-band route update is therefore PARKED here; the condition is reproduced so
-// the call drops in verbatim. DELETE-WHEN mRaceBalancingManager is a named AIModule member and
-// its TU is mounted -- then add `RaceBalancingManager*` to this signature.
+// ⛔ CORRECTED 2026-09-22 (crash parity G04-D4 / G04-D5 / G05-D5):
+//   * the UpdateOpponentRoute call was an empty [FLAG PC bring-up] block (its "no named home"
+//     reason was stale: mRaceBalancingManager is a member and its TU is mounted), so no rival's
+//     race-balancing route was ever Prepared and every balanced race ran its rivals at the
+//     KF_DEFAULT_SPEED fallback;
+//   * the event-117 gate took a caller-computed `GetAICar(mePlayerGlobalRaceCarIndex)` from before
+//     HandleManagementEvents, so after a DEACTIVATE_RACE_CAR of the player's car (driver mpCar
+//     nulled, global index stale) the PC kept posting 117 where the console posts nothing. The
+//     console's own gate -- the player's ACTIVE-slot driver's mpCar -- is evaluated here, after
+//     the response loop, exactly where the console reads it.
 // =================================================================================================
-void UpdateCarRoutes(AIModule* lpAIModule,
-                     AIModuleIO::OutputBuffer* lpOutputBuffer,
-                     const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer,
-                     const AICar* lpPlayerAICar)
+void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
+                               const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer)
 {
-    CGS_ASSERT(lpAIModule          != 0, "lpAIModule != NULL");
     CGS_ASSERT(lpRouteOutputBuffer != 0, "lpRouteOutputBuffer != NULL");   // :1503
-    if (lpAIModule == 0 || lpRouteOutputBuffer == 0)
+    if (lpRouteOutputBuffer == 0)
     {
-        return;
+        return;   // [GUARD]
     }
 
     const RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue =
@@ -197,7 +194,7 @@ void UpdateCarRoutes(AIModule* lpAIModule,
     CGS_ASSERT(lpRouteResponseQueue != 0, "lpRouteResponseQueue != NULL");   // :1507
     if (lpRouteResponseQueue == 0)
     {
-        return;
+        return;   // [GUARD]
     }
 
     const s32 liResponseCount = lpRouteResponseQueue->GetLength();
@@ -212,7 +209,7 @@ void UpdateCarRoutes(AIModule* lpAIModule,
             continue;
         }
 
-        AICar* lpAICar = lpAIModule->GetAICar(lpRouteResponse->GetEventId());
+        AICar* lpAICar = GetAICar(lpRouteResponse->GetEventId());
         if (lpAICar == 0)   // [GUARD] GetAICar's PC-only out-of-range bail (see BrnAIModule_ResetPump.cpp)
         {
             // [FLAG PC witness] an AI-owned response whose event id is not a valid car index --
@@ -248,8 +245,7 @@ void UpdateCarRoutes(AIModule* lpAIModule,
             continue;
         }
 
-        const AISectionsData* lpAISectionsData = lpAIModule->GetLoadedAISectionsData();
-        lpAICar->UpdateRoute(lpRouteResponse->GetRoute(), lpAISectionsData);
+        lpAICar->UpdateRoute(lpRouteResponse->GetRoute(), GetAISectionsData());           // 0x827956FC/0x8279570C
 
         {
             // [FLAG PC witness] NOT IN THE X360 BINARY. Deliveries, budgeted PER CAR (see the
@@ -258,8 +254,8 @@ void UpdateCarRoutes(AIModule* lpAIModule,
             // DELETE-WHEN rivals are seen driving.
             static s32 saiDeliveryWitness[36] = { 0 };
             static s32 siDeliveryWitnessTotal = 0;
-            if (RouteDeliveryWitnessBudget(saiDeliveryWitness, siDeliveryWitnessTotal,
-                                           lpRouteResponse->GetEventId())
+            if (AIModuleRoutes::RouteDeliveryWitnessBudget(saiDeliveryWitness, siDeliveryWitnessTotal,
+                                                           lpRouteResponse->GetEventId())
                 && CgsDev::Log::gpDebugPrint != 0)
             {
                 *CgsDev::Log::gpDebugPrint
@@ -270,33 +266,39 @@ void UpdateCarRoutes(AIModule* lpAIModule,
             }
         }
 
-        if (lpAICar->GetOpponentIndex() != -1 && !lpAICar->IsPlayerCar() && lpAICar->mbIsInGameMode)
+        if (lpAICar->GetOpponentIndex() != -1 && !lpAICar->IsPlayerCar() && lpAICar->mbIsInGameMode)   // 0x82795710..0x82795744
         {
-            // [FLAG PC bring-up] mRaceBalancingManager.UpdateOpponentRoute(lpAICar,
-            // lpAISectionsData) @0x82789C48 -- see the banner.
+            mRaceBalancingManager.UpdateOpponentRoute(lpAICar, GetAISectionsData());       // 0x82795748..0x8279575C
         }
     }
 
     // ---- the player's own route -> E_EVENT_PLAYER_ROUTE_UPDATED (0x8279576C..0x827957E0) ----
-    if (lpPlayerAICar != 0 && lpPlayerAICar->HasValidRoute())
+    AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);                      // 0x8279577C
+    if (lpPlayerDriver != 0 /*[GUARD] GetAIDriver's host-only bail*/ && lpPlayerDriver->GetCar() != 0)   // 0x82795780 lwz 0x1CE0
     {
-        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");
-        if (lpOutputBuffer != 0)
+        const AICar* lpPlayerAICar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));   // 0x8279579C
+        if (lpPlayerAICar != 0 /*[GUARD]*/ && lpPlayerAICar->HasValidRoute())                // 0x827957A0..0x827957B8
         {
-            // The console posts ONE UNINITIALISED stack byte as the payload (`addi r4, r1, var_60`
-            // with no store; `li r6, 1`): the event carries no data, only its type. A zeroed byte
-            // here -- the consumer never reads it.
-            u8 luPlayerRouteUpdatedEvent = 0;
-            CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue =
-                reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
-                    lpOutputBuffer->GetGameEventQueue());
-            lpGameEventQueue->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&luPlayerRouteUpdatedEvent),
-                KI_EVENT_PLAYER_ROUTE_UPDATED, 1);
+            CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");
+            if (lpOutputBuffer != 0)
+            {
+                // The console posts ONE UNINITIALISED stack byte as the payload (`addi r4, r1,
+                // var_60` with no store; `li r6, 1`): the event carries no data, only its type. A
+                // zeroed byte here -- the consumer never reads it.
+                u8 luPlayerRouteUpdatedEvent = 0;
+                CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue =
+                    reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
+                        lpOutputBuffer->GetGameEventQueue());
+                lpGameEventQueue->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&luPlayerRouteUpdatedEvent),
+                    AIModuleRoutes::KI_EVENT_PLAYER_ROUTE_UPDATED, 1);
+            }
         }
     }
 }
 
+namespace AIModuleRoutes
+{
 // =================================================================================================
 // 0x8279B7E8..0x8279B800 -- every RouteResponse of the frame (AI-owned or not) is copied onto the
 // AI module's OUTPUT buffer, where WorldModule::BridgeAIModuleToOutput (AppendRouteResponseQueue)
@@ -322,28 +324,6 @@ void AppendRouteResponses(AIModuleIO::OutputBuffer* lpOutputBuffer,
         reinterpret_cast<RouteMapModuleIO::RouteResponseQueue*>(lpOutputBuffer->GetRouteResponseQueueForWrite());
 
     lpDestination->Append(*lpSource);
-}
-
-// =================================================================================================
-// 0x8279B7D0..0x8279B808 as one call: the read-lock bracket around UpdateCarRoutes + the append.
-// The spine calls this right after mRouteMapModule.Update(...) and before the output IOHelper
-// goes out of scope (0x8279B810).
-// =================================================================================================
-void ProcessRouteResponses(AIModule* lpAIModule,
-                           AIModuleIO::OutputBuffer* lpOutputBuffer,
-                           const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer,
-                           const AICar* lpPlayerAICar)
-{
-    CGS_ASSERT(lpRouteOutputBuffer != 0, "lpRouteOutputBuffer != NULL");
-    if (lpRouteOutputBuffer == 0)
-    {
-        return;
-    }
-
-    lpRouteOutputBuffer->LockForRead();                                                 // 0x8279B7D4
-    UpdateCarRoutes(lpAIModule, lpOutputBuffer, lpRouteOutputBuffer, lpPlayerAICar);   // 0x8279B7E4
-    AppendRouteResponses(lpOutputBuffer, lpRouteOutputBuffer);                          // 0x8279B800
-    lpRouteOutputBuffer->UnlockForRead();                                               // 0x8279B808
 }
 
 }   // namespace AIModuleRoutes
