@@ -644,7 +644,7 @@ namespace BrnAI
     //   0x8279A8A4  assert(mResetOnTrackRequestQueue.miCount != -1)   (CgsArray.h:336)
     //   0x8279A8CC  liPending = mResetOnTrackRequestQueue.GetCount()  -- READ BEFORE anything else
     //   0x8279A8D4  mePlayerGlobalRaceCarIndex = lePlayer             (stw  this+900)
-    //   0x8279A8DC  Camera::operator=(this + 0x38C, <the 4th argument>)   [PARKED -- see the header]
+    //   0x8279A8F0  mCamera = lCamera       (`addi r3, r25, 0x390 ; bl Camera::operator=`, r4 = r7)
     //   0x8279A8E4  if (mRecentResets.GetLength() > 0
     //                   && lfTime - mRecentResets[len-1].mfTime > 3.0f)  mRecentResets.Pop()
     //   0x8279A930  if (liPending > 0) {
@@ -679,7 +679,8 @@ namespace BrnAI
     // ---------------------------------------------------------------------------------------------
     void ResetOnTrackManager::Update(AIModuleResultInterface* lpResults,
                                      EGlobalRaceCarIndex lePlayer,
-                                     f32 lfTime)
+                                     f32 lfTime,
+                                     BrnDirector::Camera::Camera lCamera)
     {
         CGS_ASSERT(mResetOnTrackRequestQueue.GetCount() != -1,
                    "Array used before Construct/Clear was called");   // CgsArray.h:336
@@ -687,9 +688,7 @@ namespace BrnAI
         const s32 liPendingCount = mResetOnTrackRequestQueue.GetCount();
 
         mePlayerGlobalRaceCarIndex = lePlayer;
-
-        // [FLAG PC bring-up] Camera::operator=(mCamera, <the dropped 4th argument>) -- see the
-        // declaration's banner in BrnResetOnTrackManager.h.
+        mCamera = lCamera;   // 0x8279A8EC -> 0x8279A8F0 (crash parity G08-D2)
 
         // Age the recent-reset ring: when the NEWEST entry is more than 3 s old, drop the OLDEST.
         if (mRecentResets.GetLength() > 0)

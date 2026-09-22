@@ -158,12 +158,49 @@ def checks_paused(tree):
            re.search(r"PausedUpdate\([^;]*lUpdateSet\s*\)", update) is not None)
 
 
+WORLD = "src/GameSource/World/BrnWorldModule.cpp"
+AIMODULE_H = "src/GameSource/World/AI/BrnAIModule.h"
+ROTM = "src/GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.cpp"
+
+
+def checks_camera(tree):
+    header = code_only(tree.read(AIMODULE_H))
+    # G05-D3: DWARF BrnAIModule.h:354 `Camera mCamera` (X360 +0x4EA00) and :423 SetCamera(Camera&)
+    yield ("G05-D3 AIModule has the DWARF mCamera member (X360 +0x4EA00)",
+           re.search(r"BrnDirector::Camera::Camera\s+mCamera\s*;", header) is not None)
+    yield ("G05-D3 AIModule::SetCamera(Camera&) copies into mCamera (DWARF :423)",
+           re.search(r"void\s+SetCamera\(\s*BrnDirector::Camera::Camera&\s*\w+\s*\)\s*\{\s*mCamera\s*=\s*\w+\s*;\s*\}",
+                     header) is not None)
+    world = tree.read(WORLD)
+    update = code_only(function_body(world, "WorldModule::Update( BrnUpdateSet lUpdateSet,"))
+    drives = update.find("mAIModule.SetAIDrivesPlayer(")
+    setcam = update.find("mAIModule.SetCamera(mLastCameraInput)")
+    aiupdate = update.find("mAIModule.Update(")
+    # 0x827D753C stbx (SetAIDrivesPlayer) -> 0x827D7540 Camera::operator= -> 0x827D7588 vtbl+0x44
+    yield ("G05-D3 WorldModule::Update hands mLastCameraInput to the AI module (0x827D750C..0x827D7540)",
+           setcam >= 0)
+    yield ("G05-D3 ...after SetAIDrivesPlayer and before AIModule::Update, as on the console",
+           0 <= drives < setcam < aiupdate)
+    pump = code_only(function_body(tree.read(PUMP), "void AIModule::UpdateResetOnTrackManager("))
+    # 0x8279AC10..0x8279AC24 Camera::Camera(stack, this+0x4EA00) -> r7 of ResetOnTrackManager::Update
+    yield ("G05-D3 UpdateResetOnTrackManager passes mCamera as ROTM::Update's 4th argument (0x8279AC3C)",
+           re.search(r"mResetOnTrackManager\.Update\(\s*lpResults\s*,[^;]*,\s*lfTime\s*,\s*mCamera\s*\)", pump)
+           is not None)
+    rotm = code_only(function_body(tree.read(ROTM), "    void ResetOnTrackManager::Update("))
+    player = rotm.find("mePlayerGlobalRaceCarIndex = lePlayer;")
+    copy = rotm.find("mCamera = lCamera;")
+    ageing = rotm.find("mRecentResets.GetLength()")
+    yield ("G08-D2 ROTM::Update stores the camera right after the player index (0x8279A8EC -> 0x8279A8F0)",
+           0 <= player < copy < ageing)
+
+
 def checks(tree):
     """Yield (name, passed) pairs."""
     yield from checks_routes(tree)
     yield from checks_route_requests(tree)
     yield from checks_prepare(tree)
     yield from checks_paused(tree)
+    yield from checks_camera(tree)
     events = tree.read(EVENTS)
     mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
     # G04-D2: 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> stbx 0x4EB7C and 0x82791E24 lbz 0x94 -> stbx 0x4EB7D

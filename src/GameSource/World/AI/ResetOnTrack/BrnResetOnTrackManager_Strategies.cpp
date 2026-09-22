@@ -16,7 +16,7 @@
 //   BrnAI::ResetOnTrackManager::ResetAheadFromSideTurnings               @0x827909F0     (type 5)
 //   BrnAI::ResetOnTrackManager::ScanForwardsAndAlongJunction             @0x827852C0     (export hole)
 //   BrnAI::ResetOnTrackManager::InterpolatePositionFromAngle             @0x82784FD8
-//   BrnAI::ResetOnTrackManager::PlayerIsLookingBackwards                 @0x82778000     (PARKED)
+//   BrnAI::ResetOnTrackManager::PlayerIsLookingBackwards                 @0x82778000
 //
 // WHY THIS TU EXISTS. Before it, ComputeResetOnTrack answered every non-STANDARD reset type with a
 // once-only "PARKED strategy" log line and `false`, so every request that was not type 1 resolved
@@ -1495,35 +1495,23 @@ bool ResetOnTrackManager::ResetAheadFromSideTurnings(ResetOnTrackCoords* lpReset
 // =================================================================================================
 // PlayerIsLookingBackwards @0x82778000
 //
-//   0x82778030  lvx128 v127, this, 0x3B0        -- this+0x3B0 is INSIDE mCamera (@+0x38C, +0x24
-//                                                  into it): the camera's at-vector.
-//   0x82778040  return Dot(lpPlayerAICar->GetDirection(), thatVector) < 0.0
+//   0x82778020  lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex)
+//   0x82778030  lvx128 v127, this, 0x3B0     -- mCamera (+0x390) + 0x20: mTransform's At row, the
+//                                                camera's view direction (Camera::GetDirection)
+//   0x82778034  AICar::GetDirection ; 0x82778040 vmsum3fp128 (3-lane dot)
+//   0x82778058  fcmpu vs 0.0 (flt_82001CC0) ; blt -> true
 //
-// ⛔ [FLAG PC bring-up] PARKED. mCamera is `u8[0x164]` here -- an opaque blob with no named
-// interior -- AND it is never filled: ResetOnTrackManager::Update's own banner records that the
-// console's `Camera::operator=(this+0x38C, <4th argument>)` is parked because
-// AIModule::UpdateResetOnTrackManager does not build the stack Camera either. So the console value
-// would be read out of 356 uninitialised bytes. Reaching into it by raw offset to answer a question
-// nothing has seeded is the offset-poke this tree keeps paying for.
-// Returning false takes reset type 3's `else` arm, i.e. ResetFixedDistanceBehindPlayer -- the
-// strategy this TU DOES implement, and the sane default for a road-rage rival.
-// DELETE-WHEN mCamera has its real Camera type and UpdateResetOnTrackManager fills it.
+// ⛔ CORRECTED 2026-09-22 (crash parity G07-D3): this was parked to `false` because mCamera was an
+// unwritten u8[0x164]. ResetOnTrackManager::Update now copies the camera AIModule hands it
+// (G08-D2 / G05-D3), and ResetAheadFromSideTurnings -- the arm a `true` routes reset type 3 into --
+// is real (G07-D2), so a look-back reset lands ahead of the player instead of in view behind.
 // =================================================================================================
 bool ResetOnTrackManager::PlayerIsLookingBackwards()
 {
-    static bool sbReportedParked = false;
-    if (!sbReportedParked)
-    {
-        sbReportedParked = true;
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[rot] PARKED: PlayerIsLookingBackwards (X360 0x82778000) reads mCamera+0x24, "
-                   "which nothing on this build fills -- answering false, so reset type 3 takes "
-                   "ResetFixedDistanceBehindPlayer.\n";
-        }
-    }
-    return false;
+    const AICar* lpPlayerAICar = GetAICar(mePlayerGlobalRaceCarIndex);
+    const Vector3 lCameraDirection = mCamera.GetDirection();
+
+    return Dot3D(lpPlayerAICar->GetDirection(), lCameraDirection) < KF_ZERO;
 }
 
 }   // namespace BrnAI

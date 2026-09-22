@@ -5,6 +5,7 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"
 #include "GameSource/World/AI/BrnAICar.h"                              // AICar (maAICars[35], BY VALUE)
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"   // ResetOnTrackManager
+#include "GameSource/Director/Camera/Camera.h"                     // BrnDirector::Camera::Camera (mCamera, DWARF :354)
 // ---- ADDITIVE (aiwave lane A1, 2026-09-03): the drive spine's embedded state ----
 #include "GameSource/World/AI/BrnAIDriver.h"                          // AIDriver (maAIDrivers[8], BY VALUE)
 #include "GameSource/World/AI/BrnAIBuzzBy.h"                          // BuzzBy (mBuzzBy, BY VALUE)
@@ -93,6 +94,11 @@ class AIModule : public CgsModule::ModuleSingleBuffered
 public:
     // DWARF SetAIDrivesPlayer; inlined store in ARTIST WorldModule::Update @0x827D753C.
     void SetAIDrivesPlayer(bool lbEnabled) { mbAIDrivesPlayer = lbEnabled; }
+    // DWARF BrnAIModule.h:423 `void SetCamera(Camera&)`; inlined in ARTIST WorldModule::Update as
+    // Camera::operator=(this + 0x5DFD00 == mAIModule + 0x4EA00, this + 0x5E1CC0 == mLastCameraInput)
+    // at 0x827D750C..0x827D7540 -- right after the SetAIDrivesPlayer store, right before the
+    // AIModule::Update vtable call (0x827D7588). (crash parity G05-D3, 2026-09-22)
+    void SetCamera(BrnDirector::Camera::Camera& lrCamera) { mCamera = lrCamera; }
 
         // X360 0x82794D08. Reached by the wired WorldModule::Construct @0x827CF540 fleet cascade.
         void Construct() override;
@@ -425,6 +431,12 @@ private:
     // Update ever writes it on one path: PausedUpdate -> HandleManagementEvents case 4.
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;   // X360 +322040
     EGlobalRaceCarIndex mePlayerGlobalRaceCarIndex;   // X360 +322044
+
+    // X360 +322048 (0x4EA00), DWARF BrnAIModule.h:354 -- the player's camera, refreshed every
+    // frame by WorldModule::Update through SetCamera (0x827D7540) and handed BY VALUE to
+    // ResetOnTrackManager::Update (copy-constructed at 0x8279AC10..0x8279AC24). Its only consumer
+    // is ResetOnTrackManager::PlayerIsLookingBackwards. (crash parity G05-D3, 2026-09-22)
+    BrnDirector::Camera::Camera mCamera;
 
     // ---- ADDITIVE (aiwave lane A4, 2026-09-03): DWARF BrnAIModule.h:361, X360 +322408
     //      (0x4EB68). The contact-spy handle AIModule::PostPhysicsUpdate @0x8276E428 latches

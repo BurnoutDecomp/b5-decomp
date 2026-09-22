@@ -85,7 +85,8 @@
 //   mpaAICars                 @0x380  AICar*                       (GetAICar base; stride 0x1560)
 //   mePlayerGlobalRaceCarIndex@0x384  EGlobalRaceCarIndex
 //   miResetCount              @0x388  s32
-//   mCamera                   @0x38C  Camera (opaque, 0x164 -> ends 0x4F0)
+//   mCamera                   @0x390  BrnDirector::Camera::Camera (0x160 -> ends 0x4F0;
+//                                     +0x38C..+0x38F is alignment padding)
 //   mRandom                   @0x4F0  CgsNumeric::Random (0x30)
 //   mHelperNodeNext/Prev      @0x520 / @0x530 RouteNode (16B each)
 //   mResetOnTrackDebugComponent@0x540 opaque 0x870 -> footprint 0xDB0
@@ -97,7 +98,7 @@
 // there it builds TWO ring buffers inside the component (mpData = this+1392 cap 16, and
 // mpData = this+2704 cap 16) plus a 7-byte flag block at this+3480. So 0x870 is the
 // COMPONENT'S OWN SIZE (1344 + 2160 == 3504 == 0xDB0) and 0xDB0 is the footprint. Everything
-// below 0x540 cross-checks exactly (mCamera 0x38C + 0x164 == 0x4F0 == mRandom; mRandom + 0x30
+// below 0x540 cross-checks exactly (mCamera 0x390 + 0x160 == 0x4F0 == mRandom; mRandom + 0x30
 // == 0x520; two 0x10 helper nodes == 0x540), which is what makes the last member the only one
 // that could be wrong -- and it was.
 // A faithful Construct against the old declaration would have written 1344 bytes past the end
@@ -124,6 +125,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                 // CgsNumeric::Random (0x30)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"   // CgsResource::ResourcePtr
 #include "GameSource/World/AI/Route/BrnRoute.h"                     // BrnAI::RouteNode (mHelperNode*)
+#include "GameSource/Director/Camera/Camera.h"                     // BrnDirector::Camera::Camera (mCamera)
 
 namespace BrnAI
 {
@@ -192,19 +194,16 @@ namespace BrnAI
         // drain the pending request queue into ProcessResetOnTrackRequest, then refresh every
         // ACTIVE car's reset-on-track section.
         //
-        // ⚠️ THE CONSOLE PASSES A FOURTH ARGUMENT AND IT IS DROPPED HERE, DELIBERATELY.
-        // AIModule::UpdateResetOnTrackManager @0x8279AC20 copy-constructs a stack Camera from
-        // `module + 322048` and passes it in r7; the callee's first act is
-        // `Camera::operator=(this + 0x38C, r7)` -- i.e. it fills mCamera, this class's SCRATCH
-        // camera. r6 is never set at the call site: that is not a dropped argument, it is the GPR
-        // slot the f1 float parameter burns on this ABI (the same trap
-        // BrnRaceCarEntityModule_CrashExit.cpp:78 documents for RequestResetOnTrack).
-        // mCamera is `u8[0x164]` here -- an opaque blob with no named interior -- and its ONLY
-        // readers are the parked geometry arms (ComputeInitialCoordinates* / the debug component).
-        // Copying a Camera into an untyped 356-byte hole to satisfy a parameter nothing live reads
-        // is exactly the offset-poke this tree keeps paying for. Restore the parameter WITH the
-        // Camera member's real type.
-        void Update(AIModuleResultInterface* lpResults, EGlobalRaceCarIndex lePlayer, f32 lfTime);
+        // THE FOURTH ARGUMENT IS THE PLAYER'S CAMERA, BY VALUE (DWARF :83 `Update(
+        // AIModuleResultInterface*, EGlobalRaceCarIndex, float32_t, Camera)`). AIModule::
+        // UpdateResetOnTrackManager copy-constructs it from its own mCamera (0x8279AC10..0x8279AC24,
+        // passed in r7 -- r6 is the GPR slot f1 burns on this ABI), and the callee's first act after
+        // storing the player index is `Camera::operator=(this + 0x390, r7)` (0x8279A8E8..0x8279A8F0).
+        // Its one reader is PlayerIsLookingBackwards (mTransform.At(), this + 0x3B0).
+        // ⛔ CORRECTED 2026-09-22 (crash parity G08-D2): the parameter was dropped and mCamera was
+        // an unwritten u8[0x164] at +0x38C, so PlayerIsLookingBackwards was parked to false.
+        void Update(AIModuleResultInterface* lpResults, EGlobalRaceCarIndex lePlayer, f32 lfTime,
+                    BrnDirector::Camera::Camera lCamera);
 
         // @0x82799D38. Resolve ONE request: compute a reset pose, publish a ResetOnTrackResult
         // (SUCCESS with the pose, or FAILURE so the consumer falls back to the car's own
@@ -291,7 +290,7 @@ namespace BrnAI
         // the player's own reset-on-track portal pair, forced BEHIND the player.
         bool ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetData);
 
-        // @0x82778000. PARKED -- see the body (it reads mCamera).
+        // @0x82778000. Dot(player AICar direction, mCamera's At row) < 0.0.
         bool PlayerIsLookingBackwards();
 
         // @0x82778088 (DWARF :230). Flip the computed direction when it opposes the player's.
@@ -356,8 +355,10 @@ namespace BrnAI
         EGlobalRaceCarIndex mePlayerGlobalRaceCarIndex; // +0x384
         s32                 miResetCount;               // +0x388
 
-        // +0x38C : scratch Camera used while computing reset coordinates (opaque, 0x164).
-        u8 mCamera[0x164];
+        // +0x390 : the player's camera as of this frame's Update (DWARF :336). Console seat +0x390,
+        // 16-aligned by its Matrix44Affine; +0x38C..+0x38F is padding. On the host the Camera widens
+        // its three pointer members, so parity is BY NAME (the _AssertLayout pins are relative).
+        BrnDirector::Camera::Camera mCamera;
 
         // +0x4F0 : buffered PRNG for reset-position jitter.
         CgsNumeric::Random mRandom;
