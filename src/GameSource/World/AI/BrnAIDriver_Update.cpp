@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // [FLAG PC witness] the [drv] behaviour-transition trace
 
 #include "rw/math/vpu/vector3_operation.h"                 // vpu::Magnitude / vpu::Dot
+#include "rw/math/vpu/vector2_operation.h"                 // vpu::Magnitude (2-lane: GetIndexOfFurthestVehicle)
 
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
@@ -1271,25 +1272,57 @@ namespace BrnAI
     }
 
     // ================================================================================
-    // GetIndexOfFurthestVehicle @0x8277D2E0
+    // GetIndexOfFurthestVehicle @0x8277D2E0 (DWARF BrnAIDriver.cpp:2549..2566)
     //
-    // Nominates the avoidance slot to evict when the 16-slot list is full: the console walks the
-    // list from this+0x10 measuring each entry against the car's position and the candidate
-    // centre it is handed, returning -1 when nothing should be evicted.
-    //
-    // [FLAG PC bring-up] this body is a NAMED PARK. The function has no IDA export (recovered
-    // address only, from AddNearbyAIToAvoidance's `bl`), and its 60-odd instructions are almost
-    // entirely VMX128 forms capstone does not decode, so the selection rule cannot be read
-    // faithfully yet. Returning -1 means "keep what is already in the list", which drops the new
-    // candidate -- the console's own answer whenever it decides nothing is further away. With the
-    // eight-driver cap the list only fills in dense traffic, and the whole avoidance feed is
-    // consumed by the (gated) SteeringFan HNG contributors, so nothing observable changes until
-    // that stack lands. DELETE-WHEN the VMX128 decode of 0x8277D2E0..0x8277D3E0 is available.
+    // Nominates the avoidance slot to evict when the 16-slot list is full (AddNearbyTraffic-
+    // ToAvoidance `bl` @0x8277D594, AddNearbyAIToAvoidance @0x8277D834; both drop the candidate on
+    // -1). Export hole, read with ppcdis + vmx128.py raw fields; the PS3 twin @0xA02810 is the same
+    // code:
+    //   0x8277D2FC  vmr128 v123, v1                         lNewPosition
+    //   0x8277D308  bl AICar::GetPosition (mpCar @+0x1CE0)  lCarPosition
+    //   0x8277D330  vrlimi128 v12,v13,8,0 (0x19886F10) ; 0x8277D344 vrlimi128 v124,v13,4,1
+    //               (0x1B846F5C)                            lCar2DPosition = (pos.x, pos.z)
+    //   0x8277D34C  vsubfp128 v0 = v123 - v124 ; x*x + y*y ; vrsqrtefp + 2 Newton-Raphson ; * lenSq ;
+    //               vsel 0 when lenSq == 0 -> f31           the candidate's distance from the car
+    //   0x8277D318  li r23,-1 ; 0x8277D320 li r30,0 ; 0x8277D324 r24 = this+0x10 (&mVehicle[0].mCentre)
+    //   0x8277D3CC  loop while r30 < miCount (lwz 0x700 every pass: NearbyVehicles::GetCount inlined
+    //               with its :2912/:2913 asserts; GetVehiclePointer's :2942/:2943 asserts inside)
+    //   0x8277D460  the same 2D magnitude of mVehicle[i].mCentre - lCar2DPosition
+    //   0x8277D4C8  fcmpu f0,f31 ; ble skip ; mr r23,r30  (r24 += 0x70, r30 += 1)
+    //   0x8277D4E0  mr r3,r23
+    // f31 is NEVER rewritten inside the loop (PS3 identical), so the answer is the LAST entry
+    // farther from the car than the candidate -- not the farthest one -- and -1 when none is.
+    // `!(d <= ref)` keeps the ble's unordered (NaN) case on the evict side.
     // ================================================================================
-    s32 AIDriver::GetIndexOfFurthestVehicle(Vector2 lCentre)
+    s32 AIDriver::GetIndexOfFurthestVehicle(Vector2 lNewPosition)
     {
-        (void)lCentre;
-        return -1;
+        const Vector3 lCarPosition   = mpCarHost->GetPosition();
+        const Vector2 lCar2DPosition = To2DU(lCarPosition);
+
+        Vector2 lToCandidate;
+        lToCandidate.x = lNewPosition.x - lCar2DPosition.x;
+        lToCandidate.y = lNewPosition.y - lCar2DPosition.y;
+        lToCandidate.z = 0.0f;
+        lToCandidate.w = 0.0f;
+        const f32 lDistanceToDriver = rw::math::vpu::Magnitude(lToCandidate);
+
+        s32       lCacheIndex = -1;
+        const f32 lfFurthest  = lDistanceToDriver;
+        for (s32 lNewIndex = 0; lNewIndex < mNearbyVehicles.GetCount(); ++lNewIndex)
+        {
+            const NearbyVehicle* lpVehicle = mNearbyVehicles.GetVehiclePointer(lNewIndex);
+
+            Vector2 lToEntry;
+            lToEntry.x = lpVehicle->mCentre.x - lCar2DPosition.x;
+            lToEntry.y = lpVehicle->mCentre.y - lCar2DPosition.y;
+            lToEntry.z = 0.0f;
+            lToEntry.w = 0.0f;
+            const f32 lfNewSeperation = rw::math::vpu::Magnitude(lToEntry);
+
+            if (!(lfNewSeperation <= lfFurthest))
+                lCacheIndex = lNewIndex;
+        }
+        return lCacheIndex;
     }
 
     // ================================================================================
