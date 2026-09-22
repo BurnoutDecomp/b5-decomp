@@ -80,6 +80,21 @@
 namespace BrnWorld
 {
 
+namespace
+{
+    // The crash exit's two place-on-track speeds (ProcessRaceCarCrashCompleteEvents 0x822F4468 /
+    // 0x822F4478). Both words are BSS -- they read 0x00000000 out of the image -- and both are
+    // written by CRT dynamic initialisers in the 0x82C4Bxxx bank (findinit: one writer, one reader
+    // each). The NAMES are the DecFIGS DWARF's (BrnRaceCarEntityModule.cpp:232/:233): that bank
+    // runs in declaration order, and 0x82C4BB10 (10 mph -> flt_82FAD610) / 0x82C4BB70 (120 mph ->
+    // flt_82FAD728) bracket these two exactly as :231 KF_RESET_ON_TRACK_SPEED_FAILURE and :234
+    // KF_RESET_ON_TRACK_IN_RANGE_SPEED bracket them in the declaration list.
+    //   0x82C4BB30..0x82C4BB48  flt_82FAD720 = flt_82F31928 (0.44704) * flt_820138DC (50.0)
+    //   0x82C4BB50..0x82C4BB68  flt_82FAD8C0 = flt_82F31928 (0.44704) * flt_82019A30 (75.0)
+    const f32 KF_RESET_ON_TRACK_SPEED        = 0.44704f * 50.0f;   // flt_82FAD720, 50 mph in m/s
+    const f32 KF_RESET_ON_TRACK_SPEED_ONLINE = 0.44704f * 75.0f;   // flt_82FAD8C0, 75 mph in m/s
+}
+
 // =================================================================================================
 // ProcessRaceCarCrashCompleteEvents @ 0x822F3FE0   (359 insns)
 //
@@ -196,16 +211,16 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
         f32 lfResetDistance = 0.0f;
         BrnAI::EResetType leResetType = BrnAI::E_RESET_TYPE_STANDARD;                 // li r30, 1
 
+        // 0x822F4440..0x822F4478: `lwz r11, 0x768(car)` (meEngineState) == 2 ->
+        //     lbzx this+0x18345 (mbIsInOnlineGameMode) ? lfs flt_82FAD8C0 : lfs flt_82FAD720
+        // Both words are BSS and read 0.0 out of the image; their writers are CRT dynamic
+        // initialisers (tools/re/findinit.py), so a running engine puts the car back on the road
+        // at 50 mph offline / 75 mph online, not at rest. See the constants at the top of the file.
         if( lpActiveRaceCar->GetEngineState() ==
             RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_RUNNING )
         {
-            // ⚠️ flt_82FAD8C0 / flt_82FAD720 BOTH READ 0.0 FROM THE IMAGE and both live in BSS
-            // (their whole 0x60-byte neighbourhoods are zero), i.e. they are runtime-written
-            // tunables this slice has not traced. 0.0f is what the console itself reads before
-            // any writer runs, and it is the identity for this parameter (RequestResetOnTrack
-            // asserts `mfResetOnTrackSpeed >= 0.0f` and a zero means "replace at rest"), so it is
-            // reproduced as the symbol's static value -- FLAGGED, not guessed.
-            lfResetSpeed = 0.0f;
+            lfResetSpeed = mbIsInOnlineGameMode ? KF_RESET_ON_TRACK_SPEED_ONLINE
+                                                : KF_RESET_ON_TRACK_SPEED;
         }
 
         if( lpRaceCar->GetType() == E_RACE_CAR_TYPE_AI &&
@@ -216,6 +231,19 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
         }
 
         lpRaceCar->RequestResetOnTrack( lfResetSpeed, leResetType, lfResetDistance );
+
+        // [DIAG] NOT IN THE X360 BINARY -- one line per crash-exit reset request (the CRASH
+        // COMPLETE line above is the same cadence), carrying the engine state that picked the speed.
+        if( CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[crash-exit] reset-on-track active race car "
+                << static_cast<s32>( luActiveRaceCarIndex )
+                << " engineState " << static_cast<s32>( lpActiveRaceCar->GetEngineState() )
+                << " online " << ( mbIsInOnlineGameMode ? 1 : 0 )
+                << " speed " << lfResetSpeed << " type " << static_cast<s32>( leResetType )
+                << " dist " << lfResetDistance << "\n";
+        }
     }
 }
 
