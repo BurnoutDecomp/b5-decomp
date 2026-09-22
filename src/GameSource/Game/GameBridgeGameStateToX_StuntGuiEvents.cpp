@@ -178,6 +178,20 @@ namespace
     static_assert(sizeof(InAirEventWire387)        == 8, "GUI 387 size 8");
     static_assert(sizeof(OncomingEventWire388)     == 4, "GUI 388 size 4");
     static_assert(sizeof(TailgatingEventWire389)   == 4, "GUI 389 size 4");
+
+    // =========================================================================
+    // [crash-parity 2026-09-22] the on-queue record of GUI event 374
+    // (BrnGui::GuiShutdownFinishedEvent), TU-LOCAL for the same reason as the records above:
+    // the canonical home is BrnGuiDemangledEventTypes.h:562, which this TU cannot include.
+    // Wire shape: AddGuiEvent<GuiShutdownFinishedEvent> @0x823D8A48 posts ONE byte
+    // (`li r5, 0x176 ; li r6, 1` @0x823D8AE4..0x823D8AE8).
+    // =========================================================================
+    struct ShutdownFinishedEventWire374
+    {
+        u8 mu8Unwritten;                        // +0x00 (never written by the console's arm)
+        s32 GetEventType() const { return 374; }
+    };
+    static_assert(sizeof(ShutdownFinishedEventWire374) == 1, "GUI 374 size 1");
 }
 
     // =========================================================================
@@ -757,6 +771,43 @@ namespace
                         << static_cast<s32>(lEvent.meCurrentState)
                         << (lpTakedownCamera->mbActive ? " (START_TAKEDOWN)" : " (LEAVE_TAKEDOWN)")
                         << "\n";
+                }
+                break;
+            }
+
+            // ---- 121 -> GUI 374, THE FREE-BURN RIVAL SHUTDOWN IS FINISHED --------------------
+            // [crash-parity 2026-09-22] ARTIST 0x823ED8A8..0x823ED8B4 (jpt_823EA1F0 entry 121 at
+            // 0x823EA3D8):
+            //     mr r5, r20 ; addi r4, r1, 0xDD ; add r3, r29, r30
+            //     bl AddGuiEvent<BrnGui::GuiShutdownFinishedEvent>     -> AddEvent(q, rec, 374, 1)
+            // The record is one stack byte the arm never writes, and it does not read the
+            // action. The byte's only reader-side consumer, GuiCache::RecEvent case 374
+            // (0x8250FFC4..0x8250FFC8), stores mbCarUnlockPending = 1 without reading it, so a
+            // zero byte stands in for the residue. Producer: TakedownManager::EndTakedownCamera's
+            // free-burn arm (action 121, after the car is handed back to the player).
+            // ⚠️ [FLAG] THE CONSUMER HALF IS NOT ON PC YET: GuiCache::RecEvent has no case 374 and
+            // GuiModule::DispatchInboundGuiEvents does not forward 374, so today nothing observes
+            // this post. DELETE-WHEN GuiCache case 374 and its forward land.
+            //
+            // ⛔ [FLAG] THE SIBLING 120 -> GUI 373 IS DELIBERATELY NOT LANDED. The console arm is
+            // ARTIST 0x823ED88C..0x823ED8A0 (`ld r11, 0(record)` == ShutdownAction::mVictimCarID
+            // -> AddGuiEvent<GuiShutdownEvent> @0x823D8990 -> AddEvent(q, rec, 373, 8)). On PC,
+            // BrnGui::InGame's existing case 373 shuts the HUD down and sends "TO_RVL_POST" into
+            // BrnGui::OfflineRivalShutdown, which has no state bodies here (console OnEnter
+            // 0x824B9588, Update 0x824DAFE0, HandleIncomingEvents 0x824C23D0), so posting 373
+            // would strand the screen flow after every free-burn rival shutdown.
+            // DELETE-WHEN OfflineRivalShutdown and GuiCache's case 373 (mShutdownCarID) land.
+            case BrnGameState::GameStateModuleIO::E_ACTION_SHUTDOWN_FINISHED:   // 121
+            {
+                ShutdownFinishedEventWire374 lEvent;
+                lEvent.mu8Unwritten = 0;
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY.
+                static const bool sbTdDiag = (getenv("BRN_TD_DIAG") != 0);
+                if (sbTdDiag && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[td-gui] action 121 -> gui 374 (1 byte)\n";
                 }
                 break;
             }
