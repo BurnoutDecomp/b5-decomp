@@ -137,10 +137,12 @@ namespace BrnAI
     // GetRandomNumber(). Neither Aggressiveness body exists in this tree yet (BrnAIAggressiveness.cpp),
     // so the stream stays homed here; moving it there is a pure refactor of this block + the two
     // Construct() call sites below.
-    // [FLAG PC bring-up] CONSUMER NOT ROUTED YET: BrnResetOnTrackManager_Strategies.cpp's
-    // ResetAwayFromPlayer still draws from its own lazily-Construct'ed `lsGlobalResetRandom_8300D5D0`
-    // copy, so a draw there does not step this stream and no Reset re-seeds it (crash-parity
-    // G01-D3 / G07-D6). DELETE-WHEN ResetAwayFromPlayer draws `lpPlayerAICar->GetRandomNumber()`.
+    // ONE STREAM (crash parity 2026-09-22, G01-D3 / G07-D6): ResetAwayFromPlayer draws
+    // lpPlayerAICar->GetRandomNumber() (BrnResetOnTrackManager_Strategies.cpp; its private
+    // never-re-seeded copy is gone), so an ATTACH_AI_CONTROL Reset restarts the reset-on-track
+    // draws exactly as on the console. ResetAheadFromSideTurnings (0x82790A60: draw * 40 + 160)
+    // and ScanForwardsAndAlongJunction (hole 0x82785314) must draw through GetRandomNumber too
+    // when they are bodied.
     static CgsNumeric::Random gAICarRandom;
 
     // GetRandomNumber (DWARF BrnAICar.h:476, inlined on the console). The inline expansion in
