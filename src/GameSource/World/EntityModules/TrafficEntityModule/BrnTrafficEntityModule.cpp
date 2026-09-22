@@ -223,6 +223,13 @@ namespace BrnTraffic
         return &maParamTransforms[luParam];
     }
 
+    // ARTIST 0x82707768: assert index < 400, then this + (index + 0xDCC) * 64.
+    const ParamTransform* TrafficEntityModule::GetParamTransform(u32 luParam) const
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        return &maParamTransforms[luParam];
+    }
+
     // DWARF BrnTrafficUnity.cpp:15022. No standalone ARTIST symbol: every caller inlines the
     // bounds assert plus the `8 * (luParam + 27856) + this` index (== &maParamListNodes[luParam]).
     ParamListNode* TrafficEntityModule::GetParamListNode(u32 luParam)
@@ -8042,19 +8049,15 @@ void TrafficEntityModule::UpdateParams_CalcDesiredSpeed(
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateParams_CalcAcceleration  @0x827172B8  (.cpp 10998..11030) PARTIAL
+// TrafficEntityModule::UpdateParams_CalcAcceleration  @0x827172B8  (.cpp 10998..11030)
 //
 // The behaviour switch: NORMAL closes on the lane speed limit, the five slowing behaviours
 // solve v^2 = u^2 + 2as for the target speed at the stop distance, and behaviour 0
 // (SLOWING_FOR_CRASH) is a fixed-rate ramp.
 //
-// GATED LEGS, all three under the console's own `if (AllowDivergentBehaviour())`, so the
-// fallback is the shipped !divergent path (lfMaxSpeed 500, lfSpeedScale 1):
-//   * the showtime local-player proximity arm @0x82717370 -- BLOCKER: the unnamed .data
-//     vectors it reads and mRaceCarState's active-race-car position lane.
-//   * the slam / extreme-swerve arm @0x827174A0 -- BLOCKER: flt_8300CB50 and the
-//     unk_8300CB40 / unk_8300CA30 / unk_8300CCA0 / unk_8300CB20 lane block, all dyn-init
-//     .data (see scratchpad recovered_constants.md for the thunk-walk recipe).
+// Divergent behaviour first adjusts the speed cap/scale. Showtime proximity and
+// slam/extreme-swerve recovery are exclusive arms (0x8271749C skips the latter).
+// Their dynamic constants are recovered from the initializers at 0x82C66B30..0x82C66BE8.
 //   * ✅ switch case 0 @0x82717844 -- NO LONGER A BLOCKER, AND THE ANSWER IS THE OPPOSITE OF
 //     WHAT THE NOTE THAT STOOD HERE PREDICTED (2026-08-28). It said, of flt_8300C958 /
 //     flt_8300C95C: "reads 0.0 in the image and is therefore NOT its runtime value... ⛔ Do
@@ -8093,20 +8096,87 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
         const Section* lpSection,
         const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet) const
 {
-    (void)luParam;
-    (void)lrAvoidSet;
-
     const f32 lfLaneSpeed  = mfSpeedMultiplier * lpSection->mfSpeed;   // +0x72880 * section+0x24
-    const f32 lfMaxSpeed   = KF_PARAM_DEFAULT_MAX_SPEED;
-    const f32 lfSpeedScale = 1.0f;
+    f32 lfMaxSpeed   = KF_PARAM_DEFAULT_MAX_SPEED;
+    f32 lfSpeedScale = 1.0f;
 
     if (mbAllowDivergentBehaviour)
     {
-        static bool sbLogged = false;
-        LogMissingLeg_T2(sbLogged,
-                      "UpdateParams_CalcAcceleration @0x827172B8 divergent arms (showtime "
-                      "@0x82717370 / slam-swerve @0x827174A0) -- unnamed dyn-init .data "
-                      "vectors flt_8300CB50, unk_8300CB40/CA30/CCA0/CB20");
+        if (mbPlayingShowtimeMode && meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            // 0x82717370..0x82717498. All four original VecFloat constants are splats.
+            // Initializers: CB40 <- .025 @82C66BA0, CA30 <- .2 @82C66BC8,
+            // CCA0 <- .3 @82C66B50, CB20 <- 1.8 @82C66B78 (immutable literal inputs).
+            const f32 KF_CALCACCEL_SHOWTIME_DIST_TO_SLOW_RECIP = 0.025f;
+            const f32 KF_CALCACCEL_SHOWTIME_MIN_NEAR_SPEED_SCALE = 0.2f;
+            const f32 KF_CALCACCEL_SHOWTIME_MIN_SPEED_SCALE = 0.3f;
+            const f32 KF_CALCACCEL_SHOWTIME_MAX_SPEED_SCALE = 1.8f;
+            const ParamTransform* const lpTransform = GetParamTransform(luParam);
+            const Vector3 lToPlayer = mRaceCarState.maActiveRaceCarPositions[meLocalPlayerIndex]
+                                   - lpTransform->GetLerpedPos();
+            const f32 lfDistance = rw::math::vpu::Magnitude(lToPlayer);
+            const Vector3 lParamDirection = lpTransform->GetDirection();
+            // ARTIST masks zero length, but not the normalized direction (v5).
+            // Keep its NaN for coincident positions: vminfp propagates NaNs, and
+            // the scalar fsel clamps below then select the maximum acceleration.
+            const f32 lfFacing = rw::math::vpu::Dot(lToPlayer / lfDistance, lParamDirection);
+            const f32 lfScaledDistance = lfDistance * KF_CALCACCEL_SHOWTIME_DIST_TO_SLOW_RECIP;
+            const f32 lfNonnegativeDistance = lfScaledDistance < 0.0f ? 0.0f : lfScaledDistance;
+            const f32 lfDistanceBlend = lfNonnegativeDistance > 1.0f ? 1.0f : lfNonnegativeDistance;
+            const f32 lfDistanceScale = KF_CALCACCEL_SHOWTIME_MIN_NEAR_SPEED_SCALE +
+                (1.0f - KF_CALCACCEL_SHOWTIME_MIN_NEAR_SPEED_SCALE) * lfDistanceBlend;
+            const f32 lfFacingScale = KF_CALCACCEL_SHOWTIME_MIN_SPEED_SCALE +
+                (KF_CALCACCEL_SHOWTIME_MAX_SPEED_SCALE - KF_CALCACCEL_SHOWTIME_MIN_SPEED_SCALE) *
+                ((lfFacing + 1.0f) * 0.5f);
+            const f32 lfMinScale = std::isnan(lfFacingScale) ? lfFacingScale :
+                (lfFacingScale < lfDistanceScale ? lfFacingScale : lfDistanceScale);
+            lfMaxSpeed = lfLaneSpeed * lfMinScale;
+            // PC diagnostic only: observe this restored arm without changing its inputs.
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                static u32 suSamples = 0;
+                if (suSamples++ < 8)
+                    *lpDiag << "[traffic-accel] showtime param=" << luParam
+                        << " distance=" << lfDistance << " cap=" << lfMaxSpeed << "\n";
+            }
+        }
+        else
+        {
+            // 0x827174A0..0x82717590: the FastBitArray access owns this bounds check.
+            CGS_ASSERT(luParam < KU_PARAM_MAX_PARAMS, "Index is out of range (max bits: 600)");
+            if (lrAvoidSet.IsBitSet(luParam))
+            {
+                const Vehicle* const lpVehicle = GetVehicle(luParam);
+                if (lpVehicle->IsRecoveringFromSlam() || lpVehicle->IsExtremeSwerving())
+                {
+                    const ParamTransform* const lpTransform = GetParamTransform(luParam);
+                    const Vector3 lOffset = GetVehicleTransform(luParam).Pos() - lpTransform->GetLerpedPos();
+                    const f32 lfDistance = rw::math::vpu::Dot(lOffset, lpTransform->GetDirection());
+                    // 0x82717630..0x82717670: the open (-20,0) interval retains scale 1.
+                    // Literals: 820BA8C0=-50, 820BA910=-20, 820139F8=1/60,
+                    // 82004744=.2, 82005548=2.5.
+                    if (!(lfDistance > -20.0f && lfDistance < 0.0f))
+                    {
+                        lfSpeedScale = (lfDistance + 50.0f) * 0.016666667f;
+                        lfSpeedScale = (0.2f - lfSpeedScale >= 0.0f) ? 0.2f : lfSpeedScale;
+                        lfSpeedScale = (2.5f - lfSpeedScale >= 0.0f) ? lfSpeedScale : 2.5f;
+                    }
+                    // flt_8300CB50, initializer 0x82C66B30: 90 * flt_82F31928.
+                    // Unlike the crash-slow constants below, both inputs are immutable.
+                    const f32 KF_CALCACCEL_MAX_SCALED_SPEED = 90.0f * 0.44703999f;
+                    lfMaxSpeed = KF_CALCACCEL_MAX_SCALED_SPEED;
+                    // PC diagnostic only: confirm that an actual recovering vehicle used this arm.
+                    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+                    {
+                        static u32 suSamples = 0;
+                        if (suSamples++ < 8)
+                            *lpDiag << "[traffic-accel] recovery param=" << luParam
+                                << " distance=" << lfDistance << " scale=" << lfSpeedScale
+                                << " cap=" << lfMaxSpeed << "\n";
+                    }
+                }
+            }
+        }
     }
 
     f32 lfAcceleration = 0.0f;
@@ -8127,14 +8197,10 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
             const f32 lfCrashSlowMaxAccel    = KF_CRASH_SLOW_MAX_ACCEL;      // flt_8300C95C
 
             lfAcceleration = lfCrashSlowTargetSpeed - lpParam->mfSpeed;
-            if (lfAcceleration < -lfCrashSlowMaxAccel)
-            {
-                lfAcceleration = -lfCrashSlowMaxAccel;
-            }
-            if (lfAcceleration > lfCrashSlowMaxAccel)
-            {
-                lfAcceleration = lfCrashSlowMaxAccel;
-            }
+            lfAcceleration = (-lfCrashSlowMaxAccel - lfAcceleration >= 0.0f)
+                ? -lfCrashSlowMaxAccel : lfAcceleration;
+            lfAcceleration = (lfCrashSlowMaxAccel - lfAcceleration >= 0.0f)
+                ? lfAcceleration : lfCrashSlowMaxAccel;
             break;
         }
 
@@ -8163,52 +8229,33 @@ f32 TrafficEntityModule::UpdateParams_CalcAcceleration(
             }
 
             f32 lfTargetSpeed = lpParam->mfTargetSpeed * lfSpeedScale;
-            if (lfTargetSpeed < 0.0f)
-            {
-                lfTargetSpeed = 0.0f;
-            }
-            if (lfTargetSpeed > lfMaxSpeed)
-            {
-                lfTargetSpeed = lfMaxSpeed;
-            }
+            // Transcribe fsel's unordered choice as well as its finite clamp.
+            lfTargetSpeed = (-lfTargetSpeed >= 0.0f) ? 0.0f : lfTargetSpeed;
+            lfTargetSpeed = (lfMaxSpeed - lfTargetSpeed >= 0.0f) ? lfTargetSpeed : lfMaxSpeed;
 
             lfAcceleration = ((lfTargetSpeed * lfTargetSpeed) -
                               (lpParam->mfSpeed * lpParam->mfSpeed)) /
                              (lpParam->mfStopDist * 2.0f);
 
-            if (lfAcceleration < mTweakValues.GetMinAcceleration())
-            {
-                lfAcceleration = mTweakValues.GetMinAcceleration();
-            }
-            if (lfAcceleration > mTweakValues.GetMaxAcceleration())
-            {
-                lfAcceleration = mTweakValues.GetMaxAcceleration();
-            }
+            const f32 lfMinAcceleration = mTweakValues.GetMinAcceleration();
+            const f32 lfMaxAcceleration = mTweakValues.GetMaxAcceleration();
+            lfAcceleration = (lfMinAcceleration - lfAcceleration >= 0.0f) ? lfMinAcceleration : lfAcceleration;
+            lfAcceleration = (lfMaxAcceleration - lfAcceleration >= 0.0f) ? lfAcceleration : lfMaxAcceleration;
             break;
         }
 
         case 6:   // KI_BEHAVIOUR_NORMAL
         {
             f32 lfDesiredSpeed = lfLaneSpeed * lfSpeedScale;
-            if (lfDesiredSpeed < 0.0f)
-            {
-                lfDesiredSpeed = 0.0f;
-            }
-            if (lfDesiredSpeed > lfMaxSpeed)
-            {
-                lfDesiredSpeed = lfMaxSpeed;
-            }
+            lfDesiredSpeed = (-lfDesiredSpeed >= 0.0f) ? 0.0f : lfDesiredSpeed;
+            lfDesiredSpeed = (lfMaxSpeed - lfDesiredSpeed >= 0.0f) ? lfDesiredSpeed : lfMaxSpeed;
 
             lfAcceleration = lfDesiredSpeed - lpParam->mfSpeed;
 
-            if (lfAcceleration < mTweakValues.GetMinNormalAcceleration())
-            {
-                lfAcceleration = mTweakValues.GetMinNormalAcceleration();
-            }
-            if (lfAcceleration > mTweakValues.GetMaxNormalAcceleration())
-            {
-                lfAcceleration = mTweakValues.GetMaxNormalAcceleration();
-            }
+            const f32 lfMinAcceleration = mTweakValues.GetMinNormalAcceleration();
+            const f32 lfMaxAcceleration = mTweakValues.GetMaxNormalAcceleration();
+            lfAcceleration = (lfMinAcceleration - lfAcceleration >= 0.0f) ? lfMinAcceleration : lfAcceleration;
+            lfAcceleration = (lfMaxAcceleration - lfAcceleration >= 0.0f) ? lfAcceleration : lfMaxAcceleration;
             break;
         }
 
@@ -13678,7 +13725,7 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
 
             Vehicle* lpVehicle = GetVehicle(luVehicle);
 
-            // `(v143[5] & 1) != 0` gates the whole body; a dead vehicle is silently skipped.
+            // ARTIST's `(v143[5] & 1) != 0` gate excludes dead vehicles from this update.
             if (!lpVehicle->IsAlive())
             {
                 continue;

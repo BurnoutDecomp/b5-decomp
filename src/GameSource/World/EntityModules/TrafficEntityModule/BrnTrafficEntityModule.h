@@ -663,6 +663,8 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // @0x82716040 calls it by name). DWARF :2455. Shape is GetParam's: bounds assert then
         // &maParamTransforms[luParam].
         ParamTransform* GetParamTransform(u32 luParam);
+        // ARTIST 0x82707768; DWARF :2462, same bounds and pool as the mutable accessor.
+        const ParamTransform* GetParamTransform(u32 luParam) const;
 
         // @ 0x82707C90 (EXPORT HOLE -- GetSympCrashingTargetPos @0x82708C10 calls it by name).
         // DWARF :2558 returns Matrix44Affine BY VALUE; SetVehicleTransform @0x827142B8 is the
