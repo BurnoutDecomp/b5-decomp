@@ -17,7 +17,7 @@
         SkipTrainingTip = $true
         MaxSeconds = 100
     }
-    DiagEnv = 'BRN_CRASHCAM_DIAG=1,BRN_PROP_DIAG=1,BRN_TRAFFIC_DIAG=1,BRN_VFXFEED_PROBE=1'
+    DiagEnv = 'BRN_CRASHCAM_DIAG=1,BRN_PROP_DIAG=1,BRN_TRAFFIC_DIAG=1,BRN_VFXFEED_PROBE=1,BRN_RIVAL_PURSUIT_DIAG=1'
     Checks = @(
         @{ Kind = 'NewAsserts'; Name = 'no new assertions' }
         @{ Kind = 'LogCount'; Name = 'no exceptions'; Pattern = '\[EXCEPTION\]'; Max = 0 }

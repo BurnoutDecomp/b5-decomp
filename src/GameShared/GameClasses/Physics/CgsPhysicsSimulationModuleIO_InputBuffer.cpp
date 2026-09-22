@@ -318,6 +318,10 @@ namespace PhysicsSimulationIO
     const InputBuffer::InUpdateExternalBodyQueue* InputBuffer::GetUpdateExternalBodyQueue() const
     { CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n"); return &mUpdateExternalBodyQueue; }
 
+    // ARTIST 0x825BCEB0: status bit 3 requires the write lock; return this+0x31C50.
+    InputBuffer::InUpdateExternalBodyQueue* InputBuffer::GetUpdateExternalBodyQueue()
+    { CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n"); return &mUpdateExternalBodyQueue; }
+
     // ⭐ 2026-08-05 (the rigid-body drain group): the NINETEENTH const accessor, whose
     // committed nonexistence claim was retracted -- see the header. Its body @0x8259EE80 is
     // the same 42-instruction shape as the eighteen above (read-lock guard, this header's

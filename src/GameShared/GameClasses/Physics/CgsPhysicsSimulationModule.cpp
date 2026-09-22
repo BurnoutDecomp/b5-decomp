@@ -2095,6 +2095,13 @@ namespace CgsPhysics
             lpBody->SetLinearVelocity(lrEvent.mVel);            // event+0x50 -> mVel  (+0x20)
             lpBody->SetAngularVelocity(lrEvent.mAngularVel);    // event+0x60 -> mOmega(+0x30)
 
+            // Opt-in witness: an actual body-part update reached its live simulation body.
+            const u32 luOwner = static_cast<u32>(lrEvent.mID >> 56);
+            static const bool lbPartTrace = std::getenv("BRN_RIVAL_DAMAGE_DIAG") != nullptr;
+            static u32 luPartTraceCount = 0;
+            if (lbPartTrace && (luOwner == 6 || luOwner == 7) && luPartTraceCount++ < 8)
+                CgsDev::Log::WriteToLog("[part-motion] simulation update applied to body\n");
+
             lpBody->SetCoolDown(0);                             // unconditional, 0x828A40B4
             if ((lpBody->GetState() & rw_physics::FROZEN_BODY) != 0)
             {
