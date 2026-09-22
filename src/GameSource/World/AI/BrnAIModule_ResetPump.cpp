@@ -23,7 +23,8 @@
 // rather than skips -- that flag is the console's own "is there a player car to reason about",
 // and RCEM::WriteUpdatedAIData (landed this wave) is the only thing that raises it.
 //
-// ⛔ [FLAG PC bring-up] THE FOURTEEN LEGS THIS SLICE DOES NOT RUN, named so nobody re-derives
+// ⛔ [HISTORY 2026-08-26 -- every leg below has landed since (aiwave 2026-09-03; PausedUpdate
+// whole 2026-09-22)] THE FOURTEEN LEGS THIS SLICE DID NOT RUN, named so nobody re-derives
 // the list: PausedUpdate @0x8279A1E0 · the transient RouteMapModuleIO "Route" input buffer
 // (created at 0x8279B4F8, destroyed at the tail) · HandleGameActions @0x82791FD0 ·
 // HandleManagementEvents @0x82798620 · StoreDrivenCarData @0x827957F0 · SortTrafficIntoAICars
@@ -257,7 +258,7 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
 // Update @0x8279B478 -- THE MINIMAL-COMPLETE SLICE. See the file banner for what it does not run.
 //
 // Console order, with the reproduced steps starred:
-//   0x8279B4B0  if (lUpdateSet & 1) return PausedUpdate()                        [PARKED]
+//   0x8279B4B0  if (lUpdateSet & 1) return PausedUpdate(..., lUpdateSet)         ⭐ (whole since 2026-09-22)
 //   0x8279B4C4  StartMonitor(dword_82F30154)                                     [PARKED]
 //   0x8279B4D0  assert(lpInputBufferStack)  ...  :611                          ⭐
 //   0x8279B4E4  assert(lpOutputBufferStack) ...  :612                          ⭐
@@ -296,7 +297,8 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
         // said a request posted on a paused frame "waits for the next running frame" --
         // THAT WAS WRONG, and it cost an assert in the owner's session: the management queue
         // is a PER-FRAME buffer, so an event nobody drains is DESTROYED, not deferred.
-        PausedUpdate(lpInputBufferStack, lpOutputBufferStack, lpInputBuffer, lpOutputBuffer);
+        // 0x8279B49C..0x8279B4B8: r8 (lUpdateSet) reaches PausedUpdate untouched.
+        PausedUpdate(lpInputBufferStack, lpOutputBufferStack, lpInputBuffer, lpOutputBuffer, lUpdateSet);
         return;
     }
 
@@ -444,16 +446,31 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
 // AIModule::PausedUpdate  @0x8279A1E0   -- THE SIM-PAUSED ARM OF Update.
 //
 // Update branches here at 0x8279B4B0 (`clrlwi r11, r8, 31` then `beq` -> `bl 0x8279A1E0`)
-// INSTEAD of running its body, and the console's paused frame STILL DRAINS THE PER-FRAME
-// QUEUES:
+// INSTEAD of running its body, with r8 (lUpdateSet) untouched (0x8279B49C..0x8279B4B8), and the
+// console's paused frame STILL DRAINS THE PER-FRAME QUEUES. The whole body, in order:
+//   0x8279A208..0x8279A298  the four NULL asserts (:767..:770 == 0x2FF..0x302: input stack,
+//                           output stack, input buffer, output buffer)
+//   0x8279A2B4  IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(inStack, "Route")  (CreateIOBuffer)
 //   0x8279A2F0  LockForRead (lpInputBuffer)
 //   0x8279A2F8  LockForWrite(lpOutputBuffer)
-//   0x8279A334  LockForWrite(route input buffer)       assert @:238 (0xEE)
+//   0x8279A334  LockForWrite(routeIn)                    assert @:238 (0xEE)
 //   0x8279A348  HandleGameActions(in, out, routeIn)
-//   0x8279A370  UnlockForWrite(route input buffer)     assert @:248 (0xF8)
+//   0x8279A370  UnlockForWrite(routeIn)                  assert @:248 (0xF8)
 //   0x8279A37C  HandleManagementEvents(in)
-// -- i.e. exactly rows 13..16 of the running spine, with the same Route INPUT buffer
-// bracket around HandleGameActions.
+//   0x8279A390  IOHelper<RouteMapModuleIO::OutputBuffer> lRouteOut(outStack, "Route")
+//   0x8279A3DC  LockForWrite(routeIn)
+//   0x8279A3FC  routeIn->RaceRouteRequestQueue.Append(in->RaceRouteRequestQueue)   (@0x8276AE00/@0x8276D488)
+//   0x8279A424  UnlockForWrite(routeIn)
+//   0x8279A450  mRouteMapModule.Update(inStack, outStack, routeIn, routeOut)       (vtbl+0x44)
+//   0x8279A458  LockForRead(routeOut)
+//   0x8279A474  out->RouteResponseQueue.Append(routeOut->RouteResponseQueue)       (@0x8276DB18/@0x8276B148)
+//   0x8279A47C  UnlockForRead(routeOut)
+//   0x8279A488  ~lRouteOut (DestroyIOBuffer<OutputBuffer>)
+//   0x8279A4C8  ProcessRequestInterface(in, out, lUpdateSet)   (bit 0 set: the stuck sweep is skipped)
+//   0x8279A4D0  UnlockForRead(in)
+//   0x8279A4D8  UnlockForWrite(out)
+//   0x8279A4E4  ~lRouteIn  (DestroyIOBuffer<InputBuffer>, LAST)
+// There is NO UpdateCarRoutes on this path -- the responses are only appended.
 //
 // WHY IT MATTERS (owner session 2026-09-16, [ASSERT 4]):
 //     lpCar->GetState() == E_AI_CAR_STATE_OUT_OF_RANGE   (BrnAIModule_Events.cpp:332)
@@ -461,49 +478,62 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
 // lands AFTER the spawn in that log). RaceCarEntityModule::SpawnRaceCar posts an
 // AttachAIControlEvent into the AI interface's management queue on that paused frame. With
 // this function absent the frame returned immediately, nobody drained the queue, and the
-// queue is PER-FRAME -- so the ATTACH was destroyed, not deferred. The first frame the
-// running body executed (`[resetpump] ... mbPlayerDataSet is SET`) therefore handled an
-// ACTIVATE_RACE_CAR for a car whose AI control had never been attached, and
-// HandleManagementEvents' `meCarState == OUT_OF_RANGE` assert fired. Every LATER
-// attach/activate cycle in that same log is correctly ordered -- that is the tell: it is
-// the BOOT one, on the paused frame, that went missing.
+// queue is PER-FRAME -- so the ATTACH was destroyed, not deferred.
 //
-// [FLAG PC bring-up] the TAIL is not reproduced: from 0x8279A390 the console creates the
-// Route OUTPUT buffer and does the paused-frame route bookkeeping (the RaceRouteRequest
-// Append at 0x8279A3FC and the RouteMap update behind it). That is the route slice, it
-// needs no management queue, and nothing in this tree consumes it on a paused frame. The
-// two drains above are the load-bearing half and are reproduced in the console's order.
+// ⛔ CORRECTED 2026-09-22 (crash parity G05-D2): the body stopped after HandleManagementEvents
+// ("the route slice ... nothing in this tree consumes it on a paused frame"). It does: the
+// RouteMapModule's in-flight A* (`else if (mAStar.IsInProgress()) ProcessRaceRoute(0, ...)`,
+// 0x8279402C) advances one Compute per paused frame on the console and a finished response is
+// appended to the AI output, and ProcessRequestInterface hands that frame's reset-on-track
+// requests to the manager. The PC froze the search for the whole pause and never drained them.
 // ================================================================================
 void AIModule::PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              CgsModule::IOBufferStack* lpOutputBufferStack,
                              const AIModuleIO::InputBuffer* lpInputBuffer,
-                             AIModuleIO::OutputBuffer* lpOutputBuffer )
+                             AIModuleIO::OutputBuffer* lpOutputBuffer,
+                             BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT(lpInputBuffer  != 0, "lpInputBuffer != NULL");    // X360 :767 (0x2FF)
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :768 (0x300)
-    (void)lpOutputBufferStack;   // used only by the parked Route OUTPUT leg (see the banner)
+    CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");    // X360 :767 (0x2FF)
+    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");   // X360 :768 (0x300)
+    CGS_ASSERT(lpInputBuffer       != 0, "lpInputBuffer != NULL");         // X360 :769 (0x301)
+    CGS_ASSERT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL");        // X360 :770 (0x302)
 
     if (lpInputBuffer == 0 || lpOutputBuffer == 0)
     {
-        return;
+        return;   // [GUARD] the console dereferences both unconditionally
     }
 
-    lpInputBuffer->LockForRead();      // 0x8279A2F0
-    lpOutputBuffer->LockForWrite();    // 0x8279A2F8
+    CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // 0x8279A2B4
+    RouteMapModuleIO::InputBuffer* lpRouteIn = lRouteIn;
+
+    lpInputBuffer->LockForRead();                                    // 0x8279A2F0
+    lpOutputBuffer->LockForWrite();                                  // 0x8279A2F8
+
+    lpRouteIn->LockForWrite();                                       // 0x8279A334
+    HandleGameActions(lpInputBuffer, lpOutputBuffer, lpRouteIn);     // 0x8279A348
+    lpRouteIn->UnlockForWrite();                                     // 0x8279A370
+
+    HandleManagementEvents(lpInputBuffer);                           // 0x8279A37C
 
     {
-        CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");
-        RouteMapModuleIO::InputBuffer* lpRouteIn = lRouteIn;
+        CgsModule::IOHelper<RouteMapModuleIO::OutputBuffer> lRouteOut(lpOutputBufferStack, "Route");   // 0x8279A390
+        RouteMapModuleIO::OutputBuffer* lpRouteOut = lRouteOut;
 
-        lpRouteIn->LockForWrite();                                   // 0x8279A334
-        HandleGameActions(lpInputBuffer, lpOutputBuffer, lpRouteIn);  // 0x8279A348
-        lpRouteIn->UnlockForWrite();                                 // 0x8279A370
+        lpRouteIn->LockForWrite();                                               // 0x8279A3DC
+        AIModuleRoutes::AppendRaceRouteRequests(lpRouteIn, lpInputBuffer);      // 0x8279A3FC
+        lpRouteIn->UnlockForWrite();                                             // 0x8279A424
 
-        HandleManagementEvents(lpInputBuffer);                       // 0x8279A37C
-    }
+        mRouteMapModule.Update(lpInputBufferStack, lpOutputBufferStack, lpRouteIn, lpRouteOut);   // 0x8279A450
 
-    lpOutputBuffer->UnlockForWrite();
-    lpInputBuffer->UnlockForRead();
-}
+        lpRouteOut->LockForRead();                                               // 0x8279A458
+        AIModuleRoutes::AppendRouteResponses(lpOutputBuffer, lpRouteOut);        // 0x8279A474
+        lpRouteOut->UnlockForRead();                                             // 0x8279A47C
+    }   // ~lRouteOut -- 0x8279A488
+
+    ProcessRequestInterface(lpInputBuffer, lpOutputBuffer, lUpdateSet);         // 0x8279A4C8
+
+    lpInputBuffer->UnlockForRead();                                  // 0x8279A4D0
+    lpOutputBuffer->UnlockForWrite();                                // 0x8279A4D8
+}   // ~lRouteIn -- 0x8279A4E4
 
 }   // namespace BrnAI

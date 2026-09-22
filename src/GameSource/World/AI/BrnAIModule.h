@@ -196,13 +196,14 @@ public:
 
         // @0x8279A1E0. The SIM-PAUSED arm of Update: the console branches to it at
         // 0x8279B4B0 (`if (lUpdateSet & 1)`) INSTEAD of the running body, and it still
-        // drains the per-frame queues -- HandleGameActions at 0x8279A348 and
-        // HandleManagementEvents at 0x8279A37C. Dropping it dropped every management
-        // event posted on a paused frame; see the body for the assert that cost.
+        // drains the per-frame queues -- HandleGameActions at 0x8279A348,
+        // HandleManagementEvents at 0x8279A37C, the route round trip and
+        // ProcessRequestInterface (0x8279A4C8, r6 = the lUpdateSet Update forwards in r8).
         void PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                            CgsModule::IOBufferStack* lpOutputBufferStack,
                            const AIModuleIO::InputBuffer* lpInputBuffer,
-                           AIModuleIO::OutputBuffer* lpOutputBuffer );
+                           AIModuleIO::OutputBuffer* lpOutputBuffer,
+                           BrnUpdateSet lUpdateSet );
 
         // ---- the game-action handlers HandleGameActions calls (DWARF :251..:272) --------------
         void OnRaceCarReachedFinish( const BrnGameState::GameStateModuleIO::RaceCarReachedFinishAction* lpAction );      // @0x8277B8D0
