@@ -66,7 +66,8 @@ static const f32 KF_START_GRID_PLACE_ON_TRACK_SPEED = 0.0f;
 // branches remain outside this BoostManager pass. The state below is the exact
 // subset that selects/preserves the boost strategy, seeds its mode bar, gates
 // earning until START_PLAYING_MODE, and arms attached cars. Showtime's
-// KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR branch is deliberately not implemented.
+// KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR branch is reproduced too (the showtime arm below,
+// 0x82309980..0x823099D4).
 // ----------------------------------------------------------------------------
 void RaceCarEntityModule::HandlePrepareForModeAction(
     const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction,
@@ -242,7 +243,16 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
     // Under KU_FLAG_USE_SHOWTIME_VEHICLE_BEHAVIOUR (0x200) the console does three things:
     //     (*(**(a1 + 97504) + 52))(*(a1 + 97504));   // the strategy's OnShowtimeStart virtual
     //     *(a1 + 98877) = 1;                         // CrashPlayManager::mbIsInShowtime
-    //     *(GetActiveRaceCar(...) + 1922) = 1;       // ActiveRaceCar::mbIsInShowtime
+    //     *(GetActiveRaceCar(...) + 1922) = 1;       // ActiveRaceCar::mbIsWrecked
+    //
+    // ⛔ +1922 == +0x782 IS mbIsWrecked, NOT mbIsInShowtime (+0x788 == 1928): `stb r18, 0x782(r3)`
+    // @0x823099D0, r18 == the literal 1 (`li r18, 1` @0x82309408, never rewritten in this body).
+    // Until 2026-09-22 (crash-parity FX-RCEM) this arm stored ActiveRaceCar::SetInShowtime(true)
+    // instead -- a store the console never makes here (+0x788's only 1-writer is action 143,
+    // HandleGameActions @0x8230D724) -- and never latched the wreck, so IsWrecked() @0x822BFDA0
+    // did not short-circuit true for the Showtime car: ProcessPlayerVehicleInput's
+    // `IsCrashing() && IsWrecked()` pin (zero gas, full brake + handbrake in Showtime) and the
+    // crash verdict's wreck arm then depended on the physics snapshot instead of the latch.
     //
     // module+98877 == 98544 + 0x14D == mCrashPlayManager.mbIsInShowtime, and it had NO writer
     // anywhere in this tree until now -- which is why CrashPlayManager::Update's showtime branch
@@ -264,8 +274,10 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
             lpShowtimeStrategy->OnStartCrashPlay();
         }
 
-        mCrashPlayManager.mbIsInShowtime = true;
-        GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetInShowtime(true);
+        mCrashPlayManager.mbIsInShowtime = true;                           // stbx r18, this+0x1823D
+        WreckLatchWitness("HandlePrepareForModeAction.showtime@0x823099D0",
+                          static_cast<s32>(mePlayerActiveRaceCarIndex), true);
+        GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbIsWrecked = true;  // stb r18, 0x782(car)
     }
 
     if (!lpGameModeParams->GetFlag(
