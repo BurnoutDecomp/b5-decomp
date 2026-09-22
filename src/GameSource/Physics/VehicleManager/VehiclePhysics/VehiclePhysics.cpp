@@ -1822,18 +1822,14 @@ namespace Vehicle
     //     mAirRamEffect[i].mfTimerTillFire -= dt;
     //     if ( mfTimerTillFire <= 0.0f ) {
     //        if ( |mImpulse|^2 > flt_82F2A430 )           // still has magnitude to fire
-    //            AddLocalImpulse(mImpulse, mPosition);     // (X360: in meImpulseSpace; see FLAG)
+    //            AddLocalImpulse(mImpulse, meImpulseSpace, mPosition, BODY_SPACE);
     //            mImpulse *= (1.0f - mfDecay);             // decay for the next fire
     //        else
     //            mUsedAirRams.UnSetBit(i);                 // spent -> release the slot
     //     }
     //   (dt arrives splatted in a VMX register; v52[0] is the scalar dt the timer subtracts.)
     //
-    //   FLAG (rodata): flt_82F2A430 (the squared-magnitude "still alive" epsilon) is un-homed .rdata ->
-    //   flagged-0. With it 0, any non-zero impulse keeps firing and a fully-decayed (zero) impulse
-    //   releases the slot -- faithful behaviour, the exact epsilon pending recovery. NEVER fabricated.
-    //   FLAG (slice): the X360 base call is AddLocalImpulse(mImpulse, meImpulseSpace, mPosition,
-    //   BODY_SPACE); the slice's 2-arg stub drops the impulse-space tag (noted, not fabricated).
+    //   flt_82F2A430 is recovered as 0.01; the call preserves the stored impulse-space tag.
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::UpdateAirRam(VecFloat lvfDeltaTime)
     {
@@ -1869,6 +1865,7 @@ namespace Vehicle
                 lrRam.mImpulse.x *= lfDecayScale;
                 lrRam.mImpulse.y *= lfDecayScale;
                 lrRam.mImpulse.z *= lfDecayScale;
+                lrRam.mImpulse.w *= lfDecayScale; // 0x825FCAC8..0x825FCACC scales/stores all four VMX lanes.
             }
             else
             {
