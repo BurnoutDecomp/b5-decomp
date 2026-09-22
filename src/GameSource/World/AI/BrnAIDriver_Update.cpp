@@ -165,6 +165,27 @@ namespace BrnAI
             lpVehicle->maHNGLines[3].mfStartX = lC3.x; lpVehicle->maHNGLines[3].mfStartY = lC3.y;
             lpVehicle->maHNGLines[3].mfEndX   = lC0.x; lpVehicle->maHNGLines[3].mfEndY   = lC0.y;
         }
+
+        // [DIAG] NOT IN THE X360 BINARY (BRN_AI_FAN_DIAG=1). Crash-parity G03-D2 witness: the two
+        // avoidance feeders ask GetIndexOfFurthestVehicle only when the 16-slot list is full.
+        // Until 2026-09-22 it always answered -1, so every later candidate (the player's
+        // E_NEARBY_PLAYER entry, the other rivals) was dropped. Counts asks vs. evictions per
+        // kind (0 traffic, 1 race car) so a live run shows whether the path was reached at all.
+        void NoteFurthestVehicleAnswer(s32 liKind, s32 liIndex)
+        {
+            static const bool sbFanDiag = (std::getenv("BRN_AI_FAN_DIAG") != 0);
+            static u32 sauAsked[2] = { 0, 0 }, sauEvicted[2] = { 0, 0 };
+            if (!sbFanDiag || CgsDev::Log::gpDebugPrint == 0)
+                return;
+            ++sauAsked[liKind];
+            if (liIndex != -1)
+                ++sauEvicted[liKind];
+            if (sauAsked[liKind] <= 8 || (sauAsked[liKind] % 240) == 0)
+                *CgsDev::Log::gpDebugPrint
+                    << "[aidrv] furthest " << (liKind ? "race-car" : "traffic")
+                    << " index " << liIndex
+                    << " evicted " << sauEvicted[liKind] << "/" << sauAsked[liKind] << "\n";
+        }
     }
 
     // ================================================================================
@@ -1364,6 +1385,7 @@ namespace BrnAI
         else
         {
             liIndex = GetIndexOfFurthestVehicle(lpEntity->mCentre);             // v1 = entity+16
+            NoteFurthestVehicleAnswer(0, liIndex);                              // [DIAG] BRN_AI_FAN_DIAG only
             if (liIndex == -1)
                 return false;
         }
@@ -1421,6 +1443,7 @@ namespace BrnAI
         else
         {
             liIndex = GetIndexOfFurthestVehicle(lCentre);
+            NoteFurthestVehicleAnswer(1, liIndex);                              // [DIAG] BRN_AI_FAN_DIAG only
             if (liIndex == -1)
                 return false;
         }
