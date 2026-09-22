@@ -2812,6 +2812,12 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     mAIModule.SetAIDrivesPlayer(meLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
         GetCarControl(meLocalPlayerActiveRaceCarIndex) == E_CAR_CONTROL_AI_MODULE);
 
+    // ARTIST 0x827D750C..0x827D7540: AIModule::SetCamera inlined as Camera::operator=(this +
+    // 0x5DFD00 == mAIModule.mCamera, this + 0x5E1CC0 == mLastCameraInput), before the AIModule
+    // Update vtable call. ResetOnTrackManager::PlayerIsLookingBackwards reads it (crash parity
+    // G05-D3, 2026-09-22).
+    mAIModule.SetCamera(mLastCameraInput);
+
     PerfMonCpu::StartMonitor( miAIModuleUpdatePM );
     // X360 (*(vtbl(mAIModule) + 68)) == Update; devirtualised.
     mAIModule.Update( lpInputBufferStack, lpOutputBufferStack, lpAIInput, lpAIOutput,

@@ -197,8 +197,8 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
         return;
     }
 
-    // [FLAG PC bring-up] the Camera copy at this+322048 -- ResetOnTrackManager's own mCamera
-    // member is parked in that class too (see its Update banner).
+    // 0x8279AC10..0x8279AC24: Camera::Camera(stack, this + 0x4EA00) -> r7, i.e. mCamera BY VALUE
+    // as ResetOnTrackManager::Update's 4th argument (crash parity G05-D3).
 
     // ⚠️ [FLAG PC bring-up] THE RANGE GUARD IS THE DEVIATION, and it exists because the
     // console's next act is two HALTING asserts. ResetOnTrackManager::Update stores this value
@@ -226,7 +226,8 @@ void AIModule::UpdateResetOnTrackManager(AIModuleIO::AIModuleResultInterface* lp
     mResetOnTrackManager.Update(
         lpResults,
         static_cast<EGlobalRaceCarIndex>(liPlayer),
-        lfTime);
+        lfTime,
+        mCamera);
 
     // ARTIST 0x8279AC40..0x8279AE90. Keep the AI model in step with the
     // world/physics reset. In-range cars also discard their pre-reset aggression
