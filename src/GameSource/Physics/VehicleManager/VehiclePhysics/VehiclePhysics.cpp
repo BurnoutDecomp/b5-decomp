@@ -1966,23 +1966,27 @@ namespace Vehicle
     //   The axis constants are image-settled: unk_82181510={0,1,0}, the RenderWare gIVector is
     //   {1,0,0}, and unk_82181520={0,0,1}. The 50.0 scale, the (attribLane * lfFactor) product, the normalize, the
     //   mHalfExtent position seeds, the |mImpulse|^2 eviction and the field stores are EXACT. A custom
-    //   impulse (bit0/bit2) and a custom position (bit8) path are fully exact.
-    //   The IsValid()/"must specify an axis" debug asserts are elided (debug-build guards).
+    //   impulse keeps all four lanes, including the event's magnitude in w. Validation
+    //   follows ARTIST, including the distinct body-space tag (0x2) in the space check.
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::AddAirRam(u32 luFlags, f32 lfFactor, f32 lfDecay,
                                    Vector3 lvCustomImpulse, Vector3 lvCustomPosition, f32 lfTimerTillFire)
     {
+        CGS_ASSERT(((luFlags & 0x1u) != 0) != ((luFlags & 0x3Au) != 0),
+                   "Air ram must either have a world-space impulse or a body-space impulse");
         // ----- direction + impulse-space -----
         rw::physics::InputSpace leImpulseSpace = rw::physics::BODY_SPACE;
         Vector3 lvDirection = { 0.0f, 0.0f, 0.0f, 0.0f };
 
         if (luFlags & 0x1u)            // custom WORLD-space impulse
         {
+            CGS_ASSERT(vpu::IsValid(lvCustomImpulse), "IsValid( lCustomImpulse )");
             lvDirection    = lvCustomImpulse;
             leImpulseSpace = rw::physics::WORLD_SPACE;
         }
         else if (luFlags & 0x4u)       // custom BODY-space impulse
         {
+            CGS_ASSERT(vpu::IsValid(lvCustomImpulse), "IsValid( lCustomImpulse )");
             lvDirection    = lvCustomImpulse;
             leImpulseSpace = rw::physics::BODY_SPACE;
         }
@@ -1994,7 +1998,11 @@ namespace Vehicle
             if (luFlags & 0x10u)  lvDirection.x += 1.0f; // rw::math::vpu::detail::gIVector
             if (luFlags & 0x20u)  lvDirection.z += 1.0f; // unk_82181520
 
-            lvDirection = vpu::Normalize(lvDirection);   // vrsqrtefp+Newton normalize (zero stays zero)
+            CGS_ASSERT((luFlags & 0x38u) != 0,
+                       "Body-space airram impulse must specify at least one axis");
+            // 0x825FE3FC..438 has no zero-vector select after the reciprocal square root.
+            const f32 lfInverseLength = 1.0f / std::sqrt(vpu::MagnitudeSquared(lvDirection));
+            lvDirection = vpu::Mult(lvDirection, lfInverseLength);
         }
 
         // ----- magnitude: (attribs base lane0) * lfFactor * 50.0 -----
@@ -2004,12 +2012,13 @@ namespace Vehicle
         Vector3 lvImpulse = { lvDirection.x * lfMagnitude,
                               lvDirection.y * lfMagnitude,
                               lvDirection.z * lfMagnitude,
-                              0.0f };
+                              lvDirection.w * lfMagnitude };
 
         // ----- position -----
         Vector3 lvPosition = { 0.0f, 0.0f, 0.0f, 0.0f };
         if (luFlags & 0x100u)          // custom position
         {
+            CGS_ASSERT(vpu::IsValid(lvCustomPosition), "IsValid( lCustomPosition )");
             lvPosition = lvCustomPosition;
         }
         else
@@ -2037,11 +2046,13 @@ namespace Vehicle
             f32 lfMinMagSq = 3.4028235e38f;   // FLT_MAX (asm v81 seed)
             for (u32 lu = 0; lu < KU_MAX_AIR_RAMS; ++lu)
             {
+                CGS_ASSERT(mUsedAirRams.IsBitSet(lu), "mUsedAirRams.IsBitSet(luCheckIndex)");
                 const f32 lfMagSq = vpu::MagnitudeSquared(mAirRamEffect[lu].mImpulse);
                 if (lfMagSq < lfMinMagSq) { lfMinMagSq = lfMagSq; liSlot = static_cast<s32>(lu); }
             }
         }
 
+        CGS_ASSERT(liSlot >= 0, "liIndex >= 0");
         // ----- store into the slot + mark it used -----
         AirRamEffect& lrRam   = mAirRamEffect[liSlot];
         lrRam.mImpulse        = lvImpulse;
