@@ -1,5 +1,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // E_MODE_ROAD_RAGE
+#include "SDKs/EATech/include/rw/math/vpu/vec_float.h" // RandomVecFloat result
 #include <algorithm>   // std::sort (the exported std::_Sort<ContactTime*> -- walls leg 4)
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                       // gpDebugPrint / gxMessageFilterFlags (walls leg 4 gates)
@@ -2674,12 +2676,10 @@ namespace Deformation
     //   vp body CalculateNewVelocity(timeStep);
     //   CheckForForcedDetachment(simIn, physOut, partMgr, random, timeStep);
     //   mbIKUpdateRequired |= mbHasDeformedThisFrame; vp->mbDeformedThisFrame = flag;
-    //   [the showtime crashed-wheel random-detach block -- GATED, see below]
+    //   Road Rage crash fallback: twist one front wheel in the original timing window.
     //   return mbIKUpdateRequired.
     //
-    // ONE NAMED GATE: the showtime wheel-detach tail (game mode 3 + racecar + crashing +
-    // three dynamic-init thresholds unk_82FB9AE0/9700/9600, values not yet recovered) -- dead on
-    // the junkyard drive path; log-once gate, censused.
+    // Road Rage wheel fallback restored from82649400..826495C8 and CRT initialization order.
     // =============================================================================================
     bool DeformableObject::Update(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
                                   CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpOutput,
@@ -2777,19 +2777,45 @@ namespace Deformation
         mbIKUpdateRequired = mbIKUpdateRequired || mbHasDeformedThisFrame;   // +26409 |= +26408
         lpVehicle->mbDeformedThisFrame = mbHasDeformedThisFrame;             // *(vp+4954)
 
-        // The showtime crashed-wheel random-detach tail (mode 3 + racecar + crashing + the three
-        // unrecovered dynamic-init thresholds) -- NAMED GATE, dead on the junkyard drive path.
-        if ( liGameMode == 3 )
+        // ARTIST82649400..826495C8: Road Rage's one broken front-wheel fallback.
+        // CRT82C5D8E0/82C5D908 produce0.5/1.0 seconds. The speed threshold is
+        // an authored startup-order zero: CRT entry82CD191C calls82C5D930,
+        // multiplying30 by83017FE0 before entry82CD2C50 initializes that slot.
+        // Do not substitute30*0.44704: that is not what ARTIST starts with.
+        const f32 KF_ROAD_RAGE_WHEEL_MIN_TIME = 0.5f;
+        const f32 KF_ROAD_RAGE_WHEEL_MAX_TIME = 1.0f;
+        const f32 KF_ROAD_RAGE_WHEEL_MIN_SPEED = 0.0f;
+        const f32 lfCrashTime = lpVehicle->mvSpeedOnLastCrashMPH_TimeCrashing_CounterSteerSideMag_Spare.y;
+        const VecFloat lvfSpeed = lpVehicle->GetSpeedMPH();
+        if (GetHandlingBodyIdHighByte() == 1u
+            && liGameMode == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE
+            && miNumBrokenWheels == 0
+            && lfCrashTime > KF_ROAD_RAGE_WHEEL_MIN_TIME
+            && lfCrashTime < KF_ROAD_RAGE_WHEEL_MAX_TIME
+            && lvfSpeed.x > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lvfSpeed.y > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lvfSpeed.z > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lvfSpeed.w > KF_ROAD_RAGE_WHEEL_MIN_SPEED
+            && lpVehicle->mvTimeStandingStill_CoolDown_TimeWithoutTraction_TimeWithTraction.w > KF_ROAD_RAGE_WHEEL_MIN_TIME
+            && lpVehicle->IsCrashing())
         {
-            static bool sbLoggedShowtimeDetachGate = false;
-            if ( !sbLoggedShowtimeDetachGate )
+            //826494DC..82649570 is RandomVecFloat's one-lane buffered draw.
+            // >0.5 selects front-left; equality and unordered select front-right.
+            const auto leWheel = lrRandom.RandomVecFloat().GetFloat() > 0.5f
+                ? BrnPhysics::Vehicle::eFrontLeftWheel : BrnPhysics::Vehicle::eFrontRightWheel;
+            auto* lpWheel = lpVehicle->SimpleVehiclePhysics::GetWheel(leWheel);
+            // The original assertion text says IsAttached, but its predicate is !=2.
+            // An already twisting wheel is accepted; a detached wheel is skipped.
+            CGS_ASSERT(!lpWheel->IsDetached(), "lpWheel->IsAttached()");
+            if (!lpWheel->IsDetached())
             {
-                sbLoggedShowtimeDetachGate = true;
-                if ( CgsDev::Message::gxMessageFilterFlags & 1 )
-                    *CgsDev::Log::gpDebugPrint
-                        << "conductor gate: DeformableObject::Update's showtime wheel-detach tail "
-                           "reached but not reconstructed (thresholds unk_82FB9AE0/9700/9600 "
-                           "unrecovered) [FLAG PC boot gate]\n";
+                lpWheel->Twist();
+                ++miNumBrokenWheels;
+                // FLAG PC witness: observe the restored transition without changing it.
+                if (std::getenv("BRN_WHEEL_PROBE") && CgsDev::Log::gpDebugPrint)
+                    *CgsDev::Log::gpDebugPrint << "[wheel-probe] ROAD_RAGE_TWIST obj "
+                        << static_cast<s32>(mu16DeformableObjectIndex) << " wheel "
+                        << static_cast<s32>(leWheel) << "\n";
             }
         }
 
