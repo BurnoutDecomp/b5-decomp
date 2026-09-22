@@ -227,6 +227,10 @@ namespace BrnAI
         f32                mfRelativePositionAhead;          // +0x5C
         bool               mbIsSuitableForAggression;        // +0x60
         f32                mfNonSpeedMatchedSpeed;           // +0x64
-        f32                mfHangingAroundTimer;             // +0x68
+        // +0x68. Written only by Prepare (inlined into AIDriver::SetAICar, stfs @0x82796494) and
+        // AIModule::UpdateResetOnTrackManager (@0x8279ACD0); no AIAggression handler touches it.
+        // ⚠ Hex-Rays prints the state handlers' `stb 0,0x44` as `*(this + 68) = 0` -- that 68 is
+        // DECIMAL, i.e. mbTargetPosValid, not this field (crash-parity audit 2026-09-22).
+        f32                mfHangingAroundTimer;
     };
 }
