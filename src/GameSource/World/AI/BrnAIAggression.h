@@ -136,8 +136,11 @@ namespace BrnAI
 
         // Slam geometry / target separation.
         bool    CanSlam();
-        f32     DetermineAttackSide(const AICar* lpCarA, const AICar* lpCarB);
-        Vector3 GetPositionNextToTarget(const AICar* lpCarA, const AICar* lpCarB, f32 lfOffset);
+        // DWARF DetermineAttackSide(mpCar, mpTargetCar) / GetPositionNextToTarget(mpTargetCar,
+        // mpCar, lfAlignment): note the two orders differ -- GetPositionNextToTarget passes its
+        // SECOND car first (0x82771508/0x8277150C).
+        f32     DetermineAttackSide(const AICar* lpCar, const AICar* lpTargetCar);
+        Vector3 GetPositionNextToTarget(const AICar* lpTargetCar, const AICar* lpCar, f32 lfAlignment);
         f32     CalcSeparationAcrossToTarget();
         f32     CalcSeparationAlongToTarget();
         f32     GetLeadingSeparation(const AICar* lpThisCar, const AICar* lpOtherCar) const;
