@@ -176,7 +176,7 @@ namespace BrnAI
         void    UpdateAggressionStateVeerExtreme();
         void    UpdateAggressionStateSteerAwayPreSlam();
         void    UpdateAggressionStateSpurtForward();
-        void    UpdateAggressionPassive(const AICar* lpPlayerCar);
+        void    UpdateAggressionPassive(const AICar* lpTargetCar);   // DWARF name; Update passes its lpPlayerCar
         void    UpdateAggressionStateFallPast(const AICar* lpPlayerCar);
         void    UpdateAggressionStateClipOffBehind();
         void    UpdateAggressionStateComeSlowFromBehind();
