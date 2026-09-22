@@ -22,8 +22,7 @@
 // local: lPointVel/lPoint2Vel/lRelativeMotion/lvfClosingSpeed/lImpulse/lvfInvInertiaA/lvfInvInertiaB/
 // lvfRestitution/lvfImpulseMagnitude/lParams/lReverseContact + the bounce-block locals
 // lpRaceCarPhysics/lfNormalStressMagnitude/lfMinBouncePower/lfMassFactorScale/lScale/lLinearVelocity)
-// and the X360 pseudocode/asm. The hard-tuning rodata vectors the bounce shaping scales by have no
-// project home and are NOT fabricated -- they are file-static KVF_/KF_ placeholders, each FLAGGED.
+// and the X360 pseudocode/asm. Bounce constants are pinned to their ARTIST static initializers.
 
 namespace BrnPhysics
 {
@@ -53,20 +52,7 @@ namespace Deformation
 {
     namespace vpu = rw::math::vpu;
 
-    // ---------------------------------------------------------------------------------------------
-    // Unrecovered .rodata tuning values. The X360 build loads these from constant pools with no
-    // symbol we can resolve; per the project no-fabrication rule they are honest zero/identity
-    // placeholders, NOT invented numbers. The bounce shaping that consumes them is therefore
-    // structurally faithful but numerically inert until the rodata is recovered.
-    //   * unk_82FB81F0 -- the minimum bounce-stress threshold (squared-magnitude compare).
-    //   * unk_82FB8210 / unk_82FB9E40 -- the bounce-boost scale vector (boosting vs not boosting).
-    //   * unk_82FB7F70 / unk_82FB8040 -- the per-axis clamp band (min/max) for the shaped scale.
-    //   * unk_82FB82F0 -- the double-bounce damp scale (the "already bounced this frame" path).
-    // ---------------------------------------------------------------------------------------------
-    // These are NOT "un-homed rodata": they are .data slots that read zero
-    // in the image and are filled at static-init time by tiny unexported blr-terminated splat runs.
-    // Each line names its initialiser and the .rdata scalar it splats. The clamp band reading
-    // [0.75, 1.5] and the two bounce scales landing either side of it is a self-consistent set.
+    // ARTIST bounce constants, recovered from the CRT initializers named below.
     static const f32     KF_MIN_BOUNCE_STRESS_SQ   = 2000000.0f;                  // unk_82FB81F0 @82C5D598 <- flt_8209D734
     static const Vector3 KVF_BOUNCE_BOOST_SCALE     = { 2.79999995f, 2.79999995f, 2.79999995f, 2.79999995f }; // unk_82FB8210 @82C5D4A8 <- flt_8200C6B8
     static const Vector3 KVF_BOUNCE_NOBOOST_SCALE   = { 1.5f, 1.5f, 1.5f, 1.5f }; // unk_82FB9E40 @82C5D480 <- flt_820945DC
@@ -74,13 +60,9 @@ namespace Deformation
     static const Vector3 KVF_BOUNCE_CLAMP_MAX       = { 1.5f, 1.5f, 1.5f, 1.5f }; // unk_82FB8040 @82C5D570 <- flt_820945DC
     static const Vector3 KVF_DOUBLE_BOUNCE_DAMP     = { 30.0f, 30.0f, 30.0f, 30.0f }; // unk_82FB82F0 @82C5D430 <- flt_82004F5C
 
-    // The one literal that IS visible in the asm: v143 = 0.00066666666f == 1/1500, the bounce-power
-    // y-floor the shaped scale's Y lane is seeded with before the clamp/max.
-    static const f32 KF_BOUNCE_POWER_Y_FLOOR = 0.00066666666f;   // asm-visible (= 1/1500)
-
-    // The other-car game-mode HIGH byte the cross-car bounce gate compares against: the takedown/
-    // showtime-eligible game mode (the asm tests `HIBYTE(otherCar.mGameModeState) == 2`).
-    static const u8 KU_GAMEMODE_BOUNCE_ELIGIBLE = 2;
+    static const f32 KF_BOUNCE_MASS_FACTOR = 0.00066666666f; // flt_8209AF58 = 1/1500
+    static const f32 KF_BOUNCE_LATERAL_SCALE = 0.1f; // unk_82FB9B90 @82C5D520 <- flt_82004014
+    static const u8 KU_TRAFFIC_ENTITY_OWNER = 2; // mGlobalEntityId owner byte
 
     // ---------------------------------------------------------------------------------------------
     // ApplyCarCarImpulse
@@ -194,115 +176,52 @@ namespace Deformation
             }
         }
 
-        // -------- showtime / bounce-boost shaping --------
-        // ⭐ DISPATCH OFFSET READ OUT OF THE IMAGE 2026-09-05 (crash wave) -- this site and the one
-        // at the `else` arm below were the two BrnDeformableObject.cpp sites 1df609e7 flagged as
-        // "spelling the +0x14 name with their own dispatch offsets UNREAD". Read now, and BOTH are
-        // +0x10, not +0x14:
-        //     0x82624DB4  lwz r3, 0x194C(r30)  ; 0x82624DB8 lwz r11, 0(r3)
-        //     0x82624DBC  lwz r11, 0x10(r11)   ; 0x82624DC4 bctrl        <- THIS car
-        //     0x82624E0C  lwz r11, 0x30(r31)   ; 0x82624E10 lwz r3, 0x194C(r11)
-        //     0x82624E18  lwz r11, 0x10(r11)   ; 0x82624E20 bctrl        <- the OTHER car
-        // and +0x10 on RaceCarPhysics' concrete table (0x820D1034) is IsPlayerVehicleInShowtime
-        // @0x825D7B68 == mbPlayerCarInShowtime && !mbDisableShowtime && mfTimeUntilPush <= 0 --
-        // NOT the bare +0x14 byte read IsPlayerVehicleActuallyInShowtime @0x827E42B0. The old
-        // spelling was the looser predicate, so it could fire in windows the console excludes.
-        // Same correction, same direction (stricter) as 1df609e7's GetVehicleWorldRestitution fix.
-        // The banner text below said "vtbl+16" all along -- decimal 16 IS 0x10; the NAME was what
-        // disagreed with it.
-        //
-        // The asm gates the shaping on a virtual showtime predicate on THIS car's physics body (the
-        // inlined `(*(vtbl+16))(body)` -> IsPlayerVehicleInShowtime). It is a TRUE/FALSE split
-        // (asm: the `else` at ~line 958), NOT two nested cases:
-        //   * predicate TRUE  (this car in showtime): the punchy BOUNCE-BOOST path, itself gated on the
-        //       OTHER car's game-mode HIGH byte == 2 (takedown/bounce-eligible). Any other mode: nothing.
-        //   * predicate FALSE (this car NOT in showtime): the DOUBLE-BOUNCE-DAMP path. It (a) ALWAYS runs
-        //       a bare-shaping step on the impulse, then (b) gates on THIS car's mode HIGH byte == 2, and
-        //       (c) only then checks (other-car-in-showtime || other-car-has-bounced) before applying the
-        //       damp scale and latching THIS car's mbHasBouncedThisFrame (+26414).
-        // A body that is not a race car (no showtime) takes the FALSE/damp path with this car's mode.
+        // -------- Showtime / bounce-boost shaping (0x82624DB4..0x82625040) --------
         Vehicle::RaceCarPhysics* lpRaceCarPhysics = AsRaceCarPhysics();
-        const bool lbThisInShowtime = (lpRaceCarPhysics != nullptr) &&
-                                      lpRaceCarPhysics->IsPlayerVehicleInShowtime();   // vtbl +0x10 @0x82624DBC
+        const bool lbThisInShowtime = lpRaceCarPhysics->IsPlayerVehicleInShowtime();
         if (lbThisInShowtime)
         {
-            // ----- predicate TRUE: bounce-boost (asm ~lines 843-957) -----
-            // Gated on the OTHER car's game-mode HIGH byte (asm: `HIBYTE(*(otherCar+26392)) == 2`).
-            if (lOtherCar.GetGameModeByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE)
+            if ((lOtherCar.GetGlobalEntityId().muValue >> 24) == KU_TRAFFIC_ENTITY_OWNER)
             {
-                // Was the impact above the minimum bounce stress? (squared magnitude vs the rodata band).
-                const f32  lfNormalStressMagnitude = vpu::MagnitudeSquared(lImpulse);
-                const bool lbOverMinStress         = lfNormalStressMagnitude >= KF_MIN_BOUNCE_STRESS_SQ;
+                const bool lbOverMinStress = vpu::MagnitudeSquared(lImpulse) >= KF_MIN_BOUNCE_STRESS_SQ;
+                // v1 = contact+0, r6 = OTHER object's global entity ID (0x82624E68/EA4).
+                lpRaceCarPhysics->SetJustBounced(lContact.mPointOnA, true, lbOverMinStress,
+                                                lOtherCar.GetGlobalEntityId());
 
-                // Tell the race car it just bounced (so showtime can react). The bounce direction is
-                // the impulse direction; the entity id is this car's. (asm: SetJustBounced(body,1,<stress>,id)).
-                lpRaceCarPhysics->SetJustBounced(lImpulse, true, lbOverMinStress, GetGlobalEntityId());
+                // Floor only the Y impulse using THIS car's mass and the bounce power.
+                // 0x82624EC4 loads VehiclePhysics+0xE0 (mass), not accumulated impulse.
+                const f32 lfMinBouncePower = lThisBody.GetMass().x *
+                    (lpRaceCarPhysics->IsBounceBoosting() ? KVF_BOUNCE_BOOST_SCALE.x
+                                                         : KVF_BOUNCE_NOBOOST_SCALE.x);
+                lImpulse.y = (lImpulse.y > lfMinBouncePower) ? lImpulse.y : lfMinBouncePower;
 
-                // Build the shaped bounce velocity scale. The boost-scale vector differs when the car
-                // is actively bounce-boosting; the impulse is scaled by it, the Y lane is floored to
-                // the visible 1/1500 power, then clamped into the rodata band. Every rodata vector here
-                // is a FLAGGED placeholder, so this reproduces the SHAPE of the shaping, not the values.
-                const Vector3& lrBoostScale = lpRaceCarPhysics->IsBounceBoosting()
-                                                ? KVF_BOUNCE_BOOST_SCALE
-                                                : KVF_BOUNCE_NOBOOST_SCALE;
+                // 0x82624FB4..FCC: traffic mass / 1500 clamped to [.75,1.5] affects Y.
+                // vperm mask 82CDA350 selects {lateral, massScale, lateral, lateral}.
+                const f32 lfMassFactor = lOtherBody.GetMass().x * KF_BOUNCE_MASS_FACTOR;
+                const f32 lfMassScale = (lfMassFactor < KVF_BOUNCE_CLAMP_MIN.x) ? KVF_BOUNCE_CLAMP_MIN.x
+                    : (lfMassFactor > KVF_BOUNCE_CLAMP_MAX.x) ? KVF_BOUNCE_CLAMP_MAX.x : lfMassFactor;
+                lImpulse = vpu::Mult(lImpulse,
+                    Vector3{ KF_BOUNCE_LATERAL_SCALE, lfMassScale, KF_BOUNCE_LATERAL_SCALE,
+                             KF_BOUNCE_LATERAL_SCALE });
 
-                Vector3 lScale = vpu::Mult(lImpulse, lrBoostScale);   // per-lane scale of the impulse
-                lScale.y = (lScale.y > KF_BOUNCE_POWER_Y_FLOOR) ? lScale.y : KF_BOUNCE_POWER_Y_FLOOR;
+                // 0x82624FD8..0x82625004 keeps all velocity lanes, flooring only Y to zero.
+                Vector3 lLinearVelocity = lThisBody.GetLinearVelocity();
+                lLinearVelocity.y = lLinearVelocity.y >= 0.0f ? lLinearVelocity.y : 0.0f;
+                lThisBody.SetLinearVelocity(lLinearVelocity);
 
-                // Mass-factor scale: the other car's accumulated linear impulse contributes a per-lane
-                // factor (asm: lvx body+224 -> mTotalLinearImpulse, multiplied into the band before the
-                // clamp). Modelled by name; the multiplier vector is the FLAGGED clamp band itself.
-                const Vector3 lLinearVelocity   = lOtherBody.GetLocalVelocity(lContact.mPointOnB, rw::physics::WORLD_SPACE);
-                const f32     lfMassFactorScale = vpu::Magnitude(lLinearVelocity);
-                (void)lfMassFactorScale;   // folds into the clamp band below; band is unrecovered (FLAG)
-
-                // Clamp the shaped scale into the rodata min/max band (asm: vmaxfp then vminfp).
-                lScale.x = (lScale.x < KVF_BOUNCE_CLAMP_MIN.x) ? KVF_BOUNCE_CLAMP_MIN.x
-                         : (lScale.x > KVF_BOUNCE_CLAMP_MAX.x) ? KVF_BOUNCE_CLAMP_MAX.x : lScale.x;
-                lScale.y = (lScale.y < KVF_BOUNCE_CLAMP_MIN.y) ? KVF_BOUNCE_CLAMP_MIN.y
-                         : (lScale.y > KVF_BOUNCE_CLAMP_MAX.y) ? KVF_BOUNCE_CLAMP_MAX.y : lScale.y;
-                lScale.z = (lScale.z < KVF_BOUNCE_CLAMP_MIN.z) ? KVF_BOUNCE_CLAMP_MIN.z
-                         : (lScale.z > KVF_BOUNCE_CLAMP_MAX.z) ? KVF_BOUNCE_CLAMP_MAX.z : lScale.z;
-
-                // The shaped scale replaces the raw impulse for the apply step.
-                lImpulse = lScale;
-
-                // Pick the random double-bounce parity for the OTHER car (asm: an LCG draw whose %3==0
-                // result is stored into the other car's +26413 parity flag). Faithful in structure;
-                // the draw uses the supplied Random.
                 const u32 luDraw = const_cast<CgsNumeric::Random&>(lRandom).RandomUInt();
                 lOtherCar.SetBounceRandomParity((luDraw % 3u) == 0u);
             }
-            // (asm: when HIBYTE(otherCar+26392) != 2 the TRUE branch does nothing -- raw impulse kept.)
         }
         else
         {
-            // ----- predicate FALSE: double-bounce damp (asm `else` ~lines 958-1176) -----
-            // (a) UNCONDITIONAL bare-shaping step (asm ~lines 960-975): scale the impulse per-lane by
-            //     `(lvfIteration + 1) * 0.5`. The 1.0/0.5 are asm-visible vcfsx immediates (NOT rodata):
-            //     `vcfsx 1>>0 = 1.0`, `vcfsx 1>>1 = 0.5`. lvfIteration is a broadcast VecFloat, so the
-            //     per-lane multiply is a scalar broadcast of that factor.
             const f32 lfBareShapeFactor = (lvfIteration.x + 1.0f) * 0.5f;
             lImpulse = vpu::Mult(lImpulse, lfBareShapeFactor);
-
-            // (b) Gate the rest on THIS car's game-mode HIGH byte == 2 (asm ~line 976:
-            //     `HIBYTE(*(this+26392)) != 2` -> skip straight to apply). NOTE: this is THIS car's
-            //     mode (GetGameModeByte() on `this`), NOT the other car's.
-            if (GetGameModeByte() == KU_GAMEMODE_BOUNCE_ELIGIBLE)
+            if ((GetGlobalEntityId().muValue >> 24) == KU_TRAFFIC_ENTITY_OWNER)
             {
-                // (c) Only when this-car-mode == 2: apply the damp + latch iff the OTHER car is in
-                //     showtime OR the OTHER car has already bounced this frame (asm ~line 1163:
-                //     `otherCar.IsPlayerVehicleInShowtime() || *(otherCar+26414)`) -- the OTHER
-                //     car's dispatch is `lwz r11, 0x10(r11)` @0x82624E18, read this wave; see the
-                //     banner above.
                 const Vehicle::RaceCarPhysics* lpOtherRaceCar = lOtherCar.AsRaceCarPhysics();
-                const bool lbOtherInShowtime = (lpOtherRaceCar != nullptr) &&
-                                               lpOtherRaceCar->IsPlayerVehicleInShowtime();   // vtbl +0x10 @0x82624E18
-                if (lbOtherInShowtime || lOtherCar.HasBouncedThisFrame())
+                if (lpOtherRaceCar->IsPlayerVehicleInShowtime() || lOtherCar.HasBouncedThisFrame())
                 {
-                    // Latch THIS car's bounced-this-frame flag (asm ~line 1166: `*(this+26414) = 1`),
-                    // then apply the double-bounce DAMP scale (asm: the unk_82FB82F0 multiply). The
-                    // damp vector is a FLAGGED placeholder.
                     SetHasBouncedThisFrame(true);
                     lImpulse = vpu::Mult(lImpulse, KVF_DOUBLE_BOUNCE_DAMP);
                 }
@@ -310,6 +229,21 @@ namespace Deformation
         }
 
         // -------- apply the equal-and-opposite impulse to both cars --------
+        // Opt-in integration witness; records the shaped impulse before decomposition.
+        if (lbThisInShowtime && (lOtherCar.GetGlobalEntityId().muValue >> 24) == KU_TRAFFIC_ENTITY_OWNER)
+        {
+            static const bool lbWatch = std::getenv("BRN_SHOWTIME_WATCH") != nullptr;
+            static u32 luWatchCount = 0;
+            if (lbWatch && luWatchCount < 8 && CgsDev::Log::gpDebugPrint != nullptr)
+            {
+                ++luWatchCount;
+                *CgsDev::Log::gpDebugPrint << "[showtime-car-contact] other="
+                    << lOtherCar.GetGlobalEntityId().muValue << " playerMass=" << lThisBody.GetMass().x
+                    << " trafficMass=" << lOtherBody.GetMass().x
+                    << " shaped=" << lImpulse.x << "," << lImpulse.y << "," << lImpulse.z
+                    << " velocityY=" << lThisBody.GetLinearVelocity().y << "\n";
+            }
+        }
         // Build the impulse parameter block.
         //
         // THE DROPPED STORES. `ImpulseParams` is a 0xC0 == 192-byte
@@ -457,6 +391,7 @@ namespace Deformation
         // observable console behaviour is exactly the two lines below.
         lReverseContact.mpOtherVehicle = this;        // 0x82625188 (stw r30 == this)
         lReverseContact.mpOtherSensor  = lpSensor;    // 0x8262518C (stw r28 == the sensor arg of call #1)
+        lParams.mImpulsePosition       = lReverseContact.mPointOnA; // 0x82625190: original point B
         lParams.mvfInverseInertia      = lvfInvInertiaB;
         lParams.mWorldImpulseDirection = lReverseContact.mNormal;
         // ⭐ The passer is RE-POINTED at the OTHER car for the reversed half -- the console repeats
@@ -469,6 +404,17 @@ namespace Deformation
         lOtherCar.ApplySensorImpulse(lvfTimeStep, lReverseContact, lParams, vpu::Negate(lRelativeMotion),
                                      vpu::Negate(lImpulseUnit), lvfShapedMagnitude, lContact.mpOtherSensor,
                                      /*lbAddToSpy*/ false, /*lbUseNormalScaledFriction*/ true);
+
+        static const bool lbWatchPair = std::getenv("BRN_SHOWTIME_WATCH") != nullptr;
+        static u32 luPairCount = 0;
+        if (lbWatchPair && luPairCount < 8 && CgsDev::Log::gpDebugPrint != nullptr)
+        {
+            ++luPairCount;
+            *CgsDev::Log::gpDebugPrint << "[car-car-contact] pair-applied other="
+                << lOtherCar.GetGlobalEntityId().muValue << " reversePoint="
+                << lParams.mImpulsePosition.x << "," << lParams.mImpulsePosition.y << ","
+                << lParams.mImpulsePosition.z << "\n";
+        }
 
         return true;
     }
