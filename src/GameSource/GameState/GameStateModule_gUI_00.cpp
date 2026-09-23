@@ -67,6 +67,9 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"          // CgsResource::ID::HashString ([car-audio] audit)
 #include "GameSource/GameState/Progression/BrnProgressionCarData.h"   // CarData::GetId ([car-audio] junkyard pick)
 #include "SharedClasses/DataLists/WheelList.h"                          // WheelList::FindWheelIndexFromName/GetWheelData ([car])
+#include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // [FX-GS2 G10-D11] GameStateToGuiInterface::AddOnTailEvent
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // [FX-GS2 G10-D11] GetUsedCarsBitArray / GetRaceCar
+#include "rw/math/vpu/vector3_operation.h"                              // [FX-GS2 G10-D11] Magnitude (the player's speed)
 
 namespace BrnGameState
 {
@@ -2917,6 +2920,151 @@ void GameStateModule::HarnessInjectPlayerCarBringUp()
             << lpEntry->GetName() << "' wheel index " << liWheel
             << " -- posted ChangePlayerCarEvent exactly as the development menu does; everything "
             << "downstream is the console's own. One-shot; will not fire again this process.\n";
+    }
+}
+
+// ==============================================================================================
+// [FX-GS2 2026-09-23, crash-parity G10-D11] The rival-tailing clock and its per-frame check.
+//
+// GetRivalTailingTime / SetRivalTailingTime: CheckForTailingRivals keeps one f32 per race-car
+// slot at gsm+0x32D90 + 4 * slot (r27, stepped by `addi r27, r27, 4` @0x82376384 for EVERY slot,
+// the player's included). The DWARF array is f32[7] (BrnGameStateModule.h:792), so slot 7 lands on
+// the next word, muNetworkGameRandomSeed (gsm+0x32DAC). That aliasing is the console's; it is
+// routed here through the seed word's bits rather than by indexing past the array.
+// ==============================================================================================
+f32 GameStateModule::GetRivalTailingTime(s32 liRaceCarIndex) const
+{
+    if (liRaceCarIndex < 7)
+    {
+        return mafRivalTailingTimes[liRaceCarIndex];
+    }
+    f32 lfTime;
+    memcpy(&lfTime, &muNetworkGameRandomSeed, sizeof(lfTime));   // slot 7 == gsm+0x32DAC
+    return lfTime;
+}
+
+void GameStateModule::SetRivalTailingTime(s32 liRaceCarIndex, f32 lfTime)
+{
+    if (liRaceCarIndex < 7)
+    {
+        mafRivalTailingTimes[liRaceCarIndex] = lfTime;
+        return;
+    }
+    memcpy(&muNetworkGameRandomSeed, &lfTime, sizeof(lfTime));   // slot 7 == gsm+0x32DAC
+}
+
+// ----------------------------------------------------------------------------------------------
+// CheckForTailingRivals @0x82375F90 (DWARF BrnGameStateModule.h:808; sole caller PreWorldUpdate
+// @0x823A5328, `bl` @0x823A57A0). For each rival sitting just behind the player at speed, run a
+// clock; at 3 s, post the GUI "on your tail" record and restart it.
+//     0x82375FBC..0x82375FEC  mode type (ModeManager +0xD94) == 0 (offline race), or the current
+//                             mode (+0xD98) is online (+0xAC) -- else return
+//     0x82375FF0..0x82376000  meControllerState (gsm+0x38B64) == 3 -- else return
+//     0x82376004..0x823760F8  the player's used-car bit (the bit array's "invalid index" assert)
+//     0x823760FC..0x8237619C  |RaceCarState.mLinearVelocity (+0x330)| > 50.0 (flt_820138DC):
+//                             vmsum3fp128 + vrsqrtefp + two Newton steps (0 when the square is 0);
+//                             the exact root here, this tree's convention (BrnMathUtils.h)
+//     0x823761A0..0x823761DC  assert "lpScoringSystem != NULL" (line 0x1949); the player's
+//                             GetRaceCarDistanceToFinish
+//     loop slot 0..7 (the enum ++ carries BurnoutConstants.h:39's range assert):
+//       0x82376220  the player's slot: skipped (its clock untouched)
+//       0x82376234  player < rival (fcmpu/bge) and !((player + 20.0 (flt_820054CC)) < rival)
+//                   (fcmpu/blt) -- the rival is BEHIND the player by at most 20 m
+//       0x823762DC  the rival's used-car bit ; 0x82376318 RaceCarState.mfSpeedMPH (+0x3CC) > 50.0
+//       0x82376328  all true: clock += the time step
+//       0x82376338  otherwise `fsel f0, f0, 0.0, f0`: a clock >= 0 resets to 0, a negative or NaN
+//                   one is kept
+//       0x82376344  !(clock < 3.0 (flt_8202AC20)) (a NaN passes too): AddOnTailEvent(GetRivalId(slot)
+//                   from the module's active-car snapshot (gsm+0x397E0), slot) through the
+//                   write-locked GetGameStateToGuiInterface, then the clock = 0.0 (0x8237637C)
+// Because of the slot-7 aliasing, ClearData's 0xFFFFFFFF seed reads as a NaN clock: on the first
+// gated frame in which the player is not in slot 7 the console posts one record for slot 7 and the
+// seed word becomes 0.0f. That is the console's arithmetic and it is kept.
+// ----------------------------------------------------------------------------------------------
+void GameStateModule::CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpOutput,
+                                            const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput,
+                                            f32 lfTimeStep)
+{
+    if (mModeManager.GetCurrentGameModeType() != GameStateModuleIO::E_MODE_OFFLINE_RACE)
+    {
+        const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+        if (lpCurrentGameMode == 0 || !lpCurrentGameMode->IsOnline())
+        {
+            return;
+        }
+    }
+
+    if (meControllerState != E_CONTROLLERSTATE_ACTIVE_GAME_MODE_STATE)
+    {
+        return;
+    }
+
+    if (!lpVehicleOutput->GetUsedCarsBitArray().IsBitSet(static_cast<u32>(GetPlayerActiveRaceCarIndex())))
+    {
+        return;
+    }
+
+    const f32 lfPlayerSpeed = rw::math::vpu::Magnitude(
+        lpVehicleOutput->GetRaceCar(static_cast<u32>(GetPlayerActiveRaceCarIndex()))->mLinearVelocity);
+    if (!(lfPlayerSpeed > 50.0f))
+    {
+        return;
+    }
+
+    const ScoringSystem* lpScoringSystem = mModeManager.GetScoringSystem();
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+
+    const f32 lfPlayerDistanceToFinish =
+        lpScoringSystem->GetRaceCarDistanceToFinish(GetPlayerActiveRaceCarIndex());
+
+    for (::EActiveRaceCarIndex leIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
+         leIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leIndex++)
+    {
+        if (GetPlayerActiveRaceCarIndex() == leIndex)
+        {
+            continue;
+        }
+
+        const f32 lfDistanceToFinish = lpScoringSystem->GetRaceCarDistanceToFinish(leIndex);
+        f32 lfTime = GetRivalTailingTime(static_cast<s32>(leIndex));
+
+        if (lfPlayerDistanceToFinish < lfDistanceToFinish
+            && !((lfPlayerDistanceToFinish + 20.0f) < lfDistanceToFinish)
+            && lpVehicleOutput->GetUsedCarsBitArray().IsBitSet(static_cast<u32>(leIndex))
+            && lpVehicleOutput->GetRaceCar(static_cast<u32>(leIndex))->mfSpeedMPH > 50.0f)
+        {
+            lfTime = lfTime + lfTimeStep;
+        }
+        else
+        {
+            lfTime = (lfTime >= 0.0f) ? 0.0f : lfTime;   // fsel
+        }
+        SetRivalTailingTime(static_cast<s32>(leIndex), lfTime);
+
+        if (!(lfTime < 3.0f))
+        {
+            lpOutput->GetGameStateToGuiInterface()->AddOnTailEvent(
+                mLastActiveRaceCarInterface.GetRivalId(leIndex), leIndex);
+            SetRivalTailingTime(static_cast<s32>(leIndex), 0.0f);
+
+            // [FLAG PC witness] -- NOT IN THE X360 BINARY. Opt-in behind BRN_MODEMGR_DIAG (the
+            // race-HUD cases' gate), first 12 records: proves the on-tail record was posted and names
+            // the slot and the clock that crossed 3.0. DELETE-WHEN the on-tail HUD message has a
+            // live oracle.
+            static const bool sbTailingDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+            static s32 siTailingWitnessed = 0;
+            if (sbTailingDiag && siTailingWitnessed < 12 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siTailingWitnessed;
+                *CgsDev::Log::gpDebugPrint
+                    << "[tailing] on-tail record: slot " << static_cast<s32>(leIndex)
+                    << " player " << static_cast<s32>(GetPlayerActiveRaceCarIndex())
+                    << " clock " << lfTime << " player speed " << lfPlayerSpeed
+                    << " gap " << (lfDistanceToFinish - lfPlayerDistanceToFinish)
+                    << " [FLAG PC witness]\n";
+            }
+        }
     }
 }
 

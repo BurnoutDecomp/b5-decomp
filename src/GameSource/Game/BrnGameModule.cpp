@@ -4643,6 +4643,17 @@ namespace BrnGame
                         // Append's "only 1 slowmo request" on the consumer side), and the sim would
                         // never come back to real time when the drive-thru hands control back.
                         lpGameStateOutput->GetTimerRequestInterface()->Clear();
+                        // ⭐ [FLAG PC lifecycle, FX-GS2 2026-09-23, G10-D11] THE GAME-STATE -> GUI
+                        // INTERFACE RETIRES TOO, for the same reason. The console rebuilds this
+                        // OutputBuffer every frame, and OutputBuffer::Construct runs
+                        // GameStateToGuiInterface::Construct (this + 17488), so each of its eight
+                        // EventQueues starts every frame empty. Here the buffer is persistent and the
+                        // queues are AddEvent-only (asserting, then writing past the end on overflow):
+                        // AddFinishedRaceEvent's 4-slot queue already overran on a session's fifth
+                        // finish, and CheckForTailingRivals' 7-slot on-tail queue would overrun in a
+                        // few seconds of racing. The console's own Construct is the retire: queues
+                        // empty, miPlayerRaceCarIndex back to -1.
+                        lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
                         lpGameStateOutput->UnlockForWrite();
                     }
                 }
