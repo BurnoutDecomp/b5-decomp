@@ -5,8 +5,10 @@
 #include "GameSource/BurnoutConstants.h"              // E_ACTIVE_RACE_CAR_INDEX_COUNT
 
 #include "rw/math/vpu/vector3_operation.h"           // Magnitude
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (opt-in witness)
 
 #include <cmath>                                      // fabsf
+#include <cstdlib>                                    // std::getenv (opt-in witness)
 
 #include <cstddef>   // offsetof
 
@@ -110,8 +112,8 @@ namespace BrnWorld
     //      constant, so the edge fires exactly once.
     //   2. Player-only book-keeping (skipped entirely when online, or for a non-player wreck):
     //      accumulate mfTimeCrashing and mfTimeStationary, then ZERO mfTimeStationary if the car
-    //      is still moving -- |mfSpeedMPH| > 6.5f (flt_820CA5C0) or |linear velocity| > 1.5f
-    //      (flt_820CA5C4), both read from the image.
+    //      is still moving OR SPINNING -- |mfSpeedMPH| > 6.5f (flt_820CA5C0) or |angular
+    //      velocity| (RaceCarState+0x340) > 1.5f rad/s (flt_820CA5C4), both read from the image.
     //   3. The EXTENSION. On the 0.25f edge, if the wreck has not used up its allowance and is
     //      still sliding (mfTimeStationary < 1.0f), grant one more second and count it.
     //      The 1.0f handed to SetSecondsBeforeCleanup is flt_82001C98, and the compiler REUSES
@@ -167,24 +169,33 @@ namespace BrnWorld
             if (lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() == leOwner)
             {
                 // 0x827BF1D0 / 0x827BF1E0 `lfs f30, 0x3CC(iface-element)` -- mfSpeedMPH, and
-                // 0x827BF20C `lvx128 v13, r3, 0x340` -- mLinearVelocity, both out of the owner's
-                // RaceCarState. Reached BY NAME here.
+                // 0x827BF1E8 `li r11, 0x340` / 0x827BF20C `lvx128 v13, r3, r11` --
+                // mAngularVelocity, both out of the owner's RaceCarState. Reached BY NAME here.
+                // ⚠️ +0x340 IS THE SPIN, NOT THE LINEAR VELOCITY (G63-D1, crash parity 2026-09-23).
+                // The only producer, VehicleOutputInterface::UpdateRaceCarState @0x825EC808, stores
+                // the physics body's linear velocity (+0x50) to state+0x330 (0x825EC948/0x825EC94C)
+                // and its angular velocity (+0x60) to state+0x340 (0x825EC950/0x825EC954); DWARF
+                // order is mLinearVelocity (@816) then mAngularVelocity (@832). This body used to
+                // read mLinearVelocity, so a wreck that was still rolling or rocking with little
+                // centre-of-mass speed counted as stationary here.
                 const BrnPhysics::Vehicle::RaceCarState* lpState =
                     lpActiveRaceCarInterface->GetRaceCarState(leOwner);
 
-                const f32     lfSpeedMPH      = lpState->mfSpeedMPH;
-                const Vector3 lLinearVelocity = lpState->mLinearVelocity;
+                const f32     lfSpeedMPH       = lpState->mfSpeedMPH;
+                const Vector3 lAngularVelocity = lpState->mAngularVelocity;   // 0x827BF20C (+0x340)
 
                 // 0x827BF1F4..0x827BF228 -- both accumulate unconditionally, BEFORE the test.
                 mfTimeStationary += lfTimeStep;
                 mfTimeCrashing   += lfTimeStep;
 
-                // 0x827BF238..0x827BF268 -- the vrsqrtefp/vmsum3fp sequence is a 3-component
-                // LENGTH with the exact-zero lane selected back to zero by the vcmpeqfp/vsel.
-                const f32 lfSpeed = rw::math::vpu::Magnitude(lLinearVelocity);
+                // 0x827BF214..0x827BF264 -- the vmsum3fp/vrsqrtefp (+2 Newton-Raphson) sequence is a
+                // 3-component LENGTH with the exact-zero lane selected back to zero by the
+                // vcmpeqfp/vsel.
+                const f32 lfSpin = rw::math::vpu::Magnitude(lAngularVelocity);
 
-                // 0x827BF230/0x827BF270: flt_820CA5C0 == 6.5f, flt_820CA5C4 == 1.5f (image-read).
-                if (fabsf(lfSpeedMPH) > 6.5f || lfSpeed > 1.5f)
+                // 0x827BF230/0x827BF270: flt_820CA5C0 == 6.5f, flt_820CA5C4 == 1.5f (image-read);
+                // both compares are strict (`bgt` / `ble` skip).
+                if (fabsf(lfSpeedMPH) > 6.5f || lfSpin > 1.5f)
                 {
                     mfTimeStationary = 0.0f;   // flt_82001CC0 == 0.0f
                 }
@@ -198,6 +209,22 @@ namespace BrnWorld
                     SetSecondsBeforeCleanup(1.0f);
                     lbGrantedExtension = true;
                     ++mi8NumCleanupExtensions;
+                }
+
+                // FLAG PC witness (BRN_CRASH_ACTION_DIAG, not console code): the player wreck's
+                // 0.25 s decision edge, with the spin that feeds the "still moving" test above.
+                if (lbCrossedCleanupEdge && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    static const bool sbDiag = (std::getenv("BRN_CRASH_ACTION_DIAG") != 0);
+                    if (sbDiag)
+                    {
+                        *CgsDev::Log::gpDebugPrint
+                            << "[crash-tick] player wreck edge owner=" << static_cast<s32>(luOwner)
+                            << " spin=" << lfSpin << " speedMPH=" << lfSpeedMPH
+                            << " stationary=" << mfTimeStationary
+                            << " extended=" << (lbGrantedExtension ? 1 : 0)
+                            << " extensions=" << static_cast<s32>(mi8NumCleanupExtensions) << "\n";
+                    }
                 }
             }
         }

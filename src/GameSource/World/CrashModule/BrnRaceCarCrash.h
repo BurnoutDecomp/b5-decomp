@@ -108,7 +108,8 @@ namespace BrnWorld
         //   Tick @0x827BF0B8:       lfs 0xC / stfs 0xC        (the countdown)
         //                           lfs 8   / fadds f31 / stfs 8   (+= dt, unconditional)
         //                           lfs 0x10 / fadds f31 / stfs 0x10 (+= dt) and
-        //                           stfs 0.0f, 0x10 when |speedMPH| > 6.5f or |velocity| > 1.5f
+        //                           stfs 0.0f, 0x10 when |speedMPH| > 6.5f or |angular velocity|
+        //                           (RaceCarState+0x340) > 1.5f
         //                           lbz/extsb 0x14 -> compared SIGNED against miNumCrashExtensions,
         //                           then `addi r11,r11,1 ; stb 0x14`   => a signed 8-bit counter
         CgsSceneManager::VolumeInstanceId mRaceCarVolumeInstanceId;   // +0x00 (u64)
@@ -123,9 +124,10 @@ namespace BrnWorld
         f32 mfSecondsBeforeCleanup;                                   // +0x0C
 
         // +0x10. How long the wreck has been essentially STATIONARY. Accumulated with the timestep
-        // but slammed back to 0.0f whenever the car is still moving (|mfSpeedMPH| > 6.5f or
-        // |linear velocity| > 1.5f). Tick only grants a cleanup extension while this is < 1.0f,
-        // i.e. only while the wreck is still visibly sliding.
+        // but slammed back to 0.0f whenever the car is still moving or spinning (|mfSpeedMPH| >
+        // 6.5f or |mAngularVelocity| > 1.5f -- Tick reads RaceCarState+0x340, G63-D1). Tick only
+        // grants a cleanup extension while this is < 1.0f, i.e. only while the wreck is still
+        // visibly sliding or tumbling.
         f32 mfTimeStationary;                                         // +0x10
 
         // +0x14. How many 1-second cleanup extensions this crash has already been granted
