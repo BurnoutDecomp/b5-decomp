@@ -1674,6 +1674,29 @@ namespace Deformation
     }
 
     // =============================================================================================
+    // ResetScratching -- DWARF BrnDeformableObject.cpp:1000 (locals `u8 lu8NumSensors`, `u8 i`);
+    // PS3 out of line @0x6B9D7C, X360 inlined into DeformationManager::ProcessEvents @0x82644E38 at
+    // 0x82644ED0..0x82644F04 (the paint-shop respray, game action 98 -> mbResetPlayerScratches):
+    //     lwz r11, 0x18E0(model)  ; lbz r9, 0x652(r11)   the SPEC's own sensor count (no +4 wheels)
+    //     beq skip ; lfs f0, flt_82001CC0 (x360rd 00000000 == 0.0f)
+    //     loop: mulli 0x1B0 ; add model ; stfs f0, 0x1AF4(r10)   == maDeformationSensors[i] +0x1A4,
+    //           i.e. mfScratchAmount (0x1950 + 0x1A4) ; clrlwi 24 ; cmplw ; blt
+    // PS3 is the same (lwz 0x18E0 / lbz 0x652 / addi 0x1950 / stfs 0x1A4, stride 0x1B0). Crash parity
+    // G24-D1 (2026-09-23): declared, never bodied; the manager's ProcessEvents skipped it behind a
+    // FLAG claiming UpdateSkinningOffsets resets the scratch -- it does not (0x825DFA90 never stores to
+    // sensor+0x1A4), and UpdateIK READS sensor+0x1A4 (0x826088DC/0x826088E8) to re-blend each tag
+    // point's scratch, so the player's scratches survived a respray.
+    // =============================================================================================
+    void DeformableObject::ResetScratching()
+    {
+        const u8 lu8NumSensors = mpDeformationSpec->mu8NumDeformationSensors;
+        for (u8 i = 0; i < lu8NumSensors; ++i)
+        {
+            maDeformationSensors[i].SetScratchAmount(0.0f);
+        }
+    }
+
+    // =============================================================================================
     // UpdateIK @0x82608858 (61 insns) -- ⭐ BODIED 2026-08-14 (walls wave; it was ABSENT from the
     // tree altogether, trial-link-measured). PS3 out-of-line twin @0x6D374C confirms structure +
     // the operand roles lane for lane.
