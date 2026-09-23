@@ -179,8 +179,9 @@ namespace BrnPhysics
         // @0x825A24B0 (607 insns; bodied 2026-08-07, orchestrator wave): the dev-build state
         // validator the driving spine brackets every stage with. Ten NaN sweeps in the
         // console's own order -- mTransform (4 rows, xyz lanes), mLocalInverseInertia,
-        // mWorldInverseInertia (3 rows each, xyz), then whole-register checks on mfMass, the
-        // four force/impulse accumulators, mLinearVelocity and mAngularVelocity. On a failure
+        // mWorldInverseInertia (3 rows each, xyz), a whole-register check on mfMass (the only
+        // one), then xyz-lane checks on the four force/impulse accumulators, mLinearVelocity and
+        // mAngularVelocity (vspltw 0/1/2 -- lane w is never tested; G31-D1). On a failure
         // it prints the caller's stage string through gpDebugPrint (gated on
         // gxMessageFilterFlags bit 0, exactly as the asm does) and fires the console's own
         // assert text ("Bad transform" ... "Bad angular velocity").

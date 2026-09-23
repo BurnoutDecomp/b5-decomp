@@ -1332,16 +1332,22 @@ namespace BrnPhysics
     //   +0x70        mLocalInverseInertia, 3 rows xyz -> "Bad local inverse inertia"
     //   +0xA0        mWorldInverseInertia, 3 rows xyz -> "Bad world inverse inertia" (:0x2B3)
     //   +0xD0        mfMass          (whole register) -> "Bad mass"
-    //   +0xE0        mTotalLinearForce                -> "Bad total linear force"
-    //   +0xF0        mTotalTorque                     -> "Bad total torque"
-    //   +0x100       mTotalLinearImpulse              -> "Bad total linear impulse"
-    //   +0x110       mTotalAngularImpulse             -> "Bad total angular impulse"
-    //   +0x40        mLinearVelocity                  -> "Bad linear velocity"
-    //   +0x50        mAngularVelocity                 -> "Bad angular velocity"
-    // The console's test is `vcmpeqfp. v, v` -- a lane self-compare that fails only on NaN --
-    // per xyz lane for the matrices and whole-register for the scalars/accumulators. On a
-    // failure the caller's stage string goes through gpDebugPrint (gated on
-    // gxMessageFilterFlags bit 0) and the console's own assert text fires.
+    //   +0xE0        mTotalLinearForce,    xyz lanes  -> "Bad total linear force"
+    //   +0xF0        mTotalTorque,         xyz lanes  -> "Bad total torque"
+    //   +0x100       mTotalLinearImpulse,  xyz lanes  -> "Bad total linear impulse"
+    //   +0x110       mTotalAngularImpulse, xyz lanes  -> "Bad total angular impulse"
+    //   +0x40        mLinearVelocity,      xyz lanes  -> "Bad linear velocity"
+    //   +0x50        mAngularVelocity,     xyz lanes  -> "Bad angular velocity"
+    // The console's test is `vcmpeqfp. v, v` -- a lane self-compare that fails only on NaN.
+    // ONLY mfMass is tested as a whole register (0x825A29E4 lvx128 +0xD0, 0x825A29E8
+    // `vcmpeqfp. v0,v0,v0`, CR6 all-true -- all four lanes). Every other member is tested per
+    // xyz lane: the matrix rows, and the six Vector3s too -- e.g. +0xE0 at 0x825A2A3C lvx128,
+    // then 0x825A2A40/2A58/2A74 `vspltw v,v0,0/1/2` each followed by `vcmpeqfp.`; lane 3 (w) is
+    // never splatted. The same three-lane ladder repeats for +0xF0 (0x825A2AE8..2B24), +0x100
+    // (0x825A2B90..2BCC), +0x110 (0x825A2C38..2C74), +0x40 (0x825A2CE0..2D1C) and +0x50
+    // (0x825A2D88..2DC4). So a NaN only in a Vector3's w lane asserts nothing on the console
+    // (G31-D1, crash parity 2026-09-23). On a failure the caller's stage string goes through
+    // gpDebugPrint (gated on gxMessageFilterFlags bit 0) and the console's own assert text fires.
     namespace
     {
         inline bool IsLaneNaN(f32 lfValue) { return !(lfValue == lfValue); }   // vcmpeqfp self-test
@@ -1382,25 +1388,27 @@ namespace BrnPhysics
             AnyNaN3(mWorldInverseInertia.zAxis))
             CheckStateFail(lpcContext, "Bad world inverse inertia");
 
+        // mfMass -- the one whole-register test (0x825A29E8 vcmpeqfp. v0,v0,v0: all four lanes).
         if (AnyNaN4(mfMass))
             CheckStateFail(lpcContext, "Bad mass");
 
-        if (AnyNaN4(mTotalLinearForce))
+        // The six Vector3 members -- xyz lanes only (vspltw 0/1/2, never lane 3).
+        if (AnyNaN3(mTotalLinearForce))
             CheckStateFail(lpcContext, "Bad total linear force");
 
-        if (AnyNaN4(mTotalTorque))
+        if (AnyNaN3(mTotalTorque))
             CheckStateFail(lpcContext, "Bad total torque");
 
-        if (AnyNaN4(mTotalLinearImpulse))
+        if (AnyNaN3(mTotalLinearImpulse))
             CheckStateFail(lpcContext, "Bad total linear impulse");
 
-        if (AnyNaN4(mTotalAngularImpulse))
+        if (AnyNaN3(mTotalAngularImpulse))
             CheckStateFail(lpcContext, "Bad total angular impulse");
 
-        if (AnyNaN4(mLinearVelocity))
+        if (AnyNaN3(mLinearVelocity))
             CheckStateFail(lpcContext, "Bad linear velocity");
 
-        if (AnyNaN4(mAngularVelocity))
+        if (AnyNaN3(mAngularVelocity))
             CheckStateFail(lpcContext, "Bad angular velocity");
     }
 
