@@ -3165,6 +3165,15 @@ namespace
     // KF_DRIVE_THRU_MAX_EXIT_SPEED_SLOW / _FAST.
     const f32 KF_DRIVE_THRU_ENTRY_SPEED = 0.44704f * 60.0f;
 
+    // ---- flt_82FAD4FC == DWARF KF_MIN_STUNT_RESET_SPEED (BrnRaceCarEntityModule.cpp:88) ----------
+    // The speed action 34's donut-start arm hands RequestPlaceOnTrack (`lfs f1, -0x2B04(0x82FB0000)`
+    // @0x8230C874, its only reader in this switch). BSS -- the image reads 0x00000000 -- written by
+    // the CRT dynamic initialiser 0x82C4BC10..0x82C4BC28: `lfs flt_82F31928 (3EE4E26D == 0.44704) ;
+    // lfs flt_82014988 (41700000 == 15.0) ; fmuls ; stfs -> 0x82FAD4FC` == 15 mph in m/s. The NAME
+    // is the DWARF's by bank order: the mph dyn-inits 0x82C4BB10..0x82C4BC10 run 10/50/75/120/160/
+    // 20/30/60/15 == KF_RESET_ON_TRACK_SPEED_FAILURE .. KF_PLAYER_SLOW_FOR_ROAD_RAGE, then this one.
+    const f32 KF_MIN_STUNT_RESET_SPEED = 0.44704f * 15.0f;
+
     // ---- action 97, E_ACTION_BODY_SHOP_DRIVE_THRU (size 144) ---------------------------------
     // [!] HEADER REQUEST -- BrnGameActions.h carries the enumerator but no record for 97. The
     // entity id word is read at +0x80 by BOTH console consumers: this module's arm (`lwz r11,
@@ -3296,9 +3305,19 @@ void RaceCarEntityModule::HandleGameActions(
                 lpOutput);
             break;
 
-        // ARTIST 0x8230C7A0..0x8230C7E0, plus the ONE trailing store at 0x8230C7F8 added by
-        // the rival range-loop wave (lane W1, 2026-09-05); the optional donut-start placement
-        // at 0x8230C804..0x8230C880 still remains with the wider mode-action reconstruction.
+        // ARTIST 0x8230C7A0..0x8230C880 (low jump table entry 34): the assert, SetAllCarsOnStartLine,
+        // SetBoostEarningEnabled, the mbModeStartedPlaying store at 0x8230C7F8 (rival range-loop
+        // wave, lane W1, 2026-09-05) and -- G68-D9, crash parity 2026-09-23 -- the donut-start
+        // placement 0x8230C804..0x8230C880:
+        //     0x8230C7F4  lbzx r11, +0x18352        mbPlayerDonutsOnEventStart (DWARF :384)
+        //     0x8230C800  beq  -> break
+        //     0x8230C810  GetActiveRaceCar(mePlayerActiveRaceCarIndex) ; assert :6943 (li r5,0x1B1F)
+        //     0x8230C840  GetActiveRaceCar(...) again -- the receiver
+        //     0x8230C850  GetDirection (v2) ; 0x8230C860 GetPosition (v1)
+        //     0x8230C874  lfs f1, flt_82FAD4FC      KF_MIN_STUNT_RESET_SPEED (15 mph)
+        //     0x8230C87C  bl  ActiveRaceCar::RequestPlaceOnTrack
+        // HandlePrepareForModeAction sets the flag from KU_FLAG_DONUT_START (StuntAttackMode), so at
+        // every Stunt Run start the player's car is re-placed on the track at its own pose, 15 mph.
         //
         // ⭐ `mbModeStartedPlaying = true` (asm `stbx r23, r31, 0x18354`, r23 == the literal 1)
         // IS THE GATE OF THE WHOLE RIVAL RANGE LOOP. UpdateInAndOutOfRangeCars @0x822FF924
@@ -3337,6 +3356,15 @@ void RaceCarEntityModule::HandleGameActions(
             SetAllCarsOnStartLine(ActiveRaceCar::E_RACE_START_STATE_RACING, true);
             mBoostManager.SetBoostEarningEnabled(true);
             mbModeStartedPlaying = true;                      // 0x8230C7F8
+            if (mbPlayerDonutsOnEventStart)                   // lbzx +0x18352 @0x8230C7F4, beq @0x8230C800
+            {
+                const ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
+                CGS_ASSERT(lpPlayerActiveRaceCar != 0, "lpPlayerActiveRaceCar");         // :6943
+                const Vector3 lDirection = lpPlayerActiveRaceCar->GetDirection();       // v2 @0x8230C850
+                const Vector3 lPosition  = lpPlayerActiveRaceCar->GetPosition();        // v1 @0x8230C860
+                GetActiveRaceCar(mePlayerActiveRaceCarIndex)->RequestPlaceOnTrack(      // @0x8230C87C
+                    lPosition, lDirection, KF_MIN_STUNT_RESET_SPEED);                    // f1 = flt_82FAD4FC
+            }
             break;
 
         // ====================================================================================
