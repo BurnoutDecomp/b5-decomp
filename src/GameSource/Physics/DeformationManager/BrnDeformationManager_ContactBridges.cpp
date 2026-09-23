@@ -41,6 +41,8 @@
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h" // PrimitivePairListBuilder::AddPrimitivePair (+ CgsGeometric::Box)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"     // IKBodyPart::GetPartPoolIndex (the hinged-panel walk)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnPhysicalWheel.h"  // PhysicalWheel::GetVolumeInstanceId (the detached-wheel bridge)
+#include "GameShared/GameClasses/Geometric/Primitives/CgsCylinder.h"                     // CgsGeometric::Cylinder (AddRaceCarWheelPair's wheel primitive)
+#include <cstdlib>                                                                        // getenv (the opt-in [wheel-car] witness)
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"            // PotentialContactInterface::GetDetached*Queue (the two drained queues)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"                // InputBuffer::GetAddContactQueue
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"               // InAddPotentialContact (the queued record)
@@ -109,6 +111,7 @@ namespace Deformation
         // Pair-builder feeder constants, read off the three bodies' asm.
         const f32 KF_PART_VS_CAR_CONTACT_PADDING  = 0.5f;   // flt_82001DA0 @0x82605A88
         const f32 KF_HINGED_PART_CONTACT_PADDING  = 1.0f;   // flt_82001C98 @0x82605B20
+        const f32 KF_WHEEL_VS_CAR_CONTACT_PADDING = 0.5f;   // flt_82001DA0 @0x82605DFC
         const s32 KI_MAX_PARTS_PER_MODEL          = 50;     // `cmpwi r26, 0x32` (maPartStates[50])
 
         // Per-lane NaN self-compare (the asm's vspltw + vcmpeqfp. over lanes x/y/z) -- the
@@ -213,10 +216,13 @@ namespace Deformation
         BrnPhysics::ContactId lContactId,
         CgsPhysics::PhysicsSimulationIO::InputBuffer* /*lpSimInput*/)
     {
-        // Initial validity gate: the asm self-compares the three lanes of the contact's leading
-        // vector (mPointOnA) -- any NaN lane means the contact is invalid and is ignored (asserted,
-        // then the function returns without adding it).
-        if (!IsValidVec3Lanes(lrPotentialContact.mPointOnA))
+        // Initial validity gate on the contact NORMAL (+0x20): 0x826045AC addi r25,r23,0x20 ;
+        // 0x826045BC lvx128 ; lanes 0/1/2 self-compared (vcmpeqfp.) -- any NaN lane asserts and
+        // the contact is ignored. The same r25 feeds the |n|^2 tripwire (0x8260473C) and the
+        // streamed normal (0x82604888); PS3 0x73A884 `li r0,0x20 ; lvx v1,lPotentialContact,r0`.
+        // (Crash parity G22-D2, 2026-09-23: the tree tested mPointOnA, so a NaN normal reached
+        // the sensor and a NaN point with a valid normal was dropped.)
+        if (!IsValidVec3Lanes(lrPotentialContact.mNormal))
         {
             CGS_ASSERT(false, "Invalid contact added to deformation. Ignoring...\n");
             return;
@@ -568,6 +574,23 @@ namespace Deformation
         const Queue& lrQueue = lpContacts->GetDetachedWheelCarQueue();
         const s32 liQueueLength = lrQueue.GetLength();   // snapshot, as above
 
+        // [wheel-car] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_DEFORM_TRACE). Running total of the
+        // detached-wheel-vs-car contacts this bridge drains -- zero for the whole life of the tree
+        // until AddRaceCarWheelPair landed (crash parity G22-D1). First 20 non-empty frames, then
+        // every 50th. DELETE-WHEN-STABLE.
+        {
+            static const bool sbWitness = (getenv("BRN_DEFORM_TRACE") != 0);
+            static u32 suFrames = 0u, suContacts = 0u;
+            if (sbWitness && liQueueLength > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++suFrames;
+                suContacts += static_cast<u32>(liQueueLength);
+                if (suFrames <= 20u || (suFrames % 50u) == 0u)
+                    *CgsDev::Log::gpDebugPrint << "[wheel-car] frame contacts " << liQueueLength
+                                               << " total " << suContacts << " frames " << suFrames << "\n";
+            }
+        }
+
         for (s32 liEventIndex = 0; liEventIndex < liQueueLength; ++liEventIndex)
         {
             const CgsSceneManager::SceneManagerIO::PotentialContact lContact =
@@ -786,31 +809,57 @@ namespace Deformation
     }
 
     // -------------------------------------------------------------------------------------------------
-    // GATE AddRaceCarWheelPair @0x82605BE8 (136 insns) -- reachable only once a wheel has been torn
-    // off. BLOCKER: its appender is sub_828149F8, a CYLINDER-vs-BOX AddPrimitivePair overload that has
-    // no declaration and no body in the tree (its home is CgsPrimitivePairListBuilder.h/.cpp); the
-    // Box/Box overload would stamp the wrong volume type into the record.
-    // DELETE-WHEN AddPrimitivePair(Cylinder*, Box*, f32, u16, u16) @0x828149F8 lands.
-    // The rest of the body is recovered: DetachedWheelManager::IsSlotUsed/Get on this+72928,
-    // FindModelIndexByEntityID, a 5-row cylinder built from the wheel transform (row0 = -wheelRow2,
-    // row1/row2 = wheelRow1/row0, row3 = wheelRow3, row4.xy = wheel+0x7C/+0x78), the car box via
-    // CgsGeometric::Box::Set off model+0x194C, the "Bad Pool Index: " tripwire (:2324), padding 0.5f.
+    // AddRaceCarWheelPair @0x82605BE8 (137 insns) -- a torn-off wheel vs a car body.
+    // ⭐ LANDED 2026-09-23 (crash parity G22-D1). Until now this was a GATE that logged once and
+    // appended nothing, so detached wheels passed straight through every car (rivals, traffic, the
+    // player) and BridgeDetachedWheelCarContactsToSimulation had nothing to drain. Its blocker, the
+    // CYLINDER-vs-BOX AddPrimitivePair overload @0x828149F8, is bodied in CgsPrimitivePairListBuilder.
+    //   0x82605BF8  slot = (u16)volumeInstanceId            (clrlwi r29,r5,16)
+    //   0x82605C14  !DetachedWheelManager::IsSlotUsed(slot) -> return   (manager at this+0x11CE0)
+    //   0x82605C2C  wheel = Get(slot); null -> return
+    //   0x82605C44  model = FindModelIndexByEntityID(entity); -1 -> return
+    //   0x82605C58..0x82605CE4  the wheel cylinder, inlined: rows (-r2, r1, r0, r3), +0x40 =
+    //               wheel+0x7C (radius), +0x44 = wheel+0x78 (half height) == PhysicalWheel::GetCylinder
+    //   0x82605CE8..0x82605D68  the car box, inlined: deformable AABB of model+0x194C's physics,
+    //               half = (max-min)*0.5 - unk_82FB95E0 (0.1, 0.3, 0.05), centre transformed, fatness
+    //               0 -> Box::Set == DeformableObject::GetAlignedDeformedBoundingBox
+    //   0x82605D6C..0x82605DDC  (u8)wheel id (ld 0x70, clrlwi 24) == slot, else "Bad Pool Index: " (:0x914)
+    //   0x82605DE0..0x82605E00  builder->AddPrimitivePair(&cyl, &box, 0.5 (flt_82001DA0),
+    //               (u8)wheel pool index, (u16)model)
+    // Both inlined blocks are de-inlined to the named helpers per the project's inlining rule.
     // -------------------------------------------------------------------------------------------------
-    void DeformationManager::AddRaceCarWheelPair(EntityId /*lEntityId*/,
-                                                 CgsSceneManager::VolumeInstanceId /*lVolumeInstanceId*/,
-                                                 PrimitivePairListBuilder* /*lpBuilder*/)
+    void DeformationManager::AddRaceCarWheelPair(EntityId lEntityId,
+                                                 CgsSceneManager::VolumeInstanceId lVolumeInstanceId,
+                                                 PrimitivePairListBuilder* lpBuilder)
     {
-        static bool sbLoggedWheelPairGate = false;
-        if (!sbLoggedWheelPairGate)
+        const u16 lu16WheelSlot = static_cast<u16>(lVolumeInstanceId.muId & 0xFFFFu);
+
+        if (!mDetachedWheelManager.IsSlotUsed(lu16WheelSlot))
         {
-            sbLoggedWheelPairGate = true;
-            if (CgsDev::Message::gxMessageFilterFlags & 1)
-                *CgsDev::Log::gpDebugPrint
-                    << "conductor gate: DeformationManager::AddRaceCarWheelPair @0x82605BE8 reached "
-                       "(a detached wheel overlapped a car) but not landed -- needs PrimitivePairList"
-                       "Builder::AddPrimitivePair(Cylinder*, Box*) @0x828149F8, undeclared "
-                       "[FLAG PC boot gate]. Reported once, not per frame\n";
+            return;
         }
+        const PhysicalWheel* lpWheel = mDetachedWheelManager.GetWheel(lu16WheelSlot);
+        if (lpWheel == nullptr)
+        {
+            return;
+        }
+
+        const s32 liModelIndex = FindModelIndexByEntityID(lEntityId);
+        if (liModelIndex == -1)
+        {
+            return;
+        }
+
+        CgsGeometric::Cylinder lWheelCylinder;
+        lpWheel->GetCylinder(lWheelCylinder);
+        CgsGeometric::Box lCarBox;
+        mpaModels[liModelIndex].GetAlignedDeformedBoundingBox(&lCarBox);
+
+        // The streamed value tail is lowered to the static prefix per the standing project rule.
+        CGS_ASSERT(lpWheel->GetPoolIndex() == static_cast<u8>(lu16WheelSlot), "Bad Pool Index: ");  // :2324
+
+        lpBuilder->AddPrimitivePair(&lWheelCylinder, &lCarBox, KF_WHEEL_VS_CAR_CONTACT_PADDING,
+                                    lpWheel->GetPoolIndex(), static_cast<u16>(liModelIndex));
     }
 }
 }

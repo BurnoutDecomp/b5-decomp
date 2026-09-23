@@ -149,8 +149,9 @@ namespace CgsCollision
         // It is NOT reachable from the volume switch -- typeID 3 (rwcollision TRIANGLE) takes
         // the refusal arm -- and no X360 address for it has been located, so there is nothing
         // to reconstruct it from and nothing calling it. Left undeclared rather than declared
-        // bodyless. Same for the DWARF's Destruct()/Release() and its four other
-        // AddPrimitivePair overloads (Sphere/Sphere, Sphere/Box, Box/Sphere, Cylinder/Box).
+        // bodyless. Same for the DWARF's Destruct()/Release() and its three other
+        // AddPrimitivePair overloads (Sphere/Sphere, Sphere/Box, Box/Sphere). (The fourth,
+        // Cylinder/Box, has a caller and is bodied below -- crash parity G22-D1, 2026-09-23.)
         //
         // Instruction counts and function boundaries were MEASURED this wave on a private .i64
         // copy (scratchpad/waveQ6/ida_addprim/out.json `leaves`), because sub_82814570 has NO
@@ -182,6 +183,14 @@ namespace CgsCollision
         // (debug) assert the two boxes are not near-identical, stamp a box/box header,
         // bump-allocate two 80-byte box payloads, copy both boxes, bump the count.
         void AddPrimitivePair(CgsGeometric::Box* lpBoxA, CgsGeometric::Box* lpBoxB,
+                              f32 lfPadding, u16 lu16PrimitiveTagA, u16 lu16PrimitiveTagB);
+
+        // AddPrimitivePair(Cylinder*, Box*) @ 0x828149F8 (IDA `sub_828149F8`; the DWARF's
+        // Cylinder/Box overload) -- a CYLINDER-vs-BOX pair record: two-type header (5, 4), the
+        // cylinder copied into an 80-byte slot, the box into another, ++count. No near-identical
+        // assert (only the box/box overload has one). Sole caller:
+        // DeformationManager::AddRaceCarWheelPair @0x82605BE8 (a torn-off wheel vs a car body).
+        void AddPrimitivePair(CgsGeometric::Cylinder* lpCylinder, CgsGeometric::Box* lpBox,
                               f32 lfPadding, u16 lu16PrimitiveTagA, u16 lu16PrimitiveTagB);
 
     private:

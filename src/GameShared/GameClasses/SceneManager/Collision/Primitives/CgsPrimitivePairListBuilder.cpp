@@ -589,5 +589,40 @@ namespace CgsCollision
 
         ++mu16NumTests;
     }
+
+    // -------------------------------------------------------------------------
+    // AddPrimitivePair(Cylinder*, Box*) @ 0x828149F8 (46 insns; IDA leaves it `sub_828149F8`)
+    //
+    // ⭐ BODIED 2026-09-23 (crash parity G22-D1) -- the leaf whose absence gated
+    // DeformationManager::AddRaceCarWheelPair, i.e. every torn-off wheel vs car contact.
+    //     0x82814A0C/10  li r5,4 ; li r4,5         header types: A = CYLINDER, B = BOX
+    //     0x82814A18     bl AddCollisionHeader(5, 4, f1, r7, r8)   (f1 burns r6)
+    //     0x82814A1C     li r4,0x50 ; bl AllocateMemory             the cylinder slot
+    //     0x82814A30..A6C  four lvx128/stvx128 rows 0..0x30 + two lfs/stfs at 0x40 / 0x44
+    //                     (the same 72-of-80-byte copy AddPrimitive(Cylinder*) makes)
+    //     0x82814A70     bl AllocateMemory (r4 still 0x50)          the box slot
+    //     0x82814A74..A9C  five lvx128/stvx128 rows 0..0x40         (the whole 80-byte box)
+    //     0x82814AA0..A8  lhz/addi/sth 6(this)                      ++mu16NumTests
+    // No near-identical assert: that block is the box/box overload's alone.
+    // -------------------------------------------------------------------------
+    void PrimitivePairListBuilder::AddPrimitivePair(CgsGeometric::Cylinder* lpCylinder,
+                                                    CgsGeometric::Box* lpBox,
+                                                    f32 lfPadding,
+                                                    u16 lu16PrimitiveTagA,
+                                                    u16 lu16PrimitiveTagB)
+    {
+        AddCollisionHeader(E_VOLUME_TYPE_CYLINDER, E_VOLUME_TYPE_BOX,
+                           lfPadding, lu16PrimitiveTagA, lu16PrimitiveTagB);
+
+        CgsGeometric::Cylinder* lpPrimitiveA =
+            static_cast<CgsGeometric::Cylinder*>(AllocateMemory(sizeof(CgsGeometric::Cylinder)));
+        *lpPrimitiveA = *lpCylinder;   // four rows + the two scalars
+
+        CgsGeometric::Box* lpPrimitiveB =
+            static_cast<CgsGeometric::Box*>(AllocateMemory(sizeof(CgsGeometric::Box)));
+        *lpPrimitiveB = *lpBox;
+
+        ++mu16NumTests;
+    }
 }
 }
