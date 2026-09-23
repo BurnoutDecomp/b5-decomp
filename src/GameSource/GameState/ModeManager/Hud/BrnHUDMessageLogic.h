@@ -4,12 +4,21 @@
 #include "BrnCommonTypes.h"               // CgsID (== u64)
 #include "GameSource/BurnoutConstants.h"  // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_COUNT (== 8)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // BitArray<N>
+#include "GameShared/GameClasses/Containers/CgsObjectPool.h" // ObjectPool<BufferedCrashingCar,8,s32> (mBufferedCrashingCars)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // VariableEventQueue<256,16>
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h" // ScoringSystem, CarData (by pointer),
                                                                        // StuntModeScoring + StuntInfo (GenerateStuntMessage)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"               // GameStateModuleIO::EPlayerTeam
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"             // CgsSystem::Time
+
+// The two queue types the crash-message legs read (DWARF BrnHUDMessageLogic.h:69/:128/:160/:166/:233
+// spell them by these names). Pointers only here; BrnScoringSystemEventQueues.h completes both.
+namespace BrnGameState
+{
+    namespace InputBuffer                   { struct TakedownEventQueue; }
+    namespace VehicleManagerOutputInterface { struct RaceCarCrashEventQueue; }
+}
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h
@@ -157,11 +166,47 @@ public:
 
     // X360 0x8239D998. Latches the game mode, ticks the in-mode clock and runs the per-mode
     // message generators. REDUCED ARGUMENT SET -- see the body for the console's full ten and
-    // for the arms this build does not reproduce.
+    // for the arms this build does not reproduce. [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3]
+    // the crash queue (console r8), the takedown queue (r10) and the player's active race-car index
+    // (the [sp+0x5C] stack argument) are carried now: the race arm (modes 0/10) and the free-burn
+    // lobby arm (15) read them.
     void PostWorldUpdate(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                          GameStateModuleIO::EGameModeType leGameModeType,
                          ScoringSystem* lpScoringSystem,
-                         f32 lfDelta);
+                         const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+                         const InputBuffer::TakedownEventQueue* lpTakedownQueue,
+                         f32 lfDelta,
+                         EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
+
+    // X360 0x82399C78 (DWARF BrnHUDMessageLogic.h:128). The race arm of PostWorldUpdate (modes 0 and
+    // 10): the leader / finisher / checkpoint / crash / first-or-last / distance messages, in that
+    // order, then the checkpoint latch is dropped.
+    void GenerateRaceModeMessages(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                                  ScoringSystem* lpScoringSystem,
+                                  const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+                                  const InputBuffer::TakedownEventQueue* lpTakedownQueue,
+                                  EActiveRaceCarIndex lePlayerRaceCarIndex,
+                                  f32 lfTimeStep);
+
+    // DWARF BrnHUDMessageLogic.h:150. Inlined into GenerateRaceModeMessages on the X360
+    // (0x82399CB4..0x82399CE8): the player-reached-checkpoint record (action 249, 24 bytes).
+    void GeneratePlayerCheckpointMessage();
+
+    // X360 0x82394418 (DWARF BrnHUDMessageLogic.h:160). Offline race: one "X crashes" record
+    // (action 250, 16 bytes) per non-player crash event this frame.
+    void DetectCrashes(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                       const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue);
+
+    // X360 0x82394528 (DWARF BrnHUDMessageLogic.h:166). Online race / free-burn lobby: buffer each
+    // non-player crash for 1.5 s (flt_82029F18), then post it unless the car left the race or is in
+    // Showtime.
+    void DetectOnlineCrashes(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                             const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+                             f32 lfSimTimeStep);
+
+    // X360 0x82366590 (DWARF BrnHUDMessageLogic.h:233). Drops the buffered crash of every car
+    // taken down this frame, so a takedown victim gets no "crashed" message.
+    void RemoveCrashingMessagesForTakendownPlayers(const InputBuffer::TakedownEventQueue* lpTakedownQueue);
 
     // X360 0x82394DF8. THE stunt scorer's notification pump, and the ONLY consumer of the
     // scorer's three one-shot latches (mbRecentCombo / mbRecentStunt / the time-up edge) in the
@@ -202,6 +247,12 @@ private:
     // The action queue is the first member (object offset 0): the X360 passes `this`
     // directly as the queue pointer to AddEvent.
     CgsModule::VariableEventQueue<256, 16> mActionQueue;
+
+    // X360 +0x110 (DWARF BrnHUDMessageLogic.h:265): the online crash messages waiting out their
+    // 1.5 s buffer. Objects +0x110..+0x18F (8 x 16), free queue +0x190, free count +0x1B0,
+    // occupancy bits +0x1B8 -- the store run Construct (0x8236F550..0x8236F5D4) and Prepare
+    // (0x82366528..0x82366578) write. [FX-GS 2026-09-23, crash-parity G11-D2]
+    CgsContainers::ObjectPool<BufferedCrashingCar, 8, s32> mBufferedCrashingCars;
 
     // The game mode this object is currently generating messages for (X360 +0x1C0). Construct
     // seeds it to E_MODE_NONE (`stw r28(-1), 0x1C0(r31)` @0x8236F5D8) and PostWorldUpdate latches

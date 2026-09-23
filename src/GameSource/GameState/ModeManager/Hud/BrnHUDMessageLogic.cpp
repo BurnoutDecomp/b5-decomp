@@ -4,6 +4,10 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::IsComboInProgress
 #include "GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.h" // RoadRageModeScoring::DoesDamageCriticalMessageNeedToBeSent / ResetDamageCriticalMessageFlag
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface::IsPlayerCarCrashing (inline)
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // InputBuffer::TakedownEventQueue, VehicleManagerOutputInterface::RaceCarCrashEventQueue (complete)
+#include "GameSource/GameState/BrnGameActions.h"               // HUDMessageXCrashesAction (250), HUDMessagePlayerReachesCheckpointAction (249)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"     // gpDebugPrint ([hud-xcrash] witness)
+#include <cstdlib>                                             // getenv (BRN_MODEMGR_DIAG)
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp
@@ -48,6 +52,15 @@ namespace
     const f32 KF_ZERO_SECONDS                = 0.0f;    // 0x82001CC0
     const f32 KF_TIME_WARNING_WINDOW_SECONDS = 31.0f;   // 0x820323F4
     const f32 KF_TIME_WARNING_SECONDS        = 30.0f;   // 0x82029F30
+
+    // DetectOnlineCrashes' buffer time: `lfs f0, -0x60E8(r25)` @0x8239468C == flt_82029F18, which
+    // the image holds as 0x3FC00000 == 1.5f. The same word seeds mTimeSinceNewLeader in Prepare
+    // (`lfs f1, -4(r29)` @0x82366508).
+    const f32 KF_CRASH_MESSAGE_BUFFER_SECONDS = 1.5f;   // 0x82029F18
+
+    // The buffered-crash pool's capacity; DetectOnlineCrashes' second loop and
+    // RemoveCrashingMessagesForTakendownPlayers both walk every slot (`cmpwi r31, 8`).
+    const s32 KI_NUM_BUFFERED_CRASHING_CARS = 8;
 }
 
 // ============================================================================
@@ -61,23 +74,23 @@ namespace
 //   bl VariableEventQueue<256,16>::Construct   ; the queue IS this object's first member (offset 0)
 //   bl VariableEventQueue<256,16>::Prepare
 //   std r10(0), 0x240(r31)  (twice)            ; the team-changed bit set
-//   stw {7,6,5,4,3,2,1,0,8}, 0x190..0x1B0(r31) ; a nine-entry s32 table (written TWICE)
-//   std r10(0), 0x1B8(r31)                     ; an 8-byte zero
+//   std r10(0), 0x1B8(r31)                     ; the buffered-crash pool's occupancy bits
+//   stw {7,6,5,4,3,2,1,0}, 0x190..0x1AC(r31) ; stw 8, 0x1B0(r31) ; std 0, 0x1B8(r31)
+//                                              ; the pool's Clear image, written TWICE
 //   stw r28(-1), 0x1C0(r31)                    ; meCurrentGameModeType = E_MODE_NONE
 //   bl HUDMessageLogic::Prepare
 //
-// [X] NOT REPRODUCED, named rather than faked: the nine-entry table at +0x190..+0x1B0 and the
-// 8-byte zero at +0x1B8. Neither offset is modelled by this file's semantic-parity layout (see
-// the header's LAYOUT NOTE), and inventing members to hold them would be exactly the fabricated
-// offset the tree forbids. The table's contents {7,6,5,4,3,2,1,0,8} read as a message-priority
-// ordering over the nine EPlayerTeam slots; its only readers are the HUD generators this build
-// does not mount. DELETE-WHEN those generators land and name the members.
+// [FX-GS 2026-09-23, crash-parity G11-D2] The "nine-entry table" this banner used to park is
+// mBufferedCrashingCars (DWARF BrnHUDMessageLogic.h:265, base r11 = this+0x110): the free queue
+// {7..0} at +0x80, the free count 8 at +0xA0 and the occupancy word at +0xA8 are
+// ObjectPool::Clear's image. One Clear() reproduces the doubled store run's end state.
 void HUDMessageLogic::Construct()
 {
     mActionQueue.Construct();
     mActionQueue.Prepare();
 
     mTeamChangedBits.Prepare();                                 // std 0, 0x240
+    mBufferedCrashingCars.Clear();                              // 0x8236F574..0x8236F5D4
     meCurrentGameModeType = GameStateModuleIO::E_MODE_NONE;     // stw -1, 0x1C0
 
     Prepare();
@@ -95,9 +108,12 @@ void HUDMessageLogic::Construct()
 //   *(a1+484) = 0     -> miLastVictoryTeam           (+0x1E4)
 //   *(a1+488) = -1.0  -> mfLastTimeWarningAnnounced  (+0x1E8)
 //
-// Checkpoint and finisher latches below are also initialized by ARTIST Prepare.
+// Checkpoint and finisher latches below are also initialized by ARTIST Prepare, and so is the
+// buffered-crash pool: 0x82366528..0x82366578 write its Clear image (free queue 7..0 at
+// +0x190..+0x1AC, count 8 at +0x1B0, occupancy 0 at +0x1B8) as Prepare's last stores
+// [FX-GS 2026-09-23, crash-parity G11-D2].
 // Still unmounted: +516/+520 (5.0), +524/+528 (0), +532/+540 (times 1.5/7.5),
-// +584 (-1), +568/+588 (0), +592 (-1), +596 (0), +440 and +400..+432.
+// +584 (-1), +568/+588 (0), +592 (-1), +596 (0).
 // Prepare deliberately leaves the two score-sample fields untouched, as in ARTIST.
 void HUDMessageLogic::Prepare()
 {
@@ -116,6 +132,7 @@ void HUDMessageLogic::Prepare()
     miLastLeadingTeam          = 0;                                     // +0x1E0
     miLastVictoryTeam          = 0;                                     // +0x1E4
     mfLastTimeWarningAnnounced = -1.0f;                                 // +0x1E8
+    mBufferedCrashingCars.Clear();                                      // +0x190..+0x1B8
 }
 
 // X360 0x82389248. The drain: bulk-append this frame's notifications into the module's outgoing
@@ -138,41 +155,52 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
 //   PostWorldUpdate(this, lpActiveRaceCarInterface, leGameModeType, lpModeManager, lpScoringSystem,
 //                   lpRaceCarCrashEventQueue, lpVehicleOutputInterface, lpTakedownQueue, lfDelta,
 //                   [sp+0x5C] mePlayerActiveRaceCarIndex, [sp+0x67] IsGameModeInProgress(mode))
-// -- and every argument past lpScoringSystem exists only for the message families this build does
-// not mount. The four carried here are exactly the ones the reproduced body reads, so both of the
-// console's head asserts stay verbatim rather than being dropped with the arguments they guard.
+// (r4 iface, r5 mode, r6 ModeManager, r7 scoring, r8 crash queue, r9 vehicle interface,
+// r10 takedown queue, f1 delta; 0x8239D9A8..0x8239D9CC, `lwz r29, 0x10C(r1)` @0x8239DA40).
+// The seven carried here are the ones the reproduced arms read, so both of the console's head
+// asserts stay verbatim rather than being dropped with the arguments they guard. Still dropped:
+// the ModeManager (only case 13 reads it), the VehicleOutputInterface (only the online-team tail)
+// and the in-progress byte (only case 11).
 //
 // REPRODUCED, statement for statement:
 //   CGS_ASSERT(a2, "lpActiveRaceCarInterface != NULL")  (BrnHUDMessageLogic.cpp:144)
 //   CGS_ASSERT(a5, "lpScoringSystem != NULL")           (BrnHUDMessageLogic.cpp:145)
 //   if (*(a1+448) != a3) { Prepare(a1); *(a1+448) = a3; }
 //   *(a1+452) += a9;
-//   switch (*(a1+448)) { case 3: GenerateCriticalDamageMessage(a1, a2, a5); break;
+//   switch (*(a1+448)) { case 0/10: GenerateRaceModeMessages(a1, a2, a5, a6, a8, [sp+0x5C], a9);
+//                        case 3: GenerateCriticalDamageMessage(a1, a2, a5); break;
 //                        case 7: GenerateStuntMessage(a1, a5); break;
-//                        case 12/14/17: GenerateStuntMessage(a1, a5); ... break; }
+//                        case 12/14/17: GenerateStuntMessage(a1, a5); ... break;
+//                        case 15: DetectOnlineCrashes(a1, a2, a6, a9);
+//                                 RemoveCrashingMessagesForTakendownPlayers(a1, a8); break; }
 // Note the switch tests the LATCHED member, not the incoming argument -- they differ only on the
 // frame the mode changes, and the console reads the member. Faithfully kept.
 // (case 3 added by the road-rage wave 2026-09-02: it reads only a2 and a5, both carried here.)
+// [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3] cases 0/10 (@0x8239DAB0, `bl` @0x8239DACC) and
+// 15 (@0x8239DB40, `bl` @0x8239DB50 / @0x8239DB5C) are reproduced; jump table 0x8239DA68.
 //
 // [X] NOT REPRODUCED, named rather than faked -- the other switch arms and the tail:
-//   case 0/10  GenerateRaceModeMessages;
 //   case 11    GenerateOnlineBlueTeamEscapingMessage + ...AreBehindYouMessage + ...LeaderMilestone;
 //   case 12/14 (not 17) GenerateOnlineStuntRunVictoryMessages + ...LeadingMessages;
 //   case 12/14/17 GenerateOnlineStuntRunEliminationMessages + ...TimeMessages + ...ScoreMessages;
-//   case 13    GenerateBurningHomeRunMessages;      case 15 DetectOnlineCrashes +
-//              RemoveCrashingMessagesForTakendownPlayers;
+//   case 13    GenerateBurningHomeRunMessages;
 //   tail       GenerateOnlineTeamChangeMessages(a1, a7, a31).
-// The five online stunt-run generators ARE bodied in this file, but every one of them needs the
-// local player's EActiveRaceCarIndex and/or a CgsSystem::Time that arrive in the dropped stack
-// arguments; wiring them would mean inventing those values. Behaviour cost on an OFFLINE stunt
-// race -- the mode this leg exists for -- is zero: case 7 is the whole of its arm.
+// The five online stunt-run generators ARE bodied in this file. Leading and Time also take a
+// CgsSystem::Time read off the ModeManager (`lwz 0x6DC8(r27) / lfs 0x6DCC(r27)` @0x8239DB9C /
+// @0x8239DBDC) that this reduced set does not carry; Victory, Elimination and Score need only the
+// player index carried since 2026-09-23 and are still unwired (online-only; not part of the
+// crash-message fix). Behaviour cost on an OFFLINE stunt race -- the mode that leg exists for --
+// is zero: case 7 is the whole of its arm.
 // DELETE-WHEN the console's full argument set is reachable (a real PostWorldInputBuffer exists and
 // ModeManager::PostWorldUpdate becomes the live caller again).
 void HUDMessageLogic::PostWorldUpdate(
     const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
     GameStateModuleIO::EGameModeType leGameModeType,
     ScoringSystem* lpScoringSystem,
-    f32 lfDelta)
+    const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+    const InputBuffer::TakedownEventQueue* lpTakedownQueue,
+    f32 lfDelta,
+    EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
     CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
     CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
@@ -187,8 +215,19 @@ void HUDMessageLogic::PostWorldUpdate(
 
     switch (meCurrentGameModeType)
     {
+        case GameStateModuleIO::E_MODE_OFFLINE_RACE:        // case 0
+        case GameStateModuleIO::E_MODE_ONLINE_RACE:         // case 10
+            GenerateRaceModeMessages(lpActiveRaceCarInterface, lpScoringSystem, lpRaceCarCrashQueue,
+                                     lpTakedownQueue, lePlayerActiveRaceCarIndex, lfDelta);
+            break;
+
         case GameStateModuleIO::E_MODE_ROAD_RAGE:           // case 3
             GenerateCriticalDamageMessage(lpActiveRaceCarInterface, lpScoringSystem);
+            break;
+
+        case GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY:  // case 15
+            DetectOnlineCrashes(lpActiveRaceCarInterface, lpRaceCarCrashQueue, lfDelta);
+            RemoveCrashingMessagesForTakendownPlayers(lpTakedownQueue);
             break;
 
         case GameStateModuleIO::E_MODE_STUNT_ATTACK:        // case 7
@@ -203,6 +242,231 @@ void HUDMessageLogic::PostWorldUpdate(
 
         default:
             break;
+    }
+}
+
+// ============================================================================
+// [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3] The race arm and the crash messages.
+// ============================================================================
+
+// X360 0x82399C78 (DWARF BrnHUDMessageLogic.h:128 / .cpp:242). Registers on entry: r4 iface -> r30,
+// r5 scoring -> r29, r6 crash queue -> r28, r7 takedown queue -> r27, r8 player index -> r26,
+// f1 time step -> f31. The console order, call for call:
+//   0x82399CA4  bl GenerateLeaderMessages(iface, scoring)                    [X] no body in the tree
+//   0x82399CB0  bl GenerateFinisherMessage(iface)                            [X] no body in the tree
+//   0x82399CB4  lbz 0x201 ; beq -> the inlined GeneratePlayerCheckpointMessage (AddEvent 249, 24)
+//   0x82399CF8  bl GenerateRivalCheckpointMessage(iface, scoring)            [X] no body in the tree
+//   0x82399CFC  lwz 0x1C0 ; cmpwi 0 ; bne -> mode 0: bl DetectCrashes(iface, crash queue) @0x82399D14
+//                                           else:   bl DetectOnlineCrashes(iface, crash queue, f1)
+//                                                   @0x82399D20, then
+//                                                   bl RemoveCrashingMessagesForTakendownPlayers(
+//                                                   takedown queue) @0x82399D2C
+//   0x82399D44  bl GenerateFirstOrLastMessage(scoring, f1, player, iface)    [X] no body in the tree
+//   0x82399D54  bl GenerateDistanceToFinishMessage(scoring, player)          [X] no body in the tree
+//   0x82399D5C  stb 0, 0x201                  mbPlayerHasJustTriggeredCheckpoint = false
+// [X] NOT REPRODUCED, named rather than faked: the five sibling generators marked above (0x82394110,
+// 0x82394258, 0x82394338, 0x82395760, 0x82395A88) post actions 242..248 and read members this
+// layout does not carry yet (+0x204..+0x21C, +0x250/+0x254). Their GUI consumers
+// (TranslateGameActionsToGuiEvents cases 242..248) are not mounted either, so nothing downstream
+// changes. DELETE-WHEN those bodies land: they slot in at the positions above.
+void HUDMessageLogic::GenerateRaceModeMessages(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    ScoringSystem* lpScoringSystem,
+    const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+    const InputBuffer::TakedownEventQueue* lpTakedownQueue,
+    EActiveRaceCarIndex lePlayerRaceCarIndex,
+    f32 lfTimeStep)
+{
+    // (GenerateLeaderMessages / GenerateFinisherMessage -- see the banner.)
+
+    GeneratePlayerCheckpointMessage();
+
+    // (GenerateRivalCheckpointMessage -- see the banner.)
+
+    if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_RACE)   // lwz 0x1C0 ; cmpwi 0
+    {
+        DetectCrashes(lpActiveRaceCarInterface, lpRaceCarCrashQueue);
+    }
+    else
+    {
+        DetectOnlineCrashes(lpActiveRaceCarInterface, lpRaceCarCrashQueue, lfTimeStep);
+        RemoveCrashingMessagesForTakendownPlayers(lpTakedownQueue);
+    }
+
+    // (GenerateFirstOrLastMessage / GenerateDistanceToFinishMessage -- see the banner.)
+
+    mbPlayerHasJustTriggeredCheckpoint = false;                          // stb 0, 0x201
+}
+
+// DWARF BrnHUDMessageLogic.h:150; inlined into GenerateRaceModeMessages on the X360:
+//   0x82399CB4  lbz r11, 0x201(r31) ; beq -> skip          mbPlayerHasJustTriggeredCheckpoint
+//   0x82399CC0  ld 0x1F0 -> std var+0x00                    mCurrentPlayerCheckpointID
+//   0x82399CD8  ld 0x1F8 -> std var+0x08                    mNextPlayerCheckpointID
+//   0x82399CE0  lbz 0x200 -> stb var+0x10                   mbIsLastCheckpoint
+//   0x82399CE8  AddEvent(var, 0xF9, 0x18)
+// The latch is NOT dropped here: GenerateRaceModeMessages drops it after its last generator.
+void HUDMessageLogic::GeneratePlayerCheckpointMessage()
+{
+    if (mbPlayerHasJustTriggeredCheckpoint)
+    {
+        GameStateModuleIO::HUDMessagePlayerReachesCheckpointAction lCheckpointAction;
+        lCheckpointAction.mThisLandmarkID          = mCurrentPlayerCheckpointID;
+        lCheckpointAction.mNextLandmarkID          = mNextPlayerCheckpointID;
+        lCheckpointAction.mbIsPenultimatedLandmark = mbIsLastCheckpoint;
+
+        // The typed overload: liSize == sizeof(HUDMessagePlayerReachesCheckpointAction) == 24 == `li r6, 0x18`.
+        mActionQueue.AddEvent(&lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT);
+    }
+}
+
+// X360 0x82394418 (DWARF BrnHUDMessageLogic.h:160 / .cpp:707).
+//   0x82394434  lwz r23, 8(r27)            the queue length, read ONCE before the loop
+//   0x82394468  bl GetEvent(i)             (BaseEventQueue<RaceCarCrashEvent>, 0x822ACAE0)
+//   0x82394474  ld / rldicl 32 / extrwi 14,8   the event's entity index == the crashed active slot
+//   0x8239446C  lwz 0x2858 ; cmpwi -1      the inlined GetPlayerActiveRaceCarIndex ("Player car
+//                                          index hasn't been set", :980); `cmpw ; beq` skips the player
+//   0x823944A8  the inlined GetRivalId(idx) (:824/:825) -> `ldx` maRivalIds[idx] @+0x2630
+//   0x8239450C  AddEvent(var, 0xFA, 0x10)  {+0 rival id, +8 index}
+// No primary-crash test (+0x38 is never read), no active or Showtime gate: every non-player crash
+// event of the frame becomes one record.
+void HUDMessageLogic::DetectCrashes(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue)
+{
+    const s32 liRaceCarCrashQueueLength = lpRaceCarCrashQueue->GetLength();
+
+    for (s32 liCrashedRaceCarQueueIndex = 0; liCrashedRaceCarQueueIndex < liRaceCarCrashQueueLength;
+         ++liCrashedRaceCarQueueIndex)
+    {
+        const BrnPhysics::Vehicle::RaceCarCrashEvent& lRaceCarCrashEvent =
+            lpRaceCarCrashQueue->GetEvent(liCrashedRaceCarQueueIndex);
+        const EActiveRaceCarIndex leCrashedCarIndex = static_cast<EActiveRaceCarIndex>(
+            lRaceCarCrashEvent.mRaceCarVolumeInstanceID.GetEntityIDEntityIndex());
+
+        if (leCrashedCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
+        {
+            GameStateModuleIO::HUDMessageXCrashesAction lCrashingEvent;
+            lCrashingEvent.mRivalID            = lpActiveRaceCarInterface->GetRivalId(leCrashedCarIndex);
+            lCrashingEvent.meRivalRaceCarIndex = leCrashedCarIndex;
+
+            // The typed overload: liSize == sizeof(HUDMessageXCrashesAction) == 16 == `li r6, 0x10`.
+            mActionQueue.AddEvent(&lCrashingEvent, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES);
+
+            // [DIAG] NOT IN THE X360 BINARY -- the `[hud-xcrash]` witness (BRN_MODEMGR_DIAG, first 20
+            // lines): proves the offline race arm dispatched this body and what it posted.
+            static const bool sbHudCrashDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+            if (sbHudCrashDiag && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static s32 siHudCrashLines = 0;
+                if (siHudCrashLines < 20)
+                {
+                    ++siHudCrashLines;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[hud-xcrash] action 250 posted: crashed slot " << static_cast<s32>(leCrashedCarIndex)
+                        << " (event " << liCrashedRaceCarQueueIndex << " of " << liRaceCarCrashQueueLength
+                        << ", mode " << static_cast<s32>(meCurrentGameModeType) << ", hud queue length "
+                        << mActionQueue.GetLength() << ")\n";
+                }
+            }
+        }
+    }
+}
+
+// X360 0x82394528 (DWARF BrnHUDMessageLogic.h:166 / .cpp:748).
+// First loop (queue length read ONCE, `lwz r24, 8(r26)` @0x82394558), for each non-player event:
+//   0x823945E0  bl ObjectPool::AllocateObject (this+0x110)
+//   0x823945E8  cmpwi 0 ; bge -> store, else assert "liAllocatedIndex >= 0" (:804) and skip
+//   0x8239465C  ldx maRivalIds[idx] (the inlined GetRivalId, :824/:825)
+//   0x82394670  std id, 0(obj) ; 0x82394684 stw idx, 0xC(obj) ; 0x82394690 stfs 1.5 (flt_82029F18), 8(obj)
+// Second loop, every slot j < 8 that IsObjectAllocated:
+//   0x82394728  lhzx 2*(idx+0x13C0) ; clrlwi 31    the inlined IsRaceCarActive (:854/:855)
+//               clear -> FreeObject(j) @0x82394818
+//   0x8239474C  fsubs (timer -= step) ; 0x8239475C fcmpu vs flt_82001CC0 (0.0) ; bge -> keep
+//   0x823947BC  lbzx at the SAME halfword address = its high byte, bit 0x0100 -- the inlined
+//               IsCarInShowtime (:938/:939); set -> skip the post
+//   0x8239480C  AddEvent({id, idx}, 0xFA, 0x10) ; then FreeObject(j)
+void HUDMessageLogic::DetectOnlineCrashes(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpRaceCarCrashQueue,
+    f32 lfSimTimeStep)
+{
+    const s32 liRaceCarCrashQueueLength = lpRaceCarCrashQueue->GetLength();
+
+    for (s32 liCrashedRaceCarQueueIndex = 0; liCrashedRaceCarQueueIndex < liRaceCarCrashQueueLength;
+         ++liCrashedRaceCarQueueIndex)
+    {
+        const BrnPhysics::Vehicle::RaceCarCrashEvent& lRaceCarCrashEvent =
+            lpRaceCarCrashQueue->GetEvent(liCrashedRaceCarQueueIndex);
+        const EActiveRaceCarIndex leCrashedCarIndex = static_cast<EActiveRaceCarIndex>(
+            lRaceCarCrashEvent.mRaceCarVolumeInstanceID.GetEntityIDEntityIndex());
+
+        if (leCrashedCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
+        {
+            const s32 liAllocatedIndex = mBufferedCrashingCars.AllocateObject();
+            CGS_ASSERT(liAllocatedIndex >= 0, "liAllocatedIndex >= 0");   // BrnHUDMessageLogic.cpp:804
+
+            // `bge` @0x823945EC: the failure arm branches past the stores to the loop tail
+            // (`b 0x82394694` @0x82394608), so a full pool drops the crash.
+            if (liAllocatedIndex >= 0)
+            {
+                mBufferedCrashingCars[liAllocatedIndex].mRivalID =
+                    lpActiveRaceCarInterface->GetRivalId(leCrashedCarIndex);
+                mBufferedCrashingCars[liAllocatedIndex].meActiveRaceCarIndex  = leCrashedCarIndex;
+                mBufferedCrashingCars[liAllocatedIndex].mfTimeUntilUnbuffered = KF_CRASH_MESSAGE_BUFFER_SECONDS;
+            }
+        }
+    }
+
+    for (s32 liIndex = 0; liIndex < KI_NUM_BUFFERED_CRASHING_CARS; ++liIndex)
+    {
+        if (!mBufferedCrashingCars.IsObjectAllocated(liIndex))
+        {
+            continue;
+        }
+
+        if (!lpActiveRaceCarInterface->IsRaceCarActive(mBufferedCrashingCars[liIndex].meActiveRaceCarIndex))
+        {
+            mBufferedCrashingCars.FreeObject(liIndex);
+            continue;
+        }
+
+        mBufferedCrashingCars[liIndex].mfTimeUntilUnbuffered -= lfSimTimeStep;
+        if (mBufferedCrashingCars[liIndex].mfTimeUntilUnbuffered < 0.0f)   // flt_82001CC0; fcmpu/bge
+        {
+            if (!lpActiveRaceCarInterface->IsCarInShowtime(mBufferedCrashingCars[liIndex].meActiveRaceCarIndex))
+            {
+                GameStateModuleIO::HUDMessageXCrashesAction lCrashingEvent;
+                lCrashingEvent.mRivalID            = mBufferedCrashingCars[liIndex].mRivalID;
+                lCrashingEvent.meRivalRaceCarIndex = mBufferedCrashingCars[liIndex].meActiveRaceCarIndex;
+                mActionQueue.AddEvent(&lCrashingEvent, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_CRASHES);
+            }
+            mBufferedCrashingCars.FreeObject(liIndex);
+        }
+    }
+}
+
+// X360 0x82366590 (DWARF BrnHUDMessageLogic.h:233 / .cpp:826).
+//   0x823665A4  lwz r11, 8(r27) -- and again @0x82366610 on every outer iteration: the length is
+//               re-read, not cached
+//   0x823665BC  bl GetEvent(i) (BaseEventQueue<TakedownEvent>, 0x822AC660) ; lwz r29, 4(r3)
+//               == TakedownEvent::meVictimIndex
+//   0x823665D0  for j < 8: IsObjectAllocated(j) ; lwz 0xC(obj) ; cmpw victim ; bne ->
+//               FreeObject(j) @0x82366600
+void HUDMessageLogic::RemoveCrashingMessagesForTakendownPlayers(const InputBuffer::TakedownEventQueue* lpTakedownQueue)
+{
+    for (s32 liEventIndex = 0; liEventIndex < lpTakedownQueue->GetLength(); ++liEventIndex)
+    {
+        const TakedownEvent* lpTakedownEvent = &lpTakedownQueue->GetEvent(liEventIndex);
+        const EActiveRaceCarIndex leVictimRaceCarIndex = lpTakedownEvent->meVictimIndex;
+
+        for (s32 liIndex = 0; liIndex < KI_NUM_BUFFERED_CRASHING_CARS; ++liIndex)
+        {
+            if (mBufferedCrashingCars.IsObjectAllocated(liIndex) &&
+                mBufferedCrashingCars[liIndex].meActiveRaceCarIndex == leVictimRaceCarIndex)
+            {
+                mBufferedCrashingCars.FreeObject(liIndex);
+            }
+        }
     }
 }
 

@@ -636,7 +636,19 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
     // creates, so it has no call site. mLastActiveRaceCarInterface (leg 1's own output) and the
     // ModeManager's public named accessors are real, so this leg takes them directly. THE
     // ARGUMENTS ARE THE DEVIATION, NOT THE BODY -- the console passes ten, the mounted body reads
-    // four, and BrnHUDMessageLogic.cpp names every dropped argument and every unmounted arm.
+    // seven, and BrnHUDMessageLogic.cpp names every dropped argument and every unmounted arm.
+    //
+    // [FX-GS 2026-09-23, crash-parity G11-D1/D2/D3] THE RACE ARM'S THREE INPUTS. The console's
+    // ModeManager::PostWorldUpdate passes r8 = the post-world crash queue (`bl 0x8231D170`
+    // @0x8234B0B8), r10 = its takedown queue (`mr r10, r16` @0x8234B0E4, gsm+249936) and [sp+0x5C]
+    // = mePlayerActiveRaceCarIndex (@0x8234B0D4). Here: the frame's crash queue this leg was handed
+    // (the world output's own, the queue ProcessPlayerCrashes reads above), the takedown cache's
+    // queue (the one PostWorldUpdateTakedownScoringBringUp reads above; still full at this point in
+    // the frame), and the ModeManager's own index. The two queue pointers are re-homed onto the
+    // scorer-side names by the same cast PostWorldUpdateTakedownScoringBringUp uses (identical
+    // EventQueue<T,8> bytes). Both are bound on every post-world tick of this build:
+    // BridgeWorldToGameState hands the queue as the address of a world-output member, and
+    // ConstructTakedownBringUp creates the takedown cache at boot.
     //
     // DELETE-WHEN a real PostWorldInputBuffer exists: this block collapses into
     // `mModeManager.PostWorldUpdate(lpPostWorldInput, lfDelta)` together with legs 1-3.
@@ -648,7 +660,10 @@ void GameStateModule::PostWorldUpdateStuntBringUp(
             &mLastActiveRaceCarInterface,
             lpModeManager->GetCurrentGameModeType(),
             lpModeManager->GetScoringSystem(),
-            lfDelta);
+            reinterpret_cast<const VehicleManagerOutputInterface::RaceCarCrashEventQueue*>(lpRaceCarCrashEventQueue),
+            reinterpret_cast<const InputBuffer::TakedownEventQueue*>(&mpTakedownCache->mTakedownEventQueue),
+            lfDelta,
+            lpModeManager->GetPlayerActiveRaceCarIndex());
     }
 
     // ARTIST PostWorldUpdate calls TriggerQueryManager after the mode and HUD updates.
