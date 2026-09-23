@@ -3350,6 +3350,16 @@ namespace
         static const bool sbOn = ( getenv( "BRN_TD_DIAG" ) != 0 );
         return sbOn;
     }
+
+    // [DIAG] BRN_RCEM_ACTION_DIAG -- NOT IN THE X360 BINARY (crash parity FX-RCEM3, 2026-09-23). One
+    // [rcem-action] line the first time each game-action id reaches HandleGameActions' switch, plus
+    // the outcome of the arms a live run cannot otherwise see (170's bar, 34's donut placement), so
+    // a run proves which arms were DISPATCHED. Opt-in; silent otherwise.
+    bool GameActionDiagEnabled()
+    {
+        static const bool sbOn = ( getenv( "BRN_RCEM_ACTION_DIAG" ) != 0 );
+        return sbOn;
+    }
 }
 
 void RaceCarEntityModule::HandleGameActions(
@@ -3374,6 +3384,18 @@ void RaceCarEntityModule::HandleGameActions(
     s32 liType = lpQueue->GetFirstEvent( &lpEvent, &liSize );
     while( lpEvent != 0 )
     {
+        // [DIAG] BRN_RCEM_ACTION_DIAG -- see GameActionDiagEnabled. NOT IN THE X360 BINARY.
+        if( GameActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 && liType >= 0 && liType < 512 )
+        {
+            static u8 sauSeenActionIds[512] = {};
+            if( sauSeenActionIds[liType] == 0 )
+            {
+                sauSeenActionIds[liType] = 1;
+                *CgsDev::Log::gpDebugPrint << "[rcem-action] id " << liType << " size " << liSize
+                                           << " reached HandleGameActions\n";
+            }
+        }
+
         switch( liType )
         {
         case BrnGameState::GameStateModuleIO::E_ACTION_CAR_SELECTION_REQUEST_STREAMING:
@@ -4384,6 +4406,25 @@ void RaceCarEntityModule::HandleGameActions(
 
         default:
             break;   // [FLAG PC bring-up] see the banner
+        }
+
+        // [DIAG] BRN_RCEM_ACTION_DIAG -- the outcome of two arms. NOT IN THE X360 BINARY.
+        if( GameActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            if( liType == KI_ACTION_SET_BOOST )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[rcem-action] 170 SetBoost -> player bar "
+                    << mBoostManager.GetBoostStrategy()->GetBoostAmount() << " / "
+                    << mBoostManager.GetBoostStrategy()->GetMaxBoost() << "\n";
+            }
+            else if( liType == BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE
+                     && mbPlayerDonutsOnEventStart )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[rcem-action] 34 donut start -> player RequestPlaceOnTrack at "
+                    << KF_MIN_STUNT_RESET_SPEED << " m/s\n";
+            }
         }
 
         liType = lpQueue->GetNextEvent( lpEvent, &lpEvent, &liSize );
