@@ -103,7 +103,7 @@ public:
         // X360 0x82794D08. Reached by the wired WorldModule::Construct @0x827CF540 fleet cascade.
         void Construct() override;
         // ---- ADDITIVE (attested by WorldModule::DestructWorld @0x827BD0F0) ----
-        // Still a boot gate in WorldLinkStubs.cpp -- see the note there.
+        // X360 0x8276E380. Bodied in BrnAIModule.cpp (crash parity G04-D7); teardown-only.
         void Destruct() override;
         // ---- ADDITIVE (attested by WorldModule::ReleaseWorld @0x827BCE58) ----
         // Still a boot gate in WorldLinkStubs.cpp -- see the note there.

@@ -194,6 +194,24 @@ def checks_camera(tree):
            0 <= player < copy < ageing)
 
 
+STUBS = "src/GameSource/World/WorldLinkStubs.cpp"
+
+
+def checks_destruct(tree):
+    destruct = optional_body(tree.read(AIMODULE), "void AIModule::Destruct()")
+    # G04-D7: 0x8276E398 base Destruct ; 0x8276E3A4 Clear(this+0x47FB0) ; 0x8276E3BC vtbl+0xC on
+    #         this+0x483D8 ; 0x8276E40C ContactSpyInterface::Construct(this+0x4EB68)
+    sequence = ["ModuleSingleBuffered::Destruct()", "mResourceReceiverQueue.Clear()",
+                "mRouteMapModule.Destruct()", "mContactSpyInterface.Construct()"]
+    positions = [destruct.find(item) for item in sequence]
+    yield ("G04-D7 AIModule::Destruct is bodied in BrnAIModule.cpp (0x8276E380)", destruct != "")
+    yield ("G04-D7 ...base Destruct, receiver-queue Clear, route-map Destruct, contact-spy Construct, in order",
+           all(p >= 0 for p in positions) and positions == sorted(positions))
+    stubs = code_only(tree.read(STUBS))
+    yield ("G04-D7 the one-shot logging stub is gone from WorldLinkStubs.cpp",
+           "BrnAI::AIModule::Destruct()" not in stubs)
+
+
 def checks(tree):
     """Yield (name, passed) pairs."""
     yield from checks_routes(tree)
@@ -201,6 +219,7 @@ def checks(tree):
     yield from checks_prepare(tree)
     yield from checks_paused(tree)
     yield from checks_camera(tree)
+    yield from checks_destruct(tree)
     events = tree.read(EVENTS)
     mode_start = code_only(function_body(events, "void AIModule::OnModeStart("))
     # G04-D2: 0x82791DF4 lbz 0x94 ; cntlzw ; extrwi -> stbx 0x4EB7C and 0x82791E24 lbz 0x94 -> stbx 0x4EB7D
