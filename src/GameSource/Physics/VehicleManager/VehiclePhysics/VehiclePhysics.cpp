@@ -7346,9 +7346,10 @@ namespace Vehicle
 
     // ---- [wheel-bpv] PC bring-up instrument -- NOT IN THE X360 BINARY -----------------------------
     // OPT-IN (BRN_WHEEL_BPV_PROBE=1). UpdateWheels prints, for the PLAYER car, the first 40 AIRBORNE
-    // wheels' mBodyPointVelocity as written by CalculateBodyVelocityAtWheelContact, as the lever arm
-    // it implies: |mBodyPointVelocity - mLinearVelocity| / |mAngularVelocity| (the component of r
-    // perpendicular to omega). G54-D1: the console's airborne arm is the body-local wheel position
+    // wheels of a ROTATING body (|omega| > 0.05) -- mBodyPointVelocity as written by
+    // CalculateBodyVelocityAtWheelContact, as the lever arm it implies:
+    // |mBodyPointVelocity - mLinearVelocity| / |mAngularVelocity| (the component of r perpendicular
+    // to omega). G54-D1: the console's airborne arm is the body-local wheel position
     // rotated (a body-scale arm, ~1-3 m); the old streamed-minus-Pos() arm implied |worldPos|.
     namespace
     {
@@ -7493,13 +7494,14 @@ namespace Vehicle
         if (WheelBpvProbeArmed() && lpControls->GetType() == E_DRIVER_TYPE_PLAYER)
         {
             static u32 suWitnessLines = 0u;
+            const f32 lfOmega = vpu::Magnitude(mAngularVelocity);
             for (s32 liW = 0; liW < eNumDrivenWheels && suWitnessLines < 40u; ++liW)
             {
                 const Wheel& lrWheel = maWheels[liW];
-                if (lrWheel.GetRoadContact().mbIsOnGround)
+                // only a ROTATING body separates the two arms (at omega = 0 both give bpv = v)
+                if (lrWheel.GetRoadContact().mbIsOnGround || !(lfOmega > 0.05f))
                     continue;
                 ++suWitnessLines;
-                const f32 lfOmega = vpu::Magnitude(mAngularVelocity);
                 const f32 lfRelative =
                     vpu::Magnitude(vpu::Subtract(lrWheel.mBodyPointVelocity, mLinearVelocity));
                 *CgsDev::Log::gpDebugPrint
@@ -7507,7 +7509,7 @@ namespace Vehicle
                     << " w " << liW
                     << " |omega| " << lfOmega
                     << " |bpv-v| " << lfRelative
-                    << " arm " << ((lfOmega > 0.05f) ? (lfRelative / lfOmega) : -1.0f)
+                    << " arm " << (lfRelative / lfOmega)
                     << " |pos| " << vpu::Magnitude(mTransform.wAxis)
                     << "\n";
             }
