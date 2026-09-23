@@ -124,11 +124,10 @@ namespace BrnGui
     const CgsGui::sResourceTuple ImageGalleryState::KA_RESOURCES_TO_LOAD[1] =
         { { 164, CgsGui::E_GUI_RESOURCETYPE_APT } };
 
-    // .rdata @0x82F27318 / count @0x82066898
-    const CgsGui::sResourceTuple OfflineRivalShutdown::maResourcesToLoad[] =
-        { { 224, CgsGui::E_GUI_RESOURCETYPE_APT }, { 59, CgsGui::E_GUI_RESOURCETYPE_APT },
-          {  29, CgsGui::E_GUI_RESOURCETYPE_APT }, { 55, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 OfflineRivalShutdown::muNumResourcesToLoad = 4;
+    // OfflineRivalShutdown's pair is NOT here any more: the class got its own TU
+    // (BrnOfflineRivalShutdown.cpp, crash parity G13-X5 2026-09-23), which defines both
+    // (same .rdata @0x82F27318 / count @0x82066898, same four { id, APT } entries). Two
+    // definitions is LNK2005, so the stub goes.
 
     // .rdata @0x82F27338 / count @0x82066928
     const CgsGui::sResourceTuple OfflineTrophyCarUnlock::maResourcesToLoad[] =
