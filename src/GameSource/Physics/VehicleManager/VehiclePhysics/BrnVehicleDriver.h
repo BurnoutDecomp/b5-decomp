@@ -50,9 +50,10 @@ namespace Vehicle
         // eight-car array and the spare mPlayerAiDriver) and from PhysicalTrafficManager::Prepare.
         void Construct();
 
-        // ---- declare-only DWARF surface (bodies belong to this class's own future slices) ------
-        // Left DECLARED-ONLY on purpose: a declared non-virtual with no definition costs nothing
-        // until something calls it, and none of these has a recovered body yet.
+        // ---- the DWARF surface -------------------------------------------------------------------
+        // Prepare, UpdateVehicle, StartCatchupInterpolation and ClearControls have bodies in
+        // BrnVehicleDriver.cpp. The rest are left DECLARED-ONLY on purpose: a declared non-virtual
+        // with no definition costs nothing until something calls it.
         void Destruct();
         bool Prepare();
         bool Release();
