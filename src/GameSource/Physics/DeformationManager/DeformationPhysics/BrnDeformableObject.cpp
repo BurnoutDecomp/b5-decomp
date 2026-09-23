@@ -209,8 +209,14 @@ namespace Deformation
                 lLinearVelocity.y = lLinearVelocity.y >= 0.0f ? lLinearVelocity.y : 0.0f;
                 lThisBody.SetLinearVelocity(lLinearVelocity);
 
+                // 0x82625008..0x82625040: one LCG step, (old seed hi % 3 == 0), then
+                // `lwz r8,0x30(contact) ; stb r11,0x672D(r8)` -- the TRAFFIC car's
+                // mbForceWheelsToDetach, written 0 or 1 every time (an assignment, not an OR).
+                // Its next crashing UpdateWheels twists all four wheels and sheds them on the pass
+                // after. (Crash parity G19-D1, 2026-09-23: this stored into an invented trailing
+                // byte nothing read, so a Showtime bounce never stripped a traffic car's wheels.)
                 const u32 luDraw = const_cast<CgsNumeric::Random&>(lRandom).RandomUInt();
-                lOtherCar.SetBounceRandomParity((luDraw % 3u) == 0u);
+                lOtherCar.mbForceWheelsToDetach = ((luDraw % 3u) == 0u);
             }
         }
         else

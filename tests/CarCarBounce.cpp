@@ -57,6 +57,7 @@ struct ShapeObject
     ShapeVehicle vehicle;
     EntityId id{};
     bool bounced = false, parity = false;
+    bool mbForceWheelsToDetach = false;   // DeformableObject +26413 (G19-D1: the console's stb 0x672D target)
     ImpulsePasser mImpulsePasser{};
     ImpulseParams receivedParams{};
     Contact receivedContact;
@@ -82,7 +83,7 @@ struct ShapeObject
     u8 GetGameModeByte() const { return static_cast<u8>(id.muValue >> 24); }
     bool HasBouncedThisFrame() const { return bounced; }
     void SetHasBouncedThisFrame(bool value) { bounced = value; }
-    void SetBounceRandomParity(bool value) { parity = value; }
+    void SetBounceRandomParity(bool value) { parity = value; }   // kept only so a pre-fix snapshot compiles
     Vector3 Shape(ShapeObject& lOtherCar, Vector3 lImpulse, VecFloat lvfIteration,
                   const Contact& lContact, const CgsNumeric::Random& lRandom)
     {
@@ -127,7 +128,20 @@ int main()
         Check(player.vehicle.reports==1 && player.vehicle.reportedCar &&
             player.vehicle.reportedGood==(impulse.x*impulse.x+impulse.y*impulse.y+impulse.z*impulse.z>=2000000),"bounce report and original stress");
         Check(random.muSeed==seed*CgsNumeric::KU_RANDOM_MULTIPLIER+1 &&
-            traffic.parity==((u32(seed>>32)%3)==0),"one original RNG draw and traffic parity");
+            traffic.mbForceWheelsToDetach==((u32(seed>>32)%3)==0),
+            "one original RNG draw arms the traffic car's mbForceWheelsToDetach (stb 0x672D)");
+    }
+    // G19-D1: the latch is ASSIGNED every bounce (stb of 0/1), not OR-ed: a draw with hi % 3 != 0
+    // clears a latch left armed.
+    {
+        ShapeObject player, traffic;
+        player.id.muValue=0x01000400; traffic.id.muValue=0x02000800;
+        player.vehicle.showtime=true;
+        player.vehicle.mass={1500,1500,1500,1500}; traffic.vehicle.mass={1500,1500,1500,1500};
+        traffic.mbForceWheelsToDetach=true;
+        CgsNumeric::Random random{}; random.muSeed=0x1234567900000001ull;   // hi % 3 == 1
+        player.Shape(traffic,Vector3{100,-200,300,40},{0,0,0,0},contact,random);
+        Check(!traffic.mbForceWheelsToDetach,"a non-multiple-of-3 draw clears the force-detach latch");
     }
     // Normal race-car hits retain iteration scaling; traffic's secondary bounce gets x30.
     for (bool showtime : {false,true}) for (unsigned owner : {1u,2u})

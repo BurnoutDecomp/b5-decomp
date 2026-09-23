@@ -176,7 +176,8 @@ namespace Deformation
 
         // Per-frame latches the asm clears (+26417 region) -> the reconstructed bounce/parity flags.
         mbHasBouncedThisFrame = 0u;
-        mbBounceRandomParity  = 0u;
+        // (no +26413 clear here: console ClearVariables @0x82608D58 never touches mbForceWheelsToDetach;
+        //  the only console clear is ResetDeformation's @0x8263A63C, below.)
 
         // Per-sensor state reset across the 20 embedded sensors (asm: the 20-iteration stride-432 loop
         // that zeroes each sensor's accumulated impulse/spy and seeds the 100.0 default). FLAG: the
@@ -1066,8 +1067,9 @@ namespace Deformation
         // were minted for the ApplyCarCarImpulse slice when +26413/+26414 "had no named member").
         // One console byte, two PC names -- so clearing only the real member would leave the bounce
         // readers on a stale copy. Both halves are cleared until the fork is retired.
-        // DELETE-WHEN the bounce slice is re-read against mbForceWheelsToDetach/mbShowtimeShunting.
-        mbBounceRandomParity        = 0u;
+        // DELETE-WHEN the bounce slice is re-read against mbShowtimeShunting. (The +26413 half of the
+        // fork, mbBounceRandomParity, was retired 2026-09-23: ApplyCarCarImpulse writes the real
+        // mbForceWheelsToDetach now, crash parity G19-D1.)
         mbHasBouncedThisFrame       = 0u;
 
         meAbsorptionSet              = E_ABSORPTIONSET_NORMAL;   // asm: +26460 = 0 (the absorption set slot)

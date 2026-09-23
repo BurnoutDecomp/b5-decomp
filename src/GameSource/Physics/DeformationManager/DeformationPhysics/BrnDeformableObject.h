@@ -31,7 +31,8 @@
 //       (mbResetDeformationNextUpdate region is unrelated; the bounce-this-frame latch the asm pokes
 //       at +26414 has no separately-named DWARF member, so it is retained as the reconstructed
 //       mbHasBouncedThisFrame -- FLAG).
-//   * SetBounceRandomParity -> reconstructed mbBounceRandomParity (asm +26413; no DWARF name) -- FLAG.
+//   * (retired 2026-09-23) SetBounceRandomParity / mbBounceRandomParity: the console byte it stood in
+//       for is +26413 == the DWARF mbForceWheelsToDetach; ApplyCarCarImpulse now writes that member.
 // The reconstructed bounce members are appended AFTER the DWARF sequence (clearly flagged) so they do
 // not perturb the recovered member order.
 
@@ -487,11 +488,11 @@ namespace Deformation
         u8 GetGameModeByte() const { return static_cast<u8>(mu32GameModeState >> 24); }
 
         // Cross-car bounce flag mutators (named-member writes -- no raw-offset pokes). FLAG: backed by
-        // the reconstructed mbHasBouncedThisFrame / mbBounceRandomParity members (asm +26414 / +26413;
-        // no separately-named DWARF members) appended below.
+        // the reconstructed mbHasBouncedThisFrame member (asm +26414, which the DWARF order names
+        // mbShowtimeShunting) appended below. Its +26413 twin was retired 2026-09-23 (G19-D1): that
+        // byte is mbForceWheelsToDetach and is now written directly.
         void SetHasBouncedThisFrame(bool lb) { mbHasBouncedThisFrame = lb ? 1u : 0u; }
         bool HasBouncedThisFrame() const     { return mbHasBouncedThisFrame != 0u; }
-        void SetBounceRandomParity(bool lb)  { mbBounceRandomParity = lb ? 1u : 0u; }
 
         // =========================================================================================
         // Debug-visualiser accessors (for BrnPhysics::Deformation::DeformationDebugComponent).
@@ -681,7 +682,6 @@ namespace Deformation
         //   That is its own wave with its own evidence. ⚠️ Until then do NOT "clean this up" by
         //   deleting the member: the three readers would silently rebind to a different field.
         u32 mu32GameModeState;     // asm +26392 -- SEE THE FLAG ABOVE: this offset is mGlobalEntityId
-        u8  mbBounceRandomParity;  // asm +26413 -- double-bounce random parity flag
         u8  mbHasBouncedThisFrame; // asm +26414 -- bounced-this-frame latch (double-bounce damp gate)
 
     private:
