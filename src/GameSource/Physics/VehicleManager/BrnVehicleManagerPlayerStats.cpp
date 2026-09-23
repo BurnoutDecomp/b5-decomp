@@ -2,6 +2,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"  // RaceCarPhysics::SetPlayerVehicleInShowtime (declare-only callee)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint / gxMessageFilterFlags (HIDE_ONLINE lines)
+#include "GameSource/GameState/BrnGameActions.h"                               // Prepare/StartPlaying/DriveThruJunkYard action payloads
 
 #include <cstddef>  // offsetof (layout asserts)
 #include <cstring>  // std::memcpy (asm reinterprets a stat word's bit pattern as int / float)
@@ -450,6 +452,128 @@ namespace Vehicle
     {
         mbImpactTime                = false;   // asm: stbx 0 @ +172304
         mbAftertouchIsForceAdditive = false;   // asm: stbx 0 @ +172314
+    }
+
+    // ===============================================================================================
+    // ADDED 2026-09-23 (crash-parity FX-VMNET, G40-D2 / G43-D2) -- the three post-scene game-action
+    // leaves. PhysicsModule::HandleGameActionsPostScene @0x825A70C0 calls each with the action
+    // payload in r4 (`mr r4, r31`); before this wave its arms 23/34/99 only logged a deferral and
+    // the two HIDE_ONLINE latches below were never written after VehicleManager::Construct.
+    //
+    // WHAT THE LATCHES FEED (so the next reader need not rediscover it):
+    //   mbInOnlineGameModeStartLine (+0x2A11E) -- read ONLY by ProcessCreateEvents @0x826175B0: a
+    //       NETWORK race car created while it is set is NOT hidden on creation (image scan of every
+    //       `ori rX,rY,0xA11E`: 0x825B5828 set here, 0x825B58D0 cleared here, 0x826175B0 the read,
+    //       0x8263C63C the Construct seed -- nothing else).
+    //   mbPlayerCarInJunkYard (+0x2A11F) -- read ONLY by EndVehicleContactGeneration @0x8261B3E4:
+    //       holds a hidden NETWORK car hidden while the player is in a junkyard.
+    // Both readers act on E_RACE_CAR_TYPE_NETWORK cars only, so single player observes nothing
+    // but the HIDE_ONLINE log lines (gxMessageFilterFlags bit 0, which the PC build keeps set).
+    // ===============================================================================================
+
+    // -------------------------------------------------------------------------------------------
+    // OnPrepareGameMode  @0x825B5770  (50 insns; an ARTIST export HOLE -- read with ppcdis)
+    //
+    //   0x825B5788  cmplwi r30, 0 -> assert "lpPrepareModeAction != NULL"        (li r5,0x2719 = :10009)
+    //   0x825B57B0  addic. r11, r30, 0x30 -> assert
+    //               "lpPrepareModeAction->GetGameModeParams() != NULL"            (li r5,0x271A = :10010)
+    //   0x825B57D4  lwz r11, 0x178(r30)  -- GetGameModeParams()->GetGameModeType() (0x30 + 0x148)
+    //   0x825B57D8  cmpwi 0xF / cmpwi 0x10 -> return   (E_MODE_ONLINE_FREE_BURN_LOBBY / _SHOWTIME)
+    //   0x825B57E8  gxMessageFilterFlags (0x82F31908) & 1 gates the two-part log ONLY:
+    //               0x82091358 "HIDE_ONLINE: " + 0x82091300 "Just prepared an online game mode
+    //               (start forcing race cars to be visible when created)\n"
+    //   0x825B5820  lis 2 ; li r10,1 ; ori 0xA11E ; stbx -> mbInOnlineGameModeStartLine = true
+    // The test is only "not the lobby and not online Showtime" -- the console sets the latch for
+    // every other mode, offline ones included. Reproduced as written.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::OnPrepareGameMode(
+            const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPrepareModeAction)
+    {
+        CGS_ASSERT(lpPrepareModeAction != NULL, "lpPrepareModeAction != NULL");            // :10009
+        CGS_ASSERT(lpPrepareModeAction->GetGameModeParams() != NULL,
+                   "lpPrepareModeAction->GetGameModeParams() != NULL");                    // :10010
+
+        const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
+            lpPrepareModeAction->GetGameModeParams()->GetGameModeType();                   // lwz 0x178
+        if (leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
+            leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: "
+                    << "Just prepared an online game mode (start forcing race cars to be visible when created)\n";
+            }
+            mbInOnlineGameModeStartLine = true;                                            // stbx 1 @ +0x2A11E
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // OnStartGameMode  @0x825B5838  (46 insns)
+    //
+    //   0x825B5854  cmplwi r31, 0 -> assert "lpStartModeAction != NULL"          (li r5,0x2736 = :10038)
+    //   0x825B587C  lwz r11, 0(r31)      -- StartPlayingModeAction::meGameMode
+    //   0x825B5880  cmpwi 0xF / cmpwi 0x10 -> return
+    //   0x825B5890  gxMessageFilterFlags & 1 gates the log ONLY: 0x82091358 "HIDE_ONLINE: " +
+    //               0x820913B8 "Just started an online game mode (stop forcing race cars to be
+    //               visible when created)\n"
+    //   0x825B58C8  lis 2 ; li r10,0 ; ori 0xA11E ; stbx -> mbInOnlineGameModeStartLine = false
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::OnStartGameMode(
+            const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStartModeAction)
+    {
+        CGS_ASSERT(lpStartModeAction != NULL, "lpStartModeAction != NULL");                // :10038
+
+        const BrnGameState::GameStateModuleIO::EGameModeType leGameModeType =
+            lpStartModeAction->meGameMode;                                                 // lwz 0(r31)
+        if (leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
+            leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: "
+                    << "Just started an online game mode (stop forcing race cars to be visible when created)\n";
+            }
+            mbInOnlineGameModeStartLine = false;                                           // stbx 0 @ +0x2A11E
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // OnJunkYardDriveThru  @0x825EB050  (60 insns)
+    //
+    //   0x825EB06C  cmplwi r31, 0 -> assert "lpJunkYardAction != NULL"           (li r5,0x2752 = :10066)
+    //   0x825EB094  lbz r11, 0(r31)      -- the entry byte (DWARF JunkYardDriveThruAction::mbOnEntry;
+    //               this tree's DriveThruJunkYardAction::mbIsInJunkYard)
+    //   entering:   gxMessageFilterFlags & 1 -> "HIDE_ONLINE: " + 0x82097264 "Player entered a
+    //               junkyard, so making all network cars hidden\n"; then 0x825EB0E0
+    //               `li r4,1 ; bl SetAllNetworkRaceCarsHidden` and r10 = 1
+    //   leaving:    gxMessageFilterFlags & 1 -> "HIDE_ONLINE: " + 0x82097218 "Player exitted a
+    //               junkyard, so can start making network cars visible again\n"; r10 = 0
+    //   0x825EB11C  stbx r10 -> +0x2A11F == mbPlayerCarInJunkYard -- AFTER the hide call.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::OnJunkYardDriveThru(
+            const BrnGameState::GameStateModuleIO::DriveThruJunkYardAction* lpJunkYardAction)
+    {
+        CGS_ASSERT(lpJunkYardAction != NULL, "lpJunkYardAction != NULL");                  // :10066
+
+        if (lpJunkYardAction->mbIsInJunkYard)                                              // lbz 0(r31)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: "
+                    << "Player entered a junkyard, so making all network cars hidden\n";
+            }
+            SetAllNetworkRaceCarsHidden(1);                                                // 0x825EB0E0
+            mbPlayerCarInJunkYard = true;                                                  // stbx 1 @ +0x2A11F
+        }
+        else
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: "
+                    << "Player exitted a junkyard, so can start making network cars visible again\n";
+            }
+            mbPlayerCarInJunkYard = false;                                                 // stbx 0 @ +0x2A11F
+        }
     }
 }
 }

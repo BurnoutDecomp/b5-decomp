@@ -126,6 +126,14 @@ namespace BrnPhysics { namespace Deformation { class DeformationOutputInterface;
 // ReadUpdatedBodyProperties' queue element (CgsPhysicsSimulationIO_Events.h, class key `struct`).
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
 namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }
+// The game-action payloads the post-scene / pre-scene physics action arms hand over BY POINTER
+// (OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru). Class key `struct`, matching
+// BrnGameActions.h; a pointer-only use, so the 3000-line action header stays out of this one.
+namespace BrnGameState { namespace GameStateModuleIO {
+    struct PrepareForModeAction;
+    struct StartPlayingModeAction;
+    struct DriveThruJunkYardAction;
+} }
 
 namespace BrnPhysics
 {
@@ -1543,6 +1551,24 @@ namespace Vehicle
 
         // @0x825B5750 (8 insns). mbImpactTime = false ; mbAftertouchIsForceAdditive = false.
         void EndImpactTime();
+
+        // ==========================================================================================
+        // ADDED 2026-09-23 (crash-parity FX-VMNET, G40-D2 / G43-D2). The three VehicleManager
+        // leaves PhysicsModule::HandleGameActionsPostScene @0x825A70C0 calls out of its switch
+        // (index = action - 0x17), every one as `mr r4, r31 (the payload) ; addi r3, r28, 0x4AA0
+        // (mVehicleManager) ; bl`:
+        //     jump-table case 0  (action 23) @0x825A7294 -> OnPrepareGameMode
+        //     jump-table case 11 (action 34) @0x825A72A4 -> OnStartGameMode
+        //     jump-table case 76 (action 99) @0x825A72B4 -> OnJunkYardDriveThru
+        // DWARF BrnVehicleManager.h:684/689/694 (cpp :9998/:10026/:10053). The DWARF names the
+        // junkyard payload `JunkYardDriveThruAction`; this tree homes that record (BrnGameActions.h)
+        // as DriveThruJunkYardAction, and the declaration follows the tree's home.
+        // They drive the two HIDE_ONLINE latches EndVehicleContactGeneration and
+        // ProcessCreateEvents read. Bodies: BrnVehicleManagerPlayerStats.cpp.
+        // ==========================================================================================
+        void OnPrepareGameMode(const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPrepareModeAction);    // @0x825B5770
+        void OnStartGameMode(const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStartModeAction);      // @0x825B5838
+        void OnJunkYardDriveThru(const BrnGameState::GameStateModuleIO::DriveThruJunkYardAction* lpJunkYardAction);  // @0x825EB050
 
         // ==========================================================================================
         // DoCrashPrediction @0x82645FE0 (814 insns) -- BODIED 2026-08-22 (wave T3 r2 owner B fix
