@@ -9,13 +9,14 @@
 // file itself (references/DecFIGS/dwarfdump/GameSource/GameState/SharedIO/
 // BrnGameStateToGuiIOInterfaces.cpp), so this is the file's real home rather than a convenience
 // seat. Only the members the mounted event core actually calls are reconstructed here; the
-// other seven publishers, Clear() and the ten queue/index accessors stay declared-only in the
+// other six publishers, Clear() and the ten queue/index accessors stay declared-only in the
 // header until they have live callers to check them against.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   AddFinishedRaceEvent  @ 0x8236EA60
 //   Construct             @ 0x82379908   (added 2026-08-27, stunt-races frontier round 2 -- see D2)
 //   AddDirtyTrickEnding   (no own body; inlined into PaybackManager::ProcessDirtyTrickEventQueue)
+//   AddDirtyTrickTriggered (no own body; inlined into PaybackManager::HandleTriggeringPayback)
 // (the interface's remaining out-of-line X360 symbol, AppendRaceCarCrashes @0x82379980, is NOT
 // reconstructed here -- it is not an unresolved external today and it reaches the opaque
 // trailing crash queue.)
@@ -180,6 +181,30 @@ void GameStateToGuiInterface::AddDirtyTrickEnding(::EActiveRaceCarIndex leAggres
     lEvent.mbSurvived                    = lbSurvived;    // record +0xC
 
     mDirtyTrickEndingQueue.AddEvent(lEvent);              // this + 0x7C
+}
+
+// -----------------------------------------------------------------------------
+// AddDirtyTrickTriggered (DWARF BrnGameStateToGuiIOInterfaces.h:83) -- publish "a dirty trick was
+// triggered" to the GUI. [FX-GS 2026-09-23, crash-parity G12-D2] No out-of-line console body:
+// PaybackManager::HandleTriggeringPayback @0x82397C08 inlines it at 0x82397C58..0x82397C74:
+//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
+//     addi r3, r3, 0x40          ; mDirtyTrickTriggeredQueue
+//     stw  r27, var_48           ; aggressor  -> record +0x0
+//     stw  r28, var_44           ; victim     -> record +0x4
+//     stw  r29, var_40           ; trick type -> record +0x8
+//     bl   GameStateToGuiTriggeredDirtyTrick AddEvent 0x82368940   (a 12-byte copy, length++)
+// The PS3 twin (DecFIGS 0x2592B8, PaybackManager::DirtyTrickTriggered) calls this member by name.
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::AddDirtyTrickTriggered(::EActiveRaceCarIndex leAggressor,
+                                                     ::EActiveRaceCarIndex leVictim,
+                                                     BrnNetwork::EPaybackType leTrickType)
+{
+    GameStateToGuiTriggeredDirtyTrick lEvent;
+    lEvent.meAggressorActiveRaceCarIndex = leAggressor;   // record +0x0
+    lEvent.meVictimActiveRaceCarIndex    = leVictim;      // record +0x4
+    lEvent.meTrickType                   = leTrickType;   // record +0x8
+
+    mDirtyTrickTriggeredQueue.AddEvent(lEvent);           // this + 0x40
 }
 
 }

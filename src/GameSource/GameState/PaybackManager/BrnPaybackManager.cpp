@@ -2,11 +2,17 @@
 // b5-decomp/src/GameSource/GameState/PaybackManager/BrnPaybackManager.cpp
 //
 // The online payback / dirty-trick manager. Reconstructed from BURNOUT_X360_ARTIST.XEX
-// (semantic parity, not byte-matching). Eleven of the manager's functions live here; the
-// remaining declared members (Prepare/Release/Destruct/OnRoundStart/the Handle* helpers/
-// DirtyTrick{Awarded,Triggered,Ending}/Show*/StartCountdown/IsCountdownComplete/RemoveCountdown/
-// the victim-side ChangeState/UpdateFSMTimers/SetDirtyTrickButtonState/SetTimerInterface) are
-// other passes -- they are called by name here and trap-stub linked.
+// (semantic parity, not byte-matching). The manager's functions that live here are listed at
+// each body; the remaining declared members (Prepare/Release/OnRoundStart/
+// HandleWaitingToAwardPayback/HandleAwardingPayback/HandleReceivingPayback/DirtyTrickAwarded/
+// ShowDTAvailableHudNotification/StartCountdown/UpdateFSMTimers/SetDirtyTrickButtonState/
+// SetTimerInterface) have no body in the tree yet and no caller here.
+//
+// [FX-GS crash-parity 2026-09-23] ResetState + Destruct (G12-D12), the three victim-side arms
+// HandleActivePayback / HandleCrashDueToPayback / HandleSurvivingPayback (G12-D8/D9/D10) with
+// the X360-inlined helpers they are written through (the victim ChangeState, IsCountdownComplete,
+// RemoveCountdown, DirtyTrickEnding), and HandleTriggeringPayback's GUI record through
+// DirtyTrickTriggered (G12-D2).
 //
 // Source-of-truth: X360 ASM (behaviour + calling convention) > DecFIGS DWARF (shape) > none.
 // ===================================================================================
@@ -37,6 +43,18 @@ namespace BrnGameState
         // output-buffer GUI/action queue (VariableEventQueue<13312,16>) tags
         const s32 KI_GUI_EVENT_HAVE_PAYBACK         = 212; // 0xD4, 1-byte bool payload
         const s32 KI_GUI_EVENT_DT_ENDED_ON_YOU      = 217; // 0xD9, 8-byte {aggressor,victim} payload
+        // PaybackOverAction (DWARF name, AddGameAction<PaybackOverAction> in both victim end arms):
+        // `li r5,0xD8 ; li r6,1` @0x82397E80 (HandleCrashDueToPayback) and @0x82397FA0
+        // (HandleSurvivingPayback) -- the same id and size in both.
+        const s32 KI_ACTION_PAYBACK_OVER            = 216; // 0xD8, 1-byte payload
+
+        // The two terminal dirty-trick statuses the victim arms broadcast. BrnNetwork::EDirtyTrickStatus's
+        // shared home names only E_DIRTY_TRICK_NONE, so the X360 immediates are named here (the PS3
+        // DecFIGS twins spell them E_DIRTY_TRICK_STATUS_SURVIVED / _CRASHED).
+        const BrnNetwork::EDirtyTrickStatus KE_DIRTY_TRICK_STATUS_SURVIVED =
+            static_cast<BrnNetwork::EDirtyTrickStatus>(3);   // `li r7,3` @0x82397F34
+        const BrnNetwork::EDirtyTrickStatus KE_DIRTY_TRICK_STATUS_CRASHED  =
+            static_cast<BrnNetwork::EDirtyTrickStatus>(4);   // `li r7,4` @0x82397E14
 
         // A "payback HUD element shown/hidden" flag record (the type-176 s32 payload). The X360
         // posts an s32 0/1 toggle; modelled as a named POD so the queue write is not a bare int.
@@ -63,6 +81,14 @@ namespace BrnGameState
         struct PaybackCountdownEvent : public CgsModule::Event
         {
             f32 mfRemaining;
+        };
+
+        // The type-216 record (PaybackOverAction). The console posts a one-byte stack local it never
+        // writes (`addi r4, r1, var_50` with no store to var_50 in either victim end arm): the type id
+        // carries the whole meaning, so the byte stays uninitialised here too.
+        struct PaybackOverAction : public CgsModule::Event
+        {
+            u8 muUnused;
         };
 
     }
@@ -147,6 +173,68 @@ namespace BrnGameState
     }
 
     // -----------------------------------------------------------------------------------
+    // ResetState  (DWARF BrnPaybackManager.h:170; PS3 DecFIGS 0x23CB04)
+    // No out-of-line X360 body: the console inlines it into Destruct @0x8236D110
+    // (0x8236D150..0x8236D190) and OnRoundStart @0x8236D290 (0x8236D2B0..0x8236D304), and both
+    // inline copies store the same twelve fields:
+    //     +0x24C/+0x248 = flt_820037C8 (-1.0)   +0x266/+0x264/+0x265 = 0   +0x25C/+0x260 = 0
+    //     +0x240/+0x244 = -1                    +0x258/+0x254 = 3          mEvent = {-1,-1,3,5}
+    // The sentinel is the X360's 3 (the PS3 build stores 4; see the header note on
+    // KE_NO_DIRTY_TRICK). mfPaybackVictimTimer (+0x250) is NOT touched by either copy.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::ResetState()
+    {
+        mfPaybackAggTimer       = -1.0f;                             // +0x24C
+        mfCountdownTimer        = -1.0f;                             // +0x248
+        mbPaybackAwarded        = false;                             // +0x266
+        mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_IDLE;    // +0x25C
+
+        mePaybackAggressorRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x240
+        mePaybackVictimRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x244
+
+        meAwardedDirtyTrick    = KE_NO_DIRTY_TRICK;   // +0x258 = 3
+        meActiveDirtyTrickType = KE_NO_DIRTY_TRICK;   // +0x254 = 3
+
+        mEvent.meAggressorActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x1FC
+        mEvent.meVictimActiveRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // +0x200
+        mEvent.meDirtyTrickType              = KE_NO_DIRTY_TRICK;                   // +0x204 = 3
+        mEvent.meDirtyTrickStatus            = static_cast<BrnNetwork::EDirtyTrickStatus>(5);   // +0x208
+
+        mePaybackVictimState      = E_PAYBACK_VICTIM_STATE_IDLE;   // +0x260
+        mbDirtyTrickButtonDown    = false;                         // +0x264
+        mbDirtyTrickButtonWasDown = false;                         // +0x265
+    }
+
+    // -----------------------------------------------------------------------------------
+    // Destruct  @ 0x8236D110 (sole caller GameStateModule::Destruct @0x82375420, `bl` @0x823755A0)
+    // Unhook the debug component, clear the timer copy and the outbound queue, reset both FSMs,
+    // drop the owner pointer. The X360 body, in order:
+    //     0x8236D12C  addi r3, r31, 0x26C ; stw 0, 0xC(r3)   mDebugComponent.mpPaybackManager = 0
+    //     0x8236D134  bl   0x8284CB38                         mDebugComponent.Destruct() -- an
+    //                                                          ICF-folded bare `blr` on the console
+    //     0x8236D13C  bl   TimerStatusInterface::Clear        (this + 0)
+    //     0x8236D148  stw  0, 0x38(r31)                       mDirtyTrickOutputQueue.Clear()
+    //     0x8236D150..0x8236D190                               ResetState() inlined
+    //     0x8236D194  stw  0, 0x268(r31)                      mpGameStateModule = 0
+    // The PS3 twin (DecFIGS 0x267A98) is the same minus the debug-component pair, which the
+    // X360 build added with the component.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::Destruct()
+    {
+        mDebugComponent.mpPaybackManager = 0;
+        mDebugComponent.Destruct();
+
+        mTimerStatusInterface.Clear();
+        mDirtyTrickOutputQueue.Clear();
+
+        ResetState();
+
+        mpGameStateModule = 0;
+    }
+
+    // -----------------------------------------------------------------------------------
     // ChangeState (aggressor overload)  @ 0x823919B0
     // Cancel any aggressor timer, set the new aggressor state, clear the payback-awarded flag and
     // post the "payback HUD shown" state-change event onto the module's output GUI queue.
@@ -190,6 +278,75 @@ namespace BrnGameState
         {
             mfCountdownTimer = -1.0f;
         }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // The victim-side helpers. None has an out-of-line X360 body -- the console inlines each
+    // one at its call sites (cited per helper) -- but the DWARF declares all of them
+    // (BrnPaybackManager.h:206/215/229/232/242) and the PS3 DecFIGS build keeps them out of
+    // line, so the handlers below are written through them (inlining reversal).
+    // -----------------------------------------------------------------------------------
+
+    // ChangeState (victim overload), PS3 0x23CB9C: the state word and nothing else. X360 inline
+    // stores to +0x260 at 0x82397D20 / 0x82397D54 (HandleActivePayback), 0x82397E90
+    // (HandleCrashDueToPayback) and 0x82397FB8 (HandleSurvivingPayback).
+    void
+    PaybackManager::ChangeState(EPaybackVictimState leNewPaybackVictimState)
+    {
+        mePaybackVictimState = leNewPaybackVictimState;
+    }
+
+    // IsCountdownComplete, PS3 0x23CBA4: the countdown has run below zero. X360 inline at
+    // 0x82397D28..0x82397D44: `lfs f13,0x248 ; lfs f0,flt_82001CC0 (0.0) ; fcmpu ; blt -> 1`, so a
+    // NaN timer is NOT complete (the `<` below is false for NaN, exactly like the blt).
+    bool
+    PaybackManager::IsCountdownComplete()
+    {
+        return mfCountdownTimer < 0.0f;
+    }
+
+    // RemoveCountdown, PS3 0x26903C: cancel the countdown and tell the HUD with a -1.0 record.
+    // X360 inline at 0x82397D8C..0x82397DB8 (and 0x82397EAC..0x82397ED8):
+    //     lfs f0, flt_820037C8 (-1.0) ; stfs f0, 0x248(r31) ; stfs f0, var_4C
+    //     GetOutputGuiEventQueue ; AddEvent(&var_4C, 0xEB, 4)
+    void
+    PaybackManager::RemoveCountdown()
+    {
+        mfCountdownTimer = -1.0f;
+
+        PaybackCountdownEvent lCountdown;
+        lCountdown.mfRemaining = -1.0f;
+        mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
+            &lCountdown, KI_GUI_EVENT_PAYBACK_COUNTDOWN, sizeof(f32));
+    }
+
+    // DirtyTrickTriggered, PS3 0x2592B8: the GUI "dirty trick triggered" record. X360 inline at
+    // HandleTriggeringPayback 0x82397C58..0x82397C74: `bl 0x8231D8A8` (the write-locked
+    // GetGameStateToGuiInterface) ; addi r3,r3,0x40 ; stw {aggressor, victim, type} ;
+    // bl GameStateToGuiTriggeredDirtyTrick AddEvent 0x82368940.
+    void
+    PaybackManager::DirtyTrickTriggered(GameStateModuleIO::OutputBuffer* lpOutput,
+                                        ::EActiveRaceCarIndex leAggressorRaceCarIndex,
+                                        ::EActiveRaceCarIndex leVictimRaceCarIndex,
+                                        BrnNetwork::EPaybackType leDirtyTrickType)
+    {
+        lpOutput->GetGameStateToGuiInterface()->AddDirtyTrickTriggered(
+            leAggressorRaceCarIndex, leVictimRaceCarIndex, leDirtyTrickType);
+    }
+
+    // DirtyTrickEnding, PS3 0x2584D8: the GUI "dirty trick ended" record. X360 inline at
+    // 0x82397DD0..0x82397DF4 (survived byte 0) and 0x82397EF0..0x82397F14 (survived byte 1):
+    // `bl 0x8231D8A8` ; addi r3,r3,0x7C ; {aggressor, victim, type, survived} ;
+    // bl GameStateToGuiEndingDirtyTrick AddEvent 0x82368A98.
+    void
+    PaybackManager::DirtyTrickEnding(GameStateModuleIO::OutputBuffer* lpOutput,
+                                     ::EActiveRaceCarIndex leAggressorRaceCarIndex,
+                                     ::EActiveRaceCarIndex leVictimRaceCarIndex,
+                                     BrnNetwork::EPaybackType leDirtyTrickType,
+                                     bool lbSurvived)
+    {
+        lpOutput->GetGameStateToGuiInterface()->AddDirtyTrickEnding(
+            leAggressorRaceCarIndex, leVictimRaceCarIndex, leDirtyTrickType, lbSurvived);
     }
 
     // -----------------------------------------------------------------------------------
@@ -343,14 +500,15 @@ namespace BrnGameState
         SendNetworkDirtyTrickMessage(lePlayerIndex, leVictimIndex, leAwarded,
                                      static_cast<BrnNetwork::EDirtyTrickStatus>(2));
 
+        // X360 0x82397C44..0x82397C74 re-reads the three values (+0x258, +0x244, the player) and
+        // writes the GUI "dirty trick triggered" record {player, victim, trick} into the output
+        // buffer's GameStateToGuiInterface (+0x40 queue) -- the PS3 twin calls
+        // DirtyTrickTriggered(lpOutput, player, victim, trick) here, which the X360 inlines.
         const BrnNetwork::EPaybackType leAwarded2     = meAwardedDirtyTrick;
         const ::EActiveRaceCarIndex    leVictimIndex2 = mePaybackVictimRaceCarIndex;
         const ::EActiveRaceCarIndex    lePlayerIndex2 = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
-        // FLAG parked: GameStateToGuiInterface::AddDirtyTrickTriggered is declared with no body
-        // anywhere in the tree; the three values it would carry are computed above.
-        (void)leAwarded2; (void)leVictimIndex2; (void)lePlayerIndex2;
-        (void)lpOutput;
+        DirtyTrickTriggered(lpOutput, lePlayerIndex2, leVictimIndex2, leAwarded2);
 
         // X360 @0x82397C08 end-stores (asm order): timer off, clear the awarded trick, drop the victim
         // index, return the aggressor FSM to IDLE, clear the awarded flag. The earlier reconstruction
@@ -365,6 +523,106 @@ namespace BrnGameState
         lHide.miShow = 1;
         mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
             &lHide, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HandleActivePayback  @ 0x82397CC8 (Update victim jump table 0x8239AD24[2] = 0x8239AD4C)
+    // Victim side, ACTIVE -- a dirty trick is running on the local player. Publish it to the
+    // output buffer every frame, then resolve it: the player crashing ends it as YOU_CRASHED, the
+    // countdown running out ends it as YOU_SURVIVED, otherwise the countdown ticks on.
+    //     0x82397CEC  OutputBuffer::SetActivePaybackType(lpOutput, +0x254)
+    //     0x82397CF8  OutputBuffer::SetActivePaybackAggressor(lpOutput, +0x240)
+    //     0x82397D0C  GameStateModule::IsRaceCarCrashing(player) -> +0x260 = 3
+    //     0x82397D28  else fcmpu +0x248, 0.0 ; blt              -> +0x260 = 4
+    //     0x82397D60  else UpdateCountdown
+    // The crash test reads the MODULE's cached per-slot flag (IsRaceCarCrashing), not a
+    // CrashingRaceCarInterface -- the PS3 twin (DecFIGS 0x268BFC) reads the same member.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::HandleActivePayback(GameStateModuleIO::OutputBuffer* lpOutput)
+    {
+        lpOutput->SetActivePaybackType(meActiveDirtyTrickType);
+        lpOutput->SetActivePaybackAggressor(mePaybackAggressorRaceCarIndex);
+
+        if (mpGameStateModule->IsRaceCarCrashing(mpGameStateModule->GetPlayerActiveRaceCarIndex()))
+        {
+            ChangeState(E_PAYBACK_VICTIM_STATE_YOU_CRASHED);
+        }
+        else if (IsCountdownComplete())
+        {
+            ChangeState(E_PAYBACK_VICTIM_STATE_YOU_SURVIVED);
+        }
+        else
+        {
+            UpdateCountdown();
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HandleCrashDueToPayback  @ 0x82397D80 (Update victim jump table 0x8239AD24[3] = 0x8239AD5C)
+    // Victim side, YOU_CRASHED -- the dirty trick did its job. Cancel the countdown, tell the GUI
+    // the trick ended (not survived), broadcast status 4, post PaybackOverAction, go idle.
+    //     0x82397D8C..0x82397DB8  RemoveCountdown()          (-1.0 -> +0x248, record 235 = -1.0)
+    //     0x82397DBC..0x82397DF4  DirtyTrickEnding(+0x240, player, +0x254, survived 0)
+    //     0x82397DF8..0x82397E18  SendNetworkDirtyTrickMessage(+0x240, player, +0x254, 4)
+    //     0x82397E1C..0x82397E70  asserts "lpOutput" / "lpOutput->GetGameActionQueue()" (non-gating)
+    //     0x82397E74..0x82397E88  GetGameActionQueue()->AddEvent(&<byte>, 0xD8, 1)
+    //     0x82397E8C..0x82397E94  +0x260 = 0, +0x254 = 3
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::HandleCrashDueToPayback(GameStateModuleIO::OutputBuffer* lpOutput)
+    {
+        RemoveCountdown();
+
+        DirtyTrickEnding(lpOutput, mePaybackAggressorRaceCarIndex,
+                         mpGameStateModule->GetPlayerActiveRaceCarIndex(), meActiveDirtyTrickType,
+                         /*lbSurvived=*/false);
+
+        SendNetworkDirtyTrickMessage(mePaybackAggressorRaceCarIndex,
+                                     mpGameStateModule->GetPlayerActiveRaceCarIndex(),
+                                     meActiveDirtyTrickType, KE_DIRTY_TRICK_STATUS_CRASHED);
+
+        CGS_ASSERT(lpOutput, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()");
+
+        PaybackOverAction lPaybackOver;
+        lpOutput->GetGuiOutputQueue()->AddEvent(
+            &lPaybackOver, KI_ACTION_PAYBACK_OVER, sizeof(PaybackOverAction));
+
+        meActiveDirtyTrickType = KE_NO_DIRTY_TRICK;     // +0x254 = 3
+        ChangeState(E_PAYBACK_VICTIM_STATE_IDLE);       // +0x260 = 0
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HandleSurvivingPayback  @ 0x82397EA0 (Update victim jump table 0x8239AD24[4] = 0x8239AD6C)
+    // Victim side, YOU_SURVIVED -- the countdown ran out first. The same body as the crash arm
+    // with the two values that say "survived": the GUI record's survived byte is 1
+    // (`li r11,1` @0x82397EF8) and the network status is 3 (`li r7,3` @0x82397F34). The
+    // PaybackOverAction is the SAME id (0xD8, size 1, @0x82397FA0). The end stores run +0x254 = 3
+    // then +0x260 = 0 (0x82397FB4/0x82397FB8).
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::HandleSurvivingPayback(GameStateModuleIO::OutputBuffer* lpOutput)
+    {
+        RemoveCountdown();
+
+        DirtyTrickEnding(lpOutput, mePaybackAggressorRaceCarIndex,
+                         mpGameStateModule->GetPlayerActiveRaceCarIndex(), meActiveDirtyTrickType,
+                         /*lbSurvived=*/true);
+
+        SendNetworkDirtyTrickMessage(mePaybackAggressorRaceCarIndex,
+                                     mpGameStateModule->GetPlayerActiveRaceCarIndex(),
+                                     meActiveDirtyTrickType, KE_DIRTY_TRICK_STATUS_SURVIVED);
+
+        CGS_ASSERT(lpOutput, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()");
+
+        PaybackOverAction lPaybackOver;
+        lpOutput->GetGuiOutputQueue()->AddEvent(
+            &lPaybackOver, KI_ACTION_PAYBACK_OVER, sizeof(PaybackOverAction));
+
+        meActiveDirtyTrickType = KE_NO_DIRTY_TRICK;     // +0x254 = 3
+        ChangeState(E_PAYBACK_VICTIM_STATE_IDLE);       // +0x260 = 0
     }
 
     // -----------------------------------------------------------------------------------
@@ -548,10 +806,15 @@ namespace BrnGameState
                 HandleWaitForPaybackAggressorToCrash(lpVehicleOutputInterface);
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_AWARD_DT:
-                // FLAG parked: PaybackManager::HandleWaitingToAwardPayback has no body anywhere in the tree.
+                // FLAG parked: PaybackManager::HandleWaitingToAwardPayback @0x823978B0 (jump table
+                // 0x8239AC2C[2], r4 = lpVehicleOutputInterface) has no body: its test is
+                // BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing, declared with no body in
+                // BrnVehicleOutputInterface.h (not this TU's file).
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER:
-                // FLAG parked: PaybackManager::HandleAwardingPayback has no body anywhere in the tree.
+                // FLAG parked: PaybackManager::HandleAwardingPayback @0x82397970 (jump table
+                // 0x8239AC2C[3], r4 = lpOutput, r5 = lpVehicleOutputInterface, r6 = leGameModeType)
+                // has no body: same CrashingRaceCarInterface::IsCrashing blocker.
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_YOU_TRIGGERED_DT:
                 HandleHavingPayback(lpOutput);
@@ -571,16 +834,19 @@ namespace BrnGameState
             case E_PAYBACK_VICTIM_STATE_IDLE:
                 break;
             case E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU:
-                // FLAG parked: PaybackManager::HandleReceivingPayback has no body anywhere in the tree.
+                // FLAG parked: PaybackManager::HandleReceivingPayback @0x82383B40 (jump table
+                // 0x8239AD24[1], r4 = lpOutput, r5 = lpVehicleOutputInterface) has no body: it reads
+                // BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing, which is declared with
+                // no body in BrnVehicleOutputInterface.h (not this TU's file).
                 break;
             case E_PAYBACK_VICTIM_STATE_ACTIVE:
-                // FLAG parked: PaybackManager::HandleActivePayback has no body anywhere in the tree.
+                HandleActivePayback(lpOutput);        // jump table [2] 0x8239AD4C, r4 = lpOutput
                 break;
             case E_PAYBACK_VICTIM_STATE_YOU_CRASHED:
-                // FLAG parked: PaybackManager::HandleCrashDueToPayback has no body anywhere in the tree.
+                HandleCrashDueToPayback(lpOutput);    // jump table [3] 0x8239AD5C, r4 = lpOutput
                 break;
             case E_PAYBACK_VICTIM_STATE_YOU_SURVIVED:
-                // FLAG parked: PaybackManager::HandleSurvivingPayback has no body anywhere in the tree.
+                HandleSurvivingPayback(lpOutput);     // jump table [4] 0x8239AD6C, r4 = lpOutput
                 break;
             default:
                 CGS_ASSERT(false, "Unknown payback victim state");
