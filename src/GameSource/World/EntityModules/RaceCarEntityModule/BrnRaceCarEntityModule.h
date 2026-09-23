@@ -1033,10 +1033,9 @@ private:
     s32  miPlayerBaseDeformationTypeMirror; // +0x184D0 (99536) LIVE reset-type mirror (-1 == none)
     s32  miPlayerBaseDeformationTypeSaved;  // +0x184D4 (99540) mode-change stash of the above
     f32  mfPlayerBaseDeformAmountMirror;    // +0x184D8 (99544) LIVE amount mirror
-    // ⚠️ ARMED ONLY BY GAME ACTION 97, which is one of the network add/remove arms and is NOT
-    // reconstructed on this build -- so on the single-player/harness path it is permanently 0 and
-    // ResetActiveRaceCar always takes the mirror-READ arm. Naming it anyway because the consume
-    // side IS reconstructed, and a consume with no declared producer reads like dead code.
+    // ARMED ONLY BY GAME ACTION 97, E_ACTION_BODY_SHOP_DRIVE_THRU (the repair shop; an earlier
+    // banner here misnamed it a network add/remove arm) -- HandleGameActions case 97 @0x8230C6C8,
+    // landed 2026-09-23 (crash parity G68-D7). Consumed by ResetActiveRaceCar's player arm.
     bool mbPlayerBaseDeformRequestPending;  // +0x184DC (99548) one-shot: force mbResetDeformation
     u8   maTailPadB1c0[0x184E0 - 0x184DD];  // +0x184DD (99549) .. +0x184E0 (99552)
     f32  mfPlayerBaseDeformAmountSaved;     // +0x184E0 (99552) mode-change stash of the amount

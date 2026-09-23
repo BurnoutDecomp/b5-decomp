@@ -118,6 +118,14 @@ public:
     f32 GetMaxBoost() const { return mpBoostStrategy->GetMaxBoost(); }
 
     f32 GetJustBounceBoostedTimer() const { return mfJustBounceBoostedTimer; }
+
+    // DWARF BrnBoostManager.h:280 `void OnBounceBoost()`. No out-of-line X360 symbol: its one
+    // console call site, RaceCarEntityModule::HandleGameActions case 144 (JUST_BOUNCED, a boosted
+    // bounce), inlines it as `lfs f0, flt_820147F4 ; stfsx f0, module, 0x17CEC` @0x8230D76C..
+    // 0x8230D774 -- module +0x17CEC == mBoostManager (+0x17890) + 0x45C == this timer.
+    // flt_820147F4 reads 0x3F19999A == 0.6f out of the image.
+    void OnBounceBoost() { mfJustBounceBoostedTimer = 0.6f; }
+
     void UpdateJustBounceBoostedTimer(f32 lfTimeStep)
     {
         if (mfJustBounceBoostedTimer > 0.0f)

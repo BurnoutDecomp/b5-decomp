@@ -1486,8 +1486,9 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // ResetDeformation @0x82639D60 turns into mfNoDamageTimer = 1.5f + set 4 when it is 1.
         //
         // ⭐ WHAT ACTUALLY CHANGES ON THIS BUILD. The one-shot's only arm site is HandleGameActions
-        // case 97 (0x8230C6C8), a network add/remove arm this tree does not reconstruct, so it is
-        // permanently false here and the mirror arm always wins. The mirror is written by
+        // case 97 (0x8230C6C8) -- E_ACTION_BODY_SHOP_DRIVE_THRU, the repair shop, landed 2026-09-23
+        // (G68-D7); until then it was permanently false and the mirror arm always won. It is
+        // armed only by a repair, so a normal respawn still takes the mirror arm. The mirror is written by
         // HandleResetPlayerCarAction's unlock-deformation step (the junkyard car-select confirm,
         // whose builder calls the type field `liInCarSelect` and writes 1) and by
         // AddRaceCarToStartingGridOrFreeburnLobby. So on a normal boot this hands the console's own
@@ -3067,17 +3068,18 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 // Also reproduced (crash-parity 2026-09-22): the takedown flow's four world-side consumers,
 // 3 (player reset on track), 111 (player invulnerability), 120 (free-burn SHUTDOWN: damage
 // rendering on an AI victim) and 121 (SHUTDOWN_FINISHED: remove the victim, reset the player).
+// And (crash-parity 2026-09-23, FX-RCEM2): 35 FINISHED_MODE_NOTIFY, 97 BODY_SHOP_DRIVE_THRU,
+// 205 ROAD_RAGE_PLAYER_DAMAGE and the Showtime crash-play five 128/140/144/201/273.
 //
 // [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
 // console dispatches to and that are still un-reconstructed:
 //                                           4   HandleSetPlayerOpponentsAction
-//   5   HandleSetupNetworkCarAction         7   the player-control-changed AI publish
-//   11  HandleRemotePlayerDisconnected      23  HandlePrepareForModeAction
-//   39  HandleStopModeAction
-//   73/74/76/77     the car-select / drive-thru arms
+//   5   HandleSetupNetworkCarAction
+//   11  HandleRemotePlayerDisconnected
+//   73/74/76        the car-select / drive-thru arms
 //   126 SwitchCarColourAction (an AI car's colour; asserts :7393/:7397/:7398)
 //   219 the network setup-car arm, which also writes the colour pair (:7212/:7215)
-//   97/98/99        the network add/remove arms       + ~80 more.
+//   98/99           the paint-shop / junk-yard drive-thrus     + ~70 more.
 // Because the walk itself is real, adding any one of them later is a case label, not a
 // re-derivation. DELETE-WHEN the handlers land.
 // ============================================================================
@@ -3141,6 +3143,31 @@ namespace
     // 0x82C4BB70 -> flt_82FAD728 (120 mph, KF_RESET_ON_TRACK_IN_RANGE_SPEED :234).
     // BrnRaceCarEntityModule_Rivals.cpp holds the same word TU-locally as KF_POST_MODE_RESET_SPEED.
     const f32 KF_RESET_ON_TRACK_SPEED = 0.44704f * 50.0f;
+
+    // ---- flt_82FAD3F4 == DWARF KF_DRIVE_THRU_ENTRY_SPEED (BrnRaceCarEntityModule.cpp:282) --------
+    // The drive-thru placement speed of action 7's two drive-thru arms (0x8230CC10 / 0x8230CC70,
+    // its only readers). BSS -- the image reads 0x00000000 -- written by the CRT dynamic
+    // initialiser 0x82C4BC58..0x82C4BC70: `lfs flt_82F31928 (3EE4E26D == 0.44704) ; lfs
+    // flt_82004C6C (42700000 == 60.0) ; fmuls ; stfs -> 0x82FAD3F4` == 60 mph in m/s. The NAME is
+    // the DWARF's by bank order: the thunk before it stores KF_MAX_SEPERATION_DELAY's 8.0
+    // (0x82C4BC38) and the two after it are 130 mph / flt_82020A74 mph -- :283/:284
+    // KF_DRIVE_THRU_MAX_EXIT_SPEED_SLOW / _FAST.
+    const f32 KF_DRIVE_THRU_ENTRY_SPEED = 0.44704f * 60.0f;
+
+    // ---- action 97, E_ACTION_BODY_SHOP_DRIVE_THRU (size 144) ---------------------------------
+    // [!] HEADER REQUEST -- BrnGameActions.h carries the enumerator but no record for 97. The
+    // entity id word is read at +0x80 by BOTH console consumers: this module's arm (`lwz r11,
+    // 0x80(r27)` @0x8230C664) and PhysicsModule's (BrnPhysicsModule.cpp KU_EV_BODY_SHOP_ENTITY_ID);
+    // the producer DriveThruManager::PostShopAction memcpy's the u32 there.
+    // DELETE-WHEN BrnGameActions.h grows the typed 144-byte record.
+    const u32 KU_BODY_SHOP_ACTION_ENTITY_ID_OFFSET = 0x80;
+
+    // ---- action 273, DWARF E_ACTION_ROAD_RULES_ENTER_ROAD (260; +13 road-rules band) ---------
+    // [!] HEADER REQUEST -- BrnGameActions.h has the record (RoadRulesEnterRoadAction, 168 bytes)
+    // but no enumerator; its producer RoadRulesManager::OnEnterRoad posts the literal 273
+    // (BrnRoadRulesManager.cpp). High jump table case 166 == 273 @0x8230D6C0.
+    // DELETE-WHEN BrnGameActions.h grows the enumerator.
+    const s32 KI_ACTION_ROAD_RULES_ENTER_ROAD = 273;
 
     // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY. The takedown-flow switch shared (by env
     // name) with TakedownManager's classifier trace: one [td-action] line per consumed takedown
@@ -3227,14 +3254,23 @@ void RaceCarEntityModule::HandleGameActions(
                 const Vector3 lVelocity = lpCar->GetVelocity();
                 if (lVelocity.x * lDirection.x + lVelocity.y * lDirection.y + lVelocity.z * lDirection.z < 0.0f)
                     lDirection = -lDirection;
+                // G68-D3 (crash parity 2026-09-23): both placements run at KF_DRIVE_THRU_ENTRY_SPEED,
+                // the 60 mph floor this arm used to read as the .bss zero of flt_82FAD3F4.
+                //   regain 0x8230CBE8..0x8230CC20: f0 = +0x28 mfMaxResetSpeed, f13 = +0x184C0
+                //     mfLastPlayerCarSpeed ; fsubs ; fsel -> (last - max >= 0) ? max : last
+                //     lfs f13, flt_82FAD3F4 ; fsubs ; fsel -> (v - K >= 0) ? v : K ; fabs f1
+                //   lose   0x8230CC70/0x8230CC7C: lfs f0, flt_82FAD3F4 ; fabs f1, f0
                 if (lChanged.mbPlayerIsInControl)
                 {
-                    f32 lfSpeed = mfLastPlayerCarSpeed < lpAction->mfMaxResetSpeed ? mfLastPlayerCarSpeed : lpAction->mfMaxResetSpeed;
-                    if (lfSpeed < 0.0f) lfSpeed = 0.0f;
-                    lpCar->RequestPlaceOnTrack(lpCar->GetPosition(), lpCar->GetDirection(), lfSpeed);
+                    f32 lfSpeed = (mfLastPlayerCarSpeed - lpAction->mfMaxResetSpeed >= 0.0f)
+                                      ? lpAction->mfMaxResetSpeed : mfLastPlayerCarSpeed;
+                    lfSpeed = (lfSpeed - KF_DRIVE_THRU_ENTRY_SPEED >= 0.0f)
+                                      ? lfSpeed : KF_DRIVE_THRU_ENTRY_SPEED;
+                    lpCar->RequestPlaceOnTrack(lpCar->GetPosition(), lpCar->GetDirection(), std::fabs(lfSpeed));
                 }
                 else
-                    lpCar->RequestPlaceOnTrack(lBox.GetPosition() - lDirection * (lBox.GetDimensionZ() * 0.5f), lDirection, 0.0f);
+                    lpCar->RequestPlaceOnTrack(lBox.GetPosition() - lDirection * (lBox.GetDimensionZ() * 0.5f), lDirection,
+                                               std::fabs(KF_DRIVE_THRU_ENTRY_SPEED));
             }
             break;
         }
@@ -3795,6 +3831,198 @@ void RaceCarEntityModule::HandleGameActions(
             }
             break;
         }
+
+        // ====================================================================================
+        // FX-RCEM2 (crash parity 2026-09-23): the end-of-event, repair-shop, Road Rage damage and
+        // Showtime crash-play arms. Every one of them had a live PC producer (or a declared
+        // handler with no caller) and fell into `default:` below.
+        // ====================================================================================
+
+        // G68-D4 -- ARTIST low jump table, case 35 (0x8230C884..0x8230C914):
+        //     GetActiveRaceCar(+0x182F8)->SetIndicatorState(0, 0)          @0x8230C89C
+        //     if (lbzx +0x18345) stbx r23(1), +0x18346                      mbOnlineModeJustFinished
+        //     if (lwzx +0x18368 == 0 && lbz 0(record) != 0)                 OFFLINE_RACE and byte 0
+        //         RemoveRivals(this, r20 == lpOutput, 0) @0x8230C8EC ; re-fetch the player car ;
+        //         stb r24(0), 0x78C                                          mbWonLastEvent = false
+        //     else stb r23(1), 0x78C @0x8230C910                             mbWonLastEvent = true
+        // The ONLY writer of a 1 to ActiveRaceCar+0x78C in the image; without it HandleStopModeAction's
+        // winner tail (the 50 mph RequestResetOnTrack / RequestPlaceOnTrack) never ran. The console
+        // producer (SendFinishedModeAction @0x82343628) posts one never-written stack byte, which reads
+        // 0 there; the PC producer posts 0 -- so the RemoveRivals sub-arm is dead on both and every
+        // finished mode sets mbWonLastEvent. The byte test is kept because it is the console's.
+        case BrnGameState::GameStateModuleIO::E_ACTION_FINISHED_MODE_NOTIFY: // 35
+        {
+            const BrnGameState::GameStateModuleIO::FinishedModeNotifyAction* lpFinishedNotify =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::FinishedModeNotifyAction*>(lpEvent);
+
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetIndicatorState(false, false);
+            if (mbIsInOnlineGameMode)                                           // lbzx +0x18345
+            {
+                mbOnlineModeJustFinished = true;                                // stbx r23, +0x18346
+            }
+            if (meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_RACE
+                && lpFinishedNotify->mbPlayerWon)                               // lbz 0(record)
+            {
+                RemoveRivals(lpOutput, false);                                  // r5 = 0
+                GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbWonLastEvent = false;   // stb r24, 0x78C
+            }
+            else
+            {
+                GetActiveRaceCar(mePlayerActiveRaceCarIndex)->mbWonLastEvent = true;    // stb r23, 0x78C
+            }
+            break;
+        }
+
+        // G68-D7 -- ARTIST low jump table, case 97 (0x8230C608..0x8230C6E8), the BODY-SHOP repair
+        // (E_ACTION_BODY_SHOP_DRIVE_THRU; the old "network add/remove arm" banners were wrong).
+        // For every slot (the range-guarded EActiveRaceCarIndex operator++, no early break):
+        //     assert(lpActiveRaceCar) :6822 ; IsActive() ; PhysicsState+0x3C8 (mEntityId) ==
+        //     lwz 0x80(record) ->
+        //         stb r24(0), 0x1BF6               mRenderParams.mu8RenderDamageFlags
+        //         8x stw 0 from 0x1BF8             mRenderParams.mafCrackedGlassFractureAmount
+        //         stfs f30(0.0), 0x7CC             mfBaseDeformAmount (+0x7C8, the type, untouched)
+        //         if (slot == +0x182F8):
+        //             +0x184E0 = 0.0  +0x184D8 = 0.0  +0x184DC = r23(1)  +0x184D4 = -1
+        //             (the saved amount, the live amount mirror, THE one-shot, the saved type --
+        //              the live TYPE mirror +0x184D0 is not written)
+        // This is the ONLY arm site of mbPlayerBaseDeformRequestPending: the next ResetActiveRaceCar
+        // of the player forces resetDeformation instead of re-applying the stale mirror.
+        case BrnGameState::GameStateModuleIO::E_ACTION_BODY_SHOP_DRIVE_THRU: // 97
+        {
+            // [serialised event payload] action 97 has no typed record in BrnGameActions.h yet (see
+            // the HEADER REQUEST on KU_BODY_SHOP_ACTION_ENTITY_ID_OFFSET); the producer
+            // (DriveThruManager PostShopAction) writes the u32 entity id at +0x80.
+            u32 luEntityId = 0;
+            std::memcpy(&luEntityId,
+                        reinterpret_cast<const u8*>(lpEvent) + KU_BODY_SHOP_ACTION_ENTITY_ID_OFFSET,
+                        sizeof(luEntityId));
+
+            for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+            {
+                const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+                ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(leSlot);
+                CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveRaceCar");            // :6822
+                if (!lpActiveRaceCar->IsActive()
+                    || lpActiveRaceCar->GetPhysicsState()->mEntityId.muValue != luEntityId)
+                {
+                    continue;
+                }
+
+                ActiveRaceCar::RenderParams* lpRenderParams = lpActiveRaceCar->GetRenderParams();
+                lpRenderParams->SetRenderDamageFlag(0);                         // stb 0, 0x1BF6
+                for (u32 luPane = 0; luPane < 8; ++luPane)
+                {
+                    lpRenderParams->SetCrackedGlassFractureAmountN(luPane, 0.0f);   // stw 0, 0x1BF8+4n
+                }
+                lpActiveRaceCar->mfBaseDeformAmount = 0.0f;                     // stfs f30, 0x7CC
+
+                if (leSlot == mePlayerActiveRaceCarIndex)
+                {
+                    mfPlayerBaseDeformAmountSaved    = 0.0f;                    // stfsx +0x184E0
+                    mfPlayerBaseDeformAmountMirror   = 0.0f;                    // stfsx +0x184D8
+                    mbPlayerBaseDeformRequestPending = true;                    // stbx r23, +0x184DC
+                    miPlayerBaseDeformationTypeSaved = -1;                      // stwx -1, +0x184D4
+                }
+            }
+            break;
+        }
+
+        // G68-D6 -- ARTIST high jump table (index = id - 107), case 98 == 205 (0x8230D0EC..0x8230D18C),
+        // E_ACTION_ROAD_RAGE_PLAYER_DAMAGE. Posted by ScoringSystem::OnRoadRagePlayerCrashed on every
+        // Road Rage / Marked Man player crash; the mirror pair it writes is what ResetActiveRaceCar's
+        // player arm (0x822F4A70/0x822F4A74) feeds into every live reset of the player:
+        //     assert :6846 (0x1ABE) ; assert :6849 (0x1AC1) f30(0.0) <= f <= f28(1.0)
+        //     lbz 5(record) (mbPlayerTotalled) ?
+        //         +0x184D8 <- +0x184E0 ; +0x184D0 <- +0x184D4      (restore the pre-mode stash)
+        //       : stwx r24(0), +0x184D0 ; lfs 0(record) -> stfsx +0x184D8   (type 0 == the EVENT
+        //                                        compression ratio, amount == how close to totalled)
+        case BrnGameState::GameStateModuleIO::E_ACTION_ROAD_RAGE_PLAYER_DAMAGE: // 205
+        {
+            const BrnGameState::GameStateModuleIO::RoadRagePlayerDamageAction* lpRoadRagePlayerDamageAction =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::RoadRagePlayerDamageAction*>(lpEvent);
+            CGS_ASSERT(lpRoadRagePlayerDamageAction != 0,
+                       "lpRoadRagePlayerDamageAction != NULL");                // :6846
+            CGS_ASSERT((lpRoadRagePlayerDamageAction->mfHowCloseToTotalled >= 0.0f)
+                           && (lpRoadRagePlayerDamageAction->mfHowCloseToTotalled <= 1.0f),
+                       "(lpRoadRagePlayerDamageAction->mfHowCloseToTotalled >= 0.0f) && "
+                       "(lpRoadRagePlayerDamageAction->mfHowCloseToTotalled <= 1.0f)");   // :6849
+
+            if (lpRoadRagePlayerDamageAction->mbPlayerTotalled)                 // lbz 5(record)
+            {
+                mfPlayerBaseDeformAmountMirror    = mfPlayerBaseDeformAmountSaved;
+                miPlayerBaseDeformationTypeMirror = miPlayerBaseDeformationTypeSaved;
+            }
+            else
+            {
+                miPlayerBaseDeformationTypeMirror = 0;                          // stwx r24(0)
+                mfPlayerBaseDeformAmountMirror    =
+                    lpRoadRagePlayerDamageAction->mfHowCloseToTotalled;         // lfs 0 -> +0x184D8
+            }
+            break;
+        }
+
+        // G68-D8 -- the Showtime crash-play arms, all on mCrashPlayManager (this + 0x20000 - 0x7F10
+        // == +0x180F0). High jump table (index = id - 107):
+        //   case 21 == 128 (0x8230D790)  OnHitOverheadSign(mgr)
+        //   case 33 == 140 (0x8230D7A0)  OnVehicleHitConfirmed(mgr, r4 = lwz 0xC, r5 = lwz 0x1C,
+        //                                                       r6 = lwz 8)
+        //   case 37 == 144 (0x8230D72C)  assert(lpBounceAction) :7353 (0x1CB9) ; OnBounce(mgr, record) ;
+        //                                if (lbz 0x22) +0x17CEC = flt_820147F4 (0.6) -- BoostManager
+        //                                (+0x17890) + 0x45C mfJustBounceBoostedTimer
+        //   case 94 == 201 (0x8230D6D4)  if (lbz 0x1E) OnEnterJunction(mgr, record)
+        //   case 166 == 273 (0x8230D6C0) OnEnterRoad(mgr, record)
+        // 273 and 201 are posted on PC today (RoadRulesManager::OnEnterRoad, the junction-event
+        // check); OnEnterRoad / OnEnterJunction are Showtime-gated inside. 128/140/144 wait on
+        // their producers (UpdateShowtimeMode @0x82380EF8, ProcessGameEvents cases 52/118).
+        case BrnGameState::GameStateModuleIO::E_ACTION_OVERHEAD_SIGN_HIT: // 128
+            mCrashPlayManager.OnHitOverheadSign();
+            break;
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_VEHICLE_HIT: // 140
+        {
+            const BrnGameState::GameStateModuleIO::VehicleHitAction* lpVehicleHit =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::VehicleHitAction*>(lpEvent);
+            mCrashPlayManager.OnVehicleHitConfirmed(lpVehicleHit->miVehicleBaseScore,       // r4 = +0xC
+                                                    lpVehicleHit->miComboBonusEarned,       // r5 = +0x1C
+                                                    lpVehicleHit->miTotalVehiclesCrashed);  // r6 = +0x8
+            break;
+        }
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_JUST_BOUNCED: // 144
+        {
+            const BrnGameState::GameStateModuleIO::JustBouncedAction* lpBounceAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::JustBouncedAction*>(lpEvent);
+            CGS_ASSERT(lpBounceAction != 0, "lpBounceAction");                  // :7353
+            mCrashPlayManager.OnBounce(lpBounceAction);
+            if (lpBounceAction->mbBoostedBounce)                                // lbz 0x22
+            {
+                mBoostManager.OnBounceBoost();                                  // +0x17CEC = 0.6f
+            }
+            break;
+        }
+
+        case BrnGameState::GameStateModuleIO::E_ACTION_EVENT_AT_JUNCTION_AVAILABLE: // 201
+        {
+            const BrnGameState::GameStateModuleIO::JunctionInfoAction* lpJunctionInfo =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::JunctionInfoAction*>(lpEvent);
+            if (lpJunctionInfo->mbOnEntry)                                      // lbz 0x1E
+            {
+                // OnEnterJunction reads only +0x00 (its assert "lpJAction->muJunctionID != 0");
+                // the console passes this very record, whose word 0 is the junction box id.
+                mCrashPlayManager.OnEnterJunction(
+                    reinterpret_cast<
+                        const BrnGameState::GameStateModuleIO::SendJunctionPlayerIsAtAction*>(lpEvent));
+            }
+            break;
+        }
+
+        case KI_ACTION_ROAD_RULES_ENTER_ROAD: // 273
+            mCrashPlayManager.OnEnterRoad(
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction*>(lpEvent));
+            break;
 
         default:
             break;   // [FLAG PC bring-up] see the banner
