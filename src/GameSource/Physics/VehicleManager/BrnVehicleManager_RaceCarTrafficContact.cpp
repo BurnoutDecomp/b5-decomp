@@ -9,11 +9,10 @@
 //   VehicleManager::HandleRaceCarTrafficCarPotentialContact          @0x8263FA50 (783)
 //   VehicleManager::DecideOutcomeOfRaceCarTrafficContact             @0x825C70A0 (305)
 //   VehicleManager::ShouldRaceCarCrashOnCarImpact                    @0x825C6FF8 ( 42)
-//   VehicleManager::PredictCarCarIntersection                        @0x825C57B0 (565)  NAMED GATE
+//   VehicleManager::PredictCarCarIntersection                        @0x825C57B0 (565)  landed 2026-09-23
 //
-// ONE NAMED GATE is left inside HandleRaceCarTrafficCarPotentialContact; it carries its own name +
-// address + blocker + DELETE-WHEN at its seat:
-//   PredictCarCarIntersection                     @0x825C57B0 -- returns true (see its banner)
+// The last named gate here, PredictCarCarIntersection @0x825C57B0, landed 2026-09-23 (crash parity
+// G41-D2): the swept-box prediction is real, so the near-miss arm now runs.
 // The two race-car-side gates that stood beside it -- InstantTakedown and SetRaceCarCrashing, the
 // RACE-CAR side of the outcome (flag bit 0) -- were deleted on 2026-08-25 once the crash-commit
 // chain mounted. This round is the TRAFFIC car's reaction; the traffic-side arms (bits 1..3) are
@@ -62,9 +61,15 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "vendor/renderware/collision/CollisionVolume.hpp"   // rw::collision::BoxVolume (PredictCarCarIntersection)
+#include "vendor/renderware/collision/GPInstance.hpp"        // rw::collision::PrimitivePairIntersect(+Result)
+#include "rw/rwcore_structs.h"                               // rw::Resource (BoxVolume::Initialize's first argument)
+#include "rw/math/vpu/vector3_operation.h"                   // rw::math::vpu::{Add, Mult, Subtract, Cross}
+#include "rw/math/vpu/matrix44affine_operation.h"            // rw::math::vpu::OrthoNormalize3x3
 
 #include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 #include <cmath>     // sqrtf / fabsf
+#include <cstddef>   // std::ptrdiff_t (the memo identity)
 
 namespace BrnPhysics
 {
@@ -78,7 +83,6 @@ namespace
         static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
         return sbEnabled;
     }
-    bool s_bPredictGateLogged = false;
 
     // unk_82FB8270 -- above this the contact is a CHECK, below it a SLAM.
     const f32 KF_TRAFFIC_CHECK_MAGNITUDE = 30.0f;
@@ -216,48 +220,192 @@ bool VehicleManager::ShouldRaceCarCrashOnCarImpact(EActiveRaceCarIndex leVictimA
 // -------------------------------------------------------------------------------------------
 // PredictCarCarIntersection  @0x825C57B0 (565)
 //
-// GATE: VehicleManager::PredictCarCarIntersection @0x825C57B0 -- the swept-box prediction.
-// Blocker: it builds two rw::collision::BoxVolumes over a stack rw::Resource and calls
-// rw::collision::PrimitivePairIntersect @0x82BAC130, which has no declaration in the tree.
-// DELETE-WHEN that entry point is homed.
+// ⭐ LANDED 2026-09-23 (crash parity, G41-D2). Until now this was a GATE that returned true, so
+// every race-car/traffic potential contact the scene manager reported became a SLAM / CHECK /
+// CRASH, the near-miss arm (TestForNearMissFreakOut, whose ONLY xref is the caller's false arm)
+// never ran, and traffic/traffic pairs the console drops became crashes. Its stated blocker --
+// "rw::collision::PrimitivePairIntersect @0x82BAC130 has no declaration" -- had gone stale: the
+// entry point is declared in GPInstance.hpp and bodied in PrimitiveIntersect.cpp, and
+// BoxVolume::Initialize @0x82BAA188 is homed in BoxVolume.cpp.
 //
-// WHAT IS ALREADY RECOVERED, so the next round does not repeat this work:
-//   * memoisation on mpCachedCarA/mpCachedCarB (this+172416/+172420, tested in BOTH orders at
-//     0x825C57F4 and 0x825C5924), returning mbCachedCarCarPredictionResult (+172424) after
-//     re-asserting mCachedCarCarPredictionNormal (+172432) is unit length
-//     ("Bad cached normal in PredictCarCarIntersection", BrnVehicleManager.cpp:0x1835/0x183C).
-// THE TREE MODELS mpCachedCarA/B AS `u32 muCachedCarASlot/BSlot` to hold the +172432 seat
-//     on x64; a real body needs a pointer-shaped identity there (or the slot index the console's
-//     pointers stand for). That is a HEADER decision, not a body one.
-//   * both half-extents come from SimpleVehiclePhysics::mDeformableAABB (+0x6D0 min / +0x6E0
-//     max), halved and then shrunk by (1 - 0.85) * halfExtent.x -- unk_82FB7FD0 == 0.85f,
-//     recovered from its static-init thunk @0x82C5BBB0.
-//   * each box's transform is the body's own, translated by the body velocity over the step and
-//     re-orthonormalised (rw::math::vpu::OrthoNormalize3x3 @0x82203B28, twice).
-//   * on a hit it additionally requires the result's +0x700 lane to be <= 0, then latches
-//     mCachedCarCarPredictionNormal and asserts it ("Bad calculated normal in
-//     PredictCarCarIntersection", :0x18A8).
+// Transcribed from the asm, in order:
+//   0x825C57F4..0x825C5808  memo hit (A == cachedA && B == cachedB): assert the cached normal is
+//                           unit length (:0x1835) and return the cached result (lbzx +172424).
+//   0x825C5924..0x825C5938  the same for the swapped order (:0x183C).
+//   0x825C5A54..0x825C5B68  one rounded box per body over its mDeformableAABB (+0x6D0/+0x6E0):
+//                               half = (max - min) * 0.5          (0.5 = vcsxwfp128 of splat 1)
+//                               r    = half.x - half.x * 0.85     (unk_82FB7FD0, see below)
+//                               dims = half - r ;  dims.x -= r    (vrlimi128 mask 8: x lane only)
+//                           over an rw::Resource staged on the stack (five words zeroed, word 0 =
+//                           a static block) -> BoxVolume::Initialize(resource, dims).
+//                           So the box keeps its full length and height but is 15% narrower
+//                           (0.7*half.x core + r of rounding): a graze in the outer 15% of the
+//                           width does not count.
+//   0x825C5B6C..0x825C5D1C  each box: transform rows 0..2 identity, row 3 = (min + max) * 0.5,
+//                           fatness (+0x50) = r.
+//   0x825C5D20..0x825C5DA0  body A's pose one step ahead: pos' = v*dt + pos (vmaddfp), each
+//                           rotation row' = row - cross(row, w*dt) (the permwi 0x63 idiom), then
+//                           OrthoNormalize3x3 and all four rows copied back. The same integrator
+//                           as ExternalPhysicsBody::IntegrateTransform @0x825A7930.
+//   0x825C5DA4..0x825C5EAC  the same for body B.
+//   0x825C5F00/0x825C5F04   the memo pair is written BEFORE the query.
+//   0x825C5F0C              PrimitivePairIntersect(result, boxA, mtxA, boxB, mtxB, f1 = 0.0
+//                           (flt_82001CC0), r9 = NULL sepDir); r8 is the slot the f32 eats.
+//   0x825C5F10..0x825C5F24  hit = ret != 0 && !(result.distance (+0x4F0) > 0.0) -- fcmpu/bgt, so
+//                           a NaN distance counts as a hit.
+//   0x825C5F48..0x825C6060  hit: store result.normal (+0x4C0) into the memo normal FIRST, assert
+//                           it is unit length (:0x18A8), store 1, return 1.
+//   0x825C5F34..0x825C5F44  miss: store 0, return 0 (the memo normal is left alone).
 //
-// GATE RETURN VALUE, and why: the caller uses this as a REFINEMENT filter over contacts the
-// scene manager has already reported as overlapping. Returning true means "no extra filtering" --
-// every reported pair is handled, which is the round's goal; the near-miss/freak-out arm simply
-// never fires. Returning false would make EVERY hit a near miss and nothing else could ever
-// happen. Neither is the console; true is the honest degradation and is what is shipped here.
+// THE MEMO IDENTITY (host representation, stated because it is not the console's spelling). The
+// DWARF types mpCachedCarA/B `const SimpleVehiclePhysics*`; the tree keeps them as the console's
+// two u32 words so the 16-aligned normal behind them keeps its asm-proven +172432 seat (see the
+// header). Every body this function is handed lives INSIDE this VehicleManager -- the race cars
+// in maRaceCarVehicles and the traffic cars in mPhysicalTrafficManager.maFullTrafficPhysics, the
+// only two callers' sources -- so the body's byte offset from `this` is a lossless 32-bit
+// identity, and 0 (the NULL both Construct and DoCrashPrediction's per-frame reset write) can
+// never name a body. The range check below is the proof obligation, not console behaviour.
 // -------------------------------------------------------------------------------------------
+namespace
+{
+    // unk_82FB7FD0 = splat(flt_82013A78 == 0x3F59999A == 0.85f), CRT thunk 0x82C5BBB0.
+    const f32 KF_PREDICT_BOX_WIDTH_FRACTION = 0.850000024f;
+
+    // The two static blocks the stack rw::Resource's word 0 points at. BoxVolume::Initialize
+    // placement-constructs one box into each (console unk_82FB7980 for body A, unk_82FB7CF0 for
+    // body B -- the latter is the third of the three 96-byte volume statics that
+    // BrnPhysicalBodyPart_Remove.cpp documents). 16-aligned like the console's .data placement.
+    struct PredictBoxStorage
+    {
+        alignas(16) unsigned char maBytes[sizeof(rw::collision::BoxVolume)];
+    };
+    PredictBoxStorage gPredictBoxStorageA;   // X360 unk_82FB7980
+    PredictBoxStorage gPredictBoxStorageB;   // X360 unk_82FB7CF0
+
+    // 0x825C5A54..0x825C5D1C, once per body.
+    rw::collision::BoxVolume* BuildPredictionBox(const SimpleVehiclePhysics* lpBody,
+                                                 PredictBoxStorage& lrStorage)
+    {
+        const CgsGeometric::AxisAlignedBox& lrBox = lpBody->GetDeformableAABB();
+
+        Vector3 lvHalf;
+        lvHalf.x = (lrBox.mMax.x - lrBox.mMin.x) * 0.5f;
+        lvHalf.y = (lrBox.mMax.y - lrBox.mMin.y) * 0.5f;
+        lvHalf.z = (lrBox.mMax.z - lrBox.mMin.z) * 0.5f;
+        lvHalf.w = (lrBox.mMax.w - lrBox.mMin.w) * 0.5f;
+
+        const f32 lfRadius = lvHalf.x - lvHalf.x * KF_PREDICT_BOX_WIDTH_FRACTION;
+
+        rw::collision::Vec4 lvDims;
+        lvDims.x = (lvHalf.x - lfRadius) - lfRadius;     // vrlimi128 mask 8: the x lane only
+        lvDims.y = lvHalf.y - lfRadius;
+        lvDims.z = lvHalf.z - lfRadius;
+        lvDims.w = lvHalf.w - lfRadius;
+
+        rw::Resource lResource = {};
+        lResource.m_baseResources[0] = lrStorage.maBytes;
+        rw::collision::BoxVolume* const lpVolume = rw::collision::BoxVolume::Initialize(lResource, lvDims);
+
+        lpVolume->maTransform[0] = rw::collision::Vec4{ 1.0f, 0.0f, 0.0f, 0.0f };
+        lpVolume->maTransform[1] = rw::collision::Vec4{ 0.0f, 1.0f, 0.0f, 0.0f };
+        lpVolume->maTransform[2] = rw::collision::Vec4{ 0.0f, 0.0f, 1.0f, 0.0f };
+        lpVolume->maTransform[3] = rw::collision::Vec4{ (lrBox.mMin.x + lrBox.mMax.x) * 0.5f,
+                                                        (lrBox.mMin.y + lrBox.mMax.y) * 0.5f,
+                                                        (lrBox.mMin.z + lrBox.mMax.z) * 0.5f,
+                                                        (lrBox.mMin.w + lrBox.mMax.w) * 0.5f };
+        lpVolume->mfRadius = lfRadius;                   // stfs f0/f13, 0x50(box)
+        return lpVolume;
+    }
+
+    // [predict] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). Running totals of the
+    // prediction's verdicts -- a miss is a near miss for a race car and a dropped pair for two
+    // traffic cars, the two arms the old `return true` gate never let run. First 20 calls, then
+    // every 100th. DELETE-WHEN-STABLE.
+    void NotePrediction(u32 luOutcome)   // 0 miss, 1 hit, 2 memo
+    {
+        static const bool sbEnabled = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        static u32 s_auCounts[3] = { 0u, 0u, 0u };
+        ++s_auCounts[luOutcome];
+        const u32 luTotal = s_auCounts[0] + s_auCounts[1] + s_auCounts[2];
+        if (sbEnabled && CgsDev::Log::gpDebugPrint != 0 && (luTotal <= 20u || (luTotal % 100u) == 0u))
+        {
+            *CgsDev::Log::gpDebugPrint << "[predict] calls=" << luTotal << " hit=" << s_auCounts[1]
+                                       << " miss=" << s_auCounts[0] << " memo=" << s_auCounts[2] << "\n";
+        }
+    }
+
+    // 0x825C5D20..0x825C5DA0 (A) / 0x825C5DA4..0x825C5EAC (B).
+    Matrix44Affine PredictPose(const SimpleVehiclePhysics* lpBody, f32 lfTimestep)
+    {
+        Matrix44Affine lPose = lpBody->GetTransform();
+        lPose.wAxis = rw::math::vpu::Add(rw::math::vpu::Mult(lpBody->GetLinearVelocity(), lfTimestep), lPose.wAxis);
+        const Vector3 lvSpin = rw::math::vpu::Mult(lpBody->GetAngularVelocity(), lfTimestep);
+        lPose.zAxis = rw::math::vpu::Subtract(lPose.zAxis, rw::math::vpu::Cross(lPose.zAxis, lvSpin));
+        lPose.yAxis = rw::math::vpu::Subtract(lPose.yAxis, rw::math::vpu::Cross(lPose.yAxis, lvSpin));
+        lPose.xAxis = rw::math::vpu::Subtract(lPose.xAxis, rw::math::vpu::Cross(lPose.xAxis, lvSpin));
+        return rw::math::vpu::OrthoNormalize3x3(lPose);
+    }
+}
+
+u32 VehicleManager::CachedCarIdentity(const SimpleVehiclePhysics* lpBody) const
+{
+    const std::ptrdiff_t liOffset =
+        reinterpret_cast<const unsigned char*>(lpBody) - reinterpret_cast<const unsigned char*>(this);
+    CGS_ASSERT(liOffset > 0 && static_cast<size_t>(liOffset) < sizeof(VehicleManager),
+               "PredictCarCarIntersection: body outside the VehicleManager (host memo identity)");
+    return static_cast<u32>(liOffset);
+}
+
 bool VehicleManager::PredictCarCarIntersection(const SimpleVehiclePhysics* lpBodyA,
                                                const SimpleVehiclePhysics* lpBodyB,
                                                f32 lfTimestep)
 {
-    (void)lpBodyA; (void)lpBodyB; (void)lfTimestep;
+    const u32 luBodyA = CachedCarIdentity(lpBodyA);   // r26
+    const u32 luBodyB = CachedCarIdentity(lpBodyB);   // r25
 
-    if (!s_bPredictGateLogged && CgsDev::Log::gpDebugPrint != 0)
+    if (luBodyA == muCachedCarASlot && luBodyB == muCachedCarBSlot)
     {
-        s_bPredictGateLogged = true;
-        *CgsDev::Log::gpDebugPrint
-            << "[GATE] VehicleManager::PredictCarCarIntersection @0x825C57B0 -- swept-box "
-               "prediction not landed (rw::collision::PrimitivePairIntersect @0x82BAC130 "
-               "undeclared); every predicted pair reported as intersecting.\n";
+        CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
+                   "Bad cached normal in PredictCarCarIntersection: ");          // :0x1835
+        NotePrediction(2u);
+        return mbCachedCarCarPredictionResult;
     }
+    if (luBodyA == muCachedCarBSlot && luBodyB == muCachedCarASlot)
+    {
+        CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
+                   "Bad cached normal in PredictCarCarIntersection: ");          // :0x183C
+        NotePrediction(2u);
+        return mbCachedCarCarPredictionResult;
+    }
+
+    rw::collision::BoxVolume* const lpBoxA = BuildPredictionBox(lpBodyA, gPredictBoxStorageA);
+    rw::collision::BoxVolume* const lpBoxB = BuildPredictionBox(lpBodyB, gPredictBoxStorageB);
+
+    const Matrix44Affine lPoseA = PredictPose(lpBodyA, lfTimestep);
+    const Matrix44Affine lPoseB = PredictPose(lpBodyB, lfTimestep);
+
+    muCachedCarASlot = luBodyA;                          // 0x825C5F00 stw r26
+    muCachedCarBSlot = luBodyB;                          // 0x825C5F04 stw r25
+
+    rw::collision::PrimitivePairIntersectResult lResult;
+    const rw::collision::RwBool lbIntersects = rw::collision::PrimitivePairIntersect(
+        lResult, lpBoxA, &lPoseA, lpBoxB, &lPoseB, 0.0f, nullptr);
+
+    if (lbIntersects == 0 || lResult.distance > 0.0f)
+    {
+        mbCachedCarCarPredictionResult = false;
+        NotePrediction(0u);
+        return false;
+    }
+
+    mCachedCarCarPredictionNormal.x = lResult.normal.x;
+    mCachedCarCarPredictionNormal.y = lResult.normal.y;
+    mCachedCarCarPredictionNormal.z = lResult.normal.z;
+    mCachedCarCarPredictionNormal.w = lResult.normal.w;
+    CGS_ASSERT(IsUnitLength(mCachedCarCarPredictionNormal),
+               "Bad calculated normal in PredictCarCarIntersection: ");          // :0x18A8
+    mbCachedCarCarPredictionResult = true;
+    NotePrediction(1u);
     return true;
 }
 

@@ -1719,10 +1719,14 @@ namespace Vehicle
                                            VecFloat lvfImpactSpeed, VecFloat lvfScale) const;
 
         // @0x825C57B0 (565). Swept-box prediction: will these two cars actually meet inside the
-        // step? NAMED GATE this round -- see the .cpp.
+        // step? Landed 2026-09-23 -- see the .cpp.
         bool PredictCarCarIntersection(const SimpleVehiclePhysics* lpBodyA,
                                        const SimpleVehiclePhysics* lpBodyB,
                                        f32 lfTimestep);
+        // NOT AN X360 SYMBOL. The host's 32-bit spelling of the mpCachedCarA/B identity: the body's
+        // byte offset inside this manager (every body PredictCarCarIntersection sees lives in
+        // maRaceCarVehicles or mPhysicalTrafficManager). See muCachedCarASlot below.
+        u32 CachedCarIdentity(const SimpleVehiclePhysics* lpBody) const;
 
         // NOT AN X360 SYMBOL. HandleRaceCarTrafficCarPotentialContact emits this test TWICE
         // inline (0x82640510 / 0x826405B8, instruction-identical with the two cars swapped);
@@ -2763,8 +2767,10 @@ namespace Vehicle
         // POINTER WIDTH. The DWARF types these two `const SimpleVehiclePhysics*`. They are
         // modelled as u32 slots so the 16-aligned mCachedCarCarPredictionNormal below keeps its
         // asm-proven +172432 seat on x64 -- two 8-byte pointers would push it to +172440 and silently
-        // break the rest of the class. Construct only NULLs them; nothing in this tree dereferences
-        // them yet. DELETE-WHEN a RaceCarPhysics/SimpleVehiclePhysics cache pass needs them live.
+        // break the rest of the class. LIVE since 2026-09-23: PredictCarCarIntersection memoises on
+        // them, holding CachedCarIdentity(body) -- the body's byte offset inside this manager, which
+        // is never 0, so the NULL that Construct and DoCrashPrediction's per-frame reset write still
+        // means 'no pair cached'. They are compared, never dereferenced.
         u32 muCachedCarASlot;                       // +172416 = NULL  (DWARF: mpCachedCarA)
         u32 muCachedCarBSlot;                       // +172420 = NULL  (DWARF: mpCachedCarB)
         bool mbCachedCarCarPredictionResult;        // +172424 = false

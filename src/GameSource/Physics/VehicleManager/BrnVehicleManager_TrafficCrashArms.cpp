@@ -164,9 +164,8 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
 
     // ---- [T13] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_TRAFFIC_DIAG). DELETE-WHEN-STABLE. ----
     // What reaches this arm and what it does with it: the two slots, both states, the closing
-    // speed against its 60 mph gate, the trailer bits. PredictCarCarIntersection is still the
-    // tree's `true` stand-in, so this is also the count of pairs a real predictor would have had
-    // the chance to reject. First 40 arrivals, then every 200th.
+    // speed against its 60 mph gate, the trailer bits. Only pairs PredictCarCarIntersection
+    // accepts arrive here (real since 2026-09-23). First 40 arrivals, then every 200th.
     {
         static u32 s_uArrivals = 0u;
         ++s_uArrivals;
