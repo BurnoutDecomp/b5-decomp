@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstddef>   // offsetof
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
@@ -10,7 +12,8 @@
 // Canonical class home for the network-message base. Console layout (byte
 // offsets the per-function asm dereferences):
 //
-//   +0x00  vptr
+//   +0x00  vptr             (5 slots: IsReliable, OldMessagesAreValid,
+//                           GetPackedMessageSize, GetName, PackOrUnpack)
 //   +0x04  mePackOrUnpack   (EPackOrUnpack; used as a 3-state lifecycle marker:
 //                           0 = packing, 1 = unpacking, 2 = idle)
 //   +0x08  mBitstream       (CgsNetwork::SmartBitStream, by value, 0x10 bytes:
@@ -24,9 +27,9 @@
 // mBitstream on sits later than its console offset; members are addressed by
 // name only.
 
-// Forward declaration for the PackOrUnpackTime field primitive below; the concrete
-// CgsSystem::Time layout lives in GameShared/GameClasses/System/Timer/CgsTime.h.
-namespace CgsSystem { class Time; }
+// Forward declarations for the Time / DateAndTime field primitives below; the concrete
+// classes live in the GameShared/GameClasses/System/Timer headers.
+namespace CgsSystem { class Time; class DateAndTime; }
 
 namespace CgsNetwork
 {
@@ -59,8 +62,27 @@ namespace CgsNetwork
             E_PACK_OR_UNPACK_COUNT  = 2,
         };
 
-        // --- layout (frozen) ---
-        void*          mpVTable;                 // +0x00
+        // --- virtual interface (console vtable order, slots 0..4) ---
+        // Slot 0: the base reports "not reliable"; ReliableMessage overrides it.
+        virtual bool               IsReliable() const;
+        // Slot 1: whether messages of this type tolerate older-frame arrivals
+        // (ReliableMessageManager::MessageIsDuplicate). The base reports false.
+        virtual bool               OldMessagesAreValid() const;
+        // Slot 2: packs the message into a scratch buffer of KI_MAX_PACKED_MESSAGE_SIZE
+        // bytes and returns the packed length in whole bytes. Subclasses zero their
+        // payload first so the size is the same every call.
+        virtual s32                GetPackedMessageSize();
+        // Slot 3: every concrete message names itself; the base has no body anywhere
+        // in the image (no base vtable is ever emitted), so it stays pure.
+        virtual const char*        GetName() const = 0;
+
+    protected:
+        // Slot 4: the base serialises nothing and reports success. Subclasses
+        // override it and OR the per-field statuses together.
+        virtual PackOrUnpackResult PackOrUnpack();
+
+    public:
+        // --- layout (frozen; the compiler's vptr is +0x00) ---
         s32            mePackOrUnpack;           // +0x04
         SmartBitStream mBitstream;               // +0x08 (0x10 console bytes)
         u8             mu8GameID;                // +0x18
@@ -71,22 +93,7 @@ namespace CgsNetwork
         // --- reconstructed members (this TU) ---
         // Placement-style initialiser the console build calls "Construct" (returns this).
         Message* Construct();
-        // Packs the message into a scratch buffer of KI_MAX_PACKED_MESSAGE_SIZE bytes
-        // (CgsMessage.cpp) and returns the packed length in whole bytes.
-        s32      GetPackedMessageSize();
-        // vtable slot 4 (+0x10): the base serialises nothing and reports success.
-        // Subclasses shadow it and OR this base status into their own.
-        PackOrUnpackResult PackOrUnpack();
         u8   GetGameID() const;
-        // vtable slot 0 in the X360 build: the base reports "not reliable"; only
-        // ReliableMessage overrides it. Subclass PrepareForSend asserts on it.
-        bool IsReliable() const;
-        // vtable slot 1 in the X360 build (DWARF CgsMessage.cpp:393): reports whether
-        // messages of this type tolerate out-of-order (older-frame) arrivals. The base
-        // reports false; ordered subclasses override. Bodied in its own TU; declared here
-        // so ReliableMessageManager::MessageIsDuplicate can dispatch it to reject stale
-        // reliable messages.
-        bool OldMessagesAreValid() const;
         Message* SetType(s32 leType);
 
         // --- inline flag/scalar accessors (used by the NetworkPlayer send pump) ------------
@@ -129,7 +136,28 @@ namespace CgsNetwork
         // Static helper (writes the result through the output vector pointer).
         static void GetVectorFromAngles(rw::math::vpu::Vector3* lpvOut,
                                         f32 lfAngleA, f32 lfAngleB, f32 lfMagnitude);
+
+        // The rotation rows of an affine from roll / pitch / yaw (the translation row and
+        // every w lane are left as they are), and back. Used by the matrix field primitive.
+        static void SetMatrixFromEulerAngles(rw::math::vpu::Matrix44Affine* lpMatrix,
+                                             f32 lfRoll, f32 lfPitch, f32 lfYaw);
+        // Declaration only: vector code (an inlined arc-sine and two arc-tangents built on
+        // reciprocal estimates) that is not reconstructed yet.
+        static void GetEulerAnglesFromMatrix(rw::math::vpu::Matrix44Affine lMatrix,
+                                             f32* lpfRollOut, f32* lpfPitchOut, f32* lpfYawOut);
+        // Declaration only, for the same reason: the two angles and the magnitude of a vector.
+        static void GetAnglesFromVector(rw::math::vpu::Vector3 lVector,
+                                        f32* lpfAngleAOut, f32* lpfAngleBOut, f32* lpfMagnitudeOut);
     };
+
+    // Console layout, checked on a 32-bit build (the vptr is the +0x00 word).
+    static_assert(sizeof(void*) != 4 || offsetof(Message, mePackOrUnpack) == 0x04, "Message::mePackOrUnpack @ +0x04");
+    static_assert(sizeof(void*) != 4 || offsetof(Message, mBitstream)     == 0x08, "Message::mBitstream @ +0x08");
+    static_assert(sizeof(void*) != 4 || offsetof(Message, mu8GameID)      == 0x18, "Message::mu8GameID @ +0x18");
+    static_assert(sizeof(void*) != 4 || offsetof(Message, mx8Flags)       == 0x19, "Message::mx8Flags @ +0x19");
+    static_assert(sizeof(void*) != 4 || offsetof(Message, mi8Type)        == 0x1A, "Message::mi8Type @ +0x1A");
+    static_assert(sizeof(void*) != 4 || offsetof(Message, mu16Frame)      == 0x1C, "Message::mu16Frame @ +0x1C");
+    static_assert(sizeof(void*) != 4 || sizeof(Message) == 0x20, "sizeof(Message) == 0x20");
 
     // 16-bit frame-ring helpers (homed in CgsMessageFrameUtils.cpp; declared in
     // CgsMessageFrameUtils.h). Declared here so the rest of the Message hierarchy
@@ -138,69 +166,54 @@ namespace CgsNetwork
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B);
     u16  GetFrameDiffWrapped16(u16 lu16FrameA, u16 lu16FrameB);
 
+    // 50 Hz <-> 60 Hz translation of a 16-bit frame counter received from a console
+    // running the other simulation rate (TrafficManager frame conversion,
+    // BrnNetworkPlayer::RetrieveBufferedMessage).
+    u16 TranslateFrame50HzTo60Hz(u16 lu16Frame50Hz, u16 lu16CurrentFrame50Hz, u16 lu16NumWraps);
+    u16 TranslateFrame60HzTo50Hz(u16 lu16Frame60Hz, u16 lu16CurrentFrame60Hz, u16 lu16NumWraps);
+    // The float reference versions the translations are cross-checked against
+    // (CgsOldFrameConversionFunctions.cpp).
+    u16 OLDTranslateFrame50HzTo60Hz(u16 lu16Frame50Hz, u16 lu16CurrentFrame50Hz, u16 lu16NumWraps);
+    u16 OLDTranslateFrame60HzTo50Hz(u16 lu16Frame60Hz, u16 lu16CurrentFrame60Hz, u16 lu16NumWraps);
+
     // ------------------------------------------------------------------------
-    // Shared field (de)serialise primitives (homed in CgsMessage.cpp; each is its
-    // own not-yet-reconstructed TU, so they are declared here -- the whole message
-    // hierarchy packs/unpacks fields by name through these). Every Pack/Unpack pass
-    // routes the field through the message's bitstream and the lifecycle word
-    // (mePackOrUnpack) decides pack vs unpack. Each returns a per-field status that
-    // the callers OR together (0 == all fields succeeded == KX_PACK_OR_UNPACK_SUCCESS).
-    //   PackOrUnpackInt  -- sub_82881370: a quantised 32-bit int in [liMin, liMax].
-    //   PackOrUnpackU8   -- sub_82881078: a quantised 8-bit value  in [liMin, liMax].
-    //   PackOrUnpackS16  -- sub_82881198: a quantised signed-16-bit value in [liMin, liMax].
-    //   PackOrUnpackU16  -- sub_82881250: a quantised 16-bit value in [liMin, liMax].
-    //   PackOrUnpackBool -- sub_8288DDA0: a single boolean flag.
-    //   PackOrUnpackCgsID-- sub_82881C00: a 64-bit CgsID.
-    // (PackOrUnpackU8 / PackOrUnpackS16 are the uint8_t* / int16_t* overloads of the X360
-    // Message::PackOrUnpack field primitive -- DWARF CgsMessage.cpp:538 / :576 -- distinct
-    // from the uint16_t* one (PackOrUnpackU16, :617). First needed by
-    // BrnNetwork::SelectedRoutesMessage::PackOrUnpack: the u8 landmark count and the s16
-    // landmark ids respectively. Bodies live in their own not-yet-reconstructed TU.)
-    // The field to (de)serialise is passed by pointer; the return is a per-field
-    // status the callers bitwise-OR together into the message's PackOrUnpackResult.
-    // Int / U8 / S16 / U16 / UInt / Bool are bodied in CgsMessage.cpp; CgsID, Float,
-    // Time, Matrix and Vector are still declaration-only.
+    // Shared field (de)serialise primitives, homed in CgsMessage.cpp: the overloads of
+    // the Message::PackOrUnpack field primitive, spelled as free functions that take
+    // the message. The lifecycle word (mePackOrUnpack) picks pack vs unpack; each
+    // returns a per-field status the callers OR together (0 == all fields succeeded ==
+    // KX_PACK_OR_UNPACK_SUCCESS). Fields are passed by pointer.
+    //   Int / U8 / S16 / U16 / UInt -- a quantised integer in [liMin, liMax].
+    //   Bool  -- a single flag (a u8 in [0, 1]).
+    //   CgsID -- the low and high 32-bit halves as two full-range ints.
+    //   Float -- a float in [lfMin, lfMax], quantised either to lfResolution or to
+    //            liNumBits bits.
+    //   Time  -- whole seconds as an int in [liMinSeconds, liMaxSeconds - 1] plus the
+    //            fraction in [0, 1] at lfResolution; the two-argument form uses
+    //            [0, INT_MAX - 1] seconds.
+    //   DateAndTime -- second, minute, hour, day, month and year as bounded ints.
+    //   Matrix / Vector -- the Euler-angle and direction-angle quantisers; declaration
+    //            only (their angle helpers are vector code not reconstructed yet).
     PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
-    //   PackOrUnpackUInt -- sub_82881490: a quantised 32-bit UNSIGNED int in [liMin, liMax]
-    //   (distinct from PackOrUnpackU16). First needed by StuntMultiplierMessage::PackOrUnpack.
     PackOrUnpackResult PackOrUnpackUInt(Message* lpMessage, u32* lpu32Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField);
     PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field);
-    //   PackOrUnpackFloat  -- sub_8288DF50: a quantised 32-bit float in [fMin, fMax] at a
-    //                        given resolution (the X360 success-message scores pass
-    //                        0.0f .. FLT_MAX at 0.005f). The field is passed by pointer; the
-    //                        return is the per-field status the callers OR together.
     PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, f32 lfResolution);
-    //   PackOrUnpackTime  -- sub_8288EA60: a CgsSystem::Time value (de)serialised at a given
-    //                        per-tick resolution (the X360 PlayerFinishedRoundMessage passes
-    //                        1/600 s == flt_8208550C). The Time is passed by pointer; the
-    //                        return is the per-field status the callers OR together. Bodied
-    //                        in its own not-yet-reconstructed bitstream TU. (CgsSystem::Time
-    //                        is forward-declared to keep this base header light -- the
-    //                        callers already include CgsTime.h for the concrete type.)
+    PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, s32 liNumBits);
+    PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField,
+                                        s32 liMinSeconds, s32 liMaxSeconds, f32 lfResolution);
     PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField, f32 lfResolution);
-    //   PackOrUnpackMatrix -- sub_8288E078: quantise an affine's rotation (roll/pitch/yaw
-    //                        bit-widths) and its translation row (per-axis bit-widths) into
-    //                        [lPosMin, lPosMax], returning the per-field OR status. First
-    //                        needed by BrnNetwork::CrashingTrafficMessage::PackOrUnpack. The
-    //                        matrix + AABB corners are passed by value/pointer; the body lives
-    //                        in its own not-yet-reconstructed bitstream TU.
+    PackOrUnpackResult PackOrUnpackDateAndTime(Message* lpMessage, CgsSystem::DateAndTime* lpDateAndTime);
+    // Matrix: the rotation as three Euler angles (roll/pitch/yaw bit widths), then the
+    // translation row per axis into [lPosMin, lPosMax] (per-axis bit widths).
     PackOrUnpackResult PackOrUnpackMatrix(Message* lpMessage, rw::math::vpu::Matrix44Affine* lpMatrix,
                                           s32 liRollBits, s32 liPitchBits, s32 liYawBits,
-                                          s32 liPosXBits, s32 liPosYBits, s32 liPosZBits,
-                                          rw::math::vpu::Vector3 lPosMin, rw::math::vpu::Vector3 lPosMax);
-    //   PackOrUnpackVector -- sub_8288E390: quantise a Vector3 (a bounded-magnitude direction)
-    //                        with a per-axis bit width and a magnitude bound, returning the
-    //                        per-field OR status. First needed by BrnNetwork::AggressiveDriving-
-    //                        Message::PackOrUnpack (direction packed as 8/8/8 bits, magnitude 1.01).
-    //                        The X360 ABI arg order sandwiches the f32 magnitude bound between the
-    //                        second and third axis-bit-width slots (the FP arg reserves the r7 GPR
-    //                        slot, so the third bit width lands in r8) -- preserved here verbatim.
-    //                        The vector is passed by pointer; the body lives in its own
-    //                        not-yet-reconstructed bitstream TU.
+                                          rw::math::vpu::Vector3 lPosMin, rw::math::vpu::Vector3 lPosMax,
+                                          s32 liPosXBits, s32 liPosYBits, s32 liPosZBits);
+    // Vector: a bounded-magnitude vector as two angles plus a magnitude. The f32 bound
+    // sits between the second and third bit widths in the parameter list.
     PackOrUnpackResult PackOrUnpackVector(Message* lpMessage, rw::math::vpu::Vector3* lpvField,
                                           s32 liXBits, s32 liYBits, f32 lfMagnitudeBound, s32 liZBits);
 

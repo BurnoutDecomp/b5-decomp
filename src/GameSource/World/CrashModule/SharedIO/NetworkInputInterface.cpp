@@ -1,12 +1,14 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h" // BrnTraffic::KU_MAX_TOTAL_TRAFFIC
+#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::IsValid (per-row matrix validity)
 
 // BrnWorld::CrashIO::NetworkInputInterface
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (Construct @ 0x82592798,
 // MarkRaceCarForUpdate @ 0x8254E6F8, operator= @ 0x823C8A78). Per-player network input
 // view of crashing traffic: an active-race-car bitset plus one fixed-capacity (24) update
-// queue per race car. The other NetworkInputInterface accessors (Clear / AddTrafficUpdate /
-// IsRaceCarMarkedForUpdate / GetCrashingTrafficUpdateQueue) live in the sibling wave TU.
+// queue per race car. AddTrafficUpdate and IsRaceCarMarkedForUpdate have out-of-line console
+// copies and are bodied here; Clear is header-inline.
 
 namespace BrnWorld
 {
@@ -37,6 +39,42 @@ void NetworkInputInterface::MarkRaceCarForUpdate(s32 liRaceCarId)
     CGS_ASSERT(liRaceCarId < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarId < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
 
     mActiveRaceCars.SetBit(static_cast<u32>(liRaceCarId));
+}
+
+// Queue a crashing traffic vehicle's update under its owning race car. The vehicle index, the
+// owner index and the transform are asserted (non-gating), as is the owner having been marked
+// for update this frame; the event {u16 vehicle id, transform} then goes onto that car's queue.
+void NetworkInputInterface::AddTrafficUpdate(u32 luVehicleIndex, u32 luOwnerRaceCarIndex, Matrix44Affine lTransform)
+{
+    CGS_ASSERT(luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC,
+               "luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+    CGS_ASSERT(luOwnerRaceCarIndex < static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS),
+               "luOwnerRaceCarIndex < (uint32_t) BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+
+    const bool lbValid = rw::math::vpu::IsValid(lTransform.xAxis)
+                      && rw::math::vpu::IsValid(lTransform.yAxis)
+                      && rw::math::vpu::IsValid(lTransform.zAxis)
+                      && rw::math::vpu::IsValid(lTransform.wAxis);
+    CGS_ASSERT(lbValid, "rw::math::IsValid( lTransform )");
+
+    CGS_ASSERT(mActiveRaceCars.IsBitSet(luOwnerRaceCarIndex),
+               "You must mark a race car for update before adding vehicles owned by them");
+
+    CrashingTrafficUpdateEvent lEvent;
+    lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
+    lEvent.mTransform  = lTransform;
+
+    maCrashingTrafficUpdateQueues[luOwnerRaceCarIndex].AddEvent(lEvent);
+}
+
+// Whether the race car has been marked for update (its bit is set). Asserts the index range
+// (non-gating) first.
+bool NetworkInputInterface::IsRaceCarMarkedForUpdate(s32 liRaceCarId) const
+{
+    CGS_ASSERT(liRaceCarId >= 0, "liRaceCarId >= 0");
+    CGS_ASSERT(liRaceCarId < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarId < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+
+    return mActiveRaceCars.IsBitSet(static_cast<u32>(liRaceCarId));
 }
 
 // Per-instance copy assignment. The X360 body copies the 8-byte active-car bitset, then for

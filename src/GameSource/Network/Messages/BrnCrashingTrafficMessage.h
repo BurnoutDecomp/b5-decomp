@@ -52,14 +52,14 @@ namespace BrnNetwork
         void          PrepareForSend(u16 lu16Frame, u16 lu16FramesSinceRoundStart,
                                      s32 liCount, CrashingTrafficData* lpData);
         bool          Retrieve(s32* lpiCount, CrashingTrafficData* lpData);
-        virtual s32   GetPackedMessageSize();        // DWARF :112 (sibling .cpp)
+        s32   GetPackedMessageSize() override;
         u16           GetFramesSinceStart() const;   // DWARF :118 (sibling .cpp)
 
         // LEDGER func @ 0x827DE088 -- bodied in this TU (DWARF BrnCrashingTrafficMessage.h:124).
-        virtual const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         s32                 miCrashingTrafficDataCount;                            // DWARF :106
@@ -73,4 +73,7 @@ namespace BrnNetwork
     {
         return "Crashing Traffic Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(CrashingTrafficMessage) == 0x7B0, "sizeof(CrashingTrafficMessage) == 0x7B0");
 } // namespace BrnNetwork

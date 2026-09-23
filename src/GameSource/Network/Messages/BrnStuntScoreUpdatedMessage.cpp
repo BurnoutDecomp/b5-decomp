@@ -42,4 +42,34 @@ namespace BrnNetwork
         miStuntScore = liStuntScore;   // stw r28, 0x28(this)
         CgsNetwork::ReliableMessage::PrepareForSend(KI_STUNT_SCORE_UPDATED_MESSAGE_TYPE, lu16FrameCount);
     }
+
+    // The console body is one folded copy shared with CheckpointTriggeredMessage::Retrieve
+    // (same layout: one s32 at +0x28).
+    bool StuntScoreUpdatedMessage::Retrieve(s32* lpiStuntScore)
+    {
+        if (IsMessageValid())
+        {
+            *lpiStuntScore = miStuntScore;
+            SetMessageInvalid();
+            return true;
+        }
+
+        *lpiStuntScore = -1;
+        return false;
+    }
+
+    // Zero the score, then size through the reliable base (one folded copy shared with
+    // CheckpointTriggeredMessage::GetPackedMessageSize).
+    s32 StuntScoreUpdatedMessage::GetPackedMessageSize()
+    {
+        miStuntScore = 0;
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
+    }
+
+    // The console slot is the same folded code as CheckpointTriggeredMessage::GetName, so
+    // this message names itself with that string.
+    const char* StuntScoreUpdatedMessage::GetName() const
+    {
+        return "Checkpoint Triggered Message";
+    }
 } // namespace BrnNetwork

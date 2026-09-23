@@ -97,6 +97,24 @@ namespace Vehicle
         return *this;
     }
 
+    // VehicleOutputInterface::Append, inlined into its one caller
+    // PostSimulationInputBuffer::AppendVehicleOutputInterface. Unlike operator= it keeps this
+    // interface's queued events (no length reset) and leaves the aggressive-driving flags alone.
+    void VehicleOutputInterface::Append(const VehicleOutputInterface* lpOther)
+    {
+        mTrafficStateQueue.Append(lpOther->mTrafficStateQueue);
+        mImpactEventQueue.Append(lpOther->mImpactEventQueue);
+        GetGameEventQueue()->Append(*lpOther->GetGameEventQueue());
+
+        mUsedRaceCars = lpOther->mUsedRaceCars;
+
+        // All eight states in one block copy (8 x 1120 bytes on the console).
+        for (s32 liCar = 0; liCar < KI_NUM_RACE_CARS; ++liCar)
+        {
+            std::memcpy(&maRaceCarStates[liCar], &lpOther->maRaceCarStates[liCar], sizeof(RaceCarState));
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
     // VehicleOutputRequestInterface::_AssertLayout   -- the gate for the derived six-queue layout.
     //

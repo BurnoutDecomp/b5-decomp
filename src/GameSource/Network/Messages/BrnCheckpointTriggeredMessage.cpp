@@ -62,4 +62,10 @@ namespace BrnNetwork
         *lpiCheckpointIndex = -1;                     // li r11,-1 ; stw r11,0(r4)
         return false;                                // li r3,0
     }
+
+    // An older message is still accepted (slot 1 is the shared `return true` leaf).
+    bool CheckpointTriggeredMessage::OldMessagesAreValid() const
+    {
+        return true;
+    }
 } // namespace BrnNetwork

@@ -124,6 +124,37 @@ namespace BrnNetwork
             KI_STUNT_MULTIPLIER_EVENT_TYPE, sizeof(lEvent));   // console record: 16 bytes
     }
 
+    // Unpack the arrived stunt score and queue it, with the sender's id, as network event 47
+    // on the owning player's module (the player is the registered user data).
+    void BrnNetworkPlayer::_StuntScoreUpdatedMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                                   CgsNetwork::NetworkPlayerID lNetworkPlayerID,
+                                                                   void* lpUserData)
+    {
+        const s32 KI_STUNT_SCORE_UPDATED_EVENT_TYPE = 47;
+
+        StuntScoreUpdatedMessage* lpStuntScoreUpdatedMessage =
+            static_cast<StuntScoreUpdatedMessage*>(lpMessage);
+        CGS_ASSERT(lpStuntScoreUpdatedMessage != 0, "lpStuntScoreUpdatedMessage");
+
+        // 8-byte event record: +0 sending player id, +4 the score.
+        struct StuntScoreUpdatedEvent
+        {
+            s32 miNetworkPlayerID;
+            s32 miStuntScore;
+        } lEvent;
+
+        if (lpStuntScoreUpdatedMessage->Retrieve(&lEvent.miStuntScore))
+        {
+            BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
+            CGS_ASSERT(lpPlayer != 0, "lpPlayer");
+
+            lEvent.miNetworkPlayerID = lNetworkPlayerID;
+            lpPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lEvent),
+                KI_STUNT_SCORE_UPDATED_EVENT_TYPE, sizeof(lEvent));   // console record: 8 bytes
+        }
+    }
+
     // Unpack the arrived multiplier message and forward it to the owning BrnNetworkPlayer
     // (handed in as the registered user data).
     void BrnNetworkPlayer::_StuntMultiplierMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,

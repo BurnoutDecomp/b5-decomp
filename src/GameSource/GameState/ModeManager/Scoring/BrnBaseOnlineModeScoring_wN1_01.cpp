@@ -5,10 +5,6 @@
 // priority order: each award re-sorts the rows with its rating comparator and hands the leading row
 // the award if that award's give test passes and the car has not already been awarded. At most
 // KI_ONLINE_AWARD_MAX_AWARDS awards are handed out, one per car.
-//
-// Link dependency: four of the per-car reads are header-inline ScoringSystem accessors
-// (GetNumberOfCrashes, GetTotalDistanceDriven, IsNetworkCarsDistanceDrivenValid, GetLongestDrift)
-// that BrnScoringSystem.h declares but does not yet define.
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"
 

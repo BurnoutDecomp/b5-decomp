@@ -22,8 +22,7 @@
 // confirm BurnoutSkillzData == 56 bytes (f32[14], the X360-grown array in
 // BrnBurnoutSkillzData.h). mbInitialData lands at +0x60 (== 0x28 + 0x38).
 //
-// The X360 build models the vtable as the inherited Message::mpVTable member (no C++
-// `virtual`), matching every committed message base; these are therefore plain methods.
+// GetPackedMessageSize, PackOrUnpack and GetName override the Message virtuals.
 // Reconstructed (ledger funcs for this TU):
 //   GetName              @ 0x8257C330 -- inline here; returns "Burnout Skillz Message"
 //   GetPackedMessageSize @ 0x8257C2F0 -- clear payload + chain base
@@ -57,15 +56,18 @@ namespace BrnNetwork
 
         // @ 0x8257C2F0 -- reset the payload (Clear + mbInitialData=false) and chain the
         // ReliableMessage base to compute the packed size.
-        s32 GetPackedMessageSize();
+        s32 GetPackedMessageSize() override;
 
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
         // Ledger func @ 0x8257C330 -- inline header-homed accessor.
-        const char* GetName() const { return "Burnout Skillz Message"; }
+        const char* GetName() const override { return "Burnout Skillz Message"; }
 
     private:
         BrnGameState::BurnoutSkillzData mSkillzData;    // +0x28  (56 bytes)
         bool                            mbInitialData;  // +0x60
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(BurnoutSkillzMessage) == 0x64, "sizeof(BurnoutSkillzMessage) == 0x64");
 } // namespace BrnNetwork

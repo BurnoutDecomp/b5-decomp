@@ -115,6 +115,20 @@ namespace BrnGameState
             E_IMAGE_TYPE_COUNT                  = 6,
         };
 
+        // The step a payback-mugshot action (E_ACTION_PAYBACK_MUGSHOT, record +0x10) asks the
+        // network side to perform. The MugshotManager's producers store 0 when a capture is
+        // requested and 1 / 3 / 5 from its capture and show steps.
+        enum EMugshotResponse
+        {
+            E_MUGSHOT_RESPONSE_PREPARE_CAPTURE    = 0,
+            E_MUGSHOT_RESPONSE_CAPTURE            = 1,
+            E_MUGSHOT_RESPONSE_TAKE               = 2,
+            E_MUGSHOT_RESPONSE_SHOW               = 3,
+            E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT    = 4,
+            E_MUGSHOT_RESPONSE_STOP_THEIR_MUGSHOT = 5,
+            E_MUGSHOT_RESPONSE_COUNT              = 6,
+        };
+
         // ADDITIVE GROW (BrnGameStateImageManagerBase TU): the gallery-image-type enum the in-game
         // photo gallery is keyed on. DWARF BrnGameStateSharedIO.h:518-525 (X360-gated). The two
         // road-rule EImageType variants both fold to the single ROAD_RULE gallery; COUNT == 5.

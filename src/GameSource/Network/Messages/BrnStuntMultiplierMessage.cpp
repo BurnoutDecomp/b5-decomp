@@ -2,6 +2,8 @@
 #include "GameSource/Network/Messages/BrnStuntMultiplierMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+#include <cstring>   // memcpy (the 8-byte record crosses the s64 interface)
+
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::StuntMultiplierMessage::GetName              @ 0x8257D2E8
 //   BrnNetwork::StuntMultiplierMessage::GetPackedMessageSize @ 0x8257D210
@@ -24,22 +26,22 @@ namespace BrnNetwork
 
     s32 StuntMultiplierMessage::GetPackedMessageSize()
     {
-        mi64MultiplierInfo = 0;      // stw 0,+0x28 ; sth 0,+0x2E ; sth 0,+0x2C
-        miFramesSinceStart = 0;      // stw 0,+0x30
+        mMultiplierInfo.muMultiplierStuntTypes = 0;   // +0x28
+        mMultiplierInfo.mu16BarrelRolls        = 0;   // +0x2E
+        mMultiplierInfo.mu16FlatSpins          = 0;   // +0x2C
+        miFramesSinceStart                     = 0;   // +0x30
         return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
     CgsNetwork::PackOrUnpackResult StuntMultiplierMessage::PackOrUnpack()
     {
-        u8* lpu8Info = reinterpret_cast<u8*>(&mi64MultiplierInfo);
-
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxTypes =
-            CgsNetwork::PackOrUnpackUInt(this, reinterpret_cast<u32*>(lpu8Info + 0), 1, 0x3FFFF) | lxBase;
+            CgsNetwork::PackOrUnpackUInt(this, &mMultiplierInfo.muMultiplierStuntTypes, 1, 0x3FFFF) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxBarrelRolls =
-            CgsNetwork::PackOrUnpackU16(this, reinterpret_cast<u16*>(lpu8Info + 6), 0, 8) | lxTypes;
+            CgsNetwork::PackOrUnpackU16(this, &mMultiplierInfo.mu16BarrelRolls, 0, 8) | lxTypes;
         const CgsNetwork::PackOrUnpackResult lxFlatSpins =
-            CgsNetwork::PackOrUnpackU16(this, reinterpret_cast<u16*>(lpu8Info + 4), 0, 16);
+            CgsNetwork::PackOrUnpackU16(this, &mMultiplierInfo.mu16FlatSpins, 0, 16);
         return CgsNetwork::PackOrUnpackInt(this, &miFramesSinceStart, 0, 0x7FFFFFFF)
              | (lxFlatSpins | lxBarrelRolls);
     }
@@ -56,7 +58,8 @@ namespace BrnNetwork
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                    "!CgsNetwork::ReliableMessage::IsMessageValid()");
 
-        mi64MultiplierInfo = liStuntMultiplier;   // std r26, +0x28 (whole 8-byte blob)
+        const s64 li64MultiplierInfo = liStuntMultiplier;   // the whole 8-byte record
+        memcpy(&mMultiplierInfo, &li64MultiplierInfo, sizeof(mMultiplierInfo));
         miFramesSinceStart = liFramesSinceStart;  // stw r27, +0x30
         CgsNetwork::ReliableMessage::PrepareForSend(KI_STUNT_MULTIPLIER_MESSAGE_TYPE, lu16FrameCount);
     }
@@ -66,7 +69,7 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
             return false;
 
-        *lpi64Out = mi64MultiplierInfo;
+        memcpy(lpi64Out, &mMultiplierInfo, sizeof(mMultiplierInfo));
         *lpiOut   = miFramesSinceStart;
         mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;   // clrrwi + stb: clear VALID bit
         return true;

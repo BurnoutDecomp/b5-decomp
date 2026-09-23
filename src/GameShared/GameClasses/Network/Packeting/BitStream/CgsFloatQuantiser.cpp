@@ -101,4 +101,72 @@ namespace CgsNetwork
         if (fClamped > lfMax) fClamped = lfMax;
         *lpfValue = fClamped;
     }
+
+    // ---- Pack (resolution form) --------------------------------------------------
+    // Assert the value is inside [min, max], clamp it anyway (two fsels, lower bound
+    // first), then count whole steps of 2 * resolution from min, rounding half up. The bit
+    // count is the smallest n with (1 << n) > the rounded step count of the whole range;
+    // the range quotient is rounded in double precision, the value's in single. The
+    // packed value is stored before the fits-in-n-bits assert.
+    void FloatQuantiser::Pack(float lfValue, float lfMin, float lfMax, float lfResolution,
+                              u32* lpuPackedValue, s32* lpiNumBitsUsed)
+    {
+        CGS_ASSERT(!(lfValue < lfMin) && lfValue <= lfMax,
+                   "Value  is outside the range :");
+
+        const float lfIncrement = lfResolution * 2.0f;
+
+        float lfClamped = ((lfMin - lfValue) >= 0.0f) ? lfMin : lfValue;
+        lfClamped       = ((lfMax - lfClamped) >= 0.0f) ? lfClamped : lfMax;
+
+        CGS_ASSERT(lfIncrement > 0.0f, "lfIncrement > 0.0f");
+
+        const float  lfSteps    = (lfClamped - lfMin) / lfIncrement + 0.5f;
+        const double ldMaxSteps = static_cast<double>((lfMax - lfMin) / lfIncrement) + 0.5;
+
+        *lpuPackedValue = static_cast<u32>(static_cast<s64>(lfSteps));
+
+        const u32 luNumValues = static_cast<u32>(static_cast<s32>(ldMaxSteps)) + 1u;
+        s32 liNumBits = 0;
+        if (luNumValues != 0)
+        {
+            do
+            {
+                ++liNumBits;
+            }
+            while ((1u << liNumBits) < luNumValues);
+        }
+        *lpiNumBitsUsed = liNumBits;
+
+        CGS_ASSERT(*lpuPackedValue < (1u << liNumBits),
+                   "*lpuPackedValue < static_cast<uint32_t>( 1 << *lpiNumBitsUsed )");
+    }
+
+    // ---- UnPack (resolution form) ------------------------------------------------
+    // value = min + packed * (2 * resolution) (one fused multiply-add on the console),
+    // asserted inside [min, max], then clamped: two fsels, then the explicit bound checks.
+    void FloatQuantiser::UnPack(float* lpfValue, float lfMin, float lfMax, float lfResolution,
+                                u32 luPackedValue)
+    {
+        const float lfValue = (lfResolution * 2.0f) * static_cast<float>(luPackedValue) + lfMin;
+
+        CGS_ASSERT(!(lfValue < lfMin) && lfValue <= lfMax,
+                   "Value  is outside the range :");
+
+        float lfClamped = ((lfMin - lfValue) >= 0.0f) ? lfMin : lfValue;
+        lfClamped       = ((lfMax - lfClamped) >= 0.0f) ? lfClamped : lfMax;
+
+        if (lfClamped < lfMin)
+        {
+            *lpfValue = lfMin;
+        }
+        else if (lfClamped > lfMax)
+        {
+            *lpfValue = lfMax;
+        }
+        else
+        {
+            *lpfValue = lfClamped;
+        }
+    }
 }

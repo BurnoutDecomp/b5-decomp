@@ -854,9 +854,8 @@ namespace BrnGameState
         }
 
         // Publish this frame's outbound dirty-trick events onto the GameState->Network interface's
-        // dirty-trick queue, then clear the manager's per-frame queue (X360 *(this+56) = 0).
-        // FLAG parked: GameStateToNetworkInterface::GetDirtyTrickQueue is declared with no body
-        // anywhere in the tree, so the merge cannot be linked; the per-frame clear still runs.
+        // dirty-trick queue, then clear the manager's per-frame queue.
+        lpOutput->GetGameStateToNetworkInterface()->GetDirtyTrickQueue()->Append(mDirtyTrickOutputQueue);
         mDirtyTrickOutputQueue.Clear();
 
         // (X360 tail: a virtual hook on the embedded debug component -- a debug-only per-frame record

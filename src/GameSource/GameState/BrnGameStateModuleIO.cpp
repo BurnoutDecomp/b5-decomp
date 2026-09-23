@@ -139,14 +139,14 @@ GameEventQueue* PreWorldInputBuffer::GetGameEventQueue()
 TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    return reinterpret_cast<TakedownEventInputQueueType*>(&mTakedownEventInputQueueStorage);
+    return &mTakedownEventInputQueue;
 }
 
 // X360 0x82362778 - read-lock accessor for the takedown-event input queue (this+0x660).
 const TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const TakedownEventInputQueueType*>(&mTakedownEventInputQueueStorage);
+    return &mTakedownEventInputQueue;
 }
 
 // X360 0x8231D020 - read-lock accessor for the network player-results interface (this+0x36B8).
@@ -536,6 +536,16 @@ BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer::GetGa
                       <= KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE,
                   "GameStateToNetworkInterface must fit the OutputBuffer's +0x4190 seat");
     return reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface*>(
+               &mGameStateToNetworkInterfaceStorage);
+}
+
+// Read-lock twin of the accessor above (exported unnamed): the
+// "Not locked for reading\n" assert with __LINE__ 289 (the write-side one is 290), then
+// `addi r3, r28, 0x4190`. BridgeGameStateToNetwork calls it on the read-locked game-state output.
+const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer::GetGameStateToNetworkInterface() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface*>(
                &mGameStateToNetworkInterfaceStorage);
 }
 

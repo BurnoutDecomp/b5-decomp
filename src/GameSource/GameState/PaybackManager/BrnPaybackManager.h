@@ -52,7 +52,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"        // CgsSystem::TimerStatusInterface
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                     // BrnNetwork::EPaybackType, ::EActiveRaceCarIndex, DirtyTrickEvent
-#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // BrnGameState::GameStateToNetworkInterface::DirtyTrickQueue (== EventQueue<DirtyTrickEvent,28>)
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"  // GameStateToNetworkInterface::DirtyTrickQueue (== EventQueue<DirtyTrickEvent,28>)
 #include "GameSource/GameState/PaybackManager/BrnPaybackDebugComponent.h"        // BrnGameState::PaybackDebugComponent (embedded by value @ +620)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                          // GameStateModuleIO::EGameModeType
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                        // CgsModule::EventQueue<TakedownEvent,8> (Update's takedown-queue arg)
@@ -189,7 +189,7 @@ namespace BrnGameState
 
         // ------------------------------------------------------------------ data members
         CgsSystem::TimerStatusInterface               mTimerStatusInterface;     // :150  @ +0
-        GameStateToNetworkInterface::DirtyTrickQueue  mDirtyTrickOutputQueue;    // :151  @ +48
+        BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface::DirtyTrickQueue mDirtyTrickOutputQueue; // :151  @ +48
         BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent mEvent;                  // :152  @ +508
         CgsNumeric::Random                            mRdmNumGenerator;          // :153  @ +528
         ::EActiveRaceCarIndex                         mePaybackAggressorRaceCarIndex; // :154 @ +576

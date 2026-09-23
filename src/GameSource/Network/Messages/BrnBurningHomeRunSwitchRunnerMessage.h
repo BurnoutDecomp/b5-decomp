@@ -25,7 +25,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"
-#include "GameSource/Network/BrnNetworkManager.h"   // BrnNetworkManager::PackOrUnpackResult (return type)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
 namespace BrnNetwork
 {
@@ -37,8 +37,12 @@ namespace BrnNetwork
 
         void                             PrepareForSend(u16 lu16Frame, NetworkPlayerID lNewRunnerID);
         bool                             Retrieve(NetworkPlayerID* lpNewRunnerID);
-        s32                              GetPackedMessageSize();
-        BrnNetworkManager::PackOrUnpackResult PackOrUnpack();
-        const char*                      GetName() const;
+        s32                              GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult   PackOrUnpack() override;
+        const char*                      GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(BurningHomeRunSwitchRunnerMessage) == 0x2C,
+                  "sizeof(BurningHomeRunSwitchRunnerMessage) == 0x2C");
 } // namespace BrnNetwork

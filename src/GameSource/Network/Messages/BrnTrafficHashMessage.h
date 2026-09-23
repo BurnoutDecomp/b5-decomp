@@ -43,11 +43,12 @@ namespace BrnNetwork
         bool                           Retrieve(u16* lpu16SyncedFrameSinceStart,
                                                 u16* lpu16Update10HzFrame,
                                                 u16* lpu16TrafficHash);
-        s32                            GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        s32                            GetPackedMessageSize() override;
+        bool                           OldMessagesAreValid() const override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
         // LEDGER func @ 0x827DE098 -- bodied inline below (DWARF BrnTrafficHashMessage.h:105).
-        const char*                    GetName() const;
+        const char*                    GetName() const override;
     };
 
     // BrnNetwork::TrafficHashMessage::GetName  @ 0x827DE098
@@ -56,4 +57,7 @@ namespace BrnNetwork
     {
         return "Traffic Hash Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(TrafficHashMessage) == 0x28, "sizeof(TrafficHashMessage) == 0x28");
 } // namespace BrnNetwork

@@ -24,7 +24,11 @@ namespace BrnNetwork
         void                          Construct();
         void                          PrepareForSend(u16 lu16FrameCount, s32 liShowtimeScore);
         bool                          Retrieve(s32* lpiShowtimeScore);
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                   GetName() const;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        s32                           GetPackedMessageSize() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(ShowtimeUpdateMessage) == 0x24, "sizeof(ShowtimeUpdateMessage) == 0x24");
 } // namespace BrnNetwork

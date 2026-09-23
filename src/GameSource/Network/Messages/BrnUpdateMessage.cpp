@@ -81,4 +81,29 @@ namespace BrnNetwork
         mUpdateData        = lOther.mUpdateData;          // +0x20 (UpdateData::operator=)
         return *this;
     }
+
+    // Size a representative message: identity rotation with a zero translation row, zero
+    // velocities, controls, statuses and flags, and a zero frames-since-start (the sent
+    // frame is left as is), then pack through the base.
+    s32 UpdateMessage::GetPackedMessageSize()
+    {
+        mUpdateData.mMatrix.SetIdentity();
+        mUpdateData.mu16FramesSinceStart = 0;
+        mUpdateData.mfSteering           = 0.0f;
+        mUpdateData.mfAcceleration       = 0.0f;
+        mUpdateData.mfBraking            = 0.0f;
+        mUpdateData.mLinearVelocity.SetZero();
+        mUpdateData.mAngularVelocity.SetZero();
+        mUpdateData.mbIsBoosting                = false;
+        mUpdateData.mbIsCrashing                = false;
+        mUpdateData.mbSnap                      = false;
+        mUpdateData.mbIsEliminated              = false;
+        mUpdateData.mbIsFreeBurnLobby           = false;
+        mUpdateData.mbIsRoundNumberOdd          = false;
+        mUpdateData.mbIsInCarSelect             = false;
+        mUpdateData.mbReceivingPlayerCrashedUs  = false;
+        mUpdateData.meCameraStatus              = E_CAMERA_STATUS_NONE;
+        mUpdateData.meHeadsetStatus             = 0;
+        return CgsNetwork::Message::GetPackedMessageSize();
+    }
 } // namespace BrnNetwork

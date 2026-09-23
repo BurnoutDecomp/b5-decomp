@@ -86,12 +86,8 @@ namespace BrnGame
     // word, the payload size in its first and the payload offset in its third -- the three
     // words GuiEventWrapper::GetRawEvent() unwraps on the console. A console-style queue
     // (type = event id, pointer = payload) passes through unchanged.
-    //
-    // FLAG return type: the reference declares this void and the only caller never reads the
-    // result; the int return (the final GetNextEvent status) follows the BrnGameModule.hpp
-    // declaration until that header changes.
     // =========================================================================
-    int BrnGameModule::TranslateGuiEventsToNetworkEvents(
+    void BrnGameModule::TranslateGuiEventsToNetworkEvents(
         CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputEventQueue,
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
     {
@@ -399,7 +395,5 @@ namespace BrnGame
 
             liEventId = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }
-
-        return liEventId;
     }
 }

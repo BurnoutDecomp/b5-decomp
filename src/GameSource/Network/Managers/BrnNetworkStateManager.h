@@ -86,7 +86,7 @@ namespace BrnNetwork
     namespace BrnNetworkModuleIO
     {
         struct PostSimulationInputBuffer;
-        class  NetworkEventQueue;   // class-key follows BrnNetworkModuleIO.h (the reference declares a struct)
+        struct NetworkEventQueue;   // class-key follows BrnNetworkModuleIO.h
     }
 
     struct StateManager
@@ -209,9 +209,7 @@ namespace BrnNetwork
         void PlayerAdded();
         void PlayerRemoved();
         void OnGameIDChanged();
-        // FLAG: first parameter is BrnNetwork::ELeftGameReason, which has no home yet
-        // (requested for BrnNetworkSharedIO.h); carried as its s32 storage until then.
-        void SuspendToLeaveGame(s32 leLeftReason, CgsNetwork::EKickReason leKickReason);
+        void SuspendToLeaveGame(ELeftGameReason leLeftReason, CgsNetwork::EKickReason leKickReason);
         bool GameModeHasEnoughTeams();
         bool IsInLimbo();
         void HandleConnectEvent(const BrnGui::GuiEventNetworkConnect* lpConnectEvent);
@@ -221,22 +219,6 @@ namespace BrnNetwork
         bool IsIdle() const { return meState == E_STATE_COUNT; }
         // The buddy manager, once its retry timer elapses in limbo, stores true here.
         void CloseLimboGame() { mbCloseLimboGameWhenIdle = true; }
-
-        // ---- LEGACY CALL-SITE SHIMS -- not console functions, no bodies ------------------
-        // Kept only so the existing callers keep compiling until their owners move them
-        // to the real API (requests filed):
-        //   BrnNetworkAutoLoginManager.cpp: ConnectEvent + HandleConnectEvent(const ConnectEvent*)
-        //     -> HandleConnectEvent(const BrnGui::GuiEventNetworkConnect*) (the payload word at
-        //     +0 is a LoginManagerBase::ESignInType; the flow passes E_SIGN_IN_TYPE_SILENT),
-        //     GetConnectionStatus() == 23 -> IsIdle().
-        //   BrnNetworkBuddyManagerBase.cpp: SetRetryGetServerBuddies(true) -> CloseLimboGame().
-        struct ConnectEvent
-        {
-            bool mbTriggerSignIn;
-        };
-        void HandleConnectEvent(const ConnectEvent* lpConnectEvent);
-        s32  GetConnectionStatus() const;
-        void SetRetryGetServerBuddies(bool lbRetry);
 
     private:
         // ---- event processing (UpdateEvents) -------------------------------------------
@@ -329,9 +311,7 @@ namespace BrnNetwork
         CachedDistrictData   mDistrictData;             // +0xC0
         CachedCarColourData  mCarColourData;            // +0xCC
         CachedFeverData      mFeverData;                // +0xD8
-        // FLAG: BrnNetwork::ELeftGameReason (E_LEFT_GAME_REASON_LEFT 0 .. _COUNT 4) has no
-        // home yet (requested for BrnNetworkSharedIO.h); carried as its s32 storage.
-        s32                  meLeftReason;              // +0xDC
+        ELeftGameReason      meLeftReason;              // +0xDC
         CgsNetwork::EKickReason meKickReason;           // +0xE0
 
         bool mbSetNotPlaying;                           // +0xE4

@@ -15,4 +15,11 @@ namespace CgsNetwork
     {
         return Message::GetPackedMessageSize();
     }
+
+    // A keep-alive carries no payload: nothing to serialise, success (the console
+    // folds this `return 0` leaf with every other identical leaf in the image).
+    PackOrUnpackResult HostKeepAliveMessage::PackOrUnpack()
+    {
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
 }

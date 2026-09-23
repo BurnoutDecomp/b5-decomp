@@ -64,15 +64,24 @@ namespace BrnNetworkModuleIO
     // The lifecycle event a freeburn challenge broadcasts over the network (original home
     // BrnNetworkSharedIO.h). COUNT is the count, not a valid event. Used by
     // BrnNetwork::FreeburnChallengeMessage and the ChallengeManager.
+    //
+    // The console carries one enumerator more than the reference list, ahead of ENDED, so ENDED
+    // is 5, RESULTS_FINISHED 6 and COUNT 7. Attested by the producers and consumers:
+    // ChallengeManager::EndChallenge stores 5, UpdateResults stores 6, the arbitration reset
+    // of every action slot stores 4; BridgeGameStateToNetwork tests 5 for the "challenge
+    // finished" telemetry and filters 6 out of the network event; FreeburnChallengeMessage's
+    // constructor seeds its "no event" value as 7.
+    // FLAG: the name of value 4 is unrecovered; it is named after its one producer.
     enum EChallengeEventType
     {
         E_CHALLENGE_EVENT_SELECTED         = 0,
         E_CHALLENGE_EVENT_TRIGGERED        = 1,
         E_CHALLENGE_EVENT_ACTION_SUCCESS   = 2,
         E_CHALLENGE_EVENT_RESET            = 3,
-        E_CHALLENGE_EVENT_ENDED            = 4,
-        E_CHALLENGE_EVENT_RESULTS_FINISHED = 5,
-        E_CHALLENGE_EVENT_COUNT            = 6,
+        E_CHALLENGE_EVENT_RESET_ACTIONS    = 4,   // FLAG name
+        E_CHALLENGE_EVENT_ENDED            = 5,
+        E_CHALLENGE_EVENT_RESULTS_FINISHED = 6,
+        E_CHALLENGE_EVENT_COUNT            = 7,
     };
 
     // ========================================================================
@@ -327,7 +336,9 @@ namespace BrnNetworkModuleIO
         NetworkEventQueue*                      GetNetworkEventQueue();
         const NetworkEventQueue*                GetNetworkEventQueue() const;
 
-        bool AreInvitesOpen() const;
+        // Inline on the console: BridgeNetworkToGameState reads the byte at +0x2C16B directly,
+        // with no lock assert.
+        bool AreInvitesOpen() const { return mbInvitesOpen; }
         void SetInvitesOpen(bool lbInvitesOpen);
 
     private:

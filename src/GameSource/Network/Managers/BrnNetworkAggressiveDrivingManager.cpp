@@ -667,11 +667,8 @@ namespace BrnNetwork
         CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
         CGS_ASSERT(mpPlayerManager != nullptr, "mpPlayerManager");
 
-        // FLAG: VehicleOutputInterface exposes only a non-const GetImpactEventQueue(); the queue
-        // is read through the const post-sim buffer here (request filed for a const accessor).
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactQueue =
-            &const_cast<BrnPhysics::Vehicle::VehicleOutputInterface*>(
-                lpInput->GetVehicleOutputInterface())->GetImpactEventQueue();
+            lpInput->GetVehicleOutputInterface()->GetImpactEventQueue();
         for (s32 liIndex = 0; liIndex < lpImpactQueue->GetLength(); ++liIndex)
         {
             BrnPhysics::Vehicle::ImpactEvent lImpactEvent = lpImpactQueue->GetEvent(liIndex);
@@ -755,11 +752,8 @@ namespace BrnNetwork
     {
         CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
 
-        // FLAG: VehicleInputInterface exposes only a const GetImpactEventQueue(); the output
-        // buffer's queue is written here (request filed for the non-const accessor).
         CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactEventQueue =
-            const_cast<BrnPhysics::Vehicle::VehicleInputInterface::ImpactEventQueue*>(
-                lpOutput->GetVehicleInputInterface()->GetImpactEventQueue());
+            lpOutput->GetVehicleInputInterface()->GetImpactEventQueue();
         CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>* lpTakedownEventQueue =
             lpOutput->GetTakedownEventOutputQueue();
 

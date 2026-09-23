@@ -51,10 +51,9 @@ namespace BrnNetwork
 
     // The TeamSelectMessage broadcasts which team each player landed on. Class shape is
     // recovered from the X360 asm (no DWARF); base reused by name from CgsReliableMessage.h.
-    // Like the committed base hierarchy, the X360 build models the vtable as the explicit
-    // Message::mpVTable member (no C++ `virtual`), so these are plain methods -- adding a C++
-    // `virtual` here would inject a second vptr and shift every member off its recovered
-    // byte offset (see the offsetof pins in the .cpp).
+    // GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals; the
+    // one vptr is the base's, so the members keep their recovered byte offsets (see the
+    // offsetof pins in the .cpp).
     struct TeamSelectMessage : public CgsNetwork::ReliableMessage
     {
         // One per-player team assignment in the broadcast table (8 bytes; +0x00 player id,
@@ -75,13 +74,13 @@ namespace BrnNetwork
                                      bool lbAutobalance, bool lbFinalSelection);
         bool          Retrieve(PlayerTeamInfo* lpaPlayerTeamInfo, s32* lpiNumPlayers,
                                s32* lpiNumTeams, bool* lpbAutobalance, bool* lpbFinalSelection);
-        s32           GetPackedMessageSize();
+        s32           GetPackedMessageSize() override;
 
         // LEDGER func @ 0x827DFD70 -- bodied inline below.
-        const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         PlayerTeamInfo maPlayerTeamInfo[KI_TEAM_SELECT_MAX_PLAYERS];   // +0x28 (64 bytes)
@@ -101,4 +100,7 @@ namespace BrnNetwork
     {
         return "Team Select Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(TeamSelectMessage) == 0x74, "sizeof(TeamSelectMessage) == 0x74");
 } // namespace BrnNetwork

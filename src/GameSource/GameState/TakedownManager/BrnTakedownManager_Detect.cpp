@@ -530,12 +530,8 @@ namespace BrnGameState
                                                  RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
                                                  GameStateModuleIO::OutputBuffer* lpOutput)
     {
-        // FLAG cross-home cast: GameStateModuleIO::TakedownEventInputQueueType is still a forward-declared
-        // incomplete class; the DWARF names this member InputBuffer::TakedownEventQueue ==
-        // EventQueue<TakedownEvent,8> (BrnAIModuleIO.h:54), the same cast GameStateModule_gUI_00.cpp
-        // carries for the output-side twin.
-        const CgsModule::EventQueue<TakedownEvent, 8>* lpOnlineTakedownQueue =
-            reinterpret_cast<const CgsModule::EventQueue<TakedownEvent, 8>*>(lpInput->GetTakedownEventInputQueue());
+        const GameStateModuleIO::TakedownEventInputQueueType* lpOnlineTakedownQueue =
+            lpInput->GetTakedownEventInputQueue();
 
         for (s32 liTakedown = 0; liTakedown < lpOnlineTakedownQueue->GetLength(); ++liTakedown)
         {

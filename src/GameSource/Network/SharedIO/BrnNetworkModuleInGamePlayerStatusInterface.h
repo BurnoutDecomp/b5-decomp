@@ -56,8 +56,11 @@ namespace BrnNetwork
     // enum spans [NONE..COUNT] with COUNT == 4 (the cleared-record sentinel). FLAG: additive only.
     enum ECameraStatus : s32
     {
-        E_CAMERA_STATUS_NONE  = 0,
-        E_CAMERA_STATUS_COUNT = 4,
+        E_CAMERA_STATUS_NONE      = 0,
+        E_CAMERA_STATUS_AVAILABLE = 1,
+        E_CAMERA_STATUS_IN_USE    = 2,
+        E_CAMERA_STATUS_DISABLED  = 3,
+        E_CAMERA_STATUS_COUNT     = 4,
     };
 
     namespace BrnNetworkModuleIO
@@ -89,7 +92,11 @@ namespace BrnNetwork
             // the InGamePl copy reaches +304); natural C++ alignment ends the struct at +304, so an
             // 8-byte trailing reserved pad pins the array stride to the X360-authoritative 312. The
             // X360 copy stores the +304 word as inert padding; left default here.
-            u8                      maReservedPadTo312[8];         // +304..+312
+            // +304: a byte the console build carries beyond the reference member list.
+            // BrnNetworkManager::OutputPlayerStatusInfo stores false for the local player and the
+            // remote BrnNetworkPlayer's eliminated flag otherwise. FLAG: named from that producer.
+            bool                    mbIsEliminated;                // +304
+            u8                      maReservedPadTo312[7];         // +305..+312
 
             void Clear();                                          // @ 0x823555A8 (body in this TU's .cpp)
 
@@ -141,15 +148,20 @@ namespace BrnNetwork
                 macGameName[0] = 0;
                 miNumPlayers = 0;
             }
-            void                          SetNumPlayers(s32 liNumPlayers);
+            // Header-inline on the console: OutputPlayerStatusInfo stores the +0x9E4 word directly.
+            void                          SetNumPlayers(s32 liNumPlayers) { miNumPlayers = liNumPlayers; }
             // Header-inline on the console: the gui bridge reads +0x9C0 / +0x9E8 directly.
             const char*                   GetGameName() const { return macGameName; }
             s32                           GetTotalNumberPlayers() const { return miTotalNumberPlayers; }
+            // Header-inline on the console: OutputPlayerStatusInfo stores the +0x9E8 word directly.
+            // FLAG: the reference lists no setter for this console-only member; named after its getter.
+            void                          SetTotalNumberPlayers(s32 liTotalNumberPlayers) { miTotalNumberPlayers = liTotalNumberPlayers; }
             void                          SetGameName(const char* lpcName);
             // Header-inline on the console: ModeManager::PreWorldUpdate reads the +0x9EC byte
             // directly (plain lbz, no assert) and passes it to ChallengeManager::PreWorldUpdate.
             bool                          GetLocalPlayerIsHost() const { return mbLocalPlayerIsHost; }
-            void                          SetLocalPlayerIsHost(bool lbIsHost);
+            // Header-inline on the console: OutputPlayerStatusInfo stores the +0x9EC byte directly.
+            void                          SetLocalPlayerIsHost(bool lbIsHost) { mbLocalPlayerIsHost = lbIsHost; }
             NetworkPlayerID               GetNetworkIDFromPlayerName(PlayerName lName) const;
 
         private:

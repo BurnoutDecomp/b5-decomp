@@ -58,4 +58,12 @@ namespace BrnNetwork
 
         return true;
     }
+
+    // Zero the response word, then size through the reliable base (the console body is one
+    // folded copy shared with CheckpointTriggeredMessage::GetPackedMessageSize).
+    s32 CameraRequestResponseMessage::GetPackedMessageSize()
+    {
+        meCameraRequestResponse = E_RESPONSE_DECLINE;
+        return CgsNetwork::ReliableMessage::GetPackedMessageSize();
+    }
 }

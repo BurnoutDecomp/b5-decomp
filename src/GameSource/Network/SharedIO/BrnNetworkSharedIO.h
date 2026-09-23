@@ -5,6 +5,8 @@
 #include "GameSource/BurnoutConstants.h"   // ::EActiveRaceCarIndex (the one and only)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"   // CgsModule::EventQueue<T,N> (the road-rules queue typedefs)
 
+namespace CgsSystem { class Time; }   // GameShared/GameClasses/System/Timer/CgsTime.h (TelemetryData::AddParameter by value)
+
 namespace BrnNetwork
 {
     // Base of the CgsModule event hierarchy (no data members on the X360 spine).
@@ -39,6 +41,38 @@ namespace BrnNetwork
         E_PAYBACK_TYPE_COUNT                          = 4,
     };
     enum EDirtyTrickStatus   : s32 { E_DIRTY_TRICK_NONE = 0 };
+
+    // The game-mode filter of an online game search. The custom-match screen's producers
+    // store 0 (any), 1 (race) and 4 (freeburn lobby).
+    enum ESearchGameModes
+    {
+        E_SEARCH_GAME_MODES_ANY              = 0,
+        E_SEARCH_GAME_MODES_RACE             = 1,
+        E_SEARCH_GAME_MODES_ROAD_RAGE        = 2,
+        E_SEARCH_GAME_MODES_BURNING_HOME_RUN = 3,
+        E_SEARCH_GAME_MODES_FREE_BURN_LOBBY  = 4,
+        E_SEARCH_GAME_MODES_COUNT            = 5,
+    };
+
+    // The opponent filter of an online game search (GameSearchParams +0x28C).
+    enum ESearchOpponentTypes
+    {
+        E_SEARCH_OPPONENT_TYPES_ANY                = 0,
+        E_SEARCH_OPPONENT_TYPES_FRIENDS_AND_RIVALS = 1,
+        E_SEARCH_OPPONENT_TYPES_FRIENDS            = 2,
+        E_SEARCH_OPPONENT_TYPES_RIVALS             = 3,
+        E_SEARCH_OPPONENT_TYPES_COUNT              = 4,
+    };
+
+    // Why the local player left an online game (StateManager +0xDC meLeftReason).
+    enum ELeftGameReason
+    {
+        E_LEFT_GAME_REASON_LEFT         = 0,
+        E_LEFT_GAME_REASON_COMMS_FAILED = 1,
+        E_LEFT_GAME_REASON_KICKED       = 2,
+        E_LEFT_GAME_REASON_GAME_DELETED = 3,
+        E_LEFT_GAME_REASON_COUNT        = 4,
+    };
 
     namespace Road { typedef s32 ChallengeIndex; }
 
@@ -198,8 +232,8 @@ namespace BrnNetwork
         // StrCat's "." then the parameter; CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE == 16 is the
         // cap it asserts). Bodies: BrnNetworkSharedIO_Telemetry.cpp.
         // Only the members with a reconstructed body are declared: the DWARF's remaining
-        // overloads (:558 int32 / :562 uint32 / :566 float / :570 ClearParameter / :580 CgsID /
-        // :585 Time) have no body in the tree yet; add each with its body, not before.
+        // overloads (:562 uint32 / :570 ClearParameter) have no body in the tree yet; add each
+        // with its body, not before.
         // [takedown P1 wave 2026-09-03, additive.]
         // ------------------------------------------------------------------------------------
         struct TelemetryData
@@ -207,6 +241,10 @@ namespace BrnNetwork
             void Construct(ETelemetryHook leHook);      // DWARF :548 -- inlined at every X360 site: {hook, ""}
             void AddParameter(const char* lpcParam);     // DWARF :553 -- X360 0x82354010
             void AddParameter(Vector3 lVector);          // DWARF :575 -- X360 sub_8236A8B8 ("%i.%i" of X and Z)
+            void AddParameter(s32 liParam);              // "%i"
+            void AddParameter(f32 lfParam);              // "%i" of (int)(value * 100)
+            void AddParameter(CgsID lID);                // "%x"
+            void AddParameter(CgsSystem::Time lTime);    // "%i" of (int)(seconds * 100)
 
             ETelemetryHook meHook;                       // +0x00
             char           macBuffer[16];                // +0x04

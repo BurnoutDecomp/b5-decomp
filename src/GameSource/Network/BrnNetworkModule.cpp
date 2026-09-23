@@ -3,8 +3,8 @@
 // ============================================================================
 // BrnNetwork::BrnNetworkModule -- constructor, the staged lifecycle (Construct / Prepare / Release /
 // Destruct), the player-ID cache pair, the two mapping-table forwards, the lock-guarded sub-object
-// accessors, and the compile-time layout pins. The per-frame update (ProcessBeforeSimulation /
-// ProcessAfterSimulation) is declared in the header and not bodied yet.
+// accessors, the per-frame update (ProcessBeforeSimulation / ProcessAfterSimulation) and the
+// compile-time layout pins.
 //
 // Every accessor asserts mbIsUpdating ("Can not use this function unless module is updating") and
 // then returns the address of its embedded member.
@@ -17,7 +17,10 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                               // CgsNetwork::PlayerManager::GetNextPlayerID
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                               // CgsNetwork::KI_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // CgsNetwork::ServerInterfaceGames::IsPlayerInGameByID
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h" // CgsNetwork::ServerInterfaceConnection::IsLoggedIn
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                                          // the memory checks' log line
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"                                 // AllocatorList::GetHeapAllocator
+#include "GameSource/Resource/BrnResourceAllocator.h"                                              // PrintConsoleMemory, GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
 
 #include <cstddef>       // offsetof
 #include <type_traits>   // std::is_same
@@ -136,8 +139,7 @@ namespace BrnNetwork
             {
                 break;
             }
-            // FLAG: the console calls BrnResource::PrintConsoleMemory("Network prepare start") here.
-            // That function has no declaration in the tree yet, so the call is not made.
+            BrnResource::PrintConsoleMemory("Network prepare start");
             // fall through
         case E_PREPARESTAGE_NETWORK_MANAGER:
             mePrepareStage = E_PREPARESTAGE_NETWORK_MANAGER;
@@ -265,6 +267,143 @@ namespace BrnNetwork
             maCachedPlayerIDsInGame[liIndex] = CgsNetwork::KI_INVALID_PLAYER_ID;
         }
         miCachedPlayersInGame = 0;
+    }
+
+    // Returns whether the local player is in the game (DoUpdate_NetworkPreSim keeps it). Snapshots
+    // the pre-sim input under its read lock, runs the manager, then publishes the module's staged
+    // queues and interfaces into the output buffer and empties the module-side queues.
+    bool BrnNetworkModule::ProcessBeforeSimulation(CgsModule::IOBufferStack*                          lpInputBufferStack,
+                                                   CgsModule::IOBufferStack*                          lpOutputBufferStack,
+                                                   const BrnNetworkModuleIO::PreSimulationInputBuffer* lpInputBuffer,
+                                                   BrnNetworkModuleIO::OutputBuffer*                  lpOutputBuffer,
+                                                   BrnUpdateSet                                       lUpdateSet)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkBeforeSimPM);
+        mbIsUpdating = true;
+
+        lpOutputBuffer->LockForWrite();
+        lpInputBuffer->LockForRead();
+
+        mbPadIdle                   = lpInputBuffer->IsPadIdle();
+        mTimerStatusOutputInterface = *lpInputBuffer->GetTimerStatusInterface();
+        mNetworkManager.SetActiveControllerPort(lpInputBuffer->GetControllerPort());
+        mNetworkManager.SetSysMenuOnScreen(lpInputBuffer->IsSysMenuOnScreen());
+
+        lpInputBuffer->UnlockForRead();
+
+        mNetworkManager.ProcessBeforeSimulation(lpInputBuffer, lpOutputBuffer,
+                                                mTimerStatusOutputInterface.GetGameTimerStatus(), lUpdateSet);
+
+        lpOutputBuffer->SetIsPlaying(mNetworkManager.GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
+                                     mNetworkManager.GetServerInterface()->GetGameComponent()->IsGameStarted());
+        lpOutputBuffer->SetIsInInvite(mNetworkManager.GetNetworkInviteManager()->IsInInvite());
+        lpOutputBuffer->SetConnected(mNetworkManager.GetServerInterface()->GetConnectionComponent()->IsLoggedIn());
+
+        *lpOutputBuffer->GetGameEventQueue() = *GetGameEventQueue();
+        GetGameEventQueue()->Clear();
+
+        lpOutputBuffer->GetGuiEventQueue()->Append(*GetOutputGuiEventQueue());
+        GetOutputGuiEventQueue()->Clear();
+
+        *lpOutputBuffer->GetVehicleDriverInputInterface() = mVehicleDriverInputInterface;
+        *lpOutputBuffer->GetVehicleInputInterface()       = mVehicleInputInterface;
+
+        // Inlined interface copy: reset the destination queue's length, append ours, copy the flag.
+        BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface* lpTrafficInput = lpOutputBuffer->GetTrafficNetworkInputInterface();
+        BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface::ActivateHullQueue& lrHullQueue =
+            const_cast<BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface::ActivateHullQueue&>(
+                lpTrafficInput->GetActivateHullQueue());
+        lrHullQueue.Clear();
+        lrHullQueue.Append(mTrafficNetworkInputInterface.GetActivateHullQueue());
+        lpTrafficInput->SetDiverged(mTrafficNetworkInputInterface.HasDiverged());
+
+        *lpOutputBuffer->GetCrashNetworkInputInterface()  = mCrashNetworkInputInterface;
+        *lpOutputBuffer->GetNetworkToGameStateInterface() = mNetworkToGameStateInterface;
+
+        lpOutputBuffer->GetNetworkEventQueue()->Append(*GetNetworkEventQueue());
+        GetNetworkEventQueue()->Clear();
+
+        lpOutputBuffer->UnlockForWrite();
+
+        const bool lbLocalPlayerInGame = GetNetworkManager()->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
+
+        mbIsUpdating = false;
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkBeforeSimPM);
+        return lbLocalPlayerInGame;
+    }
+
+    // Takes the post-sim input under its read lock: resets the module's network-side inputs, copies
+    // the sim's outputs into the module's interfaces, merges the GUI input events, then runs the
+    // manager. Ten perf monitors bracket the legs, and four memory checks compare the free memory
+    // against the reading taken on entry.
+    void BrnNetworkModule::ProcessAfterSimulation(CgsModule::IOBufferStack*                           lpInputBufferStack,
+                                                  CgsModule::IOBufferStack*                           lpOutputBufferStack,
+                                                  const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
+                                                  BrnUpdateSet                                        lUpdateSet)
+    {
+        u32 luAvailableMemory = BrnResource::GetAvailableMemory();
+        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSimPM);
+        mbIsUpdating = true;
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim1PM);
+        lpInputBuffer->LockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim1PM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim2PM);
+        if (mNetworkManager.GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
+            mNetworkManager.GetServerInterface()->GetGameComponent()->IsGameStarted() &&
+            lpInputBuffer->GetGameStateToNetworkInterface()->GetIsInOnlineGameMode())
+        {
+            CGS_ASSERT(mTimerStatusOutputInterface.GetSimTimerStatus()->GetTimeStepMultiplier() == 1.0f,
+                       "Some criminal has put an online game into slowmo!\n");
+        }
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim2PM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim3PM);
+        mVehicleDriverInputInterface.Clear();
+        mVehicleInputInterface.Construct();
+        mTrafficNetworkInputInterface.Construct();
+        mCrashNetworkInputInterface.Clear();
+        mNetworkToGameStateInterface.Construct();
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim3PM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim4PM);
+        mVehicleOutputInterface        = *lpInputBuffer->GetVehicleOutputInterface();
+        mActiveRaceCarInterface        = *lpInputBuffer->GetActiveRaceCarInterface();
+        mPlayerVehicleControls         = *lpInputBuffer->GetPlayerVehicleControls();
+        mTrafficNetworkOutputInterface = *lpInputBuffer->GetTrafficNetworkOutputInterface();
+        mCrashNetworkOutputInterface.Append(lpInputBuffer->GetCrashNetworkOutputInterface());
+        mGameStateToNetworkInterface   = *lpInputBuffer->GetGameStateToNetworkInterface();
+        mTakedownEventInputQueue.Clear();
+        mTakedownEventInputQueue.Append(*lpInputBuffer->GetTakedownEventInputQueue());
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim4PM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim5PM);
+        mInputGuiEventQueue.Clear();
+        GetInputGuiEventQueue()->Append(*lpInputBuffer->GetGuiEventQueue());
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim5PM);
+
+        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim6PM);
+        mNetworkManager.ProcessAfterSimulation(lpInputBuffer, lUpdateSet);
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim6PM);
+
+        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim7PM);
+        lpInputBuffer->UnlockForRead();
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim7PM);
+
+        CgsDev::PerfMonCpu::StartMonitor(miNetworkAfterSim8PM);
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSim8PM);
+
+        mbIsUpdating = false;
+        CgsDev::PerfMonCpu::StopMonitor(miNetworkAfterSimPM);
+
+        BRN_RESOURCE_MEMORY_CHECK(luAvailableMemory);
     }
 
     // Header-inline on the console (no out-of-line symbol): the callers read the module's own

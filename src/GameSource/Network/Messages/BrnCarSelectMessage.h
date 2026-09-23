@@ -43,10 +43,8 @@
 
 namespace BrnNetwork
 {
-    // DWARF BrnCarSelectMessage.h:46. The X360 build models the vtable as the explicit
-    // Message::mpVTable member (no C++ `virtual`), so these are plain methods -- adding a
-    // C++ `virtual` here would inject a second vptr and shift every member off its
-    // recovered byte offset.
+    // GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals; the
+    // one vptr is the base's, so the members keep their recovered byte offsets.
     struct CarSelectMessage : public CgsNetwork::ReliableMessage
     {
     public:
@@ -59,13 +57,13 @@ namespace BrnNetwork
         bool Retrieve(CgsID* lpCarId, CgsID* lpWheelId,
                       u16* lpu16CarColourIndex, u16* lpu16CarPaintFinishIndex,
                       f32* lpfBaseDeformationAmount, bool* lpbFinalSelection);
-        s32  GetPackedMessageSize();
+        s32  GetPackedMessageSize() override;
 
         // LEDGER func @ 0x827DFBA8 -- bodied inline below.
-        const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         CgsID mCarId;                    // +0x28  DWARF :91
@@ -82,4 +80,7 @@ namespace BrnNetwork
     {
         return "Car Select Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(CarSelectMessage) == 0x48, "sizeof(CarSelectMessage) == 0x48");
 } // namespace BrnNetwork

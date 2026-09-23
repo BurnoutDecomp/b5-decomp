@@ -13,8 +13,7 @@
 // the DWARF -- it is a bare keep-the-link-warm probe -- so
 // sizeof(TestConnectionMessage) == sizeof(ReliableMessage) == 0x28.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals.
 //
 // Reconstructed here (ledger func for this TU):
 //   GetName @ 0x827DE358 -- header-homed inline accessor; returns the literal
@@ -41,11 +40,15 @@ namespace CgsNetwork
         void               Update();
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DE358 -- inline header-homed accessor.
-        const char* GetName() const { return "Test Connection Message"; }
+        const char* GetName() const override { return "Test Connection Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(TestConnectionMessage) == 0x28, "sizeof(TestConnectionMessage) == 0x28");
+
 } // namespace CgsNetwork

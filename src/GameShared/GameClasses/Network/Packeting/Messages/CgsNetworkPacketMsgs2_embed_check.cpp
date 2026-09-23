@@ -8,10 +8,9 @@
 
 namespace CgsNetwork
 {
-    // NOTE: absolute offsets/sizes are NOT asserted here -- the Message base begins
-    // with mpVTable, which is 4 bytes on the X360 (32-bit) but 8 on the host (64-bit),
-    // so any byte-offset that crosses that pointer differs between platforms. Only
-    // platform-stable RELATIVE facts are asserted.
+    // NOTE: only platform-stable RELATIVE facts are asserted here; the absolute
+    // console sizes are pinned (32-bit builds only) in each message's owning header,
+    // since the vptr is 4 bytes on the console and 8 on the host.
 
     // SignalMessage and TestConnectionMessage add no data of their own: each is the
     // same size as its committed base.

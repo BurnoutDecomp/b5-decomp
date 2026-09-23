@@ -18,8 +18,7 @@
 // (CgsMessageWithPlayerIDs.h) for the player-id fields. Both id members land after the
 // 0x20-byte Message base.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals.
 //
 // Reconstructed here (ledger func for this TU):
 //   GetName @ 0x827DBC58 -- header-homed inline accessor; returns the literal
@@ -46,14 +45,18 @@ namespace CgsNetwork
         void        PrepareForSend(u16 lu16CurrentFrame, NetworkPlayerID liNewHostID,
                                    NetworkPlayerID* lpReceivedClientsIDs);
         bool        Retrieve(NetworkPlayerID* lpNewHostID, NetworkPlayerID* lpReceivedClientsIDs);
-        s32         GetPackedMessageSize();
+        s32         GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DBC58 -- inline header-homed accessor.
-        const char* GetName() const { return "New Host Message"; }
+        const char* GetName() const override { return "New Host Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         NetworkPlayerID mNewHostID;                                  // DWARF h:75 (after 0x20 base)
         NetworkPlayerID maReceivedClientsIDs[KI_MAX_RECEIVED_CLIENTS]; // DWARF h:76
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(NewHostMessage) == 0x44, "sizeof(NewHostMessage) == 0x44");
+
 } // namespace CgsNetwork

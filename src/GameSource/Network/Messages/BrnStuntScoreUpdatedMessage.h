@@ -29,6 +29,15 @@ namespace BrnNetwork
         void                          PrepareForSend(u16 lu16FrameCount, s32 liStuntScore);
         // @ 0x8257D0E0 -- (de)serialise the score; ORs the base reliable id status with the
         // quantised int field status. 0 == success.
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+
+        // Copy the score out and consume the message; an empty slot reports -1.
+        bool                          Retrieve(s32* lpiStuntScore);
+        s32                           GetPackedMessageSize() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(StuntScoreUpdatedMessage) == 0x2C,
+                  "sizeof(StuntScoreUpdatedMessage) == 0x2C");
 } // namespace BrnNetwork

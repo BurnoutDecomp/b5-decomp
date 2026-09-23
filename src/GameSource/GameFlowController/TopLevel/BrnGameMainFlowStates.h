@@ -159,6 +159,9 @@ protected:
     bool LoadDirectorModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                             const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
 
+    bool LoadNetworkModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
+                           const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
+
     // The update set the loading spine drives the world with: ConstructUpdateSetFromFsm
     // @0x823BD420's base value 128 (frustum testing on; no in-game / boot-video / paused
     // bits while the scripted load runs).

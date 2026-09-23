@@ -31,6 +31,13 @@ namespace CgsNetwork
         return lxResult;
     }
 
+    // Slot 0: every reliable message reports true (the console folds this
+    // `return true` leaf with every other identical leaf in the image).
+    bool ReliableMessage::IsReliable() const
+    {
+        return true;
+    }
+
     // Zero the reliable id (the inherited frame word) and chain MessageWithPlayerIDs,
     // which zeroes both player ids and sizes the message through the base. The console
     // folds this body with TestConnectionMessage::GetPackedMessageSize (one copy: three

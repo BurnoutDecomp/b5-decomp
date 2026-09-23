@@ -98,6 +98,9 @@ namespace BrnReplays { namespace ReplayIO { struct OutputBuffer_PreSim; } }
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct OutputBuffer; } }
 // The network post-sim INPUT buffer the GameState/World -> Network bridges fill (same home).
 namespace BrnNetwork { namespace BrnNetworkModuleIO { struct PostSimulationInputBuffer; } }
+// The network output's GUI interface and the scoreboard heading-list OUT record (homes
+// SharedIO/BrnNetworkToGuiIOInterfaces.h and SharedIO/BrnNetworkOutScoreboardHeadingList.h).
+namespace BrnNetwork { namespace BrnNetworkModuleIO { struct NetworkToGuiInterface; struct NetworkOutScoreboardHeadingList; } }
 // Sound-bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) parameter/member types:
 // the sound root pre-update OUTPUT buffer (home GameSource/Sound/Module/SharedIO/
 // BrnSoundRootSharedIO.h) and the training manager (home GameSource/GameState/TrainingManager/
@@ -787,38 +790,38 @@ namespace BrnGame
 
         // X360 0x823DEEB8 -- drain a GUI event queue (VariableEventQueue<18432,16>) and translate each
         // network-bound GUI event into the matching network IN-event, AddEvent'd into the network module's
-        // in-event queue (VariableEventQueue<14000,16>). Returns the final queue-walk status. Called by
-        // DoUpdate_NetworkPostSim.
-        int TranslateGuiEventsToNetworkEvents(CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputQueue,
+        // in-event queue (VariableEventQueue<14000,16>). Called by DoUpdate_NetworkPostSim.
+        void TranslateGuiEventsToNetworkEvents(CgsModule::VariableEventQueue<14000, 16>* lpNetworkInputQueue,
                                               const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue);
 
         // ---- network-output bridge family (GameSource/Unity/../Game/GameBridgeNetworkToX.cpp) -----
         // The mirror of the controller/replay bridges for the network module: each reads the network
         // module's OUTPUT buffer (BrnNetwork::BrnNetworkModuleIO::OutputBuffer + its interfaces) and
-        // republishes it into the GUI + game-state subsystems. lpGuiBuffer is the CgsGui GUI IO buffer
-        // pointer threaded to CgsGui::GuiModule::AddGuiEvent (placeholder type -> void*).
+        // republishes it into the GUI + game-state subsystems. lpGuiInput is the GUI input buffer the
+        // translated GUI events are queued into.
         //
         // X360 0x823E9518 -- top-level per-frame network->GUI bridge: run both translators below, bulk-
         // append the network GUI event queue into the GUI input queue, then synthesise the three player-
         // snapshot GUI events (player-list / player-status / lobby-player-list). Called by DoUpdate_GUI /
         // LoadingScriptedState::Update.
-        int BridgeNetworkToGui(void* lpGuiBuffer,
-                               const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+        void BridgeNetworkToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
 
         // X360 0x823DF9E0 -- drain the network event queue (VariableEventQueue<14000,16>) and translate
         // each recognised network event into the matching game-state event, AddEvent'd into the PreWorld
         // input buffer's game-event queue (VariableEventQueue<1536,16>). Called by BridgeNetworkToGameState.
-        int TranslateNetworkEventsToGameEvents(BrnGameState::GameStateModule* lpGameStateModule,
-                                               const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+        void TranslateNetworkEventsToGameEvents(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
+                                                const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
 
         // X360 0x823E0900 -- drain the same network event queue and translate each GUI-bound network
         // event into the matching GUI event, pushed through the GUI module (this + 7252512).
-        int TranslateNetworkEventsToGuiEvents(void* lpGuiBuffer,
-                                              const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
+        void TranslateNetworkEventsToGuiEvents(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                               const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput);
 
         // X360 0x823DF938 -- walk the network output's live-revenge update interface and push one
         // BrnGui::GuiLiveRevengeUpdateEvent per record through the GUI module.
-        int TranslateNetworkInterfaceToGuiEvents(void* lpGuiBuffer, const void* lpNetworkToGuiInterface);
+        void TranslateNetworkInterfaceToGuiEvents(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                                  const BrnNetwork::BrnNetworkModuleIO::NetworkToGuiInterface* lpNetworkToGuiInterface);
 
         // ---- the network legs of the per-frame cascade and their bridges ------------------------
         // DoUpdate_NetworkPreSim (called by DoUpdate): perf monitors; carve a
@@ -881,7 +884,8 @@ namespace BrnGame
         // (category/variation/index) -- copy the per-name string list into the matching scoreboard event
         // (with the CgsStringUtils "String too long" guard) and push it. Not a distinct X360 function
         // (inlined into 0x823E0900); factored out here for the switch's readability.
-        void TranslateScoreboardResponse(void* lpGuiBuffer, const unsigned char* lpRecord);
+        void TranslateScoreboardResponse(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                         const BrnNetwork::BrnNetworkModuleIO::NetworkOutScoreboardHeadingList* lpHeadingList);
     public:
 
         // ---- sound-output bridge family (GameSource/Unity/../Game/GameBridgeSoundToX.cpp) ---------

@@ -28,6 +28,14 @@ namespace BrnNetwork
         return "Showtime Update Message";
     }
 
+    // Zero the score, then size through the base (the console body is one folded copy
+    // shared with CameraStatusMessage::GetPackedMessageSize).
+    s32 ShowtimeUpdateMessage::GetPackedMessageSize()
+    {
+        miShowtimeScore = 0;
+        return CgsNetwork::Message::GetPackedMessageSize();
+    }
+
     CgsNetwork::PackOrUnpackResult ShowtimeUpdateMessage::PackOrUnpack()
     {
         return CgsNetwork::PackOrUnpackInt(this, &miShowtimeScore, 0, 0x7FFFFFFF);

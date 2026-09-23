@@ -35,14 +35,13 @@ namespace CgsNetwork
     static const s32 KI_E_MESSAGE_TYPE_PING       = 6;
     static const s32 KI_E_MESSAGE_TYPE_PING_REPLY = 7;
 
-    // Ping-time quantiser range + resolution passed to PackOrUnpackFloat.
-    // DWARF-named (CgsPingMessage.cpp:29-31). asm rodata: flt_8307A2B0 (min),
-    // flt_82F335D4 (max), flt_82F335D8 (resolution). Exact float values were not
-    // recoverable in scope -- CONSOLIDATOR: pin these from rodata.
-    // FLAG: placeholder VALUES (0.0f). Logic is faithful; the constants are TBD.
-    const f32 KF_MIN_PING_TIME       = /* flt_8307A2B0  TBD */ 0.0f;
-    const f32 KF_MAX_PING_TIME       = /* flt_82F335D4  TBD */ 0.0f;
-    const f32 KF_MAX_PING_TIME_ERROR = /* flt_82F335D8  TBD */ 0.0f;
+    // Ping-time quantiser range + resolution passed to PackOrUnpackFloat. The maximum
+    // (259200 s, three days) and the resolution (0.02 s) are the initialised data words.
+    // FLAG: the minimum lives in zero-initialised data; 0.0f is its image value and no
+    // run-time initialiser for it has been searched for yet.
+    const f32 KF_MIN_PING_TIME       = 0.0f;
+    const f32 KF_MAX_PING_TIME       = 259200.0f;
+    const f32 KF_MAX_PING_TIME_ERROR = 0.02f;
 
     // ---- PingMessage ----------------------------------------------------------
 
@@ -78,7 +77,24 @@ namespace CgsNetwork
         return true;
     }
 
+    // The ping time travels as a quantised float; the console body is the same code as
+    // PingReplyMessage::PackOrUnpack (one folded copy).
+    PackOrUnpackResult PingMessage::PackOrUnpack()
+    {
+        return PackOrUnpackFloat(this, &mfPingTime,
+                                 KF_MIN_PING_TIME, KF_MAX_PING_TIME,
+                                 KF_MAX_PING_TIME_ERROR);
+    }
+
     // ---- PingReplyMessage -----------------------------------------------------
+
+    // Same code as PingMessage::GetPackedMessageSize (one folded copy): zero the ping
+    // time, then size through the base.
+    s32 PingReplyMessage::GetPackedMessageSize()
+    {
+        mfPingTime = 0.0f;
+        return Message::GetPackedMessageSize();
+    }
 
     // X360 0x8288EBF0. Tail-calls the shared quantised-float (de)serialise primitive
     // on mfPingTime. Return type is the namespace-scope typedef CgsNetwork::PackOrUnpackResult.

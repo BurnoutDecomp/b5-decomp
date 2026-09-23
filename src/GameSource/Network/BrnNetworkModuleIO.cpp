@@ -13,10 +13,8 @@
 // console's emission order, which is not member order and constructs a few queues twice
 // (kept as shipped).
 //
-// Not bodied here (declared in the header, no body yet): PostSimulationInputBuffer::
-// AppendVehicleOutputInterface (its whole body is the inlined VehicleOutputInterface::Append,
-// which that interface does not declare yet), and the declarations with no out-of-line console
-// body (header inlines on the console).
+// Not bodied here: the declarations with no out-of-line console body (header inlines on the
+// console).
 //
 // InGamePlayerStatusData::operator= / Clear live in the SharedIO .cpp beside the struct.
 
@@ -258,6 +256,15 @@ namespace BrnNetworkModuleIO
         CGS_ASSERT(lpInterface != nullptr, "lpInterface");
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
         std::memcpy(static_cast<void*>(&mActiveRaceCarInterface), lpInterface, sizeof(mActiveRaceCarInterface));
+    }
+
+    // Write lock, then VehicleOutputInterface::Append (inlined on the console): the three queue
+    // Appends, the used-cars bitset and the eight race-car states.
+    void PostSimulationInputBuffer::AppendVehicleOutputInterface(
+            const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        mVehicleOutputInterface.Append(lpVehicleOutputInterface);
     }
 
     // The console runs TrafficNetworkOutputInterface::operator= BEFORE the lock assert; the
