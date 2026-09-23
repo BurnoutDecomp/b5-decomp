@@ -32,6 +32,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                         // [boost-wave2] PlayerHitRivalAction / RivalHitPlayerAction / ShowHudMessageAction
 #include "GameShared/GameClasses/Core/CgsID.h"                            // [boost-wave2] CgsIDCompress (the two impact message-id tables)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // [boost-wave2] BrnPhysics::Vehicle::EImpactType (E_IMPACT_COUNT)
+#include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"        // [FX-GS] PaybackManager::Destruct (the Destruct leg)
 
 namespace BrnGameState
 {
@@ -344,6 +345,22 @@ void GameStateModule::Destruct()
     {
         delete mpTrainingManager;
         mpTrainingManager = 0;
+    }
+
+    // [FX-GS 2026-09-23, crash-parity G12-D12] PaybackManager::Destruct -- the console's own leg:
+    // X360 GameStateModule::Destruct @0x82375420 calls it at 0x823755A0 with r3 = gsm+0x570 (the
+    // manager, embedded by value on the console), after ModeManager::Destruct (0x82375578) and the
+    // +0x7F0 VariableEventQueue<1536,16>::Destruct (0x82375588), before the MugshotManager (+0x500)
+    // reset stores and before ModuleSingleBuffered::Destruct (0x82375694). This reduced body has no
+    // ModeManager / queue legs, so the call keeps its console place relative to the base Destruct.
+    // [FLAG PC] the delete is the partner of GameStateModule_gTD_00.cpp's `new PaybackManager()`
+    // (the manager is held by pointer on PC for the include-cycle reason recorded on the member);
+    // the console has no free, the manager dies with the module.
+    if (mpPaybackManager != 0)
+    {
+        mpPaybackManager->Destruct();
+        delete mpPaybackManager;
+        mpPaybackManager = 0;
     }
 
     CgsModule::ModuleSingleBuffered::Destruct();
@@ -2443,7 +2460,7 @@ void GameStateModule::CopyScoringDataToOutput(
         // `Time::operator-(&tmp, &now, scoring+0)` then float(seconds)+fraction -> out+0xA90.
         // (The X360 also carries a dead alternative arm reading scoring+0x10 (mTotalTime) for the
         //  mStartTime.miSeconds < 0 case -- unreachable behind the gate above, so it is not
-        //  reproduced. Named, not silently dropped.)
+        //  reproduced; it is named here so the omission is on record.)
         lpScoringOut->mfModeTimeElapsed =
             lpScoringSystem->GetElapsedTime(lTimeNow).GetFloatVal();            // stfs out+0xA90
         // @0x8236D048 `ScoringSystem::GetModeTimeRemaining(&ret, scoring, &now)` -- an sret call,
