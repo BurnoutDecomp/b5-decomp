@@ -3,9 +3,9 @@
 //
 // The online payback / dirty-trick manager. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (semantic parity, not byte-matching). The manager's functions that live here are listed at
-// each body; the remaining declared members (Prepare/Release/OnRoundStart/
-// ShowDTAvailableHudNotification/UpdateFSMTimers/SetDirtyTrickButtonState/SetTimerInterface)
-// have no body in the tree yet and no caller here.
+// each body; the remaining declared members (Prepare/Release/ShowDTAvailableHudNotification/
+// UpdateFSMTimers/SetDirtyTrickButtonState/SetTimerInterface) have no body in the tree yet and no
+// caller here.
 //
 // [FX-GS crash-parity 2026-09-23] ResetState + Destruct (G12-D12), the three victim-side arms
 // HandleActivePayback / HandleCrashDueToPayback / HandleSurvivingPayback (G12-D8/D9/D10) with
@@ -16,7 +16,8 @@
 // IsCrashing (b5 27ad7089) instead of a pinned false (G12-D1); HandleWaitingToAwardPayback, the
 // aggressor arm [2] that was parked on the same read (G12-D5); HandleAwardingPayback, arm [3],
 // with DirtyTrickAwarded, the helper it inlines on the X360 (G12-D6); the victim arm [1]
-// HandleReceivingPayback with StartCountdown, which it inlines (G12-D7).
+// HandleReceivingPayback with StartCountdown, which it inlines (G12-D7); OnRoundStart, and
+// OnRoundEnd's reseed from the frame count through the repaired Random::SetSeed (G12-D11).
 //
 // Source-of-truth: X360 ASM (behaviour + calling convention) > DecFIGS DWARF (shape) > none.
 // ===================================================================================
@@ -159,9 +160,35 @@ namespace BrnGameState
     }
 
     // -----------------------------------------------------------------------------------
-    // OnRoundEnd  @ 0x8236D4D0
-    // When asked to reset, return both FSMs to their post-Construct idle state and re-prime the RNG.
-    // (When not asked to reset, the X360 is a no-op.)
+    // OnRoundStart  @ 0x8236D290 (sole caller GameStateModule::ProcessGameEvents @0x823A0A18,
+    // `bl` @0x823A2274 in its E_EVENT_START_NETWORK_ROUND (18) arm)
+    // Return both FSMs to idle and reseed the award RNG from the current game frame.
+    //     0x8236D2B0..0x8236D304  ResetState() inlined (the twelve stores; +0x250 untouched)
+    //     0x8236D308  lwz r8, 0(r3)   mTimerStatusInterface's game frame count (TimerStatus +0)
+    //     0x8236D314  extsw           sign-extended into the 64-bit seed
+    //     0x8236D310..0x8236D4C4      Random::SetSeed inlined (8 ring fills, cursor back to 0)
+    // The PS3 twin (DecFIGS 0x244678) calls ResetState() by name and inlines the same SetSeed.
+    // [FX-GS2 2026-09-23, G12-D11] Bodied. No PC caller yet: the console's only one is the
+    // network-round-start arm of ProcessGameEvents, which this build does not have (event 18 is
+    // posted only by the online StateManager).
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::OnRoundStart()
+    {
+        ResetState();
+        mRdmNumGenerator.SetSeed(static_cast<u64>(static_cast<s64>(
+            mTimerStatusInterface.GetGameTimerStatus()->GetFrameCount())));
+    }
+
+    // -----------------------------------------------------------------------------------
+    // OnRoundEnd  @ 0x8236D4D0 (sole caller GameStateModule::OnModeEnd @0x823767E0)
+    // When asked to reset, the same as OnRoundStart; otherwise nothing.
+    //     0x8236D4D4  clrlwi r11, r4, 24 ; beq -> return
+    //     0x8236D4FC..0x8236D550  ResetState() inlined (the same twelve stores as OnRoundStart)
+    //     0x8236D554  lwz r8, 0(r3) ; 0x8236D560 extsw ; 0x8236D55C..0x8236D710 Random::SetSeed
+    // The PS3 twin (DecFIGS 0x24470C): `if (lbResetState) { ResetState(); <inline SetSeed> }`.
+    // [FX-GS2 2026-09-23, G12-D11] The RNG used to be re-primed with Construct() (the default
+    // seed); the console reseeds it from the frame count.
     // -----------------------------------------------------------------------------------
     void
     PaybackManager::OnRoundEnd(bool lbResetState)
@@ -169,28 +196,9 @@ namespace BrnGameState
         if (!lbResetState)
             return;
 
-        mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_IDLE;
-        mePaybackVictimState    = E_PAYBACK_VICTIM_STATE_IDLE;
-
-        mePaybackAggressorRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
-        mePaybackVictimRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
-
-        mfCountdownTimer  = -1.0f;
-        mfPaybackAggTimer = -1.0f;
-
-        meActiveDirtyTrickType = KE_NO_DIRTY_TRICK;   // 3
-        meAwardedDirtyTrick    = KE_NO_DIRTY_TRICK;   // 3
-
-        mbDirtyTrickButtonDown    = false;
-        mbDirtyTrickButtonWasDown = false;
-        mbPaybackAwarded          = false;
-
-        mEvent.meAggressorActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
-        mEvent.meVictimActiveRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
-        mEvent.meDirtyTrickType              = KE_NO_DIRTY_TRICK;                       // 3
-        mEvent.meDirtyTrickStatus            = static_cast<BrnNetwork::EDirtyTrickStatus>(5);
-
-        mRdmNumGenerator.Construct();
+        ResetState();
+        mRdmNumGenerator.SetSeed(static_cast<u64>(static_cast<s64>(
+            mTimerStatusInterface.GetGameTimerStatus()->GetFrameCount())));
     }
 
     // -----------------------------------------------------------------------------------

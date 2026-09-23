@@ -32,6 +32,9 @@
 //                        non-gating); gui+0x40 Triggered {+0x240, player, +0x254} (0x82383C04); action
 //                        0xD7 {+0x254, +0x240, player} 12 bytes (0x82383C88); 10.0 (flt_8202AC38) ->
 //                        +0x248; 2 -> +0x260                                                      (G12-D7)
+//   OnRoundStart @0x8236D290 / OnRoundEnd @0x8236D4D0 (r4 != 0): the ResetState stores (+0x250 left
+//                        alone), then Random::SetSeed((s64)(s32) frame count) inlined -- ring
+//                        F(hi32(s_0..s_7)), cursor 0, seed s_8 (0x8236D308..0x8236D4C4)          (G12-D11)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"
@@ -242,6 +245,54 @@ static bool RingUntouched(const PaybackManager& lr)
         if (lr.mRdmNumGenerator.mauIntegerBuffer[luSlot] != 0u)
             return false;
     return lr.mRdmNumGenerator.muOldestBufferIndex == 0u;
+}
+
+// The console's inline SetSeed (0x8236D308..0x8236D4C4): ring[k] = F(hi32(s_k)), cursor 0, seed s_8.
+static bool RngIs(const PaybackManager& lr, u64 luSeed)
+{
+    for (u32 luSlot = 0; luSlot < 8; ++luSlot)
+    {
+        if (lr.mRdmNumGenerator.mauIntegerBuffer[luSlot] != (0x3F800000u | (static_cast<u32>(luSeed >> 32) >> 9)))
+            return false;
+        luSeed = NextSeed(luSeed);
+    }
+    return lr.mRdmNumGenerator.muOldestBufferIndex == 0u && lr.mRdmNumGenerator.muSeed == luSeed;
+}
+
+// Every field ResetState stores, off its reset value; the RNG junked; the game frame count set.
+static void Dirty(PaybackManager& lr, s32 liFrameCount)
+{
+    lr.mfPaybackAggTimer = 0.5f;               lr.mfCountdownTimer = 5.0f;
+    lr.mbPaybackAwarded = true;                lr.mbDirtyTrickButtonDown = true;   lr.mbDirtyTrickButtonWasDown = true;
+    lr.mePaybackAggressorState = PM::E_PAYBACK_AGGRESSOR_STATE_TRIGGER_DT;
+    lr.mePaybackVictimState    = PM::E_PAYBACK_VICTIM_STATE_ACTIVE;
+    lr.mePaybackAggressorRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_1;
+    lr.mePaybackVictimRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_2;
+    lr.meAwardedDirtyTrick = static_cast<BrnNetwork::EPaybackType>(0);
+    lr.meActiveDirtyTrickType = static_cast<BrnNetwork::EPaybackType>(1);
+    lr.mEvent.meAggressorActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_1;
+    lr.mEvent.meVictimActiveRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_2;
+    lr.mEvent.meDirtyTrickType              = static_cast<BrnNetwork::EPaybackType>(0);
+    lr.mEvent.meDirtyTrickStatus            = static_cast<BrnNetwork::EDirtyTrickStatus>(2);
+    lr.mfPaybackVictimTimer = 7.5f;
+    std::memset(&lr.mRdmNumGenerator, 0xA5, sizeof(lr.mRdmNumGenerator));
+    lr.mTimerStatusInterface.mGameTimerStatus.miFrameCount = liFrameCount;
+}
+
+// The X360 ResetState values (-1.0 timers, states 0, indices -1, tricks 3, bytes 0, mEvent {-1,-1,3,5}).
+static bool IsReset(const PaybackManager& lr)
+{
+    return lr.mfPaybackAggTimer == -1.0f && lr.mfCountdownTimer == -1.0f
+        && !lr.mbPaybackAwarded && !lr.mbDirtyTrickButtonDown && !lr.mbDirtyTrickButtonWasDown
+        && lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_IDLE
+        && lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_IDLE
+        && lr.mePaybackAggressorRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && lr.mePaybackVictimRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && lr.meAwardedDirtyTrick == PM::KE_NO_DIRTY_TRICK && lr.meActiveDirtyTrickType == PM::KE_NO_DIRTY_TRICK
+        && lr.mEvent.meAggressorActiveRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && lr.mEvent.meVictimActiveRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_INVALID
+        && lr.mEvent.meDirtyTrickType == PM::KE_NO_DIRTY_TRICK
+        && static_cast<s32>(lr.mEvent.meDirtyTrickStatus) == 5;
 }
 
 // Exactly one type-176 (0xB0) record, 4 bytes, carrying 1: the aggressor ChangeState's "show".
@@ -531,6 +582,34 @@ int main()
         Check(luFired == 1 && lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_ACTIVE
                   && lr.meActiveDirtyTrickType == PM::KE_NO_DIRTY_TRICK,
               "D7 trick type 3 fires the non-gating assert (line 0x211) and the arm still runs  @0x82383BB4");
+    }
+
+    // ===================== G12-D11: OnRoundStart / OnRoundEnd(true) ================================
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_ACTIVE, PM::E_PAYBACK_AGGRESSOR_STATE_TRIGGER_DT);
+        Dirty(lr, 1234);
+        lr.OnRoundStart();
+        Check(IsReset(lr), "D11 OnRoundStart: the twelve ResetState stores  @0x8236D2B0..0x8236D304");
+        Check(lr.mfPaybackVictimTimer == 7.5f, "D11 OnRoundStart leaves +0x250 alone");
+        Check(RngIs(lr, static_cast<u64>(static_cast<s64>(1234))),
+              "D11 OnRoundStart reseeds from the frame count: ring F(hi32(s_0..s_7)), cursor 0, seed s_8  @0x8236D308..0x8236D4C4");
+        Dirty(lr, static_cast<s32>(0x80000005u));
+        lr.OnRoundStart();
+        Check(RngIs(lr, static_cast<u64>(static_cast<s64>(static_cast<s32>(0x80000005u)))),
+              "D11 ...the frame count is SIGN-extended (extsw)  @0x8236D314");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_ACTIVE, PM::E_PAYBACK_AGGRESSOR_STATE_TRIGGER_DT);
+        Dirty(lr, 77);
+        alignas(16) unsigned char laBefore[sizeof(PaybackManager)];
+        std::memcpy(laBefore, gaManagerStorage, sizeof(laBefore));
+        lr.OnRoundEnd(false);
+        Check(std::memcmp(laBefore, gaManagerStorage, sizeof(laBefore)) == 0, "D11 OnRoundEnd(false) stores nothing  @0x8236D4DC");
+        lr.OnRoundEnd(true);
+        Check(IsReset(lr), "D11 OnRoundEnd(true): the same ResetState stores  @0x8236D4FC..0x8236D550");
+        Check(RngIs(lr, static_cast<u64>(static_cast<s64>(77))),
+              "D11 OnRoundEnd(true) reseeds from the frame count, not Construct()'s default seed  @0x8236D554..0x8236D710");
+        Check(lr.mfPaybackVictimTimer == 7.5f, "D11 OnRoundEnd(true) leaves +0x250 alone");
     }
 
     Check(gAsserts == 0, "valid fixtures fire no assert");

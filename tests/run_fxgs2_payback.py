@@ -9,6 +9,9 @@ BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing.
            0x82397A40..64) + GameStateToGuiInterface::AddNewDirtyTrick: the timer >= 1.0 award (RandomInt
            draw, gui+4 record, AVAILABLE network message through Update's tail Append) and the
            independent crash -> PaybackLostAction (0xD3) -> idle arm.
+  G12-D11  OnRoundStart @0x8236D290 / OnRoundEnd(true) @0x8236D4D0: ResetState's stores, then the
+           award RNG reseeded from the game frame count (`extsw`) through the repaired Random::SetSeed
+           (8 ring fills) -- OnRoundEnd used to re-prime it with Construct()'s default seed.
   G12-D7   HandleReceivingPayback @0x82383B40 (victim arm 0x8239AD24[1] = 0x8239AD38) + StartCountdown
            (inlined at 0x82383C8C..98): when the player is not crashing, the trick type from the event
            copy, the gui+0x40 record, PaybackActivatedAction (0xD7, 12 bytes), a 10.0 countdown, ACTIVE.
@@ -33,7 +36,7 @@ PAYBACK_CPP = "src/GameSource/GameState/PaybackManager/BrnPaybackManager.cpp"
 GUI_CPP = "src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp"
 TIMER_CPP = "src/GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.cpp"
 RANDOM_CPP = "src/GameShared/GameClasses/Numeric/CgsRandom.cpp"
-NUMERIC_CHECKS = 49
+NUMERIC_CHECKS = 57
 
 # Bodies every revision under test has: Update and everything it reaches.
 REQUIRED = [
@@ -54,6 +57,8 @@ REQUIRED = [
     "    void\n    PaybackManager::ProcessTakedownEvents(",
     "    void\n    PaybackManager::ProcessDirtyTrickEventQueue(",
     "    void\n    PaybackManager::Update(",
+    "    void\n    PaybackManager::ResetState(",
+    "    void\n    PaybackManager::OnRoundEnd(",
 ]
 # Bodies a fix adds: (signature, labelled empty stand-in used when the revision lacks it).
 OPTIONAL = [
@@ -66,6 +71,7 @@ OPTIONAL = [
      "void PaybackManager::HandleAwardingPayback(GameStateModuleIO::OutputBuffer*,"
      " const BrnPhysics::Vehicle::VehicleOutputInterface*, GameStateModuleIO::EGameModeType) {}"),
     ("    void\n    PaybackManager::StartCountdown(", "void PaybackManager::StartCountdown() {}"),
+    ("    void\n    PaybackManager::OnRoundStart(", "void PaybackManager::OnRoundStart() {}"),
     ("    void\n    PaybackManager::HandleReceivingPayback(",
      "void PaybackManager::HandleReceivingPayback(GameStateModuleIO::OutputBuffer*,"
      " const BrnPhysics::Vehicle::VehicleOutputInterface*) {}"),
@@ -154,6 +160,7 @@ def numeric(tree):
         print("NUMERIC: cannot build -- CgsRandom.cpp's KU_RANDOM_LCG_MULTIPLIER is absent")
         return None
     rng = ("namespace CgsNumeric {\n" + multiplier.group(0) + "\n"
+           + definition(random, "    void Random::SetSeed(") + "\n"
            + definition(random, "    u32 Random::RandomUInt()") + "\n"
            + definition(random, "    s32 Random::RandomInt(") + "\n}\n")
     inc = ("namespace BrnGameState {\n" + "\n".join(parts) + "\n}\n"
