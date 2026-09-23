@@ -1087,10 +1087,9 @@ private:
     // addresses exactly that 8-byte gap (`addis r19,r3,1 ; addi r19,r19,0xE0`), iterating
     // it as ONE 64-bit BitArray word (`ld r9,0(r10)` with the word count fixed at 1) and
     // clearing it whole at the tail (`std r22,0(r19)` with r22 == 0).
-    // ⚠️ NO PRODUCER IN THIS TREE YET. The console's writer of the bits is the reset path
-    // (a car reset THIS FRAME wants its scene padding dropped); nothing in this tree sets
-    // one, so the walk is a correct no-op rather than a wrong answer. Recorded here rather
-    // than left inside a pad so the walk reads a NAMED member.
+    // ⭐ PRODUCER LANDED 2026-09-23 (crash parity G67-D4): ResetActiveRaceCar's live-car arm
+    // sets the slot's bit right after VehicleInputInterface::ResetRaceCar (0x822F4B30..
+    // 0x822F4C10), the console's only writer of a 1 here.
     CgsContainers::BitArray<8u> mabResetThisFrame;
 
     // X360 +0x100E8 (65768). The module's own reply queue: every request

@@ -1280,7 +1280,9 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 //     it (2026-08-21, gateui r9);
 //   * +99536 / +99544 / +99548 are NAMED (miPlayerBaseDeformationTypeMirror /
 //     mfPlayerBaseDeformAmountMirror / mbPlayerBaseDeformRequestPending) and the block that reads
-//     them is landed (2026-09-07). Only +99164 and +65760 remain unnamed.
+//     them is landed (2026-09-07). +99164 is the low word of mxGameModeFlags (+99160) and
+//     +65760 is mabResetThisFrame; both are named, and the reset bit is set by this arm since
+//     2026-09-23 (G67-D4).
 // ============================================================================
 void RaceCarEntityModule::ResetActiveRaceCar(
         EActiveRaceCarIndex leActiveRaceCarIndex,
@@ -1320,8 +1322,9 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         //               forced and the byte cleared; otherwise the reset TYPE comes from +99536
         //               and the amount from +99544. Defaults (nothing pending) are -1 / 0.0f.
         //   0x822F4B2C  VehicleInputInterface::ResetRaceCar(...)                 ⭐ REPRODUCED
-        //   0x822F4B30+ the module's reset BitArray bit (+65760)                  ⛔ STILL PARKED
+        //   0x822F4B30+ mabResetThisFrame.SetBit(slot) (+0x100E0)                 ⭐ REPRODUCED (G67-D4)
         //   0x822F4C14  ActiveRaceCar::ResetAfterCrash @0x822BF3A0                ⭐ REPRODUCED
+        //   0x822F4C18  if (resetDeformation) clear the glass render state        ⭐ REPRODUCED (G67-D5)
         //
         // ⛔ PARK 1 -- the CRASHING classification. ActiveRaceCar::IsDriveableAfterCrash and
         //    ::IsDeformationFixedAfterCrash have no declaration or body anywhere in this tree;
@@ -1359,14 +1362,10 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         //    `isDriveable=1 fullyDrivable=1 upDot=+0.99` and four of those with
         //    `canDriveAwayLatch=1` -- i.e. the DRIVEAWAY banner up while the game respawns the car.
         //    The call is landed below, with the console's own argument.
-        // ⛔ WHAT STAYS PARKED (both still unnamed in this tree, both gated, neither on the
-        //    wrecked-latch path):
-        //      * the module's reset BitArray bit at +65760 (0x822F4BE8..0x822F4C10) -- read by the
-        //        deformation legs;
-        //      * the `if (resetDeformation)` clear of ActiveRaceCar +0x1BF6 / +0x1BF8..+0x1C18
-        //        (0x822F4C18..0x822F4C40) -- 33 bytes inside the mRenderParams tail with no name
-        //        here yet.
-        //    DELETE-WHEN either is named.
+        // ⭐ THE TWO LEGS THIS PARK KEPT BACK ARE LANDED (crash parity 2026-09-23, G67-D4/D5). Both
+        //    were named long before the park was written -- mabResetThisFrame (header, DWARF :339)
+        //    and RenderParams::mu8RenderDamageFlags / mafCrackedGlassFractureAmount (BrnActiveRaceCar.h)
+        //    -- so the "unnamed" reason was stale. See the two blocks after ResetRaceCar below.
         // ⭐ PARK 1 RETIRED 2026-08-25 (crash exit). The banner above said
         // "ActiveRaceCar::IsDriveableAfterCrash and ::IsDeformationFixedAfterCrash have no
         // declaration or body anywhere in this tree; guessing either would decide whether a
@@ -1603,6 +1602,20 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                 << " amount=" << lfHowCloseToTotalled << "\n";
         }
 
+        // ---- 0x822F4B30..0x822F4C10 -- THIS SLOT WAS RESET THIS FRAME (G67-D4) ------------
+        //   addis r26, r30, 1 ; addi r26, r26, 0xE0     -- this + 0x100E0 == mabResetThisFrame
+        //   cmplwi r27, 8 ; blt                         -- the inlined BitArray<8>::SetBit bound:
+        //       "Index: " << slot << ", Number of bits: " << 8          (CgsBitArray.h:222)
+        //   li r9,1 ; clrldi r10,r27,58 ; rlwinm r11,r27,29,3,28 ; ldx ; sld ; or ; stdx
+        // Unconditional on this live-car arm: every classification branch above reaches it. Its
+        // two readers are SetPaddingForResetRaceCars (GenerateSceneUpdateEvents' tail, which
+        // drops the reset car's scene-volume padding and then clears the array) and the glass
+        // event skip in ReadUpdatedActiveRaceCarDataFromPhysics (0x822E8AA0) -- until this store
+        // landed both saw an always-empty array.
+        CGS_ASSERT( static_cast<u32>( leActiveRaceCarIndex ) < 8u,
+                    "Index: <slot>, Number of bits: 8" );                    // CgsBitArray.h:222
+        mabResetThisFrame.SetBit( static_cast<u32>( leActiveRaceCarIndex ) );
+
         // ---- 0x822F4C14 -- THE CRASH BOOK-KEEPING RE-SEAT. See PARK 3 above. --------------
         // The console's argument is `cntlzw r9, (u8)r24 ; extrwi r4, r9, 1, 26` at
         // 0x822F4C04/0x822F4C0C -- the standard "== 0" idiom on r24, and r24 is the same
@@ -1610,6 +1623,24 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // (`mr r8, r24` @0x822F4B08). So lbKeepVerletOffsets == !lbResetDeformation: a reset
         // that does NOT reset the deformation keeps the verlet offsets the dents live in.
         lpActiveRaceCar->ResetAfterCrash( !lbResetDeformation );
+
+        // ---- 0x822F4C18..0x822F4C40 -- A DEFORMATION RESET REPAIRS THE GLASS (G67-D5) -------
+        //   cmplwi r30, 0 ; beq -> exit              -- r30 == (u8)r24, the same resetDeformation
+        //   stb r25(0), 0x1BF6(car)                  -- mRenderParams(+0x7E0).mu8RenderDamageFlags
+        //   li r10, 8 ; mtctr ; stw r9(0), 0(r11) ; addi 4 ; bdnz   from +0x1BF8
+        //                                            -- mafCrackedGlassFractureAmount[0..7]
+        // Only these 33 bytes: the equalisation / scale factors after them are left alone. Before
+        // this landed a wreck respawn kept its smashed panes hidden (excludeMeshBits) and its
+        // cracks drawn -- RenderParams::Reset (Construct/Prepare only) was their only clear.
+        if( lbResetDeformation )
+        {
+            ActiveRaceCar::RenderParams* lpRenderParams = lpActiveRaceCar->GetRenderParams();
+            lpRenderParams->SetRenderDamageFlag( 0 );
+            for( u32 luPane = 0; luPane < 8; ++luPane )
+            {
+                lpRenderParams->SetCrackedGlassFractureAmountN( luPane, 0.0f );
+            }
+        }
 
         return;
     }
