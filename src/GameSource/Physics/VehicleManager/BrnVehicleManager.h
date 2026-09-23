@@ -127,12 +127,14 @@ namespace BrnPhysics { namespace Deformation { class DeformationOutputInterface;
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
 namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }
 // The game-action payloads the post-scene / pre-scene physics action arms hand over BY POINTER
-// (OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru). Class key `struct`, matching
-// BrnGameActions.h; a pointer-only use, so the 3000-line action header stays out of this one.
+// (OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru / ProcessNetworkCarDisconnect).
+// Class key `struct`, matching BrnGameActions.h; a pointer-only use, so the 3000-line action
+// header stays out of this one.
 namespace BrnGameState { namespace GameStateModuleIO {
     struct PrepareForModeAction;
     struct StartPlayingModeAction;
     struct DriveThruJunkYardAction;
+    struct RemotePlayerDisconnectedAction;
 } }
 
 namespace BrnPhysics
@@ -1569,6 +1571,15 @@ namespace Vehicle
         void OnPrepareGameMode(const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPrepareModeAction);    // @0x825B5770
         void OnStartGameMode(const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStartModeAction);      // @0x825B5838
         void OnJunkYardDriveThru(const BrnGameState::GameStateModuleIO::DriveThruJunkYardAction* lpJunkYardAction);  // @0x825EB050
+
+        // ADDED 2026-09-23 (crash-parity FX-VMNET, G41-D1). @0x825C53F8 (73 insns), DWARF
+        // BrnVehicleManager.h:250 (cpp :3817). The pre-scene PhysicsModule::HandleGameActions
+        // @0x825A72F0 calls it from jump-table case 4 (action 11, E_ACTION_REMOTE_PLAYER_DISCONNECTED)
+        // @0x825A7834 `mr r4, r29 (the payload) ; addi r3, r31, 0x4AA0 ; bl`: the disconnected
+        // player's race-car driver gets its controls cleared and its mHiddenRaceCars bit dropped.
+        // Body: BrnVehicleManagerPlayerStats.cpp.
+        void ProcessNetworkCarDisconnect(
+            const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction* lpPlayerDisconnectedAction);
 
         // ==========================================================================================
         // DoCrashPrediction @0x82645FE0 (814 insns) -- BODIED 2026-08-22 (wave T3 r2 owner B fix
