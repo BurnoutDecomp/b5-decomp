@@ -19,11 +19,12 @@
 //   +4    NewDirtyTrickQueue        mNewDirtyTrickQueue        (EventQueue<...,4>: base 12B + 4*12B == 60B -> ends +64)
 //   +64   DirtyTrickTriggeredQueue  mDirtyTrickTriggeredQueue  (12 + 4*12 == 60B -> ends +124)
 //   +124  DirtyTrickEndingQueue     mDirtyTrickEndingQueue     (EndingDirtyTrick is 16B: 12 + 4*16 == 76B)
-//   ...   the remaining notification queues, then the crash queue.
+//   ...   the remaining notification queues, then the crash queue (+0x1E0).
 //
-// The Add* publishers are bodied by this interface's own TU (BrnGameStateToGuiIOInterfaces.cpp,
-// not yet reconstructed); declared-only here so callers (PaybackManager, ModeManager scoring)
-// compile against the de-inlined named API rather than raw sub-queue offset writes.
+// The publishers, accessors and AppendRaceCarCrashes are bodied by this interface's own TU
+// (BrnGameStateToGuiIOInterfaces.cpp -- its banner lists which); callers (PaybackManager,
+// ModeManager scoring, GameStateModule) use the de-inlined named API rather than raw sub-queue
+// offset writes.
 // ===================================================================================
 
 #include "types.hpp"
@@ -32,6 +33,10 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::EPaybackType
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"            // CgsModule::EventQueue<T,N>
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiEvents.h"  // the GameStateToGui* event records (+ BrnGui::EFinishType)
+// BrnPhysics::Vehicle::RaceCarCrashEvent, the element of the trailing crash queue (by value). Its
+// include closure is event PODs and their enums only -- no GameState header but BrnTakedownType.h
+// -- so it can sit under this interface (and BrnGameStateModuleIO.h) without a cycle.
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
 
 namespace BrnGameState
 {
@@ -71,6 +76,11 @@ namespace GameStateModuleIO
         void AddTookLastEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex);  // DWARF :115
         void AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex);    // DWARF :121
 
+        // DWARF :126, X360 @0x82379980 (out of line). The parameter's DWARF type is
+        // VehicleManagerOutputInterface::RaceCarCrashEventQueue == EventQueue<RaceCarCrashEvent,8>.
+        void AppendRaceCarCrashes(
+            const CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>* lpRaceCarCrashEventQueue);
+
         const NewDirtyTrickQueue*       GetNewDirtyTrickQueue() const;        // DWARF :128
         const DirtyTrickTriggeredQueue* GetDirtyTrickTriggeredQueue() const;  // DWARF :129
         const DirtyTrickEndingQueue*    GetDirtyTrickEndingQueue() const;     // DWARF :130
@@ -96,11 +106,13 @@ namespace GameStateModuleIO
 
         // DWARF :151 mRaceCarCrashEventQueue ==
         // VehicleManagerOutputInterface::RaceCarCrashEventQueue == EventQueue<BrnPhysics::Vehicle::
-        // RaceCarCrashEvent,8>. Its element type (a 64-byte Matrix44Affine-carrying crash record) is
-        // owned by the VehicleManager / RaceCarEntityModule TUs; modelled here as a documented opaque
-        // tail so this interface is a complete type without forking that physics type. Sized base(12B)
-        // + 8 * 64B == 524B (the trailing crash queue is never touched by the PaybackManager bodies).
-        u8                       maRaceCarCrashEventQueueStorage[524];   // DWARF :151
+        // RaceCarCrashEvent,8> @ +0x1E0 (Construct's ninth leg `addi r3, r31, 0x1E0`; console span
+        // 12 + 8 * 64 == 524). [FX-GS2 2026-09-23, crash-parity G11-D5] Typed: it was a documented
+        // opaque u8[524] tail, so Construct could not build it and AppendRaceCarCrashes had nothing to
+        // append to. Its one writer is AppendRaceCarCrashes (online modes only); nothing in the image
+        // reads it (TranslateGuiInterfaceToGuiEvents never touches +0x1E0). Host width: see
+        // OutputBuffer's mGameStateToGuiInterface note in BrnGameStateModuleIO.h.
+        CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8> mRaceCarCrashEventQueue;  // DWARF :151
     };
 } // namespace GameStateModuleIO
 } // namespace BrnGameState

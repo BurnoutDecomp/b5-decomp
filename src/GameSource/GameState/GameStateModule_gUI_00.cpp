@@ -1621,6 +1621,34 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");   // BrnGameStateModule.cpp:1149
     mbIsUpdating = true;
 
+    // ---- -1) THE ONLINE CRASH APPEND (console 0x823A5544..0x823A55A0) -------------------------
+    // ⭐ [FX-GS2 2026-09-23, crash-parity G11-D5] Straight after the setup-player-car one-shot
+    // (0x823A5510..0x823A5540, PreWorldUpdateSetupPlayerCarBringUp here) and before the drive-thru
+    // tick below (0x823A56C0), the console does, in ANY frame:
+    //     lwz  r11, 0xD98(ModeManager)  ; mpCurrentGameMode, NULL -> skip
+    //     lbz  r11, 0xAC(r11)           ; GameMode::mbIsOnline, 0 -> skip
+    //     bl   GetPlayerActiveRaceCarIndex
+    //     bl   0x8231D8A8 (write-locked GetGameStateToGuiInterface) ; stw r28, 0(r11)
+    //                                   ; the inlined SetPlayerRaceCarIndex
+    //     bl   0x8231D8A8 ; addi r4 = gsm + 0x3D1A0 (the cached post-world crash queue)
+    //     bl   GameStateToGuiInterface::AppendRaceCarCrashes @0x82379980
+    // Online-only, and write-only: nothing in the image reads the interface's crash queue or its
+    // player index back (TranslateGuiInterfaceToGuiEvents walks +4..+0x160 only), so this is a
+    // completeness leg with no observable effect, on the console as here.
+    // [FLAG PC] gsm+0x3D1A0 is the takedown lane's heap cache on this build (see the rumble leg
+    // below): a missing cache skips the append rather than handing the callee a NULL it would
+    // dereference -- the same guard CheckForTailingRivals' call site stands behind.
+    {
+        const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+        if (lpCurrentGameMode != 0 && lpCurrentGameMode->IsOnline() && mpTakedownCache != 0)
+        {
+            const s32 liPlayerRaceCarIndex = static_cast<s32>(GetPlayerActiveRaceCarIndex());
+            mpOutputBuffer->GetGameStateToGuiInterface()->SetPlayerRaceCarIndex(liPlayerRaceCarIndex);
+            mpOutputBuffer->GetGameStateToGuiInterface()->AppendRaceCarCrashes(
+                &mpTakedownCache->mRaceCarCrashEventQueue);
+        }
+    }
+
     // ---- 0) DRIVE-THRU TICK (console #? -- PreWorldUpdate @0x823A5328 pseudocode line 220) ---
     // ⭐⭐⭐ [drive-thru wave 2026-08-27] DriveThruManager::Update @0x8239EEF0. This is the leg that
     // turns a latched drive-thru into its game action: HandleDriveThru (leg 2b below) only CACHES
