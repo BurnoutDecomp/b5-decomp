@@ -61,8 +61,18 @@ namespace Vehicle
         void Update(const BrnAIDriverControls* lpControls);
         void Update(const BrnTrafficDriverControls* lpControls);
         void UpdateVehicle(VehiclePhysics* lpVehicle);
-        void StartCatchupInterpolation(VehiclePhysics* lpVehicle, Matrix44Affine lTargetTransform,
-                                       Vector3 lLinearVelocity, Vector3 lAngularVelocity, bool lbSnap);
+
+        // @0x825FED30 (877 insns) -- BODIED 2026-09-23 (crash-parity FX-VMNET, G44-D2) in
+        // BrnVehicleDriver.cpp. Signature per DWARF BrnVehicleDriver.cpp:247 and the X360 prologue:
+        // r4 = lpVehicle, r5 = the transform BY REFERENCE, v1/v2 = the two velocities (by value,
+        // `vmr128 v127,v1 ; vmr128 v126,v2`), r6 = lbSnap. Callers: VehicleManager::
+        // UpdateNetworkCatchup @0x82619160 and PhysicalTrafficManager::UpdateNetworkTrafficVehicle
+        // @0x8261CC8C (both pass the snap flag in r6; the traffic one `li r6, 0` @0x8261CC78).
+        void StartCatchupInterpolation(VehiclePhysics* lpVehicle,
+                                       const Matrix44Affine& lCatchupTransformGraphicsSpace,
+                                       const Vector3 lCatchupLinearVelocity,
+                                       const Vector3 lCatchupAngularVelocity,
+                                       bool lbSnap);
         void ClearControls();
 
         const BrnPlayerDriverControls* GetControls() const { return &mControls; }
