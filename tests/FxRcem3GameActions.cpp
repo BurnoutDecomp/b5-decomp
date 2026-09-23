@@ -5,6 +5,8 @@
 //   G68-D9  case 34  0x8230C7A0..0x8230C880  after mbModeStartedPlaying = 1 (0x8230C7F8):
 //                    mbPlayerDonutsOnEventStart (+0x18352) -> player->RequestPlaceOnTrack(
 //                    GetPosition(), GetDirection(), flt_82FAD4FC = 0.44704f * 15.0f)
+//   G67-D6  case 76  0x8230C260..0x8230C298  assert "IsInCarSelect()" (:6685); mbInCarModScreen
+//                    (+0x186CA) = record byte +4 (CarSelectModificationScreen::mbEntering)
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/GameState/BrnGameActions.h"
@@ -61,6 +63,7 @@ struct RaceCarEntityModule {
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_3;
     BoostManager        mBoostManager;
     bool mbIsInGameMode = true, mbModeStartedPlaying = false, mbPlayerDonutsOnEventStart = false;
+    bool mbInCarSelectScreen = true, mbInCarModScreen = false;
     int  miStartLineCalls = 0; s32 miStartLineState = -1; bool mbStartLineArg = false;
     ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leIndex) {
         CGS_ASSERT(leIndex >= 0 && leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "active index");
@@ -110,6 +113,24 @@ int main() {
         lPlain.Dispatch(E_ACTION_START_PLAYING_MODE, AsEvent(lacRecord), &lOut);
         Check(lPlain.maActiveRaceCars[3].miPlaceRequests == 0 && lPlain.mbModeStartedPlaying,
               "G68-D9 34: no donut flag -> no placement (beq @0x8230C800)");
+    }
+
+    // ---- G67-D6: action 76, the car-modification-screen byte ------------------------------------
+    {
+        struct { s32 meCarSelectType; bool mbEntering; u8 pad[3]; } lRecord = { 0, true, { 0xCC, 0xCC, 0xCC } };
+        Fixture::RaceCarEntityModule lModule; Fixture::OutputFixture lOut;
+        lModule.Dispatch(76, AsEvent(&lRecord), &lOut);
+        Check(lModule.mbInCarModScreen, "G67-D6 76: entering -> mbInCarModScreen = 1 (lbz 4(r27) ; stbx +0x186CA)");
+        lRecord.mbEntering = false;
+        lModule.Dispatch(76, AsEvent(&lRecord), &lOut);
+        Check(!lModule.mbInCarModScreen, "G67-D6 76: leaving -> mbInCarModScreen = 0");
+        const unsigned luBefore = guAssertions;
+        Fixture::RaceCarEntityModule lOutside; lOutside.mbInCarSelectScreen = false;
+        lRecord.mbEntering = true;
+        lOutside.Dispatch(76, AsEvent(&lRecord), &lOut);
+        Check(guAssertions == luBefore + 1 && lOutside.mbInCarModScreen,
+              "G67-D6 76: outside car select -> the IsInCarSelect() tripwire fires, the store still happens");
+        guAssertions = luBefore;
     }
 
     Check(guAssertions == 0, "valid fixtures fire no assertions");

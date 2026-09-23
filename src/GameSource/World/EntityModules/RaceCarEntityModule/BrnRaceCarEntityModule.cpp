@@ -1687,12 +1687,15 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                     static_cast<s32>( lpActiveRaceCar->GetActiveRaceCarIndex() ) ),
                 "mRaceCarStreamer.IsRaceCarLoaded( lpActiveRaceCar->GetActiveRaceCarIndex() )" ); // :1940
 
-    // asm `lbz r30, 0x1874A(r31)` -- module+100042, the byte between mbInCarSelectScreen
-    // (+100041) and mbCarSelectDontStreamAudio (+100048) in the same DWARF run
-    // (BrnRaceCarEntityModule.h:444..447 -> mbInCarModScreen). It is AddHandlingModel's
-    // "reset the physics state" gate. [FLAG] not modelled here; false is what the zeroed
-    // module holds and what a start-of-game spawn wants.
-    const bool lbResettingPhysicsState = false;
+    // G67-D6 (crash parity 2026-09-23): `lis r11,1 ; ori r11,r11,0x86CA ; lbzx r30, r30, r11`
+    // @0x822F4D38..0x822F4D48 -- module+0x186CA (100042) == mbInCarModScreen (DWARF :445), passed
+    // as r7 (`mr r7, r30` @0x822F4D70) into AddHandlingModel, which forwards
+    // (a5 && muType == PLAYER) to CreateRaceCar as lbDisablePhysicsStateReset. A livery picked
+    // in the junkyard's modification screen re-promotes the player car WITHOUT resetting its
+    // physics state. (This read used to be pinned to false under a "[FLAG] not modelled" note
+    // that also gave the wrong offset, 0x1874A; the member's writer, HandleGameActions case 76,
+    // lands with it.)
+    const bool lbResettingPhysicsState = mbInCarModScreen;
 
     // The strength stat the console reads at lpVehicleListEntry+155.
     const u8 lu8CarStrengthStat = ( lpVehicleListEntry != 0 )
@@ -3160,6 +3163,24 @@ namespace
     static_assert(sizeof(AllowCarToJoinRoadRageActionRecord) == 8,
                   "X360 posts action 129 as 8 bytes (li r6, 8)");
 
+    // ---- action 76, DWARF E_ACTION_CAR_SELECT_MODIFICATION_SCREEN (71; +5 car-select band) -------
+    // [!] HEADER REQUEST -- interim TU-local carrier (same pattern as action 129 above):
+    // BrnGameActions.h carries neither the enumerator nor the record. X360 76 is pinned by the
+    // consumer (low jump table entry 76 -> 0x8230C260) and by the producer
+    // CarSelectManager (`KI_ACTION_CAR_MOD_SCREEN = 76`, 8 bytes, BrnCarSelectManager.cpp).
+    // DWARF BrnGameActions.h:2729 CarSelectModificationScreen { ECarSelectType meCarSelectType;
+    // bool mbEntering; } -- the consumer reads only mbEntering (`lbz r11, 4(r27)` @0x8230C290).
+    // DELETE-WHEN BrnGameActions.h grows the enumerator + struct.
+    const s32 KI_ACTION_CAR_SELECT_MODIFICATION_SCREEN = 76;
+
+    struct CarSelectModificationScreenActionRecord
+    {
+        s32  meCarSelectType;   // +0x00  DWARF :2731 (an s32-backed ECarSelectType; not read here)
+        bool mbEntering;        // +0x04  DWARF :2732
+    };
+    static_assert(sizeof(CarSelectModificationScreenActionRecord) == 8,
+                  "X360 posts action 76 as 8 bytes (KI_ACTION_CAR_MOD_SCREEN, size 8)");
+
     // ---- flt_82FAD720 == DWARF KF_RESET_ON_TRACK_SPEED (BrnRaceCarEntityModule.cpp:232) ----
     // The speed action 121's arm hands RequestResetOnTrack for the player. The word is BSS and
     // reads 0x00000000 out of the image; its writer is the CRT dynamic initialiser
@@ -3663,6 +3684,19 @@ void RaceCarEntityModule::HandleGameActions(
             ChangePlayerCarColour( lpColour->muPaletteIndex, lpColour->muColourIndex );
             break;
         }
+
+        // G67-D6 (crash parity 2026-09-23) -- ARTIST low jump table entry 76, 0x8230C260..0x8230C298:
+        //     lbzx +0x186C9 (mbInCarSelectScreen) ; bne -> skip the assert
+        //     assert "IsInCarSelect()" (:6685, li r5,0x1A1D; string 0x820204D0)
+        //     lbz r11, 4(record) ; stbx r11, +0x186CA   mbInCarModScreen = mbEntering
+        // The junkyard's livery screen tells the world module it is in (or leaving) the
+        // modification screen; ResetActiveRaceCar reads the byte as AddHandlingModel's
+        // physics-state-reset gate. Case 77 clears it again.
+        case KI_ACTION_CAR_SELECT_MODIFICATION_SCREEN: // 76
+            CGS_ASSERT( mbInCarSelectScreen, "IsInCarSelect()" );                         // :6685
+            mbInCarModScreen =
+                reinterpret_cast<const CarSelectModificationScreenActionRecord*>( lpEvent )->mbEntering;
+            break;
 
         // ⭐ [tut-ticker] ARTIST case 77 (0x8230BE08's low jump table). The payload is IGNORED
         // by the console arm; it re-reads the ACTIVE player car's VehicleListEntry and
