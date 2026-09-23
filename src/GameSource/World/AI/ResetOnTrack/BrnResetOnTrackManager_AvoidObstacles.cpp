@@ -5,7 +5,7 @@
 //   BrnAI::ResetOnTrackManager::AvoidObstacles    @0x827941E0   (DWARF :227)
 //   BrnAI::ResetOnTrackManager::TestSectionHNG    @0x82785F90   (DWARF :344)
 //   BrnAI::ResetOnTrackManager::TestRecentResets  @0x82778130   (DWARF :350)
-//   BrnAI::ResetOnTrackManager::TestCarHNG        @0x82790BD8   (DWARF :341)  [section legs; traffic legs parked]
+//   BrnAI::ResetOnTrackManager::TestCarHNG        @0x82790BD8   (DWARF :341)
 //
 // ⭐ AvoidObstacles IS NOT OPTIONAL POLISH -- IT IS ON THE RETURN PATH OF SIX OF THE SEVEN RESET
 // TYPES. ComputeResetOnTrack @0x82797F70..0x82797F94 ends with
@@ -15,7 +15,7 @@
 // FALSE outright when the requesting car's AICar is neither IN_RANGE nor OUT_OF_RANGE, i.e. when
 // the AI is not modelling that car at all. Reproducing the sweep but dropping that gate would let
 // a pose through for a car the AI has never seen. (TestCarHNG runs its two hard-no-go legs since
-// 2026-09-22; only its two traffic legs remain parked on LineTestTrafficHNG -- see its banner.)
+// 2026-09-22 and its two traffic legs since 2026-09-23 -- see its banner.)
 //
 // ⚠️ THE OPERAND-ORDER TRAP. IDA prints the PowerPC A-form multiply-add family in ENCODING order
 // (vD, vA, vB, vC), not mnemonic order (vD, vA, vC, vB). The lateral vector this whole function is
@@ -43,14 +43,15 @@
 #include "GameSource/World/AI/BrnAICar.h"                    // AICar (state + driver)
 #include "GameSource/World/AI/BrnAIDriver.h"                 // AIDriver::GetNearbyVehicles (TestCarHNG's set)
 #include "GameSource/World/AI/BrnAIPortal.h"                 // BrnAI::Portal (GetLinkSectionIndex)
-#include "GameSource/World/AI/BrnHNGTest.h"                  // BrnAI::LineTestSectionHNG
+#include "GameSource/World/AI/BrnHNGTest.h"                  // BrnAI::LineTestSectionHNG / LineTestTrafficHNG
 #include "GameSource/World/AI/BrnAISharedConstants.h"        // EAICarState / EResetType
 #include "GameSource/Math/BrnMathUtils.h"                    // BrnMath::Flatten (XZ)
 #include "SharedClasses/AI/AISectionsResourceType.h"         // AISection / AISectionsData
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <math.h>   // sqrtf
+#include <math.h>     // sqrtf
+#include <cstdlib>    // std::getenv (the BRN_ROT_TRAFFIC_DIAG witness only)
 
 namespace BrnAI
 {
@@ -77,6 +78,35 @@ namespace
     // (var_E0, stored first at 0x827943C8) and index 1 the positive one (var_D0, 0x827943C0);
     // the inner loop walks r29 upwards from var_E0.
     const s32 KI_SWEEP_SIDE_COUNT = 2;
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_ROT_TRAFFIC_DIAG=1). Crash-parity G07-D1 witness: proves
+    // TestCarHNG reached its two traffic legs (a nearby set was passed and neither section leg
+    // hit), how many vehicles the set held, and which leg answered. Budgeted: the first 16 calls,
+    // the first 32 hits, then every 64th call. Reads only; changes nothing it reports on.
+    void NoteTrafficLegs(const NearbyVehicles* lpaNearbyVehicles, f32 lfSpeed, bool lbAheadHit, bool lbHit)
+    {
+        static const bool sbTrafficDiag = (std::getenv("BRN_ROT_TRAFFIC_DIAG") != 0);
+        static u32 suCalls = 0;
+        static u32 suHits  = 0;
+        if (!sbTrafficDiag || CgsDev::Log::gpDebugPrint == 0)
+        {
+            return;
+        }
+        ++suCalls;
+        if (lbHit)
+        {
+            ++suHits;
+        }
+        if (suCalls <= 16 || (lbHit && suHits <= 32) || (suCalls % 64) == 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[rot-hng] traffic legs call " << suCalls
+                << " nearby " << lpaNearbyVehicles->miCount
+                << " speed " << lfSpeed
+                << " -> " << (lbAheadHit ? "AHEAD hit" : (lbHit ? "ACROSS hit" : "clear"))
+                << " hits " << suHits << "/" << suCalls << "\n";
+        }
+    }
 }
 
 // =================================================================================================
@@ -212,15 +242,14 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
 // ⛔ CORRECTED 2026-09-22 (crash parity G07-D1): the whole function was a logged `return false`,
 // so AvoidObstacles never swept a pose off a hard-no-go line ahead of or across the car's front.
 // The two SECTION legs are the console's own first answer (it returns 1 on a section hit before it
-// ever consults traffic) and are landed.
+// ever consults traffic) and landed first; the two TRAFFIC legs followed on 2026-09-23, once
+// BrnAI::LineTestTrafficHNG @0x8277A878 got its body in BrnHNGTest.cpp. A reset pose with a car of
+// the avoidance list on its look-ahead or across its nose now sends AvoidObstacles into the sweep.
 //
-// ⛔ [FLAG blocked: not this lane's files] still missing, each flagged where it would sit:
-//   * the two TRAFFIC legs: BrnAI::LineTestTrafficHNG(const NearbyVehicles*, Vector2, Vector2)
-//     @0x8277A878 (DWARF BrnHNGTest.cpp:104, PS3 0x9B9718) has no body; its home is BrnHNGTest.cpp.
-//     Until it lands, "no section hit" is answered as "nothing in the way" (the park's old answer).
-//   * the :2216 assert needs BrnMath::IsNormal(Vector2) (DWARF-attested overload; sub_8276AC48),
-//     which BrnMathUtils does not carry. It is a dev assert only.
-// DELETE-WHEN LineTestTrafficHNG and BrnMath::IsNormal(Vector2) land.
+// ⛔ [FLAG blocked: GameSource/Math is not this lane's file] the :2216 assert needs
+// BrnMath::IsNormal(Vector2) (DWARF-attested overload; sub_8276AC48 -- |v.xy| via rsqrt, then
+// fabs(|v| - 1.0) > flt_82002138), which BrnMathUtils does not carry. It is a dev assert only.
+// DELETE-WHEN BrnMath::IsNormal(Vector2) lands.
 // =================================================================================================
 bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
                                      const NearbyVehicles* lpaNearbyVehicles,
@@ -258,21 +287,11 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
         return false;
     }
 
-    // [FLAG blocked] 0x82790DB8 / 0x82790DD4: LineTestTrafficHNG(lpaNearbyVehicles, lPosition,
-    // lFront) || LineTestTrafficHNG(lpaNearbyVehicles, lAcrossStart, lAcrossEnd) -- see the banner.
-    static bool sbReportedTrafficParked = false;
-    if (!sbReportedTrafficParked)
-    {
-        sbReportedTrafficParked = true;
-        if (CgsDev::Log::gpDebugPrint != 0)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[rot] PARKED: ResetOnTrackManager::TestCarHNG (X360 0x82790BD8) traffic legs need "
-                   "LineTestTrafficHNG (0x8277A878), which has no body -- the two section legs run; "
-                   "nearby traffic is answered as 'not in the way'.\n";
-        }
-    }
-    return false;
+    const bool lbAheadHit = LineTestTrafficHNG(lpaNearbyVehicles, lPosition, lFront);              // 0x82790DB8
+    const bool lbHit      = lbAheadHit
+                         || LineTestTrafficHNG(lpaNearbyVehicles, lAcrossStart, lAcrossEnd);    // 0x82790DD4
+    NoteTrafficLegs(lpaNearbyVehicles, lfSpeed, lbAheadHit, lbHit);   // [DIAG] BRN_ROT_TRAFFIC_DIAG only
+    return lbHit;
 }
 
 // =================================================================================================

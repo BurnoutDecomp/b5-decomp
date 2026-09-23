@@ -57,6 +57,7 @@
 #include "GameSource/World/AI/PID/BrnPIDController.h"                // PIDController (BY VALUE @0x1B34 / @0x1B98)
 #include "GameSource/World/AI/BrnAIAggression.h"                     // AIAggression (host-side member)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                // CgsNumeric::Random (Prepare draws one float)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (NearbyVehicles::GetCount)
 
 // [FLAG PC bring-up] THE RACING-LINE / STEERING-FAN STACK IS ONLY HALF RECONSTRUCTED.
 // The two bring-up gates BRN_AI_RACINGLINE_STACK_PRESENT (the RacingLineGenerator query half) and
@@ -124,7 +125,15 @@ namespace BrnAI
         NearbyVehicle mVehicle[KI_MAX_NEARBY_VEHICLES];                 // :121 +0x000
         s32           miCount;                                          // :123 +0x700
 
-        s32  GetCount() const { return miCount; }                       // :104 @0x82766748
+        // :104 @0x82766748 -- the console body asserts before the load (BrnAIDriver.cpp:2912 /
+        // :2913, `li r5, 0xB60` / `0xB61`); LineTestTrafficHNG inlines the same two asserts
+        // (0x8277A910..0x8277A974). Restored 2026-09-23 (crash parity G07-D1).
+        s32  GetCount() const
+        {
+            CGS_ASSERT(miCount >= 0, "miCount >= 0");
+            CGS_ASSERT(miCount <= KI_MAX_NEARBY_VEHICLES, "miCount <= KI_MAX_NEARBY_TRAFFIC");
+            return miCount;
+        }
         void Reset()          { miCount = 0; }                          // :110 (inlined)
 
         // @0x827667D8 -- claim the next free slot. Both asserts are the console's

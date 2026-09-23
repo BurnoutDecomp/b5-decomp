@@ -35,10 +35,12 @@
 // GetRoadSideForStartingLine, ConvertNodesToPositionAndDirection, DeterminePositionBetweenNodes,
 // ResetNearRoutelessPlayer, ResetAwayFromPlayer, EnsureAIIsDrivingSameDirectionAsPlayer and the
 // three ResetFixedDistance* entry points) and BrnResetOnTrackManager_AvoidObstacles.cpp
-// (AvoidObstacles, TestSectionHNG, TestRecentResets). Still parked, each reporting itself once:
-// ResetAheadFromSideTurnings (reset type 5), PlayerIsLookingBackwards, TestCarHNG, and
-// ComputeInitialCoordinatesStandard's geometry arm (reset type 1, which therefore still answers
-// FAILURE and still recovers a crashed car through the consumer's GetResetCoords fallback).
+// (AvoidObstacles, TestSectionHNG, TestRecentResets). Parked at the time of this note, each
+// reporting itself once: ResetAheadFromSideTurnings (reset type 5), PlayerIsLookingBackwards,
+// TestCarHNG, and ComputeInitialCoordinatesStandard's geometry arm (reset type 1, which therefore
+// still answered FAILURE and recovered a crashed car through the consumer's GetResetCoords
+// fallback). [2026-09-23] Since landed: ResetAheadFromSideTurnings (crash parity G07-D2, fddfdf18),
+// PlayerIsLookingBackwards (G07-D3, 57bf4a4d) and TestCarHNG with both traffic legs (G07-D1).
 // ⭐ PushResetOnTrackRequest ALSO GREW ITS DE-DUPLICATION SCAN in the same wave; without it the
 // 35-slot queue overflowed in ~75 frames whenever more than one car was waiting, because the
 // sender re-posts every frame BY DESIGN. See that function's own banner.
