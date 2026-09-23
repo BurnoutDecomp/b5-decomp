@@ -9,8 +9,8 @@
 // file itself (references/DecFIGS/dwarfdump/GameSource/GameState/SharedIO/
 // BrnGameStateToGuiIOInterfaces.cpp), so this is the file's real home rather than a convenience
 // seat. Only the members the mounted event core actually calls are reconstructed here; the
-// remaining publishers (AddOvertakeEvent / AddTookLeadEvent / AddTookLastEvent), Clear() and the
-// player-index accessors stay declared-only in the header until they have live callers to check
+// remaining publishers (AddOvertakeEvent / AddTookLeadEvent / AddTookLastEvent), Clear() and
+// GetPlayerRaceCarIndex stay declared-only in the header until they have live callers to check
 // them against. The eight const queue accessors are bodied (FX-GS2, G10-D11 part 2) for their one
 // reader, BrnGameModule's TranslateGuiInterfaceToGuiEvents.
 //
@@ -23,9 +23,8 @@
 //   AddOnTailEvent        (no own body; inlined into GameStateModule::CheckForTailingRivals)
 //   the eight const Get*Queue accessors (no own bodies; inlined into
 //                          BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90)
-// (the interface's remaining out-of-line X360 symbol, AppendRaceCarCrashes @0x82379980, is NOT
-// reconstructed here -- it is not an unresolved external today and it reaches the opaque
-// trailing crash queue.)
+//   AppendRaceCarCrashes  @ 0x82379980   (FX-GS2 2026-09-23, G11-D5, with Construct's ninth leg)
+//   SetPlayerRaceCarIndex (no own body; inlined into GameStateModule::PreWorldUpdate @0x823A5594)
 // =============================================================================
 
 namespace BrnGameState
@@ -88,15 +87,11 @@ namespace GameStateModuleIO
 // AddFinishedRaceEvent to +244). This body pins the whole thing, including the trailing crash
 // queue, and 1008 is exactly the OutputBuffer span 0x4840-0x4450 the member occupies.
 //
-// ⚠️ [FLAG PC bring-up] THE LAST LEG IS NOT MADE: mRaceCarCrashEventQueue is still modelled as
-// the documented opaque tail maRaceCarCrashEventQueueStorage[524] (its element type,
-// BrnPhysics::Vehicle::RaceCarCrashEvent, is owned by the VehicleManager/RaceCarEntityModule
-// TUs), so its Construct cannot be spelled from here. That queue has NO producer and NO consumer
-// in the tree today -- AppendRaceCarCrashes @0x82379980 is not reconstructed either -- and the
-// storage is zero-filled by OutputBuffer's `new T()` value-initialisation, so it is inert rather
-// than dangerous. DELETE-WHEN RaceCarCrashEvent is typed here: add the ninth Construct leg in
-// this body FIRST, before wiring any producer, or this exact null-buffer crash returns one queue
-// along.
+// ✅ THE NINTH LEG IS MADE (FX-GS2 2026-09-23, crash-parity G11-D5). mRaceCarCrashEventQueue used
+// to be the documented opaque tail maRaceCarCrashEventQueueStorage[524], so this body could not
+// construct it; the header now types it as the console's EventQueue<RaceCarCrashEvent,8>, and the
+// leg is built here BEFORE its producer (AppendRaceCarCrashes, below) is wired -- the order the old
+// banner asked for, so the null-buffer AddEvent crash of D2 cannot return one queue along.
 // -----------------------------------------------------------------------------
 void GameStateToGuiInterface::Construct()
 {
@@ -110,11 +105,7 @@ void GameStateToGuiInterface::Construct()
     mTookLeadEventQueue.Construct();        // this + 0x120
     mTookLastEventQueue.Construct();        // this + 0x140
     mOnTailEventQueue.Construct();          // this + 0x160
-
-    // [FLAG PC bring-up] the console's ninth leg,
-    //     BrnPhysics::Vehicle::RaceCarCrashEvent_8_::Construct(this + 0x1E0)
-    // cannot be made while mRaceCarCrashEventQueue is the opaque tail -- see the banner's ⚠️.
-    // DELETE-WHEN RaceCarCrashEvent is a committed type in this header.
+    mRaceCarCrashEventQueue.Construct();    // this + 0x1E0 (0x82379964: RaceCarCrashEvent_8_::Construct)
 }
 
 // -----------------------------------------------------------------------------
@@ -257,6 +248,35 @@ void GameStateToGuiInterface::AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActive
     lEvent.meOnTailActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x8
 
     mOnTailEventQueue.AddEvent(lEvent);                         // this + 0x160
+}
+
+// -----------------------------------------------------------------------------
+// AppendRaceCarCrashes (X360 @ 0x82379980, DWARF BrnGameStateToGuiIOInterfaces.h:126) -- copy the
+// frame's race-car crash events into the interface's own crash queue. [FX-GS2 2026-09-23,
+// crash-parity G11-D5] The console body, whole:
+//     0x8237999C  cmplwi r31, 0 ; bne          ; lpRaceCarCrashEventQueue == NULL ->
+//     0x823799A4  BeginAssert / FireAssert("lpRaceCarCrashEventQueue", line 0xF7 = 247) / EndAssert
+//     0x823799C4  mr r4, r31 ; addi r3, r30, 0x1E0
+//     0x823799CC  bl RaceCarCrashEvent_::Append      ; mRaceCarCrashEventQueue.Append(*queue)
+// The assert is a non-gating tripwire: the Append follows either way, exactly as here. Its one
+// caller is GameStateModule's pre-world pump, in online modes only (console 0x823A5544..0x823A55A0).
+// Nothing in the image reads the queue back.
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::AppendRaceCarCrashes(
+    const CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>* lpRaceCarCrashEventQueue)
+{
+    CGS_ASSERT(lpRaceCarCrashEventQueue != 0, "lpRaceCarCrashEventQueue");   // line 247
+    mRaceCarCrashEventQueue.Append(*lpRaceCarCrashEventQueue);                // this + 0x1E0
+}
+
+// -----------------------------------------------------------------------------
+// SetPlayerRaceCarIndex (DWARF BrnGameStateToGuiIOInterfaces.h:137). No out-of-line console body:
+// GameStateModule::PreWorldUpdate inlines it as `stw r28, 0(r11)` @0x823A5594, r11 being the
+// write-locked GetGameStateToGuiInterface() and r28 GetPlayerActiveRaceCarIndex().
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::SetPlayerRaceCarIndex(s32 liPlayerRaceCarIndex)
+{
+    miPlayerRaceCarIndex = liPlayerRaceCarIndex;   // this + 0
 }
 
 // -----------------------------------------------------------------------------

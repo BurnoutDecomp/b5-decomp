@@ -25,6 +25,7 @@ GUI_UI_CPP = "src/GameSource/GameState/GameStateModule_gUI_00.cpp"
 GSM_CPP = "src/GameSource/GameState/BrnGameStateModule.cpp"
 GAME_CPP = "src/GameSource/Game/BrnGameModule.cpp"
 GUI_CPP = "src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp"
+VEHICLE_EVENTS_CPP = Path(__file__).resolve().parents[1] / "src/GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.cpp"
 NUMERIC_CHECKS = 18
 
 OPTIONAL = [
@@ -83,8 +84,9 @@ def numeric(tree):
         print("NUMERIC: bodies absent in this revision (empty stand-ins): " + ", ".join(stood_in))
     inc = ("namespace BrnGameState {\n" + "\n".join(parts) + "\n}\n"
            + "namespace BrnGameState { namespace GameStateModuleIO {\n" + "\n".join(gui_parts) + "\n} }\n")
+    # BrnVehicleEvents.cpp: the real RaceCarState's constructor calls its out-of-line Clear().
     return compile_and_run(Path(__file__).with_name("FxGs2Tailing.cpp"), "tailing_methods.inc", inc,
-                           "FxGs2Tailing", extra_sources=[STRSTREAM_CPP])
+                           "FxGs2Tailing", extra_sources=[STRSTREAM_CPP, VEHICLE_EVENTS_CPP])
 
 
 def main():

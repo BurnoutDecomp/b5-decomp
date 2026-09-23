@@ -17,6 +17,7 @@
 #include "GameSource/BurnoutConstants.h"                                    // ::EActiveRaceCarIndex (+ its operator++)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                      // GameStateModuleIO::EGameModeType
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"    // the real GameStateToGuiInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"    // the real RaceCarState
 #include "rw/math/vpu/vector3_operation.h"                                  // Magnitude
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the [tailing] witness (silent here)
@@ -40,16 +41,13 @@ namespace Assert
 namespace Log { DebugPrint* gpDebugPrint = nullptr; }   // the [tailing] witness stays silent
 }
 
-// ---- physics fixtures: the vehicle output's used-car bits and two RaceCarState fields ----------
+// ---- physics fixtures: the vehicle output's used-car bits around the REAL RaceCarState ---------
+// (BrnVehicleEvents.h reaches this TU through the GUI interface header since G11-D5 typed its crash
+// queue; the two fields the body reads are mLinearVelocity, console +0x330, and mfSpeedMPH, +0x3CC.)
 namespace BrnPhysics
 {
 namespace Vehicle
 {
-    struct RaceCarState
-    {
-        Vector3 mLinearVelocity;   // console +0x330
-        f32     mfSpeedMPH;        // console +0x3CC
-    };
     struct UsedCarBits
     {
         u8 muBits;

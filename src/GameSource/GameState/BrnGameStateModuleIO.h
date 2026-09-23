@@ -786,16 +786,19 @@ namespace GameStateModuleIO
         // "mpEvents != NULL" then EXCEPTION_ACCESS_VIOLATION WRITING 0x0. Typed by value here so
         // the Construct call is by-name, exactly as mTriggerManagementInputInterface above.
         //
-        // ⚠️ HOST WIDTH, MEASURED on this x64 build: sizeof(GameStateToGuiInterface) == 1032
+        // ⚠️ HOST WIDTH, MEASURED on this x64 build: sizeof(GameStateToGuiInterface) == 1040
         // against the console's 1008-byte span (0x4840-0x4450). The nine BaseEventQueue<T> heads
         // widen from 12 to 16 bytes each on LLP64 (T* mpEvents 4 -> 8 plus alignment), which
-        // pushes the trailing crash queue from console +480 to host +504. Every member after this
-        // one therefore sits 24 bytes past its console offset -- fine, and safe for the SAME
+        // pushes the trailing crash queue from console +480 to host +512 (re-measured 2026-09-23,
+        // FX-GS2 G11-D5: that queue is now the typed EventQueue<RaceCarCrashEvent,8>, 528 bytes and
+        // 16-aligned because RaceCarCrashEvent is alignas(16); it was 1032 / +504 as the opaque
+        // u8[524] tail). Every member after this one therefore sits at least 32 bytes past its
+        // console offset -- fine, and safe for the SAME
         // reason the trigger interfaces' 4-byte overshoot is: every access to this buffer is BY
         // NAMED MEMBER (nothing pokes it at an absolute offset), and the buffer is heap-allocated
         // at sizeof by GameStateModule::Construct's `new OutputBuffer()`. Keeping the console's
-        // 1008-byte span here would have been the bug: a 1032-byte object viewed through a
-        // 1008-byte blob, overlapping mGuiEventQueueStorage's first 24 bytes.
+        // 1008-byte span here would have been the bug: a 1040-byte object viewed through a
+        // 1008-byte blob, overlapping mGuiEventQueueStorage's first 32 bytes.
         GameStateToGuiInterface mGameStateToGuiInterface;                 // console +0x4450 (17488)
         u8  mGuiEventQueueStorage[0x9050 - 0x4840];                       // GuiEventQueue                @ +18496 .. +0x9050
         // ⛔ CORRECTED 2026-08-01 (BridgeGameStateToWorld wave). These two members used to be
