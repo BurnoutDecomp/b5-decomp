@@ -115,7 +115,9 @@ int main() {
     Check(Dispatch() && !lrBoost.mbForceBoost,"camera return restores player and releases forced boost");
     lAction.mbIsDriveThru=true; lAction.mfMaxResetSpeed=50;
     Dispatch(); Check(std::fabs(lModule.maCars[0].mfPlacedSpeed-44.704f)<0.001f,"drive-through return restores entry speed");
-    lAction.mfMaxResetSpeed=20; Dispatch(); Check(lModule.maCars[0].mfPlacedSpeed==20,"drive-through exit respects authored speed cap");
+    // 0x8230CC04..0x8230CC1C: min(last, cap) then fsel-max with flt_82FAD3F4 (0.44704f*60, CRT 0x82C4BC70):
+    // a 20 m/s cap is floored at the 60 mph entry speed (G68-D3; this check used to expect the pre-fix 20).
+    lAction.mfMaxResetSpeed=20; Dispatch(); Check(lModule.maCars[0].mfPlacedSpeed==0.44704f*60.0f,"drive-through exit: authored cap below 60 mph is floored at KF_DRIVE_THRU_ENTRY_SPEED");
     lAction.meCarControl=E_CAR_CONTROL_AI_MODULE;
     auto& lrCar=lModule.maCars[0];
     BrnTrigger::BoxRegion lBox;
@@ -123,7 +125,9 @@ int main() {
     std::memcpy(&lBox,lafBoxData,sizeof(lBox));
     std::memcpy(lAction.maDriveThruBoxRegion,&lBox,sizeof(lBox));
     lrCar.mVelocity={0,0,30,0}; lrBoost.mbBoosting=false;
-    Dispatch(); Check(lrCar.mfPlacedSpeed==0 && lrCar.mPlacedPosition.z==14 && lrCar.mPlacedDirection.z==1,
+    // 0x8230CC70/0x8230CC7C `lfs f0, flt_82FAD3F4 ; fabs f1` -- the entrance seats the car at 60 mph, not
+    // at the .bss zero the pre-G68-D3 code read.
+    Dispatch(); Check(lrCar.mfPlacedSpeed==0.44704f*60.0f && lrCar.mPlacedPosition.z==14 && lrCar.mPlacedDirection.z==1,
                       "drive-through entrance aligns the car with the approach side of the box");
     Check(!lrBoost.mbForceBoost,"handoff cannot create boost when none was active");
     lrCar.mVelocity={0,0,-30,0}; Dispatch();
