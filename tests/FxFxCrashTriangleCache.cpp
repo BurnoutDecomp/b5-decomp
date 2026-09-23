@@ -8,13 +8,18 @@
 //   G09-D4  CheckForDuplicateTriangles @0x822847B0 searches packs K..0, K = count==48 ? 48 :
 //           count+1, all four lanes, including stale packs and (count >= 47) the counter block.
 //   G09-D5  the four incoming triangles are all compared against the PRE-insert cache.
+//   G09-D6  CollideWithTriangleCache @0x822849B8, the cache's reader (had no body): one-sided
+//           segment test (det > 1e-8, slack 1e-5*det), unit normal cross(V0-V1, V0-V2), param
+//           t/det, nearest hit below the line's w wins, packs 0..K-1 with K = count==48 ? 48 : count+1.
 //
 // Built by run_fxfx_crash_triangle_cache.py against the PRODUCTION BrnCrashTriangleCache.cpp
 // (working tree, or `--rev <b5 rev>` for the RED side) plus SharedClasses/World/BrnCollisionTag.cpp
 // (BrnWorld::KU8_COLLISION_INVISIBLE_SURFACE_ID). Every expected value below is what the ARTIST
 // instruction words themselves produce: the cases were run through a PPC/VMX128 emulation of
-// 0x8228CDA8 -> 0x822847B0 -> 0x8227B2D0 (raw words from the image, VMX128 register fields per
-// tools/re/vmx128.py, vmaddfp fused, VMX non-Java mode) before being written down here.
+// 0x8228CDA8 -> 0x822847B0 -> 0x8227B2D0 and of 0x822849B8 (raw words from the image, VMX128
+// register fields per tools/re/vmx128.py, vmaddfp fused, VMX non-Java mode) before being written
+// down here. The runner defines FXFX_HAS_COLLIDE=0 for a revision with no CollideWithTriangleCache
+// body; its checks then count as failed.
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"
@@ -202,6 +207,93 @@ namespace
     }
 
     CgsGeometric::Triangle4 gaBatches[64];
+
+    const int KI_D6_CHECKS = 15;
+
+#if FXFX_HAS_COLLIDE
+    typedef BrnCrashLineTriangleCacheFormat Line;
+
+    const Tri KZERO = { { { 0, 0, 0 }, { 0, 0, 0 }, { 0, 0, 0 } } };
+
+    // A horizontal triangle at height y. As wound it is front-facing (det > 0) for a DOWNWARD line;
+    // flipped, for an upward one. cross(V0-V1, V0-V2) is (0, 16, 0) / (0, -16, 0).
+    Tri H(f32 y, bool lbFlip = false)
+    {
+        return lbFlip ? Make(-2, y, -2, 2, y, -2, 0, y, 2) : Make(-2, y, -2, 0, y, 2, 2, y, -2);
+    }
+
+    // Write four triangles straight into pack `luPack` (the SoA rows; the hash row is not read).
+    void PutPack(BrnCrashTriangleCache& lrCache, u32 luPack, const Tri& a, const Tri& b, const Tri& c, const Tri& d)
+    {
+        const Tri* lapTris[4] = { &a, &b, &c, &d };
+        BrnCrashTrianglePackedFormat& lrPack = lrCache.maPackedTriangles[luPack];
+        Vector4Lane* lapRows[9] = { &lrPack.mVertex0X, &lrPack.mVertex0Y, &lrPack.mVertex0Z,
+                                    &lrPack.mVertex1X, &lrPack.mVertex1Y, &lrPack.mVertex1Z,
+                                    &lrPack.mVertex2X, &lrPack.mVertex2Y, &lrPack.mVertex2Z };
+        for (u32 luLane = 0; luLane < 4; ++luLane)
+        {
+            for (u32 luRow = 0; luRow < 9; ++luRow)
+            {
+                lapRows[luRow]->SetComponent(luLane, lapTris[luLane]->mafV[luRow / 3][luRow % 3]);
+            }
+        }
+    }
+
+    Line Seg(f32 x0, f32 y0, f32 z0, f32 x1, f32 y1, f32 z1, f32 lfW = 1.0f)
+    {
+        Line lLine;
+        std::memset(&lLine, 0, sizeof(lLine));
+        lLine.mLineStartPosition.x = x0; lLine.mLineStartPosition.y = y0; lLine.mLineStartPosition.z = z0;
+        lLine.mLineEndPos.x = x1;        lLine.mLineEndPos.y = y1;        lLine.mLineEndPos.z = z1;
+        lLine.mLineIntersectNormalPlusLineParms.w = lfW;   // UpdateBucket's seed is {0, 0, 0, 1.0}
+        return lLine;
+    }
+
+    // The downward probe x = 0.5, z = 0 from y = 3 to y = -1 (param = (3 - y) / 4).
+    Line Down(f32 lfW = 1.0f) { return Seg(0.5f, 3.0f, 0.0f, 0.5f, -1.0f, 0.0f, lfW); }
+
+    void Collide(BrnCrashTriangleCache& lrCache, u32 luCount, Line* lpLines, u32 luNumLines)
+    {
+        lrCache.mnNumberOfPackedTriangles = luCount;
+        lrCache.mnNextPackedTriangleToFill = 0;
+        lrCache.mnNextComponentToFill = 0;
+        lrCache.CollideWithTriangleCache(lpLines, luNumLines);
+    }
+
+    bool Is(const Line& lrLine, f32 x, f32 y, f32 z, f32 w)
+    {
+        const Vector3Plus& lrOut = lrLine.mLineIntersectNormalPlusLineParms;
+        return lrOut.x == x && lrOut.y == y && lrOut.z == z && lrOut.w == w;
+    }
+
+    bool Near(const Line& lrLine, u32 luX, u32 luY, u32 luZ, u32 luW)
+    {
+        const u32 lauBits[4] = { luX, luY, luZ, luW };
+        const Vector3Plus& lrOut = lrLine.mLineIntersectNormalPlusLineParms;
+        const f32 lafOut[4] = { lrOut.x, lrOut.y, lrOut.z, lrOut.w };
+        for (u32 li = 0; li < 4; ++li)
+        {
+            f32 lfConsole;
+            std::memcpy(&lfConsole, &lauBits[li], sizeof(f32));
+            const f32 lfDelta = lafOut[li] - lfConsole;
+            if (!(lfDelta <= 2.0e-6f && lfDelta >= -2.0e-6f))
+            {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    // One line, cache holding `lrTri` in pack 0 lane 0 only.
+    Line OneTriangle(const Tri& lrTri, const Line& lrLine)
+    {
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        PutPack(lrCache, 0, lrTri, KZERO, KZERO, KZERO);
+        Line lLine = lrLine;
+        Collide(lrCache, 0, &lLine, 1);
+        return lLine;
+    }
+#endif
 }
 
 int main()
@@ -366,6 +458,128 @@ int main()
         Check(Counters(lrCache, 1, 1, 0) && V0XLanes(lrCache, 0, 8.0f, 8.0f, 9.0f, 8.0f),
               "[G09-D5] identical triangles in one batch are all inserted");
     }
+
+    // ---- G09-D6: CollideWithTriangleCache ------------------------------------------------------------
+#if FXFX_HAS_COLLIDE
+    const int liChecksBeforeD6 = giChecks;
+    {
+        Check(Is(OneTriangle(H(1.0f), Down()), 0.0f, 1.0f, 0.0f, 0.5f),
+              "[G09-D6] a front-facing hit writes the unit normal (0,1,0) and param t/det 0.5");
+        Check(Is(OneTriangle(H(1.0f), Seg(0.5f, -1.0f, 0.0f, 0.5f, 3.0f, 0.0f)), 0.0f, 0.0f, 0.0f, 1.0f)
+                  && Is(OneTriangle(H(1.0f, true), Seg(0.5f, -1.0f, 0.0f, 0.5f, 3.0f, 0.0f)), 0.0f, -1.0f, 0.0f, 0.5f),
+              "[G09-D6] one-sided: a back face never hits; the flipped triangle hit from below gives (0,-1,0) 0.5");
+        Check(Is(OneTriangle(H(1.0f), Seg(5.0f, 3.0f, 0.0f, 5.0f, -1.0f, 0.0f)), 0.0f, 0.0f, 0.0f, 1.0f),
+              "[G09-D6] a line outside the triangle misses");
+        Check(Is(OneTriangle(H(1.0f), Seg(0.5f, 3.0f, 0.0f, 0.5f, 1.5f, 0.0f)), 0.0f, 0.0f, 0.0f, 1.0f),
+              "[G09-D6] a segment ending short of the triangle misses (t > det)");
+    }
+    {
+        // lanes: y = -0.5 (0.875), 2.0 (0.25), 0.5 (0.625), and a nearer BACK face at 2.5.
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        PutPack(lrCache, 0, H(-0.5f), H(2.0f), H(0.5f), H(2.5f, true));
+        Line lLine = Down();
+        Collide(lrCache, 0, &lLine, 1);
+        BrnCrashTriangleCache& lrReversed = FreshCache();
+        PutPack(lrReversed, 0, H(2.5f, true), H(0.5f), H(2.0f), H(-0.5f));
+        Line lReversed = Down();
+        const bool lbFirst = Is(lLine, 0.0f, 1.0f, 0.0f, 0.25f);
+        Collide(lrReversed, 0, &lReversed, 1);
+        Check(lbFirst && Is(lReversed, 0.0f, 1.0f, 0.0f, 0.25f),
+              "[G09-D6] the nearest front-facing lane wins (0.25) in either lane order; the nearer back face is ignored");
+    }
+    {
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        PutPack(lrCache, 0, H(0.0f), KZERO, KZERO, KZERO);
+        PutPack(lrCache, 1, KZERO, KZERO, H(2.0f), KZERO);
+        Line lLine = Down();
+        Collide(lrCache, 1, &lLine, 1);
+        const bool lbNearInPack1 = Is(lLine, 0.0f, 1.0f, 0.0f, 0.25f);
+        PutPack(lrCache, 0, H(2.0f), KZERO, KZERO, KZERO);
+        PutPack(lrCache, 1, KZERO, KZERO, H(0.0f), KZERO);
+        lLine = Down();
+        Collide(lrCache, 1, &lLine, 1);
+        Check(lbNearInPack1 && Is(lLine, 0.0f, 1.0f, 0.0f, 0.25f),
+              "[G09-D6] the nearest hit across packs wins, whichever pack holds it");
+    }
+    {
+        const Line lLine = OneTriangle(H(1.0f), Down(0.3f));
+        Check(Is(lLine, 0.0f, 0.0f, 0.0f, 0.3f), "[G09-D6] a hit beyond the line's current w (0.5 >= 0.3) is not taken");
+    }
+    {
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        PutPack(lrCache, 1, H(1.0f), KZERO, KZERO, KZERO);
+        Line lLine = Down();
+        Collide(lrCache, 0, &lLine, 1);
+        const bool lbCount0 = Is(lLine, 0.0f, 0.0f, 0.0f, 1.0f);
+        lLine = Down();
+        Collide(lrCache, 1, &lLine, 1);
+        Check(lbCount0 && Is(lLine, 0.0f, 1.0f, 0.0f, 0.5f),
+              "[G09-D6] K = count + 1: count 0 does not search pack 1, count 1 does");
+    }
+    {
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        PutPack(lrCache, 47, KZERO, KZERO, KZERO, H(1.0f));
+        Line la[3] = { Down(), Down(), Down() };
+        Collide(lrCache, 48, &la[0], 1);
+        Collide(lrCache, 46, &la[1], 1);
+        Collide(lrCache, 47, &la[2], 1);
+        Check(Is(la[0], 0.0f, 1.0f, 0.0f, 0.5f) && Is(la[1], 0.0f, 0.0f, 0.0f, 1.0f) && Is(la[2], 0.0f, 1.0f, 0.0f, 0.5f),
+              "[G09-D6] count 48 and count 47 search pack 47, count 46 does not");
+    }
+    {
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        PutPack(lrCache, 0, H(1.0f), KZERO, KZERO, KZERO);
+        Line la[3] = { Seg(5.0f, 3.0f, 0.0f, 5.0f, -1.0f, 0.0f), Seg(0.25f, 3.0f, -0.5f, 0.25f, -1.0f, -0.5f),
+                       Seg(-7.0f, 3.0f, 0.0f, -7.0f, -1.0f, 0.0f) };
+        Collide(lrCache, 0, la, 3);
+        Check(Is(la[0], 0.0f, 0.0f, 0.0f, 1.0f) && Is(la[1], 0.0f, 1.0f, 0.0f, 0.5f) && Is(la[2], 0.0f, 0.0f, 0.0f, 1.0f),
+              "[G09-D6] lines are independent (0x30 stride): only the middle of three is hit");
+    }
+    {
+        // V0 (0,0,0) V1 (0,0,2) V2 (2,0,0); det = 8, so the slack is 8e-5 in v = 4x.
+        const Tri lEdge = Make(0, 0, 0, 0, 0, 2, 2, 0, 0);
+        const Line lInside = OneTriangle(lEdge, Seg(-1.5e-5f, 1.0f, 0.5f, -1.5e-5f, -1.0f, 0.5f));
+        const Line lOutside = OneTriangle(lEdge, Seg(-3.0e-5f, 1.0f, 0.5f, -3.0e-5f, -1.0f, 0.5f));
+        Check(Is(lInside, 0.0f, 1.0f, 0.0f, 0.5f) && Is(lOutside, 0.0f, 0.0f, 0.0f, 1.0f),
+              "[G09-D6] RTINTSECEDGEEPS 1e-5: 1.5e-5 outside the edge still hits, 3e-5 misses");
+    }
+    {
+        // A 1e-4 triangle crossed through its interior: det = |D.y| * 1e-8.
+        const Tri lTiny = Make(0, 0, 0, 0, 0, 1.0e-4f, 1.0e-4f, 0, 0);
+        const Line lAbove = OneTriangle(lTiny, Seg(2.0e-5f, 0.75f, 2.0e-5f, 2.0e-5f, -0.75f, 2.0e-5f));
+        const Line lBelow = OneTriangle(lTiny, Seg(2.0e-5f, 0.25f, 2.0e-5f, 2.0e-5f, -0.25f, 2.0e-5f));
+        Check(Is(lAbove, 0.0f, 1.0f, 0.0f, 0.5f) && Is(lBelow, 0.0f, 0.0f, 0.0f, 1.0f),
+              "[G09-D6] RTINTSECEPSILON 1e-8: det 1.5e-8 hits, det 5e-9 does not");
+    }
+    {
+        // Tilted triangles, two packs, count 1, three lines -- console results (emulated, raw bits).
+        BrnCrashTriangleCache& lrCache = FreshCache();
+        const Tri lA = Make(-1.5f, 0.25f, -2.0f, 0.75f, 1.5f, 2.25f, 2.5f, -0.5f, -1.25f);
+        const Tri lB = Make(-2.0f, 2.0f, -1.0f, 0.5f, 2.75f, 1.5f, 1.75f, 1.25f, -2.5f);
+        const Tri lC = Make(3.0f, -1.0f, 3.0f, -3.0f, -1.25f, 2.0f, 0.0f, -0.75f, -3.0f);
+        const Tri lD = Make(-0.5f, 3.5f, -0.5f, 0.5f, 3.25f, 0.75f, 0.75f, 3.75f, -0.75f);
+        PutPack(lrCache, 0, lA, KZERO, lB, KZERO);
+        PutPack(lrCache, 1, lC, lD, KZERO, KZERO);
+        Line la[3] = { Seg(0.1f, 4.0f, -0.2f, 0.3f, -3.0f, 0.1f), Seg(-0.8f, 3.0f, 0.4f, 0.9f, -2.0f, -0.6f),
+                       Seg(1.2f, -3.0f, 0.9f, 0.2f, 4.0f, 0.3f) };
+        Collide(lrCache, 1, la, 3);
+        Check(Near(la[0], 0xBE05BD38u, 0x3F7266F6u, 0x3E9674DFu, 0x3D96B917u),
+              "[G09-D6] golden line 0: (-0.1306046, 0.9468836, 0.2938604) param 0.0735952 (+-2e-6)");
+        Check(Near(la[1], 0x3D5C1A5Cu, 0x3F70BCD4u, 0xBEABF497u, 0x3E001498u),
+              "[G09-D6] golden line 1: (0.0537361, 0.9403813, -0.3358505) param 0.1250786 (+-2e-6)");
+        Check(Near(la[2], 0x3D586804u, 0xBF7F0CE0u, 0xBD8B1E4Cu, 0x3E958489u),
+              "[G09-D6] golden line 2 (upward): (0.0528336, -0.9962902, -0.0679289) param 0.2920268 (+-2e-6)");
+    }
+    if (giChecks - liChecksBeforeD6 != KI_D6_CHECKS)
+    {
+        Check(false, "[G09-D6] harness bookkeeping: KI_D6_CHECKS is out of date");
+    }
+#else
+    for (int li = 0; li < KI_D6_CHECKS; ++li)
+    {
+        Check(false, "[G09-D6] CollideWithTriangleCache has no body in this revision");
+    }
+#endif
 
     std::printf("%d/%d checks passed\n", giChecks - giFailures, giChecks);
     return giFailures == 0 ? 0 : 1;
