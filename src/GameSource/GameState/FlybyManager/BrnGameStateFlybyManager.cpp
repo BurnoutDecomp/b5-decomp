@@ -1,6 +1,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
 
 template <typename T>
@@ -25,11 +26,6 @@ struct RoadRulesRecvData
 {
     typedef s32 NetworkPlayerID;
 };
-}
-
-namespace CgsNetwork
-{
-static const BrnNetwork::RoadRulesRecvData::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
 }
 
 namespace BrnGameState

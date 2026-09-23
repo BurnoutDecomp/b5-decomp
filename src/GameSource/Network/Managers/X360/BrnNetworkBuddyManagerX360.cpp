@@ -162,7 +162,7 @@ namespace BrnNetwork
     // =======================================================================
     // Prepare @ 0x8254C818
     // =======================================================================
-    bool BuddyManagerX360::Prepare(const BuddySoftRebootData* lpSoftRebootData)
+    bool BuddyManagerX360::Prepare(const BrnHW::LaunchData* lpSoftRebootData)
     {
         if (!BuddyManagerBase::Prepare())
         {
@@ -171,12 +171,15 @@ namespace BrnNetwork
 
         CGS_ASSERT(lpSoftRebootData, "lpSoftRebootData");
 
+        // FLAG: view of the launch data's two read fields (see BuddySoftRebootData).
+        const BuddySoftRebootData* lpRebootData = reinterpret_cast<const BuddySoftRebootData*>(lpSoftRebootData);
+
         // Length-guard the soft-reboot session id (the X360 inlined CgsString length check that
         // fires "String too long: " if the id is >= 128 bytes before the strncpy).
-        CGS_ASSERT(strlen(lpSoftRebootData->macSessionID) < KU_SESSION_ID_LENGTH, "String too long: ");
+        CGS_ASSERT(strlen(lpRebootData->macSessionID) < KU_SESSION_ID_LENGTH, "String too long: ");
 
-        strncpy(macPendingSessionID, lpSoftRebootData->macSessionID, KU_SESSION_ID_LENGTH);
-        miPendingInviteUserPort = lpSoftRebootData->miUserControllerPort;
+        strncpy(macPendingSessionID, lpRebootData->macSessionID, KU_SESSION_ID_LENGTH);
+        miPendingInviteUserPort = lpRebootData->miUserControllerPort;
         return true;
     }
 
@@ -341,7 +344,7 @@ namespace BrnNetwork
     // Update @ 0x82573A40
     // =======================================================================
     u32 BuddyManagerX360::Update(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
-                                 bool lbProcessInvites, bool lbCanBlock, f32 lfTimeStep)
+                                 f32 lfTimeStep, bool lbProcessInvites, bool lbCanBlock)
     {
         BuddyManagerBase::Update(lbCanBlock, lfTimeStep);
 

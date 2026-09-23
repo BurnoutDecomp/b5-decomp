@@ -200,7 +200,6 @@ namespace CgsGui
     struct GuiEventNetworkInGameFailed { u8 maData[4]; s32 GetEventType() const { return 51; } };  // id 51 size 4
     struct GuiEventNetworkLaunched { u8 maData[4]; s32 GetEventType() const { return 58; } };  // id 58 size 4
     struct GuiEventSetCircleButtonConfig { u8 maData[1]; s32 GetEventType() const { return 32; } };  // id 32 size 1
-    struct GuiEventShowLoginQuestion { u8 maData[4]; s32 GetEventType() const { return 47; } };  // id 47 size 4
 
     // X360-pinned payload offsets. CgsModule::Event is an empty base, so the GuiEvent<N>
     // header (muHeader0/muEventType/muHeader2 == 3 x u32) occupies +0x00..+0x0B and the
@@ -241,6 +240,33 @@ namespace CgsGui
         E_LOGIN_QUESTION_SHOW_SIGN_IN     = 5,
         E_LOGIN_QUESTION_CHAT_RESTRICTION = 6,
         E_LOGIN_QUESTION_COUNT            = 7,
+    };
+
+    // The sign-in flow's "show this question" request (network -> GUI). The network module
+    // posts the object itself (4 bytes), so the question sits at +0.
+    struct GuiEventShowLoginQuestion
+    {
+        ELoginQuestion meLoginQuestion;   // +0x00
+        s32 GetEventType() const { return 47; }
+    };
+    static_assert(sizeof(GuiEventShowLoginQuestion) == 4, "id 47 size 4");
+
+    // The player's answer to a login question (GUI -> network). The network state manager
+    // switches on the question at +0 and reads the accept flag at +4.
+    struct GuiEventAnswerLoginQuestion
+    {
+        ELoginQuestion meLoginQuestion;   // +0x00
+        bool           mbAccept;          // +0x04
+        bool           mbAccept2;         // +0x05
+        s32 GetEventType() const { return 48; }
+    };
+
+    // Whether the loading screen is showing (GUI view -> sound, network). The network state
+    // manager latches the byte at +0.
+    struct GuiEventLoadingScreenState
+    {
+        bool mbIsVisible;   // +0x00
+        s32 GetEventType() const { return 33; }
     };
 
     // DWARF CgsGuiEventTypeDefs.h:427 -- `typedef GuiEvent<49> GuiEventCancelLogin;`,

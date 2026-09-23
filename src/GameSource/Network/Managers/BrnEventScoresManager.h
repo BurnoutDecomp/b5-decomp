@@ -87,12 +87,17 @@ namespace BrnNetwork
         // debug component.
         void Construct( BrnNetworkModule* lpNetworkModule, BrnServerInterfaceBase* lpServerInterface );
 
+        // Nothing to acquire or free: both always report ready (the shared return-true body).
+        bool Prepare();
+        bool Release();
+
         // Teardown (X360 @ 0x82556B58): zero everything and destruct the debug component.
         void Destruct();
 
         // --- per-frame pumps (called by BrnNetworkManager) -----------------------------------
         // X360 @ 0x8256FEF0: dispatch on meState (1 -> UpdateLoggedIn, 2 -> UpdateUploadEventScores).
-        void ProcessBeforeSimulation();
+        // lfTimeStep is the frame step the upload retry timer counts down by.
+        void ProcessBeforeSimulation( f32 lfTimeStep );
         // X360 @ 0x82565430: pull the post-sim network-event queue from the module IO input and
         // drain it through ProcessNetworkEvents.
         void ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput );
@@ -125,9 +130,10 @@ namespace BrnNetwork
         // uploading state; otherwise tell the network manager the auto-login flow is complete.
         void UpdateLoggedIn();
 
-        // X360 @ 0x8256C010: once the retry timer has elapsed (and the custom-commands component
-        // is idle), batch the pending records into one EventScoreData and upload it.
-        void UpdateUploadEventScores();
+        // count the retry timer down by lfTimeStep; once it has elapsed (and the
+        // custom-commands component is idle), batch the pending records into one EventScoreData
+        // and upload it.
+        void UpdateUploadEventScores( f32 lfTimeStep );
 
         // X360 @ 0x8254B4B0: map an (eventID, gameMode) onto its scoreboard slot using the
         // per-mode scoreboard tables. Static helper (no `this` in the ASM).

@@ -147,6 +147,18 @@ namespace BrnNetwork
                                              CgsNetwork::CompressCallback lCompleteCallback,
                                              void* lpCompleteData);
 
+        // The local player's decoded gamer picture, or null while it is not ready (inlined into
+        // StateManager::OutputPlayerTexture on the console; name not recovered).
+        CgsNetwork::NetworkTexture* GetLocalPlayerGamerPictureTexture()
+        {
+            GamerPictureData* lpDataEntry = &mLocalPlayerGamerPictureData;
+            if (lpDataEntry != nullptr && lpDataEntry->mbReady)
+            {
+                return &lpDataEntry->mTexture;
+            }
+            return nullptr;
+        }
+
     private:
         // X360 0x8254C2A8 -- find the GamerPictureData slot whose miPlayerID matches liPlayerID
         // (the local slot when liPlayerID != -1 and it owns that id), or null if no slot matches.

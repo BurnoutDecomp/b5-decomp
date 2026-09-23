@@ -17,8 +17,7 @@
 //                                     Construct/Destruct/Prepare/Connect drive it through
 //                                     Time::SetFloatVal (X360 calls SetFloatVal with r3 ==
 //                                     this+0); UpdateWaitAutoLogin decrements it by the
-//                                     frame delta (operator-=) and UpdateConnected adds the
-//                                     frame delta back (its GetFloatVal feeds the 120s guard).
+//                                     frame delta (operator-=).
 //   +0x08 (4)  meState                E_AUTO_LOGIN_STATE (the switch in ProcessBeforeSimulation:
 //                                     1->UpdateWaitAutoLogin, 2->UpdateConnecting,
 //                                     3->UpdateConnected; Construct stores 0).
@@ -29,8 +28,9 @@
 //                                     first clear bit to decide when every process is done.
 //   +0x18 (4)  mpNetworkModule        BrnNetworkModule* (Construct a2; asm lwz 0x18).
 //   +0x1C (4)  mpServerInterface      BrnServerInterface* (Construct a3; asm lwz 0x1C).
-//   +0x20 (4)  mfReserved             f32 cleared to 0 by Construct/Destruct (stfs f31(=0),0x20).
-//                                     Touched only as a zero-init scalar in the recovered code.
+//   +0x20 (4)  mfTimeConnected        f32 seconds spent in E_AUTO_LOGIN_STATE_CONNECTED: zeroed by
+//                                     Construct/Destruct/Connect, accumulated by UpdateConnected
+//                                     (which asserts once it passes the 120 s budget).
 //
 // Naming follows references/CXX_NAMING_CONVENTIONS.md. The state and process-count
 // constants below are grounded in the asm (cmpwi against 1/2/3 in ProcessBeforeSimulation;
@@ -42,6 +42,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"         // CgsSystem::Time
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"       // CgsContainers::BitArray<4>
+#include "SharedClasses/BrnSharedConstants.h"                    // BrnUpdateSet
 
 namespace BrnNetwork
 {
@@ -95,12 +96,20 @@ namespace BrnNetwork
         // UpdateWaitAutoLogin.)
         void Connect();
 
+        // Boot has finished: an idle manager starts waiting to auto-login (inlined into
+        // BrnNetworkManager::OnFinishedBoot).
+        void OnFinishedBoot()
+        {
+            if (meState == E_AUTO_LOGIN_STATE_IDLE)
+            {
+                meState = E_AUTO_LOGIN_STATE_WAIT_AUTO_LOGIN;
+            }
+        }
+
         // X360 0x82579910 -- per-frame tick dispatched on meState (called by
-        // BrnNetworkManager::ProcessBeforeSimulation). The X360 body is a pure tail-call
-        // dispatch that forwards its frame-delta / force-stay-connected arguments untouched to
-        // the matching per-state update step (so the registers carrying them, f1 and r4, pass
-        // straight through).
-        void ProcessBeforeSimulation(f32 lfFrameDelta, bool lbForceStayConnected);
+        // BrnNetworkManager::ProcessBeforeSimulation). A pure tail-call dispatch that forwards the
+        // frame step and the high-level update set untouched to the matching per-state step.
+        void ProcessBeforeSimulation(f32 lfFrameDelta, BrnUpdateSet luUpdateSet);
 
         // X360 0x82556DD0 -- mark one auto-login process complete (set its bit). leCompletedProcess
         // must be < KU_AUTO_LOGIN_PROCESS_COUNT.
@@ -116,17 +125,17 @@ namespace BrnNetwork
         // wait-auto-login state.
         void UpdateConnecting();
 
-        // X360 0x8255E2B8 -- while connected, accumulate the frame delta, assert if the connection
-        // outlives the 120s budget, and once every auto-login process has completed disconnect from
-        // the server if the local player is not in a game. lbForceStayConnected suppresses the
-        // disconnect (the X360 `a4 & 1` flag).
-        void UpdateConnected(f32 lfFrameDelta, bool lbForceStayConnected);
+        // while connected, accumulate the time connected, assert once it
+        // outlives the 120 s budget, and once every auto-login process has completed disconnect
+        // from the server if the local player is not in a game. Bit 0 of luUpdateSet suppresses
+        // the disconnect.
+        void UpdateConnected(f32 lfFrameDelta, BrnUpdateSet luUpdateSet);
 
         CgsSystem::Time                       mTimer;              // +0x00
         E_AUTO_LOGIN_STATE                    meState;             // +0x08
         CgsContainers::BitArray<KU_AUTO_LOGIN_PROCESS_COUNT> mProcessesComplete; // +0x10
         BrnNetworkModule*                     mpNetworkModule;     // +0x18
         BrnServerInterface*                   mpServerInterface;   // +0x1C
-        f32                                   mfReserved;          // +0x20
+        f32                                   mfTimeConnected;     // +0x20
     };
 }

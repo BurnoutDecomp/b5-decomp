@@ -89,14 +89,24 @@ namespace CgsGui
     // The "suspend / resume network processing" GUI event. X360-attested by the
     // OutputGuiEvent<CgsGui::GuiEventNetworkSuspension> instantiation @0x82493A88: the
     // queued record is { muHeader0 = 4 (payload bytes), muEventType = 45, muHeader2 = 12
-    // (payload offset) } + one payload word (the suspend flag), channel 40, 16 bytes.
-    // (BrnGui::PauseScreen posts it with the flag false when leaving the pause menu.)
+    // (payload offset) } + one payload word, channel 40, 16 bytes.
+    // The payload word is the suspension type: the network state manager suspends on 0 and
+    // calls SuspensionManager::Resume on 1, so a true constructor argument means RESUME.
+    // (BrnGui::PauseScreen posts 0 when leaving the pause menu.)
     struct GuiEventNetworkSuspension : public GuiEvent<45>
     {
-        u32 muSuspend;   // +0x0C payload word: nonzero = suspend network processing
+        enum ESuspensionType
+        {
+            E_SUSPENSION_TYPE_SUSPEND = 0,
+            E_SUSPENSION_TYPE_RESUME  = 1,
+            E_SUSPENSION_TYPE_COUNT   = 2,
+        };
 
-        explicit GuiEventNetworkSuspension(bool lbSuspend)
-            : GuiEvent<45>(4, 12), muSuspend(lbSuspend ? 1u : 0u) {}
+        ESuspensionType meSuspensionType;   // +0x0C payload word
+
+        explicit GuiEventNetworkSuspension(bool lbResume)
+            : GuiEvent<45>(4, 12),
+              meSuspensionType(lbResume ? E_SUSPENSION_TYPE_RESUME : E_SUSPENSION_TYPE_SUSPEND) {}
     };
 
     struct StateInterface

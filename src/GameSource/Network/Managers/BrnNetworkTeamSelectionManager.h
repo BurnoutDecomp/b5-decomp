@@ -128,9 +128,10 @@ namespace BrnNetwork
         typedef void (*CompletionCallback)(bool lbSuccess, void* lpUserData);
 
         // The per-substate process-action driver (the maActionFunctions[] elements) and the
-        // per-update-state driver (the maUpdateFunctions[] elements). Both take the manager.
-        typedef int (*ActionFunction)(TeamSelectionManager* lpThis);
-        typedef void (*UpdateFunction)(TeamSelectionManager* lpThis);
+        // per-update-state driver (the maUpdateFunctions[] elements): members of this manager
+        // whose addresses the tables hold.
+        typedef bool (TeamSelectionManager::*ActionFunction)();
+        typedef void (TeamSelectionManager::*UpdateFunction)();
 
         // Per-player reliable-message slot (X360 236B stride): the outbound + inbound team-select
         // messages plus the player this slot tracks. mPlayerID @ +0xE8 (sentinel -1) is the
@@ -152,6 +153,9 @@ namespace BrnNetwork
 
         // === lifecycle ===
         void Construct( BrnNetworkManager* lpNetworkManager );
+        // Nothing to acquire or free: both always report ready (the shared return-true body).
+        bool Prepare();
+        bool Release();
         void Destruct();
 
         // === per-player registration ===
@@ -174,20 +178,20 @@ namespace BrnNetwork
         // === update-state drivers (registered into maUpdateFunctions) ===
         // @ 0x82556EE8 / @ 0x8254BE60 -- both inline below.
         void UpdateWaitIdle();
-        int  ActionWaitFinalTeamSelection();
+        bool ActionWaitFinalTeamSelection();
 
         // === process-action drivers (registered into maActionFunctions) ===
         // Co-op assigns every in-game player to one shared team (KI_COOP_TEAM).
-        int  ActionAssignCoopStuntRunTeams();
+        bool ActionAssignCoopStuntRunTeams();
         // FFA / autobalance derive each player's team from a stack-built
         // BrnNetwork::PlayerParams (vtable off_82083550) filled via
         // ServerInterfaceGames::GetPlayerParametersByPlayerID: FFA gives each player
         // their own team (GetPlayerColourIndex()+1 @ 0x8256C278); autobalance splits
         // on the colour index's parity (@ 0x8256C4C8).
-        int  ActionAssignFFAStuntRunTeams();
-        int  ActionAutobalanceStuntRunTeams();
+        bool ActionAssignFFAStuntRunTeams();
+        bool ActionAutobalanceStuntRunTeams();
         // Broadcasts the assembled per-player team table to every other player (host).
-        int  ActionBroadcastFinalTeamSelection();
+        bool ActionBroadcastFinalTeamSelection();
 
     private:
         // Find the slot tracking lPlayerID, or null. (Mirrors the X360 RemovePlayer scan.)
@@ -198,16 +202,9 @@ namespace BrnNetwork
                                                           NetworkPlayerID lSendingPlayerID,
                                                           void* lpUserData );
 
-        // Free-function thunks stored into maUpdateFunctions / maActionFunctions. On the X360 the
-        // member addresses go straight into the tables (the platform C ABI passes `this` first);
-        // these thunks are the faithful PC equivalent of those table entries.
-        static void UpdateIdleNoOp( TeamSelectionManager* lpThis );
-        static void UpdateWaitIdleThunk( TeamSelectionManager* lpThis );
-        static int ActionAssignFFAThunk( TeamSelectionManager* lpThis );
-        static int ActionAssignCoopThunk( TeamSelectionManager* lpThis );
-        static int ActionAutobalanceThunk( TeamSelectionManager* lpThis );
-        static int ActionBroadcastFinalThunk( TeamSelectionManager* lpThis );
-        static int ActionWaitFinalThunk( TeamSelectionManager* lpThis );
+        // The idle update state's driver: an empty member (the console table slot holds a shared
+        // empty body; FLAG: name not recovered).
+        void UpdateNone() {}
 
         // --- members (X360-order) -------------------------------------------------------------
         TeamSelectionData  maTeamSelectionData[KI_MAX_PLAYERS];                     // +0x000
@@ -243,9 +240,9 @@ namespace BrnNetwork
 
     // ---- ActionWaitFinalTeamSelection @ 0x8254BE60 ---------------------------------------------
     // X360: *(this+1780) = 0; return 1;  (clears meSubState, reports success).
-    inline int TeamSelectionManager::ActionWaitFinalTeamSelection()
+    inline bool TeamSelectionManager::ActionWaitFinalTeamSelection()
     {
         meSubState = 0;
-        return 1;
+        return true;
     }
 }

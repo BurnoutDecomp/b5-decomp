@@ -27,6 +27,7 @@
 
 #include "types.hpp"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // BrnGameState::GameStateModuleIO::SpecificGameModeEventInterface::Event + LandmarkIndex
+#include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"  // BrnGui::GuiEventNetworkGameParams (SetFromGameParams source)
 
 namespace BrnGui
 {
@@ -45,30 +46,32 @@ namespace BrnGui
         // so the scalar block below lands exactly at +0x1B8 as the binary requires.
         Event maEvents[KI_NUM_EVENTS];
 
-        // Scalar option / count block seeded by Construct (X360 r3+0x1B8 .. r3+0x1DF).
-        s32 miMaxPlayers;         // r3+0x1B8 -> 10
-        s32 miGameMode;           // r3+0x1BC -> 18
-        s32 miCountA;             // r3+0x1C0 -> 0
-        s32 miCountB;             // r3+0x1C4 -> 0
-        s32 miCountC;             // r3+0x1C8 -> 0
-        s32 miCountD;             // r3+0x1CC -> 0
-        s32 miOptionE;            // r3+0x1D0 -> 1
-        s32 miOptionF;            // r3+0x1D4 -> 9
-        s32 miOptionG;            // r3+0x1D8 -> 3
-        u8  mbFlagH;              // r3+0x1DC -> 1
-        u8  mbFlagI;              // r3+0x1DD -> 1
-        u8  mbFlagJ;              // r3+0x1DE -> 1
-        u8  mbFlagK;              // r3+0x1DF -> 1
+        // Scalar match-option tail seeded by Construct (+0x1B8 .. +0x1DF). The same field row,
+        // names and offsets as GuiEventNetworkGameParams (the reference declares the two
+        // records alike); the Construct defaults are that record's too.
+        s32  meGameMode;           // +0x1B8 GsmIO::EGameModeType (Construct: 10)
+        s32  mePreviousGameMode;   // +0x1BC GsmIO::EGameModeType (Construct: 18)
+        s32  meSecurity;           // +0x1C0 BrnNetwork::EBrnGameSecurity (Construct: 0)
+        s32  meBoostType;          // +0x1C4 (Construct: 0)
+        s32  meVehicleChoice;      // +0x1C8 (Construct: 0)
+        s32  miTimeLimit;          // +0x1CC (Construct: 0)
+        s32  miNumRounds;          // +0x1D0 (Construct: 1)
+        s32  miVehicleClass;       // +0x1D4 (Construct: 9)
+        s32  miNumRunnerCrashes;   // +0x1D8 (Construct: 3)
+        bool mbInfiniteBoost;      // +0x1DC (Construct: true)
+        bool mbTrafficOn;          // +0x1DD (Construct: true)
+        bool mbTrafficCheckingOn;  // +0x1DE (Construct: true)
+        bool mbRanked;             // +0x1DF (Construct: true)
 
         // @0x82481F50 - default-construct the event: zero each record's trigger/count/id
         // tail (trigger = -1, numLandmarks = 0, eventID = 0) and seed the scalar block with
         // the default online-match parameters. The landmark blocks are left untouched here.
         void Construct();
 
-        // @0x82481FC8 - copy a fully configured create-game event from lrSource: rebuild each
-        // of the ten Events via Event::Construct (gathering lrSource's landmark indices) and
-        // copy the scalar option / count block verbatim.
-        void SetFromGameParams(const GuiEventNetworkCreateGame& lrSource);
+        // Copy a game-params event: rebuild each of the ten Events via
+        // Event::Construct (gathering the source's landmark indices) and copy the scalar
+        // option block verbatim.
+        void SetFromGameParams(const GuiEventNetworkGameParams* lpGameParams);
 
         // The queued event-type id. Not GuiEvent<N>-derived, so the id is carried here;
         // X360-attested by StateInterface::OutputGuiEvent<GuiEventNetworkCreateGame>

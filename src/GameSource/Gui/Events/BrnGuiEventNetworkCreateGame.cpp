@@ -25,32 +25,34 @@ namespace BrnGui
             maEvents[li].Construct(0, 0xFFFFFFFFu, 0, 0);
         }
 
-        // Scalar option / count block (X360 r3+0x1B8 .. r3+0x1DF).
-        miCountA     = 0;   // 0x1C0
-        miCountB     = 0;   // 0x1C4
-        miCountC     = 0;   // 0x1C8
-        miCountD     = 0;   // 0x1CC
-        mbFlagK      = 1;   // 0x1DF
-        miMaxPlayers = 10;  // 0x1B8
-        miGameMode   = 18;  // 0x1BC
-        miOptionE    = 1;   // 0x1D0
-        miOptionF    = 9;   // 0x1D4
-        miOptionG    = 3;   // 0x1D8
-        mbFlagH      = 1;   // 0x1DC
-        mbFlagI      = 1;   // 0x1DD
-        mbFlagJ      = 1;   // 0x1DE
+        // Scalar option block (+0x1B8 .. +0x1DF), in the console's store order.
+        meSecurity          = 0;      // 0x1C0
+        meBoostType         = 0;      // 0x1C4
+        meVehicleChoice     = 0;      // 0x1C8
+        miTimeLimit         = 0;      // 0x1CC
+        mbRanked            = true;   // 0x1DF
+        meGameMode          = 10;     // 0x1B8
+        mePreviousGameMode  = 18;     // 0x1BC
+        miNumRounds         = 1;      // 0x1D0
+        miVehicleClass      = 9;      // 0x1D4
+        miNumRunnerCrashes  = 3;      // 0x1D8
+        mbInfiniteBoost     = true;   // 0x1DC
+        mbTrafficOn         = true;   // 0x1DD
+        mbTrafficCheckingOn = true;   // 0x1DE
     }
 
     // @0x82481FC8
-    void GuiEventNetworkCreateGame::SetFromGameParams(const GuiEventNetworkCreateGame& lrSource)
+    void GuiEventNetworkCreateGame::SetFromGameParams(const GuiEventNetworkGameParams* lpGameParams)
     {
+        const GuiEventNetworkGameParams& lrSource = *lpGameParams;
+
         // Rebuild each of the ten Events from lrSource: gather that source event's landmark
         // indices into a temp buffer (X360 loops GetNumLandmarks() halfwords through the
         // landmark accessor into the stack buffer v13) then Event::Construct(dest) with the
         // source event's id, trigger id, the gathered landmarks and the landmark count.
         for (s32 li = 0; li < KI_NUM_EVENTS; ++li)
         {
-            const Event& lrSrcEvent = lrSource.maEvents[li];
+            const GuiEventNetworkGameParams::Event& lrSrcEvent = lrSource.maEvents[li];
 
             const s32 liNumLandmarks = lrSrcEvent.GetNumLandmarks();
 
@@ -66,19 +68,19 @@ namespace BrnGui
                                    liNumLandmarks);
         }
 
-        // Copy the scalar option / count block verbatim (X360 r3+0x1B8 .. r3+0x1DF).
-        mbFlagK      = lrSource.mbFlagK;       // 0x1DF
-        miMaxPlayers = lrSource.miMaxPlayers;  // 0x1B8
-        miGameMode   = lrSource.miGameMode;    // 0x1BC
-        miCountA     = lrSource.miCountA;      // 0x1C0
-        miOptionE    = lrSource.miOptionE;     // 0x1D0
-        miOptionF    = lrSource.miOptionF;     // 0x1D4
-        miOptionG    = lrSource.miOptionG;     // 0x1D8
-        miCountB     = lrSource.miCountB;      // 0x1C4
-        miCountC     = lrSource.miCountC;      // 0x1C8
-        mbFlagH      = lrSource.mbFlagH;       // 0x1DC
-        mbFlagI      = lrSource.mbFlagI;       // 0x1DD
-        mbFlagJ      = lrSource.mbFlagJ;       // 0x1DE
-        miCountD     = lrSource.miCountD;      // 0x1CC
+        // Copy the scalar option block verbatim (+0x1B8 .. +0x1DF), in the console's order.
+        mbRanked            = lrSource.mbRanked;             // 0x1DF
+        meGameMode          = lrSource.meGameMode;           // 0x1B8
+        mePreviousGameMode  = lrSource.mePreviousGameMode;   // 0x1BC
+        meSecurity          = lrSource.meSecurity;           // 0x1C0
+        miNumRounds         = lrSource.miNumRounds;          // 0x1D0
+        miVehicleClass      = lrSource.miVehicleClass;       // 0x1D4
+        miNumRunnerCrashes  = lrSource.miNumRunnerCrashes;   // 0x1D8
+        meBoostType         = lrSource.meBoostType;          // 0x1C4
+        meVehicleChoice     = lrSource.meVehicleChoice;      // 0x1C8
+        mbInfiniteBoost     = lrSource.mbInfiniteBoost;      // 0x1DC
+        mbTrafficOn         = lrSource.mbTrafficOn;          // 0x1DD
+        mbTrafficCheckingOn = lrSource.mbTrafficCheckingOn;  // 0x1DE
+        miTimeLimit         = lrSource.miTimeLimit;          // 0x1CC
     }
 }

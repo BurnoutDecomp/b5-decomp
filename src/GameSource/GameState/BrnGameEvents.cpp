@@ -1,14 +1,7 @@
 #include "GameSource/GameState/BrnGameEvents.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-// CgsNetwork::K_INVALID_PLAYER_ID has no committed home (it lives in the un-reconstructed
-// CgsNetworkConstants.h); modelled file-local as -1, exactly as the committed
-// BrnGameStateFlybyManager.cpp does. The assert expression strings keep the original spelling.
-namespace CgsNetwork
-{
-static const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
-}
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 
 namespace BrnGameState
 {
@@ -70,21 +63,24 @@ void StartNetworkGameEvent::Clear()
     mbIsStartingFreeburnLobbyAfterOnlineEvent = false;
 }
 
-// X360 0x825420C8. Populate one player's slot, optionally adopting it as the local player.
+// Populate one player's slot; the host's slot index becomes the host grid position.
 void StartNetworkGameEvent::SetPlayerData(s32                         liPlayerIndex,
-                                          BrnNetwork::NetworkPlayerID liNetworkPlayerID,
+                                          BrnNetwork::NetworkPlayerID lNetworkPlayerID,
                                           CgsID                       lCarId,
-                                          f32                         lfPlayerData,
+                                          CgsID                       lWheelId,
                                           u16                         lu16CarColourIndex,
                                           u16                         lu16CarPaintFinishIndex,
+                                          f32                         lfPlayerData,
                                           EPlayerTeam                 lePlayerTeam,
-                                          bool                        lbPlayerHasFever,
-                                          bool                        lbUpdateLocalNetworkPlayerID)
+                                          bool                        lbIsHost,
+                                          bool                        lbPlayerHasFever)
 {
-    CGS_ASSERT(liNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+    (void)lWheelId;
+
+    CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
 
-    maNetworkPlayerID[liPlayerIndex]        = liNetworkPlayerID;
+    maNetworkPlayerID[liPlayerIndex]        = lNetworkPlayerID;
     maCarIds[liPlayerIndex]                 = lCarId;
     mau16CarColourIndex[liPlayerIndex]      = lu16CarColourIndex;
     mau16CarPaintFinishIndex[liPlayerIndex] = lu16CarPaintFinishIndex;
@@ -92,9 +88,9 @@ void StartNetworkGameEvent::SetPlayerData(s32                         liPlayerIn
     maePlayerTeam[liPlayerIndex]            = lePlayerTeam;
     mabPlayerHasFever[liPlayerIndex]        = lbPlayerHasFever;
 
-    if (lbUpdateLocalNetworkPlayerID)
+    if (lbIsHost)
     {
-        mLocalNetworkPlayerID = liPlayerIndex;
+        miHostGridPosition = liPlayerIndex;
     }
 }
 }

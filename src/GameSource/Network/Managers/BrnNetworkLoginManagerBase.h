@@ -38,6 +38,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT (GetCompletedSignInType)
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"   // CgsUnicode::CgsUtf8
 
 namespace BrnNetwork
@@ -111,8 +112,9 @@ namespace BrnNetwork
         virtual void Disconnected();
 
         // ---- front-end answers (driven by BrnNetwork::StateManager::ProcessGuiEvents) ------
-        void AnswerCreateAccount(bool lbAgree);          // DWARF .cpp:874 -- no asm (decl-only).
-        void AnswerShareInfo(bool lbAgree1, bool lbAgree2); // DWARF .cpp:898 -- no asm (decl-only).
+        // Inlined into StateManager::ProcessGuiEvents on the console (no out-of-line copy).
+        void AnswerCreateAccount(bool lbAgree);
+        void AnswerShareInfo(bool lbAgree1, bool lbAgree2);
 
         // X360 0x82543B30 -- user (dis)agreed to open a US account.
         void AnswerOpenUsAccount(bool lbAgree);
@@ -124,15 +126,17 @@ namespace BrnNetwork
         // X360 0x82543BB8 -- the platform sign-in completed (success/failure).
         void AnswerSignIn(bool lbSuccess);
 
-        void AnswerChatRestricted(bool lbAcknowledged); // DWARF .cpp:1018 -- no asm (decl-only).
+        // Inlined into StateManager::ProcessGuiEvents on the console (no out-of-line copy).
+        void AnswerChatRestricted(bool lbAcknowledged);
 
         // X360 0x8254FE60 -- the user cancelled the login flow.
         void CancelLogin();
 
         // ---- queries (inline; DWARF .h:282/288/294) ---------------------------------------
+        // The flow is in flight while the sub-state cursor is neither idle nor done.
         bool IsSigningIn() const
         {
-            return meSignInState == E_SIGN_IN_STATE_SIGNING_IN;
+            return meSubState != E_SUBSTATE_COUNT && meSubState != E_SUBSTATE_DONE;
         }
 
         ESignInType GetSignInType() const
@@ -142,6 +146,8 @@ namespace BrnNetwork
 
         ESignInType GetCompletedSignInType() const
         {
+            CGS_ASSERT(meCompletedSignInType != E_SIGN_IN_TYPE_COUNT,
+                       "meCompletedSignInType != E_SIGN_IN_TYPE_COUNT");
             return meCompletedSignInType;
         }
 

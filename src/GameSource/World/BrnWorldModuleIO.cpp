@@ -85,7 +85,28 @@ void UpdateInputBuffer::Construct()
     mInWorldEventQueue.Construct();                         // +297532  VEQ<4096,16>
     mTrafficNetworkInterface.Construct();                   // +301644  ActivateHull<8> + mbDiverged
     mCrashNetworkInterface.Construct();                     // +301760  CrashIO::NetworkInputInterface
-    mPlayerVehicleControls.Clear();                         // +317264  13 f32 + 7 bytes = 0
+    // +317264: the 13 floats and the first seven flags are zeroed in place (mbBoostBounce is
+    // not written).
+    mPlayerVehicleControls.mfXAxis1       = 0.0f;
+    mPlayerVehicleControls.mfXAxis0       = 0.0f;
+    mPlayerVehicleControls.mfYAxis1       = 0.0f;
+    mPlayerVehicleControls.mfYAxis0       = 0.0f;
+    mPlayerVehicleControls.mfXSensor      = 0.0f;
+    mPlayerVehicleControls.mfYSensor      = 0.0f;
+    mPlayerVehicleControls.mfZSensor      = 0.0f;
+    mPlayerVehicleControls.mfGSensor      = 0.0f;
+    mPlayerVehicleControls.mfAcceleration = 0.0f;
+    mPlayerVehicleControls.mfBraking      = 0.0f;
+    mPlayerVehicleControls.mfHandBrake    = 0.0f;
+    mPlayerVehicleControls.mfSteering     = 0.0f;
+    mPlayerVehicleControls.mfSpin         = 0.0f;
+    mPlayerVehicleControls.mbHorn         = false;
+    mPlayerVehicleControls.mbChangeView   = false;
+    mPlayerVehicleControls.mbStart        = false;
+    mPlayerVehicleControls.mbReset        = false;
+    mPlayerVehicleControls.mbToggle       = false;
+    mPlayerVehicleControls.mbBoost        = false;
+    mPlayerVehicleControls.mbIsWheel      = false;
     mDebugController.Clear();                               // +317324  DebugController::Clear
     mRaceCarRaceDistanceInterface.Clear();                  // +317496  RaceCarRaceDistanceInterface::Clear
     mScoringInterface.Clear();                              // +317536  memset(.., 0, 2736)
@@ -298,21 +319,18 @@ const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterfac
     return &mTrafficNetworkInterface;
 }
 
-// X360 0x823C8DA8 (:285 W) -- update the traffic-network interface (member @+301644).
-// FAITHFULNESS NOTE: the X360 does NOT blanket-copy the interface; it performs a SELECTIVE
-// 3-field update within the member -- zero the queue's miLength at member+8 (BaseEventQueue::
-// Clear()), BaseEventQueue<ActivateHullEvent>::Append the source's activate-hull queue into the
-// member's queue, and copy the mbDiverged byte at member+0x6C (this+301752). The canonical home
-// (BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface, BrnTrafficNetworkInterfaces.h) IS
-// committed and byte-confirms this 3-op shape, but it only exposes a const GetActivateHullQueue()
-// + SetDiverged/HasDiverged -- no public mutator lets an outside caller Clear()+Append() its
-// private queue. That mutator must be grown onto BrnTrafficNetworkInterfaces.h/.cpp (a different
-// TU) before the 3 ops can be re-modelled by name here; until then this stays a local placeholder
-// abstracted into Set(). The member touched + offsets are correct.
+// (:285 W) -- update the traffic-network interface (member +301644): zero
+// the activate-hull queue length, append the source queue, copy mbDiverged. The interface
+// exposes its queue only through the const getter, so the merge goes through it (the
+// traffic pre-scene buffer's SetTrafficNetworkInputInterface does the same).
 void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    mTrafficNetworkInterface.Set(lpInterface);
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    TrafficNetworkInputInterface::ActivateHullQueue& lrQueue =
+        const_cast<TrafficNetworkInputInterface::ActivateHullQueue&>(mTrafficNetworkInterface.GetActivateHullQueue());
+    lrQueue.Clear();
+    lrQueue.Append(lpInterface->GetActivateHullQueue());
+    mTrafficNetworkInterface.SetDiverged(lpInterface->HasDiverged());
 }
 
 // X360 0x827A3BA0 (:287 R, GetCrashNetworkIn) -- const crash-network accessor (+301760).

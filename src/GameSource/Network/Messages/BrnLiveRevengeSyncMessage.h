@@ -10,15 +10,7 @@
 // CommonRelationship / CommonRelationshipStats parts) are the committed homes in
 // BrnNetworkLiveRevengeRelationship.h, reused BY NAME.
 //
-// LEDGER FUNCTION reconstructed in this TU (X360 BURNOUT_X360_ARTIST.XEX):
-//   BrnNetwork::LiveRevengeSyncMessage::GetName  @ 0x827DFD00
-//     -> returns the literal "Live Revenge Sync Message" (lis/addi a rodata string, blr).
-//        No member or base access.
-//
-// The other declared methods (Construct/PrepareForSend/Retrieve/Release/Destruct/
-// GetPackedMessageSize/PackOrUnpack overloads) live in the sibling
-// BrnLiveRevengeSyncMessage.cpp TU and are declared here for class shape but NOT bodied
-// in this TU.
+// GetName is header-inline; every other method is bodied in BrnLiveRevengeSyncMessage.cpp.
 #pragma once
 
 #include "types.hpp"                                                               // bool, s32, u16
@@ -27,6 +19,10 @@
 
 namespace BrnNetwork
 {
+    // The reliable-message type the per-player sync send/recv pair is registered under; the
+    // message stamps it on send.
+    static const s32 KI_LIVE_REVENGE_SYNC_MESSAGE_TYPE = 24;
+
     // DWARF BrnLiveRevengeSyncMessage.h:42.
     struct LiveRevengeSyncMessage : public CgsNetwork::ReliableMessage
     {
@@ -34,7 +30,6 @@ namespace BrnNetwork
         LiveRevengeRelationship mLiveRevengeRelationship;   // DWARF :94
 
     public:
-        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
         void Construct();
         void PrepareForSend(const LiveRevengeRelationship* lpLiveRevengeRelationship, u16 lu16Frame);
         bool Retrieve(LiveRevengeRelationship* lpLiveRevengeRelationship);

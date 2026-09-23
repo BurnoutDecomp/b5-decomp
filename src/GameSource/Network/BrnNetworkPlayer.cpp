@@ -3,6 +3,7 @@
 #include "GameSource/Network/BrnNetworkPlayer.h"
 #include "GameSource/Network/BrnNetworkModule.h"          // BrnNetworkModule::GetNetworkManager / GetNetworkEventQueue
 #include "GameSource/Network/BrnNetworkManager.h"         // BrnNetworkManager::GetLocalConsoleFrameRate
+#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"  // NetworkInStuntMultiplierEvent (SendStuntMultiplierMessage)
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h" // PlayerManager::GetPlayerByID
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"      // TimeManager::GetFrameCount / GetFramesSinceStart
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // VariableEventQueue<14000,16>::AddEvent
@@ -13,13 +14,10 @@
 // and the delivered-callback set.
 //
 // Bodied here:
-//   SendStuntScoreUpdatedMessage, SendStuntMultiplierMessage,
-//   ProcessReceivedStuntMultiplier, _StuntMultiplierMessageArrivedCallback,
+//   SendSelectedCar, SendStuntScoreUpdatedMessage, SendStuntMultiplierMessage,
+//   ProcessReceivedStuntMultiplier, _StuntScoreUpdatedMessageArrivedCallback,
+//   _StuntMultiplierMessageArrivedCallback,
 //   the eleven *DeliveredCallback functions (one shared empty body).
-//
-// _StuntScoreUpdatedMessageArrivedCallback is declared only: its retrieval call lands
-// on the folded CheckpointTriggeredMessage::Retrieve address, and the message's own
-// StuntScoreUpdatedMessage::Retrieve has no declaration in its header yet.
 // ===================================================================================
 
 namespace BrnNetwork
@@ -45,6 +43,17 @@ namespace BrnNetwork
         }
     }
 
+    // Tail-calls CarSelectMessage::PrepareForSend on the send slot; every argument moves
+    // up one place behind the frame id and the deformation stays in its float register.
+    void BrnNetworkPlayer::SendSelectedCar(CgsID lCarID, CgsID lWheelID, u16 lu16CarColourIndex,
+                                           u16 lu16PaintFinishIndex, f32 lfDeformation,
+                                           bool lbFinalCarSelection)
+    {
+        mCarSelectMessageSend.PrepareForSend(GetLocalNetworkFrameId(mpTimeManager), lCarID, lWheelID,
+                                             lu16CarColourIndex, lu16PaintFinishIndex,
+                                             lfDeformation, lbFinalCarSelection);
+    }
+
     // Tail-calls StuntScoreUpdatedMessage::PrepareForSend on the send slot.
     void BrnNetworkPlayer::SendStuntScoreUpdatedMessage(s32 liStuntScore)
     {
@@ -52,13 +61,19 @@ namespace BrnNetwork
                                                      liStuntScore);
     }
 
-    // Samples the frame count + frames-since-start, then stamps the multiplier send slot.
-    void BrnNetworkPlayer::SendStuntMultiplierMessage(s32 liStuntMultiplier)
+    // Samples the frame count, then the frames-since-start, and stamps the multiplier send
+    // slot with the whole 8-byte record (one 64-bit register on the console).
+    void BrnNetworkPlayer::SendStuntMultiplierMessage(
+            BrnNetworkModuleIO::NetworkInStuntMultiplierEvent lStuntMultiplier)
     {
-        const u16 lu16FrameId = GetLocalNetworkFrameId(mpTimeManager);
+        const u16 lu16FrameId        = GetLocalNetworkFrameId(mpTimeManager);
         const s32 liFramesSinceStart = mpTimeManager->GetFramesSinceStart();
-        mStuntMultiplierMessageSend.PrepareForSend(lu16FrameId, liFramesSinceStart,
-                                                   liStuntMultiplier);
+
+        StuntMultiplierMessage::MultiplierInfo lMultiplierInfo;
+        lMultiplierInfo.muMultiplierStuntTypes = lStuntMultiplier.muStuntTypes;      // +0x00
+        lMultiplierInfo.mu16FlatSpins          = lStuntMultiplier.mu16FlatSpins;     // +0x04
+        lMultiplierInfo.mu16BarrelRolls        = lStuntMultiplier.mu16BarrelRolls;   // +0x06
+        mStuntMultiplierMessageSend.PrepareForSend(lu16FrameId, liFramesSinceStart, lMultiplierInfo);
     }
 
     // Rescale the received multiplier from the sender's frame rate to ours and queue it for

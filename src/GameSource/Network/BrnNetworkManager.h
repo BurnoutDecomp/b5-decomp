@@ -74,7 +74,6 @@
 
 namespace CgsNetwork
 {
-    struct Message;                      // pointer-only (PackOrUnpack)
     class NetworkTexture;                // pointer-only (PackTextureAndSendDisplayEventToGui)
 }
 
@@ -261,13 +260,9 @@ namespace BrnNetwork
         void ProcessNetworkTextureDecodeEvent(
                 const BrnNetworkModuleIO::NetworkInDxtDecodeImageEvent* lpDxtDecodeRequestEvent);
 
-        // ---- telemetry (the const char* overload; the others are inlined at their callers) --
+        // ---- telemetry: a text payload, or an integer printed as decimal text ---------------
         void CaptureTelemetryEvent(ETelemetryHook leHook, const char* lpcData);
-
-        // (De)serialise one NetworkPlayerID field over the full s32 range. The call sites pass
-        // only the message and the field, so this is static.
-        static PackOrUnpackResult PackOrUnpack(CgsNetwork::Message* lpMessage,
-                                               NetworkPlayerID* lpNetworkPlayerID);
+        void CaptureTelemetryEvent(ETelemetryHook leHook, s32 liData);
 
         // ---- sub-object accessors ---------------------------------------------------------
         BrnServerInterface*                    GetServerInterface()                 { return &mServerInterface; }
@@ -346,7 +341,12 @@ namespace BrnNetwork
         f32                                    GetTimeStep() const                  { return mfTimeStep; }
 
         // ---- session scalars ------------------------------------------------------------
-        void                SetFreeBurnCar(CgsID lCarID, CgsID lWheelID)       { mFreeBurnCarID = lCarID; mFreeBurnWheelID = lWheelID; }
+        void                SetFreeBurnCar(CgsID lCarID, CgsID lWheelID, f32 lfDeformation)
+        {
+            mFreeBurnCarID   = lCarID;
+            mFreeBurnWheelID = lWheelID;
+            mfField86A90     = lfDeformation;
+        }
         CgsID               GetFreeBurnCarID() const                            { return mFreeBurnCarID; }
         CgsID               GetFreeBurnWheelID() const                          { return mFreeBurnWheelID; }
         void                SetCurrentDistrict(BrnWorld::EDistrict leDistrict)  { meCurrentDistrict = leDistrict; }
@@ -370,8 +370,6 @@ namespace BrnNetwork
         // ---- other declared-only accessors used by committed callers ----------------------
         u8   GetCurrentRoundNumber() const;                      // reads miRoundNumber
         void ClearLocalUserSignedInFlag();                       // a byte inside mGamerPictureManager
-        bool HasLoginManager() const;                            // mLoginManager's vtable slot
-        s32  GetNetworkLoginState() const;                       // mLoginManager's state word
 
     private:
         s32  GetMaxMessageSize(bool lbReliableOnly);
@@ -428,7 +426,7 @@ namespace BrnNetwork
 
         CgsID                 mFreeBurnCarID;                         // +0x86A80
         CgsID                 mFreeBurnWheelID;                       // +0x86A88
-        f32                   mfField86A90;      // +0x86A90 ratio the matchmaking actions test against 0.85
+        f32                   mfField86A90;      // +0x86A90 the free-burn car's deformation amount (SetFreeBurnCar); the matchmaking actions test it against 0.85
         BrnWorld::EDistrict   meCurrentDistrict;                      // +0x86A94 (constructed as 11)
         EPrepareStage         mePrepareStage;                         // +0x86A98
         EReleaseStage         meReleaseStage;                         // +0x86A9C

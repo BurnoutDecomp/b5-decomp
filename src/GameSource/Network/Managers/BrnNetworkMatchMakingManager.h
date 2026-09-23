@@ -121,6 +121,9 @@ namespace BrnNetwork
         void Disconnected();
 
     private:
+        // The state manager drives the processes directly (StartProcess).
+        friend struct StateManager;
+
         // The ordered action list of one process.
         struct ProcessActions
         {

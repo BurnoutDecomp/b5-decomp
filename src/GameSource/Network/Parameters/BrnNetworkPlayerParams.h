@@ -53,6 +53,8 @@ namespace BrnNetwork
             static const s32 KX_IS_50HZ    = 4;
             static const s32 KX_HAS_FEVER  = 8;
             static const s32 KX_DEVELOPER  = 16;
+            // Console-only bit (see IsCarDeformed); FLAG: name is ours.
+            static const s32 KX_CAR_DEFORMED = 32;
 
             // muCarColourIndex packing (h:165..167): car colour in the low 16 bits,
             // paint finish in the high 16.
@@ -101,16 +103,76 @@ namespace BrnNetwork
         // ActionAutobalanceStuntRunTeams @ 0x8256C4C8 (lbz obj+0x93 ; extsb).
         s32 GetPlayerColourIndex() const { return mData.mi8PlayerColourIndex; }
 
-        // Declared-only (DWARF h:243/h:221/h:265): the X360 inlines these
-        // payload-bit twiddles at every call site; no standalone body to recover.
-        void SetPlaying(bool lbPlaying);
-        void SetReady(bool lbReady);
-        void SetMarkedPlayerID(NetworkPlayerID lMarkedPlayerID);
+        // Header-inline payload accessors: every console call site inlines them as a
+        // plain load/store or bit twiddle on mData (the stack PlayerParams of the
+        // network manager's status / menu-data writers and the state manager's
+        // parameter updates).
+        bool IsReady() const     { return (mData.mxFlags & CLobbyPlayerParamsData::KX_IS_READY) != 0; }
+        bool IsPlaying() const   { return (mData.mxFlags & CLobbyPlayerParamsData::KX_IS_PLAYING) != 0; }
+        bool HasFever() const    { return (mData.mxFlags & CLobbyPlayerParamsData::KX_HAS_FEVER) != 0; }
+        bool IsDeveloper() const { return (mData.mxFlags & CLobbyPlayerParamsData::KX_DEVELOPER) != 0; }
+        void SetReady(bool lbReady)
+        {
+            mData.mxFlags = static_cast<s8>(mData.mxFlags & ~CLobbyPlayerParamsData::KX_IS_READY);
+            if (lbReady)
+                mData.mxFlags = static_cast<s8>(mData.mxFlags | CLobbyPlayerParamsData::KX_IS_READY);
+        }
+        void SetPlaying(bool lbPlaying)
+        {
+            mData.mxFlags = static_cast<s8>(mData.mxFlags & ~CLobbyPlayerParamsData::KX_IS_PLAYING);
+            if (lbPlaying)
+                mData.mxFlags = static_cast<s8>(mData.mxFlags | CLobbyPlayerParamsData::KX_IS_PLAYING);
+        }
+        void SetHasFever(bool lbHasFever)
+        {
+            mData.mxFlags = static_cast<s8>(mData.mxFlags & ~CLobbyPlayerParamsData::KX_HAS_FEVER);
+            if (lbHasFever)
+                mData.mxFlags = static_cast<s8>(mData.mxFlags | CLobbyPlayerParamsData::KX_HAS_FEVER);
+        }
 
-        // (The remaining DWARF accessor set -- SetPlayerTeam/IsReady/IsPlaying/
-        // GetRank/SetRank/GetConsoleFrameRate/Get+SetCarColourIndex/
-        // Get+SetPaintFinishIndex/HasFever/SetHasFever/IsDeveloper/SetIsDeveloper --
-        // is left undeclared until an X360 call site attests each one.)
+        // mxFlags bit 0x20: set when the chosen freeburn car's deformation amount is not
+        // below 0.85; readers turn it back into a menu deformation of 0.85 or 0.0.
+        // FLAG: the bit and both accessor names are ours (no reference name).
+        bool IsCarDeformed() const { return (mData.mxFlags & CLobbyPlayerParamsData::KX_CAR_DEFORMED) != 0; }
+        void SetIsCarDeformed(bool lbIsCarDeformed)
+        {
+            mData.mxFlags = static_cast<s8>(mData.mxFlags & ~CLobbyPlayerParamsData::KX_CAR_DEFORMED);
+            if (lbIsCarDeformed)
+                mData.mxFlags = static_cast<s8>(mData.mxFlags | CLobbyPlayerParamsData::KX_CAR_DEFORMED);
+        }
+
+        NetworkPlayerID GetMarkedPlayerID() const                   { return mData.mMarkedPlayer; }
+        void            SetMarkedPlayerID(NetworkPlayerID lMarkedPlayerID) { mData.mMarkedPlayer = lMarkedPlayerID; }
+        s32             GetRank() const                             { return mData.miRank; }
+
+        // The team byte is stored without a range check (the state manager's team swap).
+        void SetPlayerTeam(BrnGameState::GameStateModuleIO::EPlayerTeam lePlayerTeam)
+        {
+            mData.mi8PlayerTeam = static_cast<s8>(lePlayerTeam);
+        }
+
+        // Car colour in the low 16 bits of muCarColourIndex, paint finish in the high 16.
+        u16 GetCarColourIndex() const
+        {
+            return static_cast<u16>(mData.muCarColourIndex & CLobbyPlayerParamsData::KU_LOW_BITS_MASK);
+        }
+        u16 GetPaintFinishIndex() const
+        {
+            return static_cast<u16>(mData.muCarColourIndex >> CLobbyPlayerParamsData::KU_COLOUR_BIT_SHIFT);
+        }
+        void SetCarColourIndex(u16 lu16CarColourIndex)
+        {
+            mData.muCarColourIndex = (mData.muCarColourIndex & CLobbyPlayerParamsData::KU_HIGH_BITS_MASK)
+                                   + lu16CarColourIndex;
+        }
+        void SetPaintFinishIndex(u16 lu16PaintFinishIndex)
+        {
+            mData.muCarColourIndex = (mData.muCarColourIndex & CLobbyPlayerParamsData::KU_LOW_BITS_MASK)
+                                   + (static_cast<u32>(lu16PaintFinishIndex) << CLobbyPlayerParamsData::KU_COLOUR_BIT_SHIFT);
+        }
+
+        // (The remaining reference accessors -- SetRank / GetConsoleFrameRate /
+        // SetIsDeveloper -- have no console call site and stay undeclared.)
 
     protected:
         // DWARF h:178. X360 object offset +0x84; on the PC host the compiler places

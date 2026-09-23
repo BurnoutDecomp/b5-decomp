@@ -1,6 +1,7 @@
 #include "GameSource/GameState/BrnGameActions.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // OnlineGameResults round-index runtime asserts
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
@@ -13,14 +14,6 @@ namespace
 // (0x82029BA4), which is not in the available exports; this is an UNCONFIRMED stand-in -- the
 // |lane| > eps emptiness test is faithful, only the literal value is provisional.
 const float KF_QUERY_POS_EPSILON = 1.0e-4f;
-}
-
-// CgsNetwork::K_INVALID_PLAYER_ID has no committed home (it lives in the un-reconstructed
-// CgsNetworkConstants.h); modelled file-local as -1, exactly as the committed
-// BrnGameStateFlybyManager.cpp does. The assert expression strings keep the original spelling.
-namespace CgsNetwork
-{
-static const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
 }
 
 // ⛔ RETIRED 2026-08-01 (reset-player-car wave): this TU carried a FILE-LOCAL FORK of the

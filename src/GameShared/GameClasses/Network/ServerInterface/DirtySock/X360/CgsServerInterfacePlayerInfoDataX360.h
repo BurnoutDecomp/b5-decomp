@@ -22,7 +22,7 @@
 // X360 image for this type, so none are fabricated and the class is left ABSTRACT.
 //
 // LAYOUT (X360 asm @ 0x82879E80 Prepare / 0x82879EE0 SerialiseFromUser):
-//   the base ends at +0xF4 (miField_F0 at +0xF0); the 8-byte-aligned leaf member
+//   the base ends at +0xF4 (muLocality at +0xF0); the 8-byte-aligned leaf member
 //   lands at +0xF8, making the whole record 0x100 (256) bytes:
 //     +0xF8  muXUID   (u64) -- secure host address decoded from the lobby user
 //                             record (DirtyAddrToHostAddr, 8 bytes).

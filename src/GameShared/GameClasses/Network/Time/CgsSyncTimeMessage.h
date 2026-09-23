@@ -23,14 +23,12 @@
 //   +0x34  mClientPlayerID  (NetworkPlayerID word)
 // matching the DWARF member order and the *(this+32/36)/(40/44)/(48)/(52) accesses.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// Message's five console vtable slots are real C++ virtuals; this leaf overrides
+// GetPackedMessageSize, GetName and PackOrUnpack.
 //
-// Ledger func for this TU:
-//   GetName @ 0x827DBC68 -- header-homed inline accessor; returns the literal
-//                           "Sync Time Message".
-// The remaining methods are bodied in their own TU (CgsSyncTimeMessage.cpp); they are
-// declared here so the rest of the hierarchy can call them by name.
+// GetName is the header-homed inline accessor ("Sync Time Message");
+// GetPackedMessageSize and PackOrUnpack are bodied in CgsSyncTimeMessage.cpp, the rest of
+// the methods in their own TUs.
 // ===================================================================================
 
 #include "types.hpp"
@@ -51,12 +49,12 @@ namespace CgsNetwork
                                     CgsSystem::Time* lpClientTime,
                                     MessageWithPlayerIDs::NetworkPlayerID* lpHostID,
                                     CgsSystem::Time* lpHostTime);
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DBC68 -- inline header-homed accessor.
-        const char*        GetName() const { return "Sync Time Message"; }
+        const char*        GetName() const override { return "Sync Time Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         // +0x20 .. +0x37 (after the 0x20-byte Message base).
         CgsSystem::Time                       mClientSendTime; // +0x20

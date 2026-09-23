@@ -236,6 +236,35 @@ namespace BrnNetwork
 
     // ---- front-end answers ------------------------------------------------------------------
 
+    // The user (dis)agreed to create an account: go on to the share-info question, or stop at
+    // the no-agreement screen.
+    void LoginManagerBase::AnswerCreateAccount(bool lbAgree)
+    {
+        if (lbAgree)
+        {
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_SHARE, 0);
+        }
+        else
+        {
+            meSubState = E_SUBSTATE_NO_AGREEMENT;
+            mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_NO_AGREEMENT, 0);
+        }
+    }
+
+    // Record the two share-info answers, then ask about the US account.
+    void LoginManagerBase::AnswerShareInfo(bool lbAgree1, bool lbAgree2)
+    {
+        mbAgreeShare1 = lbAgree1;
+        mbAgreeShare2 = lbAgree2;
+        mpNetworkManager->TriggerEventFromLogin(BrnNetworkManager::E_LOGIN_EVENT_SHOW_OPEN_US_ACCOUNT, 0);
+    }
+
+    // The chat-restriction notice was acknowledged: the flow ends (no disconnect).
+    void LoginManagerBase::AnswerChatRestricted(bool /*lbAcknowledged*/)
+    {
+        Finished(true);
+    }
+
     // X360 0x82543B30
     void LoginManagerBase::AnswerOpenUsAccount(bool lbAgree)
     {

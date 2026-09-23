@@ -42,7 +42,7 @@
 //   44*0x20) and copies/zeroes only 16 name bytes (strncpy 16; the bool flags sit at
 //   +0xBA8/+0xBA9, immediately after a 16-byte name). So the X360 constants are 44 / [16].
 //
-// The X360 build models the message vtable as Message::mpVTable (no C++ `virtual`), and
+// The messages carry real C++ virtuals (Message's five console vtable slots), and
 // NetworkPlayer itself has a real vtable (Construct/Prepare/Release/Update are virtual in
 // the DWARF). The five perfmon-id statics and the timeout/discard-frame tunables are
 // file-scope state in the .cpp.

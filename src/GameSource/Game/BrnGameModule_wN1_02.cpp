@@ -233,7 +233,7 @@ namespace BrnGame
                     }
                     break;
                 }
-                case 23:  // NetworkPlayerDisconnectedEvent (its home still tags it with the reference's 22)
+                case NetIO::NetworkPlayerDisconnectedEvent::KI_EVENT_TYPE:                  // 23
                 {
                     const NetIO::NetworkPlayerDisconnectedEvent* lpPlayerDisconnectedEvent =
                         reinterpret_cast<const NetIO::NetworkPlayerDisconnectedEvent*>(lpEvent);

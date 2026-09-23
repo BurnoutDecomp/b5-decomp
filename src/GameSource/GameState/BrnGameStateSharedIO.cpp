@@ -1,14 +1,9 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (AddMessage dynamic assert text)
 #include <cstring>  // memcpy, memset, strncpy, strlen
-
-// CgsNetwork::K_INVALID_PLAYER_ID has no committed home; file-local -1 (the FlybyManager precedent).
-namespace CgsNetwork
-{
-static const BrnNetwork::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
-}
 
 namespace BrnGameState
 {

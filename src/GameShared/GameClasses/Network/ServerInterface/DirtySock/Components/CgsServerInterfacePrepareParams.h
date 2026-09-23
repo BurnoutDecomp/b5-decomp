@@ -2,6 +2,7 @@
 #define CGS_SERVER_INTERFACE_PREPARE_PARAMS_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // LobbyPrepareParams, ConnAPIPrepareParams
 
 // ===========================================================================
 // CgsNetwork::ServerInterfacePrepareParams
@@ -41,15 +42,8 @@
 // (the byte store at +0x48 is what identifies the tail as ConnAPIPrepareParams, whose
 // third and last member is the only `bool` in the block.)
 //
-// FLAGGED / DEFERRED -- the trailing block still carries raw offset names below.
-// LobbyPrepareParams and ConnAPIPrepareParams are SEPARATE structs whose DWARF home is
-// CgsServerInterfaceDirtySock.h (src :134 and :153); ConnAPIPrepareParams is already
-// committed there. Nesting them into this struct means depending on that header, which
-// belongs to that header's owner, not to this one -- so the seven trailing scalars stay
-// flat here with their DWARF identity recorded per-member. They are NOT unknown: the
-// earlier revision of this comment claimed "the descriptive names of the seven trailing
-// words are not present in the available exports", which was FALSE -- the DWARF above
-// supplies all seven.
+// The two trailing blocks are the LobbyPrepareParams and ConnAPIPrepareParams structs of
+// CgsServerInterfaceDirtySock.h, embedded by value.
 //
 // The struct is non-polymorphic (Construct takes `this` as a plain pointer; no vtable
 // store).
@@ -75,24 +69,15 @@ namespace CgsNetwork
         // +0x00 (console) -- DWARF `CgsNetwork::ServerInterfaceComponent *[12]
         // mapComponents`. Indexed by CgsNetwork::EComponents (E_COMPONENTS_COUNT == 12,
         // CgsServerInterfaceDirtySock.h:69); the bound is spelled 12 here rather than
-        // E_COMPONENTS_COUNT because that enum lives in CgsServerInterfaceDirtySock.h and
-        // this home is dependency-free (types.hpp only) -- and 12 is what the DWARF
-        // attests. Each platform Prepare leaf parks the component it contributes in its
+        // E_COMPONENTS_COUNT, as the console array length. Each platform Prepare leaf
+        // parks the component it contributes in its
         // own slot before chaining on, e.g. BrnServerInterfaceX360::Prepare @0x8258B200
         // `addi r30, r31, 0xC2C ; stw r30, 4(r4)` == mapComponents[E_COMPONENTS_GAMES]
         // (console slot 1) = &mGames.
         ServerInterfaceComponent* mapComponents[12];
 
-        // +0x30..+0x48 (console) -- DWARF: `LobbyPrepareParams mLobbyParams` followed by
-        // `ConnAPIPrepareParams mConnAPIParams`. See the FLAGGED note in the header
-        // comment for why they are still flat scalars here.
-        u32 muField_30;      // +0x30  == mLobbyParams.miLanguage    (s32)
-        u32 muField_34;      // +0x34  == mLobbyParams.mpcVersion    (const char*)
-        u32 muField_38;      // +0x38  == mLobbyParams.mpcSKU        (const char*)
-        u32 muField_3C;      // +0x3C  == mLobbyParams.mpcSLUS       (const char*)
-        u32 muField_40;      // +0x40  == mConnAPIParams.miPort      (s32)
-        u32 muField_44;      // +0x44  == mConnAPIParams.miMaxPlayers(s32)
-        u8  mu8Field_48;     // +0x48  == mConnAPIParams.mbPeerToPeer(bool; asm stb)
+        LobbyPrepareParams   mLobbyParams;     // +0x30
+        ConnAPIPrepareParams mConnAPIParams;   // +0x40
     };
 }
 

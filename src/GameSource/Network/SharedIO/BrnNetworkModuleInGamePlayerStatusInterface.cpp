@@ -43,9 +43,8 @@ namespace BrnNetwork
         // sub-object to NetworkPlayerStats::operator= (0x82355C50), block-copies the
         // LiveRevengeRelationship (+136..+256, 120B) and PlayerName (+256, 16B), then copies the
         // scalar id/enum/bool tail (+272..+303). Reversed back into named-member assignments;
-        // behaviour is identical to the inlined memcpy/word-store sequence. (The X360 also copies
-        // the +304 trailing pad word of the 312-byte record stride; that is inert alignment with
-        // no named member and is left as default padding.)
+        // behaviour is identical to the inlined memcpy/word-store sequence. The copy ends with
+        // the byte at +304 (mbIsEliminated); the bytes past it are not copied.
         InGamePlayerStatusData& InGamePlayerStatusData::operator=(const InGamePlayerStatusData& lOther)
         {
             mPlayerStats                  = lOther.mPlayerStats;                  // +0   (NetworkPlayerStats::operator= @0x82355C50)
@@ -62,6 +61,7 @@ namespace BrnNetwork
             mbIsHost                      = lOther.mbIsHost;                      // +301
             mbIsLocalPlayer               = lOther.mbIsLocalPlayer;              // +302
             mbIsInLocalGameWorld          = lOther.mbIsInLocalGameWorld;         // +303
+            mbIsEliminated                = lOther.mbIsEliminated;               // +304
             return *this;
         }
 

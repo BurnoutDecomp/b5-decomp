@@ -8,13 +8,12 @@
 // gated against the X360 binary (member byte offsets / copy strides):
 //   InGamePlayerStatusData::operator=          @ 0x823628C8  (memberwise; 312-byte stride)
 //   InGamePlayerStatusInterface::operator=     @ 0x8236B020  (8 records + name + counts)
-//   InGamePlayerStatusInterface::GetPlayerStatusDataForWriting @ 0x8230FF60 (stride 312)
 //   InGamePlayerStatusData::Clear              @ 0x823555A8
 //
 // LAYOUT (X360-AUTHORITATIVE byte offsets; sizeof(InGamePlayerStatusData) == 312):
 //   +0    NetworkPlayerStats      mPlayerStats               (136B; committed BrnNetworkPlayerStats.h)
 //   +136  LiveRevengeRelationship mLiveRevengeRelationship   (120B; committed BrnNetworkLiveRevengeRelationship.h)
-//   +256  PlayerName              mPlayerName                (16B; committed BrnNetworkSharedIO.h)
+//   +256  PlayerName              mPlayerName                (16B; CgsNetwork::PlayerName)
 //   +272  NetworkPlayerID         mNetworkPlayerID           (s32)
 //   +276  EActiveRaceCarIndex     meActiveRaceCarIndex       (s32)
 //   +280  s32                     meVOIPStatus               (CgsNetwork::ENetworkHeadsetPlayerStatus; un-homed -> s32)
@@ -26,7 +25,8 @@
 //   +301  bool                    mbIsHost
 //   +302  bool                    mbIsLocalPlayer
 //   +303  bool                    mbIsInLocalGameWorld
-//   +304..+312 trailing pad to the 312-byte record stride
+//   +304  bool                    mbIsEliminated (console-only member)
+//   +305..+312 trailing pad to the 312-byte record stride
 //
 // The X360 InGamePl copy (0x823628C8) block-copies 120 bytes for mLiveRevengeRelationship
 // (+136..+256), which is why LiveRevengeRelationship's committed home was GROWN to 120 bytes
@@ -41,7 +41,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // BrnNetwork::PlayerName(16B), NetworkPlayerID, EActiveRaceCarIndex(NONE=-1)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT (the header-inline index asserts)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // PlayerName (CgsNetwork's 16B name), NetworkPlayerID, EActiveRaceCarIndex(NONE=-1)
 #include "GameSource/BurnoutConstants.h"                             // ::EActiveRaceCarIndex (0..8 : INVALID/_0../_COUNT) for MarkedManInterface
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"       // BrnNetwork::NetworkPlayerStats (136B, committed; operator= @0x82355C50)
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h" // BrnNetwork::LiveRevengeRelationship (120B, committed)
@@ -88,11 +89,10 @@ namespace BrnNetwork
             bool                    mbIsHost;                      // +301
             bool                    mbIsLocalPlayer;               // +302
             bool                    mbIsInLocalGameWorld;          // +303
-            // X360 record stride is 312 bytes (the In() accessor / array indexing uses 312*idx, and
-            // the InGamePl copy reaches +304); natural C++ alignment ends the struct at +304, so an
-            // 8-byte trailing reserved pad pins the array stride to the X360-authoritative 312. The
-            // X360 copy stores the +304 word as inert padding; left default here.
-            // +304: a byte the console build carries beyond the reference member list.
+            // The console record stride is 312 bytes (every reader indexes at 312*idx);
+            // the trailing reserved pad pins the array stride to 312.
+            // +304: a byte the console build carries beyond the reference member list (the
+            // record's operator= copies it).
             // BrnNetworkManager::OutputPlayerStatusInfo stores false for the local player and the
             // remote BrnNetworkPlayer's eliminated flag otherwise. FLAG: named from that producer.
             bool                    mbIsEliminated;                // +304
@@ -113,9 +113,18 @@ namespace BrnNetwork
         struct InGamePlayerStatusInterface
         {
         public:
-            // @ 0x8230FF60 -- returns &maInGamePlayerData[liIndex] (stride 312); asserts the
-            // index is in [0, miNumPlayers). Body in BrnNetworkModuleIO.cpp.
-            InGamePlayerStatusData* GetPlayerStatusDataForWriting(s32 liIndex);
+            static const s32 KI_MAX_PLAYERS = 8;
+
+            // Header-inline on the console: the writer (BrnNetworkManager::OutputPlayerStatusInfo)
+            // carries both asserts and the stride-312 address computation in its own body. The
+            // upper bound is the array size, not miNumPlayers: the writer fills records before it
+            // publishes the count.
+            InGamePlayerStatusData* GetPlayerStatusDataForWriting(s32 liIndex)
+            {
+                CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+                CGS_ASSERT(liIndex < KI_MAX_PLAYERS, "liIndex < KI_MAX_PLAYERS");
+                return &maInGamePlayerData[liIndex];
+            }
 
             // @ 0x8236B020 -- memberwise copy of all 8 records (via InGamePlayerStatusData::operator=,
             // stride 312), then macGameName[36], miNumPlayers, mbLocalPlayerIsHost. Body in BrnNetworkModuleIO.cpp.

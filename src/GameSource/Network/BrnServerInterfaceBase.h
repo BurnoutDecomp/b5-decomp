@@ -19,7 +19,7 @@ namespace BrnNetwork
 
 namespace BrnNetworkModuleIO
 {
-    class PostSimulationInputBuffer;
+    struct PostSimulationInputBuffer;
 }
 
 class BrnNetworkManager;
@@ -78,6 +78,7 @@ public:
     inline BrnServerInterfaceDownloadableConfig * GetDownloadableConfigComponent();
     inline BrnServerInterfaceTelemetry * GetTelemetryComponent();
     inline ServerInterfaceCustomCommands * GetCustomCommandsComponent();
+    ServerInterfaceDebugComponent * GetDebugComponent() { return &mServerInterfaceDebugComponent; }
 
 private:
 

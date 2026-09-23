@@ -45,15 +45,17 @@
 #include "GameSource/Network/Managers/BrnNetworkBuddyManagerBase.h"  // BrnNetwork::BuddyManagerBase (real base)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // PlayerName, BrnNetworkModuleIO::InviteOrJoinParams
 
+namespace BrnHW { struct LaunchData; }   // Prepare param (pointer only; no class home yet)
+
 namespace BrnNetwork
 {
     namespace BrnNetworkModuleIO { struct PostSimulationInputBuffer; struct NetworkEventQueue; }
 
-    // The launch / soft-reboot data block handed to Prepare. Only the two fields the X360
-    // Prepare reads are modelled (the requesting controller port @ +0x00 and the session-ID
-    // string @ +0x14); the remainder of the block is owned by its own (not-yet-homed) type, so
-    // the unread span is reserved as opaque storage rather than fabricated. FLAGGED: the block's
-    // full layout/home is unrecovered in this TU; only the two grounded fields are named.
+    // The two fields of the launch data (BrnHW::LaunchData, handed to BrnNetworkManager::Prepare
+    // and on to Prepare unchanged) that Prepare reads: the requesting controller port @ +0x00
+    // and the session-ID string @ +0x14. FLAG: BrnHW::LaunchData has no class home yet, so
+    // Prepare reads it through this view; retire the view once LaunchData is homed with these
+    // two members.
     struct BuddySoftRebootData
     {
         s32  miUserControllerPort;   // +0x00 (Prepare: this->miPendingInviteUserPort = lpData[0])
@@ -77,9 +79,9 @@ namespace BrnNetwork
         void Destruct();
 
         // X360 0x8254C818 -- chain the game base Prepare; on success latch the soft-reboot
-        // invite (controller port + session ID) so the next Update can re-issue it. Returns the
-        // base Prepare result. Called by BrnNetworkManager::Prepare.
-        bool Prepare(const BuddySoftRebootData* lpSoftRebootData);
+        // invite (controller port + session ID) out of the launch data so the next Update can
+        // re-issue it. Returns the base Prepare result. Called by BrnNetworkManager::Prepare.
+        bool Prepare(const BrnHW::LaunchData* lpSoftRebootData);
 
         // X360 0x8254C978 -- chain the game base Release. Called by BrnNetworkManager::Release.
         bool Release();
@@ -88,10 +90,14 @@ namespace BrnNetwork
         // pumps the inbound network queue through ProcessNetworkQueue, processes debug events,
         // then (when invites may be acted on) either re-issues a latched soft-reboot invite or
         // polls the Live notification listener for a freshly accepted cross-title invite and acts
-        // on it. Called by BrnNetworkManager::ProcessAfterSimulation. lbProcessInvites (r6) gates
-        // the invite handling; lbCanBlock (r7) + lfTimeStep (f1) forward to the base Update.
+        // on it. Called by BrnNetworkManager::ProcessAfterSimulation. lbProcessInvites gates the
+        // invite handling; lbCanBlock and lfTimeStep forward to the base Update.
         u32 Update(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer,
-                   bool lbProcessInvites, bool lbCanBlock, f32 lfTimeStep);
+                   f32 lfTimeStep, bool lbProcessInvites, bool lbCanBlock);
+
+        // The session's joinable state changed. Nothing to do on this platform (an empty body
+        // on the console).
+        void UpdateJoinableStatus() {}
 
     protected:
         // X360 0x8256C8E0 -- override: walk the inbound network-event queue, routing the buddy

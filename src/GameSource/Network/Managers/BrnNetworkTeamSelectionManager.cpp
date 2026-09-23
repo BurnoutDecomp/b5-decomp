@@ -49,11 +49,8 @@ namespace BrnNetwork
     {
         maUpdateFunctions[0] = 0;
         maUpdateFunctions[1] = 0;
-        // X360 [0] is CgsSceneManager::CgsCollision::BaseCollisionGenerator::Destruct -- the
-        // COMDAT-folded `return 1` no-op the idle update-state runs (a function that simply
-        // succeeds). Modelled here by a named local no-op so the table is a real callable.
-        maUpdateFunctions[0] = &TeamSelectionManager::UpdateIdleNoOp;
-        maUpdateFunctions[1] = &TeamSelectionManager::UpdateWaitIdleThunk;
+        maUpdateFunctions[0] = &TeamSelectionManager::UpdateNone;
+        maUpdateFunctions[1] = &TeamSelectionManager::UpdateWaitIdle;
 
         for (s32 liIndex = 0; liIndex < KI_NUM_UPDATE_FUNCTIONS; ++liIndex)
             CGS_ASSERT(maUpdateFunctions[liIndex] != 0, "No update function supplied for this sub state");
@@ -70,11 +67,11 @@ namespace BrnNetwork
         for (s32 liInit = 0; liInit < KI_NUM_ACTION_FUNCTIONS; ++liInit)
             maActionFunctions[liInit] = 0;
 
-        maActionFunctions[0] = &TeamSelectionManager::ActionAssignFFAThunk;
-        maActionFunctions[1] = &TeamSelectionManager::ActionAssignCoopThunk;
-        maActionFunctions[2] = &TeamSelectionManager::ActionAutobalanceThunk;
-        maActionFunctions[3] = &TeamSelectionManager::ActionBroadcastFinalThunk;
-        maActionFunctions[4] = &TeamSelectionManager::ActionWaitFinalThunk;
+        maActionFunctions[0] = &TeamSelectionManager::ActionAssignFFAStuntRunTeams;
+        maActionFunctions[1] = &TeamSelectionManager::ActionAssignCoopStuntRunTeams;
+        maActionFunctions[2] = &TeamSelectionManager::ActionAutobalanceStuntRunTeams;
+        maActionFunctions[3] = &TeamSelectionManager::ActionBroadcastFinalTeamSelection;
+        maActionFunctions[4] = &TeamSelectionManager::ActionWaitFinalTeamSelection;
 
         for (s32 liCheck = 0; liCheck < KI_NUM_ACTION_FUNCTIONS; ++liCheck)
             CGS_ASSERT(maActionFunctions[liCheck] != 0, "No update function supplied for this substate");
@@ -132,6 +129,19 @@ namespace BrnNetwork
 
         InitialiseUpdateArray();
         InitialiseActionArray();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Prepare / Release: nothing to acquire or free, always ready.
+    // ---------------------------------------------------------------------------------
+    bool TeamSelectionManager::Prepare()
+    {
+        return true;
+    }
+
+    bool TeamSelectionManager::Release()
+    {
+        return true;
     }
 
     // ---------------------------------------------------------------------------------
@@ -346,8 +356,7 @@ namespace BrnNetwork
             return;
         }
 
-        const int liResult = maActionFunctions[leAction](this);
-        if (liResult != 0)
+        if ((this->*maActionFunctions[leAction])())
         {
             ++miActionIndex;
             return;
@@ -370,7 +379,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(maUpdateFunctions[meUpdateState] != 0,
                    "No update function supplied for the current process substate");
-        maUpdateFunctions[meUpdateState](this);
+        (this->*maUpdateFunctions[meUpdateState])();
     }
 
     // ---------------------------------------------------------------------------------
@@ -425,7 +434,7 @@ namespace BrnNetwork
     //   Clears the active-race-car team table, then assigns every in-game player to the single
     //   co-op team (KI_COOP_TEAM), keyed by their active-race-car index, and arms the output.
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::ActionAssignCoopStuntRunTeams()
+    bool TeamSelectionManager::ActionAssignCoopStuntRunTeams()
     {
         CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
         CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
@@ -458,7 +467,7 @@ namespace BrnNetwork
         }
 
         meSubState = 1;
-        return 1;
+        return true;
     }
 
     // ---------------------------------------------------------------------------------
@@ -467,7 +476,7 @@ namespace BrnNetwork
     //   player's lobby parameters and derive the team from its player-colour index (team =
     //   colour + 1, so the colours 0..N map onto teams 1..N+1). Arms the output substate.
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::ActionAssignFFAStuntRunTeams()
+    bool TeamSelectionManager::ActionAssignFFAStuntRunTeams()
     {
         CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
         CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
@@ -509,7 +518,7 @@ namespace BrnNetwork
         }
 
         meSubState = 1;
-        return 1;
+        return true;
     }
 
     // ---------------------------------------------------------------------------------
@@ -519,7 +528,7 @@ namespace BrnNetwork
     //   Unlike the FFA/co-op actions this one does NOT arm the output substate; the autobalance
     //   process runs the broadcast action next, which does.
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::ActionAutobalanceStuntRunTeams()
+    bool TeamSelectionManager::ActionAutobalanceStuntRunTeams()
     {
         CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
         CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
@@ -561,7 +570,7 @@ namespace BrnNetwork
             }
         }
 
-        return 1;
+        return true;
     }
 
     // ---------------------------------------------------------------------------------
@@ -570,7 +579,7 @@ namespace BrnNetwork
     //   send it the final team table (the active-race-car team table reinterpreted as the message
     //   PlayerTeamInfo[] payload; numTeams 1, autobalance false, finalSelection true). Arms output.
     // ---------------------------------------------------------------------------------
-    int TeamSelectionManager::ActionBroadcastFinalTeamSelection()
+    bool TeamSelectionManager::ActionBroadcastFinalTeamSelection()
     {
         CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
         CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
@@ -602,7 +611,7 @@ namespace BrnNetwork
         }
 
         meSubState = 1;
-        return 1;
+        return true;
     }
 
     // ---------------------------------------------------------------------------------
@@ -666,17 +675,6 @@ namespace BrnNetwork
         }
     }
 
-    // ---- thunks bridging the (TeamSelectionManager*) table signature to the methods -----------
-    // The X360 stores each method's address directly into the function-pointer tables (the C ABI
-    // there passes `this` as the first integer arg, so a free `(TeamSelectionManager*)` thunk is
-    // the faithful PC equivalent; it has no body of its own beyond the forward).
-    void TeamSelectionManager::UpdateIdleNoOp( TeamSelectionManager* /*lpThis*/ ) {}
-    void TeamSelectionManager::UpdateWaitIdleThunk( TeamSelectionManager* lpThis ) { lpThis->UpdateWaitIdle(); }
-    int TeamSelectionManager::ActionAssignFFAThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionAssignFFAStuntRunTeams(); }
-    int TeamSelectionManager::ActionAssignCoopThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionAssignCoopStuntRunTeams(); }
-    int TeamSelectionManager::ActionAutobalanceThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionAutobalanceStuntRunTeams(); }
-    int TeamSelectionManager::ActionBroadcastFinalThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionBroadcastFinalTeamSelection(); }
-    int TeamSelectionManager::ActionWaitFinalThunk( TeamSelectionManager* lpThis ) { return lpThis->ActionWaitFinalTeamSelection(); }
 
     // Uncalled layout pin. The committed TeamSelectMessage base is reconstructed larger than the
     // X360 original, so the ABSOLUTE byte offsets do NOT survive onto the LLP64 gate host; only the

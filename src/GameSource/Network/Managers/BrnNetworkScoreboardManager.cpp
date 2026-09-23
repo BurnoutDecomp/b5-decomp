@@ -717,8 +717,8 @@ namespace BrnNetwork
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
         lHeadingList.miLength                = 0;
         lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_CATEGORY;
-        lHeadingList.maReservedPadTo0x808[0] = 0;
-        lHeadingList.maReservedPadTo0x808[1] = 0;
+        lHeadingList.mbIsPerRoad             = false;
+        lHeadingList.mb807                   = false;
 
         for (s32 liCategoryCounter = 0;
              liCategoryCounter < mpRankings->GetNumberOfCategories();
@@ -744,8 +744,8 @@ namespace BrnNetwork
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
         lHeadingList.miLength                = 0;
         lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_INDEX;
-        lHeadingList.maReservedPadTo0x808[0] = 0;
-        lHeadingList.maReservedPadTo0x808[1] = 0;
+        lHeadingList.mbIsPerRoad             = false;
+        lHeadingList.mb807                   = false;
 
         for (s32 liIndexCounter = 0;
              liIndexCounter < mpRankings->GetNumberOfIndexes(liCategory);
@@ -767,7 +767,7 @@ namespace BrnNetwork
     // 2056 bytes) and hand it to the debug component to (re)render. Most variations take their name
     // straight from the rankings component (GetVariationName); the stunt-run / burn-route event
     // scoreboards instead synthesise their heading through a per-mode format-string table and flag
-    // the list via the two reserved discriminator bytes.
+    // the list via the two trailing flag bytes.
     //
     // The SPrintf FORMAT strings are recovered rodata literals ("$%d" for param 3, "$EV_%06u" for
     // the param-4 stunt-run and param-5 burn-route branches -- asm r5 == aD_11 / aEv06u_0). Their
@@ -778,15 +778,15 @@ namespace BrnNetwork
     // FLAGGED rodata gap (per project rule: never fabricate un-recovered rodata): each SPrintf keeps
     // its recovered format literal but passes a FLAGGED-0 placeholder for the un-recovered table
     // value until that rodata is homed. The recoverable structure -- the param dispatch, the two
-    // range asserts, the reserved-flag stores and the GetVariationName fallback -- is faithful.
+    // range asserts, the flag stores and the GetVariationName fallback -- is faithful.
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::CopyVariations(s32 liCategory, s32 liIndex)
     {
         BrnNetworkModuleIO::NetworkOutScoreboardHeadingList lHeadingList;
         lHeadingList.miLength                = 0;
         lHeadingList.meHeadingType           = BrnNetworkModuleIO::E_HEADING_VARIATION;
-        lHeadingList.maReservedPadTo0x808[0] = 0;
-        lHeadingList.maReservedPadTo0x808[1] = 0;
+        lHeadingList.mbIsPerRoad             = false;
+        lHeadingList.mb807                   = false;
 
         // The X360 body tracks the format-table index in its own register (r31) alongside the
         // variation counter (r30); both start at 0 and step together, so they stay equal.
@@ -805,7 +805,7 @@ namespace BrnNetwork
                 // is left as a FLAGGED-0 placeholder until that table is homed.
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$%d", 0 /* qword_82029FA0[liTableIndex] */);
                 lHeadingList.AddHeading(lacHeading);
-                lHeadingList.maReservedPadTo0x808[0] = 1;
+                lHeadingList.mbIsPerRoad             = true;
             }
             else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_STUNT_RUN))
             {
@@ -817,8 +817,8 @@ namespace BrnNetwork
                 // as a FLAGGED-0 placeholder until that table is homed.
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u", 0u /* qword_8207C440[liTableIndex] */);
                 lHeadingList.AddHeading(lacHeading);
-                lHeadingList.maReservedPadTo0x808[0] = 0;
-                lHeadingList.maReservedPadTo0x808[1] = 1;
+                lHeadingList.mbIsPerRoad             = false;
+                lHeadingList.mb807                   = true;
             }
             else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_BURN_ROUTE))
             {
@@ -830,12 +830,12 @@ namespace BrnNetwork
                 // as a FLAGGED-0 placeholder until that table is homed.
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u", 0u /* qword_8207C4B0[liTableIndex] */);
                 lHeadingList.AddHeading(lacHeading);
-                lHeadingList.maReservedPadTo0x808[0] = 0;
-                lHeadingList.maReservedPadTo0x808[1] = 1;
+                lHeadingList.mbIsPerRoad             = false;
+                lHeadingList.mb807                   = true;
             }
             else
             {
-                lHeadingList.maReservedPadTo0x808[0] = 0;
+                lHeadingList.mbIsPerRoad             = false;
                 lHeadingList.AddHeading(
                     mpRankings->GetVariationName(liCategory, liIndex, liVariationCounter));
             }

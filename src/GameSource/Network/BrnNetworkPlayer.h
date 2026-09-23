@@ -89,6 +89,7 @@ namespace BrnNetwork
     namespace BrnNetworkModuleIO
     {
         struct NetworkInActiveFburnChallengeEvent;   // pointer-only (SendActiveFburnChallengeMessage)
+        struct NetworkInStuntMultiplierEvent;        // by-value parameter (SendStuntMultiplierMessage)
     }
 
     // Construct() parameters: the base params plus the two dependencies Construct latches
@@ -124,8 +125,10 @@ namespace BrnNetwork
         virtual void SendDirtySockConnectionTelemetry(u32 luConnectionStatus, u32 luConnectionFlags);
 
         // ---- reliable-message senders --------------------------------------------------
+        // The deformation amount travels in the float register between the paint-finish
+        // index and the final-selection flag (its integer argument slot is skipped).
         void SendSelectedCar(CgsID lCarID, CgsID lWheelID, u16 lu16CarColourIndex,
-                             u16 lu16PaintFinishIndex, bool lbFinalCarSelection);
+                             u16 lu16PaintFinishIndex, f32 lfDeformation, bool lbFinalCarSelection);
         void SendLandmarkTriggeredMessage(s32 liLandmarkIndex);
         void SendCollectableDone(CgsID lCollectableID,
                                  CollectableMessage::ECollectableType leCollectableType);
@@ -148,8 +151,9 @@ namespace BrnNetwork
         void SendStuntScoreUpdatedMessage(s32 liStuntScore);
 
         // Stamp the stunt-multiplier send slot for the current network frame, recording the
-        // frames-since-start the multiplier was sampled on.
-        void SendStuntMultiplierMessage(s32 liStuntMultiplier);
+        // frames-since-start the multiplier was sampled on. The 8-byte multiplier record
+        // is passed by value (one 64-bit register) and forwarded whole to the message.
+        void SendStuntMultiplierMessage(BrnNetworkModuleIO::NetworkInStuntMultiplierEvent lStuntMultiplier);
 
         // A remote multiplier arrived: convert it from the sender's console frame rate to
         // ours and queue a network event (type 34, 16-byte payload) for the game side.
@@ -161,6 +165,15 @@ namespace BrnNetwork
         // sender reads it.
         void SetEliminated(bool lbEliminated) { mbIsEliminated = lbEliminated; }
         bool IsEliminated() const             { return mbIsEliminated; }
+
+        // The game-action handler stores the start-line flag (+0x2237) and the local
+        // race car's crasher id (+0x21F0) inline.
+        void SetOnStartLine(bool lbOnStartLine)                       { mbIsOnStartLine = lbOnStartLine; }
+        void SetLocalPlayerCrasherID(CgsNetwork::NetworkPlayerID lID) { mLocalPlayerRaceCarCrasherID = lID; }
+
+        // The status writer reads +0x2234 inline: a player still waiting for its first
+        // update message is not yet in the local game world. FLAG: accessor name is ours.
+        bool IsFirstUpdateMessage() const     { return mbFirstUpdateMessage; }
 
         // ---- legacy caller-facing declarations (no console function of this class) -----
         // Kept only so the committed callers keep compiling; see the lane report.

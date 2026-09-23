@@ -9,26 +9,14 @@
 // DWARF supplies the declaration shape; committed siblings (BrnNetworkAggressiveDrivingManager,
 // CgsNetworkTexture, BrnImageMessage, the debug component) supply style.
 //
-// FUNCTION OWNERSHIP for this TU (30 X360 functions):
-//   BODIED (11): Construct, Destruct, Prepare, Release, OnRoundStart, AddPlayer, RemovePlayer,
-//                Disconnected, GetMugshotImageByAggressor, GetMugshotVictimID,
-//                _ImageMessageArrivedCallback. These touch only named members + committed-by-name
-//                APIs (NetworkTexture / ImageMessage / debug-component lifecycle, PlayerManager /
-//                NetworkPlayer message registration, the per-player table accessors).
-//   DECLARATION-ONLY + FLAGGED (19): every method that walks the un-homed internals of
-//                BrnNetwork::CameraX360 / GamerPictureManagerX360 / BrnNetworkManager
-//                (PackTextureAndSendDisplayEventToGui, GetCompressedLocalCameraPicture, ...), the
-//                raw-offset BrnNetworkModuleIO interfaces (the +818064 / +852392 hacks), the
-//                CgsModule::VariableEventQueue<14000,16> event pump, or the multi-stage
-//                compress / segment / pack message pipeline. Each is left as an empty body with a
-//                // FLAG: declaration-only marker; bodying them faithfully needs those un-homed
-//                deps first. Fabricating a scalar paraphrase of those pipelines is forbidden.
-//
-// The per-player table helpers GetMugshotDataEntry / GetImageMessageDataEntry (the DWARF spells
-// the X360 callees GetMugshotDataEn / GetImageMes) are NOT in this TU's X360 function set -- they
-// are sibling-TU functions. They are declared in the header and CALLED by the bodied functions
-// here; their bodies link from the sibling .cpp. The reliable-message delivery callback twin
-// (_ImageMessageDeliveredCallback) is likewise sibling-homed and only referenced for registration.
+// FUNCTION OWNERSHIP for this TU:
+//   BODIED: Construct, Destruct, Prepare, Release, OnRoundStart, AddPlayer, RemovePlayer,
+//           Disconnected, GetMugshotImageByAggressor, GetMugshotVictimID, the two message
+//           callbacks, the two table look-ups, CheckMugshotPrivilege, ProcessAfterSimulation,
+//           HandleRoundResults, ProcessNetworkEvents, OutputMugshotData, AbortMugshotCapture,
+//           AbortMugshotShow and HandleReceivedCameraPic (HandlePlayerStoppedMode and
+//           EnableMugshotOutput are header inlines).
+//   DECLARATION-ONLY: the rest (listed at the end of this file); no stub bodies.
 // ===================================================================================
 
 #include "GameSource/Network/Managers/BrnNetworkImageManager.h"
@@ -39,6 +27,16 @@
 #include "GameSource/Network/BrnNetworkModule.h"                        // BrnNetworkModule::GetNetworkManager
 #include "GameSource/Network/BrnNetworkManager.h"                       // BrnNetworkManager::GetLocalUserControllerPort
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"         // CgsInput::KU_NUMBER_OF_PADS
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // GetFirstEvent / GetNextEvent / AddEvent
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h" // IsLoggedIn
+#include "GameSource/Network/BrnServerInterface.h"                      // GetConnectionComponent
+#include "GameSource/Network/BrnNetworkModuleIO.h"                      // Output / PostSimulation buffers, NetworkEventQueue
+#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"               // NetworkInPaybackMugshotEvent / NetworkInAbortMugshotCaptureEvent
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"              // NetworkOutPostEventScalps / NetworkOutAbortImageCaptureEvent
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface::GetActiveRaceCarIndex
+#include "GameSource/Network/Managers/X360/BrnNetworkCameraX360.h"      // CameraX360::GetUserSetting
+#include "GameSource/Network/Managers/X360/BrnNetworkGamerPictureManagerX360.h" // GetCompressedGamerPictureTexture
+#include "GameSource/GameState/BrnGameActions.h"                        // OnlineRoundResults::GetWinner
 
 // Vendor XDK privilege query used by CheckMugshotPrivilege. Declared extern "C" at file
 // scope (the real prototype lives in the Xbox 360 XDK), mirroring the corpus convention.
@@ -51,12 +49,15 @@ namespace BrnNetwork
     // The X360 packed ImageMessage byte length passed to RegisterMessageType (liLength = 568).
     static const s32 KI_IMAGE_MESSAGE_PACKED_LENGTH = 568;
 
-    // Xbox communications privilege ids (asm 0xF7 / 0xF6) and the un-homed camera sub-object
-    // offsets CheckMugshotPrivilege reaches off the network manager (attested displacements).
+    // Xbox communications privilege ids (asm 0xF7 / 0xF6).
     static const u32 KU_XPRIVILEGE_COMMUNICATIONS              = 247; // 0xF7
     static const u32 KU_XPRIVILEGE_COMMUNICATIONS_FRIENDS_ONLY = 246; // 0xF6
-    static const s32 KI_NETWORK_MANAGER_CAMERA_OFFSET          = 0x425E0; // asm addis+addi -> &mpCamera
-    static const s32 KI_CAMERA_MUGSHOT_PRIVILEGE_FIELD_OFFSET  = 0x43B9C; // lwzx field, ==2 -> FRIENDS
+    // The camera user setting that restricts the feed to friends (CAMERA_USER_FRIENDS_ONLY).
+    static const s32 KI_CAMERA_USER_FRIENDS_ONLY                = 2;
+
+    // The inbound network event that arms the mugshot-data output (tag 21; the event type has
+    // no named home).
+    static const s32 KI_INEVENT_OUTPUT_MUGSHOT_DATA             = 21;
 
     // ----------------------------------------------------------------------------------
     // Construct  @ 0x8255D7D0  (EXECUTED in goal trace)
@@ -360,129 +361,261 @@ namespace BrnNetwork
         lpThis->ReceiveImageMessage(liFromPlayerID, reinterpret_cast<ImageMessage*>(lpMessage));
     }
 
-    // ==================================================================================
-    // DECLARATION-ONLY + FLAGGED bodies (19).
-    //   The faithful body of each of these reaches an un-homed dependency (CameraX360 /
-    //   GamerPictureManagerX360 / BrnNetworkManager internals, the raw-offset BrnNetworkModuleIO
-    //   GameStateToNetworkInterface / event-queue interfaces, the VariableEventQueue<14000,16>
-    //   event pump) or a multi-stage compress/segment/pack pipeline. Per the anti-fabrication rule
-    //   these are left empty rather than paraphrased; bodying them needs those homes committed.
-    // ==================================================================================
-
-    // FLAG: declaration-only -- per-case state machine over CameraX360 / GamerPictureManagerX360 /
-    // BrnNetworkManager::PackTextureAndSendDisplayEventToGui + GetCompressedTexture.  @ 0x8256F6E8
-    void NetworkImageManager::ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* /*lpOutput*/)
+    // ----------------------------------------------------------------------------------
+    // ProcessAfterSimulation
+    //   While no capture is in progress the local player's received-packet set is kept clear.
+    //   Service the abort requests raised last frame, then drain the inbound network events,
+    //   the dirty-trick events and the next outgoing picture segment.
+    // ----------------------------------------------------------------------------------
+    void NetworkImageManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+
+        if ( mTakedownVictimPlayerID == -1 )
+        {
+            CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+            const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetLocalPlayerID();
+            if ( lLocalPlayerID != -1 )
+            {
+                MugshotData* lpLocalMugshotData = GetMugshotDataEntry(lLocalPlayerID);
+                if ( lpLocalMugshotData )
+                    lpLocalMugshotData->mReceivedPhotoPackets.UnSetAll();
+            }
+        }
+
+        if ( mbAbortCaptureThisFrame )
+        {
+            AbortMugshotCapture();
+            mbAbortCaptureThisFrame = false;
+        }
+
+        if ( mbAbortShowThisFrame )
+        {
+            AbortMugshotShow();
+            mbAbortShowThisFrame = false;
+        }
+
+        ProcessNetworkEvents(lpInput->GetNetworkEventQueue());
+        ProcessDirtyTrickEvents();
+        SendNextSegment();
     }
 
-    // FLAG: declaration-only -- drains the network event queue (ProcessNetworkEvents) + ProcessDirty
-    // trick handling + AbortMugshotCapture/Show, all through un-homed module-IO interfaces.  @ 0x8256BB38
-    void NetworkImageManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* /*lpInput*/)
+    // ----------------------------------------------------------------------------------
+    // HandleRoundResults
+    //   Online and with a round winner: when the winner's slot holds a photo-finish picture,
+    //   save it as the victory mugshot; otherwise fetch the winner's gamer picture (compressed
+    //   into the winner's slot texture) to stand in for it, recording the winner as the local
+    //   slot's victim.
+    // ----------------------------------------------------------------------------------
+    void NetworkImageManager::HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpRoundResults)
     {
+        if ( !mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetConnectionComponent()->IsLoggedIn() )
+            return;
+
+        CGS_ASSERT(lpRoundResults, "lpRoundResults");
+
+        const NetworkPlayerID lRoundWinnerID = lpRoundResults->GetWinner();
+        if ( lRoundWinnerID == -1 )
+            return;
+
+        MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lRoundWinnerID);
+        CGS_ASSERT(lpMugshotDataEntry, "lpMugshotDataEntry");
+
+        if ( lpMugshotDataEntry->mbPhotoFinishValid )
+        {
+            RequestMugshotSave(lpMugshotDataEntry, lRoundWinnerID,
+                               BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+            return;
+        }
+
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+        GamerPictureManagerX360* lpGamerPicManager = mpNetworkModule->GetNetworkManager()->GetGamerPictureManager();
+        CGS_ASSERT(lpGamerPicManager, "lpGamerPicManager");
+
+        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetLocalPlayerID();
+        if ( lLocalPlayerID == -1 )
+            return;
+
+        MugshotData* lpLocalMugshotData = GetMugshotDataEntry(lLocalPlayerID);
+        CGS_ASSERT(lpLocalMugshotData, "lpLocalMugshotData");
+
+        lpLocalMugshotData->mTakedownVictimPlayerID = lRoundWinnerID;
+        meImageTypeOfGamerPicToSave = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT;
+        lpGamerPicManager->GetCompressedGamerPictureTexture(lRoundWinnerID, &lpMugshotDataEntry->mPicture,
+                                                            &NetworkImageManager::_GetCompressedGamerPicCallback, this);
     }
 
-    // FLAG: declaration-only -- ServerInterfaceConnection::IsLoggedIn gate + StrStream debug output +
-    // photo-finish abort bookkeeping into un-homed module internals.  @ 0x8254ACA0
-    CgsNetwork::NetworkTexture* NetworkImageManager::GetPhotoFinishImageByRoundWinner(
-        NetworkPlayerID /*lRoundWinnerID*/, bool* /*lpbIsPhotoFinish*/)
+    // ----------------------------------------------------------------------------------
+    // ProcessNetworkEvents
+    //   Walk the inbound network events: the output request arms the mugshot-data output, a
+    //   payback mugshot starts a capture, an abort request aborts the capture next frame.
+    // ----------------------------------------------------------------------------------
+    void NetworkImageManager::ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue)
     {
-        return nullptr;
+        const CgsModule::Event* lpEvent = nullptr;
+        s32 liSize = 0;
+        s32 leEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        while ( lpEvent != nullptr )
+        {
+            switch ( leEventType )
+            {
+            case KI_INEVENT_OUTPUT_MUGSHOT_DATA:
+                mbOutputMugshotData = true;
+                break;
+
+            case BrnNetworkModuleIO::NetworkInPaybackMugshotEvent::KI_EVENT_TYPE:
+                HandleMugshotEvent(reinterpret_cast<const BrnNetworkModuleIO::NetworkInPaybackMugshotEvent*>(lpEvent));
+                break;
+
+            case BrnNetworkModuleIO::NetworkInAbortMugshotCaptureEvent::KI_EVENT_TYPE:
+                mbAbortCaptureThisFrame = true;
+                break;
+
+            default:
+                break;
+            }
+
+            const CgsModule::Event* lpNextEvent = nullptr;
+            leEventType = lpQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
+            lpEvent = lpNextEvent;
+        }
     }
 
-    // FLAG: declaration-only -- maps the round results to the per-player mugshot/photo-finish slots.  @ 0x82573778
-    void NetworkImageManager::HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* /*lpResults*/)
+    // ----------------------------------------------------------------------------------
+    // OutputMugshotData
+    //   When armed, publish every slot that holds a takedown (aggressor -> victim) as the
+    //   post-event scalps list, each player given as its active-race-car index.
+    // ----------------------------------------------------------------------------------
+    void NetworkImageManager::OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* lpOutput)
     {
+        if ( !mbOutputMugshotData )
+            return;
+
+        BrnNetworkModuleIO::GameStateToNetworkInterface* lpGameStateToNetworkInterface =
+            mpNetworkModule->GetGameStateToNetworkInterface();
+
+        BrnNetworkModuleIO::NetworkOutPostEventScalps lScalpsEvent;
+        lScalpsEvent.miNumScalpsWon = 0;
+        for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
+        {
+            const MugshotData& lrMugshotData = maMugshotData[liIndex];
+            if ( lrMugshotData.mTakedownVictimPlayerID != -1 )
+            {
+                BrnNetworkModuleIO::NetworkOutPostEventScalps::OnlineScalp& lrScalp =
+                    lScalpsEvent.maOnlineScalps[lScalpsEvent.miNumScalpsWon];
+                lrScalp.miAggressorIndex =
+                    lpGameStateToNetworkInterface->GetActiveRaceCarIndex(lrMugshotData.mTakedownAggressorPlayerID);
+                lrScalp.miVictimIndex =
+                    lpGameStateToNetworkInterface->GetActiveRaceCarIndex(lrMugshotData.mTakedownVictimPlayerID);
+                ++lScalpsEvent.miNumScalpsWon;
+            }
+        }
+
+        lpOutput->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScalpsEvent),
+                                                   lScalpsEvent.GetEventType(), sizeof(lScalpsEvent));
     }
 
-    // FLAG: declaration-only -- segments the compressed mugshot into ImageMessage packets and pumps
-    // them over the reliable channel (CgsCore::MemCpy + NetworkPlayer send).  @ 0x82555658
-    void NetworkImageManager::SendNextSegment()
-    {
-    }
-
-    // FLAG: declaration-only -- drains the VariableEventQueue<14000,16> and dispatches mugshot events.  @ 0x8255DAB0
-    void NetworkImageManager::ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* /*lpQueue*/)
-    {
-    }
-
-    // FLAG: declaration-only -- packs the active-race-car id pairs into a 68-byte event on the output
-    // buffer's VariableEventQueue via the raw +818064 GameStateToNetworkInterface.  @ 0x82564E38
-    void NetworkImageManager::OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* /*lpOutput*/)
-    {
-    }
-
-    // FLAG: declaration-only -- turns an inbound payback-mugshot event into a capture request.  @ 0x82555188
-    void NetworkImageManager::HandleMugshotEvent(const NetworkInPaybackMugshotEvent* /*lpEvent*/)
-    {
-    }
-
-    // FLAG: declaration-only -- VariableEventQueue<14000,16>::AddEvent +
-    // BrnNetworkManager::PackTextureAndSendDisplayEventToGui (un-homed).  @ 0x825649A8
+    // ----------------------------------------------------------------------------------
+    // AbortMugshotCapture / AbortMugshotShow
+    //   Stop sending every slot's picture, tell the game the capture (or show) was aborted,
+    //   clear the displayed image and drop back to the idle state.
+    // ----------------------------------------------------------------------------------
     void NetworkImageManager::AbortMugshotCapture()
     {
+        for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
+            maMugshotData[liIndex].miNumberOfPacketsToSend = 0;
+
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue(), "mpNetworkModule->GetNetworkEventQueue()");
+
+        BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
+        lAbortEvent.mbCapture = true;
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
+                                                          lAbortEvent.GetEventType(), sizeof(lAbortEvent));
+
+        mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+
+        mbBroadcastCurrentImage    = false;
+        mRoadRuleBeatenID          = 0;
+        mTakedownAggressorPlayerID = -1;
+        mTakedownVictimPlayerID    = -1;
+        meState                    = E_IMAGE_MANAGER_STATE_COUNT;
+        meImageTypeToSend          = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT;
     }
 
-    // FLAG: declaration-only -- twin of AbortMugshotCapture (un-homed reach).  @ 0x82564A98
     void NetworkImageManager::AbortMugshotShow()
     {
+        for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
+            maMugshotData[liIndex].miNumberOfPacketsToSend = 0;
+
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue(), "mpNetworkModule->GetNetworkEventQueue()");
+
+        BrnNetworkModuleIO::NetworkOutAbortImageCaptureEvent lAbortEvent;
+        lAbortEvent.mbCapture = false;
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAbortEvent),
+                                                          lAbortEvent.GetEventType(), sizeof(lAbortEvent));
+
+        mpNetworkModule->GetNetworkManager()->PackTextureAndSendDisplayEventToGui(nullptr, -1);
+
+        mbBroadcastCurrentImage    = false;
+        mRoadRuleBeatenID          = 0;
+        mTakedownAggressorPlayerID = -1;
+        mTakedownVictimPlayerID    = -1;
+        meState                    = E_IMAGE_MANAGER_STATE_COUNT;
+        meImageTypeToSend          = BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_COUNT;
     }
 
-    // FLAG: declaration-only -- builds + sends an ImageMessage to the receiver via the un-homed
-    // NetworkPlayer send path.  @ 0x82564B80
-    void NetworkImageManager::SendMugshotPicture(NetworkPlayerID /*lAggressorID*/,
-                                                 NetworkPlayerID /*lVictimID*/,
-                                                 NetworkPlayerID /*lReceiverID*/)
+    // ----------------------------------------------------------------------------------
+    // HandleReceivedCameraPic
+    //   A picture from lSenderID finished arriving in lpMugshotData: record the sender, then mark
+    //   the picture valid (and a photo finish when it is a victory mugshot) unless the sender's
+    //   mugshots are disabled, in which case both flags are cleared.
+    // ----------------------------------------------------------------------------------
+    void NetworkImageManager::HandleReceivedCameraPic(NetworkPlayerID lSenderID, MugshotData* lpMugshotData,
+                                                      BrnGameState::GameStateModuleIO::EImageType leImageType)
+    {
+        const bool lbMugshotsDisabled = AreMugshotsDisabledForPlayer(lSenderID);
+        lpMugshotData->mTakedownVictimPlayerID = lSenderID;
+
+        if ( lbMugshotsDisabled )
+        {
+            lpMugshotData->mbPictureValid     = false;
+            lpMugshotData->mbPhotoFinishValid = false;
+        }
+        else
+        {
+            lpMugshotData->mbPictureValid     = true;
+            lpMugshotData->mbPhotoFinishValid =
+                (leImageType == BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
+        }
+    }
+
+    // ----------------------------------------------------------------------------------
+    // _ImageMessageDeliveredCallback
+    //   Delivery of an ImageMessage needs no bookkeeping. When the second flag is raised the
+    //   console writes "WARNING: Fack Nack found in
+    //   BrnNetwork::NetworkImageManager::_ImageMessageDeliveredCallback" to the network dev-log
+    //   stream, which has no home in this tree.
+    // ----------------------------------------------------------------------------------
+    void NetworkImageManager::_ImageMessageDeliveredCallback(bool /*lbDelivered*/, bool /*lbWasReliable*/,
+                                                             CgsNetwork::SignalMessage* /*lpMessage*/,
+                                                             NetworkPlayerID /*liToPlayerID*/,
+                                                             void* /*lpUserData*/)
     {
     }
 
-    // FLAG: declaration-only -- computes per-player send-segment counts via AreMugshotsDisabledForPlayer
-    // (un-homed) over the local player id.  @ 0x825559C8
-    void NetworkImageManager::BroadcastImage(MugshotData* /*lpMugshotData*/)
-    {
-    }
-
-    // FLAG: declaration-only -- reassembles inbound ImageMessage segments into a mugshot texture
-    // (Retrieve + bitset + per-packet blit).  @ 0x825732A8
-    void NetworkImageManager::ReceiveImageMessage(NetworkPlayerID /*lSenderID*/, ImageMessage* /*lpImageMessage*/)
-    {
-    }
-
-    // FLAG: declaration-only -- promotes a fully-received camera picture into the player's mugshot
-    // slot + drives the show state.  @ 0x82555AD8
-    void NetworkImageManager::HandleReceivedCameraPic(NetworkPlayerID /*lSenderID*/,
-                                                      MugshotData* /*lpMugshotData*/,
-                                                      BrnGameState::GameStateModuleIO::EImageType /*leImageType*/)
-    {
-    }
-
-    // FLAG: declaration-only -- packs the selected mugshot texture out to the GUI (un-homed
-    // BrnNetworkManager).  @ 0x82555B38
-    void NetworkImageManager::HandleShowingMugshot(bool /*lbShowMyMugshot*/)
-    {
-    }
-
-    // FLAG: declaration-only -- kicks the CameraX360 compressed-local-picture job with the
-    // _GetCompressedCameraPicCallback.  @ 0x8256BC38
-    void NetworkImageManager::GetCompressedTexture(CgsNetwork::NetworkTexture* /*lpTexture*/)
-    {
-    }
-
-    // FLAG: declaration-only -- requests an async save of the captured gamer-pic mugshot.  @ 0x8256FC18
-    void NetworkImageManager::RequestMugshotSave(NetworkPlayerID /*lAggressorID*/,
-                                                 NetworkPlayerID /*lVictimID*/, u32 /*lu32Frame*/)
-    {
-    }
-
-    // FLAG: declaration-only -- compressed-camera-picture job completion: DXT-compress + BroadcastImage
-    // + SendNextSegment kickoff.  @ 0x82564EF8
-    void NetworkImageManager::_GetCompressedCameraPicCallback(void* /*lpData*/)
-    {
-    }
-
-    // FLAG: declaration-only -- compressed-gamer-picture job completion twin.  @ 0x8256FD40
-    void NetworkImageManager::_GetCompressedGamerPicCallback(void* /*lpData*/)
-    {
-    }
+    // ==================================================================================
+    // Not bodied here (declared in the header, FLAG: declaration-only): ProcessBeforeSimulation,
+    // GetPhotoFinishImageByRoundWinner, SendNextSegment, ProcessDirtyTrickEvents,
+    // HandleMugshotEvent, SendMugshotPicture, BroadcastImage, ReceiveImageMessage,
+    // HandleShowingMugshot, GetCompressedTexture, RequestMugshotSave,
+    // AreMugshotsDisabledForPlayer and the two compress callbacks. Each walks the camera /
+    // gamer-picture / manager internals or the compress-segment-send pipeline and needs its own
+    // reconstruction pass.
+    // ==================================================================================
 
     // ----------------------------------------------------------------------------------
     // GetImageMessageDataEntry  @ 0x8254A8B8  (DWARF spells the X360 callee GetImageMes)
@@ -564,17 +697,12 @@ namespace BrnNetwork
             CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
             CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
 
-            // X360 (0x8254AB10 addis r30,r3,4 / addi r30,r30,0x25E0): lpCamera = NetworkManager +
-            // 0x425E0 (== &NetworkManager->mpCamera); the read is *(int*)(lpCamera + 0x43B9C) == 2.
-            // The camera sub-object is not yet homed, so it is reached by its attested byte offset
-            // off the manager (mirrors the sibling GamerPictureManagerX360 named-offset accessor).
-            BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
-            u8* lpCamera = reinterpret_cast<u8*>(lpNetworkManager) + KI_NETWORK_MANAGER_CAMERA_OFFSET;
+            // The camera's user setting decides: friends-only restricts mugshots to friends.
+            CameraX360* lpCamera = mpNetworkModule->GetNetworkManager()->GetCamera();
             CGS_ASSERT(lpCamera, "lpCamera");
 
-            const s32 liCameraPrivilege =
-                *reinterpret_cast<const s32*>(lpCamera + KI_CAMERA_MUGSHOT_PRIVILEGE_FIELD_OFFSET);
-            lePrivilege = (liCameraPrivilege == 2) ? E_MUGSHOT_PRIVILEGE_FRIENDS : E_MUGSHOT_PRIVILEGE_ANYONE;
+            lePrivilege = (lpCamera->GetUserSetting() == KI_CAMERA_USER_FRIENDS_ONLY)
+                              ? E_MUGSHOT_PRIVILEGE_FRIENDS : E_MUGSHOT_PRIVILEGE_ANYONE;
         }
         else
         {

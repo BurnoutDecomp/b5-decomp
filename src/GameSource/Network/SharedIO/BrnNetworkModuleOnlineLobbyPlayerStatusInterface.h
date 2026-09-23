@@ -71,13 +71,36 @@ namespace BrnNetwork
             // count at 8*56 == +448). The trailing reserved pad pins that stride.
             u8           maReservedPadTo56[4];    // X360 row+52..55
 
-            void Clear();   // DWARF :76 (body is the network module's own TU)
+            // Header-inline on the console: the writer
+            // (BrnNetworkManager::OutputPlayerStatusInfo) stores these nine fields before it
+            // fills the record. The car / wheel ids and the two colour words are left alone.
+            void Clear()
+            {
+                mPlayerID            = -1;
+                meReadyStatus        = E_READY_STATUS_COUNT;
+                mePlayerTeam         = 0;
+                meGameConnectionType = 0;
+                meVoipConnectionType = 0;
+                miPlayerColourIndex  = -1;
+                mbLocalPlayer        = false;
+                mbIsHost             = false;
+                mbFinalSelection     = false;
+                mbIsCriterion        = false;
+            }
         };
 
         // DWARF :109 -- the 8-slot owner of the lobby records.
         struct OnlineLobbyPlayerStatusInterface
         {
-            LobbyPlayerStatusData*       GetPlayerLobbyData(s32 liIndex);        // :115
+            // Header-inline on the console: the writer
+            // (BrnNetworkManager::OutputPlayerStatusInfo) carries both range asserts and the
+            // stride-56 address computation in its own body.
+            LobbyPlayerStatusData* GetPlayerLobbyData(s32 liPlayerIndex)
+            {
+                CGS_ASSERT(liPlayerIndex >= 0, "liPlayerIndex >= 0");
+                CGS_ASSERT(liPlayerIndex < KI_MAX_PLAYERS, "liPlayerIndex < KI_MAX_PLAYERS");
+                return &maPlayerData[liPlayerIndex];
+            }
 
             // Header-inline on the console: the gui bridge carries both range asserts and the
             // stride-56 address computation in its own body.

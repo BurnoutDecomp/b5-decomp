@@ -10,12 +10,19 @@ namespace BrnNetwork
     class NetworkServers
     {
     public:
-        explicit NetworkServers(BrnNetworkManager* lpNetworkManager)
-            : mpNetworkManager(lpNetworkManager)
-            , meServerType(CgsNetwork::E_SERVER_TYPE_LOCAL)
-            , mpcServerIP(nullptr)
-            , miServerPort(0)
+        // The owning manager's constructor leaves the selection untouched; Construct brings it up.
+        NetworkServers() {}
+
+        // Bring the server selection up (inlined into BrnNetworkManager::Construct): remember
+        // the manager, start on the first demo server with no address, then resolve the address
+        // and port for it.
+        void Construct(BrnNetworkManager* lpNetworkManager)
         {
+            mpcServerIP      = nullptr;
+            miServerPort     = 0;
+            mpNetworkManager = lpNetworkManager;
+            meServerType     = CgsNetwork::E_SERVER_TYPE_DEMO_1;
+            SetIPAndPort();
         }
 
         const char* GetServerIP() const;

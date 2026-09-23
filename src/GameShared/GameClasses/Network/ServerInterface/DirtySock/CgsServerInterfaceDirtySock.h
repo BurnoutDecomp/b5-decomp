@@ -117,6 +117,18 @@ namespace CgsNetwork
         struct LobbySettingRefT;
     }
 
+    // CgsServerInterfaceDirtySock.h:134 -- lobby prepare params (POD): the language and
+    // the three identity strings the lobby login presents.
+    struct LobbyPrepareParams
+    {
+        s32         miLanguage;
+        const char* mpcVersion;
+        const char* mpcSKU;
+        const char* mpcSLUS;
+
+        void Construct();
+    };
+
     // CgsServerInterfaceDirtySock.h:153 -- ConnAPI prepare params (POD).
     struct ConnAPIPrepareParams
     {
@@ -354,5 +366,10 @@ namespace CgsNetwork
         s32                          miCgsNetworkServerInterfacePM1;    // +0xBC
     };
 }
+
+// DirtySDK's connection-API control entry point (vendor SDK; no body in this tree). The
+// games components and the network state manager drive it with four-character selectors.
+extern "C" s32 ConnApiControl(CgsNetwork::DirtySock::ConnApiRefT* pConn, s32 iControl, s32 iValue,
+                              s32 iValue2, const void* pValue);
 
 #endif // CGS_SERVER_INTERFACE_DIRTY_SOCK_H

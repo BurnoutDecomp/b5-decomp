@@ -21,4 +21,9 @@ namespace CgsNetwork
     // TelemetryData::AddParameter @0x82354010 compares against 16 (`cmpwi cr6, r11, 0x10`).
     // [takedown P1 wave 2026-09-03, additive.]
     const s32 KI_MAX_TELEMETRY_DATA_SIZE = 16;
+
+    // The session-wide player handle and its "no player" sentinel (all bits set; the
+    // console compares against -1).
+    typedef s32 NetworkPlayerID;
+    const NetworkPlayerID K_INVALID_PLAYER_ID = -1;
 }

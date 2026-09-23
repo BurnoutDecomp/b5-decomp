@@ -52,6 +52,9 @@ namespace BrnNetwork
         void Update();
 
     private:
+        // The state manager runs the NAT-kick walk each frame (UpdateNATData).
+        friend struct StateManager;
+
         // @ 0x8256CFF0 -- the per-frame NAT-kick policy walk (host only).
         void UpdateNATData();
 

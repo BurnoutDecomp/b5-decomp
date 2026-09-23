@@ -11,16 +11,17 @@ namespace
     // Take the address of each bridge method so it is emitted + type-checked.
     void ReferenceBridges()
     {
-        int (BrnGame::BrnGameModule::*lpToGui)(
-            void*, const BrnNetwork::BrnNetworkModuleIO::OutputBuffer*) =
+        void (BrnGame::BrnGameModule::*lpToGui)(
+            CgsGui::CgsGuiModuleIO::InputBuffer*, const BrnNetwork::BrnNetworkModuleIO::OutputBuffer*) =
             &BrnGame::BrnGameModule::BridgeNetworkToGui;
-        int (BrnGame::BrnGameModule::*lpToGameEvents)(
-            BrnGameState::GameStateModule*, const BrnNetwork::BrnNetworkModuleIO::OutputBuffer*) =
+        void (BrnGame::BrnGameModule::*lpToGameEvents)(
+            BrnGameState::GameStateModuleIO::PreWorldInputBuffer*, const BrnNetwork::BrnNetworkModuleIO::OutputBuffer*) =
             &BrnGame::BrnGameModule::TranslateNetworkEventsToGameEvents;
-        int (BrnGame::BrnGameModule::*lpToGuiEvents)(
-            void*, const BrnNetwork::BrnNetworkModuleIO::OutputBuffer*) =
+        void (BrnGame::BrnGameModule::*lpToGuiEvents)(
+            CgsGui::CgsGuiModuleIO::InputBuffer*, const BrnNetwork::BrnNetworkModuleIO::OutputBuffer*) =
             &BrnGame::BrnGameModule::TranslateNetworkEventsToGuiEvents;
-        int (BrnGame::BrnGameModule::*lpIfToGui)(void*, const void*) =
+        void (BrnGame::BrnGameModule::*lpIfToGui)(
+            CgsGui::CgsGuiModuleIO::InputBuffer*, const BrnNetwork::BrnNetworkModuleIO::NetworkToGuiInterface*) =
             &BrnGame::BrnGameModule::TranslateNetworkInterfaceToGuiEvents;
         (void)lpToGui; (void)lpToGameEvents; (void)lpToGuiEvents; (void)lpIfToGui;
     }

@@ -19,8 +19,8 @@
 //   * "GEN"  -- 3 longs at +0x04 (first long is the entry count that bounds the loop);
 //   * per-entry custom-results (RACE/STUNT) records selected by the wire game-mode type;
 //   * "STAT" -- the 8-long + 13-char statistics block at +0x10.
-// Every field is reached by raw byte offset from `this` (base+disp), mirroring the asm,
-// so no per-field member names are asserted.
+// Every field is reached by its console byte offset from GetPayloadBase(), so no per-field
+// member names are asserted.
 
 namespace BrnNetwork
 {
@@ -28,7 +28,7 @@ namespace BrnNetwork
     {
         // The GEN header block: 3 longs at +0x04 (first long is the entry count that
         // bounds the per-mode loop below). The X360 reads this word raw from `this`.
-        u8* lpBytes = reinterpret_cast<u8*>(const_cast<GameResults*>(this));
+        u8* lpBytes = const_cast<u8*>(GetPayloadBase());
         TagFieldSetStructure(lpcRecord, liRecLen, "GEN", lpBytes + 0x04, -1, "lll");
 
         const s32 liCount = *reinterpret_cast<const s32*>(lpBytes + 0x04);
@@ -84,7 +84,7 @@ namespace BrnNetwork
     // Called by Prepare and SetGameStats.
     void GameResults::ClearGameData()
     {
-        u8* lpBytes = reinterpret_cast<u8*>(this);
+        u8* lpBytes = GetPayloadBase();
         std::memset(lpBytes + 0x04, 0, 12);   // GEN header (3 longs)   XMemSet(this+4,0,12)
         std::memset(lpBytes + 0x10, 0, 48);   // STAT block (12 longs)  XMemSet(this+0x10,0,48)
 
@@ -134,29 +134,20 @@ namespace BrnNetwork
     // at +0x90+8i), selected by the raw wire mode; finally stamps the STAT block
     // (car-name string @ +0x30, meters-driven truncated to int, takedown tallies, rival count).
     //
-    // Field bytes on `this` are reached by absolute offset (as in the sibling SerialiseToString
-    // @ 0x82584600 -- no per-field member names on the leaf payload are asserted). The frozen
-    // header declares the input in a global forward-declared `GameStateModuleIO` (an opaque
-    // handle); the concrete record is BrnGameState::GameStateModuleIO::OnlineGameResults
-    // (home BrnGameActions.h), so rebind to the real type here -- without touching the
-    // declaration -- to name the members and call GetRaceResults / GetStuntResults.
+    // Payload fields are reached by console offset from GetPayloadBase() (as in the sibling
+    // SerialiseToString -- no per-field member names on the leaf payload are asserted).
     // Absolute-offset stores into the serialized end-of-game result WIRE byte-stream.
-    // `this` is the packed result record; its per-field member names are not recovered (the
-    // committed sibling SerialiseToString @0x82584600 reads the same layout by offset).
     static inline void WirePutS32(void* lpBase, u32 luOffset, s32 liValue)
     {
         *reinterpret_cast<s32*>(reinterpret_cast<u8*>(lpBase) + luOffset) = liValue;   // serialized byte-stream store
     }
 
-    void GameResults::SetGameStats(const GameStateModuleIO::OnlineGameResults* lpRaceResults,
+    void GameResults::SetGameStats(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults,
                                    s32 liNumberOfRivals)
     {
-        const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults =
-            reinterpret_cast<const BrnGameState::GameStateModuleIO::OnlineGameResults*>(lpRaceResults);
-
         ClearGameData();
 
-        u8* lpBytes = reinterpret_cast<u8*>(this);
+        u8* lpBytes = GetPayloadBase();
         WirePutS32(lpBytes, 0x0C, GameModeToEvent(lpResults->miEventType));
         WirePutS32(lpBytes, 0x08, lpResults->miReserved0x30);
 
@@ -257,10 +248,10 @@ namespace BrnNetwork
 
     // X360 @ 0x825844D0. Non-const GetData override. These results are never accessed
     // through the generic byte-blob path -- the override exists only to fire the redirect
-    // assert -- but it still returns the address of the result payload (this+0x04).
+    // assert -- but it still returns the address of the result payload (console +0x04).
     void* GameResults::GetData()
     {
         CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
-        return reinterpret_cast<u8*>(this) + 4;
+        return GetPayloadBase() + 4;
     }
 }

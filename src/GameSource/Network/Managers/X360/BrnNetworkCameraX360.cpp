@@ -405,6 +405,7 @@ namespace BrnNetwork
 
     s32 CameraX360::GetCompressedLocalCameraPicture(
         CgsNetwork::NetworkTexture* lpDstTexture,
+        s32 /*liQualitySetting*/,
         CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback /*lCompleteCallback*/,
         void* /*lpCompleteData*/)
     {

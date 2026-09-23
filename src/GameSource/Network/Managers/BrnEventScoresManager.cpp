@@ -132,6 +132,19 @@ namespace BrnNetwork
     }
 
     // ---------------------------------------------------------------------------------------------
+    // Prepare / Release: nothing to acquire or free, always ready.
+    // ---------------------------------------------------------------------------------------------
+    bool EventScoresManager::Prepare()
+    {
+        return true;
+    }
+
+    bool EventScoresManager::Release()
+    {
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------------------
     // Destruct  @ 0x82556B58
     // ---------------------------------------------------------------------------------------------
     void EventScoresManager::Destruct()
@@ -211,7 +224,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------------------
     // ProcessBeforeSimulation  @ 0x8256FEF0
     // ---------------------------------------------------------------------------------------------
-    void EventScoresManager::ProcessBeforeSimulation()
+    void EventScoresManager::ProcessBeforeSimulation( f32 lfTimeStep )
     {
         if ( meState == KI_STATE_LOGGED_IN )
         {
@@ -219,7 +232,7 @@ namespace BrnNetwork
         }
         else if ( meState == KI_STATE_UPLOADING )
         {
-            UpdateUploadEventScores();
+            UpdateUploadEventScores( lfTimeStep );
         }
     }
 
@@ -346,14 +359,12 @@ namespace BrnNetwork
     // When the retry timer has elapsed (and the custom-commands component is idle), batch the
     // pending records into one EventScoreData and upload it.
     // ---------------------------------------------------------------------------------------------
-    void EventScoresManager::UpdateUploadEventScores()
+    void EventScoresManager::UpdateUploadEventScores( f32 lfTimeStep )
     {
-        // The X360 builds a Time(0.0) and subtracts it from mUploadRetryTimer (a no-op identity used
-        // to read the elapsed value), then tests whether the timer + its fraction has elapsed.
-        const CgsSystem::Time lZeroTime( 0.0f );
-        const CgsSystem::Time lElapsed = mUploadRetryTimer - lZeroTime;
+        // Count the retry timer down by this frame's step.
+        mUploadRetryTimer -= CgsSystem::Time( lfTimeStep );
 
-        // lbReadyToUpload == (miUploadCount == 0) && ((seconds + fraction) <= 0), i.e. the retry
+        // lbReadyToUpload == (miUploadCount == 0) && !((seconds + fraction) > 0), i.e. the retry
         // window has expired and no batch is currently in flight.
         bool lbReadyToUpload = true;
         if ( miUploadCount != 0 )
@@ -362,8 +373,8 @@ namespace BrnNetwork
         }
         else
         {
-            const f32 lfElapsed = static_cast<f32>( lElapsed.GetSeconds() ) + lElapsed.GetFraction();
-            if ( lfElapsed > 0.0f )
+            const f32 lfRemaining = static_cast<f32>( mUploadRetryTimer.GetSeconds() ) + mUploadRetryTimer.GetFraction();
+            if ( lfRemaining > 0.0f )
             {
                 lbReadyToUpload = false;
             }

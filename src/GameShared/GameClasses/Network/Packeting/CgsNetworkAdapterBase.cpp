@@ -17,18 +17,18 @@ namespace CgsNetwork
 
 NetworkAdapterPrepareParams* NetworkAdapterPrepareParams::Construct(
         u32 leServerType, void* lpHeapMalloc, void* lpNetworkManager,
-        void* lpField_10, void* lpField_00)
+        ServerInterfaceDirtySock* lpServerInterface, u32 luTitleID)
 {
     CGS_ASSERT((leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
                "(leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT)");
     CGS_ASSERT(lpHeapMalloc, "lpHeapMalloc");
     CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
 
-    mpField_00       = lpField_00;        // +0x00 (a6)
+    muTitleID        = luTitleID;         // +0x00
     meServerType     = leServerType;      // +0x04
     mpHeapMalloc     = lpHeapMalloc;      // +0x08
     mpNetworkManager = lpNetworkManager;  // +0x0C
-    mpServerInterface = static_cast<ServerInterfaceDirtySock*>(lpField_10);   // +0x10 (a5)
+    mpServerInterface = lpServerInterface; // +0x10
 
     return this;
 }

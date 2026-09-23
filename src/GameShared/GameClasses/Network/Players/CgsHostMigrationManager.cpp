@@ -430,6 +430,9 @@ namespace CgsNetwork
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
         CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
 
+        // The lengths are the console message sizes (0x20 / 0x44). The player only range-checks
+        // them (> 0 here, <= the reliable-buffer limit when a reliable copy is buffered); no host
+        // byte count is derived from them, so the console values stay.
         lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE, 32,
                                          &lData.mHostKeepAliveMessageSend,
                                          &lData.mHostKeepAliveMessageRecv, nullptr, nullptr, nullptr);

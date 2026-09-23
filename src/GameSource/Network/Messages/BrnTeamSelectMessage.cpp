@@ -146,7 +146,7 @@ namespace BrnNetwork
         {
             PlayerTeamInfo& lInfo = maPlayerTeamInfo[liPlayer];
 
-            lxResult = BrnNetwork::BrnNetworkManager::PackOrUnpack(this, &lInfo.mPlayerID) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lInfo.mPlayerID) | lxResult;
 
             // The X360 stages the team id through a stack temp (lwz +0x04 -> [sp], pack,
             // [sp] -> +0x04); de-staged here to the member by name.

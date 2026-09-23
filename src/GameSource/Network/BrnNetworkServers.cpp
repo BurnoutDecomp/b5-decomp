@@ -71,7 +71,8 @@ namespace BrnNetwork
         }
     }
 
-    // SetServerType is declared only: it writes the version display's server type and
-    // re-targets the network adapter, both members of the CgsNetwork::NetworkManager base,
-    // which BrnNetworkManager still holds as raw storage.
+    // SetServerType is declared only: after storing the type and resolving the address it
+    // mirrors the type into the base manager's version display, drops the server connection
+    // and re-targets the network adapter through the adapter's first virtual slot, a slot the
+    // committed adapter header does not declare there (its first slot is Prepare).
 }

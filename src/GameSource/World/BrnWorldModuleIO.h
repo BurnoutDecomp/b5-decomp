@@ -64,7 +64,8 @@
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropBecamePhysicalEvent.h"   // BrnWorld::PropEntityIO::PropBecamePhysicalEvent
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActive/Global race-car output interfaces + AudioCarDataLoadedEvent
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h"  // BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface
-#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"   // BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"   // BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface / TrafficNetworkInputInterface
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"    // BrnWorld::PlayerVehicleControls
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"     // BrnTraffic::BrnTrafficIO::TrafficSoundOutputInterface
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h"       // BrnTraffic::BrnTrafficIO::TrafficTypeResponse
 #include "GameSource/World/EntityModules/TriggerEntityModule/BrnTriggerEntityModuleIO.h"           // BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface
@@ -176,31 +177,10 @@ namespace BrnWorldIO
         u8 maData[164];      // X360 SetOnlineScoringInterface copies 164 bytes
     };
 
-    // TrafficNetworkInputInterface: the canonical home (BrnTraffic::BrnTrafficIO::
-    // TrafficNetworkInputInterface, GameSource/World/EntityModules/TrafficEntityModule/SharedIO/
-    // BrnTrafficNetworkInterfaces.h) IS committed and byte-confirms the X360 body (queue header
-    // Clear() = the member+8 zero-store, BaseEventQueue<ActivateHullEvent>::Append = the merge,
-    // mbDiverged @ offset 0x6C = the trailing byte copy) -- but it exposes no public mutator for
-    // its private mActivateHullQueue/mbDiverged (only a const GetActivateHullQueue() and
-    // SetDiverged/HasDiverged, none of which allow a Clear()+Append() merge from outside). Adding
-    // that mutator belongs to BrnTrafficNetworkInterfaces.h/.cpp (a different TU), so this stays a
-    // local sized-slice placeholder here. Modelled with a Set entry pending that mutator landing.
-    struct TrafficNetworkInputInterface
-    {
-        void Set(const TrafficNetworkInputInterface* lpSource)
-        {
-            if (lpSource && lpSource != this)
-                std::memcpy(maPayload, lpSource->maPayload, sizeof(maPayload));
-        }
-        // X360 UpdateInputBuffer::Construct: ActivateHullEvent_8_::Construct(+301644) then
-        // the mbDiverged byte at interface+0x6C = 0 -- i.e. the committed
-        // BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface::Construct. Until this slice
-        // is retyped onto that home (blocked on its whole-interface Set mutator, see above)
-        // the construct is the zero-fill stand-in [marked deviation]; a zeroed
-        // EventQueue header reads as an empty queue, which is what the loading frames see.
-        void Construct() { std::memset(maPayload, 0, sizeof(maPayload)); }
-        u8 maPayload[256];   // NOMINAL
-    };
+    // The traffic-network input interface is the real BrnTraffic::BrnTrafficIO one (queue of
+    // ActivateHullEvent + mbDiverged); SetTrafficNetworkInterface clear-merges the queue and
+    // copies the flag by name.
+    typedef BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface TrafficNetworkInputInterface;
 
     // CrashNetworkInputInterface: canonical home is committed
     // (GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h). X360
@@ -209,14 +189,8 @@ namespace BrnWorldIO
     // operator=.
     typedef BrnWorld::CrashIO::NetworkInputInterface CrashNetworkInputInterface;
 
-    // PlayerVehicleControls (X360 SetPlayerVehicleControls memcpy 60 bytes into +317264).
-    struct PlayerVehicleControls
-    {
-        // X360 UpdateInputBuffer::Construct zeroes the whole record in place (13 f32 stores
-        // at +317264..+317312 then 7 byte stores at +317316..+317322).
-        void Clear() { std::memset(maData, 0, sizeof(maData)); }
-        u8 maData[60];       // X360 SetPlayerVehicleControls copies 60 bytes
-    };
+    // The player controls are the real 60-byte BrnWorld::PlayerVehicleControls.
+    typedef BrnWorld::PlayerVehicleControls PlayerVehicleControls;
 
     // DebugController (X360 Get const at +317324 read-lock, Get non-const at +317324 write-lock).
     // Size 172 == the X360 span +317324..+317496 (Construct's DebugController::Clear target

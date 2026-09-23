@@ -123,6 +123,9 @@ namespace BrnNetwork
         void OnLeaveGame();
         void SuppressTrafficRestart(bool lbSuppress);
         void RestartNetworkTraffic(NetworkPlayerID lPlayerID);
+        // The host restarts the networked traffic on its next update (the state manager raises it
+        // when a showtime round ends).
+        void RestartNetworkTrafficForHost() { mbRestartNetworkTraffic = true; }
 
     private:
         static const s32 KI_REPORT_CRASHING_TRAFFIC_DELAY_50HZ     = 50;

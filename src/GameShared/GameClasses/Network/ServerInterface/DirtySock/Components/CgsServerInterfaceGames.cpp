@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // full ServerInterfaceDirtySock (GetLobbyAPIRef/GetGameManagerRef/GetConnAPIRef/GetMessageBuffer/GetSKU)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h" // ServerInterfaceComponent (StartActionCore/EndActionCore/ConvertError)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h" // DSErrorToServerInterfaceError(Table)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameSearchParams.h"
@@ -19,14 +20,10 @@
 // Member access is by name throughout; the LobbyApiPlayT field offsets are pinned
 // in the header (grounded against this TU's asm).
 //
-// FLAGGED placeholders (honest -- contents live in unrecovered .rdata):
+// FLAGGED placeholder (honest -- contents live in unrecovered .rdata):
 //   * gServerInterfaceErrorData    -- the static error-string table (shared with the
 //                                     other components; Construct points mpErrorData at it).
-//   * KAPC_ACTION_NAMES[13]        -- per-action human-readable names ("Create Game" ...).
-//   * KAU_ACTION_MESSAGE_TYPES[13] -- per-action DirtySDK request fourcc table.
-//   * KA_DS_ERROR_TABLE_LOOKUP[13] -- per-action { DS-error-table*, count } pairs used by
-//                                     EndAction -> ConvertError.
-// Their element TYPES are reconstructed; their byte contents are not fabricated.
+// The per-action name, request-code and DirtySock-error tables hold the console values.
 
 // ---- External DirtySDK / lobby C-API entry points used by this component. -------
 // These live in the DirtySDK vendor SDK (not yet fully reconstructed in vendor/).
@@ -138,20 +135,155 @@ namespace CgsNetwork
         const s32 KI_EVT_HOST_MIGRATED         = 18;
     }
 
-    // ---- FLAGGED placeholder rodata (contents in unrecovered .rdata). ----
-    // Per-action human-readable name table (off_82F334D8, "Create Game" ...).
-    extern const char* const KAPC_ACTION_NAMES[ServerInterfaceGames::E_ACTION_COUNT];
-    // Per-action DirtySDK request message fourcc table (dword_820E8CAC).
-    extern const s32 KAU_ACTION_MESSAGE_TYPES[ServerInterfaceGames::E_ACTION_COUNT];
-
-    // Per-action { DS-error-table*, count } pair used by EndAction -> ConvertError
-    // (off_820E9038 / dword_820E903C, interleaved as one array of pairs).
-    struct ActionErrorTableEntry
+    // ---- Per-action tables (console rodata). ----
+    // The per-action display names indexed by EAction (passed to StartActionCore).
+    const char* const KAPC_ACTION_NAMES[ServerInterfaceGames::E_ACTION_COUNT] =
     {
-        const DSErrorToServerInterfaceError* mpTable;
-        s32                                  miCount;
+        "Create Game",                // 0
+        "Join game",                  // 1
+        "Quick join",                 // 2
+        "Search for games",           // 3
+        "Cancel Search for games",    // 4
+        "Leave game",                 // 5
+        "Kick player",                // 6
+        "Update game parameters",     // 7
+        "Update player parameters",   // 8
+        "Lock game",                  // 9
+        "Unlock game",                // 10
+        "Start game",                 // 11
+        "Send Game Results"           // 12
     };
-    extern const ActionErrorTableEntry KA_DS_ERROR_TABLE_LOOKUP[ServerInterfaceGames::E_ACTION_COUNT];
+
+    // The DirtySDK request message code each action sends.
+    const s32 KAU_ACTION_MESSAGE_TYPES[ServerInterfaceGames::E_ACTION_COUNT] =
+    {
+        0x67637265,   // 'gcre'
+        0x676A6F69,   // 'gjoi'
+        0x6771776B,   // 'gqwk'
+        0x67736561,   // 'gsea'
+        0x67736561,   // 'gsea'
+        0x676C6561,   // 'glea'
+        0x67736574,   // 'gset'
+        0x67736574,   // 'gset'
+        0x67736574,   // 'gset'
+        0x67736574,   // 'gset'
+        0x67736574,   // 'gset'
+        0x67737461,   // 'gsta'
+        0x72616E6B    // 'rank'
+    };
+
+    // The DirtySock-error -> EServerInterfaceError mappings, laid out as one contiguous
+    // block because that is how the console reads them: the search and cancel-search
+    // lookup entries carry a count of 22 over the 2-entry search table, so ConvertError
+    // walks on through the leave, kick/params/lock and start tables and the first four
+    // entries of the results table.
+    const DSErrorToServerInterfaceError KA_GAMES_DS_ERROR_MAPPINGS[76] =
+    {
+        // [0] create game
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x696E7670, E_SERVER_INTERFACE_GENERAL_ERROR_INVALID_PARAMS },        // 'invp'
+        { 0x6D617574, E_SERVER_INTERFACE_GENERAL_ERROR_MASTER_NOT_AUTH },       // 'maut'
+        { 0x696E676D, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_IN_GAME },         // 'ingm'
+        { 0x6475706C, E_SERVER_INTERFACE_GAMES_ERROR_NAME_ALREADY_EXISTS },     // 'dupl'
+        { 0x75726F6D, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_ROOM },            // 'urom'
+        { 0x75757374, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_USERSET },         // 'uust'
+        { 0x6E6C6F6B, E_SERVER_INTERFACE_GAMES_ERROR_USERSET_NOT_LOCKED },      // 'nlok'
+        { 0x61757468, E_SERVER_INTERFACE_GAMES_ERROR_NOT_USERSET_HOST },        // 'auth'
+        { 0x6D616E79, E_SERVER_INTERFACE_GAMES_ERROR_TOO_MANY_GAMES_IN_ROOM },  // 'many'
+        // [10] join game
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x7567616D, E_SERVER_INTERFACE_GAMES_ERROR_UNKOWN_GAME },             // 'ugam'
+        { 0x6D617574, E_SERVER_INTERFACE_GENERAL_ERROR_MASTER_NOT_AUTH },       // 'maut'
+        { 0x616A6F69, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_JOINED },          // 'ajoi'
+        { 0x696E676D, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_IN_GAME },         // 'ingm'
+        { 0x66756C6C, E_SERVER_INTERFACE_GAMES_ERROR_GAME_FULL },               // 'full'
+        { 0x6E737063, E_SERVER_INTERFACE_GAMES_ERROR_GAME_FULL },               // 'nspc'
+        { 0x70617373, E_SERVER_INTERFACE_GAMES_ERROR_INVALID_PASSWORD },        // 'pass'
+        { 0x61737461, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_STARTED },         // 'asta'
+        { 0x6C6F636B, E_SERVER_INTERFACE_GAMES_ERROR_GAME_LOCKED },             // 'lock'
+        { 0x70617274, E_SERVER_INTERFACE_GAMES_ERROR_INVALID_PARTITION },       // 'part'
+        { 0x75757374, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_USERSET },         // 'uust'
+        { 0x6E6C6F6B, E_SERVER_INTERFACE_GAMES_ERROR_USERSET_NOT_LOCKED },      // 'nlok'
+        { 0x62616E64, E_SERVER_INTERFACE_GAMES_ERROR_PLAYER_BANNED },           // 'band'
+        { 0x6A6F696E, E_SERVER_INTERFACE_GAMES_ERROR_USER_NOT_JOINED },         // 'join'
+        // [25] quick join
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x7567616D, E_SERVER_INTERFACE_GAMES_ERROR_UNKOWN_GAME },             // 'ugam'
+        { 0x6D617574, E_SERVER_INTERFACE_GENERAL_ERROR_MASTER_NOT_AUTH },       // 'maut'
+        { 0x616A6F69, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_JOINED },          // 'ajoi'
+        { 0x696E676D, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_IN_GAME },         // 'ingm'
+        { 0x66756C6C, E_SERVER_INTERFACE_GAMES_ERROR_GAME_FULL },               // 'full'
+        { 0x6E737063, E_SERVER_INTERFACE_GAMES_ERROR_GAME_FULL },               // 'nspc'
+        { 0x70617373, E_SERVER_INTERFACE_GAMES_ERROR_INVALID_PASSWORD },        // 'pass'
+        { 0x61737461, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_STARTED },         // 'asta'
+        { 0x6C6F636B, E_SERVER_INTERFACE_GAMES_ERROR_GAME_LOCKED },             // 'lock'
+        { 0x70617274, E_SERVER_INTERFACE_GAMES_ERROR_INVALID_PARTITION },       // 'part'
+        { 0x75757374, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_USERSET },         // 'uust'
+        { 0x6E6C6F6B, E_SERVER_INTERFACE_GAMES_ERROR_USERSET_NOT_LOCKED },      // 'nlok'
+        { 0x62616E64, E_SERVER_INTERFACE_GAMES_ERROR_PLAYER_BANNED },           // 'band'
+        { 0x6A6F696E, E_SERVER_INTERFACE_GAMES_ERROR_USER_NOT_JOINED },         // 'join'
+        { 0x6E666E64, E_SERVER_INTERFACE_GAMES_ERROR_NO_GAMES_FOUND },          // 'nfnd'
+        { 0x78697374, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_QUICK_JOINING },   // 'xist'
+        { 0x696E7670, E_SERVER_INTERFACE_GENERAL_ERROR_INVALID_PARAMS },        // 'invp'
+        { 0x6475706C, E_SERVER_INTERFACE_GAMES_ERROR_NAME_ALREADY_EXISTS },     // 'dupl'
+        { 0x75726F6D, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_ROOM },            // 'urom'
+        { 0x61757468, E_SERVER_INTERFACE_GAMES_ERROR_NOT_USERSET_HOST },        // 'auth'
+        { 0x6D616E79, E_SERVER_INTERFACE_GAMES_ERROR_TOO_MANY_GAMES_IN_ROOM },  // 'many'
+        // [47] search / cancel search
+        { 0x6E666E64, E_SERVER_INTERFACE_GAMES_ERROR_NO_GAMES_FOUND },          // 'nfnd'
+        { 0x75726F6D, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_ROOM },            // 'urom'
+        // [49] leave game
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x7567616D, E_SERVER_INTERFACE_GAMES_ERROR_UNKOWN_GAME },             // 'ugam'
+        { 0x6D617574, E_SERVER_INTERFACE_GENERAL_ERROR_MASTER_NOT_AUTH },       // 'maut'
+        { 0x6A6F696E, E_SERVER_INTERFACE_GAMES_ERROR_USER_NOT_JOINED },         // 'join'
+        { 0x67687374, E_SERVER_INTERFACE_GAMES_ERROR_HOST_CANT_LEAVE },         // 'ghst'
+        { 0x61737461, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_STARTED },         // 'asta'
+        { 0x6C6F636B, E_SERVER_INTERFACE_GAMES_ERROR_GAME_LOCKED },             // 'lock'
+        { 0x61757468, E_SERVER_INTERFACE_GAMES_ERROR_NOT_USERSET_HOST },        // 'auth'
+        // [57] kick player, update game/player parameters, lock, unlock
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x7567616D, E_SERVER_INTERFACE_GAMES_ERROR_UNKOWN_GAME },             // 'ugam'
+        { 0x6D617574, E_SERVER_INTERFACE_GENERAL_ERROR_MASTER_NOT_AUTH },       // 'maut'
+        { 0x6E676874, E_SERVER_INTERFACE_GAMES_ERROR_NOT_HOST },                // 'nght'
+        { 0x6E67616D, E_SERVER_INTERFACE_GAMES_ERROR_NOT_IN_GAME },             // 'ngam'
+        { 0x61737461, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_STARTED },         // 'asta'
+        { 0x696E7670, E_SERVER_INTERFACE_GENERAL_ERROR_INVALID_PARAMS },        // 'invp'
+        { 0x6E6F776E, E_SERVER_INTERFACE_GAMES_ERROR_NOT_OWNER_OF_GUEST },      // 'nown'
+        // [65] start game
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x7567616D, E_SERVER_INTERFACE_GAMES_ERROR_UNKOWN_GAME },             // 'ugam'
+        { 0x6D617574, E_SERVER_INTERFACE_GENERAL_ERROR_MASTER_NOT_AUTH },       // 'maut'
+        { 0x6E676874, E_SERVER_INTERFACE_GAMES_ERROR_NOT_HOST },                // 'nght'
+        { 0x6E67616D, E_SERVER_INTERFACE_GAMES_ERROR_NOT_IN_GAME },             // 'ngam'
+        { 0x61737461, E_SERVER_INTERFACE_GAMES_ERROR_ALREADY_STARTED },         // 'asta'
+        { 0x6E65706C, E_SERVER_INTERFACE_GAMES_ERROR_NOT_ENOUGH_PLAYERS },      // 'nepl'
+        // [72] send game results
+        { 0x75757372, E_SERVER_INTERFACE_GAMES_ERROR_UNKNOWN_USER },            // 'uusr'
+        { 0x626F6775, E_SERVER_INTERFACE_GAMES_ERROR_BOGUS_RESULT },            // 'bogu'
+        { 0x71756974, E_SERVER_INTERFACE_GAMES_ERROR_QUIT },                    // 'quit'
+        { 0x736F6F6E, E_SERVER_INTERFACE_GAMES_ERROR_RESULT_TOO_SOON },         // 'soon'
+    };
+
+    // Per-action { mapping table, count } used by EndAction -> ConvertError.
+    const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[ServerInterfaceGames::E_ACTION_COUNT] =
+    {
+        { &KA_GAMES_DS_ERROR_MAPPINGS[0],  10 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[10], 15 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[25], 22 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[47], 22 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[47], 22 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[49], 8 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[57], 8 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[57], 8 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[57], 8 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[57], 8 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[57], 8 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[65], 7 },
+        { &KA_GAMES_DS_ERROR_MAPPINGS[72], 4 }
+    };
+    static_assert(sizeof(KA_GAMES_DS_ERROR_MAPPINGS) / sizeof(KA_GAMES_DS_ERROR_MAPPINGS[0]) == 47 + 22 + 7,
+                  "the search entry's count of 22 ends inside the results table");
 
     // ===================================================================
     // Lifecycle
@@ -312,8 +444,8 @@ namespace CgsNetwork
     {
         CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, "meCurrentAction != E_ACTION_COUNT");
 
-        const ActionErrorTableEntry& lrEntry = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-        EServerInterfaceError leMapped = ConvertError(liError, lrEntry.mpTable, lrEntry.miCount);
+        const DSErrorToServerInterfaceErrorTable& lrEntry = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
+        EServerInterfaceError leMapped = ConvertError(liError, lrEntry.mpMappingTable, lrEntry.miNumMappings);
         EndActionCore(static_cast<int>(leMapped));
 
         meCurrentAction     = E_ACTION_COUNT;

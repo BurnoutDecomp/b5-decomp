@@ -41,10 +41,9 @@ namespace CgsNetwork
         const f32 KF_BITS_PER_BYTE    = 8.0f;    // flt_82004C88
         const f32 KF_BITS_TO_KILOBITS = 0.001f;  // flt_82013F90
 
-        // DrawBar's first float argument (X360 flt_82001CC0). The value is an un-dumped .rdata
-        // float; DrawBar's asm never reads it, so its magnitude is not observable. Reproduced as
-        // the baseline 0.0f so the call surface matches the callers' constant.
-        const f32 KF_DRAWBAR_BASELINE = 0.0f;    // flt_82001CC0 (UNCERTAIN literal; unused by DrawBar)
+        // DrawBar's first float argument: the rodata word the callers load is 0.0f, and DrawBar
+        // never reads it.
+        const f32 KF_DRAWBAR_BASELINE = 0.0f;
 
         // Debug-menu option labels for the "Measurement Type" enum variable (X360 unk_820E964C,
         // a StringList[2] per DWARF). The .rdata label bytes are not in the available exports, so
@@ -55,16 +54,6 @@ namespace CgsNetwork
             { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT, "Instantaneous" },
             { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_RUNNING, "Running"       },
         };
-
-        // The X360 reads a message-type's display name through the Message vtable slot at byte
-        // +0x0C (index 3): `(*(*lpMessage + 0xC))(lpMessage)`. Message models its vtable by hand
-        // (mpVTable @ +0x00), so dispatch through it directly here.
-        const char* GetMessageTypeName(Message* lpMessage)
-        {
-            typedef const char* (*NameFn)(Message*);
-            void** lppVTable = *reinterpret_cast<void***>(lpMessage);
-            return reinterpret_cast<NameFn>(lppVTable[3])(lpMessage);
-        }
     }
 
     // qsort comparator: descending order by miMaxBytes (larger first).
@@ -133,7 +122,7 @@ namespace CgsNetwork
             else
             {
                 Message* lpMessage = lpPlayer->GetRegisteredSendMessage(liMessageType);
-                lStream << GetMessageTypeName(lpMessage);
+                lStream << lpMessage->GetName();
             }
         }
         else

@@ -69,6 +69,10 @@ namespace CgsNetwork
         void DestroyHttpsDownload();
         void StopHttpDownload();
 
+        // The byte count the running download has received (the news / TOS copy sizes its
+        // buffer from it).
+        s32  GetHttpDownloadSize() const { return miAmountHttpDownloaded; }
+
         // --- component overrides and lifecycle ---
         virtual void Construct();
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);

@@ -20,6 +20,10 @@
 #include "GameSource/Network/BrnServerInterface.h"                              // BrnServerInterface::GetStatus / EStatus
 #include "GameSource/Network/BrnServerInterfaceBase.h"                          // GetCustomCommandsComponent()
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"     // ServerInterfaceCustomCommands::UploadOfflineProgress
+#include "GameSource/Network/BrnNetworkModule.h"                                // BrnNetworkModule::GetNetworkEventQueue
+#include "GameSource/Network/BrnNetworkModuleIO.h"                              // NetworkEventQueue
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"                      // NetworkOutGetOfflineProgression
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                // VariableEventQueue::AddEvent
 
 namespace BrnNetwork
 {
@@ -121,5 +125,49 @@ namespace BrnNetwork
             std::memcpy(&mBufferedOfflineProgression, lpEvent, sizeof(mBufferedOfflineProgression));
             mbWaitingToUploadOfflineProgress = true;
         }
+    }
+
+    // -----------------------------------------------------------------------------
+    // UploadOfflineProgression()
+    //
+    // Ask the game state for the offline progression record (the one-byte request event, tag
+    // 55) and arm the wait for it; HandleOfflineProgressionEvent uploads it when it arrives.
+    // -----------------------------------------------------------------------------
+    void NetworkPlayerStatsManager::UploadOfflineProgression()
+    {
+        BrnNetworkModuleIO::NetworkOutGetOfflineProgression lRequestEvent;
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequestEvent),
+            lRequestEvent.GetEventType(), sizeof(lRequestEvent));
+        mbWaitingForOfflineProgressFromGamestate = true;
+    }
+
+    // -----------------------------------------------------------------------------
+    // HandleFreeburnChallengeEvent(const NetworkInFreeburnChallengeEvent*)
+    //
+    // A freeburn challenge was completed: remember the new completed-challenge count and
+    // publish it as the local player's challenges-completed stat. (Inlined into the state
+    // manager's network-event pump on the console.)
+    // -----------------------------------------------------------------------------
+    void NetworkPlayerStatsManager::HandleFreeburnChallengeEvent(
+        const BrnNetworkModuleIO::NetworkInFreeburnChallengeEvent* lpEvent)
+    {
+        if (lpEvent->meChallengeStatus == BrnGameState::E_CHALLENGE_STATUS_SUCCESS)
+        {
+            miCachedNumberOfChallegesCompleted = lpEvent->miNumberOfCompletedChallenges;
+            UpdateLocalPlayersStat(NetworkPlayerStats::E_STATS_VALUE_CHALLENGES_COMPLETED,
+                                   lpEvent->miNumberOfCompletedChallenges);
+        }
+    }
+
+    // -----------------------------------------------------------------------------
+    // HandleNewNumberOfAchievements(s32)
+    //
+    // Publish the new achievement count as the local player's achievements stat. (Inlined into
+    // the state manager's game-state action pump on the console.)
+    // -----------------------------------------------------------------------------
+    void NetworkPlayerStatsManager::HandleNewNumberOfAchievements(s32 liNumberOfAchievements)
+    {
+        UpdateLocalPlayersStat(NetworkPlayerStats::E_STATS_VALUE_ACHIEVEMENTS_EARNT, liNumberOfAchievements);
     }
 }

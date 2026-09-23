@@ -45,9 +45,17 @@ namespace CgsNetwork
         };
 
         // @ 0x8287F4D8 -- zero the state, register the four perfmon counters, then chain
-        // the base Construct. liParentPerfMon nests the adapter's monitors under a parent
-        // in the perfmon tree (the 5th AddMonitor arg).
-        void Construct(s32 liParentPerfMon);
+        // the base Construct.
+        void Construct();
+
+        // Inlined into the network manager's Destruct: drop the environment and the
+        // connecting latch, then the base tear-down.
+        void Destruct()
+        {
+            mpEnvironment = nullptr;
+            mbConnecting  = false;
+            NetworkAdapterBase::Destruct();
+        }
 
         // @ 0x8288BD90 -- drive the prepare state machine; on the INIT/PREPARING edge it
         // runs the base prepare, brings networking up (StartupNetworking) and arms the

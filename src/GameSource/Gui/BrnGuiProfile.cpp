@@ -276,12 +276,13 @@ namespace
                                lpSaveImageDLC1);
     }
 
-    // BrnNetwork::LiveRevengeProfile::ValidateProfile @0x824FCE98 IS committed
-    // (BrnNetworkLiveRevengeManager.cpp; body: `return true;`, signature
-    // (const LiveRevengeProfile*, s32) const). Calling it on the stored segment would
-    // mean reinterpreting the serialised console image as the live type for a constant
-    // result, so this boundary shim keeps the committed body's exact behaviour instead.
-    // FLAG PC-platform leaf: serialised-vs-live type boundary (see above).
+    // The console's ValidateProfiles calls BrnNetwork::LiveRevengeProfile::ValidateProfile
+    // on the stored segment, and that inline (BrnNetworkLiveRevengeManager.h) is faithful:
+    // false unless the version word is 6. It cannot replace this shim yet. On PC the live
+    // block the segment is saved from is the zero-filled stand-in GuiModule::Prepare installs
+    // (not a LiveRevengeProfile::Clear()ed one), so every PC save carries version 0 and the
+    // real check would reject all of them. DELETE-WHEN the PC live block is Clear()ed (or the
+    // network module installs the real one) and saves written before that are handled.
     bool LiveRevengeProfile_ValidateProfile(const u8* /*lpSaveImage*/)
     {
         return true;

@@ -5,6 +5,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h" // CgsContainers::FastBitArray
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // CgsSystem::DateAndTime
 
@@ -64,11 +65,6 @@ struct RoadRulesRecvData
 {
     typedef s32 NetworkPlayerID;
 };
-}
-
-namespace CgsNetwork
-{
-static const BrnNetwork::RoadRulesRecvData::NetworkPlayerID K_INVALID_PLAYER_ID = -1;
 }
 
 namespace BrnNetwork

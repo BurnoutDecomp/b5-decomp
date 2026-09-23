@@ -154,7 +154,10 @@ namespace CgsNetwork
         void SetChatRestricted(bool lbIsChatRestricted);
         void HandleReceivedHeadsetStatus(VoIPNetworkPlayerID lPlayerID,
                                          ENetworkHeadsetPlayerStatus leStatus);
-        void SetGameSendingHeadsetStatus(bool lbGameIsHandlingHeadsetStatus);
+        void SetGameSendingHeadsetStatus(bool lbGameIsHandlingHeadsetStatus)
+        {
+            mbGameIsHandlingHeadsetStatus = lbGameIsHandlingHeadsetStatus;
+        }
 
         // Connection bitmask for the talker's server connection (external TU).
         u32 GetConnectionMask();

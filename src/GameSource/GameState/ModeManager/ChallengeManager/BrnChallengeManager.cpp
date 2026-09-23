@@ -5281,9 +5281,8 @@ void ChallengeManager::PostWorldUpdate(
 // ProcessEvent DISCRIMINANTS: the X360 jump table is RELATIVE (r11 = leEventType - 54, 120
 // slots), so the raw table cases 0/1/11/12/13/16/17/65/66/111/112/113/119 are the ABSOLUTE
 // event types 54/55/65/66/67/70/71/119/120/165/166/167/173. The frozen E_EVENT_* tags carry
-// exactly those values (each case is annotated `== raw N`). The two placeholder tags
-// E_EVENT_FREEBURN_CHALLENGE_SUCCESS_UPDATE/SUCCESS duplicate 165/166 and are deliberately
-// never switched on by name (keystone pitfall F5 note).
+// exactly those values (each case is annotated `== raw N`). E_EVENT_FREEBURN_CHALLENGE_SUCCESS_UPDATE
+// and E_EVENT_FREEBURN_CHALLENGE_SUCCESS (171/172) are not among them: they take the default arm.
 //
 // SetCurrentSkillScore's third argument (r6 at every callsite) is the "bank immediately"
 // flag: false for the in-progress event flavours (POWER_PARK/NEAR_MISS/DRIFT/ONCOMING/
