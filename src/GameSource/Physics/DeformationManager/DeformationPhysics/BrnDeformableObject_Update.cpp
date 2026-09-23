@@ -431,21 +431,37 @@ namespace Deformation
         // --- (2) gather the skinned tag-point offsets into the Verlet scratch (0x825DFB10..0x825DFB88)
         // `lwz r9, 0x4B10(r31)` is miNumTagPoints (this+0x4B10 -- the tag pool's count word, stored by
         // ResetDeformation @0x82639FD8 straight after the tag count is read; the tag base is 0x3B10 and
-        // the driven pool starts at 0x4B20). Walk EVERY live tag point; for each whose spec carries the
-        // skinned-point flag (`lbz r6, 0x41(spec)` == TagPointSpec::mbSkinnedPoint) store
-        // (mPos - spec.mInitialPosition) with w = mfScratchAmount (`lfs f0, 0x1C(tag)`) into
-        // maVerletOffsets_Scratch[row]; the row (r29 / r11 += 0x10) advances ONLY when the flag is set.
+        // the driven pool starts at 0x4B20). Walk EVERY live tag point; store (mPos -
+        // spec.mInitialPosition) with w = mfScratchAmount (`lfs f0, 0x1C(tag)`) into
+        // maVerletOffsets_Scratch[row] when the skinned-point flag (`lbz r6, 0x41(spec)` ==
+        // TagPointSpec::mbSkinnedPoint) is set; the row (r29 / r11 += 0x10) advances ONLY then.
         // The part walk in (3) then consumes the rows that follow.
         // (Was `li < miNumDrivenPoints` -- the wrong count word; retired 2026-09-02.)
+        //
+        // ⭐ WHICH TAG'S FLAG (crash parity G17-D3, 2026-09-23): the flag is read at the RUNNING ROW,
+        // not the loop index. Two cursors walk the tag array:
+        //   0x825DFB1C  addi r9, r31, 0x3B20    ; &maTagPoints[0].mpSpec -- the FLAG cursor
+        //   0x825DFB24  lwz r6, 0(r9) ; 0x825DFB28 lbz r6, 0x41(r6) ; beq skip
+        //   0x825DFB44  addi r9, r9, 0x20       ; ...advanced ONLY inside the skinned arm
+        //   0x825DFB18  addi r10, r31, 0x3B10   ; &maTagPoints[0] -- the DATA cursor (mPos @0x825DFB38,
+        //               mpSpec +0x20 initial @0x825DFB34/48, mfScratchAmount +0x1C @0x825DFB5C)
+        //   0x825DFB80  addi r10, r10, 0x20     ; ...advanced EVERY iteration
+        // The PS3 twin 0x6D7178 is the same (flag at 32*v11+15120+this+0x10 with v11 the running row;
+        // data at 32*v14 with v14 the loop index), so it is in the original source. So the console
+        // gathers the LEADING RUN of skinned tags: once the running row reaches an unskinned tag, that
+        // tag's flag is tested for every remaining index. The tree tested maTagPoints[li] (every
+        // skinned tag) behind a `lpSpec != nullptr` guard the console lacks. Inert on shipped data --
+        // a survey of all 430 retail VEH_*_AT.BIN finds no unskinned tag ahead of a skinned one
+        // (e.g. PUSMC01's four unskinned tags are 97..100, the LAST four) -- but a spec that had one
+        // would gather a different row set and start the part walk at a different row.
         s32 liScratchBase = 0;
         if ( miNumTagPoints > 0 )
         {
             for ( s32 li = 0; li < miNumTagPoints; ++li )
             {
-                TagPoint& lrTagPoint = maTagPoints[li];
-                const TagPointSpec* lpSpec = lrTagPoint.GetSpec();   // *v15 == mpSpec (TagPoint +0x10)
-                if ( lpSpec != nullptr && lpSpec->IsSkinned() )       // *(*v15 + 65) == mbSkinnedPoint
+                if ( maTagPoints[liScratchBase].GetSpec()->IsSkinned() )   // *(*r9 + 0x41): the RUNNING row's tag
                 {
+                    TagPoint& lrTagPoint = maTagPoints[li];                // r10: the loop index's tag supplies the data
                     const Vector3 lOffset = lrTagPoint.GetOffsetFromInitialPosition();  // mPos - initialPos
                     Vector3Plus& lrScratch = maVerletOffsets_Scratch[liScratchBase];
                     lrScratch.x = lOffset.x;
