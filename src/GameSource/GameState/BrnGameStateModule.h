@@ -1190,6 +1190,12 @@ public:
     // (X360 0x82363978); declare-only suffices for the per-TU `cl /c` gate.
     ::EActiveRaceCarIndex GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lPlayerID);
 
+    // [FX-GS 2026-09-23, crash-parity G11-D4] DWARF BrnGameStateModule.h:621
+    //   `RoadRulesRecvData::NetworkPlayerID GetNetworkPlayerID(EActiveRaceCarIndex)`, X360 0x823639C0:
+    // the inverse of the lookup above -- the active slot's CarData network player id, or -1.
+    // ModeManager::HandleOnlineTeamTakedowns calls it (@0x82344364) for the new runner of mode 13.
+    BrnNetwork::NetworkPlayerID GetNetworkPlayerID(::EActiveRaceCarIndex leActiveRaceCarIndex);
+
     // The loaded vehicle list (X360 reads the VehicleList* at this+284392 == 0x456E8). BODIED --
     // OnSpecialEventPlayerCarChange / ApplyCarStats / GetOriginalCarId all resolve their vehicle
     // records through it.

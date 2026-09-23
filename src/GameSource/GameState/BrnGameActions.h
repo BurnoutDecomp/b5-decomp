@@ -847,6 +847,16 @@ enum EGameActionType
     //      @0x823944F8/0x823944F0) and ::DetectOnlineCrashes @0x82394528 (@0x823947F8/0x823947F4).
     E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT       = 249,  // DWARF 239 (+10 X360); size 24 BAND
     E_ACTION_HUD_MESSAGE_X_CRASHES                       = 250,  // DWARF 240 (+10 X360); size 16 PINNED (translator case 250)
+    // ---- [FX-GS 2026-09-23, crash-parity G11-D4] the online team-takedown trio -----------------
+    // BAND (+8, the freeburn-challenge block 153..161 above and NEAR_MISS..TAILGATING 171..176 sit in
+    // it). ModeManager::HandleOnlineTeamTakedowns @0x823440B8 posts all three, each with the DWARF
+    // record's exact size:
+    //   166 `li r5,0xA6` + `li r6,4` @0x8234432C/0x82344324  a same-team takedown in mode 12/14/17
+    //   165 `li r5,0xA5` + `li r6,8` @0x823443B8/0x823443B0  mode 11, team 1 takes down team 2
+    //   167 `li r5,0xA7` + `li r6,4` @0x82344370/0x8234436C  mode 13, team 1 takes down team 2
+    E_ACTION_PLAYER_ELIMINATED                           = 165,  // DWARF 157 (+8 X360); size 8  BAND
+    E_ACTION_TRAITOROUS_TAKEDOWN                         = 166,  // DWARF 158 (+8 X360); size 4  BAND
+    E_ACTION_SWITCH_BURNING_HOME_RUN_RUNNER              = 167,  // DWARF 159 (+8 X360); size 4  BAND
     // 255: RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0, `li r5,0xFF` + `li r6,4`
     //      @0x823446BC/0x823446B8 AND again @0x823446D4/0x823446D0 (the console posts it twice,
     //      back to back). DWARF :248 E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION. [!] That is a
@@ -2601,6 +2611,37 @@ struct HUDMessageXCrashesAction : public GameAction<E_ACTION_HUD_MESSAGE_X_CRASH
 static_assert(sizeof(HUDMessageXCrashesAction) == 16 &&
               offsetof(HUDMessageXCrashesAction, meRivalRaceCarIndex) == 8,
               "X360 posts action 250 with size 16; the index at +8");
+
+// [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3256-3260. Producer
+// ModeManager::HandleOnlineTeamTakedowns @0x823440B8: `stw victim, var+0` @0x8234439C,
+// `stb (blue players left == 1), var+4` @0x823443A4, `stb (victim == player), var+5` @0x823443C4,
+// size 8.
+struct PlayerEliminatedAction : public GameAction<E_ACTION_PLAYER_ELIMINATED>
+{
+    ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00  the eliminated (taken down) car
+    bool                  mbLastBlueTeamMember;   // +0x04
+    bool                  mbLocalPlayerEliminated;// +0x05
+};
+static_assert(sizeof(PlayerEliminatedAction) == 8 &&
+              offsetof(PlayerEliminatedAction, mbLastBlueTeamMember) == 4 &&
+              offsetof(PlayerEliminatedAction, mbLocalPlayerEliminated) == 5,
+              "X360 posts action 165 with size 8; flags at +4/+5");
+
+// [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3242-3244. Producer
+// HandleOnlineTeamTakedowns: `stw aggressor, var+0` @0x82344328, size 4.
+struct TraitorousTakedownAction : public GameAction<E_ACTION_TRAITOROUS_TAKEDOWN>
+{
+    ::EActiveRaceCarIndex meAggrActiveRaceCarIndex;   // +0x00
+};
+static_assert(sizeof(TraitorousTakedownAction) == 4, "X360 posts action 166 with size 4");
+
+// [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:5417-5419. Producer
+// HandleOnlineTeamTakedowns: `stw GetNetworkPlayerID(aggressor), var+0` @0x82344368, size 4.
+struct SwitchBurningHomeRunRunnerAction : public GameAction<E_ACTION_SWITCH_BURNING_HOME_RUN_RUNNER>
+{
+    BrnNetwork::NetworkPlayerID mNewRunnerPlayerID;   // +0x00
+};
+static_assert(sizeof(SwitchBurningHomeRunRunnerAction) == 4, "X360 posts action 167 with size 4");
 
 // =============================================================================================
 // [takedown wave 2026-09-02] The five records BrnGameState::TakedownManager posts

@@ -696,6 +696,9 @@ namespace BrnGameState
             void            SetDisconnected(bool lbDisconnected) { mbDisconnected = lbDisconnected; } // +0x69 (Set/Clear-PlayerDisconnected)
             CgsSystem::Time GetTimeAsRunner() const         { return mTimeAsRunner; }           // +0x84
             bool            GetCompletedBurningHomeRun() const { return mbCompletedBurningHomeRun; } // +0xBC
+            // [FX-GS 2026-09-23, crash-parity G11-D4] the flag's one writer:
+            // ModeManager::HandleOnlineBurningHomeRunCheckForModeFinished `stb 1, 0xBC(r3)` @0x82328B3C.
+            void            SetCompletedBurningHomeRun(bool lbCompleted) { mbCompletedBurningHomeRun = lbCompleted; } // +0xBC
             s32             GetCumulativeCheckpoints() const { return miCumulativeCheckpoints; } // +0xC4
 
             // Writeback. Both scorers write the same two physical slots in the same order: first the

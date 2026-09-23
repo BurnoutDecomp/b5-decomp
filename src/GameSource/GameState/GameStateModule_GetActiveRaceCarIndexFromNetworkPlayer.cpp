@@ -57,4 +57,27 @@ namespace BrnGameState
     return lpCarData->GetActiveRaceCarIndex();
 }
 
+// ----------------------------------------------------------------------------
+// GetNetworkPlayerID -- X360 0x823639C0 (DWARF BrnGameStateModule.h:621). The inverse of the body
+// above, register for register [FX-GS 2026-09-23, crash-parity G11-D4]:
+//     0x823639CC  addi  r3, r3, 0x1DD0        ; r3 = &mModeManager.mScoringSystem
+//     0x823639D0  bl    sub_8231DCD0          ; ScoringSystem::GetCarData(EActiveRaceCarIndex) const
+//                                             ;   (asserts the index, :2813) -- r4 forwarded
+//     0x823639D4  cmplwi r3, 0 ; beq -> li r3, -1
+//     0x823639DC  lwz   r3, 0x148(r3)         ; CarData::mNetworkPlayerID (+328)
+// The console calls the CONST GetCarData twin; the const ScoringSystem reference below binds it.
+// ----------------------------------------------------------------------------
+BrnNetwork::NetworkPlayerID GameStateModule::GetNetworkPlayerID(::EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    const ScoringSystem& lrScoringSystem = *mModeManager.GetScoringSystem();
+    const CarData* lpCarData = lrScoringSystem.GetCarData(leActiveRaceCarIndex);
+
+    if (lpCarData == NULL)
+    {
+        return -1;
+    }
+
+    return lpCarData->GetNetworkPlayerID();
+}
+
 } // namespace BrnGameState
