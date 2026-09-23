@@ -5424,8 +5424,17 @@ namespace Vehicle
                 vpu::TransformPoint(mTransform, lrWheel.mPosition),
                 vpu::Mult(lrPlaneNormal, lfRadius));
 
+            // G52-D1 (crash parity 2026-09-23): the reach is compared against the LINE-PLANE
+            // DISTANCE t, not 0. 0x825F6EB0 vmulfp128 v13 = recip(dot(n,-n)) * (dot(n,contact) -
+            // dot(n,W)) = t, stored to var_190; 0x825F6EB8 lfs f31 = t; 0x825F700C stfs f31,var_1D0
+            // (var_1CC..1C4 zeroed); 0x825F7058/705C lvx128 + vspltw v4 = splat(t).
+            // 0x825F7048 vsubfp v3 = splat(p.y) - splat(wheel+0x60 .x); 0x825F7060 vaddfp
+            // v13 = v3 + splat(wheel+0x40 .w radius); 0x825F7064 vcmpgefp. v13,v13,v4 -- CR6
+            // all-true gates the Up.n > 0.5 test and the repair. (PS3 twin 0x6ECEF0 agrees:
+            // 0x6ED51C vcmpgefp. v1,v1,v0 with v1 = (p.y - susp.x) + r and v0 = lfLinePlaneDist
+            // in all four lanes.) vcmpgefp is false on NaN, as >= is here.
             const bool lbWheelWithinSuspensionReach =
-                (lrWheel.mPosition.y - lfMinSuspensionHeight + lfRadius) >= 0.0f;
+                (lrWheel.mPosition.y - lfMinSuspensionHeight + lfRadius) >= lfLinePlaneDistance;
             const bool lbRoadFacesVehicleUp =
                 vpu::Dot(mTransform.yAxis, lrPlaneNormal) > 0.5f;
 
