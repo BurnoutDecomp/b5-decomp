@@ -13,6 +13,8 @@
 // the X360-inlined helpers they are written through (the victim ChangeState, IsCountdownComplete,
 // RemoveCountdown, DirtyTrickEnding), and HandleTriggeringPayback's GUI record through
 // DirtyTrickTriggered (G12-D2).
+// [FX-GS2 2026-09-23] HandleWaitForPaybackAggressorToCrash reads CrashingRaceCarInterface::
+// IsCrashing (b5 27ad7089) instead of a pinned false (G12-D1).
 //
 // Source-of-truth: X360 ASM (behaviour + calling convention) > DecFIGS DWARF (shape) > none.
 // ===================================================================================
@@ -418,6 +420,14 @@ namespace BrnGameState
     // Snapshot the per-car "is crashing" flags from this frame's vehicle output; if the LOCAL player's
     // race car is now crashing, the payback is earned: cancel the aggressor timer, advance the FSM to
     // AWARD_DT, clear the awarded flag and show the payback HUD.
+    //     0x8239780C  assert "lpVehicleOutputInterface" (non-gating, line 355)
+    //     0x8239783C  bl  CrashingRaceCarInterface::SetFromVehicleOutputInterface (stack copy)
+    //     0x82397844  bl  GameStateModule::GetPlayerActiveRaceCarIndex
+    //     0x82397848  addi r11, r1, var_20 ; lbzx r11, r3, r11   -- IsCrashing(player), no assert
+    //     0x82397854  beq -> return; else flt_820037C8 (-1.0) -> +0x24C, `li r10, 2` -> +0x25C,
+    //                 0 -> +0x266, AddEvent(outGui, &1, 0xB0, 4)
+    // [FX-GS2 G12-D1] The test was a pinned `false` (FLAG placeholder) while IsCrashing had no body;
+    // it has its inline body now (b5 27ad7089), so the console's own read is back.
     // -----------------------------------------------------------------------------------
     void
     PaybackManager::HandleWaitForPaybackAggressorToCrash(
@@ -431,14 +441,7 @@ namespace BrnGameState
         const s32 liPlayerRaceCarIndex =
             static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex());
 
-        // FLAG parked: CrashingRaceCarInterface::IsCrashing is declared with no body anywhere in
-        // the tree, and the flag array it reads is private, so this arm's test cannot be taken.
-        // FLAG placeholder, not a recovered value -- the arm is held shut until that body lands.
-        const bool lbPlayerIsCrashing = false;
-        (void)lCrashingRaceCars;
-        (void)liPlayerRaceCarIndex;
-
-        if (lbPlayerIsCrashing)
+        if (lCrashingRaceCars.IsCrashing(liPlayerRaceCarIndex))
         {
             mfPaybackAggTimer       = -1.0f;                                 // +588
             mePaybackAggressorState = E_PAYBACK_AGGRESSOR_STATE_AWARD_DT;    // +604 = 2
