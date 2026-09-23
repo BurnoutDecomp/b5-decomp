@@ -884,6 +884,20 @@ public:
     // the stunt leg are the console's.
     void PreWorldUpdateTrainingBringUp(f32 lfGameTimestep);
 
+    // [FX-GS2 2026-09-23, crash-parity G10-D11] X360 0x82375F90 -- CheckForTailingRivals (DWARF
+    // BrnGameStateModule.h:808). PreWorldUpdate @0x823A5328 calls it at 0x823A57A0, just before the
+    // training leg above: r4 = the output buffer, r5 = gsm+0x3D3C0 (the module's post-world copy of
+    // the vehicle output, mpTakedownCache->mVehicleOutputInterface here), f1 = the game timestep.
+    // Posts GameStateToGuiInterface's on-tail record for each rival that has sat within 20 m behind
+    // the player at speed for 3 s. Body in GameStateModule_gUI_00.cpp.
+    void CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpOutput,
+                               const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutput,
+                               f32 lfTimeStep);
+    // The per-slot tailing clock CheckForTailingRivals keeps (X360 gsm+0x32D90 + 4 * slot). Slot 7
+    // is the word after mafRivalTailingTimes -- see the quirk note at that member.
+    f32  GetRivalTailingTime(s32 liRaceCarIndex) const;
+    void SetRivalTailingTime(s32 liRaceCarIndex, f32 lfTime);
+
     // ⭐ [tut-ticker] X360 0x82356DB0 -- ShouldAllowTimedTutorialTips. True only when the player
     // car is live and nothing suppresses ambient tips. Console reads, in order:
     //   * the embedded interface (this+235488): mePlayerActiveRaceCarIndex != -1 (with the
@@ -1482,6 +1496,16 @@ private:
 
     // DWARF BrnGameStateModule.h:771. The by-value ModeManager that owns the current game mode.
     ModeManager         mModeManager;
+    // DWARF BrnGameStateModule.h:792 (X360 this+0x32D90..0x32DAB) -- how long each rival has sat on
+    // the player's tail (CheckForTailingRivals). [FX-GS2 2026-09-23, G10-D11]
+    // ⚠️ FLAG (initialisation site only, the muNetworkGameRandomSeed precedent below): the console
+    // zeroes it in ClearData @0x8236B3A8 (std 0 at +0/+8/+0x10 and stw 0 at +0x18 from gsm+0x32D90),
+    // which is not reconstructed on this build, so the zeroes are a member initialiser.
+    // ⚠️ CONSOLE QUIRK, KEPT: CheckForTailingRivals walks race-car slots 0..7 with a pointer that
+    // steps 4 bytes per slot -- even across the player's own slot (`addi r27, r27, 4` @0x82376384)
+    // -- so slot 7 is the word AFTER this 7-entry array, i.e. muNetworkGameRandomSeed.
+    // Get/SetRivalTailingTime route slot 7 to that word's bits instead of indexing out of bounds.
+    f32                 mafRivalTailingTimes[7] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
     // DWARF BrnGameStateModule.h:793 (X360 this+208300) -- the seed word for the online session's
     // shared RNG, declared immediately ABOVE mePlayerActiveRaceCarIndex by the DWARF and landing in
     // exactly the 4-byte gap the X360 leaves there. See GetNetworkRandomSeed() for the writer and

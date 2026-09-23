@@ -233,5 +233,25 @@ void GameStateToGuiInterface::AddNewDirtyTrick(::EActiveRaceCarIndex leAggressor
     mNewDirtyTrickQueue.AddEvent(lEvent);                 // this + 4
 }
 
+// -----------------------------------------------------------------------------
+// AddOnTailEvent (DWARF BrnGameStateToGuiIOInterfaces.h:121) -- publish "this rival is on the
+// player's tail" to the GUI. [FX-GS2 2026-09-23, crash-parity G10-D11] No out-of-line console
+// body: GameStateModule::CheckForTailingRivals @0x82375F90 inlines it at 0x82376350..0x82376378:
+//     bl   RCEntityActiveRaceCarOutputInterface::GetRivalId  ; the rival's car id (u64)
+//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
+//     stw  r30, var_B8           ; the slot  -> record +0x8
+//     addi r3, r3, 0x160         ; mOnTailEventQueue
+//     std  r31, var_C0           ; the id    -> record +0x0
+//     bl   GameStateToGuiOnTailEvent AddEvent 0x82368E80   (a 16-byte copy, length++)
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    GameStateToGuiOnTailEvent lEvent;
+    lEvent.mOfflineRivalCarID         = lOfflineRivalCarID;     // record +0x0
+    lEvent.meOnTailActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x8
+
+    mOnTailEventQueue.AddEvent(lEvent);                         // this + 0x160
+}
+
 }
 }

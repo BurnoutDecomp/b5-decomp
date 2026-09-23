@@ -11,6 +11,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"     // BrnProgression::ProgressionManager::GetProfile
 #include "GameSource/GameState/Progression/BrnProfile.h"                // BrnProgression::Profile::SetCarUnlockAlreadyShown
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // GameStateModuleIO::OutputBuffer (owned by pointer)
+#include "GameSource/GameState/BrnGameStateTakedownCache.h"             // [FX-GS2 G10-D11] mpTakedownCache->mVehicleOutputInterface (CheckForTailingRivals' r5)
 #include "GameSource/GameState/BrnGameEvents.h"                         // [returning-player wave] E_GUI_HAS_STARTED_GAME (the case-78 trigger)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> (the carry-queue walk)
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"    // [gateui] the complete type mpTrainingManager is newed as (see its FLAG in the header)
@@ -1582,6 +1583,14 @@ void GameStateModule::PreWorldUpdateTrainingBringUp(f32 lfGameTimestep)
     CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
 
     mbIsUpdating = true;   // the module's own accessors assert this (IsOnlineGameMode et al.)
+    // [FX-GS2 2026-09-23, G10-D11] PreWorldUpdate @0x823A5328 calls CheckForTailingRivals at
+    // 0x823A57A0, immediately before ShouldAllowTimedTutorialTips (0x823A57A8): r4 = the output
+    // buffer, r5 = gsm+0x3D3C0 (the post-world vehicle-output copy -- mpTakedownCache here),
+    // f1 = the same game timestep TrainingManager::Update gets.
+    if (mpTakedownCache != 0)
+    {
+        CheckForTailingRivals(mpOutputBuffer, &mpTakedownCache->mVehicleOutputInterface, lfGameTimestep);
+    }
     const bool lbAllowTimedTips = ShouldAllowTimedTutorialTips();
     mpTrainingManager->Update(lpActionQueue, &mLastActiveRaceCarInterface,
                               lfGameTimestep, lbAllowTimedTips);
