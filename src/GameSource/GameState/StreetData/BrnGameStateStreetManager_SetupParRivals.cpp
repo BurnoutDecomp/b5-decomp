@@ -64,6 +64,8 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                  // CgsNumeric::Random
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h" // CgsResource::BinaryFileResource::GetData
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint ([parrivals] witness)
+#include <cstdlib>                                                     // getenv ([parrivals] witness gate)
 
 namespace
 {
@@ -80,12 +82,14 @@ namespace
     const Vector2 KV2_DISTRICT_MAP_WORLD_ORIGIN = { -4208.0f, -3846.0f, 0.0f, 0.0f };   // unk_82FADAA0
     const Vector2 KV2_DISTRICT_MAP_WORLD_SIZE   = {  8270.0f,  6101.0f, 0.0f, 0.0f };   // unk_82FADD60
 
-    // The LCG state SetupParRivals draws its rival picks from, materialised as a
-    // 64-bit immediate at 0x8233F5D8..0x8233F5E8 (lis/ori 0x2EC654DA + insrdi of
-    // 0xB5E330D0 into the high half). It is NOT the state CgsNumeric::Random::
-    // Construct() leaves behind (that spine is DEAD here -- the ring buffer is
-    // never read, only muSeed is), so the seed is installed explicitly.
-    const u64 KU_PAR_RIVAL_SELECTION_SEED = 0xB5E330D02EC654DAull;
+    // The LCG state SetupParRivals draws its rival picks from is materialised as a 64-bit
+    // immediate at 0x8233F5D8..0x8233F5E8 (lis/ori 0x2EC654DA + insrdi of 0xB5E330D0 into the
+    // high half) and stepped in r27 (0x8233F898 `srdi` / 0x8233F89C `mulld`). That immediate IS
+    // the state CgsNumeric::Random::Construct() leaves: Construct is SetSeed(DWARF default seed
+    // 2413850050), whose eight priming steps take 2413850050 to exactly 0xB5E330D02EC654DA. The
+    // ring buffer is never read here, so the compiler folded the whole prime into the constant;
+    // the source is a bare Construct(). [FX-GS2 2026-09-23, G12-D11] A SetSeed(0xB5E330D02EC654DA)
+    // used to follow the Construct(), and it moved the seed off the console's value.
 }
 
 namespace BrnGameState
@@ -148,8 +152,7 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
     }
 
     CgsNumeric::Random lRandom;
-    lRandom.Construct();
-    lRandom.SetSeed( KU_PAR_RIVAL_SELECTION_SEED );
+    lRandom.Construct();   // muSeed == 0xB5E330D02EC654DA, the console's r27 (see the note above)
 
     // ⚠️ PC HARDENING (2026-08-11) -- documented deviation, NOT a placeholder.
     // The console dereferences mDistrictMapResourceHandle UNCONDITIONALLY here (0x8233F5BC
@@ -268,6 +271,27 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
                     }
                 }
             }
+        }
+    }
+
+    // [FLAG PC witness] -- NOT IN THE X360 BINARY. Opt-in behind BRN_PROGRESSION_RIVALS (the
+    // progression_rivals case's gate), first 2 calls only: proves the pick loop ran to the end on
+    // this boot and fingerprints the first roads' picks, which are drawn from Construct()'s
+    // 0xB5E330D02EC654DA (FX-GS2, G12-D11). DELETE-WHEN: the par-rival picks have a live oracle.
+    {
+        static s32 siParRivalsWitnessed = 0;
+        if ( siParRivalsWitnessed < 2 && getenv( "BRN_PROGRESSION_RIVALS" ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++siParRivalsWitnessed;
+            *CgsDev::Log::gpDebugPrint << "[parrivals] SetupParRivals done: roads="
+                                       << static_cast<s32>( mpStreetData->GetRoadCount() );
+            for ( s32 liRoad = 0; liRoad < 4 && liRoad < mpStreetData->GetRoadCount(); ++liRoad )
+            {
+                *CgsDev::Log::gpDebugPrint << " r" << liRoad << "="
+                                           << static_cast<u64>( maaParRivalIds[liRoad][0] ) << ","
+                                           << static_cast<u64>( maaParRivalIds[liRoad][1] );
+            }
+            *CgsDev::Log::gpDebugPrint << " [FLAG PC witness]\n";
         }
     }
 }
