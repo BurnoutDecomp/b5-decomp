@@ -8,6 +8,10 @@
 #     that arm right before the new SetBit / glass-clear legs).
 #   * G68-D6 action 205 on a player crash -> the `[reset-mirror]` line of the next player reset
 #     (BRN_CRASH_RESPONSE_DIAG) carries mirrorType 0 (reported, not required: the player may not crash).
+#   * G61-D6 ActiveRaceCar::OnResourcesLoaded now calls ResetVerletOffsets (0x822EB404): the
+#     `[PLACEONTRACK] race car N resources loaded` line is printed right after that call returns.
+#   * G13-X5 BrnGui::OfflineRivalShutdown (POST_RIVAL) is constructed by BrnScreenFlow::Prepare at
+#     boot; its presentation is unreachable until the 120 -> GUI 373 arm lands (no-regression only).
 #   python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/Rcem2Live.ps1 --run-name rcem2_live
 $case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
 $case.Name = 'rcem2_live'
@@ -19,6 +23,7 @@ $case.Checks = @(
     @{ Kind = 'Mark'; Name = 'reached driving'; Phase = 'DRIVING' }
     @{ Kind = 'LogMatch'; Name = 'G68-D5 case 29 armed the intro timer'; Pattern = '\[intro-timer\] armed'; Expect = $true }
     @{ Kind = 'LogMatch'; Name = 'G68-D5 UpdateRaceCars_PreScene released the rivals'; Pattern = '\[intro-timer\] expired -> SetAllCarsOnStartLine\(ROLLING_START'; Expect = $true }
+    @{ Kind = 'LogMatch'; Name = 'G61-D6 OnResourcesLoaded (-> ResetVerletOffsets) was dispatched'; Pattern = '\[PLACEONTRACK\] race car \d+ resources loaded -> E_STATE_WAITING'; Expect = $true }
     @{ Kind = 'LogMatch'; Name = 'G67-D4/D5 the live-car reset arm ran'; Pattern = '\[teleport\] ResetActiveRaceCar RE-RESET car'; Expect = $true }
     @{ Kind = 'Script'; Name = 'G68-D6 player reset mirrors (report)'; Script = {
         param($ctx)
