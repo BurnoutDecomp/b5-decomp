@@ -76,6 +76,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/World/AI/BrnAISharedConstants.h"   // BrnAI::EResetType
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"   // KU_FLAG_AI_PERSISTENT_DAMAGE
 
 namespace BrnWorld
 {
@@ -93,6 +94,31 @@ namespace
     //   0x82C4BB50..0x82C4BB68  flt_82FAD8C0 = flt_82F31928 (0.44704) * flt_82019A30 (75.0)
     const f32 KF_RESET_ON_TRACK_SPEED        = 0.44704f * 50.0f;   // flt_82FAD720, 50 mph in m/s
     const f32 KF_RESET_ON_TRACK_SPEED_ONLINE = 0.44704f * 75.0f;   // flt_82FAD8C0, 75 mph in m/s
+}
+
+// =================================================================================================
+// X360 0x822A4A38 -- GetPersistentDamageCarCount (G67-D2). Its only caller is the persistent-
+// damage arm of ProcessRaceCarCrashCompleteEvents below (bl at 0x822F4168): it caps the carry-over
+// at three damaged rivals.
+//   for (i = 0; i < 35; ++i)                  -- cmpwi 0x23; sub_822A3628 == &maRaceCars[i]
+//     assert muType < 4                       (BrnRaceCar.h:482)
+//     if (muType == 3) continue               -- E_RACE_CAR_TYPE_INACTIVE
+//     if (mfPersistentDamage > 0.0f) ++count  -- fcmpu flt_82001CC0 ; ble skips (NaN too)
+// =================================================================================================
+s32 RaceCarEntityModule::GetPersistentDamageCarCount() const
+{
+    s32 liCount = 0;
+    for( s32 liIndex = 0; liIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liIndex )
+    {
+        const RaceCar& lrRaceCar = maRaceCars[liIndex];
+        CGS_ASSERT( lrRaceCar.GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT" );
+
+        if( lrRaceCar.GetType() != E_RACE_CAR_TYPE_INACTIVE && lrRaceCar.GetPersistentDamage() > 0.0f )
+        {
+            ++liCount;
+        }
+    }
+    return liCount;
 }
 
 // =================================================================================================
@@ -127,13 +153,32 @@ namespace
 // committed RaceCar::RequestResetOnTrack signature matches exactly, and Hex-Rays' rendering of
 // this call (five positional args, one of them the uninitialised `v31`) does not.
 //
-// ⛔ THE AI RE-COLOUR BLOCK IS PARKED. It is ~200 of the 359 instructions and it re-rolls a
-// TAKEN-DOWN AI car's paint from the global colour palette (GetPersistentDamageCarCount,
-// GetRandomCarColour, GlobalColourPalette, the four "Invalid Colour Index" asserts). It is gated
-// on GetGameModeFlag(0x40000000) AND ActiveRaceCar::mbTakenDown, and on this build there is
-// exactly one race car -- the player -- who is never an AI (muType == 1) and never taken down.
-// ⭐ The `mbTakenDown = false` store that FOLLOWS the block is NOT parked: it is outside it on the
-// console (0x822F4394 is the merge point of both arms) and it is real bookkeeping.
+// ⭐ THE PERSISTENT-DAMAGE ARM (0x822F40C8..0x822F4390) -- LANDED 2026-09-23 (crash parity
+// G67-D1). The old banner parked the whole block on "there is exactly one race car -- the
+// player"; that stopped being true when rivals landed, and the PARK line fired in ~20 banked
+// runs (e.g. aimod_rival_damage/20260922_220959 BrnGame.log:27804, car 1). In a mode carrying
+// KU_FLAG_AI_PERSISTENT_DAMAGE (Road Rage, Survivor, Marked Man) every taken-down AI rival
+// carries 0.3 more damage into its respawn -- at most three rivals carry damage at once:
+//   0x822F40C8  GetGameModeFlag(0x40000000) ; 0x822F40E0 lbz 0x789 (mbTakenDown)
+//   0x822F40F0  IsAttached assert (:1089) ; lwz 0x6F0 ; muType < 4 assert (BrnRaceCar.h:603)
+//   0x822F4140  lbz 0xA4 == 1 (E_RACE_CAR_TYPE_AI) else skip
+//   0x822F4158  lfs 0xA0 > 0.0f -> increase   ||   GetPersistentDamageCarCount() < 3 -> increase
+//               otherwise straight to the re-colour (0x822F4174)
+//   0x822F4264  IncreasePersistentDamage (inlined) ; true -> re-colour (0x822F4298), false -> done
+// The damage reaches the car on its next reset: ResetActiveRaceCar's non-player arm reads it
+// (G67-D3) into ResetRaceCar's lfHowCloseToTotalled, which WriteOutVehicleStats hands to
+// DeformableObject::ResetDeformation as the initial damage -- the rival comes back crumpled.
+//
+// ⛔ ONLY THE RE-COLOUR LEG STAYS PARKED (0x822F4174..0x822F4260 and 0x822F4298..0x822F4390):
+// `miColourIndex = GetGameModeFlag(KU_FLAG_SET_OPPONENTS_TO_COPS) ? 6 :
+// GetRandomCarColour(miColourPalette, -1)` plus its "Invalid Colour Index" asserts. It indexes
+// maPalettes[miColourPalette], and on this build a rival's palette is still RaceCar::Reset's -1:
+// its console writer SetupCarColour @0x822F5170 (called from OnRaceCarResourcesLoaded) has no
+// body yet (G61-D6). Running the leg now would read maPalettes[-1]. It lands with
+// SetupCarColour, GetRandomCarColour @0x822EA088 and IsCarColourInUse @0x822D2E68 (the
+// RaceCarEntityModule fix lane, CHAIN-RECOLOUR). The damage does not depend on the colour.
+// ⭐ The `mbTakenDown = false` store that FOLLOWS the block is NOT part of it: it is outside it
+// on the console (0x822F4394 is the merge point of both arms) and it is real bookkeeping.
 // =================================================================================================
 void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
     const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput )
@@ -172,17 +217,47 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
                 << " remove=" << ( lrEvent.mbRemoveRaceCar ? 1 : 0 ) << "\n";
         }
 
-        // 0x822F40C8..0x822F4390 -- the taken-down AI re-colour block. PARKED, see the banner.
-        if( GetGameModeFlag( 0x40000000ull ) && lpActiveRaceCar->IsTakenDown() )
+        // 0x822F40C8..0x822F4390 -- the taken-down AI persistent-damage block. See the banner.
+        if( GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_AI_PERSISTENT_DAMAGE ) &&
+            lpActiveRaceCar->IsTakenDown() )
         {
-            static bool sbLoggedRecolourPark = false;
-            if( !sbLoggedRecolourPark && CgsDev::Log::gpDebugPrint != 0 )
+            RaceCar* lpTakenDownCar = lpActiveRaceCar->GetGlobalRaceCar();
+            CGS_ASSERT( lpTakenDownCar->GetType() < E_RACE_CAR_TYPE_COUNT,
+                        "muType < E_RACE_CAR_TYPE_COUNT" );
+
+            if( lpTakenDownCar->GetType() == E_RACE_CAR_TYPE_AI )
             {
-                sbLoggedRecolourPark = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[crash-exit] ProcessRaceCarCrashCompleteEvents PARK: the taken-down AI"
-                       " re-colour block (GetPersistentDamageCarCount / GetRandomCarColour /"
-                       " GlobalColourPalette) is not reconstructed [FLAG]\n";
+                const f32 lfDamageBefore = lpTakenDownCar->GetPersistentDamage();
+                bool lbRecolour = true;
+                if( lfDamageBefore > 0.0f || GetPersistentDamageCarCount() < 3 )
+                {
+                    lbRecolour = lpTakenDownCar->IncreasePersistentDamage();
+                }
+
+                // [DIAG] NOT IN THE X360 BINARY -- one line per credited AI takedown in a
+                // persistent-damage mode: what the rival will carry into its respawn.
+                if( CgsDev::Log::gpDebugPrint != 0 )
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[persist-damage] car " << static_cast<s32>( luActiveRaceCarIndex )
+                        << " damage " << lfDamageBefore << " -> "
+                        << lpTakenDownCar->GetPersistentDamage()
+                        << " recolour " << ( lbRecolour ? 1 : 0 ) << "\n";
+                }
+
+                if( lbRecolour )
+                {
+                    // 0x822F4174 / 0x822F4298 -- the re-colour leg. PARKED, see the banner.
+                    static bool sbLoggedRecolourPark = false;
+                    if( !sbLoggedRecolourPark && CgsDev::Log::gpDebugPrint != 0 )
+                    {
+                        sbLoggedRecolourPark = true;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[crash-exit] ProcessRaceCarCrashCompleteEvents PARK: the"
+                               " taken-down AI re-colour leg (GetRandomCarColour, needs"
+                               " SetupCarColour's palette) is not reconstructed [FLAG]\n";
+                    }
+                }
             }
         }
 

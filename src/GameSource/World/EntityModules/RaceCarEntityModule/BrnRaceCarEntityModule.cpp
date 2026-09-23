@@ -1515,12 +1515,14 @@ void RaceCarEntityModule::ResetActiveRaceCar(
         // the crash CORPUS: a sweep shot IS a place-on-track, so the guard in BrnDeformationSensor
         // .cpp and crash_sweep_report.py's discard are what keep that out of the numbers.
         //
-        // ⛔ PARK -- the NON-player arm (0x822F4A7C..0x822F4AC4) reads two module flags at +0x18358
-        //    (a 64-bit BitArray word, `rlwinm 0,1,1`) and +0x18345, and on either takes
-        //    lfHowCloseToTotalled from GetGlobalRaceCar()+0xA0. Both flags are unnamed bytes inside
-        //    maTailPadA0/B0 and neither has a reconstructed writer, so guessing them would decide
-        //    an AI car's damage carry-over. Left alone, LOUDLY, exactly as PARK 1 was until its
-        //    inputs landed.
+        // ⭐ THE NON-player arm (0x822F4A7C..0x822F4AFC) -- LANDED 2026-09-23 (crash parity G67-D3).
+        //    `ldx this+0x18358 ; rlwinm 0,1,1` == GetGameModeFlag(KU_FLAG_AI_PERSISTENT_DAMAGE),
+        //    or `lbzx this+0x18345` == mbIsInOnlineGameMode; on either, lfHowCloseToTotalled =
+        //    GetGlobalRaceCar()->mfPersistentDamage (lfs f31, 0xA0) and the type stays -1. The old
+        //    PARK called both flags unnamed with no writer; both are named and written in
+        //    ModeArming.cpp (mxGameModeFlags :143, mbIsInOnlineGameMode :92). Its producer is the
+        //    persistent-damage arm of ProcessRaceCarCrashCompleteEvents (G67-D1), so a Road Rage /
+        //    Survivor / Marked Man rival respawns carrying 0.3 / 0.6 / 0.9 initial deformation.
         // ⭐ The console spells this test as `GetActiveRaceCar(*(this+0x182F8))` and compares the
         // returned POINTER with r31 (0x822F4A34/0x822F4A38). The map index -> &maActiveRaceCars[i]
         // is a pure injective array index, so comparing the INDICES is the same test with the same
@@ -1545,15 +1547,16 @@ void RaceCarEntityModule::ResetActiveRaceCar(
                 lfHowCloseToTotalled = mfPlayerBaseDeformAmountMirror; // lfsx @0x822F4A74
             }
         }
-
-        // ⛔ NOT REPRODUCED, DELIBERATELY: the `lfHowCloseToTotalled >= 0.0f && <= 1.0f` assert at
-        // 0x822F4AE0 (BrnRaceCarEntityModule.cpp:1896; bounds flt_82001CC0 == 0.0f and
-        // flt_82001C98 == 1.0f, both read out of the image). It is NOT a check on the value this
-        // function passes -- it sits INSIDE the non-player arm, after `lfs f31, 0xA0(globalRaceCar)`
-        // at 0x822F4AC4, and both player arms branch straight to loc_822F4B00 (0x822F4A5C /
-        // 0x822F4A78) without ever reaching it. Hoisting it to cover the player mirror would be an
-        // INVENTED ARM on a build where an assert BLOCKS the sim -- the exact defect class that put
-        // 839,983 asserts in one run. It belongs with the parked non-player arm; it lands with it.
+        else if( GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_AI_PERSISTENT_DAMAGE ) ||
+                 mbIsInOnlineGameMode )
+        {
+            lfHowCloseToTotalled = lpGlobalRaceCar->GetPersistentDamage();   // lfs f31, 0xA0 @0x822F4AC4
+            // 0x822F4AC8..0x822F4AFC (:1896, string @0x8201E5C4). The upper bound is `blt` against
+            // flt_82001C98 == 1.0f, so it is STRICT; IncreasePersistentDamage never leaves 1.0f.
+            // It lives only on this arm -- both player arms branch past it (0x822F4A5C/0x822F4A78).
+            CGS_ASSERT( lfHowCloseToTotalled >= 0.0f && lfHowCloseToTotalled < 1.0f,
+                        "lfHowCloseToTotalled >= 0.0f && lfHowCloseToTotalled < 1.0f" );
+        }
 
         // ---- [reset-mirror] DIAG. NOT IN THE X360 BINARY. Opt-in (BRN_CRASH_RESPONSE_DIAG=1). ---
         // Prints BOTH halves of the arm above on every live-car reset, so a run can say whether the
