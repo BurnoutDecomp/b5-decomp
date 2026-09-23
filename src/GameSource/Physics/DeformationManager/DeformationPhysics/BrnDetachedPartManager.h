@@ -186,6 +186,11 @@ namespace Deformation
             return mPartPool.GetPart(static_cast<s16>(lu16Index));
         }
 
+        // ⭐ ADDED 2026-09-23 (crash parity G24-D2). The manager's one member, by name -- for
+        // DeformationManager::ProcessAddDeformationModelEvents' unconditional pool-slot-0 row store
+        // (see PhysicalBodyPartPool::GetPartSlot). Header-only, no storage.
+        PhysicalBodyPartPool& GetPartPool() { return mPartPool; }
+
         // BrnDetachedPartManager.h:117. Whether the given pool slot index is currently in use.
         // ⭐ INLINE (same evidence as above).
         bool IsPartIndexUsed(s32 liIndex)

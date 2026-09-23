@@ -470,6 +470,46 @@ namespace Deformation
             mpaModels[liModelIndex].Prepare(lpSimInput, static_cast<u16>(liModelIndex), lrEvent,
                                             lpSceneInterface, &mDetachedPartManager,
                                             &mDetachedWheelManager, mRandom);
+
+            // ⭐ THE LOOP-INVARIANT ROW ZERO (crash parity G24-D2, 2026-09-23). Unconditionally after
+            // Prepare (its result is ignored), both consoles zero ONE 16-byte row:
+            //     0x82644DB8 mulli r11,r31(model),0x700 ; 0x82644DBC vspltisw v0,0 ; add this ;
+            //     addi 0x60 ; 0x82644DC4..D4 an EMPTY `li r10,0x14` countdown ; 0x82644DDC stvx128 v0
+            //     == this + 0x60 + 0x700*model == mStateOutput(+0x30) + 0x6B0*model + 0x50*model + 0x30
+            // i.e. maCarStates[model].maSensors[model].mDisplacementDelta. PS3 0x76AF48..0x76AF74 is the
+            // same address, empty `bdnz 20` loop and stvx; the DWARF scopes an `int32_t liSensor` here
+            // (BrnDeformationManager.cpp:315) -- a 20-sensor clear loop whose store indexes the MODEL,
+            // so both compilers hoisted it. The empty count loop is not reproduced. Past sensor 19 the
+            // row runs off the record, and the host spells each landing BY NAME (DeformationState is
+            // pointer-free, so the console arithmetic is the host's too; the detached-part pool is not,
+            // so slot 27 is reached through accessors, never an offset):
+            //   model 0..19  -> maCarStates[m].maSensors[m] + 0x30         (mDisplacementDelta)
+            //   model 20     -> maCarStates[20] + 0x670                     (maWheelTagPoints[1])
+            //   model 21..26 -> maCarStates[m+1].maSensors[m-21] + 0x10     (mWorldScalarVector)
+            //   model 27     -> mStateOutput end + ... == DetachedPartManager+0x170 (this+0xBD60 -
+            //                   0xBBF0) == pool slot 0's mLocalGraphicsPositionPlusJointVelocity,
+            //                   whether or not slot 0 is in use (no GetPart tripwires on console).
+            // Only the model-27 arm is observable: OutputState rewrites the CarState rows before any
+            // reader, while the part row carries a live part's render offset and hinge velocity.
+            const Vector3 lZeroRow = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            const s32 liSensorsPerCar = static_cast<s32>(CarState::KU_MAX_SENSORS);   // 20
+            if (liModelIndex < liSensorsPerCar)
+            {
+                mStateOutput.maCarStates[liModelIndex].maSensors[liModelIndex].mDisplacementDelta = lZeroRow;
+            }
+            else if (liModelIndex == liSensorsPerCar)
+            {
+                mStateOutput.maCarStates[liModelIndex].maWheelTagPoints[1] = lZeroRow;
+            }
+            else if (liModelIndex < static_cast<s32>(KU_MAX_DEFORMATION_MODELS) - 1)
+            {
+                mStateOutput.maCarStates[liModelIndex + 1].maSensors[liModelIndex - (liSensorsPerCar + 1)].mWorldScalarVector = lZeroRow;
+            }
+            else
+            {
+                mDetachedPartManager.GetPartPool().GetPartSlot(0).SetLocalGraphicsPositionPlusJointVelocity(
+                    Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f });
+            }
         }
     }
 

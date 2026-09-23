@@ -412,6 +412,18 @@ namespace Deformation
             mLocalGraphicsPositionPlusJointVelocity.SetPlus(lvfJointVelocity.x);
         }
 
+        // ⭐ ADDED 2026-09-23 (crash parity G24-D2). The WHOLE 16-byte row at part+0x170 (xyz =
+        // local graphics position, w = joint velocity). The one console site that stores it whole
+        // from outside the part is DeformationManager::ProcessAddDeformationModelEvents' loop-
+        // invariant zero (0x82644DDC `stvx128 v0(0)` at manager+0x60+0x700*model, which for model
+        // slot 27 is DetachedPartManager+0x170 == pool slot 0 +0x170). No out-of-line symbol on
+        // either console; a documented by-name setter (SetJointVelocity / ClearPoolSlotBindings
+        // precedent -- no friendship, no raw offsets).
+        void SetLocalGraphicsPositionPlusJointVelocity(const Vector3Plus& lrValue)
+        {
+            mLocalGraphicsPositionPlusJointVelocity = lrValue;
+        }
+
         // ⭐ ADDED 2026-08-14 (deformation-mount wave). PhysicalBodyPartPool::RemovePart tears
         // down the released slot's bindings with four direct stores on the console
         // (0x8260CAF0..0x8260CAFC, a cross-object poke): mpIKPart = 0 (part+0x1DC),
