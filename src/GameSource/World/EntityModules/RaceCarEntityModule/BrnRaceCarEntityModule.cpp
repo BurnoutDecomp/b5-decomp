@@ -7806,16 +7806,33 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
                             "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" ); // X360 :6206
 
                 // Online-race catch-up: the leader keeps 90% throttle, last place keeps 100%,
-                // linearly between. The console does both int->float converts with fcfid/frsp,
-                // i.e. a plain (f32) cast of the s32.
-                const f32 lfPositionFromFront =
-                        static_cast<f32>( lpScoring->maCarScoreData[leActiveRaceCarIndex]
-                                                  .GetRacePosition() - 1 );
+                // linearly between.
+                // ⛔ CORRECTED 2026-09-23 (crash parity G67-D9, FX-RCEM3) -- X360 0x82300530..0x82300588:
+                //     lwz 8(score) ; addi -1 ; clrldi 32 ; std/lfd ; fcfid ; frsp f29
+                //         (pos - 1) converted UNSIGNED: CarScoreData+0x08 is DWARF
+                //         `uint32_t muRacePosition` (BrnGameStateSharedIO.h:470)
+                //     lwz 0xA38 ; addi -1 ; extsw ; fcfid ; frsp f13
+                //         (miNumPlayersInGame - 1) converted SIGNED (int32_t)
+                //     fdivs  f12 = f29 / f13
+                //     fmadds f0  = f12 * flt_8201F7F8 + flt_82005450   (raw 0xEC0C683A: FRA = q,
+                //                  FRC = slope, FRB = 0.9) -- ONE rounding
+                //     fmuls  f0 *= f27 (lfGas) ; stfs -> mfGas
+                // flt_82005450 = 0x3F666666 (0.9f); flt_8201F7F8 = 0x3DCCCCD0, which is EXACTLY
+                // (1.0f - 0.9f) -- NOT 0.1f (0x3DCCCCCD), and the decimal 0.10000002f would round to
+                // 0x3DCCCCCF. The old body converted signed, used 0.1f and rounded twice: 1-2 ULP off
+                // the console in 5 of the 41 reachable (pos, players) states.
+                // The name is the DWARF's (:34, this TU's only online gas modifier besides the
+                // Burning Home Run runner's); the value is flt_82005450.
+                const f32 KF_ONLINE_MAX_POSITION_GAS_MODIFIER = 0.9f;
+                const f32 lfPositionFromFront = static_cast<f32>(
+                        static_cast<u32>( lpScoring->maCarScoreData[leActiveRaceCarIndex]
+                                                  .GetRacePosition() ) - 1u );
                 const f32 lfPositionRange =
                         static_cast<f32>( lpScoring->miNumPlayersInGame - 1 );
 
-                lControls.mfGas =
-                        ( ( lfPositionFromFront / lfPositionRange ) * 0.1f + 0.9f ) * lfGas;
+                lControls.mfGas = std::fmaf( lfPositionFromFront / lfPositionRange,
+                                             1.0f - KF_ONLINE_MAX_POSITION_GAS_MODIFIER,
+                                             KF_ONLINE_MAX_POSITION_GAS_MODIFIER ) * lfGas;
             }
         }
         else if( meGameModeType
