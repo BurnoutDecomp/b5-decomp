@@ -56,10 +56,11 @@
 // cntlzw/extrwi pair is the compiler's branchless `!x`, not a computation.
 // [[check-what-a-zeroed-field-means]] -- the member and the flag have OPPOSITE polarity.
 //
-// ⚠️ TWO ARMS ARE NOT LANDED HERE, AND THEY ARE NAMED, NOT SILENT. Ids 11 and 116 each call a
-// body that does not exist anywhere in the tree; each gets its own one-shot deferral line so a
-// future run says which one was hit rather than producing a plausible nothing.
-// [[silent-drop-stubs]].
+// ⚠️ ONE ARM IS NOT LANDED HERE, AND IT IS NAMED, NOT SILENT. Id 116 calls a body that does not
+// exist anywhere in the tree; it gets its own one-shot deferral line so a future run says it was
+// hit rather than producing a plausible nothing. [[silent-drop-stubs]]. (Id 11 was the second
+// such arm until 2026-09-23, when VehicleManager::ProcessNetworkCarDisconnect got its body --
+// crash-parity FX-VMNET, G41-D1.)
 // ⛔⛔ ID 198 WAS ON THAT LIST, WITH THE NOTE "not on the showtime path". IT WAS, AND THE FIRST RUN
 // THAT ACTUALLY REACHED SHOWTIME PROVED IT BY ASSERTING INSIDE THE CHAIN -- see the banner on that
 // arm. "Not on the live path" expires silently, and un-gating a consumer is what makes a missing
@@ -258,20 +259,17 @@ namespace BrnPhysics
 
                 // -------------------------------------------------------------------------------
                 // 11 -- VehicleManager::ProcessNetworkCarDisconnect @0x825C53F8 (73 insns).
-                // DEFERRED: no body in the tree. It resets one network car's per-slot physics
-                // block (56-word stride) and is reachable only in an online session, so it is not
-                // on the showtime path this wave is opening.
+                // asm 0x825A7834 `mr r4, r29 ; addi r3, r31, 0x4AA0 ; bl` -- the payload itself
+                // (RemotePlayerDisconnectedAction). Clears the disconnected player's race-car
+                // driver controls and its mHiddenRaceCars bit. Online-only producers, so single
+                // player never reaches it. Landed 2026-09-23 (crash-parity FX-VMNET, G41-D1);
+                // before that this arm was a one-shot "[s3-action] id 11 DEFERRED" log.
                 // -------------------------------------------------------------------------------
                 case KI_ACTION_NETWORK_CAR_DISCONNECT:
                 {
-                    static bool sbLogged = false;
-                    if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLogged = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[s3-action] id 11 DEFERRED: VehicleManager::ProcessNetworkCarDisconnect"
-                               " @0x825C53F8 (73) has no body in the tree [FLAG]\n";
-                    }
+                    mVehicleManager.ProcessNetworkCarDisconnect(
+                        reinterpret_cast<const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction*>(
+                            lpEventData));
                     break;
                 }
 

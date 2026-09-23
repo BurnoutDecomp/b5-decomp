@@ -575,5 +575,43 @@ namespace Vehicle
             mbPlayerCarInJunkYard = false;                                                 // stbx 0 @ +0x2A11F
         }
     }
+
+    // -------------------------------------------------------------------------------------------
+    // ProcessNetworkCarDisconnect  @0x825C53F8  (73 insns)  -- ADDED 2026-09-23 (FX-VMNET, G41-D1)
+    //
+    // The pre-scene PhysicsModule::HandleGameActions @0x825A72F0 calls it for action 11
+    // (E_ACTION_REMOTE_PLAYER_DISCONNECTED; jt case 4 @0x825A7834, r4 = the payload). DWARF
+    // BrnVehicleManager.cpp:3817, local `int32_t liDisconnectedRaceCar` (:3821), callees
+    // RemotePlayerDisconnectedAction::GetActiveRaceCarIndex, VehicleDriver::ClearControls,
+    // BitArray<8>::UnSetBit -- all three inlined on the X360:
+    //   0x825C540C  cmplwi r31, 0 -> assert "lpPlayerDisconnectedAction"          (li r5,0xEEF = :3823)
+    //   0x825C5438  lwz r31, 0(r31)      -- meActiveRaceCarIndex (the getter, inlined; the tree's
+    //               record declares no getter, so the member is read by name)
+    //   0x825C545C  mulli r11, r31, 0xE0 ; add r11, r11, this -> maRaceCarDrivers[idx] (+0x40), then
+    //               the inlined ClearControls store run 0x825C5464..0x825C54D0: stw -1 @+0x00, twelve
+    //               flt_82001CC0 (0.0f) @+0x04..+0x30, flt_82001C98 (1.0f) @+0x34, stb -1 @+0x38,
+    //               stb 0 @+0x39 / +0x3B..+0x42 / +0x4C..+0x4E, 0.0f @+0x48. +0x3A (mbToggle) and
+    //               +0x44 (meDriverType) are skipped -- store-for-store VehicleDriver::ClearControls.
+    //   0x825C5448  cmplwi r31, 8 -> assert "luIndex < NUMBITS" (CgsBitArray.h:241, li r5,0xF1),
+    //               branched on only AFTER the store run
+    //   0x825C54F8  li 1 ; sld ; ldx ; andc ; stdx on this+0xAEA0 (+44704) == mHiddenRaceCars.UnSetBit
+    // No race-car-type test and no driver-index test: the console clears whatever slot the record
+    // names. Online-only producers (ModeManager::StartModeIntro's online-event arm, GameStateModule::
+    // ProcessGameEvents), so single player never reaches it.
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::ProcessNetworkCarDisconnect(
+            const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction* lpPlayerDisconnectedAction)
+    {
+        CGS_ASSERT(lpPlayerDisconnectedAction, "lpPlayerDisconnectedAction");                  // :3823
+
+        const s32 liDisconnectedRaceCar =
+            static_cast<s32>(lpPlayerDisconnectedAction->meActiveRaceCarIndex);                // lwz 0(r31)
+
+        maRaceCarDrivers[liDisconnectedRaceCar].ClearControls();                                // 0x825C5464..0x825C54D0
+
+        CGS_ASSERT(static_cast<u32>(liDisconnectedRaceCar) < mHiddenRaceCars.GetCapacity(),
+                   "luIndex < NUMBITS");                                                        // CgsBitArray.h:241
+        mHiddenRaceCars.UnSetBit(static_cast<u32>(liDisconnectedRaceCar));                      // stdx @ +44704
+    }
 }
 }
