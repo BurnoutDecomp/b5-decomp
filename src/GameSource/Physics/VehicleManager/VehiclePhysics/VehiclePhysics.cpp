@@ -1840,13 +1840,19 @@ namespace Vehicle
     //     }
     //   (dt arrives splatted in a VMX register; v52[0] is the scalar dt the timer subtracts.)
     //
-    //   flt_82F2A430 is recovered as 0.01; the call preserves the stored impulse-space tag.
+    //   flt_82F2A430 reads 0x3C23D70B (0.0100000007f); the call preserves the stored impulse-space tag.
     // -------------------------------------------------------------------------------------
     void VehiclePhysics::UpdateAirRam(VecFloat lvfDeltaTime)
     {
-        // flt_82F2A430 @0x82F2A430 .data = 0x3C23D70A = 0.01 (already in the image). At 0.0f the air-ram
-        // stayed "alive" on pure numerical noise, because any squared magnitude clears zero.
-        static const f32 KF_AIR_RAM_ALIVE_EPSILON_SQ = 0.01f;   // flt_82F2A430
+        // flt_82F2A430 @0x82F2A430 (lfs at 0x825FCA10, splatted via var_D0, 0x825FCA40 vcmpgtfp.
+        // against the vmsum3fp128 |mImpulse|^2) holds 0x3C23D70B = 0.0100000007f in the image
+        // (x360rd; findinit: its only reference is that reader, no CRT writer) -- exactly
+        // f32(0.1f) * f32(0.1f). The literal 0.01f encodes 0x3C23D70A, one ULP LOW, which kept a
+        // |impulse|^2 == 0x3C23D70B slot firing where the console releases it (G54-D2). Do not
+        // confuse it with UpdateSpinEffects' flt_82002138, which really is 0x3C23D70A.
+        // (At 0.0f the air-ram stayed "alive" on pure numerical noise, because any squared
+        // magnitude clears zero.)
+        static const f32 KF_AIR_RAM_ALIVE_EPSILON_SQ = 0.0100000007f;   // flt_82F2A430 == 0x3C23D70B
 
         const f32 lfDeltaTime = lvfDeltaTime.x;   // dt splat lane
 
