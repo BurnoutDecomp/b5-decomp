@@ -82,6 +82,7 @@
 #include <cstring>   // memset
 #include <cstdlib>   // getenv  ([motion] opt-in probe)
 #include <cmath>     // sqrtf
+#include <cstddef>   // offsetof (the action-276 record pin)
 
 namespace BrnWorld
 {
@@ -3227,6 +3228,19 @@ namespace
     // DELETE-WHEN BrnGameActions.h grows the enumerator.
     const s32 KI_ACTION_ROAD_RULES_ENTER_ROAD = 273;
 
+    // ---- action 276, DWARF E_ACTION_UPCOMING_ROAD_CHANGE (263; +13 road-rules band) ------------
+    // [!] HEADER REQUEST -- BrnGameActions.h has the record (UpcomingRoadChangeAction, 368 bytes)
+    // but no enumerator; its producer StreetManager::SendUpcomingRoadMessage posts the literal 276
+    // (`li r5, 0x114 ; li r6, 0x170`). High jump table case 169 == 276 @0x8230D894.
+    // DELETE-WHEN BrnGameActions.h grows the enumerator.
+    const s32 KI_ACTION_UPCOMING_ROAD_CHANGE = 276;
+    // The console reads the two highlight words at +0x14C / +0x150 (`lwz` @0x8230D8A4 / 0x8230D8A0);
+    // pin the PC record to those offsets so the named reads are the console's.
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
+                           miLeftRoadHighlightState) == 0x14C, "UpcomingRoadChangeAction +0x14C");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
+                           miRightRoadHighlightState) == 0x150, "UpcomingRoadChangeAction +0x150");
+
     // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY. The takedown-flow switch shared (by env
     // name) with TakedownManager's classifier trace: one [td-action] line per consumed takedown
     // action, so a live run proves the arms below were DISPATCHED, not merely compiled.
@@ -4136,6 +4150,25 @@ void RaceCarEntityModule::HandleGameActions(
                 reinterpret_cast<
                     const BrnGameState::GameStateModuleIO::RoadRulesEnterRoadAction*>(lpEvent));
             break;
+
+        // Crash parity 2026-09-23 (G68-D11 arm 276, with G60-D1/G60-D2/G61-D5) -- ARTIST high jump
+        // table case 169 (0x8230D894..0x8230D8C0), E_ACTION_UPCOMING_ROAD_CHANGE:
+        //     GetActiveRaceCar(mePlayerActiveRaceCarIndex)          lwzx +0x182F8
+        //     lwz 0x14C (miLeftRoadHighlightState) ; addi -2 ; cntlzw ; rlwinm 27,31,31   -> == 2
+        //     lwz 0x150 (miRightRoadHighlightState) ; same                                 -> == 2
+        //     bl ActiveRaceCar::SetIndicatorState(r4 = left == 2, r5 = right == 2)
+        // The route's turn signal: StreetManager highlights the upcoming road (state 2) on the side
+        // the route turns, and the player's car blinks that indicator (UpdateIndicators).
+        case KI_ACTION_UPCOMING_ROAD_CHANGE: // 276
+        {
+            const BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction* lpUpcomingRoad =
+                reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction*>(lpEvent);
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetIndicatorState(
+                lpUpcomingRoad->miLeftRoadHighlightState == 2,
+                lpUpcomingRoad->miRightRoadHighlightState == 2);
+            break;
+        }
 
         default:
             break;   // [FLAG PC bring-up] see the banner

@@ -7,6 +7,7 @@
 //                    GetPosition(), GetDirection(), flt_82FAD4FC = 0.44704f * 15.0f)
 //   G67-D6  case 76  0x8230C260..0x8230C298  assert "IsInCarSelect()" (:6685); mbInCarModScreen
 //                    (+0x186CA) = record byte +4 (CarSelectModificationScreen::mbEntering)
+//   G68-D11 case 276 0x8230D894..0x8230D8C0  player->SetIndicatorState(+0x14C == 2, +0x150 == 2)
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/GameState/BrnGameActions.h"
@@ -45,6 +46,8 @@ struct ActiveRaceCar {
     int     miPlaceRequests = 0;
     Vector3 mPlacePosition = {}, mPlaceDirection = {};
     f32     mfPlaceSpeed = -99.0f;
+    int     miIndicatorCalls = 0; bool mbIndicatorLeftArg = false, mbIndicatorRightArg = false;
+    void SetIndicatorState(bool lbLeft, bool lbRight) { ++miIndicatorCalls; mbIndicatorLeftArg = lbLeft; mbIndicatorRightArg = lbRight; }
     bool IsActive() const { return mbActive; }
     Vector3 GetPosition() const { return mPosition; }
     Vector3 GetDirection() const { return mDirection; }
@@ -131,6 +134,28 @@ int main() {
         Check(guAssertions == luBefore + 1 && lOutside.mbInCarModScreen,
               "G67-D6 76: outside car select -> the IsInCarSelect() tripwire fires, the store still happens");
         guAssertions = luBefore;
+    }
+
+    // ---- G68-D11 arm 276: the upcoming-road turn signal --------------------------------------
+    {
+        UpcomingRoadChangeAction lRoad; std::memset(&lRoad, 0, sizeof(lRoad));
+        Fixture::RaceCarEntityModule lModule; Fixture::OutputFixture lOut;
+        const Fixture::ActiveRaceCar& lrPlayer = lModule.maActiveRaceCars[3];
+        lRoad.miLeftRoadHighlightState = 2; lRoad.miRightRoadHighlightState = 1;
+        lModule.Dispatch(276, AsEvent(&lRoad), &lOut);
+        Check(lrPlayer.miIndicatorCalls == 1 && lrPlayer.mbIndicatorLeftArg && !lrPlayer.mbIndicatorRightArg,
+              "G68-D11 276: left road highlighted (+0x14C == 2) -> player SetIndicatorState(1, 0)");
+        lRoad.miLeftRoadHighlightState = 1; lRoad.miRightRoadHighlightState = 2;
+        lModule.Dispatch(276, AsEvent(&lRoad), &lOut);
+        Check(lrPlayer.miIndicatorCalls == 2 && !lrPlayer.mbIndicatorLeftArg && lrPlayer.mbIndicatorRightArg,
+              "G68-D11 276: right road highlighted (+0x150 == 2) -> SetIndicatorState(0, 1)");
+        lRoad.miLeftRoadHighlightState = 0; lRoad.miRightRoadHighlightState = 0;
+        lModule.Dispatch(276, AsEvent(&lRoad), &lOut);
+        Check(lrPlayer.miIndicatorCalls == 3 && !lrPlayer.mbIndicatorLeftArg && !lrPlayer.mbIndicatorRightArg,
+              "G68-D11 276: no highlight -> SetIndicatorState(0, 0) (cntlzw(x-2) test, not x != 0)");
+        bool lbOthers = true;
+        for (int i = 0; i < 8; ++i) if (i != 3 && lModule.maActiveRaceCars[i].miIndicatorCalls != 0) lbOthers = false;
+        Check(lbOthers, "G68-D11 276: only the player's car (lwzx +0x182F8)");
     }
 
     Check(guAssertions == 0, "valid fixtures fire no assertions");
