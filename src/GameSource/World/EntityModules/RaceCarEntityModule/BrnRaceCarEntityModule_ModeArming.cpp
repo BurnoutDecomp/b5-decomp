@@ -170,6 +170,18 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         lpGameModeParams->GetFlag(BrnGameState::GameModeParams::KU_FLAG_ROLLING_START)
         || mbPlayerDonutsOnEventStart;
 
+    // ⭐ [crash parity 2026-09-23, G68-D6] THE BASE-DEFORMATION STASH, interleaved by the console
+    // with the mode-type store below:
+    //     0x82309554  lwzx  r9, r31, 0x184D0   ; miPlayerBaseDeformationTypeMirror
+    //     0x82309564  lfsx  f0, r31, 0x184D8   ; mfPlayerBaseDeformAmountMirror
+    //     0x82309568  stwx  r9, r31, 0x184D4   ; -> miPlayerBaseDeformationTypeSaved
+    //     0x8230956C  stwx  r10, r31, 0x18368  ; meGameModeType (below)
+    //     0x82309570  stfsx f0, r31, 0x184E0   ; -> mfPlayerBaseDeformAmountSaved
+    // The saved pair is what HandleStopModeAction pops back and what action 205's TOTALLED arm
+    // restores; without this push both restored Construct's -1 / 0.0f.
+    miPlayerBaseDeformationTypeSaved = miPlayerBaseDeformationTypeMirror;
+    mfPlayerBaseDeformAmountSaved    = mfPlayerBaseDeformAmountMirror;
+
     meGameModeType = lpGameModeParams->GetGameModeType();
     // ARTIST 0x82309580..0x823095D8: modes which take the wheel must also
     // switch the player's AI routing state before the first driving update.
