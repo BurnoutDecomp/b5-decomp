@@ -9,14 +9,20 @@
 // file itself (references/DecFIGS/dwarfdump/GameSource/GameState/SharedIO/
 // BrnGameStateToGuiIOInterfaces.cpp), so this is the file's real home rather than a convenience
 // seat. Only the members the mounted event core actually calls are reconstructed here; the
-// other six publishers, Clear() and the ten queue/index accessors stay declared-only in the
-// header until they have live callers to check them against.
+// remaining publishers (AddOvertakeEvent / AddTookLeadEvent / AddTookLastEvent), Clear() and the
+// player-index accessors stay declared-only in the header until they have live callers to check
+// them against. The eight const queue accessors are bodied (FX-GS2, G10-D11 part 2) for their one
+// reader, BrnGameModule's TranslateGuiInterfaceToGuiEvents.
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   AddFinishedRaceEvent  @ 0x8236EA60
 //   Construct             @ 0x82379908   (added 2026-08-27, stunt-races frontier round 2 -- see D2)
 //   AddDirtyTrickEnding   (no own body; inlined into PaybackManager::ProcessDirtyTrickEventQueue)
 //   AddDirtyTrickTriggered (no own body; inlined into PaybackManager::HandleTriggeringPayback)
+//   AddNewDirtyTrick      (no own body; inlined into PaybackManager::HandleAwardingPayback)
+//   AddOnTailEvent        (no own body; inlined into GameStateModule::CheckForTailingRivals)
+//   the eight const Get*Queue accessors (no own bodies; inlined into
+//                          BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90)
 // (the interface's remaining out-of-line X360 symbol, AppendRaceCarCrashes @0x82379980, is NOT
 // reconstructed here -- it is not an unresolved external today and it reaches the opaque
 // trailing crash queue.)
@@ -251,6 +257,61 @@ void GameStateToGuiInterface::AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActive
     lEvent.meOnTailActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x8
 
     mOnTailEventQueue.AddEvent(lEvent);                         // this + 0x160
+}
+
+// -----------------------------------------------------------------------------
+// The eight const queue accessors (DWARF BrnGameStateToGuiIOInterfaces.h:128-135). [FX-GS2
+// 2026-09-23, crash-parity G10-D11 part 2] No out-of-line console bodies: their one reader,
+// BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90, inlines all eight in its prologue
+// as plain address arithmetic on the interface pointer (r5), 0x823E1D9C..0x823E1DC4:
+//     addi r30, r5, 4       ; GetNewDirtyTrickQueue
+//     addi r28, r5, 0x40    ; GetDirtyTrickTriggeredQueue
+//     addi r25, r5, 0x7C    ; GetDirtyTrickEndingQueue
+//     addi r22, r5, 0xC8    ; GetOvertakeEventQueue
+//     addi r20, r5, 0xF4    ; GetFinishedRaceEventQueue
+//     addi r18, r5, 0x120   ; GetTookLeadEventQueue
+//     addi r15, r5, 0x140   ; GetTookLastEventQueue
+//     addi r11, r5, 0x160   ; GetOnTailEventQueue
+// -- the same eight offsets Construct walks above, so each accessor is `return &member;`.
+// -----------------------------------------------------------------------------
+const GameStateToGuiInterface::NewDirtyTrickQueue* GameStateToGuiInterface::GetNewDirtyTrickQueue() const
+{
+    return &mNewDirtyTrickQueue;         // this + 4
+}
+
+const GameStateToGuiInterface::DirtyTrickTriggeredQueue* GameStateToGuiInterface::GetDirtyTrickTriggeredQueue() const
+{
+    return &mDirtyTrickTriggeredQueue;   // this + 0x40
+}
+
+const GameStateToGuiInterface::DirtyTrickEndingQueue* GameStateToGuiInterface::GetDirtyTrickEndingQueue() const
+{
+    return &mDirtyTrickEndingQueue;      // this + 0x7C
+}
+
+const GameStateToGuiInterface::OvertakeEventQueue* GameStateToGuiInterface::GetOvertakeEventQueue() const
+{
+    return &mOvertakeEventQueue;         // this + 0xC8
+}
+
+const GameStateToGuiInterface::FinishedRaceEventQueue* GameStateToGuiInterface::GetFinishedRaceEventQueue() const
+{
+    return &mFinishedRaceEventQueue;     // this + 0xF4
+}
+
+const GameStateToGuiInterface::TookLeadEventQueue* GameStateToGuiInterface::GetTookLeadEventQueue() const
+{
+    return &mTookLeadEventQueue;         // this + 0x120
+}
+
+const GameStateToGuiInterface::TookLastEventQueue* GameStateToGuiInterface::GetTookLastEventQueue() const
+{
+    return &mTookLastEventQueue;         // this + 0x140
+}
+
+const GameStateToGuiInterface::OnTailEventQueue* GameStateToGuiInterface::GetOnTailEventQueue() const
+{
+    return &mOnTailEventQueue;           // this + 0x160
 }
 
 }
