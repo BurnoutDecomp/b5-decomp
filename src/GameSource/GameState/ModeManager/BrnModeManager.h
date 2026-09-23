@@ -368,6 +368,19 @@ public:
     void ShowModeResults(const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutput,
                          GameStateModuleIO::GameActionQueue* lpGameActionQueue);                            // DWARF :414 / X360 0x823436D0
     void PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedModeEvent* lpEvent);                     // DWARF :397 / X360 0x823280D8
+
+    // ---- [FX-GS 2026-09-23, crash-parity G11-D4] the online team modes (11 and 13) ----------------
+    // X360 0x8234C750 (DWARF :483). Called from GameStateModule::PreWorldUpdate (0x823A5C14, after
+    // DetectModeStarts) with the tick's takedown queue (gsm+249936). In progress, online, mode 11 or
+    // 13 only: the team takedowns, then that mode's finish check.
+    void HandleOnlineTeamModes(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                               GameStateModuleIO::OutputBuffer* lpOutput,
+                               InputBuffer::TakedownEventQueue* lpTakedownQueue);                            // DWARF :483 / X360 0x8234C750
+    void HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface,
+                                   const InputBuffer::TakedownEventQueue* lpTakedownQueue,
+                                   GameStateModuleIO::GameActionQueue* lpActionQueue);                      // DWARF :724 / X360 0x823440B8
+    void HandleOnlineTeamCheckForModeFinished();                                                            // DWARF :727 / X360 0x82328910
+    void HandleOnlineBurningHomeRunCheckForModeFinished();                                                  // DWARF :730 / X360 0x82328A70
     void FinishCurrentModeNextUpdate();                                                                     // DWARF :245
     void FinishCurrentModeNextUpdateWithFinishPosition(s32 liFinishPosition);                               // DWARF :250
     const BrnTraffic::LightTriggerStartData* GetStartDataForTrafficLight(u32 luLightTriggerId) const;        // DWARF :566 / X360 0x82327310

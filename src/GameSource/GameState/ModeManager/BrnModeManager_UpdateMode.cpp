@@ -60,6 +60,8 @@
 #include "SharedClasses/Trigger/BrnRegion.h"                      // BrnTrigger::BoxRegion::GetPosition
 #include "SharedClasses/Progression/BrnTrainingTypes.h"           // BrnProgression::ETrainingType (action-149 payload)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // [diagnostic] the [showtime-switch] arming witness
+#include "GameSource/GameState/BrnGameStateModuleIO.h"            // [FX-GS G11-D4] PreWorldInputBuffer::GetPlayerStatusInterface / OutputBuffer::GetGameActionQueue
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h" // [FX-GS G11-D4] InputBuffer::TakedownEventQueue (complete)
 
 namespace BrnGameState
 {
@@ -926,6 +928,246 @@ void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedMode
     mpGameStateModule->SetInActiveGameModeState();
     miDebugFinishPosition = -1;      // console: stwx r9(-1), r31, 0x9518 @0x823281D0
     FinishCurrentModeNextUpdate();   // console: stbx r28(1), r31, 0x94F7 @0x823281D4
+}
+
+// ============================================================================================
+// [FX-GS 2026-09-23, crash-parity G11-D4] THE ONLINE TEAM MODES -- 11 (the team road rage) and
+// 13 (Burning Home Run). None of the four bodies existed, so on this build a team-1 takedown never
+// eliminated a team-2 player, actions 165/166/167 were never posted, and neither mode could
+// finish. Online-only: no offline mode reaches the gate below.
+// ============================================================================================
+
+// X360 0x8234C750 (DWARF BrnModeManager.h:483 / .cpp:4379). Only caller:
+// GameStateModule::PreWorldUpdate @0x823A5C14, right after DetectModeStarts and
+// GameStateInviteManager::Update, with r6 = gsm+249936 (the tick's takedown queue).
+//   0x8234C76C..0x8234C7B8  mode && mode->mbIsOnline (+0xAC)  -- IsOnlineGameMode(), inlined
+//                           mode && mode->state (+0x28) == 2  -- IsInProgress(), inlined
+//   0x8234C7BC..0x8234C7CC  meCurrentGameModeType (+0xD94) is 11 or 13
+//   asserts "lpInput" :4383, "lpOutput" :4384; `bl 0x8231CF78` (GetPlayerStatusInterface) and
+//   `bl 0x8231D4B8` (GetGameActionQueue); asserts "lpPlayerStatusInterface" :4388,
+//   "lpActionQueue" :4389
+//   0x8234C890  bl HandleOnlineTeamTakedowns(status, takedown queue, action queue)
+//   0x8234C89C  mode 13 -> HandleOnlineBurningHomeRunCheckForModeFinished, else
+//               HandleOnlineTeamCheckForModeFinished
+void ModeManager::HandleOnlineTeamModes(const GameStateModuleIO::PreWorldInputBuffer* lpInput,
+                                        GameStateModuleIO::OutputBuffer* lpOutput,
+                                        InputBuffer::TakedownEventQueue* lpTakedownQueue)
+{
+    if (!IsOnlineGameMode() || !IsInProgress())
+    {
+        return;
+    }
+    if (meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE &&
+        meCurrentGameModeType != GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
+    {
+        return;
+    }
+
+    CGS_ASSERT(lpInput != NULL, "lpInput");     // BrnModeManager.cpp:4383
+    CGS_ASSERT(lpOutput != NULL, "lpOutput");   // BrnModeManager.cpp:4384
+
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
+        lpInput->GetPlayerStatusInterface();
+    GameStateModuleIO::GameActionQueue* lpActionQueue = lpOutput->GetGameActionQueue();
+
+    CGS_ASSERT(lpPlayerStatusInterface != NULL, "lpPlayerStatusInterface");   // BrnModeManager.cpp:4388
+    CGS_ASSERT(lpActionQueue != NULL, "lpActionQueue");                       // BrnModeManager.cpp:4389
+
+    HandleOnlineTeamTakedowns(lpPlayerStatusInterface, lpTakedownQueue, lpActionQueue);
+
+    if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
+    {
+        HandleOnlineBurningHomeRunCheckForModeFinished();
+    }
+    else
+    {
+        HandleOnlineTeamCheckForModeFinished();
+    }
+}
+
+// X360 0x823440B8 (DWARF BrnModeManager.h:724 / .cpp:4478).
+// First, the blue (team 2) players still in: every status record i < miNumPlayers (+0x9E4, re-read
+// each pass; the inlined GetPlayerStatusData asserts :256/:257), read its meActiveRaceCarIndex
+// (+0x114), skip it when the const GetCarData twin's +0xD9 (mbEliminated) is set, count it when the
+// inlined GetPlayerTeam (:1549 assert, GetCarData ? +0x13C : 0) is 2.
+// Then, for every takedown event (queue length re-read, `lwz 8(r20)` @0x823443FC; the 40-byte
+// event copied out @0x82344224):
+//   aggressor team (+0 index), victim team (+4 index), both through the inlined GetPlayerTeam;
+//   a victim already eliminated (+0xD9) -> the next event, finish test included (@0x823442E8);
+//   same team and mode 14/12/17        -> AddEvent(&aggressor, 166, 4)          @0x823442EC
+//   team 1 takes down team 2, mode 11  -> one fewer blue player, SetPlayerEliminated(victim,
+//                                         aggressor), AddEvent({victim, left == 1,
+//                                         victim == player}, 165, 8)             @0x8234437C
+//   team 1 takes down team 2, mode 13  -> AddEvent(GetNetworkPlayerID(aggressor), 167, 4) @0x8234435C
+//   then, INSIDE the loop (0x823443D0..0x823443F8): no blue player left in mode 11 ->
+//   PlayerFinishedMode({0, 0, 0}). It runs after every event that is not skipped, posted or not,
+//   and never on a frame without takedowns.
+// The PS3 twin also calls HUDMessageLogic::OnlineTeamChange; the X360 body does not.
+void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface,
+                                            const InputBuffer::TakedownEventQueue* lpTakedownQueue,
+                                            GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r24, r22, 0xDB0
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");      // BrnModeManager.cpp:4434
+    const ScoringSystem& lrScoringSystem = *lpScoringSystem;             // the const GetCarData twin (0x8231DCD0)
+
+    s32 liNumBlueTeamPlayersLeft = 0;                                    // r23
+    for (s32 liIndex = 0; liIndex < lpPlayerStatusInterface->GetNumPlayers(); ++liIndex)
+    {
+        const EActiveRaceCarIndex leRaceCarIndex =
+            lpPlayerStatusInterface->GetPlayerStatusData(liIndex)->meActiveRaceCarIndex;
+        if (!lrScoringSystem.GetCarData(leRaceCarIndex)->GetScoreData()->GetEliminated())
+        {
+            if (lpScoringSystem->GetPlayerTeam(leRaceCarIndex) == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+            {
+                ++liNumBlueTeamPlayersLeft;
+            }
+        }
+    }
+
+    for (s32 liEventIndex = 0; liEventIndex < lpTakedownQueue->GetLength(); ++liEventIndex)
+    {
+        const TakedownEvent lTakedownEvent = lpTakedownQueue->GetEvent(liEventIndex);
+
+        const EActiveRaceCarIndex leAggressorIndex = lTakedownEvent.meAggressorIndex;
+        const GameStateModuleIO::EPlayerTeam leAggressorTeam = lpScoringSystem->GetPlayerTeam(leAggressorIndex);
+        const EActiveRaceCarIndex leVictimIndex = lTakedownEvent.meVictimIndex;
+        const GameStateModuleIO::EPlayerTeam leVictimTeam = lpScoringSystem->GetPlayerTeam(leVictimIndex);
+
+        if (lrScoringSystem.GetCarData(leVictimIndex)->GetScoreData()->GetEliminated())
+        {
+            continue;
+        }
+
+        if (leVictimTeam == leAggressorTeam &&
+            (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN ||
+             meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FUGITIVE  ||
+             meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_MODE_END))
+        {
+            GameStateModuleIO::TraitorousTakedownAction lTraitorousAction;
+            lTraitorousAction.meAggrActiveRaceCarIndex = leAggressorIndex;
+            lpActionQueue->AddEvent(&lTraitorousAction, GameStateModuleIO::E_ACTION_TRAITOROUS_TAKEDOWN);
+        }
+        else if (leAggressorTeam == GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM &&
+                 leVictimTeam == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+        {
+            if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
+            {
+                --liNumBlueTeamPlayersLeft;
+                lpScoringSystem->SetPlayerEliminated(leVictimIndex, leAggressorIndex);
+
+                GameStateModuleIO::PlayerEliminatedAction lEliminatedAction;
+                lEliminatedAction.meActiveRaceCarIndex    = leVictimIndex;
+                lEliminatedAction.mbLastBlueTeamMember    = (liNumBlueTeamPlayersLeft == 1);
+                lEliminatedAction.mbLocalPlayerEliminated =
+                    (leVictimIndex == mpGameStateModule->GetPlayerActiveRaceCarIndex());
+                lpActionQueue->AddEvent(&lEliminatedAction, GameStateModuleIO::E_ACTION_PLAYER_ELIMINATED);
+            }
+            else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
+            {
+                GameStateModuleIO::SwitchBurningHomeRunRunnerAction lSwitchAction;
+                lSwitchAction.mNewRunnerPlayerID = mpGameStateModule->GetNetworkPlayerID(leAggressorIndex);
+                lpActionQueue->AddEvent(&lSwitchAction, GameStateModuleIO::E_ACTION_SWITCH_BURNING_HOME_RUN_RUNNER);
+            }
+        }
+
+        if (liNumBlueTeamPlayersLeft == 0 &&
+            meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
+        {
+            const GameStateModuleIO::PlayerFinishedModeEvent lPlayerFinishedModeEvent =
+                MakePlayerFinishedModeEvent(false, false, false);          // stb r17(0) x3 @0x823443E8..F4
+            PlayerFinishedMode(&lPlayerFinishedModeEvent);
+        }
+    }
+}
+
+// X360 0x82328910 (DWARF BrnModeManager.h:727 / .cpp:4375). Mode 11's finish test: every car slot
+// (EActiveRaceCarIndex operator++, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT") that is not
+// disconnected (the inlined GetPlayerDisconnected, :1900, GetCarData ? +0x69 : 0), is on the blue
+// team (GetPlayerTeam @0x8231FDB8 == 2) and is not eliminated (the const twin's +0xD9) must have
+// completed the laps (`cmplw` GetRaceCarNumCompletedLaps vs muTotalLaps +0x4ED8); the first one
+// that has not ends the test. Only then PlayerFinishedMode({0, 0, 0}) @0x82328A64. The whole walk
+// is gated on the car count (+0x4EE8, `cmpwi 0 ; ble`).
+void ModeManager::HandleOnlineTeamCheckForModeFinished()
+{
+    ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r30, r24, 0xDB0
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");      // BrnModeManager.cpp:4557
+    const ScoringSystem& lrScoringSystem = *lpScoringSystem;
+
+    const s32 liNumActiveCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
+    if (liNumActiveCars <= 0)
+    {
+        return;
+    }
+
+    for (EActiveRaceCarIndex leRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leRaceCarIndex++)
+    {
+        if (!lpScoringSystem->GetPlayerDisconnected(leRaceCarIndex) &&
+            lpScoringSystem->GetPlayerTeam(leRaceCarIndex) == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM &&
+            !lrScoringSystem.GetCarData(leRaceCarIndex)->GetScoreData()->GetEliminated() &&
+            lpScoringSystem->GetRaceCarNumCompletedLaps(leRaceCarIndex) < lpScoringSystem->GetTotalLaps())
+        {
+            return;
+        }
+    }
+
+    const GameStateModuleIO::PlayerFinishedModeEvent lPlayerFinishedModeEvent =
+        MakePlayerFinishedModeEvent(false, false, false);                  // stb r25(0) x3 @0x82328A54..60
+    PlayerFinishedMode(&lPlayerFinishedModeEvent);
+}
+
+// X360 0x82328A70 (DWARF BrnModeManager.h:730 / .cpp:4428). Mode 13's finish test -- the X360 body,
+// not the PS3 twin (which walks GetOnlineLandmarksVisited instead):
+//   gated on the car count (+0x4EE8 > 0);
+//   the FIRST global race-car slot (EGlobalRaceCarIndex operator++, :84, "leEnumIndex <=
+//   E_GLOBAL_RACE_CAR_INDEX_COUNT") with no checkpoint left (CountCheckpointsRemaining == 0) --
+//   none -> no finish;
+//   its slot is handed to GameStateModule::GetActiveRaceCarIndex @0x82363978 AS the network player
+//   id (`mr r4, r31` @0x82328B18 -- the only overload the image has takes a NetworkPlayerID); -1 ->
+//   no finish;
+//   that car's +0xBC (mbCompletedBurningHomeRun) = 1 through the const GetCarData twin
+//   (`bl 0x8231DCD0 ; stb r11(1), 0xBC(r3)` @0x82328B34..3C, no null test) -- written here through the
+//   non-const twin (0x8231DC18): the same search, only the baked assert line differs (:2793/:2813);
+//   PlayerFinishedMode({player's team != 2 (GetCarData ? +0x13C : 0 -- the inlined GetPlayerTeam,
+//   :1549), 0, 0}) @0x82328BB8: the local player "timed out" unless it is on the blue team.
+void ModeManager::HandleOnlineBurningHomeRunCheckForModeFinished()
+{
+    ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r27, r28, 0xDB0
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");      // BrnModeManager.cpp:4616
+
+    const s32 liNumActiveCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
+    if (liNumActiveCars <= 0)
+    {
+        return;
+    }
+
+    for (EGlobalRaceCarIndex leGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+         leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT; leGlobalRaceCarIndex++)
+    {
+        if (CountCheckpointsRemaining(leGlobalRaceCarIndex) != 0)
+        {
+            continue;
+        }
+
+        const EActiveRaceCarIndex leRaceCarIndex = mpGameStateModule->GetActiveRaceCarIndex(
+            static_cast<BrnNetwork::NetworkPlayerID>(leGlobalRaceCarIndex));
+        if (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            return;
+        }
+
+        lpScoringSystem->GetCarData(leRaceCarIndex)->GetScoreData()->SetCompletedBurningHomeRun(true);
+
+        const EActiveRaceCarIndex leLocalPlayerRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        const bool lbLocalPlayerTimedOut =
+            (lpScoringSystem->GetPlayerTeam(leLocalPlayerRaceCarIndex) != GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM);
+
+        const GameStateModuleIO::PlayerFinishedModeEvent lPlayerFinishedModeEvent =
+            MakePlayerFinishedModeEvent(lbLocalPlayerTimedOut, false, false);
+        PlayerFinishedMode(&lPlayerFinishedModeEvent);
+        return;
+    }
 }
 
 } // namespace BrnGameState

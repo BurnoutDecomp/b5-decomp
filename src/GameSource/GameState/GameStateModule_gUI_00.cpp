@@ -2146,6 +2146,17 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         HarnessAuditVehicleAudioBringUp();   // [car-audio] BRN_VEHICLE_AUDIO_AUDIT (harness-only, see the body)
         HarnessInjectJunkyardCarBringUp();    // [car-audio] BRN_DEBUG_JUNKYARD_CAR (harness-only, see the body)
 
+        // [FX-GS 2026-09-23, crash-parity G11-D4] ModeManager::HandleOnlineTeamModes at its console
+        // slot: GameStateModule::PreWorldUpdate calls it @0x823A5C14, after DetectModeStarts
+        // (@0x823A5BE4) and GameStateInviteManager::Update (@0x823A5BFC, not staged here), with
+        // r6 = r25 = gsm+249936 -- the takedown queue this tick's TakedownPreWorldLeg (above) cleared
+        // and refilled. The cache's EventQueue<TakedownEvent,8> is re-homed onto the DWARF name by the
+        // same cast the takedown scoring leg uses. Its own gate (online, in progress, mode 11 or 13)
+        // keeps it inert offline.
+        mModeManager.HandleOnlineTeamModes(
+            mpPreWorldInputBuffer, mpOutputBuffer,
+            reinterpret_cast<InputBuffer::TakedownEventQueue*>(&mpTakedownCache->mTakedownEventQueue));
+
         // ✅ [showtime S7b-b, 2026-08-27] THE HARNESS SHOWTIME INJECTION IS GONE, and this is
         // the line that used to call it. Its DELETE-WHEN was "ShouldStartShowtimeMode and the
         // DetectModeStarts else arm land"; both landed this session, so DetectModeStarts above now
