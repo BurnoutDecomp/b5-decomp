@@ -1784,7 +1784,19 @@ namespace Deformation
             f32 mfImpactTime;     // +4 -- the record's sub-frame impact time
             s16 mi16SensorIndex;  // +8 -- which sensor owns the record
 
-            bool operator<(const ContactTime& lrOther) const { return mfSortKey < lrOther.mfSortKey; }
+            // _Insertion_sort1 @0x82629898, 0x826298D4..0x826298FC: when the impact times differ by
+            // more than 0.1 of a frame (flt_82004014) the EARLIER contact goes first; only near-
+            // simultaneous contacts are ordered by the key. `<=` mirrors fcmpu/ble, so a NaN time
+            // takes the time branch. (Crash parity G20-D6, 2026-09-23: the tree sorted by key alone,
+            // so a head-on wall/ground contact always ran before an earlier car-car one.) Not a
+            // strict weak ordering -- hence the hand-written insertion sort in UpdateContacts.
+            bool operator<(const ContactTime& lrOther) const
+            {
+                const f32 lfDelta = mfImpactTime - lrOther.mfImpactTime;
+                if ( std::fabs(lfDelta) <= 0.1f )
+                    return mfSortKey < lrOther.mfSortKey;
+                return mfImpactTime < lrOther.mfImpactTime;
+            }
         };
 
         struct ContactOrder
@@ -2023,8 +2035,37 @@ namespace Deformation
             ++_mContactOrder.miNumContacts;
         }
 
-        std::sort(_mContactOrder.maContactTimes,
-                  _mContactOrder.maContactTimes + _mContactOrder.miNumContacts);
+        // 0x82647C74 bl std::_Sort<ContactTime*>: with n <= 0x20 (always -- at most 24 rows) that is
+        // _Insertion_sort1 @0x82629898, reproduced step for step (compare with the first element and
+        // rotate to the front, otherwise walk the hole backwards). std::sort is NOT equivalent: the
+        // comparator is not a strict weak ordering, so a different algorithm gives a different order.
+        {
+            ContactTime* const lpFirst = _mContactOrder.maContactTimes;
+            ContactTime* const lpLast  = lpFirst + _mContactOrder.miNumContacts;
+            if ( lpFirst != lpLast )
+            {
+                for ( ContactTime* lpNext = lpFirst + 1; lpNext != lpLast; ++lpNext )
+                {
+                    const ContactTime lVal = *lpNext;
+                    if ( lVal < *lpFirst )
+                    {
+                        for ( ContactTime* lp = lpNext; lp != lpFirst; --lp )
+                            *lp = *(lp - 1);
+                        *lpFirst = lVal;
+                    }
+                    else
+                    {
+                        ContactTime* lpHole = lpNext;
+                        for ( ContactTime* lpPrev = lpHole - 1; lVal < *lpPrev; --lpPrev )
+                        {
+                            *lpHole = *lpPrev;
+                            lpHole = lpPrev;
+                        }
+                        *lpHole = lVal;
+                    }
+                }
+            }
+        }
 
         // ---- [absorb] PC bring-up instrument -- NOT IN THE X360 BINARY. -------------------------
         // ⭐ THE ISOLATION THE ROLL-FREQUENCY WAVE ASKED FOR. That wave measured "pristine stays on
@@ -2766,11 +2807,13 @@ namespace Deformation
         UpdateIKSuspensionOffsets();
         UpdateLocators(lpPartMgr);
 
-        // mAngularVelocitySum <- the body's angular velocity row; the entity sphere centre xyz
-        // re-seeds from the body velocity row (keeps its w == the size lane).
+        // mLastAngularVelocity <- the body's angular velocity row (0x82649394..0x826493AC: lvx128
+        // vehicle+0x60 ; stvx128 -> this+0x66C0 -- DWARF :636; PS3 UpdateVelocity 0x6C8054 `stvx v0,
+        // this, 26304`). The spin accumulator (+0xF40) is NOT touched here: until 2026-09-23 this
+        // line overwrote it every frame (crash parity G20-D4), so spin-induced hinging could never
+        // integrate. The entity sphere centre xyz re-seeds from the body velocity row.
         {
-            const Vector3 lvAngular = GetVehicleBody().GetAngularVelocity();
-            mAngularVelocitySum = VecFloat{ lvAngular.x, lvAngular.y, lvAngular.z, lvAngular.w };
+            mLastAngularVelocity = GetVehicleBody().GetAngularVelocity();
             const Vector3 lvLinear = GetVehicleBody().GetLinearVelocity();
             SetLastLinearVelocity(lvLinear);   // this+26320 xyz keep w (the vperm{0,1,2,7} merge)
         }
