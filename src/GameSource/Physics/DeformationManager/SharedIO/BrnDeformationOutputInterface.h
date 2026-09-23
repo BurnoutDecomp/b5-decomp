@@ -110,6 +110,17 @@ namespace BrnPhysics
             s32                              miNumLocatorOutputs;               // +0x2A00
             VehicleLocatorOutput             maLocatorData[28];                 // +0x2A04 (VehicleLocatorOutput, promoted 2026-08-24)
 
+            // DWARF BrnDeformationOutputInterface.h:158. Console-INLINE on both builds (no
+            // standalone symbol): PhysicalBodyPartPool::OutputEvents calls straight through it to
+            // BaseEventQueue<DetachedPartCurrentPositionEvent>::AddEventSafe (X360 0x8260DDAC bl
+            // 0x825E5B00; PS3 0x6FE148 `if (len < max) {...}` after the :331 tripwire) -- the
+            // BOUNDS-GATED append that drops the event silently when the queue is full. (DWARF passes
+            // the event by value; by const reference here, as it is 16-aligned. Crash parity G30-D1.)
+            void AddDetachedPartPosition(const DetachedPartCurrentPositionEvent& lrEvent)
+            {
+                mDetachedPartCurrentPositionQueue.AddEventSafe(lrEvent);
+            }
+
             // Console-INLINE locator push (no standalone X360 symbol -- the producer,
             // DeformationManager::OutputData @0x826225D8, emits the assert + two stores + count
             // bump in line at 0x8260xxxx; the baked assert cite is THIS header's own line 500 on
