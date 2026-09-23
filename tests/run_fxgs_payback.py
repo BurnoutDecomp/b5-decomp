@@ -61,6 +61,17 @@ OPTIONAL = [
     ("    void\n    PaybackManager::HandleSurvivingPayback(",
      "void PaybackManager::HandleSurvivingPayback(GameStateModuleIO::OutputBuffer*) {}"),
 ]
+# Aggressor arms [2]/[3] and victim arm [1] (FX-GS2 G12-D5/D6/D7, 7da0efff / b66d479f / 5a13b69c): Update
+# has called them since those fixes. Their behaviour -- with the production RNG and every callee -- is
+# covered by run_fxgs2_payback.py; this runner keeps its 42 checks on the arms it was written for, so the
+# three are ALWAYS empty stand-ins here (not extracted).
+ALWAYS_STAND_IN = [
+    "void PaybackManager::HandleWaitingToAwardPayback(const BrnPhysics::Vehicle::VehicleOutputInterface*) {}",
+    "void PaybackManager::HandleAwardingPayback(GameStateModuleIO::OutputBuffer*,"
+    " const BrnPhysics::Vehicle::VehicleOutputInterface*, GameStateModuleIO::EGameModeType) {}",
+    "void PaybackManager::HandleReceivingPayback(GameStateModuleIO::OutputBuffer*,"
+    " const BrnPhysics::Vehicle::VehicleOutputInterface*) {}",
+]
 GUI_REQUIRED = ["void GameStateToGuiInterface::Construct()"]
 GUI_OPTIONAL = [
     ("void GameStateToGuiInterface::AddDirtyTrickEnding(",
@@ -106,6 +117,8 @@ def numeric(tree):
         except ValueError:
             parts.append("// [stand-in: body absent in this revision]\n" + stand_in)
             stood_in.append(signature.split("::", 1)[1].strip())
+    for stand_in in ALWAYS_STAND_IN:
+        parts.append("// [stand-in: covered by run_fxgs2_payback.py]\n" + stand_in)
     gui_parts = []
     for signature in GUI_REQUIRED:
         try:

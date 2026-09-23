@@ -28,6 +28,7 @@
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
+#include "GameSource/GameState/BrnGameActions.h"      // PaybackActivatedAction (HandleReceivingPayback, G12-D7)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -83,12 +84,14 @@ struct OutputBuffer
 {
     GameStateToGuiInterface  mGui;
     GameActionQueue          mActions;          // VariableEventQueue<13312,16>, OutputBuffer +0x04
+    BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface mNetwork;   // OutputBuffer +0x4190 (1839b90d: the Update tail Appends the dirty tricks here)
     BrnNetwork::EPaybackType meActivePaybackType      = static_cast<BrnNetwork::EPaybackType>(99);
     ::EActiveRaceCarIndex    meActivePaybackAggressor = static_cast<::EActiveRaceCarIndex>(99);
     unsigned                 muSetType = 0, muSetAggressor = 0;
 
     GameStateToGuiInterface* GetGameStateToGuiInterface() { return &mGui; }
     GameActionQueue*         GetGameActionQueue() { return &mActions; }
+    BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface() { return &mNetwork; }
     CgsModule::VariableEventQueue<13312, 16>* GetGuiOutputQueue() { return &mActions; }
     void SetActivePaybackType(BrnNetwork::EPaybackType leType) { meActivePaybackType = leType; ++muSetType; }
     void SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor) { meActivePaybackAggressor = leAggressor; ++muSetAggressor; }
@@ -158,6 +161,7 @@ static PaybackManager& Fresh(PaybackManager::EPaybackVictimState leVictim,
     gModule.mOutputGuiEventQueue.Construct();
     gOutput.mGui.Construct();
     gOutput.mActions.Construct();
+    gOutput.mNetwork.GetDirtyTrickQueue()->Construct();
     gOutput.meActivePaybackType      = static_cast<BrnNetwork::EPaybackType>(99);
     gOutput.meActivePaybackAggressor = static_cast<::EActiveRaceCarIndex>(99);
     gOutput.muSetType = gOutput.muSetAggressor = 0;
