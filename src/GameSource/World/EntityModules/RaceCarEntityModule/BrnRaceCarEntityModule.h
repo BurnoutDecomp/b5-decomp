@@ -783,6 +783,8 @@ public:
 
     // X360 0x822A3A20 -- (mxGameModeFlags & lxFlagMask) != 0.
     bool GetGameModeFlag(u64 lxFlagMask) const;
+    // X360 0x822A4A38 (DWARF :884). Global race cars in the world carrying persistent damage.
+    s32 GetPersistentDamageCarCount() const;
 
     // ------------------------------------------------------------------------
     // Tail-state bookkeeping bodied in BrnRaceCarEntityModule.cpp. These touch only

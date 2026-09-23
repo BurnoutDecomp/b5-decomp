@@ -538,6 +538,32 @@ bool RaceCar::IsOutOfRangeRival() const
 }
 
 // ----------------------------------------------------------------------------
+// IncreasePersistentDamage -- inlined into ProcessRaceCarCrashCompleteEvents, its only site
+// (0x822F4264..0x822F4288; DWARF has it as the only writer of mfPersistentDamage):
+//   lfs f13,0xA0(car) ; lfs f0,flt_8201496C (0x3E99999A == 0.3f) ; fadds ; stfs 0xA0
+//   fcmpu f0, f28 (flt_82001C98 == 1.0f) ; blt -> return false
+//   stfs f29 (0.0f), 0xA0 ; return true
+// A car that reaches a full wreck's worth of carried damage starts again from clean and
+// reports it, so the caller re-paints it. The compare is `blt`, so an unordered sum also
+// resets (the `< 1.0f` test below is false for NaN, like the console's).
+// ----------------------------------------------------------------------------
+static const f32 KF_PERSISTENT_DAMAGE_INCREMENT = 0.3f;   // flt_8201496C
+static const f32 KF_PERSISTENT_DAMAGE_WRECKED   = 1.0f;   // flt_82001C98
+
+bool RaceCar::IncreasePersistentDamage()
+{
+    mfPersistentDamage += KF_PERSISTENT_DAMAGE_INCREMENT;
+
+    if (mfPersistentDamage < KF_PERSISTENT_DAMAGE_WRECKED)
+    {
+        return false;
+    }
+
+    mfPersistentDamage = 0.0f;
+    return true;
+}
+
+// ----------------------------------------------------------------------------
 // ToBeRenderedDamaged @ 0x822B3D70. Whether this car should render with accumulated damage:
 // it has persistent damage, or it is the player car, or it is a network car.
 // ----------------------------------------------------------------------------
