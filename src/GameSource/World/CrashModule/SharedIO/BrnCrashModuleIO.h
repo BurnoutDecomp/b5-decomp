@@ -30,6 +30,7 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h" // RaceCarOutputInterface (the crash-complete ring)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"    // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"     // BrnPhysics::Vehicle::VehicleInputInterface (OutputBuffer_PreScene +0x670)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // BrnPhysics::Vehicle::VehicleDriverInputInterface (InputBuffer_PreScene +0x3CD0)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"             // CgsSystem::TimerStatusInterface
 // [crash exit 2026-08-25] InputBuffer_PreScene now holds the REAL RCEntityActiveRaceCarOutputInterface
 // by value (it used to be a console-sized opaque blob), so its home header is a hard dependency.
@@ -102,9 +103,8 @@ namespace CrashIO
     // BrnCrashModuleIO.h:63 (DWARF) -- crash-module pre-scene input buffer. DWARF-authoritative
     // full-member layout (the prior slice modelled this as an opaque read view with a single
     // mReadInterface @+0x3CD0, exposed as GetReadInterface; that getter is the const
-    // GetVehicleDriverInterface below). Member ORDER + names from DecFIGS DWARF; the three
-    // blind-copied interface members (vehicle-driver / active-race-car / game-action) have their
-    // own homes and are modelled as correctly-sized opaque storage (X360 setter copy counts).
+    // GetVehicleDriverInterface below). Member ORDER + names from DecFIGS DWARF; every member is
+    // now its real committed type (the vehicle-driver view was the last opaque blob -- G65-D1).
     // X360 member offsets (documentation): mTimerStatusInterface @+0x4, mNetworkInputInterface
     // @+0x40, mVehicleDriverInterface @+0x3CD0, mActiveRaceCarInterface @+0x5180, mGameActionQueue
     // @+0x7A70, mbPlayerPressingBoost @+0xAE80. On this PC build the embedded NetworkInputInterface
@@ -113,15 +113,17 @@ namespace CrashIO
     // return &member (host-correct regardless of absolute offset).
     struct InputBuffer_PreScene : public CgsModule::IOBuffer
     {
-        // Blind-copied foreign types (own homes elsewhere); correctly-sized opaque storage.
-        struct VehicleDriverInterfaceStorage { unsigned char maBytes[0x14B0]; };   // 5296
+        // DWARF BrnCrashModuleIO.h:47 `typedef VehicleDriverInputInterface VehicleDriverInterface;`
+        // -- the driver-update records (player/AI/NETWORK/traffic) the crash module reads in
+        // ResetCrashedNetworkRaceCars @0x827CE6E0. Was a 0x14B0-byte opaque blob (G65-D1).
+        typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInterface;
         typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;
         const GameActionQueue* GetGameActionQueue() const; // ARTIST 0x827BB528
 
         // ---- read-side getters (read-lock tripwire "Not locked for reading") ----
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;    // 0x827BB288 -> +0x4
         const NetworkInputInterface*           GetNetworkInputInterface() const;   // 0x827BB330 -> +0x40
-        const VehicleDriverInterfaceStorage*   GetVehicleDriverInterface() const;  // 0x827BB3D8 -> +0x3CD0 (ex-GetReadInterface)
+        const VehicleDriverInterface*          GetVehicleDriverInterface() const;  // 0x827BB3D8 -> +0x3CD0 (ex-GetReadInterface)
         // 0x827BB480 -> +0x5180. THE crash module's window onto the race cars: TickCrashes,
         // ClearupCrashes and PreSceneUpdate all reach the player index, the per-car RaceCarState
         // and the per-car flags word through this one getter.
@@ -136,7 +138,7 @@ namespace CrashIO
         // ---- write-side setters (write-lock tripwire "Not locked for writing") ----
         void SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpInterface);   // 0x827A20A8
         void SetNetworkInputInterface(const NetworkInputInterface* lpInterface);            // 0x827ACF88
-        void SetVehicleDriverInterface(const VehicleDriverInterfaceStorage* lpInterface);   // 0x827A21B8
+        void SetVehicleDriverInterface(const VehicleDriverInterface* lpInterface);          // 0x827A21B8
         // Latch the race-car module's pre-scene active-car view (caller
         // WorldModule::BridgeEntityModulesToCrashModule_PreScene @0x827A50D4). Pointer-only use of
         // the interface type (home: BrnRaceCarEntityModuleOutputInterface.h).
@@ -159,7 +161,7 @@ namespace CrashIO
     private:
         CgsSystem::TimerStatusInterface mTimerStatusInterface;    // X360 +0x4    (48B POD)
         NetworkInputInterface           mNetworkInputInterface;   // X360 +0x40   (align-16; widens on host)
-        VehicleDriverInterfaceStorage   mVehicleDriverInterface;  // X360 +0x3CD0
+        VehicleDriverInterface          mVehicleDriverInterface;  // X360 +0x3CD0  (0x14B0 bytes, 16-aligned)
         BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface
                                         mActiveRaceCarInterface;  // X360 +0x5180 (widens on host)
         GameActionQueue                 mGameActionQueue;         // X360 +0x7A70

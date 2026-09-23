@@ -136,10 +136,10 @@ namespace BrnWorld
 
         // NOTE: the DWARF declares the full ModuleSingleBuffered override set
         // (Construct/Prepare/Release/Destruct), the PreSceneUpdate/PostPhysicsUpdate entry points
-        // and the ~25 private crash-handling helpers. The TRAFFIC and NETWORK halves are still
-        // intentionally NOT declared in this behavioural slice: their signatures reference
-        // crash-module IO buffer types whose headers are owned by their own ledger TUs. Those TUs
-        // additively grow this class with their own declarations.
+        // and the ~25 private crash-handling helpers. The traffic half and the network race-car
+        // reset (ResetCrashedNetworkRaceCars / OnContactFromNetworkPlayer) are declared below;
+        // HandleNetworkCrashingTraffic @0x827CB788 and GenerateOwnedTrafficUpdates @0x827C53F0
+        // are still undeclared (see their park notes in BrnCrashModule_RaceCarCrashes.cpp).
 
     private:
         void HandleGameActions(const CrashIO::InputBuffer_PreScene* lpInput,
@@ -158,6 +158,12 @@ namespace BrnWorld
                              CrashIO::OutputBuffer_PreScene* lpOutput );                   // 0x827CDE98
         void ResetRaceCarFromCrashIndex( CrashIO::OutputBuffer_PreScene* lpOutput,
                                          u32 luCrashIndex, bool lbRemoveRaceCar );         // 0x827C6C40
+
+        // ---- the NETWORK race-car reset (crash parity 2026-09-23, G64-D4 / G65-D1). Bodies in
+        //      BrnCrashModule_RaceCarCrashes.cpp; both run only in an online game mode.
+        void ResetCrashedNetworkRaceCars( const CrashIO::InputBuffer_PreScene* lpInput,
+                                          CrashIO::OutputBuffer_PreScene* lpOutput );      // 0x827CE6E0
+        void OnContactFromNetworkPlayer( EActiveRaceCarIndex lePlayer );                   // 0x827C62E8
 
         // X360 0x827C6AD8. Linear search of mRaceCarCrashes for the crash record owned by the
         // given active-race-car slot; returns its index, or KU_INVALID_CRASH (-1) if none.

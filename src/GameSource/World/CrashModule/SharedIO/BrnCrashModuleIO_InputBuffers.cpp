@@ -36,6 +36,12 @@ namespace CrashIO
         // host-widening EventQueue storage, so their X360 offsets are documented (header) not pinned.
         static_assert(offsetof(InputBuffer_PreScene, mTimerStatusInterface) == 0x4,
                       "InputBuffer_PreScene::mTimerStatusInterface @0x4");
+        // SetVehicleDriverInterface's whole-object copy (the console's XMemCpy) keeps the driver
+        // queue's address-dependent first-event offset valid only because source and destination
+        // share the queue's alignment: the interface is 16-aligned (Vector3 members) and the
+        // queue sits at its +0.
+        static_assert(alignof(VehicleDriverInterface) == 16,
+                      "VehicleDriverInputInterface must stay 16-aligned (SetVehicleDriverInterface copy)");
     }
 
     // 0x827BB288 (DWARF :75) -- read-lock tripwire; returns &mTimerStatusInterface (X360 this+0x4).
@@ -56,8 +62,9 @@ namespace CrashIO
     }
 
     // 0x827BB3D8 (DWARF :81, ex-GetReadInterface) -- read-lock tripwire; returns
-    // &mVehicleDriverInterface (X360 this+0x3CD0). Caller CrashModule::ResetCrashedNetworkRaceCars.
-    const InputBuffer_PreScene::VehicleDriverInterfaceStorage*
+    // &mVehicleDriverInterface (X360 this+0x3CD0). Caller CrashModule::ResetCrashedNetworkRaceCars
+    // (0x827CE788).
+    const InputBuffer_PreScene::VehicleDriverInterface*
     InputBuffer_PreScene::GetVehicleDriverInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
@@ -95,13 +102,17 @@ namespace CrashIO
         mNetworkInputInterface = *lpInterface;
     }
 
-    // 0x827A21B8 (DWARF :82) -- write-lock tripwire; blind-copy the 0x14B0-byte vehicle-driver view
-    // into mVehicleDriverInterface (X360 this+0x3CD0). DWARF VehicleDriverInterface ==
-    // VehicleDriverInputInterface (foreign; own home elsewhere). Caller WorldModule::BridgeInputToCrashModule.
-    void InputBuffer_PreScene::SetVehicleDriverInterface(const VehicleDriverInterfaceStorage* lpInterface)
+    // 0x827A21B8 (DWARF :82) -- write-lock tripwire, then 0x827A2254..0x827A2260
+    // `memcpy(this + 0x3CD0, lpInterface, 0x14B0)`: the whole VehicleDriverInputInterface (its
+    // driver-update queue, target-assist list and base-deformation snapshot) copied in one block.
+    // Reproduced as the type's own (implicit, memberwise) assignment -- the same whole-object copy,
+    // sized by the host type instead of the console's 0x14B0. It stays valid for the queue's
+    // address-dependent first-event offset because both ends are 16-aligned (see _AssertLayout).
+    // Caller WorldModule::BridgeInputToCrashModule (0x827ADF4C).
+    void InputBuffer_PreScene::SetVehicleDriverInterface(const VehicleDriverInterface* lpInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-        memcpy(&mVehicleDriverInterface, lpInterface, sizeof(mVehicleDriverInterface));
+        mVehicleDriverInterface = *lpInterface;
     }
 
     // 0x827A2270 (DWARF :85) -- write-lock tripwire; blind-copy the 0x28F0-byte active-race-car view
