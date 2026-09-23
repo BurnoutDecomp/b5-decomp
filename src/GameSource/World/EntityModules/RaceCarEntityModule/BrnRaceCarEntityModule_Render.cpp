@@ -881,9 +881,10 @@ RaceCarEntityModule::RenderRaceCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
     // that brakes print different lines, and every transition reprints exactly once. It is
     // also the only thing that can tell the three ways this block produces a black lamp
     // apart -- engine off, deformed past the cut-off, or simply not braking -- and it prints
-    // mfDeformationSquared verbatim because that member has NO writer on this build (its
-    // console producer, ActiveRaceCar::UpdateDeformationState @0x822D4A58, is the parked leg
-    // BrnGame.log already reports), so a non-zero reading here is itself the finding.
+    // mfDeformationSquared verbatim. (Refreshed 2026-09-23, FX-RCEM3 G62-D2: the member's console
+    // producer, ActiveRaceCar::UpdateDeformationState @0x822D4A58, is LANDED and writes it every
+    // frame for each slot the physics readback owns; RenderParams::Reset keeps a PC-only 0.0f
+    // seed only for the three PC skips of that store -- see its banner.)
     {
         const u32 luLightState =
             ( lpRenderParams->IsEngineOff()  ? 1u : 0u )

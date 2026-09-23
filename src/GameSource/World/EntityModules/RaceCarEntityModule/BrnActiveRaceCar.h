@@ -470,9 +470,10 @@ public:
         { return mWheelTransforms[luWheel]; }
         // X360 0x822A31B8: ((luWheel+39)<<6)+this == &mWheelScaleTransforms[luWheel].
         Matrix44Affine&       GetWheelScaleMatrix(u32 luWheel);
-        // X360 0x822CD170: mWheelScaleTransforms[luWheel] = diag(lrScale.xyz, 1). The
-        // console argument is a scale VECTOR in v1, not a matrix -- see the .cpp banner
-        // for the asm that settles it.
+        // X360 0x822CD170: mWheelScaleTransforms[luWheel] = diag(lrScale.x, .y, .z) with a
+        // ZERO wAxis (the template's sp+0x8C slot is `li r10,0 / stw` @0x822CD258, not 1.0f).
+        // The console argument is a scale VECTOR in v1, not a matrix -- see the .cpp banner
+        // for the asm that settles both.
         void                  SetWheelScale(u32 luWheel, const Vector3& lrScale);
 
         bool GetWheelExists(u32 luWheel) const { return mabWheelExists[luWheel]; }
