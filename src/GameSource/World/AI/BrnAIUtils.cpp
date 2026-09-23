@@ -143,6 +143,55 @@ namespace BrnAI
         return lfResult;
     }
 
+    // 0x827653C0 -- the DWARF BrnAIUtils.h:180 overload (locals lB :182, lA :183, lfSelfDot :185,
+    // lfLineLength :197, lfDot :198, lfParam :200). ARTIST emits it out of line for its only
+    // caller, LineTestTrafficHNG @0x8277A878 (the PS3 build inlines it there). Crash parity G07-D1
+    // (FX-AI-RUMBLE, 2026-09-23). v1 = l2DPoint, v2 = l2DStartLine, v3 = l2DEndLine,
+    // r3 = &l2DPointOnLine; VMX operands checked with tools/re/vmx128.py:
+    //   0x827653C0 vsubfp v12, v3, v2          lB = end - start
+    //   0x827653CC vsubfp v10, v1, v2          lA = point - start
+    //   0x827653D4..0x827653E0                 lfSelfDot = lB.x*lB.x + lB.y*lB.y
+    //   0x827653E4 vcmpeqfp. selfdot == 0 -> the degenerate arm (0x827653F8..0x82765458):
+    //       0x82765408 stvx128 v2, r0, r3      *out = the START
+    //       return |lA| (vrsqrtefp + 2 Newton steps, vsel -> 0 when |lA|^2 == 0)
+    //   else (0x8276545C..0x82765528):
+    //       lfParam      = lfDot * (1/lfSelfDot)   (vrefp + 2 Newton; lfDot = lB.x*lA.x + lB.y*lA.y)
+    //       lfLineLength = Magnitude(lB)           (lfSelfDot * rsqrt, vsel -> 0 @0x827654E4)
+    //       0x827654FC vmaddfp v12, v12, v2, v9    (raw D,A,B,C: lB*lfParam + start) -> *out
+    //       0x827654D4..0x82765508                 Cross(lB, lA) = lB.x*lA.y - lB.y*lA.x
+    //       return Cross * (1/lfLineLength)        (vrefp + 2 Newton) -- SIGNED, no fabs
+    // The estimate + Newton pairs lower to exact reciprocals/sqrt, as in the overload above.
+    f32 DistancePointToLine(Vector2 l2DPoint, Vector2 l2DStartLine, Vector2 l2DEndLine,
+                            Vector2& l2DPointOnLine)
+    {
+        const f32 lfBX = l2DEndLine.x - l2DStartLine.x;   // lB
+        const f32 lfBY = l2DEndLine.y - l2DStartLine.y;
+        const f32 lfAX = l2DPoint.x   - l2DStartLine.x;   // lA
+        const f32 lfAY = l2DPoint.y   - l2DStartLine.y;
+
+        const f32 lfSelfDot = (lfBX * lfBX) + (lfBY * lfBY);
+        if (lfSelfDot == 0.0f)
+        {
+            l2DPointOnLine = l2DStartLine;
+            const f32 lfALengthSquared = (lfAX * lfAX) + (lfAY * lfAY);
+            return (lfALengthSquared == 0.0f) ? 0.0f
+                                              : (lfALengthSquared * (1.0f / std::sqrt(lfALengthSquared)));
+        }
+
+        const f32 lfLineLength = (lfSelfDot == 0.0f) ? 0.0f : (lfSelfDot * (1.0f / std::sqrt(lfSelfDot)));
+        const f32 lfDot        = (lfBX * lfAX) + (lfBY * lfAY);
+        const f32 lfParam      = lfDot * (1.0f / lfSelfDot);
+
+        // The whole 16-byte register is stored: every lane is lB * lfParam + start.
+        l2DPointOnLine.x = l2DStartLine.x + lfBX * lfParam;
+        l2DPointOnLine.y = l2DStartLine.y + lfBY * lfParam;
+        l2DPointOnLine.z = l2DStartLine.z + (l2DEndLine.z - l2DStartLine.z) * lfParam;
+        l2DPointOnLine.w = l2DStartLine.w + (l2DEndLine.w - l2DStartLine.w) * lfParam;
+
+        const f32 lfCross = (lfBX * lfAY) - (lfBY * lfAX);
+        return lfCross * (1.0f / lfLineLength);
+    }
+
     // 0x82768680 -- SEMANTIC reconstruction of the branchless SIMD point-in-section test
     // (the SoA precomputed-edge twin of AISection::IsInside). The X360 body runs all four
     // edge half-plane tests in parallel across the VMX lanes, then AND-reduces (vperm +

@@ -7,8 +7,8 @@
 // X360 build. This home owns the two functions reconstructed here:
 //   StepTo                          @ 0x82766BA8 (BrnAIUtils.cpp:172)
 //   Calc2DIntersectionEquationData  @ 0x82771800 (BrnAIUtils.cpp:211)
-// The DWARF for this source path also declares the 2D geometry helpers DistancePointToLine,
-// GetInterpOnLine, IsPointOnLine, DistancePosVelToOrigin, Convert3DVectorTo2D / Convert2DVectorTo3D,
+// The DWARF for this source path also declares the 2D geometry helpers DistancePointToLine (both
+// overloads are bodied in BrnAIUtils.cpp and declared below), GetInterpOnLine, IsPointOnLine, DistancePosVelToOrigin, Convert3DVectorTo2D / Convert2DVectorTo3D,
 // Rotate2DVectorByAngle and Find{Signed,Unsigned}AngleBetween2DVectors. The two angle helpers are
 // bodied in the partfile BrnAIUtils_Angles.cpp (AIDriver steering wave 2026-09-03) and declared
 // below; the rest are reconstructed by their own recon passes and intentionally NOT declared here.
@@ -40,6 +40,15 @@ namespace BrnAI
     // segment falls back to |point - start|. Asserts the result is finite ('Bad maths!',
     // BrnAIUtils.cpp:117). Consumer: RacingLineGenerator::GetPerpendicularDistanceToCentreLine.
     f32 DistancePointToLine(Vector2 lPoint, Vector2 lLineStart, Vector2 lLineEnd);
+
+    // 0x827653C0 - the DWARF BrnAIUtils.h:180 overload with the foot of the perpendicular:
+    // writes l2DPointOnLine = start + (end - start) * (Dot(end - start, point - start) /
+    // |end - start|^2) and returns the SIGNED distance Cross(end - start, point - start) /
+    // |end - start| (positive when the point lies to the left of start->end). A zero-length line
+    // writes the start and returns |point - start|. No finite-result assert (unlike 0x8276DDB8).
+    // Sole console caller: LineTestTrafficHNG @0x8277A878.
+    f32 DistancePointToLine(Vector2 l2DPoint, Vector2 l2DStartLine, Vector2 l2DEndLine,
+                            Vector2& l2DPointOnLine);
 
     // 0x82768680 - SIMD 'fast' point-in-section test against a precomputed 4-edge convex
     // section (SoA edge coefficients). Returns true iff (lfX,lfY) is on the inside half-plane
