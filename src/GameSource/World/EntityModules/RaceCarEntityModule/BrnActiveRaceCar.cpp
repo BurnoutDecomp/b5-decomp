@@ -1208,12 +1208,21 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 //   2. the four RenderParams::SetWheelScale(i, Def + 96 + 48*i) calls -- same dependency,
 //      and this build cannot draw wheels at all (Model::SetupShaderConstantsForInstancing
 //      is absent).
-//   3. Attrib::FindCollection(-206702987) -> burnoutcargraphicsasset -> the two dwords
-//      stored at +0x1C80/+0x1C84 (miDefaultColourIndex / miDefaultColourPalette). Reads
-//      an attribute collection the vehicle's own attrib vault owns; SetupCarColour is the
-//      only consumer and it is not reconstructed either.
-//   4. ResetVerletOffsets @0x822A4E90 -- the ledger calls it `reviewed`, the tree has no
-//      body for it (same drift as BrnMath::BuildTransform last wave).
+//   3. [FLAG BLOCKED -- a header outside this lane] the default-colour leg, 0x822EB474..
+//      0x822EB4F0: `Attrib::Instance lCar(Attrib::FindCollection(0x52B81656F3ADF675 /*the
+//      burnoutcarasset class; the old "-206702987" here was only its low word, with the r4
+//      collection-key argument dropped by Hex-Rays*/, luCarAssetAttribKey), 0)` -> layout or
+//      DefaultDataArea(0x228) -> RefSpec @+0x170 (GraphicsAsset) -> burnoutcargraphicsasset
+//      -> miDefaultColourIndex (+0x1C80) = layout word 1 (DWARF PlayerColourIndex(), :83) and
+//      miDefaultColourPalette (+0x1C84) = layout word 0 (PlayerColourPaletteIndex(), :90).
+//      The PC Attrib::Gen::burnoutcargraphicsasset (AttribSys/Generated/classes) derives
+//      Instance PRIVATELY and has neither accessor, so its layout cannot be read from here.
+//      Its only consumer, RaceCarEntityModule::SetupCarColour @0x822F5170, has no body yet
+//      either. DELETE-WHEN burnoutcargraphicsasset grows the two DWARF accessors.
+//   4. ⭐ LANDED 2026-09-23 (crash parity G61-D6): ResetVerletOffsets @0x822A4E90, `bl` at
+//      0x822EB404, right before the detached-part queue Construct (0x822EB40C). The old
+//      reason ("the tree has no body for it") was stale -- the body is below, at
+//      ActiveRaceCar::ResetVerletOffsets.
 // ============================================================================
 void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDeformationModelHandle,
                                        const CgsResource::ResourceHandle& lrGraphicsModelHandle,
@@ -1224,12 +1233,17 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     CGS_ASSERT(!IsActive(), "!IsActive()");       // :822
 
     (void)lrInitialVelocity;     // consumed by AddHandlingModel, carried for signature parity
-    (void)luCarAssetAttribKey;   // ditto
+    (void)luCarAssetAttribKey;   // the console READS it (r7 -> r23 @0x822EB180 -> FindCollection's
+                                 // r4 @0x822EB478): only the parked colour leg 3 above uses it
 
     muState = E_STATE_WAITING;                                       // +0x740 = 2
 
     mDeformationModelHandle = lrDeformationModelHandle;              // +0x1CA4
     mGraphicsModelHandle    = lrGraphicsModelHandle;                 // +0x1CC4
+
+    // 0x822EB404 `mr r3, r28 ; bl ResetVerletOffsets` (G61-D6): a slot re-used for a new car
+    // starts undented. muState is WAITING here, so its !IsInactive() tripwire holds.
+    ResetVerletOffsets();
 
     // BrnWorld::DetachedPartRenderEvent<20>::Construct(this + 5520) -- the queue lives
     // inside mRenderParams and is the one member of the block this header names.

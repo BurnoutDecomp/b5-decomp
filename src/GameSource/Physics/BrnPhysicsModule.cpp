@@ -696,9 +696,10 @@ namespace BrnPhysics
 // PhysicsModule::HandleGameActionsPostScene -- the post-scene game-action dispatch, called every
 // frame by PostSceneUpdate over the same GameStateModuleIO::GameActionQueue the pre-scene
 // HandleGameActions drains. Four arms (ids 23 / 34 / 97 / 99) preceded by one unconditional
-// DeformationManager::ProcessDebugResetDeformationModels sweep. Only arm 97 (the body-shop
-// drive-thru repair) is live; the other three and the pre-loop sweep call methods with no body in
-// the tree and each logs a named one-shot deferral instead.
+// DeformationManager::ProcessDebugResetDeformationModels sweep. All four arms are live: 97 (the
+// body-shop drive-thru repair) and, since 2026-09-23 (crash-parity FX-VMNET, G40-D2 / G43-D2),
+// 23 / 34 / 99 into VehicleManager::OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru.
+// Only the pre-loop debug sweep still has no body in the tree and logs a named one-shot deferral.
 // =================================================================================================
 
 
@@ -710,8 +711,9 @@ namespace BrnPhysics
         // +0x80 (written there by BrnDriveThruManager.cpp, PostShopAction).
         const u32 KU_EV_BODY_SHOP_ENTITY_ID = 128;
 
-        // One line per distinct deferral, ever. DELETE-WHEN: the three VehicleManager mode/junkyard
-        // methods and the debug reset sweep are reconstructed.
+        // One line per distinct deferral, ever. DELETE-WHEN: the debug reset sweep
+        // (DeformationManager::ProcessDebugResetDeformationModels) is reconstructed -- the three
+        // VehicleManager mode/junkyard methods it also covered landed 2026-09-23 (FX-VMNET).
         void ReportDeferral(bool& lrbLogged, const char* lpcWhat)
         {
             if (lrbLogged || CgsDev::Log::gpDebugPrint == 0)
@@ -749,18 +751,21 @@ namespace BrnPhysics
                 // 23 -- the post-scene half of the mode PREPARE. Its callee
                 // VehicleManager::OnPrepareGameMode is NOT VehicleManager::OnGameModePrepare
                 // (landed, and reached from the pre-scene dispatch's own case 23).
+                // 0x825A7294 `mr r4, r31 ; addi r3, r28, 0x4AA0 ; bl OnPrepareGameMode` -- the
+                // payload itself, the same convention the pre-scene case-23 arm reads.
                 case BrnGameState::GameStateModuleIO::E_ACTION_PREPARE_FOR_MODE:
                 {
-                    static bool sbLogged = false;
-                    ReportDeferral(sbLogged, "VehicleManager::OnPrepareGameMode");
+                    mVehicleManager.OnPrepareGameMode(
+                        reinterpret_cast<const BrnGameState::GameStateModuleIO::PrepareForModeAction*>(lpEventData));
                     break;
                 }
 
                 // 34 -- the post-scene half of mode START.
+                // 0x825A72A4 `mr r4, r31 ; addi r3, r28, 0x4AA0 ; bl OnStartGameMode`.
                 case BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE:
                 {
-                    static bool sbLogged = false;
-                    ReportDeferral(sbLogged, "VehicleManager::OnStartGameMode");
+                    mVehicleManager.OnStartGameMode(
+                        reinterpret_cast<const BrnGameState::GameStateModuleIO::StartPlayingModeAction*>(lpEventData));
                     break;
                 }
 
@@ -781,10 +786,11 @@ namespace BrnPhysics
                 }
 
                 // 99 -- the junkyard drive-thru.
+                // 0x825A72B4 `mr r4, r31 ; addi r3, r28, 0x4AA0 ; bl OnJunkYardDriveThru`.
                 case BrnGameState::GameStateModuleIO::E_ACTION_DRIVE_THRU_JUNK_YARD:
                 {
-                    static bool sbLogged = false;
-                    ReportDeferral(sbLogged, "VehicleManager::OnJunkYardDriveThru");
+                    mVehicleManager.OnJunkYardDriveThru(
+                        reinterpret_cast<const BrnGameState::GameStateModuleIO::DriveThruJunkYardAction*>(lpEventData));
                     break;
                 }
 
