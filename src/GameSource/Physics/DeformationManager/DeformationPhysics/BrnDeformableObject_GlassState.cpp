@@ -189,8 +189,11 @@ namespace Deformation
         // CarState write offsets OutputState fills (console; CarState interior not fully homed).
         static const u32 KU_CARSTATE_SENSOR_ARRAY    = 32;     // &maSensors[0] write base (80-byte stride)
         static const u32 KU_CARSTATE_SENSOR_STRIDE   = 80;     // per-sensor record stride
-        static const u32 KU_CARSTATE_WHEEL_BASE      = 1600;   // the 4 wheel handling-transform rows
-        static const u32 KU_CARSTATE_WHEEL_STRIDE    = 16;     // one row per wheel slot
+        // ⭐ The three wheel-block figures below are REFERENCE ONLY since 2026-09-23 (crash parity
+        // G17-D1): OutputState writes CarState::mDeformedBBoxMin/Max (+0x640, TWO rows) and
+        // maWheelTagPoints[i] (+0x660) by name. Kept as the figures for reading the asm.
+        static const u32 KU_CARSTATE_WHEEL_BASE      = 1600;   // reference only -- mDeformedBBoxMin (+0x640)
+        static const u32 KU_CARSTATE_WHEEL_STRIDE    = 16;     // reference only -- one 16-byte row
         // ⭐ These two are now REFERENCE ONLY (2026-09-06, widening-sweep wave): both members are
         // homed and named in BrnDeformationState.h, so OutputState reaches them as
         // mfSummedDisplacementSquared / mu8NumSensors. Kept as the figures for reading the asm
@@ -198,7 +201,7 @@ namespace Deformation
         // console stores a BYTE at 0x6A4, which is what retired the old 4-byte write there).
         static const u32 KU_CARSTATE_SCRATCH_SUM     = 1696;   // reference only -- mfSummedDisplacementSquared
         static const u32 KU_CARSTATE_SENSOR_COUNT    = 1700;   // reference only -- mu8NumSensors (a BYTE)
-        static const u32 KU_CARSTATE_WHEEL_TAG_BASE  = 1632;   // the 4 wheel tag-point world positions
+        static const u32 KU_CARSTATE_WHEEL_TAG_BASE  = 1632;   // reference only -- maWheelTagPoints[0] (+0x660)
 
         // DeformationSensor stride / fields OutputState walks (console).
         // ⛔ X360 VALUES -- DO NOT USE EITHER IN HOST POINTER ARITHMETIC. `this+6484` is
@@ -211,10 +214,10 @@ namespace Deformation
 
         // The attached vehicle physics pointer + its transform sub-blocks (console).
         static const u32 KU_VEHICLE_PHYSICS_PTR      = 6476;   // mVehicleBody.GetVehiclePhysics() (dword 1619)
-        static const u32 KU_VEHICLE_HANDLING_ROWS    = 1744;   // the four wheel handling rows OutputState copies
+        static const u32 KU_VEHICLE_HANDLING_ROWS    = 1744;   // reference only -- mDeformableAABB (+0x6D0; OutputState copies its 2 rows by name)
         static const u32 KU_VEHICLE_TRANSFORM_OFFSET = 16;     // the graphics/handling transform (4 rows from +16)
-        static const u32 KU_VEHICLE_WHEEL_STRIDE     = 224;    // per-wheel vehicle block stride (v18 += 224)
-        static const u32 KU_VEHICLE_WHEEL_BLOCK_OFFSET = 432;  // wheel-block source value (+304+128; the OutputState tag w-lane source)
+        static const u32 KU_VEHICLE_WHEEL_STRIDE     = 224;    // reference only -- sizeof(Wheel) (maWheels stride 0xE0)
+        static const u32 KU_VEHICLE_WHEEL_BLOCK_OFFSET = 432;  // reference only -- maWheels[0].mPosition (+0x130+0x80; OutputState's tag Y-lane source, read by name)
 
         // GlassSmashOrCrackEvent queue offset for the entity-module output interface (its interior is
         // opaque, so its glass queue is reached at the asm offset; the render-side queue is reached BY
@@ -684,13 +687,13 @@ namespace Deformation
     //   2. for each sensor, copies the sensor's displacement vectors into the CarState sensor record
     //      (80-byte stride from +32) and accumulates the summed squared displacement into a scalar
     //      (written to CarState +1696);
-    //   3. copies the four wheel handling rows from the attached vehicle (vehicle +1744) into the
-    //      CarState wheel block (+1600..);
+    //   3. copies the attached vehicle's deformed AABB (vehicle +0x6D0, TWO rows, 32 bytes) into
+    //      CarState::mDeformedBBoxMin/Max (+0x640);
     //   4. for each of the four wheels, asserts (asm order: lpWheel, liWheel < eNumWheels, lpWheelSpec,
-    //      liTagPointIndex != -1) and that the vehicle wheel-block value is finite (non-gating
+    //      liTagPointIndex != -1) and that the wheel's position is finite (non-gating
     //      "Invalid wheel position: , please tell Graham D." tripwire), then writes maTagPoints[idx]
-    //      (LOCAL, w lane merged from the wheel-block value -- NOT transformed) into the CarState
-    //      wheel-tag block (+1632, 16-byte stride).
+    //      (LOCAL, NOT transformed, Y lane taken from the wheel's position) into
+    //      CarState::maWheelTagPoints[i] (+0x660, 16-byte stride).
     //
     // MODELLED-vs-asm: the CarState interior is NOT fully homed (BrnDeformationState.h models only
     // the sensor-count + the opaque per-sensor records), and the DeformationSensor displacement
@@ -776,47 +779,38 @@ namespace Deformation
         // the right byte -- it is spelled by name so it STAYS the right byte.
         lpCarState->mfSummedDisplacementSquared = lfScratchSumSq;
 
-        // (3) copy the four wheel handling rows from the attached vehicle (vehicle +1744) into the
-        // CarState wheel block (+1600..). The asm copies four 16-byte rows.
-        const char* lpcVehicle = reinterpret_cast<const char*>(mVehicleBody.GetVehiclePhysics());
-        // ^ BY NAME (fixed 2026-08-24, deform-land wave): the old `*(this + 6476)` read used the
-        // CONSOLE offset on the HOST object -- every pointer above the seat widens on x64, so it
-        // dereferenced garbage. BOOT-MEASURED: first OutputData frame AV'd at OutputWheelData+0x67
-        // (fault 0x123587, event log -> map). KU_VEHICLE_PHYSICS_PTR stays as asm provenance only.
-        const char* lpcHandling = lpcVehicle + KU_VEHICLE_HANDLING_ROWS;
-        // ⚠️ OPEN, RAISED 2026-09-06 (widening-sweep wave) -- NOT RESOLVED HERE, AND NOT TOUCHED.
-        // Two banners in this tree disagree about how wide this copy is, and raw offsets are why
-        // nobody has had to notice:
-        //   * BrnDeformationState.h:71-73 calls +0x640 a "deformed-bbox pair (32 bytes)" and homes
-        //     it as mDeformedBBoxMin/mDeformedBBoxMax, with maWheelTagPoints[4] starting at +0x660.
-        //   * this loop writes FOUR 16-byte rows from +0x640, i.e. +0x640..+0x680 -- so rows 2 and
-        //     3 land on maWheelTagPoints[0] and [1], which step (4) below then writes again.
-        // The console sets up BOTH cursors together (@0x825C1F78 `addi r10,r4,0x640` and
-        // @0x825C1F94 `addi r9,r4,0x660`, source @0x825C1F88 `addi r9,r11,0x6D0`), so the overlap
-        // may be real and order-dependent, or this loop may simply be one iteration count too
-        // long. Settling it needs the +0x640 cursor's own loop read out of OutputState @0x825C1EA8;
-        // that is an OutputState PARITY question, not an x64-widening one, so this wave leaves it
-        // stated rather than guessed. ⭐ Note WHAT SURFACED IT: spelling the neighbouring writes by
-        // name made two writes to the same bytes visible; as raw offsets they were invisible.
-        for (s32 liRow = 0; liRow < 4; ++liRow)
-        {
-            *reinterpret_cast<Vector3*>(lpcCarState + KU_CARSTATE_WHEEL_BASE + KU_CARSTATE_WHEEL_STRIDE * liRow) =
-                *reinterpret_cast<const Vector3*>(lpcHandling + 16 * liRow);
-        }
+        // (3) the attached vehicle's deformed AABB -> CarState::mDeformedBBoxMin / mDeformedBBoxMax.
+        // BY NAME (the vehicle pointer: fixed 2026-08-24, deform-land wave -- the old `*(this + 6476)`
+        // read used the CONSOLE offset on the HOST object and AV'd at OutputWheelData+0x67 on the
+        // first OutputData frame; KU_VEHICLE_PHYSICS_PTR stays as asm provenance only).
+        // ⭐ SETTLED 2026-09-23 (crash parity G17-D1, FX-DEFORM-LAT): the copy is TWO rows, not four.
+        // The 2026-09-06 banner left this OPEN ("four 16-byte rows from +0x640 overlap
+        // maWheelTagPoints[0..1] -- real, or one iteration too long?"). Read out of the asm, the copy
+        // is not a loop at all: 0x825C1F88 `addi r9,r11,0x6D0` (source = vehicle+0x6D0 ==
+        // mDeformableAABB), 0x825C1F78 `addi r10,r4,0x640` (dest), then 0x825C1FB4..0x825C1FD0 FOUR
+        // 8-byte `ld/std` pairs == 32 bytes == mMin + mMax. The PS3 twin (OutputSensorState
+        // @0x6F3E10) is two `lvx/stvx` at 0x6F3FA8..0x6F3FC0. The +0x660 cursor set up at
+        // 0x825C1F94 belongs to the wheel loop below. So the old rows 2-3 (vehicle mOriginalAABB
+        // over maWheelTagPoints[0..1]) were a PC-only overrun that step (4) happened to overwrite.
+        const Vehicle::SimpleVehiclePhysics* lpVehicle = mVehicleBody.GetVehiclePhysics();
+        const CgsGeometric::AxisAlignedBox&  lrDeformedAABB = lpVehicle->GetDeformableAABB();
+        lpCarState->mDeformedBBoxMin = Vector3{ lrDeformedAABB.mMin.x, lrDeformedAABB.mMin.y,
+                                                lrDeformedAABB.mMin.z, lrDeformedAABB.mMin.w };   // ld/std +0x00/+0x08
+        lpCarState->mDeformedBBoxMax = Vector3{ lrDeformedAABB.mMax.x, lrDeformedAABB.mMax.y,
+                                                lrDeformedAABB.mMax.z, lrDeformedAABB.mMax.w };   // ld/std +0x10/+0x18
 
         // (4) per-wheel CarState tag-point write. UNLIKE GetWheelTagPoints, the asm does NOT transform
-        // the tag point here: it writes maTagPoints[tagIndex] (this+15120+32*idx, LOCAL) with its w
-        // lane replaced by the w lane of the vehicle wheel-block value at vehicle + 224*wheel + 432
-        // (vrlimi128 v127,v0,4,0). The per-wheel asserts run in the asm order lpWheel, liWheel <
+        // the tag point here: it writes maTagPoints[tagIndex] (console this+0x3B10+32*idx, LOCAL)
+        // with its Y LANE replaced by the wheel's position y -- the axle row sits at the wheel's
+        // suspension height. The per-wheel asserts run in the asm order lpWheel, liWheel <
         // eNumWheels, lpWheelSpec, liTagPointIndex != -1; the finite-position tripwire is on the
-        // VEHICLE-block value (v0 @ +432), not the local tag point.
-        char* lpcWheelTagDst = lpcCarState + KU_CARSTATE_WHEEL_TAG_BASE;
+        // WHEEL position (Wheel::GetPosition, DWARF Wheel.h:412), not the local tag point.
         for (s32 liWheel = 0; liWheel < 4; ++liWheel)
         {
-            // lpWheel: the per-wheel vehicle base (vehicle + 224*wheel); asm `if (v19 == -304)` is the
-            // null-vehicle sentinel check on that pointer (vehicle ptr + 304 == 0 -> base == -304).
-            const char* lpcWheelBase = lpcVehicle + KU_VEHICLE_WHEEL_STRIDE * liWheel;
-            CGS_ASSERT(reinterpret_cast<std::intptr_t>(lpcWheelBase) != -304, "lpWheel");
+            // lpWheel = SimpleVehiclePhysics::GetWheel(i) (console r30 = vehicle + 0x130 + 0xE0*i,
+            // `cmplwi r30,0` @0x825C2040 -> "lpWheel" tripwire, line 0x3B8).
+            const Vehicle::Wheel* lpWheel = lpVehicle->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
+            CGS_ASSERT(lpWheel != nullptr, "lpWheel");
 
             CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
 
@@ -824,25 +818,26 @@ namespace Deformation
             CGS_ASSERT(lpWheelSpec != nullptr, "lpWheelSpec");
             CGS_ASSERT(lpWheelSpec->liTagPointIndex != -1, "lpWheelSpec->liTagPointIndex != -1");
 
-            // The vehicle wheel-block value the asm loads (lvx128 v0, r0, r29 with r29 = vehicle +
-            // 224*wheel + 432); its finiteness is the tripwire and its w lane is merged into the row.
-            const char* lpcWheelBlock = lpcWheelBase + KU_VEHICLE_WHEEL_BLOCK_OFFSET;
-            const Vector3 lWheelBlockValue = *reinterpret_cast<const Vector3*>(lpcWheelBlock);
+            // Wheel::GetPosition (wheel+0x80: 0x825C20DC `addi r29,r30,0x80`, lvx128 v0 @0x825C20F0
+            // and again @0x825C2210). Its finiteness is the "Invalid wheel position: ..., please
+            // tell Graham D." tripwire -- a formatted-message tripwire with no side effect.
+            const Vector3 lWheelPosition = lpWheel->GetPosition();
+            CGS_ASSERT(vpu::IsValid(lWheelPosition), "Invalid wheel position: , please tell Graham D.");
 
-            // Validity tripwire on the vehicle-block value ("Invalid wheel position ... please tell
-            // Graham D." -- a pure formatted-message tripwire with no observable side effect).
-            CGS_ASSERT(vpu::IsValid(lWheelBlockValue), "Invalid wheel position: , please tell Graham D.");
-
-            // maTagPoints[tagIndex] (LOCAL, NOT transformed), w lane replaced by the wheel-block w lane.
-            // ⭐⭐ BY NAME as of 2026-09-06 (glass wave): this read used the console seat/stride on
-            // the widened host object, so every wheel tag point written into the CarState was a
-            // slice of whatever member actually sits at host +15120. Silent -- unlike the glass
-            // path it never dereferenced what it read, so it produced wrong numbers, not a fault.
-            Vector3 lTagPoint = maTagPoints[lpWheelSpec->liTagPointIndex].GetPosition();
-            lTagPoint.w = lWheelBlockValue.w;   // vrlimi128 v127, v0, 4, 0 (w-lane merge)
-            *reinterpret_cast<Vector3*>(lpcWheelTagDst) = lTagPoint;
-
-            lpcWheelTagDst += KU_CARSTATE_WHEEL_STRIDE;   // += 16
+            // maTagPoints[tagIndex] (LOCAL, NOT transformed) with the Y lane taken from the wheel.
+            // ⭐⭐ Y, NOT W (crash parity G17-D1, 2026-09-23): 0x825C2214 is `vrlimi128 v127,v0,4,0`
+            // (word 0x1BE4071C; vmx128.py: vD=127 vB=0 IMM=4). The vrlimi mask bits are 8=x 4=y
+            // 2=z 1=w, so IMM 4 inserts the wheel's Y lane -- the same TU's UpdateSkinningOffsets
+            // uses IMM 1 where the PS3 twin is vperm<0,1,2,7> (w). The PS3 twin of THIS merge is
+            // 0x6F4190 `vperm v0,v31(tag),v0(wheel+128),VectorPermuteConstant<0,5,2,3>` ==
+            // (tag.x, wheel.y, tag.z, tag.w), and the DWARF inline chain is Wheel::GetPosition ->
+            // VecFloatRef<VectorAxisY> -> SetY<VectorAxisY>. The old `lTagPoint.w = wheel.w` kept
+            // the tag's Y (axle rows ignored suspension travel) and published the wheel's W.
+            // (BY NAME since 2026-09-06, glass wave: the console seat/stride +15120/32 is wrong on
+            // the widened host object.)
+            Vector3 lTagPoint = maTagPoints[lpWheelSpec->liTagPointIndex].GetPosition();   // lvx128 v127 @0x825C20F8
+            lTagPoint.y = lWheelPosition.y;                                                // vrlimi128 v127,v0,4,0 @0x825C2214
+            lpCarState->maWheelTagPoints[liWheel] = lTagPoint;                             // stvx128 v127 -> +0x660+16*i @0x825C2240
         }
     }
 
