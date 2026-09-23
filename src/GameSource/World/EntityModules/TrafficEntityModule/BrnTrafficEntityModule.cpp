@@ -15241,6 +15241,112 @@ void TrafficEntityModule::RemoveVehicle(u32 luVehicle)
 }
 
 // --------------------------------------------------------------------------------------------
+// TrafficEntityModule::ClearupCrashedTraffic  @0x8273CBE0
+//   DWARF BrnTrafficEntityModule.h:1860 -- `void ClearupCrashedTraffic()`
+//
+// Sole caller: HandleExternalRequests' drive-thru arm (actions 97..100, offline). Removes every
+// alive PHYSICAL car that is fatally crashing or has given up, so a drive-thru does not leave
+// wrecks and stranded cars around the shop.
+//
+//   0x8273CBF8..0x8273CC2C  a STACK snapshot, ten 64-bit words: this+8*(0x5078+i)
+//                           (mPhysicalVehicles, soa+240) AND this+8*(0x505A+i) (mAliveVehicles,
+//                           soa+0). The walk runs over the copy, so a RemoveVehicle mid-walk
+//                           never hides the next car.
+//   0x8273CE44..0x8273CE70  the inlined GetVehicle (.h 2459 bound) + assert "lpVehicle"
+//                           (.cpp 0x3ED8 == 16088)
+//   0x8273CE7C              GetTrafficPhysicsInfoForVehicl + assert "lpPhysInfo" (.cpp 16092)
+//   0x8273CEA4              `lbz 0xFE6(info)` == mbIsFatallyCrashing -> remove
+//   0x8273CEB4              else GetCurrentManoeuvre() == 3 (E_MANOEUVRE_GIVE_UP) -> remove
+//   0x8273CEC8              RemoveVehicle(luVehicle)
+// The two asserts do not gate: the console has no null early-out.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::ClearupCrashedTraffic()
+{
+    typedef CgsContainers::FastBitArray<VehicleSoaData::KU_MAX_VEHICLES> TrafficBitArray;
+
+    TrafficBitArray lPhysicalAliveVehicles;
+    lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mPhysicalVehicles, mVehicleSoaData.mAliveVehicles);
+
+    for (TrafficBitArray::Iterator lIt = lPhysicalAliveVehicles.Begin();
+         lIt != lPhysicalAliveVehicles.End();
+         ++lIt)
+    {
+        const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
+
+        const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+        CGS_ASSERT(lpVehicle != 0, "lpVehicle");                             // .cpp 16088
+
+        const TrafficPhysicsInfo* const lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+        CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");                           // .cpp 16092
+
+        if (lpPhysInfo->mbIsFatallyCrashing
+            || lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_GIVE_UP)
+        {
+            RemoveVehicle(luVehicle);
+        }
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::KillAllTrafficInCylinder  @0x82741C58  (121 insns)
+//   DWARF BrnTrafficEntityModule.h:1788 -- `void KillAllTrafficInCylinder(Vector3, float32_t,
+//   float32_t, bool)`, parameters unnamed. ABI from the prologue: r3 this, v1 the centre
+//   (spilled at 0x82741C8C), f1 the radius (squared at 0x82741C7C), f2 the height (f29), r6 the
+//   bool (r24) -- f1/f2 consume the r4/r5 slots.
+//
+// Six console callers (xrefs_to): HandleExternalRequests, HandlePrepareForModeAction,
+// HandleResetRaceCarEvents, UpdateEventStarts, KillTrafficOnStartGridWholeSale, UnhideAllTraffic.
+//
+//   0x82741CD4  `lbz 1(r30)` == vehicle byte +5 (mxFlags) & E_FLAG_ALIVE -- a dead car is skipped
+//   0x82741CE8  unless the bool is set, `lbz 0(r30)` == byte +4 (muSpecies) & 0xF == 1
+//               (E_SPECIES_STATIC) skips a parked car -- the vehicle's own species byte, i.e.
+//               IsOfStaticSpecies(), not the index-range GetVehicleSpecies()
+//   0x82741D4C  maVehicleTransforms[i].wAxis (this+0x1ECB0+64*i), behind the inlined
+//               GetVehicleTransform's second .h 2459 bound assert (0x82741D20)
+//   0x82741D70  offset = pos - centre ; `vrlimi128 v0, splat(flt_82001CC0 == 0.0f), 4` zeroes Y ;
+//               vmsum3fp128 ; `vcmpgtfp.` against splat(r*r): OUTSIDE when d^2 > r^2
+//   0x82741DBC  |pos.y - centre.y| (vslw sign mask + vandc) `vcmpgefp.` splat(height):
+//               OUTSIDE when |dy| >= height
+//   0x82741E10  RemoveVehicle(i)
+// Both compares read CR6's all-lanes bit over splatted operands, i.e. scalar predicates.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::KillAllTrafficInCylinder(Vector3 lvCentre, f32 lfRadius, f32 lfHeight,
+                                                   bool lbIncludeStatic)
+{
+    const f32 lfRadiusSquared = lfRadius * lfRadius;
+
+    for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+    {
+        const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+
+        if (!lpVehicle->IsAlive())
+        {
+            continue;
+        }
+        if (!lbIncludeStatic && lpVehicle->IsOfStaticSpecies())
+        {
+            continue;
+        }
+
+        const Vector3 lvPosition = GetVehicleTransform(luVehicle).Pos();
+
+        const f32 lfDeltaX = lvPosition.x - lvCentre.x;
+        const f32 lfDeltaZ = lvPosition.z - lvCentre.z;
+        if (lfDeltaX * lfDeltaX + lfDeltaZ * lfDeltaZ > lfRadiusSquared)
+        {
+            continue;
+        }
+
+        if (fabsf(lvPosition.y - lvCentre.y) >= lfHeight)
+        {
+            continue;
+        }
+
+        RemoveVehicle(luVehicle);
+    }
+}
+
+// --------------------------------------------------------------------------------------------
 // TrafficEntityModule::JunctionFUP_StopOffscreenTraffic  @0x82719868
 //   DWARF BrnTrafficEntityModule.h:1884 --
 //     void JunctionFUP_StopOffscreenTraffic(const FastBitArray<601>::Iterator&, bool)
@@ -16181,17 +16287,14 @@ void TrafficEntityModule::HandlePrepareForModeAction(
             && meState == E_STATE_RUNNING
             && IsDecisionFrame())
         {
-            // GATE: KillAllTrafficInCylinder @0x82741C58 (121 insns) has no body in the tree
-            // yet. Its signature IS recovered from the prologue -- r3 this, v1 the centre,
-            // f1 the radius, f2 the height, r6 a bool (Hex-Rays' a4/a5 are the phantom slots
-            // f1/f2 ate) -- so this is a missing BODY, not a missing shape. Gated rather than
-            // trap-stubbed on purpose: this arm fires on every clear-nearby-traffic event
-            // start, so a __debugbreak() here would turn "showtime is reachable" into "showtime
-            // crashes", which is strictly worse than the console's traffic staying put.
+            // GATE: the KillAllTrafficInCylinder @0x82741C58 call. The callee is BODIED since
+            // G59-D1 (2026-09-23); this call site was outside that defect and is not wired yet
+            // (its arguments -- 200 m x 10 m on the player -- are this banner's, not re-read).
+            // DELETE-WHEN the call is re-read from 0x827486B4..0x827486F8 and wired.
             static bool sbLogged = false;
             LogMissingLeg_T6(sbLogged,
-                "HandlePrepareForModeAction leg KillAllTrafficInCylinder @0x82741C58 -- no "
-                "body; the start-line sweep of a 200 m x 10 m cylinder on the player does not "
+                "HandlePrepareForModeAction leg KillAllTrafficInCylinder @0x82741C58 -- not "
+                "wired; the start-line sweep of a 200 m x 10 m cylinder on the player does not "
                 "run, so an event that clears nearby traffic starts with the grid still "
                 "populated. Everything else in this handler is live");
             (void)lPlayerPosition;
@@ -16361,6 +16464,49 @@ void TrafficEntityModule::HandleExternalRequests(
                 reinterpret_cast<const BrnGameState::GameStateModuleIO::StopModeAction*>(lpEvent));
             break;
 
+        // --------------------------------------------------------------------------------
+        // 0x8274BFA8..0x8274BFDC -- the four DRIVE-THRU actions (jump-table cases 84..87 ==
+        // ids 97..100 after the -13 bias): BODY_SHOP / PAINT_SHOP / DRIVE_THRU_JUNK_YARD /
+        // GAS_STATION. Offline only (`lbzx r11, r31, r22`, r22 == 0x717DC == mbIsOnlineGameMode):
+        // clear the crashed and given-up physical traffic, then cull every non-parked car
+        // within 250 m horizontally / 1000 m vertically of the local player (v1 = lvx128
+        // this+0x713D0 == mLocalPlayerPosition, r6 = 0). Landed 2026-09-23 (G59-D1).
+        // --------------------------------------------------------------------------------
+        case BrnGameState::GameStateModuleIO::E_ACTION_BODY_SHOP_DRIVE_THRU:
+        case BrnGameState::GameStateModuleIO::E_ACTION_PAINT_SHOP_DRIVE_THRU:
+        case BrnGameState::GameStateModuleIO::E_ACTION_DRIVE_THRU_JUNK_YARD:
+        case BrnGameState::GameStateModuleIO::E_ACTION_GAS_STATION_DRIVE_THRU:
+        {
+            // flt_82004A24 == 0x437A0000 and flt_820BA604 == 0x447A0000 (x360rd), plain .rdata.
+            const f32 KF_DRIVE_THRU_TRAFFIC_CLEAR_RADIUS = 250.0f;
+            const f32 KF_DRIVE_THRU_TRAFFIC_CLEAR_HEIGHT = 1000.0f;
+
+            if (!mbIsOnlineGameMode)
+            {
+                // [FLAG PC witness] NOT IN THE X360 BINARY -- BRN_TRAFFIC_TRACK only: one line per
+                // drive-thru, and the removal reasons RemoveVehicle's [traffic-track] line prints.
+                if (CgsDev::Log::DebugPrint* lpTrack = TrafficTrackStream())
+                {
+                    *lpTrack << "[traffic-track] drive-thru action=" << liType
+                             << " clear-up + cylinder r=" << KF_DRIVE_THRU_TRAFFIC_CLEAR_RADIUS
+                             << " h=" << KF_DRIVE_THRU_TRAFFIC_CLEAR_HEIGHT << "\n";
+                }
+
+                {
+                    const TrafficRemoveReasonTag lTag("drivethru-clearup-crashed");
+                    ClearupCrashedTraffic();                                    // 0x8274BFB8
+                }
+                {
+                    const TrafficRemoveReasonTag lTag("drivethru-cylinder");
+                    KillAllTrafficInCylinder(mLocalPlayerPosition,
+                                             KF_DRIVE_THRU_TRAFFIC_CLEAR_RADIUS,
+                                             KF_DRIVE_THRU_TRAFFIC_CLEAR_HEIGHT,
+                                             false);                            // 0x8274BFD8
+                }
+            }
+            break;
+        }
+
         default:
             break;
         }
@@ -16383,22 +16529,23 @@ void TrafficEntityModule::HandleExternalRequests(
         //   73  crash-camera proximity kill                   -> (inline, needs the +0x7143x block)
         //   75  HideAllTraffic                                -> HideAllTraffic
         //   77  UnhideAllTraffic / cylinder kill              -> UnhideAllTraffic, KillAllTrafficInCylinder
-        //   97..100  crash clean-up                           -> ClearupCrashedTraffic, KillAllTrafficInCylinder
+        //   97..100  drive-thru crash clean-up                -- LIVE above (2026-09-23, G59-D1)
         //   110 kill-zone list                                -> FireKillZone
         //   143 predicted-hull reset
         //   192 streaming request / wait latch
         //   225,226,236  RestartTraffic (+ the hull re-activation copy)
         //   244 low-speed density halving
         // and the post-loop tail at 0x8274C0D0 (the +0x72910 bit-14 edge that fires a 90 m
-        // KillAllTrafficInCylinder), also blocked on KillAllTrafficInCylinder.
+        // KillAllTrafficInCylinder). KillAllTrafficInCylinder is BODIED since G59-D1
+        // (2026-09-23), so arm 30, arm 77's cylinder half and this tail are no longer blocked on
+        // it -- they are simply not wired yet.
         static bool sbLogged = false;
         LogMissingLeg_T6(sbLogged,
-            "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE) and "
-            "39 (STOP_MODE) are reconstructed. The other thirteen arms and the post-loop proximity "
-            "tail each need a callee with no body in this tree (KillAllTrafficInCylinder, RestartTraffic, "
-            "Hide/UnhideAllTraffic, ClearupCrashedTraffic, FireKillZone, "
-            "TrafficLightManager::SetCountdownValue, IsPaused). Nothing regresses: the whole "
-            "function was gated at its call site until now, so zero arms ran");
+            "HandleExternalRequests -- actions 23 (PREPARE_FOR_MODE), 28 (SET_TRAFFIC_SCALE), "
+            "39 (STOP_MODE) and 97..100 (drive-thru clean-up) are reconstructed. The other arms "
+            "and the post-loop proximity tail are not wired (RestartTraffic, Hide/UnhideAllTraffic, "
+            "FireKillZone, TrafficLightManager::SetCountdownValue and IsPaused have no body; "
+            "KillAllTrafficInCylinder does)");
     }
 }
 

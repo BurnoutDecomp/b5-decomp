@@ -1065,6 +1065,18 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // KillDyingVehicleEntities' job, and the scene/collision teardown stays there too.
         void RemoveVehicle(u32 luVehicle);
 
+        // @0x8273CBE0, DWARF BrnTrafficEntityModule.h:1860. RemoveVehicle every alive PHYSICAL
+        // car that is fatally crashing or has given up (E_MANOEUVRE_GIVE_UP). Sole caller:
+        // HandleExternalRequests' drive-thru arm (actions 97..100, offline only).
+        void ClearupCrashedTraffic();
+
+        // @0x82741C58 (121 insns), DWARF BrnTrafficEntityModule.h:1788 (parameters unnamed
+        // there). RemoveVehicle every alive car whose position lies within lfRadius of lvCentre
+        // horizontally (y ignored) and within lfHeight of it vertically; parked (STATIC-species)
+        // cars only when lbIncludeStatic. ABI: r3 this, v1 centre, f1 radius, f2 height, r6 the
+        // bool (the two floats eat the r4/r5 slots).
+        void KillAllTrafficInCylinder(Vector3 lvCentre, f32 lfRadius, f32 lfHeight, bool lbIncludeStatic);
+
         // @0x8273C4C8 (452 insns). DWARF `void TryClearupOffscreenTraffic(
         // const FastBitArray<601>::Iterator&)` (BrnTrafficUnity.cpp:14258); the X360 asm
         // arbitrates the RETURN -- 0x8273CAD4 `li r3,1` on the removal path, 0x8273CBC4
