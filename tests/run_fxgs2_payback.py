@@ -9,6 +9,9 @@ BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing.
            0x82397A40..64) + GameStateToGuiInterface::AddNewDirtyTrick: the timer >= 1.0 award (RandomInt
            draw, gui+4 record, AVAILABLE network message through Update's tail Append) and the
            independent crash -> PaybackLostAction (0xD3) -> idle arm.
+  G12-D7   HandleReceivingPayback @0x82383B40 (victim arm 0x8239AD24[1] = 0x8239AD38) + StartCountdown
+           (inlined at 0x82383C8C..98): when the player is not crashing, the trick type from the event
+           copy, the gui+0x40 record, PaybackActivatedAction (0xD7, 12 bytes), a 10.0 countdown, ACTIVE.
 
 Numeric: tests/FxGs2Payback.cpp compiled against the extracted PRODUCTION bodies (Update and every
 body it dispatches), driven through the real PaybackManager / GameStateToGuiInterface /
@@ -30,7 +33,7 @@ PAYBACK_CPP = "src/GameSource/GameState/PaybackManager/BrnPaybackManager.cpp"
 GUI_CPP = "src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp"
 TIMER_CPP = "src/GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.cpp"
 RANDOM_CPP = "src/GameShared/GameClasses/Numeric/CgsRandom.cpp"
-NUMERIC_CHECKS = 38
+NUMERIC_CHECKS = 49
 
 # Bodies every revision under test has: Update and everything it reaches.
 REQUIRED = [
@@ -62,6 +65,10 @@ OPTIONAL = [
     ("    void\n    PaybackManager::HandleAwardingPayback(",
      "void PaybackManager::HandleAwardingPayback(GameStateModuleIO::OutputBuffer*,"
      " const BrnPhysics::Vehicle::VehicleOutputInterface*, GameStateModuleIO::EGameModeType) {}"),
+    ("    void\n    PaybackManager::StartCountdown(", "void PaybackManager::StartCountdown() {}"),
+    ("    void\n    PaybackManager::HandleReceivingPayback(",
+     "void PaybackManager::HandleReceivingPayback(GameStateModuleIO::OutputBuffer*,"
+     " const BrnPhysics::Vehicle::VehicleOutputInterface*) {}"),
 ]
 GUI_REQUIRED = [
     "void GameStateToGuiInterface::Construct()",
@@ -95,6 +102,11 @@ def wiring(tree):
                     r"\s*;\s*break\s*;", update)
     yield ("D6 Update aggressor case 3 calls HandleAwardingPayback(out, vehicle output, mode) "
            "(0x8239AC64: r4 = r22, r5 = r21, r6 = r29)", arm is not None)
+    arm = re.search(r"case\s+E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU\s*:\s*"
+                    r"HandleReceivingPayback\(\s*lpOutput\s*,\s*lpVehicleOutputInterface\s*\)\s*;\s*break\s*;",
+                    update)
+    yield ("D7 Update victim case 1 calls HandleReceivingPayback(out, vehicle output) "
+           "(0x8239AD38: r4 = r22, r5 = r21)", arm is not None)
 
 
 def numeric(tree):

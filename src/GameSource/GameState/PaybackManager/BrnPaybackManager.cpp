@@ -3,9 +3,9 @@
 //
 // The online payback / dirty-trick manager. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (semantic parity, not byte-matching). The manager's functions that live here are listed at
-// each body; the remaining declared members (Prepare/Release/OnRoundStart/HandleReceivingPayback/
-// ShowDTAvailableHudNotification/StartCountdown/UpdateFSMTimers/SetDirtyTrickButtonState/
-// SetTimerInterface) have no body in the tree yet and no caller here.
+// each body; the remaining declared members (Prepare/Release/OnRoundStart/
+// ShowDTAvailableHudNotification/UpdateFSMTimers/SetDirtyTrickButtonState/SetTimerInterface)
+// have no body in the tree yet and no caller here.
 //
 // [FX-GS crash-parity 2026-09-23] ResetState + Destruct (G12-D12), the three victim-side arms
 // HandleActivePayback / HandleCrashDueToPayback / HandleSurvivingPayback (G12-D8/D9/D10) with
@@ -15,7 +15,8 @@
 // [FX-GS2 2026-09-23] HandleWaitForPaybackAggressorToCrash reads CrashingRaceCarInterface::
 // IsCrashing (b5 27ad7089) instead of a pinned false (G12-D1); HandleWaitingToAwardPayback, the
 // aggressor arm [2] that was parked on the same read (G12-D5); HandleAwardingPayback, arm [3],
-// with DirtyTrickAwarded, the helper it inlines on the X360 (G12-D6).
+// with DirtyTrickAwarded, the helper it inlines on the X360 (G12-D6); the victim arm [1]
+// HandleReceivingPayback with StartCountdown, which it inlines (G12-D7).
 //
 // Source-of-truth: X360 ASM (behaviour + calling convention) > DecFIGS DWARF (shape) > none.
 // ===================================================================================
@@ -27,6 +28,7 @@
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (complete)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface (complete; ->GetDirtyTrickQueue)
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h" // BrnGameState::TakedownEvent
+#include "GameSource/GameState/BrnGameActions.h"                         // GameStateModuleIO::PaybackActivatedAction (215)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // BrnPhysics::Vehicle::{VehicleOutputInterface,CrashingRaceCarInterface}
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint ([payback] witness)
@@ -662,6 +664,69 @@ namespace BrnGameState
     }
 
     // -----------------------------------------------------------------------------------
+    // StartCountdown  (DWARF BrnPaybackManager.h:223; PS3 DecFIGS 0x23CB90: `mfCountdownTimer = 10.0`)
+    // No out-of-line X360 body: HandleReceivingPayback inlines it at 0x82383C8C..0x82383C98
+    // (`lfs f0, flt_8202AC38` -- the image reads 0x41200000 = 10.0 -- `stfs f0, 0x248(r31)`).
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::StartCountdown()
+    {
+        mfCountdownTimer = 10.0f;   // flt_8202AC38
+    }
+
+    // -----------------------------------------------------------------------------------
+    // HandleReceivingPayback  @ 0x82383B40 (Update victim jump table 0x8239AD24[1] = 0x8239AD38:
+    // r4 = lpOutput (r22), r5 = the vehicle output (r21))
+    // Victim side, TRIGGERED_ON_YOU -- a dirty trick was triggered on the local player. It starts
+    // as soon as the player is not crashing: take the trick type from the event copy, tell the GUI
+    // it was triggered, post PaybackActivatedAction, start the 10 s countdown, go ACTIVE.
+    //     0x82383B68  assert "lpVehicleOutputInterface" (non-gating, line 0x207 = 519)
+    //     0x82383B8C  bl  CrashingRaceCarInterface::SetFromVehicleOutputInterface (stack copy)
+    //     0x82383B9C  lbzx crashing[player] ; bne -> return
+    //     0x82383BA8  lwz +0x204 (mEvent.meDirtyTrickType) ; stw +0x254 ; assert != 3 (non-gating, 0x211)
+    //     0x82383BD4..0x82383C04  DirtyTrickTriggered(+0x240, player, +0x254) inlined:
+    //                 gui+0x40 record {aggressor, victim = player, type}
+    //     0x82383C10/0x82383C3C  asserts "lpOutput" / "lpOutput->GetGameActionQueue()" (non-gating)
+    //     0x82383C58..0x82383C88  GetGameActionQueue()->AddEvent({+0x254, +0x240, player}, 0xD7, 0xC)
+    //     0x82383C8C..0x82383C98  StartCountdown() inlined (10.0 -> +0x248)
+    //     0x82383C9C  `li r10, 2 ; stw r10, 0x260(r31)`   victim ChangeState(ACTIVE) inlined
+    // The PS3 twin (DecFIGS 0x29C9B0) calls DirtyTrickTriggered / StartCountdown / ChangeState by name.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::HandleReceivingPayback(GameStateModuleIO::OutputBuffer* lpOutput,
+                                           const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
+    {
+        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+
+        BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
+        lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
+
+        if (lCrashingRaceCars.IsCrashing(static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex())))
+            return;
+
+        meActiveDirtyTrickType = mEvent.meDirtyTrickType;
+        CGS_ASSERT(meActiveDirtyTrickType != KE_NO_DIRTY_TRICK,
+                   "BrnNetwork::E_PAYBACK_TYPE_COUNT != meActiveDirtyTrickType");
+
+        DirtyTrickTriggered(lpOutput, mePaybackAggressorRaceCarIndex,
+                            mpGameStateModule->GetPlayerActiveRaceCarIndex(), meActiveDirtyTrickType);
+
+        CGS_ASSERT(lpOutput, "lpOutput");
+        CGS_ASSERT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()");
+
+        // PaybackActivatedAction (DWARF record, BrnGameActions.h): {type, aggressor, victim} in
+        // THIS order (`stw +0x254, var_50 ; stw +0x240, var_4C ; stw player, var_48`), 12 bytes.
+        GameStateModuleIO::PaybackActivatedAction lActivated;
+        lActivated.mePaybackType           = meActiveDirtyTrickType;
+        lActivated.mePaybackAggressorIndex = mePaybackAggressorRaceCarIndex;
+        lActivated.mePaybackVictimIndex    = mpGameStateModule->GetPlayerActiveRaceCarIndex();
+        lpOutput->GetGuiOutputQueue()->AddEvent(&lActivated, GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED);
+
+        StartCountdown();                            // +0x248 = 10.0
+        ChangeState(E_PAYBACK_VICTIM_STATE_ACTIVE);  // +0x260 = 2
+    }
+
+    // -----------------------------------------------------------------------------------
     // HandleActivePayback  @ 0x82397CC8 (Update victim jump table 0x8239AD24[2] = 0x8239AD4C)
     // Victim side, ACTIVE -- a dirty trick is running on the local player. Publish it to the
     // output buffer every frame, then resolve it: the player crashing ends it as YOU_CRASHED, the
@@ -968,10 +1033,8 @@ namespace BrnGameState
             case E_PAYBACK_VICTIM_STATE_IDLE:
                 break;
             case E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU:
-                // FLAG parked: PaybackManager::HandleReceivingPayback @0x82383B40 (jump table
-                // 0x8239AD24[1], r4 = lpOutput, r5 = lpVehicleOutputInterface) has no body: it reads
-                // BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing, which is declared with
-                // no body in BrnVehicleOutputInterface.h (not this TU's file).
+                // Jump table 0x8239AD24[1] = 0x8239AD38: r5 = the vehicle output (r21), r4 = lpOutput.
+                HandleReceivingPayback(lpOutput, lpVehicleOutputInterface);
                 break;
             case E_PAYBACK_VICTIM_STATE_ACTIVE:
                 HandleActivePayback(lpOutput);        // jump table [2] 0x8239AD4C, r4 = lpOutput
