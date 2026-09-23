@@ -27,10 +27,16 @@
 //                        +0x244 = -1, -1.0 -> +0x24C, 0 -> +0x25C / +0x266, GUI 0xB0 {1}            (G12-D6)
 //   Update tail          GetGameStateToNetworkInterface (0x8231D800) -> DirtyTrickEvent Append of +0x30
 //                        (0x8239ADEC), then +0x38 = 0: the award's message reaches the network queue.
+//   HandleReceivingPayback @0x82383B40 (victim arm [1] = 0x8239AD38: r4 = out, r5 = vehicle output)
+//                        crashing[player] (0x82383B9C) bne -> return; else +0x254 = +0x204 (assert != 3,
+//                        non-gating); gui+0x40 Triggered {+0x240, player, +0x254} (0x82383C04); action
+//                        0xD7 {+0x254, +0x240, player} 12 bytes (0x82383C88); 10.0 (flt_8202AC38) ->
+//                        +0x248; 2 -> +0x260                                                      (G12-D7)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"
+#include "GameSource/GameState/BrnGameActions.h"      // PaybackActivatedAction (the D7 arm's 0xD7 record)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -444,6 +450,87 @@ int main()
         Tick(lr);
         Check(lbNotYet && lr.mbPaybackAwarded && lr.mfPaybackAggTimer == 1.0f && static_cast<s32>(lr.meAwardedDirtyTrick) == 1,
               "D5+D6 chain: 3 entered at -1.0, award exactly when Update's timer reaches 1.0");
+    }
+
+    // ===================== G12-D7: HandleReceivingPayback through victim arm [1] ===================
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU, PM::E_PAYBACK_AGGRESSOR_STATE_IDLE);
+        lr.mEvent.meDirtyTrickType = static_cast<BrnNetwork::EPaybackType>(0);   // the trick triggered on you
+        Tick(lr);
+        Check(gSetFromCalls == 1 && gpSetFromArg == gpVehicleOutput,
+              "D7 the arm snapshots the vehicle output Update was handed  @0x82383B8C");
+        Check(lr.meActiveDirtyTrickType == static_cast<BrnNetwork::EPaybackType>(0),
+              "D7 +0x254 = the event copy's trick type (+0x204)  @0x82383BB0");
+        const GameStateModuleIO::GameStateToGuiInterface::DirtyTrickTriggeredQueue& lrTriggered = gOutput.mGui.mDirtyTrickTriggeredQueue;
+        Check(lrTriggered.GetLength() == 1
+                  && lrTriggered.GetEvent(0).meAggressorActiveRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_5
+                  && lrTriggered.GetEvent(0).meVictimActiveRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_2
+                  && lrTriggered.GetEvent(0).meTrickType == static_cast<BrnNetwork::EPaybackType>(0),
+              "D7 gui+0x40 Triggered record {+0x240 aggressor, player, +0x254}  @0x82383C04");
+        const void* lpLast = nullptr;
+        s32 liSize = 0;
+        s32 laiActivated[3] = { -9, -9, -9 };
+        const bool lbPosted = CountType(gOutput.mActions, 215, &lpLast, &liSize) == 1 && liSize == 12 && lpLast != nullptr;
+        if (lbPosted) std::memcpy(laiActivated, lpLast, sizeof(laiActivated));
+        Check(lbPosted && laiActivated[0] == 0 && laiActivated[1] == 5 && laiActivated[2] == 2,
+              "D7 action 0xD7 PaybackActivatedAction {type, aggressor, player}, 12 bytes  @0x82383C88");
+        Check(lr.mfCountdownTimer == 10.0f, "D7 StartCountdown: +0x248 = 10.0 (flt_8202AC38)  @0x82383C98");
+        Check(lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_ACTIVE, "D7 victim state 2 (ACTIVE)  @0x82383C9C");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU, PM::E_PAYBACK_AGGRESSOR_STATE_IDLE);
+        lr.mEvent.meDirtyTrickType = static_cast<BrnNetwork::EPaybackType>(0);
+        gabCrashing[2] = true;   // the player is crashing: wait
+        Tick(lr);
+        Check(lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU
+                  && lr.meActiveDirtyTrickType == static_cast<BrnNetwork::EPaybackType>(1) && lr.mfCountdownTimer == 5.0f
+                  && gOutput.mGui.mDirtyTrickTriggeredQueue.GetLength() == 0 && CountType(gOutput.mActions, 215, nullptr, nullptr) == 0,
+              "D7 player crashing -> nothing (bne to the epilogue), stays in state 1  @0x82383BA4");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU, PM::E_PAYBACK_AGGRESSOR_STATE_IDLE);
+        lr.mEvent.meDirtyTrickType = static_cast<BrnNetwork::EPaybackType>(2);
+        gabCrashing[5] = true;   // the aggressor's car is crashing, not the player
+        Tick(lr);
+        Check(lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_ACTIVE && lr.meActiveDirtyTrickType == static_cast<BrnNetwork::EPaybackType>(2),
+              "D7 the byte is the PLAYER's slot (slot 5 crashing, player 2 clear -> ACTIVE)");
+    }
+    {
+        // Inbound status 2 on the player: ProcessDirtyTrickEventQueue sets state 1 and the SAME
+        // Update's victim switch then dispatches arm [1] (0x8239ABB0 runs before 0x8239AD00).
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_IDLE);
+        BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent lEvent;
+        lEvent.meAggressorActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_7;
+        lEvent.meVictimActiveRaceCarIndex    = ::E_ACTIVE_RACE_CAR_INDEX_2;
+        lEvent.meDirtyTrickType              = static_cast<BrnNetwork::EPaybackType>(1);
+        lEvent.meDirtyTrickStatus            = static_cast<BrnNetwork::EDirtyTrickStatus>(2);
+        gInput.mNetworkToGameStateInterface.GetDirtyTrickQueue()->AddEvent(lEvent);
+        Tick(lr);
+        const void* lpLast = nullptr;
+        s32 liSize = 0;
+        s32 laiActivated[3] = { -9, -9, -9 };
+        const bool lbPosted = CountType(gOutput.mActions, 215, &lpLast, &liSize) == 1 && liSize == 12 && lpLast != nullptr;
+        if (lbPosted) std::memcpy(laiActivated, lpLast, sizeof(laiActivated));
+        Check(lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_ACTIVE && lr.mePaybackAggressorRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_7
+                  && lbPosted && laiActivated[0] == 1 && laiActivated[1] == 7 && laiActivated[2] == 2 && lr.mfCountdownTimer == 10.0f,
+              "D7 an inbound TRIGGERED on the player activates in the same Update (state 0 -> 1 -> 2, 0xD7 {1, 7, 2})");
+        gInput.mNetworkToGameStateInterface.GetDirtyTrickQueue()->Clear();   // next frame's input is fresh
+        Tick(lr);   // next frame: HandleActivePayback ticks the countdown
+        Check(lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_ACTIVE && lr.mfCountdownTimer == 9.75f
+                  && gOutput.meActivePaybackType == static_cast<BrnNetwork::EPaybackType>(1)
+                  && gOutput.meActivePaybackAggressor == ::E_ACTIVE_RACE_CAR_INDEX_7,
+              "D7+D8 chain: the next frame's ACTIVE arm publishes it and counts 10.0 -> 9.75");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_TRIGGERED_ON_YOU, PM::E_PAYBACK_AGGRESSOR_STATE_IDLE);
+        lr.mEvent.meDirtyTrickType = PM::KE_NO_DIRTY_TRICK;   // 3: the assert's case
+        const unsigned luBefore = gAsserts;
+        Tick(lr);
+        const unsigned luFired = gAsserts - luBefore;
+        gAsserts = luBefore;   // expected here; keep the global no-assert check meaningful
+        Check(luFired == 1 && lr.mePaybackVictimState == PM::E_PAYBACK_VICTIM_STATE_ACTIVE
+                  && lr.meActiveDirtyTrickType == PM::KE_NO_DIRTY_TRICK,
+              "D7 trick type 3 fires the non-gating assert (line 0x211) and the arm still runs  @0x82383BB4");
     }
 
     Check(gAsserts == 0, "valid fixtures fire no assert");
