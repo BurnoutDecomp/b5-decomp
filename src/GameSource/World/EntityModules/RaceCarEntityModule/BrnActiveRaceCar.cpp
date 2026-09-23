@@ -2310,10 +2310,9 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
 //  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
 //     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
 //     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
-//  6. SendAddedRemovedNetworkCarForCollisionEvents and UpdateIndicators -- neither exists in
-//     this tree yet (re-measured 2026-09-13: no definition anywhere).
-//     (CalculateWheelAngularVelocities landed 2026-09-12 and UpdateInAirRotations 2026-09-13;
-//      both are called below.)
+//  6. SendAddedRemovedNetworkCarForCollisionEvents (0x822F7E70) -- no definition in this tree.
+//     (CalculateWheelAngularVelocities landed 2026-09-12, UpdateInAirRotations 2026-09-13 and
+//      UpdateIndicators 2026-09-23 (G60-D2/G61-D5); all three are called below.)
 //  7. the mbIsWaitingForDeferredReset -> RequestPlaceOnTrack countdown (0x822F7E80..0x822F7EB8).
 //     RequestPlaceOnTrack exists, but the latch is only ever armed by code this build has not
 //     landed, so running the countdown would be dead work with a live teleport at the end.
@@ -2424,6 +2423,11 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
     // time-step multiplier, not lfTimeStep. This is the only producer of mCurrentInAirRotations,
     // which GetCurrentInAirRotations publishes.
     UpdateInAirRotations( lfTimeStepMultiplier );
+
+    // 0x822F7E74..0x822F7E7C: `mr r3, r31 ; fmr f1, f31 ; bl UpdateIndicators` -- f31 is Update's
+    // incoming f1 (`fmr f31, f1` @0x822F78E0), i.e. lfTimeStep, NOT the multiplier the two calls
+    // above take. Unconditional, every active car.
+    UpdateIndicators( lfTimeStep );
 
     // 0x822F7EBC..0x822F7ED0.
     if( mbCrashedIntoWater )                             // +0x783
@@ -2921,23 +2925,33 @@ void ActiveRaceCar::GetResetCoords( Vector3* lpOutPosition, Vector3* lpOutDirect
 
 
 // ----------------------------------------------------------------------------
-// SetIndicatorState @ 0x822A52B0. Store-for-store:
-//   a2 != 0 : if (!+0x1C8D) +0x1C88 = 0.0 ; +0x1C8C = 1
-//   a3 != 0 : if (!+0x1C8C) +0x1C88 = 0.0 ; +0x1C8D = 0 ; +0x1C8C = 1
-//   else    : +0x1C88 = 0.0 ; +0x1C8C = 0 ; +0x1C8D = 0
-// HandleStopModeAction @0x82307C44 calls it with (0, 0) -- indicators off at mode end.
+// SetIndicatorState @ 0x822A52B0. Store-for-store (raw asm, NOT the Hex-Rays rendering):
+//   r4 != 0 : lbz +0x1C8D ; if 0 -> stfs flt_82001CC0 (0.0) +0x1C88
+//             stb 0 +0x1C8C ; stb 1 +0x1C8D                    (0x822A52D4..0x822A52E0)
+//   r5 != 0 : lbz +0x1C8C ; if 0 -> stfs 0.0 +0x1C88
+//             stb 0 +0x1C8D ; stb 1 +0x1C8C                    (0x822A530C..0x822A5318)
+//   else    : stfs 0.0 +0x1C88 ; stb 0 +0x1C8C ; stb 0 +0x1C8D (0x822A5320..0x822A5334)
+// +0x1C8D is mbLeftIndicatorActive (UpdateIndicators copies it into mbIsIndicatingLeft, the byte
+// SubmitCoronasForRaceCar treats as LEFT), so arg 1 is the LEFT request -- DWARF :47 names the
+// parameters (lbLeftIndicatorOn, lbRightIndicatorOn).
+// CORRECTED 2026-09-23 (crash parity G60-D1, FX-RCEM3): arm 1 used to raise
+// mbRightIndicatorActive and never touch the left latch -- a copy of Hex-Rays' `*(+7308) = 1`,
+// which drops the two real stores. Callers: HandleStopModeAction @0x82307C44 and
+// HandleGameActions case 35 pass (0, 0) (indicators off); case 276 (UpcomingRoadChangeAction)
+// passes the left/right road highlight states == 2.
 // ----------------------------------------------------------------------------
-void ActiveRaceCar::SetIndicatorState(bool lbRightIndicator, bool lbLeftIndicator)
+void ActiveRaceCar::SetIndicatorState(bool lbLeftIndicatorOn, bool lbRightIndicatorOn)
 {
-    if (lbRightIndicator)
+    if (lbLeftIndicatorOn)
     {
         if (!mbLeftIndicatorActive)
         {
             mfIndicatorTime = 0.0f;
         }
-        mbRightIndicatorActive = true;
+        mbRightIndicatorActive = false;
+        mbLeftIndicatorActive  = true;
     }
-    else if (lbLeftIndicator)
+    else if (lbRightIndicatorOn)
     {
         if (!mbRightIndicatorActive)
         {
@@ -2952,6 +2966,34 @@ void ActiveRaceCar::SetIndicatorState(bool lbRightIndicator, bool lbLeftIndicato
         mbRightIndicatorActive = false;
         mbLeftIndicatorActive  = false;
     }
+}
+
+// ----------------------------------------------------------------------------
+// UpdateIndicators @ 0x822A5340 (crash parity G60-D2 / G61-D5, 2026-09-23). No definition existed
+// and ActiveRaceCar::Update dropped the call (0x822F7E7C), so the two render bits the corona
+// producer reads had no writer on PC.
+//   0x822A5340  lbz r9, +0x1C8C (right latch, read once) ; || lbz +0x1C8D (left latch)
+//   0x822A5358  lfs +0x1C88 ; fadds f0, f0, f1 ; stfs +0x1C88        mfIndicatorTime += lfTimeStep
+//   0x822A5368  lfs flt_820147FC (0.5) ; fcmpu ; ble -> keep          !(t <= 0.5) -> 0.0
+//   0x822A5374  stfs flt_82001CC0 (0.0) +0x1C88
+//   0x822A5380  lfs +0x1C88 ; lfs flt_82003F40 (0.25) ; fcmpu ; blt   lbIndicatorActive = t < 0.25
+//   0x822A53C4  stb (left latch && active)  -> +0x1BE9 == mRenderParams.mbIsIndicatingLeft
+//   0x822A53E0  stb (right latch && active) -> +0x1BEA == mRenderParams.mbIsIndicatingRight
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::UpdateIndicators(f32 lfTimeStep)
+{
+    if (mbRightIndicatorActive || mbLeftIndicatorActive)
+    {
+        mfIndicatorTime = mfIndicatorTime + lfTimeStep;
+        if (!(mfIndicatorTime <= 0.5f))                  // flt_820147FC; `ble` keeps, so a NaN wraps
+        {
+            mfIndicatorTime = 0.0f;                      // flt_82001CC0
+        }
+    }
+
+    const bool lbIndicatorActive = mfIndicatorTime < 0.25f;   // flt_82003F40
+    mRenderParams.SetIndicatingLeft(mbLeftIndicatorActive && lbIndicatorActive);
+    mRenderParams.SetIndicatingRight(mbRightIndicatorActive && lbIndicatorActive);
 }
 
 }

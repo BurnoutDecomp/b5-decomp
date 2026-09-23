@@ -547,10 +547,13 @@ public:
         // ADDITIVE (coronas step 1): the two INDICATOR bits. SubmitCoronasForRaceCar
         // @0x822D1600 reads them as bare bytes (`lbz r20, 0x1409(r27)` == +5129 == LEFT,
         // `lbz r21, 0x140A(r27)` == +5130 == RIGHT) to gate the four indicator tag types --
-        // 7/9 on LEFT, 8/10 on RIGHT, which is what pins which byte is which side. Getters
-        // only: no writer of either byte exists anywhere in the reconstructed tree yet (the
-        // console's producer is the AI/driver indicator logic, not reconstructed).
+        // 7/9 on LEFT, 8/10 on RIGHT, which is what pins which byte is which side.
+        // Their one console writer is ActiveRaceCar::UpdateIndicators @0x822A5340 (`stb` to
+        // ActiveRaceCar+0x1BE9 / +0x1BEA == +0x7E0 + 0x1409 / 0x140A), through the DWARF setters
+        // SetIndicatingLeft/Right (BrnActiveRaceCar.h:200/:206; landed 2026-09-23, G60-D2).
+        void SetIndicatingLeft(bool lbOn)  { mbIsIndicatingLeft = lbOn; }
         bool IsIndicatingLeft() const  { return mbIsIndicatingLeft; }
+        void SetIndicatingRight(bool lbOn) { mbIsIndicatingRight = lbOn; }
         bool IsIndicatingRight() const { return mbIsIndicatingRight; }
         // ADDITIVE (coronas step 1): the blues-and-twos STROBE PHASE.
         // RequestBluesAndTwosStateSwitch below advances and wraps it in [0,1);
@@ -873,6 +876,13 @@ public:
     // lfTimeStep even though Update hands it the multiplier.
     void UpdateInAirRotations(f32 lfTimeStep);
 
+    // X360 0x822A5340 (DWARF BrnActiveRaceCar.cpp:67, local lbIndicatorActive). The indicator
+    // blink: while either latch (+0x1C8C / +0x1C8D) is up, mfIndicatorTime accumulates lfTimeStep
+    // and wraps to 0 past 0.5 s; the lamp is lit for the first 0.25 s of each period and the two
+    // render bits mRenderParams.mbIsIndicatingLeft/Right follow their latch AND that phase.
+    // Update calls it every frame (0x822F7E7C) with its lfTimeStep. (Crash parity G60-D2/G61-D5.)
+    void UpdateIndicators(f32 lfTimeStep);
+
     // X360 0x822B8828: the render body transform,
     // `Mult(mCentreOfMassTransform, mPhysicsState.mTransform)`. The console's only caller
     // is UpdatePhysicsState @0x822D4418, which stores the result into
@@ -1015,10 +1025,12 @@ public:
     // class (Prepare @0x822EAC28 and ResetAfterCrash @0x822BF3A0), and both write ZERO.
     void SetInShowtime(bool lbInShowtime)            { mbIsInShowtime = lbInShowtime; }        // +0x788
     // X360 0x822A52B0. The indicator latch RaceCarEntityModule drives: the two flag bytes at
-    // +0x1C8C / +0x1C8D and the timer at +0x1C88. Body in BrnActiveRaceCar.cpp. Parameter
-    // names follow the members each argument raises (arg 1 raises +0x1C8C, arg 2's arm raises
-    // +0x1C8C and CLEARS +0x1C8D -- the console's own stores, reproduced as written).
-    void SetIndicatorState(bool lbRightIndicator, bool lbLeftIndicator);
+    // +0x1C8C (mbRightIndicatorActive) / +0x1C8D (mbLeftIndicatorActive) and the timer at
+    // +0x1C88. Body in BrnActiveRaceCar.cpp. DWARF BrnActiveRaceCar.cpp:47 names the parameters
+    // (lbLeftIndicatorOn, lbRightIndicatorOn): arg 1 RAISES +0x1C8D (left) and CLEARS +0x1C8C,
+    // arg 2 is the mirror (0x822A52D4..0x822A52E0 / 0x822A530C..0x822A5318; corrected
+    // 2026-09-23, crash parity G60-D1 -- the old names and arm 1 followed a Hex-Rays mis-render).
+    void SetIndicatorState(bool lbLeftIndicatorOn, bool lbRightIndicatorOn);
     bool IsNotSendingNetworkUpdates() const          { return mbNotSendingNetworkUpdates; }    // +0x798
     bool IsDisconnectedFromNetwork() const           { return mbIsDisconnectedFromNetwork; }   // +0x799
     const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750
