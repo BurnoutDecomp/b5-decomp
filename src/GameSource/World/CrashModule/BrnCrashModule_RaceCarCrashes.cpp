@@ -19,9 +19,10 @@
 // BrnCrashModule_Lifecycle.cpp. DELETE-WHEN the home TU becomes mountable whole.
 //
 // Traffic producers, ownership, countdown and cleanup now run through the original phases.
-// The network race-car reset (ResetCrashedNetworkRaceCars + OnContactFromNetworkPlayer) runs under
-// the online gate; HandleNetworkCrashingTraffic and GenerateOwnedTrafficUpdates remain parked (see
-// their park notes) and none of the online arms is certified by the offline lifecycle pass.
+// The network race-car reset (ResetCrashedNetworkRaceCars + OnContactFromNetworkPlayer) and the
+// owned-traffic publisher (GenerateOwnedTrafficUpdates) run under the online gate;
+// HandleNetworkCrashingTraffic remains parked (see its park note), and none of the online arms is
+// certified by the offline lifecycle pass.
 
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
 #include "rw/math/vpu/vector3_operation.h"
@@ -521,6 +522,104 @@ void CrashModule::ResetCrashedNetworkRaceCars( const CrashIO::InputBuffer_PreSce
 }
 
 // =================================================================================================
+// GenerateOwnedTrafficUpdates @ 0x827C53F0   (957 insns; Hex-Rays gave no pseudocode, so this is
+// read from the ARTIST asm)   -- G64-D3 (crash parity 2026-09-23). DWARF BrnCrashModule.cpp:1355,
+// locals laTrafficTransforms[601] (:1367), lInitialisedTransforms (:1368), lpVehicleOutputInterface
+// (:1374), liEvent (:1375), luVehicle / lbTrafficWillBeRecycled (:1403/:1407), lpNetworkInterface
+// (:1420), luTrafficCrash (:1424).
+//
+// Online only: publish, for every crashing traffic vehicle THIS machine owns, the transform the
+// physics module reported this frame, so the other players can replay the wreck.
+//   0x827C5418..0x827C547C  tripwires lpOutput != NULL (:1357), IsOnlineGameMode() (:1358)
+//   0x827C5480  `lbz 0x152A ; bne -> return` -- nothing is published in a Showtime mode
+//   0x827C5494  lInitialisedTransforms.UnSetAll() (10 x `std 0`)
+//   0x827C54B0  lpInput->GetVehicleOutputInterface() (0x827BB870); its physical-traffic-state queue
+//               is at +0x2620 (length `lwz 0x2628`), read with GetEvent (0x8227BE58)
+//   per state:  the entity's owner byte (`lbz 0x320`) must be E_ENTITYTYPE_TRAFFIC_VEHICLE (2) (:1381);
+//               luVehicle = its 14-bit index (`extrwi 14,8`); when mCrashingTraffic (+0x808) has the
+//               bit: keep the state's mTransform (+0x1C0, 4 x lvx/stvx into the local array), assert
+//               it was not seen twice (:1392) and mark it
+//   0x827C591C..0x827C5E20  an ASSERT-ONLY pass over all 600 vehicles: a crashing vehicle with no
+//               transform that is neither network-crashing (+0x858) nor about to be recycled
+//               (WillTrafficVehicleBeRecycledNextFrame @0x827BBB10) trips :1410
+//   0x827C5E68  tripwire: no traffic crashes, or meLocalActiveRaceCarIndex is a valid slot (:1418)
+//   0x827C5EB0  lpOutput->GetNetworkOutputInterface() (0x827BB9C0, write lock)
+//   per record: owner (`lbz 0 ; extsb`) == meLocalActiveRaceCarIndex (+0x1520) -> luVehicle (`lhz 2`),
+//               tripwire mCrashingTraffic bit (:1433 "Inconsistent state for vehicle"), and when the
+//               transform arrived: AddOwnedTrafficUpdate(luVehicle, transform) (0x827C3528)
+// =================================================================================================
+void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPhysics* lpInput,
+                                               CrashIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );             // :1357
+    CGS_ASSERT( mbIsOnlineGameMode, "IsOnlineGameMode()" );      // :1358
+
+    if( mbIsShowtimeGameMode )
+    {
+        return;
+    }
+
+    Matrix44Affine                   laTrafficTransforms[601];
+    CgsContainers::FastBitArray<601> lInitialisedTransforms;
+    lInitialisedTransforms.UnSetAll();
+
+    const CrashIO::InputBuffer_PostPhysics::VehicleOutputInterface* lpVehicleOutputInterface =
+        lpInput->GetVehicleOutputInterface();
+    const BrnPhysics::Vehicle::VehicleOutputInterface::PhysicalTrafficStateQueue* lpTrafficStates =
+        lpVehicleOutputInterface->GetTrafficStateQueue();
+
+    for( s32 liEvent = 0; liEvent < lpTrafficStates->GetLength(); ++liEvent )
+    {
+        const BrnPhysics::Vehicle::PhysicalTrafficState* lpEvent = &lpTrafficStates->GetEvent( liEvent );
+        CGS_ASSERT( ( lpEvent->mEntityID.muValue >> 24 ) == 2u,
+                    "lpEvent->mEntityID.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE" );   // :1381
+        const u32 luVehicle = ( lpEvent->mEntityID.muValue >> 10 ) & 0x3FFFu;
+        CGS_ASSERT( luVehicle < 600, "Index is out of range (max bits: 600)" );
+        if( mCrashingTraffic.IsBitSet( luVehicle ) )
+        {
+            laTrafficTransforms[luVehicle] = lpEvent->mTransform;
+            CGS_ASSERT( !lInitialisedTransforms.IsBitSet( luVehicle ),
+                        "!lInitialisedTransforms.IsBitSet( luVehicle )" );                        // :1392
+            lInitialisedTransforms.SetBit( luVehicle );
+        }
+    }
+
+    for( u32 luVehicle = 0; luVehicle < 600; ++luVehicle )
+    {
+        const bool lbTrafficWillBeRecycled = WillTrafficVehicleBeRecycledNextFrame( static_cast<u16>( luVehicle ) );
+        if( mCrashingTraffic.IsBitSet( luVehicle ) && !lInitialisedTransforms.IsBitSet( luVehicle ) &&
+            !mCrashingNetworkTraffic.IsBitSet( luVehicle ) )
+        {
+            CGS_ASSERT( lbTrafficWillBeRecycled, "Didn't receive transform for crashing traffic vehicle" );   // :1410
+        }
+    }
+
+    CGS_ASSERT( mTrafficCrashes.GetLength() == 0 ||
+                ( meLocalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+                  meLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ),
+                "( mTrafficCrashes.GetLength() == 0 ) || ( (meLocalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0)"
+                " && (meLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) )" );                // :1418
+
+    CrashIO::NetworkOutputInterface* lpNetworkInterface = lpOutput->GetNetworkOutputInterface();
+    for( u32 luTrafficCrash = 0; luTrafficCrash < mTrafficCrashes.GetLength(); ++luTrafficCrash )
+    {
+        const TrafficCrash& lrTrafficCrash = mTrafficCrashes.GetItem( luTrafficCrash );
+        if( lrTrafficCrash.GetOwner() != meLocalActiveRaceCarIndex )
+        {
+            continue;
+        }
+
+        const u32 luVehicle = lrTrafficCrash.GetVehicleIndex();
+        CGS_ASSERT( luVehicle < 600, "Index is out of range (max bits: 600)" );
+        CGS_ASSERT( mCrashingTraffic.IsBitSet( luVehicle ), "Inconsistent state for vehicle" );   // :1433
+        if( lInitialisedTransforms.IsBitSet( luVehicle ) )
+        {
+            lpNetworkInterface->AddOwnedTrafficUpdate( luVehicle, laTrafficTransforms[luVehicle] );
+        }
+    }
+}
+
+// =================================================================================================
 // PreSceneUpdate @ 0x827D3A60   (86 insns)
 //
 //   0x827D3A80  LockForWrite(lpOutput) ; LockForRead(lpInput)         -- in THAT order
@@ -600,7 +699,7 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
 //                                                                       [LIVE]
 //     0x827D3C40  ProcessSlammedTrafficEvents / HandleNewCrashingTraffic /
 //                 HandleRecoveredSlammedTraffic / HandleCleanedUpTrafficEvents  [LIVE]
-//     0x827D3C58  if (mbIsOnlineGameMode) GenerateOwnedTrafficUpdates            [PARKED]
+//     0x827D3CA8  if (mbIsOnlineGameMode) GenerateOwnedTrafficUpdates   [LIVE online, G64-D3/G65-D3]
 //     0x827D3C68  if (mbNeedToSendEndingMessage) { VariableEventQueue<1536,16>::AddEvent(
 //                     lpOutput->GetGameEventQueue(), &record, 42, 1);
 //                   mbNeedToSendEndingMessage = false; }                [LIVE]
@@ -629,10 +728,9 @@ void CrashModule::PostPhysicsUpdate( CgsModule::IOBufferStack* /*lpInputBufferSt
         HandleNewCrashingTraffic(lpInput);
         HandleRecoveredSlammedTraffic(lpInput);
         HandleCleanedUpTrafficEvents(lpInput);
-        if (mbIsOnlineGameMode)
+        if (mbIsOnlineGameMode)                                 // 0x827D3CA8 lbz 0x1529 ; beq 0x827D3CC4
         {
-            static bool logged = false;
-            LogCrashPark(logged, "[crash-exit] GenerateOwnedTrafficUpdates PARK: network replication remains unreconstructed [FLAG]\n");
+            GenerateOwnedTrafficUpdates(lpInput, lpOutput);     // 0x827D3CC0 (r4 = in, r5 = out)
         }
 
         if( mbNeedToSendEndingMessage )

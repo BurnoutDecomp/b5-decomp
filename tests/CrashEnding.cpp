@@ -36,6 +36,8 @@ struct CrashFixture {
     void HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=2;}
     void HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=3;}
     void HandleCleanedUpTrafficEvents(const CrashIO::InputBuffer_PostPhysics*){phases[phaseCount++]=4;}
+    // Online-only arm (0x827D3CC0, FX-CRASHMOD G65-D3); mbIsOnlineGameMode stays false here.
+    void GenerateOwnedTrafficUpdates(const CrashIO::InputBuffer_PostPhysics*,CrashIO::OutputBuffer_PostPhysics*){phases[phaseCount++]=5;}
     unsigned processed=0;
     void ProcessCrashedRaceCarEvents(const CrashIO::InputBuffer_PostPhysics*,CrashIO::OutputBuffer_PostPhysics*){++processed;phases[phaseCount++]=0;}
     void PostPhysicsUpdate(CgsModule::IOBufferStack*,CgsModule::IOBufferStack*,
