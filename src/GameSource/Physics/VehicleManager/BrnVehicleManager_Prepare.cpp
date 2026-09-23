@@ -113,21 +113,21 @@ namespace Vehicle
     // CgsBitArray.h:203 assert-formatting maze). Per live race car:
     //   0x82615D48  car = &maRaceCarVehicles[i]            (mulli 0x1460 off the manager base)
     //   0x82615D6C  lvx128 v11, car+0xDE0                  -> mHalfExtent  (+0x6A0 in the car)
-    //   0x82615D70  vaddfp v0, v11, *unk_82FB91D0          -> see the zero-vector note below
+    //   0x82615D70  vaddfp v0, v11, *unk_82FB91D0          -> + kvfVehicleTriangleCachePadding (1.0)
     //   0x82615D74  lvx128 v11, car+0x780                  -> mTransform.wAxis (+0x40 in the car)
     //   0x82615D7C  vrlimi128 v11, 0, 1, 0                 -> clear the w lane of that position
-    //   0x82615D90..DCC  vmsum3fp128 + vrsqrtefp + 2 NR    -> radius = |halfExtent|, 0 if zero
+    //   0x82615D90..DCC  vmsum3fp128 + vrsqrtefp + 2 NR    -> radius = |halfExtent + pad|, 0 if zero
     //   0x82615DD8  stfs into the position vector's w lane -> {pos.xyz, radius}
     //   0x82615DEC  InEventUpdateCachedPosition::AddEvent, miCacheSlot = the car index
     // then 0x82615FE0 chains to the traffic pool, whose slots are 8 + liVehicle.
     //
-    // FLAG -- `unk_82FB91D0` IS A ZERO VECTOR AND THE ADD IS AN IDENTITY. Sixteen bytes of
-    // zero in the image; a full-text scan of all 30,084 X360 export JSONs finds exactly THREE
-    // readers (this function, PhysicalTrafficManager::UpdateTriangleCache and
-    // RaceCarPhysics::ApplyPropCollisionImpulseSum) and NO writer, so it is zero at runtime too.
-    // It is the same shape as this tree's own KV_ZERO. The add is reproduced as the identity it
-    // is rather than modelled as a mystery global; if a later wave finds a writer hiding in an
-    // export hole, this is the line to revisit.
+    // THE PADDING: `unk_82FB91D0` is kvfVehicleTriangleCachePadding == splat(1.0f), written at startup
+    // by CRT thunk 0x82C5A470 (see KVF_VEHICLE_TRIANGLE_CACHE_PADDING in BrnVehicleConstants.h). An
+    // earlier banner here read its .bss zero as the runtime value and dropped the add, which shrank
+    // every car's inner radius (2.69 instead of ~4.26 for the Cavalry), so the 5 m cache sphere
+    // re-centred only after ~2.3 m of travel instead of ~0.8 m (CacheSlot::UpdateCachedObject
+    // @0x828BE660 re-centres when dist + innerRadius > 5.0) and walls/kerbs ahead of a fast car
+    // could be missing from world-contact generation until the next refresh.
     //
     // THE ZERO GUARD IS `== 0`, NOT `> 0`: the console selects the zero vector on
     // `vcmpeqfp128 v9, 0, lensq` (0x82615DA0) and multiplies otherwise. Kept exactly.
@@ -145,7 +145,10 @@ namespace Vehicle
             const RaceCarPhysics& lrCar = maRaceCarVehicles[liCar];
 
             const Vector3 lvHalfExtent = lrCar.GetHalfExtent();
-            const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvHalfExtent);
+            const Vector3 lvPadded = { lvHalfExtent.x + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,     // 0x82615D70 vaddfp
+                                       lvHalfExtent.y + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,
+                                       lvHalfExtent.z + KVF_VEHICLE_TRIANGLE_CACHE_PADDING, 0.0f };
+            const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvPadded);               // vmsum3fp128: xyz
             const f32 lfRadius   = (lfRadiusSq != 0.0f) ? std::sqrt(lfRadiusSq) : 0.0f;
 
             const Vector3& lrPosition = lrCar.GetPosition();
