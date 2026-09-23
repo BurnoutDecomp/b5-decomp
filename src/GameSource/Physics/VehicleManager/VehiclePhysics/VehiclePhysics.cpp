@@ -3198,6 +3198,11 @@ namespace Vehicle
         AddWorldSpaceTorque(lTorque);
     }
 
+    namespace
+    {
+        bool DriftProbeArmed();   // the opt-in [drift] probe gate (BRN_DRIFT_PROBE), defined with the probe below
+    }
+
     // @0x825D2270  VehiclePhysics::MaintainDriftSpeed
     //   Keeps a sliding car from scrubbing off speed. Gated by mDriftFlags.DoMaintainSpeed(), the
     //   MaintainedSpeed lane (@+0x1000 .y) exceeding current speed, throttle >= 0.3, grounded
@@ -3251,10 +3256,17 @@ namespace Vehicle
                 const f32 lfPush     = mpAttribs->mBaseAttribs.mvMass_TimeForFullBrakeRecip_MaxSpeed_DownForce.x;   // D2: MASS
 
                 // D3: the velocity-direction term only when moving (|speedParam| > eps).
+                // G51-D1 (crash parity 2026-09-23): the term is the velocity over the SPEED
+                // PARAMETER, not a unit vector. 0x825D2398 `vrefp v0,v2` + the two Newton steps at
+                // 0x825D23B0..23BC (against v13 = 1.0) give 1/v2; 0x825D23AC loads [this+0x50]
+                // (mLinearVelocity) and 0x825D23C0 multiplies it in. UpdateDrift hands in the
+                // PRE-damping |v| (f31 @0x8262E268..E2D8 -> f3 @0x8262E6E4) while +0x50 already
+                // holds the sideways-DAMPED velocity (stvx128 @0x8262E6BC), so on the console this
+                // term's length is |v_post|/|v_pre| <= 1. vpu::Normalize made it exactly 1.
                 Vector3 lVelDir{ 0.0f, 0.0f, 0.0f, 0.0f };
                 if (std::fabs(lfSpeed) > 1.1920929e-07f)   // FLT_EPSILON, the asm's gate
                 {
-                    lVelDir = vpu::Normalize(mLinearVelocity);
+                    lVelDir = vpu::Mult(mLinearVelocity, 1.0f / lfSpeed);   // 0x825D2398..0x825D23C0
                 }
                 Vector3 lDir{ lvDirection.x * lfAlongZ + lVelDir.x * lfAlongVel,
                               lvDirection.y * lfAlongZ + lVelDir.y * lfAlongVel,
@@ -3269,6 +3281,30 @@ namespace Vehicle
                                   (lDir.z - mAboveGroundTestResult.mIntersectionNormal.z * lfN) * lfDeficit * lfPush,
                                   0.0f };
                 AddWorldSpaceImpulse(lImpulse);   // "Invalid total linear impulse during drift" assert elided
+
+                // ---- [drift-maintain] PC witness -- NOT IN THE X360 BINARY, nothing here is console
+                // state. Opt-in with the [drift] probe (BRN_DRIFT_PROBE=1), player car only, first 60
+                // lines. It proves this success arm is dispatched and prints the length of the G51-D1
+                // velocity term, |mLinearVelocity| / speedParam (below 1 while the drift's sideways
+                // damping bites; the pre-fix Normalize made it exactly 1).
+                if (DriftProbeArmed() && lpControls->GetType() == E_DRIVER_TYPE_PLAYER)
+                {
+                    static u32 suWitnessLines = 0u;
+                    if (suWitnessLines < 60u)
+                    {
+                        ++suWitnessLines;
+                        const f32 lfVelocityMagnitude = vpu::Magnitude(mLinearVelocity);
+                        *CgsDev::Log::gpDebugPrint
+                            << "[drift-maintain] n " << static_cast<s32>(suWitnessLines)
+                            << " speedParam " << lfSpeed
+                            << " |v| " << lfVelocityMagnitude
+                            << " velTerm " << vpu::Magnitude(lVelDir)
+                            << " maintained " << lfMaintained
+                            << " deficit " << lfDeficit
+                            << " imp " << lImpulse.x << " " << lImpulse.y << " " << lImpulse.z
+                            << "\n";
+                    }
+                }
             }
         }
     }
