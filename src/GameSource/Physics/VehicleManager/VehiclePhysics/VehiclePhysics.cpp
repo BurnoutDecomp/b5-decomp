@@ -121,21 +121,32 @@ namespace Vehicle
 
     // @0x825C0000  BrnPhysics::Vehicle::VehiclePhysics::UpdateLinearVelocityMagnitude
     //   r9 = this+0x50 (mLinearVelocity) ; r10 = this+0x1340 (mNormLinearVelocityMag)
-    //   vmsum3fp128 v0,v10,v10  -> |v|^2 (dot3) ; the cached vector is zeroed first (stvx128 v12=0).
-    //   vrsqrtefp + Newton refinement -> 1/|v| ; v0 = |v|^2 * (1/|v|) = |v| (the speed magnitude),
-    //   guarded by vsel/vcmpeqfp-against-zero so a zero-speed input yields a zero (no NaN).
-    //   The unit direction is written into the xyz lanes and the magnitude into the "plus" (w) lane
-    //   of mNormLinearVelocityMag (vrlimi128 packs the magnitude lane into the direction register).
-    // Lowered here to the canonical Normalize + scalar magnitude; the member stores (direction in
-    // xyz, speed in the w lane) match the asm's stvx128 to this+0x1340.
+    //   0x825C0028 vmsum3fp128 v0,v10,v10 -> |v|^2 (dot3) ; 0x825C003C stvx128 v12(=0) zeroes +0x1340.
+    //   0x825C0058..0088 vrsqrtefp + two Newton steps ; v0 = |v|^2 * rsqrt(|v|^2) = |v|, and
+    //   0x825C008C vsel picks 0 where vcmpeqfp(0, |v|^2) (a zero-speed input gives 0, not NaN).
+    //   0x825C0090/0098 vrlimi128 mask 1 + stvx128: +0x1340 = (0, 0, 0, |v|).
+    //   ⛔ G51-D2 (crash parity 2026-09-23): the DIRECTION has its own gate. 0x825C009C lvlx
+    //   stru_8208F620 (lane 0 = 0x34000000 = FLT_EPSILON, x360rd), 0x825C00A4/00A8 splat |v| and
+    //   vandc the sign, 0x825C00AC vcmpgtfp, 0x825C00B0 vperm ctl 0x0004080C, 0x825C00C0 beqlr: the
+    //   function RETURNS with xyz = 0 unless |v| > FLT_EPSILON. Only then does it write
+    //   v * (1/|v|) (0x825C00DC vrefp + two Newton steps, 0x825C00F0 vmulfp128) with lane w put
+    //   back to |v| (0x825C00F4 vrlimi128 mask 1) -- 0x825C00F8 stvx128. The old body's
+    //   vpu::Normalize zeroes only at |v|^2 <= 0, so for 0 < |v| <= 1.19e-7 it published a unit
+    //   direction where the console publishes 0.
     void VehiclePhysics::UpdateLinearVelocityMagnitude()
     {
-        const f32 lfSpeedSquared = vpu::MagnitudeSquared(mLinearVelocity);
+        const f32 lfSpeedSquared = vpu::MagnitudeSquared(mLinearVelocity);   // 0x825C0028
 
-        Vector3 lvDirection = vpu::Normalize(mLinearVelocity);   // zero vector when speed is zero
-        const f32 lfSpeed = (lfSpeedSquared > 0.0f) ? std::sqrt(lfSpeedSquared) : 0.0f;
+        // 0x825C008C vsel(|v|, 0, vcmpeqfp(0, |v|^2)): zero exactly where |v|^2 == 0.
+        const f32 lfSpeed = (lfSpeedSquared == 0.0f) ? 0.0f : std::sqrt(lfSpeedSquared);
 
-        mNormLinearVelocityMag.SetVector3(lvDirection);   // unit direction -> xyz lanes
+        // 0x825C009C..00C0: the direction only when |v| > FLT_EPSILON (stru_8208F620), else the
+        // xyz lanes zeroed at 0x825C003C/0x825C0098 stay 0.
+        const Vector3 lvDirection = (std::fabs(lfSpeed) > 1.1920929e-07f)
+                                        ? vpu::Mult(mLinearVelocity, 1.0f / lfSpeed)   // 0x825C00DC..00F0
+                                        : Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        mNormLinearVelocityMag.SetVector3(lvDirection);   // direction -> xyz lanes
         mNormLinearVelocityMag.SetPlus(lfSpeed);          // speed magnitude -> w / "plus" lane
     }
 

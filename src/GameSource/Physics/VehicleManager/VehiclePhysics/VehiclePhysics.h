@@ -1109,8 +1109,10 @@ namespace Vehicle
         // @0x825C0000: recompute the cached normalized linear velocity + speed. Reads the world-space
         // linear velocity (mLinearVelocity, base +0x50), normalizes it (vmsum3fp128 |v|^2 +
         // vrsqrtefp/Newton-refined reciprocal magnitude), and stores the unit direction in the xyz
-        // lanes and the speed magnitude in the "plus" (w) lane of mNormLinearVelocityMag. A zero-speed
-        // input leaves the direction zeroed (the asm's vsel/vcmpeqfp-against-zero guard).
+        // lanes and the speed magnitude in the "plus" (w) lane of mNormLinearVelocityMag. Two guards:
+        // the vsel/vcmpeqfp-against-zero one makes a zero-speed |v| exactly 0, and the direction is
+        // written only when |v| > FLT_EPSILON (stru_8208F620; `beqlr` at 0x825C00C0) -- below that
+        // the xyz lanes stay 0 (G51-D2).
         void UpdateLinearVelocityMagnitude();
 
         // ----- Vehicle-physics group: two header-homed methods (bodies inline below) -----
