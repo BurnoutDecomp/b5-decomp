@@ -2,6 +2,7 @@
 #define GAMESOURCE_EFFECTS_BRNCRASHTRIANGLECACHE_H
 
 #include "types.hpp"
+#include "BrnCommonTypes.h"   // Vector3 / Vector3Plus (BrnCrashLineTriangleCacheFormat)
 
 // ============================================================================
 // GameSource/Effects/BrnCrashTriangleCache.h
@@ -18,7 +19,7 @@
 // +0x2D400, constructed by EffectsModule::Construct @0x8228FE98), so the
 // declarations moved here. Bodies stay in the .cpp (Construct @0x8227B240,
 // AddTriangles @0x8228CDA8, CheckForDuplicateTriangles @0x822847B0,
-// InsertTriangleIntoCache @0x8227B2D0).
+// InsertTriangleIntoCache @0x8227B2D0, CollideWithTriangleCache @0x822849B8).
 //
 // 2026-09-23 (crash parity FX-FX, G09-D1..D6): the incoming batch type is the REAL
 // CgsGeometric::Triangle4 (0xE0 bytes, DWARF h:123, PS3 mangled
@@ -74,6 +75,20 @@ namespace BrnEffects
         }
     };
 
+    // DWARF BrnCrashTriangleCache.h:42-61 -- one debris line segment handed to
+    // CollideWithTriangleCache (X360 stride 0x30: `addi r11, r11, 0x30` @0x82284EC8).
+    // BrnDebrisArrayLite::UpdateBucket seeds mLineIntersectNormalPlusLineParms with
+    // {0, 0, 0, 1.0} (0x82C087AC..0x82C087C8); CollideWithTriangleCache overwrites it with the
+    // unit normal (xyz) and line parameter (w) of the nearest front-facing hit whose parameter
+    // is below the current w. (The DWARF also declares an inline `Initialise(Vector3, Vector3)`
+    // at h:49; no X360 ledger row attests it, so it is not declared here.)
+    struct BrnCrashLineTriangleCacheFormat
+    {
+        Vector3     mLineStartPosition;                 // h:59  +0x00
+        Vector3     mLineEndPos;                        // h:60  +0x10
+        Vector3Plus mLineIntersectNormalPlusLineParms;  // h:61  +0x20  xyz = normal, w = line param
+    };
+
     struct BrnCrashTrianglePackedFormat
     {
         void Clear();
@@ -114,6 +129,8 @@ namespace BrnEffects
         }
         // DWARF h:123. lnNum4Triangles counts Triangle4 BATCHES (four triangles each).
         void AddTriangles(const CgsGeometric::Triangle4* lpInTriangles, u32 lnNum4Triangles);
+        // DWARF h:135 (const: PS3 _ZNK...24CollideWithTriangleCache... @0xE0ADC).
+        void CollideWithTriangleCache(BrnCrashLineTriangleCacheFormat* lpLinesToTest, u32 luNumberLines) const;
         // DWARF h:155. lpbAddTriangleBool[i] == true means "do NOT add triangle i" (the console
         // seeds its found-mask with all-ones for a true byte, 0x822847D8..0x82284830); the DWARF
         // name reads the other way round.

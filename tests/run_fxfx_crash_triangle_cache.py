@@ -47,11 +47,18 @@ def main():
         (root / "GameSource/Effects").mkdir(parents=True)
         (root / "GameSource/Effects/BrnCrashTriangleCache.h").write_text(read(args.rev, HEADER), encoding="utf-8")
         staged = root / "GameSource/Effects/BrnCrashTriangleCache.cpp"
-        staged.write_text(read(args.rev, SOURCE), encoding="utf-8")
+        source = read(args.rev, SOURCE)
+        staged.write_text(source, encoding="utf-8")
+        # G09-D6: a revision without the CollideWithTriangleCache body builds the harness with its
+        # D6 checks counted as failed instead of failing to compile.
+        has_collide = "BrnCrashTriangleCache::CollideWithTriangleCache(" in source
+        if not has_collide:
+            print("note: this revision defines no BrnCrashTriangleCache::CollideWithTriangleCache")
 
         includes = " ".join(f'/I"{WORKFLOW / p}"' for p in settings("msvc_includes.txt"))
         command = ("cl " + " ".join(settings("msvc_flags.txt"))
                    + " /D_ALLOW_KEYWORD_MACROS=1 /Dprivate=public"
+                   + f" /DFXFX_HAS_COLLIDE={1 if has_collide else 0}"
                    + f' /I"{root}" ' + includes
                    + f' "{HARNESS}" "{staged}" "{COLLISION_TAG}" /Fe:regression.exe /link /OPT:REF')
         script = out / "run.cmd"

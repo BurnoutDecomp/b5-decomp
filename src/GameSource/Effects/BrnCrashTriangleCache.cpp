@@ -3,12 +3,14 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"   // CgsGeometric::Triangle4 (the incoming batches)
 #include "SharedClasses/World/BrnCollisionTag.h"                        // KU_COLLISION_MASK_SURFACE_ID / KU8_COLLISION_INVISIBLE_SURFACE_ID
 
+#include <cmath>     // std::sqrt (the vrsqrtefp + Newton lowering in CollideWithTriangleCache)
 #include <cstring>   // std::memcpy (raw lane words)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnEffects::BrnCrashTriangleCache::Construct                  @ 0x8227B240
 //   BrnEffects::BrnCrashTriangleCache::InsertTriangleIntoCache     @ 0x8227B2D0
 //   BrnEffects::BrnCrashTriangleCache::CheckForDuplicateTriangles  @ 0x822847B0   (PS3 0xEECD0)
+//   BrnEffects::BrnCrashTriangleCache::CollideWithTriangleCache    @ 0x822849B8   (PS3 0xE0ADC)
 //   BrnEffects::BrnCrashTriangleCache::AddTriangles                @ 0x8228CDA8   (PS3 0xEF58C;
 //       CalculateHashForPackedTriangle, DWARF .cpp:117, is inlined into it on both consoles)
 //
@@ -47,9 +49,11 @@
 //      console accumulates all four found-masks against the PRE-insert cache in the one loop
 //      (vor/vor128 @0x822848B0..BC) and only then inserts (bl @0x82284904 / 0x82284938 /
 //      0x8228496C / 0x822849A0), so two identical triangles in one batch are both kept.
+//  D6  CollideWithTriangleCache (the cache's only reader) had no declaration and no body. It is
+//      reconstructed below from 0x822849B8..0x82284EE4 (see its banner).
 // Every behaviour above was confirmed by executing the ARTIST instruction words themselves (a
-// PPC/VMX128 emulation of 0x8228CDA8 -> 0x822847B0 -> 0x8227B2D0); tests/FxFxCrashTriangleCache.cpp
-// carries the resulting cases.
+// PPC/VMX128 emulation of 0x8228CDA8 -> 0x822847B0 -> 0x8227B2D0, and of 0x822849B8);
+// tests/FxFxCrashTriangleCache.cpp carries the resulting cases.
 // ============================================================================================
 
 namespace BrnEffects
@@ -106,6 +110,17 @@ namespace BrnEffects
         {
             return FlushDenormalToZero(lfA) == FlushDenormalToZero(lfB);
         }
+
+        // The two tolerances of the segment-vs-triangle test in CollideWithTriangleCache; the PS3
+        // build names them (TOC loads @0xE0C68 / @0xE0C7C). On X360 both are .bss splats written by
+        // CRT thunks, so the image word 0 is NOT their value:
+        //   rw::collision::RTINTSECEPSILON_VecFloat  0x82FACC00 <- CRT 0x82C4AF10 splats flt_8200D5F0
+        //       == 0x322BCC77 == 1.0e-8f. A lane can only hit when its determinant exceeds it:
+        //       the test is one-sided, back faces never hit.
+        //   rw::collision::RTINTSECEDGEEPS_VecFloat  0x82FACBE0 <- CRT 0x82C4AF38 splats flt_82004884
+        //       == 0x3727C5AC == 1.0e-5f. The barycentric / segment slack, scaled by the determinant.
+        const f32 KF_RTINTSECEPSILON = 1.0e-8f;
+        const f32 KF_RTINTSECEDGEEPS = 1.0e-5f;
     }
 
     void BrnCrashTrianglePackedFormat::Clear()
@@ -263,6 +278,162 @@ namespace BrnEffects
             if (!labResultsMask[luTriangle])
             {
                 InsertTriangleIntoCache(&lpaPackedTriangles[luTriangle]);
+            }
+        }
+    }
+
+    // ============================================================================================
+    // CollideWithTriangleCache  @ 0x822849B8  (332 insns; PS3 0xE0ADC; DWARF .cpp:467)
+    //
+    // Caller: BrnParticle::Native::BrnDebrisArrayLite::UpdateBucket @0x82C08410 (an export hole,
+    // read with ppcdis): `bl 0x822849B8` @0x82C08884 with r3 = the dispatch-side cache copy, r4 =
+    // sp+0xD0 (the bucket's debris lines), r5 = the line count; gated on a non-zero line count, on
+    // BrnDebrisArrayLite::mbCollisionEnabled and on a non-zero cache count (0x82C08850..0x82C0886C).
+    //
+    // For each searched pack -- the same K as CheckForDuplicateTriangles, (count == 48) ? 48 :
+    // count + 1, but walked 0..K-1 (`ble` exit @0x822849D4, `addi r10, r10, 0xA0` @0x82284ED8), so
+    // the part-filled pack and nothing past the array -- and for each line (stride 0x30), the four
+    // lanes run the segment-vs-triangle test the DWARF names rw::collision::TriangleLineSegIntersect
+    // (inlined; outputs lOutDeterminant / lOutBarycentricParams1 / lOutBarycentricParams2 /
+    // lOutLineParams, lIntersectMask), register-for-register:
+    //     D = end - start                       0x82284A60
+    //     e1 = V1 - V0, e2 = V2 - V0            0x82284A74..0x82284A9C
+    //     P = D x e2                            0x82284AC8..0x82284AF0
+    //     T = start - V0                        0x82284AF8..0x82284B00
+    //     det = e1.P, u = T.P                   0x82284B1C / B24 / B28 / B40
+    //     Q = T x e1                            0x82284B08..0x82284B3C
+    //     v = D.Q, t = e2.Q                     0x82284B54 / B58 / B68 / B80
+    //     lo = -det * RTINTSECEDGEEPS           vxor sign mask (vslw of all-ones) 0x82284B38, 0x82284B44
+    //     hi = det - lo                         0x82284B50
+    //     hit = det > RTINTSECEPSILON && u >= lo && !(u > hi) && v >= lo && !(u + v > hi)
+    //           && t >= lo && !(t > hi)         0x82284B64..0x82284BB4
+    // (the epsilon splat reaches its compare through a vperm/vperm/vsldoi reshuffle, 0x82284B5C /
+    // B6C / B74, with the image permute controls 0x82CDA400 / 0x82CDA3C0 -- all lanes stay 1e-8).
+    // No lane hit -> next line (CompAnyTrue through 0x8327F110, `bne` @0x82284BE4). Otherwise every
+    // lane's unit normal cross(V0 - V1, V0 - V2) (vmrghw/vmrglw transpose, then the yzx-permute cross
+    // 0x82284C64..0x82284D2C, vrsqrtefp + two Newton steps) and parameter t / det (vrefp + two
+    // Newton steps, vmulfp @0x82284D64) are formed, and lanes 0 -> 3 in order replace the line's
+    // {normal, w} when the lane hit and !(param >= w) (vcmpgefp ; vnot ; vand ; vsel ; vrlimi128
+    // cascade 0x82284D80..0x82284EBC), so the nearest hit wins and a tie keeps the earlier one.
+    // Upper bounds are `!(x > hi)`, as shipped (vcmpgtfp + vnot): a NaN passes them and fails the
+    // lower ones. PC lowering: 1/sqrt and / are exact where the console refines estimates -- the
+    // project's standing choice (BrnVehicleManager_PlayerStuck.cpp, ContactGeneratorJob.cpp).
+    // ============================================================================================
+    void BrnCrashTriangleCache::CollideWithTriangleCache(
+        BrnCrashLineTriangleCacheFormat* lpLinesToTest,
+        u32 luNumberLines) const
+    {
+        const s32 lnNumPackedTris =
+            (mnNumberOfPackedTriangles == KU_MAX_NUMBER_PACKED_TRIANGLES)
+                ? static_cast<s32>(KU_MAX_NUMBER_PACKED_TRIANGLES)
+                : static_cast<s32>(mnNumberOfPackedTriangles) + 1;
+
+        for (s32 liTriBatch = 0; liTriBatch < lnNumPackedTris; ++liTriBatch)
+        {
+            const BrnCrashTrianglePackedFormat* lpTriBatch = &maPackedTriangles[liTriBatch];
+            BrnCrashLineTriangleCacheFormat* lpCurrentLine = lpLinesToTest;
+
+            for (u32 luLineTest = 0; luLineTest < luNumberLines; ++luLineTest, ++lpCurrentLine)
+            {
+                const Vector3& lrStart = lpCurrentLine->mLineStartPosition;
+                const f32 lfDeltaX = lpCurrentLine->mLineEndPos.x - lrStart.x;
+                const f32 lfDeltaY = lpCurrentLine->mLineEndPos.y - lrStart.y;
+                const f32 lfDeltaZ = lpCurrentLine->mLineEndPos.z - lrStart.z;
+
+                f32  lafOutDeterminant[KU_TRIANGLES_PER_PACK];
+                f32  lafOutLineParams[KU_TRIANGLES_PER_PACK];
+                bool labIntersectMask[KU_TRIANGLES_PER_PACK];
+                bool lbAnyIntersection = false;
+
+                for (u32 luLane = 0; luLane < KU_TRIANGLES_PER_PACK; ++luLane)
+                {
+                    const f32 lfVertex0X = lpTriBatch->mVertex0X.GetComponent(luLane);
+                    const f32 lfVertex0Y = lpTriBatch->mVertex0Y.GetComponent(luLane);
+                    const f32 lfVertex0Z = lpTriBatch->mVertex0Z.GetComponent(luLane);
+
+                    const f32 lfEdge1X = lpTriBatch->mVertex1X.GetComponent(luLane) - lfVertex0X;
+                    const f32 lfEdge1Y = lpTriBatch->mVertex1Y.GetComponent(luLane) - lfVertex0Y;
+                    const f32 lfEdge1Z = lpTriBatch->mVertex1Z.GetComponent(luLane) - lfVertex0Z;
+                    const f32 lfEdge2X = lpTriBatch->mVertex2X.GetComponent(luLane) - lfVertex0X;
+                    const f32 lfEdge2Y = lpTriBatch->mVertex2Y.GetComponent(luLane) - lfVertex0Y;
+                    const f32 lfEdge2Z = lpTriBatch->mVertex2Z.GetComponent(luLane) - lfVertex0Z;
+
+                    // P = D x e2
+                    const f32 lfPX = (lfEdge2Z * lfDeltaY) - (lfEdge2Y * lfDeltaZ);
+                    const f32 lfPY = (lfEdge2X * lfDeltaZ) - (lfEdge2Z * lfDeltaX);
+                    const f32 lfPZ = (lfEdge2Y * lfDeltaX) - (lfEdge2X * lfDeltaY);
+
+                    // T = start - V0 ; Q = T x e1
+                    const f32 lfTX = lrStart.x - lfVertex0X;
+                    const f32 lfTY = lrStart.y - lfVertex0Y;
+                    const f32 lfTZ = lrStart.z - lfVertex0Z;
+                    const f32 lfQX = (lfTY * lfEdge1Z) - (lfTZ * lfEdge1Y);
+                    const f32 lfQY = (lfTZ * lfEdge1X) - (lfTX * lfEdge1Z);
+                    const f32 lfQZ = (lfTX * lfEdge1Y) - (lfTY * lfEdge1X);
+
+                    const f32 lfDeterminant        = (lfEdge1X * lfPX) + (lfEdge1Y * lfPY) + (lfEdge1Z * lfPZ);
+                    const f32 lfBarycentricParams1 = (lfTX * lfPX) + (lfTY * lfPY) + (lfTZ * lfPZ);
+                    const f32 lfBarycentricParams2 = (lfQX * lfDeltaX) + (lfQY * lfDeltaY) + (lfQZ * lfDeltaZ);
+                    const f32 lfLineParams         = (lfEdge2X * lfQX) + (lfEdge2Y * lfQY) + (lfEdge2Z * lfQZ);
+
+                    const f32 lfLowerBound = (-lfDeterminant) * KF_RTINTSECEDGEEPS;
+                    const f32 lfUpperBound = lfDeterminant - lfLowerBound;
+
+                    labIntersectMask[luLane] =
+                        (lfDeterminant > KF_RTINTSECEPSILON)
+                        && (lfBarycentricParams1 >= lfLowerBound) && !(lfBarycentricParams1 > lfUpperBound)
+                        && (lfBarycentricParams2 >= lfLowerBound)
+                        && !((lfBarycentricParams1 + lfBarycentricParams2) > lfUpperBound)
+                        && (lfLineParams >= lfLowerBound) && !(lfLineParams > lfUpperBound);
+
+                    lafOutDeterminant[luLane] = lfDeterminant;
+                    lafOutLineParams[luLane]  = lfLineParams;
+                    lbAnyIntersection = lbAnyIntersection || labIntersectMask[luLane];
+                }
+
+                if (!lbAnyIntersection)
+                {
+                    continue;
+                }
+
+                Vector3Plus& lrNormalPlusParam = lpCurrentLine->mLineIntersectNormalPlusLineParms;
+                for (u32 luLane = 0; luLane < KU_TRIANGLES_PER_PACK; ++luLane)
+                {
+                    // lIsTriNNearest = hit && !(param >= w). The console forms every lane's param
+                    // (and normal) before the cascade; only a hit lane can write, so a missed lane's
+                    // division is skipped here.
+                    if (!labIntersectMask[luLane])
+                    {
+                        continue;
+                    }
+                    const f32 lfLineParam = lafOutLineParams[luLane] / lafOutDeterminant[luLane];
+                    if (lfLineParam >= lrNormalPlusParam.w)
+                    {
+                        continue;
+                    }
+
+                    // lTriNNormal: cross(V0 - V1, V0 - V2), normalised.
+                    const f32 lfVertex0X = lpTriBatch->mVertex0X.GetComponent(luLane);
+                    const f32 lfVertex0Y = lpTriBatch->mVertex0Y.GetComponent(luLane);
+                    const f32 lfVertex0Z = lpTriBatch->mVertex0Z.GetComponent(luLane);
+                    const f32 lfAX = lfVertex0X - lpTriBatch->mVertex1X.GetComponent(luLane);
+                    const f32 lfAY = lfVertex0Y - lpTriBatch->mVertex1Y.GetComponent(luLane);
+                    const f32 lfAZ = lfVertex0Z - lpTriBatch->mVertex1Z.GetComponent(luLane);
+                    const f32 lfBX = lfVertex0X - lpTriBatch->mVertex2X.GetComponent(luLane);
+                    const f32 lfBY = lfVertex0Y - lpTriBatch->mVertex2Y.GetComponent(luLane);
+                    const f32 lfBZ = lfVertex0Z - lpTriBatch->mVertex2Z.GetComponent(luLane);
+
+                    const f32 lfNormalX = (lfAY * lfBZ) - (lfAZ * lfBY);
+                    const f32 lfNormalY = (lfAZ * lfBX) - (lfAX * lfBZ);
+                    const f32 lfNormalZ = (lfAX * lfBY) - (lfAY * lfBX);
+                    const f32 lfInvLength =
+                        1.0f / std::sqrt((lfNormalX * lfNormalX) + (lfNormalY * lfNormalY) + (lfNormalZ * lfNormalZ));
+
+                    lrNormalPlusParam.x = lfNormalX * lfInvLength;     // SetVector3
+                    lrNormalPlusParam.y = lfNormalY * lfInvLength;
+                    lrNormalPlusParam.z = lfNormalZ * lfInvLength;
+                    lrNormalPlusParam.w = lfLineParam;                 // SetPlus
+                }
             }
         }
     }
