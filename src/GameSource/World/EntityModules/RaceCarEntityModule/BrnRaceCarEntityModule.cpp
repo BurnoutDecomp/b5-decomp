@@ -2926,9 +2926,19 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         s32 liColourPalette = 0;
         bool lbWasInGameMode = false;
 
-        if( mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID )
+        // G68-D1 (crash parity 2026-09-23): the console reads the player's slot ONCE, before the
+        // old car is removed -- `add r17, r22, r30` (r30 = 0x182F8) @0x823051B4, `lwz r27, 0(r17)`
+        // @0x823051CC -- and r27 (non-volatile, never rewritten) is the slot it re-attaches the new
+        // car to (`mr r5, r27` @0x82305364 -> AttachActiveRaceCar @0x82305370). RemoveRaceCar
+        // (0x82304440) resets mePlayerActiveRaceCarIndex to -1 when it removes the player, and
+        // SpawnRaceCar's inlined RaceCar::Prepare clears the new car's index, so the value has to
+        // be captured here. It is INVALID on the first spawn (AttachActiveRaceCar then picks the
+        // first free slot, as before).
+        const EActiveRaceCarIndex leOldPlayerSlot = mePlayerActiveRaceCarIndex;
+
+        if( leOldPlayerSlot != E_ACTIVE_RACE_CAR_INDEX_INVALID )    // cmpwi r27, -1 @0x823051EC
         {
-            ActiveRaceCar* lpOldSlot = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+            ActiveRaceCar* lpOldSlot = GetActiveRaceCar( leOldPlayerSlot );
             RaceCar* lpOldCar = lpOldSlot->GetGlobalRaceCar();
             // ⛔ STALE BANNER CORRECTED 2026-08-17 (ghost-car wave). The old text said the
             // module bool at +99141 "has not been fitted"; it HAS been, since the player-input
@@ -2982,7 +2992,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         }
 
         RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobal );
-        AttachActiveRaceCar( lpRaceCar, E_ACTIVE_RACE_CAR_INDEX_INVALID );
+        AttachActiveRaceCar( lpRaceCar, leOldPlayerSlot );          // mr r5, r27 @0x82305364
 
         CGS_ASSERT( liColourPalette < 4, "Invalid Number of Palettes: " );   // X360 :7556
         CGS_ASSERT( liColourIndex >= 0, "Invalid car colour: " );            // X360 :7557
@@ -3010,11 +3020,18 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
         ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
         CGS_ASSERT( lpActiveRaceCar != 0, "lpActiveRaceCar" );                 // X360 :7581
 
-        // [FLAG PC bring-up] ActiveRaceCar::RequestPlaceOnTrack(position, direction, 0.0f)
-        // is not reconstructed (it hands the request to PlaceOnTrackManager, which owns the
-        // physics teleport). The console's own debug line is kept so the drop is visible in
-        // the log the moment a teleport record does arrive.
-        if( CgsDev::Log::gpDebugPrint != 0 )
+        // G68-D2 (crash parity 2026-09-23): 0x82305534..0x82305544 --
+        //     vmr128 v2, v127   direction = lTransform row +0x20 (zAxis; lvx128 @0x823050D4)
+        //     vmr128 v1, v126   position  = lTransform row +0x30 (wAxis; lvx128 @0x823050D0)
+        //     fmr    f1, f31    flt_82001CC0 == 0.0f
+        //     bl     ActiveRaceCar::RequestPlaceOnTrack
+        // (The old "[FLAG PC bring-up] RequestPlaceOnTrack is not reconstructed" banner was stale:
+        // the body exists and case 7 / HandleStopModeAction already call it.)
+        lpActiveRaceCar->RequestPlaceOnTrack( lTransform.wAxis, lTransform.zAxis, 0.0f );
+
+        // The console's own debug line, printed after the request under the message filter's
+        // bit 0 (`ld 0x82F31908 ; clrldi 63` @0x82305548).
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
         {
             *CgsDev::Log::gpDebugPrint
                 << "*** HandleResetPlayerCarAction: Teleport ["
