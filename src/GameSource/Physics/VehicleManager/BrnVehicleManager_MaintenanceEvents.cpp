@@ -682,7 +682,9 @@ namespace Vehicle
     // maeRaceCarTypes[i], compared against 2 == E_RACE_CAR_TYPE_NETWORK.
     //
     // The only argument is r4, forwarded verbatim as SetNetworkRaceCarHidden's r5 -- the frame
-    // count, not a bool. Its one call site (ProcessCreateEvents @0x826177CC) passes `li r4, 1`.
+    // count, not a bool. All three console call sites pass `li r4, 1`: ProcessCreateEvents
+    // (@0x826177CC), ProcessResetEvents (@0x82617EEC, a player-car reset) and OnJunkYardDriveThru
+    // (@0x825EB0E0, junkyard entry) -- ARTIST xrefs_to; the last two landed 2026-09-23 (FX-VMNET).
     // =============================================================================================
     void VehicleManager::SetAllNetworkRaceCarsHidden(s32 liFrames)
     {
