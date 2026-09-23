@@ -477,13 +477,19 @@ namespace Deformation
         // hinged parts -- i.e. essentially always. This function force-hinges a RANDOM still-attached
         // panel every time it passes, so with the constant substituted AND the MakeDetachedPart
         // forward wired (this wave) the car would have shed a panel per frame until it ran out.
-        // The real budget is a per-object latch seeded to 0 by DeformableObject::Reset and armed only
-        // on the PLAYER_EXTREME (showtime) path -- so the honest gate is ~always closed.
+        // The real budget is a per-object latch seeded to 0 by DeformableObject::Reset and armed by
+        // UpdateAbsorptionSet's SHUTDOWN arm (10, @0x825DFA7C/84 -- a crashing taken-down rival) and
+        // by a damaged CAR_SELECT ResetDeformation ((int)(damage*5)+1).
         if ( mi16NumPhysicalParts < KI_MAX_PHYSICAL_PARTS
              && ( mi8NumPartsToForceHinging - mi16NumHingedParts ) > 0 )   // +26417 - +26288
         {
             // (1) random part ordinal -> resolve to a real attached jointed part.
-            const u32 luPartDraw = lpRandom->RandomUInt();             // inline LCG draw (*(a5+32))
+            // 0x8263ADC4..0x8263AE00: ONE LCG step, then r4 = (u32)(oldSeed >> 32) % 11 (mulhwu
+            // 0xBA2E8BA3, srwi 3, mulli 11, subf; PS3 0x757C08 `% 0xB`). GetNonDetachedJointedPart
+            // walks that many qualifying parts. (Crash parity G20-D1, 2026-09-23: the tree passed the
+            // raw 32-bit draw as the skip count, so the walk ran off the end and returned -1 ~always
+            // -- a shut-down rival's ten forced hinges never happened.)
+            const u32 luPartDraw = lpRandom->RandomUInt() % 11u;
             const s32 liPart = GetNonDetachedJointedPart(static_cast<s32>(luPartDraw));
             if ( liPart != -1 )
             {
@@ -553,14 +559,17 @@ namespace Deformation
             return;
         }
 
-        // (1) decay the spin accumulator. The asm samples the body's angular velocity (lvx body+96),
-        // folds it into the accumulator, then multiplies by pow(0.99, timeStep * 60) built via the
-        // exp/log polynomial.
+        // (1) integrate the TOTAL angular travel, then decay it. (Crash parity G20-D3, 2026-09-23 --
+        // the tree summed the SIGNED omega per axis with no dt and tested a squared magnitude.)
+        //   0x8263A7B0  lvx128 v12, vehicle+0x60                  -- omega
+        //   0x8263A7D8/7EC/800  vandc |wx|,|wy|,|wz| (sign mask vslw(-1,-1))
+        //   0x8263A7FC/808  vaddfp x2                             -- the L1 norm
+        //   0x8263A80C  vmaddfp (D = A*C + B): sum = L1 * dt + sum
+        //   then *= pow(0.99, 60*dt) and stvx128 -> +0xF40 (a splat; all four lanes equal)
         const f32 lfTimeStep = lvfTimeStep.x;
         const Vector3 lBodyOmega = GetVehicleBody().GetAngularVelocity();   // lvx body+96
-        mAngularVelocitySum.x += lBodyOmega.x;
-        mAngularVelocitySum.y += lBodyOmega.y;
-        mAngularVelocitySum.z += lBodyOmega.z;
+        const f32 lfL1 = std::fabs(lBodyOmega.x) + std::fabs(lBodyOmega.y) + std::fabs(lBodyOmega.z);
+        f32 lfSum = mAngularVelocitySum.x + lfL1 * lfTimeStep;
 
         // pow(0.99, timeStep * 60) -- the asm's exp/log polynomial with the 60.0 reference rate the
         // same block loads (flt_82092BC4 @0x8263A7CC). At a 60 fps step this is exactly 0.99 per
@@ -568,20 +577,21 @@ namespace Deformation
         // host that does not hold 60.
         const f32 lfDecayFactor =
             std::exp( std::log( kfAngularVelocityDecay ) * ( lfTimeStep * KF_ANGULAR_DECAY_REFERENCE_RATE ) );
-        mAngularVelocitySum.x *= lfDecayFactor;
-        mAngularVelocitySum.y *= lfDecayFactor;
-        mAngularVelocitySum.z *= lfDecayFactor;
+        lfSum *= lfDecayFactor;
+        mAngularVelocitySum = VecFloat{ lfSum, lfSum, lfSum, lfSum };   // 0x8263A99C stvx128 -> +0xF40
 
-        // (2) over-threshold test (vcmpgtfp v13, spinSpeed^2, threshold). Below threshold returns.
-        const f32 lfSpinSpeedSq = MagnitudeSquared3(mAngularVelocitySum);
-        if ( !( lfSpinSpeedSq > kfAngularVelocityForDetachment ) )
+        // (2) over-threshold test: 0x8263A9A8 vcmpgtfp. sum > kfAngularVelocityForDetachment (8.0),
+        // all-lanes bit. Below threshold returns (the sum is kept).
+        if ( !( lfSum > kfAngularVelocityForDetachment ) )
             return;
 
-        // (3) force a random attached jointed part to hinge off. Inline LCG draw -> part ordinal.
-        const u32 luPartDraw = lrRandom.RandomUInt();             // *(a5+32) advance
-        const s32 liPart = GetNonDetachedJointedPart(static_cast<s32>(luPartDraw));
+        // (3) force a random attached jointed part to hinge off. 0x8263A9BC..0x8263AA08: ONE LCG
+        // step, (u8)((u32)(oldSeed >> 32) % 20) (mulhwu 0xCCCCCCCD, srwi 4, *20, subf, clrlwi 24;
+        // PS3 0x757E80 `% 0x14`). (Crash parity G20-D2: the raw draw made the walk return -1 ~always.)
+        const u32 luPartDraw = lrRandom.RandomUInt() % 20u;
+        const s32 liPart = GetNonDetachedJointedPart(static_cast<s32>(static_cast<u8>(luPartDraw)));
         if ( liPart == -1 )
-            return;
+            return;   // no zero on this path (the asm returns before 0x8263AB90)
 
         // (debug log "Hinging part due to spinning: <part> my entity id: <mHandlingBodyID>" is a
         // gxMessageFilterFlags-gated trace; omitted -- no observable state change.)
@@ -608,6 +618,10 @@ namespace Deformation
 
         // Hinge it (lbHinge == true) hanging from the located tag point.
         DetachPart(lpInput, lpOutput, lpPartMgr, liPart, liTagPoint, /*lbHinge*/ true);
+
+        // 0x8263AB90 stvx128 v127(=0) -> +0xF40: the accumulator restarts after every hinge attempt,
+        // including one DetachPart refuses at the 20-part cap.
+        mAngularVelocitySum.SetZero();
     }
 
     // =============================================================================================

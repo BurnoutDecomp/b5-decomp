@@ -193,7 +193,9 @@ namespace Deformation
 
         // DWARF tail: accumulators / derived state reset by name (asm: vspltisw v0,0 over the cooldown
         // sum, then SetLastLinearVelocity / SetEntitySphereSize). mAngularVelocitySum is a VecFloat.
-        mAngularVelocitySum.SetZero();
+        // 0x82608DAC: the zero goes to +0x66C0 == mLastAngularVelocity. Console ClearVariables never
+        // writes the +0xF40 spin accumulator (crash parity G20-D4, 2026-09-23).
+        mLastAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
         SetLastLinearVelocity(Vector3{ 0.0f, 0.0f, 0.0f, 0.0f });
         SetEntitySphereSize(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
 
@@ -324,9 +326,10 @@ namespace Deformation
         mbDontPlayGlassPaneEffects = false;   // stb 0, +26415
         meAbsorptionSet            = E_ABSORPTIONSET_NORMAL;   // stw 0, +26460
 
-        // The +6372 25-dword scratch header the asm zeroes before the reset (the world-sphere/scratch
-        // block). Cleared by name via the shared ClearVariables init the asm inlines here.
-        // (asm: the `v14 = 25; do *v11 = 0 ...` loop over the +6372 header.)
+        // 0x826421F8..0x82642204: 25 x `stw 0` at +0x18E4 == mImpulsePasser's collidable-body map
+        // (PS3 0x76A844 calls ImpulsePasser::Prepare). A pooled slot re-prepared for another car must
+        // not keep the previous car's map slots (crash parity G20-D7, 2026-09-23).
+        mImpulsePasser.Prepare();
 
         // Full deformation reset to the event's initial-damage amount + base type (asm tail-call). The
         // f32 initial-damage amount is broadcast into the VecFloat the reset takes (asm: vspltw of the
@@ -514,14 +517,12 @@ namespace Deformation
     {
         CGS_ASSERT(mbActive, "mbActive");
 
-        // Drop physical parts/joints (a DeformableObject method, called by name), then the detached
-        // wheels keyed by this car's body/entity ids. FLAG: DetachedWheelManager is only forward-declared
-        // on the frozen header (its full layout would risk an include cycle), so its RemoveVehicleWheels
-        // call -- DetachedWheelManager::RemoveVehicleWheels(lpWheelMgr, lpInput, mHandlingBodyID,
-        // mGlobalEntityId) -- is left documented but not emitted here; it is restored when the manager
-        // header is in-tree. RemovePhysicalPartsAndJoints IS a DeformableObject member and runs.
+        // Drop physical parts/joints, then this car's detached wheels (0x8263A6F8..0x8263A708: r3
+        // wheelMgr, r4 input, r5 scene, r6 = ld 0x6710 == mHandlingBodyID). Crash parity G20-D5,
+        // 2026-09-23: the tree discarded lpWheelMgr under a stale "only forward-declared" banner, so a
+        // removed model's shed wheels stayed live in the 20-slot DetachedWheelManager forever.
         RemovePhysicalPartsAndJoints(lpInput, lpScene, lpPartMgr);
-        (void)lpWheelMgr;   // FLAG: DetachedWheelManager::RemoveVehicleWheels(lpWheelMgr, lpInput, ...)
+        lpWheelMgr->RemoveVehicleWheels(lpInput, lpScene, mHandlingBodyID);
 
         // Invalidate the ids + drop the spec + clear active/index state (asm tail + DWARF SetInvalid).
         // EntityId / RigidBodyId are plain { u32 muValue } handles on the frozen common-types header; the
@@ -675,6 +676,12 @@ namespace Deformation
             maDrivenPoints[liDriven].Construct(mpDeformationSpec->GetDrivenPointSpec(liDriven),
                                                &maTagPoints[0]);
         }
+
+        // 0x8263A120..0x8263A134: stvx128 0 -> +0x10E0, then _blkmov(+0x10F0, +0x10E0, 0x7F0) -- a
+        // forward fill that zeroes all 128 skinning-offset scratch rows on EVERY reset (crash parity
+        // G20-D8, 2026-09-23).
+        for (s32 liRow = 0; liRow < 128; ++liRow)
+            maVerletOffsets_Scratch[liRow] = Vector3Plus{ 0.0f, 0.0f, 0.0f, 0.0f };
 
         // --- rebuild the IK parts (damage-state only) (asm: if (lbResetParts) { miNumIKBodyParts =
         //     spec->numIKParts; per-part bounds-assert; IKBodyPart::Construct + PrepareIKPart; seed

@@ -53,6 +53,13 @@ namespace Deformation
         ClearVariables();
     }
 
+    // PS3 0x6B50CC (inlined on X360 at DeformableObject::Prepare 0x826421F8..0x82642204: 25 x stw 0).
+    bool ImpulsePasser::Prepare()
+    {
+        ClearVariables();
+        return true;
+    }
+
     // Inline-attested at ResetSensors @0x82623EB8..0x82623F00 (see the TU banner).
     void ImpulsePasser::SetCollidableBodyMap(s32 liIndex, CollidableBody* lpBody)
     {
