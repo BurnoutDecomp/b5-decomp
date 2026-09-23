@@ -15,6 +15,9 @@
 //                        SetFromVehicleOutputInterface on a stack copy (0x8239783C); lbzx
 //                        crashing[player] (0x8239784C); beq -> return; else -1.0 (flt_820037C8)
 //                        -> +0x24C, 2 -> +0x25C, 0 -> +0x266, AddEvent(outGui, &1, 0xB0, 4)   (G12-D1)
+//   HandleWaitingToAwardPayback @0x823978B0 (arm [2] = 0x8239AC54, vehicle output = r21)
+//                        the same snapshot (0x823978FC) and read (0x8239790C); bne -> return; else
+//                        -1.0 -> +0x24C, 3 -> +0x25C, 0 -> +0x266, AddEvent(outGui, &1, 0xB0, 4)  (G12-D5)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"
@@ -242,6 +245,47 @@ int main()
         Tick(lr);
         Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT,
               "D1 the byte is indexed by GetPlayerActiveRaceCarIndex (player 5, slot 5 crashing -> state 2)");
+    }
+
+    // ===================== G12-D5: HandleWaitingToAwardPayback through arm [2] =====================
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT);
+        Tick(lr);   // nobody crashing: the player's crash is over
+        Check(gSetFromCalls == 1 && gpSetFromArg == gpVehicleOutput,
+              "D5 the arm snapshots the vehicle output Update was handed  @0x823978FC");
+        Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER,
+              "D5 player not crashing -> aggressor state 3 (`li r10, 3`)  @0x82397934");
+        Check(lr.mfPaybackAggTimer == -1.0f, "D5 ...+0x24C = -1.0 (flt_820037C8)  @0x82397930");
+        Check(!lr.mbPaybackAwarded, "D5 ...+0x266 = 0  @0x82397938");
+        Check(OneShowRecord(), "D5 ...and one GUI 176 (0xB0) record, 4 bytes, value 1  @0x82397950");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT);
+        gabCrashing[2] = true;   // still crashing
+        Tick(lr);
+        Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT && lr.mbPaybackAwarded
+                  && lr.mfPaybackAggTimer == 0.0f && CountType(gModule.mOutputGuiEventQueue, 176, nullptr, nullptr) == 0,
+              "D5 player still crashing -> stays in state 2, nothing stored or posted (bne)  @0x82397914");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT);
+        gabCrashing[5] = true;   // another car is crashing; the player is not
+        Tick(lr);
+        Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER,
+              "D5 the byte is the PLAYER's slot (slot 5 crashing, player 2 clear -> state 3)");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_WAIT_AWARD_PAYBACK);
+        gabCrashing[2] = true;
+        Tick(lr);                                  // 1 -> 2 (the crash starts)
+        const bool lbTwo = lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT;
+        Tick(lr);                                  // still crashing: stays 2
+        const bool lbStillTwo = lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT;
+        gabCrashing[2] = false;
+        Tick(lr);                                  // the crash is over: 2 -> 3
+        Check(lbTwo && lbStillTwo && lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER
+                  && lr.mfPaybackAggTimer == -1.0f,
+              "D1+D5 chain: crash starts 1 -> 2, holds while crashing, ends 2 -> 3");
     }
 
     Check(gAsserts == 0, "valid fixtures fire no assert");

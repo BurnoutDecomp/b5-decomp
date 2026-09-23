@@ -4,7 +4,7 @@
 // The online payback / dirty-trick manager. Reconstructed from BURNOUT_X360_ARTIST.XEX
 // (semantic parity, not byte-matching). The manager's functions that live here are listed at
 // each body; the remaining declared members (Prepare/Release/OnRoundStart/
-// HandleWaitingToAwardPayback/HandleAwardingPayback/HandleReceivingPayback/DirtyTrickAwarded/
+// HandleAwardingPayback/HandleReceivingPayback/DirtyTrickAwarded/
 // ShowDTAvailableHudNotification/StartCountdown/UpdateFSMTimers/SetDirtyTrickButtonState/
 // SetTimerInterface) have no body in the tree yet and no caller here.
 //
@@ -14,7 +14,8 @@
 // RemoveCountdown, DirtyTrickEnding), and HandleTriggeringPayback's GUI record through
 // DirtyTrickTriggered (G12-D2).
 // [FX-GS2 2026-09-23] HandleWaitForPaybackAggressorToCrash reads CrashingRaceCarInterface::
-// IsCrashing (b5 27ad7089) instead of a pinned false (G12-D1).
+// IsCrashing (b5 27ad7089) instead of a pinned false (G12-D1); HandleWaitingToAwardPayback, the
+// aggressor arm [2] that was parked on the same read (G12-D5).
 //
 // Source-of-truth: X360 ASM (behaviour + calling convention) > DecFIGS DWARF (shape) > none.
 // ===================================================================================
@@ -455,6 +456,40 @@ namespace BrnGameState
     }
 
     // -----------------------------------------------------------------------------------
+    // HandleWaitingToAwardPayback  @ 0x823978B0 (Update jump table 0x8239AC2C[2] = 0x8239AC54,
+    // `mr r4, r21` = the vehicle output interface)
+    // Aggressor side, value 2 -- the taken-down player has crashed; wait for the crash to END. Once
+    // the player's car is no longer crashing, move to value 3 (the awarding arm).
+    //     0x823978CC  assert "lpVehicleOutputInterface" (non-gating, line 378)
+    //     0x823978FC  bl  CrashingRaceCarInterface::SetFromVehicleOutputInterface (stack copy)
+    //     0x8239790C  lbzx r11, r3, r11 ; 0x82397914 bne -> return   (IsCrashing(player), no assert)
+    //     0x82397918..0x82397950  ChangeState(3) inlined: flt_820037C8 (-1.0) -> +0x24C,
+    //                 `li r10, 3` -> +0x25C, 0 -> +0x266, AddEvent(outGui, &1, 0xB0, 4)
+    // The PS3 twin (DecFIGS 0x268080) calls ChangeState by name, so the handler does too.
+    // NAMING: the X360 inserted value 1 (HandleWaitForPaybackAggressorToCrash) ahead of the DWARF's
+    // states, so this header's PS3 enumerator for value 3 is READY_TO_TRIGGER while the X360 source
+    // calls value 3 AWARD_DT (its own assert text in ProcessPaybackTriggerableEvent). The value
+    // stored is the console's 3.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::HandleWaitingToAwardPayback(
+        const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
+    {
+        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+
+        BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
+        lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
+
+        const s32 liPlayerRaceCarIndex =
+            static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex());
+
+        if (!lCrashingRaceCars.IsCrashing(liPlayerRaceCarIndex))
+        {
+            ChangeState(E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);   // raw 3, `li r10, 3` @0x82397920
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
     // HandleHavingPayback  @ 0x82397B30
     // Aggressor side, READY_TO_TRIGGER -> waiting for the victim car. While the victim's race car is
     // still present (resolved from the module's active-car table by mePaybackVictimRaceCarIndex and
@@ -809,10 +844,8 @@ namespace BrnGameState
                 HandleWaitForPaybackAggressorToCrash(lpVehicleOutputInterface);
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_AWARD_DT:
-                // FLAG parked: PaybackManager::HandleWaitingToAwardPayback @0x823978B0 (jump table
-                // 0x8239AC2C[2], r4 = lpVehicleOutputInterface) has no body: its test is
-                // BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing, declared with no body in
-                // BrnVehicleOutputInterface.h (not this TU's file).
+                // Jump table 0x8239AC2C[2] = 0x8239AC54: `mr r4, r21` (the vehicle output).
+                HandleWaitingToAwardPayback(lpVehicleOutputInterface);
                 break;
             case E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER:
                 // FLAG parked: PaybackManager::HandleAwardingPayback @0x82397970 (jump table
