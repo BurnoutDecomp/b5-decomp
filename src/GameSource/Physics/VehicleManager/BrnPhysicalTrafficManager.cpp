@@ -998,7 +998,8 @@ bool PhysicalTrafficManager::PrepareTriangleCache(
 // are SimpleVehiclePhysics: `lvx128 v11, body+0x6A0` == mHalfExtent (r16 = 0x6A0) and
 // `lvx128 v11, body+0x40` == mTransform.wAxis (r17 = 0x40). Radius = |mHalfExtent| through the
 // same vmsum3fp128 + vrsqrtefp + 2 Newton-Raphson chain with the same `lensq == 0 -> 0` vsel, and
-// the same identity add of the zero vector at unk_82FB91D0 (see the note on the vehicle body).
+// the same `vaddfp halfExtent, *unk_82FB91D0` (0x825EE7B0/0x825EE7E8): kvfVehicleTriangleCachePadding,
+// splat(1.0f) written by CRT thunk 0x82C5A470 -- see KVF_VEHICLE_TRIANGLE_CACHE_PADDING.
 // =================================================================================================
 void PhysicalTrafficManager::UpdateTriangleCache(
     CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
@@ -1018,7 +1019,10 @@ void PhysicalTrafficManager::UpdateTriangleCache(
         const SimpleVehiclePhysics* const lpBody = mpaTrafficVehicles[liVehicle].mpVehicleBody;
 
         const Vector3 lvHalfExtent = lpBody->GetHalfExtent();
-        const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvHalfExtent);
+        const Vector3 lvPadded = { lvHalfExtent.x + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,     // 0x825EE7E8 vaddfp
+                                   lvHalfExtent.y + KVF_VEHICLE_TRIANGLE_CACHE_PADDING,
+                                   lvHalfExtent.z + KVF_VEHICLE_TRIANGLE_CACHE_PADDING, 0.0f };
+        const f32 lfRadiusSq = rw::math::vpu::MagnitudeSquared(lvPadded);               // vmsum3fp128: xyz
         const f32 lfRadius   = (lfRadiusSq != 0.0f) ? std::sqrt(lfRadiusSq) : 0.0f;
 
         const Vector3& lrPosition = lpBody->GetPosition();

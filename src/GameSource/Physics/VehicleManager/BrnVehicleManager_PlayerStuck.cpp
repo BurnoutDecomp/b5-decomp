@@ -116,12 +116,14 @@ namespace
 
     // DoPlayerStuckLineTests' two "is the car moving" cut-offs, compared against SQUARED
     // magnitudes (`vmsum3fp128 v0, v0, v0` then `vcmpgtfp.`):
-    //   flt_82093CE4 == 0x3CECBFB1 == 0.0289f == 0.17^2  vs |angular velocity|^2  (0x825C3A98)
+    //   flt_82093CE4 == 0x3CECBFB2 == 0.0289000012f      vs |angular velocity|^2  (0x825C3A98)
+    //                   (== f32(0.17f)*f32(0.17f); the decimal literal 0.0289f encodes 0x3CECBFB1,
+    //                   one ULP low -- the image word is what the body compares against)
     //   flt_82001C98 == 0x3F800000 == 1.0f    == 1.0^2   vs |linear velocity|^2   (0x825C3B30)
     // The DWARF names for the unsquared pair (KF_STUCK_LINETEST_ANGULARCUTOFF /
     // KF_STUCK_LINETEST_LINEARCUTOFF) belong to another TU's dump; these are the squared literals
     // this body actually loads.
-    const f32 KF_STUCK_LINETEST_ANGULARCUTOFF_SQ = 0.0289f;
+    const f32 KF_STUCK_LINETEST_ANGULARCUTOFF_SQ = 0.0289000012f;   // flt_82093CE4 == 0x3CECBFB2
     const f32 KF_STUCK_LINETEST_LINEARCUTOFF_SQ  = 1.0f;
 
     // flt_82001DA0 == 0.5f: the wheel-pair midpoint factor (0x825C3BC8 / 0x825C3EA0 / 0x825C4300).
@@ -696,8 +698,11 @@ namespace
     //               (and the line stays whatever was on the stack -- zero here)
     //   0x825C44xx  the kernel, single line, against GetTrianglesForCachedObject(player) x
     //               GetNumCachedTriangleBatches(player)
-    //   result: occluded = hit && !(tag & 0x2000)   (`extrwi r11, tag, 3,16 ; clrlwi 31` == bit 13
-    //           of the tag WORD == BrnWorld::KU_COLLISION_FLAG_DRIVEABLE in the material halfword)
+    //   result: occluded = hit && !((tag >> 16) & 0x2000)   (0x825C4930 lwz ; 0x825C4934 srwi 16 ;
+    //           then per plane `rlwinm 19,29,31 ; clrlwi 31` == bit 13 of the HIGH (material) halfword
+    //           == BrnWorld::KU_COLLISION_FLAG_DRIVEABLE. The LOW halfword is the group / AI-section
+    //           tag -- cf. SimpleVehiclePhysics::AddTractionPoint 0x825D9654 `srwi r23,r5,16` ->
+    //           Wheel::SetRoadContact -> RoadContact+0x26, the same material the crash code reads)
     //   0x825C49D0  plane 0: word |= 1  / word &= ~1     (knVehicleRoundRobinFrontPlaneOccluded)
     //   0x825C499C  plane 4: word |= 2  / word &= ~2     (knVehicleRoundRobinRearPlaneOccluded)
     //   0x825C496C  plane 8: mbIsFrontRayOccluded = occluded
@@ -782,8 +787,9 @@ namespace
         IntersectLinesWithTriangleBatches(&lvStart, &lvEnd, 1, lpTriangles, liNumBatches, &lHit);
 
         // occluded == the line hit something that is NOT driveable (a wall, not the road)
+        // 0x825C4934 srwi r11,tag,16 ; 0x825C4978/49A8/49DC rlwinm r11,r11,19,29,31 ; clrlwi 31 ; bne -> not occluded
         const bool lbOccluded =
-            lHit.mbHit && ((lHit.muSurfaceTag & BrnWorld::KU_COLLISION_FLAG_DRIVEABLE) == 0u);
+            lHit.mbHit && (((lHit.muSurfaceTag >> 16) & BrnWorld::KU_COLLISION_FLAG_DRIVEABLE) == 0u);
 
         // ---- record the verdict --------------------------------------------------------------------
         if (luPlane == knVehicleRoundRobinFrontPlaneToTest)

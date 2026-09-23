@@ -175,6 +175,16 @@ namespace Vehicle
     // kept live around every car.
     const f32 KF_TRIANGLE_CACHE_SPHERE_RADIUS = 5.0f;   // X360 flt_8200426C
 
+    // kvfVehicleTriangleCachePadding (DWARF BrnVehicleConstants.h:81), splat(1.0f): padded onto a
+    // vehicle's mHalfExtent before its triangle-cache inner radius is taken
+    // (VehicleManager::UpdateTriangleCache 0x82615D70 and PhysicalTrafficManager::UpdateTriangleCache
+    // 0x825EE7E8, both `vaddfp halfExtent, pad`). X360 .bss unk_82FB91D0 reads 0 in the image BY
+    // DEFINITION; it is filled by the CRT thunk 0x82C5A470 (`lfs f0, flt_82001C98` == 0x3F800000,
+    // lvlx, vspltw, `stvx128 -> 0x82FB91D0`), __xc entry 0x82CD1530 in the _initterm range walked
+    // at 0x829346B4. PS3 static-init 0x7B7B74 stores the same splat(1.0). An earlier banner read the
+    // .bss zero as the runtime value and dropped the add.
+    const f32 KVF_VEHICLE_TRIANGLE_CACHE_PADDING = 1.0f;
+
     // The two crash-visual constants of
     // SimpleVehiclePhysics::GetWheelsWorldTransfrom @0x825D8878. Both are BrnPhysics::Vehicle
     // namespace-scope (the PS3 DecFIGS pseudocode names them through TOC symbols:
