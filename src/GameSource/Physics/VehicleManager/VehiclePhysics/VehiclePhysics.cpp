@@ -1186,15 +1186,27 @@ namespace Vehicle
     // ===========================================================================================
 
     // @0x825FB200  BrnPhysics::Vehicle::VehiclePhysics::CalculateBodyVelocityAtWheelContact
-    //   The rigid-body velocity at one wheel's contact point:
-    //       v_contact = v_linear + omega x (r_contact - bodyPos)
-    //   r_contact is the wheel's road-contact position when the wheel is on the ground (asm:
-    //   `if (*(wheel+344)) { ... lvx128 contact... }`), else its streamed position
-    //   (mStreamedPositionPlusTwistAmount; the else branch asserts the streamed position is finite
-    //   -- elided -- and reads +0x90). The result is stored into the wheel's mBodyPointVelocity
-    //   (+0xA0). bodyPos is the body world position (mTransform.Pos(), base +0x40); omega is the
-    //   angular-velocity register at +0x60 (here mAngularVelocity). The cross-product is the X360's
-    //   vpermwi/vmulfp/vnmsubfp lane-rotated `a x b`.
+    //   The rigid-body velocity at one wheel's contact point, v = v_linear + omega x r, stored into
+    //   the wheel's mBodyPointVelocity (+0xA0; stvx128 at 0x825FB2A4 / 0x825FB448). The two arms
+    //   build the lever arm r DIFFERENTLY (branch on lbz wheel+0x28 mbIsOnGround at 0x825FB218):
+    //     on the ground (0x825FB224..0x825FB2A4): r = RoadContact.mPosition (wheel+0x00) -
+    //       mTransform.Pos() (this+0x40) -- a WORLD-space arm;
+    //     airborne (0x825FB2B0..0x825FB448): the wheel's LOCAL position mPosition (wheel+0x80 --
+    //       NOT the streamed +0x90), lowered by the radius on .y only (0x825FB3EC splat
+    //       mSlipVariables.w, 0x825FB3FC vsubfp, 0x825FB400 vrlimi128 mask 4), then ROTATED into
+    //       world space with NO translation: Up*y (0x825FB418 vmulfp128), + Right*x (0x825FB424
+    //       vmaddfp, raw 11AA6B2E), + At*z (0x825FB42C vmaddfp, raw 11A96AEE). This arm never loads
+    //       this+0x40. The finite check + "Invalid wheel position: ... please tell Graham D."
+    //       assert at 0x825FB2C4..0x825FB3C4 is the inlined Wheel::GetPosition (elided there too).
+    //     (PS3 twin 0x6EC360: the same arm -- +0x80, +0x40 lane 3, perm <0,5,2,3>, three row
+    //     products, no translation.)
+    //   omega is the +0x60 register (mAngularVelocity), v_linear the +0x50 one; the cross product is
+    //   the X360's vpermwi 0x63 / vmulfp128 / vnmsubfp lane-rotated `a x b`.
+    //   ⛔ G54-D1 (crash parity 2026-09-23): the airborne arm used to read the streamed position
+    //   and subtract mTransform.Pos() -- a body-LOCAL point minus the WORLD translation, so r was
+    //   about -worldPos (hundreds of metres) and an airborne wheel's +0xA0 read omega x -worldPos.
+    //   The player's touch-down frame publishes that value (UpdateRaceCarState -> WheelLite
+    //   .mVelocity) to the skid-smoke and landing-dust state machines.
     // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave) to the DWARF 3-arg form; both extra
     // args are DEAD in the console callee (see the header note).
     void VehiclePhysics::CalculateBodyVelocityAtWheelContact(EVehicleDrivenWheel leWheel,
@@ -1203,18 +1215,30 @@ namespace Vehicle
     {
         Wheel& lrWheel = maWheels[leWheel];
 
-        // r_contact: road-contact position when on the ground, else the streamed position.
-        Vector3 lvContactPos;
-        if (lrWheel.GetRoadContact().mbIsOnGround)
-            lvContactPos = lrWheel.GetRoadContact().mPosition;
-        else
-            lvContactPos = lrWheel.mStreamedPositionPlusTwistAmount.GetVector3();
-
-        // lever arm r = contactPos - bodyPos
-        const Vector3& lvBodyPos = mTransform.Pos();
-        const f32 lfRx = lvContactPos.x - lvBodyPos.x;
-        const f32 lfRy = lvContactPos.y - lvBodyPos.y;
-        const f32 lfRz = lvContactPos.z - lvBodyPos.z;
+        f32 lfRx, lfRy, lfRz;
+        if (lrWheel.GetRoadContact().mbIsOnGround)   // 0x825FB218
+        {
+            // world lever arm: road-contact point minus the body position
+            const Vector3& lvContact = lrWheel.GetRoadContact().mPosition;
+            const Vector3& lvBodyPos = mTransform.Pos();
+            lfRx = lvContact.x - lvBodyPos.x;
+            lfRy = lvContact.y - lvBodyPos.y;
+            lfRz = lvContact.z - lvBodyPos.z;
+        }
+        else   // 0x825FB2B0
+        {
+            // body-local wheel position (+0x80) with the radius taken off .y, rotated (no Pos())
+            const Vector3& lvLocal = lrWheel.GetPosition();
+            const f32 lfLx = lvLocal.x;
+            const f32 lfLy = lvLocal.y - lrWheel.mSlipVariables.w;
+            const f32 lfLz = lvLocal.z;
+            const Vector3& lvRight = mTransform.xAxis;
+            const Vector3& lvUp    = mTransform.yAxis;
+            const Vector3& lvAt    = mTransform.zAxis;
+            lfRx = (lvUp.x * lfLy + lvRight.x * lfLx) + lvAt.x * lfLz;
+            lfRy = (lvUp.y * lfLy + lvRight.y * lfLx) + lvAt.y * lfLz;
+            lfRz = (lvUp.z * lfLy + lvRight.z * lfLx) + lvAt.z * lfLz;
+        }
 
         // omega x r  (mAngularVelocity is the +0x60 angular-velocity register)
         const Vector3& lvOmega = mAngularVelocity;
@@ -7320,6 +7344,26 @@ namespace Vehicle
         lrfSpinB = (lrfSpinB < lfLo) ? lfLo : ((lrfSpinB > lfHi) ? lfHi : lrfSpinB);
     }
 
+    // ---- [wheel-bpv] PC bring-up instrument -- NOT IN THE X360 BINARY -----------------------------
+    // OPT-IN (BRN_WHEEL_BPV_PROBE=1). UpdateWheels prints, for the PLAYER car, the first 40 AIRBORNE
+    // wheels' mBodyPointVelocity as written by CalculateBodyVelocityAtWheelContact, as the lever arm
+    // it implies: |mBodyPointVelocity - mLinearVelocity| / |mAngularVelocity| (the component of r
+    // perpendicular to omega). G54-D1: the console's airborne arm is the body-local wheel position
+    // rotated (a body-scale arm, ~1-3 m); the old streamed-minus-Pos() arm implied |worldPos|.
+    namespace
+    {
+        bool WheelBpvProbeArmed()
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_WHEEL_BPV_PROBE");
+                siArmed = (lpcEnv != NULL && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            return (siArmed == 1) && (CgsDev::Log::gpDebugPrint != NULL);
+        }
+    }
+
 // [clean] UpdateWheels  @0x8261E4F0
     // @0x8261E4F0  BrnPhysics::Vehicle::VehiclePhysics::UpdateWheels  (1130 insns)
     // THE PER-WHEEL TRACTION/CONTACT CORE -- the stage UpdateDriving runs between the
@@ -7444,6 +7488,30 @@ namespace Vehicle
         CalculateBodyVelocityAtWheelContact(eRearRightWheel,  lvAt,               lvfTimeStep);
         CalculateBodyVelocityAtWheelContact(eFrontLeftWheel,  mSteeringDirection, lvfTimeStep);
         CalculateBodyVelocityAtWheelContact(eFrontRightWheel, mSteeringDirection, lvfTimeStep);
+
+        // ---- [wheel-bpv] witness (opt-in, see WheelBpvProbeArmed; not console state) -----------
+        if (WheelBpvProbeArmed() && lpControls->GetType() == E_DRIVER_TYPE_PLAYER)
+        {
+            static u32 suWitnessLines = 0u;
+            for (s32 liW = 0; liW < eNumDrivenWheels && suWitnessLines < 40u; ++liW)
+            {
+                const Wheel& lrWheel = maWheels[liW];
+                if (lrWheel.GetRoadContact().mbIsOnGround)
+                    continue;
+                ++suWitnessLines;
+                const f32 lfOmega = vpu::Magnitude(mAngularVelocity);
+                const f32 lfRelative =
+                    vpu::Magnitude(vpu::Subtract(lrWheel.mBodyPointVelocity, mLinearVelocity));
+                *CgsDev::Log::gpDebugPrint
+                    << "[wheel-bpv] n " << static_cast<s32>(suWitnessLines)
+                    << " w " << liW
+                    << " |omega| " << lfOmega
+                    << " |bpv-v| " << lfRelative
+                    << " arm " << ((lfOmega > 0.05f) ? (lfRelative / lfOmega) : -1.0f)
+                    << " |pos| " << vpu::Magnitude(mTransform.wAxis)
+                    << "\n";
+            }
+        }
 
         // ---- 0x8261E838: just-landed spin-up (order 2,3,0,1) ---------------------------------
         static const EVehicleDrivenWheel kaeLandOrder[eNumDrivenWheels] = {

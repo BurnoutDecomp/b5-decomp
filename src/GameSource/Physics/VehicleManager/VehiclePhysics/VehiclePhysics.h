@@ -770,10 +770,11 @@ namespace Vehicle
         //       remaining "BLOCKED" labels in this file as UNVERIFIED CLAIMS until disassembled. ----
 
         // @0x825FB200: the body velocity at one wheel's contact point:
-        //   v_contact = mLinearVelocity + mAngularVelocity x (r_contact - bodyPos)
-        // r_contact = the wheel's road-contact position when on the ground, else its streamed
-        // position (mStreamedPositionPlusTwistAmount). Stored into maWheels[leWheel].mBodyPointVelocity
-        // (+0xA0 within the wheel). (mAngularVelocity is the +0x60 register, here mLocalVelocity.)
+        //   v_contact = mLinearVelocity + mAngularVelocity x r
+        // On the ground r = RoadContact.mPosition - mTransform.Pos() (a world arm); airborne,
+        // r = R * (mPosition - (0, radius, 0)) -- the body-LOCAL wheel position (+0x80, not the
+        // streamed +0x90) lowered by mSlipVariables.w and rotated, with no translation (G54-D1).
+        // Stored into maWheels[leWheel].mBodyPointVelocity (+0xA0 within the wheel).
         // SIGNATURE CONFORMED 2026-08-07 (wheel-cluster wave): DWARF VehiclePhysics.cpp:5148
         // spells (EVehicleDrivenWheel, Vector3, VecFloat). Both extra args are DEAD in the callee
         // (the only v1 mention in @0x825FB200 is a WRITE at 0x825FB390) -- the SetWheelVelocities
