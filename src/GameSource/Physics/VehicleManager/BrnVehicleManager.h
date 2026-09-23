@@ -939,7 +939,10 @@ namespace Vehicle
 
         // @0x825E9380 (175) -- ADDED 2026-08-11 (create-drain wave). DWARF BrnVehicleManager.h
         // :1335. Walk the live-car bitset and hide every NETWORK car for at least liFrames frames.
-        // Its only caller is ProcessCreateEvents. Bodied in BrnVehicleManager_MaintenanceEvents.cpp.
+        // THREE console callers (ARTIST xrefs_to), each `li r4, 1`: ProcessCreateEvents,
+        // ProcessResetEvents (player-car reset, 0x82617EEC) and OnJunkYardDriveThru (junkyard
+        // entry, 0x825EB0E0) -- the last two wired 2026-09-23 (FX-VMNET, G44-D1 / G43-D2).
+        // Bodied in BrnVehicleManager_MaintenanceEvents.cpp.
         void SetAllNetworkRaceCarsHidden(s32 liFrames);
 
         // DWARF BrnVehicleManager.h:986

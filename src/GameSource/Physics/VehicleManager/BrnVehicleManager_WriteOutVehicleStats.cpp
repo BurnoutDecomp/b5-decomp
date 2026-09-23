@@ -386,8 +386,8 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //                                     LANDED 2026-08-26 -- (P3) is RESOLVED, not parked
 //   0x82617E28  RaceCarResetEvent::AddEvent(managerOut+0x5B0,
 //               { index, mbResettingAfterWreck, <the transform's translation row, v125> })
-//   0x82617E34+ the `index == player` tail: a bit test at +0x1908, SetAllNetworkRaceCarsHidden,
-// and four gpcMessageBuffer streams                      PARKED -- see (P4)
+//   0x82617E34+ the `index == player` tail: SetAllNetworkRaceCarsHidden(1) under a LOG-only
+//               gate, then the per-event HIDE_ONLINE stream   LANDED 2026-09-23 -- see (P4)
 //
 // (P1) RETIRED (r9 verify): the "un-homed +0x1ACD0 flags word" was a 0x10000 mis-read of
 //      +0xACD0 == mStuntOffencesManager; the leg is the named SetCurrentRaceCarState call,
@@ -458,9 +458,13 @@ void VehicleManager::WriteOutVehicleStats(VehicleOutputInterface* lpOutputInterf
 //      assert to "get past it" would have been the invented-arm class this campaign has paid
 //      for twice; gating the call on IsCrashing() would have hidden exactly the producer defect
 //      the console's own assert exists to catch.
-// (P4) the player tail is the network-car un-hide + four debug streams; the un-hide's own
-//      SetAllNetworkRaceCarsHidden IS bodied, but its guard is the +0x1908 bit of an unnamed
-//      member. Parked for the same reason as (P1), and it is a no-op with no network cars.
+// (P4) RESOLVED 2026-09-23 (crash-parity FX-VMNET, G44-D1). The park's premise was a misread:
+//      the "+0x1908 bit" is `lwz r11,var_1B0 ; ld r11,0x1908(r11)` with var_1B0 = `lis 0x82F3`
+//      (0x82617B94/98) -- the GLOBAL CgsDev::Message::gxMessageFilterFlags @0x82F31908, the same
+//      `lis -0x7d0d ; ld 0x1908` every HIDE_ONLINE site in this class uses -- and it gates the
+//      LOG only. SetAllNetworkRaceCarsHidden(1) runs on every player-car reset (the call is
+//      reached from both arms of the bit test). It is a no-op with no network cars, so offline
+//      the only visible change is the two HIDE_ONLINE log streams.
 // =================================================================================================
 void VehicleManager::ProcessResetEvents(
         const VehicleInputInterface* lpInputInterface,
@@ -552,7 +556,7 @@ void VehicleManager::ProcessResetEvents(
             // reproduced, and it cannot diverge: UpdateDriving re-splats mfMass from the SAME
             // attribute lane at the top of every single frame (VehiclePhysics.cpp, the
             // `mfMass = VecFloat{lfM,...}` line right after mfSpeedMPH), so the console's store
-            // here is overwritten before anything reads it. Stated rather than silently dropped.
+            // here is overwritten before anything reads it. Recorded here so the omission is explicit.
         }
 
         if (lrEvent.mbResetDeformation)
@@ -614,6 +618,34 @@ void VehicleManager::ProcessResetEvents(
             lResult.mbResettingAfterWreck = lrEvent.mbResettingAfterWreck;
             lResult.mResetPosition        = lrEvent.mInitialTransform.wAxis;
             lpManagerOutputInterface->AddRaceCarResetEvent(lResult);
+        }
+
+        // 0x82617E2C..0x82617EEC -- THE PLAYER-RESET NETWORK HIDE (G44-D1, 2026-09-23; retires
+        // park (P4)). `lwz r11,0(r19)` (r19 = this+0x2A0AC == mePlayerActiveRaceCarIndex) ;
+        // `cmpw r28,r11 ; bne 0x82617EF0`. The bit test at +0x1908 is off the GLOBAL base
+        // `lis 0x82F3` (0x82F31908 == CgsDev::Message::gxMessageFilterFlags), not a member, and its
+        // `beq 0x82617EE4` skips ONLY the log: both arms reach `li r4,1 ; mr r3,r30(this) ; bl
+        // SetAllNetworkRaceCarsHidden` @0x82617EE4..0x82617EEC. Offline it is a walk that finds no
+        // E_RACE_CAR_TYPE_NETWORK car.
+        if (liRaceCar == static_cast<s32>(mePlayerActiveRaceCarIndex))
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: "                              // 0x82091358
+                    << "Making all network race cars hidden for at least 1 frame because player car "   // 0x82099D38
+                    << static_cast<s32>(mePlayerActiveRaceCarIndex)                         // lwz r5,0(r19)
+                    << " was just reset\n";                                                 // 0x82099E30
+            }
+            SetAllNetworkRaceCarsHidden(1);
+        }
+
+        // 0x82617EF0..0x8261800C -- the per-event HIDE_ONLINE stream, same global gate:
+        // 0x82091358 + 0x82099E44 "Resetting race car " + idx + 0x820941FC ", type " +
+        // maeRaceCarTypes[idx] (`addi r10,r28,0x2B28 ; slwi 2 ; lwzx` == this+44192) + "\n".
+        if (CgsDev::Message::gxMessageFilterFlags & 1)
+        {
+            *CgsDev::Log::gpDebugPrint << "HIDE_ONLINE: " << "Resetting race car " << liRaceCar
+                << ", type " << static_cast<s32>(maeRaceCarTypes[liRaceCar]) << "\n";
         }
 
         if (CgsDev::Log::gpDebugPrint != 0)
