@@ -461,12 +461,8 @@ namespace Deformation
     //   type, bounds-asserting (index < spec count; tag type < E_TAGPOINT_COUNT==57; live count <
     //   category max). The three live counts are zeroed first.
     //
-    //   NOTE the asm ORDER + count maxima (verbatim asserts): generic (max 15), light (max 24), camera
-    //   (max 1). FLAG: the spec-side per-list accessors (GetGenericLocators / GetLightLocators /
-    //   GetCameraLocators + LocatorPointSpecList::GetNumLocatorPoints / GetLocatorSpec) are private on
-    //   the frozen StreamedDeformationSpec, so the spec walk is left as a FLAGGED declare-only shape:
-    //   the count-clears + the per-category bound asserts + the destination by-member writes are exact;
-    //   the source read is pinned to an empty list (0 locators) until the spec accessors are exposed.
+    //   Seed generic (max 15), light (max 24), then camera (max 1) locators. The live counts
+    //   must accompany the transforms: effects use them to find the car's exhaust points.
     // =================================================================================================
     void DeformableObject::PrepareLocators()
     {
@@ -476,43 +472,46 @@ namespace Deformation
         mLocatorData.miNumGenericLocators = 0;
 
         // --- generic locators (asm: spec+36 count / spec+40 array; dest stride 16 dwords; max 15) ---
-        const u32 luNumGeneric = 0;   // FLAG: = mpDeformationSpec->mGenericTags.GetNumLocatorPoints()
+        const u32 luNumGeneric = mpDeformationSpec->mGenericTags.GetNumLocatorPoints();
         for (u32 luIndex = 0; luIndex < luNumGeneric; ++luIndex)
         {
-            // FLAG: lpLocator = mpDeformationSpec->mGenericTags.GetLocatorSpec(luIndex) (accessor not
-            // exposed on frozen spec). The bound asserts + dest writes below are the exact asm shape.
-            CGS_ASSERT(luIndex < luNumGeneric, "luIndex < muNumLocators");
-            const ETagPointType leType = E_TAG_POINT_TYPE_INVALID;   // FLAG: = lpLocator->meTagPointType
-            CGS_ASSERT(static_cast<s32>(leType) < 57, "lpLocator->meTagPointType < E_TAGPOINT_COUNT");
+            CGS_ASSERT(luIndex < mpDeformationSpec->mGenericTags.GetNumLocatorPoints(), "luIndex < muNumLocators");
+            const LocatorPointSpec* lpLocator = mpDeformationSpec->mGenericTags.GetLocatorSpec(luIndex);
+            const ETagPointType leType = lpLocator->meTagPointType;
+            CGS_ASSERT(leType < E_TAGPOINT_COUNT, "lpLocator->meTagPointType < E_TAGPOINT_COUNT");
             CGS_ASSERT(mLocatorData.miNumGenericLocators < KI_NUM_GENERIC_LOCATORS,
                        "mLocatorData.miNumGenericLocators < KI_MAX_GENERIC_LOCATORS");
-            // dest: mLocatorData.maGenericLocators[count] = lpLocator->mLocatorMatrix (4x16B copy).
+            mLocatorData.maGenericLocators[mLocatorData.miNumGenericLocators] = lpLocator->mLocatorMatrix;
             mLocatorData.maGenericLocatorTypes[mLocatorData.miNumGenericLocators] = leType;
             ++mLocatorData.miNumGenericLocators;
         }
 
         // --- light locators (asm: spec+52 count / spec+56 array; dest stride 16; max 24) ------------
-        const u32 luNumLight = 0;   // FLAG: = mpDeformationSpec->mLightTags.GetNumLocatorPoints()
+        const u32 luNumLight = mpDeformationSpec->mLightTags.GetNumLocatorPoints();
         for (u32 luIndex = 0; luIndex < luNumLight; ++luIndex)
         {
-            CGS_ASSERT(luIndex < luNumLight, "luIndex < muNumLocators");
-            const ETagPointType leType = E_TAG_POINT_TYPE_INVALID;   // FLAG: = lpLocator->meTagPointType
-            CGS_ASSERT(static_cast<s32>(leType) < 57, "lpLocator->meTagPointType < E_TAGPOINT_COUNT");
+            CGS_ASSERT(luIndex < mpDeformationSpec->mLightTags.GetNumLocatorPoints(), "luIndex < muNumLocators");
+            const LocatorPointSpec* lpLocator = mpDeformationSpec->mLightTags.GetLocatorSpec(luIndex);
+            const ETagPointType leType = lpLocator->meTagPointType;
+            CGS_ASSERT(leType < E_TAGPOINT_COUNT, "lpLocator->meTagPointType < E_TAGPOINT_COUNT");
             CGS_ASSERT(mLocatorData.miNumLightLocators < KI_NUM_LIGHT_LOCATORS,
                        "mLocatorData.miNumLightLocators < KI_MAX_LIGHT_LOCATORS");
+            mLocatorData.maLightLocators[mLocatorData.miNumLightLocators] = lpLocator->mLocatorMatrix;
             mLocatorData.maLightLocatorTypes[mLocatorData.miNumLightLocators] = leType;
             ++mLocatorData.miNumLightLocators;
         }
 
         // --- camera locators (asm: spec+44 count / spec+48 array; dest stride 16; max 1) ------------
-        const u32 luNumCamera = 0;   // FLAG: = mpDeformationSpec->mCameraTags.GetNumLocatorPoints()
+        const u32 luNumCamera = mpDeformationSpec->mCameraTags.GetNumLocatorPoints();
         for (u32 luIndex = 0; luIndex < luNumCamera; ++luIndex)
         {
-            CGS_ASSERT(luIndex < luNumCamera, "luIndex < muNumLocators");
-            const ETagPointType leType = E_TAG_POINT_TYPE_INVALID;   // FLAG: = lpLocator->meTagPointType
-            CGS_ASSERT(static_cast<s32>(leType) < 57, "lpLocator->meTagPointType < E_TAGPOINT_COUNT");
+            CGS_ASSERT(luIndex < mpDeformationSpec->mCameraTags.GetNumLocatorPoints(), "luIndex < muNumLocators");
+            const LocatorPointSpec* lpLocator = mpDeformationSpec->mCameraTags.GetLocatorSpec(luIndex);
+            const ETagPointType leType = lpLocator->meTagPointType;
+            CGS_ASSERT(leType < E_TAGPOINT_COUNT, "lpLocator->meTagPointType < E_TAGPOINT_COUNT");
             CGS_ASSERT(mLocatorData.miNumCameraLocators < KI_NUM_CAMERA_LOCATORS,
                        "mLocatorData.miNumCameraLocators < KI_MAX_CAMERA_LOCATORS");
+            mLocatorData.maCameraLocators[mLocatorData.miNumCameraLocators] = lpLocator->mLocatorMatrix;
             mLocatorData.maCameraLocatorTypes[mLocatorData.miNumCameraLocators] = leType;
             ++mLocatorData.miNumCameraLocators;
         }
