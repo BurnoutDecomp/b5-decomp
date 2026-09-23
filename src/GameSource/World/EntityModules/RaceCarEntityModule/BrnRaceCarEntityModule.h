@@ -569,6 +569,19 @@ public:
                 const BrnGameState::GameStateModuleIO::ResetPlayerCarAction* lpAction,
                 RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 
+        // [!] HEADER REQUEST (crash parity G68-D11, 2026-09-23): the X360 record of game action 170
+        // (DWARF BrnGameState::GameStateModuleIO::SetBoostAction, BrnGameActions.h:1490; DWARF id
+        // 162, X360 170), defined in BrnRaceCarEntityModule.cpp and declared here only because
+        // HandleSetBoost takes it. DELETE-WHEN BrnGameActions.h grows the record.
+        struct SetBoostActionRecord;
+
+        // X360 0x822A4648 (DWARF BrnRaceCarEntityModule.h:758) -- game action 170, the event's
+        // boost set (StuntAttackMode's full bar at the start; the online Stunt Run's infinite
+        // boost). Acts only on the player's slot, through strategy slots 32/39/40. The console
+        // body never reads lpOutput (the call passes only r3/r4).
+        void HandleSetBoost( const SetBoostActionRecord* lpAction,
+                             RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
         // X360 0x822FE5D8. Find a free global race-car slot, Prepare + AddToWorld it at
         // lrTransform, resolve the wheel set when lWheelModelId is null, and publish the AI
         // module's AttachAIControlEvent. Returns the global slot used.

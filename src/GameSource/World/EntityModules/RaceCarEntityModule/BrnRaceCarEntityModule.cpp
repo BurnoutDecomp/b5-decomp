@@ -3086,6 +3086,61 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 }
 
 // ============================================================================
+// RaceCarEntityModule::SetBoostActionRecord -- game action 170's record (see the header). X360
+// member offsets from HandleSetBoost's reads; the order differs from the PS3 DWARF's (which puts
+// mbInfiniteBoost before mfBoostAmount), and matches the producers: StuntAttackMode::PreWorldUpdate
+// (idx +0, flags 2 +4, 1.0f +8 -- BrnStuntAttackMode.cpp) and the online Stunt Run post
+// { idx, 7, 100.0f, 5, (u8)1 } (BrnModeManager_UpdateMode.cpp).
+// ============================================================================
+struct RaceCarEntityModule::SetBoostActionRecord
+{
+    static const s32 KX_SET_INFINITE_BOOST_FLAG = 1;   // DWARF BrnGameActions.h:1492
+    static const s32 KX_SET_BOOST_AMOUNT        = 2;   // :1493
+    static const s32 KX_SET_BOOST_SEGMENTS      = 4;   // :1494
+
+    ::EActiveRaceCarIndex meRaceCarIndex;   // +0x00  `lwz r10, 0(r30)` @0x822A4664
+    s32                   mxFlags;          // +0x04  `lwz r11, 4(r30)` @0x822A4674/A4/CC
+    f32                   mfBoostAmount;    // +0x08  `lfs f1, 8(r30)` @0x822A46B8
+    s32                   miBoostSegments;  // +0x0C  `lwz r4, 0xC(r30)` @0x822A46E0
+    bool                  mbInfiniteBoost;  // +0x10  `lbz r4, 0x10(r30)` @0x822A4690
+};
+static_assert(sizeof(RaceCarEntityModule::SetBoostActionRecord) == 20,
+              "X360 posts action 170 with size 20 (li r6, 0x14)");
+
+// ============================================================================
+// HandleSetBoost  @ 0x822A4648   (crash parity G68-D11, 2026-09-23 -- had no definition, and
+// HandleGameActions had no case 170, so every SetBoostAction was dropped: a Stunt Run started with
+// whatever bar the car had instead of the full one StuntAttackMode::PreWorldUpdate asks for).
+//     lwz r10, 0(rec) ; lwzx r11, this+0x182F8 ; cmpw ; bne -> return    (player slot only)
+//     strategy = *(this + 0x17CE0)  (mBoostManager's strategy)
+//     flags & 1 -> strategy vtable +0x80 (slot 32 SetInfiniteBoost)(lbz rec+0x10)
+//     flags & 2 -> strategy vtable +0x9C (slot 39 SetBoostAmount)(lfs rec+0x08)
+//     flags & 4 -> strategy vtable +0xA0 (slot 40 SetBoostSegments)(lwz rec+0x0C)
+// ============================================================================
+void RaceCarEntityModule::HandleSetBoost(
+        const SetBoostActionRecord* lpAction,
+        RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    (void)lpOutput;   // DWARF parameter; the console body never reads r5
+
+    if( lpAction->meRaceCarIndex == mePlayerActiveRaceCarIndex )
+    {
+        if( ( lpAction->mxFlags & SetBoostActionRecord::KX_SET_INFINITE_BOOST_FLAG ) != 0 )
+        {
+            mBoostManager.GetBoostStrategy()->SetInfiniteBoost( lpAction->mbInfiniteBoost );
+        }
+        if( ( lpAction->mxFlags & SetBoostActionRecord::KX_SET_BOOST_AMOUNT ) != 0 )
+        {
+            mBoostManager.GetBoostStrategy()->SetBoostAmount( lpAction->mfBoostAmount );
+        }
+        if( ( lpAction->mxFlags & SetBoostActionRecord::KX_SET_BOOST_SEGMENTS ) != 0 )
+        {
+            mBoostManager.GetBoostStrategy()->SetBoostSegments( lpAction->miBoostSegments );
+        }
+    }
+}
+
+// ============================================================================
 // HandleGameActions  @ 0x8230BE08 -- PARTIAL SLICE.
 //
 // The console body is one walk of the pre-scene input buffer's game-action queue with a
@@ -3240,6 +3295,52 @@ namespace
                            miLeftRoadHighlightState) == 0x14C, "UpcomingRoadChangeAction +0x14C");
     static_assert(offsetof(BrnGameState::GameStateModuleIO::UpcomingRoadChangeAction,
                            miRightRoadHighlightState) == 0x150, "UpcomingRoadChangeAction +0x150");
+
+    // ---- G68-D11 (crash parity 2026-09-23): the ids and records of the remaining console arms ----
+    // [!] HEADER REQUEST -- BrnGameActions.h carries none of these enumerators and none of these
+    // records. Each id is the value the X360 jump tables dispatch on (low table @0x8230C09C indexed
+    // by id, high table @0x8230CDC0 indexed by id - 107), each is the DWARF enumerator plus its
+    // band's X360 shift, and each record carries the DWARF members at the offsets the arm reads.
+    // DELETE-WHEN BrnGameActions.h grows them.
+    const s32 KI_ACTION_SWITCH_CAR_CORONAS_ON_OFF = 68;    // DWARF 63  (+5) -> 0x8230CD54
+    const s32 KI_ACTION_CAR_SELECT_TRANSITION_IN  = 73;    // DWARF 68  (+5) -> 0x8230C228
+    const s32 KI_ACTION_SET_SIXAXIS_STEERING      = 125;   // DWARF 120 (+5) -> 0x8230D77C
+    const s32 KI_ACTION_SWITCH_CAR_COLOUR         = 126;   // DWARF 121 (+5) -> 0x8230D7BC
+    const s32 KI_ACTION_SET_BOOST                 = 170;   // DWARF 162 (+8) -> 0x8230D1E4
+    const s32 KI_ACTION_WAIT_FOR_STREAMING        = 192;   // DWARF 184 (+8) -> 0x8230C5B8
+    const s32 KI_ACTION_LOAD_PROFILE              = 194;   // DWARF 186 (+8) -> 0x8230D87C
+
+    // DWARF SwitchCarCoronasOnOffAction { bool mbIsOn; } -- `lbz r11, 0(r27)` @0x8230CD58.
+    struct SwitchCarCoronasOnOffActionRecord { bool mbIsOn; };
+    // DWARF CarSelectTransitionInAction { bool mbStart; bool mbUnlockingCars; } -- `lbz 0(r27)`.
+    struct CarSelectTransitionInActionRecord { bool mbStart; bool mbUnlockingCars; };
+    // DWARF SetSixaxisSteeringAction { bool mbState; } -- `lbz r11, 0(r27)` @0x8230D780.
+    struct SetSixaxisSteeringActionRecord { bool mbState; };
+    // DWARF SwitchCarColourAction { EActiveRaceCarIndex meActiveRaceCarIndex; uint32_t muColourIndex; }
+    // -- `lwz r4, 0(r27)` @0x8230D7E0, `lwz 4(r27)` @0x8230D834 / 0x8230D86C.
+    struct SwitchCarColourActionRecord
+    {
+        ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00
+        u32                   muColourIndex;          // +0x04
+    };
+    static_assert(sizeof(SwitchCarColourActionRecord) == 8, "SwitchCarColourAction is 8 bytes");
+
+    // Action 98 (E_ACTION_PAINT_SHOP_DRIVE_THRU, size 144; DWARF PaintShopDriveThruAction). The X360
+    // member order differs from the PS3 DWARF's (mbDoPresentation, muColourIndex, muPaletteIndex):
+    // the consumer reads the colour at +0x80 and the palette at +0x84 (`lwz r29, 0x80/0x84(r27)`
+    // @0x8230C994 / 0x8230C980) and the producer DriveThruManager::ProcessDriveThru writes colour
+    // +0x80, palette +0x84, the presentation byte +0x88 (BrnDriveThruManager.cpp PostShopAction).
+    struct PaintShopDriveThruActionRecord
+    {
+        Matrix44Affine mTransform;          // +0x00
+        Matrix44Affine mBaseTransform;      // +0x40
+        u32            muColourIndex;       // +0x80
+        u32            muPaletteIndex;      // +0x84
+        bool           mbDoPresentation;    // +0x88  (not read by this module)
+    };
+    static_assert(offsetof(PaintShopDriveThruActionRecord, muColourIndex) == 0x80 &&
+                  offsetof(PaintShopDriveThruActionRecord, muPaletteIndex) == 0x84 &&
+                  sizeof(PaintShopDriveThruActionRecord) == 144, "X360 action 98 record");
 
     // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY. The takedown-flow switch shared (by env
     // name) with TakedownManager's classifier trace: one [td-action] line per consumed takedown
@@ -4144,6 +4245,117 @@ void RaceCarEntityModule::HandleGameActions(
             }
             break;
         }
+
+        // ============================================================================================
+        // G68-D11 (crash parity 2026-09-23): the remaining console arms of this switch. Every one is
+        // read from the jump tables' own targets (low 0x8230C09C / high 0x8230CDC0).
+        // ============================================================================================
+
+        // Low 68 -> 0x8230CD54: `lbz r11, 0(r27) ; stbx r11, +0x1834F` (mbRenderRaceCarCoronas).
+        // (No AddEvent site in ARTIST posts 68: the arm is dead on the console too.)
+        case KI_ACTION_SWITCH_CAR_CORONAS_ON_OFF: // 68
+            mbRenderRaceCarCoronas =
+                reinterpret_cast<const SwitchCarCoronasOnOffActionRecord*>(lpEvent)->mbIsOn;
+            break;
+
+        // Low 73 -> 0x8230C228..0x8230C25C, the junkyard transition-in (CarSelectManager's
+        // Start/EndTransitionIn): on mbStart, the rivals are removed and the module enters car select.
+        //     lbz r11, 0(r27) ; beq -> break
+        //     RemoveRivals(this, lpOutput = r20, 0)            bl @0x8230C240
+        //     stbx r23 (1), +0x186C9    mbInCarSelectScreen = true
+        //     stwx r24 (0), +0x186CC    meCarSelectResetType = 0
+        case KI_ACTION_CAR_SELECT_TRANSITION_IN: // 73
+            if (reinterpret_cast<const CarSelectTransitionInActionRecord*>(lpEvent)->mbStart)
+            {
+                RemoveRivals(lpOutput, false);
+                mbInCarSelectScreen  = true;
+                meCarSelectResetType = 0;
+            }
+            break;
+
+        // Low 98 -> 0x8230C92C..0x8230CA30, the paint-shop drive-thru: the player's global car takes
+        // the shop's palette and colour (UpdateActiveRaceCarColours repaints from them).
+        //     assert record :7018 ; car = GetActiveRaceCar(player) ; assert car :7021
+        //     stw +0x84 -> car->GetGlobalRaceCar()->miColourPalette (+0x98)    @0x8230C990
+        //     stw +0x80 -> car->GetGlobalRaceCar()->miColourIndex   (+0x94)    @0x8230C9A4
+        //     assert palette < 4 :7027 ; assert colour < mItems[palette].miNumColours :7028
+        case BrnGameState::GameStateModuleIO::E_ACTION_PAINT_SHOP_DRIVE_THRU: // 98
+        {
+            const PaintShopDriveThruActionRecord* lpPaintShopDriveThruAction =
+                reinterpret_cast<const PaintShopDriveThruActionRecord*>(lpEvent);
+            CGS_ASSERT(lpPaintShopDriveThruAction != 0, "lpPaintShopDriveThruAction");        // :7018
+            ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
+            CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveRaceCar");                                // :7021
+            lpActiveRaceCar->GetGlobalRaceCar()->SetColourPalette(
+                static_cast<s32>(lpPaintShopDriveThruAction->muPaletteIndex));
+            lpActiveRaceCar->GetGlobalRaceCar()->SetColourIndex(
+                static_cast<s32>(lpPaintShopDriveThruAction->muColourIndex));
+            CGS_ASSERT(lpActiveRaceCar->GetGlobalRaceCar()->GetColourPalette() < E_NUM_PALETTES,
+                       "Invalid Number of Palettes");                                            // :7027
+            CGS_ASSERT(lpActiveRaceCar->GetGlobalRaceCar()->GetColourIndex() <
+                           mCarColoursResource->maPalettes[
+                               lpActiveRaceCar->GetGlobalRaceCar()->GetColourPalette()].GetNumColours(),
+                       "lpActiveRaceCar->GetGlobalRaceCar()->GetColourIndex() < mpPlayerCarColours->"
+                       "mItems[lpActiveRaceCar->GetGlobalRaceCar()->GetColourPalette()].miNumColours"); // :7028
+            break;
+        }
+
+        // High 122 / 123 -> 0x8230D8C8 / 0x8230D8DC: the award sequence keeps the player's engine
+        // from switching itself off -- `stb r24 (0)` / `stb r23 (1)` to the player car's +0x770.
+        case BrnGameState::GameStateModuleIO::E_ACTION_AWARD_SEQUENCE_START: // 122
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->EnableEngineSwitchOff(false);
+            break;
+        case BrnGameState::GameStateModuleIO::E_ACTION_AWARD_SEQUENCE_END: // 123
+            GetActiveRaceCar(mePlayerActiveRaceCarIndex)->EnableEngineSwitchOff(true);
+            break;
+
+        // High 125 -> 0x8230D77C: `lbz r11, 0(r27) ; stbx r11, +0x1834D` (mbSixaxisSteeringEnabled).
+        // (No ARTIST producer posts 125: dead on the console too.)
+        case KI_ACTION_SET_SIXAXIS_STEERING: // 125
+            mbSixaxisSteeringEnabled =
+                reinterpret_cast<const SetSixaxisSteeringActionRecord*>(lpEvent)->mbState;
+            break;
+
+        // High 126 -> 0x8230D7BC..0x8230D874: re-colour one car in its current palette.
+        //     assert record :7393 ; car = GetActiveRaceCar(record +0)
+        //     assert GetGlobalRaceCar()->miColourPalette < 4 :7397
+        //     assert (s32)muColourIndex < mItems[palette].miNumColours :7398
+        //     stw muColourIndex -> GetGlobalRaceCar()->miColourIndex (+0x94)   @0x8230D874
+        // (No ARTIST producer posts 126: dead on the console too.)
+        case KI_ACTION_SWITCH_CAR_COLOUR: // 126
+        {
+            const SwitchCarColourActionRecord* lpSwitchCarColourAction =
+                reinterpret_cast<const SwitchCarColourActionRecord*>(lpEvent);
+            CGS_ASSERT(lpSwitchCarColourAction != 0, "lpSwitchCarColourAction");              // :7393
+            ActiveRaceCar* lpActiveRaceCar =
+                GetActiveRaceCar(lpSwitchCarColourAction->meActiveRaceCarIndex);
+            CGS_ASSERT(lpActiveRaceCar->GetGlobalRaceCar()->GetColourPalette() < E_NUM_PALETTES,
+                       "Invalid Number of Palettes");                                            // :7397
+            CGS_ASSERT(static_cast<s32>(lpSwitchCarColourAction->muColourIndex) <
+                           mCarColoursResource->maPalettes[
+                               lpActiveRaceCar->GetGlobalRaceCar()->GetColourPalette()].GetNumColours(),
+                       "(int32_t)lpSwitchCarColourAction->muColourIndex < mpPlayerCarColours->"
+                       "mItems[lpActiveRaceCar->GetGlobalRaceCar()->GetColourPalette()].miNumColours"); // :7398
+            lpActiveRaceCar->GetGlobalRaceCar()->SetColourIndex(
+                static_cast<s32>(lpSwitchCarColourAction->muColourIndex));
+            break;
+        }
+
+        // High 170 -> 0x8230D1E4: `mr r4, r27 ; mr r3, r31 ; bl HandleSetBoost`.
+        case KI_ACTION_SET_BOOST: // 170
+            HandleSetBoost(reinterpret_cast<const SetBoostActionRecord*>(lpEvent), lpOutput);
+            break;
+
+        // High 192 -> 0x8230C5B8: `stbx r23 (1), +0x18348` (mbWaitingForStreaming) -- the same
+        // store the case-74 audio-wait arm falls through into.
+        case KI_ACTION_WAIT_FOR_STREAMING: // 192
+            mbWaitingForStreaming = true;
+            break;
+
+        // High 194 -> 0x8230D87C: `lwzx r3, r31, r17` (the boost strategy) ; vtable +0xA4 (slot 41).
+        case KI_ACTION_LOAD_PROFILE: // 194
+            mBoostManager.GetBoostStrategy()->RemoveAllBoostAndChunks();
+            break;
 
         case KI_ACTION_ROAD_RULES_ENTER_ROAD: // 273
             mCrashPlayManager.OnEnterRoad(

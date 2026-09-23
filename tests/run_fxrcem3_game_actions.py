@@ -16,10 +16,25 @@ from fxrcem3_common import RCEM, REPO, build_and_run, code_mask, definition, pre
 MODULE = RCEM + "BrnRaceCarEntityModule.cpp"
 LABELS = [r"BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE",
           r"KI_ACTION_CAR_SELECT_MODIFICATION_SCREEN",
-          r"KI_ACTION_UPCOMING_ROAD_CHANGE"]
+          r"KI_ACTION_UPCOMING_ROAD_CHANGE",
+          r"KI_ACTION_SWITCH_CAR_CORONAS_ON_OFF",
+          r"KI_ACTION_CAR_SELECT_TRANSITION_IN",
+          r"BrnGameState::GameStateModuleIO::E_ACTION_PAINT_SHOP_DRIVE_THRU",
+          r"BrnGameState::GameStateModuleIO::E_ACTION_AWARD_SEQUENCE_START",
+          r"BrnGameState::GameStateModuleIO::E_ACTION_AWARD_SEQUENCE_END",
+          r"KI_ACTION_SET_SIXAXIS_STEERING",
+          r"KI_ACTION_SWITCH_CAR_COLOUR",
+          r"KI_ACTION_SET_BOOST",
+          r"KI_ACTION_WAIT_FOR_STREAMING",
+          r"KI_ACTION_LOAD_PROFILE"]
 CONSTANTS = ["KF_MIN_STUNT_RESET_SPEED", "KI_ACTION_CAR_SELECT_MODIFICATION_SCREEN",
-             "KI_ACTION_UPCOMING_ROAD_CHANGE"]
-RECORDS = ["CarSelectModificationScreenActionRecord"]
+             "KI_ACTION_UPCOMING_ROAD_CHANGE", "KI_ACTION_SWITCH_CAR_CORONAS_ON_OFF",
+             "KI_ACTION_CAR_SELECT_TRANSITION_IN", "KI_ACTION_SET_SIXAXIS_STEERING",
+             "KI_ACTION_SWITCH_CAR_COLOUR", "KI_ACTION_SET_BOOST", "KI_ACTION_WAIT_FOR_STREAMING",
+             "KI_ACTION_LOAD_PROFILE"]
+RECORDS = ["CarSelectModificationScreenActionRecord", "SwitchCarCoronasOnOffActionRecord",
+           "CarSelectTransitionInActionRecord", "SetSixaxisSteeringActionRecord",
+           "SwitchCarColourActionRecord", "PaintShopDriveThruActionRecord"]
 
 
 def main():
@@ -32,10 +47,22 @@ def main():
         if constant:
             pieces.append(constant.group(0).strip())
     for name in RECORDS:
+        one_line = re.search(r"^\s*struct " + name + r" \{[^\n]*\};", module, re.M)
+        if one_line:
+            pieces.append(one_line.group(0).strip())
+            continue
         try:
             pieces.append(definition(module, "    struct " + name + "\n") + ";")
         except ValueError:
             pass
+    # G68-D11 170: the member record and HandleSetBoost itself (0x822A4648).
+    try:
+        pieces.append(definition(module, "struct RaceCarEntityModule::SetBoostActionRecord\n") + ";")
+        pieces.append(definition(module, "void RaceCarEntityModule::HandleSetBoost("))
+    except ValueError:
+        print("MISSING RaceCarEntityModule::HandleSetBoost -- replayed as an empty body")
+        pieces.append("struct RaceCarEntityModule::SetBoostActionRecord {};")
+        pieces.append("void RaceCarEntityModule::HandleSetBoost(const SetBoostActionRecord*, OutputFixture*) {}")
     arms = []
     for label in LABELS:
         arm = switch_arm(handler, label)
