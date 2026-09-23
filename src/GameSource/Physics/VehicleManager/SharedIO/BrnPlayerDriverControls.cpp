@@ -22,8 +22,12 @@ namespace Vehicle
     //   lfs f13,0x10(r3) ; fmuls f0,f13,flt_8208F834(=0.25) ; stfs f0,0(r4)
     //     -> outX = mfSteering * 0.25
     //   lbz r11,0x41(r3) ; cmplwi r11,0 ; bne <alt>
-    //     -> branch on the selector (the DWARF-declared trailing bool; the standalone leaf
-    //        reads it from a spilled arg slot rendered as +0x41 by the decompiler).
+    //     -> branch on THIS object's mbIsSteeringWheel (+0x41; r3 is `this`, raw word
+    //        0x89630041). The trailing bool the callers load into r7 (ProcessAftertouchEvents
+    //        0x82633E1C..3C: meShowtimeBehaviour == 2; UpdateAftertouch 0x8262EE64: li r7,0)
+    //        is NEVER READ by this 28-instruction leaf. Until 2026-09-23 the tree branched on
+    //        that argument instead (crash parity G47-D1): a pad in showtime behaviour 2 got
+    //        the wheel formula, and a steering wheel in UpdateAftertouch got the pad one.
     //   default (selector == 0):
     //     lfs f13,0x14(r3) ; fmuls f0,f13,flt_8200D56C(=-0.25) ; stfs f0,0(r5)
     //     lfs f0,flt_82001CC0(=0.0) ; stfs f0,0(r6)
@@ -44,7 +48,9 @@ namespace Vehicle
     {
         lrfOutX = mfSteering * KF_STICK_AFTERTOUCH_MODIFIER;
 
-        if ( lbUseRequestedGas )
+        (void)lbUseRequestedGas;   // passed by both callers, read by neither console body
+
+        if ( mbIsSteeringWheel )   // lbz r11,0x41(r3)
             lrfOutY = (mfRequestedGas - mfBrake) * -KF_STICK_AFTERTOUCH_MODIFIER;
         else
             lrfOutY = mfForwardSteering * -KF_STICK_AFTERTOUCH_MODIFIER;
