@@ -611,6 +611,22 @@ namespace Deformation
     // of the joint's max angle (the w lane of mLocalInitialComPositionPlusMaxJointAngle @+384).
     //   asm: v0 = reciprocal(maxAngle.w) refined (vrefp + two Newton steps) ; result = rotation.w * recip.
     // Tripwire: IsJoinedToVehicle().
+    //
+    // ⛔ NO ZERO GUARD (crash parity G28-D3, 2026-09-23). After the tripwire the console is straight
+    // line (0x825C1B80..0x825C1BC0), classic VA fields read off the raw words (D = A*C + B):
+    //   v12 = vcfsx(vspltisw 1) = 1.0 ; v13 = vrefp(m)                   (m = splat +0x180.w)
+    //   0x825C1BAC vnmsubfp v0,v13,v12,v0   e1 = 1 - est*m
+    //   0x825C1BB0 vmaddfp  v0,v13,v13,v0   y1 = est*e1 + est
+    //   0x825C1BB4 vnmsubfp v13,v0,v12,v9   e2 = 1 - y1*m
+    //   0x825C1BB8 vmaddfp  v0,v0,v0,v13    y2 = y1*e2 + y1
+    //   0x825C1BBC vmulfp128 v0,v0,v11      y2 * r                     (r = splat +0x160.w)
+    // There is no compare or branch on m. At m = +-0, vrefp gives +-inf, inf*0 is NaN, and the
+    // result is NaN whatever the rotation -- TestJointForBreaking's 0.3 gate (vcmpgtfp) then does NOT
+    // exit. The tree returned 0 there (an invented arm); a plain rotation/m would give +-inf, and
+    // -inf would take the gate exit NaN skips. So the refinement is modelled step for step (the build
+    // is /fp:precise, so inf*0 stays NaN); for m != 0 it stays within an ulp of rotation/m. The 30
+    // retail zero-angle joints (6458 surveyed) never reach it for breaking (gate 1, thresh -1 < -0.9);
+    // UpdateAndOutputJointStates publishes the NaN for a hung part on both builds now.
     // =========================================================================================
     VecFloat PhysicalBodyPart::GetJointRotationProportion() const
     {
@@ -619,10 +635,10 @@ namespace Deformation
         const f32 lfMaxJointAngle = mLocalInitialComPositionPlusMaxJointAngle.GetPlus();   // +384 w lane
         const f32 lfRotation      = mLocalJointPositionPlusRotation.GetPlus();             // +352 w lane
 
-        // vrefp + Newton-Raphson refine of 1/maxAngle, then * rotation. Modelled as the exact divide
-        // the refined reciprocal converges to (the two vnmsubfp/vmaddfp steps are the refinement).
-        const f32 lfProportion = (lfMaxJointAngle != 0.0f) ? (lfRotation / lfMaxJointAngle) : 0.0f;
-        return Splat(lfProportion);
+        const f32 lfEstimate = 1.0f / lfMaxJointAngle;                                              // vrefp (+-inf at +-0)
+        const f32 lfRecip1   = lfEstimate + lfEstimate * (1.0f - lfEstimate * lfMaxJointAngle);   // 0x825C1BAC/B0
+        const f32 lfRecip2   = lfRecip1 + lfRecip1 * (1.0f - lfRecip1 * lfMaxJointAngle);         // 0x825C1BB4/B8
+        return Splat(lfRecip2 * lfRotation);                                                        // 0x825C1BBC
     }
 
     // =========================================================================================
