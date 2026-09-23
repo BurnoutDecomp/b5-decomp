@@ -139,6 +139,21 @@ namespace Deformation
         // ---- PHASE 1: add each live model + its stored contacts to the solver. ----
         CgsDev::PerfMonCpu::StartMonitor(miPostPhysicsUpdateAddContactsToPenSolverPerfMon);
 
+        // The WORLD pseudo-body first (crash parity G23-D1, 2026-09-23): an inlined
+        // AddObject(KI_MAX_DEFORMATION_MODELS, identity, 0) at 0x82621B44..0x82621C1C, every solve.
+        // Rows built on the stack from f13 = flt_82001C98 (1.0) and f0 = flt_82001CC0 (0.0) --
+        // (1,0,0,0) (0,1,0,0) (0,0,1,0) (0,0,0,0), every w lane 0, a zero translation -- and stored
+        // with stvx128 to solver+0x710/+0x720/+0x730/+0x740 == maObjectTransforms[28] (Solve indexes
+        // 64*idx+0x10); then `vspltisw v10,0 ; li r5,0x910 ; stvx128 v10,r21,r5` ==
+        // mavfBodyWeighting[28] (16*idx+0x750) = 0. PS3 SolvePenetration 0x74A08C makes the same
+        // stores (+1808 rows, +2320 zero). CreateIOBuffer<PenetrationSolver> writes only the two
+        // counts, so without this the slot kept whatever the IO-buffer stack held. (Today nothing
+        // reads slot 28: Solve's world loop reads only miIndexA -- 1:1 hygiene.) The SDK affine
+        // identity is exactly those rows (its wAxis is all zero).
+        Matrix44Affine lWorldTransform;
+        lWorldTransform.SetIdentity();
+        lpSolver->AddObject(KI_MAX_DEFORMATION_MODELS, lWorldTransform, VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });
+
         for (s32 liModelIndex = mModelsAdded.GetFirstNonZeroBit();
              liModelIndex != -1;
              liModelIndex = mModelsAdded.GetNextNonZeroBit(liModelIndex))
