@@ -26,6 +26,8 @@
 namespace renderengine { extern u32 guPresentCount; }
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h"                // [diag] BRN_FRAME_DUMP_ARM=x15
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/Wheel.h"             // BrnPhysics::Vehicle::Wheel (UpdateWheels seats / twists / detaches it)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"   // CgsDev::Debug3DImmediateRender::DrawBox / DrawLine (RenderSensors)
+#include "rw/rwcore_structs.h"                                                    // rw::RGBA (RenderSensors colours)
 
 // =================================================================================================
 // BrnPhysics::Deformation::DeformableObject -- the per-frame UPDATE core (group "update").
@@ -73,18 +75,15 @@ namespace renderengine { extern u32 guPresentCount; }
 // explicit scalar lane math.
 //
 // FLAGGED-0 PLACEHOLDERS (rodata NOT in the per-function exports -- NEVER fabricated): the per-sensor
-// direction basis, the apply's friction/limit/scale rows and the sensor-render colour ramp have no
-// recoverable XEX symbol; they are carried as correctly-shaped honest zeros (the indexing shape / loop
-// structure is exact, the numeric output stays inert until the rodata lands).
+// direction basis and the apply's friction/limit/scale rows have no recoverable XEX symbol; they are
+// carried as correctly-shaped honest zeros (the indexing shape / loop structure is exact, the numeric
+// output stays inert until the rodata lands). (The sensor-render colour ramp is no longer one of
+// them: its four constants read straight out of the image -- see RenderSensors.)
 //
-// FLAGGED-DEFERRED (out-of-tree callees with no in-tree declaration -- NOT fabricated): two emission
-// callees are forward-declared-only externals and so cannot be reached BY NAME without inventing a
-// declaration:
-//   * CgsDev::Debug3DImmediateRender::DrawBox / DrawLine  (RenderSensors) -- the render class is only
-//     forward-declared in the frozen header; the draw calls are documented but not emitted.
-//     on the homed DeformationSensor; the per-sensor spy push is documented but not emitted.
-// Both reproduce the recoverable outer flow (loop bounds, counts, the game-mode-word source); the
-// emission is left as a documented gap (no fabricated callee signatures / declarations).
+// (RETIRED 2026-09-23, crash parity G17-D2: the old "FLAGGED-DEFERRED" note that
+// CgsDev::Debug3DImmediateRender was only forward-declared was stale -- the class is homed in
+// GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h with bodied
+// DrawBox/DrawLine, and RenderSensors now emits the console's draws.)
 //
 // ASSERTS are non-gating tripwires (BeginAssert/FireAssert/EndAssert == one CGS_ASSERT): in the asm
 // execution continues past a failed assert, so the C++ falls through identically.
@@ -1552,63 +1551,115 @@ namespace Deformation
     }
 
     // =============================================================================================
-    // RenderSensors @0x825E08C0 -- debug-draw every sensor sphere + the inter-sensor links. const.
+    // RenderSensors @0x825E08C0 -- debug-draw every sensor sphere + the selected sensor's links. const.
+    // Caller (X360 xref): DeformationDebugComponent::RenderWorld, under the 'Render deformation rig'
+    // toggle (component+0x24), passing r5 = component+0x18 == miSelectedSensor.
     //
-    // For each of the bare deformation sensors the asm:
-    //   * transforms the sensor's local sphere centre by the vehicle body transform (body +16 rows) into
-    //     world space and pulls the sphere radius (vspltw lane 3),
-    //   * if the sensor is its own primary (the v13 == v11 self-link test) draws the six inter-sensor
-    //     link lines (DrawLine) to its linked sensors, then a white box (DrawBox, colour -1) sized by the
-    //     radius,
-    //   * otherwise colours the box by a 0..0.2 displacement ramp ((0.2 - dist) * 5 * 255 | 0xFF000000)
-    //     and draws it.
-    // After the sensor loop it draws the four wheel sensors (j in 0..3) as green boxes + green links
-    // (DrawBox / DrawLine, colour -16711936).
-    //
-    // FLAGGED-DEFERRED: CgsDev::Debug3DImmediateRender is only forward-declared in the frozen header, so
-    // DrawBox / DrawLine cannot be reached BY NAME without a fabricated declaration. The recoverable
-    // outer flow (the per-sensor world-centre transform + the six-link / four-wheel loop bounds) is
-    // reproduced; the draw emission is left as a documented gap (no fabricated callee signatures).
-    // Caller (X360 xref): DeformationDebugComponent::RenderWorld.
+    // Rebuilt from the asm (crash parity G17-D2, 2026-09-23). The body was a no-draw stub behind a
+    // stale "Debug3DImmediateRender is only forward-declared" FLAG; the renderer is homed with bodied
+    // DrawBox / DrawLine. Store for store:
+    //   0x825E08F0..0x825E091C  v127..v124 = the attached vehicle's transform rows (vehicle+0x10) --
+    //                           GetTransform.
+    //   Per sensor li < spec+0x652 (re-read every pass, 0x825E0B70):
+    //     0x825E0960..0x825E09B8  L = *mpLocalSpaceSphere (sensor+0x19C); lBox = body rows with
+    //                           wAxis = row1*L.y + row0*L.x + row2*L.z + row3 (in that order); r = L.w.
+    //     li == liSelectedSensor (0x825E0968 `cmpw r24,r20`):
+    //       0x825E09C8..0x825E0A14  for i in 0..5: n = spec->maNextSensor[i] (`lbz 0x2C(spec)`); if
+    //                           n > 0: DrawLine(lBox.wAxis, *maDeformationSensors[n -
+    //                           mu8NumVehicleBodies (spec+0x651)].mpWorldSpaceSphere, 0xFFFFFFFF).
+    //       0x825E0A18..0x825E0A58  DrawBox((-r,-r,-r,0), (r,r,r,0), lBox, 0xFFFFFFFF).
+    //     otherwise:
+    //       0x825E0A5C..0x825E0A80  GetDeformationSensorSpec(li) (inline assert :201, spec+272+64*li).
+    //       0x825E0AAC..0x825E0B14  d = |L.xyz - spec.mInitialOffset.xyz| (rsqrt + 2 Newton, vsel 0
+    //                           when d^2 == 0).
+    //       0x825E0B1C..0x825E0B44  fsel -d,0,d ; fsel 0.2-f,f,0.2 ; *5 ; *255 ; fctidz ; low byte |
+    //                           0xFF000000 -- i.e. clamp(d, 0, 0.2) * 5 * 255, a blue ramp (the old
+    //                           banner's "(0.2 - dist)" inverted it).
+    //       0x825E0B48..0x825E0B60  DrawBox((-r,-r,-r,0), (r,r,r,0), lBox, colour).
+    //   Per wheel j in 0..3 (0x825E0B7C..0x825E0C5C), colour 0xFF00FF00:
+    //     W = maWorldSensorSpheres[spec+0x652 + j] (this + 16*(n+j)); lBox = body rows, wAxis = W (all
+    //     four lanes); r = W.w; DrawBox((-r,-r,-r,0), (r,r,r,0), lBox, green);
+    //     DrawLine(W, *maDeformationSensors[mau8WheelToSensorMap[j] (this+0x66E0)].mpWorldSpaceSphere,
+    //     green).
+    // Colours: console words are 0xAARRGGBB, spelled rw::RGBA(r, g, b, a) exactly as the
+    // DeformationDebugComponent's own KRGBA_* table (BrnDeformationDebugComponent.cpp) does.
+    // Constants (x360rd): flt_82001CC0 = 0.0, flt_82004744 = 0.2, flt_8200426C = 5.0,
+    // flt_82010C20 = 255.0.
     // =============================================================================================
-    void DeformableObject::RenderSensors(CgsDev::Debug3DImmediateRender* lpRender, s32 liFlags) const
+    void DeformableObject::RenderSensors(CgsDev::Debug3DImmediateRender* lpRender, s32 liSelectedSensor) const
     {
-        const s32 liNumSensors = const_cast<DeformableObject*>(this)->GetNumSensors() - 4;
+        const f32      KF_SENSOR_RAMP_FLOOR     = 0.0f;     // flt_82001CC0
+        const f32      KF_SENSOR_RAMP_CEILING   = 0.2f;     // flt_82004744
+        const f32      KF_SENSOR_RAMP_SCALE     = 5.0f;     // flt_8200426C
+        const f32      KF_SENSOR_RAMP_BYTE      = 255.0f;   // flt_82010C20
+        const rw::RGBA KRGBA_SELECTED_SENSOR    = rw::RGBA(0xFFu, 0xFFu, 0xFFu, 0xFFu);   // r25 = -1
+        const rw::RGBA KRGBA_WHEEL_SENSOR       = rw::RGBA(0x00u, 0xFFu, 0x00u, 0xFFu);   // 0xFF00FF00
 
-        // body transform rows the local sensor centres are projected through (mVehicleBody body +16).
         Matrix44Affine lBodyTransform;
-        GetTransform(lBodyTransform);   // const accessor
+        GetTransform(lBodyTransform);   // the vehicle's mTransform (vehicle+0x10 rows)
 
-        // The asm loop counter v13 IS the sensor index, bounded by *(spec+1618) == mu8NumDeformationSensors
-        // (== liNumSensors). Each iteration tests whether the sensor is its own primary link (v13 == v11):
-        // the self-link branch draws the six inter-sensor link lines + a white box; the else (non-primary)
-        // branch fires the index tripwire then draws a displacement-ramp-coloured box. FLAG: the v11
-        // primary-link selector is an un-homed early arg-derived value with no accessor on the minimal
-        // slice -- the self-link predicate is carried as a documented gap, so the else branch (and its
-        // restored assert) is taken for every sensor here. The DrawBox / DrawLine emissions stay
-        // FLAGGED-DEFERRED (see header).
-        for ( s32 li = 0; li < liNumSensors; ++li )
+        for ( s32 li = 0; li < static_cast<s32>(mpDeformationSpec->mu8NumDeformationSensors); ++li )
         {
-            // world-space sphere centre + radius (the modelled affine transform of the local centre)
-            // would feed the DrawBox / DrawLine calls; those calls are FLAGGED-DEFERRED (see header).
-            const DeformationSensor& lrSensor = maDeformationSensors[li];
-            (void)lrSensor;
+            const DeformationSensor& lrSensor     = maDeformationSensors[li];
+            const Vector4&           lrLocalSphere = lrSensor.mpLocalSpaceSphere->mPositionRadius;
 
-            // else-branch (sensor is not its own primary link) index tripwire -- asm 5519-5527.
-            // Non-gating; li is the sensor index bounded by mu8NumDeformationSensors (== liNumSensors).
-            CGS_ASSERT(li < liNumSensors,
-                       "liSensorIndex < mu8NumDeformationSensors");  // BrnStreamedDeformationSpec.h:201
+            Matrix44Affine lBox = lBodyTransform;
+            lBox.wAxis.x = lBodyTransform.zAxis.x * lrLocalSphere.z + (lBodyTransform.xAxis.x * lrLocalSphere.x + lBodyTransform.yAxis.x * lrLocalSphere.y) + lBodyTransform.wAxis.x;
+            lBox.wAxis.y = lBodyTransform.zAxis.y * lrLocalSphere.z + (lBodyTransform.xAxis.y * lrLocalSphere.x + lBodyTransform.yAxis.y * lrLocalSphere.y) + lBodyTransform.wAxis.y;
+            lBox.wAxis.z = lBodyTransform.zAxis.z * lrLocalSphere.z + (lBodyTransform.xAxis.z * lrLocalSphere.x + lBodyTransform.yAxis.z * lrLocalSphere.y) + lBodyTransform.wAxis.z;
+            lBox.wAxis.w = lBodyTransform.zAxis.w * lrLocalSphere.z + (lBodyTransform.xAxis.w * lrLocalSphere.x + lBodyTransform.yAxis.w * lrLocalSphere.y) + lBodyTransform.wAxis.w;
+            const f32 lfRadius = lrLocalSphere.w;   // vspltw 3 @0x825E09B8
+            const Vector3 lBoxMin = Vector3{ -lfRadius, -lfRadius, -lfRadius, 0.0f };
+            const Vector3 lBoxMax = Vector3{  lfRadius,  lfRadius,  lfRadius, 0.0f };
+
+            if ( li == liSelectedSensor )
+            {
+                for ( s32 liLink = 0; liLink < 6; ++liLink )
+                {
+                    const u8 lu8NextSensor = lrSensor.mpSpec->maNextSensor[liLink];
+                    if ( lu8NextSensor > 0 )
+                    {
+                        const DeformationSensor& lrNext =
+                            maDeformationSensors[lu8NextSensor - mpDeformationSpec->mu8NumVehicleBodies];
+                        const Vector4& lrNextSphere = lrNext.mpWorldSpaceSphere->mPositionRadius;
+                        lpRender->DrawLine(lBox.wAxis,
+                                           Vector3{ lrNextSphere.x, lrNextSphere.y, lrNextSphere.z, lrNextSphere.w },
+                                           KRGBA_SELECTED_SENSOR);
+                    }
+                }
+                lpRender->DrawBox(lBoxMin, lBoxMax, lBox, KRGBA_SELECTED_SENSOR);
+            }
+            else
+            {
+                const SensorSpec* lpSensorSpec = mpDeformationSpec->GetDeformationSensorSpec(li);
+                const Vector3 lDisplacement = Vector3{ lrLocalSphere.x - lpSensorSpec->mInitialOffset.x,
+                                                       lrLocalSphere.y - lpSensorSpec->mInitialOffset.y,
+                                                       lrLocalSphere.z - lpSensorSpec->mInitialOffset.z,
+                                                       lrLocalSphere.w - lpSensorSpec->mInitialOffset.w };
+                const f32 lfDisplacement = vpu::Magnitude(lDisplacement);   // |0| == 0: the vsel guard
+                f32 lfRamp = ( -lfDisplacement >= 0.0f ) ? KF_SENSOR_RAMP_FLOOR : lfDisplacement;   // fsel @0x825E0B24
+                lfRamp = ( KF_SENSOR_RAMP_CEILING - lfRamp >= 0.0f ) ? lfRamp : KF_SENSOR_RAMP_CEILING;  // fsel @0x825E0B2C
+                const u8 lu8Blue = static_cast<u8>(static_cast<s64>(lfRamp * KF_SENSOR_RAMP_SCALE * KF_SENSOR_RAMP_BYTE));
+                lpRender->DrawBox(lBoxMin, lBoxMax, lBox, rw::RGBA(0x00u, 0x00u, lu8Blue, 0xFFu));   // oris 0xFF00
+            }
         }
 
-        // four wheel sensors drawn green (DrawBox / DrawLine, colour -16711936) -- FLAGGED-DEFERRED.
         for ( s32 lj = 0; lj < 4; ++lj )
         {
-            (void)lj;
-        }
+            const Vector4& lrWheelSphere =
+                maWorldSensorSpheres[mpDeformationSpec->mu8NumDeformationSensors + lj].mPositionRadius;
+            Matrix44Affine lBox = lBodyTransform;
+            lBox.wAxis = Vector3{ lrWheelSphere.x, lrWheelSphere.y, lrWheelSphere.z, lrWheelSphere.w };
+            const f32 lfRadius = lrWheelSphere.w;
+            lpRender->DrawBox(Vector3{ -lfRadius, -lfRadius, -lfRadius, 0.0f },
+                              Vector3{  lfRadius,  lfRadius,  lfRadius, 0.0f }, lBox, KRGBA_WHEEL_SENSOR);
 
-        (void)lpRender;
-        (void)liFlags;
-        (void)lBodyTransform;
+            const Vector4& lrMappedSphere =
+                maDeformationSensors[mau8WheelToSensorMap[lj]].mpWorldSpaceSphere->mPositionRadius;
+            lpRender->DrawLine(lBox.wAxis,
+                               Vector3{ lrMappedSphere.x, lrMappedSphere.y, lrMappedSphere.z, lrMappedSphere.w },
+                               KRGBA_WHEEL_SENSOR);
+        }
     }
 
     // =============================================================================================

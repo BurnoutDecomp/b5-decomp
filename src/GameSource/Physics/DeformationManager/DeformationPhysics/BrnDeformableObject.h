@@ -563,9 +563,9 @@ namespace Deformation
 
         // Public wrapper around the (private) sensor render the debug component's RenderWorld calls
         // (asm rig RenderSensors). Forwards to the private member.
-        void RenderSensorsDebug(CgsDev::Debug3DImmediateRender* lpRender, s32 liFlags) const
+        void RenderSensorsDebug(CgsDev::Debug3DImmediateRender* lpRender, s32 liSelectedSensor) const
         {
-            RenderSensors(lpRender, liFlags);
+            RenderSensors(lpRender, liSelectedSensor);
         }
 
         // ⭐ ADDITIVE named seat write (2026-08-14, walls wave). DeformationManager::
@@ -737,7 +737,7 @@ namespace Deformation
         void GetInitialCompressionScalesAndLimits(DeformationResetType leResetType, VecFloat lvfTime,
                                                   Vector3Plus& lrScales, Vector3& lrLimitA,
                                                   Vector3& lrLimitB);                            // :826
-        void RenderSensors(CgsDev::Debug3DImmediateRender* lpRender, s32 liFlags) const;        // :832
+        void RenderSensors(CgsDev::Debug3DImmediateRender* lpRender, s32 liSelectedSensor) const;   // :832 (r5 = DeformationDebugComponent::miSelectedSensor)
     };
 }
 }
