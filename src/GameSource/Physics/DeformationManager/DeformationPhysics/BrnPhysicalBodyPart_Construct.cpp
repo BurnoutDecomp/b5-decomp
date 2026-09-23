@@ -26,21 +26,32 @@ namespace Deformation
     // =========================================================================================
     // Construct @ 0x825B4178   [EXECUTED in goal trace]
     //
-    // Zero/identity-init the part: clear the COM/box-orientation scratch, null mpIKPart (+476),
-    // mpDeformableObject (+480), mbAddedToScene (+485) and mbFrozen (+486); Construct the embedded
-    // body; seed mfMass = 5.0 (the lvlx/vspltw of the 5.0 stack temp into +208); Prepare the body;
-    // then zero the four packed joint/graphics/COM/collision Vector3Plus rows (+368/+384/+400/+432/
-    // +448 -- the five stvx128 of the zero vector). The mRigidBodyId word at +464 is seeded from the
-    // static qword_82F2A3A8 (an invalid-id constant).
+    // Zero/identity-init the part: zero mLocalJointPositionPlusRotation (+352), seed mRigidBodyId
+    // (+464) with K_INVALID_RIGID_BODY_ID, null mpIKPart (+476), mpDeformableObject (+480),
+    // mbAddedToScene (+485) and mbFrozen (+486); Construct the embedded body; seed mfMass = 5.0 (the
+    // lvlx/vspltw of the 5.0 stack temp into +208); Prepare the body; then zero the packed
+    // graphics/COM/initial-joint rows and the two collision accumulators (+368/+384/+400/+432/+448).
+    // SIX Vector3Plus rows are zeroed in all (+352 first, the other five last).
     // =========================================================================================
     void PhysicalBodyPart::Construct()
     {
-        // *(this+464) = qword_82F2A3A8 ; the stvx128 v127(=0) at +HIDWORD(qword) clears the high half.
-        // qword_82F2A3A8 is the "invalid body-part id" seed (concrete value rodata-not-recovered;
-        // modelled as the all-ones invalid handle the BurnoutBodyPartID family uses).
-        mRigidBodyId.muEntityWord = 0xFFFFFFFFu;   // FLAG: qword_82F2A3A8 seed -> invalid id
-        mRigidBodyId.muSubA = 0u;
-        mRigidBodyId.muSubB = 0u;
+        // 0x825B4194 vspltisw128 v127,0 ; 0x825B419C li r9,0x160 ; 0x825B41A8 stvx128 v127,r31,r9
+        // (word 0x13FF49CF, the same encoding as the +0x190 store below) -- the FIRST store: all
+        // 16 bytes of mLocalJointPositionPlusRotation (+0x160) = 0. Crash parity G28-D1
+        // (2026-09-23): Hex-Rays rendered r9 as `HIDWORD(qword_82F2A3A8)` and this line's old comment
+        // copied it ("clears the high half" of the id); nothing wrote the row. PhysicalBodyPart::
+        // Prepare re-zeroes it before any reader, so only a never-prepared slot differed.
+        mLocalJointPositionPlusRotation.SetZero();
+
+        // 0x825B4190 lis r11,0x82F3 ; 0x825B41A0 ld r10,qword_82F2A3A8 ; 0x825B41AC std r10,0x1D0(r31):
+        // all EIGHT bytes of the packed id. x360rd reads 0x82F2A3A8..AF as FF x8 -- plain image data
+        // (findinit: 9 `ld` readers, no CRT writer), i.e. CgsPhysics::K_INVALID_RIGID_BODY_ID (~0ull),
+        // the same constant RemovePart re-seeds from (0x8260CAEC; ClearPoolSlotBindings). Crash parity
+        // G28-D2 (2026-09-23): the old "rodata-not-recovered" FLAG seeded only the entity word and left
+        // muSubA/muSubB zero, so GetBaseRigidBodyID() read 0xFFFFFFFF00000000 instead of all ones.
+        mRigidBodyId.muEntityWord = 0xFFFFFFFFu;
+        mRigidBodyId.muSubA       = 0xFFFFu;
+        mRigidBodyId.muSubB       = 0xFFFFu;
 
         mpIKPart           = 0;       // *(this+476) = 0
         mpDeformableObject = 0;       // *(this+480) = 0
@@ -59,7 +70,8 @@ namespace Deformation
         // BrnPhysics::ExternalPhysicsBody::Prepare().
         mRwBody.Prepare();
 
-        // Zero the four packed Vector3Plus rows + the collision accumulator (the five stvx128 v127):
+        // Zero the three packed Vector3Plus rows + the two collision accumulators (the five
+        // stvx128 v127 at 0x825B4200..0x825B4210):
         //   +368 mLocalGraphicsPositionPlusJointVelocity
         //   +384 mLocalInitialComPositionPlusMaxJointAngle
         //   +400 mLocalInitialJointPositionPlusLimitStress
