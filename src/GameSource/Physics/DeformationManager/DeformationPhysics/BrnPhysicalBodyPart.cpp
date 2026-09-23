@@ -446,7 +446,8 @@ namespace Deformation
     // Bind the part to its vehicle + IK spec and build the local joint/graphics/COM frames.
     //   this+464 = lPartId (the 8-byte BurnoutBodyPartID); +472 = lGlobalVehicleId;
     //   this+488 = -1 (mi8ActiveJointsTagPointIndex none); +480 = lpDeformableObject;
-    //   +476 = lpIKPart; +485 = 0 (mbAddedToScene); +484 = 0 (mbJoinedToVehicle).
+    //   +476 = lpIKPart; +485 = 0 (mbAddedToScene); +486 = 0 (mbFrozen); +484 = 0 (mbJoinedToVehicle).
+    //   (Hex-Rays drops the +486 store; the raw word at 0x82626750 is 0x9BBF01E6 = stb r29,0x1E6(r31).)
     // Construct the embedded body; +487 = 0 (mbNeedsWritingIntoRenderware).
     //
     // ⭐⭐⭐ 2026-09-05 (hinge-geometry wave): THE SECOND MATRIX PARAMETER IS THE VEHICLE'S WORLD
@@ -495,8 +496,14 @@ namespace Deformation
         mi8ActiveJointsTagPointIndex = -1;                // +488
         mpDeformableObject           = lpDeformableObject; // +480
         mpIKPart                     = lpIKPart;           // +476
-        mbAddedToScene               = false;             // +485
-        mbJoinedToVehicle            = false;             // +484
+        mbAddedToScene               = false;             // +485  stb r29,0x1E5 @0x8262674C
+        // +486 stb r29,0x1E6 @0x82626750 -- the reuse reset of the frozen flag. PhysicalBodyPartPool::
+        // RemovePart never clears it, so without this a slot freed while its part lay frozen on the
+        // road re-Prepares FROZEN: AddPartsToScene skips it and contact generation ignores it, and a
+        // HINGED part (never Update()d) stays out of the scene for its whole hinged life -- no
+        // contacts, no joint stress, no breaking (crash parity G29-D1, 2026-09-23).
+        mbFrozen                     = false;             // +486
+        mbJoinedToVehicle            = false;             // +484  stb r29,0x1E4 @0x82626754
 
         // BrnPhysics::ExternalPhysicsBody::Construct() ; *(this+487) = 0.
         mRwBody.Construct();
