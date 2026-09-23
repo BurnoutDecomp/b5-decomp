@@ -1031,6 +1031,9 @@ public:
     // arg 2 is the mirror (0x822A52D4..0x822A52E0 / 0x822A530C..0x822A5318; corrected
     // 2026-09-23, crash parity G60-D1 -- the old names and arm 1 followed a Hex-Rays mis-render).
     void SetIndicatorState(bool lbLeftIndicatorOn, bool lbRightIndicatorOn);
+    // DWARF BrnActiveRaceCar.h:994 `void EnableEngineSwitchOff(bool)`; the console inlines it as a
+    // bare `stb` to +0x770 (HandleGameActions cases 122/123 @0x8230D8D4 / 0x8230D8E8).
+    void EnableEngineSwitchOff(bool lbEnable)        { mbEnableEngineSwitchOff = lbEnable; }   // +0x770
     bool IsNotSendingNetworkUpdates() const          { return mbNotSendingNetworkUpdates; }    // +0x798
     bool IsDisconnectedFromNetwork() const           { return mbIsDisconnectedFromNetwork; }   // +0x799
     const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750
