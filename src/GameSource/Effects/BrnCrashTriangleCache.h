@@ -9,22 +9,37 @@
 // BrnEffects::BrnCrashTriangleCache -- the effects module's cache of the world
 // triangles the crashing player car is grinding over (EffectsModule::
 // HandlePlayerTriangleCache @0x82296EA0 feeds it from the scene manager's
-// triangle-cache interface; the crash spark / debris handlers read it).
+// triangle-cache interface; the crash-debris integrator reads it:
+// BrnDebrisArrayLite::UpdateBucket @0x82C08410 -> CollideWithTriangleCache).
 //
 // 2026-09-02 (tyre-mark wave): the type used to live at the top of
 // BrnCrashTriangleCache.cpp. EffectsModule embeds it BY VALUE
 // (DWARF EffectsModule.h:621 `BrnCrashTriangleCache mCrashTriangleCache`, X360
 // +0x2D400, constructed by EffectsModule::Construct @0x8228FE98), so the
-// declarations moved here -- same names, same layout, nothing forked. Bodies stay
-// in the .cpp (Construct @0x8227B240, AddTriangles @0x8228CDA8,
-// CheckForDuplicateTriangles @0x822847B0).
+// declarations moved here. Bodies stay in the .cpp (Construct @0x8227B240,
+// AddTriangles @0x8228CDA8, CheckForDuplicateTriangles @0x822847B0,
+// InsertTriangleIntoCache @0x8227B2D0).
+//
+// 2026-09-23 (crash parity FX-FX, G09-D1..D6): the incoming batch type is the REAL
+// CgsGeometric::Triangle4 (0xE0 bytes, DWARF h:123, PS3 mangled
+// _ZN10BrnEffects21BrnCrashTriangleCache12AddTrianglesEPKN12CgsGeometric9Triangle4Ej). The
+// local 0xA0-byte `BrnEffects::Triangle4` fork (9 vertex lanes + "mSurfaceTags" at +0x90,
+// which is the real mValidMasks) and its `BrnEffects::CollisionTag` helper are gone; see
+// the .cpp banner for what the fork did to every batch after the first.
 // ============================================================================
+
+namespace CgsGeometric
+{
+    // Pointer-only use here (AddTriangles' batch array). A forward declaration keeps
+    // CgsTriangle4.h out of EffectsModule.h / BrnDispatchThreadInputBuffer.h, which embed
+    // this cache by value; the .cpp includes the full type.
+    struct Triangle4;
+}
 
 namespace BrnEffects
 {
-    static const u32 KU_MAX_NUMBER_PACKED_TRIANGLES = 48;
+    static const u32 KU_MAX_NUMBER_PACKED_TRIANGLES = 48;   // DWARF BrnCrashTriangleCache.h:29
     static const u32 KU_TRIANGLES_PER_PACK = 4;
-    static const u16 KU_INVALID_CRASH_MATERIAL_ID = 0x11;
 
     // The SoA lane of the packed crash-triangle format: four scalars, one per triangle
     // of the Triangle4 batch. It is NOT the math Vector4 -- it carries no vpu semantics
@@ -59,26 +74,10 @@ namespace BrnEffects
         }
     };
 
-    struct CollisionTag
-    {
-        u32 muValue;
-
-        bool IsEmpty() const
-        {
-            return muValue == 0;
-        }
-
-        u16 GetMaterialId() const
-        {
-            return static_cast<u16>((muValue >> 20) & 0x3F);
-        }
-    };
-
     struct BrnCrashTrianglePackedFormat
     {
         void Clear();
         void SetScalarTriangle(const BrnCrashTrianglePackedFormat& lTriangle, u32 luDestinationComponent);
-        bool HasMatchingHash(const BrnCrashTrianglePackedFormat& lTriangle, u32 luComponent) const;
 
         Vector4Lane mVertexHash;
         Vector4Lane mVertex0X;
@@ -92,22 +91,13 @@ namespace BrnEffects
         Vector4Lane mVertex2Z;
     };
 
-    struct Triangle4
-    {
-        BrnCrashTrianglePackedFormat ExtractPackedTriangle(u32 luComponent) const;
-        CollisionTag GetCollisionTag(u32 luComponent) const;
-
-        Vector4Lane mVertex0X;
-        Vector4Lane mVertex0Y;
-        Vector4Lane mVertex0Z;
-        Vector4Lane mVertex1X;
-        Vector4Lane mVertex1Y;
-        Vector4Lane mVertex1Z;
-        Vector4Lane mVertex2X;
-        Vector4Lane mVertex2Y;
-        Vector4Lane mVertex2Z;
-        Vector4Lane mSurfaceTags;
-    };
+    // TRANSITIONAL (FX-FX 2026-09-23). EffectsModule::HandlePlayerTriangleCache
+    // (EffectsModule.cpp:1960 / :1968 -- not this job's file) still spells its two calls as
+    // `AddTriangles(reinterpret_cast<const Triangle4*>(lpCache), ...)` inside namespace
+    // BrnEffects. With the 0xA0-byte fork deleted, this alias makes that cast the identity on
+    // the real 0xE0-byte CgsGeometric::Triangle4 (the console passes lpCache straight through).
+    // Delete it together with those two casts.
+    typedef CgsGeometric::Triangle4 Triangle4;
 
     struct BrnCrashTriangleCache
     {
@@ -122,19 +112,21 @@ namespace BrnEffects
             mnNextPackedTriangleToFill = 0;
             mnNextComponentToFill      = 0;
         }
-        void AddTriangles(const Triangle4* lpInTriangles, u32 lnNum4Triangles);
-        void CheckForDuplicateTriangles(BrnCrashTrianglePackedFormat* lpaPackedTriangles, bool* lpbSkipTriangle);
-        void InsertTriangleIntoCache(BrnCrashTrianglePackedFormat* lpPackedTriangle);
+        // DWARF h:123. lnNum4Triangles counts Triangle4 BATCHES (four triangles each).
+        void AddTriangles(const CgsGeometric::Triangle4* lpInTriangles, u32 lnNum4Triangles);
+        // DWARF h:155. lpbAddTriangleBool[i] == true means "do NOT add triangle i" (the console
+        // seeds its found-mask with all-ones for a true byte, 0x822847D8..0x82284830); the DWARF
+        // name reads the other way round.
+        void CheckForDuplicateTriangles(BrnCrashTrianglePackedFormat* lpaPackedTriangles, bool* lpbAddTriangleBool);
+        void InsertTriangleIntoCache(BrnCrashTrianglePackedFormat* lpPackedTriangle);   // DWARF h:150
 
     private:
-        void CalculateHashForPackedTriangle(BrnCrashTrianglePackedFormat* lpPackedTriangle) const;
-        bool IsDuplicateTriangle(const BrnCrashTrianglePackedFormat& lTriangle) const;
-        u32 GetPackedTriangleCountForSearch() const;
+        void CalculateHashForPackedTriangle(BrnCrashTrianglePackedFormat* lpPackedTriangle);   // DWARF h:146
 
-        BrnCrashTrianglePackedFormat maPackedTriangles[KU_MAX_NUMBER_PACKED_TRIANGLES];
-        u32 mnNumberOfPackedTriangles;
-        u32 mnNextPackedTriangleToFill;
-        u32 mnNextComponentToFill;
+        BrnCrashTrianglePackedFormat maPackedTriangles[KU_MAX_NUMBER_PACKED_TRIANGLES];   // h:158  +0x0000
+        u32 mnNumberOfPackedTriangles;                                                     // h:160  +0x1E00
+        u32 mnNextPackedTriangleToFill;                                                    // h:161  +0x1E04
+        u32 mnNextComponentToFill;                                                         // h:162  +0x1E08
     };
 }
 
