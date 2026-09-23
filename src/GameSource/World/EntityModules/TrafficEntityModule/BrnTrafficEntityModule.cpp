@@ -4237,13 +4237,18 @@ void TrafficEntityModule::Construct()
     SetTuningSplat(KF_VEHICLE_PITCH_SCALE,               0.050000001f);    // 0x726D0 flt_820047C8
 
     // The four cones, {cos(half-angle), length, recip-Y-scale, w}. The console builds each with
-    // a read-modify-write of the member's own lanes, so the lanes it never stores keep whatever
-    // the record held; they are written as 0.0f here. Angles: dbl_8200D500 == 10 degrees,
-    // dbl_820BFBF0 == 20 degrees, both in radians.
+    // a read-modify-write of the member's own lanes, so the lanes it never stores (W) keep
+    // whatever the record held; they are written as 0.0f here. Angles: dbl_8200D500 == 10
+    // degrees, dbl_820BFBF0 == 20 degrees, both in radians.
     SetTuningLanes(kfParamSympatheticCone_CosAngle_Length_RecipYScale_W,
                    static_cast<f32>(std::cos(0.1745329238474369)), 30.0f, 0.25f, 0.0f);   // 0x726E0
+    // 0x726F0 (r11 from 0x827405D4, untouched to 0x82740680): lane 0 cos(dbl_820BFBF0) stored at
+    // 0x827405F4, lane 1 flt_820BA5C0 == 50.0f at 0x82740610 (member write 0x82740620), lane 2
+    // flt_820BA544 == 0x3E800000 == 0.25f at 0x82740658/0x82740670 (member write 0x82740680).
+    // The Showtime cone squashes Y by 0.25 like the normal one (G58-X1: it was seeded 0.0f,
+    // which zeroed the height offset of every crashing thing before the cone test).
     SetTuningLanes(kfParamSympatheticConeShowTime_CosAngle_Length_RecipYScale_W,
-                   static_cast<f32>(std::cos(0.3490658476948738)), 50.0f, 0.0f, 0.0f);    // 0x726F0
+                   static_cast<f32>(std::cos(0.3490658476948738)), 50.0f, 0.25f, 0.0f);   // 0x726F0
     SetTuningLanes(kfVehicle_AvoidancePassingFactor_Constants,
                    4.0f, 10.0f, 10.0f, 3.0f);                                             // 0x72770
     SetTuningLanes(kfVehicle_AvoidanceCone_CosAngle_Length_RecipYScale_W,
