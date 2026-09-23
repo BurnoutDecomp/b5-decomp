@@ -893,7 +893,7 @@ namespace Deformation
     }
 
     // ===========================================================================================
-    // OutputWheelData  @ 0x82608E28   (PARTIAL FIDELITY -- see FLAG)
+    // OutputWheelData  @ 0x82608E28
     //
     // Serialise the four wheels' world transforms + physical state into one entry of a
     // DeformationOutputInterfaceForEntityModules (lpOutEM). For each of the four wheels:
@@ -901,25 +901,20 @@ namespace Deformation
     //     detached-wheel record exists for it (the asm's sub_825E8308 lookup against the wheel
     //     manager), build the wheel's world transform from that detached record's position;
     //   - otherwise build it from the attached vehicle's live wheel transform
-    //     (SimpleVehiclePhysics::GetWheelsWorldTransfrom(wheel, applySteer));
-    //   - fold the per-wheel result into a running entity-sphere-size bound and stamp the per-wheel
-    //     scratch state block.
+    //     (SimpleVehiclePhysics::GetWheelsWorldTransfrom(wheel, applySteer)) plus the wheel's
+    //     body-point velocity and spin (row0 * mIntegrationVariables.x);
+    //   - a DETACHED wheel (only) folds its distance + radius into the running entity-sphere-size
+    //     bound; both arms stamp the per-wheel state block.
     // Finally it bounds-checks the entity sphere size + the output entry count (non-gating
     // tripwires), writes the per-wheel volume id, copies the assembled WheelPhysicalStates block
     // into the output entry (WheelPhysicalStates::operator=), and bumps the entry count.
     //
-    // FLAG (PARTIAL): the X360 pseudocode for this function carries the "local variable allocation
-    // has failed, the output may be wrong" marker; its per-wheel transform assembly threads through
-    // a NOT-yet-homed detached-wheel lookup (sub_825E8308) and an un-homed 0x188-byte per-wheel
-    // scratch-state block (the local v60/v61 buffers), and writes into the entity-module output
-    // interface whose interior is opaque. The CONTROL FLOW (the per-wheel detached/live branch, the
-    // four-wheel loop bound, the count/sphere tripwires, the volume-id + state writes, the count
-    // bump) and the homed calls (GetWheelsWorldTransfrom, WheelPhysicalStates::operator=) are
-    // reproduced faithfully; the un-homed detached-record transform math + the per-wheel scratch
-    // block are carried as honestly-FLAGGED zero-seeded scratch (NEVER fabricated) and the output
-    // entry is written at the asm-authoritative offsets. PROMOTE the detached-record path + the
-    // scratch-state interior when the DetachedWheelManager record + the entity-module wheel-state
-    // layout are homed.
+    // STATUS (2026-09-23, crash parity G18-D1/D2): the old "FLAG (PARTIAL)" banner is retired. The
+    // Hex-Rays text carries the "local variable allocation has failed" marker, so this body is read
+    // off the ASSEMBLY: the detached-record path (sub_825E8308 == DetachedWheelManager::GetWheel)
+    // landed 2026-09-02, WheelPhysicalStates and the entity-module interface are homed and written
+    // by name, and the live arm now publishes all six rows of its 0x60-byte entry (transform,
+    // body-point velocity, spin) plus both flags -- with no sphere fold, as on the console.
     // ===========================================================================================
     void DeformableObject::OutputWheelData(s32 /*liWheelIndex*/,
                                            DeformationOutputInterfaceForEntityModules* lpOutEM,
@@ -948,9 +943,11 @@ namespace Deformation
         // stvx this+0x66D0) before asserting THE MEMBER.
         f32 lfEntitySphereSize = mLastLinearVelocityPlusEntityRadius.w;
 
-        // The assembled per-wheel scratch state block (the local v61 the asm copies out). FLAG:
-        // 0x188 bytes; its interior is the un-homed entity-module per-wheel physical state. Zeroed
-        // (honest seed) -- NEVER fabricated. PROMOTE when that layout is homed.
+        // The assembled per-wheel state block (the stack WheelPhysicalStates the asm copies out
+        // with operator= at the tail). The console seeds only the eight flag bytes
+        // (0x82608EA8/0x82608EAC `stw r29(0)` -> mabWheelExists / mabWheelAttached); the rows of a
+        // detached wheel whose record was reclaimed stay whatever the stack held. The PC zero-fills
+        // the whole block -- a deterministic instance of that indeterminate content.
         WheelPhysicalStates lWheelStates;
         std::memset(&lWheelStates, 0, sizeof(lWheelStates));
 
@@ -992,7 +989,7 @@ namespace Deformation
                 // 0x82609114 / 0x82609118  stb 1,-4 ; stb 0,0  ->  exists = 1, attached = 0.
                 // 0x826090D4..0x82609154  |rec pos - car pos| (vrsqrtefp + two Newton steps,
                 //   zero-guarded) ; radius = rec+0x7C ; if (dist <= KVF_MAX) size = max(size,
-                //   dist + radius) -- the SAME fold as the live arm, with the radius term.
+                //   dist + radius) -- the loop's ONLY sphere fold (the live arm has none, G18-D2).
                 // r4 = the high dword of the handling id (RigidBodyId::GetEntityId, DWARF :3442).
                 EntityId lVehicleEntityId;
                 lVehicleEntityId.muValue = static_cast<u32>(static_cast<u64>(mHandlingBodyID) >> 32);
@@ -1041,37 +1038,45 @@ namespace Deformation
                 // ⭐ THE LIVE WHEEL ROW IS WRITTEN NOW (2026-08-24, deform-land wave;
                 // BOOT-MEASURED: with the block left zero-seeded, the newly-live readback L3
                 // published zero transforms + exists=0 over UpdatePhysicsState's good wheel
-                // poses and the car rendered WHEEL-LESS). The consumer contract
-                // (ActiveRaceCar::UpdateWheelPhysicsState's snapshot view) is {64-byte
-                // transform @ 96*wheel; on-ground byte @ 0x180+wheel}; those two fields are
-                // filled per live wheel. FLAG: the remaining per-wheel scalars (velocities /
-                // forces inside the 96-byte entry) stay zero-seeded until the interior is homed.
-                // 2026-09-02 (traffic-deformation wave): BY NAME, now that WheelPhysicalStates
-                // is homed -- and the SECOND byte the console's live arm writes is restored:
-                //     0x82609114  stb r24, -4(r11)   mabWheelExists[w]   = 1
-                //     0x82609118  stb r29,  0(r11)   mabWheelAttached[w] = 1
-                // (r11 = block + 0x184 + w). The old raw-offset transcription wrote only the
-                // exists byte; TrafficEntityModule::ProcessDeformationData reads
-                // "exists && !attached" as a torn-off wheel and marks the car FATALLY CRASHING,
-                // so with the attached byte left zero every physical traffic car would have been
-                // flagged fatal on its first deformation frame. The detached-wheel arm above
-                // (`stb 1,-4 ; stb 0,0`: exists, not attached) stays un-homed with its record.
-                lWheelStates.maStates[liWheel].mWorldSpaceTransform = lWheelTransform;
+                // poses and the car rendered WHEEL-LESS). 2026-09-02 (traffic-deformation wave):
+                // BY NAME, now that WheelPhysicalStates is homed -- and the SECOND byte the
+                // console's live arm writes is restored (the old raw-offset transcription wrote
+                // only the exists byte; TrafficEntityModule::ProcessDeformationData reads
+                // "exists && !attached" as a torn-off wheel and marks the car FATALLY CRASHING).
+                //
+                // ⭐ The whole 0x60-byte entry, store for store (crash parity G18-D1, 2026-09-23;
+                // r31 = block + 0x60*w + 0x20, r28 = &maWheels[w], r23 = 0xA0):
+                //     0x82608F3C..0x82608F4C  the four transform rows       -> entry+0x00..+0x30
+                //     0x82608F38 lvx128 v13 = wheel+0xA0 (mBodyPointVelocity)
+                //     0x82608F50 stvx128 v13                                -> entry+0x40
+                //     0x82608F30/34 lvx128 wheel+0x30 (mIntegrationVariables) ; vspltw 0
+                //     0x82608F48 vmulfp128 v0 = row0 * splat(x)  (all four lanes)
+                //     0x82608F54 stvx128 v0                                 -> entry+0x50
+                //     0x82608F58  stb r24, -4(r10)   mabWheelExists[w]   = 1
+                //     0x82608F5C  stb r24,  0(r10)   mabWheelAttached[w] = 1
+                // The two velocity rows used to stay at the memset zero under a 'remaining
+                // per-wheel scalars stay zero-seeded until the interior is homed' FLAG -- stale
+                // once WheelPhysicalStates and Wheel were both named. The angular row is the
+                // inlined Wheel::GetAngularVelocity (the spin rate, mIntegrationVariables.x, as a
+                // splat -- DWARF :3424 scope) times the wheel's world X axis (vpu::operator*).
+                // PS3 twin 0x77781C: `lvx v0,wheel,48 ; vspltw 0 ; vmaddfp row0*splat+0` -> +0x50,
+                // `lvx v0,wheel,160` -> +0x40.
+                const Vehicle::Wheel* lpWheel = lpSimple->GetWheel(static_cast<Vehicle::EVehicleDrivenWheel>(liWheel));
+                const f32      lfWheelSpin    = lpWheel->mIntegrationVariables.x;
+                const VecFloat lvfWheelSpin   = VecFloat{ lfWheelSpin, lfWheelSpin, lfWheelSpin, lfWheelSpin };
+                lWheelStates.maStates[liWheel].mWorldSpaceTransform       = lWheelTransform;
+                lWheelStates.maStates[liWheel].mWorldSpaceVelocity        = lpWheel->mBodyPointVelocity;
+                lWheelStates.maStates[liWheel].mWorldSpaceAngularVelocity = vpu::Mult(lWheelTransform.xAxis, lvfWheelSpin);
                 lWheelStates.mabWheelExists[liWheel]   = true;
                 lWheelStates.mabWheelAttached[liWheel] = true;
 
-                // Fold the wheel's DISTANCE FROM THE VEHICLE into the running entity radius (the
-                // dist <= kMax gate + max(size, dist + r) cascade). FLAG: the per-wheel radius
-                // term (v7) is not homed; folded as 0 -- exact for an attached wheel, an
-                // under-estimate only for the not-yet-modelled detached arm.
-                const Vector3 lToWheel = vpu::Subtract(lWheelTransform.Pos(),
-                                                       lpSimple->GetTransform().Pos());
-                const f32 lfDist = vpu::Magnitude(lToWheel);
-                if (lfDist <= KVF_MAX_DEFORMABLE_OBJECT_SPHERE_SIZE
-                    && lfDist > lfEntitySphereSize)
-                {
-                    lfEntitySphereSize = lfDist;
-                }
+                // ⛔ NO entity-sphere fold on this arm (crash parity G18-D2, 2026-09-23). The live
+                // arm ends `b loc_82609160` @0x82608F60 -- the loop increment -- without naming
+                // v127 (the running sphere size); the ONLY v127 update in the loop is the detached
+                // arm's vaddfp/vcmpgtfp/vmaxfp128/vsel cascade @0x8260914C..0x8260915C. PS3
+                // 0x77781C agrees (its live arm never writes v31), and the DWARF scopes the
+                // distance locals (lCarToWheelVec, lvfWheelDistance, lIsTooFarAway :3464-:3468)
+                // inside the detached-wheel scope only. The PC used to fold |wheel - car| here.
             }
         }
 
