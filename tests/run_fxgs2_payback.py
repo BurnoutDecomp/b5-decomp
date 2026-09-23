@@ -3,6 +3,8 @@ BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing.
 
   G12-D1   HandleWaitForPaybackAggressorToCrash @0x823977F0: the pinned `false` becomes the
            console's IsCrashing(player) read (0x82397848 lbzx), so aggressor state 1 -> 2.
+  G12-D5   HandleWaitingToAwardPayback @0x823978B0 (Update arm 0x8239AC2C[2] = 0x8239AC54): once the
+           player is no longer crashing, ChangeState(3) -- state 2 -> 3.
 
 Numeric: tests/FxGs2Payback.cpp compiled against the extracted PRODUCTION bodies (Update and every
 body it dispatches), driven through the real PaybackManager / GameStateToGuiInterface /
@@ -23,7 +25,7 @@ from fxgs_common import Tree, definition, body_or_empty, compile_and_run, report
 PAYBACK_CPP = "src/GameSource/GameState/PaybackManager/BrnPaybackManager.cpp"
 GUI_CPP = "src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp"
 TIMER_CPP = "src/GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.cpp"
-NUMERIC_CHECKS = 11
+NUMERIC_CHECKS = 19
 
 # Bodies every revision under test has: Update and everything it reaches.
 REQUIRED = [
@@ -46,7 +48,10 @@ REQUIRED = [
     "    void\n    PaybackManager::Update(",
 ]
 # Bodies a fix adds: (signature, labelled empty stand-in used when the revision lacks it).
-OPTIONAL = []
+OPTIONAL = [
+    ("    void\n    PaybackManager::HandleWaitingToAwardPayback(",
+     "void PaybackManager::HandleWaitingToAwardPayback(const BrnPhysics::Vehicle::VehicleOutputInterface*) {}"),
+]
 GUI_REQUIRED = [
     "void GameStateToGuiInterface::Construct()",
     "void GameStateToGuiInterface::AddDirtyTrickTriggered(",
@@ -66,6 +71,10 @@ def wiring(tree):
     wait = body_or_empty(source, "    void\n    PaybackManager::HandleWaitForPaybackAggressorToCrash(")
     yield ("D1 HandleWaitForPaybackAggressorToCrash tests IsCrashing(player), not a pinned bool "
            "(0x82397848 lbzx)", "IsCrashing(" in wait and "lbPlayerIsCrashing" not in wait)
+    arm = re.search(r"case\s+E_PAYBACK_AGGRESSOR_STATE_AWARD_DT\s*:\s*"
+                    r"HandleWaitingToAwardPayback\(\s*lpVehicleOutputInterface\s*\)\s*;\s*break\s*;", update)
+    yield ("D5 Update aggressor case 2 calls HandleWaitingToAwardPayback(vehicle output) "
+           "(0x8239AC54: mr r4, r21)", arm is not None)
 
 
 def numeric(tree):
