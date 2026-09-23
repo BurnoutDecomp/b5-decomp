@@ -158,14 +158,14 @@ namespace Deformation
     // The X360 reaches three DeformableObject members the FROZEN BrnDeformableObject.h models in a
     // way this TU cannot call directly: ConstructUpdate/IK/PostPhysics PerformanceMonitors are
     // declared as INSTANCE methods there but the X360 Construct calls them with NO object (they are
-    // static perfmon-registration routines), and ClearVariables is declared PRIVATE there but the
-    // X360 Prepare calls it on each model. Rather than edit a frozen header outside this group, they
-    // are reached via declare-only stand-ins. FLAG: reconcile to `static` / `public` (or a friend
-    // grant) on DeformableObject when that header is next revised.
+    // static perfmon-registration routines). Rather than edit a frozen header outside this group, they
+    // are reached via declare-only stand-ins. FLAG: reconcile to `static` on DeformableObject when
+    // that header is next revised. (The fourth stand-in, DeformableObject_ClearVariables, is retired:
+    // Prepare now calls the public DWARF DeformableObject::Construct, which runs ClearVariables --
+    // crash parity G23-D4.)
     void DeformableObject_ConstructUpdatePerformanceMonitors();
     void DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors();
     void DeformableObject_ConstructPostPhysicsPerformanceMonitors();
-    void DeformableObject_ClearVariables(DeformableObject* lpModel);
 
 
     // -----------------------------------------------------------------------------------
@@ -253,26 +253,31 @@ namespace Deformation
         if (mpaModels == nullptr)
             return false;
 
-        // Reset every model's per-object scratch to a quiescent state, then ClearVariables. The
-        // X360 zeroes a small per-model header (the active flag / culling group / a few scratch
-        // bytes) before calling ClearVariables. FLAG: the per-model header bytes the X360 pokes
-        // (+26384/+26402/+26408/+26409/+26416/+26480) are interior DeformableObject fields not
-        // reachable by name from here; the by-name ClearVariables call performs the model's own
-        // reset (the pokes are folded into it).
+        // Construct every model (crash parity G23-D4, 2026-09-23): 0x826303B4..0x826303CC is the
+        // inlined DeformableObject::Construct (PS3 out of line @0x6BEFC4) -- six stores
+        // (mHandlingBodyID +0x6710, mbActive +0x6722, mbHasDeformedThisFrame +0x6728,
+        // mbIKUpdateRequired +0x6729, miNumBrokenWheels +0x6770, mbResetDeformationNextUpdate
+        // +0x6730) and then `bl ClearVariables`. The old comment said those pokes were "folded into"
+        // ClearVariables; neither console's ClearVariables makes them, so the tree left six fields
+        // holding the allocator's bytes.
         for (u32 lu = 0; lu < KU_MAX_DEFORMATION_MODELS; ++lu)
         {
-            DeformableObject_ClearVariables(&mpaModels[lu]);
+            mpaModels[lu].Construct();
         }
 
-        // No models live + the IK round-robin reset. (X360 re-zeroes the live-slot set word
-        // *(this+75904) and the per-frame latch *(this+76672) at the tail of Prepare. It also
-        // zeroes two INTERIOR sub-object fields -- *(this+75888) in mDetachedWheelManager's region
-        // and *(this+48096) in mStateOutput's region -- which are not reachable by name from here;
-        // FLAG: those two interior resets are folded into the sub-objects' own prepare and are
-        // deferred until those interiors are homed. Prepare does NOT touch miPlayerModelIndex (it
-        // is seeded to -1 once, in Construct).)
-        mModelsAdded.UnSetAll();          // X360 *(this+75904) = 0
-        miLastBodyToHaveIKUpdate = 0;     // X360 *(this+76672) = 0
+        // The tail, store for store (0x826303DC..0x82630410; PS3 Prepare 0x739BC8 the same):
+        //   0x826303F8/FC  std 0 -> this+0x12880 (twice)   mModelsAdded
+        //   0x82630404     std 0 -> this+0x12870           the inlined DetachedWheelManager::Prepare
+        //                                                  (its used-set; PS3 calls it @0x6B4C60)
+        //   0x8263040C     std 0 -> this+0xBBE0            mStateOutput.mxLiveSlots (this+0x30 + 48048)
+        //   0x82630410     stw 0 -> this+0x12B80           miLastBodyToHaveIKUpdate
+        // (crash parity G23-D3: the two middle stores used to sit behind a FLAG calling them "not
+        // reachable by name" -- both members are named; the wheel manager's Prepare result is ignored
+        // by the console.) Prepare does NOT touch miPlayerModelIndex (seeded to -1 once, in Construct).
+        mModelsAdded.UnSetAll();
+        mDetachedWheelManager.Prepare();
+        mStateOutput.mxLiveSlots.UnSetAll();
+        miLastBodyToHaveIKUpdate = 0;
 
         return true;
     }

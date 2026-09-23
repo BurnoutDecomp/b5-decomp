@@ -576,13 +576,9 @@ namespace Deformation
         // friendship, no raw offset).
         void SetDeformationSpec(const StreamedDeformationSpec* lpSpec) { mpDeformationSpec = lpSpec; }
 
-        // ⭐ 2026-08-14 (walls wave): the one friend grant the manager's Prepare needs --
-        // DeformationManager::Prepare @0x82630230 calls the PRIVATE ClearVariables on each pool
-        // model (0x826303CC `bl ...ClearVariables` inside manager code). The tree reaches it via
-        // the free trampoline the home TU declares; this friend line makes that trampoline (defined
-        // beside the private body in BrnDeformableObject_Lifecycle.cpp) legal without widening the
-        // member's access.
-        friend void DeformableObject_ClearVariables(DeformableObject* lpModel);
+        // (2026-09-23, crash parity G23-D4: the DeformableObject_ClearVariables friend trampoline is
+        // retired -- DeformationManager::Prepare @0x82630230 now calls the public Construct() above,
+        // the DWARF method its 0x826303B4..0x826303CC block inlines, which runs ClearVariables.)
 
     private:
         // =========================================================================================
