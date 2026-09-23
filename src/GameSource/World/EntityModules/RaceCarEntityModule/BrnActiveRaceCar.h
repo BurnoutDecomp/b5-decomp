@@ -86,6 +86,9 @@ namespace CgsWorld { struct WorldMap2D; }   // UpdatePhysicsState forwards it to
 // the owning header). DWARF spells it OutputBuffer_PreScene::SceneInputInterface, which is a
 // typedef for this type (BrnRaceCarEntityModuleIO.h:379).
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface; } }
+// Update_PreScene's third parameter (OutputBuffer_PreScene::RaceCarAIInterface, a typedef for
+// this type -- BrnRaceCarEntityModuleIO.h:380); pointer-only and never dereferenced.
+namespace BrnAI { namespace AIModuleIO { struct RaceCarAIInterface; } }
 
 namespace BrnWorld
 {
@@ -826,6 +829,18 @@ public:
     // BrnVehicleEvents.h is already in this header's include closure (it is where
     // InEventAddForCollision's own typedef points), so naming it costs no new include.
     BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup DetermineCullingGroup();
+
+    // X360 0x822EAE08 (215 insns). DWARF BrnActiveRaceCar.h:542 `void Update_PreScene(
+    // OutputBuffer_PreScene::SceneInputInterface*, OutputBuffer_PreScene::VehicleInputInterface*,
+    // OutputBuffer_PreScene::RaceCarAIInterface*)`. Its only caller is
+    // RaceCarEntityModule::UpdateRaceCars_PreScene @0x822F5578, once per slot per PreScene. The
+    // meOnlineState machine (connect / lost contact / disconnect / car-select collision toggles),
+    // then the shared tail every arm reaches: publish a pending collision / culling-group change
+    // to the physics module and CLEAR mbCrashedIntoWater (0x822EB15C). The third argument is
+    // passed by the caller and never read (the asm touches only r4/r5).
+    void Update_PreScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                          BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface );
 
     // The attested declaration slot: the original class declares this between
     // DetermineCullingGroup / SetCullingGroup / UpdateLostContact / UpdateTimeSinceCreation

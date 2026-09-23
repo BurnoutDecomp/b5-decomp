@@ -666,6 +666,168 @@ void ActiveRaceCar::RemoveFromCollision( CgsSceneManager::SceneManagerIO::InScen
 }
 
 // ----------------------------------------------------------------------------
+// Update_PreScene @ 0x822EAE08   (215 insns)   -- crash parity 2026-09-23 (G61-D2 / G61-D3)
+//
+// Its only caller is RaceCarEntityModule::UpdateRaceCars_PreScene @0x822F5578 (every slot, every
+// un-paused PreScene). Until this landed NEITHER function had a body in the tree, so on PC:
+//   * mbCrashedIntoWater (+0x783) was never cleared per frame. CheckForResetOnTrackConditions sets
+//     it while the car stands on water and ActiveRaceCar::Update adds dt to mfTimeInWater while it
+//     is set -- so after the first water contact that did not reset the car, mfTimeInWater kept
+//     growing on dry land, and the next water contact was instantly over KF_MAX_TIME_IN_WATER
+//     (1.0 s) and reset the car on the spot. The console clears it here, on every path.
+//   * the meOnlineState machine (online connect / lost contact / disconnect / car-select collision
+//     toggles) never ran -- inert offline, where every car is E_ONLINE_STATE_NORMAL with all four
+//     network flags false, so the NORMAL arm falls straight through to the tail.
+//
+// The switch, arm for arm (r29 = lpSceneInterface, r28 = lpVehicleInterface, r27 = 0):
+//   0 CONNECTING  0x822EAE58  lbz 0x79C ; stb 0, 0x79D ; (0x79C && IsActive()) ->
+//                 stw 1, 0x744 ; stb 1, 0x79D ; lbz 0x79A ? <log> : AddToCollision
+//   1 NORMAL      0x822EAEF0  IsActive() ; lbz 0x799 ? (!IsCrashing() -> RemoveFromCollision,
+//                 state 3) : (lbz 0x798 && !IsCrashing() -> RemoveFromCollision, state 2) ;
+//                 lbz 0x79B -> assert muType == 2 (:490), then the car-select toggle, stb 0, 0x79B
+//   2 LOST        0x822EB034  lbz 0x798 == 0 -> (lbz 0x79A == 0 -> AddToCollision) ; stb 1, 0x79D ;
+//                 stw 1, 0x744 | lbz 0x799 -> (IsActive() && !IsCrashing() -> RemoveFromCollision,
+//                 state 3) | else the 30/60-frame flash counter on +0x794 / +0x79D
+//   3 DISCONNECTED 0x822EB0F0 stb 0, 0x79D
+// ----------------------------------------------------------------------------
+void ActiveRaceCar::Update_PreScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
+                                     BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
+                                     BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface )
+{
+    (void)lpRaceCarAIInterface;   // r6: passed by UpdateRaceCars_PreScene, never read
+
+    switch( meOnlineState )                                                 // lwz 0x744
+    {
+    case E_ONLINE_STATE_CONNECTING:
+    {
+        const bool lbReceivedNetworkDriverControls = mbReceivedNetworkDriverControls;   // lbz 0x79C
+        mbRenderThisFrame = false;                                          // stb r27, 0x79D
+        if( lbReceivedNetworkDriverControls && IsActive() )
+        {
+            meOnlineState     = E_ONLINE_STATE_NORMAL;                      // stw 1, 0x744
+            mbRenderThisFrame = true;                                       // stb 1, 0x79D
+            if( !mbIsInCarSelectOnline )                                    // lbz 0x79A
+            {
+                AddToCollision( lpSceneInterface, lpVehicleInterface );
+            }
+            else if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "\n[ACTIVE RACE CAR]: Not adding active race car "
+                    << static_cast<s32>( meActiveRaceCarIndex )             // lwz 0x748
+                    << " for collision on online connect as it is in a junkyard\n";
+            }
+        }
+        break;
+    }
+
+    case E_ONLINE_STATE_NORMAL:
+        if( !IsActive() )
+        {
+            break;
+        }
+        if( mbIsDisconnectedFromNetwork )                                   // lbz 0x799
+        {
+            if( !IsCrashing() )
+            {
+                RemoveFromCollision( lpSceneInterface, lpVehicleInterface );
+                meOnlineState = E_ONLINE_STATE_DISCONNECTED;                // li 3
+            }
+        }
+        else if( mbNotSendingNetworkUpdates && !IsCrashing() )             // lbz 0x798
+        {
+            RemoveFromCollision( lpSceneInterface, lpVehicleInterface );
+            meOnlineState = E_ONLINE_STATE_LOST_CONTACT;                    // li 2
+        }
+
+        if( mbCarSelectOnlineStateChanged )                                 // lbz 0x79B
+        {
+            // `lbz r11, 0xA4(GetGlobalRaceCar()) ; cmplwi 2` -- the raw type byte, no range assert.
+            CGS_ASSERT( GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK,
+                        "Trying to update a non-network car car select state" );   // :490
+            if( !mbIsInCarSelectOnline )                                    // lbz 0x79A
+            {
+                if( !mbAddedForCollision )                                  // lbz 0x78B
+                {
+                    AddToCollision( lpSceneInterface, lpVehicleInterface );
+                }
+            }
+            else if( mbAddedForCollision )
+            {
+                RemoveFromCollision( lpSceneInterface, lpVehicleInterface );
+            }
+            mbCarSelectOnlineStateChanged = false;                          // stb r27, 0x79B
+        }
+        break;
+
+    case E_ONLINE_STATE_LOST_CONTACT:
+        if( !mbNotSendingNetworkUpdates )                                   // lbz 0x798
+        {
+            if( !mbIsInCarSelectOnline )                                    // lbz 0x79A
+            {
+                AddToCollision( lpSceneInterface, lpVehicleInterface );
+            }
+            mbRenderThisFrame = true;                                       // stb 1, 0x79D
+            meOnlineState     = E_ONLINE_STATE_NORMAL;                      // stw 1, 0x744
+        }
+        else if( mbIsDisconnectedFromNetwork )                              // lbz 0x799
+        {
+            if( IsActive() && !IsCrashing() )
+            {
+                RemoveFromCollision( lpSceneInterface, lpVehicleInterface );
+                meOnlineState = E_ONLINE_STATE_DISCONNECTED;                // li 3
+            }
+        }
+        else
+        {
+            // The lost-contact flash: drawn for 30 frames, hidden for the next 30.
+            ++miFlashFrequency;                                             // lwz/addi/stw 0x794
+            if( miFlashFrequency <= 30 )                                    // cmpwi 0x1E ; ble
+            {
+                mbRenderThisFrame = true;
+            }
+            else
+            {
+                mbRenderThisFrame = false;                                  // stb r27, 0x79D
+                if( miFlashFrequency > 60 )                                 // cmpwi 0x3C ; ble
+                {
+                    miFlashFrequency = 0;
+                }
+            }
+        }
+        break;
+
+    case E_ONLINE_STATE_DISCONNECTED:
+        mbRenderThisFrame = false;                                          // stb r27, 0x79D
+        break;
+
+    default:
+        break;
+    }
+
+    // ---- THE SHARED TAIL (0x822EB0F4..0x822EB15C), reached by every arm and the default ----
+    // [FLAG BLOCKED -- the posters live in a header outside this lane] the two physics posts:
+    //   0x822EB0F4  if (mbChangeCollisionState) {                                   (lbz 0x78D)
+    //                   { (u32)(mHandlingBodyVolumeId.muId >> 32), mbCollisionStateToChangeTo }
+    //                   -> lpVehicleInterface + 0x202A0 (mSetRaceCarCollisionEventQueue).AddEvent ;
+    //                   mbChangeCollisionState = false; }
+    //   0x822EB128  if (mbChangeCullingGroup) {                                     (lbz 0x78F)
+    //                   { entity word, mCullingGrouptoChangeTo }
+    //                   -> lpVehicleInterface + 0x202FC (mSetRaceCarCullingGroupEventQueue).AddEvent ;
+    //                   mbChangeCullingGroup = false; }
+    // The DWARF declares the posters as VehicleInputInterface::SetRaceCarCollision(EntityId, bool)
+    // and ::SetRaceCarCullingGroup(EntityId, CullingGroup) (BrnVehicleInputInterface.h:166/:171,
+    // header inlines on X360); the PC VehicleInputInterface has neither and keeps both queues
+    // private, so the posts cannot be written from here. The two flags are therefore LEFT SET
+    // (exactly as before this function existed) rather than consumed with nothing posted.
+    // Their physics-side consumer (VehicleManager::ProcessCollisionEvents) only forwards them to
+    // the deformation interface, which nothing on PC reads yet.
+    // DELETE-WHEN BrnVehicleInputInterface.h grows SetRaceCarCollision / SetRaceCarCullingGroup.
+
+    mbCrashedIntoWater = false;                                             // 0x822EB15C  stb r27, 0x783
+}
+
+// ----------------------------------------------------------------------------
 // CalcBodyTransform @ 0x822B8828.
 //
 // The whole 384-instruction console body is the four RwMath::IsValid dev-assert blocks
