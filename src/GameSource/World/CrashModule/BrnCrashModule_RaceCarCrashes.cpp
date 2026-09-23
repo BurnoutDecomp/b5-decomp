@@ -39,6 +39,11 @@ namespace BrnWorld
 
 namespace
 {
+    // BrnCrashModule.cpp:53 (DWARF). A dynamically initialised .bss float on the console: CRT thunk
+    // 0x82C6AC28 sums 0x82065B70 (1.0f) + 0x82065B6C (3.0f) + 0x82065B68 (10.0f) + 0x82001C98 (1.0f)
+    // and stfs's the result into 0x8300E9B0 at 0x82C6AC58. Read at 0x827CAEE0.
+    const f32 KF_PLAYER_SHOWTIME_CAR_RESET_SECONDS = 1.0f + 3.0f + 10.0f + 1.0f;   // == 15.0f
+
     // One-shot park logger. Each parked helper gets its own static bool at its call site.
     void LogCrashPark(bool& lrbAlreadyLogged, const char* lpcText)
     {
@@ -71,14 +76,18 @@ namespace
 // THE DURATION SELECT -- every constant READ FROM THE IMAGE, none guessed:
 //   event.mbCarIsAI      -> mbFastCrashesForAI ? 2.0f (0x82001D9C) : 4.5f (0x820CA5B4)
 //   event.mbCarIsNetwork -> 20.0f (0x820CA5A8)
-//   mbIsShowtimeGameMode -> flt_8300E9B0
+//   mbIsShowtimeGameMode -> KF_PLAYER_SHOWTIME_CAR_RESET_SECONDS (flt_8300E9B0 == 15.0f, below)
 //   mbIsOnlineGameMode   -> 5.0f (0x8200426C)
 //   otherwise            -> mfPlayerCrashTime  (Construct: 4.0f)   <-- THE PLAYER'S PATH
-// ⚠️ flt_8300E9B0 reads 0.0 from the image, but its whole 0x60-byte neighbourhood is zero: it is
-// BSS, i.e. written at runtime by something this slice has not traced. It is behind
-// mbIsShowtimeGameMode, which is false everywhere on this build, so it is reproduced as the
-// symbol's static value with this flag rather than invented. [[placeholder-identity-element]]
-// does NOT bite here: it is a straight assignment, not an identity-element folded into a lerp.
+// flt_8300E9B0 is .bss (it reads 0.0 from the image by definition); its only writer is the CRT
+// dyn-init thunk 0x82C6AC28 (init-table entry 0x82CD29B4), which sums 1.0f (0x82065B70) + 3.0f
+// (0x82065B6C) + 10.0f (0x82065B68) + 1.0f (0x82001C98) and stores 15.0f with `stfs f0,-0x1650(r11)`
+// at 0x82C6AC58 (findinit: that is the only store). DWARF: KF_PLAYER_SHOWTIME_CAR_RESET_SECONDS,
+// BrnCrashModule.cpp:53 -- the thunk right before KVF_DIST_TO_ALLOW_CLEANUP_BEHIND's (:1773,
+// 0x82C6AC60). The arm is LIVE: HandleGameActions sets mbIsShowtimeGameMode for modes 2/16
+// (console 0x827D0CFC). (G64-D1: this arm used to store the .bss image value 0.0f.) The value is
+// only ever consumed by TickCrashes/ClearupCrashes, i.e. while mbClearUpEnabled is set, which
+// Showtime's KU_FLAG_DISABLE_CRASH_CLEAN_UP clears for the mode's own duration.
 // =================================================================================================
 void CrashModule::ProcessCrashedRaceCarEvents( const CrashIO::InputBuffer_PostPhysics* lpInput,
                                                CrashIO::OutputBuffer_PostPhysics* lpOutput )
@@ -136,8 +145,8 @@ void CrashModule::ProcessCrashedRaceCarEvents( const CrashIO::InputBuffer_PostPh
         }
         else if( mbIsShowtimeGameMode )
         {
-            // flt_8300E9B0 -- BSS, reads 0.0f; unreachable on this build. See the banner.
-            lfSecondsBeforeCleanup = 0.0f;
+            // 0x827CAED0 `lbz 0x152A` ; 0x827CAEE0 `lfs f31, -0x1650(0x8301 << 16)` == flt_8300E9B0.
+            lfSecondsBeforeCleanup = KF_PLAYER_SHOWTIME_CAR_RESET_SECONDS;
         }
         else if( mbIsOnlineGameMode )
         {
