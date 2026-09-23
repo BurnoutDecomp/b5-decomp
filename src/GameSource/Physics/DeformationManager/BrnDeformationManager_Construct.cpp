@@ -51,9 +51,10 @@ namespace Deformation
     // Construct  @0x82621510   [EXECUTED in goal trace]
     //
     // One-time manager construction: build the static debug component, construct the embedded
-    // detached-part pool, seed the private RNG, mark no models live + no player, clear the
-    // race-car / traffic / global-traffic index tables to -1, and register the ~24 CPU
-    // performance monitors in their exact order.
+    // detached-part pool and detached-wheel manager, seed the private RNG, mark no models live + no
+    // pool + no player, unmap every slot's global entity id, clear the race-car / traffic /
+    // global-traffic index tables to -1, and register the ~24 CPU performance monitors in their
+    // exact order.
     // -----------------------------------------------------------------------------------
     void DeformationManager::Construct()
     {
@@ -62,9 +63,16 @@ namespace Deformation
         DeformationDebugComponent_Construct(&mDebugComponent, this);
 
         // The embedded detached-PART pool: 50 PhysicalBodyPart slots (the X360 inlines the pool
-        // construct loop -- 50 iterations, 496-byte stride, then the pool count/ptr init). The
-        // detached-WHEEL manager is NOT constructed here (the asm constructs only the part pool).
+        // construct loop -- 50 iterations, 496-byte stride, then the pool count/ptr init).
         mDetachedPartManager.Construct();
+
+        // The detached-WHEEL manager IS constructed here (crash parity G23-D2, 2026-09-23; the old
+        // banner said "the asm constructs only the part pool", which is false): 0x82621584/0x82621590
+        // `addis r10,this,1 ; addi r10,r10,0x2870` then 0x826215A8 `std r30(0),0(r10)` ==
+        // mDetachedWheelManager.mUsedWheels = 0 -- the inlined DetachedWheelManager::Construct. The
+        // PS3 twin (DeformationManager::Construct @0x744130) calls it out of line right after
+        // DetachedPartManager::Construct: `bl DetachedWheelManager::Construct` @0x744184.
+        mDetachedWheelManager.Construct();
 
         // Seed the private RNG (the X360 inlines Random::Construct -- the 0x..1AD0891B default seed
         // + the 8-slot float ring fill + the index advance).
@@ -73,6 +81,15 @@ namespace Deformation
         // Clear the per-model live-slot set (the X360 zeroes the BitArray field; done first, with
         // the RNG seed, in the asm).
         mModelsAdded.UnSetAll();
+
+        // No model pool yet, and every model slot's global entity id is unmapped (crash parity
+        // G23-D2): 0x8262177C `stwx r30(0),r31,r23(0x12900)` == mpaModels = NULL, then
+        // 0x8262178C..0x82621798 `mtctr 28 ; stw r5(-1),0(r7) ; addi r7,r7,4 ; bdnz` from
+        // this+0x12888 == maGlobalEntityIDs[0..27] = 0xFFFFFFFF. PS3 0x744208 `stw 0,0x2900` and the
+        // 0x74420C..0x744228 28-word -1 loop are the same two stores.
+        mpaModels = nullptr;
+        for (s32 li = 0; li < static_cast<s32>(KU_MAX_DEFORMATION_MODELS); ++li)
+            maGlobalEntityIDs[li].muValue = 0xFFFFFFFFu;
 
         // Index tables start fully unmapped (-1 == no model). The X360 memsets the three byte
         // tables (8 / 20 / 600 bytes -- the global-traffic table is sized 601 but the loop writes

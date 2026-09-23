@@ -237,13 +237,32 @@ namespace Deformation
         mLastLinearVelocityPlusEntityRadius.w = lvfSize.w;
     }
 
-    // ⭐ 2026-08-14 (walls wave): the free-function trampoline BrnDeformationManager.cpp's Prepare
-    // calls by name (the manager's per-model reset loop; ClearVariables is private on the frozen
-    // header and the header now grants exactly this function friendship). Defined HERE, next to the
-    // private body, so the two can never drift apart.
-    void DeformableObject_ClearVariables(DeformableObject* lpModel)
+    // =================================================================================================
+    // Construct @ DWARF :172 -- PS3 out of line @0x6BEFC4; X360 inlined into DeformationManager::Prepare
+    // @0x82630230, per pool model (r3 = mpaModels + 0x6780*i), 0x826303B4..0x826303CC:
+    //     std r31(0), 0x6710(r3)   mHandlingBodyID            = 0
+    //     stb r31,    0x6722(r3)   mbActive                   = false
+    //     stb r31,    0x6728(r3)   mbHasDeformedThisFrame     = false
+    //     stb r31,    0x6729(r3)   mbIKUpdateRequired         = false
+    //     stb r31,    0x6770(r3)   miNumBrokenWheels          = 0
+    //     stb r31,    0x6730(r3)   mbResetDeformationNextUpdate = false
+    //     bl  ClearVariables
+    // PS3 is the same six stores (mbResetDeformationNextUpdate first) and a tail call to
+    // ClearVariables. ClearVariables writes none of the six, and the placement-new ctor leaves them as
+    // whatever the rw allocator's memory held -- so until this landed (crash parity G23-D4,
+    // 2026-09-23) the manager's "the pokes are folded into ClearVariables" comment described stores
+    // nobody made. Replaces the 2026-08-14 DeformableObject_ClearVariables trampoline, whose only
+    // caller was that loop.
+    // =================================================================================================
+    void DeformableObject::Construct()
     {
-        lpModel->ClearVariables();
+        mHandlingBodyID              = 0ull;
+        mbActive                     = false;
+        mbHasDeformedThisFrame       = false;
+        mbIKUpdateRequired           = false;
+        miNumBrokenWheels            = 0;
+        mbResetDeformationNextUpdate = false;
+        ClearVariables();
     }
 
     // =================================================================================================

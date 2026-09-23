@@ -90,6 +90,33 @@ namespace Deformation
     }
 
     // ============================================================================================
+    // Construct -- PS3 @0x6D0358 (DWARF BrnDetachedWheelManager.h:53); X360 has no out-of-line
+    // copy: DeformationManager::Construct @0x82621510 inlines it as `addis r10,this,1 ; addi
+    // r10,r10,0x2870` (0x82621584/0x82621590) and `std r30(0),0(r10)` @0x826215A8 -- the manager
+    // is at +0x11CE0 and the used-set at +0xB90 of it. The PS3 body is exactly `addi this,this,0xB90
+    // ; std 0,0(this)`: the used-set's one 64-bit field cleared, nothing else.
+    // Crash parity G23-D2 (2026-09-23): declared but never bodied or called until now.
+    // ============================================================================================
+    void DetachedWheelManager::Construct()
+    {
+        mUsedWheels.UnSetAll();
+    }
+
+    // ============================================================================================
+    // Prepare -- PS3 @0x6B4C60 (DWARF BrnDetachedWheelManager.h:59): `addi r9,this,0xB90 ; li
+    // this,1 ; std 0,0(r9)` -- clear the used-set, return true. X360 inlines it into
+    // DeformationManager::Prepare @0x82630230 (0x826303E0/0x826303EC this+0x12870 ; std 0 @0x82630404).
+    // The console's Release (PS3 @0x6B4C78) is a bare `return 1`, so this is the only per-session
+    // clear of the used wheels.
+    // Crash parity G23-D3 (2026-09-23): declared but never bodied or called until now.
+    // ============================================================================================
+    bool DetachedWheelManager::Prepare()
+    {
+        mUsedWheels.UnSetAll();
+        return true;
+    }
+
+    // ============================================================================================
     // GetWheel (@0x825A0B10) / IsSlotUsed (@0x825A0A10) MOVED 2026-08-06 (bridge de-facade
     // wave) to the mounted slice TU BrnDetachedWheelManager_Accessors.cpp: the contact-spy
     // bridge's FixupWheelVehicleContact links against both, while THIS TU's RemoveWheel /
