@@ -268,7 +268,10 @@ namespace BrnGameState
         miNumCarsLeaped                = 0;      // +0x2F8
         miNumPropsDestroyed            = 0;      // +0x2FC
         mbAboutToResetCombo            = false;  // +0x300 (stb 0)
-        mfResetComboGracePeriod        = 0.0f;   // +0x304
+        // (+0x304 mfResetComboGracePeriod: NO store. 0x82320D10..0x82320DC4 never writes +0x304 --
+        //  the invented `= 0.0f` that sat here was removed 2026-09-23, crash-parity G10-D10. Update
+        //  re-arms it to 0.5 (flt_82001DA0 @0x82320A5C) in the same breath as the only
+        //  mbAboutToResetCombo = true store, so nothing reads the value ClearData would have left.)
         mfDistanceTravelled            = 0.0f;   // +0x308
         mfTimeSinceLastHitOverheadSign = 1.0f;   // +0x30C (stfs flt_82001C98 == 1.0f)
         mfTimeContactingWall           = 0.0f;   // +0x310
@@ -279,8 +282,14 @@ namespace BrnGameState
         miStuntsPerformed              = 0;      // +0x324
         miCarDestructionBonus          = 0;      // +0x328
 
-        // The three container sets are reset to empty. (The X360 ClearData zeros the
-        // recent-hit-cars count word @+0x27C directly; Clear() does the same here.)
+        // The three container sets are reset to empty, in the console's store order:
+        //   0x82320D90..0x82320D98  stw 0 -> +0x288/+0x28C/+0x290  mRecentStuntSet (+0x280) read/write/length
+        //   0x82320D9C..0x82320DA4  stw 0 -> +0x60/+0x64/+0x68     mRecentlyHitPropSet (+0x58) read/write/length
+        //   0x82320DAC              stw 0 -> +0x27C                maRecentCrashes' count word
+        // (the DWARF ClearData lists both RingBuffer<CgsID>::Clear and RingBuffer<uint16_t>::Clear).
+        // [FX-GS 2026-09-23, crash-parity G10-D10] the CgsID stunt ring's Clear was missing, so the
+        // showtime stunt de-dupe window survived every ScoringSystem::ClearData.
+        mRecentStuntSet.Clear();
         mRecentlyHitPropSet.Clear();
         maRecentCrashes.Clear();
     }
