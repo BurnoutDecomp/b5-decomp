@@ -4,6 +4,7 @@
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdio>
 #include <cstdlib>
 #include <set>
@@ -13,7 +14,12 @@ int BeginAssert() { return 0; }
 int FireAssert(const char* lpcMessage, const char*, int)
 { std::fprintf(stderr, "Assertion: %s\n", lpcMessage); std::abort(); }
 void* EndAssert() { return nullptr; }
-} }
+}
+// The extracted bodies carry env-gated PC witnesses ([slammed], [wrecklatch]); a null sink
+// keeps them silent and the stream operators they use link.
+namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+StrStreamBase& StrStreamBase::operator<<(s32) { return *this; }
+}
 
 namespace Fixture {
 using namespace BrnWorld;
@@ -47,8 +53,17 @@ struct BoostStrategy {
 };
 struct BoostManager {
     BoostStrategy mStrategy;
+    int miSlammed = 0;
     BoostStrategy* GetBoostStrategy() { return &mStrategy; }
+    void OnSlammed() { ++miSlammed; }   // UpdateBoost +0x648 -> BoostManager::OnSlammed
 };
+// VehicleOutputInterface::mAggressiveDrivingFlags as UpdateBoost reads it (the two lost bytes).
+struct AggressiveDrivingFlags {
+    bool mbPlayerLostSlamThisFrame = false;
+    bool mbPlayerLostGrindingThisFrame = false;
+};
+static int gWreckLatchWitnesses = 0;
+static void WreckLatchWitness(const char*, s32, bool) { ++gWreckLatchWitnesses; }
 struct NearMissManager {
     std::set<u32> mTakenDown;
     void AddTakenDownRaceCar(u32 luCar) { mTakenDown.insert(luCar); }
@@ -63,6 +78,7 @@ struct RaceCarEntityModule {
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
     BoostManager mBoostManager;
     NearMissManager mNearMissManager;
+    AggressiveDrivingFlags mAggressiveDrivingFlags;
     ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leCar) { return &maActiveRaceCars[leCar]; }
     s32 GetDamagedCarCount() const;
     void ProcessTakedownEvents(const RaceCarEntityModuleIO::TakedownEventQueue* lpQueue);
@@ -119,5 +135,14 @@ int main()
     lInput.mQueue.Clear(); lModule.mBoostManager.mStrategy.miRewards = 0;
     lModule.UpdateBoostTakedowns(&lInput); lModule.ProcessTakedownEvents(&lInput.mQueue);
     Check(lModule.mBoostManager.mStrategy.miRewards == 0, "empty event queues have no reward side effects");
+    Check(lModule.mBoostManager.miSlammed == 0, "no lost slam or grind -> no OnSlammed");
+    lModule.mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame = true;
+    lModule.UpdateBoostTakedowns(&lInput);
+    Check(lModule.mBoostManager.miSlammed == 1, "player lost a slam this frame -> OnSlammed");
+    lModule.mAggressiveDrivingFlags.mbPlayerLostSlamThisFrame = false;
+    lModule.mAggressiveDrivingFlags.mbPlayerLostGrindingThisFrame = true;
+    lModule.UpdateBoostTakedowns(&lInput);
+    Check(lModule.mBoostManager.miSlammed == 2, "player lost a grind this frame -> OnSlammed");
+    Check(gWreckLatchWitnesses == 1, "the wreck latch witness fires once, for the player victim");
     std::printf("PASS: %d rival damage and takedown lifecycle checks\n",liChecks);
 }

@@ -41,8 +41,18 @@ struct CrashFixture {
     void PostPhysicsUpdate(CgsModule::IOBufferStack*,CgsModule::IOBufferStack*,
         const CrashIO::InputBuffer_PostPhysics*,CrashIO::OutputBuffer_PostPhysics*,BrnUpdateSet);
 };
+// ProcessGameEvents case 31 @0x823A278C also jolts the pad when the player is the aggressor
+// (0x823A27C8) or the victim (0x823A27EC) -- the RumbleManager legs FX-RUMBLE landed.
+struct RumbleFixture {
+    unsigned aggressor=0,victim=0;
+    void OnVehicleAggressorImpact(BrnPhysics::Vehicle::EImpactType){++aggressor;}
+    void OnVehicleVictimImpact(BrnPhysics::Vehicle::EImpactType){++victim;}
+};
 struct GameStateFixture {
     unsigned impacts=0;
+    EActiveRaceCarIndex player=E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    RumbleFixture mRumbleManager;
+    EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const {return player;}
     void SendVehicleImpactMessages(const VehicleImpactEvent*,GameActionQueue*){++impacts;}
     void ProcessGameEventsVehicleImpactBringUp(const CgsModule::VariableEventQueue<1536,16>*,GameActionQueue*);
 };
@@ -97,6 +107,17 @@ int main(){
     Check(actions.GetFirstEvent(&event,&size)==17&&event&&size==1,"unknown events skipped before ending event");
     if(event)Check(actions.GetNextEvent(event,&event,&size)==17&&event&&size==1,"each notification produces an action");
     if(event)Check(actions.GetNextEvent(event,&event,&size)==-1&&!event,"no additional actions");
+    Check(state.mRumbleManager.aggressor==0&&state.mRumbleManager.victim==0,"no player in the impact -> no rumble");
+    actions.Clear();carry.Clear();
+    state.player=E_ACTIVE_RACE_CAR_INDEX_0;
+    VehicleImpactEvent hit{};hit.meAggressorActiveRaceCarIndex=E_ACTIVE_RACE_CAR_INDEX_0;hit.meVictimActiveRaceCarIndex=static_cast<EActiveRaceCarIndex>(3);
+    carry.AddEvent(reinterpret_cast<const CgsModule::Event*>(&hit),31,sizeof(hit));
+    VehicleImpactEvent hitBy{};hitBy.meAggressorActiveRaceCarIndex=static_cast<EActiveRaceCarIndex>(2);hitBy.meVictimActiveRaceCarIndex=E_ACTIVE_RACE_CAR_INDEX_0;
+    carry.AddEvent(reinterpret_cast<const CgsModule::Event*>(&hitBy),31,sizeof(hitBy));
+    state.ProcessGameEventsVehicleImpactBringUp(&carry,&actions);
+    Check(state.impacts==3,"both impacts still reach SendVehicleImpactMessages");
+    Check(state.mRumbleManager.aggressor==1,"player as aggressor -> one aggressor jolt");
+    Check(state.mRumbleManager.victim==1,"player as victim -> one victim jolt");
     Check(assertions==0,"valid full chain produces no lock assertions");
     const unsigned before=assertions;output->GetGameEventQueue();
     Check(assertions==before+1,"mutable getter checks write lock");
