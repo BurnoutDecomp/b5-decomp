@@ -9,7 +9,11 @@
 $case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
 $case.Name = 'fxvmnet_hide_online'
 $case.Area = 'network'
-$case.Bug = 'The VehicleManager mode/junkyard/reset HIDE_ONLINE leaves must be dispatched (G40-D2, G43-D2, G44-D1).'
+$case.Bug = 'The VehicleManager mode/junkyard/reset HIDE_ONLINE leaves and the network catch-up stage must be dispatched (G40-D2, G43-D2, G44-D1, G44-D2).'
+# BRN_NETCATCHUP_DIAG arms the one-shot [net-catchup] witness in PhysicsModule::UpdateNetworkCatchup
+# (G44-D2): the stage WorldModule::Update runs every frame; offline its driver queue holds no
+# NETWORK record, so the witness is the only thing that shows the un-gated body ran.
+$case.DiagEnv += ',BRN_NETCATCHUP_DIAG=1'
 $case.Checks = @(
     @{ Kind = 'NewAsserts'; Name = 'no new assertions' }
     @{ Kind = 'LogCount'; Name = 'no exceptions'; Pattern = '\[EXCEPTION\]'; Max = 0 }
@@ -28,5 +32,9 @@ $case.Checks = @(
        Pattern = 'HIDE_ONLINE: Resetting race car \d+, type \d+'; Expect = $true }
     @{ Kind = 'LogCount'; Name = 'no VehicleManager post-scene deferral left'
        Pattern = '\[postscene-action\] DEFERRED: VehicleManager::'; Max = 0 }
+    @{ Kind = 'LogMatch'; Name = 'G44-D2 PhysicsModule::UpdateNetworkCatchup dispatched (offline: 0 NETWORK records)'
+       Pattern = '\[net-catchup\] PhysicsModule::UpdateNetworkCatchup LIVE: driver queue \d+ record\(s\), 0 NETWORK'; Expect = $true }
+    @{ Kind = 'LogCount'; Name = 'G44-D2 the WorldLinkStubs boot gate is gone'
+       Pattern = 'PhysicsModule::UpdateNetworkCatchup: inert'; Max = 0 }
 )
 $case

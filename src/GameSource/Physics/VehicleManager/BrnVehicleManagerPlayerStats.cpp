@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                    // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                     // gpDebugPrint / gxMessageFilterFlags (HIDE_ONLINE lines)
 #include "GameSource/GameState/BrnGameActions.h"                               // Prepare/StartPlaying/DriveThruJunkYard action payloads
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // UpdateNetworkCatchup's driver queue
 
 #include <cstddef>  // offsetof (layout asserts)
 #include <cstring>  // std::memcpy (asm reinterprets a stat word's bit pattern as int / float)
@@ -612,6 +613,97 @@ namespace Vehicle
         CGS_ASSERT(static_cast<u32>(liDisconnectedRaceCar) < mHiddenRaceCars.GetCapacity(),
                    "luIndex < NUMBITS");                                                        // CgsBitArray.h:241
         mHiddenRaceCars.UnSetBit(static_cast<u32>(liDisconnectedRaceCar));                      // stdx @ +44704
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // UpdateNetworkCatchup  @0x82618E30  (324 insns)  -- ADDED 2026-09-23 (FX-VMNET, G44-D2)
+    //
+    // The one callee of PhysicsModule::UpdateNetworkCatchup (@0x825A156C), which WorldModule::Update
+    // reaches every frame. DWARF BrnVehicleManager.cpp:4064, locals lpDriverQueue / liId / liSize /
+    // lpEvent (:4066-4068), lpControls / liRaceCarIndex (:4081-4082), lpRaceCarPhysics /
+    // lpVehicleDriver (:4091-4092), lbSnap (:4108).
+    //   0x82618E40  `mr r3, r4` -- the driver queue is the interface's first member; GetFirstEvent /
+    //               GetNextEvent walk it (0x82618E50 / 0x8261932C)
+    //   0x82618F1C  only E_DRIVER_TYPE_NETWORK (2) records are looked at
+    //   0x82618F24  liRaceCarIndex = lpControls->miVehicleID (`lwz r30, 0(r25)`)
+    //   0x82618F34  maeRaceCarTypes[idx] (this+44192) == INACTIVE (3) -> next record;
+    //               != NETWORK (2) -> assert :4098 (0x1002) and CARRY ON -- there is no skip
+    //   0x82619050  lbSnap = lpControls->mbSnap (lbz 0xB8) || !mNetworkCarsRecievedFirstUpdate
+    //               .IsBitSet(idx) (this+0xAEB8; the CgsBitArray.h:203 bound assert sits on the
+    //               IsBitSet leg only)
+    //   0x82619160  maRaceCarDrivers[idx].StartCatchupInterpolation(&maRaceCarVehicles[idx],
+    //               mTransform (+0x50), mLinearVelocity (+0x90 -> v1), mAngularVelocity (+0xA0 -> v2),
+    //               lbSnap (r6))
+    //   on a snap:  gxMessageFilterFlags&1 log "HIDE_ONLINE: " (0x82091358) "Network race car "
+    //               (0x820941E8) idx ", type " (0x820941FC) type " was made hidden because it
+    //               snapped to " (0x82099F80) + StrStreamBase::AppendFormat(off_82F31964 ==
+    //               "(%f, %f, %f)", mTransform.wAxis) + "\n"; SetBit on this+0xAEB8 (CgsBitArray.h:222
+    //               bound assert, 0x826192F0..0x82619314); SetNetworkRaceCarHidden(idx, 1) (0x82619318)
+    // Latent offline: the only producer of NETWORK driver records is BrnNetworkPlayer (online).
+    // -------------------------------------------------------------------------------------------
+    void VehicleManager::UpdateNetworkCatchup(const VehicleDriverInputInterface* lpInputInterface)
+    {
+        const VehicleDriverInputInterface::UpdateDriverEventQueue* const lpDriverQueue =
+            lpInputInterface->GetUpdateDriverQueue();
+
+        const CgsModule::Event* lpEvent = 0;
+        s32 liSize = 0;
+        for (s32 liId = lpDriverQueue->GetFirstEvent(&lpEvent, &liSize);
+             liId >= 0;
+             liId = lpDriverQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+        {
+            if (liId != E_DRIVER_TYPE_NETWORK)                                                 // cmpwi r3, 2
+            {
+                continue;
+            }
+
+            const BrnNetworkDriverControls* const lpControls =
+                static_cast<const BrnNetworkDriverControls*>(lpEvent);
+            const s32 liRaceCarIndex = lpControls->miVehicleID;                                 // lwz r30, 0(r25)
+
+            if (maeRaceCarTypes[liRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_INACTIVE)          // cmpwi 3 ; beq next
+            {
+                continue;
+            }
+            CGS_ASSERT(maeRaceCarTypes[liRaceCarIndex] == BrnWorld::E_RACE_CAR_TYPE_NETWORK,
+                       "Recieved network driver controls for active race car liRaceCarIndex "
+                       "which is of non-network type maeRaceCarTypes[liRaceCarIndex]");         // :4098
+
+            RaceCarPhysics* const lpRaceCarPhysics = &maRaceCarVehicles[liRaceCarIndex];        // mulli 0x1460 ; +0x740
+            VehicleDriver*  const lpVehicleDriver  = &maRaceCarDrivers[liRaceCarIndex];         // mulli 0xE0 ; +0x40
+
+            bool lbSnap = lpControls->mbSnap;                                                   // lbz 0xB8
+            if (!lbSnap)
+            {
+                CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < mNetworkCarsRecievedFirstUpdate.GetCapacity(),
+                           "invalid index : liRaceCarIndex < 8");                                // CgsBitArray.h:203
+                lbSnap = !mNetworkCarsRecievedFirstUpdate.IsBitSet(static_cast<u32>(liRaceCarIndex));
+            }
+
+            lpVehicleDriver->StartCatchupInterpolation(lpRaceCarPhysics, lpControls->mTransform,
+                                                       lpControls->mLinearVelocity,
+                                                       lpControls->mAngularVelocity, lbSnap);  // 0x82619160
+
+            if (lbSnap)
+            {
+                if (CgsDev::Message::gxMessageFilterFlags & 1)
+                {
+                    CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint
+                        << "HIDE_ONLINE: " << "Network race car " << liRaceCarIndex
+                        << ", type " << static_cast<s32>(maeRaceCarTypes[liRaceCarIndex])
+                        << " was made hidden because it snapped to ";
+                    const Vector3& lrSnapPosition = lpControls->mTransform.wAxis;               // lvx 0x80(r25)
+                    lrStream.AppendFormat("(%f, %f, %f)", lrSnapPosition.x, lrSnapPosition.y,
+                                          lrSnapPosition.z);                                     // off_82F31964
+                    lrStream << "\n";
+                }
+
+                CGS_ASSERT(static_cast<u32>(liRaceCarIndex) < mNetworkCarsRecievedFirstUpdate.GetCapacity(),
+                           "Index: liRaceCarIndex, Number of bits: 8");                          // CgsBitArray.h:222
+                mNetworkCarsRecievedFirstUpdate.SetBit(static_cast<u32>(liRaceCarIndex));     // stdx @ +0xAEB8
+                SetNetworkRaceCarHidden(static_cast<EActiveRaceCarIndex>(liRaceCarIndex), 1);  // 0x82619318
+            }
+        }
     }
 }
 }

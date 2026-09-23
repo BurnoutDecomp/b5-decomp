@@ -465,18 +465,9 @@ RealmcIface::MemcardInterface::~MemcardInterface()
 
 // ---- module entry points driven by the spines ----------------------------
 
-// Boot gate: the network catch-up step WorldModule::UpdatePhysicsNetworkCatchup forwards to;
-// body not reconstructed. Quiet one-shot log, never a trap.
-void BrnPhysics::PhysicsModule::UpdateNetworkCatchup(class BrnPhysics::PhysicsModuleIO::InputBuffer const *,unsigned short)
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "PhysicsModule::UpdateNetworkCatchup: inert [FLAG PC boot gate]\n";
-    }
-}
+// RETIRED 2026-09-23 (crash-parity FX-VMNET, G44-D2): the PhysicsModule::UpdateNetworkCatchup
+// boot gate that stood here. The real body @0x825A1508 lives in BrnPhysicsModule.cpp; a second
+// definition here would be an LNK2005.
 
 // ---- module-IO buffer Construct() ------------------------------------------
 // CgsModule::IOBufferStack::CreateIOBuffer<T> is DEFAULT-init + T::Construct, as on the

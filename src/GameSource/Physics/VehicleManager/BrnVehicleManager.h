@@ -1584,6 +1584,13 @@ namespace Vehicle
         void ProcessNetworkCarDisconnect(
             const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction* lpPlayerDisconnectedAction);
 
+        // ADDED 2026-09-23 (crash-parity FX-VMNET, G44-D2). @0x82618E30 (324 insns), DWARF
+        // BrnVehicleManager.h:301 (cpp :4064). The one callee of PhysicsModule::UpdateNetworkCatchup
+        // @0x825A156C: walk the driver queue and arm VehicleDriver::StartCatchupInterpolation for
+        // every NETWORK driver record; a snap marks the car's first update and hides it for a frame.
+        // Body: BrnVehicleManagerPlayerStats.cpp.
+        void UpdateNetworkCatchup(const VehicleDriverInputInterface* lpInputInterface);
+
         // ==========================================================================================
         // DoCrashPrediction @0x82645FE0 (814 insns) -- BODIED 2026-08-22 (wave T3 r2 owner B fix
         // round) in BrnVehicleManager_DoCrashPrediction.cpp. The 2026-08-09 census below is kept
