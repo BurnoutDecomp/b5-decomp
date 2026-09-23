@@ -21,6 +21,11 @@ namespace CgsNetwork
     {
     }
 
+    void ServerInterfaceDirtySockX360::Construct()
+    {
+        ServerInterfaceDirtySock::Construct();
+    }
+
     void ServerInterfaceDirtySockX360::Destruct()
     {
         ServerInterfaceDirtySock::Destruct();
@@ -29,6 +34,11 @@ namespace CgsNetwork
     bool ServerInterfaceDirtySockX360::Prepare(ServerInterfacePrepareParams* lpParams)
     {
         return ServerInterfaceDirtySock::Prepare(lpParams);
+    }
+
+    bool ServerInterfaceDirtySockX360::Release()
+    {
+        return false;
     }
 
     void ServerInterfaceDirtySockX360::Resume()

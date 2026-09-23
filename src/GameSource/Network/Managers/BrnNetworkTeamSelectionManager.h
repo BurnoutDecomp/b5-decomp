@@ -82,10 +82,8 @@ namespace BrnNetwork
         // assert bound).
         static const s32 KI_MAX_ACTIVE_RACE_CARS = 8;
 
-        // The wire EMessageType + packed length stamped onto a team-select reliable registration
-        // (X360 AddPlayer: li r4,0x2B == 43 ; li r5,0x74 == 116).
+        // The wire message type of a team-select reliable registration.
         static const s32 KI_TEAM_SELECT_MESSAGE_TYPE   = 43;
-        static const s32 KI_TEAM_SELECT_MESSAGE_LENGTH = 116;
 
         // Number of distinct processes (maProcessActions is indexed [process][action], 2 actions
         // per process; InitialiseActionArray validates 4 process rows).

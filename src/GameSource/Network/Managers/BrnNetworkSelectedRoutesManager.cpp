@@ -49,8 +49,8 @@ namespace BrnNetwork
 
     // ---------------------------------------------------------------------------------
     // Construct @ 0x8255BC38   [EXECUTED in goal trace]
-    //   Asserts both injected pointers, clears the network-module pointer, stores the time
-    //   manager, zeroes miNumRounds, then for every player slot: zeroes the round-send frame
+    //   Asserts both injected pointers, stores them, clears mbRoutesChanged, then for every
+    //   player slot: zeroes the round-send frame
     //   stamps, marks the slot free (mPlayerID = -1), Constructs both reliable messages, and
     //   clears both round bit sets.
     // ---------------------------------------------------------------------------------
@@ -60,12 +60,9 @@ namespace BrnNetwork
         CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
         CGS_ASSERT(lpTimeManager != 0, "lpTimeManager");
 
-        // The X360 stores 0 into mpNetworkModule here (HIDWORD(v6)==a2 is a decompiler
-        // register-pair artifact; the store is LODWORD(v6)==0). The full network-module wiring
-        // happens elsewhere; Construct leaves it null.
-        mpNetworkModule = 0;
+        mpNetworkModule = lpNetworkModule;
         mpTimeManager   = lpTimeManager;
-        miNumRounds     = 0;
+        mbRoutesChanged = false;
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_PLAYERS; ++liPlayerIndex)
         {
@@ -104,8 +101,8 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     // Destruct @ 0x8255BD18
     //   Mirror of Construct's per-slot reset (zero frame stamps, free the slot, Construct both
-    //   messages, clear both bit sets) and then clear the module/time-manager/round-count
-    //   trailing scalars.
+    //   messages, clear both bit sets) and then clear the module / time-manager pointers and
+    //   mbRoutesChanged.
     // ---------------------------------------------------------------------------------
     void SelectedRoutesManager::Destruct()
     {
@@ -125,7 +122,7 @@ namespace BrnNetwork
 
         mpNetworkModule = 0;
         mpTimeManager   = 0;
-        miNumRounds     = 0;
+        mbRoutesChanged = false;
     }
 
     // ---------------------------------------------------------------------------------
@@ -188,7 +185,7 @@ namespace BrnNetwork
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_SELECTED_ROUTES_MESSAGE_TYPE,
-                KI_SELECTED_ROUTES_MESSAGE_LENGTH,
+                static_cast<s32>(sizeof(SelectedRoutesMessage)),   // console 0x58
                 &lpDataEntry->mMessageSend,
                 &lpDataEntry->mMessageRecv,
                 _SelectedRoutesMessageArrivedCallback,

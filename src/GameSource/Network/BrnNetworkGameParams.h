@@ -64,6 +64,19 @@ namespace BrnNetwork
     const u32 KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS                = 5;
     const u32 KI_GAME_PARAMS_NETWORK_VERSION_BASE_BIT          = 0;
     const u32 KI_GAME_PARAMS_NETWORK_VERSION_NUM_BITS           = 3;
+    const u32 KI_GAME_PARAMS_VEHICLE_LEVEL_BASE_BIT            = 3;
+    const u32 KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS             = 4;
+    const u32 KI_GAME_PARAMS_INFINITE_BOOST_BASE_BIT           = 7;
+    const u32 KI_GAME_PARAMS_INFINITE_BOOST_NUM_BITS            = 1;
+    const u32 KI_GAME_PARAMS_LAPS_BASE_BIT                     = 8;
+    const u32 KI_GAME_PARAMS_LAPS_NUM_BITS                      = 3;
+    const u32 KU_BRN_GAMESEARCHDATA_SECURITY_BASE_BIT           = 0;
+    const u32 KU_BRN_GAMESEARCHDATA_SKILL_BASE_BIT              = 2;
+    const u32 KU_BRN_GAMESEARCHDATA_SKILL_NUM_BITS               = 6;
+    const u32 KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_NUM_BITS          = 1;
+    const u32 KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_NUM_BITS = 1;
+    const u32 KU_BRN_GAMESEARCHDATA_BOOST_TYPE_BASE_BIT         = 24;
+    const u32 KU_BRN_GAMESEARCHDATA_BOOST_TYPE_NUM_BITS          = 3;
     const u32 KU_BRN_GAMESEARCHDATA_GAMEMODE_BASE_BIT           = 8;
     const u32 KU_BRN_GAMESEARCHDATA_GAMEMODE_NUM_BITS            = 5;
     const u32 KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_BASE_BIT  = 18;
@@ -100,8 +113,8 @@ namespace BrnNetwork
         // The ServerInterfaceStructureInterface pure-virtuals the game leaf provides
         // (replicated-payload pattern + data accessors); declared here so GameParams
         // is instantiable. Bodies homed in the behavioural game-params TU.
+        // (GetPatternLength is not overridden: the console vtable keeps the base default.)
         virtual const char* GetPattern() const override;
-        virtual s32         GetPatternLength() const override;
         virtual u32         GetDataSize() const override;
         virtual void*       GetData() override;
         virtual const void* GetData() const override;

@@ -96,9 +96,27 @@ namespace CgsNetwork
 
         // ---- lifecycle -------------------------------------------------------
         void Construct(NetworkManager* lpNetworkManager, ServerInterface* lpServerInterface);
-        bool Prepare();
+
+        // Inlined into the platform Prepare: idle, no buddies-changed callback, no
+        // buddy API yet.
+        bool Prepare()
+        {
+            meCurrentStatus         = E_BUDDY_ACTION_IDLE;
+            mBuddiesChangedCallback = 0;
+            mpBuddies               = 0;
+            return true;
+        }
+
         virtual void Update(bool lbCanBlock);
-        bool Release();
+
+        // Inlined into the platform Release: drop the buddy API through the virtual
+        // Disconnect.
+        bool Release()
+        {
+            Disconnect();
+            return true;
+        }
+
         void Destruct();
         void Suspend();
         void Resume();
@@ -117,39 +135,42 @@ namespace CgsNetwork
         bool CanBuddyVoiceChat(const PlayerName* lpPlayerName);
 
         virtual void BuddyListHasChanged();
-        virtual void AddPlayerToHistory(ServerInterfacePlayerParams* lpParams);
+        virtual void AddPlayerToHistory(ServerInterfacePlayerParams* /*lpParams*/) {}
 
         s32  GetAllBuddyNames(const char** lpaNames);
         void SetSortFunction(CgsBuddySortCallback lpfnSort, void* lpUserData);
         EBuddyErrorCodes SortBuddies();
         bool IsBuddyJoinable(const PlayerName* lpPlayerName);
 
-        virtual void JoinBuddy(const PlayerName* lpPlayerName);
-        virtual void SendInvite(const PlayerName* lpPlayerName);
-        virtual void CancelInvites();
-        virtual void AcceptInvite(const PlayerName* lpPlayerName);
-        virtual void RevokeInvite(const PlayerName* lpPlayerName);
+        // The slots declared "= 0" below are overridden by the platform leaf and have no
+        // base body anywhere in the image (no base vtable is ever emitted), so they stay
+        // pure. The others keep the base body the leaf vtable points at.
+        virtual void JoinBuddy(const PlayerName* lpPlayerName) = 0;
+        virtual void SendInvite(const PlayerName* lpPlayerName) = 0;
+        virtual void CancelInvites() = 0;
+        virtual void AcceptInvite(const PlayerName* lpPlayerName) = 0;
+        virtual void RevokeInvite(const PlayerName* lpPlayerName) = 0;
         virtual void RevokeAllInvites();
-        virtual void DeclineInvite(const PlayerName* lpPlayerName);
+        virtual void DeclineInvite(const PlayerName* lpPlayerName) = 0;
         virtual void InviteAccepted(const PlayerName* lpBuddyName);
         virtual void InviteRevoked(const PlayerName* lpBuddyName);
         virtual void InviteDeclined(const PlayerName* lpBuddyName);
-        virtual bool AreAnyInvitesOpen();
+        virtual bool AreAnyInvitesOpen() = 0;
 
         virtual s32  GetTotalNumberOfMessages(const PlayerName* lpPlayerName);
         virtual s32  GetNumberOfUnreadMessages(const PlayerName* lpPlayerName);
-        virtual bool GetNextUnreadMessage(const PlayerName* lpPlayerName, char* lpcOut, s32 liMaxLength);
-        virtual bool GetMessage(const PlayerName* lpPlayerName, s32 liIndex, char* lpcOut, s32 liMaxLength);
+        virtual bool GetNextUnreadMessage(const PlayerName* lpPlayerName, char* lpcOut, s32 liMaxLength) = 0;
+        virtual bool GetMessage(const PlayerName* lpPlayerName, s32 liIndex, char* lpcOut, s32 liMaxLength) = 0;
         virtual void SendMessage(const PlayerName* lpBuddyName, const char* lpcMessage);
-        virtual const char* GetTitle(const PlayerName* lpPlayerName);
+        virtual const char* GetTitle(const PlayerName* lpPlayerName) = 0;
 
         void SetPresence(const char* lpcPresence);
         void GetBuddyPresence(const PlayerName* lpBuddyName, char* lpcOut);
         void SetJoinable(bool lbJoinable);
         bool IsBuddyJoinable(s32 liIndex);
 
-        virtual bool HasBuddyInvitedMe(const PlayerName* lpPlayerName);
-        virtual bool HaveIInvitedMyBuddy(const PlayerName* lpPlayerName);
+        virtual bool HasBuddyInvitedMe(const PlayerName* lpPlayerName) = 0;
+        virtual bool HaveIInvitedMyBuddy(const PlayerName* lpPlayerName) = 0;
 
         bool IsBuddyOnline(const PlayerName* lpBuddyName);
         bool IsBuddyBlocked(const PlayerName* lpPlayerName);
@@ -157,9 +178,9 @@ namespace CgsNetwork
         virtual void RefreshBuddyList();
 
     protected:
-        virtual bool IsConnectedToNetworkService() const;
-        virtual s32  GetNumberOfNewOnlineBuddies();
-        virtual s32  GetIndexOfLastBuddyToComeOnline();
+        virtual bool IsConnectedToNetworkService() const = 0;
+        virtual s32  GetNumberOfNewOnlineBuddies()      { return 0; }
+        virtual s32  GetIndexOfLastBuddyToComeOnline()  { return KI_INVALID_BUDDY_INDEX; }
         virtual void MessageArrived(const char* lpcMessage);
         virtual void MessageSent(bool lbSuccess, s32 liError);
         virtual void InviteArrived(const PlayerName* lpPlayerName, s32 liInvitePayload);
@@ -167,15 +188,18 @@ namespace CgsNetwork
 
         s32 _SortBuddyFunction(const void* lpA, const void* lpB);
 
-        // Reset hook for the buddies-changed client callback slot (+0x18). The
-        // X360 BuddyManagerX360::Prepare zeroes this private base word (asm:
-        // stw r10, 0x18(this) @0x8287F8E0) alongside the members it clears
-        // directly; expose a protected setter so the derived Prepare can do so
-        // without reaching across the class' private state.
-        void _ClearBuddiesChangedCallback() { mBuddiesChangedCallback = 0; }
-
     private:
-        bool IsFullBuddy(s32 liIndex);
+        // Inlined into GetNumFullBuddies: the indexed buddy exists and is a real
+        // (not temporary) buddy.
+        bool IsFullBuddy(s32 liIndex)
+        {
+            if (mpBuddies == 0)
+            {
+                return false;
+            }
+            HLBBudT* lpBuddy = CgsNetwork::DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
+            return lpBuddy != 0 && CgsNetwork::DirtySock::HLBBudIsRealBuddy(lpBuddy) == 1;
+        }
         EBuddyErrorCodes _ConvertError(s32 liApiError);
         void _BuddyManagerDebugPrint(void* lpContext, const char* lpcText);
 

@@ -5,48 +5,39 @@
 #include "lobbyapi.h"                                   // DirtySDK LobbyApiInfo/Status + LobbyApiRefT
 #include "lobbytagfield.h"                              // DirtySDK TagFieldFind/GetString/GetEpoch
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX
-//   CgsNetwork::ServerInterfaceServerInfo::Construct               @ 0x8287A510
-//   CgsNetwork::ServerInterfaceServerInfo::Destruct                @ 0x8287A540
-//   CgsNetwork::ServerInterfaceServerInfo::Prepare                 @ 0x8287A558
-//   CgsNetwork::ServerInterfaceServerInfo::Release                 @ 0x8287A580
-//   CgsNetwork::ServerInterfaceServerInfo::FindUrl                 @ 0x8287A5A8
-//   CgsNetwork::ServerInterfaceServerInfo::GetTosUrl               @ 0x8287A6A0
-//   CgsNetwork::ServerInterfaceServerInfo::GetTelemetryAuthString  @ 0x8287A6D0
-//   CgsNetwork::ServerInterfaceServerInfo::IsNewsUpdated           @ 0x8287A758
-//   CgsNetwork::ServerInterfaceServerInfo::GetStringFromClientConfig @ 0x8287A7F8
-//
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
+
+#include <string.h>   // _strnicmp
+
+// Case-insensitive bounded compare (console strnicmp -> MSVC _strnicmp).
+#if defined(_MSC_VER)
+#  define strnicmp _strnicmp
+#endif
+
 // The component reads the lobby's tagfield "config" / "self" / "pred" records via
 // LobbyApiInfo/Status and pulls named fields out of them. URLs are formatted with the
 // current hardware language code substituted in.
-//
-// FLAGGED:
-//  * gpcErrorData -- the static error-string table (Construct points mpErrorData at it).
-//    Its bytes live in unrecovered .rdata; declared extern as an honest placeholder.
-//  * KAU_LANGUAGE_STRINGS[24] -- the per-language 2-char code table (private static homed
-//    in this TU); not recoverable from the available exports, declared extern.
 
 // CgsSystem::HardwareSku::FindLanguage is homed in CgsHardwareSku{PS3,PC}.cpp with no
 // shared header; declared minimally so FindUrl can call it.
 namespace CgsSystem
 {
-    class HardwareSku
+    namespace HardwareSku
     {
-    public:
-        static s32 FindLanguage();
-    };
+        s32 FindLanguage();
+    }
 }
 
 namespace CgsNetwork
 {
-    // Construct points mpErrorData at this static error-string table (unk_820046A7).
-    // HONEST PLACEHOLDER: real bytes are in the unrecovered image .rdata.
-    extern const u8 gpcErrorData[];
-
-    // Per-language packed 2-char language code (CgsServerInterfaceServerInfo.cpp:78).
-    // HONEST PLACEHOLDER: 24 entries; exact contents unrecovered.
+    // Per-language packed 2-char language code, indexed by HardwareSku::FindLanguage.
     const s32 KI_NUM_LANGUAGE_STRINGS = 24;
-    extern const u32 KAU_LANGUAGE_STRINGS[KI_NUM_LANGUAGE_STRINGS];
+    u32 KAU_LANGUAGE_STRINGS[KI_NUM_LANGUAGE_STRINGS] =
+    {
+        0x656E, 0x656E, 0x656E, 0x656E, 0x656E, 0x656E, 0x656E, 0x656E,   // "en" x8
+        0x656E, 0x656E, 0x6672, 0x6465, 0x656E, 0x656E, 0x656E, 0x6974,   // "en" "en" "fr" "de" "en" "en" "en" "it"
+        0x6A61, 0x656E, 0x656E, 0x656E, 0x656E, 0x656E, 0x6573, 0x656E,   // "ja" "en" x5 "es" "en"
+    };
 
     namespace
     {
@@ -64,10 +55,20 @@ namespace CgsNetwork
 namespace CgsNetwork
 {
 
+// The console object is laid out by Construct; the constructor only installs the vtable.
+ServerInterfaceServerInfo::ServerInterfaceServerInfo()
+{
+}
+
+// Server info reacts to no server-interface event.
+void ServerInterfaceServerInfo::OnEvent(EServerInterfaceEvent /*leEvent*/, void* /*lpData*/)
+{
+}
+
 void ServerInterfaceServerInfo::Construct()
 {
     miLastError          = 0;                              // +0x0C
-    mpcCurrentAction     = static_cast<const char*>(static_cast<const void*>(gpcErrorData)); // +0x04
+    mpcCurrentAction     = "";                             // +0x04
     meStatus             = 2;                              // +0x08
     mpServerInterface    = 0;                              // +0x10
     meCurrentAction      = E_ACTION_COUNT;                 // +0x1C
@@ -99,6 +100,18 @@ bool ServerInterfaceServerInfo::Release()
     return true;
 }
 
+void ServerInterfaceServerInfo::Update()
+{
+}
+
+void ServerInterfaceServerInfo::Suspend()
+{
+}
+
+void ServerInterfaceServerInfo::Resume()
+{
+}
+
 void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32 liOutLen)
 {
     CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0,
@@ -116,7 +129,7 @@ void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32
 
     char lacUrlTemplate[KI_URL_LENGTH];
     TagFieldGetString(lpcField, lacUrlTemplate, KI_URL_LENGTH,
-                      reinterpret_cast<const char*>(gpcErrorData));
+                      "");
 
     // Map the hardware sku/language to the language-string index, then build a
     // null-terminated 2-char big-endian language code to substitute into the template.
@@ -145,6 +158,11 @@ void ServerInterfaceServerInfo::GetTosUrl(char* lpcOut, s32 liOutLen)
     FindUrl("TOS_URL", lpcOut, liOutLen);
 }
 
+void ServerInterfaceServerInfo::GetNewsUrl(char* lpcOut, s32 liOutLen)
+{
+    FindUrl("NEWS_URL", lpcOut, liOutLen);
+}
+
 void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLen)
 {
     CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0,
@@ -154,7 +172,7 @@ void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLe
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_PRED));
     const char* lpcField = TagFieldFind(lpcPred, "EX-Telemetry");
     TagFieldGetString(lpcField, lpcOut, liOutLen,
-                      reinterpret_cast<const char*>(gpcErrorData));
+                      "");
 }
 
 void ServerInterfaceServerInfo::GetStringFromClientConfig(const char* lpcKey,
@@ -167,7 +185,7 @@ void ServerInterfaceServerInfo::GetStringFromClientConfig(const char* lpcKey,
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));
     const char* lpcField = TagFieldFind(lpcConf, lpcKey);
     TagFieldGetString(lpcField, lpcOut, liOutLen,
-                      reinterpret_cast<const char*>(gpcErrorData));
+                      "");
 }
 
 bool ServerInterfaceServerInfo::IsNewsUpdated() const
@@ -180,6 +198,21 @@ bool ServerInterfaceServerInfo::IsNewsUpdated() const
     const u32 luNewsDate = TagFieldGetEpoch(TagFieldFind(lpcConf, "NEWS_DATE"), 1);
     const u32 luLast     = TagFieldGetEpoch(TagFieldFind(lpcPred, "LAST"), 1);
     return luNewsDate >= luLast;
+}
+
+u32 ServerInterfaceServerInfo::GetTimeStampFromClientConfig(const char* lpcKey)
+{
+    CGS_ASSERT(mpServerInterface->GetMessageBuffer() != 0, "mpServerInterface->GetMessageBuffer()");
+
+    mpServerInterface->GetMessageBuffer()[0] = 0;
+    GetStringFromClientConfig(lpcKey, mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_SIZE);
+
+    // A "0" record means no timestamp is configured.
+    if (strnicmp(mpServerInterface->GetMessageBuffer(), "0", KI_MESSAGE_BUFFER_SIZE) == 0)
+    {
+        return 0;
+    }
+    return TagFieldGetEpoch(mpServerInterface->GetMessageBuffer(), 0);
 }
 
 }

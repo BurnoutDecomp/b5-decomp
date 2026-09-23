@@ -59,8 +59,8 @@ namespace BrnNetwork
         // a PlayerInfoData, so the class must be concrete; the override bodies belong to this class's
         // own TU and are declared-only here. (SerialiseFromUser is overridden from the player-info
         // base, which already provides a body slot.)
+        // (GetPatternLength is not overridden: the console vtable keeps the base default.)
         virtual const char* GetPattern() const;
-        virtual s32         GetPatternLength() const;
         virtual u32         GetDataSize() const;
         virtual void*       GetData();
         virtual const void* GetData() const;

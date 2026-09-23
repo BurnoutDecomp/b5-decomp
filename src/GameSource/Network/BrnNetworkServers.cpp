@@ -2,6 +2,8 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/BrnNetworkManager.h"
+#include "GameSource/Network/BrnServerInterface.h"   // BrnServerInterface::GetConnectionComponent
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h" // DisconnectFromServer
 
 namespace BrnNetwork
 {
@@ -71,8 +73,15 @@ namespace BrnNetwork
         }
     }
 
-    // SetServerType is declared only: after storing the type and resolving the address it
-    // mirrors the type into the base manager's version display, drops the server connection
-    // and re-targets the network adapter through the adapter's first virtual slot, a slot the
-    // committed adapter header does not declare there (its first slot is Prepare).
+    // Store the type and resolve its address (which may remap it), then mirror the resolved type
+    // into the manager's version display, drop the server connection and re-target the adapter.
+    void NetworkServers::SetServerType(CgsNetwork::EServerType leServerType)
+    {
+        meServerType = leServerType;
+        SetIPAndPort();
+
+        mpNetworkManager->mVersionDisplay.meServerType = meServerType;
+        mpNetworkManager->GetServerInterface()->GetConnectionComponent()->DisconnectFromServer();
+        mpNetworkManager->mNetworkAdapter.SetServerType(meServerType);
+    }
 }

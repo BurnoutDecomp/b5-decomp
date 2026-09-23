@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::Resource, rw::ResourceDescriptor
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // KX_FILTER_* (memory-check print)
 
 namespace rw { namespace core { struct GeneralResourceAllocator; } }   // GetGameDataGeneralAllocator return type
 
@@ -109,14 +110,17 @@ public:
 // The inlined memory check: re-read the free memory, and when it differs from luMemory log the
 // change (with this site's line and file), take the new reading, and assert when
 // Allocators::mbAssertOnMemoryChange is set. The expansion site needs CgsLog.h and CgsAssert.h.
-// FLAG: the macro's own name is not recovered; the expanded body is the shipped one.
+// FLAG: the macro's own name is not recovered; the expanded body is the shipped one, except that
+// [PC] the print is additionally gated on the memory log category, which the PC default filter
+// (CgsLog.cpp) leaves off: once the network module runs, dozens of these lines fire per frame.
 #define BRN_RESOURCE_MEMORY_CHECK(luMemory)                                                                    \
     do                                                                                                         \
     {                                                                                                          \
         const u32 luMemoryNow = BrnResource::GetAvailableMemory();                                             \
         if ((luMemory) != luMemoryNow)                                                                         \
         {                                                                                                      \
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)                                              \
+            if ((CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GLOBAL) != 0 &&            \
+                (CgsDev::Message::gxMessageFilterFlags & CgsDev::Message::KX_FILTER_GSMEMORY) != 0)            \
             {                                                                                                  \
                 *CgsDev::Log::gpDebugPrint << "[" << static_cast<s32>(__LINE__) << ":" << __FILE__             \
                                            << "] Available memory changed from " << (luMemory)                 \

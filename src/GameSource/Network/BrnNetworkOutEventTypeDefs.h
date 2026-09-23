@@ -345,6 +345,9 @@ namespace BrnNetworkModuleIO
     // 51 -- one scoreboard page. 2924 bytes.
     struct NetworkOutScoreboardEvent : public NetworkEvent<51>
     {
+        // Inlined where the scoreboard manager builds the page on its stack.
+        void              Construct()           { mScoreboard.Construct(); }
+        Scoreboard*       GetScoreboard()       { return &mScoreboard; }
         const Scoreboard* GetScoreboard() const { return &mScoreboard; }
 
     private:

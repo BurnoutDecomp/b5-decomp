@@ -19,24 +19,7 @@
 #include "lobbyapi.h"   // LobbyApiRefT, LobbyApiDisconnect
 #include "GameSource/Network/BrnNetworkManager.h"   // BrnNetwork::BrnNetworkManager::GetLocalUserControllerPort
 
-// ----------------------------------------------------------------------------------------
-// DirtySock (DirtySDK) network-connection API. These are platform-SDK free functions; the
-// X360 build links them from the Xbox DirtySDK. Declared here in their canonical SDK shape
-// (matching the register usage in the call sites) so this TU compiles standalone; their
-// bodies live in the SDK / platform shim. The integer control selectors below are the
-// four-character codes DirtySDK uses ('frrt', 'xlsp', 'serv', 'conn'), recovered verbatim
-// from the asm immediates.
-// ----------------------------------------------------------------------------------------
-extern "C"
-{
-    int  NetConnStartup(const char* lpcParams);
-    int  NetConnControl(int liControl, int liValue, int liValue2, void* lpValue, void* lpValue2);
-    int  NetConnConnect(int liData, const char* lpcParams);
-    int  NetConnIdle();
-    int  NetConnStatus(int liSelector, int liData, void* lpBuf, int liBufSize);
-    int  NetConnDisconnect();
-    int  NetConnShutdown(unsigned int luFlags);
-}
+#include "netconn.h"    // NetConnStartup / Control / Connect / Idle / Status / Disconnect / Shutdown
 
 // XDK signin-state query. XUSER_SIGNIN_STATE_SIGNED_IN_TO_LIVE == 2 (the value the asm
 // compares against). Declared in its XDK shape; provided by the platform layer.
@@ -224,7 +207,7 @@ void NetworkAdapterX360::Update()
         {
             CGS_ASSERT(mpEnvironment != nullptr, "Environment to use not set up");
 
-            const int liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
+            const int liConnectResult = NetConnConnect(nullptr, static_cast<const char*>(mpEnvironment));
             mbConnecting = (liConnectResult == 1);
             if (liConnectResult == 1)
             {
@@ -262,7 +245,26 @@ void NetworkAdapterX360::Update()
 
     // --- the base-update timing bracket (empty body besides the perfmon pair) -----------
     CgsDev::PerfMonCpu::StartMonitor(miCallBasePerfMon);
+    NetworkAdapterBase::Update();
     CgsDev::PerfMonCpu::StopMonitor(miCallBasePerfMon);
+}
+
+// ----------------------------------------------------------------------------------------
+// SetServerType
+// ----------------------------------------------------------------------------------------
+void NetworkAdapterX360::SetServerType(EServerType leServerType)
+{
+    if (meServerType == leServerType)
+    {
+        return;
+    }
+
+    meServerType     = leServerType;
+    mbConnecting     = false;
+    mbDuplicateLogin = false;
+    NetConnDisconnect();
+    NetConnShutdown(0);
+    StartupNetworking();
 }
 
 }

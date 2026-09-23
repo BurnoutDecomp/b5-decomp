@@ -6,6 +6,8 @@
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint
+#include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (streamed assert)
+#include "rw/math/vpu/vector3_operation.h"                              // Min / Max / Magnitude
 
 #include <cmath>   // sinf, cosf, sin, cos, fmaf
 
@@ -33,6 +35,58 @@ namespace CgsNetwork
 {
     // Largest packed message in bytes (file-scope in this TU).
     const s32 KI_MAX_PACKED_MESSAGE_SIZE = 1400;
+
+    namespace
+    {
+        const f32 KF_ANGLE_PI      = 3.14159274f;
+        const f32 KF_ANGLE_HALF_PI = 1.57079637f;
+
+        // A vector shorter than this has no direction worth encoding.
+        const f32 KF_MIN_ANGLES_MAGNITUDE = 1.52587890625e-05f;   // 2^-16
+
+        // The quadrant-correct arctangent the angle decoders build inline: the arctangent of
+        // the ratio, moved half a turn towards the numerator's side when the denominator is
+        // negative, and a quarter turn (with the numerator's sign) when it is zero -- also
+        // when the numerator is zero too.
+        // FLAG (PC-platform, numeric): the console forms the ratio with a reciprocal
+        // estimate refined once and evaluates its minimax arctangent; the exact divide and
+        // atanf are used here.
+        f32 ATan2(f32 lfNumerator, f32 lfDenominator)
+        {
+            if (lfDenominator == 0.0f)
+            {
+                return copysignf(KF_ANGLE_HALF_PI, lfNumerator);
+            }
+
+            const f32 lfAngle = atanf(lfNumerator / lfDenominator);
+            if (lfDenominator < 0.0f)
+            {
+                return lfAngle + copysignf(KF_ANGLE_PI, lfNumerator);
+            }
+            return lfAngle;
+        }
+
+        // Time between two frames at each rate, and the wrap of the 16-bit frame counter.
+        const f32 KF_TIME_STEP_50HZ   = 0.0199999996f;
+        const f32 KF_TIME_STEP_60HZ   = 0.0166666675f;
+        const s32 KI_FRAMES_PER_WRAP  = 0xFFFF;
+        const s64 KI_HALF_WRAP_FRAMES = 0x8000;
+
+        // The float reference is consulted only while the frames are this close to each
+        // other (in either direction).
+        const u16 KU16_TIME_DIFF_CHECK_FRAMES = 0x5554;
+
+        // The frame distance the diagnostic reports alongside the arguments.
+        const s32 KI_TIME_DIFF_REPORTED_FRAME_RANGE = 0x5555;
+
+        // The float reference drifts with the session length: the allowed error grows
+        // from 33 and from 242 wraps on.
+        const s32 KI_TIME_DIFF_SHORT_SESSION_WRAPS  = 33;
+        const s32 KI_TIME_DIFF_MEDIUM_SESSION_WRAPS = 242;
+        const f32 KF_TIME_DIFF_SHORT_SESSION_ERROR  = 0.0299999993f;
+        const f32 KF_TIME_DIFF_MEDIUM_SESSION_ERROR = 0.0500000007f;
+        const f32 KF_TIME_DIFF_LONG_SESSION_ERROR   = 0.0700000003f;
+    }
 
     // ---- Construct @ 0x82870B90 ------------------------------------------------
     // Field initialiser the X360 build calls "Construct": stores the invalid
@@ -737,5 +791,186 @@ namespace CgsNetwork
                    "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)");
 
         return (liMessageSizeInBits + 7) / 8;
+    }
+
+    // ---- GetEulerAnglesFromMatrix ---------------------------------------------------
+    // Roll, pitch and yaw of the rotation rows (each clamped to [-1, 1] first). Pitch is the
+    // arc-sine of the forward row's y; away from straight up / down, yaw comes from the
+    // forward row and roll from the side and up rows. At the poles yaw and roll are not
+    // separable: roll takes the whole turn and yaw is zero.
+    // FLAG (PC-platform, numeric): the console's arc-sine is its minimax polynomial; asinf
+    // is used here (the clamp keeps the argument in range).
+    void Message::GetEulerAnglesFromMatrix(rw::math::vpu::Matrix44Affine lMatrix,
+                                           f32* lpfRollOut, f32* lpfPitchOut, f32* lpfYawOut)
+    {
+        const rw::math::vpu::Vector3 lvMinusOne = { -1.0f, -1.0f, -1.0f, 0.0f };
+        const rw::math::vpu::Vector3 lvPlusOne  = {  1.0f,  1.0f,  1.0f, 0.0f };
+
+        CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, "lpfRollOut && lpfPitchOut && lpfYawOut");
+
+        const rw::math::vpu::Vector3 lZAxis =
+            rw::math::vpu::Min(rw::math::vpu::Max(lMatrix.zAxis, lvMinusOne), lvPlusOne);
+        const rw::math::vpu::Vector3 lXAxis =
+            rw::math::vpu::Min(rw::math::vpu::Max(lMatrix.xAxis, lvMinusOne), lvPlusOne);
+        const rw::math::vpu::Vector3 lYAxis =
+            rw::math::vpu::Min(rw::math::vpu::Max(lMatrix.yAxis, lvMinusOne), lvPlusOne);
+
+        const f32 lfPitch = asinf(lZAxis.y);
+        *lpfPitchOut = lfPitch;
+
+        if (!(lfPitch < KF_ANGLE_HALF_PI))
+        {
+            *lpfRollOut = ATan2(lXAxis.z, -lYAxis.z);
+            *lpfYawOut  = 0.0f;
+        }
+        else if (!(lfPitch > -KF_ANGLE_HALF_PI))
+        {
+            *lpfRollOut = ATan2(-lXAxis.z, lYAxis.z);
+            *lpfYawOut  = 0.0f;
+        }
+        else
+        {
+            *lpfYawOut  = ATan2(-lZAxis.x, lZAxis.z);
+            *lpfRollOut = ATan2(-lXAxis.y, lYAxis.y);
+        }
+    }
+
+    // ---- GetAnglesFromVector --------------------------------------------------------
+    // The inverse of GetVectorFromAngles: the magnitude, then (for a vector long enough to
+    // have a direction) angle B as the arc-sine of the unit vector's y and angle A as the
+    // heading of its x / z pair. A vertical vector has no heading: angle A is zero.
+    // FLAG (PC-platform, numeric): the console's magnitude and unit vector use a refined
+    // reciprocal square-root estimate and its arc-sine is a minimax polynomial; the exact
+    // forms are used here.
+    void Message::GetAnglesFromVector(rw::math::vpu::Vector3 lVector,
+                                      f32* lpfAngleAOut, f32* lpfAngleBOut, f32* lpfMagnitudeOut)
+    {
+        const f32 lfMagnitude = rw::math::vpu::Magnitude(lVector);
+        *lpfMagnitudeOut = lfMagnitude;
+
+        if (!(fabsf(lfMagnitude) > KF_MIN_ANGLES_MAGNITUDE))
+        {
+            *lpfAngleBOut = 0.0f;
+            *lpfAngleAOut = 0.0f;
+            return;
+        }
+
+        const rw::math::vpu::Vector3 lvPlusOne  = {  1.0f,  1.0f,  1.0f,  0.0f };
+        const rw::math::vpu::Vector3 lvMinusOne = { -1.0f, -1.0f, -1.0f, -0.0f };
+        const f32 lfInverseMagnitude = 1.0f / lfMagnitude;
+        const rw::math::vpu::Vector3 lDirection = { lVector.x * lfInverseMagnitude,
+                                                    lVector.y * lfInverseMagnitude,
+                                                    lVector.z * lfInverseMagnitude,
+                                                    lVector.w * lfInverseMagnitude };
+        const rw::math::vpu::Vector3 lUnit =
+            rw::math::vpu::Min(rw::math::vpu::Max(lDirection, lvMinusOne), lvPlusOne);
+
+        const f32 lfAngleB = asinf(lUnit.y);
+        *lpfAngleBOut = lfAngleB;
+
+        if (fabsf(lfAngleB) == KF_ANGLE_HALF_PI)
+        {
+            *lpfAngleAOut = 0.0f;
+            return;
+        }
+
+        *lpfAngleAOut = ATan2(lUnit.z, lUnit.x);
+    }
+
+    // ---- GetTimeDiffWrapped16 -------------------------------------------------------
+    // Frame A (unwrapped with the wrap count) is moved onto frame B's rate, rounded to the
+    // nearest frame, and frame B is unwrapped into the same wrap; when the two land at
+    // least half a wrap apart, the one that is behind moves on a wrap. The difference in
+    // frames becomes seconds at B's rate. For a live session and frames within a third of
+    // a wrap of each other the result is cross-checked against the float reference.
+    f32 GetTimeDiffWrapped16(u16 lu16FramesA, u16 lu16FramesB, s32 liNumWraps,
+                             bool lbFramesAAre50Hz, bool lbFramesBAre50Hz)
+    {
+        s64 liFramesA = static_cast<s32>(liNumWraps * KI_FRAMES_PER_WRAP + lu16FramesA);
+
+        CGS_ASSERT(lu16FramesA != KU16_INVALID_FRAME, "lu16FramesA != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16FramesB != KU16_INVALID_FRAME, "lu16FramesB != KU16_INVALID_FRAME");
+
+        const f32 lfTimeStep = lbFramesBAre50Hz ? KF_TIME_STEP_50HZ : KF_TIME_STEP_60HZ;
+
+        if (lbFramesAAre50Hz)
+        {
+            if (!lbFramesBAre50Hz)
+            {
+                liFramesA = (liFramesA * 12 + 5) / 10;
+            }
+        }
+        else if (lbFramesBAre50Hz)
+        {
+            liFramesA = (liFramesA * 5 + 3) / 6;
+        }
+
+        s64 liFramesB = (liFramesA / KI_FRAMES_PER_WRAP) * KI_FRAMES_PER_WRAP + lu16FramesB;
+        if (!(liFramesB < liFramesA + KI_HALF_WRAP_FRAMES))
+        {
+            liFramesA += KI_FRAMES_PER_WRAP;
+        }
+        else if (!(liFramesB + KI_HALF_WRAP_FRAMES > liFramesA))
+        {
+            liFramesB += KI_FRAMES_PER_WRAP;
+        }
+
+        const s64 liFramesBMinusA = liFramesB - liFramesA;
+        CGS_ASSERT((liFramesBMinusA < KI_HALF_WRAP_FRAMES) || ((liFramesA - liFramesB) < KI_HALF_WRAP_FRAMES),
+                   "((liFramesB - liFramesA) < KU16_HALF_WRAP_FRAMES) || ((liFramesA - liFramesB) < KU16_HALF_WRAP_FRAMES)");
+
+        f32 lfTimeDiff;
+        if (liFramesB > liFramesA)
+        {
+            lfTimeDiff = -(static_cast<f32>(liFramesBMinusA) * lfTimeStep);
+        }
+        else
+        {
+            lfTimeDiff = static_cast<f32>(liFramesA - liFramesB) * lfTimeStep;
+        }
+
+        if (liNumWraps >= 0
+            && (static_cast<u16>(liFramesBMinusA) < KU16_TIME_DIFF_CHECK_FRAMES
+                || static_cast<u16>(liFramesA - liFramesB) < KU16_TIME_DIFF_CHECK_FRAMES))
+        {
+            const f32 lfOldTimeDiff = OLDGetTimeDiffWrapped16(lu16FramesA, lu16FramesB, liNumWraps,
+                                                              lbFramesAAre50Hz, lbFramesBAre50Hz);
+
+            f32 lfMaxError;
+            if (liNumWraps < KI_TIME_DIFF_SHORT_SESSION_WRAPS)
+            {
+                lfMaxError = KF_TIME_DIFF_SHORT_SESSION_ERROR;
+            }
+            else if (liNumWraps < KI_TIME_DIFF_MEDIUM_SESSION_WRAPS)
+            {
+                lfMaxError = KF_TIME_DIFF_MEDIUM_SESSION_ERROR;
+            }
+            else
+            {
+                lfMaxError = KF_TIME_DIFF_LONG_SESSION_ERROR;
+            }
+
+            const f32 lfError = lfOldTimeDiff - lfTimeDiff;
+            if (!(fabsf(lfError) < lfMaxError))
+            {
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStream << "GetTimeDiffWrapped16(" << static_cast<s32>(lu16FramesA)
+                        << "," << static_cast<s32>(lu16FramesB)
+                        << "," << liNumWraps
+                        << "," << (lbFramesAAre50Hz ? "true" : "false")
+                        << "," << (lbFramesBAre50Hz ? "true" : "false")
+                        << "," << KI_TIME_DIFF_REPORTED_FRAME_RANGE
+                        << ") failed. Old time=" << lfOldTimeDiff
+                        << " new time=" << lfTimeDiff
+                        << " error=" << fabsf(lfError)
+                        << " larger than max allowed error of " << lfMaxError;
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+
+        return lfTimeDiff;
     }
 }

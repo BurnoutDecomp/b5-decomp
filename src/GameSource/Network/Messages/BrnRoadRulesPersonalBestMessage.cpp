@@ -3,11 +3,14 @@
 #include "GameSource/Network/Messages/BrnRoadRulesPersonalBestMessage.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"                                    // BrnStreetData::ScoreList::KAI_MIN/MAX_SCORES, E_SCORE_TYPE_COUNT
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"                  // ChallengeHighScoreEntry::Construct / SetScore (Retrieve)
+#include <cstring>                                                                       // std::memset (PrepareForSend)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::RoadRulesPersonalBestMessage::Construct             @ 0x8257B988
 //   BrnNetwork::RoadRulesPersonalBestMessage::GetPackedMessageSize  @ 0x8257B998
 //   BrnNetwork::RoadRulesPersonalBestMessage::PackOrUnpack          @ 0x8257BA28
+//   BrnNetwork::RoadRulesPersonalBestMessage::PrepareForSend / Retrieve
 //
 // A CgsNetwork::ReliableMessage subclass announcing a player's personal-best road-rules
 // scores for one challenge: a pair of score values (maiScores @+0x28/+0x2C, one per
@@ -24,6 +27,64 @@
 
 namespace BrnNetwork
 {
+    // The reliable message type the personal bests travel as.
+    static const s32 KI_ROAD_RULES_PERSONAL_BEST_MESSAGE_TYPE = 27;
+
+    // The street-data version this build scores against.
+    static const s32 KI_STREET_DATA_VERSION = 5;
+
+    // Arm the message with one challenge's personal bests (a score per type the record holds,
+    // zero for the others) unless a previous one is still pending in this slot.
+    void RoadRulesPersonalBestMessage::PrepareForSend(u16 lu16CurrentFrame, Road::ChallengeIndex lChallengeIndex,
+                                                      BrnStreetData::ChallengeData lPbScore)
+    {
+        if (IsMessageValid())
+        {
+            return;
+        }
+
+        mChallengeIndex = lChallengeIndex;
+        std::memset(maiScores, 0, sizeof(maiScores));
+        for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
+             leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)
+        {
+            if (lPbScore.ContainsData(leScoreType))
+            {
+                maiScores[leScoreType] = lPbScore.GetScore(leScoreType);
+            }
+        }
+        miStreetDataVersion = KI_STREET_DATA_VERSION;
+
+        CgsNetwork::ReliableMessage::PrepareForSend(KI_ROAD_RULES_PERSONAL_BEST_MESSAGE_TYPE, lu16CurrentFrame);
+        CGS_ASSERT(IsReliable(), "IsReliable()");
+    }
+
+    // Hand back a pending personal best: the challenge index and a high-score entry holding
+    // every non-zero score under the sender's name. Consumes the slot.
+    bool RoadRulesPersonalBestMessage::Retrieve(PlayerName* lpPlayerName, Road::ChallengeIndex* lpChallengeIndex,
+                                                BrnStreetData::ChallengeHighScoreEntry* lpPbScore)
+    {
+        if (!IsMessageValid())
+        {
+            return false;
+        }
+
+        *lpChallengeIndex = mChallengeIndex;
+        lpPbScore->Construct();
+        for (BrnStreetData::ScoreType leScoreType = BrnStreetData::E_SCORE_TYPE_START;
+             leScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; leScoreType++)
+        {
+            if (maiScores[leScoreType] != 0)
+            {
+                lpPbScore->SetScore(leScoreType, maiScores[leScoreType], lpPlayerName);
+            }
+        }
+
+        SetMessageInvalid();
+        CGS_ASSERT(!IsMessageValid(), "!CgsNetwork::ReliableMessage::IsMessageValid()");
+        return true;
+    }
+
     // BrnNetwork::RoadRulesPersonalBestMessage::Construct @ 0x8257B988
     //   li r11,-1 ; stw r11,0x20(r3) ; stw r11,0x24(r3) ; b Message::Construct
     // Inlines the MessageWithPlayerIDs base init (the two player ids -> -1, at +0x20 /

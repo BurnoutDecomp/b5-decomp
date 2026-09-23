@@ -348,6 +348,9 @@ namespace BrnNetwork
             mfField86A90     = lfDeformation;
         }
         CgsID               GetFreeBurnCarID() const                            { return mFreeBurnCarID; }
+        // The free-burn car's deformation amount (the matchmaking actions' lobby "car deformed"
+        // flag). FLAG: accessor name is ours.
+        f32                 GetFreeBurnCarDeformation() const                   { return mfField86A90; }
         CgsID               GetFreeBurnWheelID() const                          { return mFreeBurnWheelID; }
         void                SetCurrentDistrict(BrnWorld::EDistrict leDistrict)  { meCurrentDistrict = leDistrict; }
         BrnWorld::EDistrict GetCurrentDistrict() const                          { return meCurrentDistrict; }
@@ -366,10 +369,6 @@ namespace BrnNetwork
         CgsNetwork::PlayersConnectionManager*  GetPlayersConnectionManager()        { return &GetPlayerManager()->mConnectionManager; }
         s32                                    GetLocalUserControllerPort() const   { return GetActiveControllerPort(); }
         u32                                    GetCurrentFrame() const              { return GetTimeManager()->GetFrameCount(); }
-
-        // ---- other declared-only accessors used by committed callers ----------------------
-        u8   GetCurrentRoundNumber() const;                      // reads miRoundNumber
-        void ClearLocalUserSignedInFlag();                       // a byte inside mGamerPictureManager
 
     private:
         s32  GetMaxMessageSize(bool lbReliableOnly);

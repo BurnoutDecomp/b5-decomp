@@ -45,4 +45,42 @@ namespace CgsNetwork
                                     KI_MIN_SYNC_TIME_PLAYER_ID, KI_MAX_SYNC_TIME_PLAYER_ID);
         return lxResult;
     }
+
+    // Fill an idle message with both player ids and both times.
+    void SyncTimeMessage::Prepare(MessageWithPlayerIDs::NetworkPlayerID liClientPlayerID,
+                                  CgsSystem::Time lClientSendTime,
+                                  MessageWithPlayerIDs::NetworkPlayerID liHostPlayerID,
+                                  CgsSystem::Time lHostTime)
+    {
+        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
+
+        mClientPlayerID = liClientPlayerID;
+        mClientSendTime = lClientSendTime;
+        mHostPlayerID   = liHostPlayerID;
+        mHostTime       = lHostTime;
+    }
+
+    // Copy a received message out and consume it. False when nothing is pending.
+    bool SyncTimeMessage::Retrieve(MessageWithPlayerIDs::NetworkPlayerID* lpClientID,
+                                   CgsSystem::Time* lpClientTime,
+                                   MessageWithPlayerIDs::NetworkPlayerID* lpHostID,
+                                   CgsSystem::Time* lpHostTime)
+    {
+        CGS_ASSERT(lpClientID, "lpClientID");
+        CGS_ASSERT(lpClientTime, "lpClientTime");
+        CGS_ASSERT(lpHostID, "lpHostID");
+        CGS_ASSERT(lpHostTime, "lpHostTime");
+
+        if (!IsMessageValid())
+        {
+            return false;
+        }
+
+        *lpClientID   = mClientPlayerID;
+        *lpHostID     = mHostPlayerID;
+        *lpClientTime = mClientSendTime;
+        *lpHostTime   = mHostTime;
+        SetMessageInvalid();
+        return true;
+    }
 }

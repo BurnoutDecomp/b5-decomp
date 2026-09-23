@@ -1,6 +1,6 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkNotificationManagerX360.h"
 #include "GameSource/Network/BrnNetworkModule.h"    // BrnNetworkModule::GetNetworkManager
-#include "GameSource/Network/BrnNetworkManager.h"   // GetLocalUserControllerPort / ClearLocalUserSignedInFlag
+#include "GameSource/Network/BrnNetworkManager.h"   // GetLocalUserControllerPort / GetGamerPictureManager
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -45,7 +45,8 @@ namespace BrnNetwork
     // X360 0x8254C780 -- drain the Xbox notification queue. The only notification handled is the
     // system sign-in change (XN_SYS_SIGNINCHANGED, id 14): its parameter is a bitmask of the user
     // indices whose sign-in state changed; if the bit for the local user's controller port is set,
-    // the manager's cached local-user sign-in flag (byte @ manager +0x3D0CC) is cleared.
+    // the local player's gamer picture is marked not ready (byte @ manager +0x3D0CC, the picture
+    // manager's local slot mbReady).
     void NetworkNotificationManagerX360::ProcessNotifications()
     {
         unsigned long luId    = 0;   // var_2C (pdwId)
@@ -57,8 +58,7 @@ namespace BrnNetwork
                 BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
                 if (((1u << lpNetworkManager->GetLocalUserControllerPort()) & luParam) != 0)
                 {
-                    // stbx r29(=0), r3, r30(=0x3D0CC) -- second GetNetworkManager() call in the asm.
-                    mpNetworkModule->GetNetworkManager()->ClearLocalUserSignedInFlag();
+                    mpNetworkModule->GetNetworkManager()->GetGamerPictureManager()->ClearLocalPlayerGamerPictureReady();
                 }
             }
         }

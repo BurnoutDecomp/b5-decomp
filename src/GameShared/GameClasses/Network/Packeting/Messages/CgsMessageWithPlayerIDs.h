@@ -37,13 +37,29 @@ namespace CgsNetwork
         NetworkPlayerID mSendingPlayerID;   // +0x20
         NetworkPlayerID mRecvingPlayerID;   // +0x24
 
-        void            Construct();
-        void            SetSendingPlayerID(NetworkPlayerID liPlayerID);
+        // Inlined at every call site on the console: both ids to the sentinel, then the base's
+        // field reset.
+        void            Construct()
+        {
+            mSendingPlayerID = KI_INVALID_PLAYER_ID;
+            mRecvingPlayerID = KI_INVALID_PLAYER_ID;
+            Message::Construct();
+        }
+        // Inlined at every call site on the console: range assert, then the word store.
+        void            SetSendingPlayerID(NetworkPlayerID lSendingPlayerID)
+        {
+            CGS_ASSERT(lSendingPlayerID >= 0, "lSendingPlayerID>=0");
+            mSendingPlayerID = lSendingPlayerID;
+        }
         NetworkPlayerID GetSendingPlayerID() const;
-        NetworkPlayerID GetSendingPlayerIDForNack() const;
-        void            SetRecvingPlayerID(NetworkPlayerID liPlayerID);
+        NetworkPlayerID GetSendingPlayerIDForNack() const { return mSendingPlayerID; }
+        void            SetRecvingPlayerID(NetworkPlayerID lRecvingPlayerID)
+        {
+            CGS_ASSERT(lRecvingPlayerID >= 0, "lRecvingPlayerID>=0");
+            mRecvingPlayerID = lRecvingPlayerID;
+        }
         NetworkPlayerID GetRecvingPlayerID() const;
-        NetworkPlayerID GetRecvingPlayerIDForNack() const;
+        NetworkPlayerID GetRecvingPlayerIDForNack() const { return mRecvingPlayerID; }
         s32             GetPackedMessageSize() override;
     };
 

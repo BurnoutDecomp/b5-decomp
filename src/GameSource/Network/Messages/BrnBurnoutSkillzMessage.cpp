@@ -1,6 +1,8 @@
 #include "types.hpp"
 #include "GameSource/Network/Messages/BrnBurnoutSkillzMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (streamed assert)
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h" // PackOrUnpackFloat / PackOrUnpackBool
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::BurnoutSkillzMessage::GetPackedMessageSize @ 0x8257C2F0
@@ -14,6 +16,54 @@
 
 namespace BrnNetwork
 {
+    namespace
+    {
+        // Skill values are non-negative and unbounded above.
+        const f32 KF_MIN_SKILL_VALUE = 0.0f;
+        const f32 KF_MAX_SKILL_VALUE = 3.40282347e+38f;
+    }
+
+    // The base reliable fields, a cleared skill table and no initial-data marker.
+    void BurnoutSkillzMessage::Construct()
+    {
+        MessageWithPlayerIDs::Construct();
+        mSkillzData.Clear();
+        mbInitialData = false;
+    }
+
+    // The reliable id, then each sent skill at its network accuracy (a negative value is
+    // reported before it is packed; the value read back is stored rounded to the same
+    // accuracy), then the initial-data marker.
+    CgsNetwork::PackOrUnpackResult BurnoutSkillzMessage::PackOrUnpack()
+    {
+        CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
+
+        for (BrnGameState::BurnoutSkillzData::EBurnoutSkillType leSkillType =
+                 BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_START;
+             leSkillType < BrnGameState::BurnoutSkillzData::E_BURNOUT_SKILL_TO_SEND_VIA_NETWORK_COUNT;
+             leSkillType++)
+        {
+            f32 lfSkillValue = mSkillzData.GetBurnoutSkill(leSkillType);
+            if (!(lfSkillValue >= KF_MIN_SKILL_VALUE))
+            {
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStream << "Can't packet value " << lfSkillValue
+                        << " for skill type " << static_cast<s32>(leSkillType) << "\n";
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+                CgsDev::Assert::EndAssert();
+            }
+
+            lxResult = CgsNetwork::PackOrUnpackFloat(this, &lfSkillValue, KF_MIN_SKILL_VALUE, KF_MAX_SKILL_VALUE,
+                                                     mSkillzData.GetSkillAccuracy(leSkillType)) | lxResult;
+            mSkillzData.SetBurnoutSkill(leSkillType, lfSkillValue);
+        }
+
+        lxResult = CgsNetwork::PackOrUnpackBool(this, &mbInitialData) | lxResult;
+        return lxResult;
+    }
+
     s32 BurnoutSkillzMessage::GetPackedMessageSize()
     {
         mSkillzData.Clear();          // addi r3,r31,0x28 ; bl BurnoutSkillzData::Clear

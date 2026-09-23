@@ -8,6 +8,12 @@
 //     not full, otherwise evict the oldest record whose player has left the game).
 //   GetPlayerStats(const char*) @ 0x82546CF8 -- linear name lookup into the cache.
 //   Prepare @ 0x82552C20 -- reset the cache and prime the stats debug component.
+//   GetPlayerStats(NetworkPlayerID) -- linear player-id lookup (the unnamed console copy the
+//     manager's UpdateLocalPlayersStat calls).
+//   Construct / Release / Destruct / GetLocalPlayerStats -- no standalone console copy; inlined
+//     into the manager's own lifecycle functions and GetLocalPlayerStats.
+//   InsertPlayerStats -- store a finished record over the player's old one (or a free /
+//     replaceable slot) and re-register it with the stats debug component.
 //   Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
 // ===================================================================================
 #include "GameSource/Network/Managers/BrnNetworkPlayerStatsResults.h"
@@ -17,13 +23,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-
-// X360 LobbyNameCmp -- compares two 16-byte player-name strings (returns 0 when they
-// name the same player, <0/>0 for ordering). It is a free function with no committed
-// header home yet; declared here at global scope so this TU links against the one X360
-// definition (same file-local idiom as BrnNetworkBuddyManagerBase.cpp:23 /
-// BrnChallengeHighScoreEntry.cpp).
-int LobbyNameCmp(const char* lpcNameA, const char* lpcNameB);
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"   // ::LobbyNameCmp (the vendor name compare)
 
 namespace BrnNetwork
 {
@@ -90,5 +90,92 @@ namespace BrnNetwork
             "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )");
 
         return true;
+    }
+    // Latch the network manager, build the debug component and start empty.
+    void
+    NetworkPlayerStatsResults::Construct(BrnNetworkManager* lpNetworkManager)
+    {
+        mpNetworkManager = lpNetworkManager;
+        mStatsDebugComponent.Construct();
+        miCacheSize = 0;
+    }
+
+    bool
+    NetworkPlayerStatsResults::Release()
+    {
+        miCacheSize = 0;
+        CGS_ASSERT(mStatsDebugComponent.Release(), "mStatsDebugComponent.Release()");
+        return true;
+    }
+
+    void
+    NetworkPlayerStatsResults::Destruct()
+    {
+        miCacheSize = 0;
+        mStatsDebugComponent.Destruct();
+    }
+
+    // The cached record belonging to the local player, if any.
+    NetworkPlayerStats*
+    NetworkPlayerStatsResults::GetLocalPlayerStats()
+    {
+        for (s32 luCacheLoopCounter = 0; luCacheLoopCounter < miCacheSize; ++luCacheLoopCounter)
+        {
+            if (maPlayerStatsCache[luCacheLoopCounter].IsLocalPlayer())
+            {
+                return &maPlayerStatsCache[luCacheLoopCounter];
+            }
+        }
+        return nullptr;
+    }
+
+    // Linear player-id lookup into the record cache.
+    NetworkPlayerStats*
+    NetworkPlayerStatsResults::GetPlayerStats(NetworkPlayerID lPlayerID)
+    {
+        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+
+        for (s32 luCacheLoopCounter = 0; luCacheLoopCounter < miCacheSize; ++luCacheLoopCounter)
+        {
+            if (maPlayerStatsCache[luCacheLoopCounter].GetPlayerID() == lPlayerID)
+            {
+                return &maPlayerStatsCache[luCacheLoopCounter];
+            }
+        }
+        return nullptr;
+    }
+
+    // Store a finished record: over the player's existing record (found by id, then by name), or
+    // into a free / replaceable slot. The debug component drops the old record's menu group and
+    // registers the new one.
+    NetworkPlayerStats*
+    NetworkPlayerStatsResults::InsertPlayerStats(const NetworkPlayerStats& lNewStats)
+    {
+        CGS_ASSERT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
+                   "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED");
+
+        NetworkPlayerStats* lpPlaceToInsert = nullptr;
+        if (lNewStats.GetPlayerID() != CgsNetwork::K_INVALID_PLAYER_ID)
+        {
+            lpPlaceToInsert = GetPlayerStats(lNewStats.GetPlayerID());
+        }
+        if (lpPlaceToInsert == nullptr)
+        {
+            lpPlaceToInsert = GetPlayerStats(lNewStats.GetName());
+        }
+
+        if (lpPlaceToInsert == nullptr)
+        {
+            lpPlaceToInsert = FindReplaceableRecordSet();
+        }
+        else
+        {
+            mStatsDebugComponent.RemoveStats(lpPlaceToInsert);
+        }
+
+        CGS_ASSERT(lpPlaceToInsert != nullptr, "lpPlaceToInsert != NULL");
+        *lpPlaceToInsert = lNewStats;
+        mStatsDebugComponent.AddStats(lpPlaceToInsert);
+        return lpPlaceToInsert;
     }
 }

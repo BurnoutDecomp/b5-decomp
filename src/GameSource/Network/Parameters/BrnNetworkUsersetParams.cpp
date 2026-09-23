@@ -22,4 +22,19 @@ namespace BrnNetwork
     {
         return "";
     }
+
+    u32 UsersetParams::GetDataSize() const
+    {
+        return 0;
+    }
+
+    void* UsersetParams::GetData()
+    {
+        return nullptr;
+    }
+
+    const void* UsersetParams::GetData() const
+    {
+        return nullptr;
+    }
 }

@@ -13,8 +13,8 @@
 //   do { --v2; *(v1 - 1) = 0; *v1 = 0; v1 += 2; } while (v2);
 //   return 1;
 //
-// Reproduced member-by-name as a zero-fill of maResultWords[16], which spans exactly
-// that range (the base vptr occupies this+0x00).
+// Reproduced member-by-name as a clear of the eight player records, which span
+// exactly that range on the console (the base vptr occupies this+0x00).
 
 // ---------------------------------------------------------------------------------------
 // CgsNetwork::ServerInterfaceEndGameDataBase::`scalar deleting destructor' @ 0x82558ED8
@@ -44,19 +44,24 @@ namespace CgsNetwork
     {
     }
 
+    // The base vtable's Prepare slot is a folded `return true` body.
     bool ServerInterfaceEndGameDataBase::Prepare()
     {
-        return false;
+        return true;
     }
 
     ServerInterfaceEndGameDataX360::ServerInterfaceEndGameDataX360()
     {
     }
 
+    // Each loop pass clears one record: the name at +0x04 + 8i, the id at +0x08 + 8i.
     bool ServerInterfaceEndGameDataX360::Prepare()
     {
-        for (s32 liWord = 0; liWord < 16; ++liWord)
-            maResultWords[liWord] = 0;
+        for (s32 liRecord = 0; liRecord < KI_MAX_PLAYER_RECORDS; ++liRecord)
+        {
+            maPlayerRecords[liRecord].mpcName    = 0;
+            maPlayerRecords[liRecord].miPlayerID = 0;
+        }
         return true;
     }
 }

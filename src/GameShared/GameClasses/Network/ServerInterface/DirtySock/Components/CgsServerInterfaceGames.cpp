@@ -6,8 +6,10 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameSearchParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceQuickJoinParams.h"
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceEndGameData.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameResults.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePingRegions.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h" // EConversionFlags
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf / SnPrintf / StrCat
 #include <string.h>                                      // memcpy / strlen / strcmp
@@ -29,33 +31,12 @@
 // These live in the DirtySDK vendor SDK (not yet fully reconstructed in vendor/).
 // A not-yet-homed callee is satisfied by its declaration under cl /c; no body needed.
 struct LobbyApiRefT;
-namespace CgsNetwork { namespace DirtySock { struct ConnApiRefT; struct GameManagerRefT; } }
+#include "connapi.h"   // ConnApiControl, DirtySock::ConnApiRefT / ConnApiCbInfoT
 
 extern "C"
 {
-    s32  LobbyApiStatus(LobbyApiRefT* pLobbyApi, s32 iSelect, void* pBuf, s32 iBufLen);
-    s32  LobbyApiSetCallback(LobbyApiRefT* pLobbyApi, s32 iChannel, void* pCallback, void* pUserData);
-    s32  LobbyApiClearCallback(LobbyApiRefT* pLobbyApi, s32 iCallback);
-    s32  LobbyApiRequestCB(LobbyApiRefT* pLobbyApi, s32 iKind, const char* pRequest,
-                           void* pCallback, void* pUserData);
-    void* LobbyApiListFlush(LobbyApiRefT* pLobbyApi, s32 iList);
-    s32  LobbyApiListFree(LobbyApiRefT* pLobbyApi, s32 iList, void* pList,
-                          s32 a4, s32 a5, s32 a6, s32 a7, s32 a8);
     s32  LobbyNameCmp(const char* pNameA, const char* pNameB);
     void* XMemSet(void* pDest, s32 iValue, u32 uCount);
-
-    s32  GameManagerStatus(CgsNetwork::DirtySock::GameManagerRefT* pGm, s32 iSelect, s32 a3, s32 a4);
-    s32  GameManagerControl(CgsNetwork::DirtySock::GameManagerRefT* pGm, s32 iControl, s32 a3, s32 a4, s32 a5);
-    s32  GameManagerSetCallback(CgsNetwork::DirtySock::GameManagerRefT* pGm, void* pCallback, void* pUserData);
-    s32  GameManagerRequestCb(CgsNetwork::DirtySock::GameManagerRefT* pGm, s32 iKind, const char* pRequest,
-                              void* pCallback, void* pUserData);
-
-    s32  ConnApiControl(CgsNetwork::DirtySock::ConnApiRefT* pConn, s32 iControl, s32 a3, s32 a4, const void* a5);
-
-    void* DispListClear(void* pList);
-    s32  DispListOrder(void* pList);
-    s32  DispListSort(void* pList, void* pUserData, s32 a3, void* pfnCompare);
-    s32  AptRenderItem_Manager_GetMask(void* pList);
 
     // lobbytagfield C-API (vendor/dirtysdk/include/lobbytagfield.h homes some of these;
     // the rest are declared here so the component links under cl /c).
@@ -69,17 +50,9 @@ extern "C"
 
 namespace CgsNetwork
 {
-    // Static error-string data, defined in another (not-yet-reconstructed) TU (the same
-    // table the sibling components point mpErrorData at; X360 unk_820046A7).
-    extern const u8 gServerInterfaceErrorData[];
-
     // ConvertFlags: decode a LobbyApiPlayT's uSysflags into the logical flag word the
     // queries test (locked == bit 5, started == bit 11). Homed elsewhere in CgsNetwork.
-    u32 ConvertFlags(u32 luSysflags, s32 liMode);
-
-    // ConnApiCallback / AllocDisplayLists: referenced by Prepare; homed in the X360-derived
-    // ServerInterfaceGamesX360 TU. Declared so Prepare can take their address.
-    s32  ServerInterfaceGamesConnApiCallback(void* a1, void* a2, void* a3);
+    u32 ConvertFlags(u32 luSysflags, EConversionFlags leDirection);
 
     // The shared debug-log stream (X360 off_82F335C8). The component routes its
     // "DirtySock: ..." progress lines through this global StrStream. Modelled as a free
@@ -291,9 +264,9 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::Construct()
     {
-        // The X360 stores the static error-string table ptr in the base's +0x04 slot
-        // (mpcCurrentAction) and marks the component idle.
-        mpcCurrentAction     = reinterpret_cast<const char*>(gServerInterfaceErrorData); // +0x04
+        // The base's +0x04 slot (mpcCurrentAction) starts at the empty string and the
+        // component is marked idle.
+        mpcCurrentAction     = "";                          // +0x04
         meStatus             = 2;                           // +0x08
         miLastError          = 0;                           // +0x0C
         mpFoundGames         = 0;                            // +0x868
@@ -335,7 +308,7 @@ namespace CgsNetwork
 
         miEventCallback = LobbyApiSetCallback(lpServerInterface->GetLobbyAPIRef(),
                                               KI_CB_CHANNEL_EVENT,
-                                              reinterpret_cast<void*>(&EventStatusCallback),
+                                              &EventStatusCallback,
                                               this);
         miRespCallback  = LobbyApiSetCallback(mpServerInterface->GetLobbyAPIRef(),
                                               KI_CB_CHANNEL_RESP,
@@ -347,11 +320,9 @@ namespace CgsNetwork
         // game-manager play-record callback.
         CGS_ASSERT(mpServerInterface->IsGameComponentRegistered(),
                    "The component hasn't been registered!");
-        mpServerInterface->SetConnApiGameCallback(
-            reinterpret_cast<ServerInterfaceComponentData::ServerInterfaceConnApiCallback>(
-                &ServerInterfaceGamesConnApiCallback));
+        mpServerInterface->SetConnApiGameCallback(&ServerInterfaceGames::ConnApiCallback);
         GameManagerSetCallback(mpServerInterface->GetGameManagerRef(),
-                               reinterpret_cast<void*>(&GameManagerCallback),
+                               &GameManagerCallback,
                                this);
 
         XMemSet(&mLastGameRecord, 0, KI_PLAYER_RECORD_SIZE);
@@ -389,8 +360,7 @@ namespace CgsNetwork
     {
         if (mpFoundGames)
         {
-            LobbyApiListFree(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES,
-                             mpFoundGames, 0, 0, 0, 0, 0);
+            LobbyApiListFree(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES, mpFoundGames);
             mpFoundGames = 0;
         }
         return mpFoundGames;
@@ -400,7 +370,7 @@ namespace CgsNetwork
     // Action plumbing
     // ===================================================================
 
-    void ServerInterfaceGames::StartAction(EAction leAction, void* lpfnCallback)
+    void ServerInterfaceGames::StartAction(EAction leAction, LobbyApiCallbackT* lpfnCallback)
     {
         meCurrentAction = leAction;
         StartActionCore(KAPC_ACTION_NAMES[leAction]);
@@ -416,7 +386,7 @@ namespace CgsNetwork
             miRequestCallbackID = -1;
     }
 
-    s32 ServerInterfaceGames::StartGameManagerAction(EAction leAction, void* lpfnCallback)
+    s32 ServerInterfaceGames::StartGameManagerAction(EAction leAction, LobbyApiCallbackT* lpfnCallback)
     {
         meCurrentAction = leAction;
         StartActionCore(KAPC_ACTION_NAMES[leAction]);
@@ -430,12 +400,10 @@ namespace CgsNetwork
         if (liResult < 0)
         {
             // Synthesise an immediate failure callback when the request could not be sent.
-            s32 lauMsg[6];
-            XMemSet(lauMsg, 0, sizeof(lauMsg));
-            lauMsg[3] = KI_GM_REQ_NULL;
-            typedef s32 (*GmCallback)(void*, void*, ServerInterfaceGames*);
-            GmCallback lpfn = reinterpret_cast<GmCallback>(lpfnCallback);
-            liResult = lpfn(mpServerInterface->GetLobbyAPIRef(), lauMsg, this);
+            LobbyApiMsgT lMsg;
+            XMemSet(&lMsg, 0, sizeof(lMsg));
+            lMsg.code = KI_GM_REQ_NULL;
+            lpfnCallback(mpServerInterface->GetLobbyAPIRef(), &lMsg, this);
         }
         return liResult;
     }
@@ -456,82 +424,75 @@ namespace CgsNetwork
     // Static callbacks
     // ===================================================================
 
-    s32 ServerInterfaceGames::DefaultCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* lpSelf)
+    void ServerInterfaceGames::DefaultCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg, void* lpUserData)
     {
-        // asm @0x82886920 tail-calls EndAction(self, msg[3]) and returns its result.
-        // (EndAction -> EndActionCore returns the converted error code; the base
-        // EndActionCore is declared void in this build, so we surface the success code.)
-        lpSelf->EndAction(a2[3]);   // a2 + 12 -> the DirtySDK message error field
-        return 0;
+        static_cast<ServerInterfaceGames*>(lpUserData)->EndAction(lpMsg->code);
     }
 
-    s32 ServerInterfaceGames::LeaveGameCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* lpSelf)
+    void ServerInterfaceGames::LeaveGameCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg, void* lpUserData)
     {
+        ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
         CGS_ASSERT(lpSelf != 0, "lpLobbyComponent");
         ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(),
-                       KI_CONN_CTRL_DISCONNECT, 0, 0, gServerInterfaceErrorData);
-        bool lbLocalPlayerInGame = lpSelf->IsLocalPlayerInGame();
-        if (lbLocalPlayerInGame)
+                       KI_CONN_CTRL_DISCONNECT, 0, 0, "");
+        if (lpSelf->IsLocalPlayerInGame())
         {
-            s32 liError = a2[3];
+            s32 liError = lpMsg->code;
             if (liError)
             {
                 lpSelf->EndAction(liError);
-                return 1;
             }
         }
-        // asm makes exactly one IsLocalPlayerInGame() call and reuses its result for both
-        // the branch and the fall-through return -- no second query.
-        return lbLocalPlayerInGame ? 1 : 0;
     }
 
-    s32 ServerInterfaceGames::SearchForGamesCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* lpSelf)
+    void ServerInterfaceGames::SearchForGamesCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg,
+                                                      void* lpUserData)
     {
-        s32 liError = a2[3];
+        ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
+        s32 liError = lpMsg->code;
         if (liError == 0)
         {
-            void* lpField = TagFieldFind(reinterpret_cast<const char*>(a2[4]), "COUNT");
+            void* lpField = TagFieldFind(lpMsg->pData, "COUNT");
             if (TagFieldGetNumber(reinterpret_cast<const char*>(lpField), 0) == 0)
                 liError = KI_ERR_NO_RESULTS;
         }
         lpSelf->EndAction(liError);
-        return liError;
     }
 
-    s32 ServerInterfaceGames::ReceivedGameEvent(s32* a2)
+    s32 ServerInterfaceGames::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
     {
         ServerInterfaceGames* lpSelf = this;
         if (static_cast<u32>(lpSelf->meCurrentAction) < 3u)
         {
-            void* lpField = TagFieldFind(reinterpret_cast<const char*>(a2[4]), "IDENT");
+            void* lpField = TagFieldFind(lpMsg->pData, "IDENT");
             s32 liIdent = TagFieldGetNumber(reinterpret_cast<const char*>(lpField), -1);
             if (liIdent == lpSelf->mLastGameRecord.iIdent)
             {
-                lpSelf->EndAction(a2[3]);
-                return a2[3];
+                lpSelf->EndAction(lpMsg->code);
+                return lpMsg->code;
             }
             return liIdent;
         }
         return 0;
     }
 
-    void ServerInterfaceGames::EventStatusCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* a3)
+    void ServerInterfaceGames::EventStatusCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg,
+                                                   void* lpUserData)
     {
-        // Prepare registers `this` directly as the callback user data (LobbyApiSetCallback's
-        // 4th arg); a3 IS the games component, not a pointer to it.
-        ServerInterfaceGames* lpSelf = a3;
-        switch (a2[2])     // a2 + 8 -> the lobby event tag
+        // Prepare registers `this` directly as the callback user data.
+        ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
+        switch (lpMsg->kind)
         {
         case KI_EVENT_TAG_PLAYERS:
             RaiseServerInterfaceEvent(lpSelf->mpServerInterface, KI_EVT_PLAYER_PARAMS_CHANGED, 0);
             break;
         case KI_EVENT_TAG_RESET:
-            // Re-run the play-record processing (vtable slot 17 of the games component).
-            lpSelf->ProcessGameManagerPlayRecord();
+            // The lobby 'game' event goes to the (virtual) ReceivedGameEvent with the message.
+            lpSelf->ReceivedGameEvent(lpMsg);
             break;
         case KI_EVENT_TAG_KICKED:
             {
-                void* lpField = TagFieldFind(reinterpret_cast<const char*>(a2[4]), "REASON");
+                void* lpField = TagFieldFind(lpMsg->pData, "REASON");
                 s32 liReason = TagFieldGetNumber(reinterpret_cast<const char*>(lpField), 5);
                 s32 laReason[4];
                 laReason[0] = liReason;
@@ -543,14 +504,16 @@ namespace CgsNetwork
         }
     }
 
-    void* ServerInterfaceGames::GameManagerCallback(s32 /*a1*/, s32* a2, ServerInterfaceGames* lpSelf)
+    void ServerInterfaceGames::GameManagerCallback(GameManagerRefT* /*lpGameManager*/, GameManagerCBDataT* lpCBData,
+                                                   void* lpUserData)
     {
-        switch (a2[0])
+        ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
+        switch (lpCBData->eType)
         {
         case 0:
         case 1:
         case 2:
-            return lpSelf;
+            return;
         case 3:
             XMemSet(&lpSelf->mLastGameRecord, 0, KI_PLAYER_RECORD_SIZE);
             if (lpSelf->meCurrentAction == E_ACTION_LEAVE_GAME)
@@ -561,24 +524,24 @@ namespace CgsNetwork
             {
                 RaiseServerInterfaceEvent(lpSelf->mpServerInterface, KI_EVT_DISCONNECTED, 0);
             }
-            ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_DISCONNECT, 0, 0, gServerInterfaceErrorData);
-            return lpSelf;
+            ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(), KI_CONN_CTRL_DISCONNECT, 0, 0, "");
+            return;
         case 4:
-            return lpSelf->ProcessGameManagerPlayRecord();
+            lpSelf->ProcessGameManagerPlayRecord();
+            return;
         default:
             CGS_ASSERT(false, "Unknown GameManager event");
-            return lpSelf;
+            return;
         }
     }
 
-    s32 ServerInterfaceGames::FoundGamesSort(ServerInterfaceGames* lpSelf, void* /*a2*/,
-                                             ServerInterfaceGameParamsBase* lpA,
-                                             ServerInterfaceGameParamsBase* lpB)
+    s32 ServerInterfaceGames::FoundGamesSort(void* lpSortRef, s32 /*liSortCon*/, void* lpGameA, void* lpGameB)
     {
+        ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpSortRef);
         if (!lpSelf->mpGameParamsA || !lpSelf->mpGameParamsB)
             return 0;
-        lpSelf->mpGameParamsA->DeserialiseFromString(reinterpret_cast<const char*>(lpA));
-        lpSelf->mpGameParamsB->DeserialiseFromString(reinterpret_cast<const char*>(lpB));
+        lpSelf->mpGameParamsA->SerialiseFromGame(lpGameA);
+        lpSelf->mpGameParamsB->SerialiseFromGame(lpGameB);
         return lpSelf->mpSearchSortCallback(lpSelf->mpSearchSortUserData,
                                             lpSelf->mpGameParamsA, lpSelf->mpGameParamsB);
     }
@@ -630,8 +593,7 @@ namespace CgsNetwork
             }
         }
 
-        StartGameManagerAction(E_ACTION_CREATE_GAME,
-                               reinterpret_cast<void*>(&OnlyFinishOnErrorCallback));
+        StartGameManagerAction(E_ACTION_CREATE_GAME, &OnlyFinishOnErrorCallback);
     }
 
     void ServerInterfaceGames::JoinGame(ServerInterfaceGameParamsBase* lpGameParams,
@@ -645,8 +607,7 @@ namespace CgsNetwork
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
 
-        StartGameManagerAction(E_ACTION_JOIN_GAME,
-                               reinterpret_cast<void*>(&OnlyFinishOnErrorCallback));
+        StartGameManagerAction(E_ACTION_JOIN_GAME, &OnlyFinishOnErrorCallback);
     }
 
     void ServerInterfaceGames::QuickJoinGame(ServerInterfaceQuickJoinParamsBase* lpQuickJoinParams,
@@ -661,8 +622,7 @@ namespace CgsNetwork
         lpQuickJoinParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         lpPlayerParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
 
-        StartGameManagerAction(E_ACTION_QUICK_JOIN_GAME,
-                               reinterpret_cast<void*>(&OnlyFinishOnErrorCallback));
+        StartGameManagerAction(E_ACTION_QUICK_JOIN_GAME, &OnlyFinishOnErrorCallback);
     }
 
     void ServerInterfaceGames::SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams)
@@ -678,8 +638,7 @@ namespace CgsNetwork
         DispListOrder(mpFoundGames);
         lpSearchParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
 
-        StartAction(E_ACTION_SEARCH_FOR_GAMES,
-                    reinterpret_cast<void*>(&SearchForGamesCallback));
+        StartAction(E_ACTION_SEARCH_FOR_GAMES, &SearchForGamesCallback);
     }
 
     void ServerInterfaceGames::CancelSearchForGames()
@@ -693,7 +652,7 @@ namespace CgsNetwork
 
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "CANCEL", 1);
-        StartAction(E_ACTION_CANCEL_SEARCH_FOR_GAMES, reinterpret_cast<void*>(&DefaultCallback));
+        StartAction(E_ACTION_CANCEL_SEARCH_FOR_GAMES, &DefaultCallback);
     }
 
     void ServerInterfaceGames::UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams)
@@ -704,7 +663,7 @@ namespace CgsNetwork
         CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
 
         lpGameParams->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
-        StartAction(E_ACTION_UPDATE_GAME_PARAMS, reinterpret_cast<void*>(&DefaultCallback));
+        StartAction(E_ACTION_UPDATE_GAME_PARAMS, &DefaultCallback);
     }
 
     void ServerInterfaceGames::LockGame()
@@ -718,7 +677,7 @@ namespace CgsNetwork
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SYSFLAGS",
                           static_cast<s32>(mLastGameRecord.uSysflags | 0x1000));
-        StartAction(E_ACTION_LOCK_GAME, reinterpret_cast<void*>(&DefaultCallback));
+        StartAction(E_ACTION_LOCK_GAME, &DefaultCallback);
     }
 
     void ServerInterfaceGames::UnlockGame()
@@ -732,24 +691,22 @@ namespace CgsNetwork
         lpcBuffer[0] = 0;
         TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SYSFLAGS",
                           static_cast<s32>(mLastGameRecord.uSysflags & 0xFFFFEFFF));
-        StartAction(E_ACTION_UNLOCK_GAME, reinterpret_cast<void*>(&DefaultCallback));
+        StartAction(E_ACTION_UNLOCK_GAME, &DefaultCallback);
     }
 
-    void* ServerInterfaceGames::KickPlayerByID(s32 liPlayerID, s32 liReason, char lbBan)
+    void ServerInterfaceGames::KickPlayerByID(s32 liPlayerID, s32 liReason, char lbBan)
     {
-        bool lbLocalPlayerInGame = false;
         for (s32 i = 0; ; ++i)
         {
-            lbLocalPlayerInGame = IsLocalPlayerInGame();
-            CGS_ASSERT(lbLocalPlayerInGame, "IsLocalPlayerInGame()");
+            CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
             if (i >= mLastGameRecord.iCount)
                 break;
-            if (mLastGameRecord.aPlayers[i].iIdent == liPlayerID)
-                return KickPlayer(mLastGameRecord.aPlayers[i].strPers, liReason, lbBan);
+            if (mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
+            {
+                KickPlayer(mLastGameRecord.aOpponents[i].strPers, liReason, lbBan);
+                return;
+            }
         }
-        // asm falls straight to the epilogue on loop exhaustion, reusing the last
-        // IsLocalPlayerInGame() result from the assert check above -- no second query.
-        return reinterpret_cast<void*>(static_cast<intptr_t>(lbLocalPlayerInGame ? 1 : 0));
     }
 
     void ServerInterfaceGames::SetGameServerConnectionType(s32 liConnectionType)
@@ -798,11 +755,10 @@ namespace CgsNetwork
         mpSearchSortUserData = lpUserData;
         mpGameParamsA        = lpParamsA;
         mpGameParamsB        = lpParamsB;
-        DispListSort(mpFoundGames, this, 0, reinterpret_cast<void*>(&FoundGamesSort));
+        DispListSort(mpFoundGames, this, 0, &FoundGamesSort);
     }
 
-    void ServerInterfaceGames::SendGameResult(ServerInterfaceEndGameDataBase* lpEndGameData,
-                                              void* /*lpUserData*/)
+    void ServerInterfaceGames::SendGameResult(const ServerInterfaceGameResultsBase* lpGameResults)
     {
         DirtySockDebugLog("DirtySockLobby: SendGameResult");
 
@@ -836,19 +792,19 @@ namespace CgsNetwork
             char lacKey[32];
             CgsCore::SPrintf(lacKey, 32, "NAME%d", i);
             TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey,
-                              mLastGameRecord.aPlayers[i].strPers);
+                              mLastGameRecord.aOpponents[i].strPers);
             CgsCore::SPrintf(lacKey, 32, "TEAM%d", i);
             TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, i);
             CgsCore::SPrintf(lacKey, 32, "WEIGHT%d", i);
             TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, lacKey, 0);
         }
 
-        lpEndGameData->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
+        lpGameResults->SerialiseToString(lpcBuffer, KI_MESSAGE_BUFFER_LEN);
         DirtySockDebugLog("Uploading: ");
         DirtySockDebugLog(lpcBuffer);
         DirtySockDebugLog("\n");
 
-        StartAction(E_ACTION_SEND_RESULTS, reinterpret_cast<void*>(&DefaultCallback));
+        StartAction(E_ACTION_SEND_RESULTS, &DefaultCallback);
     }
 
     void ServerInterfaceGames::UpdatePlayerParameters(s32 liPlayerID,
@@ -862,7 +818,7 @@ namespace CgsNetwork
         for (; ; ++i)
         {
             CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-            if (i >= mLastGameRecord.iCount || mLastGameRecord.aPlayers[i].iIdent == liPlayerID)
+            if (i >= mLastGameRecord.iCount || mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
                 break;
         }
 
@@ -873,7 +829,7 @@ namespace CgsNetwork
         CGS_ASSERT(i < mLastGameRecord.iCount, "Could not find PlayerID");
 
         const s32 liLocalPlayerID = *reinterpret_cast<s32*>(lacSelf);
-        const bool lbDifferentPlayer = (mLastGameRecord.aPlayers[i].iIdent != liLocalPlayerID);
+        const bool lbDifferentPlayer = (mLastGameRecord.aOpponents[i].iIdent != liLocalPlayerID);
 
         if (lbDifferentPlayer)
         {
@@ -908,11 +864,11 @@ namespace CgsNetwork
                 lpcBuffer = mpServerInterface->GetMessageBuffer();
                 CGS_ASSERT(lpcBuffer != 0, "mpacMessageBuffer");
                 TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "PERS",
-                                  mLastGameRecord.aPlayers[i].strPers);
+                                  mLastGameRecord.aOpponents[i].strPers);
             }
         }
 
-        StartAction(E_ACTION_UPDATE_PLAYER_PARAMS, reinterpret_cast<void*>(&DefaultCallback));
+        StartAction(E_ACTION_UPDATE_PLAYER_PARAMS, &DefaultCallback);
     }
 
     // ===================================================================
@@ -925,7 +881,7 @@ namespace CgsNetwork
         memcpy(&lNewRecord, &mLastGameRecord, KI_PLAYER_RECORD_SIZE);
         void* lpResult = reinterpret_cast<void*>(static_cast<intptr_t>(
             GameManagerStatus(mpServerInterface->GetGameManagerRef(), KI_GM_SELECT_PLAYREC,
-                              reinterpret_cast<intptr_t>(&mLastGameRecord), KI_PLAYER_RECORD_SIZE)));
+                              &mLastGameRecord, KI_PLAYER_RECORD_SIZE)));
 
         if (mLastGameRecord.strName[0])
         {
@@ -940,8 +896,8 @@ namespace CgsNetwork
 
             // Slots / privilege change -> push a latency-update control. asm sign-extends
             // bMaxsize (extsb) before comparing/subtracting.
-            const s8 liMaxsize    = static_cast<s8>(mLastGameRecord.bMaxsize);
-            const s8 liNewMaxsize = static_cast<s8>(lNewRecord.bMaxsize);
+            const s8 liMaxsize    = mLastGameRecord.iMaxsize;
+            const s8 liNewMaxsize = lNewRecord.iMaxsize;
             if (liMaxsize != liNewMaxsize ||
                 mLastGameRecord.iPrivSlots != lNewRecord.iPrivSlots)
             {
@@ -982,11 +938,11 @@ namespace CgsNetwork
         bool lbChanged = false;
         for (s32 i = 0; i < lpA->iCount; ++i)
         {
-            const s32 liIdent = lpA->aPlayers[i].iIdent;
+            const s32 liIdent = lpA->aOpponents[i].iIdent;
             bool lbStillPresent = false;
             for (s32 j = 0; j < lpB->iCount; ++j)
             {
-                if (lpB->aPlayers[j].iIdent == liIdent)
+                if (lpB->aOpponents[j].iIdent == liIdent)
                 {
                     lbStillPresent = true;
                     break;
@@ -1009,13 +965,13 @@ namespace CgsNetwork
         bool lbChanged = false;
         for (s32 i = 0; i < lpA->iCount; ++i)
         {
-            const s32 liIdent = lpA->aPlayers[i].iIdent;
+            const s32 liIdent = lpA->aOpponents[i].iIdent;
             for (s32 j = 0; j < lpB->iCount; ++j)
             {
-                if (lpB->aPlayers[j].iIdent == liIdent)
+                if (lpB->aOpponents[j].iIdent == liIdent)
                 {
-                    if (::strcmp(lpA->aPlayers[i].strParams,
-                                        lpB->aPlayers[j].strParams) != 0)
+                    if (::strcmp(lpA->aOpponents[i].strParams,
+                                        lpB->aOpponents[j].strParams) != 0)
                     {
                         RaiseServerInterfaceEvent(mpServerInterface, 
                             static_cast<EServerInterfaceEvent>(KI_EVT_PARAM_CHANGED), 0);
@@ -1044,10 +1000,10 @@ namespace CgsNetwork
         return mLastGameRecord.strName;
     }
 
-    bool ServerInterfaceGames::GetGameParameters(ServerInterfaceGameParamsBase* lpOut)
+    void ServerInterfaceGames::GetGameParameters(ServerInterfaceGameParamsBase* lpOut)
     {
         CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-        return lpOut->DeserialiseFromString(reinterpret_cast<const char*>(&mLastGameRecord.iIdent));
+        lpOut->SerialiseFromGame(&mLastGameRecord);
     }
 
     s32 ServerInterfaceGames::GetHostPlayerID()
@@ -1055,8 +1011,8 @@ namespace CgsNetwork
         char lacSelf[8];
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
         {
-            if (LobbyNameCmp(mLastGameRecord.strHost, mLastGameRecord.aPlayers[i].strPers) == 0)
-                return mLastGameRecord.aPlayers[i].iIdent;
+            if (LobbyNameCmp(mLastGameRecord.strHost, mLastGameRecord.aOpponents[i].strPers) == 0)
+                return mLastGameRecord.aOpponents[i].iIdent;
         }
         (void)lacSelf;
         CGS_ASSERT(false, "Host not found!");
@@ -1066,7 +1022,7 @@ namespace CgsNetwork
     s32 ServerInterfaceGames::GetNumberOfFoundGames()
     {
         CGS_ASSERT(mpFoundGames != 0, "mpFoundGames");
-        return AptRenderItem_Manager_GetMask(mpFoundGames);
+        return DispListCount(mpFoundGames);
     }
 
     s32 ServerInterfaceGames::GetNumberPlayersInGame()
@@ -1085,7 +1041,7 @@ namespace CgsNetwork
             CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
         }
         CGS_ASSERT(liIndex >= 0 && liIndex < mLastGameRecord.iCount, "Invalid player index");
-        lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[liIndex]); return lpOut;
+        lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[liIndex]); return lpOut;
     }
 
     void* ServerInterfaceGames::GetPlayerParametersByPlayerID(s32 liPlayerID,
@@ -1098,9 +1054,9 @@ namespace CgsNetwork
             CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
             if (i >= mLastGameRecord.iCount)
                 break;
-            if (mLastGameRecord.aPlayers[i].iIdent == liPlayerID)
+            if (mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
             {
-                lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[i]);
+                lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[i]);
                 return lpOut;
             }
         }
@@ -1118,9 +1074,9 @@ namespace CgsNetwork
             CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
             if (i >= mLastGameRecord.iCount)
                 break;
-            if (LobbyNameCmp(lpcName, mLastGameRecord.aPlayers[i].strPers) == 0)
+            if (LobbyNameCmp(lpcName, mLastGameRecord.aOpponents[i].strPers) == 0)
             {
-                lpOut->SerialiseFromPlayer(&mLastGameRecord.aPlayers[i]);
+                lpOut->SerialiseFromPlayer(&mLastGameRecord.aOpponents[i]);
                 return lpOut;
             }
         }
@@ -1137,7 +1093,7 @@ namespace CgsNetwork
             return false;
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
         {
-            if (LobbyNameCmp(mLastGameRecord.aPlayers[i].strPers, lacSelf + 8) == 0)
+            if (LobbyNameCmp(mLastGameRecord.aOpponents[i].strPers, lacSelf + 8) == 0)
                 return true;
         }
         return false;
@@ -1160,7 +1116,7 @@ namespace CgsNetwork
             return false;
         for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
         {
-            if (LobbyNameCmp(mLastGameRecord.aPlayers[i].strPers, lpcName) == 0)
+            if (LobbyNameCmp(mLastGameRecord.aOpponents[i].strPers, lpcName) == 0)
                 return true;
         }
         return false;
@@ -1169,13 +1125,13 @@ namespace CgsNetwork
     bool ServerInterfaceGames::IsGameLocked()
     {
         CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-        return ((ConvertFlags(mLastGameRecord.uSysflags, 0) >> 5) & 1) != 0;
+        return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 5) & 1) != 0;
     }
 
     bool ServerInterfaceGames::IsGameStarted()
     {
         CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
-        return ((ConvertFlags(mLastGameRecord.uSysflags, 0) >> 11) & 1) != 0;
+        return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 11) & 1) != 0;
     }
 
     bool ServerInterfaceGames::IsGameServerGame()
@@ -1186,8 +1142,159 @@ namespace CgsNetwork
         if (lpGm)
             return GameManagerStatus(lpGm, KI_GM_SELECT_ISSERVER, 0, 0) == 1;
         // No game-manager: a "game server" game iff the first player's persona name starts
-        // with '@' (64) -- asm reads the SIGNED first byte of aPlayers[0].strPers.
-        return static_cast<s8>(mLastGameRecord.aPlayers[0].strPers[0]) == 64;
+        // with '@' (64) -- asm reads the SIGNED first byte of aOpponents[0].strPers.
+        return static_cast<s8>(mLastGameRecord.aOpponents[0].strPers[0]) == 64;
+    }
+
+    // ===================================================================
+    // Display list, events, leave / kick / start
+    // ===================================================================
+
+    void ServerInterfaceGames::AllocDisplayLists()
+    {
+        if (mpFoundGames == 0)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "********++++++++++\nALLOCING FOUND GAMES\n********++++++++++\n";
+            }
+            mpFoundGames = LobbyApiListAlloc(mpServerInterface->GetLobbyAPIRef(), KI_LIST_FOUND_GAMES, NULL, NULL);
+            CGS_ASSERT(mpFoundGames != 0, "Failed to create found game list");
+        }
+    }
+
+    void ServerInterfaceGames::OnlyFinishOnErrorCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg,
+                                                         void* lpUserData)
+    {
+        // The create / join / quick-join requests finish on the game event instead; only
+        // a failed request ends the action here.
+        if (lpMsg->code != 0)
+        {
+            static_cast<ServerInterfaceGames*>(lpUserData)->EndAction(lpMsg->code);
+        }
+    }
+
+    void ServerInterfaceGames::RespCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* /*lpMsg*/,
+                                            void* /*lpUserData*/)
+    {
+    }
+
+    void ServerInterfaceGames::OnEvent(EServerInterfaceEvent leEvent, void* /*lpData*/)
+    {
+        if (leEvent == static_cast<EServerInterfaceEvent>(0))   // lobby API created
+        {
+            AllocDisplayLists();
+            if (mpSearchSortCallback != 0)
+            {
+                DispListSort(mpFoundGames, this, 0, &FoundGamesSort);
+            }
+            if (miEventCallback == -1)
+            {
+                miEventCallback = LobbyApiSetCallback(mpServerInterface->GetLobbyAPIRef(),
+                                                      KI_CB_CHANNEL_EVENT,
+                                                      &EventStatusCallback,
+                                                      this);
+            }
+            if (miRespCallback == -1)
+            {
+                miRespCallback = LobbyApiSetCallback(mpServerInterface->GetLobbyAPIRef(),
+                                                     KI_CB_CHANNEL_RESP,
+                                                     &RespCallback,
+                                                     this);
+            }
+            GameManagerSetCallback(mpServerInterface->GetGameManagerRef(),
+                                   &GameManagerCallback, this);
+        }
+        else if (leEvent == static_cast<EServerInterfaceEvent>(1))   // lobby API destroying
+        {
+            if (miEventCallback != -1)
+            {
+                LobbyApiClearCallback(mpServerInterface->GetLobbyAPIRef(), miEventCallback);
+                miEventCallback = -1;
+            }
+            if (miRespCallback != -1)
+            {
+                LobbyApiClearCallback(mpServerInterface->GetLobbyAPIRef(), miRespCallback);
+                miRespCallback = -1;
+            }
+            FreeDisplayLists();
+        }
+        else if (leEvent == static_cast<EServerInterfaceEvent>(5))   // disconnected
+        {
+            meCurrentAction = E_ACTION_COUNT;
+            XMemSet(&mLastGameRecord, 0, KI_PLAYER_RECORD_SIZE);
+        }
+    }
+
+    bool ServerInterfaceGames::GetFoundGame(s32 liIndex, ServerInterfaceGameParamsBase* lpOut) const
+    {
+        if (liIndex >= 0)
+        {
+            CGS_ASSERT(mpFoundGames != 0, "mpFoundGames");
+            if (liIndex < DispListCount(mpFoundGames))
+            {
+                void* lpRecord = DispListIndex(mpFoundGames, liIndex);
+                if (lpRecord == 0)
+                {
+                    return false;
+                }
+                lpOut->SerialiseFromGame(lpRecord);
+                return true;
+            }
+        }
+
+        // The streamed text also reports the found-game total (an inlined
+        // GetNumberOfFoundGames, with its own assert).
+        CGS_ASSERT(mpFoundGames != 0, "mpFoundGames");
+        CGS_ASSERT(liIndex >= 0 && liIndex < DispListCount(mpFoundGames), "Invalid game index specified: ");
+        return false;
+    }
+
+    bool ServerInterfaceGames::IsLocalPlayerLeavingGame() const
+    {
+        return meCurrentAction == E_ACTION_LEAVE_GAME;
+    }
+
+    bool ServerInterfaceGames::IsPlayerInGame(s32 liPlayerID) const
+    {
+        for (s32 i = 0; i < mLastGameRecord.iCount; ++i)
+        {
+            if (mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
+                return true;
+        }
+        return false;
+    }
+
+    void ServerInterfaceGames::LeaveGame(bool lbSet, bool lbForce)
+    {
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
+        lpcBuffer[0] = 0;
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "SET", lbSet ? "1" : "0");
+        TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "FORCE", lbForce ? "1" : "0");
+        StartGameManagerAction(E_ACTION_LEAVE_GAME, &LeaveGameCallback);
+    }
+
+    void ServerInterfaceGames::KickPlayer(const char* lpcPlayerName, s32 liReason, char lbBan)
+    {
+        char* lpcBuffer = mpServerInterface->GetMessageBuffer();
+        if (IsLocalPlayerInGame() && IsLocalPlayerHost())
+        {
+            lpcBuffer[0] = 0;
+            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "KICK", lpcPlayerName);
+            TagFieldSetNumber(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "KICK_REASON", liReason);
+            TagFieldSetString(lpcBuffer, KI_MESSAGE_BUFFER_LEN, "KICK_SET", lbBan ? "1" : "0");
+            StartAction(E_ACTION_KICK_PLAYER, &DefaultCallback);
+        }
+    }
+
+    void ServerInterfaceGames::StartGame()
+    {
+        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+        CGS_ASSERT(IsLocalPlayerHost(), "IsLocalPlayerHost()");
+
+        mpServerInterface->GetMessageBuffer()[0] = 0;
+        StartAction(E_ACTION_START_GAME, &DefaultCallback);
     }
 
     // ===================================================================

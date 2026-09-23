@@ -16,10 +16,6 @@
 // user flags, converts the HW flags, and finally parses the custom structure blob.
 //
 // FLAGGED:
-//  * The {mask,value} mapping tables (KAAI_HW_FLAGS_TO_PLAYER_INFO_FLAGS and
-//    KAAI_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS) are private statics whose exact byte
-//    contents are not recoverable from the available exports; they are declared extern
-//    here as honest placeholders (defined in the not-yet-reconstructed data segment).
 //  * The lobby user struct has no reconstructed home; its fields are read at the exact
 //    byte offsets the X360 asm uses (verified store-for-store).
 
@@ -39,9 +35,42 @@ namespace CgsNetwork
     const s32 KI_NUM_HW_FLAGS = 14;
     const s32 KI_NUM_FLAGS    = 17;
 
-    // HONEST PLACEHOLDERS: real contents live in the unrecovered .rdata of the X360 image.
-    extern const FlagMapping KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS[KI_NUM_HW_FLAGS];
-    extern const FlagMapping KAA_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS[KI_NUM_FLAGS];
+    // { player-info hardware flag, lobby hardware flag } -- seven rows (the console .rdata
+    // table). The console's fold walks KI_NUM_HW_FLAGS (14) rows, i.e. it also reads the seven
+    // row-sized words of unrelated .rdata that follow the table; the host fold stops at the
+    // table's end (see ConvertHWFlags).
+    const FlagMapping KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS[] =
+    {
+        { 0x00000001u, 0x00000004u },
+        { 0x00000002u, 0x00000020u },
+        { 0x00000004u, 0x00000100u },
+        { 0x00000008u, 0x00000800u },
+        { 0x00000010u, 0x00010000u },
+        { 0x00000020u, 0x00200000u },
+        { 0x00000040u, 0x00400000u },
+    };
+
+    // { player-info flag, lobby user flag } (the console .rdata table).
+    const FlagMapping KAA_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS[KI_NUM_FLAGS] =
+    {
+        { 0x00000001u, 0x00000002u },
+        { 0x00000002u, 0x00000010u },
+        { 0x00000004u, 0x00000080u },
+        { 0x00000008u, 0x00000100u },
+        { 0x00000010u, 0x00001000u },
+        { 0x00000020u, 0x00002000u },
+        { 0x00000040u, 0x00004000u },
+        { 0x00000080u, 0x00010000u },
+        { 0x00000100u, 0x00100000u },
+        { 0x00000200u, 0x00200000u },
+        { 0x00000400u, 0x00400000u },
+        { 0x00000800u, 0x02000000u },
+        { 0x00001000u, 0x04000000u },
+        { 0x00002000u, 0x08000000u },
+        { 0x00004000u, 0x10000000u },
+        { 0x00008000u, 0x20000000u },
+        { 0x00010000u, 0x40000000u },
+    };
 }
 
 namespace
@@ -97,9 +126,12 @@ s32 ConvertHWFlags(s32 liFlags, EConversionFlags leDirection)
     // (E_CONVERSION_FROM_WIRE == 0, the sole reachable caller) is reconstructed: fold the
     // input flag word through the 14-entry hardware-flag mapping table.
     (void)leDirection;
+    // The console walks KI_NUM_HW_FLAGS rows of the seven-row table (reading past its end);
+    // the host walks the table's own rows.
     return static_cast<s32>(FoldFlags(static_cast<u32>(liFlags),
                                       KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS,
-                                      KI_NUM_HW_FLAGS));
+                                      static_cast<s32>(sizeof(KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS) /
+                                                       sizeof(KAA_HW_FLAGS_TO_PLAYER_INFO_FLAGS[0]))));
 }
 
 bool ServerInterfacePlayerInfoDataBase::Prepare()

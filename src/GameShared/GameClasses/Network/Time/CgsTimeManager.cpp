@@ -16,11 +16,10 @@
 //   GetFramesSinceStart           @0x82893388
 //   NextFrame                     @0x825813F0
 //
-// The remaining DWARF-declared methods (SetStartFrame / the simple
-// getters / ResetNetworkTime / Start/StopSyncingTime / Disconnected / Destruct /
-// OnHostMigration / ReleaseSyncTimeManagers / the start-frame helpers) were not in
-// this TU's binary export; they are declared in the header and bodied in their own
-// waves. Only the ten functions above are defined here.
+// Also here: ReleaseSyncTimeManagers, SetStartFrame, IsTimeSynchronised,
+// OnHostMigration, StartSyncingTime, Disconnected and the two frame/wrap helpers. The
+// trivial accessors are inline in the header; ResetNetworkTime and Destruct have no
+// caller in the tree and stay declared only.
 //
 // The original streamed a handful of dev-log lines ("Cleared Start frame", "...called",
 // "SyncTimeManager invalid status ...") through a CgsDev::StrStream debug stream; per
@@ -227,9 +226,17 @@ namespace CgsNetwork
     s32
     TimeManager::GetFrameWrapCountSinceStart() const
     {
-        // SIGNED divide: the asm @0x82893310 emits the sign-test + (v-1)/0xFFFF correction
-        // codegen for signed division by 65535 (diverges from unsigned for muFrameCount>=0x80000000).
-        const s32 liWrapsNow = static_cast<s32>(muFrameCount) / static_cast<s32>(KU_FRAME_WRAP_MODULUS);
+        // A count that is negative as a signed value takes the second reduction, which
+        // rounds the wrap count down rather than toward zero.
+        s32 liWrapsNow;
+        if (static_cast<s32>(muFrameCount) >= 0)
+        {
+            liWrapsNow = static_cast<s32>(muFrameCount / KU_FRAME_WRAP_MODULUS);
+        }
+        else
+        {
+            liWrapsNow = static_cast<s32>((muFrameCount - 1) / KU_FRAME_WRAP_MODULUS) - 0x10001;
+        }
 
         s32 liResult = liWrapsNow - miStartFrameWrapCount;
         if (GetU16FrameCount() < mu16StartFrame)
@@ -276,5 +283,156 @@ namespace CgsNetwork
         mGlobalTime  += CgsSystem::Time(lfTimeStep);   // this+0x378 += Time(step)
 
         ++muFrameCount;                                // this+0x388
+    }
+
+    // ---- ReleaseSyncTimeManagers ----------------------------------------------------
+    // Release whichever half of the clock sync is prepared, then drop back to "none".
+    void
+    TimeManager::ReleaseSyncTimeManagers()
+    {
+        switch (meSyncTimePrepareStatus)
+        {
+        case E_SYNC_TIME_PREPARE_STATUS_HOST:
+            CGS_ASSERT(mSyncTimeHost.Release(), "mSyncTimeHost.Release()");
+            break;
+
+        case E_SYNC_TIME_PREPARE_STATUS_CLIENT:
+            CGS_ASSERT(mSyncTimeClient.Release(), "mSyncTimeClient.Release()");
+            break;
+
+        default:
+            break;
+        }
+
+        meSyncTimePrepareStatus = E_SYNC_TIME_PREPARE_STATUS_NONE;
+    }
+
+    // ---- StartSyncingTime -----------------------------------------------------------
+    // Arm the per-frame sync and prepare the half that matches our role: the host
+    // answers requests, everyone else estimates the host clock. The Prepare results
+    // are not checked.
+    void
+    TimeManager::StartSyncingTime()
+    {
+        mbWeAreSyncingTime = true;
+
+        const NetworkPlayerID lHostID = mpPlayerManager->GetHostPlayerID();
+        if (mpPlayerManager->IsLocalPlayer(lHostID))
+        {
+            mSyncTimeHost.Prepare();
+        }
+        else
+        {
+            mSyncTimeClient.Prepare(lHostID);
+        }
+    }
+
+    // ---- Disconnected ---------------------------------------------------------------
+    // Lost the session: release everything and reset the sync message pool.
+    void
+    TimeManager::Disconnected()
+    {
+        CGS_ASSERT(Release(), "Release()");
+        mSyncTimeMessageManager.Destruct();
+    }
+
+    // ---- IsTimeSynchronised ---------------------------------------------------------
+    // The host's clock is the reference, so it is always in sync. A client is in sync
+    // once its averaged clock difference is within 0.05 s over at least 8 replies.
+    bool
+    TimeManager::IsTimeSynchronised() const
+    {
+        switch (meSyncTimePrepareStatus)
+        {
+        case E_SYNC_TIME_PREPARE_STATUS_NONE:
+            return false;
+
+        case E_SYNC_TIME_PREPARE_STATUS_HOST:
+            return true;
+
+        case E_SYNC_TIME_PREPARE_STATUS_CLIENT:
+            return mSyncTimeClient.TimeIsSynchronised(CgsSystem::Time(0.05f), 8);
+
+        default:
+            // The original streams the function name after this prefix.
+            CGS_ASSERT(false, "SyncTimeManager not prepared in ");
+            return false;
+        }
+    }
+
+    // ---- OnHostMigration ------------------------------------------------------------
+    // Re-prepare the sync halves under the new host. The old host id only reaches a
+    // dropped dev-log line.
+    void
+    TimeManager::OnHostMigration(NetworkPlayerID /*lOldHostID*/, NetworkPlayerID lNewHostID, bool lbIAmHost)
+    {
+        CGS_ASSERT(miPlayersAdded > 0, "miPlayersAdded > 0");
+
+        ReleaseSyncTimeManagers();
+        PrepareSyncTimeManagers(lbIAmHost, lNewHostID);
+    }
+
+    // ---- SetStartFrame --------------------------------------------------------------
+    // Bookmark the frame gameplay counts from: the current frame, the frame at which
+    // the network clock read *lpStartTime (stepping back by the elapsed time over the
+    // frame step), or no frame at all.
+    void
+    TimeManager::SetStartFrame(EStartFrame leStartFrame, const CgsSystem::Time* lpStartTime, f32 lfTimeStep)
+    {
+        if (leStartFrame == E_START_FRAME_CURRENT)
+        {
+            mu16StartFrame        = GetU16FrameCount();
+            miStartFrameWrapCount = CalculateFrameWrapCount();
+        }
+        else if (leStartFrame == E_START_FRAME_PAST)
+        {
+            CGS_ASSERT(lpStartTime, "lpStartTime");
+            CGS_ASSERT(lfTimeStep > 0.0f, "lfTimeStep > 0.0f");
+
+            const CgsSystem::Time lElapsedTime    = mNetworkTime - *lpStartTime;
+            const u32             luElapsedFrames = static_cast<u32>(static_cast<s64>(lElapsedTime.GetFloatVal() / lfTimeStep));
+            const u32             luStartFrame    = muFrameCount - luElapsedFrames;
+
+            CalculateFrameCountAndWrapCount(luStartFrame, &mu16StartFrame, &miStartFrameWrapCount);
+        }
+        else
+        {
+            CGS_ASSERT(leStartFrame == E_START_FRAME_INVALID, "leStartFrame == E_START_FRAME_INVALID");
+
+            mu16StartFrame        = KU16_INVALID_FRAME;
+            miStartFrameWrapCount = 0;
+        }
+    }
+
+    // ---- CalculateFrameWrapCount ----------------------------------------------------
+    s32
+    TimeManager::CalculateFrameWrapCount() const
+    {
+        u16 lu16FrameCount;
+        s32 liWrapCount;
+        CalculateFrameCountAndWrapCount(muFrameCount, &lu16FrameCount, &liWrapCount);
+        return liWrapCount;
+    }
+
+    // ---- CalculateFrameCountAndWrapCount --------------------------------------------
+    // Split a running frame count into its 16-bit wire frame and the number of whole
+    // 0xFFFF-frame wraps. A count that is negative as a signed value (a start frame
+    // stepped back past frame zero) takes the second reduction, which rounds the wrap
+    // count down rather than toward zero; GetFrameWrapCountSinceStart reduces the same way.
+    void
+    TimeManager::CalculateFrameCountAndWrapCount(u32 luFrameCount, u16* lpu16FrameCount, s32* lpiWrapCount) const
+    {
+        s32 liNumWraps;
+        if (static_cast<s32>(luFrameCount) >= 0)
+        {
+            liNumWraps = static_cast<s32>(luFrameCount / KU_FRAME_WRAP_MODULUS);
+        }
+        else
+        {
+            liNumWraps = static_cast<s32>((luFrameCount - 1) / KU_FRAME_WRAP_MODULUS) - 0x10001;
+        }
+
+        *lpiWrapCount    = liNumWraps;
+        *lpu16FrameCount = static_cast<u16>(luFrameCount % KU_FRAME_WRAP_MODULUS);
     }
 } // namespace CgsNetwork

@@ -26,17 +26,11 @@
 // returned config record into the registered memory addresses (ParseConfigFile), and
 // EndAction records the outcome.
 //
-// FLAGGED (wire/data constants not recoverable from the available exports -- see the
-// per-table notes below): the request fourcc KAI_ACTION_CODE_MAPPING, and the DirtySock
-// error-code mapping KA_CONFIGDOWNLOAD_NEWS_SERVER_INTERFACE_ERROR_MAPPING.
+// The request fourcc table and the DirtySock error-code mapping are the console .rdata
+// tables.
 
 namespace CgsNetwork
 {
-    // The shared empty/error string the components point their base error-data slot at
-    // (X360 &unk_820046A7). Also used as the default value for TagFieldGetString. Its
-    // bytes live in unrecovered .rdata; declared extern as an honest placeholder.
-    extern const char gpcEmptyErrorString[];
-
     namespace
     {
         // Pack a 4-character code the way the X360 build reads it (big-endian byte order),
@@ -49,12 +43,10 @@ namespace CgsNetwork
                     static_cast<int>(static_cast<unsigned char>(d));
         }
 
-        // The "game news" lobby request fourcc. GetGameNewsCallback (@0x82888CB0) accepts a
-        // response whose code == miRequestedNewsIndex + 'new0' (the asm adds 0x6E657730),
-        // and StartAction sends this fixed kind plus the index as the "NAME" field.
-        // FLAGGED: the exact request kind word is not present in the recovered exports;
-        // 'new0' is inferred from the success-code base the callback compares against.
-        const int KI_REQUEST_GAME_NEWS = FourCC('n', 'e', 'w', '0');   // 0x6E657730
+        // The "game news" lobby request fourcc StartAction sends (with the index as the
+        // "NAME" field). GetGameNewsCallback accepts a response whose code ==
+        // miRequestedNewsIndex + 'new0' (the asm adds 0x6E657730).
+        const int KI_REQUEST_GAME_NEWS = FourCC('n', 'e', 'w', 's');   // 0x6E657773
 
         // Result codes the callback / parser produce explicitly (X360 immediates).
         const int KI_RESULT_NEWS_BASE  = FourCC('n', 'e', 'w', '0');   // 0x6E657730 ('new0'+idx)
@@ -103,11 +95,21 @@ namespace CgsNetwork
     // Lifecycle
     // ===========================================================================
 
+    // The object is laid out by Construct; the constructor only installs the vtable.
+    ServerInterfaceDownloadableConfig::ServerInterfaceDownloadableConfig()
+    {
+    }
+
+    // The deleting destructor only restores the base vtable and conditionally frees.
+    ServerInterfaceDownloadableConfig::~ServerInterfaceDownloadableConfig()
+    {
+    }
+
     // @ 0x8287ACC0 -- initialise the base component error slots and our own state.
     void ServerInterfaceDownloadableConfig::Construct()
     {
         meStatus             = 2;                          // +0x08 (E_STATUS_IDLE)
-        mpcCurrentAction     = gpcEmptyErrorString;        // +0x04 (base error-data slot)
+        mpcCurrentAction     = "";        // +0x04 (base error-data slot)
         miLastError          = 0;                          // +0x0C
         mpaDataIDToMemAddrs  = 0;                           // +0x14
         miMemAddrTableSize   = 0;                           // +0x1C
@@ -149,14 +151,10 @@ namespace CgsNetwork
         miMemAddrTableSize  = 0;                            // +0x1C
     }
 
-    // No standalone X360 body in the milestone func set (the build inlines/omits it);
-    // reconstructed from the Feb-2007 declaration. Resume re-enables the component without
-    // an in-flight action, mirroring Suspend's reset. NOT asm-verified.
+    // Empty: the owning server interface's resume fan-out reaches the shared empty body for
+    // this component.
     void ServerInterfaceDownloadableConfig::Resume()
     {
-        mpaDataIDToMemAddrs = 0;
-        meCurrentAction     = E_ACTION_COUNT;
-        miMemAddrTableSize  = 0;
     }
 
     // @ 0x8287AD68 -- on the reset event (id 5) drop the in-flight action.
@@ -337,7 +335,7 @@ namespace CgsNetwork
                     while (*lpacScan)
                         ++lpacScan;
                     const s32 liLength = static_cast<s32>(lpacScan - lpacValue);
-                    TagFieldGetString(lpacValue, lpacDest, liLength, gpcEmptyErrorString);
+                    TagFieldGetString(lpacValue, lpacDest, liLength, "");
                     break;
                 }
 
@@ -351,7 +349,7 @@ namespace CgsNetwork
                 case E_TYPE_BOOL:
                 {
                     TagFieldGetString(TagFieldFind(lpacConfigData, lrEntry.mpacName),
-                                      lacBool, 6, gpcEmptyErrorString);
+                                      lacBool, 6, "");
                     // True iff the value equals "TRUE" (byte-wise compare, stopping at the
                     // first mismatch or the terminating NUL of either string).
                     const char* lpacValue = lacBool;

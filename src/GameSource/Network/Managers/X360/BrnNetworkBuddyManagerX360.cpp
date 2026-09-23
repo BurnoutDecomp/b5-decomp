@@ -17,6 +17,8 @@
 // as extern "C" free functions, mirroring the sibling CgsBuddyManagerDirtySockX360.cpp /
 // BrnNetworkGamerCardManagerX360.cpp glue precedent. Argument shapes are taken from the X360
 // call sites (register usage), not the PPC Hex-Rays.
+#include "protomangle.h"   // ProtoMangleEncodeSession
+
 extern "C"
 {
     // Notification listener lifecycle. XNotifyCreateListener(qwAreas) returns a HANDLE (0 == fail);
@@ -42,9 +44,6 @@ extern "C"
 
     // Byte copy used by the X360 build in place of memcpy on the LIVE blobs.
     void* XMemCpy(void* lpDest, const void* lpSrc, u32 luCount);
-
-    // DirtySock session-id encoder: ProtoMangleEncodeSession(pXnAddr, len, pszSessionOut).
-    s32 ProtoMangleEncodeSession(const void* lpSession, u32 luLen, char* lpcSessionOut);
 
     // Case-insensitive bounded string compare (CRT _strnicmp; the X360 build links the
     // strnicmp alias). 0 == the first luCount chars match ignoring case.

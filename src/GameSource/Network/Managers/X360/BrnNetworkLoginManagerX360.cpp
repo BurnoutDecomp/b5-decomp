@@ -31,9 +31,7 @@
 // are taken from the X360 call sites (register usage), not the PPC Hex-Rays.
 // ------------------------------------------------------------------------------------
 
-// DirtySDK connection-status query (vendor SDK; same declaration as BrnNetworkLoginManagerBase.cpp).
-// The selector is a FourCC; 'gtag' fills the supplied buffer with the local Live gamertag.
-extern "C" int NetConnStatus(int luSelector, int liData, void* lpBuf, int liBufSize);
+#include "netconn.h"   // NetConnStatus ('gtag' fills the supplied buffer with the gamertag)
 
 extern "C"
 {

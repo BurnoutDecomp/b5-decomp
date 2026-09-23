@@ -19,37 +19,10 @@
 #include <cstddef>                             // offsetof (_AssertLayout)
 #include "types.hpp"
 #include "SDKs/EATech/eajobs/job.h"          // EA::Jobs::Job (embedded, sizeof=848)
+#include "GameShared/Jobs/DXTCompress/DXTCompress.h"   // DXTCompressData
+#include "GameShared/Jobs/DXTDecode/DXTDecode.h"       // DXTDecodeData
 
 namespace CgsMemory { class HeapMalloc; }
-
-// ---------------------------------------------------------------------------
-// Job descriptor structs (128-byte X360 layout, named-member access only).
-// ---------------------------------------------------------------------------
-
-// Descriptor for the DXT compression job (+0x700), a 128-byte aligned job data block.
-struct alignas(128) DXTCompressData
-{
-    char* lpUncompressedPixels;    // +0x00  source pixel buffer
-    char* lpCompressedPixels;      // +0x04  destination compressed buffer
-    s32 miTextureWidth;            // +0x08
-    s32 miTextureHeight;           // +0x0C
-    s32 miSrcPitch;                // +0x10
-    s32 miCmpPitch;                // +0x14
-    s32 miQuality;                 // +0x18
-    s32 leSourceFormat;            // +0x1C  renderengine::PixelFormat (stored as s32)
-    s8  lbInputIsUncompressedYUYV; // +0x20
-};
-
-// Descriptor for the DXT decode job (+0x780), a 128-byte aligned job data block.
-struct alignas(128) DXTDecodeData
-{
-    char* lpCompressedPixels;   // +0x00  source compressed buffer
-    char* lpUncompressedPixels; // +0x04  destination uncompressed buffer
-    s32 miCompressedPixelSize;  // +0x08
-    s32 miUncompressedSize;     // +0x0C
-    s32 miCompressedWidth;      // +0x10
-    s32 miCompressedHeight;     // +0x14
-};
 
 namespace CgsNetwork
 {

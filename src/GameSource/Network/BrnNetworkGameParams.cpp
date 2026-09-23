@@ -150,14 +150,14 @@ void GameParams::SetBoostType(s32 liBoostType)
 // X360 @ 0x8258A790. Pack the 5-bit game-mode field (base bit 8, stored biased by -10)
 // into the game-search word at +0xE8, then (re)publish the game-mode LIVE context via
 // AmendGameModeContexts over the base's context array (maRankedContexts @ +0xF8, count
-// @ +0x148). AmendGameModeContexts is handed the RAW game-mode value as lpParams. Then
+// @ +0x148). AmendGameModeContexts is handed the raw game-mode value. Then
 // assert the field round-trips.
 void GameParams::SetGameMode(s32 liGameMode)
 {
     muCustomFlags = ((static_cast<u32>(liGameMode - KI_GAME_PARAMS_GAME_MODE_BIAS) << 8) & 0x1F00u)
                   | (muCustomFlags & 0xFFFFE0FFu);
 
-    AmendGameModeContexts(reinterpret_cast<void*>(static_cast<intptr_t>(liGameMode)),
+    AmendGameModeContexts(liGameMode,
                           &miContextCount,
                           reinterpret_cast<MatchmakingContext*>(maRankedContexts));
 
@@ -297,6 +297,100 @@ s32 GameParams::VehicleLevelLimit() const
 void GameParams::SetLocality(u32 luLocality)
 {
     mGameData.muUser3 = luLocality;
+}
+
+
+// The defaults a freshly prepared game advertises: this build's network version, a
+// two-to-eight player game over three laps with traffic (and traffic checking) on, no vehicle
+// level limit, three runner crashes, previous-game-mode field 8 and the unset-locality marker.
+static const s32 KI_GAME_PARAMS_DEFAULT_NETWORK_VERSION = 2;
+static const s32 KI_GAME_PARAMS_DEFAULT_LAPS            = 3;
+static const s32 KI_GAME_PARAMS_DEFAULT_MIN_PLAYERS     = 2;
+static const s32 KI_GAME_PARAMS_DEFAULT_MAX_PLAYERS     = 8;
+static const s32 KI_GAME_PARAMS_DEFAULT_VEHICLE_LEVEL   = 0;
+static const u32 KU_GAME_PARAMS_DEFAULT_PREVIOUS_GAMEMODE_FIELD = 8;   // packed (bias-subtracted) value
+static const s32 KI_GAME_PARAMS_DEFAULT_RUNNER_CRASHES  = 3;
+static const u32 KU_GAME_PARAMS_UNSET_LOCALITY          = 0x7A7A5A5Au;
+
+// The lobby game record SerialiseFromGame reads is the network library's own structure: its
+// per-player entries start at +0x294 and are 0xA4 bytes apart (console layout).
+static const s32 KI_LOBBY_GAME_PLAYER_RECORDS_OFFSET = 0x294;
+static const s32 KI_LOBBY_GAME_PLAYER_RECORD_SIZE    = 0xA4;
+
+// Reset to the default game: the platform defaults first, then an empty name and password,
+// the default slot counts and packed settings, an unranked game in the first game mode, and
+// every player record prepared.
+bool GameParams::Prepare()
+{
+    if (!CgsNetwork::ServerInterfaceGameParamsX360::Prepare())
+    {
+        return false;
+    }
+
+    SetName("");
+    SetPassword("");
+
+    mGameData.muUser1 &= ~((((1u << KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS) - 1u) << KI_GAME_PARAMS_VEHICLE_LEVEL_BASE_BIT)
+                           | (((1u << KI_GAME_PARAMS_INFINITE_BOOST_NUM_BITS) - 1u) << KI_GAME_PARAMS_INFINITE_BOOST_BASE_BIT));
+    SetMinPlayers(KI_GAME_PARAMS_DEFAULT_MIN_PLAYERS);
+    SetMaxPlayers(KI_GAME_PARAMS_DEFAULT_MAX_PLAYERS);
+    SetTotalSlots(KI_GAME_PARAMS_DEFAULT_MAX_PLAYERS, 0);
+
+    const u32 luNetworkVersionMask =
+        (((1u << KI_GAME_PARAMS_NETWORK_VERSION_NUM_BITS) - 1u) << KI_GAME_PARAMS_NETWORK_VERSION_BASE_BIT);
+    const u32 luLapsMask      = (((1u << KI_GAME_PARAMS_LAPS_NUM_BITS) - 1u) << KI_GAME_PARAMS_LAPS_BASE_BIT);
+    const u32 luTimeLimitMask = (((1u << KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS) - 1u) << KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT);
+    mGameData.muUser1 = (mGameData.muUser1 & ~(luNetworkVersionMask | luLapsMask | luTimeLimitMask))
+                      | (static_cast<u32>(KI_GAME_PARAMS_DEFAULT_NETWORK_VERSION) << KI_GAME_PARAMS_NETWORK_VERSION_BASE_BIT)
+                      | (static_cast<u32>(KI_GAME_PARAMS_DEFAULT_LAPS) << KI_GAME_PARAMS_LAPS_BASE_BIT);
+
+    const u32 luSecurityMask =
+        (((1u << KU_BRN_GAMESEARCHDATA_SECURITY_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_SECURITY_BASE_BIT);
+    const u32 luSkillMask = (((1u << KU_BRN_GAMESEARCHDATA_SKILL_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_SKILL_BASE_BIT);
+    const u32 luTrafficCheckingMask = (((1u << KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_BASE_BIT);
+    const u32 luBoostTypeMask =
+        (((1u << KU_BRN_GAMESEARCHDATA_BOOST_TYPE_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_BOOST_TYPE_BASE_BIT);
+    const u32 luRunnerCrashesMask =
+        (((1u << KU_BRN_GAMESEARCHDATA_RUNNER_CRASHES_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_RUNNER_CRASHES_BASE_BIT);
+    muCustomFlags = (muCustomFlags & ~(luSecurityMask | luSkillMask | luTrafficCheckingMask | luBoostTypeMask | luRunnerCrashesMask))
+                  | (1u << KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_BASE_BIT)
+                  | (static_cast<u32>(KI_GAME_PARAMS_DEFAULT_RUNNER_CRASHES) << KU_BRN_GAMESEARCHDATA_RUNNER_CRASHES_BASE_BIT);
+
+    miRoomID = -1;
+    SetRankedGame(false);
+    SetGameMode(KI_GAME_PARAMS_GAME_MODE_BIAS);
+
+    const u32 luVehicleLevelMask =
+        (((1u << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_BASE_BIT);
+    const u32 luTrafficOnMask =
+        (((1u << KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_BASE_BIT);
+    const u32 luPreviousGameModeMask = (((1u << KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_NUM_BITS) - 1u) << KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_BASE_BIT);
+    muCustomFlags = (muCustomFlags & ~(luVehicleLevelMask | luTrafficOnMask | luPreviousGameModeMask))
+                  | (static_cast<u32>(KI_GAME_PARAMS_DEFAULT_VEHICLE_LEVEL) << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_BASE_BIT)
+                  | (1u << KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_BASE_BIT)
+                  | (KU_GAME_PARAMS_DEFAULT_PREVIOUS_GAMEMODE_FIELD << KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_BASE_BIT);
+    mbJoinUserset = false;
+
+    mGameData.muUser3 = KU_GAME_PARAMS_UNSET_LOCALITY;
+
+    for (s32 liSlot = 0; liSlot < KI_GAMEPARAMS_PLAYER_SLOTS; ++liSlot)
+    {
+        maPlayerParams[liSlot].Prepare();
+    }
+    return true;
+}
+
+// Serialise the platform game record, then let each of the seven player-param records read
+// its own player entry of the lobby record.
+void GameParams::SerialiseFromGame(const void* lpGame)
+{
+    CgsNetwork::ServerInterfaceGameParamsX360::SerialiseFromGame(lpGame);
+
+    const u8* lpu8PlayerRecords = static_cast<const u8*>(lpGame) + KI_LOBBY_GAME_PLAYER_RECORDS_OFFSET;
+    for (s32 liSlot = 0; liSlot < KI_GAMEPARAMS_PLAYER_SLOTS; ++liSlot)
+    {
+        maPlayerParams[liSlot].SerialiseFromPlayer(lpu8PlayerRecords + liSlot * KI_LOBBY_GAME_PLAYER_RECORD_SIZE);
+    }
 }
 
 } // namespace BrnNetwork

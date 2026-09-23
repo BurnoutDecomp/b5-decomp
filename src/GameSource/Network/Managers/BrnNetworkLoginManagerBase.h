@@ -154,10 +154,11 @@ namespace BrnNetwork
         void FinishedWithTOS();   // DWARF .cpp:1247 -- no asm in this export (declaration-only).
 
     protected:
-        // X360 .h:179 -- the per-platform sign-in front end step (LoginManagerX360 overrides).
-        virtual void PlatformSpecificUpdate(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);
-        // X360 .h:184 -- supply the user name / password for the DS login (LoginManagerX360 overrides).
-        virtual void GetUserNameAndPassword(char* lpcUserName, char* lpcPassword);
+        // The per-platform sign-in front end step. Pure: the console has no base body (only the
+        // platform leaf's vtable exists, and the leaf supplies the one body).
+        virtual void PlatformSpecificUpdate(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput) = 0;
+        // Supply the user name / password for the DS login. Pure for the same reason.
+        virtual void GetUserNameAndPassword(char* lpcUserName, char* lpcPassword) = 0;
 
         // X360 0x82543C30 -- end the flow (disconnecting on failure), recording the completed type.
         void Finished(bool lbSuccess);

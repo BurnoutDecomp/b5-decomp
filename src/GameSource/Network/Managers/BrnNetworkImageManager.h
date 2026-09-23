@@ -68,6 +68,7 @@ namespace CgsNetwork
     class NetworkTextureDXTCompress;     // Construct param (pointer-only)
     struct ReliableMessage;              // _ImageMessageArrivedCallback param (committed home: CgsReliableMessage.h)
     struct SignalMessage;                // _ImageMessageDeliveredCallback param
+    struct UniquePlayerIDX360;           // GetUniqueIDByPlayerID param (pointer only)
 }
 
 namespace BrnGameState
@@ -147,7 +148,7 @@ namespace BrnNetwork
         bool Release();                                                              // @ 0x8255DA20  (bodied)
         void Destruct();                                                            // @ 0x8255D8B0  (bodied)
 
-        void ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutput);                     // @ 0x8256F6E8  // FLAG: declaration-only
+        void ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutput);                     // (bodied)
         void ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);    // (bodied)
 
         void AddPlayer(NetworkPlayerID lPlayerID);    // @ 0x82576110  (bodied)
@@ -157,7 +158,7 @@ namespace BrnNetwork
         CgsNetwork::NetworkTexture* GetMugshotImageByAggressor(NetworkPlayerID lTakedownAggressorID);        // @ 0x8254AC28  (bodied)
         NetworkPlayerID             GetMugshotVictimID(NetworkPlayerID lTakedownAggressorID);                // @ 0x8254AE10  (bodied)
         CgsNetwork::NetworkTexture* GetPhotoFinishImageByRoundWinner(NetworkPlayerID lRoundWinnerID,
-                                                                     bool* lpbIsPhotoFinish);               // @ 0x8254ACA0  // FLAG: declaration-only
+                                                                     bool* lpbAlreadyShowingPhotoFinish);   // (bodied)
         void OnRoundStart();                                          // @ 0x8255DC98  (bodied)
 
         // The local player left the mode: forget every slot's victim and pending packets and the
@@ -190,34 +191,57 @@ namespace BrnNetwork
 
     private:
         // ---- internals ------------------------------------------------------------------
-        void         SendNextSegment();                                                 // @ 0x82555658  // FLAG: declaration-only
+        void         SendNextSegment();                                                 // (bodied)
+
+        // The first slot that is still owed picture segments (a player is in it and it has
+        // packets left to send), or null. Inlined into SendNextSegment on the console.
+        MugshotData* GetImageDataToSend()
+        {
+            for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
+            {
+                if ( maMugshotData[liIndex].mTakedownAggressorPlayerID != -1 &&
+                     maMugshotData[liIndex].miNumberOfPacketsToSend > 0 )
+                {
+                    return &maMugshotData[liIndex];
+                }
+            }
+            return nullptr;
+        }
+
+        // The reliable-message send buffer has room for a mugshot. Inlined into
+        // SendMugshotPicture on the console; defined inline in the .cpp.
+        bool         IsThereEnoughBandwidthToSend();
         MugshotData* GetMugshotDataEntry(NetworkPlayerID lPlayerID);                     // @ 0x8254A940 (DWARF GetMugshotDataEn)
         ImageMessageData* GetImageMessageDataEntry(NetworkPlayerID lPlayerID);           // @ 0x8254A8B8 (DWARF GetImageMes)
         // @ 0x8254A9C8 -- local communications-privilege gate for mugshot exchange.
         EMugshotPrivilege CheckMugshotPrivilege();
         void         ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue); // (bodied)
-        void         ProcessDirtyTrickEvents();                                         // FLAG: declaration-only
+        void         ProcessDirtyTrickEvents();                                         // (bodied)
         void         OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* lpOutput);      // (bodied)
-        void         HandleMugshotEvent(const BrnNetworkModuleIO::NetworkInPaybackMugshotEvent* lpEvent); // FLAG: declaration-only
+        void         HandleMugshotEvent(const BrnNetworkModuleIO::NetworkInPaybackMugshotEvent* lpMugshotEvent); // (bodied)
         void         AbortMugshotCapture();                                             // @ 0x825649A8  (bodied)
         void         AbortMugshotShow();                                                // @ 0x82564A98  (bodied)
-        bool         AreMugshotsDisabledForPlayer(NetworkPlayerID lPlayerID);           // FLAG: declaration-only
-        void         SendMugshotPicture(NetworkPlayerID lAggressorID, NetworkPlayerID lVictimID,
-                                        NetworkPlayerID lReceiverID);                    // @ 0x82564B80  // FLAG: declaration-only
-        void         BroadcastImage(MugshotData* lpMugshotData);                         // @ 0x825559C8  // FLAG: declaration-only
-        void         ReceiveImageMessage(NetworkPlayerID lSenderID, ImageMessage* lpImageMessage); // @ 0x825732A8  // FLAG: declaration-only
+        bool         AreMugshotsDisabledForPlayer(NetworkPlayerID lRemotePlayerID);     // (bodied)
+        void         SendMugshotPicture(NetworkPlayerID lRemotePlayerID,
+                                        NetworkPlayerID lTakedownAggressorPlayerID,
+                                        NetworkPlayerID lTakedownVictimPlayerID);        // (bodied)
+        void         BroadcastImage(MugshotData* lpMugshotData);                         // (bodied)
+        void         ReceiveImageMessage(NetworkPlayerID lSendingPlayerID, ImageMessage* lpImageMessageRecv); // (bodied)
         void         HandleReceivedCameraPic(NetworkPlayerID lSenderID, MugshotData* lpMugshotData,
                                              BrnGameState::GameStateModuleIO::EImageType leImageType); // (bodied)
-        void         HandleShowingMugshot(bool lbShowMyMugshot);                         // @ 0x82555B38  // FLAG: declaration-only
-        void         GetCompressedTexture(CgsNetwork::NetworkTexture* lpTexture);         // @ 0x8256BC38  // FLAG: declaration-only
-        void         RequestMugshotSave(MugshotData* lpMugshotData, NetworkPlayerID lPlayerID,
-                                        BrnGameState::GameStateModuleIO::EImageType leImageType); // FLAG: declaration-only
+        void         HandleShowingMugshot(bool lbShowMyMugshot);                         // (bodied)
+        void         GetCompressedTexture(CgsNetwork::NetworkTexture* lpCompressedTexture); // (bodied)
+        void         RequestMugshotSave(MugshotData* lpLocalMugshotData, NetworkPlayerID lImageSenderPlayerID,
+                                        BrnGameState::GameStateModuleIO::EImageType leMugshotType); // (bodied)
+        // Fill lpUniqueID with the gamer name and XUID of lNetworkPlayerID, read from the games
+        // component's player parameters.
+        void         GetUniqueIDByPlayerID(NetworkPlayerID lNetworkPlayerID,
+                                           CgsNetwork::UniquePlayerIDX360* lpUniqueID);
 
         // Static compress callbacks (the texture compressor's CompressionCompleteCallback shape;
-        // the user-data is this manager). Bodies reach the un-homed compress/segment pipeline ->
-        // declaration-only.
-        static void  _GetCompressedCameraPicCallback(void* lpPixels, void* lpUserData);   // FLAG: declaration-only
-        static void  _GetCompressedGamerPicCallback(void* lpPixels, void* lpUserData);    // FLAG: declaration-only
+        // the user-data is this manager).
+        static void  _GetCompressedCameraPicCallback(void* lpPixels, void* lpUserData);   // (bodied)
+        static void  _GetCompressedGamerPicCallback(void* lpPixels, void* lpUserData);    // (bodied)
 
         // Reliable-message arrival callback registered with CgsNetwork::NetworkPlayer for the
         // ImageMessage type (matches CgsNetwork::ReliableMessageArrivedCallback). Forwards to

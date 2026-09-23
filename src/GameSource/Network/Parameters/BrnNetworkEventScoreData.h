@@ -42,6 +42,30 @@
 
 namespace BrnNetwork
 {
+    // The online event leaderboards: one scoreboard per stunt-run event and one per burn-route
+    // event. Scoreboard slot i of each mode belongs to the event whose id is entry i of that
+    // mode's table (rodata tables read by the event-score uploader and the scoreboard browser).
+    const s32 KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS  = 14;
+    const s32 KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS = 35;
+
+    const u64 KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS[KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS] =
+    {
+        481049u, 481074u, 481389u, 481037u, 481066u,
+        480897u, 481387u, 480888u, 481005u, 481400u,
+        481086u, 481026u, 481528u, 481384u,
+    };
+
+    const u64 KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS[KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS] =
+    {
+        480974u, 481424u, 480973u, 480846u, 481040u,
+        481012u, 480860u, 481027u, 481057u, 481050u,
+        480998u, 480901u, 481030u, 480890u, 480899u,
+        481045u, 481015u, 481069u, 481548u, 527090u,
+        481034u, 480905u, 481061u, 481381u, 480854u,
+        527091u, 480892u, 481083u, 481386u, 481402u,
+        481032u, 481470u, 480847u, 481014u, 486462u,
+    };
+
     class EventScoreData : public CgsNetwork::ServerInterfaceStructureInterface
     {
     public:
@@ -67,14 +91,11 @@ namespace BrnNetwork
         // X360 SerialiseToString @ 0x82584CA0.
         void SerialiseToString( char* lpcRecord, s32 liRecLen );
 
-        // ServerInterfaceStructureInterface overrides. GetDataSize is X360 GetDataSize @
-        // 0x82584D38 (returns 184); GetPattern / GetPatternLength / GetData bodies live in
-        // other (out-of-batch) TUs -- declared here so SerialiseToString / the interface
-        // contract resolve. FLAG: those override bodies are not yet reconstructed in-tree; the
-        // vtable is anchored to this TU (destructor), so they must be provided before this
-        // class is instantiated at link time.
+        // ServerInterfaceStructureInterface overrides. GetDataSize returns 184. The class
+        // vtable keeps the base GetPatternLength (its slot
+        // holds the shared base body), so that virtual is NOT overridden here; GetPattern and
+        // both GetData slots hold this class's own (identical-code-folded) bodies.
         virtual const char* GetPattern() const override;
-        virtual s32         GetPatternLength() const override;
         virtual u32         GetDataSize() const override;
         virtual void*       GetData() override;
         virtual const void* GetData() const override;

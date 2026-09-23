@@ -61,7 +61,17 @@ namespace CgsNetwork
 
     struct ConnectionStatusMessage : ReliableMessage
     {
-        void               Construct();
+        // Inlined at every call site on the console: every record to (no player,
+        // E_NOT_STARTED), then the base's field reset.
+        void               Construct()
+        {
+            for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
+            {
+                maConnectionData[liIndex].mPlayerID          = KI_INVALID_PLAYER_ID;
+                maConnectionData[liIndex].meConnectionStatus = E_NOT_STARTED;
+            }
+            MessageWithPlayerIDs::Construct();
+        }
         void               PrepareForSend(const PlayerConnectionData* lpaConnectionData,
                                           u16 lu16Frame);
         bool               Retrieve(PlayerConnectionData* lpaConnectionData);

@@ -16,14 +16,10 @@
 // (CgsServerInterfaceUsersets.h DWARF:
 // `ServerInterfaceUsersets : public CgsNetwork::ServerInterfaceComponent`).
 //
-// This TU owns only the X360 vector-deleting destructor @ 0x827DE280 (it restores the
-// shared component vtable slot off_820CDBF8 at this+0 and conditionally frees). The
-// behavioural members and methods (Construct / Prepare / CreateUserset / JoinUserset /
-// KickPlayer / ... and the display-list / action members modelled in the
-// CgsServerInterfaceUsersets.h DWARF) are owned by their own dossiers; only the
-// destructor is reconstructed here so the leaf's vtable slot is emitted exactly once.
-// The base layout (vptr + mpcCurrentAction / meStatus / miLastError) is inherited by
-// name from the committed ServerInterfaceComponent -- not re-forked here.
+// LAYOUT: the ServerInterfaceComponent base (+0x00..+0x0F), then
+//   +0x10  mpServerInterface
+//   +0x14  meCurrentAction
+//   +0x18  mpUsersInUsersetList  (the lobby's userset-member display list)
 // ===========================================================================
 
 // DirtySDK handles (vendor SDK, global namespace like LobbyApiRefT).
@@ -35,6 +31,7 @@ struct DispListRef;
 namespace CgsNetwork
 {
     struct ServerInterfaceUsersetParamsBase;
+    struct DSErrorToServerInterfaceErrorTable;
 
     class ServerInterfaceUsersets : public ServerInterfaceComponent
     {
@@ -52,20 +49,14 @@ namespace CgsNetwork
 
         ServerInterfaceUsersets();
 
-        // CgsServerInterfaceUsersets.h:69 -- vector deleting destructor @ 0x827DE280.
         virtual ~ServerInterfaceUsersets();
 
-        // ADDITIVE GROW (flagged by the BrnNetworkConnectionManager group). The NAT-kick walk
-        // (X360 KickUnNATablePlayer @ 0x82566860) routes the kick through the userset component
-        // when the target is in the local player's userset:
-        //   IsPlayerInOurUserset() -- is the named player in our userset? (DWARF h:238)
-        //   KickPlayer()           -- evict the named player with a kick reason (DWARF h:241)
-        // Signatures from DecFIGS DWARF (CgsServerInterfaceUsersets.h). Declared-only here;
-        // bodies are homed in the usersets component's own behavioural TU.
+        // Userset membership queries and kicks. The by-name and by-id forms find the
+        // member's display-list index and kick through KickPlayer(index).
         bool IsPlayerInOurUserset(const char* lpcPlayerName) const;
-        // The console body compares the id with the first word of each userset list entry.
         bool IsPlayerInOurUserset(s32 lPlayerID) const;
         void KickPlayer(const char* lpcPlayerName, EKickReason leReason);
+        void KickPlayer(s32 liMemberIndex, EKickReason leReason);
         void KickPlayerByID(s32 lPlayerID, EKickReason leReason);
 
         // --- component overrides and lifecycle ---
@@ -92,6 +83,10 @@ namespace CgsNetwork
         void AllocDisplayLists();
         void StartAction(EAction leAction);
         static void DefaultCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+
+        static const s32 KAI_ACTION_CODE_MAPPING[E_ACTION_COUNT];
+        static const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[E_ACTION_COUNT];
+        static const char* KAPC_ACTION_NAMES[E_ACTION_COUNT];
 
         ServerInterfaceDirtySock* mpServerInterface;       // +0x10
         EAction                   meCurrentAction;         // +0x14

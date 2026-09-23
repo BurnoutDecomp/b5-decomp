@@ -23,24 +23,22 @@ namespace CgsNetwork
     namespace DebugUI = CgsDev::DebugUI;
 
     // ------------------------------------------------------------------------------------
-    // File-scope constants RenderHUD reads (consolidator-owned; see header + TU issues):
-    //   KAPC_SERVER_TYPES - the seven server-type display names indexed by EServerType. Only
-    //   element 0 ("Local Server") is byte-attested in the X360 asm (off_82F33478@l comment);
-    //   elements 1..6 are inferred from the EServerType enum names and are NOT byte-attested.
+    // The seven server-type display names RenderHUD indexes by the server type, in the
+    // console's table order. The shipped table has "Auto detect Server" second and a single
+    // demo entry, so it does not line up one-to-one with the EServerType enumerator names.
     const char* const KAPC_SERVER_TYPES[E_SERVER_TYPE_COUNT] =
     {
-        "Local Server",   // E_SERVER_TYPE_LOCAL  (byte-attested)
-        "Dev Server",     // E_SERVER_TYPE_DEV    (inferred)
-        "Test Server",    // E_SERVER_TYPE_TEST   (inferred)
-        "Juice Server",   // E_SERVER_TYPE_JUICE  (inferred)
-        "Artist Server",  // E_SERVER_TYPE_ARTIST (inferred)
-        "Demo 1 Server",  // E_SERVER_TYPE_DEMO_1 (inferred)
-        "Demo 2 Server",  // E_SERVER_TYPE_DEMO_2 (inferred)
+        "Local Server",
+        "Auto detect Server",
+        "Dev Server",
+        "Test Server",
+        "Juice Server",
+        "Artist Server",
+        "Demo Server 1",
     };
 
-    // The banner text colour (X360: a .rdata data-load, value not byte-attested) and the
-    // text size (X360 flt_820E8C0C == 12.0f).
-    static const RGBA KU_TEXT_COLOUR = 0xFFFFFFFFu;
+    // The banner text colour (an initialised data word, 0xE0FFFFFF) and the text size (12).
+    static const RGBA KU_TEXT_COLOUR = 0xE0FFFFFFu;
     static const f32  KF_TEXT_SIZE   = 12.0f;
 
     // Two-phase init, inlined into NetworkManager::Construct: the base first, then no version
@@ -70,6 +68,24 @@ namespace CgsNetwork
     const char* VersionDisplay::GetName() const
     {
         return "Network Version Display";
+    }
+
+    // The debug-menu folder the component sits in (identical code to the other network
+    // components' GetPath).
+    const char* VersionDisplay::GetPath() const
+    {
+        return "Network";
+    }
+
+    // No menu entries of its own (an empty body on the console).
+    void VersionDisplay::OnActivate()
+    {
+    }
+
+    // Registered as a full component, not a simple one.
+    bool VersionDisplay::IsSimple() const
+    {
+        return false;
     }
 
     // X360 0x8286F9F0. Seed the version-display component from the network prepare params: the server

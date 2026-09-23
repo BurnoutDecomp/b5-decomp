@@ -36,7 +36,8 @@ namespace BrnNetwork
     class PlayerParams : public PlayerParamsBase
     {
     public:
-        PlayerParams();
+        // Inlined at every stack construction site (only the vptr store survives).
+        PlayerParams() {}
         virtual ~PlayerParams();
     };
 }

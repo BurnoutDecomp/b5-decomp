@@ -4,10 +4,8 @@
 //
 // The nine X360-recovered members of the Xbox-Live invite/join state machine. Layout, enum
 // values and every constant below are grounded in the recovered asm (see the owning header for
-// the per-offset map). The four further DWARF-declared members (Release/Update/JoinGameComplete/
-// GetGameID and the private ProcessGameStateActions/SetPreparingForInvite) have no recovered X360
-// body in this TU and are declared-only in the header -- their bodies are resolved by their own
-// slices / inlined at the call sites; no body is fabricated here.
+// the per-offset map). Release shares Prepare's body; JoinGameComplete, GetGameID and
+// SetPreparingForInvite are header inlines; ProcessGameStateActions has no body of its own.
 // ===================================================================================
 
 #include "GameSource/Network/Managers/BrnNetworkInviteManager.h"
@@ -19,6 +17,10 @@
 #include "GameShared/GameClasses/System/CgsHardwareInit.h" // CgsSystem::HardwareInit::IsHardDiskAvailable
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> / <14000,16>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"             // CgsDev::StrStream (unknown-state assert)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // IsLocalPlayerInGame / GetGameID
+#include "GameSource/Network/Managers/BrnNetworkStateManager.h"         // StateManager::GetState
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"              // NetworkOutInviteFailed
 
 #include <cstring>   // std::memcpy (X360 StartInviteOrJoin / DownloadPlayersGameIDFromServer)
 
@@ -59,10 +61,9 @@ namespace BrnNetwork
         // enum member since no enum for it is recovered.
         const s32 KI_INVITE_FAILED_REASON_NO_HARD_DISK = 4;
 
-        // The "idle" status the get-game-id sub-machine waits for from the server interface and the
-        // player-info query (X360 GetStatus(...) == 2; BrnServerInterface::E_STATUS_IDLE == 2). The
-        // queried component index is the X360 immediate li r4, 2.
-        const s32 KI_SERVER_INTERFACE_COMPONENT = 2;
+        // The reason code Update posts when the local player is already in the target's game
+        // (the console immediate 1).
+        const s32 KI_INVITE_FAILED_REASON_SAME_GAME = 1;
     }
 
     // X360 0x825488B0 -- store the owning module and bring both state machines to their idle/not-in-
@@ -81,6 +82,14 @@ namespace BrnNetwork
         return true;                                  // return 1
     }
 
+    // The release step re-arms the get-game-id sub-machine exactly as Prepare does (the network
+    // manager's release stage reaches the same body).
+    bool NetworkInviteManager::Release()
+    {
+        meGetGameIDState = E_GET_ID_STATE_IDLE;
+        return true;
+    }
+
     // X360 0x825488E0 -- reset both state machines to their not-in-invite / idle values.
     void NetworkInviteManager::Destruct()
     {
@@ -93,6 +102,85 @@ namespace BrnNetwork
     bool NetworkInviteManager::IsInInvite() const
     {
         return meInviteState != E_INVITE_STATE_COUNT; // *(a1 + 436) != 7
+    }
+
+    // Drive the invite: fetch the target player's game id, check the local player
+    // is not already in that game, then (once the state manager is not matchmaking) join the
+    // target's session. The get-game-id sub-machine is ticked on every path.
+    void NetworkInviteManager::Update()
+    {
+        switch (meInviteState)
+        {
+        case E_INVITE_STATE_PREPARING_FOR_INVITE:
+        case E_INVITE_STATE_LOGGING_IN_TO_SERVER:
+        case E_INVITE_STATE_JOINING_GAME_SESSION:
+        case E_INVITE_STATE_COUNT:
+            break;
+
+        case E_INVITE_STATE_GETTING_GAME_ID:
+            DownloadPlayersGameIDFromServer(&mInviteOrJoinParams.mPlayerName);
+            // fall through
+        case E_INVITE_STATE_WAITING_FOR_GAME_ID:
+            meInviteState = E_INVITE_STATE_WAITING_FOR_GAME_ID;
+            if (!GetGameID(&mInviteOrJoinParams.miGameID))
+            {
+                break;
+            }
+            // fall through
+        case E_INVITE_STATE_VERIFYING_GAME_ID:
+        {
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+            BrnServerInterface* lpServerInterface = mpNetworkModule->GetNetworkManager()->GetServerInterface();
+            CGS_ASSERT(lpServerInterface, "lpServerInterface");
+            CGS_ASSERT(lpServerInterface->GetGameComponent(), "lpServerInterface->GetGameComponent()");
+
+            s32 liCurrentGameID = -1;
+            if (lpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
+            {
+                liCurrentGameID = lpServerInterface->GetGameComponent()->GetGameID();
+            }
+
+            if (liCurrentGameID == mPlayerInfoData.GetGameID())
+            {
+                // Already in the target's game: fail the invite.
+                BrnNetworkModuleIO::NetworkOutInviteFailed lInviteFailedEvent;
+                lInviteFailedEvent.meFailReason = KI_INVITE_FAILED_REASON_SAME_GAME;
+                AsNetworkQueue(mpNetworkModule->GetNetworkEventQueue())
+                    ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInviteFailedEvent),
+                               KI_INVITE_FAILED_EVENT_TYPE, 4);
+                CompleteInvite(false);
+                break;
+            }
+        }
+            // fall through
+        case E_INVITE_STATE_START_JOIN_GAME_SESSION:
+            meInviteState = E_INVITE_STATE_START_JOIN_GAME_SESSION;
+            CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager(),
+                       "mpNetworkModule->GetNetworkManager()->GetStateManager()");
+            if (mpNetworkModule->GetNetworkManager()->GetStateManager()->GetState()
+                == StateManager::E_STATE_WAIT_MATCHMAKING)
+            {
+                break;
+            }
+            meInviteState = E_INVITE_STATE_JOINING_GAME_SESSION;
+            mpNetworkModule->GetNetworkManager()->JoinGameSession(mInviteOrJoinParams.macSessionID);
+            break;
+
+        default:
+        {
+            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Unknown state in NetworkInviteManager: " << static_cast<s32>(meInviteState) << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+        }
+
+        UpdateGettingGameID();
     }
 
     // X360 0x82548AA8 -- remember the player whose game id we want and kick the get-game-id
@@ -209,7 +297,7 @@ namespace BrnNetwork
                        "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
 
             BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
-            if (lpNetworkManager->GetServerInterface()->GetStatus(KI_SERVER_INTERFACE_COMPONENT)
+            if (lpNetworkManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
                 == BrnServerInterface::E_STATUS_IDLE)
             {
                 // Server interface is idle: issue the by-name player-info query into mPlayerInfoData,
@@ -238,7 +326,7 @@ namespace BrnNetwork
                        "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
 
             BrnNetworkManager* lpWaitManager = mpNetworkModule->GetNetworkManager();
-            if (lpWaitManager->GetServerInterface()->GetStatus(KI_SERVER_INTERFACE_COMPONENT)
+            if (lpWaitManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
                 == BrnServerInterface::E_STATUS_IDLE)
             {
                 meGetGameIDState = E_GET_ID_STATE_IDLE;  // *(v1 + 432) = 2

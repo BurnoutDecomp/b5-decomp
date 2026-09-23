@@ -29,41 +29,81 @@
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::EServerType
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // CgsNetwork::ServerInterfaceDirtySock (mpServerInterface's real type)
 
+#include "netgamelink.h"   // NetGameLinkRefT, NetGamePacketT
+
+namespace CgsMemory
+{
+    class HeapMalloc;
+}
+
 namespace CgsNetwork
 {
     struct NetworkAdapterPrepareParams;   // defined below; Prepare() takes it by pointer.
 
-    // --- The "fake network conditions" buffered-message connection block -----------------
-    // The DWARF types the address payload a NetworkPlayer sends through as
-    // FakeNetworkConditions::BufferedMessageData::ConnectionData (passed BY VALUE into
-    // SendTo). NetworkPlayer carries a copy of it (its mConnectionData member). It is an
-    // opaque sized value block here -- this TU only stores/copies it whole; the field-level
-    // shape belongs to the FakeNetworkConditions TU. The X360 SendTo glue reads 0x48 (72)
-    // bytes of it off the stack copy (5 doublewords), so it is modelled as a 0x70-byte value
-    // (the size NetworkPlayer reserves) carried by value. FLAGGED: opaque sized placeholder.
-    // This is the canonical home for the type; NetworkPlayer's mConnectionData reuses it.
+    // --- How a NetworkPlayer reaches its peer --------------------------------------------
+    // The address block a NetworkPlayer sends and receives through (passed BY VALUE into
+    // SendTo / ReceiveFrom); NetworkPlayer and each PlayersConnectionManager entry carry a
+    // copy. PlayersConnectionManager::UpdatePlayerList is its only filler: once a peer's
+    // ConnApi game connection is active it copies the peer's ConnApiClientT fields into
+    // it. 0x70 console bytes. This is the canonical home for the type.
+    //
+    // Host note: mpNetGameLink is 8 bytes on the host (4 on the console), so every member
+    // after it sits 4 bytes later and the host block is larger than 0x70. Offsets below are
+    // the console's; read and write the block only by member name.
     struct ConnectionData
     {
-        u8  maReserved00[0x28];
-        // How the game and voice traffic reach this peer (the lobby status writer copies
-        // both words out of a player's connection data).
-        s32 meGameConnectionType;   // +0x28
-        s32 meVoipConnectionType;   // +0x2C
-        u8  maReserved30[0x40];
+        NetGameLinkRefT* mpNetGameLink;          // +0x00  the peer's game link (null = no link)
+        s32              miIPAddress;            // +0x04  external address (ConnApi UserInfo.uAddr)
+        s32              miLocalIPAddress;       // +0x08  internal address (UserInfo.uLocalAddr)
+        u32              muGamePort;             // +0x0C  UserInfo.uLocalGamePort
+        u32              muVoipPort;             // +0x10  UserInfo.uLocalVoipPort
+        u32              muLocalGamePort;        // +0x14  GameInfo.uLocalPort
+        u32              muMnglGamePort;         // +0x18  GameInfo.uMnglPort (demangled port)
+        u32              muLocalVoipPort;        // +0x1C  VoipInfo.uLocalPort
+        u32              muMnglVoipPort;         // +0x20  VoipInfo.uMnglPort
+        u32              muConnApiClientId;      // +0x24  UserInfo.uClientId
+        // How the game and voice traffic reach this peer: bit 1 of the matching ConnApi
+        // connection's uConnFlags (the lobby status writer copies both words out).
+        s32              meGameConnectionType;   // +0x28
+        s32              meVoipConnectionType;   // +0x2C
+        // Zeroed by Clear, never written by the filler (UpdatePlayerList copies whatever
+        // its stack block held there).
+        u8               maReserved30[0x40];     // +0x30 .. +0x6F
+
+        // SendTo asserts "lConnectionData.IsValid()" on a null link; the receive loop skips
+        // a player whose link is null.
+        bool IsValid() const { return mpNetGameLink != nullptr; }
+
+        // Inlined into NetworkPlayer's Construct / Prepare / Release: no link, both
+        // addresses and the client id -1, every port and connection type 0, tail zeroed.
+        void Clear()
+        {
+            mpNetGameLink        = nullptr;
+            miIPAddress          = -1;
+            miLocalIPAddress     = -1;
+            muConnApiClientId    = static_cast<u32>(-1);
+            muGamePort           = 0;
+            muVoipPort           = 0;
+            muLocalGamePort      = 0;
+            muMnglGamePort       = 0;
+            muLocalVoipPort      = 0;
+            muMnglVoipPort       = 0;
+            meGameConnectionType = 0;
+            meVoipConnectionType = 0;
+            for (s32 liIndex = 0; liIndex < static_cast<s32>(sizeof(maReserved30)); ++liIndex)
+            {
+                maReserved30[liIndex] = 0;
+            }
+        }
     };
 
     // --- The network adapter base (UDP/DirtySock send path) ------------------------------
-    // SHAPE/method from the DecFIGS DWARF (CgsNetworkAdapterBase.h:129-222), gated against the
-    // ARTIST binary. Polymorphic base: the X360/PS3 concrete adapter overrides Prepare /
-    // Update / Release / SetServerType, and CgsNetwork::NetworkManager dispatches through the
-    // vtable (the X360 adapter stores a vtable at +0x00, confirmed by the asm). The member
-    // layout below is the X360-attested offset map (the asm reads mpNetworkManager @+0x08,
-    // mpServerInterface @+0x0C, meServerType @+0x18, mbDuplicateLogin @+0x1C; concrete adapter
-    // members begin @+0x28). The fake-network-conditions / last-error region between
-    // mpServerInterface and meServerType is NOT individually attested by the X360 binary, so it
-    // is reserved as an explicit padding buffer rather than fabricating its field shape -- the
-    // FakeNetworkConditions debug block belongs to its own home. FLAGGED: mPad10 is an
-    // offset-preserving reserve, not a recovered field layout.
+    // The platform-independent half of the adapter: the receive buffer, the send / receive
+    // calls onto the peer's game link, and the state the platform adapter shares. The network
+    // manager holds the platform adapter by value and calls its lifecycle directly; the only
+    // virtual is SetServerType. Member offsets below are the console's (mpNetworkManager +0x08,
+    // mpServerInterface +0x0C, meServerType +0x18, mbDuplicateLogin +0x1C; the platform
+    // adapter's members begin at +0x28).
     struct NetworkAdapterBase
     {
         // DWARF CgsNetworkAdapterBase.h:132 / :145 -- the adapter status + error enums.
@@ -83,13 +123,14 @@ namespace CgsNetwork
             E_NET_ERROR_COUNT                  = 2,
         };
 
-        // Construct is a plain initialiser (not virtual on the base; the X360 ctor stores the
-        // vtable then calls this). Prepare / Update / Release are virtual (the concrete adapter
-        // overrides them). DWARF :153/:159/:168/:171/:174.
-        void                          Construct();
-        virtual ENetworkStatus        Prepare(NetworkAdapterPrepareParams* lpParams);
-        virtual void                  Update();
-        virtual bool                  Release();
+        // Plain (non-virtual) lifecycle: the platform adapter calls each of these from its own
+        // Construct / Prepare / Update / Release. The platform adapter's only virtual is
+        // SetServerType (its vtable has that one slot).
+        void           Construct();
+        ENetworkStatus Prepare(NetworkAdapterPrepareParams* lpParams);
+        // Empty: the platform Update's base-call bracket times nothing.
+        void           Update() {}
+        bool           Release();
 
         // Inlined into the network manager's Destruct: forget the manager, the server type,
         // both buffers and the duplicate-login latch.
@@ -112,10 +153,14 @@ namespace CgsNetwork
         // the packet length (0 when nothing is pending).
         s32  ReceiveFrom(void** lppData, ConnectionData lConnectionData);
 
-        bool HadDuplicateLogin() const;
+        // Inlined at the network manager's disconnect handler (a byte load of the latch).
+        bool HadDuplicateLogin() const { return mbDuplicateLogin; }
+
+        // The send-time monitor every adapter shares (registered once, -1 until then).
+        static s32 miSendPerfMon;
 
         // --- layout (X360 asm offsets) ----------------------------------------------------
-        // +0x00 is the vtable pointer (implicit, from the virtuals above).
+        // +0x00 is the platform adapter's vtable pointer.
         void* mpMessageSentCallbackFunction; // +0x04
         void* mpNetworkManager;              // +0x08  (NetworkManager*; the concrete Brn manager
                                              //        type -- BrnNetwork::BrnNetworkManager --
@@ -142,18 +187,17 @@ namespace CgsNetwork
         EServerType     meServerType;        // +0x18
         bool            mbDuplicateLogin;    // +0x1C
         u8              mPad1D[3];           // +0x1D  pad to word
-        void*           mpHeapMalloc;        // +0x20
-        u8*             mpRecvBuffer;        // +0x24
+        CgsMemory::HeapMalloc* mpHeapMalloc;   // +0x20
+        u8*             mpRecvBuffer;        // +0x24  one NetGamePacketT
         // ...concrete adapter members continue from +0x28.
     };
 
     struct NetworkAdapter : NetworkAdapterBase
     {
-        // Selects which server flavour this adapter talks to. DWARF NetworkAdapter.h:
-        // `virtual void SetServerType(EServerType)`; the X360 NetworkServers::SetServerType
-        // forwards the chosen type here (BrnNetworkServers.cpp). Declared-only; bodied in the
-        // adapter's own TU.
-        virtual void SetServerType(EServerType leServerType);
+        // Selects which server flavour this adapter talks to; the network servers block
+        // forwards the chosen type here through the vtable. Only the platform adapter has a
+        // body (its vtable's single slot).
+        virtual void SetServerType(EServerType leServerType) = 0;
     };
 
     struct NetworkAdapterPrepareParams

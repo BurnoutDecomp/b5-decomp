@@ -32,10 +32,9 @@
 //                                 a1[3] / this+12 by RegisterAll / UnregisterAll / UploadToServer).
 // (member name + type from the DecFIGS DWARF BrnNetworkLiveRevengeDebugComponent.h:119.)
 //
-// X360 LEDGER: this TU's recovered function set is exactly the 10 bodies listed above. The DecFIGS
-// DWARF also declares Prepare / Release / Destruct / GetPath for this class, but none has an X360
-// body in this TU (they fold onto the shared base / empty thunks), so they are declared-only here to
-// preserve the declaration surface; the base CgsDev::DebugComponent defaults apply at link time.
+// Prepare / Release / Destruct / GetPath have no body of their own on the console: the manager's
+// calls and the vtable slot land on the shared `return true`, empty and "Network" bodies, which
+// this TU reproduces.
 
 namespace BrnNetwork
 {
@@ -47,9 +46,9 @@ namespace BrnNetwork
     {
     public:
         void Construct(LiveRevengeManager* lpLiveRevengeManager);   // @ 0x82584D48
-        bool Prepare();                                             // declared-only (DWARF :63)
-        bool Release();                                             // declared-only (DWARF :94)
-        void Destruct();                                            // declared-only (DWARF :109)
+        bool Prepare();
+        bool Release();
+        void Destruct();
 
         // Register / unregister one relationship's full debug-menu group (called by the manager when a
         // rival is added/removed, and by RegisterAll / UnregisterAll over the whole table).
@@ -58,7 +57,7 @@ namespace BrnNetwork
 
     protected:
         const char* GetName() const override;   // @ 0x82585148 -> "Live Revenge"
-        const char* GetPath() const override;   // declared-only (DWARF :231)
+        const char* GetPath() const override;
         void        OnActivate() override;       // @ 0x82594708
 
     private:

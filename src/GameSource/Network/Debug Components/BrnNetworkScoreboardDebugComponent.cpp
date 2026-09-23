@@ -24,7 +24,9 @@
 // DebugComponent::RegisterVariable(s32*, name); sub_8282F598 is DebugComponent::SetRange(s32*, min, max).
 
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"
+#include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"   // ScoreboardManager::HandleScoreboardEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (PrintScoreboard)
 #include <cstring>                                    // std::strlen / std::strncpy
 
 namespace BrnNetwork
@@ -89,7 +91,7 @@ namespace BrnNetwork
     {
         IO::NetworkInSelectScoreboardEvent lEvent;
         lEvent.GetCategories();   // top-level: select category list / download headings (EState GETTING_HEADINGS)
-        DispatchScoreboardEvent(mpScoreboardManager, &lEvent);
+        mpScoreboardManager->HandleScoreboardEvent(&lEvent);
     }
 
     // ----------------------------------------------------------------------------------------------
@@ -107,7 +109,7 @@ namespace BrnNetwork
             lpThis->UnregisterVariable(&lpThis->miIndex);
             IO::NetworkInSelectScoreboardEvent lEvent;
             lEvent.GetIndexes(lpThis->miCategory);
-            DispatchScoreboardEvent(lpThis->mpScoreboardManager, &lEvent);
+            lpThis->mpScoreboardManager->HandleScoreboardEvent(&lEvent);
         }
     }
 
@@ -120,7 +122,7 @@ namespace BrnNetwork
             lpThis->UnregisterVariable(&lpThis->miVariation);
             IO::NetworkInSelectScoreboardEvent lEvent;
             lEvent.GetVariations(lpThis->miIndex);
-            DispatchScoreboardEvent(lpThis->mpScoreboardManager, &lEvent);
+            lpThis->mpScoreboardManager->HandleScoreboardEvent(&lEvent);
         }
     }
 
@@ -133,7 +135,7 @@ namespace BrnNetwork
         {
             IO::NetworkInSelectScoreboardEvent lEvent;
             lEvent.GetScoreboard(lpThis->miVariation);
-            DispatchScoreboardEvent(lpThis->mpScoreboardManager, &lEvent);
+            lpThis->mpScoreboardManager->HandleScoreboardEvent(&lEvent);
         }
     }
 
@@ -230,6 +232,33 @@ namespace BrnNetwork
     {
         CGS_ASSERT(lpScoreboard != nullptr, "lpScoreboardEvent");
         mScoreboard = *lpScoreboard;   // X360: memcpy(this+0xC, src, 0xB6C) -- whole Scoreboard payload
-        PrintScoreboard();             // X360 tail call: render the freshly copied scoreboard (declared-only)
+        PrintScoreboard();             // tail call: render the freshly copied scoreboard
+    }
+
+    // Dump the working scoreboard to the debug log: a title banner, the tab-separated
+    // column titles, then one tab-separated line per row.
+    void ScoreboardDebugComponent::PrintScoreboard()
+    {
+        *CgsDev::Log::gpDebugPrint << "************************************ ";
+        *CgsDev::Log::gpDebugPrint << mScoreboard.GetTitle();
+        *CgsDev::Log::gpDebugPrint << "******************************************\n";
+        *CgsDev::Log::gpDebugPrint << "\n";
+
+        for (s32 liColumn = 0; liColumn < mScoreboard.GetNumberOfColumns(); ++liColumn)
+        {
+            *CgsDev::Log::gpDebugPrint << mScoreboard.GetColumn(liColumn)->GetTitle();
+            *CgsDev::Log::gpDebugPrint << "\t";
+        }
+        *CgsDev::Log::gpDebugPrint << "\n";
+
+        for (s32 liRow = 0; liRow < mScoreboard.GetNumberOfRows(); ++liRow)
+        {
+            for (s32 liColumn = 0; liColumn < mScoreboard.GetNumberOfColumns(); ++liColumn)
+            {
+                *CgsDev::Log::gpDebugPrint << mScoreboard.GetRow(liRow)->GetData(liColumn);
+                *CgsDev::Log::gpDebugPrint << "\t";
+            }
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
     }
 }

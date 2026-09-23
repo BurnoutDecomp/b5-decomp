@@ -220,7 +220,7 @@ namespace BrnNetwork
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_TEAM_SELECT_MESSAGE_TYPE,
-                KI_TEAM_SELECT_MESSAGE_LENGTH,
+                static_cast<s32>(sizeof(TeamSelectMessage)),   // console 0x74
                 &lpDataEntry->mMessageSend,
                 &lpDataEntry->mMessageRecv,
                 _TeamSelectionMessageArrivedCallback,
@@ -454,7 +454,7 @@ namespace BrnNetwork
         NetworkPlayerID lPlayerID = KI_INVALID_PLAYER_ID;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
         {
-            if (lpGames->IsPlayerInGameByID(lPlayerID))
+            if (lpGames->IsPlayerInGame(lPlayerID))
             {
                 const s32 liActiveRaceCarIndex = mpNetworkManager->GetActiveRaceCarIndex(lPlayerID);
                 CGS_ASSERT(liActiveRaceCarIndex != -1,
@@ -496,7 +496,7 @@ namespace BrnNetwork
         NetworkPlayerID lPlayerID = KI_INVALID_PLAYER_ID;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
         {
-            if (lpGames->IsPlayerInGameByID(lPlayerID))
+            if (lpGames->IsPlayerInGame(lPlayerID))
             {
                 // The stack-built lobby params (X360 seeds the leaf vptr off_82083550 here, then
                 // restores the base chain's off_8207C88C at scope end -- the inlined ctor/dtor).
@@ -548,7 +548,7 @@ namespace BrnNetwork
         NetworkPlayerID lPlayerID = KI_INVALID_PLAYER_ID;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
         {
-            if (lpGames->IsPlayerInGameByID(lPlayerID))
+            if (lpGames->IsPlayerInGame(lPlayerID))
             {
                 PlayerParams lPlayerParams;
                 lPlayerParams.PreparePattern();

@@ -45,7 +45,7 @@ namespace BrnGameState
 namespace BrnNetwork
 {
     class BrnNetworkManager;
-    class GameResults;     // embedded by value (own home: BrnNetworkGameResults.h)
+    struct GameResults;    // embedded by value (own home: BrnNetworkGameResults.h)
 }
 
 #include "GameSource/Network/BrnNetworkGameResults.h"   // BrnNetwork::GameResults (embedded mGameResults)

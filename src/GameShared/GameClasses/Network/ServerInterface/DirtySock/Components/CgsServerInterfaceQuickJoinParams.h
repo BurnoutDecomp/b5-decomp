@@ -83,9 +83,9 @@ namespace CgsNetwork
         // X360 @ 0x8287A4A8 -- reset the base list + zero the X360 payload, return true.
         virtual bool Prepare();
 
-        // Alignment padding: the base ends at +0x4A (two trailing bools); the X360
-        // payload below is word-aligned at +0x4C (the asm's addi r3, r31, 0x4C).
-        u8  maAlignPad_4A[2];    // +0x4A
+        // The base ends at +0x4A (two trailing bools) and is padded to +0x4C, so the platform
+        // payload below starts at +0x4C without an explicit pad; the leaf is 0xA0 bytes (the
+        // matchmaking quick-join action's stack frame places the next local 0xA0 on).
         // The X360-only payload the leaf Prepare zeroes (this+0x4C .. this+0x9B).
         u8  maX360Payload[80];   // +0x4C  (XMemSet(this+0x4C, 0, 80))
         u32 muX360Field_9C;      // +0x9C  (single stw 0)

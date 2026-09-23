@@ -175,15 +175,6 @@ namespace BrnNetwork
         // update message is not yet in the local game world. FLAG: accessor name is ours.
         bool IsFirstUpdateMessage() const     { return mbFirstUpdateMessage; }
 
-        // ---- legacy caller-facing declarations (no console function of this class) -----
-        // Kept only so the committed callers keep compiling; see the lane report.
-        //   IsNatable     -- the caller reads the base's paused flag at +0xBA9.
-        //   GetPlayerName -- the caller wants the base name at +0xB98 (NetworkPlayer::GetName).
-        //   SetHasWonRound -- the caller's store is the inline SetEliminated(true).
-        bool        IsNatable() const;
-        const char* GetPlayerName() const;
-        void        SetHasWonRound(bool lbHasWonRound);
-
         // ---- reliable-message arrived callbacks (registered by Prepare with this player
         //      as the user data) -------------------------------------------------------
         static void _CarSelectMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,

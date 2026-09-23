@@ -1,222 +1,113 @@
 // CgsNetwork::NetworkTextureDXTCompress
 //
-// Manages two parallel EA::Jobs job lanes for DXT compression and DXT decode.
-// Each lane owns an EA::Jobs::Job slot and a 128-byte descriptor (DXTCompressData /
-// DXTDecodeData) committed via Job::SetData.  The double-buffer scheme lets a new
-// image be queued while the previous job is still in flight.
-//
-// X360 function addresses:
-//   Construct              @ 0x8287E938
-//   Destruct               @ 0x8287E9D8
-//   Prepare                @ 0x8287EA78
-//   Update                 @ 0x8287ECC0
-//   SetNewTextureToCompress   @ 0x8287EF60
-//   SetNewTextureToDecompress @ 0x8287F0B8
+// Two job lanes, DXT compression and DXT decode, over two pairs of image buffers. A new image
+// is copied into the buffer miWriteToSource names; Update hands it to the lane's job and turns
+// the ping-pong indices over, so the next image can be queued while a job runs. When a job
+// finishes, Update fires the lane's completion callback with the buffer the job wrote.
 
 #include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
-#include "GameShared/GameClasses/Containers/CgsPriorityQueue.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (buffer-size assert)
 #include "SDKs/EATech/eajobs/entry_point.h"
-#include "SDKs/EATech/eajobs/job_scheduler.h" // EA::Jobs::JobScheduler (AddJobs)
 #include "ppmalloc/EAGeneralAllocator.h"
 
-#include <cstring>   // memset / memcpy
-
-// ---------------------------------------------------------------------------
-// HIDWORD — lvalue macro for the high 32 bits of a 64-bit local.  Used in the
-// StrStreamBase-on-stack pattern inside the overflow assert block.
-// ---------------------------------------------------------------------------
-#define HIDWORD(x) (*reinterpret_cast<u32*>(reinterpret_cast<u8*>(&(x)) + 4u))
-
-// ---------------------------------------------------------------------------
-// File-scope externs
-// ---------------------------------------------------------------------------
-
-// Process-wide job scheduler (unk_830EA650); defined in CgsHardwareInitPS3.cpp.
-extern EA::Jobs::JobScheduler gJobManager;
-
-// StrStreamBase vtable pointers (X360 .rodata) used in the overflow assert path.
-extern u32 off_82000D00;
-extern u32 off_82000D08;
-
-// Job entry-point functions defined in the DXTCompress / DXTDecode codec TUs.
-extern void DXTCompressEntry(EA::Jobs::Param, EA::Jobs::Param,
-                              EA::Jobs::Param, EA::Jobs::Param);
-extern void DXTDecodeEntry(EA::Jobs::Param, EA::Jobs::Param,
-                            EA::Jobs::Param, EA::Jobs::Param);
-
-// ---------------------------------------------------------------------------
-static const char KPC_SRC[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\GameShared\\Jobs\\DXTCompress\\"
-    "CgsNetworkTextureDXTCompress.cpp";
+#include <cstring>   // memcpy
 
 namespace CgsNetwork
 {
 
-// ---------------------------------------------------------------------------
-// Construct @ 0x8287E938
-//
-// Zero-initialises all buffer pointers, clears both job slots, and zeroes the
-// remaining state fields.
-// ---------------------------------------------------------------------------
+// Clear both buffer pairs and both jobs and reset the lane state. The two "read" indices start
+// on the second buffer.
 void NetworkTextureDXTCompress::Construct()
 {
-    for (s32 li = 0; li < 2; ++li)
+    for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
     {
-        mapUncompressedBuffers[li] = nullptr;
-        mapCompressedBuffers[li]   = nullptr;
+        mapUncompressedBuffers[liBufferIndex] = nullptr;
+        mapCompressedBuffers[liBufferIndex]   = nullptr;
     }
 
-    mDXTCompressJob.EA::Jobs::Job::Clear();
-    mDXTDecodeJob.EA::Jobs::Job::Clear();
+    mDXTCompressJob.Clear();
+    mDXTDecodeJob.Clear();
 
-    miWriteToSource       = 0;
-    miJobReadFromSource   = 0;
-    miJobWriteToTexture   = 0;
-    miReadFromTexture     = 0;
-
+    miWriteToSource         = 0;
+    miJobWriteToTexture     = 0;
     mbRunningCompressionJob = false;
     mbNewImageToCompress    = false;
+    miJobReadFromSource     = 1;
+    miReadFromTexture       = 1;
     mbRunningDecodeJob      = false;
     mbNewImageToDecode      = false;
 
-    mpHeapMalloc                   = nullptr;
-    mCompressionCompleteCallback   = nullptr;
-    mpCompressionCompleteData      = nullptr;
-    mDecodeCompleteCallback        = nullptr;
-    mpDecodeCompleteData           = nullptr;
-    miUncompressedBufferSize       = 0;
-    miCompressedBufferSize         = 0;
-    return;
+    mCompressionCompleteCallback = nullptr;
+    mpCompressionCompleteData    = nullptr;
+    mDecodeCompleteCallback      = nullptr;
+    mpDecodeCompleteData         = nullptr;
+    miUncompressedBufferSize     = 0;
+    miCompressedBufferSize       = 0;
 }
 
-// ---------------------------------------------------------------------------
-// Destruct @ 0x8287E9D8
-//
-// Clears both job slots and zeroes all state, mirroring Construct.
-// ---------------------------------------------------------------------------
+// The same reset as Construct, in the console's store order.
 void NetworkTextureDXTCompress::Destruct()
 {
-    for (s32 li = 0; li < 2; ++li)
+    mCompressionCompleteCallback = nullptr;
+    mpCompressionCompleteData    = nullptr;
+    mDecodeCompleteCallback      = nullptr;
+    mpDecodeCompleteData         = nullptr;
+    mbNewImageToCompress         = false;
+    mbRunningCompressionJob      = false;
+    mbRunningDecodeJob           = false;
+    mbNewImageToDecode           = false;
+
+    mDXTCompressJob.Clear();
+    mDXTDecodeJob.Clear();
+
+    miJobWriteToTexture = 0;
+    miWriteToSource     = 0;
+    miReadFromTexture   = 1;
+    miJobReadFromSource = 1;
+
+    for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
     {
-        mapUncompressedBuffers[li] = nullptr;
-        mapCompressedBuffers[li]   = nullptr;
+        mapUncompressedBuffers[liBufferIndex] = nullptr;
+        mapCompressedBuffers[liBufferIndex]   = nullptr;
     }
 
-    mDXTCompressJob.EA::Jobs::Job::Clear();
-    mDXTDecodeJob.EA::Jobs::Job::Clear();
-
-    miWriteToSource       = 0;
-    miJobReadFromSource   = 0;
-    miJobWriteToTexture   = 0;
-    miReadFromTexture     = 0;
-
-    mbRunningCompressionJob = false;
-    mbNewImageToCompress    = false;
-    mbRunningDecodeJob      = false;
-    mbNewImageToDecode      = false;
-
-    mpHeapMalloc                   = nullptr;
-    mCompressionCompleteCallback   = nullptr;
-    mpCompressionCompleteData      = nullptr;
-    mDecodeCompleteCallback        = nullptr;
-    mpDecodeCompleteData           = nullptr;
-    miUncompressedBufferSize       = 0;
-    miCompressedBufferSize         = 0;
-    return;
+    miUncompressedBufferSize = 0;
+    miCompressedBufferSize   = 0;
 }
 
-// ---------------------------------------------------------------------------
-// Prepare @ 0x8287EA78
-//
-// Stores the HeapMalloc and buffer-size parameters, then allocates two
-// uncompressed and two compressed pixel buffers (double-buffered, 128-byte
-// aligned).  Each allocation is bracketed by heap-validation asserts and
-// followed by a non-null assert.
-// ---------------------------------------------------------------------------
+// Take the heap and allocate both buffer pairs from it (128-byte aligned), validating the heap
+// around every allocation.
 bool NetworkTextureDXTCompress::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc,
-                                         s32 liUncompressedBufferSize,
-                                         s32 liCompressedBufferSize)
+                                        s32 liUncompressedBufferSize,
+                                        s32 liCompressedBufferSize)
 {
-    if (!lpHeapMalloc)
+    CGS_ASSERT(lpHeapMalloc, "lpHeapMalloc");
+
+    mpHeapMalloc = lpHeapMalloc;
+
+    for (s32 liBufferIndex = 0; liBufferIndex < KI_NUM_IMAGE_BUFFERS; ++liBufferIndex)
     {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("mpHeapMalloc != NULL", KPC_SRC, 78);
-        CgsDev::Assert::EndAssert();
+        CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
+                   "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
+        mapUncompressedBuffers[liBufferIndex] =
+            static_cast<char*>(mpHeapMalloc->Malloc(liUncompressedBufferSize, 128));
+        CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
+                   "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
+        CGS_ASSERT(mapUncompressedBuffers[liBufferIndex], "mapUncompressedBuffers[ liBufferIndex ]");
+
+        CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
+                   "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
+        mapCompressedBuffers[liBufferIndex] =
+            static_cast<char*>(mpHeapMalloc->Malloc(liCompressedBufferSize, 128));
+        CGS_ASSERT(mpHeapMalloc->GetAllocator()->ValidateHeap(EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
+                   "mpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
+        CGS_ASSERT(mapCompressedBuffers[liBufferIndex], "mapCompressedBuffers[ liBufferIndex ]");
     }
 
-    mpHeapMalloc             = lpHeapMalloc;
     miUncompressedBufferSize = liUncompressedBufferSize;
     miCompressedBufferSize   = liCompressedBufferSize;
-
-    EA::Allocator::GeneralAllocator* const lpAllocator = mpHeapMalloc->GetAllocator();
-
-    for (s32 liBufferIndex = 0; liBufferIndex < 2; ++liBufferIndex)
-    {
-        if (!lpAllocator->EA::Allocator::GeneralAllocator::ValidateHeap(
-                EA::Allocator::GeneralAllocator::kHeapValidationLevelFull))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mpHeapMalloc->GetAllocator()->ValidateHeap(kHeapValidationLevelFull)",
-                KPC_SRC, 95);
-            CgsDev::Assert::EndAssert();
-        }
-
-        mapUncompressedBuffers[liBufferIndex] = static_cast<char*>(
-            mpHeapMalloc->CgsMemory::HeapMalloc::Malloc(miUncompressedBufferSize, 128));
-
-        if (!lpAllocator->EA::Allocator::GeneralAllocator::ValidateHeap(
-                EA::Allocator::GeneralAllocator::kHeapValidationLevelFull))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mpHeapMalloc->GetAllocator()->ValidateHeap(kHeapValidationLevelFull)",
-                KPC_SRC, 101);
-            CgsDev::Assert::EndAssert();
-        }
-
-        if (!mapUncompressedBuffers[liBufferIndex])
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mapUncompressedBuffers[liBufferIndex] != NULL", KPC_SRC, 106);
-            CgsDev::Assert::EndAssert();
-        }
-
-        if (!lpAllocator->EA::Allocator::GeneralAllocator::ValidateHeap(
-                EA::Allocator::GeneralAllocator::kHeapValidationLevelFull))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mpHeapMalloc->GetAllocator()->ValidateHeap(kHeapValidationLevelFull)",
-                KPC_SRC, 113);
-            CgsDev::Assert::EndAssert();
-        }
-
-        mapCompressedBuffers[liBufferIndex] = static_cast<char*>(
-            mpHeapMalloc->CgsMemory::HeapMalloc::Malloc(miCompressedBufferSize, 128));
-
-        if (!lpAllocator->EA::Allocator::GeneralAllocator::ValidateHeap(
-                EA::Allocator::GeneralAllocator::kHeapValidationLevelFull))
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mpHeapMalloc->GetAllocator()->ValidateHeap(kHeapValidationLevelFull)",
-                KPC_SRC, 119);
-            CgsDev::Assert::EndAssert();
-        }
-
-        if (!mapCompressedBuffers[liBufferIndex])
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "mapCompressedBuffers[liBufferIndex] != NULL", KPC_SRC, 124);
-            CgsDev::Assert::EndAssert();
-        }
-    }
-
     return true;
 }
 
@@ -249,14 +140,8 @@ bool NetworkTextureDXTCompress::Release()
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// SetNewTextureToCompress @ 0x8287EF60
-//
-// Validates the source pointer, the write-index bounds, that no callback is
-// already pending, and that the source size fits the allocated buffer.  Then
-// DMA-copies the source pixels into the current write-slot and records the job
-// parameters for the next Update tick.
-// ---------------------------------------------------------------------------
+// Queue a source image for compression: copy it into the write buffer and record its shape
+// in the job data block. Update submits the job.
 void NetworkTextureDXTCompress::SetNewTextureToCompress(
     char*            lpNewSourcePixels,
     s32              liNewSourcePixelsSize,
@@ -270,73 +155,32 @@ void NetworkTextureDXTCompress::SetNewTextureToCompress(
     CompressionCompleteCallback lCompressionCompleteCallback,
     void*            lpCompressionCompleteData)
 {
-    if (!lpNewSourcePixels)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpNewSourcePixels != NULL", KPC_SRC, 175);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(lpNewSourcePixels, "lpNewSourcePixels");
+    CGS_ASSERT(miWriteToSource < KI_NUM_IMAGE_BUFFERS, "miWriteToSource < KI_NUM_IMAGE_BUFFERS");
+    CGS_ASSERT(miWriteToSource >= 0, "miWriteToSource >= 0");
+    CGS_ASSERT(mCompressionCompleteCallback == nullptr, "mCompressionCompleteCallback == NULL");
+    CGS_ASSERT(miUncompressedBufferSize >= liNewSourcePixelsSize,
+               "miUncompressedBufferSize >= liNewSourcePixelsSize");
 
-    if (miWriteToSource >= 2)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miWriteToSource < KI_NUM_IMAGE_BUFFERS", KPC_SRC, 180);
-        CgsDev::Assert::EndAssert();
-    }
+    memcpy(mapUncompressedBuffers[miWriteToSource], lpNewSourcePixels,
+           static_cast<size_t>(liNewSourcePixelsSize));
 
-    if (miWriteToSource < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("miWriteToSource >= 0", KPC_SRC, 185);
-        CgsDev::Assert::EndAssert();
-    }
-
-    if (mCompressionCompleteCallback)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "mCompressionCompleteCallback == NULL", KPC_SRC, 190);
-        CgsDev::Assert::EndAssert();
-    }
-
-    if (liNewSourcePixelsSize > miUncompressedBufferSize)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liNewSourcePixelsSize <= miUncompressedBufferSize", KPC_SRC, 195);
-        CgsDev::Assert::EndAssert();
-    }
-
-    memcpy(mapUncompressedBuffers[miWriteToSource],
-           lpNewSourcePixels,
-           liNewSourcePixelsSize);
-
-    mDXTCompressData.lpUncompressedPixels    = mapUncompressedBuffers[miWriteToSource];
-    mDXTCompressData.miTextureWidth          = liTextureWidth;
-    mDXTCompressData.miTextureHeight         = liTextureHeight;
-    mDXTCompressData.miSrcPitch              = liSrcPitch;
-    mDXTCompressData.miCmpPitch              = liCmpPitch;
-    mDXTCompressData.miQuality               = liQuality;
-    mDXTCompressData.leSourceFormat          = leSourceFormat;
-    mDXTCompressData.lbInputIsUncompressedYUYV = lbInputIsUncompressedYUYV;
+    mDXTCompressData.miSrcWidth                = liTextureWidth;
+    mDXTCompressData.miSrcHeight               = liTextureHeight;
+    mDXTCompressData.miSrcPitch                = liSrcPitch;
+    mDXTCompressData.miDstPitch                = liCmpPitch;
+    mDXTCompressData.miQuality                 = liQuality;
+    mDXTCompressData.mePixelFormat             = static_cast<renderengine::PixelFormat>(leSourceFormat);
+    mDXTCompressData.mbInputIsUncompressedYUYV = lbInputIsUncompressedYUYV != 0;
 
     mCompressionCompleteCallback = lCompressionCompleteCallback;
     mpCompressionCompleteData    = lpCompressionCompleteData;
     mbNewImageToCompress         = true;
-    return;
 }
 
-// ---------------------------------------------------------------------------
-// SetNewTextureToDecompress @ 0x8287F0B8
-//
-// Validates the compressed pixel pointer, write-index bounds, callback vacancy,
-// and buffer capacities.  The buffer-too-small check uses the familiar
-// StrStreamBase-on-stack pattern (HIDWORD + BasePriorityQueue::Clear) to format
-// the assert message; on PC this reduces to a plain FireAssert string.
-// Copies the compressed data into the current compressed write-slot and records
-// the job parameters.
-// ---------------------------------------------------------------------------
+// Queue a DXT1 image for decoding: copy it into the write buffer and record its shape in the
+// job data block (the decoded image is eight times the compressed size). Update submits the
+// job.
 void NetworkTextureDXTCompress::SetNewTextureToDecompress(
     char*            lpCompressedPixels,
     s32              liCompressedPixelSize,
@@ -345,170 +189,136 @@ void NetworkTextureDXTCompress::SetNewTextureToDecompress(
     CompressionCompleteCallback lDecodeCompleteCallback,
     void*            lpDecodeCompleteData)
 {
-    if (!lpCompressedPixels)
+    CGS_ASSERT(lpCompressedPixels, "lpCompressedPixels");
+    CGS_ASSERT(miWriteToSource < KI_NUM_IMAGE_BUFFERS, "miWriteToSource < KI_NUM_IMAGE_BUFFERS");
+    CGS_ASSERT(miWriteToSource >= 0, "miWriteToSource >= 0");
+    CGS_ASSERT(mDecodeCompleteCallback == nullptr, "mDecodeCompleteCallback == NULL");
+    CGS_ASSERT(miCompressedBufferSize >= liCompressedPixelSize,
+               "miCompressedBufferSize >= liCompressedPixelSize");
+
+    const s32 liDecodedSize = liCompressedPixelSize << 3;
+    if (!(miUncompressedBufferSize >= liDecodedSize))
     {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("lpCompressedPixels != NULL", KPC_SRC, 240);
-        CgsDev::Assert::EndAssert();
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStrStream << "Uncompressed buffer is not large enough. DXT1 textures are 8 times smaller than their 32-bit ARGB equivalent\n";
+        CGS_ASSERT(miUncompressedBufferSize >= liDecodedSize, lStrStream.GetBuffer());
     }
 
-    if (miWriteToSource >= 2)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "miWriteToSource < KI_NUM_IMAGE_BUFFERS", KPC_SRC, 245);
-        CgsDev::Assert::EndAssert();
-    }
+    memcpy(mapCompressedBuffers[miWriteToSource], lpCompressedPixels,
+           static_cast<size_t>(liCompressedPixelSize));
 
-    if (miWriteToSource < 0)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("miWriteToSource >= 0", KPC_SRC, 250);
-        CgsDev::Assert::EndAssert();
-    }
-
-    if (mDecodeCompleteCallback)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "mDecodeCompleteCallback == NULL", KPC_SRC, 255);
-        CgsDev::Assert::EndAssert();
-    }
-
-    if (liCompressedPixelSize > miCompressedBufferSize)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "liCompressedPixelSize <= miCompressedBufferSize", KPC_SRC, 260);
-        CgsDev::Assert::EndAssert();
-    }
-
-    if (miUncompressedBufferSize < 8 * liCompressedPixelSize)
-    {
-        // StrStreamBase-on-stack overflow assert (X360 pattern: HIDWORD/Clear/vtable).
-        CgsDev::Assert::BeginAssert();
-        u64 lv21 = 0u;
-        HIDWORD(lv21) = off_82000D00;
-        reinterpret_cast<CgsContainers::BasePriorityQueue*>(&lv21)->
-            CgsContainers::BasePriorityQueue::Clear();
-        HIDWORD(lv21) = off_82000D08;
-        (void)HIDWORD(lv21);  // X360: (*(HIDWORD(lv21)+4))(&lv21, "Uncompressed buffer...")
-        CgsDev::Assert::FireAssert(
-            "Uncompressed buffer is not large enough for decoded image", KPC_SRC, 268);
-        CgsDev::Assert::EndAssert();
-    }
-
-    memcpy(mapCompressedBuffers[miWriteToSource],
-           lpCompressedPixels,
-           liCompressedPixelSize);
-
-    mDXTDecodeData.lpCompressedPixels   = mapCompressedBuffers[miWriteToSource];
-    mDXTDecodeData.miCompressedPixelSize = liCompressedPixelSize;
-    mDXTDecodeData.miUncompressedSize    = 8 * liCompressedPixelSize;
-    mDXTDecodeData.miCompressedWidth     = liCompressedWidth;
-    mDXTDecodeData.miCompressedHeight    = liCompressedHeight;
+    mDXTDecodeData.miCompressedSize = liCompressedPixelSize;
+    mDXTDecodeData.miDecodedSize    = liDecodedSize;
+    mDXTDecodeData.miDecodedWidth   = liCompressedWidth;
+    mDXTDecodeData.miDecodedHeight  = liCompressedHeight;
 
     mDecodeCompleteCallback = lDecodeCompleteCallback;
     mpDecodeCompleteData    = lpDecodeCompleteData;
     mbNewImageToDecode      = true;
-    return;
 }
 
-// ---------------------------------------------------------------------------
-// Update @ 0x8287ECC0
+// Service the compression lane, then the decode lane. Submitting a job or reaping a
+// finished compression job ends the tick; the decode lane is serviced only while the
+// compression lane has nothing to do. A submit moves the image to the job's read buffer and
+// advances the write buffer; a finished job moves its output buffer to the read side, advances
+// the job's write buffer and fires (and clears) the lane's callback.
 //
-// Per-tick state machine.  Compress lane: if idle and a new image is queued,
-// launch a compress job; if a job is running and completes, fire the callback.
-// Decode lane: same pattern.  The two lanes are independent; both are serviced
-// every tick.
-// ---------------------------------------------------------------------------
+// [PC platform layer] THE DISPATCH, AND ONLY THE DISPATCH. The console submits each job to the
+// process-wide EA::Jobs::JobScheduler (gJobManager), which does not exist on this build. As
+// RelocatorEntry, TrafficJobEntry, the tint blend and the collision generators already do, the
+// job's own entry point runs here instead, over the same data block SetData attached. The job
+// wiring (Clear, SetCode, SetData, SetName), the running latch and the reaping are the
+// console's: Job::IsDone reports a never-submitted job as done, so the next Update reaps the
+// finished job and fires the callback one tick later, as it would after a worker finished.
+// The cost is that the compression (or decode) runs on the calling thread.
 void NetworkTextureDXTCompress::Update()
 {
-    // ---- Compress lane --------------------------------------------------
-
-    if (mbRunningCompressionJob)
-        goto LABEL_COMPRESS_DONE;
-
-    if (mbNewImageToCompress)
+    // ---- Compression lane ----
+    if (!mbRunningCompressionJob)
     {
-        mDXTCompressData.lpCompressedPixels =
-            mapCompressedBuffers[miJobWriteToTexture];
-
-        mDXTCompressJob.EA::Jobs::Job::Clear();
-        mDXTCompressJob.mEntryPoint.EA::Jobs::EntryPoint::SetCode(DXTCompressEntry);
-        mDXTCompressJob.EA::Jobs::Job::SetData(&mDXTCompressData, 128);
-        mDXTCompressJob.mEntryPoint.EA::Jobs::EntryPoint::SetName("DXTCompressJob");
-        gJobManager.EA::Jobs::JobScheduler::AddJobs(&mDXTCompressJob, 1);
-
-        mbRunningCompressionJob = true;
-        mbNewImageToCompress    = false;
-        goto LABEL_4;
-    }
-
-    if (mbRunningCompressionJob)
-    {
-LABEL_COMPRESS_DONE:
-        if (mDXTCompressJob.EA::Jobs::Job::IsDone())
+        if (mbNewImageToCompress)
         {
-            mbRunningCompressionJob = false;
-            miReadFromTexture       = miJobWriteToTexture;
-            miJobWriteToTexture     = miWriteToSource;
-            miWriteToSource         = miJobReadFromSource;
-            miJobReadFromSource     = miReadFromTexture;
+            const s32 liSource = miWriteToSource;
+            mbRunningCompressionJob = true;
+            miJobReadFromSource     = liSource;
+            mbNewImageToCompress    = false;
+            miWriteToSource         = (liSource + 1) % KI_NUM_IMAGE_BUFFERS;
 
-            if (!mCompressionCompleteCallback)
-                goto LABEL_4;
+            mDXTCompressData.mpSrcPixels = mapUncompressedBuffers[liSource];
+            mDXTCompressData.mpDstPixels = mapCompressedBuffers[miJobWriteToTexture];
 
-            mCompressionCompleteCallback(
-                mapUncompressedBuffers[miReadFromTexture],
-                mpCompressionCompleteData);
-            mCompressionCompleteCallback = nullptr;
-            mpCompressionCompleteData    = nullptr;
-            goto LABEL_4;
+            mDXTCompressJob.Clear();
+            mDXTCompressJob.mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                                                reinterpret_cast<const void*>(&DXTCompressEntry), 0);
+            mDXTCompressJob.SetData(&mDXTCompressData, 128);
+            mDXTCompressJob.mEntryPoint.SetName("DXTCompressJob");
+
+            DXTCompressEntry(EA::Jobs::Param(), EA::Jobs::Param(static_cast<void*>(&mDXTCompressData)),
+                             EA::Jobs::Param(), EA::Jobs::Param());
+            return;
         }
     }
+    else if (mDXTCompressJob.IsDone())
+    {
+        const s32 liTexture = miJobWriteToTexture;
+        miReadFromTexture       = liTexture;
+        mbRunningCompressionJob = false;
+        miJobWriteToTexture     = (liTexture + 1) % KI_NUM_IMAGE_BUFFERS;
 
-    // ---- Decode lane ----------------------------------------------------
+        const CompressionCompleteCallback lCallback = mCompressionCompleteCallback;
+        if (lCallback)
+        {
+            void* const lpData = mpCompressionCompleteData;
+            mCompressionCompleteCallback = nullptr;
+            mpCompressionCompleteData    = nullptr;
+            lCallback(mapCompressedBuffers[miReadFromTexture], lpData);
+        }
+        return;
+    }
 
+    // ---- Decode lane ----
     if (!mbRunningDecodeJob)
     {
         if (mbNewImageToDecode)
         {
-            mDXTDecodeData.lpUncompressedPixels =
-                mapUncompressedBuffers[miJobWriteToTexture];
+            const s32 liSource = miWriteToSource;
+            mbRunningDecodeJob  = true;
+            miJobReadFromSource = liSource;
+            mbNewImageToDecode  = false;
+            miWriteToSource     = (liSource + 1) % KI_NUM_IMAGE_BUFFERS;
 
-            mDXTDecodeJob.EA::Jobs::Job::Clear();
-            mDXTDecodeJob.mEntryPoint.EA::Jobs::EntryPoint::SetCode(DXTDecodeEntry);
-            mDXTDecodeJob.EA::Jobs::Job::SetData(&mDXTDecodeData, 128);
-            mDXTDecodeJob.mEntryPoint.EA::Jobs::EntryPoint::SetName("DXTDecodeJob");
-            gJobManager.EA::Jobs::JobScheduler::AddJobs(&mDXTDecodeJob, 1);
+            mDXTDecodeData.mpCompressedPixels = mapCompressedBuffers[liSource];
+            mDXTDecodeData.mpDecodedPixels    = mapUncompressedBuffers[miJobWriteToTexture];
 
-            mbRunningDecodeJob = true;
-            mbNewImageToDecode = false;
-            goto LABEL_4;
+            mDXTDecodeJob.Clear();
+            mDXTDecodeJob.mEntryPoint.SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                                              reinterpret_cast<const void*>(&DXTDecodeEntry), 0);
+            mDXTDecodeJob.SetData(&mDXTDecodeData, 128);
+            mDXTDecodeJob.mEntryPoint.SetName("DXTDecodeJob");
+
+            DXTDecodeEntry(EA::Jobs::Param(), EA::Jobs::Param(static_cast<void*>(&mDXTDecodeData)),
+                           EA::Jobs::Param(), EA::Jobs::Param());
         }
-
-        if (!mbRunningDecodeJob)
-            goto LABEL_4;
+        return;
     }
 
-    if (mDXTDecodeJob.EA::Jobs::Job::IsDone())
+    if (mDXTDecodeJob.IsDone())
     {
-        mbRunningDecodeJob = false;
+        const s32 liTexture = miJobWriteToTexture;
+        miReadFromTexture   = liTexture;
+        mbRunningDecodeJob  = false;
+        miJobWriteToTexture = (liTexture + 1) % KI_NUM_IMAGE_BUFFERS;
 
-        if (mDecodeCompleteCallback)
+        const CompressionCompleteCallback lCallback = mDecodeCompleteCallback;
+        if (lCallback)
         {
-            mDecodeCompleteCallback(
-                mapCompressedBuffers[miReadFromTexture],
-                mpDecodeCompleteData);
+            void* const lpData = mpDecodeCompleteData;
             mDecodeCompleteCallback = nullptr;
             mpDecodeCompleteData    = nullptr;
+            lCallback(mapUncompressedBuffers[miReadFromTexture], lpData);
         }
     }
-
-LABEL_4: return;
 }
 
 } // namespace CgsNetwork
-
-#undef HIDWORD

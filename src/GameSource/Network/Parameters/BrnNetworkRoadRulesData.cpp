@@ -20,11 +20,52 @@
 #include "GameSource/Network/Parameters/BrnNetworkRoadRulesData.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                  // CgsCore::SPrintf (Construct's pattern)
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"   // BrnGameState::KI_MAX_CHALLENGES
+#include "SharedClasses/StreetData/BrnChallengeData.h"                   // BrnStreetData::E_SCORE_TYPE_COUNT
 
-#include <cstring>  // std::strlen / std::strncpy -- the X360 name copy
+#include <cstring>  // std::strlen / std::strncpy (the name copy) / std::strncat (Construct)
 
 namespace BrnNetwork
 {
+
+// Build the validity pattern (one "16s" per name slot, then "l*") and empty the table.
+void RoadRulesDownloadData::Construct()
+{
+    macPattern[0] = 0;
+    for (s32 liIndex = 0; liIndex < KI_MAX_DOWNLOAD_DATA; ++liIndex)
+    {
+        char lacField[4];
+        CgsCore::SPrintf(lacField, sizeof(lacField), "%ds", KI_ROAD_RULES_NAME_LENGTH);
+        std::strncat(macPattern, lacField, KI_DOWNLOAD_DATA_PATTERN_LENGTH);
+    }
+    std::strncat(macPattern, "l*", KI_DOWNLOAD_DATA_PATTERN_LENGTH);
+    mData.miNumScores = 0;
+}
+
+// Stamp the batch with its road-rules id and empty it.
+void RoadRulesUploadData::Construct(u64 lu64RoadRulesID)
+{
+    mu64RoadRulesID = lu64RoadRulesID;
+    miNumScores     = 0;
+}
+
+// Append one {record-index, score, car-id} row; returns true once the batch is full.
+bool RoadRulesUploadData::SetScoreData(s32 liRecordIndex, s32 liQuantisedScore, CgsID lCarID)
+{
+    CGS_ASSERT(liRecordIndex >= 0, "liRecordIndex >= 0");
+    CGS_ASSERT(liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT,
+               "liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT");
+    CGS_ASSERT(miNumScores >= 0, "miNumScores >= 0");
+    CGS_ASSERT(miNumScores < KI_MAX_UPLOAD_DATA, "miNumScores < KI_MAX_UPLOAD_DATA");
+
+    maiRecordIndices[miNumScores]  = liRecordIndex;
+    maiQuantisedScore[miNumScores] = liQuantisedScore;
+    maCarIDs[miNumScores]          = lCarID;
+    ++miNumScores;
+
+    return miNumScores == KI_MAX_UPLOAD_DATA;
+}
 
 // X360 0x82541708.
 void RoadRulesDownloadData::GetRoadRulesDataForDownloadIndex(s32 liDownloadIndex, char* lpName,

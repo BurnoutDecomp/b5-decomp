@@ -531,7 +531,7 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = lpServerInterface->GetGameComponent();
         CGS_ASSERT(lpServerInterfaceGames != nullptr, "lpServerInterfaceGames");
 
-        lpServerInterfaceGames->SendGameResult(&mGameResults, nullptr);
+        lpServerInterfaceGames->SendGameResult(&mGameResults);
         meSubState = E_SUBSTATE_WAIT_IDLE;
         return true;
     }
@@ -575,34 +575,34 @@ namespace BrnNetwork
     }
 
     // ActionEndGame  (X360 @ 0x82567B18)
-    //   Build the end-game data record from every finalised player's params, then
-    //   submit it. The X360 walks the player registry, fetches each player's lobby
-    //   params and appends a {score, playerId} pair into the end-game data payload
-    //   before SendGameResult. The exact per-player score field offset inside the
-    //   fetched params and the packed destination layout are not exposed by the
-    //   reconstructed types, so the (opaque-payload) packing is intentionally left to
-    //   the not-yet-homed end-game-data TU; the observable server traffic -- the
-    //   per-player param fetch and the final SendGameResult -- is reproduced here.
+    //   Build the end-game data from every player: for each one, fetch its lobby params
+    //   and append a {name, player id} record, then hand the data to the games
+    //   component's EndGame (vtable slot +0x40). The records are not bounds-checked; the
+    //   player count keeps them within the eight the payload holds.
     bool PostRoundManager::ActionEndGame()
     {
         CgsNetwork::ServerInterfaceEndGameData lEndGameData;
         lEndGameData.Prepare();
 
-        CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames =
-            mpNetworkManager->GetServerInterface()->GetGameComponent();
-
-        CgsNetwork::NetworkPlayerID lPlayerID = static_cast<CgsNetwork::NetworkPlayerID>(-1);
-        while (lpPlayerManager->GetNextPlayerID(&lPlayerID,
-                   CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
+            CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
             PlayerParams lPlayerParams;
-            lPlayerParams.Prepare();
-            lpServerInterfaceGames->GetPlayerParametersByPlayerID(lPlayerID, &lPlayerParams);
+            CgsNetwork::NetworkPlayerID lPlayerID = static_cast<CgsNetwork::NetworkPlayerID>(-1);
+            s32 liRecord = 0;
+            while (lpPlayerManager->GetNextPlayerID(&lPlayerID,
+                       CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
+            {
+                lPlayerParams.Prepare();
+                mpNetworkManager->GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerID(
+                    lPlayerID, &lPlayerParams);
+                lEndGameData.maPlayerRecords[liRecord].miPlayerID = lPlayerID;
+                lEndGameData.maPlayerRecords[liRecord].mpcName    = lPlayerParams.GetName();
+                ++liRecord;
+            }
         }
 
         meSubState = E_SUBSTATE_WAIT_IDLE;
-        mpNetworkManager->GetServerInterface()->GetGameComponent()->SendGameResult(&lEndGameData, nullptr);
+        mpNetworkManager->GetServerInterface()->GetGameComponent()->EndGame(&lEndGameData);
         return true;
     }
 

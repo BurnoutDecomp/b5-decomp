@@ -37,7 +37,8 @@ namespace CgsNetwork
     // elapsed ping time.
     struct PingMessage : Message
     {
-        void               Construct();
+        // Inlined at every call site on the console: the base field reset only.
+        void               Construct() { Message::Construct(); }
         void               PrepareForSend(u16 lu16Frame, f32 lfPingTime);
         bool               Retrieve(f32* lpfPingTime);
         void               Release();
@@ -55,7 +56,8 @@ namespace CgsNetwork
     // The matching reply, sent back by the pinged peer.
     struct PingReplyMessage : Message
     {
-        void               Construct();
+        // Inlined at every call site on the console: the base field reset only.
+        void               Construct() { Message::Construct(); }
         void               PrepareForSend(u16 lu16Frame, f32 lfPingTime);
         bool               Retrieve(f32* lpfPingTime);
         void               Release();

@@ -345,7 +345,8 @@ namespace BrnNetworkModuleIO
         // Inline on the console: BridgeNetworkToGameState reads the byte at +0x2C16B directly,
         // with no lock assert.
         bool AreInvitesOpen() const { return mbInvitesOpen; }
-        void SetInvitesOpen(bool lbInvitesOpen);
+        // Also inline: ProcessBeforeSimulation stores the byte straight into the buffer.
+        void SetInvitesOpen(bool lbInvitesOpen) { mbInvitesOpen = lbInvitesOpen; }
 
     private:
         f32                                                 mfStandingsReceivedCountDownTime;   // console +4

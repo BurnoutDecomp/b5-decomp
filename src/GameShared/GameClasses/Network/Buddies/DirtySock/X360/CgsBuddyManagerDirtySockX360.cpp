@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Network/Buddies/DirtySock/X360/CgsBuddyManagerDirtySockX360.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/CgsNetworkManager.h"   // NetworkManager::GetActiveControllerPort
+#include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"   // GetGameComponent / GetConnAPIRef
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"
 
@@ -41,11 +43,15 @@ extern "C"
     u32 XUserReadProfileSettingsByXuid(u32 luTitleId, u32 luUserIndexRequester,
                                        u32 luNumXuids, const u64* lpaXuids,
                                        u32 luNumSettingIds, const u32* lpaSettingIds,
-                                       u32* lpcbResults, void* lpResults);
+                                       u32* lpcbResults, void* lpResults, void* lpOverlapped);
     u32 XUserReadGamerPictureByKey(const void* lpPictureKey, s32 lbSmall,
                                    u8* lpTextureBuffer, u32 luPitch, u32 luHeight,
                                    void* lpOverlapped);
 }
+
+// ConnApiStatus 'sess' copies the game session text into the buffer: empty until the ConnApi
+// session is up.
+#include "connapi.h"
 
 // Win32/XDK winerror.h codes consumed by the polling logic.
 #ifndef ERROR_IO_INCOMPLETE
@@ -55,12 +61,13 @@ extern "C"
 #define ERROR_IO_PENDING    997u
 #endif
 
+// ConnApiStatus 'sess' selector and the session-text buffer Update hands it.
+static const s32 KI_CONNAPI_STATUS_SESSION    = ('s' << 24) | ('e' << 16) | ('s' << 8) | 's';
+static const s32 KI_CONNAPI_SESSION_TEXT_SIZE = 128;
+
 // XPROFILE_GAMERCARD_PICTURE_KEY -- the single profile setting id requested per
-// buddy (asm: pdwSettingIds = &dword_820E965C, dwNumSettingIds = 1). The literal
-// setting-id value lives in un-reconstructed rodata (dword_820E965C); reserved
-// here as a flagged placeholder so the read shape is preserved without inventing
-// the constant.  FLAGGED: setting-id value (dword_820E965C) unrecovered.
-static const u32 KU_PROFILE_GAMERCARD_PICTURE_KEY = 0u;
+// buddy (dwNumSettingIds = 1; the value is read from the image's rodata).
+static const u32 KU_PROFILE_GAMERCARD_PICTURE_KEY = 0x4064000Fu;
 
 namespace CgsSystem
 {
@@ -80,14 +87,6 @@ namespace CgsSystem
 
 namespace CgsNetwork
 {
-    // The active controller/user index lives at NetworkManager+0x60 (asm:
-    // lwz r3, 0x60(mpNetworkManager)). NetworkManager has no shared header (its
-    // definition is TU-local to CgsNetworkManager.cpp), so the field is reached
-    // through an accessor the NetworkManager TU owns -- the same one the DirtySock
-    // base uses. Declared here; the offset (+0x60 == user index) is grounded in the
-    // asm. FLAGGED: accessor home un-reconstructed.
-    s32 BuddyManager_GetNetworkManagerUserIndex(const NetworkManager* lpNetworkManager);
-
     // =========================================================================
     // Construct @ 0x8287F858
     //
@@ -121,20 +120,14 @@ namespace CgsNetwork
     // =========================================================================
     // Prepare @ 0x8287F8C0
     //
-    // Reset the manager to a clean idle state. The asm zeroes five words:
-    //   +0x13918 miNumberOfInvitesToBeSent, +0x1391C mbSendingInvite,
-    //   +0x08 meCurrentStatus, +0x18 mBuddiesChangedCallback (base private),
-    //   +0x04 mpBuddies. The base callback slot is reset through the protected
-    //   _ClearBuddiesChangedCallback hook so the +0x18 store is reproduced.
+    // Reset the manager to a clean idle state: clear the invite queue, then the
+    // inlined base Prepare (status, buddies-changed callback, buddy API).
     // =========================================================================
     bool BuddyManagerX360::Prepare()
     {
         miNumberOfInvitesToBeSent = 0;
         mbSendingInvite           = false;
-        meCurrentStatus           = E_BUDDY_ACTION_IDLE;   // +0x08 (base)
-        _ClearBuddiesChangedCallback();                    // +0x18 (base private)
-        mpBuddies                 = 0;                       // +0x04 (base)
-        return true;
+        return BuddyManagerBase::Prepare();
     }
 
     // =========================================================================
@@ -157,7 +150,7 @@ namespace CgsNetwork
     // =========================================================================
     bool BuddyManagerX360::IsConnectedToNetworkService() const
     {
-        const u32 luUserIndex = BuddyManager_GetNetworkManagerUserIndex(mpNetworkManager);
+        const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
         return XUserGetSigninState(luUserIndex) == 2;
     }
 
@@ -170,7 +163,14 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerX360::AcceptInvite(const PlayerName* /*lpPlayerName*/)
     {
-        const u32 luUserIndex = BuddyManager_GetNetworkManagerUserIndex(mpNetworkManager);
+        const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
+        XShowMessagesUI(luUserIndex);
+    }
+
+    // Declining is handled in the Guide messages blade as well.
+    void BuddyManagerX360::DeclineInvite(const PlayerName* /*lpPlayerName*/)
+    {
+        const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
         XShowMessagesUI(luUserIndex);
     }
 
@@ -184,7 +184,7 @@ namespace CgsNetwork
         CGS_ASSERT(lpBuddyName && lpBuddyName->GetPlayerName()[0] != '\0',
                    "!lpBuddyName->IsEmpty()");
 
-        const u32 luUserIndex = BuddyManager_GetNetworkManagerUserIndex(mpNetworkManager);
+        const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
 
         // The asm takes the high 32 bits of the XUID (>> 32) for XShowGamerCardUI's
         // second argument; the XDK packs the gamertag id in the high dword.
@@ -202,13 +202,16 @@ namespace CgsNetwork
         ShowProfile(lpPlayerName);
     }
 
+    // Revoking an invite on the 360 also just shows the buddy's gamercard.
+    void BuddyManagerX360::RevokeInvite(const PlayerName* lpPlayerName)
+    {
+        ShowProfile(lpPlayerName);
+    }
+
     // =========================================================================
     // GetBuddyXUID @ 0x8287F9B0
     //
-    // Look the buddy up in the HLB list by name and return its Xenon XUID.
-    // The HLB list query / XUID accessor are external DirtySock entry points
-    // (the PPC Hex-Rays mis-resolved their symbols); modelled by behaviour.
-    // FLAGGED: HLBListGetBuddyByName / HLBBudGetXenonXUID are external middleware.
+    // Look the buddy up in the HLB list by name and return its platform user id.
     // =========================================================================
     u64 BuddyManagerX360::GetBuddyXUID(const PlayerName* lpBuddyName)
     {
@@ -219,11 +222,23 @@ namespace CgsNetwork
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
         CGS_ASSERT(lpBuddy, "lpBuddy");
 
-        // HLBBudGetXenonXUID(lpBuddy) -> the buddy's 64-bit Xbox XUID. Declared as a
-        // local extern: it is a real DirtySock/Xenon entry point that this TU calls
-        // directly, with no shared header home.
-        extern u64 HLBBudGetXenonXUID(DirtySock::HLBBudT* lpBuddy);
-        return HLBBudGetXenonXUID(lpBuddy);
+        return DirtySock::HLBBudGetXenonXUID(lpBuddy);
+    }
+
+    // =========================================================================
+    // HasBuddyInvitedMe (virtual)
+    //
+    // The buddy's "has invited me" flag: bit 27 of its game-invite flag word.
+    // =========================================================================
+    bool BuddyManagerX360::HasBuddyInvitedMe(const PlayerName* lpPlayerName)
+    {
+        CGS_ASSERT(lpPlayerName, "lpPlayerName");
+
+        DirtySock::HLBBudT* lpBuddy =
+            DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
+        CGS_ASSERT(lpBuddy, "lpBuddy");
+
+        return (lpBuddy->uFlags & HLB_BUDFLAG_INVITE_RECV) != 0;
     }
 
     // =========================================================================
@@ -240,11 +255,9 @@ namespace CgsNetwork
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
         CGS_ASSERT(lpBuddy, "lpBuddy");
 
-        // The "I have invited this buddy" flag is bit 26 of the buddy record's
-        // status word at +0x18. The record layout is external middleware data; read
-        // the bit via the accessor the DirtySock base exposes for that word.
-        extern u32 HLBBudGetStatusWord(DirtySock::HLBBudT* lpBuddy);
-        return ((HLBBudGetStatusWord(lpBuddy) >> 26) & 1) != 0;
+        // The "I have invited this buddy" flag is bit 26 of the buddy record's flag
+        // word (+0x18).
+        return (lpBuddy->uFlags & HLB_BUDFLAG_INVITE_SENT) != 0;
     }
 
     // =========================================================================
@@ -255,8 +268,6 @@ namespace CgsNetwork
     // =========================================================================
     bool BuddyManagerX360::AreAnyInvitesOpen()
     {
-        extern u32 HLBBudGetStatusWord(DirtySock::HLBBudT* lpBuddy);
-
         for (s32 liIndex = 0; ; ++liIndex)
         {
             const s32 liBuddyCount = mpBuddies ? DirtySock::HLBListGetBuddyCount(mpBuddies) : 0;
@@ -268,7 +279,7 @@ namespace CgsNetwork
             DirtySock::HLBBudT* lpBuddy = DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
             CGS_ASSERT(lpBuddy, "lpBuddy");
 
-            if (((HLBBudGetStatusWord(lpBuddy) >> 26) & 1) != 0)
+            if ((lpBuddy->uFlags & HLB_BUDFLAG_INVITE_SENT) != 0)
             {
                 return true;
             }
@@ -337,15 +348,10 @@ namespace CgsNetwork
     {
         BuddyManagerBase::Update(lbCanBlock);
 
-        // Platform pre-update hook (vtable +0x7C); reconstructed in its own TU.
-        // FLAGGED: pre-update virtual (+0x7C) home un-reconstructed.
+        UpdatePictureDownload();
 
         CGS_ASSERT(mpServerInterface, "mpServerInterface");
-        // The asm additionally asserts mpServerInterface->GetGameComponent() is
-        // non-null here (:152). Dereferencing the game component requires the full
-        // ServerInterface type, whose connection state is queried below through the
-        // BuddyManager_IsConnApiConnected accessor (the ConnApi status chain has no
-        // shared header). The non-null guard is folded into that accessor's domain.
+        CGS_ASSERT(mpServerInterface->GetGameComponent(), "mpServerInterface->GetGameComponent()");
 
         // Is an overlapped invite op still pending? (997 == pending, 996 == incomplete)
         const u32 luInviteResult = XGetOverlappedResult(mInviteOverlapped, 0, 0);
@@ -363,13 +369,16 @@ namespace CgsNetwork
             mbSendingInvite = false;
         }
 
-        // Gate on the ConnApi connection being live. The status query reaches deep
-        // into the server interface's game component (asm: GetGameComponent()->...
-        // +0x86C ->+0x80, ConnApiStatus selector 'genc' = 0x73656E63). The exact
-        // member chain has no shared header; modelled as an external predicate.
-        // FLAGGED: ConnApi connection-status accessor un-reconstructed.
-        extern bool BuddyManager_IsConnApiConnected(ServerInterface* lpServerInterface);
-        if (!BuddyManager_IsConnApiConnected(mpServerInterface))
+        // Invites go out only while a game session is up: the ConnApi reports a non-empty
+        // 'sess' text. The ref is the one the games component's server-interface pointer
+        // (+0x86C) leads to, i.e. this manager's own server interface.
+        char lacSession[KI_CONNAPI_SESSION_TEXT_SIZE];
+        lacSession[0] = 0;
+        const bool lbInSession =
+            (ConnApiStatus(mpServerInterface->GetConnAPIRef(), KI_CONNAPI_STATUS_SESSION, lacSession,
+                           KI_CONNAPI_SESSION_TEXT_SIZE) == 0) &&
+            (lacSession[0] != 0);
+        if (!lbInSession)
         {
             return;
         }
@@ -379,7 +388,7 @@ namespace CgsNetwork
         {
             CGS_ASSERT(!mbSendingInvite, "!mbSendingInvite");
 
-            const u32 luUserIndex = BuddyManager_GetNetworkManagerUserIndex(mpNetworkManager);
+            const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
             const u32 luResult = XInviteSend(luUserIndex,
                                              static_cast<u32>(miNumberOfInvitesToBeSent),
                                              maInvitesToBeSent, 0, mInviteOverlapped);
@@ -447,7 +456,7 @@ namespace CgsNetwork
 
         reinterpret_cast<CgsSystem::CgsXOverlapped*>(mGamerPicOverlapped)->Construct();
 
-        const u32 luUserIndex = BuddyManager_GetNetworkManagerUserIndex(mpNetworkManager);
+        const u32 luUserIndex = mpNetworkManager->GetActiveControllerPort();
         const u32 luSettingId = KU_PROFILE_GAMERCARD_PICTURE_KEY;
         u32 luResultsSize = 80000;   // pcbResults seed (asm: v6 = 0x13880 == 80000)
 
@@ -459,12 +468,58 @@ namespace CgsNetwork
             1,
             &luSettingId,
             &luResultsSize,
-            &muProfileResultsSettingsLen);   // pResults == this + 0x28 (asm: addi r10, r31, 0x28)
+            &muProfileResultsSettingsLen,    // pResults (+0x28)
+            mGamerPicOverlapped);
         CGS_ASSERT(luResult == ERROR_IO_PENDING, "dwRet == ERROR_IO_PENDING");
 
         meCurrentStatus             = E_BUDDY_ACTION_DOWNLOADING_PROFILE;
         miFirstProfileInThisRequest = miNextProfileToRequest;
         miNextProfileToRequest      = miNextProfileToRequest + static_cast<s32>(luBatchCount);
+    }
+
+    // =========================================================================
+    // UpdatePictureDownload (virtual)
+    //
+    // Once the outstanding read has finished: a finished profile read goes on to
+    // fetch the current picture (clearing its downloaded flag when the read
+    // failed); a finished picture read sets the current flag on success and
+    // advances to the next picture.
+    // =========================================================================
+    void BuddyManagerX360::UpdatePictureDownload()
+    {
+        if (meCurrentStatus == E_BUDDY_ACTION_IDLE)
+        {
+            return;
+        }
+
+        if (meCurrentStatus == E_BUDDY_ACTION_DOWNLOADING_PROFILE)
+        {
+            const u32 luResult = XGetOverlappedResult(mGamerPicOverlapped, 0, 0);
+            if (luResult == ERROR_IO_PENDING || luResult == ERROR_IO_INCOMPLETE)
+            {
+                return;
+            }
+            if (XGetOverlappedResult(mGamerPicOverlapped, 0, 0) != 0 && mpGamerPicKeys != 0)
+            {
+                static_cast<u8*>(mpGamerPicKeys)[miCurrentProfile] = 0;
+            }
+            DownloadNextPicture(true);
+            return;
+        }
+
+        if (meCurrentStatus == E_BUDDY_ACTION_DOWNLOADING_PIC)
+        {
+            const u32 luResult = XGetOverlappedResult(mGamerPicOverlapped, 0, 0);
+            if (luResult == ERROR_IO_PENDING || luResult == ERROR_IO_INCOMPLETE)
+            {
+                return;
+            }
+            if (XGetOverlappedResult(mGamerPicOverlapped, 0, 0) == 0 && mpGamerPicKeys != 0)
+            {
+                static_cast<u8*>(mpGamerPicKeys)[miCurrentProfile] = 1;
+            }
+            DownloadNextPicture(false);
+        }
     }
 
     // =========================================================================
@@ -506,8 +561,8 @@ namespace CgsNetwork
 
         // The picture key for this buddy. The record base is the pSettings pointer
         // the XDK filled into the downloaded results buffer (asm: lwz r10, 0x2C(this)
-        // == mpProfileSettings), NOT the caller's a5 key blob (mpGamerPicKeys @+0x20,
-        // which is stored but never read here). Records are 40 bytes, with the
+        // == mpProfileSettings), NOT the caller's per-picture flag array (mpGamerPicKeys
+        // @+0x20, which UpdatePictureDownload writes). Records are 40 bytes, with the
         // gamercard picture key at +0x18 (asm: 40*(cur-first) + *(this+0x2C) + 0x18).
         const u8* lpKeyRecord = reinterpret_cast<const u8*>(mpProfileSettings)
                               + 40 * (miCurrentProfile - miFirstProfileInThisRequest);

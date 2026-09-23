@@ -43,6 +43,7 @@
 #include "GameShared/GameClasses/Network/Packeting/CgsNetworkAdapterBase.h"              // ConnectionData
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"
 #include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"          // PlayerConnectionData, EConnectionStatus
+#include "connapi.h"                                                                    // DirtySock::ConnApiRefT / ConnApiCbInfoT / ConnApiClientListT
 
 namespace CgsSystem
 {
@@ -55,13 +56,6 @@ namespace CgsNetwork
     struct SignalMessage;
     struct ReliableMessage;
     class  ServerInterface;
-
-    namespace DirtySock
-    {
-        struct ConnApiRefT;
-        struct ConnApiCbInfoT;
-        struct ConnApiClientListT;
-    }
 
     typedef s32 NetworkPlayerID;
 
@@ -95,22 +89,49 @@ namespace CgsNetwork
 
         PlayersConnectionManager();
 
-        void Construct();
-        void Destruct();
+        // Construct / Release / ResetConnectionData / Disconnected are inlined into the
+        // player registry on the console: the pointer members to zero and, per entry, the
+        // player id to the sentinel and the status to E_NOT_STARTED.
+        void Construct()
+        {
+            mpPlayerManager                = nullptr;
+            mpServerInterface              = nullptr;
+            mpfConnectionFinalisedCallback = nullptr;
+            mpConnectionFinalisedUserData  = nullptr;
+            muLocalPlayerIPAddress         = 0;
+            ResetConnectionData();
+        }
+        // Empty; the registry's Destruct leaves every connection-manager member alone.
+        void Destruct() {}
         bool Prepare(PlayerManager* lpPlayerManager, ServerInterface* lpServerInterface,
                      ConnMgrConnectionFinalisedCallback lpfConnectionFinalisedCallback,
                      void* lpConnectionFinalisedUserData,
                      ConnMgrPlayerDisconnectedCallback lpfPlayerDisconnectedCallback,
                      void* lpPlayerDisconnectedCallbackData);
-        bool Release();
+        bool Release()
+        {
+            mpPlayerManager                = nullptr;
+            mpServerInterface              = nullptr;
+            mpfConnectionFinalisedCallback = nullptr;
+            mpConnectionFinalisedUserData  = nullptr;
+            muLocalPlayerIPAddress         = 0;
+            return true;
+        }
         void Update(const CgsSystem::TimerStatus* lpTimerStatus, u16 lu16CurrentFrame);
 
         EConnectionStatus GetConnectionStatus(NetworkPlayerID lPlayerID) const;
-        void ResetConnectionData();
+        void ResetConnectionData()
+        {
+            for (s32 liIndex = 0; liIndex < KI_MAX_CONNECTION_ENTRIES; ++liIndex)
+            {
+                maConnectionDataEntry[liIndex].mPlayerConnectionData.mPlayerID = -1;
+                maConnectionDataEntry[liIndex].mPlayerConnectionData.meConnectionStatus = E_NOT_STARTED;
+            }
+        }
         bool HavePlayersFailedToConnect(NetworkPlayerID lPlayerID1, NetworkPlayerID lPlayerID2) const;
         NetworkPlayerID GetIDOfPlayerToKick(NetworkPlayerID lPlayerID1, NetworkPlayerID lPlayerID2) const;
         bool AreAllConnectionsSuccessful() const;
-        void Disconnected();
+        void Disconnected() { ResetConnectionData(); }
         void OnLobbyApiCreated();
 
     private:

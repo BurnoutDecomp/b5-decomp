@@ -144,6 +144,14 @@ namespace BrnNetwork
         NetworkPlayerID GetMarkedPlayerID() const                   { return mData.mMarkedPlayer; }
         void            SetMarkedPlayerID(NetworkPlayerID lMarkedPlayerID) { mData.mMarkedPlayer = lMarkedPlayerID; }
         s32             GetRank() const                             { return mData.miRank; }
+        // Inlined by the matchmaking create / join / quick-join actions.
+        void            SetRank(s32 liRank)                         { mData.miRank = liRank; }
+        void SetIsDeveloper(bool lbIsDeveloper)
+        {
+            mData.mxFlags = static_cast<s8>(mData.mxFlags & ~CLobbyPlayerParamsData::KX_DEVELOPER);
+            if (lbIsDeveloper)
+                mData.mxFlags = static_cast<s8>(mData.mxFlags | CLobbyPlayerParamsData::KX_DEVELOPER);
+        }
 
         // The team byte is stored without a range check (the state manager's team swap).
         void SetPlayerTeam(BrnGameState::GameStateModuleIO::EPlayerTeam lePlayerTeam)
@@ -171,8 +179,13 @@ namespace BrnNetwork
                                    + (static_cast<u32>(lu16PaintFinishIndex) << CLobbyPlayerParamsData::KU_COLOUR_BIT_SHIFT);
         }
 
-        // (The remaining reference accessors -- SetRank / GetConsoleFrameRate /
-        // SetIsDeveloper -- have no console call site and stay undeclared.)
+        // The remote console's simulation rate travels as the 50 Hz flag bit
+        // (BrnNetworkPlayer::Prepare inlines it: byte +0x92, bit 2).
+        CgsSystem::EFrameRate GetConsoleFrameRate() const
+        {
+            return (mData.mxFlags & CLobbyPlayerParamsData::KX_IS_50HZ) != 0
+                       ? CgsSystem::E_FRAMERATE_50HZ : CgsSystem::E_FRAMERATE_60HZ;
+        }
 
     protected:
         // DWARF h:178. X360 object offset +0x84; on the PC host the compiler places

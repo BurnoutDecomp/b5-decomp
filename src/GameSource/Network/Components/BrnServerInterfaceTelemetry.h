@@ -12,16 +12,10 @@
 // E_PREPARESTAGE_TELEMETRY_COMPONENT / E_RELEASESTAGE_TELEMETRY_COMPONENT stage
 // owner; embedded by value as BrnServerInterfaceBase::mTelemetry). It is a thin
 // game-specific leaf over the committed CgsNetwork::ServerInterfaceTelemetry base
-// (the DirtySock telemetry component), exactly as BrnServerInterfaceCustomCommands
-// derives from CgsNetwork::ServerInterfaceCustomCommands and
-// BrnServerInterfaceDownloadableConfig from CgsNetwork::ServerInterfaceComponent.
-//
-// FLAGGED: this leaf has no dedicated dossier in the available exports. It is
-// reached here only through the aggregate's by-value embed + the polymorphic-
-// teardown vtable walk, so only the inheritance edge (giving it a complete
-// polymorphic layout + virtual destructor) is modelled -- no Burnout-specific data
-// members are recovered, and the behavioural overrides (Construct / Prepare /
-// CaptureEvent / ...) belong to their own TUs. Members GROW additively when found.
+// (the DirtySock telemetry component). It adds no instance data; its only state is
+// the class-static event-id -> keys table. Construct / Destruct / Update() / OnEvent
+// are the base's (the component vtable carries the base entries); Prepare is a new
+// virtual with its own slot, Release overrides the base's.
 // ===========================================================================
 
 namespace BrnNetwork
@@ -53,6 +47,12 @@ namespace BrnNetwork
         // Update @ 0x8258EF90 -- pump the base telemetry feed, then drain the inbound post-sim
         // network-event queue, capturing each telemetry event (type 16) into the component.
         void Update(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);
+
+    private:
+        static const s32 KI_NUM_EVENT_DATA_KEYS = 50;
+
+        // The event-id -> telemetry-keys table Prepare latches and Release zeroes.
+        static CgsNetwork::EventDataKeys maEventDataKeys[KI_NUM_EVENT_DATA_KEYS];
     };
 }
 

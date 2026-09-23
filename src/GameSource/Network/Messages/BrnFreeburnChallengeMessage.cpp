@@ -2,6 +2,7 @@
 
 #include "GameSource/Network/Messages/BrnFreeburnChallengeMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (streamed assert)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::FreeburnChallengeMessage::Construct            @ 0x8257C508
@@ -70,6 +71,36 @@ namespace BrnNetwork
             CgsNetwork::PackOrUnpackInt(this, &liStatus, 0, 7) | lxEvent;
         meChallengeStatus = static_cast<BrnGameState::EChallengeStatus>(liStatus);
         return lxResult;
+    }
+
+    // Stamp a challenge event for sending. An event still waiting to go out is reported (it
+    // is overwritten either way), then the reliable base stamps type 34 for the frame.
+    void FreeburnChallengeMessage::PrepareForSend(u16 lu16FrameCount, CgsID lChallengeID,
+                                                  BrnNetworkModuleIO::EChallengeEventType leEventType,
+                                                  BrnGameState::EChallengeStatus leChallengeStatus,
+                                                  s32 liActionIndex)
+    {
+        const s32 KI_FREEBURN_CHALLENGE_MESSAGE_TYPE = 34;
+
+        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+                   "lu16FrameCount != KU16_INVALID_FRAME");
+
+        if (IsMessageValid())
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStream << "Haven't yet sent event type : " << static_cast<s32>(meEventType)
+                    << " but trying to send new event type : " << static_cast<s32>(leEventType) << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+
+        mChallengeID      = lChallengeID;
+        meEventType       = leEventType;
+        meChallengeStatus = leChallengeStatus;
+        miActionIndex     = liActionIndex;
+        CgsNetwork::ReliableMessage::PrepareForSend(KI_FREEBURN_CHALLENGE_MESSAGE_TYPE, lu16FrameCount);
     }
 
     bool FreeburnChallengeMessage::Retrieve(CgsID* lpChallengeID,

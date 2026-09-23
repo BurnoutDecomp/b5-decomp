@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
 
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -12,7 +13,7 @@
 // These are members of the canonical ServerInterfaceComponent declared in the
 // sibling CgsServerInterfaceComponent.h (vptr@0, mpcCurrentAction@4, meStatus@8,
 // miLastError@0xC -- see that header for the full layout note). Construct points
-// mpcCurrentAction at the static error-string data (unk_820046A7) and resets
+// mpcCurrentAction at the empty string and resets
 // status/error; Clear/GetAndClear reset them the same way (mpcCurrentAction=0,
 // meStatus=2 "no error", miLastError=0).
 //
@@ -21,8 +22,9 @@
 // entries (DSErrorToServerInterfaceError, home: CgsServerInterfaceDirtySockErrorHelpers.h).
 // A zero code maps to E_SERVER_INTERFACE_ERROR_NONE. If the code is absent from the
 // supplied table (or no table is given) it falls back to the one-entry default table
-// keyed on the 'nfnd' ("not found") fourcc, returning E_SERVER_INTERFACE_ERROR_UNHANDLED
-// when even that misses. (The X360 disassembly resolves the default-table address as a
+// keyed on the 'nfnd' ("not found") fourcc (mapped to E_SERVER_INTERFACE_GAMES_ERROR_NO_GAMES_FOUND,
+// the rodata word is 27), returning E_SERVER_INTERFACE_ERROR_UNHANDLED when even that misses.
+// (The disassembly resolves the default-table address as a
 // "nfnd" string literal purely because its bytes are ASCII-printable -- it is actually
 // &kaDefaultDSServerInterfaceErrorMapping[0], per the DWARF-attested private static.)
 
@@ -36,12 +38,9 @@ namespace CgsNetwork
     // CgsServerInterfaceComponent.cpp:43 / :49 (DWARF)
     const DSErrorToServerInterfaceError kaDefaultDSServerInterfaceErrorMapping[1] =
     {
-        { KI_NOT_FOUND_CODE, E_SERVER_INTERFACE_ERROR_UNHANDLED }
+        { KI_NOT_FOUND_CODE, E_SERVER_INTERFACE_GAMES_ERROR_NO_GAMES_FOUND }
     };
     const s32 KI_NUM_DEFAULT_ERROR_MAPPINGS = 1;
-
-    // Static error-string data, defined in another (not-yet-reconstructed) TU.
-    extern const u8 gServerInterfaceErrorData[];
 
     void* ServerInterfaceComponent::ClearLastError()
     {
@@ -54,8 +53,35 @@ namespace CgsNetwork
     void ServerInterfaceComponent::Construct()
     {
         meStatus = 2;
-        mpcCurrentAction = reinterpret_cast<const char*>(&gServerInterfaceErrorData);
+        mpcCurrentAction = "";
         miLastError = 0;
+    }
+
+    // The progress lines both action hooks stream to the network log channel ("StartAction: ",
+    // "Finish Action: ... successfully" / "... with error N") are not reproduced: that stream
+    // object has no home in the tree. The streamed assert text is reduced to its lead literal.
+    void ServerInterfaceComponent::StartActionCore(const char* lpcAction)
+    {
+        CGS_ASSERT(meStatus != 0, "Trying to start ");
+
+        mpcCurrentAction = lpcAction;
+        meStatus         = 0;
+        miLastError      = 0;
+    }
+
+    void ServerInterfaceComponent::EndActionCore(int liError)
+    {
+        if (liError == 0)
+        {
+            miLastError      = liError;
+            mpcCurrentAction = 0;
+            meStatus         = 2;
+        }
+        else
+        {
+            miLastError = liError;
+            meStatus    = 1;
+        }
     }
 
     int ServerInterfaceComponent::GetAndClearLastError()

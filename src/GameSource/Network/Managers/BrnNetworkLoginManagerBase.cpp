@@ -44,9 +44,7 @@
 
 #include <cstring>   // strncpy / memset
 
-// DirtySDK connection-status query (vendor SDK; declared at global scope to match the SDK
-// header, mirroring BrnNetworkGamerPictureManagerX360.cpp). The selector is a FourCC.
-extern "C" int NetConnStatus(int luSelector, int liData, void* lpBuf, int liBufSize);
+#include "netconn.h"   // NetConnStatus (the selector is a FourCC)
 
 namespace BrnNetwork
 {
@@ -391,7 +389,7 @@ namespace BrnNetwork
             lpcUrl = macServerUrl;
         }
 
-        const s32 liBufferSize = lpServerInterface->GetDownloadableConfigComponent()->GetTosDownloadBufferSize();
+        const s32 liBufferSize = lpServerInterface->GetDownloadableConfigComponent()->TOSBufferSize();
         lpServerInterface->GetHttpComponent()->StartHttpsDownload(lpcUrl, liBufferSize, KI16_TOS_DOWNLOAD_TIMEOUT_MS);
     }
 
@@ -406,8 +404,8 @@ namespace BrnNetwork
             reinterpret_cast<CgsNetwork::ServerInterfaceTelemetry*>(lpServerInterface->GetTelemetryComponent());
 
         lpTelemetry->SetDisabledCountryList(lpConfig->GetTelemetryDisabledList());
-        lpTelemetry->SetEventFilters(lpConfig->GetTelemetryFirstUsageEventFilters(),
-                                     lpConfig->GetTelemetryNormalUsageEventFilters());
+        lpTelemetry->SetEventFilters(lpConfig->TelemetryFiltersFirstUse(),
+                                     lpConfig->TelemetryFiltersNormalUse());
 
         const s32 liError = lpTelemetry->Connect(false);
         if (liError != 0)
@@ -627,7 +625,7 @@ namespace BrnNetwork
                 mpTOS = nullptr;
             }
 
-            const s32 liBufferSize = lpServerInterface->GetDownloadableConfigComponent()->GetTosDownloadBufferSize();
+            const s32 liBufferSize = lpServerInterface->GetDownloadableConfigComponent()->TOSBufferSize();
             mpTOS = static_cast<CgsUnicode::CgsUtf8*>(CgsNetwork::ServerInterfaceDirtySock::MemAlloc(liBufferSize, 0, 0));
             CgsUnicode::Copy(mpTOS, lpText);
 

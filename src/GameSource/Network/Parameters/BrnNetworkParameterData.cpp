@@ -19,10 +19,25 @@
 
 namespace BrnNetwork
 {
-    // Maps the game-params object to its game-mode context value (X360 sub_82587518,
-    // called with the first arg). Homed in the GameParams behavioural TU; forward-declared
-    // here so AmendGameModeContexts links. (Real symbol name unrecovered.)
-    s32 GetGameModeContextValue(void* lpParams);
+    // Maps a game mode (10..17) to its LIVE game-mode context value (jump-table switch on
+    // liGameMode - 10, cmplwi 7 bound). Unknown modes (16 included) trip a non-gating assert
+    // and map to 0. The console symbol carries no recovered name.
+    s32 GetGameModeContextValue(s32 liGameMode)
+    {
+        switch (liGameMode)
+        {
+        case 10: return 1;
+        case 11: return 2;
+        case 12:
+        case 14:
+        case 17: return 3;
+        case 13: return 5;
+        case 15: return 6;
+        default:
+            CGS_ASSERT(false, "Unknown game mode");
+            return 0;
+        }
+    }
 
     // ---- TranslateGameMode @ 0x82587450 --------------------------------------
     // Maps a game-side game-mode id (1..4) to its LIVE game-mode context value
@@ -47,7 +62,7 @@ namespace BrnNetwork
     // existing entries; asserts at most one already exists; if absent appends a fresh slot
     // (post-incrementing the count). Writes the game-mode id and GetGameModeContextValue()
     // as its value, and returns that value (the asm threads r3 straight through).
-    s32 AmendGameModeContexts(void* lpParams, s32* lpiCount, MatchmakingContext* lpaContexts)
+    s32 AmendGameModeContexts(s32 liGameMode, s32* lpiCount, MatchmakingContext* lpaContexts)
     {
         s32 liGameModeIndex = -1;
 
@@ -74,7 +89,7 @@ namespace BrnNetwork
 
         MatchmakingContext& lSlot = lpaContexts[liGameModeIndex];
         lSlot.muContextId = KU_CONTEXT_GAME_MODE;
-        s32 liValue = GetGameModeContextValue(lpParams);
+        s32 liValue = GetGameModeContextValue(liGameMode);
         lSlot.muValue = static_cast<u32>(liValue);
         return liValue;
     }

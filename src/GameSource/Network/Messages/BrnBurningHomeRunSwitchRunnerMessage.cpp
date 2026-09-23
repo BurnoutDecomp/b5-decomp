@@ -21,6 +21,12 @@ namespace BrnNetwork
     // Reliable message type id (asm `li r4,0x1E` in PrepareForSend).
     static const s32 KI_BURNING_HOME_RUN_SWITCH_RUNNER_MESSAGE_TYPE = 30;   // 0x1E
 
+    // Only the runner id is reset (the message base fields are left as they are).
+    void BurningHomeRunSwitchRunnerMessage::Construct()
+    {
+        mNewRunnerID = KI_INVALID_PLAYER_ID;
+    }
+
     // BrnNetwork::BurningHomeRunSwitchRunnerMessage::GetName @ 0x8257C298
     // lis/addi a rodata string then blr -- no member or base access. Standalone ledger
     // body (own address, NOT inlined).

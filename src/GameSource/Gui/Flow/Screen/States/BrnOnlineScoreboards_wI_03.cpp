@@ -80,6 +80,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::GetLanguageManager
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // FormatText / E_FORMAT_ID_LOOKUP
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"   // KAA_SAVE_GAME_CHALLENGE_ROAD_IDS
 #include <cstdlib>   // qsort
 
 namespace BrnGui
@@ -90,27 +91,9 @@ namespace BrnGui
         // The screen offers one leaderboard per road, and the road filter lists them
         // alphabetically in the CURRENT language -- so the order cannot be baked into the
         // table and has to be rebuilt from the localised names every time the screen opens.
-        //
-        // FLAG consumer-named: this table is file-scope and unnamed on the X360
-        // (qword_82029FA0 .. qword_8202A1A0, dumped in scratchpad/waveI/scoreboards_rodata.txt).
-        // The 64 entries are localisation-database string ids -- BuildAlphabeticalRoadIndexes
-        // renders each one decimally and resolves it through E_FORMAT_ID_LOOKUP.
-        //
-        // Element type is u64: the X360 walks the table with `ld` and a stride of 8. Every
-        // entry's high word is zero, which is why the "%d" render below is well defined.
-        const s32 KI_NUM_ALPHABETICAL_ROADS = 64;   // (0x8202A1A0 - 0x82029FA0) / 8
-
-        const u64 KAU64_ALPHABETICAL_ROAD_IDS[KI_NUM_ALPHABETICAL_ROADS] =
-        {
-            383595, 385737, 385860, 386215, 386734, 387078, 387153, 387198,
-            390723, 392323, 392532, 392589, 392684, 392688, 392997, 393062,
-            393120, 393166, 393198, 393756, 393760, 393762, 393860, 393900,
-            393911, 394273, 394306, 394474, 394487, 394853, 394965, 395197,
-            395490, 395600, 395656, 395917, 395952, 396114, 396133, 396188,
-            396228, 396456, 396460, 396706, 396718, 396742, 396988, 397134,
-            397165, 397201, 397348, 397409, 397455, 397601, 397702, 505312,
-            506394, 506519, 535195, 535196, 561121, 561413, 561415, 561416
-        };
+        // The road ids are the street manager's save-game challenge road-id table (its 64
+        // entries are localisation-database string ids -- BuildAlphabeticalRoadIndexes
+        // renders each one decimally and resolves it through E_FORMAT_ID_LOOKUP).
 
         // The decimal id is rendered into this many characters before it is handed to the
         // localisation lookup. Source constant (X360 `li r4, 0xA`), not a buffer size -- the
@@ -172,6 +155,8 @@ namespace BrnGui
     // ================================================================================
     void OnlineScoreboards::BuildAlphabeticalRoadIndexes()
     {
+        static_assert(KI_NUM_ALPHABETICAL_ROADS == BrnGameState::KI_MAX_CHALLENGES,
+                      "one alphabetical slot per challenge road");
         RoadSortData laRecords[KI_NUM_ALPHABETICAL_ROADS];
 
         for (s32 liRoad = 0; liRoad < KI_NUM_ALPHABETICAL_ROADS; ++liRoad)
@@ -188,7 +173,7 @@ namespace BrnGui
             // rather than relying on that.
             char lacNumber[16];
             CgsCore::SPrintf(lacNumber, KU_ROAD_ID_DIGITS, "%d",
-                             static_cast<s32>(KAU64_ALPHABETICAL_ROAD_IDS[liRoad]));
+                             static_cast<s32>(BrnGameState::KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoad]));
 
             // X360 r7 == 9 == E_FORMAT_ID_LOOKUP: resolve the digits as a database id.
             mpStateInterface->GetLanguageManager()->FormatText(

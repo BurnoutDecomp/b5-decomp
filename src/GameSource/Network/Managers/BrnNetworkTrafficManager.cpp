@@ -28,6 +28,11 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"  // traffic network IO
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"        // BrnTraffic::KU_INVALID_HULL
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleNetworkIOInterfaces.h"      // crash network IO
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"                                // NetworkOutRestartTrafficEvent
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                                    // CgsCore::SnPrintf
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"          // Draw2DText
+#include "GameShared/GameClasses/Network/StartTime/CgsStartTimeManager.h"                   // AreWeSyncingTime
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                             // CgsDev::StrStream (streamed assert)
 
 namespace BrnNetwork
 {
@@ -48,6 +53,20 @@ namespace BrnNetwork
 
         // Per-hash decay of the "running in the past" amount.
         const f32 KF_IN_THE_PAST_DECAY              = 0.8f;
+
+        // The debug overlay: text size, the three lines' screen positions and colours, and the
+        // print buffer. The lag is reported (in seconds, one traffic update per tenth of a
+        // second) only once it exceeds two updates.
+        const f32          KF_TRAFFIC_DEBUG_TEXT_SIZE           = 22.0f;
+        const s32          KI_TRAFFIC_DEBUG_TEXT_LENGTH         = 1024;
+        const s32          KI_IN_THE_PAST_REPORT_THRESHOLD      = 2;
+        const f32          KF_TRAFFIC_UPDATE_PERIOD             = 0.1f;
+        const CgsDev::RGBA KU_TRAFFIC_DIVERGENCE_TEXT_COLOUR    = 0xFF0000E6u;
+        const CgsDev::RGBA KU_IN_THE_PAST_TEXT_COLOUR           = 0xFF0064C8u;
+        const CgsDev::RGBA KU_RESTART_PENDING_TEXT_COLOUR       = 0xFFC86400u;
+        const Vector2      KV2_TRAFFIC_DIVERGENCE_TEXT_POSITION = { 251.3f, 158.0f, 0.0f, 0.0f };
+        const Vector2      KV2_IN_THE_PAST_TEXT_POSITION        = { 586.9f, 158.0f, 0.0f, 0.0f };
+        const Vector2      KV2_RESTART_PENDING_TEXT_POSITION    = { 536.85f, 133.0f, 0.0f, 0.0f };
     }
 
     // =========================================================================
@@ -1149,5 +1168,299 @@ namespace BrnNetwork
             }
         }
         return false;
+    }
+
+    // =========================================================================
+    // Update -- the per-frame tick. While the start time is being synced or a traffic
+    // restart is pending, every crash / hull / hash record is dropped; otherwise the hull
+    // syncs, crashing traffic and traffic hashes are exchanged. The debug overlay then
+    // reports divergence, a lagging simulation and a pending restart.
+    // =========================================================================
+    void TrafficManager::Update(bool lbInGame)
+    {
+        mbSyncingTime = mpNetworkModule->GetNetworkManager()->GetStartTimeManager()->AreWeSyncingTime();
+        UpdateRestartTraffic();
+
+        if (mbSyncingTime || IsTrafficSystemResetPending())
+        {
+            ClearCrashingTraffic();
+            for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
+            {
+                maTrafficData[liIndex].mBufferedHullActivates.Clear();
+            }
+            mbLastHashDataValid = false;
+            maStoredTrafficHashes.Clear();
+        }
+        else
+        {
+            UpdateHullSync();
+            if (mbHasRoundStarted)
+            {
+                SendCrashingTrafficMessages(lbInGame);
+                ReceiveCrashingTrafficMessages();
+            }
+            UpdateTrafficHashing(lbInGame);
+        }
+
+        if (mbShowTrafficDivergence && !IsTrafficSystemResetPending() && !mbSuppressingHullSyncsUntilReset)
+        {
+            if (mbHasTrafficDiverged)
+            {
+                CgsDev::DebugInterface lDebugInterface;
+                lDebugInterface.Get2dRender().Draw2DText("Traffic Divergence", KV2_TRAFFIC_DIVERGENCE_TEXT_POSITION,
+                                                         KF_TRAFFIC_DEBUG_TEXT_SIZE, KU_TRAFFIC_DIVERGENCE_TEXT_COLOUR);
+            }
+
+            if (mbIsThisMachineInThePast && miInThePastAmount > KI_IN_THE_PAST_REPORT_THRESHOLD)
+            {
+                char lacText[KI_TRAFFIC_DEBUG_TEXT_LENGTH];
+                CgsCore::SnPrintf(lacText, KI_TRAFFIC_DEBUG_TEXT_LENGTH, "Traffic running %.01fs in the past",
+                                  static_cast<f32>(miInThePastAmount) * KF_TRAFFIC_UPDATE_PERIOD);
+
+                CgsDev::DebugInterface lDebugInterface;
+                lDebugInterface.Get2dRender().Draw2DText(lacText, KV2_IN_THE_PAST_TEXT_POSITION,
+                                                         KF_TRAFFIC_DEBUG_TEXT_SIZE, KU_IN_THE_PAST_TEXT_COLOUR);
+            }
+        }
+
+        if (IsTrafficSystemResetPending())
+        {
+            CgsDev::DebugInterface lDebugInterface;
+
+            char lacText[KI_TRAFFIC_DEBUG_TEXT_LENGTH];
+            CgsCore::SnPrintf(lacText, KI_TRAFFIC_DEBUG_TEXT_LENGTH, "Network Traffic restart pending, frame %u",
+                              static_cast<u32>(mBufferedRestartTrafficMessage.mu16RestartFrame));
+
+            lDebugInterface.Get2dRender().Draw2DText(lacText, KV2_RESTART_PENDING_TEXT_POSITION,
+                                                     KF_TRAFFIC_DEBUG_TEXT_SIZE, KU_RESTART_PENDING_TEXT_COLOUR);
+        }
+    }
+
+    // =========================================================================
+    // ProcessBufferedRestartTrafficMessages -- once a buffered restart is due, tell the
+    // game which hulls to reactivate and treat the traffic system as restarted (unless
+    // restarts are suppressed).
+    // =========================================================================
+    void TrafficManager::ProcessBufferedRestartTrafficMessages()
+    {
+        BrnNetworkModuleIO::NetworkOutRestartTrafficEvent lRestartEvent;
+        u16 lu16RestartFrame;
+
+        if (IsTrafficRestartRequired(lRestartEvent.mau16ActveHulls, &lu16RestartFrame))
+        {
+            CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+
+            if (!mbSuppressTrafficRestart)
+            {
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRestartEvent),
+                                                                  lRestartEvent.GetEventType(), sizeof(lRestartEvent));
+                mu16LastTrafficResetFrame   = lu16RestartFrame;
+                mu16NumFramesSinceLastReset = 0;
+                OnTrafficRestarted();
+            }
+        }
+    }
+
+    // =========================================================================
+    // ConvertReceivedMessageFrameToLocalFrame -- a frame stamped by a console running at
+    // the other frame rate, re-expressed in our own frame count.
+    // =========================================================================
+    u16 TrafficManager::ConvertReceivedMessageFrameToLocalFrame(u16 lu16Frame,
+                                                                CgsSystem::EFrameRate leLocalConsoleFrameRate,
+                                                                CgsSystem::EFrameRate leRemoteConsoleFrameRate)
+    {
+        CGS_ASSERT(leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
+                   "leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+        CGS_ASSERT(leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
+                   "leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+
+        if (leLocalConsoleFrameRate == leRemoteConsoleFrameRate)
+        {
+            return lu16Frame;
+        }
+
+        const u16 lu16NumWraps     = static_cast<u16>(mpTimeManager->GetFrameWrapCountSinceStart());
+        const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCountSinceStart();
+        if (leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ)
+        {
+            return CgsNetwork::TranslateFrame60HzTo50Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
+        }
+        return CgsNetwork::TranslateFrame50HzTo60Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
+    }
+
+    // =========================================================================
+    // ConvertLocalFrameToReceivedMessageFrame -- one of our frames, re-expressed in the
+    // frame count of a console running at the other frame rate.
+    // =========================================================================
+    u16 TrafficManager::ConvertLocalFrameToReceivedMessageFrame(u16 lu16Frame,
+                                                                CgsSystem::EFrameRate leLocalConsoleFrameRate,
+                                                                CgsSystem::EFrameRate leRemoteConsoleFrameRate)
+    {
+        CGS_ASSERT(mpTimeManager, "mpTimeManager");
+        CGS_ASSERT(leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
+                   "leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+        CGS_ASSERT(leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
+                   "leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || leRemoteConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+
+        if (leLocalConsoleFrameRate == leRemoteConsoleFrameRate)
+        {
+            return lu16Frame;
+        }
+
+        const u16 lu16NumWraps     = static_cast<u16>(mpTimeManager->GetFrameWrapCountSinceStart());
+        const u16 lu16CurrentFrame = mpTimeManager->GetU16FrameCountSinceStart();
+        if (leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ)
+        {
+            return CgsNetwork::TranslateFrame50HzTo60Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
+        }
+        return CgsNetwork::TranslateFrame60HzTo50Hz(lu16Frame, lu16CurrentFrame, lu16NumWraps);
+    }
+
+    // =========================================================================
+    // UpdateHullSync -- relay the hull activations the local traffic produced this
+    // frame to every peer (unless hull syncs are suppressed until the next reset).
+    // =========================================================================
+    void TrafficManager::UpdateHullSync()
+    {
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+
+        if (mbSuppressingHullSyncsUntilReset)
+        {
+            return;
+        }
+
+        const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface* lpTrafficOutput =
+            mpNetworkModule->GetTrafficOutputInterface();
+
+        BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface::ActivateHullQueue lActivateHullQueue;
+        lActivateHullQueue.Construct();
+        lActivateHullQueue.Clear();
+        lActivateHullQueue.Append(lpTrafficOutput->GetActivateHullQueue());
+
+        for (s32 liIndex = 0; liIndex < lActivateHullQueue.GetLength(); ++liIndex)
+        {
+            const BrnTraffic::BrnTrafficIO::ActivateHullEvent lActivateHullEvent = lActivateHullQueue.GetEvent(liIndex);
+
+            CGS_ASSERT(lActivateHullEvent.muNewActiveHull <= KU16_MAX_HULL_NUMBER,
+                       "lActivateHullEvent.muNewActiveHull <= BrnNetwork::KU16_MAX_HULL_NUMBER");
+            CGS_ASSERT(lActivateHullEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                       "lActivateHullEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(lActivateHullEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "lActivateHullEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+            HandleHullSyncMessage(lActivateHullEvent.meActiveRaceCarIndex,
+                                  static_cast<u16>(lActivateHullEvent.muUpdateFrame),
+                                  lActivateHullEvent.muNewActiveHull);
+        }
+
+        SendHullSyncMessages();
+    }
+
+    // =========================================================================
+    // ReceiveCrashingTrafficMessages -- buffer every peer's freshly arrived crashing
+    // traffic (dropping it while syncing time, for unmapped peers, from before a
+    // traffic reset or while a reset is pending), then hand the crash module every
+    // buffered update due one second ago.
+    // =========================================================================
+    void TrafficManager::ReceiveCrashingTrafficMessages()
+    {
+        CGS_ASSERT(mpTimeManager, "mpTimeManager");
+        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetGameComponent(),
+                   "lpServerInterfaceGames");
+
+        const CgsSystem::EFrameRate leLocalConsoleFrameRate =
+            mpNetworkModule->GetNetworkManager()->GetLocalConsoleFrameRate();
+
+        for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
+        {
+            TrafficSyncData& lrData = maTrafficData[liIndex];
+            CrashingTrafficMessage* lpMessage = &lrData.mCrashingTrafficMessageRecv;
+            if (!lpMessage->IsMessageValid())
+            {
+                continue;
+            }
+
+            bool lbBuffered = false;
+            if (!mbSyncingTime
+                && liIndex < mpPlayerManager->GetNumberNetworkPlayers(CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
+            {
+                CGS_ASSERT(lrData.mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                           "maTrafficData[liIndex].mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+
+                if (mpNetworkModule->GetActiveRaceCarIndex(lrData.mPlayerID) != -1)
+                {
+                    CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lrData.mPlayerID);
+                    const NetworkPlayerID lPlayerID = lrData.mPlayerID;
+                    if (!IsMessageFromBeforeTrafficReset(lpMessage->GetFramesSinceStart(), lPlayerID)
+                        && !IsTrafficSystemResetPending()
+                        && !mbSuppressingHullSyncsUntilReset)
+                    {
+                        CGS_ASSERT(leLocalConsoleFrameRate == lpNetworkPlayer->GetLocalConsoleFrameRate(),
+                                   "leLocalConsoleFrameRate == lpNetworkPlayer->GetLocalConsoleFrameRate()");
+                        StoreBufferedMessage(lPlayerID, lpMessage, leLocalConsoleFrameRate,
+                                             lpNetworkPlayer->GetRemoteConsoleFrameRate());
+                        lbBuffered = true;
+                    }
+                }
+            }
+
+            if (!lbBuffered)
+            {
+                lpMessage->SetMessageInvalid();
+            }
+        }
+
+        // Updates are applied one second behind the local frame.
+        u16 lu16Frame;
+        if (leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ)
+        {
+            lu16Frame = static_cast<u16>(mpTimeManager->GetU16FrameCountSinceStart() - KI_REPORT_CRASHING_TRAFFIC_DELAY_50HZ);
+        }
+        else if (leLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ)
+        {
+            lu16Frame = static_cast<u16>(mpTimeManager->GetU16FrameCountSinceStart() - KI_REPORT_CRASHING_TRAFFIC_DELAY_60HZ);
+        }
+        else
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Invalid frame rate " << static_cast<s32>(leLocalConsoleFrameRate);
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+            lu16Frame = CgsNetwork::KU16_INVALID_FRAME;
+        }
+
+        if (lu16Frame == CgsNetwork::KU16_INVALID_FRAME)
+        {
+            return;
+        }
+
+        DeleteOutOfDateBufferedMesssages(lu16Frame);
+        BufferedMessage* lpBufferedMessage = RetrieveBufferedMessage(lu16Frame);
+        BrnWorld::CrashIO::NetworkInputInterface* lpCrashInput = mpNetworkModule->GetCrashInputInterface();
+
+        while (lpBufferedMessage != nullptr)
+        {
+            const EActiveRaceCarIndex leActiveRaceCarIndex =
+                mpNetworkModule->GetActiveRaceCarIndex(lpBufferedMessage->mOwningNetworkPlayerID);
+            if (leActiveRaceCarIndex != -1 && !lpCrashInput->IsRaceCarMarkedForUpdate(leActiveRaceCarIndex))
+            {
+                lpCrashInput->MarkRaceCarForUpdate(leActiveRaceCarIndex);
+                for (s32 liData = 0; liData < lpBufferedMessage->miCrashingTrafficDataCount; ++liData)
+                {
+                    const CrashingTrafficData& lrCrashingTraffic = lpBufferedMessage->maCrashingTrafficData[liData];
+                    lpCrashInput->AddTrafficUpdate(lrCrashingTraffic.mu16VehicleID,
+                                                   static_cast<u32>(leActiveRaceCarIndex),
+                                                   lrCrashingTraffic.mMatrix);
+                }
+            }
+
+            RemoveBufferedMessage(lpBufferedMessage);
+            mu16LastBufferReadFrame = lu16Frame;
+            lpBufferedMessage = RetrieveBufferedMessage(lu16Frame);
+        }
     }
 }

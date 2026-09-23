@@ -1273,7 +1273,7 @@ namespace BrnNetwork
                 {
                     u64 lu64XUID;
                     if (mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame()
-                        && mpNetworkManager->GetServerInterface()->GetGameComponent()->IsPlayerInGameByID(
+                        && mpNetworkManager->GetServerInterface()->GetGameComponent()->IsPlayerInGame(
                                lpSelectedPlayerOptionEvent->mSelectedPlayerID))
                     {
                         static_cast<CgsNetwork::ServerInterfaceGamesX360*>(
@@ -1292,7 +1292,7 @@ namespace BrnNetwork
                 {
                     u64 lu64XUID;
                     if (mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame()
-                        && mpNetworkManager->GetServerInterface()->GetGameComponent()->IsPlayerInGameByID(
+                        && mpNetworkManager->GetServerInterface()->GetGameComponent()->IsPlayerInGame(
                                lpSelectedPlayerOptionEvent->mSelectedPlayerID))
                     {
                         static_cast<CgsNetwork::ServerInterfaceGamesX360*>(

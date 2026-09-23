@@ -24,9 +24,8 @@ namespace BrnNetwork
 
 namespace CgsNetwork
 {
-    // The 7 human-readable server-type names indexed by EServerType (X360 off_82F33478 /
-    // KAPC_SERVER_TYPES). Definition lives in the .cpp; only element 0 ("Local Server") is
-    // byte-attested in the X360 asm.
+    // The 7 human-readable server-type names RenderHUD indexes by the server type.
+    // Definition lives in the .cpp.
     extern const char* const KAPC_SERVER_TYPES[E_SERVER_TYPE_COUNT];
 
     struct VersionDisplay : public CgsDev::DebugComponent
@@ -44,7 +43,8 @@ namespace CgsNetwork
 
         bool Release();
         void Destruct();
-        void SetGameServerGame(bool lbGameServerGame);
+        // Inline on the console: a single byte store.
+        void SetGameServerGame(bool lbGameServerGame) { mbGameServerGame = lbGameServerGame; }
 
     protected:
         // X360 0x8286FA60. Debug-menu display name.

@@ -45,11 +45,10 @@ namespace CgsNetwork
 //  perfmon handles registered once on first Prepare.)
 namespace
 {
-    // K_NETWORK_PLAYER_TIMEOUT (CgsNetworkPlayer.cpp:40) -- the disconnect window. The
-    // ARTIST CheckForPlayerDisconnectTimeout compares the elapsed time-since-last-packet
-    // against a fixed (seconds, fraction) pair loaded from rodata (dword_8307A310 /
-    // flt_8307A314). Those two words ARE this Time constant; modelled here by name.
-    const CgsSystem::Time K_NETWORK_PLAYER_TIMEOUT(/*seconds*/ 10, /*fraction*/ 0.0f);
+    // K_NETWORK_PLAYER_TIMEOUT -- the no-packet window after which a player counts as
+    // paused. A dynamic initialiser builds it as Time(5.0f); its storage is zero in the
+    // image until then.
+    const CgsSystem::Time K_NETWORK_PLAYER_TIMEOUT(5.0f);
 
     // First-Prepare guard + the six CPU perfmon handles (CgsNetworkPlayer.cpp:43-49).
     bool s_bRegisteredPerfmons                  = false;
@@ -71,14 +70,6 @@ namespace
     // The "connected" connection-status value GetConnectionStatus returns when linked.
     const s32 KI_CONNECTION_STATUS_CONNECTED = 3;   // E_CONNECTION_SUCCESS
 
-    // The send pump's "do we have a live connection?" test reads the connection-handle word
-    // at the head of the serialised connection blob (the asm's `*(this + 0x20) != 0`). The
-    // blob is external/serialised data (its field shape belongs to the FakeNetworkConditions
-    // TU), so the leading word is read through a documented raw view here.
-    inline bool ConnectionDataIsLive(const ConnectionData& lConnectionData)
-    {
-        return *reinterpret_cast<const u32*>(&lConnectionData) != 0;   // serialised blob: handle word @ +0
-    }
 }
 
 // =====================================================================================
@@ -129,16 +120,8 @@ void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams
     CGS_ASSERT(lpConstructParams->mpPlayerManager, "mpPlayerManager");
     mpPlayerManager  = lpConstructParams->mpPlayerManager;   // +0x0C
 
-    // mConnectionData (+0x20 .. +0x8F): sentinels then a zeroed tail (the asm writes the
-    // leading words individually, then memsets the remaining 64 bytes to zero).
-    std::memset(&mConnectionData, 0, sizeof(mConnectionData));
-    {
-        s32* lpiConn = reinterpret_cast<s32*>(&mConnectionData);   // serialised blob: documented raw view
-        lpiConn[0] = 0;
-        lpiConn[1] = -1;
-        lpiConn[2] = -1;
-        lpiConn[9] = -1;
-    }
+    // mConnectionData: no link, the address sentinels and a zeroed tail.
+    mConnectionData.Clear();
 
     // Reset every send & recv message slot.
     for (s32 liSlot = 0; liSlot < KI_MAX_MESSAGE_TYPES; ++liSlot)
@@ -369,14 +352,7 @@ bool NetworkPlayer::Prepare(NetworkAdapter* lpNetworkAdapter,
     // Reset identity / connection state (same sentinel set Construct writes).
     mPlayerID        = KI_INVALID_PLAYER_ID;
     mpNetworkAdapter = nullptr;
-    std::memset(&mConnectionData, 0, sizeof(mConnectionData));
-    {
-        s32* lpiConn = reinterpret_cast<s32*>(&mConnectionData);   // serialised blob: documented raw view
-        lpiConn[0] = 0;
-        lpiConn[1] = -1;
-        lpiConn[2] = -1;
-        lpiConn[9] = -1;
-    }
+    mConnectionData.Clear();
 
     // Bound-check the name length (the X360 string-copy guard: must fit in 16 chars).
     s32 liNameLength = 0;
@@ -442,14 +418,7 @@ bool NetworkPlayer::Release()
 
     mPlayerID        = KI_INVALID_PLAYER_ID;
     mpNetworkAdapter = nullptr;
-    std::memset(&mConnectionData, 0, sizeof(mConnectionData));
-    {
-        s32* lpiConn = reinterpret_cast<s32*>(&mConnectionData);   // serialised blob: documented raw view
-        lpiConn[0] = 0;
-        lpiConn[1] = -1;
-        lpiConn[2] = -1;
-        lpiConn[9] = -1;
-    }
+    mConnectionData.Clear();
 
     meLocalConsoleFrameRate  = static_cast<CgsSystem::EFrameRate>(-1);
     meRemoteConsoleFrameRate = static_cast<CgsSystem::EFrameRate>(-1);
@@ -564,7 +533,7 @@ void NetworkPlayer::SendMessages()
             // clear its valid flag -- the reliable copy lives in the resend buffer now.
             // The "have a connection" test reads the connection-handle word at the head of
             // the serialised connection blob (mConnectionData[0] != 0).
-            if (!mbNetworkPlayerPaused && ConnectionDataIsLive(mConnectionData))
+            if (!mbNetworkPlayerPaused && mConnectionData.IsValid())
             {
                 lpPlayerManager->mReliableMessageManager.AddBufferedReliableMessage(
                     mPlayerID, lpMsg, maSendMessageData[liIndex].miLength);
@@ -688,7 +657,7 @@ void NetworkPlayer::SendMessages()
         CgsDev::PerfMonCpu::StopMonitor(s_iNetworkPlayerPackMessagesPM);
 
         CgsDev::PerfMonCpu::StartMonitor(s_iNetworkPlayerSendToPM);
-        if (liBytesPacked > 0 && !mbNetworkPlayerPaused && ConnectionDataIsLive(mConnectionData))
+        if (liBytesPacked > 0 && !mbNetworkPlayerPaused && mConnectionData.IsValid())
         {
             ConnectionData lConnectionData = mConnectionData;   // sent by value
             if (!mpNetworkAdapter->SendTo(lacPackBuffer, liBytesPacked, lConnectionData))

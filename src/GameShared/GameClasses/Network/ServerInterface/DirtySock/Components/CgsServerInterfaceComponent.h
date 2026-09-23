@@ -55,16 +55,15 @@ namespace CgsNetwork
         ServerInterfaceComponent();
 
         // Vtable order (five slots): Construct, the deleting destructor, OnEvent,
-        // StartActionCore, EndActionCore. The console OnEvent slot is pure and every leaf
-        // component overrides it; it stays a plain declaration here while a game-side
-        // component in the tree still derives from this base directly.
+        // StartActionCore, EndActionCore. The OnEvent slot is pure; every leaf component
+        // overrides it.
         virtual void Construct();
 
         // CgsServerInterfaceComponent.h:55 -- vector deleting destructor @ 0x827DB3E8.
         virtual ~ServerInterfaceComponent();
 
         // CgsServerInterfaceComponent.h:61
-        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
+        virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData) = 0;
 
         // Reset the component's pending error/status back to idle (X360 @ 0x828766F0). Returns the
         // component pointer (the X360 ABI hands `this` back in r3). The body lives in the sibling
@@ -92,8 +91,9 @@ namespace CgsNetwork
         // invoking it through the component by name.
         int GetAndClearLastError();
 
-    protected:
         // ---- Action / error helpers shared by every leaf component ------------------
+        // Public, as the owning server interface drives them through the base pointer
+        // (its disconnect handler ends every busy component's action).
         // (Bodied in dedicated component TUs / CgsServerInterfaceComponent.cpp; declared
         //  here so derived leaves can drive an action through the base by name. In the
         //  Jan-2008 ARTIST build these helpers live on ServerInterfaceComponent -- they
@@ -111,6 +111,7 @@ namespace CgsNetwork
                                            const DSErrorToServerInterfaceError* lpTable,
                                            int liCount) const;
 
+    protected:
         const char* mpcCurrentAction;   // +0x04
         s32         meStatus;           // +0x08
         s32         miLastError;        // +0x0C

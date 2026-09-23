@@ -139,4 +139,25 @@ namespace CgsNetwork
         PlayerManager*          mpPlayerManager;          // +0x394
         s32                     miPlayersAdded;           // +0x398
     };
+
+    // Inline on the console: every caller reads or writes the member directly.
+    inline void TimeManager::StopSyncingTime()
+    {
+        mbWeAreSyncingTime = false;
+    }
+
+    inline CgsSystem::Time TimeManager::GetNetworkTime() const
+    {
+        return mNetworkTime;
+    }
+
+    inline bool TimeManager::HasStartFrameBeenSetValid()
+    {
+        return mu16StartFrame != KU16_INVALID_FRAME;
+    }
+
+    inline u32 TimeManager::GetFrameCount() const
+    {
+        return muFrameCount;
+    }
 } // namespace CgsNetwork

@@ -51,13 +51,16 @@ namespace BrnNetwork
     struct ScoreboardManager
     {
     public:
-        // DWARF BrnNetworkScoreboardManager.h:55 -- the download state machine.
+        // The download state machine. The reference list has three states; this build has a
+        // fourth (headings downloaded, waiting for select events) between idle and the two
+        // downloads, and ProcessBeforeSimulation switches on all four values.
         enum EState
         {
-            E_STATE_IDLE              = 0,
-            E_STATE_GETTING_HEADINGS  = 1,
-            E_STATE_GETTING_SCOREBOARD = 2,
-            E_STATE_COUNT             = 3,
+            E_STATE_IDLE               = 0,
+            E_STATE_WAITING_FOR_EVENTS = 1,   // FLAG: name ours
+            E_STATE_GETTING_HEADINGS   = 2,
+            E_STATE_GETTING_SCOREBOARD = 3,
+            E_STATE_COUNT              = 4,
         };
 
         void Construct();                                                                // @ 0x8255A408
@@ -82,7 +85,7 @@ namespace BrnNetwork
         void AddColumnInfoToScoreboard(Scoreboard* lpScoreboard);                        // @ 0x82553010
         void AddRowDataToScoreboard(Scoreboard* lpScoreboard);                           // @ 0x8255A448
         void AddSortedRowDataToScoreboard(Scoreboard* lpScoreboard);                     // @ 0x8255A5D0
-        void ProcessEventQueue();                                                        // DWARF :161 (declared-only)
+        void ProcessEventQueue();
         void CopyCategories();                                                           // DWARF :165 (declared-only)
         void CopyVariations(s32 liCategory, s32 liIndex);                                // DWARF :171 (declared-only)
         void CopyIndexes(s32 liCategory);                                                // DWARF :176 (declared-only)

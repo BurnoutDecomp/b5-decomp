@@ -22,7 +22,7 @@
 //
 // SCOPE: all five functions are bodied in the .cpp. DrawBar's per-bar geometry (the VMX
 // splat/subtract/multiply lane chain that scales the value against the virtual-screen width) is
-// decoded into scalar float math + the shared debug-HUD helpers (MaybeDrawText / DebugDraw2DBox /
+// decoded into scalar float math + the shared debug-HUD helpers (MaybeDrawText / DrawBox /
 // DrawLine), store-for-store against the X360 asm.
 
 namespace CgsNetwork
@@ -41,11 +41,52 @@ namespace CgsNetwork
 {
     struct PlayerManagerDebugComponent : public CgsDev::DebugComponent
     {
-        // (No standalone X360 symbol in this TU; declared for the call surface, bodied elsewhere.)
-        void Construct(PlayerManager* lpPlayerManager);
-        void Prepare();
-        void Release();
-        void Destruct();
+        // The graph scale the bandwidth bars start with (kbps at full width) and the bandwidth
+        // budget the bars are coloured against (console .rdata floats).
+        static constexpr f32 KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH = 256.0f;
+        static constexpr f32 KF_DEFAULT_MAX_BANDWIDTH           = 128.0f;
+
+        // The lifecycle is inlined into PlayerManager's Construct / Prepare / Release / Destruct.
+        void Construct(PlayerManager* lpPlayerManager)
+        {
+            CgsDev::DebugComponent::Construct();
+            mpPlayerManager = lpPlayerManager;
+            Register();
+            mbDrawBandwidthUsage          = false;
+            mbShowUsedRegisteredMessages  = false;
+            miAverageType                 = 0;
+            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
+            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
+        }
+
+        void Prepare()
+        {
+            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
+            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
+            mbDrawBandwidthUsage          = false;
+            mbShowUsedRegisteredMessages  = false;
+            miAverageType                 = 0;
+        }
+
+        void Release()
+        {
+            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
+            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
+            mbDrawBandwidthUsage          = false;
+            mbShowUsedRegisteredMessages  = false;
+            miAverageType                 = 0;
+        }
+
+        void Destruct()
+        {
+            mfMaxBandwidthForGraph        = KF_DEFAULT_MAX_BANDWIDTH_FOR_GRAPH;
+            mfMaxBandwidth                = KF_DEFAULT_MAX_BANDWIDTH;
+            mpPlayerManager               = nullptr;
+            mbDrawBandwidthUsage          = false;
+            mbShowUsedRegisteredMessages  = false;
+            miAverageType                 = 0;
+            CgsDev::DebugComponent::Destruct();
+        }
 
         // qsort element: one message type and its max byte count. 8-byte stride (matches the asm
         // qsort SizeOfElements == 8 and the (type@0, bytes@4) field reads).

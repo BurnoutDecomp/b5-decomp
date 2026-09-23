@@ -30,14 +30,12 @@ namespace CgsNetwork
     struct ServerInterfacePlayerParamsX360 : public ServerInterfacePlayerParamsBase
     {
     public:
-        ServerInterfacePlayerParamsX360();
+        // Inlined into the owning game-side constructor (vtable store only).
+        ServerInterfacePlayerParamsX360() {}
 
-        // @ X360 0x8287A228 -- the platform prepare that BrnNetwork::
-        // PlayerParamsBase::Prepare (@ 0x8258A818) chains to first with a direct
-        // base-qualified call (bl CgsNetwork__ServerInterfacePlayerParamsX360__Prepare,
-        // r3 == this). Declared so that call binds to the platform override rather
-        // than the shared base body; the body itself is not yet recovered (no
-        // per-function export for 0x8287A228).
+        // The platform prepare the game-side player params chain to first: reset every
+        // field, derive the firewall setting from the NAT type and read this console's
+        // secure network address.
         virtual bool Prepare();
 
         // @ X360 0x8287A340 -- chain to the base, then parse the 36-byte network

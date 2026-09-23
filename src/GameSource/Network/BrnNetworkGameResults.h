@@ -4,42 +4,34 @@
 #include <cstddef>   // offsetof (_AssertLayout)
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceEndGameData.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameResults.h"
 
 // ===========================================================================
 // BrnNetwork::GameResults
 //   Home: GameSource/Network/BrnNetworkGameResults.{h,cpp}
 //
 // The game-side end-of-game result record that BrnNetwork::PostRoundManager
-// embeds by value (mGameResults @ +196) and submits to the server. It is the
-// Burnout leaf of the DirtySock end-game-data hierarchy:
+// embeds by value (mGameResults @ +0xC4) and uploads through
+// CgsNetwork::ServerInterfaceGames::SendGameResult. It is the game leaf of the
+// server-interface game-results hierarchy:
 //
-//   CgsNetwork::ServerInterfaceEndGameDataBase
-//       <- CgsNetwork::ServerInterfaceEndGameDataX360   (platform leaf)
-//           <- BrnNetwork::GameResults                  (game leaf, this type)
+//   CgsNetwork::ServerInterfaceStructureInterface
+//       <- CgsNetwork::ServerInterfaceGameResultsBase   (Prepare / SerialiseToString)
+//           <- BrnNetwork::GameResults                  (this type)
 //
-// proven by the X360 PostRoundManager asm:
-//   * ActionSendResults @ 0x82545040 passes &mGameResults (this+196) where
-//     CgsNetwork::ServerInterfaceGames::SendGameResult expects a
-//     ServerInterfaceEndGameDataBase* -- so GameResults IS one.
-//   * Prepare / ProcessComplete / ProcessRaceResults make a virtual call through
-//     mGameResults' vtable (the inherited Prepare()), confirming the polymorphic
-//     base edge.
+// Vtable: destructor, GetPattern, GetPatternLength, GetDataSize, GetData const,
+// GetData, Prepare, SerialiseToString. SendGameResult calls SerialiseToString through
+// slot +0x1C; the four pattern/data accessors are dead redirects that assert.
 //
-// FLAGGED: only the surface PostRoundManager drives is recovered here --
-//   * Prepare()      (inherited virtual, re-Prepares the payload), and
-//   * SetGameStats() (X360 @ ~0x8255Exxx; fills the result payload from the
-//     per-round OnlineGameResults plus the rival count).
-// The full game-specific result-field layout is owned by this type's own
-// (not-yet-homed) behavioural TU; no field bytes beyond the inherited
-// ServerInterfaceEndGameDataX360 payload are fabricated here.
-//
-// The result payload is console +0x04..+0xE0 (ClearGameData zeroes exactly that span):
-// the inherited maResultWords[16] (+0x04..+0x44) followed by maCustomResults (+0x44..+0xE0),
-// so the object is 0xE0 bytes on the console. The bodies address payload fields by their
-// console offsets from GetPayloadBase() (the object start as the console lays it out: the
-// payload's first byte, maResultWords, sits at +0x04 from it), which keeps every field on the
-// right byte although the host vptr is wider.
+// The payload mGameData is console +0x04..+0xE0 (ClearGameData zeroes exactly that span):
+//   +0x04  GEN block, 3 longs: entry count, a scalar, the event type
+//   +0x10  STAT block, 8 longs + the 13-char car name at +0x30
+//   +0x40  ten RACE records, 8 bytes each (+0x40..+0x90)
+//   +0x90  ten STUNT records, 8 bytes each (+0x90..+0xE0)
+// The bodies address payload fields by their console offsets from GetPayloadBase() (the
+// object start as the console lays it out), which keeps every field on the right byte
+// although the host vptr is wider. The console record layout is not the reference
+// GameDataT shape, so the payload stays a byte block.
 // ===========================================================================
 
 namespace BrnGameState
@@ -52,7 +44,7 @@ namespace BrnGameState
 
 namespace BrnNetwork
 {
-    class GameResults : public CgsNetwork::ServerInterfaceEndGameDataX360
+    struct GameResults : public CgsNetwork::ServerInterfaceGameResultsBase
     {
     public:
         // X360 @ 0x827DFB60 (`scalar deleting destructor'). Installs the shared
@@ -60,13 +52,13 @@ namespace BrnNetwork
         // dies. Implicitly virtual via the base's virtual destructor.
         virtual ~GameResults();
 
-        // X360 @ 0x82584600. Serialise the GEN header, each per-entry RACE/STUNT
-        // custom-results record, and the STAT block into the lobby message record.
-        void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
+        // Serialise the GEN block, each per-entry RACE/STUNT record, and the STAT
+        // block into the lobby message record.
+        virtual void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
 
         // Fill the end-game result payload from the round-by-round results and the
         // number of online rivals (X360: called from PostRoundManager::ProcessRaceResults
-        // after the inherited Prepare()). Declared-only; bodied in the GameResults TU.
+        // after Prepare()).
         void SetGameStats(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpRaceResults,
                           s32 liNumberOfRivals);
 
@@ -88,13 +80,13 @@ namespace BrnNetwork
         virtual bool Prepare();
 
     protected:
-        // DWARF vtable order; these are dead redirect stubs (results serialise via
-        // SerialiseToString, never the generic sized-blob path). Declared plain `virtual`
-        // (the committed base ServerInterfaceEndGameDataX360 does not declare them).
+        // Dead redirects (results serialise via SerialiseToString, never the generic
+        // sized-blob path): each asserts, then returns a filler value.
         virtual const char* GetPattern() const;        // X360 0x82584318
         virtual s32         GetPatternLength() const;   // X360 0x825843B0
         virtual u32         GetDataSize() const;        // X360 0x82584440
         virtual void*       GetData();                  // X360 0x825844D0
+        virtual const void* GetData() const;
 
     private:
         // X360 @ 0x82584268 -- zero the whole payload (+0x04..+0xE0). Called by Prepare
@@ -106,25 +98,20 @@ namespace BrnNetwork
         // (the asm treats it as int). (DWARF cpp:266)
         EEventType GameModeToEvent(s32 liGameMode);
 
-        // The payload's console base: its +0x04 is maResultWords[0] (see the header note).
-        u8* GetPayloadBase() { return reinterpret_cast<u8*>(maResultWords) - 0x04; }
-        const u8* GetPayloadBase() const { return reinterpret_cast<const u8*>(maResultWords) - 0x04; }
+        // The payload's console base: its +0x04 is mGameData[0] (see the header note).
+        u8* GetPayloadBase() { return mGameData - 0x04; }
+        const u8* GetPayloadBase() const { return mGameData - 0x04; }
 
         // Console layout, pinned in a 32-bit build; inert on the x64 host.
         static void _AssertLayout();
 
-    protected:
-        // +0x44  leaf custom-results tail, right after the inherited {vptr + maResultWords[16]}
-        // (base size 0x44), up to the payload end at +0xE0: the ten RACE records
-        // (+0x40..+0x90, starting inside the base words) and the ten STUNT records
-        // (+0x90..+0xE0), 8 bytes each. SerialiseToString reaches records by console byte
-        // offset, so no per-field names are asserted.
-        u8 maCustomResults[0x9C];   // +0x44
+        // The whole result payload, console +0x04..+0xE0 (see the header note).
+        alignas(4) u8 mGameData[0xDC];   // +0x04
     };
 
     inline void GameResults::_AssertLayout()
     {
-        static_assert(sizeof(void*) != 4 || offsetof(GameResults, maCustomResults) == 0x44, "maCustomResults @ +0x44");
+        static_assert(sizeof(void*) != 4 || offsetof(GameResults, mGameData) == 0x04, "mGameData @ +0x04");
         static_assert(sizeof(void*) != 4 || sizeof(GameResults) == 0xE0, "GameResults is 0xE0 bytes");
     }
 }

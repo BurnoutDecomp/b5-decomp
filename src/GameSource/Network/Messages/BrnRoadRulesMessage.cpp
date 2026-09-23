@@ -3,14 +3,15 @@
 #include "GameSource/Network/Messages/BrnRoadRulesMessage.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"                                    // BrnStreetData::ScoreList::KAI_MIN/MAX_SCORES, E_SCORE_TYPE_COUNT
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                             // CgsDev::StrStream (PrepareForSend asserts)
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::RoadRulesMessage::GetPackedMessageSize @ 0x8257B7C8
 //   BrnNetwork::RoadRulesMessage::PackOrUnpack         @ 0x8257B808
 //   BrnNetwork::RoadRulesMessage::Retrieve             @ 0x8257EA08
-// (GetName @ 0x827DFD50 is inline in the header; Construct/PrepareForSend are declared in
-// the header but are not part of this ledger TU.)
+//   BrnNetwork::RoadRulesMessage::Construct / PrepareForSend
+// (GetName is inline in the header.)
 //
 // A CgsNetwork::ReliableMessage subclass carrying a batch of up to 10 road-rules score
 // records. Each RoadRulesMessageData (24 bytes, home BrnNetworkSharedIO.h) holds a pair
@@ -41,6 +42,56 @@ namespace BrnNetwork
     static const s32 KI_MIN_STREET_DATA_VERSION        = 0;
     static const s32 KI_MAX_STREET_DATA_VERSION        = 50;   // li r6,0x32
     static const s32 KI_EXPECTED_STREET_DATA_VERSION   = 5;    // cmpwi r11,5
+
+    // The reliable message type the road-rules scores travel as.
+    static const s32 KI_ROAD_RULES_MESSAGE_TYPE = 26;
+
+    // The player ids go invalid, then the message base resets (the same body as every
+    // two-player-id message's Construct).
+    void RoadRulesMessage::Construct()
+    {
+        mSendingPlayerID = KI_INVALID_PLAYER_ID;
+        mRecvingPlayerID = KI_INVALID_PLAYER_ID;
+        CgsNetwork::Message::Construct();
+    }
+
+    // Arm the message with a batch of 1..10 score records unless a previous batch is still
+    // pending in this slot; the batch is stamped with this build's street-data version.
+    void RoadRulesMessage::PrepareForSend(u16 lu16Frame, s32 liNumRoadRulesScores,
+                                          RoadRulesMessageData* lpRoadRulesMessageData)
+    {
+        if (IsMessageValid())
+        {
+            return;
+        }
+
+        if (liNumRoadRulesScores <= 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Trying to send 0 or less road rules: " << liNumRoadRulesScores;
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        if (liNumRoadRulesScores > KI_MAX_ROAD_RULES_MESSAGE_ENTRIES)
+        {
+            CgsDev::Assert::BeginAssert();
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Trying to send too many road rules: " << liNumRoadRulesScores << "\n";
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+
+        miNumRoadRulesScores = liNumRoadRulesScores;
+        std::memcpy(maRoadRulesMessageData, lpRoadRulesMessageData,
+                    static_cast<u32>(liNumRoadRulesScores) * sizeof(RoadRulesMessageData));
+        miStreetDataVersion = KI_EXPECTED_STREET_DATA_VERSION;
+
+        CgsNetwork::ReliableMessage::PrepareForSend(KI_ROAD_RULES_MESSAGE_TYPE, lu16Frame);
+        CGS_ASSERT(IsReliable(), "IsReliable()");
+    }
 
     // BrnNetwork::RoadRulesMessage::GetPackedMessageSize @ 0x8257B7C8
     // Sizes for the worst case: the count is pinned to the array capacity (10) and every

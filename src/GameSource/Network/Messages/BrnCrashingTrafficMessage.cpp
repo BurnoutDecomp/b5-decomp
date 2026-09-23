@@ -143,4 +143,11 @@ namespace BrnNetwork
 
         return true;
     }
+
+    // No state of its own to seed: the console body is the shared tail-call to the base
+    // initialiser (folded with the other plain message Constructs).
+    void CrashingTrafficMessage::Construct()
+    {
+        CgsNetwork::Message::Construct();
+    }
 } // namespace BrnNetwork

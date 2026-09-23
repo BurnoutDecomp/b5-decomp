@@ -16,6 +16,13 @@ namespace CgsNetwork
         return Message::GetPackedMessageSize();
     }
 
+    // Stamp the frame, set the type and mark the message valid (the base PrepareForSend,
+    // inlined with its constant type).
+    void HostKeepAliveMessage::PrepareForSend(u16 lu16Frame)
+    {
+        Message::PrepareForSend(KI_E_MESSAGE_TYPE_HOST_KEEP_ALIVE, lu16Frame);
+    }
+
     // A keep-alive carries no payload: nothing to serialise, success (the console
     // folds this `return 0` leaf with every other identical leaf in the image).
     PackOrUnpackResult HostKeepAliveMessage::PackOrUnpack()

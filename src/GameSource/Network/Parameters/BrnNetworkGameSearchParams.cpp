@@ -1,5 +1,8 @@
 #include "BrnNetworkGameSearchParams.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                          // CgsCore::SPrintf
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameFlags.h" // KU_GAME_FLAGS_RANKED
+#include "GameSource/Network/Parameters/BrnNetworkParameterData.h"             // SetUpContexts, MatchmakingContext
 // Include the FULL LiveRevengeManager header FIRST: it defines the real
 // BrnNetwork::LiveRevengeManager (struct) and sets BRNETWORK_LIVEREVENGEMANAGER_DEFINED,
 // which suppresses BrnNetworkManager.h's minimal `class LiveRevengeManager` slice (a
@@ -12,6 +15,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::GameSearchParamsBase::operator=              @ 0x8255EA80
 //   BrnNetwork::GameSearchParamsX360::AreRivalsInSameGame    @ 0x82590FC0
+//   BrnNetwork::GameSearchParamsBase::Prepare
 
 // ---- XDK / Xbox-LIVE presence entry points -----------------------------------
 // Real prototypes live in the Xbox 360 XDK (<xonline.h>/<xapi.h>); declared here as
@@ -37,11 +41,6 @@ extern "C"
 
 namespace BrnNetwork
 {
-    // Free helper the LiveRevengeManager TU owns (maps a table index to a
-    // LiveRevengeRelationship* inside the profile). Declared here so AreRivalsInSameGame
-    // can name it; the definition is resolved at link time.
-    LiveRevengeRelationship* LiveRevengeRelations(LiveRevengeProfile* lpProfile, s32 liTableIndex);
-
     // The XDK XPRESENCE_INFO record. On X360 the presence array is strided by 0xA4 == 164
     // bytes (asm: XMemSet count 0xA028 == 250 * 164; XEnumerate cbBuffer == 164 * count;
     // second-loop stride addi r29,r29,0xA4). Only two fields are read by this TU, both by
@@ -102,6 +101,55 @@ namespace BrnNetwork
         return *this;
     }
 
+    // Seed the platform search block, build the pattern (forty 16-char rival names, then the
+    // search fields), store the search fields, ask for ranked games only when lbIsRanked, fill
+    // in the rival names and publish the matchmaking contexts. The ranked byte of the payload
+    // is not written here.
+    bool GameSearchParamsBase::Prepare(s32 leGameSearchGameMode, EBrnGameState leGameState, u32 luSkillLevel,
+                                       s32 leOpponentType, bool lbIsRanked, bool lbIsFreeburn,
+                                       u32 luRequiredSlots, CgsNetwork::EFirewallSettings leFirewallSettings,
+                                       BrnNetworkManager* lpNetworkManager, u32 luField29C)
+    {
+        CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
+
+        if (!CgsNetwork::ServerInterfaceGameSearchParams::Prepare())
+        {
+            return false;
+        }
+
+        macPattern[0] = 0;
+        for (s32 liIndex = 0; liIndex < SearchData::KI_MAX_PLAYERS_UPLOAD; ++liIndex)
+        {
+            char lacField[10];
+            CgsCore::SPrintf(lacField, sizeof(lacField), "%ds", SearchData::KI_MAX_PLAYER_NAME_LENGTH);
+            strncat(macPattern, lacField, KI_PATTERN_SIZE);
+            mSearchData.macPlayerNames[liIndex][0] = 0;
+        }
+        strncat(macPattern, "llllllbbwl", KI_PATTERN_SIZE);
+
+        mSearchData.meGameSearchGameMode = leGameSearchGameMode;
+        mSearchData.meGameState          = leGameState;
+        mSearchData.muSkillLevel         = luSkillLevel;
+        mSearchData.meOpponentType       = leOpponentType;
+        mSearchData.muRequiredSlots      = luRequiredSlots;
+        mSearchData.mbIsFreeburn         = lbIsFreeburn;
+        mSearchData.mu16Field29A         = 0;
+        mSearchData.muField29C           = luField29C;
+
+        muGameFlagsMask  = CgsNetwork::KU_GAME_FLAGS_RANKED;
+        muGameFlagsValue = lbIsRanked ? CgsNetwork::KU_GAME_FLAGS_RANKED : 0;
+
+        mSearchData.meFirewallSettings = leFirewallSettings;
+        FillInRivals(lpNetworkManager);
+
+        // The platform context list is { id, value } pairs with the count after it; the
+        // context helper takes it as a MatchmakingContext array and an s32 count.
+        SetUpContexts(leGameSearchGameMode, static_cast<char>(lbIsRanked),
+                      reinterpret_cast<s32*>(&muX360Field_68),
+                      reinterpret_cast<MatchmakingContext*>(maX360Payload));
+        return true;
+    }
+
     // The pattern Prepare built.
     const char* GameSearchParamsBase::GetPattern() const
     {
@@ -149,11 +197,10 @@ namespace BrnNetwork
     // For every stored live-revenge rival with a non-zero takedown history, ask
     // Xbox LIVE presence whether that rival is currently present in a Burnout
     // title, and write the yes/no answer into lpbRivalInSameGame in relationship
-    // order. Returns the current revenge-relationship count (the value left in r3
-    // by the final GetNumberOfRelationships call).
+    // order.
     // ========================================================================
-    s32 GameSearchParams::AreRivalsInSameGame(bool* lpbRivalInSameGame,
-                                              BrnNetworkManager* lpNetworkManager)
+    void GameSearchParams::AreRivalsInSameGame(bool* lpbRivalInSameGame,
+                                               BrnNetworkManager* lpNetworkManager)
     {
         CGS_ASSERT(lpbRivalInSameGame, "lpbRivalInSameGame");
         CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
@@ -173,7 +220,7 @@ namespace BrnNetwork
             LiveRevengeProfile* lpProfile = lpLiveRevengeManager->GetProfile();
             CGS_ASSERT(lpProfile, "mpLiveRevengeProfile");
             LiveRevengeRelationship* lpRelationship =
-                BrnNetwork::LiveRevengeRelations(lpProfile, liIndex);
+                &lpProfile->maRelationshipTable[static_cast<u32>(liIndex)];
 
             CGS_ASSERT(lpRelationship->GetTotalTakedowns() >= 0,
                        "mOverallStats.mPlayerStats.miTakedowns + mOverallStats.mRivalStats.miTakedowns >= 0");
@@ -181,7 +228,7 @@ namespace BrnNetwork
             {
                 CGS_ASSERT(lpProfile, "mpLiveRevengeProfile");
                 laXUIDs[liNumPeers] =
-                    BrnNetwork::LiveRevengeRelations(lpProfile, liIndex)->GetRivalXUID();
+                    lpProfile->maRelationshipTable[static_cast<u32>(liIndex)].GetRivalXUID();
                 ++liNumPeers;
             }
         }
@@ -221,7 +268,7 @@ namespace BrnNetwork
             LiveRevengeProfile* lpProfile = lpLiveRevengeManager->GetProfile();
             CGS_ASSERT(lpProfile, "mpLiveRevengeProfile");
             LiveRevengeRelationship* lpRelationship =
-                BrnNetwork::LiveRevengeRelations(lpProfile, liIndex);
+                &lpProfile->maRelationshipTable[static_cast<u32>(liIndex)];
 
             CGS_ASSERT(lpRelationship->GetTotalTakedowns() >= 0,
                        "mOverallStats.mPlayerStats.miTakedowns + mOverallStats.mRivalStats.miTakedowns >= 0");
@@ -230,7 +277,7 @@ namespace BrnNetwork
                 CGS_ASSERT(lpProfile, "mpLiveRevengeProfile");
                 CGS_ASSERT(
                     lpPresence->GetXuid() ==
-                        BrnNetwork::LiveRevengeRelations(lpProfile, liIndex)->GetRivalXUID(),
+                        lpProfile->maRelationshipTable[static_cast<u32>(liIndex)].GetRivalXUID(),
                     "laPresence[ liNumPeers ].xuid == lpNetworkManager->GetLiveRevengeManager()->GetRevengeRelationshipByIndex( liIndex )->GetRivalXUID()");
 
                 *lpbOut = (lpPresence->GetTitleId() == KU_BURNOUT_TITLE_ID);
@@ -240,7 +287,56 @@ namespace BrnNetwork
 
             liNumRelationships = lpLiveRevengeManager->GetNumberOfRelationships();
         }
+    }
 
-        return liNumRelationships;
+    // Put the rivals the search should look for into the payload's name slots: for a rivals
+    // search (with or without friends), every rival with a takedown history who is in the same
+    // title right now, up to the slot count. Other searches leave the slots empty.
+    void GameSearchParamsBase::FillInRivals(BrnNetworkManager* lpNetworkManager)
+    {
+        CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
+
+        s32  liPlayerNameIndex = 0;
+        bool lbRivalInSameGame[LiveRevengeProfile::KI_MAX_REVENGE_HISTORY];
+        AreRivalsInSameGame(lbRivalInSameGame, lpNetworkManager);
+
+        switch (mSearchData.meOpponentType)
+        {
+        case E_SEARCH_OPPONENT_TYPES_FRIENDS_AND_RIVALS:
+        case E_SEARCH_OPPONENT_TYPES_RIVALS:
+        {
+            LiveRevengeManager* lpLiveRevengeManager = lpNetworkManager->GetLiveRevengeManager();
+            s32 liValidRivalIndex = 0;
+            for (s32 liRivalIndex = 0;
+                 liRivalIndex < lpLiveRevengeManager->GetNumberOfRelationships()
+                     && liPlayerNameIndex < SearchData::KI_MAX_PLAYERS_UPLOAD;
+                 ++liRivalIndex)
+            {
+                if (lpLiveRevengeManager->GetRevengeRelationshipByIndex(liRivalIndex)->GetTotalTakedowns() > 0)
+                {
+                    if (lbRivalInSameGame[liValidRivalIndex])
+                    {
+                        const char* lpcRivalName =
+                            lpLiveRevengeManager->GetRevengeRelationshipByIndex(liRivalIndex)->GetRivalName()->GetPlayerName();
+                        CGS_ASSERT(strlen(lpcRivalName) < static_cast<u32>(SearchData::KI_MAX_PLAYER_NAME_LENGTH),
+                                   "String too long");
+                        strncpy(mSearchData.macPlayerNames[liPlayerNameIndex], lpcRivalName,
+                                SearchData::KI_MAX_PLAYER_NAME_LENGTH);
+                        ++liPlayerNameIndex;
+                    }
+                    ++liValidRivalIndex;
+                }
+            }
+            break;
+        }
+
+        case E_SEARCH_OPPONENT_TYPES_ANY:
+        case E_SEARCH_OPPONENT_TYPES_FRIENDS:
+            break;
+
+        default:
+            CGS_ASSERT(false, "Invalid opponent type");
+            break;
+        }
     }
 }

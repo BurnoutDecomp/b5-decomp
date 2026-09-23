@@ -32,6 +32,9 @@ namespace CgsNetwork
         const f32 KF_NO_ALTERNATIVE   = -1.0f;
         const u32 KU_NEAR_WRAP_FRAMES = 0x5555;   // a third of the 16-bit range
         const s32 KI_LAST_FRAME       = 0xFFFE;
+
+        // The time difference marks "no alternative wrap" with the largest float.
+        const f32 KF_NO_ALTERNATIVE_TIME = 3.40282347e+38f;
     }
 
     u16 OLDTranslateFrame50HzTo60Hz(u16 lu16Frame50Hz, u16 lu16CurrentFrame50Hz, u16 lu16NumWraps)
@@ -94,5 +97,46 @@ namespace CgsNetwork
         const f32 lfWholeWraps = static_cast<f32>(static_cast<s32>(lfChosenTime * KF_OLD_INV_WRAP_TIME_50HZ));
         const f32 lfTime50Hz   = fmaf(-lfWholeWraps, KF_OLD_WRAP_TIME_50HZ, lfChosenTime);
         return static_cast<u16>(static_cast<s64>(lfTime50Hz * KF_OLD_FRAMES_PER_SECOND_50HZ));
+    }
+
+    // The float version of GetTimeDiffWrapped16, which runs it only to cross-check its own
+    // integer result. Frame A becomes seconds on its own clock (frame * step + wraps * wrap
+    // time); frame B is placed in the wrap of B's clock that time falls in and, for a frame
+    // near either end of the 16-bit range, also in the next or the previous wrap. The
+    // smaller of the two differences wins.
+    f32 OLDGetTimeDiffWrapped16(u16 lu16FramesA, u16 lu16FramesB, s32 liNumWraps,
+                                bool lbFramesAAre50Hz, bool lbFramesBAre50Hz)
+    {
+        const f32 lfWrapTimeA = lbFramesAAre50Hz ? KF_OLD_WRAP_TIME_50HZ : KF_OLD_WRAP_TIME_60HZ;
+        const f32 lfTimeStepA = lbFramesAAre50Hz ? KF_OLD_TIME_STEP_50HZ : KF_OLD_TIME_STEP_60HZ;
+        const f32 lfWrapTimeB = lbFramesBAre50Hz ? KF_OLD_WRAP_TIME_50HZ : KF_OLD_WRAP_TIME_60HZ;
+        const f32 lfTimeStepB = lbFramesBAre50Hz ? KF_OLD_TIME_STEP_50HZ : KF_OLD_TIME_STEP_60HZ;
+
+        const f32 lfTimeA = fmaf(static_cast<f32>(lu16FramesA), lfTimeStepA,
+                                 static_cast<f32>(liNumWraps) * lfWrapTimeA);
+        const f32 lfFrameTimeB = static_cast<f32>(lu16FramesB) * lfTimeStepB;
+
+        const s32 liNumWrapsB = static_cast<s32>(lfTimeA / lfWrapTimeB);
+        const f32 lfTimeDiff  = lfTimeA - fmaf(static_cast<f32>(liNumWrapsB), lfWrapTimeB, lfFrameTimeB);
+
+        f32 lfAlternativeTimeB    = KF_NO_ALTERNATIVE_TIME;
+        f32 lfAlternativeTimeDiff = KF_NO_ALTERNATIVE_TIME;
+        if (lu16FramesB < KU_NEAR_WRAP_FRAMES)
+        {
+            lfAlternativeTimeB    = fmaf(static_cast<f32>(liNumWrapsB + 1), lfWrapTimeB, lfFrameTimeB);
+            lfAlternativeTimeDiff = lfTimeA - lfAlternativeTimeB;
+        }
+        if (KI_LAST_FRAME - static_cast<s32>(lu16FramesB) < static_cast<s32>(KU_NEAR_WRAP_FRAMES))
+        {
+            lfAlternativeTimeB    = fmaf(static_cast<f32>(liNumWrapsB - 1), lfWrapTimeB, lfFrameTimeB);
+            lfAlternativeTimeDiff = lfTimeA - lfAlternativeTimeB;
+        }
+
+        if (lfAlternativeTimeB == KF_NO_ALTERNATIVE_TIME
+            || fabsf(lfTimeDiff) < fabsf(lfAlternativeTimeDiff))
+        {
+            return lfTimeDiff;
+        }
+        return lfAlternativeTimeDiff;
     }
 }

@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDUnCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint (ConvertEventScoreUploadError)
 #include "GameSource/Network/Parameters/BrnNetworkEventScoreData.h" // EventScoreData::SerialiseToString (UploadEventScoreData)
+#include "GameSource/GameState/BrnGameActions.h"                    // GameStateModuleIO::OnlineGameResults (UploadFreeBurnLobbyStats)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h" // IsLoggedIn
 #include "lobbyapi.h"        // DirtySDK LobbyApiRequestCB / LobbyApiRefT / LobbyApiMsgT
 #include "lobbytagfield.h"   // DirtySDK TagFieldFind/Get*/Set*
 
@@ -72,25 +74,20 @@ namespace
                 static_cast<s32>(static_cast<u8>(d));
     }
 
-    // BrnServerInterfaceCustomCommands.cpp:67 -- per-action lobby message-kind fourcc,
-    // indexed by EAction (dword_820872A4 on X360). Every fourcc below is recovered exactly
-    // from the kind the X360 HandleIncomingMessage @ 0x82589C70 compares against
-    // ('rrup'/'rrgt'/'rrlc'/'fget'/'fupd'/'evup'/'gelo'/'selo' read off the cmpw immediates);
-    // the two actions whose acks the handler does not branch on ([5] freeburn-stats and
-    // [6] offline-progression) are best-effort reconstructions of the same fourcc family.
+    // The per-action lobby message-kind fourcc, indexed by EAction (read from the image).
     const s32 KI_ACTIONS_TO_MESSAGE_CODES[ServerInterfaceCustomCommands::E_ACTION_COUNT] =
     {
-        KFOURCC('r','r','u','p'),  // [0]  SET_ROAD_RULES_SCORES       (exact, handler 'rrup')
-        KFOURCC('r','r','g','t'),  // [1]  GET_ROAD_RULES_SCORES       (exact, handler 'rrgt')
-        KFOURCC('r','r','l','c'),  // [2]  GET_LOCAL_ROAD_RULES_SCORES (exact, handler 'rrlc')
-        KFOURCC('f','g','e','t'),  // [3]  GET_FRIENDS                 (exact, handler 'fget')
-        KFOURCC('f','u','p','d'),  // [4]  UPLOAD_FRIENDS              (exact, handler 'fupd')
-        KFOURCC('f','b','s','t'),  // [5]  UPLOAD_FREEBURN_LOBBY_STATS (inferred)
-        KFOURCC('o','p','u','p'),  // [6]  UPLOAD_OFFLINE_PROGRESSION  (inferred)
-        KFOURCC('e','v','u','p'),  // [7]  UPLOAD_RIVAL_DATA           (exact, handler 'evup')
-        KFOURCC('e','s','u','p'),  // [8]  UPLOAD_EVENT_SCORE_DATA     (inferred)
-        KFOURCC('g','e','l','o'),  // [9]  GET_ELO                     (exact, handler 'gelo')
-        KFOURCC('s','e','l','o')   // [10] SET_ELO                     (exact, handler 'selo')
+        KFOURCC('r','r','u','p'),  // [0]  SET_ROAD_RULES_SCORES
+        KFOURCC('r','r','g','t'),  // [1]  GET_ROAD_RULES_SCORES
+        KFOURCC('r','r','l','c'),  // [2]  GET_LOCAL_ROAD_RULES_SCORES
+        KFOURCC('f','g','e','t'),  // [3]  GET_FRIENDS
+        KFOURCC('f','u','p','d'),  // [4]  UPLOAD_FRIENDS
+        KFOURCC('f','b','s','t'),  // [5]  UPLOAD_FREEBURN_LOBBY_STATS
+        KFOURCC('o','p','u','p'),  // [6]  UPLOAD_OFFLINE_PROGRESSION
+        KFOURCC('r','v','u','p'),  // [7]  UPLOAD_RIVAL_DATA
+        KFOURCC('e','v','u','p'),  // [8]  UPLOAD_EVENT_SCORE_DATA
+        KFOURCC('g','e','l','o'),  // [9]  GET_ELO
+        KFOURCC('s','e','l','o')   // [10] SET_ELO
     };
 
     // --- ConvertError special-case codes (read off the X360 cmpw immediates) ----------
@@ -111,27 +108,27 @@ namespace
         s32 liServerInterfaceErrorCode; // BrnServerInterfaceCustomCommands.cpp:109
     };
 
-    // 14 rows, proven from the X360 scan loop: r11 starts at base+4 (0x82087304) and steps by
-    // 0xC (3 words: kind, code, error) while r11 < off_820873AC (0x820873AC, the first byte
-    // past the table -- it is the "Not using rebroadcaster" string). (0x820873AC - 0x82087304)
-    // / 0xC == 14 iterations.
-    const s32 KI_NUMBER_OF_ERROR_MAPPINGS = 14;  // cpp:134
+    // The 14 {kind, code, error} rows ConvertError scans (read from the image).
+    const s32 KI_NUMBER_OF_ERROR_MAPPINGS = 14;
 
-    // KA_CUSTOM_COMMAND_ERROR_MAPPING @ 0x82087300 -- the generic {kind, code, error} table
-    // ConvertError (0x825839A0-0x82583AF0) scans when a reply code is not one of the three
-    // inline special cases ('badc'->140, 'time'->5, 'iper'->6, all reproduced and asm-verified).
-    // UNRECOVERED: the 14 rows live in .rdata that is NOT in the available function-keyed
-    // exports (neither BURNOUT_X360_ARTIST.XEX nor DecFIGS PS3 dumps the data segment), so their
-    // literal {kind, code, error} values are unknown. The table is reproduced at the correct
-    // length (14 rows, see above) with zeroed rows as an honest placeholder; this is SAFE for
-    // behaviour because ConvertError early-returns on code==0 before the scan, so a {0,0,*} row
-    // can never match a live reply -- the scan simply falls through to the "Unhandled custom
-    // command message type" assert + return 1 for any unrecognised {kind, code}, exactly as the
-    // real table would for a code it does not list. The row values are a known uncertainty
-    // FLAGGED for the reviewer + still_open: they affect only the returned error NUMBER for the
-    // (kind, code) pairs the real table would have mapped to a specific error.
     const CustomCommandErrorMapping
-        KA_CUSTOM_COMMAND_ERROR_MAPPING[KI_NUMBER_OF_ERROR_MAPPINGS] = {};
+        KA_CUSTOM_COMMAND_ERROR_MAPPING[KI_NUMBER_OF_ERROR_MAPPINGS] =
+    {
+        { KFOURCC('r','r','u','p'), KFOURCC('i','n','v','p'), 3 },
+        { KFOURCC('r','r','u','p'), KFOURCC('i','s','k','y'), 3 },
+        { KFOURCC('r','r','u','p'), KFOURCC('t','i','m','e'), 5 },
+        { KFOURCC('r','r','g','t'), KFOURCC('n','o','f','r'), 0 },
+        { KFOURCC('r','r','g','t'), KFOURCC('i','n','v','p'), 3 },
+        { KFOURCC('r','r','g','t'), KFOURCC('t','i','m','e'), 5 },
+        { KFOURCC('r','r','l','c'), KFOURCC('t','i','m','e'), 5 },
+        { KFOURCC('r','r','l','c'), KFOURCC('i','n','v','p'), 3 },
+        { KFOURCC('f','g','e','t'), KFOURCC('m','a','u','t'), 4 },
+        { KFOURCC('f','g','e','t'), KFOURCC('m','i','s','s'), 2 },
+        { KFOURCC('f','g','e','t'), KFOURCC('i','n','v','p'), 3 },
+        { KFOURCC('f','u','p','d'), KFOURCC('m','a','u','t'), 4 },
+        { KFOURCC('f','u','p','d'), KFOURCC('m','i','s','s'), 2 },
+        { KFOURCC('s','e','l','o'), KFOURCC('n','o','s','t'), 0 },
+    };
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +183,27 @@ bool ServerInterfaceCustomCommands::Release()
     mpiBurningHomeRunElo = nullptr;   // a1[7]
     meCurrentAction      = E_ACTION_COUNT;  // a1[8] = 11
     return true;
+}
+
+// Destruct -- no standalone console body; recovered from its inlined copy in
+// BrnServerInterfaceBase::Destruct: null / idle the members, then the base Destruct.
+void ServerInterfaceCustomCommands::Destruct()
+{
+    mpServerInterface    = nullptr;
+    mpiRaceElo           = nullptr;
+    mpiRoadRageElo       = nullptr;
+    mpiBurningHomeRunElo = nullptr;
+    meCurrentAction      = E_ACTION_COUNT;
+    mpCallback           = nullptr;
+    mpCallbackData       = nullptr;
+
+    CgsNetwork::ServerInterfaceCustomCommands::Destruct();
+}
+
+// Update -- no standalone console body; BrnServerInterfaceBase::Update brackets it with its
+// perf monitor and the bracket is empty.
+void ServerInterfaceCustomCommands::Update()
+{
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +622,7 @@ void ServerInterfaceCustomCommands::UpdateServerFriendsRecord(
 // ---------------------------------------------------------------------------
 // UploadLiveRevengeData @ 0x82590A88 -- pack each rival as a RIVAL%i structure field, then
 // post the 'upload rivals' request inline. No-op when liNumberToUpload == 0.
-void ServerInterfaceCustomCommands::UploadLiveRevengeData(const RivalDataT* lpRivalData,
+void ServerInterfaceCustomCommands::UploadLiveRevengeData(const ServerGeneratedTypes::RivalDataT* lpRivalData,
                                                           const s32* lpiRivalIDs,
                                                           s32 liNumberToUpload)
 {
@@ -617,17 +635,14 @@ void ServerInterfaceCustomCommands::UploadLiveRevengeData(const RivalDataT* lpRi
     char* lpcBuffer = mpServerInterface->GetMessageBuffer();
     lpcBuffer[0] = 0;
 
-    // The rival rows are a flat 64-byte-stride blob; lpiRivalIDs supplies each row's id.
-    const u8* lpRow = reinterpret_cast<const u8*>(lpRivalData);
-    const s32* lpiId = lpiRivalIDs;
+    // One 64-byte rival record per row; lpiRivalIDs supplies each row's id.
     for (s32 liRival = 0; liRival < liNumberToUpload; ++liRival)
     {
         char lacFieldName[96];
-        CgsCore::SPrintf(lacFieldName, 7, "RIVAL%i", *lpiId);
+        CgsCore::SPrintf(lacFieldName, 7, "RIVAL%i", lpiRivalIDs[liRival]);
         TagFieldSetStructure(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH,
-                             lacFieldName, lpRow, 64, "llllllllllll16s");
-        ++lpiId;
-        lpRow += 64;
+                             lacFieldName, &lpRivalData[liRival], static_cast<s32>(sizeof(ServerGeneratedTypes::RivalDataT)),
+                             "llllllllllll16s");
     }
 
     char* lpcMessageData = mpServerInterface->GetMessageBuffer();
@@ -642,6 +657,54 @@ void ServerInterfaceCustomCommands::UploadLiveRevengeData(const RivalDataT* lpRi
                       lpcMessageData,
                       &ServerInterfaceCustomCommands::_CustomCommandSentCallback,
                       this);
+}
+
+// ---------------------------------------------------------------------------
+// UploadFreeBurnLobbyStats -- the finished free-burn lobby game's takedowns, crashes, completed
+// challenges (each only when positive), distance, time and rival count. Without a login the
+// stats are dropped with a log line.
+void ServerInterfaceCustomCommands::UploadFreeBurnLobbyStats(
+    const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults,
+    s32 liNumberOfRivals, s32 liNumberOfChallengesCompleted)
+{
+    if (!static_cast<CgsNetwork::ServerInterfaceConnection*>(mpServerInterface->GetConnectionComponent())->IsLoggedIn())
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "WARNING: Trying to upload freeburn stats whilst not connect, these have now been lost. ";
+        return;
+    }
+
+    mpServerInterface->GetMessageBuffer()[0] = 0;
+
+    if (lpResults->miTakedownsFor > 0)
+    {
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TKDNF",
+                          lpResults->miTakedownsFor);
+    }
+    if (lpResults->miTakedownsAgainst > 0)
+    {
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TKDNA",
+                          lpResults->miTakedownsAgainst);
+    }
+    if (lpResults->miMarkedManTakedownsFor > 0)
+    {
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "CRSH",
+                          lpResults->miMarkedManTakedownsFor);
+    }
+    if (liNumberOfChallengesCompleted > 0)
+    {
+        TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "FBCHAL",
+                          liNumberOfChallengesCompleted);
+    }
+
+    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "DIST",
+                      static_cast<s32>(lpResults->mfMetersDriven));
+    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "TIME",
+                      lpResults->mSecondsInEvent.GetSeconds());
+    TagFieldSetNumber(mpServerInterface->GetMessageBuffer(), KI_MESSAGE_BUFFER_LENGTH, "RIVALS",
+                      liNumberOfRivals);
+
+    SendCustomCommand(E_ACTION_UPLOAD_FREEBURN_LOBBY_STATS, mpServerInterface->GetMessageBuffer());
 }
 
 // ---------------------------------------------------------------------------
@@ -899,7 +962,7 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
     }
     else if (liKind == KI_ACTIONS_TO_MESSAGE_CODES[E_ACTION_SET_ROAD_RULES_SCORES] ||   // 'rrup'
              liKind == KI_ACTIONS_TO_MESSAGE_CODES[E_ACTION_UPLOAD_FRIENDS]        ||   // 'fupd'
-             liKind == KI_ACTIONS_TO_MESSAGE_CODES[E_ACTION_UPLOAD_RIVAL_DATA])         // 'evup'
+             liKind == KI_ACTIONS_TO_MESSAGE_CODES[E_ACTION_UPLOAD_EVENT_SCORE_DATA])   // 'evup'
     {
         // Plain upload acks (X360 LABEL_20): success with no result payload when code == 0;
         // otherwise the action failed and the callback is told so.
@@ -920,24 +983,25 @@ void ServerInterfaceCustomCommands::HandleIncomingMessage(::LobbyApiMsgT* lpMsg)
         }
     }
 
-    // Common tail (X360 0x8258A728-0x8258A754): the binary does NOT call a fixed converter
-    // here. It dispatches through a PER-ACTION function-pointer table indexed by the CURRENT
-    // action (read while it is still set, before the reset to E_ACTION_COUNT below):
-    //
-    //   lwz   r10, 0x20(r15)            ; meCurrentAction (a1[8])  -- pre-reset
-    //   lwz   r4,  0xC(r14)             ; liCode (a2[3])
-    //   lwz   r3,  8(r14)               ; liKind (a2[2])
-    //   slwi  r10, r10, 2               ; index * sizeof(void*)
-    //   lwzx  r11, r10, off_820872D0    ; converter = off_820872D0[meCurrentAction]
-    //   bctrl                           ; liError = converter(liKind, liCode)
-    //
-    // off_820872D0 is unexported .rdata (not in the available exports), so we cannot confirm
-    // every slot resolves to this ConvertError -- it is the only converter body recovered for
-    // this TU, and it takes exactly (kind, code) as the table entries are called. We therefore
-    // model the dispatch as a direct ConvertError(liKind, liCode) call. FLAGGED ASSUMPTION:
-    // if a future export shows a slot pointing at a different per-action converter, this single
-    // call must become an indexed dispatch over off_820872D0[meCurrentAction]. See still_open.
-    const int liError = ConvertError(liKind, liCode);  // == off_820872D0[meCurrentAction](liKind, liCode)
+    // Common tail: the reply is converted by the CURRENT action's converter (read before the
+    // action is reset below): the event-score upload has its own, every other action uses
+    // ConvertError.
+    typedef int (ServerInterfaceCustomCommands::*ErrorConverter)(int, int);
+    static const ErrorConverter KA_ACTION_ERROR_CONVERTERS[E_ACTION_COUNT] =
+    {
+        &ServerInterfaceCustomCommands::ConvertError,                  // [0]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [1]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [2]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [3]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [4]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [5]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [6]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [7]
+        &ServerInterfaceCustomCommands::ConvertEventScoreUploadError,  // [8]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [9]
+        &ServerInterfaceCustomCommands::ConvertError,                  // [10]
+    };
+    const int liError = (this->*KA_ACTION_ERROR_CONVERTERS[meCurrentAction])(liKind, liCode);
     EndActionCore(liError);
 
     CustomCommandCallback lCallback = mpCallback;  // v75 = a1[9]

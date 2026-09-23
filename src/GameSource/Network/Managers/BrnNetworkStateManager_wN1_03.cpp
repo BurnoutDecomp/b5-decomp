@@ -899,7 +899,7 @@ namespace BrnNetwork
                         while (mpNetworkManager->GetPlayerManager()->GetNextPlayerID(
                                    &lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
                         {
-                            if (lpGames->IsPlayerInGameByID(lPlayerID) && lPlayerID != lLocalPlayerID)
+                            if (lpGames->IsPlayerInGame(lPlayerID) && lPlayerID != lLocalPlayerID)
                             {
                                 lPlayerParams.PreparePattern();
                                 lpGames->GetPlayerParametersByPlayerID(lPlayerID, &lPlayerParams);

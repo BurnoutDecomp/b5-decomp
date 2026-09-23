@@ -35,6 +35,7 @@ namespace BrnNetwork
     {
         NetworkPlayerID mNewRunnerID;   // +0x28
 
+        void                             Construct();
         void                             PrepareForSend(u16 lu16Frame, NetworkPlayerID lNewRunnerID);
         bool                             Retrieve(NetworkPlayerID* lpNewRunnerID);
         s32                              GetPackedMessageSize() override;

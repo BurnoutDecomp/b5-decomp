@@ -4,6 +4,7 @@
 // @0x825B2E88. The class itself is reconstructed (additive grow) in BrnVehicleDriverControls.h.
 // The other declared members (ctor / Clear / ResetType / GetType) carry no X360 address in
 // this TU's ledger and are owned elsewhere -- they are NOT bodied here.
+// BrnNetworkDriverControls::Clear (the network subclass shares this header) is bodied here.
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"
 
 namespace BrnPhysics
@@ -56,6 +57,50 @@ namespace Vehicle
             lrfOutY = mfForwardSteering * -KF_STICK_AFTERTOUCH_MODIFIER;
 
         lrfOutZ = 0.0f;
+    }
+
+    // No vehicle and nothing to merge, every control and sensor at rest (the boost speed scale
+    // at 1), every button up except the toggle (not written), the transform rows (1,0,0,0)
+    // (0,1,0,0) (0,0,1,0) with a zero translation row, no velocity, no catch-up time, no
+    // crasher, and neither snap nor crash.
+    void BrnNetworkDriverControls::Clear()
+    {
+        miVehicleID                = -1;
+        mfGas                      = 0.0f;
+        mfBrake                    = 0.0f;
+        mfHandBrake                = 0.0f;
+        mfSteering                 = 0.0f;
+        mfForwardSteering          = 0.0f;
+        mfSpin                     = 0.0f;
+        mfRequestedGas             = 0.0f;
+        mfAftertouchLevel          = 0.0f;
+        mfXSensor                  = 0.0f;
+        mfYSensor                  = 0.0f;
+        mfZSensor                  = 0.0f;
+        mfGSensor                  = 0.0f;
+        mfBoostMaxSpeedScale       = 1.0f;
+        miVehicleIDToMerge         = -1;
+        mbReset                    = false;
+        mbBoost                    = false;
+        mbIsInvulnerableToVehicles = false;
+        mbIsInvulnerableToWorld    = false;
+        mbForceDrift               = false;
+        mbBoostBounce              = false;
+        mbIsOnStartLine            = false;
+        mbIsSteeringWheel          = false;
+        mbHorn                     = false;
+
+        mTransform.xAxis = Vector3{ 1.0f, 0.0f, 0.0f, 0.0f };
+        mTransform.yAxis = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        mTransform.zAxis = Vector3{ 0.0f, 0.0f, 1.0f, 0.0f };
+        mTransform.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        mLinearVelocity  = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        mAngularVelocity = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+
+        mfCatchupTime         = 0.0f;
+        meCrasherRaceCarIndex = -1;
+        mbSnap                = false;
+        mbCrash               = false;
     }
 }
 }

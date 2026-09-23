@@ -43,12 +43,9 @@ extern "C"
     void* XNotifyCreateListener(unsigned long long luAreas);
     int   XNotifyGetNext(void* lpListener, u32 luMsgFilter, u32* lpidNotification, void* lpParam);
     int   CloseHandle(void* lpObject);
-
-    // DirtySock address -> host address helper (external SDK; the manager reads the host
-    // XUID back out of the filled buffer). Declared with the X360 call shape (r3 = out
-    // buffer, r4 = size 8, r5 = scratch).
-    int DirtyAddrToHostAddr(void* lpOutHostAddr, int liSize, void* lpScratch);
 }
+
+#include "dirtyaddr.h"   // DirtyAddrToHostAddr
 
 namespace BrnNetwork
 {
@@ -445,8 +442,7 @@ namespace BrnNetwork
                 lpGameComponent->GetPlayerParametersByPlayerName(lpPlayerName->macName, &lPlayerParams);
 
                 u64 lHostAddr = 0;
-                u8  laScratch[16] = { 0 };
-                DirtyAddrToHostAddr(&lHostAddr, 8, laScratch);
+                DirtyAddrToHostAddr(&lHostAddr, 8, static_cast<const DirtyAddrT*>(lPlayerParams.GetDirtyAddrT()));
 
                 muRequestingControllerPort = luRequestingControllerPort;  // stw r21, 0x80
                 mRequestedGamerCardXUID    = lHostAddr;                    // std r11, 0x78

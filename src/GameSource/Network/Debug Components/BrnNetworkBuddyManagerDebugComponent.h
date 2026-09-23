@@ -44,33 +44,25 @@ namespace BrnNetwork
     class BuddyManagerBase;   // back-pointer member only (pointer-only use; its full header embeds
                               // this component by value, so including it would cycle).
 
-    // ForceServerFriendsOverwrite reaches deep into the buddy manager (its buddy count / per-buddy
-    // name + full-buddy queries and the maBuddyListAtUpload[] / miNumBuddiesAtUpload upload scratch,
-    // then posts the list through the server-interface custom-commands component). BuddyManagerBase's
-    // full header is not yet gate-compilable from this TU (it embeds this component by value and
-    // pulls in the un-reconstructed network-module / server-interface chain), so the manager-side
-    // work is reached through this free helper -- the documented cascade-avoidance forward-decl
-    // exception (same pattern as ServerInterfaceDebugComponent::GetConnectionComponent). Its body
-    // lands with the BrnNetworkBuddyManagerBase reconstruction (X360 @ 0x82591B78, the manager-side
-    // tail of this component's ForceServerFriendsOverwrite callback).
-    void ForceServerFriendsOverwriteOnManager(BuddyManagerBase* lpBuddyManager);
-
     class BuddyManagerDebugComponent : public CgsDev::DebugComponent
     {
     public:
         // @ 0x82585648 -- base Destruct (reset) then store the manager back-pointer + clear members.
         void Construct(BuddyManagerBase* lpBuddyManager);
         bool Prepare();    // @ 0x825856A8 -- clear members, return true.
-        bool Release();    // clear members, return true (mirrors Prepare; called from BuddyManagerBase::Release).
+        bool Release();    // drop the menu surface, clear members, free the event queue.
         void Destruct();   // @ 0x825856D0 -- clear members + manager back-pointer, base Destruct.
 
-        // NOTE: the DWARF additionally lists GetEventQueue() (h:157, returns mpEventQueue),
-        // SetGameInviteBuddy(const PlayerName*) (cpp:354), GetPath() and OnActivate() for this class.
-        // None has a separately-recovered X360 body in this TU (GetEventQueue/SetGameInviteBuddy are
-        // inlined into their callers; GetPath/OnActivate fold onto the base CgsDev::DebugComponent
-        // defaults). They are intentionally omitted so the compile gate has no undefined vtable slots
-        // / undefined member bodies -- the inherited base virtuals apply and the inlined accessors are
-        // recovered where they are used.
+        // The manager's IN-event queue the menu actions post to (header-inline on the console:
+        // the buddy manager reads the pointer straight off the component).
+        BrnNetworkModuleIO::NetworkEventQueue* GetEventQueue() { return mpEventQueue; }
+
+        // Log the buddy events the manager has just produced (the buddy count, the buddy details,
+        // message and invite notifications) and pick up the latest buddy details for the menu.
+        void ProcessOutgoingEvents(BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue);
+
+        // SetGameInviteBuddy(const PlayerName*), GetPath() and OnActivate() also belong to this
+        // class; they are not reconstructed here.
 
     protected:
         const char* GetName() const override;   // @ 0x825856F0 -> "Buddies"

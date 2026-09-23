@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+#include "protohttp.h"   // ProtoHttpRefT, the ProtoHttp* C API
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceHttp
@@ -23,17 +24,13 @@
 //     +0x24  mpcDownloadBuffer       (char*)
 //     +0x28  mi16Timeout             (s16)
 //
-// This TU owns only the X360 vector-deleting destructor @ 0x827DE1F0 (it stores the
-// component vtable off_820CDBF8 at this+0 and conditionally frees). The component's
-// behavioural methods (Construct / Prepare / Update / StartHttpsDownload / ...) are
-// declared for layout fidelity but bodied in their own TUs; only the destructor is
-// reconstructed here.
 // ===========================================================================
 
 namespace CgsNetwork
 {
     struct ServerInterfaceDirtySock;      // forward; pointer member only
-    namespace DirtySock { struct ProtoHttpRefT; }
+    struct DSErrorToServerInterfaceErrorTable;
+    namespace DirtySock { using ::ProtoHttpRefT; }
 
     class ServerInterfaceHttp : public ServerInterfaceComponent
     {
@@ -50,7 +47,6 @@ namespace CgsNetwork
 
         ServerInterfaceHttp();
 
-        // CgsServerInterfaceHttp.h:69 -- vector deleting destructor @ 0x827DE1F0.
         virtual ~ServerInterfaceHttp();
 
         // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
@@ -80,9 +76,14 @@ namespace CgsNetwork
         bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
         bool Release();
         void Update();
+        void Suspend();
+        void Resume();
 
     private:
         void EndAction(s32 liError);
+
+        static const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[E_ACTION_COUNT];
+        static const char* KAPC_ACTION_NAMES[E_ACTION_COUNT];
 
         ServerInterfaceDirtySock*    mpServerInterface;       // +0x10
         EAction                      meCurrentAction;          // +0x14

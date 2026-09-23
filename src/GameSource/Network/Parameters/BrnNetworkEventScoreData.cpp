@@ -84,4 +84,22 @@ namespace BrnNetwork
     {
         return 184;
     }
+
+    // The serialisation pattern: one long field, repeated ("l*"). The vtable slot shares its body
+    // with GameParams::GetPattern.
+    const char* EventScoreData::GetPattern() const
+    {
+        return "l*";
+    }
+
+    // The payload the pattern describes starts right after the vptr (+0x04).
+    void* EventScoreData::GetData()
+    {
+        return maScoreboardIndex;
+    }
+
+    const void* EventScoreData::GetData() const
+    {
+        return maScoreboardIndex;
+    }
 }

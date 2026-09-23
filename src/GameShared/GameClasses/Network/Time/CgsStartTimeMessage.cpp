@@ -52,4 +52,42 @@ namespace CgsNetwork
         }
         return lxResult;
     }
+
+    // Copy the start time and the acknowledged-client list in, then queue a reliable
+    // send of the start-time message type (3). Always true.
+    bool StartTimeMessage::PrepareForSend(u16 lu16Frame,
+                                          const StartTime* lpStartTime,
+                                          MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs)
+    {
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, "lu16Frame != KU16_INVALID_FRAME");
+
+        mStartTime = *lpStartTime;
+        for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)
+        {
+            maReceivedClientsIDs[liClient] = lpaReceivedClientsIDs[liClient];
+        }
+
+        ReliableMessage::PrepareForSend(3, lu16Frame);
+        return true;
+    }
+
+    // Copy a received message out and consume it. False when nothing is pending.
+    bool StartTimeMessage::Retrieve(StartTime* lpStartTime,
+                                    MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs)
+    {
+        if (!IsMessageValid())
+        {
+            return false;
+        }
+
+        *lpStartTime = mStartTime;
+        for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)
+        {
+            lpaReceivedClientsIDs[liClient] = maReceivedClientsIDs[liClient];
+        }
+
+        SetMessageInvalid();
+        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
+        return true;
+    }
 }

@@ -42,6 +42,11 @@ namespace BrnNetwork
         // The number-of-active-feeds value GetLocalCameraStatus treats as "in use".
         const s32 KI_ACTIVE_FEEDS_IN_USE = 3;
 
+        // A remote slot's receive / video-frame state once its latch time is valid, and how
+        // old (seconds) either latch may be before GetCameraPicture stops serving the feed.
+        const s32 KI_FEED_STATE_TIMED     = 2;
+        const f32 KF_FEED_MAX_AGE_SECONDS = 1.0f;
+
         // The reliable message-type ids registered per remote player (X360 RegisterMessageType
         // first args 20/21/22; UnRegisterMessageType the same three).
         const s32 KI_MSG_TYPE_CAMERA_STATUS           = 20;
@@ -189,14 +194,49 @@ namespace BrnNetwork
     // GetCameraPicture @ 0x82595410
     //
     // Return the decoded camera texture for a player. For the local player (or id -1) it is the
-    // local camera texture, available only while the user/game has the camera up and XCamGetStatus
-    // reports ready. For a remote player it is the slot's decoded feed -- but only when both the
-    // video-frame and receive states are timed (== 2) and recent enough (the X360 compares the
-    // current network time against the slot's two latched times). DECLARATION-ONLY: the recency
-    // gate needs the un-homed XCamGetStatus + the manager's per-frame network time, and the local
-    // path needs the un-homed XCam camera status; reconstructing the time-window comparison without
-    // those would require fabricating the comparison constants. FLAGGED.
+    // local camera texture, available only while the user and the game have the camera on and
+    // XCamGetStatus reports ready. For a remote player it is the slot's decoded feed, but only
+    // when both the video-frame and receive states are timed (== 2) and each latched time is at
+    // most one second behind the manager's current network time.
     // =======================================================================
+    CgsNetwork::NetworkTexture* CameraX360::GetCameraPicture(s32 liPlayerID)
+    {
+        if (!mbPrepared)
+        {
+            return NULL;
+        }
+
+        if (mpNetworkManager->IsLocalPlayer(liPlayerID) || liPlayerID == KI_INVALID_PLAYER_ID)
+        {
+            if (miUserSetting != 0 && mbGameEnabled
+                && static_cast<s32>(XCamGetStatus()) == KI_XCAM_STATUS_READY)
+            {
+                return &mLocalCameraTexture;
+            }
+            return NULL;
+        }
+
+        RemotePlayerData* lpSlot = GetSlotForPlayer(liPlayerID);
+        if (lpSlot == NULL || lpSlot->meVideoFrameState != KI_FEED_STATE_TIMED)
+        {
+            return NULL;
+        }
+
+        const CgsSystem::Time lMaxFrameAge(KF_FEED_MAX_AGE_SECONDS);
+        if (!(mpNetworkManager->GetTime() - lpSlot->mLastVideoFrameTime <= lMaxFrameAge)
+            || lpSlot->meReceiveState != KI_FEED_STATE_TIMED)
+        {
+            return NULL;
+        }
+
+        const CgsSystem::Time lMaxReceiveAge(KF_FEED_MAX_AGE_SECONDS);
+        if (!(mpNetworkManager->GetTime() - lpSlot->mLastReceiveTime <= lMaxReceiveAge))
+        {
+            return NULL;
+        }
+
+        return &lpSlot->mDecodedTexture;
+    }
 
     // =======================================================================
     // GetRequestedCameraPicture @ 0x825977C0

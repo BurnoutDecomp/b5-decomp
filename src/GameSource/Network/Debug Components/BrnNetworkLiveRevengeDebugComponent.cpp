@@ -58,6 +58,27 @@ namespace BrnNetwork
         return "Live Revenge";
     }
 
+    // The component sits in the "Network" debug-menu folder.
+    const char* LiveRevengeDebugComponent::GetPath() const
+    {
+        return "Network";
+    }
+
+    // Nothing to acquire, free or tear down.
+    bool LiveRevengeDebugComponent::Prepare()
+    {
+        return true;
+    }
+
+    bool LiveRevengeDebugComponent::Release()
+    {
+        return true;
+    }
+
+    void LiveRevengeDebugComponent::Destruct()
+    {
+    }
+
     // ----------------------------------------------------------------------------------------------
     // Per-relationship registration
     // ----------------------------------------------------------------------------------------------

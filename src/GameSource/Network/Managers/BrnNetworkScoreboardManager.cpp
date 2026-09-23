@@ -1,7 +1,7 @@
 // ---- GameSource/Network/Managers/BrnNetworkScoreboardManager.cpp ----
 // BrnNetwork::ScoreboardManager -- reconstructed from the BURNOUT_X360_ARTIST.XEX ARTIST exports
 // (the per-function X360 addresses are cited inline). The bodies recovered in this pass are the 13
-// ARTIST-attested functions; the remaining declared methods (ProcessBeforeSimulation /
+// ARTIST-attested functions; the remaining declared methods (
 // HandleScoreboardEvent / ProcessEventQueue / Copy* / Page* / Destruct / DirtySockColumnTypeToEDataType
 // / AddNumberBeforeAndAfter) have only DWARF variable hints in this slice -- no recovered pseudocode --
 // so they are intentionally left declared-only (their bodies land in a follow-up pass). Their call
@@ -14,13 +14,24 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                              // CgsDev::StrStream (download asserts)
+#include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"       // E_SERVER_INTERFACE_RANKINGS_ERROR_START
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                    // CgsCore::SPrintf (variation heading formatter)
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceRankings.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                          // VariableEventQueue<14000,16>::AddEvent
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"                                // NetworkOutScoreboardEvent / NetworkOutDldChallengeableEvent
+#include "GameSource/Resource/BrnDLCManager.h"                                            // g_DLCFeatureAvailability (heading view)
+#include "GameSource/Network/BrnServerInterface.h"                                        // GetPlayerInfoComponent
+#include "GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.h"                 // GetAllBuddyNames (friends scoreboards)
+#include "GameSource/Network/Parameters/BrnNetworkPlayerInfoData.h"                      // PlayerInfoData (the local player's name)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // GetLocalPlayerInfo
+#include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"                    // KAA_SAVE_GAME_CHALLENGE_ROAD_IDS (per-road headings)
 #include "GameSource/Network/BrnNetworkModule.h"                                          // GetNetworkManager / GetNetworkEventQueue
 #include "GameSource/Network/BrnNetworkManager.h"                                         // GetLocalUserControllerPort / GetGamerCardManager
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerCardManagerX360.h"             // NetworkGamerCardManagerX360::GetXuidForPlayer
+#include "GameSource/Network/Parameters/BrnNetworkEventScoreData.h"                      // KAU64_*_SCOREBOARD_EVENT_IDS / KI_NUM_*_EVENT_SCOREBOARDS
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                              // CgsDev::Log::gpDebugPrint
 
 #include <cstdlib>   // atoi, qsort
 #include <cstdio>    // snprintf (the rank-column "%d" formatter)
@@ -60,10 +71,16 @@ namespace BrnNetwork
     static const s32 KI_SCOREBOARD_PARAM_STUNT_RUN     = 4;   // -> qword_8207C440 format table
     static const s32 KI_SCOREBOARD_PARAM_BURN_ROUTE    = 5;   // -> qword_8207C4B0 format table
 
-    // The per-mode event-scoreboard counts CopyVariations range-asserts its variation index against
-    // (X360 FireAssert immediates @ BrnNetworkScoreboardManager.cpp:542 / :552).
-    static const s32 KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS  = 14;
-    static const s32 KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS = 35;
+    // The rank views the headings download asks for: the base one and the one carrying the
+    // downloadable-content leaderboards. FLAG: identifiers are ours; the strings are the image's.
+    static const s32 KI_RANK_VIEW_BASE = 0;
+    static const s32 KI_RANK_VIEW_DLC  = 1;
+    static const char* const KAPC_RANK_VIEWS[] = { "PS2", "DLC" };
+
+    // The rankings user type of a friends-only scoreboard ('budd'), and the room for its user
+    // list: every buddy plus the local player.
+    static const s32 KI_USER_TYPE_BUDDIES     = 0x62756464;
+    static const s32 KI_MAX_USER_LIST_NAMES   = 101;
 
     // The incoming GUI "challenge this event score" event handed to HandleEvScoreTargetEvent.
     // Forward-declared in the header (BrnNetwork::EvScoreTargetEvent); defined here. The leading
@@ -197,27 +214,21 @@ namespace BrnNetwork
 
     // -------------------------------------------------------------------------------------------
     // SetViewAndDownloadHeaders  @ 0x82547280
-    // Kick off a headings download and advance into the GETTING_SCOREBOARD state.
-    //
-    // FLAGGED rodata gap: the X360 body selects between two heading-type descriptor pointers
-    // (off_82F29900 / off_82F298FC) based on a global capability-flag test
-    // ((dword_82FFA7F4 & dword_82FFA7F8[dword_82FFA864]) ...). Those two descriptor objects and the
-    // flag table are file-scope rodata that is NOT recovered in this slice, so the selected heading
-    // type cannot be reconstructed without fabricating data. The recoverable structure -- the
-    // not-busy assert, the DownloadHeadings call and the state transition -- is reconstructed; the
-    // descriptor argument is left as a documented null placeholder to be filled when that rodata is
-    // homed. (Per project rule: never fabricate un-recovered rodata.)
+    // Kick off a headings download and advance into the GETTING_HEADINGS state. The rank view is
+    // the downloadable-content one when both event leaderboards are available, the base one
+    // otherwise.
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::SetViewAndDownloadHeaders()
     {
         CGS_ASSERT(mpRankings->IsBusy() == false, "mpRankings->IsBusy() == false");
 
-        // FLAGGED: heading-type descriptor selection (off_82F29900 vs off_82F298FC) depends on
-        // un-recovered file-scope rodata; placeholder until that data is homed.
-        void* lpHeadingType = 0;   // FLAGGED-0 placeholder (un-recovered rodata)
+        const bool lbLeaderboardContent =
+            BrnResource::g_DLCFeatureAvailability.IsFeatureAvailable(BrnResource::E_DLC_FEATURE_LEADERBOARDS_BURNING_ROUTE)
+            && BrnResource::g_DLCFeatureAvailability.IsFeatureAvailable(BrnResource::E_DLC_FEATURE_LEADERBOARDS_STUNT_RUN);
+        const char* lpcView = KAPC_RANK_VIEWS[lbLeaderboardContent ? KI_RANK_VIEW_DLC : KI_RANK_VIEW_BASE];
 
-        mpRankings->DownloadHeadings(lpHeadingType);
-        meCurrentState = E_STATE_GETTING_SCOREBOARD;   // *(this + 56) = 2
+        mpRankings->DownloadHeadings(lpcView);
+        meCurrentState = E_STATE_GETTING_HEADINGS;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -244,7 +255,7 @@ namespace BrnNetwork
         }
 
         miCurrentViewOffset = liNewOffset;
-        meCurrentState      = E_STATE_COUNT;   // a1[14] = 3 (re-render pending)
+        meCurrentState      = E_STATE_GETTING_SCOREBOARD;   // rebuild the page at the new offset
     }
 
     // -------------------------------------------------------------------------------------------
@@ -584,10 +595,8 @@ namespace BrnNetwork
     // resolved by-name through the gamer-card manager and the event is queued from
     // RequestXUIDForPlayerCallback once it arrives.
     //
-    // FLAGGED rodata gap: the per-param score-target scoreboard-slot tables (qword_8207C440 for
-    // param 4, qword_8207C4B0 for param 5) are un-recovered file-scope rodata. The param dispatch,
-    // the no-leaderboard assert and the mScoreTargetScoreboard store ARE reconstructed; the table
-    // read (v4[variation]) is left as a documented placeholder (0) until that rodata is homed.
+    // The target scoreboard is the event id of the selected variation, read from the stunt-run
+    // (param 4) or burn-route (param 5) event table.
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::HandleEvScoreTargetEvent(const EvScoreTargetEvent* lpScoreTargetEvent)
     {
@@ -597,14 +606,15 @@ namespace BrnNetwork
                                      lpScoreTargetEvent->miIndex,
                                      lpScoreTargetEvent->miVariation);
 
-        // Resolve which per-param scoreboard-slot table applies (FLAGGED: table content un-recovered).
+        // Resolve which event table applies.
+        const u64* lpau64EventIDs = nullptr;
         if (mpRankings->ScoreboardHasParam(KI_SCORE_TARGET_PARAM_A))
         {
-            // v4 = &qword_8207C440 (param-4 table).
+            lpau64EventIDs = KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS;
         }
         else if (mpRankings->ScoreboardHasParam(KI_SCORE_TARGET_PARAM_B))
         {
-            // v4 = &qword_8207C4B0 (param-5 table).
+            lpau64EventIDs = KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS;
         }
         else
         {
@@ -612,9 +622,7 @@ namespace BrnNetwork
             return;
         }
 
-        // FLAGGED-0 placeholder: mScoreTargetScoreboard = v4[lpScoreTargetEvent->miVariation]
-        // (un-recovered per-param scoreboard-slot table, u64 stride).
-        mScoreTargetScoreboard = 0;
+        mScoreTargetScoreboard = lpau64EventIDs[lpScoreTargetEvent->miVariation];
         miScoreTargetValue     = static_cast<s32>(lpScoreTargetEvent->muScoreValue);
 
         if (lpScoreTargetEvent->muChallengeType != 0)
@@ -771,14 +779,12 @@ namespace BrnNetwork
     //
     // The SPrintf FORMAT strings are recovered rodata literals ("$%d" for param 3, "$EV_%06u" for
     // the param-4 stunt-run and param-5 burn-route branches -- asm r5 == aD_11 / aEv06u_0). Their
-    // vararg VALUE, however, is loaded (asm `ldx r6`) from a per-mode numeric table indexed by the
-    // loop counter (qword_82029FA0 / qword_8207C440 / qword_8207C4B0), and those tables are file-scope
-    // rodata NOT recovered in this slice.
+    // vararg VALUE is loaded (asm `ldx r6`) from a per-mode numeric table indexed by the loop
+    // counter: the stunt-run / burn-route event-id tables (BrnNetworkEventScoreData.h) and, for
+    // param 3, the 64-entry per-road id table.
     //
-    // FLAGGED rodata gap (per project rule: never fabricate un-recovered rodata): each SPrintf keeps
-    // its recovered format literal but passes a FLAGGED-0 placeholder for the un-recovered table
-    // value until that rodata is homed. The recoverable structure -- the param dispatch, the two
-    // range asserts, the flag stores and the GetVariationName fallback -- is faithful.
+    // The per-road table is the street manager's save-game challenge road-id table (also read by
+    // the online scoreboards screen).
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::CopyVariations(s32 liCategory, s32 liIndex)
     {
@@ -800,10 +806,8 @@ namespace BrnNetwork
             if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_VARIATION_FMT))
             {
                 char lacHeading[32];
-                // Format literal "$%d" is recovered (rodata aD_11, asm r5); the vararg VALUE is
-                // qword_82029FA0[liTableIndex] -- an un-recovered rodata table (asm `ldx r6`), so it
-                // is left as a FLAGGED-0 placeholder until that table is homed.
-                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$%d", 0 /* qword_82029FA0[liTableIndex] */);
+                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$%d",
+                                 static_cast<s32>(BrnGameState::KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liTableIndex]));
                 lHeadingList.AddHeading(lacHeading);
                 lHeadingList.mbIsPerRoad             = true;
             }
@@ -812,10 +816,8 @@ namespace BrnNetwork
                 CGS_ASSERT(liVariationCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
                            "liVariationLoopCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS");
                 char lacHeading[32];
-                // Format literal "$EV_%06u" is recovered (rodata aEv06u_0, asm r5); the vararg VALUE
-                // is qword_8207C440[liTableIndex] -- an un-recovered rodata table (asm `ldx r6`), left
-                // as a FLAGGED-0 placeholder until that table is homed.
-                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u", 0u /* qword_8207C440[liTableIndex] */);
+                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u",
+                                 static_cast<u32>(KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS[liTableIndex]));
                 lHeadingList.AddHeading(lacHeading);
                 lHeadingList.mbIsPerRoad             = false;
                 lHeadingList.mb807                   = true;
@@ -825,10 +827,8 @@ namespace BrnNetwork
                 CGS_ASSERT(liVariationCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
                            "liVariationLoopCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS");
                 char lacHeading[32];
-                // Format literal "$EV_%06u" is recovered (rodata aEv06u_0, asm r5); the vararg VALUE
-                // is qword_8207C4B0[liTableIndex] -- an un-recovered rodata table (asm `ldx r6`), left
-                // as a FLAGGED-0 placeholder until that table is homed.
-                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u", 0u /* qword_8207C4B0[liTableIndex] */);
+                CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u",
+                                 static_cast<u32>(KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS[liTableIndex]));
                 lHeadingList.AddHeading(lacHeading);
                 lHeadingList.mbIsPerRoad             = false;
                 lHeadingList.mb807                   = true;
@@ -848,5 +848,253 @@ namespace BrnNetwork
             KI_NETEVENT_SCOREBOARD_HEADINGS, KI_SCOREBOARD_HEADINGS_PAYLOAD_SIZE);
 
         mDebugComponent.HandleScoreboardHeadingEvent(&lHeadingList);
+    }
+    // -------------------------------------------------------------------------------------------
+    // ProcessBeforeSimulation
+    // Step the download state machine. While waiting, drain the GUI select events; a finished
+    // heading download returns to waiting; a finished scoreboard download is built, posted to the
+    // game (out-event 51) together with the matching challengeable event id for the stunt-run /
+    // burn-route boards (out-event 54), and handed to the debug component.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::ProcessBeforeSimulation(
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* /*lpOutputBuffer*/)
+    {
+        switch (meCurrentState)
+        {
+        case E_STATE_WAITING_FOR_EVENTS:
+            ProcessEventQueue();
+            break;
+
+        case E_STATE_GETTING_HEADINGS:
+            if (mpRankings->GetStatus() == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
+            {
+                meCurrentState = E_STATE_WAITING_FOR_EVENTS;
+            }
+            break;
+
+        case E_STATE_GETTING_SCOREBOARD:
+        {
+            const s32 liStatus = mpRankings->GetStatus();
+            if (liStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_BUSY)
+            {
+                break;
+            }
+
+            if (liStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
+            {
+                CgsDev::Assert::BeginAssert();
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "Downloading of scoreboard failed: " << mpRankings->GetLastError()
+                           << " note E_SERVER_INTERFACE_RANKINGS_ERROR_START="
+                           << static_cast<s32>(CgsNetwork::E_SERVER_INTERFACE_RANKINGS_ERROR_START) << "\n";
+                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+                CgsDev::Assert::EndAssert();
+
+                meCurrentState = E_STATE_WAITING_FOR_EVENTS;
+                mpRankings->ClearLastError();
+            }
+            else if (liStatus == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
+            {
+                BrnNetworkModuleIO::NetworkOutScoreboardEvent lScoreboardEvent;
+                lScoreboardEvent.Construct();
+                BuildDownloadedScoreboard(lScoreboardEvent.GetScoreboard());
+                AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lScoreboardEvent),
+                    lScoreboardEvent.GetEventType(), sizeof(lScoreboardEvent));
+
+                const u64* lpau64EventIDs = nullptr;
+                if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_STUNT_RUN))
+                {
+                    CGS_ASSERT(miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
+                               "miCurrentVariation < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS");
+                    lpau64EventIDs = KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS;
+                }
+                else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_BURN_ROUTE))
+                {
+                    CGS_ASSERT(miCurrentVariation < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
+                               "miCurrentVariation < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS");
+                    lpau64EventIDs = KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS;
+                }
+
+                if (lpau64EventIDs != nullptr)
+                {
+                    BrnNetworkModuleIO::NetworkOutDldChallengeableEvent lChallengeableEvent;
+                    lChallengeableEvent.mID = lpau64EventIDs[miCurrentVariation];
+                    CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+                    CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue() != 0,
+                               "mpNetworkModule->GetNetworkEventQueue()");
+                    AsConcreteQueue(mpNetworkModule->GetNetworkEventQueue())->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lChallengeableEvent),
+                        lChallengeableEvent.GetEventType(), sizeof(lChallengeableEvent));
+                }
+
+                meCurrentState = E_STATE_WAITING_FOR_EVENTS;
+                mDebugComponent.HandleScoreboardEvent(lScoreboardEvent.GetScoreboard());
+            }
+            else
+            {
+                CgsDev::Assert::BeginAssert();
+                char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                lStrStream << "Rankings component in bad state: " << liStatus;
+                CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+                CgsDev::Assert::EndAssert();
+            }
+            break;
+        }
+
+        default:
+            break;
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // ProcessEventQueue
+    // Drain the GUI select requests. A heading request (category / index / variation list or a
+    // scoreboard) cancels the rankings action in flight and returns to waiting first. A scoreboard
+    // request selects it and downloads its rows -- for a friends scoreboard with every buddy plus
+    // the local player as the user list -- then waits for that download, centred on the local
+    // player. Page up / down move the visible window by a page.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::ProcessEventQueue()
+    {
+        BrnNetworkModuleIO::NetworkInSelectScoreboardEvent lEvent;
+        lEvent.Prepare();
+
+        while (mScoreboardEventQueue.GetLength() > 0)
+        {
+            mScoreboardEventQueue.Pop(&lEvent);
+
+            const BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::EScoreboardEventType leType =
+                lEvent.GetScoreboardEventType();
+            if (leType > BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_NONE
+                && leType <= BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_GET_SCOREBOARD)
+            {
+                mpRankings->CancelCurrentActionAndInvalidateScoreboard();
+                meCurrentState = E_STATE_WAITING_FOR_EVENTS;
+            }
+
+            switch (leType)
+            {
+            case BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_GET_CATEGORY:
+                CopyCategories();
+                miCurrentCategory  = KI_INVALID_HEADING;
+                miCurrentIndex     = KI_INVALID_HEADING;
+                miCurrentVariation = KI_INVALID_HEADING;
+                break;
+
+            case BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_GET_INDEX:
+                miCurrentCategory = lEvent.GetChosenCategory();
+                CopyIndexes(miCurrentCategory);
+                miCurrentIndex     = KI_INVALID_HEADING;
+                miCurrentVariation = KI_INVALID_HEADING;
+                break;
+
+            case BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_GET_VARIATION:
+                CGS_ASSERT(miCurrentCategory != KI_INVALID_HEADING, "miCurrentCategory != KI_INVALID_HEADING");
+                miCurrentIndex = lEvent.GetChosenIndex();
+                CopyVariations(miCurrentCategory, miCurrentIndex);
+                miCurrentVariation = KI_INVALID_HEADING;
+                break;
+
+            case BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_GET_SCOREBOARD:
+            {
+                PlayerInfoData lPlayerInfo;
+
+                CGS_ASSERT(mpRankings != nullptr, "mpRankings");
+                CGS_ASSERT(miCurrentCategory != KI_INVALID_HEADING, "miCurrentCategory != KI_INVALID_HEADING");
+                CGS_ASSERT(miCurrentIndex != KI_INVALID_HEADING, "miCurrentIndex != KI_INVALID_HEADING");
+
+                miCurrentVariation = lEvent.GetChosenVariation();
+                mpRankings->SelectScoreboard(miCurrentCategory, miCurrentIndex, miCurrentVariation);
+                miCurrentViewOffset = 0;
+
+                const char* lapcUserListNames[KI_MAX_USER_LIST_NAMES];
+                s32         liUserListCount = 0;
+                const s32   liUserType      = mpRankings->GetUserType();
+                if (liUserType == KI_USER_TYPE_BUDDIES)
+                {
+                    CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager() != nullptr, "mpNetworkModule->GetNetworkManager()");
+                    BuddyManagerX360* lpBuddyManager = mpNetworkModule->GetNetworkManager()->GetBuddyManager();
+                    CGS_ASSERT(lpBuddyManager != nullptr, "lpBuddyManager");
+                    liUserListCount = lpBuddyManager->GetAllBuddyNames(lapcUserListNames);
+
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != nullptr,
+                               "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
+                    CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent() != nullptr,
+                               "mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent()");
+                    mpNetworkModule->GetNetworkManager()->GetServerInterface()->GetPlayerInfoComponent()
+                        ->GetLocalPlayerInfo(&lPlayerInfo);
+                    lapcUserListNames[liUserListCount] = lPlayerInfo.GetName();
+                    ++liUserListCount;
+                }
+                else if (liUserType != 0)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+                    CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+                    lStrStream << "User type for C" << miCurrentCategory << " I" << miCurrentIndex
+                               << " V" << miCurrentVariation << " is invalid :" << liUserType << "\n";
+                    CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+                    CgsDev::Assert::EndAssert();
+                }
+
+                mpRankings->DownloadScoreboardData(lapcUserListNames, liUserListCount);
+                miCurrentViewOffset = KI_INVALID_HEADING;   // centre the first page on the local player
+                meCurrentState      = E_STATE_GETTING_SCOREBOARD;
+                break;
+            }
+
+            case BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_PAGE_UP:
+                OffsetScoreboard(-KI_MAX_SCOREBOARD_ROWS);
+                break;
+
+            case BrnNetworkModuleIO::NetworkInSelectScoreboardEvent::E_TYPE_PAGE_DOWN:
+                OffsetScoreboard(KI_MAX_SCOREBOARD_ROWS);
+                break;
+
+            default:
+                CGS_ASSERT(false, "Unknown scoreboard event");
+                break;
+            }
+        }
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // HandleScoreboardEvent
+    // A GUI "select scoreboard" request. The first request after a reset also starts the heading
+    // download; the queue holds only the newest request.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::HandleScoreboardEvent(
+        const BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent* lpSelectScoreboardEvent)
+    {
+        if (meCurrentState == E_STATE_IDLE)
+        {
+            SetViewAndDownloadHeaders();
+        }
+
+        mScoreboardEventQueue.Clear();
+        mScoreboardEventQueue.Push(lpSelectScoreboardEvent);
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // AddNumberBeforeAndAfter
+    // Record how many rankings rows sit above the visible window (the view offset) and below it
+    // (clamped at 0), logging both.
+    // -------------------------------------------------------------------------------------------
+    void ScoreboardManager::AddNumberBeforeAndAfter(Scoreboard* lpScoreboard, s8 liCurrentRows)
+    {
+        s8 liAfter = static_cast<s8>(liCurrentRows - miCurrentViewOffset - 9);
+
+        *CgsDev::Log::gpDebugPrint << "RG\nBefore : " << miCurrentViewOffset
+                                   << "\nAfter : " << static_cast<s32>(liAfter) << "\n";
+
+        if (liAfter <= 0)
+        {
+            liAfter = 0;
+        }
+        lpScoreboard->AddNumberBeforeAndAfter(static_cast<s8>(miCurrentViewOffset), liAfter);
     }
 }

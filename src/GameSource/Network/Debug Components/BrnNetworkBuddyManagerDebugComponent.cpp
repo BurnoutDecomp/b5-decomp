@@ -3,6 +3,13 @@
 #include <string.h>   // memcpy / strncpy (the X360 bodies call the CRT primitives directly)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameSource/Network/Managers/BrnNetworkBuddyManagerBase.h"             // BuddyManagerBase (upload scratch, buddy queries)
+#include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"     // ServerInterfaceCustomCommands::OverWriteServerFriendsRecord
+#include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"  // ServerInterface::GetCustomCommandsComponent
+#include "GameSource/Resource/BrnResourceAllocator.h"                           // BrnResource::GetDebugAllocator
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"                      // NetworkOutBuddyCount / NetworkOutBuddyInformation
+#include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h"          // CgsDev::Log::LogChannelOutput
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"  // ServerInterfaceDirtySock::mNetStreamLogChannelOutput
 
 // ===========================================================================
 // BrnNetwork::BuddyManagerDebugComponent  --  GameSource/Network/Debug Components/
@@ -80,6 +87,41 @@ namespace BrnNetwork
         miFeedbackIndex = 0;
         mInviteBuddy.macName[0] = '\0';
         mpEventQueue    = NULL;
+        return true;
+    }
+
+    // -------- Release --------
+    // Unregister the menu surface OnActivate registered, clear the selection / invite-buddy
+    // members, and hand the event queue (when there is one) back to the debug allocator.
+    bool BuddyManagerDebugComponent::Release()
+    {
+        UnregisterFunction(&BuddyManagerDebugComponent::ForceServerFriendsOverwrite, NULL);
+        UnregisterFunction(&BuddyManagerDebugComponent::GetBuddyCount, NULL);
+        UnregisterVariable(&miBuddyIndex);
+        UnregisterFunction(&BuddyManagerDebugComponent::PrintBuddyInfo, NULL);
+        UnregisterFunction(&BuddyManagerDebugComponent::PrintNextUnreadMessage, NULL);
+        UnregisterFunction(&BuddyManagerDebugComponent::SendTestMessage, NULL);
+        UnregisterFunction(&BuddyManagerDebugComponent::SendInvite, NULL);
+        UnregisterVariable(&miMessageIndex);
+        UnregisterFunction(&BuddyManagerDebugComponent::PrintMessage, NULL);
+        UnregisterFunction(&BuddyManagerDebugComponent::LeaveFeedback, NULL);
+        UnregisterVariable(&miFeedbackIndex);
+        UnregisterFunction(&BuddyManagerDebugComponent::AcceptInvite, NULL);
+
+        miBuddyIndex    = 0;
+        miMessageIndex  = 0;
+        miFeedbackIndex = 0;
+        mInviteBuddy.macName[0] = '\0';
+
+        if (mpEventQueue != NULL)
+        {
+            BrnResource::HeapResourceAllocator* lpAllocator = BrnResource::GetDebugAllocator();
+            mpEventQueue->Release();
+            mpEventQueue->Destruct();
+            lpAllocator->Free(mpEventQueue);
+            mpEventQueue = NULL;
+        }
+
         return true;
     }
 
@@ -263,18 +305,122 @@ namespace BrnNetwork
     }
 
     // -------- ForceServerFriendsOverwrite  @ 0x82591B78 --------
-    // Snapshot the manager's current buddy list into its upload scratch (maBuddyListAtUpload /
-    // miNumBuddiesAtUpload) and push it to the server via the custom-commands component. All of that
-    // work lives on the (not-yet-reconstructed) BuddyManagerBase, so it is delegated to the free
-    // helper (see header); this callback just validates + forwards.
+    // Snapshot the manager's full buddies into its upload scratch (maBuddyListAtUpload /
+    // miNumBuddiesAtUpload) and overwrite the server friends record with them through the
+    // custom-commands component.
     void BuddyManagerDebugComponent::ForceServerFriendsOverwrite(void* lpData)
     {
         BuddyManagerDebugComponent* lpBuddyDebug = static_cast<BuddyManagerDebugComponent*>(lpData);
+        CGS_ASSERT(lpBuddyDebug, "lpBuddyDebug");
 
-        CGS_ASSERT(lpBuddyDebug != NULL, "ForceServerFriendsOverwrite: null debug component");
-        CGS_ASSERT(lpBuddyDebug->mpBuddyManager != NULL,
-                   "ForceServerFriendsOverwrite: null buddy manager");
+        BuddyManagerBase* lpBuddyManager = lpBuddyDebug->mpBuddyManager;
+        CGS_ASSERT(lpBuddyManager, "lpBuddyManager");
+        CGS_ASSERT(lpBuddyManager->mpServerInterface->GetCustomCommandsComponent(),
+                   "lpBuddyManager->mpServerInterface->GetCustomCommandsComponent()");
 
-        ForceServerFriendsOverwriteOnManager(lpBuddyDebug->mpBuddyManager);
+        ServerInterfaceCustomCommands* lpCustomCommandsComponent = static_cast<ServerInterfaceCustomCommands*>(
+            lpBuddyManager->mpServerInterface->GetCustomCommandsComponent());
+        CGS_ASSERT(lpCustomCommandsComponent, "lpCustomCommandsComponent");
+
+        lpBuddyManager->miNumBuddiesAtUpload = 0;
+        for (s32 liBuddyIndex = 0; liBuddyIndex < lpBuddyManager->GetNumBuddies(); ++liBuddyIndex)
+        {
+            const bool lbGotName = lpBuddyManager->GetBuddyName(
+                liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]);
+            CGS_ASSERT(lbGotName,
+                       "lpBuddyManager->GetBuddyName( liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload] )");
+
+            if (lpBuddyManager->IsFullBuddy(&lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]))
+            {
+                ++lpBuddyManager->miNumBuddiesAtUpload;
+            }
+        }
+
+        lpCustomCommandsComponent->OverWriteServerFriendsRecord(lpBuddyManager->maBuddyListAtUpload,
+                                                                lpBuddyManager->miNumBuddiesAtUpload);
+    }
+
+    // Print the buddy manager's outgoing events to the network log stream.
+    void BuddyManagerDebugComponent::ProcessOutgoingEvents(BrnNetworkModuleIO::NetworkEventQueue* lpEventQueue)
+    {
+        CgsDev::Log::LogChannelOutput& lrLog = CgsNetwork::ServerInterfaceDirtySock::mNetStreamLogChannelOutput;
+
+        const CgsModule::Event* lpEvent = NULL;
+        s32 liSize = 0;
+        s32 liEventType = lpEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        while (lpEvent != NULL)
+        {
+            const u8* lpcEvent = reinterpret_cast<const u8*>(lpEvent);
+
+            switch (liEventType)
+            {
+            case 1:
+            {
+                const BrnNetworkModuleIO::NetworkOutBuddyCount* lpCount =
+                    reinterpret_cast<const BrnNetworkModuleIO::NetworkOutBuddyCount*>(lpEvent);
+                lrLog << "We have " << lpCount->miBuddyCount << " buddies!\n";
+                break;
+            }
+
+            case 2:
+            {
+                const BrnNetworkModuleIO::NetworkOutBuddyInformation* lpInfo =
+                    reinterpret_cast<const BrnNetworkModuleIO::NetworkOutBuddyInformation*>(lpEvent);
+
+                for (s32 liBuddy = 0; liBuddy < lpInfo->miNumberOfBuddiesInEvent; ++liBuddy)
+                {
+                    const BrnNetworkModuleIO::BuddyInformation& lrBuddy = lpInfo->mBuddyInformation[liBuddy];
+
+                    lrLog << "Buddy Name: " << lrBuddy.mPlayerName.macName << "\n";
+                    if (lrBuddy.mbIsFullBuddy)
+                    {
+                        lrLog << "Buddy Presence: " << lrBuddy.macPresenceData << "\n";
+                        lrLog << "Can you join buddy: " << (lrBuddy.mbIsJoinable ? "Yes" : "No") << "\n";
+                        lrLog << "Messages " << lrBuddy.miUnreadMessages << " of which "
+                              << lrBuddy.miTotalMessages << " are unread.\n";
+                        if (lrBuddy.miInviteStatus == 2)
+                        {
+                            lrLog << "You have been invited to his game\n";
+                        }
+                        else if (lrBuddy.miInviteStatus == 1)
+                        {
+                            lrLog << "You invited him to your game!\n";
+                        }
+                    }
+                    else
+                    {
+                        lrLog << "Buddy Request pending\n";
+                    }
+
+                    memcpy(&mBuddyInformation[liBuddy], &lrBuddy, sizeof(lrBuddy));
+                }
+
+                miBuddyIndex = 0;
+                SetRange(&miBuddyIndex, 0, lpInfo->miNumberOfBuddiesInEvent);
+                break;
+            }
+
+            case 3:
+            case 5:
+                lrLog << "Buddy: " << reinterpret_cast<const char*>(lpcEvent + 0x04)
+                      << " Message index: " << *reinterpret_cast<const s32*>(lpcEvent)
+                      << " Message: " << reinterpret_cast<const char*>(lpcEvent + 0x14) << "\n";
+                break;
+
+            case 4:
+                lrLog << "New Message Arrived.\n";
+                break;
+
+            case 7:
+                lrLog << "Invite Arrived.\n";
+                break;
+
+            default:
+                break;
+            }
+
+            liEventType = lpEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        }
     }
 }

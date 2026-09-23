@@ -1,5 +1,6 @@
 #include "GameSource/Network/Messages/BrnUpdateMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (UpdateMessage validity guards)
+#include "rw/math/vpu/vector3_operation.h"          // Magnitude / Normalize / Min / Max
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::UpdateData::operator=   @ 0x82579CD0
@@ -15,6 +16,74 @@
 
 namespace BrnNetwork
 {
+    namespace
+    {
+        // The update message type id.
+        const s32 KI_UPDATE_MESSAGE_TYPE = 11;
+
+        // A velocity at or above these speeds is pulled back to just inside the packing
+        // range (135 linear, 63 angular), scaled by 0.99.
+        const f32 KF_UPDATE_LINEAR_VELOCITY_CLAMP_START  = 133.649994f;
+        const f32 KF_UPDATE_ANGULAR_VELOCITY_CLAMP_START = 62.3699989f;
+        const f32 KF_UPDATE_MAX_LINEAR_VELOCITY          = 135.0f;
+        const f32 KF_UPDATE_MAX_ANGULAR_VELOCITY         = 63.0f;
+        const f32 KF_UPDATE_VELOCITY_CLAMP_SCALE         = 0.99000001f;
+
+        // The packed translation row's bounds (x, y, z; the w lane clamps to 0).
+        const f32 KF_UPDATE_POSITION_MAX_XZ = 20000.0f;
+        const f32 KF_UPDATE_POSITION_MAX_Y  = 2000.0f;
+    }
+
+    // BrnNetwork::UpdateMessage::Construct (identical code to AggressiveDrivingMessage's):
+    // only the message base fields are reset.
+    void UpdateMessage::Construct()
+    {
+        CgsNetwork::Message::Construct();
+    }
+
+    // Take a new update unless the previous one has not been sent yet: copy the payload,
+    // pull either velocity that would not pack back inside its range, clamp the position
+    // to the packed bounds, then stamp the message for the payload's send frame.
+    void UpdateMessage::PrepareForSend(UpdateData* lpUpdateData)
+    {
+        if (IsMessageValid())
+        {
+            return;
+        }
+
+        mUpdateData = *lpUpdateData;
+
+        if (rw::math::vpu::Magnitude(mUpdateData.mLinearVelocity) >= KF_UPDATE_LINEAR_VELOCITY_CLAMP_START)
+        {
+            const Vector3 lUnit = rw::math::vpu::Normalize(mUpdateData.mLinearVelocity);
+            mUpdateData.mLinearVelocity = Vector3{
+                lUnit.x * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
+                lUnit.y * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
+                lUnit.z * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
+                lUnit.w * KF_UPDATE_MAX_LINEAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE };
+        }
+
+        if (rw::math::vpu::Magnitude(mUpdateData.mAngularVelocity) >= KF_UPDATE_ANGULAR_VELOCITY_CLAMP_START)
+        {
+            const Vector3 lUnit = rw::math::vpu::Normalize(mUpdateData.mAngularVelocity);
+            mUpdateData.mAngularVelocity = Vector3{
+                lUnit.x * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
+                lUnit.y * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
+                lUnit.z * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE,
+                lUnit.w * KF_UPDATE_MAX_ANGULAR_VELOCITY * KF_UPDATE_VELOCITY_CLAMP_SCALE };
+        }
+
+        const Vector3 lPositionMax = {  KF_UPDATE_POSITION_MAX_XZ,  KF_UPDATE_POSITION_MAX_Y,
+                                        KF_UPDATE_POSITION_MAX_XZ, 0.0f };
+        const Vector3 lPositionMin = { -KF_UPDATE_POSITION_MAX_XZ, -KF_UPDATE_POSITION_MAX_Y,
+                                       -KF_UPDATE_POSITION_MAX_XZ, 0.0f };
+        mUpdateData.mMatrix.wAxis = rw::math::vpu::Max(rw::math::vpu::Min(mUpdateData.mMatrix.wAxis, lPositionMax),
+                                                       lPositionMin);
+
+        CgsNetwork::Message::PrepareForSend(KI_UPDATE_MESSAGE_TYPE, mUpdateData.mu16SentFrame);
+        CGS_ASSERT(!IsReliable(), "!IsReliable()");
+    }
+
     UpdateData& UpdateData::operator=(const UpdateData& lOther)
     {
         mu16SentFrame              = lOther.mu16SentFrame;              // +0x00 (lhz/sth 0)

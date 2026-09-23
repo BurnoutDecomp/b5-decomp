@@ -41,9 +41,12 @@ namespace BrnNetwork
     s32 SetUpContexts(s32 liGameMode, char lbRanked, s32* lpiCount,
                       MatchmakingContext* lpaContexts);
 
+    // Maps a game mode (10..17) to its LIVE game-mode context value.
+    s32 GetGameModeContextValue(s32 liGameMode);
+
     // Set (or overwrite) the game-mode context entry (id 3) in lpaContexts, appending a
     // fresh slot when absent. Returns the game-mode value written.
-    s32 AmendGameModeContexts(void* lpParams, s32* lpiCount, MatchmakingContext* lpaContexts);
+    s32 AmendGameModeContexts(s32 liGameMode, s32* lpiCount, MatchmakingContext* lpaContexts);
 
     // Set (or overwrite) the ranked context entry (id 0x800A) in lpaContexts, appending a
     // fresh slot when absent. Returns lbRanked.

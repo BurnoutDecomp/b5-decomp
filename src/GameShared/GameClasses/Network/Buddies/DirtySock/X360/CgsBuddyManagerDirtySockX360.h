@@ -52,10 +52,14 @@ namespace CgsNetwork
         virtual void SendInvite(const PlayerName* lpPlayerName);
         virtual void CancelInvites();
         virtual void AcceptInvite(const PlayerName* lpPlayerName);
+        // Same code as JoinBuddy / AcceptInvite (the leaf vtable points both slots at one body).
+        virtual void RevokeInvite(const PlayerName* lpPlayerName);
+        virtual void DeclineInvite(const PlayerName* lpPlayerName);
         virtual bool AreAnyInvitesOpen();
         virtual bool GetNextUnreadMessage(const PlayerName* lpPlayerName, char* lpcOut, s32 liMaxLength);
         virtual bool GetMessage(const PlayerName* lpPlayerName, s32 liIndex, char* lpcOut, s32 liMaxLength);
         virtual const char* GetTitle(const PlayerName* lpPlayerName);
+        virtual bool HasBuddyInvitedMe(const PlayerName* lpPlayerName);
         virtual bool HaveIInvitedMyBuddy(const PlayerName* lpPlayerName);
 
         // ---- Xbox-specific buddy actions -------------------------------------
@@ -73,13 +77,17 @@ namespace CgsNetwork
         virtual bool IsConnectedToNetworkService() const;
 
     private:
+        // The first virtual this class adds (vtable +0x7C, after the base's InviteSent): steps
+        // the picture download once its profile / picture read has finished. Update calls it.
+        virtual void UpdatePictureDownload();
+
         // The picture-download working set keys off the same controller/user index
         // the network manager exposes at its +0x60 slot; reached through the base
         // mpNetworkManager accessor (the field has no shared header here).
 
         // -- gamer-picture download source pointers (set by StartDownloadingPictures) --
         NetworkTexture* mpDownloadTextures;     // +0x1C  destination texture array (stride 28)
-        void*           mpGamerPicKeys;         // +0x20  caller a5 picture-key blob (STORED-but-UNUSED here)
+        void*           mpGamerPicKeys;         // +0x20  caller a5: one downloaded-flag byte per picture (UpdatePictureDownload)
         u64*            mpDownloadXuids;         // +0x24  source XUID array (8B/entry)
 
         // Embedded XUSER_READ_PROFILE_SETTING_RESULTS buffer handed to

@@ -2,40 +2,22 @@
 #define CGS_SERVER_INTERFACE_DEFAULT_PLAYER_PARAMETERS_H
 
 #include "types.hpp"
-#include "../CgsServerInterfaceStructureInterface.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerParams.h"
 
 // ===========================================================================
 // CgsNetwork::DefaultPlayerParameters
 //   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/
 //         CgsServerInterfaceDefaultPlayerParameters.{h,cpp}
 //
-// A "default" (null-object) implementation of the player-parameters
-// server-interface structure. Forward-declared in the DirtySock DWARF
-//   (references/DecFIGS/dwarfdump/.../CgsServerInterfaceStructureInterface.h:171,
-//    `struct CgsNetwork::DefaultPlayerParameters;`)
-// with no body and no own data members emitted; the only X360 codegen attributed
-// to it is its vector deleting destructor @ 0x82890260.
-//
-// X360 EVIDENCE (vector deleting destructor @ 0x82890260):
-//   *this = &off_8207C88C;            ; install the StructureInterface vtable
-//   if ( a2 & 1 ) operator delete(this);
-//   return this;
-// The installed vptr is off_8207C88C -- the SAME vtable as the abstract
-// ServerInterfaceStructureInterface base. The destructor reduces entirely to the
-// base sub-object: this class adds NO vtable slots of its own and NO data members
-// beyond the inherited vptr -- the codegen of a thin default that does not give
-// the interface's pure virtuals new state.
-//
-// No GetPattern / GetData / size bodies are attributed to this type in the X360
-// image or DWARF, so NONE are fabricated: the class is left ABSTRACT (inherits the
-// interface's pure virtuals). Only the out-of-line destructor is defined, anchoring
-// emission of the inherited vtable pointer to this TU (matching the established
-// deleting-destructor home convention, CgsServerInterfaceComponentDtor.cpp).
+// The default player-parameters record: the player-parameters structure base with the
+// default Prepare (clear every parameter, open firewall). Its vector deleting destructor
+// leaves the root ServerInterfaceStructureInterface vtable installed, the
+// intermediate base adding nothing to tear down.
 // ===========================================================================
 
 namespace CgsNetwork
 {
-    struct DefaultPlayerParameters : public ServerInterfaceStructureInterface
+    struct DefaultPlayerParameters : public ServerInterfacePlayerParamsBase
     {
         DefaultPlayerParameters();
 
@@ -46,6 +28,14 @@ namespace CgsNetwork
 
         // Vtable slot 6: reset the record to its defaults before a new game.
         virtual bool Prepare();
+
+        // The structure-interface slots: an empty pattern of length 20, and no data block
+        // (each is a shared folded body on the console).
+        virtual const char* GetPattern() const;
+        virtual s32         GetPatternLength() const;
+        virtual u32         GetDataSize() const;
+        virtual void*       GetData();
+        virtual const void* GetData() const;
     };
 } // namespace CgsNetwork
 

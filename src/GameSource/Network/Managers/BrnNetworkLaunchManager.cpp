@@ -51,10 +51,6 @@ namespace BrnNetwork
         // window, in seconds, before UpdateWaiting reports the launch complete.
         const f32 KF_LAUNCH_WAIT_TIME = 3.0f;
 
-        // The DirtySock component the launch sequence drives (E_COMPONENTS_GAMES == 1; the
-        // literal `1` argument at every GetStatus/GetLastError/ClearLastError call site).
-        const s32 KI_GAMES_COMPONENT = CgsNetwork::E_COMPONENTS_GAMES;
-
         // The minimum number of finalised players required to launch (the asm compares the
         // finalised-player count against 2 with `cmpwi 2; blt`).
         const s32 KI_MIN_PLAYERS_TO_LAUNCH = 2;
@@ -181,7 +177,7 @@ namespace BrnNetwork
     bool LaunchManager::ServerInterfaceIdle()
     {
         const BrnServerInterface::EStatus leStatus =
-            mpNetworkManager->GetServerInterface()->GetStatus(KI_GAMES_COMPONENT);
+            mpNetworkManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_GAMES);
 
         if (leStatus == BrnServerInterface::E_STATUS_BUSY)
             return false;
@@ -189,9 +185,9 @@ namespace BrnNetwork
         if (leStatus == BrnServerInterface::E_STATUS_ERROR)
         {
             // A "kick" error (33) just means a player left; clear it and treat as idle.
-            if (mpNetworkManager->GetServerInterface()->GetLastError(KI_GAMES_COMPONENT) == 33)
+            if (mpNetworkManager->GetServerInterface()->GetLastError(CgsNetwork::E_COMPONENTS_GAMES) == 33)
             {
-                mpNetworkManager->GetServerInterface()->ClearLastError(KI_GAMES_COMPONENT);
+                mpNetworkManager->GetServerInterface()->ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
                 return true;
             }
 
@@ -220,7 +216,7 @@ namespace BrnNetwork
 
     LaunchManager::EStatus LaunchManager::UpdateRunning()
     {
-        if (mpNetworkManager->GetServerInterface()->GetStatus(KI_GAMES_COMPONENT)
+        if (mpNetworkManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                 != BrnServerInterface::E_STATUS_IDLE)
             return E_STATUS_WAITING_FOR_LAUNCH;
 
@@ -288,7 +284,7 @@ namespace BrnNetwork
 
         if (!lbNATFinalised && lpGames->IsLocalPlayerHost())
         {
-            mpNetworkManager->GetServerInterface()->ClearLastError(KI_GAMES_COMPONENT);
+            mpNetworkManager->GetServerInterface()->ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
             lpGames->UnlockGame();
             DebugLog("[LAUNCH MGR]: ");
             DebugLog("Update locking failed as not everyone is finalised\n");
@@ -337,7 +333,7 @@ namespace BrnNetwork
 
         if (!lbNATFinalised && lpGames->IsLocalPlayerHost())
         {
-            mpNetworkManager->GetServerInterface()->ClearLastError(KI_GAMES_COMPONENT);
+            mpNetworkManager->GetServerInterface()->ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
             lpGames->UnlockGame();
             DebugLog("[LAUNCH MGR]: ");
             DebugLog("Update set players to playing failed as not everyone has finalised\n");
@@ -438,7 +434,7 @@ namespace BrnNetwork
             DebugLog("[LAUNCH MGR]: ");
             DebugLog("Update launching failed to launch as players are not finalised\n");
             DebugLog("\n");
-            mpNetworkManager->GetServerInterface()->ClearLastError(KI_GAMES_COMPONENT);
+            mpNetworkManager->GetServerInterface()->ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
             lpGames->UnlockGame();
             meSubState = E_SUBSTATE_UNLOCK_FROM_ERROR;
         }
@@ -466,7 +462,7 @@ namespace BrnNetwork
         {
             if (lpGames->IsLocalPlayerHost())
             {
-                mpNetworkManager->GetServerInterface()->ClearLastError(KI_GAMES_COMPONENT);
+                mpNetworkManager->GetServerInterface()->ClearLastError(CgsNetwork::E_COMPONENTS_GAMES);
                 lpGames->UnlockGame();
                 return E_STATUS_LAUNCHING;
             }

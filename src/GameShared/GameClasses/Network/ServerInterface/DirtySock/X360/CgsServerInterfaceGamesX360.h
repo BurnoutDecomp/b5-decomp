@@ -24,7 +24,7 @@
 // ALREADY-COMMITTED leaf CgsServerInterfaceGameParamsX360 (maRankedContexts[10] @
 // +0xF8, miContextCount @ +0x148, miPropertyCount @ +0x14C) plus the base slot
 // counters (miNumPublicSlots @ +224 / miNumPrivateSlots @ +228); the end-game
-// payload is the committed ServerInterfaceEndGameDataX360::maResultWords[16]; and
+// payload is the committed ServerInterfaceEndGameDataX360::maPlayerRecords; and
 // the play record is the committed CgsNetwork::DirtySock::LobbyApiPlayT. This leaf
 // reuses those committed types rather than duplicating them.
 //
@@ -52,9 +52,6 @@ namespace CgsNetwork
 
     // The lobby play record holds up to 9 player entries.
     const s32 KI_MAX_GAME_PLAYERS = 9;
-
-    // EndGame walks 8 {playerId, value} result pairs out of maResultWords[16].
-    const s32 KI_END_GAME_RESULT_PAIRS = 8;
 
     // ConnApi control fourccs used by this leaf (leaf-local; the base's identically
     // valued anon-namespace constants are not visible across TUs).
@@ -95,7 +92,7 @@ namespace CgsNetwork
                            ServerInterfacePlayerParamsBase* lpPlayerParams); // 0x8288C300
         void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams); // 0x8288C460
         void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);   // 0x8288C770
-        virtual void EndGame(ServerInterfaceEndGameDataBase* lpEndGameData);
+        virtual void EndGame(const ServerInterfaceEndGameDataBase* lpEndGameData);
 
         // Set the game-server "session flags" word through ConnApi ('sflg').
         void SetSessionFlags(s32 liFlags);                                 // 0x8287F7B0
@@ -104,7 +101,7 @@ namespace CgsNetwork
         // @ 0x8288C808 -- end the current create/join/quick-join action once the lobby
         // message carries a "SESS" tagfield; otherwise chain to the base.
         // lpauMsg points at the DirtySDK lobby message (msg[3]==error, msg[4]==pData).
-        virtual s32 ReceivedGameEvent(s32* lpauMsg);
+        virtual s32 ReceivedGameEvent(LobbyApiMsgT* lpMsg);
 
         // ---- X360 queries ---------------------------------------------------------
         // @ 0x8288C880 -- resolve a player id to its XUID/host-address.

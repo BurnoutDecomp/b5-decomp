@@ -108,7 +108,7 @@ namespace BrnNetwork
         CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != nullptr,
                    "mpServerInterface->GetDownloadableConfigComponent()");
 
-        mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->GetAutoLoginTimeout());
+        mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
         mProcessesComplete.UnSetAll();
 
         CGS_ASSERT(mpNetworkModule != nullptr, "mpNetworkModule");
@@ -169,7 +169,7 @@ namespace BrnNetwork
             CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != nullptr,
                        "mpServerInterface->GetDownloadableConfigComponent()");
 
-            mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->GetAutoLoginTimeout());
+            mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
             meState = E_AUTO_LOGIN_STATE_CONNECTING;
 
             const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();

@@ -90,21 +90,34 @@ namespace BrnNetwork
         // s32* debug-menu variable, indexing the maiValues[] array directly (it is the first member,
         // at object offset 0). Inline accessor over the named member so callers do not offset-hack.
         s32* GetStatValuePtr(s32 liIndex) { return &maiValues[liIndex]; }
+        // Read-only twin: the stats manager reads the local player's counters straight out of the
+        // record when it builds a stats update message.
+        const s32* GetStatValuePtr(s32 liIndex) const { return &maiValues[liIndex]; }
         void      GetStatAsString(EStatsValue leValue, char* lpcBuffer, s32 liSize) const;
         void      SetStat(EStatsValue leValue, const char* lpcStat, EStatType leType);
-        void      SetStatAsInt(EStatsValue leValue, s32 liValue, EStatType leType);
 
-        void      SetPlayerID(NetworkPlayerID lPlayerID);
-        const char*     GetName() const;
-        NetworkPlayerID GetPlayerID() const;
-        EStatsStatus    GetStatus() const;
-        void      SetStatus(EStatsStatus leStatus);
-        void      SetTimeStamp(Time lTimeStamp);
-        Time      GetTimeStamp() const;
+        // Header-inline on the console: NetworkPlayerStatsManager::UpdateLocalPlayersStat stores the
+        // value word and its display type straight into the two parallel arrays.
+        void      SetStatAsInt(EStatsValue leValue, s32 liValue, EStatType leType)
+        {
+            maiValues[leValue]   = liValue;
+            maeStatType[leValue] = leType;
+        }
+
+        // Header-inline setters (no standalone console body; the callers store the member).
+        void      SetPlayerID(NetworkPlayerID lPlayerID) { mNetworkPlayerID = lPlayerID; }
+
+        // Header-inline accessors (no standalone console body; every caller reads the member).
+        const char*     GetName() const       { return macName; }
+        NetworkPlayerID GetPlayerID() const   { return mNetworkPlayerID; }
+        EStatsStatus    GetStatus() const     { return meStatsStatus; }
+        void      SetStatus(EStatsStatus leStatus)    { meStatsStatus = leStatus; }
+        void      SetTimeStamp(Time lTimeStamp)       { mTimeStamp = lTimeStamp; }
+        Time      GetTimeStamp() const        { return mTimeStamp; }
         EStatType GetStatType(EStatsValue leValue) const;
-        bool      IsCalculated() const;
-        void      SetCalculated(bool lbCalculated);
-        bool      IsLocalPlayer() const;
+        bool      IsCalculated() const        { return mbIsCalulated; }
+        void      SetCalculated(bool lbCalculated)    { mbIsCalulated = lbCalculated; }
+        bool      IsLocalPlayer() const       { return mbIsLocalPlayer; }
 
         // ---- owned by THIS TU --------------------------------------------------
         // Compiler-generated-style member-wise copy assignment (@0x82355C50).

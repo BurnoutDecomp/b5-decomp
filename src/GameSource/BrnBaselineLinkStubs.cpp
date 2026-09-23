@@ -57,10 +57,6 @@ namespace BrnHW
     bool System360HW::HasGameBeenRebootedDueToInvite() { return false; }
 }
 
-// --- XShowDirtyDiscErrorUI: Xbox 360 XDK import (declared extern "C" in BrnGameModule.cpp's
-// DiskErrorThreadProc). No PC equivalent; the disk-error thread never runs on the boot slice. ---
-extern "C" unsigned long XShowDirtyDiscErrorUI(unsigned long /*dwUserIndex*/) { return 0; }
-
 // --- RenderWare resource-descriptor helpers driving RwRenderableResourceType::
 // GetSerialisedResourceDescriptor (a resource-SIZE query, not exercised while rendering the
 // title Apt). RenderableMesh::GetResourceDescriptor has no linkable body; the renderengine
@@ -107,25 +103,6 @@ namespace renderengine
     }
 }
 
-// ===========================================================================
-// XDK boundary shims: the XDK imports referenced by CgsSaveLoadPS3.cpp (SaveLoadSystem::
-// Update's overlapped pump), CgsGuideIntegration.cpp (SystemUserProfile's XNotify/XUser
-// watcher) and CgsXOverlapped. No game body to reconstruct; the PC has no XDK, so each
-// returns the value that makes its caller take the no-device/no-user branch.
-// ===========================================================================
-
-// FLAG PC-platform leaf: XDK overlapped-result query; 0 (== ERROR_SUCCESS, not the
-// 997/996 still-pending codes) tells SaveLoadSystem::Update the async op is finished,
-// clearing its in-flight state -- no overlapped I/O ever starts on PC.
-extern "C" unsigned long XGetOverlappedResult(void* /*lpOverlapped*/,
-                                              unsigned long* /*lpdwResult*/,
-                                              int /*bWait*/) { return 0; }
-
-// FLAG PC-platform leaf: XDK overlapped EXTENDED-error query; only reached from
-// CgsXOverlapped::GetResultString on a code its three named cases (0 / 996 / 997) did not
-// cover. 0 on a platform where no overlapped I/O is ever started.
-extern "C" unsigned long XGetOverlappedExtendedError(void* /*lpOverlapped*/) { return 0; }
-
 // ---- StreetManagerDebugComponent vtable gate --------------------------------------------
 // GameStateModule embeds StreetManager, whose embedded debug component's vtable is emitted by
 // the module ctor chain, so these two virtuals must link. The real TUs
@@ -144,75 +121,6 @@ namespace BrnGameState
             << "StreetManagerDebugComponent::OnActivate: inert [FLAG PC boot gate]\n";
     }
 }
-
-// FLAG PC-platform leaf: XDK notification-listener creation; a null handle makes
-// SystemUserProfile::Update early-return (no sign-in/storage/invite events on PC).
-extern "C" void* XNotifyCreateListener(unsigned long long /*qwAreas*/) { return 0; }
-
-// FLAG PC-platform leaf: XDK notification poll; 0 == "no notification pending"
-// (unreached while XNotifyCreateListener hands out no listener).
-extern "C" int XNotifyGetNext(void* /*hListener*/, unsigned long /*dwMsgFilter*/,
-                              unsigned long* /*pdwId*/, unsigned long* /*pParam*/) { return 0; }
-
-// FLAG PC-platform leaf: XDK sign-in-state query.
-//
-// ⭐ CHANGED 2026-09-16 (owner: "the save/load menu doesn't do anything when we click it in
-// the pause menu"). This leaf used to return 0 == eXUserSigninState_NotSignedIn, and that is
-// what made the pause menu's SAVE/LOAD row inert: BrnCrashNavSettings.cpp:514 gates it as
-//     if (XUserGetSigninState(activeController) != 0) SendStateEvent("TO_PROFILE");
-//     else  <post the "PRONoSaveLd" overlay>
-// so every click took the else arm and the CN_PROFILE screen could never be entered. The
-// console reaches the same arm only for a controller with NO profile signed in; a PC player
-// always has their local profile, so the faithful answer for this platform is
-// eXUserSigninState_SignedInLocally == 1, NOT "no user".
-//
-// ⚠️ WHY 1 AND NOT 2, and why this is safe for every other consumer. The XDK enum is
-// { NotSignedIn = 0, SignedInLocally = 1, SignedInToLive = 2 }. Every caller in this tree
-// reads it one of exactly two ways:
-//     != 0  "is there a user at all"  -> CrashNavSettings.cpp:514 (save/load, the fix),
-//                                        CgsGuideIntegration.cpp:186 (SystemUserProfile's
-//                                        signed-in flag) -- both now correctly say YES
-//     == 2  "is that user on LIVE"    -> BrnTrainingManager.cpp:432 (mbIsOnlinePossible),
-//                                        CgsBuddyManagerDirtySockX360.cpp:161,
-//                                        CgsNetworkAdapterX360.cpp:223, BrnGuiCache.cpp
-//                                        -- all still FALSE, exactly as before
-// So this opens the offline save/load door and moves nothing that requires Xbox Live. The
-// XUserCheckPrivilege leaf below notes it is "unreached: every caller gates the query on
-// XUserGetSigninState reporting a signed-in user" -- that is no longer true for the != 0
-// callers, so it is left returning its error code, which makes those callers keep their
-// running answer rather than read an unfilled result word (its own documented behaviour).
-extern "C" u32 XUserGetSigninState(u32 /*luUserIndex*/) { return 1; /* SignedInLocally */ }
-
-// FLAG PC-platform leaf: XDK privilege query; a non-zero error return makes the caller keep
-// its running answer rather than read an unfilled result word (unreached: every caller gates
-// the query on XUserGetSigninState reporting a signed-in user).
-extern "C" s32 XUserCheckPrivilege(u32 /*luUserIndex*/, u32 /*luPrivilegeType*/,
-                                   u32* /*lpbResult*/) { return 87; /* ERROR_INVALID_PARAMETER */ }
-
-// FLAG PC-platform leaf: XDK sign-in-info query; a non-zero error return makes the caller
-// treat the query as failed rather than parse an unfilled block -- the same answer the console
-// gives for a user index with no profile signed in.
-extern "C" s32 XUserGetSigninInfo(u32 /*luUserIndex*/, u32 /*luFlags*/,
-                                  void* /*lpSigninInfo*/) { return 87; /* ERROR_INVALID_PARAMETER */ }
-
-// FLAG PC-platform leaf: XDK user-name query; success + empty name (unreached: no
-// user ever signs in without XNotify events, so the no-user sentinel holds).
-extern "C" u32 XUserGetName(u32 /*luUserIndex*/, char* lpszUserName, u32 luCchUserName)
-{
-    if (lpszUserName != 0 && luCchUserName != 0)
-    {
-        lpszUserName[0] = 0;
-    }
-    return 0;
-}
-
-// FLAG PC-platform leaf: XDK profile-settings read; a non-zero error return makes the
-// caller treat the read as failed rather than parse an unfilled results buffer
-// (unreached: SystemUserProfile only reads settings for a signed-in user).
-extern "C" u32 XUserReadProfileSettings(u32 /*luTitleId*/, u32 /*luUserIndex*/,
-                                        u32 /*luNumSettingIds*/, unsigned long* /*lpaSettingIds*/,
-                                        unsigned long* /*lpcbResults*/, void* /*lpResults*/,
-                                        void* /*lpOverlapped*/) { return 87u; /* ERROR_INVALID_PARAMETER */ }
 
 // RealmcIface record members whose owning TUs are not in the link (SaveLoadSystem::Save
 // builds them; Save is never reached on this boot -- the PC backend is CgsSaveLoadPC):

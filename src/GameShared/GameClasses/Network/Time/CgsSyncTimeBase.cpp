@@ -20,38 +20,57 @@
 namespace CgsNetwork
 {
     // -------------------------------------------------------------------------------
-    // Reset every slot to "free" and put the manager in the idle mode. The X360 build
-    // inlines each SyncTimeMessage's field init inside the per-slot loop; reversed back
-    // to a plain Construct() call on each message plus the explicit sentinels the loop
-    // writes (free player id, -1 message player ids, zeroed timestamps).
+    // Only the embedded messages' own constructors run (vtable, zeroed times); Construct
+    // seeds the rest.
+    SyncTimeMessageManager::SyncTimeMessageManager()
+    {
+    }
+
+    // -------------------------------------------------------------------------------
+    // Reset both messages of every slot, free the slot and put the manager in the idle
+    // mode. Each message's Construct is inline in the loop.
     void SyncTimeMessageManager::Construct()
     {
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
         {
+            mSyncMessageToSend[liPlayerIndex].Construct();
+            mSyncMessageToReceive[liPlayerIndex].Construct();
             mNetworkPlayerID[liPlayerIndex] = KI_INVALID_PLAYER_ID;
-
-            SyncTimeMessage& lSendMessage = mSyncMessageToSend[liPlayerIndex];
-            lSendMessage.Construct();
-            lSendMessage.mClientSendTime.SetFloatVal(0.0f);
-            lSendMessage.mHostTime.SetFloatVal(0.0f);
-            lSendMessage.mHostPlayerID   = KI_INVALID_PLAYER_ID;
-            lSendMessage.mClientPlayerID = KI_INVALID_PLAYER_ID;
-
-            SyncTimeMessage& lReceiveMessage = mSyncMessageToReceive[liPlayerIndex];
-            lReceiveMessage.Construct();
-            lReceiveMessage.mClientSendTime.SetFloatVal(0.0f);
-            lReceiveMessage.mHostTime.SetFloatVal(0.0f);
-            lReceiveMessage.mHostPlayerID   = KI_INVALID_PLAYER_ID;
-            lReceiveMessage.mClientPlayerID = KI_INVALID_PLAYER_ID;
         }
 
         meMessageMode = E_MESSAGE_MODE_NONE;
     }
 
     // -------------------------------------------------------------------------------
+    // The same reset as Construct.
     void SyncTimeMessageManager::Destruct()
     {
-        // No owned resources to release: the slots are value-type members.
+        for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
+        {
+            mSyncMessageToSend[liPlayerIndex].Construct();
+            mSyncMessageToReceive[liPlayerIndex].Construct();
+            mNetworkPlayerID[liPlayerIndex] = KI_INVALID_PLAYER_ID;
+        }
+
+        meMessageMode = E_MESSAGE_MODE_NONE;
+    }
+
+    // -------------------------------------------------------------------------------
+    // Hand out the first receive slot whose message is pending. Retrieve consumes it,
+    // so the callers' drain loops terminate.
+    bool SyncTimeMessageManager::GetNextRecievedMessage(SyncTimeMessage** lppMessage)
+    {
+        for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
+        {
+            if (mSyncMessageToReceive[liPlayerIndex].IsMessageValid())
+            {
+                *lppMessage = &mSyncMessageToReceive[liPlayerIndex];
+                return true;
+            }
+        }
+
+        *lppMessage = nullptr;
+        return false;
     }
 
     // -------------------------------------------------------------------------------

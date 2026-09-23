@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                           // CgsSystem::Time
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // CgsNetwork::EComponents
 #include "GameSource/Network/BrnNetworkGameParams.h"                               // BrnNetwork::GameParams
+#include "GameSource/Network/Parameters/BrnNetworkGameSearchParams.h"              // BrnNetwork::GameSearchParams
 
 // ===========================================================================
 // BrnNetwork::MatchMakingManager
@@ -42,16 +43,15 @@
 // The constructor is the compiler-generated one: the console body only runs the
 // member constructors (the three GameParams, the GameSearchParams and the Time).
 //
-// FLAG: mGameSearchParameters is held as console-sized storage. Its type,
-// BrnNetwork::GameSearchParams (Parameters/BrnNetworkGameSearchParams.h), is still
-// abstract (GetCustomFlagsMask / GetCustomFlagsValue are not overridden) and 4 bytes
-// larger than its 0x390-byte console span, so it cannot be embedded by value yet.
+// CreateGame, SearchForGames and LeaveGame have no out-of-line console copy: every
+// caller inlines them. SearchForGames is inline below; CreateGame needs the complete
+// BrnNetworkManager (whose header embeds this class), so it is defined in the .cpp
+// family.
 // ===========================================================================
 
 namespace BrnNetwork
 {
     class BrnNetworkManager;
-    class GameSearchParams;     // SearchForGames param; see the FLAG above for the member
 
     class MatchMakingManager
     {
@@ -109,15 +109,16 @@ namespace BrnNetwork
         void CreateGame(const GameParams* lpGameParams, Callback lpfCallback, void* lpCallbackUserData);
         // Copies the parameters into mGameParameters, then starts JOIN_GAME, or
         // LEAVE_AND_JOIN_GAME when the local player is already in a game.
-        void JoinGame(const GameParams* lpGameParams, bool lbJoinFlag,
+        void JoinGame(const GameParams* lpGameParams, bool lbPerformingInvite,
                       Callback lpfCallback, void* lpCallbackUserData);
         void LeaveGame(Callback lpfCallback, void* lpCallbackUserData);
         // Latches the two flags into mbQuickJoinRanked / mbQuickJoinFreeburn, then starts
         // QUICK_JOIN_GAME (or LEAVE_AND_QUICK_JOIN_GAME when already in a game).
         void QuickJoinGame(bool lbRanked, bool lbFreeburn,
                            Callback lpfCallback, void* lpCallbackUserData);
-        void SearchForGames(const GameSearchParams* lpGameSearchParams,
-                            Callback lpfCallback, void* lpCallbackUserData);
+        // Copies the parameters into mGameSearchParameters, then starts SEARCH_FOR_GAMES.
+        void SearchForGames(const GameSearchParams* lpSearchParams,
+                            Callback lCallback, void* lpCallbackUserData);
         void Disconnected();
 
     private:
@@ -179,7 +180,7 @@ namespace BrnNetwork
         Callback               mCallback;                           // +0x0F8
         void*                  mpCallbackUserData;                  // +0x0FC
         GameParams             mGameParameters;                     // +0x100
-        u8                     maGameSearchParametersStorage[0x390]; // +0x6D0 GameSearchParams (FLAG above)
+        GameSearchParams       mGameSearchParameters;               // +0x6D0
         GameParams             mFoundGameA;                         // +0xA60
         GameParams             mFoundGameB;                         // +0x1030
         bool                   mbQuickJoinRanked;                   // +0x1600
@@ -202,7 +203,7 @@ namespace BrnNetwork
         BRN_MMM_AT(mCallback,             0x0F8);
         BRN_MMM_AT(mpCallbackUserData,    0x0FC);
         BRN_MMM_AT(mGameParameters,       0x100);
-        BRN_MMM_AT(maGameSearchParametersStorage, 0x6D0);
+        BRN_MMM_AT(mGameSearchParameters, 0x6D0);
         BRN_MMM_AT(mFoundGameA,           0xA60);
         BRN_MMM_AT(mFoundGameB,           0x1030);
         BRN_MMM_AT(mbQuickJoinRanked,     0x1600);
@@ -213,7 +214,15 @@ namespace BrnNetwork
         BRN_MMM_AT(mbCreateGameServerGame, 0x1611);
 #undef BRN_MMM_AT
         static_assert(sizeof(void*) != 4 || sizeof(GameParams) == 0x5D0, "GameParams is 0x5D0 bytes");
+        static_assert(sizeof(void*) != 4 || sizeof(GameSearchParams) == 0x390, "GameSearchParams is 0x390 bytes");
         static_assert(sizeof(void*) != 4 || sizeof(MatchMakingManager) == 0x1614, "MatchMakingManager is 0x1614 bytes");
+    }
+
+    inline void MatchMakingManager::SearchForGames(const GameSearchParams* lpSearchParams,
+                                                   Callback lCallback, void* lpCallbackUserData)
+    {
+        mGameSearchParameters = *lpSearchParams;
+        StartProcess(E_PROCESS_SEARCH_FOR_GAMES, lCallback, lpCallbackUserData);
     }
 }
 

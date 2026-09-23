@@ -28,9 +28,8 @@
 //     ReliableMessage::PackOrUnpack (which (de)serialises the wrapped reliable id).
 //
 // GetName is the header-homed inline accessor ("Ready Message", the literal its vtable
-// slot returns). The remaining lifecycle methods (Construct/PrepareForSend/Retrieve/
-// Release/Destruct) are bodied in their own TUs; declared here so the rest of the
-// hierarchy can call them by name.
+// slot returns). Construct and PrepareForSend are inline below; Retrieve, Release and
+// Destruct have no caller and stay declared only.
 // ===================================================================================
 
 #include "types.hpp"
@@ -55,4 +54,17 @@ namespace CgsNetwork
         // Ledger func @ 0x827DE100 -- forwards to the ReliableMessage base.
         PackOrUnpackResult PackOrUnpack() override;
     };
+
+    // Inline on the console (the start-time manager carries the copies). Construct: both
+    // player ids invalid and the base header reset. PrepareForSend: a reliable send of
+    // the ready message type (1).
+    inline void ReadyMessage::Construct()
+    {
+        MessageWithPlayerIDs::Construct();
+    }
+
+    inline void ReadyMessage::PrepareForSend(u16 lu16Frame)
+    {
+        ReliableMessage::PrepareForSend(1, lu16Frame);
+    }
 } // namespace CgsNetwork

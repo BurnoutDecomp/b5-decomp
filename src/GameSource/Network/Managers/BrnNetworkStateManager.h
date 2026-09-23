@@ -217,6 +217,8 @@ namespace BrnNetwork
         // Inline accessors (no out-of-line console body; the callers inline them).
         // The auto-login flow reads meState and compares it with the idle value.
         bool IsIdle() const { return meState == E_STATE_COUNT; }
+        // The invite manager's join step reads meState and holds off while matchmaking.
+        EState GetState() const { return meState; }
         // The buddy manager, once its retry timer elapses in limbo, stores true here.
         void CloseLimboGame() { mbCloseLimboGameWhenIdle = true; }
         // The network manager hands this to the buddy manager's Update: a game session may be

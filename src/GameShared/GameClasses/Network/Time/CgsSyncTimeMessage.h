@@ -62,4 +62,15 @@ namespace CgsNetwork
         MessageWithPlayerIDs::NetworkPlayerID mHostPlayerID;   // +0x30
         MessageWithPlayerIDs::NetworkPlayerID mClientPlayerID; // +0x34
     };
+
+    // Inline on the console (the message manager's Construct and Destruct loops carry
+    // the copies): the base header reset, both times zeroed, both player ids invalid.
+    inline void SyncTimeMessage::Construct()
+    {
+        Message::Construct();
+        mClientSendTime.SetFloatVal(0.0f);
+        mHostTime.SetFloatVal(0.0f);
+        mHostPlayerID   = -1;
+        mClientPlayerID = -1;
+    }
 } // namespace CgsNetwork
