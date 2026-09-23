@@ -28,7 +28,8 @@
 #include <cstdio>
 #include <cstring>
 
-// CGS_ASSERT link stubs for BrnCollisionTag.cpp's GetTrafficInfo (never reached here).
+// Link stubs: CGS_ASSERT for BrnCollisionTag.cpp's GetTrafficInfo, and the log sink of the opt-in
+// [crash-tricache] witness (BRN_CRASH_TRICACHE_DIAG is not set here). Neither is reached.
 namespace CgsDev
 {
 namespace Assert
@@ -36,6 +37,10 @@ namespace Assert
     int BeginAssert() { return 0; }
     int FireAssert(const char*, const char*, int) { return 0; }
     void* EndAssert() { return 0; }
+}
+namespace Log
+{
+    void WriteToLog(const char*) {}
 }
 }
 

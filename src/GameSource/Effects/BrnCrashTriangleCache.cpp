@@ -3,7 +3,11 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h"   // CgsGeometric::Triangle4 (the incoming batches)
 #include "SharedClasses/World/BrnCollisionTag.h"                        // KU_COLLISION_MASK_SURFACE_ID / KU8_COLLISION_INVISIBLE_SURFACE_ID
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // [crash-tricache] witness (CgsDev::Log::WriteToLog)
+
 #include <cmath>     // std::sqrt (the vrsqrtefp + Newton lowering in CollideWithTriangleCache)
+#include <cstdio>    // std::snprintf ([crash-tricache])
+#include <cstdlib>   // getenv        ([crash-tricache] opt-in latch)
 #include <cstring>   // std::memcpy (raw lane words)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -121,6 +125,48 @@ namespace BrnEffects
         //       == 0x3727C5AC == 1.0e-5f. The barycentric / segment slack, scaled by the determinant.
         const f32 KF_RTINTSECEPSILON = 1.0e-8f;
         const f32 KF_RTINTSECEDGEEPS = 1.0e-5f;
+
+        // -----------------------------------------------------------------------------------------
+        // ---- [crash-tricache] PC witness -- DELETE WHEN the debris chain that reads this cache
+        //      (UpdateBucket -> CollideWithTriangleCache) is live and carries its own witness ----
+        // OPT-IN (BRN_CRASH_TRICACHE_DIAG=1): unarmed, the latch reads 0 once and nothing below
+        // prints, so a default run is unchanged. It exists because the fill is LATENT on PC -- no
+        // reader consumes the cache yet -- so only a line in the log can show that AddTriangles is
+        // dispatched on a player crash and that real world triangles now enter the cache. Printed
+        // on the first fill after a counter reset, whenever the fill cursors move, and every 60th
+        // call otherwise. `skip` counts the lanes the surface / valid-mask test turned away; the
+        // counters are this cache's own members after the call.
+        // -----------------------------------------------------------------------------------------
+        bool IsCrashTriCacheDiagArmed()
+        {
+            static s32 siArmed = -1;
+            if (siArmed < 0)
+            {
+                const char* lpcEnv = getenv("BRN_CRASH_TRICACHE_DIAG");
+                siArmed = (lpcEnv != NULL && lpcEnv[0] != '\0' && lpcEnv[0] != '0') ? 1 : 0;
+            }
+            return siArmed == 1;
+        }
+
+        void ReportCrashTriCacheFill(u32 luBatches, u32 luSkippedLanes,
+                                     u32 luCountBefore, u32 luPackBefore, u32 luComponentBefore,
+                                     u32 luCount, u32 luPack, u32 luComponent)
+        {
+            static u32 suCalls = 0u;
+            ++suCalls;
+            const bool lbMoved = (luCount != luCountBefore) || (luPack != luPackBefore) || (luComponent != luComponentBefore);
+            const bool lbFresh = (luCountBefore == 0u) && (luPackBefore == 0u) && (luComponentBefore == 0u);
+            if (!lbMoved && !lbFresh && (suCalls % 60u) != 0u)
+            {
+                return;
+            }
+            char lacLine[200];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[crash-tricache] add call=%u batches=%u skip=%u count %u->%u pack %u->%u comp %u->%u\n",
+                          suCalls, luBatches, luSkippedLanes, luCountBefore, luCount,
+                          luPackBefore, luPack, luComponentBefore, luComponent);
+            CgsDev::Log::WriteToLog(lacLine);
+        }
     }
 
     void BrnCrashTrianglePackedFormat::Clear()
@@ -174,6 +220,12 @@ namespace BrnEffects
         BrnCrashTrianglePackedFormat laPackedTriangles[KU_TRIANGLES_PER_PACK];
         bool labMaskValues[KU_TRIANGLES_PER_PACK];
 
+        // [crash-tricache] witness inputs (see IsCrashTriCacheDiagArmed; not console state).
+        const u32 luDiagCountBefore     = mnNumberOfPackedTriangles;
+        const u32 luDiagPackBefore      = mnNextPackedTriangleToFill;
+        const u32 luDiagComponentBefore = mnNextComponentToFill;
+        u32 luDiagSkippedLanes = 0u;
+
         for (u32 lnTriangleLoop = 0; lnTriangleLoop < lnNum4Triangles; ++lnTriangleLoop)
         {
             // The nine vertex members at T+0x00..T+0x80 (r31 = T+0x20: loads at r31-0x20 .. r31+0x60).
@@ -207,10 +259,18 @@ namespace BrnEffects
                     lbSkipTriangle = CompEqualVmx(GetLane(lpIncomingTriangles->mValidMasks, luComponent), 0.0f);   // T+0x90
                 }
                 labMaskValues[luComponent] = lbSkipTriangle;
+                luDiagSkippedLanes += lbSkipTriangle ? 1u : 0u;
             }
 
             CheckForDuplicateTriangles(laPackedTriangles, labMaskValues);
             ++lpIncomingTriangles;                                                                 // +0xE0
+        }
+
+        if (IsCrashTriCacheDiagArmed())
+        {
+            ReportCrashTriCacheFill(lnNum4Triangles, luDiagSkippedLanes,
+                                    luDiagCountBefore, luDiagPackBefore, luDiagComponentBefore,
+                                    mnNumberOfPackedTriangles, mnNextPackedTriangleToFill, mnNextComponentToFill);
         }
     }
 
