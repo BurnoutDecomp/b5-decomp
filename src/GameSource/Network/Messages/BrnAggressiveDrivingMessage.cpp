@@ -107,8 +107,8 @@ namespace BrnNetwork
             lrRecord.meTakedownType = static_cast<BrnGameState::ETakedownType>(liTakedownType);
 
             // Aggressor / victim player ids through the NetworkPlayerID primitive.
-            lxResult = BrnNetworkManager::PackOrUnpack(this, &lrRecord.mAggressorNetworkPlayerID) | lxResult;
-            lxResult = BrnNetworkManager::PackOrUnpack(this, &lrRecord.mVictimNetworkPlayerID)    | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mAggressorNetworkPlayerID) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mVictimNetworkPlayerID)    | lxResult;
 
             // Two boolean flags.
             lxResult = CgsNetwork::PackOrUnpackBool(this, &lrRecord.mbMarkedMan)    | lxResult;

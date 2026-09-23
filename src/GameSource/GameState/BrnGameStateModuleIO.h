@@ -407,6 +407,11 @@ namespace GameStateModuleIO
     // ========================================================================
     struct PreWorldInputBuffer : public CgsModule::IOBuffer
     {
+        // Raises the base status byte, clears the timer block and the controller-input bytes,
+        // constructs every embedded queue and clears the player-status and player-results
+        // interfaces. Body in the .cpp.
+        void Construct();
+
         // X360 0x823632F8 (read-lock; "Not locked for reading", line 377)
         const ControllerInput*                GetControllerInput() const;
         // X360 0x8231CD80 (read-lock; "Not locked for reading", line 130)
@@ -760,11 +765,14 @@ namespace GameStateModuleIO
         // (they overshoot by 4 too): everything after slides 4 bytes past its console offset, which
         // is inert because every access to this buffer is BY NAMED MEMBER and the buffer is
         // heap-allocated at sizeof. Keeping the console's 540 would be the bug -- a 544-byte object
-        // viewed through a 540-byte blob, overlapping mGameStateToControllerInterface. The .cpp
-        // carries the static_assert that keeps that claim honest.
+        // viewed through a 540-byte blob, overlapping mGameStateToControllerInterface.
+        // _AssertLayout carries the static_assert that keeps that claim honest.
         static const s32 KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE = 544; // console span is 0x43AC - 0x4190 == 540
         u8  mTakedownEventOutputQueueStorage[0x4190 - 0x4040];            // TakedownEventOutputQueue     @ +0x4040 (16448, 336)
-        u8  mGameStateToNetworkInterfaceStorage[KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE]; // GameStateToNetworkInterface @ console +0x4190 (16784)
+        // Typed by value so Construct can build it by name (its dirty-trick queue Construct
+        // and its Clear are on the console's construct list); host size pinned to the seat
+        // width above in _AssertLayout.
+        BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface mGameStateToNetworkInterface; // console +0x4190 (16784)
         GameStateToControllerInterface mGameStateToControllerInterface;   // console +0x43AC (17324, named opaque)
         u8  maPadToGameStateToGui[0x4450 - (0x43AC + sizeof(GameStateToControllerInterface))]; // -> +0x4450
         // ⭐ 2026-08-27 (stunt-races frontier round 2, defect D2): was
@@ -864,6 +872,11 @@ namespace GameStateModuleIO
         // this has to be a member-fn context. NEVER CALLED.
         static void _AssertLayout()
         {
+            // The GameState->Network interface keeps the host seat width the members after it
+            // were laid out against.
+            static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface)
+                              == KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE,
+                          "GameStateToNetworkInterface host size == its +0x4190 seat");
             // The two interfaces are ADJACENT, with nothing between them: the console span
             // between them is exactly one SetUpAllEventStartsInterface wide.
             static_assert(offsetof(OutputBuffer, mSpecificGameModeEventInterface)

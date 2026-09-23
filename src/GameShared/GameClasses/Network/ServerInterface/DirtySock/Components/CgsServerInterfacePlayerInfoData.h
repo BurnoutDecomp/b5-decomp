@@ -13,30 +13,31 @@
 // id/rank/locality, the converted player-info + hardware flag sets, etc.).
 // Derives from ServerInterfaceStructureInterface (vptr-only polymorphic base).
 //
-// LAYOUT (dwarfdump + X360 asm @ 0x828798A8 SerialiseFromUser). Offsets are the
-// exact strncpy/store destinations the asm uses (this == r23):
+// LAYOUT (console offsets from SerialiseFromUser's stores; member names and order
+// follow the reference declaration, each field matched to the lobby user field it
+// is filled from):
 //   +0x00  vptr
-//   +0x04  macName[16]
-//   +0x14  macMotto[132]
-//   +0x98  macLocation[20]
-//   +0xAC  macClanTag[8]
-//   +0xB4  macTitleId[8]
-//   +0xBC  maAttr[4]              (4 bytes, copied byte-for-byte)
-//   +0xC0  miID                   (s32)   (0 -> -1)
-//   +0xC4  muInfoFlags            (u32)   folded from lobby user flags
-//   +0xC8  miRank                 (s32)
-//   +0xCC  miLocality             (s32)
-//   +0xD0  miGameID               (s32)
-//   +0xD4  mi0xD4 / miField_D4     (s32)
-//   +0xD8  mi0xD8                  (s32)
-//   +0xDC  mi0xDC                  (s32)
-//   +0xE0  mi0xE0                  (s32)
-//   +0xE4  mi0xE4                  (s32)
-//   +0xE8  muHWFlags              (u32)   ConvertHWFlags(...)
-//   +0xEC  mi0xEC                  (s32)
-//   +0xF0  mi0xF0                  (s32)
-// The trailing scalar fields keep raw offset names (mi0x..) where the DWARF gives
-// no descriptive name; their stores are reproduced verbatim from the asm.
+//   +0x04  macName[16]            <- user name
+//   +0x14  macAuxiliaryData[132]  <- user aux
+//   +0x98  macClubID[20]          <- user club id
+//   +0xAC  macClubTag[8]          <- user club tag
+//   +0xB4  macPing[8]             <- user ping
+//   +0xBC  maColour[4]            <- user colour (4 bytes, copied byte-for-byte)
+//   +0xC0  miIdent                <- user ident (0 -> -1)
+//   +0xC4  miFlags                <- user flags, folded onto the player-info flags
+//   +0xC8  miAttributes           <- user attr
+//   +0xCC  miRank                 <- user rank (GetRank)
+//   +0xD0  miGameID               <- user game
+//   +0xD4  miReputation           <- user reputation
+//   +0xD8  miUserSetID            <- user userset ident
+//   +0xDC  muIPAddress            <- user addr
+//   +0xE0  muLevel                <- user level
+//   +0xE4  muMedals               <- user medals
+//   +0xE8  muHwFlags              <- ConvertHWFlags(user hardware flags)
+//   +0xEC  muLocalAddr            <- user local addr
+//   +0xF0  muLocality             <- user locality (GetLocality)
+// The create / modify game paths read +0xCC as the player's skill level and +0xF0
+// as the host locality; the stats writer reads +0xCC through GetRank.
 // ===========================================================================
 
 namespace CgsNetwork
@@ -97,31 +98,31 @@ namespace CgsNetwork
 
         // CgsServerInterfacePlayerInfoData.h accessors.
         const char* GetName() const { return macName; }
-        s32 GetID() const { return miID; }
+        s32 GetID() const { return miIdent; }
         s32 GetRank() const { return miRank; }
-        u32 GetLocality() const { return static_cast<u32>(miLocality); }
+        u32 GetLocality() const { return muLocality; }
         s32 GetGameID() const { return miGameID; }
 
     protected:
-        char macName[16];        // +0x04
-        char macMotto[132];      // +0x14
-        char macLocation[20];    // +0x98
-        char macClanTag[8];      // +0xAC
-        char macTitleId[8];      // +0xB4
-        u8   maAttr[4];          // +0xBC
-        s32  miID;               // +0xC0
-        u32  muInfoFlags;        // +0xC4
-        s32  miRank;             // +0xC8
-        s32  miLocality;         // +0xCC
-        s32  miGameID;           // +0xD0
-        s32  miField_D4;         // +0xD4
-        s32  miField_D8;         // +0xD8
-        s32  miField_DC;         // +0xDC
-        s32  miField_E0;         // +0xE0
-        s32  miField_E4;         // +0xE4
-        u32  muHWFlags;          // +0xE8
-        s32  miField_EC;         // +0xEC
-        s32  miField_F0;         // +0xF0
+        char macName[16];            // +0x04
+        char macAuxiliaryData[132];  // +0x14
+        char macClubID[20];          // +0x98
+        char macClubTag[8];          // +0xAC
+        char macPing[8];             // +0xB4
+        u8   maColour[4];            // +0xBC
+        s32  miIdent;                // +0xC0
+        s32  miFlags;                // +0xC4
+        s32  miAttributes;           // +0xC8
+        s32  miRank;                 // +0xCC
+        s32  miGameID;               // +0xD0
+        s32  miReputation;           // +0xD4
+        s32  miUserSetID;            // +0xD8
+        u32  muIPAddress;            // +0xDC
+        u32  muLevel;                // +0xE0
+        u32  muMedals;               // +0xE4
+        u32  muHwFlags;              // +0xE8
+        u32  muLocalAddr;            // +0xEC
+        u32  muLocality;             // +0xF0
     };
 }
 

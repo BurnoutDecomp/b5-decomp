@@ -219,6 +219,9 @@ namespace BrnNetwork
         bool IsIdle() const { return meState == E_STATE_COUNT; }
         // The buddy manager, once its retry timer elapses in limbo, stores true here.
         void CloseLimboGame() { mbCloseLimboGameWhenIdle = true; }
+        // The network manager hands this to the buddy manager's Update: a game session may be
+        // joined once the state manager is ready for one and no loading screen is up.
+        bool IsReadyToJoinGameSession() const { return !mbLoadingScreenVisible && mbReadyToJoinGameSession; }
 
     private:
         // ---- event processing (UpdateEvents) -------------------------------------------

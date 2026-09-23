@@ -23,6 +23,9 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BrnGameState::BurnoutSkillzData
 #include "SharedClasses/StreetData/BrnChallengeData.h"           // BrnStreetData::ChallengePlayerScoreEntry
 #include "SharedClasses/World/BrnWorldRegion.h"                  // BrnWorld::WorldRegion
+#include "GameSource/GameState/BrnCgsPlayerName.h"               // CgsNetwork::PlayerName (16 bytes)
+
+#include <cstddef>   // offsetof (layout pins)
 
 namespace CgsNetwork
 {
@@ -31,11 +34,21 @@ namespace CgsNetwork
 
 namespace BrnGameState { struct StreetManager; }             // NetworkInRoadRulesDataEvent (held by pointer only)
 namespace BrnNetwork { struct LocalEventScoreUploadData; }  // NetworkInNonUploadedScoresEvent (held by pointer only)
+namespace BrnNetwork { struct LiveRevengeProfile; }         // NetworkInLiveRevengeProfileLoaded (held by pointer only)
 
 namespace BrnNetwork
 {
 namespace BrnNetworkModuleIO
 {
+    // The camera-feed user setting (options screen, saved in the GUI options profile at
+    // +0x7364, carried to the network side by NetworkInSettingsUpdateEvent).
+    enum ECameraUserOptions
+    {
+        CAMERA_USER_OFF          = 0,
+        CAMERA_USER_ON           = 1,
+        CAMERA_USER_FRIENDS_ONLY = 2,
+    };
+
     // The IN-event that delivers a player's accumulated offline-play progress to the network
     // player-stats manager (tag 33). NetworkPlayerStatsManager::HandleOfflineProgressionEvent
     // copies exactly 0x44 bytes of it and reads the word at +0x40 as the freeburn-challenge
@@ -352,5 +365,102 @@ namespace BrnNetworkModuleIO
     {
         const Array<LocalEventScoreUploadData, 49>* mpNonUploadedScores;  // +0x00
     };
+
+    // ====================================================================================
+    // The IN-events BrnGameModule::TranslateGuiEventsToNetworkEvents queues (tags and sizes
+    // are the translator's AddEvent immediates) and StateManager::ProcessNetworkEvents drains.
+    // ====================================================================================
+
+    // The Guide's friends UI closed. Empty signal, queued as one byte.
+    struct NetworkInFriendsUtilShut : public NetworkEvent<6> {};
+
+    // Invite a buddy (an empty name: sign in and create a game first). 16 bytes.
+    struct NetworkInSendInvite : public NetworkEvent<8>
+    {
+        CgsNetwork::PlayerName mBuddyToSendTo;                    // +0x00
+    };
+
+    // Revoke an invite. 17 bytes.
+    struct NetworkInRevokeInvite : public NetworkEvent<9>
+    {
+        CgsNetwork::PlayerName mBuddyToRevokeInviteTo;            // +0x00
+        bool                   mbHasOnlineGameBeenStarted;        // +0x10
+    };
+
+    // Empty signals, queued as one byte.
+    typedef NetworkEvent<14> NetworkInInstantFreeburn;
+
+    // The voice-chat volume option changed (the option screen's 0..10 step). 4 bytes.
+    struct NetworkInVoipEvent : public NetworkEvent<17>
+    {
+        s32 miVoipVolume;                                         // +0x00
+    };
+
+    // The camera-feed option changed. 4 bytes.
+    struct NetworkInSettingsUpdateEvent : public NetworkEvent<23>
+    {
+        ECameraUserOptions meCameraFeedSetting;                   // +0x00
+    };
+
+    // The live-revenge profile finished loading. Console 4 bytes; the pointer is 8 bytes on
+    // the host.
+    struct NetworkInLiveRevengeProfileLoaded : public NetworkEvent<24>
+    {
+        LiveRevengeProfile* mpLiveRevengeProfile;                 // +0x00
+    };
+
+    // Empty signals, queued as one byte.
+    typedef NetworkEvent<25> NetworkInLoadingScreenShown;
+    typedef NetworkEvent<26> NetworkInLeftPostEvent;
+    typedef NetworkEvent<27> NetworkInCancelLogin;
+    struct NetworkInLeavingJunkyard : public NetworkEvent<28> {};
+
+    // FLAG name (console-only tag): the scoreboard's "challenge this score" request, handed to
+    // ScoreboardManager::HandleEvScoreTargetEvent. 36 bytes. The translator copies the GUI
+    // request's name to +0x00, its four words to +0x10..+0x1C and its flag to +0x20.
+    struct NetworkInScoreTargetEvent : public NetworkEvent<50>
+    {
+        CgsNetwork::PlayerName mPlayerName;                       // +0x00
+        s32                    miScore;                           // +0x10
+        s32                    miCategory;                        // +0x14
+        s32                    miIndex;                           // +0x18
+        s32                    miVariation;                       // +0x1C
+        bool                   mbIsCurrentTarget;                 // +0x20
+    };
+
+    // Empty signal, queued as one byte.
+    typedef NetworkEvent<51> NetworkInRequestAccountSettings;
+
+    // The account's data-sharing settings were edited. 3 bytes.
+    struct NetworkInAccountUpdate : public NetworkEvent<52>
+    {
+        bool mbAgreeToShareInfoEA;                                // +0x00
+        bool mbAgreeToShareInfoPartners;                          // +0x01
+        bool mbTelemetryEnable;                                   // +0x02
+    };
+
+    // Layout pins for the pointer-free records above (console offsets and AddEvent sizes).
+    // Never called.
+    inline void AssertNetworkInGuiEventLayouts()
+    {
+        static_assert(sizeof(NetworkInFriendsUtilShut) == 1, "tag 6 size");
+        static_assert(sizeof(NetworkInSendInvite) == 16, "tag 8 size");
+        static_assert(offsetof(NetworkInRevokeInvite, mbHasOnlineGameBeenStarted) == 0x10, "tag 9 +0x10");
+        static_assert(sizeof(NetworkInRevokeInvite) == 17, "tag 9 size");
+        static_assert(sizeof(NetworkInInstantFreeburn) == 1, "tag 14 size");
+        static_assert(sizeof(NetworkInVoipEvent) == 4, "tag 17 size");
+        static_assert(sizeof(NetworkInSettingsUpdateEvent) == 4, "tag 23 size");
+        static_assert(sizeof(NetworkInLoadingScreenShown) == 1, "tag 25 size");
+        static_assert(sizeof(NetworkInLeftPostEvent) == 1, "tag 26 size");
+        static_assert(sizeof(NetworkInCancelLogin) == 1, "tag 27 size");
+        static_assert(sizeof(NetworkInLeavingJunkyard) == 1, "tag 28 size");
+        static_assert(offsetof(NetworkInScoreTargetEvent, miScore) == 0x10, "tag 50 +0x10");
+        static_assert(offsetof(NetworkInScoreTargetEvent, miVariation) == 0x1C, "tag 50 +0x1C");
+        static_assert(offsetof(NetworkInScoreTargetEvent, mbIsCurrentTarget) == 0x20, "tag 50 +0x20");
+        static_assert(sizeof(NetworkInScoreTargetEvent) == 36, "tag 50 size");
+        static_assert(sizeof(NetworkInRequestAccountSettings) == 1, "tag 51 size");
+        static_assert(offsetof(NetworkInAccountUpdate, mbTelemetryEnable) == 0x02, "tag 52 +0x02");
+        static_assert(sizeof(NetworkInAccountUpdate) == 3, "tag 52 size");
+    }
 }
 } // namespace BrnNetwork

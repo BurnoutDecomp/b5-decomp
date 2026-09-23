@@ -122,7 +122,7 @@ namespace BrnNetwork
 
         lxResult |= CgsNetwork::PackOrUnpackU8(this, &mu8RoundNumber,
                                                KU8_MIN_NUM_ROUNDS, KU8_MAX_NUM_ROUNDS);
-        lxResult |= BrnNetwork::BrnNetworkManager::PackOrUnpack(this, &mEliminatorNetworkPlayerID);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mEliminatorNetworkPlayerID);
         lxResult |= CgsNetwork::PackOrUnpackTime(this, &mFinishTime, KF_FINISH_TIME_RESOLUTION);
 
         // A valid distance must never equal the in-range invalid sentinel.

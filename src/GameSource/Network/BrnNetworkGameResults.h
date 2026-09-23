@@ -1,6 +1,8 @@
 #ifndef BRN_NETWORK_GAME_RESULTS_H
 #define BRN_NETWORK_GAME_RESULTS_H
 
+#include <cstddef>   // offsetof (_AssertLayout)
+
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceEndGameData.h"
 
@@ -30,15 +32,22 @@
 //     per-round OnlineGameResults plus the rival count).
 // The full game-specific result-field layout is owned by this type's own
 // (not-yet-homed) behavioural TU; no field bytes beyond the inherited
-// ServerInterfaceEndGameDataX360 payload are fabricated here. SetGameStats is
-// declared-only (its body lands with the GameResults TU); the embedded-by-value
-// storage is exactly the inherited base payload, which keeps PostRoundManager's
-// mGameResults a complete object for `cl /c`.
+// ServerInterfaceEndGameDataX360 payload are fabricated here.
+//
+// The result payload is console +0x04..+0xE0 (ClearGameData zeroes exactly that span):
+// the inherited maResultWords[16] (+0x04..+0x44) followed by maCustomResults (+0x44..+0xE0),
+// so the object is 0xE0 bytes on the console. The bodies address payload fields by their
+// console offsets from GetPayloadBase() (the object start as the console lays it out: the
+// payload's first byte, maResultWords, sits at +0x04 from it), which keeps every field on the
+// right byte although the host vptr is wider.
 // ===========================================================================
 
-namespace GameStateModuleIO
+namespace BrnGameState
 {
-    struct OnlineGameResults;   // SetGameStats input (home: BrnGameActions.h)
+    namespace GameStateModuleIO
+    {
+        struct OnlineGameResults;   // SetGameStats input (home: BrnGameActions.h)
+    }
 }
 
 namespace BrnNetwork
@@ -58,7 +67,7 @@ namespace BrnNetwork
         // Fill the end-game result payload from the round-by-round results and the
         // number of online rivals (X360: called from PostRoundManager::ProcessRaceResults
         // after the inherited Prepare()). Declared-only; bodied in the GameResults TU.
-        void SetGameStats(const GameStateModuleIO::OnlineGameResults* lpRaceResults,
+        void SetGameStats(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpRaceResults,
                           s32 liNumberOfRivals);
 
         // DWARF BrnNetworkGameResults.h:50 -- event-type index produced by
@@ -97,13 +106,27 @@ namespace BrnNetwork
         // (the asm treats it as int). (DWARF cpp:266)
         EEventType GameModeToEvent(s32 liGameMode);
 
+        // The payload's console base: its +0x04 is maResultWords[0] (see the header note).
+        u8* GetPayloadBase() { return reinterpret_cast<u8*>(maResultWords) - 0x04; }
+        const u8* GetPayloadBase() const { return reinterpret_cast<const u8*>(maResultWords) - 0x04; }
+
+        // Console layout, pinned in a 32-bit build; inert on the x64 host.
+        static void _AssertLayout();
+
     protected:
-        // +0x44  leaf custom-results tail. Begins right after the inherited
-        // {vptr + maResultWords[16]} (base size 0x44); SerialiseToString @ 0x82584600
-        // reaches records by absolute byte offset from `this`, so no per-field names
-        // are asserted. Sized as a safe UPPER BOUND -- max entry count unattested.
-        u8 maCustomResults[0x200];   // +0x44
+        // +0x44  leaf custom-results tail, right after the inherited {vptr + maResultWords[16]}
+        // (base size 0x44), up to the payload end at +0xE0: the ten RACE records
+        // (+0x40..+0x90, starting inside the base words) and the ten STUNT records
+        // (+0x90..+0xE0), 8 bytes each. SerialiseToString reaches records by console byte
+        // offset, so no per-field names are asserted.
+        u8 maCustomResults[0x9C];   // +0x44
     };
+
+    inline void GameResults::_AssertLayout()
+    {
+        static_assert(sizeof(void*) != 4 || offsetof(GameResults, maCustomResults) == 0x44, "maCustomResults @ +0x44");
+        static_assert(sizeof(void*) != 4 || sizeof(GameResults) == 0xE0, "GameResults is 0xE0 bytes");
+    }
 }
 
 #endif // BRN_NETWORK_GAME_RESULTS_H

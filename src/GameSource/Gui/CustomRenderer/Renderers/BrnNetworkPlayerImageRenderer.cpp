@@ -417,7 +417,7 @@ namespace BrnGui
                 std::snprintf(lacMsg, sizeof(lacMsg),
                     "[netimg] RECV258 n=%u tex=%p idx=%d copyTo=%d render=%d "
                     "renderTexture=%d useDefault=%d\n",
-                    guNetImgRecv258, static_cast<void*>(lpImageEvent->mpTexture),
+                    guNetImgRecv258, static_cast<const void*>(lpImageEvent->mpTexture),
                     static_cast<int>(lpImageEvent->miTextureIndex),
                     static_cast<int>(miCurrentCopyToTexture),
                     static_cast<int>(miCurrentRenderTexture),

@@ -67,8 +67,8 @@ namespace BrnNetwork
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
 
-        lxResult |= BrnNetwork::BrnNetworkManager::PackOrUnpack(this, &mImageSenderPlayerID);
-        lxResult |= BrnNetwork::BrnNetworkManager::PackOrUnpack(this, &mImageReceiverPlayerID);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mImageSenderPlayerID);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mImageReceiverPlayerID);
         lxResult |= CgsNetwork::PackOrUnpackU8(this, &mu8ImageType, 0, 6);
         lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16PhotoPacketNumber, 0, KI_MAX_PHOTO_PACKETS);
         lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16TotalPhotoPacketCount, 0, KI_MAX_PHOTO_PACKETS);

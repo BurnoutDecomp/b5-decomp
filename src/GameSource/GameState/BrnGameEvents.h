@@ -39,6 +39,15 @@ enum EGameEventType
     E_EVENT_ONLINE_PLAYER_REMOVED   = 129,   // posted as 129 by TranslateNetworkEventsToGameEvents
     E_EVENT_START_NETWORK_GAME      = 17,    // DWARF BrnGameEvents.h (full contiguous EGameEventType)
     E_EVENT_START_NETWORK_ROUND     = 18,    // DWARF BrnGameEvents.h
+    // Network state manager signals. 16 and 22 equal the reference ids; 27 and 60 sit one
+    // below them (reference 28 / 61), the same drift the ids 31..36 above carry. Each value is
+    // the producer's AddEvent immediate and a GameStateModule::ProcessGameEvents case.
+    E_EVENT_ONLINE_CAR_SELECT          = 16,    // StateManager::UpdateLaunching, 1 byte
+    E_EVENT_FINISHED_SYNCING_PLAYERS   = 22,    // StateManager::UpdateSyncTime, 1 byte
+    E_EVENT_PLAYER_EXITED_MODE         = 27,    // StateManager::ProcessGuiEvents, 1 byte; case 27 cancels the mode
+    E_EVENT_PREPARED_FOR_INVITE        = 60,    // StateManager::PrepareForInvite, 4 bytes
+    E_EVENT_LOCAL_PLAYER_DISCONNECTED  = 123,   // BrnNetworkManager::ProcessHLUpdateFlags and
+                                                // ::TriggerEventFromServerInterface, 1 byte
     // Posted as 121 by TranslateNetworkEventsToGameEvents; ProcessGameEvents' case 121 is the
     // arm that turns it into the remote-player-disconnected action.
     E_EVENT_REMOTE_PLAYER_DISCONNECTED = 121,
@@ -312,17 +321,36 @@ struct RequestPropProgression : public GameEvent<E_EVENT_REQUEST_PROP_PROGRESSIO
 {
 };
 
-// FLAG (minimal home): FinishedSyncingPlayersEvent -- a BrnGameState::GameStateModuleIO network-sync
-// notification event queued by BrnNetwork::StateManager::UpdateSyncTime via
-// CgsModule::VariableEventQueue<1536,16>::AddEvent<FinishedSyncingPlayersEvent> @ 0x82566168, which
-// forwards liSize == sizeof(EventT) == 1 (li r6,1 @ 0x82566204). Neither the member layout nor the
-// EGameEventType discriminant is attested by any decompiled caller or by DWARF (the sole caller
-// UpdateSyncTime is not yet decompiled), so this is homed at the asm-attested size only: a 1-byte
-// opaque marker. Grow to the real GameEvent<E_EVENT_...> shape once the caller is recovered.
-struct FinishedSyncingPlayersEvent
+// The network state manager's "every player is synced" signal. Empty: AddEvent copies one byte.
+struct FinishedSyncingPlayersEvent : public GameEvent<E_EVENT_FINISHED_SYNCING_PLAYERS>
 {
-    u8 muPad0;   // 0x00 -- asm-attested size (1) only; real field(s)/discriminant unknown
 };
+static_assert(sizeof(FinishedSyncingPlayersEvent) == 1, "posted with size 1");
+
+// Online car selection starts (posted once a launch succeeds). Empty signal.
+struct OnlineCarSelectEvent : public GameEvent<E_EVENT_ONLINE_CAR_SELECT>
+{
+};
+static_assert(sizeof(OnlineCarSelectEvent) == 1, "posted with size 1");
+
+// The player left the current mode; ProcessGameEvents answers with ModeManager::
+// UserCancelCurrentMode and TakedownManager::ClearRaceCarData. Empty signal.
+struct PlayerExitedModeEvent : public GameEvent<E_EVENT_PLAYER_EXITED_MODE>
+{
+};
+static_assert(sizeof(PlayerExitedModeEvent) == 1, "posted with size 1");
+
+// A module finished preparing for an invite. The payload is the module
+// (EModulePreparedForInvite: 0 game state, 1 network); the network state manager posts 1.
+struct PreparedForInviteEvent : public GameEvent<E_EVENT_PREPARED_FOR_INVITE>
+{
+    s32 meModulePreparedForInvite;   // +0x00 FLAG: typed s32 until EModulePreparedForInvite has a home
+};
+static_assert(sizeof(PreparedForInviteEvent) == 4, "posted with size 4");
+
+// The local player lost the connection. Empty signal.
+typedef GameEvent<E_EVENT_LOCAL_PLAYER_DISCONNECTED> LocalPlayerDisconnectedEvent;
+static_assert(sizeof(LocalPlayerDisconnectedEvent) == 1, "posted with size 1");
 
 // mNetworkPlayerID at offset 0. 32 bytes: the network bridge builds it from
 // the network OUT record 18 and ProcessGameEvents case 7 reads it. The float at +0x18 is a
@@ -427,15 +455,19 @@ struct StartNetworkGameEvent : public GameEvent<E_EVENT_START_NETWORK_GAME>
     bool                        mbForceStartFreeburnLobby;                // 0xFA (250)
 
     void Clear();
+    // Reference shape plus the console's f32 after the paint-finish index (it lands in
+    // mafPlayerData). The wheel id is taken and not stored. lbIsHost makes this slot the
+    // host's grid position.
     void SetPlayerData(s32                         liPlayerIndex,
-                       BrnNetwork::NetworkPlayerID liNetworkPlayerID,
+                       BrnNetwork::NetworkPlayerID lNetworkPlayerID,
                        CgsID                       lCarId,
-                       f32                         lfPlayerData,
+                       CgsID                       lWheelId,
                        u16                         lu16CarColourIndex,
                        u16                         lu16CarPaintFinishIndex,
+                       f32                         lfPlayerData,
                        EPlayerTeam                 lePlayerTeam,
-                       bool                        lbPlayerHasFever,
-                       bool                        lbUpdateLocalNetworkPlayerID);
+                       bool                        lbIsHost,
+                       bool                        lbPlayerHasFever);
 };
 
 // X360 element copied as 10 dwords (40 bytes) by NetworkRoundManager::NetworkRoundStarted

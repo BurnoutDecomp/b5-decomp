@@ -104,32 +104,32 @@ s32 ConvertHWFlags(s32 liFlags, EConversionFlags leDirection)
 
 bool ServerInterfacePlayerInfoDataBase::Prepare()
 {
-    // Zero the string / attr buffers (the X360 XMemSet moves @ 0x828797FC..0x82879840)
-    // then reset each scalar (the run of stw @ 0x82879850..0x82879890). miID starts at -1.
-    std::memset(macName,     0, sizeof(macName));      // +0x04, 16
-    std::memset(macMotto,    0, sizeof(macMotto));     // +0x14, 132
-    std::memset(macLocation, 0, sizeof(macLocation));  // +0x98, 20
-    std::memset(macClanTag,  0, sizeof(macClanTag));   // +0xAC, 8
-    std::memset(macTitleId,  0, sizeof(macTitleId));   // +0xB4, 8
+    // Zero the string / colour buffers, then reset each scalar in member order.
+    // The ident starts at -1.
+    std::memset(macName,          0, sizeof(macName));           // +0x04, 16
+    std::memset(macAuxiliaryData, 0, sizeof(macAuxiliaryData));  // +0x14, 132
+    std::memset(macClubID,        0, sizeof(macClubID));         // +0x98, 20
+    std::memset(macClubTag,       0, sizeof(macClubTag));        // +0xAC, 8
+    std::memset(macPing,          0, sizeof(macPing));           // +0xB4, 8
 
-    maAttr[0]   = 0;   // +0xBC
-    maAttr[1]   = 0;   // +0xBD
-    maAttr[2]   = 0;   // +0xBE
-    maAttr[3]   = 0;   // +0xBF
+    maColour[0]  = 0;   // +0xBC
+    maColour[1]  = 0;   // +0xBD
+    maColour[2]  = 0;   // +0xBE
+    maColour[3]  = 0;   // +0xBF
 
-    miID        = -1;  // +0xC0
-    muInfoFlags = 0;   // +0xC4
-    miRank      = 0;   // +0xC8
-    miLocality  = 0;   // +0xCC
-    miGameID    = 0;   // +0xD0
-    miField_D4  = 0;   // +0xD4
-    miField_D8  = 0;   // +0xD8
-    miField_DC  = 0;   // +0xDC
-    miField_E0  = 0;   // +0xE0
-    miField_E4  = 0;   // +0xE4
-    muHWFlags   = 0;   // +0xE8
-    miField_EC  = 0;   // +0xEC
-    miField_F0  = 0;   // +0xF0
+    miIdent      = -1;  // +0xC0
+    miFlags      = 0;   // +0xC4
+    miAttributes = 0;   // +0xC8
+    miRank       = 0;   // +0xCC
+    miGameID     = 0;   // +0xD0
+    miReputation = 0;   // +0xD4
+    miUserSetID  = 0;   // +0xD8
+    muIPAddress  = 0;   // +0xDC
+    muLevel      = 0;   // +0xE0
+    muMedals     = 0;   // +0xE4
+    muHwFlags    = 0;   // +0xE8
+    muLocalAddr  = 0;   // +0xEC
+    muLocality   = 0;   // +0xF0
 
     return true;
 }
@@ -138,38 +138,39 @@ bool ServerInterfacePlayerInfoDataBase::SerialiseFromUser(const void* lpUser)
 {
     CGS_ASSERT(lpUser != 0, "lpUser");
 
+    // Lobby user record fields, by byte offset (the record type has no home here).
     const u8* lpcRec = static_cast<const u8*>(lpUser);
 
-    StrnCpyChecked(macName,     reinterpret_cast<const char*>(lpcRec + 0x008), 16);
-    StrnCpyChecked(macMotto,    reinterpret_cast<const char*>(lpcRec + 0x12C), 132);
-    StrnCpyChecked(macLocation, reinterpret_cast<const char*>(lpcRec + 0x218), 20);
-    StrnCpyChecked(macClanTag,  reinterpret_cast<const char*>(lpcRec + 0x22C), 8);
-    StrnCpyChecked(macTitleId,  reinterpret_cast<const char*>(lpcRec + 0x018), 8);
+    StrnCpyChecked(macName,          reinterpret_cast<const char*>(lpcRec + 0x008), 16);   // name
+    StrnCpyChecked(macAuxiliaryData, reinterpret_cast<const char*>(lpcRec + 0x12C), 132);  // aux
+    StrnCpyChecked(macClubID,        reinterpret_cast<const char*>(lpcRec + 0x218), 20);   // club id
+    StrnCpyChecked(macClubTag,       reinterpret_cast<const char*>(lpcRec + 0x22C), 8);    // club tag
+    StrnCpyChecked(macPing,          reinterpret_cast<const char*>(lpcRec + 0x018), 8);    // ping
 
-    maAttr[0] = lpcRec[0x1B8];
-    maAttr[1] = lpcRec[0x1B9];
-    maAttr[2] = lpcRec[0x1BA];
-    maAttr[3] = lpcRec[0x1BB];
+    maColour[0] = lpcRec[0x1B8];
+    maColour[1] = lpcRec[0x1B9];
+    maColour[2] = lpcRec[0x1BA];
+    maColour[3] = lpcRec[0x1BB];
 
-    const s32 liID = *reinterpret_cast<const s32*>(lpcRec + 0x000);
-    miID = (liID != 0) ? liID : -1;
+    const s32 liIdent = *reinterpret_cast<const s32*>(lpcRec + 0x000);
+    miIdent = (liIdent != 0) ? liIdent : -1;
 
-    muInfoFlags = FoldFlags(*reinterpret_cast<const u32*>(lpcRec + 0x004),
-                            KAA_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS,
-                            KI_NUM_FLAGS);
+    miFlags = static_cast<s32>(FoldFlags(*reinterpret_cast<const u32*>(lpcRec + 0x004),
+                                         KAA_LOBBY_USER_FLAGS_TO_PLAYER_INFO_FLAGS,
+                                         KI_NUM_FLAGS));
 
-    miRank      = *reinterpret_cast<const s32*>(lpcRec + 0x1B4);
-    miLocality  = *reinterpret_cast<const s32*>(lpcRec + 0x024);
-    miGameID    = *reinterpret_cast<const s32*>(lpcRec + 0x1B0);
-    miField_D4  = *reinterpret_cast<const s32*>(lpcRec + 0x1CC);
-    miField_D8  = *reinterpret_cast<const s32*>(lpcRec + 0x1C4);
-    miField_DC  = *reinterpret_cast<const s32*>(lpcRec + 0x020);
-    miField_E0  = *reinterpret_cast<const s32*>(lpcRec + 0x1BC);
-    miField_E4  = *reinterpret_cast<const s32*>(lpcRec + 0x1C0);
-    muHWFlags   = static_cast<u32>(ConvertHWFlags(*reinterpret_cast<const s32*>(lpcRec + 0x1C8),
-                                                  E_CONVERSION_FROM_WIRE));
-    miField_EC  = *reinterpret_cast<const s32*>(lpcRec + 0x210);
-    miField_F0  = *reinterpret_cast<const s32*>(lpcRec + 0x214);
+    miAttributes = *reinterpret_cast<const s32*>(lpcRec + 0x1B4);   // attr
+    miRank       = *reinterpret_cast<const s32*>(lpcRec + 0x024);   // rank
+    miGameID     = *reinterpret_cast<const s32*>(lpcRec + 0x1B0);   // game
+    miReputation = *reinterpret_cast<const s32*>(lpcRec + 0x1CC);   // reputation
+    miUserSetID  = *reinterpret_cast<const s32*>(lpcRec + 0x1C4);   // userset ident
+    muIPAddress  = *reinterpret_cast<const u32*>(lpcRec + 0x020);   // addr
+    muLevel      = *reinterpret_cast<const u32*>(lpcRec + 0x1BC);   // level
+    muMedals     = *reinterpret_cast<const u32*>(lpcRec + 0x1C0);   // medals
+    muHwFlags    = static_cast<u32>(ConvertHWFlags(*reinterpret_cast<const s32*>(lpcRec + 0x1C8),
+                                                   E_CONVERSION_FROM_WIRE));
+    muLocalAddr  = *reinterpret_cast<const u32*>(lpcRec + 0x210);   // local addr
+    muLocality   = *reinterpret_cast<const u32*>(lpcRec + 0x214);   // locality
 
     // Parse the custom structure blob (held at lobby-user + 0x28) into the data buffer,
     // gated on a non-null buffer + the GetPattern()/GetPatternLength() bounds assert.

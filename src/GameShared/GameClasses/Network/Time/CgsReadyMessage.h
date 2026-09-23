@@ -13,8 +13,8 @@
 // Message::mu16Frame at +0x1C), and ReadyMessage likewise declares no data members in
 // the DWARF, so sizeof(ReadyMessage) == sizeof(ReliableMessage) == 0x28.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// Message's five console vtable slots are real C++ virtuals; this leaf overrides
+// GetPackedMessageSize, GetName and PackOrUnpack.
 //
 // Ledger funcs for this TU (both are identical-code-folded tail-call forwarders in the
 // X360 image -- a bare `b <sibling>` with no own prologue):
@@ -27,10 +27,10 @@
 //     adds no fields to (de)serialise, so it forwards straight to the base
 //     ReliableMessage::PackOrUnpack (which (de)serialises the wrapped reliable id).
 //
-// The remaining lifecycle methods (Construct/PrepareForSend/Retrieve/Release/Destruct/
-// GetName) are bodied in their own TUs; declared here so the rest of the hierarchy can
-// call them by name. GetName is NOT a ledger func for this TU and its literal is not in
-// this export, so it is only declared (not given a fabricated string body).
+// GetName is the header-homed inline accessor ("Ready Message", the literal its vtable
+// slot returns). The remaining lifecycle methods (Construct/PrepareForSend/Retrieve/
+// Release/Destruct) are bodied in their own TUs; declared here so the rest of the
+// hierarchy can call them by name.
 // ===================================================================================
 
 #include "types.hpp"
@@ -48,12 +48,11 @@ namespace CgsNetwork
 
         // Ledger func @ 0x827DE0F8 -- identical-code-folded onto
         // TestConnectionMessage::GetPackedMessageSize (same bare-ReliableMessage size).
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
-        // Declared only (not a ledger func for this TU; literal not in this export).
-        const char*        GetName() const;
+        const char*        GetName() const override { return "Ready Message"; }
 
         // Ledger func @ 0x827DE100 -- forwards to the ReliableMessage base.
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
     };
 } // namespace CgsNetwork

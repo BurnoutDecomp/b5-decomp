@@ -21,7 +21,9 @@
 //   +0x08  maHeadings[66][31] -- the heading slots. AddHeading writes slot
 //                             &maHeadings[miLength] via strncpy(base + 8 + miLength*31, name, 31)
 //                             (the asm computes 8 + (len<<5 - len) = 8 + len*31; stride 31).
-//   +0x806 .. +0x808  trailing pad to the 0x808 (2056) AddEvent byte size.
+//   +0x806 mbIsPerRoad   bool -- set by CopyVariations for the per-road scoreboard params.
+//   +0x807 mb807         bool -- console-only flag; CopyVariations sets it for the event
+//                               scoreboard params (where it clears mbIsPerRoad).
 //
 // CONSTANTS (X360 compare immediates in AddHeading):
 //   KI_MAX_CAT_VAR_INDEX_NAME_LENGTH = 31  (0x1F; strlen guard + per-slot stride / strncpy count)
@@ -32,6 +34,9 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // NetworkEvent<N>
+
+#include <cstddef>   // offsetof (layout pins)
 
 namespace BrnNetwork
 {
@@ -53,12 +58,13 @@ namespace BrnNetworkModuleIO
         E_HEADING_COUNT     = 3,   // sentinel; asserted-against in HandleScoreboardHeadingEvent
     };
 
-    struct NetworkOutScoreboardHeadingList
+    struct NetworkOutScoreboardHeadingList : public NetworkEvent<52>
     {
         s32  miLength;      // +0x00  live heading count (0 .. 66)
         s32  meHeadingType; // +0x04  EHeadingType -- category / index / variation list discriminator
         char maHeadings[KI_MAX_CAT_VAR_INDEX_COUNT][KI_MAX_CAT_VAR_INDEX_NAME_LENGTH]; // +0x08  66 x 31
-        u8   maReservedPadTo0x808[0x808 - (0x08 + KI_MAX_CAT_VAR_INDEX_COUNT * KI_MAX_CAT_VAR_INDEX_NAME_LENGTH)]; // +0x806 .. +0x808
+        bool mbIsPerRoad;   // +0x806
+        bool mb807;         // +0x807 (console-only member; unnamed)
 
         // @ 0x82541EB0 -- append one heading string. Asserts strlen(name) < 31, 0 <= miLength,
         // miLength < 66; then strncpy's the name into maHeadings[miLength] and increments miLength.
@@ -68,7 +74,12 @@ namespace BrnNetworkModuleIO
         // type is not the E_HEADING_COUNT sentinel; the consumer (HandleScoreboardHeadingEvent)
         // switches on category / index / variation.
         EHeadingType GetHeadingType() const;
+
+        bool IsPerRoad() const               { return mbIsPerRoad; }
+        void SetPerRoad(bool lbIsPerRoad)    { mbIsPerRoad = lbIsPerRoad; }
     };
     static_assert(sizeof(NetworkOutScoreboardHeadingList) == 0x808, "NetworkOutScoreboardHeadingList size (event-type 0x34, 2056 bytes)");
+    static_assert(offsetof(NetworkOutScoreboardHeadingList, mbIsPerRoad) == 0x806, "mbIsPerRoad @+0x806");
+    static_assert(offsetof(NetworkOutScoreboardHeadingList, mb807) == 0x807, "mb807 @+0x807");
 }
 }

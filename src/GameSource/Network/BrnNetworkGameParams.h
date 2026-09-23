@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGameParamsX360.h"
+#include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h"   // BrnNetwork::PlayerParams (maPlayerParams)
 
 // ===========================================================================
 // BrnNetwork::GameParams
@@ -21,52 +22,33 @@
 // storage -- so GameParams IS an X360 leaf. The X360 leaf's last member
 // (miPropertyCount) sits at +0x14C, so the base ends exactly at +0x150.
 //
-// LEAF LAYOUT (X360 asm; base ends at +0x150):
-//   +0x150  maBlock150[0x20]           32-byte (8-word) block, copied word-wise
-//                                        by operator=. Field layout unattested.
-//   +0x170  maPlayerSlots[7 * 0xA0]     seven 0xA0-byte polymorphic sub-object
-//                                        records (each carries the shared
-//                                        ServerInterfaceStructureInterface base
-//                                        vtable off_8207C88C at its +0). The
-//                                        deleting destructor @ 0x82567338 walks
-//                                        these seven slots (this+0x170..+0x530)
-//                                        resetting each vtable; operator= copies
-//                                        each slot's live [+4 .. +0xA0) span
-//                                        (only the +0 vtable slot is skipped).
-//   object end = 0x150 + 0x20 + 7*0xA0 = 0x5D0 (== the destructor's this+0x5D0
-//   walk base -> object size 1488 bytes).
+// LEAF LAYOUT (console offsets; base ends at +0x150):
+//   +0x150  mGameData (GameData, 0x20)   the replicated payload GetData hands out.
+//                                        muUser1 (+0x15C) is the packed game-params
+//                                        word; muUser3 (+0x164) holds the locality
+//                                        SetLocality stores.
+//   +0x170  maPlayerParams[7]            seven PlayerParams (0xA0 each): the stack
+//                                        constructions store the PlayerParams vtable
+//                                        into each slot, the deleting destructor walks
+//                                        them, and operator= copies each slot's
+//                                        [+4 .. +0xA0) member span.
+//   object end = 0x150 + 0x20 + 7*0xA0 = 0x5D0.
 //
-// FLAGGED: the leaf field NAMES/inner layout of maBlock150 and each maPlayerSlots
-// record are NOT attested by asm or (X360) DWARF, so they are modelled as opaque,
-// correctly-sized byte storage and reached by raw byte offset in operator= (same
-// convention as BrnNetwork::GameResults). Only the sizes/offsets/copy-order are
-// load-bearing. The mode-surface accessors (Prepare / GameMode / SetGameMode /
-// SetPreviousGameMode) and the ServerInterfaceStructureInterface overrides remain
-// declared-only; their bodies land with the full behavioural GameParams TU.
-//
-// NOTE on absolute offsets: these are the X360 32-bit-pointer layout. On a 64-bit
-// host the inherited vptr(s)/pointers widen, so the byte offsets are NOT reproduced
-// and are intentionally NOT static_asserted. Sizes/order are pinned by name.
+// The packed search-data word is the inherited muCustomFlags (+0xE8). Every accessor
+// reaches both words by name, so the host layout (wider vptrs) stays correct.
 // ===========================================================================
 
 namespace BrnNetwork
 {
-    // Seven per-player game-param sub-records at +0x170 (stride 0xA0). Count and
-    // stride are X360-attested (deleting-destructor walk + operator= loop); the
-    // per-record field layout is not, so the storage stays opaque.
+    // Seven per-player PlayerParams records at +0x170 (console stride 0xA0 ==
+    // sizeof(PlayerParams) there; the deleting-destructor walk and operator= loop).
     const s32 KI_GAMEPARAMS_PLAYER_SLOTS       = 7;
     const s32 KI_GAMEPARAMS_PLAYER_SLOT_STRIDE = 0xA0;
 
-    // Raw byte offset (from `this`) of the leaf game-params packed flag word: it lives
-    // inside maBlock150 at +0x0C (== object +0x15C). Read/written by raw offset because
-    // maBlock150's inner field layout is unattested (same convention as operator=).
-    const s32 KI_GAMEPARAMS_LEAF_FLAGS_OFFSET  = 0x15C;
-
-    // ---- X360-DWARF-attested bit-field placements (all base-bit/num-bit pairs are read
-    // directly off the extrwi/insrwi operands of the accessor asm). Two packed dwords:
-    //   * KU_BRN_GAMESEARCHDATA_* -- the game-search-data word (raw offset +0xE8, which is
-    //     the inherited protected base member muCustomFlags).
-    //   * KI_GAME_PARAMS_*        -- the leaf game-params word (raw offset +0x15C, maBlock150+0xC).
+    // ---- bit-field placements (all base-bit/num-bit pairs are read directly off the
+    // extrwi/insrwi operands of the accessor asm). Two packed dwords:
+    //   * KU_BRN_GAMESEARCHDATA_* -- the game-search-data word (muCustomFlags, +0xE8).
+    //   * KI_GAME_PARAMS_*        -- the leaf game-params word (mGameData.muUser1, +0x15C).
     const u32 KU_BRN_GAMESEARCHDATA_SECURITY_NUM_BITS            = 2;
     const u32 KU_BRN_GAMESEARCHDATA_TRAFFIC_ON_BASE_BIT         = 17;
     const u32 KU_BRN_GAMESEARCHDATA_TRAFFIC_CHECKING_ON_BASE_BIT = 23;
@@ -80,10 +62,32 @@ namespace BrnNetwork
     const u32 KI_GAME_PARAMS_ROUNDS_NUM_BITS                     = 4;
     const u32 KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT               = 15;
     const u32 KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS                = 5;
+    const u32 KI_GAME_PARAMS_NETWORK_VERSION_BASE_BIT          = 0;
+    const u32 KI_GAME_PARAMS_NETWORK_VERSION_NUM_BITS           = 3;
+    const u32 KU_BRN_GAMESEARCHDATA_GAMEMODE_BASE_BIT           = 8;
+    const u32 KU_BRN_GAMESEARCHDATA_GAMEMODE_NUM_BITS            = 5;
+    const u32 KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_BASE_BIT  = 18;
+    const u32 KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_NUM_BITS   = 5;
+
+    // Game modes are packed biased by this value (the E_GAME_MODE_* enum base).
+    const s32 KI_GAME_PARAMS_GAME_MODE_BIAS                     = 10;
 
     class GameParams : public CgsNetwork::ServerInterfaceGameParamsX360
     {
     public:
+        // The replicated payload (+0x150, 0x20 bytes).
+        struct GameData
+        {
+            s32 miGameLevel;     // +0x00
+            s32 miSkillLevel;    // +0x04
+            s32 miRulesSet;      // +0x08
+            u32 muUser1;         // +0x0C  packed game-params word
+            u32 muUser2;         // +0x10
+            u32 muUser3;         // +0x14  locality
+            u32 muUser4;         // +0x18
+            u32 muUser5;         // +0x1C
+        };
+
         // X360 @ 0x82567338 (`scalar deleting destructor'). Reinstalls the seven
         // embedded sub-object vtables + the primary vtable as the object dies.
         // Implicitly virtual via the base's virtual destructor.
@@ -114,6 +118,25 @@ namespace BrnNetwork
 
         // Burnout game-mode discriminant (E_GAME_MODE_*).
         s32  GameMode() const;                               // @0x82584098
+
+        // Inlined at every console reader (the found-game list and the game-parameter
+        // event): previous game mode from search-data bits 18..22 (+10), network
+        // version from the low three bits of the game-params word.
+        s32  PreviousGameMode() const
+        {
+            return static_cast<s32>((muCustomFlags >> KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_BASE_BIT)
+                                    & ((1u << KU_BRN_GAMESEARCHDATA_PREVIOUS_GAMEMODE_NUM_BITS) - 1u))
+                 + KI_GAME_PARAMS_GAME_MODE_BIAS;
+        }
+        s32  NetworkVersion() const
+        {
+            return static_cast<s32>((mGameData.muUser1 >> KI_GAME_PARAMS_NETWORK_VERSION_BASE_BIT)
+                                    & ((1u << KI_GAME_PARAMS_NETWORK_VERSION_NUM_BITS) - 1u));
+        }
+
+        // Store the host's locality (+0x164). The create / modify game paths call it with
+        // the local player info's locality.
+        void SetLocality(u32 luLocality);
         void SetPreviousGameMode(s32 liGameMode);            // @0x82583FD0
         void SetGameMode(s32 liGameMode);                    // @0x8258A790
 
@@ -143,25 +166,9 @@ namespace BrnNetwork
         void SetTimeLimit(s32 liTimeLimit);                  // bits 15..19
         void SetRagerVehicleLevelLimit(s32 liLevelLimit);    // @0x82583E30  bits 3..6
 
-    private:
-        // Packed bit words reached by raw byte offset (unattested inner layout, same
-        // convention as operator=). search-data word @ +0xE8 (== inherited muCustomFlags);
-        // game-params word @ +0x15C (== maBlock150 + 0xC).
-        u32&       SearchDataWord()
-        { return *reinterpret_cast<u32*>(reinterpret_cast<u8*>(this) + 0xE8); }
-        const u32& SearchDataWord() const
-        { return *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(this) + 0xE8); }
-        u32&       GameParamsWord()
-        { return *reinterpret_cast<u32*>(reinterpret_cast<u8*>(this) + 0x15C); }
-        const u32& GameParamsWord() const
-        { return *reinterpret_cast<const u32*>(reinterpret_cast<const u8*>(this) + 0x15C); }
-        u32&       GameParamFlags()       { return GameParamsWord(); }
-        const u32& GameParamFlags() const { return GameParamsWord(); }
-
     protected:
-        u8 maBlock150[0x20];                                        // +0x150
-        u8 maPlayerSlots[KI_GAMEPARAMS_PLAYER_SLOTS *
-                         KI_GAMEPARAMS_PLAYER_SLOT_STRIDE];         // +0x170
+        GameData     mGameData;                                     // +0x150
+        PlayerParams maPlayerParams[KI_GAMEPARAMS_PLAYER_SLOTS];    // +0x170 (0xA0 each)
     };
 }
 

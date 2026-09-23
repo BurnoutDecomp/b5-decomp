@@ -509,7 +509,7 @@ namespace BrnNetwork
     //   Stamp the embedded result record with this round's race results plus the
     //   number of online rivals.
     // -----------------------------------------------------------------------
-    void PostRoundManager::ProcessRaceResults(const GameStateModuleIO::OnlineGameResults* lpRaceResults)
+    void PostRoundManager::ProcessRaceResults(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpRaceResults)
     {
         mGameResults.Prepare();
         const s32 liNumberOfRivals = mpNetworkManager->GetLiveRevengeManager()->GetNumberOfRivals();

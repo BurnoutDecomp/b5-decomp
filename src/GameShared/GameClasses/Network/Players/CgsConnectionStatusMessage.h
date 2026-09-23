@@ -21,8 +21,8 @@
 //   mPlayerID (NetworkPlayerID, +0) then meConnectionStatus (EConnectionStatus, +4),
 //   and maConnectionData[7] occupies +0x28 .. +0x5F.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// Message's five console vtable slots are real C++ virtuals; this leaf overrides
+// GetPackedMessageSize, GetName and PackOrUnpack.
 //
 // Ledger func for this TU:
 //   GetName @ 0x827DE368 -- header-homed inline accessor; returns the literal
@@ -68,12 +68,12 @@ namespace CgsNetwork
         void               Update();
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DE368 -- inline header-homed accessor.
-        const char*        GetName() const { return "Connection Status Message"; }
+        const char*        GetName() const override { return "Connection Status Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         // +0x28 .. +0x5F (after the 0x28-byte ReliableMessage base).
         PlayerConnectionData maConnectionData[KI_CONNECTION_STATUS_PLAYER_COUNT];

@@ -65,10 +65,11 @@ namespace BrnNetwork
         // ---- lifecycle (non-virtual; called directly by BrnNetworkManager) ----------------
         // X360 0x8254C0C0 -- chain the base Construct, then mark the platform sub-state idle.
         void Construct(BrnNetworkModule* lpNetworkModule);
-        // X360 0x8254C0F8 -- reset the base state-machine members + the platform sub-state idle.
-        void Prepare();
-        // X360 0x8254C130 -- reset to idle (called by BrnNetworkManager::Release).
-        void Release();
+        // reset the base state-machine members + the platform sub-state idle;
+        // always ready (returns true).
+        bool Prepare();
+        // reset to idle (called by BrnNetworkManager::Release); returns true.
+        bool Release();
         // X360 0x8254C168 -- reset to idle (called by BrnNetworkManager::Destruct).
         void Destruct();
 

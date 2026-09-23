@@ -52,7 +52,7 @@ namespace BrnNetwork
 
     // GameState -> network in-event type ids walked by ProcessNetworkEvents (X360: cmpwi 0x26 /
     // 0x28 / 0x29). They mirror BrnNetworkInEventTypeDefs.h's NetworkEvent<N> tags.
-    static const s32 KI_INEVENT_FREEBURN_CHALLENGE  = 0x26;  // 38 -- challenge lifecycle (clears the gate on RESULTS_FINISHED)
+    static const s32 KI_INEVENT_FREEBURN_CHALLENGE  = 0x26;  // 38 -- challenge lifecycle (clears the gate on ENDED)
     static const s32 KI_INEVENT_FBURN_SUCCESS_UPDATE = 0x28; // 40 -- arms the gate + caches the pending update
     static const s32 KI_INEVENT_FBURN_CHALLENGE_SUCCESS = 0x29; // 41 -- the reliable two-action result to send
 
@@ -90,7 +90,7 @@ namespace BrnNetwork
         // lists; only the fields this relay reads are named, the rest are pinned with padding.
 
         // NetworkEvent<38>: challenge lifecycle event. The relay reads only meEventType (@ +16)
-        // and clears the pending gate when it is E_CHALLENGE_EVENT_RESULTS_FINISHED (== 5).
+        // and clears the pending gate when it is E_CHALLENGE_EVENT_ENDED (== 5).
         struct InFreeburnChallengeEvent
         {
             NetworkPlayerID mPlayerID;     // +0x00
@@ -178,6 +178,19 @@ namespace BrnNetwork
         mLastSecondChallengeSuccess.UnSetAll();
         miChallengeSuccessUpdateIndex = 0;
         mbSendUpdateSuccessMessage    = false;
+    }
+
+    // -------------------------------------------------------------------------------------------
+    // Prepare / Release: nothing to acquire or free, always ready.
+    // -------------------------------------------------------------------------------------------
+    bool ChallengeSuccessManager::Prepare()
+    {
+        return true;
+    }
+
+    bool ChallengeSuccessManager::Release()
+    {
+        return true;
     }
 
     // -------------------------------------------------------------------------------------------
@@ -506,7 +519,7 @@ namespace BrnNetwork
     // ProcessNetworkEvents  @ 0x8255DDC8
     // Walk the GameState's post-sim network-event queue: cache a fresh success-update (arming the
     // send gate), send the reliable challenge-success result out, and clear the send gate when the
-    // challenge's results have finished.
+    // challenge has ended.
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::ProcessNetworkEvents(
         const BrnNetworkModuleIO::NetworkEventQueue* lpInputNetworkEventQueue)
@@ -535,7 +548,7 @@ namespace BrnNetwork
                 const InFreeburnChallengeEvent* lpChallengeEvent =
                     reinterpret_cast<const InFreeburnChallengeEvent*>(lpEvent);
                 CGS_ASSERT(lpChallengeEvent != nullptr, "lpChallengeEvent");
-                if (lpChallengeEvent->meEventType == BrnNetworkModuleIO::E_CHALLENGE_EVENT_RESULTS_FINISHED)
+                if (lpChallengeEvent->meEventType == BrnNetworkModuleIO::E_CHALLENGE_EVENT_ENDED)
                 {
                     mbSendUpdateSuccessMessage = false;
                 }

@@ -49,6 +49,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"                         // CgsSystem::EFrameRate
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                         // K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsReliableMessageManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"          // EConnectionStatus
@@ -169,7 +170,13 @@ namespace CgsNetwork
         // Iterate player ids: seed *lpPlayerID with -1, then call repeatedly; false when the
         // walk is exhausted.
         bool GetNextPlayerID(NetworkPlayerID* lpPlayerID, EPlayersToConsider leConsider) const;
-        bool GetNextLocalPlayerID(NetworkPlayerID* lpPlayerID) const;
+        // Header-inline on the console: every caller reads +0x23FC and tests it against the
+        // invalid id.
+        bool GetNextLocalPlayerID(NetworkPlayerID* lpPlayerID) const
+        {
+            *lpPlayerID = mLocalPlayerID;
+            return mLocalPlayerID != K_INVALID_PLAYER_ID;
+        }
         bool GetNextRemotePlayerID(NetworkPlayerID* lpPlayerID) const;
 
         NetworkPlayer*  GetPlayerByID(NetworkPlayerID lPlayerID) const;
@@ -192,7 +199,13 @@ namespace CgsNetwork
         void            SetHostPlayerID(NetworkPlayerID lPlayerID);
         bool            AmIHost();
         NetworkPlayerID GetLocalPlayerID() const { return mLocalPlayerID; }
-        bool            IsLocalPlayer(NetworkPlayerID lPlayerID) const;
+        bool            IsLocalPlayer(NetworkPlayerID lPlayerID) const
+        {
+            return mLocalPlayerID == lPlayerID && lPlayerID != K_INVALID_PLAYER_ID;
+        }
+
+        // The disk-read-error flag the network manager raises and clears each frame.
+        void SetDiskAccessible(bool lbDiskAccessible) { mbDiskAccessible = lbDiskAccessible; }
 
         s32  GetTotalNumberPlayers(EPlayersToConsider leConsider) const;
         s32  GetNumberNetworkPlayers(EPlayersToConsider leConsider) const;

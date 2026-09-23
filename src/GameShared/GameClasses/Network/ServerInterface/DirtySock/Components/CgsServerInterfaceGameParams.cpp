@@ -83,15 +83,10 @@ namespace CgsNetwork
     ServerInterfaceGameParamsBase&
     ServerInterfaceGameParamsBase::operator=(const ServerInterfaceGameParamsBase& lrOther)
     {
-        // +4 / 36-byte run: macName[16] + macHostName[20].
-        memcpy(macName, lrOther.macName, sizeof(macName));
-        memcpy(macHostName, lrOther.macHostName, sizeof(macHostName));
-        // +40 / 20-byte run.
-        memcpy(macPassword, lrOther.macPassword, sizeof(macPassword));
-        // +60 / 16-byte run.
-        memcpy(maPad60, lrOther.maPad60, sizeof(maPad60));
-        // +76 / 128-byte run.
-        memcpy(macSession, lrOther.macSession, sizeof(macSession));
+        memcpy(macName, lrOther.macName, sizeof(macName));             // +4, 36
+        memcpy(macPassword, lrOther.macPassword, sizeof(macPassword)); // +40, 20
+        memcpy(macHostName, lrOther.macHostName, sizeof(macHostName)); // +60, 16
+        memcpy(macSession, lrOther.macSession, sizeof(macSession));    // +76, 128
 
         // +204 .. +244 : the eleven scalar words, in order.
         miGameID          = lrOther.miGameID;

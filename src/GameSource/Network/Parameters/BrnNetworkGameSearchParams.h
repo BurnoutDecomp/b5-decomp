@@ -86,6 +86,12 @@ namespace BrnNetwork
         virtual void*       GetData() override;
         virtual const void* GetData() const override;
 
+    protected:
+        // The custom-flag filter words of the platform search block. Both vtable slots of
+        // the leaf hold one shared body that returns 0 (no custom-flag filtering).
+        virtual u32 GetCustomFlagsMask() const override;
+        virtual u32 GetCustomFlagsValue() const override;
+
     private:
         // Copy the live-revenge rivals' names into macPlayerNames.
         void FillInRivals(BrnNetworkManager* lpNetworkManager);

@@ -95,6 +95,10 @@ namespace BrnNetwork
             // at +0x218 directly.
             bool                GetIsInOnlineGameMode() const { return mbIsInOnlineGameMode; }
 
+            // Header-inline on the console: the network managers read the word at +0x214 straight
+            // off the pointer BrnNetworkModule::GetGameStateToNetworkInterface returns.
+            const BrnGameState::GameStateModuleIO::EGameModeType GetCurrentGameMode() const { return meCurrentGameMode; }
+
             // ---- declared-only API (bodies are separate TUs) ----
             void                AddDirtyTrickEvent(EActiveRaceCarIndex leAggressor, EActiveRaceCarIndex leVictim,
                                                    u8 luType, u8 luStatus);
@@ -102,7 +106,6 @@ namespace BrnNetwork
             bool                GetIsInCarSelect() const;
             void                SetIsCarSelect(bool lbIsInCarSelect);
             void                SetCurrentGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode);
-            const BrnGameState::GameStateModuleIO::EGameModeType GetCurrentGameMode() const;
             void                SetPlayerInFreeburnChallenge(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbInChallenge);
 
         private:

@@ -14,8 +14,7 @@
 // A RELIABLE per-event message carrying one player's stunt-multiplier payload (an 8-byte
 // multiplier-info blob at +0x28) plus the frames-since-start stamp (+0x30). The X360 body
 // stores/reads the whole 8-byte blob with a single std/ld at +0x28 and the frame word with a
-// stw/lwz at +0x30; the sub-field asserts in PrepareForSend are keyed on the s32 the committed
-// caller (BrnNetworkPlayer::SendStuntMultiplierMessage) passes (see the header note).
+// stw/lwz at +0x30.
 
 namespace BrnNetwork
 {
@@ -47,20 +46,23 @@ namespace BrnNetwork
     }
 
     void StuntMultiplierMessage::PrepareForSend(u16 lu16FrameCount, s32 liFramesSinceStart,
-                                                s32 liStuntMultiplier)
+                                                MultiplierInfo lMultiplierInfo)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
                    "lu16FrameCount != KU16_INVALID_FRAME");
-        CGS_ASSERT(liStuntMultiplier > 0,
+        CGS_ASSERT(lMultiplierInfo.muMultiplierStuntTypes > 0,
                    "lMultiplierInfo.muMultiplierStuntTypes > 0");
-        CGS_ASSERT(static_cast<u32>(liStuntMultiplier) <= 0x3FFFFu,
+        CGS_ASSERT(lMultiplierInfo.muMultiplierStuntTypes <= 0x3FFFFu,
                    "lMultiplierInfo.muMultiplierStuntTypes <= static_cast<uint32_t>( KI_MAX_MULTIPLIER_STUNT_TYPES )");
+        CGS_ASSERT(lMultiplierInfo.mu16BarrelRolls <= 8u,
+                   "lMultiplierInfo.muBarrelRolls <= static_cast<uint32_t>( KI_MAX_BARREL_ROLLS )");
+        CGS_ASSERT(lMultiplierInfo.mu16FlatSpins <= 16u,
+                   "lMultiplierInfo.muFlatSpins <= static_cast<uint32_t>( KI_MAX_FLAT_SPINS )");
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
                    "!CgsNetwork::ReliableMessage::IsMessageValid()");
 
-        const s64 li64MultiplierInfo = liStuntMultiplier;   // the whole 8-byte record
-        memcpy(&mMultiplierInfo, &li64MultiplierInfo, sizeof(mMultiplierInfo));
-        miFramesSinceStart = liFramesSinceStart;  // stw r27, +0x30
+        mMultiplierInfo    = lMultiplierInfo;      // the whole 8-byte record, +0x28
+        miFramesSinceStart = liFramesSinceStart;   // +0x30
         CgsNetwork::ReliableMessage::PrepareForSend(KI_STUNT_MULTIPLIER_MESSAGE_TYPE, lu16FrameCount);
     }
 

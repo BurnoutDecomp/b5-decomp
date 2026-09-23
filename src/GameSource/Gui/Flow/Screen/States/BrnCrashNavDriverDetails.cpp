@@ -291,9 +291,9 @@ void CrashNavDriverDetails::OnEnter()
         reinterpret_cast<const CgsModule::Event*>(&lDeactivate), KI_CHANNEL_GUI_OUT,
         static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
 
-    CgsGui::GuiEventNetworkSuspension lSuspend(true);
+    CgsGui::GuiEventNetworkSuspension lResume(true);
     mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lSuspend), KI_CHANNEL_GUI_OUT,
+        reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_OUT,
         static_cast<s32>(sizeof(CgsGui::GuiEventNetworkSuspension)));
 
     // The 33 stat fields, then the three district columns in lock-step (the X360 runs one

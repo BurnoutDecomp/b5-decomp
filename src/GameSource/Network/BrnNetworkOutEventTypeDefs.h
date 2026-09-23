@@ -20,7 +20,7 @@
 //
 // Every member offset below is the one the translators (and the producers' AddEvent stack
 // images) read; the byte size in each banner is the producer's AddEvent size. Records that
-// hold a pointer (29, 58, 72) are larger on the host than the console size; their consumers
+// hold a pointer (29, 58, 69, 72) are larger on the host than the console size; their consumers
 // copy by member, never by the console byte count.
 //
 // Six OUT records already have homes of their own and are pulled in from there, not
@@ -50,6 +50,8 @@
 #include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h" // CgsNetwork::UniquePlayerIDX360 (24 bytes)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                 // CgsSystem::Time
 #include "GameShared/GameClasses/Containers/CgsArray.h"                  // Array<T,N>
+#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (the changed-car id setters)
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"          // CgsNetwork::K_INVALID_PLAYER_ID
 #include "pc/gcm/renderengine/pixelformat.h"                             // renderengine::PixelFormat
 
 #include <cstddef>   // offsetof (layout pins)
@@ -139,6 +141,15 @@ namespace BrnNetworkModuleIO
         NetworkPlayerID GetNetworkPlayerID() const { return mNetworkPlayerID; }
         CgsID           GetModelID() const         { return mModelID; }
         CgsID           GetWheelID() const         { return mWheelID; }
+
+        void SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
+        {
+            CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                       "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            mNetworkPlayerID = lNetworkPlayerID;
+        }
+        void SetModelID(CgsID lModelID) { mModelID = lModelID; }
+        void SetWheelID(CgsID lWheelID) { mWheelID = lWheelID; }
     };
 
     // 19 -- a remote player changed paint. 12 bytes.
@@ -148,6 +159,16 @@ namespace BrnNetworkModuleIO
         EActiveRaceCarIndex GetActiveRaceCarIndex() const     { return meActiveRaceCarIndex; }
         u16             GetCarColourIndex() const             { return mu16CarColourIndex; }
         u16             GetPaintFinishIndex() const           { return mu16PaintFinishIndex; }
+
+        void SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
+        {
+            CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+                       "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            mNetworkPlayerID = lNetworkPlayerID;
+        }
+        void SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex) { meActiveRaceCarIndex = leActiveRaceCarIndex; }
+        void SetCarColourIndex(u16 lu16CarColourIndex)     { mu16CarColourIndex = lu16CarColourIndex; }
+        void SetPaintFinishIndex(u16 lu16PaintFinishIndex) { mu16PaintFinishIndex = lu16PaintFinishIndex; }
 
     private:
         NetworkPlayerID     mNetworkPlayerID;               // +0x00
@@ -207,11 +228,17 @@ namespace BrnNetworkModuleIO
         bool mbSuccessfulLaunch;                            // +0x05
     };
 
+    // 28 -- the sign-in UI must be shown. 1 byte (no payload).
+    typedef NetworkEvent<28> NetworkOutShowSignInGui;
+
     // 29 -- the live-revenge profile is ready. Console 4 bytes (one pointer).
     struct NetworkOutLiveRevengeProfileData : public NetworkEvent<29>
     {
         LiveRevengeProfile* mpLiveRevengeProfile;           // +0x00
     };
+
+    // 30 -- the loading screen must be shown. 1 byte (no payload).
+    typedef NetworkEvent<30> NetworkOutShowLoadingScreen;
 
     // 31 -- the time left in the online event. 8 bytes.
     struct NetworkOutEventTimeRemaining : public NetworkEvent<31>
@@ -257,6 +284,12 @@ namespace BrnNetworkModuleIO
 
     // 40 -- the local player lost the session. 1 byte (no payload).
     struct NetworkOutLocalPlayerDisconnected : public NetworkEvent<40> {};
+
+    // 41 -- the local player is joining a session. 1 byte (no payload).
+    typedef NetworkEvent<41> NetworkOutJoiningGameEvent;
+
+    // 42 -- a player joined the freeburn lobby, so the game starts. 1 byte (no payload).
+    typedef NetworkEvent<42> NetworkOutStartingGameDueToPlayerJoin;
 
     // 43 -- the host restarted traffic; the active hull of each of the eight PVS slots. 16 bytes.
     struct NetworkOutRestartTrafficEvent : public NetworkEvent<43>
@@ -441,6 +474,14 @@ namespace BrnNetworkModuleIO
         bool                mabAccumulationThisFrame[2];    // +0x12
     };
 
+    // 69 -- a received image finished DXT decoding. Console 20 bytes; the pixel pointer is 8
+    // bytes on the host, so the name sits at console +0x04 and at host +0x08.
+    struct NetworkOutImageDxtDecodedEvent : public NetworkEvent<69>
+    {
+        void*                  mpDecodedPixels;             // +0x00
+        CgsNetwork::PlayerName mPlayerName;                 // console +0x04
+    };
+
     // 70 -- the account's data-sharing settings. 3 bytes.
     struct NetworkOutAccountSettings : public NetworkEvent<70>
     {
@@ -448,6 +489,9 @@ namespace BrnNetworkModuleIO
         bool mbAgreeToShareInfoPartners;                    // +0x01
         bool mbTelemetryEnable;                             // +0x02
     };
+
+    // 71 -- the account settings edit finished. 1 byte (no payload).
+    typedef NetworkEvent<71> NetworkOutAccountUpdateComplete;
 
     // 72 -- the Xbox camera picture was compressed. Console 12 bytes; the pixel pointer sits at
     // console +0x08 and at host +0x08 (8 bytes wide).
@@ -457,6 +501,9 @@ namespace BrnNetworkModuleIO
         renderengine::PixelFormat meCompressedFormat;       // +0x04
         char*                    mpcCompressedPixels;       // +0x08
     };
+
+    // 73 -- the photo booth has no gamer picture for the player. 1 byte (no payload).
+    typedef NetworkEvent<73> NetworkOutNoPhotoBoothGamerPic;
 
     // 74 -- the event scores uploaded this session. 128 bytes. Console-only record; the
     // game-state side reads it as the Array<s64,15> it is.
@@ -500,6 +547,8 @@ namespace BrnNetworkModuleIO
         static_assert(offsetof(NetworkOutLaunchedEvent, mbHostChoiceCarAndNotHost) == 0x04, "tag 27 +0x04");
         static_assert(offsetof(NetworkOutLaunchedEvent, mbSuccessfulLaunch) == 0x05, "tag 27 +0x05");
         static_assert(sizeof(NetworkOutLaunchedEvent) == 8, "tag 27 size");
+        static_assert(sizeof(NetworkOutShowSignInGui) == 1, "tag 28 size");
+        static_assert(sizeof(NetworkOutShowLoadingScreen) == 1, "tag 30 size");
         static_assert(sizeof(NetworkOutEventTimeRemaining) == 8, "tag 31 size");
         static_assert(sizeof(NetworkOutAutosaveProfile) == 1, "tag 32 size");
         static_assert(offsetof(NetworkOutStuntMultiplierEvent, miStuntMultiplier) == 0x08, "tag 34 +0x08");
@@ -510,6 +559,8 @@ namespace BrnNetworkModuleIO
         static_assert(sizeof(NetworkOutRoadRulesConnectedOnlineEvent) == 4, "tag 38 size");
         static_assert(sizeof(NetworkOutLocalPlayerConnected) == 4, "tag 39 size");
         static_assert(sizeof(NetworkOutLocalPlayerDisconnected) == 1, "tag 40 size");
+        static_assert(sizeof(NetworkOutJoiningGameEvent) == 1, "tag 41 size");
+        static_assert(sizeof(NetworkOutStartingGameDueToPlayerJoin) == 1, "tag 42 size");
         static_assert(sizeof(NetworkOutRestartTrafficEvent) == 16, "tag 43 size");
         static_assert(offsetof(NetworkOutNetworkPlayerCollectableEvent, mNetworkPlayerID) == 0x08, "tag 44 +0x08");
         static_assert(offsetof(NetworkOutNetworkPlayerCollectableEvent, meType) == 0x0C, "tag 44 +0x0C");
@@ -561,9 +612,12 @@ namespace BrnNetworkModuleIO
         static_assert(offsetof(NetworkOutFburnChallengeSuccessEvent, mabSuccessfulActions) == 0x10, "tag 68 +0x10");
         static_assert(offsetof(NetworkOutFburnChallengeSuccessEvent, mabAccumulationThisFrame) == 0x12, "tag 68 +0x12");
         static_assert(sizeof(NetworkOutFburnChallengeSuccessEvent) == 20, "tag 68 size");
+        static_assert(offsetof(NetworkOutImageDxtDecodedEvent, mPlayerName) == sizeof(void*), "tag 69 name follows the pointer");
         static_assert(sizeof(NetworkOutAccountSettings) == 3, "tag 70 size");
+        static_assert(sizeof(NetworkOutAccountUpdateComplete) == 1, "tag 71 size");
         static_assert(offsetof(NetworkOutCamPicCompressedEvent, meCompressedFormat) == 0x04, "tag 72 +0x04");
         static_assert(offsetof(NetworkOutCamPicCompressedEvent, mpcCompressedPixels) == 0x08, "tag 72 +0x08");
+        static_assert(sizeof(NetworkOutNoPhotoBoothGamerPic) == 1, "tag 73 size");
         static_assert(sizeof(NetworkOutUploadedModeScoresEvent) == 128, "tag 74 size");
     }
 }

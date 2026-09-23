@@ -228,10 +228,11 @@ namespace BrnNetwork
     }
 
     // BrnNetwork::MarkedManManager::MarkingFinished  @ BrnNetworkMarkedManManager.cpp:306
-    // No standalone X360 symbol survives and the DWARF hint exposes no locals/side-effects;
-    // reconstructed as an empty body (no recovered behaviour to fabricate).
+    // No out-of-line console copy: the state manager's GUI-event handler inlines it as an
+    // increment of the +0x2C0 counter.
     void MarkedManManager::MarkingFinished()
     {
+        ++miNumberOfPlayersFinishedMarking;
     }
 
     // BrnNetwork::MarkedManManager::GetDataEntry  @ BrnNetworkMarkedManManager.cpp:251

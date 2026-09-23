@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"   // ::EActiveRaceCarIndex (the one and only)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"   // CgsModule::EventQueue<T,N> (the road-rules queue typedefs)
+#include "GameSource/GameState/BrnCgsPlayerName.h"          // CgsNetwork::PlayerName (the records' 16-byte name)
 
 namespace CgsSystem { class Time; }   // GameShared/GameClasses/System/Timer/CgsTime.h (TelemetryData::AddParameter by value)
 
@@ -78,11 +79,12 @@ namespace BrnNetwork
 
     typedef s32 NetworkPlayerID;
 
-    // Fixed player name. X360-AUTHORITATIVE width is 16 (KI_USERNAME_LENGTH == 0x10) -- every
-    // X360 build site copies/strides 16 bytes -- NOT the PS3-DWARF char[20]. Mirrors the committed
-    // CgsNetwork::PlayerName (BrnCgsPlayerName.h). 16 is load-bearing for the RoadRules* event
-    // strides (RoadRulesDownloadEvent==56, RoadRulesRecvData==264).
-    struct PlayerName { char macName[16]; };
+    // The player name these records carry is CgsNetwork's 16-byte name, not a type of its own:
+    // there is one PlayerName in the program, and the in-game status writer runs
+    // CgsNetwork::PlayerName::Construct on the name inside these records. 16 bytes is
+    // load-bearing for the RoadRules* event strides (RoadRulesDownloadEvent == 56,
+    // RoadRulesRecvData == 264).
+    using CgsNetwork::PlayerName;
 
     struct RoadRulesMessageData
     {

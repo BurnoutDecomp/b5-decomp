@@ -4,6 +4,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                    // NetworkPlayerID
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
 #include "rw/math/vpu/types.h"
 
@@ -130,6 +131,9 @@ namespace CgsNetwork
         // quantised bits back into the field), anything else asserts.
         // KX_PACK_OR_UNPACK_SUCCESS on success.
         PackOrUnpackResult PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax);
+
+        // (De)serialise one NetworkPlayerID field over the full s32 range.
+        PackOrUnpackResult PackOrUnpack(NetworkPlayerID* lpNetworkPlayerID);
 
         // Build a scaled direction vector from two angles: the X360 build computes
         // (cos(B)*cos(A), sin(B), cos(B)*sin(A), 0) and scales it by lfMagnitude.

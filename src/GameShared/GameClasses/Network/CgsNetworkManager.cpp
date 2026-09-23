@@ -34,7 +34,7 @@ namespace CgsNetwork
 
         // FLAG: the adapter's declared parameter is not a console argument (the call passes
         // none); 0 is inert until that declaration drops it.
-        mNetworkAdapter.Construct(0);
+        mNetworkAdapter.Construct();
         mPlayerManager.Construct(lpConstructParams->GetPlayerManagerConstructParams());
         mHostMigrationManager.Construct();
         mStartTimeManager.Construct(&mHostMigrationManager, &mTimeManager, &mPlayerManager,

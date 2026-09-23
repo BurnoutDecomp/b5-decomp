@@ -40,13 +40,12 @@
 // 64/1144 strides are pinned in a 32-bit build only (_AssertLayout). The committed CgsNetwork::NetworkTexture, BrnNetwork::ImageMessage and
 // BrnNetwork::ImageManagerDebugComponent are reused BY NAME -- not forked.
 //
-// FUNCTION OWNERSHIP (this TU has 30 X360 functions):
-//   BODIED here/in the sibling .cpp -- the lifecycle + table accessors + the self-contained
-//   dispatch helpers that touch only named members and committed-by-name APIs.
-//   DECLARATION-ONLY + FLAGGED (body deferred) -- the functions that walk un-homed internals of
-//   BrnNetwork::CameraX360 / GamerPictureManagerX360 / BrnNetworkManager / the BrnNetworkModuleIO
-//   raw-offset interfaces, or that drive the multi-stage compress/segment/pack message pipeline.
-//   Each such method is marked  // FLAG: declaration-only  at its declaration AND .cpp slot.
+// FUNCTION OWNERSHIP:
+//   BODIED in the .cpp (or inline here) -- the lifecycle, table accessors, the event pump, the
+//   abort / output / round-result handlers.
+//   DECLARATION-ONLY + FLAGGED (body deferred, no stub) -- the functions that walk the camera /
+//   gamer-picture / manager internals or drive the multi-stage compress/segment/pack message
+//   pipeline. Each is marked  // FLAG: declaration-only  at its declaration.
 // ===================================================================================
 #pragma once
 
@@ -88,10 +87,8 @@ namespace BrnNetwork
         struct OutputBuffer;                 // ProcessBeforeSimulation / OutputMugshotData param
         struct PostSimulationInputBuffer;    // ProcessAfterSimulation param
         struct NetworkEventQueue;            // ProcessNetworkEvents param
+        struct NetworkInPaybackMugshotEvent; // HandleMugshotEvent param
     }
-
-    // Forward-only network event / message types touched through committed homes.
-    struct NetworkInPaybackMugshotEvent; // HandleMugshotEvent param
 
     // DWARF BrnNetworkImageManager.cpp:45 -- the reliable-message budget gate.
     const s32 KI_MAX_BUFFERED_RELIABLE_MESSAGES_TO_SEND_MUGSHOT = 21;
@@ -151,7 +148,7 @@ namespace BrnNetwork
         void Destruct();                                                            // @ 0x8255D8B0  (bodied)
 
         void ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutput);                     // @ 0x8256F6E8  // FLAG: declaration-only
-        void ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);    // @ 0x8256BB38  // FLAG: declaration-only
+        void ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);    // (bodied)
 
         void AddPlayer(NetworkPlayerID lPlayerID);    // @ 0x82576110  (bodied)
         void RemovePlayer(NetworkPlayerID lPlayerID); // @ 0x8255DB40  (bodied)
@@ -162,7 +159,34 @@ namespace BrnNetwork
         CgsNetwork::NetworkTexture* GetPhotoFinishImageByRoundWinner(NetworkPlayerID lRoundWinnerID,
                                                                      bool* lpbIsPhotoFinish);               // @ 0x8254ACA0  // FLAG: declaration-only
         void OnRoundStart();                                          // @ 0x8255DC98  (bodied)
-        void HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpResults); // FLAG: declaration-only
+
+        // The local player left the mode: forget every slot's victim and pending packets and the
+        // capture's aggressor (inlined into the state manager's game-state action pump on the
+        // console; FLAG: attributed to this reference-declared name by its effect).
+        void HandlePlayerStoppedMode()
+        {
+            for ( s32 liIndex = 0; liIndex < KI_MAX_MUGSHOT_PLAYERS; ++liIndex )
+            {
+                maMugshotData[liIndex].miNumberOfPacketsToSend = 0;
+                maMugshotData[liIndex].mTakedownVictimPlayerID  = -1;
+                maMugshotData[liIndex].mReceivedPhotoPackets.UnSetAll();
+            }
+            mTakedownAggressorPlayerID = -1;
+        }
+
+        void HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpRoundResults); // (bodied)
+
+        // The user switched mugshots on or off; switching them off while a mugshot is being shown
+        // aborts the show next frame (inlined into the state manager's GUI-event pump on the
+        // console; FLAG: attributed to this reference-declared name by its effect).
+        void EnableMugshotOutput(bool lbEnable)
+        {
+            mbMugshotsEnabled = lbEnable;
+            if ( !lbEnable && meState == E_IMAGE_MANAGER_STATE_SHOW_MUGSHOT )
+            {
+                mbAbortShowThisFrame = true;
+            }
+        }
 
     private:
         // ---- internals ------------------------------------------------------------------
@@ -171,34 +195,36 @@ namespace BrnNetwork
         ImageMessageData* GetImageMessageDataEntry(NetworkPlayerID lPlayerID);           // @ 0x8254A8B8 (DWARF GetImageMes)
         // @ 0x8254A9C8 -- local communications-privilege gate for mugshot exchange.
         EMugshotPrivilege CheckMugshotPrivilege();
-        void         ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue); // FLAG: declaration-only
-        void         OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* lpOutput);      // @ 0x82564E38  // FLAG: declaration-only
-        void         HandleMugshotEvent(const NetworkInPaybackMugshotEvent* lpEvent);    // @ 0x82555188  // FLAG: declaration-only
+        void         ProcessNetworkEvents(const BrnNetworkModuleIO::NetworkEventQueue* lpQueue); // (bodied)
+        void         ProcessDirtyTrickEvents();                                         // FLAG: declaration-only
+        void         OutputMugshotData(BrnNetworkModuleIO::OutputBuffer* lpOutput);      // (bodied)
+        void         HandleMugshotEvent(const BrnNetworkModuleIO::NetworkInPaybackMugshotEvent* lpEvent); // FLAG: declaration-only
         void         AbortMugshotCapture();                                             // @ 0x825649A8  (bodied)
         void         AbortMugshotShow();                                                // @ 0x82564A98  (bodied)
+        bool         AreMugshotsDisabledForPlayer(NetworkPlayerID lPlayerID);           // FLAG: declaration-only
         void         SendMugshotPicture(NetworkPlayerID lAggressorID, NetworkPlayerID lVictimID,
                                         NetworkPlayerID lReceiverID);                    // @ 0x82564B80  // FLAG: declaration-only
         void         BroadcastImage(MugshotData* lpMugshotData);                         // @ 0x825559C8  // FLAG: declaration-only
         void         ReceiveImageMessage(NetworkPlayerID lSenderID, ImageMessage* lpImageMessage); // @ 0x825732A8  // FLAG: declaration-only
         void         HandleReceivedCameraPic(NetworkPlayerID lSenderID, MugshotData* lpMugshotData,
-                                             BrnGameState::GameStateModuleIO::EImageType leImageType); // @ 0x82555AD8  // FLAG: declaration-only
+                                             BrnGameState::GameStateModuleIO::EImageType leImageType); // (bodied)
         void         HandleShowingMugshot(bool lbShowMyMugshot);                         // @ 0x82555B38  // FLAG: declaration-only
         void         GetCompressedTexture(CgsNetwork::NetworkTexture* lpTexture);         // @ 0x8256BC38  // FLAG: declaration-only
-        void         RequestMugshotSave(NetworkPlayerID lAggressorID, NetworkPlayerID lVictimID,
-                                        u32 lu32Frame);                                  // @ 0x8256FC18  // FLAG: declaration-only
+        void         RequestMugshotSave(MugshotData* lpMugshotData, NetworkPlayerID lPlayerID,
+                                        BrnGameState::GameStateModuleIO::EImageType leImageType); // FLAG: declaration-only
 
-        // Static compress callbacks (the void* user-data is this manager). Bodies reach the
-        // un-homed compress/segment pipeline -> declaration-only.
-        static void  _GetCompressedCameraPicCallback(void* lpData);                      // @ 0x82564EF8  // FLAG: declaration-only
-        static void  _GetCompressedGamerPicCallback(void* lpData);                       // @ 0x8256FD40  // FLAG: declaration-only
+        // Static compress callbacks (the texture compressor's CompressionCompleteCallback shape;
+        // the user-data is this manager). Bodies reach the un-homed compress/segment pipeline ->
+        // declaration-only.
+        static void  _GetCompressedCameraPicCallback(void* lpPixels, void* lpUserData);   // FLAG: declaration-only
+        static void  _GetCompressedGamerPicCallback(void* lpPixels, void* lpUserData);    // FLAG: declaration-only
 
         // Reliable-message arrival callback registered with CgsNetwork::NetworkPlayer for the
         // ImageMessage type (matches CgsNetwork::ReliableMessageArrivedCallback). Forwards to
         // ReceiveImageMessage. The user-data is this manager.  @ 0x82573700  (bodied)
         static void  _ImageMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
                                                   NetworkPlayerID liFromPlayerID, void* lpUserData);
-        // The delivery callback twin lives in the sibling .cpp (not in this TU's X360 set); declared
-        // here only so AddPlayer can register it.
+        // Reliable-message delivery callback registered alongside the arrival one.  (bodied)
         static void  _ImageMessageDeliveredCallback(bool lbDelivered, bool lbWasReliable,
                                                     CgsNetwork::SignalMessage* lpMessage,
                                                     NetworkPlayerID liToPlayerID, void* lpUserData);

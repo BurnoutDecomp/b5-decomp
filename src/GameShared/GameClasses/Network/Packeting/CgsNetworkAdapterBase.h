@@ -9,18 +9,18 @@
 // consumed by BrnNetwork::BrnNetworkManager::Prepare.
 //
 // LAYOUT (X360 asm @ 0x82581330 Construct -- five word stores, used size 0x14 / 20B):
-//   stw r25,0x00  ; +0x00  the 6th ctor arg (a6)            -- mpField_00
-//   stw r29,0x04  ; +0x04  leServerType (E_SERVER_TYPE_*)   -- meServerType
-//   stw r28,0x08  ; +0x08  lpHeapMalloc                     -- mpHeapMalloc
-//   stw r27,0x0C  ; +0x0C  lpNetworkManager                 -- mpNetworkManager
-//   stw r26,0x10  ; +0x10  the 5th ctor arg (a5)            -- mpField_10
+//   +0x00  the 6th Construct argument (title id)   -- muTitleID
+//   +0x04  leServerType (E_SERVER_TYPE_*)           -- meServerType
+//   +0x08  lpHeapMalloc                             -- mpHeapMalloc
+//   +0x0C  lpNetworkManager                         -- mpNetworkManager
+//   +0x10  the 5th Construct argument               -- mpServerInterface
 //
 // Construct bounds-checks leServerType in [E_SERVER_TYPE_LOCAL, E_SERVER_TYPE_COUNT) and
 // non-null lpHeapMalloc / lpNetworkManager, then writes the five words in this order. The
-// two end words (a5, a6) are stored straight from the call but never individually read in
-// the available exports, so they keep raw-offset-derived names with their observed pointer
-// width; recovering their meaning would GROW this home additively. The struct is
-// non-polymorphic (Construct takes `this` as a plain pointer; no vtable store).
+// word at +0x00 is the platform title id (the network manager passes a 32-bit immediate),
+// and the word at +0x10 is the server interface the base Prepare copies into its
+// mpServerInterface. The struct is non-polymorphic (Construct takes `this` as a plain
+// pointer; no vtable store).
 //
 // E_SERVER_TYPE_LOCAL == 0, E_SERVER_TYPE_COUNT == 7 (from the asm bounds blt 0 / blt 7).
 // ===================================================================================
@@ -44,7 +44,12 @@ namespace CgsNetwork
     // This is the canonical home for the type; NetworkPlayer's mConnectionData reuses it.
     struct ConnectionData
     {
-        u8 mReserved[0x70];
+        u8  maReserved00[0x28];
+        // How the game and voice traffic reach this peer (the lobby status writer copies
+        // both words out of a player's connection data).
+        s32 meGameConnectionType;   // +0x28
+        s32 meVoipConnectionType;   // +0x2C
+        u8  maReserved30[0x40];
     };
 
     // --- The network adapter base (UDP/DirtySock send path) ------------------------------
@@ -85,7 +90,17 @@ namespace CgsNetwork
         virtual ENetworkStatus        Prepare(NetworkAdapterPrepareParams* lpParams);
         virtual void                  Update();
         virtual bool                  Release();
-        void                          Destruct();
+
+        // Inlined into the network manager's Destruct: forget the manager, the server type,
+        // both buffers and the duplicate-login latch.
+        void Destruct()
+        {
+            meServerType     = E_SERVER_TYPE_COUNT;
+            mpNetworkManager = nullptr;
+            mpRecvBuffer     = nullptr;
+            mpHeapMalloc     = nullptr;
+            mbDuplicateLogin = false;
+        }
 
         ENetworkError                 GetLastError();
 
@@ -151,13 +166,14 @@ namespace CgsNetwork
 
         // @ 0x82581330 -- populate the param block (returns `this`).
         // Param order matches the X360 register order: leServerType, lpHeapMalloc,
-        // lpNetworkManager, then the two trailing opaque words (a5 -> mpField_10,
-        // a6 -> mpField_00).
+        // lpNetworkManager, the server interface (stored at +0x10), then the title id
+        // (stored at +0x00).
         NetworkAdapterPrepareParams* Construct(u32 leServerType, void* lpHeapMalloc,
                                                void* lpNetworkManager,
-                                               void* lpField_10, void* lpField_00);
+                                               ServerInterfaceDirtySock* lpServerInterface,
+                                               u32 luTitleID);
 
-        void* mpField_00;        // +0x00  (6th ctor arg, a6; the platform title ids)
+        u32   muTitleID;         // +0x00  the platform title id
         u32   meServerType;      // +0x04  EServerType
         void* mpHeapMalloc;      // +0x08
         void* mpNetworkManager;  // +0x0C

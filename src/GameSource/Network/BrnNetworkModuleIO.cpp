@@ -22,7 +22,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"   // BrnGameState::GameStateModuleIO::GameEventQueue (OutputBuffer storage)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include <cstring>   // std::memcpy (SetTimerStatusInterface, SetActiveRaceCarInterface) / std::strncpy (SetGameName)
+#include <cstring>   // std::memcpy (SetActiveRaceCarInterface) / std::strncpy (SetGameName)
 
 namespace BrnNetwork
 {
@@ -60,13 +60,11 @@ namespace BrnNetworkModuleIO
     }
 
     // The console body is the flat field-for-field copy of the two 24-byte TimerStatus blocks
-    // (the inlined TimerStatusInterface assignment). CgsSystem::TimerStatusInterface::operator=
-    // has no body in the tree yet and the type is pointer-free (48 bytes on both targets), so
-    // the copy is the same bytes as a block copy.
+    // (the inlined TimerStatusInterface assignment).
     void PreSimulationInputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        std::memcpy(&mTimerInterface, lpTimerStatusInterface, sizeof(mTimerInterface));
+        mTimerInterface = *lpTimerStatusInterface;
     }
 
     void PreSimulationInputBuffer::SetPadIdle(bool lbPadIdle)
@@ -575,14 +573,6 @@ namespace BrnNetworkModuleIO
     // ========================================================================
     // InGamePlayerStatusInterface helpers
     // ========================================================================
-
-    // Asserts the index is in [0, miNumPlayers), then returns the indexed 312-byte record.
-    InGamePlayerStatusData* InGamePlayerStatusInterface::GetPlayerStatusDataForWriting(s32 liIndex)
-    {
-        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-        CGS_ASSERT(liIndex < miNumPlayers, "liIndex < miNumPlayers");
-        return &maInGamePlayerData[liIndex];
-    }
 
     // Member-wise copy: the 8 records through InGamePlayerStatusData::operator= (312-byte
     // stride), the 36-byte game name, then the word at +2532, the word at +2536 and the byte at

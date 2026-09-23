@@ -108,19 +108,7 @@ void GameStateModule::Construct()
     if (mpPreWorldInputBuffer == 0)
     {
         mpPreWorldInputBuffer = new GameStateModuleIO::PreWorldInputBuffer();
-        mpPreWorldInputBuffer->Construct();   // CgsModule::IOBuffer::Construct -- raises eStatusConstructed
-
-        // ⓘ THE never-Constructed-queue TRAP, PAID UP FRONT. The console's CreateIOBuffer path
-        // Constructs the buffer's embedded VariableEventQueue<1536,16> at +0x4C; a queue that is
-        // only zero-filled has miFirstEventOffset == 0 and mbIsConstructed == false, and the first
-        // AddEvent on it asserts "Not Constructed" (or, worse for a queue that has been Clear()ed
-        // instead, writes at an unaligned head). DoUpdate_GameStatePreWorld posts onto exactly
-        // this queue -- events 33 (the stream-stall pair) and 8 -- so it WILL have a producer the
-        // moment that entry point lands. Constructed through the committed write-locked accessor
-        // rather than by poking the member, so the lock contract is honoured here too.
-        mpPreWorldInputBuffer->LockForWrite();
-        mpPreWorldInputBuffer->GetGameEventQueue()->Construct();
-        mpPreWorldInputBuffer->UnlockForWrite();
+        mpPreWorldInputBuffer->Construct();   // raises eStatusConstructed and constructs every embedded queue
     }
 
     // ⭐ X360 0x82380388 (this function) is the console's ONLY caller of

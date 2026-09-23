@@ -63,6 +63,8 @@ namespace CgsNetwork
         // Signatures from DecFIGS DWARF (CgsServerInterfaceUsersets.h). Declared-only here;
         // bodies are homed in the usersets component's own behavioural TU.
         bool IsPlayerInOurUserset(const char* lpcPlayerName) const;
+        // The console body compares the id with the first word of each userset list entry.
+        bool IsPlayerInOurUserset(s32 lPlayerID) const;
         void KickPlayer(const char* lpcPlayerName, EKickReason leReason);
         void KickPlayerByID(s32 lPlayerID, EKickReason leReason);
 

@@ -71,7 +71,7 @@ namespace BrnNetwork
     }
 
     // X360 0x8254C0F8 -- reset the base state-machine members and the platform sub-state idle.
-    void LoginManagerX360::Prepare()
+    bool LoginManagerX360::Prepare()
     {
         meSignInState         = E_SIGN_IN_STATE_COUNT;                     // stw 3,  0x10
         meSubState            = E_SUBSTATE_COUNT;                          // stw 0xF, 0x0C
@@ -79,10 +79,11 @@ namespace BrnNetwork
         meCompletedSignInType = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x18
         mpTOS                 = nullptr;                                   // stw 0,  0x20
         mePlatformSpecificSubState = E_PLATFORM_SPECIFIC_SUBSTATE_COUNT;   // stw 2,  0x24
+        return true;
     }
 
     // X360 0x8254C130 -- reset to idle (called by BrnNetworkManager::Release).
-    void LoginManagerX360::Release()
+    bool LoginManagerX360::Release()
     {
         meSignInState         = E_SIGN_IN_STATE_COUNT;                     // stw 3,  0x10
         mePlatformSpecificSubState = E_PLATFORM_SPECIFIC_SUBSTATE_COUNT;   // stw 2,  0x24
@@ -90,6 +91,7 @@ namespace BrnNetwork
         meSignInType          = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x14
         meCompletedSignInType = E_SIGN_IN_TYPE_COUNT;                      // stw 3,  0x18
         mpTOS                 = nullptr;                                   // stw 0,  0x20
+        return true;
     }
 
     // X360 0x8254C168 -- reset to idle (called by BrnNetworkManager::Destruct).

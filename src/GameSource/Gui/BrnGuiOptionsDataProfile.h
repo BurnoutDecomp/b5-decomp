@@ -52,6 +52,7 @@ namespace BrnGui
 // including the same real headers everywhere -- the l2 merge).
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
+#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"    // BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions
 
 namespace BrnNetwork
 {
@@ -59,21 +60,6 @@ namespace BrnNetwork
     {
         E_VEHICLE_CHOICE_DEFAULT = 0,
     };
-
-    // BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions -- the camera-feed user
-    // setting (stored as a 4-byte word at +0x7364). BrnNetworkModuleIO is a NAMESPACE
-    // in its canonical home (BrnNetworkModuleIO.h) and in BrnGuiCache.h; declaring it as
-    // a namespace here (not a struct) lets this header coexist with those in one TU
-    // (e.g. CrashNavOptions, which needs both). Enum access is identical either way.
-    namespace BrnNetworkModuleIO
-    {
-        enum ECameraUserOptions
-        {
-            CAMERA_USER_OFF          = 0,
-            CAMERA_USER_ON           = 1,
-            CAMERA_USER_FRIENDS_ONLY = 2,
-        };
-    }
 }
 
 // (BrnGameState::GameStateModuleIO::EGameModeType arrives from the REAL

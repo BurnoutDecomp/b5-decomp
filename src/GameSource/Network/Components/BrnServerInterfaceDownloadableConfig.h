@@ -99,6 +99,27 @@ namespace BrnNetwork
         const u8*  GetTelemetryFirstUsageEventFilters() const;
         const u8*  GetTelemetryNormalUsageEventFilters() const;
         s32        GetTosDownloadBufferSize() const;
+
+        // ---- ADDITIVE GROW (BrnNetworkStateManager TUs) ------------------------------------
+        // Downloaded-config readers the state manager uses. Console config-cache offsets:
+        // news buffer size +0x328, the connection mangle value +0x32C (a field the reference
+        // layout lacks; handed to ConnApiControl 'mngl'; name not recovered), then the start-time
+        // tunables in seconds: min / max sync time +0x330 / +0x334, wait-for-start-time +0x338,
+        // silent / communicating client-ready waits +0x33C / +0x340, gap before start time
+        // +0x344. Declared-only like the readers above; the backing members and bodies land with
+        // this component's own config-load TU.
+        s32        NewsBufferSize();
+        s32        MangleConfigValue();
+        f32        MinSyncTime();
+        f32        MaxSyncTime();
+        f32        WaitForStartTime();
+        f32        TimeToWaitForSilentClientReady();
+        f32        TimeToWaitForCommunicatingClientReady();
+        f32        TimeGapBeforeStartTime();
+
+        // Whether the gamertag is on the downloaded fever list (the state manager's login step
+        // sets the local player's fever flag from it). Declared-only.
+        bool       IsGamertagInFeverList(const char* lpcGamertag);
     };
 }
 

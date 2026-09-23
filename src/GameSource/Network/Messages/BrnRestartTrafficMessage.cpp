@@ -122,7 +122,7 @@ namespace BrnNetwork
             const CgsNetwork::PackOrUnpackResult lxHull =
                 CgsNetwork::PackOrUnpackU16(this, &mau16ActiveTrafficHulls[leActiveRaceCarIndex],
                                             KU16_MIN_HULL_VALUE, KU16_MAX_HULL_VALUE) | lxResult;
-            lxResult = BrnNetworkManager::PackOrUnpack(this,
+            lxResult = CgsNetwork::Message::PackOrUnpack(
                            &maPlayerIDsForActiveHulls[leActiveRaceCarIndex]) | lxHull;
 
             // Inlined EActiveRaceCarIndex operator++ range guard (X360 fires only if the

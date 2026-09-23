@@ -1,6 +1,7 @@
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (streamed asserts)
 
 // @ 0x82355540  int __fastcall BrnNetwork::LiveRevengeRelationship::GetTotalTakedowns(_DWORD *a1)
 // Sum of the local player's and the rival's lifetime takedowns across the whole
@@ -22,57 +23,328 @@ s32 BrnNetwork::LiveRevengeRelationship::GetTotalTakedowns() const
 namespace BrnNetwork
 {
     // ----------------------------------------------------------------------------------
-    // The relationship "clear" family. All three zero the SAME field set, store-for-store:
-    //   mOverallStats (the 18-word +0..+68 block), mLastTimeChanged's two FILETIME halves
-    //   (+76/+80), the un-homed mUniqueID byte @+88 and 8-byte field @+104, and the two
-    //   trailing ints miCurrentScoreForPlayersPointOfView (+112) / miTotalEvents (+116).
-    //   The X360 leaves mLastTimeChanged.mbIsLocal (+72) untouched here (it is owned by the
-    //   wall-clock Update path), and the opaque mUniqueID head/interior bytes untouched.
-    // Each member function below zeroes the set by name (members are private; expressed
-    // inline so no extra header surface is added).
+    // Lifecycle. Release, Destruct and the debug clear run the header-inline Clear(); Prepare
+    // clears, stamps the change time and adopts the rival's identity.
     // ----------------------------------------------------------------------------------
 
-    // @ 0x82547BE8  -- reset the relationship in place (no return value).
-    void LiveRevengeRelationship::Destruct()
+    bool LiveRevengeRelationship::Prepare(const UniquePlayerID* lpUniquePlayerID)
     {
-        // mOverallStats: zero both 36-byte stat blocks (the +0..+68 word stores).
-        mOverallStats.mPlayerStats = CommonRelationshipStats();
-        mOverallStats.mRivalStats  = CommonRelationshipStats();
-        // mLastTimeChanged: zero the two FILETIME halves (+76 / +80); DateAndTime::Clear
-        // zeros exactly those and leaves mbIsLocal (+72) untouched (no +72 store in the asm).
-        mLastTimeChanged.Clear();
-        // mUniqueID (un-homed): the byte @+88 and the 8-byte field @+104 the X360 zeroes.
-        mbUniqueID_88  = 0;
-        muUniqueID_104 = 0;
-        miCurrentScoreForPlayersPointOfView = 0;   // +112
-        miTotalEvents                       = 0;   // +116
-    }
+        CGS_ASSERT(lpUniquePlayerID, "lpUniquePlayerID");
+        // PlayerName::IsEmpty (inline): the first name character is the terminator.
+        CGS_ASSERT(lpUniquePlayerID->GetPlayerName()[0] != '\0',
+                   "!lpUniquePlayerID->GetPlayerName()->IsEmpty()");
 
-    // @ 0x82547B78  -- reset the relationship in place; returns true (the X360 li r3,1).
-    bool LiveRevengeRelationship::Release()
-    {
-        mOverallStats.mPlayerStats = CommonRelationshipStats();
-        mOverallStats.mRivalStats  = CommonRelationshipStats();
-        mLastTimeChanged.Clear();
-        mbUniqueID_88  = 0;
-        muUniqueID_104 = 0;
-        miCurrentScoreForPlayersPointOfView = 0;
-        miTotalEvents                       = 0;
+        Clear();
+        mLastTimeChanged.SetLocal(false);
+        mLastTimeChanged.Update();
+
+        // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
+        CGS_ASSERT(lpUniquePlayerID->GetPlayerName()[0] != '\0' && lpUniquePlayerID->mqXuid != 0,
+                   "lpUniquePlayerID->IsValid()");
+
+        mUniqueID = *lpUniquePlayerID;
         return true;
     }
 
-    // @ 0x82547D70  -- static debug callback: cast the void* to the relationship, clear it,
-    // then refresh the timestamp (X360 tail-calls CgsSystem::DateAndTime::Update(this+0x48)).
+    // Reset the relationship in place; always succeeds.
+    bool LiveRevengeRelationship::Release()
+    {
+        Clear();
+        return true;
+    }
+
+    // Reset the relationship in place.
+    void LiveRevengeRelationship::Destruct()
+    {
+        Clear();
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Takedowns. A takedown against the side that was ahead settles the score (the running
+    // score returns to zero and that side's settled count rises); otherwise it extends the
+    // taker's streak. The streak high-water mark and the marked-man count follow, then the
+    // change time is stamped.
+    // ----------------------------------------------------------------------------------
+
+    void LiveRevengeRelationship::AddTakedownByLocalPlayer(bool lbMarkedMan)
+    {
+        ++mOverallStats.mPlayerStats.miTakedowns;
+
+        if (miCurrentScoreForPlayersPointOfView < 0)
+        {
+            ++mOverallStats.mPlayerStats.miScoresSettled;
+            mOverallStats.mPlayerStats.miEventsSinceLastTakedown = 0;
+            miCurrentScoreForPlayersPointOfView = 0;
+        }
+        else
+        {
+            ++miCurrentScoreForPlayersPointOfView;
+        }
+
+        if (miCurrentScoreForPlayersPointOfView > mOverallStats.mPlayerStats.miLongestStreak)
+        {
+            mOverallStats.mPlayerStats.miLongestStreak = miCurrentScoreForPlayersPointOfView;
+        }
+
+        if (lbMarkedMan)
+        {
+            ++mOverallStats.mPlayerStats.miScalps;
+        }
+
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddTakedownByRival(bool lbMarkedMan)
+    {
+        ++mOverallStats.mRivalStats.miTakedowns;
+
+        if (miCurrentScoreForPlayersPointOfView > 0)
+        {
+            ++mOverallStats.mRivalStats.miScoresSettled;
+            mOverallStats.mRivalStats.miEventsSinceLastTakedown = 0;
+            miCurrentScoreForPlayersPointOfView = 0;
+        }
+        else
+        {
+            --miCurrentScoreForPlayersPointOfView;
+        }
+
+        if (-miCurrentScoreForPlayersPointOfView > mOverallStats.mRivalStats.miLongestStreak)
+        {
+            mOverallStats.mRivalStats.miLongestStreak = -miCurrentScoreForPlayersPointOfView;
+        }
+
+        if (lbMarkedMan)
+        {
+            ++mOverallStats.mRivalStats.miScalps;
+        }
+
+        mLastTimeChanged.Update();
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Single-counter events (no out-of-line console bodies; each is inlined at its one
+    // manager call site as the increment followed by the change-time stamp).
+    // ----------------------------------------------------------------------------------
+
+    void LiveRevengeRelationship::AddPaybackDealtByLocalPlayer()
+    {
+        ++mOverallStats.mPlayerStats.miPaybacksDealt;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddPaybackDealtByRival()
+    {
+        ++mOverallStats.mRivalStats.miPaybacksDealt;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddPaybackScoredByLocalPlayer()
+    {
+        ++mOverallStats.mPlayerStats.miPaybacksScored;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddPaybackScoredByRival()
+    {
+        ++mOverallStats.mRivalStats.miPaybacksScored;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddWinByLocalPlayer()
+    {
+        ++mOverallStats.mPlayerStats.miWins;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddWinByRival()
+    {
+        ++mOverallStats.mRivalStats.miWins;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddMarkByPlayer()
+    {
+        ++mOverallStats.mPlayerStats.miMarks;
+        mLastTimeChanged.Update();
+    }
+
+    void LiveRevengeRelationship::AddMarkByRival()
+    {
+        ++mOverallStats.mRivalStats.miMarks;
+        mLastTimeChanged.Update();
+    }
+
+    // One more shared event with this rival.
+    void LiveRevengeRelationship::OnRoundFinish()
+    {
+        ++miTotalEvents;
+        mLastTimeChanged.Update();
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Point of view. A relationship received from the rival is expressed from the rival's
+    // side; flipping negates the running score and swaps the two stat blocks.
+    // ----------------------------------------------------------------------------------
+
+    void LiveRevengeRelationship::FlipCommonRelationship(CommonRelationship* lpRelationship)
+    {
+        CommonRelationshipStats lStats = lpRelationship->mRivalStats;
+        lpRelationship->mRivalStats  = lpRelationship->mPlayerStats;
+        lpRelationship->mPlayerStats = lStats;
+    }
+
+    void LiveRevengeRelationship::FlipPointOfView()
+    {
+        miCurrentScoreForPlayersPointOfView = -miCurrentScoreForPlayersPointOfView;
+        FlipCommonRelationship(&mOverallStats);
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Validation.
+    // ----------------------------------------------------------------------------------
+
+    bool LiveRevengeRelationship::Validate() const
+    {
+        // UniquePlayerID::IsValid (inline): a non-empty name and a non-zero XUID.
+        if (!(mUniqueID.GetPlayerName()[0] != '\0' && mUniqueID.mqXuid != 0))
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "mUniqueID is not valid: " << mUniqueID.GetPlayerName()
+                       << ". If you delete your profile you will stop seeing this.\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+
+        if (mOverallStats.mPlayerStats.miTakedowns + mOverallStats.mRivalStats.miTakedowns < 0)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "number of takedowns are invalid player: " << mOverallStats.mPlayerStats.miTakedowns
+                       << " rival: " << mOverallStats.mRivalStats.miTakedowns
+                       << ". If you delete your profile you will stop seeing this.\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+            return false;
+        }
+
+        CGS_ASSERT(!mLastTimeChanged.IsZero(), "!mLastTimeChanged.IsZero()");
+        return true;
+    }
+
+    // A local/remote stat pair is inconsistent when one side claims more for the player while
+    // the other claims more for the rival. With lbShouldWeAssert the mismatch asserts; without
+    // it the build only writes a warning line to the network log stream.
+    void LiveRevengeRelationship::ValidateStat(s32 liLocalPlayerStat, s32 liRemotePlayerStat,
+                                               s32 liLocalRivalStat, s32 liRemoteRivalStat,
+                                               const char* lpcName, bool lbShouldWeAssert)
+    {
+        bool lbDetectedWrong = false;
+        if (liLocalPlayerStat > liRemotePlayerStat && liLocalRivalStat < liRemoteRivalStat)
+        {
+            lbDetectedWrong = true;
+        }
+        if (liLocalRivalStat > liRemoteRivalStat && liLocalPlayerStat < liRemotePlayerStat)
+        {
+            lbDetectedWrong = true;
+        }
+
+        if (lbDetectedWrong && lbShouldWeAssert)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "We are detecting " << lpcName << " wrong, pl: " << liLocalPlayerStat
+                       << " pr: " << liRemotePlayerStat << " rl: " << liLocalRivalStat
+                       << " rr: " << liRemoteRivalStat
+                       << ".  Step over, run an external or delete your profile to stop getting this every time you join a game with "
+                       << mUniqueID.GetPlayerName() << ".\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::EndAssert();
+        }
+        // FLAG: the non-asserting branch writes "WARNING: We are detecting <name> wrong, pl: ..
+        // pr: .. rl: .. rr: ..\n" to the network log stream, which has no home in this tree;
+        // the line is dropped.
+    }
+
+    // Merge the rival's copy (already flipped to this side's point of view) into this one:
+    // cross-check five stats, reconcile a disagreeing running score, then keep the larger
+    // value of every merged stat.
+    void LiveRevengeRelationship::Merge(LiveRevengeRelationship* lpRemoteRelationship)
+    {
+        CommonRelationshipStats& lrLocalPlayer  = mOverallStats.mPlayerStats;
+        CommonRelationshipStats& lrLocalRival   = mOverallStats.mRivalStats;
+        const CommonRelationshipStats& lrRemotePlayer = lpRemoteRelationship->mOverallStats.mPlayerStats;
+        const CommonRelationshipStats& lrRemoteRival  = lpRemoteRelationship->mOverallStats.mRivalStats;
+
+        ValidateStat(lrLocalPlayer.miTakedowns, lrRemotePlayer.miTakedowns,
+                     lrLocalRival.miTakedowns, lrRemoteRival.miTakedowns, "Takedowns", false);
+        ValidateStat(lrLocalPlayer.miWins, lrRemotePlayer.miWins,
+                     lrLocalRival.miWins, lrRemoteRival.miWins, "Wins", false);
+        ValidateStat(lrLocalPlayer.miLongestStreak, lrRemotePlayer.miLongestStreak,
+                     lrLocalRival.miLongestStreak, lrRemoteRival.miLongestStreak, "Longest Streak", false);
+        ValidateStat(lrLocalPlayer.miEventsSinceLastTakedown, lrRemotePlayer.miEventsSinceLastTakedown,
+                     lrLocalRival.miEventsSinceLastTakedown, lrRemoteRival.miEventsSinceLastTakedown,
+                     "Events since takedown", false);
+        ValidateStat(lrLocalPlayer.miScoresSettled, lrRemotePlayer.miScoresSettled,
+                     lrLocalRival.miScoresSettled, lrRemoteRival.miScoresSettled, "Scores Settled", false);
+
+        if (miCurrentScoreForPlayersPointOfView != lpRemoteRelationship->miCurrentScoreForPlayersPointOfView)
+        {
+            // The local takedown total is weighed against twice the remote player-side takedown
+            // count (the build doubles that one field, not the remote total).
+            const s32 liLocalTakedowns  = lrLocalPlayer.miTakedowns + lrLocalRival.miTakedowns;
+            const s32 liRemoteTakedowns = lrRemotePlayer.miTakedowns * 2;
+            if (liLocalTakedowns < liRemoteTakedowns)
+            {
+                miCurrentScoreForPlayersPointOfView = lpRemoteRelationship->miCurrentScoreForPlayersPointOfView;
+            }
+            else if (liLocalTakedowns == liRemoteTakedowns)
+            {
+                miCurrentScoreForPlayersPointOfView = 0;
+            }
+        }
+
+        // rw::core::stdc::Max over each merged stat (the branchy max, spelled in place).
+        lrLocalPlayer.miTakedowns               = (lrLocalPlayer.miTakedowns > lrRemotePlayer.miTakedowns) ? lrLocalPlayer.miTakedowns : lrRemotePlayer.miTakedowns;
+        lrLocalPlayer.miWins                    = (lrLocalPlayer.miWins > lrRemotePlayer.miWins) ? lrLocalPlayer.miWins : lrRemotePlayer.miWins;
+        lrLocalPlayer.miLongestStreak           = (lrLocalPlayer.miLongestStreak > lrRemotePlayer.miLongestStreak) ? lrLocalPlayer.miLongestStreak : lrRemotePlayer.miLongestStreak;
+        lrLocalPlayer.miEventsSinceLastTakedown = (lrLocalPlayer.miEventsSinceLastTakedown > lrRemotePlayer.miEventsSinceLastTakedown) ? lrLocalPlayer.miEventsSinceLastTakedown : lrRemotePlayer.miEventsSinceLastTakedown;
+        lrLocalPlayer.miScoresSettled           = (lrLocalPlayer.miScoresSettled > lrRemotePlayer.miScoresSettled) ? lrLocalPlayer.miScoresSettled : lrRemotePlayer.miScoresSettled;
+        lrLocalRival.miTakedowns                = (lrLocalRival.miTakedowns > lrRemoteRival.miTakedowns) ? lrLocalRival.miTakedowns : lrRemoteRival.miTakedowns;
+        lrLocalRival.miWins                     = (lrLocalRival.miWins > lrRemoteRival.miWins) ? lrLocalRival.miWins : lrRemoteRival.miWins;
+        lrLocalRival.miLongestStreak            = (lrLocalRival.miLongestStreak > lrRemoteRival.miLongestStreak) ? lrLocalRival.miLongestStreak : lrRemoteRival.miLongestStreak;
+        lrLocalRival.miEventsSinceLastTakedown  = (lrLocalRival.miEventsSinceLastTakedown > lrRemoteRival.miEventsSinceLastTakedown) ? lrLocalRival.miEventsSinceLastTakedown : lrRemoteRival.miEventsSinceLastTakedown;
+        lrLocalRival.miScoresSettled            = (lrLocalRival.miScoresSettled > lrRemoteRival.miScoresSettled) ? lrLocalRival.miScoresSettled : lrRemoteRival.miScoresSettled;
+    }
+
+    // ----------------------------------------------------------------------------------
+    // Debug-menu callbacks (the void* is the relationship).
+    // ----------------------------------------------------------------------------------
+
+    void LiveRevengeRelationship::DEBUGResetTimeStamp(void* lpParameter)
+    {
+        LiveRevengeRelationship* lpRelationship = static_cast<LiveRevengeRelationship*>(lpParameter);
+        lpRelationship->mLastTimeChanged.Update();
+    }
+
+    // A default-constructed (zero) time makes the relationship the oldest in the table.
+    void LiveRevengeRelationship::DEBUGSetTimeStampOld(void* lpParameter)
+    {
+        LiveRevengeRelationship* lpRelationship = static_cast<LiveRevengeRelationship*>(lpParameter);
+        CgsSystem::DateAndTime lDateAndTime;
+        lpRelationship->SetLastTimeChanged(lDateAndTime);
+    }
+
+    // Clear the relationship, then stamp the change time.
     void LiveRevengeRelationship::DEBUGClearRelationship(void* lpParameter)
     {
-        LiveRevengeRelationship* lpThis = static_cast<LiveRevengeRelationship*>(lpParameter);
-        lpThis->mOverallStats.mPlayerStats = CommonRelationshipStats();
-        lpThis->mOverallStats.mRivalStats  = CommonRelationshipStats();
-        lpThis->mLastTimeChanged.Clear();
-        lpThis->mbUniqueID_88  = 0;
-        lpThis->muUniqueID_104 = 0;
-        lpThis->miCurrentScoreForPlayersPointOfView = 0;
-        lpThis->miTotalEvents                       = 0;
-        lpThis->mLastTimeChanged.Update();
+        LiveRevengeRelationship* lpRelationship = static_cast<LiveRevengeRelationship*>(lpParameter);
+        lpRelationship->Clear();
+        lpRelationship->mLastTimeChanged.Update();
     }
 }

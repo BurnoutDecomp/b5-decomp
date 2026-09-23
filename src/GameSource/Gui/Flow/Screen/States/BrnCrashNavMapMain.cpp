@@ -312,11 +312,11 @@ namespace BrnGui
             static_cast<s32>(sizeof(lDeactivate)));
 
         // 0x824CCA44..0x824CCA70 -- { 4, 45, 12, 1 } ch 40, 16 bytes. Id 45 ==
-        // CgsGui::GuiEventNetworkSuspension; the payload word is the suspend flag.
-        CgsGui::GuiEventNetworkSuspension lSuspend(true);
+        // CgsGui::GuiEventNetworkSuspension; payload 1 is E_SUSPENSION_TYPE_RESUME.
+        CgsGui::GuiEventNetworkSuspension lResume(true);
         mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lSuspend), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lSuspend)));
+            reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_EVENT,
+            static_cast<s32>(sizeof(lResume)));
 
         // 0x824CCA84 / 0x824CCA88 -- the two stores the pause-wave partial could not
         // make. +24928 is this class's own byte; +56 is the base's meMapState.

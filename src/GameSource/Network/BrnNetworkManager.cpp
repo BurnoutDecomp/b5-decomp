@@ -1,34 +1,37 @@
 #include "types.hpp"
 
 #include "GameSource/Network/BrnNetworkManager.h"
-#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"  // CgsNetwork::PackOrUnpackInt field primitive
+#include "GameSource/Network/BrnServerInterface.h"                                          // GetTelemetryComponent
+#include "GameSource/Network/Components/BrnServerInterfaceTelemetry.h"                      // BrnServerInterfaceTelemetry
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                                     // CgsCore::SPrintf
+#include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                             // KI_MAX_TELEMETRY_DATA_SIZE
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceTelemetry.h"
 
 // ============================================================================================
 // BrnNetwork::BrnNetworkManager -- the online hub.
 //
-// All 39 console functions of the class are declared in BrnNetworkManager.h with their
-// reconstructed signatures, and the class layout is homed there by name. Only PackOrUnpack is
-// bodied here so far; the remaining bodies land in partfiles beside this one.
+// The console functions of the class are declared in BrnNetworkManager.h with their
+// reconstructed signatures, and the class layout is homed there by name. Most bodies live in
+// the partfiles beside this one. (The NetworkPlayerID field helper the message classes call
+// is CgsNetwork::Message::PackOrUnpack(NetworkPlayerID*), homed in CgsMessage.cpp.)
 // ============================================================================================
 
 namespace BrnNetwork
 {
     // ----------------------------------------------------------------------------------------
-    // BrnNetworkManager::PackOrUnpack
+    // BrnNetworkManager::CaptureTelemetryEvent (integer payload)
     //
-    // Static field (de)serialise helper for a NetworkPlayerID carried in a reliable message:
-    // copy the field into a local, route it through the shared quantised-int primitive over
-    // the full signed 32-bit range, write the (possibly updated) value back, and return the
-    // per-field pack/unpack status (0 == success).
+    // The integer form of the telemetry hook: print the value as decimal text into a
+    // telemetry-sized buffer and record the event with that text as its payload.
     // ----------------------------------------------------------------------------------------
-    BrnNetworkManager::PackOrUnpackResult BrnNetworkManager::PackOrUnpack(
-            CgsNetwork::Message* lpMessage,
-            NetworkPlayerID*     lpNetworkPlayerID )
+    void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, s32 liData)
     {
-        s32 liValue = *lpNetworkPlayerID;
-        const BrnNetworkManager::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt( lpMessage, &liValue, 0x80000000, 0x7FFFFFFF );
-        *lpNetworkPlayerID = liValue;
-        return lxResult;
+        CGS_ASSERT(GetServerInterface(), "GetServerInterface()");
+        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), "GetServerInterface()->GetTelemetryComponent()");
+
+        char lacData[CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE];
+        CgsCore::SPrintf(lacData, sizeof(lacData), "%i", liData);
+        GetServerInterface()->GetTelemetryComponent()->CaptureEvent(leHook, lacData);
     }
 }

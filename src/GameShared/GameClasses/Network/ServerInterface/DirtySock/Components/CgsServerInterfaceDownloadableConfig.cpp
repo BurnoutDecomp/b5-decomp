@@ -66,15 +66,14 @@ namespace CgsNetwork
         // OnEvent reset trigger (the asm compares the event id against 5).
         const s32 KI_EVENT_RESET = 5;
 
-        // DirtySock-error -> EServerInterfaceError map for the game-news download.
-        // (CgsServerInterfaceDownloadableConfig.cpp:45 -- 2 entries.)
-        // FLAGGED: only the 'nfnd' -> MISSING_CONFIG_FILE pairing is grounded (the empty-
-        // config path returns 'nfnd'); the second entry's DirtySock code is inferred --
-        // a timeout maps to the config TIMEOUT error in this sub-range.
+        // DirtySock-error -> EServerInterfaceError map for the game-news download
+        // (2 entries, as the console rodata holds them): no error maps to none, and
+        // 'nfnd' maps to the server-info item-not-found error (93), not to a
+        // downloadable-config error.
         const DSErrorToServerInterfaceError KA_CONFIGDOWNLOAD_NEWS_SERVER_INTERFACE_ERROR_MAPPING[2] =
         {
-            { FourCC('n', 'f', 'n', 'd'), E_SERVER_INTERFACE_DOWNLOADABLE_CONFIG_ERROR_MISSING_CONFIG_FILE },
-            { FourCC('t', 'i', 'm', 'e'), E_SERVER_INTERFACE_DOWNLOADABLE_CONFIG_ERROR_TIMEOUT },
+            { 0,                          E_SERVER_INTERFACE_ERROR_NONE },
+            { FourCC('n', 'f', 'n', 'd'), E_SERVER_INTERFACE_SERVER_INFO_ERROR_ITEM_NOT_FOUND },
         };
     }
 

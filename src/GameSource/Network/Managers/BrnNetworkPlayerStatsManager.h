@@ -56,8 +56,6 @@ namespace BrnNetwork
         struct PostSimulationInputBuffer;   // ProcessAfterSimulation param
     }
 
-    struct NetworkInFreeburnChallengeEvent; // HandleFreeburnChallengeEvent param (other TU)
-
     namespace StatsInputInterface
     {
         struct StatsInputQueue;             // CopyEvents param (other TU)
@@ -99,10 +97,12 @@ namespace BrnNetwork
         void RequestPlayerStats(const char* lpcName);
         void OnGameStart();
         void HandleGameResults(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults);
-        void HandleFreeburnChallengeEvent(const NetworkInFreeburnChallengeEvent* lpEvent);
+        void HandleFreeburnChallengeEvent(const BrnNetworkModuleIO::NetworkInFreeburnChallengeEvent* lpEvent);
         void ValidateQueueAndPostGettingStatsEvents(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
         void UploadFreeBurnLobbyStats(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults);
-        void UploadOfflineProgression(const BrnNetworkModuleIO::NetworkInOfflineProgression* lpOfflineProgression);
+        // Ask the game state for its offline progression (posts the empty request event) and wait
+        // for it to arrive.
+        void UploadOfflineProgression();
         void Disconnected();
         void HandleNewNumberOfRivals();
         void HandleNewNumberOfAchievements(s32 liNumberOfAchievements);

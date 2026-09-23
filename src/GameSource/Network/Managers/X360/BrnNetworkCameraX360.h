@@ -242,6 +242,13 @@ namespace BrnNetwork
         // a feed slot, with the request timer stamped from the manager's current time.
         void RequestFeed(s32 liPlayerID);
 
+        // The player whose feed is being watched (-1 == none).
+        s32 GetRequestedPlayerID() const { return miRequestedPlayerID; }
+
+        // The user's camera option (the setting SetUserSetting stores; the image manager reads a
+        // friends-only value, 2, as the mugshot privilege).
+        s32 GetUserSetting() const { return miUserSetting; }
+
         // X360 0x82587390 -- the local camera availability/status (0 none / 1 available /
         // 2 in-use / 3 connecting) advertised to the lobby.
         s32 GetLocalCameraStatus();
@@ -249,10 +256,12 @@ namespace BrnNetwork
         // X360 0x8258B6F8 -- stamp the local camera status into the local player's menu data.
         void UpdateCameraStatus();
 
-        // X360 0x82586890 -- queue the local camera picture for DXT compression for transmission.
+        // queue the local camera picture for DXT compression for transmission
+        // at compression quality liQualitySetting.
         // DECLARATION-ONLY (depends on the un-homed XCamGetStatus + stream-engine geometry).
         s32 GetCompressedLocalCameraPicture(
             CgsNetwork::NetworkTexture* lpDstTexture,
+            s32 liQualitySetting,
             CgsNetwork::NetworkTextureDXTCompress::CompressionCompleteCallback lCompleteCallback,
             void* lpCompleteData);
 

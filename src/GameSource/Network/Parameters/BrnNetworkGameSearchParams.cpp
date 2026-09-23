@@ -131,6 +131,18 @@ namespace BrnNetwork
         return &mSearchData;
     }
 
+    // No custom-flag filtering: the console body of both slots is a bare `return 0`
+    // (shared by identical code folding with other such functions).
+    u32 GameSearchParamsBase::GetCustomFlagsMask() const
+    {
+        return 0;
+    }
+
+    u32 GameSearchParamsBase::GetCustomFlagsValue() const
+    {
+        return 0;
+    }
+
     // ========================================================================
     // GameSearchParams::AreRivalsInSameGame  @ 0x82590FC0
     //

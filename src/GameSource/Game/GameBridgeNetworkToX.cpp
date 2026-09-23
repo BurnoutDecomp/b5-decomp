@@ -20,11 +20,7 @@
 //     GetPlayerActiveRaceCarIndex) and the interfaces' own members. Nothing is read at a
 //     console offset of the IO buffer, whose host layout is pointer-widened.
 //   * The records drained from the NetworkEventQueue are the network OUT events of
-//     BrnNetworkOutEventTypeDefs.h and are read by member. Three of them still come from
-//     homes that do not name every field (NetworkOutPlayerAddedEvent and
-//     NetworkOutPlayerRemovedEvent hold their payload as opaque spans, and
-//     NetworkOutRecvRoadRulesPBEvent is one opaque block); those fields are read at their
-//     record offsets and marked at the read.
+//     BrnNetworkOutEventTypeDefs.h (and the homes it pulls in) and are read by member.
 //   * The game-state events with a home in BrnGameEvents.h are built through their members
 //     and posted with their own size. The rest of the game-state records are still opaque
 //     in their homes; they are built at their record offsets inside a buffer of the size the
@@ -58,17 +54,6 @@
 
 namespace
 {
-    // The three debug switches BridgeNetworkToGui reads. Their real homes are static members of
-    // the GUI records it posts: BrnGui::GuiEventNetworkPlayerList::msbWorstCaseHudActive,
-    // BrnGui::GuiEventNetworkPlayerStatus::msbWorstCaseHudActive and
-    // BrnGui::GuiEventNetworkPlayerStatus::msbStatusSwitch, written only by
-    // BrnGui::GuiDebugComponent::UpdateWorstCaseHUD. Those records are still opaque in
-    // BrnGuiDemangledEventTypes.h, so the flags are held here under the member names until the
-    // statics are declared there. Nothing else stores to them, so they start false.
-    bool msbPlayerListWorstCaseHudActive   = false;   // GuiEventNetworkPlayerList::msbWorstCaseHudActive
-    bool msbPlayerStatusWorstCaseHudActive = false;   // GuiEventNetworkPlayerStatus::msbWorstCaseHudActive
-    bool msbPlayerStatusSwitch             = false;   // GuiEventNetworkPlayerStatus::msbStatusSwitch
-
     // Layout pins for the game-state records this TU builds by member and posts with sizeof.
     typedef BrnGameState::GameStateModuleIO::OnlinePlayerAddedEvent               PinAdded;
     typedef BrnGameState::GameStateModuleIO::OnlinePlayerRemovedEvent             PinRemoved;
@@ -232,17 +217,14 @@ namespace BrnGame
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lBuddyRemoved, GsIO::E_EVENT_BUDDY_REMOVED);
                     break;
                 }
-                case 15:  // NetworkOutGameParamsChanged -> {game mode, ranked}
+                case NetIO::NetworkOutGameParamsChanged::KI_EVENT_TYPE:                     // 15
                 {
-                    // The record's home names its +0x1B8 word miMaxPlayers and its +0x1DC byte
-                    // mbIsRankedGame; they are the reference's meGameMode and mbRanked (the GUI
-                    // translator's copy into GuiEventNetworkGameParams maps them by name).
                     const NetIO::NetworkOutGameParamsChanged* lpGameParamEvent =
                         reinterpret_cast<const NetIO::NetworkOutGameParamsChanged*>(lpEvent);
                     CGS_ASSERT(lpGameParamEvent != 0, "lpEvent");
                     unsigned char lOut[8];
-                    lOut[4] = lpGameParamEvent->mbIsRankedGame;                          // mbRanked
-                    *reinterpret_cast<s32*>(lOut) = lpGameParamEvent->miMaxPlayers;      // meGameMode
+                    lOut[4] = lpGameParamEvent->mbRanked;
+                    *reinterpret_cast<s32*>(lOut) = lpGameParamEvent->meGameMode;
                     CGS_ASSERT(lpGameStateInput != 0, "lpGameStateInput");
                     CGS_ASSERT(lpGameStateInput->GetGameEventQueue() != 0,
                                "lpGameStateInput->GetGameEventQueue()");
@@ -250,45 +232,38 @@ namespace BrnGame
                         reinterpret_cast<const CgsModule::Event*>(lOut), 125, 8);
                     break;
                 }
-                case 16:  // NetworkOutPlayerAddedEvent -> OnlinePlayerAddedEvent
+                case NetIO::NetworkOutPlayerAddedEvent::KI_EVENT_TYPE:                      // 16
                 {
-                    // The record's home names only mNetworkPlayerID (+0x10); its other fields sit
-                    // in opaque spans and are read at their offsets:
-                    //   +0x00 mModelID, +0x08 mWheelID, +0x14 meTeam, +0x18 the console-only float,
-                    //   +0x1C mu16CarColourIndex, +0x1E mu16CarPaintFinishIndex, +0x20 mbIsLocalPlayer.
                     const NetIO::NetworkOutPlayerAddedEvent* lpPlayerAddedEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerAddedEvent*>(lpEvent);
-                    const unsigned char* lpRecord = reinterpret_cast<const unsigned char*>(lpPlayerAddedEvent);
                     GsIO::OnlinePlayerAddedEvent lAdded;
-                    lAdded.SetNetworkPlayerID(lpPlayerAddedEvent->mNetworkPlayerID);
-                    lAdded.mModelID                = *reinterpret_cast<const CgsID*>(lpRecord + 0x00);
-                    lAdded.mf18                    = *reinterpret_cast<const f32*>(lpRecord + 0x18);
-                    lAdded.mWheelID                = *reinterpret_cast<const CgsID*>(lpRecord + 0x08);
-                    lAdded.meTeam                  = *reinterpret_cast<const GsIO::EPlayerTeam*>(lpRecord + 0x14);
-                    lAdded.mbIsLocalPlayer         = lpRecord[0x20] != 0;
-                    lAdded.mu16CarColourIndex      = *reinterpret_cast<const u16*>(lpRecord + 0x1C);
-                    lAdded.mu16CarPaintFinishIndex = *reinterpret_cast<const u16*>(lpRecord + 0x1E);
+                    lAdded.SetNetworkPlayerID(lpPlayerAddedEvent->GetNetworkPlayerID());
+                    lAdded.mModelID                = lpPlayerAddedEvent->GetModelID();
+                    lAdded.mf18                    = lpPlayerAddedEvent->mf18;
+                    lAdded.mWheelID                = lpPlayerAddedEvent->GetWheelID();
+                    lAdded.meTeam                  = lpPlayerAddedEvent->GetTeam();
+                    lAdded.mbIsLocalPlayer         = lpPlayerAddedEvent->IsLocalPlayer();
+                    lAdded.mu16CarColourIndex      = lpPlayerAddedEvent->GetCarColourIndex();
+                    lAdded.mu16CarPaintFinishIndex = lpPlayerAddedEvent->GetCarPaintFinishIndex();
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lAdded, GsIO::E_EVENT_ONLINE_PLAYER_ADDED);
                     break;
                 }
-                case 20:  // NetworkOutPlayerFinalisedEvent -> OnlinePlayerFinalisedEvent
+                case NetIO::NetworkOutPlayerFinalisedEvent::KI_EVENT_TYPE:                  // 20
                 {
                     const NetIO::NetworkOutPlayerFinalisedEvent* lpPlayerFinalisedEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerFinalisedEvent*>(lpEvent);
                     GsIO::OnlinePlayerFinalisedEvent lFinalised;
-                    lFinalised.SetNetworkPlayerID(lpPlayerFinalisedEvent->mNetworkPlayerID);
+                    lFinalised.SetNetworkPlayerID(lpPlayerFinalisedEvent->GetNetworkPlayerID());
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lFinalised, GsIO::E_EVENT_ONLINE_PLAYER_FINALISED);
                     break;
                 }
-                case 17:  // NetworkOutPlayerRemovedEvent -> OnlinePlayerRemovedEvent
+                case NetIO::NetworkOutPlayerRemovedEvent::KI_EVENT_TYPE:                    // 17
                 {
-                    // mbIsLocalPlayerInGame sits at +0x14 in the record's opaque tail.
                     const NetIO::NetworkOutPlayerRemovedEvent* lpPlayerRemovedEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerRemovedEvent*>(lpEvent);
-                    const unsigned char* lpRecord = reinterpret_cast<const unsigned char*>(lpPlayerRemovedEvent);
                     GsIO::OnlinePlayerRemovedEvent lRemoved;
-                    lRemoved.SetNetworkPlayerID(lpPlayerRemovedEvent->mNetworkPlayerID);
-                    lRemoved.mbIsLocalPlayerInGame = lpRecord[0x14] != 0;
+                    lRemoved.SetNetworkPlayerID(lpPlayerRemovedEvent->GetNetworkPlayerID());
+                    lRemoved.mbIsLocalPlayerInGame = lpPlayerRemovedEvent->IsLocalPlayerInGame();
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lRemoved, GsIO::E_EVENT_ONLINE_PLAYER_REMOVED);
                     break;
                 }
@@ -314,7 +289,7 @@ namespace BrnGame
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), laeTeams, 154);
                     break;
                 }
-                case 23:  // NetworkPlayerDisconnectedEvent -> RemotePlayerDisconnectedEvent (only when DISCONNECTED)
+                case NetIO::NetworkPlayerDisconnectedEvent::KI_EVENT_TYPE:                  // 23 (only when DISCONNECTED)
                 {
                     const NetIO::NetworkPlayerDisconnectedEvent* lpPlayerDisconnectedEvent =
                         reinterpret_cast<const NetIO::NetworkPlayerDisconnectedEvent*>(lpEvent);
@@ -361,20 +336,17 @@ namespace BrnGame
                         reinterpret_cast<const CgsModule::Event*>(lOut), 143, 16);
                     break;
                 }
-                case 35:  // NetworkOutRecvRoadRulesPBEvent -> OnlineRoadRulesPersonalBestRecvEvent
+                case NetIO::NetworkOutRecvRoadRulesPBEvent::KI_EVENT_TYPE:                  // 35
                 {
-                    // The record's home holds it as one opaque 72-byte block: the 56-byte score at
-                    // +0x00, then the player id (+0x38), the challenge index (+0x3C) and the friend
-                    // flag (+0x40).
                     const NetIO::NetworkOutRecvRoadRulesPBEvent* lpRoadRulesPersonalBest =
                         reinterpret_cast<const NetIO::NetworkOutRecvRoadRulesPBEvent*>(lpEvent);
                     CGS_ASSERT(lpRoadRulesPersonalBest != 0, "lpRoadRulesPersonalBest");
-                    const unsigned char* lpRecord = lpRoadRulesPersonalBest->maOpaque;
                     GsIO::OnlineRoadRulesPersonalBestRecvEvent lPersonalBest;
-                    std::memcpy(&lPersonalBest.mPersonalBestScore, lpRecord, sizeof(lPersonalBest.mPersonalBestScore));
-                    lPersonalBest.mPersonalBestPlayerID       = *reinterpret_cast<const s32*>(lpRecord + 0x38);
-                    lPersonalBest.mPersonalBestChallengeIndex = *reinterpret_cast<const s32*>(lpRecord + 0x3C);
-                    lPersonalBest.mbWasPBByFriend             = lpRecord[0x40] != 0;
+                    std::memcpy(&lPersonalBest.mPersonalBestScore, &lpRoadRulesPersonalBest->mPersonalBestScore,
+                                sizeof(lPersonalBest.mPersonalBestScore));
+                    lPersonalBest.mPersonalBestPlayerID       = lpRoadRulesPersonalBest->mPersonalBestPlayerID;
+                    lPersonalBest.mPersonalBestChallengeIndex = lpRoadRulesPersonalBest->mPersonalBestChallengeIndex;
+                    lPersonalBest.mbWasPBByFriend             = lpRoadRulesPersonalBest->mbWasPBByFriend;
                     PostGameEvent(lpGameStateInput->GetGameEventQueue(), lPersonalBest,
                                   GsIO::E_EVENT_ONLINE_ROAD_RULES_PB_RECV);
                     break;
@@ -778,10 +750,8 @@ namespace BrnGame
         }
         else if (luHeadingType < BrnNetwork::BrnNetworkModuleIO::E_HEADING_COUNT)
         {
-            // variation (cap KI_MAX_VARIATIONS == 66). The two bytes after the name table
-            // (+0x806 / +0x807: the reference's mbIsPerRoad and the byte after it; the record's
-            // home holds them in its tail pad) land right after the event's last name slot,
-            // +2050 / +2051.
+            // variation (cap KI_MAX_VARIATIONS == 66). The record's two trailing flags land
+            // right after the event's last name slot, +2050 / +2051.
             BrnGui::GuiEventScoreboardResponseVariationEvent lEvent;
             unsigned char* lpDst = RecordBytes(lEvent);
             *reinterpret_cast<s32*>(lpDst) = liCount;
@@ -789,8 +759,8 @@ namespace BrnGame
                 "lVariationEvent.miNumberOfVariations <= BrnGui::GuiEventScoreboardResponseVariationEvent::KI_MAX_VARIATIONS");
             for (s32 i = 0; i < liCount; ++i)
                 CopyScoreboardName(lpDst + 4 + 31 * i, lpHeadingList->maHeadings[i]);
-            lpDst[2050] = lpHeadingList->maReservedPadTo0x808[0];
-            lpDst[2051] = lpHeadingList->maReservedPadTo0x808[1];
+            lpDst[2050] = lpHeadingList->mbIsPerRoad;
+            lpDst[2051] = lpHeadingList->mb807;
             PushGuiEvent(lEvent, lpGuiInput);
         }
         else
@@ -891,47 +861,44 @@ namespace BrnGame
                     PushGuiEvent(lEventB, lpGuiInput);
                     break;
                 }
-                case 15:  // NetworkOutGameParamsChanged -> GuiEventNetworkGameParams
+                case NetIO::NetworkOutGameParamsChanged::KI_EVENT_TYPE:                     // 15
                 {
-                    // The ten round events copy straight across; the scalar tail is re-ordered by
-                    // name. The record's home spells the tail by offset (miMaxPlayers, miGameMode,
-                    // mi1C0 ...); the reference name of each is given at the read.
+                    // The ten round events copy straight across; the scalar tail is copied by name
+                    // (the GUI record orders it differently).
                     const NetIO::NetworkOutGameParamsChanged* lpParamsChangedEvent =
                         reinterpret_cast<const NetIO::NetworkOutGameParamsChanged*>(lpEvent);
                     CGS_ASSERT(lpParamsChangedEvent != 0, "lpParamsChangedEvent");
                     BrnGui::GuiEventNetworkGameParams lEvent;
-                    lEvent.mbInfiniteBoost     = lpParamsChangedEvent->mbFlag1D;        // mbInfiniteBoost
-                    lEvent.miVehicleClass      = lpParamsChangedEvent->mi1D0;           // miVehicleClass
-                    lEvent.mbRanked            = lpParamsChangedEvent->mbIsRankedGame;  // mbRanked
-                    lEvent.meSecurity          = lpParamsChangedEvent->mi1C0;           // meSecurity
-                    lEvent.meGameMode          = lpParamsChangedEvent->miMaxPlayers;    // meGameMode
-                    lEvent.mePreviousGameMode  = lpParamsChangedEvent->miGameMode;      // mePreviousGameMode
-                    lEvent.miNumRounds         = lpParamsChangedEvent->mi1CC;           // miNumRounds
-                    lEvent.mbTrafficOn         = lpParamsChangedEvent->mbFlag1E;        // mbTrafficOn
-                    lEvent.meBoostType         = lpParamsChangedEvent->mi1C4;           // meBoostType
-                    lEvent.miNumRunnerCrashes  = lpParamsChangedEvent->mi1D4;           // miNumRunnerCrashes
-                    lEvent.mbTrafficCheckingOn = lpParamsChangedEvent->mbFlag1F;        // mbTrafficCheckingOn
-                    lEvent.meVehicleChoice     = lpParamsChangedEvent->mi1C8;           // meVehicleChoice
-                    lEvent.miTimeLimit         = lpParamsChangedEvent->mi1D8;           // miTimeLimit
-                    static_assert(sizeof(lEvent.maEvents) == 440, "the ten round events span 440 bytes");
-                    std::memcpy(lEvent.maEvents, lpParamsChangedEvent, sizeof(lEvent.maEvents));
+                    lEvent.mbInfiniteBoost     = lpParamsChangedEvent->mbInfiniteBoost;
+                    lEvent.miVehicleClass      = lpParamsChangedEvent->miVehicleClass;
+                    lEvent.mbRanked            = lpParamsChangedEvent->mbRanked;
+                    lEvent.meSecurity          = lpParamsChangedEvent->meSecurity;
+                    lEvent.meGameMode          = lpParamsChangedEvent->meGameMode;
+                    lEvent.mePreviousGameMode  = lpParamsChangedEvent->mePreviousGameMode;
+                    lEvent.miNumRounds         = lpParamsChangedEvent->miNumRounds;
+                    lEvent.mbTrafficOn         = lpParamsChangedEvent->mbTrafficOn;
+                    lEvent.meBoostType         = lpParamsChangedEvent->meBoostType;
+                    lEvent.miNumRunnerCrashes  = lpParamsChangedEvent->miNumRunnerCrashes;
+                    lEvent.mbTrafficCheckingOn = lpParamsChangedEvent->mbTrafficCheckingOn;
+                    lEvent.meVehicleChoice     = lpParamsChangedEvent->meVehicleChoice;
+                    lEvent.miTimeLimit         = lpParamsChangedEvent->miTimeLimit;
+                    static_assert(sizeof(lEvent.maEvents) == sizeof(lpParamsChangedEvent->maEvents),
+                                  "the ten round events span 440 bytes on both sides");
+                    std::memcpy(lEvent.maEvents, lpParamsChangedEvent->maEvents, sizeof(lEvent.maEvents));
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }
-                case 17:  // NetworkOutPlayerRemovedEvent -> GuiEventNetworkPlayerLeftLobby (only when not leaving)
+                case NetIO::NetworkOutPlayerRemovedEvent::KI_EVENT_TYPE:                    // 17 (only when not leaving)
                 {
-                    // The record's opaque tail holds the player name (+0x04),
-                    // mbIsLocalPlayerInGame (+0x14) and mbLocalPlayerLeavingGame (+0x15).
                     const NetIO::NetworkOutPlayerRemovedEvent* lpPlayerRemovedEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerRemovedEvent*>(lpEvent);
                     CGS_ASSERT(lpPlayerRemovedEvent != 0, "lpPlayerRemovedEvent");
-                    const unsigned char* lpRecord = reinterpret_cast<const unsigned char*>(lpPlayerRemovedEvent);
-                    if (lpRecord[0x15] == 0)
+                    if (!lpPlayerRemovedEvent->IsLocalPlayerLeavingGame())
                     {
                         BrnGui::GuiEventNetworkPlayerLeftLobby lEvent;
-                        lEvent.mNetworkPlayerID = lpPlayerRemovedEvent->mNetworkPlayerID;
-                        std::memcpy(&lEvent.mPlayerName, lpRecord + 0x04, sizeof(lEvent.mPlayerName));
-                        lEvent.mbIsLocalPlayerInGame = lpRecord[0x14] != 0;
+                        lEvent.mNetworkPlayerID = lpPlayerRemovedEvent->GetNetworkPlayerID();
+                        std::memcpy(&lEvent.mPlayerName, lpPlayerRemovedEvent->GetPlayerName(), sizeof(lEvent.mPlayerName));
+                        lEvent.mbIsLocalPlayerInGame = lpPlayerRemovedEvent->IsLocalPlayerInGame();
                         PushGuiEvent(lEvent, lpGuiInput);
                     }
                     break;
@@ -991,7 +958,7 @@ namespace BrnGame
                     PushGuiEvent(lRequest, lpGuiInput);
                     break;
                 }
-                case 28:  // GuiEvent<271>
+                case NetIO::NetworkOutShowSignInGui::KI_EVENT_TYPE:                         // 28
                 {
                     CgsGui::GuiEvent<271> lEvent;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -1009,7 +976,7 @@ namespace BrnGame
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }
-                case 30:  // GuiEvent<280>
+                case NetIO::NetworkOutShowLoadingScreen::KI_EVENT_TYPE:                     // 30
                 {
                     CgsGui::GuiEvent<280> lEvent;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -1033,7 +1000,7 @@ namespace BrnGame
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }
-                case 42:  // GuiEvent<109>
+                case NetIO::NetworkOutStartingGameDueToPlayerJoin::KI_EVENT_TYPE:           // 42
                 {
                     CgsGui::GuiEvent<109> lEvent;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -1059,7 +1026,7 @@ namespace BrnGame
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }
-                case 52:  // NetworkOutScoreboardHeadingList (category / index / variation heading sub-switch)
+                case NetIO::NetworkOutScoreboardHeadingList::KI_EVENT_TYPE:                 // 52 (heading sub-switch)
                     TranslateScoreboardResponse(
                         lpGuiInput, reinterpret_cast<const NetIO::NetworkOutScoreboardHeadingList*>(lpEvent));
                     break;
@@ -1153,7 +1120,7 @@ namespace BrnGame
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }
-                case 71:  // GuiEvent<127>
+                case NetIO::NetworkOutAccountUpdateComplete::KI_EVENT_TYPE:                 // 71
                 {
                     CgsGui::GuiEvent<127> lEvent;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -1161,21 +1128,17 @@ namespace BrnGame
                 }
                 case NetIO::NetworkOutCamPicCompressedEvent::KI_EVENT_TYPE:                 // 72
                 {
-                    // FLAG: the GUI record holds the pixel pointer in a 4-byte slot (console
-                    // width); only the first 4 bytes of the host pointer reach it until the GUI
-                    // record gets a pointer member.
                     const NetIO::NetworkOutCamPicCompressedEvent* lpCamPicCompressedEvent =
                         reinterpret_cast<const NetIO::NetworkOutCamPicCompressedEvent*>(lpEvent);
                     CGS_ASSERT(lpCamPicCompressedEvent != 0, "lpCamPicCompressedEvent");
                     BrnGui::GuiEventCamPicCompressed lEvent;
-                    unsigned char* lpDst = RecordBytes(lEvent);
-                    *reinterpret_cast<s32*>(lpDst + 4) = lpCamPicCompressedEvent->meCompressedFormat;
-                    *reinterpret_cast<s32*>(lpDst)     = lpCamPicCompressedEvent->miCompressedPixelSize;
-                    std::memcpy(lpDst + 8, &lpCamPicCompressedEvent->mpcCompressedPixels, 4);
+                    lEvent.meCompressedFormat    = lpCamPicCompressedEvent->meCompressedFormat;
+                    lEvent.miCompressedPixelSize = lpCamPicCompressedEvent->miCompressedPixelSize;
+                    lEvent.mpcCompressedPixels   = lpCamPicCompressedEvent->mpcCompressedPixels;
                     PushGuiEvent(lEvent, lpGuiInput);
                     break;
                 }
-                case 73:  // GuiEvent<571>
+                case NetIO::NetworkOutNoPhotoBoothGamerPic::KI_EVENT_TYPE:                  // 73
                 {
                     CgsGui::GuiEvent<571> lEvent;
                     PushGuiEvent(lEvent, lpGuiInput);
@@ -1225,7 +1188,7 @@ namespace BrnGame
             unsigned char* lpList = RecordBytes(lListEvent);
             bool lbBuiltList = false;
 
-            if (msbPlayerListWorstCaseHudActive)
+            if (BrnGui::GuiEventNetworkPlayerList::msbWorstCaseHudActive)
             {
                 liNumPlayers = 8;
                 CgsNetwork::PlayerName lName;
@@ -1285,7 +1248,7 @@ namespace BrnGame
                 laPlayerInfo[i].Clear();
 
             s32 liFilled;
-            if (msbPlayerStatusWorstCaseHudActive)
+            if (BrnGui::GuiEventNetworkPlayerStatus::msbWorstCaseHudActive)
             {
                 CgsNetwork::PlayerName lName;
                 lName.Construct("Mole4Avril");
@@ -1303,8 +1266,8 @@ namespace BrnGame
                     lrPlayer.mbIsHost                       = false;
                     lrPlayer.mbIsLocalPlayer                = false;
                     lrPlayer.mbIsInLocalGameWorld           = true;
-                    lrPlayer.meVOIPStatus                   = msbPlayerStatusSwitch;
-                    lrPlayer.meCameraStatus                 = static_cast<BrnNetwork::ECameraStatus>(msbPlayerStatusSwitch);
+                    lrPlayer.meVOIPStatus                   = BrnGui::GuiEventNetworkPlayerStatus::msbStatusSwitch;
+                    lrPlayer.meCameraStatus                 = static_cast<BrnNetwork::ECameraStatus>(BrnGui::GuiEventNetworkPlayerStatus::msbStatusSwitch);
                     if (i == static_cast<s32>(lpNetworkOutput->GetPlayerActiveRaceCarIndex()))
                     {
                         lrPlayer.mbIsHost        = true;

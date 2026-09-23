@@ -3,10 +3,13 @@
 #include <cstddef>                                                                      // offsetof (_AssertLayout)
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                      // CGS_ASSERT (ValidateProfile, inline accessors)
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                 // Array<T, N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"                          // CgsContainers::FastBitArray<10>
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                                // CgsModule::EventQueue<T,N>
+#include "GameSource/CompilerDefines/gameshared_network_defines.h"                      // ::KI_MAX_NETWORK_PLAYERS
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"              // BrnGameState::TakedownEvent
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                             // NetworkPlayerID, EActiveRaceCarIndex, EDirtyTrickStatus
 #include "GameSource/Network/Debug Components/BrnNetworkLiveRevengeDebugComponent.h"   // BrnNetwork::LiveRevengeDebugComponent
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h"             // BrnNetwork::LiveRevengeRelationship
 #include "GameSource/Network/Messages/BrnLiveRevengeSyncMessage.h"                     // BrnNetwork::LiveRevengeSyncMessage
@@ -21,10 +24,13 @@ namespace BrnNetwork
     {
         struct OutputBuffer;                 // ProcessBeforeSimulation param
         struct PostSimulationInputBuffer;    // ProcessAfterSimulation param
+        struct NetworkInPaybackIntialised;   // HandlePaybackInitialisedEvent param
+        struct NetworkInPaybackSucceeded;    // HandlePaybackSucceededEvent param
     }
 }
 namespace BrnGameState { namespace GameStateModuleIO { struct OnlineRoundResults; } }   // HandleRoundResults param
 namespace CgsMemory  { class  HeapMalloc; }
+namespace CgsNetwork { struct ReliableMessage; struct SignalMessage; }                   // sync-message callbacks
 
 // BrnNetwork::LiveRevengeManager + LiveRevengeProfile
 // Recovered from the DecFIGS DWARF
@@ -36,12 +42,6 @@ namespace CgsMemory  { class  HeapMalloc; }
 
 namespace BrnNetwork
 {
-    // Alias used by the mapping-entry (BrnNetworkLiveRevengeManager.h:74 DWARF).
-    // Multiple DWARF compilations spell this namespace differently
-    // (RoadRulesRecvData / GuiEventNetworkLaunching); in practice it is the same
-    // s32 typedef as BrnNetwork::NetworkPlayerID from BrnNetworkSharedIO.h.
-    typedef s32 NetworkPlayerID;
-
     // BrnNetworkLiveRevengeManager.h:89 (DWARF). The saved/loaded live-revenge profile:
     // a version word followed by the fixed 250-entry relationship-history table.
     // X360-AUTHORITATIVE: the RegisterAll / UnregisterAll walkers read the table at
@@ -55,14 +55,35 @@ namespace BrnNetwork
         static const s32 KI_VERSION_NUMBER      = 6;
 
         s32 miVersionNumber;                                            // +0x00
-        u8  mPad_Version[4];                                            // +0x04  (align table to +0x08)
         Array<LiveRevengeRelationship, KI_MAX_REVENGE_HISTORY>
-            maRelationshipTable;                                        // +0x08  (250 * 120 + count)
+            maRelationshipTable;                                        // +0x08  (250 * 120 + count; 8-aligned)
 
-        void Clear();                       // BrnNetworkLiveRevengeManager.cpp
-        bool IsIncorrectVersion() const;    // BrnNetworkLiveRevengeManager.cpp
-        bool IsUpgradable() const;          // BrnNetworkLiveRevengeManager.cpp
-        bool ValidateProfile(const LiveRevengeProfile* lpNewProfile, s32 liMaxEntries) const; // own TU
+        // Header inline: Prepare and Release emit the version store and the table reset in place.
+        void Clear()
+        {
+            miVersionNumber = KI_VERSION_NUMBER;
+            maRelationshipTable.Clear();
+        }
+
+        // A profile is valid when it has the current version and every relationship in its
+        // table validates. (On a version mismatch the console logs "Live Revenge Profile version
+        // mismatch, expected <6>, got <version>" to the network dev-log stream, which has no home
+        // in this tree.)
+        bool ValidateProfile()
+        {
+            if (miVersionNumber != KI_VERSION_NUMBER)
+            {
+                return false;
+            }
+
+            CGS_ASSERT(maRelationshipTable.GetLength() < static_cast<u32>(KI_MAX_REVENGE_HISTORY),
+                       "maRelationshipTable.GetLength() < static_cast<uint32_t>( KI_MAX_REVENGE_HISTORY )");
+            for (u32 luIndex = 0; luIndex < maRelationshipTable.GetLength(); ++luIndex)
+            {
+                maRelationshipTable[luIndex].Validate();
+            }
+            return true;
+        }
     };
 
     // BrnNetworkLiveRevengeManager.h:74 (DWARF). Per-active-player mapping entry:
@@ -75,20 +96,6 @@ namespace BrnNetwork
         LiveRevengeSyncMessage  mSendMessage;        // DWARF :76
         LiveRevengeSyncMessage  mRecvMessage;        // DWARF :77
     };
-
-    // 2-word payback network-event payload (X360: word0 @+0, word1 @+4). Consumed by
-    // HandlePayback{Initialised,Succeeded}Event -> UpdatePaybacksData. X360 attests only
-    // two 4-byte words (lwz 0(r31), lwz 4(r31)); field names inferred from UpdatePaybacksData
-    // arg1/arg2.
-    struct PaybackEvent
-    {
-        s32 miNetworkPlayerID;  // +0  (UpdatePaybacksData arg1)
-        s32 miAggressorIndex;   // +4  (UpdatePaybacksData arg2)
-    };
-
-    // Suppress the minimal-slice forward definition in BrnNetworkManager.h when the full
-    // class definition is already visible (see BrnNetworkManager.h comment).
-#define BRNETWORK_LIVEREVENGEMANAGER_DEFINED
 
     // BrnNetworkLiveRevengeManager.h:133 (DWARF).
     struct LiveRevengeManager
@@ -117,81 +124,107 @@ namespace BrnNetwork
 
         void ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
         void ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer);
-        void ProcessTakedownQueue(void* lpOutputBuffer);
-        void ProcessGameDirtyTrickInterface();
 
         void AddPlayer(NetworkPlayerID lNetworkPlayerID);
-        void RemovePlayer(NetworkPlayerID lNetworkPlayerID);
+        void RemovePlayer(NetworkPlayerID lPlayerID);
         void Disconnected();
         void OnRoundStart();
-        void OnRoundFinish();
-        // BrnNetworkManager::OnLeaveGame / OnGameFinish call these; both console bodies are
-        // empty (folded) functions.
         void OnLeaveGame();
+        void OnRoundFinish();
         void OnGameFinish();
-        void HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpResults);
 
-        s32  GetNumberOfRivals() const;
-        s32  GetNumberOfRelationships() const;
+        s32  GetNumberOfRivals();
+        s32  GetNumberOfRelationships();
 
-        LiveRevengeRelationship* GetNonConstRevengeRelationship(NetworkPlayerID lPlayerID);
-        // The console export of the non-const per-player accessor (reached from
-        // BrnNetworkManager::OutputPlayerStatusInfo and the aggressive-driving manager).
-        LiveRevengeRelationship* GetNonConstRevengeRelation(NetworkPlayerID lPlayerID);
+        // Header inline: the takedown messages and RemotePlayerFinalised reach the relationship
+        // through this const view of the per-player lookup.
+        const LiveRevengeRelationship* GetRevengeRelationship(NetworkPlayerID lNetworkPlayerID)
+        {
+            return GetNonConstRevengeRelationship(lNetworkPlayerID);
+        }
 
-        // @ 0x8258C540 -- const table-index accessor (DWARF-truncated "GetRevengeRelationshi").
-        // Caller: BrnNetwork::GameSearchParamsBase::FillInRivals.
-        LiveRevengeRelationship* GetRevengeRelationship(s32 liTableIndex) const;
-
-        // Payback network-event handlers (callers: BrnNetwork::StateManager::ProcessNetworkEvents).
-        void HandlePaybackInitialisedEvent(const PaybackEvent* lpPaybackEvent);   // @ 0x82561930
-        void HandlePaybackSucceededEvent(const PaybackEvent* lpPaybackEvent);     // @ 0x825619A0
-
-        void DisplayPlayerTakedownMessage(void* lpOutputBuffer, s32 liAggressorIndex, s32 liVictimIndex, s32 liUnk);
-        void DisplayRivalTakedownMessage(void* lpOutputBuffer, s32 liAggressorIndex, s32 liVictimIndex, s32 liUnk);
-
-        void HandleLiveRevengeProfileLoadedEvent(const LiveRevengeProfile* lpProfile, s32 liMaxEntries);
+        // Header inline (the rival search reaches it out of line): one table row by index.
+        const LiveRevengeRelationship* GetRevengeRelationshipByIndex(s32 liIndex)
+        {
+            CGS_ASSERT(mpLiveRevengeProfile, "mpLiveRevengeProfile");
+            return &mpLiveRevengeProfile->maRelationshipTable[static_cast<u32>(liIndex)];
+        }
 
         void RemotePlayerFinalised(NetworkPlayerID lNetworkPlayerID);
 
-        void SendLiveRevengeRivalsToServer();
-        void UpdateTopRivals();
+        void GetUniqueIDByName(CgsNetwork::PlayerName* lpPlayerName,
+                               LiveRevengeRelationship::UniquePlayerID* lpUniqueID);
 
-        // Accessor for the debug component.
-        LiveRevengeProfile* GetProfile() const { return mpLiveRevengeProfile; }
+        void UpdateTopRivals();
+        void SendLiveRevengeRivalsToServer();
+
+        // Header inlines on the console (emitted out of line at the network state manager's
+        // event dispatch); bodied in BrnNetworkLiveRevengeManager.cpp here.
+        void HandlePaybackInitialisedEvent(const BrnNetworkModuleIO::NetworkInPaybackIntialised* lpPaybackEvent);
+        void HandlePaybackSucceededEvent(const BrnNetworkModuleIO::NetworkInPaybackSucceeded* lpPaybackEvent);
+
+        void HandleLiveRevengeProfileLoadedEvent(const LiveRevengeProfile* lpLiveRevengeProfile);
+        void HandleRoundResults(const BrnGameState::GameStateModuleIO::OnlineRoundResults* lpResults);
+
+        // The per-player relationship lookup. Private in the reference class; the network manager
+        // (player status output) and the aggressive-driving manager reach it as well.
+        LiveRevengeRelationship* GetNonConstRevengeRelationship(NetworkPlayerID lNetworkPlayerID);
+        // Transitional spelling kept for the two outside callers
+        // (BrnNetworkManager::OutputPlayerStatusInfo, NetworkAggressiveDrivingManager::AddTakedownEvent);
+        // delete once they call GetNonConstRevengeRelationship.
+        LiveRevengeRelationship* GetNonConstRevengeRelation(NetworkPlayerID lNetworkPlayerID)
+        {
+            return GetNonConstRevengeRelationship(lNetworkPlayerID);
+        }
+
+        // Private in the reference class; the debug component and the rival search read it.
+        LiveRevengeProfile* GetProfile() { return mpLiveRevengeProfile; }
 
     private:
-        // -- private helpers --
+        void DisplayRivalTakedownMessage(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer,
+                                         EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                                         EActiveRaceCarIndex leVictimActiveRaceCarIndex);
+        void DisplayPlayerTakedownMessage(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer,
+                                          EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                                          EActiveRaceCarIndex leVictimActiveRaceCarIndex);
+        s32   FindPlayerInTableByName(const char* lpcName);
+        s32   AddNewTableEntry(const LiveRevengeRelationship::UniquePlayerID* lpUniqueID);
+        void  ProcessTakedownQueue(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
+        void  UpdateLiveRevengeRelationShip(EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                                            EActiveRaceCarIndex leVictimActiveRaceCarIndex,
+                                            bool lbMarkedManTakedown,
+                                            BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
+        void  UpdatePaybacksData(EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
+                                 EActiveRaceCarIndex leVictimActiveRaceCarIndex,
+                                 EDirtyTrickStatus leDirtyTrickStatus);
         void  ResetRevengeTableMappings();
-        LiveRevengeMappingEntry* FindMappingEntry(NetworkPlayerID lNetworkPlayerID);
-        s32   FindPlayerInTableByName(const char* lpcName) const;
-        s32   AddNewTableEntry(const void* lpUniqueID);
-        void  AddMappingEntry(NetworkPlayerID lNetworkPlayerID, s32 liTableIndex);
+        EActiveRaceCarIndex NetworkPlayerIDToActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID);
+        void  AddMappingEntry(NetworkPlayerID lNetworkPlayerID, s32 liRevengeTableIndex);
         void  RemoveMappingEntry(NetworkPlayerID lNetworkPlayerID);
-        s32   NetworkPlayerIDToActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID) const;
+        LiveRevengeMappingEntry* FindMappingEntry(NetworkPlayerID lNetworkPlayerID);
         s32   GetRivalTopIndex(s32 liTableIndex) const;
         void  ClearTopRivals();
-        bool  IsTableValid() const;
+        void  ProcessGameDirtyTrickInterface();
+        void  SyncMessageArrivedCallback(LiveRevengeSyncMessage* lpMessage, NetworkPlayerID lRemotePlayerID);
         void  AutoSaveLiveRevengeProfile();
         void  UpdateMarkedManInfo();
-        void  UpdateLiveRevengeRelationShip(s32 liAggressor, s32 liVictim, u8 luFlags, void* lpOutputBuffer);
-        // The X360 payback handlers pass (networkPlayerID, aggressorIndex, flag) as three
-        // value args (r4/r5/r6), where the 3rd is a raw payback-outcome flag (2 == Initialised,
-        // 4 == Succeeded; NOT EPaybackType, whose values are 0..3).
-        void  UpdatePaybacksData(s32 liNetworkPlayerID, s32 liAggressorIndex, s32 liPaybackFlag);
-        void  GetUniqueIDByName(const char* lpcPlayerName, void* lpUniqueID) const;
-        void  GetUniqueIDByPlayerID(NetworkPlayerID lNetworkPlayerID, void* lpUniqueID) const;
+        bool  IsTableValid();
 
-        static s32 _SortTopRivals(const void* lpRival1, const void* lpRival2);
-        static void _SyncMessageArrivedCallback();
-        static void _SyncMessageDeliveredCallback();
+        static void _SyncMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                NetworkPlayerID lSendingPlayerID, void* lpData);
+        static void _SyncMessageDeliveredCallback(bool lbSuccess, bool lbFakeNack,
+                                                  CgsNetwork::SignalMessage* lpAck,
+                                                  NetworkPlayerID lRecvingPlayerID, void* lpData);
+        static int  _SortTopRivals(const void* lpRival1, const void* lpRival2);
+
+        void  AddRelationshipToDebugMenu(s32 liLiveRevengeTableIndex);
+        void  RemoveRelationshipFromDebugMenu(s32 liLiveRevengeTableIndex);
 
         // ---- members (DWARF order, :291..:319) ----
         LiveRevengeDebugComponent mDebugComponent;      // DWARF :291 (by-value, first member)
 
-        // DWARF :302  (7 per-player mapping slots; each 328B on X360)
-        static const s32 KI_MAX_PLAYERS = 7;
-        LiveRevengeMappingEntry   maPlayerToTableIndexData[KI_MAX_PLAYERS]; // DWARF :302
+        // One mapping slot per remote player (0x148 console bytes each).
+        LiveRevengeMappingEntry   maPlayerToTableIndexData[KI_MAX_NETWORK_PLAYERS];
 
         // DWARF :304..306
         static const s32 KI_NUMBER_OF_RIVALS_TO_STORE_ON_SERVER = 10;
@@ -223,13 +256,17 @@ namespace BrnNetwork
         static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeMappingEntry, mSendMessage) == 0x8, "LiveRevengeMappingEntry::mSendMessage @ +0x8");
         static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeMappingEntry) == 8 + 2 * sizeof(LiveRevengeSyncMessage), "LiveRevengeMappingEntry is two ids plus two messages");
         static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, maPlayerToTableIndexData) == 0x10, "maPlayerToTableIndexData @ +0x10");
-#define BRN_LRM_AT(member, off)         static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, member) == 0x10 + KI_MAX_PLAYERS * sizeof(LiveRevengeMappingEntry) + (off), #member)
+#define BRN_LRM_AT(member, off)         static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeManager, member) == 0x10 + KI_MAX_NETWORK_PLAYERS * sizeof(LiveRevengeMappingEntry) + (off), #member)
         BRN_LRM_AT(maTopIndexes,              0x00);   // +0x908
         BRN_LRM_AT(mpLiveRevengeProfile,      0x2C);   // +0x934
         BRN_LRM_AT(mTakedownEventQueue,       0x30);   // +0x938
         BRN_LRM_AT(mpNetworkManager,          0x180);  // +0xA88
         BRN_LRM_AT(meLiveRevengeUploadStatus, 0x18C);  // +0xA94
+        BRN_LRM_AT(maDirtyTopRivals,          0x190);  // +0xA98
+        BRN_LRM_AT(mbAreWeInOnlineGame,       0x198);  // +0xAA0
 #undef BRN_LRM_AT
-        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeManager) == 0x10 + KI_MAX_PLAYERS * sizeof(LiveRevengeMappingEntry) + 0x1A0, "LiveRevengeManager tail is 0x1A0 bytes");
+        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeManager) == 0x10 + KI_MAX_NETWORK_PLAYERS * sizeof(LiveRevengeMappingEntry) + 0x1A0, "LiveRevengeManager tail is 0x1A0 bytes");
+        static_assert(sizeof(void*) != 4 || offsetof(LiveRevengeProfile, maRelationshipTable) == 0x8, "LiveRevengeProfile::maRelationshipTable @ +0x8");
+        static_assert(sizeof(void*) != 4 || sizeof(LiveRevengeProfile) == 0x7540, "sizeof(LiveRevengeProfile) == 0x7540");
     }
 }

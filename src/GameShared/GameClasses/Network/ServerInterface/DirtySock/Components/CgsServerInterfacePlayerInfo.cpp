@@ -30,59 +30,103 @@ extern "C"
 // Only the 21 functions present in this TU's export are bodied here; the remaining
 // declared members belong to functions not in this export.
 //
-// FLAGGED rodata: the X360 build keeps several class-static tables in rodata that the
-// available exports do NOT dump as values:
-//   * KAPC_ACTION_NAMES[9]        -- the human-readable per-action names. The asm
-//                                    comments reveal a handful of the strings (recovered
-//                                    below); the unrevealed entries are left as a clearly
-//                                    flagged empty placeholder. These strings are
-//                                    display-only (passed to StartActionCore).
-//   * KAI_ACTION_CODE_MAPPING[9]  -- the per-action lobby request fourcc codes
-//                                    (dword_820E90A0). Their values are NOT recoverable
-//                                    from the available exports -> flagged 0 placeholders.
-//   * KA_DS_ERROR_TABLE_LOOKUP[9] -- per-action { error-mapping table, count } pairs
-//                                    (off_820E91C8 / dword_820E91CC). The mapping tables'
-//                                    fourcc/EServerInterfaceError contents are NOT
-//                                    recoverable -> flagged empty (null table, 0 count),
-//                                    which makes ConvertError fall back to the shared
-//                                    default table at runtime.
-// The bodies index these tables exactly as the asm does (behaviour preserved); only the
-// literal table CONTENTS are flagged-unknown, never fabricated.
+// The three per-action tables below (names, lobby request codes, DirtySock-error
+// mappings) hold the console rodata values word for word.
 // ===========================================================================
 
 namespace CgsNetwork
 {
-    // The per-action display names indexed by EAction. Recovered strings come from the
-    // X360 asm string comments (off_82F3350C base); the rest are FLAGGED placeholders.
+    // The per-action display names indexed by EAction (passed to StartActionCore).
     static const char* const KAPC_ACTION_NAMES[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
     {
-        "Finding User Data",      // E_ACTION_FIND_USER             (off_82F3350C)
-        "",                       // E_ACTION_UPDATE_AUXI           FLAGGED: not in export
-        "",                       // E_ACTION_SELECT_VIEW           FLAGGED: not in export
-        "Downloading stats",      // E_ACTION_DOWNLOADING_STATS     (off_82F33518)
-        "Downloading view info",  // E_ACTION_DOWNLOADING_VIEW_INFO (off_82F3351C)
-        "",                       // E_ACTION_SENDING_FEEDBACK      FLAGGED: not in export
-        "",                       // E_ACTION_UPDATE_ACCOUNT        FLAGGED: not in export
-        "Load settings",          // E_ACTION_UPDATE_SETTINGS       (off_82F33528)
-        ""                        // E_ACTION_LOAD_SETTINGS         FLAGGED: not in export
+        "Finding User Data",          // 0
+        "Updating auxiliary data",    // 1
+        "Selecting stat view",        // 2
+        "Downloading stats",          // 3
+        "Downloading view info",      // 4
+        "Uploading user feedback",    // 5
+        "Update settings",            // 6
+        "Load settings",              // 7
+        "Getting user xuids"          // 8
     };
 
-    // FLAGGED: per-action lobby request fourcc codes (dword_820E90A0). The values are not
-    // recoverable from the available exports; zeroed placeholders preserve the indexing.
+    // The lobby request code StartAction sends for each action. 0x20 marks the actions
+    // that are not lobby requests.
     static const s32 KAI_ACTION_CODE_MAPPING[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
     {
-        0, 0, 0, 0, 0, 0, 0, 0, 0   // FLAGGED unrecoverable rodata
+        0x20,
+        0x61757869,   // 'auxi'
+        0x20,
+        0x20,
+        0x20,
+        0x72657074,   // 'rept'
+        0x20,
+        0x20,
+        0x6D616472    // 'madr'
     };
 
-    // FLAGGED: per-action error-mapping lookup (off_820E91C8 / dword_820E91CC). The
-    // mapping-table contents are not recoverable from the available exports; an empty
-    // entry (null table, 0 count) makes ConvertError fall back to the shared default
-    // table, matching the not-found behaviour for an unknown code.
+    // The DirtySock-error -> EServerInterfaceError mappings, laid out as one contiguous
+    // block because that is how the console reads them: the load-settings lookup entry
+    // below carries a count of 4 over a 3-entry table, so ConvertError also reads the
+    // following 8 rodata bytes (the string "NEWS_URL"). That word pair is reproduced as
+    // the block's last entry; its DirtySock code 'NEWS' is never returned by the lobby.
+    static const DSErrorToServerInterfaceError KA_PLAYER_INFO_DS_ERROR_MAPPINGS[32] =
+    {
+        // [0] find user (the console pairs 'soon' with 55 and 'many' with 56)
+        { 0x736F6F6E, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_FIND_BUSY },                 // 'soon'
+        { 0x6D616E79, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_REQUEST_TOO_SOON },          // 'many'
+        { 0x696E7670, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_FIND_INVALID_PARAMETERS },   // 'invp'
+        // [3] update auxiliary data
+        { 0x736F6F6E, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_FIND_BUSY },                 // 'soon'
+        { 0x6D616E79, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_REQUEST_TOO_SOON },          // 'many'
+        { 0x696E7670, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_FIND_INVALID_PARAMETERS },   // 'invp'
+        // [6] stat-book actions (negative stat-book result codes)
+        { -1, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_MISC },
+        { -2, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_INVALID_VIEW },
+        { -3, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_PLAYER_NOT_FOUND },
+        { -4, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_VIEW_NOT_SELECTED },
+        { -5, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_BAD_SLOT },
+        { -6, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_BUSY },
+        { -7, E_SERVER_INTERFACE_PLAYER_INFO_ERROR_STAT_TIMEOUT },
+        // [13] user feedback
+        { 0,          E_SERVER_INTERFACE_ERROR_NONE },
+        { 0x6D617574, E_SERVER_INTERFACE_FEEDBACK_ERROR_MASTER_AUTH },          // 'maut'
+        { 0x70617574, E_SERVER_INTERFACE_FEEDBACK_ERROR_PERSONA_AUTH },         // 'paut'
+        { 0x64697361, E_SERVER_INTERFACE_FEEDBACK_ERROR_REPORTING_DISABLED },   // 'disa'
+        { 0x69706572, E_SERVER_INTERFACE_FEEDBACK_ERROR_INVALID_PLAYER },       // 'iper'
+        { 0x73656C66, E_SERVER_INTERFACE_FEEDBACK_ERROR_SELF },                 // 'self'
+        { 0x776F6C66, E_SERVER_INTERFACE_FEEDBACK_ERROR_PLAYER_NOT_POSTED },    // 'wolf'
+        // [20] update settings
+        { 0,          E_SERVER_INTERFACE_ERROR_NONE },
+        { 0x6D697373, E_SERVER_INTERFACE_PLAYER_INFO_UPDATE_SETTINGS_ERROR_MISSING_PARAM },     // 'miss'
+        { 0x64626572, E_SERVER_INTERFACE_PLAYER_INFO_UPDATE_SETTINGS_ERROR_DATABASE_ERROR },    // 'dber'
+        { 0x69706572, E_SERVER_INTERFACE_PLAYER_INFO_UPDATE_SETTINGS_ERROR_INVALID_PERSONA },   // 'iper'
+        // [24] load settings
+        { 0,          E_SERVER_INTERFACE_ERROR_NONE },
+        { 0x6D697373, E_SERVER_INTERFACE_PLAYER_INFO_LOAD_SETTINGS_ERROR_MISSING_PARAM },       // 'miss'
+        { 0x64626572, E_SERVER_INTERFACE_PLAYER_INFO_LOAD_SETTINGS_ERROR_DATABASE_ERROR },      // 'dber'
+        { 0x69706572, E_SERVER_INTERFACE_PLAYER_INFO_LOAD_SETTINGS_ERROR_INVALID_PERSONA },     // 'iper'
+        // [28] get user xuids
+        { 0,          E_SERVER_INTERFACE_ERROR_NONE },
+        { 0x6D697373, E_SERVER_INTERFACE_GENERAL_ERROR_MISSING_PARAMS },        // 'miss'
+        { 0x6E666E64, E_SERVER_INTERFACE_GENERAL_ERROR_INVALID_PERSONA },       // 'nfnd'
+        // [31] the 8 bytes after the block ("NEWS_URL"), read through the count of 4
+        { 0x4E455753, static_cast<EServerInterfaceError>(0x5F55524C) },
+    };
+
+    // Per-action { mapping table, count }. The three stat-book actions share one table.
     static const DSErrorToServerInterfaceErrorTable
         KA_DS_ERROR_TABLE_LOOKUP[ServerInterfacePlayerInfo::E_ACTION_COUNT] =
     {
-        { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 },
-        { 0, 0 }, { 0, 0 }, { 0, 0 }, { 0, 0 }   // FLAGGED unrecoverable rodata
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[0],  3 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[3],  3 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[6],  7 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[6],  7 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[6],  7 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[13], 7 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[20], 4 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[24], 4 },
+        { &KA_PLAYER_INFO_DS_ERROR_MAPPINGS[28], 4 }
     };
 
     // -----------------------------------------------------------------------------------

@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "../CgsServerInterfaceStructureInterface.h"
+#include "CgsServerInterfaceGameFlags.h"   // KU_GAME_FLAGS_PERSISTENT (SetFixedGame)
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceGameParamsBase
@@ -14,40 +15,35 @@
 // (a vptr-only polymorphic base) and adds the named string buffers + counters
 // that describe a hosted/joined game.
 //
-// LAYOUT -- reconciled from dwarfdump (CgsServerInterfaceGameParams.h:55) AND the
-// X360 ARTIST asm. The asm is authoritative for member ORDER/OFFSETS and OVERRIDES
-// the PS3 DWARF where they disagree:
-//   operator= @ 0x825504C8 copies, in this exact order:
-//       +4   : 36 bytes  (macName[16] immediately followed by macHostName[20])
+// LAYOUT (console offsets; member order follows the reference declaration):
+//   operator= copies, in this exact order:
+//       +4   : 36 bytes  (macName[36])
 //       +40  : 20 bytes  (macPassword[20])
-//       +60  : 16 bytes  (macSession's leading 16 bytes are grouped here by the
-//                          compiler; see note -- the full macSession[128] runs
-//                          +60..  no: see below)
+//       +60  : 16 bytes  (macHostName[16])
 //       +76  : 128 bytes (macSession[128])
 //       +204 : 11 words  (the int/u32/bool counters below)
-//   SetName     @ 0x825411E8  strncpy(this+4 , src, 16)   -> macName[16]
-//   SetPassword @ 0x825809F0  strncpy(this+40, src, 20)   -> macPassword[20]
-//   SetSession  @ 0x825412E8  strncpy(this+76, src, 128)  -> macSession[128]
-//   IsRankedGame@ 0x825413E8  returns (muGameFlags >> 10) & 1, reads this+236
+//   SetName      strncpy(this+4 , src, 16)   (the 36-byte buffer is
+//                                           only ever set 16 long)
+//   SetPassword  strncpy(this+40, src, 20)   -> macPassword[20]
+//   SetSession   strncpy(this+76, src, 128)  -> macSession[128]
+//   IsRankedGame returns (muGameFlags >> 10) & 1, reads this+236
+//   The found-game reader copies GetName() with a 36-byte limit and tests the
+//   first byte of the host name at +60 for '@'.
 //
 // Offset map (this == ServerInterfaceStructureInterface vptr @ +0 on X360):
-//   +4   macName[16]          (SetName limit 16)
-//   +20  macHostName[20]      (GetHostName; copied as part of the +4/36-byte run)
-//   +40  macPassword[20]      (SetPassword limit 20)
-//   +60  maPad60[16]          (grouped 16-byte run before macSession in the X360
-//                              build; not individually named by any setter --
-//                              kept as a named padding/reserved field so macSession
-//                              lands at +76 exactly as the asm requires)
-//   +76  macSession[128]      (SetSession limit 128)
+//   +4   macName[36]
+//   +40  macPassword[20]
+//   +60  macHostName[16]
+//   +76  macSession[128]
 //   +204 miGameID
 //   +208 miRoomID
-//   +212 miMinNumPlayers
-//   +216 miMaxNumPlayers
-//   +220 miNumPlayers
+//   +212 miMinNumPlayers      (SetMinPlayers)
+//   +216 miMaxNumPlayers      (SetMaxPlayers / GetMaxPlayers)
+//   +220 miNumPlayers         (GetNumberOfPlayers)
 //   +224 miNumPublicSlots
 //   +228 miNumPrivateSlots
 //   +232 muCustomFlags
-//   +236 muGameFlags          (bit 10 / 0x400 == "ranked")
+//   +236 muGameFlags          (bit 10 / 0x400 == "ranked", bit 2 / 0x4 == fixed)
 //   +240 mbJoinUserset
 //   +244 muRandomSeed
 //
@@ -60,11 +56,13 @@
 
 namespace CgsNetwork
 {
-    // CgsServerInterfaceGameParams.h:185 .. 200 (member buffer sizes from asm).
-    const s32 KI_GAMEPARAMS_NAME_LENGTH     = 16;
-    const s32 KI_GAMEPARAMS_HOSTNAME_LENGTH = 20;
-    const s32 KI_GAMEPARAMS_PASSWORD_LENGTH = 20;
-    const s32 KI_GAMEPARAMS_SESSION_LENGTH  = 128;
+    // Member buffer sizes from the operator= copy runs; the name buffer is 36 bytes but
+    // SetName limits the string to 16.
+    const s32 KI_GAMEPARAMS_NAME_LENGTH        = 16;
+    const s32 KI_GAMEPARAMS_NAME_BUFFER_LENGTH = 36;
+    const s32 KI_GAMEPARAMS_HOSTNAME_LENGTH    = 16;
+    const s32 KI_GAMEPARAMS_PASSWORD_LENGTH    = 20;
+    const s32 KI_GAMEPARAMS_SESSION_LENGTH     = 128;
 
     // The X360 build tests bit 10 of muGameFlags ("ranked match").
     const u32 KU_GAMEPARAMS_RANKED_FLAG = 0x400u;
@@ -87,6 +85,24 @@ namespace CgsNetwork
         // trivial getter) and strnicmp-compares it against the invite's session ID. Exposed as an
         // inline accessor so the read goes through the named member rather than a raw-offset hack.
         const char* GetSession() const { return macSession; }
+
+        // Inlined at the console call sites (create game, the found-game list).
+        const char* GetName() const            { return macName; }
+        const char* GetHostName() const        { return macHostName; }
+        s32  GetNumberOfPlayers() const        { return miNumPlayers; }
+        s32  GetMaxPlayers() const             { return miMaxNumPlayers; }
+        u32  GetRandomSeed() const             { return muRandomSeed; }
+        void SetMinPlayers(s32 liMinPlayers)   { miMinNumPlayers = liMinPlayers; }
+        void SetMaxPlayers(s32 liMaxPlayers)   { miMaxNumPlayers = liMaxPlayers; }
+        // The create-game path sets the fixed (persistent) game flag. FLAG: only the
+        // set branch is attested; clearing on false follows SetRankedGame's shape.
+        void SetFixedGame(bool lbFixedGame)
+        {
+            if (lbFixedGame)
+                muGameFlags |= KU_GAME_FLAGS_PERSISTENT;
+            else
+                muGameFlags &= ~KU_GAME_FLAGS_PERSISTENT;
+        }
 
         // CgsServerInterfaceGameParams.h:443 -- true if muGameFlags bit 10 set.
         bool IsRankedGame() const;
@@ -123,11 +139,10 @@ namespace CgsNetwork
         ServerInterfaceGameParamsBase& operator=(const ServerInterfaceGameParamsBase& lrOther);
 
     protected:
-        char macName[KI_GAMEPARAMS_NAME_LENGTH];          // +4   (X360)
-        char macHostName[KI_GAMEPARAMS_HOSTNAME_LENGTH];  // +20  (X360)
-        char macPassword[KI_GAMEPARAMS_PASSWORD_LENGTH];  // +40  (X360)
-        char maPad60[16];                                 // +60  (16-byte run grouped before macSession)
-        char macSession[KI_GAMEPARAMS_SESSION_LENGTH];    // +76  (X360)
+        char macName[KI_GAMEPARAMS_NAME_BUFFER_LENGTH];   // +4
+        char macPassword[KI_GAMEPARAMS_PASSWORD_LENGTH];  // +40
+        char macHostName[KI_GAMEPARAMS_HOSTNAME_LENGTH];  // +60
+        char macSession[KI_GAMEPARAMS_SESSION_LENGTH];    // +76
 
         s32 miGameID;          // +204
         s32 miRoomID;          // +208

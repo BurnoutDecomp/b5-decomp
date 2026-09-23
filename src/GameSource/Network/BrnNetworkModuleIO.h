@@ -53,6 +53,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h" // TrafficNetworkInputInterface / TrafficNetworkOutputInterface
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"       // BrnGameState::TakedownEvent (40-byte queue element)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"               // BrnResource::GameDataIO::RequestInterface<N>
+#include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"     // BrnStreetData::ChallengeHighScoreEntry (NetworkOutRecvRoadRulesPBEvent)
 
 // Defined in BrnGameStateModuleIO.h, which includes this header (see the banner).
 namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }
@@ -144,8 +145,13 @@ namespace BrnNetworkModuleIO
             CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
             return &maPlayerResultsData[liIndex];
         }
-        // Mutable element accessor (writer side). Declared-only: inlined at its call sites.
-        PlayerResultsData* GetPlayerResultsDataForWriting(s32 liIndex);
+        // Mutable element accessor, header-inline (the writer, BrnNetworkManager::
+        // OutputPlayerResultsInfo, carries the one assert and the 28-byte stride itself).
+        PlayerResultsData* GetPlayerResultsDataForWriting(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            return &maPlayerResultsData[liIndex];
+        }
 
         // Resets all 8 records (body in BrnNetworkModuleIO.cpp).
         void Clear();
@@ -368,13 +374,25 @@ namespace BrnNetworkModuleIO
     };
 
     // ========================================================================
-    // NetworkOutRecvRoadRulesPBEvent (original home BrnNetworkOutEventTypeDefs.h)
-    //   : NetworkEvent<33> { ChallengeHighScoreEntry mPersonalBestScore; NetworkPlayerID
-    //   mPersonalBestPlayerID; Road::ChallengeIndex mPersonalBestChallengeIndex; bool
-    //   mbWasPBByFriend; } -- FifoQueue element stride 72 bytes. ChallengeHighScoreEntry is not
-    //   reachable from here yet, so the element is held as its 72 bytes for the
-    //   FifoQueue<...,14>::Push instantiation TU.
+    // NetworkOutRecvRoadRulesPBEvent -- network-out tag 35, 72 bytes: a road-rules personal
+    // best arrived. NetworkRoadRulesManager queues it straight onto the network event queue,
+    // or buffers it in its FifoQueue<...,14> (the element stride is the same 72 bytes).
+    // Pointer-free, so the host layout is the console layout.
     // ========================================================================
-    struct NetworkOutRecvRoadRulesPBEvent { u8 maOpaque[72]; };
+    struct NetworkOutRecvRoadRulesPBEvent : public NetworkEvent<35>
+    {
+        BrnStreetData::ChallengeHighScoreEntry mPersonalBestScore;           // +0x00 (56)
+        NetworkPlayerID                        mPersonalBestPlayerID;        // +0x38
+        Road::ChallengeIndex                   mPersonalBestChallengeIndex;  // +0x3C
+        bool                                   mbWasPBByFriend;              // +0x40
+
+        static void _AssertLayout()
+        {
+            static_assert(offsetof(NetworkOutRecvRoadRulesPBEvent, mPersonalBestPlayerID) == 0x38, "tag 35 +0x38");
+            static_assert(offsetof(NetworkOutRecvRoadRulesPBEvent, mPersonalBestChallengeIndex) == 0x3C, "tag 35 +0x3C");
+            static_assert(offsetof(NetworkOutRecvRoadRulesPBEvent, mbWasPBByFriend) == 0x40, "tag 35 +0x40");
+            static_assert(sizeof(NetworkOutRecvRoadRulesPBEvent) == 72, "tag 35 is queued as 72 bytes");
+        }
+    };
 }
 }

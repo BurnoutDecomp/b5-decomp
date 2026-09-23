@@ -20,13 +20,10 @@
 // => sizeof(TimerStatus) == 24. TimerStatusInterface = { game @ +0, sim @ +24 },
 //    sizeof == 48 (Clear writes the sim block at +24..+44).
 //
-// This TU owns TimerStatusInterface::Clear and ::IsSimTimerFrequency50Hz. The other
-// declared methods (operator=, the four GetGameTimerStatus/GetSimTimerStatus
-// overloads, IsGameTimerFrequency50Hz, StoreTimers) are declared-only here; each is
-// recovered by its own TU. TimerStatus's own accessors/Clear/operator= are likewise
-// declared-only except TimerStatus::Clear, whose body is recovered from the
-// inlined-twice X360 logic of TimerStatusInterface::Clear and defined here so the
-// interface Clear can call it on both sub-statuses.
+// CgsTimerStatusInterface.cpp owns TimerStatusInterface::Clear, operator=, StoreTimers,
+// IsSimTimerFrequency50Hz and TimerStatus::operator=. The four GetGameTimerStatus /
+// GetSimTimerStatus overloads, TimerStatus's accessors and TimerStatus::Clear are inline
+// below. IsGameTimerFrequency50Hz is the one declaration without a body.
 namespace CgsSystem
 {
     class Timer;   // fwd: StoreTimers param (declared-only here)
@@ -43,7 +40,7 @@ namespace CgsSystem
 
     private:
         void Clear();                                   // DWARF :74
-        TimerStatus& operator=(const TimerStatus&);     // DWARF :77 (declared-only)
+        TimerStatus& operator=(const TimerStatus&);
 
         s32  miFrameCount;          // DWARF :67  @ +0
         f32  mfBaseTimeStep;        // DWARF :68  @ +4
@@ -58,17 +55,17 @@ namespace CgsSystem
     {
     public:
         void Clear();                                                       // DWARF :95
-        TimerStatusInterface& operator=(const TimerStatusInterface&);       // DWARF :98 (declared-only)
+        TimerStatusInterface& operator=(const TimerStatusInterface&);
 
-        const TimerStatus* GetGameTimerStatus() const;   // DWARF :101 (declared-only)
-        const TimerStatus* GetSimTimerStatus() const;    // DWARF :104 (declared-only)
-        TimerStatus*       GetGameTimerStatus();          // DWARF :107 (declared-only)
-        TimerStatus*       GetSimTimerStatus();           // DWARF :110 (declared-only)
+        const TimerStatus* GetGameTimerStatus() const;
+        const TimerStatus* GetSimTimerStatus() const;
+        TimerStatus*       GetGameTimerStatus();
+        TimerStatus*       GetSimTimerStatus();
 
         bool IsGameTimerFrequency50Hz() const;            // DWARF :113 (declared-only)
         bool IsSimTimerFrequency50Hz() const;             // DWARF :116
 
-        void StoreTimers(Timer* lpGameTimer, Timer* lpSimTimer);  // DWARF :119 (declared-only)
+        void StoreTimers(Timer* lpGameTimer, Timer* lpSimTimer);
 
     private:
         TimerStatus mGameTimerStatus;   // DWARF :123  @ +0

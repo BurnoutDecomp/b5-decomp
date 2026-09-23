@@ -34,9 +34,12 @@
 // the other committed BrnNetwork manager TUs -- it is not reproduced here.
 // ===========================================================================
 
-namespace GameStateModuleIO
+namespace BrnGameState
 {
-    struct OnlineGameResults;   // ProcessRaceResults input (home: BrnGameActions.h)
+    namespace GameStateModuleIO
+    {
+        struct OnlineGameResults;   // ProcessRaceResults input (home: BrnGameActions.h)
+    }
 }
 
 namespace BrnNetwork
@@ -99,9 +102,12 @@ namespace BrnNetwork
         void StartEndOfGame(bool lbQuit, bool lbLeaveGame,
                             Callback lpfCallback, void* lpCallbackUserData);
         void Disconnected();
-        void ProcessRaceResults(const GameStateModuleIO::OnlineGameResults* lpRaceResults);
+        void ProcessRaceResults(const BrnGameState::GameStateModuleIO::OnlineGameResults* lpRaceResults);
 
     private:
+        // The state manager drives the processes directly (StartProcess).
+        friend struct StateManager;
+
         // BrnNetworkPostRoundManager.h:130 -- the ordered action list for one process.
         struct ProcessActions
         {
@@ -152,9 +158,7 @@ namespace BrnNetwork
         bool            mbDidTheUserQuit;                           // +192
         GameResults     mGameResults;                               // +196
 
-        // Console layout (0x1A4 bytes), pinned in a 32-bit build; inert on the x64 host. The
-        // object is 0x1A4 bytes once GameResults reproduces its 0xE0 console bytes; until then the
-        // tail is pinned relative to it.
+        // Console layout (0x1A4 bytes), pinned in a 32-bit build; inert on the x64 host.
         static void _AssertLayout();
     };
 
@@ -164,7 +168,7 @@ namespace BrnNetwork
         static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mpNetworkManager) == 0xA8, "mpNetworkManager @ +0xA8");
         static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mbDidTheUserQuit) == 0xC0, "mbDidTheUserQuit @ +0xC0");
         static_assert(sizeof(void*) != 4 || offsetof(PostRoundManager, mGameResults) == 0xC4, "mGameResults @ +0xC4");
-        static_assert(sizeof(void*) != 4 || sizeof(PostRoundManager) == 0xC4 + sizeof(GameResults), "PostRoundManager ends with mGameResults");
+        static_assert(sizeof(void*) != 4 || sizeof(PostRoundManager) == 0x1A4, "PostRoundManager is 0x1A4 bytes");
     }
 }
 

@@ -112,8 +112,8 @@ namespace CgsNetwork
         bool Release();
         void Destruct();
 
-        bool HasStartTimePassed() const;
-        const StartTime* GetStartTime() const;
+        bool HasStartTimePassed() const { return meStatus == E_STARTED; }
+        const StartTime* GetStartTime() const { return mbStartTimeIsValid ? &mStartTime : nullptr; }
 
         void OnHostMigration(const CgsSystem::TimerStatus* lpTimerStatus,
                              NetworkPlayerID lOldHostID, NetworkPlayerID lNewHostID);
@@ -121,11 +121,25 @@ namespace CgsNetwork
         void RemovePlayer(NetworkPlayerID lPlayerID);
         void Disconnected();
 
-        void SetSyncTimeTimeouts(CgsSystem::Time lMinTime, CgsSystem::Time lMaxTime);
-        void SetWaitForStartTimeTimeout(CgsSystem::Time lTimeout);
+        void SetSyncTimeTimeouts(CgsSystem::Time lMinTime, CgsSystem::Time lMaxTime)
+        {
+            mMinTimeToSyncTime = lMinTime;
+            mMaxTimeToSyncTime = lMaxTime;
+        }
+        void SetWaitForStartTimeTimeout(CgsSystem::Time lTimeout)
+        {
+            mTimeToWaitForStartTime = lTimeout;
+        }
         void SetWaitForClientReadyTimeouts(CgsSystem::Time lSilentTimeout,
-                                           CgsSystem::Time lCommunicatingTimeout);
-        void SetGapTillStartTime(CgsSystem::Time lGap);
+                                           CgsSystem::Time lCommunicatingTimeout)
+        {
+            mTimeToWaitForSilentClientReady        = lSilentTimeout;
+            mTimeToWaitForCommunicatingClientReady = lCommunicatingTimeout;
+        }
+        void SetGapTillStartTime(CgsSystem::Time lGap)
+        {
+            mGapToLeaveBeforeStartTime = lGap;
+        }
 
         bool AreWeSyncingTime();
         void ForceStartTime(const CgsSystem::TimerStatus* lpTimerStatus);

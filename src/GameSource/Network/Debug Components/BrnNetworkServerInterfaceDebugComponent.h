@@ -50,6 +50,11 @@ namespace BrnNetwork
         // tail-call RenderConnectionStatus. Overrides CgsDev::DebugComponent::RenderHUD.
         void RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay) override;
 
+        // BrnNetworkManager::Construct hands the component its manager (+0x14) and the manager's
+        // current server type (+0x0C) right after the server interface is constructed.
+        void SetNetworkManager(BrnNetworkManager* lpNetworkManager)    { mpNetworkManager = lpNetworkManager; }
+        void SetServerType(CgsNetwork::EServerType leServerType)       { miServerType = leServerType; }
+
     protected:
         const char* GetName() const override;   // @ 0x82585798
         void        OnActivate() override;       // @ 0x8258AD10

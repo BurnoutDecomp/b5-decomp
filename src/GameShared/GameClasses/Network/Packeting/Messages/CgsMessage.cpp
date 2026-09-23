@@ -261,6 +261,16 @@ namespace CgsNetwork
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
+    // NetworkPlayerID field: copied into a local, routed through the int32_t primitive over
+    // the full signed 32-bit range, and written back.
+    PackOrUnpackResult Message::PackOrUnpack(NetworkPlayerID* lpNetworkPlayerID)
+    {
+        s32 liValue = *lpNetworkPlayerID;
+        const PackOrUnpackResult lxResult = PackOrUnpackInt(this, &liValue, -0x7FFFFFFF - 1, 0x7FFFFFFF);
+        *lpNetworkPlayerID = liValue;
+        return lxResult;
+    }
+
     // uint32_t field (the word goes to the quantiser unchanged).
     PackOrUnpackResult PackOrUnpackUInt(Message* lpMessage, u32* lpu32Field, s32 liMin, s32 liMax)
     {

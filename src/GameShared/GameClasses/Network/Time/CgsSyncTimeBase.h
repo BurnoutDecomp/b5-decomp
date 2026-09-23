@@ -26,8 +26,8 @@
 //
 // WIDTH MODELLING: every member is accessed BY NAME; the C++ struct is laid out natively
 // (semantic parity, not byte-exact X360 layout -- the same rule the rest of the project
-// follows, cf. CgsNetworkPlayer.h / CgsMessage.h). The X360 build models the message
-// vtable as Message::mpVTable (no C++ `virtual`), so these are plain methods.
+// follows, cf. CgsNetworkPlayer.h / CgsMessage.h). The manager's own methods are plain
+// (it has no vtable); the SyncTimeMessages it holds carry Message's virtuals.
 //
 // NOTE: this is the canonical owning header for CgsNetwork::SyncTimeMessageManager. The
 // older placeholder CgsSyncTimeMessageManager.h is now a thin shim that includes this.

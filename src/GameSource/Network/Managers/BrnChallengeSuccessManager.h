@@ -99,6 +99,9 @@ namespace BrnNetwork
         void Construct(BrnNetworkModule* lpNetworkModule,
                        CgsNetwork::PlayerManager* lpPlayerManager,
                        CgsNetwork::TimeManager* lpTimeManager);
+        // Nothing to acquire or free: both always report ready (the shared return-true body).
+        bool Prepare();
+        bool Release();
         void Destruct();
         void ProcessBeforeSimulation(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
         void ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput);

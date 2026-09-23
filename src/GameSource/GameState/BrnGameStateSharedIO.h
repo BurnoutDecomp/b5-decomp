@@ -242,7 +242,12 @@ namespace BrnGameState
             E_PLAYER_TEAM_NONE      = 0,
             E_PLAYER_TEAM_RED_TEAM  = 1,
             E_PLAYER_TEAM_BLUE_TEAM = 2,
-            E_PLAYER_TEAM_COUNT     = 3
+            // The console bound is 9, not the reference's 3: every team range assert and team
+            // loop compares against 9 (ScoringSystem::GetNextTeamMember, PlayerParamsBase::
+            // GetPlayerTeam, ModeManager::PrepareForMode, StateManager::StartGameMode and
+            // StartFreeBurnLobbyGameMode, the sat-nav icon team getter, OnlineStuntRunMode::
+            // ShouldFinish), and the scoring output keeps 9 per-team stunt scores.
+            E_PLAYER_TEAM_COUNT     = 9
         };
 
         // How the blue team finished an online team round. DWARF: BrnGameStateSharedIO.h:478.
@@ -1039,6 +1044,13 @@ namespace BrnGameState
         // X360 0x821F2B08. Free predicate over EGameModeType: true for exactly
         // E_MODE_ONLINE_FREE_BURN_LOBBY (15) and E_MODE_ONLINE_SHOWTIME (16).
         bool IsOnlineFreeBurnLobby(EGameModeType leGameMode);
+
+        // Offline or online showtime. There is no out-of-line body: GameStateModule::
+        // IsShowtimeGameMode compares its mode against 2 and 16 in place.
+        inline bool IsShowtimeGameMode(EGameModeType leGameMode)
+        {
+            return leGameMode == E_MODE_OFFLINE_SHOWTIME || leGameMode == E_MODE_ONLINE_SHOWTIME;
+        }
 
         // OnlineGameResults re-homed to its DWARF home BrnGameActions.h (typed members +
         // GameAction<E_ACTION_ONLINE_GAME_RESULT> base, which is visible there). The provisional

@@ -27,9 +27,12 @@ namespace CgsNetwork
 {
     // Forward declarations -- held by pointer only here.
     struct PlayerName;                  // Network/Players/CgsPlayerName.h
-    struct NetworkManager;              // CgsNetworkManager.cpp (TU-local home)
+    struct NetworkManager;              // Network/CgsNetworkManager.h
     class  ServerInterface;             // ServerInterface/CgsServerInterface.h
-    struct ServerInterfacePlayerParams; // ServerInterface/.../CgsServerInterfacePlayerParams.h
+    // The history hook takes the platform player params: the platform leaf struct
+    // declared below is the one its callers pass.
+    struct ServerInterfacePlayerParamsX360;
+    typedef ServerInterfacePlayerParamsX360 ServerInterfacePlayerParams;
 
     // CgsBuddyManagerDirtySock.h:39
     const s32 KI_MAX_RECENT_PLAYERS = 20;

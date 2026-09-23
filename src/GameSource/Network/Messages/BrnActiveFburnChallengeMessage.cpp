@@ -68,7 +68,7 @@ namespace BrnNetwork
         lxResult |= CgsNetwork::PackOrUnpackInt(this, &miNumPlayersInChallenge, 0, KI_MAX_NETWORK_PLAYERS);
 
         for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)
-            lxResult |= BrnNetworkManager::PackOrUnpack(this, &maPlayersInChallengeIDs[liPlayer]);
+            lxResult |= CgsNetwork::Message::PackOrUnpack(&maPlayersInChallengeIDs[liPlayer]);
 
         return lxResult;
     }

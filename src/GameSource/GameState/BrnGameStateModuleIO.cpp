@@ -25,6 +25,74 @@ namespace GameStateModuleIO
 
 // =====================  PreWorldInputBuffer  =====================
 
+// The console's CreateIOBuffer<PreWorldInputBuffer> runs this on every buffer it stages. In
+// console order:
+//     *this = 1                                                  // IOBuffer status: constructed
+//     TimerStatusInterface::Clear(this + 4)
+//     the 21 ControllerInput bytes (+0x34..+0x48) = 0
+//     VariableEventQueue<1536,16>::Construct(this + 0x4C)       // mGameEventQueue
+//     TakedownEvent<..,8>::Construct(this + 0x660)              // mTakedownEventInputQueue
+//     the network-to-game-state interface at +0x7B0: its five queue Constructs and a zero
+//         frame counter (NetworkToGameStateInterface::Construct, inlined)
+//     BindResult<..,8>::Construct(this + 0x2BE8), UnBindResult<..,8>::Construct(this + 0x2C54),
+//         this + 0x2CC0 = -1                                     // ControllerToGameStateInterface
+//     InGamePlayerStatusData::Clear x 8 from this + 0x2CC8, then miNumPlayers = 0 and the
+//         game name emptied                                      // InGamePlayerStatusInterface::Clear
+//     PlayerResultsInterface::Clear(this + 0x36B8)
+//     this + 0x3798 = 0                                          // mbInvitesOpen
+//
+// NOT MADE: the ControllerToGameStateInterface leg. That interface is still untyped storage
+// inside maPadToPlayerStatus (its two queue heads widen on the host, so typing it means giving
+// up the absolute +0x2CC8 pin in the header's _AssertLayout), and nothing on this build reads it yet.
+void PreWorldInputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+
+    // TimerStatusInterface::Clear on both timer blocks (game, then sim): frame 0, zero base
+    // step, unit multiplier, stopped, zero time. The member is this header's mirror of
+    // CgsSystem::TimerStatusInterface, so the Clear is spelled over its field names.
+    for (s32 liEntry = 0; liEntry < 2; ++liEntry)
+    {
+        TimerStatusInterface::Entry& lrEntry = mTimerStatusInterface.maEntries[liEntry];
+        lrEntry.miWord00  = 0;       // miFrameCount
+        lrEntry.mfValue04 = 0.0f;    // mfBaseTimeStep
+        lrEntry.mfValue08 = 1.0f;    // mfTimeStepMultiplier
+        lrEntry.mbFlag0C  = 0;       // mbRunning
+        lrEntry.mfValue14 = 0.0f;    // mTime fraction
+        lrEntry.miWord10  = 0;       // mTime seconds
+    }
+
+    mControllerInput.mbAcceptPressed               = false;
+    mControllerInput.mbStartPressed                = false;
+    mControllerInput.mbSelectBackPressed           = false;
+    mControllerInput.mbCancelPressed               = false;
+    mControllerInput.mbUpPressed                   = false;
+    mControllerInput.mbDownPressed                 = false;
+    mControllerInput.mbLeftPressed                 = false;
+    mControllerInput.mbRightPressed                = false;
+    mControllerInput.mbLeftShoulderPressed         = false;
+    mControllerInput.mbLeftShoulderDown            = false;
+    mControllerInput.mbRightShoulderPressed        = false;
+    mControllerInput.mbRightShoulderDown           = false;
+    mControllerInput.mbDirtyTrickPressed           = false;
+    mControllerInput.mbImpactTimeDown              = false;
+    mControllerInput.mbCrashModePressed            = false;
+    mControllerInput.mbCrashbreakerPressed         = false;
+    mControllerInput.mbStartEventPressed           = false;
+    mControllerInput.mbRaceModePressed             = false;
+    mControllerInput.mbAcceleratePressed           = false;
+    mControllerInput.mbMaxPlayerStatsCheatActivate = false;
+    mControllerInput.mbDPadLeftPressed             = false;
+
+    mGameEventQueue.Construct();
+    mTakedownEventInputQueue.Construct();
+    mNetworkToGameStateInterface.Construct();
+
+    mPlayerStatusInterface.Clear();
+    mNetworkPlayerResultsInterface.Clear();
+    mbInvitesOpen = false;
+}
+
 // X360 0x823632F8 - read-lock accessor for the controller input (this+0x34).
 const ControllerInput* PreWorldInputBuffer::GetControllerInput() const
 {
@@ -358,6 +426,14 @@ void OutputBuffer::Construct()
     ConstructTakedownEventOutputQueue(
         reinterpret_cast<TakedownEventOutputQueueType*>(&mTakedownEventOutputQueueStorage));
 
+    //     DirtyTrickEvent<..,28>::Construct(this + 16784)
+    //     GameStateToNetworkInterface::Clear(this + 16784)
+    // == GameStateToNetworkInterface::Construct (the queue's Construct, then Clear: mapping rows
+    // -1, free-burn flags false, game mode -1, online / car-select false). PaybackManager::Update
+    // appends onto this queue every frame and ChallengeManager::WriteDataToOutput writes the
+    // free-burn flags, so the queue has to point at its own storage before either runs.
+    mGameStateToNetworkInterface.Construct();
+
     // ⭐⭐ 2026-08-01 (BridgeGameStateToWorld wave): the console's construct list for the members
     // that bridge READS. Until now every one of these was inside an opaque blob, so none of them
     // could be built -- and BridgeGameStateToWorld hands five of them straight to the world's
@@ -443,8 +519,9 @@ void OutputBuffer::Construct()
     // ⚠️ STILL NOT MADE, and named so nobody has to re-derive them:
     //   * TakedownEvent<..,8>::Construct(this + 16448) -- ⭐ MADE 2026-09-03 (takedown wave), see the
     //     ConstructTakedownEventOutputQueue call above; no longer on this list.
-    //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784),
-    //     the two input bind/unbind request queues (this + 17324 / 17400),
+    //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784)
+    //     -- MADE, see the mGameStateToNetworkInterface.Construct() call above.
+    //   * the two input bind/unbind request queues (this + 17324 / 17400),
     //     VariableEventQueue<18432,16>::Construct (this + 18496) -- all still opaque.
     //     ⚠️ THAT LAST ONE IS THE SAME TRAP D2 JUST PAID OFF, ONE MEMBER ALONG: the GUI event
     //     queue at +18496 is handed out by GetGuiEventQueue() as OutputBufferGuiEventQueue, which
@@ -527,16 +604,12 @@ CgsModule::VariableEventQueue<13312, 16>* OutputBuffer::GetGuiOutputQueue()
 // on that call's own result -- and OutputBuffer::Construct's console list supplies the type
 // (`GameStateToNetworkInterface::Clear(this + 16784)`).
 //
-// ⚠️ Storage is HOST-width (544), not the console's 540-byte span -- see the ⚠️ note on the
-// member in the header. The static_assert below is what makes that claim self-checking.
+// The member is HOST-width (544), not the console's 540-byte span -- see the note on the
+// member in the header; OutputBuffer::_AssertLayout pins it.
 BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer::GetGameStateToNetworkInterface()
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    static_assert(sizeof(BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface)
-                      <= KI_GAME_STATE_TO_NETWORK_INTERFACE_SEAT_SIZE,
-                  "GameStateToNetworkInterface must fit the OutputBuffer's +0x4190 seat");
-    return reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface*>(
-               &mGameStateToNetworkInterfaceStorage);
+    return &mGameStateToNetworkInterface;
 }
 
 // Read-lock twin of the accessor above (exported unnamed): the
@@ -545,8 +618,7 @@ BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer::GetGa
 const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer::GetGameStateToNetworkInterface() const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-    return reinterpret_cast<const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface*>(
-               &mGameStateToNetworkInterfaceStorage);
+    return &mGameStateToNetworkInterface;
 }
 
 // X360 0x8231D8A8 - write-lock accessor for the game-state-to-GUI interface (this+0x4450).

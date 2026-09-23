@@ -82,16 +82,16 @@ static const int KI_NETCONN_STATUS_DUPLICATE_LOGIN = 0x2D647570;
 // ----------------------------------------------------------------------------------------
 // Construct @ 0x8287F4D8
 // ----------------------------------------------------------------------------------------
-void NetworkAdapterX360::Construct(s32 liParentPerfMon)
+void NetworkAdapterX360::Construct()
 {
     mePrepareState = E_PREPARE_INIT;   // +0x2C = 0
     mbConnecting   = false;            // +0x30 = 0
     mpEnvironment  = nullptr;          // +0x28 = 0
 
-    miIdlePerfMon       = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Idle",       8, 0, 1.0, liParentPerfMon, 1);
-    miConnectPerfMon    = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Connect",    8, 0, 1.0, liParentPerfMon, 1);
-    miDisconnectPerfMon = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Disconnect", 8, 0, 1.0, liParentPerfMon, 1);
-    miCallBasePerfMon   = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - CallBase",   8, 0, 1.0, liParentPerfMon, 1);
+    miIdlePerfMon       = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Idle",       CgsDev::E_PMP_8, false, 1.0f, true);
+    miConnectPerfMon    = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Connect",    CgsDev::E_PMP_8, false, 1.0f, true);
+    miDisconnectPerfMon = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - Disconnect", CgsDev::E_PMP_8, false, 1.0f, true);
+    miCallBasePerfMon   = CgsDev::PerfMonCpu::AddMonitor("AdaptorX360 - CallBase",   CgsDev::E_PMP_8, false, 1.0f, true);
 
     NetworkAdapterBase::Construct();
 }

@@ -105,17 +105,10 @@ namespace BrnNetwork
     }
 
     // 0x82586618 -- component FIRST, then the base. Only the BASE receives
-    // liUpdateFlags: `mr r4, r30` @0x82586648 materialises the stashed flags for the
-    // `bl BrnServerInterfaceBase::Suspend` @0x82586650, and NOTHING materialises r4 for
-    // the component bctrl @0x82586644 (r4 is live there only because it is this
-    // function's own untouched incoming parameter -- a non-signal). The argument on the
-    // mGames call below is therefore NOT measured: it is carried solely to satisfy the
-    // committed leaf header's `virtual void Suspend(s32)`, which the Feb-2007 source,
-    // the DWARF and the callee body all contradict. See the +0x24 note in the banner;
-    // the correct shape is `mGames.Suspend();` and lands with the header fix.
+    // The games component's Suspend takes no argument; only the base call receives the flags.
     void BrnServerInterfaceX360::Suspend( int32_t liUpdateFlags )
     {
-        mGames.Suspend( liUpdateFlags );   // FIXME(header): argument is spurious -- see banner +0x24
+        mGames.Suspend();
         BrnServerInterfaceBase::Suspend( liUpdateFlags );
     }
 

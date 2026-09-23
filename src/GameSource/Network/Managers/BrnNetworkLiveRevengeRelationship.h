@@ -14,6 +14,7 @@
 
 #include "types.hpp"
 #include "GameSource/GameState/BrnCgsPlayerName.h"   // CgsNetwork::PlayerName (committed, 16B)
+#include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h" // CgsNetwork::UniquePlayerIDX360 (mUniqueID, 24B)
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h" // CgsSystem::DateAndTime (committed, 12B; mLastTimeChanged @+72)
 
 namespace BrnNetwork
@@ -32,7 +33,19 @@ namespace BrnNetwork
         s32 miPaybacksScored;         // +28
         s32 miPaybacksDealt;          // +32
 
-        void Clear();                 // own TU
+        // Header inline: every clear site zeroes the nine words in place.
+        void Clear()
+        {
+            miTakedowns               = 0;
+            miScalps                  = 0;
+            miLongestStreak           = 0;
+            miWins                    = 0;
+            miMarks                   = 0;
+            miScoresSettled           = 0;
+            miEventsSinceLastTakedown = 0;
+            miPaybacksScored          = 0;
+            miPaybacksDealt           = 0;
+        }
     };
 
     // BrnNetworkLiveRevengeRelationship.h:74 (DWARF) -- two stat blocks == 72 bytes.
@@ -41,7 +54,11 @@ namespace BrnNetwork
         CommonRelationshipStats mPlayerStats; // +0
         CommonRelationshipStats mRivalStats;  // +36
 
-        void Clear();                         // own TU
+        void Clear()
+        {
+            mPlayerStats.Clear();
+            mRivalStats.Clear();
+        }
     };
 
     // BrnNetworkLiveRevengeRelationship.h:94 (DWARF). Total object size 120 bytes
@@ -50,10 +67,7 @@ namespace BrnNetwork
     // 120 bytes for mLiveRevengeRelationship spanning object +136..+256, which places
     //   InGamePlayerStatusData::mPlayerName     at +256  (NetworkPlayerStats[136] + this[120] == 256)
     //   InGamePlayerStatusData::mNetworkPlayerID at +272  (256 + PlayerName[16])
-    // matching the X360 stores. The PS3 DecFIGS DWARF spells mUniqueID as UniquePlayerIDPS3, whose
-    // combined size with DateAndTime is 4 bytes smaller than the X360 build's (DWARF would imply a
-    // 116-byte object placing PlayerName at +252 -- PS3 drift); the X360 binary wins, so the un-homed
-    // mLastTimeChanged(DateAndTime)+mUniqueID(MugshotInfo::UniquePlayerID) pad is 40 bytes here.
+    // matching the console stores.
     // Forward declaration for the friend grant below (the debug component publishes this
     // relationship's private stat members into the debug menu by pointer).
     class LiveRevengeDebugComponent;
@@ -67,6 +81,10 @@ namespace BrnNetwork
         // by raw offset off the relationship pointer, which in clean C++ is friendship, not an
         // accessor (the const GetOverallStats() accessor cannot back a writable menu variable).
         friend class BrnNetwork::LiveRevengeDebugComponent;
+
+        // The rival's identity: the player name plus the 64-bit XUID. The reference build spells it
+        // through a platform typedef; this build's platform type is the Xbox identity.
+        typedef CgsNetwork::UniquePlayerIDX360 UniquePlayerID;
 
         // BrnNetworkLiveRevengeRelationship.h:98 (DWARF)
         enum ERelationshipType
@@ -87,25 +105,29 @@ namespace BrnNetwork
         };
 
     public:
-        // Header-inline (the console inlines it into InGamePlayerStatusData::Clear). Clears the
-        // same field set as Destruct / Release: both stat blocks, the two timestamp words, the
-        // unique-id byte and 8-byte field, and the two trailing counters.
-        void Construct()
+        // Header inline (the console inlines it into InGamePlayerStatusData::Clear and
+        // LiveRevengeManager::AddNewTableEntry).
+        void Construct() { Clear(); }
+        bool Prepare(const UniquePlayerID* lpUniquePlayerID); // own TU
+        bool Release();                                     // own TU
+        void Destruct();                                    // own TU
+
+        // Header inline: every clear site (Release, Destruct, DEBUGClearRelationship, the sync
+        // message's size query) emits the same store set. mLastTimeChanged keeps its local flag.
+        void Clear()
         {
-            mbUniqueID_88  = 0;
-            muUniqueID_104 = 0;
+            // The identity: empty name and zero XUID (the UniquePlayerID clear, inlined).
+            mUniqueID.macName[0] = '\0';
+            mUniqueID.mqXuid     = 0;
             mLastTimeChanged.Clear();
-            mOverallStats.mPlayerStats = CommonRelationshipStats();
-            mOverallStats.mRivalStats  = CommonRelationshipStats();
+            mOverallStats.Clear();
             miCurrentScoreForPlayersPointOfView = 0;
             miTotalEvents                       = 0;
         }
-        bool Release();                                     // own TU
-        void Destruct();                                    // own TU
-        void Clear();                                       // own TU
+
         void FlipPointOfView();                             // own TU
-        void AddTakedownByLocalPlayer(bool);                // own TU
-        void AddTakedownByRival(bool);                      // own TU
+        void AddTakedownByLocalPlayer(bool lbMarkedMan);    // own TU
+        void AddTakedownByRival(bool lbMarkedMan);          // own TU
         void AddPaybackDealtByLocalPlayer();                // own TU
         void AddPaybackDealtByRival();                      // own TU
         void AddPaybackScoredByLocalPlayer();               // own TU
@@ -118,68 +140,52 @@ namespace BrnNetwork
         // === Reconstructed in this TU ===
         s32 GetTotalTakedowns() const;                      // @ 0x82355540
 
-        // The rival's 64-bit XUID (asm reads ld 0x68(rel) == +104 == muUniqueID_104).
+        // The rival's 64-bit XUID (asm reads ld 0x68(rel) == +104 == mUniqueID.mqXuid).
         // Consumed by GameSearchParams::AreRivalsInSameGame (X360 @ 0x82590FC0).
-        u64 GetRivalXUID() const { return muUniqueID_104; }
+        u64 GetRivalXUID() const { return mUniqueID.mqXuid; }
 
-        // GetRivalName returns the committed CgsNetwork::PlayerName (do NOT re-fork PlayerName).
-        const CgsNetwork::PlayerName* GetRivalName() const; // own TU
-        s32  GetCurrentScoreForLocalPlayer() const;         // own TU
-        s32  GetCurrentScoreForRival() const;               // own TU
+        // The rival's name is the PlayerName base of mUniqueID (relationship +88).
+        const CgsNetwork::PlayerName* GetRivalName() const { return &mUniqueID; }
+
+        // Header inlines: the console reads the +112 score word directly at every call site.
+        s32  GetCurrentScoreForLocalPlayer() const { return miCurrentScoreForPlayersPointOfView; }
+        s32  GetCurrentScoreForRival() const       { return -miCurrentScoreForPlayersPointOfView; }
         ERelationshipStatus GetRelationshipStatus() const;  // own TU
-        s32  GetTotalEvents() const;                        // own TU
+        s32  GetTotalEvents() const { return static_cast<s32>(miTotalEvents); }
         const CommonRelationship* GetLastGameStats() const; // own TU
-        const CommonRelationship* GetOverallStats() const;  // own TU
-        void SetCurrentScoreForPlayer(s32);                 // own TU
-        void SetTotalNumberOfEvents(s32);                   // own TU
-        void SetOverallStats(CommonRelationship*);          // own TU
-        void Merge(LiveRevengeRelationship*);               // own TU
-        bool IsRivalAheadInCurrentRelationship() const;     // own TU
-        bool IsPlayerAheadInCurrentRelationship() const;    // own TU
-        bool IsCurrentRelationshipEqual() const;            // own TU
+        const CommonRelationship* GetOverallStats() const { return &mOverallStats; }
+        void SetLastTimeChanged(CgsSystem::DateAndTime lDateAndTime) { mLastTimeChanged = lDateAndTime; }
+        void SetCurrentScoreForPlayer(s32 liScore)  { miCurrentScoreForPlayersPointOfView = liScore; }
+        void SetTotalNumberOfEvents(s32 liNumberOfEvents) { miTotalEvents = static_cast<u32>(liNumberOfEvents); }
+        void SetOverallStats(CommonRelationship* lpOverallStats) { mOverallStats = *lpOverallStats; }
+        void Merge(LiveRevengeRelationship* lpRemoteRelationship); // own TU
+        bool IsRivalAheadInCurrentRelationship() const  { return miCurrentScoreForPlayersPointOfView < 0; }
+        bool IsPlayerAheadInCurrentRelationship() const { return miCurrentScoreForPlayersPointOfView > 0; }
+        bool IsCurrentRelationshipEqual() const         { return miCurrentScoreForPlayersPointOfView == 0; }
         ERelationshipType GetRelationshipType() const;      // own TU
+        CgsSystem::DateAndTime GetLastChangedTime() const { return mLastTimeChanged; }
         void OnRoundFinish();                               // own TU
         void OnRoundStart();                                // own TU
         bool Validate() const;                              // own TU
         // DEBUG callbacks are static per leak + DWARF (cast the void* into a local
         // LiveRevengeRelationship* rather than using `this`).
-        static void DEBUGResetTimeStamp(void*);             // own TU
-        static void DEBUGSetTimeStampOld(void*);            // own TU
-        static void DEBUGClearRelationship(void*);          // own TU
+        static void DEBUGResetTimeStamp(void* lpParameter);    // own TU
+        static void DEBUGSetTimeStampOld(void* lpParameter);   // own TU
+        static void DEBUGClearRelationship(void* lpParameter); // own TU
 
     private:
         void ScoreSettled();                                // own TU
-        void FlipCommonRelationship(CommonRelationship*);   // own TU
-        void ValidateStat(s32, s32, s32, s32, const char*, bool); // own TU
+        void FlipCommonRelationship(CommonRelationship* lpRelationship); // own TU
+        void ValidateStat(s32 liLocalPlayerStat, s32 liRemotePlayerStat, s32 liLocalRivalStat,
+                          s32 liRemoteRivalStat, const char* lpcName, bool lbShouldWeAssert); // own TU
 
     private:
-        // BrnNetworkLiveRevengeRelationship.h:320 (DWARF) -- TOUCHED by this TU.
-        CommonRelationship mOverallStats;          // +0  (72 bytes)
-
-        // === ADDITIVE GROW (this TU, the owning home for the clear path) ===
-        // The committed home previously modelled this region as an opaque 40-byte pad
-        // (mPad_LastTimeChanged_UniqueID) "to be replaced by the real members, keeping the
-        // combined DateAndTime+UniquePlayerID span at 40 bytes" -- this is that owning TU.
-        // The clear bodies (Destruct/Release/DEBUGClearRelationship @0x82547xxx) write
-        // exact sub-offsets inside this region and DEBUGClearRelationship tail-calls
-        // CgsSystem::DateAndTime::Update(this+0x48 == +72), proving mLastTimeChanged is the
-        // committed CgsSystem::DateAndTime AT +72. (Confirmed independently by the Flyby
-        // home, which spells the same +72 field `CgsSystem::DateAndTime mLastActivity`.)
-        // Size/offsets are preserved (12 + 28 == the old 40-byte span); object stays 120B.
-        CgsSystem::DateAndTime mLastTimeChanged;   // +72  (12 bytes) committed type
-
-        // mUniqueID: the un-homed MugshotInfo::UniquePlayerID (28 bytes, +84..+111). Its
-        // internal layout is NOT committed, so it is modelled as named byte-span fields at
-        // exactly the offsets the X360 clear path stores to (a byte @+88, an 8-byte field
-        // @+104) plus opaque spans -- reproducing the clear stores by name without
-        // fabricating the UniquePlayerID layout. The owning TU of UniquePlayerID should
-        // replace this with the real member, keeping the 28-byte span.
-        u8  maUniqueID_84[4];                      // +84  (opaque head)
-        u8  mbUniqueID_88;                         // +88  (stb 0 here)
-        u8  maUniqueID_89[15];                      // +89..+103 (opaque)
-        u64 muUniqueID_104;                        // +104 (std 0 here -> +104..+111)
-        s32 miCurrentScoreForPlayersPointOfView;   // +112
-        u32 miTotalEvents;                         // +116
+        // Reference member order; console offsets:
+        CommonRelationship     mOverallStats;                        // +0   (72 bytes)
+        CgsSystem::DateAndTime mLastTimeChanged;                     // +72  (12 bytes)
+        UniquePlayerID         mUniqueID;                            // +88  (24 bytes, 8-aligned)
+        s32                    miCurrentScoreForPlayersPointOfView;  // +112
+        u32                    miTotalEvents;                        // +116
     };
 } // namespace BrnNetwork
 // static_assert(sizeof(BrnNetwork::LiveRevengeRelationship) == 120, "X360 layout");

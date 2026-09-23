@@ -21,14 +21,12 @@
 //   +0x34  maReceivedClientsIDs[8] (eight NetworkPlayerID words; *(this+52..+80) = a4[0..7])
 // So StartTime is 12 bytes and the trailing id array occupies +0x34 .. +0x53.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// Message's five console vtable slots are real C++ virtuals; this leaf overrides
+// GetPackedMessageSize, GetName and PackOrUnpack.
 //
-// Ledger func for this TU:
-//   GetName @ 0x827DE0E8 -- header-homed inline accessor; returns the literal
-//                           "Start Time Message".
-// The remaining methods are bodied in their own TU (CgsStartTimeMessage.cpp); they are
-// declared here so the rest of the hierarchy can call them by name.
+// GetName is the header-homed inline accessor ("Start Time Message");
+// GetPackedMessageSize and PackOrUnpack are bodied in CgsStartTimeMessage.cpp, the rest
+// of the methods in their own TUs.
 // ===================================================================================
 
 #include "types.hpp"
@@ -57,12 +55,12 @@ namespace CgsNetwork
         void               Destruct();
         bool               Retrieve(StartTime* lpStartTime,
                                     MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs);
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DE0E8 -- inline header-homed accessor.
-        const char*        GetName() const { return "Start Time Message"; }
+        const char*        GetName() const override { return "Start Time Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         // +0x28 .. (after the 0x28-byte ReliableMessage base).
         StartTime                             mStartTime;            // +0x28 .. +0x33

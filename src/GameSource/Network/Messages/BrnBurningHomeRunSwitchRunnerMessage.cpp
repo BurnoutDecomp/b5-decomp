@@ -46,7 +46,7 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult BurningHomeRunSwitchRunnerMessage::PackOrUnpack()
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
-        return BrnNetworkManager::PackOrUnpack(this, &mNewRunnerID) | lxBase;
+        return CgsNetwork::Message::PackOrUnpack(&mNewRunnerID) | lxBase;
     }
 
     // BrnNetwork::BurningHomeRunSwitchRunnerMessage::PrepareForSend @ 0x8257F278

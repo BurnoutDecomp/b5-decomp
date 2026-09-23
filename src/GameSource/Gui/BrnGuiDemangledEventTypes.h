@@ -54,6 +54,12 @@
 // GuiEventNetworkPlayerImage carries the transmitted photo pointer-only (the renderer's
 // CopyTexture is the only consumer, and it lives in its own TU).
 namespace CgsNetwork { class NetworkTexture; }
+// GuiEventCamStatus names the camera status by its enum; its home is
+// BrnNetworkModuleInGamePlayerStatusInterface.h (an opaque declaration keeps that network
+// header out of this one).
+namespace BrnNetwork { enum ECameraStatus : s32; struct LiveRevengeProfile; }
+#include "pc/gcm/renderengine/pixelformat.h"   // renderengine::PixelFormat (cam picture events)
+#include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 
 namespace BrnGui
 {
@@ -156,7 +162,15 @@ namespace BrnGui
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :4566 in the X360 field order, sizeof 28).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiEventBuddyNotification : public CgsGui::GuiEvent<105> { u8 maPayload[12]; };  // id 105 size 24 (12B GuiEvent header + opaque payload)
-    struct GuiEventCamPicCompressed : public CgsGui::GuiEvent<569> {};  // id 569 size 12
+    // The compressed still is ready (network -> GUI). AddGuiEvent posts the object itself; the
+    // pixel pointer is a 4-byte slot on the console and native width here.
+    struct GuiEventCamPicCompressed
+    {
+        s32                       miCompressedPixelSize;   // +0x00
+        renderengine::PixelFormat meCompressedFormat;      // +0x04
+        char*                     mpcCompressedPixels;     // +0x08
+        s32 GetEventType() const { return 569; }
+    };  // id 569 size 12 on the console
     struct GuiEventCanSkipCrash { u8 maData[1]; s32 GetEventType() const { return 547; } };  // id 547 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventCantPaintCar { u8 maData[1]; s32 GetEventType() const { return 551; } };  // id 551 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventChallengedEventDataResponse : public CgsGui::GuiEvent<332> { u8 maPayload[20]; };  // id 332 size 32 (12B GuiEvent header + opaque payload)
@@ -193,7 +207,13 @@ namespace BrnGui
     struct GuiEventInviteComplete { u8 maData[1]; s32 GetEventType() const { return 132; } };  // id 132 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventInviteFailed { u8 maData[4]; s32 GetEventType() const { return 133; } };  // id 133 size 4 (raw; size not GuiEvent-shaped)
     struct GuiEventJumpStarted { u8 maData[8]; s32 GetEventType() const { return 216; } };  // id 216 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiEventLiveRevengeProfileData { u8 maData[4]; s32 GetEventType() const { return 351; } };  // id 351 size 4 (raw; size not GuiEvent-shaped)
+    // The loaded live-revenge profile, by pointer (network -> GUI). The console record is the
+    // one 4-byte pointer; it is native width here.
+    struct GuiEventLiveRevengeProfileData
+    {
+        BrnNetwork::LiveRevengeProfile* mpLiveRevengeProfile;   // +0x00
+        s32 GetEventType() const { return 351; }
+    };  // id 351 size 4 on the console
     struct GuiEventLoadImageFiles : public CgsGui::GuiEvent<359> { u8 maPayload[36]; };  // id 359 size 48 (12B GuiEvent header + opaque payload)
     struct GuiEventMedalUpdate { u8 maData[8]; s32 GetEventType() const { return 307; } };  // id 307 size 8 (raw; size not GuiEvent-shaped)
     struct GuiEventMiniMapSwitch { u8 maData[1]; s32 GetEventType() const { return 205; } };  // id 205 size 1 (raw; size not GuiEvent-shaped)
@@ -212,15 +232,45 @@ namespace BrnGui
     // GuiEventNetworkPlayerImageRecord in BrnLicenseComponent.cpp / BrnPhotoBoothComponent.cpp.
     struct GuiEventNetworkPlayerImage
     {
-        CgsNetwork::NetworkTexture* mpTexture;      // +0x00
+        const CgsNetwork::NetworkTexture* mpTexture; // +0x00
         s32                         miTextureIndex; // +0x04
         s32 GetEventType() const { return 258; }
     };  // id 258 size 8 on X360 (4-byte pointer); native-width here
-    struct GuiEventNetworkPlayerList : public CgsGui::GuiEvent<243> { u8 maPayload[156]; };  // id 243 size 168 (12B GuiEvent header + opaque payload)
-    struct GuiEventNetworkPlayerStatus : public CgsGui::GuiEvent<245> { u8 maPayload[2532]; };  // id 245 size 2544 (12B GuiEvent header + opaque payload)
+    // The two roster records carry the debug worst-case-HUD switches as static members; only
+    // GuiDebugComponent::UpdateWorstCaseHUD writes them and the network bridge reads them.
+    struct GuiEventNetworkPlayerList : public CgsGui::GuiEvent<243>
+    {
+        u8 maPayload[156];
+        static inline bool msbWorstCaseHudActive = false;
+    };  // id 243 size 168 (12B GuiEvent header + opaque payload)
+    struct GuiEventNetworkPlayerStatus : public CgsGui::GuiEvent<245>
+    {
+        u8 maPayload[2532];
+        static inline bool msbWorstCaseHudActive = false;
+        static inline bool msbStatusSwitch       = false;
+    };  // id 245 size 2544 (12B GuiEvent header + opaque payload)
+    // The roster row the player highlighted (GUI -> network). The network state manager reads
+    // the player id at +0 and outputs that player's stats.
+    struct GuiEventNetworkHighlightedPlayer
+    {
+        BrnNetwork::NetworkPlayerID mPlayerID;   // +0x00
+        s32 GetEventType() const { return 247; }
+    };
     struct GuiEventNetworkPostGameProcessingFinished { u8 maData[1]; s32 GetEventType() const { return 274; } };  // id 274 size 1 (raw; size not GuiEvent-shaped)
     struct GuiEventNetworkShowFreeBurnIntro { u8 maData[2]; s32 GetEventType() const { return 279; } };  // id 279 size 2 (raw; size not GuiEvent-shaped)
-    struct GuiEventNetworkSplashEvent { u8 maData[4]; s32 GetEventType() const { return 269; } };  // id 269 size 4 (raw; size not GuiEvent-shaped)
+    // The online splash screen's state. The network state manager acts on FINISHED (2).
+    struct GuiEventNetworkSplashEvent
+    {
+        enum ESplashState
+        {
+            E_SPLASH_STATE_SHOW     = 0,
+            E_SPLASH_STATE_STOP     = 1,
+            E_SPLASH_STATE_FINISHED = 2,
+            E_SPLASH_STATE_COUNT    = 3,
+        };
+        ESplashState meSplashState;   // +0x00
+        s32 GetEventType() const { return 269; }
+    };  // id 269 size 4
     // GuiEventOfflinePostEvent (id 289, size 192) MOVED to
     // GameSource/Gui/BrnGuiEventTypeDefs.h with its real nested OfflinePostEventData
     // shape. ⚠️ SAME AUTO-DERIVATION ERROR AS GuiEventPrepareForModeStart ABOVE: the
@@ -634,7 +684,12 @@ namespace BrnGui
     struct alignas(8) GuiEventAudioTraxLastPlayedIndexes : public CgsGui::GuiEvent<459> { u8 maPayload[12]; };  // id 459 size 24 [8-aligned: OGE off16]
     struct GuiEventAudioTraxPreview { u8 maData[8]; s32 GetEventType() const { return 460; } };  // id 460 size 8
     struct GuiEventAudioVoiceOver { u8 maData[4]; s32 GetEventType() const { return 466; } };  // id 466 size 4
-    struct GuiEventCamStatus { u8 maData[4]; s32 GetEventType() const { return 570; } };  // id 570 size 4
+    // The local camera's status (network -> GUI). The network module posts the object itself.
+    struct GuiEventCamStatus
+    {
+        BrnNetwork::ECameraStatus meCamStatus;   // +0x00
+        s32 GetEventType() const { return 570; }
+    };  // id 570 size 4
     struct alignas(8) GuiEventChallengedEventDataRequest { u8 maData[8]; s32 GetEventType() const { return 331; } };  // id 331 size 8 [8-aligned: OGE off16]
     struct GuiEventControllerSettings { u8 maData[3]; s32 GetEventType() const { return 472; } };  // id 472 size 3
     // =============================================================================
@@ -798,10 +853,65 @@ namespace BrnGui
     static_assert(sizeof(GuiEventNetworkCustomMatchSearch) == 24,
                   "GuiEventNetworkCustomMatchSearch is the 24-byte OutputGuiEvent record");
     struct GuiEventNetworkLeavingGameFailed { u8 maData[1]; s32 GetEventType() const { return 275; } };  // id 275 size 1
-    struct GuiEventNetworkNewsAndTOS { u8 maData[4]; s32 GetEventType() const { return 266; } };  // id 266 size 4
-    struct GuiEventNetworkOutputPlayerTexture { u8 maData[8]; s32 GetEventType() const { return 264; } };  // id 264 size 8
-    struct GuiEventNetworkQuickMatch { u8 maData[2]; s32 GetEventType() const { return 251; } };  // id 251 size 2
-    struct GuiEventNetworkSelectedPlayerOption { u8 maData[8]; s32 GetEventType() const { return 246; } };  // id 246 size 8
+    // News / terms-of-service download requests and results. The network state manager
+    // starts the news (0) or TOS (1) download and releases both on RELEASE (6).
+    struct GuiEventNetworkNewsAndTOS
+    {
+        enum EEventType
+        {
+            E_EVENT_TYPE_REQUEST_NEWS   = 0,
+            E_EVENT_TYPE_REQUEST_TOS    = 1,
+            E_EVENT_TYPE_RETRIEVED_NEWS = 2,
+            E_EVENT_TYPE_RETRIEVED_TOS  = 3,
+            E_EVENT_TYPE_FAILED_NEWS    = 4,
+            E_EVENT_TYPE_FAILED_TOS     = 5,
+            E_EVENT_TYPE_RELEASE        = 6,
+            E_EVENT_TYPE_COUNT          = 7,
+        };
+        EEventType meEventType;   // +0x00
+        s32 GetEventType() const { return 266; }
+    };  // id 266 size 4
+    // Which player's picture the camera path should output. The network state manager stores
+    // the mode (+0) and player (+4); OFF (0) disables the game camera.
+    struct GuiEventNetworkOutputPlayerTexture
+    {
+        enum EOutput
+        {
+            E_OUTPUT_OFF              = 0,
+            E_OUTPUT_PLAYER_IMAGE     = 1,
+            E_OUTPUT_SCALP_IMAGE      = 2,
+            E_OUTPUT_WINNER_IMAGE     = 3,
+            E_OUTPUT_GAMERPIC         = 4,
+            E_OUTPUT_GAMERPIC_LICENCE = 5,
+            E_OUTPUT_NUM              = 6,
+        };
+        EOutput                     meOutput;            // +0x00
+        BrnNetwork::NetworkPlayerID mPlayerIDToOutput;   // +0x04
+        s32 GetEventType() const { return 264; }
+    };  // id 264 size 8
+    // Quick match request: MatchMakingManager::QuickJoinGame(+0, +1).
+    struct GuiEventNetworkQuickMatch
+    {
+        bool mbRanked;     // +0x00
+        bool mbFreeburn;   // +0x01
+        s32 GetEventType() const { return 251; }
+    };  // id 251 size 2
+    // An option picked on a game-room player. The network state manager switches on the option
+    // (KICK_PLAYER kicks the player id at +4).
+    struct GuiEventNetworkSelectedPlayerOption
+    {
+        enum EOptionSelected
+        {
+            E_OPTION_SELECTED_MARK_PLAYER    = 0,
+            E_OPTION_SELECTED_VIEW_GAMERCARD = 1,
+            E_OPTION_SELECTED_SUBMIT_REVIEW  = 2,
+            E_OPTION_SELECTED_KICK_PLAYER    = 3,
+            E_OPTION_SELECTED_COUNT          = 4,
+        };
+        EOptionSelected             meOptionSelected;    // +0x00
+        BrnNetwork::NetworkPlayerID mSelectedPlayerID;   // +0x04
+        s32 GetEventType() const { return 246; }
+    };  // id 246 size 8
     struct GuiEventOnlineInviteEvent
     {
         s32 meRequestedAction;
@@ -818,7 +928,15 @@ namespace BrnGui
 
     struct alignas(8) GuiEventPostEventFreeCarSequenceStart { u8 maData[8]; s32 GetEventType() const { return 302; } };  // id 302 size 8 [8-aligned: OGE off16]
     struct GuiEventPostEventRankUpSequenceStart { u8 maData[8]; s32 GetEventType() const { return 303; } };  // id 303 size 8
-    struct GuiEventRequestCompressedCamPic : public CgsGui::GuiEvent<568> {};  // id 568 size 12
+    // Ask the network camera for a compressed still. OutputGuiEvent wraps it as
+    // { 12, 568, 12 } + three payload words; the third is a pointer (4-byte slot on the
+    // console, native width here).
+    struct GuiEventRequestCompressedCamPic : public CgsGui::GuiEvent<568>
+    {
+        s32                         miQualitySetting;            // payload +0x00
+        renderengine::PixelFormat   meCompressedFormat;          // payload +0x04
+        CgsNetwork::NetworkTexture* mpTextureToCompressedInto;   // payload +0x08
+    };  // id 568
     struct GuiEventRequestSpecificPreSetRaces { u8 maData[4]; s32 GetEventType() const { return 193; } };  // id 193 size 4
     // id 572 size 4 -- UPGRADED from the opaque u8[4] 2026-08-25 (HUD H2): DWARF home
     // BrnGuiEventTypeDefs.h:6556 `GuiEventRequestTraining : GuiEvent<557>` with the one

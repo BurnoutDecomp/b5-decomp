@@ -1585,7 +1585,7 @@ struct SetUpAllDriveThrusAction : public GameAction<E_ACTION_SET_UP_ALL_DRIVE_TH
 // X360 0x8231CA38 (SetPosition) / 0x82558580 (GetPosition). Per-player online-round result action:
 // a position-indexed table of finishing slots plus a list of mid-round disconnects. DWARF
 // BrnGameActions.h:5227 (true owning home). Minimal slice -- only the members the two reconstructed
-// bodies touch are declared; Construct/GetWinner are declared-only (own ledger entries). GameAction<T>
+// bodies touch are declared; Construct is declared-only (own ledger entry). GameAction<T>
 // is an empty tag base, so instance data starts at +0x00 (matches the X360 a1[0] / (a1+8) access:
 // maPlayerPosition[8] at +0x00, maDisconnectedPlayers Array<NetworkPlayerID,8> at +0x20 with its count
 // word at +0x40 == a1[16]). NetworkPlayerID == s32 (committed BrnNetwork::NetworkPlayerID).
@@ -1597,7 +1597,8 @@ struct OnlineRoundResults : public GameAction<E_ACTION_ONLINE_ROUND_RESULT>
     void                        Construct();                                                       // declared-only
     void                        SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition); // 0x8231CA38
     s32                         GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const;           // 0x82558580
-    BrnNetwork::NetworkPlayerID GetWinner() const;                                                 // declared-only
+    // The winner is the player in first place (the word at +0x00).
+    BrnNetwork::NetworkPlayerID GetWinner() const { return maPlayerPosition[0]; }
 
 private:
     BrnNetwork::NetworkPlayerID                        maPlayerPosition[KI_MAX_PLAYERS];   // +0x00 (DWARF :5248)
@@ -2678,6 +2679,42 @@ static_assert(sizeof(PlayerEliminatedAction) == 8 &&
               offsetof(PlayerEliminatedAction, mbLastBlueTeamMember) == 4 &&
               offsetof(PlayerEliminatedAction, mbLocalPlayerEliminated) == 5,
               "X360 posts action 165 with size 8; flags at +4/+5");
+
+// The player picked a car in online car select. OnlineCarSelectManager::SendOnlineChangeCarAction
+// fills the car id, the profile car's deformation amount, the colour and paint finish from the
+// progression manager and the final-selection flag, and posts 24 bytes; the network state
+// manager reads the same five fields.
+struct CarSelectOnlineSelectCarAction : public GameAction<E_ACTION_CAR_SELECT_ONLINE_SELECT_CAR>
+{
+    CgsID mCarID;                  // +0x00
+    f32   mfDeformationAmount;     // +0x08 not in the reference record; FLAG name
+    u16   mu16ColourIndex;         // +0x0C
+    u16   mu16PaintFinishIndex;    // +0x0E
+    bool  mbFinalSelection;        // +0x10
+};
+static_assert(sizeof(CarSelectOnlineSelectCarAction) == 24 &&
+              offsetof(CarSelectOnlineSelectCarAction, mfDeformationAmount) == 0x08 &&
+              offsetof(CarSelectOnlineSelectCarAction, mu16ColourIndex) == 0x0C &&
+              offsetof(CarSelectOnlineSelectCarAction, mu16PaintFinishIndex) == 0x0E &&
+              offsetof(CarSelectOnlineSelectCarAction, mbFinalSelection) == 0x10,
+              "action 84 is posted with size 24");
+
+// Carry out an invite or join: GameStateModule::ProcessGameEvents copies the whole 0x9C-byte
+// parameter block into the action.
+struct PerformInviteAction : public GameAction<E_ACTION_PERFORM_INVITE>
+{
+    ::BrnNetwork::BrnNetworkModuleIO::InviteOrJoinParams mInviteParams;   // +0x00
+};
+static_assert(sizeof(PerformInviteAction) == 0x9C, "action 95 is posted with size 0x9C");
+
+// The achievement count after a write. The console record is the count alone (4 bytes): the
+// reference's earned-bit array is not carried; the achievement manager's WriteAchievements posts
+// the population count of its earned bits.
+struct AchievementsEarnedAction : public GameAction<E_ACTION_ACHIEVEMENTS_EARNED>
+{
+    s32 miAchivementCount;   // +0x00 (reference spelling)
+};
+static_assert(sizeof(AchievementsEarnedAction) == 4, "action 209 is posted with size 4");
 
 // [FX-GS 2026-09-23, crash-parity G11-D4] DecFIGS BrnGameActions.h:3242-3244. Producer
 // HandleOnlineTeamTakedowns: `stw aggressor, var+0` @0x82344328, size 4.

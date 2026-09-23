@@ -96,8 +96,13 @@ namespace Detail
     //   +N*sizeof(T)+12 mPad1                   (uint32_t)
     // For N=16, T=Event(16B): mNext@0x100, mSize@0x104, sizeof==0x110 (272) -- the
     // exact size requested from the allocator in Add.
+    //
+    // The node is 16-byte aligned: every Add allocates its overflow node with alignment 16,
+    // and the <Job*,6> node is allocated as 0x30 bytes (0x28 of members rounded up to 16).
+    // The same alignment places Job's mDependencies at +0x60 and mEvents at +0x1E0, which
+    // makes sizeof(Job) 0x350.
     template <typename T, int N>
-    struct BucketListNode
+    struct alignas(16) BucketListNode
     {
         BucketListNode();
         ~BucketListNode();

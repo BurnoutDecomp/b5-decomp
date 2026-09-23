@@ -23,13 +23,13 @@ namespace CgsNetwork
 void ServerInterfacePrepareParams::Construct()
 {
     std::memset(mapComponents, 0, sizeof(mapComponents));   // XMemSet(this, 0, 48)
-    muField_30 = 0;
-    muField_34 = 0;
-    muField_38 = 0;
-    muField_3C = 0;
-    muField_40 = 0;
-    muField_44 = 0;
-    mu8Field_48 = 0;   // stb (byte)
+    mLobbyParams.miLanguage      = 0;
+    mLobbyParams.mpcVersion      = nullptr;
+    mLobbyParams.mpcSKU          = nullptr;
+    mLobbyParams.mpcSLUS         = nullptr;
+    mConnAPIParams.miPort        = 0;
+    mConnAPIParams.miMaxPlayers  = 0;
+    mConnAPIParams.mbPeerToPeer  = false;
 }
 
 }
