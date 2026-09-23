@@ -9,6 +9,7 @@
 //
 // Methods bodied here (X360 ARTIST.XEX addresses):
 //   GetRecentCrash                0x8232BEF8
+//   DealWithRemovedTraffic        0x8232BF90   [FX-GS2 2026-09-23, G10-D9]
 //   ClearData                     0x82320D10
 //   DealWithComboItem             0x82312918
 //   DealWithCrashbreakerRequest   0x82320EB8
@@ -76,6 +77,7 @@
 #include <cstring>                                    // std::memset (ClearData zeroes the Vector3 members)
 #include <cmath>                                      // std::fabs (Update's IsVectorSet epsilon test)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"       // BrnGui::GuiRemovedTrafficEvent (DealWithRemovedTraffic)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the X360 assert sites in these bodies)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [diagnostic] the [crash-end] witness
 #include "GameShared/GameClasses/Core/CgsID.h"        // CgsIDUnCompress (GetVehicleScoreData diagnostic)
@@ -114,6 +116,41 @@ namespace BrnGameState
             }
         }
         return nullptr;
+    }
+
+    // ------------------------------------------------------------------------
+    // DealWithRemovedTraffic  @ 0x8232BF90 (DWARF BrnCrashModeScoring.h:157)
+    // [FX-GS2 2026-09-23, crash-parity G10-D9] Sole caller BrnGameModule::
+    // BridgeWorldTrafficAndPropDataToGui @0x823E5560, in its GUI-event 209 arm after it forwards the
+    // record to the GUI. For every traffic car the world removed this frame, drop that car's entry
+    // from the recent-crash set -- otherwise a new car that reuses the slot index is rejected by
+    // DealWithHitTrafficCar (GetRecentCrash != NULL) until the entry ages out of the 64-slot FIFO.
+    //     0x8232BFA4  lwz 0x34(event) -- the removed-id count, read ONCE (CgsArray.h:336 assert on -1)
+    //     0x8232BFF4  GetItem(i) (0x823185E8) ; lhz -- the removed traffic index, as a u16
+    //     0x8232BFF8  lwz 0x200(this+0x7C) -- the recent-crash count, RE-READ for every removed id
+    //                 (the same -1 assert)
+    //     0x8232C03C  operator[](j) (0x8231ADB0) ; lhz +0 ; cmplw -- RecentCrash::muTrafficCarIndex
+    //     0x8232C064  RecentCrash<64>::Erase(j) (0x82319308, order-preserving), then straight on to
+    //                 the next removed id: only the FIRST match is erased
+    // ------------------------------------------------------------------------
+    void CrashModeScoring::DealWithRemovedTraffic(const BrnGui::GuiRemovedTrafficEvent* lpRemovedTrafficEvent)
+    {
+        const s32 liEndIndex = static_cast<s32>(lpRemovedTrafficEvent->mRemovedTrafficArray.GetLength());
+        for (s32 liIndex = 0; liIndex < liEndIndex; ++liIndex)
+        {
+            const u16 luTrafficIndex =
+                lpRemovedTrafficEvent->mRemovedTrafficArray.GetItem(static_cast<u32>(liIndex));
+
+            const s32 liRecentCount = static_cast<s32>(maRecentCrashes.GetLength());
+            for (s32 liRecent = 0; liRecent < liRecentCount; ++liRecent)
+            {
+                if (maRecentCrashes[static_cast<u32>(liRecent)].muTrafficCarIndex == luTrafficIndex)
+                {
+                    maRecentCrashes.Erase(static_cast<u32>(liRecent));
+                    break;
+                }
+            }
+        }
     }
 
     // ========================================================================

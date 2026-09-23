@@ -1543,6 +1543,20 @@ struct GuiImpactEvent
 };
 static_assert(sizeof(GuiImpactEvent) == 12, "X360 AddGuiEvent size 12 (id 365)");
 
+// DWARF :1992 (GuiEvent<207>; X360 id 209, record 56 bytes == sizeof(Array<u16,25>), count word
+// +0x34). [FX-GS2 2026-09-23, crash-parity G10-D9] The traffic cars the world removed this frame:
+// WorldModule::BridgeTrafficCarEntityInfoToOutput_PrePhysics builds it (an Array<short,25> of 14-bit
+// entity indices -- the same byte image) and posts it with AddEvent(.., 209, 56);
+// BrnGameModule::BridgeWorldTrafficAndPropDataToGui @0x823E5560 forwards it to the GUI and hands it
+// to CrashModeScoring::DealWithRemovedTraffic @0x8232BF90, which reads it with `lhz` (u16).
+struct GuiRemovedTrafficEvent
+{
+    Array<u16, 25> mRemovedTrafficArray;   // DWARF :1994  +0x00 (count word +0x34)
+
+    s32 GetEventType() const { return 209; }
+};
+static_assert(sizeof(GuiRemovedTrafficEvent) == 56, "X360 AddEvent size 56 (id 209)");
+
 // DWARF :3708 (GuiEvent<363>; X360 id 368 = Update dispatch 313+55). HandleSignatureStunt
 // @0x8251D7E8 reads the id qword @+0x00.
 struct GuiSignatureStuntEvent
