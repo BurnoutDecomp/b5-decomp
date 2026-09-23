@@ -1580,6 +1580,14 @@ namespace Deformation
 		// --- (1) partition stored contacts into world / vehicle index lists -----------------------
 		u16 lauWorldContacts[KU_MAX_STORED_CONTACTS];
 		u16 lauVehicleContacts[KU_MAX_STORED_CONTACTS];
+		// P (console sp+0x120): each WORLD contact's raw world point B, stored by world ORDINAL in the
+		// partition loop (0x825E1F50 lvx128 contact+0x10 ; 0x825E1F58 stvx128 r27, r27 += 0x10) and
+		// read back by CONTACT index in the cull (0x825E1FBC / 0x825E2010) -- the console's own index
+		// mix (the PS3 twin 0x6C0BAC has it too). FUNCTION-STATIC on purpose: in a mixed list (a
+		// vehicle contact stored before the last world contact, nW >= 2) the console reads P slots
+		// this call never wrote, i.e. whatever the previous sensor's call left in the same stack
+		// frame; a static reproduces that. For pure-world lists every slot read is written first.
+		static Vector3 savWorldPointB[KU_MAX_STORED_CONTACTS];
 		s32 liNumWorld = 0;     // v9  -> v128
 		s32 liNumVehicle = 0;   // v10 -> v126
 
@@ -1601,6 +1609,7 @@ namespace Deformation
 			}
 			else
 			{
+				savWorldPointB[liNumWorld] = lContact.mLocalPointOnB;         // 0x825E1F50/58: P[ordinal] = B
 				lauWorldContacts[liNumWorld++] = static_cast<u16>(li);       // *v17 path (world list)
 			}
 		}
@@ -1610,25 +1619,42 @@ namespace Deformation
 			return;
 		}
 
-		// --- (2) de-duplicate the world list: merge contacts sharing a near point -----------------
-		// (the vmsum3fp128 squared-distance test against the per-contact weight; modelled as a
-		// pairwise near-point merge keeping the deeper contact.)
-		for ( s32 li = 0; li + 1 < liNumWorld; ++li )
+		// --- (2) cull world contacts that lie BEHIND another contact's plane ---------------------
+		// 0x825E1F84..0x825E2098 + 0x825E23AC..0x825E2408 (crash parity G25-D1, 2026-09-23 -- the
+		// tree had an invented "near-point merge" on mLocalPointOnA that only ever dropped bit-exact
+		// duplicates, so every shallower contact reached the solver and a convex wall corner got an
+		// extra push along the second wall's normal). For each pair i < j, d = P_i - P_j:
+		//   dist_j >= dist_i (fcmpu + bge, also taken when unordered): drop j when d.n_i >= 0
+		//                    (vcmpgefp.), swap-removing with the last entry and re-testing j;
+		//   else:            drop i when d.n_j < 0 (vcmpgtfp. 0 > d.n), swap-remove, restart i.
+		// The two arms are asymmetric (>= against <) and the slot bookkeeping mixes contact index and
+		// ordinal exactly as the console does; both are reproduced, not tidied.
+		for ( s32 li = 0; li < liNumWorld; ++li )
 		{
-			const StoredContact& lA = maStoredContacts[lauWorldContacts[li]];
-			for ( s32 lj = li + 1; lj < liNumWorld; )
+			const u16 luI = lauWorldContacts[li];
+			const Vector3 lPointI = savWorldPointB[luI];                  // 0x825E1FBC: P by CONTACT index
+			const f32 lfDistI = maStoredContacts[luI].mfProjectedDist;    // 0x825E1FCC
+			for ( s32 lj = li + 1; lj < liNumWorld; ++lj )
 			{
-				const StoredContact& lB = maStoredContacts[lauWorldContacts[lj]];
-				const f32 lfDistSq = Dot3(Sub3(lA.mLocalPointOnA, lB.mLocalPointOnA),
-				                          Sub3(lA.mLocalPointOnA, lB.mLocalPointOnA));
-				if ( lfDistSq <= 0.0f && lB.mfProjectedDist >= lA.mfProjectedDist )
+				const u16 luJ = lauWorldContacts[lj];
+				const Vector3 lDiff = Sub3(lPointI, savWorldPointB[luJ]);   // 0x825E2010 / 0x825E2018 vsubfp
+				if ( !( maStoredContacts[luJ].mfProjectedDist < lfDistI ) )
 				{
-					// merge: drop the duplicate (swap-remove with the last world entry).
-					lauWorldContacts[lj] = lauWorldContacts[--liNumWorld];
+					if ( Dot3(lDiff, maStoredContacts[luI].mNormal) >= 0.0f )   // 0x825E23B4 / 0x825E23B8
+					{
+						savWorldPointB[luJ]   = savWorldPointB[liNumWorld - 1];    // 0x825E23D8 / 0x825E23DC
+						lauWorldContacts[luJ] = lauWorldContacts[liNumWorld - 1];  // 0x825E23CC / 0x825E23F0 (slot luJ)
+						--liNumWorld;
+						--lj;
+					}
 				}
-				else
+				else if ( Dot3(lDiff, maStoredContacts[luJ].mNormal) < 0.0f )    // 0x825E202C / 0x825E2030
 				{
-					++lj;
+					savWorldPointB[li]   = savWorldPointB[liNumWorld - 1];         // 0x825E206C / 0x825E2070
+					lauWorldContacts[li] = lauWorldContacts[liNumWorld - 1];       // 0x825E2064 / 0x825E2078
+					--liNumWorld;
+					--li;
+					break;
 				}
 			}
 		}
