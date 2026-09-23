@@ -712,8 +712,16 @@ namespace Deformation
     //        -> AddEvent onto lpOutputForEntityModules->mDetachedPartRenderQueue (+0x2E80);
     //      - DetachedPartCurrentPositionEvent { same transform, same id,
     //        meType = ikPart->spec part type (spec+0x1DC) }
-    //        -> AddEvent onto lpOutput->mDetachedPartCurrentPositionQueue (+0xB40).
-    // Both adds are the UNCONDITIONAL AddEvent (assert-tripwire bounds), not AddEventSafe.
+    //        -> AddEventSafe (the inlined DeformationOutputInterface::AddDetachedPartPosition, DWARF
+    //        :158) onto lpOutput->mDetachedPartCurrentPositionQueue (+0xB40).
+    // The render add is the UNCONDITIONAL AddEvent (0x8260DD68 bl 0x825E5C78: :312/:313 tripwires,
+    // then the write); the position add is the BOUNDS-GATED AddEventSafe (0x8260DDAC bl 0x825E5B00:
+    // only the :331 null tripwire, then 0x825E5B48..54 `cmpw len,max ; bge -> li r3,0` -- dropped
+    // silently when full). PS3 0x6FE148 is the same pair. (Crash parity G30-D1, 2026-09-23: this
+    // banner used to say both were AddEvent, and the position add was; unreachable today -- at most
+    // 50 used slots per call, one call per frame, into a 50-slot queue CreateIOBuffer rebuilds every
+    // frame -- but a full queue would assert and write past maEvents[50] on PC where the console
+    // drops.)
     // =========================================================================================
     void PhysicalBodyPartPool::OutputEvents(
         Deformation::DeformationOutputInterfaceForEntityModules* lpOutputForEntityModules,
@@ -740,7 +748,7 @@ namespace Deformation
             lPositionEvent.mTransform       = lTransform;
             lPositionEvent.mVehicleEntityId = lrPart.GetGlobalEntityId();
             lPositionEvent.meType           = lpIKPart->GetPartType();      // spec+0x1DC
-            lpOutput->mDetachedPartCurrentPositionQueue.AddEvent(lPositionEvent);
+            lpOutput->AddDetachedPartPosition(lPositionEvent);                // 0x8260DDAC -> AddEventSafe
 
             // [detach-pose] NOT X360. The pose witness for the 2026-08-27 detach wave, latched on
             // BRN_DEFORM_TRACE (0/unset == inert). Prints the WORLD POSITION the shed panel is
