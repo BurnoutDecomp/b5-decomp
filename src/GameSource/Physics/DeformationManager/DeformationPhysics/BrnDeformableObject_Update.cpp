@@ -19,7 +19,7 @@
 #include <cmath>                                                              // std::sqrt (the P4 tangential magnitude)
 #include "GameSource/World/BrnEntityTypes.h"                                  // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE (the ApplySensorImpulse owner test)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedWheelManager.h"   // DetachedWheelManager::DetachWheel (UpdateWheels' detach arm)
-#include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random::RandomFloat (UpdateWheels' twist-limit draw)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random::RandomVecFloat (UpdateWheels' twist-limit draw)
 
 // The present counter, so an [st-mag] line names the dumped frame it belongs to (the dump writes
 // bb_<present>.bmp). Same extern the [deform-bbox] witness takes (BrnDeformableObject_BBox.cpp:19).
@@ -2345,7 +2345,7 @@ namespace Deformation
     //     if (state != 1):                                        -- ATTACHED arm, 0x826264E8
     //       if (ShouldDetachWheel(tag) || mbForceWheelsToDetach /*lbz 0x672D*/):
     //         Wheel::Twist()  (stb 1,0xD7 ; +0x30 x lane = 0)
-    //         mWheelTwistLimits[i] = Random::RandomFloat() * KVF_MAX_TWIST_ANGLE   (the inlined
+    //         mWheelTwistLimits[i] = Random::RandomVecFloat() * KVF_MAX_TWIST_ANGLE   (the inlined
     //           LCG + mantissa-splice draw minus 1.0, times unk_82FB9740, vperm'd into lane i via
     //           the unk_8327F140 lane-insert table)
     //         ++miNumBrokenWheels (+0x6770)
@@ -2376,8 +2376,9 @@ namespace Deformation
     //             lPartRenderTransform, lVehicleTransform, lLinVel, lAngVel)
     //
     // The timestep (f1) is never read by the body. DWARF :2777 liNumWheels is the eNumWheels
-    // bound of the loop. RandomVecFloat (DWARF) is the ring-buffer draw the tree spells
-    // Random::RandomFloat -- same LCG, same mantissa splice, same "-1.0".
+    // bound of the loop. The draw is RandomVecFloat (DWARF), the VECTOR-slot ring draw
+    // (slot = (cursor+3)&4, cursor = slot+1) -- not RandomFloat, whose scalar cursor reads a
+    // different slot for cursors 1-3 and 5-7 (corrected 2026-09-23, crash parity G19-D2).
     // =============================================================================================
     void DeformableObject::UpdateWheels(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpInput,
                                         DetachedWheelManager* lpWheelMgr, f32 lfTimeStep,
@@ -2449,7 +2450,10 @@ namespace Deformation
                 if (ShouldDetachWheel(lpTagPoint) || mbForceWheelsToDetach)
                 {
                     lpWheel->Twist();
-                    const f32 lfTwistLimit = lpRandom->RandomFloat() * KVF_MAX_TWIST_ANGLE.x;
+                    // 0x82626580..0x826265E0: the inlined RandomVecFloat -- slot = (cursor+3)&4,
+                    // ring[slot] - 1.0, refill ring[slot], cursor = slot+1 -- times 1.57 (unk_82FB9740).
+                    // NOT RandomFloat's scalar cursor (crash parity G19-D2, 2026-09-23).
+                    const f32 lfTwistLimit = lpRandom->RandomVecFloat().GetFloat() * KVF_MAX_TWIST_ANGLE.x;
                     switch (liWheel)   // vperm lane-insert (unk_8327F140 + 64*i) into +0x6760
                     {
                         case 0:  mWheelTwistLimits.x = lfTwistLimit; break;
