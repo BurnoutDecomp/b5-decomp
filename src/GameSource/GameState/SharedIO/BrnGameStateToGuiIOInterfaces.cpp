@@ -207,5 +207,31 @@ void GameStateToGuiInterface::AddDirtyTrickTriggered(::EActiveRaceCarIndex leAgg
     mDirtyTrickTriggeredQueue.AddEvent(lEvent);           // this + 0x40
 }
 
+// -----------------------------------------------------------------------------
+// AddNewDirtyTrick (DWARF BrnGameStateToGuiIOInterfaces.h:76) -- publish "a dirty trick was
+// awarded" to the GUI. [FX-GS2 2026-09-23, crash-parity G12-D6] No out-of-line console body:
+// PaybackManager::HandleAwardingPayback @0x82397970 inlines it (through DirtyTrickAwarded) at
+// 0x82397A4C..0x82397A64:
+//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
+//     addi r3, r3, 4             ; mNewDirtyTrickQueue
+//     stw  r28, var_50           ; aggressor  -> record +0x0
+//     stw  r29, var_4C           ; victim     -> record +0x4
+//     stw  r30, var_48           ; trick type -> record +0x8
+//     bl   GameStateToGuiNewDirtyTrick AddEvent 0x823687E8   (a 12-byte copy, length++)
+// The PS3 twin (DecFIGS 0x258614, PaybackManager::DirtyTrickAwarded) appends the same record to
+// mNewDirtyTrickQueue.
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::AddNewDirtyTrick(::EActiveRaceCarIndex leAggressor,
+                                               ::EActiveRaceCarIndex leVictim,
+                                               BrnNetwork::EPaybackType leTrickType)
+{
+    GameStateToGuiNewDirtyTrick lEvent;
+    lEvent.meAggressorActiveRaceCarIndex = leAggressor;   // record +0x0
+    lEvent.meVictimActiveRaceCarIndex    = leVictim;      // record +0x4
+    lEvent.meTrickType                   = leTrickType;   // record +0x8
+
+    mNewDirtyTrickQueue.AddEvent(lEvent);                 // this + 4
+}
+
 }
 }

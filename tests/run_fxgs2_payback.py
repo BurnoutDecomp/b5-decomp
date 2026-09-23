@@ -5,6 +5,10 @@ BrnPhysics::Vehicle::CrashingRaceCarInterface::IsCrashing.
            console's IsCrashing(player) read (0x82397848 lbzx), so aggressor state 1 -> 2.
   G12-D5   HandleWaitingToAwardPayback @0x823978B0 (Update arm 0x8239AC2C[2] = 0x8239AC54): once the
            player is no longer crashing, ChangeState(3) -- state 2 -> 3.
+  G12-D6   HandleAwardingPayback @0x82397970 (arm [3] = 0x8239AC64) + DirtyTrickAwarded (inlined at
+           0x82397A40..64) + GameStateToGuiInterface::AddNewDirtyTrick: the timer >= 1.0 award (RandomInt
+           draw, gui+4 record, AVAILABLE network message through Update's tail Append) and the
+           independent crash -> PaybackLostAction (0xD3) -> idle arm.
 
 Numeric: tests/FxGs2Payback.cpp compiled against the extracted PRODUCTION bodies (Update and every
 body it dispatches), driven through the real PaybackManager / GameStateToGuiInterface /
@@ -25,7 +29,8 @@ from fxgs_common import Tree, definition, body_or_empty, compile_and_run, report
 PAYBACK_CPP = "src/GameSource/GameState/PaybackManager/BrnPaybackManager.cpp"
 GUI_CPP = "src/GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp"
 TIMER_CPP = "src/GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.cpp"
-NUMERIC_CHECKS = 19
+RANDOM_CPP = "src/GameShared/GameClasses/Numeric/CgsRandom.cpp"
+NUMERIC_CHECKS = 38
 
 # Bodies every revision under test has: Update and everything it reaches.
 REQUIRED = [
@@ -51,13 +56,23 @@ REQUIRED = [
 OPTIONAL = [
     ("    void\n    PaybackManager::HandleWaitingToAwardPayback(",
      "void PaybackManager::HandleWaitingToAwardPayback(const BrnPhysics::Vehicle::VehicleOutputInterface*) {}"),
+    ("    void\n    PaybackManager::DirtyTrickAwarded(",
+     "void PaybackManager::DirtyTrickAwarded(GameStateModuleIO::OutputBuffer*, ::EActiveRaceCarIndex,"
+     " ::EActiveRaceCarIndex, BrnNetwork::EPaybackType) {}"),
+    ("    void\n    PaybackManager::HandleAwardingPayback(",
+     "void PaybackManager::HandleAwardingPayback(GameStateModuleIO::OutputBuffer*,"
+     " const BrnPhysics::Vehicle::VehicleOutputInterface*, GameStateModuleIO::EGameModeType) {}"),
 ]
 GUI_REQUIRED = [
     "void GameStateToGuiInterface::Construct()",
     "void GameStateToGuiInterface::AddDirtyTrickTriggered(",
     "void GameStateToGuiInterface::AddDirtyTrickEnding(",
 ]
-GUI_OPTIONAL = []
+GUI_OPTIONAL = [
+    ("void GameStateToGuiInterface::AddNewDirtyTrick(",
+     "void GameStateToGuiInterface::AddNewDirtyTrick(::EActiveRaceCarIndex, ::EActiveRaceCarIndex,"
+     " BrnNetwork::EPaybackType) {}"),
+]
 
 
 def wiring(tree):
@@ -75,6 +90,11 @@ def wiring(tree):
                     r"HandleWaitingToAwardPayback\(\s*lpVehicleOutputInterface\s*\)\s*;\s*break\s*;", update)
     yield ("D5 Update aggressor case 2 calls HandleWaitingToAwardPayback(vehicle output) "
            "(0x8239AC54: mr r4, r21)", arm is not None)
+    arm = re.search(r"case\s+E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER\s*:\s*"
+                    r"HandleAwardingPayback\(\s*lpOutput\s*,\s*lpVehicleOutputInterface\s*,\s*leGameModeType\s*\)"
+                    r"\s*;\s*break\s*;", update)
+    yield ("D6 Update aggressor case 3 calls HandleAwardingPayback(out, vehicle output, mode) "
+           "(0x8239AC64: r4 = r22, r5 = r21, r6 = r29)", arm is not None)
 
 
 def numeric(tree):
@@ -114,9 +134,19 @@ def numeric(tree):
     if stood_in:
         print("NUMERIC: bodies absent in this revision (empty stand-ins): " + ", ".join(stood_in))
     timer = tree.read(TIMER_CPP)
+    # The award's draw is the production RNG (RandomInt -> RandomUInt, CgsRandom.cpp), extracted
+    # from the same revision with the LCG multiplier constant it steps by.
+    random = tree.read(RANDOM_CPP)
+    multiplier = re.search(r"static const u64 KU_RANDOM_LCG_MULTIPLIER\s*=\s*[^;]+;", random)
+    if multiplier is None:
+        print("NUMERIC: cannot build -- CgsRandom.cpp's KU_RANDOM_LCG_MULTIPLIER is absent")
+        return None
+    rng = ("namespace CgsNumeric {\n" + multiplier.group(0) + "\n"
+           + definition(random, "    u32 Random::RandomUInt()") + "\n"
+           + definition(random, "    s32 Random::RandomInt(") + "\n}\n")
     inc = ("namespace BrnGameState {\n" + "\n".join(parts) + "\n}\n"
            + "namespace BrnGameState { namespace GameStateModuleIO {\n" + "\n".join(gui_parts) + "\n} }\n"
-           + definition(timer, "void\nCgsSystem::TimerStatusInterface::Clear()") + "\n")
+           + definition(timer, "void\nCgsSystem::TimerStatusInterface::Clear()") + "\n" + rng)
     return compile_and_run(Path(__file__).with_name("FxGs2Payback.cpp"), "payback2_methods.inc", inc,
                            "FxGs2Payback", extra_sources=[STRSTREAM_CPP])
 
