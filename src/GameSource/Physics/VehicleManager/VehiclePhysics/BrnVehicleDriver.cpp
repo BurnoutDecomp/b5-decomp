@@ -209,6 +209,141 @@ namespace Vehicle
 
         --mi8NumOfInterpSteps;
     }
+
+    // =============================================================================================
+    // @0x825FED30  BrnPhysics::Vehicle::VehicleDriver::StartCatchupInterpolation  (877 insns)
+    // BODIED 2026-09-23 (crash-parity FX-VMNET, G44-D2). DWARF BrnVehicleDriver.cpp:247, locals
+    // lbSnapToPosition (:254), lComOffset (:263), lCurrentPos / lTargetPos /
+    // lvfSquaredInterpDist (:272-274). Read off the raw words (ppcdis): Hex-Rays drops the vector
+    // compares in this body and prints the two tail tripwires as unconditional.
+    //
+    // It ARMS the catch-up UpdateVehicle above applies: callers VehicleManager::
+    // UpdateNetworkCatchup (network race cars) and PhysicalTrafficManager::
+    // UpdateNetworkTrafficVehicle (network traffic). Both are fed only by network messages, so
+    // single player never reaches this function.
+    //
+    //   0x825FED60..0x825FF050  asserts :249 lpVehicle, :250 IsValid(transform) (all four rows),
+    //                           :251 / :252 IsValid of the two velocities
+    //   0x825FF054  `lbz 0x70 ; beq ; stb 0` -- a frozen body is thawed (base +0x60 == mbFrozen)
+    //   0x825FF068  mCatchupTargetTransform (this+0x50) = the four rows, then its translation is
+    //               moved from the graphics origin onto the centre of mass:
+    //                   wAxis += xAxis*com.x + yAxis*com.y + zAxis*com.z
+    //               com = vehicle +0x670 == mSimpleAttribs.mCOMOffset (the vmulfp/vmaddfp cascade
+    //               0x825FF0C0..0x825FF0F0, all four lanes)
+    //   0x825FF0F4  |target.wAxis - vehicle.wAxis|^2 > KVF_MAX_VEHICLE_INTERP_DIST_SQ ->
+    //               lbSnapToPosition = true (vmsum3fp128 + `vcmpgtfp.` against the splat at
+    //               0x82FB9F50, which the CRT thunk 0x82C5CE20 loads from flt_820049E0 == 100.0f)
+    //   0x825FF124  vehicle angular velocity (+0x60) = v2 ; linear velocity (+0x50) = v1 -- on
+    //               BOTH arms, before the branch
+    //   SNAP (0x825FF158): vehicle transform = mCatchupTargetTransform (four stvx +0x10..+0x40);
+    //               mi8NumOfInterpSteps (+0xD4) = 0; mSlerpTransform (+0x90) = the identity rows
+    //               {1,0,0,0} {0,1,0,0} {0,0,1,0} {0,0,0,0} (flt_82001C98 / flt_82001CC0 stores);
+    //               mbSnappedThisFrame (+0xD5) = 1 -- the ONLY store of 1 to that byte image-wide.
+    //   ELSE (0x825FF218): mSlerpTransform = mCatchupTargetTransform *
+    //               InverseOfMatrixWithOrthonormal3x3(current) -- the vmrghw/vmrglw transpose of
+    //               the current rows, `vsubfp128 v11, 0, pos` for the inverse translation, and the
+    //               broadcast FMA cascade over the TARGET rows (target row i transformed by the
+    //               inverse); asserts :310 IsValid(mSlerpTransform) and :311
+    //               IsValid(lCurrentVehicleTransform); mi8NumOfInterpSteps = 10 (`li r11,0xA ;
+    //               stb 0xD4`); then mSlerpTransform = SLerp(identity {gIVector, gJVector,
+    //               gKVector, 0}, mSlerpTransform, 1/10) -- flt_82004A20 == 10.0f through vrefp +
+    //               two Newton steps -- and OrthoNormalize3x3 of that; assert :325.
+    //   TAIL (both arms, 0x825FF8C4): :328 IsNormal3x3(mSlerpTransform, flt_82002138 == 0.01f)
+    //               "Slerp transform is not normalised"; :329 IsOrthogonal3x3(mSlerpTransform,
+    //               flt_8208F620 == 1.1920929e-7f) "Slerp transform is not orthogonal".
+    //   The non-snap arm leaves mbSnappedThisFrame alone (UpdateTrafficPhysicsPostSimulation
+    //   clears it); the vehicle transform is only written on the snap arm.
+    //
+    // FLAG (VMX -> portable, the vendor math home's standing convention): the FMA cascades are
+    // per-lane f32 math and the vrefp/Newton reciprocal is an exact 1.0f / 10.0f.
+    // =============================================================================================
+    namespace
+    {
+        // DWARF BrnVehicleDriver.cpp:239 `const VecFloat KVF_MAX_VEHICLE_INTERP_DIST_SQ` -- a
+        // splat on the console (dynamic-init .bss 0x82FB9F50 <- flt_820049E0 == 100.0f); the host
+        // MagnitudeSquared returns a scalar, so the constant is spelled as one.
+        const f32 KF_MAX_VEHICLE_INTERP_DIST_SQ = 100.0f;
+
+        const f32 KF_SLERP_NORMALISED_TOLERANCE = 0.0099999998f;    // flt_82002138 (0x3C23D70A)
+        const f32 KF_SLERP_ORTHOGONAL_TOLERANCE = 1.1920929e-07f;   // flt_8208F620 (0x34000000)
+    }
+
+    void VehicleDriver::StartCatchupInterpolation(VehiclePhysics* lpVehicle,
+                                                  const Matrix44Affine& lCatchupTransformGraphicsSpace,
+                                                  const Vector3 lCatchupLinearVelocity,
+                                                  const Vector3 lCatchupAngularVelocity,
+                                                  bool lbSnap)
+    {
+        CGS_ASSERT(lpVehicle != NULL, "lpVehicle != NULL");                                   // :249
+        CGS_ASSERT(vpu::IsValid(lCatchupTransformGraphicsSpace),
+                   "RwMathVPU::IsValid( lCatchupTransformGraphicsSpace )");                   // :250
+        CGS_ASSERT(vpu::IsValid(lCatchupLinearVelocity),
+                   "RwMathVPU::IsValid( lCatchupLinearVelocity )");                           // :251
+        CGS_ASSERT(vpu::IsValid(lCatchupAngularVelocity),
+                   "RwMathVPU::IsValid( lCatchupAngularVelocity )");                          // :252
+
+        bool lbSnapToPosition = lbSnap;                                                       // `mr r7, r26`
+
+        if (lpVehicle->IsFrozen())                                                            // lbz 0x70
+        {
+            lpVehicle->SetFrozen(false);                                                      // stb 0 @ +0x70
+        }
+
+        // The graphics transform, moved onto the physics body's centre of mass (DWARF: the three
+        // operator*<VectorAxisX/Y/Z> products, two operator+ and the WAxis() operator+=).
+        const Vector3 lComOffset = lpVehicle->GetSimpleAttribs()->mCOMOffset;                // lvx +0x670
+        mCatchupTargetTransform = lCatchupTransformGraphicsSpace;
+        mCatchupTargetTransform.wAxis = mCatchupTargetTransform.wAxis
+                                      + (vpu::Mult(mCatchupTargetTransform.xAxis, lComOffset.x)
+                                         + vpu::Mult(mCatchupTargetTransform.yAxis, lComOffset.y)
+                                         + vpu::Mult(mCatchupTargetTransform.zAxis, lComOffset.z));
+
+        // Too far to interpolate: snap instead. (DWARF lvfSquaredInterpDist, a VecFloat on the
+        // console; the host MagnitudeSquared is scalar.)
+        const Vector3 lCurrentPos = lpVehicle->GetTransform().wAxis;                         // lvx +0x40
+        const Vector3 lTargetPos  = mCatchupTargetTransform.wAxis;
+        const f32 lfSquaredInterpDist = vpu::MagnitudeSquared(lTargetPos - lCurrentPos);
+        if (lfSquaredInterpDist > KF_MAX_VEHICLE_INTERP_DIST_SQ)                              // vcmpgtfp.
+        {
+            lbSnapToPosition = true;
+        }
+
+        lpVehicle->SetAngularVelocity(lCatchupAngularVelocity);                               // stvx v126 +0x60
+        lpVehicle->SetLinearVelocity(lCatchupLinearVelocity);                                 // stvx v127 +0x50
+
+        if (lbSnapToPosition)
+        {
+            lpVehicle->SetTransform(mCatchupTargetTransform);                                 // +0x10..+0x40
+            mi8NumOfInterpSteps = 0;
+            mSlerpTransform.SetIdentity();
+            mbSnappedThisFrame = true;
+        }
+        else
+        {
+            const Matrix44Affine lCurrentVehicleTransform = lpVehicle->GetTransform();
+            mSlerpTransform = vpu::Mult(mCatchupTargetTransform,
+                                        vpu::InverseOfMatrixWithOrthonormal3x3(lCurrentVehicleTransform));
+            CGS_ASSERT(vpu::IsValid(mSlerpTransform), "RwMathVPU::IsValid( mSlerpTransform )");     // :310
+            CGS_ASSERT(vpu::IsValid(lCurrentVehicleTransform),
+                       "RwMathVPU::IsValid( lCurrentVehicleTransform )");                           // :311
+
+            mi8NumOfInterpSteps = ki8NumNetworkSlerpSteps;
+
+            Matrix44Affine lIdentity;
+            lIdentity.SetIdentity();
+            Vector3 lUnusedAngle;
+            mSlerpTransform = vpu::SLerp(lIdentity, mSlerpTransform,
+                                         1.0f / static_cast<f32>(ki8NumNetworkSlerpSteps),
+                                         &lUnusedAngle);                                            // 0x825FF6C4
+            mSlerpTransform = vpu::OrthoNormalize3x3(mSlerpTransform);                              // 0x825FF6F4
+            CGS_ASSERT(vpu::IsValid(mSlerpTransform), "RwMathVPU::IsValid( mSlerpTransform )");     // :325
+        }
+
+        CGS_ASSERT(vpu::IsNormal3x3(mSlerpTransform, KF_SLERP_NORMALISED_TOLERANCE),
+                   "Slerp transform is not normalised");                                            // :328
+        CGS_ASSERT(vpu::IsOrthogonal3x3(mSlerpTransform, KF_SLERP_ORTHOGONAL_TOLERANCE),
+                   "Slerp transform is not orthogonal");                                            // :329
+    }
 }
 }
 
