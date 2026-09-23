@@ -142,17 +142,8 @@ namespace Attrib { void DecodeLiveLinkMessage(const char*); }
 // -------------------------------------------------------------------------
 // BrnAI::AIModule
 // -------------------------------------------------------------------------
-// Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
-void BrnAI::AIModule::Destruct()
-{
-    static bool s_bLogged = false;
-    if (!s_bLogged)
-    {
-        s_bLogged = true;
-        if (CgsDev::Message::gxMessageFilterFlags & 1)
-            *CgsDev::Log::gpDebugPrint << "BrnAI::AIModule::Destruct: inert (body not reconstructed) [FLAG PC boot gate]\n";
-    }
-}
+// BrnAI::AIModule::Destruct @0x8276E380 is bodied in GameSource/World/AI/BrnAIModule.cpp (crash
+// parity G04-D7, 2026-09-22); only the process-teardown chain WorldModule::Destruct reaches it.
 
 // Boot gate: reached every frame by WorldModule::Update; body not reconstructed. Quiet one-shot log, never a trap.
 bool BrnAI::AIModule::Release()

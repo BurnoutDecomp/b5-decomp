@@ -248,6 +248,37 @@ void AIModule::Construct()
 }
 
 // =================================================================================================
+// Destruct @0x8276E380 (vtable 0x820D0D98 slot 3). Its only dispatch is WorldModule::Destruct
+// @0x827BD108..0x827BD11C (vtbl+0xC on mAIModule) <- BrnGameModule::Destruct @0x823BC868 <- the tail
+// of main (0x827E6640); the PC's BrnMain.cpp GameRelease leaves that chain gated, so nothing on this
+// build reaches it yet.
+//
+//   0x8276E398              ModuleSingleBuffered::Destruct()
+//   0x8276E39C..0x8276E3A4  mResourceReceiverQueue.Clear()                         (this + 0x47FB0)
+//   0x8276E3A8..0x8276E3BC  vtbl+0xC on mRouteMapModule (this + 0x483D8) == RouteMapModule::Destruct
+//                           @0x827750D0; the tree has no override, so ModuleSingleBuffered::Destruct
+//                           -- the non-debug half of 0x827750D0
+//   0x8276E3C0..0x8276E400  the AIDebugComponent (this + 0x424AC) Destruct, inlined: assert
+//                           `mpAIModule != NULL` (BrnAIDebugComponent.cpp:265), mpAIModule = NULL,
+//                           then the ICF-folded empty base Destruct
+//   0x8276E404..0x8276E40C  mContactSpyInterface.Construct()                      (this + 0x4EB68)
+//
+// ⛔ CORRECTED 2026-09-22 (crash parity G04-D7): this was a one-shot-logging stub in
+// WorldLinkStubs.cpp whose banner said it was "reached every frame by WorldModule::Update" -- it
+// is reached only at process teardown.
+// =================================================================================================
+void AIModule::Destruct()
+{
+    CgsModule::ModuleSingleBuffered::Destruct();
+    mResourceReceiverQueue.Clear();
+    mRouteMapModule.Destruct();
+    // [FLAG PC boot gate] 0x8276E3C0..0x8276E400, the AIDebugComponent leg: the same gate as
+    // Construct's AIDebugComponent::Construct -- the component is never built on this build (the
+    // class has no member for it), so its `mpAIModule != NULL` assert would fire on nothing.
+    mContactSpyInterface.Construct();
+}
+
+// =================================================================================================
 // Prepare @0x82798070   (224 insns)   -- a 6-stage machine over mePrepareStage (+294764),
 // re-entered once per frame from WorldModule::Prepare stage eWorldPrepareAI until it returns true.
 // The console's switch falls THROUGH from each case into the next, so one frame can complete
