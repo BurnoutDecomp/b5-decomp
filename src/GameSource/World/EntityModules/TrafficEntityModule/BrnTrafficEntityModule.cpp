@@ -2192,13 +2192,11 @@ void TrafficEntityModule::StaticVehicles_KillParam(u32 luParam)
     }
     else if (!lbDivorced)
     {
-        lpVehicle->SetDead(GetVehicleIndexFromStaticIndex(luParam), mVehicleSoaData);
+        lpVehicle->SetDead(GetVehicleIndexFromStaticIndex(luParam), mVehicleSoaData);   // 0x82721E00
 
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "StaticVehicles_KillParam leg EnsureVehicleRemovedFromCrashModule("
-            "GetVehicleIndexFromStaticIndex(luParam)) -- no body in tree; it drains the "
-            "crash-module registration mVehiclesAddedToCrashModule tracks");
+        // 0x82721E0C..0x82721E18, then return. The parked car's crash-module release: the
+        // offline RemoveVehicle STATIC arm (0x8272E5B4) only flags the param should-be-removed.
+        EnsureVehicleRemovedFromCrashModule(GetVehicleIndexFromStaticIndex(luParam));
     }
     else
     {
@@ -6804,10 +6802,12 @@ void TrafficEntityModule::PutParamInPurgatory(u32 luParam)
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::KillParam  @ 0x82721FB8   PARTIAL   (the ship rewrote the leak's :4383)
+// TrafficEntityModule::KillParam  @ 0x82721FB8   (the ship rewrote the leak's :4383)
 //
 // Marks the param dying, then either orphans or kills its vehicle, then purgatories the id.
-// One gate remains, the crash-module / trailer arm; it names its blocker at the site.
+// The kill arm releases the vehicle from the crash module and, for a cab, takes a non-physical
+// trailer down with it (G58-X3, 2026-09-23: that arm was a logged gate whose three blockers --
+// GetTrailerIndex, DetachArticulation, EnsureVehicleRemovedFromCrashModule -- had all landed).
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::KillParam(u32 luParam)
 {
@@ -6847,21 +6847,31 @@ void TrafficEntityModule::KillParam(u32 luParam)
         }
         else
         {
-            lpVehicle->SetDead(luParam, mVehicleSoaData);
+            lpVehicle->SetDead(luParam, mVehicleSoaData);                   // 0x82722318
 
+            // 0x82722324. Offline this is the crash-module release for a STANDARD car:
+            // RemoveVehicle's divergent STANDARD arm only flags the param should-be-removed and
+            // returns (0x8272E5CC), and the kill itself happens here.
+            EnsureVehicleRemovedFromCrashModule(luParam);
+
+            // 0x8272232C..0x827223B0 -- a cab takes its trailer down with it, unless the trailer
+            // is physical (0x82722370 `lbz 5 ; rlwinm 0,28,28` == E_FLAG_PHYSICAL). The order is
+            // this function's own: detach the TRAILER, kill it, release it, and only then detach
+            // the cab (RemoveVehicle detaches both halves first). GetTrailerIndex is read twice,
+            // as the console does (0x8272233C and 0x82722350).
+            if (GetVehicleSpecies(luParam) == Vehicle::E_SPECIES_STANDARD
+                && lpVehicle->GetTrailerIndex() != static_cast<u16>(KU_INVALID_VEHICLE))
             {
-                // GATE: EnsureVehicleRemovedFromCrashModule @0x82721?? and, for a STANDARD
-                // vehicle with a trailer, the Vehicle::GetTrailerIndex / DetachArticulation
-                // pair. Blocker: none of the three is declared in this tree
-                // (BrnTrafficVehicle.h models muOtherHalfIndex but no accessor pair, and the
-                // crash-module helper has no declaration at all).
-                // DELETE-WHEN those declarations land (crash surface, wave 3 / trailers).
-                static bool sbLogged = false;
-                LogMissingLeg_T2(sbLogged,
-                    "KillParam leg EnsureVehicleRemovedFromCrashModule + the trailer detach "
-                    "(Vehicle::GetTrailerIndex / Vehicle::DetachArticulation) -- none of the "
-                    "three is declared in this tree. The vehicle is still marked dead, so the "
-                    "param slot recycles; a towed trailer stays alive one extra kill");
+                const u32 luTrailer = lpVehicle->GetTrailerIndex();
+                Vehicle* const lpTrailer = GetVehicle(luTrailer);
+
+                if ((lpTrailer->GetFlags() & Vehicle::E_FLAG_PHYSICAL) == 0)
+                {
+                    lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);  // 0x82722384
+                    lpTrailer->SetDead(luTrailer, mVehicleSoaData);             // 0x82722394
+                    EnsureVehicleRemovedFromCrashModule(luTrailer);             // 0x827223A0
+                    lpVehicle->DetachArticulation(luParam, mVehicleSoaData);    // 0x827223B0
+                }
             }
         }
     }
@@ -13172,15 +13182,13 @@ void TrafficEntityModule::StopVehicleBeingPhysical(u32 luVehicle, bool lbSuppres
         maNewRemovedVehicles.Append(static_cast<u16>(luVehicle));
     }
 
-    // GATE: EnsureVehicleRemovedFromCrashModule (0x8271FFA4) -- no body in this tree (KillParam
-    // @_wT2_01.cpp:656 and StaticVehicles_KillParam already gate the same callee).
-    // COST: a car demoted mid-crash keeps its crash-module entry. DELETE-WHEN it lands.
-    {
-        static bool sbLoggedCrashModule = false;
-        LogMissingLeg_T3Drive(sbLoggedCrashModule,
-                      "StopVehicleBeingPhysical's EnsureVehicleRemovedFromCrashModule "
-                      "(0x8271FFA4) -- no body; the crash module keeps its entry");
-    }
+    // 0x8271FF9C..0x8271FFA4 `mr r4,r27 ; mr r3,r30 ; bl EnsureVehicleRemovedFromCrashModule` --
+    // UNCONDITIONAL, and BEFORE SetNotPhysical below: that call stores 0xFF over
+    // muCrashTrafficType (0x8270F614), and Ensure reads the byte first to queue a slammed car
+    // (type 3) on maRecentlyRecoveredSlammedTraffic. It also drops the vehicle's
+    // mVehiclesAddedToCrashModule bit, so a car returned to traffic is announced again the next
+    // time it crashes (GenerateVehicleCrashedEvents skips a set bit).
+    EnsureVehicleRemovedFromCrashModule(luVehicle);
 
     // 0x8271FFAC..0x82720010 -- free the module-side physics record. The parts index is read
     // BEFORE SetNotPhysical (which stores -1 over it); the console's `extsb` only serves the
@@ -14893,11 +14901,11 @@ void TrafficEntityModule::UpdateCrashSlider()
 // --------------------------------------------------------------------------------------------
 // TrafficEntityModule::EnsureVehicleRemovedFromCrashModule  @0x8271FBE8  (185 insns)
 //
-// LANDED HERE because it is one of the three blockers on RemoveVehicle @0x8272E370, which is
-// the junction-FUP RELIEF VALVE this file's UpdateJunctionFUP has to leave gated. It is also
-// named as a blocker by three other park notes (_wT1_01.cpp:582 StaticVehicles_KillParam,
-// _wT2_01.cpp:618 KillParam, _wT3_02.cpp:866 StopVehicleBeingPhysical). All four callers are
-// still gated, so this changes no behaviour today -- it shortens the next wave's path.
+// The console's four callers (xrefs_to 0x8271FBE8) all reach it: RemoveVehicle, and -- since
+// G58-X2/X3/X4 (2026-09-23) retired their stale "no body" gates -- StopVehicleBeingPhysical
+// (0x8271FFA4), KillParam (0x82722324 / 0x827223A0) and StaticVehicles_KillParam (0x82721E18).
+// Offline, KillParam and StaticVehicles_KillParam are the main release: RemoveVehicle's
+// divergent STANDARD and STATIC arms only flag the param should-be-removed.
 //
 // Every offset in it resolves by name:
 //   +164480 == mVehiclesAddedToCrashModule       (:634, the FastBitArray<601> immediately
