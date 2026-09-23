@@ -185,6 +185,12 @@ namespace Deformation
         const PhysicalBodyPart* GetPart(s16 li16Index) const;
         PhysicalBodyPart*       GetPart(s16 li16Index);
 
+        // ⭐ ADDED 2026-09-23 (crash parity G24-D2). A slot BY NAME with none of GetPart's
+        // tripwires (range / mUsedParts.IsBitSet): the console's one unconditional reach into a
+        // pool slot from outside is ProcessAddDeformationModelEvents' raw row store (0x82644DDC),
+        // which lands on slot 0 whether or not that slot is in use. Header-only, no storage.
+        PhysicalBodyPart& GetPartSlot(s16 li16Index) { return maParts[li16Index]; }
+
         // ----- per-frame drivers ---------------------------------------------------------
 
         // BrnPhysicalBodyPartPool.h:98. Apply one post-physics rigid-body update event to the
