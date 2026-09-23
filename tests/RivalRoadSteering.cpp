@@ -1,6 +1,7 @@
 #include "GameSource/World/AI/BrnAICar.h"
 #include "GameSource/World/AI/RacingLine/BrnAISteeringFan.h"
 #include "GameSource/World/AI/Route/BrnRacingLine.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -9,7 +10,14 @@ namespace CgsDev { namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char* lpcMessage, const char*, int) { std::fprintf(stderr, "%s\n", lpcMessage); std::abort(); }
 void* EndAssert() { return nullptr; }
-} }
+}
+// The extracted GenerateFanVectors / IncludeCentreLineTracking carry env-gated PC witnesses
+// (BRN_AI_NAN, [aidrv]); a null print sink keeps them silent and the stream operators link.
+namespace Log { DebugPrint* gpDebugPrint = nullptr; }
+StrStreamBase& StrStreamBase::operator<<(s32) { return *this; }
+StrStreamBase& StrStreamBase::operator<<(u32) { return *this; }
+StrStreamBase& StrStreamBase::operator<<(f32) { return *this; }
+}
 namespace BrnAI {
 Vector3 AICar::GetPosition() const { return mPosition; }
 Vector3 AICar::GetUsefulDirection() const { return mDirection; }
