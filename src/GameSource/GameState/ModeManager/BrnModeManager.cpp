@@ -242,12 +242,13 @@ bool ModeManager::HasPlayerWon()
 // (ModeManager+0x33D0 == ScoringSystem+0x2620 == mScoringSystem.GetOnlineStuntScorer()) then activates it.
 void ModeManager::SetupStuntChallenge()
 {
-    StuntModeScoring* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
+    StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
     CGS_ASSERT(lpStuntModeScoring != nullptr, "lpStuntModeScoring");
-    // FLAG: the X360 reset is a virtual dispatch through the scorer's vtable slot +0x10; the exact
-    // named method at that slot is not recoverable from the bounded StuntModeScoring view (its full
-    // vtable order is deferred to its own TU). ClearData() is the declared reset; called by name for
-    // semantic parity. Confirm the precise virtual when StuntModeScoring's vtable is reconstructed.
+    // The reset is the virtual at vtable +0x10 (0x8231EB44..0x8231EB54 `lwz r11,0(r31) ; lwz r11,0x10(r11)
+    // ; bctrl`). The object at ss+0x2620 carries the StuntModeScoringOnline vtable 0x820CF9EC (ScoringSystem
+    // ctor 0x827E0998), whose +0x10 entry is StuntModeScoringOnline::ClearData 0x82321968.
+    // [FX-GS 2026-09-23, crash-parity G10-D8] the pointer is typed as the online class, so the call
+    // binds to that override (it was the base ClearData while the member was a base StuntModeScoring).
     lpStuntModeScoring->ClearData();
     lpStuntModeScoring->Activate(0);
     mbStuntChallengeActive = true;   // X360 +0x950D = 1
@@ -256,9 +257,10 @@ void ModeManager::SetupStuntChallenge()
 // X360 0x823120E8.
 void ModeManager::EndStuntChallenge()
 {
-    StuntModeScoring* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
+    StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
     CGS_ASSERT(lpStuntModeScoring != nullptr, "lpStuntModeScoring");
-    // FLAG: same vtable-slot-+0x10 reset as SetupStuntChallenge (see note above).
+    // The same vtable +0x10 reset as SetupStuntChallenge (0x8231212C..0x8231213C) ==
+    // StuntModeScoringOnline::ClearData 0x82321968.
     lpStuntModeScoring->ClearData();
     mbStuntChallengeActive = false;  // X360 +0x950D = 0
 }

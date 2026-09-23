@@ -42,51 +42,48 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
-// Construct (X360 0x8232D060)
+// Construct (X360 0x8232D060, vtable 0x820CF9EC slot 0)
 // ----------------------------------------------------------------------------
-void StuntModeScoringOnline::Construct()
+// [FX-GS 2026-09-23, crash-parity G10-D8] re-read store for store; the member is now the real
+// ss+0x2620 object and ScoringSystem::Construct calls this, so the body had to be the console's:
+//     bl   StuntModeScoring::Construct          r4 untouched -> the caller's achievement manager
+//     stw  0, 0x24F0 / 0x2470                   maMultiplierData / maChainableMultiplierInfo counts
+//     std  0, 0x23E0 ; stw {6,5,4,3,2,1,0}, 0x23C0..0x23D8 ; stw 7, 0x23DC
+//                                               mStoredLeapingDataPool.Clear() (bits, free queue, count)
+//     std  0, 0x22D0                            mCarsAroundPlayerAtTakeoff = 0
+//     stb  0, 0x2514/0x2515/0x2516 ; stw 0, 0x2510
+// The previous body passed NULL for the manager, seeded +0x22D0 with 0x600000000 (the console
+// stores 0), left the pool to an empty loop, and wrote maPendingMultiplier[0] (no +0x24F8 store).
+void StuntModeScoringOnline::Construct(AchievementManager* lpAchievementManager)
 {
-    StuntModeScoring::Construct(NULL);
+    StuntModeScoring::Construct(lpAchievementManager);
 
-    // Clear the live banked-multiplier array and the chainable-info array (the X360 `stw 0` into each
-    // count word == Array<>::Clear).
-    maMultiplierData.Clear();              // *(a1 + 9456) = 0
-    maChainableMultiplierInfo.Clear();     // *(a1 + 9328) = 0
+    maMultiplierData.Clear();              // stw 0, 0x24F0
+    maChainableMultiplierInfo.Clear();     // stw 0, 0x2470
+    mStoredLeapingDataPool.Clear();        // +0x23E0 bits 0, free queue 6..0, count 7
+    mCarsAroundPlayerAtTakeoff = 0;        // std 0, 0x22D0
 
-    // Seed both bitset/pool images with the 0x6_00000000 init pattern the X360 stores.
-    mCarsAroundPlayerAtTakeoff = 0x600000000ULL;   // *(a1 + 8912)
-    // The StoredLeapingData pool's free-queue/count tail is seeded the same way (X360 std 0x600000000
-    // @+0x23E0, then the 8-entry free-index ramp 6..0,7 @+0x23A0..). Construct the pool to its empty
-    // state via its own Construct-equivalent stores below.
-    // (the pool free-queue ramp + count are modelled by the ObjectPool layout; seed the ramp.)
-    // X360 writes the descending free-index ramp 6,5,4,3,2,1,0,7 into the pool free queue:
-    for (s32 li = 0; li < KI_LEAPING_POOL_CAPACITY; ++li)
-    {
-        // best-effort: leave pool to its default-constructed empty state (no live slots).
-        (void)li;
-    }
-
-    // Reset the pending/cached online state.
-    maPendingMultiplier[0] = 0;            // (the 6-word record is left zero until banked)
-    mbStuntModeEndedCached      = false;   // *(a1 + 9492/0x2514) cleared as bool 0 region
-    mbPendingMultiplierValid    = false;   // *(a1 + 0x2514)
-    mbCarsAroundPlayerCaptured  = false;   // *(a1 + 0x2516)
-    miOnlineDisplayScore        = 0;       // *(a1 + 9488)
+    mbPendingMultiplierValid    = false;   // stb 0, 0x2514
+    mbStuntModeEndedCached      = false;   // stb 0, 0x2515
+    mbCarsAroundPlayerCaptured  = false;   // stb 0, 0x2516
+    miOnlineDisplayScore        = 0;       // stw 0, 0x2510
 }
 
 // ----------------------------------------------------------------------------
-// Destruct (X360 0x8232D0F8)
+// Destruct (X360 0x8232D0F8, vtable slot 3)
 // ----------------------------------------------------------------------------
+// The same resets without the base call: 0x2510 = 0, the three bools, the two array counts,
+// std 0 0x22D0, and the pool's Clear image (std 0 0x23E0, queue 6..0, count 7).
 void StuntModeScoringOnline::Destruct()
 {
     miOnlineDisplayScore       = 0;
-    mbStuntModeEndedCached     = false;
     mbPendingMultiplierValid   = false;
+    mbStuntModeEndedCached     = false;
     mbCarsAroundPlayerCaptured = false;
     maMultiplierData.Clear();
     maChainableMultiplierInfo.Clear();
-    mCarsAroundPlayerAtTakeoff = 0x600000000ULL;
-    // (the StoredLeapingData pool free-queue ramp is re-seeded; pool left empty)
+    mCarsAroundPlayerAtTakeoff = 0;        // std 0, 0x22D0 (was seeded 0x600000000)
+    mStoredLeapingDataPool.Clear();
 }
 
 // ----------------------------------------------------------------------------
@@ -94,8 +91,10 @@ void StuntModeScoringOnline::Destruct()
 // ----------------------------------------------------------------------------
 bool StuntModeScoringOnline::Prepare()
 {
-    // Re-seed the StoredLeapingData pool free-queue ramp (6..0,7) and reset the cached "ended" flag.
-    mCarsAroundPlayerAtTakeoff = 0;        // std 0 @+0x23E0 region (pool count word reset)
+    // X360 0x82338B50 (vtable slot 1): the pool's Clear image -- std 0 @0x23E0, the descending
+    // free queue 6..0 @0x23C0.. and 7 @0x23DC -- then stb 0 @0x2515. No base call. (The +0x23E0 store
+    // is the pool's occupancy word, not mCarsAroundPlayerAtTakeoff @+0x22D0 as this body read it.)
+    mStoredLeapingDataPool.Clear();
     mbStuntModeEndedCached = false;        // *(a1 + 0x2515) = 0
     return true;
 }
@@ -180,8 +179,10 @@ void StuntModeScoringOnline::EndCombo()
 // ----------------------------------------------------------------------------
 void StuntModeScoringOnline::DealWithTakedown()
 {
-    // Only when a stunt is currently in progress (base mbStuntInProgress @+0x28).
-    if (IsStuntInProgressInternal())
+    // Only while the online stunt mode is active: `lbz r11, 0x28(r31) ; beq` @0x823218A4 reads
+    // mbStuntModeActive (+0x28, set by Activate's `stb 1,0x28`), not mbStuntInProgress (+0x29).
+    // [FX-GS 2026-09-23, crash-parity G10-D8] the gate read +0x29 before.
+    if (IsStuntModeActiveInternal())
     {
         if (RegisterStunt())
         {

@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h" // GameStateImageManagerBase::ImageLoadRequest (real home)
 #include "GameSource/GameState/SharedIO/BrnTargetEventScore.h"              // GameStateModuleIO::TargetEventScore (real home)
+#include "GameSource/GameState/SharedIO/BrnChainableMultiplierInfo.h"      // GameStateModuleIO::ChainableMultiplierInfo (moved out, FX-GS 2026-09-23)
 
 // Element-type homes for the fixed-capacity Array<T,N> leaf instantiations reconstructed by the
 // GameMode leaf batch. PROVISIONAL minimal records: sized to the X360 element stride; real field
@@ -28,10 +29,8 @@ struct BufferedNewHighScore     { u8 maBlob[32]; };  // X360 stride 32 (provisio
 // stub that used to live here has been removed; the Array<TargetEventScore,49> explicit-
 // instantiation TU (Array_TargetEventScore_49.cpp) now reaches the real type through this include
 // (mirroring the DeveloperChallengeManager / ImageManagerBase / StuntModeScoringOnline promotions).
-namespace GameStateModuleIO
-{
-struct ChainableMultiplierInfo { s32 maField[4]; };  // X360 stride 16 (provisional)
-}
+// NOTE: GameStateModuleIO::ChainableMultiplierInfo now lives in SharedIO/BrnChainableMultiplierInfo.h
+// (included above) so the online stunt scorer's header can name it without this whole header.
 
 // NOTE: BrnGameState::DeveloperChallengeManager (and its nested CollectedBillboard element type) is
 // now FULLY homed in DeveloperChallengeManager/BrnDeveloperChallengeManager.h -- the manager's own

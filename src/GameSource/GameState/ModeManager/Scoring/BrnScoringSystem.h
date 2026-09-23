@@ -59,6 +59,7 @@ namespace BrnGameState
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"        // CrashModeScoring (by value)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"                   // StuntModeScoring (by value) + AchievementManager
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.h"             // StuntModeScoringOnline (by value, the X360 ss+0x2620 online stunt scorer)
 #include "GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.h"                // RoadRageModeScoring (by value)
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.h"              // OnlineRaceModeScoring (by value)
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.h"          // OnlineRoadRageModeScoring (by value)
@@ -511,7 +512,14 @@ namespace BrnGameState
                                  const AICarOutputInterface* lpAI,
                                  ModeManager* lpModeManager);                                 // :770 / 0x8232A668
         void UpdateTeamStats(f32 lfDeltaTime);                                                // :775 / 0x8231F308
-        void UpdateTakedowns(const InputBuffer::TakedownEventQueue* lpQueue);                 // :780 / 0x8232AC88
+        // X360 0x8232AC88 takes FOUR arguments (r3 this, r4 queue, r5 -> r21 the player active race-car
+        // index, r6 -> r20 the stunt-challenge flag; no floats, so not f32 phantoms); the caller
+        // ModeManager::PostWorldUpdate loads r5 = lwzx +0x8038 mePlayerActiveRaceCarIndex @0x8234AC4C and
+        // r6 = lbzx +0x950D mbStuntChallengeActive @0x8234AC44. The PS3 DWARF's one-argument form is
+        // build drift; the asm decides.
+        void UpdateTakedowns(const InputBuffer::TakedownEventQueue* lpQueue,
+                             ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+                             bool lbStuntChallengeActive);                                    // :780 / 0x8232AC88
         void UpdatePaybackTakedowns(const GameStateToNetworkInterface::DirtyTrickQueue* lpQueueA,
                                     const GameStateToNetworkInterface::DirtyTrickQueue* lpQueueB); // :786 / 0x82338320
         void UpdateCrashes(const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpQueue); // :791 / 0x8231F9B8
@@ -598,7 +606,7 @@ namespace BrnGameState
         // Additive accessor (no layout change) so HUDMessageLogic's online stunt-run time
         // generator can poll IsComboInProgress() on the online scorer by name -- the X360 reads
         // ss+0x2620 directly (BrnHUDMessageLogic.cpp / 0x82394B88).
-        StuntModeScoring*           GetOnlineStuntScorer()   { return &mOnlineStuntModeScoring; }
+        StuntModeScoringOnline*     GetOnlineStuntScorer()   { return &mOnlineStuntModeScoring; }
         RoadRageModeScoring*        GetRoadRageScoring()       { return &mRoadRageModeScoring; } // :947
         const RoadRageModeScoring*  GetRoadRageScoring() const { return &mRoadRageModeScoring; } // :950
 
@@ -742,7 +750,12 @@ namespace BrnGameState
         //     (offline) and reads its stunt-display fields.
         // Embedded by value -- a big slice (sizeof StuntModeScoring == 0x2620-0x350 == 0x22D0 on X360),
         // but ScoringSystem reaches it by NAME only (no byte-exact sizeof asserted on the keystone).
-        StuntModeScoring    mOnlineStuntModeScoring; // X360 ss+0x2620 (online stunt scorer)
+        // [FX-GS 2026-09-23, crash-parity G10-D8] TYPED AS THE ONLINE CLASS. The X360 ScoringSystem ctor
+        // @0x827E0998 stores the StuntModeScoringOnline vtable (off_820CF9EC, slot 0 =
+        // StuntModeScoringOnline::Construct 0x8232D060) at ss+0x2620, and the object spans
+        // ss+0x2620..ss+0x4B37 (the online members run to +0x2516) -- it was modelled as a base
+        // StuntModeScoring, so UpdateTakedowns could not reach StuntModeScoringOnline::DealWithTakedown.
+        StuntModeScoringOnline mOnlineStuntModeScoring; // X360 ss+0x2620 (online stunt scorer)
         RoadRageModeScoring mRoadRageModeScoring;    // :1212 (by value)
         s32  miMaximumPlayerCrashedNumber;           // :1213  X360 ss+0x4B58
         s32  miCurrentPlayerCrashedNumber;           // :1214  X360 ss+0x4B5C

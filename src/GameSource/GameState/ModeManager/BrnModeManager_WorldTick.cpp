@@ -1262,18 +1262,18 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
 // all; so this entry point takes the two queues in the types their live holders carry, and the
 // caller passes gsm+249936 by name. Nothing else about the arm changes.
 //
-// [!] TWO DROPPED CONSOLE ARGUMENTS, MEASURED INERT OFFLINE -- NOT ASSUMED.
-// UpdateTakedowns' console arity is four; the committed body takes one. Its own FLAG already
-// records that the two extra arguments (a3 = mePlayerActiveRaceCarIndex, a4 = mbStuntChallengeActive)
-// gate exactly one thing -- the trailing
+// [!] THE TWO CONSOLE ARGUMENTS ARE PASSED (FX-GS 2026-09-23, crash-parity G10-D8; they were
+// dropped before, and the reasoning below is why that was inert offline -- it still holds).
+// UpdateTakedowns' console arity is four. The two extra arguments (a3 = mePlayerActiveRaceCarIndex,
+// a4 = mbStuntChallengeActive) gate exactly one thing -- the trailing
 //     if ((a3 == aggressor && GetPlayerTeam(victim) != GetPlayerTeam(aggressor)) || a4)
 //         StuntModeScoringOnline::DealWithTakedown(this + 9760);
 // -- and re-reading UpdateTakedowns' export confirms it: a3/a4 appear nowhere else in the function,
 // every CarScoreData tally above them is unconditional. The callee itself then opens
 // `if (mbStuntModeActive)` and returns immediately when clear, and the only writer of that flag is
 // the ONLINE stunt scorer's Activate. So on an offline event the dropped pair can change nothing
-// observable; the takedown / takedowns-against / marked-man / traitorous tallies are whole. The
-// FLAG stays on the committed body until the online scorer is declared on the keystone.
+// observable; the takedown / takedowns-against / marked-man / traitorous tallies are whole. Online,
+// the arm is what turns a player takedown into the +3000 takedown stunt (flt_8202112C).
 //
 // [!] TYPE RE-HOME, the same cast convention BrnTakedownManager_Detect.cpp and ProcessPlayerCrashes
 // above already use for exactly this pair, and for the same reason: the SCORER declarations name the
@@ -1298,8 +1298,11 @@ ModeManager::PostWorldUpdateTakedownScoringBringUp(
         return;
     }
 
+    // r5 = lwzx +0x8038 (mePlayerActiveRaceCarIndex) @0x8234AC4C, r6 = lbzx +0x950D
+    // (mbStuntChallengeActive) @0x8234AC44 -- the two arguments the trailing online-stunt arm reads.
     mScoringSystem.UpdateTakedowns(
-        reinterpret_cast<const InputBuffer::TakedownEventQueue*>(lpTakedownEventQueue));
+        reinterpret_cast<const InputBuffer::TakedownEventQueue*>(lpTakedownEventQueue),
+        mePlayerActiveRaceCarIndex, mbStuntChallengeActive);
 
     // [FLAG PC bring-up] THE NULL TEST IS NOT THE CONSOLE'S. On console the crash queue is a field
     // of the post-world buffer and is always present; here it arrives from the lifted leg, whose own

@@ -76,14 +76,13 @@
 //       InputBuffer::TakedownEventQueue is completed in BrnScoringSystemEventQueues.h
 //       (empty struct deriving CgsModule::EventQueue<TakedownEvent,8>), carrying the
 //       full GetLength/GetEvent surface; TakedownEvent is committed in
-//       BrnTakedownManagerTypes.h. Body lands below. FLAG: the X360 0x8232AC88 carries
-//       two extra params (a3/a4) the DWARF single-arg signature drops; they gate ONLY
-//       the trailing StuntModeScoringOnline::DealWithTakedown online-scoring call
-//       (0x8232AE40-0x8232AE7C). That call cannot be expressed under the committed
-//       single-arg keystone signature and StuntModeScoringOnline is not reachable here,
-//       so the tail is omitted -- every CarScoreData tally the body DOES own
-//       (takedowns/against +0x4C/+0x50, marked-man events +0x108/+0x10C, traitorous
-//       +0x120/+0x124) is reconstructed store-for-store.
+//       BrnTakedownManagerTypes.h. Body lands below. The X360 0x8232AC88 carries two
+//       extra params (r5 the player's active race-car index, r6 the stunt-challenge flag)
+//       the DWARF single-arg signature drops; they gate the trailing
+//       StuntModeScoringOnline::DealWithTakedown call (0x8232AE40-0x8232AE7C), which is
+//       reconstructed too since 2026-09-23 (FX-GS, crash-parity G10-D8) together with the
+//       CarScoreData tallies (takedowns/against +0x4C/+0x50, marked-man events
+//       +0x108/+0x10C, traitorous +0x120/+0x124).
 //
 //   UpdatePaybackTakedowns        (0x82338320)  [NOW LANDED -- see body below]
 //       Merges the two DirtyTrickQueue inputs into a local DirtyTrickQueue and tallies
@@ -551,11 +550,20 @@ namespace BrnGameState
     // BOTH cars resolve it bumps +0x4C(aggressor)/+0x50(victim), then -- gated on
     // mbMarkedManTakeDown (event +0x24) -- +0x108(aggressor)/+0x10C(victim), then -- gated
     // on GetPlayerTeam(aggressor) != NONE && GetPlayerTeam(aggressor) == GetPlayerTeam(victim)
-    // -- +0x120/+0x124 (both on the aggressor). FLAG: the trailing
-    // StuntModeScoringOnline::DealWithTakedown call (0x8232AE40-0x8232AE7C) is gated on the
-    // two extra X360 params (a3/a4) the committed single-arg DWARF signature drops and reaches
-    // a scorer not declared on the keystone; it is omitted (see file header).
-    void ScoringSystem::UpdateTakedowns(const InputBuffer::TakedownEventQueue* lpQueue)
+    // -- +0x120/+0x124 (both on the aggressor). Then, still inside the both-CarData block (the
+    // null branches at 0x8232AD9C/0x8232ADA4 skip it), the trailing online-stunt arm
+    // 0x8232AE40..0x8232AE7C:
+    //     cmpw r21(player), r29(aggressor) ; bne -> test r20
+    //     GetPlayerTeam(victim) @0x8232AE50 ; GetPlayerTeam(aggressor) @0x8232AE60 ; bne -> call
+    //     clrlwi r11, r20, 24 ; beq -> next      (r20 == lbStuntChallengeActive)
+    //     addi r3, r27, 0x2620 ; bl StuntModeScoringOnline::DealWithTakedown @0x82321890
+    // i.e. a player takedown of a car on ANOTHER team, or any takedown during a stunt challenge,
+    // is a takedown stunt for the online stunt scorer (which then gates on its own
+    // mbStuntModeActive -- only the online modes Activate it). [FX-GS 2026-09-23, crash-parity
+    // G10-D8] the arm and the two arguments it reads were dropped.
+    void ScoringSystem::UpdateTakedowns(const InputBuffer::TakedownEventQueue* lpQueue,
+                                        ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+                                        bool lbStuntChallengeActive)
     {
         CGS_ASSERT(lpQueue != NULL, "lpTakedownQueue != NULL");
 
@@ -604,6 +612,15 @@ namespace BrnGameState
                         lpAggressorScore->GetTraitorousTakedownsFor() + 1);
                     lpAggressorScore->SetTraitorousTakedownsAgainst(
                         lpAggressorScore->GetTraitorousTakedownsAgainst() + 1);
+                }
+
+                // The online-stunt takedown arm (0x8232AE40..0x8232AE7C). The victim's team is
+                // queried first, then the aggressor's; a different team goes straight to the call.
+                if ((lePlayerActiveRaceCarIndex == leAggressor &&
+                     GetPlayerTeam(leVictim) != GetPlayerTeam(leAggressor)) ||
+                    lbStuntChallengeActive)
+                {
+                    mOnlineStuntModeScoring.DealWithTakedown();   // ss+0x2620
                 }
             }
         }

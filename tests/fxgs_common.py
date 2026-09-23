@@ -85,15 +85,19 @@ def extract(tree, relative, signatures):
 STRSTREAM_CPP = REPO / "src/GameShared/GameClasses/Development/CgsStrStream.cpp"
 
 
-def compile_and_run(test_cpp, inc_name, inc_text, tag, extra_flags="", shadow=None, extra_sources=()):
+def compile_and_run(test_cpp, inc_name, inc_text, tag, extra_flags="", shadow=None, extra_sources=(),
+                    extra_files=None):
     """Write inc_text as <tmp>/<inc_name>, compile test_cpp (+ extra_sources, e.g. the real
     CgsStrStream.cpp the assert-message paths need) with the canonical flags (+ the access macros
     the fixtures need) and run it. `shadow` maps a src-relative header path to the revision's text
-    so the extracted bodies compile against their own revision's header.
+    so the extracted bodies compile against their own revision's header. `extra_files` maps more
+    file names to texts written beside the .inc (e.g. a generated configuration include).
     Returns (checks, failures) parsed from the '<tag>: N checks, M failures' line, or None."""
     with tempfile.TemporaryDirectory(prefix="brn_fxgs_") as directory:
         output = Path(directory)
         (output / inc_name).write_text(inc_text, encoding="utf-8")
+        for name, text in (extra_files or {}).items():
+            (output / name).write_text(text, encoding="utf-8")
         shadow_dir = output / "shadow"
         for relative, text in (shadow or {}).items():
             target = shadow_dir / Path(relative).relative_to("src")
