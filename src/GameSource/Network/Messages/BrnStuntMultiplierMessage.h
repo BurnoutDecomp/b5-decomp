@@ -35,20 +35,29 @@ namespace BrnNetwork
 
     // Leaf layout (after the 0x28 ReliableMessage base). The X360 stores the whole 8-byte
     // multiplier-info blob with one std at +0x28 and the frames-since-start with a stw at +0x30:
-    //   +0x28  s64 mi64MultiplierInfo   (8-byte multiplier-info blob; the s64 payload)
+    //   +0x28  MultiplierInfo mMultiplierInfo (8 bytes, 4-aligned: the class is 0x34 long)
     //            (+0x28 u32 stunt-types [1,0x3FFFF]; +0x2C u16 flat-spins [0,16]; +0x2E u16 barrel-rolls [0,8])
     //   +0x30  s32 miFramesSinceStart   (packed [0, 0x7FFFFFFF])
     struct StuntMultiplierMessage : CgsNetwork::ReliableMessage
     {
-        s64 mi64MultiplierInfo;   // +0x28  (8-byte multiplier-info blob)
-        s32 miFramesSinceStart;   // +0x30
+        // The 8-byte multiplier record the message carries. The console moves it as one
+        // 64-bit word; here it crosses the s64 interface below by a byte copy.
+        struct MultiplierInfo
+        {
+            u32 muMultiplierStuntTypes;   // +0x00
+            u16 mu16FlatSpins;            // +0x04
+            u16 mu16BarrelRolls;          // +0x06
+        };
+
+        MultiplierInfo mMultiplierInfo;       // +0x28
+        s32            miFramesSinceStart;    // +0x30
 
         // @ 0x8257D2E8 -- header/name accessor.
-        const char*                    GetName() const;
+        const char*                    GetName() const override;
         // @ 0x8257D210 -- zero every leaf field then chain to the base packed-size.
-        s32                            GetPackedMessageSize();
+        s32                            GetPackedMessageSize() override;
         // @ 0x8257D228 -- (de)serialise the four leaf fields; OR the per-field statuses.
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
         // Stamp this send-slot with the player's current multiplier sampled on the given
         // frame. @ 0x8257D2F8.
@@ -58,4 +67,11 @@ namespace BrnNetwork
         // Returns true when a valid multiplier was retrieved. @ 0x82580020.
         bool Retrieve(s32* lpiOut, s64* lpi64Out);
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || offsetof(StuntMultiplierMessage, mMultiplierInfo) == 0x28,
+                  "StuntMultiplierMessage::mMultiplierInfo @ +0x28");
+    static_assert(sizeof(void*) != 4 || offsetof(StuntMultiplierMessage, miFramesSinceStart) == 0x30,
+                  "StuntMultiplierMessage::miFramesSinceStart @ +0x30");
+    static_assert(sizeof(void*) != 4 || sizeof(StuntMultiplierMessage) == 0x34, "sizeof(StuntMultiplierMessage) == 0x34");
 } // namespace BrnNetwork

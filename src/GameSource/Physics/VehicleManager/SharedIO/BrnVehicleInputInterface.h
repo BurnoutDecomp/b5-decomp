@@ -199,6 +199,9 @@ namespace Vehicle
         // addressing stays layout-correct without the console byte offsets.
         const InLineTestResultQueue* GetLineTestResults() const { return &mLineTestResultsQueue; }
         const ImpactEventQueue*      GetImpactEventQueue() const { return &mImpactEventQueue; }
+        // The write twin: NetworkAggressiveDrivingManager adds network impacts to the
+        // network output buffer's copy of this queue.
+        ImpactEventQueue*            GetImpactEventQueue()       { return &mImpactEventQueue; }
 
         // Same ADDITIVE header-only inline as the two
         // above: the X360 reaches this queue as a raw `this + 128032` -- the pair

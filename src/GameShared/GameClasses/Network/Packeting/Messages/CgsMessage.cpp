@@ -1,8 +1,13 @@
 #include "CgsMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsIntQuantiser.h"
+#include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
+#include "GameShared/GameClasses/Core/CgsID.h"                          // CgsIDConvertToString
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"
+#include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // gpDebugPrint
 
-#include <cmath>   // sinf, cosf
+#include <cmath>   // sinf, cosf, sin, cos, fmaf
 
 // CgsNetwork::Message  -- the reconstructed functions of the
 // class:CgsNetwork::Message translation unit.
@@ -66,6 +71,37 @@ namespace CgsNetwork
         lpvOut->y = lfMagnitude * lfSinB;              // var_5C, lane 1
         lpvOut->z = lfMagnitude * (lfCosB * lfSinA);   // var_58, lane 2
         lpvOut->w = 0.0f;                              // var_54, lane 3 (zeroed)
+    }
+
+    // ---- SetMatrixFromEulerAngles ---------------------------------------------------
+    // Rotation rows from the negated roll / pitch / yaw (cos and sin in double, rounded to
+    // single). Only the x, y and z lanes of the three rotation rows are written; the
+    // translation row and the w lanes keep their values. The console fuses the four
+    // multiply-adds, so they are written with fmaf.
+    void Message::SetMatrixFromEulerAngles(rw::math::vpu::Matrix44Affine* lpMatrix,
+                                           f32 lfRoll, f32 lfPitch, f32 lfYaw)
+    {
+        const f32 lfCosRoll  = static_cast<f32>(cos(static_cast<double>(-lfRoll)));
+        const f32 lfSinRoll  = static_cast<f32>(sin(static_cast<double>(-lfRoll)));
+        const f32 lfCosPitch = static_cast<f32>(cos(static_cast<double>(-lfPitch)));
+        const f32 lfSinPitch = static_cast<f32>(sin(static_cast<double>(-lfPitch)));
+        const f32 lfCosYaw   = static_cast<f32>(cos(static_cast<double>(-lfYaw)));
+        const f32 lfSinYaw   = static_cast<f32>(sin(static_cast<double>(-lfYaw)));
+
+        const f32 lfCosYawSinPitch = lfCosYaw * lfSinPitch;
+        const f32 lfSinYawSinPitch = lfSinYaw * lfSinPitch;
+
+        lpMatrix->xAxis.x = fmaf(lfSinYawSinPitch, lfSinRoll, lfCosYaw * lfCosRoll);
+        lpMatrix->xAxis.y = lfCosPitch * lfSinRoll;
+        lpMatrix->xAxis.z = fmaf(lfCosYawSinPitch, lfSinRoll, -(lfSinYaw * lfCosRoll));
+
+        lpMatrix->yAxis.x = fmaf(lfSinYawSinPitch, lfCosRoll, -(lfCosYaw * lfSinRoll));
+        lpMatrix->yAxis.y = lfCosPitch * lfCosRoll;
+        lpMatrix->yAxis.z = fmaf(lfCosYawSinPitch, lfCosRoll, lfSinYaw * lfSinRoll);
+
+        lpMatrix->zAxis.x = lfSinYaw * lfCosPitch;
+        lpMatrix->zAxis.y = -lfSinPitch;
+        lpMatrix->zAxis.z = lfCosYaw * lfCosPitch;
     }
 
     // ---- sub_828800F0 (quantised-int unpack helper) ----------------------------
@@ -269,6 +305,243 @@ namespace CgsNetwork
         return lxResult;
     }
 
+    // ---- CgsID field --------------------------------------------------------------
+    // A CgsID travels as its low then its high 32-bit half, each a full-range int. Both
+    // directions also render the id to text (the result is unused); packing first checks
+    // the halves recombine to the id.
+    PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field)
+    {
+        const s32 KI_MIN_INT32 = -0x7FFFFFFF - 1;
+        const s32 KI_MAX_INT32 = 0x7FFFFFFF;
+        char lacIDString[KI_CGSID_STRING_LEN];
+
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            CgsIDConvertToString(*lpu64Field, lacIDString);
+
+            const u64 liLow  = *lpu64Field & 0xFFFFFFFFull;
+            const u64 liHigh = *lpu64Field >> 32;
+            CGS_ASSERT(*lpu64Field == (liLow | (liHigh << 32)),
+                       "*lpValue == (liLow | (liHigh << 32))");
+
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(static_cast<s32>(liLow), KI_MIN_INT32, KI_MAX_INT32, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            IntQuantiser::Pack(static_cast<s32>(liHigh), KI_MIN_INT32, KI_MAX_INT32, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            const s32 liLow  = UnPackQuantisedInt(&lpMessage->mBitstream, KI_MIN_INT32, KI_MAX_INT32);
+            const s32 liHigh = UnPackQuantisedInt(&lpMessage->mBitstream, KI_MIN_INT32, KI_MAX_INT32);
+            *lpu64Field = (static_cast<u64>(static_cast<u32>(liHigh)) << 32) | static_cast<u32>(liLow);
+            CgsIDConvertToString(*lpu64Field, lacIDString);
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // ---- float field, quantised to a bit count ---------------------------------------
+    PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, s32 liNumBits)
+    {
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked = 0;
+            FloatQuantiser::Pack(*lpfField, lfMin, lfMax, liNumBits, &luPacked);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            lpMessage->mBitstream.GetQuantisedFloat(lpfField, lfMin, lfMax, liNumBits);
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // ---- float field, quantised to a resolution --------------------------------------
+    PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, f32 lfResolution)
+    {
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            FloatQuantiser::Pack(*lpfField, lfMin, lfMax, lfResolution, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            lpMessage->mBitstream.GetQuantisedFloat(lpfField, lfMin, lfMax, lfResolution);
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // ---- Time field ----------------------------------------------------------------
+    // Whole seconds as an int in [liMinSeconds, liMaxSeconds - 1], then the fraction in
+    // [0, 1] at lfResolution. An unpacked fraction that reaches 1 is pulled back one step
+    // (1 - resolution). Both directions log the time to the debug print.
+    PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField,
+                                        s32 liMinSeconds, s32 liMaxSeconds, f32 lfResolution)
+    {
+        const f32 KF_MIN_FRACTION = 0.0f;
+        const f32 KF_MAX_FRACTION = 1.0f;
+
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+            IntQuantiser::Pack(lpTimeField->GetSeconds(), liMinSeconds, liMaxSeconds - 1, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            FloatQuantiser::Pack(lpTimeField->GetFraction(), KF_MIN_FRACTION, KF_MAX_FRACTION, lfResolution,
+                                 &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            const f32 lfTime = static_cast<f32>(lpTimeField->GetSeconds()) + lpTimeField->GetFraction();
+            *CgsDev::Log::gpDebugPrint << "Packed Time " << lfTime << "\n";
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            s32 liSeconds = 0;
+            lpMessage->mBitstream.GetQuantisedInt(&liSeconds, liMinSeconds, liMaxSeconds - 1);
+
+            f32 lfFraction = 0.0f;
+            lpMessage->mBitstream.GetQuantisedFloat(&lfFraction, KF_MIN_FRACTION, KF_MAX_FRACTION, lfResolution);
+            if (!(lfFraction < KF_MAX_FRACTION))
+            {
+                lfFraction = KF_MAX_FRACTION - lfResolution;
+            }
+
+            lpTimeField->SetSeconds(liSeconds);
+            lpTimeField->SetFraction(lfFraction);
+
+            const f32 lfTime = lpTimeField->GetFraction() + static_cast<f32>(lpTimeField->GetSeconds());
+            *CgsDev::Log::gpDebugPrint << "Unpacked Time " << lfTime << "\n";
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
+    // Seconds in [0, INT_MAX - 1].
+    PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField, f32 lfResolution)
+    {
+        return PackOrUnpackTime(lpMessage, lpTimeField, 0, 0x7FFFFFFF, lfResolution);
+    }
+
+    // ---- DateAndTime field -----------------------------------------------------------
+    // Second and minute in [0, 59], hour in [0, 23], day in [1, 31], month in [1, 12] and
+    // year in [0, 5000], in that order. A pack stops at the first field that does not fit.
+    PackOrUnpackResult PackOrUnpackDateAndTime(Message* lpMessage, CgsSystem::DateAndTime* lpDateAndTime)
+    {
+        const s32 KI_MAX_SECOND = 59;
+        const s32 KI_MAX_MINUTE = 59;
+        const s32 KI_MAX_HOUR   = 23;
+        const s32 KI_MIN_DAY    = 1;
+        const s32 KI_MAX_DAY    = 31;
+        const s32 KI_MIN_MONTH  = 1;
+        const s32 KI_MAX_MONTH  = 12;
+        const s32 KI_MAX_YEAR   = 5000;
+
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            u32 luPacked  = 0;
+            s32 liNumBits = 0;
+
+            IntQuantiser::Pack(lpDateAndTime->GetSecond(), 0, KI_MAX_SECOND, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            IntQuantiser::Pack(lpDateAndTime->GetMinute(), 0, KI_MAX_MINUTE, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            IntQuantiser::Pack(lpDateAndTime->GetHour(), 0, KI_MAX_HOUR, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            IntQuantiser::Pack(lpDateAndTime->GetDay(), KI_MIN_DAY, KI_MAX_DAY, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            IntQuantiser::Pack(lpDateAndTime->GetMonth(), KI_MIN_MONTH, KI_MAX_MONTH, &luPacked, &liNumBits);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            IntQuantiser::Pack(lpDateAndTime->GetYear(), 0, KI_MAX_YEAR, &luPacked, &liNumBits);
+            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+                                                                      : KX_PACK_FAILED_NO_SPACE;
+        }
+
+        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            BitStream* lpStream = &lpMessage->mBitstream;
+            const s32 liSecond = UnPackQuantisedInt(lpStream, 0, KI_MAX_SECOND);
+            const s32 liMinute = UnPackQuantisedInt(lpStream, 0, KI_MAX_MINUTE);
+            const s32 liHour   = UnPackQuantisedInt(lpStream, 0, KI_MAX_HOUR);
+            const s32 liDay    = UnPackQuantisedInt(lpStream, KI_MIN_DAY, KI_MAX_DAY);
+            const s32 liMonth  = UnPackQuantisedInt(lpStream, KI_MIN_MONTH, KI_MAX_MONTH);
+            const s32 liYear   = UnPackQuantisedInt(lpStream, 0, KI_MAX_YEAR);
+
+            lpDateAndTime->SetSecond(liSecond);
+            lpDateAndTime->SetMinute(liMinute);
+            lpDateAndTime->SetHour(liHour);
+            lpDateAndTime->SetDay(liDay);
+            lpDateAndTime->SetMonth(liMonth);
+            lpDateAndTime->SetYear(liYear);
+            return KX_PACK_OR_UNPACK_SUCCESS;
+        }
+
+        CGS_ASSERT(false,
+                   "CgsNetwork::Message::PackOrUnpack called without telling "
+                   "it which it is doing\n");
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+
     // ---- PackOrUnpackBuffer --------------------------------------------------------
     // (De)serialise a raw byte buffer through the message's SmartBitStream
     // (mBitstream, +0x08): 0 packs (AddRawData; a full stream reports
@@ -350,10 +623,27 @@ namespace CgsNetwork
         mx8Flags |= KX8_FLAGS_VALID;
     }
 
+    // ---- IsReliable ----------------------------------------------------------------
+    // Slot 0. A plain message is unreliable; ReliableMessage overrides it. The console
+    // folds this `return false` leaf with every other identical leaf in the image.
+    bool Message::IsReliable() const
+    {
+        return false;
+    }
+
+    // ---- OldMessagesAreValid -------------------------------------------------------
+    // Slot 1. By default a message older than the last one received is stale; the
+    // messages whose payload is an event (collectables, checkpoints, images, ...)
+    // override it to accept them. Same folded `return false` leaf.
+    bool Message::OldMessagesAreValid() const
+    {
+        return false;
+    }
+
     // ---- PackOrUnpack() ----------------------------------------------------------
-    // vtable slot 4. The base message carries no fields of its own: it serialises
-    // nothing and reports success. The console folds this `return 0` leaf with every
-    // other identical leaf in the image.
+    // Slot 4. The base message carries no fields of its own: it serialises nothing
+    // and reports success. The console folds this `return 0` leaf with every other
+    // identical leaf in the image.
     PackOrUnpackResult Message::PackOrUnpack()
     {
         return KX_PACK_OR_UNPACK_SUCCESS;
@@ -362,7 +652,7 @@ namespace CgsNetwork
     // ---- Pack --------------------------------------------------------------------
     // Attach mBitstream to the caller's buffer (Prepare is inlined: the byte
     // misalignment of the buffer is folded into both cursors and the length), run the
-    // virtual PackOrUnpack() (vtable slot 4, +0x10), report how far the write cursor
+    // virtual PackOrUnpack() (slot 4), report how far the write cursor
     // advanced, then detach the stream (Release, inlined as four zero stores) and mark
     // the message idle. Returns true when PackOrUnpack reported success.
     bool Message::Pack(u8* lpu8Buffer, s32 liBufferOffsetInBits, s32 liBufferLengthInBits,
@@ -374,9 +664,7 @@ namespace CgsNetwork
 
         const s32 liStartWritePosition = mBitstream.miBitWritePosition;
 
-        typedef PackOrUnpackResult (*PackOrUnpackFn)(Message*);
-        PackOrUnpackFn* lpVTable = static_cast<PackOrUnpackFn*>(mpVTable);
-        const PackOrUnpackResult lxResult = lpVTable[4](this);
+        const PackOrUnpackResult lxResult = PackOrUnpack();
 
         *lpiBitsWritten = mBitstream.miBitWritePosition - liStartWritePosition;
 
@@ -401,20 +689,14 @@ namespace CgsNetwork
         mBitstream.Prepare(lpu8Buffer, liBufferReadOffsetInBits, liBufferLengthInBits,
                            liBufferLengthInBits);
 
-        typedef PackOrUnpackResult (*PackOrUnpackFn)(Message*);
-        typedef bool (*IsReliableFn)(const Message*);
-        void** lpVTable = static_cast<void**>(mpVTable);
-
         const s32 liStartUnread = mBitstream.miBitWritePosition - mBitstream.miBitReadPosition;
 
         mx8Flags = 0;
 
-        PackOrUnpackFn lpPackOrUnpack = reinterpret_cast<PackOrUnpackFn>(lpVTable[4]);
-        const PackOrUnpackResult lxResult = lpPackOrUnpack(this);
+        const PackOrUnpackResult lxResult = PackOrUnpack();
 
         mx8Flags |= KX8_FLAGS_VALID;
-        IsReliableFn lpIsReliable = reinterpret_cast<IsReliableFn>(lpVTable[0]);
-        if (lpIsReliable(this))
+        if (IsReliable())
         {
             mx8Flags |= KX8_FLAGS_RELIABLE;
         }

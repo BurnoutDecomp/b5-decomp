@@ -19,7 +19,6 @@
 #include <cstddef>                             // offsetof (_AssertLayout)
 #include "types.hpp"
 #include "SDKs/EATech/eajobs/job.h"          // EA::Jobs::Job (embedded, sizeof=848)
-#include "SDKs/EATech/eajobs/job_scheduler.h" // EA::Jobs::JobScheduler (AddJobs)
 
 namespace CgsMemory { class HeapMalloc; }
 

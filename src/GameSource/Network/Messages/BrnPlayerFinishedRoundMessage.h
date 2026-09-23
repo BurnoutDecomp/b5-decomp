@@ -79,7 +79,7 @@ namespace BrnNetwork
         bool Retrieve(u8* lpu8RoundNumber, Time* lpFinishTime, f32* lpfDistanceFromFinish,
                       NetworkPlayerID* lpEliminatorNetworkPlayerID, s32* lpiEliminations,
                       bool* lpbTimedOut, bool* lpbWonRound);
-        virtual s32 GetPackedMessageSize();
+        s32 GetPackedMessageSize() override;
 
         u8              GetRoundNumber() const;
         Time            GetFinishTime() const;
@@ -88,10 +88,10 @@ namespace BrnNetwork
         bool            GetTimedOut() const;
 
         // LEDGER func @ 0x827DFCD0 -- bodied in this TU.
-        virtual const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
     };
 
     // BrnNetwork::PlayerFinishedRoundMessage::GetName  @ 0x827DFCD0
@@ -99,4 +99,7 @@ namespace BrnNetwork
     {
         return "Player Finished Round Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(PlayerFinishedRoundMessage) == 0x40, "sizeof(PlayerFinishedRoundMessage) == 0x40");
 } // namespace BrnNetwork

@@ -86,12 +86,18 @@ namespace BrnNetwork
             // No out-of-line console body; the IO buffers inline it (body in this TU's .cpp).
             void                Construct();
 
+            // Header-inline on the console: the queue is the first member, so ModeManager::PreWorldUpdate
+            // and PaybackManager::Update pass the interface pointer itself as the queue.
+            DirtyTrickQueue*        GetDirtyTrickQueue()       { return &mDirtyTrickQueue; }
+            const DirtyTrickQueue*  GetDirtyTrickQueue() const { return &mDirtyTrickQueue; }
+
+            // Header-inline on the console: BrnNetworkModule::ProcessAfterSimulation reads the byte
+            // at +0x218 directly.
+            bool                GetIsInOnlineGameMode() const { return mbIsInOnlineGameMode; }
+
             // ---- declared-only API (bodies are separate TUs) ----
             void                AddDirtyTrickEvent(EActiveRaceCarIndex leAggressor, EActiveRaceCarIndex leVictim,
                                                    u8 luType, u8 luStatus);
-            DirtyTrickQueue*        GetDirtyTrickQueue();
-            const DirtyTrickQueue*  GetDirtyTrickQueue() const;
-            bool                GetIsInOnlineGameMode() const;
             void                SetIsInOnlineGameMode(bool lbIsOnline);
             bool                GetIsInCarSelect() const;
             void                SetIsCarSelect(bool lbIsInCarSelect);

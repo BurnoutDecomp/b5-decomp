@@ -14,8 +14,7 @@
 //   +0x20  NetworkPlayerID mSendingPlayerID   (stw -1 in every subclass ctor)
 //   +0x24  NetworkPlayerID mRecvingPlayerID   (stw -1 in every subclass ctor)
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), so this subclass adds plain methods and the two player-id words only --
+// This subclass adds the two player-id words and a GetPackedMessageSize override --
 // sizeof == 0x28.
 // ===================================================================================
 
@@ -45,6 +44,10 @@ namespace CgsNetwork
         void            SetRecvingPlayerID(NetworkPlayerID liPlayerID);
         NetworkPlayerID GetRecvingPlayerID() const;
         NetworkPlayerID GetRecvingPlayerIDForNack() const;
-        s32             GetPackedMessageSize();
+        s32             GetPackedMessageSize() override;
     };
+
+    static_assert(sizeof(void*) != 4 || offsetof(MessageWithPlayerIDs, mSendingPlayerID) == 0x20,
+                  "MessageWithPlayerIDs::mSendingPlayerID @ +0x20");
+    static_assert(sizeof(void*) != 4 || sizeof(MessageWithPlayerIDs) == 0x28, "sizeof(MessageWithPlayerIDs) == 0x28");
 } // namespace CgsNetwork

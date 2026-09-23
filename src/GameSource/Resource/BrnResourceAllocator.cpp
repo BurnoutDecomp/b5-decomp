@@ -2,7 +2,9 @@
 #include "ppmalloc/EAGeneralAllocator.h"   // the backing EA general allocator
 #include "rw/rwcore_general_alloc.h"       // rw::core::GeneralResourceAllocator (GetGameDataGeneralAllocator)
 #include "GameShared/GameClasses/Memory/PC/CgsLowMemoryPC.h"   // LowMemory::Reserve (low-4GB root block)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include <new>   // std::nothrow (the GlobalGraphics arena carve)
+#include <Windows.h>   // GlobalMemoryStatus (PrintConsoleMemory / GetAvailableMemory)
 
 // BrnResource::Allocators / HeapResourceAllocator - the engine's root debug resource allocator,
 // the heap the whole GameData resource system (ConstructResourceModule -> ResourceModule::Construct)
@@ -102,6 +104,73 @@ namespace BrnResource
             s_bGameDataGeneralInit = true;
         }
         return &s_GameDataGeneralAllocator;
+    }
+
+    // Never written by the game (the flag sits in initialised data with readers only), so a
+    // failed memory check logs but does not assert.
+    bool Allocators::mbAssertOnMemoryChange = false;
+
+    // One line per memory figure, each behind its own message-filter test. The field values are
+    // shifted down to MB before they are streamed.
+    void PrintConsoleMemory(const char* lpcMessage)
+    {
+        if (lpcMessage != NULL && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << lpcMessage << " ";
+        }
+
+        MEMORYSTATUS lMemoryStatus;
+        GlobalMemoryStatus(&lMemoryStatus);
+
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "XBox 360 memory status: \n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalVirtual >> 20)
+                                       << " total MB of virtual memory.\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailVirtual >> 20)
+                                       << " free MB of virtual memory.\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalPhys >> 20)
+                                       << " total MB of physical memory.\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailPhys >> 20)
+                                       << " free MB of physical memory.\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwTotalPageFile >> 20)
+                                       << " total MB of paging file.\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwAvailPageFile >> 20)
+                                       << " free MB of paging file.\n";
+        }
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "    " << static_cast<u32>(lMemoryStatus.dwMemoryLoad)
+                                       << " percent of memory is in use.\n";
+        }
+    }
+
+    // FLAG PC-platform note: the host MEMORYSTATUS fields are pointer-sized, so a free figure of
+    // 4 GB or more wraps in the u32 the console returns. The memory checks only compare two
+    // readings, so a wrapped value still reports a change.
+    u32 GetAvailableMemory()
+    {
+        MEMORYSTATUS lMemoryStatus;
+        GlobalMemoryStatus(&lMemoryStatus);
+        return static_cast<u32>(lMemoryStatus.dwAvailPhys);
     }
 
     // Out-of-line defaulted destructor: anchors the DefaultLinearAllocator vtable in this TU so

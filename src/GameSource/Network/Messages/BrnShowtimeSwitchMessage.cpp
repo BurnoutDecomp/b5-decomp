@@ -71,4 +71,10 @@ namespace BrnNetwork
         mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
         return true;
     }
+
+    // An older message is still accepted (slot 1 is the shared `return true` leaf).
+    bool ShowtimeSwitchMessage::OldMessagesAreValid() const
+    {
+        return true;
+    }
 }

@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SPrintf / StrCat
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"    // CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"           // CgsSystem::Time (AddParameter(Time))
 #include <cstring>                                                  // std::strlen
 
 namespace BrnNetwork
@@ -83,6 +84,51 @@ namespace BrnNetworkModuleIO
         char lacParam[16];
         CgsCore::SPrintf(lacParam, static_cast<u32>(sizeof(lacParam)), "%i.%i",
                          static_cast<s32>(lfX), static_cast<s32>(lfZ));
+        AddParameter(lacParam);
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // AddParameter(s32) -- SPrintf(buf, 16, "%i", liParam), then the string overload.
+    // ----------------------------------------------------------------------------------------
+    void TelemetryData::AddParameter(s32 liParam)
+    {
+        char lacParam[16];
+        CgsCore::SPrintf(lacParam, static_cast<u32>(sizeof(lacParam)), "%i", liParam);
+        AddParameter(lacParam);
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // AddParameter(f32) -- the value in hundredths: `fmuls` by the 100.0f constant, `fctiwz`
+    // (truncate toward zero, the C cast), then "%i".
+    // ----------------------------------------------------------------------------------------
+    void TelemetryData::AddParameter(f32 lfParam)
+    {
+        char lacParam[16];
+        CgsCore::SPrintf(lacParam, static_cast<u32>(sizeof(lacParam)), "%i",
+                         static_cast<s32>(lfParam * 100.0f));
+        AddParameter(lacParam);
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // AddParameter(CgsID) -- the id handed straight to SPrintf with "%x" (the low word is what
+    // the conversion prints).
+    // ----------------------------------------------------------------------------------------
+    void TelemetryData::AddParameter(CgsID lID)
+    {
+        char lacParam[16];
+        CgsCore::SPrintf(lacParam, static_cast<u32>(sizeof(lacParam)), "%x", lID);
+        AddParameter(lacParam);
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // AddParameter(CgsSystem::Time) -- the time in hundredths of a second: the whole seconds
+    // (+0x00) converted to float plus the fraction (+0x04), times 100.0f, truncated, "%i".
+    // ----------------------------------------------------------------------------------------
+    void TelemetryData::AddParameter(CgsSystem::Time lTime)
+    {
+        char lacParam[16];
+        CgsCore::SPrintf(lacParam, static_cast<u32>(sizeof(lacParam)), "%i",
+                         static_cast<s32>(lTime.GetFloatVal() * 100.0f));
         AddParameter(lacParam);
     }
 }

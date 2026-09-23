@@ -82,8 +82,11 @@ namespace BrnNetwork
         bool                          Retrieve(s32* lpiFramesSinceStart,
                                               s32* lpiActionIndex,
                                               FburnSuccessUpdatePayload* lpSuccessBitArray);
-        s32                           GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                   GetName() const;
+        s32                           GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(FburnSuccessUpdateMessage) == 0x30, "sizeof(FburnSuccessUpdateMessage) == 0x30");
 } // namespace BrnNetwork

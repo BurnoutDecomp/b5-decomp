@@ -478,7 +478,7 @@ namespace BrnNetwork
             // Start the post-suspend settle window.
             const CgsSystem::Time lWaitDuration(KF_LAUNCH_WAIT_TIME);
             mTimeToStopWaiting =
-                mpNetworkManager->GetTimerStatus()->GetGameTimerStatus()->GetTime()
+                mpNetworkManager->GetTimerStatus()->GetTime()
                 + lWaitDuration;
             meSubState = E_SUBSTATE_WAITING;
         }
@@ -493,7 +493,7 @@ namespace BrnNetwork
                    "mpNetworkManager->GetTimerStatus()");
 
         const CgsSystem::Time lNow =
-            mpNetworkManager->GetTimerStatus()->GetGameTimerStatus()->GetTime();
+            mpNetworkManager->GetTimerStatus()->GetTime();
 
         if (lNow >= mTimeToStopWaiting)
         {

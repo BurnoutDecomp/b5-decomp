@@ -95,7 +95,7 @@ namespace BrnNetwork
         void          PrepareForSend(UpdateData* lpUpdateData);
         void          Release();
         void          Destruct();
-        virtual s32   GetPackedMessageSize();          // DWARF :- (sibling .cpp)
+        s32   GetPackedMessageSize() override;
         const UpdateData* GetUpdateData();             // DWARF :129 (sibling .cpp)
         u16           GetU16FramesSinceStart();         // DWARF :136 (sibling .cpp)
         u16           GetU16SentFrame();                // DWARF :143 (sibling .cpp)
@@ -107,10 +107,10 @@ namespace BrnNetwork
         UpdateMessage& operator=(const UpdateMessage& lOther);
 
         // LEDGER func @ 0x827DDED8 -- bodied inline below (DWARF BrnUpdateMessage.h:150).
-        virtual const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         UpdateData mUpdateData;   // +0x20 (DWARF :125)
@@ -122,4 +122,7 @@ namespace BrnNetwork
     {
         return "Update Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(UpdateMessage) == 0xB0, "sizeof(UpdateMessage) == 0xB0");
 } // namespace BrnNetwork

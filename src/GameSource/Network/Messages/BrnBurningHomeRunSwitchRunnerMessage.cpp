@@ -43,9 +43,9 @@ namespace BrnNetwork
     // ORs the reliable base id status with the NetworkPlayerID field status (both u8,
     // 0 == success). BrnNetworkManager::PackOrUnpack is the committed static NetworkPlayerID
     // field primitive (message + field pointer; == X360 sub_82881BF0).
-    BrnNetworkManager::PackOrUnpackResult BurningHomeRunSwitchRunnerMessage::PackOrUnpack()
+    CgsNetwork::PackOrUnpackResult BurningHomeRunSwitchRunnerMessage::PackOrUnpack()
     {
-        const BrnNetworkManager::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
+        const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         return BrnNetworkManager::PackOrUnpack(this, &mNewRunnerID) | lxBase;
     }
 

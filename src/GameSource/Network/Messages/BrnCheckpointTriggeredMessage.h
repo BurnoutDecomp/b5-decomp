@@ -44,15 +44,18 @@ namespace BrnNetwork
 
     private:
         // @ 0x8257D0D0 -- zero miCheckpointIndex then delegate to the reliable base.
-        s32                            GetPackedMessageSize();
+        s32                            GetPackedMessageSize() override;
         // @ 0x8257CE50 -- (de)serialise the index in [0, 16]; ORs the base reliable id status
         // with the quantised int field status. 0 == success.
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
         // @ 0x8257CEC8 -- returns the literal message name.
-        const char*                    GetName() const;
+        const char*                    GetName() const override;
         // DWARF BrnCheckpointTriggeredMessage.cpp:122 -- declared-only.
-        bool                           OldMessagesAreValid() const;
+        bool                           OldMessagesAreValid() const override;
 
         s32 miCheckpointIndex;   // +0x28 (DWARF BrnCheckpointTriggeredMessage.h:68)
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(CheckpointTriggeredMessage) == 0x2C, "sizeof(CheckpointTriggeredMessage) == 0x2C");
 } // namespace BrnNetwork

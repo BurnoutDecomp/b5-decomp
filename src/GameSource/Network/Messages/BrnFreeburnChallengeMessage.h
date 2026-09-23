@@ -37,8 +37,11 @@ namespace BrnNetwork
                                                 BrnNetworkModuleIO::EChallengeEventType* lpeEventType,
                                                 BrnGameState::EChallengeStatus* lpeChallengeStatus,
                                                 s32* lpiActionIndex);
-        s32                            GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                    GetName() const;
+        s32                            GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                    GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(FreeburnChallengeMessage) == 0x40, "sizeof(FreeburnChallengeMessage) == 0x40");
 } // namespace BrnNetwork

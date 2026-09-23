@@ -43,8 +43,26 @@ namespace CrashIO
         // Reset the bitset and (re)construct every per-car queue against its inline storage.
         void Construct();
 
+        // No out-of-line console copy: BrnNetwork::BrnNetworkModule::ProcessAfterSimulation
+        // inlines it as the bitset reset plus a length reset on each of the eight queues.
+        void Clear()
+        {
+            mActiveRaceCars.UnSetAll();
+            for (s32 liRaceCar = 0; liRaceCar < KI_MAX_ACTIVE_RACE_CARS; ++liRaceCar)
+            {
+                maCrashingTrafficUpdateQueues[liRaceCar].Clear();
+            }
+        }
+
         // Mark a race car as having a pending network update (sets its bit).
         void MarkRaceCarForUpdate(s32 liRaceCarId);
+
+        // Queue a crashing traffic vehicle's transform under the race car that owns it; that car
+        // must have been marked for update first. Called by TrafficManager::ReceiveCrashingTrafficMessages.
+        void AddTrafficUpdate(u32 luVehicleIndex, u32 luOwnerRaceCarIndex, Matrix44Affine lTransform);
+
+        // True when the race car's bit is set.
+        bool IsRaceCarMarkedForUpdate(s32 liRaceCarId) const;
 
         // Per-instance copy: copy the active-car bitset, then merge each source queue's
         // live events onto the matching (freshly cleared) destination queue (X360 operator=).

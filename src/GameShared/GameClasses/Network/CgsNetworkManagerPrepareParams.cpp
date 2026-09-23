@@ -50,8 +50,8 @@ void NetworkManagerPrepareParams::VersionDisplayPrepareParams::Construct(
 
 void NetworkManagerPrepareParams::PlayerManagerPrepareParams::Construct(
         ServerInterface* lpServerInterface,
-        void* lpfOnReceivedFromWrongIPCallback,
-        void* lpfConnectionFinalisedCallback,
+        CgsNetwork::PlayerManagerPrepareParams::OnReceivedFromWrongIPCallback* lpfOnReceivedFromWrongIPCallback,
+        PlayersConnectionManager::ConnMgrConnectionFinalisedCallback lpfConnectionFinalisedCallback,
         void* lpConnectionFinalisedUserData,
         CgsMemory::HeapMalloc* lpNetworkHeapAllocator)
 {

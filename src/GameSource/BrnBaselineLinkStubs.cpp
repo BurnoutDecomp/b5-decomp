@@ -7,7 +7,6 @@
 // ===========================================================================
 
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"
-#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                      // BrnPhysics::Vehicle::RaceCarState
@@ -15,15 +14,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"                  // Palette / Variant
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"                                                  // LoadEntryInfo (3-arg ctor stub)
 #include "SDKs/Realmc/RealmcIfaceSaveCheckParams.h"                                           // SaveCheckParams (ctor/dtor stubs)
-
-namespace BrnGameState
-{
-    // DELETE-WHEN BrnBaseOnlineModeScoring_wN1_01.cpp is mounted: it holds the real body, which
-    // needs the four header-inline ScoringSystem accessors (GetNumberOfCrashes,
-    // GetTotalDistanceDriven, IsNetworkCarsDistanceDrivenValid, GetLongestDrift) defined first.
-    // Until then no online event hands out awards.
-    void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem*, u32) {}
-}
 
 namespace CgsSound
 {

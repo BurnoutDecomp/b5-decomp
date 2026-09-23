@@ -12,8 +12,8 @@
 //   BrnNetwork::SelectedRoutesMessage::PackOrUnpack          @ 0x8257B088
 //   BrnNetwork::SelectedRoutesMessage::GetPackedMessageSize  @ 0x8257B2A0
 //   BrnNetwork::SelectedRoutesMessage::Retrieve              @ 0x8257E770
-//   (GetName is bodied inline in the header @ 0x827DFD30; Destruct and
-//    OldMessagesAreValid have empty recovered bodies -- see below.)
+//   (GetName is bodied inline in the header; Destruct has an empty body and
+//    OldMessagesAreValid is the shared `return true` leaf -- see below.)
 //
 // A RELIABLE message carrying one selected-routes event payload: a
 // SpecificGameModeEventInterface::Event record (the event id, the per-junction
@@ -230,12 +230,8 @@ namespace BrnNetwork
     }
 
     // ---------------------------------------------------------------------------------
-    // OldMessagesAreValid @ (no standalone body recovered -- empty in the DecFIGS unity
-    //   dump). Declared virtual by the owning header; the recovered body is empty. The
-    //   sibling reliable messages whose \"old messages are valid\" predicate is unrecovered
-    //   default to \"old messages are still valid\", so this returns true.
-    //   FLAGGED: body not recovered from the X360 binary (empty in the leak unity dump);
-    //   the `return true` is the conventional default, not an attested value.
+    // OldMessagesAreValid: the class's vtable slot 1 is the shared `return true` leaf, so an
+    // older route selection is still accepted.
     // ---------------------------------------------------------------------------------
     bool SelectedRoutesMessage::OldMessagesAreValid() const
     {

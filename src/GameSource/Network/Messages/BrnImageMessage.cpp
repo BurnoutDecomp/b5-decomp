@@ -121,4 +121,10 @@ namespace BrnNetwork
 
         return false;
     }
+
+    // An older message is still accepted (slot 1 is the shared `return true` leaf).
+    bool ImageMessage::OldMessagesAreValid() const
+    {
+        return true;
+    }
 } // namespace BrnNetwork

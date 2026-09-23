@@ -40,13 +40,13 @@ namespace BrnNetwork
                                      u8 lu8DirtyTrickStatus);
         bool          Retrieve(NetworkPlayerID* lpAggressorPlayerID, NetworkPlayerID* lpVictimPlayerID,
                                u8* lpu8DirtyTrickType, u8* lpu8DirtyTrickStatus);
-        virtual s32   GetPackedMessageSize();        // DWARF :96 (sibling .cpp)
+        s32   GetPackedMessageSize() override;
 
         // LEDGER func @ 0x827DFD10 -- bodied in this TU (DWARF BrnDirtyTrickMessage.h:101).
-        virtual const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         NetworkPlayerID mAggressorNetworkPlayerID;   // DWARF :88
@@ -61,4 +61,7 @@ namespace BrnNetwork
     {
         return "Dirty Trick Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(DirtyTrickMessage) == 0x34, "sizeof(DirtyTrickMessage) == 0x34");
 } // namespace BrnNetwork

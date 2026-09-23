@@ -50,6 +50,15 @@ namespace Vehicle
         // (target-assist count -> 0, base-deformation amounts -> 0.0f, frames -> -1).
         void Construct();
 
+        // No out-of-line console copy: BrnNetworkModule::ProcessAfterSimulation inlines
+        // it as the queue Clear plus a zero store to the target-assist count. The base-deformation
+        // snapshot is left alone.
+        void Clear()
+        {
+            mDriverUpdateQueue.Clear();
+            miTargetAssistCount = 0;
+        }
+
         // @0x822A0398  Append one stomped/target car to this frame's target-assist list.
         void AddTargetAssist(Vector3 lTargetAssistPosition, EntityId lTargetAssistID);
 

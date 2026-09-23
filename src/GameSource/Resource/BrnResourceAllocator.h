@@ -73,6 +73,13 @@ HeapResourceAllocator* GetDebugAllocator();
 // population is the faithful follow-on; see the allocator-gate memory.)
 rw::core::GeneralResourceAllocator* GetGameDataGeneralAllocator();
 
+// Logs the message (when given) and the platform memory status to the debug print, one line per
+// figure in MB plus the in-use percentage. Each line is gated on the debug-print message filter.
+void PrintConsoleMemory(const char* lpcMessage);
+
+// The platform's free physical memory in bytes.
+u32 GetAvailableMemory();
+
 // Owns the engine's named global allocators. Construct asserts the debug
 // allocator's backing general allocator exists before carving the ICE debug
 // block (X360: Allocators::mpInternalDebugAllocator). MINIMAL SLICE -- only the
@@ -82,6 +89,11 @@ class Allocators
 {
 public:
     static void* mpInternalDebugAllocator;   // X360 dword: backing general allocator
+
+    // When set, a failed memory check (the available-memory comparisons in
+    // BrnNetworkModule::ProcessAfterSimulation, the game module's DoUpdate and the network
+    // managers) fires "Memory check failed". Never written by the game; false.
+    static bool mbAssertOnMemoryChange;
 
     // The process-wide "GlobalGraphics" linear resource allocator (X360 object @ dword_82F2C814,
     // built by ConstructGlobalGraphicsMemory over an XPhysicalAlloc'd region). Graphics objects that
@@ -93,5 +105,26 @@ public:
 };
 
 } // namespace BrnResource
+
+// The inlined memory check: re-read the free memory, and when it differs from luMemory log the
+// change (with this site's line and file), take the new reading, and assert when
+// Allocators::mbAssertOnMemoryChange is set. The expansion site needs CgsLog.h and CgsAssert.h.
+// FLAG: the macro's own name is not recovered; the expanded body is the shipped one.
+#define BRN_RESOURCE_MEMORY_CHECK(luMemory)                                                                    \
+    do                                                                                                         \
+    {                                                                                                          \
+        const u32 luMemoryNow = BrnResource::GetAvailableMemory();                                             \
+        if ((luMemory) != luMemoryNow)                                                                         \
+        {                                                                                                      \
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)                                              \
+            {                                                                                                  \
+                *CgsDev::Log::gpDebugPrint << "[" << static_cast<s32>(__LINE__) << ":" << __FILE__             \
+                                           << "] Available memory changed from " << (luMemory)                 \
+                                           << " to " << luMemoryNow << "\n";                                   \
+            }                                                                                                  \
+            (luMemory) = luMemoryNow;                                                                          \
+            CGS_ASSERT(!BrnResource::Allocators::mbAssertOnMemoryChange, "Memory check failed");               \
+        }                                                                                                      \
+    } while (0)
 
 #endif // GAMESOURCE_RESOURCE_BRNRESOURCEALLOCATOR_H

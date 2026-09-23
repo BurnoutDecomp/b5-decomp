@@ -18,6 +18,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "GameShared/GameClasses/Containers/CgsPriorityQueue.h"
 #include "SDKs/EATech/eajobs/entry_point.h"
+#include "SDKs/EATech/eajobs/job_scheduler.h" // EA::Jobs::JobScheduler (AddJobs)
 #include "ppmalloc/EAGeneralAllocator.h"
 
 #include <cstring>   // memset / memcpy

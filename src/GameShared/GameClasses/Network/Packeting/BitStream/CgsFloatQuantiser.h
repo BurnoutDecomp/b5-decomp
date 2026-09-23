@@ -26,6 +26,12 @@ namespace CgsNetwork
                          u32* lpuPackedValue);
         static void UnPack(float* lpfValue, float lfMin, float lfMax, s32 liNumBits,
                            u32 luPackedValue);
+        // Resolution form: one step is 2 * lfResolution, and the bit count is the smallest
+        // that holds every step across [lfMin, lfMax] (reported through lpiNumBitsUsed).
+        static void Pack(float lfValue, float lfMin, float lfMax, float lfResolution,
+                         u32* lpuPackedValue, s32* lpiNumBitsUsed);
+        static void UnPack(float* lpfValue, float lfMin, float lfMax, float lfResolution,
+                           u32 luPackedValue);
         static s32  GetNumBits(float lfMin, float lfMax, float lfResolution);
         static bool PackAndUnPackTest(float lfValue, float lfMin, float lfMax,
                                       s32 liNumBits);

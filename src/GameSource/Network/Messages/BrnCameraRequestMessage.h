@@ -35,9 +35,9 @@ namespace BrnNetwork
         void                           Construct();
         void                           PrepareForSend(u16 lu16FrameCount, bool lbReleaseFeed);
         bool                           Retrieve(bool* lpbReleaseFeed);
-        s32                            GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                    GetName() const;
+        s32                            GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                    GetName() const override;
     };
 
     // BrnNetwork::CameraRequestMessage::GetName @ 0x827DFD80.
@@ -45,4 +45,7 @@ namespace BrnNetwork
     {
         return "Camera Request Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(CameraRequestMessage) == 0x2C, "sizeof(CameraRequestMessage) == 0x2C");
 } // namespace BrnNetwork

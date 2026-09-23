@@ -12,8 +12,7 @@
 // ack/nack control message whose payload is entirely the inherited sending/receiving
 // player-id pair -- so sizeof(SignalMessage) == sizeof(MessageWithPlayerIDs) == 0x28.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals.
 //
 // Reconstructed here (ledger func for this TU):
 //   GetName @ 0x827DDF40 -- header-homed inline accessor; returns the literal
@@ -44,11 +43,15 @@ namespace CgsNetwork
         void               PrepareNack(Message* lpMessage,
                                        NetworkPlayerID liSendingPlayerID,
                                        NetworkPlayerID liRecvingPlayerID);
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DDF40 -- inline header-homed accessor.
-        const char* GetName() const { return "Signal Message"; }
+        const char* GetName() const override { return "Signal Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
     };
+
+    // Console size (no payload beyond the player-id pair), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(SignalMessage) == 0x28, "sizeof(SignalMessage) == 0x28");
+
 } // namespace CgsNetwork

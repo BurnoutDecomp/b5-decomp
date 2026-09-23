@@ -12,8 +12,7 @@
 // single f32 ping-time member after the 0x20-byte Message base (DWARF h:82 / h:126).
 // The DWARF spells it float_t; the project scalar type is f32.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals.
 //
 // Reconstructed here (ledger funcs for this TU -- 2):
 //   PingMessage::GetName      @ 0x827DE0C8 -- inline; returns "Ping Message".
@@ -43,12 +42,12 @@ namespace CgsNetwork
         bool               Retrieve(f32* lpfPingTime);
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DE0C8 -- inline header-homed accessor.
-        const char* GetName() const { return "Ping Message"; }
+        const char* GetName() const override { return "Ping Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         f32 mfPingTime;     // DWARF h:82 (after 0x20 Message base)
     };
@@ -61,13 +60,18 @@ namespace CgsNetwork
         bool               Retrieve(f32* lpfPingTime);
         void               Release();
         void               Destruct();
-        s32                GetPackedMessageSize();
+        s32                GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DE0D8 -- inline header-homed accessor.
-        const char* GetName() const { return "Ping Reply Message"; }
+        const char* GetName() const override { return "Ping Reply Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         f32 mfPingTime;     // DWARF h:126 (after 0x20 Message base)
     };
+
+    // Console sizes (the RegisterMessageType lengths), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(PingMessage) == 0x24, "sizeof(PingMessage) == 0x24");
+    static_assert(sizeof(void*) != 4 || sizeof(PingReplyMessage) == 0x24, "sizeof(PingReplyMessage) == 0x24");
+
 } // namespace CgsNetwork

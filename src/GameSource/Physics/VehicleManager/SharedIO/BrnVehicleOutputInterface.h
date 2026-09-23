@@ -86,6 +86,13 @@ namespace Vehicle
         // used-cars bitset and the aggressive-driving flags.
         void Construct();
 
+        // No out-of-line console copy: its one caller,
+        // PostSimulationInputBuffer::AppendVehicleOutputInterface, inlines it. Appends the source's
+        // traffic-state, impact and game-event queues onto this interface's, then copies the
+        // used-cars bitset and all eight race-car states. The queue lengths are not reset first
+        // and the aggressive-driving flags are not copied. Bodied in BrnVehicleOutputInterface.cpp.
+        void Append(const VehicleOutputInterface* lpOther);
+
         // @0x825EC390 (285) -- BODIED wave T3 (physical traffic) in this group's .cpp. Retyped
         // from the old `const void*` to the DWARF's second parameter (BrnVehicleOutputInterface.h
         // :352, `void AddTrafficState(EntityId, const PhysicalTrafficVehicle*)`); the caller
@@ -147,6 +154,10 @@ namespace Vehicle
         // raw offset (`lwz r11,8(r31) ; addi r4,r11,0x2310`) from what is friend/same-TU context
         // on the console. No field reordered or retyped.
         ImpactEventQueue& GetImpactEventQueue() { return mImpactEventQueue; }
+
+        // The read twin. NetworkAggressiveDrivingManager reads the impacts through the
+        // read-locked post-simulation buffer.
+        const ImpactEventQueue* GetImpactEventQueue() const { return &mImpactEventQueue; }
 
         // @0x823C89C8: hand-written copy assignment (ADDITIVE GROW: a real ledger func not in the
         // DWARF member set; no field reordered/retyped).

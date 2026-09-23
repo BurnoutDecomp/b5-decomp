@@ -20,8 +20,8 @@
 // The 4-byte gap between the 0x44-end of the id table and the 0x48 CgsID is natural
 // 8-byte alignment for the CgsID (u64); no member lives there.
 //
-// The X360 build models the vtable as Message::mpVTable (no C++ `virtual`); these are
-// plain methods. Bodies live in BrnActiveFburnChallengeMessage.cpp.
+// GetPackedMessageSize, PackOrUnpack and GetName override the Message virtuals. Bodies
+// live in BrnActiveFburnChallengeMessage.cpp.
 // ===================================================================================
 
 #include "types.hpp"
@@ -51,8 +51,11 @@ namespace BrnNetwork
         bool                          Retrieve(CgsID* lpChallengeID,
                                                NetworkPlayerID* lpaNetworkPlayerIDs,
                                                s32* lpiNumPlayersInChallenge);
-        s32                           GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                   GetName() const;
+        s32                           GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(ActiveFburnChallengeMessage) == 0x58, "sizeof(ActiveFburnChallengeMessage) == 0x58");
 } // namespace BrnNetwork

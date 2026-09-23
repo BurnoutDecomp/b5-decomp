@@ -27,12 +27,9 @@
 // NetworkInDxtDecodeImageEvent: console 20 bytes), so they are copied by member, never by the
 // console byte count.
 //
-// ---- STATUS: PARTIAL, NOT MOUNTABLE ----------------------------------------------------------
-// Five translate arms are not written: game actions 18, 19, 20, 21 and 299 are console-only
-// records (queued as network IN-events 56, 57, 45, 46 and 55) whose payload and event types have
-// no recoverable names yet. Their exact console recipes are kept in the comment block inside
-// the translate switch. This body also names action / event types and TelemetryData overloads
-// that other owners have yet to add; until they land this partfile does not compile.
+// Five of the translated actions (18, 19, 20, 21, 299 -> network IN-events 56, 57, 45, 46, 55)
+// are console-only records with no reference names; their records carry FLAG names in
+// BrnGameActions.h / BrnNetworkInEventTypeDefs.h, the layouts are the console's.
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -85,11 +82,11 @@ namespace BrnGame
                 case GsmIO::E_ACTION_SHOW_MODE_RESULTS:
                 case GsmIO::E_ACTION_STOP_MODE:
                 case GsmIO::E_ACTION_ON_STUNT_ELEMENT_COMPLETE:
-                case 84:    // no enumerator in BrnGameActions.h yet
-                case 93:    // no enumerator in BrnGameActions.h yet
-                case 95:    // no enumerator in BrnGameActions.h yet
-                case 165:   // no enumerator in BrnGameActions.h yet
-                case 209:   // no enumerator in BrnGameActions.h yet
+                case GsmIO::E_ACTION_CAR_SELECT_ONLINE_SELECT_CAR:
+                case GsmIO::E_ACTION_UPDATE_PREPARE_FOR_INVITE:
+                case GsmIO::E_ACTION_PERFORM_INVITE:
+                case GsmIO::E_ACTION_PLAYER_ELIMINATED:
+                case GsmIO::E_ACTION_ACHIEVEMENTS_EARNED:
                 case GsmIO::E_ACTION_ONLINE_GAME_RESULT:
                 case GsmIO::E_ACTION_ONLINE_ROUND_RESULT:
                 case GsmIO::E_ACTION_NETWORK_CAUGHT_FEVER:
@@ -293,14 +290,8 @@ namespace BrnGame
                         reinterpret_cast<const GsmIO::FreeburnChallengeAction*>(lpAction);
                     CGS_ASSERT(lpChallengeAction, "lpChallengeAction");
 
-                    // The challenge event-type values here are the console's: it carries one more
-                    // enumerator before ENDED than the reference EChallengeEventType, so ENDED is 5
-                    // and RESULTS_FINISHED is 6 (the producers store exactly these).
-                    const s32 KI_CHALLENGE_EVENT_ENDED            = 5;
-                    const s32 KI_CHALLENGE_EVENT_RESULTS_FINISHED = 6;
-
                     if (!lpChallengeAction->mbAbortingToStartNewChallenge &&
-                        lpChallengeAction->meEventType != KI_CHALLENGE_EVENT_RESULTS_FINISHED)
+                        lpChallengeAction->meEventType != NetIO::E_CHALLENGE_EVENT_RESULTS_FINISHED)
                     {
                         // mPlayerID is left unset: the network side stamps it.
                         NetIO::NetworkInFreeburnChallengeEvent lChallengeEvent;
@@ -320,7 +311,7 @@ namespace BrnGame
                         lTelemeteryEvent.mEventData.AddParameter(lpChallengeAction->mChallengeID);
                         lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     }
-                    else if (lpChallengeAction->meEventType == KI_CHALLENGE_EVENT_ENDED)
+                    else if (lpChallengeAction->meEventType == NetIO::E_CHALLENGE_EVENT_ENDED)
                     {
                         NetIO::NetworkInTelemetryEvent lTelemeteryEvent;
                         lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_NETWORK_CHALLENGE_FINISHED);
@@ -465,8 +456,8 @@ namespace BrnGame
                     lNetworkProgressionEvent.miFreeburnChallengeSuccessCount =
                         lpGameStats->GetValue(GS::E_INT_VALUE_TYPE_FREEBURN_CHALLENGES_COMPLETE);
 
-                    // Event type 33 (reference: NetworkInOfflineProgression : NetworkEvent<33>).
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkProgressionEvent, 33);
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkProgressionEvent,
+                                                                     lNetworkProgressionEvent.GetEventType());
                     break;
                 }
 
@@ -637,19 +628,75 @@ namespace BrnGame
                     break;
                 }
 
-                // ---- NOT YET WRITTEN: five console-only arms (no recoverable type names) ----------
-                // Each copies scalars off the action into a network IN-event; the recipes are
-                // exact (payload offsets, event tag, console event size):
-                //   action 18  assert "lpModeScoreLeaderboardAction" -> event 56, 16 bytes:
-                //              +0x00 u64 = action +0x00, +0x08 s32 = action +0x08,
-                //              +0x0C s32 = action +0x0C (event id, game mode, score).
-                //   action 19  assert "lpNonUploadedModeScoresAction" -> event 57, 4 bytes:
-                //              +0x00 = action +0x00.
-                //   action 20  no assert -> event 45, 4 bytes: +0x00 = action +0x00.
-                //   action 21  assert "lpStuntMultiplierAction" -> event 46, 8 bytes:
-                //              +0x00 (8) = action +0x00.
-                //   action 299 assert "lpGamerCardAction" -> event 55, 8 bytes:
-                //              +0x00 (8) = action +0x00.
+                case GsmIO::E_ACTION_EVENT_SCORE_TO_UPLOAD:
+                {
+                    const GsmIO::ModeScoreLeaderboardAction* lpModeScoreLeaderboardAction =
+                        reinterpret_cast<const GsmIO::ModeScoreLeaderboardAction*>(lpAction);
+                    CGS_ASSERT(lpModeScoreLeaderboardAction, "lpModeScoreLeaderboardAction");
+
+                    NetIO::NetworkInScoreLeaderboardEvent lScoreLeaderboardEvent;
+                    lScoreLeaderboardEvent.mEventID       = lpModeScoreLeaderboardAction->mEventID;
+                    lScoreLeaderboardEvent.meGameModeType = static_cast<s32>(lpModeScoreLeaderboardAction->meGameModeType);
+                    lScoreLeaderboardEvent.miScore        = lpModeScoreLeaderboardAction->miScore;
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lScoreLeaderboardEvent,
+                                                                     lScoreLeaderboardEvent.GetEventType());
+                    break;
+                }
+
+                case GsmIO::E_ACTION_NON_UPLOADED_MODE_SCORES:
+                {
+                    const GsmIO::NonUploadedModeScoresAction* lpNonUploadedModeScoresAction =
+                        reinterpret_cast<const GsmIO::NonUploadedModeScoresAction*>(lpAction);
+                    CGS_ASSERT(lpNonUploadedModeScoresAction, "lpNonUploadedModeScoresAction");
+
+                    NetIO::NetworkInNonUploadedScoresEvent lNonUploadedScoresEvent;
+                    lNonUploadedScoresEvent.mpNonUploadedScores = lpNonUploadedModeScoresAction->mpNonUploadedScores;
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNonUploadedScoresEvent,
+                                                                     lNonUploadedScoresEvent.GetEventType());
+                    break;
+                }
+
+                case GsmIO::E_ACTION_STUNT_SCORE_UPDATED:
+                {
+                    // No assert on this arm.
+                    const GsmIO::StuntScoreUpdatedAction* lpStuntScoreAction =
+                        reinterpret_cast<const GsmIO::StuntScoreUpdatedAction*>(lpAction);
+
+                    NetIO::NetworkInStuntScoreUpdatedEvent lStuntScoreUpdatedEvent;
+                    lStuntScoreUpdatedEvent.miStuntScore = lpStuntScoreAction->miStuntScore;
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lStuntScoreUpdatedEvent,
+                                                                     lStuntScoreUpdatedEvent.GetEventType());
+                    break;
+                }
+
+                case GsmIO::E_ACTION_STUNT_MULTIPLIER:
+                {
+                    const GsmIO::StuntMultiplierAction* lpStuntMultiplierAction =
+                        reinterpret_cast<const GsmIO::StuntMultiplierAction*>(lpAction);
+                    CGS_ASSERT(lpStuntMultiplierAction, "lpStuntMultiplierAction");
+
+                    // One 8-byte copy on the console.
+                    NetIO::NetworkInStuntMultiplierEvent lStuntMultiplierEvent;
+                    lStuntMultiplierEvent.muStuntTypes    = lpStuntMultiplierAction->muStuntTypes;
+                    lStuntMultiplierEvent.mu16FlatSpins   = lpStuntMultiplierAction->mu16FlatSpins;
+                    lStuntMultiplierEvent.mu16BarrelRolls = lpStuntMultiplierAction->mu16BarrelRolls;
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lStuntMultiplierEvent,
+                                                                     lStuntMultiplierEvent.GetEventType());
+                    break;
+                }
+
+                case GsmIO::E_ACTION_SHOW_GAMERCARD_FOR_XUID:
+                {
+                    const GsmIO::ShowGamerCardForXuidAction* lpGamerCardAction =
+                        reinterpret_cast<const GsmIO::ShowGamerCardForXuidAction*>(lpAction);
+                    CGS_ASSERT(lpGamerCardAction, "lpGamerCardAction");
+
+                    NetIO::NetworkInShowGamerCardForXuidEvent lShowGamerCardEvent;
+                    lShowGamerCardEvent.mu64Xuid = lpGamerCardAction->mu64Xuid;
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lShowGamerCardEvent, lShowGamerCardEvent.GetEventType());
+                    break;
+                }
+
                 default:
                     break;
             }

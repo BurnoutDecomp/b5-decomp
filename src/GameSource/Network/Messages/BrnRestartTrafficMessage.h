@@ -48,13 +48,13 @@ namespace BrnNetwork
                                      const NetworkPlayerID* lpaPlayerIDsForActiveHulls);
         bool          Retrieve(u16* lpu16FrameSinceStartToResetTraffic, u16* lpau16ActiveTrafficHulls,
                                NetworkPlayerID* lpaPlayerIDsForActiveHulls);
-        virtual s32   GetPackedMessageSize();        // DWARF :95 (sibling .cpp)
+        s32   GetPackedMessageSize() override;
 
         // LEDGER func @ 0x827DFCF0 -- bodied in this TU (DWARF BrnRestartTrafficMessage.h:96).
-        virtual const char* GetName() const;
+        const char* GetName() const override;
 
     protected:
-        virtual CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         NetworkPlayerID maPlayerIDsForActiveHulls[8];    // DWARF :84
@@ -68,4 +68,7 @@ namespace BrnNetwork
     {
         return "Restart Traffic Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(RestartTrafficMessage) == 0x5C, "sizeof(RestartTrafficMessage) == 0x5C");
 } // namespace BrnNetwork

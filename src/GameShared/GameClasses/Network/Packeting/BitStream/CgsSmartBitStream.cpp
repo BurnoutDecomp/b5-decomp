@@ -124,6 +124,30 @@ namespace CgsNetwork
         FloatQuantiser::UnPack(lpfValue, lfMin, lfMax, liNumBits, luPackedValue);
     }
 
+    // ---- GetQuantisedFloat (resolution overload) --------------------------------
+    // The bit count is inlined: the smallest n with (1 << n) > the range's step count
+    // ((max - min) / (2 * resolution), rounded half up in double precision). Read that
+    // many bits and reconstruct through the resolution form of FloatQuantiser::UnPack.
+    void SmartBitStream::GetQuantisedFloat(float* lpfValue, float lfMin, float lfMax,
+                                           float lfResolution)
+    {
+        const s32 liMaxSteps =
+            static_cast<s32>(static_cast<double>((lfMax - lfMin) / (lfResolution * 2.0f)) + 0.5);
+        const u32 luNumValues = static_cast<u32>(liMaxSteps) + 1u;
+        s32 liNumBits = 0;
+        if (luNumValues != 0)
+        {
+            do
+            {
+                ++liNumBits;
+            }
+            while ((1u << liNumBits) < luNumValues);
+        }
+
+        const u32 luPackedValue = static_cast<u32>(GetBits(liNumBits));
+        FloatQuantiser::UnPack(lpfValue, lfMin, lfMax, lfResolution, luPackedValue);
+    }
+
     // ---- GetQuantisedInt @ 0x82880098 -----------------------------------------
     // The X360 build inlines IntQuantiser::GetNumBits here: count the right-shifts
     // it takes to drive the unsigned span (max-min) to zero. Read that many bits,

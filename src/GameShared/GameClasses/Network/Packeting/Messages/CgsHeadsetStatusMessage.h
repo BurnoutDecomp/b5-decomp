@@ -12,8 +12,7 @@
 // data member (mu8HeadsetStatus, DWARF CgsHeadsetStatusMessage.h:73) lands after the
 // 0x20-byte Message base.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals.
 //
 // Reconstructed here (ledger func for this TU):
 //   GetName @ 0x827DBC78 -- header-homed inline accessor; returns the literal
@@ -43,13 +42,17 @@ namespace CgsNetwork
         void        PrepareForSend(u16 lu16CurrentFrame, u8 lu8HeadsetStatus);
         bool        Retrieve(u8* lpu8HeadsetStatus);
         void        Destruct();
-        s32         GetPackedMessageSize();
+        s32         GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DBC78 -- inline header-homed accessor.
-        const char* GetName() const { return "Headset Status Message"; }
+        const char* GetName() const override { return "Headset Status Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
 
         u8 mu8HeadsetStatus;        // DWARF CgsHeadsetStatusMessage.h:73 (after 0x20 base)
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(HeadsetStatusMessage) == 0x24, "sizeof(HeadsetStatusMessage) == 0x24");
+
 } // namespace CgsNetwork

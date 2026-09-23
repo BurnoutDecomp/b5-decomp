@@ -86,10 +86,10 @@ namespace BrnNetwork
                                                KI_CRASHING_TRAFFIC_MATRIX_ROLL_BITS,
                                                KI_CRASHING_TRAFFIC_MATRIX_PITCH_BITS,
                                                KI_CRASHING_TRAFFIC_MATRIX_YAW_BITS,
+                                               lPosMin, lPosMax,
                                                KI_CRASHING_TRAFFIC_POSITIONX_BITS,
                                                KI_CRASHING_TRAFFIC_POSITIONY_BITS,
-                                               KI_CRASHING_TRAFFIC_POSITIONZ_BITS,
-                                               lPosMin, lPosMax) | lxResult;
+                                               KI_CRASHING_TRAFFIC_POSITIONZ_BITS) | lxResult;
 
             // Vehicle id in [0, 1024].
             lxResult =

@@ -5,69 +5,82 @@
 #include "types.hpp"
 #include "SharedClasses/BrnSharedConstants.h"                               // BrnUpdateSet
 #include "SharedClasses/World/BrnWorldRegion.h"                             // BrnWorld::EDistrict
+#include "GameSource/CompilerDefines/gameshared_network_defines.h"          // KI_MAX_NETWORK_PLAYERS
 #include "GameShared/GameClasses/Core/CgsID.h"                              // CgsID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                    // CgsSystem::Time
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"
+#include "GameShared/GameClasses/Network/CgsNetworkManager.h"               // CgsNetwork::NetworkManager (base)
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"        // CgsSystem::EFrameRate
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"
+#include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"       // mTextureCompressor
 #include "GameSource/GameState/BrnCgsPlayerName.h"                          // CgsNetwork::PlayerName
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                 // NetworkPlayerID, ETelemetryHook, EActiveRaceCarIndex
 #include "GameSource/Network/BrnServerInterface.h"                          // mServerInterface
 #include "GameSource/Network/BrnNetworkServers.h"                           // mNetworkServers
+#include "GameSource/Network/BrnNetworkPlayer.h"                            // maNetworkPlayer
+#include "GameSource/Network/BrnNetworkPlayerMenuData.h"                    // maNetworkPlayerMenuData, mLocalPlayerMenuSelections
 #include "GameSource/Network/Managers/X360/BrnNetworkLoginManagerX360.h"    // mLoginManager
 #include "GameSource/Network/Managers/BrnNetworkLaunchManager.h"            // mLaunchManager
 #include "GameSource/Network/Managers/BrnNetworkConnectionManager.h"        // mConnectionManager
+#include "GameSource/Network/Managers/BrnNetworkMatchMakingManager.h"       // mMatchMakingManager
 #include "GameSource/Network/Managers/BrnNetworkSuspensionManager.h"        // mSuspensionManager
+#include "GameSource/Network/Managers/BrnNetworkPostRoundManager.h"         // mPostRoundManager
+#include "GameSource/Network/Managers/BrnNetworkStandingsManager.h"         // mStandingsManager
+#include "GameSource/Network/Managers/BrnNetworkTrafficManager.h"           // mTrafficManager
+#include "GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.h"    // mBuddyManager
+#include "GameSource/Network/Managers/BrnNetworkPlayerStatsManager.h"       // mStatsManager
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"        // mScoreboardManager
-#include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h"       // GetLiveRevengeManager() callers
+#include "GameSource/Network/Managers/BrnNetworkAggressiveDrivingManager.h" // mAggressiveDrivingManager
+#include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h"       // mLiveRevengeManager
+#include "GameSource/Network/Managers/BrnNetworkDirtyTrickManager.h"        // mDirtyTrickManager
+#include "GameSource/Network/Managers/BrnNetworkImageManager.h"             // mImageManager
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerPictureManagerX360.h"  // mGamerPictureManager
 #include "GameSource/Network/Managers/X360/BrnNetworkNotificationManagerX360.h"  // mNetworkNotificationManager
 #include "GameSource/Network/Managers/BrnNetworkInviteManager.h"            // mNetworkInviteManager
+#include "GameSource/Network/Managers/BrnNetworkSelectedRoutesManager.h"    // mSelectedRoutesManager
+#include "GameSource/Network/Managers/BrnNetworkMarkedManManager.h"         // mMarkedManManager
+#include "GameSource/Network/Managers/BrnNetworkStateManager.h"             // mStateManager
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"         // mRoadRulesManager
+#include "GameSource/Network/Managers/BrnChallengeSuccessManager.h"         // mChallengeSuccessManager
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerCardManagerX360.h"     // mGamerCardManager
+#include "GameSource/Network/Managers/BrnEventScoresManager.h"              // mEventScoresManager
 #include "GameSource/Network/Managers/BrnNetworkAutoLoginManager.h"         // mAutoLoginManager
 #include "GameSource/Network/Managers/BrnNetworkTeamSelectionManager.h"     // mTeamSelectionManager
+#include "GameSource/Network/Managers/X360/BrnNetworkCameraX360.h"          // mCamera
 
 // ============================================================================================
 // BrnNetwork::BrnNetworkManager -- the online hub embedded in BrnNetworkModule at +0x280.
 //
 // LAYOUT
 // ------
-// Every member is placed by name at the offset the constructor, Construct, Prepare, Release,
-// Destruct and the per-frame updates address it at (console byte offsets in the comments).
-// A sub-object whose committed header reproduces its console span exactly is embedded as a
-// typed member. A sub-object whose header is a thin slice, over-models its span, or has no
-// class home is kept as offset-pinned byte storage of the console span; its accessor stays
-// declared-only until the owning header reconciles. The per-member notes say which header
-// needs growing (or shrinking) and by how much.
+// CgsNetwork::NetworkManager is the base (+0x0000 .. +0x38E8); every game-side manager follows
+// as a typed member at the offset the constructor, Construct, Prepare, Release, Destruct and
+// the per-frame updates address it at (console byte offsets in the comments).
+//
+// The texture compressor is 128-byte aligned, so the whole object is: the module places it at
+// +0x280 and its own members resume at +0x96100, i.e. the console sizeof is 0x95E80 (the last
+// member ends at +0x95E0C).
+//
+// The server interface is the one sub-object whose committed hierarchy is short of its console
+// span; a byte reserve after it keeps the following offsets.
+//
+// BrnNetworkPlayer.h must not include this header back (it reaches it through the message
+// headers it embeds), or the two classes cannot both be complete.
 //
 // Host layout: pointers widen on the x64 host, so the host offsets differ from the console
 // ones; code must reach members by name only. _AssertLayout() pins every console offset in a
-// 32-bit build (where the committed headers reproduce the console widths) and is inert on x64.
-//
-// The CgsNetwork::NetworkManager base class has no header home yet (only a translation-unit
-// local placeholder in CgsNetworkManager.cpp), so its span is pinned storage at +0x0000 rather
-// than a base class. Attested members inside it: VersionDisplay +0x00, NetworkAdapter +0x1C,
-// active controller port +0x60, PlayerManager +0x78, HostMigrationManager +0x2578,
-// StartTimeManager +0x2B68, TimeManager +0x32D0 (frame counter read at +0x3658),
-// VoIPManager +0x366C.
-//
-// The console object is at least 0x95E0C bytes (last attested member) and at most 0x95E80
-// (the module's own members resume at module +0x96100).
+// 32-bit build and is inert on x64.
 // ============================================================================================
 
 namespace CgsNetwork
 {
     struct Message;                      // pointer-only (PackOrUnpack)
-    struct PlayerManager;                // pointer-only (GetPlayerManager)
-    class PlayersConnectionManager;      // pointer-only (GetPlayersConnectionManager)
     class NetworkTexture;                // pointer-only (PackTextureAndSendDisplayEventToGui)
 }
 
 namespace CgsSystem
 {
     class TimerStatus;                   // pointer-only (mpGameTimerStatus)
-    class TimerStatusInterface;          // pointer-only (GetTimerStatus)
 }
 
 namespace CgsMemory
@@ -84,23 +97,6 @@ namespace BrnNetwork
 {
     class BrnNetworkModule;              // pointer-only (mpNetworkModule)
 
-    // Pointer-only accessor returns for the sub-managers held as pinned storage below.
-    class  MatchMakingManager;
-    class  PostRoundManager;
-    struct StandingsManager;
-    class  NetworkPlayerStatsManager;
-    struct NetworkAggressiveDrivingManager;
-    struct NetworkDirtyTrickManager;
-    struct NetworkImageManager;
-    class  SelectedRoutesManager;
-    class  MarkedManManager;
-    struct StateManager;
-    class  EventScoresManager;
-    class  CameraX360;
-    class  BuddyManagerX360;
-    struct ChallengeSuccessManager;
-    class  BrnNetworkPlayer;
-
     namespace BrnNetworkModuleIO
     {
         struct PreSimulationInputBuffer;         // ProcessBeforeSimulation
@@ -112,7 +108,7 @@ namespace BrnNetwork
 
 namespace BrnNetwork
 {
-    class BrnNetworkManager
+    class BrnNetworkManager : public CgsNetwork::NetworkManager
     {
         friend class NetworkServers;
 
@@ -273,48 +269,105 @@ namespace BrnNetwork
         static PackOrUnpackResult PackOrUnpack(CgsNetwork::Message* lpMessage,
                                                NetworkPlayerID* lpNetworkPlayerID);
 
-        // ---- sub-object accessors: typed members --------------------------------------------
-        BrnServerInterface*       GetServerInterface()       { return &mServerInterface; }
-        const BrnServerInterface* GetServerInterface() const { return &mServerInterface; }
-        LoginManagerX360*         GetLoginManager()          { return &mLoginManager; }
-        LaunchManager*            GetLaunchManager()         { return &mLaunchManager; }
-        ConnectionManager*        GetConnectionManager()     { return &mConnectionManager; }
-        SuspensionManager*        GetSuspensionManager()     { return &mSuspensionManager; }
-        ScoreboardManager*        GetScoreboardManager()     { return &mScoreboardManager; }
-        GamerPictureManagerX360*  GetGamerPictureManager()   { return &mGamerPictureManager; }
-        NetworkNotificationManagerX360* GetNotificationManager() { return &mNetworkNotificationManager; }
-        NetworkInviteManager*     GetNetworkInviteManager()  { return &mNetworkInviteManager; }
-        NetworkRoadRulesManager*  GetRoadRulesManager()      { return &mRoadRulesManager; }
-        NetworkGamerCardManagerX360* GetGamerCardManager()   { return &mGamerCardManager; }
-        NetworkServers*           GetNetworkServers()        { return &mNetworkServers; }
-        CgsSystem::Time           GetTime() const            { return mTime; }
-        f32                       GetTimeStep() const        { return mfTimeStep; }
+        // ---- sub-object accessors ---------------------------------------------------------
+        BrnServerInterface*                    GetServerInterface()                 { return &mServerInterface; }
+        const BrnServerInterface*              GetServerInterface() const           { return &mServerInterface; }
+        LoginManagerX360*                      GetLoginManager()                    { return &mLoginManager; }
+        const LoginManagerX360*                GetLoginManager() const              { return &mLoginManager; }
+        LaunchManager*                         GetLaunchManager()                   { return &mLaunchManager; }
+        const LaunchManager*                   GetLaunchManager() const             { return &mLaunchManager; }
+        ConnectionManager*                     GetConnectionManager()               { return &mConnectionManager; }
+        const ConnectionManager*               GetConnectionManager() const         { return &mConnectionManager; }
+        MatchMakingManager*                    GetMatchMakingManager()              { return &mMatchMakingManager; }
+        const MatchMakingManager*              GetMatchMakingManager() const        { return &mMatchMakingManager; }
+        SuspensionManager*                     GetSuspensionManager()               { return &mSuspensionManager; }
+        const SuspensionManager*               GetSuspensionManager() const         { return &mSuspensionManager; }
+        PostRoundManager*                      GetPostRoundManager()                { return &mPostRoundManager; }
+        const PostRoundManager*                GetPostRoundManager() const          { return &mPostRoundManager; }
+        StandingsManager*                      GetStandingsManager()                { return &mStandingsManager; }
+        const StandingsManager*                GetStandingsManager() const          { return &mStandingsManager; }
+        TrafficManager*                        GetTrafficManager()                  { return &mTrafficManager; }
+        const TrafficManager*                  GetTrafficManager() const            { return &mTrafficManager; }
+        BuddyManagerX360*                      GetBuddyManager()                    { return &mBuddyManager; }
+        const BuddyManagerX360*                GetBuddyManager() const              { return &mBuddyManager; }
+        NetworkPlayerStatsManager*             GetStatsManager()                    { return &mStatsManager; }
+        const NetworkPlayerStatsManager*       GetStatsManager() const              { return &mStatsManager; }
+        ScoreboardManager*                     GetScoreboardManager()               { return &mScoreboardManager; }
+        const ScoreboardManager*               GetScoreboardManager() const         { return &mScoreboardManager; }
+        NetworkAggressiveDrivingManager*       GetAggressiveDrivingManager()        { return &mAggressiveDrivingManager; }
+        const NetworkAggressiveDrivingManager* GetAggressiveDrivingManager() const  { return &mAggressiveDrivingManager; }
+        LiveRevengeManager*                    GetLiveRevengeManager()              { return &mLiveRevengeManager; }
+        const LiveRevengeManager*              GetLiveRevengeManager() const        { return &mLiveRevengeManager; }
+        NetworkDirtyTrickManager*              GetDirtyTrickManager()               { return &mDirtyTrickManager; }
+        const NetworkDirtyTrickManager*        GetDirtyTrickManager() const         { return &mDirtyTrickManager; }
+        NetworkImageManager*                   GetNetworkImageManager()             { return &mImageManager; }
+        const NetworkImageManager*             GetNetworkImageManager() const       { return &mImageManager; }
+        GamerPictureManagerX360*               GetGamerPictureManager()             { return &mGamerPictureManager; }
+        const GamerPictureManagerX360*         GetGamerPictureManager() const       { return &mGamerPictureManager; }
+        NetworkNotificationManagerX360*        GetNetworkNotificationManager()      { return &mNetworkNotificationManager; }
+        const NetworkNotificationManagerX360*  GetNetworkNotificationManager() const { return &mNetworkNotificationManager; }
+        NetworkNotificationManagerX360*        GetNotificationManager()             { return &mNetworkNotificationManager; }
+        NetworkInviteManager*                  GetNetworkInviteManager()            { return &mNetworkInviteManager; }
+        const NetworkInviteManager*            GetNetworkInviteManager() const      { return &mNetworkInviteManager; }
+        SelectedRoutesManager*                 GetSelectedRoutesManager()           { return &mSelectedRoutesManager; }
+        const SelectedRoutesManager*           GetSelectedRoutesManager() const     { return &mSelectedRoutesManager; }
+        MarkedManManager*                      GetMarkedManManager()                { return &mMarkedManManager; }
+        const MarkedManManager*                GetMarkedManManager() const          { return &mMarkedManManager; }
+        StateManager*                          GetStateManager()                    { return &mStateManager; }
+        const StateManager*                    GetStateManager() const              { return &mStateManager; }
+        NetworkRoadRulesManager*               GetRoadRulesManager()                { return &mRoadRulesManager; }
+        const NetworkRoadRulesManager*         GetRoadRulesManager() const          { return &mRoadRulesManager; }
+        ChallengeSuccessManager*               GetChallengeSuccessManager()         { return &mChallengeSuccessManager; }
+        const ChallengeSuccessManager*         GetChallengeSuccessManager() const   { return &mChallengeSuccessManager; }
+        NetworkGamerCardManagerX360*           GetGamerCardManager()                { return &mGamerCardManager; }
+        const NetworkGamerCardManagerX360*     GetGamerCardManager() const          { return &mGamerCardManager; }
+        EventScoresManager*                    GetEventScoresManager()              { return &mEventScoresManager; }
+        const EventScoresManager*              GetEventScoresManager() const        { return &mEventScoresManager; }
+        AutoLoginManager*                      GetAutoLoginManager()                { return &mAutoLoginManager; }
+        const AutoLoginManager*                GetAutoLoginManager() const          { return &mAutoLoginManager; }
+        TeamSelectionManager*                  GetTeamSelectionManager()            { return &mTeamSelectionManager; }
+        const TeamSelectionManager*            GetTeamSelectionManager() const      { return &mTeamSelectionManager; }
+        NetworkServers*                        GetNetworkServers()                  { return &mNetworkServers; }
+        const NetworkServers*                  GetNetworkServers() const            { return &mNetworkServers; }
+        CameraX360*                            GetCamera()                          { return &mCamera; }
+        const CameraX360*                      GetCamera() const                    { return &mCamera; }
+        CgsNetwork::NetworkTextureDXTCompress*       GetTextureCompressor()         { return &mTextureCompressor; }
+        const CgsNetwork::NetworkTextureDXTCompress* GetTextureCompressor() const   { return &mTextureCompressor; }
+        PlayerMenuData*                        GetPlayerMenuData(s32 liIndex)       { return &maNetworkPlayerMenuData[liIndex]; }
+        const PlayerMenuData*                  GetPlayerMenuData(s32 liIndex) const { return &maNetworkPlayerMenuData[liIndex]; }
+        PlayerMenuData*                        GetLocalPlayerMenuSelections()       { return &mLocalPlayerMenuSelections; }
+        const PlayerMenuData*                  GetLocalPlayerMenuSelections() const { return &mLocalPlayerMenuSelections; }
+        BrnNetworkModule*                      GetNetworkModule()                   { return mpNetworkModule; }
+        const BrnNetworkModule*                GetNetworkModule() const             { return mpNetworkModule; }
+        BrnNetworkPlayer*                      GetNetworkPlayer(s32 liIndex)        { return &maNetworkPlayer[liIndex]; }
+        const BrnNetworkPlayer*                GetNetworkPlayer(s32 liIndex) const  { return &maNetworkPlayer[liIndex]; }
+        CgsSystem::TimerStatus*                GetTimerStatus()                     { return mpGameTimerStatus; }
+        CgsSystem::Time                        GetTime() const                      { return mTime; }
+        f32                                    GetTimeStep() const                  { return mfTimeStep; }
 
-        // ---- sub-object accessors: pinned-storage members (declared-only until the owning
-        //      header reconciles with its console span) ----------------------------------
-        MatchMakingManager*              GetMatchMakingManager();
-        PostRoundManager*                GetPostRoundManager();
-        StandingsManager*                GetStandingsManager();
-        NetworkPlayerStatsManager*       GetStatsManager();
-        NetworkAggressiveDrivingManager* GetAggressiveDrivingManager();
-        LiveRevengeManager*              GetLiveRevengeManager();
-        NetworkImageManager*             GetNetworkImageManager();
-        SelectedRoutesManager*           GetSelectedRoutesManager();
-        MarkedManManager*                GetMarkedManManager();
-        StateManager*                    GetStateManager();
-        CameraX360*                      GetCamera();
-        BuddyManagerX360*                GetBuddyManager();
-        ChallengeSuccessManager*         GetChallengeSuccessManager();
+        // ---- session scalars ------------------------------------------------------------
+        void                SetFreeBurnCar(CgsID lCarID, CgsID lWheelID)       { mFreeBurnCarID = lCarID; mFreeBurnWheelID = lWheelID; }
+        CgsID               GetFreeBurnCarID() const                            { return mFreeBurnCarID; }
+        CgsID               GetFreeBurnWheelID() const                          { return mFreeBurnWheelID; }
+        void                SetCurrentDistrict(BrnWorld::EDistrict leDistrict)  { meCurrentDistrict = leDistrict; }
+        BrnWorld::EDistrict GetCurrentDistrict() const                          { return meCurrentDistrict; }
+        void                SetCurrentCarColourIndex(u16 lu16Index)             { mu16CarColourIndex = lu16Index; }
+        u16                 GetCurrentCarColourIndex() const                    { return mu16CarColourIndex; }
+        void                SetCurrentPaintFinishIndex(u16 lu16Index)           { mu16PaintFinishIndex = lu16Index; }
+        u16                 GetCurrentPaintFinishIndex() const                  { return mu16PaintFinishIndex; }
+        bool                HasFever()                                          { return mbHasFever; }
+        void                SetHasFever(bool lbHasFever)                        { mbHasFever = lbHasFever; }
+        bool                IsDeveloper()                                       { return mbIsDeveloper; }
+        void                SetIsDeveloper(bool lbIsDeveloper)                  { mbIsDeveloper = lbIsDeveloper; }
+        void                SetRound(s32 liRoundNumber)                         { miRoundNumber = liRoundNumber; }
+        s32                 GetRound() const                                    { return miRoundNumber; }
 
-        // ---- accessors into the CgsNetwork::NetworkManager base span (declared-only until
-        //      that class has a header) ---------------------------------------------------
-        CgsNetwork::PlayerManager*            GetPlayerManager();                  // base +0x78
-        CgsNetwork::PlayersConnectionManager* GetPlayersConnectionManager();
-        s32  GetLocalUserControllerPort() const;                                   // base +0x60
-        u32  GetCurrentFrame() const;                                              // base +0x3658
+        // ---- accessors into the CgsNetwork::NetworkManager base --------------------------
+        CgsNetwork::PlayersConnectionManager*  GetPlayersConnectionManager()        { return &GetPlayerManager()->mConnectionManager; }
+        s32                                    GetLocalUserControllerPort() const   { return GetActiveControllerPort(); }
+        u32                                    GetCurrentFrame() const              { return GetTimeManager()->GetFrameCount(); }
 
         // ---- other declared-only accessors used by committed callers ----------------------
-        CgsSystem::TimerStatusInterface* GetTimerStatus();       // reads mpGameTimerStatus
         u8   GetCurrentRoundNumber() const;                      // reads miRoundNumber
         void ClearLocalUserSignedInFlag();                       // a byte inside mGamerPictureManager
         bool HasLoginManager() const;                            // mLoginManager's vtable slot
@@ -327,110 +380,51 @@ namespace BrnNetwork
         void UpdateMenuDataFromPlayerParams(s32 liPlayerIndex);
         void ProcessHLUpdateFlags(BrnUpdateSet luUpdateSet);
 
-        // Callbacks registered by address; the user-data word is the manager. The player
-        // manager's event enum has no home in CgsPlayerManager.h yet, so the event is an s32.
-        static void PlayerManagerEventCallback(s32 leEvent, void* lpEventData, void* lpUserData);
+        // Callbacks registered by address; the user-data word is the manager.
+        static void PlayerManagerEventCallback(CgsNetwork::PlayerManager::EEvent leEvent,
+                                               void* lpEventData, void* lpUserData);
         static void SyncTimeClientReadyCallback(NetworkPlayerID lClientReadyID, void* lpUserData);
         static void DxtDecodeCallback(void* lpPixels, void* lpUserData);
 
         // Console offsets are pinned in a 32-bit build; inert on the x64 host.
         static void _AssertLayout();
 
-        // ---- +0x00000 : CgsNetwork::NetworkManager base span (no header home) ---------------
-        u8 maNetworkManagerBaseStorage[0x38E8];
-
-        // ---- +0x038E8 : server interface. The committed hierarchy is 1168 bytes short of
+        // ---- +0x038E8 : server interface. The committed hierarchy is 1164 bytes short of
         //      its 0x14CC console span; the reserve keeps the following offsets. Shrink it as
         //      the server-interface base and platform layers grow. ---------------------------
-        BrnServerInterface mServerInterface;                          // +0x038E8
-        u8 maServerInterfaceReserve[1168];
+        BrnServerInterface              mServerInterface;             // +0x038E8
+        u8                              maServerInterfaceReserve[1164];
 
-        LoginManagerX360   mLoginManager;                             // +0x04DB4
-        LaunchManager      mLaunchManager;                            // +0x04DDC
-        ConnectionManager  mConnectionManager;                        // +0x04E18
-
-        // MatchMakingManager: the committed header models 108 of 5652 bytes (grow by 5544).
-        u8 maMatchMakingManagerStorage[0x1614];                       // +0x04E24
-
-        SuspensionManager  mSuspensionManager;                        // +0x06438
-
-        // PostRoundManager: the committed header is 356 bytes larger than its 420-byte span.
-        u8 maPostRoundManagerStorage[0x1A4];                          // +0x0644C
-
-        // StandingsManager: the committed header is 72 bytes larger than its 1296-byte span.
-        u8 maStandingsManagerStorage[0x510];                          // +0x065F0
-
-        // TrafficManager: committed as a namespace; the console object spans 99520 bytes.
-        u8 maTrafficManagerStorage[0x184C0];                          // +0x06B00
-
-        // Buddy manager: its header reproduces the 85848-byte span, but it pulls in
-        // BrnNetworkBuddyManagerDebugComponent.h, whose BrnNetwork::NetworkEventQueue is
-        // defined differently in BrnNetworkImageManager.h. Pinned until that is fixed.
-        u8 maBuddyManagerStorage[0x14F58];                            // +0x1EFC0
-
-        // NetworkPlayerStatsManager: the committed header is 8 bytes larger than its span.
-        u8 maStatsManagerStorage[0x1788];                             // +0x33F18
-
-        ScoreboardManager  mScoreboardManager;                        // +0x356A0
-
-        // NetworkAggressiveDrivingManager: the header is 224 bytes larger than its span.
-        u8 maAggressiveDrivingManagerStorage[0x2F60];                 // +0x37070
-
-        // LiveRevengeManager: the header is 112 bytes larger than its 2728-byte span.
-        u8 maLiveRevengeManagerStorage[0xAA8];                        // +0x39FD0
-
-        // NetworkDirtyTrickManager: the header is 56 bytes larger than its 768-byte span.
-        u8 maDirtyTrickManagerStorage[0x300];                         // +0x3AA78
-
-        // NetworkImageManager: the header is 112 bytes larger than its 8664-byte span.
-        u8 maImageManagerStorage[0x21D8];                             // +0x3AD78
-
-        GamerPictureManagerX360 mGamerPictureManager;                 // +0x3CF50
-
-        // Notification manager: header 4 bytes short of its 16-byte span.
-        NetworkNotificationManagerX360 mNetworkNotificationManager;   // +0x3D108
-        u8 maNotificationManagerReserve[4];
-
-        // Invite manager: header 4 bytes short of its 448-byte span.
-        NetworkInviteManager mNetworkInviteManager;                   // +0x3D118
-        u8 maInviteManagerReserve[4];
-
-        // SelectedRoutesManager: the header is 56 bytes larger than its 1968-byte span.
-        u8 maSelectedRoutesManagerStorage[0x7B0];                     // +0x3D2D8
-
-        // MarkedManManager: the header is 52 bytes larger than its 712-byte span.
-        u8 maMarkedManManagerStorage[0x2C8];                          // +0x3DA88
-
-        // StateManager: the committed header models 4 of 248 bytes (grow by 244).
-        u8 maStateManagerStorage[0xF8];                               // +0x3DD50
-
-        // Road-rules manager: header 8 bytes short of its 13920-byte span.
-        NetworkRoadRulesManager mRoadRulesManager;                    // +0x3DE48
-        u8 maRoadRulesManagerReserve[8];
-
-        // ChallengeSuccessManager: its header reproduces the 1544-byte span, but it defines
-        // BrnNetwork::KI_MAX_NETWORK_PLAYERS a second time (also in
-        // BrnNetworkAggressiveDrivingManager.h). Pinned until the duplicate is removed.
-        u8 maChallengeSuccessManagerStorage[0x608];                   // +0x414A8
-        NetworkGamerCardManagerX360 mGamerCardManager;                // +0x41AB0
-
-        // EventScoresManager: the header is 8 bytes larger than its 832-byte span.
-        u8 maEventScoresManagerStorage[0x340];                        // +0x41B50
-
-        AutoLoginManager     mAutoLoginManager;                       // +0x41E90
-        TeamSelectionManager mTeamSelectionManager;                   // +0x41EB8
-
-        // Server selection: header 4 bytes short of its 20-byte span.
-        NetworkServers mNetworkServers;                               // +0x425CC
-        u8 maNetworkServersReserve[4];
-
-        // Camera: the header is 8 bytes larger than its 277536-byte span.
-        u8 maCameraStorage[0x43C20];                                  // +0x425E0
-
-        // NetworkTextureDXTCompress plus the unattributed bytes up to +0x86A80. Its header
-        // documents at least 0x840 console bytes but reproduces only 0x700 in a 32-bit build
-        // (the embedded job objects do not match their console width).
-        u8 maTextureCompressorStorage[0x880];                         // +0x86200
+        LoginManagerX360                mLoginManager;                // +0x04DB4
+        LaunchManager                   mLaunchManager;               // +0x04DDC
+        ConnectionManager               mConnectionManager;           // +0x04E18
+        MatchMakingManager              mMatchMakingManager;          // +0x04E24
+        SuspensionManager               mSuspensionManager;           // +0x06438
+        PostRoundManager                mPostRoundManager;            // +0x0644C
+        StandingsManager                mStandingsManager;            // +0x065F0
+        TrafficManager                  mTrafficManager;              // +0x06B00
+        BuddyManagerX360                mBuddyManager;                // +0x1EFC0
+        NetworkPlayerStatsManager       mStatsManager;                // +0x33F18
+        ScoreboardManager               mScoreboardManager;           // +0x356A0
+        NetworkAggressiveDrivingManager mAggressiveDrivingManager;    // +0x37070
+        LiveRevengeManager              mLiveRevengeManager;          // +0x39FD0
+        NetworkDirtyTrickManager        mDirtyTrickManager;           // +0x3AA78
+        NetworkImageManager             mImageManager;                // +0x3AD78
+        GamerPictureManagerX360         mGamerPictureManager;         // +0x3CF50
+        NetworkNotificationManagerX360  mNetworkNotificationManager;  // +0x3D108
+        NetworkInviteManager            mNetworkInviteManager;        // +0x3D118
+        SelectedRoutesManager           mSelectedRoutesManager;       // +0x3D2D8
+        MarkedManManager                mMarkedManManager;            // +0x3DA88
+        StateManager                    mStateManager;                // +0x3DD50
+        NetworkRoadRulesManager         mRoadRulesManager;            // +0x3DE48
+        ChallengeSuccessManager         mChallengeSuccessManager;     // +0x414A8
+        NetworkGamerCardManagerX360     mGamerCardManager;            // +0x41AB0
+        EventScoresManager              mEventScoresManager;          // +0x41B50
+        AutoLoginManager                mAutoLoginManager;            // +0x41E90
+        TeamSelectionManager            mTeamSelectionManager;        // +0x41EB8
+        NetworkServers                  mNetworkServers;              // +0x425CC
+        CameraX360                      mCamera;                      // +0x425E0
+        CgsNetwork::NetworkTextureDXTCompress mTextureCompressor;     // +0x86200 (128-aligned)
 
         CgsID                 mFreeBurnCarID;                         // +0x86A80
         CgsID                 mFreeBurnWheelID;                       // +0x86A88
@@ -439,18 +433,11 @@ namespace BrnNetwork
         EPrepareStage         mePrepareStage;                         // +0x86A98
         EReleaseStage         meReleaseStage;                         // +0x86A9C
         BrnNetworkModule*     mpNetworkModule;                        // +0x86AA0
-        u8                    maUnattributed86AA4[12];                // +0x86AA4
 
-        // BrnNetworkPlayer: the committed header models 3264 of 8768 bytes (grow by 5504);
-        // stored as the console-stride array.
-        u8 maNetworkPlayerStorage[7][0x2240];                         // +0x86AB0
+        BrnNetworkPlayer      maNetworkPlayer[KI_MAX_NETWORK_PLAYERS];          // +0x86AB0 (0x2240 each, 16-aligned)
 
-        // PlayerMenuData (0x60 each): its header reproduces the stride, but it pulls in
-        // BrnCameraStatusMessage.h, whose BrnNetwork::ECameraStatus is defined again in
-        // BrnNetworkModuleInGamePlayerStatusInterface.h; every translation unit that also sees
-        // the module IO header then fails. Pinned until the duplicate enum is removed.
-        u8 maNetworkPlayerMenuDataStorage[7][0x60];                   // +0x95A70
-        u8 mLocalPlayerMenuSelectionsStorage[0x60];                   // +0x95D10
+        PlayerMenuData        maNetworkPlayerMenuData[KI_MAX_NETWORK_PLAYERS];  // +0x95A70 (0x60 each)
+        PlayerMenuData        mLocalPlayerMenuSelections;             // +0x95D10
         NetworkPlayerID       mPlayerIDStatsGet;                      // +0x95D70
         CgsSystem::Time       mLastStatsSentToOnlinePlayStamp;        // +0x95D74
         CgsNetwork::PlayerName mExportPlayerName;                     // +0x95D7C
@@ -501,42 +488,42 @@ namespace BrnNetwork
         BRN_NM_AT(mLoginManager,                  0x04DB4);
         BRN_NM_AT(mLaunchManager,                 0x04DDC);
         BRN_NM_AT(mConnectionManager,             0x04E18);
-        BRN_NM_AT(maMatchMakingManagerStorage,    0x04E24);
+        BRN_NM_AT(mMatchMakingManager,            0x04E24);
         BRN_NM_AT(mSuspensionManager,             0x06438);
-        BRN_NM_AT(maPostRoundManagerStorage,      0x0644C);
-        BRN_NM_AT(maStandingsManagerStorage,      0x065F0);
-        BRN_NM_AT(maTrafficManagerStorage,        0x06B00);
-        BRN_NM_AT(maBuddyManagerStorage,          0x1EFC0);
-        BRN_NM_AT(maStatsManagerStorage,          0x33F18);
+        BRN_NM_AT(mPostRoundManager,              0x0644C);
+        BRN_NM_AT(mStandingsManager,              0x065F0);
+        BRN_NM_AT(mTrafficManager,                0x06B00);
+        BRN_NM_AT(mBuddyManager,                  0x1EFC0);
+        BRN_NM_AT(mStatsManager,                  0x33F18);
         BRN_NM_AT(mScoreboardManager,             0x356A0);
-        BRN_NM_AT(maAggressiveDrivingManagerStorage, 0x37070);
-        BRN_NM_AT(maLiveRevengeManagerStorage,    0x39FD0);
-        BRN_NM_AT(maDirtyTrickManagerStorage,     0x3AA78);
-        BRN_NM_AT(maImageManagerStorage,          0x3AD78);
+        BRN_NM_AT(mAggressiveDrivingManager,      0x37070);
+        BRN_NM_AT(mLiveRevengeManager,            0x39FD0);
+        BRN_NM_AT(mDirtyTrickManager,             0x3AA78);
+        BRN_NM_AT(mImageManager,                  0x3AD78);
         BRN_NM_AT(mGamerPictureManager,           0x3CF50);
         BRN_NM_AT(mNetworkNotificationManager,    0x3D108);
         BRN_NM_AT(mNetworkInviteManager,          0x3D118);
-        BRN_NM_AT(maSelectedRoutesManagerStorage, 0x3D2D8);
-        BRN_NM_AT(maMarkedManManagerStorage,      0x3DA88);
-        BRN_NM_AT(maStateManagerStorage,          0x3DD50);
+        BRN_NM_AT(mSelectedRoutesManager,         0x3D2D8);
+        BRN_NM_AT(mMarkedManManager,              0x3DA88);
+        BRN_NM_AT(mStateManager,                  0x3DD50);
         BRN_NM_AT(mRoadRulesManager,              0x3DE48);
-        BRN_NM_AT(maChallengeSuccessManagerStorage, 0x414A8);
+        BRN_NM_AT(mChallengeSuccessManager,       0x414A8);
         BRN_NM_AT(mGamerCardManager,              0x41AB0);
-        BRN_NM_AT(maEventScoresManagerStorage,    0x41B50);
+        BRN_NM_AT(mEventScoresManager,            0x41B50);
         BRN_NM_AT(mAutoLoginManager,              0x41E90);
         BRN_NM_AT(mTeamSelectionManager,          0x41EB8);
         BRN_NM_AT(mNetworkServers,                0x425CC);
-        BRN_NM_AT(maCameraStorage,                0x425E0);
-        BRN_NM_AT(maTextureCompressorStorage,     0x86200);
+        BRN_NM_AT(mCamera,                        0x425E0);
+        BRN_NM_AT(mTextureCompressor,             0x86200);
         BRN_NM_AT(mFreeBurnCarID,                 0x86A80);
         BRN_NM_AT(mfField86A90,                   0x86A90);
         BRN_NM_AT(meCurrentDistrict,              0x86A94);
         BRN_NM_AT(mePrepareStage,                 0x86A98);
         BRN_NM_AT(meReleaseStage,                 0x86A9C);
         BRN_NM_AT(mpNetworkModule,                0x86AA0);
-        BRN_NM_AT(maNetworkPlayerStorage,         0x86AB0);
-        BRN_NM_AT(maNetworkPlayerMenuDataStorage, 0x95A70);
-        BRN_NM_AT(mLocalPlayerMenuSelectionsStorage, 0x95D10);
+        BRN_NM_AT(maNetworkPlayer,                0x86AB0);
+        BRN_NM_AT(maNetworkPlayerMenuData,        0x95A70);
+        BRN_NM_AT(mLocalPlayerMenuSelections,     0x95D10);
         BRN_NM_AT(mPlayerIDStatsGet,              0x95D70);
         BRN_NM_AT(mLastStatsSentToOnlinePlayStamp, 0x95D74);
         BRN_NM_AT(mExportPlayerName,              0x95D7C);
@@ -553,5 +540,7 @@ namespace BrnNetwork
         BRN_NM_AT(miNetworkHostStatusPM,          0x95DE4);
         BRN_NM_AT(miNetworkChallengeManagerPM,    0x95E08);
 #undef BRN_NM_AT
+        static_assert(sizeof(void*) != 4 || alignof(BrnNetworkManager) == 128, "BrnNetworkManager console alignment");
+        static_assert(sizeof(void*) != 4 || sizeof(BrnNetworkManager) == 0x95E80, "BrnNetworkManager console size");
     }
 }

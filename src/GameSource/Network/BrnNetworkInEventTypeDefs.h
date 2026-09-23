@@ -17,30 +17,32 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::Event, NetworkEvent<N>, TelemetryData
 #include "GameSource/Network/Shared Server Types/BrnNetworkSharedServerTypes.h" // ServerGeneratedTypes::OfflineProgressionT
 #include "pc/gcm/renderengine/pixelformat.h"                     // renderengine::PixelFormat (NetworkInReqCamPicEvent)
+#include "GameShared/GameClasses/Containers/CgsArray.h"          // Array<T,N> (NetworkInNonUploadedScoresEvent)
+#include "GameSource/Network/BrnNetworkModuleIO.h"               // EChallengeEventType (NetworkInFreeburnChallengeEvent)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"           // EMugshotResponse, EImageType, CompletedFburnChallenges, LastSecondChallengeSuccess
+#include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // BrnGameState::BurnoutSkillzData
+#include "SharedClasses/StreetData/BrnChallengeData.h"           // BrnStreetData::ChallengePlayerScoreEntry
+#include "SharedClasses/World/BrnWorldRegion.h"                  // BrnWorld::WorldRegion
 
 namespace CgsNetwork
 {
     class NetworkTexture;   // GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h (held by pointer only)
 }
 
+namespace BrnGameState { struct StreetManager; }             // NetworkInRoadRulesDataEvent (held by pointer only)
+namespace BrnNetwork { struct LocalEventScoreUploadData; }  // NetworkInNonUploadedScoresEvent (held by pointer only)
+
 namespace BrnNetwork
 {
 namespace BrnNetworkModuleIO
 {
-    // DWARF (BrnNetworkInEventTypeDefs.h:438) -- the IN-event that delivers a player's
-    // accumulated offline-play progress to the network player-stats manager. DWARF spells it
-    // `: public NetworkEvent<33>` (tag 33); the empty BrnNetwork::Event base is byte-identical
-    // to that NetworkEvent<N> base (no data members, first field at +0x00 -- see the
-    // banner), so it is modelled on Event directly.
-    //
-    // LAYOUT is X360-AUTHORITATIVE from NetworkPlayerStatsManager::HandleOfflineProgressionEvent
-    // (@0x82546BB0): that body memcpy's exactly 0x44 == 68 bytes of this event into its buffered
-    // copy, and reads a 32-bit word at event+0x40 == +64 as the freeburn-challenge success count
-    // (handed to ServerInterfaceCustomCommands::UploadOfflineProgress as its count argument).
-    // The 64-byte OfflineProgressionT at +0 plus that trailing s32 give the 68-byte total. The
-    // trailing count field is not present in the (incomplete) DWARF member list but is required
-    // by the asm; FLAGGED as asm-recovered.
-    struct NetworkInOfflineProgression : public Event
+    // The IN-event that delivers a player's accumulated offline-play progress to the network
+    // player-stats manager (tag 33). NetworkPlayerStatsManager::HandleOfflineProgressionEvent
+    // copies exactly 0x44 bytes of it and reads the word at +0x40 as the freeburn-challenge
+    // success count (its count argument to ServerInterfaceCustomCommands::UploadOfflineProgress):
+    // the 64-byte OfflineProgressionT plus that trailing s32. The trailing field is missing from
+    // the reference member list; FLAGGED as recovered from the consumer.
+    struct NetworkInOfflineProgression : public NetworkEvent<33>
     {
         ServerGeneratedTypes::OfflineProgressionT mOfflineProgression; // +0x00 (64 bytes)
         s32                                       miFreeburnChallengeSuccessCount; // +0x40 (asm-recovered)
@@ -133,6 +135,222 @@ namespace BrnNetworkModuleIO
         s32                         miQualitySetting;            // +0x00
         renderengine::PixelFormat   meCompressedFormat;          // +0x04
         CgsNetwork::NetworkTexture* mpTextureToCompressedInto;   // +0x08 (4 bytes on the console)
+    };
+
+    // ====================================================================================
+    // [network wave N1] the IN-events BrnGameModule::BridgeGameStateToNetwork queues. Tags
+    // are the console's (the bridge's AddEvent immediates), sizes the console's AddEvent sizes;
+    // three records carry a pointer and are wider on the host, so producers queue sizeof().
+    // The later tags drift from the reference numbering: the console inserted 45 and 46 ahead
+    // of the gamer-card event (reference 45 -> 47, 46 -> 48) and three more after the
+    // local-player-crashes event (reference 51 -> 54; 55, 56, 57 are console-only).
+    // ====================================================================================
+
+    struct NetworkInUpdateRichPresence : public NetworkEvent<15>
+    {
+        char macRichPresenceString[100];                          // +0x00
+    };
+    static_assert(sizeof(NetworkInUpdateRichPresence) == 100, "queued as 100 bytes");
+
+    // Console 16 bytes; the street-manager pointer is 8 bytes on the host.
+    struct NetworkInRoadRulesDataEvent : public NetworkEvent<18>
+    {
+        void Construct(u64 lu64RoadRulesID, u32 luTimeStamp, BrnGameState::StreetManager* lpStreetManager)
+        {
+            mu64RoadRulesID                    = lu64RoadRulesID;
+            muTimeStampOfLastRoadRulesDownload = luTimeStamp;
+            mpStreetManager                    = lpStreetManager;
+        }
+        u32 GetTimeStampOfLastRoadRulesDownload() const { return muTimeStampOfLastRoadRulesDownload; }
+        u64 GetRoadRulesID() const                      { return mu64RoadRulesID; }
+
+    private:
+        u64                          mu64RoadRulesID;                     // +0x00
+        u32                          muTimeStampOfLastRoadRulesDownload;  // +0x08
+        BrnGameState::StreetManager* mpStreetManager;                     // +0x0C (console 4 bytes)
+    };
+
+    struct NetworkInRoadRulesPBEvent : public NetworkEvent<19>
+    {
+        BrnStreetData::ChallengePlayerScoreEntry mPersonalBestScore;      // +0x00 (40)
+        Road::ChallengeIndex                     mChallengeIndex;         // +0x28
+        bool                                     mbLobbyPersonalBest;     // +0x2C
+    };
+    static_assert(sizeof(NetworkInRoadRulesPBEvent) == 48, "queued as 48 bytes");
+
+    // Empty signal, queued as one byte.
+    struct NetworkInRoadRulesOverwriteServerRecord : public NetworkEvent<20> {};
+
+    struct NetworkInPaybackMugshotEvent : public NetworkEvent<29>
+    {
+        EActiveRaceCarIndex                               meTakedownAggressorIndex;          // +0x00
+        EActiveRaceCarIndex                               meTakedownVictimIndex;             // +0x04
+        BrnGameState::GameStateModuleIO::EMugshotResponse meMugshotResponse;                 // +0x08
+        BrnGameState::GameStateModuleIO::EImageType       meMugshotType;                     // +0x0C
+        CgsID                                             mRoadRuleBeatenRoadID;             // +0x10
+        bool                                              mbIsTakedownAggressorLocalPlayer;  // +0x18
+        bool                                              mbMugshotRequiresBroadcast;        // +0x19
+    };
+    static_assert(sizeof(NetworkInPaybackMugshotEvent) == 32, "queued as 32 bytes");
+
+    // Empty signal, queued as one byte.
+    struct NetworkInAbortMugshotCaptureEvent : public NetworkEvent<30> {};
+
+    struct NetworkInPaybackIntialised : public NetworkEvent<31>
+    {
+        EActiveRaceCarIndex mePaybackAggressorIndex;              // +0x00
+        EActiveRaceCarIndex mePaybackVictimIndex;                 // +0x04
+    };
+
+    struct NetworkInPaybackSucceeded : public NetworkEvent<32>
+    {
+        EActiveRaceCarIndex mePaybackAggressorIndex;              // +0x00
+        EActiveRaceCarIndex mePaybackVictimIndex;                 // +0x04
+    };
+
+    struct NetworkInSwitchBurningHomeRunRunner : public NetworkEvent<34>
+    {
+        NetworkPlayerID mNewRunnerID;                             // +0x00
+    };
+
+    struct NetworkInBurnoutSkillzEvent : public NetworkEvent<35>
+    {
+        enum EEventType
+        {
+            E_EVENT_TYPE_SEND_TO_ALL_PLAYERS       = 0,
+            E_EVENT_TYPE_SEND_TO_A_SPECIFIC_PLAYER = 1,
+            E_EVENT_TYPE_COUNT                     = 2,
+        };
+
+        BrnGameState::BurnoutSkillzData mNewSkillzData;           // +0x00 (56)
+        NetworkPlayerID                 mPlayerID;                // +0x38
+        EEventType                      meEventType;              // +0x3C
+    };
+    static_assert(sizeof(NetworkInBurnoutSkillzEvent) == 64, "queued as 64 bytes");
+
+    struct NetworkInShowtimeUpdateEvent : public NetworkEvent<36>
+    {
+        s32             miShowtimeScore;                          // +0x00
+        NetworkPlayerID mPlayerID;                                // +0x04
+    };
+    static_assert(sizeof(NetworkInShowtimeUpdateEvent) == 8, "queued as 8 bytes");
+
+    struct NetworkInShowtimeSwitchEvent : public NetworkEvent<37>
+    {
+        s32             miFinalShowtimeScore;                     // +0x00
+        NetworkPlayerID mPlayerID;                                // +0x04
+        bool            mbEnteringShowtime;                       // +0x08
+    };
+    static_assert(sizeof(NetworkInShowtimeSwitchEvent) == 12, "queued as 12 bytes");
+
+    struct NetworkInFreeburnChallengeEvent : public NetworkEvent<38>
+    {
+        NetworkPlayerID                mPlayerID;                        // +0x00
+        CgsID                          mChallengeID;                     // +0x08
+        EChallengeEventType            meEventType;                      // +0x10
+        BrnGameState::EChallengeStatus meChallengeStatus;                // +0x14
+        s32                            miActionIndex;                    // +0x18
+        s32                            miNumberOfCompletedChallenges;    // +0x1C
+    };
+    static_assert(sizeof(NetworkInFreeburnChallengeEvent) == 32, "queued as 32 bytes");
+
+    struct NetworkInFburnChallengeStatusEvent : public NetworkEvent<39>
+    {
+        BrnGameState::GameStateModuleIO::CompletedFburnChallenges mCompletedChallenges;  // +0x000 (256)
+        NetworkPlayerID                                           mPlayerID;             // +0x100
+    };
+    static_assert(sizeof(NetworkInFburnChallengeStatusEvent) == 0x108, "queued as 0x108 bytes");
+
+    struct NetworkInFburnSuccessUpdateEvent : public NetworkEvent<40>
+    {
+        BrnGameState::GameStateModuleIO::LastSecondChallengeSuccess mChallengeSuccessUpdate;  // +0x00 (8)
+        s32                                                          miActionIndex;           // +0x08
+    };
+    static_assert(sizeof(NetworkInFburnSuccessUpdateEvent) == 16, "queued as 16 bytes");
+
+    struct NetworkInFburnChallengeSuccessEvent : public NetworkEvent<41>
+    {
+        f32  mafActionScores[2];                                  // +0x00
+        bool mabSuccessfulActions[2];                             // +0x08
+        bool mabAccumulationThisFrame[2];                         // +0x0A
+    };
+    static_assert(sizeof(NetworkInFburnChallengeSuccessEvent) == 12, "queued as 12 bytes");
+
+    struct NetworkInActiveFburnChallengeEvent : public NetworkEvent<42>
+    {
+        EActiveRaceCarIndex maePlayersInChallengeARCI[7];         // +0x00
+        CgsID               mChallengeID;                         // +0x20
+        NetworkPlayerID     mPlayerToSendToID;                    // +0x28
+        s32                 miNumPlayersInChallenge;              // +0x2C
+    };
+    static_assert(sizeof(NetworkInActiveFburnChallengeEvent) == 48, "queued as 48 bytes");
+
+    struct NetworkInChangeDistrictEvent : public NetworkEvent<43>
+    {
+        BrnWorld::WorldRegion mNewWorldRegion;                    // +0x00 (8)
+    };
+
+    struct NetworkInLocalPlayerReachesCheckpoint : public NetworkEvent<44>
+    {
+        s32 miCheckpointIndex;                                    // +0x00
+    };
+
+    // FLAG name (console-only tag): StateManager::ProcessNetworkEvents hands the word to
+    // BrnNetworkPlayer::SendStuntScoreUpdatedMessage for every remote player.
+    struct NetworkInStuntScoreUpdatedEvent : public NetworkEvent<45>
+    {
+        s32 miStuntScore;                                         // +0x00
+    };
+
+    // FLAG name (console-only tag): StateManager::ProcessNetworkEvents hands the 8-byte record
+    // whole to BrnNetworkPlayer::SendStuntMultiplierMessage for every remote player.
+    struct NetworkInStuntMultiplierEvent : public NetworkEvent<46>
+    {
+        u32 muStuntTypes;                                         // +0x00
+        u16 mu16FlatSpins;                                        // +0x04
+        u16 mu16BarrelRolls;                                      // +0x06
+    };
+    static_assert(sizeof(NetworkInStuntMultiplierEvent) == 8, "queued as 8 bytes");
+
+    struct NetworkInShowGamerCard : public NetworkEvent<47>
+    {
+        PlayerName mPlayerName;                                   // +0x00 (16)
+    };
+
+    // Console 20 bytes; the texture pointer is 8 bytes on the host.
+    struct NetworkInDxtDecodeImageEvent : public NetworkEvent<48>
+    {
+        CgsNetwork::NetworkTexture* mpTextureToDecode;            // +0x00 (console 4 bytes)
+        PlayerName                  mPlayerName;                  // +0x04 on the console
+    };
+
+    struct NetworkInLocalPlayerCrashesEvent : public NetworkEvent<54>
+    {
+        EActiveRaceCarIndex meCrasherRaceCarIndex;                // +0x00
+    };
+
+    // FLAG name (console-only tag): StateManager::ProcessNetworkEvents passes the 64-bit id to
+    // the gamer-card manager's ShowGamerCardForXuid.
+    struct NetworkInShowGamerCardForXuidEvent : public NetworkEvent<55>
+    {
+        u64 mu64Xuid;                                             // +0x00
+    };
+
+    // FLAG name (console-only tag): EventScoresManager::ProcessNetworkEvents hands {+0x00 id,
+    // +0x0C score, +0x08 game mode} to StoreEventScoreForUpload.
+    struct NetworkInScoreLeaderboardEvent : public NetworkEvent<56>
+    {
+        CgsID mEventID;                                           // +0x00
+        s32   meGameModeType;                                     // +0x08 (GameStateModuleIO::EGameModeType)
+        s32   miScore;                                            // +0x0C
+    };
+    static_assert(sizeof(NetworkInScoreLeaderboardEvent) == 16, "queued as 16 bytes");
+
+    // FLAG name (console-only tag): EventScoresManager::ProcessNetworkEvents appends the pointed-to
+    // array onto its pending uploads. Console 4 bytes; the pointer is 8 bytes on the host.
+    struct NetworkInNonUploadedScoresEvent : public NetworkEvent<57>
+    {
+        const Array<LocalEventScoreUploadData, 49>* mpNonUploadedScores;  // +0x00
     };
 }
 } // namespace BrnNetwork

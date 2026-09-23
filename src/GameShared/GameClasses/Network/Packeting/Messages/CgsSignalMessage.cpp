@@ -103,4 +103,18 @@ namespace CgsNetwork
         lxResult = PackOrUnpackInt(this, &mSendingPlayerID, -1, 0x7FFFFFFF) | lxResult;
         return PackOrUnpackInt(this, &mRecvingPlayerID, -1, 0x7FFFFFFF) | lxResult;
     }
+
+    // The packed size of a signal: every header field it carries is zeroed first (the
+    // game id, flag and type bytes, the frame word and both player ids), then the base
+    // packs it into its scratch buffer.
+    s32 SignalMessage::GetPackedMessageSize()
+    {
+        mu8GameID        = 0;
+        mx8Flags         = 0;
+        mi8Type          = 0;
+        mu16Frame        = 0;
+        mSendingPlayerID = 0;
+        mRecvingPlayerID = 0;
+        return Message::GetPackedMessageSize();
+    }
 } // namespace CgsNetwork

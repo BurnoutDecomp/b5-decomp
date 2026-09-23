@@ -3,6 +3,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"  // real HostMigrationManager (IsHostAlive)
 #include "BrnMessageSubclasses.h"
 #include "GameSource/Network/Messages/BrnHullSyncMessage.h"   // BrnNetwork::HullSyncMessage (real layout)
+#include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"
 
 // Reconstructed bodies for four functions of the CgsMessage.h message hierarchy
 // that were previously dropped (a prior pass wrongly folded this TU into
@@ -67,5 +68,36 @@ namespace CgsNetwork
         SetType(leType);
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;
+    }
+
+    // ---- ConnectionStatusMessage virtuals ----------------------------------------
+    // Homed here, beside the rest of the message hierarchy in the mounted build: the
+    // players-connection manager embeds the message, so its vtable needs both bodies.
+
+    // Size the message with every slot at its "no player" value: player -1, status
+    // E_NOT_STARTED, then the reliable chain zeroes its id and both player ids.
+    s32 ConnectionStatusMessage::GetPackedMessageSize()
+    {
+        for (s32 liSlot = 0; liSlot < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liSlot)
+        {
+            maConnectionData[liSlot].meConnectionStatus = E_NOT_STARTED;
+            maConnectionData[liSlot].mPlayerID          = MessageWithPlayerIDs::KI_INVALID_PLAYER_ID;
+        }
+        return ReliableMessage::GetPackedMessageSize();
+    }
+
+    // The reliable id, then per slot the player id in [-1, 0x7FFFFFFF] and the status in
+    // [0, E_CONNECTION_STATUS_COUNT].
+    PackOrUnpackResult ConnectionStatusMessage::PackOrUnpack()
+    {
+        PackOrUnpackResult lxResult = ReliableMessage::PackOrUnpack();
+        for (s32 liSlot = 0; liSlot < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liSlot)
+        {
+            PlayerConnectionData& lrData = maConnectionData[liSlot];
+            lxResult = PackOrUnpackInt(this, &lrData.mPlayerID, -1, 0x7FFFFFFF) | lxResult;
+            lxResult = PackOrUnpackInt(this, reinterpret_cast<s32*>(&lrData.meConnectionStatus),
+                                       0, E_CONNECTION_STATUS_COUNT) | lxResult;
+        }
+        return lxResult;
     }
 }

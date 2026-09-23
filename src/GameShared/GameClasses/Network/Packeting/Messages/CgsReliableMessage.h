@@ -14,8 +14,8 @@
 // member lands at +0x28 (confirmed by every leaf ctor, e.g.
 // BrnNetwork::CameraRequestMessage::Construct stores its mbReleaseFeed at +0x28).
 //
-// The X360 build models the vtable as Message::mpVTable (no C++ `virtual`); these are
-// plain methods. Bodies live in CgsReliableMessage.cpp / CgsMessageFrameUtils.cpp.
+// IsReliable / GetPackedMessageSize / PackOrUnpack override the Message virtuals.
+// Bodies live in CgsReliableMessage.cpp / CgsMessageSubclasses.cpp.
 // ===================================================================================
 
 #include "types.hpp"
@@ -28,11 +28,14 @@ namespace CgsNetwork
         // Stamps the message type + frame and flags it RELIABLE; chains to the
         // MessageWithPlayerIDs base. liType is an EMessageType.
         void               PrepareForSend(s32 liType, u16 lu16Frame);
-        bool               IsReliable() const;
-        s32                GetPackedMessageSize();
+        bool               IsReliable() const override;
+        s32                GetPackedMessageSize() override;
 
+    protected:
         // Serialises the wrapped 16-bit reliable id (stored in the inherited
         // mu16Frame field) through the shared u16 primitive. 0 == success.
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
     };
+
+    static_assert(sizeof(void*) != 4 || sizeof(ReliableMessage) == 0x28, "sizeof(ReliableMessage) == 0x28");
 } // namespace CgsNetwork

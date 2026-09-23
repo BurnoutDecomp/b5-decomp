@@ -21,6 +21,11 @@
 #include "SharedClasses/Progression/BrnRival.h"                // [takedown P1] BrnProgression::Rival (RivalStateChangeAction::mRival)
 #include "GameSource/GameState/Progression/BrnProgressionRivalData.h" // [takedown P1] BrnProgression::RivalData (RivalStateChangeAction::mRivalSavedData)
 #include "SharedClasses/Progression/BrnRaceEventData.h"    // [rivals] BrnProgression::EventRacerPersonality (AddRivalCarAction::mPersonality)
+#include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h" // [network N1] BrnGameState::BurnoutSkillzData (BurnoutSkillzAction)
+
+namespace CgsNetwork { class NetworkTexture; }             // DXTDecodeImageAction (held by pointer only)
+namespace BrnNetwork { struct LocalEventScoreUploadData; }  // NonUploadedModeScoresAction (held by pointer only)
+namespace BrnGameState { struct StreetManager; }             // RoadRulesChallengeScoresAction (held by pointer only)
 
 namespace BrnResource
 {
@@ -894,6 +899,53 @@ enum EGameActionType
     E_ACTION_AWARD_SEQUENCE_START                        = 122,  // DWARF 117 (+5 X360); payload unread
     E_ACTION_AWARD_SEQUENCE_END                          = 123,  // DWARF 118 (+5 X360); payload unread
     E_ACTION_UPDATE_ROAD_RAGE_MADNESS                    = 131,  // DWARF 126 (+5 X360); AI reads +0 and +4
+
+    // ---- [network wave N1] the ids BrnGameModule::BridgeGameStateToNetwork forwards or ---------
+    //      translates. Each value is the case label of that bridge's jump tables AND a producer's
+    //      AddEvent immediate; the name is the reference enumerator at the band shift noted.
+    //   1   GuiUpdatePlayerCarID: unshifted region (0..17); the bridge reads the car id at +0.
+    E_ACTION_GUI_UPDATE_PLAYER_CAR_ID                    = 1,
+    //   84  band +5: OnlineCarSelectManager::SendOnlineChangeCarAction posts it (car id +0).
+    E_ACTION_CAR_SELECT_ONLINE_SELECT_CAR                = 84,
+    //   93 / 95  band +5: GameStateModule::ProcessGameEvents posts 93 (size 1) and 95 (the 0x9C-byte
+    //   InviteOrJoinParams) from consecutive arms, with 94 (size 4) between them.
+    E_ACTION_UPDATE_PREPARE_FOR_INVITE                   = 93,
+    E_ACTION_PERFORM_INVITE                              = 95,
+    //   112 band +5 (between 111 and 113): the bridge copies the 8-byte WorldRegion into event 43.
+    E_ACTION_WORLD_REGION_CHANGE                         = 112,
+    E_ACTION_BURNOUT_SKILLZ                              = 168,
+    //   209 band +8: the achievement manager's WriteAchievements posts it.
+    E_ACTION_ACHIEVEMENTS_EARNED                         = 209,
+    //   213..217 band +8: the MugshotManager posts 213 (32 bytes) and 214 (16 bytes).
+    E_ACTION_PAYBACK_MUGSHOT                             = 213,
+    E_ACTION_ABORT_MUGSHOT_CAPTURE                       = 214,
+    E_ACTION_PAYBACK_ACTIVATED                           = 215,
+    E_ACTION_PAYBACK_SUCCEEDED                           = 217,
+    //   225 / 226 / 236 band +8: BrnGameModule::TranslateNetworkEventsToWorld posts all three
+    //   (225 and 226 as one byte, 236 as the 16-byte hull list).
+    E_ACTION_LOCAL_PLAYER_DISCONNECTED                   = 225,
+    E_ACTION_LOCAL_PLAYER_LEFT_GAME                      = 226,
+    E_ACTION_UPDATE_RICH_PRESENCE                        = 227,
+    E_ACTION_ROAD_RULES_CHALLENGE_SCORES                 = 232,
+    E_ACTION_ROAD_RULES_PERSONAL_BEST                    = 233,
+    E_ACTION_ROAD_RULES_OVERWRITE_SERVER_RECORD          = 234,
+    E_ACTION_RESTART_TRAFFIC                             = 236,
+    E_ACTION_REQUEST_GAMERCARD                           = 239,
+    //   296 band +14: the bridge copies {texture pointer, player name} into event 48.
+    E_ACTION_DXT_DECODE_IMAGE                            = 296,
+    //   FLAG -- names unrecovered. Ids 18..21 are the four the console inserted ahead of the
+    //   reference's 18 (CHECK_FOR_LOADING_SCREEN sits at 22), and 299 lies past the reference's
+    //   COUNT; no reference enumerator exists for any of them. Each is named after its producer
+    //   and the local name the bridge's assert gives the record (18 is E_ACTION_EVENT_SCORE_TO_UPLOAD
+    //   above).
+    //   19  GameStateModule::OnProfileLoaded: a pointer to the profile's pending uploads (size 4).
+    //   20  the stunt score the network side sends to every remote player (size 4).
+    //   21  StuntModeScoring::PreWorldUpdate: the 8-byte stunt-multiplier record.
+    //   299 GameStateImageManagerBase::ProcessShowGamerCardRequest: an 8-byte player id.
+    E_ACTION_NON_UPLOADED_MODE_SCORES                    = 19,   // FLAG name
+    E_ACTION_STUNT_SCORE_UPDATED                         = 20,   // FLAG name
+    E_ACTION_STUNT_MULTIPLIER                            = 21,   // FLAG name
+    E_ACTION_SHOW_GAMERCARD_FOR_XUID                     = 299,  // FLAG name
 };
 
 template <EGameActionType T>
@@ -2832,5 +2884,217 @@ static_assert(offsetof(RequestRouteInfoAction, mEndPosition)        == 0x10 &&
               offsetof(RequestRouteInfoAction, muEventId)           == 0x24 &&
               offsetof(RequestRouteInfoAction, miOwnerId)           == 0x28,
               "action-50 offsets are the @0x827923E4 consumer loads");
+
+// =============================================================================================
+// [network wave N1] the action records BrnGameModule::BridgeGameStateToNetwork reads, plus the
+// three the network-to-world translation posts. Offsets are the console's: the bridge's own loads
+// (each arm copies the record member by member into a network IN-event) and the producers'
+// stores. Records holding a pointer are wider on the host; they are queued with sizeof().
+// =============================================================================================
+
+// 1 -- the car the player now drives (telemetry "car model").
+struct GuiUpdatePlayerCarIDAction : public GameAction<E_ACTION_GUI_UPDATE_PLAYER_CAR_ID>
+{
+    CgsID mPlayerCarID;                                        // +0x00
+};
+static_assert(sizeof(GuiUpdatePlayerCarIDAction) == 8, "GuiUpdatePlayerCarIDAction is 8 bytes");
+
+// 112 -- the district/county the player has just entered.
+struct WorldRegionChangeAction : public GameAction<E_ACTION_WORLD_REGION_CHANGE>
+{
+    BrnWorld::WorldRegion mNewWorldRegion;                     // +0x00 (8)
+};
+static_assert(sizeof(WorldRegionChangeAction) == 8, "WorldRegionChangeAction is 8 bytes");
+
+// 113 -- posted by ModeManager::TransmitAndIncrementCheckPointsReached (size 16). The bridge
+// forwards the checkpoint index (+0x08) when the local-player flag (+0x0E) is set.
+struct RaceCarReachedCheckpointAction : public GameAction<E_ACTION_RACE_CAR_REACHED_CHECKPOINT>
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;                  // +0x00
+    EGlobalRaceCarIndex meGlobalRaceCarIndex;                  // +0x04
+    s32                 miCheckPointIndex;                     // +0x08
+    u16                 muNextCheckpointAISectionIndex;        // +0x0C
+    bool                mbIsLocalPlayer;                       // +0x0E
+};
+static_assert(sizeof(RaceCarReachedCheckpointAction) == 16, "RaceCarReachedCheckpointAction is 16 bytes");
+
+// 168 -- a burnout-skillz update. The bridge copies the 56-byte skillz block, the player id at
+// +0x3C, and turns the flags word at +0x38 into the network event's send type.
+struct BurnoutSkillzAction : public GameAction<E_ACTION_BURNOUT_SKILLZ>
+{
+    static const s32 KI_ACTION_TYPE_SEND_TO_SINGLE_PLAYER = 1;
+    static const s32 KI_ACTION_TYPE_SEND_TO_ALL_PLAYERS   = 2;
+    static const s32 KI_ACTION_TYPE_UPDATED_VALUE         = 4;
+    static const s32 KI_ACTION_TYPE_SHOW_HUD_MESSAGE      = 8;
+
+    BurnoutSkillzData           mBurnoutSkillzData;            // +0x00 (56)
+    s32                         miActionFlags;                 // +0x38
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;              // +0x3C
+    EActiveRaceCarIndex         meActiveRaceCarIndex;          // +0x40
+};
+static_assert(offsetof(BurnoutSkillzAction, miActionFlags) == 0x38 &&
+              offsetof(BurnoutSkillzAction, mNetworkPlayerID) == 0x3C,
+              "BurnoutSkillzAction flag / player-id offsets");
+
+// 213 -- the payback-mugshot step (32 bytes). The console puts the road id FIRST (the reference
+// member list has it after the four enums); the MugshotManager's producers and the bridge's loads
+// agree on this order.
+struct PaybackMugshotAction : public GameAction<E_ACTION_PAYBACK_MUGSHOT>
+{
+    CgsID               mRoadRuleBeatenRoadID;                 // +0x00
+    EActiveRaceCarIndex meTakedownAggressorIndex;              // +0x08
+    EActiveRaceCarIndex meTakedownVictimIndex;                 // +0x0C
+    EMugshotResponse    meMugshotResponse;                     // +0x10
+    EImageType          meImageType;                           // +0x14
+    bool                mbIsTakedownAggressorLocalPlayer;      // +0x18
+    bool                mbMugshotRequiresBroadcast;            // +0x19
+};
+static_assert(sizeof(PaybackMugshotAction) == 32, "PaybackMugshotAction is posted as 32 bytes");
+static_assert(offsetof(PaybackMugshotAction, meMugshotResponse) == 0x10 &&
+              offsetof(PaybackMugshotAction, mbIsTakedownAggressorLocalPlayer) == 0x18,
+              "PaybackMugshotAction console offsets");
+
+// 214 -- abort an in-flight mugshot capture (16 bytes, the MugshotManager's post). The bridge
+// forwards only the event tag.
+struct AbortMugshotCaptureAction : public GameAction<E_ACTION_ABORT_MUGSHOT_CAPTURE>
+{
+    EActiveRaceCarIndex meTakedownAggressorIndex;              // +0x00
+    EActiveRaceCarIndex meTakedownVictimIndex;                 // +0x04
+    EImageType          meImageType;                           // +0x08
+    bool                mbIsTakedownAggressorLocalPlayer;      // +0x0C
+};
+static_assert(sizeof(AbortMugshotCaptureAction) == 16, "AbortMugshotCaptureAction is posted as 16 bytes");
+
+// 215 -- a payback has started (the bridge forwards +0x04 / +0x08).
+struct PaybackActivatedAction : public GameAction<E_ACTION_PAYBACK_ACTIVATED>
+{
+    BrnNetwork::EPaybackType mePaybackType;                    // +0x00
+    EActiveRaceCarIndex      mePaybackAggressorIndex;          // +0x04
+    EActiveRaceCarIndex      mePaybackVictimIndex;             // +0x08
+};
+
+// 217 -- a payback succeeded.
+struct PaybackSucceededAction : public GameAction<E_ACTION_PAYBACK_SUCCEEDED>
+{
+    EActiveRaceCarIndex mePaybackAggressorIndex;               // +0x00
+    EActiveRaceCarIndex mePaybackVictimIndex;                  // +0x04
+};
+
+// 225 / 226 -- empty signals, posted as one byte.
+typedef GameAction<E_ACTION_LOCAL_PLAYER_DISCONNECTED> LocalPlayerDisconnectedAction;
+typedef GameAction<E_ACTION_LOCAL_PLAYER_LEFT_GAME>    LocalPlayerLeftGameAction;
+
+// 227 -- the new rich-presence string (the bridge copies at most 100 bytes).
+struct UpdateRichPresence : public GameAction<E_ACTION_UPDATE_RICH_PRESENCE>
+{
+    char macNewPresenceData[100];                              // +0x00
+};
+
+// 228 -- one telemetry record, forwarded whole.
+struct TelemetryAction : public GameAction<E_ACTION_SEND_TELEMETRY>
+{
+    BrnNetwork::BrnNetworkModuleIO::TelemetryData mEventData;  // +0x00 (20)
+};
+static_assert(sizeof(TelemetryAction) == 20, "TelemetryAction is 20 bytes");
+
+// 232 -- road-rules scores to fetch. Console 16 bytes; the street-manager pointer at +0x0C is
+// 8 bytes on the host (+0x10).
+struct RoadRulesChallengeScoresAction : public GameAction<E_ACTION_ROAD_RULES_CHALLENGE_SCORES>
+{
+    void Construct(u64 lu64RoadRulesID, u32 luTimeStamp, StreetManager* lpStreetManager)
+    {
+        mu64RoadRulesID                    = lu64RoadRulesID;
+        muTimeStampOfLastRoadRulesDownload = luTimeStamp;
+        mpStreetManager                    = lpStreetManager;
+    }
+    StreetManager* GetStreetManager() const                   { return mpStreetManager; }
+    u32            GetTimeStampOfLastRoadRulesDownload() const { return muTimeStampOfLastRoadRulesDownload; }
+    u64            GetRoadRulesID() const                     { return mu64RoadRulesID; }
+
+private:
+    u64            mu64RoadRulesID;                            // +0x00
+    u32            muTimeStampOfLastRoadRulesDownload;         // +0x08
+    StreetManager* mpStreetManager;                            // +0x0C (console 4 bytes)
+};
+
+// 233 -- a new road-rules personal best.
+struct RoadRulesPersonalBestAction : public GameAction<E_ACTION_ROAD_RULES_PERSONAL_BEST>
+{
+    BrnStreetData::ChallengePlayerScoreEntry mPersonalBestScore;  // +0x00 (40)
+    BrnNetwork::Road::ChallengeIndex         mChallengeIndex;     // +0x28
+    bool                                     mbLobbyPersonalBest; // +0x2C
+};
+static_assert(sizeof(RoadRulesPersonalBestAction) == 48, "RoadRulesPersonalBestAction is 48 bytes");
+
+// 236 -- the traffic hulls to restart with (TranslateNetworkEventsToWorld copies 16 bytes).
+struct RestartTrafficAction : public GameAction<E_ACTION_RESTART_TRAFFIC>
+{
+    u16 mau16ActveHulls[8];                                    // +0x00
+};
+static_assert(sizeof(RestartTrafficAction) == 16, "RestartTrafficAction is posted as 16 bytes");
+
+// 239 -- show a player's gamer card, by name.
+struct RequestGamerCardAction : public GameAction<E_ACTION_REQUEST_GAMERCARD>
+{
+    BrnNetwork::PlayerName mPlayerName;                        // +0x00 (16)
+};
+
+// 296 -- decode a received DXT image. Console 20 bytes; the texture pointer is 8 bytes on the
+// host, so the name lands at +0x08 here.
+struct DXTDecodeImageAction : public GameAction<E_ACTION_DXT_DECODE_IMAGE>
+{
+    CgsNetwork::NetworkTexture* mpTextureToDecode;             // +0x00 (console 4 bytes)
+    BrnNetwork::PlayerName      mPlayerName;                   // +0x04 on the console
+};
+
+// 31 -- ModeManager::MarkedManLoaded (size 8). Reference record; the bridge forwards it verbatim.
+struct MarkedManLoadedAction : public GameAction<E_ACTION_MARKED_MAN_LOADED>
+{
+    EGameModeType meGameMode;                                  // +0x00
+    bool          mbMovingBetweenLobbyModes;                   // +0x04
+};
+static_assert(sizeof(MarkedManLoadedAction) == 8, "MarkedManLoadedAction is posted as 8 bytes");
+
+// ---- FLAG: the four console-only records (no reference names; see the enumerators) -----------
+// 18 -- ModeManager::ShowModeResults' score for the leaderboard upload (16 bytes). Named after
+// the bridge's assert local.
+struct ModeScoreLeaderboardAction : public GameAction<E_ACTION_EVENT_SCORE_TO_UPLOAD>
+{
+    CgsID         mEventID;                                    // +0x00
+    EGameModeType meGameModeType;                              // +0x08
+    s32           miScore;                                     // +0x0C
+};
+static_assert(sizeof(ModeScoreLeaderboardAction) == 16, "ModeScoreLeaderboardAction is posted as 16 bytes");
+
+// 19 -- the profile's scores still waiting for upload, by pointer (console 4 bytes).
+struct NonUploadedModeScoresAction : public GameAction<E_ACTION_NON_UPLOADED_MODE_SCORES>
+{
+    const Array<BrnNetwork::LocalEventScoreUploadData, 49>* mpNonUploadedScores;   // +0x00
+};
+
+// 20 -- the local player's current stunt score (4 bytes).
+struct StuntScoreUpdatedAction : public GameAction<E_ACTION_STUNT_SCORE_UPDATED>
+{
+    s32 miStuntScore;                                          // +0x00
+};
+static_assert(sizeof(StuntScoreUpdatedAction) == 4, "StuntScoreUpdatedAction is 4 bytes");
+
+// 21 -- the 8-byte stunt-multiplier record StuntModeScoring::PreWorldUpdate copies out of its
+// scorer (+0x6C word, +0x78 / +0x7A halves). The network side sends it whole as the stunt
+// multiplier message's multiplier-info blob (field meanings are that message's pack ranges).
+struct StuntMultiplierAction : public GameAction<E_ACTION_STUNT_MULTIPLIER>
+{
+    u32 muStuntTypes;                                          // +0x00
+    u16 mu16FlatSpins;                                         // +0x04
+    u16 mu16BarrelRolls;                                       // +0x06
+};
+static_assert(sizeof(StuntMultiplierAction) == 8, "StuntMultiplierAction is posted as 8 bytes");
+
+// 299 -- show a player's gamer card, by 64-bit player id (8 bytes).
+struct ShowGamerCardForXuidAction : public GameAction<E_ACTION_SHOW_GAMERCARD_FOR_XUID>
+{
+    u64 mu64Xuid;                                              // +0x00
+};
+static_assert(sizeof(ShowGamerCardForXuidAction) == 8, "ShowGamerCardForXuidAction is 8 bytes");
 }
 }

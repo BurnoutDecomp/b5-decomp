@@ -81,7 +81,11 @@ namespace GameStateModuleIO
     {
     };
 
-    class TakedownEventInputQueueType;     // PreWorldInputBuffer +0x660
+    // PreWorldInputBuffer +0x660: the online takedowns the network module hands the game state.
+    // BridgeNetworkToGameState appends the network output's EventQueue<TakedownEvent,8> into it
+    // with the TakedownEvent queue's own Append, and TakedownManager::DetectNetworkTakedowns walks
+    // it; the console span is 0x150 (a 16-byte head + 8 x 40), the host size is the same.
+    typedef CgsModule::EventQueue<BrnGameState::TakedownEvent, 8> TakedownEventInputQueueType;
     // PreWorldInputBuffer +0x36B8: the network player-results interface is BrnNetwork's committed
     // PlayerResultsInterface (operator= @0x823B8F68); alias it so SetNetworkPlayerResultsInterface
     // can member-copy into it and the const getter still spells NetworkPlayerResultsInterface.
@@ -448,6 +452,9 @@ namespace GameStateModuleIO
         void SetPlayerStatusInterface(const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpSource);
         // X360 0x823C53D0 (write-lock; line 150) -- copies a PlayerResultsInterface into this+0x36B8.
         void SetNetworkPlayerResultsInterface(const NetworkPlayerResultsInterface* lpSource);
+        // Inline on the console, no lock assert: BridgeNetworkToGameState stores the network
+        // output's invites-open byte straight into +0x3798.
+        void SetInvitesOpen(bool lbInvitesOpen) { mbInvitesOpen = lbInvitesOpen; }
 
     private:
         // --- members pinned to X360 offsets (gaps = padding) -----------------
@@ -457,9 +464,9 @@ namespace GameStateModuleIO
         // [gateui] real typed seat (was `u8 mGameEventQueueStorage[0x660 - 0x4C]`).
         GameEventQueue       mGameEventQueue;                               // @ +0x004C
         // The console seat is 4 bytes wider than the queue; keep the remainder explicit so
-        // mTakedownEventInputQueueStorage stays pinned at +0x660 (asserted below).
+        // mTakedownEventInputQueue stays pinned at +0x660 (asserted below).
         u8  maPadAfterGameEventQueue[(0x660 - 0x4C) - sizeof(GameEventQueue)];
-        u8  mTakedownEventInputQueueStorage[0x7B0 - 0x660];            // TakedownEventQueue@ +0x0660
+        TakedownEventInputQueueType mTakedownEventInputQueue;          // @ +0x0660 (0x150 bytes, host == console)
         NetworkToGameStateInterface mNetworkToGameStateInterface;      // @ +0x07B0 (real type; console span 0x2438, host span larger -- see below)
         // The console region +0x7B0..+0x2CC8 (0x2518) is this interface (0x2438) followed by the
         // 0xE0-byte ControllerToGameStateInterface at +0x2BE8. On the host the interface's five
@@ -472,6 +479,7 @@ namespace GameStateModuleIO
         // The +0x36B8 offset of mNetworkPlayerResultsInterface is independently pinned by the
         // static_assert in _AssertLayout(), which guards this flush fit.
         NetworkPlayerResultsInterface mNetworkPlayerResultsInterface;  // @ +0x36B8 (PlayerResultsInterface, 224B)
+        bool                          mbInvitesOpen;                   // @ +0x3798
 
         // Compile-time offset guards (private members -> assert from a member-fn context).
         static void _AssertLayout()
@@ -485,9 +493,11 @@ namespace GameStateModuleIO
             // a pointer, this is the assert that fires instead of silently shifting +0x660.
             static_assert(sizeof(GameEventQueue) == 1552, "GameEventQueue host sizeof (pointer-free: bool + char[1536] + 3 * s32)");
             static_assert(offsetof(PreWorldInputBuffer, mGameEventQueue)                == 0x4C,   "GameEventQueue @ +0x4C");
-            static_assert(offsetof(PreWorldInputBuffer, mTakedownEventInputQueueStorage) == 0x660,  "TakedownEventInputQueue @ +0x660");
+            static_assert(offsetof(PreWorldInputBuffer, mTakedownEventInputQueue)       == 0x660,  "TakedownEventInputQueue @ +0x660");
+            static_assert(sizeof(TakedownEventInputQueueType)                           == 0x150,  "TakedownEventInputQueue spans +0x660..+0x7B0");
             static_assert(offsetof(PreWorldInputBuffer, mPlayerStatusInterface)         == 0x2CC8, "mPlayerStatusInterface @ +0x2CC8");
             static_assert(offsetof(PreWorldInputBuffer, mNetworkPlayerResultsInterface) == 0x36B8, "mNetworkPlayerResultsInterface @ +0x36B8");
+            static_assert(offsetof(PreWorldInputBuffer, mbInvitesOpen)                  == 0x3798, "mbInvitesOpen @ +0x3798");
         }
     };
 
@@ -619,6 +629,9 @@ namespace GameStateModuleIO
         // GameState->Network interface (GetGameStateToNetworkInterface()->GetDirtyTrickQueue()->
         // Append(...)). Returns the embedded interface by pointer; body lands with the OutputBuffer TU.
         BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface();
+        // Read-lock ("Not locked for reading", line 289) -- const twin of the
+        // above (this+0x4190). BridgeGameStateToNetwork hands it to the network post-sim input.
+        const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface() const;
         // X360 0x823B9D80 (read-lock; "Not locked for reading", line 295) -- const twin of the above.
         // (class:BrnGameState catch-all TU; the BridgeGameStateToGui consumer reads it read-locked.)
         const GameStateToGuiInterface*    GetGameStateToGuiInterface() const;

@@ -88,7 +88,7 @@ namespace BrnNetwork
     void ScoreboardDebugComponent::OnActivate()
     {
         IO::NetworkInSelectScoreboardEvent lEvent;
-        lEvent.meSelectType = 1;   // top-level: select category list / download headings (EState GETTING_HEADINGS)
+        lEvent.GetCategories();   // top-level: select category list / download headings (EState GETTING_HEADINGS)
         DispatchScoreboardEvent(mpScoreboardManager, &lEvent);
     }
 
@@ -105,8 +105,8 @@ namespace BrnNetwork
         if (lpThis->miCategory != KI_NONE_SELECTED)
         {
             lpThis->UnregisterVariable(&lpThis->miIndex);
-            IO::NetworkInSelectScoreboardEvent lEvent =
-                IO::NetworkInSelectScoreboardEvent::GetIndexes(lpThis->miCategory);
+            IO::NetworkInSelectScoreboardEvent lEvent;
+            lEvent.GetIndexes(lpThis->miCategory);
             DispatchScoreboardEvent(lpThis->mpScoreboardManager, &lEvent);
         }
     }
@@ -118,8 +118,8 @@ namespace BrnNetwork
         if (lpThis->miCategory != KI_NONE_SELECTED && lpThis->miIndex != KI_NONE_SELECTED)
         {
             lpThis->UnregisterVariable(&lpThis->miVariation);
-            IO::NetworkInSelectScoreboardEvent lEvent =
-                IO::NetworkInSelectScoreboardEvent::GetVariations(lpThis->miIndex);
+            IO::NetworkInSelectScoreboardEvent lEvent;
+            lEvent.GetVariations(lpThis->miIndex);
             DispatchScoreboardEvent(lpThis->mpScoreboardManager, &lEvent);
         }
     }
@@ -131,8 +131,8 @@ namespace BrnNetwork
         if (lpThis->miCategory != KI_NONE_SELECTED && lpThis->miIndex != KI_NONE_SELECTED &&
             lpThis->miVariation != KI_NONE_SELECTED)
         {
-            IO::NetworkInSelectScoreboardEvent lEvent =
-                IO::NetworkInSelectScoreboardEvent::GetScoreboard(lpThis->miVariation);
+            IO::NetworkInSelectScoreboardEvent lEvent;
+            lEvent.GetScoreboard(lpThis->miVariation);
             DispatchScoreboardEvent(lpThis->mpScoreboardManager, &lEvent);
         }
     }

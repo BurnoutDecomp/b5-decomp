@@ -10,10 +10,8 @@
 //     sub-step by DoUpdate_NetworkPostSim inside the post-sim input's write lock, and only
 //     when the update set does not carry 0x20.
 //
-// The other network bridges of this wave (BridgeNetworkToGameState, BridgeNetworkToWorld,
-// TranslateNetworkEventsToWorld) are declared in BrnGameModule.hpp and are NOT bodied here:
-// each needs a declaration in a header this wave does not own. The wave report lists the
-// exact requests.
+// The network -> game-state / world bridges (BridgeNetworkToGameState, BridgeNetworkToWorld,
+// TranslateNetworkEventsToWorld) live in BrnGameModule_wN1_02.cpp.
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"

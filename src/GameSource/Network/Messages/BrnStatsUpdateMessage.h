@@ -40,8 +40,11 @@ namespace BrnNetwork
                                               s32* lpiNumberOfRivals,
                                               s32* lpiNumberOfAchievements,
                                               s32* lpiNumberOfTakedowns);
-        s32                           GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                   GetName() const;
+        s32                           GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(StatsUpdateMessage) == 0x30, "sizeof(StatsUpdateMessage) == 0x30");
 } // namespace BrnNetwork

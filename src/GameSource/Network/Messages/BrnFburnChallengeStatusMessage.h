@@ -37,8 +37,11 @@ namespace BrnNetwork
         void                          PrepareForSend(u16 lu16FrameCount,
                                                      const FburnChallengeStatusPayload* lpCompletedChallenges);
         bool                          Retrieve(FburnChallengeStatusPayload* lpCompletedChallenges);
-        s32                           GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                   GetName() const;
+        s32                           GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(FburnChallengeStatusMessage) == 0x128, "sizeof(FburnChallengeStatusMessage) == 0x128");
 } // namespace BrnNetwork

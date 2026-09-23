@@ -47,9 +47,12 @@ namespace BrnNetwork
                                               bool* lpaSuccessfulActions,
                                               bool* lpaAccumulationsThisFrame,
                                               f32* lpaActionScores);
-        bool                          OldMessagesAreValid() const;
-        s32                           GetPackedMessageSize();
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
-        const char*                   GetName() const;
+        bool                          OldMessagesAreValid() const override;
+        s32                           GetPackedMessageSize() override;
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
+        const char*                   GetName() const override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(FburnChallengeSuccessMessage) == 0x38, "sizeof(FburnChallengeSuccessMessage) == 0x38");
 } // namespace BrnNetwork

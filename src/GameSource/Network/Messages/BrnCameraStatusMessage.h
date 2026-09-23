@@ -35,15 +35,14 @@ namespace BrnNetwork
         void          Destruct();
         void          PrepareForSend(u16 lu16CurrentFrame, ECameraStatus leCameraStatus);
         bool          Retrieve(ECameraStatus* lpeCameraStatus);
-        // Message-table entries (the base carries the table pointer, so these are plain
-        // methods; a C++ vtable would add a second pointer and break the 36-byte span).
-        s32           GetPackedMessageSize();
+        // Overrides of the Message virtuals (the one vptr is the base's).
+        s32           GetPackedMessageSize() override;
 
         // LEDGER func @ 0x827DE0B8 -- bodied in this TU (DWARF BrnCameraStatusMessage.h:90).
-        const char*   GetName() const;
+        const char*   GetName() const override;
 
     protected:
-        CgsNetwork::PackOrUnpackResult PackOrUnpack();
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
 
     private:
         ECameraStatus meCameraStatus;           // DWARF BrnCameraStatusMessage.h:80 (after the Message base, by name)
@@ -55,4 +54,7 @@ namespace BrnNetwork
     {
         return "Camera Status Message";
     }
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(CameraStatusMessage) == 0x24, "sizeof(CameraStatusMessage) == 0x24");
 } // namespace BrnNetwork

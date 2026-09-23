@@ -438,15 +438,7 @@ void ScoringSystem::WriteDataToOutput(GameStateModuleIO::ScoringOutputInterface*
     {
         CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring");
         mpCurrentOnlineModeScoring->Update(this, static_cast<s32>(muCarsInCurrentMode));
-        // SLICE-IDENTITY NOTE: BaseOnlineModeScoring::WriteDataToOutput (BrnBaseOnlineModeScoring.h:57) is
-        // declared against the header's forward-only placeholder `BrnGameState::OnlineScoringOutputInterface`
-        // (a documented pointer-only stand-in that "self-completes when that TU is worked"), NOT the real
-        // GameStateModuleIO::OnlineScoringOutputInterface that lpOnlineOutput points at. The X360 dispatches
-        // this through the vtable on the same byte address, so the two are the same object; bridge the
-        // slice's placeholder/real type split with a pointer reinterpret_cast (both are incomplete-pointer
-        // compatible). When the online-scorer TU lands and unifies the type, this cast drops out.
-        mpCurrentOnlineModeScoring->WriteDataToOutput(
-            reinterpret_cast<OnlineScoringOutputInterface*>(lpOnlineOutput));
+        mpCurrentOnlineModeScoring->WriteDataToOutput(lpOnlineOutput);
     }
 
     // ---- road-rage scalars (gated on the road-rage scorer being active) ----

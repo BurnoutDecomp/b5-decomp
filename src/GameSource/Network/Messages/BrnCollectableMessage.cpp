@@ -106,4 +106,10 @@ namespace BrnNetwork
                    "!CgsNetwork::ReliableMessage::IsMessageValid()");
         return true;
     }
+
+    // An older message is still accepted (slot 1 is the shared `return true` leaf).
+    bool CollectableMessage::OldMessagesAreValid() const
+    {
+        return true;
+    }
 } // namespace BrnNetwork

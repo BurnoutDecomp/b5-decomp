@@ -23,6 +23,10 @@
 
 namespace BrnNetwork
 {
+    // Highest traffic hull index a hull-sync entry can carry (the hull field packs in
+    // [0, 400]).
+    const u16 KU16_MAX_HULL_NUMBER = 400;
+
     // DWARF BrnHullSyncMessage.h:38 -- one traffic hull queued for activation, with the
     // frame it was requested and the traffic update it should activate on.
     struct HullToActivateInfo
@@ -56,5 +60,17 @@ namespace BrnNetwork
         void PrepareForSend(u16 lu16FrameCount, BufferedHullsToActivate* laBufferedHullActivates);
         bool Retrieve(BufferedHullsToActivate* laBufferedHullActivates);
         void Release();
+
+        s32         GetPackedMessageSize() override;
+        bool        OldMessagesAreValid() const override;
+        const char* GetName() const override;
+
+    protected:
+        CgsNetwork::PackOrUnpackResult PackOrUnpack() override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || offsetof(HullSyncMessage, mBufferedHullActivates) == 0x28,
+                  "HullSyncMessage::mBufferedHullActivates @ +0x28");
+    static_assert(sizeof(void*) != 4 || sizeof(HullSyncMessage) == 0x58, "sizeof(HullSyncMessage) == 0x58");
 } // namespace BrnNetwork

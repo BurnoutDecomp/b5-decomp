@@ -59,7 +59,7 @@
 //
 // -- WHAT IS GATED AND WHY (hazards H7) -------------------------------------------------------
 // Every omission below carries its own banner naming the exact console call. Summary:
-//   ONLINE ARM DEFERRED  : the online-stunt network-player-results sweep, UpdatePaybackTakedowns,
+//   ONLINE ARM DEFERRED  : the online-stunt network-player-results sweep,
 //                          UpdateOnlineStuntModeScorePreWorld, StuntModeScoringOnline::Update,
 //                          the mode-15 BurnoutSkillzManager tick, the online-stunt SetPlayerStuntScore.
 //   [x] ChallengeManager::PostWorldUpdate -- UN-PARKED 2026-09-07 (the mount landed; the member is
@@ -151,7 +151,7 @@ IsGameModeOnline(const GameMode* lpGameMode)
 //   mTimerStatusInterface = lrTimerStatusInterface                            (+0x6DA0, 2 x 24 B)
 //   mePlayerActiveRaceCarIndex / mePlayerGlobalRaceCarIndex                   (+0x8038 / +0x803C)
 //   if (mpCurrentGameMode) { UpdateCurrentMode; <online results sweep>;
-//                            UpdateNetworkPlayerResults; <UpdatePaybackTakedowns>;
+//                            UpdateNetworkPlayerResults; UpdatePaybackTakedowns;
 //                            mfTimeInMode += dt; mfTimeInOnline += dt or 0 }
 //   else                   { mfTimeInOnline = 0; mfTimeInFreeBurn += dt or 0 }
 //   <the per-mode stunt-scorer pre-world fork>
@@ -240,20 +240,11 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         mScoringSystem.UpdateNetworkPlayerResults(
             lpPreWorldInputBuffer->GetNetworkPlayerResultsInterface(), lbFinalNetworkResults);
 
-        // [!] [stuntrace] ONLINE ARM DEFERRED -- payback (dirty-trick) takedowns. The console call:
-        //   mScoringSystem.UpdatePaybackTakedowns(
-        //       lpPreWorldInputBuffer->GetNetworkToGameStateInterface()->GetDirtyTrickQueue(),
-        //       lpOutputBuffer->GetGameStateToNetworkInterface()->GetDirtyTrickQueue());
-        // (the first queue is interface +0x2268; the second is the output interface itself, whose
-        //  dirty-trick queue sits at +0x0, so its accessor folds away in the console code).
-        // The input half is reachable now (the inline NetworkToGameStateInterface accessor).
-        // STILL NOT REPRODUCED, TWO REASONS: (a) GameStateToNetworkInterface::GetDirtyTrickQueue()
-        // is declared with no body (BrnNetworkModuleGameStateIOInterfaces.h), so the output half
-        // would be an unresolved external; (b) ScoringSystem::UpdatePaybackTakedowns is declared
-        // against the local stand-in BrnGameState::GameStateToNetworkInterface::DirtyTrickQueue
-        // (BrnScoringSystem.h / BrnScoringSystemEventQueues.h), which is a different type from the
-        // real CgsModule::EventQueue<DirtyTrickEvent,28> typedef, so neither argument converts.
-        // Payback takedowns are an online-only mechanic; offline both queues are empty.
+        // Payback (dirty-trick) takedowns: the inbound network queue (interface +0x2268) and this
+        // frame's outbound one (the output interface's first member). Offline both are empty.
+        mScoringSystem.UpdatePaybackTakedowns(
+            lpPreWorldInputBuffer->GetNetworkToGameStateInterface()->GetDirtyTrickQueue(),
+            lpOutputBuffer->GetGameStateToNetworkInterface()->GetDirtyTrickQueue());
 
         // Clocks, mode branch. `addi r11, r11, -0x6AE0` == this+0x9520 == mfTimeInMode.
         mfTimeInMode += lfSimTimeStep;

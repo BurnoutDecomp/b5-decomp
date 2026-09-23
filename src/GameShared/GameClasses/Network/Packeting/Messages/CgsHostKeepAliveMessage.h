@@ -12,8 +12,7 @@
 // no data members of its own (sizeof == sizeof(Message) == 0x20); the heartbeat frame
 // reuses the inherited Message::mu16Frame field.
 //
-// The X360 build models the vtable as the explicit Message::mpVTable member (no C++
-// `virtual`), matching the committed base; these are therefore plain methods.
+// GetPackedMessageSize, GetName and PackOrUnpack override the Message virtuals.
 //
 // Reconstructed here (ledger func for this TU):
 //   GetName @ 0x827DBC48 -- header-homed inline accessor; returns the literal
@@ -32,11 +31,15 @@ namespace CgsNetwork
         Message*    Construct();
         void        PrepareForSend(u16 lu16CurrentFrame);
         bool        Retrieve();
-        s32         GetPackedMessageSize();
+        s32         GetPackedMessageSize() override;
 
         // Ledger func @ 0x827DBC48 -- inline header-homed accessor.
-        const char* GetName() const { return "Keep Host Alive Message"; }
+        const char* GetName() const override { return "Keep Host Alive Message"; }
 
-        PackOrUnpackResult PackOrUnpack();
+        PackOrUnpackResult PackOrUnpack() override;
     };
+
+    // Console size (the RegisterMessageType length), checked on a 32-bit build.
+    static_assert(sizeof(void*) != 4 || sizeof(HostKeepAliveMessage) == 0x20, "sizeof(HostKeepAliveMessage) == 0x20");
+
 } // namespace CgsNetwork

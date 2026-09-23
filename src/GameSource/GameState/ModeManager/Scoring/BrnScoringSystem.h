@@ -36,6 +36,8 @@
                                                           //   OnlineScoringOutputInterface, OutputBuffer}
 #include "GameSource/GameState/BrnGameStateTypes.h"       // BrnGameState::LandmarkIndex
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::NetworkPlayerID (== s32), BrnNetwork::Road::ChallengeIndex
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // GameStateToNetworkInterface::DirtyTrickQueue (UpdatePaybackTakedowns)
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (the inline per-car accessors)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"  // CgsSystem::Time
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N>
 #include "GameShared/GameClasses/Core/CgsID.h"            // CgsID (== u64)
@@ -110,7 +112,9 @@ namespace BrnGameState
     // GameActionQueue is the real GameStateModuleIO typedef (BrnGameStateSharedIO.h); only
     // TakedownEventQueue stays an incomplete nested forward decl here.
     namespace InputBuffer                  { struct TakedownEventQueue; }
-    namespace GameStateToNetworkInterface  { struct DirtyTrickQueue; }
+    // The game state names the network interface unqualified; UpdatePaybackTakedowns takes its
+    // real DirtyTrickQueue (EventQueue<DirtyTrickEvent,28>).
+    typedef BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface GameStateToNetworkInterface;
     namespace VehicleManagerOutputInterface{ struct RaceCarCrashEventQueue; }
     namespace VehicleOutputInterface       { struct PhysicalTrafficStateQueue; }
 
@@ -465,7 +469,22 @@ namespace BrnGameState
         const CgsSystem::Time GetRaceCarFastestLapTime(EActiveRaceCarIndex leRaceCarIndex) const; // :721 / 0x8231F880
 
         const s32 GetNumberOfTakedowns(EActiveRaceCarIndex leRaceCarIndex) const;            // :726 / 0x82326D50
-        const s32 GetNumberOfCrashes(EActiveRaceCarIndex leRaceCarIndex) const;              // :731
+        // Header-inline (BaseOnlineModeScoring::AwardNetworkRatings inlines it): the crash tally at
+        // CarScoreData +0x54, 0 when the car has no record.
+        const s32 GetNumberOfCrashes(EActiveRaceCarIndex leRaceCarIndex) const               // :731
+        {
+            CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                       "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            const CarData* lpCarData = GetCarData(leRaceCarIndex);
+            if (lpCarData != NULL)
+            {
+                return lpCarData->GetScoreData()->GetMarkedManTakedownsFor();
+            }
+            return 0;
+        }
         const s32 GetNumberOfTakedownsAgainst(EActiveRaceCarIndex leRaceCarIndex) const;     // :736 / 0x82326DD0
 
         // ===== ADDITIVE GROW (declare-only) for the AchievementManagerBase TU =====
@@ -617,13 +636,59 @@ namespace BrnGameState
         void SetCheckPointDistancesToFinishReady(bool lbReady) { mbCheckPointDistancesToFinishReady = lbReady; } // :974 (inline)
         void StoreCarIds(const ActiveRaceCarOutputInterface* lpOutput);                       // :979 / 0x8232B7C0
 
-        f32  GetTotalDistanceDriven(EActiveRaceCarIndex leRaceCarIndex) const;                // :984
-        bool IsNetworkCarsDistanceDrivenValid(EActiveRaceCarIndex leRaceCarIndex) const;      // :989
+        // Header-inline (inlined into AwardNetworkRatings): the distance accumulator at CarScoreData
+        // +0xDC, 0.0f when the car has no record.
+        f32  GetTotalDistanceDriven(EActiveRaceCarIndex leRaceCarIndex) const                 // :984
+        {
+            CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                       "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            const CarData* lpCarData = GetCarData(leRaceCarIndex);
+            if (lpCarData != NULL)
+            {
+                return lpCarData->GetScoreData()->GetDistanceAccumulator();
+            }
+            return 0.0f;
+        }
+
+        // Header-inline (inlined into AwardNetworkRatings): the has-finished byte at CarScoreData
+        // +0x45, false when the car has no record.
+        bool IsNetworkCarsDistanceDrivenValid(EActiveRaceCarIndex leRaceCarIndex) const       // :989
+        {
+            CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                       "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            const CarData* lpCarData = GetCarData(leRaceCarIndex);
+            if (lpCarData != NULL)
+            {
+                return lpCarData->GetScoreData()->GetHasFinished();
+            }
+            return false;
+        }
         CgsSystem::Time GetTimeSpentInFirstPlace(EActiveRaceCarIndex leRaceCarIndex) const;   // :994 / 0x82326F28
         CgsSystem::Time GetTimeSpentInLastPlace(EActiveRaceCarIndex leRaceCarIndex) const;    // :999 / 0x82326FC0
         bool HaveCarsBeenSortedIntoRacePositions() const;                                     // :1003
         CgsSystem::Time GetTimeSpentBoosting(EActiveRaceCarIndex leRaceCarIndex) const;       // :1008 / 0x82327058
-        f32  GetLongestDrift(EActiveRaceCarIndex leRaceCarIndex) const;                       // :1013
+        // Header-inline (inlined into AwardNetworkRatings): CarScoreData +0xF8, 0.0f when the car
+        // has no record.
+        f32  GetLongestDrift(EActiveRaceCarIndex leRaceCarIndex) const                        // :1013
+        {
+            CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                       "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            const CarData* lpCarData = GetCarData(leRaceCarIndex);
+            if (lpCarData != NULL)
+            {
+                return lpCarData->GetScoreData()->GetLongestDrift();
+            }
+            return 0.0f;
+        }
         s32  GetMarkedManTakedowns(EActiveRaceCarIndex leRaceCarIndex) const;                 // :1018
 
         // ===== network round data (declare-only + trivial accessor) =====

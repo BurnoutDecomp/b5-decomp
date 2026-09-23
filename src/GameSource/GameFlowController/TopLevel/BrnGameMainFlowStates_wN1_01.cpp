@@ -8,12 +8,8 @@
 //     at E_LOADINGSTAGE_NETWORK with this frame's GameData IO pair. Same shape as its
 //     LoadDirectorModule / LoadSoundModule siblings.
 //
-// ⛔ Two preconditions before this TU compiles, both outside this wave's files:
-//   * BrnGameMainFlowStates.h must declare the member (next to LoadDirectorModule):
-//       bool LoadNetworkModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
-//                              const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer);
-//   * BrnGameModule.hpp must include the real BrnNetworkModule.h in place of its placeholder
-//     class (the Prepare below is the real module's slot-17 virtual).
+// ⛔ This TU compiles only once BrnGameModule.hpp includes the real BrnNetworkModule.h in place
+// of its placeholder class (the Prepare below is the real module's slot-17 virtual).
 // ============================================================================
 
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"

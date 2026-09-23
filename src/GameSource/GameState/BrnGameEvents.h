@@ -36,10 +36,12 @@ enum EGameEventType
     E_EVENT_CHANGE_NETWORK_CAR      = 7,
     E_EVENT_ONLINE_PLAYER_ADDED     = 127,
     E_EVENT_ONLINE_PLAYER_FINALISED = 128,
-    E_EVENT_ONLINE_PLAYER_REMOVED   = 129,   // value unconfirmed (template tag only)
+    E_EVENT_ONLINE_PLAYER_REMOVED   = 129,   // posted as 129 by TranslateNetworkEventsToGameEvents
     E_EVENT_START_NETWORK_GAME      = 17,    // DWARF BrnGameEvents.h (full contiguous EGameEventType)
     E_EVENT_START_NETWORK_ROUND     = 18,    // DWARF BrnGameEvents.h
-    E_EVENT_REMOTE_PLAYER_DISCONNECTED = 131, // value unconfirmed (template tag only)
+    // Posted as 121 by TranslateNetworkEventsToGameEvents; ProcessGameEvents' case 121 is the
+    // arm that turns it into the remote-player-disconnected action.
+    E_EVENT_REMOTE_PLAYER_DISCONNECTED = 121,
     E_EVENT_RECORD_PROP_HIT         = 111,   // DWARF BrnGameEvents.h:121
     E_EVENT_CHANGE_WORLD_REGION     = 115,   // X360-attested: RaceCarEntityModule::
                                              // UpdateCurrentWorldRegion @0x822F5824 posts it
@@ -146,12 +148,10 @@ enum EGameEventType
     // Freeburn-challenge events (PS3-DWARF values; used as template tags -- the X360
     // discriminants ChallengeManager::ProcessEvent actually switches on are the raw
     // jump-table case values in that body, which drift from these).
-    // NOTE: the X360 values of these two are UNKNOWN but are provably NOT 165/166 -- the
-    // ChallengeManager::ProcessEvent jump table attests X360 165 == action-success and
-    // 166 == challenge-reset (see the X360-attested block below; duplicate enumerator
-    // values are intentional). Template tags only; do not switch on these two by name.
-    E_EVENT_FREEBURN_CHALLENGE_SUCCESS_UPDATE = 165, // DWARF BrnGameEvents.h:175 (value unconfirmed on X360)
-    E_EVENT_FREEBURN_CHALLENGE_SUCCESS        = 166, // DWARF BrnGameEvents.h:176 (value unconfirmed on X360)
+    // The network bridge posts these two as 171 and 172 (TranslateNetworkEventsToGameEvents),
+    // and ProcessGameEvents' case 172 hands the record to ModeManager::HandleChallengeSuccessEvent.
+    E_EVENT_FREEBURN_CHALLENGE_SUCCESS_UPDATE = 171,
+    E_EVENT_FREEBURN_CHALLENGE_SUCCESS        = 172,
     // ---- X360-ATTESTED discriminants (ChallengeManager::ProcessEvent 0x8233D6A8 jump
     // table: r11 = type - 54, 120 slots; the assert strings name each case's event).
     // PS3-DWARF values drift NON-uniformly (noted per enumerator) -- keep the X360 values.
@@ -201,15 +201,16 @@ enum EGameEventType
     // reconstructed from the case body (FLAG).
     E_EVENT_FREEBURN_CHALLENGE_RESET_ALL_ACTIONS = 167, // X360-attested value; FLAGGED name
     E_EVENT_ACTIVE_FREEBURN_CHALLENGE         = 173, // X360 (PS3 167; "lpActiveChallengeEvent")
-    // Road-rules events (StreetManager keystone, wave B). PS3-DWARF-derived tags;
-    // values unconfirmed on X360 (template tags only -- the retail discriminants are
-    // the ProcessGameEvents jump-table cases, owned by that dispatcher TU).
-    E_EVENT_BUDDY_REMOVED                    = 190,  // value unconfirmed (template tag only)
+    // Road-rules events (StreetManager keystone, wave B). The network bridge posts the buddy and
+    // the four online road-rules events under these ids, and ProcessGameEvents' cases 150 /
+    // 130 / 131 / 132 / 133 call StreetManager::ProcessBuddyRemoved / ProcessNetworkHighScoreEvent
+    // / ProcessUploadEvent / ProcessDownloadEvent / ProcessConnectedOnlineEvent.
+    E_EVENT_BUDDY_REMOVED                    = 150,
     E_EVENT_ROAD_RULE_ROAD_SCORE_REQUEST     = 191,  // value unconfirmed (template tag only)
-    E_EVENT_ONLINE_ROAD_RULES_PB_RECV        = 192,  // value unconfirmed (template tag only)
-    E_EVENT_ONLINE_ROAD_RULES_UPLOADED       = 193,  // value unconfirmed (template tag only)
-    E_EVENT_ONLINE_ROAD_RULES_DOWNLOADED     = 194,  // value unconfirmed (template tag only)
-    E_EVENT_ONLINE_ROAD_RULES_CONNECT_INFO   = 195,  // value unconfirmed (template tag only)
+    E_EVENT_ONLINE_ROAD_RULES_PB_RECV        = 130,
+    E_EVENT_ONLINE_ROAD_RULES_UPLOADED       = 131,
+    E_EVENT_ONLINE_ROAD_RULES_DOWNLOADED     = 132,
+    E_EVENT_ONLINE_ROAD_RULES_CONNECT_INFO   = 133,
 };
 
 template <EGameEventType T>
@@ -323,20 +324,32 @@ struct FinishedSyncingPlayersEvent
     u8 muPad0;   // 0x00 -- asm-attested size (1) only; real field(s)/discriminant unknown
 };
 
-// X360 0x823A78F0. mNetworkPlayerID at offset 0.
+// mNetworkPlayerID at offset 0. 32 bytes: the network bridge builds it from
+// the network OUT record 18 and ProcessGameEvents case 7 reads it. The float at +0x18 is a
+// console-only member (not in the reference record); the bridge copies it through.
 struct ChangeNetworkCarEvent : public GameEvent<E_EVENT_CHANGE_NETWORK_CAR>
 {
-    BrnNetwork::NetworkPlayerID mNetworkPlayerID;
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;  // 0x00
+    CgsID                       mCarModelId;       // 0x08
+    CgsID                       mWheelModelId;     // 0x10
+    f32                         mf18;              // 0x18 (console-only member; unnamed)
 
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID);
 };
 
-// X360 0x823A77D0. mNetworkPlayerID at offset 0x10 (after two CgsID).
+// mNetworkPlayerID at offset 0x10 (after two CgsID). 40 bytes: ProcessGameEvents
+// case 127 copies the ids, the team, the float at +0x18 and the two paint indices into the
+// online-player-added action. The float is a console-only member (not in the reference record).
 struct OnlinePlayerAddedEvent : public GameEvent<E_EVENT_ONLINE_PLAYER_ADDED>
 {
-    CgsID                       mModelID;          // 0x00
-    CgsID                       mWheelID;          // 0x08
-    BrnNetwork::NetworkPlayerID mNetworkPlayerID;  // 0x10
+    CgsID                       mModelID;                 // 0x00
+    CgsID                       mWheelID;                 // 0x08
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;         // 0x10
+    EPlayerTeam                 meTeam;                   // 0x14
+    f32                         mf18;                     // 0x18 (console-only member; unnamed)
+    u16                         mu16CarColourIndex;       // 0x1C
+    u16                         mu16CarPaintFinishIndex;  // 0x1E
+    bool                        mbIsLocalPlayer;          // 0x20
 
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID);
 };
@@ -349,13 +362,28 @@ struct OnlinePlayerFinalisedEvent : public GameEvent<E_EVENT_ONLINE_PLAYER_FINAL
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID);
 };
 
-// X360 0x823A7890. mNetworkPlayerID at offset 0.
+// mNetworkPlayerID at offset 0. 8 bytes.
 struct OnlinePlayerRemovedEvent : public GameEvent<E_EVENT_ONLINE_PLAYER_REMOVED>
 {
-    BrnNetwork::NetworkPlayerID mNetworkPlayerID;
+    BrnNetwork::NetworkPlayerID mNetworkPlayerID;        // 0x00
+    bool                        mbIsLocalPlayerInGame;   // 0x04
 
     void SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID);
 };
+
+// The three records above are pointer-free, so the console offsets and sizes hold on the host.
+static_assert(offsetof(ChangeNetworkCarEvent, mCarModelId)  == 0x08, "ChangeNetworkCarEvent car model at +0x08");
+static_assert(offsetof(ChangeNetworkCarEvent, mWheelModelId) == 0x10, "ChangeNetworkCarEvent wheel model at +0x10");
+static_assert(offsetof(ChangeNetworkCarEvent, mf18)         == 0x18, "ChangeNetworkCarEvent float at +0x18");
+static_assert(sizeof(ChangeNetworkCarEvent) == 32, "ChangeNetworkCarEvent is posted as 32 bytes");
+static_assert(offsetof(OnlinePlayerAddedEvent, meTeam)                  == 0x14, "OnlinePlayerAddedEvent team at +0x14");
+static_assert(offsetof(OnlinePlayerAddedEvent, mf18)                    == 0x18, "OnlinePlayerAddedEvent float at +0x18");
+static_assert(offsetof(OnlinePlayerAddedEvent, mu16CarColourIndex)      == 0x1C, "OnlinePlayerAddedEvent colour at +0x1C");
+static_assert(offsetof(OnlinePlayerAddedEvent, mu16CarPaintFinishIndex) == 0x1E, "OnlinePlayerAddedEvent paint finish at +0x1E");
+static_assert(offsetof(OnlinePlayerAddedEvent, mbIsLocalPlayer)         == 0x20, "OnlinePlayerAddedEvent local flag at +0x20");
+static_assert(sizeof(OnlinePlayerAddedEvent) == 40, "OnlinePlayerAddedEvent is posted as 40 bytes");
+static_assert(offsetof(OnlinePlayerRemovedEvent, mbIsLocalPlayerInGame) == 0x04, "OnlinePlayerRemovedEvent flag at +0x04");
+static_assert(sizeof(OnlinePlayerRemovedEvent) == 8, "OnlinePlayerRemovedEvent is posted as 8 bytes");
 
 // X360 0x823A7770. mNetworkPlayerID at offset 0.
 struct RemotePlayerDisconnectedEvent : public GameEvent<E_EVENT_REMOTE_PLAYER_DISCONNECTED>
