@@ -18,6 +18,15 @@
 //   HandleWaitingToAwardPayback @0x823978B0 (arm [2] = 0x8239AC54, vehicle output = r21)
 //                        the same snapshot (0x823978FC) and read (0x8239790C); bne -> return; else
 //                        -1.0 -> +0x24C, 3 -> +0x25C, 0 -> +0x266, AddEvent(outGui, &1, 0xB0, 4)  (G12-D5)
+//   HandleAwardingPayback @0x82397970 (arm [3] = 0x8239AC64: r4 = out, r5 = vehicle output, r6 = mode)
+//                        !(+0x24C < 1.0 (flt_82001C98)) && !+0x266 (fcmpu/blt: NaN awards) ->
+//                        +0x266 = 1; +0x258 = hi32(OLD seed) % 3, seed = seed * 0x5851F42D4C957F2D + 1;
+//                        gui+4 NewDirtyTrick {player, +0x244, +0x258} (0x82397A64);
+//                        SendNetworkDirtyTrickMessage(player, +0x244, +0x258, 1) (0x82397A8C). Then,
+//                        NOT as an else: crashing[player] -> action 0xD3 size 1 (0x82397AE0), +0x258 = 3,
+//                        +0x244 = -1, -1.0 -> +0x24C, 0 -> +0x25C / +0x266, GUI 0xB0 {1}            (G12-D6)
+//   Update tail          GetGameStateToNetworkInterface (0x8231D800) -> DirtyTrickEvent Append of +0x30
+//                        (0x8239ADEC), then +0x38 = 0: the award's message reaches the network queue.
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"
@@ -198,6 +207,37 @@ static s32 CountType(const CgsModule::VariableEventQueue<N, 16>& lrQueue, s32 li
 
 static s32 ReadS32(const void* lp) { s32 li; std::memcpy(&li, lp, 4); return li; }
 
+// The console's LCG (0x5851F42D4C957F2D, every inlined site) as an independent oracle for the draw.
+static const u64 KU_CONSOLE_LCG = 0x5851F42D4C957F2Dull;
+static u64 NextSeed(u64 luSeed) { return luSeed * KU_CONSOLE_LCG + 1u; }
+static s32 AwardFor(u64 luSeed) { return static_cast<s32>(static_cast<u32>(luSeed >> 32) % 3u); }
+
+typedef BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface::DirtyTrickQueue NetworkQueue;
+static const NetworkQueue& NetworkOut() { return *gOutput.mNetwork.GetDirtyTrickQueue(); }
+static bool IsMessage(const BrnNetwork::BrnNetworkModuleIO::DirtyTrickEvent& lr, s32 liAggressor, s32 liVictim,
+                      s32 liType, s32 liStatus)
+{
+    return static_cast<s32>(lr.meAggressorActiveRaceCarIndex) == liAggressor
+        && static_cast<s32>(lr.meVictimActiveRaceCarIndex) == liVictim
+        && static_cast<s32>(lr.meDirtyTrickType) == liType
+        && static_cast<s32>(lr.meDirtyTrickStatus) == liStatus;
+}
+static bool IsNewDirtyTrick(s32 liIndex, s32 liAggressor, s32 liVictim, s32 liType)
+{
+    const GameStateModuleIO::GameStateToGuiInterface::NewDirtyTrickQueue& lrQueue = gOutput.mGui.mNewDirtyTrickQueue;
+    return liIndex < lrQueue.GetLength()
+        && static_cast<s32>(lrQueue.GetEvent(liIndex).meAggressorActiveRaceCarIndex) == liAggressor
+        && static_cast<s32>(lrQueue.GetEvent(liIndex).meVictimActiveRaceCarIndex) == liVictim
+        && static_cast<s32>(lrQueue.GetEvent(liIndex).meTrickType) == liType;
+}
+static bool RingUntouched(const PaybackManager& lr)
+{
+    for (u32 luSlot = 0; luSlot < 8; ++luSlot)
+        if (lr.mRdmNumGenerator.mauIntegerBuffer[luSlot] != 0u)
+            return false;
+    return lr.mRdmNumGenerator.muOldestBufferIndex == 0u;
+}
+
 // Exactly one type-176 (0xB0) record, 4 bytes, carrying 1: the aggressor ChangeState's "show".
 static bool OneShowRecord()
 {
@@ -286,6 +326,124 @@ int main()
         Check(lbTwo && lbStillTwo && lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER
                   && lr.mfPaybackAggTimer == -1.0f,
               "D1+D5 chain: crash starts 1 -> 2, holds while crashing, ends 2 -> 3");
+    }
+
+    // ===================== G12-D6: HandleAwardingPayback through arm [3] ===========================
+    const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+    const u64 luSeedA = 0x0123456789ABCDEFull;   // hi32 0x01234567 % 3 == 1
+    const u64 luSeedB = 0xFFFFFFFE00000000ull;   // hi32 0xFFFFFFFE % 3 == 2
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = false;
+        lr.mfPaybackAggTimer = 0.75f;   // Update's advance makes it 1.0: the gate opens (1.0 is not < 1.0)
+        lr.mRdmNumGenerator.muSeed = luSeedA;
+        Tick(lr);
+        Check(gSetFromCalls == 1 && gpSetFromArg == gpVehicleOutput,
+              "D6 the arm snapshots the vehicle output Update was handed  @0x823979BC");
+        Check(lr.mbPaybackAwarded, "D6 timer 1.0, not yet awarded -> +0x266 = 1  @0x823979E8");
+        Check(static_cast<s32>(lr.meAwardedDirtyTrick) == AwardFor(luSeedA) && AwardFor(luSeedA) == 1,
+              "D6 +0x258 = hi32(OLD seed) % 3 (mulhwu 0xAAAAAAAB)  @0x82397A3C");
+        Check(lr.mRdmNumGenerator.muSeed == NextSeed(luSeedA) && RingUntouched(lr),
+              "D6 ...ONE LCG step (mulld 0x5851F42D4C957F2D, +1), the float ring untouched  @0x82397A1C");
+        Check(gOutput.mGui.mNewDirtyTrickQueue.GetLength() == 1 && IsNewDirtyTrick(0, 2, 6, 1),
+              "D6 gui+4 NewDirtyTrick record {player, +0x244, +0x258}  @0x82397A64");
+        Check(NetworkOut().GetLength() == 1 && IsMessage(NetworkOut().GetEvent(0), 2, 6, 1, 1)
+                  && lr.mDirtyTrickOutputQueue.GetLength() == 0,
+              "D6 network message {player, victim, trick, AVAILABLE 1} reaches the interface via Update's Append  @0x82397A8C/0x8239ADEC");
+        Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER && lr.mfPaybackAggTimer == 1.0f
+                  && CountType(gModule.mOutputGuiEventQueue, 176, nullptr, nullptr) == 0
+                  && CountType(gOutput.mActions, 211, nullptr, nullptr) == 0,
+              "D6 the award does not change state or timer and posts no 176 / 0xD3");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = false;
+        lr.mfPaybackAggTimer = 0.5f;    // -> 0.75: still < 1.0
+        lr.mRdmNumGenerator.muSeed = luSeedA;
+        Tick(lr);
+        Check(!lr.mbPaybackAwarded && lr.mRdmNumGenerator.muSeed == luSeedA && gOutput.mGui.mNewDirtyTrickQueue.GetLength() == 0
+                  && NetworkOut().GetLength() == 0 && lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER,
+              "D6 timer 0.75 < 1.0 -> no award, no draw (blt)  @0x823979D4");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = true;     // already awarded
+        lr.mfPaybackAggTimer = 2.0f;
+        lr.mRdmNumGenerator.muSeed = luSeedA;
+        Tick(lr);
+        Check(lr.mRdmNumGenerator.muSeed == luSeedA && lr.meAwardedDirtyTrick == static_cast<BrnNetwork::EPaybackType>(2)
+                  && gOutput.mGui.mNewDirtyTrickQueue.GetLength() == 0 && NetworkOut().GetLength() == 0,
+              "D6 already awarded (+0x266 != 0) -> no second award (bne)  @0x823979E0");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = false;
+        lr.mfPaybackAggTimer = lfNaN;
+        lr.mRdmNumGenerator.muSeed = luSeedB;
+        Tick(lr);
+        Check(lr.mbPaybackAwarded && gOutput.mGui.mNewDirtyTrickQueue.GetLength() == 1,
+              "D6 a NaN timer awards (fcmpu unordered: blt not taken)  @0x823979D4");
+        Check(static_cast<s32>(lr.meAwardedDirtyTrick) == AwardFor(luSeedB) && AwardFor(luSeedB) == 2,
+              "D6 a second seed draws trick 2 (0xFFFFFFFE % 3)");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = false;
+        lr.mfPaybackAggTimer = 0.25f;   // gate closed
+        lr.mRdmNumGenerator.muSeed = luSeedA;
+        gabCrashing[2] = true;          // the player crashes again
+        Tick(lr);
+        s32 liSize = -1;
+        Check(CountType(gOutput.mActions, 211, nullptr, &liSize) == 1 && liSize == 1,
+              "D6 player crashing -> action 0xD3 (PaybackLostAction), 1 byte  @0x82397AE0");
+        Check(lr.meAwardedDirtyTrick == PM::KE_NO_DIRTY_TRICK && lr.mePaybackVictimRaceCarIndex == ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
+              "D6 ...+0x258 = 3, +0x244 = -1  @0x82397B04/0x82397B08");
+        Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_IDLE && lr.mfPaybackAggTimer == -1.0f
+                  && !lr.mbPaybackAwarded && OneShowRecord(),
+              "D6 ...ChangeState(0): +0x24C = -1.0, +0x25C = 0, +0x266 = 0, GUI 176 {1}  @0x82397B00..0x82397B24");
+        Check(lr.mRdmNumGenerator.muSeed == luSeedA && gOutput.mGui.mNewDirtyTrickQueue.GetLength() == 0 && NetworkOut().GetLength() == 0,
+              "D6 ...with the gate closed nothing is awarded");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = false;
+        lr.mfPaybackAggTimer = 0.75f;   // gate opens this frame ...
+        lr.mRdmNumGenerator.muSeed = luSeedA;
+        gabCrashing[2] = true;          // ... and the player is crashing: both blocks run
+        Tick(lr);
+        Check(gOutput.mGui.mNewDirtyTrickQueue.GetLength() == 1 && IsNewDirtyTrick(0, 2, 6, 1)
+                  && NetworkOut().GetLength() == 1 && IsMessage(NetworkOut().GetEvent(0), 2, 6, 1, 1),
+              "D6 award and loss in one frame: the award's record + message go out first (not an else)  @0x82397A90");
+        Check(lr.mePaybackAggressorState == PM::E_PAYBACK_AGGRESSOR_STATE_IDLE && lr.meAwardedDirtyTrick == PM::KE_NO_DIRTY_TRICK
+                  && !lr.mbPaybackAwarded && CountType(gOutput.mActions, 211, nullptr, nullptr) == 1,
+              "D6 ...then the loss resets it (state 0, trick 3, +0x266 = 0, one 0xD3)");
+    }
+    {
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_READY_TO_TRIGGER);
+        lr.mbPaybackAwarded = false;
+        lr.mfPaybackAggTimer = 0.75f;
+        lr.mRdmNumGenerator.muSeed = luSeedB;
+        Tick(lr);
+        Check(static_cast<s32>(lr.meAwardedDirtyTrick) == 2 && IsNewDirtyTrick(0, 2, 6, 2)
+                  && NetworkOut().GetLength() == 1 && IsMessage(NetworkOut().GetEvent(0), 2, 6, 2, 1),
+              "D6 the drawn trick is what the record and the message carry (seed B -> 2)");
+    }
+    {
+        // The whole aggressor chain through Update: state 2 ends its crash -> 3 (timer -1.0); then
+        // 0.0, 0.25, 0.5, 0.75 -> no award; 1.0 -> award, on exactly the fifth tick in state 3.
+        PaybackManager& lr = Fresh(PM::E_PAYBACK_VICTIM_STATE_IDLE, PM::E_PAYBACK_AGGRESSOR_STATE_AWARD_DT);
+        lr.mRdmNumGenerator.muSeed = luSeedA;
+        Tick(lr);   // 2 -> 3
+        bool lbEarly = false;
+        for (int liTick = 0; liTick < 4; ++liTick)
+        {
+            Tick(lr);
+            lbEarly = lbEarly || lr.mbPaybackAwarded;
+        }
+        const bool lbNotYet = !lbEarly && lr.mfPaybackAggTimer == 0.75f;
+        Tick(lr);
+        Check(lbNotYet && lr.mbPaybackAwarded && lr.mfPaybackAggTimer == 1.0f && static_cast<s32>(lr.meAwardedDirtyTrick) == 1,
+              "D5+D6 chain: 3 entered at -1.0, award exactly when Update's timer reaches 1.0");
     }
 
     Check(gAsserts == 0, "valid fixtures fire no assert");
