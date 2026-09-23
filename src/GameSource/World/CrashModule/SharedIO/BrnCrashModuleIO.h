@@ -29,6 +29,7 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleTrafficIOInterfaces.h" // TrafficInputInterface + TrafficOutputInterface
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h" // RaceCarOutputInterface (the crash-complete ring)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"    // BrnPhysics::Vehicle::VehicleOutputInterface + VehicleManagerOutputInterface
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"     // BrnPhysics::Vehicle::VehicleInputInterface (OutputBuffer_PreScene +0x670)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"             // CgsSystem::TimerStatusInterface
 // [crash exit 2026-08-25] InputBuffer_PreScene now holds the REAL RCEntityActiveRaceCarOutputInterface
 // by value (it used to be a console-sized opaque blob), so its home header is a hard dependency.
@@ -232,10 +233,8 @@ namespace CrashIO
     // NAMES (PS3 DecFIGS reconcile, X360-confirmed): member + accessor names are from the PS3
     // DWARF (BrnCrashModuleIO.h:141-143 / 130-137) and corroborated by the X360 truncated
     // symbol stems (GetTr.. / GetV.. / GetRa..) plus the matching member ORDER + offsets
-    // (Traffic@+0x8, Vehicle@+0x670, RaceCar@+0x231D0). FLAG (foreign types): the three
-    // interface members have their own owning homes elsewhere and are NOT reconstructed here;
-    // the regions between member starts are modelled as correctly-sized opaque storage so the
-    // three X360-pinned return offsets are exact.
+    // (Traffic@+0x8, Vehicle@+0x670, RaceCar@+0x231D0). All three members are the real committed
+    // interface types (their homes are elsewhere; see MEMBERS below).
     // ⭐⭐ [crash exit 2026-08-25] THIS BUFFER IS ALSO THE "POST-SCENE" CRASH OUTPUT BUFFER.
     // BrnWorld::CrashModuleIO::OutputBuffer_PostScene DOES NOT EXIST. It was a phantom type
     // invented from the mangled signatures of the three post-scene crash bridges, and it stood
@@ -271,16 +270,19 @@ namespace CrashIO
     // reproduced and must not be static_asserted; only the ORDER is load-bearing).
     struct OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
-        // The crash side's vehicle input interface has no committed home yet and nothing in the
-        // tree reads it; kept opaque so the member ORDER around it stays right.
-        struct VehicleInputInterfaceStorage  { unsigned char maBytes[1]; };
+        // DWARF BrnCrashModuleIO.h:46 `typedef VehicleInputInterface VehicleInputInterface;` -- the
+        // crash side's requests to the physics module (network traffic transform updates), merged
+        // into the physics input by WorldModule::BridgeCrashModuleToPhysicsModule @0x827AAC70
+        // (0x827AACEC `bl VehicleInputInterface::Append`). G63-D2 (crash parity 2026-09-23): this
+        // was a 1-byte `VehicleInputInterfaceStorage` placeholder that Construct never touched.
+        typedef BrnPhysics::Vehicle::VehicleInputInterface VehicleInputInterface;
 
         // +0x8 (line 130/131) -- the cleanup-traffic + network-crashing-traffic rings.
         const TrafficOutputInterface* GetTrafficOutputInterface() const;   // 0x827A23E0 read-lock
         TrafficOutputInterface*       GetTrafficOutputInterface();         // 0x827BB5D0 write-lock
         // +0x670 (line 133/134).
-        const VehicleInputInterfaceStorage*  GetVehicleInputInterface() const;    // 0x827A2488 read-lock
-        VehicleInputInterfaceStorage*        GetVehicleInputInterface();          // 0x827BB678 write-lock
+        const VehicleInputInterface*  GetVehicleInputInterface() const;    // 0x827A2488 read-lock
+        VehicleInputInterface*        GetVehicleInputInterface();          // 0x827BB678 write-lock
         // +0x231D0 (line 136/137) -- holds the EventQueue<RaceCarCrashCompleteEvent,10> that
         // carries "this race car has finished crashing" to the race-car and prop modules.
         const RaceCarOutputInterface* GetRaceCarOutputInterface() const;   // 0x827A2530 read-lock
@@ -298,7 +300,7 @@ namespace CrashIO
 
     private:
         TrafficOutputInterface       mTrafficOutputInterface;   // X360 +0x8     (widens on host)
-        VehicleInputInterfaceStorage mVehicleInputInterface;    // X360 +0x670   (opaque, see above)
+        VehicleInputInterface        mVehicleInputInterface;    // X360 +0x670   (console span 0x22B60; widens on host)
         RaceCarOutputInterface       mRaceCarOutputInterface;   // X360 +0x231D0 (widens on host)
     };
 }

@@ -56,14 +56,14 @@ namespace CrashIO
     }
 
     // +0x670 -- vehicle interface.
-    const OutputBuffer_PreScene::VehicleInputInterfaceStorage*
+    const OutputBuffer_PreScene::VehicleInputInterface*
     OutputBuffer_PreScene::GetVehicleInputInterface() const   // 0x827A2488 read-lock
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mVehicleInputInterface;
     }
 
-    OutputBuffer_PreScene::VehicleInputInterfaceStorage*
+    OutputBuffer_PreScene::VehicleInputInterface*
     OutputBuffer_PreScene::GetVehicleInputInterface()         // 0x827BB678 write-lock
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -88,32 +88,33 @@ namespace CrashIO
     // ====================================================================================
     // OutputBuffer_PreScene::Construct   X360 0x827CE9E8
     //
-    //   *this = 1                                                -- IOBuffer::Construct
-    //   CleanupTrafficEvent_160_::Construct(this + 8)         \__ == TrafficOutputInterface
-    //   NetworkTrafficCrashingEvent_160_::Construct(this + 332) /   ::Construct over +0x8
-    //   VehicleInputInterface::Construct(this + 1648)            -- mVehicleInputInterface
-    //   RaceCarCrashCompleteEvent_10_::Construct(this + 143824)  -- mRaceCarOutputInterface's
-    //                                                               queue; 143824 == 0x231D0
-    //   *(this + 143826) = 0                                     -- a trailing byte in the same
-    //                                                               interface (2 past the queue
-    //                                                               base; not modelled)
+    //   0x827CEA0C  stb 1, 0(this)                                    -- IOBuffer::Construct
+    //   0x827CEA10  CleanupTrafficEvent<160>::Construct(this + 8)          \__ TrafficOutputInterface
+    //   0x827CEA18  NetworkTrafficCrashingEvent<160>::Construct(this+0x518) /   ::Construct over +0x8
+    //   0x827CEA20  VehicleInputInterface::Construct(this + 0x670)        -- mVehicleInputInterface
+    //   0x827CEA30  RaceCarCrashCompleteEvent<10>::Construct(this+0x231D0) -- mRaceCarOutputInterface's
+    //                                                                        queue
+    //   0x827CEA38  stw 0, 8(this + 0x231D0)                              -- the same queue's
+    //               miLength = 0, which that Construct (0x822E3600: +0 buffer, +4 capacity 10,
+    //               +8 count 0) has already stored; the queue's own Construct covers it.
     //
-    // ⭐ THE +0x231D0 CONSTRUCT IS THE ONE THAT MATTERS: it is the crash-complete ring that
-    // ResetRaceCarFromCrashIndex AddEvent()s into and that
+    // ⭐ THE +0x231D0 CONSTRUCT IS THE ONE THAT MATTERS FOR THE CRASH EXIT: it is the crash-complete
+    // ring that ResetRaceCarFromCrashIndex AddEvent()s into and that
     // RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents drains. 143824 is also, exactly, the
     // number the previous wave's "OUT OF BOUNDS @143824" measurement was reporting against the
     // phantom OutputBuffer_PostScene -- it was this member's own offset all along.
     //
-    // ⛔ mVehicleInputInterface IS NOT CONSTRUCTED HERE, and that is not an omission: this tree
-    // still models it as `VehicleInputInterfaceStorage { unsigned char maBytes[1] }` (see the type
-    // banner). There is nothing to construct until it is promoted to the real type, and nothing
-    // in the reconstructed crash module writes it. [FLAG] DELETE-WHEN it is promoted.
+    // G63-D2 (crash parity 2026-09-23): the 0x827CEA20 leg was missing while mVehicleInputInterface
+    // was a 1-byte placeholder. It is the real interface now, and its own Construct (0x822E66A0)
+    // points each of its event queues at its storage with a zero length and clears its
+    // added-for-collision bits, at the console's position in the sequence.
     // ====================================================================================
     void OutputBuffer_PreScene::Construct()
     {
         CgsModule::IOBuffer::Construct();
 
         mTrafficOutputInterface.Construct();
+        mVehicleInputInterface.Construct();
         mRaceCarOutputInterface.GetRaceCarCrashCompleteEventQueue()->Construct();
     }
 
