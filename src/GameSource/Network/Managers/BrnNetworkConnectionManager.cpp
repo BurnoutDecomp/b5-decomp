@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameSource/Network/BrnNetworkManager.h"                                   // BrnNetworkManager, GetTime/GetServerInterface/GetPlayerManager
 #include "GameSource/Network/BrnServerInterface.h"                                  // BrnServerInterface (GetGameComponent/GetUsersetsComponent/GetStatus)
-#include "GameSource/Network/BrnNetworkPlayer.h"                                    // BrnNetwork::BrnNetworkPlayer (IsNatable/GetPlayerName)
+#include "GameSource/Network/BrnNetworkPlayer.h"                                    // BrnNetwork::BrnNetworkPlayer (base paused flag / name)
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h"              // BrnNetwork::PlayerParams
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                // CgsNetwork::PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"     // CgsNetwork::PlayersConnectionManager
@@ -147,7 +147,7 @@ namespace BrnNetwork
         }
 
         CgsNetwork::PlayersConnectionManager* lpConnectionManager =
-            mpNetworkManager->GetPlayerManager()->GetPlayersConnectionManager();
+            mpNetworkManager->GetPlayersConnectionManager();
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
 
         if (lpConnectionManager->AreAllConnectionsSuccessful())
@@ -161,11 +161,11 @@ namespace BrnNetwork
                 BrnNetworkPlayer* lpPlayer =
                     static_cast<BrnNetworkPlayer*>(lpPlayerManager->GetPlayerByID(lPlayerID));
                 if (lpPlayer
-                    && lpPlayer->IsNatable()
+                    && lpPlayer->mbNetworkPlayerPaused
                     && lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_GAMES)
                            == BrnServerInterface::E_STATUS_IDLE)
                 {
-                    lpGames->KickPlayer(lpPlayer->GetPlayerName(),
+                    lpGames->KickPlayer(lpPlayer->GetName(),
                                         CgsNetwork::E_KICKREASON_LOST_CONNECTION, 0);
                     mLastKickTime = mpNetworkManager->GetTime();
                 }

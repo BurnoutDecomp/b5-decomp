@@ -94,21 +94,18 @@ namespace BrnNetwork
         // BrnNetworkManager::Prepare and ::Release).
         bool Prepare();
 
-        // DWARF BrnNetworkInviteManager.h:58 -- release counterpart of Prepare. Body not recovered
-        // in this TU (declared-only; resolved by its own slice / inlined at the caller).
+        // Release counterpart of Prepare: re-arm the get-game-id sub-machine to IDLE; returns true.
         bool Release();
 
         // X360 0x825488E0 -- tear the manager back down to its zero/idle state (called by
         // BrnNetworkManager::Destruct). meInviteState = COUNT (7), meGetGameIDState = IDLE (2).
         void Destruct();
 
-        // DWARF BrnNetworkInviteManager.h:66 -- per-frame tick / invite state-machine dispatch.
-        // Body not recovered in this TU (no X360 asm in the recovered set); declared-only.
+        // Per-frame tick / invite state-machine dispatch.
         void Update();
 
-        // DWARF BrnNetworkInviteManager.h:70 -- force the machine into PREPARING_FOR_INVITE. Body
-        // not recovered in this TU; declared-only.
-        void SetPreparingForInvite();
+        // Force the machine into PREPARING_FOR_INVITE (inlined into the buddy manager's StartInvite).
+        void SetPreparingForInvite() { meInviteState = E_INVITE_STATE_PREPARING_FOR_INVITE; }
 
         // X360 0x82563210 -- begin an invite/join: if the hard disk is available copy the params in
         // and enter LOGGING_IN_TO_SERVER, otherwise post a NetworkOutInviteFailed event (no disk).
@@ -120,9 +117,9 @@ namespace BrnNetwork
         // and post an InviteComplete(false) game event. Called from BrnNetwork::StateManager.
         void LogInComplete(bool lbLoggedIn);
 
-        // DWARF BrnNetworkInviteManager.h:85 -- the join attempt finished. Body not recovered in
-        // this TU; declared-only.
-        void JoinGameComplete(bool lbJoinedGame);
+        // The join attempt finished: end the invite with the join result (inlined into the state
+        // manager's join-finished callback).
+        void JoinGameComplete(bool lbJoinedGame) { CompleteInvite(lbJoinedGame); }
 
         // X360 0x82548A90 -- true while an invite/join is in progress (meInviteState != COUNT).
         // Called by BrnNetwork::BrnNetworkModule::ProcessBeforeSimulation.
@@ -132,9 +129,18 @@ namespace BrnNetwork
         // sub-machine (asserts the sub-machine is idle and the name is non-empty).
         void DownloadPlayersGameIDFromServer(const PlayerName* lpPlayerName);
 
-        // DWARF BrnNetworkInviteManager.h:99 -- read back the downloaded game id. Body not
-        // recovered in this TU; declared-only.
-        bool GetGameID(s32* lpiGameID);
+        // Read back the downloaded game id: valid (true) once the get-game-id sub-machine is idle
+        // again, otherwise 0 and false (inlined into Update).
+        bool GetGameID(s32* lpiGameID)
+        {
+            if (meGetGameIDState == E_GET_ID_STATE_IDLE)
+            {
+                *lpiGameID = mPlayerInfoData.GetGameID();
+                return true;
+            }
+            *lpiGameID = 0;
+            return false;
+        }
 
     private:
         // DWARF BrnNetworkInviteManager.h:137 -- act on the game-state actions. Body not recovered

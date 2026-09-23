@@ -277,9 +277,31 @@ namespace CgsNetwork
     }
 
     // -------------------------------------------------------------------------------
+    // Register the per-player messages for a remote player (the local player has no network
+    // player to carry them) and append the player to the election list.
     void HostMigrationManager::AddPlayer(NetworkPlayerID liPlayerID)
     {
-        RegisterMessages(liPlayerID);
+        CGS_ASSERT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
+
+        *CgsDev::Log::gpDebugPrint << "CgsNetwork::HostMigrationManager::AddPlayer"
+                                   << ": id " << static_cast<s32>(liPlayerID) << "\n";
+
+        if (liPlayerID != mpPlayerManager->GetLocalPlayerID())
+        {
+            RegisterMessages(liPlayerID);
+        }
+
+        s32 liArrayIndex = 0;
+        while (maHostMigrationPlayerIDs[liArrayIndex] != KI_INVALID_PLAYER_ID)
+        {
+            ++liArrayIndex;
+            if (liArrayIndex >= KI_MAX_PLAYERS)
+            {
+                CGS_ASSERT(false, "liArrayIndex < KI_MAX_PLAYERS");
+                break;
+            }
+        }
+        maHostMigrationPlayerIDs[liArrayIndex] = liPlayerID;
     }
 
     // -------------------------------------------------------------------------------
@@ -287,39 +309,43 @@ namespace CgsNetwork
     {
         CGS_ASSERT(liPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
 
-        // Find the player in the election list and compact the gap.
+        // Find the player in the election list and compact the gap. A player missing from
+        // the list still has its messages unregistered below.
         s32 liArrayIndex = 0;
+        bool lbFound = true;
         while (maHostMigrationPlayerIDs[liArrayIndex] != liPlayerID)
         {
             ++liArrayIndex;
             if (liArrayIndex >= KI_MAX_PLAYERS)
             {
                 CGS_ASSERT(false, "liArrayIndex < KI_MAX_PLAYERS");
-                return;
+                lbFound = false;
+                break;
             }
         }
 
-        if (liArrayIndex < KI_MAX_PLAYERS - 1)
+        if (lbFound)
         {
-            const s32 liNumEntriesToMove = (KI_MAX_PLAYERS - 1) - liArrayIndex;
-            CGS_ASSERT(liNumEntriesToMove > 0, "liNumEntriesToMove > 0");
-            memmove(&maHostMigrationPlayerIDs[liArrayIndex],
-                    &maHostMigrationPlayerIDs[liArrayIndex + 1],
-                    sizeof(NetworkPlayerID) * static_cast<size_t>(liNumEntriesToMove));
+            if (liArrayIndex < KI_MAX_PLAYERS - 1)
+            {
+                const s32 liNumEntriesToMove = (KI_MAX_PLAYERS - 1) - liArrayIndex;
+                CGS_ASSERT(liNumEntriesToMove > 0, "liNumEntriesToMove > 0");
+                memmove(&maHostMigrationPlayerIDs[liArrayIndex],
+                        &maHostMigrationPlayerIDs[liArrayIndex + 1],
+                        sizeof(NetworkPlayerID) * static_cast<size_t>(liNumEntriesToMove));
+            }
+
+            if (mHostPlayerID == liPlayerID)
+            {
+                mHostPlayerID = KI_INVALID_PLAYER_ID;
+                mpPlayerManager->SetHostPlayerID(KI_INVALID_PLAYER_ID);
+            }
+            maHostMigrationPlayerIDs[KI_MAX_PLAYERS - 1] = KI_INVALID_PLAYER_ID;
         }
 
-        if (mHostPlayerID == liPlayerID)
-        {
-            mHostPlayerID = KI_INVALID_PLAYER_ID;
-            mpPlayerManager->SetHostPlayerID(KI_INVALID_PLAYER_ID);
-        }
-        maHostMigrationPlayerIDs[KI_MAX_PLAYERS - 1] = KI_INVALID_PLAYER_ID;
-
-        // Only unregister the per-player messages for remote players (a local player keeps
-        // its slot for the lifetime of the session).
-        NetworkPlayerID liLocalPlayerID = KI_INVALID_PLAYER_ID;
-        mpPlayerManager->GetNextLocalPlayerID(&liLocalPlayerID);
-        if (liPlayerID != liLocalPlayerID)
+        // Only unregister the per-player messages for remote players (the local player never
+        // registered any).
+        if (liPlayerID != mpPlayerManager->GetLocalPlayerID())
             UnregisterMessages(liPlayerID);
     }
 
@@ -430,13 +456,14 @@ namespace CgsNetwork
         NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(liPlayerID);
         CGS_ASSERT(lpNetPlayer != nullptr, "lpNetPlayer");
 
-        // The lengths are the console message sizes (0x20 / 0x44). The player only range-checks
-        // them (> 0 here, <= the reliable-buffer limit when a reliable copy is buffered); no host
-        // byte count is derived from them, so the console values stay.
-        lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE, 32,
+        // The lengths are the message sizes (console 0x20 / 0x44). Both messages are
+        // unreliable, so the length is only range-checked; it is the byte count the reliable
+        // resend buffer would copy, hence the host size.
+        lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE,
+                                         static_cast<s32>(sizeof(HostKeepAliveMessage)),
                                          &lData.mHostKeepAliveMessageSend,
                                          &lData.mHostKeepAliveMessageRecv, nullptr, nullptr, nullptr);
-        lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_NEW_HOST, 68,
+        lpNetPlayer->RegisterMessageType(KI_MESSAGE_TYPE_NEW_HOST, static_cast<s32>(sizeof(NewHostMessage)),
                                          &lData.mNewHostMessageSend,
                                          &lData.mNewHostMessageRecv, nullptr, nullptr, nullptr);
     }

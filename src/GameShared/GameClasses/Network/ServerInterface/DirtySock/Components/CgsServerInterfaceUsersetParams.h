@@ -61,6 +61,9 @@ namespace CgsNetwork
     const s32 KI_USERSETPARAMS_DESCRIPTION_LENGTH = 68;   // 0x44
     const s32 KI_USERSETPARAMS_HOSTNAME_LENGTH    = 16;   // 0x10 (SerialiseFromUserset)
 
+    // muUsersetFlags bit 0: the userset is locked (Lock / Unlock / IsLocked). FLAG: name ours.
+    const u32 KU_USERSET_FLAG_LOCKED = 1;
+
     struct ServerInterfaceUsersetParamsBase : public ServerInterfaceStructureInterface
     {
     public:
@@ -83,6 +86,13 @@ namespace CgsNetwork
         void SetPassword(const char* lpcPassword);
         // CgsServerInterfaceUsersetParams.h:206
         void SetDescription(const char* lpcDescription);
+
+        // Header-inline: the matchmaking userset actions inline them as a plain store /
+        // a bit twiddle of muUsersetFlags.
+        void SetMaxPlayers(s32 liMaxPlayers) { miMaxNumPlayers = liMaxPlayers; }
+        void Lock()           { muUsersetFlags |= KU_USERSET_FLAG_LOCKED; }
+        void Unlock()         { muUsersetFlags &= ~KU_USERSET_FLAG_LOCKED; }
+        bool IsLocked() const { return (muUsersetFlags & KU_USERSET_FLAG_LOCKED) != 0; }
 
     protected:
         char macName[KI_USERSETPARAMS_NAME_LENGTH];               // +4   (X360)

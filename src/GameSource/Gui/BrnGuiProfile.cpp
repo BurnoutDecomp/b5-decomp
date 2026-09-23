@@ -12,6 +12,7 @@
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfile.h"            // BrnGuiSaveLoad::Profile (stored-segment validate)
 #include "GameSource/GameState/Progression/BrnProfile.h"              // BrnProgression::Profile::Serialise/Deserialise + ProfileUpgradeTable
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                       // BrnGui::GuiOverlayWaitFinishRequest (event 188)
+#include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h" // BrnNetwork::LiveRevengeProfile::ValidateProfile (stored-segment validate)
 
 #include <cstring>   // std::memcpy / std::strncpy
 
@@ -274,18 +275,6 @@ namespace
         lpProfile->Deserialise(reinterpret_cast<const BrnGuiSaveLoad::Profile*>(lpSaveImage),
                                static_cast<const BrnProgression::ProfileUpgradeTable*>(lpUpgradeData),
                                lpSaveImageDLC1);
-    }
-
-    // The console's ValidateProfiles calls BrnNetwork::LiveRevengeProfile::ValidateProfile
-    // on the stored segment, and that inline (BrnNetworkLiveRevengeManager.h) is faithful:
-    // false unless the version word is 6. It cannot replace this shim yet. On PC the live
-    // block the segment is saved from is the zero-filled stand-in GuiModule::Prepare installs
-    // (not a LiveRevengeProfile::Clear()ed one), so every PC save carries version 0 and the
-    // real check would reject all of them. DELETE-WHEN the PC live block is Clear()ed (or the
-    // network module installs the real one) and saves written before that are handled.
-    bool LiveRevengeProfile_ValidateProfile(const u8* /*lpSaveImage*/)
-    {
-        return true;
     }
 
     // FLAG PC-platform leaf: the PROFILEUPG availability gate is the un-recovered
@@ -1512,8 +1501,27 @@ bool ProfileManager::ValidateProfiles()
 
     const bool lbOptionsDLC1Valid = mStoredData.mOptionsDataProfileDLC1.ValidateProfile();
 
+    // [PC save migration, NOT X360] PC saves written before the live-revenge block was a
+    // Clear()ed LiveRevengeProfile carry this segment as all zeros (version 0), which the real
+    // check rejects, sending every existing PC save down the damaged-save path. No console save
+    // holds an all-zero segment, so exactly that image is upgraded in place to a fresh profile
+    // (what it always stood for) before the check; the next save writes it back as version 6.
+    {
+        const u8* lpSegment = mStoredData.mLiveRevengeProfile.maData;
+        bool lbAllZero = true;
+        for (u32 i = 0; i < sizeof(mStoredData.mLiveRevengeProfile.maData); ++i)
+        {
+            if (lpSegment[i] != 0) { lbAllZero = false; break; }
+        }
+        if (lbAllZero)
+        {
+            reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(mStoredData.mLiveRevengeProfile.maData)->Clear();
+        }
+    }
+
     const bool lbLiveRevengeValid =
-        LiveRevengeProfile_ValidateProfile(mStoredData.mLiveRevengeProfile.maData);
+        reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(mStoredData.mLiveRevengeProfile.maData)
+            ->ValidateProfile();
 
     // [DIAG one-profile] NOT IN THE X360 BINARY. A rejected save is otherwise INVISIBLE --
     // ReportTaskCompleted just skips the deserialise arm, and the boot then looks exactly

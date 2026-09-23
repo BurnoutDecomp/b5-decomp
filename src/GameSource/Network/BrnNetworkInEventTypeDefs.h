@@ -174,6 +174,10 @@ namespace BrnNetworkModuleIO
             muTimeStampOfLastRoadRulesDownload = luTimeStamp;
             mpStreetManager                    = lpStreetManager;
         }
+        // Copy the street manager's per-challenge local scores (liSizeInBytes of them) into lpDest.
+        // Inline; defined beside its one user (the road-rules manager), where StreetManager is
+        // complete.
+        inline void GetRoadRulesScoreData(BrnStreetData::ChallengePlayerScoreEntry* lpDest, s32 liSizeInBytes) const;
         u32 GetTimeStampOfLastRoadRulesDownload() const { return muTimeStampOfLastRoadRulesDownload; }
         u64 GetRoadRulesID() const                      { return mu64RoadRulesID; }
 

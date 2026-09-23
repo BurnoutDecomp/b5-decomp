@@ -46,6 +46,15 @@ enum E_DLC_DATA_PACK
 // parallel 25-byte bool block at +0x80; both run 0..24.
 enum { KU_DLC_FEATURE_COUNT = 25 };
 
+// The features the network code gates on: the burning-route and stunt-run event leaderboards
+// (their debug names are "Leaderboards - burning route" / "Leaderboards - Stunt run").
+// FLAG: enumerator names are ours; the values are the feature slots the online code reads.
+enum EDLCFeature
+{
+    E_DLC_FEATURE_LEADERBOARDS_BURNING_ROUTE = 22,
+    E_DLC_FEATURE_LEADERBOARDS_STUNT_RUN     = 23,
+};
+
 // ---------------------------------------------------------------------------
 // DLCFeatureAvailability
 //
@@ -86,6 +95,20 @@ public:
     // with the pack's bit cleared. Asserts the same pack-index bounds.
     void SetPackAvailabilityState(s32 liPack, bool lbAvailable);
 
+    // Header-inline feature queries (the online leaderboard code inlines them as direct reads
+    // of the table). A feature is available when every bit of the pack it requires is in the
+    // availability mask, and enabled when it is available and its enabled flag is set.
+    // FLAG: both names are ours.
+    bool IsFeatureAvailable(s32 liFeature) const
+    {
+        const u32 luPackMask = mauPackMask[maePackForFeature[liFeature]];
+        return (muAvailabilityMask & luPackMask) == luPackMask;
+    }
+    bool IsFeatureEnabled(s32 liFeature) const
+    {
+        return IsFeatureAvailable(liFeature) && mabFeatureEnabled[liFeature];
+    }
+
 private:
     // Never called; defined in BrnDLCManager.cpp to pin member offsets via offsetof.
     static void _AssertLayout();
@@ -98,6 +121,9 @@ private:
     s32  maePackForFeature[KU_DLC_FEATURE_COUNT];// +0x1C .. +0x7C
     bool mabFeatureEnabled[KU_DLC_FEATURE_COUNT];// +0x80 .. +0x98
 };
+
+// The file-scope availability table (one instance; defined in BrnDLCManager.cpp).
+extern DLCFeatureAvailability g_DLCFeatureAvailability;
 
 // A single downloadable "Beat The Team" online game's availability/enabled state.
 // Layout recovered from SetEnabledState: mbIsAvailable @ +0x00, mbIsEnabled @ +0x01.
@@ -178,9 +204,8 @@ protected:
     virtual void OnActivate();
 
 private:
-    // X360 0x82662B40 helper (own TU -- declaration only here). Populate one pack-detail
-    // record (name + index) and seed its availability state. The X360 keeps the body outside
-    // this TU's function set.
+    // Populate one pack-detail record (name + index), seed both availability bytes from the
+    // table's mask, and register the pack's availability as a debug variable.
     void RegisterPackDetails(const char* lpcPackName, s32 liPackIndex);
 
     // One downloadable data pack's debug record. 12 bytes (Update stride). Fields named from

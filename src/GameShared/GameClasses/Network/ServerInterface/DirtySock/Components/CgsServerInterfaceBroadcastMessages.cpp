@@ -26,12 +26,6 @@
 
 namespace CgsNetwork
 {
-    // The shared empty/error string the components point their base error-data slot at
-    // (X360 &unk_820046A7); also the TagFieldGetString default value. Its bytes live in
-    // unrecovered .rdata; declared extern as an honest placeholder (mirrors the sibling
-    // ServerInfo / DownloadableConfig component homes).
-    extern const char gpcEmptyErrorString[];
-
     namespace
     {
         // The DirtySock lobby chat channel the component subscribes to.
@@ -81,7 +75,7 @@ namespace CgsNetwork
     void ServerInterfaceBroadcastMessages::Construct()
     {
         meStatus                = ServerInterfaceDirtySock::E_STATUS_IDLE;   // +0x08 (== 2)
-        mpcCurrentAction        = gpcEmptyErrorString;                       // +0x04
+        mpcCurrentAction        = "";                       // +0x04
         miLastError             = 0;                                         // +0x0C
         miNumArbPacketsBuffered = 0;                                         // +0x580
         meCurrentAction         = E_ACTION_COUNT;                           // +0x588 (== 1)
@@ -178,7 +172,7 @@ namespace CgsNetwork
         // shared 2 KB message buffer, then parse the broadcast record's sub-fields from it.
         char* lpacMessageBuffer = lpThis->mpServerInterface->GetMessageBuffer();
         TagFieldGetString(TagFieldFind(lpMsg->pData, "T"),
-                          lpacMessageBuffer, KI_MESSAGE_BUFFER_SIZE, gpcEmptyErrorString);
+                          lpacMessageBuffer, KI_MESSAGE_BUFFER_SIZE, "");
 
         // Only buffer 'cast' messages, and skip our own echoed broadcast.
         if (lpMsg->kind == KI_KIND_CAST &&
@@ -212,6 +206,16 @@ namespace CgsNetwork
     // ===========================================================================
     // Drain / dispatch
     // ===========================================================================
+
+    // Both empty: the owning server interface's suspend / resume fan-out reaches the shared
+    // empty body for this component.
+    void ServerInterfaceBroadcastMessages::Suspend()
+    {
+    }
+
+    void ServerInterfaceBroadcastMessages::Resume()
+    {
+    }
 
     // @ 0x828860C8 -- pop every buffered packet in arrival order, dispatching each decoded
     // payload to the callback registered for its message type.

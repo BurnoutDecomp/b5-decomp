@@ -31,6 +31,12 @@ namespace BrnNetwork
 
         // The (empty) serialisation pattern.
         virtual const char* GetPattern() const override;
+
+        // No replicated payload: size 0 and no data (all three slots share one folded
+        // `return 0` body).
+        virtual u32         GetDataSize() const override;
+        virtual void*       GetData() override;
+        virtual const void* GetData() const override;
     };
 }
 

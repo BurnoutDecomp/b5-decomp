@@ -13,14 +13,12 @@ namespace
 {
     using namespace CgsNetwork;
 
-    // Both Default* types derive from the vptr-only ServerInterfaceStructureInterface
-    // base; they add no data members, so each must be exactly the base size (a single
-    // vtable pointer). Sizes are compared between types -- no absolute X360 offset is
-    // asserted across the 32-bit/64-bit boundary.
-    static_assert(sizeof(DefaultPlayerInfoData) == sizeof(ServerInterfaceStructureInterface),
-                  "DefaultPlayerInfoData adds no members beyond the StructureInterface vptr");
-    static_assert(sizeof(DefaultPlayerParameters) == sizeof(ServerInterfaceStructureInterface),
-                  "DefaultPlayerParameters adds no members beyond the StructureInterface vptr");
+    // Both Default* types derive from their structure bases (player-info data / player
+    // params) and add no data members, so each must be exactly its base's size.
+    static_assert(sizeof(DefaultPlayerInfoData) == sizeof(ServerInterfacePlayerInfoDataBase),
+                  "DefaultPlayerInfoData adds no members beyond its base");
+    static_assert(sizeof(DefaultPlayerParameters) == sizeof(ServerInterfacePlayerParamsBase),
+                  "DefaultPlayerParameters adds no members beyond its base");
 
     // The Default* types are abstract (they inherit the interface's pure virtuals and
     // override nothing), so they cannot be instantiated directly. Exercise their

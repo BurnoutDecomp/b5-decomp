@@ -42,11 +42,14 @@ namespace CgsNetwork
     struct ServerInterfacePlayerParamsBase : public ServerInterfaceStructureInterface
     {
     public:
-        ServerInterfacePlayerParamsBase();
-        virtual ~ServerInterfacePlayerParamsBase();
+        // Both inline and empty (the leaves' constructors and deleting destructors store
+        // only the vtable pointers).
+        ServerInterfacePlayerParamsBase() {}
+        virtual ~ServerInterfacePlayerParamsBase() {}
 
-        // CgsServerInterfacePlayerParams.cpp:53
-        virtual bool Prepare();
+        // Pure here: the base slot is never emitted on the console (every concrete leaf
+        // overrides it), so no base body can be recovered.
+        virtual bool Prepare() = 0;
 
         // CgsServerInterfacePlayerParams.cpp:77
         //   lpPlayer is a DirtySDK LobbyApiPlayerT* (raw lobby player record); its

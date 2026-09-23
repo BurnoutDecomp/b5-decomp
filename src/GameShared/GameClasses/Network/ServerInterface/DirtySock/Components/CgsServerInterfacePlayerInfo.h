@@ -50,8 +50,8 @@ typedef void (LobbyApiCallbackT)(LobbyApiRefT*, LobbyApiMsgT*, void*);
 
 namespace CgsNetwork
 {
-    class ServerInterfaceDirtySock;
-    class ServerInterfaceStructureInterface;
+    struct ServerInterfaceDirtySock;
+    struct ServerInterfaceStructureInterface;
     struct ServerInterfacePlayerInfoDataBase;
     struct PlayerName;
 
@@ -88,7 +88,8 @@ namespace CgsNetwork
             E_ACTION_COUNT                 = 9
         };
 
-        ServerInterfacePlayerInfo();
+        // Inlined into the owning server-interface constructor (vtable store only).
+        ServerInterfacePlayerInfo() {}
         virtual ~ServerInterfacePlayerInfo();
 
         // ---- Lifecycle (driven by the aggregate ServerInterfaceDirtySock) -----------

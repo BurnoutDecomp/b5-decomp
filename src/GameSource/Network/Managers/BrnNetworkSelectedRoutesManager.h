@@ -69,8 +69,6 @@ namespace BrnNetwork
 
         // The wire EMessageType stamped onto a selected-routes reliable send (X360 li r4,0x17).
         static const s32 KI_SELECTED_ROUTES_MESSAGE_TYPE = 23;
-        // Packed length passed to RegisterMessageType (X360 li r5,0x58).
-        static const s32 KI_SELECTED_ROUTES_MESSAGE_LENGTH = 88;
 
         // === API ===
         void Construct( BrnNetworkModule* lpNetworkModule, CgsNetwork::TimeManager* lpTimeManager );

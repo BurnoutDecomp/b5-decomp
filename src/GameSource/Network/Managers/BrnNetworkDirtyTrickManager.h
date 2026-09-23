@@ -85,10 +85,11 @@ namespace BrnNetwork
         void SendDirtyTrickMessage(EActiveRaceCarIndex leAggressor, EActiveRaceCarIndex leVictim,
                                    u8 lu8DirtyTrickType, u8 lu8DirtyTrickStatus);
         void ReceiveDirtyTrickMessage(NetworkPlayerID lNetworkPlayerID, DirtyTrickMessage* lpMessage);
-        void _DirtyTrickMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
-                                               NetworkPlayerID lNetworkPlayerID, void* lpContext);
-        void _DirtyTrickDeliveredCallback(bool lbA, bool lbB, CgsNetwork::SignalMessage* lpMessage,
-                                          NetworkPlayerID lNetworkPlayerID, void* lpContext);
+        // Reliable-message callbacks registered per peer in AddPlayer (the user data is this manager).
+        static void _DirtyTrickMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
+                                                      NetworkPlayerID lNetworkPlayerID, void* lpContext);
+        static void _DirtyTrickDeliveredCallback(bool lbDelivered, bool lbFakeNack, CgsNetwork::SignalMessage* lpMessage,
+                                                 NetworkPlayerID lNetworkPlayerID, void* lpContext);
 
         // ---- data layout (DWARF h:118-121) -----------------------------------------
         static const s32 KI_MAX_DIRTY_TRICK_PLAYERS = 7;

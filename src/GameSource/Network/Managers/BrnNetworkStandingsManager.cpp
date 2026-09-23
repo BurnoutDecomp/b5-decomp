@@ -17,15 +17,18 @@
 #include "GameSource/Network/Managers/BrnNetworkStandingsManager.h"
 
 #include "GameSource/Network/BrnNetworkModule.h"                                // BrnNetworkModule::GetNetworkManager / GetGameStateToNetworkInterface
-#include "GameSource/Network/BrnNetworkManager.h"                               // BrnNetworkManager::GetPlayerManager / GetCurrentRoundNumber
-#include "GameSource/Network/BrnNetworkPlayer.h"                                 // BrnNetworkPlayer::SetHasWonRound (the registry stores BrnNetworkPlayer-derived peers)
+#include "GameSource/Network/BrnNetworkManager.h"                               // BrnNetworkManager::GetPlayerManager / GetRound
+#include "GameSource/Network/BrnNetworkPlayer.h"                                 // BrnNetworkPlayer::SetEliminated (the registry stores BrnNetworkPlayer-derived peers)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"  // GameStateToNetworkInterface::GetNetworkPlayerID / GetActiveRaceCarIndex
 #include "GameSource/Network/BrnNetworkModuleIO.h"                              // BrnNetworkModuleIO::PlayerResultsData (FillOutResultsData out param)
 #include "GameSource/GameState/BrnGameActions.h"                                // FinishedModeAction
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"            // PlayerManager::GetPlayerByID / GetNextPlayerID / GetNextLocalPlayerID
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"            // NetworkPlayer::RegisterMessageType / UnRegisterMessageType / GetRegisteredSendMessage
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"                 // CgsNetwork::TimeManager
+#include <cfloat>   // FLT_MAX
+
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint (nack warning)
 
 namespace BrnNetwork
 {
@@ -33,9 +36,6 @@ namespace BrnNetwork
     // under (X360 RegisterMessageType(player, 12, ...) / UnRegisterMessageType(player, 12) /
     // GetRegisteredSendMessage(player, 12)). Named here for the (Un)Register / lookup calls.
     static const s32 KI_PLAYER_FINISHED_ROUND_MESSAGE_TYPE = 12;
-
-    // The packed wire length RegisterMessageType reserves for the message (X360 passes 64 == 0x40).
-    static const s32 KI_PLAYER_FINISHED_ROUND_MESSAGE_LENGTH = 64;
 
     // "No player" sentinel, mirroring the sibling Network TUs' file-local constant (the X360
     // asserts spell "CgsNetwork::K_INVALID_PLAYER_ID"; NetworkPlayerID == s32, sentinel == -1).
@@ -46,15 +46,9 @@ namespace BrnNetwork
     // flt_820037C8, which the decompiler resolves to -1.0).
     static const f32 KF_INVALID_DISTANCE_FROM_FINISH = -1.0f;
 
-    // FLAGGED / UNRESOLVED CONSTANT: HandlePlayerFinishedMode asserts the just-stored distance is
-    // NOT equal to a distinct "bad distance" sentinel (X360 flt_82F29918, compared with `==`). That
-    // float symbol's literal value is NOT recoverable from this TU's data (the decompiler left it
-    // un-resolved, unlike flt_820037C8 == -1.0), so it is NOT fabricated here. The assert is a
-    // dev-only guard with no gameplay side effect; the placeholder below is intentionally set equal
-    // to the -1.0 cleared-distance sentinel so the guard NEVER fires on a freshly-cleared slot
-    // (the only safe, non-fabricating choice). Re-ground KF_BAD_DISTANCE_SENTINEL against
-    // flt_82F29918 when its rodata value is available.
-    static const f32 KF_BAD_DISTANCE_SENTINEL = -1.0f;   // FLAGGED placeholder (flt_82F29918 unresolved)
+    // HandlePlayerFinishedMode asserts the just-stored distance is not the largest float (the
+    // "no distance" value the game side reports).
+    static const f32 KF_BAD_DISTANCE_SENTINEL = FLT_MAX;
 
     // ---------------------------------------------------------------------------------
     // StandingsManager  (X360 @ 0x827E29D8)  -- default constructor
@@ -173,7 +167,7 @@ namespace BrnNetwork
         if (lpNetworkPlayer != nullptr)
         {
             lpNetworkPlayer->RegisterMessageType(KI_PLAYER_FINISHED_ROUND_MESSAGE_TYPE,
-                                                 KI_PLAYER_FINISHED_ROUND_MESSAGE_LENGTH,
+                                                 static_cast<s32>(sizeof(PlayerFinishedRoundMessage)),   // console 0x40
                                                  &lpDataEntry->mPlayerFinishedRoundMessageSend,
                                                  &lpDataEntry->mPlayerFinishedRoundMessageRecv,
                                                  _RoundFinishedMessageArrivedCallback,
@@ -296,7 +290,7 @@ namespace BrnNetwork
                    "Bad distance reported #1, dist from finish");
 
         const u16 lu16CurrentFrame   = mpTimeManager->GetU16FrameCount();
-        const u8  lu8CurrentRound     = mpNetworkManager->GetCurrentRoundNumber();
+        const u8  lu8CurrentRound     = static_cast<u8>(mpNetworkManager->GetRound());
 
         NetworkPlayerID lPlayerID = K_INVALID_PLAYER_ID;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
@@ -359,7 +353,7 @@ namespace BrnNetwork
                                                &lbTimedOut, &lbWonRound);
 
         // Only accept the result if it is for the round we are currently running.
-        if (lu8RoundIndex == lpStandingsManager->mpNetworkManager->GetCurrentRoundNumber())
+        if (lu8RoundIndex == lpStandingsManager->mpNetworkManager->GetRound())
         {
             lpStandings->mFinishTime                = lFinishTime;
             lpStandings->mfDistanceFromFinish       = lfDistanceFromFinish;
@@ -377,7 +371,7 @@ namespace BrnNetwork
                     static_cast<BrnNetworkPlayer*>(lpPlayerManager->GetPlayerByID(lSendingPlayerID));
                 if (lpNetPlayer != nullptr)
                 {
-                    lpNetPlayer->SetHasWonRound(true);
+                    lpNetPlayer->SetEliminated(true);
                 }
             }
         }
@@ -449,5 +443,50 @@ namespace BrnNetwork
         }
 
         lpResultsData->mbTimedOut = lpStandingsData->mbTimedOut;
+    }
+    // ---------------------------------------------------------------------------------
+    // Prepare / Release -- nothing to acquire or free (both fold onto the shared `return true`
+    // body).
+    // ---------------------------------------------------------------------------------
+    bool StandingsManager::Prepare()
+    {
+        return true;
+    }
+
+    bool StandingsManager::Release()
+    {
+        return true;
+    }
+
+    // ---------------------------------------------------------------------------------
+    // Update -- the per-frame tick has no work (the console body is the shared empty one).
+    // ---------------------------------------------------------------------------------
+    void StandingsManager::Update(bool /*lbDiskEjected*/)
+    {
+    }
+
+    // ---------------------------------------------------------------------------------
+    // OnRoundStart -- a new round forgets every recorded result.
+    // ---------------------------------------------------------------------------------
+    void StandingsManager::OnRoundStart()
+    {
+        ClearStandingsData();
+    }
+
+    // ---------------------------------------------------------------------------------
+    // _RoundFinishedMessageDeliveredCallback -- a delivered result needs no bookkeeping; a fake
+    // nack is logged.
+    // ---------------------------------------------------------------------------------
+    void StandingsManager::_RoundFinishedMessageDeliveredCallback(bool /*lbSuccess*/, bool lbFakeNack,
+                                                                  CgsNetwork::SignalMessage* /*lpAck*/,
+                                                                  NetworkPlayerID /*lRecvingPlayerID*/,
+                                                                  void* /*lpUserData*/)
+    {
+        if (lbFakeNack)
+        {
+            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in ";
+            *CgsDev::Log::gpDebugPrint << "BrnNetwork::StandingsManager::_RoundFinishedMessageDeliveredCallback";
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
     }
 } // namespace BrnNetwork

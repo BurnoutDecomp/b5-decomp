@@ -2,7 +2,13 @@
 #define CGS_SERVER_INTERFACE_GAMES_H
 
 #include "types.hpp"
+#include <stddef.h>   // offsetof
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+#include "lobbyapi.h"      // LobbyApiPlayT, LobbyApiPlayerT, LobbyApiMsgT, LobbyApiCallbackT
+#include "gamemanager.h"   // GameManagerRefT, GameManagerCBDataT
+
+struct LobbyApiRefT;
+struct LobbyApiMsgT;
 
 // ===========================================================================
 // CgsNetwork::ServerInterfaceGames
@@ -38,13 +44,7 @@
 // without forking, so (matching the sibling ServerInterfaceServerInfo home) the
 // base's documented data layout is modelled here as the leading members.
 //
-// The LobbyApiPlayT play record is a DirtySDK vendor type. Its X360 build differs
-// slightly from the DecFIGS DWARF copy (the DWARF is explicitly "not offset
-// authority"); the field offsets named here are pinned to the load/store
-// displacements in this TU's asm (e.g. uSysflags @ rec+484 from `lwz r3,0x1F4`
-// where the record base is this+0x10, iCount @ rec+652, the player array @
-// rec+660 with a 164-byte stride). Fields the TU does not touch are reserved with
-// explicit padding so the named fields keep their grounded offsets.
+// The LobbyApiPlayT play record is the DirtySDK type (lobbyapi.h, console layout).
 // ===========================================================================
 
 namespace CgsNetwork
@@ -55,48 +55,16 @@ namespace CgsNetwork
     struct ServerInterfaceGameSearchParamsBase;
     struct ServerInterfaceQuickJoinParamsBase;
     struct ServerInterfaceEndGameDataBase;
+    struct ServerInterfaceGameResultsBase;
     enum   EServerInterfaceEvent : s32;
 
     namespace DirtySock
     {
         struct ConnApiCbInfoT;
 
-        // A single player record inside a LobbyApiPlayT (X360 stride = 164 bytes;
-        // the DWARF generic copy is 168). Only the fields this TU reads/compares are
-        // named; the rest is reserved with padding to keep their offsets exact.
-        struct LobbyApiPlayerT
-        {
-            s32  iIdent;        // rec-player +0   (player ID; compared in *ById)
-            char strPers[20];   // rec-player +4   (player name; LobbyNameCmp arg)
-            u8   mPad24[80];     // +24 .. +104
-            char strParams[60]; // rec-player +104 (compared in CheckForPlayerParameterChange)
-        };
-
-        // The lobby "play" / game record (X360 size 2136 bytes). Field offsets are
-        // record-relative and pinned to this TU's asm displacements.
-        struct LobbyApiPlayT
-        {
-            s32  iIdent;        // +0   game ID            (GetGameID)
-            char strName[36];   // +4   game name          (GetGameName)
-            char strHost[20];   // +40  host name          (GetHostPlayerID LobbyNameCmp)
-            u8   mPad60[144];   // +60 .. +204
-            char strParams[16]; // +204 game-params string (asm record+0xCC; GAME_PARAMS_CHANGED strcmp)
-            u8   mPad220[260];  // +220 .. +480
-            u32  uCustflags;    // +480 (asm comp+496)
-            u32  uSysflags;     // +484 (asm comp+500; ConvertFlags -> locked/started bits)
-            u8   bMinsize;      // +488
-            u8   bMaxsize;      // +489 (asm comp+505; compared as SBYTE1 of the dword @+488)
-            u8   mPad490[6];    // +490 .. +496
-            u32  uWhen;         // +496 (asm comp+512; "WHEN" epoch in SendGameResult)
-            u8   mPad500[4];    // +500 .. +504
-            char strAuth[64];   // +504 .. +568 (asm comp+520; SendGameResult AUTH + strlen check)
-            u8   mPad568[84];   // +568 .. +652 (strParams moved to +204)
-            s32  iCount;        // +652 number of players  (asm comp+668)
-            s32  iPrivSlots;    // +656
-            // +660: player array (stride 164). Sized so the whole record is 2136 bytes:
-            //   2136 - 660 = 1476 = 9 * 164.
-            LobbyApiPlayerT aPlayers[9];
-        };
+        // The DirtySDK record types, under the names this component's interface uses.
+        using ::LobbyApiPlayerT;
+        using ::LobbyApiPlayT;
     }
 
     class ServerInterfaceGames : public ServerInterfaceComponent
@@ -138,7 +106,8 @@ namespace CgsNetwork
                                                  ServerInterfaceGameParamsBase*);
 
         // Establishes the vtable slot at +0 (the X360 type is polymorphic).
-        virtual ~ServerInterfaceGames();
+        // Empty: the leaf's deleting destructor only restores the component vtable.
+        virtual ~ServerInterfaceGames() {}
 
         // ---- Lifecycle ------------------------------------------------------------
         // Vtable: after the five component slots the games component appends Destruct,
@@ -169,11 +138,11 @@ namespace CgsNetwork
         virtual void SearchForGames(ServerInterfaceGameSearchParamsBase* lpSearchParams);
         void CancelSearchForGames();
         virtual void UpdateGameParameters(ServerInterfaceGameParamsBase* lpGameParams);
-        virtual void EndGame(ServerInterfaceEndGameDataBase* lpEndGameData) = 0;
+        virtual void EndGame(const ServerInterfaceEndGameDataBase* lpEndGameData) = 0;
         // Lobby game event: ends the pending create/join/quick-join action when the event
         // carries our game ident. lpauMsg is the DirtySDK lobby message (word 3 the error,
         // word 4 the tagfield payload).
-        virtual s32 ReceivedGameEvent(s32* lpauMsg);
+        virtual s32 ReceivedGameEvent(LobbyApiMsgT* lpMsg);
         void UpdatePlayerParameters(s32 liPlayerID,
                                     ServerInterfacePlayerParamsBase* lpPlayerParams);
         void LockGame();
@@ -186,9 +155,12 @@ namespace CgsNetwork
         // The post-round flow (ActionLeaveGame) calls LeaveGame(0, 1) -- the two trailing
         // args are the X360 LeaveGame(this, 0, 1) request flags. Declared-only; body lives
         // in this component's own TU.
-        void LeaveGame(s32 liFlagsA, s32 liFlagsB);
-        void* KickPlayerByID(s32 liPlayerID, s32 liReason, char lbBan);
-        void SendGameResult(ServerInterfaceEndGameDataBase* lpEndGameData, void* lpUserData);
+        // The two flags become the request's "SET" / "FORCE" tags.
+        void LeaveGame(bool lbSet, bool lbForce);
+        void KickPlayerByID(s32 liPlayerID, s32 liReason, char lbBan);
+        // Upload the local player's game result record (the tagged header fields, then
+        // lpGameResults->SerialiseToString) as the lobby "send results" action.
+        void SendGameResult(const ServerInterfaceGameResultsBase* lpGameResults);
         void SetGameServerConnectionType(s32 liConnectionType);
         void RegisterGameSearchSortCallback(SearchResultsSortCallback lpfnCallback,
                                             void* lpUserData,
@@ -198,7 +170,8 @@ namespace CgsNetwork
         // ---- Queries --------------------------------------------------------------
         s32  GetGameID();
         char* GetGameName();
-        bool GetGameParameters(ServerInterfaceGameParamsBase* lpOut);
+        // Hand the current play record to lpOut->SerialiseFromGame.
+        void GetGameParameters(ServerInterfaceGameParamsBase* lpOut);
         s32  GetHostPlayerID();
         s32  GetNumberOfFoundGames();
         // Copy found game liIndex's parameters into lpOut; false if there is no such game.
@@ -213,14 +186,8 @@ namespace CgsNetwork
         bool IsLocalPlayerLeavingGame() const;
         bool IsPlayerInGame(const char* lpcName);
 
-        // ADDITIVE GROW (flagged by the BrnNetworkTeamSelectionManager group): is the player with
-        // the given id currently in the game? X360 sub_82878620 -- the by-id in-game predicate the
-        // GamerPictureManagerX360 note attributes to the (still un-homed) ServerInterfaceGamesX360
-        // override; called on the games component with a NetworkPlayerID by
-        // BrnNetwork::TeamSelectionManager's team-assignment actions (e.g.
-        // ActionAssignCoopStuntRunTeams @ 0x8254BC48). Declared here so the team-selection call
-        // site can reach it BY NAME; body is homed in the X360-derived ServerInterfaceGamesX360 TU.
-        bool IsPlayerInGameByID(s32 liPlayerID);
+        // The by-id overload: is a player with this network player id in the play record?
+        bool IsPlayerInGame(s32 liPlayerID) const;
 
         bool IsGameLocked();
         bool IsGameStarted();
@@ -231,21 +198,22 @@ namespace CgsNetwork
         // 0x82566860, UpdateNATData @ 0x8256CFF0) calls this cross-class on the games component,
         // so it belongs to the public surface. Body is homed in the X360-derived
         // ServerInterfaceGamesX360 TU / a sibling; declared here so callers can reach it.
-        void* KickPlayer(const char* lpcPlayerName, s32 liReason, char lbBan);
+        void KickPlayer(const char* lpcPlayerName, s32 liReason, char lbBan);
+
+        // The owning server interface (also reached from outside the component).
+        ServerInterfaceDirtySock* GetServerInterface() const { return mpServerInterface; }
 
     protected:
-        // ADDITIVE GROW (flagged by the ServerInterfaceGamesX360 group): read accessors
-        // the X360 leaf uses to reach the owning server interface and the play record by
-        // name (rather than widening data-member access). Layout unchanged.
-        ServerInterfaceDirtySock* GetServerInterface() const { return mpServerInterface; }
+        // Read accessor the platform leaf uses to reach the play record by name (rather
+        // than widening data-member access). Layout unchanged.
         DirtySock::LobbyApiPlayT* GetLastGameRecord()        { return &mLastGameRecord; }
 
         // ---- Internal helpers (this TU) -------------------------------------------
         // Promoted private -> protected: the X360 leaf (Suspend / Resume / ReceivedGameEvent)
         // reaches EndAction / FreeDisplayLists / AllocDisplayLists / the static FoundGamesSort /
         // the static ReceivedGameEvent directly.
-        void StartAction(EAction leAction, void* lpfnCallback);
-        s32  StartGameManagerAction(EAction leAction, void* lpfnCallback);
+        void StartAction(EAction leAction, LobbyApiCallbackT* lpfnCallback);
+        s32  StartGameManagerAction(EAction leAction, LobbyApiCallbackT* lpfnCallback);
         void EndAction(s32 liError);
         bool CheckForPlayerChange(DirtySock::LobbyApiPlayT* lpA, DirtySock::LobbyApiPlayT* lpB,
                                   EServerInterfaceEvent leAddEvent,
@@ -260,21 +228,23 @@ namespace CgsNetwork
         // OnlyFinishOnErrorCallback is the create/join action thunk that only ends the action on
         // error.) KickPlayer is now public (see above) -- it is reached cross-class.
         void  AllocDisplayLists();
-        static s32 OnlyFinishOnErrorCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
+        static void OnlyFinishOnErrorCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
 
         // Static action-thunks (used as DirtySDK callbacks). Match the X360 ABI shapes.
-        static s32   DefaultCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
+        static void  DefaultCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
         // ConnApi status callback registered in the games component slot of the server
         // interface (see ServerInterfaceDirtySock::SetConnApiGameCallback).
         static void  ConnApiCallback(DirtySock::ConnApiCbInfoT* lpCbInfo,
                                      ServerInterfaceComponent* lpComponent);
-        static s32   LeaveGameCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
-        static s32   SearchForGamesCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
-        static void  EventStatusCallback(s32 a1, s32* a2, ServerInterfaceGames* a3);
-        static void* GameManagerCallback(s32 a1, s32* a2, ServerInterfaceGames* lpSelf);
-        static s32   FoundGamesSort(ServerInterfaceGames* lpSelf, void* a2,
-                                    ServerInterfaceGameParamsBase* lpA,
-                                    ServerInterfaceGameParamsBase* lpB);
+        static void  LeaveGameCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        static void  SearchForGamesCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        static void  EventStatusCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        // The response-channel callback registered on lobby creation; it has an empty body.
+        static void  RespCallback(LobbyApiRefT* lpLobbyApi, LobbyApiMsgT* lpMsg, void* lpUserData);
+        static void  GameManagerCallback(GameManagerRefT* lpGameManager, GameManagerCBDataT* lpCBData,
+                                         void* lpUserData);
+        // DispListSortT: (sort ref == this component, sort con, two list-3 game records).
+        static s32   FoundGamesSort(void* lpSortRef, s32 liSortCon, void* lpGameA, void* lpGameB);
 
     public:
         // The per-action error-mapping table ({table-ptr, count} indexed by action),
@@ -287,7 +257,7 @@ namespace CgsNetwork
         // meCurrentAction / miRequestCallbackID / mpSearchSortCallback by name. Order and
         // offsets are unchanged.
         DirtySock::LobbyApiPlayT mLastGameRecord;   // +0x010 (2136 bytes)
-        void*       mpFoundGames;           // +0x868  (DispListRef*)
+        DispListRef* mpFoundGames;          // +0x868
         ServerInterfaceDirtySock* mpServerInterface; // +0x86C
         EAction     meCurrentAction;        // +0x870
         s32         miEventCallback;        // +0x874

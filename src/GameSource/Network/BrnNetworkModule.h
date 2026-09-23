@@ -182,6 +182,7 @@ namespace BrnNetwork
         const BrnWorld::CrashIO::NetworkOutputInterface*                  GetCrashOutputInterface() const;
         BrnNetworkModuleIO::NetworkToGameStateInterface*                  GetNetworkToGameStateInterface();
         BrnWorld::PlayerVehicleControls*                                  GetPlayerVehicleControls();
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* GetActiveRaceCarInterface() const;
         const CgsModule::EventQueue<BrnGameState::TakedownEvent, 8>*      GetTakedownEventInputQueue() const;
         CgsModule::VariableEventQueue<18432, 16>*                         GetInputGuiEventQueue();
 

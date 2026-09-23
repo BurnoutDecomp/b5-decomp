@@ -39,6 +39,12 @@ namespace BrnResource { namespace GameDataIO { struct InputBuffer; struct Output
 // (pointer-only here; real home GameSource/Sound/Module/BrnRootSoundModuleIo.h).
 namespace BrnSound { namespace Module { namespace Io { struct RootPreUpdateOutputBuffer; } } }
 
+// The scripted world-load stage every loading-scripted state shares (defined in
+// BrnGameMainFlowStates.cpp). At 8 the load is done and a loading-scripted state's Update runs
+// the full per-frame module cascade instead of its partial one; BrnGameModule reads it to
+// decide whether this sub-step runs that cascade's network legs.
+extern s32 gBrnScriptedLoadStage;
+
 namespace BrnGameMainFlowController
 {
     // The GameData IO pair the scripted-load spine brackets every frame.

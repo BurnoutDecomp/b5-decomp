@@ -157,7 +157,7 @@ namespace CgsInput     { class InputModule     : public CgsModule::ModuleSingleB
 namespace BrnEffects { namespace EffectsIO { struct InputBuffer; struct DispatchInputBuffer; } }
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"   // BrnSound::Module::RootSoundModule (real class)
 #include "GameSource/Replays/BrnReplayModule.h"   // BrnReplays::ReplayModule (real class -- was an ODR stub)
-namespace BrnNetwork   { class BrnNetworkModule : public CgsModule::ModuleSingleBuffered {}; }
+#include "GameSource/Network/BrnNetworkModule.h"
 
 namespace BrnGame
 {
@@ -340,6 +340,10 @@ namespace BrnGame
         // module's own spines.
         BrnWorldIO::UpdateOutputBuffer* GetWorldUpdateOutputBuffer() { return mpWorldUpdateOutputBuffer; }
         BrnEffects::EffectsIO::OutputBuffer* GetEffectsOutputBuffer() { return mpEffectsOutputBuffer; }
+        // This sub-step's network OUTPUT buffer, or null when the sub-step does not run the full
+        // module cascade (see CreateStaticIOBuffers). The live world drive reads it for
+        // BridgeNetworkToWorld.
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* GetNetworkOutputBuffer() { return mpNetworkOutputBuffer; }
         BrnEffects::EffectsModule& GetEffectsModule() { return mEffectsModule; }
         // The PC pad fill's output buffer (driving-input wave 2026-08-11): the live world
         // drive (DriveWorldUpdateFrame) needs it to run BridgeControllerToWorld, exactly as
@@ -1066,6 +1070,12 @@ namespace BrnGame
         // lock-only participant) DoUpdate_Sound. DoUpdate is a PC leaf here, so it lives with
         // the other per-sub-step buffers in CreateStaticIOBuffers.
         BrnEffects::EffectsIO::OutputBuffer*   mpEffectsOutputBuffer;
+        // [FLAG PC placement] this sub-step's network OUTPUT buffer. The console's DoUpdate
+        // creates it second, right after the input output buffer, and threads it through
+        // DoUpdate_NetworkPreSim, DoUpdate_GameStatePreWorld, DoUpdate_World and DoUpdate_GUI;
+        // it lives with the other per-sub-step buffers here, and exists only in the sub-steps
+        // whose flow state runs that cascade (null otherwise).
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* mpNetworkOutputBuffer;
         // ---- ⚠️ FLAG PC quality-of-life: the dispatch camera latch (no console members) ---
         // The last two simulation ticks' worth of the director's published camera, plus the
         // frame-local blend of them. See LatchDispatchCamera / GetInterpolatedDispatchCamera.
@@ -1112,6 +1122,10 @@ namespace BrnGame
         bool mbGuiPhaseComplete;        // @ +10094152 (command 70 -- the flow-advance flag)
         bool mbRequestStreamingWait = false;   // @ +10094117 (see RequestStreamingWait)
         bool mbSkipVideos;              // TUB WinMain's "-skipvideos" latch (boot audit F-P0-10)
+        // [FLAG world-load stand-in] the in-game screen notice (GUI command 65) arrived: the
+        // reason-1 streaming pause is released at the next game-state pre-world pass (see
+        // BridgeGuiToGame case 65). PC only.
+        bool mbPcStreamingFinishPending = false;
         // X360 gm+0x9A0630 -- the reusable loading-screen allocator the renderer lends us
         // through RendererIO::OutputBuffer each GamePrepare pass (boot audit F-P2-4). Null
         // until the first pass runs.

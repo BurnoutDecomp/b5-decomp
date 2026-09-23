@@ -35,6 +35,7 @@
 #include "GameSource/Network/Messages/BrnStatsUpdateMessage.h"              // StatsUpdateMessage
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                 // NetworkPlayerID
 #include "GameSource/Network/BrnNetworkInEventTypeDefs.h"                   // BrnNetworkModuleIO::NetworkInOfflineProgression
+#include "GameSource/Network/SharedIO/BrnNetworkModuleStatsIOInterface.h"  // StatsInputInterface::StatsInputQueue (CopyEvents)
 #include "GameSource/GameState/BrnGameActions.h"                            // BrnGameState::GameStateModuleIO::OnlineGameResults
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                    // CgsSystem::Time
 
@@ -54,11 +55,6 @@ namespace BrnNetwork
     {
         struct OutputBuffer;                // ProcessBeforeSimulation / queue-validate param
         struct PostSimulationInputBuffer;   // ProcessAfterSimulation param
-    }
-
-    namespace StatsInputInterface
-    {
-        struct StatsInputQueue;             // CopyEvents param (other TU)
     }
 
     class NetworkPlayerStatsManager
@@ -119,7 +115,7 @@ namespace BrnNetwork
         };
 
         // ---- private helpers (DWARF :231..309) ---------------------------------
-        void CopyEvents(const StatsInputInterface::StatsInputQueue* lpQueue);
+        void CopyEvents(const BrnNetworkModuleIO::StatsInputInterface::StatsInputQueue* lpStatsEventQueue);
         void AddEventFromNetworkPlayerID(NetworkPlayerID lPlayerID);
         void CopyResultsToOutputBuffer(BrnNetworkModuleIO::OutputBuffer* lpOutputBuffer);
         void ProcessResults();

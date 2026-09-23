@@ -1,74 +1,42 @@
 #include "types.hpp"
 
-// Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x8287C7C0
-//   (CgsNetwork::ConvertUsersetFlags)
-//
-// Maps a packed userset-flag word (lxFlags) into the engine's flag representation
-// by consulting six static mapping tables. For each table, if every bit of that
-// table's "mask" element is present in the input, the table's per-index value is
-// OR'd into the result.
-//
-//   half = (cntlzw(liIndex) >> 3) & 4;   // selects mask element 0 or 1 (byte 0/4)
-//   for each table T in {T0..T5}:
-//       if ((T[half] & lxFlags) == T[half])  result |= T[liIndex];
-//   return result;
-//
-// DATA CAVEAT: the six tables (dword_820E953C, _9544, _954C, _9554, _955C, _9564)
-// live in .rdata and are *unvalued* in the function-only IDA export, so their
-// contents cannot be recovered here. They are declared `extern` (data-stub) and
-// must be populated by a later .rdata-recovery pass; the control/bit logic below
-// is faithful to the pseudocode. The first table's branch is written as an
-// assignment in the pseudocode (result starts at 0) — equivalent to the OR used
-// for the rest.
+// CgsNetwork::ConvertUsersetFlags -- translate a userset flag word between the game's
+// userset flag bits and the DirtySock lobby flag bits through the six-row table
+// KAU_DIRTYSOCK_FLAGS_TO_USERSET_FLAGS ({ userset flag, DirtySock flag } per row).
+// luDirection 0 converts DirtySock flags to userset flags (test column 1, emit column 0);
+// 1 converts userset flags to DirtySock flags (test column 0, emit column 1).
 
 namespace CgsNetwork
 {
-    // Six flag-mapping tables (.rdata, values not in the export). Each is indexed
-    // both by a 0/1 "half" selector (mask element) and by the flag index.
-    extern const u32 gaUsersetFlagTable0[];   // dword_820E953C
-    extern const u32 gaUsersetFlagTable1[];   // dword_820E9544
-    extern const u32 gaUsersetFlagTable2[];   // dword_820E954C
-    extern const u32 gaUsersetFlagTable3[];   // dword_820E9554
-    extern const u32 gaUsersetFlagTable4[];   // dword_820E955C
-    extern const u32 gaUsersetFlagTable5[];   // dword_820E9564
-
     namespace
     {
-        // count-leading-zeros of a 32-bit word (PPC cntlzw), portable.
-        inline u32 CountLeadingZeros32(u32 luValue)
+        const u32 KU_NUM_USERSET_FLAGS = 6;
+
+        const u32 KAU_DIRTYSOCK_FLAGS_TO_USERSET_FLAGS[KU_NUM_USERSET_FLAGS][2] =
         {
-            if (luValue == 0)
-                return 32;
-            u32 luCount = 0;
-            while ((luValue & 0x80000000u) == 0)
-            {
-                ++luCount;
-                luValue <<= 1;
-            }
-            return luCount;
-        }
+            { 0x01, 0x001000 },
+            { 0x02, 0x000100 },
+            { 0x04, 0x000800 },
+            { 0x08, 0x008000 },
+            { 0x10, 0x080000 },
+            { 0x20, 0x400000 },
+        };
     }
 
-    int ConvertUsersetFlags(int lxFlags, unsigned int luIndex)
+    int ConvertUsersetFlags(int lxFlags, unsigned int luDirection)
     {
-        // Mask element index, 0 or 4. The pseudocode reads the mask via
-        // `*(table + v2)` where v2 = (cntlzw(index) >> 3) & 4 — element-indexed
-        // (the symbol is a dword), so the index stays {0,4}, not collapsed to {0,1}.
-        const u32 luMaskIndex = (CountLeadingZeros32(luIndex) >> 3) & 4u;
+        // The column tested is the one not emitted.
+        const u32 luFromColumn = (luDirection == 0) ? 1u : 0u;
 
-        const u32* const lapTables[6] =
+        u32 luResult = 0;
+        for (u32 luFlag = 0; luFlag < KU_NUM_USERSET_FLAGS; ++luFlag)
         {
-            gaUsersetFlagTable0, gaUsersetFlagTable1, gaUsersetFlagTable2,
-            gaUsersetFlagTable3, gaUsersetFlagTable4, gaUsersetFlagTable5
-        };
-
-        int liResult = 0;
-        for (int liTable = 0; liTable < 6; ++liTable)
-        {
-            const u32 luMask = lapTables[liTable][luMaskIndex];
-            if ((luMask & static_cast<u32>(lxFlags)) == luMask)
-                liResult |= static_cast<int>(lapTables[liTable][luIndex]);
+            const u32 luFrom = KAU_DIRTYSOCK_FLAGS_TO_USERSET_FLAGS[luFlag][luFromColumn];
+            if ((luFrom & static_cast<u32>(lxFlags)) == luFrom)
+            {
+                luResult |= KAU_DIRTYSOCK_FLAGS_TO_USERSET_FLAGS[luFlag][luDirection];
+            }
         }
-        return liResult;
+        return static_cast<int>(luResult);
     }
 }

@@ -24,9 +24,9 @@
 // Message's five console vtable slots are real C++ virtuals; this leaf overrides
 // GetPackedMessageSize, GetName and PackOrUnpack.
 //
-// GetName is the header-homed inline accessor ("Start Time Message");
-// GetPackedMessageSize and PackOrUnpack are bodied in CgsStartTimeMessage.cpp, the rest
-// of the methods in their own TUs.
+// GetName is the header-homed inline accessor ("Start Time Message") and Construct is
+// inline below; GetPackedMessageSize, PackOrUnpack, PrepareForSend and Retrieve are
+// bodied in CgsStartTimeMessage.cpp. Release and Destruct have no caller.
 // ===================================================================================
 
 #include "types.hpp"
@@ -66,4 +66,11 @@ namespace CgsNetwork
         StartTime                             mStartTime;            // +0x28 .. +0x33
         MessageWithPlayerIDs::NetworkPlayerID maReceivedClientsIDs[KI_START_TIME_CLIENT_COUNT]; // +0x34 .. +0x53
     };
+
+    // Inline on the console (the start-time manager's per-slot reset carries the copies):
+    // both player ids invalid and the base header reset. The payload is left alone.
+    inline void StartTimeMessage::Construct()
+    {
+        MessageWithPlayerIDs::Construct();
+    }
 } // namespace CgsNetwork

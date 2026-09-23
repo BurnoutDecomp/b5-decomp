@@ -38,38 +38,17 @@
 // These live in the DirtySDK vendor SDK / the Xbox 360 XDK (not reconstructed in
 // vendor/). A not-yet-homed callee is satisfied by its declaration under cl /c; no
 // body is needed. Mirrors the sibling CgsServerInterfacePlayerInfo.cpp extern block.
-struct ConnApiClientListT; // opaque DirtySDK client list (word[0]=count; entries @ +0x58 stride 0xBC)
 struct LobbyApiRefT;       // opaque DirtySDK lobby API ref (matches CgsServerInterfaceDirtySock.h)
 
-namespace CgsNetwork { namespace DirtySock { struct ConnApiRefT; } }
+#include "connapi.h"       // ConnApiControl / ConnApiStatus / ConnApiStop / ConnApiGetClientList
 
 extern "C"
 {
     // XDK Xbox LIVE matchmaking context setter.
     void XUserSetContext(u32 uUserIndex, u32 uContextId, u32 uContextValue);
 
-    // DirtySDK ConnApi controls / client-list glue.
-    s32   ConnApiControl(CgsNetwork::DirtySock::ConnApiRefT* pConn, s32 iControl, s32 a3, s32 a4, const void* a5);
-    s32   ConnApiStatus(CgsNetwork::DirtySock::ConnApiRefT* pConn, s32 iSelect, void* pBuf, s32 iBufLen);
-    s32   ConnApiStop(CgsNetwork::DirtySock::ConnApiRefT* pConn);
-    ConnApiClientListT* ConnApiGetClientList(CgsNetwork::DirtySock::ConnApiRefT* pConn);
-
-    // Documented client-list accessors (list word[0]=count; entry @ +0x58 stride 0xBC).
-    // Opaque list reached only through these helpers, never as a fabricated sized struct.
-    s32         ConnApiClientList_GetNumClients(const ConnApiClientListT* pList);
-    const char* ConnApiClientList_GetEntry(const ConnApiClientListT* pList, s32 liIndex);
-
-    // DirtySDK lobby name compare + host-address decode.
+    // DirtySDK lobby name compare.
     s32  LobbyNameCmp(const char* pNameA, const char* pNameB);
-    s32  DirtyAddrToHostAddr(void* pHostAddr, s32 iLen, const void* pField);
-
-    // DirtySDK display-list ordering used by Update / Resume.
-    s32  DispListChange(void* pList, s32 a2);
-    s32  DispListOrder(void* pList);
-    s32  DispListSort(void* pList, void* pUserData, s32 a3, void* pfnCompare);
-
-    // DirtySDK lobby request cancel used by Suspend.
-    s32  LobbyApiCancelCB(LobbyApiRefT* pLobbyApi, s32 iCallbackID);
 }
 
 namespace CgsNetwork
@@ -156,7 +135,7 @@ namespace CgsNetwork
         AllocDisplayLists();
         if (mpSearchSortCallback)
         {
-            DispListSort(mpFoundGames, this, 0, reinterpret_cast<void*>(&FoundGamesSort));
+            DispListSort(mpFoundGames, this, 0, &FoundGamesSort);
         }
     }
 
@@ -300,13 +279,14 @@ namespace CgsNetwork
         ServerInterfaceGames::UpdateGameParameters(lpGameParams);
     }
 
-    // EndGame @ 0x8288C5B8 -- post each in-game client's end-of-game stat value
-    // ('skil') through the ConnApi client list, then stop the ConnApi session.
-    void ServerInterfaceGamesX360::EndGame(ServerInterfaceEndGameDataBase* lpEndGameData)
+    // EndGame -- for each named player record, find that player in the
+    // ConnApi client list and post the record's id with the 'skil' control, then stop
+    // the ConnApi session.
+    void ServerInterfaceGamesX360::EndGame(const ServerInterfaceEndGameDataBase* lpEndGameData)
     {
         CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
 
-        ConnApiClientListT* lpClientList =
+        const ConnApiClientListT* lpClientList =
             ConnApiGetClientList(GetServerInterface()->GetConnAPIRef());
 
         if (lpClientList == 0)
@@ -316,42 +296,41 @@ namespace CgsNetwork
             return;
         }
 
-        // The X360 concrete end-game object is the committed leaf; its 16-word result
-        // payload holds 8 { playerId, value } pairs.
-        ServerInterfaceEndGameDataX360* lpData =
-            static_cast<ServerInterfaceEndGameDataX360*>(lpEndGameData);
+        // Every caller on this platform passes the platform leaf.
+        const ServerInterfaceEndGameDataX360* lpData =
+            static_cast<const ServerInterfaceEndGameDataX360*>(lpEndGameData);
 
-        for (s32 liPair = 0; liPair < KI_END_GAME_RESULT_PAIRS; ++liPair)
+        for (s32 liRecord = 0; liRecord < ServerInterfaceEndGameDataX360::KI_MAX_PLAYER_RECORDS; ++liRecord)
         {
-            s32 liPlayerId = static_cast<s32>(lpData->maResultWords[liPair * 2]);
-            s32 liValue    = static_cast<s32>(lpData->maResultWords[liPair * 2 + 1]);
-            if (liPlayerId == 0)
+            const char* lpcName    = lpData->maPlayerRecords[liRecord].mpcName;
+            const s32   liPlayerID = lpData->maPlayerRecords[liRecord].miPlayerID;
+            if (lpcName == 0)
                 continue;
 
             s32 liIndex = 0;
-            if (ConnApiClientList_GetNumClients(lpClientList) > 0)
+            if (lpClientList->iNumClients > 0)
             {
-                while (LobbyNameCmp(reinterpret_cast<const char*>(liPlayerId),
-                                    ConnApiClientList_GetEntry(lpClientList, liIndex)) != 0)
+                while (LobbyNameCmp(lpcName,
+                                    lpClientList->Clients[liIndex].UserInfo.strName) != 0)
                 {
                     ++liIndex;
-                    if (liIndex >= ConnApiClientList_GetNumClients(lpClientList))
+                    if (liIndex >= lpClientList->iNumClients)
                         break;
                 }
 
-                if (liIndex < ConnApiClientList_GetNumClients(lpClientList))
+                if (liIndex < lpClientList->iNumClients)
                 {
-                    // 'skil' == 0x736B696C: post this client's end-of-game stat value.
+                    // 'skil' == 0x736B696C: post the record's id for this client.
                     ConnApiControl(GetServerInterface()->GetConnAPIRef(), KI_CONN_CTRL_SKILL,
-                                   liIndex, liValue, 0);
+                                   liIndex, liPlayerID, 0);
                 }
             }
 
-            if (liIndex == ConnApiClientList_GetNumClients(lpClientList))
+            if (liIndex == lpClientList->iNumClients)
             {
                 DirtySockDebugLog("CgsNetwork::ServerInterfaceGamesX360::EndGame");
                 DirtySockDebugLog(": Failed to find ");
-                DirtySockDebugLog(reinterpret_cast<const char*>(liPlayerId));
+                DirtySockDebugLog(lpcName);
                 DirtySockDebugLog(" in the client list\n");
             }
         }
@@ -380,15 +359,15 @@ namespace CgsNetwork
     // ReceivedGameEvent @ 0x8288C808 -- for create/join/quick-join (meCurrentAction <= 2)
     // end the action once the lobby message carries a "SESS" tagfield; otherwise chain
     // to the base.
-    s32 ServerInterfaceGamesX360::ReceivedGameEvent(s32* lpauMsg)
+    s32 ServerInterfaceGamesX360::ReceivedGameEvent(LobbyApiMsgT* lpMsg)
     {
         if (static_cast<u32>(meCurrentAction) > 2u)
-            return ServerInterfaceGames::ReceivedGameEvent(lpauMsg);
+            return ServerInterfaceGames::ReceivedGameEvent(lpMsg);
 
-        if (TagFieldFind(reinterpret_cast<const char*>(lpauMsg[4]), "SESS") != 0) // msg->pData (+0x10)
+        if (TagFieldFind(lpMsg->pData, "SESS") != 0)
         {
-            EndAction(lpauMsg[3]);   // msg error field (+0xC); base EndAction is void
-            return lpauMsg[3];
+            EndAction(lpMsg->code);   // base EndAction is void
+            return lpMsg->code;
         }
         return 0;
     }
@@ -403,13 +382,11 @@ namespace CgsNetwork
         DirtySock::LobbyApiPlayT* lpRecord = GetLastGameRecord();
         for (s32 i = 0; i < KI_MAX_GAME_PLAYERS; ++i)
         {
-            if (lpRecord->aPlayers[i].iIdent == liPlayerID)
+            if (lpRecord->aOpponents[i].iIdent == liPlayerID)
             {
-                // The 8-byte secure XUID lives at +0x1C inside the 164-byte player
-                // record (within the reserved mPad24 region).
-                const u8* lpXUIDField =
-                    reinterpret_cast<const u8*>(&lpRecord->aPlayers[i]) + 0x1C;
-                DirtyAddrToHostAddr(lpXUIDOut, 8, lpXUIDField);
+                // The player's machine address text carries the 8-byte secure XUID.
+                DirtyAddrToHostAddr(lpXUIDOut, 8,
+                                    reinterpret_cast<const DirtyAddrT*>(lpRecord->aOpponents[i].strMachineAddr));
                 return true;
             }
         }

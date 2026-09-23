@@ -82,14 +82,6 @@ namespace
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
-// DebugDraw2DBox (X360 sub_8281C3E0) -- the free-function corner-based debug 2D box primitive used by
-// the thumbnail selection highlight. External to this TU (its own helper); declared here so the
-// compile gate sees its shape. The X360 takes two screen-space corners (x1,y1)-(x2,y2), forms the box
-// position {x1,y1} and size {x2-x1,y2-y1}, and hands them to CgsDev::Debug2DImmediateRender::DrawBox.
-// The trailing decompiler register args are artifacts; the recovered call is (display, x1, y1, x2, y2,
-// colour). Under the per-TU compile gate the declaration suffices (its body lives in its own TU).
-void DebugDraw2DBox(CgsDev::Debug2DImmediateRender* lpDisplay, f32 lfX1, f32 lfY1, f32 lfX2, f32 lfY2,
-                    CgsDev::RGBA lColour);
 
 namespace CgsResource
 {
@@ -508,9 +500,9 @@ namespace CgsResource
                     {
                         // The selected cell gets a highlight box (X360 sub_8281C3E0, colour
                         // 0xFF0000FF) spanning the full cell stride from its top-left corner.
-                        DebugDraw2DBox(lpRender, lv2CellOrigin.x, lv2CellOrigin.y,
-                                       lv2CellOrigin.x + lv2CellStride.x,
-                                       lv2CellOrigin.y + lv2CellStride.y, 0xFF0000FFu);
+                        lpRender->DrawBox(lv2CellOrigin.x, lv2CellOrigin.y,
+                                          lv2CellOrigin.x + lv2CellStride.x,
+                                          lv2CellOrigin.y + lv2CellStride.y, 0xFF0000FFu);
                     }
 
                     // Draw this cell's texture, centred in its stride region (origin + {2,2}, size =

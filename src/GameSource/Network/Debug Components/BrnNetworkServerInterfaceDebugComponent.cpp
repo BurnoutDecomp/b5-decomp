@@ -28,54 +28,38 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender (MaybeDrawText target)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
 
-// ---- Shared debug-HUD text helper + DirtySDK ConnApi client-list glue this TU calls. -------
-// MaybeDrawText lives in its own TU (X360 bl's it directly); the ConnApi client-list + LobbyNameCmp
-// entry points are DirtySDK vendor C-API (same extern block idiom as the sibling
-// CgsServerInterfaceGamesX360.cpp / CgsNetworkPlayerManagerDebugComponent.cpp). A not-yet-homed
-// callee is satisfied by its declaration under cl /c; no body is needed here.
-struct ConnApiClientListT;   // opaque DirtySDK client list (word[0] == client count; entries @ +0x58 stride 0xBC)
-namespace CgsNetwork { namespace DirtySock { struct ConnApiRefT; } }
+#include "connapi.h"                                       // ConnApiGetClientList / ConnApiClientListT
+#include "lobbyname.h"                                     // LobbyNameCmp
 
+// The shared debug-HUD text helper (its own TU).
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
-extern "C"
-{
-    ConnApiClientListT* ConnApiGetClientList(CgsNetwork::DirtySock::ConnApiRefT* pConn);
-    s32         ConnApiClientList_GetNumClients(const ConnApiClientListT* pList);
-    const char* ConnApiClientList_GetEntry(const ConnApiClientListT* pList, s32 liIndex);
-    s32         LobbyNameCmp(const char* pNameA, const char* pNameB);
-}
 
 namespace BrnNetwork
 {
     namespace
     {
-        // Debug-menu option labels for the two enum variables. The X360 feeds .rdata StringList
-        // arrays (&unk_820873A8 / &unk_820873D8) to SetOptions; their string bytes are not in the
-        // available exports, so the display labels below are derived from the DecFIGS enum constant
-        // names (CgsServerInterfaceGames.h EGameServerConnectionType / CgsNetworkConstants.h
-        // EServerType). The value column IS attested (the SetRange bounds + the enum). DWARF lists
-        // the connection table as a file-scope StringList[6] (5 entries + null terminator).
+        // Debug-menu option labels for the two enum variables (the console's .rdata StringList
+        // tables; each ends with a { 0, null } terminator).
         const CgsDev::DebugUI::StringList KA_CONNECTION_TYPE_OPTIONS[] =
         {
-            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_NONE,             "None"               },
-            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_BOTH,    "Fallback Both"      },
-            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_VOIP_ONLY,"Fallback VOIP Only" },
-            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY,"Fallback Game Only" },
-            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_NO_FALLBACK,      "No Fallback"        },
+            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_NONE,              "Not using rebroadcaster"                    },
+            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_BOTH,     "Game and voip direct first"                 },
+            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_VOIP_ONLY,"Voip direct first"                          },
+            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY,"Game direct first"                          },
+            { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_NO_FALLBACK,       "Game and voip always through rebroadcaster" },
             { 0, nullptr },
         };
 
         const CgsDev::DebugUI::StringList KA_SERVER_TYPE_OPTIONS[] =
         {
-            { CgsNetwork::E_SERVER_TYPE_LOCAL,  "Local"  },
-            { CgsNetwork::E_SERVER_TYPE_DEV,    "Dev"    },
-            { CgsNetwork::E_SERVER_TYPE_TEST,   "Test"   },
-            { CgsNetwork::E_SERVER_TYPE_JUICE,  "Juice"  },
-            { CgsNetwork::E_SERVER_TYPE_ARTIST, "Artist" },
-            { CgsNetwork::E_SERVER_TYPE_DEMO_1, "Demo 1" },
-            { CgsNetwork::E_SERVER_TYPE_DEMO_2, "Demo 2" },
+            { CgsNetwork::E_SERVER_TYPE_LOCAL,  "Local Server"       },
+            { CgsNetwork::E_SERVER_TYPE_DEV,    "Auto detect Server" },
+            { CgsNetwork::E_SERVER_TYPE_TEST,   "Dev Server"         },
+            { CgsNetwork::E_SERVER_TYPE_JUICE,  "Test Server"        },
+            { CgsNetwork::E_SERVER_TYPE_ARTIST, "Juice Server"       },
+            { CgsNetwork::E_SERVER_TYPE_DEMO_1, "Artist Server"      },
+            { CgsNetwork::E_SERVER_TYPE_DEMO_2, "Demo Server 1"      },
             { 0, nullptr },
         };
 
@@ -83,17 +67,6 @@ namespace BrnNetwork
         // the constant colour argument to every MaybeDrawText call). Matches the sibling
         // CgsNetworkPlayerManagerDebugComponent KU_TEXT_COLOUR.
         const CgsDev::RGBA KU_TEXT_COLOUR = 0xFFFFFFFFu;   // white (X360 r29 = -1)
-
-        // Per-client byte fields inside a DirtySDK ConnApiClientT entry (the opaque client-list
-        // entry is reached only through ConnApiClientList_GetEntry; these are the load/compare
-        // displacements the X360 reads off the returned entry base). The game/voip status bytes are
-        // an EConnApiConnStatus (0..6); bit 1 of the conn-flags byte selects game-server vs peer.
-        const s32 KI_ENTRY_GAME_DEMANGLING = 0x44;   // v56[0x44] (0 -> "No")
-        const s32 KI_ENTRY_GAME_CONN_FLAGS = 0x45;   // v56[0x45] (bit1 -> "GameServer")
-        const s32 KI_ENTRY_GAME_STATUS     = 0x46;   // v56[0x46] (status switch)
-        const s32 KI_ENTRY_VOIP_DEMANGLING = 0x4C;   // v56[0x4C] (0 -> "No")
-        const s32 KI_ENTRY_VOIP_CONN_FLAGS = 0x4D;   // v56[0x4D] (bit1 -> "GameServer")
-        const s32 KI_ENTRY_VOIP_STATUS     = 0x4E;   // v56[0x4E] (status switch)
 
         const u8 KU_CONN_FLAG_GAMESERVER = 2;        // conn-flags bit 1
 
@@ -118,24 +91,17 @@ namespace BrnNetwork
         }
     }
 
-    // The "not in game" banner and the connection-status header/data columns are drawn at per-column
-    // X offsets the X360 loads from a consecutive .rdata float table based at flt_82F2A018 (idx 0 ==
-    // the banner X; idx 1..8 == the eight table columns, stride 4). FLAG: those float bytes sit above
-    // the exported X360 range (max export 0x82CCF730) and the DecFIGS DWARF carries no hint for this
-    // debug TU, so their VALUES are not recoverable and are NOT fabricated -- the offsets are declared
-    // by name and resolve to their real .rdata definition when that float pool is dumped/homed, the
-    // same deferred-value idiom as WheelStateMachine.h's `extern const f32` un-recovered floats. Each
-    // cell's screen X is mfScreenBorderLeft + the column offset; the render layout (branches, labels,
-    // row stride) is fully grounded in the asm.
-    extern const f32 KF_COL_MESSAGE;          // flt_82F2A018 ("Local Player not in game" banner X)
-    extern const f32 KF_COL_PLAYER;           // flt_82F2A01C (player-name column)
-    extern const f32 KF_COL_LOCAL;            // flt_82F2A020 (is-local column)
-    extern const f32 KF_COL_GAME_STATUS;      // flt_82F2A024
-    extern const f32 KF_COL_GAME_DEMANGLE;    // flt_82F2A028
-    extern const f32 KF_COL_VOIP_STATUS;      // flt_82F2A02C
-    extern const f32 KF_COL_VOIP_DEMANGLE;    // flt_82F2A030
-    extern const f32 KF_COL_GAME_CONN_TYPE;   // flt_82F2A034
-    extern const f32 KF_COL_VOIP_CONN_TYPE;   // flt_82F2A038
+    // Per-column X offsets (from the left screen border) of the "not in game" banner and the eight
+    // connection-status table columns, in table order (the console's .data float block).
+    const f32 KF_COL_MESSAGE        = 0.0f;
+    const f32 KF_COL_PLAYER         = 230.0f;
+    const f32 KF_COL_LOCAL          = 300.0f;
+    const f32 KF_COL_GAME_STATUS    = 370.0f;
+    const f32 KF_COL_GAME_DEMANGLE  = 470.0f;
+    const f32 KF_COL_VOIP_STATUS    = 580.0f;
+    const f32 KF_COL_VOIP_DEMANGLE  = 670.0f;
+    const f32 KF_COL_GAME_CONN_TYPE = 780.0f;
+    const f32 KF_COL_VOIP_CONN_TYPE = 890.0f;
 
     // @ 0x82585700. Initialise the component for the server interface it debugs, then register it
     // with the debug manager. The X360 emits a `bl` to an empty (blr-only) function @ 0x8284CB38
@@ -154,6 +120,44 @@ namespace BrnNetwork
         miServerType                = CgsNetwork::E_SERVER_TYPE_COUNT; // 7 (sentinel: no server type yet)
 
         Register();
+    }
+
+    // Back to the default connection type with nothing pending or displayed, and pick up the
+    // manager's current server type when there is a manager.
+    bool ServerInterfaceDebugComponent::Prepare()
+    {
+        miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY;
+        mbDisconnectNextUpdate      = false;
+        mbApplyServerTypeNextUpdate = false;
+        mbDisplayConnectionStatus   = false;
+        if (mpNetworkManager != nullptr)
+        {
+            miServerType = mpNetworkManager->GetNetworkServers()->GetServerType();
+        }
+        return true;
+    }
+
+    // Back to the default connection type with nothing pending or displayed.
+    bool ServerInterfaceDebugComponent::Release()
+    {
+        miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY;
+        mbDisconnectNextUpdate      = false;
+        mbApplyServerTypeNextUpdate = false;
+        mbDisplayConnectionStatus   = false;
+        return true;
+    }
+
+    // Base teardown, then the Release reset plus both back-pointers dropped.
+    void ServerInterfaceDebugComponent::Destruct()
+    {
+        CgsDev::DebugComponent::Destruct();
+
+        mbDisconnectNextUpdate      = false;
+        miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY;
+        mbApplyServerTypeNextUpdate = false;
+        mbDisplayConnectionStatus   = false;
+        mpServerInterfaceBase       = nullptr;
+        mpNetworkManager            = nullptr;
     }
 
     // @ 0x825857A8. "Disconnect" menu action: flag a disconnect for the next Update tick. The void*
@@ -204,7 +208,8 @@ namespace BrnNetwork
         if (mbDisconnectNextUpdate)
         {
             mbDisconnectNextUpdate = false;
-            GetConnectionComponent(mpServerInterfaceBase)->DisconnectFromServer();
+            static_cast<CgsNetwork::ServerInterfaceConnection*>(
+                mpServerInterfaceBase->GetConnectionComponent())->DisconnectFromServer();
         }
 
         if (mbApplyServerTypeNextUpdate)
@@ -258,7 +263,7 @@ namespace BrnNetwork
             return;
         }
 
-        ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
+        const ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
         if (lpClientList == nullptr)
         {
             return;
@@ -278,43 +283,42 @@ namespace BrnNetwork
         MaybeDrawText(lpDisplay, "Voip Conn Type", lfBaseX + KF_COL_VOIP_CONN_TYPE, lfHeaderY, lfTextSize, KU_TEXT_COLOUR, false);
 
         f32 lfRowY = lfBaseY;
-        for (s32 liIndex = 0; liIndex < ConnApiClientList_GetNumClients(lpClientList); ++liIndex)
+        for (s32 liIndex = 0; liIndex < lpClientList->iNumClients; ++liIndex)
         {
-            const char* lpcEntry = ConnApiClientList_GetEntry(lpClientList, liIndex);
-            const u8*   lpEntry   = reinterpret_cast<const u8*>(lpcEntry);
+            const ConnApiClientT& lrClient = lpClientList->Clients[liIndex];
 
-            // The client's lobby name (entry +0).
-            MaybeDrawText(lpDisplay, lpcEntry, lfBaseX + KF_COL_PLAYER, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
+            // The client's lobby name.
+            MaybeDrawText(lpDisplay, lrClient.UserInfo.strName, lfBaseX + KF_COL_PLAYER, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
-            if (LobbyNameCmp(lLocalPlayerInfo.GetName(), lpcEntry) != 0)
+            if (LobbyNameCmp(lLocalPlayerInfo.GetName(), lrClient.UserInfo.strName) != 0)
             {
                 // A remote peer: show the full connection status.
                 MaybeDrawText(lpDisplay, "No", lfBaseX + KF_COL_LOCAL, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
-                const char* lpcGameStatus = GetConnApiStatusLabel(lpEntry[KI_ENTRY_GAME_STATUS]);
+                const char* lpcGameStatus = GetConnApiStatusLabel(lrClient.GameInfo.eStatus);
                 if (lpcGameStatus != nullptr)
                 {
                     MaybeDrawText(lpDisplay, lpcGameStatus, lfBaseX + KF_COL_GAME_STATUS, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
                 }
 
-                MaybeDrawText(lpDisplay, (lpEntry[KI_ENTRY_GAME_DEMANGLING] != 0) ? "Yes" : "No",
+                MaybeDrawText(lpDisplay, (lrClient.GameInfo.bDemangling != 0) ? "Yes" : "No",
                               lfBaseX + KF_COL_GAME_DEMANGLE, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
-                const char* lpcVoipStatus = GetConnApiStatusLabel(lpEntry[KI_ENTRY_VOIP_STATUS]);
+                const char* lpcVoipStatus = GetConnApiStatusLabel(lrClient.VoipInfo.eStatus);
                 if (lpcVoipStatus != nullptr)
                 {
                     MaybeDrawText(lpDisplay, lpcVoipStatus, lfBaseX + KF_COL_VOIP_STATUS, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
                 }
 
-                MaybeDrawText(lpDisplay, (lpEntry[KI_ENTRY_VOIP_DEMANGLING] != 0) ? "Yes" : "No",
+                MaybeDrawText(lpDisplay, (lrClient.VoipInfo.bDemangling != 0) ? "Yes" : "No",
                               lfBaseX + KF_COL_VOIP_DEMANGLE, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
                 MaybeDrawText(lpDisplay,
-                              ((lpEntry[KI_ENTRY_GAME_CONN_FLAGS] & KU_CONN_FLAG_GAMESERVER) == KU_CONN_FLAG_GAMESERVER) ? "GameServer" : "Peer-peer",
+                              ((lrClient.GameInfo.uConnFlags & KU_CONN_FLAG_GAMESERVER) == KU_CONN_FLAG_GAMESERVER) ? "GameServer" : "Peer-peer",
                               lfBaseX + KF_COL_GAME_CONN_TYPE, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
 
                 MaybeDrawText(lpDisplay,
-                              ((lpEntry[KI_ENTRY_VOIP_CONN_FLAGS] & KU_CONN_FLAG_GAMESERVER) == KU_CONN_FLAG_GAMESERVER) ? "GameServer" : "Peer-peer",
+                              ((lrClient.VoipInfo.uConnFlags & KU_CONN_FLAG_GAMESERVER) == KU_CONN_FLAG_GAMESERVER) ? "GameServer" : "Peer-peer",
                               lfBaseX + KF_COL_VOIP_CONN_TYPE, lfRowY, lfTextSize, KU_TEXT_COLOUR, false);
             }
             else

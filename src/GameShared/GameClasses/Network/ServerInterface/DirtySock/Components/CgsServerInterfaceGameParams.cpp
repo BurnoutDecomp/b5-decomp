@@ -1,5 +1,8 @@
 #include "CgsServerInterfaceGameParams.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"          // DirtySock::LobbyApiPlayT
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"   // EConversionFlags
+#include "lobbytagfield.h"   // TagFieldSet* / TagFieldGetStructure
 
 #include <string.h>
 
@@ -102,5 +105,121 @@ namespace CgsNetwork
         muRandomSeed      = lrOther.muRandomSeed;
 
         return *this;
+    }
+
+    // The lobby game-flag word conversion (home: the game-flags TU).
+    u32 ConvertFlags(u32 luFlags, EConversionFlags leDirection);
+
+    // Reset every field to the empty default: no name / password / session / host, no
+    // game or room id, eight public slots.
+    bool ServerInterfaceGameParamsBase::Prepare()
+    {
+        SetName("");
+        SetPassword("");
+        SetSession("");
+        macHostName[0]    = 0;
+        miGameID          = -1;
+        miRoomID          = -1;
+        miMinNumPlayers   = 0;
+        miMaxNumPlayers   = 0;
+        miNumPlayers      = 0;
+        miNumPublicSlots  = 8;
+        miNumPrivateSlots = 0;
+        muCustomFlags     = 0;
+        muGameFlags       = 0;
+        muRandomSeed      = 0;
+        mbJoinUserset     = false;
+        return true;
+    }
+
+    // Append the game's fields to a lobby request record; the derived structure (if any)
+    // travels packed under "PARAMS".
+    void ServerInterfaceGameParamsBase::SerialiseToString(char* lpcString, s32 liLength) const
+    {
+        CGS_ASSERT(lpcString, "lpcString");
+
+        if (macName[0] != 0)
+        {
+            TagFieldSetString(lpcString, liLength, "NAME", macName);
+        }
+        TagFieldSetString(lpcString, liLength, "PASS", macPassword);
+        if (mbJoinUserset)
+        {
+            TagFieldSetNumber(lpcString, liLength, "SET", 1);
+        }
+
+        if (GetData() != 0 && GetDataSize() != 0)
+        {
+            CGS_ASSERT(strlen(GetPattern()) < static_cast<size_t>(GetPatternLength()),
+                       "strlen( GetPattern()) < (size_t) GetPatternLength()");
+            const char* lpcPattern = GetPattern();
+            const s32   liSize     = static_cast<s32>(GetDataSize());
+            const void* lpData     = GetData();
+            TagFieldSetStructure(lpcString, liLength, "PARAMS", lpData, liSize, lpcPattern);
+        }
+
+        TagFieldSetNumber(lpcString, liLength, "MINSIZE", miMinNumPlayers);
+        TagFieldSetNumber(lpcString, liLength, "MAXSIZE", miMaxNumPlayers);
+        TagFieldSetNumber(lpcString, liLength, "CUSTFLAGS", static_cast<s32>(muCustomFlags));
+        TagFieldSetNumber(lpcString, liLength, "SYSFLAGS",
+                          static_cast<s32>(ConvertFlags(muGameFlags, E_CONVERSION_TO_WIRE)));
+        if (miRoomID != -1)
+        {
+            TagFieldSetNumber(lpcString, liLength, "ROOM", miRoomID);
+        }
+        if (miGameID != -1)
+        {
+            TagFieldSetNumber(lpcString, liLength, "IDENT", miGameID);
+        }
+        if (macSession[0] != 0)
+        {
+            TagFieldSetString(lpcString, liLength, "SESS", macSession);
+        }
+        TagFieldSetNumber(lpcString, liLength, "PRIV", miNumPrivateSlots);
+        TagFieldSetNumber(lpcString, liLength, "SEED", static_cast<s32>(muRandomSeed));
+        TagFieldSetNumber(lpcString, liLength, "FORCE_LEAVE", 1);
+    }
+
+    // Fill the fields from a lobby game record; the derived structure (if any) is
+    // unpacked from the record's params text.
+    void ServerInterfaceGameParamsBase::SerialiseFromGame(const void* lpGame)
+    {
+        CGS_ASSERT(lpGame, "lpGame");
+        const DirtySock::LobbyApiPlayT* lpRecord = static_cast<const DirtySock::LobbyApiPlayT*>(lpGame);
+
+        SetName(lpRecord->strName);
+        SetPassword("");
+        // The inlined bounded copy of the host name.
+        CGS_ASSERT(strlen(lpRecord->strHost) < static_cast<size_t>(KI_GAMEPARAMS_HOSTNAME_LENGTH),
+                   "String too long: ");
+        strncpy(macHostName, lpRecord->strHost, KI_GAMEPARAMS_HOSTNAME_LENGTH);
+        SetSession(lpRecord->strSess);
+
+        miGameID          = lpRecord->iIdent;
+        miRoomID          = lpRecord->iRoom;
+        miMinNumPlayers   = lpRecord->iMinsize;
+        miMaxNumPlayers   = lpRecord->iMaxsize;
+        miNumPlayers      = lpRecord->iCount;
+        miNumPublicSlots  = lpRecord->iMaxsize - lpRecord->iPrivSlots;
+        miNumPrivateSlots = lpRecord->iPrivSlots;
+        muCustomFlags     = lpRecord->uCustflags;
+        muRandomSeed      = lpRecord->uSeed;
+        muGameFlags       = ConvertFlags(lpRecord->uSysflags, E_CONVERSION_FROM_WIRE);
+
+        if (GetData() != 0 && GetDataSize() != 0)
+        {
+            CGS_ASSERT(strlen(GetPattern()) < static_cast<size_t>(GetPatternLength()),
+                       "strlen( GetPattern()) < (size_t) GetPatternLength()");
+            const char* lpcPattern = GetPattern();
+            const s32   liSize     = static_cast<s32>(GetDataSize());
+            void*       lpData     = GetData();
+            TagFieldGetStructure(lpRecord->strParams, lpData, liSize, lpcPattern);
+        }
+    }
+
+    void ServerInterfaceGameParamsBase::SetTotalSlots(s32 liNumPublicSlots, s32 liNumPrivateSlots)
+    {
+        miNumPublicSlots  = liNumPublicSlots;
+        miNumPrivateSlots = liNumPrivateSlots;
     }
 }

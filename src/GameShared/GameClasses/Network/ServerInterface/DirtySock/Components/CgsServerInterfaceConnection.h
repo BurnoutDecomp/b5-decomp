@@ -76,7 +76,8 @@ namespace CgsNetwork
             E_ACTION_COUNT           = 5,
         };
 
-        ServerInterfaceConnection();
+        // Inlined into the owning server-interface constructor (vtable store only).
+        ServerInterfaceConnection() {}
 
         // CgsServerInterfaceConnection.h:64 -- vector deleting destructor @ 0x827DE118.
         virtual ~ServerInterfaceConnection();
@@ -96,6 +97,10 @@ namespace CgsNetwork
         bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
         bool Release();
         void Update();
+        // Both empty: the owning server interface's suspend / resume fan-out reaches the
+        // shared empty body for this component.
+        void Suspend();
+        void Resume();
 
         // ADDITIVE GROW (CgsNetworkAdapterX360 group): the owning DirtySock server
         // interface (== mpServerInterface, the +0x10 member). CgsNetwork::NetworkAdapterX360

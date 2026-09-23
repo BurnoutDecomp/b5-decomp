@@ -84,8 +84,10 @@ namespace CgsNetwork
     struct ServerInterfacePlayerInfoDataBase : public ServerInterfaceStructureInterface
     {
     public:
-        ServerInterfacePlayerInfoDataBase();
-        virtual ~ServerInterfacePlayerInfoDataBase();
+        // Both inline and empty (the leaves' constructors and deleting destructors store
+        // only the vtable pointers).
+        ServerInterfacePlayerInfoDataBase() {}
+        virtual ~ServerInterfacePlayerInfoDataBase() {}
 
         // CgsServerInterfacePlayerInfoData.cpp:167 (virtual; DWARF). Resets the whole
         // record to its empty default -- clears every string/attr buffer and scalar,

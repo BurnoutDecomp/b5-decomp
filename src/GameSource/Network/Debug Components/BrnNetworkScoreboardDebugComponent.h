@@ -47,16 +47,8 @@
 
 namespace BrnNetwork
 {
-    struct ScoreboardManager;   // back-pointer member + dispatch helper only (pointer-only use; its full
-                                // header embeds this component by value, so including it would cycle).
-
-    // The scoreboard manager owns the select-event queue. The debug component dispatches a freshly built
-    // NetworkInSelectScoreboardEvent through it on every menu change. Declared as a free helper here (its
-    // body lands with the BrnNetworkScoreboardManager reconstruction) because ScoreboardManager's full
-    // header is not yet gate-compilable from this TU -- the same documented cascade-avoidance forward-decl
-    // exception used by ServerInterfaceDebugComponent::GetConnectionComponent.
-    void DispatchScoreboardEvent(ScoreboardManager* lpScoreboardManager,
-                                 const BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent* lpEvent);
+    struct ScoreboardManager;   // back-pointer member only (its full header embeds this component by
+                                // value, so including it here would cycle; the .cpp includes it).
 
     class ScoreboardDebugComponent : public CgsDev::DebugComponent
     {
@@ -92,11 +84,8 @@ namespace BrnNetwork
         static void GetVariations(void* lpValue, void* lpUserData);   // @ 0x825859C0 (Index changed)
         static void GetScoreboard(void* lpValue, void* lpUserData);   // @ 0x82585A28 (Variation changed)
 
-        // Render the current scoreboard to debug text. Called at the tail of HandleScoreboardEvent.
-        // Not attested as a separately-recovered body in this TU (its StrStream body folds away in the
-        // assert-only build); declared-only so the call site is preserved, the body lands with the full
-        // scoreboard-render reconstruction. (Same declared-only idiom as ServerInterfaceDebugComponent.)
-        void PrintScoreboard();   // @ ~0x82585xxx (folded; declared-only)
+        // Render the current scoreboard to the debug log. Called at the tail of HandleScoreboardEvent.
+        void PrintScoreboard();
 
         // ---- member layout (see header comment) ----
         BrnNetwork::Scoreboard      mScoreboard;                                       // +0x000C

@@ -160,7 +160,8 @@ namespace BrnNetwork
         }
 
         lpDataEntry->mPlayerID = lPlayerID;
-        lpNetworkPlayer->RegisterMessageType(KE_MESSAGE_TYPE_MARKED_MAN, 0x30,
+        lpNetworkPlayer->RegisterMessageType(KE_MESSAGE_TYPE_MARKED_MAN,
+                                             static_cast<s32>(sizeof(MarkedManMessage)),   // console 0x30
                                              &lpDataEntry->mMarkedManMessageSend,
                                              &lpDataEntry->mMarkedManMessageRecv,
                                              &MarkedManManager::_MarkedManMessageArrivedCallback,

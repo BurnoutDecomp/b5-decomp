@@ -19,20 +19,18 @@
 //        string, blr). No member or base access.
 //
 // The remaining declared methods (Construct/PrepareForSend/Retrieve/
-// GetPackedMessageSize/PackOrUnpack) live in the sibling .cpp TU
-// (BrnRoadRulesPersonalBestMessage.cpp) and are declared here for the class shape but
-// NOT bodied in this TU. BrnStreetData::ChallengeData / ChallengeHighScoreEntry are
-// only referenced (by ptr/value) in those sibling-.cpp signatures, so they are
-// forward-declared here rather than pulling in their StreetData homes.
+// GetPackedMessageSize/PackOrUnpack) are bodied in BrnRoadRulesPersonalBestMessage.cpp.
+// PrepareForSend takes the personal-best ChallengeData by value (the reference shape; the
+// caller passes the 24-byte record in registers), so its StreetData home is included.
 // ===================================================================================
 
 #include "types.hpp"                                                                // s32, u16, bool
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"   // CgsNetwork::ReliableMessage (committed base)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                         // BrnNetwork::Road::ChallengeIndex, PlayerName (committed)
+#include "SharedClasses/StreetData/BrnChallengeData.h"                              // BrnStreetData::ChallengeData (PrepareForSend by value)
 
 namespace BrnStreetData
 {
-    struct ChallengeData;            // committed home: SharedClasses/StreetData/BrnChallengeData.h
     class  ChallengeHighScoreEntry;  // committed home: GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h
 }
 
@@ -41,10 +39,10 @@ namespace BrnNetwork
     struct RoadRulesPersonalBestMessage : public CgsNetwork::ReliableMessage
     {
     public:
-        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
+        // Bodied in BrnRoadRulesPersonalBestMessage.cpp.
         void          Construct();
         void          PrepareForSend(u16 lu16Frame, Road::ChallengeIndex lChallengeIndex,
-                                     const BrnStreetData::ChallengeData& lChallengeData);
+                                     BrnStreetData::ChallengeData lPbScore);
         bool          Retrieve(PlayerName* lpPlayerName, Road::ChallengeIndex* lpChallengeIndex,
                                BrnStreetData::ChallengeHighScoreEntry* lpChallengeHighScoreEntry);
         s32   GetPackedMessageSize() override;

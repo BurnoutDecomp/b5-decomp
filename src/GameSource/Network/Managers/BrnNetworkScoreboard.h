@@ -19,6 +19,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (inline GetColumn)
 
 namespace BrnNetwork
 {
@@ -45,15 +46,28 @@ namespace BrnNetwork
             E_DATATYPE_COUNT      = 8,
         };
 
-        void      Construct();                                            // own TU
-        bool      Prepare(const char*, s32, s32, EDataType);              // own TU
+        // Header-inline: the console inlines Construct at every stack column (AddColumnInfoToScoreboard)
+        // and Clear ten times over in Scoreboard::ClearAllColumnData -- the same four stores each time.
+        void      Construct() { Clear(); }
+        bool      Prepare(const char* lpcTitle, s32 liWidth, s32 liStyle, EDataType leDataType);
         bool      Release();                                              // own TU
         void      Destruct();                                             // own TU
-        void      Clear();                                                // own TU
-        const char* GetTitle() const;                                     // own TU
+        void      Clear()
+        {
+            meDataType  = static_cast<EDataType>(KI_DATATYPE_NONE);
+            macTitle[0] = 0;
+            miWidth     = 0;
+            miStyle     = 0;
+        }
+        const char* GetTitle() const { return macTitle; }
         s32       GetWidth() const;                                       // own TU
         s32       GetStyle() const;                                       // own TU
         EDataType GetType() const;                                        // own TU
+
+        // The "no type" value a cleared column carries. The console stores 9 -- one past the
+        // reference enum's E_DATATYPE_COUNT (8) -- and DirtySockColumnTypeToEDataType returns the
+        // same value for an unknown server column type.
+        static const s32 KI_DATATYPE_NONE = 9;
 
     private:
         EDataType meDataType;     // +0   DWARF :107
@@ -69,9 +83,20 @@ namespace BrnNetwork
         void      Construct();                                            // own TU
         bool      Release();                                              // own TU
         void      Destruct();                                             // own TU
-        void      Clear();                                                // own TU
-        void      AddCell(const char*);                                   // own TU
-        const char* GetData(s32) const;                                   // own TU
+
+        // Header-inline: inlined into ScoreboardManager::AddRowDataToScoreboard and
+        // Scoreboard::ClearAllScoreboardData (terminate every cell, no cells in use).
+        void      Clear()
+        {
+            for (s32 liCell = 0; liCell < KI_MAX_SCOREBOARD_COLUMNS; ++liCell)
+            {
+                maacData[liCell][0] = 0;
+            }
+            miNumberOfColumns = 0;
+        }
+
+        void      AddCell(const char* lpcData);
+        const char* GetData(s32 liColumnNumber) const;
 
     private:
         char maacData[10][31];    // +0   DWARF :157  (10 cells x 31 chars == 310)
@@ -85,19 +110,31 @@ namespace BrnNetwork
         bool      Prepare(const char*);                                   // own TU
         bool      Release();                                              // own TU
         void      Destruct();                                             // own TU
-        s32       GetNumberOfRows() const;                                // own TU
-        s32       GetNumberOfColumns() const;                             // own TU
-        const ScoreboardColumn* GetColumn(s32) const;                     // own TU
+        // Header-inline accessors (inlined into ScoreboardDebugComponent::PrintScoreboard and the
+        // manager's row builders).
+        s32       GetNumberOfRows() const    { return miNumberOfRows; }
+        s32       GetNumberOfColumns() const { return miNumberOfColumns; }
+        const ScoreboardColumn* GetColumn(s32 liColumnNumber) const
+        {
+            CGS_ASSERT(liColumnNumber >= 0, "liColumnNumber >= 0");
+            CGS_ASSERT(liColumnNumber < miNumberOfColumns, "liColumnNumber < miNumberOfColumns");
+            return &maColumns[liColumnNumber];
+        }
 
         // === Reconstructed in this TU ===
         const ScoreboardRow*    GetRow(s32 liRowNumber) const;            // @ 0x8240E9A8
 
-        const char* GetTitle() const;                                     // own TU
-        void      AddRow(ScoreboardRow*);                                 // own TU
-        void      AddColumn(ScoreboardColumn*);                           // own TU
-        void      AddNumberBeforeAndAfter(s8, s8);                        // own TU
-        s8        GetNumberBefore() const;                                // own TU
-        s8        GetNumberAfter() const;                                 // own TU
+        const char* GetTitle() const { return macTitle; }
+        void      AddRow(ScoreboardRow* lpRow);
+        void      AddColumn(ScoreboardColumn* lpColumn);
+        // Header-inline: ScoreboardManager::AddNumberBeforeAndAfter stores the two counts directly.
+        void      AddNumberBeforeAndAfter(s8 liBefore, s8 liAfter)
+        {
+            miNumberOfRowsBefore = liBefore;
+            miNumberOfRowsAfter  = liAfter;
+        }
+        s8        GetNumberBefore() const { return miNumberOfRowsBefore; }
+        s8        GetNumberAfter() const  { return miNumberOfRowsAfter; }
 
     private:
         void      ClearAllScoreboardData();                               // own TU

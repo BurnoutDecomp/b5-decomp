@@ -48,6 +48,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"                         // CgsSystem::EFrameRate
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                         // K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
@@ -189,10 +190,19 @@ namespace CgsNetwork
 
         bool AckNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const;
         bool NackNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const;
-        // Inlined on the console with two range asserts; declared-only until those strings
-        // are recovered.
-        SignalMessage* GetAck(s32 liIndex);
-        SignalMessage* GetNack(s32 liIndex);
+        // Inlined into the player pump on the console: two range asserts, then the slot.
+        SignalMessage* GetAck(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < KI_MAX_ACKS_TO_BUFFER, "liIndex < KI_MAX_ACKS_TO_BUFFER");
+            return &maAckMessage[liIndex];
+        }
+        SignalMessage* GetNack(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < KI_MAX_NACKS_TO_BUFFER, "liIndex < KI_MAX_NACKS_TO_BUFFER");
+            return &maNackMessage[liIndex];
+        }
 
         // --- host / identity ---
         NetworkPlayerID GetHostPlayerID();
@@ -229,7 +239,18 @@ namespace CgsNetwork
 
         // Receive-side filters: consume an incoming ack / nack signal, accept or drop a
         // received message.
-        bool CheckForAck(Message* lpMessage);
+        // Inlined into the player receive path on the console: an ack frees the buffered
+        // reliable message it answers.
+        bool CheckForAck(Message* lpMessage)
+        {
+            if ((lpMessage->mx8Flags & KX8_FLAGS_ACK) != 0)
+            {
+                mReliableMessageManager.RemoveBufferedReliableMessage(
+                    static_cast<SignalMessage*>(lpMessage));
+                return true;
+            }
+            return false;
+        }
         bool CheckForNack(Message* lpMessage);
         void AcceptMessage(Message* lpMessage);
         void ThrowAwayMessage(Message* lpMessage);
@@ -239,14 +260,34 @@ namespace CgsNetwork
         u32 GetTotalBytesSentWithOverhead();
         u32 GetTotalBytesSentToDirtySock();
 
-        // The connection-test manager embedded at +0x0000. Declared-only: the console has
-        // no such accessor (its callers reach mConnectionManager directly).
-        PlayersConnectionManager* GetPlayersConnectionManager();
-
         PlayersConnectionManager mConnectionManager;                         // +0x0000
         ReliableMessageManager   mReliableMessageManager;                    // +0x0E38
 
     private:
+        // Header-inline helpers the console folds into Construct / Prepare / Release /
+        // Destruct and the disconnect callback.
+        void ResetAllBandwidthCounters()
+        {
+            miBytesUsedForAcks                   = 0;
+            miBytesUsedForReliableMessages       = 0;
+            miBytesUsedForReliableResendMessages = 0;
+            miBytesUsedForUnreliableMessages     = 0;
+            for (s32 liIndex = 0; liIndex < KI_NUM_MESSAGE_BYTE_COUNTERS; ++liIndex)
+            {
+                maMessageBytes[liIndex] = 0;
+            }
+        }
+        void ResetEventCallbacks()
+        {
+            miNumEventCallbacks = 0;
+            for (s32 liIndex = 0; liIndex < KI_NUM_EVENT_CALLBACKS; ++liIndex)
+            {
+                maEventCallbacks[liIndex].mCallback  = nullptr;
+                maEventCallbacks[liIndex].mpUserData = nullptr;
+            }
+        }
+        bool AreAnyPlayersConnected() const;
+
         PlayerData* AssignActiveLocalPlayer(s32 liConnectionIndex);
         PlayerData* AssignActiveNetworkPlayer(s32 liConnectionIndex);
         void        ReleasePlayer(s32 liActiveIndex);
@@ -291,5 +332,10 @@ namespace CgsNetwork
         s32             miBytesUsedForReliableMessages;                       // +0x2444
         s32             miBytesUsedForReliableResendMessages;                 // +0x2448
         s32             maMessageBytes[KI_NUM_MESSAGE_BYTE_COUNTERS];         // +0x244C
+
+        // Class statics: the GetNextPlayerID perfmon handle and the register-once guard for
+        // both registry perfmons.
+        static s32  miNextPlayerIDPerfmon;
+        static bool _mbRegisteredPerfmon;
     };
 }

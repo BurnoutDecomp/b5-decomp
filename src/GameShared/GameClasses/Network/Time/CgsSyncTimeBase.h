@@ -88,8 +88,7 @@ namespace CgsNetwork
                                           NetworkPlayerID  lHostPlayerID,
                                           NetworkPlayerID  lClientPlayerID);
 
-        // Bodied in another TU (did not run before the milestone); declared here so the
-        // rest of the hierarchy can call it by name.
+        // The first receive slot holding a message; null and false when none is pending.
         bool GetNextRecievedMessage(SyncTimeMessage** lppMessage);
 
     private:

@@ -18,24 +18,20 @@
 // (meState) pumped from ProcessBeforeSimulation. The inbound network-event queue is drained in
 // ProcessAfterSimulation -> ProcessNetworkEvents.
 //
-// FLAGGED rodata gaps (per project rule: never fabricate un-recovered rodata):
-//   * ProcessNetworkEvents gates the score-leaderboard store on the same DLC/entitlement
-//     capability test the sibling ScoreboardManager flags un-recovered
-//     ((dword_82FFA7F4 & dword_82FFA7F8[dword_82FFA864]) ... && byte_82FFA886, and the 868/887
-//     twin). The flag table + indices + the two enable bytes are file-scope rodata not recovered
-//     in this slice; the gate is preserved structurally behind a documented placeholder.
-//   * GetScoreboardIndexForEvent scans per-game-mode scoreboard tables (qword_8207C440 /
-//     qword_8207C4B0 .. qword_8207C5C8) that are un-recovered rodata; the scan structure + the
-//     game-mode dispatch (5 / 7) + the not-set-up assert are reconstructed, the table extents
-//     are left as documented placeholders.
+// Notes:
+//   * ProcessNetworkEvents gates the score-leaderboard store on the downloadable-content
+//     feature table (both event leaderboards enabled).
+//   * GetScoreboardIndexForEvent scans the per-mode event scoreboard tables
+//     (BrnNetworkEventScoreData.h).
 
 #include "GameSource/Network/Managers/BrnEventScoresManager.h"
+#include "GameSource/Resource/BrnDLCManager.h"                                // g_DLCFeatureAvailability (leaderboard gate)
 #include "GameSource/Network/BrnNetworkModule.h"                    // BrnNetworkModule::GetNetworkManager / GetNetworkEventQueue
 #include "GameSource/Network/BrnNetworkManager.h"                   // BrnNetworkManager::OnAutoLoginProcessComplete
 #include "GameSource/Network/BrnServerInterfaceBase.h"              // GetCustomCommandsComponent / GetDownloadableConfigComponent / GetStatus
 #include "GameSource/Network/BrnNetworkModuleIO.h"                  // PostSimulationInputBuffer, NetworkEventQueue
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h" // UploadEventScoreData
-#include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h" // GetEventScoreUploadRetryInterval
+#include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h" // TimeBetweenRoadRulesUploads
 #include "GameSource/Network/Parameters/BrnNetworkEventScoreData.h" // EventScoreData
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // EComponents / EStatus
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // VariableEventQueue<14000,16> (GetFirstEvent/GetNextEvent/AddEvent)
@@ -161,21 +157,32 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------------------
     // GetScoreboardIndexForEvent  @ 0x8254B4B0
     // Map an (eventID, gameMode) onto its scoreboard slot. Each game mode has its own scoreboard
-    // table; the slot index is the position of lu64EventID in that mode's table, or -1 when absent.
-    // FLAGGED: the per-mode tables (qword_8207C4B0 .. qword_8207C5C8 for mode 5; qword_8207C440 ..
-    // for mode 7) are un-recovered file-scope rodata, so the scan extents cannot be reconstructed
-    // without fabricating data. The dispatch + the not-set-up assert ARE reconstructed; the table
-    // walk is left as a documented placeholder that always reports "not found".
+    // table (mode 5: the burn-route events, mode 7: the stunt-run events); the slot index is the
+    // position of lu64EventID in that mode's table, or -1 when absent.
     // ---------------------------------------------------------------------------------------------
     s32 EventScoresManager::GetScoreboardIndexForEvent( u64 lu64EventID, s32 leGameMode )
     {
-        (void)lu64EventID;
-
-        if ( leGameMode == KI_GAME_MODE_KEEP_MIN || leGameMode == KI_GAME_MODE_KEEP_MAX )
+        if ( leGameMode == KI_GAME_MODE_KEEP_MIN )
         {
-            // FLAGGED-(-1) placeholder: the per-mode scoreboard tables are un-recovered rodata.
-            // The X360 scans the mode's table for lu64EventID, returning its index, or -1 when the
-            // event is not present in the table. Reconstruct the scan when the tables are homed.
+            for ( s32 liScoreboard = 0; liScoreboard < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS; ++liScoreboard )
+            {
+                if ( lu64EventID == KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS[liScoreboard] )
+                {
+                    return liScoreboard;
+                }
+            }
+            return -1;
+        }
+
+        if ( leGameMode == KI_GAME_MODE_KEEP_MAX )
+        {
+            for ( s32 liScoreboard = 0; liScoreboard < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS; ++liScoreboard )
+            {
+                if ( lu64EventID == KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS[liScoreboard] )
+                {
+                    return liScoreboard;
+                }
+            }
             return -1;
         }
 
@@ -245,13 +252,6 @@ namespace BrnNetwork
     {
         CGS_ASSERT( lpNetworkEventQueue != nullptr, "lpNetworkEventQueue" );
 
-        // FLAGGED: the score-leaderboard upload is gated on the same DLC/entitlement capability test
-        // the sibling ScoreboardManager flags un-recovered: two independent feature bits
-        // ((dword_82FFA7F4 & dword_82FFA7F8[dword_82FFA864]) == dword_82FFA7F8[...] && byte_82FFA886,
-        // and the 868/887 twin). The flag table, the two table indices and the two enable bytes are
-        // un-recovered file-scope rodata. Reconstruct the real test when that rodata is homed; until
-        // then the gate is preserved structurally as a documented placeholder.
-        const bool lbScoreLeaderboardUploadEnabled = false;   // FLAGGED placeholder (un-recovered rodata)
 
         const CgsModule::Event* lpEvent = nullptr;
         s32 liSize = 0;
@@ -261,7 +261,10 @@ namespace BrnNetwork
         {
             if ( leEventType == KI_NETEVENT_SCORE_LEADERBOARD )
             {
-                if ( lbScoreLeaderboardUploadEnabled )
+                // Event scores are stored for upload only while both event leaderboards are enabled
+                // by the downloadable content.
+                if ( BrnResource::g_DLCFeatureAvailability.IsFeatureEnabled( BrnResource::E_DLC_FEATURE_LEADERBOARDS_BURNING_ROUTE )
+                     && BrnResource::g_DLCFeatureAvailability.IsFeatureEnabled( BrnResource::E_DLC_FEATURE_LEADERBOARDS_STUNT_RUN ) )
                 {
                     const ScoreLeaderboardEvent* lpScoreLeaderboardEvent =
                         reinterpret_cast<const ScoreLeaderboardEvent*>( lpEvent );
@@ -458,7 +461,7 @@ namespace BrnNetwork
             CGS_ASSERT( lpServerInterface->GetDownloadableConfigComponent() != nullptr,
                         "lpServerInterface->GetDownloadableConfigComponent()" );
             lpEventScoresManager->mUploadRetryTimer.SetFloatVal(
-                lpServerInterface->GetDownloadableConfigComponent()->GetEventScoreUploadRetryInterval() );
+                lpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesUploads() );
             lpEventScoresManager->miUploadCount = 0;
         }
         else

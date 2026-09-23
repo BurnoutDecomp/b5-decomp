@@ -56,6 +56,9 @@ namespace BrnNetwork
 
     class BuddyManagerBase : public CgsNetwork::BuddyManagerX360
     {
+        // The debug component's server-friends overwrite fills the upload scratch directly.
+        friend class BuddyManagerDebugComponent;
+
     public:
         // DWARF BrnNetworkBuddyManagerBase.h:140 -- the server-mirroring state machine.
         enum EBuddyManagerState
@@ -94,11 +97,10 @@ namespace BrnNetwork
         // network-event queue (read events from the first queue, mirror them onto the
         // module's IN-event queue). VIRTUAL: the X360 leaf (BuddyManagerX360) overrides it
         // to additionally route the gamer-card "show profile" events through the Xbox Guide.
-        // ADDITIVE GROW (BrnNetworkBuddyManagerX360 TU): the body is homed in this base's own
-        // TU; declared here so the X360 override (which calls through this slot via the vtable)
-        // matches the base virtual signature.
+        // Pure: the console has no base body (no base vtable exists); the platform leaf's override
+        // is the only one, and ProcessDebugEvents reaches it through this slot.
         virtual void ProcessNetworkQueue(const BrnNetworkModuleIO::NetworkEventQueue* lpInQueue,
-                                         BrnNetworkModuleIO::NetworkEventQueue* lpOutQueue);
+                                         BrnNetworkModuleIO::NetworkEventQueue* lpOutQueue) = 0;
 
         BrnNetworkModule* GetNetworkModule() { return mpNetworkModule; }
 

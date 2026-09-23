@@ -25,6 +25,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceTelemetry.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGamesX360.h" // SetSessionFlags
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                         // [PC HARNESS] bounded [net] witness lines
 
 // ============================================================================================
 // BrnNetwork::BrnNetworkManager -- event handling and GUI / game output (partfile).
@@ -176,7 +177,7 @@ namespace BrnNetwork
         PlayerInfoData lPlayerInfo;
 
         CgsNetwork::ServerInterfaceGames* lpGamesComponent = GetServerInterface()->GetGameComponent();
-        if (lpGamesComponent->IsPlayerInGameByID(lPlayerID))
+        if (lpGamesComponent->IsPlayerInGame(lPlayerID))
         {
             PlayerParams lPlayerParams;
             lPlayerParams.Prepare();
@@ -254,7 +255,7 @@ namespace BrnNetwork
 
         const NetworkPlayerID lLocalPlayerID = lpPlayerManager->GetLocalPlayerID();
 
-        if (lpGamesComponent->IsPlayerInGameByID(lLocalPlayerID))
+        if (lpGamesComponent->IsPlayerInGame(lLocalPlayerID))
         {
             lpOutput->GetInGamePlayerStatusInterface()->SetGameName(lpGamesComponent->GetGameName());
             lpOutput->GetInGamePlayerStatusInterface()->SetLocalPlayerIsHost(lpGamesComponent->IsLocalPlayerHost());
@@ -268,7 +269,7 @@ namespace BrnNetwork
 
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
         {
-            if (!lpGamesComponent->IsPlayerInGameByID(lPlayerID))
+            if (!lpGamesComponent->IsPlayerInGame(lPlayerID))
             {
                 continue;
             }
@@ -703,6 +704,7 @@ namespace BrnNetwork
             PlayerMenuData* lpMenuData =
                 static_cast<PlayerMenuData*>(lpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
             CGS_ASSERT(lpMenuData != NULL, "lpMenuData");
+            BrnNetHarnessPC::Witness("player", "added id=%d local=%d name=%.16s", lPlayerID, lbIsLocalPlayer ? 1 : 0, (lpMenuData != NULL) ? lpMenuData->macName : "?");
 
             lPlayerParams.Prepare();
             lpNetworkManager->GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerID(lPlayerID,
@@ -748,6 +750,7 @@ namespace BrnNetwork
         }
 
         case CgsNetwork::PlayerManager::E_EVENT_START_PLAYER_REMOVAL:
+            BrnNetHarnessPC::Witness("player", "removing id=%d", lPlayerID);
             lpNetworkManager->GetHostMigrationManager()->RemovePlayer(lPlayerID);
             lpNetworkManager->GetStartTimeManager()->RemovePlayer(lPlayerID);
             lpNetworkManager->GetVoIPManager()->RemovePlayer(lpNetworkManager->GetServerInterface(), lPlayerID);
@@ -905,7 +908,7 @@ namespace BrnNetwork
         while (GetPlayerManager()->GetNextPlayerID(&lPlayerID,
                                                    CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
-            if (GetServerInterface()->GetGameComponent()->IsPlayerInGameByID(lPlayerID) &&
+            if (GetServerInterface()->GetGameComponent()->IsPlayerInGame(lPlayerID) &&
                 GetStandingsManager()->ArePlayersResultsValid(lPlayerID))
             {
                 BrnNetworkModuleIO::PlayerResultsData* lpPlayerResultsData =

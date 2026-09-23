@@ -25,6 +25,8 @@
 
 namespace CgsNetwork
 {
+    struct ServerInterfacePlayerParamsBase;   // Construct-from-lobby-player input (pointer only)
+
     struct UniquePlayerIDX360 : public PlayerName
     {
         // CgsUniquePlayerIDX360.h -- KI_USERNAME_LENGTH bound used by Construct's strlen guard
@@ -34,6 +36,10 @@ namespace CgsNetwork
         // @ 0x82541A10 -- validate lpcPlayerName, copy it into the PlayerName base, then store
         // the 64-bit XUID at +0x10. Returns `this` (the X360 returns PlayerName::Construct's r3).
         UniquePlayerIDX360* Construct(const char* lpcPlayerName, u64 lqXuid);
+
+        // Build the identity from a lobby player's parameters: the XUID decoded from the
+        // player's machine address, and the player's name.
+        void Construct(ServerInterfacePlayerParamsBase* lpPlayerParams);
 
         u64 mqXuid;   // +0x10
     };

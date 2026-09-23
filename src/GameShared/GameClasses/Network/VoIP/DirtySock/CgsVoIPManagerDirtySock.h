@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsHeadsetStatusMessage.h"
+#include "voip.h"   // VoipRefT, the Voip* C API
 
 // ===========================================================================
 // CgsNetwork::VoIPClient / CgsNetwork::VoIPManager  (DirtySock VoIP)
@@ -64,9 +65,8 @@
 //   +0x279  mbGameIsHandlingHeadsetStatus (bool)
 //
 // The manager's service-pointer types (VoipRefT/PlayerManager/TimeManager/
-// NetworkManager/ServerInterface/BuddyManagerBase) are declared opaque here: this
-// TU's three reconstructed functions only touch mpVoiceRef, the talker array and
-// mbLocalPlayerHasHeadset, so full definitions are not pulled in.
+// NetworkManager/ServerInterface/BuddyManagerBase) are declared opaque here; the .cpp
+// includes the owning headers it needs.
 // ===========================================================================
 
 namespace CgsNetwork
@@ -106,7 +106,7 @@ namespace CgsNetwork
     };
 
     // Opaque service types the manager only holds by pointer (not touched by this TU).
-    namespace DirtySock { struct VoipRefT; }
+    namespace DirtySock { using ::VoipRefT; }
     struct PlayerManager;
     struct TimeManager;
     struct NetworkManager;
@@ -187,6 +187,26 @@ namespace CgsNetwork
         s32  GetIndexFromPlayerName(const char* lpcName) const;
         void UpdateConnectionIDsAndSendMask(ServerInterface* lpServerInterface);
     };
+
+    // Inline on the console (the network manager's Construct and Destruct carry the
+    // copies). Construct latches the owner, clears the service pointers and the controller
+    // port, sets the volume to 100 percent, then resets the talkers.
+    inline void VoIPManager::Construct(NetworkManager* lpNetworkManager)
+    {
+        mpNetworkManager              = lpNetworkManager;
+        miControllerPort              = 0;
+        mpTimeManager                 = nullptr;
+        mpPlayerManager               = nullptr;
+        miVoipVolumePercent           = 100;
+        mbGameIsHandlingHeadsetStatus = false;
+        ClearData();
+    }
+
+    inline void VoIPManager::Destruct()
+    {
+        mbGameIsHandlingHeadsetStatus = false;
+        ClearData();
+    }
 } // namespace CgsNetwork
 
 #endif // CGS_VOIP_MANAGER_DIRTYSOCK_H

@@ -17,6 +17,10 @@
 // The full DLCManager / DLCDebugComponent bodies that share this translation unit
 // land when those TUs are reconstructed -- add them here then.
 
+// The shared debug-HUD text helper (a global function, bodied in CgsDebug2DImmediateRender.cpp).
+int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
+                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+
 namespace BrnResource
 {
     // Never called -- pins the asm-attested member offsets of DLCFeatureAvailability.
@@ -133,14 +137,10 @@ namespace BrnResource
 
     // The file-scope downloadable-content availability table the debug component drives. In the X360
     // image this is the static instance at byte_82FFA7F0; Update / RenderHUD / OnActivate all reach it
-    // directly (the asm hard-codes its address), so it is a TU-local static here.
-    static DLCFeatureAvailability g_DLCFeatureAvailability;
+    // directly (the asm hard-codes its address). The online leaderboard code reads it too, so it has
+    // external linkage (declared in the header).
+    DLCFeatureAvailability g_DLCFeatureAvailability;
 
-    // MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper. External to
-    // this TU (its own TU); declared so the compile gate sees its shape. Signature recovered from the
-    // call sites: (display, text, x, y, scale, colour, centred).
-    int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                      f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
     // Never called -- pins the asm-attested member offsets of DLCDebugComponent. The console offsets
     // inside the byte/bool fields reproduce on the host; the PackDetail record's pointer field is 4
@@ -246,6 +246,22 @@ namespace BrnResource
     // variable. The variable name is "<pack name>/<...> Entitlement" (CgsCore::SPrintf into a 127-byte
     // buffer) and the menu group is the feature's debug name (mapcFeatureNames[i]). The leading folded
     // base call is a no-op here.
+    void DLCDebugComponent::RegisterPackDetails(const char* lpcPackName, s32 liPackIndex)
+    {
+        CGS_ASSERT(lpcPackName != 0, "lacPackname!=0");
+
+        PackDetail& lPack = maPackDetails[liPackIndex];
+        lPack.mpcPackName = lpcPackName;
+        lPack.miPackIndex = liPackIndex;
+
+        const u32 luPackMask = g_DLCFeatureAvailability.mauPackMask[liPackIndex];
+        const bool lbAvailable = (g_DLCFeatureAvailability.muAvailabilityMask & luPackMask) == luPackMask;
+        lPack.mbLastApplied = lbAvailable;
+        lPack.mbAvailable   = lbAvailable;
+
+        RegisterVariable(&lPack.mbAvailable, lpcPackName, "Enabled");
+    }
+
     void DLCDebugComponent::OnActivate()
     {
         RegisterPackDetails("friends Pack",       0);

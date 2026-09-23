@@ -60,19 +60,18 @@ namespace CgsNetwork
         // @ 0x8288BD90 -- drive the prepare state machine; on the INIT/PREPARING edge it
         // runs the base prepare, brings networking up (StartupNetworking) and arms the
         // DirtySock connect timeout, landing in FULLY_PREPARED.
-        virtual ENetworkStatus Prepare(NetworkAdapterPrepareParams* lpParams) override;
+        ENetworkStatus Prepare(NetworkAdapterPrepareParams* lpParams);
 
         // @ 0x8288BEC0 -- pump NetConnIdle, drive connect-when-ready, and poll the
         // connection status for a disconnect (bracketed by the four perfmon monitors).
-        virtual void Update() override;
+        void Update();
 
         // @ 0x8287F5B8 -- tear the connection down (disconnect + shutdown if ever started),
         // reset the adapter state, then chain the base release.
-        virtual bool Release() override;
+        bool Release();
 
-        // Select the network environment + re-run startup for a new server type. The X360
-        // SetServerType forwards into StartupNetworking (dossier: StartupNetworking is called
-        // by SetServerType). Declared-only here; bodied in the SetServerType TU.
+        // On a new server type: drop the connection, shut the stack down and start it again
+        // against the new type's environment. The vtable's only slot.
         virtual void SetServerType(EServerType leServerType) override;
 
         // @ 0x8287F610 -- select the network environment for the current server type and

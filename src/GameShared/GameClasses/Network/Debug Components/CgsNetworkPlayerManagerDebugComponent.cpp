@@ -27,10 +27,6 @@
 int MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
-//   DebugDraw2DBox (X360 sub_8281C3E0) -- the corner-based filled 2D box primitive: takes two
-//     screen-space corners (x1,y1)-(x2,y2) and hands the box {x1,y1}+{x2-x1,y2-y1} to DrawBox.
-void DebugDraw2DBox(CgsDev::Debug2DImmediateRender* lpDisplay, f32 lfX1, f32 lfY1, f32 lfX2, f32 lfY2,
-                    CgsDev::RGBA lColour);
 
 namespace CgsNetwork
 {
@@ -45,14 +41,12 @@ namespace CgsNetwork
         // never reads it.
         const f32 KF_DRAWBAR_BASELINE = 0.0f;
 
-        // Debug-menu option labels for the "Measurement Type" enum variable (X360 unk_820E964C,
-        // a StringList[2] per DWARF). The .rdata label bytes are not in the available exports, so
-        // the display strings are DERIVED from the CompressionAndEncryptionUtils::EAverageType
-        // constant names; the value column IS attested (SetRange(0,1) + the enum).
+        // Debug-menu option labels for the "Measurement Type" enum variable (the console's
+        // .rdata StringList[2]).
         const CgsDev::DebugUI::StringList KA_AVERAGE_TYPES[2] =
         {
-            { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT, "Instantaneous" },
-            { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_RUNNING, "Running"       },
+            { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_INSTANT, "Average Over Last Second" },
+            { CompressionAndEncryptionUtils::E_AVERAGE_TYPE_RUNNING, "Maximum Over Second"      },
         };
     }
 
@@ -283,7 +277,7 @@ namespace CgsNetwork
         MaybeDrawText(lpRender, lpcName, 50.0f, lfLabelY, 15.0f, KU_TEXT_COLOUR, false);
 
         // 2) The filled bandwidth bar, from the 50px left margin to the scaled length.
-        DebugDraw2DBox(lpRender, 50.0f, lfRowY, lfBarLength + 50.0f, lfBottomY, lBarColour);
+        lpRender->DrawBox(50.0f, lfRowY, lfBarLength + 50.0f, lfBottomY, lBarColour);
 
         // 3) The numeric value (kbps), streamed and drawn under the label.
         char              lacValue[128];

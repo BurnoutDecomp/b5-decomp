@@ -87,6 +87,19 @@ namespace BrnTrafficIO
         return mau16ActiveHulls;
     }
 
+    // No out-of-line console copy of either accessor: the traffic manager's hashing reads the
+    // hash-valid byte straight off the interface and its hull sync appends the embedded queue.
+    bool TrafficNetworkOutputInterface::HasHashBeenSet() const
+    {
+        return mbHashValid;
+    }
+
+    const TrafficNetworkOutputInterface::ActivateHullQueue&
+    TrafficNetworkOutputInterface::GetActivateHullQueue() const
+    {
+        return mActivateHullQueue;
+    }
+
     // X360 0x823C8FD8. TrafficNetworkOutputInterface copy-assignment. The X360 clears the
     // embedded ActivateHull queue (stw 0,miLength) then Appends the source queue's live
     // events, then field-copies the active-hull table (mau16ActiveHulls[8] @0x6C), the two

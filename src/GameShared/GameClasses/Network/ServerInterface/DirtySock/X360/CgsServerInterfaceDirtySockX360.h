@@ -33,6 +33,10 @@ namespace CgsNetwork
         virtual void Construct();
         virtual void Destruct();
         virtual bool Prepare(ServerInterfacePrepareParams* lpParams);
+        // Unlike its siblings this override does not forward: the console body only
+        // returns false (the shared return-false body), so the owning server interface's
+        // staged release never passes its base-class stage.
+        virtual bool Release();
         virtual void Resume();
         virtual void Suspend(s32 liUpdateFlags);
         virtual void Update();

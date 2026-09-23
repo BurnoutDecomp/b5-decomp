@@ -26,6 +26,7 @@
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
 
 namespace CgsMemory { class HeapMalloc; }
@@ -34,6 +35,7 @@ namespace CgsNetwork
 {
     struct Message;
     struct PlayerManager;
+    struct SignalMessage;
 
     typedef s32 NetworkPlayerID;   // mirrors MessageWithPlayerIDs::NetworkPlayerID
 
@@ -82,22 +84,71 @@ namespace CgsNetwork
         s32                     miReliableMessagesRecvdBufferIndex;                       // +0x11AC
         CgsMemory::HeapMalloc*  mpHeapAllocator;                                          // +0x11B0
 
+        // Largest message a send slot holds (the slot stride; the pool is 140 of them). A slot
+        // holds a byte copy of the registered message object, so it is sized for the largest
+        // reliable message on the host: the image message, 0x248 bytes here. The console slot is
+        // 0x238, that message's console size. BrnImageMessage.cpp checks the bound.
+        static const s32 KI_MAX_RELIABLE_MESSAGE_SIZE = 0x248;
+
         // ---- public interface (DWARF-attested, gated on X360 ledger) ----
-        void  Construct();
+        // Construct and Destruct are inlined into the player registry's own Construct /
+        // Destruct on the console: every pointer, cursor and count to zero and the valid-send
+        // bits cleared (Destruct keeps the registry back-pointer).
+        void  Construct()
+        {
+            mpHeapAllocator                    = nullptr;
+            mpReliableMessageBuffer            = nullptr;
+            miReliableMessageSendIndex         = 0;
+            miReliableMessagesRecvdBufferIndex = 0;
+            mpPlayerManager                    = nullptr;
+            miNumBufferedReliableMessages      = 0;
+            mabValidSendData.UnSetAll();
+        }
         bool  Prepare(PlayerManager* lpPlayerManager, CgsMemory::HeapMalloc* lpHeapAllocator);
         void  Update();
         bool  Release();
-        void  Destruct();
+        void  Destruct()
+        {
+            miNumBufferedReliableMessages      = 0;
+            mpReliableMessageBuffer            = nullptr;
+            miReliableMessageSendIndex         = 0;
+            miReliableMessagesRecvdBufferIndex = 0;
+            mpHeapAllocator                    = nullptr;
+            mabValidSendData.UnSetAll();
+        }
 
-        BufferedSendMessageData* GetBufferedReliableMessage(s32 liIndex);
+        // Inlined into the player pump on the console.
+        BufferedSendMessageData* GetBufferedReliableMessage(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(liIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER,
+                       "liIndex < KI_MAX_RELIABLE_MESSAGES_SEND_TO_BUFFER");
+            return &maReliableMessageSendData[liIndex];
+        }
         s32   GetNextReliableMessageToResend(NetworkPlayerID liPlayerID, u16 lu16CurrentFrame,
                                              s32 liPrevIndex);
         void  AddBufferedReliableMessage(NetworkPlayerID liPlayerID, Message* lpMessage, s32 liLength);
         void  RemoveBufferedReliableMessage(s32 liIndex);
+        // Drop the buffered reliable message an ack or nack answers (same frame, type and
+        // addressee).
+        void  RemoveBufferedReliableMessage(SignalMessage* lpAckOrNackMsg);
         void  ClearSendReliableMessages();
         void  ClearPlayersSendReliableMessages(NetworkPlayerID liPlayerID);
         bool  MessageIsDuplicate(Message* lpMessage);
-        void  ClearRcvdReliableMessages();
+        // Forget every remembered received message and restart the ring cursor (inlined into
+        // the registry's OnRoundStart on the console).
+        void  ClearRcvdReliableMessages()
+        {
+            for (s32 liIndex = 0; liIndex < KI_MAX_RELIABLE_MESSAGES_RECV_TO_BUFFER; ++liIndex)
+            {
+                StoredRcvdMessageData& lData = maReliableMessagesRcvdData[liIndex];
+                lData.mPlayerID        = -1;
+                lData.mu16FrameSent    = 0xFFFF;
+                lData.miType           = -1;
+                lData.miValidCountdown = -1;
+            }
+            miReliableMessagesRecvdBufferIndex = 0;
+        }
 
     private:
         // Age-out helpers driven every Update (bodies in their own TUs).

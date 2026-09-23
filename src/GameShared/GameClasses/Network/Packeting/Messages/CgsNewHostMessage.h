@@ -41,7 +41,17 @@ namespace CgsNetwork
         // Max client acknowledgements tracked in a single migration message.
         static const s32 KI_MAX_RECEIVED_CLIENTS = 8;
 
-        Message*    Construct();
+        // Inlined at every call site on the console: no new host, no acknowledged
+        // clients, then the base field reset.
+        Message*    Construct()
+        {
+            mNewHostID = MessageWithPlayerIDs::KI_INVALID_PLAYER_ID;
+            for (s32 liIndex = 0; liIndex < KI_MAX_RECEIVED_CLIENTS; ++liIndex)
+            {
+                maReceivedClientsIDs[liIndex] = MessageWithPlayerIDs::KI_INVALID_PLAYER_ID;
+            }
+            return Message::Construct();
+        }
         void        PrepareForSend(u16 lu16CurrentFrame, NetworkPlayerID liNewHostID,
                                    NetworkPlayerID* lpReceivedClientsIDs);
         bool        Retrieve(NetworkPlayerID* lpNewHostID, NetworkPlayerID* lpReceivedClientsIDs);

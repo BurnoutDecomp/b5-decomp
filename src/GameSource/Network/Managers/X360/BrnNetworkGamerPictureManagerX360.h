@@ -159,6 +159,10 @@ namespace BrnNetwork
             return nullptr;
         }
 
+        // Mark the local player's picture as not ready (inlined into the notification manager's
+        // sign-in-change handling on the console; name not recovered).
+        void ClearLocalPlayerGamerPictureReady() { mLocalPlayerGamerPictureData.mbReady = false; }
+
     private:
         // X360 0x8254C2A8 -- find the GamerPictureData slot whose miPlayerID matches liPlayerID
         // (the local slot when liPlayerID != -1 and it owns that id), or null if no slot matches.

@@ -51,6 +51,32 @@ namespace BrnNetwork
         return "Images";
     }
 
+    // The component sits in the "Network" debug-menu folder.
+    const char* ImageManagerDebugComponent::GetPath() const
+    {
+        return "Network";
+    }
+
+    // Nothing to allocate.
+    bool ImageManagerDebugComponent::Prepare( CgsMemory::HeapMalloc* /*lpHeapMalloc*/ )
+    {
+        return true;
+    }
+
+    // No per-frame work and nothing kept of the handed-over picture in this build.
+    void ImageManagerDebugComponent::PreWorldUpdate()
+    {
+    }
+
+    void ImageManagerDebugComponent::SetImageToEncode( const char* /*lpcImage*/ )
+    {
+    }
+
+    // The "Encode and save image" action does nothing in this build.
+    void ImageManagerDebugComponent::EncodeMugshotAtSelectedQuality( void* /*lpData*/ )
+    {
+    }
+
     // Wire up the encode action + the quality slider when the debug menu opens this component.
     void ImageManagerDebugComponent::OnActivate()
     {

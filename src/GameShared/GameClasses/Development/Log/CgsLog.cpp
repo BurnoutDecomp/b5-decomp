@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h"   // KX_FILTER_GSMEMORY
 
 #include <cstdio>
 #include <cstring>
@@ -90,6 +91,8 @@ namespace Log
 
 namespace Message
 {
-    u64 gxMessageFilterFlags = 0xFFFFFFFF;
+    // [PC] Every category of the low word except the memory category, whose only user is the
+    // per-frame resource memory-check print (re-enable it from the debug menu's message filter).
+    u64 gxMessageFilterFlags = 0xFFFFFFFFull & ~KX_FILTER_GSMEMORY;
 }
 }

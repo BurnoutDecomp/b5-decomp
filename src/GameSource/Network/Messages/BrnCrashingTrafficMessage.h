@@ -53,7 +53,8 @@ namespace BrnNetwork
                                      s32 liCount, CrashingTrafficData* lpData);
         bool          Retrieve(s32* lpiCount, CrashingTrafficData* lpData);
         s32   GetPackedMessageSize() override;
-        u16           GetFramesSinceStart() const;   // DWARF :118 (sibling .cpp)
+        // Header-inline on the console (the traffic manager reads the half-word directly).
+        u16           GetFramesSinceStart() const { return mu16FramesSinceRoundStart; }
 
         // LEDGER func @ 0x827DE088 -- bodied in this TU (DWARF BrnCrashingTrafficMessage.h:124).
         const char* GetName() const override;

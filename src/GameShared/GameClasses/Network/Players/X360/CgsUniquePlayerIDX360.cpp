@@ -1,5 +1,7 @@
 #include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Begin/Fire/End)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerParams.h" // ServerInterfacePlayerParamsBase
+#include "dirtyaddr.h"                                 // DirtyAddrToHostAddr
 
 #include <cstring>   // std::strlen
 
@@ -27,6 +29,16 @@ UniquePlayerIDX360* UniquePlayerIDX360::Construct(const char* lpcPlayerName, u64
 
     mqXuid = lqXuid;   // std r28, 0x10(this)
     return this;
+}
+
+// The lobby player's machine address carries the XUID; decode it, then take the name.
+void UniquePlayerIDX360::Construct(ServerInterfacePlayerParamsBase* lpPlayerParams)
+{
+    CGS_ASSERT(lpPlayerParams != 0, "lpPlayerParams");
+
+    u64 lqXuid;
+    DirtyAddrToHostAddr(&lqXuid, sizeof(lqXuid), static_cast<const DirtyAddrT*>(lpPlayerParams->GetDirtyAddrT()));
+    Construct(lpPlayerParams->GetName(), lqXuid);
 }
 
 }

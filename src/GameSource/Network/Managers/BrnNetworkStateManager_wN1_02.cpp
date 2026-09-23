@@ -45,7 +45,7 @@
 #include "GameSource/Network/BrnServerInterface.h"                                        // BrnServerInterface
 #include "GameSource/Network/BrnNetworkGameParams.h"                                      // BrnNetwork::GameParams
 #include "GameSource/Network/BrnNetworkPlayerMenuData.h"                                  // BrnNetwork::PlayerMenuData
-#include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h"           // GetTosDownloadBufferSize
+#include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h"           // TOSBufferSize
 #include "GameSource/Network/Managers/BrnNetworkSuspensionManager.h"
 #include "GameSource/Network/Managers/BrnNetworkMatchMakingManager.h"
 #include "GameSource/Network/Managers/BrnNetworkLaunchManager.h"
@@ -58,6 +58,7 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"                                     // GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"          // GameStateToNetworkInterface
 #include "pc/gcm/renderengine/pixelformat.h"                                              // renderengine::PIXELFORMAT_DXT1
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                         // [PC HARNESS] bounded [net] witness lines
 
 #include <cstring>   // std::memcpy / std::strlen / std::strncpy
 
@@ -281,7 +282,7 @@ namespace BrnNetwork
 
         lpServerInterface->GetHttpComponent()->StartHttpsDownload(
             lpcUrlToUse,
-            lpServerInterface->GetDownloadableConfigComponent()->GetTosDownloadBufferSize(),
+            lpServerInterface->GetDownloadableConfigComponent()->TOSBufferSize(),
             CgsNetwork::ServerInterfaceHttp::KI_SERVER_INTERFACE_HTTP_DOWNLOAD_TIMEOUT);
 
         meState = E_STATE_WAIT_DOWNLOAD_TOS;
@@ -446,6 +447,7 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceGames* lpGames =
             lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent();
         const bool lbInGame = lbSuccess && lpGames->IsLocalPlayerInGame();
+        BrnNetHarnessPC::Witness("create", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
 
         if (lbInGame)
         {
@@ -548,6 +550,7 @@ namespace BrnNetwork
 
         const bool lbInGame =
             lbSuccess && lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
+        BrnNetHarnessPC::Witness("join", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
 
         lpStateManager->mpNetworkManager->GetNetworkInviteManager()->JoinGameComplete(lbInGame);
 
@@ -668,6 +671,7 @@ namespace BrnNetwork
 
         const bool lbInGame =
             lbSuccess && lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
+        BrnNetHarnessPC::Witness("quickjoin", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
 
         if (lbInGame)
         {
@@ -989,7 +993,7 @@ namespace BrnNetwork
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         ConnApiControl(lpServerInterface->GetConnAPIRef(), KI_CONNAPI_CONTROL_MANGLE,
-                       (lpServerInterface->GetDownloadableConfigComponent()->MangleConfigValue() != 0) ? 1 : 0,
+                       (lpServerInterface->GetDownloadableConfigComponent()->NumDemanglePlayers() != 0) ? 1 : 0,
                        0, nullptr);
 
         mpNetworkManager->GetCamera()->RequestFeed(CgsNetwork::K_INVALID_PLAYER_ID);
@@ -1010,6 +1014,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(!lbRefreshOnly || (lbStartingAfterJoin && lbStartingAfterOnlineEvent && lbForceStartFreeburnLobby)==false,
                    "!lbRefreshOnly || (lbStartingAfterJoin && lbStartingAfterOnlineEvent && lbForceStartFreeburnLobby)==false");
+        BrnNetHarnessPC::Witness("fblobby", "start afterJoin=%d afterOnlineEvent=%d force=%d refreshOnly=%d", lbStartingAfterJoin ? 1 : 0, lbStartingAfterOnlineEvent ? 1 : 0, lbForceStartFreeburnLobby ? 1 : 0, lbRefreshOnly ? 1 : 0);
 
         PlayerParams                 lPlayerParams;
         GameParams                   lGameParams;
@@ -1182,7 +1187,7 @@ namespace BrnNetwork
                 NetworkPlayerID lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
                 while (mpNetworkManager->GetPlayerManager()->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_ALL_PLAYERS))
                 {
-                    if (!lpGamesComponent->IsPlayerInGameByID(lPlayerID))
+                    if (!lpGamesComponent->IsPlayerInGame(lPlayerID))
                     {
                         continue;
                     }
@@ -1291,6 +1296,7 @@ namespace BrnNetwork
 
             const bool lbLoggedIn = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn();
             const LoginManagerBase::ESignInType leSignInType = mpNetworkManager->GetLoginManager()->GetCompletedSignInType();
+            BrnNetHarnessPC::Witness("login", "finished loggedIn=%d signInType=%d", lbLoggedIn ? 1 : 0, static_cast<s32>(leSignInType));
 
             meState = E_STATE_COUNT;
             mpNetworkManager->GetNetworkInviteManager()->LogInComplete(lbLoggedIn);

@@ -94,6 +94,8 @@ namespace CgsNetwork
         u32  GetRandomSeed() const             { return muRandomSeed; }
         void SetMinPlayers(s32 liMinPlayers)   { miMinNumPlayers = liMinPlayers; }
         void SetMaxPlayers(s32 liMaxPlayers)   { miMaxNumPlayers = liMaxPlayers; }
+        // Inlined by the matchmaking join action (a byte store).
+        void SetJoinUserset(bool lbJoinUserset) { mbJoinUserset = lbJoinUserset; }
         // The create-game path sets the fixed (persistent) game flag. FLAG: only the
         // set branch is attested; clearing on false follows SetRankedGame's shape.
         void SetFixedGame(bool lbFixedGame)
@@ -110,26 +112,17 @@ namespace CgsNetwork
         // Store the public and private slot counts (miNumPublicSlots / miNumPrivateSlots).
         void SetTotalSlots(s32 liNumPublicSlots, s32 liNumPrivateSlots);
 
-        // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the lobby-record
-        // (de)serialisers, matching the sibling param families (PlayerParams / GameSearch /
-        // QuickJoin all expose SerialiseToString). ServerInterfaceGames create/join/update
-        // drive SerialiseToString; GetGameParameters / the search-sort comparator drive
-        // DeserialiseFromString. Declared here (bodied in the game-params TU).
-        // SerialiseToString is virtual: the X360 ServerInterfaceGameParamsX360 leaf @0x828778E0
-        // is a genuine vtable-slot override that pure-forwards to this base.
-        virtual void SerialiseToString(char* lpcRecord, s32 liRecLen) const;
-        bool DeserialiseFromString(const char* lpcRecord);
-
-        // ADDITIVE GROW (ServerInterfaceGameParamsX360 TU): the base virtuals the X360 leaf
-        // overrides. Prepare @0x82877810 seeds the ranked-context table; SerialiseFromGame
-        // @0x828778E8 pushes the game's live state into the params record. Both are declared
-        // here so the leaf's base-qualified calls + vtable overrides bind; base bodies live in
-        // the base game-params TU (declared-not-defined at link time here is acceptable).
+        // The four virtuals, in vtable order after the structure-interface slots.
+        // Reset every field to the empty default.
         virtual bool Prepare();
+        // Append this game's tagfield fields to a lobby request record.
+        virtual void SerialiseToString(char* lpcString, s32 liLength) const;
+        // Fill the fields from a lobby game / play record (DirtySock::LobbyApiPlayT
+        // layout; the found-game list records share its prefix).
         virtual void SerialiseFromGame(const void* lpGame);
-
-        // CgsServerInterfaceGameParams.h:339
-        virtual void SetRankedGame(bool lbRanked);
+        // Pure here: the base slot is never emitted on the console (every concrete leaf
+        // overrides it), so no base body can be recovered.
+        virtual void SetRankedGame(bool lbRanked) = 0;
 
         virtual ~ServerInterfaceGameParamsBase();
 

@@ -4,6 +4,8 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+#include "pingmanager.h"   // PingManagerRefT, the PingManager* C API
+#include "protoname.h"     // HostentT, ProtoNameAsync
 
 // ===========================================================================
 // CgsNetwork::ServerInterfacePingRegions
@@ -11,45 +13,31 @@
 //         CgsServerInterfacePingRegions.{h,cpp}
 //
 // The DirtySock server-interface component that pings the candidate game-server regions and
-// records each region's round-trip ping. Derives from CgsNetwork::ServerInterfaceComponent
-// (its destructors -- this leaf's @0x827DE2C8 and the sibling ServerInterfaceHttp's
-// @0x827DE1F0 -- both restore the shared component vtable off_820CDBF8 at this+0, the
-// hallmark of a ServerInterfaceComponent leaf).
+// records each region's round-trip ping. StartPingRegions resolves the first region host
+// named in the lobby's "GPS_REGIONS" config record; Update waits for the name lookup, then
+// pings the resolved address through the DirtySDK ping manager; every result (or failure,
+// recorded as -1) moves on to the next region until the list runs out.
 //
-// LAYOUT (X360 asm @ 0x8287C8A8 Construct + @ 0x82877968 GetPingValue + @ 0x8287CC18
-// HandlePingResults), after the 4-word Component base:
-//     +0x00  (Component base: vptr / mpcCurrentAction / meStatus / miLastError)
-//     +0x10  maiPingResults[KI_MAX_PING_REGIONS] -- per-region ping values; ctor fills -1
-//     +0xD8  mpServerInterface  (Prepare stores its argument)
-//     +0xDC  mpPingManagerRefT  (Prepare stores the PingManagerCreate result)
-//     +0xE0  mpHostAddress      (the pending ProtoNameAsync lookup; HandlePingResults
-//                                calls its free slot +0xC)
+// LAYOUT, after the 4-word Component base:
+//     +0x10  maiPingResults[KI_MAX_PING_REGIONS] -- per-region ping values (-1 = none)
+//     +0xD8  mpServerInterface
+//     +0xDC  mpPingManagerRefT
+//     +0xE0  mpHostAddress      (the pending name lookup)
 //     +0xE4  miCurrentRegion    (the count of regions filled so far)
-//     +0xE8  miPingRequest      (ctor stores -1)
-//     +0xEC  meState            (ctor stores 2 == E_STATE_COUNT, idle)
-//     +0xF0  meCurrentAction    (ctor stores 1 == E_ACTION_COUNT, idle)
-//
-// KI_MAX_PING_REGIONS == 0x32 (50) is grounded in HandlePingResults
-// (@ 0x8287CC18: `cmpwi miCurrentRegion, 0x32` -- the "miCurrentRegion < KI_MAX_PING_REGIONS"
-// guard) and in Construct's 50-iteration -1 fill loop (mtctr 0x32). The non-ping trailing
-// words keep raw-offset names (only the ctor's zero/sentinel stores reach them; their
-// descriptive meaning is not present in the available exports) so the array + miCurrentRegion
-// that THIS TU's functions touch land at the asm-observed offsets.
-//
-// This TU owns GetPingValue (@ 0x82877968) and the X360 scalar-deleting destructor
-// (@ 0x827DE2C8). The component's behavioural methods (Construct / Prepare / Update /
-// StartPingRegions / ...) are declared for layout fidelity but bodied in their own TUs.
+//     +0xE8  miPingRequest      (the outstanding ping request, -1 = none)
+//     +0xEC  meState
+//     +0xF0  meCurrentAction
 // ===========================================================================
 
 // DirtySDK handles (vendor SDK, global namespace like LobbyApiRefT).
 struct LobbyApiRefT;
 struct LobbyApiMsgT;
-struct HostentT;
 
 namespace CgsNetwork
 {
     struct ServerInterfaceDirtySock;
-    namespace DirtySock { struct PingManagerRefT; }
+    struct DSErrorToServerInterfaceErrorTable;
+    namespace DirtySock { using ::PingManagerRefT; }
 
     class ServerInterfacePingRegions : public ServerInterfaceComponent
     {
@@ -72,11 +60,9 @@ namespace CgsNetwork
 
         ServerInterfacePingRegions();
 
-        // CgsServerInterfacePingRegions.h -- scalar/vector deleting destructor @ 0x827DE2C8.
         virtual ~ServerInterfacePingRegions();
 
-        // @ 0x82877968 -- return the recorded ping for liRegion. Asserts
-        // 0 <= liRegion < miCurrentRegion (both vacuous), then returns maRegionPings[liRegion].
+        // The recorded ping for liRegion (0 <= liRegion < miCurrentRegion).
         s32 GetPingValue(s32 liRegion) const;
 
         // ADDITIVE GROW (flagged by the ServerInterfaceGames group): the recorded ping-region
@@ -99,15 +85,20 @@ namespace CgsNetwork
         bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
         bool Release();
         void Update();
+        void Suspend();
+        void Resume();
 
     private:
         void EndAction(s32 liError);
         bool ResolveRegion(s32 liRegion);
-        void HandlePingResults(s32 liRegion);
+        void HandlePingResults(s32 liPing);
         // PingManager result callback: (host address, ping, user data = the component).
         static void PingManagerCallback(void* lpAddress, u32 luPing, void* lpUserData);
 
-        s32                         maiPingResults[KI_MAX_PING_REGIONS];   // +0x10 (ctor fills -1)
+        static const DSErrorToServerInterfaceErrorTable KA_DS_ERROR_TABLE_LOOKUP[E_ACTION_COUNT];
+        static const char* KAPC_ACTION_NAMES[E_ACTION_COUNT];
+
+        s32                         maiPingResults[KI_MAX_PING_REGIONS];   // +0x10
         ServerInterfaceDirtySock*   mpServerInterface;                     // +0xD8
         DirtySock::PingManagerRefT* mpPingManagerRefT;                     // +0xDC
         HostentT*                   mpHostAddress;                         // +0xE0

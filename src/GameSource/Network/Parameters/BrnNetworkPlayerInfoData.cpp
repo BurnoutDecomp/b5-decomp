@@ -18,4 +18,26 @@ namespace BrnNetwork
     {
         return CgsNetwork::ServerInterfacePlayerInfoDataX360::Prepare();
     }
+
+    // The record replicates nothing of its own: an empty pattern and no data (the console slots
+    // are the shared empty-string / zero bodies).
+    const char* PlayerInfoData::GetPattern() const
+    {
+        return "";
+    }
+
+    u32 PlayerInfoData::GetDataSize() const
+    {
+        return 0;
+    }
+
+    void* PlayerInfoData::GetData()
+    {
+        return nullptr;
+    }
+
+    const void* PlayerInfoData::GetData() const
+    {
+        return nullptr;
+    }
 }

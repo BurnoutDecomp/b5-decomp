@@ -14,13 +14,10 @@
 #include "GameSource/Network/BrnNetworkModule.h"
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
+#include "GameSource/Network/Managers/BrnNetworkInviteManager.h"                          // SetPreparingForInvite
+#include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"                                 // NetworkOutInviteRequest
 
-// X360 LobbyNameCmp -- compares two 16-byte player-name strings (returns 0 when
-// they name the same player, <0/>0 for ordering). It is a free function with no
-// committed header home yet (the sibling BrnChallengeHighScoreEntry.cpp declares
-// it file-locally the same way); declared here at global scope so this TU links
-// against the one X360 definition.
-int LobbyNameCmp(const char* lpcNameA, const char* lpcNameB);
+#include "lobbyname.h"   // LobbyNameCmp
 
 // ===========================================================================
 // BrnNetwork::BuddyManagerBase -- game-side buddy manager. See the header for
@@ -126,6 +123,64 @@ namespace BrnNetwork
     static BrnNetworkModuleIO::NetworkEventQueue* GetEventQueue(BrnNetworkModule* lpNetworkModule)
     {
         return lpNetworkModule->GetNetworkEventQueue();
+    }
+
+    // =======================================================================
+    // PopulateServerBuddyList -- the server's friends list is a run of 16-byte
+    // name records ended by an empty one; copy it into maServerBuddyList.
+    // =======================================================================
+    void BuddyManagerBase::PopulateServerBuddyList(char* lpcServerData)
+    {
+        s32 liBuddyIndex = 0;
+        for (const char* lpcBuddyListReadLocation = lpcServerData; ;
+             lpcBuddyListReadLocation += CgsNetwork::PlayerName::KI_USERNAME_LENGTH)
+        {
+            CGS_ASSERT(static_cast<s32>(std::strlen(lpcBuddyListReadLocation)) < CgsNetwork::PlayerName::KI_USERNAME_LENGTH,
+                       "static_cast<int32_t>( strlen(lpcBuddyListReadLocation) ) < CgsNetwork::KI_BUDDIES_USERNAME_MAX_LENGTH");
+            if (lpcBuddyListReadLocation[0] == '\0')
+            {
+                break;
+            }
+
+            CGS_ASSERT(liBuddyIndex < KI_MAX_BUDDIES, "liBuddyIndex < CgsNetwork::KI_MAX_BUDDIES");
+            maServerBuddyList[liBuddyIndex].Construct(lpcBuddyListReadLocation);
+            ++liBuddyIndex;
+        }
+        miNumServerBuddies = liBuddyIndex;
+    }
+
+    // =======================================================================
+    // ProcessDebugEvents -- run the events the debug menu queued through the
+    // normal network-queue path, empty that queue, then let the component log
+    // what the manager produced.
+    // =======================================================================
+    void BuddyManagerBase::ProcessDebugEvents()
+    {
+        BrnNetworkModuleIO::NetworkEventQueue* lpDebugEventQueue = mDebugComponent.GetEventQueue();
+        if (lpDebugEventQueue != nullptr)
+        {
+            ProcessNetworkQueue(lpDebugEventQueue, GetEventQueue(mpNetworkModule));
+            lpDebugEventQueue->Clear();
+            mDebugComponent.ProcessOutgoingEvents(GetEventQueue(mpNetworkModule));
+        }
+    }
+
+    // =======================================================================
+    // StartInvite -- hand the accepted invite to the game and put the invite
+    // manager into its preparing state.
+    // =======================================================================
+    void BuddyManagerBase::StartInvite(BrnNetworkModuleIO::InviteOrJoinParams lInviteOrJoinParams)
+    {
+        BrnNetworkModuleIO::NetworkOutInviteRequest lInviteRequest;
+        std::memcpy(&lInviteRequest.mInviteParams, &lInviteOrJoinParams, sizeof(lInviteRequest.mInviteParams));
+        GetEventQueue(mpNetworkModule)->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInviteRequest),
+                                                 lInviteRequest.GetEventType(), sizeof(lInviteRequest));
+
+        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager(),
+                   "mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()");
+        mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()->SetPreparingForInvite();
     }
 
     // =======================================================================
@@ -830,7 +885,7 @@ namespace BrnNetwork
             CGS_ASSERT(lpServerInterface->GetDownloadableConfigComponent(),
                        "lpServerInterface->GetDownloadableConfigComponent()");
             lpBuddyManager->mTimeUntilRetryAfterFailedBuddyUpload.SetFloatVal(
-                lpServerInterface->GetDownloadableConfigComponent()->GetBuddyUploadRetryDelay());
+                lpServerInterface->GetDownloadableConfigComponent()->TimeUntilRetryAfterFailedBuddyUpload());
 
             CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(),
                        "lpServerInterface->GetCustomCommandsComponent()");

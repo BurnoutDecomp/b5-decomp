@@ -65,6 +65,11 @@ namespace CgsNetwork
         void Destruct();
         bool Prepare(ServerInterfaceDirtySock* lpServerInterface);
         bool Release();
+        // The server interface's per-frame and suspend / resume fan-outs reach the shared empty
+        // body for this component.
+        void Update();
+        void Suspend();
+        void Resume();
 
         // Queries.
         void GetTosUrl(char* lpcOut, s32 liOutLen);

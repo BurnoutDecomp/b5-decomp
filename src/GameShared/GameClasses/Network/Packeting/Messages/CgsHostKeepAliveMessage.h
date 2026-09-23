@@ -28,8 +28,12 @@ namespace CgsNetwork
 {
     struct HostKeepAliveMessage : Message
     {
-        Message*    Construct();
-        void        PrepareForSend(u16 lu16CurrentFrame);
+        // The message type this class sends (E_MESSAGE_TYPE_HOST_KEEP_ALIVE).
+        static const s32 KI_E_MESSAGE_TYPE_HOST_KEEP_ALIVE = 8;
+
+        // Inlined at every call site on the console: the base field reset.
+        Message*    Construct() { return Message::Construct(); }
+        void        PrepareForSend(u16 lu16Frame);
         bool        Retrieve();
         s32         GetPackedMessageSize() override;
 

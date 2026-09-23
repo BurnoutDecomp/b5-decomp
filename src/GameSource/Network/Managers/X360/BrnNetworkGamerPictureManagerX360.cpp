@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"              // PlayerManager::GetPlayerByID
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h"     // GetLocalPlayerInfo
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h" // ServerInterfacePlayerInfoDataBase
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGamesX360.h" // IsPlayerInGameByID / GetPlayerXUIDByID
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGamesX360.h" // IsPlayerInGame / GetPlayerXUIDByID
 #include "GameSource/Network/Parameters/BrnNetworkPlayerInfoData.h"               // BrnNetwork::PlayerInfoData
 #include "GameSource/Network/BrnNetworkManager.h"  // BrnNetworkManager accessors
 
@@ -22,12 +22,9 @@ extern "C"
     // The XUID signed in to a controller index (0 == success). The X360 Update path resolves the
     // local console XUID before downloading the local player's own gamer picture.
     u32 XUserGetXUID(u32 luUserIndex, u64* lpXuid);
-
-    // DirtySDK / EA network connection status query. The X360 Update polls it with the FOURCC
-    // 'onln' (0x6F6E6C6E) selector to learn whether the console is connected to the network
-    // service (returns 1 when connected); the trailing three args are 0.
-    int NetConnStatus(int luSelector, int liData, void* lpBuf, int liBufSize);
 }
+
+#include "netconn.h"   // NetConnStatus ('onln': 1 while connected to the network service)
 
 namespace BrnNetwork
 {
@@ -37,12 +34,6 @@ namespace BrnNetwork
         // (X360 Update: lis 0x6F6E / ori 0x6C6E -> 0x6F6E6C6E). A return of 1 means connected.
         const int KI_NETCONNSTATUS_ONLINE_SELECTOR = 0x6F6E6C6E;
         const int KI_NETCONNSTATUS_CONNECTED       = 1;
-
-        // The byte offset of the embedded platform buddy manager within BrnNetworkManager. The X360
-        // download glue reaches the CgsNetwork::BuddyManagerX360 sub-object as mpNetworkManager +
-        // 0x1EFC0 (== 126912; asm: addis r3, r11, 2 / addi r3, r3, -0x1040). Modelled as a named
-        // accessor; the storage lives in the full BrnNetworkManager TU.
-        const s32 KI_NETWORK_MANAGER_BUDDY_MANAGER_OFFSET = 126912;
 
         // The decoded mug-shot geometry the picture textures are allocated at (X360
         // PrepareGamerPictureTextures: 160x120, pixel format 0x18280043; the compressed scratch is
@@ -65,11 +56,11 @@ namespace BrnNetwork
         // signed-in local user's controller/pad index, exposed by
         // BrnNetworkManager::GetLocalUserControllerPort).
 
-        // Convenience: reach the platform buddy manager that owns the picture-download pipeline.
+        // The platform buddy manager that owns the picture-download pipeline: the manager's
+        // embedded buddy manager (+0x1EFC0 on the console).
         inline CgsNetwork::BuddyManagerX360* GetBuddyManager(BrnNetworkManager* lpNetworkManager)
         {
-            return reinterpret_cast<CgsNetwork::BuddyManagerX360*>(
-                reinterpret_cast<char*>(lpNetworkManager) + KI_NETWORK_MANAGER_BUDDY_MANAGER_OFFSET);
+            return lpNetworkManager->GetBuddyManager();
         }
     }
 
@@ -619,7 +610,7 @@ namespace BrnNetwork
             static_cast<CgsNetwork::ServerInterfaceGamesX360*>(
                 mpNetworkManager->GetServerInterface()->GetGameComponent());
 
-        if (lpGames->IsPlayerInGameByID(liPlayerID))
+        if (lpGames->IsPlayerInGame(liPlayerID))
         {
             lpGames->GetPlayerXUIDByID(liPlayerID, &lXuid);
         }

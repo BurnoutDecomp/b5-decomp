@@ -28,6 +28,9 @@
 #include "GameSource/Network/BrnNetworkPlayerMenuData.h"                     // BrnNetwork::PlayerMenuData::mMarkedManID
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"
 #include "GameSource/Network/SharedIO/BrnNetworkToGuiIOInterfaces.h"         // NetworkToGuiInterface::AddLiveRevengeUpdate
+#include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h"         // PlayerParams (GetUniqueIDByName)
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // GetPlayerParametersByPlayerName
+#include <cstring>                                                            // strlen / strncpy (rival name copy)
 
 namespace BrnNetwork
 {
@@ -1058,13 +1061,83 @@ namespace BrnNetwork
         maDirtyTopRivals.UnSetAll();
     }
 
-    // SendLiveRevengeRivalsToServer: declared only. Its upload record type has no usable home
-    // yet: ServerInterfaceCustomCommands::UploadLiveRevengeData takes a forward-declared
-    // BrnNetwork::RivalDataT that is never defined, while the record itself is
-    // BrnNetwork::ServerGeneratedTypes::RivalDataT; the name copy also needs CgsCore::StrnCpy.
+    // Upload every dirty top rival to the server in one custom command. While the custom-commands
+    // component is busy the upload stays pending; with nothing dirty the auto-login step is done.
+    void LiveRevengeManager::SendLiveRevengeRivalsToServer()
+    {
+        if (mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent()->GetStatus()
+            != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
+        {
+            meLiveRevengeUploadStatus = E_LIVE_REVENGE_UPLOAD_STATUS_PENDING;
+            return;
+        }
 
-    // GetUniqueIDByName: declared only. It fills the identity through the unique-player-id
-    // construct-from-player-params inline, which the identity's home header does not declare yet.
+        LiveRevengeProfile* lpProfile = mpLiveRevengeProfile;
+        CGS_ASSERT(lpProfile, "lpProfile");
+
+        UpdateTopRivals();
+
+        ServerGeneratedTypes::RivalDataT laRivalData[KI_NUMBER_OF_RIVALS_TO_STORE_ON_SERVER];
+        s32                              laiRivalIDs[KI_NUMBER_OF_RIVALS_TO_STORE_ON_SERVER];
+        s32                              liNumberToUpload = 0;
+
+        for (CgsContainers::FastBitArray<KI_NUMBER_OF_RIVALS_TO_STORE_ON_SERVER>::Iterator lIterator =
+                 maDirtyTopRivals.Begin();
+             lIterator != maDirtyTopRivals.End(); ++lIterator)
+        {
+            const s32 liTopIndex = lIterator.GetIndex();
+            laiRivalIDs[liNumberToUpload] = liTopIndex;
+
+            const LiveRevengeRelationship* lpRelationship =
+                &lpProfile->maRelationshipTable[static_cast<u32>(maTopIndexes[liTopIndex])];
+            const CommonRelationship*        lpStats     = lpRelationship->GetOverallStats();
+            ServerGeneratedTypes::RivalDataT* lpRivalData = &laRivalData[liNumberToUpload];
+
+            const char* lpcRivalName = lpRelationship->GetRivalName()->GetPlayerName();
+            CGS_ASSERT(strlen(lpcRivalName) < sizeof(lpRivalData->macPers), "String too long");
+            strncpy(lpRivalData->macPers, lpcRivalName, sizeof(lpRivalData->macPers));
+            ++liNumberToUpload;
+
+            lpRivalData->miRivalryStatus         = lpRelationship->GetCurrentScoreForLocalPlayer();
+            lpRivalData->miTimesBattled          = lpRelationship->GetTotalEvents();
+            lpRivalData->miTakedownsFor          = lpStats->mPlayerStats.miTakedowns;
+            lpRivalData->miTakedownsAgainst      = lpStats->mRivalStats.miTakedowns;
+            lpRivalData->miMugshotsFor           = lpStats->mPlayerStats.miScalps;
+            lpRivalData->miMugshotsAgainst       = lpStats->mRivalStats.miScalps;
+            lpRivalData->miMarksFor              = lpStats->mPlayerStats.miMarks;
+            lpRivalData->miMarksAgainst          = lpStats->mRivalStats.miMarks;
+            lpRivalData->miPaybacksDealtFor      = lpStats->mPlayerStats.miPaybacksDealt;
+            lpRivalData->miPaybacksDealtAgainst  = lpStats->mRivalStats.miPaybacksDealt;
+            lpRivalData->miPaybacksScoredFor     = lpStats->mPlayerStats.miPaybacksScored;
+            lpRivalData->miPaybacksScoredAgainst = lpStats->mRivalStats.miPaybacksScored;
+        }
+
+        if (liNumberToUpload > 0)
+        {
+            mpNetworkManager->GetServerInterface()->GetCustomCommandsComponent()->UploadLiveRevengeData(
+                laRivalData, laiRivalIDs, liNumberToUpload);
+            maDirtyTopRivals.UnSetAll();
+            meLiveRevengeUploadStatus = E_LIVE_REVENGE_UPLOAD_STATUS_IN_PROGRESS;
+        }
+        else
+        {
+            mpNetworkManager->OnAutoLoginProcessComplete(1);
+        }
+    }
+
+    // Look the named player up in the current game and build the unique id (name + XUID) from its
+    // player parameters.
+    void LiveRevengeManager::GetUniqueIDByName(CgsNetwork::PlayerName* lpPlayerName,
+                                               LiveRevengeRelationship::UniquePlayerID* lpUniqueID)
+    {
+        PlayerParams lPlayerParams;
+
+        CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
+        lPlayerParams.Prepare();
+        mpNetworkManager->GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerName(
+            lpPlayerName->GetPlayerName(), &lPlayerParams);
+        lpUniqueID->Construct(&lPlayerParams);
+    }
 
     // ============================================================================
     // Relationship sync messages

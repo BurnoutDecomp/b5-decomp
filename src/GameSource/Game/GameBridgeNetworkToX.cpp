@@ -48,6 +48,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkToGuiIOInterfaces.h" // NetworkToGuiInterface (live-revenge update queue)
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"     // InGamePlayerStatusInterface / Data
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // OnlineLobbyPlayerStatusInterface / LobbyPlayerStatusData
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                         // [PC HARNESS] bounded [net] witness lines
 
 #include <cstddef>   // offsetof (record layout pins)
 #include <cstring>   // std::memcpy / std::strncpy
@@ -1217,6 +1218,7 @@ namespace BrnGame
                     *reinterpret_cast<s32*>(lpList + 20 * i) = -1;
                 *reinterpret_cast<s32*>(lpList + 0xA0) = liNumPlayers;
                 *reinterpret_cast<s32*>(lpList + 0xA4) = lpStatusInterface->GetTotalNumberPlayers();
+                BrnNetHarnessPC::WitnessPlayerList(lpList, liNumPlayers, lpStatusInterface->GetTotalNumberPlayers());
                 lbBuiltList = true;
             }
 

@@ -66,7 +66,24 @@ namespace BrnNetwork
         f32                      mfRecoveryTime;             // +0x3C
         s32                      miNumberOfTimesTriedToSend; // +0x40
 
-        void Clear();   // DWARF BrnAggressiveDrivingMessage.h:80 (sibling .cpp; declared only).
+        // Inlined at every call site on the console (the driving manager's move builders):
+        // no move type, no takedown, no players, and every flag, score and value zero.
+        void Clear()
+        {
+            meAggressiveMoveType       = E_AGGRESSIVE_MOVE_COUNT;
+            meTakedownType             = BrnGameState::E_TAKEDOWN_NONE;
+            mAggressorNetworkPlayerID  = -1;
+            mVictimNetworkPlayerID     = -1;
+            mbMarkedMan                = false;
+            mbSettledScore             = false;
+            muImpactScore              = 0;
+            mDirection.SetZero();
+            mfMagnitude                = 0.0f;
+            mfDuration                 = 0.0f;
+            mfSteeringDirection        = 0.0f;
+            mfRecoveryTime             = 0.0f;
+            miNumberOfTimesTriedToSend = 0;
+        }
     };
 
     // DWARF BrnAggressiveDrivingMessage.h:108 -- the network message itself.

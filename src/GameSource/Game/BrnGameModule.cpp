@@ -150,6 +150,7 @@ namespace BrnGame
         , mpDirectorOutputBuffer(0)
         , mpWorldUpdateOutputBuffer(0)
         , mpEffectsOutputBuffer(0)
+        , mpNetworkOutputBuffer(0)
         , mbCurrentTickCameraValid(false)
         , mbPreviousTickCameraValid(false)
         , miInputModuleState(0)
@@ -395,7 +396,7 @@ namespace BrnGame
         mDirectorModule.Construct(1.7777778f); // +0x6B0B10  X360 slot +64 @0x8225C590 (REAL module,
                                          //            mounted 2026-07-29 -- DJ fly-by campaign).
         mReplayModule.Construct();       // +0x8BD300  (slot 0; ReplayModule -> base)
-        mNetworkModule.Construct();      // +0x8C3600  [gated] X360 slot +64 with arg 0; placeholder -> base.
+        mNetworkModule.Construct(false);      // +0x8C3600  [gated] X360 slot +64 with arg 0; placeholder -> base.
 
         // ⭐ 2026-08-16 (boot audit F-P1-11 / F-P2-6). The GamePrepare receiver queue is
         // Constructed HERE on the console -- it is part of step 7-9's queue setup
@@ -864,18 +865,11 @@ namespace BrnGame
                         // .cpp:1332 -- but nothing posts it yet), so the reason-1 pause is released
                         // at the same observable point the loading screen is retired. The real
                         // FinishStreaming replaces this when that slice lands.
-                        {
-                            BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                                mGameStateModule.GetOutputBuffer();
-                            if (lpGameStateOutput != 0)
-                            {
-                                lpGameStateOutput->LockForWrite();
-                                mGameStateModule.RequestUnpause(1, lpGameStateOutput->GetGameActionQueue());
-                                lpGameStateOutput->UnlockForWrite();
-                                CgsDev::Log::WriteToLog("[sim-pause] in-game screen entered (65) -> "
-                                                        "RequestUnpause(1) (FinishStreaming stand-in)\n");
-                            }
-                        }
+                        // The unpause itself is posted at the next game-state pre-world pass (the
+                        // seat FinishStreaming's action has on the console, where CheckGameActions
+                        // drains it in the same pass): this GUI leg runs after the sub-step's last
+                        // game-action consumer, so an action posted here would be retired unread.
+                        mbPcStreamingFinishPending = true;
                         break;
                     case 405:
                         // ⭐ THE CAR-SELECT SCREEN'S OWN DATA REQUEST. Every car-select screen
@@ -1441,15 +1435,28 @@ namespace BrnGame
         // (2026-08-01) the GAME-STATE leg, and (phase C3a/C4) the SOUND leg -- BridgeSoundToWorld
         // @0x823CDC98 is bodied (GameBridgeSoundToX.cpp) and the live world drive
         // (DriveWorldUpdateFrame) stages it when the spine threads the pre-update buffer through.
-        // [FLAG PC boot gate] BridgeNetworkToWorld @0x823DF8B0, BridgeGuiToWorld @0x823CBE90 and
-        // the replay-status latch (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still
-        // not reconstructed; their source modules' output buffers are not threaded into this leg
-        // on the PC yet, so that staging is omitted rather than faked. The X360's
-        // SetTimerStatusInterface(gm+10095372) is part of the same staging. Restore them with
-        // the DoUpdate cascade.
+        // The NETWORK leg (below) is the fourth.
+        // [FLAG PC boot gate] BridgeGuiToWorld and the replay-status latch
+        // (ReplayIO::OutputBuffer_PreSim::GetStatusInterface) are still not reconstructed; their
+        // source modules' output buffers are not threaded into this leg on the PC yet, so that
+        // staging is omitted rather than faked. The console's SetTimerStatusInterface
+        // (mTimerStatusInterface) is part of the same staging. Restore them with the DoUpdate
+        // cascade.
         lpWorldInput->LockForWrite();
         BridgeControllerToWorld(lpWorldInput, lpInputOutputBuffer);
         lpWorldInput->UnlockForWrite();
+
+        // The network -> world bridge, between the controller and game-state bridges under a
+        // read lock on the network output (console order). DriveWorldUpdateFrame carries the
+        // same call; both sites move together.
+        if (mpNetworkOutputBuffer != 0)
+        {
+            mpNetworkOutputBuffer->LockForRead();
+            lpWorldInput->LockForWrite();
+            BridgeNetworkToWorld(lpWorldInput, mpNetworkOutputBuffer);
+            lpWorldInput->UnlockForWrite();
+            mpNetworkOutputBuffer->UnlockForRead();
+        }
 
         // ⭐⭐ THE GAME-STATE -> WORLD BRIDGE (X360 BridgeGameStateToWorld @0x823E1890), the
         // only producer of the world update input buffer's game-action queue. The console gets
@@ -4254,6 +4261,18 @@ namespace BrnGame
 
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
 
+                // THE NETWORK PRE-SIMULATION LEG. Console DoUpdate order: DoUpdate_InputPreWorld,
+                // then this, then DoUpdate_GameStatePreWorld; unconditional whenever DoUpdate runs,
+                // which on this build is exactly when the sub-step has a network output buffer
+                // (CreateStaticIOBuffers). The pad record is the one the GUI pass fills later in
+                // the sub-step, so it is one sub-step stale, as for BridgeControllerToGameState.
+                if (mpNetworkOutputBuffer != 0)
+                {
+                    DoUpdate_NetworkPreSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                           &mPcInputOutputBuffer, mpNetworkOutputBuffer,
+                                           ConstructUpdateSetFromFsm());
+                }
+
                 // ⭐ THE GAME-STATE PRE-WORLD LEG (X360 DoUpdate_GameStatePreWorld @0x823EE0E8 ->
                 // GameStateModule::PreWorldUpdate @0x823A5328). Only its ONE-SHOT start-of-game
                 // latch is reconstructed (see PreWorldUpdateSetupPlayerCarBringUp); it runs
@@ -4298,6 +4317,21 @@ namespace BrnGame
                                                 "WaitForStreaming (reason 1)\n");
                     }
                 }
+                // [FLAG world-load stand-in] the FinishStreaming seat for BridgeGuiToGame case 65.
+                if (mbPcStreamingFinishPending)
+                {
+                    mbPcStreamingFinishPending = false;
+                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                        mGameStateModule.GetOutputBuffer();
+                    if (lpGameStateOutput != 0)
+                    {
+                        lpGameStateOutput->LockForWrite();
+                        mGameStateModule.RequestUnpause(1, lpGameStateOutput->GetGameActionQueue());
+                        lpGameStateOutput->UnlockForWrite();
+                        CgsDev::Log::WriteToLog("[sim-pause] in-game screen entered (65) -> "
+                                                "RequestUnpause(1) (FinishStreaming stand-in)\n");
+                    }
+                }
 
                 if (leState == BrnGameMainFlowController::E_MGS_IN_GAME)
                 {
@@ -4332,19 +4366,33 @@ namespace BrnGame
                     // sub-step's fill. Harmless for a 0.35 s hold gate, and it is the same latency
                     // the GUI leg already lives with. DELETE-WHEN the DoUpdate cascade lands and
                     // the input fill moves to the top of the frame where the console has it.
-                    // [FLAG PC bring-up] The fourth console argument is
-                    // BrnNetworkModuleIO::OutputBuffer::IsPlaying(networkOut); nothing on PC stages
-                    // the network output buffer here, and SetButtonPressed (the only consumer this
-                    // bridge has) provably ignores it -- the callee at 0x823BA240 takes two
-                    // parameters. Passed 0.
+                    // The network -> game-state bridge runs first, under a read lock on the
+                    // network output held across both bridges, and the controller bridge's last
+                    // argument is that buffer's IsPlaying() -- the console's own sequence.
+                    // [FLAG PC placement] the console stages a freshly created (so freshly
+                    // Constructed) pre-world buffer every sub-step; the PC buffer is the game-state
+                    // module's persistent one, so it is re-Constructed here first. Without that the
+                    // network bridge's queue appends would pile up across sub-steps.
                     {
                         BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGsPreWorld =
                             mGameStateModule.GetPreWorldInputBuffer();
                         if (lpGsPreWorld != 0)
                         {
+                            lpGsPreWorld->Construct();
                             mPcInputOutputBuffer.LockForRead();
                             lpGsPreWorld->LockForWrite();
-                            BridgeControllerToGameState(&mGameStateModule, &mPcInputOutputBuffer, 0);
+                            s32 liIsPlaying = 0;
+                            if (mpNetworkOutputBuffer != 0)
+                            {
+                                mpNetworkOutputBuffer->LockForRead();
+                                const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpcNetworkOutput =
+                                    mpNetworkOutputBuffer;
+                                BridgeNetworkToGameState(lpGsPreWorld, lpcNetworkOutput);
+                                liIsPlaying = lpcNetworkOutput->IsPlaying() ? 1 : 0;
+                            }
+                            BridgeControllerToGameState(&mGameStateModule, &mPcInputOutputBuffer, liIsPlaying);
+                            if (mpNetworkOutputBuffer != 0)
+                                mpNetworkOutputBuffer->UnlockForRead();
                             lpGsPreWorld->UnlockForWrite();
                             mPcInputOutputBuffer.UnlockForRead();
 
@@ -4755,11 +4803,12 @@ namespace BrnGame
                 // mpDirectorOutputBuffer, which stays alive through this frame's Render.
                 DoUpdate_Director(false);
 
-                // ⭐ RETIRE THIS SUB-STEP'S GAME ACTIONS (FLAG PC lifecycle, 2026-08-01).
-                // Both consumers of the game-state output buffer's game-action queue have now
-                // run: the WORLD leg (DriveWorldUpdateFrame -> BridgeGameStateToWorld, inside
-                // lpState->Update() above) and the DIRECTOR leg (DoUpdate_Director(false) ->
-                // BridgeGameStateToDirector). The post-GUI director pass does not read it.
+                // ⭐ RETIRING THIS SUB-STEP'S GAME ACTIONS (FLAG PC lifecycle, 2026-08-01) happens
+                // at the END of the sub-step, after the network post-simulation leg (see the
+                // block there). Its consumers: the WORLD leg (DriveWorldUpdateFrame ->
+                // BridgeGameStateToWorld, inside lpState->Update() above), the DIRECTOR leg
+                // (DoUpdate_Director(false) -> BridgeGameStateToDirector), the GUI leg below, the
+                // EFFECTS leg and the NETWORK post-simulation leg (BridgeGameStateToNetwork).
                 //
                 // WHY THIS IS NEEDED. On the console the game-state module is a
                 // CgsModule::ModuleSingleBuffered whose OUTPUT DataStructure is re-Constructed
@@ -4852,43 +4901,6 @@ namespace BrnGame
                         mGameStateModule.GetOutputBuffer()->UnlockForRead();
                     }
                 }
-                {
-                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
-                        mGameStateModule.GetOutputBuffer();
-                    if (lpGameStateOutput != 0)
-                    {
-                        lpGameStateOutput->LockForWrite();
-                        lpGameStateOutput->GetGameActionQueue()->Clear();
-                        // ⭐ [FLAG PC lifecycle, 2026-08-28 crash-slomo transport wave] THE TIMER
-                        // REQUEST SLOT RETIRES WITH THE ACTION QUEUE, and for exactly the reason
-                        // spelt out above: on the console this whole OutputBuffer is re-Constructed
-                        // by the module scheduler every frame, so a posted TimerRequests entry is
-                        // ONE-SHOT; on PC the module owns one persistent buffer. UpdateTimers() has
-                        // already drained it this sub-step. Without this retire, the first
-                        // DriveThruManager::SetPlayerCarDriver would latch KU_FLAG_MULTIPLIER here
-                        // for the rest of the session: its 0.52631581f presentation timestep would
-                        // be re-Appended every sub-step (tripping SetTimestepMultiplier's
-                        // "Attempt to change slowmo multiple times" assert on the producer side and
-                        // Append's "only 1 slowmo request" on the consumer side), and the sim would
-                        // never come back to real time when the drive-thru hands control back.
-                        lpGameStateOutput->GetTimerRequestInterface()->Clear();
-                        // ⭐ [FLAG PC lifecycle, FX-GS2 2026-09-23, G10-D11] THE GAME-STATE -> GUI
-                        // INTERFACE RETIRES TOO, for the same reason. The console rebuilds this
-                        // OutputBuffer every frame, and OutputBuffer::Construct runs
-                        // GameStateToGuiInterface::Construct (this + 17488), so each of its eight
-                        // EventQueues starts every frame empty. Here the buffer is persistent and the
-                        // queues are AddEvent-only (asserting, then writing past the end on overflow):
-                        // AddFinishedRaceEvent's 4-slot queue already overran on a session's fifth
-                        // finish, and CheckForTailingRivals' 7-slot on-tail queue would overrun in a
-                        // few seconds of racing. The console's own Construct is the retire: queues
-                        // empty, miPlayerRaceCarIndex back to -1. Their one consumer,
-                        // TranslateGuiInterfaceToGuiEvents, has already run in the GUI leg above
-                        // (G10-D11 part 2), so each record is posted in the sub-step that produced
-                        // it -- or dropped with the buffer while frame-stepping, as on the console.
-                        lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
-                        lpGameStateOutput->UnlockForWrite();
-                    }
-                }
                 // ⭐ FRAME-STEP GUARD, 2026-08-16 (boot audit F-P3-9). DoUpdate skips the
                 // whole GUI leg while the frame-stepper is engaged (`lbzx` on gm+0x9A0B98);
                 // ours ran it unconditionally, so single-stepping a frame also advanced the
@@ -4952,6 +4964,15 @@ namespace BrnGame
                         mpWorldUpdateOutputBuffer->LockForRead();
                         BridgeWorldToGui(mpGuiInputBuffer, mpWorldUpdateOutputBuffer);
                         mpWorldUpdateOutputBuffer->UnlockForRead();
+                    }
+
+                    // The network -> GUI bridge, under a read lock on the network output (console
+                    // DoUpdate_GUI runs it after the replay bridge, before BridgeGameToGui).
+                    if (mpNetworkOutputBuffer != 0)
+                    {
+                        mpNetworkOutputBuffer->LockForRead();
+                        BridgeNetworkToGui(mpGuiInputBuffer, mpNetworkOutputBuffer);
+                        mpNetworkOutputBuffer->UnlockForRead();
                     }
 
                     // ⭐ THE GUI FRAME TIMESTEP. X360 BridgeGameStateToGui @0x823EE880 closes
@@ -5266,6 +5287,67 @@ namespace BrnGame
                 // into mpDirectorOutputBuffer and before that buffer is torn down. Renders
                 // that fall between ticks blend the last two latches; see the banner on
                 // LatchDispatchCamera.
+                // THE NETWORK POST-SIMULATION LEG. Console DoUpdate order: ... DoUpdate_Effects,
+                // DoUpdate_Sound, DoUpdate_ReplaysPostSim, DoUpdate_GameStatePostWorld, then this,
+                // then UpdateTimers. [FLAG PC placement] the PC runs UpdateTimers earlier in the
+                // sub-step (see its banner), so this is the last module leg of the sub-step. The
+                // GUI output buffer carries the GUI out-events retained from the previous sub-step
+                // (the same one-sub-step hand-off the sound leg uses), so each reaches the network
+                // exactly once.
+                if (mpNetworkOutputBuffer != 0)
+                {
+                    DoUpdate_NetworkPostSim(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                            mGameStateModule.GetOutputBuffer(),
+                                            mpWorldUpdateOutputBuffer,
+                                            mpGuiOutputBuffer,
+                                            ConstructUpdateSetFromFsm());
+                }
+
+                // THE GAME-ACTION RETIRE (FLAG PC lifecycle, see the note above DoUpdate_Director's
+                // GUI block). On the console the game-state output buffer is re-Constructed every
+                // frame, so an action lives for the whole DoUpdate and every leg that reads the
+                // queue sees it; the last of them is the network post-simulation leg just above.
+                // Retiring earlier (it sat right after the director leg) hid every game action
+                // from the effects and network legs: the network never saw the start-of-game
+                // reset-player-car action, so the free-burn car id stayed 0 in every lobby.
+                {
+                    BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput =
+                        mGameStateModule.GetOutputBuffer();
+                    if (lpGameStateOutput != 0)
+                    {
+                        lpGameStateOutput->LockForWrite();
+                        lpGameStateOutput->GetGameActionQueue()->Clear();
+                        // ⭐ [FLAG PC lifecycle, 2026-08-28 crash-slomo transport wave] THE TIMER
+                        // REQUEST SLOT RETIRES WITH THE ACTION QUEUE, and for exactly the reason
+                        // spelt out above: on the console this whole OutputBuffer is re-Constructed
+                        // by the module scheduler every frame, so a posted TimerRequests entry is
+                        // ONE-SHOT; on PC the module owns one persistent buffer. UpdateTimers() has
+                        // already drained it this sub-step. Without this retire, the first
+                        // DriveThruManager::SetPlayerCarDriver would latch KU_FLAG_MULTIPLIER here
+                        // for the rest of the session: its 0.52631581f presentation timestep would
+                        // be re-Appended every sub-step (tripping SetTimestepMultiplier's
+                        // "Attempt to change slowmo multiple times" assert on the producer side and
+                        // Append's "only 1 slowmo request" on the consumer side), and the sim would
+                        // never come back to real time when the drive-thru hands control back.
+                        lpGameStateOutput->GetTimerRequestInterface()->Clear();
+                        // ⭐ [FLAG PC lifecycle, FX-GS2 2026-09-23, G10-D11] THE GAME-STATE -> GUI
+                        // INTERFACE RETIRES TOO, for the same reason. The console rebuilds this
+                        // OutputBuffer every frame, and OutputBuffer::Construct runs
+                        // GameStateToGuiInterface::Construct (this + 17488), so each of its eight
+                        // EventQueues starts every frame empty. Here the buffer is persistent and the
+                        // queues are AddEvent-only (asserting, then writing past the end on overflow):
+                        // AddFinishedRaceEvent's 4-slot queue already overran on a session's fifth
+                        // finish, and CheckForTailingRivals' 7-slot on-tail queue would overrun in a
+                        // few seconds of racing. The console's own Construct is the retire: queues
+                        // empty, miPlayerRaceCarIndex back to -1. Their one consumer,
+                        // TranslateGuiInterfaceToGuiEvents, has already run in the GUI leg above
+                        // (G10-D11 part 2), so each record is posted in the sub-step that produced
+                        // it -- or dropped with the buffer while frame-stepping, as on the console.
+                        lpGameStateOutput->GetGameStateToGuiInterface()->Construct();
+                        lpGameStateOutput->UnlockForWrite();
+                    }
+                }
+
                 LatchDispatchCamera();
                 PerfMonCpu::StopMonitor(mCpuMonitors.miUT_EachUpdate);
 
@@ -5331,6 +5413,8 @@ namespace BrnGame
         // null-checked one by one, so the pairing with the create side stays obvious.
         if (miNumSimFramesRequired > 0)
         {
+            if (mpNetworkOutputBuffer != 0)
+                mpUpdateOutputBufferStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&mpNetworkOutputBuffer);
             mpUpdateOutputBufferStack->DestroyIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(&mpEffectsOutputBuffer);
             mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
             mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);
@@ -5372,12 +5456,32 @@ namespace BrnGame
         // bottom; DoUpdate is a PC leaf here, so it shares the other buffers' lifetime.
         mpUpdateOutputBufferStack->CreateIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(
             &mpEffectsOutputBuffer, "Effects");
+
+        // THIS SUB-STEP'S NETWORK OUTPUT BUFFER (see the header note on the member). The
+        // console's DoUpdate creates it at its top and destroys it at its bottom, and DoUpdate
+        // runs from exactly two places: MainGameFlowStateInGame::Update, and
+        // LoadingScriptedState::Update once the shared load stage reads 8 (below 8 that Update
+        // runs its partial spine instead, which carves its own network buffers). The initial
+        // loading screen never updates the network module; it loads it. So the buffer, and
+        // with it every network leg of this sub-step, exists only in those states. Created
+        // last so it is destroyed first.
+        const BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
+        const bool lbLoadingScriptedState = (leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE)
+                                         && (leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING);
+        if ((leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+            || (lbLoadingScriptedState && gBrnScriptedLoadStage == 8))
+        {
+            mpUpdateOutputBufferStack->CreateIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(
+                &mpNetworkOutputBuffer, "Network");
+        }
     }
 
     // @ BrnGameModule.cpp:2515 - free this sub-step's static GUI/director IO buffers (reverse
     // order of CreateStaticIOBuffers).
     void BrnGameModule::DestroyStaticIOBuffers()
     {
+        if (mpNetworkOutputBuffer != 0)
+            mpUpdateOutputBufferStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&mpNetworkOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnEffects::EffectsIO::OutputBuffer>(&mpEffectsOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnWorldIO::UpdateOutputBuffer>(&mpWorldUpdateOutputBuffer);
         mpUpdateOutputBufferStack->DestroyIOBuffer<BrnDirector::DirectorIO::OutputBuffer>(&mpDirectorOutputBuffer);

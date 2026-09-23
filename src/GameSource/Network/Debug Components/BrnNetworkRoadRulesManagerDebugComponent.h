@@ -11,9 +11,9 @@
 //   DebugComponent base sub-object  +0x00..+0x0B
 //   mpRoadRulesManager              +0x0C   (== the *(this+12) back-pointer in every member)
 //
-// The X360 build attests only Construct / GetName / OnActivate plus the two static action callbacks;
-// GetPath / Destruct from the PS3 DWARF are not in the X360 ledger for this TU (folded / PS3-only),
-// so the base CgsDev::DebugComponent::GetPath default applies.
+// Destruct and GetPath have no body of their own on the console: Destruct is folded onto an
+// identical sibling component's body (clear the back-pointer, then the base Destruct) and the
+// vtable's GetPath slot holds the shared "Network" path getter. Both are bodied in the .cpp.
 
 namespace BrnNetwork
 {
@@ -23,9 +23,11 @@ namespace BrnNetwork
     {
     public:
         void Construct( NetworkRoadRulesManager* lpRoadRulesManager );   // @ 0x82586350
+        void Destruct();
 
     protected:
         const char* GetName() const override;   // @ 0x82586398 -> "Road Rules"
+        const char* GetPath() const override;   // "Network"
         void        OnActivate() override;       // @ 0x8258AF90
 
     private:

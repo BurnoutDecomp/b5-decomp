@@ -19,9 +19,7 @@
 //        No member or base access.
 //
 // The remaining declared methods (Construct/PrepareForSend/Retrieve/
-// GetPackedMessageSize/PackOrUnpack) live in the sibling .cpp TU
-// (BrnRoadRulesMessage.cpp) and are declared here for the class shape but NOT bodied in
-// this TU.
+// GetPackedMessageSize/PackOrUnpack) are bodied in BrnRoadRulesMessage.cpp.
 // ===================================================================================
 
 #include "types.hpp"                                                                // s32, u16, bool
@@ -33,7 +31,7 @@ namespace BrnNetwork
     struct RoadRulesMessage : public CgsNetwork::ReliableMessage
     {
     public:
-        // Sibling-.cpp methods (declared for class shape; NOT bodied in this TU).
+        // Bodied in BrnRoadRulesMessage.cpp.
         void          Construct();
         void          PrepareForSend(u16 lu16Frame, s32 liNumRoadRulesScores,
                                      RoadRulesMessageData* lpRoadRulesMessageData);

@@ -28,6 +28,7 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                      // BrnResource::GameDataIO::Input/OutputBuffer (the colour-calibration screen's IO)
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // AllocatorList::GetRWLinearResourceAllocator (mGuiConfig.mpTextureAllocator)
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h" // GetScriptedLoadGameData{Input,Output} (the PC stand-in for the scheduler's GameData IO pair)
+#include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h"      // BrnNetwork::LiveRevengeProfile (the PC live-revenge block)
 
 // DecFIGS types GuiModule::Construct's alternate-text palette as const RGBA*.
 // ARTIST's eight packed words at 0x82F27F84 are the complete table.
@@ -124,9 +125,10 @@ namespace
     // installs on the ProfileManager via GUI event 351 (SetLiveRevengeProfile). That
     // subsystem is not wired on PC, so mpLiveRevengeProfile stays null and
     // ProfileManager::Bootup->ReadProfileData faults (memcpy from mpLiveRevengeProfile).
-    // This zeroed stand-in is a blank first-boot profile -- exactly what the console holds
-    // before any save loads -- installed in Prepare below, at the real segment width
-    // (BrnGuiProfile.h: live-revenge is memcpy'd 30016 B).
+    // This stand-in is a Clear()ed profile -- the current version and an empty relationship
+    // table, what the console's network module installs before any save loads -- installed in
+    // Prepare below. Its size is the real segment width (BrnGuiProfile.h: live-revenge is
+    // memcpy'd 30016 B), asserted below.
     //
     // ⛔⛔ [one-profile wave 2026-08-28] s_pcProgressionProfileBacking (sizeof(Profile)) and
     // s_pcProgressionManifestBacking (4096 "ExpectedManifest") ARE DELETED, not moved. They
@@ -138,7 +140,9 @@ namespace
     // ⛔ DO NOT RE-ADD either one to "guard" a null: the console's ProfileManager::Construct
     // zeroes both members too, and nothing dereferences them before BF_PROFILE -- which runs
     // hundreds of log lines after the first sub-step's event-350 post.
-    alignas(16) u8 s_pcLiveRevengeProfileBacking[30016];    // KI_LIVEREVENGE_PROFILE_SIZE_BYTES
+    BrnNetwork::LiveRevengeProfile s_pcLiveRevengeProfile;
+    static_assert(sizeof(BrnNetwork::LiveRevengeProfile) == 30016,
+                  "the live-revenge block is the 30016-byte segment the profile manager copies");
 
     // The shared access-pointer bundle the HUD flow's state interface hands its GUI
     // components (Prepare'd in GuiModule::Prepare once the Apt bring-up publishes the
@@ -1364,8 +1368,9 @@ namespace BrnGui
 
         // Install the PC-boundary blank LIVE-REVENGE block (see the static above): the
         // console's network module does this via SetLiveRevengeProfile (GUI event 351);
-        // without it Bootup->ReadProfileData faults on the null pointer. std::memset zeroes
-        // it (a fresh, unsaved profile).
+        // without it Bootup->ReadProfileData faults on the null pointer. Clear() makes it a
+        // fresh, unsaved profile of the current version, so the saves written from it pass
+        // the live-revenge validation (older PC saves carrying version 0 fail it and reset).
         //
         // ⛔⛔ [one-profile wave 2026-08-28] THE PROGRESSION PAIR IS NO LONGER INSTALLED HERE,
         // and this was the whole defect. There is exactly ONE BrnProgression::Profile on the
@@ -1380,9 +1385,8 @@ namespace BrnGui
         // TrainingManager flags) read mProgressionManager.mProfile -- which was Construct()ed
         // and never loaded into, so it answered mbIsNewProfile = 1 on every boot, for ever.
         // The case-350 arm now does the console's install and the static is gone.
-        std::memset(s_pcLiveRevengeProfileBacking, 0, sizeof(s_pcLiveRevengeProfileBacking));
-        mProfileManager.SetLiveRevengeProfile(
-            reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(s_pcLiveRevengeProfileBacking));
+        s_pcLiveRevengeProfile.Clear();
+        mProfileManager.SetLiveRevengeProfile(&s_pcLiveRevengeProfile);
 
         // X360 GuiModule::Prepare @0x82518D68 STAGE 3, line 104: `*(gm + 660992) = gm +
         // 1005332`, i.e. the analyzer adopts the shared GuiAccessPointers block (the same

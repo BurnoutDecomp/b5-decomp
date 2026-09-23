@@ -11,12 +11,13 @@
 // The console has no out-of-line body for any of the methods below; they are header
 // inlines folded into their callers (OutputBuffer::Construct, the LiveRevengeManager
 // display paths, BrnGameModule::TranslateNetworkInterfaceToGuiEvents). Declared here with
-// the reference shapes; Construct and Clear are bodied inline, the rest land with their callers.
+// the reference shapes; Construct, Clear and AddLiveRevengeUpdate are bodied inline.
 // ===================================================================================
 #pragma once
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"      // BaseEventQueue<T>::AddEvent (inline generic)
 #include "GameSource/Network/SharedIO/BrnNetworkToGuiEvents.h"    // BrnNetwork::NetworkToGuiLiveRevengeUpdate
 
 namespace BrnNetwork
@@ -34,10 +35,19 @@ namespace BrnNetwork
             // length reset, at this interface's offset.
             void Construct() { mLiveRevengeUpdateQueue.Construct(); }
             void Clear()     { mLiveRevengeUpdateQueue.Clear(); }
+            // Inlined by the live-revenge takedown displays: queue one status update.
             void AddLiveRevengeUpdate(EActiveRaceCarIndex leAggressorActiveRaceCarIndex,
                                       EActiveRaceCarIndex leVictimActiveRaceCarIndex,
                                       NetworkToGuiLiveRevengeUpdate::LiveRevengeStatus leNewStatus,
-                                      s32 liDifference);
+                                      s32 liDifference)
+            {
+                NetworkToGuiLiveRevengeUpdate lUpdate;
+                lUpdate.meAggressorActiveRaceCarIndex = leAggressorActiveRaceCarIndex;
+                lUpdate.meVictimActiveRaceCarIndex    = leVictimActiveRaceCarIndex;
+                lUpdate.meNewStatus                   = leNewStatus;
+                lUpdate.miDifference                  = liDifference;
+                mLiveRevengeUpdateQueue.AddEvent(lUpdate);
+            }
             const LiveRevengeUpdateQueue* GetLiveRevengeUpdateQueue() const { return &mLiveRevengeUpdateQueue; }
 
         private:

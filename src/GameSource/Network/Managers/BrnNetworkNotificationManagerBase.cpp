@@ -11,9 +11,30 @@
 // the faithful, ABI-portable equivalent of the X360 tail dispatch.
 //
 // Called by: BrnNetwork::BrnNetworkManager::ProcessAfterSimulation.
+//
+// The lifecycle and the two connection hooks: Construct only stores the owning module;
+// Destruct, Connect and Disconnect are the shared empty body on the console (the leaf's
+// vtable keeps the base Connect / Disconnect slots).
 
 namespace BrnNetwork
 {
+    void NetworkNotificationManagerBase::Construct(BrnNetworkModule* lpNetworkModule)
+    {
+        mpNetworkModule = lpNetworkModule;
+    }
+
+    void NetworkNotificationManagerBase::Destruct()
+    {
+    }
+
+    void NetworkNotificationManagerBase::Connect()
+    {
+    }
+
+    void NetworkNotificationManagerBase::Disconnect()
+    {
+    }
+
     void NetworkNotificationManagerBase::Update()
     {
         ProcessNotifications();

@@ -19,11 +19,12 @@
 //   mpTextureCompressor             +0x50
 //   mbRenderImage                   +0x54
 //
-// The X360 ledger attests Construct / Destruct / GetName / OnActivate / Release for this TU; the
-// other DWARF methods (Prepare / PreWorldUpdate / SetImageToEncode / GetPath / the encode callbacks)
-// are not in the X360 set for this TU, so they are left out here (the base GetPath default applies).
+// Construct / Destruct / GetName / OnActivate / Release have bodies of their own on the console.
+// Prepare, PreWorldUpdate, SetImageToEncode, GetPath and the encode callback do not: the image
+// manager's calls, the menu registration and the vtable slot land on the shared `return true`,
+// empty and "Network" bodies, which this TU reproduces.
 
-namespace BrnNetwork { class NetworkImageManager; }            // back-pointer only
+namespace BrnNetwork { struct NetworkImageManager; }           // back-pointer only
 namespace CgsNetwork { class NetworkTextureDXTCompress; }      // back-pointer only
 namespace CgsMemory { class HeapMalloc; }                      // Prepare param (pointer-only)
 
@@ -34,21 +35,21 @@ namespace BrnNetwork
     public:
         void Construct( NetworkImageManager* lpImageManager,
                         CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor );   // @ 0x82586428
-        // Prepare allocates the debug work buffers (the X360 image-manager Prepare drives the
-        // inlined CgsSound::Playback::Content::DoOnPostLoad on this sub-object). Declaration-only
-        // here (body links from this component's own TU); declared so NetworkImageManager::Prepare
-        // can gate on it BY NAME.
         bool Prepare( CgsMemory::HeapMalloc* lpHeapMalloc );
+        // The image manager's per-frame hook and its hand-over of the freshly captured picture.
+        void PreWorldUpdate();
+        void SetImageToEncode( const char* lpcImage );
         void Destruct();   // @ 0x825864D0
         bool Release();    // @ 0x8258B048
 
     protected:
         const char* GetName() const override;   // @ 0x82586520 -> "Images"
+        const char* GetPath() const override;
         void        OnActivate() override;        // @ 0x8258AFF0
 
     private:
-        // Static debug-menu action callback ("Encode and save image"); body lands in this TU's
-        // follow-on pass (not in the X360 ledger for this slice). The void* user-data is this component.
+        // Static debug-menu action callback ("Encode and save image"). The void* user-data is this
+        // component.
         static void EncodeMugshotAtSelectedQuality( void* lpData );
 
         CgsNetwork::NetworkTexture             mImage;               // +0x0C

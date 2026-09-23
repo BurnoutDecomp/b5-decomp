@@ -1,5 +1,7 @@
 // Bodies for the online road-rules debug component, reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   Construct                     @ 0x82586350
+//   Destruct                      (folded; see the header)
+//   GetPath                       (folded; see the header)
 //   GetName                       @ 0x82586398
 //   OnActivate                    @ 0x8258AF90
 //   TriggerPersonalBest           @ 0x8258AEB0
@@ -15,6 +17,7 @@
 #include "GameSource/Network/Debug Components/BrnNetworkRoadRulesManagerDebugComponent.h"
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"   // NetworkRoadRulesManager (method calls)
 #include "SharedClasses/StreetData/BrnChallengeData.h"                // ChallengePlayerScoreEntry / ScoreList / ScoreType
+#include "GameSource/Network/BrnNetworkInEventTypeDefs.h"             // BrnNetworkModuleIO::NetworkInRoadRulesPBEvent (TriggerPersonalBest)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
 
 namespace BrnNetwork
@@ -26,9 +29,23 @@ namespace BrnNetwork
         Register();
     }
 
+    // Folded on the console onto the identical body of a sibling debug component: drop the
+    // back-pointer, then the base teardown.
+    void RoadRulesManagerDebugComponent::Destruct()
+    {
+        mpRoadRulesManager = nullptr;
+        CgsDev::DebugComponent::Destruct();
+    }
+
     const char* RoadRulesManagerDebugComponent::GetName() const
     {
         return "Road Rules";
+    }
+
+    // The vtable's GetPath slot is the shared network-component path getter.
+    const char* RoadRulesManagerDebugComponent::GetPath() const
+    {
+        return "Network";
     }
 
     // Called when the debug menu opens this component: wire up the two manual road-rule actions.
@@ -52,7 +69,10 @@ namespace BrnNetwork
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
         CGS_ASSERT( lpThis != nullptr, "lpRoadRulesManagerDebugCmpt" );
 
-        BrnStreetData::ChallengePlayerScoreEntry lScoreEntry;
+        // The record is a whole personal-best event: the score entry, then challenge 0 and the
+        // not-a-lobby-score flag (the two stores just before the call).
+        BrnNetworkModuleIO::NetworkInRoadRulesPBEvent lPBEvent;
+        BrnStreetData::ChallengePlayerScoreEntry& lScoreEntry = lPBEvent.mPersonalBestScore;
         lScoreEntry.Construct();
 
         const int32_t kiScore = 10;
@@ -64,7 +84,10 @@ namespace BrnNetwork
             lScoreEntry.mScoreList.SetScore( BrnStreetData::E_SCORE_TYPE_TIME, kiScore );
         }
 
-        lpThis->mpRoadRulesManager->HandleNewPersonalBest( &lScoreEntry );
+        lPBEvent.mChallengeIndex     = 0;
+        lPBEvent.mbLobbyPersonalBest = false;
+
+        lpThis->mpRoadRulesManager->HandleNewPersonalBest( &lPBEvent );
     }
 
     // @ 0x825863A8. Request the latest road-rules high scores from the server.

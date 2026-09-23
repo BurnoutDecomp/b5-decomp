@@ -2,124 +2,121 @@
 #define BRN_SERVER_INTERFACE_DOWNLOADABLE_CONFIG_H
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h"
+#include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceDownloadableConfig.h"
 
 // ===========================================================================
 // BrnNetwork::BrnServerInterfaceDownloadableConfig
 //   Home: GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.{h,cpp}
 //
-// Thin Burnout-side "downloadable config" server-interface component. It is a
-// leaf derivative of the committed CgsNetwork::ServerInterfaceComponent base
-// (the polymorphic component base shared by every DirtySock server-interface
-// component). BrnServerInterfaceBase embeds one of these as mDownloadableConfig.
+// The game's downloadable-config component. It derives from the DirtySock
+// CgsNetwork::ServerInterfaceDownloadableConfig and owns the storage the downloaded
+// "conf" news record is parsed into: Prepare registers one named field per tunable
+// (name, type, byte offset into this object) and the base parser writes each field
+// it finds straight into that member.
 //
-// The X360 build's deleting destructor (@ 0x827DE378) shows the component owns
-// no heap members of its own: the body restores only the single base vtable
-// slot at this+0 (off_820CDBF8 -- the same component base vtable used by every
-// CgsNetwork component leaf) and conditionally frees:
-//
-//     *result = &off_820CDBF8;            // restore the component base vtable
-//     if ( a2 & 1 ) operator delete(result);
-//     return result;
-//
-// MSVC synthesises exactly that store + conditional-free from the trivial
-// virtual ~BrnServerInterfaceDownloadableConfig(). No own data members are
-// declared because the destructor touches none and the dossier exposes none;
-// any genuine config-cache members would be added additively when their
-// owning getters/setters are reconstructed.
+// Console layout (32-bit), after the 0x24-byte base:
+//   +0x024  maIDsToMemAddrs[20]            (12-byte descriptors, 0xF0 bytes)
+//   +0x114  miSizeOfMemLookupTable
+//   +0x118  macTelemetryFiltersFirstUse[256]
+//   +0x218  macTelemetryFiltersNormalUse[256]
+//   +0x318  miIdleTimeOut                  +0x31C  miSearchQueryTimeInterval
+//   +0x320  miNatTestPacketTimeout         +0x324  miTOSBufferSize
+//   +0x328  miNewsBufferSize               +0x32C  miNumDemanglePlayers
+//   +0x330  mfMinSyncingTime               +0x334  mfMaxSyncingTime
+//   +0x338  mfWaitForStartTime             +0x33C  mfTimeToWaitForSilentClientReady
+//   +0x340  mfTimeToWaitForCommunicatingClientReady
+//   +0x344  mfTimeGapToLeaveBeforeStartTime
+//   +0x348  mfTimeBetweenStatChecks        +0x34C  mfTimeBetweenRoadRulesUploads
+//   +0x350  mfTimeBetweenRoadRulesDownloads
+//   +0x354  mfTimeUntilRetryAfterFailedBuddyUpload
+//   +0x358  mfTimeBetweenOfflineProgressionUpload
+//   +0x35C  mbDoLogOffOnExitOnline
+//   sizeof == 0x360
+// Every offset is the one Prepare registers for the field's config key, so the
+// member each key feeds is fixed by the registration, not by position.
+// miNumDemanglePlayers ("NUM_DEMANGLE_PLAYERS") has no counterpart in the reference
+// layout; its member and getter names are taken from the key.
 // ===========================================================================
 
 namespace BrnNetwork
 {
-    class BrnServerInterfaceDownloadableConfig : public CgsNetwork::ServerInterfaceComponent
+    class BrnServerInterfaceDownloadableConfig : public CgsNetwork::ServerInterfaceDownloadableConfig
     {
     public:
         BrnServerInterfaceDownloadableConfig();
 
-        // Vector deleting destructor @ 0x827DE378.
+        // Vector deleting destructor.
         virtual ~BrnServerInterfaceDownloadableConfig();
 
-        // ---- ADDITIVE GROW (BrnNetworkAutoLoginManager TU) --------------------------------
-        // The downloaded server config carries the auto-login timeout (seconds) the
-        // AutoLoginManager arms its wait/connect timer from (the X360 reads it as the f32 at
-        // this+0x350 in AutoLoginManager::Connect / ::UpdateWaitAutoLogin). Declared-only; the
-        // backing config-cache member and the body land when this component's own config-load
-        // TU is reconstructed.
-        f32 GetAutoLoginTimeout() const;
+        virtual void Construct();
+        virtual void Destruct();
+        // A new virtual (its own vtable slot, after the base's Prepare): the parameter
+        // type differs from the base's ServerInterfaceDirtySock*.
+        virtual bool Prepare( CgsNetwork::ServerInterface* lpServerInterface );
+        virtual bool Release();
 
-        // ---- ADDITIVE GROW (BrnNetworkEventScoresManager TU) ------------------------------
-        // The downloaded retry interval (seconds) the event-scores manager re-arms its upload
-        // timer with after a successful batch upload (X360 _UploadEventScoreCallback @ 0x825654A0:
-        // lfs f1, 0x34C(downloadableConfig) then CgsSystem::Time::SetFloatVal). Read as the f32 at
-        // this+0x34C. Declared-only; the backing config-cache member and the body land with this
-        // component's own config-load TU. FLAG: re-home onto a real member once the storage exists.
-        f32 GetEventScoreUploadRetryInterval() const;
+        // Re-request the configuration record from news item liNewsIndex, parsing it
+        // through this object's registered field table.
+        void GetConfigDataFromNews( s32 liNewsIndex );
 
-        // ---- ADDITIVE GROW (BrnNetworkBuddyManagerBase TU) --------------------------------
-        // The downloaded retry delay (seconds) the buddy manager arms its
-        // mTimeUntilRetryAfterFailedBuddyUpload timer with after a failed server-buddy
-        // download/upload (X360 _GetFriendsListFromServerComplete @ 0x82549C58: lfs from
-        // this+0x354 of the downloadable-config component then CgsSystem::Time::SetFloatVal).
-        // Read as the f32 at this+0x354. Declared-only; the backing config-cache member and
-        // the body land with this component's own config-load TU.
-        f32 GetBuddyUploadRetryDelay() const;
+        bool        LogOffOnExitOnline()                          { return mbDoLogOffOnExitOnline; }
+        s32         IdleTimeOut()                                 { return miIdleTimeOut; }
+        s32         SearchQueryTimeInterval()                     { return miSearchQueryTimeInterval; }
+        s32         NatTestPacketTimeout()                        { return miNatTestPacketTimeout; }
+        s32         TOSBufferSize()                               { return miTOSBufferSize; }
+        s32         NewsBufferSize()                              { return miNewsBufferSize; }
+        s32         NumDemanglePlayers()                          { return miNumDemanglePlayers; }
+        f32         MinSyncTime()                                 { return mfMinSyncingTime; }
+        f32         MaxSyncTime()                                 { return mfMaxSyncingTime; }
+        f32         WaitForStartTime()                            { return mfWaitForStartTime; }
+        f32         TimeToWaitForSilentClientReady()              { return mfTimeToWaitForSilentClientReady; }
+        f32         TimeToWaitForCommunicatingClientReady()       { return mfTimeToWaitForCommunicatingClientReady; }
+        f32         TimeGapBeforeStartTime()                      { return mfTimeGapToLeaveBeforeStartTime; }
+        const char* TelemetryFiltersFirstUse()                    { return macTelemetryFiltersFirstUse; }
+        const char* TelemetryFiltersNormalUse()                   { return macTelemetryFiltersNormalUse; }
+        const f32   TimeTillStatsExpire()                         { return mfTimeBetweenStatChecks; }
+        const f32   TimeBetweenRoadRulesUploads()                 { return mfTimeBetweenRoadRulesUploads; }
+        const f32   TimeBetweenRoadRulesDownloads()               { return mfTimeBetweenRoadRulesDownloads; }
+        const f32   TimeUntilRetryAfterFailedBuddyUpload()        { return mfTimeUntilRetryAfterFailedBuddyUpload; }
+        const f32   TimeBetweenOfflineProgressionUpload()         { return mfTimeBetweenOfflineProgressionUpload; }
 
-        // ---- ADDITIVE GROW (BrnNetworkLoginManagerBase TU) --------------------------------
-        // The login state machine drives the downloadable-config component through several entry
-        // points (X360 reaches the embedded config component as *(mpNetworkManager+0x38EC) + the
-        // downloadable-config slot):
-        //
-        //   Suspend() -- LoginManagerBase::AnswerAgreeTOS @ 0x82566478 / ::CancelLogin @ 0x8254FE60
-        //                call CgsNetwork::ServerInterfaceDownloadableConfig::Suspend on the slot to
-        //                abort any in-flight config download. (The behavioural body lives on the
-        //                Cgs base @ 0x8287AD50; declared here so the slot type the game embeds
-        //                exposes it by name.)
-        //
-        //   GetConfigDataFromNews(liNewsIndex) -- LoginManagerBase::UpdateLoggingIn @ 0x8254FA10
-        //                and ::UpdateGetConfigurationData re-request the configuration data from the
-        //                news feed (every recovered call site passes the literal 8). Declared-only;
-        //                the body lands with this component's own config-load TU.
-        //
-        //   GetTelemetryDisabledList() -- LoginManagerBase::PrepareConnectTelemetry @ 0x8254FEC8
-        //                returns the parsed telemetry-disabled country list the telemetry component
-        //                is configured with. Declared-only; the body lands with the config-load TU.
-        //
-        //   GetTelemetryFirstUsageEventFilters() / GetTelemetryNormalUsageEventFilters() --
-        //                PrepareConnectTelemetry passes the two parsed event-filter blobs (the X360
-        //                +280 / +536 config-cache fields) to ServerInterfaceTelemetry::SetEventFilters.
-        //                Declared-only; the backing members and bodies land with the config-load TU.
-        //
-        //   GetTosDownloadBufferSize() -- LoginManagerBase::PrepareDownloadingTOS @ 0x825438A8
-        //                passes the parsed TOS download buffer size (the X360 +804 config-cache field)
-        //                to ServerInterfaceHttp::StartHttpsDownload. Declared-only; the backing member
-        //                and body land with the config-load TU.
-        void       Suspend();
-        void       GetConfigDataFromNews(s32 liNewsIndex);
-        s32        GetTelemetryDisabledList() const;
-        const u8*  GetTelemetryFirstUsageEventFilters() const;
-        const u8*  GetTelemetryNormalUsageEventFilters() const;
-        s32        GetTosDownloadBufferSize() const;
+        // Whether lpcGamertag appears in the downloaded "FEVER_CARRIERS" list.
+        bool        IsGamertagInFeverList( const char* lpcGamertag );
 
-        // ---- ADDITIVE GROW (BrnNetworkStateManager TUs) ------------------------------------
-        // Downloaded-config readers the state manager uses. Console config-cache offsets:
-        // news buffer size +0x328, the connection mangle value +0x32C (a field the reference
-        // layout lacks; handed to ConnApiControl 'mngl'; name not recovered), then the start-time
-        // tunables in seconds: min / max sync time +0x330 / +0x334, wait-for-start-time +0x338,
-        // silent / communicating client-ready waits +0x33C / +0x340, gap before start time
-        // +0x344. Declared-only like the readers above; the backing members and bodies land with
-        // this component's own config-load TU.
-        s32        NewsBufferSize();
-        s32        MangleConfigValue();
-        f32        MinSyncTime();
-        f32        MaxSyncTime();
-        f32        WaitForStartTime();
-        f32        TimeToWaitForSilentClientReady();
-        f32        TimeToWaitForCommunicatingClientReady();
-        f32        TimeGapBeforeStartTime();
+        // The downloaded "TELE_DISABLE" country list (the tag-field value, or NULL).
+        const char* GetTelemetryDisabledList();
 
-        // Whether the gamertag is on the downloaded fever list (the state manager's login step
-        // sets the local player's fever flag from it). Declared-only.
-        bool       IsGamertagInFeverList(const char* lpcGamertag);
+    private:
+        static const s32 KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP = 20;
+        static const s32 KI_TELEMETRY_FILTERS_MAX_LENGTH   = 256;
+
+        CgsNetwork::DataIDToMemoryAddr maIDsToMemAddrs[KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP];
+        s32  miSizeOfMemLookupTable;
+
+        char macTelemetryFiltersFirstUse[KI_TELEMETRY_FILTERS_MAX_LENGTH];
+        char macTelemetryFiltersNormalUse[KI_TELEMETRY_FILTERS_MAX_LENGTH];
+
+        s32  miIdleTimeOut;
+        s32  miSearchQueryTimeInterval;
+        s32  miNatTestPacketTimeout;
+        s32  miTOSBufferSize;
+        s32  miNewsBufferSize;
+        s32  miNumDemanglePlayers;
+
+        f32  mfMinSyncingTime;
+        f32  mfMaxSyncingTime;
+        f32  mfWaitForStartTime;
+        f32  mfTimeToWaitForSilentClientReady;
+        f32  mfTimeToWaitForCommunicatingClientReady;
+        f32  mfTimeGapToLeaveBeforeStartTime;
+        f32  mfTimeBetweenStatChecks;
+        f32  mfTimeBetweenRoadRulesUploads;
+        f32  mfTimeBetweenRoadRulesDownloads;
+        f32  mfTimeUntilRetryAfterFailedBuddyUpload;
+        f32  mfTimeBetweenOfflineProgressionUpload;
+
+        bool mbDoLogOffOnExitOnline;
     };
 }
 

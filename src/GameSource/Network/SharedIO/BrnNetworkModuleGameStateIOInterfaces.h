@@ -103,7 +103,8 @@ namespace BrnNetwork
             void                AddDirtyTrickEvent(EActiveRaceCarIndex leAggressor, EActiveRaceCarIndex leVictim,
                                                    u8 luType, u8 luStatus);
             void                SetIsInOnlineGameMode(bool lbIsOnline);
-            bool                GetIsInCarSelect() const;
+            // Header-inline on the console: the update-message sender reads the byte at +0x219.
+            bool                GetIsInCarSelect() const { return mbIsInCarSelect; }
             void                SetIsCarSelect(bool lbIsInCarSelect);
             void                SetCurrentGameMode(BrnGameState::GameStateModuleIO::EGameModeType leGameMode);
             void                SetPlayerInFreeburnChallenge(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbInChallenge);

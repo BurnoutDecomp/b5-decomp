@@ -2,43 +2,22 @@
 #define CGS_SERVER_INTERFACE_DEFAULT_PLAYER_INFO_DATA_H
 
 #include "types.hpp"
-#include "../CgsServerInterfaceStructureInterface.h"
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"
 
 // ===========================================================================
 // CgsNetwork::DefaultPlayerInfoData
 //   Home: GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/
 //         CgsServerInterfaceDefaultPlayerInfoData.{h,cpp}
 //
-// A "default" (null-object) implementation of the player-info server-interface
-// structure. Forward-declared in the DirtySock DWARF
-//   (references/DecFIGS/dwarfdump/.../CgsServerInterfaceStructureInterface.h:173,
-//    `struct CgsNetwork::DefaultPlayerInfoData;`)
-// with no body and no own data members emitted; the only X360 codegen attributed
-// to it is its scalar deleting destructor @ 0x82890218.
-//
-// X360 EVIDENCE (scalar deleting destructor @ 0x82890218):
-//   *this = &off_8207C88C;            ; install the StructureInterface vtable
-//   if ( a2 & 1 ) operator delete(this);
-//   return this;
-// The vptr it installs is off_8207C88C -- the SAME vtable as the abstract
-// ServerInterfaceStructureInterface base (CgsServerInterfaceStructureInterface.cpp
-// `vector deleting destructor' @ 0x82541120 installs the identical pointer). The
-// destructor therefore reduces entirely to the base sub-object: this class adds
-// NO vtable slots of its own and NO data members beyond the inherited vptr, which
-// is exactly the codegen for a thin default that does not override the interface's
-// pure virtuals with new state.
-//
-// Because no GetPattern / GetData / size bodies are attributed to this type in the
-// X360 image or the DWARF, NONE are fabricated here: the class is left ABSTRACT
-// (it inherits the interface's pure virtuals). Only the out-of-line destructor is
-// defined, which anchors emission of the inherited vtable pointer to this TU --
-// mirroring the established deleting-destructor home convention in this tree
-// (CgsServerInterfaceComponentDtor.cpp).
+// The default player-info record: the player-info structure base with the default
+// Prepare (the base reset, reported as a bool). Its scalar deleting destructor
+// leaves the root ServerInterfaceStructureInterface vtable installed,
+// the intermediate base adding nothing to tear down.
 // ===========================================================================
 
 namespace CgsNetwork
 {
-    struct DefaultPlayerInfoData : public ServerInterfaceStructureInterface
+    struct DefaultPlayerInfoData : public ServerInterfacePlayerInfoDataBase
     {
         DefaultPlayerInfoData();
 
@@ -49,6 +28,14 @@ namespace CgsNetwork
 
         // Vtable slot 6: reset the record to its defaults before a new game.
         virtual bool Prepare();
+
+        // The structure-interface slots: an empty pattern of length 20, and no data block
+        // (each is a shared folded body on the console).
+        virtual const char* GetPattern() const;
+        virtual s32         GetPatternLength() const;
+        virtual u32         GetDataSize() const;
+        virtual void*       GetData();
+        virtual const void* GetData() const;
     };
 } // namespace CgsNetwork
 

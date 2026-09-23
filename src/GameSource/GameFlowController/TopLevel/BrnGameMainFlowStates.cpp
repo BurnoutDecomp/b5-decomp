@@ -18,6 +18,9 @@
 #include "GameSource/GameState/BrnGameStateModule.h"    // BrnGameState::GameStateModule::GetOutputBuffer (BridgeGameStateToWorld source)
 #include "GameSource/GameState/BrnGameStateModuleIO.h"  // GameStateModuleIO::OutputBuffer (its lock bracket)
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"  // CgsGuiModuleIO::Input/OutputBuffer (the C4 sound-leg GUI endpoints)
+#include "GameShared/GameClasses/Module/CgsModuleUtils.h"   // CgsModule::LockBuffersForIO (the partial spine's network -> GUI bracket)
+#include "GameSource/Network/BrnNetworkModule.h"              // BrnNetwork::BrnNetworkModule::ProcessBeforeSimulation (the partial spine)
+#include "GameSource/Network/BrnNetworkModuleIO.h"            // BrnNetworkModuleIO::PreSimulationInputBuffer / OutputBuffer
 
 // Engine clock (same source the loading-screen renderer animates from). Defined in
 // CgsTimeUtils.cpp; used here to pace the (currently stubbed) load so it is visible.
@@ -560,6 +563,24 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
         lpInputOutput->UnlockForRead();
     }
 
+    // THE NETWORK -> WORLD BRIDGE, second of DoUpdate_World's source bridges (between the
+    // controller and game-state legs, under a read lock on the network output): the network
+    // event translation into the world input plus the vehicle, crash and traffic network
+    // interfaces. The game module's network output buffer exists only in the sub-steps that run
+    // the full cascade, which are the only ones in which the console calls this bridge (the
+    // loading-scripted states' partial spine does not). DoUpdate_World carries the same call.
+    {
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput = lpGameModule->GetNetworkOutputBuffer();
+        if (lpNetworkOutput != 0)
+        {
+            lpNetworkOutput->LockForRead();
+            lpWorldInput->LockForWrite();
+            lpGameModule->BridgeNetworkToWorld(lpWorldInput, lpNetworkOutput);
+            lpWorldInput->UnlockForWrite();
+            lpNetworkOutput->UnlockForRead();
+        }
+    }
+
     // ⭐ THE OUTPUT BUFFER IS THE GAME MODULE'S, not this function's (2026-08-01, camera wave).
     // The console's DoUpdate @0x823F0AF8 creates ONE BrnWorldIO::UpdateOutputBuffer per
     // sub-step and threads it through DoUpdate_World, DoUpdate_Director and every other leg.
@@ -852,6 +873,11 @@ void LoadingScriptedState::Update()
         (void)lbSoundIn; (void)lbSoundOut; (void)lbSoundPre;
     }
 
+    // Below stage 8 this Update is the console's partial spine; at 8 the console runs the full
+    // module cascade instead. Read once, at the top, as the console does: a ladder that reaches
+    // 8 this frame still runs the partial spine's network leg below.
+    const bool lbPartialSpine = (gBrnScriptedLoadStage != 8);
+
     if (gBrnScriptedLoadStage != 8)
     {
         s_GameDataInput.LockForWrite();
@@ -971,6 +997,44 @@ void LoadingScriptedState::Update()
         lpGameModule->DoPreUpdate_Sound(lpGameModule->GetUpdateOutputBufferStack(),
                                         lpSoundPreUpdateOutput,
                                         lpGameModule->GetGuiInputBuffer());
+    }
+
+    // ---- the NETWORK leg of the partial spine --------------------------------------------
+    // Console position: right after DoPreUpdate_Sound, before BridgeGuiToGameState and the
+    // world drive. The spine carves a "NetworkPreSim" input and a "Network" output buffer (both
+    // off the update-OUTPUT stack, the input included), runs the module's
+    // ProcessBeforeSimulation directly with this frame's update set -- the input buffer is not
+    // staged first, and there is no post-simulation half on this path -- then bridges the
+    // network output into the GUI input under LockBuffersForIO(guiIn, networkOut).
+    // FLAG PC seam (buffer source only): the GUI input is the game module's per-sub-step one,
+    // as for DoPreUpdate_Sound above. Both network buffers are destroyed here rather than at the
+    // spine's tail; nothing else in the spine reads them.
+    if (lbPartialSpine)
+    {
+        CgsModule::IOBufferStack* lpUpdateOutputStack = lpGameModule->GetUpdateOutputBufferStack();
+        BrnNetwork::BrnNetworkModuleIO::PreSimulationInputBuffer* lpNetworkPreSimInput = 0;
+        BrnNetwork::BrnNetworkModuleIO::OutputBuffer*             lpNetworkOutput      = 0;
+        lpUpdateOutputStack->CreateIOBuffer<BrnNetwork::BrnNetworkModuleIO::PreSimulationInputBuffer>(
+            &lpNetworkPreSimInput, "NetworkPreSim");
+        lpUpdateOutputStack->CreateIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(
+            &lpNetworkOutput, "Network");
+
+        lpGameModule->GetNetworkModule().ProcessBeforeSimulation(
+            lpGameModule->GetUpdateInputBufferStack(), lpUpdateOutputStack,
+            lpNetworkPreSimInput, lpNetworkOutput, lpGameModule->ConstructUpdateSetFromFsm());
+
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput = lpGameModule->GetGuiInputBuffer();
+        if (lpGuiInput != 0)
+        {
+            const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpcNetworkOutput = lpNetworkOutput;
+            CgsModule::LockBuffersForIO(lpGuiInput, lpcNetworkOutput);
+            lpGameModule->BridgeNetworkToGui(lpGuiInput, lpcNetworkOutput);
+            CgsModule::UnlockBuffersForIO(lpGuiInput, lpcNetworkOutput);
+        }
+
+        lpUpdateOutputStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&lpNetworkOutput);
+        lpUpdateOutputStack->DestroyIOBuffer<BrnNetwork::BrnNetworkModuleIO::PreSimulationInputBuffer>(
+            &lpNetworkPreSimInput);
     }
 
     {
@@ -1421,8 +1485,11 @@ void MainGameFlowStateInitialLoadingScreen::Update()
         }
         break;
     case E_LOADINGSTAGE_NETWORK:
-        // X360: LoadNetworkModule. [stub]
-        if (StageDwellElapsed())
+        // LoadNetworkModule: the network module's staged Prepare, pumped once per frame until
+        // it reports prepared, its data requests forwarded into this frame's GameData input
+        // meanwhile. The console then falls through stage 6 into 7 in the same frame; this
+        // ladder advances one stage per frame, as for every other stage here.
+        if (LoadNetworkModule(lpGameDataInput, lpGameDataOutput))
             AdvanceLoadingStage(E_LOADINGSTAGE_JUICE);
         break;
     case E_LOADINGSTAGE_JUICE:

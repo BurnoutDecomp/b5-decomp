@@ -76,25 +76,20 @@ namespace BrnNetwork
     {
     }
 
-    // X360 @ 0x82584268. Zero the whole game-result payload: the GEN/STAT header words
-    // (+0x04..+0x40) followed by the ten 16-byte per-entry custom-results records
-    // (+0x40..+0xE0). The X360 does this in two memsets plus a 10-iteration loop that
-    // zeroes two 8-byte halves per record; reproduced here as memsets covering the
-    // identical byte ranges (order within an all-zero fill is immaterial).
+    // Zero the whole game-result payload: the GEN block (+0x04, 12
+    // bytes), the STAT block (+0x10, 48 bytes), then per index the RACE record
+    // (+0x40 + 8i) and the STUNT record (+0x90 + 8i), 8 bytes each, for ten indices.
     // Called by Prepare and SetGameStats.
     void GameResults::ClearGameData()
     {
         u8* lpBytes = GetPayloadBase();
-        std::memset(lpBytes + 0x04, 0, 12);   // GEN header (3 longs)   XMemSet(this+4,0,12)
-        std::memset(lpBytes + 0x10, 0, 48);   // STAT block (12 longs)  XMemSet(this+0x10,0,48)
+        std::memset(lpBytes + 0x04, 0, 12);
+        std::memset(lpBytes + 0x10, 0, 48);
 
-        // Ten 16-byte per-entry custom-results records: +0x40 .. +0xE0.
-        u8* lpEntry = lpBytes + 0x40;
         for (s32 liIndex = 0; liIndex < 10; ++liIndex)
         {
-            std::memset(lpEntry,     0, 8);
-            std::memset(lpEntry + 8, 0, 8);
-            lpEntry += 16;
+            std::memset(lpBytes + 0x40 + liIndex * 8, 0, 8);
+            std::memset(lpBytes + 0x90 + liIndex * 8, 0, 8);
         }
     }
 
@@ -252,6 +247,13 @@ namespace BrnNetwork
     void* GameResults::GetData()
     {
         CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
-        return GetPayloadBase() + 4;
+        return mGameData;
+    }
+
+    // Const twin of GetData: the same redirect assert, then the payload address (+0x04).
+    const void* GameResults::GetData() const
+    {
+        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        return mGameData;
     }
 }

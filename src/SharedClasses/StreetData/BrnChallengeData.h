@@ -160,6 +160,10 @@ namespace BrnStreetData
         // score type into maCarIDs[leScoreType], bounds-checked against E_SCORE_TYPE_COUNT.
         // Full 64-bit CgsID store (stdx). Body in BrnChallengeData.cpp.
         void SetCarID( ScoreType leScoreType, ::CgsID lCarID );
+
+        // The owning car id of a recorded score type (asserts the type holds a valid score).
+        // Body in BrnChallengeData.cpp.
+        ::CgsID GetCarID( ScoreType leScoreType ) const;
     };
 
     // BrnChallengeData.h:244 (DWARF). The compiled par-score record for one challenge road: a

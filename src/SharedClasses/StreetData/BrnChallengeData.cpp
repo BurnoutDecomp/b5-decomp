@@ -114,6 +114,15 @@ namespace BrnStreetData
         maCarIDs[ leScoreType ] = lCarID;
     }
 
+    // The owning car id of one score type; only a recorded score has one.
+    ::CgsID ChallengePlayerScoreEntry::GetCarID( ScoreType leScoreType ) const
+    {
+        CGS_ASSERT( mValidScores.IsBitSet( static_cast<u32>( leScoreType ) ), "mValidScores.IsBitSet( leScoreType )" );
+        CGS_ASSERT( leScoreType >= E_SCORE_TYPE_START, "leScoreType >= E_SCORE_TYPE_START" );
+        CGS_ASSERT( leScoreType < E_SCORE_TYPE_COUNT, "leScoreType < E_SCORE_TYPE_COUNT" );
+        return maCarIDs[ leScoreType ];
+    }
+
     // ChallengePlayerScoreEntry is now defined in the shared BrnChallengeData.h home (above);
     // only its method bodies live here.
     void ChallengePlayerScoreEntry::Construct()

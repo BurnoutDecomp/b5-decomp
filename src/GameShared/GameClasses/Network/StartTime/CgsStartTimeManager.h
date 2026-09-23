@@ -58,6 +58,14 @@ namespace CgsNetwork
 
     typedef s32 NetworkPlayerID;
 
+    // The default handshake timeouts Construct installs (seconds: 1, 30, 30, 30, 45, 5).
+    extern const CgsSystem::Time K_MIN_TIME_SPENT_SYNCING_TIME;
+    extern const CgsSystem::Time K_MAX_TIME_SPENT_SYNCING_TIME;
+    extern const CgsSystem::Time K_MAX_TIME_TO_WAIT_FOR_START_TIME;
+    extern const CgsSystem::Time K_MAX_TIME_TO_WAIT_FOR_SILENT_CLIENT_READY;
+    extern const CgsSystem::Time K_MAX_TIME_TO_WAIT_FOR_COMMUNICATING_CLIENT_READY;
+    extern const CgsSystem::Time K_TIME_GAP_TO_LEAVE_BEFORE_START_TIME;
+
     struct StartTimeManager
     {
         static const s32 KI_MAX_MESSAGE_DATA = 7;
@@ -202,4 +210,27 @@ namespace CgsNetwork
         CgsSystem::Time                  mGapToLeaveBeforeStartTime;                // +0x75C
         bool                             mbKeepSyncingAfterStart;                   // +0x764
     };
+
+    // Inline on the console (the network manager's Destruct carries the copy): drop the
+    // six collaborator pointers.
+    inline void StartTimeManager::Destruct()
+    {
+        mpHostMigrationManager             = nullptr;
+        mpTimeManager                      = nullptr;
+        mpPlayerManager                    = nullptr;
+        mpfStartMessageArrivedLateCallback = nullptr;
+        mpfClientReadyCallback             = nullptr;
+        mpClientReadyData                  = nullptr;
+    }
+
+    inline bool StartTimeManager::IsStartTimeValid() const
+    {
+        return mbStartTimeIsValid;
+    }
+
+    inline void StartTimeManager::SetStatus(CgsSystem::Time lTime, EPreStartSyncStatus leStatus)
+    {
+        mStatusEnterTime = lTime;
+        meStatus         = leStatus;
+    }
 }

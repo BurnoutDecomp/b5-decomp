@@ -104,10 +104,10 @@ namespace CgsNetwork
 // slots land at different byte offsets while the by-name member walk the compiler
 // emits is identical).
 //
-// EStatus / GetStatus / IsSuspended / GetConnectionComponent are the public surface
-// the committed callers drive (BrnNetworkManager / SuspensionManager); their bodies
-// belong to this class's own (not-yet-homed) behavioural TUs and are declared-only
-// here. Suspend/Resume are inherited virtuals -- overridden one level up, by
+// The component accessors below are inline on the console (every caller reads the
+// component slot straight out of the facade's component table); the status / error
+// queries callers make on this class are the inherited ServerInterfaceDirtySock ones.
+// Suspend/Resume are inherited virtuals -- overridden one level up, by
 // BrnServerInterfaceX360.
 // ===========================================================================
 
@@ -116,67 +116,43 @@ namespace BrnNetwork
     class BrnServerInterface : public BrnServerInterfaceX360
     {
     public:
-        // Mirrors CgsNetwork::ServerInterfaceDirtySock::EStatus (BUSY/ERROR/IDLE/COUNT);
-        // GetStatus returns one of these for the queried component.
-        enum EStatus
-        {
-            E_STATUS_BUSY = 0,
-            E_STATUS_ERROR,
-            E_STATUS_IDLE,
-            E_STATUS_COUNT
-        };
-
         BrnServerInterface();
 
-        // Scalar deleting destructor @ 0x827E4090 (bodied in BrnServerInterface.cpp).
+        // Scalar deleting destructor (bodied in BrnServerInterface.cpp).
         virtual ~BrnServerInterface();
 
-        // Public surface driven by the committed callers (bodies in this class's own TUs).
-        EStatus GetStatus( s32 liComponent ) const;
-        bool IsSuspended() const;
-        CgsNetwork::ServerInterfaceConnection* GetConnectionComponent();
-
-        // ADDITIVE GROW (BrnNetworkLaunchManager TU): the launch state machine drives the
-        // games component and the per-component error state of the underlying DirtySock
-        // interface. The X360 reaches these through the embedded ServerInterfaceDirtySock
-        // (this+0x38E8/0x38F4 from the network manager): GetGameComponent returns the games
-        // component pointer; GetLastError/ClearLastError read/clear the per-component last
-        // error (liComponent == E_COMPONENTS_GAMES == 1 at every launch-manager call site).
-        // Declared-only here; bodies live in this class's own (DirtySock) TUs.
-        CgsNetwork::ServerInterfaceGames* GetGameComponent();
-        s32  GetLastError( s32 liComponent ) const;
-        void ClearLastError( s32 liComponent );
-
-        // ADDITIVE GROW (BrnNetworkInviteManager TU): the invite get-game-id sub-machine queries
-        // the embedded player-info component by name (X360 UpdateGettingGameID reaches the
-        // ServerInterfacePlayerInfo through the server interface and calls GetPlayerInfoByName on
-        // it). The component itself is BrnServerInterfaceBase::mPlayerInfo; this is the named
-        // accessor for it. Declared-only here; the body lives in this class's own (DirtySock) TUs.
-        CgsNetwork::ServerInterfacePlayerInfo* GetPlayerInfoComponent();
-
-        // ADDITIVE GROW (BrnNetworkRoadRulesManager TU): OnAutoLogin reaches the embedded
-        // server-info component to read the road-rules client-config values (X360 reads the
-        // component pointer at *(mpServerInterface + 0x2C) and the assert names it
-        // "mpServerInterface->GetServerInfoComponent()"). The component itself is
-        // BrnServerInterfaceBase::mServerInfo; this is the named accessor for it.
-        // Declared-only here; the body lives in this class's own (DirtySock) TUs.
-        CgsNetwork::ServerInterfaceServerInfo* GetServerInfoComponent();
-
-        // ADDITIVE GROW (BrnNetworkLoginManagerBase TU): the login state machine drives the HTTPS
-        // download component (the terms-of-service download) and the ping-regions component, and
-        // reads-and-clears the per-component last error of the underlying DirtySock interface:
-        //   GetHttpComponent        -- LoginManagerBase::PrepareDownloadingTOS / ::UpdateDownloadingTOS
-        //                              reach the embedded ServerInterfaceHttp (the +0x38EC HTTP slot).
-        //   GetPingRegionsComponent -- LoginManagerBase::PreparePingRegions reaches the embedded
-        //                              ServerInterfacePingRegions (the +0x38EC ping-regions slot).
-        //   GetAndClearLastError    -- LoginManagerBase::UpdateConnectingDS reads-and-clears the
-        //                              connection component's last error (X360 GetAndClearLastError
-        //                              on the +0x38E8 DirtySock base) to special-case error 18.
-        // The component accessors are the BrnServerInterfaceBase::mHttp / the inherited ping-regions
-        // slot; declared-only here, bodies in this class's own (DirtySock) TUs.
-        CgsNetwork::ServerInterfaceHttp* GetHttpComponent();
-        CgsNetwork::ServerInterfacePingRegions* GetPingRegionsComponent();
-        s32  GetAndClearLastError( s32 liComponent );
+        // Typed views of the facade's component table (slot = CgsNetwork::EComponents).
+        // Inline on the console: each caller loads the slot's component pointer directly.
+        CgsNetwork::ServerInterfaceConnection* GetConnectionComponent()
+        {
+            return reinterpret_cast<CgsNetwork::ServerInterfaceConnection*>(
+                CgsNetwork::ServerInterfaceDirtySock::GetConnectionComponent() );
+        }
+        CgsNetwork::ServerInterfaceGames* GetGameComponent()
+        {
+            return reinterpret_cast<CgsNetwork::ServerInterfaceGames*>(
+                CgsNetwork::ServerInterfaceDirtySock::GetGameComponent() );
+        }
+        CgsNetwork::ServerInterfacePlayerInfo* GetPlayerInfoComponent()
+        {
+            return reinterpret_cast<CgsNetwork::ServerInterfacePlayerInfo*>(
+                GetComponent( CgsNetwork::E_COMPONENTS_PLAYER_INFO ) );
+        }
+        CgsNetwork::ServerInterfaceHttp* GetHttpComponent()
+        {
+            return reinterpret_cast<CgsNetwork::ServerInterfaceHttp*>(
+                GetComponent( CgsNetwork::E_COMPONENTS_HTTP ) );
+        }
+        CgsNetwork::ServerInterfaceServerInfo* GetServerInfoComponent()
+        {
+            return reinterpret_cast<CgsNetwork::ServerInterfaceServerInfo*>(
+                GetComponent( CgsNetwork::E_COMPONENTS_SERVERINFO ) );
+        }
+        CgsNetwork::ServerInterfacePingRegions* GetPingRegionsComponent()
+        {
+            return reinterpret_cast<CgsNetwork::ServerInterfacePingRegions*>(
+                CgsNetwork::ServerInterfaceDirtySock::GetPingRegionsComponent() );
+        }
 
         // NO DATA MEMBERS: this class adds none. The +0xC2C component is
         // BrnServerInterfaceX360::mGames (see the correction in the header note), and

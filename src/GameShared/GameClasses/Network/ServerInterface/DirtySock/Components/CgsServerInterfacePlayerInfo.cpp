@@ -8,19 +8,12 @@
 #include "lobbyfinduser.h"   // LobbyFindUser* family
 #include "lobbystatbook.h"   // LobbyStatbook* family
 #include "lobbysetting.h"    // LobbySetting* family
+#include "lobbytagfield.h"   // TagFieldFind / TagFieldGetString / TagFieldSetString
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 
-// Vendor DirtySDK lobby/tagfield C-API entry points used by GetPlayerXUIDByName /
-// _GetPlayerXUIDCallback. Declared extern "C" at file scope, mirroring the sibling
-// CgsServerInterfaceGames.cpp (TagFieldSetString @:68 / TagFieldFind @:65). The
-// real prototypes live in the DirtySDK headers.
-extern "C"
-{
-    s32   TagFieldSetString(char* pRecord, s32 iRecLen, const char* pKey, const char* pValue);
-    void* TagFieldFind(const char* pRecord, const char* pKey);
-    // DirtyAddrToHostAddr(pHostAddr, iLen, pField) -- decode a "MADDR" tag field into a host
-    // address (here the 8-byte XUID slot the caller passed in).
-    s32   DirtyAddrToHostAddr(void* pHostAddr, s32 iLen, const void* pField);
-}
+#include <string.h>          // _strnicmp
+
+#include "dirtyaddr.h"       // DirtyAddrToHostAddr
 
 // ===========================================================================
 // CgsNetwork::ServerInterfacePlayerInfo
@@ -363,14 +356,12 @@ namespace CgsNetwork
             static_cast<ServerInterfacePlayerInfo*>(lpData);
         CGS_ASSERT(lpComponent->mpXUID, "lpServerInterface->mpXUID");
 
-        // msg+0x0C is the lobby result code; msg+0x10 is the record data pointer.
-        const s32 liResult = reinterpret_cast<const s32*>(lpMsg)[3];   // +0x0C
+        // The lobby result code and the record text.
+        const s32 liResult = lpMsg->code;
         if (liResult == 0)
         {
-            void* lpField = TagFieldFind(
-                reinterpret_cast<const char*>(reinterpret_cast<void**>(lpMsg)[4]),  // +0x10
-                "MADDR");
-            DirtyAddrToHostAddr(lpComponent->mpXUID, 8, lpField);
+            const char* lpField = TagFieldFind(lpMsg->pData, "MADDR");
+            DirtyAddrToHostAddr(lpComponent->mpXUID, 8, reinterpret_cast<const DirtyAddrT*>(lpField));
         }
         else
         {
@@ -680,5 +671,65 @@ namespace CgsNetwork
                 liResult, lEntry.mpMappingTable, lEntry.miNumMappings);
         lpComponent->EndActionCore(static_cast<int>(leError));
         lpComponent->meCurrentAction = E_ACTION_COUNT;
+    }
+
+    // Both empty: the owning server interface's suspend / resume fan-out reaches the shared
+    // empty body for this component.
+    void ServerInterfacePlayerInfo::Suspend()
+    {
+    }
+
+    void ServerInterfacePlayerInfo::Resume()
+    {
+    }
+
+    // -----------------------------------------------------------------------------------
+    // LoadSettingsCallback (static)
+    //   Settings load completed: map the result for the current action and finish it.
+    // -----------------------------------------------------------------------------------
+    void ServerInterfacePlayerInfo::LoadSettingsCallback(DirtySock::LobbySettingRefT* /*lpRef*/,
+                                                         s32 liResult, void* lpData)
+    {
+        CGS_ASSERT(lpData, "lpData");
+        ServerInterfacePlayerInfo* lpPlayerInfoComponent =
+            static_cast<ServerInterfacePlayerInfo*>(lpData);
+        CGS_ASSERT(lpPlayerInfoComponent, "lpPlayerInfoComponent");
+
+        const DSErrorToServerInterfaceErrorTable& lEntry =
+            KA_DS_ERROR_TABLE_LOOKUP[lpPlayerInfoComponent->meCurrentAction];
+        EServerInterfaceError leError =
+            lpPlayerInfoComponent->ServerInterfaceComponent::ConvertError(
+                liResult, lEntry.mpMappingTable, lEntry.miNumMappings);
+        lpPlayerInfoComponent->ServerInterfaceComponent::EndActionCore(static_cast<int>(leError));
+        lpPlayerInfoComponent->meCurrentAction = E_ACTION_COUNT;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // EventStatusCallback (static)
+    //   A lobby 'user' event about someone other than the local user: tell the component
+    //   the player stats changed. The local user record ('self') carries its ident at +0
+    //   and its name at +0x28.
+    // -----------------------------------------------------------------------------------
+    void ServerInterfacePlayerInfo::EventStatusCallback(LobbyApiRefT* /*lpRef*/, LobbyApiMsgT* lpMsg,
+                                                        void* lpData)
+    {
+        ServerInterfacePlayerInfo* lpComponent = static_cast<ServerInterfacePlayerInfo*>(lpData);
+        if (lpMsg->kind != 0x75736572)   // 'user'
+        {
+            return;
+        }
+
+        u32 lauSelf[0x234 / sizeof(u32)];
+        LobbyApiStatus(lpComponent->mpServerInterface->GetLobbyAPIRef(), 0x73656C66 /* 'self' */,
+                       lauSelf, sizeof(lauSelf));
+
+        char lacName[260];
+        TagFieldGetString(TagFieldFind(lpMsg->pData, "S"), lacName, sizeof(lacName), "");
+
+        if (static_cast<s32>(lauSelf[0]) > 0
+            && _strnicmp(lacName, reinterpret_cast<const char*>(lauSelf) + 0x28, sizeof(lacName)) != 0)
+        {
+            lpComponent->OnEvent(E_SERVER_INTERFACE_PLAYER_INFO_EVENT_STATS_CHANGED, 0);
+        }
     }
 }

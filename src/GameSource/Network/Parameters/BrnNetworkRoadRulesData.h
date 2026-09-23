@@ -24,6 +24,7 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // committed home of `typedef u64 CgsID`
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (inline row accessors)
 
 namespace BrnNetwork
 {
@@ -60,16 +61,31 @@ namespace BrnNetwork
         // BrnNetworkRoadRulesData.h:60 -- append one {record-index, score, car-id} row.
         bool SetScoreData(s32 liRecordIndex, s32 liQuantisedScore, CgsID lCarID);
 
-        // BrnNetworkRoadRulesData.h:64 -- live row count.
-        s32 GetNumScores();
+        // Header-inline accessors: no standalone console body. The inlined copies in
+        // ServerInterfaceCustomCommands::SetRoadRulesForLocalPlayer read the members directly and
+        // fire the "liIndex < miNumScores" range assert before each per-row read.
+        s32 GetNumScores() { return miNumScores; }
 
-        // BrnNetworkRoadRulesData.h:69 / :74 / :79 -- per-row accessors.
-        s32   GetScoreValue(s32 liIndex);
-        s32   GetRecordIndex(s32 liIndex);
-        CgsID GetCarID(s32 liIndex);
+        s32 GetScoreValue(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex < miNumScores, "liIndex < miNumScores");
+            return maiQuantisedScore[liIndex];
+        }
 
-        // BrnNetworkRoadRulesData.h:83 -- the unique road-rules id stamped at Construct.
-        u64 GetUniqueID();
+        s32 GetRecordIndex(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex < miNumScores, "liIndex < miNumScores");
+            return maiRecordIndices[liIndex];
+        }
+
+        CgsID GetCarID(s32 liIndex)
+        {
+            CGS_ASSERT(liIndex < miNumScores, "liIndex < miNumScores");
+            return maCarIDs[liIndex];
+        }
+
+        // The unique road-rules id stamped at Construct.
+        u64 GetUniqueID() { return mu64RoadRulesID; }
 
     private:
         CgsID maCarIDs[KI_MAX_UPLOAD_DATA];           // +0x00
@@ -90,9 +106,9 @@ namespace BrnNetwork
     class RoadRulesDownloadData
     {
     public:
-        // BrnNetworkRoadRulesData.h:120 -- zero the table (incl. miNumScores) and write
-        // the fixed validity pattern. Body in the owning TU; declared-only here (the
-        // custom-commands HandleIncomingMessage constructs one on the stack before fill).
+        // BrnNetworkRoadRulesData.h:120 -- build the fixed validity pattern and empty the
+        // table (the custom-commands HandleIncomingMessage constructs one on the stack
+        // before the fill).
         void Construct();
 
         // DownloadData mirrors the DWARF nested struct (BrnNetworkRoadRulesData.h:166).
@@ -116,6 +132,9 @@ namespace BrnNetwork
         // (miNumScores < KI_MAX_DOWNLOAD_DATA) and that the name fits the 16-byte slot.
         void SetDownloadedRoadRulesData(char* lpName, s32 liScoreType, s32 liQuantisedScore);
 
+        // Header-inline: the road-rules download callback reads the row count directly.
+        s32 GetNumScores() { return mData.miNumScores; }
+
     private:
         DownloadData mData;                                  // +0x000
         char         macPattern[KI_DOWNLOAD_DATA_PATTERN_LENGTH]; // +0x3C4
@@ -134,9 +153,13 @@ namespace BrnNetwork
     {
     public:
         // BrnNetworkRoadRulesData.h:200 -- stamp the table with its road-rules id and reset
-        // the row count to 0. Body in the owning TU; declared-only here (the custom-commands
-        // HandleIncomingMessage stamps a stack instance with the parsed id before fill).
-        void Construct(u64 lu64RoadRulesID);
+        // the row count to 0. Inlined where the custom-commands HandleIncomingMessage stamps
+        // a stack instance with the parsed id before the fill.
+        void Construct(u64 lu64RoadRulesID)
+        {
+            miNumScores     = 0;
+            mu64RoadRulesID = lu64RoadRulesID;
+        }
 
         // X360 0x825418B0 -- read row liDownloadIndex out into the caller's score-type
         // and score words. Asserts the index is in [0, KI_MAX_DOWNLOAD_DATA) and
@@ -147,6 +170,10 @@ namespace BrnNetwork
         // X360 0x82580978 -- append a downloaded row (score-type + score) at miNumScores
         // and bump the count. Asserts there is room (miNumScores < KI_MAX_DOWNLOAD_DATA).
         void SetDownloadedRoadRulesData(s32 liScoreType, s32 liScore);
+
+        // Header-inline accessors: the local download callback reads the members directly.
+        s32 GetNumScores() { return miNumScores; }
+        u64 GetRoadRulesID() { return mu64RoadRulesID; }
 
     private:
         s32 maiScores[KI_MAX_DOWNLOAD_DATA];      // +0x000

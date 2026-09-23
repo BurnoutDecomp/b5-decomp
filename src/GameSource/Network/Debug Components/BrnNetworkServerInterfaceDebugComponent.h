@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h"  // CgsDev::DebugComponent (real base)
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                     // CgsNetwork::EServerType
+#include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // EGameServerConnectionType
 
 namespace CgsNetwork { class ServerInterfaceConnection; }
 
@@ -32,19 +33,18 @@ namespace BrnNetwork
     class BrnServerInterfaceBase;   // back-pointer member only (would cycle: its header includes this one)
     class BrnNetworkManager;        // back-pointer member only
 
-    // Recovered accessor for the connection component the debug component disconnects (X360 inlined
-    // it as *(serverInterfaceBase+4) -> the stored CgsNetwork::ServerInterfaceConnection*). Declared
-    // free here rather than as a BrnServerInterfaceBase method because that header is not yet
-    // gate-compilable (its include chain references unreconstructed headers); pointer-only use of an
-    // incomplete BrnServerInterfaceBase is the documented cascade-avoidance forward-decl exception.
-    // Body lands with the BrnServerInterfaceBase reconstruction.
-    CgsNetwork::ServerInterfaceConnection* GetConnectionComponent(BrnServerInterfaceBase* lpServerInterfaceBase);
-
     class ServerInterfaceDebugComponent : public CgsDev::DebugComponent
     {
     public:
         void Construct(BrnServerInterfaceBase* lpServerInterfaceBase);   // @ 0x82585700
         void Update() override;                                          // @ 0x8258AC70
+
+        // The server interface's prepare / release / destruct stages reset the menu state (inlined
+        // into those stages on the console; defined in this component's TU because Prepare reads
+        // the manager's current server type through the complete BrnNetworkManager).
+        bool Prepare();
+        bool Release();
+        void Destruct();
 
         // @0x82597690 -- gate the connection-status table on mbDisplayConnectionStatus, then
         // tail-call RenderConnectionStatus. Overrides CgsDev::DebugComponent::RenderHUD.
@@ -54,6 +54,17 @@ namespace BrnNetwork
         // current server type (+0x0C) right after the server interface is constructed.
         void SetNetworkManager(BrnNetworkManager* lpNetworkManager)    { mpNetworkManager = lpNetworkManager; }
         void SetServerType(CgsNetwork::EServerType leServerType)       { miServerType = leServerType; }
+
+        // The game-server connection type the matchmaking actions hand the games component
+        // (the menu variable at +0x10; MatchMakingManager::Prepare seeds it).
+        void SetConnectionType(CgsNetwork::ServerInterfaceGames::EGameServerConnectionType leConnectionType)
+        {
+            miConnectionType = leConnectionType;
+        }
+        CgsNetwork::ServerInterfaceGames::EGameServerConnectionType GetConnectionType() const
+        {
+            return static_cast<CgsNetwork::ServerInterfaceGames::EGameServerConnectionType>(miConnectionType);
+        }
 
     protected:
         const char* GetName() const override;   // @ 0x82585798

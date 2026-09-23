@@ -280,6 +280,14 @@ namespace Vehicle
     // EActiveRaceCarIndex is BrnPlayerDriverControls::miVehicleID at +0, unchanged.
     struct BrnNetworkDriverControls : public BrnPlayerDriverControls
     {
+        // The network player's update receiver builds one on its stack; the type store is the
+        // first thing it does.
+        BrnNetworkDriverControls() { meDriverType = E_DRIVER_TYPE_NETWORK; }
+
+        // Out of line (BrnPlayerDriverControls.cpp): no vehicle, neutral controls, identity
+        // rotation, no motion, no crasher. The driver type is left as constructed.
+        void Clear();
+
         Matrix44Affine mTransform;              // @0x50
         Vector3        mLinearVelocity;         // @0x90
         Vector3        mAngularVelocity;        // @0xA0

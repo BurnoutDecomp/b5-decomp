@@ -1,6 +1,8 @@
 #include "GameShared/GameClasses/Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"        // LobbyNameCmp
+#include "GameShared/GameClasses/Network/CgsNetworkManager.h"  // NetworkManager::GetActiveControllerPort
 #include "GameSource/GameState/BrnCgsPlayerName.h"
 
 // =============================================================================
@@ -14,17 +16,6 @@
 namespace CgsNetwork
 {
     using namespace CgsNetwork::DirtySock;
-
-    // -------------------------------------------------------------------------
-    // Update @ 0x8288B588 reads the active controller / user index out of the
-    // NetworkManager (asm: lwz r4, 0x60(mpNetworkManager)) and feeds it to
-    // HLBApiSetUserIndex. NetworkManager has no shared header (its definition is
-    // TU-local to CgsNetworkManager.cpp), so the +0x60 field cannot be reached by
-    // name from here. It is the active-controller-port member; declared as an
-    // external accessor that the NetworkManager TU owns. Flagged: the accessor's
-    // home is un-reconstructed; the read itself (offset +0x60 == controller port)
-    // is grounded in the asm.
-    s32 BuddyManager_GetNetworkManagerUserIndex(const NetworkManager* lpNetworkManager);
 
     // =========================================================================
     // Construct @ 0x8287D478
@@ -63,7 +54,7 @@ namespace CgsNetwork
                 CGS_ASSERT(mpBuddies, "mpBuddies");
 
                 HLBApiRegisterBuddyChangeCallback(mpBuddies, reinterpret_cast<void*>(&_BuddiesChangedCallback), this);
-                HLBListSendChatMsg(mpBuddies, reinterpret_cast<void*>(&_MessageArrivedCallback), reinterpret_cast<s32>(this));
+                HLBListSendChatMsg(mpBuddies, reinterpret_cast<void*>(&_MessageArrivedCallback), reinterpret_cast<s32>(this), 0, 0);
                 HLBApiRegisterBuddyPresenceCallback(mpBuddies, reinterpret_cast<void*>(&_PresenceChangedCallback), this);
 
                 if (mpBuddies)
@@ -74,7 +65,7 @@ namespace CgsNetwork
                     HLBApiSetSortFunction(mpBuddies, reinterpret_cast<void*>(lpfnSort));
                 }
 
-                HLBApiSetUserIndex(mpBuddies, BuddyManager_GetNetworkManagerUserIndex(mpNetworkManager));
+                HLBApiSetUserIndex(mpBuddies, mpNetworkManager->GetActiveControllerPort());
             }
         }
         else
@@ -118,6 +109,46 @@ namespace CgsNetwork
             return HLBListGetBuddyCount(mpBuddies);
         }
         return 0;
+    }
+
+    // =========================================================================
+    // GetNumFullBuddies
+    //
+    // Count the real (not temporary) buddies in the list.
+    // =========================================================================
+    s32 BuddyManagerBase::GetNumFullBuddies()
+    {
+        const s32 liBuddyCount = mpBuddies ? HLBListGetBuddyCount(mpBuddies) : 0;
+
+        s32 liNumFullBuddies = 0;
+        for (s32 liIndex = 0; liIndex < liBuddyCount; ++liIndex)
+        {
+            if (IsFullBuddy(liIndex))
+            {
+                ++liNumFullBuddies;
+            }
+        }
+        return liNumFullBuddies;
+    }
+
+    // =========================================================================
+    // GetBuddyName
+    //
+    // Copy the indexed buddy's name into lpOutName; false when there is no such
+    // buddy.
+    // =========================================================================
+    bool BuddyManagerBase::GetBuddyName(s32 liIndex, PlayerName* lpOutName)
+    {
+        CGS_ASSERT(mpBuddies, "mpBuddies");
+
+        HLBBudT* lpBuddy = HLBListGetBuddyByIndex(mpBuddies, liIndex);
+        if (lpBuddy == 0)
+        {
+            return false;
+        }
+
+        lpOutName->Construct(HLBBudGetName(lpBuddy));
+        return true;
     }
 
     // =========================================================================
@@ -216,6 +247,23 @@ namespace CgsNetwork
     }
 
     // =========================================================================
+    // _SortBuddyFunction (static)
+    //
+    // The buddy-list comparator installed with the buddy API: orders two buddy
+    // records by name.
+    // =========================================================================
+    s32 BuddyManagerBase::_SortBuddyFunction(void* /*lpUserData*/, s32 /*liSortContext*/,
+                                             void* lpHLBBuddy1, void* lpHLBBuddy2)
+    {
+        CGS_ASSERT(lpHLBBuddy1, "lpHLBBuddy1");
+        CGS_ASSERT(lpHLBBuddy2, "lpHLBBuddy2");
+
+        const char* lpcName2 = HLBBudGetName(static_cast<HLBBudT*>(lpHLBBuddy2));
+        const char* lpcName1 = HLBBudGetName(static_cast<HLBBudT*>(lpHLBBuddy1));
+        return LobbyNameCmp(lpcName1, lpcName2);
+    }
+
+    // =========================================================================
     // GetAllBuddyNames @ 0x8287DD68
     //
     // Walks the buddy list, and for every real buddy writes its display-name
@@ -279,7 +327,7 @@ namespace CgsNetwork
     void BuddyManagerBase::RevokeAllInvites()
     {
         CGS_ASSERT(mpBuddies, "mpBuddies");
-        HLBListSendChatMsg(mpBuddies, 0, 0);
+        HLBListSendChatMsg(mpBuddies, 0, 0, 0, 0);
     }
 
     // =========================================================================
@@ -328,6 +376,47 @@ namespace CgsNetwork
         CGS_ASSERT(mpBuddies, "mpBuddies");
 
         HLBListSendChatMsg(mpBuddies, lpBuddyName->GetPlayerName(), HLB_MSG_INVITE_REPLY, 0, 0);
+    }
+
+    // =========================================================================
+    // Message queries (virtual). The leaf vtable keeps these base bodies: the
+    // buddy API holds no messages for this platform.
+    // =========================================================================
+    s32 BuddyManagerBase::GetTotalNumberOfMessages(const PlayerName* /*lpPlayerName*/)
+    {
+        return 0;
+    }
+
+    s32 BuddyManagerBase::GetNumberOfUnreadMessages(const PlayerName* /*lpPlayerName*/)
+    {
+        return 0;
+    }
+
+    // =========================================================================
+    // Empty notification hooks (virtual): RefreshBuddyList, MessageArrived and
+    // InviteSent do nothing in the base.
+    // =========================================================================
+    void BuddyManagerBase::RefreshBuddyList()
+    {
+    }
+
+    void BuddyManagerBase::MessageArrived(const char* /*lpcMessage*/)
+    {
+    }
+
+    void BuddyManagerBase::InviteSent(bool /*lbSuccess*/)
+    {
+    }
+
+    // =========================================================================
+    // MessageSent (virtual)
+    //
+    // A failed chat send asserts with the error code.
+    // =========================================================================
+    void BuddyManagerBase::MessageSent(bool lbSuccess, s32 /*liError*/)
+    {
+        CGS_ASSERT(lbSuccess,
+                   "CgsNetwork::BuddyManagerBase::MessageSent" "FAILED TO SEND MESSAGE, error code: ");
     }
 
     // =========================================================================

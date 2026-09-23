@@ -91,6 +91,10 @@ namespace CgsNetwork
     const s32 KI_FRAME_GAP_BETWEEN_PINGS         = 2;
     const s32 KI_FRAME_GAP_BETWEEN_PINGS_IN_GAME = 5;
 
+    // How many frames a received unreliable message's frame is remembered for (a writable
+    // global in the image, 10800).
+    extern s32 KI_FRAMES_TO_DISCARD_MESSAGE_RECEIVED_DATA;
+
     // The shared signed player-index typedef + "no player" sentinel (mirrors
     // MessageWithPlayerIDs::NetworkPlayerID, declared here so the NetworkPlayer API does
     // not have to pull in the whole message hierarchy).
@@ -154,12 +158,20 @@ namespace CgsNetwork
         virtual void Update(const CgsSystem::TimerStatus* lpTimerStatus,
                             u16 lu16CurrentFrame, bool lbInGame);
         // Round edges and the connection-telemetry hook: vtable slots 4..6, overridden by
-        // the game's network player. No standalone base bodies exist in the console image.
-        virtual void OnRoundLoadingStart();
-        virtual void OnRoundStart();
-        virtual void SendDirtySockConnectionTelemetry(u32 luValue0, u32 luValue1);
+        // the game's network player. The base has no bodies anywhere in the image (no base
+        // vtable is ever emitted), so they stay pure.
+        virtual void OnRoundLoadingStart() = 0;
+        virtual void OnRoundStart() = 0;
+        virtual void SendDirtySockConnectionTelemetry(u32 luValue0, u32 luValue1) = 0;
 
-        void Destruct();
+        // Inlined into the player registry's Destruct on the console.
+        void Destruct()
+        {
+            miNumberMessagesRegistered = 0;
+            mpPlayerManager            = nullptr;
+            meLocalConsoleFrameRate    = static_cast<CgsSystem::EFrameRate>(-1);
+            meRemoteConsoleFrameRate   = static_cast<CgsSystem::EFrameRate>(-1);
+        }
 
         // --- message-table management ---
         void     RegisterMessageType(s32 leType, s32 liLength, Message* lpSendMsg,
@@ -182,16 +194,18 @@ namespace CgsNetwork
         // Deliver an ack (lbAck) or nack for one of our reliable messages to its callback.
         void ReceiveAckOrNack(SignalMessage* lpMessage, bool lbAck);
 
-        // --- connection / identity accessors ---
-        NetworkPlayerID GetPlayerID() const;
-        void            SetConnectionData(ConnectionData lConnectionData);
-        ConnectionData  GetConnectionData() const;
-        const char*     GetName() const;
+        // --- connection / identity accessors (inlined at every console call site) ---
+        NetworkPlayerID GetPlayerID() const                    { return mPlayerID; }
+        void            SetConnectionData(ConnectionData lConnectionData) { mConnectionData = lConnectionData; }
+        ConnectionData  GetConnectionData() const              { return mConnectionData; }
+        const char*     GetName() const                        { return macName; }
         void            SetLocalConsoleFrameRate(CgsSystem::EFrameRate leFrameRate);
         void            SetRemoteConsoleFrameRate(CgsSystem::EFrameRate leFrameRate);
-        CgsSystem::EFrameRate GetLocalConsoleFrameRate();
-        CgsSystem::EFrameRate GetRemoteConsoleFrameRate();
+        CgsSystem::EFrameRate GetLocalConsoleFrameRate()       { return meLocalConsoleFrameRate; }
+        CgsSystem::EFrameRate GetRemoteConsoleFrameRate()      { return meRemoteConsoleFrameRate; }
         bool            HasConnectionFailed() const { return mbHasConnectionFailed; }
+        // Raised by the registry when the session reports this player disconnected (+0xBA9).
+        void            SetDisconnected()                      { mbNetworkPlayerPaused = true; }
 
     protected:
         void CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus* lpTimerStatus);
@@ -227,6 +241,10 @@ namespace CgsNetwork
         // bandwidth ledger is class-static).
         CompressionAndEncryptionUtils mPacketPacker;     // +0xB94
         char                  macName[16];               // +0xB98
+        // NOTE: the source declares the paused flag first, so the source names of +0xBA8 and
+        // +0xBA9 are the other way round (+0xBA8 is what the no-packet timeout raises, +0xBA9
+        // what SetDisconnected and a failed send raise).
+        // The tree names are kept; every access matches the console offset.
         bool                  mbHasConnectionFailed;     // +0xBA8
     public:
         // Public in the class declaration: the start-time manager reads it directly.

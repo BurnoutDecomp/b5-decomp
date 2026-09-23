@@ -34,7 +34,8 @@ namespace CgsNetwork
 {
     struct TestConnectionMessage : ReliableMessage
     {
-        void               Construct();
+        // Inlined at every call site on the console: the player-id base reset only.
+        void               Construct() { MessageWithPlayerIDs::Construct(); }
         void               PrepareForSend(u16 lu16Frame);
         bool               Retrieve();
         void               Update();

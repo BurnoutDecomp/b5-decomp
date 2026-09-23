@@ -33,6 +33,10 @@ namespace BrnNetwork
         s32                                 miActionIndex;      // +0x38
 
         void                           Construct();
+        void                           PrepareForSend(u16 lu16FrameCount, CgsID lChallengeID,
+                                                      BrnNetworkModuleIO::EChallengeEventType leEventType,
+                                                      BrnGameState::EChallengeStatus leChallengeStatus,
+                                                      s32 liActionIndex);
         bool                           Retrieve(CgsID* lpChallengeID,
                                                 BrnNetworkModuleIO::EChallengeEventType* lpeEventType,
                                                 BrnGameState::EChallengeStatus* lpeChallengeStatus,

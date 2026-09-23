@@ -30,8 +30,13 @@ struct BurnoutSkillzData
         E_BURNOUT_SKILL_NEAR_MISSES             = 6,
         E_BURNOUT_SKILL_ONCOMING                = 7,
         E_BURNOUT_SKILL_POWER_PARKING           = 8,
-        E_BURNOUT_SKILL_TO_SEND_VIA_NETWORK_COUNT = 9,
-        E_BURNOUT_SKILL_TOTAL                   = 9,
+        // This build has two more scoring skills (9 and 10, names unrecovered) ahead of the
+        // unused slot 11: the skillz message sends skills 0..10, the skills menu never folds
+        // in slot 11, and it treats 12 / 13 as the road-rule time / crash records.
+        // FLAG: E_BURNOUT_SKILL_ROAD_RULE_TIME / _CRASH below keep the older values (10 / 11);
+        // this build's road-rule slots are E_BURNOUT_SKILL_EXTRA_12 / _13.
+        E_BURNOUT_SKILL_TO_SEND_VIA_NETWORK_COUNT = 11,
+        E_BURNOUT_SKILL_TOTAL                   = 11,
         E_BURNOUT_SKILL_ROAD_RULE_TIME          = 10,
         E_BURNOUT_SKILL_ROAD_RULE_CRASH         = 11,
         // GROWN (FLAG): the X360 build (Clear @0x8230FBF0 loop bound, GetSkillAccuracy

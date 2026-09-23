@@ -28,6 +28,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"         // CgsModule::EventQueue<T,N>
+#include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (AppendStatsEvent)
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"   // BrnNetwork::NetworkPlayerStats (132 bytes)
 
 namespace BrnNetwork
@@ -64,7 +65,12 @@ namespace BrnNetwork
         {
             typedef CgsModule::EventQueue<NetworkPlayerStats, KI_STATS_OUTPUT_BUFFER_SIZE> StatsOutputQueue;
 
-            void AppendStatsEvent(NetworkPlayerStats* lpStats);
+            // Inlined by the stats manager's posting paths: a bounds-gated append whose failure
+            // trips the assert.
+            void AppendStatsEvent(NetworkPlayerStats* lpStats)
+            {
+                CGS_ASSERT(mStatsEventQueue.AddEventSafe(*lpStats), "mStatsEventQueue.AddEventSafe(*lpStats)");
+            }
             const StatsOutputQueue* GetStatsOutputQueue() const { return &mStatsEventQueue; }
             // Header inlines: OutputBuffer::Construct emits the queue's Construct, then its
             // length reset, at this interface's offset.

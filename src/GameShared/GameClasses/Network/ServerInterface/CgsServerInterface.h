@@ -20,18 +20,10 @@
 // Interface derives from this", and the CgsServerInterface.h DWARF chain
 // `ServerInterface : public ServerInterfaceDirtySockPS3` on the PS3 build).
 //
-// FLAGGED: this type has no dedicated dossier in the available exports -- its
-// own member functions are reconstructed in their owning TUs as they are reached.
-// This header models only the surface the committed callers require:
-//   * the inheritance edge to ServerInterfaceDirtySockX360 (so a derived class is
-//     a complete polymorphic type with a virtual destructor), and
-//   * the three component accessors BrnServerInterfaceBase's inline wrappers call
-//     (GetDownloadableConfigComponent / GetTelemetryComponent /
-//      GetCustomCommandsComponent). They return the shared ServerInterfaceComponent
-//     base pointer; the Brn wrappers reinterpret_cast it to the Brn leaf type. The
-//     component objects live in the maComponents[] slot table inherited from
-//     ServerInterfaceDirtySock; the accessors' bodies belong to this type's own
-//     (not-yet-homed) TU, so they are declared-only here.
+// This header models the inheritance edge to the platform facade (so a derived class
+// is a complete polymorphic type with a virtual destructor). The component
+// accessors the game-side wrappers call are the inline slot reads inherited from
+// ServerInterfaceDirtySock.
 // No data members are added: ServerInterface introduces none of its own in the
 // recovered layout (the components are embedded by the most-derived game class).
 // ===========================================================================
@@ -44,15 +36,13 @@ namespace CgsNetwork
     class ServerInterface : public ServerInterfaceDirtySockX360
     {
     public:
-        ServerInterface();
-        virtual ~ServerInterface();
-
-        // Component accessors (declared-only; bodied in this type's own TU). They hand
-        // back the shared ServerInterfaceComponent base; the game-side wrappers
-        // reinterpret_cast to the concrete Brn leaf component.
-        ServerInterfaceComponent* GetDownloadableConfigComponent();
-        ServerInterfaceComponent* GetTelemetryComponent();
-        ServerInterfaceComponent* GetCustomCommandsComponent();
+        // Both inline and empty: the owning game-side constructor / destructor store
+        // nothing for this level but the vtable pointers. The component accessors the
+        // game-side wrappers call (GetDownloadableConfigComponent / GetTelemetryComponent /
+        // GetCustomCommandsComponent) are the inline slot reads inherited from
+        // ServerInterfaceDirtySock.
+        ServerInterface() {}
+        virtual ~ServerInterface() {}
     };
 }
 

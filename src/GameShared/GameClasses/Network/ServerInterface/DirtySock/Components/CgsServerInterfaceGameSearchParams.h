@@ -94,9 +94,9 @@ namespace CgsNetwork
         // X360 @ 0x82878B20 -- seed base fields + zero the X360 payload, return true.
         virtual bool Prepare();
 
-        // Alignment padding: the base ends at +0x15 (bool mbReturnPlayers at +0x14);
-        // the X360 payload below is word-aligned at +0x18 (the asm's addi r3,r11,0x18).
-        u8  maAlignPad_15[3];    // +0x15
+        // The base ends at +0x15 (bool mbReturnPlayers at +0x14) and is padded to +0x18, so
+        // the platform payload below starts at +0x18 without an explicit pad; the leaf is 0x6C
+        // bytes (the game-side search params copy their own payload from +0x6C).
         // The X360-only payload the leaf Prepare zeroes (this+0x18 .. this+0x67).
         u8  maX360Payload[80];   // +0x18  (memset(this+0x18, 0, 80))
         u32 muX360Field_68;      // +0x68  (single stw 0)

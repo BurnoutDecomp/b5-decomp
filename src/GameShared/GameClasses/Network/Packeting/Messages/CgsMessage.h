@@ -170,6 +170,15 @@ namespace CgsNetwork
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B);
     u16  GetFrameDiffWrapped16(u16 lu16FrameA, u16 lu16FrameB);
 
+    // Seconds from frame B to frame A (positive when A is later), each a 16-bit frame
+    // counter at its own console's rate; liNumWraps counts A's wraps since the start.
+    // Homed in CgsMessage.cpp; the float reference version it is cross-checked against
+    // lives in CgsOldFrameConversionFunctions.cpp.
+    f32  GetTimeDiffWrapped16(u16 lu16FramesA, u16 lu16FramesB, s32 liNumWraps,
+                              bool lbFramesAAre50Hz, bool lbFramesBAre50Hz);
+    f32  OLDGetTimeDiffWrapped16(u16 lu16FramesA, u16 lu16FramesB, s32 liNumWraps,
+                                 bool lbFramesAAre50Hz, bool lbFramesBAre50Hz);
+
     // 50 Hz <-> 60 Hz translation of a 16-bit frame counter received from a console
     // running the other simulation rate (TrafficManager frame conversion,
     // BrnNetworkPlayer::RetrieveBufferedMessage).

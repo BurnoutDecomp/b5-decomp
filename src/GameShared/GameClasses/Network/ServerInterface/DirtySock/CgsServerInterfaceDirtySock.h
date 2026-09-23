@@ -2,6 +2,11 @@
 #define CGS_SERVER_INTERFACE_DIRTY_SOCK_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLogChannelOutput.h"   // CgsDev::Log::LogChannelOutput
+#include "lobbylogin.h"    // LobbyLoginRefT
+#include "gamemanager.h"   // GameManagerRefT
+#include "connapi.h"       // DirtySock::ConnApiRefT / ConnApiCbInfoT, ConnApiControl
 
 // FLAGGED opaque DirtySock SDK ref handles (vendor SDK; reached by pointer). These live
 // in the GLOBAL namespace to match the DirtySDK vendor headers (vendor/dirtysdk/include/
@@ -31,8 +36,7 @@ namespace CgsMemory
 //   GetMessageBuffer @ 0x82580B48 reads mpacMessageBuffer at this+0x94 (=148) and
 //   asserts it is non-null ("mpacMessageBuffer", CgsServerInterfaceDirtySock.h:719).
 //
-// This TU bodies only GetMessageBuffer and the vector deleting destructor; every
-// other declared member is reconstructed in its own dossier. The DirtySock SDK
+// The facade's own members are bodied in CgsServerInterfaceDirtySock.cpp. The DirtySock SDK
 // ref types and the component classes are owned by OTHER groups / not-yet-homed
 // TUs, so they are FLAGGED here as opaque incomplete types reached by pointer.
 // Pinning is BY NAME; the X360 +148 offset for mpacMessageBuffer is a 32-bit-
@@ -74,6 +78,16 @@ namespace CgsNetwork
         E_COMPONENTS_COUNT              = 12
     };
 
+    // The component-slot cursor increment every
+    // walk over maComponents uses (inlined at each loop).
+    inline EComponents operator++(EComponents& leEnumIndex, int)
+    {
+        const EComponents leOld = leEnumIndex;
+        leEnumIndex = static_cast<EComponents>(leEnumIndex + 1);
+        CGS_ASSERT(leEnumIndex <= E_COMPONENTS_COUNT, "leEnumIndex <= E_COMPONENTS_COUNT");
+        return leOld;
+    }
+
     // CgsServerInterfaceDirtySock.h:101
     enum EKickReason
     {
@@ -112,8 +126,8 @@ namespace CgsNetwork
     {
         struct ConnApiRefT;
         struct ConnApiCbInfoT;
-        struct LobbyLoginRefT;
-        struct GameManagerRefT;
+        using ::LobbyLoginRefT;
+        using ::GameManagerRefT;
         struct LobbySettingRefT;
     }
 
@@ -167,10 +181,16 @@ namespace CgsNetwork
                                                         DirtySock::ConnApiCbInfoT*,
                                                         void*);
 
-        ServerInterfaceDirtySock();
+        // Inlined into the owning server-interface constructor, which stores only the
+        // vtable pointers; every member is set up by Construct.
+        ServerInterfaceDirtySock() {}
 
         // CgsServerInterfaceDirtySock.h:229
         virtual ~ServerInterfaceDirtySock();
+
+        // The network log stream the DirtySock components and the network managers print
+        // their progress lines to (one process-wide object, unchannelled until set).
+        static CgsDev::Log::LogChannelOutput mNetStreamLogChannelOutput;
 
         // Lifecycle virtuals (bodies in their own dossiers).
         virtual void Construct();
@@ -273,6 +293,24 @@ namespace CgsNetwork
         {
             return maComponents[E_COMPONENTS_GAMES].mpComponent;
         }
+
+        // Inline slot reads (the callers
+        // load the slot word straight off the facade). Same base-pointer idiom as above.
+        ServerInterfaceComponent* GetDownloadableConfigComponent() const
+        {
+            return maComponents[E_COMPONENTS_DOWNLOADABLE_CONFIG].mpComponent;
+        }
+        ServerInterfaceComponent* GetTelemetryComponent() const
+        {
+            return maComponents[E_COMPONENTS_TELEMETRY].mpComponent;
+        }
+        ServerInterfaceComponent* GetCustomCommandsComponent() const
+        {
+            return maComponents[E_COMPONENTS_CUSTOM_COMMANDS].mpComponent;
+        }
+
+        // The default lobby 'sele' request record.
+        const char* GetStandardSelectOptions() const { return mpcStandardSelectOptions; }
         ServerInterfaceComponent* GetUsersetsComponent() const
         {
             return maComponents[E_COMPONENTS_USERSETS].mpComponent;
@@ -302,7 +340,29 @@ namespace CgsNetwork
         void SetMemoryBuffer(CgsMemory::HeapMalloc* lpHeapMalloc);
         void ReleaseMemoryBuffer();
 
-        ServerInterfaceComponent* GetComponent(EComponents leComponent);
+        // The range-checked slot reads (header
+        // inlines; the const twin serves the const status / error queries).
+        ServerInterfaceComponent* GetComponent(EComponents leComponent)
+        {
+            CGS_ASSERT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
+                       "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT");
+            return maComponents[leComponent].mpComponent;
+        }
+        const ServerInterfaceComponent* GetComponent(EComponents leComponent) const
+        {
+            CGS_ASSERT(leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT,
+                       "leComponent >= E_COMPONENTS_START && leComponent < E_COMPONENTS_COUNT");
+            return maComponents[leComponent].mpComponent;
+        }
+
+        // A registered component's ConnApi callback.
+        ServerInterfaceComponentData::ServerInterfaceConnApiCallback GetConnApiComponentCallback(
+            EComponents leComponent)
+        {
+            CGS_ASSERT(GetComponent(leComponent) != 0, "The component hasn't been registered!");
+            return maComponents[leComponent].mConnApiCallback;
+        }
+
         bool IsSuspended() const;
         // Per-component last error; E_COMPONENTS_COUNT addresses the facade's own record.
         s32  GetLastError(EComponents leComponent) const;
@@ -313,7 +373,19 @@ namespace CgsNetwork
             maComponents[E_COMPONENTS_GAMES].mConnApiCallback = lpfnCallback;
         }
 
+        // The one ConnApi status-change listener outside the components (the players'
+        // connection manager).
+        bool AddConnectionStatusChangeCallback(ConnectionStatusChangeCallback lpfCallback, void* lpUserData)
+        {
+            mpfConnectionStatusChangeCallback = lpfCallback;
+            mpConnectionStatusChangeUserData  = lpUserData;
+            return true;
+        }
+
     protected:
+        // Write one boolean suspend-select tag.
+        void SetSuspendFlag(char* lpcBuffer, s32 liBufferLength, const char* lpcFlag, bool lbSet);
+
         // ConvertError: map a DirtySock error to an EServerInterfaceError via the table.
         virtual EServerInterfaceError ConvertError(int liError,
                                                    const DSErrorToServerInterfaceError* lpTable,
@@ -366,10 +438,5 @@ namespace CgsNetwork
         s32                          miCgsNetworkServerInterfacePM1;    // +0xBC
     };
 }
-
-// DirtySDK's connection-API control entry point (vendor SDK; no body in this tree). The
-// games components and the network state manager drive it with four-character selectors.
-extern "C" s32 ConnApiControl(CgsNetwork::DirtySock::ConnApiRefT* pConn, s32 iControl, s32 iValue,
-                              s32 iValue2, const void* pValue);
 
 #endif // CGS_SERVER_INTERFACE_DIRTY_SOCK_H

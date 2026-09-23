@@ -92,6 +92,10 @@ namespace BrnNetwork
         virtual u32 GetCustomFlagsMask() const override;
         virtual u32 GetCustomFlagsValue() const override;
 
+        // Fill lpbRivalInSameGame[i] with whether the i-th rival with a takedown history is in
+        // the same title right now (platform presence). The platform leaf implements it.
+        virtual void AreRivalsInSameGame(bool* lpbRivalInSameGame, BrnNetworkManager* lpNetworkManager) = 0;
+
     private:
         // Copy the live-revenge rivals' names into macPlayerNames.
         void FillInRivals(BrnNetworkManager* lpNetworkManager);
@@ -110,9 +114,9 @@ namespace BrnNetwork
 
         // X360 GameSearchParamsX360::AreRivalsInSameGame @ 0x82590FC0.
         // Fills lpbRivalInSameGame[i] for each stored revenge rival with whether that
-        // rival is currently present in a Burnout title (via Xbox LIVE presence). Returns
-        // the revenge-relationship count. lpNetworkManager reaches the LiveRevengeManager.
-        s32 AreRivalsInSameGame(bool* lpbRivalInSameGame, BrnNetworkManager* lpNetworkManager);
+        // rival is currently present in a Burnout title (via Xbox LIVE presence).
+        // lpNetworkManager reaches the LiveRevengeManager.
+        virtual void AreRivalsInSameGame(bool* lpbRivalInSameGame, BrnNetworkManager* lpNetworkManager) override;
     };
 }
 

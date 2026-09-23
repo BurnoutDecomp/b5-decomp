@@ -97,7 +97,7 @@ namespace CgsNetwork
         virtual bool Release();
         virtual void OnEvent(EServerInterfaceEvent leEvent, void* lpData);
 
-        // Suspend / Resume reset the in-flight action (non-virtual in this build).
+        // Suspend drops the in-flight action; Resume is empty (non-virtual in this build).
         void Suspend();
         void Resume();
 
@@ -111,6 +111,10 @@ namespace CgsNetwork
         // Parse the already-downloaded client config record (no network round-trip).
         void GetConfigurationDataFromConf(DataIDToMemoryAddr* lpaDataIDToMemAddrs,
                                           int32_t liSize);
+
+    protected:
+        // The owning facade (the lobby / message-buffer owner), for the game-side leaf.
+        ServerInterfaceDirtySock* GetServerInterface() { return mpServerInterface; }
 
     private:
         // Map a DirtySock error code to an EServerInterfaceError for the given action.
