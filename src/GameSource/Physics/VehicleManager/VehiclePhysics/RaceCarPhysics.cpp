@@ -430,7 +430,7 @@ namespace Vehicle
         mfDeformationScale   = 0.0f;    // +0x34 = 0.0
         mfDamageBudget       = KF_DAMAGE_BUDGET_SCALE;   // +0x38 = flt_82F2A2C8 (seed; FLAGGED)
         mfUncappedSpeedTimer = 0.0f;    // +0x3C = 0.0
-        mfReserved40         = 0.0f;    // +0x40 = 0.0
+        mfPlayerCarStrength  = 0.0f;    // +0x40 = 0.0 (stfs f0,0x40(r3) @0x825B89F4)
         mfTimeUntilPush      = 0.0f;    // +0x44 = 0.0
 
         miCurrentTargetId    = -1;      // +0xF4 = -1  (stw r8=-1)
@@ -1255,7 +1255,17 @@ namespace Vehicle
         }
 
         if (lbChanged)
-            SetLinearVelocity(vpu::Mult(lvUnit, lfLinMag));   // stvx128 back to +0x50
+        {
+            Vector3 lvCapped = vpu::Mult(lvUnit, lfLinMag);   // vmulfp128 v0,v13,splat(mag') @0x825D7900
+            // 0x825D78C0..0x825D791C: a DESCENDING car keeps its ORIGINAL vertical speed --
+            // `vcmpgtfp. splat(0.0) > splat(v.y)` then `vrlimi128 v0, v12(original v), 4, 0` (lane y).
+            // So the caps only ever slow a falling car horizontally; the fall itself is untouched.
+            // (Crash parity G37-D1, 2026-09-23: the tree stored the rebuilt vector whole, so a
+            // Showtime car over the cap fell at 8 m/s -- 20 while boosting -- and hung in the air.)
+            if (0.0f > lvLinear.y)
+                lvCapped.y = lvLinear.y;
+            SetLinearVelocity(lvCapped);                       // stvx128 back to +0x50 @0x825D7920
+        }
     }
 
     // ---------------------------------------------------------------------------------------
@@ -1471,7 +1481,8 @@ namespace Vehicle
 
         for (s32 liT = 0; liT < MS.miNumTargets; ++liT)
         {
-            const Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liT], lvPosition);
+            Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liT], lvPosition);
+            lvToTarget.y = 0.0f;   // stfs f11(0.0) -> lane y @0x82620078 (crash parity G37-D3)
             const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
             const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
             const Vector3 lvUnit = (lfDist > 0.0f)
@@ -1517,7 +1528,8 @@ namespace Vehicle
 
         if (liBest >= 0)
         {
-            const Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liBest], lvPosition);
+            Vector3 lvToTarget = vpu::Subtract(MS.maTargetPositions[liBest], lvPosition);
+            lvToTarget.y = 0.0f;   // stfs f11(0.0) -> lane y @0x826201DC (crash parity G37-D3)
             const f32 lfDistSq = vpu::MagnitudeSquared(lvToTarget);
             const f32 lfDist   = (lfDistSq > 0.0f) ? std::sqrt(lfDistSq) : 0.0f;
 
@@ -1661,13 +1673,23 @@ namespace Vehicle
         if (lbAtGate)
             gsAtGate.muBodyRan++;
 
-        // normalise the camera X and Z axes (the console's own asserts, :0x207 / :0x20F).
-        CGS_ASSERT(vpu::MagnitudeSquared(lpCameraMatrix->xAxis) > 0.0f,
+        // FLATTEN, then normalise, the camera X and Z axes (the console's own asserts, :0x207 /
+        // :0x20F, run on the FLAT copies). 0x8262EC54..0x8262EC78: `lvx128 camX ; stvx128 ;
+        // stfs f27(0.0 flt_82001CC0), lane y ; lvx128 v123`, and the same for camZ at
+        // 0x8262ECF0..0x8262ED28 -- so every consumer (the pitch/yaw force, both lever arms, the
+        // target-assist aim, UpdateShowtimePhysics) works in the ground plane. (Crash parity
+        // G37-D2, 2026-09-23: the tree normalised the full 3D axes, so a pitched chase camera gave
+        // the aftertouch force a vertical component the console never applies.)
+        Vector3 lvCameraX = lpCameraMatrix->xAxis;
+        lvCameraX.y = 0.0f;                                        // @0x8262EC70
+        CGS_ASSERT(vpu::MagnitudeSquared(lvCameraX) > 0.0f,
                    "RwMath::MagnitudeSquared(lCameraX) > 0.0f");
-        const Vector3 lvCameraX = vpu::Normalize(lpCameraMatrix->xAxis);
-        CGS_ASSERT(vpu::MagnitudeSquared(lpCameraMatrix->zAxis) > 0.0f,
+        Vector3 lvCameraZ = lpCameraMatrix->zAxis;
+        lvCameraZ.y = 0.0f;                                        // @0x8262ED14
+        CGS_ASSERT(vpu::MagnitudeSquared(lvCameraZ) > 0.0f,
                    "RwMath::MagnitudeSquared(lCameraZ) > 0.0f");
-        const Vector3 lvCameraZ = vpu::Normalize(lpCameraMatrix->zAxis);
+        lvCameraX = vpu::Normalize(lvCameraX);                     // v122 @0x8262ED5C
+        lvCameraZ = vpu::Normalize(lvCameraZ);                     // v123 @0x8262EDD8
 
         f32 lfEnable = lpControls->GetAftertouchEnable();   // f29 = *(controls+0x20)
         const bool lbShowtime = mbPlayerCarInShowtime;      // lbz +0x140C
@@ -1831,7 +1853,7 @@ namespace Vehicle
         static_assert(offsetof(PlayerParameters, mfDamageBudget)       == 0x38, "flt_82FB84B8");
         static_assert(offsetof(PlayerParameters, mfUncappedSpeedTimer) == 0x3C, "flt_82FB84BC");
         static_assert(offsetof(PlayerParameters, mfTimeUntilPush)      == 0x44, "flt_82FB84C4");
-        static_assert(offsetof(PlayerParameters, mfPlayerCarStrength)  == 0x48, "lfShowtimePlayerCarStrength");
+        static_assert(offsetof(PlayerParameters, mfPlayerCarStrength)  == 0x40, "lfShowtimePlayerCarStrength (0x82FB84C0)");
         static_assert(offsetof(PlayerParameters, maTargetPositions)    == 0x50, "unk_82FB84D0 (UpdateDrivers' GetTargetAssistParams arg 1)");
         static_assert(offsetof(PlayerParameters, maTargetIds)          == 0xD0, "dword_82FB8550");
         static_assert(offsetof(PlayerParameters, miNumTargets)         == 0xF0, "dword_82FB8570");

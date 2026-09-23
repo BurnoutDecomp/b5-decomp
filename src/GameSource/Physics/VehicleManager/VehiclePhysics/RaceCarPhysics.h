@@ -845,12 +845,14 @@ namespace Vehicle
         f32   mfDeformationScale;      // +0x34  flt_82FB84B4 (UpdateShowtimeBounceModifiers result)
         f32   mfDamageBudget;          // +0x38  flt_82FB84B8 (= seed * lfPlayerCarDamageLimit)
         f32   mfUncappedSpeedTimer;    // +0x3C  flt_82FB84BC (>0 -> uncapped vertical speed window)
-        f32   mfReserved40;            // +0x40
+        // +0x40: GetShowtimePlayerCarStrength `lfs f1,0x40(r11)` @0x825B8C00, SetPlayerVehicleInShowtime
+        // `stfs f29,0x40(r29)` @0x826004F0, Reset `stfs f0,0x40(r3)` @0x825B89F4 -- DWARF
+        // RaceCarPhysics.h:92/93/95 order (crash parity G37-D4; it sat at +0x48 before, in padding).
+        f32   mfPlayerCarStrength;     // +0x40  lfShowtimePlayerCarStrength (0x82FB84C0)
         f32   mfTimeUntilPush;         // +0x44  flt_82FB84C4 (launch-push delay countdown)
-        f32   mfPlayerCarStrength;     // +0x48  lfShowtimePlayerCarStrength
 
-        // ---- +0x4C : the last 4 bytes of the scalar block before the target-position array ----
-        u8    maReserved4C[0x50 - 0x4C];   // +0x4C..+0x50
+        // ---- +0x48 : padding before the 16-aligned target-position array ----
+        u8    maReserved48[0x50 - 0x48];   // +0x48..+0x50
 
         // NAMED 2026-08-11 (prepare-chain wave). +0x50..+0xD0 == unk_82FB84D0, the per-candidate
         // target-assist POSITION array, parallel to maTargetIds below (8 slots, 16-byte stride).
