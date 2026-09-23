@@ -218,7 +218,10 @@ namespace Vehicle
         void Clear();
         // Copy each in-use car's RaceCarState::mbCrashing flag (element +0x44A) into the array.
         void SetFromVehicleOutputInterface(const VehicleOutputInterface* lpOutput);
-        bool IsCrashing(s32 liIndex) const;
+        // Inline on the console: a bare byte load at every use, no assert (PaybackManager
+        // 0x82397848 `lbzx r11, r3, r11` off the interface copy). It had no body anywhere, which
+        // parked every PaybackManager arm that polls it (crash parity FX-GS follow-up, 2026-09-23).
+        bool IsCrashing(s32 liIndex) const { return mabCrashingRaceCars[liIndex]; }
 
     private:
         bool mabCrashingRaceCars[8];   // @0
