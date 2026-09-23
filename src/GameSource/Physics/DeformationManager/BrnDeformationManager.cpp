@@ -298,7 +298,7 @@ namespace Deformation
     //
     // Per-scene-update dispatch of the deformation event queues, in order: deactivate, remove,
     // add, validate. Then, if the input interface flagged a player-scratch reset, zero the
-    // player model's per-driven-point scratch and re-run its IK + skinning. Finally clear every
+    // player model's per-sensor scratch (ResetScratching) and re-run its IK + skinning. Finally clear every
     // input queue's length (they are drained).
     // -----------------------------------------------------------------------------------
     void DeformationManager::ProcessEvents(CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
@@ -315,14 +315,17 @@ namespace Deformation
             DeformableObject* lpPlayerModel = GetPlayerCarModel();
             CGS_ASSERT(lpPlayerModel != nullptr, "lpPlayerModel");
 
-            if (lpPlayerModel != nullptr)
+            if (lpPlayerModel != nullptr)   // PC-only null guard: the console asserts, then dereferences
             {
-                // Zero the player's per-driven-point skinning scratch (the X360 walks the model's
-                // mpDeformationSpec driven-point count, clearing one f32 per driven point at
-                // model+432*i+6900). FLAG: the per-driven-point scratch field is interior to the
-                // DeformableObject and is reset by the model's own UpdateSkinningOffsets below; the
-                // explicit per-point clear is folded into that path.
-                lpPlayerModel->UpdateIK(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });   // X360 passes vfTime = 0 here
+                // Zero every deformation sensor's scratch, then re-blend (crash parity G24-D1,
+                // 2026-09-23): 0x82644ED0..0x82644F04 is the inlined DeformableObject::ResetScratching
+                // (PS3 calls it out of line @0x6B9D7C; ProcessEvents is its only caller) -- spec+0x652
+                // sensors, `stfs 0.0, 0x1AF4(model + 0x1B0*i)` == maDeformationSensors[i].mfScratchAmount.
+                // The old FLAG here called it a per-driven-point clear "folded into
+                // UpdateSkinningOffsets"; the stride and base make it per-SENSOR, and
+                // UpdateSkinningOffsets never clears it -- so the respray re-blended the old scratch.
+                lpPlayerModel->ResetScratching();
+                lpPlayerModel->UpdateIK(VecFloat{ 0.0f, 0.0f, 0.0f, 0.0f });   // 0x82644F0C vspltisw v1,0
                 lpPlayerModel->UpdateSkinningOffsets();
             }
         }
