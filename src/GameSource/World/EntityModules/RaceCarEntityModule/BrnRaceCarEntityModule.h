@@ -867,6 +867,14 @@ private:
     // out-of-range rivals back IN.
     void UpdateInAndOutOfRangeCars( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 
+    // X360 0x822F5578 (62 insns). DWARF BrnRaceCarEntityModule.h:662 `void UpdateRaceCars_PreScene(
+    // OutputBuffer_PreScene*)`. Its only caller is PreSceneUpdate @0x8230E288, in the un-paused arm
+    // immediately before the rate-gated UpdateInAndOutOfRangeCars. ActiveRaceCar::Update_PreScene
+    // for all eight slots, then the start-of-mode intro countdown (mfIntroTimer): when it runs out
+    // the rivals are released onto a ROLLING start (the drive-by start). Body in
+    // BrnRaceCarEntityModule.cpp beside PreSceneUpdate.
+    void UpdateRaceCars_PreScene( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
     // X360 0x822F5830, called from PostPhysicsUpdate @0x823076B0 with
     // lpOutput->GetGameEventQueue() (the sub_822B67D0 accessor at 0x823076A4 -- the same one
     // UpdateCurrentWorldRegion is handed one call earlier). Posts every pending hiding record
@@ -995,7 +1003,14 @@ private:
     // ProcessRaceCarCrashEvents_PostPhysics @0x822BDA68 reads the third (`lfs f31, 0(r16)`,
     // r16 == this + 0x183A0) to hand ActiveRaceCar::OnCrash its f1. Nothing in this build
     // writes it yet (the console's PreSceneUpdate accumulator is not landed), so it reads 0.0f.
-    u8  maTailPadB1a0[0x183A0 - 0x18398];  // +0x18398 (99224) .. +0x183A0 (99232)  mfSimTimerTimeStep / mfIntroTimer seats
+    // 2026-09-23 (crash parity G68-D5): split once more to name the SECOND float, mfIntroTimer
+    // (DWARF :406). Its three console references, found by an image-wide scan of +0x1839C:
+    //   Construct @0x822FE2B0            stfsx f30 (flt_820037C8 == -1.0f)   -- "not counting"
+    //   HandleGameActions case 29 @0x8230C798  <- StartModeIntroAction::mfDurationSeconds - 1.4f
+    //                                           (flt_820148A0), only under mbSpawnAIBehindStartGrid
+    //   UpdateRaceCars_PreScene @0x822F561C..0x822F5658  the countdown (the only reader)
+    u8  maTailPadB1a0[0x1839C - 0x18398];  // +0x18398 (99224) .. +0x1839C  the mfSimTimerTimeStep seat (== mfTimeStep below)
+    f32 mfIntroTimer;                       // +0x1839C (99228)  DWARF :406
     f32 mfSimTime;                          // +0x183A0 (99232)  DWARF :407
 
     // 2026-09-12 (wheel-blur wave): the pad is split once more to name the FOURTH float of

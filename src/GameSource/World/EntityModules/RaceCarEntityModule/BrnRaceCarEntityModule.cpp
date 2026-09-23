@@ -349,6 +349,17 @@ void RaceCarEntityModule::Construct()
     mfPlayerBaseDeformAmountSaved     = 0.0f;
     mbPlayerBaseDeformRequestPending  = false;
 
+    // ⭐ crash parity 2026-09-23 (G61-D2 / G68-D5) -- two more seeds this slice had skipped.
+    //   0x822FE034  stfsx f0 (flt_82004F68 == 0x3FE00000 == 1.75f), this, 0x184CC
+    //               -> mfResetOnWaterHeight. The only game reader is CheckForResetOnTrackConditions
+    //               (the water / super-fatal surface test's slack); unseeded it read the module
+    //               pool's 0.0f, i.e. a car counted as ON the water only when its lowest point was
+    //               at or below the surface, where the console allows 1.75 m.
+    //   0x822FE2B0  stfsx f30 (flt_820037C8 == -1.0f), this, 0x1839C -> mfIntroTimer, "not
+    //               counting" until HandleGameActions case 29 arms it.
+    mfResetOnWaterHeight = 1.75f;   // flt_82004F68
+    mfIntroTimer         = -1.0f;   // flt_820037C8
+
     // The three render switches the dispatch leg reads (see the header for the offset
     // fit). The console seeds them from its debug-variable table, which is not live on
     // this build; body, coronas and wheels all default ON.
@@ -3298,6 +3309,29 @@ void RaceCarEntityModule::HandleGameActions(
         // HandlePrepareForModeAction's clear @0x823095E8) are declaration-only on this build;
         // the member is zero-initialised with the rest of the module, which is what that clear
         // leaves behind, so this set is the only one the loop needs.
+        // G68-D5 (crash parity 2026-09-23) -- ARTIST low jump table, case 29 (0x8230C770..0x8230C79C),
+        // E_ACTION_START_MODE_INTRO:
+        //     lbzx +0x18350 (mbSpawnAIBehindStartGrid) ; beq -> break
+        //     lfs f13, 0(record) (mfDurationSeconds) ; lfs f0, flt_820148A0 (0x3FB33333 == 1.4f)
+        //     fsubs ; stfsx +0x1839C (mfIntroTimer)
+        // Arms the drive-by start: UpdateRaceCars_PreScene counts it down and releases the rivals
+        // (ROLLING_START) 1.4 s before the intro ends.
+        case BrnGameState::GameStateModuleIO::E_ACTION_START_MODE_INTRO: // 29
+            if (mbSpawnAIBehindStartGrid)
+            {
+                mfIntroTimer = reinterpret_cast<
+                    const BrnGameState::GameStateModuleIO::StartModeIntroAction*>(lpEvent)
+                        ->mfDurationSeconds - 1.4f;                               // flt_820148A0
+
+                // [DIAG] NOT IN THE X360 BINARY -- one line per armed intro (once per mode start).
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[intro-timer] armed " << mfIntroTimer
+                                               << " s (drive-by start)\n";
+                }
+            }
+            break;
+
         case BrnGameState::GameStateModuleIO::E_ACTION_START_PLAYING_MODE: // 34
             CGS_ASSERT(mbIsInGameMode, "mbIsInGameMode");
             SetAllCarsOnStartLine(ActiveRaceCar::E_RACE_START_STATE_RACING, true);
@@ -4792,6 +4826,64 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
     }
 }
 
+// ============================================================================
+// UpdateRaceCars_PreScene @ 0x822F5578   (62 insns)   -- crash parity 2026-09-23 (G61-D2 / G68-D5)
+//
+// Its only caller is PreSceneUpdate @0x8230E288 (the un-paused arm). Two legs:
+//   0x822F55A0..0x822F5608  for each of the 8 slots, in the console's accessor order --
+//       r26 = lpOutput->GetRaceCarAIInterface()       (0x822B52C0, IO.h:301, +986752)
+//       r25 = lpOutput->GetVehicleInputInterface()    (0x822B4ED0, IO.h:283, +16)
+//       r24 = lpOutput->GetSceneInputInterface()      (0x822B4F78, IO.h:286, +142192)
+//       GetActiveRaceCar(slot)->Update_PreScene(r4 = scene, r5 = vehicle, r6 = AI)
+//     with the range-guarded EActiveRaceCarIndex increment's tripwire (BurnoutConstants.h:39).
+//   0x822F560C..0x822F565C  THE INTRO COUNTDOWN (G68-D5). mfIntroTimer is armed by
+//     HandleGameActions case 29 (START_MODE_INTRO) to the intro length minus 1.4 s when the mode
+//     spawns its AI behind the grid (KU_FLAG_AI_DRIVE_BY_START: Race, Road Rage, Survivor):
+//       lfs +0x1839C ; fcmpu flt_82001CC0 (0.0) ; ble -> skip
+//       fsubs +0x18398 (mfTimeStep) ; stfs ; fcmpu 0.0 ; bge -> skip
+//       stfs flt_820037C8 (-1.0) ; SetAllCarsOnStartLine(r4 = 1 ROLLING_START, r5 = 0 not the player)
+//     so the rivals roll out 1.4 s BEFORE the intro ends. Until this landed nothing counted the
+//     timer down and they sat on the line until action 34 (START_PLAYING_MODE) set RACING.
+//     The two tests keep the console's branch polarity (`ble` skips, `bge` skips): a NaN timer
+//     is not skipped by either.
+// ============================================================================
+void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
+    {
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::RaceCarAIInterface* lpRaceCarAIInterface =
+            lpOutput->GetRaceCarAIInterface();
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::VehicleInputInterface* lpVehicleInterface =
+            lpOutput->GetVehicleInputInterface();
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::SceneInputInterface* lpSceneInterface =
+            lpOutput->GetSceneInputInterface();
+
+        GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liSlot ) )->Update_PreScene(
+            lpSceneInterface, lpVehicleInterface, lpRaceCarAIInterface );
+
+        CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );   // BurnoutConstants.h:39
+    }
+
+    if( !( mfIntroTimer <= 0.0f ) )                                     // fcmpu ; ble -> skip
+    {
+        mfIntroTimer -= mfTimeStep;                                     // lfsx +0x18398 ; fsubs ; stfs
+        if( !( mfIntroTimer >= 0.0f ) )                                 // fcmpu ; bge -> skip
+        {
+            mfIntroTimer = -1.0f;                                       // flt_820037C8
+            SetAllCarsOnStartLine( ActiveRaceCar::E_RACE_START_STATE_ROLLING_START, false );
+
+            // [DIAG] NOT IN THE X360 BINARY. One line per armed intro (at most once per mode
+            // start), so it cannot flood; its silence in a drive-by-start mode IS the defect.
+            if( CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[intro-timer] expired -> SetAllCarsOnStartLine(ROLLING_START, excluding the player)\n";
+            }
+        }
+    }
+}
+
 // X360 0x8230D928 -- PARTIAL SLICE.
 //
 // The console body is a 15-step per-frame spine (replay enter/leave edge, the camera-vector
@@ -4809,6 +4901,9 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
 //   * step 11: `if (!mbInReplay) UpdateStreaming(lpInput, lpOutput)`. mbInReplay
 //     (+0x18774... console +99828) is not modelled here; the PC build has no replay, so
 //     the guard is constant-false and the call is unconditional. FLAGGED rather than faked.
+//   * (later waves, see each block below) HandleGameActions, the per-slot AI activation leg,
+//     UpdateRaceCars_PreScene (2026-09-23), the rival range pass, the pad-state latch,
+//     WriteUpdatedAIData and the pre-scene UpdateOutputInterfaces.
 //
 // [FLAG PC bring-up] everything else is dropped, NOT paraphrased.
 // DELETE-WHEN: the interior lands and the full spine is reconstructed.
@@ -4858,10 +4953,20 @@ void RaceCarEntityModule::PreSceneUpdate(
     // (WorldModule::BridgeActionsToRaceCarModule was an inert link stub).
     HandleGameActions( lpInput, lpOutput );
 
+    // ---- console step 7a: THE PER-SLOT PRE-SCENE PASS + THE INTRO COUNTDOWN (0x8230E288) ----
+    // ⭐ ADDED 2026-09-23 (crash parity G61-D2 / G68-D5) at the console's own slot: the `bl` at
+    // 0x8230E288, inside the `!(lUpdateSet & 1)` arm (the paused arm at 0x8230E2C8 skips it and
+    // the range pass below), after the frame's latches and immediately before the rate-gated
+    // UpdateInAndOutOfRangeCars, with r4 == the pre-scene OUTPUT buffer (r29).
+    if( ( lUpdateSet & 1 ) == 0 )
+    {
+        UpdateRaceCars_PreScene( lpOutput );
+    }
+
     // ---- the ONCE-PER-SECOND RIVAL RANGE PASS (console step 7, asm 0x8230E28C..0x8230E2C4)
     // ⭐ ADDED 2026-09-05 (rival range-loop wave, lane W1), at the console's own position: the
-    // `bl` at 0x8230E2C0, i.e. after UpdateRaceCars_PreScene (0x8230E288, still not reproduced)
-    // and before UpdateStreaming (0x8230E308, immediately below), with r4 == the pre-scene
+    // `bl` at 0x8230E2C0, i.e. after UpdateRaceCars_PreScene (0x8230E288, landed 2026-09-23 just
+    // above) and before UpdateStreaming (0x8230E308, immediately below), with r4 == the pre-scene
     // OUTPUT buffer -- the same r29 both of those neighbours receive.
     //
     // [!] IT IS RATE-GATED, AND THE GATE IS THE CONSOLE'S. 0x8230E28C..0x8230E2B4 divides the
