@@ -33,6 +33,9 @@ namespace Message { u64 gxMessageFilterFlags = 0; }
 
 namespace Fixture {
 using namespace BrnWorld;
+// The persistent-damage arm (G67-D1, b6efda77) names its flag through GameModeParams; a Fixture-local
+// stand-in is found before ::BrnGameState, which the output-interface header only forward-declares.
+namespace BrnGameState { struct GameModeParams { static const u64 KU_FLAG_AI_PERSISTENT_DAMAGE = 0x40000000ull; }; }
 struct VolumeIdFixture {
     u32 muEntityIndex = 0;
     u32 GetEntityIDEntityIndex() const { return muEntityIndex; }
@@ -64,7 +67,16 @@ struct RaceCar {
     int               miResets = 0;
     f32               mfResetSpeed = -1.0f, mfResetDistance = -1.0f;
     BrnAI::EResetType meResetType = BrnAI::E_RESET_TYPE_INVALID;
+    f32               mfPersistentDamage = 0.0f;
     ERaceCarType GetType() const { return meType; }
+    f32 GetPersistentDamage() const { return mfPersistentDamage; }
+    // Same arithmetic as RaceCar::IncreasePersistentDamage (its own test: run_persistent_damage.py).
+    bool IncreasePersistentDamage() {
+        mfPersistentDamage += 0.3f;
+        if (mfPersistentDamage < 1.0f) return false;
+        mfPersistentDamage = 0.0f;
+        return true;
+    }
     void RequestResetOnTrack(f32 lfSpeed, BrnAI::EResetType leType, f32 lfDistance) {
         ++miResets; mfResetSpeed = lfSpeed; meResetType = leType; mfResetDistance = lfDistance;
     }
@@ -95,6 +107,12 @@ struct RaceCarEntityModule {
     }
     ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leIndex) { return &maActiveRaceCars[leIndex]; }
     bool GetGameModeFlag(u64 lxFlag) const { return (mxGameModeFlags & lxFlag) != 0; }
+    s32 GetPersistentDamageCarCount() const {
+        s32 liCount = 0;
+        for (const RaceCar& lrCar : maRaceCars)
+            if (lrCar.meType != E_RACE_CAR_TYPE_INACTIVE && lrCar.mfPersistentDamage > 0.0f) ++liCount;
+        return liCount;
+    }
     void ProcessRaceCarCrashCompleteEvents(const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput);
 };
 #include "rcem_crash_exit_speed.inc"
@@ -164,6 +182,14 @@ int main() {
         Complete(lModule, 4, false);
         Check(lModule.maActiveRaceCars[4].miResetAfterCrash == 1 && lModule.maRaceCars[4].miResets == 0,
               "network car, !mbRemoveRaceCar -> ResetAfterCrash only (0x822F4428)");
+    }
+    {   // a taken-down Road Rage rival (0x40000000 | 0x80000000): +0.3 persistent damage, then the reset
+        Fixture::RaceCarEntityModule lModule; lModule.mxGameModeFlags = 0xC0000000ull;
+        lModule.maActiveRaceCars[3].mbTakenDown = true;
+        Complete(lModule, 3);
+        Check(lModule.maRaceCars[3].mfPersistentDamage == 0.3f && !lModule.maActiveRaceCars[3].mbTakenDown &&
+              lModule.maRaceCars[3].miResets == 1,
+              "taken-down AI in a persistent-damage mode carries 0.3 and is still reset on track (G67-D1)");
     }
     Check(guAssertions == 0, "no assertions");
     std::printf("RcemCrashExitSpeed: %d checks, %d failures\n", giChecks, giFailures);

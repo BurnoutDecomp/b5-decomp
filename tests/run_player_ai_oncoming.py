@@ -20,7 +20,11 @@ def main():
     method = method[:a] + method[b:]
     actions = (base / 'BrnRaceCarEntityModule.cpp').read_text(encoding='utf8')
     case = definition(actions, 'case BrnGameState::GameStateModuleIO::E_ACTION_SET_PLAYER_CAR_DRIVER:')
-    case = 'void RaceCarEntityModule::HandleDriverAction(const CgsModule::Event* lpEvent, Output* lpOutput) { switch (7) {\n' + case + '\n} }'
+    # The case reads the function-scope constant HandleGameActions declares above its switch (G68-D3,
+    # flt_82FAD3F4); carry that line along verbatim so the extracted case still compiles.
+    consts = [l.strip() for l in actions.splitlines() if l.strip().startswith('const f32 KF_DRIVE_THRU_ENTRY_SPEED')]
+    case = ('void RaceCarEntityModule::HandleDriverAction(const CgsModule::Event* lpEvent, Output* lpOutput) {\n'
+            + '\n'.join(consts) + '\nswitch (7) {\n' + case + '\n} }')
     boost = (base / 'Boost/BrnBoostStrategy.cpp').read_text(encoding='utf8')
     methods = [definition(tag, 'inline u16 TagAISectionIndex'), method, case,
                definition(boost, 'void BoostStrategy::SetOncomingState'),
