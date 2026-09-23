@@ -21,6 +21,10 @@ struct VehicleLeaptEvent;
 // rule above). The definition lives in GameSource/GameState/BrnGameActions.h.
 namespace BrnGameState { namespace GameStateModuleIO { struct WorldStuntAction; } }
 
+// [FX-GS2 2026-09-23, G10-D9] DealWithRemovedTraffic names the GUI's removed-traffic record by
+// pointer only (its home is GameSource/Gui/BrnGuiEventTypeDefs.h), same rule as above.
+namespace BrnGui { struct GuiRemovedTrafficEvent; }
+
 // ⛔⛔ THE CLASS-KEY IS LOAD-BEARING ON MSVC, AND THIS ONE WAS WRONG (fixed 2026-08-29).
 // The real type is `struct RCEntityActiveRaceCarOutputInterface`
 // (BrnRaceCarEntityModuleOutputInterface.h:139). This forward declaration said `class`, and
@@ -142,6 +146,11 @@ struct CrashModeScoring
                              s32* lpiScore, s32* lpiMultiplier,
                              BrnTraffic::VehicleScoreCategory* lpeCategory);        // X360 0x82312AB0
     bool IsActiveCrash(const RecentCrash* lpCrash) const;                          // X360 0x82312A30
+
+    // DWARF BrnCrashModeScoring.h:157, X360 0x8232BF90. Drop the recent-crash entry of every traffic
+    // car the world removed this frame. Sole caller BrnGameModule::BridgeWorldTrafficAndPropDataToGui
+    // @0x823E5560 (the GUI-event 209 arm).
+    void DealWithRemovedTraffic(const BrnGui::GuiRemovedTrafficEvent* lpRemovedTrafficEvent);
     void Update(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                 const VehicleOutputInterface::PhysicalTrafficStateQueue* lpTrafficStateQueue,
                 f32 lfSimTimeStep);                                                 // X360 0x82320808
