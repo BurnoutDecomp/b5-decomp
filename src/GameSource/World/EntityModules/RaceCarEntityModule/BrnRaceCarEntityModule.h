@@ -1208,8 +1208,11 @@ private:
     // and uses `(!mbInCarSelectScreen || !mbCarSelectDontStreamAudio) && IsPlayerDriven()`
     // as RaceCarStreamer::AddVehicleData's "stream this car's audio" flag.
     bool mbInCarSelectScreen;
-    // X360 +0x186CA (100042). DWARF :445. HandleGameActions case 76 writes it from the
-    // payload's +4 byte, case 77 clears it. Landed 2026-09-18 with the junkyard drop.
+    // X360 +0x186CA (100042). DWARF :445. HandleGameActions case 76 (0x8230C260) writes it from
+    // the payload's +4 byte (CarSelectModificationScreen::mbEntering), case 77 clears it
+    // (clear landed 2026-09-18 with the junkyard drop; the case-76 writer and the
+    // ResetActiveRaceCar reader -- AddHandlingModel's physics-state-reset gate, lbzx @0x822F4D48 --
+    // landed 2026-09-23, crash parity G67-D6).
     bool mbInCarModScreen;
     // X360 +0x186CC (100044). DWARF :446, type ResetPlayerCarAction::CarSelectType -- held as
     // the s32 the console stores (`stw`) so this header does not pull BrnGameActions.h in.
