@@ -45,7 +45,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                        // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"                   // CgsContainers::ObjectPool<T,N,TIndex>
 #include "GameSource/GameState/BrnGameStateTypes.h"                           // BrnGameState::EStuntType
-#include "GameSource/GameState/SharedIO/BrnGameStateLeafContainers.h"          // GameStateModuleIO::ChainableMultiplierInfo, StuntModeScoringOnline::MultiplierData
+#include "GameSource/GameState/SharedIO/BrnChainableMultiplierInfo.h"        // GameStateModuleIO::ChainableMultiplierInfo (MultiplierData is nested below)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"      // base class StuntModeScoring (+ StuntInfo, MultiplierOutInfo)
 
 namespace BrnGameState
@@ -110,7 +110,10 @@ namespace BrnGameState
         // --- the online lifecycle overrides (bind the base StuntModeScoring vtable slots) ---
         // The base spells these non-virtual (DWARF dropped the virtuality); the X360 asm proves the
         // overrides dispatch through the base vtable, so they are virtual on the base and here.
-        void Construct();                                                            // X360 0x8232D060
+        // X360 0x8232D060 (vtable 0x820CF9EC slot 0). r4 is never written before its first call,
+        // `bl StuntModeScoring::Construct`, so the caller's achievement manager passes straight
+        // through (ScoringSystem::Construct hands both stunt scorers r28 @0x823380E4).
+        void Construct(AchievementManager* lpAchievementManager);                    // X360 0x8232D060
         bool Prepare();                                                              // X360 0x82338B50
         bool Release();                                                              // X360 0x82321878 (ledger "Relase")
         void Destruct();                                                             // X360 0x8232D0F8

@@ -99,6 +99,12 @@ void ScoringSystem::Construct(StuntModeScoring::AchievementManager* lpAchievemen
     mCrashModeScoring.Construct();
     mCrashModeScoring.ClearData();
     mStuntModeScoring.Construct(lpAchievementManager);
+    // [FX-GS 2026-09-23, crash-parity G10-D8] the ONLINE stunt scorer's Construct, which this body
+    // had dropped: 0x823380DC..0x823380F0 `lwz r11,0x2620(r31) ; addi r3,r31,0x2620 ; mr r4,r28 ;
+    // lwz r11,0(r11) ; bctrl` -- vtable slot 0 of 0x820CF9EC == StuntModeScoringOnline::Construct
+    // (0x8232D060), handed the same achievement manager as the offline scorer, between the offline
+    // scorer (0x823380D8) and the online race scorer (0x82338104).
+    mOnlineStuntModeScoring.Construct(lpAchievementManager);
 
     mOnlineRaceModeScoring.Construct();
     mOnlineRoadRageScoring.Construct();
@@ -122,6 +128,12 @@ void ScoringSystem::Construct(StuntModeScoring::AchievementManager* lpAchievemen
 bool ScoringSystem::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc)
 {
     mStuntModeScoring.Prepare();
+    // [FX-GS 2026-09-23, crash-parity G10-D8] the online stunt scorer's Prepare -- 0x8232A460..0x8232A470
+    // `lwz r11,0x2620(r31) ; addi r3,r31,0x2620 ; lwz r11,4(r11) ; bctrl` (slot 1 =
+    // StuntModeScoringOnline::Prepare 0x82338B50), right after the offline scorer's (0x8232A45C).
+    // [X] still not made: the crash scorer's DebugComponent::Register (0x8232A444..0x8232A448,
+    // `addi r3,r31,0x20`) -- that sub-object is the opaque maCrashScoreDebugComponent on this build.
+    mOnlineStuntModeScoring.Prepare();
 
     for (s32 liSlot = 0; liSlot < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT; ++liSlot)
     {

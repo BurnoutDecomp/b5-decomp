@@ -309,7 +309,11 @@ namespace BrnGameState
         s32  GetComboScoreAsInt() const                { return static_cast<s32>(mfComboScore); } // (s32)+0x20
         s32  GetComboMultiplierInternal() const        { return miComboMultiplier; }        // +0x24
         void SetComboMultiplierInternal(s32 liMult)    { miComboMultiplier = liMult; }
-        bool IsStuntInProgressInternal() const         { return mbStuntInProgress; }        // +0x28
+        bool IsStuntInProgressInternal() const         { return mbStuntInProgress; }        // +0x29
+        // [FX-GS 2026-09-23, crash-parity G10-D8] mbStuntModeActive (+0x28, `stb 1,0x28` in Activate
+        // @0x82312FA0) -- the byte StuntModeScoringOnline::DealWithTakedown gates on (`lbz 0x28`
+        // @0x823218A4). The accessor above reads +0x29 and was mislabelled +0x28.
+        bool IsStuntModeActiveInternal() const         { return mbStuntModeActive; }        // +0x28
         // The cached online display score = (s32)mfComboScore * miComboMultiplier + miCurrentScore.
         s32  ComputeOnlineDisplayScore() const
         {
