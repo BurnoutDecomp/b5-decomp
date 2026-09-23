@@ -17,6 +17,14 @@ namespace BrnWorld
         bool IsAllowedToBeClearedUp() const { return WantsToBeClearedUp() && mfTimeTillClearup <= 0.0f; }
         void MarkVehicleAsOnscreen();
         void OnOwnerDisconnected(); // inlined ARTIST827CD0A8..827CD0F0
+        // DWARF BrnCrashModule.h:150 (body BrnCrashModule.cpp:361): flag bit 0x4 (`lbz 1 ;
+        // rlwinm 0,29,29` at OnContactFromNetworkPlayer 0x827C642C).
+        bool IsConfirmedNetwork() const { return (mxFlags & 4) != 0; }
+        // DWARF BrnCrashModule.h:134 (body BrnCrashModule.cpp:295). Inlined into
+        // CrashModule::OnContactFromNetworkPlayer @0x827C6444..0x827C6478: assert
+        // IsConfirmedNetwork() (:297) then store KF_NETWORK_CRASH_TIMEOUT (20.0f) at +4.
+        // Body in BrnCrashModule_RaceCarCrashes.cpp.
+        void ResetNetworkTimeout();
 
     private:
         s8 miOwner;             // +0

@@ -70,6 +70,12 @@ namespace BrnWorld
         // performs. Called by BrnWorld::RaceCarCrash::Tick and CrashModule::HandleGameActions.
         void SetSecondsBeforeCleanup(f32 lfSeconds);
 
+        // DWARF BrnCrashModule.h:78 (body BrnCrashModule.cpp:166). No out-of-line X360 symbol: the
+        // console inlines it into CrashModule::OnContactFromNetworkPlayer @0x827C62E8 as a bare
+        // `lfs flt_820CA5A8 (20.0f) ; stfs 0xC(item)` -- a plain store of KF_NETWORK_CRASH_TIMEOUT,
+        // with no `lfSeconds > 0.0f` tripwire. Body in BrnCrashModule_RaceCarCrashes.cpp.
+        void ResetNetworkTimeout();
+
         // ---- read accessors the crash module's own bodies need (2026-08-25, crash exit).
         // HEADER INLINES: the console folds all three into its callers as bare displacements
         // (ClearupCrashes `lfs f, 0xC(item)` @0x827CDFB6, ResetRaceCarFromCrashIndex
