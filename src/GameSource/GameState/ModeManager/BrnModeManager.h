@@ -428,6 +428,12 @@ public:
     // is not a member of this class and must not poke a byte offset (hazards H9).
     HUDMessageLogic*     GetHUDMessageLogic()       { return &mHUDMessageLogic; }
     const HUDMessageLogic* GetHUDMessageLogic() const { return &mHUDMessageLogic; }
+    // == mePlayerActiveRaceCarIndex (X360 +0x8038). No console accessor either: ModeManager::
+    // PostWorldUpdate hands `lwzx r29, r31, r17` (r17 = 0x8038 @0x8234AA90) to
+    // HUDMessageLogic::PostWorldUpdate as its [sp+0x5C] stack argument (`stw r29, 0x5C(r1)`
+    // @0x8234B0D4). Named for the same reason as GetHUDMessageLogic -- the extracted post-world leg.
+    // [FX-GS 2026-09-23, crash-parity G11-D1]
+    EActiveRaceCarIndex  GetPlayerActiveRaceCarIndex() const { return mePlayerActiveRaceCarIndex; }
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
     const NetworkRoundManager*          GetNetworkRoundManager() const;   // returns mpNetworkRoundManager (+0x6D64)

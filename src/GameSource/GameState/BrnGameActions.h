@@ -832,6 +832,21 @@ enum EGameActionType
     // DWARF value (BrnGameActions.h:220); by this band it lands at 218 on the X360. Nothing in
     // src posts it; it is left as found and named here so the collision is visible.
     E_ACTION_ALL_RIVALS_SHUTDOWN                         = 210,  // DWARF 202 (+8 X360); size 1  BAND
+    // ---- [FX-GS 2026-09-23, crash-parity G11-D1] the race-mode HUD pair HUDMessageLogic posts --
+    // BAND (+10). BrnGame::BrnGameModule::TranslateGameActionsToGuiEvents @0x823E9CE0 pins the band
+    // case by case against the DWARF names: 242 -> GuiTookLeadEvent (DWARF 232 TOOK_LEAD),
+    // 245 -> GuiInEventLeaderSplit (235 LEADING), 246 -> GuiInEventNeckAndNeck (236 NECK_AND_NECK),
+    // 247 -> GuiInEventFinisher (237 X_FINISHES), 248 -> GuiInEventRivalProgress
+    // (238 X_REACHES_CHECKPOINT), 250 -> GuiNetworkPlayerCrashingEvent (240 X_CRASHES). The band ends
+    // at 251 (241 WRONG_WAY): the three DWARF stunt HUD ids 242..244 sit at 132..134 on the X360
+    // (HUDMessageLogic's own table), which is why BHR_CHECKPOINT 245 -> 252 and
+    // ROAD_RAGE_TIME_EXTENSION 248 -> 255 below run at +7.
+    // 249: HUDMessageLogic::GenerateRaceModeMessages @0x82399C78 (its inlined
+    //      GeneratePlayerCheckpointMessage), `li r5,0xF9` + `li r6,0x18` @0x82399CC8/0x82399CC4.
+    // 250: HUDMessageLogic::DetectCrashes @0x82394418 (`li r5,0xFA` + `li r6,0x10`
+    //      @0x823944F8/0x823944F0) and ::DetectOnlineCrashes @0x82394528 (@0x823947F8/0x823947F4).
+    E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT       = 249,  // DWARF 239 (+10 X360); size 24 BAND
+    E_ACTION_HUD_MESSAGE_X_CRASHES                       = 250,  // DWARF 240 (+10 X360); size 16 PINNED (translator case 250)
     // 255: RoadRageModeScoring::IncrementPlayerNumTakedowns @0x823445D0, `li r5,0xFF` + `li r6,4`
     //      @0x823446BC/0x823446B8 AND again @0x823446D4/0x823446D0 (the console posts it twice,
     //      back to back). DWARF :248 E_ACTION_HUD_MESSAGE_ROAD_RAGE_TIME_EXTENSION. [!] That is a
@@ -2558,6 +2573,34 @@ struct HUDMessageRoadRageTimeExtensionAction : public GameAction<E_ACTION_HUD_ME
 };
 static_assert(sizeof(HUDMessageRoadRageTimeExtensionAction) == 4,
               "X360 posts action 255 with size 4");
+
+// [FX-GS 2026-09-23, crash-parity G11-D1] DecFIGS BrnGameActions.h:4482-4487. Producer
+// HUDMessageLogic::GenerateRaceModeMessages @0x82399C78 (the inlined GeneratePlayerCheckpointMessage):
+// `ld 0x1F0 -> std var+0`, `ld 0x1F8 -> std var+8`, `lbz 0x200 -> stb var+0x10`, posted with size 24
+// (`li r6,0x18` @0x82399CC4). The seven tail bytes are never written.
+struct HUDMessagePlayerReachesCheckpointAction : public GameAction<E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT>
+{
+    CgsID mThisLandmarkID;           // +0x00  HUDMessageLogic::mCurrentPlayerCheckpointID
+    CgsID mNextLandmarkID;           // +0x08  HUDMessageLogic::mNextPlayerCheckpointID
+    bool  mbIsPenultimatedLandmark;  // +0x10  HUDMessageLogic::mbIsLastCheckpoint
+};
+static_assert(sizeof(HUDMessagePlayerReachesCheckpointAction) == 24 &&
+              offsetof(HUDMessagePlayerReachesCheckpointAction, mNextLandmarkID) == 8 &&
+              offsetof(HUDMessagePlayerReachesCheckpointAction, mbIsPenultimatedLandmark) == 16,
+              "X360 posts action 249 with size 24; next id at +8, flag at +0x10");
+
+// [FX-GS 2026-09-23, crash-parity G11-D1/D2] DecFIGS BrnGameActions.h:4499-4503. Producers
+// HUDMessageLogic::DetectCrashes @0x82394418 (`ldx maRivalIds[idx] -> std var+0`, `stw idx, var+8`)
+// and ::DetectOnlineCrashes @0x82394528 (the buffered car's +0 id and +0xC index), size 16. Consumer
+// TranslateGameActionsToGuiEvents case 250 @0x823EC0CC (`ld 0` / `lwz 8` -> GuiNetworkPlayerCrashingEvent).
+struct HUDMessageXCrashesAction : public GameAction<E_ACTION_HUD_MESSAGE_X_CRASHES>
+{
+    CgsID               mRivalID;             // +0x00
+    ::EActiveRaceCarIndex meRivalRaceCarIndex; // +0x08
+};
+static_assert(sizeof(HUDMessageXCrashesAction) == 16 &&
+              offsetof(HUDMessageXCrashesAction, meRivalRaceCarIndex) == 8,
+              "X360 posts action 250 with size 16; the index at +8");
 
 // =============================================================================================
 // [takedown wave 2026-09-02] The five records BrnGameState::TakedownManager posts
