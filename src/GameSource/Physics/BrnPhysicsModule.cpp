@@ -806,3 +806,66 @@ namespace BrnPhysics
         }
     }
 }
+
+
+// =================================================================================================
+// PhysicsModule::UpdateNetworkCatchup  @0x825A1508  (37 insns)
+//
+// ADDED 2026-09-23 (crash-parity FX-VMNET, G44-D2), retiring the WorldLinkStubs.cpp boot gate that
+// stood for it (leaving both = LNK2005). WorldModule::Update reaches it every frame through
+// WorldModule::UpdatePhysicsNetworkCatchup @0x827B06E0 (BrnWorldModule.cpp), with the physics INPUT
+// buffer unlocked (its pre-scene lock pair has closed and the pre-physics pair has not opened).
+//   0x825A1528  mVehicleManager.CheckState()
+//   0x825A152C  assert "lpInputBuffer != NULL" (li r5, 0x419 == BrnPhysicsModuleUpdateFunctions.cpp
+//               :1049 -- that TU is this function's console home; it is bodied here, beside the
+//               module's other FX-VMNET arms)
+//   0x825A1558  LockForRead ; 0x825A1560 the const read-locked accessor @0x8259F948 (buffer
+//               +0x22CD0 == mVehicleDriverInterface) ; 0x825A156C VehicleManager::UpdateNetworkCatchup
+//   0x825A1574  UnlockForRead ; 0x825A157C mVehicleManager.CheckState()
+// The BrnUpdateSet argument is never read (r5 is not touched).
+// =================================================================================================
+namespace BrnPhysics
+{
+    void PhysicsModule::UpdateNetworkCatchup(const PhysicsModuleIO::InputBuffer* lpInputBuffer,
+                                             BrnUpdateSet /*lUpdateSet*/)
+    {
+        mVehicleManager.CheckState();
+        CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
+
+        lpInputBuffer->LockForRead();
+        const Vehicle::VehicleDriverInputInterface* const lpDriverInterface =
+            lpInputBuffer->GetVehicleDriverInterface();
+        mVehicleManager.UpdateNetworkCatchup(lpDriverInterface);
+
+        // [FLAG PC witness] BRN_NETCATCHUP_DIAG=1 -- one line, the first time this stage runs: the
+        // driver queue the catch-up just walked and how many NETWORK records it held (offline: 0).
+        // Read under the same read lock; no console counterpart.
+        {
+            static const bool sbDiag = (std::getenv("BRN_NETCATCHUP_DIAG") != 0);
+            static bool sbReported = false;
+            if (sbDiag && !sbReported && CgsDev::Log::gpDebugPrint != 0)
+            {
+                sbReported = true;
+                const Vehicle::VehicleDriverInputInterface::UpdateDriverEventQueue* const lpQueue =
+                    lpDriverInterface->GetUpdateDriverQueue();
+                const CgsModule::Event* lpEvent = 0;
+                s32 liSize = 0;
+                s32 liRecords = 0;
+                s32 liNetworkRecords = 0;
+                for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); liId >= 0;
+                     liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+                {
+                    ++liRecords;
+                    if (liId == Vehicle::E_DRIVER_TYPE_NETWORK)
+                        ++liNetworkRecords;
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << "[net-catchup] PhysicsModule::UpdateNetworkCatchup LIVE: driver queue "
+                    << liRecords << " record(s), " << liNetworkRecords << " NETWORK [FLAG PC witness]\n";
+            }
+        }
+
+        lpInputBuffer->UnlockForRead();
+        mVehicleManager.CheckState();
+    }
+}
