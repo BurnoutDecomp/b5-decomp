@@ -83,19 +83,21 @@ void RemotePlayerDisconnectedAction::SetNetworkPlayerID(BrnNetwork::NetworkPlaye
     mPlayerID = lPlayerID;
 }
 
-// X360 0x82355088. Initialise a setup-network-car action payload (6 members). The three asserts
+// X360 0x82355088. Initialise a setup-network-car action payload (7 members). The three asserts
 // bound the race-car index and reject the null model id (expression/file/line byte-exact).
 void SetupNetworkCarAction::Construct(EPlayerScoringIndex lePlayerScoringIndex,
                                       EActiveRaceCarIndex leActiveRaceCarIndex,
                                       Vector3             lPos,
                                       Vector3             lAt,
                                       CgsID               lModelId,
-                                      CgsID               lWheelModelId)
+                                      CgsID               lWheelModelId,
+                                      f32                 lfBaseDeformationAmount)
 {
     CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
     CGS_ASSERT(lModelId != 0, "lModelId != kCGSID_NULL");
 
+    mfBaseDeformationAmount = lfBaseDeformationAmount;   // stfs f31, 0x38(r31) @0x82355140
     mWorldSpacePosition  = lPos;
     mAt                  = lAt;
     mModelId             = lModelId;
