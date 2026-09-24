@@ -1030,6 +1030,10 @@ public:
     void EnableEngineSwitchOff(bool lbEnable)        { mbEnableEngineSwitchOff = lbEnable; }   // +0x770
     bool IsNotSendingNetworkUpdates() const          { return mbNotSendingNetworkUpdates; }    // +0x798
     bool IsDisconnectedFromNetwork() const           { return mbIsDisconnectedFromNetwork; }   // +0x799
+    // DWARF BrnActiveRaceCar.h:691 `void SetDisconnectedFromNetwork()`, no out-of-line symbol:
+    // HandleGameActions case 11 inlines it as `stb r23(1), 0x21F9` on maActiveRaceCars[idx]
+    // (0x8230CD3C; 0x21F9 - 0x1A60 == +0x799).
+    void SetDisconnectedFromNetwork()                { mbIsDisconnectedFromNetwork = true; }
     const Vector3& GetCurrentInAirRotations() const  { return mCurrentInAirRotations; }        // +0x750
     u16  GetCurrentAISection() const                 { return muCurrAISection; }               // +0x73E
     bool HasCrashedIntoWater() const                 { return mbCrashedIntoWater; }            // +0x783

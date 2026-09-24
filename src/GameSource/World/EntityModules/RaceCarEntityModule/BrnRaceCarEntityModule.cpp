@@ -2825,7 +2825,7 @@ void RaceCarEntityModule::DetachActiveRaceCar(
 //   0x823058F8 SetUpPlayerCarForMode          bodied (BrnRaceCarEntityModule_ModeArming.cpp)
 //   0x82305E00 RemoveRivals                   bodied (BrnRaceCarEntityModule_Rivals.cpp)
 //   0x82305F28 RemoveAllRivalsFromWorld       bodied (BrnRaceCarEntityModule_Rivals.cpp)
-//   0x82306028 RemoveAllNetworkCarsFromWorld  not reconstructed -- DEAD
+//   0x82306028 RemoveAllNetworkCarsFromWorld  bodied (BrnRaceCarEntityModule_Rivals.cpp; actions 27 / 41)
 //   0x8230BE08 HandleGameActions              a partial slice; it reaches RemoveRaceCar through
 //                                             case 0 (HandleResetPlayerCarAction below) and
 //                                             directly from case 121 (SHUTDOWN_FINISHED, the
@@ -3386,8 +3386,8 @@ void RaceCarEntityModule::HandleSetBoost(
 // [FLAG PC bring-up] every other case is DROPPED, not paraphrased. The named handlers the
 // console dispatches to and that are still un-reconstructed:
 //                                           4   HandleSetPlayerOpponentsAction
-//   5   HandleSetupNetworkCarAction
-//   11  HandleRemotePlayerDisconnected
+//   5   HandleSetupNetworkCarAction (header request H-GS1: SetupNetworkCarAction's +0x38 f32)
+//   [11 / 27 / 41 / 220 LANDED 2026-09-24, crash parity G68-D10 -- see "THE ONLINE ARMS"]
 //   73/74/76        the car-select / drive-thru arms
 //   126 SwitchCarColourAction (an AI car's colour; asserts :7393/:7397/:7398)
 //   219 the network setup-car arm, which also writes the colour pair (:7212/:7215)
@@ -4760,6 +4760,72 @@ void RaceCarEntityModule::HandleGameActions(
             GetActiveRaceCar(mePlayerActiveRaceCarIndex)->SetIndicatorState(
                 lpUpcomingRoad->miLeftRoadHighlightState == 2,
                 lpUpcomingRoad->miRightRoadHighlightState == 2);
+            break;
+        }
+
+        // ====================================================================================
+        // THE ONLINE ARMS (crash parity G68-D10, 2026-09-24). Their producers are live on PC now
+        // that the LAN free-burn starts: 11 from ModeManager's online intro
+        // (BrnModeManager_IntroPlay.cpp), 27 / 41 from its online stop arms (BrnModeManager_Start.cpp).
+        // Still missing here: 5 (HandleSetupNetworkCarAction @0x82305688 -- it stores the record's
+        // +0x38 base deformation, a member SetupNetworkCarAction does not have yet: header request
+        // H-GS1 in fixes/FX-RCEM4.md) and 222 (no producer anywhere in ARTIST).
+        // ====================================================================================
+
+        // Low jump table case 11 -> 0x8230CCA8..0x8230CD40. A remote player dropped out: the three
+        // asserts (:7150 / :7156 / :7160; `lbzx +0x18345` is mbIsInOnlineGameMode), then
+        // SetDisconnectedFromNetwork on maActiveRaceCars[idx] indexed directly -- `mulli 0x1CD0 ;
+        // stb r23(1), 0x21F9`, no GetActiveRaceCar call (DWARF local lpPlayerDisconnectedAction :7043).
+        case BrnGameState::GameStateModuleIO::E_ACTION_REMOTE_PLAYER_DISCONNECTED: // 11
+        {
+            const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction* lpPlayerDisconnectedAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::RemotePlayerDisconnectedAction*>(lpEvent);
+            CGS_ASSERT(lpPlayerDisconnectedAction != 0, "lpPlayerDisconnectedAction");
+            CGS_ASSERT(!mbIsInOnlineGameMode
+                       || (lpPlayerDisconnectedAction->meActiveRaceCarIndex != mePlayerActiveRaceCarIndex),
+                       "!mbIsInOnlineGameMode || (lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != mePlayerActiveRaceCarIndex)");
+            CGS_ASSERT((lpPlayerDisconnectedAction->meActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT)
+                       && (lpPlayerDisconnectedAction->meActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID),
+                       "(lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_COUNT ) && "
+                       "(lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)");
+            maActiveRaceCars[lpPlayerDisconnectedAction->meActiveRaceCarIndex].SetDisconnectedFromNetwork();
+            break;
+        }
+
+        // Low jump table cases 27 and 41 share 0x8230CD44: `mr r4, r20 ; mr r3, r31 ; bl
+        // RemoveAllNetworkCarsFromWorld` (BrnRaceCarEntityModule_Rivals.cpp).
+        case BrnGameState::GameStateModuleIO::E_ACTION_FINISH_MODE_FINAL_ONLINE: // 27
+        case BrnGameState::GameStateModuleIO::E_ACTION_QUIT_MODE_ONLINE:         // 41
+            RemoveAllNetworkCarsFromWorld(lpOutput);
+            break;
+
+        // High jump table case 113 (220) -> 0x8230D50C..0x8230D614. A player left the online
+        // lobby: the three record asserts (:7240 / :7241 / :7242), then -- unless it is the local
+        // player's own slot (`cmpw ; beq` out @0x8230D580) -- its active car (:7250) and global car
+        // (:7252) leave the scoring map and the mode, the slot's mbIsInGameMode (+0x777) clears
+        // (`stb r24(0)` @0x8230D5FC) and the car is removed (DWARF locals :7118 / :7127 / :7128).
+        case BrnGameState::GameStateModuleIO::E_ACTION_ONLINE_PLAYER_REMOVED: // 220
+        {
+            const BrnGameState::GameStateModuleIO::OnlinePlayerRemovedAction* lpPlayerRemovedAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::OnlinePlayerRemovedAction*>(lpEvent);
+            CGS_ASSERT(lpPlayerRemovedAction != 0, "lpPlayerRemovedAction");
+            CGS_ASSERT(lpPlayerRemovedAction->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                       "lpPlayerRemovedAction->GetActiveRaceCarIndex() >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(lpPlayerRemovedAction->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "lpPlayerRemovedAction->GetActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+
+            if (lpPlayerRemovedAction->meActiveRaceCarIndex != mePlayerActiveRaceCarIndex)
+            {
+                ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(lpPlayerRemovedAction->meActiveRaceCarIndex);
+                CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveRaceCar");
+                RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+                CGS_ASSERT(lpRaceCar != 0, "lpRaceCar");
+
+                ClearActiveRaceCarToPlayerScoringMapping(lpPlayerRemovedAction->meActiveRaceCarIndex);
+                lpRaceCar->SetInCurrentGameMode(false, false);
+                lpActiveRaceCar->SetInGameMode(false);
+                RemoveRaceCar(lpRaceCar->GetGlobalRaceCarIndex(), lpOutput);
+            }
             break;
         }
 

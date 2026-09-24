@@ -268,6 +268,39 @@ void RaceCarEntityModule::RemoveAllRivalsFromWorld(RaceCarEntityModuleIO::Output
 }
 
 // ============================================================================================
+// RemoveAllNetworkCarsFromWorld @0x82306028 -- game actions 27 / 41 (E_ACTION_FINISH_MODE_FINAL_ONLINE
+// / E_ACTION_QUIT_MODE_ONLINE; HandleGameActions 0x8230CD44 `mr r4, r20 ; bl`). Crash parity G68-D10.
+//
+// Console (r30 == the global index, r31 == the RaceCar; DWARF locals leGlobalRaceCarIndex :9143,
+// lpNetworkCar :9146):
+//   do {
+//       r31 = GetGlobalRaceCar(r30);
+//       [BrnRaceCar.h:547 type assert]  if (muType != 3 /* INACTIVE */)      == IsInWorld()
+//       [BrnRaceCar.h:590 type assert]      if (muType == 2 /* NETWORK */)  == IsNetworkDriven()
+//                                                SetInCurrentGameMode(false, false);   0x823060D8
+//                                                RemoveRaceCar(r30, lpOutput);         0x823060E8
+//       ++r30; [BurnoutConstants.h:84]
+//   } while (r30 < 35);
+// The sibling of RemoveAllRivalsFromWorld above, keyed on NETWORK and taking the car out of the
+// mode first. Its producers on PC are ModeManager's online stop arms (BrnModeManager_Start.cpp).
+// ============================================================================================
+void RaceCarEntityModule::RemoveAllNetworkCarsFromWorld(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput)
+{
+    for (EGlobalRaceCarIndex leGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+         leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
+         leGlobalRaceCarIndex++)
+    {
+        RaceCar* lpNetworkCar = GetGlobalRaceCar(leGlobalRaceCarIndex);
+
+        if (lpNetworkCar->IsInWorld() && lpNetworkCar->IsNetworkDriven())      // :547 / :590
+        {
+            lpNetworkCar->SetInCurrentGameMode(false, false);
+            RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
+        }
+    }
+}
+
+// ============================================================================================
 // AddRivalCar @0x82301A50 -- game action 196 (E_ACTION_ADD_RIVAL).
 //
 //   0x82301A9C  GetVehicleIndex(mpVehicleList, record->mRival.mCarId)     ; lwz 0x2C == low word
