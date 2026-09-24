@@ -351,8 +351,23 @@ namespace RaceCarEntityModuleIO
             mabCarSelectStatus[leActiveRaceCarIndex]      = lbStatus;
             mabCarSelectStatusValid[leActiveRaceCarIndex] = true;
         }
-        bool                           GetCarSelectStatus(EActiveRaceCarIndex) const;      // :236
-        bool                           IsCarSelectStatusValid(EActiveRaceCarIndex) const;  // :240
+        // :236 / :240 -- HEADER INLINES (crash parity G60-D6, 2026-09-24): no out-of-line symbol;
+        // PreSceneUpdate's per-slot pass inlines both with this header's own range-assert pair --
+        // IsCarSelectStatusValid h:866/:867 (0x8230E0E4 / 0x8230E104) then the byte at +0x52+i
+        // (`lbz 0x20(r31)` @0x8230E118), GetCarSelectStatus h:856/:857 (0x8230E130 / 0x8230E150)
+        // then the byte at +0x4A+i (`lbz r4, 0x4A(r11)` @0x8230E16C).
+        bool GetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabCarSelectStatus[leActiveRaceCarIndex];
+        }
+        bool IsCarSelectStatusValid(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabCarSelectStatusValid[leActiveRaceCarIndex];
+        }
     private:
         u16                     mau16RaceCarColourIndex[8];                                // :244
         u16                     mau16RaceCarPaintFinishIndex[8];                           // :245
