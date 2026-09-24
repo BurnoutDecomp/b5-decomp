@@ -101,6 +101,9 @@ namespace Native
         { eParticleArray_SkidSmokeGrass2,  256, 0 },
     };
 
+    // [DIAG] NOT IN THE X360 BINARY -- the ladder's first rung (see the header). DELETE-WHEN-STABLE.
+    u32 gauSimpleParticleSpawned = 0;
+
     // The two static per-type tables (DWARF :372 / :373). maTextures @0x82FAC150 (13 x 8-byte
     // handles), maStandardParams @0x82FABA80 (13 x 0x80). Zero-initialised .bss on the console.
     CgsResource::SafeResourceHandle<renderengine::Texture> BrnSimpleParticleArray::maTextures[eParticleArray_Max];
@@ -319,6 +322,7 @@ namespace Native
             lpBank->muNextParticle = lpBank->muNumParticles;
         }
         --lpBank->muNextParticle;
+        ++gauSimpleParticleSpawned;   // [diag] NOT IN THE X360 BINARY -- see the header
         return true;
     }
 

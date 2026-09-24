@@ -15,6 +15,7 @@
 #include "GameSource/Effects/Particles/Native/FXBuckets.h"             // BrnParticle::FXBucketManager (mBucketManager, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"  // BrnGraphics::Im3dSkidsRenderer (mSkidsRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnIm3dTexPlusLighting.h" // BrnGraphics::Im3dTexPlusLighting (mWorldTexRenderer, BY VALUE)
+#include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"   // BrnGraphics::Im3dSmokeRenderer (mSmokeRenderer, BY VALUE)
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"          // CgsGraphics::Im3d (mImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"   // BrnGraphics::LionBlendRenderer (mLionImmediateModeRenderer, BY VALUE)
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"        // BrnParticle::Native::TrailSystem (mTrailSystem, BY VALUE)
@@ -686,8 +687,16 @@ namespace BrnParticle
         // tyre-mark immediate-mode renderer, 100 bytes on the console, constructed by
         // ParticleModule::Prepare @0x8229BEA0 and handed to the trail system's renderer.
         BrnGraphics::Im3dSkidsRenderer mSkidsRenderer; // +0x9210 .. +0x9274
-        ContainedInterface mSmokeRenderer;             // +0x9274 (37492) DWARF :64 BrnGraphics::Im3dSmokeRenderer (off_820CEBE8)
-        u8 maPadIfaceDToE[0x92E0 - (0x9274 + sizeof(ContainedInterface))]; // -> +0x92E0
+        // +0x9274 (37492): DWARF :64 BrnGraphics::Im3dSmokeRenderer mSmokeRenderer -- the renderer the
+        // native SIMPLE particles (impact smoke, crash impact dust, skid smoke) draw through. NOT a
+        // ContainedInterface placeholder any more (2026-09-24, FX-CRASHVFX): ParticleModule::Prepare
+        // @0x8229BEA0 builds it with Im3dSmokeRenderer::Construct @0x82295260 (asm word 142, the same
+        // off_82F2C814 allocator) and hands it to BrnSimpleParticleRenderer::Construct. The console
+        // object is 0x68 bytes (four handles at +0x58..+0x64); host pointers widen the base, so the
+        // pad is clamped exactly like maPadIfaceAToB / maPadIfaceBToC above.
+        BrnGraphics::Im3dSmokeRenderer mSmokeRenderer; // +0x9274 (37492) DWARF :64 (off_820CEBE8)
+        u8 maPadIfaceDToE[(0x92E0 - 0x9274) > sizeof(BrnGraphics::Im3dSmokeRenderer)
+                          ? (0x92E0 - 0x9274) - sizeof(BrnGraphics::Im3dSmokeRenderer) : 1]; // -> +0x92E0
         // +0x92E0 (37600): DWARF :67 BrnGraphics::LionBlendRenderer -- the Lion blend
         // immediate-mode renderer, 0x1E0 bytes on the console. NOT a ContainedInterface
         // placeholder any more: ParticleModule::Prepare @0x8229BEA0 measures this object

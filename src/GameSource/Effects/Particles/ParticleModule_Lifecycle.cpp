@@ -25,13 +25,13 @@
 //
 // NOT RECONSTRUCTED, announced once each and never silently faked (every one is a
 // type with no committed layout, not a behaviour we chose to drop):
-//   - the four Im3d family Constructs bar the skids renderer (Im3d / TexPlusLighting /
-//     Smoke / Blend are `ContainedInterface` placeholders in ParticleModule.h)
+//   - (the five Im3d family Constructs all run now: Im3d / TexPlusLighting / Skids / Smoke /
+//     Blend -- the smoke renderer was the last placeholder, retired 2026-09-24 by FX-CRASHVFX)
 //   - cLionFX::Init + NativeParticleVertex::Construct + LionParticleRender::Setup's
 //     Lion half (the Lion core is not landed)
 //   - the four SparkArray bucket-manager records and ResetSparkFrameData
-//   - the per-array BrnSimpleParticleArray::Construct + spawn-time seeding
-//     (BrnSimpleParticleArray is an honest partial: only AcquireTexture's two fields)
+//   - (the per-array BrnSimpleParticleArray::Construct + spawn-time seeding and the
+//     BrnSimpleParticleRenderer::Construct run now -- 2026-09-24, FX-CRASHVFX)
 //   - the EA::Jobs::Job blocks in Construct (asm-sized placeholders)
 // ============================================================================
 
@@ -384,6 +384,12 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // re-authored pc/gcm/renderengine/WorldTexturedProgramsPC.cpp; see BrnIm3dTexPlusLighting.cpp.
         mWorldTexRenderer.Construct(lpGraphicsAllocator);
         mSkidsRenderer.Construct(lpGraphicsAllocator);
+        // asm word 142 (0x8229C0D0 `bl BrnGraphics__Im3dSmokeRenderer__Construct`), r3 = this+0x9274,
+        // r4 = the same allocator. BOTH program pairs (soft-particle + sans) and the four z-fade
+        // handles; the programs are the re-authored BrnIm3dSmokeRendererProgramsPC.cpp. The simple
+        // particles draw through it (BrnSimpleParticleRenderer, below). Was announced while this
+        // member was a ContainedInterface placeholder (2026-09-24, FX-CRASHVFX).
+        mSmokeRenderer.Construct(lpGraphicsAllocator);
         // asm word 145 (0x8229C0E4 `bl BrnGraphics__Im3dBlend__Construct`), r3 = the object at
         // this+0x92E0 == &mLionImmediateModeRenderer, r4 = the same off_82F2C814 allocator all
         // five renderers take. It uploads the two Lion program pairs and resolves the eight
@@ -391,12 +397,6 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         // pc/gcm/renderengine/LionBlendProgramsPC.cpp. It runs BEFORE the two +0x53D0 / +0x5278
         // stores below, exactly as the console orders it.
         mLionImmediateModeRenderer.Construct(lpGraphicsAllocator);
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's Im3dSmokeRenderer Construct -- a ContainedInterface "
-                "placeholder in ParticleModule.h; the other four Im3d renderers ARE constructed");
-        }
 
         // --- the Lion renderer ------------------------------------------------------------
         // `stw r30, 0x53D0(r31)` (mLionRenderer + 0x160 = &mLionImmediateModeRenderer) and
@@ -525,9 +525,10 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
 
         // --- simple particles ---------------------------------------------------------------
         // BrnSimpleParticleRenderer::Construct(this+0x228B8, mpHeapMalloc, this+0x9274) is the
-        // first call of this leg on the console (0x8229C2A4); it needs the Im3dSmokeRenderer at
-        // +0x9274, which is still a ContainedInterface placeholder, so it is announced by the
-        // smoke-renderer line above and the render half stays off.
+        // first call of this leg on the console (0x8229C2A4): the renderer keeps &mSmokeRenderer and
+        // builds its Standard / Additive / Subtractive blend states. (It was announced while the
+        // smoke renderer was a placeholder; both are real as of 2026-09-24, FX-CRASHVFX.)
+        mSimpleParticleRenderer.Construct(mpHeapMalloc, &mSmokeRenderer);
         //
         // ⭐ THE THIRTEEN ARRAYS ARE REAL AS OF 2026-09-24 (FX-CRASHVFX), 0x8229C2A8..0x8229C398:
         //     for (type = 0; type < 13; ++type)

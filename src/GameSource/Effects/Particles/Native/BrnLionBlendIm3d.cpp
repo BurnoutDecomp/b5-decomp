@@ -24,6 +24,7 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include "GameSource/Effects/Particles/Native/BrnLionBlendIm3d.h"   // BrnGraphics::Im3dBlend
+#include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the smoke renderer's BeginRendering(s8)
 
 #include <cstring>   // memcpy -- the staged shader-constant copies (console lvx128/stvx128)
 #include <cstdio>    // [diag] snprintf (the eight-handle resolve line in Construct)
@@ -484,6 +485,16 @@ template s8 ImRenderer<BrnGraphics::LionBlendVertex>::AddProgram(rw::IResourceAl
 template void ImRenderer<BrnGraphics::LionBlendVertex>::BeginRendering(s8);
 template void ImRenderer<BrnGraphics::LionBlendVertex>::Construct(rw::IResourceAllocator*, const void* const*, const u32*, const void* const*, const u32*, s8);
 template bool ImRenderer<BrnGraphics::LionBlendVertex>::SetProgram(s8);
+
+// ImRenderer<BasicColouredTexturedVertex>::BeginRendering(s8) @0x8227B5E8 -- the SAME template body,
+// instantiated for the 24-byte textured vertex: BrnGraphics::Im3dSmokeRenderer (the native simple
+// particles) selects its program slot through it (BrnSimpleParticleRenderer::Dispatch @0x8228CA18,
+// `bl` at 0x8228CB5C / 0x8228CB68). 0x8227B5E8 is instruction-for-instruction this body: the four
+// asserts (CgsImRenderer.h:617..620), mgpActiveRenderer = this + 4, ResetShadowing, `stb` of the slot
+// into +0x54, the vertex-program shadow compare against dword_8301095C, SetPixelProgram, and the
+// vertex-descriptor shadow against off_83010958 with the byte_83010A34 dirty flag.
+// (FX-CRASHVFX 2026-09-24.)
+template void ImRenderer<BasicColouredTexturedVertex>::BeginRendering(s8);
 
 } // namespace CgsGraphics
 

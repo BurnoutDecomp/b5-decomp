@@ -4,41 +4,59 @@
 // ============================================================================
 // GameSource/Effects/Particles/Native/ShadedRotatingRenderMethod.h
 //
-// BrnParticle::Native::ShadedRotatingRenderMethod -- the per-particle quad builder used
-// by the simple-particle renderer's CB4 bank (caller:
-// BrnParticle::Native::BrnSimpleParticleArray::CB4ParticleBank::Render @0x8291E600).
-// BuildQuad takes a particle's transform/colour/rotation state plus a vertex-output
-// pointer and emits one shaded, rotated, screen-space quad (four packed vertices with
-// dword-packed RGBA colour and UVs).
+// BrnParticle::Native::ShadedRotatingRenderMethod -- the per-particle quad builder of the native
+// simple-particle renderer. Its only caller is BrnSimpleParticleArray::CB4ParticleBank::Render
+// @0x8291E600, which builds ONE of these on its stack (var_470) before its loops and hands `this`
+// to every BuildQuad call in r3.
 //
-// HONEST STUB -- VMX KEYSTONE (NOT reconstructed in this pass):
-//   BuildQuad @0x8291E150 is a multi-stage hand-vectorised VMX/AltiVec pipeline. The
-//   body is almost entirely inline VMX (lvx128 strided gathers from rodata vector
-//   constants @0x8307A3B0..0x8307A680 / 0x82CDA350, vmaddfp polynomial evaluation of a
-//   fract()-based wave (vrfim/vsubfp/vminfp), vrlimi128/vperm lane shuffles building the
-//   rotated quad corners, vmulfp/vmaxfp/vminfp colour clamp, and vctuxs->byte-packing of
-//   the final RGBA dwords). This does NOT reliably lower to scalar C++: there is no
-//   faithful per-lane scalar formula without inventing one. Per project policy a VMX
-//   keystone is FLAGGED and given an honest non-fabricated stub rather than a paraphrase.
-//   Reconstructing it requires decoding the rodata vector constant tables and the exact
-//   permute-immediate lane maps (a dedicated VMX pass).
+// ⭐ 2026-09-24 (FX-CRASHVFX): BODIED. The old header called BuildQuad "a VMX keystone with no
+// faithful scalar lowering" and gave it an opaque (void*, int*, void*) signature and an asserting
+// stub. Neither holds: every lane of the pipeline is independent, the rodata tables it gathers
+// from are CRT-initialised splats whose values the init thunks state outright (see the .cpp), and
+// the result was checked against the console's own instruction words executed in an emulator
+// (scratch/CRASHPARITY_0922/fxcrashvfx_vmxemu).
+//
+// LAYOUT (the three stores Render makes into var_470 before its loops, 0x8291E6B0..0x8291E6F0):
+//   +0x00  mvCornerScale     splat(sqrt 2)  -- flt_821012CC, the half-diagonal of a unit square
+//   +0x10  mvLightingBase    (mid, mid, mid, 1.0)
+//   +0x20  mvLightingRange   (half, half, half, 0.0)
+// where mid/half are the middle and half-width of [min(1, lighting.min), min(1, lighting.max)]
+// (CB4ParticleArrayStandardParams::mLightingMinMax). Xenon-only code -- the PS3 DWARF carries no
+// shape for it, so the member names are ours, named for what the console computes into them.
 // ============================================================================
 
 #include "types.hpp"
+#include "rw/math/vpu/types.h"
 
 namespace BrnParticle
 {
 namespace Native
 {
+    struct CB4Particle;
+
     class ShadedRotatingRenderMethod
     {
     public:
-        // BrnParticle::Native::ShadedRotatingRenderMethod::BuildQuad @0x8291E150.
-        // Build one shaded, rotated quad into the vertex output. Arguments mirror the
-        // X360 register/stack contract (this, a particle-state pointer, the dword-packed
-        // vertex output, and a state block); kept opaque pending the VMX-decode pass.
-        // HONEST STUB: not implemented -- see file header (VMX keystone).
-        void BuildQuad(void* lpParticleState, int* lpVertexOut, void* lpRenderState);
+        // BrnParticle::Native::ShadedRotatingRenderMethod::BuildQuad @0x8291E150 (202 instructions).
+        // Register contract (the four Render call sites, 0x8291F33C / F498 / F5E8 / F734):
+        //   r3 this, r4 laPositions[4] (out), r5 lauColours[4] (out), r6 the spawn record,
+        //   r7 the camera's view matrix (never read -- `li r7, 0x10` overwrites it first),
+        //   v1 the particle's projected position, v2 (size x, size y, 0, size x),
+        //   v3 its colour, v4 splat(age), v5 splat(alpha).
+        // Writes the four corner positions and the four RGBA8 colour words (memory order R,G,B,A).
+        void BuildQuad(rw::math::vpu::Vector4* lpaPositions,
+                       u32* lpauColours,
+                       const CB4Particle* lpParticle,
+                       const rw::math::vpu::Matrix44* lpViewMatrix,
+                       const rw::math::vpu::Vector4& lvPosition,
+                       const rw::math::vpu::Vector4& lvSize,
+                       const rw::math::vpu::Vector4& lvColour,
+                       const rw::math::vpu::Vector4& lvAge,
+                       const rw::math::vpu::Vector4& lvAlpha) const;
+
+        rw::math::vpu::Vector4 mvCornerScale;     // +0x00
+        rw::math::vpu::Vector4 mvLightingBase;    // +0x10
+        rw::math::vpu::Vector4 mvLightingRange;   // +0x20
     };
 }
 }
