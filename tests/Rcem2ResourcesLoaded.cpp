@@ -49,20 +49,28 @@ struct burnoutcargraphicsasset {
 };
 }
 }
-struct RenderParams {
-    DetachedPartQueue mQueue;
-    f32 mafVerletOffsets[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
-    DetachedPartQueue& GetDetachedPartQueue() { return mQueue; }
-};
-
 // FX-RCEM4 (reviewer B on 87d1ad23 / G62, 2026-09-24): OnResourcesLoaded now also copies the spec's
-// +1552 matrix (0x822EB20C). Stand-ins so the extracted body builds; that leg is tested by
-// run_fxrcem4_on_resources_loaded.py.
+// +1552 matrix (0x822EB20C) and sets the four wheel scales (0x822EB410). Stand-ins so the extracted
+// body builds; those legs are tested by run_fxrcem4_on_resources_loaded.py.
 struct Matrix44Affine { Vector3 xAxis, yAxis, zAxis, wAxis; };
 namespace rw { namespace math { namespace vpu { inline bool IsValid(const Matrix44Affine&) { return true; } } } }
 namespace BrnPhysics { namespace Deformation {
-struct StreamedDeformationSpec { Matrix44Affine mCarModelSpaceToHandlingBodySpaceTransform; };
+struct WheelSpec { Vector3 mPosition, mScale; s32 liTagPointIndex; };
+struct StreamedDeformationSpec {
+    Matrix44Affine mCarModelSpaceToHandlingBodySpaceTransform;
+    WheelSpec maWheelSpecs[4];
+    const WheelSpec* GetWheelSpec(s32 liWheel) const { return &maWheelSpecs[liWheel]; }
+};
 } }
+
+struct RenderParams {
+    DetachedPartQueue mQueue;
+    f32 mafVerletOffsets[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
+    Matrix44Affine maWheelScale[6] = {};
+    DetachedPartQueue& GetDetachedPartQueue() { return mQueue; }
+    void SetWheelScale(u32, const Vector3&) {}
+    Matrix44Affine& GetWheelScaleMatrix(u32 luWheel) { return maWheelScale[luWheel]; }
+};
 static const BrnPhysics::Deformation::StreamedDeformationSpec gResidentSpec = {};
 const BrnPhysics::Deformation::StreamedDeformationSpec* ResolveDeformationSpec(const CgsResource::ResourceHandle&) { return &gResidentSpec; }
 

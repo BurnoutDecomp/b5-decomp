@@ -4,8 +4,9 @@
 Run from the workflow checkout:
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxrcem4_on_resources_loaded.py [--pre-fix <b5 rev>]
 Extracts ActiveRaceCar::OnResourcesLoaded and ResolveDeformationSpec (this TU's Def) from
-BrnActiveRaceCar.cpp into tests/FxRcem4OnResourcesLoaded.cpp, which replays them against the real
-StreamedDeformationSpec layout.
+BrnActiveRaceCar.cpp, RenderParams::SetWheelScale from BrnActiveRaceCarRenderParams.cpp and
+StreamedDeformationSpec::GetWheelSpec from BrnStreamedDeformationSpec.cpp into
+tests/FxRcem4OnResourcesLoaded.cpp, which replays them against the real StreamedDeformationSpec layout.
 """
 import sys
 
@@ -13,6 +14,8 @@ sys.dont_write_bytecode = True
 from fxrcem3_common import RCEM, REPO, build_and_run, definition, pre_fix_rev, read
 
 ACTIVE = RCEM + "BrnActiveRaceCar.cpp"
+RENDER_PARAMS = RCEM + "BrnActiveRaceCarRenderParams.cpp"
+SPEC = "src/GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.cpp"
 RESOLVE = "ResolveDeformationSpec(const CgsResource::ResourceHandle& lrHandle)\n    {"
 
 
@@ -23,6 +26,11 @@ def main():
         "fxrcem4_orl.inc": definition(active, "void ActiveRaceCar::OnResourcesLoaded("),
         "fxrcem4_orl_resolve.inc": ("const BrnPhysics::Deformation::StreamedDeformationSpec*\n"
                                     + definition(active, RESOLVE)),
+        # The two callees are other functions: always the working tree's.
+        "fxrcem4_orl_setwheelscale.inc": definition(read(RENDER_PARAMS),
+                                                    "void ActiveRaceCar::RenderParams::SetWheelScale("),
+        "fxrcem4_orl_getwheelspec.inc": definition(read(SPEC),
+                                                   "const WheelSpec* StreamedDeformationSpec::GetWheelSpec("),
     }
     rc = build_and_run(REPO / "tests" / "FxRcem4OnResourcesLoaded.cpp", pieces, "fxrcem4_orl",
                        extra_sources=(REPO / "src/GameShared/GameClasses/Development/CgsStrStream.cpp",))
