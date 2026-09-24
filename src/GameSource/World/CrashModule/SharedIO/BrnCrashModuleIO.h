@@ -156,6 +156,13 @@ namespace CrashIO
         // what the console inlines here), and the crash module reads it BY NAME.
         void SetGameActionQueue(const GameActionQueue* lpQueue);                            // 0x827A2328
 
+        // Construct -- no out-of-line X360 symbol: CgsIOBufferStack::CreateIOBuffer<InputBuffer_PreScene>
+        // @0x827CEB30 inlines it right after Alloc(0xAE90) (0x827CEBEC..0x827CEC18). CreateIOBuffer<T>
+        // calls T::Construct() statically, so until this existed the call bound to the BASE
+        // CgsModule::IOBuffer::Construct and the embedded queues / interfaces were never constructed
+        // (crash parity FOLLOWUPS 19). mbPlayerPressingBoost (+0xAE80) is not written by it.
+        void Construct();
+
         static void _AssertLayout();
 
     private:
