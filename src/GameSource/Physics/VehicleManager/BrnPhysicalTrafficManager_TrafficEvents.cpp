@@ -15,7 +15,7 @@
 //   PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents@0x8262CED0 (145)  DWARF :656
 //   PhysicalTrafficManager::SetTrafficVehicleNotCrashing     @0x825CAB48 ( 50)  DWARF :179
 //   PhysicalTrafficManager::UpdateNetworkTrafficVehicle      @0x8261CBD0 ( 50)  DWARF :662
-//                                                            -- NAMED GATE, see its seat
+//                                                            (bodied 2026-09-23, G34-D1)
 //
 // No Feb-2007 source for any of these. ARTIST pseudocode + asm; DecFIGS DWARF for declaration
 // shape. Every signature below is read off the PROLOGUE, not the pseudocode.
@@ -300,40 +300,52 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
 }
 
 // =================================================================================================
-// GATE PhysicalTrafficManager::UpdateNetworkTrafficVehicle @0x8261CBD0 (50) -- DWARF :662
-//    blocker: its two working callees have no bodies anywhere in the tree --
-//      BrnPhysics::Vehicle::PhysicalTrafficVehicle::GetFullTraffic  (the +0x1C body as a
-//        TrafficPhysics; distinct from the bodied GetFullTrafficPhysics @0x825C0148) and
-//      BrnPhysics::Vehicle::VehicleDriver::StartCatchupInterpolation (DECLARED in
-//        BrnVehicleDriver.h:64, no definition -- the whole catch-up interpolation family is
-//        unreconstructed).
-//    ⭐ IT IS UNREACHABLE OFFLINE AND THAT IS STRUCTURAL, NOT AN ASSUMPTION: the only producer
-//    of the queue that feeds it is VehicleInputInterface::UpdateNetworkTraffic, so
-//    ProcessUpdateNetworkTrafficEvents' loop above executes zero iterations in single player.
-//    Gating it here is therefore strictly better than trap-stubbing the two callees, which
-//    would put a trap on the ONLY path a future network wave has to walk.
-//    DELETE-WHEN VehicleDriver::StartCatchupInterpolation lands.
+// UpdateNetworkTrafficVehicle @0x8261CBD0 (50) -- DWARF :662. BODIED 2026-09-23 (G34-D1); it was a
+// named gate waiting on VehicleDriver::StartCatchupInterpolation, which FX-VMNET bodied (489966db).
 //
-//    The body it will get, off the asm (0x8261CBD0..0x8261CC94), for whoever lands it:
-//      assert lTrafficPhysicsId.IsValid()                                (:560)
-//      idx = lTrafficPhysicsId.GetEntityIndex()
-//      lpVehicle = GetTrafficVehicle(idx)
-//      assert lpVehicle->mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT (BrnPhysicalTrafficVehicle.h:382)
-//      if (lpVehicle->mu8PhysicalType == FULL)                           -- NOT an assert here
-//          GetTrafficDriver(idx)->StartCatchupInterpolation(
-//              lpVehicle->GetFullTraffic(),
-//              lpEvent->mTransform,                 // the event + 16, i.e. past mVolumeInstanceID
-//              <v1 = full+0x50>, <v2 = full+0x60>,  // `lvx128 v2,r31,96 / lvx128 v1,r31,80`
-//              false)                               // `li r7,0`
+// Hands a network traffic car's authoritative transform to its driver's catch-up interpolation.
+// Straight off the asm:
+//   0x8261CBE8  `cmpwi r31(id), -1`            assert "lTrafficPhysicsId.IsValid()" (.cpp 0x230 == 560)
+//   0x8261CC10  `extrwi r30, r31, 14,8`         idx == lTrafficPhysicsId.GetEntityIndex()
+//   0x8261CC1C  GetTrafficVehicle(idx)          @0x825B4880 (*(this+0x194B4) + idx*64)
+//   0x8261CC24  `lbz r29, 0x32`                 mu8PhysicalType, assert < COUNT
+//                                               (BrnPhysicalTrafficVehicle.h 0x17E == 382)
+//   0x8261CC50  `cmpwi r29, 0 ; bne out`        only a FULL car -- NOT an assert here
+//   0x8261CC5C  GetFullTraffic                  @0x825C0148 == PhysicalTrafficVehicle::
+//                                               GetFullTrafficPhysics (same address)
+//   0x8261CC6C  GetTrafficDriver(idx)           @0x825B4900 (*(this+0x194B0) + idx*0xE0)
+//   0x8261CC70..0x8261CC8C  r4 = the full body, r5 = event + 0x10 (mTransform, past the 16-byte
+//               mVolumeInstanceID), `li r6, 0` (lbSnap -- the old banner's `li r7,0` was wrong),
+//               v1 = [full+0x50] (mLinearVelocity), v2 = [full+0x60] (mAngularVelocity) --
+//               vmx128.py on the raw lvx128 words: vD 1 and 2 -- then
+//               bl VehicleDriver::StartCatchupInterpolation @0x825FED30.
+// The car's OWN current velocities are passed: the event carries only a transform.
+// Network-only: the queue's sole console producer is CrashModule::HandleNetworkCrashingTraffic
+// @0x827CB788 (online), which has no body on PC yet, so this runs zero times offline.
 // =================================================================================================
-void PhysicalTrafficManager::UpdateNetworkTrafficVehicle(const UpdateNetworkTrafficEvent*,
-                                                         EntityId)
+void PhysicalTrafficManager::UpdateNetworkTrafficVehicle(const UpdateNetworkTrafficEvent* lpEvent,
+                                                         EntityId lTrafficPhysicsId)
 {
-    static bool s_bLogged = false;
-    LogOnce(s_bLogged,
-            "conductor gate: PhysicalTrafficManager::UpdateNetworkTrafficVehicle @0x8261CBD0 "
-            "(50) inert -- VehicleDriver::StartCatchupInterpolation has no body; NETWORK-ONLY, "
-            "the queue that reaches it has no offline producer [FLAG PC boot gate]\n");
+    CGS_ASSERT(lTrafficPhysicsId.muValue != 0xFFFFFFFFu, "lTrafficPhysicsId.IsValid()");   // .cpp:560
+
+    const s32 liTrafficIndex = static_cast<s32>((lTrafficPhysicsId.muValue >> 10) & 0x3FFFu);
+    PhysicalTrafficVehicle* const lpTrafficVehicle = GetTrafficVehicle(liTrafficIndex);
+
+    const u8 lu8PhysicalType = lpTrafficVehicle->mu8PhysicalType;
+    CGS_ASSERT(static_cast<u32>(lu8PhysicalType)
+                   < static_cast<u32>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT),
+               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");                  // BrnPhysicalTrafficVehicle.h:382
+
+    if (lu8PhysicalType == static_cast<u8>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL))
+    {
+        TrafficPhysics* const lpFullTraffic = lpTrafficVehicle->GetFullTrafficPhysics();
+        GetTrafficDriver(liTrafficIndex)->StartCatchupInterpolation(
+            lpFullTraffic,
+            lpEvent->mTransform,
+            lpFullTraffic->GetLinearVelocity(),
+            lpFullTraffic->GetAngularVelocity(),
+            false);
+    }
 }
 
 // =================================================================================================

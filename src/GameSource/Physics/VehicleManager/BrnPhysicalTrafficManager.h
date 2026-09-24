@@ -713,8 +713,9 @@ public:
                                            BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
 
     // @0x8261CBD0 (50) DWARF :662. Hand a network traffic car's authoritative transform to its
-    // driver's catch-up interpolation. NAMED GATE (its callees have no bodies); network-only, so
-    // the queue that reaches it has no offline producer. See the .cpp for the recovered body.
+    // driver's catch-up interpolation. Bodied 2026-09-23 (G34-D1) in
+    // BrnPhysicalTrafficManager_TrafficEvents.cpp; network-only, so the queue that reaches it
+    // has no offline producer.
     void UpdateNetworkTrafficVehicle(const UpdateNetworkTrafficEvent* lpEvent,
                                      EntityId lTrafficPhysicsId);
 
