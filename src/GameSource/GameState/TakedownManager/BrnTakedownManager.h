@@ -163,6 +163,23 @@ namespace BrnGameState
     public:
         // [PC harness, not X360] see TakedownManagerDebugComponent::HarnessForceTakedown.
         void HarnessForceTakedown() { mTakedownManagerDebugComponent.HarnessForceTakedown(); }
+        // [PC harness, not X360] (FX-BRIDGES CC-8 witness, 2026-09-24) the console's own "Force takedown"
+        // debug action (TakedownManagerDebugComponent::ForceTakedownCallback @0x823597F8: Clear, then
+        // mfTimeSinceVictimCrashed 0, mbWaitingOnTakedown 1, a STANDARD pending event) with the roles
+        // swapped: the pending takedown is armed on the AGGRESSOR's slot (the slot ProcessQueuedTakedowns
+        // confirms against -- active, not crashing, above KF_MIN_TAKEDOWN_SPEED) and names the player as
+        // the victim. Everything after the arming is the console's code. See GameStateModule_gTD_00.cpp,
+        // BRN_FORCE_PLAYER_TAKEN_DOWN. DELETE-WHEN a scripted rival ram on the player can be relied on.
+        void HarnessForceTakenDown(EActiveRaceCarIndex leAggressorIndex, EActiveRaceCarIndex leVictimIndex)
+        {
+            RaceCarData& lrAggressor = maRaceCarData[leAggressorIndex];
+            lrAggressor.Clear();
+            lrAggressor.mfTimeSinceVictimCrashed         = 0.0f;
+            lrAggressor.mbWaitingOnTakedown              = true;
+            lrAggressor.mPendingTakedownEvent.meAggressorIndex = leAggressorIndex;
+            lrAggressor.mPendingTakedownEvent.meVictimIndex    = leVictimIndex;
+            lrAggressor.mPendingTakedownEvent.meType           = E_TAKEDOWN_STANDARD;
+        }
     private:
 
         // ---- members, DWARF order (:230-248) ----
