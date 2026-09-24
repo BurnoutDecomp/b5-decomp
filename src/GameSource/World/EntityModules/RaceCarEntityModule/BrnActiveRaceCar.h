@@ -819,6 +819,13 @@ public:
     void AddToCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface );
 
+    // X360 0x822BFA30 (DWARF BrnActiveRaceCar.cpp:1757..). A NETWORK car's owner entered or left
+    // the online junkyard: latch mbIsInCarSelectOnline (+0x79A) and, on a change, arm
+    // mbCarSelectOnlineStateChanged (+0x79B) for Update_PreScene's NORMAL arm to add or remove the
+    // car for collision. An unattached slot just clears the latch. Its one caller is
+    // RaceCarEntityModule::PreSceneUpdate's per-slot pass (0x8230E170). Crash parity G60-D6.
+    void UpdateCarSelectStateOnline( bool lbInCarSelect );
+
     // X360 0x822EB6B0 (46 insns). The per-frame post-physics scene leg: refresh the culling
     // group, then re-add for collision if this car was un-crashed this frame.
     void SendSceneUpdatesPostPhysics( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,

@@ -5984,6 +5984,14 @@ void RaceCarEntityModule::PreSceneUpdate(
                                            << " [FLAG PC witness]\n";
             }
         }
+
+        // The pass's LAST leg (crash parity G60-D6, 2026-09-24), 0x8230E118..0x8230E170: a slot whose
+        // online car-select status arrived this frame (BrnGameModule::TranslateNetworkEventsToWorld ->
+        // the world bridge -> SetCarSelectStatus) hands it to the car -- every slot, attached or not.
+        if (lpInput->IsCarSelectStatusValid(leActivateSlot))
+        {
+            lpActivateCar->UpdateCarSelectStateOnline(lpInput->GetCarSelectStatus(leActivateSlot));
+        }
     }
 
     WriteUpdatedAIData( lpOutput );

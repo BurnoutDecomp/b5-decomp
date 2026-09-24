@@ -3551,6 +3551,35 @@ void ActiveRaceCar::AddToScene(
 }
 
 // ============================================================================
+// UpdateCarSelectStateOnline @ 0x822BFA30 (crash parity G60-D6, 2026-09-24)
+//
+//   0x822BFA44  bl IsAttached ; beq -> 0x822BFB44: stb 0, 0x79A (mbIsInCarSelectOnline) ; return
+//   0x822BFA58  IsAttached assert (BrnActiveRaceCar.h:1089, the inlined GetGlobalRaceCar)
+//   0x822BFA88  lwz 0x6F0 ; lbz 0xA4 ; cmplwi 2 -- the raw type byte; not NETWORK fires the
+//               StrStream assert "Trying to update a non-network car car select state" (:1763)
+//   0x822BFB04  (0x79A != 0) vs (lbInCarSelect != 0): on a difference stb 1, 0x79B
+//               (mbCarSelectOnlineStateChanged), then stb lbInCarSelect, 0x79A.
+// ============================================================================
+void ActiveRaceCar::UpdateCarSelectStateOnline( bool lbInCarSelect )
+{
+    if( !IsAttached() )
+    {
+        mbIsInCarSelectOnline = false;
+        return;
+    }
+
+    // GetGlobalRaceCar carries the one IsAttached assert the console inlines here (h:1089).
+    CGS_ASSERT( GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK,
+                "Trying to update a non-network car car select state" );
+
+    if( mbIsInCarSelectOnline != lbInCarSelect )
+    {
+        mbCarSelectOnlineStateChanged = true;
+    }
+    mbIsInCarSelectOnline = lbInCarSelect;
+}
+
+// ============================================================================
 // AddToCollision @ 0x822D41F0   (138 insns)
 //
 //   0x822D4208  IsActive()                assert :0x56B == :1387
