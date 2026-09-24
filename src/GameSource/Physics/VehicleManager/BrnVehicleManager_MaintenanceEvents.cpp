@@ -132,7 +132,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"  // BrnWorld::ERaceCarType
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint / gxMessageFilterFlags
-#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                // gbReadSurfaceProperties / KAB_SURFACE_IS_WATER / KI_MAX_NUM_SURFACES
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                // gbReadSurfaceProperties / KAB_SURFACE_IS_WATER
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // GetSimpleVehicleBox / GetAboveGroundTestResult
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"                   // CgsGeometric::Box
 #include "SharedClasses/World/BrnCollisionTag.h"                                   // BrnWorld::KU_COLLISION_MASK_SURFACE_ID
@@ -867,10 +867,13 @@ namespace Vehicle
 
                 CGS_ASSERT(gbReadSurfaceProperties, "BrnPhysics::Vehicle::gbReadSurfaceProperties");   // :4230
 
-                // [GUARD] host bound, the same one CrashFatalRaceCars carries: the console indexes
-                // the 32-entry KAB_SURFACE_IS_WATER with the raw 6-bit id. DELETE-WHEN the surface
-                // table is widened to 64 or the id is proven < 32.
-                if (lu8SurfaceId < KI_MAX_NUM_SURFACES && KAB_SURFACE_IS_WATER[lu8SurfaceId])
+                // 0x8261E00C `lbzx byte_82FB7DF4[id]` -- no bound test on the console, and none
+                // here: the id is always < 20 on the shipped data. The tag is a WORLDCOL.BIN
+                // polygon-soup poly tag (the only PolygonSoupList bundle), the traction-line job
+                // hands it to SetAboveGroundTestResult, and over all 850830 polys this field
+                // takes exactly the 20 values 0..19 == the surfacelist's Num_Surfaces
+                // (FX-FPUMAX, tests/run_fxfpumax_water_surface.py pins the chain and the data).
+                if (KAB_SURFACE_IS_WATER[lu8SurfaceId])
                 {
                     CgsGeometric::Box lTrafficBox;
                     lpTrafficPhysics->GetSimpleVehicleBox(lTrafficBox);
