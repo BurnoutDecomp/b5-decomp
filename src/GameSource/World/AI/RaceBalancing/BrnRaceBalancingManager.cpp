@@ -121,10 +121,14 @@ void RaceBalancingManager::Update(const AICar* lpPlayerCar, f32 lfTimeStep)
 {
     if (mbInRace && !mbOnStartLine)
     {
-        // [GUARD] host-only null test: the PC's INVALID-index mapping can hand over a null
-        // player car where the console reads an in-object byte. It sits inside the gate, as the
-        // console reads +0x1542 only after the two flag tests.
-        if (lpPlayerCar != 0 && lpPlayerCar->IsCrashing())
+        // `lbz 0x1542(r3)` @0x8279B698 on AIModule::GetAICar(mePlayerGlobalRaceCarIndex), no null
+        // test -- the console's GetAICar never returns null. Nor can the PC's here: its only
+        // null is the out-of-range bail, and mePlayerGlobalRaceCarIndex is never out of range
+        // (Construct seeds 0; row 11 stores the active player driver's car slot, and an active
+        // driver always has a car -- AIDriver::SetAICar is the only writer of mbIsActive = 1 and
+        // binds the car in the same call). The host-only [GUARD] that stood here is removed
+        // (crash parity FX-NANPOL, 2026-09-24; review A on dce59f43).
+        if (lpPlayerCar->IsCrashing())
         {
             mfRaceTime = lfTimeStep * KF_PLAYER_CRASHING_TIME_FACTOR + mfRaceTime;
         }

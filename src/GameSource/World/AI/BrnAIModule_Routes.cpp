@@ -273,11 +273,18 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
     }
 
     // ---- the player's own route -> E_EVENT_PLAYER_ROUTE_UPDATED (0x8279576C..0x827957E0) ----
+    // Both results are dereferenced with no null test, as on the console (0x82795780 `lwz
+    // 0x1CE0(r3)`, 0x827957A0 `lwz 0x1408(r3)`). The host-only [GUARD]s that stood here are removed
+    // (crash parity FX-NANPOL, 2026-09-24; review A on dce59f43): this runs only inside
+    // AIModule::Update's mbPlayerDataSet gate (row 26), where mePlayerActiveRaceCarIndex is the
+    // slot RaceCarEntityModule::WriteUpdatedAIData published (it returns on -1 and asserts >= 0;
+    // AttachActiveRaceCar asserts every slot < 8), so GetAIDriver never bails; and
+    // mePlayerGlobalRaceCarIndex is always a car slot (see RaceBalancingManager::Update).
     AIDriver* lpPlayerDriver = GetAIDriver(mePlayerActiveRaceCarIndex);                      // 0x8279577C
-    if (lpPlayerDriver != 0 /*[GUARD] GetAIDriver's host-only bail*/ && lpPlayerDriver->GetCar() != 0)   // 0x82795780 lwz 0x1CE0
+    if (lpPlayerDriver->GetCar() != 0)                                                       // 0x82795780 lwz 0x1CE0
     {
         const AICar* lpPlayerAICar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));   // 0x8279579C
-        if (lpPlayerAICar != 0 /*[GUARD]*/ && lpPlayerAICar->HasValidRoute())                // 0x827957A0..0x827957B8
+        if (lpPlayerAICar->HasValidRoute())                                                   // 0x827957A0..0x827957B8
         {
             CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");
             if (lpOutputBuffer != 0)

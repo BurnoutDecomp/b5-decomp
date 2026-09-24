@@ -371,8 +371,11 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
                     : E_GLOBAL_RACE_CAR_INDEX_INVALID;
             }
         }
-        AICar* lpPlayerCar = (mePlayerGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID)
-                                 ? GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex)) : 0;   // row 12
+        // row 12, 0x8279B66C..0x8279B674: `lwz r4, +0x3E9FC ; bl GetAICar` -- unconditional. The
+        // host's `== INVALID ? 0` mapping that stood here is gone (FX-NANPOL, 2026-09-24): the index
+        // is never INVALID (row 11 stores -1 only for an active driver without a car, and SetAICar
+        // raises mbIsActive and binds the car together), so it only ever fed a dead null guard.
+        AICar* lpPlayerCar = GetAICar(static_cast<u32>(mePlayerGlobalRaceCarIndex));        // row 12
         // row 12's tail, 0x8279B678..0x8279B6C0: RaceBalancingManager::Update inlined off
         // `addis r11,r31,4 ; addi -0x2630` == &mRaceBalancingManager -- THE RACE CLOCK. It was
         // misfiled as an AIDebugComponent accumulator (+270912 == 0x3D9D0 + 0x4870 == mfRaceTime)
