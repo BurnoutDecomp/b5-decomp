@@ -3175,10 +3175,56 @@ namespace BrnDirector
         // EffectsModule) sees one edge per real change. Without it the previous set was whatever the
         // arbitrator state's camera carried: the reset-on-track sting re-posted on every gameplay-
         // camera frame and kept all four FxEffect voices busy, dropping every other FX sting.
+        //
+        // ⭐ X360 lines 850 / 853-866 -- THE POST-FX ID BOOKKEEPING (RESTORED 2026-09-24, crash parity
+        // FX-DIRECTOR; FX-CRASHSND's finding). An ICE camera publishes its take's authored post-FX
+        // hook id in mEffects.muRequestedPostFxId every frame it plays (KeyAnimController), and
+        // BridgeDirectorToGui turns a non-zero id into GUI event 495 (start the PFX by GUID). This
+        // bookkeeping makes that an EDGE: the id travels only on the frame it changes (or on a camera's
+        // first frame), and the director's EffectInterface records it, which is what later lets
+        // Camera::StopCurrentEffect ask for the null effect (0x7BEC6). Without it the PC re-started the
+        // take's post-FX on every frame of the shot and never stopped it.
+        //   0x82275084  lwzx r31, r30, 0x32FF4    ; mLastCamera.mEffects.muRequestedPostFxId -- read
+        //                                         ; BEFORE the operator= below
+        //   0x82275090  bl   Camera::operator=    ; mLastCamera = lCamera (keeps the real id)
+        //   0x82275094  lwz  r10, 0x1A4(r1)       ; lCamera.mEffects.muRequestedPostFxId
+        //   0x82275098  cmplw ; bne -> 0x822750CC ; changed since last frame
+        //   0x822750A0  ld 0x200(r1) ; & 0x40     ; E_FLAG_NEW_THIS_FRAME (bit 6) set -> 0x822750CC
+        //   0x822750C4  stw r28(=0), 0x1A4(r1)    ; neither: publish no id this frame
+        //   0x822750CC  cmplwi r10, 0 ; beq       ; changed / new to 0: nothing to register
+        //   0x822750D4..0x822750E4                ; the inlined EffectInterface::RegisterStartingEffectWithId
+        const u32 luLastRequestedPostFxId = mLastCamera.GetEffects().muRequestedPostFxId;   // 0x82275084
+
         lCamera.GetState().CopyFlagsToPrevious(mLastCamera.GetState());
 
         // Carry the finalised camera into the next frame.
         mLastCamera = lCamera;
+
+        const u32 luRequestedPostFxId = lCamera.GetEffects().muRequestedPostFxId;          // 0x82275094
+        if (luRequestedPostFxId == luLastRequestedPostFxId &&
+            !lCamera.GetState().IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME))
+        {
+            lCamera.GetEffects().muRequestedPostFxId = 0;                                   // 0x822750C4
+        }
+        else if (luRequestedPostFxId != 0)
+        {
+            reinterpret_cast<EffectInterface*>(maEffectInterface)->RegisterStartingEffectWithId(
+                luRequestedPostFxId);                                                        // 0x822750D4..E4
+
+            // [DIAG] BRN_PFX_DIAG (the GUI PFX switch, default off) -- NOT IN THE X360 BINARY. One line
+            // per registration, i.e. per frame the id actually travels to the GUI (at most 40 lines).
+            static const bool sbPostFxIdDiag      = (getenv("BRN_PFX_DIAG") != 0);
+            static s32        siPostFxIdLinesLeft = 40;
+            if (sbPostFxIdDiag && siPostFxIdLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siPostFxIdLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[postfx-id] director publishes + registers post-FX id " << luRequestedPostFxId
+                    << " (last frame " << luLastRequestedPostFxId << ", new camera "
+                    << (lCamera.GetState().IsFlagSet(Camera::CameraState::E_FLAG_NEW_THIS_FRAME) ? 1 : 0)
+                    << ")\n";
+            }
+        }
 
         // The debug component's panorama-screenshot pass gets the finished camera.
         if (mpDebugComponent != 0)
