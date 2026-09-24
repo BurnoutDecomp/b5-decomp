@@ -749,6 +749,27 @@ public:
     // sign of the player car's angular velocity Y at the moment the intro opens.
     f32 GetShowtimeIntroSteering() const;
 
+    // ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] X360 0x82380EF8 (163 insns), DWARF BrnGameStateModule.h:691 --
+    // THE PRE-WORLD HALF OF THE SHOWTIME "CARS CRASHED" CHAIN, and the only writer path of
+    // CrashModeScoring::maiNumCarsCrashed. Every PreWorldUpdate (unconditionally, `bl` #65
+    // @0x823A5888, between the event merge and ProcessGameEvents) it
+    //   1. turns a pending debug behaviour toggle into action 138;
+    //   2. finds the traffic-type ANSWER to last pop's request in lpResponseQueue, scores it through
+    //      CrashModeScoring::DealWithScoreForVehicleClass and posts action 140 (asserting when the
+    //      answer is missing, BrnGameStateModule.cpp:1611);
+    //   3. every KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES frames pops ONE crashed traffic index that
+    //      ProcessContacts pushed and posts it as the traffic-type REQUEST, action 116;
+    //   4. runs the inlined AchievementManagerBase::OnShowTimeMultiplier.
+    // Signature is the DWARF's; the console body never reads r4 (lpInput) or r6 (lpContacts).
+    // lpResponseQueue is the module's TrafficTypeResponse<32> cache (console gsm+278480, r7 ==
+    // `addis 4 ; addi 0x3FD0` @0x823A5870/78), spelled as its base, as the other consumers take it.
+    // Body in GameStateModule_Showtime.cpp.
+    void UpdateShowtimeMode(const GameStateModuleIO::PreWorldInputBuffer*       lpInput,
+                            GameStateModuleIO::OutputBuffer*                    lpOutput,
+                            const BrnPhysics::ContactSpy::ContactSpyInterface*  lpContacts,
+                            const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>*
+                                                                                lpResponseQueue);
+
 
 
     // ⭐⭐ [gateui] X360 ProcessGameEvents @0x823A0A18, THE CASE-111 ARM (0x823A1684..0x823A1698).
@@ -1322,7 +1343,9 @@ public:
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const;
 
     // DWARF BrnGameStateModule.h:1300/651. X360 inlines it (sets mbToggleShowtimeBehaviour=true at
-    // offset 284512); declared-only here, used by GameStateDebugComponent::ToggleShowtimeCallback.
+    // offset 284512); used by GameStateDebugComponent::ToggleShowtimeCallback @0x823578F8.
+    // [FX-SHOWTIME2 2026-09-24] Bodied in GameStateModule_Showtime.cpp beside its one reader,
+    // UpdateShowtimeMode.
     void ToggleShowtimeBehaviour();
 
     // ⭐ REAL (2026-08-11). The X360 BurnoutSkillzManager::Construct (0x82332688) reaches the
@@ -2090,6 +2113,13 @@ private:
     // E_SHOWTIME_MODE_COUNT. ShouldStartShowtimeMode refuses while it is E_SHOWTIME_MODE_OFF.
     EShowtimeBehaviour meShowtimeBehaviour              = E_SHOWTIME_MODE_ON_SIXAXIS;   // Construct: 2
 
+    // X360 +284512 (0x45760), DWARF :860. [FX-SHOWTIME2 2026-09-24] The debug request to cycle
+    // meShowtimeBehaviour. Its one writer is ToggleShowtimeBehaviour() (inlined in
+    // GameStateDebugComponent::ToggleShowtimeCallback @0x823578F8 as `*(module + 284512) = 1`);
+    // UpdateShowtimeMode @0x82380F1C reads it, cycles the behaviour, posts action 138 and clears it
+    // (`stb r29(=0), 0(r31)` @0x82380F78). Construct @0x82380388 stores 0.
+    bool               mbToggleShowtimeBehaviour        = false;
+
     // X360 +284510 (0x4575E), DWARF :857. "The car has been on the ground at some point during the
     // intro window." Cleared when the window opens (`stbx r28(0), r30, r9`, r9 == 0x4575E,
     // @0x8239A6C8) and OR-ed every frame with `!(mfTimeInAir > 0.0f)` (@0x8239A7A0..0x8239A7BC).
@@ -2127,10 +2157,13 @@ private:
     //                                     the traffic module answers with a TrafficTypeResponse --
     //                                     only THEN does DealWithScoreForVehicleClass run and
     //                                     maiNumCarsCrashed move.
-    // ⚠️ ONLY THE POST-WORLD HALF EXISTS TODAY. UpdateShowtimeMode is not reconstructed, so
-    // nothing pops this stack yet: it fills to KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES and then
-    // ProcessContacts' own IsFull() guard stops pushing -- which is the console's own behaviour
-    // when the consumer is starved, not a leak.
+    // ✅ BOTH HALVES EXIST (FX-SHOWTIME2 2026-09-24). Until then UpdateShowtimeMode had no body,
+    // so nothing popped this stack: it filled to KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES, ProcessContacts'
+    // own IsFull() guard stopped pushing, and "Cars Crashed" never moved. The rest of the chain:
+    // action 116 -> PhysicsModule::HandleGameActions case 116 -> VehicleManagerOutputInterface's
+    // request queue -> TrafficEntityModule::ProcessTrafficTypeRequests -> the response queue ->
+    // CacheTakedownTrafficTypeResponses -> next frame's UpdateShowtimeMode -> DealWithScoreForVehicleClass
+    // + action 140 (director close-up, crash play, GUI 394/399/401).
     // =========================================================================================
 
     // DWARF BrnGameStateModule.h:10 -- `const int32_t KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES = 8`,
@@ -2144,13 +2177,16 @@ private:
     CgsContainers::Stack<u16, KI_MAX_SIMULTANEOUS_SHOWTIME_CRASHES> mShowtimePendingTrafficIndexStack;
 
     // X360 +284484 (0x45744), DWARF :863. UpdateShowtimeMode's inter-request countdown: it
-    // decrements this every frame the stack is non-empty and only pops when it reaches 0, then
-    // re-seeds it to 2. Declared here with the stack it paces; its only writer lands with
-    // UpdateShowtimeMode.
-    s32 miShowtimePendingFrameDelay = 0;
+    // decrements this every frame the stack is non-empty (`addic. r11, r11, -1` @0x823810DC) and
+    // pops only when it is no longer positive, then re-seeds it to KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES
+    // (2, `li r11, 2` @0x82381124). Seeded 1 by GameStateModule::ClearData @0x8236B3A8 (`li r10, 1`
+    // @0x8236B4DC, `stwx r10` @0x8236B550), which Construct and Prepare both run; ClearData has no
+    // body on this build, so its value rides here as the initialiser.
+    s32 miShowtimePendingFrameDelay = 1;
 
     // X360 +284508 (0x4575C), DWARF :864. The index whose traffic-type answer is outstanding;
-    // K_INVALID_VEHICLE_INDEX (0xFFFF) when none is. Declared here for the same reason.
+    // K_INVALID_VEHICLE_INDEX (0xFFFF) when none is (ClearData @0x8236B548 / OnModeEnd @0x82376864
+    // store -1; UpdateShowtimeMode sets it on a pop and clears it on the next frame).
     u16 muShowtimeRequestedTrafficIndex = 0xFFFFu;
 
 public:

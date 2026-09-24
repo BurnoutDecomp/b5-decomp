@@ -2788,8 +2788,8 @@ void GameStateModule::ProcessContacts(
     // DealWithHitTrafficCar records a RecentCrash and bumps miCurrentComboCount; it does NOT
     // touch maiNumCarsCrashed. What it produces is the victim's traffic index, pushed here onto
     // mShowtimePendingTrafficIndexStack for the PRE-world half (UpdateShowtimeMode @0x82380EF8,
-    // not reconstructed) to turn into a traffic-type request and finally a score. The stack's
-    // banner in BrnGameStateModule.h carries the whole seven-hop chain.
+    // GameStateModule_Showtime.cpp, landed FX-SHOWTIME2 2026-09-24) to turn into a traffic-type
+    // request and finally a score. The stack's banner in BrnGameStateModule.h carries the chain.
     // ------------------------------------------------------------------------------------
     if (!lbShowtime)
     {
@@ -2818,20 +2818,22 @@ void GameStateModule::ProcessContacts(
         {
             mShowtimePendingTrafficIndexStack.Push(luVictimTrafficIndex);
 
-            // [DIAG] NOT IN THE X360 BINARY. The bounded witness for this leg, and the only
-            // evidence available for it: the crash COUNT cannot move until four more hops land,
-            // so there is no pixel to film here. One line per detected victim; the stack fills
-            // to 8 and stops, so it cannot flood. BRN_SHOWTIME_WATCH is the same opt-in the
-            // showtime physics witness in RaceCarPhysics::Update uses.
+            // [DIAG] NOT IN THE X360 BINARY. The bounded witness for this leg: one line per
+            // detected victim (the push). Its consumer, UpdateShowtimeMode, prints the matching
+            // `[showtime-score] pop` / `answer` lines under the same BRN_SHOWTIME_WATCH opt-in, so
+            // a run can count pushes against pops and scores. Capped, so a long showtime cannot
+            // flood the log.
             {
                 static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
-                if (sbWatch && CgsDev::Log::gpDebugPrint != 0)
+                static s32        siPushLinesLeft = 160;
+                if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && siPushLinesLeft > 0)
                 {
+                    --siPushLinesLeft;
                     *CgsDev::Log::gpDebugPrint
                         << "[showtime-crash] traffic car " << static_cast<s32>(luVictimTrafficIndex)
                         << " crashed; combo=" << lpCrashScorer->GetCurrentComboCount()
                         << " pending=" << mShowtimePendingTrafficIndexStack.GetLength()
-                        << " (no consumer yet -- UpdateShowtimeMode @0x82380EF8 unreconstructed)\n";
+                        << " (UpdateShowtimeMode pops it)\n";
                 }
             }
 
