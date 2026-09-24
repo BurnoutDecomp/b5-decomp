@@ -35,9 +35,12 @@ namespace Utils
     class CameraImpactEffect
     {
     public:
-        // DWARF :111/:118 -- declared-only (their own ledger functions).
+        // DWARF :111 -- clear the pending impact and the live wobble. BODIED 2026-09-24
+        // (FX-CAMRIG) in BrnCameraImpactEffectRegisterImpact.cpp: the console has no standalone
+        // symbol, BehaviourAftertouchCrash::Construct @0x822461F8 inlines it (the four zeros at
+        // +0x374..+0x380 -- the shake's own Construct -- then +0x370).
         void Construct();
-        // (Update's full DWARF shape: Update(Camera&, const Parameters&, Random&, f32).)
+        // (Update, DWARF :118, is declared below the Parameters block it takes.)
 
         // The embedded runtime shake this effect drives. ⭐ DE-FORKED 2026-08-29 (crash-camera
         // wave): mCameraShake was `u8 maCameraShake[16]` behind the FLAG above, whose own
@@ -87,6 +90,13 @@ namespace Utils
             f32                     mfShakeMagnitude;        // +0x14  "Shake magnitude"
             f32                     mfShakeFrequencyScale;   // +0x18  "Shake frequency scale"
         };
+
+        // DWARF :118 (PS3 @0x28074) -- run the embedded shake on the camera's transform, scaled
+        // by the pending impact, then decay the impact. BODIED 2026-09-24 (FX-CAMRIG) in
+        // BrnCameraImpactEffectRegisterImpact.cpp. The X360 has no standalone symbol: it is
+        // inlined into BehaviourAftertouchCrash::Update @0x8222921C..0x82229280.
+        void Update(Camera& lrCamera, const Parameters& lrParameters, Random& lrRandom,
+                    f32 lfTimestep);
 
     private:
         f32         mfImpactFactor;  // :126  +0x00

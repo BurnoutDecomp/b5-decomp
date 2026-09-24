@@ -16,11 +16,19 @@
 // which ArbStateCrashing::ApplySlomoAndShake @0x8224F8D8 drives every frame of a crash. Before
 // this split it was the ONE unresolved external in the whole link.
 //
+// ⭐ 2026-09-24 (FX-CAMRIG): the class's other two bodies, CameraImpactEffect::Construct (DWARF
+// BrnCameraShake.h:111) and ::Update (:118), live here too -- BehaviourAftertouchCrash's rig
+// (Construct @0x822461F8, Update @0x82228158) is the first caller of either, and this is the
+// class's only mounted file. Neither has an X360 symbol (both are inlined into the rig); Update is
+// transcribed from the PS3 out-of-line body @0x28074 and checked against the rig's inline copy.
+//
 // DELETE-WHEN: the three camera-tunings serialisers are mounted. Then mount
-// BrnCameraImpactEffect.cpp whole and delete this file (and its mount line).
+// BrnCameraImpactEffect.cpp whole, MOVE Construct/Update/RegisterImpact there, and delete this
+// file (and its mount line).
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"
+#include "GameSource/Director/Camera/Camera.h"   // Camera::mTransform (Update shakes it in place)
 
 namespace BrnDirector
 {
@@ -40,6 +48,41 @@ void CameraImpactEffect::RegisterImpact(f32 lfImpulseMagnitude)
     {
         mfImpactFactor = lfImpulseMagnitude;
     }
+}
+
+// DWARF BrnCameraShake.h:111. No X360 symbol -- BehaviourAftertouchCrash::Construct @0x822461F8
+// inlines it on its +0x370 member: `stfs f0(0.0)` at 4/8/0xC/0x10(r10) (the embedded shake's own
+// Construct, @0x82246488..0x82246494) and then at 0(r10) (@0x82246498).
+void CameraImpactEffect::Construct()
+{
+    mCameraShake.Construct();
+    mfImpactFactor = 0.0f;
+}
+
+// DWARF BrnCameraShake.h:118, PS3 @0x28074 (the out-of-line body):
+//   0x28088  addi  this, this, 4                 ; &mCameraShake
+//   0x28090  lfs   f0, 0x18(lParameters)         ; mfShakeFrequencyScale
+//   0x28098  lfs   f2, 0x14(lParameters)         ; mfShakeMagnitude
+//   0x2809C  fmuls f1, f0, f1                    ; frequency scale * timestep
+//   0x280A0  fmuls f2, f13(mfImpactFactor), f2   ; impact * magnitude
+//   0x280AC  bl    CameraShake::Update(transform, lParameters.mShakeParams, random, f1, f2)
+//   0x280B8  fsubs f13, 0.0, impact ; 0x280CC fmadds f0, decay(+0x10), f13, impact
+// The X360 inlines it into BehaviourAftertouchCrash::Update (0x8222921C..0x82229280) with the
+// rig's constant block folded in: f1 is the bare timestep (its frequency scale is 1.0, and
+// x * 1.0 == x for every x), f2 = impact * 60.0 (`fmuls f2, f13, f0` @0x8222926C), and the decay
+// is `fneg f13, impact ; fmadds f0, f13, 0.06, impact` (@0x82229278/0x8222927C) -- the same
+// value as the PS3's `0.0 - impact` for every input (the two differ only in the sign of a zero
+// intermediate, and x + (+-0) with x == +-0 rounds to the same result).
+// The shake runs on the camera's transform in place (the rig passes the camera itself, r4 = r24,
+// whose transform is its +0x00 member).
+void CameraImpactEffect::Update(Camera& lrCamera, const Parameters& lrParameters, Random& lrRandom,
+                                f32 lfTimestep)
+{
+    mCameraShake.Update(lrCamera.mTransform, lrParameters.mShakeParams, lrRandom,
+                        lrParameters.mfShakeFrequencyScale * lfTimestep,
+                        mfImpactFactor * lrParameters.mfShakeMagnitude);
+
+    mfImpactFactor = lrParameters.mfShakeDecayFactor * (0.0f - mfImpactFactor) + mfImpactFactor;
 }
 
 } // namespace Utils

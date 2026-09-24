@@ -8,8 +8,11 @@
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // CollisionPolicy(+AttachedToVehicle)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"     // Utils::CameraShake::Parameters (the
                                                                     //   "Shake Params" sub-block, by value)
-#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"        // Utils::PositionLag::Parameters (the lag
+#include "GameSource/Director/Camera/Utils/BrnPositionLag.h"        // Utils::PositionLag (+ ::Parameters, the lag
                                                                     //   sub-block, by value)
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"        // Utils::CameraShake (mShake, by value)
+#include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h" // Utils::CameraImpactEffect (mImpactEffect)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"               // CgsNumeric::Random (mRandom, by value)
 
 #include <cstddef>   // offsetof (the compile-time layout pins)
 
@@ -43,14 +46,17 @@
 //   mDesiredWorldSpaceNormalizedVectorFromCar  +0x2D0
 //   mCrashPoint                                +0x2E0
 //   mCameraPositionLastFrame                   +0x2F0
-//   mPositionLag/mRandom/mShake/mImpactEffect  +0x300 .. +0x383  (reserved run, see below)
+//   mPositionLag                               +0x300   Utils::PositionLag (0x30)
+//   mRandom                                    +0x330   CgsNumeric::Random (0x30, 16-aligned)
+//   mShake                                     +0x360   Utils::CameraShake (0x10)
+//   mImpactEffect                              +0x370   Utils::CameraImpactEffect (0x14)
 //   mfHeight                                   +0x384
 //   mfDistance                                 +0x388
 //   mfBlendFactor                              +0x38C
 //   mfTimeSinceLastDecision                    +0x390
 //   mfTimeSinceLastManualControl               +0x394
 //   mManualCameraDirection                     +0x3A0   Vector3
-//   mfManualHeightAdjustment                   +0x3B0   VecFloat (reserved, see below)
+//   mfManualHeightAdjustment                   +0x3B0   VecFloat (a broadcast 16-byte register)
 //   mbManualCameraControl                      +0x3C0
 //   mbWasFallingDownwards                      +0x3C1
 //   mbDisableCollision                         +0x3C2
@@ -184,11 +190,15 @@ public:
     // The base's interface is EIGHT slots (Construct / Prepare / Update / PostCollisionUpdate /
     // Release / GetCollisionPolicy / SetupTweaker / GetName; GetParameters/SetParameters are not
     // virtual and there is no destructor slot). The declaration-shape reference has this class
-    // overriding SIX of
-    // them -- slots 0, 1, 2, 5, 6 and 7 -- and appending NO extra virtuals of its own, so the
-    // derived vtable is the base's eight slots with those six re-pointed. The four transcribed
-    // below are declared in that slot order, each with `override` so the compiler proves the
-    // signature still lands on the base slot it is meant to fill.
+    // overriding SIX of them -- slots 0, 1, 2, 5, 6 and 7 -- and appending NO extra virtuals of
+    // its own, so the derived vtable is the base's eight slots with those six re-pointed.
+    // The console table is at 0x8200A580:
+    //   [0] Construct 0x822461F8   [1] Prepare 0x821FA870   [2] Update 0x82228158
+    //   [3] 0x82C296C8 (`li r3,1; blr` -- the base PostCollisionUpdate's "done")
+    //   [4] 0x8284CB38 (`blr` -- the base Release)
+    //   [5] GetCollisionPolicy 0x821FA8F8   [6] SetupTweaker 0x821FAA70   [7] GetName 0x821FA910
+    // All six overrides are declared below in that slot order, each with `override` so the
+    // compiler proves the signature still lands on the base slot it is meant to fill.
 
     // Seed the whole behaviour: the base head, the embedded collision policy plus its four
     // authored flag overrides, the rig sub-objects, and the flag/scalar tail.        (slot 0)
@@ -198,21 +208,32 @@ public:
     // parameter block and re-arm the debug-crash-camera parameter. Cannot fail.      (slot 1)
     bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;
 
+    // THE AFTERTOUCH CRASH RIG @0x82228158 (DWARF BrnBehaviourAftertouchCrash.cpp:161). Follows
+    // the lagged car: orbits it under the right stick, looks down on it, blends its direction
+    // toward the one behind the car's travel, pitches, smooths, shakes (its own shake plus the
+    // bounce impact shake), sets the FOV, rolls and finally blends into the slow-mo close-up.
+    // Always returns true.                                                           (slot 2)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo) override;
+
     // Hand back the vehicle-attached collision policy embedded after the basis, or null when
     // collision has been disabled on this instance.                                  (slot 5)
     CollisionPolicy* GetCollisionPolicy() override;
 
+    // Seed the tweaker the debug menu attaches (DWARF .cpp:516). ICF-folded on the console with
+    // BehaviourIceAnim::SetupTweaker: `mr r3, r4 ; b Tweaker::Construct`.           (slot 6)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) override;
+
     //                                                                                (slot 7)
     const char* GetName() const override;
 
-    // FLAG (not transcribed): the recovered declaration also carries
-    //   `virtual bool Update(Camera&, const BehaviourSharedInfo&)` -- the ~430-line aftertouch
-    //   crash rig -- and `virtual void SetupTweaker(Tweaker&)`, plus the private helper
-    //   `bool CheckForPlayerCarBouncing(const BehaviourSharedInfo&)`. Neither is declared here,
-    //   so slots 2 and 6 keep the base's defaults (Update returns true and leaves the camera
-    //   untouched; SetupTweaker does nothing). That is a DOCUMENTED GAP, not a fabrication --
-    //   the alternative would be inventing a camera rig.
-    //   DELETE-WHEN: the rig TU lands and bodies Update/SetupTweaker.
+    // DWARF BrnBehaviourAftertouchCrash.h:104. Inlined by Update at the close-up
+    // (0x822294C4..0x82229500): assert the rig has been prepared, then hand back the camera's
+    // current direction from the car. Non-const because Behaviour::IsPrepared is.
+    const Vector3 GetWorldSpaceVectorFromCar()
+    {
+        CGS_ASSERT(IsPrepared(), "IsPrepared()");
+        return mWorldSpaceNormalizedVectorFromCar;
+    }
 
     // Adopt an aftertouch-crash parameter block: assert it carries the aftertouch-crash type
     // tag, then store the pointer. NOT a virtual override: it is declared over the DERIVED
@@ -253,10 +274,37 @@ public:
 
 private:
 
+    // The player-car bounce detector @0x8220F340 (DWARF .cpp:465; Update is its only caller):
+    // arm on a frame the car moves DOWN, then report one bounce on the first frame it moves up
+    // again -- a bounce only if that upward speed beats KF_MIN_SPEED_FOR_CAMERA_BOUNCE.
+    bool CheckForPlayerCarBouncing(const BehaviourSharedInfo& lrSharedInfo);
+
+    // ---- the class-scope tunables (DWARF BrnBehaviourAftertouchCrash.cpp:22..:38) --------
+    // NOT const in the DWARF (debug-tweakable statics). Values and image addresses are in the
+    // .cpp. The five VecFloat ones are .bss splats filled by CRT thunks on the console.
+    static f32       KF_CAMERA_X_ROTATION_SPEED;                          // :22
+    static f32       KF_CAMERA_Y_ROTATION_SPEED;                          // :23
+    static f32       KF_CAMERA_RESET_SPEED;                               // :24
+    static f32       KF_TIME_UNTIL_CAMERA_RESET;                          // :25
+    static f32       KF_CAMERA_RESET_MIN_SPEED;                           // :26
+    static f32       KF_CRASHBREAKER_SHAKE_MAGNITUDE;                     // :27
+    static f32       KF_BOUNCE_SHAKE_MAGNITUDE;                           // :28
+    static f32       KF_MIN_SPEED_FOR_CAMERA_BOUNCE;                      // :29
+    static f32       KF_CRASHBREAKER_BLEND_OUT_SIM_SPEED;                 // :30
+    static f32       KF_RECIPROCAL_CRASHBREAKER_BLEND_OUT_SIM_SPEED_BLEND_TIME; // :31
+    static f32       KF_LOOK_DOWN_SCALE;                                  // :32
+    // `::VecFloat` (== rw::math::vpu::Vector4, BrnCommonTypes.h) is spelled with the leading
+    // `::` on purpose: inside BrnDirector the Timestep's own 16-byte slice BrnDirector::VecFloat
+    // would otherwise win the lookup.
+    static ::VecFloat KF_MIN_CAMERA_LOOK_TAN_SQ_ANGLE;                    // :34
+    static ::VecFloat KF_MAX_CAMERA_LOOK_TAN_SQ_ANGLE;                    // :35
+    static ::VecFloat KF_SMOOTHING_FACTOR;                                // :36
+    static ::VecFloat KF_SMOOTHING_STOP_DISTANCE_SQ;                      // :37
+    static ::VecFloat KF_MIN_CAMERA_MANUAL_HEIGHT_TWEAK;                  // :38
+
     // ---- layout (member NAMES and order recovered; see the file banner) -----------------
-    // The Behaviour base occupies the head. Three reserved runs stand in for rig members whose
-    // types are named in the recovered declaration but are not homed for this slice to embed; they are
-    // placeholders for REAL members, not invented ones, and nothing reads them.
+    // The Behaviour base occupies the head. Two reserved runs remain: alignment gaps, not
+    // members (the console leaves them unwritten).
 
     Matrix44Affine                   mIceCarRelativeBasis;                      // +0x020 (0x40)
     CollisionPolicyAttachedToVehicle mCollisionPolicy;                          // +0x060 (0x250)
@@ -266,10 +314,15 @@ private:
     Vector3                          mCrashPoint;                               // +0x2E0
     Vector3                          mCameraPositionLastFrame;                  // +0x2F0
 
-    // +0x300 .. +0x383 -- mPositionLag (PositionLag), mRandom (Random), mShake (CameraShake) and
-    // mImpactEffect (CameraImpactEffect), in that declared order. Held as one run until those four
-    // types are homed; the rig TU carves them out.
-    u8                               maReservedRigSubObjects[0x384 - 0x300];
+    // The four rig sub-objects, in the DWARF's declared order (h:156..:160). Their console
+    // offsets are pinned by Update (PositionLag::Update r3 = this+0x300, CameraShake::Update
+    // r6 = this+0x330 / r3 = this+0x360, RegisterImpact r3 = this+0x370, the impact shake's
+    // CameraShake::Update r3 = this+0x374) and by Construct's seeding stores (+0x320/+0x321,
+    // the Random ring at +0x330..+0x35F, +0x360..+0x36C, +0x370..+0x380).
+    Utils::PositionLag               mPositionLag;                  // +0x300 (0x30)
+    CgsNumeric::Random               mRandom;                       // +0x330 (0x30)
+    Utils::CameraShake               mShake;                        // +0x360 (0x10)
+    Utils::CameraImpactEffect        mImpactEffect;                 // +0x370 (0x14)
 
     f32                              mfHeight;                      // +0x384
     f32                              mfDistance;                    // +0x388
@@ -282,9 +335,10 @@ private:
 
     Vector3                          mManualCameraDirection;        // +0x3A0
 
-    // +0x3B0 .. +0x3BF -- mfManualHeightAdjustment (VecFloat, a 16-byte vector scalar). Held as a
-    // run until VecFloat is homed here; nothing in this slice reads it.
-    u8                               maReservedManualHeight[0x3C0 - 0x3B0];
+    // The right stick's height tweak: a broadcast 16-byte register (every console writer is a
+    // splat -- Construct's vspltw of 0.0f, and Update's stick*rate+tweak / *reset-rate), so its
+    // four lanes are always equal and Update reads lane x.
+    ::VecFloat                       mfManualHeightAdjustment;      // +0x3B0
 
     bool                             mbManualCameraControl;               // +0x3C0
     bool                             mbWasFallingDownwards;               // +0x3C1
@@ -345,6 +399,27 @@ private:
         static_assert(offsetof(BehaviourAftertouchCrash, mfBlendFactor)
                        - offsetof(BehaviourAftertouchCrash, mfHeight) == 0x08,
                       "mfBlendFactor follows mfDistance");
+
+        // The rig sub-object run +0x300 .. +0x383 (none of the four holds a pointer, so these
+        // displacements are the console's on the host too).
+        static_assert(offsetof(BehaviourAftertouchCrash, mPositionLag)
+                       - offsetof(BehaviourAftertouchCrash, mCameraPositionLastFrame) == 0x10,
+                      "mPositionLag follows mCameraPositionLastFrame (+0x300)");
+        static_assert(offsetof(BehaviourAftertouchCrash, mRandom)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x30,
+                      "mRandom @ mPositionLag + 0x30 (+0x330)");
+        static_assert(offsetof(BehaviourAftertouchCrash, mShake)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x60,
+                      "mShake @ mPositionLag + 0x60 (+0x360)");
+        static_assert(offsetof(BehaviourAftertouchCrash, mImpactEffect)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x70,
+                      "mImpactEffect @ mPositionLag + 0x70 (+0x370)");
+        static_assert(offsetof(BehaviourAftertouchCrash, mfHeight)
+                       - offsetof(BehaviourAftertouchCrash, mPositionLag) == 0x84,
+                      "mfHeight @ mPositionLag + 0x84 (+0x384)");
+        static_assert(offsetof(BehaviourAftertouchCrash, mbManualCameraControl)
+                       - offsetof(BehaviourAftertouchCrash, mfManualHeightAdjustment) == 0x10,
+                      "mfManualHeightAdjustment is the 16-byte register ahead of the flag run (+0x3B0)");
     }
 };
 
