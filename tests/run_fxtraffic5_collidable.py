@@ -35,8 +35,10 @@ CAMERA_CPP = "src/GameSource/Director/Camera/Camera.cpp"
 # VolumeInstanceId::SetEntityIDEntityIndex (@0x822B0E70): a shared helper, not under test.
 VOLUME_INSTANCE_CPP = REPO / "src/GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.cpp"
 FIXTURE = "CollidableFixture"
-NUMERIC_CHECKS = 26
+NUMERIC_CHECKS = 28   # 26 (FX-TRAFFIC5) + G1/G2, the NaN source (crash parity FX-NETCRASH, REVIEW_G)
 
+# vminfp: a NaN operand is the result -- the nearest-source scan (0x827316C4) uses it since FX-NETCRASH.
+AVOID_VMX_MIN = "    inline f32 AvoidVmxMin(f32 lfA, f32 lfB)"
 HELPER_BLOCK = ("namespace\n{\n    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.\n"
                 "    inline void LogMissingLeg_T4")
 ACCESSORS = [
@@ -71,6 +73,10 @@ def wiring(tree):
          carry >= 0 and "mVehiclesAvoidableLastFrame.UnSetBit(luVehicle)" in body[carry:]),
         ("no zero-count guard on mAveragePhysicalCentre (0x82730C80..0x82730CAC)",
          body != "" and "if (lfSourceCount > 0.0f)" not in body),
+        # crash parity FX-NETCRASH (REVIEW_G): the console asserts lpInput / lpOutput (0x82730320 /
+        # 0x82730344) and runs on -- no PC-safety early return.
+        ("no lpInput / lpOutput early return (the console asserts both and runs on, 0x82730320 / 0x82730344)",
+         body != "" and re.search(r"if\s*\(\s*lpInput\s*==\s*0\s*\|\|\s*lpOutput\s*==\s*0\s*\)", body) is None),
     ]
 
 
@@ -88,6 +94,8 @@ def numeric(tree):
         # NOT extracted from the module any more, also for --rev runs of older trees: a second
         # anonymous-namespace copy beside the header one would make the body's call ambiguous.
         parts = ["namespace BrnTraffic {", definition(module, HELPER_BLOCK)]
+        if "AvoidVmxMin(" in body:
+            parts += ["namespace {", definition(module, AVOID_VMX_MIN), "}"]
         parts += [definition(module, accessor).replace("TrafficEntityModule::", FIXTURE + "::", 1)
                   for accessor in ACCESSORS]
         parts.append(body)
