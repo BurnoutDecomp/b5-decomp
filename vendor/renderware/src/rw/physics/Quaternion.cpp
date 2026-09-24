@@ -1,35 +1,54 @@
 // =====================================================================================
-// rw::physics::Quaternion::UnitQuaternionToMatrix @ 0x82BC3EC0
+// rw::physics::Quaternion::UnitQuaternionToMatrix @ 0x82BC3EC0   (116 instructions)
 //
-// TRANSCRIPTION BASIS
-//   * 0x82BC3EC0 is an EXPORT HOLE (no listing). The body is recovered from the copy the
-//     compiler inlined into rw::physics::RigidBody::DynamicUpdate @0x82BC2B78, X360
-//     0x82BC2C58..0x82BC2D38, which IS in the export set and was read instruction by
-//     instruction.
-//   * Corroborated against the two out-of-line witnesses that do exist:
-//     BurnoutPR 0x59972D0 (x86/SSE, Hex-Rays `_mm_*`) and
-//     Burnout_External_Xbox_One.exe 0x1409B5BE0 (x64/AVX).
+// TRANSCRIPTION BASIS -- THE FUNCTION'S OWN WORDS. 0x82BC3EC0 is an export hole (no JSON), so
+// it is read straight out of the image: `python tools/re/ppcdis.py 82BC3EC0 116`. The three
+// words capstone prints as `.long 0x7C00FC0E / 0x7DA0240E / 0x7D80F40E` are `lvlx` (primary
+// 31, XO 519): `lvlx v0,0,r31` / `lvlx v13,0,r4` / `lvlx v12,0,r30`, each followed by
+// `vspltw vX,vX,0`. It is SCALAR FPU code with three VMX multiplies, not the VMX builder
+// RigidBody::DynamicUpdate inlines. Constants, read from the image (tools/re/x360rd.py):
+//     flt_82001D9C = 0x40000000 = 2.0f   stored to -0x60/-0x5C/-0x58(r1), then lvlx + vspltw 0
+//     flt_82001C98 = 0x3F800000 = 1.0f
 //
-// ⭐ THE ONE CONSTANT NEEDS NO .rdata READ. X360 loads rw::math::vpu::detail::gSqrt2s and
-// forms s = k*q, then builds the diagonal as pairwise sums of (0.5 - s_i^2):
-//     (0.5 - s_x^2) + (0.5 - s_y^2) == 1 - 2x^2 - 2y^2
-// which holds only for k == sqrt(2). The algebra pins it; no data read is required.
-// (It was subsequently read anyway -- the X360 image word at flt_821815B0+0x30 is
-// 0x3FB504F3 = 1.41421354 -- and BurnoutPR's xmmword_F0C890 is the same value. Three ways.)
+//   0x82BC3ECC..3EE4  lfs x, y, z, w <- 0/4/8/0xC(r4)  -- the ONLY accesses through r4, which
+//                     is overwritten by `addi r4,r1,-0x5C` at 0x82BC3F3C before any store.
+//   0x82BC3F0C..3F1C  fmuls  xx = x*x, yy = y*y, zz = z*z
+//   0x82BC3F2C..3F54  fmuls  wx = w*x, wy = y*w, wz = z*w
+//   0x82BC3F68..3F78  fmuls  xy = y*x, yz = z*y, zx = z*x
+//   0x82BC3F84 / 3FB4 / 3FB8  vmulfp128 of each triple by splat(2.0f):
+//                     (2xx, 2yy, 2zz)  (2wx, 2wy, 2wz)  (2xy, 2yz, 2zx)
+//   0x82BC3FD0..3FD8  fadds  2zz+2xx, 2yy+2zz, 2yy+2xx          (the three diagonal SUMS)
+//   0x82BC4020 / 4030 / 4048  fsubs  1 - (2zz+2xx), 1 - (2yy+2zz), 1 - (2yy+2xx)
+//   0x82BC3FF4..405C  fadds/fsubs  the six off-diagonals 2xy -/+ 2wz, 2yz +/- 2wx, 2zx -/+ 2wy
+//   0x82BC4074 / 4078 / 4080  stvx128 row1 -> r3+0x10, row0 -> r3+0x00, row2 -> r3+0x20.
+//                     Each row is assembled on the stack and its w lane is the `stw r11(=0)` at
+//                     0x82BC4040 (row0) / 0x82BC4028 (row1) / 0x82BC4064 (row2).
 //
-// The three output rows are the three COLUMNS of the standard body->world rotation matrix,
-// i.e. the right / up / at basis vectors -- exactly what rigidbody.h calls mRi / mUp / mAt.
-// Lane-by-lane confirmed against BurnoutPR's explicit row construction.
+// The three rows are the three COLUMNS of the body->world rotation matrix, i.e. the
+// right / up / at basis vectors (rigidbody.h's mRi / mUp / mAt); both jacobian builders use
+// them as the constraint frame (JointJacobian_Build.cpp / DriveJacobian_Build.cpp).
 //
-// ⚠️ DE-OPTIMISATION, DELIBERATE: X360 normalises with `vrsqrtefp` plus TWO Newton-Raphson
-// refinements (0x82BC2C68..0x82BC2C8C). BurnoutPR and Xbox One both use a true square root.
-// Same value; the PC leaf uses the exact form, per the committed precedent for the identical
-// idiom in rw::math::vpu::QuaternionFromMatrix33.
+// ⛔ CORRECTED 2026-09-24 (H2-D1). This body used to NORMALISE the quaternion IN PLACE
+// (1/sqrt(|q|^2), written back through the caller's pointer) and built each diagonal as
+// (1 - a) - b. Neither is on the console: 0x82BC3EC0 has no vrsqrtefp / fsqrt / fdiv, never
+// stores through r4, and forms every diagonal as 1 - (a + b) (the fadds come first). The old
+// banner had transcribed this body from the block RigidBody::DynamicUpdate INLINES at
+// 0x82BC2C58..0x82BC2D38 -- but that block is a different routine (rwmath's
+// Normalize(Quaternion) + Matrix33FromQuaternion, the gSqrt2s form), and DynamicUpdate never
+// calls 0x82BC3EC0. DynamicUpdate now carries that normalise and builder itself.
+// BurnoutPR 0x59972D0 does normalise (it scales by 2/|q|^2 and writes q/|q| back) -- BPR and
+// X360 genuinely differ here; X360 is the target.
+//
+// No out-of-line caller depended on the old write-back: the PC builders never read their
+// quaternion after the call (JointJacobian_Build.cpp:103-106 pass lqA/lqB/lqL/lqRel, last used
+// by Jacobian_RQD::Create BEFORE the calls; DriveJacobian_Build.cpp:136 passes a dedicated copy),
+// and on the console nothing is written back to read (the drive's var_200 is even fully
+// overwritten, 0x82BC588C..0x82BC58A4, before its next load). So the only thing this correction
+// changes for them is the matrix itself: built from the composed quaternion as it is (|q| = 1 to
+// rounding), in the console's grouping, with determinate zero w lanes.
 // =====================================================================================
 
 #include "rw/physics/quaternion.h"
-
-#include <cmath>   // std::sqrt
 
 namespace rw
 {
@@ -37,40 +56,19 @@ namespace physics
 {
 
 void Quaternion::UnitQuaternionToMatrix(rw::math::vpu::Matrix33* lpDst,
-                                        rw::math::vpu::Quaternion* lpQuat)
+                                        const rw::math::vpu::Quaternion* lpQuat)
 {
-    // Normalise IN PLACE. All three builds do this -- the inlined X360 copy writes the
-    // normalised quaternion back over the source at `stvx128 v12, r0, r3`.
-    const float lfNormSq = lpQuat->x * lpQuat->x + lpQuat->y * lpQuat->y
-                         + lpQuat->z * lpQuat->z + lpQuat->w * lpQuat->w;
-    const float lfInvNorm = 1.0f / std::sqrt(lfNormSq);
+    const float lfX = lpQuat->x, lfY = lpQuat->y, lfZ = lpQuat->z, lfW = lpQuat->w;
 
-    lpQuat->x *= lfInvNorm; lpQuat->y *= lfInvNorm;
-    lpQuat->z *= lfInvNorm; lpQuat->w *= lfInvNorm;
+    // Nine fmuls, then each triple doubled by one vmulfp128 against splat(flt_82001D9C = 2.0f).
+    const float lf2XX = (lfX * lfX) * 2.0f, lf2YY = (lfY * lfY) * 2.0f, lf2ZZ = (lfZ * lfZ) * 2.0f;
+    const float lf2WX = (lfW * lfX) * 2.0f, lf2WY = (lfY * lfW) * 2.0f, lf2WZ = (lfZ * lfW) * 2.0f;
+    const float lf2XY = (lfY * lfX) * 2.0f, lf2YZ = (lfZ * lfY) * 2.0f, lf2ZX = (lfZ * lfX) * 2.0f;
 
-    const float x = lpQuat->x, y = lpQuat->y, z = lpQuat->z, w = lpQuat->w;
-
-    // X360: v9 = s * s.yzx  -> [2xy, 2yz, 2zx]   (`vpermwi128` imm 0x60 == .yzxx)
-    //       v8 = s.w * s.zxy -> [2wz, 2wx, 2wy]  (`vpermwi128` imm 0x84 == .zxyx)
-    // BurnoutPR forms exactly [2xy, 2yz, 2zx] and [2wx, 2wy, 2wz].
-    const float lfXY = 2.0f * x * y, lfYZ = 2.0f * y * z, lfZX = 2.0f * z * x;
-    const float lfWX = 2.0f * w * x, lfWY = 2.0f * w * y, lfWZ = 2.0f * w * z;
-    const float lfXX = 2.0f * x * x, lfYY = 2.0f * y * y, lfZZ = 2.0f * z * z;
-
-    // Rows = columns of R. Each of the nine terms below is the literal expression BurnoutPR
-    // builds, and the X360 lane routing (`vperm` + `vrlimi128 mask=2` with rotates 0/3/2)
-    // selects exactly these.
-    lpDst->xAxis.x = 1.0f - lfYY - lfZZ;
-    lpDst->xAxis.y = lfXY + lfWZ;
-    lpDst->xAxis.z = lfZX - lfWY;
-
-    lpDst->yAxis.x = lfXY - lfWZ;
-    lpDst->yAxis.y = 1.0f - lfXX - lfZZ;
-    lpDst->yAxis.z = lfYZ + lfWX;
-
-    lpDst->zAxis.x = lfZX + lfWY;
-    lpDst->zAxis.y = lfYZ - lfWX;
-    lpDst->zAxis.z = 1.0f - lfXX - lfYY;
+    // Diagonals: flt_82001C98 (1.0f) minus the SUM -- one fadds, then one fsubs.
+    lpDst->xAxis = { 1.0f - (lf2YY + lf2ZZ), lf2XY + lf2WZ, lf2ZX - lf2WY, 0.0f };   // r3+0x00
+    lpDst->yAxis = { lf2XY - lf2WZ, 1.0f - (lf2ZZ + lf2XX), lf2YZ + lf2WX, 0.0f };   // r3+0x10
+    lpDst->zAxis = { lf2ZX + lf2WY, lf2YZ - lf2WX, 1.0f - (lf2YY + lf2XX), 0.0f };   // r3+0x20
 }
 
 } // namespace physics
