@@ -28,7 +28,10 @@
 // once the jolt queue held four events, and no request ever reached the pad. The drain is now called
 // once per update step from BrnGameModule::DoUpdate_InputPreWorld (through the GameStateModule forward),
 // and the input module's ProcessRumbleRequests plays what it hands over.
-// ⛔ STILL NOT HERE -- UpdateSurfaceRumble @0x82378AE0 (G10-D6); the header banner names what it needs.
+//
+//   UpdateSurfaceRumble      @ 0x82378AE0   (PS3 0x26F01C)  -- FX-RUMBLE3 2026-09-24, G10-D6
+//   PlayRumble / ChangeRumbleVolume / StopRumble -- DWARF-only (PS3 0x256B88 / 0x25687C / 0x256E4C),
+//                                                   inlined into UpdateSurfaceRumble on the X360
 // ============================================================================
 
 #include "GameSource/GameState/RumbleManager/BrnRumbleManager.h"
@@ -37,7 +40,10 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                             // [DIAG] CgsDev::Log::gpDebugPrint (PlayJolt witness)
 #include "rw/math/vpu/vector3_operation.h"                                             // rw::math::vpu::Magnitude (UpdateImpacts)
-#include "rw/math/fpu/scalar_operation.h"                                              // rw::math::fpu::Clamp (UpdateImpacts)
+#include "rw/math/fpu/scalar_operation.h"                                              // rw::math::fpu::Clamp / Max / Abs (UpdateImpacts, UpdateSurfaceRumble)
+#include "GameSource/AttribSys/Generated/classes/surface.h"                             // Attrib::Gen::surface (UpdateSurfaceRumble)
+#include "GameSource/AttribSys/Generated/classes/rumblesurface.h"                       // Attrib::Gen::rumblesurface (UpdateSurfaceRumble)
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"      // Attrib::StringToKey (the surface-list collection key)
 
 #include <stdlib.h>                                                                    // [DIAG] getenv (BRN_RUMBLE_DIAG)
 
@@ -70,6 +76,33 @@ namespace BrnGameState
     // word's most significant byte on the X360); on this little-endian host the same byte is the
     // shift, never a byte-offset read (which would land on the LEAST significant byte).
     static const u32 KU_ENTITY_ID_OWNER_SHIFT = 24;
+
+    // The world's surface-list COLLECTION key UpdateSurfaceRumble re-binds mSurfaceList to. The console
+    // loads it from qword_82FADEC0 (`ld r4` @0x82378B0C), whose one writer is a CRT dynamic initialiser,
+    // 0x82C4D750: `qword_82FADEC0 = Attrib::StringToKey("340654")` (the string at 0x82013F9C) -- the
+    // same literal EffectsModule::PostWorldPreparePrepare's own copy (qword_82FAB7A8) is built from; the
+    // record is SURFACELIST.BIN's (mKey = StringToKey("340654"), class 42C25F4985B5C4F4). Kept as the
+    // console keeps it: one namespace-scope constant, hashed once at start-up.
+    static const u64 KU_WORLD_SURFACELIST_COLLECTION_KEY = Attrib::StringToKey("340654");
+
+    // Attrib::DefaultDataArea(0x18) -- the zeroed RefSpec UpdateSurfaceRumble falls back to when the
+    // surface list has no element at an index (`li r3, 0x18` @0x82378B60 / 0x82378CF4 / 0x82378EC8 /
+    // 0x82379174). sizeof(Attrib::RefSpec) on both builds.
+    static const u32 KU_SURFACE_REFSPEC_BYTES = 0x18;
+
+    // A wheel's surface id is bits 4..9 of the LOW half of its road contact's collision tag: `lhz -2(r27)`
+    // (wheel +0x26, the low half of the big-endian tag word at +0x24) ; `srwi 4` ; `clrlwi 26`
+    // (0x82378CCC..0x82378CDC) -- EffectsModule's (tag >> 4) & 0x3F.
+    static const u32 KU_SURFACE_ID_SHIFT = 4;
+    static const u32 KU_SURFACE_ID_MASK  = 0x3F;
+
+    // unk_82029BA4 (x360rd 0x34000000 == FLT_EPSILON), the splat the surface-list sanity check's
+    // `vcmpgtfp.` compares each |lane| of surface 1's DebugRenderColor against (0x82378B98..0x82378BA8).
+    static const f32 KF_SURFACE_COLOUR_EPSILON = 1.1920929e-07f;
+
+    // flt_82001C98 (1.0f): the floor of UpdateSurfaceRumble's speed band (`fsel f11, f9, f11, f30`
+    // with f30 = 1.0, @0x82378F9C / 0x82379308) -- Max(Max - Min, 1.0).
+    static const f32 KF_MIN_SPEED_BAND = 1.0f;
 
     // ------------------------------------------------------------------------
     // @ 0x82378A70 -- BrnGameState::RumbleManager::Construct()
@@ -140,7 +173,7 @@ namespace BrnGameState
     //
     // The console body, statement for statement (r31 == this, r30 == the interface, r29 == the
     // player index argument, r28 == the contact spy):
-    //     UpdateSurfaceRumble(this, itf, idx)                      0x82386AB8   <- [X] G10-D6
+    //     UpdateSurfaceRumble(this, itf, idx)                      0x82386AB8   (FX-RUMBLE3 G10-D6)
     //     UpdateImpacts(this, itf, idx, spy)                       0x82386ACC
     //     crash latch    itf->IsPlayerCarCrashing()                0x82386AD0..0x82386B38
     //                    (lwz 0x2858 == the interface's OWN player index, NOT the r6 argument;
@@ -153,14 +186,8 @@ namespace BrnGameState
     // r5 (lpCrashEventQueue) is overwritten by `mr r5, r29` before the first call and f1
     // (lfGameTimeStep) is never read: both are dead in the console body too.
     //
-    // ⚠️ [FLAG G10-D6, BLOCKED] THE FIRST STATEMENT IS MISSING. The console opens with
-    // `UpdateSurfaceRumble(lpActiveRaceCarInterface, lePlayerCarIndex)` (the per-wheel road-surface
-    // rumble: Play/ChangeVolume/StopRumbleEffectEvent). Its body needs types this TU does not own
-    // (the header banner lists them); calling a declared-but-undefined function would only move the
-    // hole to the link. Nothing else in this body reads what UpdateSurfaceRumble writes (the
-    // surface arrays and the three rumble queues other than the jolt queue), so the rest of the
-    // body is unaffected by its absence. DELETE-WHEN UpdateSurfaceRumble lands: put the call back
-    // as the first line.
+    // (FX-RUMBLE3 2026-09-24: the first statement -- UpdateSurfaceRumble, the per-wheel road-surface
+    // rumble -- is back; it was a [FLAG G10-D6] hole while its body's types were missing.)
     // ------------------------------------------------------------------------
     void RumbleManager::Update(
             BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
@@ -169,7 +196,8 @@ namespace BrnGameState
             BrnPhysics::ContactSpy::ContactSpyInterface*                           lpContactSpyInterface,
             f32                                                                    /*lfGameTimeStep*/)
     {
-        UpdateImpacts(lpActiveRaceCarInterface, lePlayerCarIndex, lpContactSpyInterface);
+        UpdateSurfaceRumble(lpActiveRaceCarInterface, lePlayerCarIndex);                    // 0x82386AB8
+        UpdateImpacts(lpActiveRaceCarInterface, lePlayerCarIndex, lpContactSpyInterface);   // 0x82386ACC
 
         // DWARF :158 `const JoltEffect kCrashJoltEffect` -- a const function static in .rdata
         // 0x82030F0C: {0, 0, 0.5, 1, 1, 1 | 0, 0, 0.5, 1, 1, 1} (x360rd; no CRT writer).
@@ -274,6 +302,294 @@ namespace BrnGameState
                     return;
             }
             mbRumblePaused = true;
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // @ 0x82378AE0 -- BrnGameState::RumbleManager::UpdateSurfaceRumble()  (DWARF h:79, cpp :362..)
+    //
+    // The road-surface rumble, in the console's order (r21 == this, r16 == the player car's state):
+    //   0x82378B00  lePlayerCarIndex == -1 -> return
+    //   0x82378B08..0x82378B30  mSurfaceList re-bound: FindCollectionWithDefault(surfacelist,
+    //               StringToKey("340654")) + Instance::Change -- surfacelist::ChangeWithDefault inlined
+    //   0x82378B34..0x82378C30  :374..:376 the list's sanity check: surface 1 (Surfaces(1) or the zeroed
+    //               RefSpec) through RefSpec::GetCollection + the Collection* surface ctor (0x8227FAB0);
+    //               its DebugRenderColor all-lanes-IsZero (|lane| > FLT_EPSILON in none) asserts
+    //               "Surface list appears to be corrupt"
+    //   0x82378C3C  lpRaceCarState = GetRaceCarState(lePlayerCarIndex)
+    //   0x82378C60..0x82378C98  :382 the four surface slots cleared: id 0xFF, count 0
+    //   0x82378CB4..0x82378DF8  :391 per wheel with mbLineTestIsValid (+0x2B) && mbIsOnGround (+0x28):
+    //               surface id = (tag low half >> 4) & 0x3F; surface (RefSpec ctor sub_8227FB58) ->
+    //               rumblesurface(surface +0x28, 0x82364828); RumblePriority >= 0 -> the id takes the
+    //               first free slot or bumps its own slot's wheel count (:407), else "leSurfaceListIndex
+    //               < eNumDrivenWheels" (:433)
+    //   0x82378E14..0x8237901C  :441 per live rumble id: found among the counted slots, and not paused
+    //               (+0x399), not in Picture Paradise (+0x39B), the player driving (meDriverType +0x458
+    //               == PLAYER) -> ChangeRumbleVolume(id, volume, envelope) [asserting AddEvent +0x228];
+    //               else StopRumble(id) [+0x334] and the id -> -1
+    //   0x82379020..0x82379358  the same three gates, then :505 per counted slot with no rumble yet:
+    //               the first free id (-1) slot (:541 "leRumbleListIndex < eNumDrivenWheels"), id = the
+    //               surface, PlayRumble(id, volume, RumblePriority, envelope) [+0x10C]
+    // volume = (Clamp(|mfSpeedMPH| (+0x3CC), Min, Max) - Min) / Max(Max - Min, 1.0) -- the fsel pairs at
+    // 0x82378EF4..0x82378FA4 / 0x8237929C..0x82379310, each rw::math::fpu Min/Max/Clamp exactly (DWARF
+    // locals lfSpeed :469/:548, lfSpeedDifference :473/:552, lfVolume :474/:553). The envelope is the
+    // rumblesurface's Left (low) / Right (high) motor ADSR, lane for lane (see rumblesurface.h).
+    // Every driven-wheel walk carries the inlined BrnPhysics::Vehicle::operator++ (BrnSimpleVehiclePhysics.h
+    // :332, "leEnumIndex <= eNumDrivenWheels") -- spelled out as in Prepare, the operator being unhomed.
+    // ------------------------------------------------------------------------
+    void RumbleManager::UpdateSurfaceRumble(
+            BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+            EActiveRaceCarIndex                                                    lePlayerCarIndex)
+    {
+        using BrnPhysics::Vehicle::EVehicleDrivenWheel;
+        using BrnPhysics::Vehicle::eFrontLeftWheel;
+        using BrnPhysics::Vehicle::eNumDrivenWheels;
+
+        if (lePlayerCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            return;
+        }
+
+        mSurfaceList.ChangeWithDefault(KU_WORLD_SURFACELIST_COLLECTION_KEY);
+
+        {
+            void* lpSampleSurfaceRef = mSurfaceList.Surfaces(1);
+            if (lpSampleSurfaceRef == nullptr)
+            {
+                lpSampleSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
+            }
+            Attrib::Gen::surface lSampleSurface(
+                const_cast<Attrib::Collection*>(static_cast<Attrib::RefSpec*>(lpSampleSurfaceRef)->GetCollection()), 0);
+            const f32 (&lSampleColour)[4] = lSampleSurface.DebugRenderColor();
+            const bool lbSampleColourIsZero = !(rw::math::fpu::Abs(lSampleColour[0]) > KF_SURFACE_COLOUR_EPSILON)
+                                           && !(rw::math::fpu::Abs(lSampleColour[1]) > KF_SURFACE_COLOUR_EPSILON)
+                                           && !(rw::math::fpu::Abs(lSampleColour[2]) > KF_SURFACE_COLOUR_EPSILON)
+                                           && !(rw::math::fpu::Abs(lSampleColour[3]) > KF_SURFACE_COLOUR_EPSILON);
+            CGS_ASSERT(!lbSampleColourIsZero, "Surface list appears to be corrupt");   // :376
+        }
+
+        // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The surface witness, part 1: ONCE, the list's
+        // rumble table -- every surface's rumblesurface priority and speed band, and whether its RumbleSurface
+        // ref resolved to a collection (a surface with priority < 0 never rumbles; an unresolved ref reads the
+        // zeroed default layout, priority 0). Read-only: the same accessors the passes below use.
+        static const bool sbSurfaceTableDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
+        static bool       sbSurfaceTableLogged = false;
+        if (sbSurfaceTableDiag && !sbSurfaceTableLogged && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbSurfaceTableLogged = true;
+            const s32 liNumSurfaces = mSurfaceList.Num_Surfaces();
+            *CgsDev::Log::gpDebugPrint << "[rumble] surface table surfaces=" << liNumSurfaces << "\n";
+            for (s32 liSurface = 0; liSurface < liNumSurfaces; ++liSurface)
+            {
+                void* lpTableRef = mSurfaceList.Surfaces(static_cast<u32>(liSurface));
+                if (lpTableRef == nullptr)
+                {
+                    continue;
+                }
+                Attrib::Gen::surface       lTableSurface(*static_cast<const Attrib::RefSpec*>(lpTableRef), 0);
+                Attrib::Gen::rumblesurface lTableRumble(lTableSurface.RumbleSurface(), 0);
+                *CgsDev::Log::gpDebugPrint
+                    << "[rumble] surface table id=" << liSurface << " prio=" << lTableRumble.RumblePriority()
+                    << " min=" << lTableRumble.MinSpeedForRumble() << " max=" << lTableRumble.MaxSpeedForRumble()
+                    << " resolved=" << static_cast<s32>(lTableSurface.RumbleSurface().HasResolvedCollection() ? 1 : 0)
+                    << "\n";
+            }
+        }
+
+        const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState =
+            lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);
+
+        for (EVehicleDrivenWheel leWheelIndex = eFrontLeftWheel; leWheelIndex < eNumDrivenWheels; )
+        {
+            mau8SurfaceID[leWheelIndex]          = 0xFF;
+            mau8NumWheelsOnSurface[leWheelIndex] = 0;
+            leWheelIndex = static_cast<EVehicleDrivenWheel>(leWheelIndex + 1);
+            CGS_ASSERT(leWheelIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+        }
+
+        for (EVehicleDrivenWheel leWheelIndex = eFrontLeftWheel; leWheelIndex < eNumDrivenWheels; )
+        {
+            const BrnPhysics::Vehicle::Wheel::RoadContact& lrRoadContact = lpRaceCarState->maWheels[leWheelIndex].mRoadContact;
+            if (lrRoadContact.mbLineTestIsValid && lrRoadContact.mbIsOnGround)
+            {
+                const u8 lu8SurfaceId = static_cast<u8>(
+                    (static_cast<u16>(lrRoadContact.mCollisionTag.muValue) >> KU_SURFACE_ID_SHIFT) & KU_SURFACE_ID_MASK);
+
+                void* lpSurfaceRef = mSurfaceList.Surfaces(lu8SurfaceId);
+                if (lpSurfaceRef == nullptr)
+                {
+                    lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
+                }
+                Attrib::Gen::surface       lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+                Attrib::Gen::rumblesurface lRumbleSurface(lSurface.RumbleSurface(), 0);
+
+                // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The surface witness, part 2: one line
+                // whenever a grounded wheel's surface id changes (budgeted), with that surface's priority --
+                // the proof the wheel pass is dispatched on live data.
+                {
+                    static const bool sbWheelDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
+                    static s32        saiLastSurface[4] = { -1, -1, -1, -1 };
+                    static s32        siWheelDiagLines = 0;
+                    if (sbWheelDiag && siWheelDiagLines < 64 && CgsDev::Log::gpDebugPrint != 0
+                        && saiLastSurface[leWheelIndex] != static_cast<s32>(lu8SurfaceId))
+                    {
+                        saiLastSurface[leWheelIndex] = static_cast<s32>(lu8SurfaceId);
+                        ++siWheelDiagLines;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[rumble] surface wheel=" << static_cast<s32>(leWheelIndex)
+                            << " id=" << static_cast<s32>(lu8SurfaceId)
+                            << " prio=" << lRumbleSurface.RumblePriority()
+                            << " mph=" << lpRaceCarState->mfSpeedMPH << "\n";
+                    }
+                }
+
+                if (lRumbleSurface.RumblePriority() >= 0)
+                {
+                    EVehicleDrivenWheel leSurfaceListIndex = eFrontLeftWheel;
+                    while (leSurfaceListIndex < eNumDrivenWheels)
+                    {
+                        if (mau8NumWheelsOnSurface[leSurfaceListIndex] == 0)
+                        {
+                            mau8SurfaceID[leSurfaceListIndex]          = lu8SurfaceId;
+                            mau8NumWheelsOnSurface[leSurfaceListIndex] = 1;
+                            break;
+                        }
+                        if (lu8SurfaceId == mau8SurfaceID[leSurfaceListIndex])
+                        {
+                            ++mau8NumWheelsOnSurface[leSurfaceListIndex];
+                            break;
+                        }
+                        leSurfaceListIndex = static_cast<EVehicleDrivenWheel>(leSurfaceListIndex + 1);
+                        CGS_ASSERT(leSurfaceListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+                    }
+                    CGS_ASSERT(leSurfaceListIndex < eNumDrivenWheels,
+                               "leSurfaceListIndex < BrnPhysics::Vehicle::eNumDrivenWheels");   // :433
+                }
+            }
+            leWheelIndex = static_cast<EVehicleDrivenWheel>(leWheelIndex + 1);
+            CGS_ASSERT(leWheelIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+        }
+
+        for (EVehicleDrivenWheel leRumbleListIndex = eFrontLeftWheel; leRumbleListIndex < eNumDrivenWheels; )
+        {
+            if (manRumbleID[leRumbleListIndex] >= 0)
+            {
+                bool lbRumbleFound = false;
+                for (EVehicleDrivenWheel leSurfaceListIndex = eFrontLeftWheel; leSurfaceListIndex < eNumDrivenWheels; )
+                {
+                    if (mau8NumWheelsOnSurface[leSurfaceListIndex] != 0
+                        && manRumbleID[leRumbleListIndex] == static_cast<s32>(mau8SurfaceID[leSurfaceListIndex]))
+                    {
+                        lbRumbleFound = true;
+                        break;
+                    }
+                    leSurfaceListIndex = static_cast<EVehicleDrivenWheel>(leSurfaceListIndex + 1);
+                    CGS_ASSERT(leSurfaceListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+                }
+
+                if (!lbRumbleFound || mbRumblePaused || mbInPictureParadise
+                    || lpRaceCarState->meDriverType != BrnPhysics::Vehicle::E_DRIVER_TYPE_PLAYER)
+                {
+                    StopRumble(manRumbleID[leRumbleListIndex]);
+                    manRumbleID[leRumbleListIndex] = -1;
+                }
+                else
+                {
+                    void* lpSurfaceRef = mSurfaceList.Surfaces(static_cast<u32>(manRumbleID[leRumbleListIndex]));
+                    if (lpSurfaceRef == nullptr)
+                    {
+                        lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
+                    }
+                    Attrib::Gen::surface       lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+                    Attrib::Gen::rumblesurface lRumbleSurface(lSurface.RumbleSurface(), 0);
+
+                    const f32 lfSpeed           = rw::math::fpu::Abs(lpRaceCarState->mfSpeedMPH);
+                    const f32 lfSpeedDifference = rw::math::fpu::Max(lRumbleSurface.MaxSpeedForRumble()
+                                                                     - lRumbleSurface.MinSpeedForRumble(), KF_MIN_SPEED_BAND);
+                    const f32 lfVolume = (rw::math::fpu::Clamp(lfSpeed, lRumbleSurface.MinSpeedForRumble(),
+                                                               lRumbleSurface.MaxSpeedForRumble())
+                                          - lRumbleSurface.MinSpeedForRumble()) / lfSpeedDifference;
+                    const CgsInput::InputIO::JoltEffect lJoltEffect =
+                    {
+                        { lRumbleSurface.LeftMotorAttackTime(),   lRumbleSurface.LeftMotorDecayTime(),
+                          lRumbleSurface.LeftMotorSustainTime(),  lRumbleSurface.LeftMotorReleaseTime(),
+                          lRumbleSurface.LeftMotorPeakSpeed(),    lRumbleSurface.LeftMotorSustainSpeed() },
+                        { lRumbleSurface.RightMotorAttackTime(),  lRumbleSurface.RightMotorDecayTime(),
+                          lRumbleSurface.RightMotorSustainTime(), lRumbleSurface.RightMotorReleaseTime(),
+                          lRumbleSurface.RightMotorPeakSpeed(),   lRumbleSurface.RightMotorSustainSpeed() },
+                    };
+                    ChangeRumbleVolume(manRumbleID[leRumbleListIndex], lfVolume, lJoltEffect);
+                }
+            }
+            leRumbleListIndex = static_cast<EVehicleDrivenWheel>(leRumbleListIndex + 1);
+            CGS_ASSERT(leRumbleListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+        }
+
+        if (!mbRumblePaused && !mbInPictureParadise
+            && lpRaceCarState->meDriverType == BrnPhysics::Vehicle::E_DRIVER_TYPE_PLAYER)
+        {
+            for (EVehicleDrivenWheel leSurfaceListIndex = eFrontLeftWheel; leSurfaceListIndex < eNumDrivenWheels; )
+            {
+                if (mau8NumWheelsOnSurface[leSurfaceListIndex] != 0)
+                {
+                    bool lbRumbleFound = false;
+                    for (EVehicleDrivenWheel leRumbleListIndex = eFrontLeftWheel; leRumbleListIndex < eNumDrivenWheels; )
+                    {
+                        if (manRumbleID[leRumbleListIndex] == static_cast<s32>(mau8SurfaceID[leSurfaceListIndex]))
+                        {
+                            lbRumbleFound = true;
+                            break;
+                        }
+                        leRumbleListIndex = static_cast<EVehicleDrivenWheel>(leRumbleListIndex + 1);
+                        CGS_ASSERT(leRumbleListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+                    }
+
+                    if (!lbRumbleFound)
+                    {
+                        EVehicleDrivenWheel leRumbleListIndex = eFrontLeftWheel;
+                        while (leRumbleListIndex < eNumDrivenWheels)
+                        {
+                            if (manRumbleID[leRumbleListIndex] == -1)
+                            {
+                                break;
+                            }
+                            leRumbleListIndex = static_cast<EVehicleDrivenWheel>(leRumbleListIndex + 1);
+                            CGS_ASSERT(leRumbleListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+                        }
+                        CGS_ASSERT(leRumbleListIndex < eNumDrivenWheels,
+                                   "leRumbleListIndex < BrnPhysics::Vehicle::eNumDrivenWheels");   // :541
+
+                        manRumbleID[leRumbleListIndex] = mau8SurfaceID[leSurfaceListIndex];
+
+                        void* lpSurfaceRef = mSurfaceList.Surfaces(mau8SurfaceID[leSurfaceListIndex]);
+                        if (lpSurfaceRef == nullptr)
+                        {
+                            lpSurfaceRef = Attrib::DefaultDataArea(KU_SURFACE_REFSPEC_BYTES);
+                        }
+                        Attrib::Gen::surface       lSurface(*static_cast<const Attrib::RefSpec*>(lpSurfaceRef), 0);
+                        Attrib::Gen::rumblesurface lRumbleSurface(lSurface.RumbleSurface(), 0);
+
+                        const f32 lfSpeed           = rw::math::fpu::Abs(lpRaceCarState->mfSpeedMPH);
+                        const f32 lfSpeedDifference = rw::math::fpu::Max(lRumbleSurface.MaxSpeedForRumble()
+                                                                         - lRumbleSurface.MinSpeedForRumble(), KF_MIN_SPEED_BAND);
+                        const f32 lfVolume = (rw::math::fpu::Clamp(lfSpeed, lRumbleSurface.MinSpeedForRumble(),
+                                                                   lRumbleSurface.MaxSpeedForRumble())
+                                              - lRumbleSurface.MinSpeedForRumble()) / lfSpeedDifference;
+                        const CgsInput::InputIO::JoltEffect lJoltEffect =
+                        {
+                            { lRumbleSurface.LeftMotorAttackTime(),   lRumbleSurface.LeftMotorDecayTime(),
+                              lRumbleSurface.LeftMotorSustainTime(),  lRumbleSurface.LeftMotorReleaseTime(),
+                              lRumbleSurface.LeftMotorPeakSpeed(),    lRumbleSurface.LeftMotorSustainSpeed() },
+                            { lRumbleSurface.RightMotorAttackTime(),  lRumbleSurface.RightMotorDecayTime(),
+                              lRumbleSurface.RightMotorSustainTime(), lRumbleSurface.RightMotorReleaseTime(),
+                              lRumbleSurface.RightMotorPeakSpeed(),   lRumbleSurface.RightMotorSustainSpeed() },
+                        };
+                        PlayRumble(manRumbleID[leRumbleListIndex], lfVolume, lRumbleSurface.RumblePriority(), lJoltEffect);
+                    }
+                }
+                leSurfaceListIndex = static_cast<EVehicleDrivenWheel>(leSurfaceListIndex + 1);
+                CGS_ASSERT(leSurfaceListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
+            }
         }
     }
 
@@ -557,6 +873,82 @@ namespace BrnGameState
                 << " enabled=" << static_cast<s32>(lpInputInputBuffer->GetRumbleEnabled() ? 1 : 0)
                 << " ff=" << static_cast<s32>(lpInputInputBuffer->GetWheelForceFeedbackEnabled() ? 1 : 0)
                 << "\n";
+        }
+    }
+
+    // ------------------------------------------------------------------------
+    // DWARF BrnRumbleManager.cpp :894 / :912 / :929 -- PlayRumble / ChangeRumbleVolume / StopRumble
+    // (PS3 0x256B88 / 0x25687C / 0x256E4C; parameter names from the PS3 DWARF). No X360 copies: each
+    // is inlined into UpdateSurfaceRumble, whose three sites build the event on the stack with
+    // miPlayer 0 (`stw r19`, r19 == 0) and miPort -1 (`stw r22`, r22 == -1) and append it through the
+    // ASSERTING AddEvent (not PlayJolt's AddEventSafe):
+    //   PlayRumble          0x82379250..0x82379318  {0, -1, priority, envelope, id, volume} -> +0x10C
+    //   ChangeRumbleVolume  0x82378EF4..0x82378FB8  {0, -1, envelope, id, volume}           -> +0x228
+    //   StopRumble          0x82378FD0..0x82378FE8  {0, -1, id}                             -> +0x334
+    // The [DIAG] lines (BRN_RUMBLE_DIAG, NOT IN THE X360 BINARY) are the surface-rumble witnesses,
+    // budgeted per kind.
+    // ------------------------------------------------------------------------
+    void RumbleManager::PlayRumble(s32 liRumbleId, f32 lfVolume, s32 liRumblePriority,
+                                   const CgsInput::InputIO::JoltEffect& lJoltEffect)
+    {
+        CgsInput::InputIO::PlayRumbleEffectEvent lEvent;
+        lEvent.miPlayer         = 0;
+        lEvent.miPort           = -1;
+        lEvent.miRumblePriority = liRumblePriority;
+        lEvent.mJoltEffect      = lJoltEffect;
+        lEvent.miRumbleId       = liRumbleId;
+        lEvent.mfRumbleVolume   = lfVolume;
+        mPlayRumbleEffectEventQueue.AddEvent(lEvent);
+
+        static const bool sbSurfaceDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
+        static s32        siSurfaceDiagLines = 0;
+        if (sbSurfaceDiag && siSurfaceDiagLines < 32 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siSurfaceDiagLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[rumble] surface play id=" << liRumbleId << " prio=" << liRumblePriority << " vol=" << lfVolume
+                << " low{sus=" << lJoltEffect.mLowFreqJoltData.mfSustainTime
+                << " peak=" << lJoltEffect.mLowFreqJoltData.mfPeakSpeedValue
+                << " susv=" << lJoltEffect.mLowFreqJoltData.mfSustainSpeedValue
+                << "} high{sus=" << lJoltEffect.mHighFreqJoltData.mfSustainTime
+                << " peak=" << lJoltEffect.mHighFreqJoltData.mfPeakSpeedValue
+                << " susv=" << lJoltEffect.mHighFreqJoltData.mfSustainSpeedValue << "}\n";
+        }
+    }
+
+    void RumbleManager::ChangeRumbleVolume(s32 liRumbleId, f32 lfVolume, const CgsInput::InputIO::JoltEffect& lJoltEffect)
+    {
+        CgsInput::InputIO::ChangeVolumeRumbleEffectEvent lEvent;
+        lEvent.miPlayer       = 0;
+        lEvent.miPort         = -1;
+        lEvent.mJoltEffect    = lJoltEffect;
+        lEvent.miRumbleId     = liRumbleId;
+        lEvent.mfRumbleVolume = lfVolume;
+        mChangeVolumeRumbleEffectEventQueue.AddEvent(lEvent);
+
+        static const bool sbSurfaceDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
+        static s32        siSurfaceDiagLines = 0;
+        if (sbSurfaceDiag && siSurfaceDiagLines < 32 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siSurfaceDiagLines;
+            *CgsDev::Log::gpDebugPrint << "[rumble] surface volume id=" << liRumbleId << " vol=" << lfVolume << "\n";
+        }
+    }
+
+    void RumbleManager::StopRumble(s32 liRumbleId)
+    {
+        CgsInput::InputIO::StopRumbleEffectEvent lEvent;
+        lEvent.miPlayer   = 0;
+        lEvent.miPort     = -1;
+        lEvent.miRumbleId = liRumbleId;
+        mStopRumbleEffectEventQueue.AddEvent(lEvent);
+
+        static const bool sbSurfaceDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
+        static s32        siSurfaceDiagLines = 0;
+        if (sbSurfaceDiag && siSurfaceDiagLines < 32 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siSurfaceDiagLines;
+            *CgsDev::Log::gpDebugPrint << "[rumble] surface stop id=" << liRumbleId << "\n";
         }
     }
 
