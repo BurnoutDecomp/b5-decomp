@@ -12681,12 +12681,10 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             // (0x827493DC `b loc_827496B0`) and is always sent.
             if (leManoeuvre == Vehicle::E_MANOEUVRE_STUCK_REVERSE)              // 0x827493B0
             {
-                // GATE UpdateStuckReverseManoeuvre @0x82719430 -- exported, no body.
-                // DELETE-WHEN it lands. The car keeps the zero-control record AND is sent.
-                static bool sbLoggedStuckArm = false;
-                LogMissingLeg_T3Drive(sbLoggedStuckArm,
-                              "GenerateDriverInputs arm UpdateStuckReverseManoeuvre "
-                              "@0x82719430 -- no body");
+                // 0x827493B8..0x827493C8 `mr r5, &lControls ; mr r4, r19 ; bl 0x82719430` -- LIVE
+                // (FX-TRAFFIC3 item 1b). The back-off CheckIfPhysicalVehicleIsStuck starts; body
+                // below DriveTowardsTarget. Always sent (0x827493DC `b loc_827496B0`).
+                UpdateStuckReverseManoeuvre(static_cast<u32>(liVehicle), &lControls);
             }
             else if (lpVehicle->IsExtremeSwerving())                            // 0x82749478
             {
@@ -12987,15 +12985,14 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
         return;
     }
 
-    // GATE: CheckIfPhysicalVehicleIsStuck @0x8272C010 (0x8273E150), 141 insns, unreconstructed.
-    // BLOCKER: needs the TrafficPhysicsInfo stuck-timer block and three module bools this
-    // cluster has not homed. DELETE-WHEN it lands. COST: a wedged physical car is not detected
-    // here (GenerateDriverInputs' own mfStuckTime send still catches it).
+    // 0x8273E148..0x8273E15C -- LIVE (FX-TRAFFIC3 item 1b). A car wedged past
+    // KF_MIN_TIME_FOR_STUCK takes its response (NONE / STUCK_REVERSE / GIVE_UP) and does not
+    // drive this frame: `bne` to the tail at 0x8273E75C (the perf-mon stop, then return).
+    // Body below DriveTowardsTarget.
+    if (CheckIfPhysicalVehicleIsStuck(luVehicle))
     {
-        static bool sbLoggedStuck = false;
-        LogMissingLeg_T3Drive(sbLoggedStuck,
-                      "DriveTowardsTarget's CheckIfPhysicalVehicleIsStuck @0x8272C010 test -- "
-                      "unreconstructed; taken as not-stuck");
+        CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
+        return;
     }
 
     const Vector3 lTargetPos = lpVehicle->GetTargetPos();
@@ -13097,6 +13094,297 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     // GATE: DEBUG_ValidateEmDriverControls @0x82708FF8 (0x8273E748) -- debug-only validator.
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfMon_Driving);
+}
+
+// ============================================================================================
+// FX-TRAFFIC3 item 1b (crash parity wave 5, 2026-09-24) -- CC-2's BACK-OFF: the stuck test and
+// the stuck-reverse manoeuvre.
+//
+// CC-2 (e179f6a2) made the contact sides reach mfStuckTimeFront / mfStuckTimeBack, so the wedge
+// arm cuts gas and brake after 0.05 s. The two legs after it were still gates:
+//   CheckIfPhysicalVehicleIsStuck @0x8272C010 (DWARF h:1863), called by DriveTowardsTarget at
+//     0x8273E150 (true -> 0x8273E75C: no driving this frame) and by UpdateGiveUpManoeuvre
+//   UpdateStuckReverseManoeuvre   @0x82719430 (DWARF h:1395), called by GenerateDriverInputs'
+//     STUCK_REVERSE arm at 0x827493C8
+// so a car pinned at its nose sat with its pedals cut for ever and never backed off.
+// ============================================================================================
+namespace
+{
+    // DWARF BrnTrafficUnity `KF_MIN_TIME_FOR_STUCK` (PS3 0x404CCCCD). X360 flt_820BA868 == 3.2f,
+    // read at 0x8272C11C against both side timers.
+    const f32 KF_MIN_TIME_FOR_STUCK = 3.2f;
+
+    // DWARF `KF_VEHICLE_STUCK_REVERSE_CHANCE` (PS3 0x3ECCCCCD). X360 flt_8200473C == 0.4f, compared
+    // at 0x8272C1DC with a RandomFloat(0, 100) draw (the range is flt_820BA5C8 == 100.0f, read at
+    // 0x8272C1C0): a PERCENT, so a front-stuck car starts reversing on 0.4 % of its tests.
+    const f32 KF_VEHICLE_STUCK_REVERSE_CHANCE = 0.4f;
+    const f32 KF_STUCK_REVERSE_ROLL_MAX       = 100.0f;   // flt_820BA5C8
+
+    // DWARF BrnTrafficEntityModule.cpp:378 `kfManoeuvreStuckReverse_MaxTime_Phase0Dot_Phase1Speed_W`:
+    // the .bss vector unk_8300C9C0, filled by the CRT thunk at 0x82C66E08..0x82C66E4C from
+    // flt_820BA5F4 (3.0), flt_820C0800 (0.866 == 0x3F5DB22D), flt_820BA86C (2.0), flt_82001CC0 (0.0).
+    const Vector4 kfManoeuvreStuckReverse_MaxTime_Phase0Dot_Phase1Speed_W = { 3.0f, 0.866f, 2.0f, 0.0f };
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witnesses, capped: every stuck response
+    // other than NONE, the first KI_STUCK_NONE_DIAG_CAP NONE responses and as many live timers
+    // still below the threshold, and each stuck-reverse car's start / phase change / end
+    // (per-vehicle last-logged phase).
+    const s32 KI_STUCK_DIAG_CAP      = 60;
+    const s32 KI_STUCK_NONE_DIAG_CAP = 10;
+    s32       giStuckDiagLines       = 0;
+    s32       giStuckNoneDiagLines   = 0;
+    s32       giStuckBelowDiagLines  = 0;
+    f32       gfStuckBelowDiagHigh   = 0.0f;
+    s32       giStuckRollCount       = 0;
+    const s32 KI_STUCK_ROLL_CENSUS_PERIOD = 50;
+    bool      gbStuckDispatchLogged  = false;
+    s8        gaiStuckReverseDiagPhase[KU_MAX_STANDARD_TRAFFIC];   // 0 == not logged; phase + 1
+}
+
+// --------------------------------------------------------------------------------------------
+// @0x8272C010  TrafficEntityModule::CheckIfPhysicalVehicleIsStuck   (141 insns)
+//   DWARF locals (BrnTrafficUnity): lpPhysicsInfo :17118, lpVehicle :17130, lbFrontStuck :17133,
+//   lbBackStuck :17134, leResponse :17135.
+//   0x8272C024  GetTrafficPhysicsInfoForVehicl ; "lpPhysicsInfo" (.cpp 17334)
+//   0x8272C058  NeedToTakeActionAgainstJunctionFUP, inlined (+0x72875 ; +0x717E7 && +0x725E0 >= 65)
+//               -> 0x8272C0C8 stfs 0.0 to +0xFD0 / +0xFCC / +0xFD4 (back, front, debounce) ; return 0
+//   0x8272C0E8  GetVehicle ; "lpVehicle" (.cpp 17346)
+//   0x8272C114  lbFrontStuck = +0xFCC > 3.2 ; lbBackStuck = +0xFD0 > 3.2 (fcmpu / bgt: NaN is not stuck)
+//   both        -> 0x8272C224 StartGiveUpManoeuvre ; SetCurrentManoeuvrePhase(1) ; return 1
+//   front only  -> 0x8272C168 mEffectRand (+0x1360) RandomFloat(0, 100), inlined ; `bgt` 0.4 ->
+//                  NONE (0x8272C20C), else STUCK_REVERSE (0x8272C1F0) ; return 1
+//   back only   -> 0x8272C20C SetCurrentManoeuvre(NONE) ; return 1
+//   neither     -> return 0 (0x8272C0D4)
+// --------------------------------------------------------------------------------------------
+bool TrafficEntityModule::CheckIfPhysicalVehicleIsStuck(u32 luVehicle)
+{
+    TrafficPhysicsInfo* const lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+    CGS_ASSERT(lpPhysicsInfo != 0, "lpPhysicsInfo");                                  // .cpp 17334
+
+    // [DIAG] NOT IN THE X360 BINARY -- the first call, once: DriveTowardsTarget reached the test.
+    if (!gbStuckDispatchLogged)
+    {
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            gbStuckDispatchLogged = true;
+            *lpDiag << "[T-stuck-check] dispatched vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
+                    << " back=" << lpPhysicsInfo->mfStuckTimeBack << "\n";
+        }
+    }
+
+    if (NeedToTakeActionAgainstJunctionFUP())
+    {
+        lpPhysicsInfo->mfStuckTimeBack      = 0.0f;                                   // 0x8272C0C8
+        lpPhysicsInfo->mfStuckTimeFront     = 0.0f;                                   // 0x8272C0CC
+        lpPhysicsInfo->mfStuckTimerDebounce = 0.0f;                                   // 0x8272C0D0
+        return false;
+    }
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);
+    CGS_ASSERT(lpVehicle != 0, "lpVehicle");                                          // .cpp 17346
+
+    const bool lbFrontStuck = lpPhysicsInfo->mfStuckTimeFront > KF_MIN_TIME_FOR_STUCK;
+    const bool lbBackStuck  = lpPhysicsInfo->mfStuckTimeBack  > KF_MIN_TIME_FOR_STUCK;
+
+    if (lbFrontStuck && lbBackStuck)
+    {
+        lpVehicle->StartGiveUpManoeuvre();
+        lpVehicle->SetCurrentManoeuvrePhase(1);
+
+        // [DIAG] NOT IN THE X360 BINARY -- see KI_STUCK_DIAG_CAP.
+        if (giStuckDiagLines < KI_STUCK_DIAG_CAP)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giStuckDiagLines;
+                *lpDiag << "[T-stuck-check] vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
+                        << " back=" << lpPhysicsInfo->mfStuckTimeBack << " -> GIVE_UP phase=1\n";
+            }
+        }
+        return true;
+    }
+
+    if (!lbFrontStuck && !lbBackStuck)
+    {
+        // [DIAG] NOT IN THE X360 BINARY -- a live side timer (a contact resets it to 2.0) that has
+        // not reached KF_MIN_TIME_FOR_STUCK yet: one line per new run-wide high, in 0.25 s steps,
+        // capped -- shows the test sees the CC-2 timers and how close they came.
+        const f32 lfLiveTimer = (lpPhysicsInfo->mfStuckTimeFront > lpPhysicsInfo->mfStuckTimeBack)
+                                    ? lpPhysicsInfo->mfStuckTimeFront : lpPhysicsInfo->mfStuckTimeBack;
+        if (giStuckBelowDiagLines < KI_STUCK_NONE_DIAG_CAP && lfLiveTimer > 0.0f
+            && lfLiveTimer >= gfStuckBelowDiagHigh + 0.25f)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giStuckBelowDiagLines;
+                gfStuckBelowDiagHigh = lfLiveTimer;
+                *lpDiag << "[T-stuck-check] vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
+                        << " back=" << lpPhysicsInfo->mfStuckTimeBack << " -> below 3.2, drives on\n";
+            }
+        }
+        return false;
+    }
+
+    Vehicle::Manoeuvre leResponse = Vehicle::E_MANOEUVRE_NONE;
+    f32 lfRoll = -1.0f;   // [DIAG] the draw, kept for the witness only (no draw when back-stuck)
+    if (lbFrontStuck)
+    {
+        lfRoll = mEffectRand.RandomFloat(0.0f, KF_STUCK_REVERSE_ROLL_MAX);
+        if (!(lfRoll > KF_VEHICLE_STUCK_REVERSE_CHANCE))
+        {
+            leResponse = Vehicle::E_MANOEUVRE_STUCK_REVERSE;
+        }
+        ++giStuckRollCount;   // [DIAG] NOT IN THE X360 BINARY -- the run's roll census
+    }
+    lpVehicle->SetCurrentManoeuvre(leResponse);
+
+    // [DIAG] NOT IN THE X360 BINARY -- see KI_STUCK_DIAG_CAP; a NONE line also every
+    // KI_STUCK_ROLL_CENSUS_PERIOD-th roll, so a long pin's roll count stays visible.
+    if (giStuckDiagLines < KI_STUCK_DIAG_CAP
+        && (leResponse != Vehicle::E_MANOEUVRE_NONE || giStuckNoneDiagLines < KI_STUCK_NONE_DIAG_CAP
+            || (lbFrontStuck && (giStuckRollCount % KI_STUCK_ROLL_CENSUS_PERIOD) == 0)))
+    {
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            ++giStuckDiagLines;
+            if (leResponse == Vehicle::E_MANOEUVRE_NONE)
+            {
+                ++giStuckNoneDiagLines;
+            }
+            *lpDiag << "[T-stuck-check] vehicle=" << luVehicle << " front=" << lpPhysicsInfo->mfStuckTimeFront
+                    << " back=" << lpPhysicsInfo->mfStuckTimeBack << " roll=" << lfRoll << " -> "
+                    << (leResponse == Vehicle::E_MANOEUVRE_STUCK_REVERSE ? "STUCK_REVERSE" : "NONE")
+                    << " (rolls " << giStuckRollCount << ")\n";
+        }
+    }
+    return true;
+}
+
+// --------------------------------------------------------------------------------------------
+// @0x82719430  TrafficEntityModule::UpdateStuckReverseManoeuvre   (DWARF BrnTrafficUnity :16775..)
+//   DWARF locals: lpVehicle, lpPhysInfo, lVehicleTransform, lTargetPos, lDiffPos, lDirToTarget;
+//   phase 0 block: lVehicleAt, lfSteering.
+//   0x8271945C  "lpDriverControls" (.cpp 16988) ; GetVehicle inlined (.h 2459)
+//   0x827194BC  manoeuvre == STUCK_REVERSE (.cpp 16993) ; IsOfStandardSpecies (.cpp 16994)
+//   0x82719518  GetTrafficPhysicsInfoForVehicl ; "lpPhysInfo" (.cpp 16997)
+//   0x82719550  GetVehicleTransform ; GetTargetPos ; lDiffPos = target - row 3 (vsubfp) ;
+//               lDirToTarget = |lDiffPos|^2 != 0 ? lDiffPos * rsqrt : row 2 (vcmpeqfp / vsel128)
+//   0x827195D4  GetCurrentManoeuvrePhase (extsb ; cmplwi 1): 0 -> 0x82719768, 1 -> 0x82719678,
+//               anything else -> the streamed "Invalid phase for E_MANOEUVRE_STUCK_REVERSE: "
+//               << phase (.cpp 17053)
+//   phase 0     lfSteering = Dot(lDirToTarget, row 2) (vmsum3fp128). It ends -- SetCurrentManoeuvrePhase(1)
+//               and ResetManoeuvreTime(0) at 0x82719838 -- when the BACK is in contact
+//               (+0x1008 & 2), or K.y (0.866) > |lfSteering|, or time (+0x60) >= K.x (3.0);
+//               otherwise mfSteering = lfSteering, mfGas = 0, mfBrake = 0.75 (flt_82004018)
+//   phase 1     while |GetSpeed| > K.z (2.0) and K.x (3.0) > time: mfGas = mfBrake = 0,
+//               mfHandBrake = 0.4 (flt_8200473C); then SetCurrentManoeuvre(NONE), inlined at
+//               0x82719720 (IsAlive .h 860, the phase zeroed on a change, the time zeroed)
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
+                                                      BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    const Vector4& K = kfManoeuvreStuckReverse_MaxTime_Phase0Dot_Phase1Speed_W;
+
+    CGS_ASSERT(lpControls != 0, "lpDriverControls");                                     // .cpp 16988
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);   // its own .h 2459 bound assert, inlined here
+    CGS_ASSERT(lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_STUCK_REVERSE,
+               "lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_STUCK_REVERSE");  // .cpp 16993
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(), "lpVehicle->IsOfStandardSpecies()");    // .cpp 16994
+
+    TrafficPhysicsInfo* const lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+    CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");                                           // .cpp 16997
+
+    const Matrix44Affine lVehicleTransform = GetVehicleTransform(luVehicle);
+    const Vector3 lTargetPos = lpVehicle->GetTargetPos();
+    const Vector3 lDiffPos   = lTargetPos - lVehicleTransform.Pos();
+
+    // MagnitudeSquared / CompNotEqual / Normalize / Select. The zero test is the console's own
+    // (vcmpeqfp against 0 then vnot128): a NaN length normalises (to NaN), as there.
+    // FLAG (PC-platform, numeric): vrsqrtefp + two Newton steps de-optimised to 1 / sqrt.
+    const f32 lfDiffMagSq = rw::math::vpu::Dot(lDiffPos, lDiffPos);
+    const Vector3 lDirToTarget = (lfDiffMagSq != 0.0f)
+                                     ? lDiffPos * (1.0f / std::sqrt(lfDiffMagSq))
+                                     : lVehicleTransform.At();
+
+    const s32 liPhase = lpVehicle->GetCurrentManoeuvrePhase();
+    if (liPhase == 0)
+    {
+        const Vector3 lVehicleAt = lVehicleTransform.At();
+        const f32 lfSteering = rw::math::vpu::Dot(lDirToTarget, lVehicleAt);            // 0x82719768
+
+        const bool lbBackContact = (lpPhysInfo->muContactSideFlags & TrafficPhysicsInfo::E_CONTACT_SIDE_BACK) != 0;
+        const bool lbTurned      = K.y > std::fabs(lfSteering);                          // 0x827197C4
+        const bool lbTimedOut    = lpVehicle->GetManoeuvreTime() >= K.x;                 // 0x82719804
+
+        if (!lbBackContact && !lbTurned && !lbTimedOut)
+        {
+            lpControls->mfSteering = lfSteering;                                         // 0x8271981C
+            lpControls->mfGas      = 0.0f;                                               // 0x82719828
+            lpControls->mfBrake    = 0.75f;                                              // 0x82719830 flt_82004018
+
+            // [DIAG] NOT IN THE X360 BINARY -- the start of each reverse, once.
+            if (giStuckDiagLines < KI_STUCK_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC
+                && gaiStuckReverseDiagPhase[luVehicle] != 1)
+            {
+                if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+                {
+                    ++giStuckDiagLines;
+                    gaiStuckReverseDiagPhase[luVehicle] = 1;
+                    *lpDiag << "[T-stuck-reverse] vehicle=" << luVehicle << " phase=0 reversing brake=0.75 steer="
+                            << lfSteering << " speed=" << lpVehicle->GetSpeed().x << "\n";
+                }
+            }
+            return;
+        }
+
+        lpVehicle->SetCurrentManoeuvrePhase(1);                                          // 0x82719840
+        lpVehicle->ResetManoeuvreTime(0.0f);                                             // 0x8271984C
+
+        // [DIAG] NOT IN THE X360 BINARY -- the phase change and why.
+        if (giStuckDiagLines < KI_STUCK_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giStuckDiagLines;
+                gaiStuckReverseDiagPhase[luVehicle] = 2;
+                *lpDiag << "[T-stuck-reverse] vehicle=" << luVehicle << " phase=0->1 back=" << (lbBackContact ? 1 : 0)
+                        << " turned=" << (lbTurned ? 1 : 0) << " timeout=" << (lbTimedOut ? 1 : 0)
+                        << " steer=" << lfSteering << " speed=" << lpVehicle->GetSpeed().x << "\n";
+            }
+        }
+    }
+    else if (liPhase == 1)
+    {
+        const f32 lfSpeed = lpVehicle->GetSpeed().x;
+        if (std::fabs(lfSpeed) > K.z && K.x > lpVehicle->GetManoeuvreTime())            // 0x827196AC / 0x827196EC
+        {
+            lpControls->mfGas       = 0.0f;                                              // 0x8271970C
+            lpControls->mfBrake     = 0.0f;                                              // 0x82719710
+            lpControls->mfHandBrake = 0.4f;                                              // 0x82719718 flt_8200473C
+            return;
+        }
+
+        const f32 lfEndTime = lpVehicle->GetManoeuvreTime();   // [DIAG] read before the reset
+        lpVehicle->SetCurrentManoeuvre(Vehicle::E_MANOEUVRE_NONE);                        // 0x82719720..0x82719760
+
+        // [DIAG] NOT IN THE X360 BINARY -- the end of the manoeuvre.
+        if (giStuckDiagLines < KI_STUCK_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giStuckDiagLines;
+                gaiStuckReverseDiagPhase[luVehicle] = 0;
+                *lpDiag << "[T-stuck-reverse] vehicle=" << luVehicle << " phase=1 end speed=" << lfSpeed
+                        << " time=" << lfEndTime << " -> NONE\n";
+            }
+        }
+    }
+    else
+    {
+        // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
+        CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_STUCK_REVERSE: ");               // .cpp 17053
+    }
 }
 
 // --------------------------------------------------------------------------------------------

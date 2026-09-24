@@ -772,6 +772,13 @@ void Vehicle::AddManoeuvreTime(f32 lfDelta)
     mfManoeuvreTime += lfDelta;
 }
 
+// DWARF BrnTrafficVehicle.h:484 -- no out-of-line symbol; UpdateStuckReverseManoeuvre @0x82719430
+// folds it to one store (0x8271984C `stfs f0(0.0), 0x60(r29)`).
+void Vehicle::ResetManoeuvreTime(f32 lfTime)
+{
+    mfManoeuvreTime = lfTime;
+}
+
 s32 Vehicle::GetPhysicalReason() const
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
