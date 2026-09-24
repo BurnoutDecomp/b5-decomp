@@ -103,6 +103,9 @@ namespace RaceCarEntityModuleIO
     // IsRaceCarActive @0x82277B10 is `& 1`), bit 2 (IsRaceCarRival @0x82705690 is `>> 2 & 1`,
     // producer arm `muType == E_RACE_CAR_TYPE_AI`), bit 3 (IsRaceCarNetwork @0x82310140 is
     // `>> 3 & 1`, producer arm `muType == E_RACE_CAR_TYPE_NETWORK`).
+    // PROVEN 2026-09-24 (crash parity FX-AIBUZZ): bit 1 -- IsRaceCarPlayer @0x82681DF0 (an export hole,
+    // ppcdis) is `>> 1 & 1`, producer arm `muType == E_RACE_CAR_TYPE_PLAYER`; bodied in
+    // BrnRCEntityActiveRaceCarOutputInterface.cpp.
     // FLAG (inferred, not proven): the remaining five names. The producer's CONDITIONS are
     // asm-attested exactly as written below; what is inferred is which declared Is*()
     // predicate reads each bit, because those predicates are header inlines with no export.
