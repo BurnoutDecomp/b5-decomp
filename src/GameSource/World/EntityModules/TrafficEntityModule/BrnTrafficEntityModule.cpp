@@ -13612,11 +13612,15 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     const Matrix44Affine lTransform = GetVehicleTransform(luVehicle);
     const Vector3 lDiff  = lTargetPos - lTransform.Pos();
 
-    // The distance guard is the console's own (0x8273E258 vcmpeqfp + 0x8273E288 vsel).
-    // FLAG (host guard): only the unit vector is unguarded on the console; zero vector here.
+    // 0x8273E248..0x8273E288 -- ONE reciprocal square root (vrsqrtefp128 + two Newton steps) feeds
+    // both results. The distance is guarded: `vcmpeqfp128 |diff|^2, 0` + `vsel128` (0x8273E258 /
+    // 0x8273E288) pick 0 at the target. The unit direction is NOT: `vmulfp128 v121, v126, v0`
+    // (0x8273E284, and again for the steering at 0x8273E518) multiplies the difference by the raw
+    // reciprocal root, so a car exactly on its target gets 0 * inf == NaN, as here
+    // (FX-TRAFFIC5 follow-up (b): the zero-vector host guard that stood here is retired).
     const f32 lfDistSq = rw::math::vpu::Dot(lDiff, lDiff);
     const f32 lfDist   = (lfDistSq == 0.0f) ? 0.0f : std::sqrt(lfDistSq);
-    const Vector3 lUnitDiff = (lfDistSq == 0.0f) ? ZeroVector3() : lDiff * (1.0f / lfDist);
+    const Vector3 lUnitDiff = lDiff * (1.0f / std::sqrt(lfDistSq));
 
     const ParamTransform* const lpParamTransform = GetParamTransform(luVehicle);
 
@@ -13673,14 +13677,20 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
                                               lpControls, lfOverallRisk);
     }
 
-    // 0x8273E6C4..0x8273E70C -- one signed pedal split into gas and brake.
+    // 0x8273E570..0x8273E5AC -- one signed pedal, CalculateDriverGasBrake(forward distance, the
+    // param's direction * speed).
     const Vector3 lParamLinearVelocity =
         lpParamTransform->GetDirection() * lpParamTransform->GetSpeed();
     const f32 lfPedal =
         CalculateDriverGasBrake(luVehicle, SplatDrive(lfForwardDist), lParamLinearVelocity).x;
 
-    const f32 lfGas   = (lfPedal > 0.0f) ? ((lfPedal > 1.0f) ? 1.0f : lfPedal) : 0.0f;
-    const f32 lfBrake = (lfPedal < 0.0f) ? ((-lfPedal > 1.0f) ? 1.0f : -lfPedal) : 0.0f;
+    // 0x8273E5B4..0x8273E620 -- split into gas and brake by the console's clamp pairs, not by
+    // a sign test: gas = vminfp128(vmaxfp128(pedal, 0), 1.0) and brake = the same on -pedal (the
+    // sign-bit XOR `vspltisw -1 ; vslw ; vxor`). vmaxfp / vminfp hand a NaN operand through, so a
+    // NaN pedal reaches BOTH pedals as NaN (FX-TRAFFIC5 follow-up (a): the ternaries that stood
+    // here gave 0 and 0).
+    const f32 lfGas   = AvoidVmxMin(AvoidVmxMax(lfPedal, 0.0f), 1.0f);
+    const f32 lfBrake = AvoidVmxMin(AvoidVmxMax(-lfPedal, 0.0f), 1.0f);
 
     lpControls->mfGas   = lfGas;
     lpControls->mfBrake = lfBrake;
@@ -13694,9 +13704,12 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
         lpVehicle->SetCurrentManoeuvre(Vehicle::E_MANOEUVRE_3_POINT_TURN);
     }
 
-    // 0x8273E6F8..0x8273E71C -- reversing flips the steering sign.
+    // 0x8273E6B4..0x8273E700 -- reversing flips the steering sign: mfSteering (+0x10) *=
+    // rw::math::fpu::Sgn<VecFloat>(GetSpeed()) @0x825BC920, whose ladder is `vcmpeqfp. 0` -> 0.0
+    // (flt_82001CC0), `vcmpgefp. 0` -> 1.0 (flt_82001C98), else -1.0 (flt_820037C8) -- so a NaN
+    // speed is -1, not 0 (FX-TRAFFIC5, same NaN-polarity class as follow-up (a)).
     const f32 lfSpeed = lpVehicle->GetSpeed().x;
-    const f32 lfSpeedSign = (lfSpeed > 0.0f) ? 1.0f : ((lfSpeed < 0.0f) ? -1.0f : 0.0f);
+    const f32 lfSpeedSign = (lfSpeed == 0.0f) ? 0.0f : ((lfSpeed >= 0.0f) ? 1.0f : -1.0f);
     lpControls->mfSteering = lpControls->mfSteering * lfSpeedSign;
 
     // 0x8273E704..0x8273E744 -- LIVE (FX-TRAFFIC4 item 3): the handbrake leg. Not extreme
