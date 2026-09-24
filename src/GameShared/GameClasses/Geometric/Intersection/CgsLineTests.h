@@ -23,8 +23,10 @@ namespace CgsGeometric
                                           const AxisAlignedBox& lrBoxB);
 
     // TestLineStartEndAxisAlignedBox @ 0x82812498 -- segment(start,end)-vs-AABB
-    // intersection via the reciprocal-direction slab method (6 faces + start
-    // endpoint inside). Asserts each direction reciprocal is non-zero.
+    // intersection via the reciprocal-direction slab method (6 faces + either
+    // endpoint inside). Asserts each direction reciprocal is non-zero. Inlined on
+    // the console into PolygonSoupListSpatialMap::RunQuery(const Line&) and the
+    // long arm of BaseCollisionGenerator::CollideLineAgainstPolySoupList.
     bool TestLineStartEndAxisAlignedBox(const Vector4& lvStart,
                                         const Vector4& lvEnd,
                                         const AxisAlignedBox& lrBox);
