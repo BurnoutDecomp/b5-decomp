@@ -46,11 +46,33 @@ namespace BrnAI
     // BrnRouteRequestManager's mRandom), NOT a per-instance member.
     static CgsNumeric::Random mRandom;
 
-    // No-buzz sphere geometry (unk_8300DB30 centres / unk_820C4334 radii). The rodata values
-    // were not recovered; zero-init placeholders preserve the 7-zone / 16-byte-centre /
-    // 4-byte-radius shape the 0x70 loop span attests.
-    static const Vector3 KA_NO_BUZZ_ZONE_CENTRES[KI_NUM_NO_BUZZ_ZONES] = {}; // unk_8300DB30
-    static const f32     KAF_NO_BUZZ_ZONE_RADII[KI_NUM_NO_BUZZ_ZONES]  = {}; // unk_820C4334
+    // No-buzz sphere geometry -- seven zones, 16-byte centres at unk_8300DB30 (the 0x70 loop span
+    // IsPositionInNoBuzzZone walks, 0x82766FC8..0x8276700C) and 4-byte radii at unk_820C4334.
+    // Crash parity FX-AINAN2: both tables were zero placeholders ("not recovered"), so every
+    // `distSq < radius^2` test was `< 0` and no zone ever held a buzz-by back.
+    //   * The RADII are plain .rdata, read straight out of the image (x360rd 820C4334, 7 x f32).
+    //   * The CENTRES slot is .data that reads zero by definition: the CRT thunk @0x82C68F28
+    //     (tools/re/findinit.py 8300DB30 -> its one writer, 0x82C69058) builds the seven
+    //     Vector3s on the stack from .rdata floats and stvx128's them to 0x8300DB30..0x8300DB90
+    //     (0x82C69064..0x82C690C0); every w lane is `stw 0`. Source floats per lane:
+    //       0: 820C8C28 / 820C4158 / 820C8C20     1: 820C8C1C / 820C8C18 / 820C8C14
+    //       2: 820C8C10 / 820C8C24 / 820C8C0C     3: 820C8C08 / 820C8C24 / 820C8C04
+    //       4: 820C8C00 / 82056BE4 / 820C8BFC     5: 820C8BF8 / 820C8BF4 / 820C8BF0
+    //       6: 820C8BEC / 820C8BF4 / 820C8BE8
+    static const Vector3 KA_NO_BUZZ_ZONE_CENTRES[KI_NUM_NO_BUZZ_ZONES] =   // unk_8300DB30
+    {
+        { -2430.80005f,  60.0f,        1906.59998f, 0.0f },
+        { -2604.80005f,  82.0f,        1900.59998f, 0.0f },
+        { -2229.80005f,  19.5f,        625.400024f, 0.0f },
+        { -2205.80005f,  19.5f,        808.400024f, 0.0f },
+        { -1981.80005f,  96.5f,        698.400024f, 0.0f },
+        { -1059.69995f,  105.199997f, -1509.30005f, 0.0f },
+        { -1054.69995f,  105.199997f, -1270.30005f, 0.0f },
+    };
+    static const f32 KAF_NO_BUZZ_ZONE_RADII[KI_NUM_NO_BUZZ_ZONES] =        // unk_820C4334
+    {
+        230.0f, 210.0f, 260.0f, 240.0f, 35.0f, 185.0f, 175.0f
+    };
 
     // ------------------------------------------------------------------------
     // AICarCanBuzz @0x82767020
@@ -61,7 +83,9 @@ namespace BrnAI
         CGS_ASSERT(lpCar != NULL, "lpCar != NULL");
 
         // 0x82767020: lfs f13,0x1508(lpCar); lfs f0,flt_820C4318(=200.0); blt -> 0 else 1.
-        return lpCar->mfBuzzDistanceToPlayer >= 200.0f;
+        // NaN polarity (FX-AINAN2): `li r3,0 ; fcmpu ; blt 0x82767070 ; li r3,1` -- blt is not
+        // taken on an unordered compare, so a NaN distance CAN buzz; `>= 200` said no.
+        return !(lpCar->mfBuzzDistanceToPlayer < 200.0f);
     }
 
     // ------------------------------------------------------------------------
