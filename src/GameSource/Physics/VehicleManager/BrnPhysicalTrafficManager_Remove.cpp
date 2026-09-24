@@ -447,14 +447,37 @@ namespace Vehicle
                    "mUsedTrafficVehicles.IsBitSet( lu8TrafficEntityNum )");                  // :660
 
         PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(lu8TrafficEntityNum);
-        if (lpVehicle->HasNonBrokenJoint())
+        if (lpVehicle->HasNonBrokenJoint())   // 0x8261CDE4 ; beq -> 0x8261CFC0
         {
-            // GATE the articulated teardown -- ArticulatedJointPool::GetIndexOfOtherHalf
-            //    @0x825D8490 (304) + ::RemoveJoint @0x825D8248 (580), both declare-only on the
-            //    pool's surface, both parked with the trailer sub-tree.
-            //    DELETE-WHEN the trailer wave lands. Unreachable today: nothing creates a joint.
-            BRN_T3_REMOVE_GATE("PhysicalTrafficManager::RemoveTrafficVehicle articulated teardown "
-                               "(ArticulatedJointPool::GetIndexOfOtherHalf/RemoveJoint)");
+            // The articulated teardown (G34-D3, 2026-09-24), 0x8261CDF4..0x8261CFBC: unhitch the
+            // OTHER half and hand the joint back to the pool. Unreachable on retail data today
+            // (nothing creates a joint on PC yet), faithful for when articulated traffic lands.
+            const s32 liJointIndex = lpVehicle->miJointIndex;          // `lwz r21, 0x2C(r24)`
+            const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+                    liJointIndex, lpVehicle->GetArticulatedVehicleType());   // 0x8261CE04 / 0x8261CE14
+
+            CGS_ASSERT(static_cast<u32>(liOtherHalfIndex) < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "invalid index : luIndex < 20");                                      // CgsBitArray.h:203
+            CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liOtherHalfIndex)),
+                       "mUsedTrafficVehicles.IsBitSet( liOtherHalfIndex )");                 // :682
+
+            PhysicalTrafficVehicle* lpOtherHalf = GetTrafficVehicle(liOtherHalfIndex);  // 0x8261CF04
+            CGS_ASSERT(lpOtherHalf->miJointIndex == liJointIndex,
+                       "lpOtherHalf->GetArticulatedJointIndex() == liJointIndex");           // :689
+
+            const s32 liOtherHalfAttachedIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+                    liJointIndex, lpOtherHalf->GetArticulatedVehicleType());               // 0x8261CF48
+            CGS_ASSERT(liOtherHalfAttachedIndex == static_cast<s32>(lu8TrafficEntityNum),
+                       "liOtherHalfAttachedIndex == static_cast<int32_t>( lu8TrafficEntityNum )"); // :694
+
+            // 0x8261CF74 / 0x8261CF7C / 0x8261CF84 -- `stw 0 / stw 0 / stw -1` on the OTHER half.
+            lpOtherHalf->meArticulatedVehicleType = PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_NONE;
+            lpOtherHalf->meArticulatedJointState  = PhysicalTrafficVehicle::E_ARTICULATE_JOINT_NONE;
+            lpOtherHalf->miJointIndex             = -1;
+
+            CGS_ASSERT(mpArticulatedJointCreateBuffer != nullptr,
+                       "mpArticulatedJointCreateBuffer != NULL");                            // :702
+            mArticulatedJointPool.RemoveJoint(mpArticulatedJointCreateBuffer, liJointIndex);  // 0x8261CFBC
         }
 
         // Unconditional, and NOT part of the branch above (loc_8261CFC0 is the not-taken target).
