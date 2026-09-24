@@ -66,6 +66,10 @@
 //     mbStarting100PercentSeq    @0x7AD3 (31443)   bridge 469/470 with flag != 0
 //     mbFinished100PercentSeq    @0x7AD4 (31444)   bridge 469/470 with flag == 0
 //
+// The two bytes after that run, @0x7AD5 / @0x7AD6, are X360-only (no DWARF member) and come from
+// a different producer, BrnGameModule::BridgeGameStateToDirector -- see mbPlayerEliminated /
+// mbModeTimeExpired below.
+//
 // The flags with no store site of their own (mbWorldWantsDebugControllerFocus @0x7AC7,
 // mbPlayerCrashbreakerFired @0x7ACA) sit at the offsets the DWARF member order puts them at
 // BETWEEN two attested neighbours, so their placement is forced rather than guessed.
@@ -181,6 +185,16 @@ namespace DirectorIO
             mbPlayerTakenDown      = true;
             mePlayerKillerCarIndex = lePlayerKillerCarIndex;
         }
+
+        // @0x7AD5 / @0x7AD6 -- the player's end-of-event pair (see the members). Both ends are bare
+        // byte moves on the console with no lock-bit test: the setters are the stores
+        // BridgeGameStateToDirector inlines (0x823CD4DC `stb 0x7AD5` / 0x823CD510 `stb 0x7AD6`),
+        // the getters the loads MainDirector::ProcessInputQueue's prologue inlines
+        // (0x8223743C `lbz 0x7AD5` / 0x82237430 `lbz 0x7AD6`). The entry points are ours.
+        void SetPlayerEliminated(bool lbPlayerEliminated) { mbPlayerEliminated = lbPlayerEliminated; }
+        void SetModeTimeExpired(bool lbModeTimeExpired)   { mbModeTimeExpired  = lbModeTimeExpired; }
+        bool GetPlayerEliminated() const                  { return mbPlayerEliminated; }
+        bool GetModeTimeExpired() const                   { return mbModeTimeExpired; }
 
         // @0x7AB0 -- copied verbatim into GameState +0x1CC (mRankUpInfo's 4-byte head) by
         // ProcessInputQueue's prologue (`lwz r11, 0x7AB0(r30); stwx r11, r31, 0x339AC`).
@@ -440,13 +454,18 @@ namespace DirectorIO
         bool mbStartedOnlineEventLoading;                // @0x7AD2
         bool mbStarting100PercentSequence;               // @0x7AD3
         bool mbFinished100PercentSequence;               // @0x7AD4
-        // @0x7AD5 / @0x7AD6: TWO more flag bytes, not one (CORRECTED 2026-08-01).
-        // InputBuffer::Construct @0x82239514/0x82239518 seeds BOTH to 0, and
-        // MainDirector::ProcessInputQueue's prologue copies BOTH into the GameState
-        // (`lbz 0x7AD6(r30)` -> GameState +0x1D1, `lbz 0x7AD5(r30)` -> GameState +0x1D0 --
-        // the two RankUpInfo tail bytes). The DWARF member list for this header ends at
-        // mbFinished100PercentSequence, so neither has a name; HONEST opaque tail.
-        u8  maFlagTail[2];                               // @0x7AD5 .. @0x7AD6
+        // @0x7AD5 / @0x7AD6: the player's end-of-event pair. X360-only -- the DWARF member list
+        // for this header ends at mbFinished100PercentSequence -- so the NAMES are ours, read
+        // off the one producer. NAMED 2026-09-24 (crash parity FX-DIRECTOR; it was the opaque
+        // `u8 maFlagTail[2]`). BrnGameModule::BridgeGameStateToDirector stores both every frame
+        // out of the game-state module's ScoringOutputInterface (gameStateOut + 0x2A4B8):
+        //   @0x7AD5 = mabPlayerEliminated[mePlayerRaceCarIndex]           (0x823CD4D8..0x823CD4DC)
+        //   @0x7AD6 = mfModeTimeRemaining > 0.0f ? 0 : mbTimerActive      (0x823CD4E0..0x823CD510)
+        // InputBuffer::Construct seeds both to 0 (0x82239514 / 0x82239518), and
+        // MainDirector::ProcessInputQueue's prologue copies them into GameState +0x1D0 / +0x1D1
+        // (0x82237430..0x82237440).
+        bool mbPlayerEliminated;                         // @0x7AD5
+        bool mbModeTimeExpired;                          // @0x7AD6
 
         // Compile-time pin of every recovered offset (private members -> assert from a member fn).
         static void _AssertLayout();

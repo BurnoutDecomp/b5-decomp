@@ -808,18 +808,20 @@ namespace BrnDirector
             break;
         }
 
-        case 12:    // post-event / drive-thru / online-car-select: road-rage wrecked logic
-        case 14:
-        case 17:
+        case 12:    // the online modes E_MODE_ONLINE_FUGITIVE (12) / E_MODE_ONLINE_FREE_BURN (14) /
+        case 14:    // 17 -- jump table 0x82234A68 entries 13 / 15 / 18 (index = meEventType + 1).
+        case 17:    // The player's end-of-event pair: eliminated, or out of mode time.
         {
-            // asm 0x82234C8C: lbz +0x1D0 -> GameState::mbPlayerDamageCritical (X360-only member).
-            if (lrGameState.mbPlayerDamageCritical)              // +0x1D0
+            // asm 0x82234C8C: lbz +0x1D0 -> GameState::mbPlayerEliminated (X360-only member;
+            // BridgeGameStateToDirector publishes ScoringOutputInterface::mabPlayerEliminated[player]).
+            if (lrGameState.mbPlayerEliminated)                  // +0x1D0
             {
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Damage_Crit", KF_UNIT);
                 break;
             }
-            // asm 0x82234CB4: lbz +0x1D1 -> GameState::mbPlayerWrecked (X360-only member).
-            if (lrGameState.mbPlayerWrecked)                     // +0x1D1
+            // asm 0x82234CB4: lbz +0x1D1 -> GameState::mbModeTimeExpired (X360-only member; the
+            // bridge publishes `mfModeTimeRemaining > 0.0f ? 0 : mbTimerActive`).
+            if (lrGameState.mbModeTimeExpired)                   // +0x1D1
             {
                 // asm 0x82234CC0: lwz +0x1CC (full 4-byte word) -> the player's team, passed
                 // as the opposing-team query's liMyTeam.

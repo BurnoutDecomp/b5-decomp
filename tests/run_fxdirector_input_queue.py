@@ -15,6 +15,8 @@ MainDirector, against the revision's own BrnDirectorGameState.h / .cpp (shadowed
 the real VariableEventQueue<13312,16> with the console's byte-built wire records, and reads the
 GameState through per-layout accessors (so the pre-fix revision compiles and FAILS on behaviour).
 Wiring: the arms exist, and ArbStateCrashMode reads the named ShowTimeInfo requests.
+[2026-09-24] Also the prologue's end-of-event copies, input @0x7AD6 / @0x7AD5 -> GameState +0x1D1 / +0x1D0
+(0x82237430..0x82237440); their producer is checked by run_fxdirector_end_flags.py.
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxdirector_input_queue.py [--rev <b5 rev>]
 """
@@ -33,7 +35,7 @@ GAMESTATE_H = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 GAMESTATE_CPP = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.cpp"
 CRASHMODE_CPP = "src/GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.cpp"
 REGION_CPP = REPO / "src/SharedClasses/Trigger/BrnRegion.cpp"
-NUMERIC_CHECKS = 77
+NUMERIC_CHECKS = 82
 
 PROCESS_INPUT_QUEUE = "void MainDirector::ProcessInputQueue(const DirectorInputOutput* lpIO)"
 CLEAR_PRESENTATION = "static void ClearEventPresentationBlock(GameState& lrGameState)"
@@ -75,6 +77,24 @@ namespace FxDirectorTest
     inline bool ExtraSpin(const GameState& g)           { return g.mDirectorProfileData.maOpaque[4] != 0; }   // +0x1EC
     inline bool InIntro(const GameState& g)             { return g.mDirectorProfileData.maOpaque[5] != 0; }   // +0x1ED
     inline s32  CameraMode(const GameState& g)          { return g.mDirectorProfileData.miCameraModeWord; }  // +0x1F0
+}
+"""
+
+
+# The end-of-event pair GameState +0x1D0 / +0x1D1 by this revision's member names. NEW (2026-09-24): named for
+# their producer; OLD: mbPlayerDamageCritical / mbPlayerWrecked (named for the post-effects they play).
+END_FLAGS_NEW = """
+namespace FxDirectorTest
+{
+    inline bool PlayerEliminated(const BrnDirector::GameState& g) { return g.mbPlayerEliminated; }   // +0x1D0
+    inline bool ModeTimeExpired(const BrnDirector::GameState& g)  { return g.mbModeTimeExpired; }    // +0x1D1
+}
+"""
+END_FLAGS_OLD = """
+namespace FxDirectorTest
+{
+    inline bool PlayerEliminated(const BrnDirector::GameState& g) { return g.mbPlayerDamageCritical; }   // +0x1D0
+    inline bool ModeTimeExpired(const BrnDirector::GameState& g)  { return g.mbPlayerWrecked; }          // +0x1D1
 }
 """
 
@@ -127,6 +147,14 @@ def wiring(tree):
            "clearing mbLookbackOverride (0x8226ADE0..0x8226ADFC)",
            0 <= arb.find("lrSharedInfo.mpSharedCameraContainer=&mSharedCameraContainer;") < read
            < arb.find("mSharedCameraContainer.mbLookbackOverride=false;"))
+    # [2026-09-24] the end-of-event pair: +0x1CC, then @0x7AD6 -> +0x1D1, then @0x7AD5 -> +0x1D0, then the drain.
+    team = flat.find("maGameState.miPlayerTeam=lpInput->GetRankUpRivalInfo();")
+    expired = flat.find("maGameState.mbModeTimeExpired=lpInput->GetModeTimeExpired();")
+    eliminated = flat.find("maGameState.mbPlayerEliminated=lpInput->GetPlayerEliminated();")
+    first_event = flat.find("GetFirstEvent(")
+    yield ("the prologue copies input @0x7AD6 -> +0x1D1 then @0x7AD5 -> +0x1D0, after +0x1CC and before the drain "
+           "(0x82237430..0x82237440)",
+           0 <= team < expired < eliminated < first_event)
 
 
 def numeric(tree):
@@ -186,6 +214,13 @@ def numeric(tree):
     inc += ("namespace BrnDirector\n{\n"
             "void ArbitratorPrologueStandIn(SharedCameraContainerStandIn& mSharedCameraContainer,\n"
             "                               ArbSharedInfoStandIn& lrSharedInfo)\n{\n" + arb_stmt + "\n}\n}\n")
+    if "mbModeTimeExpired" in header:
+        inc += END_FLAGS_NEW
+    elif "mbPlayerWrecked" in header:
+        inc += END_FLAGS_OLD
+    else:
+        print("NUMERIC: cannot build -- no +0x1D0 / +0x1D1 members in this revision's GameState")
+        return None
     shadow = {GAMESTATE_H: header}
     return compile_and_run(Path(__file__).with_name("FxDirectorInputQueue.cpp"), "director_input_queue.inc", inc,
                            "FxDirectorInputQueue", shadow=shadow,

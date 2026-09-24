@@ -1792,7 +1792,9 @@ namespace BrnGame
     //   * the player's vehicle TEAM into the director input (+31408) and all 8 teams through
     //     DirectorIO::InputBuffer::SetVehicleTeam;
     //   * a CarScoreData::operator= of the player's score record (gameStateOut+173240 + 296*i)
-    //     into the director input at +12560, plus +12888 and the two flags at +31445/+31446.
+    //     into the director input at +12560, plus +12888;
+    //   * the player's end-of-event pair at +31445 / +31446 (@0x7AD5 / @0x7AD6) -- ⭐
+    //     RECONSTRUCTED 2026-09-24 (crash parity FX-DIRECTOR), see the body.
     // The team / score legs are still not reconstructed: their director-input destinations are
     // opaque storage in this model and none of them is on the crash path. Writing them against
     // opaque zeroes would be the "data arrives wrong-but-plausible" failure mode, so they are
@@ -1851,6 +1853,38 @@ namespace BrnGame
         }
 
         lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
+
+        // ---- the player's end-of-event pair (X360 live arm 0x823CD4A0..0x823CD510) -----------
+        // ⭐ 2026-09-24 (crash parity FX-DIRECTOR). The console reads both out of the scoring
+        // snapshot (gameStateOut + 0x2A4B8, the inlined GetScoringOutputInterface()) with the
+        // player slot it loaded for the takedown leg (r25, `lwzx +0x2AEEC` @0x823CD33C ==
+        // mePlayerRaceCarIndex), and stores them without a lock-bit test:
+        //   0x823CD4A0  `add. r11, r31, 0x2A4B8` -- the accessor's non-gating assert
+        //               "lpGameStateOutput->GetScoringOutputInterface()" (GameBridgeGameStateToX.cpp:256)
+        //   0x823CD4D8  `lbzx +0x2AEB8 + player` == mabPlayerEliminated[player] (+0xA00), with no
+        //               bounds test -> `stb 0x7AD5`
+        //   0x823CD4E4  `lfsx +0x2AF4C` == mfModeTimeRemaining (+0xA94) `fcmpu` flt_82001CC0 (0.0f):
+        //               `bgt` -> 0; else `lbzx +0x2AF60` == mbTimerActive (+0xAA8) != 0 -> r19 (1,
+        //               `li r19, 1` @0x823CD1A8) else 0 -> `stb 0x7AD6`. An unordered compare (NaN)
+        //               is not `gt`, so NaN takes the mbTimerActive arm; `!(x > 0.0f)` keeps that.
+        // (The console's team word @0x7AB0, the score record and the +0x3258 byte sit between the
+        //  Append and this arm, 0x823CD428..0x823CD49C; they are the legs still open above.)
+        // MainDirector::ProcessInputQueue copies the pair into GameState +0x1D0 / +0x1D1. Its one
+        // reader, ArbStateRoaming::ProcessPossibleFX, plays "Damage_Crit" / "Wrecked" on it in the
+        // online modes 12 / 14 / 17 only; offline, @0x7AD6 rises when a Road Rage or Stunt Run
+        // clock runs out.
+        {
+            const BrnGameState::GameStateModuleIO::ScoringOutputInterface* const lpScoringOutputInterface =
+                lpGameStateOutput->GetScoringOutputInterface();
+            CGS_ASSERT(lpScoringOutputInterface != 0,
+                       "lpGameStateOutput->GetScoringOutputInterface()");       // GameBridgeGameStateToX.cpp:256
+            const EActiveRaceCarIndex lePlayerRaceCarIndex = lpScoringOutputInterface->mePlayerRaceCarIndex;
+            lpDirectorInput->SetPlayerEliminated(
+                lpScoringOutputInterface->mabPlayerEliminated[lePlayerRaceCarIndex]);            // @0x7AD5
+            lpDirectorInput->SetModeTimeExpired(
+                !(lpScoringOutputInterface->mfModeTimeRemaining > 0.0f) &&                       // flt_82001CC0
+                lpScoringOutputInterface->mbTimerActive);                                         // @0x7AD6
+        }
     }
 
     // ------------------------------------------------------------------------------------

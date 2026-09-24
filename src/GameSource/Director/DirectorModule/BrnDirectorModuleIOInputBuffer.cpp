@@ -74,6 +74,8 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mbStartedOnlineEventLoading)       == 0x7AD2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartedOnlineEventLoading @0x7AD2");
         static_assert(offsetof(InputBuffer, mbStarting100PercentSequence)      == 0x7AD3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStarting100PercentSequence @0x7AD3");
         static_assert(offsetof(InputBuffer, mbFinished100PercentSequence)      == 0x7AD4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbFinished100PercentSequence @0x7AD4");
+        static_assert(offsetof(InputBuffer, mbPlayerEliminated)                == 0x7AD5 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbPlayerEliminated @0x7AD5");
+        static_assert(offsetof(InputBuffer, mbModeTimeExpired)                 == 0x7AD6 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbModeTimeExpired @0x7AD6");
     }
 
     // ---- Construct @0x822393D0 --------------------------------------------------------------
@@ -128,8 +130,8 @@ namespace DirectorIO
         mbStartedOnlineEventLoading      = false;   // 31442
         mbStarting100PercentSequence     = false;   // 31443
         mbFinished100PercentSequence     = false;   // 31444
-        maFlagTail[0]                    = 0;       // 31445 (0x7AD5)
-        maFlagTail[1]                    = 0;       // 31446 (0x7AD6)
+        mbPlayerEliminated               = false;   // 31445 (0x7AD5) -- 0x82239514
+        mbModeTimeExpired                = false;   // 31446 (0x7AD6) -- 0x82239518
 
         miRankUpRivalInfo                = 0;       // 31408 (0x7AB0) -- `stw r30, 0x7AB0`
 
