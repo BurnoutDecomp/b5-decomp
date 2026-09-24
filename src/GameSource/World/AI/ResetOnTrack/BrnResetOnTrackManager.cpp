@@ -21,7 +21,12 @@ namespace BrnAI
         CGS_ASSERT(!IsZero(segment, 1.5258789e-5f), "!RwMath::IsSimilar( lLineStart, lLineEnd )");
         const Vector3 direction = Normalize(segment);
         const f32 distance = Dot(direction, lPosition - lStart);
-        if (distance <= 0.0f) return lStart;
+        // NaN polarity (FX-AINAN2): `fcmpu distance, 0.0 ; ble -> return lStart` @0x82768A08/
+        // 0x82768A0C is TAKEN on an unordered compare, so a NaN distance (a NaN position, or the
+        // vrsqrtefp of a zero segment) answers the segment START; `distance <= 0` let it through
+        // to `lStart + direction * NaN`. The end test (`vcmpgefp.` all-true @0x82768A3C) is false
+        // for a NaN on both spellings.
+        if (!(distance > 0.0f)) return lStart;
         if (distance * distance >= MagnitudeSquared(segment)) return lEnd;
         return lStart + direction * distance;
     }

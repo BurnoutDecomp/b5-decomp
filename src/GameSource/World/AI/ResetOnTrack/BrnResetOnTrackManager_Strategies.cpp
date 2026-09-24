@@ -381,7 +381,10 @@ bool ResetOnTrackManager::ScanBackwardsAlongExtrapolatedRoute(const RouteNode*& 
         lrpNextNode = &mHelperNodeNext;
         lrpPrevNode = &mHelperNodePrev;
 
-        if (lfAheadness >= lfResetDistance)
+        // NaN polarity (FX-AINAN2): `fcmpu aheadness, lfResetDistance ; bge` @0x82784B14/
+        // 0x82784B48 is taken on an unordered compare -- a NaN aheadness (or distance) keeps
+        // walking instead of accepting the pair; `>=` accepted it.
+        if (!(lfAheadness < lfResetDistance))
         {
             // Not far enough behind yet: this portal becomes the next pair's "previous".
             luPrevSectionIndex = luNextAISectionIndex;
@@ -498,7 +501,9 @@ bool ResetOnTrackManager::ScanForwardsAlongExtrapolatedRoute(const RouteNode*& l
                                     lNextPortalPosition2D.y - lPlayerPosition.y, 0.0f, 0.0f };
         const f32 lfAheadness = Dot2D(lPlayerDirection, lRelative);
 
-        if (lfAheadness <= lfResetDistance)
+        // NaN polarity (FX-AINAN2): `fcmpu aheadness, lfResetDistance ; ble` @0x82784F14/
+        // 0x82784F18 is taken on an unordered compare -- a NaN keeps walking; `<=` accepted it.
+        if (!(lfAheadness > lfResetDistance))
         {
             luPrevSectionIndex = luNextAISectionIndex;
             luPrevPortalIndex  = lu8NextPortal;
@@ -560,15 +565,14 @@ f32 ResetOnTrackManager::GetRoadSideForStartingLine(const RouteNode* lpNextNode,
                  + (KF_STARTING_LINE_CAR_WIDTH / lfRoadWidth)
                  - 1.0f;
 
-    // rw::math::vpu::Clamp, lowered by the console to two `fsub ; fsel` pairs in this order.
-    if (lfInterp < -KF_STARTING_LINE_MAX_OFFSET)
-    {
-        lfInterp = -KF_STARTING_LINE_MAX_OFFSET;
-    }
-    if (lfInterp > KF_STARTING_LINE_MAX_OFFSET)
-    {
-        lfInterp = KF_STARTING_LINE_MAX_OFFSET;
-    }
+    // rw::math::vpu::Clamp, lowered by the console to two `fsubs ; fsel` pairs in this order
+    // (0x82784498..0x827844B0): t = (-0.25 - x >= 0) ? -0.25 : x, then (0.25 - t >= 0) ? t : 0.25.
+    // fsel takes its THIRD operand on an unordered test, so a NaN comes back as +0.25
+    // (FX-AINAN2); the old `if (x < lo) x = lo; if (x > hi) x = hi;` kept the NaN.
+    lfInterp = ((-KF_STARTING_LINE_MAX_OFFSET - lfInterp) >= 0.0f) ? -KF_STARTING_LINE_MAX_OFFSET
+                                                                  : lfInterp;
+    lfInterp = ((KF_STARTING_LINE_MAX_OFFSET - lfInterp) >= 0.0f) ? lfInterp
+                                                                 : KF_STARTING_LINE_MAX_OFFSET;
 
     if ((liRaceCarIndex & 1) != 0)
     {
