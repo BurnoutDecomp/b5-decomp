@@ -241,7 +241,11 @@ void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpC
 
     // Seek the take. The parameter is the played fraction, capped at 1.0 (the console does
     // NOT floor it here -- the clamp above already guarantees it is non-negative).
-    const f32 lfParameter = rw::math::fpu::Min(mfPlaybackTimer / GetLength(), 1.0f);
+    // Not the fsel Min: 0x8223D190 `fcmpu played, 1.0` (flt_82001C98) ; 0x8223D194 `bge` keeps the
+    // 1.0, so only an ordered played < 1 passes through -- a NaN fraction (0 / 0 on a zero-length
+    // take) seeks to 1.0.
+    const f32 lfPlayed    = mfPlaybackTimer / GetLength();
+    const f32 lfParameter = (lfPlayed < 1.0f) ? lfPlayed : 1.0f;
     mPlaybackTake.SetParameter(lfParameter, false, false);
 
     // [DIAG BRN_ICE_TRACE] BRING-UP SCAFFOLDING, NOT CONSOLE CODE. One line per sampled frame
@@ -496,12 +500,14 @@ void KeyAnimController::UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* 
             // perfectly-focused band.
             const f32 lfFalloffMeters = lfBlurFalloff * KI_DEPTH_OF_FIELD_MAX_FALLOFF_DISTANCE;
 
-            lfBlurriness = rw::math::fpu::Min(lfBlurIntensity, 1.0f);
+            // 0x821F7FF0 fsel(1 - I, I, 1.0) = Min(1, I) (the > 0 gate above makes the order moot).
+            lfBlurriness = rw::math::fpu::Min(1.0f, lfBlurIntensity);
 
             // Then force the four band edges into a strictly increasing order, keeping at
             // least the minimum separation between each adjacent pair.
+            // 0x821F8000 fsel(-(n - f), 0.0, n - f) = Max(0, n - f): a NaN edge stays NaN.
             lfFocusStartDistanceMeters =
-                rw::math::fpu::Max(lfNearFocus - lfFalloffMeters, 0.0f);
+                rw::math::fpu::Max(0.0f, lfNearFocus - lfFalloffMeters);
             lfPerfectFocusStartDistanceMeters =
                 rw::math::fpu::Max(lfFocusStartDistanceMeters + KI_DEPTH_OF_FIELD_MIN_FALLOFF_DISTANCE,
                                    lfNearFocus);

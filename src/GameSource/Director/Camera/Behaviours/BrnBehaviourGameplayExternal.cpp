@@ -56,6 +56,41 @@
 
 #include <cmath>                                        // std::acos -- the console's XMVectorACos
                                                         //   + std::atan / std::sqrt (Update)
+                                                        //   + std::signbit (VecFloatMax / Min)
+
+// ----------------------------------------------------------------------------
+// rw::math::vpu Min / Max / Clamp on a VecFloat, one broadcast lane (rwmath 1.02.00
+// vpu/detail/scalar_operation_inline.h:89-120 and :189-192): `vminfp` / `vmaxfp`, and Clamp is
+// Min(max, Max(min, value)). ModifyTargetAngles, InterpolateLastPlayerTransform and two Update
+// statements clamp VecFloats (the DWARF names vpu::Clamp / vpu::Min<VecFloat> there, and the asm is
+// vmaxfp / vminfp, not fsel), so they must NOT go through the fsel rw::math::fpu forms: the VMX
+// pair returns a NaN when EITHER operand is NaN (vA's when both are), and orders the zeros
+// -0 < +0 (AltiVec PEM vmaxfp / vminfp), where fsel returns one operand by the difference's sign.
+// Not modelled: the VMX non-Java mode's flush of denormal operands to zero.
+// ----------------------------------------------------------------------------
+namespace
+{
+    f32 VecFloatMax(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA) return lfA;
+        if (lfB != lfB) return lfB;
+        if (lfA == lfB) return std::signbit(lfA) ? lfB : lfA;   // +0 is the larger zero
+        return (lfA > lfB) ? lfA : lfB;
+    }
+
+    f32 VecFloatMin(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA) return lfA;
+        if (lfB != lfB) return lfB;
+        if (lfA == lfB) return std::signbit(lfA) ? lfA : lfB;   // -0 is the smaller zero
+        return (lfA < lfB) ? lfA : lfB;
+    }
+
+    f32 VecFloatClamp(f32 lfValue, f32 lfMin, f32 lfMax)
+    {
+        return VecFloatMin(lfMax, VecFloatMax(lfMin, lfValue));
+    }
+}
 
 // ----------------------------------------------------------------------------
 // NOTE -- BehaviourGameplayExternal::Parameters::Serialise<S> (the versioned field-walk visitor:
@@ -428,9 +463,10 @@ void BehaviourGameplayExternal::ModifyTargetAngles(const Parameters& lrCameraAtt
     const f32 lfPitchBound = KF_PI / lrCameraAttribs.mrPitchLimit;
     const f32 lfRollBound  = KF_PI / lrCameraAttribs.mrRollLimit;
 
-    // .cpp:625 / :626 -- Min(+bound, Max(-bound, v)), in that order on both builds.
-    lrTargetAngles.x = rw::math::fpu::Clamp(lrTargetAngles.x, -lfPitchBound, lfPitchBound);
-    lrTargetAngles.z = rw::math::fpu::Clamp(lrTargetAngles.z, -lfRollBound,  lfRollBound);
+    // .cpp:625 / :626 -- Min(+bound, Max(-bound, v)), in that order on both builds. The DWARF's
+    // vpu::Clamp on VecFloats (vmaxfp / vminfp above), so a NaN angle stays NaN.
+    lrTargetAngles.x = VecFloatClamp(lrTargetAngles.x, -lfPitchBound, lfPitchBound);
+    lrTargetAngles.z = VecFloatClamp(lrTargetAngles.z, -lfRollBound,  lfRollBound);
 
     // A separate statement AFTER both clamps (the X360 stores the clamped vector, then
     // multiplies and stores lane Z again). Its DecFIGS line is absorbed into the inlined
@@ -640,8 +676,11 @@ void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lP
                                                                ::VecFloat lvfCarSpeed,
                                                                ::VecFloat lvfTimestep)
 {
-    // .cpp:579 -- the angle between the two forward axes.
-    const f32 lfCos = rw::math::fpu::Clamp(
+    // .cpp:579 -- the angle between the two forward axes. Every clamp / max in this body is the
+    // VecFloat (vmaxfp / vminfp) form: 0x82224C84/0x82224C88 here, 0x82224CF8 (:584),
+    // 0x82224D38/0x82224D58 (:589), 0x82224D80/0x82224D90 (:590), 0x82224D50 (:591),
+    // 0x82224EB8/0x82224ED0 (:598). A NaN dot therefore stays NaN into the acos and trips :580.
+    const f32 lfCos = VecFloatClamp(
         rw::math::vpu::Dot(rw::math::vpu::Normalize(lPlayerTransform.zAxis),
                            rw::math::vpu::Normalize(mLastPlayerTransform.zAxis)),
         -1.0f, 1.0f);
@@ -652,22 +691,22 @@ void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lP
     // camera does not chase the car's heading at all; the response then grows with the SQUARE
     // of the excess speed, so it saturates (Clamp below) at about 8 m/s at 60 fps.
     const f32 lfExcessSpeed =
-        rw::math::fpu::Max(lvfCarSpeed.x - KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS, 0.0f);
+        VecFloatMax(lvfCarSpeed.x - KVF_LAST_PLAYER_TRANSFORM_SPEED_TO_INTERP_MPS, 0.0f);
     f32 lfSpeedMod = (lfExcessSpeed * lfExcessSpeed)
                    * KVF_LAST_PLAYER_TRANSFORM_CAR_SPEED_FACTOR * lvfTimestep.x;
     CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod), "IsValid( lvfSpeedMod )");   // .cpp:585
 
     // .cpp:589 / :590 -- turn that fraction into an ANGLE, then rate-limit the angle into
     // [0.01, 0.05] radians per frame (0.57 to 2.9 degrees).
-    const f32 lfAngleToRotate = lfOutAngle * rw::math::fpu::Clamp(lfSpeedMod, 0.0f, 1.0f);
+    const f32 lfAngleToRotate = lfOutAngle * VecFloatClamp(lfSpeedMod, 0.0f, 1.0f);
     const f32 lfAngleToRotateClamped =
-        rw::math::fpu::Clamp(lfAngleToRotate,
-                             KVF_LAST_PLAYER_TRANSFORM_MIN_INTERP,
-                             KVF_LAST_PLAYER_TRANSFORM_MAX_INTERP);
+        VecFloatClamp(lfAngleToRotate,
+                      KVF_LAST_PLAYER_TRANSFORM_MIN_INTERP,
+                      KVF_LAST_PLAYER_TRANSFORM_MAX_INTERP);
 
     // .cpp:590/:591 -- and back into a blend fraction of the remaining gap.
     lfSpeedMod = lfAngleToRotateClamped
-               / rw::math::fpu::Max(lfOutAngle, KVF_LAST_PLAYER_TRANSFORM_MIN_DIV_ANGLE);
+               / VecFloatMax(lfOutAngle, KVF_LAST_PLAYER_TRANSFORM_MIN_DIV_ANGLE);
     CGS_ASSERT(rw::math::fpu::IsValid(lfSpeedMod),                              // .cpp:592
                "lvfSpeedMod / lvfAngleToRotate / lvfAngleToRotateClamped");
 
@@ -675,7 +714,7 @@ void BehaviourGameplayExternal::InterpolateLastPlayerTransform(Matrix44Affine lP
     Vector3 lvUnusedAngleOut;   // the console reuses lvfAngleToRotateClamped's slot here
     mLastPlayerTransform = rw::math::vpu::SLerp(mLastPlayerTransform,
                                                 lPlayerTransform,
-                                                rw::math::fpu::Clamp(lfSpeedMod, 0.0f, 1.0f),
+                                                VecFloatClamp(lfSpeedMod, 0.0f, 1.0f),
                                                 &lvUnusedAngleOut);
     CGS_ASSERT(rw::math::vpu::IsValid(mLastPlayerTransform),                    // .cpp:599
                "IsValid( mLastPlayerTransform )");
@@ -1702,8 +1741,9 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // .cpp:211/:214 -- how much of the authored pitch band this speed eats. The cap is
         // 100 MPH expressed in m/s (see the banner); the reduction saturates there.
         const f32 kfPitchLimitMaxSpeed = 100.0f * KF_MPH_TO_METRES_PER_SECOND;
+        // vpu::Min<VecFloat> (DWARF): vminfp128 0x82240A04, so a NaN speed stays NaN.
         const f32 lfPitchLimitReduction =
-            (rw::math::fpu::Min(lfPlayerSpeed, kfPitchLimitMaxSpeed) / kfPitchLimitMaxSpeed)
+            (VecFloatMin(lfPlayerSpeed, kfPitchLimitMaxSpeed) / kfPitchLimitMaxSpeed)
             * KVF_MAX_PITCH_LIMIT;
 
         // .cpp:217 -- the console streams all four values; only the predicate is transcribed.
@@ -1783,14 +1823,13 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         }
 
         // .cpp:260 -- blend from the car's frame TOWARD the velocity frame, by speed: nothing
-        // below 1 m/s, fully by 11 m/s. .cpp:261 re-orthonormalises the result.
+        // below 1 m/s, fully by 11 m/s. .cpp:261 re-orthonormalises the result. The blend is
+        // vpu::Clamp on a VecFloat (DWARF): vmaxfp128 0x82240CC0 / vminfp128 0x82240CC4.
         Vector3 lUnusedAngle;
         Matrix44Affine lVelocityTransform =
             rw::math::vpu::SLerp(lCarFrame, lVelocityFrame,
-                                 rw::math::fpu::Min(rw::math::fpu::Max((lfPlayerSpeed - 1.0f)
-                                                                       * KVF_VELOCITY_BLEND_RATE,
-                                                                       0.0f),
-                                                    1.0f),
+                                 VecFloatClamp((lfPlayerSpeed - 1.0f) * KVF_VELOCITY_BLEND_RATE,
+                                               0.0f, 1.0f),
                                  &lUnusedAngle);
         lVelocityTransform = rw::math::vpu::OrthoNormalize3x3(lVelocityTransform);   // .cpp:261
 
@@ -2013,8 +2052,11 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         // already attested independently. The amplitude falls off to nothing while airborne.
         if (mbEnableBoostEffects && !rw::math::fpu::IsZero(lrSharedInfo.mfSpeedRatio))
         {
-            const f32 lfGrounded =                                           // .cpp:440
-                1.0f - rw::math::fpu::Min(rw::math::fpu::Max(lrCarState.mfTimeInAir, 0.0f), 1.0f);
+            // .cpp:440 -- the DWARF's `lrTimeInAirFactor` is fpu::Clamp<float>: 0x82241C4C
+            // fsel(-t, 0.0, t) then 0x82241C54 fsel(1 - v, v, 1.0), i.e. Min(1, Max(0, t)). In that
+            // operand order a NaN time in air clamps to 1.0 (no shake), not to 0.0.
+            const f32 lfGrounded =
+                1.0f - rw::math::fpu::Clamp(lrCarState.mfTimeInAir, 0.0f, 1.0f);
             mBoostShake.Update(lrSharedInfo.mpDirectorResourceManager,       // .cpp:445
                                lfTimestep,
                                KU8_BOOST_SHAKE_TYPE,
@@ -2041,9 +2083,10 @@ bool BehaviourGameplayExternal::Update(Camera& lCamera, const BehaviourSharedInf
         const f32 lfSpeedMPHAbs = rw::math::fpu::Abs(lrCarState.mfSpeedMPH);
         if (lfSpeedMPHAbs < 40.0f)
             lfImpactShake = lfSpeedMPHAbs * lfImpactShake * 0.025f;
+        // fpu::Clamp<float> then fpu::Max<float> (DWARF): 0x82241F40 fsel(-s, 0.0, s), 0x82241F4C
+        // fsel(0.8 - v, v, 0.8) (0.8 @0x820054C8), 0x82241F58 fsel(f - v, f, v).
         mfImpactShakeFactor =
-            rw::math::fpu::Max(mfImpactShakeFactor,
-                               rw::math::fpu::Min(rw::math::fpu::Max(lfImpactShake, 0.0f), 0.8f));
+            rw::math::fpu::Max(mfImpactShakeFactor, rw::math::fpu::Clamp(lfImpactShake, 0.0f, 0.8f));
 
         // .cpp:474 -- the slide/drift push.
         ApplySlideyEffects(lrCameraAttribs, lCameraMatrix, lVelocityTransform, lrSharedInfo);

@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/System/CgsHarnessSlot.h"     // BRN_HARNESS_SLOT channel-name suffix (parallel harness slots)
 #include "GameSource/Input/GameInputActions.h"                // EGameInputActions -- the action vocabulary KA_BINDINGS binds to
 #include "GameShared/GameClasses/System/Input/PC/CgsDebugKeyboardPC.h"
+#include "rw/math/fpu/scalar_operation.h"                    // rw::math::fpu::Clamp (ClampAxis)
 
 // ============================================================================
 // FLAG PC-platform leaf (whole file): the host pad source standing in for the
@@ -837,14 +838,12 @@ namespace
         return false;
     }
 
-    // InputPads::FillRawData's axis accumulation tail: rw::math::fpu::Clamp(sum, -1, +1).
+    // InputPads::FillRawData's axis accumulation tail: rw::math::fpu::Clamp(sum, -1, +1) --
+    // 0x828E7484 fsel(-1 - s, -1, s) (flt_820037C8) ; 0x828E748C fsel(1 - v, v, 1.0), so a NaN
+    // axis reads +1 as on the console.
     f32 ClampAxis(f32 lfValue)
     {
-        if (lfValue < -1.0f)
-            return -1.0f;
-        if (lfValue > 1.0f)
-            return 1.0f;
-        return lfValue;
+        return rw::math::fpu::Clamp(lfValue, -1.0f, 1.0f);
     }
 
     // FLAG PC-platform leaf: the unattended boot harness signals one named event per host

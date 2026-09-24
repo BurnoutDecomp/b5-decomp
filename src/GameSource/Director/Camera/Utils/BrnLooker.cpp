@@ -367,11 +367,15 @@ void Looker::Zoom(VecFloat lvTimeStep,
         {
             // Moving: step the FOV toward the target by the velocity band (sign per which side
             // we are on; asm 0x82222EE0..0x82222F0C), then blur rate, delta = (1 - blur).
+            // 0x82222EE4 `fcmpu f31(FOV), f0(target)` ; 0x82222EF0 `ble` into the Min arm -- taken on
+            // <= AND on an unordered compare, so a NaN side takes the Min arm. The other arm is
+            // 0x82222EFC fsel(-vd - (t - F), -vd, t - F) = Max(-vd, t - F), NOT -Min(vd, F - t): the
+            // two differ when the velocity step is NaN (Max keeps the finite t - F).
             f32 lfStep;
-            if (lfFOV <= mfTargetFOV)
+            if (!(lfFOV > mfTargetFOV))
                 lfStep = rw::math::fpu::Min(mfMaxFOVVelocity * lfTimeStep, mfTargetFOV - lfFOV);
             else
-                lfStep = -rw::math::fpu::Min(mfMaxFOVVelocity * lfTimeStep, lfFOV - mfTargetFOV);
+                lfStep = rw::math::fpu::Max(-(mfMaxFOVVelocity * lfTimeStep), mfTargetFOV - lfFOV);
             lfFOV += lfStep;
 
             lfDofRate  = KF_DOF_BLUR_RATE;
