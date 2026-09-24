@@ -22,11 +22,12 @@ namespace World
 namespace
 {
 // Position-match tolerance splatted into IsAttachedToThis's per-lane compare. The
-// X360 loads it as a single float from rodata @0x820AA0E0 (lvlx + vspltw128 lane 0).
-// That rodata is NOT present in any dump available to this reconstruction, so its
-// exact value is UNRECOVERED; seeded with a small placeholder so the compare's
-// structure is faithful and compiles. FLAG: do NOT trust this magnitude.
-const f32 KfAttachPositionEpsilon_UNRECOVERED = 0.01f;   // @0x820AA0E0 (un-dumped)
+// X360 loads it as a single float from rodata @0x820AA0E0 (lvlx + vspltw128 lane 0):
+// 0x37800000 = 1.52587890625e-05f = 2^-16 (tools/re/x360rd.py 0x820AA0E0), rwmath's
+// SMALL_FLOAT -- the rw::math::vpu::IsSimilar tolerance CgsCamera.cpp and
+// BrnRacingLineGenerator.cpp cite at their own copies of 0x37800000. (FX-EMITTER
+// 2026-09-24: was an invented 0.01f placeholder, 655x the console tolerance.)
+const f32 KF_ATTACH_POSITION_EPSILON = 1.52587890625e-05f;   // @0x820AA0E0 = 0x37800000 (2^-16)
 
 // The entity type lives in the HIGH 16 bits of the mPosPlus w component (a float
 // slot reinterpreted as bits, then >>16 -- exactly the X360 `srwi rN, rN, 16`).
@@ -140,7 +141,7 @@ void EmitterState::UpdateParams(f32 lfDeltaTime)
 //
 //   cmplwi cr6, r4, 0                       ; if (lpvTestAttachment == 0)
 //   ... BeginAssert/FireAssert("lpvTestAttachment",...)/EndAssert
-//   lvlx   v0, unk_820AA0E0 ; vspltw128 v127, v0, 0   ; v127 = eps splat (rodata, UNRECOVERED)
+//   lvlx   v0, unk_820AA0E0 ; vspltw128 v127, v0, 0   ; v127 = eps splat (2^-16, rodata 0x37800000)
 //   lbz    r10, 0x48(this)  ; if (!mbIsAttached) assert("IsAttached()")  ; GetSoundEntity()
 //   lvx128 v13, r0, r28      ; v13 = *(StaticSoundEntity*)lpvTestAttachment
 //   lvx128 v12, this, 0x60   ; v12 = mEntity
@@ -159,9 +160,8 @@ void EmitterState::UpdateParams(f32 lfDeltaTime)
 // first for the XYZ position compare against the splatted tolerance (the packed w
 // lane is masked out of that compare by vrlimi128), then for the packed type in the
 // high 16 bits of the w component, which must match exactly. CGS_ASSERT folds each
-// Begin/Fire/End; baked file/line dropped. FLAG: the position tolerance is un-dumped
-// rodata (see KfAttachPositionEpsilon_UNRECOVERED) -- the compare STRUCTURE is
-// faithful but its threshold magnitude is not proven.
+// Begin/Fire/End; baked file/line dropped. The position tolerance is the image's
+// 2^-16 (KF_ATTACH_POSITION_EPSILON, rodata 0x820AA0E0).
 // ---------------------------------------------------------------------------
 bool EmitterState::IsAttachedToThis(void* lpvTestAttachment)
 {
@@ -179,9 +179,9 @@ bool EmitterState::IsAttachedToThis(void* lpvTestAttachment)
     const f32 lfAbsDx = (lfDx < 0.0f) ? -lfDx : lfDx;   // vandc sign-bit clear == fabs
     const f32 lfAbsDy = (lfDy < 0.0f) ? -lfDy : lfDy;
     const f32 lfAbsDz = (lfDz < 0.0f) ? -lfDz : lfDz;
-    if (lfAbsDx > KfAttachPositionEpsilon_UNRECOVERED ||
-        lfAbsDy > KfAttachPositionEpsilon_UNRECOVERED ||
-        lfAbsDz > KfAttachPositionEpsilon_UNRECOVERED)
+    if (lfAbsDx > KF_ATTACH_POSITION_EPSILON ||
+        lfAbsDy > KF_ATTACH_POSITION_EPSILON ||
+        lfAbsDz > KF_ATTACH_POSITION_EPSILON)
     {
         return false;
     }
