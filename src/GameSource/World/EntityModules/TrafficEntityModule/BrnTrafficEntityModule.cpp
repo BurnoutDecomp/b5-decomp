@@ -50,6 +50,7 @@
 #include "GameShared/GameClasses/Algorithms/CgsShuffle.h"        // CgsAlgorithms::Shuffle (Reset pool shuffles)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficTrackWitness.h"
 #include <cmath>   // sqrtf, for the witness' player distance
+#include <algorithm>   // std::min / std::max (UpdateGiveUpManoeuvre's vmaxfp128 / vminfp128 clamps)
 #include "rw/math/vpu/matrix44affine_operation.h"               // rw::math::vpu::IsValid
 #include <cfloat>    // FLT_MAX (the KF_MAX_FLOAT tuning seed)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h" // KU_INVALID_HULL
@@ -12759,12 +12760,11 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             }
             else if (leManoeuvre == Vehicle::E_MANOEUVRE_GIVE_UP)               // jpt case 2
             {
-                // GATE UpdateGiveUpManoeuvre @0x8273EB60 -- exported, no body. Reached by the
-                // ten-second no-driving latch at the tail of this loop.
-                static bool sbLoggedGiveUpArm = false;
-                LogMissingLeg_T3Drive(sbLoggedGiveUpArm,
-                              "GenerateDriverInputs arm UpdateGiveUpManoeuvre @0x8273EB60 "
-                              "-- no body");
+                // 0x8274951C..0x82749528 `addi r5, &lControls ; mr r4, r19 ; bl 0x8273EB60` -- LIVE
+                // (FX-TRAFFIC3 item 1c). Reached by the ten-second no-driving latch at the tail of
+                // this loop, by CheckIfPhysicalVehicleIsStuck (both ends) and by DriveTowardsTarget's
+                // slam give-up. Body below DriveTowardsTarget.
+                UpdateGiveUpManoeuvre(static_cast<u32>(liVehicle), &lControls);
             }
             else
             {
@@ -13384,6 +13384,149 @@ void TrafficEntityModule::UpdateStuckReverseManoeuvre(u32 luVehicle,
     {
         // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
         CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_STUCK_REVERSE: ");               // .cpp 17053
+    }
+}
+
+// ============================================================================================
+// FX-TRAFFIC3 item 1c (crash parity wave 5, 2026-09-24) -- the GIVE_UP manoeuvre.
+//
+// UpdateGiveUpManoeuvre @0x8273EB60 (DWARF h:1392) was a GenerateDriverInputs gate (0x82749528)
+// although three routes start the manoeuvre: the ten-second no-driving latch at 0x8274979C and
+// CheckIfPhysicalVehicleIsStuck's both-ends arm (both at phase 1), and DriveTowardsTarget's slam
+// give-up (phase 0). A given-up car kept the zero-control record for ever instead of braking to
+// a stop, waiting out 4 s and handing itself back as a NORMAL physical car.
+// ============================================================================================
+namespace
+{
+    // DWARF BrnTrafficUnity `KF_VEHICLE_IS_STUCK_TIME` (PS3 0x3F000000). X360 flt_820BA62C == 0.5f:
+    // the threshold the TrafficPhysicsInfo::IsStuckFront / IsStuckBack inlines compare against at
+    // 0x8273EE38 (the same rodata word is phase 0's steering, 0x8273EDB4).
+    const f32 KF_VEHICLE_IS_STUCK_TIME = 0.5f;
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witnesses, capped: phase changes and the
+    // hand-back, per vehicle.
+    const s32 KI_GIVE_UP_DIAG_CAP = 40;
+    s32       giGiveUpDiagLines   = 0;
+}
+
+// DWARF BrnTrafficEntityModule.h:221 / :224. No out-of-line symbol: UpdateGiveUpManoeuvre inlines
+// both (0x8273EE30 `lfs 0xFCC` / 0x8273EE48 `lfs 0xFD0`, each `fcmpu` + `bgt` against 0.5).
+bool TrafficPhysicsInfo::IsStuckFront() const
+{
+    return mfStuckTimeFront > KF_VEHICLE_IS_STUCK_TIME;
+}
+
+bool TrafficPhysicsInfo::IsStuckBack() const
+{
+    return mfStuckTimeBack > KF_VEHICLE_IS_STUCK_TIME;
+}
+
+// --------------------------------------------------------------------------------------------
+// @0x8273EB60  TrafficEntityModule::UpdateGiveUpManoeuvre   (DWARF BrnTrafficUnity :16690..)
+//   DWARF locals: lpVehicle; phase 1 block: lpPhysInfo, lbStuckFront, lbStuckBack, lbStillStuck.
+//   0x8273EB98  "lpDriverControls" (.cpp 16907) ; GetVehicle inlined (.h 2459)
+//   0x8273EBF8  manoeuvre == GIVE_UP (.cpp 16910) ; IsOfStandardSpecies (.cpp 16911)
+//   0x8273EC50  GetCurrentManoeuvrePhase (extsb ; cmplwi 1): 0 -> 0x8273ED00, 1 -> 0x8273EDE4,
+//               anything else -> the streamed "Invalid phase for E_MANOEUVRE_GIVE_UP: " << phase
+//               (.cpp 16973)
+//   phase 0     Abs(GetSpeed()) > 1.0 (flt_82001C98, all lanes): brake against the motion --
+//               mfGas = Min(Max(-speed, 0), 1), mfSteering = 0.5 (flt_820BA62C),
+//               mfBrake = Min(Max(speed, 0), 1), one GetSpeed call each; else
+//               SetCurrentManoeuvrePhase(1) + ResetManoeuvreTime(0) and FALL INTO phase 1
+//   phase 1     time (+0x60) < 4.0 (flt_820BA8DC, `blt`): mfGas = mfBrake = mfSteering = 0;
+//               else IsStuckFront && IsStuckBack -> ResetManoeuvreTime(0) (wait again); else
+//               lbStillStuck = CheckIfPhysicalVehicleIsStuck && manoeuvre == GIVE_UP; if not ->
+//               SetIndicatingLeft(0), SetIndicatingRight(0), mfTimeNotDriving (+0xFD8) = 0,
+//               SetPhysicalReason(5 == E_PHYSICALREASON_NORMAL)
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::UpdateGiveUpManoeuvre(u32 luVehicle,
+                                                BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    CGS_ASSERT(lpControls != 0, "lpDriverControls");                                     // .cpp 16907
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);   // its own .h 2459 bound assert, inlined here
+    CGS_ASSERT(lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_GIVE_UP,
+               "lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_GIVE_UP");       // .cpp 16910
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(), "lpVehicle->IsOfStandardSpecies()");    // .cpp 16911
+
+    const s32 liPhase = lpVehicle->GetCurrentManoeuvrePhase();
+    if (liPhase == 0)
+    {
+        if (std::fabs(lpVehicle->GetSpeed().x) > 1.0f)                                   // 0x8273ED48
+        {
+            // vxor sign / vmaxfp128 0 / vminfp128 1 (0x8273ED8C..0x8273ED94), then vmaxfp128 0 /
+            // vminfp128 1 on the third GetSpeed (0x8273EDB0 / 0x8273EDC0).
+            lpControls->mfGas      = std::min(std::max(-lpVehicle->GetSpeed().x, 0.0f), 1.0f);   // 0x8273EDA0
+            lpControls->mfSteering = 0.5f;                                               // 0x8273EDBC flt_820BA62C
+            lpControls->mfBrake    = std::min(std::max(lpVehicle->GetSpeed().x, 0.0f), 1.0f);    // 0x8273EDCC
+            return;
+        }
+
+        lpVehicle->SetCurrentManoeuvrePhase(1);                                          // 0x8273EDDC
+        lpVehicle->ResetManoeuvreTime(0.0f);                                             // 0x8273EDE0
+
+        // [DIAG] NOT IN THE X360 BINARY -- see KI_GIVE_UP_DIAG_CAP.
+        if (giGiveUpDiagLines < KI_GIVE_UP_DIAG_CAP)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giGiveUpDiagLines;
+                *lpDiag << "[T-give-up] vehicle=" << luVehicle << " phase=0->1 stopped speed="
+                        << lpVehicle->GetSpeed().x << "\n";
+            }
+        }
+    }
+    else if (liPhase != 1)
+    {
+        // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
+        CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_GIVE_UP: ");                     // .cpp 16973
+        return;
+    }
+
+    // 0x8273EDE4 -- phase 1 (also the tail of the frame phase 0 hands over).
+    if (lpVehicle->GetManoeuvreTime() < 4.0f)                                            // flt_820BA8DC
+    {
+        lpControls->mfGas      = 0.0f;                                                   // 0x8273EED4
+        lpControls->mfBrake    = 0.0f;                                                   // 0x8273EED8
+        lpControls->mfSteering = 0.0f;                                                   // 0x8273EEDC
+        return;
+    }
+
+    TrafficPhysicsInfo* const lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+    CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");                                           // .cpp 16938
+
+    const bool lbStuckFront = lpPhysInfo->IsStuckFront();
+    const bool lbStuckBack  = lpPhysInfo->IsStuckBack();
+    if (lbStuckFront && lbStuckBack)
+    {
+        lpVehicle->ResetManoeuvreTime(0.0f);                                             // 0x8273EE78
+        return;
+    }
+
+    const f32 lfDiagWaited = lpVehicle->GetManoeuvreTime();   // [DIAG] read before the stuck test can reset it
+    const bool lbStillStuck = CheckIfPhysicalVehicleIsStuck(luVehicle)
+                           && lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_GIVE_UP;   // 0x8273EE88
+    if (!lbStillStuck)
+    {
+        lpVehicle->SetIndicatingLeft(false);                                             // 0x8273EEB0
+        lpVehicle->SetIndicatingRight(false);                                            // 0x8273EEBC
+        lpPhysInfo->mfTimeNotDriving = 0.0f;                                             // 0x8273EEC8
+        lpVehicle->SetPhysicalReason(static_cast<s8>(E_PHYSICALREASON_NORMAL));          // 0x8273EECC
+
+        // [DIAG] NOT IN THE X360 BINARY -- the hand-back: the first frame past the 4 s wait, and the
+        // frame the stuck test takes the car out of GIVE_UP (its manoeuvre, printed, is then not 3).
+        const s32 liDiagManoeuvre = static_cast<s32>(lpVehicle->GetCurrentManoeuvre());
+        if (giGiveUpDiagLines < KI_GIVE_UP_DIAG_CAP
+            && (lfDiagWaited < 4.0f + mfSimTimeStep || liDiagManoeuvre != Vehicle::E_MANOEUVRE_GIVE_UP))
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giGiveUpDiagLines;
+                *lpDiag << "[T-give-up] vehicle=" << luVehicle << " phase=1 waited=" << lfDiagWaited
+                        << " front=" << lpPhysInfo->mfStuckTimeFront << " back=" << lpPhysInfo->mfStuckTimeBack
+                        << " manoeuvre=" << liDiagManoeuvre << " -> NORMAL, time-not-driving 0\n";
+            }
+        }
     }
 }
 
