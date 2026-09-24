@@ -824,6 +824,13 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                       TotalTrafficBitArray* lpCreatedBodies);
 
+        // @0x8274B4B0 (108). DWARF :1419. PrePhysicsUpdate's RUNNING arm, after
+        // SendEmergencyCrashEvents (0x8274C7EC): promote every traffic car a remote player crashed
+        // (maNewCrashedNetworkVehicles, filled online by HandleCrashingNetworkTraffic) as a
+        // CRASHING body caused by the local player, then clear the list.
+        void CreateBodiesForCrashingNetworkTraffic(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                                   TotalTrafficBitArray* lpCreatedBodies);
+
         // @0x8274AFD0 (234). DWARF :1572. Vehicle::GetPhysicalReason is SIGN-extended
         // (0x82705540 lbz + extsb) and 0x8274B184 compares cmpwi r3, -1: == -1 is correct here.
         void SafeRequestMakeVehiclePhysical(u32 luVehicle, PhysicalReason leReason,
@@ -982,6 +989,12 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // `lis r11,7 / ori r11,r11,0x17DD / lbzx r11,r30,r11 / cmplwi r11,0`). Inline here for
         // the same reason.
         bool IsPlayingShowtimeGameMode() const { return mbPlayingShowtimeMode; }
+
+        // DWARF h:2221 `bool IsPlayingOnlineGameMode() const`. No standalone export either; the
+        // one reader here inlines it to the flag load (CreateBodiesForCrashingNetworkTraffic
+        // 0x8274B518..0x8274B528 `lis r11,7 / ori r11,r11,0x17DC / lbzx r11,r29,r11`) and names it
+        // in its assert text ("IsPlayingOnlineGameMode() || ...", .cpp 5796).
+        bool IsPlayingOnlineGameMode() const { return mbIsOnlineGameMode; }
 
         // ---- the streamer pump. Bodies in BrnTrafficEntityModule_wT1_04.cpp. ----
         //

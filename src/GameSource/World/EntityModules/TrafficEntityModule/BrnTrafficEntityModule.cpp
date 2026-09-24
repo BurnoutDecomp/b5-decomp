@@ -796,11 +796,12 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             // other-half queue; its one producer (HandleExternalResponses' articulated arm) is
             // still parked, so the queue is empty on this build and this is a faithful no-op.
             SendEmergencyCrashEvents( lpOutput, &lCreatedBodies );
-            {
-                static bool sbLogged = false;
-                LogMissingLeg_Q7PrePhysics( sbLogged,
-                    "CreateBodiesForCrashingNetworkTraffic @0x8274B4B0 (out, &lCreatedBodies)" );
-            }
+
+            // 0x8274C7E0..0x8274C7EC -- LIVE (G59-D3, 2026-09-24). Promotes the traffic a remote
+            // player crashed. Its producer (HandleCrashingNetworkTraffic) only runs online and is
+            // fed by the crash module's network arm, which is parked on PC, so offline the list is
+            // empty and this is a faithful no-op.
+            CreateBodiesForCrashingNetworkTraffic( lpOutput, &lCreatedBodies );
             // LANDED (was a gate) -- body in _wT3_02.cpp. THIS is the leg
             // that turns the module's maNewRemovedVehicles into physics RemoveTrafficEvents,
             // i.e. the only thing that ever frees a slot in the 20-car physical pool.
@@ -11540,6 +11541,60 @@ void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_Pr
     }
 
     maEmergencyCrashingVehicles.Clear();
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::CreateBodiesForCrashingNetworkTraffic  @ 0x8274B4B0 (108)   DWARF :1419
+//
+// PrePhysicsUpdate's RUNNING arm, after SendEmergencyCrashEvents (0x8274C7EC). Every traffic car
+// a remote player crashed (HandleCrashingNetworkTraffic appends its index online) becomes a
+// CRASHING physics body whose causer is the LOCAL player's race car. Locals per the
+// BrnTrafficUnity.cpp hints: lPlayerId (:5695, built by an inlined EntityId::Set),
+// luCrashedVehicle (:5698), luVehicle (:5701).
+//
+//   0x8274B4CC / 0x8274B4F4  asserts "lpOutput != NULL" (.cpp 0x16A2 = 5794), "lpCreatedBodies" (5795)
+//   0x8274B518..0x8274B590   lbzx +0x717DC (IsPlayingOnlineGameMode) ; bne -> skip, else the
+//                            count at this + 0x57CF4 + 0x140 must be 0: assert
+//                            "IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength()
+//                            == 0" (5796). Assert only -- no early return.
+//   0x8274B594..0x8274B5C4   lwzx +0x713F0 (meLocalPlayerIndex) ; cmplwi 0x4000 -> assert
+//                            "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)" (CgsEntityId.h:116)
+//   0x8274B5C8..0x8274B5D0   lPlayerId = (index << 10) | 0x01000000 (owner 1, the race car)
+//   0x8274B5DC..0x8274B644   for each u16 entry (count re-read per iteration, GetItem 0x8270D158):
+//                            SafeRequestMakeVehiclePhysical(entry, r5 0 E_PHYSICALREASON_CRASHED,
+//                            lPlayerId, r7 1 E_TRAFFIC_TYPE_CRASHING, r8 0 eCrashTrafficType_Standard,
+//                            lpOutput, lpCreatedBodies)
+//   0x8274B648..0x8274B654   `stwx 0` over this + 0x57E34 (the count word) == Clear()
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::CreateBodiesForCrashingNetworkTraffic(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                                                TotalTrafficBitArray* lpCreatedBodies)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");         // .cpp:5794
+    CGS_ASSERT(lpCreatedBodies != 0, "lpCreatedBodies");   // .cpp:5795
+    CGS_ASSERT(IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0,
+               "IsPlayingOnlineGameMode() || maNewCrashedNetworkVehicles.GetLength() == 0");   // .cpp:5796
+
+    // The inlined EntityId::Set(race car, meLocalPlayerIndex, part 0): only the index bound
+    // survives as an assert; owner and part are constants.
+    const u32 luPlayerIndex = static_cast<u32>(meLocalPlayerIndex);
+    CGS_ASSERT(luPlayerIndex < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
+               "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");   // CgsEntityId.h:116
+    EntityId lPlayerId;
+    lPlayerId.muValue = (luPlayerIndex << KU_RACE_CAR_PART_INDEX_SHIFT) | KU_RACE_CAR_OWNER_PACKED;
+
+    for (u32 luCrashedVehicle = 0; luCrashedVehicle < maNewCrashedNetworkVehicles.GetLength(); ++luCrashedVehicle)
+    {
+        const u32 luVehicle = maNewCrashedNetworkVehicles.GetItem(luCrashedVehicle);
+        SafeRequestMakeVehiclePhysical(luVehicle,
+                                       E_PHYSICALREASON_CRASHED,
+                                       lPlayerId,
+                                       BrnPhysics::Vehicle::E_TRAFFIC_TYPE_CRASHING,
+                                       BrnPhysics::Vehicle::eCrashTrafficType_Standard,
+                                       lpOutput,
+                                       lpCreatedBodies);
+    }
+
+    maNewCrashedNetworkVehicles.Clear();
 }
 
 // ----------------------------------------------------------------------------
