@@ -414,6 +414,12 @@ namespace Vehicle
         // member run so the access-specifier does not split the layout block.
         bool HasCrashedThisFrame() const { return mbCrashedThisFrame; }
 
+        // DWARF BrnSimpleVehiclePhysics.h:324 (dwarfdump line 286). No out-of-line body; its one
+        // reader, PhysicalTrafficManager::ValidateTrafficContact @0x825CACB8, inlines it as
+        // `lbz r11, 0x715(body)` at 0x825CAEAC (G32-D1). Writers: Reset 0x825D9B18 and
+        // CalculateNewWheelPlane 0x82602D14 / 0x82602F50.
+        bool AreAnyWheelsDetatched() const { return mbAnyWheelsDetatched; }
+
         // FIVE DWARF-declared read accessors
         // over the protected member run above, every one of them X360-ATTESTED by the same
         // function: BrnPhysics::Vehicle::VehicleOutputInterface::UpdateRaceCarState @0x825EC808,
