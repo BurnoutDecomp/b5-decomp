@@ -1240,6 +1240,16 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void GeneratePotentialLeapedAndStompedCarsOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
                                                          BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
 
+        // @0x8271FA18 (116 insns). DWARF h:1302 `void GenerateNearbyParkedTrafficOutput(const
+        // InputBuffer_PreScene*, OutputBuffer_PreScene*)` (BrnTrafficEntityModule.cpp:3836). The
+        // fourth of PreSceneUpdate's output producers (0x8274AB14): while the player is power
+        // parking, measure every alive parked car (no alarm, not crashing, not a divergent-only
+        // record) against the player with BrnWorld::CheckVehicleForPowerPark and publish the
+        // count and the closest / second-closest / angle / perpendicular measurements to the
+        // race-car module (TrafficToRaceCarInterface_PreScene::SetNearbyParkedTrafficData).
+        void GenerateNearbyParkedTrafficOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                               BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
         // DWARF :1872 (body .h:2746, local `lpInfo`). The next free slot of
         // maShowtimeVehicleInfoList, or NULL once all KU_MAX_SHOWTIME_TRAFFIC_VEHICLES are taken;
         // luInfoIndex receives the slot's index. The slot is only CLAIMED when its owner bumps
