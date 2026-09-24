@@ -23,7 +23,17 @@ namespace Gen
     {
     public:
         static const u64 KU_CLASS_KEY = 0x3DFA53FAFE5BD9D7ull;
+        // DWARF crashbin.h:16 -- the generated class-key accessor (propscrashbin.h's twin).
+        // BinLookupCache::Build<crashbinlist, crashbin> @0x826A85F8 stages exactly this doubleword
+        // for Attrib::FindCollection (0x826A867C..0x826A8690: lis -0x1A5 / ori 0xD9D7, lis 0x3DFA /
+        // ori 0x53FA, rldimi).
+        static u64 ClassKey() { return KU_CLASS_KEY; }
         static const u32 KU_LAYOUT_SIZE = 0x190u;
+        // The material pair's layout-block offsets (DATA-format; they do not widen): the same
+        // Build's `ld r10, 0x40(r11)` / `ld r11, 0x38(r11)` (0x826A86C4 / 0x826A86D0), which are
+        // what mMaterialA() / mMaterialB() below read.
+        static const u32 KU_OFFSET_MATERIAL_B = 0x38u;
+        static const u32 KU_OFFSET_MATERIAL_A = 0x40u;
         static const u32 KU_OFFSET_ARRAY_SMALL_HEADER = 0x48u;
         static const u32 KU_OFFSET_ARRAY_SMALL = 0x50u;
         static const u32 KU_OFFSET_ARRAY_MEDIUM_HEADER = 0xA0u;

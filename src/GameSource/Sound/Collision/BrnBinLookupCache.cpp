@@ -1,51 +1,34 @@
 #include "GameSource/Sound/Collision/BrnBinLookupCache.h"
-#include "GameSource/AttribSys/Generated/classes/propscrashbinlist.h"        // Attrib::Gen::propscrashbinlist
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"            // Attrib::FindCollection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h" // Attrib::Instance / Collection / DefaultDataArea
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
 
 // =============================================================================
-// BrnSound::Logic::Collision::BinLookupCache::Build<List, Bin>  @ 0x826A8710
-//   (instantiated <Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>)
+// BrnSound::Logic::Collision::BinLookupCache::Build<List, Bin>
+//   <Attrib::Gen::crashbinlist,      Attrib::Gen::crashbin>       @ 0x826A85F8 (export hole: ppcdis)
+//   <Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>  @ 0x826A8710
 //
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match). The two
+// instantiations are the same 72 instructions; they differ ONLY in the class key staged for
+// Attrib::FindCollection (0x3DFA53FA_FE5BD9D7 crashbin @0x826A867C..0x826A8690,
+// 0x4154BD6D_E9FF326C propscrashbin @0x826A8794..0x826A87A8), i.e. Bin::ClassKey().
 //
-// X360 leaf (de-optimised to human C++ below):
-//   result->mNumBins slot is filled last; the body walks the list's crash bins:
-//     CGS_ASSERT( lList.mNumCrashBins() < KU_CACHE_SIZE );        ; blt cr6, 0x40
-//     for ( i = 0; i < lList.mNumCrashBins(); ++i ) {
-//         ref  = (i < Private::GetLength(dataArea)) ? &refArray[i]
-//                                                   : DefaultDataArea(0x18);  ; null-RefSpec
-//         key  = *(u64*)(ref + 8);                                ; RefSpec collection key
-//         coll = Attrib::FindCollection( 0x4154BD6D_E9FF326C, key );          ; propscrashbin class
-//         Attrib::Instance bin( coll, 0 );
-//         binData = bin.mpAttributeData;
-//         if ( !binData ) binData = DefaultDataArea(0x190);        ; propscrashbin data-area size
-//         entry[i] = { binData[+0x40], binData[+0x38] };
-//     }
-//     result->mNumBins = lList.mNumCrashBins();
+//   0x826A8604  mr r27, r4 ; mr r26, r3                  ; the list, THIS cache (a member: r3)
+//   0x826A8614  cmplwi mNumCrashBins, 0x40 ; blt          ; assert (h:237, li r5,0xED)
+//   loop i < lList.mNumCrashBins()  (re-read every pass, 0x826A86DC..0x826A86EC):
+//     ref = i < Private::GetLength(list layout) ? list layout + 8 + 24*i
+//                                                : DefaultDataArea(0x18)   ; the null RefSpec
+//     Attrib::Instance lBin( Attrib::FindCollection(Bin::ClassKey(), ref+8), 0 )
+//     if (!lBin layout) layout = DefaultDataArea(0x190)                   ; Bin::KU_LAYOUT_SIZE
+//     maCacheEntry[i] = { layout[+0x40], layout[+0x38] }                  ; std -8(r30) / 0(r30)
+//   muEntryCount = lList.mNumCrashBins()                  ; 0x826A8700, stored LAST
 //
-// The list-side reads (mNumCrashBins, the RefSpec array walk + OOB sentinel) are the
-// inlined propscrashbinlist accessors (mNumCrashBins / GetCrashBinRefData, grown onto
-// propscrashbinlist.h). The bin-side is the raw AttribSys resolve+read the X360 baked from
-// Bin=propscrashbin at compile time.
-//
-// RESOLVED 2026-08-18 (was "FLAG (Bin=propscrashbin compile-time constants baked, not
-// derived)"): the X360 template body derived the resolved-collection class key and the bin
-// layout-block size from the Bin type at compile time. Bin (propscrashbin) is now homed in
-// propscrashbin.h, so the two constants come from Bin::ClassKey() (0x4154BD6DE9FF326C, the
-// doubleword this leaf stages @0x826A8794-A8) and Bin::KU_LAYOUT_SIZE (0x190, `li r3,0x190`
-// @0x826A87CC), and the two qword reads use Bin's named material offsets. What is STILL not
-// reproduced: the X360 forms a Bin over the collection (its (const Collection*, uint32_t)
-// ctor); that ctor has no IDA export, so an Attrib::Instance stands in for the handle.
-//
-// RESOLVED 2026-07-31 (was: "FLAG (FindCollection owner arg)"). The X360 forwards
-// *(RefSpec + 8) -- the RefSpec's 64-bit COLLECTION key -- in r4, and r4 is exactly what
-// Attrib::FindCollection @0x82808378 uses as the collection key. This site had it right all
-// along and was only obscured by the old `FindCollection(int, void*)` declaration, which
-// forced the qword through a pointer parameter. With the corrected two-key signature the
-// cast is gone and both keys are passed at their true widths (the class key as the whole
-// doubleword 0x4154BD6D_E9FF326C, not just its low word).
+// The resolve is the plain Attrib::FindCollection (0x82808378), NOT FindCollectionWithDefault:
+// a key with no collection yields a zeroed default area, whose zero material pair never
+// matches a collision. The generated Bin's own (Collection*) ctor is not what the console
+// calls here (no class check between FindCollection and Instance::Instance), so the Instance
+// is formed directly, as the asm does. The two qword reads use the Bin's named layout offsets
+// (DATA-format -- they do not widen on the host).
 // =============================================================================
 
 namespace BrnSound
@@ -56,58 +39,39 @@ namespace Collision
 {
 
 template< typename List, typename Bin >
-BinLookupCache BinLookupCache::Build( const List& lrList )
+void BinLookupCache::Build( const List& lrList )
 {
-    // Bin=propscrashbin compile-time constants the X360 baked into this instantiation,
-    // now derived from the homed Bin type (propscrashbin.h).
-    const u64 KU_PROPSCRASHBIN_CLASS_KEY = Bin::ClassKey();
-    const u32 KU_PROPSCRASHBIN_DATA      = Bin::KU_LAYOUT_SIZE;
-
-    BinLookupCache lCache; // entries left indeterminate past mNumBins, as in the asm
-
     CGS_ASSERT( lrList.mNumCrashBins() < KU_CACHE_SIZE,
                 "(uint32_t)lList.mNumCrashBins() < KU_CACHE_SIZE" );
 
-    const u32 luNumBins = lrList.mNumCrashBins();
-    for ( u32 i = 0; i < luNumBins; ++i )
+    for ( u32 i = 0; i < lrList.mNumCrashBins(); ++i )
     {
-        // i-th crash-bin RefSpec (OOB -> shared null-RefSpec sentinel).
+        // The i-th crash-bin RefSpec (out of range -> the shared null RefSpec); its collection
+        // key is the qword at +8.
         const void* lpRef = lrList.GetCrashBinRefData( i );
-
-        // RefSpec collection key (qword @ +8) -> FindCollection's collection-key argument.
         const u64 luCollectionKey =
             *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpRef ) + 8 );
 
-        // Resolve the bin's propscrashbin collection.
-        Attrib::Collection* lpCollection =
-            Attrib::FindCollection( KU_PROPSCRASHBIN_CLASS_KEY, luCollectionKey );
-
-        // Handle onto the resolved collection; fall back to a default data area if the
-        // handle resolved without one (the X360 `if (!v11) v11 = DefaultDataArea(0x190)`).
-        Attrib::Instance lBin( lpCollection, 0 );
+        Attrib::Instance lBin( Attrib::FindCollection( Bin::ClassKey(), luCollectionKey ), 0 );
         const void* lpBinData = lBin.GetLayoutPointer();
         if ( !lpBinData )
-            lpBinData = Attrib::DefaultDataArea( KU_PROPSCRASHBIN_DATA );
+            lpBinData = Attrib::DefaultDataArea( Bin::KU_LAYOUT_SIZE );
 
-        // Copy the bin's material pair into the cache entry (store order: +0x40 mMaterialA
-        // into entry+0x00, then +0x38 mMaterialB into entry+0x08). DATA-format offsets
-        // (they do not widen on the host).
-        lCache.maEntries[i].mMaterialA =
+        maCacheEntry[i].mx64MaterialA =
             *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpBinData ) + Bin::KU_OFFSET_MATERIAL_A );
-        lCache.maEntries[i].mMaterialB =
+        maCacheEntry[i].mx64MaterialB =
             *reinterpret_cast<const u64*>( reinterpret_cast<const u8*>( lpBinData ) + Bin::KU_OFFSET_MATERIAL_B );
     }
 
-    lCache.mNumBins = lrList.mNumCrashBins();
-    return lCache;
+    muEntryCount = lrList.mNumCrashBins();
 }
 
-// Explicit instantiation -- the single crash-bin-cache specialisation the X360 build emits
-// (@ 0x826A8710). Matches the mangled name
-// BinLookupCache::Build<Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>.
-template BinLookupCache
-BinLookupCache::Build< Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin >(
-    const Attrib::Gen::propscrashbinlist& );
+// The two specialisations the X360 build emits -- one per collision pipeline
+// (InputCollision::E_REGULAR / E_PROP), both built by CollisionStateManager::ResourcesAreReady.
+template void BinLookupCache::Build< Attrib::Gen::crashbinlist, Attrib::Gen::crashbin >(
+    const Attrib::Gen::crashbinlist& );                                              // @ 0x826A85F8
+template void BinLookupCache::Build< Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin >(
+    const Attrib::Gen::propscrashbinlist& );                                         // @ 0x826A8710
 
 } // namespace Collision
 } // namespace Logic
