@@ -18,12 +18,12 @@
 // InputBuffer_PostScene::mCrashInterface and been read by nobody, every frame, forever.
 //
 // ⛔ PostSceneUpdate IS LANDED AS A DELIBERATE SLICE, NOT WHOLE. Its console body calls eight
-// helpers, and when this file landed SIX of them did not exist anywhere in this tree. Four are
+// helpers, and when this file landed SIX of them did not exist anywhere in this tree. Five are
 // bodied now -- ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests,
-// CheckForResetOnTrackConditions and (2026-09-11) UpdateTrafficAndRaceCarNearMisses -- and the
-// remaining THREE still have no body: ProcessLeapedAndStompedCars · ProcessPowerParking ·
-// PlaceOnTrackManager::PostSceneUpdate. This body runs every leg that IS reachable and logs the
-// rest once, so it is honest about exactly what is missing.
+// CheckForResetOnTrackConditions, (2026-09-11) UpdateTrafficAndRaceCarNearMisses and (2026-09-24,
+// CHAIN-STOMPEES) ProcessLeapedAndStompedCars -- and the remaining TWO still have no body:
+// ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate. This body runs every leg that IS
+// reachable and logs the rest once, so it is honest about exactly what is missing.
 //
 // ⚠️⚠️ THE PARK THAT MATTERS, STATED PLAINLY: SendResetOnTrackRequests is the consumer of
 // RaceCar::mbToBeResetOnTrack. RaceCar::RequestResetOnTrack (BrnRaceCar.cpp:251, real and
@@ -78,6 +78,9 @@
 #include "GameSource/World/AI/BrnAISharedConstants.h"   // BrnAI::EResetType
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"   // KU_FLAG_AI_PERSISTENT_DAMAGE
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                  // the re-colour legs' palette asserts
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h" // GetPotentialStompees (ProcessLeapedAndStompedCars)
+
+#include <cstdlib>   // getenv -- the [stomp] witness only
 
 namespace BrnWorld
 {
@@ -345,13 +348,66 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
 }
 
 // =================================================================================================
+// ProcessLeapedAndStompedCars @ 0x822BD5B8   (crash parity CHAIN-STOMPEES c / G67-D7, 2026-09-24)
+//
+// The Showtime leap/stomp target assist's module leg. Had no body, and PostSceneUpdate skipped its
+// slot, so miStoredStompeeCount stayed 0 and ProcessPlayerVehicleInput's AddTargetAssist loop never
+// ran. The console body, whole:
+//   lbzx this+0x1823D          mCrashPlayManager (+0x180F0) +0x14D == IsInShowtime()  0x822BD5DC
+//   GetActiveRaceCar(mePlayerActiveRaceCarIndex (+0x182F8))
+//   lfs +0x4E4 > 0.0f (flt_82001CC0)   mPhysicsState (+0xE0) .mfTimeInAir (+0x404)    0x822BD5FC
+//   lpInput->GetTrafficToRaceCarInterface_PreScene()                                 bl @0x822BD624
+//   the inlined DWARF :122 GetPotentialStompees(&miStoredStompeeCount):
+//       lwz 0x208 -> stw this+0x185F0 (miStoredStompeeCount) ; addi 0x40 (mPotentialStompees)
+//   for (i = 0; i < miStoredStompeeCount [re-read each pass]; ++i)
+//       lvx128 record+0 -> stvx this+0x184F0 + 32*i   mStoredStompees[i].mPosition
+//       lwz record+0x10 -> stw this+0x18500 + 32*i    mStoredStompees[i].mEntityId
+// Outside Showtime or on the ground nothing is written: the list keeps its last contents and
+// count (the console has no clear here either).
+// =================================================================================================
+void RaceCarEntityModule::ProcessLeapedAndStompedCars(
+    const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
+    RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput )
+{
+    (void)lpOutput;   // passed in r5 by the console caller, never read
+
+    if( mCrashPlayManager.IsInShowtime()
+        && GetActiveRaceCar( mePlayerActiveRaceCarIndex )->GetPhysicsState()->mfTimeInAir > 0.0f )
+    {
+        const BrnTraffic::BrnTrafficIO::VehicleStompingData* lpPotentialStompees =
+            lpInput->GetTrafficToRaceCarInterface_PreScene()->GetPotentialStompees( &miStoredStompeeCount );
+
+        for( s32 liStompee = 0; liStompee < miStoredStompeeCount; ++liStompee )
+        {
+            mStoredStompees[liStompee].mPosition = lpPotentialStompees[liStompee].mStompeePosition;
+            mStoredStompees[liStompee].mEntityId = lpPotentialStompees[liStompee].mStompeeEntityId;
+        }
+
+        // [DIAG] BRN_STOMP_DIAG -- NOT IN THE X360 BINARY. First-N capped proof the leg was
+        // DISPATCHED with a non-empty traffic list (Showtime + airborne + candidates).
+        static const bool sbStompDiag = ( getenv( "BRN_STOMP_DIAG" ) != 0 );
+        static u32 suStompDiagLines = 0u;
+        if( sbStompDiag && miStoredStompeeCount > 0 && suStompDiagLines < 64u
+            && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++suStompDiagLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[stomp] ProcessLeapedAndStompedCars stored " << miStoredStompeeCount
+                << " stompee(s); first entity " << mStoredStompees[0].mEntityId.muValue
+                << " at (" << mStoredStompees[0].mPosition.x << ", " << mStoredStompees[0].mPosition.y
+                << ", " << mStoredStompees[0].mPosition.z << ")\n";
+        }
+    }
+}
+
+// =================================================================================================
 // PostSceneUpdate @ 0x822FE3F0   -- MINIMAL-COMPLETE SLICE (see the file banner)
 //
 // Console order:
 //   PerfMon start · assert lpInput/lpOutput · LockForRead(in) · LockForWrite(out)
 //   if (!(lUpdateSet & 1)) UpdateTrafficAndRaceCarNearMisses          ⭐ REPRODUCED (2026-09-11)
 //   ProcessRaceCarCrashCompleteEvents                                 ⭐ REPRODUCED
-//   ProcessLeapedAndStompedCars                                       [ABSENT]
+//   ProcessLeapedAndStompedCars                                       ⭐ REPRODUCED (2026-09-24)
 //   the showtime traffic-density publish into the output interface    [ABSENT helper]
 //   ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate         [ABSENT]
 //   SendResetOnTrackRequests                                          ⭐ REPRODUCED
@@ -380,6 +436,9 @@ void RaceCarEntityModule::PostSceneUpdate(
 
     ProcessRaceCarCrashCompleteEvents( lpInput );
 
+    // 0x822FE4AC..0x822FE4B8 -- unconditional (CHAIN-STOMPEES c, 2026-09-24).
+    ProcessLeapedAndStompedCars( lpInput, lpOutput );
+
     // ⭐⭐⭐ THE PRODUCER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
     // console's own slot -- SendResetOnTrackRequests is the fifth of PostSceneUpdate's eight
     // callees and it is the ONLY reader of RaceCar::mbToBeResetOnTrack, which
@@ -399,13 +458,13 @@ void RaceCarEntityModule::PostSceneUpdate(
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: FOUR of the eight"
+                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: FIVE of the eight"
                    " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents,"
                    " (resetpump wave 2026-08-26) SendResetOnTrackRequests, (roll-frequency"
-                   " wave 2026-09-05) CheckForResetOnTrackConditions and (near-miss producer"
-                   " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses. THREE still have no"
-                   " body anywhere in this tree (ProcessLeapedAndStompedCars,"
-                   " ProcessPowerParking, PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
+                   " wave 2026-09-05) CheckForResetOnTrackConditions, (near-miss producer"
+                   " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses and (2026-09-24)"
+                   " ProcessLeapedAndStompedCars. TWO still have no body anywhere in this tree"
+                   " (ProcessPowerParking, PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
                    "[crash-exit] ... and the RESET-ON-TRACK PUMP HAS BOTH PRODUCERS: the crash"
                    " leg (ProcessRaceCarCrashCompleteEvents -> RequestResetOnTrack) and, as of"
                    " 2026-09-05, the WATCHDOG leg (CheckForResetOnTrackConditions @0x822CE9E0 --"
