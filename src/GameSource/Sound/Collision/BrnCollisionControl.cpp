@@ -1,9 +1,13 @@
 #include "GameSource/Sound/Collision/BrnCollisionControl.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameSource/Sound/Collision/BrnCollisionEffect.h"
 #include "GameSource/Sound/Collision/BrnCollisionState.h"
+
+#include <cstdio>
+#include <cstdlib>
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionControl -- out-of-line bodies.
@@ -156,6 +160,23 @@ void CollisionControl::UpdateParams(f32 /*afDeltaTime*/)
         (leLifetime != CollisionState::E_SCRAPE ||
          mpCollisionState->GetCurrentTime() - lrScrape.mfTimeStamp > 0.5f))
     {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a finished collision gives its
+        // state back to the pool (lifetime 1 = an impact whose voice ended, 2 = a stale scrape).
+        if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 suDetachPrintCount = 0;
+            if (suDetachPrintCount++ < 256u)
+            {
+                char lacLine[160];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] detach finished lifetime=%d sample=%d attached=%.3f now=%.3f\n",
+                              static_cast<s32>(leLifetime),
+                              mpCollisionState->GetOutputCollision().miSampleID,
+                              static_cast<double>(mpCollisionState->GetTimeWeAttached()),
+                              static_cast<double>(mpCollisionState->GetCurrentTime()));
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
         mpCollisionState->Detach();
     }
 }

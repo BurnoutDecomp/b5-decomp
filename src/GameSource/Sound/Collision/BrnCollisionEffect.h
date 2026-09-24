@@ -109,27 +109,20 @@ struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
 private:
     // --- members (DWARF order; X360 offsets in comments only, not asserted) ---
 
-    // BrnCollisionEffect.h:151 (DWARF): the owning collision control. The X360
-    // GetGain @ 0x82688138 reads THIS member slot (+0x34) and dispatches
-    // Nicotine::DMixIO::GetDMixOutput through it -- i.e. at runtime the slot holds
-    // the latched dynamic-mixer I/O the crash voice reads its output level from.
-    // CollisionControl is not yet homed, so the member is modelled as the
-    // Nicotine::DMixIO* the ASM actually dereferences (GetDMixOutput is a homed
-    // member of Nicotine::DMixIO).
-    // FLAG: DWARF names this member `mpCollisionControl` (BrnSound::Logic::Collision::
-    // CollisionControl*); the X360 GetGain uses the +0x34 slot directly as the
-    // Nicotine::DMixIO receiver. Per the source-of-truth ladder the ASM (rung 1)
-    // overrides the DWARF name (rung 2): the slot is modelled by its proven runtime
-    // type (Nicotine::DMixIO*) so GetGain can be bodied without re-homing the
-    // un-reconstructed CollisionControl. The ctor nulls it (X360 stw 0,+0x34).
+    // BrnCollisionEffect.h:151 (DWARF): the owning collision control, set by
+    // AttachController @0x82688078 (`stw (ctrl-4),0x34(r3)` on the EffectBase sub-object,
+    // which sits at +4 -- i.e. X360 +0x38; the ctor nulls it with `stw 0,0x38`).
+    // NOTE: it is NOT the endpoint GetGain / GetPitch read: their +0x34 is EffectBase+0x30,
+    // the effect's OWN EffectBase::mpDynamicMixIo (GetDMixIOPtr()). Reading the control's
+    // endpoint there made every crash voice silent and pitch 0 (FX-VOICEPOOL 2026-09-24).
     CollisionControl* mpCollisionControl;
 
-    // BrnCollisionEffect.h:152 (DWARF). Voice bring-up state. The X360 ctor leaves
-    // this in the +0x38 region (one of the zero stores); init to CONSTRUCT_VOICE.
+    // BrnCollisionEffect.h:152 (DWARF). Voice bring-up state. The X360 ctor zeroes
+    // it (stw 0,0x3C); init to CONSTRUCT_VOICE.
     EPrepareState mePrepareState;
 
-    // BrnCollisionEffect.h:154/155 (DWARF). First-update + azimuth-use flags; both
-    // zeroed by the ctor (the +0x3C zero-store region).
+    // BrnCollisionEffect.h:154/155 (DWARF). First-update + azimuth-use flags (X360 +0x40 /
+    // +0x41; the ctor leaves them, Attach @0x826F8218 sets both).
     bool mbFirstUpdate;
     bool mbUseAzimuth;
 
