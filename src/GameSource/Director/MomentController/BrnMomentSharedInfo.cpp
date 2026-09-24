@@ -184,17 +184,16 @@ namespace detail
         return Record(lpSharedInfo).mpGameState->mfCrashTimeRemaining;
     }
 
-    // The showtime-intro flag inside the opaque DirectorProfileData sub-object, at its +0x05.
-    // Two MOUNTED consumers already read this exact byte through the same blob and gate on it
-    // the same way -- ArbStateRoaming::Update FORCES the external chase cam while it is up, and
-    // the same state's showtime-intro border/blur ramp runs only while it is up. So the stunt
-    // moment's use of it is an abort, not a third meaning: the stunt camera stands down while
-    // the showtime intro owns the shot. The sub-object stays opaque -- the recorded field layout
-    // for it does not line up with the displacements its own users read, as its home header
-    // explains -- so this reads the byte blob exactly as those two do rather than inventing one.
+    // The showtime-intro flag, GameState::ShowTimeInfo::mbInIntro (+0x1ED, DWARF
+    // BrnDirectorGameState.h:237; written by MainDirector::ProcessInputQueue case 146). Two other
+    // consumers gate on it the same way -- ArbStateRoaming::Update FORCES the external chase cam
+    // while it is up, and the same state's showtime-intro border/blur ramp runs only while it is up.
+    // So the stunt moment's use of it is an abort, not a third meaning: the stunt camera stands
+    // down while the showtime intro owns the shot. [FX-DIRECTOR 2026-09-24: read by name; it was
+    // byte 5 of an opaque blob misfiled as DirectorProfileData.]
     bool MomentSharedInfo_IsShowtimeIntroActive(const void* lpSharedInfo)
     {
-        return Record(lpSharedInfo).mpGameState->mDirectorProfileData.maOpaque[0x05] != 0;
+        return Record(lpSharedInfo).mpGameState->mShowTimeInfo.mbInIntro;
     }
 
     // The slow-motion permission flag, not a camera-active flag.

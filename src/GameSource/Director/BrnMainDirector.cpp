@@ -103,6 +103,40 @@ namespace BrnDirector
         // "how long a crash is allowed to run before we stop re-framing it" budget.
         const f32 KF_CRASH_TIME_WINDOW = 6.0f;
 
+        // The record ProcessInputQueue case 42 (E_ACTION_IMPACT_TIME_START) reads: DWARF
+        // BrnGameActions.h:1662 ImpactTimeStartAction {f32 mfTimestepMultiplier; bool
+        // mbDoForceAdditiveAftertouch; bool mbEnteringShowtime;}, 8 bytes on the wire (the
+        // producer, GameStateModule::UpdateRoadRulesManager, posts `li r6,8` @0x823814FC).
+        // TU-LOCAL MIRROR: the record's home is GameSource/GameState/BrnGameActions.h, which this
+        // lane does not own and which carries no ImpactTimeStartAction yet (the producer keeps
+        // its own TU-local ImpactTimeStartActionRecord, GameStateModule_RoadRules.cpp:72, the same
+        // 8 bytes under provisional names). The director reads ONE field: `lfs f0, 0(r30)`
+        // @0x82237E68. Replace with the header's type when it lands there.
+        struct ImpactTimeStartActionRecord
+        {
+            f32  mfTimestepMultiplier;          // +0x00  DWARF :1665
+            bool mbDoForceAdditiveAftertouch;   // +0x04  DWARF :1666
+            bool mbEnteringShowtime;            // +0x05  DWARF :1667
+        };
+        static_assert(sizeof(ImpactTimeStartActionRecord) == 8,
+                      "X360 UpdateRoadRulesManager posts action 42 with size 8");
+
+        // [DIAG] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. One line per director
+        // game-action arm this lane landed, printing the GameState VALUES the arm left behind
+        // (not "the arm ran"), capped so a per-hit Showtime stream cannot flood the log.
+        // DELETE-WHEN: the crash-parity Showtime / director audit closes.
+        const s32 KI_DIRECTOR_ACTION_DIAG_MAX_LINES = 400;
+
+        bool BrnDiag_DirectorActionDiagOn()
+        {
+            static const bool sbOn = (getenv("BRN_DIRECTOR_ACTION_DIAG") != 0);
+            static s32 siLines = 0;
+            if (!sbOn || CgsDev::Log::gpDebugPrint == 0 || siLines >= KI_DIRECTOR_ACTION_DIAG_MAX_LINES)
+                return false;
+            ++siLines;
+            return true;
+        }
+
         // [DIAG] BRN_SLOMO_DIAG -- NOT IN THE X360 BINARY. Edge-triggered per call site, so a
         // steady 1.0 costs one line for the whole session. It exists because the published time
         // scale is a value that arrives from a camera several copies away, and a wrong one is
@@ -1123,26 +1157,15 @@ namespace BrnDirector
 
     // ------------------------------------------------------------------------
     // The event-presentation reset both event-boundary legs open-code (the prepare-for-mode
-    // handler and ProcessInputQueue's stop-mode arm run the identical store list). Its
-    // destinations are the GameState's two trailing sub-objects, whose recovered field layouts are
-    // unreliable -- so, exactly as GameState::Clear and GameState::ResetPerFrameData do, the
-    // stores go through each sub-object's own opaque storage at its documented offset.
-    // FLAG: the field NAMES in this region are not recovered; the offsets and the values are.
+    // handler and ProcessInputQueue's stop-mode arm run the identical store list): it is
+    // GameState::ShowTimeInfo::Clear (DWARF BrnDirectorGameState.h:224), inlined by the console at
+    // both sites (case 39: 0x82237DAC..0x82237DCC off `addi r11, r11, 0x39BC` == GameState +0x1DC).
+    // [FX-DIRECTOR 2026-09-24] The sub-object is a named DWARF type now; this used to poke its
+    // bytes through two misplaced opaque blobs (same offsets, same values).
     // ------------------------------------------------------------------------
     static void ClearEventPresentationBlock(GameState& lrGameState)
     {
-        const f32 lfZero = 0.0f;
-        const s32 liZero = 0;
-
-        // ShowTimeInfo + 0x08 / + 0x0C / + 0x10  (GameState +0x1DC / +0x1E0 / +0x1E4)
-        std::memcpy(&lrGameState.mShowTimeInfo.maOpaque[0x08], &lfZero, sizeof(f32));
-        std::memcpy(&lrGameState.mShowTimeInfo.maOpaque[0x0C], &liZero, sizeof(s32));
-        std::memcpy(&lrGameState.mShowTimeInfo.maOpaque[0x10], &liZero, sizeof(s32));
-
-        // DirectorProfileData + 0x00 .. + 0x05  (GameState +0x1E8 .. +0x1ED). Six bytes, one
-        // more than the five ResetPerFrameData clears every frame.
-        for (s32 liByte = 0; liByte < 6; ++liByte)
-            lrGameState.mDirectorProfileData.maOpaque[liByte] = 0;
+        lrGameState.mShowTimeInfo.Clear();
     }
 
     // ------------------------------------------------------------------------
@@ -1268,11 +1291,14 @@ namespace BrnDirector
     // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other 21 handled cases (0, 42, 43,
-    //     53, 54, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
-    //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
-    //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
-    //     aggregate (AllVehicleData, DebugRender).
+    //   * the other handled cases (0, 53, 54, 107, 113, 120, 132, 150, 151, 215, 216, 218, 223,
+    //     224) -- the reason once given for all of them ("writes into a part of the GameState
+    //     that is still opaque") is STALE: see the crash-parity audit in the FX-DIRECTOR log.
+    //     ⭐ 42 / 43 / 140 / 144 / 145 / 146 (the Showtime arms) CAME OFF THIS LIST 2026-09-24
+    //     (FX-DIRECTOR): every field they write is a named DWARF member (mbImpactTimeActive,
+    //     mfImpactTimeSloMoFactor, GameState::ShowTimeInfo). Their absence floored Showtime's sim
+    //     at 0.005x and left ArbStateCrashMode's close-ups and blurs with no request.
+    //     ⭐ 205 is bodied (2026-09-17).
     //     ⭐ 24 (E_ACTION_BROADCAST_MODE_FINISH_LINES) CAME OFF THIS LIST 2026-09-24 (FX-FLOW,
     //     NEW-FINISHLINE): both fields it writes are named DWARF members (mFinishLineID,
     //     mFinishLineNorthmostDir) and its one call, BoxRegion::ComputeDirection, is bodied
@@ -1329,13 +1355,13 @@ namespace BrnDirector
         }
 
         // 0x82237408..0x82237440 -- three straight copies out of the input buffer into the
-        // GameState's RankUpInfo sub-object. The sub-object's DWARF layout is unreliable, so
-        // the head word goes through its named 4-byte field and the two tail bytes through its
-        // own opaque storage.
-        maGameState.mRankUpInfo.miRivalTeamSelector = lpInput->GetRankUpRivalInfo();  // +0x1CC
-        // ⚠️ GATE: GameState +0x1D0 / +0x1D1 <- input @0x7AD5 / @0x7AD6. Both ends are opaque
-        //    bytes (InputBuffer::maFlagTail, RankUpInfo::maOpaque) with no recovered role on
-        //    either side, so copying them would move bytes nobody can name. Recorded, not run.
+        // GameState's three X360-only members (+0x1CC / +0x1D1 / +0x1D0 -- see the GameState
+        // header: they sit BEFORE RankUpInfo, which is at +0x1D4).
+        maGameState.miPlayerTeam = lpInput->GetRankUpRivalInfo();                     // +0x1CC
+        // ⚠️ GATE: GameState +0x1D1 / +0x1D0 <- input @0x7AD6 / @0x7AD5 (mbPlayerWrecked /
+        //    mbPlayerDamageCritical). The input side is still the opaque InputBuffer::maFlagTail
+        //    and its producer (BridgeGameStateToDirector 0x823CD4DC / 0x823CD510) is not in this
+        //    tree, so the two copies would move zeros. Recorded, not run.
 
         const CgsModule::Event* lpAction = 0;
         s32 liActionSize = 0;
@@ -1643,6 +1669,158 @@ namespace BrnDirector
                 else if (liStuntElementType == 2)
                 {
                     maGameState.miThisFramesActionFlags |= 0x04;
+                }
+                break;
+            }
+
+            // ================= THE SHOWTIME ARMS (crash mode) ============================
+            // ⭐⭐⭐ [FX-DIRECTOR 2026-09-24] Cases 42 / 43 / 140 / 144 / 145 / 146 were missing, and
+            // with them every GameState field ArbStateCrashMode reads: its Update @0x82235488
+            // requests the camera's sim time scale from mfImpactTimeSloMoFactor whenever no
+            // close-up runs (`lfs f0, 0x108` -> `stfs f0, 0x114(camera)` @0x822356FC), so with no
+            // case 42 that factor stayed 0 and MainDirector::Update floored the sim at
+            // KF_MINIMUM_SIM_TIME_SCALE (0.005x) for the whole of Showtime -- the car barely moved
+            // (FX-CAMRIG live log: `mfSimTimeScale=0.000000` -> `simScale=0.005000`). Its close-up
+            // requests (+0x1EA / +0x1EB) and blur requests (+0x1E9 / +0x1EC) had no writer either.
+            // All six are transcribed store for store from the ARTIST asm below; the GameState
+            // fields are the DWARF names (BrnDirectorGameState.h:124/:125 and ShowTimeInfo :229..:237).
+
+            // ---- 42  E_ACTION_IMPACT_TIME_START (8 bytes) @0x82237E54 -------------------
+            //     stbx r23(=1), r31, 0x338E5   -> +0x105 mbImpactTimeActive = true
+            //     lfs  f0, 0(r30) ; stfsx 0x338E8 -> +0x108 mfImpactTimeSloMoFactor = record +0x00
+            // The only writer of +0x108 in the image (FX-CAMRIG's scan of every ARTIST export for
+            // the director-relative 211176). Producer: UpdateRoadRulesManager, 1.0 (flt_82001C98).
+            case 42:
+            {
+                const ImpactTimeStartActionRecord& lrImpactTimeStart =
+                    *reinterpret_cast<const ImpactTimeStartActionRecord*>(lpacPayload);
+                maGameState.mbImpactTimeActive      = true;                                        // +0x105
+                maGameState.mfImpactTimeSloMoFactor = lrImpactTimeStart.mfTimestepMultiplier;      // +0x108
+
+                // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY.
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 42 IMPACT_TIME_START -> mbImpactTimeActive "
+                        << (maGameState.mbImpactTimeActive ? 1 : 0)
+                        << " mfImpactTimeSloMoFactor " << maGameState.mfImpactTimeSloMoFactor << "\n";
+                }
+                break;
+            }
+
+            // ---- 43  E_ACTION_IMPACT_TIME_END (1 byte) @0x82237E74 ----------------------
+            //     stbx r29(=0), r31, 0x338E5   -> +0x105 mbImpactTimeActive = false
+            // The factor is NOT touched: it keeps the last start's value.
+            case 43:
+            {
+                maGameState.mbImpactTimeActive = false;                                            // +0x105
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 43 IMPACT_TIME_END -> mbImpactTimeActive "
+                        << (maGameState.mbImpactTimeActive ? 1 : 0)
+                        << " mfImpactTimeSloMoFactor " << maGameState.mfImpactTimeSloMoFactor << "\n";
+                }
+                break;
+            }
+
+            // ---- 140  E_ACTION_VEHICLE_HIT (36 bytes) @0x822386CC -----------------------
+            //     lwz r11, 0x1C(r30) ; cmpwi 0 ; bne default     -> a combo-bonus hit requests nothing
+            //     lwz r11, 8(r30) ; (mulhw 0x66666667 ...) % 10 ; cntlzw/extrwi -> == 0
+            //        stbx 0x339CA  -> +0x1EA mbCrushComboThisFrame = (total hit % 10 == 0)
+            //     lwz r11, 0x14(r30) ; cmpwi 0 ; bgt -> 1 else 0
+            //        stbx 0x339CB  -> +0x1EB mbEarntMultiplierThisFrame = (multiplier earned > 0)
+            // (both signed, as the console's cmpwi / srawi+srwi-31 truncating division are).
+            // ArbStateCrashMode starts its close-up on either bit and caches +0x1EA as the
+            // super-slow-mo selector.
+            case 140:
+            {
+                const BrnGameState::GameStateModuleIO::VehicleHitAction& lrVehicleHit =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::VehicleHitAction*>(lpacPayload);
+                if (lrVehicleHit.miComboBonusEarned != 0)
+                    break;
+
+                maGameState.mShowTimeInfo.mbCrushComboThisFrame      =
+                    (lrVehicleHit.miTotalVehiclesCrashed % 10) == 0;                               // +0x1EA
+                maGameState.mShowTimeInfo.mbEarntMultiplierThisFrame =
+                    lrVehicleHit.miScoreMultiplierEarned > 0;                                      // +0x1EB
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 140 VEHICLE_HIT total " << lrVehicleHit.miTotalVehiclesCrashed
+                        << " multiplier " << lrVehicleHit.miScoreMultiplierEarned
+                        << " -> mbCrushComboThisFrame "
+                        << (maGameState.mShowTimeInfo.mbCrushComboThisFrame ? 1 : 0)
+                        << " mbEarntMultiplierThisFrame "
+                        << (maGameState.mShowTimeInfo.mbEarntMultiplierThisFrame ? 1 : 0) << "\n";
+                }
+                break;
+            }
+
+            // ---- 144  E_ACTION_JUST_BOUNCED (48 bytes) @0x8223864C ----------------------
+            //     lwz r11, 0x14(r30) ; lwz r9, +0x1E0 ; cmpw r9, r11 ; blt -> 1 else 0
+            //        stbx 0x339C8  -> +0x1E8 mbComboLevelIncreasedThisFrame = (old level < record's)
+            //     lwz 0x14 -> stw +0x1E0 miComboLevel ; lwz 0x18 -> stwx 0x339C4 +0x1E4 miTotalVehiclesHit
+            //     lbz 0x21 ; beq -> 0 ; lbz 0x23 ; bne -> 1 else 0
+            //        stbx 0x339C9  -> +0x1E9 mbVehicleImpactThisFrame = (+0x21 && +0x23)
+            // Record fields by the PC's JustBouncedAction names (BrnGameActions.h): +0x14
+            // miCurrentComboCount, +0x18 miTotalVehiclesCrashed, +0x21 mbOnCar, +0x23 mu8EventByte7
+            // (the DWARF's fourth bool, mbGoodImpact, :3442 -- the GameState header's owner names it).
+            case 144:
+            {
+                const BrnGameState::GameStateModuleIO::JustBouncedAction& lrJustBounced =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::JustBouncedAction*>(lpacPayload);
+                GameState::ShowTimeInfo& lrShowTime = maGameState.mShowTimeInfo;
+
+                lrShowTime.mbComboLevelIncreasedThisFrame =
+                    lrShowTime.miComboLevel < lrJustBounced.miCurrentComboCount;                   // +0x1E8
+                lrShowTime.miComboLevel       = lrJustBounced.miCurrentComboCount;                 // +0x1E0
+                lrShowTime.miTotalVehiclesHit = lrJustBounced.miTotalVehiclesCrashed;              // +0x1E4
+                lrShowTime.mbVehicleImpactThisFrame =
+                    lrJustBounced.mbOnCar && (lrJustBounced.mu8EventByte7 != 0);                   // +0x1E9
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 144 JUST_BOUNCED combo " << lrShowTime.miComboLevel
+                        << " total " << lrShowTime.miTotalVehiclesHit
+                        << " -> mbComboLevelIncreasedThisFrame "
+                        << (lrShowTime.mbComboLevelIncreasedThisFrame ? 1 : 0)
+                        << " mbVehicleImpactThisFrame " << (lrShowTime.mbVehicleImpactThisFrame ? 1 : 0) << "\n";
+                }
+                break;
+            }
+
+            // ---- 145  E_ACTION_JUST_APPLIED_EXTRA_SPIN (1 byte) @0x822386BC ------------
+            //     stbx r23(=1), r31, 0x339CC   -> +0x1EC mbExtraSpinThisFrame = true
+            // (DWARF 137 + the +8 band; producer ProcessGameEvents case 53, `li r5,0x91` @0x823A3E14.)
+            case 145:
+            {
+                maGameState.mShowTimeInfo.mbExtraSpinThisFrame = true;                             // +0x1EC
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 145 JUST_APPLIED_EXTRA_SPIN -> mbExtraSpinThisFrame 1\n";
+                }
+                break;
+            }
+
+            // ---- 146  E_ACTION_SHOWTIME_INTRO_START (32 bytes) @0x82238608 --------------
+            //     lbz r11, 0x10(r30) ; stbx 0x339CD -> +0x1ED mbInIntro = record's mbStart
+            // Posted twice by DetectModeStarts: mbStart 1 arms the intro, mbStart 0 cancels it.
+            case 146:
+            {
+                const BrnGameState::GameStateModuleIO::ShowtimeIntroAction& lrShowtimeIntro =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::ShowtimeIntroAction*>(lpacPayload);
+                maGameState.mShowTimeInfo.mbInIntro = lrShowtimeIntro.mbStart;                     // +0x1ED
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 146 SHOWTIME_INTRO_START -> mbInIntro "
+                        << (maGameState.mShowTimeInfo.mbInIntro ? 1 : 0) << "\n";
                 }
                 break;
             }
@@ -2786,15 +2964,16 @@ namespace BrnDirector
         }
 
         // ---- GUI command 475 -- the profile's camera preference. X360 PostGuiUpdate
-        // @0x82236F88 pseudocode 64..68: the payload word lands in DirectorProfileData's
-        // +0x08 word (GameState +0x1F0) and the shared camera container's
-        // mbUseGameplayExternal becomes (payload == 1). Landed 2026-09-18 -- until then the
-        // director always started in the external view whatever the profile said, and only
-        // the in-game view toggle (ArbStateRoaming) ever moved the flag.
+        // @0x82236F88 pseudocode 64..68: the payload word lands in
+        // DirectorProfileData::meCameraMode (GameState +0x1F0) and the shared camera container's
+        // mbUseGameplayExternal becomes (payload == 1 == E_CAMERA_MODE_THIRD_PERSON). Landed
+        // 2026-09-18 -- until then the director always started in the external view whatever the
+        // profile said, and only the in-game view toggle (ArbStateRoaming) ever moved the flag.
         if (lpInput->HasNewDirectorProfileData())
         {
             const s32 liProfileData = lpInput->GetDirectorProfileData();
-            maGameState.mDirectorProfileData.miCameraModeWord     = liProfileData;         // +0x1F0
+            maGameState.mDirectorProfileData.meCameraMode =
+                static_cast<GameState::ECameraMode>(liProfileData);                        // +0x1F0
             mArbitrator.GetSharedCameras().mbUseGameplayExternal  = (liProfileData == 1);  // +0x166A0
         }
 

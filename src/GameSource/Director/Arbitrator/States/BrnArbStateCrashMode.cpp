@@ -6,6 +6,8 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"        // BrnDirector::GameState
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"             // Camera effect-hook free functions
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h" // BehaviourAftertouchCrash
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // [diag] CgsDev::Log::gpDebugPrint
+#include <cstdlib>                                                            // [diag] getenv
 
 // ============================================================================
 // BrnDirector::ArbStateCrashMode -- Construct / Prepare / GetName / DoCloseup / Release / Update.
@@ -16,8 +18,8 @@
 // the camera-effect pokes go through named Camera setters, the produced-camera copy goes through
 // the behaviour handle, the roll/close-up writes through named behaviour setters, and the sibling-state
 // hand-offs go through the ArbitratorStateContainer. The GameState snapshot it reacts to
-// (lrSharedInfo.mpGameState) is read by named members; a handful of trailing-sub-object reads
-// land in opaque DirectorProfileData / ShowTimeInfo blobs (FLAGged inline).
+// (lrSharedInfo.mpGameState) is read by named members, the Showtime request bytes through the
+// DWARF-named GameState::ShowTimeInfo (+0x1DC).
 // ----------------------------------------------------------------------------
 
 namespace BrnDirector
@@ -324,14 +326,15 @@ namespace BrnDirector
 
             // ---- periodic slow-mo close-up ----------------------------------------------
             // Trigger a new close-up once enough time has elapsed, close-ups are allowed, and the
-            // game-state requests one this frame.
-            // FLAG: gameState +0x1EA / +0x1EB land in the opaque DirectorProfileData blob (the
-            // console reads two adjacent "request close-up" bytes there); the first doubles as the
-            // super-slow-mo selector cached into mbSuperSloMoCloseUp.
+            // game-state requests one this frame (0x82235664..0x82235688): a crush combo
+            // (ShowTimeInfo::mbCrushComboThisFrame, +0x1EA) or an earnt multiplier
+            // (mbEarntMultiplierThisFrame, +0x1EB), both raised by MainDirector::ProcessInputQueue
+            // case 140 (E_ACTION_VEHICLE_HIT). The first doubles as the super-slow-mo selector
+            // cached into mbSuperSloMoCloseUp (`stb r11, 0x1CE` of the +0x1EA byte).
             if (mfTimeSinceCloseup > KF_MIN_TIME_BETWEEN_CLOSEUPS && mbAllowCloseup)
             {
-                const bool lbRequestSuperSloMo = lrGameState.mDirectorProfileData.maOpaque[0x02] != 0; // +0x1EA
-                const bool lbRequestNormal     = lrGameState.mDirectorProfileData.maOpaque[0x03] != 0; // +0x1EB
+                const bool lbRequestSuperSloMo = lrGameState.mShowTimeInfo.mbCrushComboThisFrame;      // +0x1EA
+                const bool lbRequestNormal     = lrGameState.mShowTimeInfo.mbEarntMultiplierThisFrame; // +0x1EB
                 if (lbRequestSuperSloMo || lbRequestNormal)
                 {
                     mfCloseupTime       = 0.0f;
@@ -365,11 +368,37 @@ namespace BrnDirector
                 lrCamera.SetRequestedTimeDilation(lrGameState.mfImpactTimeSloMoFactor);
             }
 
+            // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. The crash-mode heartbeat
+            // (first ACTIVE frame, then every 30th, capped): the time scale this state asked the
+            // camera for, next to the GameState inputs it came from, so "Showtime crawls" and
+            // "the close-up never starts" can each be read off one line.
+            if (getenv("BRN_DIRECTOR_ACTION_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                static u32 suActiveFrames = 0u;
+                if ((suActiveFrames % 30u) == 0u && suActiveFrames < 30u * 200u)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crashmode] hb frame " << suActiveFrames
+                        << " requestedSimScale " << lrCamera.GetEffects().mfSimTimeScale
+                        << " impactTimeActive " << (lrGameState.mbImpactTimeActive ? 1 : 0)
+                        << " impactFactor " << lrGameState.mfImpactTimeSloMoFactor
+                        << " closeup " << (mbDoingCloseup ? 1 : 0)
+                        << " super " << (mbSuperSloMoCloseUp ? 1 : 0)
+                        << " closeupTime " << mfCloseupTime
+                        << " comboLevel " << lrGameState.mShowTimeInfo.miComboLevel
+                        << "\n";
+                }
+                ++suActiveFrames;
+            }
+
             // ---- choose the blur "mode" for this frame ----------------------------------
-            // FLAG: gameState +0x1E9 / +0x1EC land in the opaque DirectorProfileData blob (the
-            // "extra spin blur" and "background/default blur" request bytes).
-            const bool lbUseSpinBlur    = lrGameState.mDirectorProfileData.maOpaque[0x01] != 0; // +0x1E9
-            const bool lbUseDefaultBlur = lrGameState.mDirectorProfileData.maOpaque[0x04] != 0; // +0x1EC
+            // 0x8223570C / 0x82235734: ShowTimeInfo::mbVehicleImpactThisFrame (+0x1E9, raised by
+            // ProcessInputQueue case 144 E_ACTION_JUST_BOUNCED) selects the short shaking blur;
+            // otherwise mbExtraSpinThisFrame (+0x1EC, case 145) selects the long one.
+            // FLAG: the KF_* names on each arm are value-matched (flt_82CDA4BC 0.25 / flt_82CDA4B4
+            // 1.0 / flt_82CDA4B8 0.9 / flt_82CDA4C0 100.0); the DWARF lists them without addresses.
+            const bool lbUseSpinBlur    = lrGameState.mShowTimeInfo.mbVehicleImpactThisFrame;   // +0x1E9
+            const bool lbUseDefaultBlur = lrGameState.mShowTimeInfo.mbExtraSpinThisFrame;       // +0x1EC
 
             if (lbUseSpinBlur)
             {
@@ -393,12 +422,10 @@ namespace BrnDirector
             // ---- ramp the motion blur in / out ------------------------------------------
             if (mfBlurInTime + mfBlurOutTime > 0.0f)
             {
-                // The vehicle-hit count scales the blur fraction, clamped to [1, 5].
-                // FLAG: gameState +0x1E0 lands in the opaque ShowTimeInfo blob (a vehicle-hit
-                // count the console reads as a 4-byte int and converts to float).
-                const s32 liVehicleHitCount =
-                    *reinterpret_cast<const s32*>(&lrGameState.mShowTimeInfo.maOpaque[0x0C]); // +0x1E0
-                const f32 lfHitCount = static_cast<f32>(liVehicleHitCount);
+                // The combo level scales the blur fraction, clamped to [1, 5] (0x82235790: `lwz
+                // 0x1E0` -> extsw/fcfid, i.e. ShowTimeInfo::miComboLevel as a float).
+                const s32 liComboLevel = lrGameState.mShowTimeInfo.miComboLevel;              // +0x1E0
+                const f32 lfHitCount = static_cast<f32>(liComboLevel);
                 const f32 lfHitFloor = (KF_UNIT - lfHitCount >= 0.0f) ? KF_UNIT : lfHitCount; // max(1, cnt)
                 const f32 lfHitScale = (KF_HIT_COUNT_CAP - lfHitFloor >= 0.0f) ? lfHitFloor
                                                                               : KF_HIT_COUNT_CAP; // min(.,5)

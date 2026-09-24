@@ -20,8 +20,6 @@
 
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 
-#include <cstring>   // std::memset (the opaque tail sub-objects' field-wise zero clear)
-
 namespace BrnDirector
 {
 
@@ -126,18 +124,17 @@ void GameState::Clear()
     mePlayerKillerIndex                 = E_ACTIVE_RACE_CAR_INDEX_INVALID; // stw -1, 0x1C4
     mbStartingFreeburnDueToPlayerJoinThisFrame = false; // stb 0, 0x1C8
 
-    // --- trailing sub-objects (+0x1CC..+0x1F3) ---
-    // The asm clears every field it touches in RankUpInfo (+0x1CC), ShowTimeInfo (+0x1D4) and
-    // DirectorProfileData (+0x1E8) to 0 (stb/stw/stfs of r10=0 / f0=0.0), then sets a single word
-    // at DirectorProfileData+0x08 (+0x1F0) to 1. With the sub-objects modelled as opaque blobs
-    // (DWARF field layout unreliable -- see header), reproduce that as a field-wise zero of each
-    // sub-object plus the one non-zero word.
-    std::memset(&mRankUpInfo,          0, sizeof(mRankUpInfo));          // +0x1CC region -> 0
-    std::memset(&mShowTimeInfo,        0, sizeof(mShowTimeInfo));        // +0x1D4 region -> 0
-    std::memset(&mDirectorProfileData, 0, sizeof(mDirectorProfileData)); // +0x1E8 region -> 0
-    // stw r8(=1), 0x1F0 -> DirectorProfileData + 0x08 = 1 (un-DWARF'd member).
-    s32 liProfileFlag = 1;
-    std::memcpy(reinterpret_cast<u8*>(&mDirectorProfileData) + 0x08, &liProfileFlag, sizeof(s32));
+    // --- the tail (+0x1CC..+0x1F3), exactly the console's stores and no more ---
+    // [FX-DIRECTOR 2026-09-24] The three sub-objects are named DWARF members now (see the header).
+    // The console writes ONE RankUpInfo field here (mbDoingRankUp, `stb 0, 0x1D4` 0x82218B8C) and
+    // leaves mbDoingRankUpIntro / mbNewRivalFocusThisFrame / meRivalIndex alone; the old blob
+    // memsets zeroed all eight bytes, which the console does not.
+    mRankUpInfo.mbDoingRankUp           = false;  // stb 0, 0x1D4
+    mbPlayerDamageCritical              = false;  // stb 0, 0x1D0
+    mbPlayerWrecked                     = false;  // stb 0, 0x1D1
+    mShowTimeInfo.Clear();                        // 0x82218C30..0x82218C54 (+0x1DC..+0x1ED)
+    mDirectorProfileData.Construct();             // stw 1, 0x1F0 (meCameraMode = THIRD_PERSON)
+    miPlayerTeam                        = 0;      // stw 0, 0x1CC (0x82218CB4, the function's last store)
 }
 
 // ----------------------------------------------------------------------------
@@ -178,15 +175,13 @@ void GameState::ResetPerFrameData()
     mbStartingFreeburnDueToPlayerJoinThisFrame         = false;   // stb 0, 0x1C8
     mbJunkyardCarUnlockTickedClosedThisFrame           = false;   // stb 0, 0x1A3
 
-    // stb 0, 0x1D6 -- ShowTimeInfo + 0x02, the byte IsNewRankUpRivalThisFrame() reads. That
-    // sub-object's DWARF layout is unreliable (see the header), so it stays an opaque blob and
-    // the ONE per-frame byte is cleared through its own storage, inside the type that owns it.
-    mShowTimeInfo.maOpaque[0x02] = 0;
+    // stb 0, 0x1D6 -- RankUpInfo::mbNewRivalFocusThisFrame, the byte IsNewRankUpRivalThisFrame()
+    // reads.
+    mRankUpInfo.mbNewRivalFocusThisFrame = false;
 
-    // stb 0, 0x1E8 .. 0x1EC -- the five leading DirectorProfileData bytes. Same reasoning. The
-    // WORD at DirectorProfileData + 0x08 (which Clear seeds to 1) is deliberately NOT touched.
-    for (s32 liByte = 0; liByte < 5; ++liByte)
-        mDirectorProfileData.maOpaque[liByte] = 0;
+    // stb 0, 0x1E8 .. 0x1EC -- ShowTimeInfo::ResetPerFrameData (DWARF h:227): the five ThisFrame
+    // bools. mbInIntro (+0x1ED) is NOT per-frame and is not touched.
+    mShowTimeInfo.ResetPerFrameData();
 }
 
 } // namespace BrnDirector
