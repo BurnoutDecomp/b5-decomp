@@ -73,6 +73,10 @@ static const u32 KU_MAX_ONLINE_ROUNDS_IN_MODE = 10;
 // The two ad-hoc action payloads the console builds on the stack. Neither has a named record type
 // in BrnGameActions.h; both are pinned by the AddEvent size argument, so they are declared here as
 // TU-local records rather than fabricated as offsets into some other struct.
+// [FX-FLOW 2026-09-24] ONE LEFT: the action-24 record now has its DWARF home,
+// GameStateModuleIO::BroadcastModeFinishLinesAction (BrnGameActions.h, DWARF :961), shared with its
+// consumer MainDirector::ProcessInputQueue case 24. The TU-local ModeLandmarkAction it replaces had
+// the identical 48-byte layout (BoxRegion +0x00, CgsID +0x28); its two wire pins moved with it.
 //
 // [!] ANONYMOUS NAMESPACE, ADDED 2026-08-26 (stuntrace waveB CLOSURE round). These two were the
 // only records in the ModeManager partfile set declared at plain `namespace BrnGameState` scope,
@@ -92,17 +96,6 @@ struct ModeLoadingScreenAction
     u8 muTag;
 };
 
-// PrepareForMode's landmark post: 36 bytes copied verbatim off the Landmark (its TriggerRegion base
-// begins with BoxRegion, and the copy is exactly 9 dwords -- `li r9, 9` + lwz/stw loop
-// @0x82342F3C..0x82342F54), then the landmark's CgsID sign-extended into the 8-byte slot at +40
-// (`lwz r11, 0x24(r31); extsw r11, r11; std r11, var_988` -- var_988 == var_9B0 + 40). Total 48,
-// which is the size AddEvent is given.
-struct ModeLandmarkAction
-{
-    BrnTrigger::BoxRegion mBoxRegion;    // +0x00, 36 B (9 dwords)
-    CgsID                 mLandmarkId;   // +0x28 (40)
-};
-
 }  // anonymous namespace
 
 // ---- WIRE-FORMAT PINS (hazards H5; header_grow_spec section 3.4 requires them) ---------------
@@ -116,15 +109,12 @@ struct ModeLandmarkAction
 //   @0x82342F60. The payload is built at stack base var_9B0: a 9-dword copy loop
 //   (`li r9,9 / mtctr / lwz+stw` @0x82342F3C..0x82342F54) fills +0x00..+0x23, then
 //   `lwz r11, 0x24(r31) / extsw r11, r11 / std r11, var_988` @0x82342F58/64/70 writes the id.
-//   var_9B0 - var_988 == 0x28 == 40, which is the offsetof pinned below.
-//   BoxRegion is 9 x f32 (BrnRegion.h:83-91) == 36; CgsID is a u64, so it aligns to 40 and the
-//   record closes at 48.
+//   var_9B0 - var_988 == 0x28 == 40 -- pinned (sizeof 48, offsetof 0x28) beside the record's home,
+//   GameStateModuleIO::BroadcastModeFinishLinesAction in BrnGameActions.h.
 //   SetupGameMode @0x8234B158 -- `li r6, 1` @0x8234B4B4 paired with `li r5, 0x16` (22)
 //   @0x8234B4B8: a one-byte bare tag.
-static_assert(sizeof(ModeLandmarkAction) == 48,
+static_assert(sizeof(GameStateModuleIO::BroadcastModeFinishLinesAction) == 48,
               "X360 PrepareForMode posts action 24 with size 48 (`li r6,0x30` @0x82342F5C)");
-static_assert(offsetof(ModeLandmarkAction, mLandmarkId) == 40,
-              "X360 PrepareForMode writes the landmark CgsID at record+40 (var_988 == var_9B0+0x28)");
 static_assert(sizeof(ModeLoadingScreenAction) == 1,
               "X360 SetupGameMode posts action 22 with size 1 (`li r6,1` @0x8234B4B4)");
 
@@ -766,11 +756,11 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
         const BrnTrigger::Landmark*    lpLandmark    =
             lpTriggerData->GetLandmarkFromRegionIndex(liRegionIndex);
 
-        ModeLandmarkAction lLandmarkAction;
-        lLandmarkAction.mBoxRegion  = *lpLandmark->GetBoxRegion();   // the 9-dword copy
-        lLandmarkAction.mLandmarkId = lpLandmark->GetId();           // lwz 0x24 / extsw / std +40
+        GameStateModuleIO::BroadcastModeFinishLinesAction lFinishLinesAction;
+        lFinishLinesAction.mBoxRegion    = *lpLandmark->GetBoxRegion();   // the 9-dword copy
+        lFinishLinesAction.mFinishLineID = lpLandmark->GetId();           // lwz 0x24 / extsw / std +40
 
-        lpGameActionQueue->AddEvent(&lLandmarkAction, GameStateModuleIO::E_ACTION_BROADCAST_MODE_FINISH_LINES);
+        lpGameActionQueue->AddEvent(&lFinishLinesAction, GameStateModuleIO::E_ACTION_BROADCAST_MODE_FINISH_LINES);
     }
 
     // Showtime (offline 2 / online 16) delays its mode-switch action by thirty frames; the countdown

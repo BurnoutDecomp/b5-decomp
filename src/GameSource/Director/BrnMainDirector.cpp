@@ -1268,11 +1268,16 @@ namespace BrnDirector
     // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other 22 handled cases (0, 24, 42, 43,
+    //   * the other 21 handled cases (0, 42, 43,
     //     53, 54, 107, 113, 120, 132, 140, 144, 145, 146, 150, 151,
     //     205, 215, 216, 218, 223, 224) -- every one of them writes into a part of the
     //     GameState or the MainDirector flag tail that is still opaque, or calls an un-homed
     //     aggregate (AllVehicleData, DebugRender).
+    //     ⭐ 24 (E_ACTION_BROADCAST_MODE_FINISH_LINES) CAME OFF THIS LIST 2026-09-24 (FX-FLOW,
+    //     NEW-FINISHLINE): both fields it writes are named DWARF members (mFinishLineID,
+    //     mFinishLineNorthmostDir) and its one call, BoxRegion::ComputeDirection, is bodied
+    //     (SharedClasses/Trigger/BrnRegion.cpp). Its absence left mFinishLineID at 0 and fired
+    //     "Unknown finish line" on every offline race finish.
     //     ⭐ 6 (E_ACTION_SET_TAKEDOWN_CAMERA_STATE) CAME OFF THIS LIST 2026-09-13. Its blanket
     //     reason -- "writes into a part of the GameState that is still opaque" -- had expired:
     //     all five fields the arm touches are named members of BrnDirector::GameState
@@ -1591,11 +1596,18 @@ namespace BrnDirector
             // resets, and ArbStateRoaming::ProcessPossibleFX scales the Damage_Crit hook's
             // blend by it -- the screen desaturating a step per crash in Road Rage / Marked
             // Man. Missing until 2026-09-17, so the blend stayed 0 and the hook never showed.
+            // [FX-FLOW 2026-09-24] read through the record's DWARF home (BrnGameActions.h
+            // RoadRagePlayerDamageAction: f32 +0x00, bool +0x04, bool +0x05, size-pinned there)
+            // instead of a raw payload offset; same three reads, same widths.
             case 205:
-                maGameState.mfHowCloseToTotalled            = *reinterpret_cast<const f32*>(lpacPayload + 0x00);   // +0x1BC
-                maGameState.mbRoadRageOneMoreCrashToWrecked = (lpacPayload[0x04] != 0);                          // +0x1C0
-                maGameState.mbRoadRageTotalled              = (lpacPayload[0x05] != 0);                          // +0x1C1
+            {
+                const BrnGameState::GameStateModuleIO::RoadRagePlayerDamageAction& lrDamageAction =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::RoadRagePlayerDamageAction*>(lpacPayload);
+                maGameState.mfHowCloseToTotalled            = lrDamageAction.mfHowCloseToTotalled;       // +0x1BC
+                maGameState.mbRoadRageOneMoreCrashToWrecked = lrDamageAction.mbOneMoreCrashToTotalled;   // +0x1C0
+                maGameState.mbRoadRageTotalled              = lrDamageAction.mbPlayerTotalled;           // +0x1C1
                 break;
+            }
 
             case 102:
             {
@@ -1742,6 +1754,47 @@ namespace BrnDirector
                 HandlePrepareForModeAction(
                     *reinterpret_cast<const BrnGameState::GameStateModuleIO::PrepareForModeAction*>(lpacPayload), lpIO);
                 break;
+
+            // ---- 24  E_ACTION_BROADCAST_MODE_FINISH_LINES (48 bytes) --------------------
+            // ⭐ [FX-FLOW 2026-09-24, NEW-FINISHLINE] THE ONLY RETAIL WRITER of
+            // GameState::mFinishLineID (+0x160) and mFinishLineNorthmostDir (+0x170).
+            // ModeManager::PrepareForMode posts the event's finish landmark -- its BoxRegion and
+            // its id -- once per prepare, right after the action-23 post (so this arm always runs
+            // after case 23 above in the same drain). The post-event camera keys its shot group
+            // off the id: ArbStatePostEvent::Prepare `ld r5,0x160` @0x8226E268 ->
+            // DirectorResourceManager::GetEventCompletionShots, and PickAppropriateShot @0x8221A34C.
+            // With this arm absent the id kept GameState::Clear's 0, so every offline race finish
+            // fired "Unknown finish line" (BrnDirectorResourceManager.cpp:325 -- a dev assert,
+            // which PAUSES the PC build) and fell back to the plain race group.
+            // Console @0x82238738..0x82238764, store for store:
+            //     ld    r11, 0x28(r30)                  ; record->mFinishLineID
+            //     stdx  r11, r31, 0x33940               ; GameState +0x160 (GameState @ +0x337E0)
+            //     bl    BoxRegion::ComputeDirection     ; sret r3 = stack, r4 = r30 = &record->mBoxRegion
+            //     stvx  v0, r31, 0x33950                ; GameState +0x170
+            // No gate, no assert. The only other store to +0x160 in the image is the
+            // mbDebugTestFinishLines debug-render walk at this function's tail (0x82238EC0) --
+            // a DirectorModule debug toggle, not a retail path.
+            case 24:
+            {
+                const BrnGameState::GameStateModuleIO::BroadcastModeFinishLinesAction& lrFinishLinesAction =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::BroadcastModeFinishLinesAction*>(lpacPayload);
+
+                maGameState.mFinishLineID           = lrFinishLinesAction.mFinishLineID;                // +0x160
+                maGameState.mFinishLineNorthmostDir = lrFinishLinesAction.mBoxRegion.ComputeDirection(); // +0x170
+
+                // [diag] BRN_FINISHLINE_DIAG -- NOT IN THE X360 BINARY. One line per broadcast: the
+                // live witness that the arm is dispatched and what the post-event camera will key on.
+                if (getenv("BRN_FINISHLINE_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[finish-line] action 24 -> GameState.mFinishLineID "
+                        << static_cast<u64>(maGameState.mFinishLineID)
+                        << " dir (" << maGameState.mFinishLineNorthmostDir.x
+                        << ", " << maGameState.mFinishLineNorthmostDir.y
+                        << ", " << maGameState.mFinishLineNorthmostDir.z << ")\n";
+                }
+                break;
+            }
 
             // ---- 29  E_ACTION_START_MODE_INTRO (604 bytes) ---------------------------
             // ⭐ THE RACE-INTRO TRIGGER. mbDoIntro is the producer's own
