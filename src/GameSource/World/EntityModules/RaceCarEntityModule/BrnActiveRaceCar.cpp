@@ -1296,7 +1296,21 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     // 0x822EB20C..0x822EB24C (banner leg 1): Def(this + 0x1C90) + 0x610 copied whole into
     // +0x90. PC-SAFETY GUARD, not console behaviour: a spec that does not resolve fires Def's own
     // "Can not instance" assert (CgsResourcePtr.h:544) and leaves the matrix as Prepare/Attach
-    // set it, where the console would read through the null resource.
+    // set it, where the console would read through the null resource. (The console's Def,
+    // 0x822C7708, asserts on a null +0 word and then returns it anyway -- 0x822C779C `lwz r3, 0(r28)`
+    // -- so the copy at +0x610 would fault.)
+    // KEPT after review D (2026-09-24), because the tree cannot show the spec always resolves here.
+    // The promote gate only proves LOADEDPHYSICS is set in RaceCarStreamer::maxLoadFlags
+    // (IsRaceCarLoadedForStateMachineBringUp), and that bit and maPhysicsResources are kept by
+    // DIFFERENT writers: OnPhysicsUnloading (0x822B75E8) nulls the pointer while OnResourceUnloading
+    // (0x822A1840) only logs -- nothing clears the bit until AddVehicleData recomputes the byte -- and
+    // AddVehicleData sets the bit for a same-model re-add off the pointer still resident at that
+    // moment. So "bit set => pointer live" rests on the InternalBaseStreamer engine never unloading an
+    // entry that is re-requested in the same AddVehicleData, which this tree does not prove. And even a
+    // live pointer resolves through ResolveDeformationSpec's double dereference of the handle's
+    // resource memory, which can itself be empty. Where the console would fault, this build keeps the
+    // Prepare/Attach matrix and asserts. The wheel-scale loop below keeps the same guard for the same
+    // reason.
     const BrnPhysics::Deformation::StreamedDeformationSpec* lpDeformationSpec =
         ResolveDeformationSpec( mDeformationModelHandle );
     CGS_ASSERT( lpDeformationSpec != 0,
