@@ -15756,7 +15756,9 @@ namespace
 //   2. walk (mAliveVehicles & mVehiclesWithEntities) and, for the half of the pool
 //      mVehiclesToUpdateCollidables selects this frame plus every physical car, find the
 //      nearest source and classify: inside 50 m == AVOIDABLE (cached for the avoidance
-//      steering), inside 20 m == COLLIDABLE (a real scene volume);
+//      steering, and remembered in mVehiclesAvoidableLastFrame), inside 20 m == COLLIDABLE (a
+//      real scene volume); a car of the OTHER half is still cached (never made collidable)
+//      when mVehiclesAvoidableLastFrame remembers it, and that bit is consumed;
 //   3. flip mVehiclesToUpdateCollidables so the OTHER half of the pool is re-evaluated next
 //      frame -- Construct seeds its first 300 bits (_wT1_01.cpp:2294..:2298), so the wholesale
 //      `~` at the tail is a two-frame amortisation, not an on/off toggle.
@@ -15881,33 +15883,34 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     }
 
     // 0x82730C80..0x82730CAC: vrefp + one Newton-Raphson step == the reciprocal of the source
-    // count, times the accumulated sum.
-    // BEHAVIOUR DELTA, deliberate: the console does NOT guard the zero case, so with no active
-    // race car and no physical traffic it writes a NaN into mAveragePhysicalCentre. Guarded
-    // here -- a NaN centre would propagate silently into every consumer of the member, and
-    // "leave the placeholder zero" is the safe reading of an unreachable console path.
-    if (lfSourceCount > 0.0f)
-    {
-        mAveragePhysicalCentre = lSourceSum * (1.0f / lfSourceCount);
-    }
+    // count, times the accumulated sum. The console has NO zero test: with no active race car
+    // and no physical traffic the reciprocal is +inf and the centre is NaN (0 * inf), which is
+    // what is written here too (FX-TRAFFIC5: the guard that used to stand here was invented).
+    // Both readers (the junction-FUP scorers) walk alive & physical cars, so a NaN centre can
+    // only meet a car promoted later in the same frame, where `radius >= Dot(NaN)` is false --
+    // the console's own outcome.
+    mAveragePhysicalCentre = lSourceSum * (1.0f / lfSourceCount);
 
+    // 0x82730CB0..0x82730CE0 -- the THIRD source, appended AFTER the average is taken (so it
+    // never moves mAveragePhysicalCentre): `ld +0x729D0` is mCameraLastFrame's current flag set
+    // (camera +0x140, one 64-bit BitArray<30>) and `rlwinm 0,4,4` keeps bit 0x08000000 of its low
+    // word == flag 27 == DWARF CameraState::E_FLAG_ROAD_FOLLOWING_CAM (BrnCameraState.h:36). The
+    // Pos row appended is mCameraLastFrame +0x30 (this+0x728C0). The flag's only setter in
+    // ARTIST is BehaviourRoadRunner::Update (0x822488A0 `oris r11, r11, 0x800` on its camera's
+    // +0x140): the road-following attract/roaming camera makes the traffic around ITSELF solid.
+    if (mCameraLastFrame.GetState().IsFlagSet(
+            BrnDirector::Camera::CameraState::E_FLAG_ROAD_FOLLOWING_CAM))
     {
-        // GATE: the third source, 0x82730CB0..0x82730CE0 -- mCameraLastFrame's Pos row
-        // (this+0x728C0) appended when bit 27 of the selector word at this+0x729D4 ==
-        // mCameraLastFrame+0x144 is set. BLOCKER: that word is mCameraLastFrame's CameraState
-        // current-flag set and the flag's MEANING is unnamed, exactly as the sibling DEBUG
-        // sim-centre gate at _wT1_01.cpp:1376 already records. Omitting it can only make FEWER
-        // cars collidable, and never the ones near a race car. DELETE-WHEN the flag is named.
-        static bool sbLogged = false;
-        LogMissingLeg_T4(sbLogged,
-            "UpdateCollidableVehicles camera collision-source @0x82730CB0 -- the selector bit "
-            "is mCameraLastFrame+0x144 bit 27, an unnamed CameraState flag (same blocker as "
-            "the DEBUG sim-centre overrides). Race-car and physical-traffic sources are LIVE");
+        lSourcePositions.Append(mCameraLastFrame.GetPosition());
     }
 
     // ================================================================================
     // PASS 2 -- classify every alive vehicle that owns a scene entity.
     // ================================================================================
+
+    // [DIAG] NOT IN THE X360 BINARY -- the two counts the [T-collidable] witness prints at the tail.
+    u32 luCarriedDiag = 0;   // cars of the half NOT evaluated this frame, cached by the carry-over
+    u32 luCachedDiag  = 0;   // traffic cars cached this frame (both halves)
 
     // 0x82730CE4..0x82730D1C == `this[(0x5064+i)*8] & this[(0x505A+i)*8]`, soa+80 & soa+0.
     TrafficBitArray lAliveWithEntities;
@@ -15922,49 +15925,12 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     // mVehiclesToUpdateCollidables is a FastBitArray<600> while the SoA sets are
     // FastBitArray<601> (same ten fields, different C++ types).
 
-    // ------------------------------------------------------------------------------------
-    // [PC SAFETY] NOT IN THE X360 BINARY. Retire the collision volume of any vehicle that has
-    // DIED while collidable.
-    //
-    // Vehicle::SetDead masks mxFlags with 0xDE -- it clears ALIVE and ORPHAN and deliberately
-    // leaves E_FLAG_COLLIDABLE and the SoA bit alone, because on the console the remove half
-    // (KillDyingVehicleEntities @0x82741E40) tears the scene registration down. The main walk
-    // below only visits (alive & withEntities), so a killed driving-traffic car would keep a
-    // live AddForCollision registration at its last position for the rest of the session -- an
-    // invisible solid car. KillParam (_wT2_01.cpp:653) reaches SetDead on a normal drive, so
-    // this is reachable, not theoretical.
-    //
-    // ⚠️ NOTE CORRECTED 2026-08-28. This note used to name RemoveVehicle @0x8272E370 as the
-    // other half of the teardown and say "DELETE-WHEN KillDyingVehicleEntities or RemoveVehicle
-    // lands". RemoveVehicle HAS NOW LANDED (_wT5_01.cpp) and this sweep is NOT retired by it:
-    // read end to end, RemoveVehicle frees no pool slot, deletes no param and touches no scene
-    // or collision registration at all -- it retires LIVENESS (Vehicle::SetDead), the
-    // crash-module bookkeeping and any articulation, and MARKS the param. The scene/collision
-    // teardown was always KillDyingVehicleEntities' alone.
-    // DELETE-WHEN KillDyingVehicleEntities' scene-remove leg is proven live on the shipped path.
-    // ------------------------------------------------------------------------------------
-    {
-        TrafficBitArray lStaleCollidable;
-        lStaleCollidable.SetInverse(mVehicleSoaData.mAliveVehicles);
-        lStaleCollidable.SetAnd(lStaleCollidable, mVehicleSoaData.mCollidableVehicles);
-
-        for (TrafficBitArray::Iterator lIt = lStaleCollidable.Begin();
-             lIt != lStaleCollidable.End();
-             ++lIt)
-        {
-            const u32 luVehicle = static_cast<u32>(lIt.GetIndex());
-            if (luVehicle >= KU_MAX_TOTAL_TRAFFIC)
-            {
-                continue;
-            }
-
-            const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
-                MakeTrafficVolumeInstanceId(luVehicle);
-            lpOutput->GetSceneInputInterface()->RemoveForCollision(lVolumeInstanceId);
-            lpOutput->GetSceneInputInterface()->RemoveVolumeInstance(lVolumeInstanceId);
-            GetVehicle(luVehicle)->SetCollidable(false, lIt, mVehicleSoaData);
-        }
-    }
+    // (FX-TRAFFIC5: the "[PC SAFETY]" sweep that stood here -- RemoveForCollision /
+    // RemoveVolumeInstance / SetCollidable(false) over ~alive & collidable -- is NOT in the X360
+    // binary and is retired. Its DELETE-WHEN is met: KillDyingVehicleEntities @0x82741E40 is
+    // bodied and runs immediately before this function inside the same `!IsPaused() &&
+    // !lbSimPaused` block of PreSceneUpdate (KillDying -> CreateNewVehicleEntities -> here), and
+    // its collidable arm tears down exactly those registrations, so the sweep could never fire.)
 
     for (TrafficBitArray::Iterator lIt = lAliveWithEntities.Begin();
          lIt != lAliveWithEntities.End();
@@ -16024,6 +15990,19 @@ void TrafficEntityModule::UpdateCollidableVehicles(
                 }
             }
         }
+        else if (mVehiclesAvoidableLastFrame.IsBitSet(luVehicle))
+        {
+            // 0x82731A54..0x82731D18 (PS3 twin 0x921484, the same leg with DWARF names). A car in
+            // the half this frame does NOT re-evaluate stays in the avoidance cache when it was
+            // avoidable at its last evaluation: `ldx` of mVehiclesAvoidableLastFrame (+0x72578),
+            // bit set -> r25 = 1 (avoidable, never collidable -- r15 stays 0), and the carry-over
+            // is consumed (`andc` + `stdx` at 0x82731D14). A car that is still avoidable sets the
+            // bit again on its next evaluated frame, so the cache holds BOTH halves of the pool
+            // every frame; without this leg it held only the evaluated half and alternated.
+            lbAvoidable = true;
+            mVehiclesAvoidableLastFrame.UnSetBit(luVehicle);
+            ++luCarriedDiag;   // [DIAG] NOT IN THE X360 BINARY -- counted for [T-collidable] only
+        }
 
         // 0x82731D20: hidden traffic is never solid and never cached.
         if (mbTrafficIsHidden)
@@ -16063,6 +16042,7 @@ void TrafficEntityModule::UpdateCollidableVehicles(
                 mCachedCollidableList.Append(lPacket);   // 0x82731FE4
             }
             ++luPacketLane;
+            ++luCachedDiag;   // [DIAG] NOT IN THE X360 BINARY -- counted for [T-collidable] only
         }
 
         if (!lbCandidate && !mbTrafficIsHidden)
@@ -16169,6 +16149,28 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     // Construct seeds the first 300 bits, so this alternates which half of the 600-car pool is
     // re-evaluated. It is NOT a clear-and-rebuild: dropping it pins the sweep to one half.
     mVehiclesToUpdateCollidables.SetInverse(mVehiclesToUpdateCollidables);
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness of the carry-over leg: six
+    // consecutive frames out of every 120, capped. `carried` is how many cars of the half NOT
+    // re-evaluated this frame stayed in the avoidance cache through mVehiclesAvoidableLastFrame
+    // (0x82731A54..0x82731D18); on a pre-FX-TRAFFIC5 exe that count was always 0 and the packet
+    // count alternated between the two halves.
+    {
+        static s32 siCollidableDiagFrame = 0;
+        static s32 siCollidableDiagLines = 0;
+        const s32 liFrame = siCollidableDiagFrame++;
+        if ((liFrame % 120) < 6 && siCollidableDiagLines < 60)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++siCollidableDiagLines;
+                *lpDiag << "[T-collidable] frame=" << liFrame
+                        << " packets=" << mCachedCollidableList.GetLength()
+                        << " cachedCars=" << luCachedDiag
+                        << " carried=" << luCarriedDiag << "\n";
+            }
+        }
+    }
 }
 
 }
