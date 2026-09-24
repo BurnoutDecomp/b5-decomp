@@ -366,16 +366,14 @@ f32 RaceBalancingManager::ComputeTargetSpeed(GraphType leGraphType, const AICar*
                 lfMaxMultiplier = KF_MAX_SPEED_MULTIPLIER_IN_RANGE;     // 1.1
             }
 
-            // Schedule offset -> bounded speed multiplier: 1 + (raceTime - parTime)*0.1, clamped.
+            // Schedule offset -> bounded speed multiplier: 1 + (raceTime - parTime)*0.1, clamped by
+            // the inlined fpu::Clamp<float> ladder: `fsubs t,min,m ; fsel m,t,min,m` 0x827917BC/
+            // 0x827917C0 (0x827917D4/0x827917D8 out of range) then `fsubs t,max,m ; fsel m,t,m,max`
+            // 0x827917E0/0x827917E4. fsel takes its THIRD operand on an unordered test, so a NaN
+            // multiplier is the max (crash parity FX-AINAN2; the old if/if kept the NaN).
             f32 lfMultiplier = (mfRaceTime - lfTargetTime) * KF_SPEED_DIFFERENCE_MULTIPLIER + 1.0f;
-            if (lfMultiplier < lfMinMultiplier)
-            {
-                lfMultiplier = lfMinMultiplier;
-            }
-            if (lfMultiplier > lfMaxMultiplier)
-            {
-                lfMultiplier = lfMaxMultiplier;
-            }
+            lfMultiplier = ((lfMinMultiplier - lfMultiplier) >= 0.0f) ? lfMinMultiplier : lfMultiplier;
+            lfMultiplier = ((lfMaxMultiplier - lfMultiplier) >= 0.0f) ? lfMultiplier : lfMaxMultiplier;
 
             lfSpeed = lfParSpeed * lfMultiplier;
         }

@@ -81,16 +81,15 @@ f32 RaceBalancingGraph::ComputeSpeedRatio(GraphType leGraphType, f32 lfFraction)
     CGS_ASSERT(liNextPoint >= 0 && liNextPoint < KI_GRAPH_POINT_COUNT,
                "liNextPoint >= 0 && liNextPoint < KI_GRAPH_POINT_COUNT");
 
-    // Position within the [prev,next] segment, clamped to [0,1].
+    // Position within the [prev,next] segment, clamped to [0,1] -- the inlined fpu::Clamp<float>
+    // ladder `fneg t,s ; fsel t,t,0.0,s` 0x8277B8A4/0x8277B8A8 then `fsubs u,1.0,t ; fsel t,u,t,1.0`
+    // 0x8277B8B0/0x8277B8B4. fsel takes its THIRD operand on an unordered test, so a NaN segment
+    // fraction is 1.0 and the lerp returns the next point's ratio (a NaN lfFraction converts to
+    // 0x80000000 on both fctiwz and cvttss2si, so both indices clamp to 0: point 0's ratio). The
+    // old if/if returned NaN (crash parity FX-AINAN2).
     f32 lfSegmentFraction = (lfFraction - (static_cast<f32>(liPrevPoint) * (1.0f / 7.0f))) * 7.0f;
-    if (lfSegmentFraction < 0.0f)
-    {
-        lfSegmentFraction = 0.0f;
-    }
-    if (lfSegmentFraction > 1.0f)
-    {
-        lfSegmentFraction = 1.0f;
-    }
+    lfSegmentFraction = (-lfSegmentFraction >= 0.0f) ? 0.0f : lfSegmentFraction;
+    lfSegmentFraction = ((1.0f - lfSegmentFraction) >= 0.0f) ? lfSegmentFraction : 1.0f;
 
     const f32 lfPrev = mafSpeedRatios[leGraphType][liPrevPoint];
     const f32 lfNext = mafSpeedRatios[leGraphType][liNextPoint];

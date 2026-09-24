@@ -54,16 +54,14 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
         return 0.0f;
     }
 
-    // Fraction of the current segment already travelled, clamped to [0,1].
+    // Fraction of the current segment already travelled, clamped to [0,1] -- the inlined
+    // fpu::Clamp<float> ladder `fneg t,r ; fsel t,t,0.0,r` 0x8277ADCC/0x8277ADD0 then
+    // `fsubs u,1.0,t ; fsel c,u,t,1.0` 0x8277ADFC/0x8277AE04. fsel takes its THIRD operand on an
+    // unordered test, so a NaN ratio comes back as 1.0 (crash parity FX-AINAN2; the old
+    // `if (< 0) .. if (> 1) ..` kept the NaN, and ComputeSpeedRatio then indexed with it).
     f32 lfCheckpointRatio = (mfDistance - lfDistanceToNextCheckpoint) / mfDistance;
-    if (lfCheckpointRatio < 0.0f)
-    {
-        lfCheckpointRatio = 0.0f;
-    }
-    if (lfCheckpointRatio > 1.0f)
-    {
-        lfCheckpointRatio = 1.0f;
-    }
+    lfCheckpointRatio = (-lfCheckpointRatio >= 0.0f) ? 0.0f : lfCheckpointRatio;
+    lfCheckpointRatio = ((1.0f - lfCheckpointRatio) >= 0.0f) ? lfCheckpointRatio : 1.0f;
 
     // This checkpoint's start/end fractions of the whole route.
     const f32 lfCheckpointStartRatio =
@@ -71,18 +69,12 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
     const f32 lfCheckpointEndRatio =
         static_cast<f32>(miCurrentCheckpointIndex + 1) / static_cast<f32>(liCheckpointCount);
 
-    // Interpolate then clamp to [0,1].
+    // Interpolate then clamp to [0,1] -- the same ladder, `fneg ; fsel` 0x8277AE0C/0x8277AE10 and
+    // `fsubs ; fsel` 0x8277AE14/0x8277AE18: a NaN (e.g. a checkpoint count of 0) is 1.0.
     f32 lfResult = (lfCheckpointEndRatio - lfCheckpointStartRatio) * lfCheckpointRatio
                    + lfCheckpointStartRatio;
-    if (lfResult < 0.0f)
-    {
-        lfResult = 0.0f;
-    }
-    if (lfResult > 1.0f)
-    {
-        lfResult = 1.0f;
-    }
-    return lfResult;
+    lfResult = (-lfResult >= 0.0f) ? 0.0f : lfResult;
+    return ((1.0f - lfResult) >= 0.0f) ? lfResult : 1.0f;
 }
 
 // @0x827658F0
