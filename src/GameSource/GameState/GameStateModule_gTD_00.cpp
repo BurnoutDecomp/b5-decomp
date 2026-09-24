@@ -391,19 +391,42 @@ void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuff
 // ==============================================================================================
 // GameStateModule::OnModeEnd  (X360 0x823767E0) -- SendModeStopMessages @0x8234BEC0's tail.
 //
-//   +0x500 / +0x570  MugshotManager::OnRoundEnd / PaybackManager::OnRoundEnd -- NOT wired.
-//     Both managers now exist and are Constructed (see ConstructTakedownBringUp), but the console
-//     sets only r3 at these two calls while both declarations carry a bool reset argument, so the
-//     argument is unrecovered. FLAG: named, not guessed -- wire it when the register is pinned.
-//   0x82376800  TakedownManager::ClearRaceCarData(this + 568)
+//   0x823767F4  MugshotManager::OnRoundEnd(this + 0x500, r4)
+//   0x823767FC  PaybackManager::OnRoundEnd(this + 0x570, r4)
+//     ✅ [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING] WIRED -- the "argument unrecovered" FLAG that
+//     stood here is resolved. The console sets only r3 at these two calls because r4 is ALREADY the
+//     argument: SendModeStopMessages loads `mr r4, r29` (== !lbOnlineLobbyHandover) @0x8234C6DC
+//     before `bl OnModeEnd`, OnModeEnd never writes r4, and MugshotManager::OnRoundEnd @0x82357AF8
+//     only reads it (`clrlwi r11, r4, 24`, no r4 store), so the same bool reaches both callees.
+//     DWARF: OnModeEnd(bool) :609, both OnRoundEnd(bool lbResetState).
+//   0x82376804  TakedownManager::ClearRaceCarData(this + 568)
 //   0x82376808  lwz this+7604 == meCurrentGameModeType ; == 2 || == 16 (the two SHOWTIME modes) ->
 //   0x82376838      stw 0, +284504   == mShowtimePendingTrafficIndexStack's count (Clear)
 //   0x8237683C      stfs 2.0, +284444 == mfTimeSinceLastCrashMode (the post-mode lockout, re-armed)
 //   0x82376840      sth -1, +284508  == muShowtimeRequestedTrafficIndex (K_INVALID_VEHICLE_INDEX)
 //   0x82376848  stb 0, this+46620 ; std 0, this+46448   == DriveThroughsCanNowOpenAgain()
 // ==============================================================================================
-void GameStateModule::OnModeEnd()
+void GameStateModule::OnModeEnd(bool lbResetState)
 {
+    // Embedded by value on the console; pointers on this build (ConstructTakedownBringUp), guarded
+    // the way the pre-world tick guards them.
+    if (mpMugshotManager != 0)
+    {
+        mpMugshotManager->OnRoundEnd(lbResetState);
+    }
+    if (mpPaybackManager != 0)
+    {
+        mpPaybackManager->OnRoundEnd(lbResetState);
+    }
+
+    // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY: the round-end hand-off.
+    if (getenv("BRN_MODEMGR_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[payback] OnModeEnd(resetState " << (lbResetState ? 1 : 0)
+            << ") -> MugshotManager / PaybackManager::OnRoundEnd\n";
+    }
+
     ClearTakedownRaceCarData();
 
     const GameStateModuleIO::EGameModeType leGameModeType = GetCurrentGameModeType();
@@ -416,6 +439,61 @@ void GameStateModule::OnModeEnd()
     }
 
     mDriveThruManager.DriveThroughsCanNowOpenAgain();
+}
+
+// ==============================================================================================
+// GameStateModule::CopyInputDataToPaybackManager  (X360 0x8239AA78; DWARF BrnGameStateModule.h:835)
+// [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING] Called by PreWorldUpdate @0x823A5328 at 0x823A572C, once
+// per pre-world tick, unconditionally, right after DriveThruManager::Update. Both callees are
+// inlined on the console:
+//   0x8239AA98  PreWorldInputBuffer::GetTimerStatusInterface (0x8231CE28)
+//   0x8239AAA0..0x8239AB0C  the 48-byte copy into PaybackManager +0x00  == SetTimerInterface
+//   0x8239AB10  PreWorldInputBuffer::GetControllerInput (0x823632F8)
+//   0x8239AB14..0x8239AB58  `lbz 0xC` (mbDirtyTrickPressed) -> +0x264/+0x265 and the press-edge
+//                           ChangeState(5)                                 == SetDirtyTrickButtonState
+// Without it the payback manager's timer copy never left Construct's Clear(): its aggressor timer
+// never advanced and the OnRoundStart / OnRoundEnd reseed read frame count 0; and the dirty-trick
+// button never reached the aggressor FSM.
+//
+// THE TIMER TYPE. The buffer's block is GameStateModuleIO::TimerStatusInterface, this tree's
+// padding fork of CgsSystem::TimerStatusInterface (BrnGameStateModuleIO.h; BrnGameModule.cpp's
+// publish banner): the same 48 bytes -- two {frame count, base step, multiplier, running, time}
+// runs -- under a second declaration. The DWARF types the buffer member and SetTimerInterface's
+// parameter as the one CgsSystem type, and CgsSystem::TimerStatus keeps its members private, so the
+// block is handed over AS that type (a re-type of the same object, pinned by the size assert) and
+// copied by the real TimerStatusInterface::operator=, exactly the member-wise copy the console
+// inlines. DELETE-WHEN the fork is retired in favour of the CgsSystem type.
+// ==============================================================================================
+void GameStateModule::CopyInputDataToPaybackManager(
+        const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer)
+{
+    static_assert(sizeof(GameStateModuleIO::TimerStatusInterface) == sizeof(CgsSystem::TimerStatusInterface),
+                  "the pre-world timer block and CgsSystem::TimerStatusInterface are one 48-byte object");
+
+    // Embedded by value on the console (this + 0x570); a pointer on this build.
+    if (mpPaybackManager == 0)
+    {
+        return;
+    }
+
+    mpPaybackManager->SetTimerInterface(reinterpret_cast<const CgsSystem::TimerStatusInterface*>(
+        lpPreWorldInputBuffer->GetTimerStatusInterface()));
+    mpPaybackManager->SetDirtyTrickButtonState(
+        lpPreWorldInputBuffer->GetControllerInput()->mbDirtyTrickPressed);
+
+    // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY. One line, the first time a running game
+    // timer arrives: the witness that the copy is dispatched and carries a live frame count.
+    static const bool sbPaybackDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+    static bool       sbReported    = false;
+    const GameStateModuleIO::TimerStatusInterface::Entry& lrGameTimer =
+        lpPreWorldInputBuffer->GetTimerStatusInterface()->maEntries[0];
+    if (sbPaybackDiag && !sbReported && lrGameTimer.miWord00 != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        sbReported = true;
+        *CgsDev::Log::gpDebugPrint
+            << "[payback] CopyInputDataToPaybackManager: game timer frame " << lrGameTimer.miWord00
+            << " step " << lrGameTimer.mfValue04 * lrGameTimer.mfValue08 << " -> PaybackManager\n";
+    }
 }
 
 }

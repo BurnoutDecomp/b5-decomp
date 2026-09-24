@@ -1165,12 +1165,22 @@ public:
     // bodied in GameStateModule_gTD_00.cpp (LANDED 2026-09-10; both were parked since the
     // stunt-race wave). OnModeFinish is FinishCurrentMode's LAST statement (the results are
     // pending): takedown camera off, all takedowns cleared, drive-thrus reopen. OnModeEnd is
-    // SendModeStopMessages' tail (the mode is gone): takedown car data cleared, the showtime
-    // lockout re-armed after a showtime, drive-thrus reopen. OnModeEnd's console prologue reads
-    // no argument register -- the caller's `r4 = !lbOnlineLobbyHandover` is dead in the callee,
-    // so it takes none here.
+    // SendModeStopMessages' tail (the mode is gone): the mugshot and payback managers' round end,
+    // takedown car data cleared, the showtime lockout re-armed after a showtime, drive-thrus reopen.
+    // ⚠ CORRECTED 2026-09-24 (FX-FLOW, NEW-PAYBACK-WIRING): OnModeEnd DOES take the caller's
+    // `r4 = !lbOnlineLobbyHandover` (`mr r4, r29` @0x8234C6DC). Its own prologue never reads r4
+    // because it hands the register straight on, untouched, to MugshotManager::OnRoundEnd(bool)
+    // (0x823767F8; that callee reads `clrlwi r11, r4, 24` and writes no r4) and on to
+    // PaybackManager::OnRoundEnd(bool) (0x82376800) -- DWARF `void OnModeEnd(bool)` (:609).
     void OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuffer);
-    void OnModeEnd();
+    void OnModeEnd(bool lbResetState);
+
+    // [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING] X360 0x8239AA78, DWARF BrnGameStateModule.h:835.
+    // PreWorldUpdate @0x823A5328 calls it at 0x823A572C, straight after DriveThruManager::Update,
+    // with the pre-world input buffer: the frame's timer block -> PaybackManager::SetTimerInterface
+    // and the controller's dirty-trick press -> PaybackManager::SetDirtyTrickButtonState (both
+    // inlined on the console). Body in GameStateModule_gTD_00.cpp.
+    void CopyInputDataToPaybackManager(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer);
 
     // [stuntrace waveB fix round, 2026-08-26] X360 this+232296 (0x38B68). See the member banner for
     // the two asm attestations and for why the requested 0x38BE8 spelling is refuted.
