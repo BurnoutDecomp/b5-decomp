@@ -3,11 +3,11 @@
 // =============================================================================
 // BrnSound::Logic::Collision::HingeStateCache — out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnHingeStateCache.h for the
-// CacheNode layout, the JointedPartStateEvent placeholder FLAG, and the
-// X360-32-bit-vs-host-64-bit offset note.
+// CacheNode layout and the X360-32-bit-vs-host-64-bit offset note.
 //
-// This TU's recon'd function set is exactly ONE entry:
-//   HingeStateCache::Update  @ 0x826830D8
+//   HingeStateCache::Update       @ 0x826830D8
+//   HingeStateCache::FindInCache  (inlined by UpdateHingingBodyParts @0x826D44D0)
+//   HingeStateCache::Insert       @ 0x826831A8
 // =============================================================================
 
 namespace BrnSound
@@ -46,6 +46,46 @@ void HingeStateCache::Update(f32 lfTime)
             lrNode.mbValid = (lfTime - lrNode.mfTimeLastSeen) < 0.1f;
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// HingeStateCache::FindInCache(const JointedPartStateEvent&)  (DWARF h:197; inlined at
+// UpdateHingingBodyParts 0x826D4614..0x826D4654)
+//
+//   for 32 nodes: valid (`lbz 0x10`) and the same part type (`lwz 4 ; cmpw`) and the same vehicle
+//   (`lwz 0 ; cmplw`) -> that node; none -> null.
+// ---------------------------------------------------------------------------
+HingeStateCache::CacheNode* HingeStateCache::FindInCache(const CacheNode::JointedPartStateEvent& lrEvent)
+{
+    for (u32 luIndex = 0; luIndex < KU_CACHE_SIZE; ++luIndex)
+    {
+        CacheNode& lrNode = maEvents[luIndex];
+        if (lrNode.mbValid && lrNode.mEvent.meType == lrEvent.meType &&
+            lrNode.mEvent.mVehicleId.muValue == lrEvent.mVehicleId.muValue)
+            return &lrNode;
+    }
+    return nullptr;
+}
+
+// ---------------------------------------------------------------------------
+// HingeStateCache::Insert(const JointedPartStateEvent&)  @ 0x826831A8  (DWARF h:214)
+//
+//   the first node whose mbValid (`lbz 0x10`) is clear: mbValid = 1, then the event's four words
+//   (+0x00 / +0x04 / +0x08 / +0x0C); all 32 valid -> null.
+// ---------------------------------------------------------------------------
+HingeStateCache::CacheNode* HingeStateCache::Insert(const CacheNode::JointedPartStateEvent& lrEvent)
+{
+    for (u32 luIndex = 0; luIndex < KU_CACHE_SIZE; ++luIndex)
+    {
+        CacheNode& lrNode = maEvents[luIndex];
+        if (!lrNode.mbValid)
+        {
+            lrNode.mbValid = true;
+            lrNode.mEvent = lrEvent;
+            return &lrNode;
+        }
+    }
+    return nullptr;
 }
 
 } // namespace Collision

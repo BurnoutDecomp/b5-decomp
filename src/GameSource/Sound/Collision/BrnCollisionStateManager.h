@@ -6,6 +6,8 @@
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h" // BrnSound::Logic::Collision::ScrapeInfo (committed; maScrapeHistory element)
 #include "GameSource/Sound/Collision/BrnBinLookupCache.h"          // BinLookupCache (maBinLoopupCache, DWARF h:787)
 #include "GameSource/Sound/Collision/BrnRaceCarCache.h"            // RaceCarCache (mRaceCarCache, DWARF h:790)
+#include "GameSource/Sound/Collision/BrnHingeStateCache.h"         // HingeStateCache (mHingeCache, DWARF h:791)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"   // the deformation legs' queues
 #include "GameSource/AttribSys/Enums/eMaterialType.h"              // EeMaterialType (MapEntityIdToMaterial)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // CgsSound::Playback::Name::MakeHash (SelectBin helper)
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
@@ -185,6 +187,12 @@ class CollisionStateManager;
 EeMaterialType MapEntityIdToMaterial( EntityId lEntityId, s32 liPlayerIndex,
                                       const LogicInputBuffer& lInput );
 
+// DWARF BrnCollisionStateManager.cpp:3677, ARTIST @0x82688CF8 (the console's own spelling). The
+// material a car body part collides as: large / small body panels, mirrors, small / large glass,
+// number plates, lights, the chassis body, suspension, exhaust, wheels, seats, the extinguisher,
+// roof racks, the ladder, crane / mixer / tipper; Nothing for any other part.
+EeMaterialType MapBodyPartEnumToMateral( BrnPhysics::Deformation::EBodyParts leBodyPart );
+
 // DWARF BrnCollisionStateManager.cpp:190, ARTIST @0x8269ED18. Which face of a car's deformed box
 // a contact point is nearest (Front / Rear / Side / Roof / Bottom). The fourth vector is passed
 // zero by its only caller and never read (0x8269ED64 overwrites v3 before any use).
@@ -288,6 +296,13 @@ private:
                       const InputCollision* const* lapCollisions, u32 lu32Count) const;
     void UpdateScrapeHistory(const BrnSound::Logic::FrameInformation& lrFrame);
 
+    // The deformation legs of the resolver: UpdateGlass (DWARF cpp:3458, ARTIST 0x826D4850) turns
+    // the deformation output's glass events into collisions, UpdateHingingBodyParts (cpp:3078,
+    // 0x826D44D0) its hinged parts' opening / closing / swinging, through mHingeCache.
+    void UpdateGlass(const BrnPhysics::Deformation::DeformationOutputInterface& lrDeformation);
+    void UpdateHingingBodyParts(
+        const BrnPhysics::Deformation::DeformationOutputInterface::JointedPartStateQueue* lpQueue);
+
     void SetCollisionBinList(u64 luCollisionBinListKey,
                              u64 luPropsCollisionBinListKey,
                              u64 luPropsMappingKey);
@@ -323,6 +338,9 @@ private:
     // DWARF h:790. The eight race cars' cached transform and deformed box (X360 +0xCF0, 8 x 192;
     // the ctor clears only each node's mbActive pair, 0x826FFB1C..0x826FFB58).
     RaceCarCache mRaceCarCache;
+    // DWARF h:791 (X360 +0x12F0, 32 x 28). The hinged parts seen lately: their last orientation,
+    // velocity and open / closed flags (UpdateHingingBodyParts).
+    HingeStateCache mHingeCache;
     PropToMaterialMapping maPropToMaterialMappings[500];
     InputCollision maInputCollision[64];
     OutputCollision maOutputCollision[64];

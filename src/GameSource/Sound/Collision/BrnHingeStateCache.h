@@ -2,6 +2,7 @@
 #define BRN_SOUND_LOGIC_COLLISION_BRN_HINGE_STATE_CACHE_H
 
 #include "types.hpp"
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h"   // JointedPartStateEvent (CacheNode::mEvent)
 
 // =============================================================================
 // BrnSound::Logic::Collision::HingeStateCache
@@ -31,9 +32,10 @@
 //       CacheNode();                          // h:170
 //   };
 //
-// This TU's recon'd function set is exactly ONE entry:
-//   HingeStateCache::Update  @ 0x826830D8
-// The X360 body (0x826830D8) walks all 32 nodes (4 nodes unrolled x 8 loop
+// This TU's recon'd function set: Update @ 0x826830D8, Insert @ 0x826831A8, and FindInCache
+// (inlined by its only caller, CollisionStateManager::UpdateHingingBodyParts @0x826D44D0 -- the
+// collision manager's mHingeCache, DWARF h:791, X360 +0x12F0).
+// The X360 Update body (0x826830D8) walks all 32 nodes (4 nodes unrolled x 8 loop
 // iterations, 28-byte node stride on the 4-byte-pointer ABI) and, for each node
 // whose validity flag is currently set, KEEPS it set only while
 // (currentTime - timeLastSeen) < 0.1; otherwise clears it:
@@ -42,15 +44,10 @@
 // argument is the current sound-logic time (DWARF: Update(float32_t); the X360
 // pseudocode widens it to a double FP register, but the declared parameter is f32).
 //
-// FLAG (un-homed dependency, NAME-only placeholder): CacheNode::mEvent is
-// BrnPhysics::Deformation::JointedPartStateEvent, whose full layout lives in the
-// (un-homed) physics deformation subsystem (DWARF
-// GameSource/Physics/DeformationManager/SharedIO/BrnDeformationEvents.h). Update
-// NEVER touches mEvent (only mbValid + mfTimeLastSeen are load-bearing), so it is
-// modelled here as a NAME-only opaque placeholder of UNVERIFIED size so CacheNode
-// stays a complete, instantiable type. Replace with the real JointedPartStateEvent
-// when that physics home lands. FindInCache/Insert (which DO read mEvent) are
-// DEFERRED to their own recon slice.
+// CacheNode::mEvent is the real BrnPhysics::Deformation::JointedPartStateEvent
+// (BrnDeformationEvents.h): +0x00 mVehicleId, +0x04 meType, +0x08 mfCurrentOrientation,
+// +0x0C mfHingeVelocity; then mbValid +0x10, mfTimeLastSeen +0x14, mbHingeOpen +0x18,
+// mbHingeClose +0x19 (28-byte node, Insert / UpdateHingingBodyParts stores).
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 walk uses a 28-byte node
 // stride and a +16 base skew into the containing object; Update is bodied as a
@@ -74,12 +71,10 @@ struct HingeStateCache
     // BrnCollisionStateManager.h:169 (DWARF). One cached jointed-part state event.
     struct CacheNode
     {
-        // BrnCollisionStateManager.h:172 (DWARF):
-        //   BrnPhysics::Deformation::JointedPartStateEvent mEvent;
-        // FLAG: NAME-only opaque placeholder for the un-homed physics deformation
-        // event type. Update never touches it. Size is UNVERIFIED (not an X360
-        // fact). Replace with the real JointedPartStateEvent when its home lands.
-        struct JointedPartStateEvent { u8 mOpaque[1]; };
+        // DWARF BrnSoundLogicSharedIO.h:68 -- the deformation output's hinge event (vehicle id,
+        // part type, orientation, hinge velocity: 16 bytes, the node's +0x00..+0x0F that Insert
+        // and UpdateHingingBodyParts copy word for word).
+        typedef BrnPhysics::Deformation::JointedPartStateEvent JointedPartStateEvent;
 
         JointedPartStateEvent mEvent;         // h:172
         bool                  mbValid;        // h:173
@@ -100,9 +95,13 @@ struct HingeStateCache
     // BrnCollisionStateManager.h:181 (DWARF). @ 0x826830D8 — bodied in this TU.
     void Update(f32 lfTime);
 
-    // h:197 / h:214 (DWARF) — declared for home completeness; DEFERRED (they read
-    // CacheNode::mEvent, which is the NAME-only placeholder above).
+    // h:197 (DWARF). The node already holding this part's state: the first VALID node with the
+    // same part type (`cmpw`) and vehicle (`cmplw`), else null. The console inlines it
+    // (UpdateHingingBodyParts 0x826D4614..0x826D4654); bodied in this TU.
     CacheNode* FindInCache(const CacheNode::JointedPartStateEvent& lrEvent);
+
+    // h:214 (DWARF), ARTIST 0x826831A8. The first free node takes the event (valid, mEvent =
+    // the event's four words); null when all 32 are in use. Bodied in this TU.
     CacheNode* Insert(const CacheNode::JointedPartStateEvent& lrEvent);
 
     // BrnCollisionStateManager.h:228 (DWARF).
