@@ -146,9 +146,9 @@ void GameStateToGuiInterface::Construct()
 //
 // The mounted caller is BrnModeManager_Finish.cpp:669, which passes the GLOBAL ::EActiveRaceCarIndex
 // (that file's own :56 banner records the choice) and a finish type cast from its file-local
-// KI_FINISH_TYPE_* constants -- BrnGui::EFinishType is still the minimal stub in
-// BrnGameStateToGuiEvents.h, so the enum is carried through here untouched and unvalidated,
-// exactly as the console carries it (no assert of any kind in the X360 body).
+// KI_FINISH_TYPE_* constants (bound to BrnGui::EFinishType's DWARF enumerators, BrnGameStateToGuiEvents.h).
+// The enum is carried through here untouched and unvalidated, exactly as the console carries it
+// (no assert of any kind in the X360 body).
 // -----------------------------------------------------------------------------
 void GameStateToGuiInterface::AddFinishedRaceEvent(BrnGui::EFinishType leFinishType,
                                                    ::EActiveRaceCarIndex leActiveRaceCarIndex)

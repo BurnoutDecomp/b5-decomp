@@ -57,6 +57,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntInfo (GuiHUDMessageStuntPerformed)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (dirty-trick payloads)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray (GuiTrafficCarInfoEvent, DWARF BrnTrafficGuiInterface.h:54)
+#include "GameSource/GameState/SharedIO/BrnGameStateToGuiEvents.h" // BrnGui::EFinishType (GuiFinishRaceEvent)
 
 // Fixed-underlying-type opaque declaration (committed home BrnVehicleConstants.h:
 // `enum EImpactType : s32`); keeps the vehicle-constants header out of this GUI payload
@@ -1664,6 +1665,39 @@ struct GuiTookLastEvent
     s32 GetEventType() const { return 485; }
 };
 static_assert(sizeof(GuiTookLastEvent) == 16, "X360 AddGuiEvent size 16 (id 485)");
+
+// DWARF :3875 / :3892 (PS3 GuiEvent<366> / <367>; X360 ids 371 / 372, records 8 bytes: `li r6, 8`
+// ahead of `li r5, 0x173` @0x823D9E4C in AddGuiEvent<GuiOvertakeEvent> @0x823D9DB0, and the same
+// pair in AddGuiEvent<GuiFinishRaceEvent> @0x823D9E68). Their one producer is
+// BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90, which re-orders the game-state
+// interface records into these: overtake {u8 position @+0, slot @+4} -> `lwz` slot / `stw` @+0,
+// `lbz` position / `stb` @+4 (0x823E2040..0x823E204C); finish {type @+0, slot @+4} -> slot @+0,
+// type @+4 (0x823E20F8..0x823E2104). No console GUI consumer reads either record: 371 / 372 fall
+// to the default arm of every GUI switch whose range covers them (GuiCache::RecEvent,
+// HudMessageAnalyzer::Update, CustomRendererManager::RecvEvent, InGame::Update, GuiModule::Update)
+// -- HudMessageAnalyzer::HandleOvertake / HandleFinishRace are DWARF-only. (Upgraded from the
+// BrnGuiDemangledEventTypes.h u8[8] placeholders, removed there.)
+struct GuiOvertakeEvent
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00  DWARF :3878
+    u8                  muNewPosition;          // +0x04  DWARF :3879 (1-based race place)
+
+    s32 GetEventType() const { return 371; }
+};
+static_assert(sizeof(GuiOvertakeEvent) == 8, "X360 AddGuiEvent size 8 (id 371)");
+static_assert(__builtin_offsetof(GuiOvertakeEvent, muNewPosition) == 0x04,
+              "X360 position byte @+4 (stb @0x823E2044)");
+
+struct GuiFinishRaceEvent
+{
+    EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x00  DWARF :3895
+    EFinishType         meFinishType;           // +0x04  DWARF :3896
+
+    s32 GetEventType() const { return 372; }
+};
+static_assert(sizeof(GuiFinishRaceEvent) == 8, "X360 AddGuiEvent size 8 (id 372)");
+static_assert(__builtin_offsetof(GuiFinishRaceEvent, meFinishType) == 0x04,
+              "X360 finish type @+4 (stw @0x823E20FC)");
 
 // DWARF :3908 (PS3 GuiEvent<370>; X360 id 375, record 16 bytes). The analyzer parks a
 // copy in mTrophyCarUnlockedEvent (Update id-375 case copies the 2 qwords) and
