@@ -101,10 +101,18 @@ namespace BrnAI
         // See the banner on BrnAIDriver.cpp's IsFinite for the recovered compare sites.
         inline bool IsFiniteU(f32 lfValue) { return lfValue == lfValue; }
 
+        // The planar (x,y) normalise: vrsqrtefp + two Newton-Raphson steps + vmulfp, with NO zero
+        // guard at any console caller (DetermineDriftSteeringAngle 0x827933DC, GetQuickTurnSteering
+        // 0x8277C67C, UpdateQuickTurn 0x8278B168, UpdateBrakingAnticipationData 0x827965AC -- no
+        // vcmpeqfp/vsel after the chain). A zero vector is NaN in every lane on the console
+        // (vrsqrtefp(+0) = +inf; the Newton step's `1 - lenSq * y0^2` is 0 * inf = NaN); here
+        // 1 / sqrt(0) = +inf and 0 * inf = NaN give the same NaN lanes.
+        // ⛔ CORRECTED 2026-09-24 (crash parity FX-TAILS-A item 6, FX-AINAN2 OPEN): this was
+        // `lenSq > 0 ? 1 / sqrt : 0`, an invented guard that answered (0, 0).
         Vector2 Normalize2DU(Vector2 lVector)
         {
             const f32 lfLenSq  = lVector.x * lVector.x + lVector.y * lVector.y;
-            const f32 lfInvLen = (lfLenSq > 0.0f) ? (1.0f / std::sqrt(lfLenSq)) : 0.0f;
+            const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
             Vector2 lResult;
             lResult.x = lVector.x * lfInvLen;
             lResult.y = lVector.y * lfInvLen;
