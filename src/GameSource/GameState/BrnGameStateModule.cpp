@@ -204,6 +204,13 @@ void GameStateModule::Construct()
     mProgressionManager.Construct(&mCarSelectManager, &mStreetManager,
                                   mpTrainingManager, &mStuntManager);
 
+    // The prepare-reply queue, at the console's seat: immediately after ProgressionManager::Construct
+    // (0x8238050C) the console builds EventReceiverQueue<3072,16>::Construct inline on this+0x38BC0 --
+    // buffer = +0x18, 0xC00, align 0x10 (0x82380514..0x8238052C) -- and calls
+    // BaseEventReceiverQueue::Clear (0x82380530). It used to be a one-shot at the top of Prepare
+    // whose banner blamed the missing ClearData; ClearData never touches it. [FX-TAILS-A 2026-09-24]
+    mReceiverQueue.Construct();
+
     mStuntManager.Construct(&mProgressionManager, &mTriggerQueryManager, &mModeManager,
                             mpTrainingManager, this);
 
@@ -262,31 +269,14 @@ void GameStateModule::Construct()
     // region, CgsStack.h:177) is the X360 witness that the container is this type.
     mShowtimePendingTrafficIndexStack.Construct();
 
-    // ⭐ [gateui r4] CONSTRUCT INSURANCE (verify_r3_fix3bridge NOTE-2). The round-3 carry-queue
-    // gate narrowed the producer to E_MGS_IN_GAME, so the FIRST in-game pre-world leg now reads
-    // an mLastActiveRaceCarInterface that has never been written (round 2 refreshed it on every
-    // loading sub-step). Nothing else clears it either: the interface's default ctor is an
-    // empty user-provided `{}`, so mePlayerActiveRaceCarIndex / mbIsPlayerCarActive have no
-    // initialiser. It is safe TODAY only by accident -- BrnMain.cpp:45 is
-    // `static BrnGame::BrnGameModule gGameModule;`, i.e. static storage, i.e. zero-init, i.e.
-    // IsPlayerCarActive() false for exactly one sub-step. The day that allocation moves to the
-    // boot allocator (which BrnMain.cpp:23 names as the console shape) a garbage-true
-    // IsPlayerCarActive() sends GetPlayerRaceCarState() into maRaceCarStates[garbage].
-    // Clear() is the interface's OWN X360 body (0x8227D550) and lands exactly the state the
-    // readers expect: index -1, engine state COUNT, mbIsPlayerCarActive false.
-    mLastActiveRaceCarInterface.Clear();
-
-    // ⭐ [stuntrace waveB agent 9] SAME INSURANCE FOR THE GLOBAL SNAPSHOT, and for the same reason.
-    // The console pairs the two Clears back to back in GameStateModule::ClearData @0x8236B3A8
-    // (`RCEntityActiveRaceCarOutputInterface::Clear(a1 + 235488);
-    //   RCEntityGlobalRaceCarOutputInterface::Clear(a1 + 245968);`), and ClearData is not
-    // reconstructed here either. Without this, ModeManager::GlobalToActiveRaceCarIndex (which is
-    // the interface's own maeActiveRaceCarIndices lookup) would read indeterminate slot indices and
-    // hand a garbage active index to the checkpoint and results paths. Clear() lands the console's
-    // own "no data" state: every active-index slot E_ACTIVE_RACE_CAR_INDEX_INVALID, so the readers
-    // fire the console's own range asserts instead of indexing on garbage.
-    // DELETE-WHEN PostWorldUpdate's snapshot leg lands (it XMemCpy's both interfaces).
-    mLastGlobalRaceCarInterface.Clear();
+    // ✅ [FX-TAILS-A 2026-09-24] The two "construct insurance" Clears that sat here
+    // (mLastActiveRaceCarInterface / mLastGlobalRaceCarInterface) are RETIRED: they stood in for
+    // GameStateModule::ClearData @0x8236B3A8, whose first two calls they are
+    // (RCEntityActiveRaceCarOutputInterface::Clear(+0x397E0) @0x8236B430,
+    // RCEntityGlobalRaceCarOutputInterface::Clear(+0x3C0D0) @0x8236B43C). ClearData now runs at the
+    // console's seat below, right after DeveloperChallengeManager::Construct, and again at Prepare's
+    // START stage -- so the snapshots hold the interfaces' own "no data" state (index -1, every
+    // active-index slot E_ACTIVE_RACE_CAR_INDEX_INVALID) before any reader runs.
 
     // Restore StreetManager's full initialization before Prepare loads its data.
     // The road-display slice owns the original road identity/timeout state;
@@ -308,12 +298,98 @@ void GameStateModule::Construct()
     mDeveloperChallengeManager.Construct(&mProgressionManager, &mStreetManager,
                                          mModeManager.GetScoringSystem(), this);
 
+    // ClearData at the console's seat: `mr r3, r31 ; bl ClearData` @0x823807A8, the call right after
+    // DeveloperChallengeManager::Construct (0x82380794). [FX-TAILS-A 2026-09-24]
+    // ⓘ The console's one store between the two (`stbx r24(=1), r31, 0x32DC4` @0x823807A4) is
+    // mbIsFirstUpdate (DWARF :272) -- this tree's mbSendSetupPlayerCarPending, which it arms at the
+    // end of Prepare instead; that seat is recorded as a follow-up, not changed here.
+    ClearData();
+
     // DELETE-WHEN those two closures land (StreetManager::Construct additionally needs a
     // RoadRulesManager member, DWARF :229 / X360 this+183592, for its third argument) -- and
     // then the WireOwnerPointers call above, the helper itself, and the `= 0` initialisers
     // backing it all go with them:
     //     (mAchievementManager.Construct -- DONE above, 2026-09-03)
     //     mStreetManager.Construct(this, &mProgressionManager, &mRoadRulesManager);
+}
+
+// ----------------------------------------------------------------------------
+// GameStateModule::ClearData  (X360 0x8236B3A8; DWARF BrnGameStateModule.h:688 private, .cpp:365)
+// [FX-TAILS-A 2026-09-24] It had no body on PC; its values rode as member initialisers and two
+// "construct insurance" Clears. Two callers, both unconditional: Construct @0x82380388 (0x823807A8,
+// right after DeveloperChallengeManager::Construct) and Prepare @0x8239E578 case 0 (0x8239E6A8).
+// Every store it makes, by address (the X360 order; the stores are independent of each other):
+//   0x8236B3D4 / 0x8236B3E8  std 0    +0x456D8 / +0x456E0     mActivePlayerCarId / mActivePlayerWheelId
+//   0x8236B400 / 0x8236B404  stw -1   +0x32DB0 / +0x32DB4     mePlayerActiveRaceCarIndex / miPlayerGlobalRaceCarIndex
+//   0x8236B410               stw -1   +0x32DAC                muNetworkGameRandomSeed
+//   0x8236B418 / 0x8236B41C  stw 0    +0x32DBC / +0x32DC0     maRaceCarCrashing[0..7]
+//   0x8236B420..0x8236B42C   std 0 x3, stw 0  +0x32D90..      mafRivalTailingTimes[7]
+//   0x8236B430 / 0x8236B43C  RCEntity{Active,Global}RaceCarOutputInterface::Clear(+0x397E0 / +0x3C0D0)
+//   0x8236B444..0x8236B478   35 x { stfs FLT_MAX (flt_82CDB9AC = 0x7F7FFFFF) ; sth 0x7FFF } at
+//                            +0x441E0 + 0x140C / + 0x1498 = AICarOutputInterface::Construct inlined on
+//                            mLastAICarOutputInterface (the same loop OutputBuffer::Construct inlines)
+//   0x8236B484               VariableEventQueue<1536,16>::Clear(+0x3CA40)  mGameEventCarryQueue
+//   0x8236B4A4               stw 0    +0x3D058  the takedown event cache's miLength (EventQueue::Clear)
+//   0x8236B4AC / 0x8236B4BC  stb 0    +0x38B71 / +0x38B72     mbWaitingForStreaming / mbWaitingToPutPlayerInJunkyard
+//   0x8236B4CC               std 0    +0x38B80                mCachedCarSelectChangedAction.mJunkyardId
+//   0x8236B4D4               stw 0    +0x38B6C                miStreamingWaitCountdown
+//   0x8236B4E0 / 0x8236B4F0  stw 0    +0x38B60 / +0x38B64     miSimPauseFlags / meControllerState
+//   0x8236B4FC..0x8236B514   stb 1 x4 +0x38B73..+0x38B76      mabModuleStreamingComplete[4]
+//   0x8236B534               stb 0    +0x45761                mbWasInShowtimeGameMode
+//   0x8236B53C               stw 0    +0x45758  mShowtimePendingTrafficIndexStack's miLength (Stack::Clear)
+//   0x8236B548               sth -1   +0x4575C                muShowtimeRequestedTrafficIndex
+//   0x8236B550               stw 1    +0x45744                miShowtimePendingFrameDelay
+//   0x8236B554 / 0x8236B558  stw -1   +0x456C8 / +0x456CC     muCachedJunctionLightTriggerId / muCachedJunctionLogicBoxId
+//   0x8236B55C..0x8236B564   stb 0 x3 +0x456D0..+0x456D2      mbJunctionNewlyDiscovered / mbCanEnterEventAtJunction /
+//                                                             mbAtJunctionWithEvent
+// ----------------------------------------------------------------------------
+namespace
+{
+    // DWARF BrnGameStateModule.cpp:154 -- the console TU's file-scope constant (this file and
+    // GameStateModule_Showtime.cpp are both splits of it): ClearData's `sth r6(-1)` @0x8236B548.
+    const u16 K_INVALID_VEHICLE_INDEX = 65535;
+}
+
+void GameStateModule::ClearData()
+{
+    mActivePlayerCarId   = 0;
+    mActivePlayerWheelId = 0;
+
+    mePlayerActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    miPlayerGlobalRaceCarIndex = ::E_GLOBAL_RACE_CAR_INDEX_INVALID;
+    muNetworkGameRandomSeed    = 0xFFFFFFFFu;
+
+    for (s32 liRaceCar = 0; liRaceCar < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liRaceCar)
+        maRaceCarCrashing[liRaceCar] = false;
+    for (u32 luRival = 0; luRival < sizeof(mafRivalTailingTimes) / sizeof(mafRivalTailingTimes[0]); ++luRival)
+        mafRivalTailingTimes[luRival] = 0.0f;
+
+    mLastActiveRaceCarInterface.Clear();
+    mLastGlobalRaceCarInterface.Clear();
+    mLastAICarOutputInterface.Construct();
+
+    mGameEventCarryQueue.Clear();
+    mpTakedownCache->mTakedownEventQueue.Clear();
+
+    mbWaitingForStreaming                     = false;
+    mbWaitingToPutPlayerInJunkyard            = false;
+    mCachedCarSelectChangedAction.mJunkyardId = 0;
+    miStreamingWaitCountdown                  = 0;
+    miSimPauseFlags                           = 0;
+    meControllerState                         = E_CONTROLLERSTATE_NOT_IN_GAME;
+    for (u32 luModule = 0; luModule < sizeof(mabModuleStreamingComplete) / sizeof(mabModuleStreamingComplete[0]); ++luModule)
+        mabModuleStreamingComplete[luModule] = true;
+
+    mbWasInShowtimeGameMode = false;
+    mShowtimePendingTrafficIndexStack.Clear();
+    muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
+    miShowtimePendingFrameDelay     = 1;
+
+    muCachedJunctionLightTriggerId = 0xFFFFFFFFu;
+    muCachedJunctionLogicBoxId     = 0xFFFFFFFFu;
+    mbJunctionNewlyDiscovered      = false;
+    mbCanEnterEventAtJunction      = false;
+    mbAtJunctionWithEvent          = false;
 }
 
 void GameStateModule::Destruct()
@@ -397,7 +473,7 @@ void GameStateModule::Destruct()
 //            2026-09-22).
 //   stage 26 -> the car-select / progression list publish.
 // Every other stage logs once and advances, naming its X360 call. In console order they are:
-//   0  START                    ClearData @(not exported by name) + DebugComponent::Register x2
+//   0  START                    ClearData @0x8236B3A8 + DebugComponent::Register x2
 //                               (this+208544 / this+208376)
 //   1  MANAGER                  ModuleSingleBuffered::Prepare  -- see the mbIsNewModule note below
 //   2  MODE_DATA_ACQUIRING      pass-through on the console too (it only sets the stage word)
@@ -436,8 +512,9 @@ void GameStateModule::Destruct()
 // "This is a new module type" assert and returns null, so Prepare would return false FOR EVER
 // and GamePrepare would wedge. The GameState module is a new-style (IOBuffer) module on the
 // console, and the committed GameDataModule::Prepare carries the identical line with the same
-// reasoning (BrnGameDataModule.cpp:51, "[reliable] set before base Prepare"). The console sets
-// it inside ClearData, which is stage 0's deferral.
+// reasoning (BrnGameDataModule.cpp:51, "[reliable] set before base Prepare"). ⓘ It is NOT set
+// by ClearData @0x8236B3A8, as this line used to say (every one of ClearData's stores is listed at
+// its body; none is a base-class word); the console's writer of the flag is not traced here.
 // ----------------------------------------------------------------------------
 // The GameData reply ids the two live list stages match (BrnGameDataModule's dispatch stages
 // them at the slot: ProcessGetVehicleListRequest -> 52, ProcessGetWheelListRequest -> 59).
@@ -536,14 +613,7 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // X360: `*(this + 292289) = 1` at entry, cleared at the single exit.
     mbIsUpdating = true;
 
-    if (!mbReceiverQueueConstructed)
-    {
-        // The console's mReceiverQueue is Construct'd by ClearData (stage 0's deferral). Every
-        // stage below names it as its reply target, and AddEvent on an unconstructed receiver
-        // queue writes through a null buffer base. One-shot here until ClearData lands.
-        mbReceiverQueueConstructed = true;
-        mReceiverQueue.Construct();
-    }
+    // (mReceiverQueue, every stage's reply target, is Constructed by Construct -- see there.)
 
     lpOutputBuffer->LockForWrite();
 
@@ -552,9 +622,12 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     switch (mePrepareStage)
     {
     case E_PREPARESTAGE_START:
+        // X360 case 0 (0x8239E6A4): `mr r3, r31 ; bl ClearData` @0x8239E6A8, then the two
+        // DebugComponent::Register calls (this+0x32EA0 @0x8239E6B4, this+0x32DF8 @0x8239E6C0).
+        ClearData();
         mResetPlayerDebugComponent.Register();
-        // ClearData and the separate GameStateDebugComponent remain deferred here.
-        LogPrepareStageOnce(0, "Reset Player Car registered; ClearData + GameState debug deferred");
+        // The separate GameStateDebugComponent (this+0x32DF8) remains deferred here.
+        LogPrepareStageOnce(0, "ClearData + Reset Player Car registered; GameState debug deferred");
         // fall through
 
     case E_PREPARESTAGE_MANAGER:

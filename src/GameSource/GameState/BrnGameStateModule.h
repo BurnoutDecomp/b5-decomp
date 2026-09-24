@@ -1590,6 +1590,12 @@ private:
     // 198) from its VehicleListEntry. Sole caller: OnSpecialEventPlayerCarChange.
     void  ApplyCarStats(CgsID lCarId, GameStateModuleIO::GameActionQueue* lpQueue);
 
+    // X360 0x8236B3A8, DWARF BrnGameStateModule.h:688 (private) / .cpp:365. Resets the module's
+    // per-session state: the player car / race-car indices, the cached interfaces, the streaming and
+    // pause words, the showtime hand-off and the junction cache. Two callers, both unconditional:
+    // Construct (0x823807A8) and Prepare's START stage (0x8239E6A8). [FX-TAILS-A 2026-09-24]
+    void  ClearData();
+
     // The shared body of Prepare's "receive a resident data list" stages (vehicle reply 52,
     // wheel reply 59). The console writes each one out longhand; they differ only in the reply
     // id and their two baked assert lines. Returns false while the reply has not arrived.
@@ -1600,9 +1606,9 @@ private:
     ModeManager         mModeManager;
     // DWARF BrnGameStateModule.h:792 (X360 this+0x32D90..0x32DAB) -- how long each rival has sat on
     // the player's tail (CheckForTailingRivals). [FX-GS2 2026-09-23, G10-D11]
-    // ⚠️ FLAG (initialisation site only, the muNetworkGameRandomSeed precedent below): the console
-    // zeroes it in ClearData @0x8236B3A8 (std 0 at +0/+8/+0x10 and stw 0 at +0x18 from gsm+0x32D90),
-    // which is not reconstructed on this build, so the zeroes are a member initialiser.
+    // ClearData @0x8236B3A8 zeroes it (std 0 at +0/+8/+0x10 and stw 0 at +0x18 from gsm+0x32D90,
+    // 0x8236B420..0x8236B42C) at Construct and at Prepare's START stage [FX-TAILS-A 2026-09-24]; the
+    // member initialiser is the same value for the static-storage window before Construct.
     // ⚠️ CONSOLE QUIRK, KEPT: CheckForTailingRivals walks race-car slots 0..7 with a pointer that
     // steps 4 bytes per slot -- even across the player's own slot (`addi r27, r27, 4` @0x82376384)
     // -- so slot 7 is the word AFTER this 7-entry array, i.e. muNetworkGameRandomSeed.
@@ -1612,12 +1618,10 @@ private:
     // shared RNG, declared immediately ABOVE mePlayerActiveRaceCarIndex by the DWARF and landing in
     // exactly the 4-byte gap the X360 leaves there. See GetNetworkRandomSeed() for the writer and
     // the reader.
-    // ⚠️ FLAG (initialisation site only, same precedent as mpCurrentCarData / mpOutputBuffer): the
-    // console seeds it to -1 in GameStateModule::ClearData @0x8236B3A8 (`*(a1 + 208300) = -1`,
-    // NOT 0), and ClearData is not reconstructed on this build. GameStateModule is a by-value
-    // sub-object of BrnGameModule and is not in its ctor init list, so without this initialiser the
-    // word is indeterminate. The value IS the console's -- it is image-cited from ClearData, not a
-    // placeholder zero. DELETE-WHEN ClearData lands.
+    // GameStateModule::ClearData @0x8236B3A8 seeds it to -1 (`stwx r29(-1), r31, 0x32DAC`
+    // @0x8236B410, NOT 0) at Construct and at Prepare's START stage [FX-TAILS-A 2026-09-24: ClearData
+    // landed]. The initialiser is the same -1 for the window before Construct (GameStateModule is a
+    // by-value sub-object of BrnGameModule and is not in its ctor init list).
     u32                 muNetworkGameRandomSeed = 0xFFFFFFFFu;
     // DWARF BrnGameStateModule.h:794 (X360 this+208304).
     EActiveRaceCarIndex mePlayerActiveRaceCarIndex;
@@ -1650,10 +1654,10 @@ private:
     // `EPauseFlags mePauseFlags` (:805), so the name and the neighbour agree independently.
     // Read by IsControllerActive(); written by ClearData @0x8236B3A8 and Destruct @0x82375420
     // (both to 0) and by the four ModeManager / ProcessGameEvents sites listed on the enum.
-    // ⓘ Nothing on this build writes it yet -- ModeManager's mode machine and ProcessGameEvents'
-    // case 16/106 arms are not reconstructed -- so it holds its zero-init
-    // E_CONTROLLERSTATE_NOT_IN_GAME, which is the CORRECT state for the free-roam the junkyard
-    // handover leaves the player in, and which IsControllerActive() reports as active.
+    // ⓘ Only ClearData writes it on this build (0, at Construct and Prepare's START stage) --
+    // ModeManager's mode machine and ProcessGameEvents' case 16/106 arms are not reconstructed --
+    // so it holds E_CONTROLLERSTATE_NOT_IN_GAME, which is the CORRECT state for the free-roam the
+    // junkyard handover leaves the player in, and which IsControllerActive() reports as active.
     EControllerState    meControllerState = E_CONTROLLERSTATE_NOT_IN_GAME;
     // [stuntrace waveB fix round, 2026-08-26] X360 this+232296 (0x38B68) -- the word immediately
     // after meControllerState, requested by three wave-B partfiles. OFFSET ARBITRATED FROM THE ASM
@@ -1718,8 +1722,10 @@ private:
     // (`if (mbWaitingForStreaming && --miStreamingWaitCountdown == 0) post action 192`) counts it
     // down; the world modules answer 192 with StreamingCompleteEvent (9) per module and
     // ProcessStreamingCompleteEvent @0x82390200 tallies the four slots into FinishStreaming.
-    // Construct @0x82384A78 seeds mbWaitForStreaming = 1; ClearData @0x82385AF0 seeds the four
-    // slots to 1 and the countdown/waiting to 0.
+    // Construct @0x82380388 seeds mbWaitForStreaming = 1; ClearData @0x8236B3A8 seeds the four
+    // slots to 1 (`stb r10(1)` x4, 0x8236B4FC..0x8236B514) and the countdown / waiting byte to 0
+    // (0x8236B4D4 / 0x8236B4AC). (The addresses this line used to cite, 0x82384A78 / 0x82385AF0,
+    // are mid-function instructions of other bodies.)
     s32  miStreamingWaitCountdown = 0;                 // +232300 (0x38B6C)
     bool mbWaitForStreaming = true;                    // +232304 (:809)
     bool mbWaitingForStreaming = false;                // +232305 (:810)
@@ -1883,9 +1889,10 @@ private:
     TriggerQueryManager mTriggerQueryManager;
 
     // DWARF BrnGameStateModule.h:317 (X360 this+232384). The ONE reply queue every prepare
-    // stage names as the reply target for its resource request.
+    // stage names as the reply target for its resource request. Constructed by Construct
+    // @0x82380388 right after ProgressionManager::Construct (the inlined capacity / buffer stores
+    // at this+0x38BC0 and BaseEventReceiverQueue::Clear, 0x82380510..0x82380530).
     CgsModule::EventReceiverQueue<3072, 16> mReceiverQueue;
-    bool                                    mbReceiverQueueConstructed = false;
 
     // ⭐ DWARF BrnGameStateModule.h:280 (X360 this+183712 == 0x2CDA0). The junkyard car-select
     // state machine, held BY VALUE as the console holds it. Constructed from this module's
@@ -2018,9 +2025,10 @@ private:
     // `rlwinm r9, r11, 0,8,23 / cmplw 0xFFFF00` (hull, bits 8..23) and `clrlwi r11,r11,24 /
     // cmplwi 0xFF` (light index, bits 0..7) @0x82390DEC..0x82390E0C -- which is the same
     // LightTriggerId::IsValid() TrafficData::GetJunctionLogicBoxForTrafficLight asserts.
-    // ⚠️ FLAG (initialisation site only, the muNetworkGameRandomSeed precedent): the console
-    // seeds it in the un-reconstructed ClearData/Construct pair; the value here is the one the
-    // departure arm itself restores, so it is image-cited rather than a placeholder.
+    // ClearData @0x8236B3A8 seeds it (and muCachedJunctionLogicBoxId) to -1 (`stwx r29(-1)`
+    // @0x8236B554 / 0x8236B558) and the three junction bools to 0 (0x8236B55C..0x8236B564) at
+    // Construct and Prepare's START stage [FX-TAILS-A 2026-09-24]; the initialisers carry the same
+    // values -- the ones the departure arm itself restores -- for the window before Construct.
     u32  muCachedJunctionLightTriggerId = 0xFFFFFFFFu;
 
     // X360 +284364 (0x456CC). JunctionLogicBox::muID of that same junction (`lwz r9, 0(r31)` off
@@ -2195,8 +2203,8 @@ private:
     // decrements this every frame the stack is non-empty (`addic. r11, r11, -1` @0x823810DC) and
     // pops only when it is no longer positive, then re-seeds it to KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES
     // (2, `li r11, 2` @0x82381124). Seeded 1 by GameStateModule::ClearData @0x8236B3A8 (`li r10, 1`
-    // @0x8236B4DC, `stwx r10` @0x8236B550), which Construct and Prepare both run; ClearData has no
-    // body on this build, so its value rides here as the initialiser.
+    // @0x8236B4DC, `stwx r10` @0x8236B550), which Construct and Prepare both run (landed FX-TAILS-A
+    // 2026-09-24); the initialiser is the same 1 for the window before Construct.
     s32 miShowtimePendingFrameDelay = 1;
 
     // X360 +284508 (0x4575C), DWARF :864. The index whose traffic-type answer is outstanding;
