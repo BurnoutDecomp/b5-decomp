@@ -76,9 +76,10 @@ namespace Deformation
 
         // BodyPartBBoxSpec::HackCheckHandedness @ 0x825E6EA0. Tests the signed
         // triple product (winding) of the orientation's basis rows and, when it is
-        // left-handed, mirrors every skinned point through
-        // BBoxPointSkinData::HackSwapHandedness and flips a sign bit lane in the basis.
-        // KEYSTONE: VMX pipeline -- see the banner in BrnBodyPartBBoxSpec.cpp.
+        // left-handed (or NaN), mirrors every skinned point through
+        // BBoxPointSkinData::HackSwapHandedness with the original basis, then negates
+        // basis row 0 (all four lanes). Reconstructed from the VMX pipeline (crash parity
+        // G16-D1) -- see the banner in BrnBodyPartBBoxSpec.cpp.
         // Caller (X360 xref): StreamedDeformationSpec::FixUp.
         void HackCheckHandedness();
     };

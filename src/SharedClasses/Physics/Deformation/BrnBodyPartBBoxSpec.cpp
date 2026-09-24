@@ -3,59 +3,29 @@
 // ============================================================================
 // BrnPhysics::Deformation::BodyPartBBoxSpec::HackCheckHandedness @ 0x825E6EA0
 //
-// KEYSTONE -- NOT reconstructed. The X360 body is a hand-vectorised AltiVec/
-// VMX128 pipeline that computes the SIGN of the box basis's scalar triple
-// product (its winding / handedness) and, only when it is left-handed, mirrors
-// every skinned corner point:
-//
-//   lvx128 v0  <- mOrientation.xAxis      (basis row 0)
-//   lvx128 v12 <- mOrientation.yAxis      (basis row 1)
-//   lvx128 v11 <- mOrientation.zAxis      (basis row 2)
-//   vpermwi128 v10, v0,  0x63             (lane reshuffle of row 0)
-//   vpermwi128 v12, v12, 0x63             (lane reshuffle of row 1)
-//   vmulfp128  v0,  v0,  v12              (row0 * row1')
-//   vnmsubfp   v0,  v10, v0,  v9          (cross-product accumulation)
-//   vpermwi128 v0,  v0,  0x63
-//   vmsum3fp128 v0, v0,  v11              (dot with row 2 -> scalar triple prod)
-//   vcmpgefp   v0, v0, 0                  (sign tests against the zero splat)
-//   vcmpeqfp.  v0, v0, 0                  (CR record -> the branch predicate)
-//   if ( left-handed ) {
-//       for ( i = 0; i < 8; ++i )
-//           maCornerSkinData[i].HackSwapHandedness( mOrientation );   // r3 += 0x20
-//       mCentreSkinData.HackSwapHandedness( ... );                    // r31 + 0x140
-//       mJointSkinData.HackSwapHandedness( ... );                     // r31 + 0x160
-//       // vspltisw -1; vslw; vxor; stvx128 -> flip a sign-bit lane in row 0
-//   }
-//
-// Per the project rule on hand-vectorised VMX: a multi-stage pipeline built from
-// vpermwi128 lane-permute immediates (0x63), vnmsubfp, vmsum3fp128, and a vsel-
-// style vcmpgefp/vcmpeqfp predicate does NOT reliably lower to scalar C++, and
-// inventing a per-lane cross-product/permutation formula would be fabrication.
-// The dependent BBoxPointSkinData::HackSwapHandedness is itself an already-
-// documented VMX keystone stub, so the inner mirror is likewise unrecoverable
-// here. The body is therefore left as an HONEST no-op stub: it neither corrupts
-// the basis nor the points; it simply does not yet evaluate the handedness test
-// or apply the mirror, pending a VMX-aware reconstruction pass that decodes the
-// 0x63 permute lanes and the sign-bit flip. The named operands are modelled so
-// the declaration and the StreamedDeformationSpec::FixUp call site compile and
-// link cleanly.
-//
-// ⭐⭐ 2026-09-05 (crash wave 2): THE COST OF THIS STUB IS MEASURED, AND IT IS ZERO ON
-// SHIPPED DATA. The mirror arm only runs when the streamed box basis is LEFT-handed. Scanning
-// every ported VEH_*_AT.BIN -- 429 cars, 11,258 BodyPartBBoxSpec records -- by the same signed
-// triple product this function computes (dot(cross(row0, row1), row2)):
-//     right-handed  10829
-//     LEFT-handed       0
-//     degenerate      429   (exactly one all-zero placeholder IK part per car; its whole
-//                            orientation is zero, so there is no handedness to test)
-// So HackCheckHandedness takes its early-out on every real record the game loads, the mirror
-// never fires, and the dependent BBoxPointSkinData::HackSwapHandedness keystone is unreachable
-// in practice. That does NOT make either body optional -- it makes the stub non-blocking, and
-// it means a bbox orientation bug can never be blamed on this file without first finding a
-// left-handed record. Re-measure if new vehicle content is ever authored.
+// RECONSTRUCTED 2026-09-24 (crash parity G16-D1; decoded by FX-DEFORM-LAT, re-verified against
+// the ARTIST words and landed by FX-XLANE). The old "KEYSTONE -- not reconstructed" banner is
+// retired: every VMX128 field decodes (tools/re/vmx128.py + the classic VA field order
+// D = A*C + B, so vnmsubfp D,A,B,C == D = B - A*C):
+//   0x825E6EC0/C4/D4  lvx128 v0/v12/v11 <- mOrientation rows 0/1/2 ; v13 = vspltisw 0
+//   0x825E6EC8/D0     vpermwi128 0x63 (lanes 1,2,0,3) of row0 -> v10, of row1 -> v12 ; v9 = row1
+//   0x825E6EDC        v0 = row0 * perm(row1)
+//   0x825E6EE0        vnmsubfp v0,v10,v0,v9 : v0 = v0 - perm(row0)*row1 -> (c.z, c.x, c.y)
+//   0x825E6EE4        vpermwi128 0x63 -> cross(row0, row1)
+//   0x825E6EE8        vmsum3fp128 with row2 -> T = dot3(cross(row0,row1), row2)
+//   0x825E6EEC/F0     vcmpgefp T>=0 ; vcmpeqfp. against 0 ; mfocrf CR6, all-true bit ; beq skip
+//                     => the mirror runs iff !(T >= 0): a LEFT-handed (or NaN) basis.
+//   0x825E6F04..F3C   HackSwapHandedness(this+0x40+0x20*i, this) for the 8 corners, then the
+//                     centre (+0x140) and the joint (+0x160) -- all with the ORIGINAL basis
+//   0x825E6F40..F50   vspltisw -1 ; vslw (-> 0x80000000 lanes) ; vxor ; stvx128 -> row0 = -row0
+//                     (all four lanes, sign-bit flip), AFTER the swaps.
+// Measured cost on shipped content: 0 left-handed records among ~10.8k real BodyPartBBoxSpecs in
+// the 429 retail VEH_*_AT.BIN (the 429 all-zero placeholders give T = +0 -> no mirror, as on the
+// console). So this is 1:1 completeness; any non-retail left-handed or NaN basis now mirrors.
 // ⚠️ The same scan pins mOrientation's row 3 (the row this header used to call SIMD padding):
 // it is (0, 0, 0, 1) in 10,829 of 10,829 real records -- a genuine affine translation row whose
-// value happens to be zero. PhysicalBodyPart::CalculateBoundingBoxExtents loads and uses it.
+// value happens to be zero. PhysicalBodyPart::CalculateBoundingBoxExtents loads and uses it, and
+// HackSwapHandedness uses it as the mirror's origin T.
 // ============================================================================
 
 namespace BrnPhysics
@@ -64,13 +34,28 @@ namespace Deformation
 {
     void BodyPartBBoxSpec::HackCheckHandedness()
     {
-        // KEYSTONE STUB: VMX triple-product handedness test + point mirror not
-        // reconstructed. Reference the operands so the signature is honest about
-        // what it consumes/produces without fabricating the per-lane math.
-        (void)mOrientation;
-        (void)maCornerSkinData;
-        (void)mCentreSkinData;
-        (void)mJointSkinData;
+        const Vector3& lrRow0 = mOrientation.xAxis;
+        const Vector3& lrRow1 = mOrientation.yAxis;
+        const Vector3& lrRow2 = mOrientation.zAxis;
+        const f32 lfCrossX = lrRow0.y * lrRow1.z - lrRow0.z * lrRow1.y;
+        const f32 lfCrossY = lrRow0.z * lrRow1.x - lrRow0.x * lrRow1.z;
+        const f32 lfCrossZ = lrRow0.x * lrRow1.y - lrRow0.y * lrRow1.x;
+        const f32 lfTripleProduct = lfCrossX * lrRow2.x + lfCrossY * lrRow2.y + lfCrossZ * lrRow2.z;   // vmsum3fp128
+
+        if ( !(lfTripleProduct >= 0.0f) )   // vcmpgefp / vcmpeqfp. / CR6 all-true : T < 0 or NaN
+        {
+            for ( s32 li = 0; li < KI_NUM_BBOX_CORNER_POINTS; ++li )
+            {
+                maCornerSkinData[li].HackSwapHandedness( mOrientation );
+            }
+            mCentreSkinData.HackSwapHandedness( mOrientation );
+            mJointSkinData.HackSwapHandedness( mOrientation );
+
+            mOrientation.xAxis.x = -mOrientation.xAxis.x;   // vxor 0x80000000, all four lanes
+            mOrientation.xAxis.y = -mOrientation.xAxis.y;
+            mOrientation.xAxis.z = -mOrientation.xAxis.z;
+            mOrientation.xAxis.w = -mOrientation.xAxis.w;
+        }
     }
 }
 }
