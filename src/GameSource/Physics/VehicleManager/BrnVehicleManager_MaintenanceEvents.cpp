@@ -14,9 +14,9 @@
 // SetAllNetworkRaceCarsHidden            @0x825E9380  (175)  BODIED THIS WAVE
 // PhysicalTrafficManager::ProcessTrafficMaintenanceEvents @0x82649768 (246)  BODIED 2026-08-22
 //       (wave T3 round 1, cluster C2 -- the gate is DELETED; its eight arms live here and in the
-//        two sibling slices BrnPhysicalTrafficManager_Create.cpp / _Remove.cpp. Two of the eight,
-//        ProcessTrafficEvents and CheckForTrafficHittingWater, stay named gates at the bottom of
-//        this file: both are crash-side and both are parked for round 1.)
+//        two sibling slices BrnPhysicalTrafficManager_Create.cpp / _Remove.cpp. The last two
+//        gates are gone too: ProcessTrafficEvents was bodied 2026-08-29 (_TrafficEvents.cpp) and
+//        CheckForTrafficHittingWater @0x8261DDF0 is bodied at the bottom of this file, G35-D1.)
 //   ProcessCreateEvents                    @0x82616770  (1067) -> its OWN slice TU (see below)
 //
 // Slice TU (home BrnVehicleManager.cpp is still unmounted) -- the same shape as the sibling
@@ -132,6 +132,13 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"  // BrnWorld::ERaceCarType
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint / gxMessageFilterFlags
+#include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                // gbReadSurfaceProperties / KAB_SURFACE_IS_WATER / KI_MAX_NUM_SURFACES
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // GetSimpleVehicleBox / GetAboveGroundTestResult
+#include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"                   // CgsGeometric::Box
+#include "SharedClasses/World/BrnCollisionTag.h"                                   // BrnWorld::KU_COLLISION_MASK_SURFACE_ID
+#include "rw/math/vpu/vector3_operation.h"                                         // Vector3 * f32
+#include <cmath>                                                                   // std::fabs
+#include <cstdlib>                                                                 // std::getenv ([T-water] witness)
 
 namespace
 {
@@ -796,15 +803,119 @@ namespace Vehicle
     //    Mount BrnPhysicalTrafficManager_TrafficEvents.cpp in tools/build/build_game_exe.bat or
     //    the call above is an LNK2019 at exe link.
 
-    // GATE PhysicalTrafficManager::CheckForTrafficHittingWater @0x8261DDF0 (347)
-    //    blocker: needs the water-volume query at 0x825C0758's sibling seam plus the crash
-    //    sub-tree it removes cars through; parked for wave T3 round 1.
-    //    DELETE-WHEN the water/crash wave lands.
+    // =============================================================================================
+    // PhysicalTrafficManager::CheckForTrafficHittingWater  @0x8261DDF0  (347 insns)  -- G35-D1
+    //
+    // BODIED 2026-09-24 (lane FX-TRAFFIC2). The gate that stood here blamed "the water-volume query
+    // at 0x825C0758" -- that address is AddTrafficRemovedEvent, and the console body calls no water
+    // query: it reads the car's own down-ray result. Every callee has a body (GetSimpleVehicleBox,
+    // AddTrafficRemovedEvent, RemoveTrafficVehicle), so no traffic car was ever removed for water.
+    //
+    // Straight off the ARTIST asm (DecFIGS DWARF BrnPhysicalTrafficManager.cpp:4193.. for the local
+    // names: liTraffic, lbHitWater, lpTrafficVehicle, lpTrafficPhysics, lpAboveGroundTest,
+    // lCollisionTag, lu8SurfaceId, lTrafficBox, lHalfExtentsWorld, lvfLowestPointWorldSpace):
+    //   0x8261DE14..0x8261DE88  three null asserts (.cpp 0x1063..0x1065 == :4195..:4197)
+    //   0x8261DE8C..0x8261DEF0  GetFirstNonZeroBit of mUsedTrafficVehicles (this+0x19868)
+    //   0x8261DF80              lbHitWater = false (r26)
+    //   0x8261DF84..0x8261DFB4  GetTrafficVehicle (h 0x2E5 assert) ; lwz 0x1C = mpVehicleBody
+    //   0x8261DFB8/BC           +0x570 mAboveGroundTestResult ; lbz 0x28 mbValid == 0 -> skip
+    //   0x8261DFC8..0x8261DFDC  lwz 0x24 (mCollisionTag) ; lhz of its LOW halfword ; srwi 4 ;
+    //                           clrlwi 26 -> the 6-bit surface id
+    //   0x8261DFE0..0x8261E000  assert gbReadSurfaceProperties (byte_82FB7DF0, .cpp 0x1086 == :4230)
+    //   0x8261E00C              lbzx byte_82FB7DF4[id] == KAB_SURFACE_IS_WATER[id] ; 0 -> skip
+    //   0x8261E020              GetSimpleVehicleBox(lTrafficBox)
+    //   0x8261E05C..0x8261E0DC  lHalfExtentsWorld = the box rows * the half-dims (x, y, z);
+    //                           lowest = w.y - |hx.y| - |hy.y| - |hz.y| (vandc with the sign mask,
+    //                           then three vsubfp in that order)
+    //   0x8261E0E0              stvx128 -> this + 16*(i + 0x19B5) == mavfLowestPointWorldSpace[i]
+    //   0x8261E0E4..0x8261E108  vsubfp KVF_RESET_ON_WATER_HEIGHT (unk_82FB92D0 = splat 0.25) ;
+    //                           vcmpgefp. splat(hit.y), that ; CR6 all-true -> lbHitWater = true
+    //   0x8261E118..0x8261E15C  AddTrafficRemovedEvent(maTrafficEntityIDs[i] (this+4*(i+0x64F0)),
+    //                           mePhysicalTrafficState (lwz 0x20))
+    //   0x8261E160..0x8261E174  RemoveTrafficVehicle((u8)i, outReq, deform, byte_82FB7DF1) --
+    //                           a .data bool that is 0 in the image with no writer (findinit), and
+    //                           r7 is dead in the callee; passed as the image's false, as the
+    //                           sibling RecycleTrafficVehicle does.
+    //   then GetNextNonZeroBit on the LIVE bit array (RemoveTrafficVehicle clears the bit).
+    // =============================================================================================
     void PhysicalTrafficManager::CheckForTrafficHittingWater(
-        VehicleManagerOutputInterface*, VehicleOutputRequestInterface*,
-        BrnPhysics::Deformation::DeformationInputInterface*)
+        VehicleManagerOutputInterface* lpManagerOutputInterface,
+        VehicleOutputRequestInterface* lpOutputRequestInterface,
+        BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        BRN_MAINTENANCE_GATE("PhysicalTrafficManager::CheckForTrafficHittingWater @0x8261DDF0 (347)");
+        CGS_ASSERT(lpManagerOutputInterface != 0, "lpManagerOutputInterface != NULL");   // :4195
+        CGS_ASSERT(lpOutputRequestInterface != 0, "lpOutputRequestInterface != NULL");   // :4196
+        CGS_ASSERT(lpDeformationInterface   != 0, "lpDeformationInterface != NULL");     // :4197
+
+        for (s32 liTraffic = mUsedTrafficVehicles.GetFirstNonZeroBit();
+             liTraffic != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+             liTraffic = mUsedTrafficVehicles.GetNextNonZeroBit(liTraffic))
+        {
+            bool lbHitWater = false;
+
+            PhysicalTrafficVehicle* const lpTrafficVehicle = GetTrafficVehicle(liTraffic);
+            const SimpleVehiclePhysics* const lpTrafficPhysics = lpTrafficVehicle->mpVehicleBody;
+            const AboveGroundTestResult* const lpAboveGroundTest =
+                lpTrafficPhysics->GetAboveGroundTestResult();
+
+            if (lpAboveGroundTest->mbValid)
+            {
+                const CollisionTag lCollisionTag = lpAboveGroundTest->mCollisionTag;
+                const u16 lu16Tag = static_cast<u16>(lCollisionTag.muValue & 0xFFFFu);   // lhz: the low halfword
+                const u8  lu8SurfaceId =
+                    static_cast<u8>((lu16Tag & BrnWorld::KU_COLLISION_MASK_SURFACE_ID) >> 4);   // srwi 4 ; clrlwi 26
+
+                CGS_ASSERT(gbReadSurfaceProperties, "BrnPhysics::Vehicle::gbReadSurfaceProperties");   // :4230
+
+                // [GUARD] host bound, the same one CrashFatalRaceCars carries: the console indexes
+                // the 32-entry KAB_SURFACE_IS_WATER with the raw 6-bit id. DELETE-WHEN the surface
+                // table is widened to 64 or the id is proven < 32.
+                if (lu8SurfaceId < KI_MAX_NUM_SURFACES && KAB_SURFACE_IS_WATER[lu8SurfaceId])
+                {
+                    CgsGeometric::Box lTrafficBox;
+                    lpTrafficPhysics->GetSimpleVehicleBox(lTrafficBox);
+
+                    const Vector3 lvHalfDimensions = lTrafficBox.GetDimensions();
+                    Matrix44Affine lHalfExtentsWorld = lTrafficBox.GetTransform();
+                    lHalfExtentsWorld.xAxis = lHalfExtentsWorld.xAxis * lvHalfDimensions.x;
+                    lHalfExtentsWorld.yAxis = lHalfExtentsWorld.yAxis * lvHalfDimensions.y;
+                    lHalfExtentsWorld.zAxis = lHalfExtentsWorld.zAxis * lvHalfDimensions.z;
+
+                    f32 lfLowestPointY = lTrafficBox.GetTransform().wAxis.y;
+                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.xAxis.y);
+                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.yAxis.y);
+                    lfLowestPointY -= std::fabs(lHalfExtentsWorld.zAxis.y);
+                    const VecFloat lvfLowestPointWorldSpace = { lfLowestPointY, lfLowestPointY,
+                                                                lfLowestPointY, lfLowestPointY };
+
+                    mavfLowestPointWorldSpace[liTraffic] = lvfLowestPointWorldSpace;
+
+                    lbHitWater = lpAboveGroundTest->mIntersectionPosition.y
+                                 >= lvfLowestPointWorldSpace.y - KVF_RESET_ON_WATER_HEIGHT.y;
+                }
+            }
+
+            if (lbHitWater)
+            {
+                // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Capped removal witness.
+                static const bool sbDiag = (std::getenv("BRN_TRAFFIC_DIAG") != 0);
+                static s32 siDiagLinesLeft = 16;
+                if (sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siDiagLinesLeft;
+                    *CgsDev::Log::gpDebugPrint << "[T-water] removed slot=" << liTraffic
+                                               << " entity=" << static_cast<s32>(maTrafficEntityIDs[liTraffic].muValue)
+                                               << " lowestY=" << mavfLowestPointWorldSpace[liTraffic].y
+                                               << " waterY=" << lpAboveGroundTest->mIntersectionPosition.y << "\n";
+                }
+
+                lpManagerOutputInterface->AddTrafficRemovedEvent(
+                    maTrafficEntityIDs[liTraffic],
+                    static_cast<ETrafficType>(GetTrafficVehicle(liTraffic)->mePhysicalTrafficState));
+                RemoveTrafficVehicle(static_cast<u8>(liTraffic), lpOutputRequestInterface,
+                                     lpDeformationInterface, false);
+            }
+        }
     }
 }
 }

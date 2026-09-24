@@ -323,6 +323,14 @@ const u8 KU8_INVALID_MAP = 127;
 // packs an EntityId as (entityIndex << 10) | (ownerType << 24); the index field is 14 bits.
 const u32 KU_NUM_BITS_FOR_ENTITY_NUM = 14;
 
+// KVF_RESET_ON_WATER_HEIGHT (DWARF BrnPhysicalTrafficManager.h:55, BrnPhysics::Vehicle,
+// `const VecFloat`): how far below a traffic car's lowest point its down-ray may hit water and
+// still count as "in the water". A dynamic-init VecFloat on the console: unk_82FB92D0 is 0 in the
+// image and its one writer is the CRT thunk 0x82C5B808 (`lfs flt_8208F834` == 0x3E800000 == 0.25f ;
+// vspltw ; stvx128). Readers: CheckForTrafficHittingWater (0x8261DF64) and the debug
+// DrawResetOnWaterHeight (0x825EE1F4).
+const VecFloat KVF_RESET_ON_WATER_HEIGHT = { 0.25f, 0.25f, 0.25f, 0.25f };
+
 // KU_ENTITYTYPE_TRAFFIC_VEHICLE MOVED OUT 2026-08-03 (task #113) to BrnVehicleConstants.h,
 // included above. It was defined here AND, identically, at BrnArticulatedJoint.h:42 -- each
 // comment describing itself as a mirror of the other. That cost nothing while the two headers
