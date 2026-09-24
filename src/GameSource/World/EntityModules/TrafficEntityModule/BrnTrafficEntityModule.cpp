@@ -11819,15 +11819,56 @@ void TrafficEntityModule::AddVehicleToPhysics(
     // (BrnTrafficVehicle.h is another cluster's file) and CreateArticulatedTraffic is itself a
     // keystone gate. Unreachable today. DELETE-WHEN the trailer wave lands.
 
-    // GATE queue-full check @0x82742674..0x8274269C: the console compares
-    // mCreateTrafficEventQueue's length against its capacity and, when full, logs
-    // "CreateTrafficEventQueue is full\n" to gpDebugPrint and posts NOTHING.
-    // BLOCKER: that queue is private and VehicleInputInterface has no GetCreateTrafficEvents()
-    // accessor yet (C2's drain needs the same one). It cannot fire today -- the free-slot
-    // guard in SafeRequestMakeVehiclePhysical caps promotions at the 25 slots this 25-event
-    // queue holds and the physics drain empties it every frame; BaseEventQueue::AddEvent's own
-    // "Reached Max length" assert is the residual tripwire.
-    // DELETE-WHEN VehicleInputInterface exposes the queue.
+    // 0x82742674..0x8274269C / 0x82742894..0x827428C0 -- the queue-full leg (FX-TRAFFIC5; it was a
+    // gate on a STALE blocker, "no accessor": GetCreateTrafficBodyEvents() is DWARF
+    // BrnVehicleInputInterface.h:207 and has been declared in this tree all along). The console
+    // inlines it as `lwzx +0x20778` (miLength) `cmpw` `lwzx +0x20774` (miMaxLength) of
+    // mCreateTrafficEventQueue (+0x20770) and, unless length < max, logs (message filter bit 0)
+    // and RETURNS: no event is posted and lpCreatedBodies is NOT marked, so the car can be
+    // offered again next frame. This matters on PC: BaseEventQueue::AddEvent appends
+    // unconditionally, so a 26th create event in one frame would be written past the 25-slot
+    // buffer -- and the potential-contact route (HandleHalfPotentialContact) has no budget of its
+    // own: lCreatedBodies is PrePhysicsUpdate's per-frame local, so every non-physical car still
+    // in an overlap pair is posted again each frame.
+    {
+        const BrnPhysics::Vehicle::VehicleInputInterface::CreateTrafficEventQueue* lpCreateQueue =
+            lpVehicleInput->GetCreateTrafficBodyEvents();
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness of the queue read: one line per
+        // new high-water mark of the queue's fill at this check, and one per refused (full) post;
+        // capped.
+        {
+            static s32 siCreateQueueHigh      = -1;
+            static s32 siCreateQueueDiagLines = 0;
+            const s32  liQueued = lpCreateQueue->GetLength();
+            const bool lbFull   = !(liQueued < lpCreateQueue->GetMaxLength());
+            if ((liQueued > siCreateQueueHigh || lbFull) && siCreateQueueDiagLines < 30)
+            {
+                if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+                {
+                    ++siCreateQueueDiagLines;
+                    if (liQueued > siCreateQueueHigh)
+                    {
+                        siCreateQueueHigh = liQueued;
+                    }
+                    *lpDiag << "[T-createq] vehicle=" << luVehicle
+                            << " type=" << static_cast<s32>(leTrafficType)
+                            << " queued=" << liQueued << "/" << lpCreateQueue->GetMaxLength()
+                            << (lbFull ? " FULL -> not posted, not marked (0x82742894)" : "")
+                            << "\n";
+                }
+            }
+        }
+
+        if (!(lpCreateQueue->GetLength() < lpCreateQueue->GetMaxLength()))
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "CreateTrafficEventQueue is full\n";
+            }
+            return;
+        }
+    }
 
     // 0x827426BC / 0x827426DC. The transform is passed by value (large aggregate -> by
     // reference on PPC); the four outs are the stack locals var_190/var_180/var_1D0/var_140.
