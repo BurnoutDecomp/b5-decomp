@@ -963,6 +963,13 @@ private:
     // BrnRaceCarEntityModule.cpp beside PreSceneUpdate.
     void UpdateRaceCars_PreScene( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 
+    // X360 0x822F5668 (44 insns). DWARF BrnRaceCarEntityModule.h:665 `void
+    // UpdatePropBoundingBoxes_PreScene(OutputBuffer_PreScene*)` (crash parity CC-3 = G60-D3). Its
+    // only caller is PreSceneUpdate @0x8230E408, between WriteUpdatedAIData and the output-interface
+    // fetches: every slot whose car is in the scene and deformed this frame has its dynamic scene
+    // volume replaced by ActiveRaceCar::GetPropCollisionBox. Body beside UpdateRaceCars_PreScene.
+    void UpdatePropBoundingBoxes_PreScene( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
+
     // X360 0x822F5830, called from PostPhysicsUpdate @0x823076B0 with
     // lpOutput->GetGameEventQueue() (the sub_822B67D0 accessor at 0x823076A4 -- the same one
     // UpdateCurrentWorldRegion is handed one call earlier). Posts every pending hiding record
