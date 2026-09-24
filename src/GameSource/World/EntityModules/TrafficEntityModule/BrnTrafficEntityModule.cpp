@@ -17895,9 +17895,11 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
             static u32 suDiagLines          = 0;
             s32 liNumStompees = 0;
             lpOutput->GetTrafficToRaceCarInterface_PreScene()->GetPotentialStompees(&liNumStompees);
+            const s32 liNumScorees = lpOutput->GetPotentialScorees()->GetCount();   // the score leg's output
             ++suDiagShowtimeFrames;
             if (suDiagLines < 60u
-                && (suDiagShowtimeFrames <= 3u || liNumStompees > 0 || muShowtimeVehicleInfoCount > 0))
+                && (suDiagShowtimeFrames <= 3u || liNumStompees > 0 || muShowtimeVehicleInfoCount > 0
+                    || liNumScorees > 0))
             {
                 ++suDiagLines;
                 u32 luMagnets = 0;
@@ -17917,6 +17919,7 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
                         << " stompees=" << liNumStompees
                         << " infos=" << static_cast<s32>(muShowtimeVehicleInfoCount)
                         << " magnets=" << static_cast<s32>(luMagnets)
+                        << " scorees=" << liNumScorees
                         << " misbounce=" << mfShowtimeMisBounceTimer << "\n";
             }
         }
