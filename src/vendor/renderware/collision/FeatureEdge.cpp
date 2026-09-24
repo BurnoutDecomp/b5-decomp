@@ -20,14 +20,17 @@ namespace rw
 namespace collision
 {
 
-// .rdata constants reached only by reference in the asm (no value in the
-// export). FLAGGED as inferred:
-//   * unk_8327EEA0 -- the ctor's vcmpgtfp guard against a tiny "degenerate
-//     edge" epsilon (lenSq must exceed it for the direction to be valid).
-//     Canonical (rwccore.h:876) guards with VEC_EPSILON = rw::math::EPSILON.
-//   * flt_82001CC0 -- the constrain_point start-side threshold (canonical
-//     compares t < 0.0f).
-const f32 FeatureEdge::KF_DEGENERATE_EPSILON = 1.0e-12f;
+// The two constants, read from the image (crash parity H2-D3, 2026-09-24):
+//   * unk_8327EEA0 -- the ctor's degenerate-edge row. A .bss splat written at startup by the
+//     CRT dyn-init thunk 0x82C73BD0 (initializer table slot 0x82CD3C3C): lvlx flt_821801B4,
+//     vspltw 0, stvx128 -> 0x8327EEA0; x360rd 0x821801B4 = 0x34000000 = 1.1920929e-07 =
+//     FLT_EPSILON (canonical rwccore.h:876 guards with VEC_EPSILON = rw::math::EPSILON). The
+//     ctor's vcmpgtfp (0x82BA8608, lenSq > row) drives both the length and the dir vsel's.
+//     It was an inferred 1.0e-12f, which kept a direction and length for edges of lenSq in
+//     (1e-12, 1.19e-7] (about 1e-6 .. 3.45e-4 m) that the console zeroes.
+//   * flt_82001CC0 -- the constrain_point start-side threshold: x360rd 0x00000000 = 0.0
+//     (canonical compares t < 0.0f).
+const f32 FeatureEdge::KF_DEGENERATE_EPSILON = 1.1920929e-07f;
 const f32 FeatureEdge::KF_START_THRESHOLD    = 0.0f;
 
 namespace
