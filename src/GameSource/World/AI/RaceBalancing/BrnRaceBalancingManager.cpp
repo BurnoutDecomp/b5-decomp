@@ -136,6 +136,19 @@ void RaceBalancingManager::Update(const AICar* lpPlayerCar, f32 lfTimeStep)
         {
             mfRaceTime = lfTimeStep + mfRaceTime;
         }
+
+        // [DIAG] NOT IN THE X360 BINARY (BRN_RACEBAL_DIAG=1): ONE line, the first frame the clock
+        // runs -- the live dispatch witness for the unguarded dereference above
+        // (tests/FxNanpolGuardsLive.ps1). DELETE-WHEN that case is banked.
+        static const bool sbClockWitness = (getenv("BRN_RACEBAL_DIAG") != 0);
+        static bool sbClockWitnessed = false;
+        if (sbClockWitness && !sbClockWitnessed && CgsDev::Log::gpDebugPrint != 0)
+        {
+            sbClockWitnessed = true;
+            *CgsDev::Log::gpDebugPrint
+                << (lpPlayerCar->IsCrashing() ? "[racebal] race clock running (player crashing)\n"
+                                              : "[racebal] race clock running (player not crashing)\n");
+        }
     }
 }
 
