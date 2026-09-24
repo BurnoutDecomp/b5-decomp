@@ -862,6 +862,21 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue* lpActionQueue);
 
+    // ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] X360 ProcessGameEvents @0x823A0A18, THE CASE-52 / CASE-53 ARMS --
+    // the showtime bounce relay. Same extraction precedent as the case-31 arm above: the
+    // dispatcher's own walk, one `case` per console arm, no Clear.
+    //   case 52 @0x823A3D74..0x823A3E0C  JustBouncedEvent -> JustBouncedAction (48 bytes, + the
+    //            scorer's combo count and GetNumCarsCrashed) -> action 144, then
+    //            CrashModeScoring::DealWithPlayerBounced (empty on the console);
+    //   case 53 @0x823A3E10..0x823A3E24  -> action 145 (1 byte).
+    // Producer of both events: VehicleManager::ProcessAftertouchEvents @0x82633DE8 (physics), carried
+    // by BridgePhysicsToOutput leg 5 and the post-world carry queue. Consumers of 144 / 145: the
+    // director's ShowTimeInfo (MainDirector::ProcessInputQueue), CrashPlayManager::OnBounce (via
+    // RaceCarEntityModule::HandleGameActions) and the GUI (GuiShowtimeJustBounced, 402).
+    void ProcessGameEventsShowtimeBounceBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue);
+
     // [boost-ticker wave] NOT A CONSOLE FUNCTION -- the shared AddEvent + opt-in
     // BRN_BOOST_TICKER_DIAG witness the eight arms above post through, so each arm reads as
     // the console's own one-liner. See its body.

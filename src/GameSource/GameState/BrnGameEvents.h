@@ -166,6 +166,15 @@ enum EGameEventType
     // PS3-DWARF values drift NON-uniformly (noted per enumerator) -- keep the X360 values.
     E_EVENT_POWER_PARK_RESULT                 = 54,  // X360 (PS3 DWARF 55)
     E_EVENT_BOOST_TIME_COMPLETE               = 55,  // X360 (PS3 DWARF 56; "lpBoostTimeComplete")
+    // [FX-SHOWTIME2 2026-09-24] The two showtime bounce events -- the same -1 drift as the pair
+    // above, and pinned at BOTH ends (`li r5,<id>` + `li r6,<size>` at the producer, the arm at
+    // the consumer):
+    //   52  VehicleManager::ProcessAftertouchEvents @0x82633EB0..0x82633EC0 `li r6,0x20 ; li r5,0x34`
+    //       (the recent-bounce report); ProcessGameEvents case 52 @0x823A3D74 -> action 144.
+    //   53  ProcessAftertouchEvents @0x82633EE0..0x82633EF0 `li r6,1 ; li r5,0x35` (the one-shot
+    //       extra-spin latch); ProcessGameEvents case 53 @0x823A3E10 -> action 145.
+    E_EVENT_JUST_BOUNCED                      = 52,  // X360 (PS3 DWARF 53)
+    E_EVENT_JUST_APPLIED_EXTRA_SPIN           = 53,  // X360 (PS3 DWARF 54)
     E_EVENT_NEAR_MISS                         = 65,  // X360 == PS3 ("lpNearMissEvent")
     E_EVENT_NEAR_MISS_CHAIN_COMPLETED         = 66,  // X360 (PS3 67; "lpNearMissCompleteEvent")
     E_EVENT_DRIFTING                          = 67,  // X360 (PS3 68; "lpDriftEvent")
@@ -694,6 +703,39 @@ struct VehicleImpactEvent : public GameEvent<E_EVENT_VEHICLE_IMPACT>
     s32 meAggressorActiveRaceCarIndex; // 0x04 (:1328, EActiveRaceCarIndex)
     s32 meVictimActiveRaceCarIndex;    // 0x08 (:1329, EActiveRaceCarIndex)
 };
+
+// [FX-SHOWTIME2 2026-09-24] The showtime bounce report (X360 id 52, 32 bytes). DWARF
+// BrnGameEvents.h:2782-2790 gives the seven members, their order and their names.
+// PRODUCER VehicleManager::ProcessAftertouchEvents @0x82633DE8: RaceCarPhysics::GetRecentBounce
+// (DWARF :319, lpiBounceChain .. lpContactPoint) writes STRAIGHT INTO the stack record -- r4 = +0x00,
+// r5/r6/r7/r8 = +0x04/+0x05/+0x06/+0x07, r9 = +0x08, r10 = +0x10 (@0x82633E80..0x82633E98) -- and the
+// record is posted with `li r6, 0x20`.
+// CONSUMER ProcessGameEvents case 52 @0x823A3D74..0x823A3DF0: `lwz 0` / `lbz 4, 5, 6, 7` / `lwz 8` /
+// `lvx128 +0x10`. The four bytes at +0x0C are the Vector3's alignment pad (nothing reads or writes them).
+struct JustBouncedEvent : public GameEvent<E_EVENT_JUST_BOUNCED>
+{
+    s32      miBounceChain;       // +0x00 (:2784)
+    bool     mbFromStationary;    // +0x04 (:2785)
+    bool     mbOnCar;             // +0x05 (:2786)
+    bool     mbBoostedBounce;     // +0x06 (:2787)
+    bool     mbGoodImpact;        // +0x07 (:2788)
+    EntityId midImpactEntityId;   // +0x08 (:2789)
+    Vector3  mContactPoint;       // +0x10 (:2790)
+};
+static_assert(sizeof(JustBouncedEvent) == 32,                      "event 52 wire size (li r6, 0x20 @0x82633EB0)");
+static_assert(offsetof(JustBouncedEvent, miBounceChain)     == 0x00, "GetRecentBounce r4 / case 52 lwz 0");
+static_assert(offsetof(JustBouncedEvent, mbFromStationary)  == 0x04, "GetRecentBounce r5 / case 52 lbz 4");
+static_assert(offsetof(JustBouncedEvent, mbOnCar)           == 0x05, "GetRecentBounce r6 / case 52 lbz 5");
+static_assert(offsetof(JustBouncedEvent, mbBoostedBounce)   == 0x06, "GetRecentBounce r7 / case 52 lbz 6");
+static_assert(offsetof(JustBouncedEvent, mbGoodImpact)      == 0x07, "GetRecentBounce r8 / case 52 lbz 7");
+static_assert(offsetof(JustBouncedEvent, midImpactEntityId) == 0x08, "GetRecentBounce r9 / case 52 lwz 8");
+static_assert(offsetof(JustBouncedEvent, mContactPoint)     == 0x10, "GetRecentBounce r10 / case 52 lvx128 +0x10");
+
+// [FX-SHOWTIME2 2026-09-24] "An extra spin was just applied" (X360 id 53, 1 byte). DWARF :2801 -- no
+// members. The producer posts it once per consumed latch (ProcessAftertouchEvents @0x82633EC4..
+// 0x82633EF0); ProcessGameEvents case 53 relays it as action 145.
+struct JustAppliedExtraSpinEvent : public GameEvent<E_EVENT_JUST_APPLIED_EXTRA_SPIN> {};
+static_assert(sizeof(JustAppliedExtraSpinEvent) == 1, "event 53 wire size (li r6, 1 @0x82633EE0)");
 
 // A traffic check landed (X360 id 73) -- the 2-byte vehicle index. Consumed by
 // TrafficCheckManager::Update (which counts the chain) and by ProcessGameEvents case 73,

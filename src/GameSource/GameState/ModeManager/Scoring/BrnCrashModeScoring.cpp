@@ -611,6 +611,22 @@ namespace BrnGameState
     }
 
     // ------------------------------------------------------------------------
+    // DealWithPlayerBounced  (DWARF BrnCrashModeScoring.h:152, BrnCrashModeScoring.cpp:763)
+    // [FX-SHOWTIME2 2026-09-24] Called by ProcessGameEvents' case-52 arm right after it posts
+    // action 144 (@0x823A3DF8..0x823A3E08: r3 = gsm+0x1DF0 (this scorer), r4 = rec+0x21 mbOnCar,
+    // r5 = rec+0x23 mbGoodImpact, r6 = rec+0x1C the impact entity). The ARTIST callee is a lone
+    // `blr` @0x8284CB38 that ICF folded with every other empty body (IDA names it
+    // BaseCollisionGenerator::Destruct), and the PS3 body (DecFIGS 0x1CD04C) is empty too: the
+    // shipped function does nothing with the bounce.
+    // ------------------------------------------------------------------------
+    void CrashModeScoring::DealWithPlayerBounced(bool lbOnCar, bool lbWasGoodImpact, EntityId lidImpactEntityId)
+    {
+        (void)lbOnCar;
+        (void)lbWasGoodImpact;
+        (void)lidImpactEntityId;
+    }
+
+    // ------------------------------------------------------------------------
     // DealWithScoreForVehicleClass  (X360 0x82338778)
     // Resolve the base score / multiplier / category for the crashed vehicle (via
     // GetVehicleScoreData), apply any chain bonus (1000 per extra link once the recent
