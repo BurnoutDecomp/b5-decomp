@@ -5,6 +5,7 @@
 // BURNOUT_X360_ARTIST.XEX. Bodies homed here:
 //   AICarCanBuzz @0x82767020, BuzzOccured @0x82771BA8, ChooseAheadOrBehind @0x827718B8,
 //   IsPlayerBuzzable @0x827719F8, IsPositionInNoBuzzZone @0x82766FC0,
+//   MaintainAheadOrBehind @0x82766C40 (crash parity FX-AIBUZZ, 2026-09-24),
 //   ResetActiveList @0x82771C90, StartABuzzBy @0x8278B858, Update @0x8278B8C8.
 // (GetBuzzFrequency / Prepare / the remaining API land with sibling waves -- declared only.)
 // =============================================================================
@@ -15,7 +16,9 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"
-#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot / MagnitudeSquared / operator-
+#include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot / MagnitudeSquared / Magnitude / Normalize / operator-
+#include "rw/math/fpu/scalar_operation.h"    // rw::math::fpu::KF_IS_ZERO_TOLERANCE (FLT_EPSILON, flt_820C3B70)
+#include <cmath>                             // std::fabs (MaintainAheadOrBehind's console IsZero)
 
 namespace BrnAI
 {
@@ -32,9 +35,21 @@ namespace BrnAI
     // ⚠️ NO STATIC-INIT ORDER HAZARD HERE (the trap BrnTrafficEntityModule_wT2_03.cpp documents
     // for flt_830180B0): the multiplier flt_82F31928 is a plain image constant that reads
     // 0.44703999 straight out of .rdata, not a slot another thunk has to compute first.
-    const f32 KF_ON_COMING_RESET_SPEED    = 200.0f;  // flt_820C4318 (rodata-pinned)
-    const f32 KF_START_FAR_AHEAD          = 35.7631989f;  // flt_8300DBEC = init 0x82C68F00, flt_82004A18 ( 80) * 0.44704
-    const f32 KF_START_FAR_BEHIND         = 11.1759996f;  // flt_8300D7F4 = init 0x82C68EE0, flt_820C4870 ( 25) * 0.44704
+    // ⭐ NAMES CORRECTED 2026-09-24 (crash parity FX-AIBUZZ; VALUES UNCHANGED). The two .bss speeds
+    // were filed as KF_START_FAR_AHEAD / KF_START_FAR_BEHIND and the 200.0 literal as
+    // KF_ON_COMING_RESET_SPEED. Two independent readings put the DWARF names elsewhere:
+    //   * the PS3 twins name them: DecFIGS ChooseAheadOrBehind 0x9CE24C and MaintainAheadOrBehind
+    //     0x9CE620 load the AHEAD speed from BrnAI::KF_ON_COMING_RESET_SPEED and the BEHIND one from
+    //     BrnAI::KF_FASTER_THAN_PLAYER (+ the player's speed); both distances are TOC literals
+    //     (200.0 / -60.0), exactly where the X360 reads the pooled .rdata flt_820C4318 / flt_820C431C;
+    //   * the CRT thunks run in declaration order (DWARF BrnAIBuzzBy.cpp:29 FASTER_THAN_PLAYER,
+    //     :30 ON_COMING_RESET_SPEED, :36 MIN_SPEED_FOR_BUZZING, :57 the no-buzz centres), and this
+    //     TU's are 0x82C68EC8 (25 mph) -> 0x82C68EE8 (80 mph) -> 0x82C68F08 (7.5 mph) -> 0x82C68F28
+    //     (the centres); the two thunks before them (0x82C68E88 / 0x82C68EA8) feed AIAggression's
+    //     GetSpeedMatchSpeed / UpdateAggressionStateClipOffBehind. START_FAR_AHEAD / START_FAR_BEHIND
+    //     (DWARF :31 / :32) have no thunk and no reader in the X360 image, so they are not defined.
+    const f32 KF_FASTER_THAN_PLAYER       = 11.1759996f;  // flt_8300D7F4 = thunk 0x82C68EC8, flt_820C4870 ( 25) * flt_82F31928 (0.44704)
+    const f32 KF_ON_COMING_RESET_SPEED    = 35.7631989f;  // flt_8300DBEC = thunk 0x82C68EE8, flt_82004A18 ( 80) * 0.44704
     const f32 KF_MIN_SPEED_FOR_BUZZING    =  3.35279989f; // flt_8300D938 = init 0x82C68F20, flt_820C42D4 (7.5) * 0.44704
     const f32 KF_START_BEHIND_PROBABLITY  = 0.5f;    // flt_820C4168 (rodata-pinned)
     // Plain .rdata, read straight out of the image (0x820C4330 == 0x3F4CCCCD).  ChooseAheadOrBehind
@@ -116,6 +131,82 @@ namespace BrnAI
         return -0.7f > lfProjection;
     }
 
+    // vpu::IsZero(v, FLT_EPSILON) as MaintainAheadOrBehind inlines it (0x82766C44..0x82766C84):
+    // `vandc` (|v|), `vrlimi128 v11, v13, 1, 1` (w <- x), `vcmpgtfp.` against splat(flt_820C3B70),
+    // then the CR6 "all false" bit (`extrwi r10, r10, 1, 26`). "No lane above the tolerance" is
+    // zero, and a NaN lane is never above it -- the shared vpu::IsZero calls a NaN lane non-zero,
+    // so the console form is spelled here (the BrnAICar_Update.cpp IsZeroVmx precedent).
+    static inline bool IsZeroVmx(const Vector3& lrVector)
+    {
+        return !(std::fabs(lrVector.x) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
+               !(std::fabs(lrVector.y) > rw::math::fpu::KF_IS_ZERO_TOLERANCE) &&
+               !(std::fabs(lrVector.z) > rw::math::fpu::KF_IS_ZERO_TOLERANCE);
+    }
+
+    // ------------------------------------------------------------------------
+    // MaintainAheadOrBehind @0x82766C40  (static -- see the header; DWARF BrnAIBuzzBy.cpp:124)
+    //
+    // Free-roam placement of a rival that has just streamed in within 250 m of the player: its
+    // only caller is RaceCarEntityModule::PlaceRaceCarOnLoad's ARM A (0x822CE780..0x822CE7FC),
+    // which hands the result straight to RaceCar::RequestResetOnTrack. The car is kept on the side
+    // of the player it loaded on: AHEAD -> reset 200 m ahead at the on-coming speed, type 5 when it
+    // faces the player's way and type 4 when it faces him; otherwise (behind, level, or NaN) ->
+    // a road-rage reset 60 m back at the player's speed + 25 mph.
+    //   0x82766C40  vsubfp v0, v1(lPosition), v3(lPlayerPosition)          lRelativePosition
+    //   0x82766C44..0x82766C84  IsZero(lRelativePosition) (above) -> bne skips the normalise
+    //   0x82766C88..0x82766CC4  vmsum3fp128 + vrsqrtefp + two Newton steps + vmulfp128 -- no zero
+    //                           guard; the IsZero screen is the guard (|lane| > FLT_EPSILON, so
+    //                           the squared length is > 0), which is why the SDK Normalize's own
+    //                           zero arm can never run here
+    //   0x82766CCC..0x82766D0C  vmsum3fp128 (rel, v5 lPlayerDirection) ; vcmpgtfp. > splat(flt_82001CC0
+    //                           0.0) ; CR6 "all true" (extrwi 1,24) ; beq -> BEHIND (NaN -> BEHIND)
+    //   AHEAD  0x82766D10..0x82766D5C  vmsum3fp128 (v2 lDirection, v5) ; vcmpgtfp. > 0.0 -> r10 ;
+    //                           `ori r9, r10, 4` -> +0xC (5 same way, 4 facing / NaN) ;
+    //                           +8 = flt_820C4318 (200.0) ; +0 = 0 ; +4 = flt_8300DBEC
+    //   BEHIND 0x82766D64..0x82766DF4  +8 = flt_820C431C (-60.0) ; +0 = 0 ; +0xC = 3 ;
+    //                           +4 = |lPlayerVelocity| (vmsum3fp128 + rsqrt, `vcmpeqfp ; vsel` -> 0
+    //                           for a zero velocity) `vaddfp` splat(flt_8300D7F4)
+    // ResetOnTrackRequest::Construct is inlined with the race car index 0 (`li r11, 0 ; stw r11,
+    // 0(r3)` in both arms; the PS3 twin 0x9CE738 / 0x9CE7F4 stores the same 0) -- the caller reads
+    // only +4 / +8 / +0xC.
+    // [FX-AIBUZZ 2026-09-24: was declaration-only, and PlaceRaceCarOnLoad parked on it]
+    // ------------------------------------------------------------------------
+    void BuzzBy::MaintainAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest,
+                                       Vector3 lPosition, Vector3 lDirection, Vector3 lPlayerPosition,
+                                       Vector3 lPlayerVelocity, Vector3 lPlayerDirection)
+    {
+        const Vector3 lRelativePosition = rw::math::vpu::operator-(lPosition, lPlayerPosition);
+
+        Vector3 lRelativeDirection = lRelativePosition;
+        if (!IsZeroVmx(lRelativePosition))
+        {
+            lRelativeDirection = rw::math::vpu::Normalize(lRelativePosition);
+        }
+
+        EResetType luResetFlags;
+        f32        lfResetSpeed;
+        f32        lfResetDistance;
+
+        if (rw::math::vpu::Dot(lRelativeDirection, lPlayerDirection) > 0.0f)
+        {
+            // In front of the player: keep it there, facing whichever way it already faces.
+            luResetFlags    = (rw::math::vpu::Dot(lDirection, lPlayerDirection) > 0.0f)
+                                  ? E_RESET_TYPE_FROM_TURNINGS_ROAD_RAGE        // 4 | 1
+                                  : E_RESET_TYPE_AHEAD_PLAYER_ON_COMING;        // 4 | 0
+            lfResetSpeed    = KF_ON_COMING_RESET_SPEED;                         // flt_8300DBEC
+            lfResetDistance = 200.0f;                                           // flt_820C4318
+        }
+        else
+        {
+            // Behind the player: bring it up from behind, faster than the player.
+            luResetFlags    = E_RESET_TYPE_BEHIND_PLAYER_ROAD_RAGE;             // li r9, 3
+            lfResetSpeed    = rw::math::vpu::Magnitude(lPlayerVelocity) + KF_FASTER_THAN_PLAYER;
+            lfResetDistance = -60.0f;                                           // flt_820C431C
+        }
+
+        lpRequest->Construct(E_GLOBAL_RACE_CAR_INDEX_0, lfResetSpeed, lfResetDistance, luResetFlags);
+    }
+
     // ------------------------------------------------------------------------
     // ChooseAheadOrBehind @0x827718B8
     // ------------------------------------------------------------------------
@@ -139,10 +230,11 @@ namespace BrnAI
 
         if (lfAheadLikelyHood <= KF_START_BEHIND_PROBABLITY)
         {
-            // Start the reset far BEHIND the player, road-rage style. asm: f1=FAR_BEHIND+speed,
-            // f2=-60.0, type=3. Construct stores f1->resetSpeed(+4), f2->resetDistance(+8).
+            // Start the reset far BEHIND the player, road-rage style. asm 0x827719DC..0x827719EC:
+            // f1 = flt_8300D7F4 (KF_FASTER_THAN_PLAYER) + speed (`fadds f1, f0, f1`), f2 =
+            // flt_820C431C (-60.0), type 3. Construct stores f1->resetSpeed(+4), f2->resetDistance(+8).
             lpRequest->Construct(leGlobalRaceCarToTeleport,
-                                 KF_START_FAR_BEHIND + lfPlayerSpeed,
+                                 KF_FASTER_THAN_PLAYER + lfPlayerSpeed,
                                  -60.0f,
                                  E_RESET_TYPE_BEHIND_PLAYER_ROAD_RAGE);
         }
@@ -161,10 +253,11 @@ namespace BrnAI
                 leResetType = E_RESET_TYPE_FROM_TURNINGS_ROAD_RAGE;
             }
 
-            // asm: f1=KF_START_FAR_AHEAD, f2=200.0 (KF_ON_COMING_RESET_SPEED).
+            // asm 0x827719AC..0x827719B4: f1 = flt_8300DBEC (KF_ON_COMING_RESET_SPEED), f2 =
+            // flt_820C4318 (200.0, the reset distance).
             lpRequest->Construct(leGlobalRaceCarToTeleport,
-                                 KF_START_FAR_AHEAD,
                                  KF_ON_COMING_RESET_SPEED,
+                                 200.0f,
                                  leResetType);
         }
     }
