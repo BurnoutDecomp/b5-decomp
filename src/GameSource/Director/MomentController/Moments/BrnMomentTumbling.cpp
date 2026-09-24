@@ -437,3 +437,22 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
 }
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentTumbling> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_8200742C (AllocateVoid<MomentTumbling>
+// @0x8222E6F8 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+//   slot 7 GetInstanceType  0x827DF718  `li r3, 2 ; blr` -- E_MOMENT_TUMBLING
+namespace BrnDirector
+{
+void MomentTumbling::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+
+Moment::EType MomentTumbling::GetInstanceType()
+{
+    return E_MOMENT_TUMBLING;   // li r3, 2
+}
+}

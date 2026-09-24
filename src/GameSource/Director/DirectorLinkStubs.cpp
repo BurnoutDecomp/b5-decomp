@@ -18,7 +18,7 @@
 // GROUP C -- sub-systems with no landed TU (the director DebugComponent, the
 //   scene-query post-office free functions).
 // GROUP D -- the vendor rw SLerp leaf.
-// GROUP F -- the moment sub-system (MomentController::NewMoment).
+// GROUP F -- RETIRED 2026-09-24 (the moment sub-system; see the foot of this file).
 // ============================================================================
 
 #include "types.hpp"
@@ -123,103 +123,12 @@ namespace vpu
 }
 }
 
-// GROUP F -- THE MOMENT SUB-SYSTEM (the establishing-shot / jump-cutaway camera).
-// ONE gate remains: MomentController::NewMoment, below. The two trap stubs that used to stand
-// with it (MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor,
-// MomentTumbling::SignalIsGoodTimeToPlant) are gone: both TUs are mounted.
-//
-// It is a camera blocker: NewMoment allocates nothing, so every MomentHandle stays
-// !IsAllocated(), MomentSelector::Update's classification loop skips them all, muValidMoments
-// is pinned at 0, and ArbStateRoaming::Update's DRIVING arm never calls SelectBestMoment.
-//
-// Mounting the rest of the closure (BrnMomentControllerNewMoment.cpp + the two Moments/*.cpp
-// that are still unmounted -- PlayerJumping and TakedownLookback) costs 77 non-CRT unresolved
-// externals. Re-measured 2026-09-11 against a baseline built by RECOMPILING every one of the
-// 2,343 mounted TUs with the shipping flags and archiving them into one library: the previous
-// census read 71 off the checked-in object directory, which still held objects for TUs whose
-// source had moved on, so it credited the link with bodies it no longer has. 77 is the honest
-// number for the same closure; nothing regressed between the two readings.
-// PlayerStunt is out of the closure entirely -- it measures ZERO and is mounted.
-// By family:
-//     37  per-moment-class virtuals and privates (Destruct / SetParameters / Prepare /
-//         GetInstanceType / MomentFailSafe::Release, plus MomentPlayerJumping::UpdateCamera)
-//     24  BehaviourCollection<T,P,N> methods -- six template methods x four instantiations
-//      6  BehaviourRig's virtual set + Parameters::Construct. Camera/Behaviours/BehaviourRig.cpp
-//         HOLDS all six and now COMPILES (the four const VehicleInfo* conversions and the
-//         Looker::Update VecFloat fork are repaired). It is still unmounted, and its whole
-//         remaining cost is TWO symbols: Utils::CameraRig::Construct, which has no body
-//         anywhere in the tree, and Utils::PositionLag::Update, whose home BrnPositionLag.cpp
-//         is itself blocked on six unbodied camera-serialiser leaf overloads.
-//      5  the four vector-deleting destructors the takedown look-back's rig handle emits
-//         (Behaviour / BehaviourRig / CollisionPolicy / VisibilityCollisionPolicy) plus
-//         BehaviourRig::GetCollisionPolicy
-//      3  detail:: reach shims -- the takedown look-back's two resolved-vehicle lanes
-//         (Vehicle_GetPosition / Vehicle_GetSegmentReference, which want VehicleRef::Get's
-//         return type carved) and BehaviourRig_StartLookingAtRaceCarSnapped
-//      2  BehaviourParameterBank accessors -- and only the two INDEXED ones are left
-//         (GetPlayerJumpingRigShotParams / GetPlayerJumpingBystanderShotParams). The four
-//         single-block moment accessors are bodied; see that header's RECORD MAP for why the
-//         indexed pair needs its call sites renumbered before it can follow.
-// (operator delete(void*,size_t) and type_info's vftable also come up unresolved against the
-// object list and are NOT counted above: the whole build already leaves both to the CRT.)
-// Per-TU, each measured alone against that recompiled baseline:
-//     NewMoment 36 | PlayerJumping 27 | TakedownLookback 14 | PlayerStunt 0 (mounted).
-// Every `AllocateVoid<MomentXxx>()` arm placement-constructs a MomentXxx, which emits its
-// vftable, which needs every virtual of that class defined at link -- so the twelve-arm switch
-// drags all twelve subclasses in whole. That is what makes this ONE gate cost 49 on its own
-// while the individual moment TUs cost nothing: mounted without NewMoment, a moment TU emits no
-// vftable and so drags none of its siblings' virtuals in.
-//
-// The closure alone would not make a cutaway play: nothing in this tree ticks a moment
-// (MomentController::UpdateAllMoments has no body, MainDirector::UpdateMoments is
-// declaration-only, and its call is commented out in MainDirector::Update).
-//
-// DELETE-WHEN, in dependency order -- do NOT start at the bottom:
-//   0. DONE 2026-09-11: the layout-stubbed MomentHardStop is retired and its header deleted.
-//      The parameter bank now holds the real Moments/BrnMomentHardStop.h record, so
-//      MomentHardStop has exactly one definition tree-wide and step 4 can no longer fold a
-//      one-liner Prepare over the real body.
-//   1. DONE 2026-09-11: the MomentSharedInfo shim family is bodied against the homed record
-//      (BrnMomentSharedInfo.cpp). All of it: the last two, which the census called uncarved,
-//      were a named VehicleTracker member with its own accessor and a profile-data flag two
-//      mounted arbitrator arms already read through the same byte blob. Seven moment TUs are
-//      mounted off the back of it.
-//   2. Body MomentController::UpdateAllMoments and MainDirector::UpdateMoments, then un-gate
-//      the commented-out call in MainDirector::Update. Those two are NOT in this file set.
-//   3. Body the six BehaviourCollection<> template methods and the per-class virtuals, and
-//      repair BehaviourRig.cpp so its seven bodies can mount. 65 of the remaining 71.
-//   4. Mount the closure TUs and delete the gate below.
-//
-// The moment pool's bucket is widened on this x64 host (static_assert per moment type; see
-// the HOST BUCKET WIDENING banner in BrnMomentController.h).
-// ============================================================================
-#include "GameSource/Director/MomentController/BrnMomentController.h"   // MomentController
-
-namespace BrnDirector
-{
-    // ------------------------------------------------------------------------
-    // MomentController::NewMoment. Real body: MomentController/BrnMomentControllerNewMoment.cpp
-    // (complete; it is the MOUNT that is blocked, not the code).
-    //
-    // The console allocates a moment out of mMomentPool, hands it to the handle, pushes the
-    // bank's parameters onto it and returns TRUE unconditionally. Here: allocate nothing and
-    // return the same TRUE, leaving the handle !IsAllocated(). TRUE is load-bearing: a FALSE
-    // clears MomentSelector::Prepare's mbPrepared, which is ArbStateRoaming::Prepare's return
-    // value, and meState would never leave E_STATE_PREPARING. An unallocated handle is safe
-    // downstream (MomentSelector::Update skips it; MomentHandle::Release is a no-op on one).
-    //
-    // DELETE-WHEN: the five-step plan in the GROUP F banner above, in that order.
-    // ------------------------------------------------------------------------
-    bool MomentController::NewMoment(Moment::EType leMomentType,
-                                     MomentParameterBank::EMomentParamID leMomentParamID,
-                                     MomentHandle& lrMomentHandleInOut,
-                                     Camera::BehaviourManager& lrBehaviourManager)
-    {
-        (void)leMomentType;
-        (void)leMomentParamID;
-        (void)lrMomentHandleInOut;   // deliberately left !IsAllocated()
-        (void)lrBehaviourManager;
-        return true;
-    }
-}
+// GROUP F -- RETIRED 2026-09-24 (FX-DIRECTOR, the moment tick + factory). The stub that stood here -- a
+// MomentController::NewMoment that allocated nothing, so every MomentHandle stayed !IsAllocated() and
+// every MomentSelector counted 0 valid moments -- is GONE. The real NewMoment (and the corrected
+// MomentHandle::Prepare) live in MomentController/BrnMomentController.cpp, their DWARF home, which is
+// mounted; MainDirector ticks the moments (UpdateMoments @0x82250268, called from Update 0x82274348).
+// Two of the twelve types -- TakedownLookback and PlayerJumping -- stay gated INSIDE NewMoment until
+// their closure (BehaviourRig + CameraRig::Construct, the BehaviourCollection<> bodies,
+// MomentPlayerJumping::UpdateCamera, the look-back's reach shims) is in the link.
 

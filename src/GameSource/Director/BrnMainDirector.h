@@ -12,6 +12,7 @@
 #include "GameSource/Director/Camera/BrnCameraFinaliser.h"      // BrnDirector::CameraFinaliser (mCameraFinaliser)
 #include "GameSource/Director/Camera/Camera.h"                  // BrnDirector::Camera::Camera (mLastCamera)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // BrnDirector::GameState (maGameState)
+#include "GameSource/Director/MomentController/BrnMomentController.h" // BrnDirector::MomentController (mMomentController)
 
 namespace BrnResource { namespace GameDataIO { class AllocatorList; } }   // DirectorModule::Prepare's 2nd arg (boot audit F-P6-16)
 
@@ -158,8 +159,9 @@ namespace BrnDirector
         // DECLARATION-ONLY + FLAG (ICE wrapper Update cone + per-frame reference-space build).
         void UpdateICE(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex);
 
-        // X360 0x82250268. Pump the moment controller.
-        // DECLARATION-ONLY + FLAG (moment-controller aggregate un-homed).
+        // X360 0x82250268. Build this frame's MomentSharedInfo and pump the moment controller
+        // (MomentController::UpdateAllMoments). BODIED 2026-09-24 (FX-DIRECTOR, the moment tick);
+        // Update calls it right after UpdateCameraBehavioursPostScene (0x82274348).
         void UpdateMoments(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex);
 
         // ⭐ X360 0x8221AFD0. RE-READ the two gameplay cameras' authored attribs for the car
@@ -336,7 +338,14 @@ namespace BrnDirector
         // console too -- worth knowing before treating a collapsed scene-space shot as a PC bug.
         u8             maAllVehicleDataReadyLatch[0x12170 - 0x12160];   // +0x12160
         Matrix44Affine mICESceneSpace;                                  // +0x12170
-        u8             maShotAndAnalysisBlock[0x12480 - 0x121B0];       // +0x121B0
+        // +0x121B0 .. +0x12480, CARVED 2026-09-24 at the three console sub-object bases the moment
+        // tick publishes (MainDirector::UpdateMoments @0x82250268 hands +0x121F0 and +0x1245C to every
+        // moment). All three types stay un-homed here: ShotSelector::Construct (0x8225B7F8) and
+        // CrashAnalyser::Update (PreSceneQueryUpdate 0x8225BCDC) are gated, so the spans hold the
+        // static zero the game module starts from.
+        u8             maCameraInterpolationController[0x121F0 - 0x121B0];  // +0x121B0
+        u8             maShotSelector[0x1245C - 0x121F0];                   // +0x121F0
+        alignas(4) u8  maCrashAnalyser[0x12480 - 0x1245C];                  // +0x1245C (head: its CrashAnalysis)
 
         // +0x12480  the camera finaliser (inertia + key-anim shake). Console span to +0x124F0;
         //           the KeyAnimShakeController Construct builds at +0x124D0 is its own member.
@@ -358,24 +367,15 @@ namespace BrnDirector
         // +0x12DC0  the camera arbitrator. Console span 0x12DC0 .. 0x172C8.
         Arbitrator mArbitrator;
 
-        // +0x172D0 .. +0x1CA60  BrnDirector::MomentController (the ArbStateSharedInfo's
-        //           mpMomentController is exactly +0x172D0). FLAG: un-homed; named opaque span.
-        u8 maMomentController[0x1CA60 - 0x172D0];
-
-        // +0x1CA60 .. +0x1CAC0  the moment-bucket pool's free queue (20 slots, seeded 19..0 by
-        //           Prepare stage 5), its count word (+0x1CAB0) and its occupancy word
-        //           (+0x1CAB8, zeroed by Construct and by Destruct). Modelled as the three
-        //           named fields the two reconstructed bodies actually write, so neither pokes
-        //           an offset. FLAG: the owning pool's type is un-homed -- when
-        //           ObjectPool<MomentBucket,20> lands, replace all three with that member and
-        //           call Clear()/Construct() on it.
-        s32 maMomentBucketFreeQueue[20];               // +0x1CA60
-        s32 miMomentBucketFreeCount;                   // +0x1CAB0
-        u8  maMomentBucketPoolPad[0x1CAB8 - 0x1CAB4];  // +0x1CAB4
-        u64 muMomentBucketOccupancy;                   // +0x1CAB8
-
-        // +0x1CAC0 .. +0x1CB10  BrnDirector::MomentParameterBank. FLAG: un-homed opaque span.
-        u8 maMomentParameterBank[0x1CB10 - 0x1CAC0];
+        // +0x172D0 .. +0x1CB10  BrnDirector::MomentController -- HOMED 2026-09-24 (FX-DIRECTOR, the
+        //           moment tick). The console span is the controller's moment pool (a vptr at +0x0 --
+        //           the C++ ctor stores off_820CF070 there, 0x827E4B5C -- the 20 buckets, the free queue
+        //           +0x5790, its count +0x57E0 and the occupancy word +0x57E8: the three fields this
+        //           class used to model a second time) followed by its MomentParameterBank (+0x57F0,
+        //           whose Construct MainDirector::Construct calls at 0x8225B554). ArbStateSharedInfo::
+        //           mpMomentController is exactly +0x172D0. The host object is larger (x64 widening + the
+        //           widened bucket, see BrnMomentController.h), so it is reached by name, never by offset.
+        MomentController mMomentController;
 
         // +0x1CB10  the camera-behaviour manager. Console span 0x1CB10 .. ~0x32ED8
         //           (its own last field, mbDebugDisplayAllCameras, is at manager +91076).
@@ -497,8 +497,19 @@ namespace BrnDirector
         //   zeroes it (`*(a1 + 218148) = 0`); Construct stores 5 == "release already complete",
         //   i.e. nothing to release yet (`li r9, 5; stwx r9, r30, r10` with r10 = 0x35424).
         s32 miReleaseStage;
-        // +0x35428  the construct timestamp (the X360 stores the incoming time as a double).
-        f64 mfConstructTime;
+        // +0x35428  DWARF DirectorModule::mDisplayAspectRatio (BrnDirectorModule.h:294): Construct's
+        //           f1 argument, stored as a FLOAT (`stfs f31, 0(r27)` at 0x8225B498 and again at
+        //           0x8225B9B4) and read back for the graphics camera's FOV (0x8225B4B8). CORRECTED
+        //           2026-09-24: it was modelled as an 8-byte `f64 mfConstructTime`, which swallowed the
+        //           four flags below.
+        f32  mfDisplayAspectRatio;
+        // +0x3542C .. +0x3542F  DWARF :296 / :297 / :298 / :300. Construct seeds 0 / 1 / 1 / 0
+        //           (0x8225B97C / 0x8225B984 / 0x8225B99C / 0x8225B90C) and nothing else in the image
+        //           stores them (tweakables). UpdateMoments hands the first three to every moment.
+        bool mbAllowJumpMoment;
+        bool mbAllowStuntMoment;
+        bool mbAllowHardStopMoment;
+        bool mbShowAllCameraNames;
 
         // +0x35430 .. +0x35450  the director's own flag/latch tail (the ICE-finished latch at
         //           +0x3543C, the replaying latch at +0x3543D, the debug-print toggles at
@@ -513,6 +524,23 @@ namespace BrnDirector
         // nothing open-codes a raw number at the use site.
         enum EStateFlagTailByte
         {
+            // [2026-09-24] The whole tail is DWARF-named (DecFIGS DirectorModule, BrnDirectorModule.h
+            // :302..:324, one bool each from +0x35430): the entries below that had only a recovered
+            // ROLE keep their role names and carry the DWARF name in their comment.
+            // +0x35430 / +0x35432..+0x35435 / +0x35438 / +0x3543B / +0x3543D -- tweakables Construct
+            // seeds 0 (0x8225B914 / 0x8225B91C / 0x8225B94C / 0x8225B954 / 0x8225B96C / 0x8225B93C /
+            // 0x8225B9AC / 0x8225B9DC).
+            E_FLAG_TAIL_DISABLE_AFTERTOUCH_CAMERA = 0x00,   // mbDisableAftertouchCamera
+            E_FLAG_TAIL_ALWAYS_SUPER_WIDE          = 0x02,   // mbAlwaysSuperWide
+            E_FLAG_TAIL_FORCE_SUPER_SLOMO_IN_CRASHES = 0x03, // mbForceSuperSloMoInCrashes
+            E_FLAG_TAIL_SHOW_WORLD_MAP_DEBUG       = 0x04,   // mbShowWorldMapDebug
+            E_FLAG_TAIL_FORCE_CUTSCENE_BARS_ON     = 0x05,   // mbForceCutsceneBarsOn
+            E_FLAG_TAIL_DISABLE_DOF                = 0x08,   // mbDisableDOF
+            E_FLAG_TAIL_SHOW_CAMERA_STATE_FLAGS    = 0x0B,   // mbShowCameraStateFlags
+            E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP      = 0x0D,   // mbDebugSingleTimestep
+            // +0x35437. DWARF mbForceNextWorldCrashToBeFastTopDown (:313). Construct seeds it 1
+            // (0x8225B924); UpdateMoments hands it to every moment.
+            E_FLAG_TAIL_FORCE_NEXT_WORLD_CRASH_FAST_TOP_DOWN = 0x07,
             // +0x35431. DWARF MainDirector::mbForceSloMoNotAllowed: while set, ProcessInputQueue's
             // tail drops GameState::mbCanUseSlomo every drain (0x8223886C..0x82238888). Construct
             // clears it (0x8225B930); no other store in the image (a tweakable).
@@ -522,22 +550,25 @@ namespace BrnDirector
             // arrived, else !mbGotHooks) and Update @0x82274070 publishes it into the director
             // output buffer (out + 0x750), where BridgeDirectorToGui @0x823DD5C0 turns it into
             // GUI event 500.
-            E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION = 0x06,
+            E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION = 0x06,   // DWARF mbRequestEffectsEnumeration
             // +0x35439. Raised when the GUI reports the player ENTERED the online post-event
             // screen, cleared when it reports they left. While it is set, a prepare-for-mode
             // action is deferred instead of run (the stop-mode arm also skips its ACTIVE push
             // while it is set, so the post-event camera is not cut short).
-            E_FLAG_TAIL_IN_ONLINE_POST_EVENT = 0x09,
+            E_FLAG_TAIL_IN_ONLINE_POST_EVENT = 0x09,       // DWARF mbWaitingForOnlinePostEventFinish
             // +0x3543A. "A prepare-for-mode action arrived during the post-event and was copied
             // into maModeActionAndDebugBlock." Cleared when the post-event is entered, tested
             // when it is left: set -> replay the deferred action, clear -> just resume ACTIVE.
-            E_FLAG_TAIL_MODE_ACTION_DEFERRED = 0x0A,
+            E_FLAG_TAIL_MODE_ACTION_DEFERRED = 0x0A,       // DWARF mbSavedPrepareForModeAction
             // +0x3543E / +0x3543F. The two event-END requests Update folds into the ACTIVE
             // push at the foot of its publish tail. FLAG: recovered only as far as "either of
             // these ends the event state"; the first is additionally gated on the director
             // output interface's own byte, the second is unconditional.
-            E_FLAG_TAIL_EVENT_END_REQUEST    = 0x0E,
-            E_FLAG_TAIL_EVENT_END_FORCED     = 0x0F,
+            // +0x3543C. DWARF DirectorModule::mbDebugZeroTimestep (:321): while set, UpdateMoments
+            // hands the moments a zero game timestep (0x822502AC..0x822502BC). Construct seeds 0.
+            E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP  = 0x0C,
+            E_FLAG_TAIL_EVENT_END_REQUEST    = 0x0E,       // DWARF mbDebugTestFinishLines
+            E_FLAG_TAIL_EVENT_END_FORCED     = 0x0F,       // DWARF mbDebugForceEventStateToActive
         };
     };
 }

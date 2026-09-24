@@ -195,3 +195,16 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
 }
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentPassengerSeesAction> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_8200744C (AllocateVoid<MomentPassengerSeesAction>
+// @0x8222E7E0 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+namespace BrnDirector
+{
+void MomentPassengerSeesAction::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+}

@@ -27,10 +27,10 @@
 // leading vehicle snapshot diverges by construction. Parity is BY NAMED MEMBER -- the same rule
 // the arbitrator state container and the camera parameter bank state for their sub-objects.
 //
-// ⚠ NOTHING BUILDS ONE YET. The producer is MainDirector's moment tick, which has no body in
-// this tree (MomentController::UpdateAllMoments and MainDirector::UpdateMoments are both
-// unbodied and the call is gated out of MainDirector::Update), so no moment's Update runs and
-// no shim below is reachable at runtime. This header closes the READ end only.
+// ⭐ THE PRODUCER IS BODIED (2026-09-24, FX-DIRECTOR): MainDirector::UpdateMoments @0x82250268 builds
+// one on its stack every frame and hands it to MomentController::UpdateAllMoments @0x82239DE8.
+// ⚠ Its CALL in MainDirector::Update (0x82274348) is still gated -- two behaviours the moments pool
+// are hollow shells (see the GATE there) -- so no shim below is reachable at runtime yet.
 //
 // ⓘ TWELVE SHIM NAMES DO NOT MATCH THE MEMBER THEY LAND ON, and the shim names are the ones
 // that are wrong -- they were coined from each call site's role before the record existed.
@@ -76,7 +76,7 @@ namespace BrnDirector
     struct GameState;
     struct AllVehicleData;
     struct DebugLog;
-    class  DebugPrinter;
+    struct DebugPrinter;   // class-key as its home (BrnDirectorModuleDebugPrinter.h): MSVC mangles the key
     class  VehicleTracker;
     class  DirectorResourceManager;
     class  ShotSelector;

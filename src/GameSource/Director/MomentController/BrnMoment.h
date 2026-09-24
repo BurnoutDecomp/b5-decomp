@@ -100,6 +100,21 @@ namespace BrnDirector
         // --- inline non-virtual interface ---
         void Inhibit();
 
+        // DWARF BrnMoment.h:283. No out-of-line console symbol: MomentController::UpdateAllMoments
+        // @0x82239DE8 inlines it right before each moment's Update (0x82239F48..0x82239F94):
+        //     stb 1 -> +0x178 / +0x179 / +0x17A   mbCanSwitchToMeNow / mbCanSwitchFromMeNow /
+        //                                         mbConditionsMet (Update withdraws what it must)
+        //     assert sbFailFlagMaskSet (BrnCameraValidityAccount.h:193, `li r5, 0xC1`)
+        //     ld/and qword_82FAA5D0/std +0x148    the camera's validity account keeps only its
+        //                                         latched FAILURE bits
+        void PreUpdate()
+        {
+            mbCanSwitchToMeNow   = true;
+            mbCanSwitchFromMeNow = true;
+            mbConditionsMet      = true;
+            mCamera.GetValidityAccount().MaskToFailFlags();
+        }
+
         EState GetState() const { return meState; }
         EType  GetType()  const { return meType; }
         bool   IsValid()  const { return meState == E_STATE_VALID; }

@@ -30,7 +30,7 @@
 //   * PostGuiUpdate()         -- every leg whose destination is a GameState field
 //   * HandlePrepareForModeAction() -- the event-entry push (PRE_INTRO + meEventType)
 //
-// DECLARATION-ONLY + FLAGGED (in the header): UpdateICE / UpdateMoments / UpdateAttribSys /
+// DECLARATION-ONLY + FLAGGED (in the header): UpdateICE / UpdateAttribSys /
 // UpdateCameraBehaviours* / UpdateDebug* / ProcessNewVehicleEvents /
 // CalcTrafficLightSpace / DebugDisplayCurrentCamera.
 // Each indexes a NOT-HOMED aggregate, paraphrases a VMX pipeline, or depends on un-dumped
@@ -53,6 +53,7 @@
                                                                        //    stages one per frame)
 // -- ProcessNewVehicleEvents / UpdateAttribSys: the car's authored camera attribs ----------
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h"   // NewVehicleEvent queue
+#include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"      // MomentSharedInfo (UpdateMoments)
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"          // Attrib::Gen::burnoutcarasset
 #include "GameSource/AttribSys/Generated/classes/camerabumperbehaviour.h"    // Attrib::Gen::camerabumperbehaviour
 #include "GameSource/AttribSys/Generated/classes/cameraexternalbehaviour.h"  // Attrib::Gen::cameraexternalbehaviour
@@ -75,6 +76,7 @@ static bool PfxDirDiag()
     static const bool sbOn = (getenv("BRN_PFX_DIAG") != 0);
     return sbOn && CgsDev::Log::gpDebugPrint != 0;
 }
+
 
 // FLAG: CgsSceneManager::CgsCollision::BaseCollisionGenerator has no reconstructed home
 //   layout yet (the committed CgsSceneManagerModule.h forward-declares it only). Destruct /
@@ -247,12 +249,10 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     MainDirector::MainDirector()
         : mpDebugComponent(0)
-        , miMomentBucketFreeCount(0)
-        , muMomentBucketOccupancy(0)
         , miForcedCameraCarIndex(-1)
         , miPrepareStage(0)
         , miReleaseStage(0)
-        , mfConstructTime(0.0)
+        , mfDisplayAspectRatio(0.0f)
     {
         // Owned sub-objects: mICEWrapper / mCameraFinaliser / mArbitrator /
         // mBehaviourManager / mLastCamera / mCgsCamera run their own constructors.
@@ -265,7 +265,7 @@ namespace BrnDirector
     // The X360 call/store sequence, in order:
     //
     //     mStage         = 5;                                   // +0x35424
-    //     mfConstructTime = lfTime;                             // +0x35428 (double)
+    //     mDisplayAspectRatio = lfTime;                         // +0x35428 (a FLOAT: stfs)
     //     mStageCounter  = 0;                                   // +0x35420
     //     DirectorDevTools::Construct( this, this, lpResourceManager );
     //     <CgsGraphics::Camera ctor>( this + 0x349D0 );          // sub_827F94E8
@@ -277,8 +277,8 @@ namespace BrnDirector
     //     Camera::BehaviourManager::Construct( &mBehaviourManager );          // +0x1CB10
     //     CGS_ASSERT( lpResourceManager != NULL );               // BrnBehaviourManager.h:168
     //     *(this + 208588) = lpResourceManager;                  // == manager +91068
-    //     <the moment-bucket pool occupancy word (+0x1CAB8) cleared>
-    //     MomentParameterBank::Construct( this + 0x1CAC0 );
+    //     MomentController::Construct( this + 0x172D0 )         // inlined: pool occupancy
+    //                                                           // cleared + MomentParameterBank::Construct
     //     Arbitrator::Construct( &mArbitrator );                 // +0x12DC0
     //     <the VMX + 1284865837-multiplier LCG camera-shake seed pipeline into +0x32EE0..>
     //     KeyAnimShakeController::Construct( this + 0x124D0, lpResourceManager );
@@ -306,8 +306,7 @@ namespace BrnDirector
     //   * AllVehicleData::Construct + the five flag bytes -- un-homed (maAllVehicleData).
     //     CONSEQUENCE: the per-frame vehicle tracker starts zeroed; the arbitrator states that
     //     read it are the gameplay ones, not the attract/flyby path.
-    //   * MomentParameterBank::Construct -- un-homed (maMomentParameterBank). CONSEQUENCE: no
-    //     moment can be parameterised; UpdateMoments is itself declaration-only.
+    //   * (MomentController::Construct -- REAL since 2026-09-24: the controller is a member.)
     //   * the camera-shake LCG seed pipeline (+0x32EE0..) -- a multi-stage VMX + 1284865837
     //     multiplier LCG the reconstruction rules forbid paraphrasing to scalar, writing into
     //     the un-homed maRandom region. CONSEQUENCE: the shake RNG table starts zeroed.
@@ -333,7 +332,8 @@ namespace BrnDirector
         // BehaviourManager::Prepare) and the RELEASE stage starts at 5 == already released.
         miPrepareStage  = 0;
         miReleaseStage  = 5;
-        mfConstructTime = static_cast<f64>(lfTime);
+        // +0x35428 `stfs f31, 0(r27)` (0x8225B498): DWARF mDisplayAspectRatio, a FLOAT.
+        mfDisplayAspectRatio = lfTime;
 
         // ⚠️ GATE: DirectorDevTools::Construct( this, this, lpResourceManager );
 
@@ -367,10 +367,10 @@ namespace BrnDirector
         CGS_ASSERT(lpResourceManager != 0, "lpDirectorResourceManager != NULL");
         mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
 
-        // The moment-bucket pool's occupancy word (+0x1CAB8), cleared before the bank build.
-        muMomentBucketOccupancy = 0;
-
-        // ⚠️ GATE: MomentParameterBank::Construct( maMomentParameterBank );
+        // ⭐ REAL (2026-09-24, FX-DIRECTOR moment tick): the moment controller -- its pool's
+        // occupancy word cleared and its MomentParameterBank::Construct (0x8225B540..0x8225B554,
+        // the inlined MomentController::Construct).
+        mMomentController.Construct();
 
         // ⭐ REAL (was held back for host size): the camera arbitrator -- and with it the
         // 11-state container, the shared-camera container and the three special-cam states
@@ -420,7 +420,30 @@ namespace BrnDirector
         // The forced-camera-car override starts at the -1 "none" sentinel (+0x33100).
         miForcedCameraCarIndex = -1;
 
-        // ⚠️ GATE: the flag/latch tail seeds (+0x3542F..+0x3543F) into maStateFlagTail.
+        // ⭐ REAL (2026-09-24, FX-DIRECTOR): the flag/latch tail seeds, 0x8225B8EC..0x8225B9E8, in the
+        // console's value order (r31 == 0, r11 == 1). Names are the DecFIGS DirectorModule members.
+        mbShowAllCameraNames  = false;                                            // +0x3542F
+        maStateFlagTail[E_FLAG_TAIL_DISABLE_AFTERTOUCH_CAMERA]            = 0;    // +0x35430
+        maStateFlagTail[E_FLAG_TAIL_ALWAYS_SUPER_WIDE]                    = 0;    // +0x35432
+        maStateFlagTail[E_FLAG_TAIL_FORCE_NEXT_WORLD_CRASH_FAST_TOP_DOWN] = 1;    // +0x35437
+        maStateFlagTail[E_FLAG_TAIL_DISABLE_DOF]                          = 0;    // +0x35438
+        maStateFlagTail[E_FLAG_TAIL_FORCE_SLOMO_NOT_ALLOWED]              = 0;    // +0x35431
+        maStateFlagTail[E_FLAG_TAIL_FORCE_SUPER_SLOMO_IN_CRASHES]         = 0;    // +0x35433
+        maStateFlagTail[E_FLAG_TAIL_SHOW_WORLD_MAP_DEBUG]                 = 0;    // +0x35434
+        maStateFlagTail[E_FLAG_TAIL_FORCE_CUTSCENE_BARS_ON]               = 0;    // +0x35435
+        maStateFlagTail[E_FLAG_TAIL_REQUEST_HOOK_ENUMERATION]             = 0;    // +0x35436
+        mbAllowJumpMoment     = false;                                            // +0x3542C
+        mbAllowStuntMoment    = true;                                             // +0x3542D
+        mbAllowHardStopMoment = true;                                             // +0x3542E
+        maStateFlagTail[E_FLAG_TAIL_IN_ONLINE_POST_EVENT]                 = 0;    // +0x35439
+        maStateFlagTail[E_FLAG_TAIL_MODE_ACTION_DEFERRED]                 = 0;    // +0x3543A
+        maStateFlagTail[E_FLAG_TAIL_SHOW_CAMERA_STATE_FLAGS]              = 0;    // +0x3543B
+        mfDisplayAspectRatio  = lfTime;                                           // 0x8225B9B4 (again)
+        maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP]                  = 0;    // +0x3543C
+        maStateFlagTail[E_FLAG_TAIL_DEBUG_SINGLE_TIMESTEP]                = 0;    // +0x3543D
+        maStateFlagTail[E_FLAG_TAIL_EVENT_END_REQUEST]                    = 0;    // +0x3543E
+        maStateFlagTail[E_FLAG_TAIL_EVENT_END_FORCED]                     = 0;    // +0x3543F
+        maAllVehicleDataReadyLatch[0]                                     = 0;    // +0x12160
     }
 
     // ------------------------------------------------------------------------
@@ -435,8 +458,8 @@ namespace BrnDirector
     //   1 -> zero the frame counter (+0x121A0-ish, inside the shot block)
     //   2 -> ICEWrapper::Prepare
     //   4 -> Camera::BehaviourManager::Prepare
-    //   5 -> seed the moment-bucket pool free queue (19..0 descending) + count 20, and clear
-    //        its occupancy word (+0x1CAB8)
+    //   5 -> MomentController::Prepare (inlined): the moment pool's free queue refilled 19..0,
+    //        count 20, occupancy word (+0x1CAB8) cleared
     //   6 -> (empty)
     //   7 -> done: clear the stage counter, report success
     // (there is deliberately NO case 3 in the X360 jump table -- reproduced.)
@@ -490,16 +513,11 @@ namespace BrnDirector
                 return false;
             // fall through
         case 5:
-        {
             miPrepareStage = 5;
-            muMomentBucketOccupancy = 0;
-            for (s32 liSlot = 19; liSlot >= 0; --liSlot)
-            {
-                maMomentBucketFreeQueue[19 - liSlot] = liSlot;
-            }
-            miMomentBucketFreeCount = 20;
+            // The inlined MomentController::Prepare -> AbstractPool::Prepare -> ObjectPool::Clear
+            // (occupancy 0, free queue 19..0, count 20). It cannot fail; the console has no branch.
+            mMomentController.Prepare();
             // fall through
-        }
         case 6:
             miPrepareStage = 6;
             // fall through
@@ -570,7 +588,7 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void MainDirector::Destruct()
     {
-        muMomentBucketOccupancy = 0;      // the moment-bucket pool
+        mMomentController.Destruct();     // the moment pool's occupancy word (+0x1CAB8)
         mBehaviourManager.Destruct();     // the manager's three pools
 
         lpAsCollisionGenerator(&mCgsCamera)->Destruct();
@@ -749,8 +767,7 @@ namespace BrnDirector
                                                   &mBehaviourManager);                          // +0x18
         lrSharedInfo.mpNamedParameters       =
             &mBehaviourManager.GetBehaviourParameterBank().GetNamedParameters();    // +0x1C
-        lrSharedInfo.mpMomentController      = reinterpret_cast<MomentController*>(
-                                                  const_cast<u8*>(maMomentController));         // +0x20
+        lrSharedInfo.mpMomentController      = const_cast<MomentController*>(&mMomentController); // +0x20
         lrSharedInfo.mpGameState             = const_cast<GameState*>(&maGameState);            // +0x24
         lrSharedInfo.mpRandom                = reinterpret_cast<Random*>(
                                                   const_cast<u8*>(maRandom));                   // +0x28
@@ -2769,6 +2786,81 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
+    // UpdateMoments  @ 0x82250268   -- THE MOMENT TICK
+    //
+    // [FX-DIRECTOR 2026-09-24] BODIED. Every crash highlight / establishing camera the director can
+    // cut to is a MOMENT (MomentTumbling, MomentHardStop, MomentBystanderSeesAction, ...) owned by
+    // the moment controller, and a moment only becomes VALID inside its own Update. The console
+    // runs this tick every frame from Update (0x82274348); the PC had the call commented out and
+    // no body, so every MomentSelector counted 0 valid moments and every crash fell through to the
+    // external gameplay camera (FX-CRASHSND2 item 4, scratch/bugtest/runs/fxcrashsnd2_resetcam_diag).
+    // ⚠️ THE CALL IS STILL GATED in Update -- see the GATE there for the two hollow-shell behaviours.
+    //
+    // The console, in order:
+    //     if (input->IsSimPaused())  return;                              lbz 0x7AC8 ; bne tail
+    //     lfTimestep = gameTimer[+8] * gameTimer[+4];                     fmuls f31
+    //     if (mbDebugZeroTimestep /*+0x3543C*/) lfTimestep = 0.0f;        flt_82001CC0
+    //     <build a MomentSharedInfo on the stack -- the fields below, each named at its slot>
+    //     MomentController::UpdateAllMoments(this + 0x172D0, this + 0x1CB10 (the behaviour
+    //                                        manager), &lSharedInfo);
+    // ------------------------------------------------------------------------
+    void MainDirector::UpdateMoments(const DirectorInputOutput* lpIO, s32 liPlayerCarIndex)
+    {
+        const DirectorIO::InputBuffer* lpInput = lpIO->mpInputBuffer;          // lwz r3, 0(r30)
+        if (lpInput->IsSimPaused())
+            return;
+
+        const CgsSystem::TimerStatusInterface* lpTimerStatusInterface = lpInput->GetTimerStatusInterface();
+        f32 lfTimestep = lpTimerStatusInterface->GetGameTimerStatus()->GetCurrentTimeStep();
+        if (maStateFlagTail[E_FLAG_TAIL_DEBUG_ZERO_TIMESTEP])
+            lfTimestep = 0.0f;
+
+        const Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();    // sub_82207040
+        const Camera::VehicleInfo& lrPlayerCar = lpRaceCars[liPlayerCarIndex]; // mulli 0x4F0
+
+        MomentSharedInfo lSharedInfo;
+        lSharedInfo.mPlayerInfo              = lrPlayerCar;                     // VehicleInfo::operator=
+        lSharedInfo.mUsedRaceCars            = *lpInput->GetUsedRaceCars();     // ld / std var_90
+        lSharedInfo.mpRandom                 = reinterpret_cast<CgsNumeric::Random*>(maRandom);          // +0x32EE0
+        lSharedInfo.mpDebugLog               = reinterpret_cast<DebugLog*>(maDebugLog);                  // +0x33108
+        lSharedInfo.mpDebugPrinter           = reinterpret_cast<DebugPrinter*>(maDebugPrinterB);         // +0x3378C
+        lSharedInfo.mpGameState              = &maGameState;                                             // +0x337E0
+        lSharedInfo.mpAllVehicleData         = &mAllVehicleData;                                         // +0x12C80
+        lSharedInfo.mpPlayerCar              = &lrPlayerCar;
+        lSharedInfo.mpRaceCars               = lpRaceCars;
+        lSharedInfo.mpPlayerCarTransform     = &lrPlayerCar.mRaceCarState.mTransform;                    // +0x1F0
+        lSharedInfo.mePlayerActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(liPlayerCarIndex);
+        lSharedInfo.mfTimestep               = lfTimestep;
+        lSharedInfo.mfSimTimestep            = lpTimerStatusInterface->GetSimTimerStatus()->GetCurrentTimeStep();
+        lSharedInfo.mbAllowJumpMoment        = mbAllowJumpMoment;                                        // +0x3542C
+        lSharedInfo.mbAllowStuntMoment       = mbAllowStuntMoment;                                       // +0x3542D
+        lSharedInfo.mbAllowHardStopMoment    = mbAllowHardStopMoment;                                    // +0x3542E
+        lSharedInfo.mbForceNextWorldCrashToBeFastTopDown =
+            (maStateFlagTail[E_FLAG_TAIL_FORCE_NEXT_WORLD_CRASH_FAST_TOP_DOWN] != 0);                   // +0x35437
+        lSharedInfo.mbForceCollisionPolicysToStart = false;                                              // li r10, 0
+        lSharedInfo.mpBehaviourParameterBank = &mBehaviourManager.GetBehaviourParameterBank();           // +0x2F040
+        lSharedInfo.mpNamedBehaviourParams   =
+            &mBehaviourManager.GetBehaviourParameterBank().GetNamedParameters();                         // +0x2F050
+        lSharedInfo.mpPlayerTracker          = &mVehicleTracker;                                         // +0x339E0
+        lSharedInfo.mpContacts               =
+            reinterpret_cast<const MomentSharedInfo::ContactSpyInterface*>(lpInput->GetContacts());     // GetCont
+        lSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                                 // lwz 8(r30)
+        lSharedInfo.mpShotSelector           = reinterpret_cast<const ShotSelector*>(maShotSelector);    // +0x121F0
+        lSharedInfo.mpCrashAnalysis          = reinterpret_cast<const CrashAnalysis*>(maCrashAnalyser);  // +0x1245C
+        lSharedInfo.mpEffectInterface        = reinterpret_cast<const EffectInterface*>(maEffectInterface); // +0x33C90
+        lSharedInfo.mpPlayerCrashInfo        = lpInput->GetPlayerCrashInfo();                            // input +0x78E0
+
+        // ⚠️ GATE (inherited, not this function's): the shot selector and the crash analyser are
+        //   un-homed spans here (ShotSelector::Construct and CrashAnalyser::Update are gated), so
+        //   the crash analysis every moment reads is the static zero. CONSEQUENCE: MomentHardStop's
+        //   eligibility (CrashAnalysis::mxFlags bit 5) never holds and it never selects a shot.
+        //   DELETE-WHEN: ShotSelector + CrashAnalyser are members and PreSceneQueryUpdate runs
+        //   CrashAnalyser::Update.
+
+        mMomentController.UpdateAllMoments(mBehaviourManager, lSharedInfo);
+    }
+
+    // ------------------------------------------------------------------------
     // Update  @ 0x82274070   -- THE FUNCTION THAT PUBLISHES THE CAMERA
     //
     // Shape of the X360 body (935 lines of pseudocode; the structure is what matters):
@@ -2815,10 +2907,9 @@ namespace BrnDirector
     // touches the camera the arbitrator just produced):
     //   * UpdateDebugPrinters / DebugLog::Print / DebugLog::Update -- DebugPrinter and
     //     DebugLog are un-homed named regions.
-    //   * UpdateCameraBehavioursPostScene / UpdateMoments / UpdateICE -- all three are
-    //     declaration-only (BehaviourManager::UpdateAllBehaviours @0x82251960 is a VMX
-    //     attitude-band pipeline the rules forbid paraphrasing; the moment controller and the
-    //     ICE take are un-homed).
+    //   * UpdateMoments -- BODIED 2026-09-24, but the CALL is gated (see the GATE at the call
+    //     site: two behaviours the moments pool are hollow shells). UpdateICE -- declaration-only
+    //     (the ICE take is un-homed).
     //     ⚠️ ORDERING NOTE: the console runs those three BEFORE UpdateArbitrator, so the
     //     arbitrator sees last frame's behaviour output rather than this frame's. That is a
     //     one-frame staleness in the behaviour-driven camera, not a wrong camera.
@@ -2854,7 +2945,19 @@ namespace BrnDirector
             // BehaviourRoadRunner::Update run at all.
             UpdateCameraBehavioursPostScene(lpIO, liPlayerCarIndex);
 
-            // ⚠️ GATE: UpdateMoments( lpIO, liPlayerCarIndex );
+            // ⚠️ GATE: UpdateMoments( lpIO, liPlayerCarIndex );   (0x82274348 -- the moment tick)
+            //   UpdateMoments / MomentController::UpdateAllMoments / the factory are REAL (2026-09-24,
+            //   FX-DIRECTOR); only this call is held back. Its first live run AV'd at the first crash
+            //   moment (scratch/bugtest/runs/fxvoicepool/20260924_163149): BehaviourHelper::Prepare
+            //   @0x82255F48 dispatches the pooled behaviour's vtable slot 0, and two behaviours the
+            //   moments pool are HOLLOW SHELLS here -- Camera::BehaviourBystanderCam (three competing
+            //   definitions) and Camera::BehaviourFixedCam are modelled without their DWARF
+            //   `public Behaviour` base, so their pooled objects have no vtable.
+            //   CONSEQUENCE: no moment is ever Updated; every crash is filmed by the failsafe arm on the
+            //   gameplay camera, and the reset-on-track sting never fires (camera flag bit 3 never drops).
+            //   DELETE-WHEN: BehaviourBystanderCam (vtable off_8200A5C0) and BehaviourFixedCam
+            //   (off_8200A620) are real Camera::Behaviour subclasses and a live crash run with the tick
+            //   on is clean.
             // ⚠️ GATE: if ( !<ICE-owns-frame latch> ) UpdateICE( lpIO, liPlayerCarIndex );
 
             // ⭐ The arbitrator picks and runs the state that owns this frame's camera.

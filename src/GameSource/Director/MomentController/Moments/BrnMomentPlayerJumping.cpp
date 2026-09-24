@@ -410,3 +410,22 @@ template bool BehaviourCollection<
     Camera::BehaviourRig::Parameters, 4>::HasActiveCamera();
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentPlayerJumping> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_8200A130 (AllocateVoid<MomentPlayerJumping>
+// @0x82252DB8 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+//   slot 3 SetParameters    0x821F7670  `stw r4, 0x180(r3)` -- mpParameters
+namespace BrnDirector
+{
+void MomentPlayerJumping::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+
+void MomentPlayerJumping::SetParameters(const Moment::Parameters* lpParameters)
+{
+    mpParameters = static_cast<const Parameters*>(lpParameters);   // stw r4, 0x180(r3)
+}
+}
