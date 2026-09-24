@@ -84,7 +84,19 @@ namespace RaceCarEntityModuleIO
                                 BrnWorld::EDistrict leDistrict,
                                 EGlobalRaceCarIndex leRaceCarIndex, s8 li8RivalIndex); // :140
         void RemoveRival(s8 li8RivalIndex);                                       // :145
-        void SetFlag(Flag leFlag, bool lbValue);                                  // :151
+        // :151 / :160 -- HEADER INLINES (crash parity FX-RCEM4 2026-09-24): the image emits no
+        // out-of-line symbol for either. Their producer, RaceCarEntityModule::PostSceneUpdate,
+        // folds them on the interface returned by OutputBuffer_PostScene::GetRaceCarToTrafficInterface
+        // (0x822B56B0): `lwz 0x6A0 ; ori r11, r11, 2 | rlwinm r11, r11, 0, 31, 29 ; stw 0x6A0`
+        // (0x822FE524..0x822FE538, the flag word) and `stfs f31, 0x6A4` (0x822FE554, the scale);
+        // ProcessPowerParking does the same with bit 0.
+        void SetFlag(Flag leFlag, bool lbValue)                                   // :151
+        {
+            if (lbValue)
+                muFlags |= (1u << static_cast<u32>(leFlag));
+            else
+                muFlags &= ~(1u << static_cast<u32>(leFlag));
+        }
         // :155 / :163 -- HEADER INLINES. The image emits no out-of-line symbol for either;
         // the consumer (TrafficEntityModule::PostSceneUpdate) folds both reads in place, as a
         // single word load of muFlags masked with 1 then 2, and a single-precision load of
@@ -93,7 +105,10 @@ namespace RaceCarEntityModuleIO
         {
             return (muFlags & (1u << static_cast<u32>(leFlag))) != 0;
         }
-        void SetShowtimeTrafficDensityScale(f32 lfScale);                         // :160
+        void SetShowtimeTrafficDensityScale(f32 lfScale)                          // :160
+        {
+            mfShowtimeTrafficDensityScale = lfScale;
+        }
         f32  GetShowtimeTrafficDensityScale() const { return mfShowtimeTrafficDensityScale; }  // :163
         const CgsModule::EventQueue<CreateRivalInTrafficSystemEvent, 34>* GetCreateRivalQueue() const; // :166
         const CgsModule::EventQueue<RemoveRivalFromTrafficSystemEvent, 34>* GetRemoveRivalQueue() const; // :167

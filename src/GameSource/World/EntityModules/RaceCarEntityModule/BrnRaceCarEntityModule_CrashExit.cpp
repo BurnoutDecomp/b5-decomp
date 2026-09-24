@@ -418,7 +418,7 @@ void RaceCarEntityModule::ProcessLeapedAndStompedCars(
 //   if (!(lUpdateSet & 1)) UpdateTrafficAndRaceCarNearMisses          ⭐ REPRODUCED (2026-09-11)
 //   ProcessRaceCarCrashCompleteEvents                                 ⭐ REPRODUCED
 //   ProcessLeapedAndStompedCars                                       ⭐ REPRODUCED (2026-09-24)
-//   the showtime traffic-density publish into the output interface    [ABSENT helper]
+//   the Showtime traffic publish into the race-car -> traffic interface ⭐ REPRODUCED (2026-09-24)
 //   ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate         [ABSENT]
 //   SendResetOnTrackRequests                                          ⭐ REPRODUCED
 //   CheckForResetOnTrackConditions                                    ⭐ REPRODUCED (2026-09-05)
@@ -448,6 +448,46 @@ void RaceCarEntityModule::PostSceneUpdate(
 
     // 0x822FE4AC..0x822FE4B8 -- unconditional (CHAIN-STOMPEES c, 2026-09-24).
     ProcessLeapedAndStompedCars( lpInput, lpOutput );
+
+    // 0x822FE4BC..0x822FE554 -- THE SHOWTIME TRAFFIC PUBLISH (crash parity FX-RCEM4, 2026-09-24).
+    //   r27 = this + 0x180F0 (mCrashPlayManager); the inlined IsPlayerInShowtimeOnGround()
+    //   (0x822FE4C4..0x822FE510) -> r29 ; bl GetRaceCarToTrafficInterface (0x822B56B0) ;
+    //   flag word +0x6A0: `ori 2` / `rlwinm ..,0,31,29` ; stw        == SetFlag(bit 1, r29)
+    //   bl CrashPlayManager::GetShowtimeTrafficDensityScale (0x822A8088) -> f31 ;
+    //   bl GetRaceCarToTrafficInterface ; stfs f31, 0x6A4             == SetShowtimeTrafficDensityScale
+    // Unconditional. Its reader is TrafficEntityModule::PostSceneUpdate (+464870 / +464932), which
+    // gates the Showtime on-ground traffic and scales the Showtime spawn density. Until this landed
+    // the flag was never set and the scale sat at RaceCarToTrafficInterface::Construct's 1.0f.
+    {
+        RaceCarEntityModuleIO::RaceCarToTrafficInterface* lpRaceCarToTraffic =
+            lpOutput->GetRaceCarToTrafficInterface();
+        lpRaceCarToTraffic->SetFlag(
+            RaceCarEntityModuleIO::RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_IN_SHOWTIME_ON_GROUND,
+            mCrashPlayManager.IsPlayerInShowtimeOnGround() );
+        lpRaceCarToTraffic->SetShowtimeTrafficDensityScale(
+            mCrashPlayManager.GetShowtimeTrafficDensityScale() );
+
+        // [DIAG] BRN_SHOWTIME_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. One capped line per change
+        // of the published pair, so a run proves the publish is DISPATCHED and shows its values.
+        static const bool sbShowtimeTrafficDiag = ( getenv( "BRN_SHOWTIME_TRAFFIC_DIAG" ) != 0 );
+        static s32 siLastOnGround = -1;
+        static f32 sfLastScale = -1.0f;
+        static u32 suShowtimeTrafficLines = 0u;
+        const s32 liOnGround = lpRaceCarToTraffic->IsFlagSet(
+            RaceCarEntityModuleIO::RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_IN_SHOWTIME_ON_GROUND ) ? 1 : 0;
+        const f32 lfScale = lpRaceCarToTraffic->GetShowtimeTrafficDensityScale();
+        if( sbShowtimeTrafficDiag && CgsDev::Log::gpDebugPrint != 0 && suShowtimeTrafficLines < 32u
+            && ( liOnGround != siLastOnGround || lfScale != sfLastScale ) )
+        {
+            siLastOnGround = liOnGround;
+            sfLastScale    = lfScale;
+            ++suShowtimeTrafficLines;
+            *CgsDev::Log::gpDebugPrint << "[showtime-traffic] PostSceneUpdate publish onGround "
+                                       << liOnGround << " densityScale " << lfScale
+                                       << " (in showtime " << ( mCrashPlayManager.IsInShowtime() ? 1 : 0 )
+                                       << ")\n";
+        }
+    }
 
     // ⭐⭐⭐ THE PRODUCER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
     // console's own slot -- SendResetOnTrackRequests is the fifth of PostSceneUpdate's eight

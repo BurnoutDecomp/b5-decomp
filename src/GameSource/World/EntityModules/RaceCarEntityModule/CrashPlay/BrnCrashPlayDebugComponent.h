@@ -264,6 +264,11 @@ namespace BrnWorld
         bool IsActive() const         { return mbIsCrashPlayActive; }
         bool IsInShowtime() const     { return mbIsInShowtime; }
         bool IsBounceBoosting() const { return mfBounceBoostTimer > 0.0f; }
+        // DWARF BrnCrashPlayManager.h:160 (body BrnCrashPlayManager.cpp:952). No out-of-line X360
+        // symbol: the console inlines it into RaceCarEntityModule::PostSceneUpdate's Showtime
+        // traffic publish @0x822FE4C4..0x822FE510. Bodied out of line in the manager's own TU,
+        // beside KF_TIME_ON_GROUND_NO_PENALTY, the constant it reads (crash parity FX-RCEM4).
+        bool IsPlayerInShowtimeOnGround() const;
         // Deactivate() is DWARF-declared (BrnCrashPlayManager.h) and has no out-of-line X360
         // symbol: RaceCarEntityModule::HandleStopModeAction @0x82307B84 emits it inline as
         // `stfs 0.0, +0x134 ; stb 0, +0x14C` behind an IsActive() test, followed by the console's
