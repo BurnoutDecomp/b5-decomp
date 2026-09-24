@@ -362,6 +362,13 @@ namespace BrnTrafficIO
         const DeformationOutputInterfaceForEntityModules* GetDeformationOutputInterfaceForEntityModules() const;
         // X360 0x827A0778 (:366): write-lock; mContactSpyInterface = *src (single-word copy).
         void SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface);
+        // X360 0x827119A0 (IDA-unnamed `sub_827119A0`, DWARF :365 `GetContactSpyInterface`):
+        // read-lock test (`lbz r11,0(this) ; rlwinm r11,r11,28,31,31`), the streamed "Not locked
+        // for reading" assert at this header's line 369 (0x171), then `addis r3,r28,2 ;
+        // addi r3,r3,-0x6110` == this+0x19EF0 == 106224 == &mContactSpyInterface. Sole caller:
+        // TrafficEntityModule::HandleContactPoints @0x827342DC. Body in
+        // BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp.
+        const ContactSpyInterface* GetContactSpyInterface() const;
 
         // Read/write getters (bodies in BrnTrafficEntityModuleIO_InputBuffer_Getters.cpp).
         const VehicleOutputInterface*        GetVehicleOutputInterface() const;        // :346 (0x827115B0) &member (this+16)

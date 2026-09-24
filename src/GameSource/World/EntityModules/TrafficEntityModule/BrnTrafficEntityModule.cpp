@@ -3393,10 +3393,12 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // (_wT1_06.cpp), which call them. Writing them here would be a second, invented copy of
     // the decision frame.
     //
-    // Console order, 0x8274E7F0..0x8274E8FC, reproduced exactly:
+    // Console order, 0x8274EA20..0x8274EBF8 (meState == 1: `cmplwi r11,1 ; beq 0x8274EA20` at
+    // 0x8274E7FC), reproduced exactly:
     //   StartMonitor(+0x72A0C)
-    //   HandleRecycledTraffic / HandleExternalResponses / HandleResetRaceCarEvents /
-    //   HandleContactPoints / ProcessDeformationData                       [all GATED]
+    //   HandleRecycledTraffic 0x8274EA44 / HandleExternalResponses 0x8274EA50 /
+    //   HandleResetRaceCarEvents 0x8274EA5C / HandleContactPoints 0x8274EA68 /
+    //   ProcessDeformationData 0x8274EA7C
     //   StopMonitor(+0x72A0C)
     //   if (IsPaused() || lbSimPaused)  { StartMonitor(+0x72A28); }
     //   else { IsDecisionFrame() ? UpdateDecisionFrame : UpdateNonDecisionFrame ;
@@ -3410,34 +3412,43 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
     // ====================================================================================
     case E_STATE_RUNNING:
     {
-        // 0x8274E870..0x8274E884 -- UNGATED as of 2026-09-06: HandleRecycledTraffic is bodied
+        // 0x8274EA30..0x8274EA44 -- UNGATED as of 2026-09-06: HandleRecycledTraffic is bodied
         // in _wT3_02.cpp. The console fetches the vehicle manager's output interface and hands
         // it `interface + 0x7A0` == mRemovedTrafficEventQueue, reached here by name.
         // ⭐ This is the PHYSICS-driven half of traffic demotion (the world-driven half is
         // TryClearupOffscreenTraffic, inside GenerateDriverInputs). Both were gated, and with
         // both gated the module's 25 TrafficPhysicsInfo slots only ever filled.
-        // ⛔ NO NULL TEST, deliberately: the console has none (0x8274E874 `bl <getter>` then
-        // 0x8274E880 `addi r4, r3, 0x7A0` with nothing in between), and the getter returns the
+        // ⛔ NO NULL TEST, deliberately: the console has none (0x8274EA34 `bl <getter>` then
+        // 0x8274EA40 `addi r4, r3, 0x7A0` with nothing in between), and the getter returns the
         // address of an embedded member, so there is nothing to test. A guard here would be
         // dead code that reads like a guard.
         HandleRecycledTraffic(
             lpInput->GetVehicleManagerOutputInterface()->GetRemovedTrafficEventQueue());
 
-        // HandleExternalResponses @0x82732C68 is the second of the five head legs and IS bodied
-        // (_wT3_04.cpp): it turns the physics side's PhysicalTrafficState queue back into world
-        // vehicle transforms, so a car the player hits actually moves. The other four legs keep
-        // their gate below.
+        // HandleExternalResponses @0x82732C68 (0x8274EA50), bodied in _wT3_04.cpp: it turns the
+        // physics side's PhysicalTrafficState queue back into world vehicle transforms, so a car
+        // the player hits actually moves.
         HandleExternalResponses(lpInput);
 
-        // 0x8274E894..0x8274E8A4: `GetDeformationOutputInterfaceForEntityModules(lpInput)` ->
+        // GATE (FX-TRAFFIC3, next commit): HandleResetRaceCarEvents @0x82742CE8 (0x8274EA5C) --
+        // no body yet. DELETE-WHEN CC-1 lands it here, before HandleContactPoints.
+
+        // 0x8274EA60..0x8274EA68: HandleContactPoints(this, lpInput) @0x827340C0 -- LIVE
+        // 2026-09-24 (FX-TRAFFIC3, CC-2). The contact-side detector: without it no traffic car
+        // ever registered being pinned at its nose or tail, so GenerateDriverInputs' wedge arm
+        // never cut its gas and brake.
+        HandleContactPoints(lpInput);
+
+        // 0x8274EA6C..0x8274EA7C: `GetDeformationOutputInterfaceForEntityModules(lpInput)` ->
         // ProcessDeformationData(this, r3). LIVE as of 2026-09-02 (traffic-deformation wave);
         // body in BrnTrafficEntityModule_ProcessDeformationData.cpp.
         ProcessDeformationData(lpInput->GetDeformationOutputInterfaceForEntityModules());
 
-        // The console's head-leg order at 0x8274E870..0x8274E8A4 is exactly those three calls
-        // (HandleRecycledTraffic / HandleExternalResponses / ProcessDeformationData) --
-        // HandleResetRaceCarEvents and HandleContactPoints are NOT in this arm. All three are
-        // now LIVE.
+        // ⚠️ CORRECTED 2026-09-24 (FX-TRAFFIC3): an earlier note here said the RUNNING arm's head
+        // legs were the three calls at 0x8274E870..0x8274E8A4 and that HandleResetRaceCarEvents
+        // and HandleContactPoints were "NOT in this arm". That block is the TEARING_DOWN arm's
+        // WIPING sub-state (meState 2, +0x310 == 0; below). The RUNNING arm is 0x8274EA20 and
+        // runs all five head legs in the order above.
 
         // 0x8274E710 `clrlwi r27, r30, 31` -- bit 0 of the update set is the sim-paused bit,
         // fed straight into the `IsPaused() || ...` test below. FLAG (no enumerator):
@@ -12774,10 +12785,28 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             }
 
             // 0x827496C8 -- a wedged car has its gas and brake forced off and is always sent.
+            // Reachable since FX-TRAFFIC3 (CC-2): the stuck timers only grow from the contact
+            // flags HandleContactPoints / ProcessContactPoint raise.
             if (leManoeuvre != Vehicle::E_MANOEUVRE_STUCK_REVERSE
                 && (lpInfo->mfStuckTimeFront > KF_STUCK_SEND_THRESHOLD
                     || lpInfo->mfStuckTimeBack > KF_STUCK_SEND_THRESHOLD))
             {
+                // [DIAG] NOT IN THE X360 BINARY. BRN_TRAFFIC_DIAG witness of the wedge arm, capped.
+                {
+                    static s32 siWedgeDiagLines = 0;
+                    if (siWedgeDiagLines < KI_DEMOTE_PRINT_CAP && TrafficDiagEnabled()
+                        && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        ++siWedgeDiagLines;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[T-stuck] vehicle=" << liVehicle
+                            << " front=" << lpInfo->mfStuckTimeFront
+                            << " back=" << lpInfo->mfStuckTimeBack
+                            << " flags=" << static_cast<u32>(lpInfo->muContactSideFlags)
+                            << " gas=" << lControls.mfGas << " brake=" << lControls.mfBrake
+                            << " -> gas/brake cut\n";
+                    }
+                }
                 lControls.mfGas   = 0.0f;
                 lControls.mfBrake = 0.0f;
                 lbSend            = true;
@@ -14032,6 +14061,288 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
             }
         }
     }
+}
+
+}  // namespace BrnTraffic
+
+// ============================================================================
+// FX-TRAFFIC3 (crash parity wave 5, 2026-09-24, CC-2) -- the contact-side detector.
+//
+//   TrafficEntityModule::HandleContactPoints      @0x827340C0 (190 insns, DWARF h:1462)
+//   TrafficEntityModule::ProcessContactPoint      @0x82720C68 (150 insns, DWARF h:1470)
+//   TrafficEntityModule::DEBUG_RenderContactPoint @0x827082B8 ( 51 insns, DWARF h:1920)
+//
+// None of the three had a body and PostPhysicsUpdate's RUNNING arm never made the call the
+// console makes at 0x8274EA68. So TrafficPhysicsInfo::muContactSideFlags stayed 0 and
+// mfStuckTimerDebounce never moved: UpdateVehicleStuckTimers never grew mfStuckTimeFront /
+// mfStuckTimeBack, and GenerateDriverInputs' wedge arm (0x827496C8, stuck > 0.05 s -> gas and
+// brake forced to 0) could not fire. A traffic car the player pinned at its nose or tail kept
+// driving into him.
+//
+// The PS3 twins (DecFIGS 0x95E0DC / 0x95DBDC) name every constant and local used below.
+// ============================================================================
+namespace BrnTraffic
+{
+namespace
+{
+    // DWARF BrnTrafficEntityModule.cpp:238 / :240 -- `const VecFloat`. Both are .bss splats
+    // (a .bss slot reads 0 off the image by definition) filled by CRT thunks, which run in
+    // definition order:
+    //   0x82C669B8  lfs flt_82004018 (0.75) ; lvlx ; vspltw ; stvx128 -> unk_8300CCF0
+    //   0x82C669E0  lfs flt_820BA540 (0.9)  ; ...                    -> unk_8300CA00
+    //   0x82C66A08  lfs flt_82004018 (0.75) ; ...                    -> unk_8300CC10
+    // i.e. KF_CONTACT_FRONT_BACK (:238), KF_CONTACT_SIDE (:239), KF_CONTACT_DISCARD_SIDE (:240).
+    // ProcessContactPoint reads unk_8300CC10 for its sideways test (0x82720E10) and
+    // unk_8300CCF0 for both front/back tests (0x82720E40); the PS3 twin loads
+    // KF_CONTACT_DISCARD_SIDE and KF_CONTACT_FRONT_BACK at the same two sites. KF_CONTACT_SIDE
+    // has no reader anywhere in the image (findinit: its writer is its only site) and is not
+    // carried. Every lane is equal, so each is carried as its scalar (the house convention for
+    // splat constants).
+    const f32 KF_CONTACT_FRONT_BACK   = 0.75f;   // unk_8300CCF0 <- flt_82004018
+    const f32 KF_CONTACT_DISCARD_SIDE = 0.75f;   // unk_8300CC10 <- flt_82004018
+
+    // DWARF BrnTrafficEntityModule.cpp:241 `const float32_t`. Both stores load it as
+    // `lfs f0, flt_82001C98` (1.0) at 0x82720E68 / 0x82720EA0; the PS3 twin stores 1.0.
+    const f32 KF_CONTACT_SIDE_DEBOUNCE_TIMER = 1.0f;   // flt_82001C98
+
+    // DWARF BrnTrafficTweakConstants.h:281 `const rw::math::vpu::Vector3
+    // K_SIDE_STUCK_BOUNDING_BOX_ADD`. The .bss vector unk_8300CBD0, filled by the CRT thunk
+    // 0x82C663A0..0x82C663E4 from { flt_82004744 (0.2), flt_820047C8 (0.05), flt_82001CC0
+    // (0.0), `stw 0` }: the bbox half size is widened by 0.2 sideways (and 0.05 vertically)
+    // before the side test. Carried here beside its only reader -- the tree's
+    // BrnTrafficTweakConstants.h holds the TweakValues type only and leaves the constant pool
+    // to the TU that reads it.
+    const Vector3 K_SIDE_STUCK_BOUNDING_BOX_ADD = { 0.2f, 0.05f, 0.0f, 0.0f };
+
+    // DEBUG_RenderContactPoint's arrow: `lfs f0, flt_8200426C` (5.0) splatted into the
+    // vmaddfp at 0x8270835C. The PS3 twin builds the same splat from an immediate
+    // (0x40A00000), i.e. a literal in the source; named here for the citation.
+    const f32 KF_DEBUG_CONTACT_ARROW_LENGTH = 5.0f;    // flt_8200426C
+
+    // rw::RGBA::RGBA @0x821F05B0 packs (a<<24)|(b<<16)|(g<<8)|r, and DEBUG_RenderContactPoint
+    // passes the folded words in r4 (`lis r4,-0x100 ; ori 0xFF00 / 0xFFFF`):
+    // RGBA(0,255,0,255) against the world, RGBA(255,255,0,255) against anything else.
+    const CgsDev::RGBA KU_DEBUG_CONTACT_WORLD_COLOUR = 0xFF00FF00u;
+    const CgsDev::RGBA KU_DEBUG_CONTACT_OTHER_COLOUR = 0xFF00FFFFu;
+
+    // [DIAG] NOT IN THE X360 BINARY. BRN_TRAFFIC_DIAG witnesses for the live check: the side
+    // flags this detector raises and the frames that carried traffic contacts at all (so a run
+    // without a [T-contact-side] line can tell "no contact" from "no flag"). Capped.
+    const s32 KI_CONTACT_SIDE_DIAG_CAP = 60;
+    s32       giContactSideDiagLines   = 0;
+    s32       giContactPassDiagLines   = 0;
+}
+
+// -------------------------------------------------------------------------------------------------
+// @0x827340C0  TrafficEntityModule::HandleContactPoints
+//   DWARF h:1462 `void HandleContactPoints(const InputBuffer_PostPhysics*)`; locals luPhysInfoBit,
+//   lpPhysInfo, lpContactSpyInterface, lpTrafficContacts, liIndex, lpContact.
+//
+//   0x827340E0  "lpInput != NULL" (.cpp 6527) -- a tripwire, no early-out
+//   0x8273416C  for r28 in [0, 25): the used-slot bit (`ldx` of this+0x713A0, i.e.
+//               maTrafficPhysicsInfoListBits, + `sld`/`and`); the "invalid index" assert is
+//               the inlined BitArray::IsBitSet's (CgsBitArray.h:203), hoisted to the first pass
+//   0x827342AC  mfStuckTimerDebounce (+0xFD4) -= mfSimTimeStep (+0x713FC) and STORED, then
+//   0x827342BC  `fcmpu f0, 0.0 ; bgt skip ; stb 0 -> +0x1008` -- the flags clear unless the
+//               stored timer is still > 0, so a NaN timer clears them as well
+//   0x827342DC  GetContactSpyInterface (0x827119A0) + "lpContactSpyInterface" (.cpp 6552)
+//   0x82734308  `lwz mpData ; beq out` == ContactSpyInterface::IsValid()
+//   0x82734314  mpData + 0x70A0 == GetTrafficContacts() + "lpTrafficContacts" (.cpp 6557)
+//   0x8273433C  for liIndex < GetLength() (re-read every pass): GetEvent (0x82368330), then
+//   0x82734370  ProcessContactPoint(lpContact, &lpContact->mEntityIdA)   (r5 = contact + 0)
+//   0x82734380  ProcessContactPoint(lpContact, &lpContact->mEntityIdB)   (r5 = contact + 4)
+//   0x82734384  `lbz +0x7286B` (mbDEBUGRenderContacts) -> DEBUG_RenderContactPoint(lpContact)
+// -------------------------------------------------------------------------------------------------
+void TrafficEntityModule::HandleContactPoints(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput != NULL");                                    // .cpp 6527
+
+    for (u32 luPhysInfoBit = 0; luPhysInfoBit < KU_MAX_PHYSICAL_TRAFFIC_VEHICLES; ++luPhysInfoBit)
+    {
+        if (maTrafficPhysicsInfoListBits.IsBitSet(luPhysInfoBit))
+        {
+            TrafficPhysicsInfo* const lpPhysInfo = &maTrafficPhysicsInfoList[luPhysInfoBit];
+
+            lpPhysInfo->mfStuckTimerDebounce -= mfSimTimeStep;
+            if (!(lpPhysInfo->mfStuckTimerDebounce > 0.0f))
+            {
+                lpPhysInfo->muContactSideFlags =
+                    static_cast<u8>(TrafficPhysicsInfo::E_CONTACT_SIDE_NONE);
+            }
+        }
+    }
+
+    const BrnTrafficIO::InputBuffer_PostPhysics::ContactSpyInterface* const lpContactSpyInterface =
+        lpInput->GetContactSpyInterface();
+    CGS_ASSERT(lpContactSpyInterface != 0, "lpContactSpyInterface");                // .cpp 6552
+
+    if (lpContactSpyInterface->IsValid())
+    {
+        const BrnPhysics::ContactSpy::ContactSpyData::TrafficContactQueue* const lpTrafficContacts =
+            lpContactSpyInterface->GetTrafficContacts();
+        CGS_ASSERT(lpTrafficContacts != 0, "lpTrafficContacts");                    // .cpp 6557
+
+        // [DIAG] NOT IN THE X360 BINARY -- see KI_CONTACT_SIDE_DIAG_CAP.
+        if (lpTrafficContacts->GetLength() > 0 && giContactPassDiagLines < KI_CONTACT_SIDE_DIAG_CAP)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giContactPassDiagLines;
+                *lpDiag << "[T-contact-pass] contacts=" << lpTrafficContacts->GetLength() << "\n";
+            }
+        }
+
+        for (s32 liIndex = 0; liIndex < lpTrafficContacts->GetLength(); ++liIndex)
+        {
+            const BrnPhysics::ContactSpy::TrafficContact* const lpContact =
+                &lpTrafficContacts->GetEvent(liIndex);
+
+            ProcessContactPoint(lpContact, lpContact->mEntityIdA);
+            ProcessContactPoint(lpContact, lpContact->mEntityIdB);
+
+            if (mbDEBUGRenderContacts)
+            {
+                DEBUG_RenderContactPoint(lpContact);
+            }
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// @0x82720C68  TrafficEntityModule::ProcessContactPoint
+//   DWARF h:1470 `void ProcessContactPoint(const TrafficContact*, const EntityId&)`; locals
+//   luVehicle, lpVehicle, lpPhysInfo, lpVehicleTypeRuntime, lVehicleTransform, lVehicleHalfSize,
+//   lVehiclePosition, lVehicleDir, lVehicleRight, lPointInLocalSpace, lfDirDot, lfRightDot.
+//
+//   0x82720C8C  "lpContact" (.cpp 6591), a tripwire
+//   0x82720CB4  `srwi r10, id, 24 ; cmplwi 2 ; bne out` -- only a TRAFFIC end is looked at
+//   0x82720CC4  `cmplw id, lpContact->mEntityIdA` (a VALUE compare) -> mPointOnA (+0x40), else
+//               mPointOnB (+0x50)
+//   0x82720CD8  `extrwi r30, id, 14, 8` == the 14-bit entity index; GetVehicle + "lpVehicle"
+//               (.cpp 6620)
+//   0x82720D14  `lbz 5(vehicle)` & E_FLAG_PHYSICAL, then & E_FLAG_ALIVE -- else out
+//   0x82720D38  GetTrafficPhysicsInfoForVehicl + "lpPhysInfo" (.cpp 6631)
+//   0x82720D64  GetVehicleType (0x8270E528: its own IsAlive assert, already true here) ->
+//               GetVehicleTypeRuntime + "lpVehicleTypeRuntime" (.cpp 6635)
+//   0x82720DB0  GetVehicleTransform (sret): row 0 = right (var_80), row 2 = dir (var_60),
+//               row 3 = position (var_50)
+//   0x82720DCC  lVehicleHalfSize = mBBoxHalfSize (+0x10) + K_SIDE_STUCK_BOUNDING_BOX_ADD
+//   0x82720DD0  lPointInLocalSpace = point - position ; vmsum3fp128 x2 -> lfRightDot, lfDirDot
+//   0x82720E18  `vandc` (|lfRightDot|) ; `vcmpgefp. (half.x * KF_CONTACT_DISCARD_SIDE >= |right|)`
+//               all-lanes ; beq out. A point outside the widened sides is discarded -- and so is
+//               a NaN, which fails the compare.
+//   0x82720E4C  `vcmpgefp. (dir >= half.z * KF_CONTACT_FRONT_BACK)` -> FRONT
+//   0x82720E7C  else `vxor` the constant's sign bit, `vmulfp128` by half.z,
+//               `vcmpgefp. (half.z * -KF_CONTACT_FRONT_BACK >= dir)` -> BACK, else out
+//   0x82720EA8  mfStuckTimerDebounce (+0xFD4) = 1.0 ; muContactSideFlags (+0x1008) |= side
+// vmx128.py confirms every VMX128 register operand above (vD/vA/vB as IDA prints them).
+// -------------------------------------------------------------------------------------------------
+void TrafficEntityModule::ProcessContactPoint(const BrnPhysics::ContactSpy::TrafficContact* lpContact,
+                                              const EntityId& lEntityId)
+{
+    CGS_ASSERT(lpContact != 0, "lpContact");                                        // .cpp 6591
+
+    if (EntityOwnerOf(lEntityId) != KU_TRAFFIC_ENTITY_OWNER)
+    {
+        return;
+    }
+
+    const Vector3 lPointOnVehicle = (lEntityId.muValue == lpContact->mEntityIdA.muValue)
+                                  ? lpContact->mPointOnA
+                                  : lpContact->mPointOnB;
+
+    const u32 luVehicle = EntityIndexOf(lEntityId);
+    const Vehicle* const lpVehicle = GetVehicle(luVehicle);
+    CGS_ASSERT(lpVehicle != 0, "lpVehicle");                                        // .cpp 6620
+
+    if (!lpVehicle->IsPhysical() || !lpVehicle->IsAlive())
+    {
+        return;
+    }
+
+    TrafficPhysicsInfo* const lpPhysInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+    CGS_ASSERT(lpPhysInfo != 0, "lpPhysInfo");                                      // .cpp 6631
+
+    const VehicleTypeRuntime* const lpVehicleTypeRuntime =
+        GetVehicleTypeRuntime(lpVehicle->GetVehicleType());
+    CGS_ASSERT(lpVehicleTypeRuntime != 0, "lpVehicleTypeRuntime");                  // .cpp 6635
+
+    const Matrix44Affine lVehicleTransform = GetVehicleTransform(luVehicle);
+    const Vector3 lVehicleHalfSize = lpVehicleTypeRuntime->GetBBoxHalfSize() + K_SIDE_STUCK_BOUNDING_BOX_ADD;
+    const Vector3 lVehiclePosition = lVehicleTransform.Pos();
+    const Vector3 lVehicleDir      = lVehicleTransform.At();
+    const Vector3 lVehicleRight    = lVehicleTransform.Right();
+
+    const Vector3 lPointInLocalSpace = lPointOnVehicle - lVehiclePosition;
+    const f32 lfDirDot   = rw::math::vpu::Dot(lPointInLocalSpace, lVehicleDir);
+    const f32 lfRightDot = rw::math::vpu::Dot(lPointInLocalSpace, lVehicleRight);
+
+    if (!(fabsf(lfRightDot) <= lVehicleHalfSize.x * KF_CONTACT_DISCARD_SIDE))
+    {
+        return;
+    }
+
+    TrafficPhysicsInfo::EContactSideFlag leSide = TrafficPhysicsInfo::E_CONTACT_SIDE_NONE;
+    if (lfDirDot >= lVehicleHalfSize.z * KF_CONTACT_FRONT_BACK)
+    {
+        leSide = TrafficPhysicsInfo::E_CONTACT_SIDE_FRONT;
+    }
+    else if (lfDirDot <= lVehicleHalfSize.z * -KF_CONTACT_FRONT_BACK)
+    {
+        leSide = TrafficPhysicsInfo::E_CONTACT_SIDE_BACK;
+    }
+    else
+    {
+        return;
+    }
+
+    lpPhysInfo->mfStuckTimerDebounce = KF_CONTACT_SIDE_DEBOUNCE_TIMER;
+    lpPhysInfo->muContactSideFlags   = static_cast<u8>(lpPhysInfo->muContactSideFlags | leSide);
+
+    // [DIAG] NOT IN THE X360 BINARY -- see KI_CONTACT_SIDE_DIAG_CAP.
+    if (giContactSideDiagLines < KI_CONTACT_SIDE_DIAG_CAP)
+    {
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            ++giContactSideDiagLines;
+            *lpDiag << "[T-contact-side] vehicle=" << luVehicle
+                    << " side=" << (leSide == TrafficPhysicsInfo::E_CONTACT_SIDE_FRONT ? "front" : "back")
+                    << " dir=" << lfDirDot << " halfZ=" << lVehicleHalfSize.z
+                    << " right=" << lfRightDot << " halfX=" << lVehicleHalfSize.x
+                    << " flags=" << static_cast<u32>(lpPhysInfo->muContactSideFlags) << "\n";
+        }
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// @0x827082B8  TrafficEntityModule::DEBUG_RenderContactPoint
+//   DWARF h:1920 `void DEBUG_RenderContactPoint(const TrafficContact*)`; locals lDebugInterface,
+//   lDebugRender, lArrowColour. Reached only while mbDEBUGRenderContacts (+0x7286B) is set.
+//
+//   0x827082CC  "lpContact" (.cpp 6678)
+//   0x827082F8  the automatic DebugInterface (ctor 0x821F1F20) and GetRender
+//   0x82708304  `lbz r11, 4(lpContact)` -- the owner byte of mEntityIdB, == 0 (E_ENTITYTYPE_WORLD):
+//               BaseContact::IsContactWithWorld() (DWARF BrnContactSpyEvents.h:71, inlined; that
+//               header is not this lane's, so the test is spelled here)
+//   0x8270835C  `vmaddfp v2, v0, v1, v13` (raw field order D,A,B,C == A*C + B):
+//               to = mNormal (+0x30) * 5.0 + mPointOnA (+0x40) ; DrawArrow(mPointOnA, to, colour)
+//   0x82708364  the automatic release (`lbz var_2C ; ThreadSafeRelease`) == ~DebugInterface
+// -------------------------------------------------------------------------------------------------
+void TrafficEntityModule::DEBUG_RenderContactPoint(const BrnPhysics::ContactSpy::TrafficContact* lpContact)
+{
+    CGS_ASSERT(lpContact != 0, "lpContact");                                        // .cpp 6678
+
+    CgsDev::DebugInterface lDebugInterface;
+    CgsDev::DebugRender&   lDebugRender = lDebugInterface.GetRender();
+
+    const bool lbContactWithWorld =
+        EntityOwnerOf(lpContact->mEntityIdB) == static_cast<u32>(BrnWorld::E_ENTITYTYPE_WORLD);
+    const CgsDev::RGBA lArrowColour = lbContactWithWorld ? KU_DEBUG_CONTACT_WORLD_COLOUR
+                                                         : KU_DEBUG_CONTACT_OTHER_COLOUR;
+
+    lDebugRender.DrawArrow(lpContact->mPointOnA,
+                           lpContact->mNormal * KF_DEBUG_CONTACT_ARROW_LENGTH + lpContact->mPointOnA,
+                           lArrowColour);
 }
 
 }  // namespace BrnTraffic
