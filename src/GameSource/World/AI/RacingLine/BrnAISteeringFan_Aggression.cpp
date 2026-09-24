@@ -86,19 +86,26 @@ namespace
     }
 
     // The `vandc` (drop the sign bit) + `vcmpgtfp` pair the console emits for
-    // rw::math::vpu::IsZero on a Vector2: true when NEITHER component exceeds the epsilon.
+    // rw::math::vpu::IsZero on a Vector2: true when NEITHER component exceeds the epsilon. Each
+    // lane is tested with a non-dot vcmpgtfp, gathered by vperm and `cmpwi ; bne/beq` (e.g.
+    // IncludeDriftDirectionTracking 0x8278825C..0x8278828C) -- a NaN lane is never "greater", so
+    // it counts as zero. Spelt that way round (crash parity FX-AINAN2; `fabs <= tiny` called a
+    // NaN non-zero).
     bool IsZero2DAggression(const Vector2& lVector)
     {
-        return std::fabs(lVector.x) <= KF_AGGRESSION_TINY
-            && std::fabs(lVector.y) <= KF_AGGRESSION_TINY;
+        return !(std::fabs(lVector.x) > KF_AGGRESSION_TINY)
+            && !(std::fabs(lVector.y) > KF_AGGRESSION_TINY);
     }
 
-    // The `fsel f12,(lo-v),lo,v ; fsel f12,(hi-v),v,hi` ladder, i.e. rw::math::vpu::Clamp.
+    // The `fsel f12,(lo-v),lo,v ; fsel f12,(hi-v),v,hi` ladder, i.e. rw::math::vpu::Clamp (lo == 0:
+    // `fneg ; fsel`), e.g. IncludeDriftDirectionTracking 0x8278831C..0x82788330, IncludeSmashIntoTarget
+    // 0x82787AC4..0x82787ADC, IncludeDriveCloseToPlayer 0x82788164..0x82788170. fsel takes its THIRD
+    // operand on an unordered test, so a NaN comes back as lfHigh (crash parity FX-AINAN2; the old
+    // `if (< lo) .. if (> hi) ..` returned the NaN).
     f32 ClampAggression(f32 lfValue, f32 lfLow, f32 lfHigh)
     {
-        if (lfValue < lfLow)  return lfLow;
-        if (lfValue > lfHigh) return lfHigh;
-        return lfValue;
+        const f32 lfFloored = ((lfLow - lfValue) >= 0.0f) ? lfLow : lfValue;
+        return ((lfHigh - lfFloored) >= 0.0f) ? lfFloored : lfHigh;
     }
 
     // The 2D cross product rw::math::vpu::Cross reduces to on a Vector2
@@ -269,8 +276,11 @@ const NearbyVehicle* SteeringFan::FindNeabyAIInTraffic(const NearbyVehicles* lpN
         if (lfAheadness < 0.0f)                                             // @0x82787D6C
             continue;
 
+        // `fcmpu relSpeed, K ; bgt -> keep` @0x82787DE8/0x82787DEC: only an ORDERED relSpeed > K
+        // skips the aheadness test, so a NaN relative speed still gets it (FX-AINAN2; `<=` kept
+        // the NaN candidate outright).
         const f32 lfRelativeSpeed = lfOurSpeed - Magnitude2DAggression(lpRival->mVelocity);
-        if (lfRelativeSpeed <= KF_SLAM_FROM_BEHIND_RELATIVE_SPEED           // @0x82787DE8
+        if (!(lfRelativeSpeed > KF_SLAM_FROM_BEHIND_RELATIVE_SPEED)         // @0x82787DE8
             && lfAheadness > KF_SLAM_AHEADNESS)                             // @0x82787DF0
         {
             continue;
@@ -486,7 +496,9 @@ void SteeringFan::IncludeDriveCloseToPlayer(RacingLine* lpRacingLine, AICar* lpC
             DistancePosVelToOrigin(lProjectedPosition, lRelativeVelocity) * lfCarSide
             - KF_DESIRED_CLOSE_PASSING_SEPERATION;                          // @0x82788138
 
-        if (lfPassingSpace >= 0.0f)                                         // @0x82788140
+        // `fcmpu ps, 0.0 ; bge` @0x8278813C/0x82788140: a NaN passing space takes this arm, whose
+        // clamp then answers 1.0 -> a 0.0 weight (FX-AINAN2; `>=` sent it to the negative arm).
+        if (!(lfPassingSpace < 0.0f))                                       // @0x82788140
         {
             mfWeighting[eFan_DriveCloseToPlayer][liFanIndex] =
                 1.0f - ClampAggression(lfPassingSpace / KF_CLOSE_PASSING_RANGE, 0.0f, 1.0f);

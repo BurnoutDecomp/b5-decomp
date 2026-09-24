@@ -114,9 +114,12 @@ void SteeringFan::CalculateFanAngle(AICar* lpCar)
 
     mfLookAheadHNGRadius = KF_FAN_LOOK_AHEAD_HNG;                                   // stfs 0x7FC
 
+    // The saturate is `fneg t,r ; fsel r,t,0.0,r` 0x82768D0C/0x82768D10 then `fsubs u,1.0,r ;
+    // fsel r,u,r,1.0` 0x82768D18/0x82768D1C: fsel takes its THIRD operand on an unordered test, so
+    // a NaN speed ratio is 1.0 (flat-out fan) -- spelt as the fsels (FX-AINAN2; the if/if kept NaN).
     f32 lfRatio = lfSpeed / KF_GUESSED_MAX_SPEED;                                    // fdivs
-    if (lfRatio < 0.0f) lfRatio = 0.0f;                                              // fsel vs 0.0
-    if (lfRatio > 1.0f) lfRatio = 1.0f;                                              // fsel vs 1.0
+    lfRatio = (-lfRatio >= 0.0f) ? 0.0f : lfRatio;                                   // fsel vs 0.0
+    lfRatio = ((1.0f - lfRatio) >= 0.0f) ? lfRatio : 1.0f;                           // fsel vs 1.0
 
     mfFanAngle        = (KF_STEER_AT_HIGH_SPEED - KF_STEER_AT_LOW_SPEED) * lfRatio
                         + KF_STEER_AT_LOW_SPEED;                                     // stfs 0x800
@@ -350,7 +353,10 @@ void SteeringFan::IncludeCentreLineTracking(RacingLineGenerator* lpRacingLineGen
     lDelta.z = 0.0f;
     lDelta.w = 0.0f;
 
-    if (std::fabs(lDelta.x) <= KF_FAN_TINY && std::fabs(lDelta.y) <= KF_FAN_TINY)
+    // IsZero is a per-lane non-dot vcmpgtfp |d| > eps gathered by vperm + `cmpwi ; bne/beq`
+    // (0x82786C88..0x82786CF0): a NaN lane is never "greater", so a NaN delta counts as zero and
+    // returns here (FX-AINAN2; `fabs <= tiny` called it non-zero and wrote a 0.0 row).
+    if (!(std::fabs(lDelta.x) > KF_FAN_TINY) && !(std::fabs(lDelta.y) > KF_FAN_TINY))
         return;                                            // bnelr: the row keeps its old values
 
     const f32 lfAhead      = lpRacingLine->mfCentreLineAhead;
@@ -433,7 +439,9 @@ void SteeringFan::IncludeRouteParallelTracking(RacingLineGenerator* lpRacingLine
     lDelta.z = 0.0f;
     lDelta.w = 0.0f;
 
-    if (std::fabs(lDelta.x) <= KF_FAN_TINY && std::fabs(lDelta.y) <= KF_FAN_TINY)
+    // IsZero: the same vperm-gathered vcmpgtfp (0x82786E6C / 0x82786EA4) -- a NaN delta counts as
+    // zero and zeroes the row (FX-AINAN2; `fabs <= tiny` called it non-zero).
+    if (!(std::fabs(lDelta.x) > KF_FAN_TINY) && !(std::fabs(lDelta.y) > KF_FAN_TINY))
     {
         for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
             mfWeighting[eFan_DriveParallel][liStep] = 0.0f;
@@ -443,9 +451,11 @@ void SteeringFan::IncludeRouteParallelTracking(RacingLineGenerator* lpRacingLine
     const Vector2 lBackAlongRoad = Normalize2DFan(lDelta);
     for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
     {
+        // Clamp(d, -1, 1): `fsubs t,-1.0,d ; fsel d,t,-1.0,d` 0x82786F80/0x82786F84 then
+        // `fsubs u,1.0,d ; fsel d,u,d,1.0` 0x82786F90/0x82786F94 -- a NaN dot is 1.0 (FX-AINAN2).
         f32 lfDot = Dot2DFan(mUnitDirection[liStep], lBackAlongRoad);
-        if (lfDot < -1.0f) lfDot = -1.0f;
-        if (lfDot >  1.0f) lfDot =  1.0f;
+        lfDot = ((-1.0f - lfDot) >= 0.0f) ? -1.0f : lfDot;
+        lfDot = ((1.0f - lfDot) >= 0.0f) ? lfDot : 1.0f;
         mfWeighting[eFan_DriveParallel][liStep] = (lfDot + 1.0f) * 0.5f;
     }
 }
