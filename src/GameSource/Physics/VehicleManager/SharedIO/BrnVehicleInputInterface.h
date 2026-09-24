@@ -136,6 +136,31 @@ namespace Vehicle
         // @0x822B4770: mark an active-race-car slot as added-for-collision.
         void SetRaceCarAddedForCollision(EActiveRaceCarIndex leRaceCarIndex);
 
+        // DWARF BrnVehicleInputInterface.h:166 `void SetRaceCarCollision(EntityId, bool)` and :171
+        // `void SetRaceCarCullingGroup(EntityId, InEventAddForCollision::CullingGroup)` (crash parity
+        // FX-RCEM4 2026-09-24, reviewer A on 65eadffe). No out-of-line X360 symbol: both are inlined
+        // at their one caller, the shared tail of ActiveRaceCar::Update_PreScene -- the event is
+        // built on the stack (entity word at var_40, payload at var_3C) and handed to
+        //   0x822EB120  bl BaseEventQueue<SetRaceCarCollisionEvent>::AddEvent    r3 = this + 0x202A0
+        //   0x822EB154  bl BaseEventQueue<SetRaceCarCullingGroupEvent>::AddEvent r3 = this + 0x202FC
+        // i.e. mSetRaceCarCollisionEventQueue (+131744) / mSetRaceCarCullingGroupEventQueue (+131836),
+        // the queues VehicleManager::ProcessCollisionEvents @0x825E8F28 drains. Header-only inlines,
+        // same shape as RemoveRaceCar / RemovePhysicalTraffic above.
+        void SetRaceCarCollision(EntityId lBodyId, bool lbCollide)
+        {
+            SetRaceCarCollisionEvent lEvent;
+            lEvent.mBodyId   = lBodyId;       // stw var_40
+            lEvent.mbCollide = lbCollide;     // stb var_3C
+            mSetRaceCarCollisionEventQueue.AddEvent(lEvent);
+        }
+        void SetRaceCarCullingGroup(EntityId lBodyId, SetRaceCarCullingGroupEvent::CullingGroup lCullingGroup)
+        {
+            SetRaceCarCullingGroupEvent lEvent;
+            lEvent.mBodyId       = lBodyId;       // stw var_40
+            lEvent.mCullingGroup = lCullingGroup; // stw var_3C
+            mSetRaceCarCullingGroupEventQueue.AddEvent(lEvent);
+        }
+
         // @0x822E66A0 -- ADDED 2026-08-01 (drivable wave) AND IT WAS A LIVE DEFECT.
         // This interface embeds FIFTEEN EventQueues by value, every one of which needs its
         // mpEvents pointed at its own inline storage. Nothing in the PC tree ever called

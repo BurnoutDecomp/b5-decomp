@@ -10,12 +10,16 @@
 //   G68-D5  case 29: mbSpawnAIBehindStartGrid ? mfIntroTimer = duration - 1.4f (flt_820148A0);
 //           UpdateRaceCars_PreScene: t > 0 -> t -= dt ; t < 0 -> t = -1 (flt_820037C8) and
 //           SetAllCarsOnStartLine(1 ROLLING_START, 0 not the player).
+//   FX-RCEM4 (2026-09-24, reviewer A on 65eadffe): the countdown's NaN polarity (ble / bge are taken
+//           on an unordered compare) and the shared tail's two physics posts, SetRaceCarCollision /
+//           SetRaceCarCullingGroup (0x822EB0F4 / 0x822EB128).
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <limits>
 #include <string>
@@ -35,8 +39,23 @@ namespace Message { u64 gxMessageFilterFlags = 0; }
 namespace Fixture {
 
 // Shadow the three interface types inside this namespace (the extracted signatures qualify them).
+struct EntityId { u32 muValue; };
 namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInterface { int miTag = 1; }; } }
-namespace BrnPhysics { namespace Vehicle { struct VehicleInputInterface { int miTag = 2; }; } }
+namespace BrnPhysics { namespace Vehicle {
+struct SetRaceCarCullingGroupEvent { typedef u32 CullingGroup; };
+// The two DWARF posters (BrnVehicleInputInterface.h:166 / :171) Update_PreScene's shared tail calls
+// (FX-RCEM4, reviewer A on 65eadffe): recorded in call order.
+struct VehicleInputInterface {
+    int miTag = 2;
+    std::vector<std::string> maPosts;
+    void SetRaceCarCollision(EntityId lBodyId, bool lbCollide) {
+        char lac[64]; std::snprintf(lac, sizeof lac, "collision %08X %d", lBodyId.muValue, lbCollide ? 1 : 0);
+        maPosts.push_back(lac); }
+    void SetRaceCarCullingGroup(EntityId lBodyId, SetRaceCarCullingGroupEvent::CullingGroup lGroup) {
+        char lac[64]; std::snprintf(lac, sizeof lac, "culling %08X %u", lBodyId.muValue, lGroup);
+        maPosts.push_back(lac); }
+};
+} }
 namespace BrnAI { namespace AIModuleIO { struct RaceCarAIInterface { int miTag = 3; }; } }
 
 enum ERaceCarType { E_RACE_CAR_TYPE_PLAYER = 0, E_RACE_CAR_TYPE_AI = 1, E_RACE_CAR_TYPE_NETWORK = 2,
@@ -58,6 +77,7 @@ struct ActiveRaceCar {
     bool mbChangeCollisionState = false, mbCollisionStateToChangeTo = false, mbChangeCullingGroup = false;
     s32  mCullingGrouptoChangeTo = 0, miFlashFrequency = 0;
     bool mbActive = true, mbCrashing = false;
+    struct { u64 muId; } mHandlingBodyVolumeId = { 0x0100000000000000ull };   // +0xD0 (entity word in the high dword)
     RaceCar  mRaceCar;
     std::vector<std::string> maCalls;
     const void* mpScene = nullptr; const void* mpVehicle = nullptr; const void* mpAI = nullptr;
@@ -66,9 +86,11 @@ struct ActiveRaceCar {
     bool IsCrashing() const { return mbCrashing; }
     RaceCar* GetGlobalRaceCar() { return &mRaceCar; }
     void AddToCollision(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* s, BrnPhysics::Vehicle::VehicleInputInterface* v) {
-        maCalls.push_back("add"); mpScene = s; mpVehicle = v; mbAddedForCollision = true; }
+        maCalls.push_back("add"); mpScene = s; mpVehicle = v; mbAddedForCollision = true;
+        mbChangeCollisionState = true; mbCollisionStateToChangeTo = true; }      // as the real one (0x78D/0x78E)
     void RemoveFromCollision(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* s, BrnPhysics::Vehicle::VehicleInputInterface* v) {
-        maCalls.push_back("remove"); mpScene = s; mpVehicle = v; mbAddedForCollision = false; }
+        maCalls.push_back("remove"); mpScene = s; mpVehicle = v; mbAddedForCollision = false;
+        mbChangeCollisionState = true; mbCollisionStateToChangeTo = false; }     // 0x822BF6B8 / 0x822BF6C0
     void Update_PreScene(CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
                          BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface);
@@ -196,6 +218,34 @@ int main() {
         lModule.UpdateRaceCars_PreScene(&lOut);
         Check(c[6].miFlashFrequency == 1 && c[6].mbRenderThisFrame, "G61-D3 LOST: frames 1..30 -> drawn");
         Check(!c[7].mbRenderThisFrame, "G61-D3 DISCONNECTED: hidden");
+    }
+
+    // ---- the shared tail's two physics posts (FX-RCEM4, reviewer A on 65eadffe, 2026-09-24) -------
+    //   0x822EB0F4  lbz 0x78D -> SetRaceCarCollision({ld 0xD0 ; srdi 32}, lbz 0x78E) ; stb 0, 0x78D
+    //   0x822EB128  lbz 0x78F -> SetRaceCarCullingGroup({entity word}, lwz 0x790)  ; stb 0, 0x78F
+    {
+        RaceCarEntityModule lModule; OutputFixture lOut;
+        ActiveRaceCar* c = lModule.maActiveRaceCars;
+        for (int i = 0; i < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++i)
+            c[i].mHandlingBodyVolumeId.muId = (static_cast<u64>(0x01000000u | (static_cast<u32>(i) << 8)) << 32) | 0xABCDull;
+        // slot 1: both flags set -> collision then culling, both consumed
+        c[1].mbChangeCollisionState = true; c[1].mbCollisionStateToChangeTo = true;
+        c[1].mbChangeCullingGroup = true; c[1].mCullingGrouptoChangeTo = 5;
+        // slot 2: NORMAL + disconnected -> the arm's RemoveFromCollision arms {false}, posted the same frame
+        c[2].mbIsDisconnectedFromNetwork = true;
+        // slot 3: DISCONNECTED (case 3) with a pending group -> still posted (the tail is shared)
+        c[3].meOnlineState = ActiveRaceCar::E_ONLINE_STATE_DISCONNECTED;
+        c[3].mbChangeCullingGroup = true; c[3].mCullingGrouptoChangeTo = 6;
+        lModule.UpdateRaceCars_PreScene(&lOut);
+        const std::vector<std::string>& p = lOut.mVehicle.maPosts;
+        Check(p.size() == 4 && p[0] == "collision 01000100 1" && p[1] == "culling 01000100 5"
+                  && p[2] == "collision 01000200 0" && p[3] == "culling 01000300 6",
+              "tail 0x822EB0F4 / 0x822EB128: SetRaceCarCollision then SetRaceCarCullingGroup, id = the high dword of +0xD0 (srdi 32), every arm");
+        Check(!c[1].mbChangeCollisionState && !c[1].mbChangeCullingGroup && !c[2].mbChangeCollisionState
+                  && !c[3].mbChangeCullingGroup,
+              "tail: both flags consumed (stb 0, 0x78D @0x822EB124 / 0x78F @0x822EB158)");
+        lModule.UpdateRaceCars_PreScene(&lOut);
+        Check(p.size() == 4, "tail: nothing is posted again once the flags are clear");
     }
 
     // ---- G68-D5: case 29 arms the intro timer, the countdown releases the rivals ---------------
