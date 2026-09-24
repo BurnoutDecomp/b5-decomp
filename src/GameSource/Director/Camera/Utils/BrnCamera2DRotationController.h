@@ -48,7 +48,11 @@ namespace Utils
         // DWARF h:69..90 -- declaration-only (their own ledger functions).
         bool    IsRotated() const;
         Vector2 GetAdjustedStickVector() const;
-        Vector2 GetRawStickVector() const;
+        // BODIED INLINE (2026-09-24, FX-CAMRIG). No standalone symbol: its one inliner in the
+        // DecFIGS line table is BehaviourAftertouchCrash::Update (PS3 0x5C794/0x5C79C, attributed
+        // to this header's :134), and the X360 rig reads it as a plain 16-byte load of the shared
+        // info's head -- `lvx128 v0, r0, r26` @0x822285B0, i.e. mStickVector at +0x00.
+        Vector2 GetRawStickVector() const { return mStickVector; }                // +0x00
         f32     GetRotationAngleDegs() const;
         f32     GetRotationAngleRads() const;
         // BODIED INLINE (2026-09-16). The console has no standalone symbol for it: every
