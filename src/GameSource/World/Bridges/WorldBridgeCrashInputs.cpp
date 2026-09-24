@@ -34,8 +34,26 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"    // CgsDev::Log::gpDebugPrint
 
+#include <cstdlib>   // getenv -- the opt-in [crash-exit] dispatch witnesses only
+
 namespace WorldModule
 {
+
+namespace
+{
+    // [crash-exit] dispatch witnesses -- NOT X360. Opt-in on the BRN_CRASH_RESPONSE_DIAG latch
+    // (0/unset == inert); one line per bridge per session, proving the un-parked legs ran.
+    bool CrashBridgeWitnessOn()
+    {
+        static int siWitness = -1;
+        if( siWitness < 0 )
+        {
+            const char* lpcEnv = getenv( "BRN_CRASH_RESPONSE_DIAG" );
+            siWitness = ( lpcEnv != 0 && lpcEnv[0] != '0' ) ? 1 : 0;
+        }
+        return ( siWitness == 1 ) && ( CgsDev::Log::gpDebugPrint != 0 );
+    }
+}
 
 // =================================================================================================
 // BridgeInputToCrashModule @ 0x827ADEE8   (25 insns)
@@ -62,8 +80,15 @@ namespace WorldModule
 // spelling is unverified) -- but the SOURCE is the bounce button and the asm is unambiguous.
 // [[diagnostics-that-lie]]: read what a field actually carries, not what its name says.
 //
-// The game-action queue uses its canonical host type and is copied below. Network
-// and vehicle-driver inputs still feed the separately parked network processing paths.
+// All five console legs run, in the console's order. The network leg (0x827ADF24/30) and the
+// vehicle-driver leg (0x827ADF4C/58) were parked until 2026-09-24 (crash parity FOLLOWUPS 18/19):
+// their destinations were console-sized blobs, then real types whose queues were never constructed
+// -- InputBuffer_PreScene had no Construct, so CreateIOBuffer<T> bound to the base IOBuffer's. Both
+// now pass their real types straight through: SetNetworkInputInterface is the interface's operator=
+// (bitset copy + Clear()/Append() per race car's crashing-traffic queue, both ends constructed:
+// UpdateInputBuffer::Construct and InputBuffer_PreScene::Construct), SetVehicleDriverInterface the
+// console's whole-object copy (0x827A2254 memcpy 0x14B0). Their only readers are the online crash
+// paths (ResetCrashedNetworkRaceCars, HandleNetworkCrashingTraffic); offline both carry empty queues.
 // =================================================================================================
 void BridgeInputToCrashModule(
     void* lpWorldModule,
@@ -73,14 +98,14 @@ void BridgeInputToCrashModule(
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827ADEFC, never read
 
     // ⚠️ TWO DOCUMENTED CASTS, and the reason they are SAFE is the reason the other three legs
-    // are not. BrnWorldModuleIO.h models the world input buffer's timer view and player-controls
+    // need none (they pass their real types). BrnWorldModuleIO.h models the world input buffer's timer view and player-controls
     // view as its own console-SIZED placeholder structs (`f32 maData[12]` / `u8 maData[60]`)
     // rather than as the canonical types. Both canonical types are POINTER-FREE PODs whose host
     // sizeof therefore equals the console's -- CgsSystem::TimerStatusInterface is 2 x 24-byte
     // TimerStatus == 48 == 12 words, and BrnWorld::PlayerVehicleControls is 13 f32 + 8 bool == 60
     // -- so the reinterpretation is layout-exact and the static_asserts below hold it that way.
-    // The three PARKED legs wrap types that DO contain host pointers, which is exactly why they
-    // cannot be cast. (Precedent: BrnWorldModuleIO.h:132 records that the
+    // The network, game-action and vehicle-driver legs wrap types that DO contain host pointers or
+    // address-dependent offsets, which is why they go through their real types, never a cast. (Precedent: BrnWorldModuleIO.h:132 records that the
     // WorldBridgeInputToEntityModules consumer already reinterpret_casts one of these views.)
     static_assert( sizeof( BrnWorldIO::TimerStatusInterface ) ==
                    sizeof( CgsSystem::TimerStatusInterface ),
@@ -94,22 +119,26 @@ void BridgeInputToCrashModule(
             lpUpdateInputBuffer->GetPlayerVehicleControls() );
     lpCrashInputBuffer_PreScene->SetPlayerPressingBoost( lpControls->mbBoostBounce );
 
+    // 0x827ADF24 GetCrashNetworkIn -> 0x827ADF30 SetNetworkInputInterface.
+    lpCrashInputBuffer_PreScene->SetNetworkInputInterface( lpUpdateInputBuffer->GetCrashNetworkInterface() );
+
     lpCrashInputBuffer_PreScene->SetGameActionQueue(lpUpdateInputBuffer->GetGameActionQueue());
+
+    // 0x827ADF4C GetVehicleDriverInputInterface -> 0x827ADF58 SetVehicleDriverInterface.
+    lpCrashInputBuffer_PreScene->SetVehicleDriverInterface( lpUpdateInputBuffer->GetVehicleDriverInputInterface() );
 
     lpCrashInputBuffer_PreScene->SetTimerStatusInterface(
         reinterpret_cast<const CgsSystem::TimerStatusInterface*>(
             lpUpdateInputBuffer->GetTimerStatusInterface() ) );
 
     {
-        static bool s_bLoggedBlobPark = false;
-        if( !s_bLoggedBlobPark && CgsDev::Log::gpDebugPrint != 0 )
+        static bool s_bWitnessed = false;
+        if( !s_bWitnessed && CrashBridgeWitnessOn() )
         {
-            s_bLoggedBlobPark = true;
+            s_bWitnessed = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] BridgeInputToCrashModule PARK: the network /"
-                   " vehicle-driver legs are skipped -- their destinations are still console-sized"
-                   " opaque blobs and the copy would read out of bounds. Both feed parked"
-                   " consumers [FLAG]\n";
+                << "[crash-exit] BridgeInputToCrashModule: all five legs ran (network 0x827ADF30,"
+                   " vehicle-driver 0x827ADF58 un-parked) [FLAG PC witness]\n";
         }
     }
 }
@@ -195,15 +224,16 @@ void BridgeTrafficToCrashModule_PostPhysics(
 //   CrashIO::OutputBuffer_PreScene::GetVehicleInputInterface  (the const/read-lock overload)
 //   -> PhysicsModuleIO::InputBuffer::GetVehicleInputInterface -> VehicleInputInterface::Append.
 //
-// ⛔ PARKED, and this park is a TYPE fact, not a difficulty: CrashIO::OutputBuffer_PreScene's
-// mVehicleInputInterface is still `VehicleInputInterfaceStorage { unsigned char maBytes[1] }` --
-// a one-byte placeholder, not a queue. Append() over it would read one byte as an event queue.
-// The crash module writes nothing into that member on this build (every producer of it is in the
-// parked traffic/network set), so the transfer has nothing to carry.
-// The gate is deleted anyway: the bridge is now a REAL function whose body is a documented
-// one-shot park, which is strictly better than a link stub -- WorldModule::Update reaches it and
-// says so once, instead of the stub's generic "inert" line.
-// DELETE-WHEN CrashIO::OutputBuffer_PreScene::mVehicleInputInterface is promoted to its real type.
+// UN-PARKED 2026-09-24 (crash parity FOLLOWUPS 18a): G63-D2 (4bc22993) promoted
+// CrashIO::OutputBuffer_PreScene::mVehicleInputInterface from the one-byte placeholder to the real
+// BrnPhysics::Vehicle::VehicleInputInterface (constructed by OutputBuffer_PreScene::Construct at the
+// console's 0x827CEA20), so the console's three calls stand as written, in its order:
+//   0x827AACD8  OutputBuffer_PreScene::GetVehicleInputInterface() const   (0x827A2488, read-lock)
+//   0x827AACE4  PhysicsModuleIO::InputBuffer::GetVehicleInputInterface()  (0x8279ED28, write-lock)
+//   0x827AACEC  VehicleInputInterface::Append(crash side)                 (0x823C87C0)
+// The console's only producer into the crash side is HandleNetworkCrashingTraffic (the write-lock
+// getter 0x827BB678 has that single caller), so offline this merges empty queues.
+// (The DWARF-home copy of this function in WorldBridgeCrashToEntityModules.cpp is unmounted.)
 // =================================================================================================
 void BridgeCrashModuleToPhysicsModule(
     void* lpWorldModule,
@@ -211,19 +241,21 @@ void BridgeCrashModuleToPhysicsModule(
     const BrnWorld::CrashIO::OutputBuffer_PreScene* lpCrashOutput_PreScene)
 {
     (void)lpWorldModule;
-    (void)lpPhysicsModuleInputBuffer;
 
     CGS_ASSERT( lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer" );   // :58
     CGS_ASSERT( lpCrashOutput_PreScene != 0, "lpCrashOutput_PreScene" );           // :59
 
-    static bool s_bLogged = false;
-    if( !s_bLogged && CgsDev::Log::gpDebugPrint != 0 )
+    const BrnPhysics::Vehicle::VehicleInputInterface* lpCrashVehicleInput =
+        lpCrashOutput_PreScene->GetVehicleInputInterface();                        // 0x827AACD8
+    lpPhysicsModuleInputBuffer->GetVehicleInputInterface()->Append( *lpCrashVehicleInput );   // 0x827AACE4 / 0x827AACEC
+
+    static bool s_bWitnessed = false;
+    if( !s_bWitnessed && CrashBridgeWitnessOn() )
     {
-        s_bLogged = true;
+        s_bWitnessed = true;
         *CgsDev::Log::gpDebugPrint
-            << "[crash-exit] BridgeCrashModuleToPhysicsModule PARK: CrashIO::OutputBuffer_PreScene"
-               "::mVehicleInputInterface is still a 1-byte placeholder, and nothing in the"
-               " reconstructed crash module writes it [FLAG]\n";
+            << "[crash-exit] BridgeCrashModuleToPhysicsModule: crash vehicle-input appended to the"
+               " physics input (0x827AACEC) [FLAG PC witness]\n";
     }
 }
 
