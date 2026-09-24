@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"         // Environment::GetDynamicMixer
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsDMixDiag.h"           // [DIAG] BRN_DMIX_DIAG witness
+#include "GameSource/Sound/Global/BrnHudSoundDiag.h"                   // [DIAG] BRN_HUD_SOUND_DIAG witness
 #include <cmath>                                                       // std::fabs (the inlined |delta|)
 
 // =============================================================================
@@ -360,6 +361,11 @@ void CameraControl::UpdateParams(f32 /*af32DeltaTime*/)
     using BrnDirector::Camera::CameraState;
     using namespace BrnGameState::GameStateModuleIO;
 
+    // [DIAG] NOT IN THE X360 BINARY -- the update count the [fx-sting-post] witness stamps.
+    static u32 suCameraControlUpdatesDiag = 0;
+    if (HudSoundDiagEnabled())
+        ++suCameraControlUpdatesDiag;
+
     // 826F6550 lwz 0x28(this) == mpLogicModule ; 826F6554 lwz 0x4C94 + the
     // BrnSoundLogicModule.h:432 assert == GetBrnInputStructure() inlined.
     BrnSound::Module::SoundLogicModule* lpLogicModule =
@@ -521,6 +527,20 @@ void CameraControl::UpdateParams(f32 /*af32DeltaTime*/)
         lMessage.Construct(4, 0, 0, KU_FX_EFFECT_SEAT,
                            CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
         lpLogicModule->PostMessage(lMessage);                       // 826F6ABC
+
+        // [DIAG] NOT IN THE X360 BINARY (BRN_HUD_SOUND_DIAG=1): one line per reset-on-track
+        // POST, stamped with this control's update count. FxEffect's [fx-sound-msg] only
+        // reports the posts a free voice accepted, so it cannot count a flood; this line can
+        // (one per real gameplay-camera entry, never on consecutive updates).
+        static u32 suResetOnTrackPostDiag = 0;
+        if (HudSoundDiagBudget(suResetOnTrackPostDiag))
+        {
+            HudSoundDiagPrintf(
+                "[fx-sting-post] reset-on-track #%u update=%u flags cur=0x%08x prev=0x%08x\n",
+                suResetOnTrackPostDiag, suCameraControlUpdatesDiag,
+                static_cast<u32>(lrCameraState.mCurrentFlags.GetBitField(0)),
+                static_cast<u32>(lrCameraState.mPreviousFlags.GetBitField(0)));
+        }
     }
 
     // ---- edge-triggered snapshots ---------------------------------------------
