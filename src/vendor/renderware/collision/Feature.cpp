@@ -21,12 +21,13 @@ namespace rw
 namespace collision
 {
 
-// .rdata constant reached only by reference in the asm (no value in the export).
-// FLAGGED as inferred: unk_8327EFD0 is the vcmpgtfp degenerate-edge guard -- the
-// squared cross-product length must exceed it for the normal to be valid. Same
-// role and inferred value as FeatureEdge::KF_DEGENERATE_EPSILON (canonical
-// build_plane guards with VEC_EPSILON).
-const f32 Feature::KF_DEGENERATE_EPSILON = 1.0e-12f;
+// unk_8327EFD0 -- the vcmpgtfp degenerate-edge guard (0x82BB9DDC / 0x82BB9E80: the squared
+// cross-product length must exceed it for the normal to be valid; canonical build_plane guards
+// with VEC_EPSILON). Read from the image (crash parity H2-D4, 2026-09-24): a .bss splat written
+// at startup by the CRT dyn-init thunk 0x82C73E10 (initializer table slot 0x82CD3C80): lvlx
+// flt_82180A28, vspltw 0, stvx128 -> 0x8327EFD0; x360rd 0x82180A28 = 0x34000000 =
+// 1.1920929e-07 = FLT_EPSILON. It was an inferred 1.0e-12f.
+const f32 Feature::KF_DEGENERATE_EPSILON = 1.1920929e-07f;
 
 namespace
 {

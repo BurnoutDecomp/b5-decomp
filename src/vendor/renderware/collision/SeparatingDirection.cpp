@@ -670,21 +670,23 @@ f32 FindBestSeparatingDirVolCyl(Vec4& arBestSepDir,
 // source; the shapes are asm-derived. Shared vocabulary below.
 // ===========================================================================
 
+// flt_82180894: FLT_MIN, the hard zero guards of RimToRim's coplanar/Heron
+// paths (same label/value as KF_RIM_PARALLEL_EPSILON below).
+static const f32 KF_RIM_FLT_MIN = 1.1754944e-38f;
+
 // X360 unk_8327EFB0 -- the shared degenerate-length-squared guard row of the
-// rim workers (RimToEdge + RimToRim). Address-only in the export; value
-// FLAGGED AS INFERRED: 1.0e-12f, matching the conductor-approved inference
-// for the neighbouring guard rows of the same .rdata cluster (unk_8327EEA0 ->
-// FeatureEdge::KF_DEGENERATE_EPSILON, unk_8327EFD0 -> Feature::
-// KF_DEGENERATE_EPSILON, unk_8327EFC0 in FeaturePrism.cpp).
-static const f32 KF_RIM_DEGENERATE_EPSILON = 1.0e-12f;
+// rim workers (RimToEdge v29 @0x82BB5424, four vcmpgefp + vnot guards; RimToRim v5
+// @0x82BB5870 and v6 @0x82BB5B98). Read from the image (crash parity H2-D5, 2026-09-24):
+// a .bss splat written at startup by the CRT dyn-init thunk 0x82C73DA8 (initializer table
+// slot 0x82CD3C74): lvlx flt_82180894, vspltw 0, stvx128 -> 0x8327EFB0 -- i.e. the splat of
+// the very same flt_82180894 (x360rd 0x00800000 = FLT_MIN) as KF_RIM_FLT_MIN above. It was an
+// inferred 1.0e-12f, which sent lenSq in [FLT_MIN, 1e-12) down the degenerate arms that the
+// console only takes below FLT_MIN (or for NaN).
+static const f32 KF_RIM_DEGENERATE_EPSILON = KF_RIM_FLT_MIN;
 
 // flt_820F5E68: the rims' score/degeneracy tolerance scale (tol = minR * this;
 // value present in the export's pseudocode, "0.0000001").
 static const f32 KF_RIM_RADIUS_TOLERANCE_SCALE = 1.0e-7f;
-
-// flt_82180894: FLT_MIN, the hard zero guards of RimToRim's coplanar/Heron
-// paths (same label/value as KF_RIM_PARALLEL_EPSILON below).
-static const f32 KF_RIM_FLT_MIN = 1.1754944e-38f;
 
 namespace
 {
