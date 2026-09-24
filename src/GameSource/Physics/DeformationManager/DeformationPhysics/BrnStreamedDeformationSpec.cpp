@@ -73,15 +73,15 @@ namespace Deformation
         static const u32 KU_SENSOR_STRIDE           = 64;    // sizeof(SensorSpec)
         static const u32 KU_SENSOR_RADIUS_OFFSET    = 40;    // SensorSpec::mfRadius
 
-        // The squared dead-band TransformToNewCOMSpace compares |oldCOM - newCOM|^2 against to skip a
-        // no-op re-frame (asm @0x825E3148: vmsum3fp128 magSq -> vandc sign-mask -> vcmpgtfp against a
-        // splatted constant loaded from X360 rodata stru_8208F620, lane 0).
-        // FLAGGED PLACEHOLDER -- the concrete rodata bytes are NOT in the exports and are NOT
-        // fabricated here. Modelled at the renderware rwmath scale (rw::math::vpu::IsZero default
-        // tolerance is 1.0e-6f) purely so the near-zero gate behaves sanely. This value is NOT
-        // load-bearing: the COM shift it gates is itself a no-op at zero delta, so an imperfect epsilon
-        // only changes how often the skip fires, never the result. Replace with the real rodata when homed.
-        static const f32 KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER = 1.0e-6f;
+        // The epsilon TransformToNewCOMSpace compares |oldCOM - newCOM|^2 against to skip a no-op
+        // re-frame. X360 @0x825E3148: 0x825E3164 lvlx v13 <- .rdata stru_8208F620 ; 0x825E3168
+        // vspltw v12,v13,0 ; 0x825E3190 vmsum3fp128 |old-new|^2 ; 0x825E3194 vandc (sign mask) ;
+        // 0x825E3198 vcmpgtfp (strict >, so NaN skips too) ; 0x825E31AC beqlr. x360rd 0x8208F620 =
+        // 0x34000000 = 1.1920929e-07 = FLT_EPSILON; the PS3 twin (DecFIGS 0x6C98D0) loads the same
+        // compare constant by name, rw::math::fpu::EPSILON. Crash parity G39-D1 (2026-09-24): this
+        // was a FLAGGED PLACEHOLDER 1.0e-6f ("the rodata is not in the exports") -- it is, and the
+        // placeholder skipped every COM move of 0.35..1 mm that the console re-frames.
+        static const f32 KF_COM_MOVE_EPSILON = 1.1920929e-07f;
 
         // Add a 16-byte vector lane-by-lane (the vaddfp the asm runs on xyz; w lane folded the same
         // way the SIMD register is, harmlessly).
@@ -287,8 +287,8 @@ namespace Deformation
     // X360 @ 0x825E3148. Re-express every streamed geometry point in a new centre-of-mass frame.
     //
     // The asm first tests whether the COM actually moved: it forms (mCurrentCOMOffset - lCOMOffset),
-    // takes its squared magnitude (vmsum3fp128), masks the sign bit (vandc) and compares it against a
-    // splatted rodata epsilon (vcmpgtfp). That predicate == !RwMath::IsZero(|old - new|^2). Only when
+    // takes its squared magnitude (vmsum3fp128), masks the sign bit (vandc) and compares it against the
+    // splatted .rdata FLT_EPSILON (KF_COM_MOVE_EPSILON, vcmpgtfp). That predicate == !RwMath::IsZero(|old - new|^2). Only when
     // the COM moved does it apply the shift; otherwise it leaves the spec untouched.
     //
     // delta = lCOMOffset - mCurrentCOMOffset  (vsubfp v0 = v1 - v13).
@@ -335,7 +335,7 @@ namespace Deformation
                     << mCurrentCOMOffset.y << " " << mCurrentCOMOffset.z
                     << " -> new " << lCOMOffset.x << " " << lCOMOffset.y << " " << lCOMOffset.z
                     << " magSq " << lfMagnitudeSquared
-                    << " applies " << (lfMagnitudeSquared > KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER ? 1 : 0)
+                    << " applies " << (lfMagnitudeSquared > KF_COM_MOVE_EPSILON ? 1 : 0)
                     << " sensor0 " << maDeformationSensorSpecs[0].mInitialOffset.x << " "
                     << maDeformationSensorSpecs[0].mInitialOffset.y << " "
                     << maDeformationSensorSpecs[0].mInitialOffset.z
@@ -358,8 +358,8 @@ namespace Deformation
             }
         }
 
-        // back_chain[0] = (magSq > epsilon)  ->  the COM moved.
-        if ( lfMagnitudeSquared > KF_COM_MOVE_DEADBAND_SQ_PLACEHOLDER )
+        // back_chain[0] = (magSq > FLT_EPSILON)  ->  the COM moved (vcmpgtfp @0x825E3198, beqlr @0x825E31AC).
+        if ( lfMagnitudeSquared > KF_COM_MOVE_EPSILON )
         {
             // delta = lCOMOffset - mCurrentCOMOffset (v0 = v1 - v13).
             const Vector3 lDelta = {
