@@ -71,8 +71,14 @@ struct OutputBuffer_PostScene {
 typedef u32 BrnUpdateSet;
 inline bool CrashExitDiagEnabled() { return false; }
 
+// The place-on-track producer PostSceneUpdate calls at 0x822FE598 (FX-GEOMETRIC, 2026-09-24).
+struct PlaceOnTrackManager {
+    void PostSceneUpdate(RaceCarEntityModuleIO::OutputBuffer_PostScene*) { gaCalls.push_back("placeontrack"); }
+};
+
 struct RaceCarEntityModule {
     CrashPlayManager mCrashPlayManager;
+    PlaceOnTrackManager mPlaceOnTrackManager;                                                     // +0x17850
     bool mbIsInGameMode = false;                                                                  // +0x18344
     BrnGameState::GameStateModuleIO::EGameModeType meGameModeType = BrnGameState::GameStateModuleIO::E_MODE_NONE;   // +0x18368
     void ProcessPowerParking(const RaceCarEntityModuleIO::InputBuffer_PostScene*, RaceCarEntityModuleIO::OutputBuffer_PostScene*) { gaCalls.push_back("powerpark"); }
@@ -133,6 +139,10 @@ int main() {
         const int liStomp = IndexOf("stomp"), liPublish = IndexOf("publish"), liReset = IndexOf("reset");
         Check(liStomp >= 0 && liPublish > liStomp && liReset > liPublish && IndexOf("density") > liStomp,
               "the publish sits after ProcessLeapedAndStompedCars (0x822FE4B8) and before SendResetOnTrackRequests (0x822FE5A4)");
+        const int liPlace = IndexOf("placeontrack");
+        Check(liPlace > liPublish && liPlace > IndexOf("powerpark") && liReset > liPlace,
+              "PlaceOnTrackManager::PostSceneUpdate runs after the Power Parking gate and before the reset pump "
+              "(0x822FE598, FX-GEOMETRIC)");
 
         lModule.mCrashPlayManager.mfBounceBoostTimer = 0.5f; lModule.mCrashPlayManager.mfDensityScale = 0.4f;
         lModule.PostSceneUpdate(&lIn, &lOut, 0u);

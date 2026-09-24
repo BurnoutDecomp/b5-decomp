@@ -9,21 +9,15 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint
 
-// [FLAG PC bring-up] the world-collision drop query below reads the shipped WORLDCOL.BIN
-// through the tree's own async file-system engine (the same call every bundle load makes)
-// and walks it with the committed PolygonSoup layout. See the banner above
-// BuildDropTestCandidatesBringUp.
-#include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
-#include "GameShared/GameClasses/System/FileSystem/CgsFileSystem.h"
-#include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"
-#include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h" // InEventLineTestFine (PostSceneUpdate)
 
+// (2026-09-24, FX-GEOMETRIC) the four includes the retired WORLDCOL.BIN drop query needed --
+// CgsDeviceManager.h, CgsFileSystem.h, CgsResourceBundle2.h, CgsPolygonSoup.h -- went with it.
 #include <cstdio>   // [teleport] sscanf (the BRN_CAR_TELEPORT spec parse)
 #include <cstdlib>  // [teleport] getenv
 #include <cfloat>   // FLT_MAX
-#include <cstddef>  // offsetof
-#include <cstring>  // memset
-#include <cmath>    // sqrtf
+#include <cstring>  // [sweep] strchr
+#include <cmath>    // sinf / cosf / std::sqrt
 
 // =============================================================================
 // BrnWorld::PlaceOnTrackManager — out-of-line bodies.
@@ -227,6 +221,113 @@ void PlaceOnTrackManager::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
     mRandom.RandomFloat();
 }
 
+// ---------------------------------------------------------------------------
+// The query's two fixed flags. Both are literals in the console body; the world bit has a DWARF
+// name in a header this file does not own (MOVE-WHEN CgsTriangleCacheManager.h carries it).
+//   K_ENTITY_TYPE_FLAG_WORLD   `li r17, 2`    @0x822D31C8 -- DWARF CgsSceneManager::
+//                              K_ENTITY_TYPE_FLAG_WORLD = 2 (CgsTriangleCacheManager.h:44): the
+//                              scene answers from the static world only (ProcessLineTestFine's
+//                              world-only arm -> the triangle-collision line test)
+//   KU8_ALL_VOLUME_TYPE_FLAGS  `li r18, 0xFF` @0x822D31D8 -- every volume type (no DWARF name)
+// ---------------------------------------------------------------------------
+static const u32 K_ENTITY_TYPE_FLAG_WORLD  = 2u;
+static const u8  KU8_ALL_VOLUME_TYPE_FLAGS = 0xFFu;
+
+// ===========================================================================
+// PostSceneUpdate @ 0x822D3168   (crash parity FX-GEOMETRIC, 2026-09-24 -- no body before)
+// DWARF BrnPlaceOnTrackManager.h:49 / .cpp:101..:131 (locals leActiveRaceCarIndex, lpActiveRaceCar,
+// lSceneQueryID, lEvent); PS3 twin 0x14A31C (the same order, the debug push out of line).
+//
+// THE PRODUCER of the place-on-track query. Every other link of the round trip was already live
+// (RaceCarEntityModule::PostSceneUpdate's slot, BridgeRaceCarModuleToSceneModule_PostScene,
+// SceneManagerModule::ProcessLineTestFine / ProcessTriangleCollisionLineTests, the result bridge,
+// the PrePhysicsUpdate walk below) or landed today (CollideLineAgainstPolySoupList's two Geometric
+// kernels, 94bcd871). Until now the PC answered requests with ApplyPendingRequestsWithoutScene-
+// QueryBringUp, a WORLDCOL.BIN walk of its own -- RETIRED in this same change (see the note at the
+// walk): the console's walk places on EVERY owner-5 answer without re-testing mbToBePlacedOnTrack,
+// so the two together would have placed a car twice.
+//
+//   0x822D3210  for slot 0..7 (the BurnoutConstants.h:39 post-increment tripwire @0x822D3428):
+//   0x822D321C    car = mpRaceCarEntityModule->GetActiveRaceCar(slot)
+//   0x822D3224    IsAttached() && lbz +0x7C4 (mbToBePlacedOnTrack), else next slot
+//   0x822D3244    offset = (0, flt_820138DC == 50.0, 0, int 0) -- KF_PLACE_ON_TRACK_LINE_TEST_LENGTH
+//   0x822D3290    lEvent.mLineStart = lvx +0x7A0 (mPlaceOnTrackPosition) + offset   (vaddfp128, 4 lanes)
+//   0x822D32A8    lEvent.mLineEnd   = mPlaceOnTrackPosition - offset                 (vsubfp128)
+//   0x822D3254    lEvent.mQueryId   = `clrlwi 16 ; oris 5` == Set(KI_LINE_TEST_OWNER, slot)
+//                 lEvent.mx32EntityTypeFlags = 2, mExcludeEntityId = -1 (SetInvalid),
+//                 meExclusionMode = 0 (E_EXCLUDE_ENTITY_ONLY), mxVolumeTypeFlags = 0xFF
+//   0x822D32C0    (gxMessageFilterFlags & 1) "[PLACEONTRACK] Generating line test to place race car "
+//                 << slot << " on track\n"; then "    lEvent.mLineStart=" "(%f, %f, %f)"
+//                 ", lEvent.mLineEnd=" "(%f, %f, %f)" "\n" (off_82F31964 is the format)
+//   0x822D33D4    lpOutput->GetSceneFineLineTestQueue() -- the write accessor 0x822B5560 with its
+//                 "Not locked for writing" tripwire (BrnRaceCarEntityModuleIO.h:386) -- ->AddEvent
+//                 (BaseEventQueue<InEventLineTestFine>::AddEvent 0x822105C0)
+//   0x822D33E0    stvx128 start/end -> module + 0x17CF0 + 0x70/+0x80: RaceCarEntityModuleDebugComponent::
+//                 PushLineTest(start, end) inlined (PS3 calls it @0x123E2C). [FLAG] the debug component
+//                 is not in this tree -- a debug-render history only, nothing reads it back.
+//   0x822D33FC    (gxMessageFilterFlags & 1) "[PLACEONTRACK] Line test requested\n"
+// The flag is NOT cleared here: PlaceCarOnTrack clears it when the answer is consumed, later in the
+// same frame (WorldModule::EntityModulePostSceneUpdate runs the race-car scene queries straight after
+// this update and bridges the results into the pre-physics input the walk reads).
+// ===========================================================================
+void PlaceOnTrackManager::PostSceneUpdate( RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput )
+{
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leActiveRaceCarIndex++ )
+    {
+        ActiveRaceCar* lpActiveRaceCar = mpRaceCarEntityModule->GetActiveRaceCar( leActiveRaceCarIndex );
+
+        if( !lpActiveRaceCar->IsAttached() || !lpActiveRaceCar->ToBePlacedOnTrack() )
+        {
+            continue;
+        }
+
+        CgsSceneManager::SceneQueryId lSceneQueryID;
+        lSceneQueryID.Set( KI_PLACE_ON_TRACK_LINE_TEST_OWNER, static_cast<u16>( leActiveRaceCarIndex ) );
+
+        // The console builds both offsets as (0, 50, 0, int 0) and adds / subtracts all four lanes.
+        const Vector3& lrPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
+        const Vector3  lOffset    = Vector3{ 0.0f, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0.0f, 0.0f };
+
+        CgsSceneManager::SceneManagerIO::InEventLineTestFine lEvent;
+        lEvent.mLineStart = Vector3{ lrPosition.x + lOffset.x, lrPosition.y + lOffset.y,
+                                     lrPosition.z + lOffset.z, lrPosition.w + lOffset.w };
+        lEvent.mLineEnd   = Vector3{ lrPosition.x - lOffset.x, lrPosition.y - lOffset.y,
+                                     lrPosition.z - lOffset.z, lrPosition.w - lOffset.w };
+        lEvent.mQueryId            = lSceneQueryID;
+        lEvent.mx32EntityTypeFlags = K_ENTITY_TYPE_FLAG_WORLD;
+        lEvent.mExcludeEntityId.SetInvalid();
+        lEvent.meExclusionMode     = CgsSceneManager::SceneManagerIO::E_EXCLUDE_ENTITY_ONLY;
+        lEvent.mxVolumeTypeFlags   = KU8_ALL_VOLUME_TYPE_FLAGS;
+
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Generating line test to place race car "
+                                       << static_cast<s32>( leActiveRaceCarIndex ) << " on track\n";
+        }
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "    lEvent.mLineStart=";
+            CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lEvent.mLineStart.x,
+                                                     lEvent.mLineStart.y, lEvent.mLineStart.z );
+            *CgsDev::Log::gpDebugPrint << ", lEvent.mLineEnd=";
+            CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lEvent.mLineEnd.x,
+                                                     lEvent.mLineEnd.y, lEvent.mLineEnd.z );
+            *CgsDev::Log::gpDebugPrint << "\n";
+        }
+
+        lpOutput->GetSceneFineLineTestQueue()->AddEvent( lEvent );
+
+        // [FLAG] RaceCarEntityModuleDebugComponent::PushLineTest( lEvent.mLineStart, lEvent.mLineEnd )
+        // -- inlined on the console (module + 0x17CF0, +0x70 / +0x80); the component is absent here.
+
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Line test requested\n";
+        }
+    }
+}
+
 // ===========================================================================
 // PrePhysicsUpdate @ 0x822F6DF8   (drivable wave 2026-08-01)
 //
@@ -255,13 +356,14 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
         const RaceCarEntityModuleIO::InputBuffer_PrePhysics* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput )
 {
-    // [teleport] the harness teleport, armed here so its request is answered by THIS frame's
-    // ApplyPendingRequestsWithoutSceneQueryBringUp below. See the block at the bottom of this file.
+    // [teleport] the harness teleport, armed here. Its request is answered by the console's own
+    // round trip: the NEXT frame's PostSceneUpdate posts the line test, the scene answers it and
+    // that frame's walk below places the car (one frame later than the retired bring-up did).
+    // See the block at the bottom of this file.
     ArmCarTeleportBringUp();
 
-    // [sweep] the deterministic crash sweep, armed on the same frame and answered by the
-    // same ApplyPendingRequestsWithoutSceneQueryBringUp below. See the block at the bottom
-    // of this file. Inert unless BRN_CRASH_SWEEP is set.
+    // [sweep] the deterministic crash sweep, armed on the same frame and answered the same way.
+    // See the block at the bottom of this file. Inert unless BRN_CRASH_SWEEP is set.
     ArmCrashSweepBringUp();
 
     const RaceCarEntityModuleIO::SceneResultQueue* lpSceneResultQueue =
@@ -299,6 +401,27 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
             // !mbInCarSelectScreen.
             const bool lbIgnoreFatal = !mpRaceCarEntityModule->IsInCarSelectScreen();
 
+            // 0x822F6FBC..0x822F7048 -- the console's own two prints (gxMessageFilterFlags & 1),
+            // added 2026-09-24 with the producer: they are what a log shows for every answer, an
+            // empty one included. (The per-intersection "      Intersection 0: " << record lines that
+            // follow on the console print through CgsSceneManager::operator<<(LineTestIntersection),
+            // which this tree has no body for -- not reproduced.)
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint << "[PLACEONTRACK] Received line test result for race car "
+                                           << static_cast<s32>( leActiveRaceCarIndex ) << "\n";
+            }
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint << "    lpLineTestResult->miNumIntersections="
+                                           << lpLineTestResult->muNumCandidates << "\n";
+            }
+
+            // [FLAG] 0x822F7058..0x822F70A4: the console clears the RaceCarEntityModuleDebugComponent's
+            // intersection history (`stw 0 -> module + 97824`) and Appends every intersection position
+            // to its Vector3<10> list (module + 0x17CF0 + 144) -- debug render only; the component is
+            // not in this tree.
+
             // The console passes the request position in v1 (`lvx128 v1, car, 1952`).
             const Vector3& lrQueryPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
             const Vector4  lQuery = Vector4{ lrQueryPosition.x, lrQueryPosition.y,
@@ -307,13 +430,28 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
             const PlaceOnTrackCandidate* lpBestIntersection = ComputeBestPlaceOnT(
                 *lpLineTestResult, lQuery, lbIgnoreFatal );
 
+            // The console's "    Selected intersection " << index << " as place on track destination\n"
+            // (index = (best - &list.maCandidates[0]), `subf ; srawi 6`), printed before the car-select arm.
+            if( lpBestIntersection != 0 && ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0
+                && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                *CgsDev::Log::gpDebugPrint << "    Selected intersection "
+                                           << static_cast<s32>( lpBestIntersection - lpLineTestResult->maCandidates )
+                                           << " as place on track destination\n";
+            }
+
             PlaceCarOnTrack( leActiveRaceCarIndex, lpBestIntersection, lpOutput );
         }
 
         liType = lpSceneResultQueue->GetNextEvent( lpEvent, &lpEvent, &liSize );
     }
 
-    ApplyPendingRequestsWithoutSceneQueryBringUp( lpOutput );
+    // ⛔ RETIRED 2026-09-24 (crash parity FX-GEOMETRIC): the frame's tail used to run
+    // ApplyPendingRequestsWithoutSceneQueryBringUp -- a PC-only answer to every pending request from
+    // a WORLDCOL.BIN walk of its own, because nothing on this build produced the query above. The
+    // console has no such tail: PostSceneUpdate @0x822D3168 is the producer (landed in the same
+    // change) and this walk the only consumer. Keeping both would place a car TWICE (the walk does
+    // not re-test mbToBePlacedOnTrack -- 0x822F6F6C..0x822F6F84 test only the type and the owner).
 }
 
 // ===========================================================================
@@ -393,6 +531,16 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         // needs the above-ground line-test round trip -- see that function's banner.
         // DELETE-WHEN the ring fills on a booted drive AND the scene fine-query round trip
         // produces real results (at which point this arm stops being the one that runs).
+        // ⚠️ 2026-09-24 (FX-GEOMETRIC): the round trip DOES produce real results now
+        // (PostSceneUpdate + the scene's CollideLineAgainstPolySoupList), so this arm runs only
+        // when the console's 100 m single-sided line genuinely finds no usable surface. The park
+        // itself is unchanged (not this change's to retire); the console's own print below says
+        // when it runs, so a live log can measure it.
+        if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "    Failed to find valid place on track location - reverting to ring buffer\n";
+        }
         lResetPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
         lResetNormal   = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
     }
@@ -537,489 +685,6 @@ void GetRandomVector( CgsNumeric::Random& lrRandom, Vector3& lrOut,
 }
 
 // ===========================================================================
-// [FLAG PC bring-up] THE DROP QUERY -- NOT an X360 function, and NOT an invented pose.
-//
-// ⭐⭐ WHY THIS EXISTS AT ALL, and what it fixes (measured 2026-08-02).
-//
-// The authored spawn location a place-on-track request carries is a QUERY ANCHOR IN FREE
-// AIR, never a pose. PlaceOnTrackManager::PostSceneUpdate @0x822D3168 proves it, in asm:
-//
-//     v68 = (0, flt_820138DC, 0, 0)                 flt_820138DC == 50.0f
-//     lvx128    v0, r31, 0x7A0                      v0 = mPlaceOnTrackPosition
-//     vaddfp128 v127, v0, v13   ->  lEvent.mLineStart = pos + (0, +50, 0)
-//     vsubfp128 v126, v0, v12   ->  lEvent.mLineEnd   = pos - (0, +50, 0)
-//     InEventLineTestFine::AddEvent(...)
-//
-// -- a 100 m VERTICAL LINE TEST through the request. PrePhysicsUpdate then ranks the
-// result with ComputeBestPlaceOnT and PlaceCarOnTrack writes the car to
-// lpBestIntersection->mPosition: the GROUND, not the anchor.
-//
-// ⚠️ AND THE CAR-SELECT OVERRIDE DOES NOT SAVE THE ANCHOR ON THIS PATH.
-// GetValuesForCarSelect @0x822D3470 (reconstructed above, 2026-09-18) does copy
-// mPlaceOnTrackPosition back over the reset position, but only INSIDE `if (v14 && v14 < 3)`
-// where `v14 = *(module + 100044)` == meCarSelectResetType. HandleResetPlayerCarAction
-// @0x82304FE8 seeds that member from the action's +0x3C (meCarSelectType) and
-// CarSelectManager::EnterJunkyardAtStartOfGame posts E_CAR_SELECT_DONT_DROP. At start of
-// game the override is a NO-OP and the intersection stands; on a car SWAP
-// (TeleportCurrentVehicle posts E_CAR_SELECT_DROP_NORMAL) the anchor is restored and the
-// car drops.
-//
-// MEASURED, both ends, over the shipped collision (the junkyard the player starts in):
-//     authored anchor  maSpawnLocations[1] = (2986.933105, 1.009405, -2011.417969)
-//     the only surface the console's own line crosses:      y = -3.525
-//     => the car was rendering 4.534 m ABOVE the junkyard floor.
-// The anchor is authored high on purpose: every junkyard's three car-select anchors sit
-// 3.3-6.2 m above their own yard floor, so the downward test starts clear of the junk.
-// (The spawn record itself is NOT the bug -- it is byte-identical in the X360 original,
-// in our port, and in the shipped BPR Remaster's TRIGGERS.DAT.)
-//
-// WHAT THIS DOES. The scene fine-query round trip is severed in five places (see the
-// banner below) AND the world collision is never even loaded on this build:
-// ScriptedLoad stage 7 (LoadWorldCollision) is deferred, BrnGameDataModule's TRK_COLL arm
-// is a DeferredGameDataRequest, TriangleCollisionManager::Prepare is inert, and the VMX
-// intersection kernels (IntersectLinePolySoupTriangle*4) are not reconstructed. So this
-// helper asks the SAME QUESTION of the SAME SHIPPED DATA directly: it reads WORLDCOL.BIN
-// through the tree's own async file-system engine, walks its PolygonSoupLists with the
-// committed CgsGeometric::PolygonSoup layout, and returns every upward-facing triangle the
-// console's own line (anchor +/- (0, KF_PLACE_ON_TRACK_LINE_TEST_LENGTH, 0)) crosses as a
-// PlaceOnTrackCandidate. The console's own ComputeBestPlaceOnT then picks between them and
-// the console's own PlaceCarOnTrack does every store. Nothing here is tuned by eye: the Y
-// the car ends up at is a vertex of the shipped collision mesh.
-//
-// WHAT IS STILL A STAND-IN, stated plainly:
-//   * muFlags is left ZERO on every candidate, so the "fatal surface" gate
-//     (KU_PLACE_ON_TRACK_FILTER_BIT) never fires. That bit is a CollisionTag bit the scene
-//     manager sets; the polygon's own u32 surface tag is a different field and the mapping
-//     is not recovered. Consequence: a candidate the console would have rejected as fatal
-//     is eligible here.
-//   * only WORLDCOL.BIN is consulted -- the console's fine query also sees dynamic scene
-//     entities (props, other cars). Nothing on this build registers collision for those.
-//   * single-sidedness is reproduced by discarding triangles whose geometric normal points
-//     down (the console's IntersectLinePolySoupTriangleSingleSided4 does the same facing
-//     test); no edge-cosine / material work is attempted.
-//
-// DELETE-WHEN the real round trip lands (any one of the five severed links closing far
-// enough to deliver an OutEventLineTestFineResult): the walk in PrePhysicsUpdate then
-// answers the request first and this leg finds nothing pending.
-// ===========================================================================
-namespace
-{
-    // WORLDCOL.BIN is a platform-4 bundle of 396 PolygonSoupList + 396 IdList resources
-    // (one pair per collision zone). [game #71] in CgsResourceTypeRegistration.cpp.
-    const u32   KU_POLYGON_SOUP_LIST_TYPE_ID = 0x43;
-    const char* KAC_WORLD_COLLISION_BUNDLE   = "WORLDCOL.BIN";
-
-    // The SERIALISED forms of the two records this walk reads. They are the committed x64
-    // structures viewed before FixUp: every pointer slot still holds a byte OFFSET from the
-    // start of the resource blob (CgsGeometric::PolygonSoupList::FixUp adds the load base to
-    // exactly these three slots plus the two inside each soup). Declared here rather than
-    // reusing the committed structs because those hold real pointers and this walk must not
-    // relocate a buffer it does not own.
-    struct SerialisedPolygonSoupList
-    {
-        f32 mafOverallAabb[8];   // +0x00  min xyzw / max xyzw
-        u64 muPolySoupTable;     // +0x20  offset of the u64[miNumPolySoups] soup table
-        u64 muPolySoupBoxes;     // +0x28  offset of the AxisAlignedBox4 SoA groups
-        s32 miNumPolySoups;      // +0x30
-        s32 miDataSize;          // +0x34
-    };
-
-    struct SerialisedPolygonSoup
-    {
-        s32 miPosX;              // +0x00  the committed CgsGeometric::PolygonSoup names
-        s32 miPosY;              // +0x04
-        s32 miPosZ;              // +0x08
-        f32 mfScale;             // +0x0C
-        u64 muPolygons;          // +0x10  offset of the 12-byte polygon records
-        u64 muVertices;          // +0x18  offset of the 6-byte packed vertices
-        u16 mu16Size;            // +0x20
-        u8  mu8NumPolygons;      // +0x22
-        u8  mu8NumQuads;         // +0x23
-        u8  mu8NumVertices;      // +0x24
-        u8  mau8Pad[3];          // +0x25..+0x27
-    };
-
-    // The x64 record sizes the transcoder emits (tools/assets/bundles/
-    // world_support_transcode.py: PSL_X64_HDR / SOUP_X64_HDR).
-    static_assert(sizeof(SerialisedPolygonSoupList) == 0x38, "PolygonSoupList x64 header");
-    static_assert(sizeof(SerialisedPolygonSoup) == 0x28, "PolygonSoup x64 header");
-    static_assert(sizeof(CgsResource::BundleV2::ResourceEntry) == 0x40, "BundleV2 entry");
-
-    // The candidate buffer this leg hands to ComputeBestPlaceOnT. The console's own
-    // OutEventLineTestFineResult is a fixed-capacity record too; 32 is far more than a
-    // vertical line through one spawn point has ever produced (the junkyard start crosses
-    // exactly one triangle, the drive-in five).
-    const s32 KI_DROP_QUERY_MAX_CANDIDATES = 32;
-
-    struct DropQueryResultBringUp
-    {
-        BrnWorld::PlaceOnTrackCandidateList mList;   // header + maCandidates[1]
-        BrnWorld::PlaceOnTrackCandidate     maExtraCandidates[KI_DROP_QUERY_MAX_CANDIDATES - 1];
-    };
-
-    // maExtraCandidates must continue maCandidates[0] at the same 64-byte stride, because
-    // ComputeBestPlaceOnT walks the array by stride from +0x10.
-    static_assert(sizeof(BrnWorld::PlaceOnTrackCandidate) == 0x40, "candidate stride");
-    static_assert(offsetof(BrnWorld::PlaceOnTrackCandidateList, maCandidates) == 0x10,
-                  "candidate array offset");
-    static_assert(offsetof(DropQueryResultBringUp, maExtraCandidates)
-                      == offsetof(DropQueryResultBringUp, mList)
-                         + offsetof(BrnWorld::PlaceOnTrackCandidateList, maCandidates)
-                         + sizeof(BrnWorld::PlaceOnTrackCandidate),
-                  "candidate array is not contiguous");
-
-    // The shipped collision, read once and kept (the console keeps the world collision
-    // resident too). Null means "not attempted yet"; mbTried guards a failed read.
-    void* gpWorldCollisionBlob = 0;
-    u32   guWorldCollisionSize = 0;
-    bool  gbWorldCollisionTried = false;
-
-    const void* GetWorldCollisionBringUp(u32* lpuOutSize)
-    {
-        if (!gbWorldCollisionTried)
-        {
-            gbWorldCollisionTried = true;
-            CgsFileSystem::EnsureDeviceManagerUp();
-            CgsFileSystem::DeviceManager* lpManager =
-                CgsFileSystem::DeviceManager::GetIfInitialized();
-            if (lpManager != 0)
-            {
-                gpWorldCollisionBlob =
-                    lpManager->ReadWholeFile(KAC_WORLD_COLLISION_BUNDLE, &guWorldCollisionSize);
-            }
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[PLACEONTRACK] [FLAG PC bring-up] world collision '"
-                    << KAC_WORLD_COLLISION_BUNDLE << "' "
-                    << (gpWorldCollisionBlob != 0 ? "read (" : "UNAVAILABLE (")
-                    << static_cast<s32>(guWorldCollisionSize) << " bytes)\n";
-            }
-        }
-        *lpuOutSize = guWorldCollisionSize;
-        return gpWorldCollisionBlob;
-    }
-
-    // Where the vertical line through (lfX, *, lfZ) crosses the triangle, or false.
-    // XZ point-in-triangle by barycentric weights, then the same weights interpolate Y --
-    // exact for a plane, and the plane is what the console's ray/triangle kernel solves for.
-    bool CrossVerticalLine(f32 lfX, f32 lfZ,
-                           const f32 (&lrA)[3], const f32 (&lrB)[3], const f32 (&lrC)[3],
-                           f32* lpfOutY)
-    {
-        const f32 lfDen = (lrB[2] - lrC[2]) * (lrA[0] - lrC[0])
-                        + (lrC[0] - lrB[0]) * (lrA[2] - lrC[2]);
-        if (lfDen > -1.0e-9f && lfDen < 1.0e-9f)
-            return false;   // degenerate in XZ (a vertical wall) -- no crossing
-
-        const f32 lfInv = 1.0f / lfDen;
-        const f32 lfW0 = ((lrB[2] - lrC[2]) * (lfX - lrC[0])
-                        + (lrC[0] - lrB[0]) * (lfZ - lrC[2])) * lfInv;
-        const f32 lfW1 = ((lrC[2] - lrA[2]) * (lfX - lrC[0])
-                        + (lrA[0] - lrC[0]) * (lfZ - lrC[2])) * lfInv;
-        const f32 lfW2 = 1.0f - lfW0 - lfW1;
-        if (lfW0 < 0.0f || lfW1 < 0.0f || lfW2 < 0.0f)
-            return false;
-
-        *lpfOutY = lfW0 * lrA[1] + lfW1 * lrB[1] + lfW2 * lrC[1];
-        return true;
-    }
-
-    // Append one crossing, with the triangle's own unit normal oriented AGAINST the line
-    // (i.e. upward), which is what a DOUBLE-SIDED line/triangle test returns and what
-    // PlaceCarOnTrack needs -- it hands the normal to BrnMath::BuildTransform as the car's
-    // up vector.
-    //
-    // ⚠️ MEASURED 2026-08-02, and it is why this is not the single-sided test: the shipped
-    // collision does NOT wind ground surfaces consistently. The junkyard floor quad
-    // (res bf2191aa soup 86 poly 3, y = -3.525) winds to (0, +1, 0); the road quad right
-    // outside it (res b5515579 soup 1 poly 17, y = 1.065) winds to (0, -1, 0). A
-    // facing-rejecting walk therefore drops half the drivable surfaces in the world.
-    // CgsGeometric ships both IntersectLinePolySoupTriangleSingleSided4 AND ...DoubleSided;
-    // the data says this query is the double-sided one.
-    bool AppendCandidate(DropQueryResultBringUp& lrResult, f32 lfX, f32 lfY, f32 lfZ,
-                         const f32 (&lrA)[3], const f32 (&lrB)[3], const f32 (&lrC)[3])
-    {
-        const f32 lfUx = lrB[0] - lrA[0], lfUy = lrB[1] - lrA[1], lfUz = lrB[2] - lrA[2];
-        const f32 lfVx = lrC[0] - lrA[0], lfVy = lrC[1] - lrA[1], lfVz = lrC[2] - lrA[2];
-        f32 lfNx = lfUy * lfVz - lfUz * lfVy;
-        f32 lfNy = lfUz * lfVx - lfUx * lfVz;
-        f32 lfNz = lfUx * lfVy - lfUy * lfVx;
-        const f32 lfLen = sqrtf(lfNx * lfNx + lfNy * lfNy + lfNz * lfNz);
-        if (lfLen <= 1.0e-6f)
-            return false;
-        lfNx /= lfLen; lfNy /= lfLen; lfNz /= lfLen;
-        if (lfNy < 0.0f)
-        {
-            lfNx = -lfNx; lfNy = -lfNy; lfNz = -lfNz;   // face the incoming (downward) line
-        }
-
-        if (lrResult.mList.muNumCandidates >= KI_DROP_QUERY_MAX_CANDIDATES)
-            return false;
-
-        BrnWorld::PlaceOnTrackCandidate& lrNode =
-            lrResult.mList.maCandidates[lrResult.mList.muNumCandidates];
-        lrNode.mPosition.x = lfX;
-        lrNode.mPosition.y = lfY;
-        lrNode.mPosition.z = lfZ;
-        lrNode.mPosition.w = 0.0f;
-        lrNode.mNormal.x   = lfNx;
-        lrNode.mNormal.y   = lfNy;
-        lrNode.mNormal.z   = lfNz;
-        lrNode.mNormal.w   = 0.0f;
-        ++lrResult.mList.muNumCandidates;
-        return true;
-    }
-
-    // Fill lrResult with every collision triangle the console's own place-on-track line
-    // through lrAnchor crosses.
-    void BuildDropTestCandidatesBringUp(const Vector3& lrAnchor, DropQueryResultBringUp& lrResult)
-    {
-        std::memset(&lrResult, 0, sizeof(lrResult));
-
-        u32         luBlobSize = 0;
-        const void* lpBlob     = GetWorldCollisionBringUp(&luBlobSize);
-        if (lpBlob == 0 || luBlobSize < sizeof(CgsResource::BundleV2))
-            return;
-
-        const u8* lpcBase = static_cast<const u8*>(lpBlob);
-        const CgsResource::BundleV2* lpBundle =
-            reinterpret_cast<const CgsResource::BundleV2*>(lpcBase);
-        if (lpBundle->muVersion != CgsResource::BundleV2::KU_VERSION
-            || lpBundle->muPlatform != CgsResource::BundleV2::KU_PLATFORM
-            || lpBundle->IsCompressed())
-        {
-            return;   // not the x64 image this walk understands
-        }
-
-        const f32 lfMinY = lrAnchor.y - KF_PLACE_ON_TRACK_LINE_TEST_LENGTH;
-        const f32 lfMaxY = lrAnchor.y + KF_PLACE_ON_TRACK_LINE_TEST_LENGTH;
-
-        const CgsResource::BundleV2::ResourceEntry* lpaEntries =
-            reinterpret_cast<const CgsResource::BundleV2::ResourceEntry*>(
-                lpcBase + lpBundle->muResourceEntriesOffset);
-
-        for (u32 luEntry = 0; luEntry < lpBundle->muResourceEntriesCount; ++luEntry)
-        {
-            const CgsResource::BundleV2::ResourceEntry& lrEntry = lpaEntries[luEntry];
-            if (lrEntry.muResourceTypeId != KU_POLYGON_SOUP_LIST_TYPE_ID)
-                continue;
-
-            const u32 luSize = lrEntry.mauUncompressedSizeAndAlignment[0]
-                             & CgsResource::BundleV2::KU_SIZE_MASK;
-            if (luSize < sizeof(SerialisedPolygonSoupList))
-                continue;
-
-            const u8* lpcList = lpcBase + lpBundle->mauResourceDataOffset[0]
-                              + lrEntry.mauDiskOffset[0];
-            const SerialisedPolygonSoupList* lpList =
-                reinterpret_cast<const SerialisedPolygonSoupList*>(lpcList);
-
-            const s32 liNumSoups = lpList->miNumPolySoups;
-            if (liNumSoups <= 0)
-                continue;
-
-            // The list's own AABB: min xyzw at +0x00, max xyzw at +0x10.
-            if (lrAnchor.x < lpList->mafOverallAabb[0] || lrAnchor.x > lpList->mafOverallAabb[4]
-                || lrAnchor.z < lpList->mafOverallAabb[2] || lrAnchor.z > lpList->mafOverallAabb[6])
-            {
-                continue;
-            }
-
-            const u64* lpauSoupTable =
-                reinterpret_cast<const u64*>(lpcList + lpList->muPolySoupTable);
-
-            for (s32 liSoup = 0; liSoup < liNumSoups; ++liSoup)
-            {
-                const SerialisedPolygonSoup* lpSoup =
-                    reinterpret_cast<const SerialisedPolygonSoup*>(
-                        lpcList + lpauSoupTable[liSoup]);
-
-                const s32 liNumVerts = lpSoup->mu8NumVertices;
-                if (liNumVerts <= 0)
-                    continue;
-
-                // UnpackPolygonSoupVertices @0x8283B480: world = (pos_s32 + vert_u16) * scale.
-                //
-                // ⭐⭐ THE PACKED VERTEX IS ZERO-EXTENDED, NOT SIGN-EXTENDED (fixed 2026-08-16).
-                // This read was `const s16*`. The console masks each lane with a vector constant
-                // of {0xFFFF, 0xFFFF, 0xFFFF, 0} -- built at 0x82C6DBD0 and applied by the `vand`
-                // inside UnpackPolygonSoupVertices -- so a lane of 0x8000 is +32768, never -32768.
-                // The committed consumer CgsPolygonSoupTests.cpp:349 already zero-extends; this
-                // was the one site that disagreed with it.
-                // ⭐ ORACLE, not reasoning: the per-soup AABB shipped inside WORLDCOL.BIN is
-                // console-authored, and decoding all 23,645 soups agrees with it on 23,645/23,645
-                // UNSIGNED and on only 23,629 signed. The 16 disagreeing soups decode up to ~1 km
-                // from where they belong.
-                const u16* lpaPacked =
-                    reinterpret_cast<const u16*>(lpcList + lpSoup->muVertices);
-                f32 lafVerts[256][3];
-                f32 lfMinX = 0.0f, lfMaxX = 0.0f, lfMinZ = 0.0f, lfMaxZ = 0.0f;
-                for (s32 liVert = 0; liVert < liNumVerts; ++liVert)
-                {
-                    const u16* lpPacked = lpaPacked + liVert * 3;
-                    lafVerts[liVert][0] = (lpSoup->miPosX + lpPacked[0]) * lpSoup->mfScale;
-                    lafVerts[liVert][1] = (lpSoup->miPosY + lpPacked[1]) * lpSoup->mfScale;
-                    lafVerts[liVert][2] = (lpSoup->miPosZ + lpPacked[2]) * lpSoup->mfScale;
-                    if (liVert == 0 || lafVerts[liVert][0] < lfMinX) lfMinX = lafVerts[liVert][0];
-                    if (liVert == 0 || lafVerts[liVert][0] > lfMaxX) lfMaxX = lafVerts[liVert][0];
-                    if (liVert == 0 || lafVerts[liVert][2] < lfMinZ) lfMinZ = lafVerts[liVert][2];
-                    if (liVert == 0 || lafVerts[liVert][2] > lfMaxZ) lfMaxZ = lafVerts[liVert][2];
-                }
-                if (lrAnchor.x < lfMinX || lrAnchor.x > lfMaxX
-                    || lrAnchor.z < lfMinZ || lrAnchor.z > lfMaxZ)
-                {
-                    continue;
-                }
-
-                const u8* lpcPolys = lpcList + lpSoup->muPolygons;
-                for (s32 liPoly = 0; liPoly < lpSoup->mu8NumPolygons; ++liPoly)
-                {
-                    // 12-byte record: u32 surface tag @0, u8 vertexIndex[4] @4,
-                    // u8 edgeCosine[4] @8. Quads come first (mu8NumQuads of them); a
-                    // triangle carries KU8_POLYGON_NO_VERTEX in slot 3.
-                    //
-                    // ⭐ THE QUAD IS A STRIP, NOT A FAN (measured 2026-08-02). Its four
-                    // indices run 0-1-3-2 around the perimeter, so the two triangles are
-                    // (0,1,2) and (1,3,2). Splitting it as a fan -- (0,1,2)+(0,2,3) --
-                    // produces a BOW TIE: on the junkyard floor quad (res bf2191aa soup 86
-                    // poly 3) the fan halves come out with normals (0,+1,0) and (0,-1,0)
-                    // and the crossing the console's line actually makes is lost. That is
-                    // exactly the bug the first cut of this walk shipped: 0 crossings at
-                    // the junkyard anchor, 3 at the drive-in.
-                    const u8* lpcPoly = lpcPolys + liPoly * CgsGeometric::KI_POLYGON_STRIDE;
-                    const bool lbQuad = (liPoly < lpSoup->mu8NumQuads);
-                    const s32 laiTris[2][3] = { { lpcPoly[4], lpcPoly[5], lpcPoly[6] },
-                                                { lpcPoly[5], lpcPoly[7], lpcPoly[6] } };
-                    const s32 liNumTris = lbQuad ? 2 : 1;
-
-                    for (s32 liTri = 0; liTri < liNumTris; ++liTri)
-                    {
-                        const s32 liA = laiTris[liTri][0];
-                        const s32 liB = laiTris[liTri][1];
-                        const s32 liC = laiTris[liTri][2];
-                        if (liA >= liNumVerts || liB >= liNumVerts || liC >= liNumVerts)
-                            continue;
-
-                        f32 lfY = 0.0f;
-                        if (!CrossVerticalLine(lrAnchor.x, lrAnchor.z, lafVerts[liA],
-                                               lafVerts[liB], lafVerts[liC], &lfY))
-                            continue;
-                        if (lfY < lfMinY || lfY > lfMaxY)
-                            continue;   // outside the console's own 100 m line
-
-                        AppendCandidate(lrResult, lrAnchor.x, lfY, lrAnchor.z,
-                                        lafVerts[liA], lafVerts[liB], lafVerts[liC]);
-                    }
-                }
-            }
-        }
-    }
-}
-
-// ===========================================================================
-// [FLAG PC bring-up] ApplyPendingRequestsWithoutSceneQueryBringUp -- NOT an X360 function.
-//
-// WHY IT EXISTS, measured. RequestPlaceOnTrack latches a request; the console answers it
-// by round-tripping a fine line test through the scene manager. On PC that round trip is
-// severed in FIVE independent places. Rungs 2, 4 and 5 named a stub that has since been
-// retired -- each is corrected in place below; the severance itself is still real:
-//   1. PlaceOnTrackManager::PostSceneUpdate @0x822D3168 -- absent (this wave leaves it so)
-//   2. RaceCarEntityModule::PostSceneUpdate @0x822FE3F0 -- ⚠️ THIS RUNG IS STALE AND IS
-//      CORRECTED 2026-08-26 (resetpump): it has NOT been a WorldLinkStubs stub since the
-//      crash-exit wave (2026-08-25) -- it is a real minimal-complete SLICE in
-//      BrnRaceCarEntityModule_CrashExit.cpp. What is still absent is the leg of it that would
-//      post here: PlaceOnTrackManager::PostSceneUpdate, i.e. rung 1. The SEVERANCE IS REAL,
-//      the reason given for it was out of date.
-//   3. OutputBuffer_PostScene::GetSceneFineLineTestQueue -- declaration-only; the member is
-//      a 16400-byte opaque blob with no AddEvent (its Construct now runs -- resetpump wave --
-//      but the member type itself is still a `maReserved` slice)
-//   4. WorldModule::BridgeRaceCarModuleToSceneModule_PostScene -- ⚠️ STALE, CORRECTED
-//      2026-09-11: it is no longer a WorldLinkStubs stub but a real body in the mounted
-//      BrnWorldModule_wG_Bridges_03.cpp.
-//   5. SceneManagerModule::ProcessSceneQueries -- ⚠️ likewise no longer a stub: real body in
-//      the mounted CgsSceneManagerModule.cpp. The REST of this rung is unchanged from the
-//      original measurement and was not re-measured in the 2026-09-11 pass:
-//      ProcessFineQueries/ProcessLineTestFine absent; FineIntersectionTestModule::
-//      ComputeLineTestFine is an EMPTY body with zero callers, so nothing in the program
-//      ever produces an OutEventLineTestFineResult at all.
-// The consumer half (the bridge back, the queue, its Construct, the accessor) is REAL, so
-// the walk above is live code -- it just never sees an event.
-//
-// WHAT THIS DOES: for every attached car with a pending request, run the console's own
-// place-on-track line test against the shipped world collision (see THE DROP QUERY above),
-// rank the crossings with the console's own ComputeBestPlaceOnT, and hand the winner to the
-// console's own PlaceCarOnTrack. It invents no pose and no state: the Y the car lands on is
-// a vertex of the shipped collision mesh, and every store after that point is console code.
-// When the collision cannot be read the leg falls back to the console's own "no usable
-// intersection" arm, which keeps the anchor -- the behaviour this leg had before 2026-08-02,
-// and the reason the junkyard car rendered 4.534 m above its floor.
-//
-// This is what replaced PromoteAttachedCarToActiveBringUp, which forced
-// muState / mLOD / mbDamaged directly.
-//
-// DELETE-WHEN any ONE of the five above is closed far enough to deliver a result event;
-// the walk then handles the request first and this leg finds nothing pending.
-// ===========================================================================
-void PlaceOnTrackManager::ApplyPendingRequestsWithoutSceneQueryBringUp(
-        RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput )
-{
-    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
-    {
-        const EActiveRaceCarIndex leActiveRaceCarIndex =
-            static_cast<EActiveRaceCarIndex>( liCar );
-        const ActiveRaceCar* lpActiveRaceCar =
-            mpRaceCarEntityModule->GetActiveRaceCar( leActiveRaceCarIndex );
-
-        if( !lpActiveRaceCar->IsAttached() || !lpActiveRaceCar->ToBePlacedOnTrack() )
-        {
-            continue;
-        }
-
-        // The console's own query point and its own line (PostSceneUpdate @0x822D3168).
-        const Vector3& lrAnchor = lpActiveRaceCar->GetPlaceOnTrackPosition();
-
-        DropQueryResultBringUp lDropQuery;
-        BuildDropTestCandidatesBringUp( lrAnchor, lDropQuery );
-
-        // `lbIgnoreFatal` exactly as the console's own walk computes it.
-        const bool lbIgnoreFatal = !mpRaceCarEntityModule->IsInCarSelectScreen();
-        const Vector4 lQuery = Vector4{ lrAnchor.x, lrAnchor.y, lrAnchor.z, 0.0f };
-        const PlaceOnTrackCandidate* lpBestIntersection =
-            ComputeBestPlaceOnT( lDropQuery.mList, lQuery, lbIgnoreFatal );
-
-        if( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[PLACEONTRACK] [FLAG PC bring-up] no scene fine-query round trip; race car "
-                << liCar << " line ("
-                << lrAnchor.x << ", " << ( lrAnchor.y + KF_PLACE_ON_TRACK_LINE_TEST_LENGTH )
-                << ", " << lrAnchor.z << ") -> ("
-                << lrAnchor.x << ", " << ( lrAnchor.y - KF_PLACE_ON_TRACK_LINE_TEST_LENGTH )
-                << ", " << lrAnchor.z << ") over the shipped world collision: "
-                << lDropQuery.mList.muNumCandidates << " crossings";
-            if( lpBestIntersection != 0 )
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "; anchor y " << lrAnchor.y << " -> ground y "
-                    << lpBestIntersection->mPosition.y << " (drop "
-                    << ( lrAnchor.y - lpBestIntersection->mPosition.y ) << " m) normal ("
-                    << lpBestIntersection->mNormal.x << ", " << lpBestIntersection->mNormal.y
-                    << ", " << lpBestIntersection->mNormal.z << ")\n";
-            }
-            else
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "; NONE -- falling back to the console's own no-intersection arm "
-                       "(the car stays at the authored anchor)\n";
-            }
-        }
-
-        PlaceCarOnTrack( leActiveRaceCarIndex, lpBestIntersection, lpOutput );
-    }
-}
-
-// ===========================================================================
 // [teleport] ArmCarTeleportBringUp -- NOT an X360 function, and DELIBERATELY PERMANENT.
 //
 // ⭐ WHAT IT IS. `BRN_CAR_TELEPORT="x,y,z[,headingDeg]"` puts the player's car at a world
@@ -1030,10 +695,12 @@ void PlaceOnTrackManager::ApplyPendingRequestsWithoutSceneQueryBringUp(
 //
 // ⭐⭐ IT IS A TRIGGER, NOT A MECHANISM. Every metre of the actual move is the game's own code:
 //     ActiveRaceCar::RequestPlaceOnTrack @0x822BFB58   <- THE ONLY THING THIS BLOCK CALLS
-//       -> PlaceOnTrackManager::PrePhysicsUpdate       -- the 100 m vertical line test through the
-//          request (on PC: ApplyPendingRequestsWithoutSceneQueryBringUp, over the SHIPPED
-//          WORLDCOL.BIN, which is why the Y a teleport lands on is a vertex of the collision mesh
-//          and never a number chosen here)
+//       -> PlaceOnTrackManager::PostSceneUpdate @0x822D3168 -- the 100 m vertical line test through
+//          the request, answered by the scene's own fine line test over the resident world
+//          collision (the PC's WORLDCOL.BIN bring-up that stood here until 2026-09-24 is retired),
+//          which is why the Y a teleport lands on is a surface of the collision mesh and never a
+//          number chosen here
+//       -> PlaceOnTrackManager::PrePhysicsUpdate @0x822F6DF8 -- the same frame's answer
 //       -> ComputeBestPlaceOnT @0x822BE238             -- the console's own candidate ranking
 //       -> PlaceCarOnTrack                             -- BrnMath::BuildTransform(pos, at, up)
 //       -> RaceCarEntityModule::ResetActiveRaceCar @0x822F4880, its IsActive() arm
@@ -1054,8 +721,9 @@ void PlaceOnTrackManager::ApplyPendingRequestsWithoutSceneQueryBringUp(
 // `BRN_CAR_TELEPORT_ARM_DISTANCE` overrides it (metres); 0 means "fire on the first ACTIVE frame".
 //
 // ⚠️ THE STREAMER. A long jump is NOT free: the world streams around the player, and the
-// teleport does not wait for it. The car lands on WORLDCOL.BIN (which is resident whole, read
-// once by the drop query) so it never falls through the world, but the visible world and the
+// teleport does not wait for it. The car lands on the world collision (WORLDCOL.BIN is resident
+// whole in the scene manager -- ScriptedLoad stage 7 loads all 792 resources and builds the spacial
+// partition the line test queries) so it never falls through the world, but the visible world and the
 // breakable props around the destination arrive over the following seconds. A run plan must
 // leave the car sitting for a few seconds before it is asked to smash anything -- which is what
 // flow_run.ps1's -DriveDelay already provides.
