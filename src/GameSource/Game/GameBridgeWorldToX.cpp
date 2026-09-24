@@ -68,9 +68,9 @@
 //        parity FX-BRIDGES CC-5. Its "not homed" reason had expired: BaseContact is homed in
 //        Physics/ContactSpies/BrnContactSpyEvents.h (mNormalStress +0x20 / mNormal +0x30 of the
 //        96-byte record) and RumbleManager::UpdateImpacts already walks the same run by name.)
-//   the per-car DEFORMED AABB arm of 10 -- DeformationOutputInterface's DeformationState
-//        pointer (+112) is inside an opaque span; the UNDEFORMED arm (the RaceCarState's own
-//        mHalfExtent) is reproduced and is the arm a parked, undamaged car takes anyway.
+//   (the per-car DEFORMED AABB arm of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
+//        parity FX-BRIDGES CC-7. DeformationOutputInterface::mpDeformationState is homed and written
+//        every frame, and DeformationState::GetCarStateF / CarState::mDeformedBBoxMin/Max are named.)
 //
 // ⚠️ CONSOLE ODDITIES REPRODUCED, NOT FIXED:
 //   * step 10 clears mbHasCrashingCenterOfMass in the staged VehicleInfo and step 11 then
@@ -139,6 +139,8 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface::RaceCarCrashEventQueue (step 13)
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"          // VolumeInstanceId entity-word geometry (step 13)
 #include "GameSource/World/BrnEntityTypes.h"                                  // E_ENTITYTYPE_* (step 13 owner switch)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // mpDeformationState (the deformed-AABB arm)
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"          // DeformationState::GetCarStateF / CarState
 #include "rw/math/vpu/vector3_operation.h"       // rw::math::vpu::IsValid / IsZero / operator- / MagnitudeSquared
 #include "rw/math/vpu/matrix44affine_operation.h"// rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/fpu/scalar_operation.h"        // rw::math::fpu::IsValid(float)
@@ -265,6 +267,12 @@ namespace BrnGame
             lpCarContacts = lpContactSpy->GetRaceCarContacts();
         }
 
+        // ---- the deformation output (DWARF GameBridgeWorldToX.cpp:94 lpDeformationOutputInterface)
+        // X360 0x823E403C..0x823E4050: GetDeformationOutputInterface() @0x823B6350, kept in var_828
+        // for the per-car deformed-AABB arm below.
+        const BrnWorldIO::UpdateOutputBuffer::DeformationOutputInterface* lpDeformationOutputInterface =
+            lpWorldOutput->GetDeformationOutputInterface();
+
         // ---- step 10: the per-car VehicleInfo publish ------------------------------------
         for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
         {
@@ -330,16 +338,29 @@ namespace BrnGame
             // The RaceCarState payload: the console XMemCpy's all 1120 bytes.
             lVehicleInfo.mRaceCarState = *lpState;
 
-            // The world AABB. [FLAG] the DEFORMED arm -- the console prefers the deformation
-            // state's own per-car min/max when DeformationOutputInterface's DeformationState
-            // pointer is live AND DeformationState::GetCarStateForCar(mEntityId) resolves --
-            // is gated (that pointer sits in an opaque span). The UNDEFORMED arm is the
-            // console's own fallback and is exact: max = mHalfExtent, min = -mHalfExtent
-            // (asm `vspltisw v0,-1; vslw v0,v0,v0` builds the 0x80000000 sign mask and
-            // `vxor` negates), i.e. a symmetric box about the car's origin.
-            const Vector3& lHalfExtent = lpState->mHalfExtent;
-            lVehicleInfo.mAABB.mMin = Vector3{ -lHalfExtent.x, -lHalfExtent.y, -lHalfExtent.z, 0.0f };
-            lVehicleInfo.mAABB.mMax = lHalfExtent;
+            // The world AABB (X360 0x823E4924..0x823E49B4; DWARF :137 `AxisAlignedBox lBox`). The
+            // console prefers the deformation state's own per-car box: when the output interface's
+            // mpDeformationState (`lwz r3, 0x70(r31)`) is live AND DeformationState::GetCarStateF
+            // @0x822CC340 (the DWARF's GetCarStateFromEntityId) resolves this car's mEntityId
+            // (`lwz r4, 0x3C8`), it calls the lookup a SECOND time and copies the 32 bytes at
+            // CarState +0x640 -- mDeformedBBoxMin / mDeformedBBoxMax (0x823E4954..0x823E4978). Only
+            // otherwise does it fall back to the pristine box: max = mHalfExtent (+0x350), min = max
+            // with the sign bit flipped in ALL FOUR lanes (`vspltisw v0,-1 ; vslw v0,v0,v0` builds
+            // the 0x80000000 mask, `vxor` applies it -- w included).
+            if (lpDeformationOutputInterface->mpDeformationState != 0
+                && lpDeformationOutputInterface->mpDeformationState->GetCarStateF(lpState->mEntityId.muValue) != 0)
+            {
+                const BrnPhysics::Deformation::CarState* lpCarState =
+                    lpDeformationOutputInterface->mpDeformationState->GetCarStateF(lpState->mEntityId.muValue);
+                lVehicleInfo.mAABB.mMin = lpCarState->mDeformedBBoxMin;
+                lVehicleInfo.mAABB.mMax = lpCarState->mDeformedBBoxMax;
+            }
+            else
+            {
+                const Vector3& lHalfExtent = lpState->mHalfExtent;
+                lVehicleInfo.mAABB.mMin = Vector3{ -lHalfExtent.x, -lHalfExtent.y, -lHalfExtent.z, -lHalfExtent.w };
+                lVehicleInfo.mAABB.mMax = lHalfExtent;
+            }
             CGS_ASSERT(!rw::math::vpu::IsZero(lVehicleInfo.mAABB.mMax - lVehicleInfo.mAABB.mMin),
                        "!rw::math::IsZero(lVehicleInfo.mAABB.Max() - lVehicleInfo.mAABB.Min())"); // :148
 
@@ -423,6 +444,42 @@ namespace BrnGame
                 }
             }
 
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The camera box as published when
+            // it came from the DEFORMATION state (the arm CC-7 restored): the first 12 such
+            // publishes, then every 400th, with the pristine half-extent box beside it and the
+            // largest per-axis difference between the two.
+            {
+                static const bool sbBoxDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+                static u32 suDeformedBoxes = 0;
+                if (sbBoxDiag && CgsDev::Log::gpDebugPrint != 0
+                    && lpDeformationOutputInterface->mpDeformationState != 0
+                    && lpDeformationOutputInterface->mpDeformationState->GetCarStateF(lpState->mEntityId.muValue) != 0)
+                {
+                    ++suDeformedBoxes;
+                    if (suDeformedBoxes <= 12u || (suDeformedBoxes % 400u) == 0u)
+                    {
+                        const Vector3& lMin = lVehicleInfo.mAABB.mMin;
+                        const Vector3& lMax = lVehicleInfo.mAABB.mMax;
+                        const Vector3& lHalf = lpState->mHalfExtent;
+                        f32 lfWorst = 0.0f;
+                        const f32 lafDelta[6] = { lMax.x - lHalf.x, lMax.y - lHalf.y, lMax.z - lHalf.z,
+                                                  lMin.x + lHalf.x, lMin.y + lHalf.y, lMin.z + lHalf.z };
+                        for (s32 liAxis = 0; liAxis < 6; ++liAxis)
+                        {
+                            const f32 lfAbs = lafDelta[liAxis] < 0.0f ? -lafDelta[liAxis] : lafDelta[liAxis];
+                            if (lfAbs > lfWorst) lfWorst = lfAbs;
+                        }
+                        *CgsDev::Log::gpDebugPrint
+                            << "[cam-aabb] #" << static_cast<s32>(suDeformedBoxes)
+                            << " slot " << liSlot << (leSlot == lePlayerIndex ? " (player)" : "")
+                            << " deformed box min (" << lMin.x << ", " << lMin.y << ", " << lMin.z
+                            << ") max (" << lMax.x << ", " << lMax.y << ", " << lMax.z
+                            << ") halfExtent (" << lHalf.x << ", " << lHalf.y << ", " << lHalf.z
+                            << ") worst-axis delta " << lfWorst << "\n";
+                    }
+                }
+            }
+
             // Bring-up diagnostic: print the pose the cameras will actually frame -- on the
             // FIRST publish (which lands the frame the car is attached, before its physics
             // state has been seeded) and then every 3000th (~40 s), which is the steady
@@ -441,8 +498,8 @@ namespace BrnGame
                         << ": player index "
                         << static_cast<s32>(lePlayerIndex) << ", slot " << liSlot
                         << " at (" << lPos.x << ", " << lPos.y << ", " << lPos.z
-                        << "), halfExtent (" << lHalfExtent.x << ", " << lHalfExtent.y
-                        << ", " << lHalfExtent.z
+                        << "), halfExtent (" << lpState->mHalfExtent.x << ", " << lpState->mHalfExtent.y
+                        << ", " << lpState->mHalfExtent.z
                         << "), engine " << (lVehicleInfo.mbEngineOn ? "on" : "off") << "\n";
                 }
             }

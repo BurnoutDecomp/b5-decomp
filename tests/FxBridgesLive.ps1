@@ -29,6 +29,18 @@ $case.Checks += @(
         $lines = @($ctx.LogLines | Where-Object { $_ -match '\[cam-impact\] #\d+ slot \d+ mfHardestImpact' })
         @{ Pass = $lines.Count -gt 0; Detail = "$($lines.Count) non-player [cam-impact] lines" }
     } }
+    @{ Kind = 'Script'; Name = 'CC-7: the camera box comes from the deformation state (the crushed box), not the pristine half extent'; Script = {
+        param($ctx)
+        $lines = @($ctx.LogLines | Where-Object { $_ -match '\[cam-aabb\] #\d+ slot \d+' })
+        $worst = 0.0
+        foreach ($l in $lines) {
+            if ($l -match 'worst-axis delta ([-+0-9.eE]+)') {
+                $v = [double]::Parse($Matches[1], [cultureinfo]::InvariantCulture)
+                if ($v -gt $worst) { $worst = $v }
+            }
+        }
+        @{ Pass = ($lines.Count -gt 0); Detail = "$($lines.Count) [cam-aabb] deformed-arm lines, largest box-vs-half-extent axis delta $worst m" }
+    } }
     @{ Kind = 'Script'; Name = 'CC-6: a player crash reaches the director as a non-empty PlayerCrashInfo (wrecked / hard-stop flags)'; Script = {
         param($ctx)
         $crashes = @($ctx.LogLines | Where-Object { $_ -match '\[crashcam\] mbCrashActive -> 1' }).Count
