@@ -25,6 +25,7 @@ namespace CgsMemory { class LinearMalloc; }   // BuildSpacialPartition allocator
 namespace CgsGeometric
 {
     struct PolygonSoupList;         // forward-decl (GetPolySoupList return type; CgsPolygonSoupList.h)
+    struct Line;                    // forward-decl (RunQuery(const Line&) parameter; CgsLine.h)
 
     struct PolygonSoupListSpatialMap
     {
@@ -134,6 +135,17 @@ namespace CgsGeometric
         // BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest @0x828131C0 (the short-line
         // arm), which then reads mpOutputQueryBuffer[i] as LEAF indices into GetLeafNodes().
         s32 RunQuery(const AxisAlignedBox& lrQueryBox);
+
+        // RunQuery(const Line&) @0x82843E98 (505) -- the SEGMENT twin (crash parity FX-GEOMETRIC,
+        // 2026-09-24; X360 export name `sub_82843E98`, named by the PS3 mangle
+        // _ZN12CgsGeometric25PolygonSoupListSpatialMap8RunQueryERKNS_4LineE @0xB64574 / DWARF
+        // CgsPolygonSoupListSpatialMap.cpp:479). The same level sweep through the map's own
+        // ping-pong buffers, but a node survives when the SEGMENT meets its box
+        // (TestLineStartEndAxisAlignedBox, inlined per node), and the overflow assert is :523 with
+        // a 16-bit capacity compare. Callers: the 20 m-and-over arms of
+        // BaseCollisionGenerator::CollideLineAgainstPolySoupList @0x82812D1C (the place-on-track
+        // drop test's 100 m line) and CollideLineAgainstPolySoupListNearest @0x82813440.
+        s32 RunQuery(const Line& lrLine);
 
         // The last RunQuery's leaf-index list (+0x58 / +0x64 on the console; the caller reads both
         // fields directly at 0x8281328C/0x82813294).
