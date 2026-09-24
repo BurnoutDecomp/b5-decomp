@@ -30,21 +30,26 @@ $case.Checks = @(
     @{ Kind = 'LogMatch'; Name = 'world emitters attach through the gate (witness armed)'; Pattern = '\[emitter\] attach type \d+ of 38 name gamedb://'; Expect = $true }
     @{ Kind = 'LogCount'; Name = 'the console gate refused no entity'; Pattern = '\[emitter\] REFUSED'; Max = 0 }
     @{ Kind = 'LogMatch'; Name = 'the console static-map spew is armed (zones load)'; Pattern = '\[Static map\] 1: Load unit\t\d+'; Expect = $true }
-    @{ Kind = 'Script'; Name = 'no zone load is double-posted (a second "1: Load unit" before its "4: Unload unit")'; Script = {
+    @{ Kind = 'Script'; Name = 'no zone load is double-posted (per unit, never more than one load per scene before its unload)'; Script = {
         param($ctx)
-        $loaded = @{}
-        $dupes = @()
-        $loads = 0; $unloads = 0; $stalls = 0
+        # TWO SoundWorldScenes print every event -- the emitter scene ("_Emitter") and the player-vehicle
+        # passby scene ("_Passby"); the console's spew names no extension -- so one real load adds 2 to
+        # a unit's line balance and one unload takes 2 away. A double-posted load pushes it past 2.
+        $bal = @{}; $over = @(); $loads = 0; $unloads = 0; $stalls = 0; $peak = 0
         foreach ($line in $ctx.LogLines) {
+            if ($line -notmatch '\[Static map\]') { continue }
             if ($line -match '\[Static map\] 1: Load unit\t(\d+)') {
-                $loads++
-                if ($loaded.ContainsKey($Matches[1])) { $dupes += $Matches[1] } else { $loaded[$Matches[1]] = $true }
+                $loads++; $u = $Matches[1]
+                $bal[$u] = $(if ($bal.ContainsKey($u)) { $bal[$u] } else { 0 }) + 1
+                if ($bal[$u] -gt 2) { $over += $u }
             } elseif ($line -match '\[Static map\] 4: Unload unit\t(\d+)') {
-                $unloads++
-                $loaded.Remove($Matches[1])
-            } elseif ($line -match '\[Static map\] Stalled\.') { $stalls++ }
+                $unloads++; $u = $Matches[1]
+                $bal[$u] = $(if ($bal.ContainsKey($u)) { $bal[$u] } else { 0 }) - 1
+            } elseif ($line -match '\[Static map\] Stalled\.') { $stalls++; continue }
+            $live = @($bal.Values | Where-Object { $_ -gt 0 }).Count
+            if ($live -gt $peak) { $peak = $live }
         }
-        @{ Pass = ($dupes.Count -eq 0 -and $loads -gt 0); Detail = "$loads load(s), $unloads unload(s), $($dupes.Count) double-posted load(s) [$(($dupes | Select-Object -Unique) -join ', ')], $stalls 'Stalled.' line(s)" }
+        @{ Pass = ($over.Count -eq 0 -and $loads -gt 0); Detail = "$([int]($loads / 2)) load / $([int]($unloads / 2)) unload event(s) per scene ($loads / $unloads lines), $($over.Count) double-posted [$(($over | Select-Object -Unique) -join ', ')], peak $peak zone(s) loaded, $stalls 'Stalled.' line(s)" }
     } }
     @{ Kind = 'Script'; Name = 'attached world emitters reported'; Script = {
         param($ctx)

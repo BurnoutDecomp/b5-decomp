@@ -105,20 +105,17 @@ BrnSound::Logic::ResourceRegistrar& SoundWorldScene::GetResourceRegistrar()
 }
 
 // ARTIST @0x8269BF48: spew "[Static map] 1: Load unit" (under KB_SPEW_STATIC_MAP_INFO), assert the
-// table has room (l.346) and append the zone. FLAG (FX-EMITTER 2026-09-24): the console has NO
-// duplicate-zone check -- the early-out loop below is PC-only, kept until the world streamer
-// (WorldEntityModule::OnWorldGraphicsLoadComplete @0x822D7828) is measured never to double-post a
-// load; the spew above shows any duplicate as a second "1: Load unit" without a "4: Unload unit".
+// table has room (l.346) and append the zone -- with no duplicate-zone check: the world streamer
+// posts a unit's load once (WorldEntityModule::OnWorldGraphicsLoadComplete @0x822D7828). Measured
+// with that spew over the junction-480886 pursuit (FX-EMITTER 2026-09-24): 159 load / 134 unload
+// events per scene, no unit ever loaded twice, peak 25 of 32 zones.
+// [PC] The room test after the assert is an overflow guard only: past a failed assert the console
+// appends beyond the 32-entry table (over miNumZonesInUse), which here would corrupt the scene.
 void SoundWorldScene::HandleWorldZoneLoad(u16 lu16Zone)
 {
     if (SpewStaticMapInfo())
         *CgsDev::Log::gpDebugPrint << "[Static map] 1: Load unit\t" << static_cast<s32>(lu16Zone) << "\n";
 
-    for (s32 liZone = 0; liZone < miNumZonesInUse; ++liZone)
-    {
-        if (maSoundMapZones[liZone].GetZone() == lu16Zone)
-            return;
-    }
     CGS_ASSERT(miNumZonesInUse < KI_MAX_WORLD_ZONES_LOADED,
                "miNumZonesInUse < KI_MAX_WORLD_ZONES_LOADED");
     if (miNumZonesInUse < KI_MAX_WORLD_ZONES_LOADED)
