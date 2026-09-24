@@ -67,6 +67,31 @@ namespace BrnTrafficIO
         // X360 0x82706028: record a traffic vehicle the player could stomp.
         void AddPotentialStompee(u32 luEntityIndex, Vector3 lPosition, f32 lfDistanceSquared); // :118 (0x82706028)
 
+        // DWARF :122 -- the consumer half of the stompee buffer. No out-of-line body in either
+        // build; both callers inline it, and the inlined shape is the declaration's:
+        //   the count goes out through the pointer, the record array comes back.
+        // Consumer RaceCarEntityModule::ProcessLeapedAndStompedCars @0x822BD5B8:
+        //   0x822BD62C  lwz  r10, 0x208(r3)   ; miPotentialStompeeCount
+        //   0x822BD640  stw  r10, 0(r8)       ; *lpiNumStompees (r8 = &miStoredStompeeCount)
+        //   0x822BD638  addi r11, r3, 0x40    ; mPotentialStompees (+64), 32-byte records:
+        //               position @+0 (lvx128), EntityId @+0x10 (lwz 0x10(r11))
+        // (DecFIGS 0x14C7F4 inlines the same pair: +0x208 and +256 == +0xC0 + 64.)
+        const VehicleStompingData* GetPotentialStompees(s32* lpiNumStompees) const   // :122
+        {
+            *lpiNumStompees = miPotentialStompeeCount;
+            return mPotentialStompees;
+        }
+
+        // DWARF :126 -- empty the stompee buffer before a frame's candidates are added. Only
+        // the count is reset (the records stay, exactly as Construct leaves them). Inlined by its
+        // one caller, TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput
+        // @0x8271F298: `bl GetTrafficToRaceCarInterface_PreScene` then `stw r31(0), 0x208(r3)`
+        // at 0x8271F2E4 (DecFIGS 0x91D530: `*((lpOutput + 818784) + 0x208) = 0`).
+        void ClearStompees()                                                       // :126
+        {
+            miPotentialStompeeCount = 0;
+        }
+
         // ADDITIVE GROW. The console has no out-of-line
         // body for this: OutputBuffer_PreScene::Construct @0x82761790 INLINES the whole
         // initialisation of this member as a run of raw stores over the console span
