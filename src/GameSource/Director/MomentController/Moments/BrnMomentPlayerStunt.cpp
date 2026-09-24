@@ -92,9 +92,17 @@ static void MomentPlayerStunt_StageTakeReference(const void* lSharedInfo,
 
     char lacTakeName[64];
     CgsCore::SPrintf(lacTakeName, 64, "World_Signature_%i", liTakeNumber);
+    // The id is the name's CRC32 ZERO-extended to 64 bits: HashString @0x828D84A8 returns through
+    // `nor r11, r9, r9 ; clrldi r3, r11, 0x20` (0x828D854C), and GetKeyAnim takes that register as
+    // the id (0x82272B04 `mr r4, r3`).
+    // ⭐ 2026-09-24 (FX-DIRECTOR): this used to widen the s32 return straight to u64, which
+    // SIGN-extends every name whose CRC has its top bit set -- "World_Signature_305" is
+    // 0x9CA2368A -- so the dictionary lookup missed, the "lpIceTake != NULL" assert fired and
+    // the guid read below faulted at address 8 (scratch/bugtest/runs/fxdirector_moment_tick/
+    // 20260924_180957, the first live run with the moment tick on).
     CgsResource::ID lTakeId;
-    lTakeId.SetHash(static_cast<u64>(
-        CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacTakeName))));
+    lTakeId.SetHash(static_cast<u64>(static_cast<u32>(
+        CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacTakeName)))));
     ICE::ICETakeData* lpIceTake =
         MomentSharedInfo_GetDirectorResourceManager(lSharedInfo)->GetKeyAnim(lTakeId);
     // (One assert on the allocation path, one on the take swap -- both non-gating.)
