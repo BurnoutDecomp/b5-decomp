@@ -106,28 +106,12 @@ namespace BrnGame
     static_assert(sizeof(DirectorControllerInfoImage) == 224,
                   "SetControllerInfo copies 224 bytes");
 
-    // ---- world player-vehicle-controls image (X360 60-byte block) -----------
-    // The ToWorld bridge fills a local controls block (steering/throttle/brake/handbrake/boost +
-    // flags) then calls BrnWorldIO::UpdateInputBuffer::SetPlayerVehicleControls(&controls).
-    // Modelled here as the named POD that SetPlayerVehicleControls(const PlayerVehicleControls*)
-    // copies (60 bytes). FLAG: derived purely from the bridge's stores (no DWARF shape).
-    struct WorldVehicleControlsImage
-    {
-        // Field offsets pinned store-for-store to X360 0x823CD890 (the &controls passed to
-        // SetPlayerVehicleControls is var_140 = sp+0x60; offsets below are controls-relative).
-        f32  mfAxis08;        // +0x00 (X360 var_140 = *(pad+0x08))
-        f32  mfStickLX;       // +0x04 (X360 var_13C = *(pad+0x00), the left-stick X)
-        f32  mfAxis0C;        // +0x08 (X360 var_138 = *(pad+0x0C))
-        f32  mfStickLY;       // +0x0C (X360 var_134 = *(pad+0x04))
-        f32  mafZeroed[4];    // +0x10 .. +0x1C (X360 var_130/12C/128/124 = 0)
-        f32  mfAxis18;        // +0x20 (X360 var_120 = *(pad+0x18) / ShowtimeIntro 1.0)
-        f32  mfAxis20;        // +0x24 (X360 var_11C = *(pad+0x20) / ShowtimeIntro 0.0)
-        f32  mfAxis28;        // +0x28 (X360 var_118 = *(pad+0x28) / ShowtimeIntro 1.0)
-        f32  mfSteeringCurved;// +0x2C (X360 var_114 = curve(stickX) / ShowtimeIntro steering)
-        f32  mfDistance;      // +0x30 (X360 var_110 = action[55].value - action[54].value)
-        u8   mabStatus[8];    // +0x34 .. +0x3C (X360 var_10C..var_105, eight action/state bits)
-        // total = 0x3C = 60 bytes (SetPlayerVehicleControls's copy width)
-    };
+    // ---- world player-vehicle-controls image: RETIRED 2026-09-24 (FX-BRIDGES CC-9) ----------
+    // BridgeControllerToWorld used to fill a bridge-local 60-byte "WorldVehicleControlsImage"
+    // (offset-derived names, reinterpret_cast into SetPlayerVehicleControls). The record is the
+    // real BrnWorld::PlayerVehicleControls (DWARF BrnPlayerVehicleControls.h), which
+    // BrnWorldModuleIO.h already typedefs as BrnWorldIO::PlayerVehicleControls; the bridge now
+    // fills that type by its DWARF member names at the same offsets.
 
     // ========================================================================
     // The GUI event sink is the REAL CgsGui::GuiModule::AddGuiEvent<T> now
