@@ -16,24 +16,27 @@
 //   +496  -> mTransform              (identity affine: 3 unit rows + zero wAxis)
 //   +560  -> maWheelTransforms[0..3] (the X360 do-while loop, stride 64, 4 iterations)
 //   +480/+484/+486/+488 -> mAboveGroundTestResult.{mfVerticalDistance,mCollisionTag,mbValid}
-//   +968  -> mfSpeedMPH              (set from const-pool dword_82CDB5A0; see KF_CLEAR_SPEED_MPH)
+//   +968  -> mEntityId               (the invalid id, CgsSceneManager::K_INVALID_ENTITY_ID)
 // All other re-init stores in the X360 body (the +1100..+1112 bool writes, and the zeroing
 // of the AGTR intersection vectors) are already covered by the memset, so they are not
 // restated here.
+//
+// ⭐ [FX-RUMBLE3 2026-09-24] +968 IS mEntityId, NOT mfSpeedMPH. The store at 0x822A009C/0x822A00A0
+// is `lwz r8, dword_82CDB5A0` / `stw r8, 0x3C8(r31)`: 0x3C8 == 968, which the u64 mCarAssetAttribKey
+// widening (@960, 8 bytes -- see BrnVehicleEvents.h) made mEntityId, not mfSpeedMPH (@972). The word
+// at 0x82CDB5A0 image-reads 0xFFFFFFFF (x360rd) and findinit finds only two READERS of it (this
+// store and 0x82306D3C), no CRT writer -- it is the DWARF's `const EntityId K_INVALID_ENTITY_ID`
+// (CgsEntityId.h), a class-typed const the compiler left in .data. The body used to write a
+// "compile-safe placeholder" 0.0f into mfSpeedMPH (a no-op after the memset) and leave mEntityId
+// ZERO -- a valid-looking id (owner byte 0 == the world, entity 0) that an id match can hit.
 
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // CgsSceneManager::K_INVALID_ENTITY_ID
 
 #include <cstring>   // memset
 
 namespace
 {
-// X360 Clear() seeds mfSpeedMPH (RaceCarState+968) from the const-pool dword_82CDB5A0
-// (loaded `lwz`, stored `stw`) rather than the just-zeroed VMX register, so the value is
-// non-zero. Its literal is a raw .rdata float address not recoverable from the function
-// exports alone; 0.0f is a compile-safe placeholder. TODO(maintainer): read dword_82CDB5A0
-// from BURNOUT_X360_ARTIST.XEX (.rdata @0x82CDB5A0) and substitute the exact float.
-const f32 KF_CLEAR_SPEED_MPH = 0.0f;
-
 // AboveGroundTestResult::Reset() (inlined into Clear) leaves mCollisionTag at the value the
 // X360 builds with `sth -1 @+484` then `sth 0x8000 @+486` (big-endian u32 => 0xFFFF8000),
 // i.e. the "invalid surface" tag. Confirm against the real Reset() when the
@@ -67,8 +70,9 @@ void RaceCarState::Clear()
     mAboveGroundTestResult.mCollisionTag.muValue = KU_CLEAR_COLLISION_TAG;
     mAboveGroundTestResult.mbValid               = false;
 
-    // +968: seed the published speed from its const-pool value.
-    mfSpeedMPH = KF_CLEAR_SPEED_MPH;
+    // +968 (0x822A0098..0x822A00A0): the entity id is the invalid id (dword_82CDB5A0 ==
+    // 0xFFFFFFFF == K_INVALID_ENTITY_ID). mfSpeedMPH (@972) keeps the memset's 0.
+    mEntityId.muValue = CgsSceneManager::K_INVALID_ENTITY_ID;
 }
 
 // @0x8220A4C0 -- pure bitwise copy of the whole object; trivially copyable => defaulted.
