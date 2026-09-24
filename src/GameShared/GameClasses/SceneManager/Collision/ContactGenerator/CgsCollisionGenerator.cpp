@@ -954,5 +954,126 @@ namespace CgsCollision
 
         return static_cast<u16>(liResultListIndex);
     }
+
+    // =============================================================================================
+    // CollideLineAgainstPolySoupList @ 0x82812AE0 (439 insns) -- the ALL-HITS twin of the function
+    // above (crash parity FX-SCENEMGR, 2026-09-24; no body before). Callers:
+    // SceneManagerModule::ProcessLineTestFine (0x828CDFD8) and ProcessTriangleCollisionLineTests
+    // (0x828C7088), both with lu16MaxNumResults == 0x20 and tags 0 / 0.
+    //
+    //   0x82812B14..0x82812B98  CGS_ASSERT(Line::IsValid(line), "Invalid line\n") -- :880 (0x370)
+    //   0x82812BAC  bl PrepareNewPrimitiveTestResultsList(lu16MaxNumResults, tagA, tagB) -> idx
+    //   0x82812BB4  v127 = line+0x00 (start) ; v123 = line+0x10 (end) ; v126 = end - start
+    //   0x82812BD4  lfs flt_8200889C (0x43C80000 == 400.0) splat ; vmsum3fp128 |d|^2 ;
+    //               vcmpgtfp. 400 > |d|^2 -- the same 20 m split as the Nearest twin
+    //   0x82812C44  r28 = mapCollisionResultLists[idx]->mpResults (the 112-byte record array)
+    //   -- short arm (under 20 m) --
+    //   0x82812C20..0x82812C40  box = {vminfp128(start,end), vmaxfp128(start,end)}, all four lanes
+    //   0x82812C4C  n = PolygonSoupListSpatialMap::RunQuery(map, &box)
+    //   per leaf i < n (0x82812C64..0x82812CFC): leaf = mpLeafNodes (+0x48) + 48 *
+    //               mpOutputQueryBuffer[i] (+0x58) ; the six-lane xyz overlap (vcmpgefp x2, vand,
+    //               vpermwi128 0x4B/0x87, vspltw 0, vcmpeqfp128. vs 0) -> skip ; else
+    //   0x82812CE8  found += CgsGeometric::IntersectLinePolygonSoupSingleSided(*leaf.mpPolygonSoup
+    //               (+0x20), v1 = start, v2 = end, results + 0x70 * found, lu16MaxNumResults - found)
+    //               -- DecFIGS 0xB6C1AC `(const PolygonSoup&, Vector3, Vector3,
+    //               IntersectLinePolygonSoupResult*, int)`, the ALL-HITS soup kernel @0x8283C598
+    //   -- long arm (20 m and over) --
+    //   0x82812D1C  n = sub_82843E98(map, &line) == PolygonSoupListSpatialMap::RunQuery(const Line&)
+    //               (DecFIGS 0xB64574, the line-slab leaf gather)
+    //   0x82812D64..0x82812DEC  1/d per lane: vrefp128 then two Newton-Raphson steps
+    //               (vnmsubfp128 / vmaddfp) against {1,1,1,1} (vcsxwfp128 of vspltisw 1)
+    //   0x82812DF0/0x82812E88/0x82812F20  "Line reciprocal X / Y / Z is 0\n" tripwires, lines
+    //               0x1B9 / 0x1BA / 0x1BB (441..443) of the file at aDP4B5MainBurno_17
+    //   0x82812F90..0x82813150  per leaf, the inline slab test of the leaf box against the segment:
+    //               t = (box.min - start) * 1/d and (box.max - start) * 1/d per lane, each face's
+    //               hit point (vmaddcfp128 start + t*d) inside the other two slabs with t in [0,1],
+    //               OR'd with start-inside / end-inside ; skip when none
+    //   0x8281317C  the same soup-kernel call as the short arm
+    //   0x8281319C  lwz list ; sth found -> list+0x0C (mu16NumResults) ; return idx
+    //
+    // ⛔ TWO CALLEES ARE ABSENT FROM THE TREE, and both belong to Geometric/** (not this lane's):
+    //   * CgsGeometric::IntersectLinePolygonSoupSingleSided @0x8283C598 (849 insns) -- BOTH arms;
+    //   * PolygonSoupListSpatialMap::RunQuery(const Line&) @0x82843E98 (505 insns) -- the long arm.
+    //     A MEMBER, so it needs the class header; it is also the Nearest twin's long-arm trap.
+    // So, exactly like the Nearest twin: the short arm walks its leaves faithfully and TRAPS at the
+    // soup-kernel call (once per overlapping leaf -- the call's own position), and the long arm is
+    // one trap. `found` stays 0, so the list goes out EMPTY after a loud assert, never as a silent
+    // "no hit". DELETE-WHEN the two Geometric bodies land: replace the two traps with the calls
+    // (the decode above is the whole of the missing driver logic).
+    // =============================================================================================
+    u16 BaseCollisionGenerator::CollideLineAgainstPolySoupList(
+        const CgsGeometric::Line&                 lrLine,
+        CgsGeometric::PolygonSoupListSpatialMap*  lpPolySoupListSpacialMap,
+        u16                                       lu16MaxNumResults,
+        u32                                       lu32UserTagA,
+        u16                                       lu16UserTagB)
+    {
+        CGS_ASSERT(lrLine.IsValid(), "Invalid line\n");   // :880
+
+        const s32 liResultListIndex =
+            PrepareNewPrimitiveTestResultsList(lu16MaxNumResults, lu32UserTagA, lu16UserTagB);
+        CollisionResultList* lpList = mapCollisionResultLists[static_cast<u16>(liResultListIndex)];
+
+        const Vector3& lrStart = reinterpret_cast<const Vector3&>(lrLine.mStart);
+        const Vector3& lrEnd   = reinterpret_cast<const Vector3&>(lrLine.mEnd);
+
+        const f32 lfDx = lrEnd.x - lrStart.x;
+        const f32 lfDy = lrEnd.y - lrStart.y;
+        const f32 lfDz = lrEnd.z - lrStart.z;
+        const f32 lfLengthSq = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+
+        s32 liNumFound = 0;   // r25
+
+        if (KF_SHORT_LINE_LENGTH_SQ > lfLengthSq)
+        {
+            // 0x82812C20..0x82812C40: the line's box, all four lanes min/max'd.
+            CgsGeometric::AxisAlignedBox lBox;
+            lBox.mMin.x = (lrStart.x < lrEnd.x) ? lrStart.x : lrEnd.x;
+            lBox.mMin.y = (lrStart.y < lrEnd.y) ? lrStart.y : lrEnd.y;
+            lBox.mMin.z = (lrStart.z < lrEnd.z) ? lrStart.z : lrEnd.z;
+            lBox.mMin.w = (lrStart.w < lrEnd.w) ? lrStart.w : lrEnd.w;
+            lBox.mMax.x = (lrStart.x > lrEnd.x) ? lrStart.x : lrEnd.x;
+            lBox.mMax.y = (lrStart.y > lrEnd.y) ? lrStart.y : lrEnd.y;
+            lBox.mMax.z = (lrStart.z > lrEnd.z) ? lrStart.z : lrEnd.z;
+            lBox.mMax.w = (lrStart.w > lrEnd.w) ? lrStart.w : lrEnd.w;
+
+            const s32 liNumLeaves = lpPolySoupListSpacialMap->RunQuery(lBox);   // 0x82812C4C
+
+            if (liNumLeaves > 0)
+            {
+                const u16*                               lpau16Leaves = lpPolySoupListSpacialMap->GetOutputQueryBuffer();
+                const CgsGeometric::PolygonSoupLeafNode* lpaLeafNodes = lpPolySoupListSpacialMap->GetLeafNodes();
+
+                for (s32 liLeaf = 0; liLeaf < liNumLeaves; ++liLeaf)
+                {
+                    const CgsGeometric::PolygonSoupLeafNode& lrLeaf = lpaLeafNodes[lpau16Leaves[liLeaf]];
+
+                    if (!LeafOverlapsBoxXYZ(lrLeaf.mBox, lBox))
+                    {
+                        continue;
+                    }
+
+                    // 0x82812CE8: found += IntersectLinePolygonSoupSingleSided(*lrLeaf.mpPolygonSoup,
+                    // start, end, results + found, lu16MaxNumResults - found) -- absent (see above).
+                    CGS_ASSERT(false, "BaseCollisionGenerator::CollideLineAgainstPolySoupList @0x82812AE0: "
+                                      "CgsGeometric::IntersectLinePolygonSoupSingleSided @0x8283C598 (the all-hits "
+                                      "soup kernel) is not reconstructed -- a line overlapped a poly-soup leaf");
+                }
+            }
+        }
+        else
+        {
+            // 0x82812D1C sub_82843E98(map, &line) + the reciprocal slab test + the soup kernel.
+            CGS_ASSERT(false, "BaseCollisionGenerator::CollideLineAgainstPolySoupList @0x82812AE0: the long-line "
+                              "arm (PolygonSoupListSpatialMap::RunQuery(const Line&) @0x82843E98 + "
+                              "IntersectLinePolygonSoupSingleSided @0x8283C598) is not reconstructed -- a line "
+                              "of 20 m or more was asked for");
+        }
+
+        // 0x8281319C..0x828131A4: the one write of the count.
+        lpList->mu16NumResults = static_cast<u16>(liNumFound);
+
+        return static_cast<u16>(liResultListIndex);
+    }
 }
 }

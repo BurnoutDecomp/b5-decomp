@@ -100,6 +100,23 @@ namespace CgsCollision
                                                   u32 lu32UserTagA,
                                                   u16 lu16UserTagB);
 
+        // @ 0x82812AE0 (439 insns) -- the ALL-HITS twin of the one above (crash parity FX-SCENEMGR,
+        // 2026-09-24). DWARF CgsCollisionGenerator.h (DecFIGS 0xB0C17C):
+        //     uint16_t CollideLineAgainstPolySoupList(const Line *, const PolygonSoupListSpatialMap *,
+        //                                             uint16_t, uint32_t, uint16_t);
+        // -- lu16MaxNumResults is the list's capacity (both console callers pass 0x20), then the two
+        // user tags. The line and map keep the Nearest twin's spelling (const Line&; a NON-const
+        // map, because RunQuery publishes into it). Claims a lu16MaxNumResults-record result list,
+        // fills it with every single-sided hit of the line against the poly-soup leaves it
+        // touches, stores the count (`sth -> list+0x0C`) and returns the list index. Callers:
+        // SceneManagerModule::ProcessLineTestFine @0x828CDFD8 and ProcessTriangleCollisionLineTests
+        // @0x828C7088. Body (and what of it is still a trap) in CgsCollisionGenerator.cpp.
+        u16 CollideLineAgainstPolySoupList(const CgsGeometric::Line& lrLine,
+                                           CgsGeometric::PolygonSoupListSpatialMap* lpPolySoupListSpacialMap,
+                                           u16 lu16MaxNumResults,
+                                           u32 lu32UserTagA,
+                                           u16 lu16UserTagB);
+
         // Copy of the luIndex'th result list (by value, bounds-checked against
         // mu16NumUsedResultLists). X360 0x825B2AE0. (Incomplete return type is fine
         // for a declaration — CollisionResultList is forward-declared above and the

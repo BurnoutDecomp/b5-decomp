@@ -37,12 +37,19 @@
 
 namespace CgsSceneManager
 {
-    void FineIntersectionTestModule::ComputeLineTestFine(const InEventLineTestFine* /*lpQuery*/,
-                                                         OutEventLineTestFineResult* /*lpOutResult*/,
+    void FineIntersectionTestModule::ComputeLineTestFine(const InEventLineTestFine* lpQuery,
+                                                         OutEventLineTestFineResult* lpOutResult,
                                                          void* /*lpResultsOut*/)
     {
         CGS_ASSERT(false, "FineIntersectionTestModule::ComputeLineTestFine @0x828C7D70 is not reconstructed "
                           "(rw::collision::VolumeLineQuery::GetIntersections is a link-stub on this host)");
+        // Never a silent hit if execution continues past the trap (the ComputeLineTestNearest
+        // precedent below): its caller, SceneManagerModule::ProcessLineTestFine @0x828CDF4C, reads
+        // miNumResults / mpaResults straight back, so they are stated rather than left as whatever
+        // the caller's stack record held. (2026-09-24, FX-SCENEMGR, with that caller's body.)
+        lpOutResult->mQueryId     = lpQuery->mQueryId;
+        lpOutResult->miNumResults = 0;
+        lpOutResult->mpaResults   = 0;
     }
 
     void FineIntersectionTestModule::ComputeLineTestNearest(const InEventLineTestNearest* /*lpQuery*/,
