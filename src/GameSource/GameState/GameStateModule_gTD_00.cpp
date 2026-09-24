@@ -408,16 +408,15 @@ void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuff
 // ==============================================================================================
 void GameStateModule::OnModeEnd(bool lbResetState)
 {
-    // Embedded by value on the console; pointers on this build (ConstructTakedownBringUp), guarded
-    // the way the pre-world tick guards them.
-    if (mpMugshotManager != 0)
-    {
-        mpMugshotManager->OnRoundEnd(lbResetState);
-    }
-    if (mpPaybackManager != 0)
-    {
-        mpPaybackManager->OnRoundEnd(lbResetState);
-    }
+    // Embedded by value on the console (+0x500 / +0x570: no test before either `bl`, 0x823767F4 /
+    // 0x823767FC); held by pointer on this build and never null here, so no test here either
+    // [FX-FLOW 2026-09-24, review D]: ConstructTakedownBringUp -- called from GameStateModule::
+    // Construct -- assigns both from `new` and dereferences them on the spot (->Construct(this)),
+    // nothing else ever writes mpMugshotManager, and mpPaybackManager is cleared only by
+    // GameStateModule::Destruct, which has no ModeManager leg left to end a mode. OnModeEnd's one
+    // caller is ModeManager::SendModeStopMessages, i.e. a running game.
+    mpMugshotManager->OnRoundEnd(lbResetState);
+    mpPaybackManager->OnRoundEnd(lbResetState);
 
     // [diag] BRN_MODEMGR_DIAG -- NOT IN THE X360 BINARY: the round-end hand-off.
     if (getenv("BRN_MODEMGR_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
@@ -470,11 +469,9 @@ void GameStateModule::CopyInputDataToPaybackManager(
     static_assert(sizeof(GameStateModuleIO::TimerStatusInterface) == sizeof(CgsSystem::TimerStatusInterface),
                   "the pre-world timer block and CgsSystem::TimerStatusInterface are one 48-byte object");
 
-    // Embedded by value on the console (this + 0x570); a pointer on this build.
-    if (mpPaybackManager == 0)
-    {
-        return;
-    }
+    // Embedded by value on the console (this + 0x570, used with no test); a pointer on this build,
+    // never null here (see OnModeEnd above: set from `new` in GameStateModule::Construct's
+    // ConstructTakedownBringUp, cleared only by Destruct) -- the one caller is the pre-world tick.
 
     mpPaybackManager->SetTimerInterface(reinterpret_cast<const CgsSystem::TimerStatusInterface*>(
         lpPreWorldInputBuffer->GetTimerStatusInterface()));

@@ -1715,15 +1715,18 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // @0x8239AA78 (r4 = the pre-world input buffer), unconditionally, straight after the drive-thru
     // tick and before the rumble producers below: the frame's timer block and the dirty-trick press
     // reach PaybackManager before its Update (in the takedown leg) reads them.
-    // [FLAG PC] the pre-world buffer is the module's stand-in (GetPreWorldInputBuffer), never
-    // locked by the seam, so its read lock is taken here around the copy -- the same move the
-    // takedown leg makes for the two manager ticks (GameStateModule_gTD_00.cpp).
-    if (mpPreWorldInputBuffer != 0)
-    {
-        mpPreWorldInputBuffer->LockForRead();
-        CopyInputDataToPaybackManager(mpPreWorldInputBuffer);
-        mpPreWorldInputBuffer->UnlockForRead();
-    }
+    // THE READ LOCK IS THE CONSOLE'S [FX-FLOW 2026-09-24, review D]: PreWorldUpdate @0x823A5328 takes
+    // `IOBuffer::LockForRead(lpInput)` @0x823A542C (r30 == its r6, the pre-world input buffer) and
+    // holds it past this call to `UnlockForRead` @0x823A5D7C; the accessor the copy reads through,
+    // PreWorldInputBuffer::GetTimerStatusInterface @0x8231CE28, asserts "Not locked for reading"
+    // without it. On this build the pre-world buffer is the module's stand-in, which PreWorldUpdate
+    // does not lock as a whole, so the same lock is taken around this leg -- the move every other
+    // pre-world leg here makes. No null test on the buffer: the console asserts `lpInput != NULL`
+    // (@0x823A53E0, :1130) rather than branching, and the stand-in is allocated by
+    // GameStateModule::Construct and freed only by Destruct.
+    mpPreWorldInputBuffer->LockForRead();
+    CopyInputDataToPaybackManager(mpPreWorldInputBuffer);
+    mpPreWorldInputBuffer->UnlockForRead();
 
     // ---- 0b) THE RUMBLE PRODUCERS (console #55) ----------------------------------------------
     // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1] RumbleManager::Update @0x82386A98. X360
