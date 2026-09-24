@@ -45,11 +45,39 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"   // CgsSystem::TimerRequests
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+// [FX-SHOWTIME2 2026-09-24] UpdateShowtimeMode's action records, its scorer and its answer queue.
+#include "GameSource/GameState/BrnGameActions.h"                            // Toggle/TrafficTypeRequest/VehicleHit actions
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"      // ScoringSystem::GetCrashScorer
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h" // CrashModeScoring
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficTypeInterface.h" // TrafficTypeResponse
+#include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                // CgsModule::BaseEventQueue
 
 namespace BrnGameState
 {
 namespace
 {
+    // [FX-SHOWTIME2 2026-09-24] The console's two file-scope constants for the showtime traffic
+    // hand-off, DWARF BrnGameStateModule.cpp:154/:155 (the console's own TU; this file is a split
+    // of it). Both are immediates in UpdateShowtimeMode: `ori r27, r10, 0xFFFF` @0x82380F98 /
+    // `cmplwi cr6, r11, 0xFFFF` @0x82380F88, and `li r11, 2` @0x82381124.
+    const u16 K_INVALID_VEHICLE_INDEX             = 65535;
+    const s32 KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES = 2;
+
+    // [DIAG] NOT IN THE X360 BINARY. The UpdateShowtimeMode witness, under the same opt-in the
+    // ProcessContacts half uses (BRN_SHOWTIME_WATCH). One line per pop / answer / miss / toggle,
+    // capped, so a run can COUNT the hand-off's hops: ProcessContacts' `[showtime-crash]` pushes
+    // -> `pop` (action 116) -> `answer` (DealWithScoreForVehicleClass + action 140) or `MISS`.
+    bool ShowtimeScoreWitness()
+    {
+        static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+        static s32        siLinesLeft = 160;
+        if (!sbWatch || CgsDev::Log::gpDebugPrint == 0 || siLinesLeft <= 0)
+        {
+            return false;
+        }
+        --siLinesLeft;
+        return true;
+    }
     // [DIAG] NOT IN THE X360 BINARY. Names the gate that refused a both-bumpers press. It exists
     // because the defect this file closes was reported by a player as "the buttons do nothing",
     // and a gate stack with ten terms has ten ways to look exactly like a dead button.
@@ -434,5 +462,183 @@ namespace
     {
         CGS_ASSERT(IsInShowtimeIntro(), "IsInShowtimeIntro()");   // :5050
         return mfShowtimeIntroSteering;
+    }
+
+    // =============================================================================================
+    // GameStateModule::ToggleShowtimeBehaviour  (DWARF BrnGameStateModule.h:651)
+    //
+    // No out-of-line console symbol: its one caller, GameStateDebugComponent::ToggleShowtimeCallback
+    // @0x823578F8, inlines it as `*(module + 284512) = 1`. UpdateShowtimeMode below consumes it.
+    // =============================================================================================
+    void GameStateModule::ToggleShowtimeBehaviour()
+    {
+        mbToggleShowtimeBehaviour = true;
+    }
+
+    // =============================================================================================
+    // GameStateModule::UpdateShowtimeMode  @0x82380EF8  (163 insns; DWARF BrnGameStateModule.h:691,
+    // source BrnGameStateModule.cpp:1484..1611)  [FX-SHOWTIME2 2026-09-24]
+    //
+    // THE PRE-WORLD HALF OF THE SHOWTIME "CARS CRASHED" CHAIN. ProcessContacts (post-world) pushes
+    // each newly-crashed traffic car's index onto mShowtimePendingTrafficIndexStack; this function
+    // turns them, one every KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES frames, into traffic-type REQUESTS
+    // (action 116) and, on the next frame, the traffic module's ANSWER into a score
+    // (CrashModeScoring::DealWithScoreForVehicleClass -- the only writer of maiNumCarsCrashed) and a
+    // VehicleHitAction (140) for the director's close-up, crash play and the GUI. Until this body
+    // landed nothing popped the stack: it filled to eight and the count never moved.
+    //
+    // ARGUMENTS (prologue @0x82380F04..0x82380F14): r3 = this (r30), r5 = lpOutput (r25),
+    // r7 = lpResponseQueue (r26). r4 (lpInput) and r6 (lpContacts) are never read -- the DWARF
+    // names them and the caller passes them; the X360 body has no load through either.
+    //
+    // THE FOUR LEGS, in the console's order:
+    //   1. 0x82380F0C..0x82380F78  the debug toggle: mbToggleShowtimeBehaviour set ->
+    //      meShowtimeBehaviour = (x + 1) % 3 (`mulhw 0x55555556` + sign fix: a signed % 3), stored to
+    //      the record AND the module, action 138 (size 4), then the flag cleared.
+    //   2. 0x82380F7C..0x82381084  the outstanding request: while muShowtimeRequestedTrafficIndex is
+    //      not K_INVALID_VEHICLE_INDEX, walk the response queue (GetEvent per index, length re-read
+    //      every iteration) for the FIRST element whose muVehicleIndex matches; score it
+    //      (r4 = lhz +0, r5 = lwz +4 class, r6 = ld +8 CgsID, r7..r10 + the stack slot = the record's
+    //      five out-fields) and post action 140 (size 0x24) with the four fields the caller fills
+    //      itself (+0x00 class, +0x08 GetNumCarsCrashed() -- the four-word sum at scorer+0x2E8,
+    //      +0x18 miScoreMultiplier, +0x20 the index), then invalidate the index. Then, match or not,
+    //      assert that it IS invalid (BrnGameStateModule.cpp:1611 -- a missing answer is a console
+    //      assert, not a retry) and invalidate it unconditionally.
+    //   3. 0x82381088..0x82381128  the next request: the inlined IsEmpty (with its
+    //      "Stack used before Construct/Clear was called" tripwire, CgsStack.h:177); non-empty ->
+    //      `addic. -1 ; bgt`: decrement miShowtimePendingFrameDelay and, once it is no longer
+    //      positive, Peek -> action 116 (size 2) -> muShowtimeRequestedTrafficIndex -> Pop -> re-seed
+    //      the delay to KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES. So the first victim goes the frame after
+    //      its push, the rest every second frame, and each answer is consumed the frame after its
+    //      request -- which is why the answer MUST come back within one frame.
+    //   4. 0x8238112C..0x82381178  AchievementManagerBase::OnShowTimeMultiplier(miScoreMultiplier),
+    //      inlined (x10 -> console achievement 13). Runs every frame, showtime or not.
+    // =============================================================================================
+    void GameStateModule::UpdateShowtimeMode(
+            const GameStateModuleIO::PreWorldInputBuffer*       lpInput,
+            GameStateModuleIO::OutputBuffer*                    lpOutput,
+            const BrnPhysics::ContactSpy::ContactSpyInterface*  lpContacts,
+            const CgsModule::BaseEventQueue<BrnTraffic::BrnTrafficIO::TrafficTypeResponse>* lpResponseQueue)
+    {
+        (void)lpInput;      // r4 -- never read by the console body
+        (void)lpContacts;   // r6 -- never read by the console body
+
+        // ---- 1. the debug behaviour toggle (0x82380F0C..0x82380F78) ---------------------------
+        if (mbToggleShowtimeBehaviour)
+        {
+            GameStateModuleIO::ToggleShowtimeBehaviourAction lToggleAction;
+            meShowtimeBehaviour =
+                static_cast<EShowtimeBehaviour>((meShowtimeBehaviour + 1) % E_SHOWTIME_MODE_COUNT);
+            lToggleAction.meShowtimeBehaviour = meShowtimeBehaviour;
+            lpOutput->GetGameActionQueue()->AddEvent(
+                reinterpret_cast<const CgsModule::Event*>(&lToggleAction),
+                GameStateModuleIO::E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR,
+                static_cast<s32>(sizeof(lToggleAction)));
+            mbToggleShowtimeBehaviour = false;
+
+            if (ShowtimeScoreWitness())
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[showtime-score] toggle -> meShowtimeBehaviour " << static_cast<s32>(meShowtimeBehaviour)
+                    << " -> action 138\n";
+            }
+        }
+
+        // ---- 2. the answer to the outstanding request (0x82380F7C..0x82381084) ----------------
+        if (muShowtimeRequestedTrafficIndex != K_INVALID_VEHICLE_INDEX)
+        {
+            for (s32 liResponseIndex = 0; liResponseIndex < lpResponseQueue->GetLength(); ++liResponseIndex)
+            {
+                const BrnTraffic::BrnTrafficIO::TrafficTypeResponse& lResponse =
+                    lpResponseQueue->GetEvent(liResponseIndex);
+                if (lResponse.muVehicleIndex != muShowtimeRequestedTrafficIndex)
+                {
+                    continue;
+                }
+
+                CrashModeScoring* const lpCrashScorer = mModeManager.GetScoringSystem()->GetCrashScorer();
+
+                GameStateModuleIO::VehicleHitAction lHitAction = {};   // +0x22..+0x23 never written by the console
+                lpCrashScorer->DealWithScoreForVehicleClass(lResponse.muVehicleIndex,
+                                                            lResponse.meType,
+                                                            lResponse.mTypeId,
+                                                            &lHitAction.miVehicleTypeCrashed,
+                                                            &lHitAction.miVehicleBaseScore,
+                                                            &lHitAction.meVehicleScoreCategory,
+                                                            &lHitAction.miScoreMultiplierEarned,
+                                                            &lHitAction.miComboBonusEarned);
+                lHitAction.muTrafficEntityIndex   = lResponse.muVehicleIndex;           // sth var_50
+                lHitAction.meVehicleClass         = lResponse.meType;                   // stw var_70
+                lHitAction.miTotalVehiclesCrashed = lpCrashScorer->GetNumCarsCrashed(); // stw var_68
+                lHitAction.miTotalScoreMultiplier = lpCrashScorer->GetScoreMultiplier();// stw var_58
+                lpOutput->GetGameActionQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lHitAction),
+                    GameStateModuleIO::E_ACTION_VEHICLE_HIT,
+                    static_cast<s32>(sizeof(lHitAction)));
+
+                if (ShowtimeScoreWitness())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-score] answer traffic car " << static_cast<s32>(lResponse.muVehicleIndex)
+                        << " class " << static_cast<s32>(lResponse.meType)
+                        << " -> DealWithScoreForVehicleClass: carsCrashed " << lHitAction.miTotalVehiclesCrashed
+                        << " (class tally " << lHitAction.miVehicleTypeCrashed << ")"
+                        << " base " << lHitAction.miVehicleBaseScore
+                        << " category " << static_cast<s32>(lHitAction.meVehicleScoreCategory)
+                        << " mult +" << lHitAction.miScoreMultiplierEarned
+                        << " (total " << lHitAction.miTotalScoreMultiplier << ")"
+                        << " chain " << lHitAction.miComboBonusEarned
+                        << " -> action 140\n";
+                }
+
+                muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
+                break;
+            }
+
+            if (muShowtimeRequestedTrafficIndex != K_INVALID_VEHICLE_INDEX && ShowtimeScoreWitness())
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[showtime-score] MISS: no answer for traffic car "
+                    << static_cast<s32>(muShowtimeRequestedTrafficIndex)
+                    << " among " << lpResponseQueue->GetLength() << " responses (assert :1611)\n";
+            }
+            CGS_ASSERT(muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX,
+                       "muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX");   // :1611 (li r5, 0x64B)
+            muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
+        }
+
+        // ---- 3. the next pending victim (0x82381088..0x82381128) ------------------------------
+        // The inlined IsEmpty's constructed-check (CgsStack.h:177, li r5, 0xB1) is the console's
+        // own; this tree's Stack::IsEmpty() carries no assert, so it is spelled at the call site.
+        CGS_ASSERT(mShowtimePendingTrafficIndexStack.GetLength() != CgsContainers::KI_STACK_UNCONSTRUCTED,
+                   "Stack used before Construct/Clear was called");                   // CgsStack.h:177
+        if (!mShowtimePendingTrafficIndexStack.IsEmpty())
+        {
+            --miShowtimePendingFrameDelay;
+            if (miShowtimePendingFrameDelay <= 0)
+            {
+                GameStateModuleIO::TrafficTypeRequestAction lRequest;
+                lRequest.muTrafficVehicleIndex = mShowtimePendingTrafficIndexStack.Peek();
+                lpOutput->GetGameActionQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest),
+                    GameStateModuleIO::E_ACTION_TRAFFIC_TYPE_REQUEST,
+                    static_cast<s32>(sizeof(lRequest)));
+                muShowtimeRequestedTrafficIndex = lRequest.muTrafficVehicleIndex;
+                mShowtimePendingTrafficIndexStack.Pop();
+                miShowtimePendingFrameDelay = KI_SHOWTIME_TRAFFIC_RESPONSE_FRAMES;
+
+                if (ShowtimeScoreWitness())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-score] pop traffic car " << static_cast<s32>(lRequest.muTrafficVehicleIndex)
+                        << " -> action 116 (still pending " << mShowtimePendingTrafficIndexStack.GetLength()
+                        << ")\n";
+                }
+            }
+        }
+
+        // ---- 4. the x10 multiplier achievement (0x8238112C..0x82381178, inlined) --------------
+        mAchievementManager.OnShowTimeMultiplier(
+            mModeManager.GetScoringSystem()->GetCrashScorer()->GetScoreMultiplier());
     }
 }

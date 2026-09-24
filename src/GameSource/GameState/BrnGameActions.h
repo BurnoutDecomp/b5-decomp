@@ -438,6 +438,19 @@ enum EGameActionType
     E_ACTION_SHOWTIME_UPDATE            = 142,   // DWARF 134 (+8 X360); size 12 BAND
     E_ACTION_JUST_BOUNCED               = 144,   // DWARF 136 (+8 X360); size 48 BAND
 
+    // [FX-SHOWTIME2 2026-09-24] THE TWO SHOWTIME ACTIONS GameStateModule::UpdateShowtimeMode
+    // @0x82380EF8 POSTS BESIDE 140, each pinned at BOTH ends (`li r5,<id>` + `li r6,<size>` at the
+    // producer, the jump-table arm at the consumer, whose table is biased `addi r11, r3, -7`):
+    //   X360 116 = DWARF 111 TRAFFIC_TYPE_REQUEST (+5, the band ON_TRAFFIC_CHECKING 102 -> 107 and
+    //              SHUTDOWN_FINISHED 116 -> 121 sit in). Producer @0x82381104..0x82381110
+    //              `li r6,2 ; li r5,0x74`; consumer PhysicsModule::HandleGameActions case 116
+    //              (jump-table 109) @0x825A7844 -> VehicleManagerOutputInterface's request queue.
+    //   X360 138 = DWARF 130 TOGGLE_SHOWTIME_BEHAVIOUR (+8). Producer @0x82380F68..0x82380F74
+    //              `li r6,4 ; li r5,0x8A`; consumer PhysicsModule::HandleGameActions case 138
+    //              (jump-table 131) @0x825A7868 -> VehicleManager::SetShowtimeBehaviour.
+    E_ACTION_TRAFFIC_TYPE_REQUEST       = 116,   // DWARF 111 (+5 X360); size 2  PINNED (producer + consumer)
+    E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR  = 138,   // DWARF 130 (+8 X360); size 4  PINNED (producer + consumer)
+
     // X360-ATTESTED value (NOT a DWARF-only import -- both ends agree on 15):
     //   producer  GameStateModule::ProcessGameEvents @0x823A0A18, the E_EVENT_COMPLETED_STUNT
     //             (case 119) arm: `li r5, 0xF` + `li r6, 0x20` @0x823A1964/0x823A195C into
@@ -1928,6 +1941,45 @@ struct VehicleHitAction : public GameAction<E_ACTION_VEHICLE_HIT>
     u16                              muTrafficEntityIndex;      // +0x20
     u16                              mu16Pad22;                 // +0x22 -- never written; size 36.
 };
+// [FX-SHOWTIME2 2026-09-24] The producer landed (UpdateShowtimeMode, GameStateModule_Showtime.cpp);
+// the record is pinned to the console's stores, which also match the DWARF member ORDER
+// (BrnGameActions.h:3373-3381: meVehicleClass, miVehicleClassTotalHit, miAllVehiclesTotalHit,
+// miVehicleBaseScore, meVehicleScoreCategory, miScoreMultiplierEarned, miMultiplierTotal,
+// miChainBonusEarned, muVehicleIndex -- the names above are this tree's for the same nine slots).
+// Posted with `li r6, 0x24` @0x82381044.
+static_assert(sizeof(VehicleHitAction) == 36,                            "action 140 wire size (li r6, 0x24)");
+static_assert(offsetof(VehicleHitAction, meVehicleClass)          == 0x00, "rec+0x00  stw var_70");
+static_assert(offsetof(VehicleHitAction, miVehicleTypeCrashed)    == 0x04, "rec+0x04  r7 out");
+static_assert(offsetof(VehicleHitAction, miTotalVehiclesCrashed)  == 0x08, "rec+0x08  stw var_68");
+static_assert(offsetof(VehicleHitAction, miVehicleBaseScore)      == 0x0C, "rec+0x0C  r8 out");
+static_assert(offsetof(VehicleHitAction, meVehicleScoreCategory)  == 0x10, "rec+0x10  r9 out");
+static_assert(offsetof(VehicleHitAction, miScoreMultiplierEarned) == 0x14, "rec+0x14  r10 out");
+static_assert(offsetof(VehicleHitAction, miTotalScoreMultiplier)  == 0x18, "rec+0x18  stw var_58");
+static_assert(offsetof(VehicleHitAction, miComboBonusEarned)      == 0x1C, "rec+0x1C  stack out");
+static_assert(offsetof(VehicleHitAction, muTrafficEntityIndex)    == 0x20, "rec+0x20  sth var_50");
+
+// Action 116, 2 bytes -- THE SHOWTIME TRAFFIC-TYPE REQUEST (DWARF BrnGameActions.h:2322-2324).
+// [FX-SHOWTIME2 2026-09-24] Producer GameStateModule::UpdateShowtimeMode @0x823810E8..0x82381110:
+// `bl Stack<u16,8>::Peek ; lhz r11, 0(r3) ; sth r11, var_80 ; li r6, 2 ; li r5, 0x74 ; AddEvent`.
+// Consumer PhysicsModule::HandleGameActions case 116 (@0x825A7844), which AddEvents the u16 onto
+// VehicleManagerOutputInterface::mTrafficTypeRequestQueue for TrafficEntityModule::
+// ProcessTrafficTypeRequests @0x8272B880 to answer.
+struct TrafficTypeRequestAction : public GameAction<E_ACTION_TRAFFIC_TYPE_REQUEST>
+{
+    u16 muTrafficVehicleIndex;   // +0x00 (:2324)
+};
+static_assert(sizeof(TrafficTypeRequestAction) == 2, "action 116 wire size (li r6, 2)");
+
+// Action 138, 4 bytes -- the showtime-behaviour toggle broadcast (DWARF BrnGameActions.h:3346-3348).
+// [FX-SHOWTIME2 2026-09-24] Producer UpdateShowtimeMode @0x82380F28..0x82380F74: the new
+// `(behaviour + 1) % 3` is stored to the record (`stw r10, var_80`) and to the module, then
+// `li r6, 4 ; li r5, 0x8A ; AddEvent`. Consumer PhysicsModule::HandleGameActions case 138
+// (@0x825A7868) -> VehicleManager::SetShowtimeBehaviour, which asserts `< 3`.
+struct ToggleShowtimeBehaviourAction : public GameAction<E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR>
+{
+    EShowtimeBehaviour meShowtimeBehaviour;   // +0x00 (:3348)
+};
+static_assert(sizeof(ToggleShowtimeBehaviourAction) == 4, "action 138 wire size (li r6, 4)");
 
 // Action 142, 12 bytes -- THE SHOWTIME SCORE UPDATE. Producer: ProcessGameEvents case 49
 // @0x823A43C0 (and again from UpdateRoadRulesManager with the same id/size):

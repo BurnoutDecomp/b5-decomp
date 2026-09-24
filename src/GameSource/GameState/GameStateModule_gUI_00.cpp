@@ -1812,6 +1812,22 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     }
     mGameEventCarryQueue.Clear();
 
+    // ---- 1-) THE SHOWTIME TRAFFIC HAND-OFF (console #65) --------------------------------------
+    // ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] GameStateModule::UpdateShowtimeMode @0x82380EF8. X360
+    // PreWorldUpdate @0x823A5328 `bl` #65 @0x823A5888, UNCONDITIONAL (no branch in
+    // 0x823A56AC..0x823A58CC), bracketed by its own PerfMonCpu monitor (this+0x475CC), straight
+    // after the event merge and the carry-queue Clear (#57..#62) and before ProcessGameEvents (#68):
+    //     r4 = r30 (the pre-world input buffer)     r5 = r29 (the output buffer)
+    //     r6 = gsm+250800 (&mContactSpyInterface)   r7 = gsm+278480 (the TrafficTypeResponse<32> cache)
+    // It pops the crashed-traffic stack ProcessContacts fills into action 116 and scores last
+    // frame's answer into maiNumCarsCrashed + action 140 -- the whole showtime per-car score.
+    // The response cache is the takedown lane's heap copy of gsm+278480 on this build (filled by
+    // CacheTakedownTrafficTypeResponses in the post-world leg); ConstructTakedownBringUp allocates
+    // it in Construct and only Destruct frees it, so it is passed without a test, as the console
+    // passes its embedded queue. The output buffer's write lock is already held (top of this leg).
+    UpdateShowtimeMode(mpPreWorldInputBuffer, mpOutputBuffer, &mContactSpyInterface,
+                       &mpTakedownCache->mTrafficTypeResponseQueue);
+
     ProcessGameEventsCarCustomizationBringUp(&lGameEventQueue, lpActionQueue);
     ProcessGameEventsPropHitBringUp(&lGameEventQueue);
     // â­ [tut-ticker] the dispatcher's CASE-113 arm, over the same merged queue in the same
