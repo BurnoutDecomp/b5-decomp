@@ -190,12 +190,16 @@ namespace BrnDirector
         lrSharedInfo.mpStateContainer        = &mStateContainer;          // *(info+20)
         lrSharedInfo.mpSharedCameraContainer = &mSharedCameraContainer;   // *info
 
-        // X360: `if ( mpGameState[+337] ) mSharedCameraContainer.mbUseGameplayExternal = 1;`
-        // ⚠️ GATE: the +337 byte lives in the un-homed MainDirector GameState block, so the
-        //   test cannot be written. CONSEQUENCE: the external ("chase") gameplay camera is not
-        //   force-selected by whatever game mode raises that byte; the container keeps whatever
-        //   Construct left (external selected) or whatever a state last set.
-        //   DELETE-WHEN: BrnDirector::GameState is homed.
+        // 0x8226ADC4..0x8226ADEC: `lwz r11, 0x24(info) ; lbz r11, 0x151(r11) ; beq ;
+        // stb r27(=1), 0(r22 = this + 0x38E0)`. A reset that asks for its camera back
+        // (GameState::mbShouldResetPlayerCameraThisFrame, raised by ProcessInputQueue's case 0 from
+        // ResetPlayerCarAction::mbResetPlayerCamera) re-selects the external ("chase") gameplay
+        // camera. [FX-DIRECTOR 2026-09-24] Landed: its gate read "the +337 byte lives in the
+        // un-homed GameState block"; GameState is homed and the byte is the named DWARF member.
+        if (lrSharedInfo.mpGameState->mbShouldResetPlayerCameraThisFrame)   // GameState +0x151
+        {
+            mSharedCameraContainer.mbUseGameplayExternal = true;             // container +0x00
+        }
 
         mSharedCameraContainer.mbLookbackOverride = false;                // *(arb+14561) = 0
 

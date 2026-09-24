@@ -19,8 +19,23 @@
 //   prologue 0x82237398..0x822373A8 clears +0x1E8..+0x1EC every drain (not +0x1ED, +0x1E0, +0x1E4)
 //   case 39  0x82237DAC..0x82237DCC clears all nine ShowTimeInfo fields (+0x1DC..+0x1ED)
 //   GameState::Clear 0x82218C30..0x82218C60: ShowTimeInfo cleared, +0x1F0 = 1 (THIRD_PERSON)
+// [item 2, the rest of the console's arms + the tail]
+//   case 0   @0x82238478  lbz 0x42 -> 0x33931 (+0x151 mbShouldResetPlayerCameraThisFrame, per-frame)
+//   case 53  @0x822384E8  1 -> +0x1B1, 1 -> +0x1B2 ; case 54 @0x82238504  1 -> +0x1B1, 0 -> +0x1B2
+//   case 107 @0x82238520  1 -> +0x1B3 ; case 120 @0x82237E44  1 -> +0xDC (NOT per-frame)
+//   case 132 @0x82238530  (lwz 0xC > 0) -> +0x1B5 ; case 150/151 @0x82237E84/94  1/0 -> +0x1C2
+//   case 215 @0x82238488  1 -> +0xF0, lwz 0 -> +0xF4 ; case 216 @0x822384C8  0 -> +0xF0, 3 -> +0xF4
+//   case 218 @0x82238550  (lwz 0x10 == player RaceCarState +0x3C8 && lwz 0x14 == 1 && lwz 0x18 & bits 0..5)
+//                         -> 1 -> +0xF8 (per-frame)
+//   case 224 @0x822382C0  0 -> +0x152, 0.0 -> +0x154 (+0x158 untouched)
+//   tail 0x8223886C       flag tail +0x35431 -> +0x100 mbCanUseSlomo = 0
+//   tail 0x8223893C..0x82238A3C  +0x148 / +0x14C inactivity clocks (sim step; zeroed by mbAnyInput / sim
+//                         paused, +0x14C also by the player's mbEngineOn), +0x150 latched by mbEngineOn
+//   Arbitrator::Update 0x8226ADE0  GameState +0x151 -> SharedCameraContainer::mbUseGameplayExternal = 1
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 #include "GameSource/GameState/BrnGameActions.h"
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
+#include <cstddef>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
@@ -91,6 +106,24 @@ struct DirectorInputOutput
 {
     const DirectorIO::InputBuffer* mpInputBuffer;
 };
+
+// Stand-in for MainDirector::mAllVehicleData: case 218 asks it for the player's VehicleInfo.
+struct AllVehicleDataStandIn
+{
+    const Camera::VehicleInfo* mpPlayer = nullptr;
+    const Camera::VehicleInfo& GetPlayer() const { return *mpPlayer; }
+};
+
+// Stand-ins for what Arbitrator::Update's +0x151 read touches, by the production member names.
+struct SharedCameraContainerStandIn
+{
+    bool mbUseGameplayExternal;
+    bool mbLookbackOverride;
+};
+struct ArbSharedInfoStandIn
+{
+    const GameState* mpGameState;
+};
 }
 
 // The production bodies under test + the stand-in MainDirector (members / flag-tail indices from
@@ -113,7 +146,7 @@ static void Check(bool lbPass, const char* lpcName)
 // One console wire record: bytes at the X360 offsets, the rest junk (0xCD) like stack residue.
 struct WireRecord
 {
-    alignas(16) u8 mau8Bytes[64];
+    alignas(16) u8 mau8Bytes[96];
     WireRecord() { std::memset(mau8Bytes, 0xCD, sizeof(mau8Bytes)); }
     void Word(u32 luOffset, s32 liValue)  { std::memcpy(mau8Bytes + luOffset, &liValue, sizeof(s32)); }
     void Float(u32 luOffset, f32 lfValue) { std::memcpy(mau8Bytes + luOffset, &lfValue, sizeof(f32)); }
@@ -191,6 +224,45 @@ static WireRecord StopMode()   // action 39, 24 bytes
     return lRecord;
 }
 static WireRecord Empty() { return WireRecord(); }
+static WireRecord ResetPlayerCar(u8 lu8ResetCamera)   // action 0, 80 bytes
+{
+    WireRecord lRecord;
+    lRecord.Float(0x34, -1.0f);   // no unlock deform
+    lRecord.Word(0x3C, 0);        // E_CAR_SELECT_DONT_DROP
+    lRecord.Byte(0x40, 0);
+    lRecord.Byte(0x41, 0);
+    lRecord.Byte(0x42, lu8ResetCamera);
+    lRecord.Byte(0x43, 0);
+    return lRecord;
+}
+static WireRecord StuntPerformed(s32 liMultiplier)   // action 132, 24 bytes (StuntInfo)
+{
+    WireRecord lRecord;
+    lRecord.Word(0x00, 3);        // stunt types
+    lRecord.Word(0x04, 0);
+    lRecord.Word(0x08, 1500);     // score
+    lRecord.Word(0x0C, liMultiplier);
+    return lRecord;
+}
+static WireRecord PaybackActivated(s32 liType)   // action 215, 12 bytes
+{
+    WireRecord lRecord;
+    lRecord.Word(0x00, liType);
+    lRecord.Word(0x04, 1);
+    lRecord.Word(0x08, 0);
+    return lRecord;
+}
+static WireRecord SoundTrigger(u32 luEntity, s32 liType, u32 luTriggers)   // action 218, 32 bytes
+{
+    WireRecord lRecord;
+    lRecord.Float(0x00, 10.0f);
+    lRecord.Float(0x04, 0.0f);
+    lRecord.Float(0x08, -5.0f);
+    lRecord.Word(0x10, static_cast<s32>(luEntity));
+    lRecord.Word(0x14, liType);
+    lRecord.Word(0x18, static_cast<s32>(luTriggers));
+    return lRecord;
+}
 
 static bool ShowTimeUntouchedAfterClear(const GameState& lrGameState)
 {
@@ -327,6 +399,202 @@ int main()
     Check(lrGameState.mbDriveThruActive && lrGameState.meJunkyardState == GameState::E_JY_CAR_SELECT &&
           lrGameState.mfHowCloseToTotalled == 0.5f,
           "the six Showtime arms leave unrelated GameState fields alone");
+
+    // ================= item 2: the rest of the console's arms + the tail =================
+    // The player's published VehicleInfo (active index 0) is what case 218 compares against.
+    gDirector.mAllVehicleData.mpPlayer = &gInput.maRaceCarInfo[0];
+    gInput.maRaceCarInfo[0].mRaceCarState.mEntityId.muValue = 0x00012345u;
+
+    // 10. RESET_PLAYER_CAR (0): the reset-camera byte (per-frame) and its arbitrator consumer.
+    Post(ResetPlayerCar(1), 0, 80);
+    Drain();
+    Check(lrGameState.mbShouldResetPlayerCameraThisFrame, "0 @0x82238478: +0x151 = record +0x42 (1)");
+    {
+        SharedCameraContainerStandIn lContainer = { false, true };
+        ArbSharedInfoStandIn lInfo = { &lrGameState };
+        ArbitratorPrologueStandIn(lContainer, lInfo);
+        Check(lContainer.mbUseGameplayExternal,
+              "Arbitrator::Update 0x8226ADE0: +0x151 set -> SharedCameraContainer::mbUseGameplayExternal = 1");
+    }
+    Drain();
+    Check(!lrGameState.mbShouldResetPlayerCameraThisFrame, "the next drain's prologue clears +0x151 (0x82237360)");
+    {
+        SharedCameraContainerStandIn lOff = { false, false };
+        SharedCameraContainerStandIn lOn  = { true, false };
+        ArbSharedInfoStandIn lInfo = { &lrGameState };
+        ArbitratorPrologueStandIn(lOff, lInfo);
+        ArbitratorPrologueStandIn(lOn, lInfo);
+        Check(!lOff.mbUseGameplayExternal, "Arbitrator: +0x151 clear -> the container is not selected");
+        Check(lOn.mbUseGameplayExternal, "Arbitrator: +0x151 clear never deselects (the console only stores 1)");
+    }
+    Post(ResetPlayerCar(0), 0, 80);
+    Drain();
+    Check(!lrGameState.mbShouldResetPlayerCameraThisFrame, "0: record +0x42 == 0 -> +0x151 stays 0");
+
+    // 11. PLAYER_HIT_RIVAL (53) / RIVAL_HIT_PLAYER (54).
+    Post(Empty(), 53, 12);
+    Drain();
+    Check(lrGameState.mbPlayerAndRivalImpactOccured && lrGameState.mbPlayerWonImpactAgainstRival,
+          "53 @0x822384E8: +0x1B1 = 1, +0x1B2 = 1");
+    Post(Empty(), 54, 12);
+    Drain();
+    Check(lrGameState.mbPlayerAndRivalImpactOccured && !lrGameState.mbPlayerWonImpactAgainstRival,
+          "54 @0x82238504: +0x1B1 = 1, +0x1B2 = 0");
+    Post(Empty(), 53, 12);
+    Post(Empty(), 54, 12);
+    Drain();
+    Check(lrGameState.mbPlayerAndRivalImpactOccured && !lrGameState.mbPlayerWonImpactAgainstRival,
+          "53 then 54 in one drain: the later arm's +0x1B2 stands");
+    Drain();
+    Check(!lrGameState.mbPlayerAndRivalImpactOccured && !lrGameState.mbPlayerWonImpactAgainstRival,
+          "the prologue clears +0x1B1 / +0x1B2 (0x82237364 / 0x82237368)");
+
+    // 12. ON_TRAFFIC_CHECKING (107).
+    Post(Empty(), 107, 2);
+    Drain();
+    Check(lrGameState.mbPlayerCheckedTraffic, "107 @0x82238520: +0x1B3 = 1");
+    Drain();
+    Check(!lrGameState.mbPlayerCheckedTraffic, "the prologue clears +0x1B3 (0x8223736C)");
+
+    // 13. SHUTDOWN (120): latched until the takedown camera's inactive post (case 6).
+    Post(Empty(), 120, 24);
+    Drain();
+    Check(lrGameState.mbIsShutdown, "120 @0x82237E44: +0xDC mbIsShutdown = 1");
+    Drain();
+    Check(lrGameState.mbIsShutdown, "120: +0xDC is NOT per-frame");
+    {
+        WireRecord lTakedownOff;
+        lTakedownOff.Word(0x00, -1);
+        lTakedownOff.Byte(0x04, 0);
+        lTakedownOff.Byte(0x05, 0);
+        lTakedownOff.Byte(0x06, 0);
+        Post(lTakedownOff, 6, 8);
+    }
+    Drain();
+    Check(!lrGameState.mbIsShutdown, "case 6's inactive arm clears +0xDC (the shutdown latch's only clear)");
+
+    // 14. HUD_MESSAGE_STUNT_PERFORMED (132): the stunt multiplier at +0xC.
+    Post(StuntPerformed(2), 132, 24);
+    Drain();
+    Check(lrGameState.mbPlayerPerformedStunt, "132 @0x82238530: +0x1B5 = (multiplier 2 > 0)");
+    Post(StuntPerformed(0), 132, 24);
+    Drain();
+    Check(!lrGameState.mbPlayerPerformedStunt, "132: multiplier 0 -> +0x1B5 = 0 (bgt, strict)");
+    Post(StuntPerformed(-3), 132, 24);
+    Drain();
+    Check(!lrGameState.mbPlayerPerformedStunt, "132: signed -- multiplier -3 -> 0");
+    Post(StuntPerformed(1), 132, 24);
+    Drain();
+    Drain();
+    Check(!lrGameState.mbPlayerPerformedStunt, "the prologue clears +0x1B5 (0x82237378)");
+
+    // 15. GAME_TRAINING_PAUSE (150) / UNPAUSE (151).
+    Post(Empty(), 150, 1);
+    Drain();
+    Check(lrGameState.mbTrainingPause, "150 @0x82237E84: +0x1C2 mbTrainingPause = 1");
+    Drain();
+    Check(lrGameState.mbTrainingPause, "150: +0x1C2 is NOT per-frame");
+    Post(Empty(), 151, 1);
+    Drain();
+    Check(!lrGameState.mbTrainingPause, "151 @0x82237E94: +0x1C2 = 0");
+
+    // 16. PAYBACK_ACTIVATED (215) / PAYBACK_OVER (216).
+    Post(PaybackActivated(1), 215, 12);
+    Drain();
+    Check(lrGameState.mbPaybackActive && static_cast<s32>(lrGameState.meActivePaybackType) == 1,
+          "215 @0x82238488: +0xF0 = 1, +0xF4 = record +0x00 (1)");
+    Drain();
+    Check(lrGameState.mbPaybackActive, "215: +0xF0 is NOT per-frame");
+    Post(Empty(), 216, 1);
+    Drain();
+    Check(!lrGameState.mbPaybackActive && static_cast<s32>(lrGameState.meActivePaybackType) == 3,
+          "216 @0x822384C8: +0xF0 = 0, +0xF4 = 3 (li r11, 3)");
+
+    // 17. SOUND_TRIGGER (218): the player in a tunnel.
+    Post(SoundTrigger(0x00012345u, 1, 0x01), 218, 32);
+    Drain();
+    Check(lrGameState.mbPlayerInTunnel, "218 @0x82238550: player entity + AT_ENTITY + bit 0 -> +0xF8 = 1");
+    Drain();
+    Check(!lrGameState.mbPlayerInTunnel, "the prologue clears +0xF8 (0x82237370)");
+    {
+        bool lbAllBits = true;
+        for (u32 luBit = 0; luBit < 6; ++luBit)
+        {
+            Post(SoundTrigger(0x00012345u, 1, 1u << luBit), 218, 32);
+            Drain();
+            lbAllBits = lbAllBits && lrGameState.mbPlayerInTunnel;
+        }
+        Check(lbAllBits, "218: each of bits 0..5 alone raises +0xF8 (0x8223857C..0x822385C0)");
+    }
+    Post(SoundTrigger(0x00012345u, 1, 0x40u | 0x80u | 0x100u), 218, 32);
+    Drain();
+    Check(!lrGameState.mbPlayerInTunnel, "218: bits above 5 raise nothing");
+    Post(SoundTrigger(0x00054321u, 1, 0x3Fu), 218, 32);
+    Drain();
+    Check(!lrGameState.mbPlayerInTunnel, "218: another entity's trigger raises nothing (cmplw vs RaceCarState +0x3C8)");
+    Post(SoundTrigger(0x00012345u, 2, 0x3Fu), 218, 32);
+    Drain();
+    Check(!lrGameState.mbPlayerInTunnel, "218: AHEAD_OF_ENTITY (type 2) raises nothing (cmpwi 1)");
+    Post(SoundTrigger(0x00012345u, 1, 0x20u), 218, 32);
+    Post(SoundTrigger(0x00054321u, 1, 0x3Fu), 218, 32);
+    Drain();
+    Check(lrGameState.mbPlayerInTunnel, "218: a later non-matching trigger does not clear an earlier match");
+
+    // 18. CAR_ADDITION_PRESENTATION_END (224).
+    lrGameState.mbNewCarAdded                       = true;
+    lrGameState.mfCarAddedPresentationTimeRemaining = 2.5f;
+    lrGameState.meAddedCarID                        = static_cast<EActiveRaceCarIndex>(2);
+    Post(Empty(), 224, 1);
+    Drain();
+    Check(!lrGameState.mbNewCarAdded && lrGameState.mfCarAddedPresentationTimeRemaining == 0.0f,
+          "224 @0x822382C0: +0x152 = 0, +0x154 = 0.0 (f31 == flt_82001CC0)");
+    Check(static_cast<s32>(lrGameState.meAddedCarID) == 2, "224: +0x158 meAddedCarID untouched");
+
+    // 19. The tail: the director's mbForceSloMoNotAllowed latch (flag tail +0x35431 = byte 0x01).
+    lrGameState.mbCanUseSlomo = true;
+    gDirector.maStateFlagTail[0x01] = 1;
+    Drain();
+    Check(!lrGameState.mbCanUseSlomo, "tail 0x8223886C: +0x35431 set -> +0x100 mbCanUseSlomo = 0");
+    gDirector.maStateFlagTail[0x01] = 0;
+    lrGameState.mbCanUseSlomo = true;
+    Drain();
+    Check(lrGameState.mbCanUseSlomo, "tail: +0x35431 clear -> +0x100 untouched");
+
+    // 20. The two inactivity clocks (sim step 1/60) and the been-active latch.
+    const f32 KF_STEP = 1.0f / 60.0f;
+    gInput.mControllerInfo.mbAnyInput  = false;
+    gInput.mbSimPaused                 = false;
+    gInput.maRaceCarInfo[0].mbEngineOn = false;
+    lrGameState.mfPadInactiveTime    = 0.0f;
+    lrGameState.mfPlayerInactiveTime = 0.0f;
+    lrGameState.mbPlayerBeenActive   = false;
+    Drain();
+    Drain();
+    Drain();
+    Check(std::fabs(lrGameState.mfPadInactiveTime - 3.0f * KF_STEP) < 1e-6f,
+          "tail 0x82238964..0x8223897C: no pad input, running sim -> +0x148 += the sim step each drain");
+    Check(std::fabs(lrGameState.mfPlayerInactiveTime - 3.0f * KF_STEP) < 1e-6f,
+          "tail 0x822389D8..0x822389F8: engine off, no input -> +0x14C += the sim step");
+    Check(!lrGameState.mbPlayerBeenActive, "tail: engine off -> +0x150 not raised");
+    gInput.maRaceCarInfo[0].mbEngineOn = true;
+    Drain();
+    Check(std::fabs(lrGameState.mfPadInactiveTime - 4.0f * KF_STEP) < 1e-6f, "tail: the engine does not reset the PAD clock");
+    Check(lrGameState.mfPlayerInactiveTime == 0.0f, "tail 0x822389B4: the player's mbEngineOn (+0x4E6) -> +0x14C = 0.0");
+    Check(lrGameState.mbPlayerBeenActive, "tail 0x82238A28..0x82238A3C: mbEngineOn -> +0x150 = 1");
+    gInput.maRaceCarInfo[0].mbEngineOn = false;
+    gInput.mControllerInfo.mbAnyInput  = true;
+    Drain();
+    Check(lrGameState.mfPadInactiveTime == 0.0f && lrGameState.mfPlayerInactiveTime == 0.0f,
+          "tail: ControllerInfo::mbAnyInput -> both clocks = 0.0 (0x8223894C / 0x822389C8)");
+    Check(lrGameState.mbPlayerBeenActive, "tail: +0x150 is a latch (engine off again, still 1)");
+    gInput.mControllerInfo.mbAnyInput = false;
+    Drain();
+    gInput.mbSimPaused = true;
+    Drain();
+    Check(lrGameState.mfPadInactiveTime == 0.0f && lrGameState.mfPlayerInactiveTime == 0.0f,
+          "tail: a paused sim (input +0x7AC8) -> both clocks = 0.0 (0x82238958 / 0x822389D4)");
+    gInput.mbSimPaused = false;
+
     Check(gAsserts == 0, "no assert fired");
 
     std::printf("FxDirectorInputQueue: %u checks, %u failures\n", gChecks, gFailures);

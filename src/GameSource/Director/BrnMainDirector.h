@@ -513,6 +513,10 @@ namespace BrnDirector
         // nothing open-codes a raw number at the use site.
         enum EStateFlagTailByte
         {
+            // +0x35431. DWARF MainDirector::mbForceSloMoNotAllowed: while set, ProcessInputQueue's
+            // tail drops GameState::mbCanUseSlomo every drain (0x8223886C..0x82238888). Construct
+            // clears it (0x8225B930); no other store in the image (a tweakable).
+            E_FLAG_TAIL_FORCE_SLOMO_NOT_ALLOWED  = 0x01,
             // +0x35436. "Ask the GUI to enumerate its post-FX hooks": PostGuiUpdate
             // @0x82236F88 writes it (EffectInterface::Update's out-flag when an enumeration
             // arrived, else !mbGotHooks) and Update @0x82274070 publishes it into the director
