@@ -117,7 +117,9 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
     //   std  r11=0  -> maModelIds[i]               (8-byte CgsID cleared to 0)
     //   sth  r11=0  -> mau16CarColourIndex[i]      (colour index cleared to 0)
     //   sth  r11=0  -> mau16CarPaintFinishIndex[i] (paint-finish index cleared to 0)
-    //   stfs f0=-1.0 -> mfOvertakingDifficulty[i]  ("no handicap" sentinel, -1)
+    //   -1.0f store  -> mafOnlineDeformationAmount[i] (the +0xD8 run, addressed 0x40 below the
+    //                  team run at +0x118; not mfOvertakingDifficulty, which sits at +0x74 and
+    //                  which this reset never writes -- each rival mode's Start fills it)
     //   stw  r11=0  -> maePlayerTeam[i]            (team cleared to 0)
     //   stw  r6=-1  -> maNetworkPlayerID[i]        (4-byte signed invalid player id)
     for (u32 luCar = 0; luCar < KU_MAX_ACTIVE_RACE_CARS; ++luCar)
@@ -125,7 +127,7 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
         maNetworkPlayerID[luCar]           = -1;
         mau16CarColourIndex[luCar]         = 0;
         mau16CarPaintFinishIndex[luCar]    = 0;
-        mfOvertakingDifficulty[luCar]      = -1.0f;
+        mafOnlineDeformationAmount[luCar]  = -1.0f;
         maePlayerTeam[luCar]               = E_PLAYERTEAM_STUB;     // 0
         maModelIds[luCar]                  = 0;
     }

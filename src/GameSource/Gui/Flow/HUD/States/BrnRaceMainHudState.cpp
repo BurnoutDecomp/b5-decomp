@@ -502,13 +502,9 @@ namespace BrnGui
 
         mPositionIndicatorComponent.Construct(macPositionIndicatorName, mpStateInterface, 0);
 
-        // [FLAG deferred] PlayerPositionTableComponent::Construct @0x82421A18 / ::Prepare
-        // @0x8242AA90 are declared in BrnPlayerPositionTable.h but have no bodies, so
-        // calling them would leave the mount unlinkable. The X360 calls both
-        // UNCONDITIONALLY (they are not flag-gated), and for STUNT_ATTACK the component is
-        // never ticked afterwards, so a faithful Construct/Prepare pair is all that is
-        // missing. DELETE-WHEN: BrnPlayerPositionTable.cpp bodies the two.
-        LogDeferredComponent("PlayerPositionTableComponent::Construct/Prepare");
+        // Called unconditionally (not flag-gated); the table is only ticked on online modes.
+        mPlayerPositionTable.Construct(macPlayerPositionTableName, mpStateInterface, 0);
+        mPlayerPositionTable.Prepare(macPlayerPositionTableName, lFile);
 
         mFriendsList.Construct(macFriendListName, mpStateInterface, 0);
         mFriendsListChangeIcon.Construct(macFriendsListChangeIconName, mpStateInterface, 0);

@@ -21,6 +21,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // active race cars
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // PlayerVehicleControls
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [net] witness lines (PC harness)
 
 #include <cmath>   // fmaf
 
@@ -1448,6 +1449,24 @@ namespace BrnNetwork
         mUpdateMessageSend.PrepareForSend(&lUpdateData);
         mbHasResetCarTransformSinceLastUpdateSent = false;
         mbHasBeenSlammedSinceLastUpdateSent       = false;
+
+        // [PC HARNESS, NOT X360] bounded witness: the first update sent in each 210-frame bucket of
+        // the round clock (frames since start), with that clock value, the local car's slot and its
+        // position. The receiving side samples on the SAME clock value (the sender's), so the two
+        // logs name the same messages.
+        {
+            static s32 siLastBucket = -1;
+            const s32 liBucket = static_cast<s32>(lUpdateData.mu16FramesSinceStart) / 210;
+            if (liBucket != siLastBucket)
+            {
+                siLastBucket = liBucket;
+                BrnNetHarnessPC::Witness("update-out", "sent since=%u frame=%u car=%d pos=(%.1f, %.1f, %.1f)",
+                                         static_cast<u32>(lUpdateData.mu16FramesSinceStart),
+                                         static_cast<u32>(lu16CurrentFrame), static_cast<s32>(leActiveRaceCarIndex),
+                                         lUpdateData.mMatrix.wAxis.x, lUpdateData.mMatrix.wAxis.y,
+                                         lUpdateData.mMatrix.wAxis.z);
+            }
+        }
     }
 
     // Drive this player's network car from a received update: the transform, velocities and
@@ -1552,6 +1571,25 @@ namespace BrnNetwork
 
         lpVehicleDriverInputInterface->GetUpdateDriverQueue()->AddEvent(&lNetworkDriverControls,
                                                                         BrnPhysics::Vehicle::E_DRIVER_TYPE_NETWORK);
+
+        // [PC HARNESS, NOT X360] bounded witness: the first update applied in each 210-frame bucket
+        // of the SENDER's round clock (the value its "update-out sent" line carries), which car it
+        // drives and where to.
+        {
+            static s32 siLastBucket = -1;
+            const s32 liBucket = static_cast<s32>(lpUpdateData->mu16FramesSinceStart) / 210;
+            if (liBucket != siLastBucket)
+            {
+                siLastBucket = liBucket;
+                BrnNetHarnessPC::Witness("update-in", "applied since=%u from=%d car=%d snap=%d pos=(%.1f, %.1f, %.1f)",
+                                         static_cast<u32>(lpUpdateData->mu16FramesSinceStart),
+                                         static_cast<s32>(GetPlayerID()),
+                                         static_cast<s32>(leActiveRaceCarIndex),
+                                         lNetworkDriverControls.mbSnap ? 1 : 0,
+                                         lpUpdateData->mMatrix.wAxis.x, lpUpdateData->mMatrix.wAxis.y,
+                                         lpUpdateData->mMatrix.wAxis.z);
+            }
+        }
 
         CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
         CGS_ASSERT(mpNetworkModule->GetNetworkEventQueue(), "mpNetworkModule->GetNetworkEventQueue()");

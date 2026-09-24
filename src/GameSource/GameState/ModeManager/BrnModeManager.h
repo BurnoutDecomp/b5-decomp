@@ -450,6 +450,14 @@ public:
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
     const NetworkRoundManager*          GetNetworkRoundManager() const;   // returns mpNetworkRoundManager (+0x6D64)
+    // A one-instruction forward to the embedded ChallengeManager (+0x6E00); ProcessGameEvents'
+    // case-18 arm calls it before a network round starts.
+    void CancelFreeburnChallenge(GameStateModuleIO::GameActionQueue* lpActionQueue);
+    // The same one-instruction forwards for ProcessGameEvents' player-added / -finalised arms.
+    void NetworkPlayerAdded(BrnNetwork::NetworkPlayerID lPlayerID,
+                            GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
+    void NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlayerID,
+                                GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost);
     const BrnTraffic::TrafficData*      GetTrafficData() const;           // through the TQM's TriggerData resource
 
     // ---- grid / online-grid helpers (committed declarations; bodies land with agents 5 / 9) -------

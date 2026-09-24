@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Containers/CgsStack.h"             // CgsContainers::Stack<u16,8> (mShowtimePendingTrafficIndexStack, by value)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // BrnPhysics::ContactSpy::ContactSpyInterface (ProcessContacts' one argument)
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"        // BrnGameState::ModeManager (mModeManager, by value)
+#include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h" // BrnGameState::NetworkRoundManager (mNetworkRoundManager, by value)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // BrnNetwork::NetworkPlayerID (s32 typedef; GetActiveRaceCarIndex param)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"       // GameStateModuleIO::GameActionQueue (real typedef)
 #include "GameSource/GameState/BrnGameActions.h"             // GameStateModuleIO::CarSelectionChangedAction (by value, +0x38B80)
@@ -302,6 +303,17 @@ public:
     // Prepare2's progression AND street legs have both completed, i.e. once the two bundles the
     // GUI lane's WorldDataController::Prepare2 acquires by name are resident in pool 5.
     bool IsPrepare2Complete() const { return mbPrepare2Complete; }
+
+    // The online round bookkeeper, held BY VALUE at gsm +0xB9F8 as the console holds it: the
+    // case-17/18 arms of ProcessGameEvents address it as the module + 0x10000 - 0x4608 for
+    // NetworkGameStarted / NetworkRoundStarted / OnRoundStart, and ModeManager is handed the same
+    // object as its mpNetworkRoundManager. The console reaches it through that inlined adjust;
+    // de-inlined to this accessor.
+    NetworkRoundManager*       GetNetworkRoundManager()       { return &mNetworkRoundManager; }
+    // The embedded road-rules manager; ModeManager's Construct forwards it to the
+    // ChallengeManager (its lpRoadRulesManager argument).
+    RoadRulesManager*          GetRoadRulesManager()          { return &mRoadRulesManager; }
+    const NetworkRoundManager* GetNetworkRoundManager() const { return &mNetworkRoundManager; }
 
     BrnProgression::ProgressionManager*       GetProgressionManager()       { return &mProgressionManager; }
     const BrnProgression::ProgressionManager* GetProgressionManager() const { return &mProgressionManager; }
@@ -619,6 +631,17 @@ public:
     // unarmed. Nothing is fabricated. DELETE-WHEN those two land.
     void ProcessGameEventsModeIntroBringUp(
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
+
+    // ProcessGameEvents, THE NETWORK GAME/ROUND START ARMS (case 17 E_EVENT_START_NETWORK_GAME
+    // and case 18 E_EVENT_START_NETWORK_ROUND),
+    // extracted like the arms above: one walk over the merged pre-world queue, both ids handled in
+    // arrival order. Case 17 latches the lobby roster into the NetworkRoundManager (and swaps the
+    // local car to the one the lobby event names); case 18 starts the mode the cached event names
+    // through ModeManager::StartGameMode. The output buffer is PreWorldUpdate's own.
+    void ProcessGameEventsNetworkGameBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue*            lpActionQueue,
+        GameStateModuleIO::OutputBuffer*               lpOutputBuffer);
 
     // ================================================================================
     // (i) [D4 PUMP SEAM] CheckIfPlayerIsAtJunctionWithAnEvent (X360 0x82390418) and
@@ -1803,6 +1826,11 @@ private:
     // terminal stage. GameStateModule::Construct is the console's ONLY caller of
     // CarSelectManager::Construct.
     CarSelectManager                        mCarSelectManager;
+
+    // Console gsm +0xB9F8. The online round bookkeeper, by value.
+    // See GetNetworkRoundManager(). The module lives in static storage, so the zero-fill is the
+    // state it starts in (GetCurrentRound() == -1, the no-round sentinel).
+    NetworkRoundManager                     mNetworkRoundManager;
 
     // ⭐ [gateui] X360 this+183952 (0x2CE50). The Super-Jump / Super-Smash / Billboard collectible
     // bookkeeper, embedded BY VALUE as the console embeds it. See GetStuntManager() above for the

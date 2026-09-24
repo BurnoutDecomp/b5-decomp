@@ -11,6 +11,7 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // BrnGui::GuiAudioTriggerEvent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"                    // MovieClipRef::FindChildMovieClipOnFrame / FindChildTextField
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                    // TextFieldRef::SetText
+#include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf (the row names)
 
 // BrnGui::PlayerPositionTableComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 // Six asm-attested functions land here so far (ClearStoredData / AddInvisibleTeamLine /
@@ -273,5 +274,63 @@ namespace BrnGui
         mSkillzText = *lSkillsTextClip.FindChildTextField(&lSkillsTextFieldRef, "skillz_txt");
 
         mSkillzText.SetText(lpcText, false);
+    }
+}
+
+// ============================================================================
+// PlayerPositionTableComponent::Construct / ::Prepare -- the table's lifecycle pair, called
+// unconditionally by RaceMainHudState's set-up (the component is only ticked on the online modes).
+// ============================================================================
+namespace BrnGui
+{
+    // Construct: the flapt base's inline Construct (the "lpStateInterface" tripwire, the channel,
+    // the clip cleared), then the table's own resets in the console's order -- no cache, no
+    // challenge manager, game mode NONE, skill state 14, challenge not running, challenge data 0 /
+    // type 24, the four clip/text refs cleared -- the nine rows' Construct (no name, the same
+    // channel, no parent), and ClearStoredData.
+    void PlayerPositionTableComponent::Construct(const char* /*lacName*/,
+                                                 CgsGui::StateInterface* lpStateInterface,
+                                                 const char* /*lacParentName*/)
+    {
+        BrnFlaptComponent::Construct(lpStateInterface);
+
+        mpCache                        = NULL;
+        mpChallengeManager             = NULL;
+        meGameMode                     = BrnGameState::GameStateModuleIO::E_MODE_NONE;
+        meLastFrameSkillState          = 14;
+        mbFreeburnChallengeRunning     = false;
+        meCurrentChallengeDataType     = 24;
+        miFreeburnChallengeCurrentData = 0;
+        mTitleBarMCR.SetInvalid();
+        mTitleText.SetInvalid();
+        mSkillzText.SetInvalid();
+        mPageIconMCR.SetInvalid();
+
+        for (s32 liBar = 0; liBar < KI_MAX_BARS_NEEDED; ++liBar)
+        {
+            maPlayerComponents[liBar].Construct(NULL, lpStateInterface, NULL);
+        }
+
+        ClearStoredData();
+    }
+
+    // Prepare: bind the table's own clip (the flapt base's resolve / assert / timeline reset,
+    // inlined by the console with no parent prefix), prepare the nine rows as
+    // "<name>_Position_<i>" (128-byte buffer), then latch the page-icon and title-bar child clips.
+    void PlayerPositionTableComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFile)
+    {
+        BrnFlaptComponent::Prepare(lacName, lFile, NULL);
+
+        for (s32 liBar = 0; liBar < KI_MAX_BARS_NEEDED; ++liBar)
+        {
+            char lacRowName[128];
+            CgsCore::SnPrintf(lacRowName, sizeof(lacRowName), "%s_Position_%d", lacName, liBar);
+            maPlayerComponents[liBar].Prepare(lacRowName, lFile);
+        }
+
+        BrnFlapt::MovieClipRef lPageIcon;
+        mPageIconMCR = *mAptRef.FindChildMovieClip(&lPageIcon, "pageIcon_mc");
+        BrnFlapt::MovieClipRef lTitleBar;
+        mTitleBarMCR = *mAptRef.FindChildMovieClip(&lTitleBar, "TitleBar_mc");
     }
 }

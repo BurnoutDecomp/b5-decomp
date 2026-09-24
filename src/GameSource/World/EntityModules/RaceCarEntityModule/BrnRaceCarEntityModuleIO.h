@@ -272,7 +272,10 @@ namespace RaceCarEntityModuleIO
         void                           SetReplayStatusInterface(const ReplayStatusInterface*); // :174
         AudioCarLoadedDataQueue*       GetAudioCarLoadedDataQueue();                        // :176
         const AudioCarLoadedDataQueue* GetAudioCarLoadedDataQueue() const;                 // :177
-        bool                           GetReceivedNetworkDriverControls(EActiveRaceCarIndex) const; // :181
+        // :181. Header-inline on the console: PreSceneUpdate's per-slot pass reads the latch byte
+        // directly (a plain byte load, no lock assert).
+        bool                           GetReceivedNetworkDriverControls(EActiveRaceCarIndex leIndex) const
+        { return mabReceivedNetworkDriverControls[leIndex]; }
 
         // ---- per-active-race-car latch SETTERS: X360 HEADER-INLINES -------------------
         // (bodied 2026-08-11, WorldBridgeInputToEntityModules mount). These six carry no

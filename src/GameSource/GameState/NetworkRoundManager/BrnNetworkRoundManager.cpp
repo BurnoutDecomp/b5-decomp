@@ -73,6 +73,15 @@ void NetworkRoundManager::OnRoundStart()
 //    wants the raw remaining count calls GetRoundsRemaining() below instead of open-coding it.
 // ===================================================================================================
 
+// Inlined at its one call site (no standalone export): ProcessGameEvents' case-18 arm clears
+// +0x130 (`stbx 0, gsm, 0xBB28`) straight after ModeManager::StartGameMode has prepared the mode
+// the cached event named. The only method of this class that owns a write to the join flag
+// once the mode is prepared.
+void NetworkRoundManager::PreparedForMode()
+{
+    mbStartingGameDueToPlayerJoin = false;
+}
+
 // X360-INLINED at every call site (no standalone export). The 0-based index of the round being
 // played: with miTotalRounds seeded once and miRoundsRemaining decremented in OnRoundStart above,
 // the first round gives total - (total-1) - 1 == 0.

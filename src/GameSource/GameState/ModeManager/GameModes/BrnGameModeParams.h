@@ -406,7 +406,10 @@ public:
     s32                     miPursuitRivalTotalDamage;
     EGlobalRaceCarIndex_Stub mePursuedCarGlobalIndex;
     CgsID                   mPursuedCarID;
-    f32                     mfOnlineFreeburnDeformationAmount;
+    // (The reference list's single f32 mfOnlineFreeburnDeformationAmount is not in this build's
+    // record: mPursuedCarID ends at +0x60 and the medal run starts there -- bronze +0x60 .. time
+    // limit +0x6C, StuntAttackMode::Start's store -- and the per-car run
+    // mafOnlineDeformationAmount[8] below replaces it.)
     f32                     mfNeedForBronze;
     f32                     mfNeedForSilver;
     f32                     mfNeedForGold;
@@ -415,6 +418,12 @@ public:
     f32                     mfOvertakingDifficulty[8];
     bool                    mbIsOnline;
     CgsID                   maModelIds[8];
+    // Console +0xD8 (between maModelIds +0x98 and mau16CarColourIndex +0xF8): each online car's
+    // freeburn base deformation. Named by the console's own assert on its inlined reader
+    // ("mafOnlineDeformationAmount[ liOpponentIndex ] >= 0.0f"). Construct seeds it -1.0f,
+    // ModeManager::SetOnlineRaceCars copies the start event's per-player value into it, and
+    // RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby reads it for every grid car.
+    f32                     mafOnlineDeformationAmount[8];
     u16                     mau16CarColourIndex[8];
     u16                     mau16CarPaintFinishIndex[8];
     EPlayerTeam_Stub        maePlayerTeam[8];

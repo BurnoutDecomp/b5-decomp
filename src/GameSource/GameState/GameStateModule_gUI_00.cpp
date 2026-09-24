@@ -71,6 +71,12 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // [FX-FLOW NEW-EMMTAIL] GameStateToNetworkInterface::SetActiveRaceCarIndex
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // [FX-GS2 G10-D11] GetUsedCarsBitArray / GetRaceCar
 #include "rw/math/vpu/vector3_operation.h"                              // [FX-GS2 G10-D11] Magnitude (the player's speed)
+#include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h" // the case-17/18 arms
+#include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"     // TrainingManager::ForceUnpause (case 17)
+#include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"     // TakedownManager::ClearAllTakedowns (case 18)
+#include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"       // MugshotManager::OnRoundStart (case 18)
+#include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"       // PaybackManager::OnRoundStart (case 18)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"            // [net] witness lines (PC harness)
 
 namespace BrnGameState
 {
@@ -1746,40 +1752,55 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // X360 lines 239-245 Construct a LOCAL <1536,16> queue and Append THREE sources into it -- the
     // carry queue (+248384), the PreWorldInputBuffer's queue, and the InviteManager's (+2032) --
     // then Clear the carry queue; line 252 hands that local queue to ProcessGameEvents.
-    // REDUCED to the carry queue alone: the other two sources have no producer on this build
-    // (nothing creates a PreWorldInputBuffer, and the InviteManager's queue is never written), so
-    // the local queue would be a byte-for-byte copy of the carry queue. The Clear IS the
-    // console's, and it is what makes the queue a strict one-frame buffer.
-    ProcessGameEventsCarCustomizationBringUp(&mGameEventCarryQueue, lpActionQueue);
-    ProcessGameEventsPropHitBringUp(&mGameEventCarryQueue);
+    // The pre-world input buffer is staged every sub-step now (BrnGameModule re-Constructs it and
+    // runs BridgeNetworkToGameState into it before this pump), and its game-event queue is where
+    // the network posts the online-game events (17 start game, 18 start round, player
+    // added/removed, ...), so it is merged here in the console's position: after the carry queue.
+    // Every arm below walks the merged queue.
+    // REDUCED by one source: the InviteManager's queue is never written on this build (no
+    // invite manager runs), so appending it would add nothing.
+    CgsModule::VariableEventQueue<1536, 16> lGameEventQueue;
+    lGameEventQueue.Construct();
+    lGameEventQueue.Append(mGameEventCarryQueue);
+    if (mpPreWorldInputBuffer != 0)
+    {
+        mpPreWorldInputBuffer->LockForRead();
+        const GameStateModuleIO::PreWorldInputBuffer* lpcPreWorldInputBuffer = mpPreWorldInputBuffer;
+        lGameEventQueue.Append(*lpcPreWorldInputBuffer->GetGameEventQueue());
+        mpPreWorldInputBuffer->UnlockForRead();
+    }
+    mGameEventCarryQueue.Clear();
+
+    ProcessGameEventsCarCustomizationBringUp(&lGameEventQueue, lpActionQueue);
+    ProcessGameEventsPropHitBringUp(&lGameEventQueue);
     // â­ [tut-ticker] the dispatcher's CASE-113 arm, over the same merged queue in the same
     // walk position (the console's ProcessGameEvents handles every case in one pass; this
     // tree extracts one arm per function -- see the arm's banner in BrnGameStateModule.cpp).
     // MUST run before the Clear below, for the same reason the prop-hit arm does.
-    ProcessGameEventsTrainingRequestBringUp(&mGameEventCarryQueue);
+    ProcessGameEventsTrainingRequestBringUp(&lGameEventQueue);
     // â­ [H1 district wave] the dispatcher's CASE-115 arm (the HUD district marker's feed),
     // same walk, same must-run-before-the-Clear constraint; it posts onto the action queue
     // this function already holds the write lock for.
-    ProcessGameEventsWorldRegionBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsWorldRegionBringUp(&lGameEventQueue, lpActionQueue);
     // ⭐⭐⭐ [boost-ticker wave 2026-09-14] the dispatcher's EIGHT boost-ticker arms (cases
     // 64/67/68/69/70/72/73/74), same walk, same must-run-before-the-Clear constraint. They
     // post actions 107/108/171..176 onto the action queue this function already holds the
     // write lock for, and TranslateGameActionsToGuiEvents turns six of them into GUI events
     // 383..389 in the SAME sub-step -- which is why the hint strip beside the boost bar
     // updates on the frame the trick happens, not a frame later.
-    ProcessGameEventsBoostTickerBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsBoostTickerBringUp(&lGameEventQueue, lpActionQueue);
     // ⭐⭐⭐ [boost-wave2 2026-09-14] the dispatcher's CASE-31 arm (the rival-impact family),
     // same walk, same must-run-before-the-Clear constraint. It also relays crash-ending event42
     // to action17. The impact arm posts actions53/54 +48 onto the
     // action queue this function already holds the write lock for; RaceCarEntityModule::
     // HandleGameActions turns 53 into the OnPlayerAttacksRival boost award in the SAME sub-step.
-    ProcessGameEventsVehicleImpactBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsVehicleImpactBringUp(&lGameEventQueue, lpActionQueue);
     // â­ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
     // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
     // 86/87/88 onto the action queue this function already holds the write lock for --
     // CheckGameActions (BrnGameModule, the console's DoUpdate_GameStatePreWorld tail) reads
     // them back this same sub-step and stops/starts the sim timer.
-    ProcessGameEventsPauseBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsPauseBringUp(&lGameEventQueue, lpActionQueue);
     // [pause-stats wave] the dispatcher's CASE-79 arm -- the case-80 arm's immediate neighbour
     // and the other half of the same GUI latch (CrashNavDriverDetails::UpdateInitSetup posts 435
     // and 437 back to back, so both events are in the queue on the same frame). Same walk, same
@@ -1790,21 +1811,22 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // order: the console runs ONE walk over the merged queue, so it answers events in ARRIVAL
     // order, and 435 is posted before 437. This tree runs one walk per arm, so arm order is what
     // sets action order.
-    ProcessGameEventsGameStatsRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
-    ProcessGameEventsEventStateRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsGameStatsRequestBringUp(&lGameEventQueue, lpActionQueue);
+    ProcessGameEventsEventStateRequestBringUp(&lGameEventQueue, lpActionQueue);
     // [driver-details pause wave] the dispatcher's CASE-80 arm (the rank-progress query the
     // START-button pause screen's licence card waits on), same walk, same
     // must-run-before-the-Clear constraint; it posts action 181 onto the action queue this
     // function already holds the write lock for, and TranslateGameActionsToGuiEvents turns that
     // into GUI event 438 in the SAME sub-step.
-    ProcessGameEventsRankInfoRequestBringUp(&mGameEventCarryQueue, lpActionQueue);
+    ProcessGameEventsRankInfoRequestBringUp(&lGameEventQueue, lpActionQueue);
     // â­â­ [D4 stuntrace WAVE D] the dispatcher's CASE-20 arm (E_EVENT_PLAYER_ACCEPTED_MODE ->
     // ModeManager::StartGameMode) and the INTRO/RESULTS exit arms (cases 24/25/26/27). Same walk,
     // same must-run-before-the-Clear constraint as every arm above; the case-20 arm needs the
     // OutputBuffer because ModeManager::StartGameMode takes it (console r27).
-    ProcessGameEventsStartGameModeBringUp(&mGameEventCarryQueue, mpOutputBuffer);
-    ProcessGameEventsModeIntroBringUp(&mGameEventCarryQueue);
-    mGameEventCarryQueue.Clear();
+    ProcessGameEventsStartGameModeBringUp(&lGameEventQueue, mpOutputBuffer);
+    ProcessGameEventsModeIntroBringUp(&lGameEventQueue);
+    // The dispatcher's cases 17 and 18 (the online game / round start), same walk.
+    ProcessGameEventsNetworkGameBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);
 
     // ---- 1a) THE TAKEDOWN FEED (console: the `if (!IsSimPaused)` block between #68 and #86) --
     // ⭐⭐⭐ [road-rage wave, agent C] GameStateModule::ProcessTakedownEvents @0x8238FC50. X360
@@ -2602,6 +2624,318 @@ void GameStateModule::ProcessGameEventsModeIntroBringUp(
 
         default:
             break;
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
+// ProcessGameEventsNetworkGameBringUp -- ProcessGameEvents' CASE 17 (E_EVENT_START_NETWORK_GAME)
+// and CASE 18 (E_EVENT_START_NETWORK_ROUND) arms, one walk over the merged queue.
+//
+// The network's StateManager posts 17 (the lobby roster, mode, rounds, seed and the start flags)
+// and, unless the start is a refresh, 18 straight after it. Case 17 latches the roster in the
+// NetworkRoundManager; case 18 starts the mode the latched event names.
+//
+// CASE 17, in the console's order:
+//   assert(event)
+//   refresh (+0x10 mbRefreshOnly):
+//       assert(IsOnlineFreeBurnLobby(event mode))
+//       NetworkRoundManager::NetworkGameStarted(event); NetworkRoundManager::OnRoundStart()
+//   otherwise:
+//       lobby mode only (15/16):
+//           assert(miNumRaceCars > 0)
+//           find the local player's roster slot (maNetworkPlayerID[i] == mLocalNetworkPlayerID)
+//               -> OnSpecialEventPlayerCarChange(maCarIds[i], wheel 0, queue, true)
+//           a running ONLINE mode keeps going unless the event forces the lobby (+0xFA):
+//               -> the arm ends here, nothing latched
+//           TrainingManager::ForceUnpause(queue)
+//           starting because a player joined (+0xF8):
+//               a junkyard is open -> CarSelectManager::ForceExitJunkyard(queue, false)
+//               post action 235 (one uninitialised byte)
+//       the module's seed word (gsm +0x32DAC) = muRandomSeedForGame
+//       NetworkRoundManager::NetworkGameStarted(event)
+//       OnlineFlybyManager::SetRandomNetworkGameSeed(seed)          -- PARKED, see below
+//
+// CASE 18, in the console's order (gates read the LATCHED event, not the incoming one):
+//   latched mode is a lobby mode and a lobby mode is running and the latched event does not
+//   force the lobby -> skip.   latched mode is a lobby mode and no round is left
+//   (GetTotalRounds() - 1 == GetCurrentRound()) -> skip.
+//   ModeManager::CancelFreeburnChallenge(queue)
+//   assert(event); NetworkRoundManager::NetworkRoundStarted(event)
+//   ModeManager::ClearModeStartRegion(); post action 44 {0xFFFF, 0}
+//   MugshotManager::OnRoundStart; PaybackManager::OnRoundStart; NetworkRoundManager::OnRoundStart
+//   TakedownManager::ClearAllTakedowns(queue)
+//   StartGameModeParams::Construct(latched mode, the player's position, mechanism 0)
+//   ModeManager::StartGameMode(output, &params)
+//   NetworkRoundManager::PreparedForMode()
+//   latched mode is not a lobby mode -> controller state INACTIVE_GAME_MODE (2)
+//
+// [X] PARKED: OnlineFlybyManager::SetRandomNetworkGameSeed. The console seeds the online flyby's
+// CgsNumeric::Random (gsm +0x2D8E0 +0x260) with the game seed. The OnlineFlybyManager is not
+// embedded in this tree's GameStateModule (its TU is not on the build), so there is no object to
+// seed; the call is written out and unarmed:
+//     mOnlineFlybyManager.SetRandomNetworkGameSeed(lpEvent->muRandomSeedForGame);
+// It feeds only the pre-race flyby presentation. DELETE-WHEN the manager is embedded.
+// ============================================================================
+void GameStateModule::ProcessGameEventsNetworkGameBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue*            lpActionQueue,
+        GameStateModuleIO::OutputBuffer*               lpOutputBuffer)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0 || lpOutputBuffer == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_START_NETWORK_GAME)
+        {
+            const GameStateModuleIO::StartNetworkGameEvent* lpStartEvent =
+                reinterpret_cast<const GameStateModuleIO::StartNetworkGameEvent*>(lpEvent);
+            CGS_ASSERT(lpStartEvent, "lpStartNetworkGameEvent");
+
+            if (lpStartEvent->mbRefreshOnly)
+            {
+                CGS_ASSERT(GameStateModuleIO::IsOnlineFreeBurnLobby(lpStartEvent->meGameMode),
+                           "GsmIO::IsOnlineFreeBurnLobby(lpStartNetworkGameEvent->meGameMode)");
+                mNetworkRoundManager.NetworkGameStarted(lpStartEvent);
+                mNetworkRoundManager.OnRoundStart();
+
+                BrnNetHarnessPC::Witness("game", "start refresh mode=%d cars=%d",
+                                         static_cast<s32>(lpStartEvent->meGameMode),
+                                         lpStartEvent->miNumRaceCars);
+            }
+            else
+            {
+                bool lbLatch = true;
+                if (GameStateModuleIO::IsOnlineFreeBurnLobby(lpStartEvent->meGameMode))
+                {
+                    CGS_ASSERT(lpStartEvent->miNumRaceCars > 0,
+                               "lpStartNetworkGameEvent->miNumRaceCars > 0");
+
+                    for (s32 liRaceCar = 0; liRaceCar < lpStartEvent->miNumRaceCars; ++liRaceCar)
+                    {
+                        if (lpStartEvent->maNetworkPlayerID[liRaceCar] == lpStartEvent->mLocalNetworkPlayerID)
+                        {
+                            OnSpecialEventPlayerCarChange(lpStartEvent->maCarIds[liRaceCar], 0,
+                                                          lpActionQueue, true);
+                            break;
+                        }
+                    }
+
+                    const GameMode* lpCurrentGameMode = mModeManager.GetCurrentGameMode();
+                    const bool lbOnlineModeRunning =
+                        (lpCurrentGameMode != 0) ? lpCurrentGameMode->IsOnline() : false;
+                    if (lbOnlineModeRunning && !lpStartEvent->mbForceStartFreeburnLobby)
+                    {
+                        lbLatch = false;
+                    }
+                    else
+                    {
+                        mpTrainingManager->ForceUnpause(lpActionQueue);
+
+                        if (lpStartEvent->mbIsStartingGameAfterPlayerJoin)
+                        {
+                            if (mCarSelectManager.GetJunkyardId() != 0)
+                            {
+                                mCarSelectManager.ForceExitJunkyard(lpActionQueue, false);
+                            }
+                            // The console posts one uninitialised stack byte; the record carries
+                            // no payload.
+                            GameStateModuleIO::GameAction<GameStateModuleIO::E_ACTION_START_GAME_THROUGH_PLAYER_JOIN>
+                                lStartThroughJoinAction;
+                            lpActionQueue->AddEvent(
+                                reinterpret_cast<const CgsModule::Event*>(&lStartThroughJoinAction),
+                                GameStateModuleIO::E_ACTION_START_GAME_THROUGH_PLAYER_JOIN, 1);
+                        }
+                    }
+                }
+
+                if (lbLatch)
+                {
+                    muNetworkGameRandomSeed = lpStartEvent->muRandomSeedForGame;
+                    mNetworkRoundManager.NetworkGameStarted(lpStartEvent);
+
+                    BrnNetHarnessPC::Witness("game", "start latched mode=%d cars=%d rounds=%d afterJoin=%d force=%d",
+                                             static_cast<s32>(lpStartEvent->meGameMode),
+                                             lpStartEvent->miNumRaceCars, lpStartEvent->miNumRounds,
+                                             lpStartEvent->mbIsStartingGameAfterPlayerJoin ? 1 : 0,
+                                             lpStartEvent->mbForceStartFreeburnLobby ? 1 : 0);
+                }
+                else
+                {
+                    BrnNetHarnessPC::Witness("game", "start ignored (online mode running, not forced) mode=%d",
+                                             static_cast<s32>(lpStartEvent->meGameMode));
+                }
+            }
+        }
+        else if (liType == GameStateModuleIO::E_EVENT_ONLINE_PLAYER_ADDED)
+        {
+            // CASE 127. In a lobby mode: register the joining player with the scoring system
+            // (once) and post action 219 so the world spawns its car; a remote player also goes
+            // to the challenge manager, the local player instead queues the first online training
+            // tip it has not seen (63, 64, 65). Then the player's burnout-skillz record.
+            const GameStateModuleIO::OnlinePlayerAddedEvent* lpAddedEvent =
+                reinterpret_cast<const GameStateModuleIO::OnlinePlayerAddedEvent*>(lpEvent);
+            CGS_ASSERT(lpAddedEvent, "lpPlayerAddedEvent");
+
+            if (GameStateModuleIO::IsOnlineFreeBurnLobby(mModeManager.GetCurrentGameModeType()))
+            {
+                ScoringSystem* lpScoringSystem = mModeManager.GetScoringSystem();
+                if (lpScoringSystem->GetCarData(lpAddedEvent->mNetworkPlayerID) == 0)
+                {
+                    GameStateModuleIO::OnlinePlayerAddedAction lAddedAction;
+                    lAddedAction.SetPlayerScoringIndex(
+                        lpScoringSystem->AddPlayer(lpAddedEvent->mNetworkPlayerID, lpAddedEvent->meTeam));
+                    lAddedAction.mModelID                = lpAddedEvent->mModelID;
+                    lAddedAction.mWheelID                = lpAddedEvent->mWheelID;
+                    lAddedAction.meTeam                  = lpAddedEvent->meTeam;
+                    lAddedAction.mAddedPlayerNetworkID   = lpAddedEvent->mNetworkPlayerID;
+                    lAddedAction.mfBaseDeformationAmount = lpAddedEvent->mf18;
+                    lAddedAction.mu16CarColourIndex      = lpAddedEvent->mu16CarColourIndex;
+                    lAddedAction.mu16CarPaintFinishIndex = lpAddedEvent->mu16CarPaintFinishIndex;
+                    lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAddedAction),
+                                            GameStateModuleIO::E_ACTION_ONLINE_PLAYER_ADDED,
+                                            sizeof(lAddedAction));
+                    // The console also prints the added car's name when the message filter's
+                    // bit 0 is set -- a developer log line with no state effect; not reproduced.
+                    BrnNetHarnessPC::Witness("game", "player added -> action 219 net=%d scoring=%d local=%d",
+                                             static_cast<s32>(lpAddedEvent->mNetworkPlayerID),
+                                             static_cast<s32>(lAddedAction.mePlayerScoringIndex),
+                                             lpAddedEvent->mbIsLocalPlayer ? 1 : 0);
+                }
+
+                mpPreWorldInputBuffer->LockForRead();
+                const GameStateModuleIO::PreWorldInputBuffer* lpcPreWorldInputBuffer = mpPreWorldInputBuffer;
+                const bool lbLocalPlayerIsHost =
+                    lpcPreWorldInputBuffer->GetPlayerStatusInterface()->GetLocalPlayerIsHost();
+                mpPreWorldInputBuffer->UnlockForRead();
+
+                if (!lpAddedEvent->mbIsLocalPlayer)
+                {
+                    mModeManager.NetworkPlayerAdded(lpAddedEvent->mNetworkPlayerID, lpActionQueue,
+                                                    lbLocalPlayerIsHost);
+                }
+                else if (!lbLocalPlayerIsHost)
+                {
+                    BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
+                    BrnProgression::ETrainingType leTip = static_cast<BrnProgression::ETrainingType>(0x3F);
+                    bool lbRequest = true;
+                    if (lpProfile->HasPlayerSeenTrainingType(leTip))
+                    {
+                        leTip = static_cast<BrnProgression::ETrainingType>(0x40);
+                        if (lpProfile->HasPlayerSeenTrainingType(leTip))
+                        {
+                            leTip = static_cast<BrnProgression::ETrainingType>(0x41);
+                            lbRequest = !lpProfile->HasPlayerSeenTrainingType(leTip);
+                        }
+                    }
+                    if (lbRequest)
+                    {
+                        mpTrainingManager->RequestTraining(leTip);
+                    }
+                }
+            }
+
+            mModeManager.GetScoringSystem()->AddPlayerBurnoutSkillz(lpAddedEvent->mNetworkPlayerID,
+                                                                    mLocalPlayerNetworkID);
+        }
+        else if (liType == GameStateModuleIO::E_EVENT_ONLINE_PLAYER_FINALISED)
+        {
+            // CASE 128. In a lobby mode, a REMOTE player's finalise goes to the challenge manager.
+            const GameStateModuleIO::OnlinePlayerFinalisedEvent* lpFinalisedEvent =
+                reinterpret_cast<const GameStateModuleIO::OnlinePlayerFinalisedEvent*>(lpEvent);
+            CGS_ASSERT(lpFinalisedEvent, "lpPlayerFinalisedEvent");
+
+            if (GameStateModuleIO::IsOnlineFreeBurnLobby(mModeManager.GetCurrentGameModeType()) &&
+                lpFinalisedEvent->mNetworkPlayerID != mLocalPlayerNetworkID)
+            {
+                mpPreWorldInputBuffer->LockForRead();
+                const GameStateModuleIO::PreWorldInputBuffer* lpcPreWorldInputBuffer = mpPreWorldInputBuffer;
+                const bool lbLocalPlayerIsHost =
+                    lpcPreWorldInputBuffer->GetPlayerStatusInterface()->GetLocalPlayerIsHost();
+                mpPreWorldInputBuffer->UnlockForRead();
+                mModeManager.NetworkPlayerFinalised(lpFinalisedEvent->mNetworkPlayerID, lpActionQueue,
+                                                    lbLocalPlayerIsHost);
+            }
+        }
+        else if (liType == GameStateModuleIO::E_EVENT_START_NETWORK_ROUND)
+        {
+            const GameStateModuleIO::StartNetworkRoundEvent* lpRoundEvent =
+                reinterpret_cast<const GameStateModuleIO::StartNetworkRoundEvent*>(lpEvent);
+            const GameStateModuleIO::StartNetworkGameEvent* lpLatchedEvent =
+                mNetworkRoundManager.GetNetworkGameEvent();
+            const GameStateModuleIO::EGameModeType leLatchedMode = lpLatchedEvent->meGameMode;
+            const bool lbLatchedLobby = GameStateModuleIO::IsOnlineFreeBurnLobby(leLatchedMode);
+
+            bool lbStart = true;
+            if (lbLatchedLobby &&
+                GameStateModuleIO::IsOnlineFreeBurnLobby(mModeManager.GetCurrentGameModeType()) &&
+                !lpLatchedEvent->mbForceStartFreeburnLobby)
+            {
+                lbStart = false;
+            }
+            if (lbStart && lbLatchedLobby &&
+                mNetworkRoundManager.GetTotalRounds() - 1 == mNetworkRoundManager.GetCurrentRound())
+            {
+                lbStart = false;
+            }
+
+            if (!lbStart)
+            {
+                BrnNetHarnessPC::Witness("game", "round start skipped mode=%d current=%d rounds=%d/%d",
+                                         static_cast<s32>(leLatchedMode),
+                                         static_cast<s32>(mModeManager.GetCurrentGameModeType()),
+                                         mNetworkRoundManager.GetCurrentRound(),
+                                         mNetworkRoundManager.GetTotalRounds());
+            }
+            else
+            {
+                mModeManager.CancelFreeburnChallenge(lpActionQueue);
+
+                CGS_ASSERT(lpRoundEvent, "lpStartNetworkRoundEvent");
+                mNetworkRoundManager.NetworkRoundStarted(lpRoundEvent);
+
+                mModeManager.ClearModeStartRegion();
+                GameStateModuleIO::SetInModeStartRegionAction lStartRegionAction;
+                lStartRegionAction.mu16StartLocationId = 0xFFFFu;   // file-scope invalid landmark index
+                lStartRegionAction.mbInStartRegion     = 0;
+                lStartRegionAction.maPad03[0]          = 0;
+                lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStartRegionAction),
+                                        GameStateModuleIO::E_ACTION_SET_IN_MODE_START_REGION,
+                                        sizeof(lStartRegionAction));
+
+                mpMugshotManager->OnRoundStart();
+                mpPaybackManager->OnRoundStart();
+                mNetworkRoundManager.OnRoundStart();
+                mpTakedownManager->ClearAllTakedowns(lpActionQueue);
+
+                StartGameModeParams lStartGameModeParams;
+                const Vector3 lPlayerPosition = mLastActiveRaceCarInterface.GetPlayerPosition();
+                lStartGameModeParams.Construct(leLatchedMode, lPlayerPosition,
+                                               E_GAMEMODESTARTMECHANISM_DEFAULT);
+
+                BrnNetHarnessPC::Witness("game", "round start -> StartGameMode mode=%d cars=%d round=%d/%d",
+                                         static_cast<s32>(leLatchedMode), lpLatchedEvent->miNumRaceCars,
+                                         mNetworkRoundManager.GetCurrentRound(),
+                                         mNetworkRoundManager.GetTotalRounds());
+
+                mModeManager.StartGameMode(lpOutputBuffer, &lStartGameModeParams);
+                mNetworkRoundManager.PreparedForMode();
+
+                if (!lbLatchedLobby)
+                {
+                    SetInActiveGameModeState();
+                }
+            }
         }
 
         const CgsModule::Event* lpCurrent = lpEvent;

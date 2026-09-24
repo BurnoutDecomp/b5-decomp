@@ -33,6 +33,12 @@
 #include "SharedClasses/World/BrnWorldRegion.h"                           // BrnWorld::E_DISTRICT_INVALID
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"  // GetBoostAmount / GetMaxBoost
 #include "rw/math/fpu/scalar_operation.h"                                 // rw::math::fpu::IsZero
+#include "rw/math/vpu/vector3_operation.h"                                // rw::math::vpu::Add (the grid look-at target)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                 // BrnDirector::Camera::Utils::CreateLookAt
+#include "SharedClasses/DataLists/VehicleList.h"                          // VehicleList::GetVehicleIndex / GetVehicleData
+#include "SharedClasses/DataLists/VehicleListEntry.h"                     // VehicleListEntry::GetCarType / GetLiveryType
+#include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                // GlobalColourPalette (the colour assert)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"            // [net] witness lines (PC harness)
 
 namespace BrnWorld
 {
@@ -193,6 +199,12 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
             &lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
     }
     mbIsInGameMode = true;
+    // The two stores/asserts the console runs straight after the in-game byte: the rival range
+    // loop's gate is re-armed (action 34, START_PLAYING_MODE, sets it again), and a network roster
+    // only on an online mode.
+    mbModeStartedPlaying = false;
+    CGS_ASSERT(lpGameModeParams->mbIsOnline || lpGameModeParams->miNumNetworkPlayers == 0,
+               "lpGameModeParams->mbIsOnline || (lpGameModeParams->miNumNetworkPlayers == 0 )");
 
     if (CgsDev::Log::gpDebugPrint != 0)
     {
@@ -361,8 +373,77 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
     // mbIsInGameMode is already true above, so SetUpPlayerCarForMode's `SetInGameMode` copy
     // reads the armed value.
     // ========================================================================================
-    if (meGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY &&
-        meGameModeType != BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
+    // THE FORK, as the console has it. The whole grid block is skipped only when the record says
+    // the game is moving between the two lobby modes (+0x8D0) AND the mode is one of them; then
+    // the params' mbIsOnline byte (+0x94) picks the online roster over SetupOpponents.
+    const bool lbMovingBetweenLobbyModes =
+        lpPFMAction->IsMovingBetweenOnlineLobbyModes() &&
+        BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(lpGameModeParams->GetGameModeType());
+
+    if (!lbMovingBetweenLobbyModes && lpGameModeParams->mbIsOnline)
+    {
+        const bool lbIsFreeburnLobby =
+            BrnGameState::GameStateModuleIO::IsOnlineFreeBurnLobby(lpGameModeParams->GetGameModeType());
+
+        // The local car's pose and model, read before anything is removed.
+        const Vector3 lLocalPosition  = GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetPosition();
+        const Vector3 lLocalDirection = GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetDirection();
+        const EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex = mePlayerActiveRaceCarIndex;
+        const CgsID lLocalCarModelId =
+            GetActiveRaceCar(leLocalPlayerActiveRaceCarIndex)->GetGlobalRaceCar()->GetModelId();
+
+        // Respawn the local car everywhere but the lobby; in the lobby only when the roster names
+        // a different car for it. The console ORs in one more byte, module +0x17D06 == the
+        // RaceCarEntityModuleDebugComponent's +0x16 toggle (its Construct zeroes it and only the
+        // debug menu writes it); the component is not embedded on this build, so the byte is its
+        // constructed false.
+        const bool kbDebugComponentLobbyToggle = false;
+        bool lbRespawnLocalCar = !lbIsFreeburnLobby || kbDebugComponentLobbyToggle;
+        s32  liLocalPlayerGridPosition = -1;
+        const s32 liGridCount = static_cast<s32>(lpGameModeParams->miNumNetworkPlayers) + 1;
+        for (s32 liGrid = 0; liGrid < liGridCount; ++liGrid)
+        {
+            if (lpGameModeParams->maNetworkPlayerID[liGrid] == lpGameModeParams->mLocalNetworkPlayerID)
+            {
+                if (!lbRespawnLocalCar)
+                {
+                    lbRespawnLocalCar = (lLocalCarModelId != lpGameModeParams->maModelIds[liGrid]);
+                }
+                liLocalPlayerGridPosition = liGrid;
+                break;
+            }
+        }
+
+        RemoveAllRaceCars(lpOutput, lbRespawnLocalCar);
+
+        CGS_ASSERT(liLocalPlayerGridPosition > -1 && liLocalPlayerGridPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                   "( liLocalPlayerGridPosition > -1 ) && ( liLocalPlayerGridPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS )");
+
+        BrnNetHarnessPC::Witness("world", "online grid mode=%d cars=%d lobby=%d localGrid=%d respawnLocal=%d",
+                                 static_cast<s32>(lpGameModeParams->GetGameModeType()), liGridCount,
+                                 lbIsFreeburnLobby ? 1 : 0, liLocalPlayerGridPosition,
+                                 lbRespawnLocalCar ? 1 : 0);
+
+        AddRaceCarToStartingGridOrFreeburnLobby(lpPFMAction, lpOutput->GetRaceCarAIInterface(),
+                                                lpGameModeParams, lbIsFreeburnLobby, lbRespawnLocalCar,
+                                                liLocalPlayerGridPosition, leLocalPlayerActiveRaceCarIndex,
+                                                lLocalPosition, lLocalDirection);
+
+        for (s32 liGrid = 0; liGrid < liGridCount; ++liGrid)
+        {
+            if (liGrid == liLocalPlayerGridPosition)
+            {
+                continue;
+            }
+            CGS_ASSERT(liGrid > -1 && liGrid < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                       "( liGridPosition > -1 ) && ( liGridPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS )");
+            AddRaceCarToStartingGridOrFreeburnLobby(lpPFMAction, lpOutput->GetRaceCarAIInterface(),
+                                                    lpGameModeParams, lbIsFreeburnLobby, lbRespawnLocalCar,
+                                                    liGrid, leLocalPlayerActiveRaceCarIndex,
+                                                    lLocalPosition, lLocalDirection);
+        }
+    }
+    else if (!lbMovingBetweenLobbyModes)
     {
         SetupOpponents(lpGameModeParams, lpOutput);
 
@@ -851,6 +932,316 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
         static_cast<BrnGameState::GameStateModuleIO::EPlayerScoringIndex>(
             lpGameModeParams->miNumRivals),
         mePlayerActiveRaceCarIndex);
+}
+
+
+// ============================================================================================
+// RemoveAllRaceCars -- the online roster's clean slate.
+//
+//   for every global slot (35):
+//       [BrnRaceCar.h:547 type assert]  if (muType != INACTIVE)            == IsInWorld()
+//       [BrnRaceCar.h:577 type assert]      if (muType != PLAYER || lbRemovePlayerCar)
+//                                               RemoveRaceCar(slot, lpOutput);
+// Unlike RemoveRivals it removes NETWORK cars too: every roster car is re-added by the caller.
+// ============================================================================================
+void RaceCarEntityModule::RemoveAllRaceCars(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                                            bool lbRemovePlayerCar)
+{
+    for (EGlobalRaceCarIndex leGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+         leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
+         leGlobalRaceCarIndex++)
+    {
+        if (GetGlobalRaceCar(leGlobalRaceCarIndex)->IsInWorld())
+        {
+            if (!GetGlobalRaceCar(leGlobalRaceCarIndex)->IsPlayerDriven() || lbRemovePlayerCar)
+            {
+                RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
+            }
+        }
+    }
+}
+
+
+// ============================================================================================
+// AddRaceCarToStartingGridOrFreeburnLobby -- seat one roster car.
+//
+// The console, in order:
+//   1. the free-burn lobby spawn table, eight positions built on the stack (below; flt rodata);
+//   2. assert the local player's active slot is a real slot;
+//   3. lbIsLocal = (maNetworkPlayerID[grid] == mLocalNetworkPlayerID);
+//   4. the transform: off-lobby, the grid slot's start position/direction; in the lobby, the
+//      local car's own position (the spawn table only under the debug component's toggle, see
+//      the caller) or, for a network car, the ORIGIN (a zero splat) -- the network car's first
+//      update snaps it to its owner's pose -- looking along the local car's direction. Either way
+//      CreateLookAt(position, position + direction);
+//   5. the local car on an online mode: boost strategy from the vehicle-list entry's car type
+//      (0 -> B2, 1 -> B3, 2 -> B5, else the "Could not get the correct car type" assert) and
+//      HandleCarStatsUpdate from its gameplay bytes;
+//   6. keep the local car (clear the latched boost/accelerate/brake pad state) or SpawnRaceCar
+//      (type PLAYER for the local car, NETWORK for the rest) + AttachActiveRaceCar (the local car
+//      back into its own slot, the rest into any free slot); a network car in the lobby starts
+//      CONNECTING with no driver controls received yet;
+//   7. the grid slot's online deformation -> the car's base deformation pair (type -1 for none,
+//      1 otherwise), mirrored into the module for the local car;
+//   8. AddCarToCurrentModeEvent {global slot, grid, first checkpoint's AI section or 0x7FFF};
+//   9. colour: team colour (flag bit 36 on a car whose livery type is 0 or 1) or the roster's
+//      colour, then the roster's palette, both range-asserted;
+//  10. the scoring map, the disconnected flag, and on online modes 11/13 the local car's
+//      team boost (segments / amount / infinite).
+// ============================================================================================
+namespace
+{
+    // The free-burn lobby spawn table (rodata floats, big-endian bit patterns in brackets).
+    const Vector3 KAV_FREEBURN_LOBBY_SPAWN_POSITIONS[E_ACTIVE_RACE_CAR_INDEX_COUNT] =
+    {
+        { 3008.169921875f,  -1.159999966621399f, -1874.300048828125f,  0.0f },   // [453C02B8 BF947AE1 C4EA499A]
+        { 3172.3798828125f, -3.359999895095825f, -2006.1700439453125f, 0.0f },   // [45464614 C0570A3D C4FAC571]
+        { 3248.090087890625f, -3.0f,             -1900.8699951171875f, 0.0f },   // [454B0171 C0400000 C4ED9BD7]
+        { 3053.64990234375f, -0.9399999976158142f, -1764.550048828125f, 0.0f },  // [453EDA66 BF70A3D7 C4DC919A]
+        { 3014.389892578125f, -4.130000114440918f, -2100.0400390625f,  0.0f },   // [453C663D C08428F6 C50340A4]
+        { 3103.840087890625f, -2.140000104904175f, -1906.3599853515625f, 0.0f }, // [4541FD71 C008F5C3 C4EE4B85]
+        { 3007.97607421875f, -2.490000009536743f, -1945.1099853515625f, 0.0f },  // [453BFF9E C01F5C29 C4F32385]
+        { 3057.06005859375f, -3.6500000953674316f, -1990.1800537109375f, 0.0f }, // [453F10F6 C069999A C4F8C5C3]
+    };
+
+    // Team -> colour index (rodata u16 table): NONE 6, RED 0, BLUE 1.
+    const u16 KAU16_TEAM_COLOUR_INDEX[3] = { 6u, 0u, 1u };
+
+    // muFlags bit 36: team colours.
+    const u64 KX_FLAG_USE_TEAM_COLOURS = 1ull << 36;
+
+    // The "no AI section" sentinel when the params carry no checkpoint.
+    const u16 KU_NO_START_AI_SECTION = 0x7FFFu;
+}
+
+void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
+        const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction,
+        BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+        const BrnGameState::GameModeParams* lpGameModeParams,
+        bool lbIsFreeburnLobby,
+        bool lbRespawnLocalCar,
+        s32 liGridPosition,
+        EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
+        Vector3 lLocalPosition,
+        Vector3 lLocalDirection)
+{
+    CGS_ASSERT(leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                   leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "( leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+
+    const BrnNetwork::NetworkPlayerID lGridNetworkPlayerID = lpGameModeParams->maNetworkPlayerID[liGridPosition];
+    const bool lbIsLocal = (lGridNetworkPlayerID == lpGameModeParams->mLocalNetworkPlayerID);
+
+    // ---- 4. the transform -------------------------------------------------------------------
+    Vector3 lPosition;
+    Vector3 lDirection;
+    if (!lbIsFreeburnLobby)
+    {
+        lPosition  = lpGameModeParams->GetStartPosition(liGridPosition);
+        lDirection = lpGameModeParams->GetStartDirection(liGridPosition);
+    }
+    else
+    {
+        if (lbIsLocal)
+        {
+            lPosition = lLocalPosition;
+            // Module +0x17D06, the debug component's toggle -- constructed false, see the caller.
+            const bool kbDebugComponentLobbyToggle = false;
+            if (kbDebugComponentLobbyToggle)
+            {
+                lPosition = KAV_FREEBURN_LOBBY_SPAWN_POSITIONS[liGridPosition];
+            }
+        }
+        else
+        {
+            lPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+        }
+        lDirection = lLocalDirection;
+    }
+
+    const CgsID lModelId = lpGameModeParams->maModelIds[liGridPosition];
+    const Matrix44Affine lTransform =
+        BrnDirector::Camera::Utils::CreateLookAt(lPosition, rw::math::vpu::Add(lPosition, lDirection));
+
+    // ---- 5. the local car's boost strategy + stats -----------------------------------------
+    ERaceCarType leRaceCarType = E_RACE_CAR_TYPE_NETWORK;
+    if (lbIsLocal)
+    {
+        leRaceCarType = E_RACE_CAR_TYPE_PLAYER;
+        if (mbIsInOnlineGameMode)
+        {
+            const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lModelId);
+            const BrnResource::VehicleListEntry* lpListEntry =
+                (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
+            CGS_ASSERT(lpListEntry != 0, "lpListEntry != NULL");
+
+            const u8 luCarType = lpListEntry->GetCarType();
+            if (luCarType == 0)
+            {
+                mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT2);
+            }
+            else if (luCarType == 1)
+            {
+                mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT3);
+            }
+            else if (luCarType < 3)
+            {
+                mBoostManager.SetBoostStrategy(BoostManager::E_BOOSTSTRATEGY_BURNOUT5);
+            }
+            else
+            {
+                // The console streams the type after the text; CGS_ASSERT forwards the literal.
+                CGS_ASSERT(false, "Could not get the correct car type: ");
+            }
+
+            // The entry's gameplay block (+0x90); the two stats bytes are +0x98 / +0x9A, the same
+            // pair HandleGameActions' car-select-finished arm hands to HandleCarStatsUpdate.
+            const u8* lpcEntryBytes = reinterpret_cast<const u8*>(lpListEntry);
+            CGS_ASSERT(lpcEntryBytes + 0x90 != 0, "lpVehicleListEntryGamePlayData");
+            HandleCarStatsUpdate(static_cast<BrnResource::ECarType>(luCarType),
+                                 static_cast<s32>(lpcEntryBytes[0x98]),
+                                 static_cast<s32>(lpcEntryBytes[0x9A]));
+        }
+    }
+
+    // ---- 6. keep the local car, or spawn + attach -------------------------------------------
+    EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    RaceCar*            lpRaceCar            = 0;
+    if (!lbRespawnLocalCar && lbIsLocal)
+    {
+        mPlayerVehicleControls.mbBoost        = false;
+        mPlayerVehicleControls.mfAcceleration = 0.0f;
+        mPlayerVehicleControls.mfBraking      = 0.0f;
+        leActiveRaceCarIndex = mePlayerActiveRaceCarIndex;
+        lpRaceCar            = GetPlayerRaceCar();
+    }
+    else
+    {
+        const EGlobalRaceCarIndex leGlobalRaceCarIndex =
+            SpawnRaceCar(lpRaceCarAIInterface, lTransform, leRaceCarType, lModelId, false,
+                         0 /* lWheelModelId: resolved from the model */,
+                         0 /* lpRivalId: none */,
+                         -1 /* liOpponentIndex */);
+        lpRaceCar = GetGlobalRaceCar(leGlobalRaceCarIndex);
+        AttachActiveRaceCar(lpRaceCar, lbIsLocal ? leLocalPlayerActiveRaceCarIndex
+                                                 : E_ACTIVE_RACE_CAR_INDEX_INVALID);
+        leActiveRaceCarIndex = lpRaceCar->GetActiveRaceCarIndex();
+
+        if (lbIsFreeburnLobby && !lbIsLocal)
+        {
+            ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
+            lpActiveRaceCar->meOnlineState                   = ActiveRaceCar::E_ONLINE_STATE_CONNECTING;
+            lpActiveRaceCar->mbReceivedNetworkDriverControls = false;
+        }
+    }
+
+    // ---- 7. the base deformation pair -------------------------------------------------------
+    // GameModeParams' inlined reader asserts `>= 0.0f` (the branch is taken on unordered too,
+    // so a NaN does not fire).
+    CGS_ASSERT(!(lpGameModeParams->mafOnlineDeformationAmount[liGridPosition] < 0.0f),
+               "mafOnlineDeformationAmount[ liOpponentIndex ] >= 0.0f");
+    const f32 lfDeformAmount = lpGameModeParams->mafOnlineDeformationAmount[liGridPosition];
+    const s32 liDeformType   = (lfDeformAmount == 0.0f) ? -1 : 1;
+    GetActiveRaceCar(leActiveRaceCarIndex)->mfBaseDeformAmount = lfDeformAmount;
+    GetActiveRaceCar(leActiveRaceCarIndex)->meBaseDeformationType =
+        static_cast<BrnPhysics::Deformation::DeformationResetType>(liDeformType);
+
+    // ---- 8. "this car is in the current mode" -----------------------------------------------
+    u16 lu16StartAISectionIndex = KU_NO_START_AI_SECTION;
+    if (lpGameModeParams->GetCheckpointCount() > 0)
+    {
+        lu16StartAISectionIndex = lpGameModeParams->GetCheckpointData(0)->GetAISectionIndex();
+    }
+    BrnAI::AIModuleIO::AddCarToCurrentModeEvent lAddCarEvent;
+    lAddCarEvent.meGlobalRaceCarIndex     = lpRaceCar->GetGlobalRaceCarIndex();
+    lAddCarEvent.miOpponentIndex          = liGridPosition;
+    lAddCarEvent.muDestinationAISection   = lu16StartAISectionIndex;
+    lAddCarEvent.mbDeviateFromRoute       = false;
+    lAddCarEvent.mfProgressionRankAsRatio = 0.0f;
+    lAddCarEvent.mfOvertakingDifficulty   = 0.0f;
+    lpRaceCarAIInterface->mManagementQueue.AddEvent<BrnAI::AIModuleIO::AddCarToCurrentModeEvent>(
+        &lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);
+
+    if (lbIsLocal)
+    {
+        mePlayerActiveRaceCarIndex         = leActiveRaceCarIndex;
+        mfPlayerBaseDeformAmountMirror     = lfDeformAmount;
+        miPlayerBaseDeformationTypeMirror  = liDeformType;
+    }
+
+    // ---- 9. colour ----------------------------------------------------------------------------
+    bool lbTeamColour = false;
+    if ((lpGameModeParams->GetFlags() & KX_FLAG_USE_TEAM_COLOURS) != 0)
+    {
+        const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lModelId);
+        const BrnResource::VehicleListEntry* lpEntry =
+            (liVehicleIndex < 0) ? 0 : mpVehicleList->GetVehicleData(liVehicleIndex);
+        lbTeamColour = (lpEntry->GetLiveryType() == 0) || (lpEntry->GetLiveryType() == 1);
+    }
+    if (lbTeamColour)
+    {
+        const s32 liTeam = static_cast<s32>(lpGameModeParams->maePlayerTeam[liGridPosition]);
+        GetActiveRaceCar(leActiveRaceCarIndex)->GetGlobalRaceCar()->SetColourIndex(
+            static_cast<s32>(KAU16_TEAM_COLOUR_INDEX[liTeam]));
+    }
+    else
+    {
+        ActiveRaceCar* lpColourCar = GetActiveRaceCar(leActiveRaceCarIndex);
+        CGS_ASSERT(lpColourCar->IsAttached(), "IsAttached()");
+        lpColourCar->GetGlobalRaceCar()->SetColourIndex(
+            static_cast<s32>(lpGameModeParams->mau16CarColourIndex[liGridPosition]));
+    }
+    {
+        ActiveRaceCar* lpPaletteCar = GetActiveRaceCar(leActiveRaceCarIndex);
+        CGS_ASSERT(lpPaletteCar->IsAttached(), "IsAttached()");
+        const s32 liPalette = static_cast<s32>(lpGameModeParams->mau16CarPaintFinishIndex[liGridPosition]);
+        lpPaletteCar->GetGlobalRaceCar()->SetColourPalette(liPalette);
+        CGS_ASSERT(liPalette < E_NUM_PALETTES, "Invalid Number of Palettes: ");
+        // The colour check indexes the palette table by that palette; it is only evaluated for an
+        // in-range palette so a failed first assert cannot read past the four-entry resource.
+        if (liPalette < E_NUM_PALETTES)
+        {
+            CGS_ASSERT(static_cast<s32>(lpGameModeParams->mau16CarColourIndex[liGridPosition]) <
+                           mCarColoursResource->maPalettes[liPalette].GetNumColours(),
+                       "Invalid car colour: ");
+        }
+    }
+
+    // ---- 10. scoring map, disconnect, team boost ---------------------------------------------
+    SetActiveRaceCarForPlayerScoringIndex(lpPFMAction->GetPlayerScoringIndex(liGridPosition),
+                                          leActiveRaceCarIndex);
+
+    if (lpPFMAction->GetPlayerDisconnected(lGridNetworkPlayerID))
+    {
+        CGS_ASSERT(mePlayerActiveRaceCarIndex != leActiveRaceCarIndex,
+                   "Should not be setting the local player to be disconnected");
+        maActiveRaceCars[leActiveRaceCarIndex].mbIsDisconnectedFromNetwork = true;
+    }
+
+    if (lbIsLocal &&
+        (lpGameModeParams->GetGameModeType() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE ||
+         lpGameModeParams->GetGameModeType() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN))
+    {
+        BoostStrategy* lpBoostStrategy = mBoostManager.GetBoostStrategy();
+        if (lpGameModeParams->mbInfiniteBoost &&
+            static_cast<s32>(lpGameModeParams->maePlayerTeam[liGridPosition]) == 1)
+        {
+            lpBoostStrategy->SetBoostSegments(3);
+            lpBoostStrategy->SetBoostAmount(100.0f);   // flt rodata 0x42C80000
+            lpBoostStrategy->SetInfiniteBoost(true);
+        }
+        else
+        {
+            lpBoostStrategy->SetBoostSegments(0);
+            lpBoostStrategy->SetBoostAmount(0.0f);
+            lpBoostStrategy->SetInfiniteBoost(false);
+        }
+    }
+
+    BrnNetHarnessPC::Witness("world", "grid car %d net=%d local=%d type=%d active=%d model=%016llX",
+                             liGridPosition, static_cast<s32>(lGridNetworkPlayerID), lbIsLocal ? 1 : 0,
+                             static_cast<s32>(lpRaceCar->GetType()), static_cast<s32>(leActiveRaceCarIndex),
+                             static_cast<unsigned long long>(lModelId));
 }
 
 } // namespace BrnWorld
