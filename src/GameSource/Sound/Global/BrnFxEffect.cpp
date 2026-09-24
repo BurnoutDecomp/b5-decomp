@@ -273,7 +273,8 @@ s32 FxEffect::FindFreeVoice() const
 //   liSlot = <the four-slot free scan>;  if ( liSlot == -1 ) return;
 //   lTag = { 0.0f, 0 };
 //   switch ( message.meType ) {
-//     case 0 E_WINDOW_SMASH:      tag 2, index (see FLAG),   bank = FX
+//     case 0 E_WINDOW_SMASH:      tag 2, index by the glass event's meNewState
+//                                 (see NOTE; no producer in ARTIST), bank = FX
 //     case 1 E_CAMERA_CUT:        GetSampleTag(4,  2, sel),  bank = PRESENTATION
 //     case 2 E_STUNT_SMASH:       GetSampleTag(4,  0, sel),  bank = PRESENTATION
 //     case 3 E_STUNT_STUNT:       GetSampleTag(4,  1, sel),  bank = PRESENTATION
@@ -302,14 +303,30 @@ s32 FxEffect::FindFreeVoice() const
 // game action 56 posts plays NOTHING through this effect. That is the console's
 // own behaviour, reproduced, not an omission here.
 //
-// FLAG (case 0, E_WINDOW_SMASH): the console selects the sample index from a word
-// it reads at `*(lpMessageHeader + 0xC8)` -- 200 bytes into the message record,
-// far past the 20-byte Message<FxMessage> the queue actually stores (the X360
-// AddEvent<Message<FxMessage_*>> record size is 0x14). No PC producer posts type
-// 0 at all (ProcessGameActionQueue only posts 7 / 4 / 2 / 3), so rather than
-// reproduce an out-of-record read this takes the console's OWN "neither 1 nor 2"
-// arm: no GetSampleTag call, sample index 0, gain 0.0, FX splice bank. Restore the
-// read if that field is ever identified.
+// NOTE (case 0, E_WINDOW_SMASH) -- a REAL FIELD of a LARGER record, and dead code on the
+// console (corrected 2026-09-24; the old FLAG called the read "out-of-record"):
+//   0x826F73E0  lwz r11, 0xC8(r27)      ; == 1 -> GetSampleTag(2, 2, dword_8300C7A4++)
+//   0x826F73E4..0x826F73FC              ; == 2 -> GetSampleTag(2, 0, dword_8300C7A4++); else none
+// Type 0 does not travel in the 0x14-byte record the OTHER FxMessage_* types use. The DWARF
+// names this arm's locals `const Message<FxMessage_WindowSmash>* lpWindowSmashMessage`
+// (BrnFxEffect.cpp:296) and `const GlassSmashOrCrackEvent& lEvent` (:299): the payload embeds
+// a BrnPhysics::Deformation::GlassSmashOrCrackEvent, 16-byte aligned at message +0x20, and
+// +0xC8 is its meNewState (+0xA8). The X360 event layout is pinned by the glass collision
+// builder sub_826BE398: +0xA0 mVehicleEntityId, +0xA4 meGlassPart, +0xA8 meNewState (asserted
+// "lEvent.meNewState < BrnPhysics::Deformation::NUM_GLASS_STATES", BrnCollisionStateManager.cpp
+// :1525), +0xB0 mbDontPlaySmashEffect. So E_GLASS_STATE_CRACKED (1) -> tag 2 and
+// E_GLASS_STATE_SMASHED (2) -> tag 0 (DWARF EGlassState: INTACT 0 / CRACKED 1 / SMASHED 2).
+// THE PRODUCER IS MISSING ON THE CONSOLE TOO: the sound unity TU emits all of its
+// AddEvent<Message<T>> instantiations in one block (0x826DDF28..0x826DFCD8: 36 named -- FX
+// types 1/2/3/4/5/6/7 only -- plus three unnamed ones whose record sizes are 0x18 / 0x14 /
+// 0x14, none large enough to carry a glass event); no ARTIST or DecFIGS export names
+// FxMessage_WindowSmash outside the CgsCommandStream.h forward declaration; and Notify has no
+// direct caller. Glass smashes/cracks reach the sound through
+// CollisionStateManager::UpdateGlass @0x826D4850 (called by UpdateResolver 0x826F8F20) as INPUT
+// COLLISIONS on the collision bank -- not through this arm. With no producer on either side
+// and FxMessage_WindowSmash un-homed (its member name is not in the DWARF dump), the arm keeps
+// the console's own "neither 1 nor 2" outcome: no GetSampleTag call, sample 0, gain 0.0, FX
+// splice bank. Home the record and restore the meNewState read if a producer ever appears.
 // ---------------------------------------------------------------------------
 void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 {
@@ -342,7 +359,8 @@ void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
     switch (leType)
     {
     case FxMessage::E_WINDOW_SMASH:
-        // See the FLAG above: the console's index selector is unreachable data.
+        // See the NOTE above: the console's selector is the embedded glass event's meNewState
+        // (message +0xC8, 0x826F73E0); no producer posts type 0 in ARTIST, so the arm is dead.
         lpBank = mpGlobalStateManager ? &mpGlobalStateManager->GetFxSpliceBank() : 0;
         mau8MixerOutputs[liSlot] = 3;
         break;
