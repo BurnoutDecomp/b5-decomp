@@ -53,24 +53,14 @@ namespace BrnPhysics { namespace Vehicle { enum EImpactType : s32; } }
 // ProgressionData::GetTrophyUnlock(i) (`&GetTrophyUnlocks()[luIndex]`) was striding the
 // serialised table by 1 instead of 16. The real record now has its DWARF home; include it.
 
-// Provisional enum home for PowerParkResultAction::meOutcome. The committed owner is
-// BrnWorld::EPowerParkOutcome, whose real home (DWARF
-// World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h:11) has not been
-// reconstructed yet -- there is no PowerParking TU in b5-decomp. The full enum is mirrored here
-// (X360 DealWithPowerPark @0x82321530 only tests meOutcome == E_PPO_SUCCESS(1), but the complete
-// 4-value set is DWARF-confirmed) so PowerParkResultAction is a complete type. Re-home / replace
-// this with an #include of BrnPowerParkingManager.h when that TU lands; do not let two definitions
-// coexist (this is provisional only).
-namespace BrnWorld
-{
-enum EPowerParkOutcome
-{
-    E_PPO_TO_BE_DETERMINED = 0,
-    E_PPO_SUCCESS          = 1,
-    E_PPO_FAILURE          = 2,
-    E_PPO_COUNT            = 3,
-};
-}
+// BrnWorld::EPowerParkOutcome (PowerParkResultAction::meOutcome) lives in its DWARF home,
+// World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h (:48). Until b5
+// fd8d4ce1 / 259fa839 landed that TU, this header carried a PROVISIONAL mirror of the enum whose own
+// note said to replace it with this include "when that TU lands; do not let two definitions coexist".
+// Both are now true -- any TU seeing both headers failed C2011 -- so the mirror is gone (header
+// request H-PP1, crash parity 2026-09-24). No cycle: the PowerParking header reaches GameState only
+// through BrnGameStateSharedIO.h (EGameModeType), which does not include this file.
+#include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h"  // BrnWorld::EPowerParkOutcome (DWARF :48)
 
 namespace BrnGameState
 {
@@ -1778,8 +1768,8 @@ struct OnStuntElementCompleteByTypeAction
 // action: the park outcome enum plus the overall rating fed into the score multiplier. DWARF home
 // BrnGameActions.h:3495 (true owning home). Minimal slice -- exactly the two members the consumer
 // reads (meOutcome at +0x00 tested == E_PPO_SUCCESS, miOverallRating at +0x04 multiplied into the
-// awarded score). meOutcome's enum type (BrnWorld::EPowerParkOutcome) is provisionally homed above;
-// see that note.
+// awarded score). meOutcome's enum type (BrnWorld::EPowerParkOutcome) comes from its DWARF home,
+// BrnPowerParkingManager.h (included at the top of this file).
 struct PowerParkResultAction : public GameAction<E_ACTION_POWER_PARK_RESULT>
 {
     BrnWorld::EPowerParkOutcome meOutcome;        // +0x00  (DWARF BrnGameActions.h:3497)
