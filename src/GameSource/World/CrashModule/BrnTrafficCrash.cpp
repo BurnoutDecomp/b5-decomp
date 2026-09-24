@@ -36,6 +36,36 @@ namespace BrnWorld
         mfTimeTillClearup = 1.0f;
     }
 
+    // DWARF BrnCrashModule.h:130, body BrnCrashModule.cpp:278 (crash parity FX-NETCRASH, G64-D2).
+    // No out-of-line X360 symbol; CrashModule::HandleNetworkCrashingTraffic inlines it twice, once
+    // on each arm of its new-crashing-traffic loop (0x827CC02C..0x827CC064 and 0x827CC248..
+    // 0x827CC284):
+    //   lbz 1 ; rlwinm 0,30,30 ; bne   else assert "IsUnconfirmedNetwork()" (:280, non-gating)
+    //   stb leConfirmedOwner, 0        miOwner = the confirmed owner
+    //   andi. 0xF9 ; ori 4 ; stb 1     mxFlags: drop "unconfirmed" (0x2) and "confirmed" (0x4),
+    //                                  then set "confirmed" -- bit 0 (cleanup) is kept
+    void TrafficCrash::ConfirmNetworkOwner(EActiveRaceCarIndex leConfirmedOwner)
+    {
+        CGS_ASSERT(IsUnconfirmedNetwork(), "IsUnconfirmedNetwork()");   // :280
+        miOwner = static_cast<s8>(leConfirmedOwner);
+        mxFlags = static_cast<u8>((mxFlags & 0xF9u) | 4u);
+    }
+
+    // DWARF BrnCrashModule.h:138, body BrnCrashModule.cpp:310 (crash parity FX-NETCRASH, G64-D2).
+    // The network owner stopped sending this wreck: clear it up now. No out-of-line X360 symbol;
+    // inlined by CrashModule::HandleNetworkCrashingTraffic's cleared-up loop (0x827CCAA0..
+    // 0x827CCAE0):
+    //   lbz 1 ; rlwinm 0,29,29 ; bne   else assert "IsConfirmedNetwork()" (:312, non-gating)
+    //   stfs f31, 4                     mfTimeTillClearup = flt_820037C8 (x360rd 0xBF800000, -1.0)
+    //   ori 1 ; stb 1                   mxFlags |= 1 (WantsToBeClearedUp)
+    // Same two stores as OnOwnerDisconnected below, behind the confirmed-only tripwire.
+    void TrafficCrash::SetNetworkVehicleClearedUp()
+    {
+        CGS_ASSERT(IsConfirmedNetwork(), "IsConfirmedNetwork()");   // :312
+        mfTimeTillClearup = -1.0f;                                   // flt_820037C8
+        mxFlags |= 1;
+    }
+
     void TrafficCrash::OnOwnerDisconnected()
     {
         CGS_ASSERT((mxFlags & 4) != 0 || (mxFlags & 2) != 0,

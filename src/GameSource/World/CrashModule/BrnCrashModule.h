@@ -137,9 +137,9 @@ namespace BrnWorld
         // NOTE: the DWARF declares the full ModuleSingleBuffered override set
         // (Construct/Prepare/Release/Destruct), the PreSceneUpdate/PostPhysicsUpdate entry points
         // and the ~25 private crash-handling helpers. The traffic half, the network race-car
-        // reset (ResetCrashedNetworkRaceCars / OnContactFromNetworkPlayer) and the owned-traffic
-        // publisher (GenerateOwnedTrafficUpdates) are declared below; HandleNetworkCrashingTraffic
-        // @0x827CB788 is still undeclared (see its park note in BrnCrashModule_RaceCarCrashes.cpp).
+        // reset (ResetCrashedNetworkRaceCars / OnContactFromNetworkPlayer), the owned-traffic
+        // publisher (GenerateOwnedTrafficUpdates) and its receive twin HandleNetworkCrashingTraffic
+        // @0x827CB788 (G64-D2) are declared below.
 
     private:
         void HandleGameActions(const CrashIO::InputBuffer_PreScene* lpInput,
@@ -167,6 +167,11 @@ namespace BrnWorld
         // (G64-D3) the owned crashing-traffic transforms published for the other players.
         void GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPhysics* lpInput,
                                           CrashIO::OutputBuffer_PostPhysics* lpOutput );   // 0x827C53F0
+        // (G64-D2, crash parity FX-NETCRASH 2026-09-24; DWARF BrnCrashModule.cpp:1054) the other
+        // players' crashing-traffic transforms: replayed onto the physics module, new wrecks
+        // opened, stopped ones cleared up.
+        void HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreScene* lpInput,
+                                           CrashIO::OutputBuffer_PreScene* lpOutput );     // 0x827CB788
 
         // X360 0x827C6AD8. Linear search of mRaceCarCrashes for the crash record owned by the
         // given active-race-car slot; returns its index, or KU_INVALID_CRASH (-1) if none.

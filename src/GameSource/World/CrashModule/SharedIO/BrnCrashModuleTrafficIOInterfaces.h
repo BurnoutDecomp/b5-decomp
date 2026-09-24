@@ -168,7 +168,24 @@ namespace CrashIO
 
         void Construct();
         void AddTrafficToCleanup(CgsSceneManager::VolumeInstanceId lVolumeInstanceId);
-        void StartNetworkTrafficVehicleCrashing(u32 luVehicleId);
+
+        // DWARF-declared (crash parity FX-NETCRASH 2026-09-24, G64-D2; it was declared with no
+        // body). No out-of-line X360 symbol: inlined at its one caller,
+        // CrashModule::HandleNetworkCrashingTraffic --
+        //   0x827CC3E8  cmplwi luVehicleId, 0x258 ; blt  else assert "luVehicleId <
+        //               BrnTraffic::KU_MAX_TOTAL_TRAFFIC" BAKED WITH THIS HEADER'S PATH, line 0x16D
+        //               (365) -- a non-gating tripwire, as for the two AddRemove* publishes above
+        //   0x827CC40C  sth luVehicleId on the stack ; addi r3, interface, 0x510
+        //   0x827CC414  bl BaseEventQueue<NetworkTrafficCrashingEvent>::AddEvent @0x827C2D48
+        // i.e. one {u16} event on mStartCrashingNetworkTrafficQueue (+0x510), which
+        // TrafficEntityModule::HandleCrashingNetworkTraffic drains post-scene.
+        void StartNetworkTrafficVehicleCrashing(u32 luVehicleId)
+        {
+            CGS_ASSERT(luVehicleId < 600u, "luVehicleId < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");   // :365
+            NetworkTrafficCrashingEvent lEvent;
+            lEvent.muVehicleId = static_cast<u16>(luVehicleId);
+            mStartCrashingNetworkTrafficQueue.AddEvent(lEvent);
+        }
 
         const CleanupTrafficEventQueue& GetCleanupTrafficEventQueue() const { return mCleanupTrafficEventQueue; }
         CleanupTrafficEventQueue&       GetCleanupTrafficEventQueue()       { return mCleanupTrafficEventQueue; }
