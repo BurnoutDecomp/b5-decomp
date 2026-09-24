@@ -901,10 +901,26 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
                         VecFloat{ KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD,
                                   KF_GROUND_CONTACT_THRESHOLD, KF_GROUND_CONTACT_THRESHOLD });
 
-    // GATE SimpleVehiclePhysics::AreAnyWheelsDetatched (DWARF BrnSimpleVehiclePhysics.h:286) --
-    // the console's `lbz r11,0x715(body)` early-accept. mbAnyWheelsDetatched is PROTECTED and the
-    // DWARF accessor is not declared in this tree; that header is not this cluster's to edit.
-    // DELETE-WHEN the accessor lands (unreachable today: nothing detaches a traffic wheel yet).
+    // 0x825CAEAC `lbz r11, 0x715(body)` ; 0x825CAEB4 `bne -> 0x825CAF4C li r3, 1` -- a car with a
+    // detached wheel keeps EVERY world contact (it rests on its body, not its wheels). After the
+    // wheel-plane test, as on the console (G32-D1). Reachable: DeformableObject::UpdateWheels
+    // detaches traffic wheels on the Showtime bounce arm (mbForceWheelsToDetach), and
+    // CalculateNewWheelPlane then sets the flag.
+    if (lpBody->AreAnyWheelsDetatched())
+    {
+        // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Capped dispatch witness for the
+        // G32-D1 arm (tests/FxTraffic2WheelsDetachedLive.ps1). DELETE-WHEN-STABLE.
+        static const bool sbDiag = (getenv("BRN_TRAFFIC_DIAG") != 0);
+        static s32 siDiagLinesLeft = 8;
+        if (sbDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siDiagLinesLeft;
+            *CgsDev::Log::gpDebugPrint << "[T-contact] wheels-detached accept slot="
+                                       << static_cast<s32>(lu8PhysicalIndex)
+                                       << " belowWheelPlane=" << (lbValid ? 0 : 1) << "\n";
+        }
+        return true;
+    }
 
     const AboveGroundTestResult* const lpGround = lpBody->GetAboveGroundTestResult();  // body +0x570
     const Matrix44Affine lBodyTransform = lpBody->GetTransform();
