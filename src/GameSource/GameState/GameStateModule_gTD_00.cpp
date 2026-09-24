@@ -267,6 +267,46 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
         }
     }
 
+    // [PC HARNESS, NOT X360] BRN_FORCE_PLAYER_TAKEN_DOWN=<seconds> (FX-BRIDGES CC-8 witness): the SAME
+    // debug action with the roles reversed -- once the current mode has been IN_PROGRESS that long, the
+    // first active, non-crashing rival slot is armed as the aggressor of a STANDARD takedown of the
+    // player (TakedownManager::HarnessForceTakenDown), so ProcessQueuedTakedowns -> ProcessTakedownEvent ->
+    // the output takedown queue -> BridgeGameStateToDirector's taken-down leg run deterministically.
+    // Re-armed every 10 s, at most three times, in case the confirmation sweep drops one (the aggressor
+    // crashed or slowed below KF_MIN_TAKEDOWN_SPEED). Off unless the variable is set.
+    // DELETE-WHEN a scripted rival ram on the player can be relied on.
+    {
+        static const char* spcForceTakenDown = getenv("BRN_FORCE_PLAYER_TAKEN_DOWN");
+        static s32         siTakenDownShots  = 0;
+        if (spcForceTakenDown != 0 && siTakenDownShots < 3 && mpTakedownManager != 0)
+        {
+            const GameMode* lpMode = mModeManager.GetCurrentGameMode();
+            if (lpMode != 0 && lpMode->GetCurrentState() == GameStateModuleIO::E_GMS_IN_PROGRESS &&
+                mModeManager.GetTimeInMode() >= static_cast<f32>(atof(spcForceTakenDown)) + 10.0f * static_cast<f32>(siTakenDownShots))
+            {
+                const EActiveRaceCarIndex lePlayer = mLastActiveRaceCarInterface.GetPlayerActiveRaceCarIndex();
+                for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
+                {
+                    const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liSlot);
+                    if (leSlot == lePlayer || !mLastActiveRaceCarInterface.IsRaceCarActive(leSlot) ||
+                        mLastActiveRaceCarInterface.GetRaceCarState(leSlot)->mbCrashing)
+                    {
+                        continue;
+                    }
+                    ++siTakenDownShots;
+                    mpTakedownManager->HarnessForceTakenDown(leSlot, lePlayer);
+                    if (CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        *CgsDev::Log::gpDebugPrint << "[td] HARNESS force-taken-down fired (car " << liSlot
+                                                   << " -> player car " << static_cast<s32>(lePlayer)
+                                                   << ", shot " << siTakenDownShots << ") [FLAG PC harness]\n";
+                    }
+                    break;
+                }
+            }
+        }
+    }
+
     // 0x823A59D4..0x823A59F4: the manager's tick. The console runs PreWorldUpdate under
     // LockBuffersForIO (DoUpdate_GameStatePreWorld), so the pre-world buffer's const accessors
     // (GetTakedownEventInputQueue asserts "Not locked for reading", BrnGameStateModuleIO.cpp:147)

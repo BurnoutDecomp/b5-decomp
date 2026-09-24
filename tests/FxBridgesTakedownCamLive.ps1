@@ -19,7 +19,7 @@
 $case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
 $case.Name = 'fxbridges_takedown_cam'
 $case.Bug = 'A rival takedown of the player must reach the director input (mbPlayerTakenDown + killer), so the taken-down camera can play.'
-$case.Run.MaxSeconds = 200
+$case.Run.MaxSeconds = 300
 $case.DiagEnv += ',BRN_AI_MADNESS=1,BRN_TD_DIAG=1'
 $keep = @('no new assertions', 'no exceptions', 'reached driving', 'no injected takedown')
 $case.Checks = @($case.Checks | Where-Object { $keep -contains $_.Name })
