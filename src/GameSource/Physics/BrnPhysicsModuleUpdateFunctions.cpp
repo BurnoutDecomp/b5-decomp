@@ -867,6 +867,9 @@ namespace BrnPhysics
             mDeformationManager.UpdatePostPhysics(lpSimOutputBuffer, lpPhysicsModuleOutputBuffer,
                                                   &mContactData, lpInputBufferStack,
                                                   lpPotentialContacts);
+            // [dv] after DeformationManager::UpdatePostPhysics -- SolvePenetration's position
+            // push-out (FX-WEDGEVEL [wedge] window; before this mark it was folded into @end).
+            DvWitnessMark("postphys");
             CgsDev::PerfMonCpu::StopMonitor(miDeformationManagerPM);
             mDeformationManager.VerifyPartIndices();
             mDeformationManager.VerifyPartIndices();

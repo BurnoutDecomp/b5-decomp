@@ -43,6 +43,15 @@
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"  // CollisionGenerator (the real one)
 #include "GameSource/Physics/BrnContactGenerationList.h"                                           // ContactGenList
 
+// [wedge] (FX-WEDGEVEL) -- DEFINED in ExternalPhysicsBody.cpp, banner at WedgeWindowSteps() there.
+// NOT IN THE X360 BINARY; the [wedge-pen] lines in SolvePenetration print only inside an open window.
+namespace BrnPhysics
+{
+    extern const ExternalPhysicsBody* gpDvWatchBody;
+    bool DvWedgeStepRecording();
+    u32  DvWitnessStepIndex();
+}
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -376,6 +385,66 @@ namespace Deformation
                 }
             }
             // ---- end [wall] -------------------------------------------------------------------
+
+            // ---- [wedge-pen] (FX-WEDGEVEL) -- the WATCHED body's position push-out, inside an open
+            // [wedge] window only (banner at WedgeWindowSteps() in ExternalPhysicsBody.cpp). NOT
+            // X360. The pre-solve pose, the solved pose, the correction, and each of this model's
+            // world contacts in the solver's own terms (depth = (B - T.A) . n, the amount Solve()
+            // adds along n, evaluated on the PRE-solve transform; Solve() runs twice).
+            if ( DvWedgeStepRecording() && CgsDev::Log::gpDebugPrint != 0
+                 && &mpaModels[liModelIndex].GetVehicleBody() == gpDvWatchBody )
+            {
+                Matrix44Affine lPre; mpaModels[liModelIndex].GetTransform(lPre);
+                const s32 liNumWorld = lpSolver->GetNumWorldContacts();
+                const PenetrationContact* lpWC = lpSolver->GetWorldContacts();
+                s32 liMine = 0;
+                for ( s32 liC = 0; liC < liNumWorld; ++liC )
+                {
+                    if ( lpWC[liC].miIndexA == liModelIndex ) { ++liMine; }
+                }
+                s32 liMineVehicle = 0;
+                const s32 liNumVehicle = lpSolver->GetNumVehicleContacts();
+                const PenetrationContact* lpVC = lpSolver->GetVehicleContacts();
+                for ( s32 liC = 0; liC < liNumVehicle; ++liC )
+                {
+                    if ( lpVC[liC].miIndexA == liModelIndex || lpVC[liC].miIndexB == liModelIndex ) { ++liMineVehicle; }
+                }
+                *CgsDev::Log::gpDebugPrint
+                    << "[wedge-pen] step " << static_cast<s32>( DvWitnessStepIndex() )
+                    << " model " << liModelIndex
+                    << " world " << liMine << " vehicle " << liMineVehicle
+                    << " weight " << mpaModels[liModelIndex].GetWeightFactor().x
+                    << " pre " << lPre.wAxis.x << " " << lPre.wAxis.y << " " << lPre.wAxis.z
+                    << " post " << lpSolvedTransform->wAxis.x << " " << lpSolvedTransform->wAxis.y
+                    << " " << lpSolvedTransform->wAxis.z
+                    << " corr " << ( lpSolvedTransform->wAxis.x - lPre.wAxis.x )
+                    << " " << ( lpSolvedTransform->wAxis.y - lPre.wAxis.y )
+                    << " " << ( lpSolvedTransform->wAxis.z - lPre.wAxis.z )
+                    << "\n";
+                s32 liDumped = 0;
+                for ( s32 liC = 0; liC < liNumWorld && liDumped < 16; ++liC )
+                {
+                    if ( lpWC[liC].miIndexA != liModelIndex ) { continue; }
+                    const Vector3& lA = lpWC[liC].mPointOnA;
+                    const Vector3& lB = lpWC[liC].mPointOnB;
+                    const Vector3& lN = lpWC[liC].mNormal;
+                    Vector3 lWorldA;
+                    lWorldA.x = lPre.xAxis.x * lA.x + lPre.yAxis.x * lA.y + lPre.zAxis.x * lA.z + lPre.wAxis.x;
+                    lWorldA.y = lPre.xAxis.y * lA.x + lPre.yAxis.y * lA.y + lPre.zAxis.y * lA.z + lPre.wAxis.y;
+                    lWorldA.z = lPre.xAxis.z * lA.x + lPre.yAxis.z * lA.y + lPre.zAxis.z * lA.z + lPre.wAxis.z;
+                    const f32 lfDepth = ( lB.x - lWorldA.x ) * lN.x + ( lB.y - lWorldA.y ) * lN.y
+                                      + ( lB.z - lWorldA.z ) * lN.z;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[wedge-pen]   c" << liC
+                        << " n " << lN.x << " " << lN.y << " " << lN.z
+                        << " depth " << lfDepth
+                        << " A " << lWorldA.x << " " << lWorldA.y << " " << lWorldA.z
+                        << " localA " << lA.x << " " << lA.y << " " << lA.z
+                        << "\n";
+                    ++liDumped;
+                }
+            }
+            // ---- end [wedge-pen] -------------------------------------------------------------
 
             mpaModels[liModelIndex].SetTransform(lpSolvedTransform);
         }

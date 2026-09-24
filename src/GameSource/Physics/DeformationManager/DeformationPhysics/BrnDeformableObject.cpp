@@ -48,6 +48,12 @@ namespace Vehicle
     bool KerbProbeTake(u32& lruUsed, const char* lpcTag);
 }
 
+// [wedge] PC bring-up instrument (FX-WEDGEVEL) -- DEFINED in ExternalPhysicsBody.cpp, banner at
+// WedgeWindowSteps() there. NOT IN THE X360 BINARY; every print is gated on an open window.
+extern const ExternalPhysicsBody* gpDvWatchBody;
+bool DvWedgeStepRecording();
+u32  DvWitnessStepIndex();
+
 namespace Deformation
 {
     namespace vpu = rw::math::vpu;
@@ -713,6 +719,31 @@ namespace Deformation
             }
         }
         // ---- end [kerb-imp] ---------------------------------------------------------------------
+
+        // ---- [wedge-imp] (FX-WEDGEVEL) -- one line per world impulse applied to the WATCHED body
+        // inside an open [wedge] window: every term of the console's closed form plus the shaped
+        // magnitude handed to the sensor. The [dv] drain that follows this line in UpdateContacts
+        // is what actually reached the chassis after the sensor's absorption and the pass-on chain
+        // (ApplyWallContactImpulse's x0.25), so shaped-vs-drained is read off two adjacent lines.
+        if ( DvWedgeStepRecording() && &GetVehicleBody() == gpDvWatchBody
+             && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            const f32 lfWedgeClosing = vpu::Dot( lRelativeMotion, lContact.mNormal );
+            *CgsDev::Log::gpDebugPrint
+                << "[wedge-imp] step " << static_cast<s32>( DvWitnessStepIndex() )
+                << " sensor " << liSensorIndex
+                << " n " << lContact.mNormal.x << " " << lContact.mNormal.y << " " << lContact.mNormal.z
+                << " pA " << lContact.mPointOnA.x << " " << lContact.mPointOnA.y << " " << lContact.mPointOnA.z
+                << " r " << lvR.x << " " << lvR.y << " " << lvR.z
+                << " closing " << lfWedgeClosing
+                << " rest " << lvfRestitution.x
+                << " k " << lvfInvInertia.x
+                << " solved " << lvfImpulseMagnitude.x
+                << " shaped " << lfImpulseLength
+                << " dir " << lImpulseUnit.x << " " << lImpulseUnit.y << " " << lImpulseUnit.z
+                << " showtime " << ( lpVehicle->IsPlayerVehicleInShowtime() ? 1 : 0 )
+                << "\n";
+        }
 
         // ---- [worldimp] PC bring-up instrument -- DELETE WHEN the wall test is banked -----------
         // OPT-IN (BRN_IMPULSE_PROBE=1). The UPSTREAM question the downstream probes cannot answer:

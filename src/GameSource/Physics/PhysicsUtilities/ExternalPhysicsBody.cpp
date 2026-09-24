@@ -420,9 +420,74 @@ namespace BrnPhysics
             return sfThreshold;
         }
 
+        // ---- [wedge] THE WEDGED-CAR WINDOW (FX-WEDGEVEL, 2026-09-24) -- PC bring-up instrument ----
+        // OPT-IN (BRN_WEDGE_PROBE=<steps per window>; "1" == 240). NOT IN THE X360 BINARY; the
+        // latch reads 0 once and nothing below runs, so a default run is byte-identical.
+        //
+        // WHAT IT IS FOR. Two banked runs (fxgeometric/20260924_164556 [motion] n 5880..10470,
+        // rcem_takedown_flow/20260922_214835 n 4200..5190) show the player car held against geometry
+        // with the throttle on: its position does not move for 90 s while RaceCarState::
+        // mLinearVelocity reads ~0.9 m/s. The question is WHERE in the step that velocity survives:
+        // which writer adds it, which contact response fails to remove it, and whether a
+        // position-level push-out is what pins the pose. The [dv] ledger already samples the
+        // watched (player) body at every stage boundary of PhysicsModule::Update and records every
+        // CalculateNewVelocity drain in between -- but it prints only a step whose |dv| crosses a
+        // threshold, and a steady wedge has |dv| ~ 0 by definition. This arms the same ledger on
+        // THE SIGNATURE instead: |v_end| > KF_WEDGE_MIN_SPEED while |p_end - p_start| stays below
+        // KF_WEDGE_MAX_DISPLACEMENT_FRACTION * |v_end| * dt, for KI_WEDGE_CONFIRM_STEPS steps in a
+        // row. The window then prints the FULL ledger for its next N steps, and the contact-side
+        // lines ([wedge-imp] in the world-impulse arm, [wedge-pen] in the penetration solver's
+        // read-back) print for exactly the same steps (DvWedgeStepRecording()).
+        // CAPPED: KU_WEDGE_MAX_WINDOWS windows, and a new one only after the signature has been
+        // ABSENT for KI_WEDGE_REARM_STEPS (so one wedge is one window, not four; 45 steps is
+        // shorter than a re-placed car's approach to its next wedge, so a sweep's shots each get one).
+        // ⛔ A silent run is not "no wedge": check for the "[wedge] ARMED" line first.
+        //
+        // ⭐ WHAT IT MEASURED (fxwedgevel_wedge/20260924_175219, the 2927-ramp site, 240 steps):
+        // per step the rear tyres add dv 0.184 m/s into the wall (UpdateWheels' rear-pair drain,
+        // Fdt (-259.9, 0.5, -133.7) N.s), the world contacts take back 0.188 m/s (3 drains through
+        // UpdateContacts, each EXACTLY 0.2x the shaped impulse over all 535 contacts: the sensor
+        // passes 0.8 on and ApplyWallContactImpulse @0x825FEA18 applies x0.25 of that, after
+        // ApplyCarWorldImpulse's x0.5 -- 10% of the fully inelastic impulse), gravity is the only
+        // non-drain change, IntegrateTransform moves the car 13.4 mm into the wall and
+        // SolvePenetration pushes 13.2 mm back with NO velocity change (@postphys segDv 0 on every
+        // step). All five legs are the console's (addresses in fixes/FX-WEDGEVEL.md): the residual
+        // velocity is the console's own balance, not a PC divergence.
+        const f32 KF_WEDGE_MIN_SPEED                 = 0.3f;    // m/s
+        const f32 KF_WEDGE_MAX_DISPLACEMENT_FRACTION = 0.25f;   // of |v| * dt
+        const s32 KI_WEDGE_CONFIRM_STEPS             = 30;
+        const s32 KI_WEDGE_REARM_STEPS               = 45;
+        const u32 KU_WEDGE_MAX_WINDOWS               = 4u;
+
+        s32  giWedgeRun       = 0;      // consecutive steps showing the signature
+        s32  giWedgeClear     = 0;      // consecutive steps NOT showing it
+        s32  giWedgeLeft      = 0;      // steps left in the open window
+        u32  guWedgeWindows   = 0u;     // windows opened so far
+        bool gbWedgeRearmed   = true;   // may a new window open?
+        bool gbWedgeRecording = false;  // is the CURRENT step inside a window?
+        bool gbWedgeArmedSaid = false;
+
+        // -1 == not yet read; 0 == off; otherwise the window length in steps.
+        s32 WedgeWindowSteps()
+        {
+            static s32 siSteps = -1;
+            if ( siSteps < 0 )
+            {
+                const char* lpcEnv = getenv( "BRN_WEDGE_PROBE" );
+                siSteps = 0;
+                if ( lpcEnv != 0 && lpcEnv[0] != '0' )
+                {
+                    const s32 liParsed = atoi( lpcEnv );
+                    siSteps = ( liParsed > 1 ) ? liParsed : 240;   // "1"/"on" -> 240 steps (4 s)
+                }
+            }
+            return siSteps;
+        }
+
         bool DvArmed()
         {
-            return DvThreshold() > 0.0f && gpDvWatchBody != 0 && CgsDev::Log::gpDebugPrint != 0;
+            return ( DvThreshold() > 0.0f || WedgeWindowSteps() > 0 )
+                && gpDvWatchBody != 0 && CgsDev::Log::gpDebugPrint != 0;
         }
 
         f32 DvMagnitude( const Vector3& lrV )
@@ -467,7 +532,8 @@ namespace BrnPhysics
     {
         if ( !DvArmed() )
         {
-            gbDvStepOpen = false;
+            gbDvStepOpen     = false;
+            gbWedgeRecording = false;
             return;
         }
         ++guDvStep;
@@ -477,6 +543,33 @@ namespace BrnPhysics
         gpcDvPhase   = "begin";
         gDvStartV    = gpDvWatchBody->GetLinearVelocity();
         gDvStartP    = gpDvWatchBody->GetPosition();
+
+        // [wedge] -- see the banner at WedgeWindowSteps(). The ARMED line is the control: a run
+        // with BRN_WEDGE_PROBE set and no such line never reached a physics step with a watched body.
+        gbWedgeRecording = ( WedgeWindowSteps() > 0 && giWedgeLeft > 0 );
+        if ( WedgeWindowSteps() > 0 && !gbWedgeArmedSaid )
+        {
+            gbWedgeArmedSaid = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[wedge] ARMED -- window " << WedgeWindowSteps() << " steps, signature |v| > "
+                << KF_WEDGE_MIN_SPEED << " m/s with |dp| < " << KF_WEDGE_MAX_DISPLACEMENT_FRACTION
+                << " * |v| * dt for " << KI_WEDGE_CONFIRM_STEPS << " steps, at most "
+                << static_cast<s32>( KU_WEDGE_MAX_WINDOWS ) << " windows [NOT IN THE X360 BINARY]\n";
+        }
+    }
+
+    // [wedge] Is the current physics step inside an open window? The contact-side lines
+    // ([wedge-imp], [wedge-pen]) print only while this is true, so they cover exactly the steps
+    // whose [dv] ledger is printed. False whenever BRN_WEDGE_PROBE is unset.
+    bool DvWedgeStepRecording()
+    {
+        return gbWedgeRecording && gbDvStepOpen;
+    }
+
+    // [wedge] The step number the contact-side lines carry (== the [dv] STEP number).
+    u32 DvWitnessStepIndex()
+    {
+        return guDvStep;
     }
 
     // Record a stage boundary. The phase name also tags every drain that follows it.
@@ -519,38 +612,101 @@ namespace BrnPhysics
         const Vector3 lStepDv{ lEndV.x - gDvStartV.x, lEndV.y - gDvStartV.y,
                                lEndV.z - gDvStartV.z, 0.0f };
         const f32 lfStepDv = DvMagnitude( lStepDv );
-        if ( lfStepDv < DvThreshold() )
-        {
-            return;
-        }
-        if ( guDvDumps >= KU_DV_MAX_DUMPS )
-        {
-            if ( guDvDumps == KU_DV_MAX_DUMPS )
-            {
-                ++guDvDumps;
-                *CgsDev::Log::gpDebugPrint
-                    << "[dv] BUDGET EXHAUSTED (" << static_cast<s32>( KU_DV_MAX_DUMPS )
-                    << " dumps) at step " << static_cast<s32>( guDvStep )
-                    << " -- every later [dv] step is DROPPED; a later silence is the budget, "
-                       "not the physics\n";
-            }
-            return;
-        }
-        ++guDvDumps;
 
-        // Raise the film latch on the FIRST step that crosses the threshold, and record which
-        // one it was. BRN_FRAME_DUMP_ARM=dv holds the back-buffer writer until this is non-zero,
-        // so the strip starts at the drain instead of at boot. Sticky: never cleared.
-        if ( BrnDiag::gFilmLatch.muDvLatched == 0u )
+        // ---- [wedge] close this step's window slot, then test the signature for the NEXT ----
+        const bool lbWedgeStep = gbWedgeRecording;
+        gbWedgeRecording = false;
+        f32 lfWedgeDisp  = 0.0f;
+        f32 lfWedgeSpeed = 0.0f;
+        if ( WedgeWindowSteps() > 0 )
         {
-            BrnDiag::gFilmLatch.muDvLatchedStep      = guDvStep;
-            BrnDiag::gFilmLatch.muDvLatchedFrame     = luFrame;
-            BrnDiag::gFilmLatch.mfDvLatchedMagnitude = lfStepDv;
-            BrnDiag::gFilmLatch.muDvLatched          = 1u;
+            if ( lbWedgeStep && giWedgeLeft > 0 )
+            {
+                --giWedgeLeft;
+                if ( giWedgeLeft == 0 )
+                {
+                    gbWedgeRearmed = false;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[wedge] CLOSE window " << static_cast<s32>( guWedgeWindows )
+                        << " at step " << static_cast<s32>( guDvStep ) << "\n";
+                }
+            }
+
+            const Vector3 lDp{ lEndP.x - gDvStartP.x, lEndP.y - gDvStartP.y,
+                               lEndP.z - gDvStartP.z, 0.0f };
+            lfWedgeDisp  = DvMagnitude( lDp );
+            lfWedgeSpeed = DvMagnitude( lEndV );
+            const bool lbSignature = ( lfTimeStep > 0.0f ) && ( lfWedgeSpeed > KF_WEDGE_MIN_SPEED )
+                && ( lfWedgeDisp < KF_WEDGE_MAX_DISPLACEMENT_FRACTION * lfWedgeSpeed * lfTimeStep );
+            if ( lbSignature )
+            {
+                ++giWedgeRun;
+                giWedgeClear = 0;
+            }
+            else
+            {
+                giWedgeRun = 0;
+                ++giWedgeClear;
+                if ( !gbWedgeRearmed && giWedgeLeft == 0 && giWedgeClear >= KI_WEDGE_REARM_STEPS )
+                {
+                    gbWedgeRearmed = true;
+                }
+            }
+
+            if ( giWedgeLeft == 0 && gbWedgeRearmed && lbSignature
+                 && giWedgeRun >= KI_WEDGE_CONFIRM_STEPS && guWedgeWindows < KU_WEDGE_MAX_WINDOWS )
+            {
+                ++guWedgeWindows;
+                giWedgeLeft    = WedgeWindowSteps();
+                gbWedgeRearmed = false;
+                *CgsDev::Log::gpDebugPrint
+                    << "[wedge] OPEN window " << static_cast<s32>( guWedgeWindows )
+                    << " after step " << static_cast<s32>( guDvStep ) << " f " << static_cast<s32>( luFrame )
+                    << " -- " << giWedgeRun << " steps with |v| " << lfWedgeSpeed
+                    << " and |dp| " << lfWedgeDisp << " (|v|*dt " << lfWedgeSpeed * lfTimeStep << ")"
+                    << " pos " << lEndP.x << " " << lEndP.y << " " << lEndP.z
+                    << " v " << lEndV.x << " " << lEndV.y << " " << lEndV.z
+                    << "; the next " << giWedgeLeft << " steps print the full ledger\n";
+            }
+        }
+
+        const bool lbThresholdStep = ( DvThreshold() > 0.0f ) && !( lfStepDv < DvThreshold() );
+        if ( !lbThresholdStep && !lbWedgeStep )
+        {
+            return;
+        }
+        if ( lbThresholdStep && !lbWedgeStep )
+        {
+            if ( guDvDumps >= KU_DV_MAX_DUMPS )
+            {
+                if ( guDvDumps == KU_DV_MAX_DUMPS )
+                {
+                    ++guDvDumps;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[dv] BUDGET EXHAUSTED (" << static_cast<s32>( KU_DV_MAX_DUMPS )
+                        << " dumps) at step " << static_cast<s32>( guDvStep )
+                        << " -- every later [dv] step is DROPPED; a later silence is the budget, "
+                           "not the physics\n";
+                }
+                return;
+            }
+            ++guDvDumps;
+
+            // Raise the film latch on the FIRST step that crosses the threshold, and record which
+            // one it was. BRN_FRAME_DUMP_ARM=dv holds the back-buffer writer until this is non-zero,
+            // so the strip starts at the drain instead of at boot. Sticky: never cleared.
+            if ( BrnDiag::gFilmLatch.muDvLatched == 0u )
+            {
+                BrnDiag::gFilmLatch.muDvLatchedStep      = guDvStep;
+                BrnDiag::gFilmLatch.muDvLatchedFrame     = luFrame;
+                BrnDiag::gFilmLatch.mfDvLatchedMagnitude = lfStepDv;
+                BrnDiag::gFilmLatch.muDvLatched          = 1u;
+            }
         }
 
         *CgsDev::Log::gpDebugPrint
             << "[dv] STEP " << static_cast<s32>( guDvStep ) << " f " << static_cast<s32>( luFrame )
+            << ( lbWedgeStep ? " wedge 1" : "" )
             << " dt " << lfTimeStep
             << " |dv| " << lfStepDv
             << " v0 " << gDvStartV.x << " " << gDvStartV.y << " " << gDvStartV.z
@@ -597,9 +753,11 @@ namespace BrnPhysics
         }
 
         // ⭐ THE TAIL SEGMENT -- the last unwatched gap, now printed rather than left to
-        // arithmetic. The final mark is `postsim`, but the step does not END there: the
-        // DeformationManager post-physics leg, OutputData, ProcessDeformationStates and
-        // ProcessCrashingNetworkCars all run between that mark and DvWitnessEndStep. Before
+        // arithmetic. The final mark is `postphys` (after DeformationManager::UpdatePostPhysics,
+        // i.e. SolvePenetration -- added 2026-09-24 by FX-WEDGEVEL; the post-physics leg used to
+        // fall in this tail), but the step does not END there: OutputData,
+        // ProcessDeformationStates and ProcessCrashingNetworkCars all run between that mark and
+        // DvWitnessEndStep. Before
         // this line, a velocity written in that window showed up ONLY as the step's |dv|
         // failing to equal the sum of the printed segments -- i.e. it was visible only to a
         // reader who added the columns up, which is the same "the probe technically had the
