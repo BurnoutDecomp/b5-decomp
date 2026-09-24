@@ -106,6 +106,8 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // CgsDev::DebugInterface (leap/stomp debug view)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"  // CgsDev::DebugRender::DrawSphere
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h" // CrashModeScoring::GetVehicleScoreData (leap/stomp score leg)
+#include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"                          // LightTrigger, KU_LIGHT_TRIGGER_ID_OWNER_TAG (ManageTriggers)
+#include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"                       // KU_MAX_HULLS (ManageTriggers)
 
 namespace BrnTraffic
 {
@@ -4447,6 +4449,7 @@ void TrafficEntityModule::Construct()
 
     mbNetworkHasDetectedDivergence = false;            // 0x72B54
     mbHullSyncDivergence           = false;            // 0x725EC
+    mbDEBUGRunningWorstCase        = false;            // 0x729F0 (0x82740E00 stbx r30(0))
 
     // X360 Construct 0x82740E14..0x82741330: page 2 counters, in registration order.
     // AddMonitor receives name/r3, page/r4, minimum/r5, budget/f1, scaled/r7.
@@ -4775,6 +4778,12 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
             "(after the live GeneratePotentialLeapedAndStompedCarsOutput). No body in this tree");
     }
 
+    // 0x8274AB18..0x8274AB20 `mr r4, r26 ; mr r3, r31 ; bl 0x82747518` -- LIVE (2026-09-24,
+    // reviewer C on 0e0a5781). Unconditional, before the state switch (0x8274AB24 `lwz 0x300`).
+    // The hull add/remove lists it drains are filled by RecalculateActiveHulls' AppendSet legs,
+    // which are still gated on this build, so today it clears two empty lists.
+    ManageTriggers(lpOutput);
+
     switch (meState)
     {
     // Leg order follows the earlier revision of this function.
@@ -4866,8 +4875,8 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
         {
             static bool sbLogged = false;
             LogMissingLeg_T1(sbLogged,
-                "PreSceneUpdate E_STATE_RUNNING remaining legs -- ManageTriggers @0x82747518 / "
-                "UpdateSerialiser @0x8272DA80. Neither bodied; both are trigger/replay surface. "
+                "PreSceneUpdate E_STATE_RUNNING remaining leg -- UpdateSerialiser @0x8272DA80, "
+                "not bodied (replay surface). ManageTriggers @0x82747518 is live before the switch. "
                 "UpdateCrashSlider @0x82715A18 and GenerateCrashedVehicleEvents @0x82720030 "
                 "WERE in this list and are now live above. The earlier revision's "
                 "KillTrafficTooCloseToRaceCars is NOT in the ship's callee list and is "
@@ -17970,6 +17979,91 @@ void TrafficEntityModule::GenerateSympatheticCrasherOutput(const BrnTrafficIO::I
                     << " crashers=" << static_cast<s32>(luNumCrashers) << "\n";
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// TrafficEntityModule::ManageTriggers  @0x82747518  (235 insns)
+//   DWARF :1320 / BrnTrafficEntityModule.cpp:4590; locals per the BrnTrafficUnity.cpp hints:
+//   luIndex, luHull, lpHull, luTrigger, lTriggerId (a LightTriggerId), lpLightTrigger. The hints'
+//   inlined calls: Array<u16,72>::GetLength/operator[], GetHull, LightTriggerId::Set,
+//   GetTriggerManagementInputInterface, TriggerManagementInputInterface::RemoveTrigger /
+//   AddBoxTrigger (DWARF h:146 `AddBoxTrigger(TriggerId, Vector3, Matrix44Affine)`, not homed on
+//   this tree -- its inlined body is spelled below), LightTrigger::GetTransform.
+//
+//   0x82747534..0x82747554  assert "lpOutput" (.cpp 0x125F = 4703)
+//   REMOVE, 0x827475C8..0x827476E4, over mHullsToRemoveTriggersFor (this + 0x54AF4, count +0x90):
+//     lhz the hull ; GetHull (inlined: "luIndex < (mpData->muNumHulls)", h:2229 ; mpapHulls +0xC)
+//     for luTrigger < lpHull->muNumLightTriggers (lbz 0xE):
+//       LightTriggerId::Set's two asserts: hull < 0x190 (BrnTrafficLightTrigger.h:211 "luHull <
+//       KU_MAX_HULLS"), trigger < 0x100 (:212 "luLightTriggerIndex < 256")
+//       0x827476A0 `lbz +0x729F0 ; bne skip`, else id = (hull << 8) | 0x39000000 | trigger and
+//       GetTriggerManagementInputInterface (0x82710E78) +0x20010 -> the remove queue's AddEvent
+//       (0x823250E8)
+//   ADD, 0x827476FC..0x82747894, over mHullsToAddTriggersFor (this + 0x54A60, count +0x90):
+//     the same hull walk and asserts; lpLightTrigger = lpHull->mpaLightTriggers (+0x34) + 32 * i ;
+//     0x827477DC `lbz +0x729F0 ; bne skip`, else: id as above ; GetTransform ==
+//     ExpandPosPlusYRotToTransform(+0x10) (0x82747800) ; |mDimensions| (`vandc128` with the
+//     0x80000000 splat) ; an InAddBoxTriggerEvent {transform, id at +0x40, 0xFF at +0x44 and
+//     +0x45 (`stb r24(-1)`), dims at +0x50} ; VariableEventQueue<131072,16>::AddEvent<
+//     InAddBoxTriggerEvent>(the add queue at interface +0, &event, 2) (0x8238E8A8)
+//   0x82747898..0x827478B0  both counts stored 0 (Clear)
+// ---------------------------------------------------------------------------------------------
+void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    CGS_ASSERT(lpOutput, "lpOutput");   // .cpp:4703
+
+    for (u32 luIndex = 0; luIndex < mHullsToRemoveTriggersFor.GetLength(); ++luIndex)
+    {
+        const u32   luHull = mHullsToRemoveTriggersFor[luIndex];
+        const Hull* lpHull = GetHull(luHull);
+        for (u32 luTrigger = 0; luTrigger < lpHull->muNumLightTriggers; ++luTrigger)
+        {
+            // LightTriggerId::Set (BrnTrafficLightTrigger.h:211 / :212).
+            CGS_ASSERT(luHull < KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
+            CGS_ASSERT(luTrigger < 256u, "luLightTriggerIndex < 256");
+            if (!mbDEBUGRunningWorstCase)
+            {
+                BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent lRemoveEvent;
+                lRemoveEvent.mTriggerID = (luHull << 8) | KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
+                lpOutput->GetTriggerManagementInputInterface()->RemoveTrigger(lRemoveEvent);
+            }
+        }
+    }
+
+    for (u32 luIndex = 0; luIndex < mHullsToAddTriggersFor.GetLength(); ++luIndex)
+    {
+        const u32   luHull = mHullsToAddTriggersFor[luIndex];
+        const Hull* lpHull = GetHull(luHull);
+        for (u32 luTrigger = 0; luTrigger < lpHull->muNumLightTriggers; ++luTrigger)
+        {
+            CGS_ASSERT(luHull < KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
+            CGS_ASSERT(luTrigger < 256u, "luLightTriggerIndex < 256");
+            const LightTrigger* lpLightTrigger = &lpHull->mpaLightTriggers[luTrigger];
+            if (!mbDEBUGRunningWorstCase)
+            {
+                const u32 lTriggerId = (luHull << 8) | KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
+
+                // TriggerManagementInputInterface::AddBoxTrigger(lTriggerId, dimensions, transform),
+                // inlined on the console. The pad bytes the console leaves as stack residue are zero.
+                BrnWorld::TriggerEntityModuleIO::InAddBoxTriggerEvent lAddEvent;
+                std::memset(&lAddEvent, 0, sizeof(lAddEvent));
+                lAddEvent.mTransform                 = lpLightTrigger->GetTransform();
+                lAddEvent.mPackedQueryFlagsAndIndex  = lTriggerId;
+                lAddEvent.muTriggerType              = 0xFFu;
+                lAddEvent.muSubType                  = 0xFFu;
+                const Vector3 lDimensions            = lpLightTrigger->GetDimensions();
+                lAddEvent.mDimensions.x              = std::fabs(lDimensions.x);
+                lAddEvent.mDimensions.y              = std::fabs(lDimensions.y);
+                lAddEvent.mDimensions.z              = std::fabs(lDimensions.z);
+                lAddEvent.mDimensions.w              = std::fabs(lDimensions.w);
+                lpOutput->GetTriggerManagementInputInterface()->GetAddTriggerEventQueue()
+                    .AddEvent<BrnWorld::TriggerEntityModuleIO::InAddBoxTriggerEvent>(&lAddEvent, 2);
+            }
+        }
+    }
+
+    mHullsToAddTriggersFor.Clear();      // 0x827478AC `stwx 0, +0x54AF0`
+    mHullsToRemoveTriggersFor.Clear();   // 0x827478B0 `stwx 0, +0x54B84`
 }
 
 }   // namespace BrnTraffic

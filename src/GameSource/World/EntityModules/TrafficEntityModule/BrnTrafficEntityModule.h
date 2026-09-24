@@ -1176,6 +1176,13 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // and mNearMissRaceCarCollection wholesale into the output buffer's traffic->race-car
         // pre-scene interface. Body in _wG_NearMissOutput.cpp. lpInput is the family's shared
         // argument and is never read.
+        // @0x82747518 (DWARF :1320). PreSceneUpdate calls it unconditionally after the four output
+        // producers (0x8274AB20): every light-trigger box of each hull in
+        // mHullsToRemoveTriggersFor is removed from the world and every one of each hull in
+        // mHullsToAddTriggersFor is added (owner-57 ids), then both lists are cleared. Body at the
+        // end of BrnTrafficEntityModule.cpp.
+        void ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
         void GenerateNearMissOutput(BrnTrafficIO::InputBuffer_PreScene* lpInput,
                                     BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
 
@@ -1772,6 +1779,14 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         f32                   mfDEBUGAvoidance_LineTestResultR;     // :889
         f32                   mfDEBUGAvoidance_LineTestScore;       // :890
         f32                   mfDEBUGAvoidance_PassScore;           // :891
+
+        // X360 +0x729F0, in the un-emitted DWARF :892..:895 window, so the NAME IS INFERRED (FLAG):
+        // BrnTraffic::DebugComponent::OnActivate registers this byte as the "Performance" checkbox
+        // "Running Worst Case" (0x827632A4..0x827632BC `addi r4, r4, 0x29F0`). Construct stores 0
+        // (0x82740E00 `stbx r30(0), r31, 0x729F0`) and nothing but that checkbox writes it. While it
+        // is set RecalculateActiveHulls @0x8274C9C4 swaps in a baked hull list and ManageTriggers
+        // @0x827476A0 / @0x827477DC registers no light triggers.
+        bool                  mbDEBUGRunningWorstCase;
 
         s32                   miPerfMon_PreSceneUpdate;             // :896
         s32                   miPerfMon_PostSceneUpdate;            // :897
