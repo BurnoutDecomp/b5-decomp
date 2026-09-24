@@ -340,6 +340,11 @@ void RaceCarEntityModule::Construct()
     mbCarSelectDontStreamAudio = false;
     mbHACK_ExitingCarSelectWaitForAudio = false;   // stbx r31 (0), +0x186D1 @0x822FDBC0
 
+    // Crash parity G61-D4: the inlined Random::Construct on module +0x18490 (`addis r11, r30, 2 ;
+    // addi r11, r11, -0x7B70` @0x822FDD34/0x822FDD60; the default seed 0xC87CD8C91AD0891B built at
+    // 0x822FDCA0/0x822FDC18, the ring primed through 0x822FE024).
+    mNonDeterministicRandom.Construct();
+
     mpVehicleList        = 0;
     mpWheelList          = 0;
     mbCarColoursBound    = false;
@@ -5796,6 +5801,11 @@ void RaceCarEntityModule::PreSceneUpdate(
     lpInput->LockForRead();
     lpOutput->LockForWrite();
 
+    // 0x8230D9D8..0x8230DA10 (crash parity G61-D4): one LCG step of mNonDeterministicRandom every
+    // pre-scene update -- `ld 0x20 ; mulld ; addi 1 ; std 0x20` on module +0x18490, the DWARF's
+    // Random::RandomUInt with its result unused (the ring is not touched).
+    (void)mNonDeterministicRandom.RandomUInt();
+
     // ---- step 10: latch the sim time step -----------------------------------
     if( ( lUpdateSet & 1 ) != 0 )
     {
@@ -8057,7 +8067,8 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
             // `lbzx r10, r31, 0x18345` / `lbzx r8, r31, 0x186C9` -- both read from `this`.
             lrCar.Update( lfTimeStep, lfTimeStepMultiplier, lfAcceleration, lfBraking,
                           mbIsInOnlineGameMode, mbInCarSelectScreen, static_cast<s32>(meGameModeType),
-                          mPlayersCurrentRouteNodePosition, mPlayersNextRouteNodePosition, lpGameEvents );
+                          mPlayersCurrentRouteNodePosition, mPlayersNextRouteNodePosition, lpGameEvents,
+                          &mNonDeterministicRandom );   // the console's stack slot (0x822FF300 / 0x822FF330)
         }
     }
 

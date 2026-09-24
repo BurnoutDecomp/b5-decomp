@@ -53,6 +53,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"
 #include "GameSource/AttribSys/Generated/classes/surfacelist.h"        // Attrib::Gen::surfacelist mSurfaceList (DWARF :365)     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::EPaybackType (meActivePaybackType)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                             // CgsNumeric::Random (mNonDeterministicRandom, +0x18490)
 
 #include <cstddef>                                   // offsetof
 
@@ -1780,6 +1781,16 @@ private:
     // `lwz/stw 0x64(module + 0x18250)`. Nothing else in the image reads it; the console's WRITE
     // is reproduced on this seat rather than dropped. DELETE-WHEN the manager is embedded.
     s32 miPowerParkingContactTrafficCount = 0;
+
+    // MODELLED member (crash parity G61-D4, 2026-09-24). DWARF BrnRaceCarEntityModule.h:420
+    // `Random mNonDeterministicRandom`, X360 +0x18490 (48 bytes, ending at mfLastPlayerCarSpeed
+    // +0x184C0) -- appended per the named-member rule above, the console seat is inside maTailPadB1a.
+    // Construct seeds it (the inlined Random::Construct, default seed 0xC87CD8C91AD0891B, around
+    // 0x822FDC18..0x822FE024), PreSceneUpdate steps it once a frame (0x8230D9D8..0x8230DA10, the
+    // DWARF's RandomUInt with its result unused), and UpdateActiveCars hands its address to every
+    // ActiveRaceCar::Update (the console's stack slot at 0x822FF300/0x822FF330) for the start-line
+    // boost flame.
+    CgsNumeric::Random mNonDeterministicRandom;
 };
 
 // X360 0x822A34A8. Asserts the index is in [E_ACTIVE_RACE_CAR_INDEX_0,
