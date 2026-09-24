@@ -106,11 +106,23 @@ public:
 };
 #include "fxrcem4_increase.inc"
 
+// OnResourcesLoaded's Def() legs (0x822EB20C, reviewer B on 87d1ad23 / G62): stand-ins so the extracted
+// body builds; those legs are run_fxrcem4_on_resources_loaded.py's.
+struct Matrix44Affine { Vector3 xAxis, yAxis, zAxis, wAxis; };
+namespace rw { namespace math { namespace vpu { inline bool IsValid(const Matrix44Affine&) { return true; } } } }
+namespace BrnPhysics { namespace Deformation {
+struct StreamedDeformationSpec { Matrix44Affine mCarModelSpaceToHandlingBodySpaceTransform; };
+} }
+static const BrnPhysics::Deformation::StreamedDeformationSpec gResidentSpec = {};
+const BrnPhysics::Deformation::StreamedDeformationSpec* ResolveDeformationSpec(const CgsResource::ResourceHandle&) { return &gResidentSpec; }
+
 struct ActiveRaceCar {
     enum EState : u32 { E_STATE_INACTIVE = 0, E_STATE_ATTACHED = 1, E_STATE_WAITING = 2, E_STATE_ACTIVE = 3 };
     u32  muState = E_STATE_ATTACHED;
+    s32  meActiveRaceCarIndex = 0;
     bool mbAttached = true, mbTakenDown = false;
     RaceCar* mpRaceCar = nullptr;
+    Matrix44Affine mCentreOfMassTransform = {};
     RenderParams mRenderParams;
     CgsResource::ResourceHandle mDeformationModelHandle = { 0u }, mGraphicsModelHandle = { 0u };
     s32  miDefaultColourIndex = -1, miDefaultColourPalette = -1;

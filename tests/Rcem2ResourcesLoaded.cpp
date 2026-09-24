@@ -5,6 +5,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -14,6 +15,11 @@ namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char* lpcMessage, const char*, int) { ++guAssertions; std::fprintf(stderr, "ASSERT: %s\n", lpcMessage); return 0; }
 void* EndAssert() { return nullptr; }
+}
+// The [res-loaded] witness's sink (PC-only diag, off unless BRN_RESLOADED_DIAG is set).
+namespace Log {
+struct DebugPrint { template <class T> DebugPrint& operator<<(const T&) { return *this; } };
+DebugPrint* gpDebugPrint = nullptr;
 }
 }
 
@@ -49,9 +55,22 @@ struct RenderParams {
     DetachedPartQueue& GetDetachedPartQueue() { return mQueue; }
 };
 
+// FX-RCEM4 (reviewer B on 87d1ad23 / G62, 2026-09-24): OnResourcesLoaded now also copies the spec's
+// +1552 matrix (0x822EB20C). Stand-ins so the extracted body builds; that leg is tested by
+// run_fxrcem4_on_resources_loaded.py.
+struct Matrix44Affine { Vector3 xAxis, yAxis, zAxis, wAxis; };
+namespace rw { namespace math { namespace vpu { inline bool IsValid(const Matrix44Affine&) { return true; } } } }
+namespace BrnPhysics { namespace Deformation {
+struct StreamedDeformationSpec { Matrix44Affine mCarModelSpaceToHandlingBodySpaceTransform; };
+} }
+static const BrnPhysics::Deformation::StreamedDeformationSpec gResidentSpec = {};
+const BrnPhysics::Deformation::StreamedDeformationSpec* ResolveDeformationSpec(const CgsResource::ResourceHandle&) { return &gResidentSpec; }
+
 struct ActiveRaceCar {
     enum EState : u8 { E_STATE_INACTIVE = 0, E_STATE_ATTACHED = 1, E_STATE_WAITING = 2, E_STATE_ACTIVE = 3 };
     u8 muState = E_STATE_ATTACHED;
+    s32 meActiveRaceCarIndex = 0;
+    Matrix44Affine mCentreOfMassTransform = {};
     CgsResource::ResourceHandle mDeformationModelHandle, mGraphicsModelHandle;
     RenderParams mRenderParams;
     u8 muStateAtVerletReset = 0xFF;

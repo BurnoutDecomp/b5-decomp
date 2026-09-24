@@ -1880,8 +1880,11 @@ void RaceCarEntityModule::ResetActiveRaceCar(
     //
     // Now the seat runs at the seam (the create leg's own math over the resident spec's own
     // data -- see VehiclePhysics::SeatTransformFromCreateLegBringUp), and the SHIPPED
-    // model-space->handling-space matrix (spec+1552) lands in mCentreOfMassTransform so the
-    // two halves compose: physics ~= ground + 1.4459, body ~= ground + 0.7054 (PUSMC01).
+    // model-space->handling-space matrix (spec+1552) is already in mCentreOfMassTransform --
+    // ActiveRaceCar::OnResourcesLoaded copies it at the console's own slot (0x822EB20C, crash
+    // parity 2026-09-24; the SetCentreOfMassTransformBringUp forward that used to sit here is
+    // retired) -- so the two halves compose: physics ~= ground + 1.4459, body ~= ground + 0.7054
+    // (PUSMC01).
     // DELETE-WHEN ReadUpdatedActiveRaceCarDataFromPhysics is wired to a real producer.
     {
         const RaceCarStreamer::PhysicsResourcePtr& lrSeatPhysicsResource =
@@ -1896,9 +1899,6 @@ void RaceCarEntityModule::ResetActiveRaceCar(
             const Matrix44Affine lSeatedTransform =
                 BrnPhysics::Vehicle::VehiclePhysics::SeatTransformFromCreateLegBringUp(
                     lpSeatSpec, lrTransform );
-
-            lpActiveRaceCar->SetCentreOfMassTransformBringUp(
-                lpSeatSpec->mCarModelSpaceToHandlingBodySpaceTransform );
 
             // [FLAG PC bring-up] OnResourcesLoaded @0x822EB2FC leg 2, landed at this promote
             // seam exactly like the +1552 matrix above (wheel-transform wave 2026-08-13): the
@@ -2038,9 +2038,10 @@ void RaceCarEntityModule::PublishRenderPoseWithoutPhysicsBringUp( ActiveRaceCar*
     //
     // So the console applies the +1552 matrix EXACTLY ONCE, and it applies it as the CENTRE
     // OF MASS TRANSFORM inside CalcBodyTransform @0x822B8828 (`Mult( mCentreOfMassTransform,
-    // mPhysicsState.mTransform )`). Our promote seam already seeds mCentreOfMassTransform
-    // with that very matrix (SetCentreOfMassTransformBringUp, this file), so the multiply
-    // below was applying it a SECOND time.
+    // mPhysicsState.mTransform )`). mCentreOfMassTransform already holds that very matrix
+    // (ActiveRaceCar::OnResourcesLoaded copies it, 0x822EB20C; until 2026-09-24 the promote
+    // seam's SetCentreOfMassTransformBringUp did), so the multiply below was applying it a
+    // SECOND time.
     //
     // WHY IT LOOKED RIGHT AND WAS STILL WRONG: an extra RIGID factor cannot deform anything,
     // so on a stationary, axis-aligned car it reads as a small offset -- which is exactly
