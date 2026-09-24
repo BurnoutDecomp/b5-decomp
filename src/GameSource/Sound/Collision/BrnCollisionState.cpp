@@ -64,12 +64,14 @@ void CollisionState::UpdateParams(f32 afDeltaTime)
     CgsSound::Logic::State::UpdateParams(afDeltaTime);
 }
 
+// DWARF BrnCollisionState.h:65 declares the override, but CollisionState's vtable (off_820B25D0,
+// stored by CreateObject @0x826D3258) holds 0x826C4C20 at +0x18 -- State::Detach itself, the same
+// entry State's own vtable holds: the override is identical-code-folded with the base. So it adds
+// nothing; in particular it does not touch meLifetime (the PC wrote E_NONE into it on a successful
+// detach -- a store the console never makes; Attach's Flush(E_NONE) @0x826D3420 is the only reset).
 bool CollisionState::Detach()
 {
-    const bool lbDetached = CgsSound::Logic::State::Detach();
-    if (lbDetached)
-        meLifetime.Update(E_NONE);
-    return lbDetached;
+    return CgsSound::Logic::State::Detach();
 }
 
 // ARTIST CreateObject @ 0x826D3218 allocates and constructs one CollisionState;
