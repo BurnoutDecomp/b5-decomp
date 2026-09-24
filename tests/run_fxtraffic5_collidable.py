@@ -39,7 +39,6 @@ NUMERIC_CHECKS = 26
 
 HELPER_BLOCK = ("namespace\n{\n    // NAMED LEG GATE, file-local. NOT IN THE X360 BINARY.\n"
                 "    inline void LogMissingLeg_T4")
-VOLUME_ID = "    inline CgsSceneManager::VolumeInstanceId MakeTrafficVolumeInstanceId(u32 luVehicle)"
 ACCESSORS = [
     "    Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex)",
     "    Matrix44Affine TrafficEntityModule::GetVehicleTransform(u32 luIndex) const",
@@ -57,13 +56,6 @@ REPLACEMENTS = [
     ("BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface", "FakeRaceCars"),
     ("BrnPhysics::Vehicle::RaceCarState", "FakeRaceCarState"),
 ]
-
-
-def constant_line(source, name):
-    match = re.search(r"^[ \t]*(?:const[ \t]+)?[\w:]+[ \t]+" + re.escape(name) + r"[ \t]*=[^;]*;", source, re.M)
-    if match is None:
-        raise ValueError("constant absent: " + name)
-    return match.group(0).strip()
 
 
 def wiring(tree):
@@ -90,8 +82,12 @@ def numeric(tree):
             if old not in body:
                 raise ValueError("body text changed, cannot substitute: " + old)
             body = body.replace(old, new)
-        parts = ["namespace BrnTraffic {", "namespace {", constant_line(module, "KU8_TRAFFIC_ENTITY_OWNER"),
-                 definition(module, VOLUME_ID), "}", definition(module, HELPER_BLOCK)]
+        # MakeTrafficVolumeInstanceId + KU8_TRAFFIC_ENTITY_OWNER now come from their DWARF home,
+        # BrnTrafficConstants.h (crash parity FX-NETCRASH, b5 6c535ee9 folded the module's anonymous-
+        # namespace copy there), which the fixture includes through BrnTrafficEntityModule.h. They are
+        # NOT extracted from the module any more, also for --rev runs of older trees: a second
+        # anonymous-namespace copy beside the header one would make the body's call ambiguous.
+        parts = ["namespace BrnTraffic {", definition(module, HELPER_BLOCK)]
         parts += [definition(module, accessor).replace("TrafficEntityModule::", FIXTURE + "::", 1)
                   for accessor in ACCESSORS]
         parts.append(body)
