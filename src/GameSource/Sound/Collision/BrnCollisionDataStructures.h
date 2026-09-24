@@ -10,6 +10,11 @@
 #include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
+// The InputCollision constructors (DWARF BrnCollisionStateManager.h:405/414) take these by
+// reference only; their bodies live in BrnCollisionStateManager.cpp, which includes the full types.
+namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; } }
+namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
+
 // =============================================================================
 // BrnSound::Logic::Collision::ScrapeInfo
 //   GameSource/Sound/Collision/BrnCollisionDataStructures.h (assert-cited home) +
@@ -60,6 +65,15 @@ enum ESize
     E_SIZE_SMALL  = 2,
 };
 
+// DWARF BrnSoundLogicSharedIO.h:54/55: the contact records the collision sound logic imports,
+// and the logic input (BrnSoundLogicModuleIo.h:38 `typedef RootInputBuffer LogicInputBuffer`).
+typedef BrnPhysics::ContactSpy::BaseContact     InputContactSpy;
+typedef BrnPhysics::ContactSpy::PropContact     InputPropSpy;
+typedef BrnSound::Module::Io::RootInputBuffer   LogicInputBuffer;
+
+struct CameraInfo;               // BrnCollisionStateManager.h:120
+class  CollisionStateManager;    // BrnCollisionStateManager.h:563
+
 // BrnCollisionStateManager.h:280. Per-scrape descriptor.
 struct ScrapeInfo
 {
@@ -75,6 +89,14 @@ struct ScrapeInfo
     {
         mRelativeVelocity.SetZero();
     }
+
+    // DWARF BrnCollisionStateManager.h:299: the scrape a contact describes -- its entity pair and
+    // B's collision tag, the orientation it struck at, when, and how hard; no relative velocity
+    // yet, not crashing, valid. Inlined by every builder that makes one (e.g. the regular
+    // InputCollision @0x826D3A60..0x826D3AD0); body in BrnCollisionStateManager.cpp.
+    ScrapeInfo( InputContactSpy lSpy,
+                AttribSys::Enums::eOrientation::eOrientation leOrientation,
+                f32 lfTimeStamp, f32 lfIntensity );
 
     // BrnCollisionDataStructures.h:108 (assert-cited region). True iff the two
     // descriptors identify the same scrape: same kind (mu32Kind) and the same
@@ -121,6 +143,23 @@ struct InputCollision
             maParameter[luIndex] = VecFloat();
         mPosition.SetZero();
     }
+
+    // DWARF BrnCollisionStateManager.h:405 -- a race-car or traffic contact (the regular
+    // pipeline): ARTIST sub_826D3850, reached from ImportContactSpies<RaceCarContact>
+    // 0x826DD090 and <TrafficContact> 0x826DD128. Body in BrnCollisionStateManager.cpp.
+    InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                   const InputContactSpy& lSpy, const LogicInputBuffer& lInput,
+                   f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:414 -- a prop contact (the prop pipeline): ARTIST
+    // sub_826E8B20, reached from ImportContactSpies<PropContact> 0x826EB490.
+    InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                   const InputPropSpy& lSpy, const LogicInputBuffer& lInput,
+                   f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:474: exchange a contact's two entities and its two
+    // contact points (the regular builder's race-car ordering, 0x826D391C..0x826D3944).
+    void SwapEntityIds(InputContactSpy& lSpy);
 
     ScrapeInfo mScrapeInfo;
     VecFloat maParameter[3];

@@ -1,7 +1,9 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (TrafficClassToSize h:191)
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"          // CgsSound::Logic::Content (x4 banks)
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"            // BrnTraffic::E_VEHICLECLASS_COUNT
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"    // BrnSound::Logic::BrnStateManager (base)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h" // TrafficSoundEntity
 
@@ -67,7 +69,20 @@ namespace Traffic
         virtual void ResourcesAreReady();
         const CgsSound::Logic::Content& GetEngineAemsBank();   // h:154
         const CgsSound::Logic::Content& GetHornAemsBank();     // h:171
-        ETrafficSize TrafficClassToSize(u8 lu8TrafficClass);   // h:189
+        // DWARF h:189. A header inline on the console, emitted out of line at 0x82683290 and
+        // called with the class byte alone in r3 -- no `this` (MapEntityIdToMaterial
+        // 0x826A0D4C `lbz r3, 0x4A(r3) ; bl`, TrafficEngine::Attach, TrafficHorn::Attach,
+        // TrafficControl::UpdateParams) -- so it is static. Body: `clrlwi r31, r3, 24 ;
+        // cmplwi 4 ; blt` over the h:191 assert, then `lwzx` from the four-entry table at
+        // 0x820AA4DC = {0, 1, 2, 2}: a car is small, a van medium, a bus or a big rig large.
+        static ETrafficSize TrafficClassToSize(u8 lu8VehicleClass)
+        {
+            static const ETrafficSize KAE_VEHICLE_CLASS_TO_SIZE[BrnTraffic::E_VEHICLECLASS_COUNT] =
+                { E_SMALL, E_MEDIUM, E_LARGE, E_LARGE };
+            CGS_ASSERT(lu8VehicleClass < BrnTraffic::E_VEHICLECLASS_COUNT,
+                       "lu8VehicleClass < BrnTraffic::E_VEHICLECLASS_COUNT");
+            return KAE_VEHICLE_CLASS_TO_SIZE[lu8VehicleClass];
+        }
 
     protected:
         Slot                    maSlots[KU_NUM_SLOTS];    // h:143

@@ -5,6 +5,10 @@
 #include "BrnCommonTypes.h"                              // Vector3, Matrix44Affine
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"  // CgsSound::Utils::DataPoint<T>
 
+// RaceCarCache::Update's two sources, by reference only (bodies in BrnRaceCarCache.cpp).
+namespace BrnWorld { namespace RaceCarEntityModuleIO { struct RCEntityActiveRaceCarOutputInterface; } }
+namespace BrnPhysics { namespace Deformation { struct DeformationState; } }
+
 // =============================================================================
 // BrnSound::Logic::Collision::RaceCarCache
 //   GameSource/Sound/Collision/BrnRaceCarCache.h (DWARF home BrnCollisionStateManager.h) +
@@ -18,11 +22,11 @@
 // beside the committed sibling BrnHingeStateCache (the committed BrnCollisionStateManager
 // models the UNRELATED CollisionStateManager class as a deferred shell, not this cache).
 //
-// This TU's recon'd function set is ONE entry:
+// This TU's recon'd function set:
 //   RaceCarCache::GetRaceCar  @ 0x82683068
-// (RaceCarCache::Update is declared-only / DEFERRED -- it touches the un-homed
-//  VehicleInterface / DeformationState surface; mirrors the BrnHingeStateCache.h
-//  deferral pattern.)
+//   RaceCarCache::Update      @ 0x826BF478  (landed 2026-09-24, crash parity FX-CRASHSND2:
+//     the collision manager's MapPositionToOrientation reads this cache; with Update missing
+//     every node stayed inactive, so every contact fell back to Front with its pair reversed.)
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 RaceCarCacheNode stride is 192
 // bytes; GetRaceCar subscripts BY NAME so the host sizeof drives the stride (no 192
@@ -61,6 +65,12 @@ struct RaceCarCache
     // X360 stride sizeof(RaceCarCacheNode) == 192 (attested by luIndex*192 in
     // GetRaceCar @ 0x82683068): 16 + 2 + pad(14) + 128 + 16 + 16 == 192. NOT
     // static_asserted (32-bit-vs-host-64-bit; GetRaceCar subscripts BY NAME).
+
+    // BrnCollisionStateManager.h:151 (DWARF; body cpp:3920). @ 0x826BF478 -- bodied in this TU.
+    // Refreshes every node from the race-car output interface and the deformation state; the
+    // collision manager calls it at the head of UpdateResolver when a deformation state exists.
+    void Update( const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface& lInterface,
+                 const BrnPhysics::Deformation::DeformationState& lDeformationState );
 
     // BrnCollisionStateManager.h:154 (DWARF). @ 0x82683068 -- bodied in this TU.
     const RaceCarCacheNode* GetRaceCar( u32 luIndex ) const;

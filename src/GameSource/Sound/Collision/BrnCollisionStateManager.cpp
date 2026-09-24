@@ -9,10 +9,12 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"   // DeformationState (RaceCarCache::Update)
 #include "GameSource/Sound/Collision/BrnCollisionState.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"   // Traffic::TrafficStateManager::TrafficClassToSize
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"
 
 #include <algorithm>
@@ -353,6 +355,21 @@ void CollisionStateManager::ResourcesAreReady()
                 << " prop="
                 << static_cast<s32>(maBinLoopupCache[InputCollision::E_PROP].GetEntryCount())
                 << "/" << static_cast<s32>(mPropsCrashBinList.mNumCrashBins()) << "\n";
+            // Every entry's material pair, once: what a collision's two materials must meet.
+            for (u32 luPipeline = 0; luPipeline < InputCollision::E_MAX_PIPELINES; ++luPipeline)
+            {
+                const BinLookupCache& lrCache = maBinLoopupCache[luPipeline];
+                for (u32 luEntry = 0; luEntry < lrCache.GetEntryCount(); ++luEntry)
+                {
+                    char lacLine[128];
+                    std::snprintf(lacLine, sizeof(lacLine),
+                                  "[collision-audio] cache entry pipeline=%u %u matA=0x%016llx matB=0x%016llx\n",
+                                  luPipeline, luEntry,
+                                  static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialA),
+                                  static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialB));
+                    *CgsDev::Log::gpDebugPrint << lacLine;
+                }
+            }
         }
     }
     mbResourcesAreLoaded = true;
@@ -491,6 +508,7 @@ int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
                 << " bin=" << static_cast<s32>(lpCollision->miBinIndex)
                 << " size=" << static_cast<s32>(lpCollision->meSize)
                 << " sample=" << lpCollision->miSampleID
+                << " orient=" << static_cast<s32>(lpCollision->meOrientation)
                 << " impulse=" << lpCollision->mNormalizedImpulse.x << "\n";
         }
     }
@@ -586,114 +604,418 @@ bool CollisionStateManager::MapPropTypeToMaterial(
     return true;
 }
 
-u64 CollisionStateManager::MapEntityIdToMaterial(
-    const EntityId& lrEntityId,
-    const BrnSound::Module::Io::RootInputBuffer& lrInput) const
+// ---------------------------------------------------------------------------
+// KAE_TRAFFIC_CAR_SIZE_TO_MATERIAL_TABLE (DWARF cpp:124) -- dword_820AA79C = { 0x8, 0x800000,
+// 0x1000000 }: a small, medium or large traffic car.
+// ---------------------------------------------------------------------------
+namespace
 {
-    const u32 luOwner = lrEntityId.muValue >> 24;
-    const u32 luIndex = (lrEntityId.muValue >> 10) & 0x3FFFu;
-    switch (luOwner)
+const EeMaterialType KAE_TRAFFIC_CAR_SIZE_TO_MATERIAL_TABLE[Traffic::E_MAX_SIZES] =
+{
+    AttribSys::Enums::eMaterialType::TrafficCar,
+    AttribSys::Enums::eMaterialType::TrafficCarMedium,
+    AttribSys::Enums::eMaterialType::TrafficCarLarge,
+};
+
+// An EntityId's owner byte and 14-bit entity index (`srwi 24` / `extrwi 14,8` throughout).
+u32 GetEntityOwner(EntityId lEntityId) { return lEntityId.muValue >> 24; }
+u32 GetEntityIndex(EntityId lEntityId) { return (lEntityId.muValue >> 10) & 0x3FFFu; }
+
+const u32 KU_ENTITY_OWNER_WORLD    = 0;
+const u32 KU_ENTITY_OWNER_RACE_CAR = 1;
+const u32 KU_ENTITY_OWNER_TRAFFIC  = 2;
+const u32 KU_ENTITY_OWNER_PROP     = 3;
+}
+
+// ---------------------------------------------------------------------------
+// MapEntityIdToMaterial(EntityId, s32, const LogicInputBuffer&)  @ 0x826A0CF8  (DWARF cpp:3593)
+//
+//   srwi r11, id, 24 ; cmplwi 1
+//   owner 0  -> World (0x10)                                        0x826A0DB0
+//   owner 1  -> index == player ? PlayerCar (2) : AiCar (4)          0x826A0D94..0x826A0DA8
+//   owner 2  -> GetTrafficOutputInterface() @0x82694DD8, GetTrafficEntityIndex(index) @0x82681EC8;
+//               a found entity's muVehicleClass (+0x4A) -> TrafficStateManager::TrafficClassToSize
+//               @0x82683290 (assert < E_MAX_SIZES, cpp:3735); not found -> size 0; return
+//               KAE_TRAFFIC_CAR_SIZE_TO_MATERIAL_TABLE[size]                0x826A0D30..0x826A0D8C
+//   owner 3+ -> Nothing (1)                                            0x826A0D28
+//
+// The PC used to classify traffic by the PhysicalTrafficState crash flags (fatally crashing ->
+// large, deforming -> medium): the console never reads them here -- the material is the car's
+// SIZE, from the traffic sound output interface.
+// ---------------------------------------------------------------------------
+EeMaterialType MapEntityIdToMaterial(EntityId lEntityId, s32 liPlayerIndex,
+                                     const LogicInputBuffer& lInput)
+{
+    const u32 luOwner = GetEntityOwner(lEntityId);
+    if (luOwner < KU_ENTITY_OWNER_RACE_CAR)
+        return AttribSys::Enums::eMaterialType::World;
+    if (luOwner == KU_ENTITY_OWNER_RACE_CAR)
+        return static_cast<s32>(GetEntityIndex(lEntityId)) == liPlayerIndex
+                   ? AttribSys::Enums::eMaterialType::PlayerCar
+                   : AttribSys::Enums::eMaterialType::AiCar;
+    if (luOwner > KU_ENTITY_OWNER_TRAFFIC)
+        return AttribSys::Enums::eMaterialType::Nothing;
+
+    Traffic::ETrafficSize leSize = Traffic::E_SMALL;
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpEntity =
+        lInput.GetTrafficOutputInterface().GetTrafficEntityIndex(
+            static_cast<u16>(GetEntityIndex(lEntityId)));
+    if (lpEntity)
     {
-    case 0u: // world
-        return 0x10ull;
-    case 1u: // race car
-        return luIndex == static_cast<u32>(
-            lrInput.GetPlayerActiveRaceCarIndex()) ? 0x2ull : 0x4ull;
-    case 2u: // traffic
+        leSize = Traffic::TrafficStateManager::TrafficClassToSize(lpEntity->muVehicleClass);
+        CGS_ASSERT(leSize < Traffic::E_MAX_SIZES,
+                   "leSize < BrnSound::Logic::Traffic::E_MAX_SIZES");
+    }
+    return KAE_TRAFFIC_CAR_SIZE_TO_MATERIAL_TABLE[leSize];
+}
+
+// ---------------------------------------------------------------------------
+// KV_DIRECTION_BIAS (DWARF cpp:88) -- unk_83008160 = (1, 1, 1, 0), written by the CRT thunk
+// 0x82C63308..0x82C63338 from flt_82001C98 (1.0f). The per-axis weight of the box-face distances.
+// ---------------------------------------------------------------------------
+Vector3 KV_DIRECTION_BIAS = { 1.0f, 1.0f, 1.0f, 0.0f };
+
+// ---------------------------------------------------------------------------
+// MapPositionToOrientationUsingBox  @ 0x8269ED18  (DWARF cpp:190)
+//
+// Bring the contact point into the car's frame: the three row vectors of the cached transform
+// are merged into columns (0x8269ED74..0x8269ED90 vmrglw/vmrghw), the translation term is built
+// first (-T.z, -T.y, -T.x) and the point added after (x, y, z) -- 0x8269EDB8..0x8269EE10 -- and
+// the COM offset is subtracted (0x8269EE14). Then the distance to each face of the deformed box,
+// |local - face| (vandc of the sign bit) scaled by KV_DIRECTION_BIAS (0x8269EE2C..0x8269EEC0):
+//   front |z - max.z|  back |z - min.z|  left |x - min.x|  right |x - max.x|
+//   top   |y - max.y|  bottom |y - min.y|
+// and the nearest face wins through a fixed chain of all-lanes `vcmpgtfp.` tests (a NaN compares
+// false): Front, then Rear if nearer, then Side if nearer than EITHER side (the side distance is
+// the smaller of the two, vminfp 0x8269EF10), then Roof, then Bottom (0x8269EE90..0x8269EF4C).
+// The normal is read only by the debug print ("Normal:"), and the fourth vector not at all; the
+// debug draw (dword_82FFB910) and print (dword_82FFB90C) have no writer.
+// ---------------------------------------------------------------------------
+AttribSys::Enums::eOrientation::eOrientation MapPositionToOrientationUsingBox(
+    Vector3 lPosition, Vector3 /*lNormal*/, Matrix44Affine lTransform, Vector3 /*lUnused*/,
+    Vector3 lComOffset, Vector3 lMin, Vector3 lMax)
+{
+    using namespace AttribSys::Enums::eOrientation;
+
+    const Vector3* lapRows[3] = { &lTransform.Right(), &lTransform.Up(), &lTransform.At() };
+    const Vector3& lrTranslation = lTransform.Pos();
+    f32 lafLocal[3];
+    for (u32 luAxis = 0; luAxis < 3u; ++luAxis)
     {
-        const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue*
-            lpTraffic = lrInput.GetPhysicalTrafficStates();
-        if (lpTraffic)
+        const Vector3& lrRow = *lapRows[luAxis];
+        f32 lfLocal = -lrTranslation.z * lrRow.z;
+        lfLocal = -lrTranslation.y * lrRow.y + lfLocal;
+        lfLocal = -lrTranslation.x * lrRow.x + lfLocal;
+        lfLocal = lrRow.x * lPosition.x + lfLocal;
+        lfLocal = lrRow.y * lPosition.y + lfLocal;
+        lfLocal = lrRow.z * lPosition.z + lfLocal;
+        lafLocal[luAxis] = lfLocal;
+    }
+    const f32 lfLocalX = lafLocal[0] - lComOffset.x;
+    const f32 lfLocalY = lafLocal[1] - lComOffset.y;
+    const f32 lfLocalZ = lafLocal[2] - lComOffset.z;
+
+    const f32 lfFrontDist  = std::fabs(lfLocalZ - lMax.z) * KV_DIRECTION_BIAS.z;
+    const f32 lfBackDist   = std::fabs(lfLocalZ - lMin.z) * KV_DIRECTION_BIAS.z;
+    const f32 lfLeftDist   = std::fabs(lfLocalX - lMin.x) * KV_DIRECTION_BIAS.x;
+    const f32 lfRightDist  = std::fabs(lfLocalX - lMax.x) * KV_DIRECTION_BIAS.x;
+    const f32 lfTopDist    = std::fabs(lfLocalY - lMax.y) * KV_DIRECTION_BIAS.y;
+    const f32 lfBottomDist = std::fabs(lfLocalY - lMin.y) * KV_DIRECTION_BIAS.y;
+
+    eOrientation leOrientation = Front;
+    f32 lfNearest = lfFrontDist;
+    if (lfNearest > lfBackDist)
+    {
+        lfNearest = lfBackDist;
+        leOrientation = Rear;
+    }
+    if (lfNearest > lfLeftDist || lfNearest > lfRightDist)
+    {
+        leOrientation = Side;
+        lfNearest = std::min(lfLeftDist, lfRightDist);
+    }
+    if (lfNearest > lfTopDist)
+    {
+        lfNearest = lfTopDist;
+        leOrientation = Roof;
+    }
+    if (lfNearest > lfBottomDist)
+        leOrientation = Bottom;
+    return leOrientation;
+}
+
+// ---------------------------------------------------------------------------
+// MapPositionToOrientation  @ 0x8269F418  (DWARF cpp:318)
+//
+//   A not a race car (`srwi 24 ; cmplwi 1 ; bne`)             -> Front, false   0x8269F4F4
+//   assert index < 8 (cpp:327)
+//   node = lMgr.GetRaceCarCache().GetRaceCar(index)  (mgr+0xCF0, bl 0x82683068)
+//   !node || !node->mbActive PREVIOUS (`lbz 0x11`)           -> Front, false
+//   *out = UsingBox(position, normal, node->mTransform PREVIOUS (+0x60), 0, com (+0x00),
+//                   min (+0xA0), max (+0xB0))                 0x8269F4A8..0x8269F4D4
+//   Side against another race car (B's owner byte 1)          -> Front (`stw r11 = 1`)
+//   return true
+// The cache's DataPoints keep {current, previous}; RaceCarCache::Update runs at the head of
+// UpdateResolver, so "previous" is the car as it stood before this frame's contacts. The leading
+// matrix (the manager's mFrameInformation.mPlayerTransform) is never read -- r3 is overwritten
+// by `addi r3, r30, 0xCF0`.
+// ---------------------------------------------------------------------------
+bool MapPositionToOrientation(Matrix44Affine /*lTransform*/, Vector3 lPosition, Vector3 lNormal,
+                              EntityId lVehicleIdA, EntityId lVehicleIdB,
+                              const CollisionStateManager& lMgr,
+                              AttribSys::Enums::eOrientation::eOrientation& leOrientation)
+{
+    if (GetEntityOwner(lVehicleIdA) == KU_ENTITY_OWNER_RACE_CAR)
+    {
+        const u32 luIndex = GetEntityIndex(lVehicleIdA);
+        CGS_ASSERT(luIndex < RaceCarCache::KU_MAX_NUM_RACE_CARS,
+                   "lVehicleIdA.GetEntityIndex() < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
+        const RaceCarCache::RaceCarCacheNode* lpCar = lMgr.GetRaceCarCache().GetRaceCar(luIndex);
+        if (lpCar && lpCar->mbActive.GetPrevious())
         {
-            for (s32 liIndex = 0; liIndex < lpTraffic->GetLength(); ++liIndex)
+            const Vector3 lZero = { 0.0f, 0.0f, 0.0f, 0.0f };   // vspltisw v3, 0
+            leOrientation = MapPositionToOrientationUsingBox(
+                lPosition, lNormal, lpCar->mTransform.GetPrevious(), lZero,
+                lpCar->mComOffset, lpCar->mMin, lpCar->mMax);
+            if (leOrientation == AttribSys::Enums::eOrientation::Side &&
+                GetEntityOwner(lVehicleIdB) == KU_ENTITY_OWNER_RACE_CAR)
             {
-                const BrnPhysics::Vehicle::PhysicalTrafficState& lrState =
-                    lpTraffic->GetEvent(liIndex);
-                if (lrState.mEntityID.muValue != lrEntityId.muValue)
-                    continue;
-                if (lrState.mbIsFatallyCrashing)
-                    return 0x1000000ull;
-                if (lrState.mbIsDeforming)
-                    return 0x800000ull;
-                break;
+                leOrientation = AttribSys::Enums::eOrientation::Front;
             }
+            return true;
         }
-        return 0x8ull;
     }
-    default:
-        return 0x1ull;
-    }
+    leOrientation = AttribSys::Enums::eOrientation::Front;
+    return false;
 }
 
-void CollisionStateManager::MakeBaseInputCollision(
-    InputCollision& lrOut,
-    const BrnPhysics::ContactSpy::BaseContact& lrContact,
-    const BrnSound::Module::Io::RootInputBuffer& lrInput,
-    f32 afDeltaTime) const
+// ---------------------------------------------------------------------------
+// ScrapeInfo::ScrapeInfo(InputContactSpy, eOrientation, f32, f32)  (DWARF h:299; inlined -- the
+// regular InputCollision builds it at sp+0x70 and block-copies it in, 0x826D3A60..0x826D3AD0):
+// no relative velocity, the spy's two entities and B's collision tag, the stamp, the orientation,
+// the intensity, not crashing, valid.
+// ---------------------------------------------------------------------------
+ScrapeInfo::ScrapeInfo(InputContactSpy lSpy,
+                       AttribSys::Enums::eOrientation::eOrientation leOrientation,
+                       f32 lfTimeStamp, f32 lfIntensity)
+    : mEntityIdA(lSpy.mEntityIdA)
+    , mEntityIdB(lSpy.mEntityIdB)
+    , mfTimeStamp(lfTimeStamp)
+    , mCollisionTagB(lSpy.mCollisionTagB)
+    , meOrientation(leOrientation)
+    , mfIntensity(lfIntensity)
+    , mbCrashing(false)
+    , mbValid(true)
 {
-    lrOut = InputCollision();
-    lrOut.mePipeline = InputCollision::E_REGULAR;
-    lrOut.maEntityID[0] = lrContact.mEntityIdA;
-    lrOut.maEntityID[1] = lrContact.mEntityIdB;
-    lrOut.mPosition = lrContact.mPointOnA;
-    lrOut.maMaterial[0] = MapEntityIdToMaterial(lrOut.maEntityID[0], lrInput);
-    // InputCollision::InputCollision @ 0x826BDAE8 ORs this authored category
-    // into the second material after MapEntityIdToMaterial.  The crash-bin
-    // material pairs include that bit; omitting it prevents every regular
-    // collision from reaching a bin.
-    lrOut.maMaterial[1] =
-        MapEntityIdToMaterial(lrOut.maEntityID[1], lrInput) |
-        0x2000000000ull;
+    mRelativeVelocity.SetZero();
+}
 
-    // ARTIST flt_830083E0: the stress-to-per-second normalisation used by both
-    // regular and prop InputCollision constructors.
-    // ARTIST computes this static from KF_FASTEST_COLLISION (200) and
-    // KF_BIGGEST_THING_MASS (1600) during global initialization.
-    static const f32 KF_BIGGEST_COLLISION_IN_SECOND = 320000.0f;
-    const f32 lfDt = std::max(afDeltaTime, 0.000001f);
-    const f32 lfStress = std::sqrt(
-        lrContact.mNormalStress.x * lrContact.mNormalStress.x +
-        lrContact.mNormalStress.y * lrContact.mNormalStress.y +
-        lrContact.mNormalStress.z * lrContact.mNormalStress.z);
-    const f32 lfImpulse =
-        lfStress / (KF_BIGGEST_COLLISION_IN_SECOND * lfDt);
-    lrOut.maParameter[0] = VecFloat{lfImpulse, lfImpulse, lfImpulse, lfImpulse};
+// ---------------------------------------------------------------------------
+// InputCollision::SwapEntityIds  (DWARF h:474; inlined at 0x826D391C..0x826D3944): the two
+// entities and the two contact points trade places; the normal and the stresses do not.
+// ---------------------------------------------------------------------------
+void InputCollision::SwapEntityIds(InputContactSpy& lSpy)
+{
+    std::swap(lSpy.mEntityIdA, lSpy.mEntityIdB);
+    std::swap(lSpy.mPointOnA, lSpy.mPointOnB);
+}
 
-    const Vector3 lToContact{
-        lrOut.mPosition.x - mCameraInfo.mTransform.Pos().x,
-        lrOut.mPosition.y - mCameraInfo.mTransform.Pos().y,
-        lrOut.mPosition.z - mCameraInfo.mTransform.Pos().z,
-        0.0f};
-    const f32 lfDistanceSquared =
-        lToContact.x * lToContact.x + lToContact.y * lToContact.y +
-        lToContact.z * lToContact.z;
-    lrOut.maParameter[1] = VecFloat{lfDistanceSquared, lfDistanceSquared,
-                                    lfDistanceSquared, lfDistanceSquared};
-    f32 lfFacing = 0.0f;
-    if (lfDistanceSquared > 0.0f)
+namespace
+{
+// ARTIST flt_830083E0 = KF_BIGGEST_THING_MASS (1600, 0x82F2CEFC) * KF_FASTEST_COLLISION (200,
+// 0x82F2CEF8), computed by the CRT thunk 0x82C63230..0x82C63248: KF_BIGGEST_COLLISION_IN_SECOND
+// (DWARF cpp:74), the stress-to-per-second normalisation of every contact builder.
+const f32 KF_BIGGEST_COLLISION_IN_SECOND = 1600.0f * 200.0f;
+
+f32 Dot3(const Vector3& lrA, const Vector3& lrB)
+{
+    return lrA.x * lrB.x + lrA.y * lrB.y + lrA.z * lrB.z;
+}
+
+VecFloat Splat(f32 lfValue)
+{
+    const VecFloat lSplat = { lfValue, lfValue, lfValue, lfValue };
+    return lSplat;
+}
+
+// The impulse lane both contact builders store in maParameter[0]: 1 / (K * dt) FIRST (fmuls,
+// fdivs), then |stress| (vmsum3fp + the two-step rsqrte refinement, a zero length selected to
+// zero by vsel), multiplied in the vector unit. There is no guard on dt.
+f32 NormalisedImpulse(const Vector3& lrNormalStress, f32 lfTimeStep)
+{
+    const f32 lfInverseSecond = 1.0f / (KF_BIGGEST_COLLISION_IN_SECOND * lfTimeStep);
+    return lfInverseSecond * std::sqrt(Dot3(lrNormalStress, lrNormalStress));
+}
+}
+
+// ---------------------------------------------------------------------------
+// InputCollision::InputCollision(const CameraInfo&, CollisionStateManager&, const InputContactSpy&,
+//                                const LogicInputBuffer&, f32, f32)   sub_826D3850 (DWARF h:405)
+//
+// The race-car and traffic contacts (ImportContactSpies 0x826DD090 / 0x826DD128):
+//   0x826D3898..0x826D38D0  mScrapeInfo.mbValid = 0, mfPriorityAddition = 0.0, meAction =
+//                           Collision, meOrientation = Front, mePipeline = E_REGULAR, mbCull = 0,
+//                           mPosition = the ORIGINAL spy's point on A
+//   0x826D38D8..0x826D3944  lSpyModified = the spy; two race cars are ordered by index (the
+//                           higher index goes second -- SwapEntityIds)
+//   0x826D3948..0x826D3A20  maParameter[0] = the normalised impulse (NormalisedImpulse)
+//   0x826D3A24..0x826D3B48  MapPositionToOrientation from A's side; if A is not an active race
+//                           car, the pair is reversed (maEntityID and the scrape entry take (B, A))
+//                           and the orientation is taken from B's side at B's contact point
+//   0x826D3B4C..0x826D3C00  the two materials, each `extsw` of MapEntityIdToMaterial (NO
+//                           0x2000000000 bit -- Hex-Rays prints one, the instructions have none)
+//                           with the player index read through GetVehicleInterface() (h:980)
+//   0x826D3C04..0x826D3C50  maParameter[1] = |position - camera|^2, maParameter[2] =
+//                           normalize(position - camera) . the camera's At row (camera info +0x20)
+//   0x826D3C54..0x826D3C90  SloMoCrash culling: outside impact time False, a scrape already in the
+//                           history less than 5 s old (flt_820ABCD8) culls this collision
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                               const InputContactSpy& lSpy, const LogicInputBuffer& lInput,
+                               f32 lfTimeStamp, f32 lfTimeStep)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Collision)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lSpy.mPointOnA;
+
+    InputContactSpy lSpyModified = lSpy;
+    if (GetEntityOwner(lSpyModified.mEntityIdA) == KU_ENTITY_OWNER_RACE_CAR &&
+        GetEntityOwner(lSpyModified.mEntityIdB) == KU_ENTITY_OWNER_RACE_CAR &&
+        GetEntityIndex(lSpyModified.mEntityIdA) > GetEntityIndex(lSpyModified.mEntityIdB))
     {
-        const f32 lfInvDistance = 1.0f / std::sqrt(lfDistanceSquared);
-        lfFacing = (lToContact.x * lrContact.mNormal.x +
-                    lToContact.y * lrContact.mNormal.y +
-                    lToContact.z * lrContact.mNormal.z) * lfInvDistance;
+        SwapEntityIds(lSpyModified);
     }
-    lrOut.maParameter[2] = VecFloat{lfFacing, lfFacing, lfFacing, lfFacing};
+    maEntityID[0] = lSpyModified.mEntityIdA;
+    maEntityID[1] = lSpyModified.mEntityIdB;
+
+    maParameter[0] = Splat(NormalisedImpulse(lSpyModified.mNormalStress, lfTimeStep));
+
+    const BrnSound::Logic::FrameInformation& lrFrame = lMgr.GetFrameInformation();
+    if (MapPositionToOrientation(lrFrame.mPlayerTransform, lSpyModified.mPointOnA,
+                                 lSpyModified.mNormal, lSpyModified.mEntityIdA,
+                                 lSpyModified.mEntityIdB, lMgr, meOrientation))
+    {
+        mScrapeInfo = ScrapeInfo(lSpyModified, meOrientation, lfTimeStamp, maParameter[0].x);
+    }
+    else
+    {
+        InputContactSpy lNewSpy = lSpyModified;
+        SwapEntityIds(lNewSpy);
+        maEntityID[0] = lNewSpy.mEntityIdA;
+        maEntityID[1] = lNewSpy.mEntityIdB;
+        MapPositionToOrientation(lrFrame.mPlayerTransform, lNewSpy.mPointOnA, lNewSpy.mNormal,
+                                 lNewSpy.mEntityIdA, lNewSpy.mEntityIdB, lMgr, meOrientation);
+        mScrapeInfo = ScrapeInfo(lNewSpy, meOrientation, lfTimeStamp, maParameter[0].x);
+    }
+
+    // The EeMaterialType is a 32-bit enum; `extsw` widens it (0x826D3BA4 / 0x826D3BE8).
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        maEntityID[0], lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        maEntityID[1], lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
+
+    const Vector3 lSpyToCamera = { mPosition.x - lCamera.mTransform.Pos().x,
+                                   mPosition.y - lCamera.mTransform.Pos().y,
+                                   mPosition.z - lCamera.mTransform.Pos().z, 0.0f };
+    const f32 lfDistanceSquared = Dot3(lSpyToCamera, lSpyToCamera);
+    maParameter[1] = Splat(lfDistanceSquared);
+    const f32 lfInverseDistance = 1.0f / std::sqrt(lfDistanceSquared);
+    const Vector3 lDirection = { lSpyToCamera.x * lfInverseDistance,
+                                 lSpyToCamera.y * lfInverseDistance,
+                                 lSpyToCamera.z * lfInverseDistance, 0.0f };
+    maParameter[2] = Splat(Dot3(lDirection, lCamera.mTransform.At()));
+
+    if (lrFrame.meImpactTime.GetCurrent() != AttribSys::Enums::eImpactTime::False)
+    {
+        const ScrapeInfo* lpScrape = lMgr.FindInScrapeHistory(mScrapeInfo);   // bl 0x826889E0
+        if (lpScrape)
+        {
+            const f32 lfAge = lfTimeStamp - lpScrape->mfTimeStamp;
+            if (lfAge < 5.0f)
+                mbCull = true;
+        }
+    }
 }
 
-void CollisionStateManager::MakePropInputCollision(
-    InputCollision& lrOut,
-    const BrnPhysics::ContactSpy::PropContact& lrContact,
-    const BrnSound::Module::Io::RootInputBuffer& lrInput,
-    f32 afDeltaTime) const
+// ---------------------------------------------------------------------------
+// InputCollision::InputCollision(const CameraInfo&, CollisionStateManager&, const InputPropSpy&,
+//                                const LogicInputBuffer&, f32, f32)   sub_826E8B20 (DWARF h:414)
+//
+// The prop contacts (ImportContactSpies 0x826EB490):
+//   0x826E8B64..0x826E8BAC  mScrapeInfo.mbValid = 0, mbCull = 0, mfPriorityAddition = 0.0,
+//                           meAction = Collision, mePipeline = E_PROP, mPosition = the point on A,
+//                           maEntityID = (A, B)
+//   0x826E8BB0..0x826E8BC0  MapPositionToOrientation from B's side at B's contact point (the result
+//                           is not tested)
+//   0x826E8BC4..0x826E8C2C  maMaterial[1] = `extsw` MapEntityIdToMaterial(B)
+//   0x826E8C10..0x826E8D04  impulse, distance and facing exactly as the regular builder
+//   0x826E8D08..0x826E8D70  the prop's own material from MapPropTypeToMaterial into a zeroed
+//                           local; mbCull = it has none; a prop that began moving this frame adds
+//                           priority 1.0; maMaterial[0] = that local (0 when unmapped)
+//   0x826E8D74..0x826E8DFC  B a prop too (owner byte 3): this collision becomes A against the
+//                           world (maEntityID[1] = 0, maMaterial[1] = World) and B gets its own
+//                           collision against the world -- a copy of the spy with A := B, B := 0 and
+//                           the two points exchanged -- added straight to the manager's inputs
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                               const InputPropSpy& lSpy, const LogicInputBuffer& lInput,
+                               f32 lfTimeStamp, f32 lfTimeStep)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Collision)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_PROP)
+    , mbCull(false)
 {
-    MakeBaseInputCollision(lrOut, lrContact, lrInput, afDeltaTime);
-    lrOut.mePipeline = InputCollision::E_PROP;
-    lrOut.maMaterial[1] =
-        MapEntityIdToMaterial(lrContact.mEntityIdB, lrInput);
-    lrOut.mbCull = !MapPropTypeToMaterial(lrContact.muType,
-                                          lrOut.maMaterial[0]);
-    if (lrContact.muBeganMoving == 1u)
-        lrOut.mfPriorityAddition = 1.0f;
+    mScrapeInfo.mbValid = false;
+    mPosition = lSpy.mPointOnA;
+    maEntityID[0] = lSpy.mEntityIdA;
+    maEntityID[1] = lSpy.mEntityIdB;
+
+    MapPositionToOrientation(lMgr.GetFrameInformation().mPlayerTransform, lSpy.mPointOnB,
+                             lSpy.mNormal, lSpy.mEntityIdB, lSpy.mEntityIdA, lMgr, meOrientation);
+
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lSpy.mEntityIdB, lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
+
+    maParameter[0] = Splat(NormalisedImpulse(lSpy.mNormalStress, lfTimeStep));
+    const Vector3 lSpyToCamera = { mPosition.x - lCamera.mTransform.Pos().x,
+                                   mPosition.y - lCamera.mTransform.Pos().y,
+                                   mPosition.z - lCamera.mTransform.Pos().z, 0.0f };
+    const f32 lfDistanceSquared = Dot3(lSpyToCamera, lSpyToCamera);
+    maParameter[1] = Splat(lfDistanceSquared);
+    const f32 lfInverseDistance = 1.0f / std::sqrt(lfDistanceSquared);
+    const Vector3 lDirection = { lSpyToCamera.x * lfInverseDistance,
+                                 lSpyToCamera.y * lfInverseDistance,
+                                 lSpyToCamera.z * lfInverseDistance, 0.0f };
+    maParameter[2] = Splat(Dot3(lDirection, lCamera.mTransform.At()));
+
+    u64 luMaterial = 0;
+    mbCull = !lMgr.MapPropTypeToMaterial(lSpy.muType, luMaterial);
+    if (lSpy.muBeganMoving == 1u)
+        mfPriorityAddition = 1.0f;
+    maMaterial[0] = luMaterial;
+
+    if (GetEntityOwner(lSpy.mEntityIdB) == KU_ENTITY_OWNER_PROP)
+    {
+        maEntityID[1].muValue = 0;
+        maMaterial[1] = AttribSys::Enums::eMaterialType::World;
+
+        InputPropSpy lNewSpy = lSpy;
+        lNewSpy.mEntityIdA = lSpy.mEntityIdB;
+        lNewSpy.mEntityIdB.muValue = 0;
+        lNewSpy.mPointOnA = lSpy.mPointOnB;
+        lNewSpy.mPointOnB = lSpy.mPointOnA;
+        InputCollision lNewInputCollision(lCamera, lMgr, lNewSpy, lInput, lfTimeStamp, lfTimeStep);
+        lMgr.AddInputCollision(lNewInputCollision);
+    }
 }
 
 void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
@@ -893,6 +1215,30 @@ u32 CollisionStateManager::MapGameModesToBinFlags(const void* lpGameMode) const
     }
 }
 
+// ---------------------------------------------------------------------------
+// CollisionStateManager::ImportContactSpies<SpyQueue>  (DWARF cpp:1509; ARTIST 0x826DD090
+// RaceCarContact [export hole, ppcdis], 0x826DD128 TrafficContact, 0x826EB490 PropContact):
+//   lCameraInfo = mCameraInfo (`addis r26, this, 1 ; addi -0x7EC0`); lu32SpyCount = length
+//   (`lwz r28, 8(queue)`); for each record: InputCollision lCollision(lCameraInfo, *this, lSpy,
+//   lInputBuffer, lfTimeStamp, lfTimeStep) -> AddInputCollision(lCollision).
+// The overload the record type picks is the console's builder: a PropContact the prop one,
+// every other contact the regular one.
+// ---------------------------------------------------------------------------
+template <typename SpyQueue>
+void CollisionStateManager::ImportContactSpies(const SpyQueue& lSpyQueue,
+                                               const LogicInputBuffer& lInputBuffer,
+                                               f32 lfTimeStamp, f32 lfTimeStep)
+{
+    const CameraInfo& lCameraInfo = mCameraInfo;
+    const u32 lu32SpyCount = static_cast<u32>(lSpyQueue.GetLength());
+    for (u32 lu32I = 0; lu32I < lu32SpyCount; ++lu32I)
+    {
+        InputCollision lCollision(lCameraInfo, *this, lSpyQueue.GetEvent(static_cast<s32>(lu32I)),
+                                  lInputBuffer, lfTimeStamp, lfTimeStep);
+        AddInputCollision(lCollision);
+    }
+}
+
 void CollisionStateManager::UpdateResolver(
     const BrnSound::Module::Io::RootInputBuffer& lrInput,
     const BrnSound::Logic::FrameInformation& lrFrame,
@@ -906,52 +1252,67 @@ void CollisionStateManager::UpdateResolver(
     maBinLoopupCache[InputCollision::E_PROP]
         .Build<Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>(mPropsCrashBinList);
 
+    // 0x826F9238..0x826F92CC: the frame copy (mgr+0x81A0 <- the frame). The console makes it just
+    // after the race-car cache update below; the two touch disjoint state, so it stays here at the
+    // head. The director camera is a member of the input (GetDirectorCamera @0x82694B38 returns its
+    // address) -- there is no null test on the console.
     mFrameInformation = lrFrame;
-    const BrnDirector::Camera::Camera* lpCamera = lrInput.GetDirectorCamera();
-    CGS_ASSERT(lpCamera != nullptr, "lpDirectorCamera");
-    if (!lpCamera)
-        return;
+    const BrnDirector::Camera::Camera& lrCamera = *lrInput.GetDirectorCamera();
 
-    mx32CameraBinFlags = MapCameraStateToBinFlags(*lpCamera);
-    mx32GameModeBinFlags = MapGameModesToBinFlags(lrInput.GetGameModeInterface());
-    SetCameraInfo(*lpCamera);
-    mu32InputCollisionCount = 0;
+    mx32CameraBinFlags = MapCameraStateToBinFlags(lrCamera);                          // 0x826F9180
+    mx32GameModeBinFlags = MapGameModesToBinFlags(lrInput.GetGameModeInterface());    // 0x826F919C
 
+    // 0x826F91E4..0x826F9234: the race-car cache is refreshed from the vehicle interface only while
+    // the deformation output carries a state (`lwz r30, 0x70(deform) ; cmplwi ; beq`). It is what
+    // MapPositionToOrientation reads for every contact's orientation.
+    const BrnPhysics::Deformation::DeformationState* lpDeformationState =
+        lrInput.GetDeformationInterface().mpDeformationState;
+    if (lpDeformationState)
+        mRaceCarCache.Update(*lrInput.GetVehicleInterface(), *lpDeformationState);
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a race car entering the cache, with
+    // the transform and deformed box every contact's orientation will be read from.
+    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suCachePrintCount = 0;
+        for (u32 luCar = 0; luCar < RaceCarCache::KU_MAX_NUM_RACE_CARS && suCachePrintCount < 16u; ++luCar)
+        {
+            const RaceCarCache::RaceCarCacheNode& lrCar = *mRaceCarCache.GetRaceCar(luCar);
+            if (!lrCar.mbActive.HasChangedTo(true))
+                continue;
+            ++suCachePrintCount;
+            char lacLine[224];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[collision-audio] race-car cache car=%u active pos=(%.2f,%.2f,%.2f) "
+                          "box=(%.2f,%.2f,%.2f)..(%.2f,%.2f,%.2f) com=(%.2f,%.2f,%.2f)\n",
+                          luCar, lrCar.mTransform.GetCurrent().Pos().x, lrCar.mTransform.GetCurrent().Pos().y,
+                          lrCar.mTransform.GetCurrent().Pos().z, lrCar.mMin.x, lrCar.mMin.y, lrCar.mMin.z,
+                          lrCar.mMax.x, lrCar.mMax.y, lrCar.mMax.z,
+                          lrCar.mComOffset.x, lrCar.mComOffset.y, lrCar.mComOffset.z);
+            *CgsDev::Log::gpDebugPrint << lacLine;
+        }
+    }
+
+    mu32InputCollisionCount = 0;                                                      // 0x826F933C
+    SetCameraInfo(lrCamera);                                                          // 0x826F9340
+
+    // 0x826F9344..0x826F9504: with contact data bound, each queue goes through ImportContactSpies
+    // stamped with the manager's current time (`lfs f1, 4(r31)`) and the frame step. Console order:
+    // race cars (data+0), traffic (+0x70A0), the discarded contacts (+0x193C0) -- then the glass,
+    // hinging body-part, broken-joint, detached-part and car-part legs -- then the props (+0x167E0).
+    // [BLOCKED] the discarded-contact leg (0x826F93EC..0x826F9408): ContactSpyData keeps
+    // mDiscardedContactQueue (@0x193C0) private and exposes no accessor on PC; it needs
+    // ContactSpyInterface::GetDiscardedContacts() const (the inline "mpData != NULL" tripwire at
+    // BrnContactSpyInterface.h:219, then &mpData->mDiscardedContactQueue).
     const BrnPhysics::ContactSpy::ContactSpyInterface& lrContacts =
         lrInput.GetContactSpyQueueInterface();
     s32 liPropCount = 0;
     if (lrContacts.IsValid())
     {
-        const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue*
-            lpRaceCars = lrContacts.GetRaceCarContacts();
-        for (s32 liIndex = 0; lpRaceCars && liIndex < lpRaceCars->GetLength(); ++liIndex)
-        {
-            InputCollision lCollision;
-            MakeBaseInputCollision(lCollision,
-                *lpRaceCars->GetBaseContact(liIndex), lrInput, afDeltaTime);
-            AddInputCollision(lCollision);
-        }
-
-        const BrnPhysics::ContactSpy::ContactSpyData::TrafficContactQueue*
-            lpTraffic = lrContacts.GetTrafficContacts();
-        for (s32 liIndex = 0; lpTraffic && liIndex < lpTraffic->GetLength(); ++liIndex)
-        {
-            InputCollision lCollision;
-            MakeBaseInputCollision(lCollision,
-                *lpTraffic->GetBaseContact(liIndex), lrInput, afDeltaTime);
-            AddInputCollision(lCollision);
-        }
-
-        const BrnPhysics::ContactSpy::ContactSpyData::PropContactQueue*
-            lpProps = lrContacts.GetPropContacts();
-        liPropCount = lpProps ? lpProps->GetLength() : 0;
-        for (s32 liIndex = 0; lpProps && liIndex < lpProps->GetLength(); ++liIndex)
-        {
-            InputCollision lCollision;
-            MakePropInputCollision(lCollision,
-                lpProps->GetEvent(liIndex), lrInput, afDeltaTime);
-            AddInputCollision(lCollision);
-        }
+        ImportContactSpies(*lrContacts.GetRaceCarContacts(), lrInput, mfCurrentTime, afDeltaTime);
+        ImportContactSpies(*lrContacts.GetTrafficContacts(), lrInput, mfCurrentTime, afDeltaTime);
+        liPropCount = lrContacts.GetPropContacts()->GetLength();
+        ImportContactSpies(*lrContacts.GetPropContacts(), lrInput, mfCurrentTime, afDeltaTime);
     }
 
     CullInputCollisions();
@@ -966,7 +1327,11 @@ void CollisionStateManager::UpdateResolver(
                 << "[collision-audio] resolve inputs="
                 << static_cast<s32>(mu32InputCollisionCount)
                 << " outputs=" << static_cast<s32>(mu32OutputCollisionCount)
-                << " props=" << liPropCount << "\n";
+                << " props=" << liPropCount << " orient=";
+            for (u32 luInput = 0; luInput < mu32InputCollisionCount && luInput < 4u; ++luInput)
+                *CgsDev::Log::gpDebugPrint << (luInput ? "," : "")
+                                           << static_cast<s32>(maInputCollision[luInput].meOrientation);
+            *CgsDev::Log::gpDebugPrint << "\n";
         }
     }
 }
@@ -1198,6 +1563,22 @@ void CollisionStateManager::SelectCollisionBin(
     // then a collision whose SECOND material is exactly 1 -- the value MapEntityIdToMaterial gives
     // an unhandled owner -- selects no bin at all (`ld 0x10 ; cmpldi 1 ; beq -> out`).
     lrOutput.miSampleID = -1;
+    // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the early-out below, counted --
+    // a second material of Nothing (an entity no material maps, e.g. the prop a race-car contact
+    // touched) never reaches a bin; the prop pipeline voices that contact.
+    if (lrOutput.maMaterial[1] == 1 && CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suSkipPrintCount = 0;
+        if (suSkipPrintCount++ < 32u)
+        {
+            char lacLine[128];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[collision-audio] skip pipeline=%d second material 1 mat0=0x%016llx\n",
+                          static_cast<int>(lrOutput.mePipeline),
+                          static_cast<unsigned long long>(lrOutput.maMaterial[0]));
+            *CgsDev::Log::gpDebugPrint << lacLine;
+        }
+    }
     if (lrOutput.maMaterial[1] == 1)
         return;
     const f32 lfDistanceSquared = lrOutput.maParameter[1].x;
@@ -1390,6 +1771,10 @@ void CollisionStateManager::SelectCollisionBin(
                 << "/" << static_cast<s32>(luActionBins)
                 << "/" << static_cast<s32>(luDistanceBins)
                 << "/" << static_cast<s32>(luImpulseBins)
+                << " mat=" << static_cast<s32>(lrOutput.maMaterial[0] >> 32)
+                << ":" << static_cast<s32>(lrOutput.maMaterial[0] & 0xFFFFFFFFull)
+                << "/" << static_cast<s32>(lrOutput.maMaterial[1] >> 32)
+                << ":" << static_cast<s32>(lrOutput.maMaterial[1] & 0xFFFFFFFFull)
                 << " camera=" << static_cast<s32>(mx32CameraBinFlags)
                 << " mode=" << static_cast<s32>(mx32GameModeBinFlags)
                 << " impact=" << static_cast<s32>(lrOutput.meImpactTime)
