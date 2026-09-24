@@ -92,12 +92,28 @@ namespace BrnAI
         return lResult;
     }
 
-    // clamp(x, 0, 1) -- the X360's `fsel max(x,0)` then `fsel min(.,1)` pair.
+    // rw::math::fpu::Clamp<float>(x, lo, hi) exactly as the X360 inlines it -- the DecFIGS DWARF
+    // lists fpu::Clamp<float> in CalculateSteeringAngle, AttemptToDriveAtDesiredSpeed,
+    // ProximitySpeed and CorneringTopSpeed, and each is the same two-fsel ladder:
+    //   fsubs t,lo,x ; fsel t,t,lo,x    t = (lo - x >= 0) ? lo : x   (lo == 0: `fneg ; fsel`)
+    //   fsubs u,hi,t ; fsel r,u,t,hi    r = (hi - t >= 0) ? t  : hi
+    // e.g. CalculateSteeringAngle 0x8277D0B8..0x8277D0C4 (lo -1.0 flt_820037C8, hi f31 == 1.0
+    // flt_82001C98), AttemptToDriveAtDesiredSpeed 0x82770780..0x82770790 / 0x827707CC..0x827707DC.
+    // fsel takes its THIRD operand when the test is unordered, so a NaN x passes the floor and
+    // comes back as hi -- not as NaN, which is what the old `if (x < lo) ... if (x > hi) ...`
+    // spelling returned (crash parity FX-AINAN2). Spelt here, in the TU, rather than through the
+    // shared rw::math::fpu::Clamp, so the AI call sites keep the console form whatever that
+    // shared header's spelling is.
+    static inline f32 ClampFsel(f32 lfValue, f32 lfLow, f32 lfHigh)
+    {
+        const f32 lfFloored = ((lfLow - lfValue) >= 0.0f) ? lfLow : lfValue;
+        return ((lfHigh - lfFloored) >= 0.0f) ? lfFloored : lfHigh;
+    }
+
+    // clamp(x, 0, 1) -- the fpu::Clamp<float>(x, 0.0f, 1.0f) ladder above (NaN -> 1.0).
     static inline f32 Saturate(f32 lfValue)
     {
-        if (lfValue < 0.0f) return 0.0f;
-        if (lfValue > 1.0f) return 1.0f;
-        return lfValue;
+        return ClampFsel(lfValue, 0.0f, 1.0f);
     }
 
     // ====================================================================================
@@ -682,9 +698,10 @@ namespace BrnAI
         // 5. clamp(pidOut, -1, +1) -> mfPIDOutput; steer toward it. The X360 stores the PID
         // output clamped DIRECTLY (asm: f0=flt_820037C8=-1.0; fsubs/fsel max(out,-1) then
         // min(.,+1); stfs 0x1D54). There is NO negation of the PID output.
-        f32 lfSteer = lfPidOut;
-        if (lfSteer < -1.0f) lfSteer = -1.0f;
-        if (lfSteer >  1.0f) lfSteer =  1.0f;
+        // fpu::Clamp<float> (DWARF) is the fsel ladder 0x8277D0B8..0x8277D0C4: a NaN output --
+        // and a NaN recorded error keeps the PID integral NaN for good -- steers +1.0 on the
+        // console. The old `if (< -1) ..; if (> 1) ..` passed the NaN on to the actuator.
+        const f32 lfSteer = ClampFsel(lfPidOut, -1.0f, 1.0f);
         mfPIDOutput = lfSteer;                                   // 0x1D54
         UpdateSteeringAngle(lfSteer);
     }
@@ -984,7 +1001,10 @@ namespace BrnAI
         mfAccelerator = 0.0f;                                 // 0x1D28
         mfHandBrake   = 0.0f;                                 // 0x1D30
 
-        if (lfBoostTimer <= 0.0f)
+        // 0x82770700 `fcmpu timer, 0.0 ; ble` -> the CheckForBoosting arm. ble is bc 4,gt: taken
+        // on <= AND on unordered, so only an ordered `timer > 0` counts down (FX-AINAN2; `<=`
+        // sent a NaN timer to the count-down arm).
+        if (!(lfBoostTimer > 0.0f))
         {
             if (CheckForBoosting())
             {
