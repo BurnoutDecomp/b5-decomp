@@ -2148,14 +2148,39 @@ void CollisionStateManager::CullInputCollisions()
     }
 }
 
+// SKF32_CAMERA_ASPECT_RATIO_NORMAL (DWARF cpp:82) -- unk_830085F0 = splat(4/3), written by the CRT
+// thunk 0x82C63278..0x82C63290 (lvlx 0x820AA254 = 0x3FAAAAAB ; vspltw 0 ; stvx128).
+// SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN (DWARF cpp:83) -- unk_83005F30 = splat(16/9), CRT
+// 0x82C63298..0x82C632B0 (lvlx 0x820AA250 = 0x3FE38E39). The CRT order follows the declaration order.
+VecFloat CollisionStateManager::SKF32_CAMERA_ASPECT_RATIO_NORMAL = { 4.0f / 3.0f, 4.0f / 3.0f, 4.0f / 3.0f, 4.0f / 3.0f };
+VecFloat CollisionStateManager::SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN = { 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f, 16.0f / 9.0f };
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::SetCameraInfo  @0x8269FFD0 (UpdateResolver 0x826F9340)
+//   0x8269FFEC..0x826A0024  the camera's four transform rows -> mCameraInfo (+0x8140)
+//   0x826A002C..0x826A0030  mfFieldOfView (+0x8180) = the camera's FOV (+0x58)
+//   0x826A0034..0x826A004C  mfCosineHalfFov (+0x8184) = the cosine of FOV * flt_82002518 (0x3C0EFA35,
+//                           pi/360): the product is single (`fmuls`), the cosine the DOUBLE `cos`
+//                           @0x82C096A0, rounded once (`frsp`)
+//   0x826A0050..0x826A0094  mfAspectRatio (+0x8188) = E_FLAG_WIDESCREEN of the camera's CURRENT flag
+//                           set (`ld 0x140 ; clrldi 63`) ? SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN :
+//                           _NORMAL, lane x (`lfs 0(r11)`) -- the camera's own mfAspectRatio (+0x5C)
+//                           is not read
+//   0x826A0098..0x826A00A8  mfZoom (+0x818C) = GetZoomFromFOVDegs(the camera's FOV)
+// Nothing on the console reads the four scalars back: every instruction on +0x8180..+0x818C is here,
+// and the builders read the transform's rows 2 and 3 only.
+// ---------------------------------------------------------------------------
 void CollisionStateManager::SetCameraInfo(
     const BrnDirector::Camera::Camera& lrCamera)
 {
     mCameraInfo.mTransform = lrCamera.GetTransform();
     mCameraInfo.mfFieldOfView = lrCamera.GetFOV();
-    mCameraInfo.mfCosineHalfFov = std::cos(
-        mCameraInfo.mfFieldOfView * 0.0087266462f);
-    mCameraInfo.mfAspectRatio = lrCamera.mfAspectRatio;
+    mCameraInfo.mfCosineHalfFov = static_cast<f32>(std::cos(
+        static_cast<f64>(mCameraInfo.mfFieldOfView * 0.0087266462f)));
+    mCameraInfo.mfAspectRatio =
+        lrCamera.GetState().IsFlagSet(BrnDirector::Camera::CameraState::E_FLAG_WIDESCREEN)
+            ? SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN.x
+            : SKF32_CAMERA_ASPECT_RATIO_NORMAL.x;
     mCameraInfo.mfZoom = BrnDirector::Camera::Utils::GetZoomFromFOVDegs(
         mCameraInfo.mfFieldOfView);
 }

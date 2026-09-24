@@ -226,6 +226,12 @@ public:
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x82701FA8
 
+    // DWARF BrnCollisionStateManager.cpp:82 / :83 (class statics): the aspect ratio SetCameraInfo
+    // gives the collision camera -- 4:3, or 16:9 while the director camera is flagged
+    // E_FLAG_WIDESCREEN. .bss splats (unk_830085F0 / unk_83005F30); values in the .cpp.
+    static VecFloat SKF32_CAMERA_ASPECT_RATIO_NORMAL;
+    static VecFloat SKF32_CAMERA_ASPECT_RATIO_WIDESCREEN;
+
     // ---- boot + lifecycle virtuals ----
     virtual bool Prepare();                       // @ 0x826F8B78  (vtable +0x0C)
     virtual CgsSound::Logic::State* GetFreeState(void* apvAttachment) override;
