@@ -3449,10 +3449,15 @@ void ActiveRaceCar::AddToScene(
     const f32 lfComY      = mCentreOfMassTransform.wAxis.y;                       // this + 0xC0
     const f32 lfAbsComY   = fabsf(lfComY);                                        // vandc <sign mask>
     const f32 lfOverhang  = lfAbsComY - lrHandlingBodyDimensions.y;               // vsubfp
-    // `(x > 0) ? x : 0` is vmaxfp(x, 0) INCLUDING NaN polarity (gotcha 4): the VMX compare is
-    // unordered-false, so a NaN operand yields the second source, which is the zero here too.
+    // `vmaxfp128 v13, v13, v127` @0x822EB848 with v127 = vspltisw128 0 (@0x822EB800). vmaxfp is NOT
+    // `(x > 0) ? x : 0`: the maximum of anything and a NaN is a QNaN (AltiVec PEM), and +0 is the
+    // larger of +-0 -- so a NaN overhang stays NaN (GetPropCollisionBox @0x822D3DB0 has the same vmaxfp).
+    // (Corrected 2026-09-24, crash parity FX-RCEM4: this used to claim the "unordered-false compare"
+    // hands a NaN the zero, which turned a NaN COM height into the bare 0.025 m half-pad.)
+    const f32 lfOverhangOrZero =
+        (lfOverhang != lfOverhang) ? lfOverhang : ((lfOverhang > 0.0f) ? lfOverhang : 0.0f);   // vmaxfp128
     const f32 lfHalfDelta =
-        0.5f * (((lfOverhang > 0.0f) ? lfOverhang : 0.0f) + KF_HANDLING_BODY_Y_PAD); // vmaxfp/vaddfp/vmulfp
+        0.5f * (lfOverhangOrZero + KF_HANDLING_BODY_Y_PAD);                      // vaddfp ; vmulfp128 (0.5)
 
     Vector3 lHalfExtents = lrHandlingBodyDimensions;
     lHalfExtents.y = lrHandlingBodyDimensions.y + lfHalfDelta;   // vrlimi128 v9, v0, 4, 0
