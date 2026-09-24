@@ -77,6 +77,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/World/AI/BrnAISharedConstants.h"   // BrnAI::EResetType
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"   // KU_FLAG_AI_PERSISTENT_DAMAGE
+#include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                  // the re-colour legs' palette asserts
 
 namespace BrnWorld
 {
@@ -94,6 +95,11 @@ namespace
     //   0x82C4BB50..0x82C4BB68  flt_82FAD8C0 = flt_82F31928 (0.44704) * flt_82019A30 (75.0)
     const f32 KF_RESET_ON_TRACK_SPEED        = 0.44704f * 50.0f;   // flt_82FAD720, 50 mph in m/s
     const f32 KF_RESET_ON_TRACK_SPEED_ONLINE = 0.44704f * 75.0f;   // flt_82FAD8C0, 75 mph in m/s
+
+    // DWARF BrnRaceCarEntityModule.cpp:306 KI_BLACK_CAR_COLOUR_INDEX = 6: the re-colour legs'
+    // SET_OPPONENTS_TO_COPS colour (`li r17, 6` @0x822F4078, stored @0x822F420C / 0x822F4330).
+    // (Also TU-local in BrnRaceCarEntityModule.cpp for SetupCarColour -- the DWARF home.)
+    const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
 }
 
 // =================================================================================================
@@ -169,14 +175,15 @@ s32 RaceCarEntityModule::GetPersistentDamageCarCount() const
 // (G67-D3) into ResetRaceCar's lfHowCloseToTotalled, which WriteOutVehicleStats hands to
 // DeformableObject::ResetDeformation as the initial damage -- the rival comes back crumpled.
 //
-// ⛔ ONLY THE RE-COLOUR LEG STAYS PARKED (0x822F4174..0x822F4260 and 0x822F4298..0x822F4390):
-// `miColourIndex = GetGameModeFlag(KU_FLAG_SET_OPPONENTS_TO_COPS) ? 6 :
-// GetRandomCarColour(miColourPalette, -1)` plus its "Invalid Colour Index" asserts. It indexes
-// maPalettes[miColourPalette], and on this build a rival's palette is still RaceCar::Reset's -1:
-// its console writer SetupCarColour @0x822F5170 (called from OnRaceCarResourcesLoaded) has no
-// body yet (G61-D6). Running the leg now would read maPalettes[-1]. It lands with
-// SetupCarColour, GetRandomCarColour @0x822EA088 and IsCarColourInUse @0x822D2E68 (the
-// RaceCarEntityModule fix lane, CHAIN-RECOLOUR). The damage does not depend on the colour.
+// ⭐ THE RE-COLOUR LEG LANDED 2026-09-24 (crash parity CHAIN-RECOLOUR): 0x822F4174..0x822F4260
+// (no damage to add: damage == 0 and three rivals already carry damage) and 0x822F4298..0x822F4390
+// (IncreasePersistentDamage wrapped past 1.0): `miColourIndex = GetGameModeFlag(
+// KU_FLAG_SET_OPPONENTS_TO_COPS) ? 6 : GetRandomCarColour(miColourPalette, -1)` plus its
+// "Invalid Colour Index" asserts (:1282/:1288, :1298/:1304). It was parked because it indexes
+// maPalettes[miColourPalette] and a rival's palette was RaceCar::Reset's -1; its console writer
+// SetupCarColour @0x822F5170 (OnRaceCarResourcesLoaded, with the G61-D6 default-colour leg of
+// ActiveRaceCar::OnResourcesLoaded) landed with it, as did GetRandomCarColour @0x822EA088 and
+// IsCarColourInUse @0x822D2E68. The damage does not depend on the colour.
 // ⭐ The `mbTakenDown = false` store that FOLLOWS the block is NOT part of it: it is outside it
 // on the console (0x822F4394 is the merge point of both arms) and it is real bookkeeping.
 // =================================================================================================
@@ -234,6 +241,33 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
                     lbRecolour = lpTakenDownCar->IncreasePersistentDamage();
                 }
 
+                const s32 liColourBefore = lpTakenDownCar->GetColourIndex();   // [DIAG] only
+
+                if( lbRecolour )
+                {
+                    // 0x822F4174..0x822F4260 (no-damage arm, asserts :1298 / :1304) and
+                    // 0x822F4298..0x822F4390 (IncreasePersistentDamage wrapped, :1282 / :1288) --
+                    // the same code twice on the console:
+                    //     GetGameModeFlag(1<<34) == 0 -> miColourIndex = GetRandomCarColour(
+                    //                                    miColourPalette (lwz 0x98), -1)
+                    //     else                        -> miColourIndex = 6 (r17)
+                    //     assert miColourIndex < maPalettes[miColourPalette].miNumColours
+                    //            "Invalid Colour Index: " << miColourIndex
+                    if( !GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_SET_OPPONENTS_TO_COPS ) )
+                    {
+                        lpTakenDownCar->SetColourIndex(
+                            GetRandomCarColour( lpTakenDownCar->GetColourPalette(), -1 ) );
+                    }
+                    else
+                    {
+                        lpTakenDownCar->SetColourIndex( KI_BLACK_CAR_COLOUR_INDEX );
+                    }
+                    CGS_ASSERT( lpTakenDownCar->GetColourIndex() <
+                                    mCarColoursResource->maPalettes[lpTakenDownCar->GetColourPalette()]
+                                        .GetNumColours(),
+                                "Invalid Colour Index: " );
+                }
+
                 // [DIAG] NOT IN THE X360 BINARY -- one line per credited AI takedown in a
                 // persistent-damage mode: what the rival will carry into its respawn.
                 if( CgsDev::Log::gpDebugPrint != 0 )
@@ -242,21 +276,9 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
                         << "[persist-damage] car " << static_cast<s32>( luActiveRaceCarIndex )
                         << " damage " << lfDamageBefore << " -> "
                         << lpTakenDownCar->GetPersistentDamage()
-                        << " recolour " << ( lbRecolour ? 1 : 0 ) << "\n";
-                }
-
-                if( lbRecolour )
-                {
-                    // 0x822F4174 / 0x822F4298 -- the re-colour leg. PARKED, see the banner.
-                    static bool sbLoggedRecolourPark = false;
-                    if( !sbLoggedRecolourPark && CgsDev::Log::gpDebugPrint != 0 )
-                    {
-                        sbLoggedRecolourPark = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[crash-exit] ProcessRaceCarCrashCompleteEvents PARK: the"
-                               " taken-down AI re-colour leg (GetRandomCarColour, needs"
-                               " SetupCarColour's palette) is not reconstructed [FLAG]\n";
-                    }
+                        << " recolour " << ( lbRecolour ? 1 : 0 )
+                        << " colour " << liColourBefore << " -> " << lpTakenDownCar->GetColourIndex()
+                        << " palette " << lpTakenDownCar->GetColourPalette() << "\n";
                 }
             }
         }

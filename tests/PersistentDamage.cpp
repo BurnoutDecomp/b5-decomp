@@ -1,4 +1,5 @@
-// Harness for run_persistent_damage.py (crash parity G67-D1 / G67-D2).
+// Harness for run_persistent_damage.py (crash parity G67-D1 / G67-D2; the re-colour legs added by
+// FX-RCEM4 for CHAIN-RECOLOUR, 2026-09-24).
 // Compiles the SHIPPED text of RaceCar::IncreasePersistentDamage (inlined @0x822F4264),
 // RaceCarEntityModule::GetPersistentDamageCarCount @0x822A4A38 and the taken-down AI block of
 // ProcessRaceCarCrashCompleteEvents (0x822F40C8..0x822F4390) against minimal stand-ins, then
@@ -38,8 +39,13 @@ public:
     ERaceCarType GetType() const { return static_cast<ERaceCarType>(muType); }
     f32 GetPersistentDamage() const { return mfPersistentDamage; }
     bool IncreasePersistentDamage();
+    // CHAIN-RECOLOUR (FX-RCEM4, 2026-09-24): the colour pair the block's re-colour legs write.
+    s32  GetColourIndex() const { return miColourIndex; }
+    s32  GetColourPalette() const { return miColourPalette; }
+    void SetColourIndex(s32 liColourIndex) { miColourIndex = liColourIndex; }
     f32 mfPersistentDamage = 0.0f;
     u8  muType = E_RACE_CAR_TYPE_INACTIVE;
+    s32 miColourIndex = 11, miColourPalette = 0;
 };
 
 #include "increase.inc"
@@ -60,7 +66,18 @@ public:
     bool GetGameModeFlag(u64 lxMask) const { return (mxFlags & lxMask) != 0; }
     s32 GetPersistentDamageCarCount() const;
     void TakenDownBlock(ActiveRaceCar* lpActiveRaceCar, u32 luActiveRaceCarIndex);
+    // CHAIN-RECOLOUR (FX-RCEM4): the palette resource the re-colour asserts read, and a
+    // GetRandomCarColour @0x822EA088 stand-in (its own logic is tested by run_fxrcem4_recolour.py).
+    struct Palette { s32 miNumColours = 20; s32 GetNumColours() const { return miNumColours; } };
+    struct Palettes { Palette maPalettes[4]; };
+    struct PaletteResource { Palettes mPalettes; Palettes* operator->() { return &mPalettes; } } mCarColoursResource;
+    int miRandomColourCalls = 0; s32 miRandomColourPalette = -2, miRandomColourCurrent = -2;
+    s32 GetRandomCarColour(s32 liPaletteIndex, s32 liColourIndex)
+    { ++miRandomColourCalls; miRandomColourPalette = liPaletteIndex; miRandomColourCurrent = liColourIndex; return 7; }
 };
+
+// DWARF BrnRaceCarEntityModule.cpp:306 (TU-local in the CrashExit TU).
+static const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
 
 #include "count.inc"
 
@@ -140,6 +157,24 @@ int main()
         ActiveRaceCar lPlayer; lPlayer.mpRaceCar = &lModule.maRaceCars[0]; lPlayer.mbTakenDown = true;
         lModule.TakenDownBlock(&lPlayer, 0u);
         Check(lModule.maRaceCars[0].mfPersistentDamage == 0.0f, "player car: never persistent damage");
+
+        // CHAIN-RECOLOUR (FX-RCEM4): the two re-colour legs of the block.
+        Check(lModule.maRaceCars[4].miColourIndex == 7 && lModule.miRandomColourCalls == 1
+                  && lModule.miRandomColourPalette == 0 && lModule.miRandomColourCurrent == -1,
+              "re-colour 0x822F4174: the capped clean rival is re-coloured -- GetRandomCarColour(palette, -1)");
+        Check(lModule.maRaceCars[1].miColourIndex == 11, "re-colour: no wrap yet -> rival 1 keeps its colour");
+        lModule.TakenDownBlock(&lSlot, 1u);
+        Check(lModule.maRaceCars[1].mfPersistentDamage == 0.0f && lModule.maRaceCars[1].miColourIndex == 7
+                  && lModule.miRandomColourCalls == 2,
+              "re-colour 0x822F4298: the takedown that wraps past 1.0 re-colours the rival");
+        lModule.mxFlags |= BrnGameState::GameModeParams::KU_FLAG_SET_OPPONENTS_TO_COPS;
+        lModule.maRaceCars[6].mfPersistentDamage = 0.3f;          // three damaged rivals again (2, 3, 6)
+        ActiveRaceCar lCop; lCop.mpRaceCar = &lModule.maRaceCars[5]; lCop.mbTakenDown = true;
+        lModule.TakenDownBlock(&lCop, 5u);
+        Check(lModule.maRaceCars[5].mfPersistentDamage == 0.0f
+                  && lModule.maRaceCars[5].miColourIndex == KI_BLACK_CAR_COLOUR_INDEX && lModule.miRandomColourCalls == 2,
+              "re-colour: SET_OPPONENTS_TO_COPS (1<<34) -> colour 6, no random draw");
+        Check(lModule.maRaceCars[0].miColourIndex == 11, "re-colour: never the player");
     }
 
     Check(giAsserts == 0, "no asserts on the console-valid inputs");

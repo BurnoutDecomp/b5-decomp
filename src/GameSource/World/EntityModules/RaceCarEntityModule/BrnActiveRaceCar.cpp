@@ -58,6 +58,8 @@
 #include "vendor/renderware/collision/CollisionVolume.hpp"                      // rw::collision::BoxVolume
 #include "rw/rwcore_structs.h"                                                 // rw::Resource (BoxVolume::Initialize's first argument)
 #include "rw/physics/rigidbody.h"                                              // rw::physics::ACTIVE_BODY
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"            // OnResourcesLoaded's colour leg (0x822EB474)
+#include "GameSource/AttribSys/Generated/classes/burnoutcargraphicsasset.h"    // PlayerColourIndex / PlayerColourPaletteIndex
 
 // [deform-trace] host-side present counter, for EXACT frame correlation. Same extern the
 // other correlated instruments use (CgsIm2d.cpp:24, CgsImRenderBufferTemplate.cpp:34,
@@ -1208,17 +1210,17 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 //   2. the four RenderParams::SetWheelScale(i, Def + 96 + 48*i) calls -- same dependency,
 //      and this build cannot draw wheels at all (Model::SetupShaderConstantsForInstancing
 //      is absent).
-//   3. [FLAG BLOCKED -- a header outside this lane] the default-colour leg, 0x822EB474..
-//      0x822EB4F0: `Attrib::Instance lCar(Attrib::FindCollection(0x52B81656F3ADF675 /*the
-//      burnoutcarasset class; the old "-206702987" here was only its low word, with the r4
-//      collection-key argument dropped by Hex-Rays*/, luCarAssetAttribKey), 0)` -> layout or
-//      DefaultDataArea(0x228) -> RefSpec @+0x170 (GraphicsAsset) -> burnoutcargraphicsasset
-//      -> miDefaultColourIndex (+0x1C80) = layout word 1 (DWARF PlayerColourIndex(), :83) and
-//      miDefaultColourPalette (+0x1C84) = layout word 0 (PlayerColourPaletteIndex(), :90).
-//      The PC Attrib::Gen::burnoutcargraphicsasset (AttribSys/Generated/classes) derives
-//      Instance PRIVATELY and has neither accessor, so its layout cannot be read from here.
-//      Its only consumer, RaceCarEntityModule::SetupCarColour @0x822F5170, has no body yet
-//      either. DELETE-WHEN burnoutcargraphicsasset grows the two DWARF accessors.
+//   3. ⭐ LANDED 2026-09-24 (crash parity CHAIN-RECOLOUR / G61-D6 colour leg): the car's
+//      authored default colour, 0x822EB474..0x822EB4F0, after the wheel-scale loop:
+//        r3 = 0x52B81656F3ADF675 (burnoutcarasset's class key; the old "-206702987" here was
+//        only its low word), r4 = r23 = luCarAssetAttribKey  ->  bl Attrib::FindCollection
+//        Attrib::Instance(coll, 0) ; no layout -> DefaultDataArea(0x228)   == the inlined
+//                                    burnoutcarasset(u64 key, owner) ctor
+//        RefSpec @layout+0x170 (GraphicsAsset) -> GetCollection -> burnoutcargraphicsasset(c, 0)
+//        miDefaultColourIndex   (+0x1C80) = layout word 1  (DWARF PlayerColourIndex(), :83)
+//        miDefaultColourPalette (+0x1C84) = layout word 0  (PlayerColourPaletteIndex(), :90)
+//        then both instances are destroyed (0x822EB4E8 / 0x822EB4F0).
+//      Its only reader is RaceCarEntityModule::SetupCarColour @0x822F5170.
 //   4. ⭐ LANDED 2026-09-23 (crash parity G61-D6): ResetVerletOffsets @0x822A4E90, `bl` at
 //      0x822EB404, right before the detached-part queue Construct (0x822EB40C). The old
 //      reason ("the tree has no body for it") was stale -- the body is below, at
@@ -1233,8 +1235,6 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     CGS_ASSERT(!IsActive(), "!IsActive()");       // :822
 
     (void)lrInitialVelocity;     // consumed by AddHandlingModel, carried for signature parity
-    (void)luCarAssetAttribKey;   // the console READS it (r7 -> r23 @0x822EB180 -> FindCollection's
-                                 // r4 @0x822EB478): only the parked colour leg 3 above uses it
 
     muState = E_STATE_WAITING;                                       // +0x740 = 2
 
@@ -1248,6 +1248,13 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     // BrnWorld::DetachedPartRenderEvent<20>::Construct(this + 5520) -- the queue lives
     // inside mRenderParams and is the one member of the block this header names.
     mRenderParams.GetDetachedPartQueue().Construct();
+
+    // 0x822EB474..0x822EB4F0 -- the authored default colour (banner leg 3).
+    Attrib::Gen::burnoutcarasset lCarAsset( luCarAssetAttribKey, 0 );
+    Attrib::Gen::burnoutcargraphicsasset lGraphicsAsset(
+        const_cast<Attrib::Collection*>( lCarAsset.GetGraphicsAssetRefSpec()->GetCollection() ), 0 );
+    miDefaultColourIndex   = lGraphicsAsset.PlayerColourIndex();          // stw +0x1C80 @0x822EB4DC
+    miDefaultColourPalette = lGraphicsAsset.PlayerColourPaletteIndex();   // stw +0x1C84 @0x822EB4E4
 }
 
 // ============================================================================
