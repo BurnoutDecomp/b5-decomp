@@ -220,8 +220,9 @@ void WheelStateMachine::Update(const CarState& lCarState,
     // A backward "reverse-thrust" velocity, ramping in below the cutoff speed and scaled
     // by the tyre-surface speed, applied along the car's forward (Z) axis (negated).
     const BrnPhysics::Vehicle::RaceCarState* lpCarState = lCarState.mpCarState;
+    // 0x82294058 fsel(-x, 0.0, x) = Max(0, x) -- zero first: a NaN ramp stays NaN, -0 becomes +0.
     const f32 lfReverseThrustScale = rw::math::fpu::Max(
-        (KF_WHEEL_REVERSE_THRUST_CUTOFF_SPEED - lfWheelSpeed) * KF_WHEEL_REVERSE_THRUST_SCALE, 0.0f);
+        0.0f, (KF_WHEEL_REVERSE_THRUST_CUTOFF_SPEED - lfWheelSpeed) * KF_WHEEL_REVERSE_THRUST_SCALE);
     const Vector3 lWheelReverseThrustVelocity =
         lpCarState->mTransform.zAxis * -(lfReverseThrustScale * lfWheelSurfaceSpeed);
 
