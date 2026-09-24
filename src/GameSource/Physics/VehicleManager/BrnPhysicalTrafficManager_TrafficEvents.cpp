@@ -52,10 +52,12 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
+#include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                   // FindModelIndexByEntityID / GetDeformableObject
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // ClearStoredContacts
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
-#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG / BRN_TRAFFIC_EVENTS_CONTROL)
+#include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG / BRN_TRAFFIC_EVENTS_CONTROL / BRN_NETCRASH_DIAG)
 
 namespace
 {
@@ -87,6 +89,16 @@ namespace
                 *CgsDev::Log::gpDebugPrint << lpcMessage;
         }
     }
+
+    // FLAG PC witness (crash parity FX-NETCRASH; NOT in the X360 binary). BRN_NETCRASH_DIAG, default
+    // off: the network crashing-traffic chain's [netcrash] lines (UpdateNetworkTrafficVehicle,
+    // ClearSnappedNetworkTrafficContacts), each hard-capped.
+    bool NetCrashDiagEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_NETCRASH_DIAG") != 0);
+        return sbEnabled;
+    }
+    const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
 }
 
 namespace BrnPhysics
@@ -267,6 +279,30 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
     const VehicleInputInterface::UpdateNetworkTrafficEventQueue* const lpQueue =
         lpInputInterface->GetUpdateNetworkTrafficEvents();
 
+    // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): once per frame that carried
+    // network-traffic updates, how many of them named a vehicle that is physical here.
+    if (NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 && lpQueue->GetLength() > 0)
+    {
+        static s32 siSummaryLines = 0;
+        if (siSummaryLines < KI_NETCRASH_DIAG_MAX_LINES)
+        {
+            ++siSummaryLines;
+            s32 liMapped = 0;
+            for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
+            {
+                const u32 luIndex = static_cast<u32>(lpQueue->GetEvent(liEvent).mVolumeInstanceID.muId
+                                                     >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
+                const u32 luGlobal = (luIndex >> 10) & 0x3FFFu;
+                if (luGlobal < sizeof(mu8GlobalToPhysicalEntityIndexMap)
+                    && mu8GlobalToPhysicalEntityIndexMap[luGlobal] != KU8_INVALID_MAP)
+                    ++liMapped;
+            }
+            *CgsDev::Log::gpDebugPrint
+                << "[netcrash] ProcessUpdateNetworkTrafficEvents events=" << lpQueue->GetLength()
+                << " physical=" << liMapped << " [FLAG PC witness]\n";
+        }
+    }
+
     for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
     {
         const UpdateNetworkTrafficEvent& lrEvent = lpQueue->GetEvent(liEvent);
@@ -295,7 +331,44 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
         lPhysicsId.muValue =
             (static_cast<u32>(lu8PhysicalIndex) << 10) | (KU_ENTITYTYPE_TRAFFIC_VEHICLE << 24);
 
+        // FLAG PC witness input (BRN_NETCRASH_DIAG; NOT console code): the FULL body's position
+        // before this event's catch-up is armed.
+        static s32 siWitnessLines = 0;
+        PhysicalTrafficVehicle* lpWitnessVehicle = 0;
+        Vector3 lvBefore = { 0.0f, 0.0f, 0.0f, 0.0f };
+        if (NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0 && siWitnessLines < KI_NETCRASH_DIAG_MAX_LINES)
+        {
+            lpWitnessVehicle = GetTrafficVehicle(static_cast<s32>(lu8PhysicalIndex));
+            if (lpWitnessVehicle->mu8PhysicalType
+                    != static_cast<u8>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL))
+                lpWitnessVehicle = 0;
+            else
+                lvBefore = lpWitnessVehicle->GetFullTrafficPhysics()->GetTransform().wAxis;
+        }
+
         UpdateNetworkTrafficVehicle(&lrEvent, lPhysicsId);
+
+        // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code, crash parity FX-NETCRASH): the
+        // network traffic car's body position before and after UpdateNetworkTrafficVehicle armed its
+        // catch-up. A snap (> 10 m, KF_MAX_VEHICLE_INTERP_DIST_SQ) moves it here; otherwise the armed
+        // slerp steps move it over the next frames (VehicleDriver::UpdateVehicle), which the next
+        // line's `before` shows.
+        if (lpWitnessVehicle != 0)
+        {
+            ++siWitnessLines;
+            const VehicleDriver* const lpDriver = GetTrafficDriver(static_cast<s32>(lu8PhysicalIndex));
+            const Vector3 lvAfter = lpWitnessVehicle->GetFullTrafficPhysics()->GetTransform().wAxis;
+            *CgsDev::Log::gpDebugPrint
+                << "[netcrash] UpdateNetworkTrafficVehicle slot=" << static_cast<s32>(lu8PhysicalIndex)
+                << " global=" << static_cast<s32>(luGlobalIndex)
+                << " before=(" << lvBefore.x << ", " << lvBefore.y << ", " << lvBefore.z << ")"
+                << " target=(" << lrEvent.mTransform.wAxis.x << ", " << lrEvent.mTransform.wAxis.y
+                << ", " << lrEvent.mTransform.wAxis.z << ")"
+                << " after=(" << lvAfter.x << ", " << lvAfter.y << ", " << lvAfter.z << ")"
+                << " snapped=" << (lpDriver->SnappedThisFrame() ? 1 : 0)
+                << " steps=" << static_cast<s32>(lpDriver->GetNumInterpSteps())
+                << " [FLAG PC witness]\n";
+        }
     }
 }
 
@@ -321,7 +394,7 @@ void PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents(
 //               bl VehicleDriver::StartCatchupInterpolation @0x825FED30.
 // The car's OWN current velocities are passed: the event carries only a transform.
 // Network-only: the queue's sole console producer is CrashModule::HandleNetworkCrashingTraffic
-// @0x827CB788 (online), which has no body on PC yet, so this runs zero times offline.
+// @0x827CB788 (online; bodied 2026-09-24, b5 6c535ee9), so this runs zero times offline.
 // =================================================================================================
 void PhysicalTrafficManager::UpdateNetworkTrafficVehicle(const UpdateNetworkTrafficEvent* lpEvent,
                                                          EntityId lTrafficPhysicsId)
@@ -345,6 +418,66 @@ void PhysicalTrafficManager::UpdateNetworkTrafficVehicle(const UpdateNetworkTraf
             lpFullTraffic->GetLinearVelocity(),
             lpFullTraffic->GetAngularVelocity(),
             false);
+    }
+}
+
+// =================================================================================================
+// ClearSnappedNetworkTrafficContacts @0x825F37F0 (220) -- DWARF h:391. BODIED 2026-09-24 (G45-D1,
+// crash parity FX-NETCRASH); it had no declaration and no body, and its one caller's tail call
+// (VehicleManager::ClearSnappedNetworkCarContacts 0x8261AC28) was a [FLAG PC bring-up] comment.
+//
+// The traffic twin of the race-car loop in ClearSnappedNetworkCarContacts. A car snapped by the
+// network catch-up (VehicleDriver::StartCatchupInterpolation's snap arm is the image's only store
+// of 1 to mbSnappedThisFrame, +0xD5) had its transform replaced wholesale, so the contacts its
+// deformable object stored for the old pose are dropped. Straight off the asm:
+//   0x825F3804..0x825F386C  the inlined BitArray<20> first-set-bit walk over mUsedTrafficVehicles
+//                           (this + 0x19868: `addis r18,r31,2 ; addi r18,r18,-0x6798`), then
+//                           0x825F3988..0x825F3B58 the next-set-bit step (CgsBitArray.h:203 tripwire)
+//   0x825F38F0  `cmpwi r30, 0x14 ; blt`  else assert "liVehicle < ku8TotalMaxNumPhysicalTraffic"
+//               (BrnPhysicalTrafficManager.h 0x2F0 == 752)
+//   0x825F3910  lwz (this + 0x194B0) mpaTrafficDrivers ; mulli 0xE0 ; lbz 0xD5 == mbSnappedThisFrame;
+//               clear -> next vehicle
+//   0x825F3938  bl GetPhysicsEntityId(liVehicle)          @0x825B4980
+//   0x825F3948  bl DeformationManager::FindModelIndexByEntityID
+//   0x825F3950  == -1 -> assert "liModelIndex != -1" (BrnDeformationManager.h 0x36E == 878)
+//   0x825F3970..0x825F3984  *(mgr + 0x12900) + idx * 0x6780 -> DeformableObject::ClearStoredContacts
+// Nothing is written to the driver: UpdateTrafficPhysicsPostSimulation clears mbSnappedThisFrame.
+// =================================================================================================
+void PhysicalTrafficManager::ClearSnappedNetworkTrafficContacts(
+    Deformation::DeformationManager* lpDeformationManager)
+{
+    for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+         liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+         liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+    {
+        CGS_ASSERT(liVehicle < static_cast<s32>(KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC),
+                   "liVehicle < ku8TotalMaxNumPhysicalTraffic");                       // h:752
+
+        if (!mpaTrafficDrivers[liVehicle].SnappedThisFrame())                         // 0x825F3920 lbz +0xD5
+            continue;
+
+        const s32 liModelIndex =
+            lpDeformationManager->FindModelIndexByEntityID(GetPhysicsEntityId(liVehicle));   // 0x825F3948
+        CGS_ASSERT(liModelIndex != -1, "liModelIndex != -1");                         // BrnDeformationManager.h:878
+
+        // HOST DIVERGENCE, flagged (the race-car twin in ClearSnappedNetworkCarContacts carries the
+        // same one): on the asserted miss the console indexes the model array at -1; on the host that
+        // is a wild pointer, so only the asserted-impossible miss is skipped.
+        if (liModelIndex != -1)
+            lpDeformationManager->GetDeformableObject(liModelIndex)->ClearStoredContacts();   // 0x825F3984
+
+        // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code).
+        if (NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+        {
+            static s32 siLines = 0;
+            if (siLines < KI_NETCRASH_DIAG_MAX_LINES)
+            {
+                ++siLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[netcrash] ClearSnappedNetworkTrafficContacts slot=" << liVehicle
+                    << " model=" << liModelIndex << " [FLAG PC witness]\n";
+            }
+        }
     }
 }
 

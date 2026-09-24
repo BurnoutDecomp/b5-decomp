@@ -214,8 +214,7 @@ namespace Vehicle
     //   @0x825F37F0 (220) -- the same walk over the traffic drivers' mbSnappedThisFrame.
     //
     // A driver's mbSnappedThisFrame is raised only by the network catch-up snap, so offline this
-    // is a no-op walk. The race-car arm is real; the traffic arm is a NAMED PARK (its callee has
-    // no host body).
+    // is a no-op walk. Both arms are real: the traffic twin was bodied 2026-09-24 (FX-NETCRASH).
     // =============================================================================================
     void VehicleManager::ClearSnappedNetworkCarContacts(Deformation::DeformationManager* lpDeformationManager)
     {
@@ -239,12 +238,10 @@ namespace Vehicle
                 lpDeformationManager->GetDeformableObject(liModelIndex)->ClearStoredContacts();   // 0x8261A990
         }
 
-        // [FLAG PC bring-up] PhysicalTrafficManager::ClearSnappedNetworkTrafficContacts @0x825F37F0
-        // (220 insns) -- not declared or bodied on the host. It is the traffic twin of the loop above
-        // (walk the used-traffic bitset, skip drivers without mbSnappedThisFrame, GetPhysicsEntityId
-        // -> FindModelIndexByEntityID -> ClearStoredContacts). Offline no traffic driver is ever
-        // snapped, so nothing is lost until network play. DELETE-WHEN that body lands in
-        // BrnPhysicalTrafficManager (declaration text in this wave's report).
+        // Every exit of the walk above lands here (0x8261AC1C): `addis r3,r31,1 ; lwz r4,arg ;
+        // addi r3,r3,-0x5120 ; bl 0x825F37F0` == the traffic twin on this + 44768 with the same
+        // manager (G34-D2 / G45-D1, crash parity FX-NETCRASH 2026-09-24).
+        mPhysicalTrafficManager.ClearSnappedNetworkTrafficContacts(lpDeformationManager);   // 0x8261AC28
     }
 
     // =============================================================================================

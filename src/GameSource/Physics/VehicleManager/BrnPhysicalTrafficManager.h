@@ -270,6 +270,9 @@ namespace BrnPhysics
 // BrnPhysics::Deformation::StreamedDeformationSpec, BrnStreamedDeformationSpec.h) --
 // PhysicalTrafficVehicle::PreparePhysical takes it by pointer and reads its bounding box.
 namespace Deformation { struct StreamedDeformationSpec; }
+// Forward decl, pointer use only (ClearSnappedNetworkTrafficContacts' parameter). Class key `struct`,
+// matching its single home BrnDeformationManager.h.
+namespace Deformation { struct DeformationManager; }
 namespace Vehicle
 {
 
@@ -751,6 +754,14 @@ public:
 
     // X360 0x825B4980: pack a physics-traffic EntityId from a traffic index.
     EntityId GetPhysicsEntityId(s32 liTrafficIndex) const;
+
+    // ADDITIVE (G45-D1, crash parity FX-NETCRASH 2026-09-24). X360 0x825F37F0 (220 insns); DWARF
+    // BrnPhysicalTrafficManager.h:391 `void ClearSnappedNetworkTrafficContacts(DeformationManager*)`
+    // (public). The traffic twin of VehicleManager::ClearSnappedNetworkCarContacts, which tail-calls
+    // it on every exit (0x8261AC1C..0x8261AC28: `addis r3,r31,1 ; addi r3,r3,-0x5120` == this +
+    // 44768 == mPhysicalTrafficManager). A traffic car whose network catch-up SNAPPED it this frame
+    // drops its deformable object's stored contacts. Body: BrnPhysicalTrafficManager_TrafficEvents.cpp.
+    void ClearSnappedNetworkTrafficContacts(Deformation::DeformationManager* lpDeformationManager);
 
     // X360 0x825EEF70 -- the TRAFFIC half of the per-frame external-body publish, and the tail
     // call of VehicleManager::GetUpdatedVehicleBodies @0x82619340 (`addis r3,r20,1 ; addi r3,r3,
