@@ -898,6 +898,14 @@ void CollisionStateManager::UpdateResolver(
     const BrnSound::Logic::FrameInformation& lrFrame,
     f32 afDeltaTime)
 {
+    // 0x826F8F64..0x826F8F84 -- right after the three input getters, on EVERY call (no branch
+    // around them): both bin lookup caches are rebuilt from their lists, exactly as
+    // ResourcesAreReady first built them (+0x98 <- +0x8234, +0x4A0 <- +0x8244).
+    maBinLoopupCache[InputCollision::E_REGULAR]
+        .Build<Attrib::Gen::crashbinlist, Attrib::Gen::crashbin>(mCrashBinList);
+    maBinLoopupCache[InputCollision::E_PROP]
+        .Build<Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>(mPropsCrashBinList);
+
     mFrameInformation = lrFrame;
     const BrnDirector::Camera::Camera* lpCamera = lrInput.GetDirectorCamera();
     CGS_ASSERT(lpCamera != nullptr, "lpDirectorCamera");
