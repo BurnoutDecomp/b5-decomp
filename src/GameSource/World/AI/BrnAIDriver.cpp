@@ -52,11 +52,18 @@ namespace BrnAI
     static inline bool IsFinite(f32 lfValue) { return lfValue == lfValue; }
 
     // de-inlined planar (x,y) normalise -- v / |v| over the (x,y) lanes (the rsqrt + 2x
-    // Newton-Raphson refine idiom the X360 emits inline).
+    // Newton-Raphson refine idiom the X360 emits inline). NO ZERO GUARD at any console caller --
+    // no vcmpeqfp/vsel follows the chain at CalculateSteeringAngle 0x8277CE8C / 0x8277D004,
+    // ComputeRouteDirection 0x8276662C, GetTargetPosition 0x8277CCA0 or CorneringTopSpeed
+    // 0x8277D17C / 0x8277D1E8 -- so a zero vector is NaN in every lane there: vrsqrtefp(+0) is
+    // +inf and the first Newton step's `1 - lenSq * y0^2` (vnmsubfp) is 0 * inf = NaN. Here
+    // 1 / sqrt(0) = +inf and 0 * inf = NaN give the same NaN lanes.
+    // ⛔ CORRECTED 2026-09-24 (crash parity FX-TAILS-A item 6, FX-AINAN2 OPEN): this was
+    // `lenSq > 0 ? 1 / sqrt : 0`, an invented guard that answered (0, 0).
     static Vector2 Normalize2D(Vector2 lVector)
     {
         const f32 lfLenSq = lVector.x * lVector.x + lVector.y * lVector.y;
-        const f32 lfInvLen = (lfLenSq > 0.0f) ? (1.0f / std::sqrt(lfLenSq)) : 0.0f;
+        const f32 lfInvLen = 1.0f / std::sqrt(lfLenSq);
         Vector2 lResult;
         lResult.x = lVector.x * lfInvLen;
         lResult.y = lVector.y * lfInvLen;
@@ -639,8 +646,9 @@ namespace BrnAI
         //    `vandc` = fabs, `vcmpgtfp` per lane @0x8277CD94..0x8277CE28). When BOTH lanes are
         //    within epsilon the vector is REPLACED with (1, 0) before the normalise
         //    (@0x8277CE44..0x8277CE58 stores 1.0/0.0/0/0 over it). Added 2026-09-04 (aiwave R7):
-        //    the host used to hand a degenerate vector to Normalize2D, which returns (0,0) and
-        //    makes the signed angle meaningless.
+        //    the host used to hand a degenerate vector to Normalize2D, which then returned (0,0)
+        //    (NaN since FX-TAILS-A, as the console's unguarded rsqrt) and made the signed angle
+        //    meaningless.
         Vector2 lHeadingRaw;
         if (lbUseful)
             lHeadingRaw = To2D(mpCarHost->GetUsefulDirection());

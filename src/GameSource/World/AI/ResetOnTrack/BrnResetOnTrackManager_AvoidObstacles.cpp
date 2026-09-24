@@ -346,15 +346,18 @@ bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* 
 
     const Vector2 lPosition2D = BrnMath::Flatten(lpResetData->mPosition);
 
+    // v125 = Normalise(Flatten(mDirection)): `vmulfp128 ; vspltw ; vaddfp ; vrsqrtefp` + two
+    // Newton-Raphson steps + `vmulfp128 v125` (0x827942A0..0x827942FC) with NO zero guard -- a zero
+    // flattened direction is NaN in both lanes on the console (vrsqrtefp(+0) = +inf; the Newton
+    // step's `1 - lenSq * y0^2` is 0 * inf = NaN), and 1 / sqrtf(0) = +inf, 0 * inf = NaN here.
+    // ⛔ CORRECTED 2026-09-24 (crash parity FX-TAILS-A item 6, FX-AIRESET OPEN): an invented
+    // `lenSq != 0` test kept a zero direction (0, 0).
     Vector2 lDirection2D = BrnMath::Flatten(lpResetData->mDirection);
     {
         const f32 lfLengthSquared = lDirection2D.x * lDirection2D.x + lDirection2D.y * lDirection2D.y;
-        if (lfLengthSquared != 0.0f)
-        {
-            const f32 lfInverse = 1.0f / sqrtf(lfLengthSquared);
-            lDirection2D.x *= lfInverse;
-            lDirection2D.y *= lfInverse;
-        }
+        const f32 lfInverse = 1.0f / sqrtf(lfLengthSquared);
+        lDirection2D.x *= lfInverse;
+        lDirection2D.y *= lfInverse;
     }
 
     // v124 == Cross(worldUp, mDirection) == (dir.z, 0, -dir.x) -- X360 0x8279428C..0x827942C0; see

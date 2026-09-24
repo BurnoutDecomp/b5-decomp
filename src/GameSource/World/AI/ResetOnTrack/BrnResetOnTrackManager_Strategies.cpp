@@ -130,17 +130,21 @@ namespace
                  lfDZ > KF_IS_SIMILAR_EPSILON);
     }
 
-    // `vmsum3fp128 ; vrsqrtefp ; two Newton-Raphson steps ; vmulfp`. The console's
-    // `vcmpeqfp128 ; vsel` zero-guard (ResetAwayFromPlayer 0x827842C8/0x827842F4) is the
-    // sqrtf(0)==0 case here.
+    // `vmsum3fp128 ; vrsqrtefp ; two Newton-Raphson steps ; vmulfp`, with NO zero guard at any of
+    // its three callers: ConvertNodesToPositionAndDirection 0x827905A8..0x827905EC and
+    // ResetNearRoutelessPlayer 0x8278462C..0x82784684 (the reset direction) / 0x827846CC..
+    // 0x82784704 (the player offset, screened by the FLT_EPSILON IsZero first). A zero vector is
+    // NaN in every lane on the console (vrsqrtefp(+0) = +inf; the Newton step's
+    // `1 - lenSq * y0^2` is 0 * inf = NaN); here 1 / sqrtf(0) = +inf and 0 * inf = NaN give it.
+    // ⛔ CORRECTED 2026-09-24 (crash parity FX-TAILS-A item 6, FX-AINAN2 / FX-AIRESET OPEN): this
+    // returned (0,0,0) for a zero vector, crediting the guard to "ResetAwayFromPlayer
+    // 0x827842C8/0x827842F4" -- that `vcmpeqfp128 ; vsel` pair guards a MAGNITUDE
+    // (d2 * rsqrt(d2), spelt `d2 == 0 ? 0 : sqrtf(d2)` in ResetAwayFromPlayer below), not a
+    // normalise.
     Vector3 Normalise3D(Vector3 lVector)
     {
         const f32 lfLengthSquared =
             lVector.x * lVector.x + lVector.y * lVector.y + lVector.z * lVector.z;
-        if (lfLengthSquared == 0.0f)
-        {
-            return Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
-        }
         const f32 lfInverse = 1.0f / sqrtf(lfLengthSquared);
         return Vector3{ lVector.x * lfInverse, lVector.y * lfInverse, lVector.z * lfInverse, 0.0f };
     }

@@ -611,11 +611,22 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
         const RouteNode* lpLast = lpOutRoute->GetNode(lpOutRoute->GetNodeCount() - 1);
         const RouteNode* lpPrev = lpOutRoute->GetNode(lpOutRoute->GetNodeCount() - 2);
 
-        // Normalised travel direction of the final segment.
+        // Normalised travel direction of the final segment: vrsqrtefp + two Newton-Raphson steps +
+        // `vmulfp128 v124` (0x8277FB74..0x8277FBB4) with NO zero guard. A zero segment is NaN in
+        // both lanes on the console (vrsqrtefp(+0) = +inf; the Newton step's `1 - lenSq * y0^2` is
+        // 0 * inf = NaN), so every portal's dot below is unordered, the `fcmpu ; ble` @0x8277FD60
+        // never takes one and the exit stays portal 0 (r27 seeded 0 @0x8277FBE4). Here
+        // 1 / sqrtf(0) = +inf and 0 * inf = NaN give the same. (Route::AddNode's (x,y) de-dup
+        // keeps two equal nodes out of a built route; only a last step short enough for its square
+        // to underflow -- |d| < ~1e-19 m on the console's denormal-flushing VMX, < ~2.6e-23 m here --
+        // could reach it, which the shipped AI data never has.)
+        // ⛔ CORRECTED 2026-09-24 (crash parity FX-TAILS-A item 6, FX-AINAN2 EQUIV-UNREACHABLE): an
+        // invented `lfDirLen != 0` test made a zero travel (0, 0), which scores every portal 0.0
+        // and takes the first one the zero-offset gate lets through.
         const f32 lfDirX = lpLast->GetX() - lpPrev->GetX();
         const f32 lfDirY = lpLast->GetY() - lpPrev->GetY();
         const f32 lfDirLen = sqrtf((lfDirX * lfDirX) + (lfDirY * lfDirY));
-        const f32 lfInvLen = (lfDirLen != 0.0f) ? (1.0f / lfDirLen) : 0.0f;
+        const f32 lfInvLen = 1.0f / lfDirLen;
         const f32 lfTravelX = lfDirX * lfInvLen;
         const f32 lfTravelY = lfDirY * lfInvLen;
 
@@ -650,9 +661,13 @@ void AStar::BuildRoute(AStarNode* lpBestNode, Route* lpOutRoute)
             // when both lane tests fail). Any non-zero offset proceeds.
             if (!(fabsf(lfDeltaX) > KF_ZERO_EPSILON) && !(fabsf(lfDeltaY) > KF_ZERO_EPSILON)) continue;
 
-            // Normalised portal direction, then dot against travel direction.
+            // Normalised portal direction, then dot against travel direction: the same unguarded
+            // rsqrt chain (0x8277FCF8..0x8277FD40), `vmulfp128 v0, v124, v0` and the lane-0 + lane-1
+            // vaddfp (0x8277FD44..0x8277FD50). The zero-offset gate above already refused every
+            // offset whose squared length could be 0, so dropping the invented `lfDeltaLen != 0`
+            // test (FX-TAILS-A item 6) changes no answer; it is the console's arithmetic.
             const f32 lfDeltaLen = sqrtf((lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY));
-            const f32 lfDeltaInv = (lfDeltaLen != 0.0f) ? (1.0f / lfDeltaLen) : 0.0f;
+            const f32 lfDeltaInv = 1.0f / lfDeltaLen;
             const f32 lfDot = (lfDeltaX * lfDeltaInv * lfTravelX)
                             + (lfDeltaY * lfDeltaInv * lfTravelY);
             if (lfDot > lfBestDot)
