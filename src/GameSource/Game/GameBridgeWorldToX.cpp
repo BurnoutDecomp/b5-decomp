@@ -35,6 +35,8 @@
 //    9. input->SetPlayerCarIndex(world->GetPlayerActiveRaceCarIndex())
 //   10. FOR EACH of the 8 active slots that is active: build a stack VehicleInfo
 //       (RaceCarState + AABB + hardest-impact + engine flag) and input->SetRaceCarInfo(i, it)
+//       -- the hardest impact is the car's strongest contact-spy contact this frame (squared
+//       |mNormalStress|, its normal and stress), which every gameplay camera shakes by
 //   11. FOR EACH of the 8 slots: input->SetCrashingCentreOfMass(i, IDENTITY)
 //   12. mfPlayerBoostPercentage = boost.mfBoostAmount / boost.mfMaxBoost  (0 if max ~= 0)
 //   13. build the 48-byte PlayerCrashInfo block from the vehicle manager's crash queue
@@ -61,9 +63,10 @@
 //   13 -- BrnDirector::PlayerCrashInfo has no reconstructed home, and its source (the
 //        vehicle-manager output's 64-byte crash-event ring) is inside an opaque span.
 //   14 -- reads world-entity-status byte +217668, inside an opaque span.
-//   the per-car HARDEST-IMPACT leg of 10 -- needs the contact-spy event record layout
-//        (96-byte stride, normal at +64 / stress at +48) which is not homed. Left at the
-//        cleared value; mfHardestImpact stays 0, which is what "no contact this frame" means.
+//   (the per-car HARDEST-IMPACT leg of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
+//        parity FX-BRIDGES CC-5. Its "not homed" reason had expired: BaseContact is homed in
+//        Physics/ContactSpies/BrnContactSpyEvents.h (mNormalStress +0x20 / mNormal +0x30 of the
+//        96-byte record) and RumbleManager::UpdateImpacts already walks the same run by name.)
 //   the per-car DEFORMED AABB arm of 10 -- DeformationOutputInterface's DeformationState
 //        pointer (+112) is inside an opaque span; the UNDEFORMED arm (the RaceCarState's own
 //        mHalfExtent) is reproduced and is the arm a parked, undamaged car takes anyway.
@@ -77,10 +80,9 @@
 //     VehicleInfo's byte at that offset is left at whatever the frame before put there. An
 //     uninitialised read is not reproducible on a different ABI, so it is published as false
 //     and flagged here rather than left indeterminate.
-//   * the console seeds mHardestNormalStressNormal from an unrecovered .rodata constant at
-//     0x82181510 (the IDA export set carries no data, so its 16 bytes cannot be read). It is
-//     only meaningful when mfHardestImpact > 0, i.e. inside the gated contact-spy leg;
-//     published as zero, flagged, NOT guessed.
+//   * the console seeds mHardestNormalStressNormal from the .rdata vector at 0x82181510, which
+//     x360rd reads as (0.0, 1.0, 0.0, 0.0) -- world up. (The old note here said the 16 bytes
+//     "cannot be read"; they can, from the image, and the seed is now the console's.)
 //
 // ✅ RaceCarState +4 DRIFT -- SETTLED AND FIXED (2026-08-01, physics wave 1). The extra four
 // bytes were mCarAssetAttribKey: it is EIGHT bytes, not four. Proof and the full corroborating
@@ -131,7 +133,9 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"      // RaceCarState
 
 #include <cstring>   // std::memcpy
-#include "rw/math/vpu/vector3_operation.h"       // rw::math::vpu::IsValid / IsZero / operator-
+#include <cmath>     // std::sqrt (the [cam-impact] diagnostic)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"          // ContactSpyInterface / RaceCarContactQueue / BaseContact (the hardest-impact leg)
+#include "rw/math/vpu/vector3_operation.h"       // rw::math::vpu::IsValid / IsZero / operator- / MagnitudeSquared
 #include "rw/math/vpu/matrix44affine_operation.h"// rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/fpu/scalar_operation.h"        // rw::math::fpu::IsValid(float)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // CgsDev::Log::gpDebugPrint
@@ -243,6 +247,20 @@ namespace BrnGame
 
         lpDirectorInput->SetPlayerCarIndex(lePlayerIndex);
 
+        // ---- the frame's race-car contacts (DWARF GameBridgeWorldToX.cpp:87 lpCarContacts) --
+        // X360 0x823E4010..0x823E4034: the local starts NULL and is filled only when the world's
+        // contact spy is bound (`lwz r11, 0(GetContactSpy()) ; beq`), through
+        // ContactSpyInterface::GetRaceCarContacts @0x82277900 (asserts mpData, returns mpData+0 ==
+        // ContactSpyData::mRaceCarContactQueue). The per-car hardest-impact leg below reads it.
+        // lpContactSpy only names the accessor result the console re-fetches at each use.
+        const BrnPhysics::ContactSpy::ContactSpyInterface* lpContactSpy =
+            lpWorldOutput->GetContactSpyInterface();
+        const BrnPhysics::ContactSpy::ContactSpyData::RaceCarContactQueue* lpCarContacts = 0;
+        if (lpContactSpy->IsValid())
+        {
+            lpCarContacts = lpContactSpy->GetRaceCarContacts();
+        }
+
         // ---- step 10: the per-car VehicleInfo publish ------------------------------------
         for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)
         {
@@ -321,12 +339,49 @@ namespace BrnGame
             CGS_ASSERT(!rw::math::vpu::IsZero(lVehicleInfo.mAABB.mMax - lVehicleInfo.mAABB.mMin),
                        "!rw::math::IsZero(lVehicleInfo.mAABB.Max() - lVehicleInfo.mAABB.Min())"); // :148
 
-            // [FLAG] the hardest-impact triple -- see the header note. Cleared, which is the
-            // console's own "no contact this frame" value for the two it does clear.
-            lVehicleInfo.mHardestNormalStressNormal.SetZero();
+            // ---- the hardest-impact leg (X360 0x823E4884..0x823E489C seed, 0x823E4A18..0x823E4B24
+            //      walk) -- the only producer of VehicleInfo::mfHardestImpact, which is what the
+            //      gameplay / bumper / bystander cameras scale their impact shake by.
+            // Seed: the normal is the .rdata vector at 0x82181510 = (0, 1, 0, 0) (x360rd; `lvx128`
+            // through r25 = unk_82181510), the stress is `vspltisw128 v127, 0`, the impact is f31 =
+            // flt_82001CC0 = 0.0f.
+            lVehicleInfo.mHardestNormalStressNormal = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
             lVehicleInfo.mHardestNormalStress.SetZero();
             lVehicleInfo.mfHardestImpact            = 0.0f;
-            lVehicleInfo.mbHardestImpactIsAgainstWorld = false;   // [FLAG] console leaves it uninitialised
+            // [FLAG] the console never stores +0x4E4 (the stack byte keeps whatever the previous
+            // car left); an uninitialised read is not reproducible, so it is published false.
+            lVehicleInfo.mbHardestImpactIsAgainstWorld = false;
+
+            // Walk: only while the spy is bound (`lwz r11, 0(GetContactSpy()) ; beq 0x823E4B28`),
+            // this car's run in the race-car run list (GetRaceCarContactRunList @0x82355BF0 ->
+            // ContactSpyRunList<8>::GetRunDataWithEntityID @0x82373C38 keyed on mEntityId, `lwz
+            // 0x3C8`). The magnitude is the SQUARED length of mNormalStress (`vmsum3fp128 v0,v0,v0`
+            // @0x823E4ADC, no square root: the camera takes the root itself), and only a STRICTLY
+            // greater one replaces the running best (`vcmpgtfp128` @0x823E4AE4 + three vsel), so the
+            // normal / stress pair is the first contact to reach the maximum. An empty run publishes
+            // the zero accumulator (`stvx128 v127` @0x823E4A60 -> `lfs` @0x823E4B1C).
+            if (lpContactSpy->IsValid())
+            {
+                const BrnPhysics::ContactSpy::ContactSpyRunData* lpRunData =
+                    lpContactSpy->GetRaceCarContactRunList()->GetRunDataWithEntityID(lpState->mEntityId);
+                if (lpRunData != 0)
+                {
+                    f32 lfHardestImpact = 0.0f;   // DWARF VecFloat, a splat accumulator (v127)
+                    for (s32 liIndex = 0; liIndex < lpRunData->GetRunLength(); ++liIndex)
+                    {
+                        const BrnPhysics::ContactSpy::BaseContact* lpContact =
+                            lpCarContacts->GetBaseContact(lpRunData->GetStartIndex() + liIndex);
+                        const f32 lfImpact = rw::math::vpu::MagnitudeSquared(lpContact->mNormalStress);
+                        if (lfImpact > lfHardestImpact)
+                        {
+                            lVehicleInfo.mHardestNormalStressNormal = lpContact->mNormal;
+                            lfHardestImpact                         = lfImpact;
+                            lVehicleInfo.mHardestNormalStress       = lpContact->mNormalStress;
+                        }
+                    }
+                    lVehicleInfo.mfHardestImpact = lfHardestImpact;
+                }
+            }
 
             // The console clears this here and SetCrashingCentreOfMass (below) then sets it.
             lVehicleInfo.mbHasCrashingCenterOfMass = false;
@@ -337,6 +392,32 @@ namespace BrnGame
                                    || lpActiveRaceCars->IsRaceCarEngineStarting(leSlot);
 
             lpDirectorInput->SetRaceCarInfo(static_cast<u32>(liSlot), lVehicleInfo);
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG (the camera-input gate). The
+            // impact-shake input as published: the first 40 non-zero publishes, then every 200th.
+            // sqrt(impact) * 0.0001 is the chase camera's raw shake request
+            // (BehaviourGameplayExternal::Update, before its 40 MPH ramp and 0.8 clamp).
+            {
+                static const bool sbImpactDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+                static u32 suNonZeroImpacts = 0;
+                if (sbImpactDiag && lVehicleInfo.mfHardestImpact > 0.0f
+                    && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    ++suNonZeroImpacts;
+                    if (suNonZeroImpacts <= 40u || (suNonZeroImpacts % 200u) == 0u)
+                    {
+                        const Vector3& lN = lVehicleInfo.mHardestNormalStressNormal;
+                        const Vector3& lS = lVehicleInfo.mHardestNormalStress;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[cam-impact] #" << static_cast<s32>(suNonZeroImpacts)
+                            << " slot " << liSlot << (leSlot == lePlayerIndex ? " (player)" : "")
+                            << " mfHardestImpact " << lVehicleInfo.mfHardestImpact
+                            << " shake-request " << std::sqrt(lVehicleInfo.mfHardestImpact) * 0.0001f
+                            << " normal (" << lN.x << ", " << lN.y << ", " << lN.z
+                            << ") stress (" << lS.x << ", " << lS.y << ", " << lS.z << ")\n";
+                    }
+                }
+            }
 
             // Bring-up diagnostic: print the pose the cameras will actually frame -- on the
             // FIRST publish (which lands the frame the car is attached, before its physics
