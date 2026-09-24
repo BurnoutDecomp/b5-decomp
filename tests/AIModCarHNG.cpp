@@ -11,6 +11,7 @@
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackManager.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"
+#include "GameSource/World/AI/BrnHNGTest.h"
 #undef protected
 #undef private
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -40,6 +41,10 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection*, Vector2 lStartPos, Ve
     ++gSectionCalls;
     return gSectionCalls == gSectionHitOnCall;
 }
+// Every call below passes no nearby set, so TestCarHNG returns before its traffic legs; these
+// two only satisfy the compile/link (the traffic legs are covered by run_fxairumble_traffic_hng.py).
+bool LineTestTrafficHNG(const NearbyVehicles*, Vector2, Vector2) { return false; }
+namespace { void NoteTrafficLegs(const NearbyVehicles*, f32, bool, bool) {} }
 }
 
 #include "restored_methods.inc"

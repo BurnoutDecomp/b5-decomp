@@ -8,8 +8,7 @@
 //   BrnAI::AIModule::OnModeStartRacing           @0x8276E4B0  (69 insns;  whole)
 //   BrnAI::AIModule::OnModeFinished              @0x8277B970  (67 insns;  whole)
 //   BrnAI::AIModule::OnRaceCarReachedFinish      @0x8277B8D0  (40 insns;  whole)
-//   BrnAI::AIModule::OnModeStart                 @0x82791DB8  (133 insns; 1 named park inside:
-//                                                              the checkpoint block-section loop)
+//   BrnAI::AIModule::OnModeStart                 @0x82791DB8  (133 insns; whole since 2026-09-23)
 //   BrnAI::AIModule::OnModeEnd                   @0x8277BA80  (96 insns;  whole since 2026-09-22)
 //  BrnAI::AIModule::OnPlayerTakedown  (34 insns;  whole)
 //   BrnAI::AIModule::OnRaceCarReachedCheckpoint  @0x8278A658  (NAMED PARK -- ARTIST export hole)
@@ -1224,9 +1223,9 @@ void AIModule::OnRaceCarReachedFinish(
 // =================================================================================================
 // OnModeStart @0x82791DB8   (DWARF BrnAIModule.cpp:903)
 //
-// Latch the mode's AI configuration out of its GameModeParams. Reproduced here except for two
-// blocks that need members this host class does not have -- both are NAMED PARKS below, and
-// neither is on the activation path.
+// Latch the mode's AI configuration out of its GameModeParams: the driving-input / online bytes,
+// the race balancing, the route heuristic and every checkpoint's blocked sections, the aggressive
+// car count, the route-finding and speed-selection styles, the start flags, and the master route.
 // =================================================================================================
 void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
 {
@@ -1258,15 +1257,18 @@ void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
     mRouteRequestManager.SetDefaultAStarDistanceFunction(
         static_cast<AStarDistanceFunction>(static_cast<s32>(lpGameModeParams->GetAStarDistanceFunction())));
 
-    // ⛔ [FLAG blocked: BrnCheckpointData.h is not this lane's file] 0x82791E90..0x82791F14: for
-    // (i = 0; i < params->GetCheckpointCount() /* re-read every pass */; ++i)
-    //     mRouteRequestManager.SetBlockSections(i, params->GetCheckpointData(i)->GetBlockSectionIds());
-    // (CheckpointData_16__ @0x822AE100 then `addi r4, cp, 8` == &CheckpointData::mauBlockSectionIds,
-    // then the inlined SetBlockSections -- now bodied in BrnRouteRequestManager.cpp.)
-    // CheckpointData::GetBlockSectionIds() is DECLARED ONLY in BrnGameState's BrnCheckpointData.h
-    // (the console inlines it; its inline body `return &mauBlockSectionIds;` belongs in that header),
-    // so calling it here would not link. Until it is bodied there, standard race routes still carry
-    // NO per-checkpoint blocked sections. DELETE-WHEN BrnCheckpointData.h bodies the accessor.
+    // 0x82791E90..0x82791F14: every checkpoint's blocked sections into the RRM slot of the same index
+    // (crash parity G04-D1, 2026-09-23 -- a FLAG stood here while the accessor had no body). The count
+    // is re-read every pass (0x82791E90 `lwz 0x2C0(params+0x260)` with GetCheckpointCount's "Array used
+    // before Construct/Clear" assert); CheckpointData_16__ @0x822AE100 is the checked element read;
+    // `addi r4, cp, 8` is GetBlockSectionIds(); then the inlined SetBlockSections (:101 assert,
+    // `stw 0, 0x20(slot)`, AppendArray<8> @0x8278A108). GenerateStandardRouteRequest @0x82791490 reads
+    // the slots for every RACE-style route (AICar::OnModeStart sets car+0x153D for RACE).
+    for (s32 liCheckpoint = 0; liCheckpoint < lpGameModeParams->GetCheckpointCount(); ++liCheckpoint)
+    {
+        mRouteRequestManager.SetBlockSections(
+            liCheckpoint, lpGameModeParams->GetCheckpointData(liCheckpoint)->GetBlockSectionIds());
+    }
 
     muNumAggressiveCars              = static_cast<u8>(lpGameModeParams->GetAIAggressiveCarCount());  // 0x82791F38 (lbz 0x84C)
     meDefaultPlayerRouteFindingStyle = static_cast<ERouteFindingStyle>(
