@@ -619,6 +619,12 @@ namespace BrnGame
                               const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
         void BridgeWorldVehicleDataToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
                                          const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer);
+        // X360 @0x823E5560 (DWARF BrnGameModule.h:820): the world output's GUI queue -> the GUI
+        // input -- 512 traffic pool emptied, 208 score targets / 210 overhead signs (an empty record
+        // when the mode is not in progress), 209 removed traffic (also handed to
+        // CrashModeScoring::DealWithRemovedTraffic), 592.
+        void BridgeWorldTrafficAndPropDataToGui(CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+                                                const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput);
         // X360 @0x823E6A80: every world game event of id 31 (VehicleImpactEvent -- trading
         // paint / nudge / slam / shunt between race cars) is forwarded to the GUI as
         // GuiImpactEvent (365, 12 bytes) -- the only producer of the HUD's impact hint.
