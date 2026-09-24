@@ -570,9 +570,9 @@ struct OnlineRoadRulesConnectInfoEvent : public GameEvent<E_EVENT_ONLINE_ROAD_RU
 // Power-park scored (DWARF :2812). X360 case 54: meOutcome (lwz +0) == 1 (E_PPO_SUCCESS)
 // gates; miOtherPlayersInvolved (lwz +8) >= 2 selects PLAYER_POWER_PARKING(11) over
 // TRAFFIC_POWER_PARKING(12); miOverallRating (lwz +4, fcfid -> f32) is the score.
-// meOutcome is BrnWorld::EPowerParkOutcome stored as s32 (the enum's provisional home is
-// BrnGameActions.h; s32 storage keeps this header decoupled -- StartNetworkGameEvent
-// precedent).
+// meOutcome is BrnWorld::EPowerParkOutcome stored as s32 (the enum's home is
+// BrnPowerParkingManager.h, reached through BrnGameActions.h; s32 storage keeps this header
+// decoupled -- StartNetworkGameEvent precedent).
 struct PowerParkResultEvent : public GameEvent<E_EVENT_POWER_PARK_RESULT>
 {
     s32 meOutcome;               // 0x00 (:2814, BrnWorld::EPowerParkOutcome; s32 storage)
