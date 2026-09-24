@@ -129,11 +129,16 @@ namespace BrnAI
             return lResult;
         }
 
+        // rw::math::fpu::Clamp<float>(x, 0.0f, 1.0f) as the console inlines it (DWARF: HardShoulderSpeed
+        // and DoSlowTurn list fpu::Clamp / vpu::Clamp): `fneg t,x ; fsel t,t,0.0,x` then
+        // `fsubs u,1.0,t ; fsel r,u,t,1.0` -- HardShoulderSpeed 0x82793110/0x8279311C, DoSlowTurn
+        // 0x8277CB68/0x8277CB74 and 0x8277CBA8/0x8277CBB4. fsel takes its THIRD operand on an
+        // unordered test, so a NaN comes back as 1.0; the old `if (< 0) .. if (> 1) ..` returned
+        // the NaN (crash parity FX-AINAN2). Same ladder as BrnAIDriver.cpp's ClampFsel/Saturate.
         inline f32 SaturateU(f32 lfValue)
         {
-            if (lfValue < 0.0f) return 0.0f;
-            if (lfValue > 1.0f) return 1.0f;
-            return lfValue;
+            const f32 lfFloored = ((0.0f - lfValue) >= 0.0f) ? 0.0f : lfValue;
+            return ((1.0f - lfFloored) >= 0.0f) ? lfFloored : 1.0f;
         }
 
         inline f32 Dot2D(Vector2 lA, Vector2 lB) { return lA.x * lB.x + lA.y * lB.y; }
@@ -235,7 +240,10 @@ namespace BrnAI
         const f32 lfPlayerSpeed = lpPlayerCar->GetSpeed();
         const f32 lfDecentSpeed = mpCarHost->GetDecentSpeed();
 
-        if (lfPlayerSpeed >= lfDecentSpeed || IsPlayerProtected(lpPlayerCar))
+        // 0x82770378 `fcmpu playerSpeed, decent ; bge` -> the decay arm WITHOUT asking
+        // IsPlayerProtected. bge is bc 4,lt: taken on >= AND on unordered, so only an ordered
+        // `speed < decent` gets as far as the protection test (FX-AINAN2; `>=` sent a NaN on).
+        if (!(lfPlayerSpeed < lfDecentSpeed) || IsPlayerProtected(lpPlayerCar))
         {
             // decay, floored at 0 (fsel f0, f0, f0, 0.0)
             const f32 lfNew = mfPlayerSlowSpeedTime - lfTimeStep;
@@ -318,7 +326,9 @@ namespace BrnAI
         if (liRelative == 0 || liRelative == 2)
         {
             bool lbSpurt = false;
-            if (mfPlayerSlowSpeedTime >= KF_AGGRESSIVE_FAN_SLOW_PLAYER_TIME)          // flt_820C4250 == 6.0
+            // 0x82766220 `fcmpu slowTime, 6.0 ; blt -> skip`: taken only on an ordered <, so a
+            // NaN slow-speed time is considered (FX-AINAN2; `>=` skipped it).
+            if (!(mfPlayerSlowSpeedTime < KF_AGGRESSIVE_FAN_SLOW_PLAYER_TIME))        // flt_820C4250 == 6.0
             {
                 const f32 lfMySpeed = mpCarHost->GetSpeed();
                 if (lfMySpeed > lpPlayerCar->GetSpeed() + KF_AGGRESSIVE_FAN_SPEED_ADVANTAGE)  // flt_8300D934 == 10 mph
@@ -382,7 +392,10 @@ namespace BrnAI
         const f32 lfSpeed = lpCar->GetSpeed();
         const s32 liBehaviour = static_cast<s32>(lpCar->meBehaviour);     // lwz 0x14B4
 
-        if (liBehaviour != 6 && liBehaviour != 0 && mfStuckTime >= KF_AI_TIME_TO_START_TURNING)  // 2.0
+        // 0x82766494 `fcmpu stuckTime, 2.0 ; blt -> skip` and 0x827664C8 `fcmpu speed, 10 mph ;
+        // bge -> reset`: blt is not taken on unordered and bge is, so a NaN stuck time turns the
+        // car and a NaN speed resets the timer (FX-AINAN2; both `>=` did the opposite).
+        if (liBehaviour != 6 && liBehaviour != 0 && !(mfStuckTime < KF_AI_TIME_TO_START_TURNING))  // 2.0
         {
             lpCar->mfBehaviourTimer    = 0.0f;                             // stfs 0x14E0
             lpCar->mePreviousBehaviour = static_cast<EAIBehaviour>(liBehaviour);  // stw 0x14B8
@@ -393,7 +406,7 @@ namespace BrnAI
 
         if (lpCar->GetRouteFindingStyle() != static_cast<ERouteFindingStyle>(0) || liBehaviour != 6)
         {
-            if (lfSpeed >= KF_MAX_SPEED_FOR_BEING_STUCK)                   // flt_8300D818 == 10 mph
+            if (!(lfSpeed < KF_MAX_SPEED_FOR_BEING_STUCK))                 // flt_8300D818 == 10 mph
                 mfStuckTime = 0.0f;                                        // 0x1D04
             else
                 mfStuckTime = mfStuckTime + lfTimeStep;
@@ -770,10 +783,13 @@ namespace BrnAI
 
         const f32 lfSpeed = mpCarHost->GetSpeed();
         f32 lfDistance = lfSpeed * lfTime;
-        // fsel f0, (min - dist), min, dist  == max(dist, min)
-        if ((lfMinDistance - lfDistance) >= 0.0f) lfDistance = lfMinDistance;
-        // fsel f1, (max - dist), dist, max  == min(dist, max)
-        if ((lfMaxDistance - lfDistance) < 0.0f)  lfDistance = lfMaxDistance;
+        // fpu::Clamp<float> (DWARF), spelt as the two fsels because fsel picks its THIRD operand
+        // on an unordered test (f30 = lfMinDistance, f31 = lfMaxDistance):
+        // 0x82792FFC fsel f0, (min - dist), min, dist  == max(dist, min)  -- NaN keeps the NaN
+        lfDistance = ((lfMinDistance - lfDistance) >= 0.0f) ? lfMinDistance : lfDistance;
+        // 0x82793004 fsel f1, (max - dist), dist, max  == min(dist, max)  -- NaN becomes max
+        // (FX-AINAN2: the old `if ((max - dist) < 0) dist = max` kept a NaN distance)
+        lfDistance = ((lfMaxDistance - lfDistance) >= 0.0f) ? lfDistance : lfMaxDistance;
 
 #if BRN_AI_RACINGLINE_STACK_PRESENT
         return mRacingLineGenerator.GetPointFarAhead(&GetRacingLine(), lfDistance, m2DCarPos,
@@ -820,7 +836,9 @@ namespace BrnAI
         mbUseForcedSpeed = 0;        // stb 0, 0x1D66
         mbBoosting       = 0;        // stb 0, 0x1D6B
 
-        if (mSteeringFan.GetSpeedRatio() >= KF_DRIFT_SPEED_RATIO_THRESHOLD)   // flt_820C41FC == 0.75
+        // 0x8277C90C `fcmpu ratio, flt_820C41D4 (0.75) ; bge` -> the full-throttle arm; bge is taken
+        // on >= AND on unordered (FX-AINAN2; `>=` sent a NaN ratio to full brake).
+        if (!(mSteeringFan.GetSpeedRatio() < KF_DRIFT_SPEED_RATIO_THRESHOLD))  // flt_820C41D4 == 0.75
         {
             mfBrake       = 0.0f;    // 0x1D2C
             mfAccelerator = 1.0f;    // 0x1D28

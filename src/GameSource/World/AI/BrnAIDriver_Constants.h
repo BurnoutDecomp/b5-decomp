@@ -62,7 +62,7 @@ namespace BrnAI
     const f32 KF_DRIFT_TRIGGER_ANGLE                 = 0.9f;         // immediate     -- EstimateNeedForDrifting: |angle| > 0.9
     const f32 KF_DRIFT_LOOK_AHEAD_SPEED_SCALE        = 1.1f;         // immediate     -- FindFinalDriftDirection: speed * 1.1
     const f32 KF_DRIFT_LOOK_AHEAD_MIN                = 10.0f;        // flt_820C4150  -- FindFinalDriftDirection: min look-ahead
-    const f32 KF_DRIFT_SPEED_RATIO_THRESHOLD         = 0.75f;        // flt_820C41FC  -- AttemptToDriveAtDesiredSpeedInDrift
+    const f32 KF_DRIFT_SPEED_RATIO_THRESHOLD         = 0.75f;        // flt_820C41D4  -- AttemptToDriveAtDesiredSpeedInDrift (lfs @0x8277C908)
     const f32 KF_SLOW_TURN_PHASE_RATE                = 0.33333334f;  // flt_820065E0  -- DoSlowTurn: phase = int(behaviourTimer / 3)
     const f32 KF_PROXIMITY_CLOSE                     = 4.0f;         // flt_820C41C0  -- ProximitySpeed
     const f32 KF_PROXIMITY_FAR_RECIP                 = 0.25f;        // flt_82003F40  -- ProximitySpeed: 1 / (far - close)
