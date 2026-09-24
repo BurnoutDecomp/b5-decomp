@@ -79,7 +79,17 @@ struct WheelList {
 
 namespace RaceCarEntityModuleIO {
 struct InputBuffer_PreScene {};
-struct OutputBuffer_PreScene { void* GetVehicleInputInterface() { return this; } };
+// The readiness publish's target (reviewer C, 2026-09-24): OutputBuffer_PreScene::
+// GetActiveRaceCarOutputInterface (IO.h:289, +960960) -> the inlined DWARF :374 SetAllActiveCarsReady.
+struct ActiveRaceCarOutputFixture {
+    int miPublishes = 0; bool mbAllActiveCarsReady = false;
+    void SetAllActiveCarsReady(bool lbAllReady) { ++miPublishes; mbAllActiveCarsReady = lbAllReady; }
+};
+struct OutputBuffer_PreScene {
+    ActiveRaceCarOutputFixture mActive;
+    void* GetVehicleInputInterface() { return this; }
+    ActiveRaceCarOutputFixture* GetActiveRaceCarOutputInterface() { return &mActive; }
+};
 }
 
 // HACKGetValidModelIds' real body prefixes "VEH_"/"WHE_" and re-compresses; the fixture marks the
@@ -111,7 +121,8 @@ struct RaceCarStreamer {
     }
     AudioStreamer* GetAudioCarStreamer() { return &mAudio; }
     void Update(const RaceCarEntityModuleIO::InputBuffer_PreScene*, RaceCarEntityModuleIO::OutputBuffer_PreScene*, f32 lfStep) { ++miUpdates; mfUpdateStep = lfStep; }
-    bool IsRaceCarLoadedForStateMachineBringUp(s32) const { return true; }
+    bool mbRaceCarLoaded = true;
+    bool IsRaceCarLoadedForStateMachineBringUp(s32) const { return mbRaceCarLoaded; }
     bool IsDesiredRaceCarLoadedForCarSelect(s32) const { return mbDesiredLoadedForCarSelect; }
 };
 
@@ -312,6 +323,35 @@ int main() {
         lSelect.UpdateStreaming(&lIn, &lOut);
         Check(lSelect.mbWaitingForStreaming && !lSelect.mbSendStreamingComplete && lSelect.mabCarSelectWaitForStreaming[2],
               "UpdateStreaming: the car-select prefetch wait still holds the edge (unchanged leg)");
+    }
+
+    // ---- UpdateStreaming: the readiness publish (reviewer C, 2026-09-24) -------------------------------------
+    //   0x822FF204  mr r3, r25 ; bl OutputBuffer_PreScene::GetActiveRaceCarOutputInterface (0x822B5020)
+    //   0x822FF210  stb r24, 0x2861(r3)   == SetAllActiveCarsReady(lbAllReady), EVERY update, before the edge
+    {
+        Fixture::RaceCarEntityModule lAll; Fixture::RaceCarEntityModuleIO::OutputBuffer_PreScene lPub;
+        lAll.UpdateStreaming(&lIn, &lPub);
+        Check(lPub.mActive.miPublishes == 1 && lPub.mActive.mbAllActiveCarsReady,
+              "readiness publish: nothing pending -> SetAllActiveCarsReady(1) (stb r24, 0x2861 @0x822FF210), even with no edge armed");
+        lAll.UpdateStreaming(&lIn, &lPub);
+        Check(lPub.mActive.miPublishes == 2, "readiness publish: written on every update, not only on the edge");
+
+        Fixture::RaceCarEntityModule lWait; Fixture::RaceCarEntityModuleIO::OutputBuffer_PreScene lPubWait;
+        lWait.maActiveRaceCars[5].mbWaitingForLoad = true; lWait.mRaceCarStreamer.mbRaceCarLoaded = false;
+        lWait.UpdateStreaming(&lIn, &lPubWait);
+        Check(lPubWait.mActive.miPublishes == 1 && !lPubWait.mActive.mbAllActiveCarsReady,
+              "readiness publish: a car still waiting for its resources -> 0");
+
+        Fixture::RaceCarEntityModule lAudio; Fixture::RaceCarEntityModuleIO::OutputBuffer_PreScene lPubAudio;
+        lAudio.mbHACK_ExitingCarSelectWaitForAudio = true; lAudio.mRaceCarStreamer.mbHACK_WaitingForAudioAfterCarSelect = true;
+        lAudio.UpdateStreaming(&lIn, &lPubAudio);
+        Fixture::RaceCarEntityModule lPre; Fixture::RaceCarEntityModuleIO::OutputBuffer_PreScene lPubPre;
+        lPre.mbInCarSelectScreen = true; lPre.mabCarSelectWaitForStreaming[1] = true;
+        lPre.mRaceCarStreamer.mbDesiredLoadedForCarSelect = false;
+        lPre.UpdateStreaming(&lIn, &lPubPre);
+        Check(lPubAudio.mActive.miPublishes == 1 && !lPubAudio.mActive.mbAllActiveCarsReady
+                  && lPubPre.mActive.miPublishes == 1 && !lPubPre.mActive.mbAllActiveCarsReady,
+              "readiness publish: the junkyard-exit audio wait and the car-select prefetch wait both publish 0");
     }
 
     // ---- end-to-end: 74 then the pump ---------------------------------------------------------------------
