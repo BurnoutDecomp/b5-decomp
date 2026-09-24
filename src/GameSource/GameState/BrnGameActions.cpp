@@ -10,10 +10,11 @@
 
 namespace
 {
-// SoundTriggerAction::IsEmpty query-position tolerance. The X360 reads this float from rodata
-// (0x82029BA4), which is not in the available exports; this is an UNCONFIRMED stand-in -- the
-// |lane| > eps emptiness test is faithful, only the literal value is provisional.
-const float KF_QUERY_POS_EPSILON = 1.0e-4f;
+// SoundTriggerAction::IsEmpty query-position tolerance: the float IsEmpty @0x82355178 loads from
+// rodata (`lvlx v12, r0, r11` @0x82355198, r11 = unk_82029BA4), image-read 0x34000000 ==
+// 1.1920928955078125e-07f, i.e. FLT_EPSILON. [FX-BRIDGES 2026-09-24] It used to be a 1.0e-4f
+// "UNCONFIRMED stand-in", which called a query position empty up to 1e-4 per lane.
+const float KF_QUERY_POS_EPSILON = 1.1920928955078125e-07f;
 }
 
 // ⛔ RETIRED 2026-08-01 (reset-player-car wave): this TU carried a FILE-LOCAL FORK of the
