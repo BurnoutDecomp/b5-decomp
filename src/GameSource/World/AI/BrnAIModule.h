@@ -37,10 +37,9 @@ namespace BrnWorld { class WorldDebugComponent; }
 // ---- ADDITIVE (aiwave lane A7, 2026-09-03) -- pointer-only parameter types of the eight
 //      game-action handlers below. Declared, not included: BrnGameActions.h /
 //      BrnGameModeParams.h are heavy GameState headers and this class only takes pointers.
-//      BrnAIModule_Events.cpp includes both for the complete types it dereferences.
-//      RaceCarReachedCheckpointAction is DECLARED ONLY ANYWHERE -- its handler is a park
-//      (BrnAI::AIModule::OnRaceCarReachedCheckpoint @0x8278A658 is an ARTIST export hole), so
-//      nothing in the tree dereferences it yet. ----
+//      BrnAIModule_Events.cpp includes both for the complete types it dereferences
+//      (OnRaceCarReachedCheckpoint @0x8278A658 reads RaceCarReachedCheckpointAction's +0x04 /
+//      +0x08 / +0x0C -- an ARTIST export hole, decoded whole for crash parity CC-10). ----
 namespace BrnGameState
 {
     // CLASS KEY: BrnGameModeParams.h:138 defines it as a `class` -- MSVC mangles the key into the
@@ -213,7 +212,7 @@ public:
 
         // ---- the game-action handlers HandleGameActions calls (DWARF :251..:272) --------------
         void OnRaceCarReachedFinish( const BrnGameState::GameStateModuleIO::RaceCarReachedFinishAction* lpAction );      // @0x8277B8D0
-        void OnRaceCarReachedCheckpoint( const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpAction ); // @0x8278A658 (ARTIST export hole -- parked)
+        void OnRaceCarReachedCheckpoint( const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpRaceCarReachedCheckpointAction ); // @0x8278A658 (ARTIST export hole, decoded with ppcdis -- CC-10)
         void OnModeFinished( const BrnGameState::GameStateModuleIO::FinishedModeNotifyAction* lpAction );                // @0x8277B970
         void OnPlayerTakedown( const BrnGameState::GameStateModuleIO::OnPlayerTakedownAction* lpAction );                // @0x8278A720
         void OnModeStart( const BrnGameState::GameModeParams* lpGameModeParams );                                        // @0x82791DB8
