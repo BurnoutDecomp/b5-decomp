@@ -8,7 +8,8 @@
 //
 // This batch bodies the two verified functions:
 //   TestAxisAlignedBoxAxisAlignedBox @ 0x82812460  (store-for-store)
-//   TestLineStartEndAxisAlignedBox   @ 0x82812498  (semantic VMX lowering)
+//   TestLineStartEndAxisAlignedBox   @ 0x82812498  (per-lane VMX lowering; re-read and
+//                                                   corrected 2026-09-24, FX-GEOMETRIC)
 // ============================================================================
 
 #include "GameShared/GameClasses/Geometric/Intersection/CgsLineTests.h"
@@ -50,119 +51,134 @@ namespace CgsGeometric
 
     namespace
     {
-        // vrefp128 + Newton-Raphson refinement converges to the exact 1/x
-        // (same recip convention as every other VMX reconstruction in this
-        // project). Per-lane reciprocal of the segment direction.
-        inline f32 LineReciprocal(f32 lfValue)
+        // ---- the console's reciprocal ----------------------------------------------------------
+        // `vrefp128 v0, v126` then THREE Newton-Raphson steps, each `vnmsubfp128 e = 1 - d*x`
+        // followed by `vmaddfp x = x*e + x` (0x828124FC..0x82812538; the same eleven instructions
+        // are inlined at 0x82843FE4 in PolygonSoupListSpatialMap::RunQuery(const Line&) and at
+        // 0x82812D64 in BaseCollisionGenerator::CollideLineAgainstPolySoupList). The PS3 twin
+        // spells it VecRecipEst + one inline step + two CgsNumeric::NewtonRaphsonReciprocalIteratation
+        // (DWARF CgsReciprocal.h:42 / :152 NewtonRaphsonReciprocal3).
+        //
+        // PC LOWERING: the estimate is the exact quotient and the console's three refinement steps
+        // then run AS WRITTEN. That keeps the one property a decision here depends on: a ZERO
+        // direction lane refines to NaN (e = 1 - 0*inf = NaN), not to the +/-inf a bare 1/d gives.
+        // (Finite lanes land within an ulp of the console's.)
+        // MOVE-WHEN CgsNumeric/CgsReciprocal.h has a home in the tree (Numeric/** is not this lane's).
+        inline f32 NewtonRaphsonReciprocal3(f32 lfValue)
         {
-            return 1.0f / lfValue;
+            f32 lfReciprocal = 1.0f / lfValue;                            // vrefp128 (the estimate)
+            for (s32 liStep = 0; liStep < 3; ++liStep)
+            {
+                const f32 lfError = 1.0f - lfValue * lfReciprocal;       // vnmsubfp128 vE, vD, vX
+                lfReciprocal      = lfReciprocal * lfError + lfReciprocal; // vmaddfp vX, vX, vX, vE
+            }
+            return lfReciprocal;
+        }
+
+        // `vcmpgefp P, min` AND `vnot(vcmpgtfp P, max)` -- note the asymmetry on a NaN lane: the
+        // first compare is false, so a NaN coordinate is NEVER inside, while `!(P > max)` alone
+        // would have let it through.
+        inline bool IsWithinSlab(f32 lfValue, f32 lfMin, f32 lfMax)
+        {
+            return (lfValue >= lfMin) && !(lfValue > lfMax);
+        }
+
+        // `vcmpgefp one, t` AND `vnot(vcmpgtfp zero, t)` -- t in [0, 1]; a NaN t is rejected by
+        // the first compare.
+        inline bool IsOnSegment(f32 lfT)
+        {
+            return (1.0f >= lfT) && !(0.0f > lfT);
         }
     }
 
     // ------------------------------------------------------------------------
-    // TestLineStartEndAxisAlignedBox @ 0x82812498
+    // TestLineStartEndAxisAlignedBox @ 0x82812498 (RE-READ 2026-09-24, crash parity FX-GEOMETRIC)
     //
-    // Segment-vs-AABB intersection via the reciprocal-direction slab method.
-    // The X360 body is dense hand-vectorised VMX (SoA over the 3 axes); this is
-    // a SEMANTIC reconstruction of the recovered intent -- portable per-lane
-    // float slab math -- preserving the observed computation and the three
-    // reciprocal-is-zero asserts, not a literal per-VMX-register translation
-    // (per this project's established VMX semantic-lowering precedent; see
-    // CgsTriangleBox.cpp / CgsAxisAlignedBox::ContainsPoint).
+    // Segment-vs-AABB via the reciprocal slab method. r3 = the box, v1 = start, v2 = end
+    // (`vmr128 v127, v1 ; vmr128 v124, v2 ; mr r23, r3`); returns the hit mask splatted in v1.
+    // X360 callers: PolygonSoupTesterJob::LineTestNearestSS @0x829165D8 out of line, and the SAME
+    // body inlined per node in PolygonSoupListSpatialMap::RunQuery(const Line&) @0x82843E98 and per
+    // leaf in BaseCollisionGenerator::CollideLineAgainstPolySoupList's long arm @0x82812D64 (the
+    // DWARF names the inline in RunQuery(const Line&); the PS3 keeps the slab half out of line as
+    // TestLineAxisAlignedBox(box, start, end, reciprocal) @0xB13058, CgsLineTests.cpp:431).
     //
-    // Steps proven by the asm:
-    //   dir      = lvEnd - lvStart                         (vsubfp128 v126)
-    //   invDir   = 1 / dir  per axis  (vrefp128 + Newton-Raphson refine)
-    //   assert invDir.x/y/z != 0  ->  'Line reciprocal X/Y/Z is 0\n'
-    //   tMin[a]  = (box.min[a] - start[a]) * invDir[a]     (vsubfp128 v12 / vmulfp128)
-    //   tMax[a]  = (box.max[a] - start[a]) * invDir[a]     (vsubfp128 v7  / vmulfp128)
-    //   for each of the 6 axis planes: hit = start + dir * t   (vmaddcfp128)
-    //   accept the plane iff its t in [0,1] AND the hit point lies within the
-    //   box's other two axes (vcmpgtfp/vcmpgefp vs box.min/box.max), then OR
-    //   all faces together (the big vand/vor reduction tree).
+    //   0x828124D0  d = end - start                             (vsubfp128 v126, v124, v127)
+    //   0x828124FC  r = NewtonRaphsonReciprocal3(d)             (vrefp128 + 3 NR steps, above)
+    //   0x82812544  r.x == 0 -> "Line reciprocal X is 0\n"      :441 (0x1B9), non-gating
+    //   0x82812600  r.y == 0 -> "Line reciprocal Y is 0\n"      :442 (0x1BA)
+    //   0x8281269C  r.z == 0 -> "Line reciprocal Z is 0\n"      :443 (0x1BB)
+    //   0x82812714  per lane: tmin = r*(min - start), tmax = r*(max - start) (vmulfp128);
+    //               startIn = (start >= min) & !(start > max); endIn likewise for the end
+    //   0x8281274C  per face: P = d*t + start (vmaddcfp128, all lanes, one t splat), then
+    //               face = onSegment(t) & inside(P) on the OTHER two axes
+    //   0x828128BC  v1 = startIn.xyz | endIn.xyz | Xmin | Xmax | Ymin | Ymax | Zmin | Zmax
     //
-    // FireAssert's file-path + line-number args are dropped per convention; the
-    // rodata assert messages are reproduced verbatim (they carry a trailing \n).
+    // ⛔ CORRECTED 2026-09-24 (two divergences from the asm, both in this body since 2026-07-06):
+    //   (1) the END-INSIDE term was missing -- the asm ORs `(end >= min) & !(end > max)` over xyz
+    //       (v2/v8 -> v9 @0x82812724/0x82812734/0x82812880) with the start term and the faces;
+    //   (2) the reciprocal was a bare 1/d, so a zero direction lane gave +/-inf where the console's
+    //       refinement gives NaN. No accept/reject decision moved on the inf path (an inf or NaN t
+    //       fails onSegment either way), but the body now computes the console's lanes.
+    // The t-range and inside compares are now the console's own (a NaN t / NaN coordinate fails
+    // exactly where the asm's compare fails, not one compare later).
+    // FireAssert's file/line are dropped per convention; the messages carry their trailing \n.
     // ------------------------------------------------------------------------
     bool TestLineStartEndAxisAlignedBox(const Vector4& lvStart, const Vector4& lvEnd, const AxisAlignedBox& lrBox)
     {
-        const f32 lfDirX = lvEnd.x - lvStart.x;
-        const f32 lfDirY = lvEnd.y - lvStart.y;
-        const f32 lfDirZ = lvEnd.z - lvStart.z;
+        const f32 lafStart[3] = { lvStart.x, lvStart.y, lvStart.z };
+        const f32 lafEnd[3]   = { lvEnd.x, lvEnd.y, lvEnd.z };
+        const f32 lafMin[3]   = { lrBox.mMin.x, lrBox.mMin.y, lrBox.mMin.z };
+        const f32 lafMax[3]   = { lrBox.mMax.x, lrBox.mMax.y, lrBox.mMax.z };
 
-        const f32 lfInvX = LineReciprocal(lfDirX);
-        const f32 lfInvY = LineReciprocal(lfDirY);
-        const f32 lfInvZ = LineReciprocal(lfDirZ);
-
-        // The three reciprocal lanes must be finite: the asm branches to a fired
-        // assert when a reciprocal lane equals 0 (a zero direction component).
-        CGS_ASSERT(lfInvX != 0.0f, "Line reciprocal X is 0\n");
-        CGS_ASSERT(lfInvY != 0.0f, "Line reciprocal Y is 0\n");
-        CGS_ASSERT(lfInvZ != 0.0f, "Line reciprocal Z is 0\n");
-
-        // Slab parameters: entry/exit t for each axis. tMin/tMax here are the
-        // (unordered) hits of the min-corner and max-corner planes.
-        const f32 lfTMinX = (lrBox.mMin.x - lvStart.x) * lfInvX;
-        const f32 lfTMinY = (lrBox.mMin.y - lvStart.y) * lfInvY;
-        const f32 lfTMinZ = (lrBox.mMin.z - lvStart.z) * lfInvZ;
-        const f32 lfTMaxX = (lrBox.mMax.x - lvStart.x) * lfInvX;
-        const f32 lfTMaxY = (lrBox.mMax.y - lvStart.y) * lfInvY;
-        const f32 lfTMaxZ = (lrBox.mMax.z - lvStart.z) * lfInvZ;
-
-        // Test one axis-aligned face: the crossing point start + dir*t must lie
-        // within the box on the other two axes, and t must be on the segment
-        // [0,1]. (u0/u1 are the two axes orthogonal to the face's axis.)
-        struct FaceTest
+        f32 lafDirection[3];
+        f32 lafReciprocal[3];
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
         {
-            static bool Hits(f32 lfT,
-                             f32 lfStartU0, f32 lfDirU0, f32 lfMinU0, f32 lfMaxU0,
-                             f32 lfStartU1, f32 lfDirU1, f32 lfMinU1, f32 lfMaxU1)
+            lafDirection[liAxis]  = lafEnd[liAxis] - lafStart[liAxis];
+            lafReciprocal[liAxis] = NewtonRaphsonReciprocal3(lafDirection[liAxis]);
+        }
+
+        CGS_ASSERT(!(lafReciprocal[0] == 0.0f), "Line reciprocal X is 0\n");   // :441
+        CGS_ASSERT(!(lafReciprocal[1] == 0.0f), "Line reciprocal Y is 0\n");   // :442
+        CGS_ASSERT(!(lafReciprocal[2] == 0.0f), "Line reciprocal Z is 0\n");   // :443
+
+        // The two endpoints, each inside iff inside on all three axes.
+        bool lbStartInside = true;
+        bool lbEndInside   = true;
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+        {
+            lbStartInside = lbStartInside && IsWithinSlab(lafStart[liAxis], lafMin[liAxis], lafMax[liAxis]);
+            lbEndInside   = lbEndInside   && IsWithinSlab(lafEnd[liAxis],   lafMin[liAxis], lafMax[liAxis]);
+        }
+
+        // The six faces: axis a's min plane at tmin[a], its max plane at tmax[a]; the crossing
+        // point must lie inside the box on the two axes the face does not fix.
+        bool lbFaceHit = false;
+        for (s32 liAxis = 0; liAxis < 3; ++liAxis)
+        {
+            const f32 lafT[2] =
             {
-                if (lfT < 0.0f || lfT > 1.0f)
+                lafReciprocal[liAxis] * (lafMin[liAxis] - lafStart[liAxis]),   // tmin (vmulfp128 v12)
+                lafReciprocal[liAxis] * (lafMax[liAxis] - lafStart[liAxis]),   // tmax (vmulfp128 v11)
+            };
+
+            for (s32 liFace = 0; liFace < 2; ++liFace)
+            {
+                const f32 lfT   = lafT[liFace];
+                bool      lbHit = IsOnSegment(lfT);
+                for (s32 liOther = 0; liOther < 3; ++liOther)
                 {
-                    return false;
+                    if (liOther == liAxis)
+                    {
+                        continue;
+                    }
+                    const f32 lfCrossing = lafDirection[liOther] * lfT + lafStart[liOther];   // vmaddcfp128
+                    lbHit = lbHit && IsWithinSlab(lfCrossing, lafMin[liOther], lafMax[liOther]);
                 }
-                const f32 lfHitU0 = lfStartU0 + lfDirU0 * lfT;
-                const f32 lfHitU1 = lfStartU1 + lfDirU1 * lfT;
-                return lfHitU0 >= lfMinU0 && lfHitU0 <= lfMaxU0
-                    && lfHitU1 >= lfMinU1 && lfHitU1 <= lfMaxU1;
+                lbFaceHit = lbFaceHit || lbHit;
             }
-        };
+        }
 
-        // X-normal faces (crossing point tested against Y and Z ranges).
-        const bool lbFaceXMin = FaceTest::Hits(lfTMinX,
-            lvStart.y, lfDirY, lrBox.mMin.y, lrBox.mMax.y,
-            lvStart.z, lfDirZ, lrBox.mMin.z, lrBox.mMax.z);
-        const bool lbFaceXMax = FaceTest::Hits(lfTMaxX,
-            lvStart.y, lfDirY, lrBox.mMin.y, lrBox.mMax.y,
-            lvStart.z, lfDirZ, lrBox.mMin.z, lrBox.mMax.z);
-
-        // Y-normal faces (tested against X and Z ranges).
-        const bool lbFaceYMin = FaceTest::Hits(lfTMinY,
-            lvStart.x, lfDirX, lrBox.mMin.x, lrBox.mMax.x,
-            lvStart.z, lfDirZ, lrBox.mMin.z, lrBox.mMax.z);
-        const bool lbFaceYMax = FaceTest::Hits(lfTMaxY,
-            lvStart.x, lfDirX, lrBox.mMin.x, lrBox.mMax.x,
-            lvStart.z, lfDirZ, lrBox.mMin.z, lrBox.mMax.z);
-
-        // Z-normal faces (tested against X and Y ranges).
-        const bool lbFaceZMin = FaceTest::Hits(lfTMinZ,
-            lvStart.x, lfDirX, lrBox.mMin.x, lrBox.mMax.x,
-            lvStart.y, lfDirY, lrBox.mMin.y, lrBox.mMax.y);
-        const bool lbFaceZMax = FaceTest::Hits(lfTMaxZ,
-            lvStart.x, lfDirX, lrBox.mMin.x, lrBox.mMax.x,
-            lvStart.y, lfDirY, lrBox.mMin.y, lrBox.mMax.y);
-
-        // A start endpoint already inside the box is also an intersection
-        // (the asm's start>=min / start<=max lane compares).
-        const bool lbStartInside =
-               lvStart.x >= lrBox.mMin.x && lvStart.x <= lrBox.mMax.x
-            && lvStart.y >= lrBox.mMin.y && lvStart.y <= lrBox.mMax.y
-            && lvStart.z >= lrBox.mMin.z && lvStart.z <= lrBox.mMax.z;
-
-        return lbStartInside
-            || lbFaceXMin || lbFaceXMax
-            || lbFaceYMin || lbFaceYMax
-            || lbFaceZMin || lbFaceZMax;
+        return lbStartInside || lbEndInside || lbFaceHit;
     }
 }
