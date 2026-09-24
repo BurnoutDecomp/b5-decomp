@@ -31,6 +31,7 @@
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // GameStateToGuiInterface (OutputBuffer +0x4450, embedded by value -- see its member's ⚠️)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"      // SetUpAllEventStartsInterface (OutputBuffer console +176368, embedded by value)
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h" // CgsSystem::TimerRequestInterface (OutputBuffer +16420) -- see the typedef below
+#include "GameShared/GameClasses/System/Timer/CgsTime.h"          // CgsSystem::Time (mGameModeElapsedTime, DWARF BrnGameStateModuleIO.h:351)
 
 // PostWorldInputBuffer hands out the active-race-car output interface by pointer only
 // (GetActiveRaceCarOutputInterface, X360 0x8231D2C0); forward-declare its real home.
@@ -315,15 +316,6 @@ namespace GameStateModuleIO
     typedef CgsSystem::TimerRequestInterface OutputBufferTimerRequestInterface;
     struct OutputBufferFrameRateTypeReqInterface { u8 maOpaque[12]; };
     struct OutputBufferGuiEventQueue             { u8 maOpaque[1008]; };
-
-    // TODO(conductor-review): CgsSystem::Time has no committed home yet (CgsTime.h missing).
-    // Modelled here as the DWARF shape {s32 miSeconds; f32 mfFraction;} so the elapsed-time
-    // accessors compile; replace with the real CgsSystem::Time when CgsTime.h is reconstructed.
-    struct OutputBufferTime
-    {
-        s32 miSeconds;
-        f32 mfFraction;
-    };
 
     // ========================================================================
     // Minimal member types homed by the class:BrnGameState catch-all TU's remaining
@@ -707,7 +699,7 @@ namespace GameStateModuleIO
         void                     SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor);   // 0x82362ED0 write, line 302
 
         // Game-mode elapsed time (mGameModeElapsedTime @+173188)
-        void                       SetGameModeElapsedTime(const OutputBufferTime* lpTime);  // 0x82362F80 write, line 305
+        void                       SetGameModeElapsedTime(const CgsSystem::Time* lpTime);   // 0x82362F80 write, line 305 (DWARF `const Time*`)
 
         // Controller-active flag (mbControllerActive @+192490)
         bool GetControllerActive() const;            // 0x823B9F88 read, line 307
@@ -827,7 +819,7 @@ namespace GameStateModuleIO
         TriggerQueryInputInterface      mTriggerQueryInputInterface;      // console +169068 (4112)
         BrnNetwork::EPaybackType meActivePaybackType;                     // console +173180
         ::EActiveRaceCarIndex    meActivePaybackAggressor;                // console +173184
-        OutputBufferTime         mGameModeElapsedTime;                    // console +173188 (8B)
+        CgsSystem::Time          mGameModeElapsedTime;                    // console +173188 (8B; DWARF :351 `Time`)
         // The tail, carved at the console's own anchors (all three spans are attested by
         // OutputBuffer::Construct's zero-fills / memsets and by the two inlined address
         // computations in BridgeGameStateToWorld). Each stays OPAQUE storage of the CONSOLE's

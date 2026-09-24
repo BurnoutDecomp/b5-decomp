@@ -2102,5 +2102,13 @@ public:
     // in GameStateModule_gUI_00.cpp does.
     void UpdateStreetDisplay(f32 delta);
     void UpdateRoadRulesManagerImpactTimeBringUp(GameStateModuleIO::GameActionQueue* lpActionQueue);
+
+    // [FX-FLOW 2026-09-24, NEW-EMMTAIL] the TAIL of X360 GameStateModule::EmmPreWorldUpdate
+    // @0x8238EF50 after UpdateRoadRulesManager (0x8238F1BC..0x8238F33C, run on both the paused and
+    // the unpaused arm): the game-mode elapsed time onto the output buffer, the network interface's
+    // active-race-car mapping from every scored car, and the player's overtake record (GUI 371).
+    // Takes the caller's timer interface for the sim clock -- the same named deviation the
+    // ModeManager leg beside it carries (see PreWorldUpdateStuntBringUp's leg 1b).
+    void EmmPreWorldUpdateTailBringUp(const CgsSystem::TimerStatusInterface& lrTimerStatusInterface);
 };
 }

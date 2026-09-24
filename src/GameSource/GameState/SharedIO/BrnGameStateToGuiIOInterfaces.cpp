@@ -9,7 +9,8 @@
 // file itself (references/DecFIGS/dwarfdump/GameSource/GameState/SharedIO/
 // BrnGameStateToGuiIOInterfaces.cpp), so this is the file's real home rather than a convenience
 // seat. Only the members the mounted event core actually calls are reconstructed here; the
-// remaining publishers (AddOvertakeEvent / AddTookLeadEvent / AddTookLastEvent), Clear() and
+// remaining publishers (AddTookLeadEvent / AddTookLastEvent -- no console caller: the image has no
+// AddEvent for either queue and no store to interface +0x120 / +0x140), Clear() and
 // GetPlayerRaceCarIndex stay declared-only in the header until they have live callers to check
 // them against. The eight const queue accessors are bodied (FX-GS2, G10-D11 part 2) for their one
 // reader, BrnGameModule's TranslateGuiInterfaceToGuiEvents.
@@ -21,6 +22,7 @@
 //   AddDirtyTrickTriggered (no own body; inlined into PaybackManager::HandleTriggeringPayback)
 //   AddNewDirtyTrick      (no own body; inlined into PaybackManager::HandleAwardingPayback)
 //   AddOnTailEvent        (no own body; inlined into GameStateModule::CheckForTailingRivals)
+//   AddOvertakeEvent      (no own body; inlined into GameStateModule::EmmPreWorldUpdate @0x8238F324)
 //   the eight const Get*Queue accessors (no own bodies; inlined into
 //                          BrnGameModule::TranslateGuiInterfaceToGuiEvents @0x823E1D90)
 //   AppendRaceCarCrashes  @ 0x82379980   (FX-GS2 2026-09-23, G11-D5, with Construct's ninth leg)
@@ -248,6 +250,26 @@ void GameStateToGuiInterface::AddOnTailEvent(CgsID lOfflineRivalCarID, ::EActive
     lEvent.meOnTailActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x8
 
     mOnTailEventQueue.AddEvent(lEvent);                         // this + 0x160
+}
+
+// -----------------------------------------------------------------------------
+// AddOvertakeEvent (DWARF BrnGameStateToGuiIOInterfaces.h:97) -- publish "the player gained a
+// place" to the GUI. [FX-FLOW 2026-09-24, crash-parity NEW-EMMTAIL] No out-of-line console body:
+// GameStateModule::EmmPreWorldUpdate @0x8238EF50 inlines it at 0x8238F324..0x8238F33C:
+//     bl   0x8231D8A8            ; OutputBuffer::GetGameStateToGuiInterface (write lock)
+//     addi r3, r3, 0xC8          ; mOvertakeEventQueue
+//     stb  r31, var_88           ; the new race position (u8) -> record +0x0
+//     stw  r30, var_84           ; the car slot               -> record +0x4
+//     bl   GameStateToGuiOvertakeEvent AddEvent 0x82368BF0   (an 8-byte copy, length++)
+// Its one reader is TranslateGuiInterfaceToGuiEvents (GUI 371).
+// -----------------------------------------------------------------------------
+void GameStateToGuiInterface::AddOvertakeEvent(u8 lu8NewPosition, ::EActiveRaceCarIndex leActiveRaceCarIndex)
+{
+    GameStateToGuiOvertakeEvent lEvent;
+    lEvent.mu8NewPosition       = lu8NewPosition;         // record +0x0
+    lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;   // record +0x4
+
+    mOvertakeEventQueue.AddEvent(lEvent);                 // this + 0xC8
 }
 
 // -----------------------------------------------------------------------------
