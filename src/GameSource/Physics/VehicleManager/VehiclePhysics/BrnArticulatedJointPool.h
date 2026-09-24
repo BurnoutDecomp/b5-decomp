@@ -53,8 +53,8 @@
 //     0x82600938  Construct                          144 bytes   BODIED
 //     0x826013C0  SendCreateRemoveJointEvents       1464 bytes   BODIED (this wave)
 //     0x825D7DD8  ConstructArticulatedJoint         1132 bytes   not bodied
-//     0x825D8248  RemoveJoint                        580 bytes   not bodied
-//     0x825D8490  GetIndexOfOtherHalf                304 bytes   not bodied
+//     0x825D8248  RemoveJoint                        580 bytes   BODIED (2026-09-24, G34-D3)
+//     0x825D8490  GetIndexOfOtherHalf                304 bytes   BODIED (wave G12, folded partfile)
 //     0x826009C8  CreateJoint                       1632 bytes   not bodied  (also an export HOLE:
 //                                                                absent from progress/identity.json)
 //     0x82601028  RemoveBrokenJointsFromSimulation   920 bytes   not bodied
@@ -100,6 +100,11 @@ namespace Vehicle
         // type is declared in BrnPhysicalTrafficManager.h, which includes THIS header, so naming
         // the enum here would close an include cycle.
         s32               GetIndexOfOtherHalf(s32 liJointIndex, s32 liArticulatedType);
+
+        // @0x825D8248 (DWARF :98). Flag joint liJointIndex for removal in this frame's working
+        // buffer, carrying its packed id, and free its pool slot. The one caller is
+        // PhysicalTrafficManager::RemoveTrafficVehicle's articulated arm (0x8261CFBC).
+        void RemoveJoint(ArticulatedJointCreateBuffer* lpJointWorkingBuffer, s32 liJointIndex);
 
         // @0x826013C0 (DWARF :104). Drain one frame's batched joint create/remove requests out of
         // the working buffer and onto the simulation request interface.

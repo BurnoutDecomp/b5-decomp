@@ -204,6 +204,38 @@ void ArticulatedJointPool::SendCreateRemoveJointEvents(
     }
 }
 
+// ---------------------------------------------------------------------------------------
+// ArticulatedJointPool::RemoveJoint   @ 0x825D8248  (580 bytes)   DWARF :98   NEW 2026-09-24
+//
+//   0x825D8264..0x825D8288  assert "lpJointWorkingBuffer != NULL"                     (.cpp 0x142 = 322)
+//   0x825D828C..0x825D82B4  assert "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles" (323)
+//   0x825D82C8..0x825D836C  the inlined IsBitSet's streamed "invalid index : <i> < 10" (CgsBitArray.h:203)
+//   0x825D8370..0x825D8420  mUsedJoints (+800, word 0x64*8) bit test; clear -> streamed
+//                           "Trying to remove articulated joint <i> that isn't in use"     (324)
+//   0x825D8424..0x825D8448  GetJoint(i) (0x825C2B40) ; `ld r11,0x40` (mJointId) ; `std` into the
+//                           stack InRemoveJoint ; lpJointWorkingBuffer->FlagJointToBeRemoved(i, it)
+//                           (0x825C24F8)
+//   0x825D844C..0x825D8480  assert "luIndex < NUMBITS" (CgsBitArray.h:0xF1 = 241) ; `ldx / andc /
+//                           stdx` on +0x320 == mUsedJoints.UnSetBit(i)
+// Every assert is a non-gating tripwire: an out-of-use joint is still flagged and cleared.
+// ---------------------------------------------------------------------------------------
+void ArticulatedJointPool::RemoveJoint(ArticulatedJointCreateBuffer* lpJointWorkingBuffer, s32 liJointIndex)
+{
+    CGS_ASSERT(lpJointWorkingBuffer != nullptr, "lpJointWorkingBuffer != NULL");          // :322
+    CGS_ASSERT(liJointIndex >= 0 && liJointIndex < KI_NUM_JOINTS,
+               "liJointIndex >= 0 && liJointIndex < kiMaxArticulatedTrafficVehicles");    // :323
+    CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "invalid index : ");       // CgsBitArray.h:203
+    CGS_ASSERT(mUsedJoints.IsBitSet(static_cast<u32>(liJointIndex)),
+               "Trying to remove articulated joint ");   // :324, streamed "<i> that isn't in use"
+
+    ArticulatedJointCreateBuffer::InRemoveJoint lRemoveJointEvent;
+    lRemoveJointEvent.mu64Id = GetJoint(liJointIndex)->GetJointId().mu64RawId;   // ld 0x40 / std
+    lpJointWorkingBuffer->FlagJointToBeRemoved(liJointIndex, lRemoveJointEvent);
+
+    CGS_ASSERT(static_cast<u32>(liJointIndex) < KU_NUM_JOINTS, "luIndex < NUMBITS");      // CgsBitArray.h:241
+    mUsedJoints.UnSetBit(static_cast<u32>(liJointIndex));
+}
+
 }
 }
 
