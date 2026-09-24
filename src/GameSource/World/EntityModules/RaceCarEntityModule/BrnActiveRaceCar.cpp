@@ -110,6 +110,13 @@ namespace
         lIdentity.wAxis = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
         return lIdentity;
     }
+
+    // This TU's spelling of BrnPhysics::Def @0x822C7708 (ResourcePtr<StreamedDeformationSpec>::
+    // operator-> over the car's +0x1C90 wrapper), resolved through the handle the wrapper keeps
+    // at +0x14. Defined with AddToScene's helpers below (see its banner); declared here for
+    // OnResourcesLoaded's Def() read (0x822EB210).
+    const BrnPhysics::Deformation::StreamedDeformationSpec*
+    ResolveDeformationSpec(const CgsResource::ResourceHandle& lrHandle);
 }
 
 // ----------------------------------------------------------------------------
@@ -1195,18 +1202,25 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 //   * the two asserts, the state store,
 //   * both resource HANDLES (the console's two BaseResourcePtr::CreateFromHandle calls
 //     store the handle at wrapper+0x14; AddHandlingModel reads exactly those two words),
+//   * the centre-of-mass transform copy and its IsValid assert (leg 1 below),
+//   * ResetVerletOffsets (leg 4 below),
 //   * the detached-part render queue Construct,
 //   * mbCanDriveAwayFromCrash / mbUncrashedThisFrame clears the module's caller makes
 //     right after (they are OnRaceCarResourcesLoaded's own two trailing stores).
 //
-// [FLAG PC bring-up] WHAT IS NOT, and why -- three legs, none paraphrased:
-//   1. mCentreOfMassTransform <- BrnPhysics::Def(mDeformationModelResourcePtr) + 1552.
-//      Needs the alias-list half of CreateFromHandle (to get the resource MEMORY, not
-//      just the handle) HERE. ⭐ LANDED ELSEWHERE (seat wave 2026-08-05): the promote site
-//      (RaceCarEntityModule::ResetActiveRaceCar) forwards the resident spec's +1552 matrix
-//      through SetCentreOfMassTransformBringUp, so CalcBodyTransform now multiplies the
-//      SHIPPED model-space->handling-space matrix, not the identity. This slot still
-//      belongs here once the alias leg lands. DELETE-WHEN the spec is homed.
+// [FLAG PC bring-up] WHAT IS NOT, and why -- the legs below, none paraphrased:
+//   1. ⭐ LANDED 2026-09-24 (crash parity, reviewer B on 87d1ad23 / G62): mCentreOfMassTransform
+//      <- BrnPhysics::Def(mDeformationModelResourcePtr) + 1552, 0x822EB20C..0x822EB24C:
+//        mr r3, r24 (this + 0x1C90) ; bl BrnPhysics::Def (@0x822C7708) ; addi r10, r3, 0x610
+//        four lvx128 [r10 + 0/0x10/0x20/0x30] -> stvx128 [this + 0x90 + ...]   (w lanes too)
+//      then the per-row x/y/z self-equality cascade 0x822EB250..0x822EB3DC and ONE assert,
+//      "RwMath::IsValid( mCentreOfMassTransform )" (0x8201D720, line 0x33F == :831). The DWARF
+//      spelling is `mCentreOfMassTransform = mDeformationModelResourcePtr->
+//      GetCarModelSpaceToHandlingBodySpaceTransform()`. The "needs the alias-list half of
+//      CreateFromHandle" reason was stale: ResolveDeformationSpec (AddToScene's helper, this TU)
+//      already reaches the resident spec through the handle stored two lines up. It retires the
+//      promote-seam stand-in SetCentreOfMassTransformBringUp (seat wave 2026-08-05), which fed the
+//      same +1552 matrix one step later, from RaceCarEntityModule::ResetActiveRaceCar.
 //   2. the four RenderParams::SetWheelScale(i, Def + 96 + 48*i) calls -- same dependency,
 //      and this build cannot draw wheels at all (Model::SetupShaderConstantsForInstancing
 //      is absent).
@@ -1241,6 +1255,21 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
     mDeformationModelHandle = lrDeformationModelHandle;              // +0x1CA4
     mGraphicsModelHandle    = lrGraphicsModelHandle;                 // +0x1CC4
 
+    // 0x822EB20C..0x822EB24C (banner leg 1): Def(this + 0x1C90) + 0x610 copied whole into
+    // +0x90. PC-SAFETY GUARD, not console behaviour: a spec that does not resolve fires Def's own
+    // "Can not instance" assert (CgsResourcePtr.h:544) and leaves the matrix as Prepare/Attach
+    // set it, where the console would read through the null resource.
+    const BrnPhysics::Deformation::StreamedDeformationSpec* lpDeformationSpec =
+        ResolveDeformationSpec( mDeformationModelHandle );
+    CGS_ASSERT( lpDeformationSpec != 0,
+                "Can not instance resource pointer - it has no main memory resource\n" );
+    if( lpDeformationSpec != 0 )
+    {
+        mCentreOfMassTransform = lpDeformationSpec->mCarModelSpaceToHandlingBodySpaceTransform;
+    }
+    CGS_ASSERT( rw::math::vpu::IsValid( mCentreOfMassTransform ),
+                "RwMath::IsValid( mCentreOfMassTransform )" );                         // :831
+
     // 0x822EB404 `mr r3, r28 ; bl ResetVerletOffsets` (G61-D6): a slot re-used for a new car
     // starts undented. muState is WAITING here, so its !IsInactive() tripwire holds.
     ResetVerletOffsets();
@@ -1255,6 +1284,20 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourceHandle& lrDefo
         const_cast<Attrib::Collection*>( lCarAsset.GetGraphicsAssetRefSpec()->GetCollection() ), 0 );
     miDefaultColourIndex   = lGraphicsAsset.PlayerColourIndex();          // stw +0x1C80 @0x822EB4DC
     miDefaultColourPalette = lGraphicsAsset.PlayerColourPaletteIndex();   // stw +0x1C84 @0x822EB4E4
+
+    // [DIAG] BRN_RESLOADED_DIAG -- NOT IN THE X360 BINARY. Capped proof the Def() legs were
+    // DISPATCHED on a resolved spec, with the values they stored.
+    static const bool sbResLoadedDiag = ( getenv( "BRN_RESLOADED_DIAG" ) != 0 );
+    static u32 suResLoadedDiagLines = 0u;
+    if( sbResLoadedDiag && suResLoadedDiagLines < 32u && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        ++suResLoadedDiagLines;
+        *CgsDev::Log::gpDebugPrint
+            << "[res-loaded] OnResourcesLoaded slot " << static_cast<s32>( meActiveRaceCarIndex )
+            << " spec " << ( lpDeformationSpec != 0 ? 1 : 0 )
+            << " mCentreOfMassTransform.w (" << mCentreOfMassTransform.wAxis.x << ", "
+            << mCentreOfMassTransform.wAxis.y << ", " << mCentreOfMassTransform.wAxis.z << ")\n";
+    }
 }
 
 // ============================================================================
@@ -1380,17 +1423,6 @@ void ActiveRaceCar::ResetRenderPoseInterpolation()
         maWheelPoseTracks[luWheel].Reset();
     for (u32 luPart = 0; luPart < KU_MAX_BODY_PARTS_PER_RACE_CAR; ++luPart)
         maPartPoseTracks[luPart].Reset();
-}
-
-// ----------------------------------------------------------------------------
-// [FLAG PC bring-up] SetCentreOfMassTransformBringUp -- NOT an X360 function. See the header
-// banner: this is the console OnResourcesLoaded's `Def(...) + 1552` read, fed from the resident
-// spec by the promote site instead of through the unreconstructed resource alias leg.
-// ----------------------------------------------------------------------------
-void ActiveRaceCar::SetCentreOfMassTransformBringUp(const Matrix44Affine& lrCarModelSpaceToHandlingBodySpace)
-{
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-    mCentreOfMassTransform = lrCarModelSpaceToHandlingBodySpace;
 }
 
 // ----------------------------------------------------------------------------
