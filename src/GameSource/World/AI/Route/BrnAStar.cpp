@@ -158,7 +158,9 @@ AStarNode* AStarNodePool::ExtractBestOpenNode(u16* lpuBestNodeIndex, f32 lfCostW
 {
     CgsDev::PerfMonCpu::StartMonitor(dword_8300D530);
 
-    CGS_ASSERT(lfCostWeight >= 0.0f && lfCostWeight <= 1.0f,
+    // `fcmpu w,0 ; blt -> fire` 0x827677C4/0x827677CC then `fcmpu w,1 ; ble -> skip`
+    // 0x827677D8/0x827677DC: an unordered weight skips the assert (FX-AINAN2).
+    CGS_ASSERT(!(lfCostWeight < 0.0f) && !(lfCostWeight > 1.0f),
                "lfCostWeight >= 0.0f && lfCostWeight <= 1.0f");
 
     AStarNode* lpBestNode = nullptr;
