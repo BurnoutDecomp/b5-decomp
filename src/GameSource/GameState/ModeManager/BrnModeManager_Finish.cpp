@@ -147,17 +147,17 @@ static const f32 KF_NORMAL_TIMESTEP_MULTIPLIER = 1.0f;
 // nothing about teams (full refutation at BrnModeManager.h:758-783). So arm 8 is "the run ended on
 // the mode clock", which is what this TU's own reads at :402/:435/:507 treat it as; 9/10 are the pass/fail pair
 // of every target-based mode (road rage, marked man, stunt run, showtime, the team modes); 11 is
-// only reachable from the "Unknown or unsupported game mode type" default. The tree's BrnGui
-// EFinishType enum currently carries only E_FINISH_TYPE_NONE == 0, so the values live here as
-// file-local constants and are cast at the single AddFinishedRaceEvent call site. header_request
-// filed to grow the real enum; do NOT invent GUI-side meanings for 8..11 beyond this.
+// only reachable from the "Unknown or unsupported game mode type" default. The DWARF names of
+// 8..11 (BrnGuiEventTypeDefs.h:893, now the enum in BrnGameStateToGuiEvents.h) are TIMED_OUT, WON,
+// LOST and COUNT -- the same reading. The file-local names stay (every arm below uses them) and are
+// bound to the enumerators, cast at the single AddFinishedRaceEvent call site.
 // ---------------------------------------------------------------------------
-static const s32 KI_FINISH_TYPE_1ST      = 0;
-static const s32 KI_FINISH_TYPE_8TH      = 7;
-static const s32 KI_FINISH_TYPE_ABORTED  = 8;    // the mbPlayerFinishedTimedOut (+0x94FD) arm of every mode
-static const s32 KI_FINISH_TYPE_PASSED   = 9;    // target met  (road rage / marked man / stunt run / showtime)
-static const s32 KI_FINISH_TYPE_FAILED   = 10;   // target missed
-static const s32 KI_FINISH_TYPE_UNKNOWN  = 11;   // the default arm's value
+static const s32 KI_FINISH_TYPE_1ST      = BrnGui::E_FINISH_TYPE_1ST;        // 0
+static const s32 KI_FINISH_TYPE_8TH      = BrnGui::E_FINISH_TYPE_8TH;        // 7
+static const s32 KI_FINISH_TYPE_ABORTED  = BrnGui::E_FINISH_TYPE_TIMED_OUT;  // 8: the mbPlayerFinishedTimedOut (+0x94FD) arm of every mode
+static const s32 KI_FINISH_TYPE_PASSED   = BrnGui::E_FINISH_TYPE_WON;        // 9: target met  (road rage / marked man / stunt run / showtime)
+static const s32 KI_FINISH_TYPE_FAILED   = BrnGui::E_FINISH_TYPE_LOST;       // 10: target missed
+static const s32 KI_FINISH_TYPE_UNKNOWN  = BrnGui::E_FINISH_TYPE_COUNT;      // 11: the default arm's value
 
 // The finish positions the non-race modes answer through GetPlayersFinishPosition. The console
 // open-codes them as `(passed ? 1 : 4)` via a cntlzw/subfe/rlwinm sequence; the two literals are

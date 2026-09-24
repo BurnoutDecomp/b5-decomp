@@ -12,9 +12,30 @@
 
 namespace BrnGui
 {
-// MINIMAL STUB: BrnGui::EFinishType has no committed home yet (only GameStateToGuiFinishedRaceEvent
-// uses it). Replace with the real enum when the BrnGui front-end is reconstructed.
-enum EFinishType : s32 { E_FINISH_TYPE_NONE = 0 };
+// DWARF BrnGuiEventTypeDefs.h:893 -- how a car's event ended: its race place, or the outcome of a
+// target mode. Homed here rather than in the GUI event header because its producer,
+// ModeManager::FinishCurrentMode, is game-state code (GameStateToGuiFinishedRaceEvent, GUI 372).
+// X360 FinishCurrentMode @0x8234B978 writes exactly these values into r30, the argument of
+// AddFinishedRaceEvent (bl @0x8234BE0C): the race place minus one, range-asserted against 0 and 7
+// (`cmpwi r30, 0` @0x8234BABC "leFinishType >= BrnGui::E_FINISH_TYPE_1ST", `cmpwi r30, 7`
+// @0x8234BAE0 "... <= BrnGui::E_FINISH_TYPE_8TH"), `li r30, 8` (0x8234BA4C, the timed-out arm),
+// `li r30, 9` / `li r30, 0xA` (0x8234BBD8 / 0x8234BBE0, won / lost) and `li r30, 0xB` in the
+// unknown-mode default (0x8234BDA4). (A single invented E_FINISH_TYPE_NONE stood here before.)
+enum EFinishType : s32
+{
+    E_FINISH_TYPE_1ST       = 0,
+    E_FINISH_TYPE_2ND       = 1,
+    E_FINISH_TYPE_3RD       = 2,
+    E_FINISH_TYPE_4TH       = 3,
+    E_FINISH_TYPE_5TH       = 4,
+    E_FINISH_TYPE_6TH       = 5,
+    E_FINISH_TYPE_7TH       = 6,
+    E_FINISH_TYPE_8TH       = 7,
+    E_FINISH_TYPE_TIMED_OUT = 8,
+    E_FINISH_TYPE_WON       = 9,
+    E_FINISH_TYPE_LOST      = 10,
+    E_FINISH_TYPE_COUNT     = 11,
+};
 }
 
 namespace BrnGameState

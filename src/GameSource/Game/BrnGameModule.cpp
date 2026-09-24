@@ -3986,25 +3986,25 @@ namespace BrnGame
     // CgsGui::GuiModule each AddGuiEvent<T> is called on -- and AddGuiEvent<T> never reads it (see
     // PushGuiEvent's banner in GameBridgeGameStateToX.h). So this file-local function, posting
     // through PushGuiEvent exactly
-    // as TranslateTakedownsToGuiEvents does, is the same machine. It is file-local only because the
-    // member's declaration (BrnGameModule.hpp) and the console home (GameBridgeGameStateToX.cpp)
-    // are outside the fix lane that landed it. DELETE-WHEN promoted: declare the member, DWARF
-    // signature (InputBuffer* lpGuiInput, const GameStateToGuiInterface* lpGameToGuiInterface), in
+    // as TranslateTakedownsToGuiEvents does, is the same machine. It stays file-local because
+    // tests/run_fxgs2_gui_iface.py (FX-GS2's regression runner) extracts this definition and the two
+    // wire records below from this file by these spellings, so the move has to take that runner's
+    // extraction with it (that runner is not in the lane that owns this file today). DELETE-WHEN
+    // promoted: declare the member, DWARF signature (InputBuffer* lpGuiInput,
+    // const GameStateToGuiInterface* lpGameToGuiInterface), in
     // BrnGameModule.hpp beside TranslateTakedownsToGuiEvents and move this body (with the two
     // wire records) to GameBridgeGameStateToX.cpp verbatim.
     // =========================================================================
     namespace
     {
-        // [FLAG type home] GUI events 371 and 372 on the wire. Their canonical homes,
-        // BrnGui::GuiOvertakeEvent / BrnGui::GuiFinishRaceEvent in BrnGuiDemangledEventTypes.h,
-        // are still the opaque `u8 maData[8]` placeholders (id + size only), so the two records
-        // are spelt here, TU-local, with their DWARF fields (BrnGuiEventTypeDefs.h:3875 / :3892,
-        // PS3 GuiEvent<366> / <367>; the X360 ids are the AddGuiEvent literals `li r5, 0x173` /
-        // `li r5, 0x174`) in the order the translate's stores pin: the slot at +0 (`stw r11,
-        // 0x70(r1)` / `stw r11, 0x60(r1)`), the position byte / finish type at +4. Same precedent
-        // as GameBridgeGameStateToX_StuntGuiEvents.cpp's TickerCustomMessageWire537.
-        // DELETE-WHEN the two placeholders are upgraded in place (the move recipe in
-        // BrnGuiEventTypeDefs.h's HudMessageAnalyzer-family banner): then these become
+        // [FLAG type home] GUI events 371 and 372 on the wire, spelt here, TU-local, with their DWARF
+        // fields (BrnGuiEventTypeDefs.h:3875 / :3892, PS3 GuiEvent<366> / <367>; the X360 ids are the
+        // AddGuiEvent literals `li r5, 0x173` / `li r5, 0x174`) in the order the translate's stores
+        // pin: the slot at +0 (`stw r11, 0x70(r1)` / `stw r11, 0x60(r1)`), the position byte /
+        // finish type at +4. Their canonical homes, BrnGui::GuiOvertakeEvent / BrnGui::GuiFinishRaceEvent,
+        // now carry the same DWARF fields (BrnGuiEventTypeDefs.h; upgraded 2026-09-24 from the
+        // BrnGuiDemangledEventTypes.h u8[8] placeholders) and the asserts after the two records keep
+        // the spellings byte-identical. DELETE-WHEN the promotion above lands: then these become
         // BrnGui::GuiOvertakeEvent / BrnGui::GuiFinishRaceEvent verbatim.
         struct GuiOvertakeEventWire371
         {
@@ -4025,6 +4025,18 @@ namespace BrnGame
         };
         static_assert(sizeof(GuiFinishRaceEventWire372) == 8,
                       "X360 AddGuiEvent<GuiFinishRaceEvent> @0x823D9E68 posts 8 bytes (id 372)");
+        static_assert(sizeof(GuiOvertakeEventWire371) == sizeof(BrnGui::GuiOvertakeEvent)
+                      && offsetof(GuiOvertakeEventWire371, meActiveRaceCarIndex)
+                             == offsetof(BrnGui::GuiOvertakeEvent, meActiveRaceCarIndex)
+                      && offsetof(GuiOvertakeEventWire371, muNewPosition)
+                             == offsetof(BrnGui::GuiOvertakeEvent, muNewPosition),
+                      "the 371 wire record is BrnGui::GuiOvertakeEvent byte for byte");
+        static_assert(sizeof(GuiFinishRaceEventWire372) == sizeof(BrnGui::GuiFinishRaceEvent)
+                      && offsetof(GuiFinishRaceEventWire372, meActiveRaceCarIndex)
+                             == offsetof(BrnGui::GuiFinishRaceEvent, meActiveRaceCarIndex)
+                      && offsetof(GuiFinishRaceEventWire372, meFinishType)
+                             == offsetof(BrnGui::GuiFinishRaceEvent, meFinishType),
+                      "the 372 wire record is BrnGui::GuiFinishRaceEvent byte for byte");
 
         void TranslateGuiInterfaceToGuiEvents(
             CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,

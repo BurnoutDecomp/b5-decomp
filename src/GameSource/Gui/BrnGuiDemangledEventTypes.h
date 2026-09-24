@@ -416,7 +416,10 @@ namespace BrnGui
     // now lives in BrnGuiEventTypeDefs.h with its real X360 record shape (the raw
     // {speed, rpm, gear} words). The opaque GuiEvent<147> shell that stood here was
     // DELETED rather than left to shadow it (the GuiPowerParkResult precedent below).
-    struct GuiFinishRaceEvent { u8 maData[8]; s32 GetEventType() const { return 372; } };  // id 372 size 8 (raw; size not GuiEvent-shaped)
+    // [FX-FLOW 2026-09-24] GuiFinishRaceEvent (372) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its DWARF fields (:3892 {meActiveRaceCarIndex, meFinishType},
+    // 8 bytes). The opaque u8[8] placeholder that stood here was DELETED rather than left to
+    // shadow it.
     struct GuiGameModeStarted : public CgsGui::GuiEvent<237> { u8 maPayload[4]; };  // id 237 size 16 (12B GuiEvent header + opaque payload)
     struct GuiGamePausedEvent { u8 maData[8]; s32 GetEventType() const { return 505; } };  // id 505 size 8 (raw; size not GuiEvent-shaped)
     // [gateui r3] GuiHUDMessageBHRRunnerCrashed (id 455) has been RECOVERED and now lives in
@@ -508,7 +511,10 @@ namespace BrnGui
     // RecvEvent case 388 latches it with a single float load (@0x82420B38).
     struct GuiOncomingEvent { f32 mfDistance; s32 GetEventType() const { return 388; } };  // id 388 size 4
     struct GuiOnlineCarStatusEvent { u8 maData[8]; s32 GetEventType() const { return 563; } };  // id 563 size 8 (raw; size not GuiEvent-shaped)
-    struct GuiOvertakeEvent { u8 maData[8]; s32 GetEventType() const { return 371; } };  // id 371 size 8 (raw; size not GuiEvent-shaped)
+    // [FX-FLOW 2026-09-24] GuiOvertakeEvent (371) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its DWARF fields (:3875 {meActiveRaceCarIndex, muNewPosition},
+    // 8 bytes). The opaque u8[8] placeholder that stood here was DELETED rather than left to
+    // shadow it.
     // [boost-msg wave] NEW HOME (no committed record existed). DWARF
     // BrnGuiEventTypeDefs.h:4369 {CgsID mShortcutId}; PS3 GuiEvent<377>, X360 id 382.
     // BoostMessageManager::RecvEvent case 382 latches the qword at +0x00 into mShortcutId
