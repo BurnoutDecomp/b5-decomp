@@ -10450,15 +10450,10 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
             const BrnPhysics::Vehicle::RaceCarState* const lpRaceCarState =
                 lpActiveRaceCarInterface->GetRaceCarState(leRaceCar);
 
-            // The console calls IsRaceCarPlayer @0x82681DF0 (`maxRaceCarFlags[idx] >> 1 & 1`,
-            // E_RACE_CAR_OUTPUT_FLAG_PLAYER). That method is declared-only in this tree and its
-            // own TU is another owner's file, so calling it is a LINK HOLE; maxRaceCarFlags is
-            // private, so the bit cannot be read here either. Stand-in: the bodied public
-            // GetPlayerActiveRaceCarIndex @0x82277BF8 -- the same slot, set from the same
-            // muType == E_RACE_CAR_TYPE_PLAYER producer arm.
-            // DELETE-WHEN BrnRCEntityActiveRaceCarOutputInterface.cpp bodies IsRaceCarPlayer.
-            const bool lbIsPlayer =
-                (leRaceCar == lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex());
+            // 0x827441A4..0x827441B0: `bl IsRaceCarPlayer` (0x82681DF0: the two index asserts, then
+            // `maxRaceCarFlags[idx] >> 1 & 1`, E_RACE_CAR_OUTPUT_FLAG_PLAYER). [FX-AIBUZZ: the accessor is bodied;
+            // this was the GetPlayerActiveRaceCarIndex() == idx stand-in]
+            const bool lbIsPlayer = lpActiveRaceCarInterface->IsRaceCarPlayer(leRaceCar);
 
             PhysicalVehicleInfo lInfo;
             lInfo.mPositionAndImportance.SetVector3(lpRaceCarState->mTransform.Pos());
@@ -15806,11 +15801,8 @@ void TrafficEntityModule::UpdateCollidableVehicles(
 {
     CGS_ASSERT(lpInput != 0, "lpInput != NULL");     // 0x82730320, baked .cpp 4807
     CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // 0x82730344, baked .cpp 4808
-
-    if (lpInput == 0 || lpOutput == 0)   // PC-safety guard, as in the sibling partfiles
-    {
-        return;
-    }
+    // (crash parity FX-NETCRASH, REVIEW_G: the `if (lpInput == 0 || lpOutput == 0) return;` that
+    // stood here was a PC-safety guard -- the console asserts both and runs on.)
 
     {
         // GATE: the console's PerfMonCpu Start/StopMonitor(miPerfMon_UpdateCollidableVehicles)
@@ -16004,10 +15996,11 @@ void TrafficEntityModule::UpdateCollidableVehicles(
                 {
                     const Vector3 lToSource = lPosition - lSourcePositions[luSource];
                     const f32 lfDistSq = rw::math::vpu::Dot(lToSource, lToSource);
-                    if (lfDistSq < lfNearestSq)
-                    {
-                        lfNearestSq = lfDistSq;
-                    }
+                    // 0x827316C4 `vminfp128 v127, v127, v0`: a NaN distance (a NaN race-car /
+                    // physical / camera source) becomes the nearest and stays it, so the two
+                    // `vcmpgtfp128.` gates below fail -- neither avoidable nor collidable. (A plain
+                    // `<` skipped the NaN source and could still classify the car; REVIEW_G.)
+                    lfNearestSq = AvoidVmxMin(lfNearestSq, lfDistSq);
                 }
 
                 if (kfVehicle_AvoidRadiusSq_CollideRadiusSq_MaxFloat_W.x > lfNearestSq)

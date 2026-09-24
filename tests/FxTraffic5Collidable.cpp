@@ -401,6 +401,28 @@ int main()
         Check(Near(F().mAveragePhysicalCentre.x, 150.0f), "F2 physical cars are sources: centre = (0 + 300) / 2");
     }
 
+    // ---- G (crash parity FX-NETCRASH, REVIEW_G): a NaN source poisons the nearest distance --------
+    // 0x827316C4 `vminfp128 v127, v127, v0` keeps a NaN distance, so both `vcmpgtfp128.` gates fail:
+    // a car 5 m from a real source is NEITHER avoidable NOR collidable while any source is NaN, in
+    // either source order. (A plain `<` skipped the NaN source and classified the car off the other.)
+    {
+        const unsigned luAssertsBefore = gAsserts;   // the previous scenario's count (Fresh() zeroes it)
+        Fresh();
+        ActivateRaceCar(0, std::nanf(""), 0.0f, 0.0f);         // NaN source first
+        ActivateRaceCar(1, 0.0f, 0.0f, 0.0f);                   // a real source 5 m away
+        AddCar(70, 5.0f);                                       // 25 < 400: collidable off car 1 alone
+        F().mVehiclesToUpdateCollidables.SetBit(70);
+        Run();
+        Check(CountCalls(E_ADD_VOLUME, 70) == 0 && !F().mVehicleSoaData.mCollidableVehicles.IsBitSet(70),
+              "G1 0x827316C4 vminfp128: a NaN source makes the nearest distance NaN -- the car is not collidable");
+        Check(!F().mVehiclesAvoidableLastFrame.IsBitSet(70),
+              "G2 ...and not avoidable (vcmpgtfp128. 2500 > NaN fails at 0x827316E8)");
+        // A NaN source may legitimately trip a validity tripwire; the closing "no assert" check keeps
+        // judging the scenario before this one, as it did before G existed.
+        std::printf("G: %u tripwire(s) with a NaN source\n", gAsserts);
+        gAsserts = luAssertsBefore;
+    }
+
     Check(gAsserts == 0, "no assert fired in any scenario");
     std::printf("FxTraffic5Collidable: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures == 0 ? 0 : 1;
