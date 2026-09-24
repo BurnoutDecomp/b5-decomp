@@ -8,6 +8,7 @@
 #include "GameSource/GameState/BrnGameActions.h"               // HUDMessageXCrashesAction (250), HUDMessagePlayerReachesCheckpointAction (249)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // gpDebugPrint ([hud-xcrash] witness)
 #include <cstdlib>                                             // getenv (BRN_MODEMGR_DIAG)
+#include <cmath>                                               // truncf (GenerateDistanceToFinishMessage's Modulo)
 
 // ============================================================================
 // b5-decomp/src/GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp
@@ -61,6 +62,38 @@ namespace
     // The buffered-crash pool's capacity; DetectOnlineCrashes' second loop and
     // RemoveCrashingMessagesForTakendownPlayers both walk every slot (`cmpwi r31, 8`).
     const s32 KI_NUM_BUFFERED_CRASHING_CARS = 8;
+
+    // [FX-FLOW 2026-09-24, G11-D1 remainder] The race-arm generators' constants, read from the image.
+    //
+    // GenerateLeaderMessages turns the leader's distance lead into seconds by dividing by
+    // flt_82FADF1C, a .bss float the TU initialiser @0x82C4D820..0x82C4D838 sets to
+    // flt_82F31928 (0x3EE4E26D, 0.44704 -- one mph in m/s) `fmuls` flt_82020A70 (0x43200000, 160.0):
+    // 160 mph in m/s, 0x428F0D84. Spelt as the same single-precision product.
+    const f32 KF_MPH_TO_METRES_PER_SECOND   = 0.44704f;                                   // flt_82F31928
+    const f32 KF_LEADER_SPLIT_SPEED_MPH     = 160.0f;                                     // flt_82020A70
+    const f32 KF_LEADER_SPLIT_SPEED         = KF_MPH_TO_METRES_PER_SECOND * KF_LEADER_SPLIT_SPEED_MPH; // flt_82FADF1C
+    // The split is announced only between 1 s and 1000 s: flt_82001C98 (0x3F800000) and
+    // flt_82009E10 (0x447A0000), `blt` / `bgt` @0x82394204 / @0x82394214.
+    const f32 KF_MIN_LEADER_SPLIT_SECONDS   = 1.0f;                                       // flt_82001C98
+    const f32 KF_MAX_LEADER_SPLIT_SECONDS   = 1000.0f;                                    // flt_82009E10
+    // GenerateRivalCheckpointMessage announces a rival only this far ahead of the player
+    // (`lfs flt_8200A034` @0x823943CC, 0x43FA0000); GenerateDistanceToFinishMessage steps its next
+    // mark down by the same word (@0x82395B90).
+    const f32 KF_RIVAL_CHECKPOINT_MIN_LEAD_METRES = 500.0f;                               // flt_8200A034
+    const f32 KF_DISTANCE_MESSAGE_STEP_METRES     = 500.0f;                               // flt_8200A034
+    // GenerateFirstOrLastMessage's debounce: a new leader is announced once it has held the lead
+    // for flt_82029F18 (0x3FC00000, 1.5 s -- KF_CRASH_MESSAGE_BUFFER_SECONDS's word), a new last
+    // place after flt_82029F1C (0x40F00000, 7.5 s). Prepare seeds the two clocks with the same words.
+    const f32 KF_NEW_LEADER_MESSAGE_SECONDS = 1.5f;                                       // flt_82029F18
+    const f32 KF_NEW_LAST_MESSAGE_SECONDS   = 7.5f;                                       // flt_82029F1C
+    // GenerateDistanceToFinishMessage: the first mark is the largest multiple of 500 m (the first
+    // word of the vector constant unk_8202AEE0, 0x43FA0000, `vspltw 0` @0x82395B14) at or below the
+    // distance less 100 m (flt_820049E0, 0x42C80000). A distance of FLT_MAX (flt_82CDB9AC,
+    // 0x7F7FFFFF) means "no distance yet"; -1.0 (flt_820037C8, 0xBF800000) is Prepare's "not set".
+    const f32 KF_DISTANCE_MESSAGE_MODULUS_METRES = 500.0f;                                // unk_8202AEE0[0]
+    const f32 KF_DISTANCE_MESSAGE_OFFSET_METRES  = 100.0f;                                // flt_820049E0
+    const f32 KF_NO_RACE_DISTANCE                = 3.4028234663852886e+38f;               // flt_82CDB9AC (FLT_MAX)
+    const f32 KF_DISTANCE_MESSAGE_UNSET          = -1.0f;                                 // flt_820037C8
 }
 
 // ============================================================================
@@ -112,12 +145,13 @@ void HUDMessageLogic::Construct()
 // buffered-crash pool: 0x82366528..0x82366578 write its Clear image (free queue 7..0 at
 // +0x190..+0x1AC, count 8 at +0x1B0, occupancy 0 at +0x1B8) as Prepare's last stores
 // [FX-GS 2026-09-23, crash-parity G11-D2].
-// Still unmounted: +516/+520 (5.0), +524/+528 (0), +532/+540 (times 1.5/7.5),
-// +584 (-1), +568/+588 (0), +592 (-1), +596 (0).
+// Still unmounted: +516/+520 (5.0), +524/+528 (0), +584 (-1), +568/+588 (0), +596 (0).
+// (+532/+540, the times 1.5/7.5, and +592, -1.0, are mounted since FX-FLOW 2026-09-24: the
+// race-arm generators read them.)
 // Prepare deliberately leaves the two score-sample fields untouched, as in ARTIST.
 void HUDMessageLogic::Prepare()
 {
-    meFinishingRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    meFinishedRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     miFinishPosition = 0;
     mCurrentPlayerCheckpointID = 0;
     mNextPlayerCheckpointID = 0;
@@ -132,6 +166,12 @@ void HUDMessageLogic::Prepare()
     miLastLeadingTeam          = 0;                                     // +0x1E0
     miLastVictoryTeam          = 0;                                     // +0x1E4
     mfLastTimeWarningAnnounced = -1.0f;                                 // +0x1E8
+    // [FX-FLOW 2026-09-24] the race-arm generators' three members: `bl Time::SetFloatVal` on +0x214
+    // with flt_82029F18 (@0x82366518) and on +0x21C with flt_82029F1C (@0x82366524);
+    // `stfs f30(flt_820037C8), 0x250` @0x82366530.
+    mTimeSinceNewLeader.SetFloatVal(KF_NEW_LEADER_MESSAGE_SECONDS);    // +0x214  1.5 s
+    mTimeSinceNewLast.SetFloatVal(KF_NEW_LAST_MESSAGE_SECONDS);        // +0x21C  7.5 s
+    mfNextDistanceToFinishMessage = KF_DISTANCE_MESSAGE_UNSET;         // +0x250  -1.0
     mBufferedCrashingCars.Clear();                                      // +0x190..+0x1B8
 }
 
@@ -252,23 +292,20 @@ void HUDMessageLogic::PostWorldUpdate(
 // X360 0x82399C78 (DWARF BrnHUDMessageLogic.h:128 / .cpp:242). Registers on entry: r4 iface -> r30,
 // r5 scoring -> r29, r6 crash queue -> r28, r7 takedown queue -> r27, r8 player index -> r26,
 // f1 time step -> f31. The console order, call for call:
-//   0x82399CA4  bl GenerateLeaderMessages(iface, scoring)                    [X] no body in the tree
-//   0x82399CB0  bl GenerateFinisherMessage(iface)                            [X] no body in the tree
+//   0x82399CA4  bl GenerateLeaderMessages(iface, scoring)                    (action 245)
+//   0x82399CB0  bl GenerateFinisherMessage(iface)                            (action 247)
 //   0x82399CB4  lbz 0x201 ; beq -> the inlined GeneratePlayerCheckpointMessage (AddEvent 249, 24)
-//   0x82399CF8  bl GenerateRivalCheckpointMessage(iface, scoring)            [X] no body in the tree
+//   0x82399CF8  bl GenerateRivalCheckpointMessage(iface, scoring)            (action 248)
 //   0x82399CFC  lwz 0x1C0 ; cmpwi 0 ; bne -> mode 0: bl DetectCrashes(iface, crash queue) @0x82399D14
 //                                           else:   bl DetectOnlineCrashes(iface, crash queue, f1)
 //                                                   @0x82399D20, then
 //                                                   bl RemoveCrashingMessagesForTakendownPlayers(
 //                                                   takedown queue) @0x82399D2C
-//   0x82399D44  bl GenerateFirstOrLastMessage(scoring, f1, player, iface)    [X] no body in the tree
-//   0x82399D54  bl GenerateDistanceToFinishMessage(scoring, player)          [X] no body in the tree
+//   0x82399D44  bl GenerateFirstOrLastMessage(scoring, f1, player, iface)    (actions 242 / 243)
+//   0x82399D54  bl GenerateDistanceToFinishMessage(scoring, player)          (action 244)
 //   0x82399D5C  stb 0, 0x201                  mbPlayerHasJustTriggeredCheckpoint = false
-// [X] NOT REPRODUCED, named rather than faked: the five sibling generators marked above (0x82394110,
-// 0x82394258, 0x82394338, 0x82395760, 0x82395A88) post actions 242..248 and read members this
-// layout does not carry yet (+0x204..+0x21C, +0x250/+0x254). Their GUI consumers
-// (TranslateGameActionsToGuiEvents cases 242..248) are not mounted either, so nothing downstream
-// changes. DELETE-WHEN those bodies land: they slot in at the positions above.
+// [FX-FLOW 2026-09-24, G11-D1 remainder] the five sibling generators are bodied below and called
+// at their console positions; FirstOrLast's r5 is the f32 ABI's skipped slot (f1 rides it).
 void HUDMessageLogic::GenerateRaceModeMessages(
     const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
     ScoringSystem* lpScoringSystem,
@@ -277,11 +314,12 @@ void HUDMessageLogic::GenerateRaceModeMessages(
     EActiveRaceCarIndex lePlayerRaceCarIndex,
     f32 lfTimeStep)
 {
-    // (GenerateLeaderMessages / GenerateFinisherMessage -- see the banner.)
+    GenerateLeaderMessages(lpActiveRaceCarInterface, lpScoringSystem);   // 0x82399CA4
+    GenerateFinisherMessage(lpActiveRaceCarInterface);                   // 0x82399CB0
 
     GeneratePlayerCheckpointMessage();
 
-    // (GenerateRivalCheckpointMessage -- see the banner.)
+    GenerateRivalCheckpointMessage(lpActiveRaceCarInterface, lpScoringSystem);   // 0x82399CF8
 
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_RACE)   // lwz 0x1C0 ; cmpwi 0
     {
@@ -293,7 +331,9 @@ void HUDMessageLogic::GenerateRaceModeMessages(
         RemoveCrashingMessagesForTakendownPlayers(lpTakedownQueue);
     }
 
-    // (GenerateFirstOrLastMessage / GenerateDistanceToFinishMessage -- see the banner.)
+    GenerateFirstOrLastMessage(lpScoringSystem, lfTimeStep, lePlayerRaceCarIndex,
+                               lpActiveRaceCarInterface);                       // 0x82399D44
+    GenerateDistanceToFinishMessage(lpScoringSystem, lePlayerRaceCarIndex);    // 0x82399D54
 
     mbPlayerHasJustTriggeredCheckpoint = false;                          // stb 0, 0x201
 }
@@ -316,6 +356,286 @@ void HUDMessageLogic::GeneratePlayerCheckpointMessage()
 
         // The typed overload: liSize == sizeof(HUDMessagePlayerReachesCheckpointAction) == 24 == `li r6, 0x18`.
         mActionQueue.AddEvent(&lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT);
+    }
+}
+
+// ============================================================================
+// [FX-FLOW 2026-09-24, G11-D1 remainder] The five race-arm generators. Each posts into this object's
+// own 256-byte action queue (the drain is PreWorldUpdate); TranslateGameActionsToGuiEvents turns 242,
+// 245, 247 and 248 into GUI events and drops 243 and 244 (its default arm).
+// ============================================================================
+
+// X360 0x82394110 (DWARF BrnHUDMessageLogic.h:138 / .cpp:357). On the frame the player passes a
+// checkpoint, how far (in seconds at 160 mph) the player trails the leader -- or, when the player
+// leads, how far second place trails the player:
+//   0x8239412C  lbz 0x201 ; beq -> out                       mbPlayerHasJustTriggeredCheckpoint
+//   0x82394138  lwz 0x1C0 ; addi -0xA ; subfic 7 ; subfe/addi -> out when (mode - 10) <= 7 unsigned,
+//               i.e. in any online mode (E_MODE_ONLINE_MODE_START..E_MODE_ONLINE_MODE_END)
+//   0x8239415C  GetPlayerActiveRaceCarIndex ; 0x8239416C GetRaceCarState(player) ; lbz 0x44A (mbCrashing)
+//               set -> out
+//   0x82394180  IsPlayerCarActive() false -> out
+//   0x82394190  lbz 0x4EFA(scoring) (mbACarHasFinishedTheRace) set -> out
+//   0x8239419C  lbz 0x2861(iface) (GetAllActiveCarsRead) clear -> out
+//   0x823941B0  GetCarRacePosition(player) ; cntlzw(pos - 1) -> the player leads when pos == 1
+//   0x823941B8  lfs 0x59C8 -- the leader's distance to finish (sorted slot 0)
+//   0x823941CC  lfs 0x59E0 (slot 1) when the player leads, else 0x823941DC GetRaceCarDistanceToFinish
+//   0x823941E0  fcmpu second, leader ; blt -> out         (NaN falls through, as here)
+//   0x823941F8  fdivs (second - leader) / flt_82FADF1C
+//   0x82394200  fcmpu split, 1.0 ; blt -> out ; 0x82394210 fcmpu split, 1000.0 ; bgt -> out
+//   0x82394218  lwz 0x59C0 (slot 0's index) -> GetRivalId -> AddEvent(245, 24) @0x82394248
+void HUDMessageLogic::GenerateLeaderMessages(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    ScoringSystem* lpScoringSystem)
+{
+    if (!mbPlayerHasJustTriggeredCheckpoint)
+    {
+        return;
+    }
+    if (meCurrentGameModeType >= GameStateModuleIO::E_MODE_ONLINE_MODE_START &&
+        meCurrentGameModeType <= GameStateModuleIO::E_MODE_ONLINE_MODE_END)
+    {
+        return;
+    }
+
+    const EActiveRaceCarIndex lePlayerIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
+    const BrnPhysics::Vehicle::RaceCarState* lpPlayerRaceCarState =
+        lpActiveRaceCarInterface->GetRaceCarState(lePlayerIndex);
+    if (lpPlayerRaceCarState->mbCrashing)
+    {
+        return;
+    }
+    if (!lpActiveRaceCarInterface->IsPlayerCarActive())
+    {
+        return;
+    }
+    if (lpScoringSystem->HasAnyCarFinished())
+    {
+        return;
+    }
+    if (!lpActiveRaceCarInterface->GetAllActiveCarsRead())
+    {
+        return;
+    }
+
+    const bool lbPlayerIsLeading = (lpScoringSystem->GetCarRacePosition(lePlayerIndex) == 1);
+    const f32  lfLeaderDistanceToFinish = lpScoringSystem->GetPositionedCarDistanceToFinish(0);
+    const f32  lfSecondDistanceToFinish = lbPlayerIsLeading
+        ? lpScoringSystem->GetPositionedCarDistanceToFinish(1)
+        : lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerIndex);
+    if (lfSecondDistanceToFinish < lfLeaderDistanceToFinish)
+    {
+        return;
+    }
+
+    const f32 lfDistanceSeparation = lfSecondDistanceToFinish - lfLeaderDistanceToFinish;
+    const f32 lfTimeSeparation     = lfDistanceSeparation / KF_LEADER_SPLIT_SPEED;
+    if (lfTimeSeparation < KF_MIN_LEADER_SPLIT_SECONDS)
+    {
+        return;
+    }
+    if (lfTimeSeparation > KF_MAX_LEADER_SPLIT_SECONDS)
+    {
+        return;
+    }
+
+    const EActiveRaceCarIndex leLeaderCarIndex = lpScoringSystem->GetPositionedCarIndex(0);
+    GameStateModuleIO::HUDMessageLeadingAction lLeadingMessageAction;
+    lLeadingMessageAction.mLeadingCarID          = lpActiveRaceCarInterface->GetRivalId(leLeaderCarIndex);
+    lLeadingMessageAction.mfLeadTime             = lfTimeSeparation;
+    lLeadingMessageAction.meLeadingCarIndex      = leLeaderCarIndex;
+    lLeadingMessageAction.mbLocalPlayerIsLeading = lbPlayerIsLeading;
+
+    // The typed overload: liSize == sizeof(HUDMessageLeadingAction) == 24 == `li r6, 0x18`.
+    mActionQueue.AddEvent(&lLeadingMessageAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_LEADING);
+}
+
+// X360 0x82394258 (DWARF BrnHUDMessageLogic.h:147 / .cpp:578). A rival that ModeManager::RaceCarFinishes
+// latched (top-three finish, +0x1C8 / +0x1CC): one record, then the latch drops. The player's own
+// finish is never posted and is NOT dropped (the `beq` @0x82394304 skips the `stw -1` too).
+//   0x8239426C  lwz 0x1C8 ; cmpwi -1 ; beq -> out
+//   0x82394284  the two range asserts (.cpp:621 / :622)
+//   0x823942CC  the inlined GetPlayerActiveRaceCarIndex (its "Player car index hasn't been set",
+//               BrnRaceCarEntityModuleOutputInterface.h:980) ; cmpw ; beq -> out
+//   0x82394314  {index, miFinishPosition} -> AddEvent(247, 8) @0x82394324 ; 0x8239432C stw -1, 0x1C8
+void HUDMessageLogic::GenerateFinisherMessage(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
+{
+    if (meFinishedRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        return;
+    }
+
+    CGS_ASSERT(meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+               "meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");      // .cpp:621
+    CGS_ASSERT(meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+               "meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // .cpp:622
+
+    if (meFinishedRaceCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
+    {
+        GameStateModuleIO::HUDMessageXFinishesAction lWinnerAction;
+        lWinnerAction.meRivalRaceCarIndex = meFinishedRaceCarIndex;
+        lWinnerAction.miFinishPosition    = miFinishPosition;
+
+        // The typed overload: liSize == sizeof(HUDMessageXFinishesAction) == 8 == `li r6, 8`.
+        mActionQueue.AddEvent(&lWinnerAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_FINISHES);
+
+        meFinishedRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    }
+}
+
+// X360 0x82394338 (DWARF BrnHUDMessageLogic.h:155 / .cpp:644). A rival that ModeManager::
+// RaceCarTriggersLandmark latched at a new checkpoint (+0x228 / +0x230), announced when it is at least
+// 500 m nearer the finish than the player:
+//   0x82394354  lwz 0x228 ; cmpwi -1 ; beq -> out
+//   0x82394360  lbz 0x4EFA(scoring) set -> out (the latch is kept)
+//   0x82394374  stw -1, 0x228 -- dropped before anything else can fail
+//   0x82394378  GetPlayerActiveRaceCarIndex ; assert "leRaceCarIndex != lePlayerCarIndex" (.cpp:707)
+//   0x823943B0  GetRaceCarDistanceToFinish(rival) ; 0x823943C0 ...(player)
+//   0x823943C4  fsubs player - rival ; fcmpu flt_8200A034 (500.0) ; blt -> out
+//   0x823943D8  {GetRivalId(rival), mRivalCheckpointID (ld 0x230), rival} -> AddEvent(248, 24) @0x82394404
+void HUDMessageLogic::GenerateRivalCheckpointMessage(
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+    ScoringSystem* lpScoringSystem)
+{
+    const EActiveRaceCarIndex leRaceCarIndex = meCheckpointTriggeringRaceCarIndex;
+    if (leRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        return;
+    }
+    if (lpScoringSystem->HasAnyCarFinished())
+    {
+        return;
+    }
+    meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
+    const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
+    CGS_ASSERT(leRaceCarIndex != lePlayerCarIndex, "leRaceCarIndex != lePlayerCarIndex");   // .cpp:707
+
+    const f32 lfRaceCarDistToFinish = lpScoringSystem->GetRaceCarDistanceToFinish(leRaceCarIndex);
+    const f32 lfPlayerDistToFinish  = lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerCarIndex);
+    const f32 lfCarSeparation       = lfPlayerDistToFinish - lfRaceCarDistToFinish;
+    if (lfCarSeparation < KF_RIVAL_CHECKPOINT_MIN_LEAD_METRES)
+    {
+        return;
+    }
+
+    GameStateModuleIO::HUDMessageXReachesCheckpointAction lCheckpointAction;
+    lCheckpointAction.mLandmarkID          = mRivalCheckpointID;
+    lCheckpointAction.mRivalID             = lpActiveRaceCarInterface->GetRivalId(leRaceCarIndex);
+    lCheckpointAction.meRivalRaceCarIndex  = leRaceCarIndex;
+
+    // The typed overload: liSize == sizeof(HUDMessageXReachesCheckpointAction) == 24 == `li r6, 0x18`.
+    mActionQueue.AddEvent(&lCheckpointAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT);
+}
+
+// X360 0x82395760 (DWARF BrnHUDMessageLogic.h:219 / .cpp:1317). Two debounced announcements, each on
+// its own clock (Prepare seeds both clocks at their thresholds, so the first change is needed):
+//   0x82395788  assert "lpScoringSystem != NULL" (.cpp:1612)
+//   0x823957B0  lbz 0x4EFA (mbACarHasFinishedTheRace) set -> skip the WHOLE lead half, clock included
+//   0x823957CC  lbz 0x4EF8 (GetNewLeader) && GetLead() != -1 -> mTimeSinceNewLeader = 0.0 (SetFloatVal)
+//   0x823957F4  mTimeSinceNewLeader < Time(1.5)  (the inline operator< on {miSeconds, mfFraction})
+//   0x82395868  and mTimeSinceNewLeader + Time(step) >= Time(1.5) -- the clock crosses 1.5 s this
+//               frame -> GetLead() != -1 && != player -> {GetRivalId(lead), lead} AddEvent(242, 16)
+//   0x8239591C  mTimeSinceNewLeader += Time(step)
+//   0x82395920  the same for the last place: lbz 0x4EF9 / GetLast / 7.5 s (flt_82029F1C) / AddEvent(243,
+//               16) @0x82395A58 / mTimeSinceNewLast += Time(step) @0x82395A70 -- NOT gated on 0x4EFA.
+void HUDMessageLogic::GenerateFirstOrLastMessage(
+    ScoringSystem* lpScoringSystem, f32 lfTimeStep, EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+    const StuntModeScoring::ActiveRaceCarOutputInterface* lpLastActiveRaceCarInterface)
+{
+    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");   // .cpp:1612
+
+    if (!lpScoringSystem->HasAnyCarFinished())
+    {
+        if (lpScoringSystem->GetNewLeader() && lpScoringSystem->GetLead() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+        {
+            mTimeSinceNewLeader.SetFloatVal(KF_ZERO_SECONDS);
+        }
+        if (mTimeSinceNewLeader < CgsSystem::Time(KF_NEW_LEADER_MESSAGE_SECONDS))
+        {
+            if (mTimeSinceNewLeader + CgsSystem::Time(lfTimeStep) >= CgsSystem::Time(KF_NEW_LEADER_MESSAGE_SECONDS))
+            {
+                const EActiveRaceCarIndex leLeadCarIndex = lpScoringSystem->GetLead();
+                if (leLeadCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID && leLeadCarIndex != lePlayerActiveRaceCarIndex)
+                {
+                    GameStateModuleIO::HUDMessageTookLeadAction lTookLeadAction;
+                    lTookLeadAction.mCarId               = lpLastActiveRaceCarInterface->GetRivalId(leLeadCarIndex);
+                    lTookLeadAction.meActiveRaceCarIndex = leLeadCarIndex;
+
+                    // The typed overload: liSize == sizeof(HUDMessageTookLeadAction) == 16 == `li r6, 0x10`.
+                    mActionQueue.AddEvent(&lTookLeadAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LEAD);
+                }
+            }
+        }
+        mTimeSinceNewLeader += CgsSystem::Time(lfTimeStep);
+    }
+
+    if (lpScoringSystem->GetNewLast() && lpScoringSystem->GetLast() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        mTimeSinceNewLast.SetFloatVal(KF_ZERO_SECONDS);
+    }
+    if (mTimeSinceNewLast < CgsSystem::Time(KF_NEW_LAST_MESSAGE_SECONDS))
+    {
+        if (mTimeSinceNewLast + CgsSystem::Time(lfTimeStep) >= CgsSystem::Time(KF_NEW_LAST_MESSAGE_SECONDS))
+        {
+            const EActiveRaceCarIndex leLastCarIndex = lpScoringSystem->GetLast();
+            if (leLastCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID && leLastCarIndex != lePlayerActiveRaceCarIndex)
+            {
+                GameStateModuleIO::HUDMessageTookLastAction lTookLastAction;
+                lTookLastAction.mCarId               = lpLastActiveRaceCarInterface->GetRivalId(leLastCarIndex);
+                lTookLastAction.meActiveRaceCarIndex = leLastCarIndex;
+
+                // The typed overload: liSize == sizeof(HUDMessageTookLastAction) == 16 == `li r6, 0x10`.
+                mActionQueue.AddEvent(&lTookLastAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_TOOK_LAST);
+            }
+        }
+    }
+    mTimeSinceNewLast += CgsSystem::Time(lfTimeStep);
+}
+
+// X360 0x82395A88 (DWARF BrnHUDMessageLogic.h:224 / .cpp:1387). The 500 m distance-to-finish marks:
+//   0x82395AA4  lfs 0x250 ; fcmpu 0.0 ; beq -> out          (0.0 == every mark spent)
+//   0x82395ABC  GetRaceCarDistanceToFinish(player) ; fcmpu flt_82CDB9AC (FLT_MAX) ; beq -> out
+//   0x82395AD4  fcmpu next, -1.0 ; bgt -> keep, else (first frame, or NaN) seed next with
+//               d' - Modulo(d', 500) for d' = distance - 100: the inlined rw::math::vpu::Modulo
+//               (vrefp + two Newton steps, vmulfp128, vrfiz, vnmsubfp @0x82395AE8..0x82395B44),
+//               reconstructed as the exact divide + truncate (the vpu headers' standing convention)
+//   0x82395B58  fcmpu distance, next ; bge -> out
+//   0x82395B64  {next, GetCarRacePosition(player)} -> AddEvent(244, 8) @0x82395B84 ; next -= 500.0
+void HUDMessageLogic::GenerateDistanceToFinishMessage(ScoringSystem* lpScoringSystem,
+                                                      EActiveRaceCarIndex lePlayerRaceCarIndex)
+{
+    if (mfNextDistanceToFinishMessage == KF_ZERO_SECONDS)
+    {
+        return;
+    }
+
+    const f32 lfPlayerDistanceToFinish = lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerRaceCarIndex);
+    if (lfPlayerDistanceToFinish == KF_NO_RACE_DISTANCE)
+    {
+        return;
+    }
+
+    if (!(mfNextDistanceToFinishMessage > KF_DISTANCE_MESSAGE_UNSET))
+    {
+        const f32 lfRaceDist               = lfPlayerDistanceToFinish - KF_DISTANCE_MESSAGE_OFFSET_METRES;
+        const f32 lfModRaceDist            =
+            lfRaceDist - truncf(lfRaceDist / KF_DISTANCE_MESSAGE_MODULUS_METRES) * KF_DISTANCE_MESSAGE_MODULUS_METRES;
+        const f32 lfEarliestMessageDistance = lfRaceDist - lfModRaceDist;
+        mfNextDistanceToFinishMessage       = lfEarliestMessageDistance;
+    }
+
+    if (lfPlayerDistanceToFinish < mfNextDistanceToFinishMessage)
+    {
+        GameStateModuleIO::HUDMessageDistanceToFinishAction lDistToFinishAction;
+        lDistToFinishAction.mfDistanceToFinish = mfNextDistanceToFinishMessage;
+        lDistToFinishAction.miPlayerPosition   =
+            static_cast<s32>(lpScoringSystem->GetCarRacePosition(lePlayerRaceCarIndex));
+
+        // The typed overload: liSize == sizeof(HUDMessageDistanceToFinishAction) == 8 == `li r6, 8`.
+        mActionQueue.AddEvent(&lDistToFinishAction, GameStateModuleIO::E_ACTION_HUD_MESSAGE_DIST_TO_FINISH);
+
+        mfNextDistanceToFinishMessage -= KF_DISTANCE_MESSAGE_STEP_METRES;
     }
 }
 

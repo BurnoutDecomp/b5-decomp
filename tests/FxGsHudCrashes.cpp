@@ -52,6 +52,16 @@ void BrnPhysics::Vehicle::RaceCarState::Clear() { std::memset(this, 0, sizeof(*t
 void BrnGameState::HUDMessageLogic::GenerateCriticalDamageMessage(
     const StuntModeScoring::ActiveRaceCarOutputInterface*, ScoringSystem*) { ++gCriticalCalls; }
 void BrnGameState::HUDMessageLogic::GenerateStuntMessage(ScoringSystem*) { ++gStuntCalls; }
+// Harness-only: the five race-arm generators GenerateRaceModeMessages calls around the crash legs
+// (FX-FLOW G11-D1 remainder, tests/run_fxflow_race_hud_messages.py covers them); silent here.
+void BrnGameState::HUDMessageLogic::GenerateLeaderMessages(
+    const StuntModeScoring::ActiveRaceCarOutputInterface*, ScoringSystem*) {}
+void BrnGameState::HUDMessageLogic::GenerateFinisherMessage(const StuntModeScoring::ActiveRaceCarOutputInterface*) {}
+void BrnGameState::HUDMessageLogic::GenerateRivalCheckpointMessage(
+    const StuntModeScoring::ActiveRaceCarOutputInterface*, ScoringSystem*) {}
+void BrnGameState::HUDMessageLogic::GenerateFirstOrLastMessage(
+    ScoringSystem*, f32, EActiveRaceCarIndex, const StuntModeScoring::ActiveRaceCarOutputInterface*) {}
+void BrnGameState::HUDMessageLogic::GenerateDistanceToFinishMessage(ScoringSystem*, EActiveRaceCarIndex) {}
 
 // The production bodies under test.
 #include "hud_crashes_methods.inc"

@@ -447,10 +447,22 @@ namespace BrnGameState
         s32  GetCarRaceFinishPosition(EActiveRaceCarIndex leRaceCarIndex) const;             // :635 / 0x82326A08
         f32  GetRaceCarDistanceToFinish(EActiveRaceCarIndex leRaceCarIndex) const;           // :640 / 0x82326A90
         f32  GetRaceCarDistanceToPlayer(EActiveRaceCarIndex leRaceCarIndex) const;           // :645
-        f32  GetPositionedCarDistanceToFinish(s32 liPosition) const;                         // :650
+        // DWARF :650 / :664. Header-inline on the X360 (no out-of-line symbol): their only inlined
+        // copies, in HUDMessageLogic::GenerateLeaderMessages @0x82394110, are bare loads out of the
+        // sorted maRaceCarPositioningData (this+0x59C0, stride 24) with no range assert --
+        // `lfs 0x59C8` / `lfs 0x59E0` (slots 0 / 1, +0x08 mfDistanceToFinish) and `lwz 0x59C0`
+        // (slot 0, +0x00 meActiveRaceCarIndex). Both call sites pass constants, so the image cannot
+        // show whether the argument is the slot or the slot + 1; it is read as the slot (0 = leader).
+        f32  GetPositionedCarDistanceToFinish(s32 liPosition) const
+        {
+            return maRaceCarPositioningData[liPosition].mfDistanceToFinish;
+        }
         f32  GetRaceCarDistanceToFinishAtRoundEnd(EActiveRaceCarIndex leRaceCarIndex) const; // :655 / 0x82326B18
         bool HasAnyCarFinished() const                { return mbACarHasFinishedTheRace; }   // :659 (inline)
-        EActiveRaceCarIndex GetPositionedCarIndex(s32 liPosition) const;                     // :664
+        EActiveRaceCarIndex GetPositionedCarIndex(s32 liPosition) const                      // :664 (see :650)
+        {
+            return maRaceCarPositioningData[liPosition].meActiveRaceCarIndex;
+        }
         EActiveRaceCarIndex GetRaceCarEliminatorIndex(EActiveRaceCarIndex leRaceCarIndex) const; // :669 / 0x82326BB0
         s32  GetNumberOfEliminations(EActiveRaceCarIndex leRaceCarIndex) const;              // :674 / 0x82326C38
         // DWARF :679. Header-inline on the X360: its one inlined copy, GameStateModule::
