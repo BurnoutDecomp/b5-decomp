@@ -240,6 +240,10 @@ namespace
         *lpiReplyId = liType;
         return reinterpret_cast<const BrnResource::GameDataIO::GameDataAssetEvent*>( lpEvent );
     }
+
+    // [DIAG] BRN_RCEM_ACTION_DIAG gate, defined with HandleGameActions below (the same unnamed
+    // namespace); declared here for UpdateStreaming's audio-wait witness. NOT IN THE X360 BINARY.
+    bool GameActionDiagEnabled();
 }
 
 // The module's Construct. The X360 body (reached by WorldModule::Construct's fleet
@@ -331,6 +335,7 @@ void RaceCarEntityModule::Construct()
     mbInCarModScreen          = false;
     meCarSelectResetType      = 0;     // E_CAR_SELECT_DONT_DROP
     mbCarSelectDontStreamAudio = false;
+    mbHACK_ExitingCarSelectWaitForAudio = false;   // stbx r31 (0), +0x186D1 @0x822FDBC0
 
     mpVehicleList        = 0;
     mpWheelList          = 0;
@@ -807,8 +812,35 @@ void RaceCarEntityModule::UpdateStreaming(
             }
         }
     }
+    // ARTIST UpdateStreaming's junkyard-exit audio wait (crash parity G68-D11, 2026-09-23), right
+    // after the car-select prefetch sweep: while case 74's +0x186D1 latch is up, the edge is held
+    // back until the streamer's own mbHACK_WaitingForAudioAfterCarSelect (+0x17844, cleared by the
+    // audio streamer once the player's streaming sound is LOADEDANDATTACHED) drops; then the latch
+    // clears itself. Pseudocode: `if (a1[100049]) { if (a1[96324]) v6 = 0; else a1[100049] = 0; }`.
+    if (mbHACK_ExitingCarSelectWaitForAudio)
+    {
+        if (mRaceCarStreamer.HACK_IsWaitingForAudioAfterCarSelect())
+        {
+            lbAllLoaded = false;
+        }
+        else
+        {
+            mbHACK_ExitingCarSelectWaitForAudio = false;
+
+            // [DIAG] BRN_RCEM_ACTION_DIAG -- NOT IN THE X360 BINARY. The junkyard-exit audio wait
+            // (armed by action 74) has released: a live run that shows the arm line but never this
+            // one is a streaming-complete edge held forever.
+            if (GameActionDiagEnabled() && CgsDev::Log::gpDebugPrint != 0)
+            {
+                *CgsDev::Log::gpDebugPrint << "[rcem-action] 74 audio wait released (all loaded "
+                                           << (lbAllLoaded ? 1 : 0) << ", waiting for streaming "
+                                           << (mbWaitingForStreaming ? 1 : 0) << ")\n";
+            }
+        }
+    }
     // ARTIST UpdateStreaming's completion edge. Retains the existing PC resource
-    // readiness predicate above; unmounted prefetch/audio wait lanes remain separate.
+    // readiness predicate above (the one bring-up relaxation); the car-select prefetch and
+    // junkyard-exit audio waits above are the console's own.
     if (lbAllLoaded && mbWaitingForStreaming)
     {
         mbWaitingForStreaming = false;
@@ -3086,6 +3118,60 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 }
 
 // ============================================================================
+// RaceCarEntityModule::SetPlayerOpponentsActionRecord -- game action 4's record (see the header):
+// the DWARF Array<CgsID,7> (7 x 8 bytes + the count word at +0x38, `lwz r11, 0x38(r30)`
+// @0x822E9758), posted whole (64 bytes) by GameStateModule::OnPlayerCarChange.
+// ============================================================================
+struct RaceCarEntityModule::SetPlayerOpponentsActionRecord
+{
+    Array<CgsID, 7u> maOpponents;   // DWARF BrnGameActions.h:726
+};
+static_assert(sizeof(RaceCarEntityModule::SetPlayerOpponentsActionRecord) == 64,
+              "X360 posts action 4 with size 64 (li r6, 0x40)");
+
+// ============================================================================
+// HandleSetPlayerOpponentsAction  @ 0x822E96D8   (crash parity G68-D11, 2026-09-23 -- had no
+// definition and HandleGameActions had no case 4, so the new car's opponents were never pre-streamed).
+//     r20 = 7 (`li r20, 7` @0x822E970C) ; r26 = i = 0
+//     loop head 0x822E9758: the inlined GetLength (CgsArray.h:326; its count-word assert :336 fires
+//         when the word at +0x38 is -1), then `cmpw r26, r11` @0x822E9780 -- a SIGNED compare, so an
+//         unconstructed (-1) array runs no iteration after its assert
+//         id    = maOpponents.GetItem(i)                         bl 0x822AE418 ; ld r29, 0(r3)
+//         index = mpVehicleList->GetVehicleIndex(id)             @0x822E97A4 (+0x18434)
+//         entry = index < 0 ? 0 : mpVehicleList->GetVehicleData(index)
+//         !entry -> assert "Vehicle with ID " << id << " in opponent list but not vehicle list" :7633
+//         wheel = mpWheelList->FindWheelIndexFromName(entry +0x10 = the default wheel name); -1 -> 0
+//                 (+0x18438, `addis 2 ; addi -0x7BC8` @0x822E98B8)
+//         mRaceCarStreamer.SetDesiredVehicleData(r20, id, mpWheelList->GetWheelData(wheel)->mID, -1)
+//                 (streamer +0x11100, `ld r6, 0(r11)` = the wheel entry's id, `li r7, -1`) @0x822E98FC
+// (A missing entry is dereferenced after the assert on the console too; not guarded here.)
+// ============================================================================
+void RaceCarEntityModule::HandleSetPlayerOpponentsAction( const SetPlayerOpponentsActionRecord* lpAction )
+{
+    s32 liStreamerSlot = E_ACTIVE_RACE_CAR_INDEX_COUNT - 1;
+    for( s32 liOpponent = 0; liOpponent < static_cast<s32>( lpAction->maOpponents.GetLength() );
+         ++liOpponent, --liStreamerSlot )
+    {
+        const CgsID lCarId = lpAction->maOpponents.GetItem( static_cast<u32>( liOpponent ) );
+
+        const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex( lCarId );
+        const BrnResource::VehicleListEntry* lpVehicleListEntry =
+            ( liVehicleIndex < 0 ) ? 0 : mpVehicleList->GetVehicleData( liVehicleIndex );
+        CGS_ASSERT( lpVehicleListEntry != 0,
+                    "Vehicle with ID  in opponent list but not vehicle list \n" );            // :7633
+
+        s32 liWheelIndex = mpWheelList->FindWheelIndexFromName( lpVehicleListEntry->GetDefaultWheelName() );
+        if( liWheelIndex == -1 )
+        {
+            liWheelIndex = 0;
+        }
+
+        mRaceCarStreamer.SetDesiredVehicleData( liStreamerSlot, lCarId,
+                                                mpWheelList->GetWheelData( liWheelIndex )->mID, -1 );
+    }
+}
+
+// ============================================================================
 // RaceCarEntityModule::SetBoostActionRecord -- game action 170's record (see the header). X360
 // member offsets from HandleSetBoost's reads; the order differs from the PS3 DWARF's (which puts
 // mbInfiniteBoost before mfBoostAmount), and matches the producers: StuntAttackMode::PreWorldUpdate
@@ -3309,6 +3395,12 @@ namespace
     const s32 KI_ACTION_SET_BOOST                 = 170;   // DWARF 162 (+8) -> 0x8230D1E4
     const s32 KI_ACTION_WAIT_FOR_STREAMING        = 192;   // DWARF 184 (+8) -> 0x8230C5B8
     const s32 KI_ACTION_LOAD_PROFILE              = 194;   // DWARF 186 (+8) -> 0x8230D87C
+    const s32 KI_ACTION_SET_PLAYER_OPPONENTS      = 4;     // DWARF 4 (no shift) -> 0x8230C700
+    const s32 KI_ACTION_CAR_SELECT_WAITING_FOR_AUDIO = 74; // DWARF 69 (+5) -> 0x8230C454
+
+    // DWARF CarSelectWaitingForAudioAction { bool mbWaiting; } -- `lbz r11, 0(r27)` @0x8230C454
+    // (CarSelectManager posts it with byte 1 when the player leaves the junkyard).
+    struct CarSelectWaitingForAudioActionRecord { bool mbWaiting; };
 
     // DWARF SwitchCarCoronasOnOffAction { bool mbIsOn; } -- `lbz r11, 0(r27)` @0x8230CD58.
     struct SwitchCarCoronasOnOffActionRecord { bool mbIsOn; };
@@ -4273,6 +4365,61 @@ void RaceCarEntityModule::HandleGameActions(
         // read from the jump tables' own targets (low 0x8230C09C / high 0x8230CDC0).
         // ============================================================================================
 
+        // Low 4 -> 0x8230C700: `mr r4, r27 ; mr r3, r31 ; bl HandleSetPlayerOpponentsAction`.
+        case KI_ACTION_SET_PLAYER_OPPONENTS: // 4
+            HandleSetPlayerOpponentsAction(
+                reinterpret_cast<const SetPlayerOpponentsActionRecord*>(lpEvent));
+            break;
+
+        // Low 74 -> 0x8230C454..0x8230C5C4, the junkyard exit's audio wait. On mbWaiting:
+        //     assert player slot valid :6762 ; car = GetActiveRaceCar(player) ; assert :6765
+        //     rc = car->GetGlobalRaceCar() ; assert :6767
+        //     stbx 1, +0x17844   mRaceCarStreamer.mbHACK_WaitingForAudioAfterCarSelect
+        //     stbx 1, +0x186D1   mbHACK_ExitingCarSelectWaitForAudio
+        //     CgsIDUnCompress(rc->GetModelId()) ; assert strstr(.., "VEH_") == 0 :6778
+        //     model/wheel = rc ids ; mRaceCarStreamer.HACKGetValidModelIds(&model, &wheel)  @0x8230C56C
+        //     audio.RemoveEntry(maEntries[player].mDesiredId, player)                         @0x8230C59C
+        //     audio.AddEntry(model, player, true)                                            @0x8230C5B4
+        //     stbx 1, +0x18348   mbWaitingForStreaming -- the compiler tail-merged this last store
+        //                        with case 192's identical arm (0x8230C5B8); !mbWaiting -> break.
+        // The player's streaming sound is re-registered under its valid "VEH_" id and the
+        // streaming-complete edge waits for it (UpdateStreaming's +0x186D1 leg).
+        case KI_ACTION_CAR_SELECT_WAITING_FOR_AUDIO: // 74
+            if (reinterpret_cast<const CarSelectWaitingForAudioActionRecord*>(lpEvent)->mbWaiting)
+            {
+                CGS_ASSERT((mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                               && (mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                           "(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                           "(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");      // :6762
+                ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
+                CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveRaceCar");                            // :6765
+                RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
+                CGS_ASSERT(lpRaceCar != 0, "lpRaceCar");                                        // :6767
+
+                mRaceCarStreamer.HACK_SetWaitingForAudioAfterCarSelect(true);
+                mbHACK_ExitingCarSelectWaitForAudio = true;
+
+                char lacVehicleID[KI_CGSID_STRING_LEN];
+                CgsIDUnCompress(lpRaceCar->GetModelId(), lacVehicleID);
+                CGS_ASSERT(strstr(lacVehicleID, "VEH_") == 0,
+                           "strstr(lacVehicleID, \"VEH_\") == 0");                              // :6778
+
+                CgsID lModelId = lpRaceCar->GetModelId();
+                CgsID lWheelId = lpRaceCar->GetWheelModelId();
+                mRaceCarStreamer.HACKGetValidModelIds(lModelId, lWheelId);
+
+                // The console open-codes the slot's desired id (`ldx` of maEntries[player].mDesiredId,
+                // audio streamer +0x1368 + 24 * player) into RemoveEntry(id, player); the 1-arg PC
+                // form re-derives exactly that id (BrnRaceCarComponentStreamers.cpp).
+                mRaceCarStreamer.GetAudioCarStreamer()->RemoveEntry(
+                    static_cast<s32>(mePlayerActiveRaceCarIndex));
+                mRaceCarStreamer.GetAudioCarStreamer()->AddEntry(
+                    lModelId, static_cast<u64>(static_cast<s64>(mePlayerActiveRaceCarIndex)), true);
+
+                mbWaitingForStreaming = true;
+            }
+            break;
+
         // Low 68 -> 0x8230CD54: `lbz r11, 0(r27) ; stbx r11, +0x1834F` (mbRenderRaceCarCoronas).
         // (No AddEvent site in ARTIST posts 68: the arm is dead on the console too.)
         case KI_ACTION_SWITCH_CAR_CORONAS_ON_OFF: // 68
@@ -4424,6 +4571,29 @@ void RaceCarEntityModule::HandleGameActions(
                 *CgsDev::Log::gpDebugPrint
                     << "[rcem-action] 34 donut start -> player RequestPlaceOnTrack at "
                     << KF_MIN_STUNT_RESET_SPEED << " m/s\n";
+            }
+            else if( liType == KI_ACTION_SET_PLAYER_OPPONENTS )
+            {
+                const SetPlayerOpponentsActionRecord* lpOpponents =
+                    reinterpret_cast<const SetPlayerOpponentsActionRecord*>( lpEvent );
+                *CgsDev::Log::gpDebugPrint << "[rcem-action] 4 player opponents "
+                                           << lpOpponents->maOpponents.GetCount()
+                                           << " -> desired streamer slots 7 down:";
+                for( s32 liOpponent = 0; liOpponent < lpOpponents->maOpponents.GetCount(); ++liOpponent )
+                {
+                    *CgsDev::Log::gpDebugPrint << " "
+                        << lpOpponents->maOpponents.GetItem( static_cast<u32>( liOpponent ) );
+                }
+                *CgsDev::Log::gpDebugPrint << "\n";
+            }
+            else if( liType == KI_ACTION_CAR_SELECT_WAITING_FOR_AUDIO )
+            {
+                *CgsDev::Log::gpDebugPrint
+                    << "[rcem-action] 74 audio wait armed: waiting "
+                    << ( reinterpret_cast<const CarSelectWaitingForAudioActionRecord*>( lpEvent )->mbWaiting ? 1 : 0 )
+                    << ", streamer wait " << ( mRaceCarStreamer.HACK_IsWaitingForAudioAfterCarSelect() ? 1 : 0 )
+                    << ", module latch " << ( mbHACK_ExitingCarSelectWaitForAudio ? 1 : 0 )
+                    << ", waiting for streaming " << ( mbWaitingForStreaming ? 1 : 0 ) << "\n";
             }
         }
 
