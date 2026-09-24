@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEmitterStateManager.h"
 #include "GameSource/Sound/Module/LogicModule/BrnEmitterState.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/World/BrnEmitterEffect.h"   // KB_DEBUG_WORLD_EMITTERS (Query's lbDrawDebug)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 // =============================================================================
@@ -292,6 +293,10 @@ BrnSound::Logic::ResourceRegistrar& EmitterStateManager::GetResourceRegistrar()
     return BrnSound::Logic::BrnStateManager::GetResourceRegistrar();
 }
 
+// ARTIST @0x826E6F58: update the scene, the base states, assert "GetLogicModule()" (l.140), take the
+// frame's player position (module +0x29E0) as the camera, query 8 entities within 100 m -- with
+// KB_DEBUG_WORLD_EMITTERS as lbDrawDebug (`lbz byte_82FFB8CB`, 0x826E6FEC) -- and give every
+// entity no state holds yet (StateManager::GetStateObj) a free state (GetFreeState, vtable +0x14).
 void EmitterStateManager::UpdateParams(f32 lfDeltaTime)
 {
     mSoundScene.Update();
@@ -299,23 +304,15 @@ void EmitterStateManager::UpdateParams(f32 lfDeltaTime)
 
     BrnSound::Module::SoundLogicModule* lpLogicModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    CGS_ASSERT(lpLogicModule != 0, "GetLogicModule()");
     mCameraPos = lpLogicModule->GetFrameInformation().mPlayerTransform.Pos();
 
     BrnSound::World::StaticSoundEntity laEntities[8];
-    const s32 liEntities = mSoundScene.Query(mCameraPos, 100.0f, laEntities, 8, false);
+    const s32 liEntities =
+        mSoundScene.Query(mCameraPos, 100.0f, laEntities, 8, KB_DEBUG_WORLD_EMITTERS);
     for (s32 liEntity = 0; liEntity < liEntities; ++liEntity)
     {
-        bool lbAttached = false;
-        for (CgsSound::Logic::State* lpState = mpHeadState;
-             lpState; lpState = lpState->GetNextState())
-        {
-            if (lpState->IsAttached() && lpState->IsAttachedToThis(&laEntities[liEntity]))
-            {
-                lbAttached = true;
-                break;
-            }
-        }
-        if (!lbAttached)
+        if (!GetStateObj(&laEntities[liEntity]))
         {
             CgsSound::Logic::State* lpState = GetFreeState(&laEntities[liEntity]);
             if (lpState)
@@ -345,6 +342,7 @@ CgsSound::Logic::State* EmitterStateManager::GetFreeState(void* lpvAttachment)
          lpState; lpState = lpState->GetNextState())
     {
         EmitterState* lpEmitterState = static_cast<EmitterState*>(lpState);
+        CGS_ASSERT(lpEmitterState->IsAttached(), "lpEmitterState->IsAttached()");   // l.220
         const Vector3 lOldPos = lpEmitterState->GetSoundEntity().GetPos();
         const f32 lfOldDx = mCameraPos.x - lOldPos.x;
         const f32 lfOldDy = mCameraPos.y - lOldPos.y;

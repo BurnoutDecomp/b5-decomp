@@ -41,7 +41,8 @@ LIST_H = "src/GameSource/AttribSys/Generated/classes/worldemitterlist.h"
 SHADOWED = (LIST_H,
             "src/GameSource/AttribSys/Generated/classes/worldemitter.h",
             "src/SharedClasses/Sound/World/BrnStaticSoundMap.h")
-NUMERIC_CHECKS = 30
+NUMERIC_CHECKS = 33
+MANAGER_CPP = "src/GameSource/Sound/Module/LogicModule/BrnEmitterStateManager.cpp"
 
 
 def attach_body(source):
@@ -96,6 +97,27 @@ def invented_arms(tree):
     ]
 
 
+def debug_switch(tree):
+    """The luEmitter assert is armed only by KB_DEBUG_WORLD_EMITTERS (FX-EMITTER, commit 4)."""
+    source = code_only(tree.read(EFFECT_CPP))
+    try:
+        body = strings_blanked(code_only(attach_body(tree.read(EFFECT_CPP))))
+    except ValueError:
+        body = ""
+    manager = strings_blanked(code_only(tree.read(MANAGER_CPP)))
+    return [
+        ("KB_DEBUG_WORLD_EMITTERS (DWARF BrnEmitterEffect.cpp:42, .bss 0x82FFB8CB) is defined off by default "
+         "(only the BRN_EMITTER_DIAG stand-in for the debug menu turns it on)",
+         re.search(r"^\s*bool\s+KB_DEBUG_WORLD_EMITTERS\s*=\s*(false|std::getenv\s*\(\s*\"BRN_EMITTER_DIAG\"\s*\)"
+                   r"\s*!=\s*nullptr)\s*;", source, re.M) is not None),
+        ("Attach arms the luEmitter assert only under KB_DEBUG_WORLD_EMITTERS "
+         "(`lbz r11,byte_82FFB8CB ; beq`, 0x826F57EC..0x826F57FC)",
+         re.search(r"if\s*\(\s*KB_DEBUG_WORLD_EMITTERS\s*\)\s*\{?\s*CGS_ASSERT\s*\(\s*luEmitter", body) is not None),
+        ("EmitterStateManager::UpdateParams hands KB_DEBUG_WORLD_EMITTERS to Query as lbDrawDebug (0x826E6FEC)",
+         re.search(r"Query\s*\([^;]*,\s*KB_DEBUG_WORLD_EMITTERS\s*\)", manager) is not None),
+    ]
+
+
 def wiring(tree):
     try:
         body = strings_blanked(code_only(attach_body(tree.read(EFFECT_CPP))))
@@ -138,7 +160,8 @@ def main():
     parser.add_argument("--rev", help="read the b5 sources from this git revision (the RED side: <fix>~1)")
     args = parser.parse_args()
     tree = Tree(args.rev)
-    return report("run_fxemitter_attach", wiring(tree) + invented_arms(tree), numeric(tree), NUMERIC_CHECKS)
+    return report("run_fxemitter_attach", wiring(tree) + invented_arms(tree) + debug_switch(tree),
+                  numeric(tree), NUMERIC_CHECKS)
 
 
 if __name__ == "__main__":

@@ -24,6 +24,12 @@ namespace Logic
 namespace World
 {
 
+// DWARF BrnEmitterEffect.cpp:42. A .bss bool (0x82FFB8CB) the console's sound debug menu toggles
+// ("Emitters"/"Debug"); it defaults to false, so a shipped-default console never fires Attach's
+// luEmitter assert. [DIAG] NOT IN THE X360 BINARY: that menu (BrnSound::Debug::DebugComponent::
+// OnActivate @0x826D5CB0) is not reconstructed on PC, so BRN_EMITTER_DIAG=1 stands in for it.
+bool KB_DEBUG_WORLD_EMITTERS = std::getenv("BRN_EMITTER_DIAG") != nullptr;
+
 namespace
 {
 // The emitter effect's mixer outputs. Only the azimuth output is attested by name: ProcessUpdate
@@ -117,12 +123,17 @@ bool EmitterEffect::Attach()
     // ARTIST 0x826F57E4..0x826F57F8: the entity's packed W lane read as one u32, high half
     // (`srwi r29,r11,16`). The count is the list's SCALAR mNumWorldEmitters at layout +0x4B8
     // (`lwz r11,0x4B8(r11)`, 0x826F5804 for the assert and 0x826F5838 for the gate), not
-    // the array header's Num_mWorldEmitters -- see worldemitterlist.h.
+    // the array header's Num_mWorldEmitters -- see worldemitterlist.h. The assert is armed
+    // only by the debug switch (`lbz r11,byte_82FFB8CB ; cmplwi ; beq`, 0x826F57EC..0x826F57FC);
+    // the gate below it is unconditional.
     Attrib::Gen::worldemitterlist lWorldEmitters(
         lpLogicModule->GetGlobalData().WorldEmitterList());
     const u32 luEmitter = lrEntity.GetType();
-    CGS_ASSERT(luEmitter < static_cast<u32>(lWorldEmitters.mNumWorldEmitters()),
-               "luEmitter < static_cast< uint32_t >( lWorldEmitters.mNumWorldEmitters() )");
+    if (KB_DEBUG_WORLD_EMITTERS)
+    {
+        CGS_ASSERT(luEmitter < static_cast<u32>(lWorldEmitters.mNumWorldEmitters()),
+                   "luEmitter < static_cast< uint32_t >( lWorldEmitters.mNumWorldEmitters() )");
+    }
 
     // [DIAG] NOT IN THE X360 BINARY (BRN_EMITTER_DIAG=1): FX-EMITTER live witness -- every
     // world emitter that attaches (capped) and every entity type the console gate refuses.
