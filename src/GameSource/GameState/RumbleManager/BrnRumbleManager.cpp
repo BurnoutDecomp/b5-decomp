@@ -21,12 +21,14 @@
 // (only the reader sites 0x82379500 / 0x823795E8 / 0x82386BA4 / 0x82386B98), so the image
 // bytes ARE the source initialisers. Every value below is quoted with its address.
 //
-// ⛔ STILL NOT HERE -- UpdateSurfaceRumble @0x82378AE0 (G10-D6) and BridgeRumbleToInput
-// @0x82364978 (G10-D4). Both are blocked on headers this TU does not own; the header banner
-// names exactly what each one needs. Until BridgeRumbleToInput lands NOTHING DRAINS the four
-// event queues: PlayJolt's AddEventSafe (the bounds-GATED append, 0x82367A20) then returns false
-// once the jolt queue holds its four events -- no assert, no overflow, and no pad output either
-// way, because the input side of the chain does not exist on PC yet.
+//   BridgeRumbleToInput      @ 0x82364978   (PS3 0x270044)  -- FX-RUMBLE3 2026-09-24, G10-D4
+//
+// ⭐ [FX-RUMBLE3 2026-09-24, G10-D4] THE QUEUES ARE DRAINED. Until BridgeRumbleToInput landed nothing
+// emptied the four event queues: PlayJolt's AddEventSafe (the bounds-GATED append) returned false
+// once the jolt queue held four events, and no request ever reached the pad. The drain is now called
+// once per update step from BrnGameModule::DoUpdate_InputPreWorld (through the GameStateModule forward),
+// and the input module's ProcessRumbleRequests plays what it hands over.
+// ⛔ STILL NOT HERE -- UpdateSurfaceRumble @0x82378AE0 (G10-D6); the header banner names what it needs.
 // ============================================================================
 
 #include "GameSource/GameState/RumbleManager/BrnRumbleManager.h"
@@ -465,6 +467,100 @@ namespace BrnGameState
     }
 
     // ------------------------------------------------------------------------
+    // @ 0x82364978 -- BrnGameState::RumbleManager::BridgeRumbleToInput()  (DWARF :97; cpp :811..)
+    //
+    // The console body, in its order (r31 == this, r27 == the buffer, r21 == the timer interface):
+    //   0x82364998..0x823649D4  jolts: the length is read ONCE (lwz 0x18), each event through the
+    //                           out-of-line GetEvent @0x8235CF50 -> PostPlayJoltEffectByPlayer(ev+0 player,
+    //                           ev+8 priority, ev+0xC jolt)
+    //   0x823649D8..0x82364A14  stops: length once (0x33C), GetEvent @0x8235CFF8 ->
+    //                           PostStopRumbleEffectByPlayer(ev+0 player, ev+8 rumble id)
+    //   0x82364A18..0x82364AE4  plays: bound once (0x114), the inlined GetEvent keeps its three asserts
+    //                           (CgsBaseEventQueue.h :292/:294/:295) -> PostPlayRumbleEffectByPlayer(ev+0,
+    //                           ev+8, ev+0xC, ev+0x3C id, ev+0x40 volume in f1)
+    //   0x82364AE8..0x82364B90  volumes: same shape (0x230, stride 0x40) ->
+    //                           PostChangeVolumeRumbleEffectByPlayer(ev+0, ev+8 jolt, ev+0x38 id, ev+0x3C vol)
+    //   0x82364B9C              SetTimerStatusInterface(buffer, timer)
+    //   0x82364BA0..0x82364BD0  +0x394 = (mbRumblePaused || mbInPictureParadise); +0x395 = mbRumbleEnabled;
+    //                           +0x396 = mbWheelForceFeedback
+    //   0x82364BD4..0x82364BE0  stw 0 -> the four lengths (+0x18 jolt, +0x114 play, +0x230 volume, +0x33C stop)
+    // ------------------------------------------------------------------------
+    void RumbleManager::BridgeRumbleToInput(CgsInput::InputIO::PreWorldInputBuffer* lpInputInputBuffer,
+                                            const CgsSystem::TimerStatusInterface*  lpTimerStatusInterface)
+    {
+        s32 liLength = mPlayJoltEffectEventQueue.GetLength();
+        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        {
+            const CgsInput::InputIO::PlayJoltEffectEvent& lJoltEvent = mPlayJoltEffectEventQueue.GetEvent(liIndex);
+            lpInputInputBuffer->PostPlayJoltEffectByPlayer(lJoltEvent.miPlayer, lJoltEvent.miRumblePriority,
+                                                           lJoltEvent.mJoltEffect);
+        }
+        const s32 liNumJolts = liLength;
+
+        liLength = mStopRumbleEffectEventQueue.GetLength();
+        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        {
+            const CgsInput::InputIO::StopRumbleEffectEvent& lStopRumbleEvent = mStopRumbleEffectEventQueue.GetEvent(liIndex);
+            lpInputInputBuffer->PostStopRumbleEffectByPlayer(lStopRumbleEvent.miPlayer, lStopRumbleEvent.miRumbleId);
+        }
+        const s32 liNumStops = liLength;
+
+        liLength = mPlayRumbleEffectEventQueue.GetLength();
+        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        {
+            const CgsInput::InputIO::PlayRumbleEffectEvent& lPlayRumbleEvent = mPlayRumbleEffectEventQueue.GetEvent(liIndex);
+            lpInputInputBuffer->PostPlayRumbleEffectByPlayer(lPlayRumbleEvent.miPlayer, lPlayRumbleEvent.miRumblePriority,
+                                                             lPlayRumbleEvent.mJoltEffect, lPlayRumbleEvent.miRumbleId,
+                                                             lPlayRumbleEvent.mfRumbleVolume);
+        }
+        const s32 liNumPlays = liLength;
+
+        liLength = mChangeVolumeRumbleEffectEventQueue.GetLength();
+        for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+        {
+            const CgsInput::InputIO::ChangeVolumeRumbleEffectEvent& lChangeVolumeRumbleEvent =
+                mChangeVolumeRumbleEffectEventQueue.GetEvent(liIndex);
+            lpInputInputBuffer->PostChangeVolumeRumbleEffectByPlayer(lChangeVolumeRumbleEvent.miPlayer,
+                                                                     lChangeVolumeRumbleEvent.mJoltEffect,
+                                                                     lChangeVolumeRumbleEvent.miRumbleId,
+                                                                     lChangeVolumeRumbleEvent.mfRumbleVolume);
+        }
+        const s32 liNumVolumes = liLength;
+
+        lpInputInputBuffer->SetTimerStatusInterface(*lpTimerStatusInterface);
+        lpInputInputBuffer->SetRumblePaused(mbRumblePaused || mbInPictureParadise);
+        lpInputInputBuffer->SetRumbleEnabled(mbRumbleEnabled);
+        lpInputInputBuffer->SetWheelForceFeedbackEnabled(mbWheelForceFeedback);
+
+        mPlayJoltEffectEventQueue.Clear();
+        mPlayRumbleEffectEventQueue.Clear();
+        mChangeVolumeRumbleEffectEventQueue.Clear();
+        mStopRumbleEffectEventQueue.Clear();
+
+        // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The dispatch witness for the drain: one
+        // line per update step that handed anything to the input buffer (budgeted), with the state
+        // flags it published. Pairs with PlayJolt's producer line below and, downstream, the
+        // "[rumble] pad-request" line (InputPads::UpdatePadRumble, CgsInputPads.cpp -- the motor
+        // speeds the effects ask for) and the "[rumble] motor" line (the PC XInputSetState leaf,
+        // CgsInputPadsPC.cpp -- what a connected pad was sent).
+        static const bool sbBridgeDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
+        static s32        siBridgeDiagLines = 0;
+        const s32         KI_BRIDGE_DIAG_MAX_LINES = 64;
+        if (sbBridgeDiag && (liNumJolts + liNumStops + liNumPlays + liNumVolumes) > 0
+            && siBridgeDiagLines < KI_BRIDGE_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siBridgeDiagLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[rumble] bridge jolts=" << liNumJolts << " stops=" << liNumStops
+                << " plays=" << liNumPlays << " volumes=" << liNumVolumes
+                << " paused=" << static_cast<s32>(lpInputInputBuffer->GetRumblePaused() ? 1 : 0)
+                << " enabled=" << static_cast<s32>(lpInputInputBuffer->GetRumbleEnabled() ? 1 : 0)
+                << " ff=" << static_cast<s32>(lpInputInputBuffer->GetWheelForceFeedbackEnabled() ? 1 : 0)
+                << "\n";
+        }
+    }
+
+    // ------------------------------------------------------------------------
     // @ 0x8236E7F8 -- BrnGameState::RumbleManager::PlayJolt()
     //
     //     stw 0  -> lEvent.miPlayer         (+0x0)   0x8236E81C
@@ -488,12 +584,15 @@ namespace BrnGameState
         // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The dispatch witness for the rumble
         // producers (FX-RUMBLE): one line per jolt the game state asks for, with the priority that
         // names its producer (1000 contact / 1001 race-car impact / 1002 landing / 1010 crash
-        // start), whether the jolt queue took it, and the scaled envelope. `queued=0` with len=4 is
-        // the missing-consumer hole (G10-D4: nothing drains the queue on PC), not a producer fault.
-        // The budget is PER PRODUCER: the contact jolt can fire on every frame of a scrape, and a
-        // shared budget would let it starve the rarer crash / landing / race-car-impact lines --
-        // a witness that reports an absence it never observed. DELETE-WHEN the input bridge lands
-        // and a pad witness replaces it.
+        // start), whether the jolt queue took it, and the scaled envelope. `queued=0` with len=4 was
+        // the missing-consumer hole of G10-D4 (nothing drained the queue on PC before FX-RUMBLE3's
+        // BridgeRumbleToInput); with the drain in place the queue empties every update step, so a
+        // `queued=0` now means five producers fired inside ONE step -- the console drops the fifth
+        // exactly the same way (AddEventSafe). The budget is PER PRODUCER: the contact jolt can fire
+        // on every frame of a scrape, and a shared budget would let it starve the rarer crash /
+        // landing / race-car-impact lines -- a witness that reports an absence it never observed.
+        // The drain and the motor have their own lines ("[rumble] bridge", "[rumble] pad-request",
+        // "[rumble] motor").
         static const bool sbRumbleDiag = (getenv("BRN_RUMBLE_DIAG") != 0);
         static s32        saiRumbleDiagLines[5] = { 0, 0, 0, 0, 0 };
         const s32         KI_RUMBLE_DIAG_MAX_LINES_PER_PRODUCER = 16;

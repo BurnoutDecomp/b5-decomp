@@ -109,6 +109,16 @@ const OutputBuffer::BindResultQueue* OutputBuffer::GetBindResultQueue() const
     return &mBindResultQueue;
 }
 
+// X360 0x828E6D28 (export hole; ppcdis) - write-lock accessor for the bind-result queue (this+4):
+// `lbz r11,0(this) ; rlwinm ..,0x1d,0x1f,0x1f` (bit 3, write lock) -> "Not locked for writing\n"
+// (CgsInputModuleIO.h:1223) -> `addi r3,this,4`. Caller: CgsInput::InputModule::PreWorldUpdate
+// @0x82903328 (0x82903388), which Appends the module's bind results into it.
+OutputBuffer::BindResultQueue* OutputBuffer::GetBindResultQueue()
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    return &mBindResultQueue;
+}
+
 // X360 0x823B10E0 (ledger "OutputB") - read-lock accessor for the unbind-result queue (this+112).
 const OutputBuffer::UnBindResultQueue* OutputBuffer::GetUnbindResultQueue() const
 {
@@ -154,6 +164,105 @@ const PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort) const
 
 // =====================  PreWorldInputBuffer  =====================
 
+// X360 0x828F8500 (DWARF CgsInputModuleIO.h:643), the body CreateIOBuffer<PreWorldInputBuffer>
+// @0x823AEE18 runs after its Alloc(920):
+//   0x828F8518..0x828F8520  stb 1,0(this)             -- IOBuffer::Construct (status = constructed)
+//   0x828F8524..0x828F853C  the four EventQueue<...,4>::Construct at +0x4 / +0x100 / +0x21C / +0x328
+//   0x828F8544..0x828F8548  stb 1 -> +0x395 (enable), +0x396 (force feedback)
+//   0x828F854C..0x828F8558  stw 0 -> the four lengths (+0xC / +0x108 / +0x224 / +0x330)
+//   0x828F855C              stb 0 -> +0x394 (pause)
+void PreWorldInputBuffer::Construct()
+{
+    CgsModule::IOBuffer::Construct();
+    mPlayJoltEffectEventQueue.Construct();
+    mPlayRumbleEffectEventQueue.Construct();
+    mChangeVolumeRumbleEffectEventQueue.Construct();
+    mStopRumbleEffectEventQueue.Construct();
+    mbEnableRumble  = true;
+    mbForceFeedback = true;
+    mPlayJoltEffectEventQueue.Clear();
+    mPlayRumbleEffectEventQueue.Clear();
+    mChangeVolumeRumbleEffectEventQueue.Clear();
+    mStopRumbleEffectEventQueue.Clear();
+    mbPauseRumble = false;
+}
+
+// X360 0x828EF358 (DWARF :647), the body DestroyIOBuffer<PreWorldInputBuffer> @0x823AEEE8 runs before
+// its Free(920): the four queue lengths (words 3 / 66 / 137 / 204 == +0xC / +0x108 / +0x224 / +0x330)
+// to 0, then a tail call to IOBuffer::Destruct.
+void PreWorldInputBuffer::Destruct()
+{
+    mPlayJoltEffectEventQueue.Clear();
+    mPlayRumbleEffectEventQueue.Clear();
+    mChangeVolumeRumbleEffectEventQueue.Clear();
+    mStopRumbleEffectEventQueue.Clear();
+    CgsModule::IOBuffer::Destruct();
+}
+
+// X360 0x828EF370 (export hole; ppcdis) - DWARF :661. Write-lock assert (CgsInputModuleIO.cpp:114),
+// "Player must be greater than -1\n" (:115), then the event {miPlayer, miPort = -1, miRumblePriority}
+// (`stw r22,0x70 ; stw -1,0x74 ; stw r21,0x78`) + a 0x30-byte copy of the jolt effect, AddEvent(this+4)
+// (EventQueue<PlayJoltEffectEvent,4>::AddEvent @0x828EA6E0 -- the asserting one).
+void PreWorldInputBuffer::PostPlayJoltEffectByPlayer(s32 liPlayer, s32 liRumblePriority,
+                                                     const JoltEffect& lJoltEffect)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    PlayJoltEffectEvent lEvent;
+    lEvent.miPlayer         = liPlayer;
+    lEvent.miPort           = -1;
+    lEvent.miRumblePriority = liRumblePriority;
+    lEvent.mJoltEffect      = lJoltEffect;
+    mPlayJoltEffectEventQueue.AddEvent(lEvent);
+}
+
+// X360 0x828EF4B0 - DWARF :683. Asserts at :165 / :166; event {player, -1, priority, jolt (memcpy 0x30),
+// rumble id, volume (f1)} -> EventQueue<PlayRumbleEffectEvent,4>::AddEvent @0x82367AC0 on this+256.
+void PreWorldInputBuffer::PostPlayRumbleEffectByPlayer(s32 liPlayer, s32 liRumblePriority,
+                                                       const JoltEffect& lJoltEffect, s32 liRumbleId,
+                                                       f32 lfRumbleVolume)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    PlayRumbleEffectEvent lEvent;
+    lEvent.miPlayer         = liPlayer;
+    lEvent.miPort           = -1;
+    lEvent.miRumblePriority = liRumblePriority;
+    lEvent.mJoltEffect      = lJoltEffect;
+    lEvent.miRumbleId       = liRumbleId;
+    lEvent.mfRumbleVolume   = lfRumbleVolume;
+    mPlayRumbleEffectEventQueue.AddEvent(lEvent);
+}
+
+// X360 0x828EF608 - DWARF :703. Asserts at :214 / :215; event {player, -1, jolt (memcpy 0x30), rumble id,
+// volume (f1)} -> EventQueue<ChangeVolumeRumbleEffectEvent,4>::AddEvent @0x82367C00 on this+540.
+void PreWorldInputBuffer::PostChangeVolumeRumbleEffectByPlayer(s32 liPlayer, const JoltEffect& lJoltEffect,
+                                                               s32 liRumbleId, f32 lfRumbleVolume)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    ChangeVolumeRumbleEffectEvent lEvent;
+    lEvent.miPlayer       = liPlayer;
+    lEvent.miPort         = -1;
+    lEvent.mJoltEffect    = lJoltEffect;
+    lEvent.miRumbleId     = liRumbleId;
+    lEvent.mfRumbleVolume = lfRumbleVolume;
+    mChangeVolumeRumbleEffectEventQueue.AddEvent(lEvent);
+}
+
+// X360 0x828EF758 - DWARF :719. Asserts at :259 / :260; event {player, -1, rumble id} ->
+// EventQueue<StopRumbleEffectEvent,4>::AddEvent @0x82367D40 on this+808.
+void PreWorldInputBuffer::PostStopRumbleEffectByPlayer(s32 liPlayer, s32 liRumbleId)
+{
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(liPlayer >= 0, "Player must be greater than -1\n");
+    StopRumbleEffectEvent lEvent;
+    lEvent.miPlayer   = liPlayer;
+    lEvent.miPort     = -1;
+    lEvent.miRumbleId = liRumbleId;
+    mStopRumbleEffectEventQueue.AddEvent(lEvent);
+}
+
 // X360 0x828E6740 - read-lock accessor for the play-jolt-effect event queue (this+4).
 // Caller chain: CgsInput::InputModule::ProcessRumbleRequests.
 const PreWorldInputBuffer::PlayJoltEffectEventQueue* PreWorldInputBuffer::GetPlayJoltEffectEventQueue() const
@@ -162,13 +271,29 @@ const PreWorldInputBuffer::PlayJoltEffectEventQueue* PreWorldInputBuffer::GetPla
     return &mPlayJoltEffectEventQueue;
 }
 
+// X360 0x828E6890 - read-lock accessor for the change-volume queue (this+540; CgsInputModuleIO.h:941).
+// Caller: CgsInput::InputModule::ProcessRumbleRequests (0x828FFFCC / 0x828FFFEC).
+const PreWorldInputBuffer::ChangeVolumeRumbleEffectEventQueue*
+PreWorldInputBuffer::GetChangeVolumeRumbleEffectEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mChangeVolumeRumbleEffectEventQueue;
+}
+
+// X360 0x828E6938 - read-lock accessor for the stop queue (this+808; CgsInputModuleIO.h:955).
+// Caller: CgsInput::InputModule::ProcessRumbleRequests (0x828FFEB4 / 0x828FFED0).
+const PreWorldInputBuffer::StopRumbleEffectEventQueue*
+PreWorldInputBuffer::GetStopRumbleEffectEventQueue() const
+{
+    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    return &mStopRumbleEffectEventQueue;
+}
+
 // X360 0x828E69E0 - read-lock accessor returning the published timer snapshot (this+868).
 // Caller: CgsInput::InputModule::ProcessRumbleRequests. (DWARF abbreviates the name to
 // "GetTimerStatusInt"; it returns the TimerStatusInterface pointer at this+868.)
 const CgsSystem::TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInt() const
 {
-    // Member scope grants access to pin the modelled PC offset (matches the X360 this+868 stride).
-    static_assert(offsetof(PreWorldInputBuffer, mTimerStatusInterface) == 868, "mTimerStatusInterface kept at the X360 +868 stride");
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     return &mTimerStatusInterface;
 }

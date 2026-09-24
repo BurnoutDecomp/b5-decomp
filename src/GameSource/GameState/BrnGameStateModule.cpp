@@ -1486,6 +1486,15 @@ void GameStateModule::FinishStreaming(GameStateModuleIO::GameActionQueue* lpQueu
     RequestUnpause(1, lpQueue);
 }
 
+// ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] X360 0x8236B570 -- the three-instruction forward
+// `addis r3,r3,1 ; addi r3,r3,-0x49A8 ; b RumbleManager::BridgeRumbleToInput` (this += 0xB658 ==
+// &mRumbleManager, r4 / r5 passed through). Called by BrnGameModule::DoUpdate_InputPreWorld.
+void GameStateModule::BridgeRumbleToInput(CgsInput::InputIO::PreWorldInputBuffer* lpInputInputBuffer,
+                                          const CgsSystem::TimerStatusInterface*  lpTimerStatusInterface)
+{
+    mRumbleManager.BridgeRumbleToInput(lpInputInputBuffer, lpTimerStatusInterface);
+}
+
 // --------------------------------------------------------------------------------------------
 // ⭐ [tut-ticker] RequestPause (X360 0x82382010) -- the pause twin of RequestUnpause above.
 // Samples the CHECKED pause answer before and after ORing the reason bit in; a change there

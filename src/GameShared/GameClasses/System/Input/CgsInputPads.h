@@ -35,12 +35,12 @@ namespace CgsInput
     const u32 KU_MAX_NUMBER_OF_JOLT_EFFECTS        = 2;
     const u32 KU_MAX_NUMBER_OF_RUMBLE_EFFECTS      = 2;
 
-    // Debug "force-process this pad even when disconnected" rumble toggle. Read by
-    // UpdatePadRumble (`if (byte_83085F80) lbProcess = true; else lbProcess = pad.IsConnected()`)
-    // and by DeviceX360Pad::Update; it is the shared debug override that bypasses the connected
-    // check. FLAGGED: no TU homes it yet; this TU is its provisional home (the rumble subsystem).
-    // Promote/relocate when the debug-input override TU lands.
-    extern bool gbForceRumbleOnDisconnectedPad;   // X360 global byte_83085F80
+    // (FX-RUMBLE3 2026-09-24: the "gbForceRumbleOnDisconnectedPad" global that stood here was an
+    // invented home for byte_83085F80, which is CgsSystem::HardwareInit::mbHasDetectedAutomatic-
+    // TestingFile -- InitializeHardware @0x828E05A0 sets it for autotest runs, and the byte test
+    // UpdatePadRumble inlines is DeviceX360Pad::IsConnected() @0x828DC7E0. Both now read it there.)
+
+    class InputPadsPC;   // the PC pad backend (System/Input/PC/CgsInputPadsPC.h) -- see the friend grant
 
     // ---- Per-player bind record. maPlayers[player] indexed by player id. -------------------
     // Construct/Destruct write {mbBound=0/false @+0, miPort=-1 @+4} per record, stride 8.
@@ -96,6 +96,16 @@ namespace CgsInput
         // X360 0x828DC3C0. Stop a playing rumble effect (matched by id): clear its slot.
         void StopRumbleEvent(const InputIO::StopRumbleEffectEvent& lStopRumbleEvent);
 
+        // DWARF CgsInputPads.h:88 / X360 0x828DBEF0. Bind a player to a physical port: asserts and
+        // returns E_BINDRESULTINVALIDPLAYER / INVALIDPORT past 3, OK when the player already holds
+        // this port, PLAYERALREADYBOUND / PORTALREADYBOUND on a conflict, else records both sides.
+        EBindResult BindPlayerToPort(s32 liPlayer, s32 liPort);
+
+        // DWARF CgsInputPads.h:125 (cpp :688, local `int32_t liPort`). No out-of-line copy on the
+        // X360: InputModule::ProcessRumbleRequests @0x828FFE50 inlines it at 0x829000C4..0x829000F0 --
+        // the three flags, then UpdatePadRumble(port, maPorts[port].GetPlayerID(), lfTimeStep) x4.
+        void UpdateRumble(f32 lfTimeStep, bool lbPauseRumble, bool lbEnableRumble, bool lbEnableWheelForceFeedback);
+
         // X360 0x823A5F38 (CgsInputPads.h:251) -- homed in CgsInputPads_GetDebugGamePad.cpp.
         // Returns the address of the liPortIndex-th physical pad record.
         DeviceX360Pad* GetDebugGamePad(s32 liPortIndex);
@@ -135,8 +145,21 @@ namespace CgsInput
         // / release lerp / 0). lEnvelope = {attack, decay, sustain, release, peak, sustainLevel}.
         f32 UpdateJoltEnvelope(const InputIO::JoltEnvelope& lEnvelope, f32 lfTime);
 
+        // DWARF CgsInputPads.h:195 / :199 (cpp :878 locals lfLeftJoltTime / lfRightJoltTime, :901).
+        // Both inlined into UpdatePadRumble on the X360: the envelope's ((release + sustain) + decay)
+        // + attack, and the larger of the two envelopes (`fcmpu ; bgt` -- the left one only when it is
+        // strictly greater).
+        f32 GetTotalJoltDuration(const InputIO::JoltEffect& lJoltEffect);
+        f32 GetTotalJoltEnvelopeDuration(const InputIO::JoltEnvelope& lJoltEnvelope);
+
         // Never-called layout pin so any drift in a member offset is a compile error.
         friend void _InputPads_AssertLayout();
+
+        // FLAG PC-platform leaf access (the OutputBuffer precedent): CgsInput::InputPadsPC::
+        // UpdatePadDevices is the PC stand-in for the device half of InputPads::Update @0x828F8690
+        // (the ManagerX360 scan binding a connected pad to its DeviceX360Pad), so it reaches maPads
+        // the way that console body does.
+        friend class InputPadsPC;
 
         // ---- head (0x00 .. 0x78) ----
         InputPort     maPorts[KU_NUMBER_OF_PADS];   // +0x00  (24B stride; 4 records => +0x60)

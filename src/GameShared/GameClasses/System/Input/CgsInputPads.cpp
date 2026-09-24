@@ -7,22 +7,36 @@
 
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (BindPlayerToPort's bound asserts)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] CgsDev::Log::gpDebugPrint (UpdatePadRumble witness)
+#include "rw/math/fpu/scalar_operation.h"                      // rw::math::fpu::Clamp (UpdatePadRumble / FillRawData)
 
+#include <cstdlib>   // [DIAG] std::getenv (BRN_RUMBLE_DIAG)
 #include <cstring>   // std::memset (Construct clears the action-down bitmap)
 
 namespace CgsInput
 {
-    // Provisional home of the debug "force rumble on a disconnected pad" override (X360 byte_83085F80).
-    // FLAGGED: a debug runtime toggle; default false (no immediate store seeds it -- it lives in BSS,
-    // which is zero-initialised). Promote/relocate when the debug-input override TU lands.
-    bool gbForceRumbleOnDisconnectedPad = false;
-
-    // The total wall-clock duration of one ADSR jolt envelope = attack + decay + sustain + release.
-    // UpdatePadRumble computes this inline (`(((env[3]+env[2])+env[1])+env[0])`) for both the low- and
-    // high-frequency envelopes and ages an effect out once its time exceeds the larger of the two.
-    static f32 GetTotalJoltEnvelopeDuration(const InputIO::JoltEnvelope& lEnvelope)
+    // ------------------------------------------------------------------------------------------------
+    // DWARF CgsInputPads.cpp:901 -- GetTotalJoltEnvelopeDuration. The total wall-clock length of one
+    // ADSR envelope, summed the way UpdatePadRumble's inlined copies sum it (0x828EFD28..0x828EFD48):
+    // ((release + sustain) + decay) + attack.
+    // ------------------------------------------------------------------------------------------------
+    f32 InputPads::GetTotalJoltEnvelopeDuration(const InputIO::JoltEnvelope& lJoltEnvelope)
     {
-        return ((lEnvelope.mfReleaseTime + lEnvelope.mfSustainTime) + lEnvelope.mfDecayTime) + lEnvelope.mfAttackTime;
+        return ((lJoltEnvelope.mfReleaseTime + lJoltEnvelope.mfSustainTime) + lJoltEnvelope.mfDecayTime)
+             + lJoltEnvelope.mfAttackTime;
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // DWARF CgsInputPads.cpp:878 -- GetTotalJoltDuration (locals lfLeftJoltTime / lfRightJoltTime). The
+    // longer of the two envelopes: UpdatePadRumble's `fcmpu f0,f13 ; bgt keep ; fmr f0,f13`
+    // (0x828EFD60..0x828EFD68) keeps the LEFT time only when it is strictly greater.
+    // ------------------------------------------------------------------------------------------------
+    f32 InputPads::GetTotalJoltDuration(const InputIO::JoltEffect& lJoltEffect)
+    {
+        const f32 lfLeftJoltTime  = GetTotalJoltEnvelopeDuration(lJoltEffect.mLowFreqJoltData);
+        const f32 lfRightJoltTime = GetTotalJoltEnvelopeDuration(lJoltEffect.mHighFreqJoltData);
+        return (lfLeftJoltTime > lfRightJoltTime) ? lfLeftJoltTime : lfRightJoltTime;
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -181,16 +195,9 @@ namespace CgsInput
         for (s32 liAxisIndex = 0; liAxisIndex < static_cast<s32>(CgsInput::KU_NUMBER_OF_AXES); ++liAxisIndex)
         {
             const f32 lfAxisValue = maPads[liPortIndex].GetAxisValue(static_cast<u32>(liAxisIndex));
-            f32 lfAccumulated = lafAxisData[liAxisIndex] + lfAxisValue;
-            if (lfAccumulated < -1.0f)
-            {
-                lfAccumulated = -1.0f;
-            }
-            if (lfAccumulated > 1.0f)
-            {
-                lfAccumulated = 1.0f;
-            }
-            lafAxisData[liAxisIndex] = lfAccumulated;
+            // DWARF cpp :411 rw::math::fpu::Clamp<float> -- the X360's `fsel f0,f13,f31,f0 ;
+            // fsel f0,f13,f0,f30` pair (-1 then +1), which the fpu Clamp reproduces (NaN -> +1).
+            lafAxisData[liAxisIndex] = rw::math::fpu::Clamp(lafAxisData[liAxisIndex] + lfAxisValue, -1.0f, 1.0f);
         }
     }
 
@@ -205,7 +212,7 @@ namespace CgsInput
     // ------------------------------------------------------------------------------------------------
     f32 InputPads::UpdateJoltEnvelope(const InputIO::JoltEnvelope& lEnvelope, f32 lfTime)
     {
-        CGS_ASSERT(lfTime >= 0.0f, "jolt envelope time must be non-negative");
+        CGS_ASSERT(lfTime >= 0.0f, "lfTime >= 0.0f");                         // cpp :843 (0x34B)
 
         const f32 lfAttack  = lEnvelope.mfAttackTime;
         const f32 lfDecay   = lEnvelope.mfDecayTime;
@@ -304,7 +311,11 @@ namespace CgsInput
 
     // ------------------------------------------------------------------------------------------------
     // X360 0x828DC318 -- ChangeVolumeRumbleEvent.
-    // Resolve the player to a port, find the rumble slot matching the event's id, and update its volume.
+    // Resolve the player to a port, find the rumble slot matching the event's id, update its volume --
+    // AND replace its envelope with the event's: after the `stfsx f0` volume store (0x828DC3A4) the body
+    // tail-calls memcpy(&maRumbleEffects[port][slot], &event.mJoltEffect (r4+8), 0x30) at 0x828DC398..
+    // 0x828DC3B8 (`addi r4,r4,8 ; li r5,0x30 ; ... ; b memcpy`). FX-RUMBLE3 2026-09-24: the envelope copy
+    // was missing, so a surface rumble whose volume changed kept playing its FIRST surface's envelope.
     // ------------------------------------------------------------------------------------------------
     void InputPads::ChangeVolumeRumbleEvent(const InputIO::ChangeVolumeRumbleEffectEvent& lChangeVolumeRumbleEvent)
     {
@@ -331,6 +342,81 @@ namespace CgsInput
         }
 
         mafRumbleVolume[liPort][luRumbleIndex] = lChangeVolumeRumbleEvent.mfRumbleVolume;
+        maRumbleEffects[liPort][luRumbleIndex] = lChangeVolumeRumbleEvent.mJoltEffect;
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // X360 0x828DBEF0 -- BindPlayerToPort (DWARF CgsInputPads.h:88; cpp :427, two StrStream locals).
+    //   player > 3 (cmplwi, unsigned): "Player out of bounds. 0 <= " << player << " < " << 4 (:432) -> 3
+    //   port   > 3:                    "Port out of bounds. 0 <= "   << port   << " < " << 4 (:437) -> 4
+    //   player already bound: OK when maPorts[port] already names this player, else
+    //                         "Player is already bound to another port. Unbind first" (:448) -> 1
+    //   port already bound (maPorts[port] != -1): "Port is already bound. Unbind first" (:453) -> 2
+    //   else maPlayers[player] = {bound, port} (`stw port,4 ; stb 1,0`), maPorts[port] = player -> 0.
+    // Console caller: InputModule::ProcessBindRequestQueue @0x828EF1F0 (the InputPostWorld bind chain).
+    // ------------------------------------------------------------------------------------------------
+    EBindResult InputPads::BindPlayerToPort(s32 liPlayer, s32 liPort)
+    {
+        if (static_cast<u32>(liPlayer) > KU_NUMBER_OF_PADS - 1)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Player out of bounds. 0 <= " << liPlayer << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp", 432);
+            CgsDev::Assert::EndAssert();
+            return E_BINDRESULTINVALIDPLAYER;
+        }
+        if (static_cast<u32>(liPort) > KU_NUMBER_OF_PADS - 1)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lStrStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            lStrStream << "Port out of bounds. 0 <= " << liPort << " < " << static_cast<s32>(KU_NUMBER_OF_PADS) << "\n";
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lacMessage,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp", 437);
+            CgsDev::Assert::EndAssert();
+            return E_BINDRESULTINVALIDPORT;
+        }
+
+        InputPlayer& lrPlayer = maPlayers[liPlayer];
+        if (lrPlayer.mbBound)
+        {
+            if (maiPortToPlayer[liPort] == liPlayer)
+            {
+                return E_BINDRESULTOK;
+            }
+            CGS_ASSERT(false, "Player is already bound to another port. Unbind first");   // :448
+            return E_BINDRESULTPLAYERALREADYBOUND;
+        }
+        if (maiPortToPlayer[liPort] != -1)
+        {
+            CGS_ASSERT(false, "Port is already bound. Unbind first");                     // :453
+            return E_BINDRESULTPORTALREADYBOUND;
+        }
+
+        lrPlayer.miPort           = liPort;
+        lrPlayer.mbBound          = true;
+        maiPortToPlayer[liPort]   = liPlayer;
+        return E_BINDRESULTOK;
+    }
+
+    // ------------------------------------------------------------------------------------------------
+    // DWARF CgsInputPads.cpp:688 -- UpdateRumble, as InputModule::ProcessRumbleRequests @0x828FFE50
+    // inlines it (0x829000C4..0x829000F0): the three flag stores in the console's order (+0x10D0 pause,
+    // +0x10D2 wheel force feedback, +0x10D1 enable), then UpdatePadRumble(port, maPorts[port] (the
+    // `lwz r5,0(r29)` walk from +0x7A8), lfTimeStep) for each of the four ports.
+    // ------------------------------------------------------------------------------------------------
+    void InputPads::UpdateRumble(f32 lfTimeStep, bool lbPauseRumble, bool lbEnableRumble, bool lbEnableWheelForceFeedback)
+    {
+        mbRumblePaused   = lbPauseRumble;
+        mbWheelFFEnabled = lbEnableWheelForceFeedback;
+        mbRumbleEnabled  = lbEnableRumble;
+        for (s32 liPort = 0; liPort < static_cast<s32>(KU_NUMBER_OF_PADS); ++liPort)
+        {
+            UpdatePadRumble(liPort, maiPortToPlayer[liPort], lfTimeStep);
+        }
     }
 
     // ------------------------------------------------------------------------------------------------
@@ -369,120 +455,123 @@ namespace CgsInput
     }
 
     // ------------------------------------------------------------------------------------------------
-    // X360 0x828EFC58 -- UpdatePadRumble.
-    // Tick every active jolt + rumble effect on one pad through its low/high-frequency envelopes,
-    // accumulate the strongest left/right motor magnitudes, age out finished effects, then push the
-    // resulting motor magnitudes (or, for a wheel device, the wheel FF spring) to the DeviceX360Pad.
-    // liPlayer is unused on X360 (the index parameter that drives every table is liPort).
+    // X360 0x828EFC58 -- UpdatePadRumble (DWARF cpp :713; locals lbStopMotors / lfLeftMotorValue /
+    // lfRightMotorValue, lfJolt*MotorValue, lfRumble*MotorValue; rw::math::fpu::Clamp x4).
+    // Re-read instruction by instruction 2026-09-24 (FX-RUMBLE3):
+    //   0x828EFC80  mbRumblePaused -> skip both effect walks (the motors stay stopped)
+    //   jolts   0x828EFC98..0x828EFD90  priority > 0 (signed): left/right = the larger of the running
+    //           value and each envelope (`fcmpu ; bge skip`), time += step, then EXPIRE when the new
+    //           time is strictly past the longer envelope (`fcmpu f12,f0 ; ble keep`: time 0.0,
+    //           priority -1) else keep the motors running
+    //   rumbles 0x828EFD94..0x828EFEB4  the same with the envelope scaled by the slot volume, the time
+    //           WRAPS to 0.0 past the envelope (no expiry -- a rumble loops until it is stopped), and any
+    //           active rumble keeps the motors running
+    //   0x828EFEB8..0x828EFEE4  DeviceX360Pad::IsConnected() inlined (autotest byte, else +0x10) gates the
+    //           rest; the wheel arm publishes the FF spring (or {1.0, 0.0}) then the motors; both arms
+    //           Clamp each motor to [0,1] with the fsel pair and call SetRumble, or SetRumble(0,0).
+    // liPlayer is unused (r5 is never read), as on the console.
     // ------------------------------------------------------------------------------------------------
     void InputPads::UpdatePadRumble(s32 liPort, s32 liPlayer, f32 lfTimeStep)
     {
         (void)liPlayer;
 
-        bool lbStopMotors    = true;
+        bool lbStopMotors      = true;
         f32  lfLeftMotorValue  = 0.0f;
         f32  lfRightMotorValue = 0.0f;
 
         if (!mbRumblePaused)
         {
-            // ---- jolt effects ----
-            for (u32 luJoltIndex = 0; luJoltIndex < KU_MAX_NUMBER_OF_JOLT_EFFECTS; ++luJoltIndex)
+            for (u32 liJoltIndex = 0; liJoltIndex < KU_MAX_NUMBER_OF_JOLT_EFFECTS; ++liJoltIndex)
             {
-                if (maiJoltEffectPriorities[liPort][luJoltIndex] > 0)
+                if (maiJoltEffectPriorities[liPort][liJoltIndex] > 0)
                 {
-                    InputIO::JoltEffect& lJoltEffect = maJoltEffects[liPort][luJoltIndex];
+                    const InputIO::JoltEffect& lJoltEffect = maJoltEffects[liPort][liJoltIndex];
 
-                    const f32 lfLeftEnv = UpdateJoltEnvelope(lJoltEffect.mLowFreqJoltData, mafJoltTime[liPort][luJoltIndex]);
-                    if (lfLeftMotorValue < lfLeftEnv)
+                    const f32 lfJoltLeftMotorValue = UpdateJoltEnvelope(lJoltEffect.mLowFreqJoltData, mafJoltTime[liPort][liJoltIndex]);
+                    if (lfLeftMotorValue < lfJoltLeftMotorValue)
                     {
-                        lfLeftMotorValue = lfLeftEnv;
+                        lfLeftMotorValue = lfJoltLeftMotorValue;
                     }
-                    const f32 lfRightEnv = UpdateJoltEnvelope(lJoltEffect.mHighFreqJoltData, mafJoltTime[liPort][luJoltIndex]);
-                    if (lfRightMotorValue < lfRightEnv)
+                    const f32 lfJoltRightMotorValue = UpdateJoltEnvelope(lJoltEffect.mHighFreqJoltData, mafJoltTime[liPort][liJoltIndex]);
+                    if (lfRightMotorValue < lfJoltRightMotorValue)
                     {
-                        lfRightMotorValue = lfRightEnv;
-                    }
-
-                    const f32 lfNewTime = mafJoltTime[liPort][luJoltIndex] + lfTimeStep;
-                    mafJoltTime[liPort][luJoltIndex] = lfNewTime;
-
-                    f32 lfTotalDuration = GetTotalJoltEnvelopeDuration(lJoltEffect.mLowFreqJoltData);
-                    const f32 lfHighDuration = GetTotalJoltEnvelopeDuration(lJoltEffect.mHighFreqJoltData);
-                    if (lfTotalDuration <= lfHighDuration)
-                    {
-                        lfTotalDuration = lfHighDuration;
+                        lfRightMotorValue = lfJoltRightMotorValue;
                     }
 
-                    if (lfNewTime <= lfTotalDuration)
+                    mafJoltTime[liPort][liJoltIndex] = mafJoltTime[liPort][liJoltIndex] + lfTimeStep;
+                    if (mafJoltTime[liPort][liJoltIndex] > GetTotalJoltDuration(lJoltEffect))
                     {
-                        lbStopMotors = false;
+                        mafJoltTime[liPort][liJoltIndex]             = 0.0f;
+                        maiJoltEffectPriorities[liPort][liJoltIndex] = -1;
                     }
                     else
                     {
-                        mafJoltTime[liPort][luJoltIndex]             = 0.0f;
-                        maiJoltEffectPriorities[liPort][luJoltIndex] = -1;
+                        lbStopMotors = false;
                     }
                 }
             }
 
-            // ---- rumble effects ----
-            for (u32 luRumbleIndex = 0; luRumbleIndex < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++luRumbleIndex)
+            for (u32 liRumbleIndex = 0; liRumbleIndex < KU_MAX_NUMBER_OF_RUMBLE_EFFECTS; ++liRumbleIndex)
             {
-                if (maiRumbleEffectPriorities[liPort][luRumbleIndex] > 0)
+                if (maiRumbleEffectPriorities[liPort][liRumbleIndex] > 0)
                 {
-                    InputIO::JoltEffect& lRumbleEffect = maRumbleEffects[liPort][luRumbleIndex];
+                    const InputIO::JoltEffect& lRumbleEffect = maRumbleEffects[liPort][liRumbleIndex];
 
-                    const f32 lfLeftEnv = UpdateJoltEnvelope(lRumbleEffect.mLowFreqJoltData, mafRumbleTime[liPort][luRumbleIndex]);
-                    const f32 lfVolume  = mafRumbleVolume[liPort][luRumbleIndex];
-                    if (lfLeftMotorValue < lfVolume * lfLeftEnv)
+                    const f32 lfRumbleLeftMotorValue = mafRumbleVolume[liPort][liRumbleIndex]
+                        * UpdateJoltEnvelope(lRumbleEffect.mLowFreqJoltData, mafRumbleTime[liPort][liRumbleIndex]);
+                    if (lfLeftMotorValue < lfRumbleLeftMotorValue)
                     {
-                        lfLeftMotorValue = lfVolume * lfLeftEnv;
+                        lfLeftMotorValue = lfRumbleLeftMotorValue;
                     }
-                    const f32 lfRightEnv = UpdateJoltEnvelope(lRumbleEffect.mHighFreqJoltData, mafRumbleTime[liPort][luRumbleIndex]);
-                    if (lfRightMotorValue < lfVolume * lfRightEnv)
+                    const f32 lfRumbleRightMotorValue = mafRumbleVolume[liPort][liRumbleIndex]
+                        * UpdateJoltEnvelope(lRumbleEffect.mHighFreqJoltData, mafRumbleTime[liPort][liRumbleIndex]);
+                    if (lfRightMotorValue < lfRumbleRightMotorValue)
                     {
-                        lfRightMotorValue = lfVolume * lfRightEnv;
-                    }
-
-                    const f32 lfNewTime = lfTimeStep + mafRumbleTime[liPort][luRumbleIndex];
-                    mafRumbleTime[liPort][luRumbleIndex] = lfNewTime;
-
-                    f32 lfTotalDuration = GetTotalJoltEnvelopeDuration(lRumbleEffect.mLowFreqJoltData);
-                    const f32 lfHighDuration = GetTotalJoltEnvelopeDuration(lRumbleEffect.mHighFreqJoltData);
-                    if (lfTotalDuration <= lfHighDuration)
-                    {
-                        lfTotalDuration = lfHighDuration;
+                        lfRightMotorValue = lfRumbleRightMotorValue;
                     }
 
-                    if (lfNewTime > lfTotalDuration)
+                    mafRumbleTime[liPort][liRumbleIndex] = lfTimeStep + mafRumbleTime[liPort][liRumbleIndex];
+                    if (mafRumbleTime[liPort][liRumbleIndex] > GetTotalJoltDuration(lRumbleEffect))
                     {
-                        mafRumbleTime[liPort][luRumbleIndex] = 0.0f;
+                        mafRumbleTime[liPort][liRumbleIndex] = 0.0f;
                     }
                     lbStopMotors = false;
                 }
             }
         }
 
-        // ---- decide whether to process this pad ----
-        bool lbProcess;
-        if (gbForceRumbleOnDisconnectedPad)
+        // [DIAG] BRN_RUMBLE_DIAG -- NOT IN THE X360 BINARY. The motor-REQUEST witness (FX-RUMBLE3): one
+        // line per port-frame on which an effect is driving the motors (budgeted), BEFORE the connected
+        // test -- so a run on a box with no pad still shows the jolt arriving here. The PC motor leaf
+        // (CgsInputPadsPC.cpp XInputSetState) adds its own line when a pad takes it.
         {
-            lbProcess = true;
+            static const bool sbPadDiag = (std::getenv("BRN_RUMBLE_DIAG") != 0);
+            static s32        siPadDiagLines = 0;
+            const s32         KI_PAD_DIAG_MAX_LINES = 96;
+            if (sbPadDiag && !lbStopMotors && siPadDiagLines < KI_PAD_DIAG_MAX_LINES && CgsDev::Log::gpDebugPrint != 0)
+            {
+                ++siPadDiagLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[rumble] pad-request port=" << liPort
+                    << " left=" << lfLeftMotorValue << " right=" << lfRightMotorValue
+                    << " jolt{prio=" << maiJoltEffectPriorities[liPort][0] << "," << maiJoltEffectPriorities[liPort][1]
+                    << " t=" << mafJoltTime[liPort][0] << "," << mafJoltTime[liPort][1]
+                    << "} rumble{prio=" << maiRumbleEffectPriorities[liPort][0] << "," << maiRumbleEffectPriorities[liPort][1]
+                    << "} enabled=" << static_cast<s32>(mbRumbleEnabled ? 1 : 0)
+                    << " connected=" << static_cast<s32>(maPads[liPort].IsConnected() ? 1 : 0)
+                    << " type=" << static_cast<s32>(maPads[liPort].GetDeviceType()) << "\n";
+            }
         }
-        else
-        {
-            lbProcess = maPads[liPort].IsConnected();
-        }
-        if (!lbProcess)
+
+        if (!maPads[liPort].IsConnected())
         {
             return;
         }
 
         DeviceX360Pad& lPad = maPads[liPort];
 
-        if (lPad.GetDeviceType() == E_DEVICETYPE_WHEEL)
+        if (lPad.GetDeviceType() == Device::E_WHEEL_DEVICE_TYPE)
         {
-            // Publish the wheel force-feedback spring (or a neutral {coeff=1, sat=0} default).
             if (!mbRumbleEnabled || mbRumblePaused || !mbWheelFFEnabled || maiPortToPlayer[liPort] == -1)
             {
                 lPad.SetWheelFFSpring(1.0f, 0.0f);
@@ -494,9 +583,8 @@ namespace CgsInput
 
             if (!lbStopMotors && mbRumbleEnabled && mbWheelFFEnabled)
             {
-                f32 lfLeft  = (lfLeftMotorValue  < 0.0f) ? 0.0f : ((lfLeftMotorValue  > 1.0f) ? 1.0f : lfLeftMotorValue);
-                f32 lfRight = (lfRightMotorValue < 0.0f) ? 0.0f : ((lfRightMotorValue > 1.0f) ? 1.0f : lfRightMotorValue);
-                lPad.SetRumble(lfLeft, lfRight);
+                lPad.SetRumble(rw::math::fpu::Clamp(lfLeftMotorValue, 0.0f, 1.0f),
+                               rw::math::fpu::Clamp(lfRightMotorValue, 0.0f, 1.0f));
             }
             else
             {
@@ -511,9 +599,8 @@ namespace CgsInput
             }
             else
             {
-                f32 lfLeft  = (lfLeftMotorValue  < 0.0f) ? 0.0f : ((lfLeftMotorValue  > 1.0f) ? 1.0f : lfLeftMotorValue);
-                f32 lfRight = (lfRightMotorValue < 0.0f) ? 0.0f : ((lfRightMotorValue > 1.0f) ? 1.0f : lfRightMotorValue);
-                lPad.SetRumble(lfLeft, lfRight);
+                lPad.SetRumble(rw::math::fpu::Clamp(lfLeftMotorValue, 0.0f, 1.0f),
+                               rw::math::fpu::Clamp(lfRightMotorValue, 0.0f, 1.0f));
             }
         }
     }

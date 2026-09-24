@@ -18,6 +18,7 @@
 #include <cstddef>   // offsetof -- the 545/546 payload layout pins in BridgeGuiToGame
 
 #include "GameShared/GameClasses/System/Input/PC/CgsInputPadsPC.h" // CgsInput::InputPadsPC (the PC pad-fill leaf)
+#include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"       // [FX-RUMBLE3] CgsModule::IOHelper (DoUpdate_InputPreWorld's "InputPreWorld")
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h" // CgsGui::GuiModule::AddGuiEvent (the world-load report below)
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h" // CgsGui::GuiEventTimeInfo (the per-frame GUI timestep)
 #include "GameSource/Game/BrnLoadingScreenRenderer.h" // BrnGame::ELoadingScreenCommand (BridgeGuiToGame's command slot)
@@ -352,7 +353,9 @@ namespace BrnGame
                                          //            (slot +64, const BrnCpuMonitors& -- the
                                          //            handle block filled above). REAL module
                                          //            mounted 2026-07-26 (world-render campaign).
-        mInputModule.Construct();        // +0x6E9630  (slot 0; placeholder -> base)
+        mInputModule.Construct();        // +0x6E9630  InputModule::Construct 0x828F83D0 (slot 0) --
+                                         //            the real CgsInput::InputModule since FX-RUMBLE3
+                                         //            2026-09-24 (was an empty ODR stub -> the base)
         // [gateui r4] +0x6EAA20. X360 slot +84 takes TWO sub-objects out of the GameData
         // module -- gm+0x65A1D0 (lpHudMessageController) and gm+0x65A1F4 (lpPopupController).
         // The FIRST one is now passed for real: 0x65A1D0 - 0x5F4B00 (the GameData module's
@@ -4324,6 +4327,27 @@ namespace BrnGame
 
                 BrnGameMainFlowController::EMainGameFlowState leState = mMainFlowStateMachine.GetCurrentState();
 
+                // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] THE INPUT PRE-WORLD LEG -- the first
+                // leg of the console's update step, and the one that carries the game's rumble requests
+                // to the pads. It has exactly two console callers (the dossier's xrefs_to):
+                //   DoUpdate @0x823F0AF8 at 0x823F0F58 -- unconditional, first leg, before NetworkPreSim;
+                //     DoUpdate runs from MainGameFlowStateInGame::Update and from LoadingScriptedState::
+                //     Update once its load stage reads 8 (0x823F22F4 `cmpwi r11,8` -> 0x823F2304);
+                //   LoadingScriptedState::Update @0x823F22D8 at 0x823F26F4 -- the partial spine it runs
+                //     for load stages below 8, first leg after ConstructUpdateSetFromFsm.
+                // So it runs in the in-game state and in every loading-scripted state, whatever the load
+                // stage (the network buffer's gate below additionally needs stage 8). Arguments as the
+                // console loads them: the update input/output buffer stacks and the input module's
+                // output buffer (the PC keeps that one as mPcInputOutputBuffer). The START-pressed port
+                // it returns feeds only the flagged pad scan (see the body), so it is not consumed here.
+                if ((leState == BrnGameMainFlowController::E_MGS_IN_GAME)
+                    || ((leState >= BrnGameMainFlowController::E_MGS_CHECK_DISK_SPACE)
+                        && (leState <= BrnGameMainFlowController::E_MGS_COMPLETE_LOADING)))
+                {
+                    DoUpdate_InputPreWorld(mpUpdateInputBufferStack, mpUpdateOutputBufferStack,
+                                           &mPcInputOutputBuffer);
+                }
+
                 // THE NETWORK PRE-SIMULATION LEG. Console DoUpdate order: DoUpdate_InputPreWorld,
                 // then this, then DoUpdate_GameStatePreWorld; unconditional whenever DoUpdate runs,
                 // which on this build is exactly when the sub-step has a network output buffer
@@ -5564,6 +5588,59 @@ namespace BrnGame
         mpUpdateOutputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::OutputBuffer>(&mpGuiOutputBuffer);
         mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::ViewIO::InputBuffer>(&mpGuiViewInputBuffer);
         mpUpdateInputBufferStack->DestroyIOBuffer<CgsGui::CgsGuiModuleIO::InputBuffer>(&mpGuiInputBuffer);
+    }
+
+    // =========================================================================================
+    // ⭐ [FX-RUMBLE3 2026-09-24, crash-parity G10-D4] DoUpdate_InputPreWorld -- X360 0x823C5650
+    // (DWARF BrnGameModule.h:550; BrnGameModuleUpdateFunctions.cpp:45, locals
+    // `IOHelper<PreWorldInputBuffer> lpInputModulePreWorldInputBuffer`, `uint32_t liStartPressedPort`).
+    // The first leg of every update step, and the ONLY place the game's rumble requests reach the
+    // pads: until it existed RumbleManager's four queues were filled every frame and never drained.
+    //   0x823C5670  StartMonitor(gm+0x996F28 == mCpuMonitors+0x10, miUT_GameState)
+    //   0x823C5680  IOHelper: CreateIOBuffer<CgsInput::InputIO::PreWorldInputBuffer>(inStack, "InputPreWorld")
+    //               (0x823AEE18: Alloc 920 + PreWorldInputBuffer::Construct), asserting
+    //               "mpStack->CreateIOBuffer( &mpBuffer, lpcName )" (CgsModuleIOHelper.h:52)
+    //   0x823C56C8  StartMonitor(gm+0x996F9C == mCpuMonitors+0x84, miUT_GameState_Bridge)
+    //   0x823C56D8  LockForWrite ; GameStateModule::BridgeRumbleToInput(gm+0x669400, buffer,
+    //               gm+0x9A0B0C == &mTimerStatusInterface) ; UnlockForWrite ; StopMonitor
+    //   0x823C5720  mInputModule (gm+0x6E9630) vtable+0x44 == InputModule::PreWorldUpdate(inStack,
+    //               outStack, buffer, lpInputModuleOutput, *(gm+0x9A0622) == 0 -- !mbDiskError)
+    //   0x823C5738..0x823C57E8  if (miInputModuleState == 1): the START-pressed port scan (or the invite
+    //               relaunch's port), miInputModuleState = 2   -- [FLAG, below]
+    //   0x823C57F0  QueryRequestDoStepFrame(lpInputModuleOutput)                   -- [FLAG, below]
+    //   0x823C57F8  StopMonitor(miUT_GameState) ; the IOHelper's DestroyIOBuffer (0x823AEEE8) at scope end
+    // =========================================================================================
+    u32 BrnGameModule::DoUpdate_InputPreWorld(CgsModule::IOBufferStack* lpInputBufferStack,
+                                              CgsModule::IOBufferStack* lpOutputBufferStack,
+                                              CgsInput::InputIO::OutputBuffer* lpInputModuleOutput)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState);
+        CgsModule::IOHelper<CgsInput::InputIO::PreWorldInputBuffer> lpInputModulePreWorldInputBuffer(
+            lpInputBufferStack, "InputPreWorld");
+
+        CgsDev::PerfMonCpu::StartMonitor(mCpuMonitors.miUT_GameState_Bridge);
+        lpInputModulePreWorldInputBuffer->LockForWrite();
+        mGameStateModule.BridgeRumbleToInput(lpInputModulePreWorldInputBuffer, &mTimerStatusInterface);
+        lpInputModulePreWorldInputBuffer->UnlockForWrite();
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState_Bridge);
+
+        mInputModule.PreWorldUpdate(lpInputBufferStack, lpOutputBufferStack,
+                                    lpInputModulePreWorldInputBuffer, lpInputModuleOutput, !mbDiskError);
+
+        // The console's START-pressed port: KU_NUMBER_OF_PADS (4) unless the scan below finds one.
+        u32 liStartPressedPort = CgsInput::KU_NUMBER_OF_PADS;
+        // [FLAG, not reconstructed -- dead on this build] 0x823C5738..0x823C57E8: while
+        // miInputModuleState == 1 the console read-locks lpInputModuleOutput and takes the invite
+        // relaunch's port (HasGameBeenRebootedDueToInvite -> the launch data's first word, asserting
+        // "lpLaunchData" at BrnGameModuleUpdateFunctions.cpp:71) or the first of the four pads whose
+        // START action (record +0x5C, maActionInfo[8].muStatus bit 1) was pressed, then sets the state to
+        // 2. This build seeds miInputModuleState = 4 in Construct (the PC input bring-up) and the only
+        // 0 -> 1 edge (BridgeGuiToGame case 90) needs 0, so the block can never run here.
+        // [FLAG, not reconstructed] 0x823C57F0 QueryRequestDoStepFrame @0x823C5580 -- the debug
+        // step-frame pad chord (player 0's actions 56 + 57 held and 21 pressed raise the step or play
+        // request); not in the tree. Named here so its absence is not silent.
+        CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_GameState);
+        return liStartPressedPort;
     }
 
     // @ BrnGameModule.cpp:4048 - apply a pending step/play-frame request: a step request
