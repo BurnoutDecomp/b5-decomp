@@ -1583,6 +1583,15 @@ private:
     // X360 +0x456EC (284396). The loaded wheel list -- Prepare's stage 9/10, same shape,
     // reply id 59. GetWheelList() hands it back.
     BrnResource::WheelList*   mpWheelList = 0;
+    // ⭐ [FX-FLOW 2026-09-24] X360 +0x456F0 (284400), DWARF BrnGameStateModule.h:845
+    // `ResourcePtr<BrnWorld::GlobalColourPalette> mpPlayerCarColours`. The player-car colour
+    // palettes ("CarColours", pool 5): bound by Prepare's stage 11/12 (AcquireResource +
+    // CreateFromHandle @0x8239EA90) and handed by value to DriveThruManager::Prepare in the DONE
+    // stage (@0x8239EC74..0x8239EC88), whose paint-shop arm reads palette 2's colour count. The
+    // console's only other touch is the ctor's zero-init (@0x827E4740). It was absent here, so the
+    // drive-thru manager got a null ResourcePtr and every paint shop fired "Can not instance
+    // resource pointer" (CgsResourcePtr.h) and then faulted reading +0x20 of null.
+    CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette> mpPlayerCarColours;
 
     // X360 +0x32DC4 (208324). The one-shot latch PreWorldUpdate @0x823A5510 tests before running
     // SendSetupPlayerCarEvent + SendSetUpAllEventStartsMessage, and clears immediately after

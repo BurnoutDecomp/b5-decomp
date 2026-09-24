@@ -23,6 +23,8 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"                 // CgsContainers::Array<s64,7> (opponent payload)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // RequestInterface<3072>::GetVehicleList/GetWheelList
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"             // GameDataAssetEvent (the list replies)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h" // [FX-FLOW] AcquireResourceResponse (Prepare stage 12's reply)
+#include "SharedClasses/Graphics/BrnGlobalColourPalette.h"              // [FX-FLOW] BrnWorld::GlobalColourPalette (mpPlayerCarColours)
 #include "SharedClasses/Trigger/BrnTriggerData.h"                       // BrnTrigger::TriggerData (generic-region table)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"                     // BrnTrigger::GenericRegion (E_TYPE_JUNK_YARD)
 #include "SharedClasses/Trigger/BrnRegion.h"                            // BrnTrigger::BoxRegion::GetPosition
@@ -385,6 +387,8 @@ void GameStateModule::Destruct()
 //            StuntManager::Prepare's LoadDistrictMap (the tally half is still deferred; see
 //            the stage body and mbDistrictsBundleRequested).
 //   stages 7/8 and 9/10 -> the vehicle / wheel list GETs.
+//   stages 11/12 -> AcquireResource("CarColours", pool 5) + CreateFromHandle(mpPlayerCarColours)
+//            (FX-FLOW, 2026-09-24; the palette the DONE stage hands DriveThruManager::Prepare).
 //   stage 23 E_PREPARESTAGE_STREET_MANAGER    -> StreetManager::Prepare @0x82350900
 //            (LoadAIData + LoadDistrictMap -> mDistrictMapResourceHandle), added 2026-08-11.
 //   stage 25 E_PREPARESTAGE_RUMBLE_MANAGER    -> RumbleManager::Prepare @0x823648D0 (FX-RUMBLE,
@@ -659,8 +663,54 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
         // fall through
     case E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS:
+        // ⭐ [FX-FLOW 2026-09-24] REAL. X360 case 11 @0x8239E9D4..0x8239EA2C:
+        //     stw 11, mePrepareStage
+        //     rec = { mpUser = &mReceiverQueue (r30 = this+232384), miEventId = 0 (r20),
+        //             miPoolId = 5 (`li r10,5`), mResourceId = ID::HashString("CarColours") }
+        //     OutputBuffer's RequestInterface<3072>::mRequestQueue.AddEvent(&rec, 4, 0x18)
+        //     BaseEventReceiverQueue::Clear(&mReceiverQueue)
+        // -- the inlined RequestInterface::AcquireResource, spelled through it (the Hex-Rays
+        // `hash | 0x500000000` is the interleaved miPoolId store fused into the id's std; see
+        // AcquireResource's own note). Without it mpPlayerCarColours stayed unbound and the
+        // paint-shop arm of DriveThruManager::ProcessDriveThru asserted and faulted.
+        mePrepareStage = E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS;
+        lpOutputBuffer->GetResourceRequestInterface()->AcquireResource(&mReceiverQueue, 0, 5, "CarColours");
+        mReceiverQueue.Clear();
+        // fall through
     case E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS:
-        LogPrepareStageOnce(11, "acquire \"CarColours\" (pool 5) + bind [deferred]");
+    {
+        // X360 case 12 @0x8239EA34..0x8239EA90: `stw 12`; wait while the reply queue holds
+        // nothing (`cmpwi len,1 ; blt` -> not done this pass); then CreateFromHandle(
+        // &mpPlayerCarColours, firstEvent + 0x18) -- the AcquireResourceResponse's trailing
+        // {mpResourceMemory, mpSourceEntry} pair IS a ResourceHandle -- and straight on to stage
+        // 13. No assert and no Clear here on the console (the reply stays queued until the next
+        // request's own Clear -- ProgressionManager::LoadAIData's, stage 20).
+        mePrepareStage = E_PREPARESTAGE_RECEIVE_PLAYERCARCOLOURS;
+        if (mReceiverQueue.GetLength() < 1)
+            break;
+
+        const CgsModule::Event* lpEvent = 0;
+        s32                     liSize  = 0;
+        mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
+        const CgsResource::Events::AcquireResourceResponse* lpAcquire =
+            reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
+
+        CgsResource::ResourceHandle lPlayerCarColoursHandle;
+        lPlayerCarColoursHandle.mpResourceMemory = lpAcquire->mpResourceMemory;
+        lPlayerCarColoursHandle.mpSourceEntry    = lpAcquire->mpSourceEntry;
+        mpPlayerCarColours = lPlayerCarColoursHandle;   // == CreateFromHandle(this+284400, rec+0x18)
+
+        // [diag] one line (not in the X360 binary): the palette the paint shop will read.
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[GameStateModule::Prepare] stage 12 -- \"CarColours\" bound: "
+                << (mpPlayerCarColours.HasMemoryResource() ? 1 : 0) << " (paint-shop palette 2 colours "
+                << (mpPlayerCarColours.HasMemoryResource()
+                        ? mpPlayerCarColours->maPalettes[2].miNumColours : -1) << ")\n";
+        }
+        mePrepareStage = E_PREPARESTAGE_MODEMANAGER;
+    }
         // fall through
     case E_PREPARESTAGE_MODEMANAGER:
     case E_PREPARESTAGE_TAKEDOWNMANAGER:
@@ -773,16 +823,20 @@ bool GameStateModule::Prepare(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         // / miTotalPaintShops / miTotalCarParks. Without it every one of those totals stays 0 and
         // HandleDriveThru's "find this region's entry" scan can never match, so the whole drive-thru
         // chain is inert even with the call sites restored.
-        // ⚠️ [FLAG PC bring-up] THE PALETTE IS NULL ON THIS BUILD. Stage 11/12
-        // (E_PREPARESTAGE_REQUEST_PLAYERCARCOLOURS) still logs "acquire \"CarColours\" (pool 5) +
-        // bind [deferred]" and never binds this+284400, so a DEFAULT-CONSTRUCTED (null) ResourcePtr
-        // is passed -- which is the honest value, not a stand-in. Consequence, stated rather than
-        // hidden: ProcessDriveThru's PAINT_SHOP arm is the ONE arm that dereferences it
-        // (mpPlayerCarColours->maPalettes[2].miNumColours), so driving through a paint shop will
-        // fire the ResourcePtr assert. Gas station and body shop do not touch it.
-        // DELETE-WHEN stage 11/12 binds the CarColours resource for real.
+        // ✅ [FX-FLOW 2026-09-24] THE PALETTE IS BOUND NOW (stage 11/12 above is real), and the
+        // FLAG that stood here is paid: a DEFAULT-CONSTRUCTED (null) ResourcePtr used to be
+        // passed, so ProcessDriveThru's PAINT_SHOP arm -- the one arm that dereferences it
+        // (maPalettes[2].miNumColours) -- asserted "Can not instance resource pointer" and then
+        // faulted reading +0x20 of null on every paint shop.
+        // The console passes the member BY VALUE through ResourcePtr<GlobalColourPalette>'s copy
+        // constructor @0x82368FC8 (`addi r4,src,0x14` -> zero-init + self-link + CreateFromHandle
+        // on the source's bound handle, @0x8239EC6C..0x8239EC74). That copy constructor is
+        // declared-only in CgsResourcePtr.h, so the temporary is built through the handle
+        // constructor from GetResourceHandle() -- the same {+0x14,+0x18} pair, the same stores,
+        // the same CreateFromHandle.
         mDriveThruManager.Prepare(mTriggerQueryManager.GetTriggerData(),
-                                  CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>());
+                                  CgsResource::ResourcePtr<BrnWorld::GlobalColourPalette>(
+                                      mpPlayerCarColours.GetResourceHandle()));
 
         // [deferred] the OnlineCarSelectManager leg (its TU is unmounted).
         mCarSelectManager.Prepare(mpVehicleList, mpWheelList);
