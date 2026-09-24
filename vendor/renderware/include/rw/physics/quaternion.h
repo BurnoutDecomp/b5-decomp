@@ -9,16 +9,23 @@
 // `xrefs_from` of both jacobian builders (0x82BC42E8 JointJacobian::Build, which calls it
 // four times, and 0x82BC5590 DriveJacobian::Build, which calls it once).
 //
-// ⚠️ THE FUNCTION IS AN EXPORT HOLE -- 0x82BC3EC0 has no JSON in the export set, so its own
-// listing was never available. The body is recovered from the copy the compiler INLINED into
-// RigidBody::DynamicUpdate (X360 0x82BC2C58..0x82BC2D38) and cross-read against the two
-// out-of-line witnesses that do exist, BurnoutPR 0x59972D0 and Xbox One 0x1409B5BE0.
-// See Quaternion.cpp for the per-term derivation.
+// ⚠️ THE FUNCTION IS AN EXPORT HOLE -- 0x82BC3EC0 has no JSON in the export set. Its own 116
+// instructions (.pdata 0x821E8688: start 0x82BC3EC0, info 0x40007402 = 0x74 instructions,
+// ending in the `blr` at 0x82BC408C) are read straight from the image with
+// tools/re/ppcdis.py. See Quaternion.cpp for the per-instruction transcription.
 //
-// SIGNATURE, recovered at the call sites: r3 is the destination matrix and r4 is the
-// quaternion -- DriveJacobian::Build @0x82BC56DC passes `r4 = var_200 = qB'`. The quaternion
-// is NORMALISED IN PLACE (the inlined copy writes all four components back through the rigid
-// body at `stvx128 v12,r0,r3`), so it is taken by pointer, not by const reference.
+// SIGNATURE, from the words and the five call sites: r3 is the destination matrix and r4 is
+// the quaternion. r4 is only READ (`lfs` 0/4/8/0xC) and is repurposed as a stack pointer
+// (`addi r4,r1,-0x5C` @0x82BC3F3C) before the body's first store; the only stores that leave
+// the frame are the three matrix rows (`stvx128` r3+0x10 / r3 / r3+0x20). So the quaternion
+// is taken CONST: this function neither normalises it nor writes it back.
+//
+// CALLERS (full-image scan of every I-form branch, 2026-09-24): exactly five `bl` --
+// JointJacobian::Build 0x82BC44B0 / 0x82BC44BC / 0x82BC44C8 / 0x82BC44D4 and
+// DriveJacobian::Build 0x82BC56DC. No address constant builds 0x82BC3EC0 and the only other
+// occurrence of the word is its .pdata entry. rw::physics::RigidBody::DynamicUpdate does NOT
+// call it: the console inlines rwmath's Normalize(Quaternion) + Matrix33FromQuaternion there
+// (RigidBody.cpp), a different routine.
 // =====================================================================================
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::{Quaternion, Matrix33}
@@ -31,10 +38,10 @@ namespace physics
 class Quaternion
 {
 public:
-    // @ 0x82BC3EC0 -- normalise lpQuat in place, then write the body->world rotation basis
-    // (right / up / at) into the three rows of lpDst.
+    // @ 0x82BC3EC0 -- write the rotation basis of the (assumed unit) quaternion *lpQuat into the
+    // three rows of *lpDst: right / up / at, each row's w lane 0. *lpQuat is only read.
     static void UnitQuaternionToMatrix(rw::math::vpu::Matrix33* lpDst,
-                                       rw::math::vpu::Quaternion* lpQuat);
+                                       const rw::math::vpu::Quaternion* lpQuat);
 };
 
 } // namespace physics
