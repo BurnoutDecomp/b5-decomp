@@ -10,9 +10,15 @@
 #include "GameSource/Sound/Collision/BrnCollisionFrameInformation.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
-// The InputCollision constructors (DWARF BrnCollisionStateManager.h:405/414) take these by
+// The InputCollision constructors (DWARF BrnCollisionStateManager.h:405..466) take these by
 // reference only; their bodies live in BrnCollisionStateManager.cpp, which includes the full types.
-namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; } }
+namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; struct PhysicalCarPartContact; } }
+namespace BrnPhysics { namespace Deformation {
+    enum EBodyParts : s32;
+    struct BrokenJointNotificationEvent;
+    struct DetachedPartNotificationEvent;
+    struct GlassSmashOrCrackEvent;
+} }
 namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
 
 // =============================================================================
@@ -72,6 +78,7 @@ typedef BrnPhysics::ContactSpy::PropContact     InputPropSpy;
 typedef BrnSound::Module::Io::RootInputBuffer   LogicInputBuffer;
 
 struct CameraInfo;               // BrnCollisionStateManager.h:120
+struct GenericEntity;            // BrnCollisionStateManager.h:102
 class  CollisionStateManager;    // BrnCollisionStateManager.h:563
 
 // BrnCollisionStateManager.h:280. Per-scrape descriptor.
@@ -156,6 +163,37 @@ struct InputCollision
     InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                    const InputPropSpy& lSpy, const LogicInputBuffer& lInput,
                    f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:433 -- a contact of a physical car part (a detached body
+    // part or wheel): ARTIST sub_826BDCB8, reached from ImportContactSpies<PhysicalCarPartContact>
+    // 0x826DD388 on ContactSpyData's car-part queue.
+    InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                   const BrnPhysics::ContactSpy::PhysicalCarPartContact& lContact,
+                   const LogicInputBuffer& lInput, f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:442 -- a joint breaking: ARTIST sub_826BE108, reached from
+    // ImportContactSpies<BrokenJointNotificationEvent> 0x826DD258 on the deformation output.
+    InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                   const BrnPhysics::Deformation::BrokenJointNotificationEvent& lEvent,
+                   const LogicInputBuffer& lInput, f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:451 -- a part coming off: ARTIST sub_826BE250, reached from
+    // ImportContactSpies<DetachedPartNotificationEvent> 0x826DD2F0 on the deformation output.
+    InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                   const BrnPhysics::Deformation::DetachedPartNotificationEvent& lEvent,
+                   const LogicInputBuffer& lInput, f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:460 -- a hinged part opening, closing or swinging: ARTIST
+    // sub_826BDF60, built by CollisionStateManager::UpdateHingingBodyParts.
+    InputCollision(CollisionStateManager& lMgr, BrnPhysics::Deformation::EBodyParts leBodyPart,
+                   EntityId lEntityId, const GenericEntity& lEntity,
+                   AttribSys::Enums::eAction::eAction leAction, f32 lfVelocity);
+
+    // DWARF BrnCollisionStateManager.h:466 -- a glass pane cracking or smashing: ARTIST
+    // sub_826BE398, built by CollisionStateManager::UpdateGlass.
+    InputCollision(CollisionStateManager& lMgr,
+                   const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lEvent,
+                   const GenericEntity& lEntity);
 
     // DWARF BrnCollisionStateManager.h:474: exchange a contact's two entities and its two
     // contact points (the regular builder's race-car ordering, 0x826D391C..0x826D3944).

@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Collision/BrnCollisionStateManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // CgsSceneManager::EntityId::SetPartIndex (glass / hinge part ids)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // Prepare: the "Collisions" CPU monitor
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
@@ -14,6 +15,7 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/World/BrnEntityTypes.h"   // BrnWorld::E_ENTITYTYPE_* (the car-part contact builder)
 #include "GameSource/Sound/Vehicles/Traffic/BrnTrafficStateManager.h"   // Traffic::TrafficStateManager::TrafficClassToSize
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"
 
@@ -355,18 +357,39 @@ void CollisionStateManager::ResourcesAreReady()
                 << " prop="
                 << static_cast<s32>(maBinLoopupCache[InputCollision::E_PROP].GetEntryCount())
                 << "/" << static_cast<s32>(mPropsCrashBinList.mNumCrashBins()) << "\n";
-            // Every entry's material pair, once: what a collision's two materials must meet.
+            // Every entry's material pair, once: what a collision's two materials must meet -- and,
+            // for the regular bins, the other gates SelectCollisionBin walks (the action and
+            // orientation masks, the distance and impulse bands).
             for (u32 luPipeline = 0; luPipeline < InputCollision::E_MAX_PIPELINES; ++luPipeline)
             {
                 const BinLookupCache& lrCache = maBinLoopupCache[luPipeline];
                 for (u32 luEntry = 0; luEntry < lrCache.GetEntryCount(); ++luEntry)
                 {
-                    char lacLine[128];
-                    std::snprintf(lacLine, sizeof(lacLine),
-                                  "[collision-audio] cache entry pipeline=%u %u matA=0x%016llx matB=0x%016llx\n",
-                                  luPipeline, luEntry,
-                                  static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialA),
-                                  static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialB));
+                    char lacLine[256];
+                    if (luPipeline == InputCollision::E_REGULAR)
+                    {
+                        const Attrib::Gen::crashbin lBin(mCrashBinList.GetCrashBinCollectionKey(luEntry), nullptr);
+                        std::snprintf(lacLine, sizeof(lacLine),
+                                      "[collision-audio] cache entry pipeline=%u %u matA=0x%016llx matB=0x%016llx"
+                                      " action=%u orient=%u distance=%g..%g impulse=%g..%g\n",
+                                      luPipeline, luEntry,
+                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialA),
+                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialB),
+                                      lBin.IsValid() ? static_cast<u32>(lBin.mAction()) : 0u,
+                                      lBin.IsValid() ? static_cast<u32>(lBin.mOrientation()) : 0u,
+                                      lBin.IsValid() ? static_cast<double>(lBin.DistanceFactor_Min()) : 0.0,
+                                      lBin.IsValid() ? static_cast<double>(lBin.DistanceFactor_Max()) : 0.0,
+                                      lBin.IsValid() ? static_cast<double>(lBin.PhysicsImpulseNormalization_MIN()) : 0.0,
+                                      lBin.IsValid() ? static_cast<double>(lBin.PhysicsImpulseNormalization_MAX()) : 0.0);
+                    }
+                    else
+                    {
+                        std::snprintf(lacLine, sizeof(lacLine),
+                                      "[collision-audio] cache entry pipeline=%u %u matA=0x%016llx matB=0x%016llx\n",
+                                      luPipeline, luEntry,
+                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialA),
+                                      static_cast<unsigned long long>(lrCache.GetEntry(luEntry).mx64MaterialB));
+                    }
                     *CgsDev::Log::gpDebugPrint << lacLine;
                 }
             }
@@ -495,21 +518,44 @@ int CollisionStateManager::PlayCollision(OutputCollision* lpCollision)
     }
 
     if (lpCollision->miSampleID < 0)
+    {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a bin was chosen but its
+        // sample pick came back empty (the state stays free).
+        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 suNoSamplePrintCount = 0;
+            if (suNoSamplePrintCount++ < 32u)
+            {
+                char lacLine[160];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] no sample pipeline=%d bin=%d size=%d action=%d mat=%llx/%llx\n",
+                              static_cast<s32>(lpCollision->mePipeline), static_cast<s32>(lpCollision->miBinIndex),
+                              static_cast<s32>(lpCollision->meSize), static_cast<s32>(lpCollision->meAction),
+                              static_cast<unsigned long long>(lpCollision->maMaterial[0]),
+                              static_cast<unsigned long long>(lpCollision->maMaterial[1]));
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
         return 1;
+    }
 
     if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
     {
         static u32 suPrintCount = 0;
-        if (suPrintCount++ < 32u)
+        if (suPrintCount++ < 64u)
         {
-            *CgsDev::Log::gpDebugPrint
-                << "[collision-audio] play pipeline="
-                << static_cast<s32>(lpCollision->mePipeline)
-                << " bin=" << static_cast<s32>(lpCollision->miBinIndex)
-                << " size=" << static_cast<s32>(lpCollision->meSize)
-                << " sample=" << lpCollision->miSampleID
-                << " orient=" << static_cast<s32>(lpCollision->meOrientation)
-                << " impulse=" << lpCollision->mNormalizedImpulse.x << "\n";
+            char lacLine[224];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[collision-audio] play pipeline=%d bin=%d size=%d sample=%d orient=%d impulse=%g "
+                          "action=%d mat=%llx/%llx\n",
+                          static_cast<s32>(lpCollision->mePipeline), static_cast<s32>(lpCollision->miBinIndex),
+                          static_cast<s32>(lpCollision->meSize), lpCollision->miSampleID,
+                          static_cast<s32>(lpCollision->meOrientation),
+                          static_cast<double>(lpCollision->mNormalizedImpulse.x),
+                          static_cast<s32>(lpCollision->meAction),
+                          static_cast<unsigned long long>(lpCollision->maMaterial[0]),
+                          static_cast<unsigned long long>(lpCollision->maMaterial[1]));
+            *CgsDev::Log::gpDebugPrint << lacLine;
         }
     }
 
@@ -1407,6 +1453,510 @@ void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformatio
     }
 }
 
+// =================================================================================================
+// THE DEFORMATION LEGS (FX-CRASHSND2 item 3). What the deformation system and the car-part contact
+// spies report -- a glass pane smashing, a hinged door or bonnet opening / closing / swinging, a joint
+// breaking, a part coming off, a detached part or wheel hitting something -- becomes an InputCollision
+// of the regular pipeline (UpdateResolver 0x826F940C..0x826F94B0). Before this none of it reached the
+// collision sound: the sound input carried only an opaque 4-byte copy of the deformation output.
+// =================================================================================================
+
+// KF_MAX_IMPULSE (DWARF cpp:62) -- unk_82FFBF60 = splat(3.0f), written by the CRT thunk 0x82C631E0 from
+// 0x82004270 (0x40400000): the impulse lane of a glass, broken-joint and detached-part collision.
+// Named by the CRT order of the four VecFloats cpp:60..63 (0x82C63190 2.0, 0x82C631B8 10.0,
+// 0x82C631E0 3.0, 0x82C63208 0.1).
+const VecFloat KF_MAX_IMPULSE = { 3.0f, 3.0f, 3.0f, 3.0f };
+
+// KF_HINGING_VELOCITY_MIN_TOLERANCE (DWARF cpp:66) -- flt_82F2CEF0 = 6.0f; KF_HINGING_VELOCITY_DELTA_
+// TOLERANCE (cpp:67) -- flt_82F2CEF4 = 0.1f (.data, in declaration order ahead of KF_FASTEST_COLLISION
+// 0x82F2CEF8 and KF_BIGGEST_THING_MASS 0x82F2CEFC): a swinging part sounds when its hinge velocity
+// changed by more than the delta while one of the two velocities exceeds the minimum.
+f32 KF_HINGING_VELOCITY_MIN_TOLERANCE = 6.0f;
+f32 KF_HINGING_VELOCITY_DELTA_TOLERANCE = 0.1f;
+
+namespace
+{
+// UpdateHingingBodyParts's open / closed test: an orientation within 0.08 (flt_82F2FD30 = 0x3DA3D70A)
+// of 1 is open, of 0 closed.
+const f32 KF_HINGE_OPEN_CLOSED_EPSILON = 0.08f;
+
+// The regular builders' camera lanes (maParameter[1] = the distance squared to the camera, [2] = how
+// much the camera faces the point). The glass and hinge builders dot the RAW offset with the camera's
+// At row (0x826BE52C..0x826BE540 / 0x826BDF60's tail -- no normalisation); the contact-spy builders
+// normalise it first (the rsqrte refinement, 0x826BE204..0x826BE240).
+VecFloat CameraDistanceSquared(const Vector3& lrPosition, const CameraInfo& lrCamera)
+{
+    const Vector3 lOffset = { lrPosition.x - lrCamera.mTransform.Pos().x,
+                              lrPosition.y - lrCamera.mTransform.Pos().y,
+                              lrPosition.z - lrCamera.mTransform.Pos().z, 0.0f };
+    return Splat(Dot3(lOffset, lOffset));
+}
+
+VecFloat CameraFacingRaw(const Vector3& lrPosition, const CameraInfo& lrCamera)
+{
+    const Vector3 lOffset = { lrPosition.x - lrCamera.mTransform.Pos().x,
+                              lrPosition.y - lrCamera.mTransform.Pos().y,
+                              lrPosition.z - lrCamera.mTransform.Pos().z, 0.0f };
+    return Splat(Dot3(lOffset, lrCamera.mTransform.At()));
+}
+
+VecFloat CameraFacingNormalised(const Vector3& lrPosition, const CameraInfo& lrCamera)
+{
+    const Vector3 lOffset = { lrPosition.x - lrCamera.mTransform.Pos().x,
+                              lrPosition.y - lrCamera.mTransform.Pos().y,
+                              lrPosition.z - lrCamera.mTransform.Pos().z, 0.0f };
+    const f32 lfInverseDistance = 1.0f / std::sqrt(Dot3(lOffset, lOffset));
+    const Vector3 lDirection = { lOffset.x * lfInverseDistance, lOffset.y * lfInverseDistance,
+                                 lOffset.z * lfInverseDistance, 0.0f };
+    return Splat(Dot3(lDirection, lrCamera.mTransform.At()));
+}
+
+// The sound input the builders read the player index from: the collision manager's module's
+// (`lwz 0x2C(mgr) ; lwz 0x4C94` -- SoundLogicModule::GetBrnInputStructure, asserted h:432).
+const LogicInputBuffer& ModuleInput(const CollisionStateManager& lrMgr)
+{
+    return *static_cast<BrnSound::Module::SoundLogicModule*>(lrMgr.GetLogicModule())->GetBrnInputStructure();
+}
+}
+
+// ---------------------------------------------------------------------------
+// MapBodyPartEnumToMateral(EBodyParts)  @ 0x82688CF8  (DWARF cpp:3677, the console's spelling)
+//
+// The switch table of the image, by EBodyParts value (names: DWARF SharedClasses/Physics/
+// BrnPhysicsPartTypes.h; this tree's EBodyParts carries no enumerators):
+// ---------------------------------------------------------------------------
+EeMaterialType MapBodyPartEnumToMateral(BrnPhysics::Deformation::EBodyParts leBodyPart)
+{
+    using namespace AttribSys::Enums::eMaterialType;
+    switch (static_cast<s32>(leBodyPart))
+    {
+    case 0:     // eBody_Roof_PLAYERONLY
+    case 3:     // eBody_Bonnet
+    case 4:     // eBody_Boot
+    case 8:     // eBody_DoorLeft
+    case 10:    // eBody_DoorRight
+    case 12:    // eBody_DoorRearLeft
+    case 13:    // eBody_DoorRearRight
+    case 14:    // eBody_DoorBackLeft
+    case 15:    // eBody_DoorBackRight
+        return BodyPartLarge;
+    case 1:     // eBody_BumperFront
+    case 2:     // eBody_BumperRear
+    case 5:     // eBody_Spoiler
+    case 6:     // eBody_GrillFront
+    case 7:     // eBody_GrillRear
+    case 24:    // eBody_SkirtLeft
+    case 25:    // eBody_SkirtRight
+    case 26:    // eBody_WingFrontLeft
+    case 27:    // eBody_WingFrontRight
+    case 28:    // eBody_WingRearRight
+    case 29:    // eBody_WingRearLeft
+        return BodyPartSmall;
+    case 9:     // eBody_DoorLeftMirror
+    case 11:    // eBody_DoorRightMirror
+    case 103:   // eInterior_InteriorMirror
+        return Mirrors;
+    case 16:    // eBody_GlassDoorFrontLeft
+    case 17:    // eBody_GlassDoorFrontRight
+    case 18:    // eBody_GlassDoorRearLeft
+    case 19:    // eBody_GlassDoorRearRight
+        return GlassSmall;
+    case 20:    // eBody_GlassWindscreenFront
+    case 21:    // eBody_GlassWindscreenRear
+    case 22:    // eBody_GlassPanelLeft_bus
+    case 23:    // eBody_GlassPanelRight_bus
+        return GlassLarge;
+    case 38:    // eBody_NumberPlateRear
+    case 39:    // eBody_NumberPlateFront
+        return NumberPlate;
+    case 40:    // eLights_FrontLeft
+    case 41:    // eLights_FrontRight
+    case 42:    // eLights_RearLeft
+    case 43:    // eLights_RearRight
+    case 44:    // eLights_SpecialSiren
+    case 121:   // eVariation_Spotlights1
+    case 122:   // eVariation_SpotLights2
+        return Lights;
+    case 45:    // eChassis_FrontEnd
+    case 46:    // eChassis_PassengerCell
+    case 47:    // eChassis_RearEnd
+        return Body;
+    case 48:    // eChassis_ArmFrontRight
+    case 49:    // eChassis_ArmFrontLeft
+    case 50:    // eChassis_ArmRearRight
+    case 51:    // eChassis_ArmRearLeft
+    case 52:    // eChassis_ArmAdditionalR_Truck
+    case 53:    // eChassis_ArmAdditionalL_Truck
+        return Suspension;
+    case 84:    // eAncillaries_ExhaustSystem1
+    case 85:    // eAncillaries_ExhaustSystem2
+        return Exhaust;
+    case 87:    // eWheels_FrontLeft
+    case 88:    // eWheels_FrontRight
+    case 89:    // eWheels_RearLeft
+    case 90:    // eWheels_RearRight
+    case 91:    // eWHEEL
+    case 94:    // eWheels_AdditionalRight_Truck
+    case 95:    // eWheels_AdditionalLeft_Truck
+    case 118:   // eVariation_SpareWheel
+    case 132:   // eWHEEL_BLURRED
+        return Wheels;
+    case 96:    // eInterior_SeatFrontLeft
+    case 97:    // eInterior_SeatFrontRight
+    case 98:    // eInterior_SeatRearLeft
+    case 99:    // eInterior_SeatRearRight
+    case 100:   // eInterior_SeatRearBench
+    case 101:   // eInterior_SeatAdditional_bus
+        return Seats;
+    case 106:   // eInterior_Extinguisher
+        return Extinguisher;
+    case 107:   // eVariation_RoofRacks
+    case 116:   // eVariation_Luggage1
+    case 117:   // eVariation_Luggage2
+        return RoofRacks;
+    case 120:   // eVariation_Ladder
+        return Ladder;
+    case 127:   // eVariation_Crane
+        return Crane;
+    case 128:   // eVariation_Mixer
+        return Mixer;
+    case 129:   // eVariation_Tipper
+        return Tipper;
+    default:
+        return Nothing;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// InputCollision(const CameraInfo&, CollisionStateManager&, const PhysicalCarPartContact&,
+//                const LogicInputBuffer&, f32, f32)   sub_826BDCB8 (DWARF h:433)
+//
+//   0x826BDCE8..0x826BDD30  scrape invalid, regular pipeline, not culled, no priority, action
+//                           Collision; mPosition = the point on A; maEntityID = (A, B)
+//   0x826BDD34..0x826BDD44  meOrientation from MapPositionToOrientation (A's side, the result not
+//                           tested)
+//   0x826BDD48..0x826BDD64  a HINGED part's contact is culled and nothing else is set
+//   0x826BDD68..0x826BDDCC  one side must be a deformable part or detached wheel (entity types
+//                           6 / 7 / 9 / 10, asserted cpp:1320)
+//   0x826BDDD0..0x826BDE80  maMaterial[0] = `extsw` the part type's material; maMaterial[1] =
+//                           `extsw` the OTHER side's MapEntityIdToMaterial (B when A is the part,
+//                           else A), with the vehicle interface's player index
+//   0x826BDE84..            the impulse lane from the normal stress and dt, the camera lanes
+//                           normalised, exactly as the regular builder
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                               const BrnPhysics::ContactSpy::PhysicalCarPartContact& lContact,
+                               const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 lfTimeStep)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Collision)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lContact.mPointOnA;
+    maEntityID[0] = lContact.mEntityIdA;
+    maEntityID[1] = lContact.mEntityIdB;
+    MapPositionToOrientation(lMgr.GetFrameInformation().mPlayerTransform, lContact.mPointOnA,
+                             lContact.mNormal, lContact.mEntityIdA, lContact.mEntityIdB, lMgr,
+                             meOrientation);
+    if (lContact.mbIsHinged)
+    {
+        mbCull = true;
+        return;
+    }
+
+    const u32 luTypeA = GetEntityOwner(lContact.mEntityIdA);
+    const u32 luTypeB = GetEntityOwner(lContact.mEntityIdB);
+    CGS_ASSERT((luTypeA == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART ||
+                luTypeB == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART) ||
+               (luTypeA == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART ||
+                luTypeB == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART) ||
+               (luTypeA == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL ||
+                luTypeB == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL) ||
+               (luTypeA == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL ||
+                luTypeB == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL),
+               "(leIdA == E_ENTITYTYPE_RACECAR_DEFORMABLE_PART || leIdB == E_ENTITYTYPE_RACECAR_DEFORMABLE_PART) || "
+               "(leIdA == E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART || leIdB == E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART) || "
+               "(leIdA == E_ENTITYTYPE_DETACHED_RACECAR_WHEEL || leIdB == E_ENTITYTYPE_DETACHED_RACECAR_WHEEL) || "
+               "(leIdA == E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL || leIdB == E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL)");
+
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapBodyPartEnumToMateral(
+        static_cast<BrnPhysics::Deformation::EBodyParts>(lContact.meType))));
+    const bool lbPartIsA = luTypeA == BrnWorld::E_ENTITYTYPE_RACECAR_DEFORMABLE_PART ||
+                           luTypeA == BrnWorld::E_ENTITYTYPE_TRAFFIC_DEFORMABLE_PART ||
+                           luTypeA == BrnWorld::E_ENTITYTYPE_DETACHED_RACECAR_WHEEL ||
+                           luTypeA == BrnWorld::E_ENTITYTYPE_DETACHED_TRAFFIC_WHEEL;
+    const EntityId lOther = lbPartIsA ? lContact.mEntityIdB : lContact.mEntityIdA;
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lOther, lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
+
+    maParameter[0] = Splat(NormalisedImpulse(lContact.mNormalStress, lfTimeStep));
+    maParameter[1] = CameraDistanceSquared(mPosition, lCamera);
+    maParameter[2] = CameraFacingNormalised(mPosition, lCamera);
+}
+
+// ---------------------------------------------------------------------------
+// InputCollision(const CameraInfo&, CollisionStateManager&, const BrokenJointNotificationEvent&,
+//                const LogicInputBuffer&, f32, f32)   sub_826BE108 (DWARF h:442)
+// InputCollision(... const DetachedPartNotificationEvent& ...)   sub_826BE250 (DWARF h:451)
+//
+// The two are instruction-for-instruction the same (0x826BE108 / 0x826BE250): scrape invalid,
+// action Detach, Front, the regular pipeline, not culled, no priority; mPosition = the event's point;
+// maEntityID = (the vehicle, 0); maMaterial[0] = `extsw` MapEntityIdToMaterial(the vehicle, the
+// module input's player index -- RootInputBuffer::GetPlayerActiveRaceCarIndex @0x82694F28, input);
+// maMaterial[1] = `extsw` the part's material (NO 0x3000000000 bit -- Hex-Rays prints one, the
+// instructions are `extsw ; std` at 0x826BE1C0 / 0x826BE1DC); maParameter[0] = KF_MAX_IMPULSE; the
+// camera lanes normalised. The stamp and step are not read.
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                               const BrnPhysics::Deformation::BrokenJointNotificationEvent& lEvent,
+                               const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 /*lfTimeStep*/)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Detach)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lEvent.mPointOnA;
+    maEntityID[1].muValue = 0;
+    maEntityID[0] = lEvent.mVehicleId;
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lEvent.mVehicleId, ModuleInput(lMgr).GetPlayerActiveRaceCarIndex(), lInput)));
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapBodyPartEnumToMateral(lEvent.meType)));
+    maParameter[0] = KF_MAX_IMPULSE;
+    maParameter[1] = CameraDistanceSquared(mPosition, lCamera);
+    maParameter[2] = CameraFacingNormalised(mPosition, lCamera);
+}
+
+InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                               const BrnPhysics::Deformation::DetachedPartNotificationEvent& lEvent,
+                               const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 /*lfTimeStep*/)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Detach)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lEvent.mPointOnA;
+    maEntityID[1].muValue = 0;
+    maEntityID[0] = lEvent.mVehicleId;
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lEvent.mVehicleId, ModuleInput(lMgr).GetPlayerActiveRaceCarIndex(), lInput)));
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapBodyPartEnumToMateral(lEvent.meType)));
+    maParameter[0] = KF_MAX_IMPULSE;
+    maParameter[1] = CameraDistanceSquared(mPosition, lCamera);
+    maParameter[2] = CameraFacingNormalised(mPosition, lCamera);
+}
+
+// ---------------------------------------------------------------------------
+// InputCollision(CollisionStateManager&, EBodyParts, EntityId, const GenericEntity&, EeAction, f32)
+//   sub_826BDF60 (DWARF h:460)
+//
+// A hinged part: scrape invalid, no priority, the given action (HingeOpen / HingeClose / Hinging),
+// Front, the regular pipeline, not culled; mPosition = the vehicle's position; maMaterial[0] =
+// `extsw` the part's material, maMaterial[1] = `extsw` MapEntityIdToMaterial(the vehicle, the module
+// input's player index, the module input); maEntityID[0] = the vehicle with the part as its part
+// index (CgsSceneManager::EntityId::SetPartIndex, asserted < 1 << 10), maEntityID[1] = the vehicle;
+// maParameter[0] = splat |velocity|; the camera lanes from the manager's camera, NOT normalised.
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(CollisionStateManager& lMgr, BrnPhysics::Deformation::EBodyParts leBodyPart,
+                               EntityId lEntityId, const GenericEntity& lEntity,
+                               AttribSys::Enums::eAction::eAction leAction, f32 lfVelocity)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(leAction)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lEntity.mPosition;
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapBodyPartEnumToMateral(leBodyPart)));
+    const LogicInputBuffer& lrInput = ModuleInput(lMgr);
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lEntityId, lrInput.GetPlayerActiveRaceCarIndex(), lrInput)));
+    CgsSceneManager::EntityId lPartId(lEntityId.muValue);
+    lPartId.SetPartIndex(static_cast<u32>(leBodyPart));
+    maEntityID[0].muValue = lPartId;
+    maEntityID[1] = lEntityId;
+    maParameter[0] = Splat(std::fabs(lfVelocity));
+    maParameter[1] = CameraDistanceSquared(mPosition, lMgr.mCameraInfo);
+    maParameter[2] = CameraFacingRaw(mPosition, lMgr.mCameraInfo);
+}
+
+// ---------------------------------------------------------------------------
+// InputCollision(CollisionStateManager&, const GlassSmashOrCrackEvent&, const GenericEntity&)
+//   sub_826BE398 (DWARF h:466)
+//
+// A glass pane: scrape invalid, mPosition = the vehicle's position, the regular pipeline, no priority,
+// action Collision, Front, not culled; meNewState asserted < NUM_GLASS_STATES (cpp:1525);
+// maMaterial[0] = `extsw` MapEntityIdToMaterial(the vehicle, the module input's player index),
+// maMaterial[1] = `extsw` the pane's material; maEntityID[0] = the vehicle with meNewState (the
+// event's +0xA8, `lwz r28, 0xA8(r30)` -- the new state, not the pane) as its part index,
+// maEntityID[1] = the vehicle; maParameter[0] = KF_MAX_IMPULSE; the camera lanes from the manager's
+// camera, not normalised. Only a SMASH that asked for its effect sounds -- anything else is culled
+// ("Glass: Don't play anything but smash.") -- and never an AI car's ("Glass: AI cars don't
+// play.", `cmpldi 4`).
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(CollisionStateManager& lMgr,
+                               const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lEvent,
+                               const GenericEntity& lEntity)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Collision)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lEntity.mPosition;
+    CGS_ASSERT(lEvent.meNewState < BrnPhysics::Deformation::NUM_GLASS_STATES,
+               "lEvent.meNewState < BrnPhysics::Deformation::NUM_GLASS_STATES");
+    const LogicInputBuffer& lrInput = ModuleInput(lMgr);
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lEvent.mVehicleEntityId, lrInput.GetPlayerActiveRaceCarIndex(), lrInput)));
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapBodyPartEnumToMateral(lEvent.meGlassPart)));
+    CgsSceneManager::EntityId lPartId(lEvent.mVehicleEntityId.muValue);
+    lPartId.SetPartIndex(static_cast<u32>(lEvent.meNewState));
+    maEntityID[0].muValue = lPartId;
+    maEntityID[1] = lEvent.mVehicleEntityId;
+    maParameter[0] = KF_MAX_IMPULSE;
+    maParameter[1] = CameraDistanceSquared(lEntity.mPosition, lMgr.mCameraInfo);
+    maParameter[2] = CameraFacingRaw(lEntity.mPosition, lMgr.mCameraInfo);
+    if (lEvent.meNewState != BrnPhysics::Deformation::E_GLASS_STATE_SMASHED || lEvent.mbDontPlaySmashEffect)
+        mbCull = true;
+    if (maMaterial[0] == static_cast<u64>(AttribSys::Enums::eMaterialType::AiCar))
+        mbCull = true;
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::UpdateGlass(const DeformationOutputInterface&)  @ 0x826D4850  (DWARF cpp:3458)
+//
+// Every glass event of the deformation output (+0x1AF0, asserted cpp:3569) whose vehicle FindEntity
+// knows -- looked up only when it differs from the last vehicle seen (`cmpw` with the cached id,
+// -1 at first; one GenericEntity local for the whole walk) -- becomes a glass InputCollision.
+// ---------------------------------------------------------------------------
+void CollisionStateManager::UpdateGlass(const BrnPhysics::Deformation::DeformationOutputInterface& lrDeformation)
+{
+    const BrnPhysics::Deformation::DeformationOutputInterface::GlassSmashOrCrackQueue* lpQueue =
+        &lrDeformation.mGlassSmashOrCrackQueue;
+    CGS_ASSERT(lpQueue != nullptr, "lpQueue");
+    const u32 lu32Count = static_cast<u32>(lpQueue->GetLength());
+    u32 lu32LastVehicle = 0xFFFFFFFFu;
+    GenericEntity lEntity;
+    for (u32 lu32Index = 0; lu32Index < lu32Count; ++lu32Index)
+    {
+        const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lrEvent =
+            lpQueue->GetEvent(static_cast<s32>(lu32Index));
+        if (lu32LastVehicle == lrEvent.mVehicleEntityId.muValue ||
+            FindEntity(lrEvent.mVehicleEntityId, lEntity))
+        {
+            lu32LastVehicle = lrEvent.mVehicleEntityId.muValue;
+            InputCollision lCollision(*this, lrEvent, lEntity);
+            AddInputCollision(lCollision);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::UpdateHingingBodyParts(const JointedPartStateQueue*)  @ 0x826D44D0
+//   (DWARF cpp:3078)
+//
+// The deformation output's hinged parts (+0x74, asserted cpp:3187), against mHingeCache (aged first
+// with the manager's clock). Per event: the orientation clamped to [0, 1] (two fsel -- a NaN gives 1)
+// is OPEN within KF_HINGE_OPEN_CLOSED_EPSILON of 1 and CLOSED within it of 0. A part the cache does
+// not hold is inserted; one it holds, whose vehicle FindEntity knows (looked up only on a new vehicle;
+// one GenericEntity local), sounds:
+//   it just opened (was not open)   -> HingeOpen  with the new velocity
+//   else it just closed             -> HingeClose with the new velocity
+//   else |new - old velocity| > KF_HINGING_VELOCITY_DELTA_TOLERANCE and |new| or |old| >
+//        KF_HINGING_VELOCITY_MIN_TOLERANCE   -> Hinging with the larger magnitude (fsel)
+// and in every case (FindEntity failing included) the node takes the event, the two flags and the
+// clock (asserted valid, cpp:3290).
+// ---------------------------------------------------------------------------
+void CollisionStateManager::UpdateHingingBodyParts(
+    const BrnPhysics::Deformation::DeformationOutputInterface::JointedPartStateQueue* lpQueue)
+{
+    CGS_ASSERT(lpQueue != nullptr, "lpQueue");
+    mHingeCache.Update(mfCurrentTime);
+
+    const u32 lu32Count = static_cast<u32>(lpQueue->GetLength());
+    u32 lu32LastVehicle = 0xFFFFFFFFu;
+    GenericEntity lEntity;
+    for (u32 lu32Index = 0; lu32Index < lu32Count; ++lu32Index)
+    {
+        const BrnPhysics::Deformation::JointedPartStateEvent& lrEvent =
+            lpQueue->GetEvent(static_cast<s32>(lu32Index));
+
+        f32 lfOrientation = lrEvent.mfCurrentOrientation;
+        lfOrientation = (-lfOrientation >= 0.0f) ? 0.0f : lfOrientation;
+        lfOrientation = (1.0f - lfOrientation >= 0.0f) ? lfOrientation : 1.0f;
+        const bool lbClosed = std::fabs(lfOrientation) < KF_HINGE_OPEN_CLOSED_EPSILON;
+        const bool lbOpen = std::fabs(lfOrientation - 1.0f) < KF_HINGE_OPEN_CLOSED_EPSILON;
+
+        HingeStateCache::CacheNode* lpCached = mHingeCache.FindInCache(lrEvent);
+        if (!lpCached)
+        {
+            lpCached = mHingeCache.Insert(lrEvent);
+        }
+        else
+        {
+            const f32 lfNewVelocity = lrEvent.mfHingeVelocity;
+            const f32 lfOldVelocity = lpCached->mEvent.mfHingeVelocity;
+            const bool lbWasOpen = lpCached->mbHingeOpen;
+            const bool lbWasClosed = lpCached->mbHingeClose;
+            const f32 lfVelocityChange = lfNewVelocity - lfOldVelocity;
+            if (lu32LastVehicle == lpCached->mEvent.mVehicleId.muValue ||
+                FindEntity(lpCached->mEvent.mVehicleId, lEntity))
+            {
+                lu32LastVehicle = lpCached->mEvent.mVehicleId.muValue;
+                if (lbWasOpen != lbOpen && !lbWasOpen)
+                {
+                    InputCollision lCollision(*this, lpCached->mEvent.meType, lpCached->mEvent.mVehicleId,
+                                              lEntity, AttribSys::Enums::eAction::HingeOpen, lfNewVelocity);
+                    AddInputCollision(lCollision);
+                }
+                else if (lbWasClosed != lbClosed && !lbWasClosed)
+                {
+                    InputCollision lCollision(*this, lpCached->mEvent.meType, lpCached->mEvent.mVehicleId,
+                                              lEntity, AttribSys::Enums::eAction::HingeClose, lfNewVelocity);
+                    AddInputCollision(lCollision);
+                }
+                else if (std::fabs(lfVelocityChange) > KF_HINGING_VELOCITY_DELTA_TOLERANCE &&
+                         (std::fabs(lfNewVelocity) > KF_HINGING_VELOCITY_MIN_TOLERANCE ||
+                          std::fabs(lfOldVelocity) > KF_HINGING_VELOCITY_MIN_TOLERANCE))
+                {
+                    const f32 lfLarger = (std::fabs(lfNewVelocity) - std::fabs(lfOldVelocity) >= 0.0f)
+                                             ? std::fabs(lfNewVelocity) : std::fabs(lfOldVelocity);
+                    InputCollision lCollision(*this, lpCached->mEvent.meType, lpCached->mEvent.mVehicleId,
+                                              lEntity, AttribSys::Enums::eAction::Hinging, lfLarger);
+                    AddInputCollision(lCollision);
+                }
+            }
+        }
+
+        if (lpCached)
+        {
+            CGS_ASSERT(lpCached->mbValid, "lpCached->mbValid");
+            lpCached->mEvent = lrEvent;
+            lpCached->mbHingeOpen = lbOpen;
+            lpCached->mbHingeClose = lbClosed;
+            lpCached->mfTimeLastSeen = mfCurrentTime;
+        }
+    }
+}
+
 void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
 {
     // ARTIST 0x826D3CF0: default (unfiltered) developer settings. The distance
@@ -1700,6 +2250,8 @@ void CollisionStateManager::UpdateResolver(
     // stamped with the manager's current time (`lfs f1, 4(r31)`) and the frame step. Console order:
     // race cars (data+0), traffic (+0x70A0), the discarded contacts (+0x193C0) -- then the glass,
     // hinging body-part, broken-joint, detached-part and car-part legs -- then the props (+0x167E0).
+    // (Each group sits behind a developer filter -- dword_82FFB920 / B92C / B928 / B924, zero .bss
+    // with no writer.)
     // [BLOCKED] the discarded-contact leg (0x826F93EC..0x826F9408): ContactSpyData keeps
     // mDiscardedContactQueue (@0x193C0) private and exposes no accessor on PC; it needs
     // ContactSpyInterface::GetDiscardedContacts() const (the inline "mpData != NULL" tripwire at
@@ -1711,6 +2263,97 @@ void CollisionStateManager::UpdateResolver(
     {
         ImportContactSpies(*lrContacts.GetRaceCarContacts(), lrInput, mfCurrentTime, afDeltaTime);
         ImportContactSpies(*lrContacts.GetTrafficContacts(), lrInput, mfCurrentTime, afDeltaTime);
+
+        // The deformation legs (item 3), on the deformation output the sound input carries (the
+        // third input getter, r16): glass 0x826F9420, hinged parts (+0x74) 0x826F9438, broken joints
+        // (+0x9F0) 0x826F9450, detached parts (+0x3A0) 0x826F9468, then ContactSpyData's physical
+        // car-part contacts (+0x106C0, the inlined GetPhysicalCarPartContacts "mpData != NULL"
+        // tripwire, h:195) 0x826F94B0.
+        const BrnPhysics::Deformation::DeformationOutputInterface& lrDeformation =
+            lrInput.GetDeformationInterface();
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the inputs each deformation leg adds
+        // (a budget PER LEG, so a burst on one leg cannot hide the others), the raw queue census on any
+        // frame one of them is non-empty, and each glass event's state and suppression flag -- the
+        // glass builder culls everything but an unsuppressed smash (0x826BE544..0x826BE564).
+        const bool lbDeformDiag = CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint != nullptr;
+        // Per leg: up to 8 culled inputs and, separately, up to 24 live ones.
+        struct LegBudget { u32 mu32Culled; u32 mu32Live; };
+        auto DiagLeg = [this, lbDeformDiag](const char* lpcLeg, u32 lu32From, LegBudget& lrBudget)
+        {
+            if (!lbDeformDiag)
+                return;
+            for (u32 lu32Index = lu32From; lu32Index < mu32InputCollisionCount; ++lu32Index)
+            {
+                const InputCollision& lrAdded = maInputCollision[lu32Index];
+                u32& lru32Budget = lrAdded.mbCull ? lrBudget.mu32Culled : lrBudget.mu32Live;
+                if (lru32Budget >= (lrAdded.mbCull ? 8u : 24u))
+                    continue;
+                ++lru32Budget;
+                char lacLine[192];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] deform leg=%s action=%d mat=%llx/%llx cull=%d impulse=%g\n",
+                              lpcLeg, static_cast<s32>(lrAdded.meAction),
+                              static_cast<unsigned long long>(lrAdded.maMaterial[0]),
+                              static_cast<unsigned long long>(lrAdded.maMaterial[1]),
+                              lrAdded.mbCull ? 1 : 0, static_cast<double>(lrAdded.maParameter[0].x));
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        };
+        if (lbDeformDiag)
+        {
+            const s32 liGlass = static_cast<s32>(lrDeformation.mGlassSmashOrCrackQueue.GetLength());
+            const s32 liHinge = static_cast<s32>(lrDeformation.mJointedPartStateQueue.GetLength());
+            const s32 liJoint = static_cast<s32>(lrDeformation.mBrokenJointNotificationQueue.GetLength());
+            const s32 liDetached = static_cast<s32>(lrDeformation.mDetachedPartNotificationQueue.GetLength());
+            const s32 liCarPart = static_cast<s32>(lrContacts.GetPhysicalCarPartContacts()->GetLength());
+            static u32 suCensusCount = 0;
+            if ((liGlass | liHinge | liJoint | liDetached | liCarPart) != 0 && suCensusCount < 48u)
+            {
+                ++suCensusCount;
+                char lacLine[160];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] deform queues glass=%d hinge=%d joint=%d detached=%d carpart=%d\n",
+                              liGlass, liHinge, liJoint, liDetached, liCarPart);
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+            static u32 su32CrackEventCount = 0;
+            static u32 su32SmashEventCount = 0;
+            for (s32 liIndex = 0; liIndex < liGlass; ++liIndex)
+            {
+                const BrnPhysics::Deformation::GlassSmashOrCrackEvent& lrEvent =
+                    lrDeformation.mGlassSmashOrCrackQueue.GetEvent(liIndex);
+                u32& lru32EventBudget = lrEvent.meNewState == BrnPhysics::Deformation::E_GLASS_STATE_SMASHED
+                                            ? su32SmashEventCount : su32CrackEventCount;
+                if (lru32EventBudget >= 16u)
+                    continue;
+                ++lru32EventBudget;
+                char lacLine[160];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] glass event vehicle=%08x part=%d state=%d dontplay=%d crack=%g\n",
+                              static_cast<unsigned>(lrEvent.mVehicleEntityId.muValue),
+                              static_cast<s32>(lrEvent.meGlassPart), static_cast<s32>(lrEvent.meNewState),
+                              lrEvent.mbDontPlaySmashEffect ? 1 : 0, static_cast<double>(lrEvent.mfCrackAmount));
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
+        static LegBudget sGlassBudget = {0, 0}, sHingeBudget = {0, 0}, sJointBudget = {0, 0};
+        static LegBudget sDetachedBudget = {0, 0}, sCarPartBudget = {0, 0};
+        u32 lu32LegStart = mu32InputCollisionCount;
+        UpdateGlass(lrDeformation);
+        DiagLeg("glass", lu32LegStart, sGlassBudget);
+        lu32LegStart = mu32InputCollisionCount;
+        UpdateHingingBodyParts(&lrDeformation.mJointedPartStateQueue);
+        DiagLeg("hinge", lu32LegStart, sHingeBudget);
+        lu32LegStart = mu32InputCollisionCount;
+        ImportContactSpies(lrDeformation.mBrokenJointNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
+        DiagLeg("joint", lu32LegStart, sJointBudget);
+        lu32LegStart = mu32InputCollisionCount;
+        ImportContactSpies(lrDeformation.mDetachedPartNotificationQueue, lrInput, mfCurrentTime, afDeltaTime);
+        DiagLeg("detached", lu32LegStart, sDetachedBudget);
+        lu32LegStart = mu32InputCollisionCount;
+        ImportContactSpies(*lrContacts.GetPhysicalCarPartContacts(), lrInput, mfCurrentTime, afDeltaTime);
+        DiagLeg("carpart", lu32LegStart, sCarPartBudget);
+
         liPropCount = lrContacts.GetPropContacts()->GetLength();
         ImportContactSpies(*lrContacts.GetPropContacts(), lrInput, mfCurrentTime, afDeltaTime);
     }
@@ -1850,7 +2493,67 @@ void CollisionStateManager::UpdateParams(f32 afDeltaTime)
             for (u32 luIndex = 0; luIndex < mu32OutputCollisionCount; ++luIndex)
             {
                 if (!PlayCollision(lapCollisions[luIndex]))
+                {
+                    // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the pool had no
+                    // free state and no attached one of lower priority, so this output and every
+                    // one after it goes unvoiced this frame.
+                    if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+                    {
+                        static u32 suNoStatePrintCount = 0;
+                        if (suNoStatePrintCount++ < 32u)
+                        {
+                            u32 luAttached = 0;
+                            f32 lfLowest = 0.0f;
+                            for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
+                                 lpBase = lpBase->GetNextState())
+                            {
+                                const f32 lfPriority = static_cast<CollisionState*>(lpBase)
+                                                           ->GetOutputCollision().mfPriority;
+                                if (lpBase->IsAttached() && (luAttached++ == 0 || lfPriority < lfLowest))
+                                    lfLowest = lfPriority;
+                            }
+                            const OutputCollision& lrUnplayed = *lapCollisions[luIndex];
+                            char lacLine[224];
+                            std::snprintf(lacLine, sizeof(lacLine),
+                                          "[collision-audio] no free state action=%d mat=%llx/%llx bin=%d "
+                                          "priority=%g attached=%u lowest=%g unplayed=%u\n",
+                                          static_cast<s32>(lrUnplayed.meAction),
+                                          static_cast<unsigned long long>(lrUnplayed.maMaterial[0]),
+                                          static_cast<unsigned long long>(lrUnplayed.maMaterial[1]),
+                                          static_cast<s32>(lrUnplayed.miBinIndex),
+                                          static_cast<double>(lrUnplayed.mfPriority), luAttached,
+                                          static_cast<double>(lfLowest),
+                                          mu32OutputCollisionCount - luIndex);
+                            *CgsDev::Log::gpDebugPrint << lacLine;
+                            // The first few saturations: who holds the pool.
+                            if (suNoStatePrintCount <= 4u)
+                            {
+                                for (CgsSound::Logic::State* lpBase = GetHeadState(); lpBase;
+                                     lpBase = lpBase->GetNextState())
+                                {
+                                    if (!lpBase->IsAttached())
+                                        continue;
+                                    const CollisionState* lpHeld = static_cast<const CollisionState*>(lpBase);
+                                    const OutputCollision& lrHeld = lpHeld->GetOutputCollision();
+                                    std::snprintf(lacLine, sizeof(lacLine),
+                                                  "[collision-audio]   held lifetime=%d priority=%g attached=%.3f now=%.3f "
+                                                  "action=%d mat=%llx/%llx bin=%d sample=%d scrape=%d\n",
+                                                  static_cast<s32>(lpHeld->GetLifetime().GetCurrent()),
+                                                  static_cast<double>(lrHeld.mfPriority),
+                                                  static_cast<double>(lpHeld->GetTimeWeAttached()),
+                                                  static_cast<double>(mfCurrentTime),
+                                                  static_cast<s32>(lrHeld.meAction),
+                                                  static_cast<unsigned long long>(lrHeld.maMaterial[0]),
+                                                  static_cast<unsigned long long>(lrHeld.maMaterial[1]),
+                                                  static_cast<s32>(lrHeld.miBinIndex), lrHeld.miSampleID,
+                                                  lrHeld.mScrapeInfo.mbValid ? 1 : 0);
+                                    *CgsDev::Log::gpDebugPrint << lacLine;
+                                }
+                            }
+                        }
+                    }
                     break;
+                }
             }
         }
     }
@@ -2132,21 +2835,29 @@ void CollisionStateManager::SelectCollisionBin(
         lrOutput.mfPriority += lBin.Priority();
 
         // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the selection resolved
-        // through the pipeline's lookup cache -- which entry, and the pair it matched on.
+        // through the pipeline's lookup cache -- which entry, and the pair it matched on. A
+        // deformation-leg input (a detach / hinge action, or a body-part / mirror / glass
+        // material: 0x20|0x40|0x80|0x100|0x200) keeps its own budget and is tagged.
         if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
         {
             static u32 suCacheSelectPrintCount = 0;
-            if (suCacheSelectPrintCount++ < 32u)
+            static u32 suDeformSelectPrintCount = 0;
+            const bool lbDeformInput =
+                static_cast<s32>(lrOutput.meAction) != 1 ||
+                ((lrOutput.maMaterial[0] | lrOutput.maMaterial[1]) & 0x3E0ull) != 0;
+            u32& lruSelectBudget = lbDeformInput ? suDeformSelectPrintCount : suCacheSelectPrintCount;
+            if (lruSelectBudget++ < 32u)
             {
-                char lacLine[160];
+                char lacLine[192];
                 std::snprintf(lacLine, sizeof(lacLine),
                               "[collision-audio] cache select pipeline=%d entry=%u/%u %s "
-                              "matA=0x%016llx matB=0x%016llx\n",
+                              "matA=0x%016llx matB=0x%016llx%s\n",
                               static_cast<int>(lrOutput.mePipeline), luIndex,
                               lrCache.GetEntryCount(),
                               lbMaterialsForward ? "forward" : "reverse",
                               static_cast<unsigned long long>(lrEntry.mx64MaterialA),
-                              static_cast<unsigned long long>(lrEntry.mx64MaterialB));
+                              static_cast<unsigned long long>(lrEntry.mx64MaterialB),
+                              lbDeformInput ? " input=deform" : "");
                 *CgsDev::Log::gpDebugPrint << lacLine;
             }
         }
@@ -2155,8 +2866,13 @@ void CollisionStateManager::SelectCollisionBin(
 
     if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
     {
+        // Plain collisions (action 1) and the deformation actions (detach / hinge) keep separate
+        // budgets, so a run's early wall hits cannot hide what happened to a door coming off.
         static u32 suRejectPrintCount = 0;
-        if (suRejectPrintCount++ < 32u)
+        static u32 suDeformRejectPrintCount = 0;
+        u32& lruRejectBudget = static_cast<s32>(lrOutput.meAction) == 1 ? suRejectPrintCount
+                                                                         : suDeformRejectPrintCount;
+        if (lruRejectBudget++ < 32u)
         {
             *CgsDev::Log::gpDebugPrint
                 << "[collision-audio] reject pipeline="
