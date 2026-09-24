@@ -137,6 +137,34 @@ namespace BrnTrafficIO
             return &mNearMissRaceCarCollection;
         }
 
+        // DWARF :135 -- the parked-traffic proximity publish. No out-of-line body in the image: its
+        // one producer, TrafficEntityModule::GenerateNearbyParkedTrafficOutput @0x8271FA18, folds
+        // it into five stores on the interface GetTrafficToRaceCarInterface_PreScene (0x82710DD0)
+        // returns: 0x8271FBC4 `stw r22, 0x20C` then `stfs 0x210 / 0x214 / 0x218 / 0x21C`.
+        void SetNearbyParkedTrafficData(u32 luNearbyStaticVehicleCount, f32 lfClosestDistanceSq,
+                                        f32 lfSecondClosestDistanceSq, f32 lfClosestAngleDiff,
+                                        f32 lfClosestPerpendicularDist)                     // :135
+        {
+            muNearbyStaticVehicleCount = luNearbyStaticVehicleCount;
+            mfClosestDistanceSq        = lfClosestDistanceSq;
+            mfSecondClosestDistanceSq  = lfSecondClosestDistanceSq;
+            mfClosestAngleDiff         = lfClosestAngleDiff;
+            mfClosestPerpendicularDist = lfClosestPerpendicularDist;
+        }
+
+        // DWARF :144 -- the read half, also inlined: RaceCarEntityModule::ProcessPowerParking
+        // @0x822CDF10 reads +0x210 / +0x20C / +0x214 / +0x218 / +0x21C at 0x822CDF34..0x822CDF64.
+        void GetNearbyParkedTrafficData(u32* lpuNearbyStaticVehicleCount, f32* lpfClosestDistanceSq,
+                                        f32* lpfSecondClosestDistanceSq, f32* lpfClosestAngleDiff,
+                                        f32* lpfClosestPerpendicularDist) const            // :144
+        {
+            *lpuNearbyStaticVehicleCount = muNearbyStaticVehicleCount;
+            *lpfClosestDistanceSq        = mfClosestDistanceSq;
+            *lpfSecondClosestDistanceSq  = mfSecondClosestDistanceSq;
+            *lpfClosestAngleDiff         = mfClosestAngleDiff;
+            *lpfClosestPerpendicularDist = mfClosestPerpendicularDist;
+        }
+
     private:
         BitArray<400>              mSympatheticCrashers;        // :150 @0
         VehicleStompingData        mPotentialStompees[8];       // :151 @64 (alignas(16) via VehicleStompingData)

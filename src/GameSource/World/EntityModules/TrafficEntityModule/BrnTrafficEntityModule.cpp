@@ -108,6 +108,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h" // CrashModeScoring::GetVehicleScoreData (leap/stomp score leg)
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"                          // LightTrigger, KU_LIGHT_TRIGGER_ID_OWNER_TAG (ManageTriggers)
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"                       // KU_MAX_HULLS (ManageTriggers)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h" // BrnWorld::CheckVehicleForPowerPark (GenerateNearbyParkedTrafficOutput)
 
 namespace BrnTraffic
 {
@@ -4766,7 +4767,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     //     GenerateSympatheticCrasherOutput       <- LIVE below (0x8274AAE4)
     //     GenerateNearMissOutput                 <- LIVE below (0x8274AAF4)
     //     GeneratePotentialLeapedAndStompedCarsOutput  <- LIVE below (0x8274AB04)
-    //     GenerateNearbyParkedTrafficOutput      (0x8274AB14, gated below)
+    //     GenerateNearbyParkedTrafficOutput      <- LIVE below (0x8274AB14)
     // then ManageTriggers, then the switch. GenerateRivalInActiveHullOutput is NOT among them
     // on this build; nothing in this function calls it.
 
@@ -4781,15 +4782,11 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     // stompees, the GUI's scorees and the Showtime vehicle list (the crash magnets).
     GeneratePotentialLeapedAndStompedCarsOutput(lpInput, lpOutput);
 
-    {
-        // GATE: the one remaining pre-scene output producer, not bodied in this tree. It is placed
-        // in the console's own order after the live calls above (0x8274AB14). It writes into
-        // OutputBuffer_PreScene. DELETE WHEN the body lands.
-        static bool sbLogged = false;
-        LogMissingLeg_T1(sbLogged,
-            "PreSceneUpdate output producer -- GenerateNearbyParkedTrafficOutput @0x8271FA18 "
-            "(after the live GeneratePotentialLeapedAndStompedCarsOutput). No body in this tree");
-    }
+    // 0x8274AB08..0x8274AB14 `mr r5, r26 ; mr r4, r25 ; mr r3, r31 ; bl 0x8271FA18` -- LIVE
+    // (FX-TRAFFIC3 item 4, 2026-09-24). The Power Parking producer: while the player power parks,
+    // the parked cars around him are measured and published to the race-car module. Body at the
+    // end of this file.
+    GenerateNearbyParkedTrafficOutput(lpInput, lpOutput);
 
     // 0x8274AB18..0x8274AB20 `mr r4, r26 ; mr r3, r31 ; bl 0x82747518` -- LIVE (2026-09-24,
     // reviewer C on 0e0a5781). Unconditional, before the state switch (0x8274AB24 `lwz 0x300`).
@@ -18465,6 +18462,154 @@ void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lp
 
     mHullsToAddTriggersFor.Clear();      // 0x827478AC `stwx 0, +0x54AF0`
     mHullsToRemoveTriggersFor.Clear();   // 0x827478B0 `stwx 0, +0x54B84`
+}
+
+}   // namespace BrnTraffic
+
+// ============================================================================
+// FX-TRAFFIC3 item 4 (crash parity wave 5, 2026-09-24) -- the Power Parking PRODUCER.
+//
+//   TrafficEntityModule::GenerateNearbyParkedTrafficOutput @0x8271FA18 (116 insns, DWARF h:1302)
+//
+// It had no body; PreSceneUpdate made the console's call at 0x8274AB14 through a named gate. Its
+// consumer (RaceCarEntityModule::ProcessPowerParking @0x822CDF10) reads the five members back through
+// TrafficToRaceCarInterface_PreScene::GetNearbyParkedTrafficData; BrnWorld::CheckVehicleForPowerPark
+// @0x822B1FA0 (FX-RCEM4, fd8d4ce1) does the measuring. PS3 twin DecFIGS 0x918D18.
+// ============================================================================
+namespace BrnTraffic
+{
+namespace
+{
+    // StaticTrafficVehicle::muFlags bit 0 -- the record FillNewHull @0x82743600 spawns only while
+    // mbAllowDivergentBehaviour (`(muFlags & 1) != 0` skip). The DWARF member is a plain uint8_t with
+    // no enum, so the bit is named here, not invented as an enumerator. Tested at 0x8271FB18.
+    const u8 KU8_STATIC_VEHICLE_FLAG_DIVERGENT_ONLY = 0x01u;
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witnesses (capped): the gate state once,
+    // then each publish, and each change of the dry-run count (below).
+    const s32 KI_PARKED_DIAG_CAP = 40;
+    s32       giParkedDiagLines  = 0;
+    bool      gbParkedGateLogged = false;
+    u32       guParkedLastDryRunCount = 0xFFFFFFFFu;
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_PARKED_DRYRUN. The gate's only producer is
+    // RaceCarEntityModule::ProcessPowerParking @0x822CDF10 (RaceCarToTrafficInterface bit 0,
+    // E_FLAG_PLAYER_IS_POWER_PARKING), which has no PC body yet, so on PC the gate never opens. With
+    // this set, a closed gate still runs the measuring loop on the frames the player car is active and
+    // SKIPS THE PUBLISH, so a live run can show this body on real parked cars. Unset (the default),
+    // a closed gate is the console's `beq out`.
+    bool ParkedDryRunEnabled()
+    {
+        static const bool sbEnabled = (getenv("BRN_PARKED_DRYRUN") != 0);
+        return sbEnabled;
+    }
+}
+
+// -------------------------------------------------------------------------------------------------
+// @0x8271FA18  TrafficEntityModule::GenerateNearbyParkedTrafficOutput
+//   r3 this, r4 lpInput (InputBuffer_PreScene), r5 lpOutput (OutputBuffer_PreScene).
+//
+//   0x8271FA38  `lbzx r11, this, 0x717E5` ; 0x8271FA40 `beq out` -- mbPlayerIsPowerParking; nothing
+//               is written (not even the count) while the player is not power parking
+//   0x8271FA58  four FLT_MAX seeds (flt_820BA23C == 0x7F7FFFFF): closest / second / angle / perp
+//   0x8271FA64  for luIndex < KU_MAX_STATIC_TRAFFIC (0xC7); the inlined GetStaticVehicle's
+//               "luIndex < KU_MAX_STATIC_TRAFFIC" (.h 2426) assert is hoisted to the first pass
+//   0x8271FAAC  maVehicles[400 + luIndex]: `lbz +5 & 1` alive, else skip ; `lbz +7 & 0x10`
+//               (mxEffectState bit 4 == IsAlarmOn) set -> skip ; Vehicle::IsCrashing -> skip
+//   0x8271FAE8  GetStaticTrafficParam(luIndex) ; GetIndexInHull ; GetHull ; TrafficEntityModule::
+//               GetHull((u16)) ; Hull::GetStaticVehicle((u8)) ; `lbz +0x43 & 1` (muFlags bit 0) -> skip
+//   0x8271FB30  GetVehicleIndexFromStaticIndex ; per candidate GetActiveRaceCarOutputInterface()
+//               ->GetPlayerPosition() (sub_823102F0) and ->GetPlayerDirection() (sub_82310398)
+//   0x8271FB84  maVehicleTransforms[luVehicle] rows 3 (+0x1ECB0, position) and 2 (+0x1ECA0, At)
+//   0x8271FB90  CheckVehicleForPowerPark(v1 playerPos, v2 playerDir, v3 vehPos, v4 vehDir,
+//               r3..r6 = &closest, &second, &angle, &perp) ; true -> ++count
+//   0x8271FBB8  GetTrafficToRaceCarInterface_PreScene (0x82710DD0) ; stw count +0x20C ;
+//               stfs +0x210/+0x214/+0x218/+0x21C == SetNearbyParkedTrafficData
+// -------------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateNearbyParkedTrafficOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                                            BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    bool lbDryRun = false;   // [DIAG] NOT IN THE X360 BINARY -- see ParkedDryRunEnabled
+    if (!mbPlayerIsPowerParking)
+    {
+        // [DIAG] NOT IN THE X360 BINARY -- see KI_PARKED_DIAG_CAP.
+        if (!gbParkedGateLogged)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                gbParkedGateLogged = true;
+                *lpDiag << "[T-parked] dispatched, mbPlayerIsPowerParking=0: nothing published\n";
+            }
+        }
+
+        // [DIAG] NOT IN THE X360 BINARY -- see ParkedDryRunEnabled. Without it this is the console's
+        // return; the player-active test keeps the loop's GetPlayerPosition assert out of the diagnostic.
+        if (!ParkedDryRunEnabled() || !lpInput->GetActiveRaceCarOutputInterface()->IsPlayerCarActive())
+        {
+            return;
+        }
+        lbDryRun = true;
+    }
+
+    // Locals and lexical blocks are the DWARF's (BrnTrafficUnity, BrnTrafficEntityModule.cpp:3848..3879).
+    u32 luNearbyStaticVehicleCount = 0;                     // :3848
+    f32 lfClosestDistanceSq        = FLT_MAX;               // :3850  flt_820BA23C
+    f32 lfSecondClosestDistanceSq  = FLT_MAX;               // :3851
+    f32 lfClosestAngleDiff         = FLT_MAX;               // :3852
+    f32 lfClosestPerpendicularDist = FLT_MAX;               // :3853
+
+    for (u32 luStaticVehicleIdx = 0; luStaticVehicleIdx < KU_MAX_STATIC_TRAFFIC; ++luStaticVehicleIdx)   // :3849
+    {
+        const Vehicle* const lpStaticVehicle = GetStaticVehicle(luStaticVehicleIdx);                   // :3857
+        if (lpStaticVehicle->IsAlive() && !lpStaticVehicle->IsAlarmOn() && !lpStaticVehicle->IsCrashing())
+        {
+            const StaticTrafficParam* const lpStaticParam = GetStaticTrafficParam(luStaticVehicleIdx);  // :3862
+            // The console fetches GetIndexInHull (0x8271FAF0) before GetHull (0x8271FAFC); both are
+            // pure getters, so the order is not observable.
+            const u8 luFlags = GetHull(lpStaticParam->GetHull())
+                                   ->GetStaticVehicle(lpStaticParam->GetIndexInHull())->muFlags;         // :3864
+            if ((luFlags & KU8_STATIC_VEHICLE_FLAG_DIVERGENT_ONLY) == 0)
+            {
+                const u32 luVehicleIdx = GetVehicleIndexFromStaticIndex(luStaticVehicleIdx);             // :3871
+                const Vector3& lPlayerPos  = lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();   // :3873
+                const Vector3& lPlayerDir  = lpInput->GetActiveRaceCarOutputInterface()->GetPlayerDirection();  // :3875
+                const Vector3& lVehiclePos = maVehicleTransforms[luVehicleIdx].Pos();                    // :3877 row 3
+                const Vector3& lVehicleDir = maVehicleTransforms[luVehicleIdx].At();                     // :3879 row 2
+
+                if (BrnWorld::CheckVehicleForPowerPark(lPlayerPos, lPlayerDir, lVehiclePos, lVehicleDir,
+                                                       lfClosestDistanceSq, lfSecondClosestDistanceSq,
+                                                       lfClosestAngleDiff, lfClosestPerpendicularDist))
+                {
+                    ++luNearbyStaticVehicleCount;
+                }
+            }
+        }
+    }
+
+    if (!lbDryRun)   // [DIAG] only a dry run skips it; the console always publishes here (0x8271FBB8)
+    {
+        lpOutput->GetTrafficToRaceCarInterface_PreScene()->SetNearbyParkedTrafficData(
+            luNearbyStaticVehicleCount, lfClosestDistanceSq, lfSecondClosestDistanceSq,
+            lfClosestAngleDiff, lfClosestPerpendicularDist);
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- see KI_PARKED_DIAG_CAP. A dry run prints only when its count
+    // changes, so the capped lines follow parked cars in and out of the 15 m radius.
+    if (giParkedDiagLines < KI_PARKED_DIAG_CAP && (!lbDryRun || luNearbyStaticVehicleCount != guParkedLastDryRunCount))
+    {
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            ++giParkedDiagLines;
+            if (lbDryRun)
+            {
+                guParkedLastDryRunCount = luNearbyStaticVehicleCount;
+            }
+            *lpDiag << (lbDryRun ? "[T-parked] dry-run (not published) count=" : "[T-parked] published count=")
+                    << luNearbyStaticVehicleCount
+                    << " closestSq=" << lfClosestDistanceSq << " secondSq=" << lfSecondClosestDistanceSq
+                    << " angle=" << lfClosestAngleDiff << " perp=" << lfClosestPerpendicularDist << "\n";
+        }
+    }
 }
 
 }   // namespace BrnTraffic
