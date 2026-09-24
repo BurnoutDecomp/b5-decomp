@@ -480,6 +480,15 @@ namespace Vehicle
             return &mTrafficTypeRequestQueue;
         }
 
+        // The WRITE half of the +0x750 pair (crash-parity FX-SHOWTIME2, 2026-09-24). Also inlined
+        // by its one console user, PhysicsModule::HandleGameActions @0x825A72F0 case 116:
+        // `bl 0x8259FFD8 ; addi r3, r3, 0x750 ; bl 0x825A3148` (@0x825A7848..0x825A7854) -- the
+        // write-locked output buffer's interface, + this member, EventQueue<u16,32>::AddEvent.
+        TrafficTypeRequestQueue* GetTrafficTypeRequestQueue()
+        {
+            return &mTrafficTypeRequestQueue;
+        }
+
     private:
         TrafficCrashedEventQueue     mCrashedTrafficEventQueue;     // @0x0000  (DWARF :176)
         TrafficSlammedEventQueue     mSlammedTrafficEventQueue;     // @0x0150  (DWARF :177)

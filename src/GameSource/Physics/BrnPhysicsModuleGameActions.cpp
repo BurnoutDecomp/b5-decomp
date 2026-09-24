@@ -56,11 +56,12 @@
 // cntlzw/extrwi pair is the compiler's branchless `!x`, not a computation.
 // [[check-what-a-zeroed-field-means]] -- the member and the flag have OPPOSITE polarity.
 //
-// ⚠️ ONE ARM IS NOT LANDED HERE, AND IT IS NAMED, NOT SILENT. Id 116 calls a body that does not
-// exist anywhere in the tree; it gets its own one-shot deferral line so a future run says it was
-// hit rather than producing a plausible nothing. [[silent-drop-stubs]]. (Id 11 was the second
-// such arm until 2026-09-23, when VehicleManager::ProcessNetworkCarDisconnect got its body --
-// crash-parity FX-VMNET, G41-D1.)
+// ✅ EVERY ARM IS LANDED. The last deferred one was id 116, whose one-shot "DEFERRED ... not homed"
+// line stood long after both of its seats were homed (OutputBuffer::GetVehicleManagerOutputInterface
+// @0x8259FFD8 and VehicleManagerOutputInterface::mTrafficTypeRequestQueue @+0x750); it is the
+// traffic-type REQUEST hop of the showtime "Cars Crashed" chain and landed 2026-09-24 (crash-parity
+// FX-SHOWTIME2). Id 11 was the other such arm until 2026-09-23, when VehicleManager::
+// ProcessNetworkCarDisconnect got its body (crash-parity FX-VMNET, G41-D1). [[silent-drop-stubs]]
 // ⛔⛔ ID 198 WAS ON THAT LIST, WITH THE NOTE "not on the showtime path". IT WAS, AND THE FIRST RUN
 // THAT ACTUALLY REACHED SHOWTIME PROVED IT BY ASSERTING INSIDE THE CHAIN -- see the banner on that
 // arm. "Not on the live path" expires silently, and un-gating a consumer is what makes a missing
@@ -68,6 +69,7 @@
 // =================================================================================================
 
 #include "GameSource/Physics/BrnPhysicsModule.h"
+#include "GameSource/Physics/BrnPhysicsModuleIO.h"                            // OutputBuffer::GetVehicleManagerOutputInterface (case 116)
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // SetShowtimeAimDirection
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h"
@@ -522,23 +524,28 @@ namespace BrnPhysics
                 }
 
                 // -------------------------------------------------------------------------------
-                // 116 -- asm 0x825A7844: `sub_8259FFD8(outputBuffer)` (an assert-and-offset
-                // accessor returning outputBuffer + 41952, asserting "Not locked for writing" from
-                // BrnPhysicsModuleIO.h:352), then `+0x750` == +1872 and
-                // `BaseEventQueue<short>::AddEvent @0x825A3148` (78 insns).
-                // DEFERRED: neither the accessor's seat nor that queue is homed on the committed
-                // PhysicsModuleIO::OutputBuffer, and the arm is not on the showtime path.
+                // 116 -- E_ACTION_TRAFFIC_TYPE_REQUEST (DWARF 111, the +5 band: X360 116), the
+                // traffic-type REQUEST of the showtime "Cars Crashed" chain. asm 0x825A7844..54:
+                //     mr   r3, r14            ; lpOutputBuffer (this function's third argument)
+                //     bl   0x8259FFD8         ; OutputBuffer::GetVehicleManagerOutputInterface()
+                //                             ; (write half, +41952, "Not locked for writing")
+                //     mr   r4, r29            ; the ACTION RECORD itself
+                //     addi r3, r3, 0x750      ; + mTrafficTypeRequestQueue (inlined accessor)
+                //     bl   0x825A3148         ; EventQueue<u16,32>::AddEvent -- the same body the
+                //                             ; SetRaceCarCrashing remap path calls @0x82635AD8
+                // AddEvent copies ONE u16 out of the record: TrafficTypeRequestAction::
+                // muTrafficVehicleIndex, the record's only member (DWARF BrnGameActions.h:2324,
+                // posted with size 2 by GameStateModule::UpdateShowtimeMode @0x82381110). From the
+                // queue the index rides BridgePhysicsModuleToTrafficModule_PostPhysics into
+                // TrafficEntityModule::ProcessTrafficTypeRequests @0x8272B880, whose answer comes
+                // back to UpdateShowtimeMode through the game-state traffic-type response cache.
                 // -------------------------------------------------------------------------------
                 case KI_ACTION_FORWARD_TO_OUTPUT:
                 {
-                    static bool sbLogged = false;
-                    if (!sbLogged && CgsDev::Log::gpDebugPrint != 0)
-                    {
-                        sbLogged = true;
-                        *CgsDev::Log::gpDebugPrint
-                            << "[s3-action] id 116 DEFERRED: the OutputBuffer +41952/+1872 event"
-                               " forward (AddEvent @0x825A3148) is not homed [FLAG]\n";
-                    }
+                    const u16 luTrafficVehicleIndex =
+                        *reinterpret_cast<const u16*>(lpu8Payload + KU_EV_LEADING_WORD);
+                    lpOutputBuffer->GetVehicleManagerOutputInterface()
+                        ->GetTrafficTypeRequestQueue()->AddEvent(luTrafficVehicleIndex);
                     break;
                 }
 
@@ -655,7 +662,5 @@ namespace BrnPhysics
             liAction = lpGameActionQueue->GetNextEvent(lpEventData, &lpNextEvent, &liEventSize);
             lpEventData = lpNextEvent;
         }
-
-        (void)lpOutputBuffer;   // only case 116 reads it, and that arm is deferred
     }
 }
