@@ -750,8 +750,12 @@ namespace BrnDirector
                 mBystanderCloseParameters = mBystanderFarParameters;                               // memcpy 0x9C @0x8223E260
                 mBystanderCloseParameters.mLookerParams.mfDesiredPerceivedDistance     = 4.0f;    // +0x4C flt_82004EF4
 
-                // The passenger block is still the 2026-09-11 zeroed stand-in (see its accessor).
-                ZeroBlock(&mPassengerDefault,         sizeof(mPassengerDefault));
+                // ⭐ 2026-09-24 (FX-DIRECTOR): the passenger block is constructed too. The console inlines
+                // BehaviourPassengerCam::Parameters::Construct over it (0x8223DF08..0x8223DF54:
+                // type 7, name 0, the impact block's 0.06 / 0.0 / 1.15 / 0.11 / 0.05 / 15.0 / 5.0) and
+                // writes nothing else. Zeroed, its type tag read 0 and PassengerCam::SetParameters
+                // asserted the first time a passenger-sees-action moment went valid.
+                mPassengerDefault.Construct();                     // record +8660, bank +0x21E4
 
                 // ⭐ 2026-09-24 (FX-DIRECTOR): the fixed-cam block is no longer a zeroed stand-in. The
                 // console inlines BehaviourFixedCam::Parameters::Construct over it (0x8223DC90:
@@ -868,14 +872,7 @@ namespace BrnDirector
 
             // The passenger-sees-action camera block (MomentPassengerSeesAction::Update
             // hands manager+83732 == record +8660 to BehaviourPassengerCam::SetParameters).
-            // Record +8660 is mPassengerDefault.
-            // ⚠ ITS TYPE TAG IS NOT SEEDED and cannot be from here: the tag lives in the
-            // protected Behaviour::Parameters head and BehaviourPassengerCam::Parameters::
-            // Construct is that class's own ledger function, declaration-only in this tree.
-            // Nothing can reach the block yet either -- BehaviourPassengerCam::SetParameters
-            // is declaration-only too -- so this is inert rather than wrong.
-            // DELETE-WHEN: BehaviourPassengerCam::Parameters::Construct lands, and Construct
-            // below calls it instead of zeroing the block.
+            // Record +8660 is mPassengerDefault, constructed by Construct above (type 7).
             const BehaviourPassengerCam::Parameters& GetPassengerCamMomentParams() const
             {
                 return mPassengerDefault;
