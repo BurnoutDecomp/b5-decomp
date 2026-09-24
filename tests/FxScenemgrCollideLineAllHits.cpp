@@ -103,6 +103,7 @@ struct BaseCollisionGenerator
     u16 CollideLineAgainstPolySoupList(const CgsGeometric::Line& lrLine, CgsGeometric::PolygonSoupListSpatialMap* lpMap,
                                        u16 lu16MaxNumResults, u32 lu32UserTagA, u16 lu16UserTagB);
 };
+static void NoteLineSoupListOverrun(s32, u16) {}   // FX-TAILS-A item 7: the body's [DIAG] tripwire, a no-op here
 #include "fxsm_cla_body.inc"
 }
 }

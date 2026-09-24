@@ -872,6 +872,35 @@ namespace CgsCollision
             if (!(lrBox.mMax.z >= lrLeaf.mMin.z)) return false;
             return true;
         }
+
+        // [DIAG] NOT IN THE X360 BINARY -- CollideLineAgainstPolySoupList's result-block overrun tripwire
+        // (crash parity FX-TAILS-A item 7, REVIEW-E risk 2). Default on, one line per process, changes nothing.
+        // PrepareNewPrimitiveTestResultsList @0x82810798 sizes a list's block for 80-byte PrimitiveTestResult
+        // records (`slwi ; add ; slwi` 0x828108A0..0x828108A8: Malloc((5 * max) << 4) @0x828108AC), but the
+        // all-hits line driver fills it with 112-byte soup records and neither of its arms tests
+        // `found < max` before calling the kernel (0x82812CE4 / 0x82813178 pass `max - found` as it is,
+        // and the kernel writes a record before it tests its limit). So from the
+        // 23rd hit at max 32 -- or any hit once the list is full -- the console writes past the block into
+        // the linear allocator's unclaimed tail. That behaviour is KEPT (no clamp, no guard); this only makes
+        // it visible on PC, where a dense line near the end of the arena would corrupt the next block silently.
+        void NoteLineSoupListOverrun(s32 liNumFound, u16 lu16MaxNumResults)
+        {
+            const u32 lu32BytesWritten = static_cast<u32>(liNumFound) *
+                                         static_cast<u32>(sizeof(CgsGeometric::PolySoupLineNearestResult));
+            const u32 lu32BlockBytes   = static_cast<u32>(lu16MaxNumResults) *
+                                         static_cast<u32>(sizeof(PrimitiveTestResult));
+            static bool sbReported = false;
+            if (lu32BytesWritten <= lu32BlockBytes || sbReported || CgsDev::Log::gpDebugPrint == 0)
+            {
+                return;
+            }
+            sbReported = true;
+            *CgsDev::Log::gpDebugPrint
+                << "[scene] CollideLineAgainstPolySoupList overran its result block: " << liNumFound
+                << " records x 112 bytes = " << lu32BytesWritten << " bytes into a block of "
+                << static_cast<s32>(lu16MaxNumResults) << " x 80 = " << lu32BlockBytes
+                << " bytes (console behaviour kept; NOT IN THE X360 BINARY tripwire, reported once)\n";
+        }
     }
 
     // @ 0x828131C0
@@ -1143,6 +1172,8 @@ namespace CgsCollision
 
         // 0x8281319C..0x828131A4: the one write of the count.
         lpList->mu16NumResults = static_cast<u16>(liNumFound);
+
+        NoteLineSoupListOverrun(liNumFound, lu16MaxNumResults);   // [DIAG] NOT IN THE X360 BINARY (see its banner)
 
         return static_cast<u16>(liResultListIndex);
     }
