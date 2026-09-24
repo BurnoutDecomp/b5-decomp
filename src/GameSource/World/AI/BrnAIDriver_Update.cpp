@@ -1325,11 +1325,14 @@ namespace BrnAI
     //   0x8277D3CC  loop while r30 < miCount (lwz 0x700 every pass: NearbyVehicles::GetCount inlined
     //               with its :2912/:2913 asserts; GetVehiclePointer's :2942/:2943 asserts inside)
     //   0x8277D460  the same 2D magnitude of mVehicle[i].mCentre - lCar2DPosition
-    //   0x8277D4C8  fcmpu f0,f31 ; ble skip ; mr r23,r30  (r24 += 0x70, r30 += 1)
+    //   0x8277D4C8  fcmpu f0,f31 ; 0x8277D4CC ble skip (raw 0x40990008 = bc 4,cr6.gt) ;
+    //               mr r23,r30  (r24 += 0x70, r30 += 1)
     //   0x8277D4E0  mr r3,r23
     // f31 is NEVER rewritten inside the loop (PS3 identical), so the answer is the LAST entry
     // farther from the car than the candidate -- not the farthest one -- and -1 when none is.
-    // `!(d <= ref)` keeps the ble's unordered (NaN) case on the evict side.
+    // ble is taken whenever GT is clear -- on <, == AND UNORDERED -- so only an ORDERED `d > ref`
+    // nominates: a NaN entry distance (or a NaN candidate distance) is skipped. (FX-NANPOL
+    // 2026-09-24: the earlier `!(d <= ref)` nominated an unordered entry.)
     // ================================================================================
     s32 AIDriver::GetIndexOfFurthestVehicle(Vector2 lNewPosition)
     {
@@ -1356,7 +1359,7 @@ namespace BrnAI
             lToEntry.w = 0.0f;
             const f32 lfNewSeperation = rw::math::vpu::Magnitude(lToEntry);
 
-            if (!(lfNewSeperation <= lfFurthest))
+            if (lfNewSeperation > lfFurthest)
                 lCacheIndex = lNewIndex;
         }
         return lCacheIndex;
