@@ -77,6 +77,11 @@ namespace BrnPhysics { namespace Vehicle { struct BrnTrafficDriverControls;
 // defines the body includes BrnVehicleOutputInterface.h for the real thing.
 namespace CgsModule { template <typename T, s32 N> class EventQueue; }
 namespace BrnPhysics { namespace Vehicle { struct TrafficRemovedEvent; } }
+// HandleContactPoints / ProcessContactPoint / DEBUG_RenderContactPoint take the contact spy's
+// traffic record by pointer only (forward-declaration exception (b)); its home is
+// GameSource/Physics/ContactSpies/BrnContactSpyEvents.h (`struct TrafficContact : BaseContact`),
+// which the defining .cpp includes.
+namespace BrnPhysics { namespace ContactSpy { struct TrafficContact; } }
 // Pointer-only uses in the render declarations (forward-declaration exception (b)):
 // including CgsDispatcher.h / BrnShadowMap.h here would pull the renderer and the
 // shadow-cascade tail into every includer, and BrnWorldModule.h includes this header.
@@ -339,6 +344,17 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         static const u32 KU_NUM_WHEELS           = 4;
         static const u32 KU_MAX_LIGHT_LOCATORS   = 24;
         static const u32 KU_NUM_GLASS_PANES      = 8;
+
+        // DWARF BrnTrafficEntityModule.h:162 -- the bits of muContactSideFlags. X360-attested
+        // by both ends: ProcessContactPoint @0x82720C68 ORs in 1 (0x82720E6C `ori r11,r10,1`)
+        // or 2 (0x82720EA4 `ori r11,r10,2`), and UpdateVehicleStuckTimers @0x82708D48 tests
+        // mask 1 then mask 2 (`li r5,1` / `li r5,2`) against the front / back stuck timers.
+        enum EContactSideFlag
+        {
+            E_CONTACT_SIDE_NONE  = 0,
+            E_CONTACT_SIDE_FRONT = 1,
+            E_CONTACT_SIDE_BACK  = 2,
+        };
 
         DetachedPartRenderQueue mDetachedPartQueue;                       // :169
         Vector3Plus mvRoadTestNormal_HeightAboveRoad;                     // :171
@@ -718,7 +734,9 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         VecFloat CalculateDriverGasBrake(u32 luVehicle, VecFloat lfDistToTarget,
                                          Vector3 lParamLinearVelocity);
         void  DEBUG_AddFuzzyLogicData();                             // @ 0x82716040 (FLAG: debug)
-        void  DEBUG_RenderContactPoint();                            // @ 0x827082B8 (FLAG: debug)
+        // @0x827082B8 (51). DWARF h:1920 `void DEBUG_RenderContactPoint(const TrafficContact*)`.
+        // HandleContactPoints' debug arrow, drawn only while mbDEBUGRenderContacts is set.
+        void  DEBUG_RenderContactPoint(const BrnPhysics::ContactSpy::TrafficContact* lpContact);
         // @0x8273EFC8 (59). BODIED in _wT3_00.cpp. DWARF :1812 spells it
         // `const Attribute::Key GetCarAssetAttribKey(uint32_t) const` -- the trailing const
         // is restored here (the body only reads; it reaches Vehicle through the const
@@ -966,6 +984,23 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // BrnTrafficEntityModule_ProcessDeformationData.cpp.
         void ProcessDeformationData(
             const BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules* lpDefInterface);
+
+        // @0x827340C0 (190). DWARF h:1462 `void HandleContactPoints(const InputBuffer_PostPhysics*)`.
+        // PostPhysicsUpdate's RUNNING head leg at 0x8274EA68 (after HandleResetRaceCarEvents,
+        // before ProcessDeformationData): runs down every used TrafficPhysicsInfo's
+        // mfStuckTimerDebounce by mfSimTimeStep and clears its muContactSideFlags once it has
+        // run out, then hands both ends of every traffic contact the physics side published to
+        // ProcessContactPoint. Its flags are what UpdateVehicleStuckTimers accumulates into the
+        // front / back stuck timers GenerateDriverInputs' wedge arm reads.
+        void HandleContactPoints(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput);
+
+        // @0x82720C68 (150). DWARF h:1470 `void ProcessContactPoint(const TrafficContact*,
+        // const EntityId&)`. One end of one contact: if it is a physical, alive traffic car and
+        // the point on it lies inside its widened sides, a point far enough forward marks the
+        // car E_CONTACT_SIDE_FRONT and one far enough back E_CONTACT_SIDE_BACK, re-arming the
+        // debounce timer. The id is the contact's own member (the console passes &idA / &idB).
+        void ProcessContactPoint(const BrnPhysics::ContactSpy::TrafficContact* lpContact,
+                                 const EntityId& lEntityId);
 
         // ---- the spawn legs. Bodies in BrnTrafficEntityModule_wT1_01.cpp; the address on
         //      each line is its ARTIST entry point. ----

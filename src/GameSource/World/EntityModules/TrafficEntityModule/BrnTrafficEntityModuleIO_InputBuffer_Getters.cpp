@@ -155,5 +155,15 @@ namespace BrnTrafficIO
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mDeformationOutputInterfaceForEntityModules;
     }
+
+    // X360 0x827119A0 (IDA leaves it `sub_827119A0`; DWARF :365 GetContactSpyInterface) --
+    // read-lock (`lbz r11,0(this) ; rlwinm r11,r11,28,31,31`), "Not locked for reading" @
+    // BrnTrafficEntityModuleIO.h:369, then `addis r3,r28,2 ; addi r3,r3,-0x6110` == 106224 ==
+    // &mContactSpyInterface. Consumer: TrafficEntityModule::HandleContactPoints @0x827342DC.
+    const InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface() const
+    {
+        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        return &mContactSpyInterface;
+    }
 }
 }
