@@ -19,15 +19,13 @@
 // the crash module perfectly wired, the RaceCarCrashCompleteEvent would have arrived in
 // InputBuffer_PostScene::mCrashInterface and been read by nobody, every frame, forever.
 //
-// ⛔ PostSceneUpdate IS LANDED AS A DELIBERATE SLICE, NOT WHOLE. Its console body calls eight
-// helpers, and when this file landed SIX of them did not exist anywhere in this tree. Six are
-// bodied now -- ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests,
+// ⭐ PostSceneUpdate WAS LANDED AS A DELIBERATE SLICE AND IS NOW WHOLE. Its console body calls eight
+// helpers, and when this file landed SIX of them did not exist anywhere in this tree. All eight are
+// bodied and called now -- ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests,
 // CheckForResetOnTrackConditions, (2026-09-11) UpdateTrafficAndRaceCarNearMisses, (2026-09-24,
-// CHAIN-STOMPEES) ProcessLeapedAndStompedCars and (2026-09-24, FX-SCENEMGR item 4)
-// ProcessPowerParking -- and the remaining ONE is still not called:
-// PlaceOnTrackManager::PostSceneUpdate (blocked on two absent Geometric kernels, FX-SCENEMGR 3c).
-// This body runs every leg that IS reachable and logs the rest once, so it is honest about
-// exactly what is missing.
+// CHAIN-STOMPEES) ProcessLeapedAndStompedCars, (2026-09-24, FX-SCENEMGR item 4)
+// ProcessPowerParking and (2026-09-24, FX-GEOMETRIC) PlaceOnTrackManager::PostSceneUpdate, the
+// producer of the place-on-track line test (its two Geometric kernels landed in b5 94bcd871).
 //
 // ⚠️⚠️ THE PARK THAT MATTERS, STATED PLAINLY: SendResetOnTrackRequests is the consumer of
 // RaceCar::mbToBeResetOnTrack. RaceCar::RequestResetOnTrack (BrnRaceCar.cpp:251, real and
@@ -533,7 +531,7 @@ void RaceCarEntityModule::ProcessPowerParking(
 }
 
 // =================================================================================================
-// PostSceneUpdate @ 0x822FE3F0   -- MINIMAL-COMPLETE SLICE (see the file banner)
+// PostSceneUpdate @ 0x822FE3F0   -- all eight console callees (see the file banner)
 //
 // Console order:
 //   PerfMon start · assert lpInput/lpOutput · LockForRead(in) · LockForWrite(out)
@@ -542,7 +540,7 @@ void RaceCarEntityModule::ProcessPowerParking(
 //   ProcessLeapedAndStompedCars                                       ⭐ REPRODUCED (2026-09-24)
 //   the Showtime traffic publish into the race-car -> traffic interface ⭐ REPRODUCED (2026-09-24)
 //   if (!mbIsInGameMode || meGameModeType == 15) ProcessPowerParking  ⭐ REPRODUCED (2026-09-24)
-//   PlaceOnTrackManager::PostSceneUpdate                              [ABSENT -- FX-SCENEMGR 3c]
+//   PlaceOnTrackManager::PostSceneUpdate                              ⭐ REPRODUCED (2026-09-24)
 //   SendResetOnTrackRequests                                          ⭐ REPRODUCED
 //   CheckForResetOnTrackConditions                                    ⭐ REPRODUCED (2026-09-05)
 //   UnlockForRead(in) · UnlockForWrite(out) · PerfMon stop
@@ -616,12 +614,22 @@ void RaceCarEntityModule::PostSceneUpdate(
     // 2026-09-24): `lbzx +0x18344 (mbIsInGameMode) ; beq` straight to the call, else `lwzx +0x18368
     // (meGameModeType) ; cmpwi 0xF ; bne` past it -- the same gate UpdatePowerParking has in
     // PostPhysicsUpdate. Right after the Showtime publish, before PlaceOnTrackManager::PostSceneUpdate
-    // (0x822FE598, still absent -- item 3c) and SendResetOnTrackRequests.
+    // and SendResetOnTrackRequests.
     if( !mbIsInGameMode
         || meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY )
     {
         ProcessPowerParking( lpInput, lpOutput );
     }
+
+    // 0x822FE58C..0x822FE598 -- THE PLACE-ON-TRACK PRODUCER (crash parity FX-GEOMETRIC, 2026-09-24):
+    // `addis r3, r31, 1 ; addi r3, r3, 0x7850` (this + 0x17850 == mPlaceOnTrackManager) ;
+    // `mr r4, r30` (lpOutput) ; `bl 0x822D3168`. Unconditional. It posts one world-only fine line
+    // test per car with a pending place-on-track request; WorldModule::EntityModulePostSceneUpdate
+    // answers it straight after this update and bridges the result into the pre-physics input that
+    // PlaceOnTrackManager::PrePhysicsUpdate walks. Absent until today, so every request was answered
+    // by a PC-only WORLDCOL.BIN walk instead (ApplyPendingRequestsWithoutSceneQueryBringUp, retired in
+    // the same change).
+    mPlaceOnTrackManager.PostSceneUpdate( lpOutput );
 
     // ⭐⭐⭐ THE PRODUCER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
     // console's own slot -- SendResetOnTrackRequests is the fifth of PostSceneUpdate's eight
@@ -642,13 +650,13 @@ void RaceCarEntityModule::PostSceneUpdate(
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: SIX of the eight"
-                   " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents,"
+                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate: all eight console"
+                   " callees are reconstructed and called -- ProcessRaceCarCrashCompleteEvents,"
                    " (resetpump wave 2026-08-26) SendResetOnTrackRequests, (roll-frequency"
                    " wave 2026-09-05) CheckForResetOnTrackConditions, (near-miss producer"
                    " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses, (2026-09-24)"
-                   " ProcessLeapedAndStompedCars and (2026-09-24) ProcessPowerParking. ONE still"
-                   " has no call here (PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
+                   " ProcessLeapedAndStompedCars, (2026-09-24) ProcessPowerParking and"
+                   " (2026-09-24) PlaceOnTrackManager::PostSceneUpdate\n"
                    "[crash-exit] ... and the RESET-ON-TRACK PUMP HAS BOTH PRODUCERS: the crash"
                    " leg (ProcessRaceCarCrashCompleteEvents -> RequestResetOnTrack) and, as of"
                    " 2026-09-05, the WATCHDOG leg (CheckForResetOnTrackConditions @0x822CE9E0 --"

@@ -313,10 +313,17 @@ OutputBuffer_PostScene::GetSceneFineLineTestQueue() const
     return &mSceneFineLineTestQueue;
 }
 
-// :377 -- the write-side twin, same disposition as the coarse one above.
+// X360 0x822B5560 (W, :377) -- the write-side twin, emitted out of line on the console (crash parity
+// FX-GEOMETRIC, 2026-09-24: this seat had no tripwire until its producer landed). `lbz 0(r28) ;
+// rlwinm 29,31,31` (status >> 3 & 1, the write-lock bit) `; bne` past BeginAssert / FireAssert(
+// 0x82006294 "Not locked for writing\n", BrnRaceCarEntityModuleIO.h, `li r5, 0x182` == :386) /
+// EndAssert, then `addi r3, r28, 0x4020` (+16416). Sole caller: PlaceOnTrackManager::PostSceneUpdate
+// @0x822D33D4 (the only xref in the ARTIST export), inside RaceCarEntityModule::PostSceneUpdate's
+// LockForWrite.
 OutputBuffer_PostScene::SceneFineLineTestQueue*
 OutputBuffer_PostScene::GetSceneFineLineTestQueue()
 {
+    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
     return &mSceneFineLineTestQueue;
 }
 

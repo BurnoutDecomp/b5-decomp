@@ -60,6 +60,11 @@
 // whole fine-line-test round trip is severed in five places (nothing produces an
 // OutEventLineTestFineResult on PC at all), so merging would only propagate the disputed
 // offset. Merge when the round trip lands.
+// ⭐ 2026-09-24 (crash parity FX-SCENEMGR / FX-GEOMETRIC): the disputed offset is SETTLED (the
+// sibling now reads +0x10 too, b5044a9d) and the round trip is LIVE -- PostSceneUpdate below
+// produces the query, the scene answers it (ProcessLineTestFine -> CollideLineAgainstPolySoupList,
+// 94bcd871) and PrePhysicsUpdate consumes it. The merge into the CgsSceneManager types is the
+// remaining cleanup (MERGE-WHEN someone owns both headers).
 // =============================================================================
 
 namespace BrnWorld
@@ -70,6 +75,7 @@ namespace RaceCarEntityModuleIO
 {
     struct InputBuffer_PrePhysics;
     struct OutputBuffer_PrePhysics;
+    struct OutputBuffer_PostScene;
 }
 
 // One candidate place-on-track node (64-byte stride, per the X360 loop).
@@ -132,6 +138,16 @@ public:
     void Construct(RaceCarEntityModule* lpRaceCarEntityModule);
 
     // ------------------------------------------------------------------------
+    // PostSceneUpdate @ 0x822D3168 (DWARF BrnPlaceOnTrackManager.h:49; PS3 0x14A31C) -- the
+    // PRODUCER: for every attached car with a pending RequestPlaceOnTrack, post a 100 m vertical
+    // world-only fine line test through the request position (query id Set(KI_LINE_TEST_OWNER,
+    // slot)) into the module's post-scene output. The scene answers it the same frame and
+    // PrePhysicsUpdate below places the car on the best intersection. Called from
+    // RaceCarEntityModule::PostSceneUpdate (0x822FE58C). Landed 2026-09-24 (FX-GEOMETRIC).
+    // ------------------------------------------------------------------------
+    void PostSceneUpdate(RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput);
+
+    // ------------------------------------------------------------------------
     // PrePhysicsUpdate @ 0x822F6DF8 -- drain the scene-result queue, and for every
     // fine-line-test result whose query owner is KI_LINE_TEST_OWNER, place that car.
     // This is the ONLY caller of RaceCarEntityModule::ResetActiveRaceCar, which in turn
@@ -142,14 +158,11 @@ public:
 
 private:
     // The tail of PrePhysicsUpdate's per-result body (asm 0x822F7274..0x822F7898), factored
-    // so the bring-up leg below can run the CONSOLE's own code with the console's own
-    // "no intersection found" input rather than paraphrasing it.
+    // out of the walk. (It was factored so a PC bring-up leg could share it; that leg,
+    // ApplyPendingRequestsWithoutSceneQueryBringUp, is RETIRED 2026-09-24 with PostSceneUpdate's
+    // landing -- the walk is its only caller again.)
     void PlaceCarOnTrack(EActiveRaceCarIndex leActiveRaceCarIndex,
                          const PlaceOnTrackCandidate* lpBestIntersection,
-                         RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput);
-
-    // [FLAG PC bring-up] NOT an X360 function. See the .cpp banner.
-    void ApplyPendingRequestsWithoutSceneQueryBringUp(
                          RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpOutput);
 
     // [teleport] NOT an X360 function -- the harness `BRN_CAR_TELEPORT` trigger. It issues ONE

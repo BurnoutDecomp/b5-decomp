@@ -701,8 +701,9 @@ void RaceCarEntityModule::SetupOpponents(
 // place-on-track chain the harness BRN_CAR_TELEPORT trigger already drives and that is already
 // proven live ("[teleport] ResetActiveRaceCar RE-RESET car 0 -> road ... seated ..."):
 //     ActiveRaceCar::RequestPlaceOnTrack @0x822BFB58     (the request latch)
-//       -> PlaceOnTrackManager::PrePhysicsUpdate @0x822F6DF8
-//            (PC: ApplyPendingRequestsWithoutSceneQueryBringUp, over the shipped WORLDCOL.BIN)
+//       -> PlaceOnTrackManager::PostSceneUpdate @0x822D3168 (the 100 m world line test; the
+//            PC-only WORLDCOL.BIN answer that stood here is retired, FX-GEOMETRIC 2026-09-24)
+//       -> PlaceOnTrackManager::PrePhysicsUpdate @0x822F6DF8 (the scene's answer, walked)
 //       -> ComputeBestPlaceOnT @0x822BE238               (candidate ranking)
 //       -> PlaceOnTrackManager::PlaceCarOnTrack          (BrnMath::BuildTransform(pos, at, up))
 //       -> RaceCarEntityModule::ResetActiveRaceCar @0x822F4880

@@ -9,14 +9,34 @@
 // The body and CgsSceneQueryId.h's struct are extracted VERBATIM by run_fxscenemgr_place_on_track_query_id.py;
 // the pre-fix body read the big-endian memory bytes [1] / [0] of the id, which on this host are bits
 // [8..15] / [0..7].
+// FX-GEOMETRIC (same day) landed the producer (PostSceneUpdate) and in the same change RETIRED the PC-only tail
+// ApplyPendingRequestsWithoutSceneQueryBringUp -- the console walk has no such tail and does not re-test
+// mbToBePlacedOnTrack, so with the producer live the tail would place every car twice. The last check now pins
+// that it no longer runs (it fails on 94bcd871), and the walk's console prints (0x822F6FBC..0x822F7048 and the
+// "Selected intersection" line) are read through a recording log sink.
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <vector>
 
 namespace CgsModule { struct Event {}; }
+
+namespace CgsDev {
+static std::string gText;
+namespace Log {
+struct DebugPrint
+{
+    DebugPrint& operator<<(const char* lpc) { gText += lpc; return *this; }
+    DebugPrint& operator<<(s32 li) { gText += std::to_string(li); return *this; }
+};
+static DebugPrint gPrint;
+DebugPrint* gpDebugPrint = &gPrint;
+}
+namespace Message { u64 gxMessageFilterFlags = 1; }
+}
 
 namespace CgsSceneManager {
 #include "fxsm_qid_struct.inc"   // struct SceneQueryId { ... }; (from the revision under test)
@@ -194,7 +214,17 @@ int main()
     Check(lManager.maRanked.size() == 2 && lManager.maRanked[0].mQuery.x == 103.0f && lManager.maRanked[0].mQuery.y == 6.0f
           && lManager.maRanked[0].mQuery.z == -53.0f && lManager.maRanked[0].mQuery.w == 0.0f,
           "the query point is the asking car's GetPlaceOnTrackPosition, w = 0");
-    Check(lManager.miBringUps == 1, "the frame's tail still runs once");
+    Check(lManager.miBringUps == 0,
+          "no PC-only tail after the walk: ApplyPendingRequestsWithoutSceneQueryBringUp is retired (FX-GEOMETRIC), "
+          "so each answer places its car exactly once");
+    const std::string lExpect =
+        "[PLACEONTRACK] Received line test result for race car 3\n"
+        "    lpLineTestResult->miNumIntersections=2\n"
+        "    Selected intersection 0 as place on track destination\n"
+        "[PLACEONTRACK] Received line test result for race car 6\n"
+        "    lpLineTestResult->miNumIntersections=0\n";
+    Check(CgsDev::gText == lExpect,
+          "the walk's console prints per answer (gxMessageFilterFlags & 1): result, count, selected index");
 
     std::printf("FxScenemgrPlaceOnTrackQueryId: %d checks, %d failures\n", giChecks, giFailures);
     return giFailures ? 1 : 0;
