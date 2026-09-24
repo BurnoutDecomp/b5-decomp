@@ -318,15 +318,21 @@ void CrashPlayManager::Activate( ActiveRaceCar* /*lpPlayerActiveRaceCar*/,
 // ClampBoostLevel  (DWARF BrnCrashPlayManager.h:225)
 //
 // No out-of-line X360 symbol: the console inlines it at all six sites, always as the same pair of
-// `fsel`s -- `fneg f13,x / fsel f0,f13,ZERO,x` (== Max(x, 0)) then `fsubs f12,100.0,f0 /
-// fsel f0,f12,f0,100.0` (== Min(f0, 100)). The DWARF names it as a callee of OnEnterRoad,
-// OnEnterJunction, OnHitOverheadSign, OnVehicleHitConfirmed, OnBounce and UpdateMomentum, which is
-// exactly the six sites, so the outlining is attested and not inferred.
+// `fsel`s -- `fneg f13,x / fsel f0,f13,ZERO,x` (-x >= 0 ? 0 : x == Max(0, x)) then
+// `fsubs f12,100.0,f0 / fsel f0,f12,f0,100.0` (100 - f0 >= 0 ? f0 : 100 == Min(100, f0)), ZERO =
+// flt_82001CC0, 100.0 = flt_82014808: OnBounce 0x822A7F78..0x822A7F88, UpdateMomentum
+// 0x82302268..0x82302278 and 0x823022D8..0x823022EC, OnVehicleHitConfirmed 0x822C33B8..0x822C33C8 and
+// 0x822C3454..0x822C3464, OnHitOverheadSign 0x822A805C..0x822A8078. That is rwmath's
+// Clamp(v, min, max) = Min(max, Max(min, v)) (scalar.h:335-338) operand for operand, so a NaN meter
+// comes out 100 (the first fsel keeps the NaN, the second takes 100) and -0 comes out +0; the old
+// spelling Min(Max(x, 0), 100) gave 0 and -0 (crash parity FX-RCEM4, FX-FPUMAX's leftover). The DWARF
+// names it as a callee of OnEnterRoad, OnEnterJunction, OnHitOverheadSign, OnVehicleHitConfirmed,
+// OnBounce and UpdateMomentum, which is exactly the six sites, so the outlining is attested and not
+// inferred.
 // =================================================================================================
 void CrashPlayManager::ClampBoostLevel()
 {
-    mfBoostPercentage = rw::math::fpu::Min( rw::math::fpu::Max( mfBoostPercentage, 0.0f ),
-                                            KF_MAX_BOOST );
+    mfBoostPercentage = rw::math::fpu::Clamp( mfBoostPercentage, 0.0f, KF_MAX_BOOST );
 }
 
 // =================================================================================================
