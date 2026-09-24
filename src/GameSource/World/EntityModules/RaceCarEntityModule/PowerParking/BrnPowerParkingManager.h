@@ -96,6 +96,8 @@ namespace BrnWorld
         PowerParkingDebugComponent mPowerParkingDebugComponent;  // 0x84 (X360)
         bool              mbDebugForcePowerPark;             // 0x94 (X360)
 
+        // DWARF :75 / :78. Both inlined on the console -- into RaceCarEntityModule::Construct
+        // (0x822FDB14 / 0x822FDB1C) and ::Destruct (0x822F3DC0); bodies in the .cpp.
         void Construct();
         void Destruct();
         bool Prepare();

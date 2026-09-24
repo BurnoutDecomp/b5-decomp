@@ -60,6 +60,25 @@ namespace BrnWorld
                                  + KF_PROXIMITY_SCORE_WEIGHT + KF_DISTANCE_SCORE_WEIGHT ) * 0.98f;   // :49 .bss flt_82FAD3FC
     f32 KF_WAIT_FOR_OUTCOME_TIME                    = 1.5f;     // :53 flt_82CDB504 (Update 0x822F888C)
 
+    // DWARF :75. No X360 symbol: RaceCarEntityModule::Construct inlines it on r10 = module + 0x18250
+    // (0x822FDADC `addi r10, r10, -0x7DB0` off `addis r10, r30, 2`) as two stores --
+    //     0x822FDB14  stb r31(=0), 0x94(r10)    mbDebugForcePowerPark = false
+    //     0x822FDB1C  stw r10, 0x90(r10)        mPowerParkingDebugComponent.Construct(this)
+    // (scheduler order). PS3 0x126C3C keeps it out of line and gives the source order: the debug
+    // component first, then the byte. Nothing else is seeded here; Prepare clears the scores.
+    void PowerParkingManager::Construct()
+    {
+        mPowerParkingDebugComponent.Construct(this);
+        mbDebugForcePowerPark = false;
+    }
+
+    // DWARF :78. No X360 symbol: inlined into RaceCarEntityModule::Destruct @0x822F3DC0 as the
+    // debug component's Destruct on module + 0x182E0 (== +0x18250 + 0x90). PS3 0x126DA8.
+    void PowerParkingManager::Destruct()
+    {
+        mPowerParkingDebugComponent.Destruct();
+    }
+
     // X360 0x822C24B8 -- reset the per-attempt scoring state, then register the scorer's debug
     // component with the debug menu. Returns true (the RaceCarEntityModule::Prepare convention).
     // Grounded store-for-store on the asm: only the fields the asm writes are cleared here (it
@@ -155,7 +174,8 @@ namespace BrnWorld
     // DWARF :420 / :433. No out-of-line symbol: RaceCarEntityModule inlines each as a bare
     // increment of the manager's tally (UpdateTrafficAndRaceCarNearMisses bumps +0x68 per drained
     // near-traffic record, UpdateRaceCarContacts +0x64 per player contact). The entity id is not
-    // stored.
+    // stored. (PS3 keeps both out of line -- 0x123AE0 / 0x123AF0 -- and its two callers pass the
+    // same id the neighbouring NearMissManager call gets.)
     void PowerParkingManager::AddNearTraffic(u32 luEntityId)
     {
         (void)luEntityId;

@@ -83,6 +83,53 @@ namespace
     // latch: the drain runs every post-scene tick, so one line would only prove the first
     // non-empty batch, while unbounded printing would flood a lane drive.
     s32 s_iNearMissDrainBudget = 24;
+
+    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE ORIGINAL BINARY (crash parity FX-SCENEMGR item 4,
+    // 2026-09-24). UpdatePowerParking's witness: the scorer's own state transitions across one
+    // PowerParkingManager::Update -- a park starting, a park ending (with the outcome
+    // DetermineOutcome gave it) and the result countdown running out -- plus how many game events
+    // the step appended (1 == the E_EVENT_POWER_PARK_RESULT post). Capped.
+    bool PowerParkDiagEnabled()
+    {
+        static const bool sbEnabled = ( getenv( "BRN_POWER_PARK_DIAG" ) != 0 );
+        return sbEnabled && CgsDev::Log::gpDebugPrint != 0;
+    }
+
+    void PowerParkDiagReport( const PowerParkingManager& lrManager, bool lbWasParking,
+                              f32 lfCountdownBefore, s32 liEventsAppended, f32 lfHandBrake )
+    {
+        static u32 suLines = 0u;
+        if( suLines >= 96u )
+            return;
+
+        if( !lbWasParking && lrManager.IsPowerParking() )
+        {
+            ++suLines;
+            *CgsDev::Log::gpDebugPrint << "[power-park] start: park in progress (speed "
+                                       << lrManager.mfLowestSpeedThisPark << " m/s, handbrake "
+                                       << lfHandBrake << ")\n";
+        }
+        else if( lbWasParking && !lrManager.IsPowerParking() )
+        {
+            ++suLines;
+            *CgsDev::Log::gpDebugPrint << "[power-park] end: outcome " << static_cast<s32>( lrManager.mePowerParkOutcome )
+                                       << " rating " << lrManager.miOverallRating
+                                       << " nearby parked " << lrManager.muNearbyParkedCarCount
+                                       << " players " << lrManager.muNearbyParkedPlayerCount
+                                       << " closestSq " << lrManager.mfClosestDistanceSq
+                                       << " perp " << lrManager.mfClosestPerpendicularDist
+                                       << " countdown " << lrManager.mfTimeUntilDisplayOutcome << "\n";
+        }
+
+        if( lfCountdownBefore > 0.0f && !( lrManager.mfTimeUntilDisplayOutcome > 0.0f ) )
+        {
+            ++suLines;
+            *CgsDev::Log::gpDebugPrint << "[power-park] result countdown over: outcome "
+                                       << static_cast<s32>( lrManager.mePowerParkOutcome )
+                                       << " rating " << lrManager.miOverallRating
+                                       << " events appended " << liEventsAppended << "\n";
+        }
+    }
 }
 
 // =================================================================================================
@@ -277,6 +324,47 @@ void RaceCarEntityModule::UpdateNearMisses(
 }
 
 // =================================================================================================
+// RaceCarEntityModule::UpdatePowerParking @0x822FF5B0 (DWARF BrnRaceCarEntityModule.h:578, body
+// .cpp:4543) -- crash parity FX-SCENEMGR item 4, 2026-09-24; absent before (no body, no call).
+//
+//   0x822FF5CC  lwzx r4, +0x182F8 (mePlayerActiveRaceCarIndex) ; bl GetActiveRaceCar -> r29
+//   0x822FF5DC  bl 0x822B67D0 (OutputBuffer_PostPhysics::GetGameEventQueue, the write accessor:
+//               +0xD0660, tripwire line 0x252) -> r8
+//   0x822FF604  lfsx f1, +0x18398 (mfTimeStep) ; lwzx r4, +0x18368 (meGameModeType) ;
+//               r7 = +0x183A8 (&mPlayerVehicleControls) ; r6 = r29 ; r3 = +0x18250
+//   0x822FF610  bl PowerParkingManager::Update
+// lpInput (r4 on entry) is never read. The one caller is PostPhysicsUpdate @0x8230778C, inside the
+// second sim-paused skip right after UpdateNearMisses, behind the same `!mbIsInGameMode ||
+// meGameModeType == 15` gate as ProcessPowerParking.
+// =================================================================================================
+void RaceCarEntityModule::UpdatePowerParking(
+        const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+        RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput )
+{
+    (void)lpInput;
+
+    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE ORIGINAL BINARY: the pre-step state the witness
+    // compares against (see PowerParkDiagReport).
+    const bool lbDiag            = PowerParkDiagEnabled();
+    const bool lbDiagWasParking  = mPowerParkingManager.IsPowerParking();
+    const f32  lfDiagCountdown   = mPowerParkingManager.mfTimeUntilDisplayOutcome;
+    const s32  liDiagEventsFirst = lbDiag ? lpOutput->GetGameEventQueue()->GetLength() : 0;
+
+    mPowerParkingManager.Update( meGameModeType,
+                                 mfTimeStep,
+                                 GetActiveRaceCar( mePlayerActiveRaceCarIndex ),
+                                 &mPlayerVehicleControls,
+                                 lpOutput->GetGameEventQueue() );
+
+    if( lbDiag )
+    {
+        PowerParkDiagReport( mPowerParkingManager, lbDiagWasParking, lfDiagCountdown,
+                             lpOutput->GetGameEventQueue()->GetLength() - liDiagEventsFirst,
+                             mPlayerVehicleControls.mfHandBrake );
+    }
+}
+
+// =================================================================================================
 // RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses -- THE PRODUCER OF BOTH NEAR LISTS.
 //
 // This is the only caller of NearMissManager::AddNearTraffic / AddNearRaceCar anywhere in the
@@ -320,7 +408,9 @@ void RaceCarEntityModule::UpdateTrafficAndRaceCarNearMisses(
 
         if( lbCountForPowerParking )
         {
-            ++miPowerParkingNearTrafficCount;
+            // The inlined PowerParkingManager::AddNearTraffic (+0x68 on module + 0x18250); PS3
+            // 0x13E7AC passes it the same car id NearMissManager::AddNearTraffic just got.
+            mPowerParkingManager.AddNearTraffic( ( *lpNearMissTrafficCollection )[ luIndex ].muCarId );
         }
     }
 

@@ -50,6 +50,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/TrafficCheck/BrnTrafficCheckManager.h"    // BrnWorld::TrafficCheckManager (by value, +0x180E8) [boost-wave2]
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"                     // BrnPhysics::Vehicle::AggressiveDrivingFlags (mAggressiveDrivingFlags, +0x1836C) [boost-wave2]
 #include "GameSource/World/EntityModules/RaceCarEntityModule/CrashPlay/BrnCrashPlayDebugComponent.h"  // BrnWorld::CrashPlayManager (by value, +0x180F0)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h"   // BrnWorld::PowerParkingManager (by value, +0x18250)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"
 #include "GameSource/AttribSys/Generated/classes/surfacelist.h"        // Attrib::Gen::surfacelist mSurfaceList (DWARF :365)     // BrnWorld::PlayerVehicleControls (by value, +0x183A8)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                       // BrnNetwork::EPaybackType (meActivePaybackType)
@@ -200,6 +201,19 @@ public:
         // (r5 @0x822FE4AC) and the body never reads it (crash parity CHAIN-STOMPEES c, 2026-09-24).
         void ProcessLeapedAndStompedCars( const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
                                           RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput );
+
+        // X360 0x822CDF10 (DWARF BrnRaceCarEntityModule.h:629, body :1420). The Power Parking
+        // consumer on the post-scene tick: takes the traffic module's nearby-PARKED-traffic
+        // measurements off the input buffer, ranks every in-world, not-crashing NETWORK race car
+        // against the player on the same running minima (CheckVehicleForPowerPark), hands the
+        // result to mPowerParkingManager while a park is in progress, and publishes
+        // IsPowerParking() as RaceCarToTrafficInterface bit 0 -- the gate of the traffic module's
+        // GenerateNearbyParkedTrafficOutput. Called from PostSceneUpdate @0x822FE588, gated
+        // `!mbIsInGameMode || meGameModeType == E_MODE_ONLINE_FREE_BURN_LOBBY`. Body in
+        // BrnRaceCarEntityModule_CrashExit.cpp beside its PostSceneUpdate neighbours
+        // (crash parity FX-SCENEMGR item 4, 2026-09-24).
+        void ProcessPowerParking( const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
+                                  RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput );
 
         // ---- THE CRASH ENTRY, consumer side (crash wave 2026-09-02). X360 0x822BD8B0
         //      (127 insns), DWARF :668. Body in BrnRaceCarEntityModule_CrashExit.cpp beside its
@@ -915,6 +929,14 @@ public:
     void UpdateNearMisses(RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
                           RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput);
 
+    // X360 0x822FF5B0 (DWARF BrnRaceCarEntityModule.h:578, body :4543). One Power Parking scorer
+    // step: mPowerParkingManager.Update(meGameModeType, mfTimeStep, the player's active car,
+    // &mPlayerVehicleControls, lpOutput->GetGameEventQueue()). lpInput is never read. Called from
+    // PostPhysicsUpdate @0x8230778C right after UpdateNearMisses, gated like ProcessPowerParking.
+    // Body in BrnRaceCarEntityModule_NearMissTailgate.cpp (crash parity FX-SCENEMGR item 4).
+    void UpdatePowerParking(const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput,
+                            RaceCarEntityModuleIO::OutputBuffer_PostPhysics* lpOutput);
+
     // The PRODUCER of both near lists. Drains the traffic module's two proximity collections
     // out of the post-scene input buffer's traffic->race-car interface into mNearMissManager,
     // and tallies the traffic half for power parking while the module is out of a game mode.
@@ -1608,6 +1630,17 @@ private:
     // through this base (see the manager's own re-seated banner).
     CrashPlayManager mCrashPlayManager;
 
+    // X360 +0x18250 (98896). DWARF :356, the member right after mCrashPlayManager (0x180F0 + 0x160).
+    // Embedded (crash parity FX-SCENEMGR item 4, 2026-09-24); every console reference is asm-literal:
+    //   Construct       0x822FDADC  r10 = module + 0x18250; 0x822FDB14 / 0x822FDB1C the inlined
+    //                               PowerParkingManager::Construct (+0x94 byte, +0x90 back pointer)
+    //   Prepare         0x82303FE8  `addi r3, r3, -0x7DB0` ; 0x82304048 bl PowerParkingManager::Prepare
+    //   ProcessPowerParking 0x822CE104  lbz +0 (IsPowerParking) ; stw/stfs +0x6C..+0x80
+    //   UpdatePowerParking  0x822FF608  r3 = module + 0x18250 ; bl PowerParkingManager::Update
+    //   UpdateRaceCarContacts / UpdateTrafficAndRaceCarNearMisses  +0x64 / +0x68 (the two tallies)
+    //   Destruct        0x822F3DC0  module + 0x182E0 (the debug component's back pointer)
+    PowerParkingManager mPowerParkingManager;
+
     // X360 +0x18345/+0x18346 (99141/99142) and +0x1834D/+0x1834E (99149/99150). DWARF :371/:372
     // and :379/:380 -- four more entries of the SAME seventeen-bool run this header already
     // fitted at both ends (mbIsInGameMode :370 @+99140 ... mbRenderRaceCarCoronas :381 @+99151).
@@ -1762,32 +1795,10 @@ private:
     Vector2 mPlayersCurrentRouteNodePosition; // ARTIST +0x18720; DecFIGS named member.
     Vector2 mPlayersNextRouteNodePosition;    // ARTIST +0x18730.
 
-    // ========================================================================
-    // MODELLED member (near-miss producer wave, 2026-09-11).
-    // ========================================================================
-    // Running tally of near-traffic records drained by UpdateTrafficAndRaceCarNearMisses,
-    // counted only while the module is out of a game mode or in the online free-burn lobby --
-    // i.e. only when power parking can be scored at all.
-    // ⚠️ THE CONSOLE'S SEAT IS NOT A MODULE MEMBER: it is mPowerParkingManager's +0x68
-    // (PowerParkingManager::miNearTrafficCount), the sibling of the +0x64 contact tally
-    // UpdateRaceCarContacts bumps, and the ProcessPowerParking / UpdatePowerParking pair reads
-    // it. The manager is NOT embedded in this build: neither PowerParking TU is mounted, only
-    // two of its member functions have bodies, and embedding it by value would drag an
-    // unresolved debug-component vtable into the module. The console's WRITE is reproduced on
-    // this seat rather than dropped. DELETE-WHEN the manager is embedded -- at which point
-    // this becomes mPowerParkingManager.miNearTrafficCount and the accesses move with it.
-    s32 miPowerParkingNearTrafficCount = 0;
-
-    // MODELLED member (boost-wave2 2026-09-14), the immediate sibling of the seat above and the
-    // same DELETE-WHEN. Running tally of vehicle CONTACTS the player's car made this session:
-    // UpdateRaceCarContacts bumps it once per player-side contact, whether the other party is
-    // traffic (owner 2) or another race car (owner 1).
-    // ⚠️ THE CONSOLE'S SEAT IS NOT A MODULE MEMBER either: it is mPowerParkingManager's +0x64
-    // (PowerParkingManager::miContactTrafficCount, DWARF BrnPowerParkingManager.h -- the member
-    // immediately before miNearTrafficCount), reached by UpdateRaceCarContacts as
-    // `lwz/stw 0x64(module + 0x18250)`. Nothing else in the image reads it; the console's WRITE
-    // is reproduced on this seat rather than dropped. DELETE-WHEN the manager is embedded.
-    s32 miPowerParkingContactTrafficCount = 0;
+    // (The two MODELLED power-parking tally seats that stood here -- miPowerParkingNearTrafficCount
+    // and miPowerParkingContactTrafficCount -- are RETIRED: their DELETE-WHEN fired when
+    // mPowerParkingManager was embedded (crash parity FX-SCENEMGR item 4, 2026-09-24). The writes
+    // are PowerParkingManager::AddNearTraffic / AddContactTraffic on the manager's own +0x68 / +0x64.)
 
     // MODELLED member (crash parity G61-D4, 2026-09-24). DWARF BrnRaceCarEntityModule.h:420
     // `Random mNonDeterministicRandom`, X360 +0x18490 (48 bytes, ending at mfLastPlayerCarSpeed

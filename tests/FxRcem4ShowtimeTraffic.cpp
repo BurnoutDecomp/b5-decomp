@@ -29,6 +29,12 @@ namespace Log { DebugPrint* gpDebugPrint = nullptr; void WriteToLog(const char*)
 namespace Message { u64 gxMessageFilterFlags = 0; }
 }
 
+// BrnGameStateSharedIO.h's EGameModeType, the two values PostSceneUpdate's Power Parking gate names
+// (added 2026-09-24, FX-SCENEMGR item 4, when the gated ProcessPowerParking call landed).
+namespace BrnGameState { namespace GameStateModuleIO {
+enum EGameModeType { E_MODE_NONE = -1, E_MODE_ONLINE_FREE_BURN_LOBBY = 15 };
+} }
+
 namespace Fixture {
 static std::vector<std::string> gaCalls;
 static const f32 KF_TIME_ON_GROUND_NO_PENALTY = 1.0f;   // 0x82CDB540 (x360rd), BrnCrashPlayManager.cpp's static
@@ -67,6 +73,9 @@ inline bool CrashExitDiagEnabled() { return false; }
 
 struct RaceCarEntityModule {
     CrashPlayManager mCrashPlayManager;
+    bool mbIsInGameMode = false;                                                                  // +0x18344
+    BrnGameState::GameStateModuleIO::EGameModeType meGameModeType = BrnGameState::GameStateModuleIO::E_MODE_NONE;   // +0x18368
+    void ProcessPowerParking(const RaceCarEntityModuleIO::InputBuffer_PostScene*, RaceCarEntityModuleIO::OutputBuffer_PostScene*) { gaCalls.push_back("powerpark"); }
     void UpdateTrafficAndRaceCarNearMisses(RaceCarEntityModuleIO::InputBuffer_PostScene*) { gaCalls.push_back("nearmiss"); }
     void ProcessRaceCarCrashCompleteEvents(RaceCarEntityModuleIO::InputBuffer_PostScene*) { gaCalls.push_back("crashcomplete"); }
     void ProcessLeapedAndStompedCars(RaceCarEntityModuleIO::InputBuffer_PostScene*, RaceCarEntityModuleIO::OutputBuffer_PostScene*) { gaCalls.push_back("stomp"); }
