@@ -5,6 +5,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                // CgsModule::VariableEventQueue<BUFSIZE,ALIGN> + AddEvent<EventT>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"        // OutEventLineTestNearestResult (layout-pinned)
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_LineTestFineResult.hpp" // OutEventLineTestFineResult + LineTestIntersection (type-1 records)
+#include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"   // CgsGeometric::PolySoupLineNearestResult (DWARF LineTestResult, read by name)
 
 // -------- CgsSceneManager::SceneManagerIO::OutSceneQueryResultsQueue<SizeBytes> --------
 //
@@ -61,15 +63,26 @@ namespace SceneManagerIO
                                                        const void*      lpIntersection,
                                                        bool             lbHasIntersection);
 
-        // @ X360 0x828C4A08 (SizeBytes == 32768). Reserve a variable-length RESULT event sized
-        // for a 16-byte header + liNumIntersections 64-byte intersection records, write the two
-        // header words (query id, intersection count) and return a pointer to the record area for
-        // the caller (SceneManagerModule::ProcessLineTestFine) to fill the records in place. Uses
-        // event-type id 1 (the sibling AddTriangleCollisionLineTestNearestResult uses id 2). NAME
-        // is inferred from the caller (ProcessLineTestFine) + the type-1 tag + the 64-byte record
-        // stride; the X360 IDA symbol is truncated ("...OutSceneQueryResultsQueu"). Returns the
-        // record-area pointer (void*), matching the X360 `return Event + 4` (past the 16-byte header).
-        void* AllocateLineTestFineResult(s32 liQueryId, s32 liNumIntersections);
+        // @ X360 0x828C4A08 (SizeBytes == 32768). DWARF CgsSceneManagerModuleIO.h:434
+        //     LineTestIntersection * AddLineTestFineResult(SceneQueryId, int);
+        // (RENAMED 2026-09-24, FX-SCENEMGR: this was spelled AllocateLineTestFineResult(s32, s32)
+        // returning void*, a name inferred from the caller while the IDA symbol was truncated.)
+        // Reserve a type-1 event of 16 + n * 64 bytes, write the header (query id, count) and
+        // return the record area for the caller to fill in place.
+        LineTestIntersection* AddLineTestFineResult(SceneQueryId lQueryId, s32 liNumIntersections);
+
+        // @ X360 0x828C4A60 (SizeBytes == 32768). DWARF CgsSceneManagerModuleIO.h:446
+        //     LineTestIntersection * AddTriangleCollisionLineTestResult(SceneQueryId, EntityId,
+        //                             VolumeInstanceId, const LineTestResult *, int);
+        // LineTestResult is `typedef IntersectLinePolygonSoupResult` (CgsCollisionResult.h:35) --
+        // the 112-byte record this tree names CgsGeometric::PolySoupLineNearestResult. One type-1
+        // event, one 64-byte record per line-test result, every record stamped with the SAME two
+        // caller ids. Its one caller is ProcessTriangleCollisionLineTests @0x828C6FB0 (ids 0, 0).
+        LineTestIntersection* AddTriangleCollisionLineTestResult(SceneQueryId                                   lQueryId,
+                                                                 EntityId                                       lEntityId,
+                                                                 VolumeInstanceId                               lVolumeInstanceId,
+                                                                 const CgsGeometric::PolySoupLineNearestResult* lpaResults,
+                                                                 s32                                            liNumResults);
     };
 
     template <s32 SizeBytes>
@@ -116,22 +129,65 @@ namespace SceneManagerIO
         return this->template AddEvent<OutEventLineTestNearestResult>(&lEvent, 2);
     }
 
-    // -------- AllocateLineTestFineResult  @ X360 0x828C4A08 --------
-    // Thin wrapper over the base VariableEventQueue<SizeBytes,16>::AllocateEvent:
-    //   Event = AllocateEvent(1, (liNumIntersections << 6) + 16);   // 16B header + N*64B records
-    //   Event[0] = liQueryId;  Event[1] = liNumIntersections;       // *Event = a2 ; Event[1] = a3
-    //   return Event + 4;                                           // record area, past 16B header
-    // The X360 stores the two header words through a _DWORD view of the returned payload and
-    // returns the payload advanced by 4 words (16 bytes). Modelled with the same s32 header view.
+    // -------- AddLineTestFineResult  @ X360 0x828C4A08 --------
+    //   0x828C4A24  slwi r11, n, 6 ; addi r5, r11, 0x10 ; li r4, 1
+    //   0x828C4A30  bl VariableEventQueue<32768,16>::AllocateEvent(this, 1, n * 64 + 16)
+    //   0x828C4A38  addi r3, ev, 0x10              -- the returned record area
+    //   0x828C4A3C  stw id, 0(ev) ; stw n, 4(ev)   -- mQueryId / miNumIntersections
+    // mafPad is not written. (ProcessLineTestFine @0x828CDCD0 calls it for its empty answer and
+    // inlines the identical four instructions for its non-empty one.)
     template <s32 SizeBytes>
-    void* OutSceneQueryResultsQueue<SizeBytes>::AllocateLineTestFineResult(
-        s32 liQueryId, s32 liNumIntersections)
+    LineTestIntersection* OutSceneQueryResultsQueue<SizeBytes>::AddLineTestFineResult(
+        SceneQueryId lQueryId, s32 liNumIntersections)
     {
-        const s32 liSize = (liNumIntersections << 6) + 16; // 16-byte header + N * 64-byte records
-        s32* lpPayload = reinterpret_cast<s32*>(this->AllocateEvent(1, liSize));
-        lpPayload[0] = liQueryId;          // *Event = a2
-        lpPayload[1] = liNumIntersections; // Event[1] = a3
-        return lpPayload + 4;              // Event + 4 (dwords) == the 64-byte-record area
+        OutEventLineTestFineResult* lpEvent = static_cast<OutEventLineTestFineResult*>(
+            this->AllocateEvent(1, (liNumIntersections << 6) + static_cast<s32>(sizeof(OutEventLineTestFineResult))));
+        lpEvent->mQueryId           = lQueryId;             // stw r30, 0(r11)
+        lpEvent->miNumIntersections = liNumIntersections;   // stw r31, 4(r11)
+        return lpEvent->GetIntersections();                 // addi r3, r11, 0x10
+    }
+
+    // -------- AddTriangleCollisionLineTestResult  @ X360 0x828C4A60 --------
+    //   0x828C4A74..8C  AllocateEvent(this, 1, n * 64 + 16) ; stw id, 0(ev) ; stw n, 4(ev)
+    //   0x828C4A98      r3 = ev + 0x10 (returned) ; nothing more when n <= 0 (`ble`)
+    //   per record i (src r10 = results + 0x30 + 0x70*i, dst r11 = ev + 0x30 + 0x40*i):
+    //     0x828C4AC0  stw lEntityId        -> dst.mEntityId         (+0x28)
+    //     0x828C4AC8  std lVolumeInstanceId -> dst.mVolumeInstanceId (+0x20)
+    //     0x828C4ACC  lvx src+0x40 -> stvx dst+0x00 : mPosition
+    //     0x828C4AD8  lvx src+0x30 -> stvx dst+0x10 : mNormal (the triangle normal)
+    //     0x828C4AE0  lfs src+0x50 -> stfs dst+0x2C : mfLineParam (lane 0 of the splatted t)
+    //     0x828C4AE8  lhz src+0x60 -> sth dst+0x30  : mu16MaterialTag (the tag's HIGH half)
+    //     0x828C4AF0  lwz src+0x60 -> sth dst+0x32  : mu16GroupTag    (the tag's LOW half)
+    // The two halves are read as a big-endian halfword and the low half of the word; on this host
+    // they are the tag's value bits [16..31] and [0..15].
+    template <s32 SizeBytes>
+    LineTestIntersection* OutSceneQueryResultsQueue<SizeBytes>::AddTriangleCollisionLineTestResult(
+        SceneQueryId                                   lQueryId,
+        EntityId                                       lEntityId,
+        VolumeInstanceId                               lVolumeInstanceId,
+        const CgsGeometric::PolySoupLineNearestResult* lpaResults,
+        s32                                            liNumResults)
+    {
+        OutEventLineTestFineResult* lpEvent = static_cast<OutEventLineTestFineResult*>(
+            this->AllocateEvent(1, (liNumResults << 6) + static_cast<s32>(sizeof(OutEventLineTestFineResult))));
+        lpEvent->mQueryId           = lQueryId;
+        lpEvent->miNumIntersections = liNumResults;
+
+        LineTestIntersection* lpaIntersections = lpEvent->GetIntersections();
+        for (s32 liResult = 0; liResult < liNumResults; ++liResult)
+        {
+            const CgsGeometric::PolySoupLineNearestResult& lrSource = lpaResults[liResult];
+            LineTestIntersection&                          lrRecord = lpaIntersections[liResult];
+
+            lrRecord.mEntityId         = lEntityId;
+            lrRecord.mVolumeInstanceId = lVolumeInstanceId;
+            lrRecord.mPosition         = lrSource.mPosition;
+            lrRecord.mNormal           = lrSource.mNormal;
+            lrRecord.mfLineParam       = lrSource.mLineParam.x;
+            lrRecord.mu16MaterialTag   = static_cast<u16>(lrSource.mau32Tag[0] >> 16);
+            lrRecord.mu16GroupTag      = static_cast<u16>(lrSource.mau32Tag[0]);
+        }
+        return lpaIntersections;
     }
 }
 }

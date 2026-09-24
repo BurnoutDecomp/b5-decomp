@@ -1,73 +1,61 @@
 #pragma once
 
-// Minimal owning home for the scene-manager fine-line-test RESULT output event:
-//   CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult
-//   CgsSceneManager::SceneManagerIO::LineTestFineIntersection (its per-hit record)
+// CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult -- the scene manager's fine-line-test
+// RESULT event (type id 1 on the shared scene-result queue, VariableEventQueue<32768,16>).
 //
-// This is the event the scene manager publishes into the shared scene-result queue
-// (VariableEventQueue<32768,16>) for each fine line test it ran. BrnWorld::TriggerEntityModule::
-// ProcessLineTestFineResult (X360 0x822D9FF8) consumes it: it reads the query id and the
-// intersection count, validates every hit is a trigger entity, then republishes the overlapped
-// triggers' handles.
+// LAYOUT -- DWARF CgsSceneManagerModuleIO.h:217..227 (CORRECTED 2026-09-24, crash parity FX-SCENEMGR):
+//   +0x00  SceneQueryId mQueryId             (:219)
+//   +0x04  int32_t      miNumIntersections   (:220)
+//   +0x08  float32_t    mafPad[2]            (:222)
+//   +0x10  LineTestIntersection[miNumIntersections]   -- GetIntersections() (:227), 64-byte stride
+// Its producers write exactly that: OutSceneQueryResultsQueue::AddLineTestFineResult @0x828C4A08
+// (`stw id, 0(ev) ; stw n, 4(ev) ; addi r3, ev, 0x10`, event size n * 64 + 16),
+// AddTriangleCollisionLineTestResult @0x828C4A60 and SceneManagerModule::ProcessLineTestFine
+// @0x828CDCD0 (records at event + 0x10, EntityId at record + 0x28).
 //
-// LAYOUT (X360-authoritative, from ProcessLineTestFineResult 0x822D9FF8):
-//   +0x00  SceneQueryId mQueryId         (result[0])   -- the originating query id
-//   +0x04  s32          miNumIntersections (result[1]) -- number of hit records that follow
-//   +0x08..+0x37 header tail (the asm walks the records starting at word index 14 == +0x38)
-//   +0x38  LineTestFineIntersection maIntersections[]  -- 64-byte stride records
-//
-// Each LineTestFineIntersection record is 64 bytes (the asm strides `v10 += 64`); the only field
-// this consumer reads is the leading EntityId at the record's +0 (the asm reads the owner byte
-// then the packed entity index from the same word). FLAG: the remaining 60 bytes of the
-// intersection record (position / normal / line param / material+group tags / volume-instance id,
-// per the sibling OutEventLineTestNearestResult) are not modelled here -- only EntityId@+0 is
-// load-bearing for the trigger module. Promote to the full record when the line-test-result TU
-// lands.
-//
-// NOTE (EntityId split): this X360 build's ProcessLineTestFineResult extracts the entity index
-// as `(id >> 10) & 0x3FFF` (a 14-bit field at bit 10 -- the DecFIGS DWARF EntityId split), whereas
-// the committed CgsEntityId.h uses the asm-authoritative 8/12/12 split. The trigger consumer is
-// nonetheless correct because the PRODUCER (TriggerEntityModule::ProcessAddTriggerEvents, via
-// EntityId::Set) and the CONSUMER (here, via EntityId::GetEntityIndex) both use the committed
-// 8/12/12 convention, so the slot round-trips self-consistently regardless of the X360 build's
-// 14/10 bit positions. The committed-accessor approach is kept for ODR consistency; the bit-split
-// difference is recorded, not relied upon.
+// ⛔ WHAT THIS FILE USED TO SAY: records at +0x38 with the EntityId at the record's +0, "from
+// TriggerEntityModule::ProcessLineTestFineResult @0x822D9FF8 alone". That consumer reads word
+// 14 (+0x38) and strides 64 -- which is record 0's mEntityId (+0x10 + 0x28), NOT a record base.
+// Both models address the same bytes for that one read, so the trigger consumer's behaviour is
+// unchanged by this correction; PlaceOnTrackManager::PrePhysicsUpdate @0x822F6DF8 (records from
+// word 4, stride 16 words) is the reader that pins the base at +0x10.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"       // CgsSceneManager::EntityId
-#include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"   // CgsSceneManager::SceneQueryId
+#include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"      // CgsSceneManager::SceneQueryId
+#include "GameShared/GameClasses/SceneManager/CgsSceneManagerTypes.h"  // CgsSceneManager::LineTestIntersection
+
+#include <cstdint>   // uintptr_t (the record area follows the header in the event's byte image)
 
 namespace CgsSceneManager
 {
+    // CgsSceneManagerTypes.h:67 -- the 64-byte record (two Vector3 lanes force the 16-byte padding).
+    static_assert(sizeof(LineTestIntersection) == 0x40, "LineTestIntersection is the 64-byte record");
+
 namespace SceneManagerIO
 {
     // Empty per-module event base (queue stores events by byte image). Distinctly named to avoid
     // ODR clash with the other SceneManagerIO leaf-element Event bases.
     struct EventBaseLineTestFineResult {};
 
-    // One hit record of a fine line test. 64-byte stride (X360-attested). Only mEntityId is
-    // load-bearing for the trigger consumer; the trailing payload is opaque (see FLAG above).
-    struct LineTestFineIntersection
-    {
-        EntityId mEntityId;      // +0x00  hit entity (owner + packed index)
-        u8       maOpaque[60];   // +0x04..+0x3F  position/normal/tags/etc. (not modelled)
-    };
-
-    // The fine-line-test result output event. alignas not required (no SIMD field is read by the
-    // trigger consumer); kept default-aligned. sizeof is NOT asserted (header tail is partial).
     struct OutEventLineTestFineResult : public EventBaseLineTestFineResult
     {
-        SceneQueryId             mQueryId;            // +0x00  (result[0])
-        s32                      miNumIntersections;  // +0x04  (result[1])
-        u8                       maHeaderTail[0x38 - 0x08]; // +0x08..+0x37  (records start at +0x38)
-        LineTestFineIntersection maIntersections[1];  // +0x38  (variable count == miNumIntersections)
+        SceneQueryId mQueryId;             // +0x00  (:219)
+        s32          miNumIntersections;   // +0x04  (:220)
+        f32          mafPad[2];            // +0x08  (:222) -- never written by any producer
 
-        s32             GetNumIntersections() const          { return miNumIntersections; }
-        SceneQueryId    GetQueryId() const                   { return mQueryId; }
-        const LineTestFineIntersection& GetIntersection(s32 liIndex) const
+        // :227 -- the records follow the 16-byte header in the queue's own byte buffer (the
+        // sanctioned external-byte-stream case: a variable-length event, not a C++ array member).
+        LineTestIntersection* GetIntersections() const
         {
-            return maIntersections[liIndex];
+            return reinterpret_cast<LineTestIntersection*>(reinterpret_cast<uintptr_t>(this) + sizeof(*this));
         }
+
+        // Tree conveniences over the two header words and one record (the trigger consumer's
+        // spelling; not in the DWARF).
+        s32          GetNumIntersections() const { return miNumIntersections; }
+        SceneQueryId GetQueryId() const          { return mQueryId; }
+        const LineTestIntersection& GetIntersection(s32 liIndex) const { return GetIntersections()[liIndex]; }
     };
+    static_assert(sizeof(OutEventLineTestFineResult) == 0x10, "the header is 16 bytes; records start at +0x10");
 }
 }
