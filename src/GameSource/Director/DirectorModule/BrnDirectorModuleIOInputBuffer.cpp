@@ -41,6 +41,8 @@ namespace DirectorIO
         static_assert(sizeof(CgsSystem::TimerStatusInterface)     == 0x30,   "TimerStatusInterface fills the @0x6750 span exactly");
         static_assert(offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780, "mVehicleDriverInputInterface @0x6780");
         static_assert(offsetof(InputBuffer, mContacts)            == 0x6AB8, "mContacts @0x6AB8");
+        static_assert(offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0, "mTrafficOutputInterface @0x6AC0");
+        static_assert(offsetof(InputBuffer, mPlayerCrashInfo)     == 0x78E0, "mPlayerCrashInfo @0x78E0 (lpInputBuffer + 30944)");
         static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
         static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miDirectorProfileData @0x7AA4");
         static_assert(offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mePlayerCarIndex @0x7AA8");
@@ -127,6 +129,12 @@ namespace DirectorIO
 
         miRankUpRivalInfo                = 0;       // 31408 (0x7AB0) -- `stw r30, 0x7AB0`
 
+        // ⭐ 2026-09-24 (FX-BRIDGES CC-6): the crash record's own Construct, inlined by the
+        // console at 0x82239470..0x822394B4 (`addi r11, r31, 0x78E0` then stfs 0.0 +0x20, stb 0
+        // +0x24..+0x27, stvx128 zero +0x00 / +0x10). A frame on which BridgeWorldToDirector
+        // returns before step 13 (no active player car) therefore publishes the cleared record.
+        mPlayerCrashInfo.Construct();
+
         mUsedRaceCars.UnSetAll();
 
         // ⭐ @0x82239440-0x82239448: `addi r3, r31, 0x3340; bl VariableEventQueue<13312,16>::
@@ -172,15 +180,12 @@ namespace DirectorIO
         return mRaceCarInfo;
     }
 
-    // ArbStateSharedInfo::mpPlayerCrashInfo == lpInputBuffer + 30944 (@0x78E0), which lands
-    // 0xE28 into the honest-opaque contacts span. Addressed off that NAMED member -- this
-    // type owns the offset, so no caller has to.
-    // FLAG: BrnDirector::PlayerCrashInfo is un-homed; the DWARF slot name is the only
-    //   evidence for the role, and the payload is not interpreted here.
-    const void* InputBuffer::GetPlayerCrashInfo() const
+    // ArbStateSharedInfo::mpPlayerCrashInfo == lpInputBuffer + 30944 (@0x78E0) -- the buffer's
+    // own mPlayerCrashInfo (DWARF :339), typed 2026-09-24 (FX-BRIDGES CC-6).
+    const BrnDirector::Camera::PlayerCrashInfo* InputBuffer::GetPlayerCrashInfo() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mContacts[0x78E0 - 0x6AB8];
+        return &mPlayerCrashInfo;
     }
 
     // @0x7AC8. Read by MainDirector::UpdateArbitrator (as Arbitrator::Update's lbPaused) and

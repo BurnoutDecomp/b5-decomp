@@ -8,6 +8,8 @@
 #   python b5-decomp/tests/run_rival_organic.py --case b5-decomp/tests/FxBridgesLive.ps1 --run-name fxbridges
 $case = & (Join-Path $PSScriptRoot '..\..\scratch\CRASHPARITY_0922\RivalDamageHinge.ps1')
 $case.Name = 'fxbridges_live'
+# BRN_CRASHCAM_DIAG (already armed by RivalOrganic) also arms step 13's `[crash-info]` line (CC-6): the
+# PlayerCrashInfo record BridgeWorldToDirector publishes, printed on every change of its flags.
 $case.DiagEnv += ',BRN_CAM_INPUT_DIAG=1'
 $case.Checks += @(
     @{ Kind = 'Script'; Name = 'CC-5: the player car publishes a non-zero hardest impact to the director (impact shake input)'; Script = {
@@ -26,6 +28,17 @@ $case.Checks += @(
         param($ctx)
         $lines = @($ctx.LogLines | Where-Object { $_ -match '\[cam-impact\] #\d+ slot \d+ mfHardestImpact' })
         @{ Pass = $lines.Count -gt 0; Detail = "$($lines.Count) non-player [cam-impact] lines" }
+    } }
+    @{ Kind = 'Script'; Name = 'CC-6: a player crash reaches the director as a non-empty PlayerCrashInfo (wrecked / hard-stop flags)'; Script = {
+        param($ctx)
+        $crashes = @($ctx.LogLines | Where-Object { $_ -match '\[crashcam\] mbCrashActive -> 1' }).Count
+        $lines = @($ctx.LogLines | Where-Object { $_ -match '\[crash-info\] player slot' })
+        $flagged = @($lines | Where-Object { $_ -match 'wrecked 1|hardstopVsWall 1|hardStopVsAI 1' })
+        $wrecked = @($lines | Where-Object { $_ -match 'wrecked 1' }).Count
+        $wall = @($lines | Where-Object { $_ -match 'hardstopVsWall 1' }).Count
+        $ai = @($lines | Where-Object { $_ -match 'hardStopVsAI 1' }).Count
+        @{ Pass = ($crashes -eq 0 -or $flagged.Count -gt 0)
+           Detail = "$crashes player crash(es); $($lines.Count) [crash-info] lines, $($flagged.Count) flagged (wrecked $wrecked, vs wall $wall, vs AI $ai)" }
     } }
 )
 $case

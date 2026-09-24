@@ -105,18 +105,31 @@ namespace Camera
     //                         offsets themselves.
     // Two consecutive bools, two consumers, two roles that match their names exactly.
     //
-    // ⚠️ THE PRODUCER IS STILL DROPPED. Step 13 of BridgeWorldToDirector ("build the 48-byte
-    // PlayerCrashInfo block from the vehicle manager's crash queue") is not reconstructed, so
-    // the storage the input buffer hands out is not yet filled by anything. This header closes
-    // the READ end only. DELETE-WHEN (for the write end): GameBridgeWorldToX.cpp step 13 lands.
-    // The console block is 40 bytes and 16-aligned (two Vector3s lead it), which is where the
-    // "48-byte block" the bridge banner quotes comes from.
+    // ⭐ THE PRODUCER LANDED 2026-09-24 (crash parity FX-BRIDGES CC-6): step 13 of
+    // BridgeWorldToDirector @0x823E4DF0..0x823E4FE4 builds the record from the vehicle manager's
+    // race-car crash queue and DirectorIO::InputBuffer::SetPlayerCrashInfo publishes it into the
+    // buffer's own mPlayerCrashInfo (@0x78E0). The console block is 40 bytes and 16-aligned (two
+    // Vector3s lead it), which is where the "48-byte block" (6 x ld/std) comes from.
     // ------------------------------------------------------------------------
     struct alignas(16) PlayerCrashInfo
     {
-        // BrnPlayerInfo.h:114 -- seed the record. Declaration-only (its own ledger function;
-        // the producer TU owns the body).
-        void Construct();
+        // BrnPlayerInfo.h:114 -- seed the record. HEADER INLINE: the X360 ledger has no
+        // out-of-line symbol for it, and both console sites fold the same stores --
+        //   DirectorIO::InputBuffer::Construct @0x8223949C..0x822394B4: `stfs f31(0.0), 0x20` /
+        //     `stb 0` at +0x24..+0x27 / `stvx128 v127(0)` at +0x00 and +0x10;
+        //   BridgeWorldToDirector @0x823E4DF4..0x823E4E20: the same zero stores (the two bools it
+        //     overwrites straight after -- mbWrecked / mbHitWater -- are dead-store-eliminated).
+        // The DWARF call list of BridgeWorldToDirector carries the two Vector3::SetZero it inlines.
+        void Construct()
+        {
+            mvCollisionNormal.SetZero();
+            mvContactPoint.SetZero();
+            mfSpeedMPH       = 0.0f;
+            mbHardstopVsWall = false;
+            mbHardStopVsAI   = false;
+            mbWrecked        = false;
+            mbHitWater       = false;
+        }
 
         Vector3 mvCollisionNormal;   // :125  +0x00
         Vector3 mvContactPoint;      // :126  +0x10
@@ -131,6 +144,12 @@ namespace Camera
                   "PlayerCrashInfo::mbWrecked @ +0x26 (ArbStateCrashing::Update's read)");
     static_assert(offsetof(PlayerCrashInfo, mbHitWater) == 0x27,
                   "PlayerCrashInfo::mbHitWater @ +0x27 (Arbitrator::Update's BlackFade_Water gate)");
+    static_assert(offsetof(PlayerCrashInfo, mfSpeedMPH) == 0x20 &&
+                  offsetof(PlayerCrashInfo, mbHardstopVsWall) == 0x24 &&
+                  offsetof(PlayerCrashInfo, mbHardStopVsAI) == 0x25,
+                  "PlayerCrashInfo +0x20 / +0x24 / +0x25 (BridgeWorldToDirector's stores @0x823E4DF8..)");
+    static_assert(sizeof(PlayerCrashInfo) == 48,
+                  "PlayerCrashInfo is the 48-byte block BridgeWorldToDirector copies (6 x ld/std @0x823E4FC4)");
 }
 }
 

@@ -78,8 +78,9 @@
 // HONEST PLACEHOLDERS. Several embedded members are large interface aggregates whose full byte
 // layouts are not yet reconstructed (RCEntityGlobalRaceCarOutputInterface, ControllerInfo,
 // TimerStatusInterface, BrnDirectorVehicleInputInterface, the world StatusInterface, the
-// ContactSpyInterface, TrafficDirectorOutputInterface, PlayerCrashInfo, GuiPFXHookEnumeration,
-// CarScoreData, DirectorProfileData, and the GameActionQueue). Rather than fork those homes
+// ContactSpyInterface, TrafficDirectorOutputInterface, GuiPFXHookEnumeration,
+// CarScoreData, DirectorProfileData, and the GameActionQueue). (PlayerCrashInfo left this list
+// 2026-09-24: it is the typed Camera::PlayerCrashInfo member @0x78E0 now.) Rather than fork those homes
 // with guessed members, they are modelled here as correctly-SIZED, byte-addressable opaque
 // storage members carrying their DWARF names and offsets. This preserves the exact object
 // layout the accessors index into (every recovered offset is asserted below) while being honest
@@ -135,11 +136,18 @@ namespace DirectorIO
         const BrnDirector::Camera::VehicleInfo*            GetRaceCarInfo() const;
 
         // The player's crash-analysis record (ArbStateSharedInfo::mpPlayerCrashInfo; the X360
-        // fills that slot with `lpInputBuffer + 30944` == @0x78E0). It lands INSIDE the
-        // honest-opaque contacts span, so the address is taken off that named member.
-        // FLAG: BrnDirector::PlayerCrashInfo has no reconstructed home -- returned as void*,
-        // and the DWARF slot name is the only evidence for the role.
-        const void*                                        GetPlayerCrashInfo() const;
+        // fills that slot with `lpInputBuffer + 30944` == @0x78E0). DWARF :233 / :234. TYPED
+        // 2026-09-24 (crash parity FX-BRIDGES CC-6): Camera::PlayerCrashInfo is homed
+        // (SharedIO/BrnPlayerInfo.h) and its producer, BridgeWorldToDirector step 13, is live.
+        const BrnDirector::Camera::PlayerCrashInfo*        GetPlayerCrashInfo() const;
+        // DWARF :234 `void SetPlayerCrashInfo(const PlayerCrashInfo* lpObject)`. INLINED by the
+        // console at its one caller, BridgeWorldToDirector @0x823E4FC4..0x823E4FE4, as a bare
+        // 48-byte copy (6 x ld/std) into this + 0x78E0 -- with NO lock-bit test, unlike this
+        // class's out-of-line mutators, so none is added here.
+        void SetPlayerCrashInfo(const BrnDirector::Camera::PlayerCrashInfo* lpObject)
+        {
+            mPlayerCrashInfo = *lpObject;
+        }
 
         // The simulation-paused flag (@0x7AC8, the second byte of the mid-flag block).
         // MainDirector::UpdateArbitrator passes it to Arbitrator::Update as lbPaused, and
@@ -339,9 +347,17 @@ namespace DirectorIO
                 (0x6AB8 - 0x6780) - sizeof(BrnDirector::BrnDirectorVehicleInputInterface)];
 
         // @0x6AB8 (27320): contacts. AppendContacts stores one 32-bit word at member word [0]
-        // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage spanning
-        // to the hook-enumeration block @0x7910.
-        u8  mContacts[0x7910 - 0x6AB8];                  // @0x6AB8
+        // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage.
+        // ⭐ SPLIT 2026-09-24 (crash parity FX-BRIDGES CC-6) at the DWARF's own member order
+        // (BrnDirectorModuleIO.h:337 mContacts / :338 mTrafficOutputInterface / :339
+        // mPlayerCrashInfo) and the console's anchors: BridgeWorldToDirector writes the traffic
+        // interface's u16 head at +0x6AC0 and its 3588-byte block at +0x6AD0 (0x823E3F68..
+        // 0x823E3F78), so 0x6AC0 + 0x10 + 3588 == 0x78D4 -> 16-aligned 0x78E0 is where the
+        // crash record starts, and 0x78E0 + 48 == 0x7910 is the hook enumeration. The spans
+        // around the typed record stay opaque (no reader on this build).
+        u8  mContacts[0x6AC0 - 0x6AB8];                  // @0x6AB8 ContactSpyInterface (DWARF :337)
+        u8  mTrafficOutputInterface[0x78E0 - 0x6AC0];    // @0x6AC0 TrafficDirectorOutputInterface (DWARF :338)
+        BrnDirector::Camera::PlayerCrashInfo mPlayerCrashInfo;   // @0x78E0 (DWARF :339)
 
         // @0x7910 (30992): the GUI PFX hook enumeration, 404 (0x194) bytes (SetHookEnumeration
         // memcpy). HONEST opaque, padded out to the scalar/flag tail @0x7AA8.
