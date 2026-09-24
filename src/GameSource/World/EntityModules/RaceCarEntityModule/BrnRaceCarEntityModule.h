@@ -582,6 +582,17 @@ public:
         void HandleSetBoost( const SetBoostActionRecord* lpAction,
                              RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput );
 
+        // [!] HEADER REQUEST (crash parity G68-D11): the record of game action 4 (DWARF
+        // SetPlayerOpponentsAction { Array<CgsID,7u> maOpponents; }, BrnGameActions.h:726 -- DWARF
+        // and X360 id 4, size 64), defined in BrnRaceCarEntityModule.cpp; declared here only because
+        // HandleSetPlayerOpponentsAction takes it. DELETE-WHEN BrnGameActions.h grows the record.
+        struct SetPlayerOpponentsActionRecord;
+
+        // X360 0x822E96D8 (DWARF BrnRaceCarEntityModule.h:740) -- game action 4, posted by
+        // GameStateModule::OnPlayerCarChange with the new car's opponent set: pre-stream each
+        // opponent's model + default wheels into streamer slots 7, 6, 5, ...
+        void HandleSetPlayerOpponentsAction( const SetPlayerOpponentsActionRecord* lpAction );
+
         // X360 0x822FE5D8. Find a free global race-car slot, Prepare + AddToWorld it at
         // lrTransform, resolve the wheel set when lWheelModelId is null, and publish the AI
         // module's AttachAIControlEvent. Returns the global slot used.
@@ -1233,6 +1244,11 @@ private:
     // clears it. Read by PlaceOnTrackManager::GetValuesForCarSelect (the junkyard drop).
     s32  meCarSelectResetType;
     bool mbCarSelectDontStreamAudio;
+    // X360 +0x186D1 (100049). DWARF :448 mbHACK_ExitingCarSelectWaitForAudio. Set by HandleGameActions
+    // case 74 (the junkyard exit's audio wait, 0x8230C508), cleared by Construct (0x822FDBC0) and by
+    // UpdateStreaming once the streamer's own audio wait has cleared -- which holds back the
+    // streaming-complete edge until then (crash parity G68-D11, 2026-09-23).
+    bool mbHACK_ExitingCarSelectWaitForAudio;
 
     // ========================================================================
     // MODELLED members (race-car streamer wave 2026-07-31). Same additive rule as the

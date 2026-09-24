@@ -343,6 +343,16 @@ void RaceCarStreamer::HACK_SetWaitingForAudioAfterCarSelect( bool lbWaiting )
     mbHACK_WaitingForAudioAfterCarSelect = lbWaiting;
 }
 
+// DWARF BrnRaceCarStreamer.h:165. Inlined at its one ARTIST call site, RaceCarEntityModule::
+// HandleGameActions case 74 (`addis r30, r31, 1 ; addi r30, r30, 0x5ED0` @0x8230C574 == module
+// +0x15ED0 == streamer +0x11100 + 0x4DD0, the same mAudioStreamer UpdateStreaming pumps at
+// 0x822FEFE0 `RaceCarAudioStreamer::Update(a1 + 89808)`). Bodied here with its sibling accessors
+// (crash parity G68-D11, 2026-09-24) -- it had a declaration and no definition.
+RaceCarAudioStreamer* RaceCarStreamer::GetAudioCarStreamer()
+{
+    return &mAudioStreamer;
+}
+
 // @ 0x822A1950. "VEH_" + decode(model id) -> compress; "WHE_" + decode(wheel id) ->
 // compress. Each id's printable form is written into lacIDBuffer+4 (after the 4-char
 // prefix) and the whole buffer re-compressed back into the ref.
