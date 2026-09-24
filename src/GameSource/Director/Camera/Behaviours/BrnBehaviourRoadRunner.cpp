@@ -1066,6 +1066,18 @@ bool BehaviourRoadRunner::Update(Camera& lrCamera, const BehaviourSharedInfo& lr
     //     declaration-only) and the post-box interiors.
     //   * the CameraShake concat -- Utils::CameraShake has no home outside BehaviourRig.h.
     // None of them moves the camera; all three only refine an already-placed one.
+
+    // ⭐ 0x8224889C..0x822488A4 -- `ld r11, 0x140(r30) ; oris r11, r11, 0x800 ; std r11, 0x140(r30)`:
+    // raise CameraState::E_FLAG_ROAD_FOLLOWING_CAM (flag 27, bit 0x08000000 of the current set at
+    // camera +0x138 + 0x08) on EVERY frame the fly-by runs. Only the HasFailed exit (0x82247EC8 ->
+    // 0x82248ECC) and the Fail(6) exit (0x8224814C -> 0x82248ECC) skip it; every other path reaches
+    // it, and nothing between it and the return (0x82248ECC) reads the flag. It is the only setter
+    // of flag 27 in the image: TrafficEntityModule::UpdateCollidableVehicles (0x82730CB0..
+    // 0x82730CE0) adds the camera as a collidable / avoidance source while it is up. The console
+    // ORs the bit straight into the word -- no CameraState::SetFlag call. LANDED 2026-09-24 (crash
+    // parity FX-DIRECTOR, from FX-TRAFFIC5's consumer finding).
+    lrCamera.GetState().mCurrentFlags.SetBit(CameraState::E_FLAG_ROAD_FOLLOWING_CAM);
+
     return true;                                       // every console exit is `li r3, 1`
 }// ============================================================================
 // BehaviourRoadRunner::PostCollisionUpdate @0x8220F850 -- vtable slot 3. Drains the two fine
