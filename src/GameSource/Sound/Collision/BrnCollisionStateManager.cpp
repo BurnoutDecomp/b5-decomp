@@ -1233,14 +1233,12 @@ bool CollisionStateManager::FindEntity(const EntityId& lEntityId, GenericEntity&
         lEntity.mbCrashing = lpState->mbCrashing;
         lEntity.mPosition = lpState->mTransform.Pos();
         lEntity.mVelocity = lpState->mLinearVelocity;
-        // [STAND-IN] the console calls IsRaceCarPlayer(idx) here (0x826A055C -> 0x82681DF0: the two
-        // index asserts, then bit 1 -- E_RACE_CAR_OUTPUT_FLAG_PLAYER, raised for the PLAYER-type car --
-        // of the private maxRaceCarFlags[idx]). That accessor is declared
-        // (BrnRaceCarEntityModuleOutputInterface.h:172) but has NO BODY in this tree, and its home
-        // (BrnRCEntityActiveRaceCarOutputInterface.cpp) is not this lane's file. Until it is bodied, the
-        // player test is the interface's own player index (GetPlayerActiveRaceCarIndex @0x82277BF8,
-        // the PLAYER-type car's slot); replace with `lrVehicles.IsRaceCarPlayer(leIndex)` then.
-        lEntity.mbPlayer = lrVehicles.GetPlayerActiveRaceCarIndex() == leIndex;
+        // 0x826A0554..0x826A0568: `rlwinm r4, id, 22, 18, 31 ; bl IsRaceCarPlayer` (0x826A055C ->
+        // 0x82681DF0: the two index asserts, then bit 1 -- E_RACE_CAR_OUTPUT_FLAG_PLAYER, raised for the
+        // PLAYER-type car -- of maxRaceCarFlags[idx]) ; `stb r3, 0x21(entity)`. [FX-AIBUZZ 2026-09-24:
+        // the accessor is bodied now; this was the stand-in `GetPlayerActiveRaceCarIndex() == leIndex`,
+        // which reads a different member and asserts/logs while the player index is unset]
+        lEntity.mbPlayer = lrVehicles.IsRaceCarPlayer(leIndex);
         return true;
     }
     if (luOwner >= KU_ENTITY_OWNER_PROP)

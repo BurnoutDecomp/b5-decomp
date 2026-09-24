@@ -330,6 +330,22 @@ bool RCEntityActiveRaceCarOutputInterface::IsRaceCarRival(EActiveRaceCarIndex le
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 2) & 1) != 0;
 }
 
+// X360 0x82681DF0 -- IsRaceCarPlayer: bit 1 of the per-car flags word (maxRaceCarFlags[idx]),
+// E_RACE_CAR_OUTPUT_FLAG_PLAYER -- the bit RaceCarEntityModule::UpdateOutputInterfaces raises for the
+// muType == E_RACE_CAR_TYPE_PLAYER car. ADDITIVE (crash parity FX-AIBUZZ, 2026-09-24): it was
+// declaration-only, so its two callers carried stand-ins. Export hole, read with ppcdis: the header's
+// two index asserts (lines 0x377 / 0x378, strings 0x8200FB50 / 0x8200FB84), then
+// `addi r11, idx, 0x13C0 ; slwi r11, r11, 1 ; lhzx r11, r11, this` (the element at +0x2780)
+// `; srwi r11, r11, 1 ; clrlwi r3, r11, 31` (0x82681E54..0x82681E64). Callers (image scan of every
+// `bl 0x82681DF0`): CollisionStateManager::FindEntity 0x826A055C and
+// TrafficEntityModule::UpdateParams_DoTimeSlicedLogic 0x827441AC.
+bool RCEntityActiveRaceCarOutputInterface::IsRaceCarPlayer(EActiveRaceCarIndex leActiveRaceCarIndex) const
+{
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 1) & 1) != 0;
+}
+
 // X360 0x822A10D8 -- SetBoostOutputInfoN: store the 9-word BoostOutputInfo payload
 // into maBoostOutputInfo[idx] (the asm copies 9 dwords == sizeof(BoostOutputInfo)).
 void RCEntityActiveRaceCarOutputInterface::SetBoostOutputInfoN(EActiveRaceCarIndex leActiveRaceCarIndex,

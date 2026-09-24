@@ -58,6 +58,9 @@ struct RCEntityActiveRaceCarOutputInterface
     mutable int miActiveQueries = 0;
     bool IsRaceCarActive(EActiveRaceCarIndex le) const { ++miActiveQueries; return mabActive[le]; }
     EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const { return static_cast<EActiveRaceCarIndex>(miPlayer); }
+    // FX-AIBUZZ 2026-09-24: FindEntity reads the PLAYER flag through IsRaceCarPlayer @0x82681DF0 (bit 1 of
+    // maxRaceCarFlags[idx]); in this double the flagged slot is miPlayer.
+    bool IsRaceCarPlayer(EActiveRaceCarIndex le) const { return static_cast<s32>(le) == miPlayer; }
     const BrnPhysics::Vehicle::RaceCarState* GetRaceCarState(EActiveRaceCarIndex le) const
     {
         return mabNoState[le] ? nullptr : &maStates[le];
