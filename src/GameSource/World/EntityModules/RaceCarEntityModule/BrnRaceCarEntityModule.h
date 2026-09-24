@@ -831,6 +831,11 @@ public:
     // offline event), before re-adding the unlocked roaming rivals one per frame with 196.
     void RemoveAllRivalsFromWorld(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
 
+    // X360 0x82306028 (DWARF .cpp:9143). The game-action 27 / 41 (FINISH_MODE_FINAL_ONLINE /
+    // QUIT_MODE_ONLINE) consumer: take every NETWORK-driven car in the world out of the mode and
+    // RemoveRaceCar it. Crash parity G68-D10 (2026-09-24).
+    void RemoveAllNetworkCarsFromWorld(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
+
     // X360 0x82301A50. The game-action 196 (E_ACTION_ADD_RIVAL) consumer: spawn one roaming
     // freeburn rival -- an E_RACE_CAR_TYPE_AI car of the Rival's car -- looking down the record's
     // heading from its spawn position, then seed the AI module's out-of-range record for it at
