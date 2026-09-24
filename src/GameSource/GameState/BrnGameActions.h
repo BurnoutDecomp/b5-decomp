@@ -1405,7 +1405,7 @@ struct ResetRaceCarCrashingAction : public GameAction<E_ACTION_RESET_RACE_CAR_CR
     EActiveRaceCarIndex meActiveRaceCarIndex;
 };
 
-// X360 0x82355088 (Construct). DWARF: 6 members / 0x38 bytes.
+// X360 0x82355088 (Construct). DWARF: 6 members / 0x38 bytes; the console record has a 7th.
 struct alignas(16) SetupNetworkCarAction : public GameAction<E_ACTION_SETUP_NETWORK_CAR>
 {
     Vector3             mWorldSpacePosition;   // 0x00
@@ -1414,14 +1414,27 @@ struct alignas(16) SetupNetworkCarAction : public GameAction<E_ACTION_SETUP_NETW
     CgsID               mWheelModelId;         // 0x28
     EActiveRaceCarIndex meActiveRaceCarIndex;  // 0x30
     EPlayerScoringIndex mePlayerScoringIndex;  // 0x34
+    // +0x38: console-only f32 (not in the DWARF record). Construct takes it in f1 and stores it
+    // (`stfs f31, 0x38(r31)` @0x82355140); ProcessGameEvents' case-7 arm passes the
+    // ChangeNetworkCarEvent's +0x18 float (`lfs f31, 0x18(r25)` @0x823A17D0); the world's action-5
+    // arm, HandleSetupNetworkCarAction @0x82305880, stores it as the car's mfBaseDeformAmount (+0x7CC).
+    // Named after that use, like OnlinePlayerAddedAction::mfBaseDeformationAmount.
+    f32                 mfBaseDeformationAmount; // 0x38
 
+    // The f32 is the last parameter: it rides f1 and eats the integer slot after the four GPR
+    // arguments (r4..r7 = scoring index, race-car index, model id, wheel id), as every X360 f32 does.
     void Construct(EPlayerScoringIndex lePlayerScoringIndex,
                    EActiveRaceCarIndex leActiveRaceCarIndex,
                    Vector3             lPos,
                    Vector3             lAt,
                    CgsID               lModelId,
-                   CgsID               lWheelModelId);
+                   CgsID               lWheelModelId,
+                   f32                 lfBaseDeformationAmount);
 };
+static_assert(offsetof(SetupNetworkCarAction, mfBaseDeformationAmount) == 0x38,
+              "Construct @0x82355088 stores the base deformation at +0x38");
+static_assert(sizeof(SetupNetworkCarAction) == 0x40,
+              "ProcessGameEvents posts action 5 with size 0x40 (li r6, 0x40 @0x823A1878)");
 
 // X360 0x823551F0 (SetPlayerScoringIndex). Layout per the Feb-2007 partial source (this X360 build).
 struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
