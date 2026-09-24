@@ -1,8 +1,10 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the [takedown-cam] director-read witness
 
 #include <cstddef>   // offsetof
+#include <cstdlib>   // getenv ([DIAG] BRN_CRASHCAM_DIAG)
 #include <cstring>   // std::memcpy
 
 // BrnDirector::DirectorIO::InputBuffer member functions, reconstructed from
@@ -46,12 +48,14 @@ namespace DirectorIO
         static_assert(offsetof(InputBuffer, mHookEnumeration)     == 0x7910, "mHookEnumeration @0x7910");
         static_assert(offsetof(InputBuffer, miDirectorProfileData) == 0x7AA4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miDirectorProfileData @0x7AA4");
         static_assert(offsetof(InputBuffer, mePlayerCarIndex)     == 0x7AA8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mePlayerCarIndex @0x7AA8");
+        static_assert(offsetof(InputBuffer, mePlayerKillerCarIndex) == 0x7AAC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mePlayerKillerCarIndex @0x7AAC (stw @0x823CD3BC)");
         static_assert(offsetof(InputBuffer, miRankUpNewRank)      == 0x7AB4 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miRankUpNewRank @0x7AB4");
         static_assert(offsetof(InputBuffer, miCameraType)         == 0x7AB8 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "miCameraType @0x7AB8");
         static_assert(offsetof(InputBuffer, mbRankUpThisFrame)      == 0x7ABC + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbRankUpThisFrame @0x7ABC");
         static_assert(offsetof(InputBuffer, mbStartNewProfileIntro) == 0x7ABD + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartNewProfileIntro @0x7ABD");
         static_assert(offsetof(InputBuffer, mbStartGameIntroFlyby)  == 0x7ABE + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStartGameIntroFlyby @0x7ABE");
         static_assert(offsetof(InputBuffer, mbStopGameIntroFlyby)   == 0x7ABF + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbStopGameIntroFlyby @0x7ABF");
+        static_assert(offsetof(InputBuffer, mbPlayerTakenDown)      == 0x7AC0 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbPlayerTakenDown @0x7AC0 (stb @0x823CD3B8)");
         static_assert(offsetof(InputBuffer, mbHasGotHookEnumeration)           == 0x7AC1 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbHasGotHookEnumeration @0x7AC1");
         static_assert(offsetof(InputBuffer, mbEndOfCarSelect)                  == 0x7AC2 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbEndOfCarSelect @0x7AC2");
         static_assert(offsetof(InputBuffer, mbGotCrashNavShownEvent)           == 0x7AC3 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING, "mbGotCrashNavShownEvent @0x7AC3");
@@ -224,6 +228,20 @@ namespace DirectorIO
     EActiveRaceCarIndex InputBuffer::GetPlayerKillerCarIndex() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_CRASHCAM_DIAG (the crash-camera gate). Its one reader,
+        // MainDirector::ProcessInputQueue @0x822373B0, asks for the killer only inside its
+        // "mbPlayerTakenDown" arm, so this line is the director CONSUMING a taken-down frame the
+        // bridge published (BridgeGameStateToDirector's [takedown-cam] line is the producer side).
+        static const bool sbTakenDownDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
+        static s32 siTakenDownReadsLeft = 30;
+        if (sbTakenDownDiag && siTakenDownReadsLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siTakenDownReadsLeft;
+            *CgsDev::Log::gpDebugPrint << "[takedown-cam] director read: mbPlayerTakenDown "
+                                       << (mbPlayerTakenDown ? 1 : 0) << " killer slot "
+                                       << static_cast<s32>(mePlayerKillerCarIndex) << "\n";
+        }
         return mePlayerKillerCarIndex;
     }
 
