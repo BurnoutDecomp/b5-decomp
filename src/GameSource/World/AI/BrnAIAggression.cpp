@@ -161,10 +161,15 @@ const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4
 // Shapes a signed [-1,1] distance scale through a quadratic ease that keeps magnitudes
 // large near the centre: negative inputs map via (x+1)^2-1, positive inputs via the
 // odd-symmetric -((1-x)^2-1). Endpoints map to +/-1, zero maps to zero.
+//
+// NaN polarity (FX-AINAN2): the two range asserts are `fcmpu x,-1.0 ; bge` @0x827669EC/0x827669F0
+// and `fcmpu x,1.0 ; ble` @0x82766A18/0x82766A1C, both TAKEN on an unordered compare, so a NaN
+// input skips both asserts on the console; spelt as the negated strict compares. The arm test
+// (ble @0x82766A48) is left as written: either arm returns NaN for a NaN input.
 f32 CurveToKeepLarge(f32 lfInput)
 {
-    CGS_ASSERT(lfInput >= -1.0f, "lfDistScale >= -1.0f");
-    CGS_ASSERT(lfInput <= 1.0f, "lfDistScale <= 1.0f");
+    CGS_ASSERT(!(lfInput < -1.0f), "lfDistScale >= -1.0f");
+    CGS_ASSERT(!(lfInput > 1.0f), "lfDistScale <= 1.0f");
 
     if ( lfInput <= 0.0f )
         return ((lfInput + 1.0f) * (lfInput + 1.0f)) - 1.0f;
@@ -177,9 +182,13 @@ f32 CurveToKeepLarge(f32 lfInput)
 // True when the target is laterally too far to line up a slam: either the straight-line
 // separation already exceeds 20 units, or (when close enough) the across-track component
 // of that separation exceeds 20 units.
+//
+// NaN polarity (FX-AINAN2): `fcmpu sep, flt_820C4890 (20.0) ; ble` @0x8277DE5C/0x8277DE60 is
+// TAKEN on an unordered compare, so a NaN separation goes on to the across test (and a NaN across
+// then fails `bgt` @0x8277DE8C -> false); `sep <= 20` sent it to `return true`.
 bool AIAggression::AcrossSeparationTooBig(const AICar* lpThisCar, const AICar* lpOtherCar)
 {
-    if ( GetSeparation(lpThisCar, lpOtherCar) <= 20.0f )
+    if ( !(GetSeparation(lpThisCar, lpOtherCar) > 20.0f) )
         return GetAcrossSeparation(mpCar, lpOtherCar) > 20.0f;
 
     return true;
@@ -323,8 +332,11 @@ void AIAggression::CheckForCarVeeringAwayFromPlayer(f32 lfTimeStep)
 
     if ( mpCar->mbIsTouchingPlayer )
     {
+        // `fcmpu contact, flt_82001C98 (1.0) ; ble` @0x82770A2C/0x82770A30 is TAKEN on an
+        // unordered compare: a NaN contact time takes the short-touch arm, whose `blelr` @0x82770A50
+        // then returns -- no veer at all, where `contact <= 1` sent it to VEER_EXTREME (FX-AINAN2).
         const f32 lfContact = mfContinuousContactTimer;
-        if ( lfContact <= 1.0f )
+        if ( !(lfContact > 1.0f) )
         {
             if ( lfContact > 0.2f )
             {
@@ -891,9 +903,12 @@ void AIAggression::SetSlowOvertakingSpeed()
     const f32 lfCap = mfNonSpeedMatchedSpeed + KF_SLOW_OVERTAKE_CAP_BIAS;
     const f32 lfRaw = mpPlayerCar->GetSpeed() + KF_SLOW_OVERTAKE_SPEED_BIAS;
 
+    // The floor is `fsel f0, min - raw, min, raw` @0x8277DBA8 (a NaN raw stays NaN, as here); the
+    // ceiling is `fsel f0, max - s, s, max` @0x8277DBAC/0x8277DBB0 (f31 = GetMaxOvertakeSpeed()),
+    // which hands back the max overtake speed for a NaN s -- spelt as the fsel so it does
+    // (FX-AINAN2; `if (s > max) s = max` kept the NaN).
     f32 lfSpeed = (lfRaw < KF_OVERTAKE_FAST_MIN_SPEED) ? KF_OVERTAKE_FAST_MIN_SPEED : lfRaw;
-    if (lfSpeed > lfMaxOvertake)
-        lfSpeed = lfMaxOvertake;
+    lfSpeed = ((lfMaxOvertake - lfSpeed) >= 0.0f) ? lfSpeed : lfMaxOvertake;
 
     mFixedPassingSpeed = lfSpeed;
     if (lfSpeed > lfCap)
@@ -916,7 +931,8 @@ void AIAggression::StopAttacking(EStopAttack leStopAttack)
         const f32 lfWaitTime = KF_MIN_POST_ATTACK_WAIT_TIME
             + lfAggressionLevel * (KF_MAX_POST_ATTACK_WAIT_TIME - KF_MIN_POST_ATTACK_WAIT_TIME);
 
-        CGS_ASSERT(lfWaitTime >= 0.0f, "lfWaitTime >= 0.0f");
+        // `fcmpu wait, 0.0 ; bge` @0x82793DEC/0x82793DF0 skips the assert on an unordered compare.
+        CGS_ASSERT(!(lfWaitTime < 0.0f), "lfWaitTime >= 0.0f");
 
         if ( leStopAttack == E_AGGRESSION_ATTACKAGAIN && lfWaitTime < 0.1f )
         {
@@ -1113,6 +1129,18 @@ void AIAggression::Update(f32 lfTimeStep, const AICar* lpPlayerCar)
     }
 }
 
+// ===== STATE TIME-OUT POLARITY (FX-AINAN2) =====
+// The DWARF's AIAggression::StateHasTimedOut() (DecFIGS PS3 0x9B52C8: mfStateTime != -1.0f &&
+// mfStateTime <= 0.0f) is inlined at every X360 site as `fcmpu t,-1.0 ; bne` then
+// `fcmpu t,0.0 ; ble -> timed out`. bne and ble are both TAKEN on an unordered compare, so on the
+// console a NaN state time HAS timed out (the PS3's GCC spells the same `<=` as cror lt|eq and
+// does not). Every site below is spelt `t != -1.0f && !(t > 0.0f)` to answer as the X360 does:
+//   Passive 0x827938B4, BeFodder 0x8277DC34, ClipOffBehind 0x82770BD4, ComeSlowFromBehind
+//   0x8278B63C, DropBackToSlam 0x82796930, FallPast 0x82793648, OvertakeFast 0x8278B518,
+//   OvertakeToSlam 0x82793A30, SpurtForward 0x82770E2C, Veer 0x8277DD1C, VeerExtreme 0x82770EF4,
+//   Wait 0x82770E84. (AttackSlam's `t == -1.0f || t > 0.0f` @0x82793B48/0x82793B64 is the exact
+//   negation and already answers "timed out" for a NaN.)
+
 // ===== UpdateAggressionPassive =====
 // BrnAI::AIAggression::UpdateAggressionPassive @0x82793830.
 //
@@ -1139,7 +1167,7 @@ void BrnAI::AIAggression::UpdateAggressionPassive(const AICar* lpTargetCar)
         (!lpTargetCar->mbIsPlayer || lpTargetCar->mbIsDrivenByPlayer))
     {
         const f32 lfStateTime = mfStateTime;
-        const bool lbTimedOut = (lfStateTime != -1.0f && lfStateTime <= 0.0f);
+        const bool lbTimedOut = (lfStateTime != -1.0f && !(lfStateTime > 0.0f));
 
         if (lbTimedOut || OutOfSpeedMatchRange(mpCar, lpTargetCar))
         {
@@ -1172,7 +1200,9 @@ void BrnAI::AIAggression::UpdateAggressionStateAttackSlam()
 
     if (lfStateTime == -1.0f || lfStateTime > 0.0f)
     {
-        if (GetLeadingSeparation(mpPlayerCar, mpCar) >= -3.0f)
+        // `fcmpu lead, flt_820C42DC (-3.0) ; blt -> 0x82793C38` @0x82793BB0/0x82793BB4: a NaN lead
+        // falls through to the lineup arm (FX-AINAN2; `lead >= -3` sent it to OVERTAKE_TO_SLAM).
+        if (!(GetLeadingSeparation(mpPlayerCar, mpCar) < -3.0f))
         {
             mTargetPos       = GetPositionNextToTarget(mpTargetCar, mpCar, -8.0f);
             mbTargetPosValid = true;
@@ -1208,7 +1238,7 @@ void BrnAI::AIAggression::UpdateAggressionStateAttackSlam()
 // the slam lineup point (mbTargetPosValid) -- console store order +0x5C, +0x58, +0x44.
 void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
 {
-    if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
+    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
     {
         if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_PURSUIT)   // ==3
         {
@@ -1236,7 +1266,7 @@ void BrnAI::AIAggression::UpdateAggressionStateBeFodder()
 // slam lineup point (mbTargetPosValid); the no-target arm stores neither.
 void BrnAI::AIAggression::UpdateAggressionStateClipOffBehind()
 {
-    if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
+    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
     {
         mfStateTime = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1307,7 +1337,7 @@ void BrnAI::AIAggression::UpdateAggressionStateComeSlowFromBehind()
         // DELETE-WHEN the AI debug-stream globals (0x82F31904 / 0x82F31908) are identified.
     }
 
-    if (lfLeadingSeparation > 12.0f || (mfStateTime != -1.0f && mfStateTime <= 0.0f))
+    if (lfLeadingSeparation > 12.0f || (mfStateTime != -1.0f && !(mfStateTime > 0.0f)))
     {
         mfStateTime       = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1342,7 +1372,7 @@ void BrnAI::AIAggression::UpdateAggressionStateDropBackToSlam(const AICar* /*lpP
         return;
     }
 
-    if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
+    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
     {
         StopAttacking(E_AGGRESSION_ATTACKAGAIN);
         return;
@@ -1414,7 +1444,7 @@ void BrnAI::AIAggression::UpdateAggressionStateFallPast(const AICar* lpPlayerCar
     }
 
     // State timed out?
-    if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
+    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
     {
         const ERouteFindingStyle leStyle = mpCar->meRouteFindingStyle;
         const bool lbAggressiveStyle = (leStyle == E_ROUTE_FINDING_ROAD_RAGE) ||   // 2
@@ -1533,7 +1563,9 @@ void BrnAI::AIAggression::UpdateAggressionStateOutOfRange(const AICar* lpPlayerC
         if (lpThisCar->meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE ||
             lpThisCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)
         {
-            if (GetAheadness(mpPlayerCar, mpCar->GetPosition()) >= 20.0f)
+            // `fcmpu aheadness, flt_820C4890 (20.0) ; bge -> 0x827966CC` @0x827966AC/0x827966B0:
+            // a NaN aheadness takes the far-ahead arm (FX-AINAN2; `>= 20` sent it to PASSIVE).
+            if (!(GetAheadness(mpPlayerCar, mpCar->GetPosition()) < 20.0f))
             {
                 if (mpCar->meRelativeLocation == E_RELATIVE_INFRONT_SEPARATING)
                 {
@@ -1554,7 +1586,9 @@ void BrnAI::AIAggression::UpdateAggressionStateOutOfRange(const AICar* lpPlayerC
         {
             SetSlowOvertakingSpeed();
 
-            if (GetLeadingSeparation(mpPlayerCar, mpCar) <= 4.0f)
+            // `fcmpu lead, flt_820C41C0 (4.0) ; ble -> 0x82796764` @0x82796740/0x82796744: a NaN
+            // lead goes OVERTAKE_TO_SLAM (FX-AINAN2; `<= 4` sent it to DROP_BACK_TO_SLAM).
+            if (!(GetLeadingSeparation(mpPlayerCar, mpCar) > 4.0f))
             {
                 mfStateTime       = 12.0f;
                 meAggressionState = E_AI_AGGRESSION_STATE_OVERTAKE_TO_SLAM;
@@ -1570,11 +1604,16 @@ void BrnAI::AIAggression::UpdateAggressionStateOutOfRange(const AICar* lpPlayerC
             const f32 lfLeadingSeparation = GetLeadingSeparation(lpPlayerCar, mpCar);
             AICar* const lpCar = mpCar;
 
-            if (lfLeadingSeparation >= 0.0f)
+            // `fcmpu lead, 0.0 ; bge -> 0x827967D8` @0x82796798/0x8279679C and, for a racer,
+            // `fcmpu mfScheduleOffset1, 0.0 ; bge -> 0x82796840` (PASSIVE) @0x827967E8/0x827967EC:
+            // both TAKEN on an unordered compare, so a NaN lead is "ahead" and a NaN schedule
+            // offset goes PASSIVE (FX-AINAN2; the `>= 0` spellings sent both the other way). The
+            // checkpoint test is `blt` @0x8279680C, which a NaN distance falls through, as `<` does.
+            if (!(lfLeadingSeparation < 0.0f))
             {
                 if (lpCar->meRouteFindingStyle == E_ROUTE_FINDING_RACE)
                 {
-                    if (lpCar->mfScheduleOffset1 >= 0.0f || lpCar->mfDistanceToCheckpoint < 1000.0f)
+                    if (!(lpCar->mfScheduleOffset1 < 0.0f) || lpCar->mfDistanceToCheckpoint < 1000.0f)
                     {
                         mfStateTime       = 12.0f;
                         meAggressionState = E_AI_AGGRESSION_STATE_PASSIVE;
@@ -1640,7 +1679,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeFast()
         meAggressionState = E_AI_AGGRESSION_STATE_FALL_PAST;   // 7
     }
 
-    if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
+    if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
     {
         mfStateTime = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1684,7 +1723,7 @@ void BrnAI::AIAggression::UpdateAggressionStateOvertakeToSlam(const AICar* /*lpP
     if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_ROAD_RAGE ||
         mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)
     {
-        if (mfStateTime != -1.0f && mfStateTime <= 0.0f)
+        if (mfStateTime != -1.0f && !(mfStateTime > 0.0f))
         {
             meAggressionState = E_AI_AGGRESSION_STATE_SPURT_FORWARD;
             mfStateTime       = (1.0f + mRandom.RandomFloat()) * 0.5f;
@@ -1706,7 +1745,7 @@ void BrnAI::AIAggression::UpdateAggressionStateSpurtForward()
     mbTargetPosValid = false;                        // +0x44 (li r10,0 @0x82770DE0; stb r10,0x44 @0x82770DF4)
     mFixedPassingSpeed = KF_SPURT_PASSING_SPEED_SCALE * 130.0f;   // +0x48 (flt_82F31928 * flt_820C436C, stfs @0x82770E04)
 
-    if (lfStateTime != -1.0f && lfStateTime <= 0.0f)
+    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
     {
         mfStateTime = -1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;   // 0
@@ -1729,7 +1768,7 @@ void BrnAI::AIAggression::UpdateAggressionStateVeer()
 
     bool lbSpurtForward = false;
 
-    if (lfStateTime != -1.0f && lfStateTime <= 0.0f)
+    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
     {
         if (!mpCar->mbIsTouchingPlayer)
         {
@@ -1771,7 +1810,7 @@ void BrnAI::AIAggression::UpdateAggressionStateVeerExtreme()
     meSpeedMatchType = ESpeedMatch_SlowToClip;   // +0x58 = 3 (stw @0x82770EC0)
     mbTargetPosValid = false;                    // +0x44 (li r11,0 @0x82770EC4; stb r11,0x44 @0x82770EC8)
 
-    if (lfStateTime != -1.0f && lfStateTime <= 0.0f)
+    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
     {
         mfStateTime = 1.0f;
         meAggressionState = E_AI_AGGRESSION_STATE_WAIT;   // 4
@@ -1788,7 +1827,7 @@ void BrnAI::AIAggression::UpdateAggressionStateWait()
     const f32 lfStateTime = mfStateTime;
     meSpeedMatchType = ESpeedMatch_Disabled;
 
-    if (lfStateTime != -1.0f && lfStateTime <= 0.0f)
+    if (lfStateTime != -1.0f && !(lfStateTime > 0.0f))
     {
         mfStateTime             = -1.0f;
         meAggressionState       = E_AI_AGGRESSION_STATE_OUT_OF_RANGE;
