@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <limits>
 
 struct Body { Vector3 w; Vector3 GetAngularVelocity() const { return w; } };
 static const f32 kfAngularVelocityDecay = 0.99f;
@@ -92,6 +93,30 @@ int main()
         Check(_mContactOrder.maContactTimes[0].mi16SensorIndex == 1, "the earliest contact is applied first");
         Check(_mContactOrder.maContactTimes[1].mi16SensorIndex == 0 &&
               _mContactOrder.maContactTimes[2].mi16SensorIndex == 2, "near-simultaneous rows are ordered by key");
+    }
+
+    // FX-NANPOL (2026-09-24): `fcmpu |dt|, 0.1 ; ble key` -- raw 0x4099000C @0x826298E8 (front
+    // compare) and @0x82629974 (hole walk). ble (bc 4,gt) is TAKEN on unordered, so a row whose
+    // impact time is NaN is ordered by its KEY, never by the (unordered) time compare.
+    {
+        const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+        _mContactOrder.miNumContacts = 2;
+        _mContactOrder.maContactTimes[0] = ContactTime{  0.5f, 0.2f, 0 };
+        _mContactOrder.maContactTimes[1] = ContactTime{ -0.5f, lfNaN, 1 };   // NaN time, smaller key
+        SortRows();
+        Check(_mContactOrder.maContactTimes[0].mi16SensorIndex == 1 &&
+              _mContactOrder.maContactTimes[1].mi16SensorIndex == 0,
+              "front compare: a NaN impact time is ordered by its key (ble @0x826298E8 taken on unordered)");
+
+        _mContactOrder.miNumContacts = 3;
+        _mContactOrder.maContactTimes[0] = ContactTime{ -1.0f, 0.5f, 0 };
+        _mContactOrder.maContactTimes[1] = ContactTime{  0.5f, 0.5f, 1 };
+        _mContactOrder.maContactTimes[2] = ContactTime{  0.0f, lfNaN, 2 };   // not < row 0, < row 1 by key
+        SortRows();
+        Check(_mContactOrder.maContactTimes[0].mi16SensorIndex == 0 &&
+              _mContactOrder.maContactTimes[1].mi16SensorIndex == 2 &&
+              _mContactOrder.maContactTimes[2].mi16SensorIndex == 1,
+              "hole walk: a NaN impact time is ordered by its key (ble @0x82629974 taken on unordered)");
     }
 
     std::printf("HingeDetachment: %d checks, %d failures\n", liChecks, liFailures);
