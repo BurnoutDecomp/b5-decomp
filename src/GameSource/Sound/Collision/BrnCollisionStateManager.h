@@ -143,6 +143,29 @@ struct PropToMaterialMapping
     bool mbValid;
 };
 
+// DWARF BrnCollisionStateManager.h:102. One side of a scrape as the scrape legs see it (FindEntity
+// fills it): where the entity is and how fast it moves, whether it is crashing, the player's car,
+// the world. The constructor (h:103) zeroes all of it -- both callers build their locals from 0.0f
+// (0x82001CC0) and zero bytes (UpdateScrapeHistory 0x826BEBA8..0x826BEC7C, UpdateScrapes
+// 0x826D4380..0x826D443C); FindEntity stores +0x00 / +0x10 / +0x20 / +0x21 / +0x22.
+struct GenericEntity
+{
+    GenericEntity()
+        : mbCrashing(false)
+        , mbPlayer(false)
+        , mbWorld(false)
+    {
+        mPosition.SetZero();
+        mVelocity.SetZero();
+    }
+
+    Vector3 mPosition;   // h:111
+    Vector3 mVelocity;   // h:112
+    bool mbCrashing;     // h:113
+    bool mbPlayer;       // h:114
+    bool mbWorld;        // h:115
+};
+
 // SelectBin name->bin-index helper  @ 0x826A0598. Free function (the asm never uses
 // its r3 as `this`) -- the shared body both CollisionStateManager::SelectBin<>
 // template instantiations tail-call. Hashes the requested crash-bin content name and
@@ -250,6 +273,21 @@ private:
     void ImportContactSpies(const SpyQueue& lSpyQueue, const LogicInputBuffer& lInputBuffer,
                             f32 lfTimeStamp, f32 lfTimeStep);
 
+    // The scrape legs of the resolver (DWARF h:827..h:907). UpdateScrapes (cpp:2678, ARTIST
+    // 0x826D3F50) runs after every contact is imported and before the culls: it ages the history
+    // (UpdateScrapeHistory, cpp:2916, 0x826BEB98), eats a collision that continues a scrape, turns
+    // an attached collision state into a scrape (or attaches a new one) and records new scrapes
+    // (FindOldestScrapeInHistory, cpp:2881, 0x82688A58). UniqueScrape (cpp:2975, 0x82688B20) keeps
+    // one entry per scrape in each worklist; FindEntity (cpp:3000, 0x826A0398) reads one side of a
+    // scrape from the sound input.
+    enum { E_MAX_SCRAPE_HISTORY = 16 };   // FindOldestScrapeInHistory's assert (cpp:2992) / `cmpwi 0x10`
+    void UpdateScrapes(const BrnSound::Logic::FrameInformation& lrFrame);
+    BrnSound::Logic::Collision::ScrapeInfo* FindOldestScrapeInHistory();
+    bool FindEntity(const EntityId& lEntityId, GenericEntity& lEntity) const;
+    bool UniqueScrape(const BrnSound::Logic::Collision::ScrapeInfo& lScrapeInfo,
+                      const InputCollision* const* lapCollisions, u32 lu32Count) const;
+    void UpdateScrapeHistory(const BrnSound::Logic::FrameInformation& lrFrame);
+
     void SetCollisionBinList(u64 luCollisionBinListKey,
                              u64 luPropsCollisionBinListKey,
                              u64 luPropsMappingKey);
@@ -293,14 +331,12 @@ private:
     u32 mu32OutputCollisionCount;
     BrnSound::Logic::FrameInformation mFrameInformation;
 
-    // DWARF (BrnCollisionStateManager.h:639). The 16-entry scrape history ring
-    // FindInScrapeHistory scans (X360 offset +0x1E40, stride 48). Modelled with the
-    // COMMITTED ScrapeInfo (BrnCollisionDataStructures.h) -- which carries the mbValid
-    // flag + operator== FindInScrapeHistory needs -- rather than fabricating a second
-    // same-FQN ScrapeInfo. FLAG: the committed ScrapeInfo is not the DWARF's full 48-byte
-    // shape (it defers several fields), so the exact per-slot layout is a semantic-parity
-    // approximation; members are pinned BY NAME, offsets NOT static_asserted on host.
-    BrnSound::Logic::Collision::ScrapeInfo maScrapeHistory[16];
+    // DWARF (BrnCollisionStateManager.h:639). The 16-entry scrape history (X360 +0x1E40, stride
+    // 48 -- the full ScrapeInfo). UpdateScrapes records new scrapes into it and refreshes the ones
+    // that continue; UpdateScrapeHistory ages them out; UpdateResolver forgets them all when the
+    // impact time changes or the fatality starts; the regular InputCollision reads it for the
+    // SloMoCrash cull.
+    BrnSound::Logic::Collision::ScrapeInfo maScrapeHistory[E_MAX_SCRAPE_HISTORY];
 
     // The three ref-counted content handles built at the tail of the ARTIST
     // constructor.  They are the runtime-visible part of the otherwise deferred
