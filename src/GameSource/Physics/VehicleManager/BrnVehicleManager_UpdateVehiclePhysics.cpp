@@ -53,6 +53,8 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h" // BrnPhysics::Vehicle::DebugComponent (per-car tick)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint ([crash-probe] witness)
+#include "GameSource/GameState/BrnGameEvents.h"                                   // JustBouncedEvent / JustAppliedExtraSpinEvent (events 52 / 53)
+#include <cstddef>                                                                // offsetof (the event 52 layout asserts)
 #include <cstdlib>                                                                // getenv / atoi ([crash-probe] trigger)
 
 namespace BrnPhysics
@@ -349,29 +351,26 @@ namespace Vehicle
         // Showtime-only tail: virtual slot +0x14 == IsPlayerVehicleActuallyInShowtime.
         if (lrCar.IsPlayerVehicleActuallyInShowtime())
         {
-            // Event 52 (0x34): the recent-bounce report GetRecentBounce fills, 32 bytes in
-            // the console's exact stack order (sp+0x40..sp+0x60: chain count @+0, five
-            // flag bytes @+4.., other-entity id @+8, tail padding as laid out).
-            struct alignas(16) RecentBounceEventPayload
+            // Event 52 (0x34): the recent-bounce report. GetRecentBounce @0x825B8B08 writes its
+            // seven outputs STRAIGHT INTO the queued record at sp+0x70 -- r4 +0x00, r5..r8
+            // +0x04..+0x07, r9 +0x08, r10 +0x10 (@0x82633E80..0x82633E98) -- and the record is
+            // posted (`li r6, 0x20 ; li r5, 0x34` @0x82633EB0) only when the call returns true.
+            // [FX-SHOWTIME2 2026-09-24] FOLDED: the record is the game-state header's own
+            // JustBouncedEvent (DWARF BrnGameEvents.h:2782-2790), the one ProcessGameEvents'
+            // case 52 @0x823A3D74 reads back; the local RecentBounceEventPayload fork is gone.
+            // Same bytes, same order, same 32-byte size (the asserts below the function).
+            // The sixth out is the DWARF's `EntityId*` (RaceCarPhysics.h:319); this tree declares
+            // it `s32*`, so the record's EntityId word is handed over as its s32 view.
+            BrnGameState::GameStateModuleIO::JustBouncedEvent lBounce = {};
+            if (lrCar.GetRecentBounce(&lBounce.miBounceChain, &lBounce.mbFromStationary,
+                                      &lBounce.mbOnCar, &lBounce.mbBoostedBounce,
+                                      &lBounce.mbGoodImpact,
+                                      reinterpret_cast<s32*>(&lBounce.midImpactEntityId.muValue),
+                                      &lBounce.mContactPoint))
             {
-                s32  miChainCount;        // sp+0x40  (GetRecentBounce a2)
-                bool mbOverMinStress;     // sp+0x44  (a3)
-                bool mbCarBounce;         // sp+0x45  (a4)
-                bool mbGoodImpact;        // sp+0x46  (a5)
-                bool mbShouldBounceBoost; // sp+0x47  (a6)
-                s32  miOtherEntityId;     // sp+0x48  (a7)
-                u8   mau8Tail[20];        // sp+0x4C..0x60 -- queued verbatim, never read back typed
-            };
-            RecentBounceEventPayload lBounce = {};
-            // r10 (the 7th out) points at payload+0x10 -- the bounce DIRECTION vector's
-            // 16-aligned slot inside the queued record (mau8Tail[4..20)).
-            if (lrCar.GetRecentBounce(&lBounce.miChainCount, &lBounce.mbOverMinStress,
-                                      &lBounce.mbCarBounce, &lBounce.mbGoodImpact,
-                                      &lBounce.mbShouldBounceBoost, &lBounce.miOtherEntityId,
-                                      reinterpret_cast<Vector3*>(&lBounce.mau8Tail[4])))
-            {
-                lpOutputQueue->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lBounce), 52, 32);
+                lpOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBounce),
+                                        BrnGameState::GameStateModuleIO::E_EVENT_JUST_BOUNCED,
+                                        static_cast<s32>(sizeof(lBounce)));
             }
 
             // Event 53 (0x35): one-shot sixaxis-tilt notification. Consume the latch.
@@ -379,12 +378,42 @@ namespace Vehicle
             msPlayerParams.mbSixaxisTiltApplied = false;
             if (lbTiltApplied)
             {
-                const u8 lu8Payload = 0;   // sp+0x50 -- one uninitialised-on-console byte; zeroed here
-                lpOutputQueue->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lu8Payload), 53, 1);
+                // sp+0x50 -- one uninitialised-on-console byte; zeroed here. [FX-SHOWTIME2] the
+                // header's JustAppliedExtraSpinEvent (DWARF :2801, no members), posted `li r6, 1 ;
+                // li r5, 0x35` @0x82633EE0.
+                const BrnGameState::GameStateModuleIO::JustAppliedExtraSpinEvent lSpin = {};
+                lpOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSpin),
+                                        BrnGameState::GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN,
+                                        static_cast<s32>(sizeof(lSpin)));
             }
         }
     }
+
+    // [FX-SHOWTIME2 2026-09-24] What ProcessAftertouchEvents writes, tied to the records the
+    // game-state consumer reads (ProcessGameEvents cases 52 / 53 @0x823A3D74 / 0x823A3E10).
+    static_assert(BrnGameState::GameStateModuleIO::E_EVENT_JUST_BOUNCED == 0x34,
+                  "event 52: li r5, 0x34 @0x82633EB4");
+    static_assert(sizeof(BrnGameState::GameStateModuleIO::JustBouncedEvent) == 0x20,
+                  "event 52: li r6, 0x20 @0x82633EB0");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, miBounceChain) == 0x00,
+                  "GetRecentBounce r4 = record+0x00 (addi r4, r1, 0x70)");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbFromStationary) == 0x04,
+                  "GetRecentBounce r5 = record+0x04 (addi r5, r1, 0x74)");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbOnCar) == 0x05,
+                  "GetRecentBounce r6 = record+0x05 (addi r6, r1, 0x75)");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbBoostedBounce) == 0x06,
+                  "GetRecentBounce r7 = record+0x06 (addi r7, r1, 0x76)");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mbGoodImpact) == 0x07,
+                  "GetRecentBounce r8 = record+0x07 (addi r8, r1, 0x77)");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, midImpactEntityId) == 0x08
+                      && sizeof(EntityId) == sizeof(s32),
+                  "GetRecentBounce r9 = record+0x08, one word (addi r9, r1, 0x78)");
+    static_assert(offsetof(BrnGameState::GameStateModuleIO::JustBouncedEvent, mContactPoint) == 0x10,
+                  "GetRecentBounce r10 = record+0x10 (addi r10, r1, 0x80)");
+    static_assert(BrnGameState::GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN == 0x35,
+                  "event 53: li r5, 0x35 @0x82633EE4");
+    static_assert(sizeof(BrnGameState::GameStateModuleIO::JustAppliedExtraSpinEvent) == 1,
+                  "event 53: li r6, 1 @0x82633EE0");
 
     // ------------------------------------------------------------------------------------
     // UpdateVehiclePhysics  @0x82644FA8  (1,038 insns) -- THE FORCE PRODUCER.
