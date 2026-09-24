@@ -713,28 +713,30 @@ void DriveThruManager::ProcessDriveThru(BrnTrigger::GenericRegion::Type leTrigge
                 mpProgressionManager->GetCarColourAndPalette(lCarId, &liColourIndex, &liPaletteIndex);
                 liPaletteIndex = 2;   // X360 forces palette index 2 (the paint-shop palette)
 
-                // Advance the colour by one within palette 2's colour count (wrap-around). The X360
-                // traps on a zero divisor (__twllei).
-                const s32 liNumColours = mpPlayerCarColours.operator->()->maPalettes[2].miNumColours;
-                if (liNumColours <= 0)
-                {
-                    CgsDev::Assert::BeginAssert();
-                    CgsDev::Assert::FireAssert(
-                        "GlobalColourPalette palette[2] colour count > 0",
-                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnDriveThruManager.cpp",
-                        0 /*FLAG: assert line not in exports*/);
-                    CgsDev::Assert::EndAssert();
-                }
-                else
-                {
-                    liColourIndex = (liColourIndex + 1) % liNumColours;
-                }
+                // Advance the colour by one within palette 2's colour count (wrap-around).
+                // [FX-FLOW 2026-09-24] Console form, @0x8239BCFC..0x8239BD34: `addi r26, colour, 1`,
+                // `lwz r7, 0x20(palette)` (maPalettes[2].miNumColours), `divwu` / `mullw` / subtract --
+                // an UNSIGNED modulo (DWARF GetCarColourAndPalette hands out uint32_t&), with the
+                // compiler's divide-by-zero trap `twllei r7, 0` as the only check. The invented
+                // "colour count > 0" assert + skip that stood here (assert line 0, a FLAG) is gone:
+                // a zero count traps on both builds (integer divide fault on x64).
+                const u32 luNumColours = static_cast<u32>(mpPlayerCarColours->maPalettes[2].miNumColours);
+                liColourIndex = static_cast<s32>((static_cast<u32>(liColourIndex) + 1u) % luNumColours);
 
                 // X360 stores the (already advanced) colour index at payload+128 and the forced
                 // palette index 2 at payload+132; RaceCarEntityModule::HandleGameActions case 98
                 // reads both back onto the global race car (+148 colour, +152 palette).
                 PostShopAction(lpQueue, mBoxRegionCache, KI_ACTION_PAINT_SHOP_DRIVE_THRU, lbIsOnline,
                                0u, liColourIndex, liPaletteIndex);
+
+                // [diag] the gas / body-shop arms' POST witness, for the paint arm (not in the X360
+                // binary): the palette read above is what used to assert + fault here.
+                if (CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[drivethru] POST paint action=98 colour=" << liColourIndex
+                        << " palette=" << liPaletteIndex << " (palette colours " << luNumColours << ")\n";
+                }
 
                 lpCarData->SetColourIndex(liColourIndex);
                 lpCarData->SetPaletteIndex(liPaletteIndex);
