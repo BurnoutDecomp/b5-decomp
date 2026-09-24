@@ -524,18 +524,25 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         }
 
         // --- simple particles ---------------------------------------------------------------
-        // BrnSimpleParticleRenderer::Construct(this+0x228B8, mpHeapMalloc, this+0x9274) and,
-        // per array, BrnSimpleParticleArray::Construct(mpHeapMalloc, index) followed by two
-        // seeding loops that write -9999.0f into every pool element's +0x0C lane and into the
-        // array's own +0x10 / +0x20 spawn-time slots. BrnSimpleParticleArray is an honest
-        // partial (only AcquireTexture's mbDirty + mpTextureNameRef are modelled), so neither
-        // the construct nor the seeding has a named destination.
+        // BrnSimpleParticleRenderer::Construct(this+0x228B8, mpHeapMalloc, this+0x9274) is the
+        // first call of this leg on the console (0x8229C2A4); it needs the Im3dSmokeRenderer at
+        // +0x9274, which is still a ContainedInterface placeholder, so it is announced by the
+        // smoke-renderer line above and the render half stays off.
+        //
+        // ⭐ THE THIRTEEN ARRAYS ARE REAL AS OF 2026-09-24 (FX-CRASHVFX), 0x8229C2A8..0x8229C398:
+        //     for (type = 0; type < 13; ++type)
+        //         maSimpleParticles[type].Construct(mpHeapMalloc, type);
+        //         mBankRegular.Prepare(..); mBankCrash.Prepare(..);   (both inlined)
+        // Each inlined Prepare stamps every record's spawn-time lane and the bank's newest spawn
+        // time with -9999.0 (flt_82010CA4, held in f31 across the loop) and puts the cursor at
+        // muNumParticles - 1. It used to be announced because BrnSimpleParticleArray was a
+        // two-field placeholder; the DWARF shape landed with its bodies (BrnSimpleParticleArray.cpp).
+        for (u32 luArray = 0; luArray < KU_NUM_SIMPLE_ARRAYS; ++luArray)
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's BrnSimpleParticleRenderer::Construct and the 13 "
-                "BrnSimpleParticleArray::Construct + -9999.0f spawn-time seeding passes "
-                "(BrnSimpleParticleArray is a partial layout)");
+            Native::BrnSimpleParticleArray& lrArray = maSimpleParticles[luArray];
+            lrArray.Construct(mpHeapMalloc, static_cast<Native::ENativeParticleType>(luArray));
+            lrArray.mBankRegular.Prepare(&lrArray);
+            lrArray.mBankCrash.Prepare(&lrArray);
         }
 
         // --- the spark spawn buffer ----------------------------------------------------------
@@ -822,25 +829,49 @@ bool ParticleModule::LoadFXBundle(ParticleIO::PrepareOutputBuffer* lpOutput)
                 CgsDev::Log::WriteToLog(lacMsg);
             }
 
-            // (d) the 13 native simple-particle arrays.
-            // ⛔ NOT CALLED, deliberately. BrnSimpleParticleArray::AcquireTexture's FIRST act
-            // is `mpTextureNameRef->mpTextureName`, and mpTextureNameRef is only ever set by
-            // BrnSimpleParticleArray::Construct -- which is NOT reconstructed (see Prepare).
-            // Calling it here would dereference an uninitialised pointer on the first reply:
-            // a valid-pointer/invalid-object access violation, not a missing effect. Announced
-            // once instead; it goes live with that Construct.
+            // (d) the 13 native simple-particle arrays, 0x8229D468..0x8229D4AC:
+            //     for (type = 0; type < 13; ++type)
+            //         maSimpleParticles[type].AcquireTexture(entry[reply].hash, handle, type);
+            // LIVE as of 2026-09-24 (FX-CRASHVFX): BrnSimpleParticleArray::Construct runs in
+            // Prepare now, so every array's mpStandardParams is bound, and
+            // EffectsModule::LoadNativeParticleParams (the RESOURCES stage, BEFORE this
+            // PostPreparePrepare ladder) has filled arrays 1..12's texture names.
+            for (u32 luSimpleArray = 0; luSimpleArray < KU_NUM_SIMPLE_ARRAYS; ++luSimpleArray)
             {
-                static bool sbLogged = false;
-                LogNotReconstructed(sbLogged,
-                    "LoadFXBundle stage 12's 13 BrnSimpleParticleArray::AcquireTexture publishes "
-                    "-- skipped because BrnSimpleParticleArray::Construct is not reconstructed, "
-                    "so mpTextureNameRef is uninitialised and the call would fault");
+                maSimpleParticles[luSimpleArray].AcquireTexture(
+                    luEntryHash, lTexture, static_cast<Native::ENativeParticleType>(luSimpleArray));
             }
         }
-        // The console then asserts every simple array came out dirty ("Missing Native
-        // Particle Texture. Did you forget to include it in the Native Lion Effect ?",
-        // ParticleModule.cpp:3197). It is a content assert on data this host may not have
-        // ported yet, so it is not raised here -- announced instead.
+        // 0x8229D4D0..0x8229D518: then every simple array must have come out ready.
+        // "Missing Native Particle Texture. Did you forget to include it in the Native Lion
+        // Effect ?" (ParticleModule.cpp:3197 -- `li r5, 0xC7D`). The console tests the byte
+        // against 1 (`cmplwi r11, 1 ; beq`).
+        for (u32 luSimpleArray = 0; luSimpleArray < KU_NUM_SIMPLE_ARRAYS; ++luSimpleArray)
+        {
+            CGS_ASSERT(maSimpleParticles[luSimpleArray].IsReady(),
+                       "Missing Native Particle Texture. Did you forget to include it in the Native Lion Effect ?");
+        }
+        // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only, once. Which of the 13 arrays
+        // took a texture -- a bit per array (the ready byte) -- so a run shows the simple-particle
+        // chain's texture half resolved before anything is drawn with it. DELETE-WHEN-STABLE.
+        {
+            static bool sbLogged = false;
+            if (!sbLogged)
+            {
+                sbLogged = true;
+                u32 luReadyMask = 0;
+                for (u32 luSimpleArray = 0; luSimpleArray < KU_NUM_SIMPLE_ARRAYS; ++luSimpleArray)
+                {
+                    if (maSimpleParticles[luSimpleArray].IsReady())
+                        luReadyMask |= (1u << luSimpleArray);
+                }
+                char lacMsg[160];
+                std::snprintf(lacMsg, sizeof(lacMsg),
+                    "[simplefx] LoadFXBundle stage 12: simple-particle arrays ready mask=0x%04X "
+                    "(0x1FFF == all 13)\n", luReadyMask);
+                CgsDev::Log::WriteToLog(lacMsg);
+            }
+        }
         // fall through
     }
     case E_LOADSTAGE_LOAD_PROP_COLLISIONS:

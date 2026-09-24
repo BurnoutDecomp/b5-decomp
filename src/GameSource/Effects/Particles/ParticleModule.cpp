@@ -182,6 +182,37 @@ namespace BrnParticle
     }
 
     // =========================================================================
+    // SpawnSimple  @0x82281A10  (DWARF ParticleModule.cpp:2083) -- 55 instructions.
+    //   One ring draw for the rotational velocity, then SpawnParticle into the type's
+    //   REGULAR bank. Asm, in order:
+    //     r10 = *(this + 0x228F4 + 160*type) == maSimpleParticles[type].mpStandardParams
+    //     f0  = params+0x54 (mrRotationSpeedMin), f12 = params+0x58 - f0
+    //     the inlined CgsNumeric::Random::RandomFloat over mRandom (+0x23100): read the
+    //       current ring slot, refill it from the OLD seed's high word, step the LCG,
+    //       bump the cursor -- `fmadds f3, f12, f13, f0` == (max - min) * t + min
+    //     f1 <- the caller's f2 (spawn time), f2 <- the caller's f1 (size scale),
+    //     f4 <- the caller's f3 (alpha), r7 = 0 (the regular bank), v1/v2 untouched
+    //     bl BrnSimpleParticleArray::SpawnParticle(&maSimpleParticles[type], ...)
+    //   There is no bound check on the type -- the array index is formed directly.
+    // =========================================================================
+    void ParticleModule::SpawnSimple(Vector3 lvPosition,
+                                     Vector3 lvVelocity,
+                                     Native::ENativeParticleType leParticleType,
+                                     f32 lfSizeScale,
+                                     f32 lfSpawnTime,
+                                     f32 lfAlpha)
+    {
+        Native::BrnSimpleParticleArray& lrArray = maSimpleParticles[leParticleType];
+        const Native::CB4ParticleArrayStandardParams* const lpParams = lrArray.mpStandardParams;
+
+        const f32 lfRotationalVelocity =
+            mRandom.RandomFloat(lpParams->mrRotationSpeedMin, lpParams->mrRotationSpeedMax);
+
+        lrArray.SpawnParticle(lvPosition, lvVelocity, lfSpawnTime, lfSizeScale,
+                              lfRotationalVelocity, false, lfAlpha);
+    }
+
+    // =========================================================================
     // SuspendPlayingEffects  @0x8227A2B8
     //   Raise the suspended latch, then walk all 128 playing slots: any slot that
     //   already has a live dispatch-thread Lion instance has it destroyed

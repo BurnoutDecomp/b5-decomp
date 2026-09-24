@@ -21,6 +21,7 @@
 #include "GameSource/AttribSys/Generated/classes/surface.h"                        // Attrib::Gen::surface
 #include "GameSource/AttribSys/Generated/classes/visualfxsurface.h"                // Attrib::Gen::visualfxsurface
 #include "GameSource/AttribSys/Generated/classes/physicssurface.h"                 // [diag] Attrib::Gen::physicssurface (the [skid-bind] material line)
+#include "GameSource/AttribSys/Generated/classes/nativeparticleparams.h"           // Attrib::Gen::nativeparticleparams (LoadNativeParticleParams)
 #include "GameSource/AttribSys/Generated/attrib_findcollection.h"                  // Attrib::FindCollection
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"                                  // msPostFx (the colour-cube seed)
@@ -836,14 +837,16 @@ void EffectsModule::PushSparkParams()
 }
 
 // =============================================================================
-// LoadNativeParticleParams  @0x82290510  (DWARF :588)
-//   Twelve {array index, collection key} pairs: resolve each simple-particle parameter
-//   collection (class 0xE836C90A, the key StringToKey'd from the literal), wrap it in an
-//   Attrib::Instance (default data area 144 when the collection carries none) and push it
-//   into maSimpleParticles[index] through BrnSimpleParticleArray::UpdateParams.
-//   PARTIAL: UpdateParams has no PC body and BrnSimpleParticleArray is a partial layout
-//   (see ParticleModule.h), so the push is announced, not performed. The pair table and
-//   the resolves are the console's.
+// LoadNativeParticleParams  @0x82290510  (DWARF :588) -- 102 instructions.
+//   Twelve {array index, collection key} pairs, built on the stack in index order
+//   (0x8229051C..0x82290610): for each, StringToKey the literal, resolve it under the
+//   nativeparticleparams class (0x43DA904B_E836238A -- lis/ori/insrdi at 0x82290624..38),
+//   wrap it in an Attrib::Instance (DefaultDataArea(0x90) when the collection carries none)
+//   and hand it to maSimpleParticles[index].UpdateParams (`mulli 160` + 0x23350 ==
+//   mParticleModule +0xA80, maSimpleParticles +0x228D0). Array 0 (eParticleArray_None) is
+//   never updated -- the table starts at 1.
+//   BODIED 2026-09-24 (FX-CRASHVFX): it used to announce itself because UpdateParams had
+//   no body; the attrib class it builds is Attrib::Gen::nativeparticleparams (new header).
 // =============================================================================
 void EffectsModule::LoadNativeParticleParams()
 {
@@ -854,14 +857,44 @@ void EffectsModule::LoadNativeParticleParams()
         {  5, "554557" }, {  6, "554559" }, {  7, "561481" }, {  8, "561868" },
         {  9, "561870" }, { 10, "561869" }, { 11, "561872" }, { 12, "561871" },
     };
-    // Attrib::FindCollection(-399105142): the simple-particle-params class key. FLAG: only
-    // the low word (0xE836C90A) is visible in the pseudocode; the 64-bit form is not
-    // recovered here, and with the consumer absent the resolve is not performed either.
-    static bool sbLogged = false;
-    LogNotReconstructed(sbLogged,
-        "EffectsModule::LoadNativeParticleParams -> BrnSimpleParticleArray::UpdateParams x12 "
-        "(no PC body; simple particles are not reconstructed)");
-    (void)KAA_NATIVE_PARTICLE_PARAMS;
+
+    // [FLAG PC witness] NOT CONSOLE BEHAVIOUR: ours, log-only, printed on the first call.
+    // Which of the twelve collections RESOLVED (a DefaultDataArea fallback reads as a perfectly
+    // plausible all-zero parameter block, not as a failure) and what the resolved texture names
+    // are -- the names are what LoadFXBundle stage 12 must match. DELETE-WHEN-STABLE.
+    static bool sbWitnessed = false;
+    u32 luValidMask = 0;
+
+    for (u32 luEntry = 0; luEntry < 12u; ++luEntry)
+    {
+        const NativeParticleParamEntry& lrEntry = KAA_NATIVE_PARTICLE_PARAMS[luEntry];
+        const Attrib::Gen::nativeparticleparams lParams(Attrib::StringToKey(lrEntry.lpcCollectionKey), 0);
+        if (lParams.IsValid())
+            luValidMask |= (1u << lrEntry.muArrayIndex);
+        if (!sbWitnessed)
+        {
+            char lacMsg[224];
+            std::snprintf(lacMsg, sizeof(lacMsg),
+                "[simplefx] nativeparticleparams %s -> array %u: valid=%d tex=%s life=%.3f blend=%u "
+                "tiles=%ux%u\n",
+                lrEntry.lpcCollectionKey, lrEntry.muArrayIndex, lParams.IsValid() ? 1 : 0,
+                (lParams.TextureName() != 0) ? lParams.TextureName() : "(null)",
+                static_cast<double>(lParams.LifeTime()), lParams.BlendMode(),
+                lParams.TilesWide(), lParams.TilesHigh());
+            CgsDev::Log::WriteToLog(lacMsg);
+        }
+        mParticleModule.maSimpleParticles[lrEntry.muArrayIndex].UpdateParams(lParams);
+    }
+
+    if (!sbWitnessed)
+    {
+        sbWitnessed = true;
+        char lacMsg[128];
+        std::snprintf(lacMsg, sizeof(lacMsg),
+            "[simplefx] LoadNativeParticleParams: valid mask=0x%04X (0x1FFE == arrays 1..12)\n",
+            luValidMask);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
 }
 
 // =============================================================================

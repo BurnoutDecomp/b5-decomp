@@ -500,6 +500,18 @@ namespace BrnParticle
                          f32 lfSize,
                          f32 lfSpawnTime);
 
+        // X360 0x82281A10 (DWARF ParticleModule.cpp:2083) -- THE SIMPLE-PARTICLE PRODUCER (dust,
+        // impact smoke). Draws the record's rotational velocity from mRandom over the array's
+        // authored rotation-speed range and writes one record into maSimpleParticles[leType]'s
+        // REGULAR bank. Callers: EffectsModule::{ProcessRaceCarContacts,
+        // ProcessCarDetatchedPartContacts, HandleCrashingTrail}.
+        void SpawnSimple(Vector3 lvPosition,
+                         Vector3 lvVelocity,
+                         Native::ENativeParticleType leParticleType,
+                         f32 lfSizeScale,
+                         f32 lfSpawnTime,
+                         f32 lfAlpha);
+
         // X360 0x82278380. Resolve a handle to its playing-effect slot, or NULL when the
         // slot has been recycled (its stored handle no longer equals luHandle).
         LionEffect* GetLionEffect(u32 luHandle);
@@ -719,8 +731,7 @@ namespace BrnParticle
         Native::BrnDebrisRenderer          mDebrisRenderer;                          // +0x22810 (141328)
         Native::BrnDebrisArray             maDebris[KU_NUM_DEBRIS_ARRAYS];           // +0x22818 (141336), stride 32
         Native::BrnSimpleParticleRenderer  mSimpleParticleRenderer;                  // +0x228B8 (141496)
-        // FLAG: the committed BrnSimpleParticleArray is a partial layout (its X360 stride is 160;
-        // Prepare's per-array spawn-time seeding needs its full shape and is carved out).
+        // The full DWARF layout as of 2026-09-24 (FX-CRASHVFX) -- console stride 160 (0xA0).
         Native::BrnSimpleParticleArray     maSimpleParticles[KU_NUM_SIMPLE_ARRAYS];  // +0x228D0 (141520), stride 160
 
         // DWARF :91-121 -- the frame-rate scale, the generator, the enables, the spark accumulator.
