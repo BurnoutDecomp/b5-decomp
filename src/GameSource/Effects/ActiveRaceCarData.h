@@ -81,27 +81,29 @@ namespace BrnEffects
         // lfTime. Both callers pass 0.0f.
         void Reset(f32 lfTime)
         {
-            mfNextThreshold = mfMinBurstSize;
-            mfNextBurstTime = lfTime;
-            mfAccumulator   = mfMinBurstSize;
+            mfBurstSizeThreshold = mfMinBurstSize;
+            mfBurstTimeThreshold = lfTime;
+            mfCurrentBurstSize   = mfMinBurstSize;
         }
 
-        // Update @ 0x8227EC90. Adds lfDelta to the accumulator; if lfTime has
-        // reached the next-burst time the accumulator is reset to mfMaxBurstSize.
-        // While the accumulator is below the current threshold returns 0; once the
-        // threshold is crossed it draws a fresh randomised threshold, schedules the
-        // next-burst time at (mfBurstTimeout + lfTime), and returns the whole-number
-        // burst count (truncated accumulator), carrying the remainder forward.
-        // The X360 leaves the integer arguments after lfTime unused.
-        s32 Update(f32 lfDelta, f32 lfTime, s32 liArg3, s32 liArg4, CgsNumeric::Random* lpRandom);
+        // Update @ 0x8227EC90 -- DWARF ActiveRaceCarData.h:30 `uint32_t Update(float32_t,
+        // float32_t, Random &)`. Adds lfBurstSize to the current size; once lfTime is no longer
+        // before the time threshold the size is reset to mfMaxBurstSize. Below the size threshold
+        // it returns 0; otherwise it draws a fresh rand^2-shaped threshold, moves the time
+        // threshold to (mfBurstTimeout + lfTime), and returns the whole-number burst count,
+        // carrying the remainder forward. (FX-CRASHVFX 2026-09-24: this used to be declared
+        // `s32 Update(f32, f32, s32, s32, Random*)` -- two phantom ints are the r4/r5 slots the
+        // two floats eat in the f32 ABI; the console's third argument IS r6.)
+        u32 Update(f32 lfBurstSize, f32 lfTime, CgsNumeric::Random& lrRandom);
 
     private:
-        f32 mfMinBurstSize;       // +0x00
-        f32 mfMaxBurstSize;       // +0x04
-        f32 mfBurstTimeout;       // +0x08
-        f32 mfNextThreshold;      // +0x0C  (randomised burst threshold)
-        f32 mfNextBurstTime;      // +0x10  (next allowed burst time)
-        f32 mfAccumulator;        // +0x14
+        // DWARF ActiveRaceCarData.h:5-20 names.
+        f32 mfMinBurstSize;          // +0x00
+        f32 mfMaxBurstSize;          // +0x04
+        f32 mfBurstTimeout;          // +0x08
+        f32 mfBurstSizeThreshold;    // +0x0C  (the randomised size threshold)
+        f32 mfBurstTimeThreshold;    // +0x10  (the time at which the size resets to the max)
+        f32 mfCurrentBurstSize;      // +0x14
     };
 
     static_assert(sizeof(BurstAccumulator) == 0x18, "BurstAccumulator layout drift");

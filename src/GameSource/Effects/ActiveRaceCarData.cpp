@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                               // CgsNumeric::Random
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [boost*] witnesses
 #include <cfloat>                                                                   // FLT_MAX
+#include <cmath>                                                                    // std::fma (BurstAccumulator::Update's fmadds)
 #include <cstdio>                                             // snprintf (witnesses)
 
 // =============================================================================
@@ -34,50 +35,62 @@ void BurstAccumulator::Construct(f32 lfMinBurstSize, f32 lfMaxBurstSize, f32 lfB
     CGS_ASSERT(lfMaxBurstSize > lfMinBurstSize, "lfMaxBurstSize > lfMinBurstSize");
     CGS_ASSERT(lfBurstTimeout > 0.0f, "lfBurstTimeout > 0.0f");
 
-    mfMinBurstSize  = lfMinBurstSize;
-    mfMaxBurstSize  = lfMaxBurstSize;
-    mfBurstTimeout  = lfBurstTimeout;
-    mfNextThreshold = lfMinBurstSize;
-    mfNextBurstTime = 0.0f;
-    mfAccumulator   = lfMinBurstSize;
+    mfMinBurstSize       = lfMinBurstSize;
+    mfMaxBurstSize       = lfMaxBurstSize;
+    mfBurstTimeout       = lfBurstTimeout;
+    mfBurstSizeThreshold = lfMinBurstSize;
+    mfBurstTimeThreshold = 0.0f;
+    mfCurrentBurstSize   = lfMinBurstSize;
 }
 
-// ---- Update @ 0x8227EC90 -------------------------------------------------
-// Accumulate lfDelta; reset the accumulator to mfMaxBurstSize once lfTime reaches
-// the scheduled next-burst time. Below the current threshold -> emit nothing.
-// Otherwise draw a fresh rand-in-[0,1) (the X360 inlines CgsNumeric::Random's
-// per-call draw: read the oldest ring slot, refill it from the advanced LCG seed,
-// and return slot-1.0f), shape the next threshold as
-//   mfNextThreshold = (mfMaxBurstSize - mfMinBurstSize) * r * r + mfMinBurstSize,
-// schedule the next-burst time at (mfBurstTimeout + lfTime), emit the truncated
-// accumulator as the burst count and carry the fractional remainder forward.
-// liArg3 / liArg4 are unreferenced by the X360 body.
-s32 BurstAccumulator::Update(f32 lfDelta, f32 lfTime, s32 liArg3, s32 liArg4, CgsNumeric::Random* lpRandom)
+// ---- Update @ 0x8227EC90 (62 instr) ----------------------------------------
+// Straight from the asm (FX-CRASHVFX 2026-09-24 -- three corrections to the earlier body, each
+// pinned by tests/run_fxcrashvfx_burst_accumulator.py against the function's own words):
+//   * `fcmpu cr6, f2, f13 ; blt` -- ONLY an ordered "lfTime < mfBurstTimeThreshold" keeps the
+//     accumulated size; a NaN time falls through to the reset. The old `if (lfTime >= next)`
+//     had the NaN polarity backwards.
+//   * the threshold is `fmuls f11, f11, f0` then `fmadds f0, f11, f0, f12`: ((max - min) * r)
+//     rounded, then * r + min FUSED. The old spelling rounded twice.
+//   * the count is `fctidz` + `stfiwx`: the LOW WORD of a 64-bit truncation. A NaN size
+//     truncates to 0x8000000000000000, whose low word is 0 -- no burst -- where the old
+//     `static_cast<s32>` returned 0x80000000 and every caller would have spawned 2^31 sparks.
+//     The remainder subtracts that count as `lwz` left it, zero-extended into the `fcfid`.
+// The random draw is CgsNumeric::Random::RandomFloat() inlined (0x8227ECC4..0x8227ED24).
+u32 BurstAccumulator::Update(f32 lfBurstSize, f32 lfTime, CgsNumeric::Random& lrRandom)
 {
-    (void)liArg3;
-    (void)liArg4;
-
-    mfAccumulator = lfDelta + mfAccumulator;
-    if (lfTime >= mfNextBurstTime)
+    mfCurrentBurstSize = lfBurstSize + mfCurrentBurstSize;
+    if (!(lfTime < mfBurstTimeThreshold))
     {
-        mfAccumulator = mfMaxBurstSize;
+        mfCurrentBurstSize = mfMaxBurstSize;
     }
 
-    if (mfAccumulator < mfNextThreshold)
+    if (mfCurrentBurstSize < mfBurstSizeThreshold)
     {
-        return 0;
+        return 0u;
     }
 
-    const f32 lfRand01 = lpRandom->RandomFloat();
+    const f32 lfRandom = lrRandom.RandomFloat();
     const f32 lfRange  = mfMaxBurstSize - mfMinBurstSize;
 
-    mfNextBurstTime = mfBurstTimeout + lfTime;
+    mfBurstTimeThreshold = mfBurstTimeout + lfTime;
 
-    const s32 liBurstCount = static_cast<s32>(mfAccumulator);
-    mfNextThreshold = lfRange * lfRand01 * lfRand01 + mfMinBurstSize;
-    mfAccumulator   = mfAccumulator - static_cast<f32>(liBurstCount);
+    // fctidz: truncate toward zero into a doubleword, saturating; NaN -> 0x8000000000000000.
+    const f64 lfSize = static_cast<f64>(mfCurrentBurstSize);
+    s64 liTruncated;
+    if (lfSize != lfSize)
+        liTruncated = static_cast<s64>(0x8000000000000000ULL);
+    else if (lfSize >= 9223372036854775808.0)
+        liTruncated = static_cast<s64>(0x7FFFFFFFFFFFFFFFULL);
+    else if (lfSize < -9223372036854775808.0)
+        liTruncated = static_cast<s64>(0x8000000000000000ULL);
+    else
+        liTruncated = static_cast<s64>(lfSize);
+    const u32 luBurstCount = static_cast<u32>(static_cast<u64>(liTruncated));   // stfiwx: the low word
 
-    return liBurstCount;
+    mfBurstSizeThreshold = std::fma(lfRange * lfRandom, lfRandom, mfMinBurstSize);
+    mfCurrentBurstSize   = mfCurrentBurstSize - static_cast<f32>(static_cast<f64>(luBurstCount));
+
+    return luBurstCount;
 }
 
 // =============================================================================
