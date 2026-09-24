@@ -12,6 +12,7 @@ $workflow = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $case = & (Join-Path $workflow 'tools/tests/cases/takedown_forced.ps1')
 $case.Name = 'rcem_reset_speeds'
 $case.Bug = 'Crash-exit resets with a running engine roll at 50 mph; FAILURE-arm resets roll at up to 10 mph.'
+$case.DiagEnv += ',BRN_CRASH_EXIT_DIAG=1'   # the [crash-exit] reset-on-track line is latched (FX-RCEM4)
 $case.Checks += @(
     @{ Kind = 'Script'; Name = 'crash-exit reset speed follows the engine state'; Script = {
         param($ctx)

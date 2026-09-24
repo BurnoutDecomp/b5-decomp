@@ -21,7 +21,7 @@
 $case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
 $case.Name = 'fxrcem4_live'
 $case.Bug = 'The FX-RCEM4 arms (4, 74, the junkyard-exit audio wait) and the car-colour chain (SetupCarColour, the takedown re-colour) must run with no new asserts.'
-$case.DiagEnv += ',BRN_RCEM_ACTION_DIAG=1,BRN_ENGINE_DIAG=1,BRN_RACECAR_PAINT_DIAG=1'
+$case.DiagEnv += ',BRN_RCEM_ACTION_DIAG=1,BRN_ENGINE_DIAG=1,BRN_RACECAR_PAINT_DIAG=1,BRN_CRASH_EXIT_DIAG=1'
 $case.Run.MaxSeconds = 200
 $case.Checks = @(
     @{ Kind = 'NewAsserts'; Name = 'no new assertions' }

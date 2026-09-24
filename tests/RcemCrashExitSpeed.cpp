@@ -129,6 +129,9 @@ struct RaceCarEntityModule {
     struct PaletteResource { Palettes mPalettes; Palettes* operator->() { return &mPalettes; } } mCarColoursResource;
     s32 GetRandomCarColour(s32, s32) { return 7; }
 };
+// FX-RCEM4 (reviewer A on 65eadffe, 2026-09-24): the [crash-exit] / [persist-damage] witnesses'
+// env latch (BRN_CRASH_EXIT_DIAG) -- off in this harness.
+inline bool CrashExitDiagEnabled() { return false; }
 #include "rcem_crash_exit_speed.inc"
 }
 

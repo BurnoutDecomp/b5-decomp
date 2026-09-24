@@ -16,7 +16,7 @@
 $case = & (Join-Path $PSScriptRoot 'RivalOrganic.ps1')
 $case.Name = 'rcem2_live'
 $case.Bug = 'The pre-scene pass, the drive-by intro countdown and the reset/glass legs must run with no new asserts.'
-$case.DiagEnv += ',BRN_CRASH_RESPONSE_DIAG=1'
+$case.DiagEnv += ',BRN_CRASH_RESPONSE_DIAG=1,BRN_INTRO_TIMER_DIAG=1'   # [intro-timer] is latched (FX-RCEM4)
 $case.Checks = @(
     @{ Kind = 'NewAsserts'; Name = 'no new assertions' }
     @{ Kind = 'LogCount'; Name = 'no exceptions'; Pattern = '\[EXCEPTION\]'; Max = 0 }

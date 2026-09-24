@@ -80,7 +80,7 @@
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"                  // the re-colour legs' palette asserts
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h" // GetPotentialStompees (ProcessLeapedAndStompedCars)
 
-#include <cstdlib>   // getenv -- the [stomp] witness only
+#include <cstdlib>   // getenv -- the [stomp] and BRN_CRASH_EXIT_DIAG witnesses
 
 namespace BrnWorld
 {
@@ -103,6 +103,15 @@ namespace
     // SET_OPPONENTS_TO_COPS colour (`li r17, 6` @0x822F4078, stored @0x822F420C / 0x822F4330).
     // (Also TU-local in BrnRaceCarEntityModule.cpp for SetupCarColour -- the DWARF home.)
     const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
+
+    // [DIAG] BRN_CRASH_EXIT_DIAG -- NOT IN THE X360 BINARY. The latch every [crash-exit] /
+    // [persist-damage] witness in this TU prints under. They used to print on every run, gated only
+    // on gpDebugPrint (reviewer A on 65eadffe, 2026-09-24).
+    bool CrashExitDiagEnabled()
+    {
+        static const bool sbOn = ( getenv( "BRN_CRASH_EXIT_DIAG" ) != 0 );
+        return sbOn && CgsDev::Log::gpDebugPrint != 0;
+    }
 }
 
 // =================================================================================================
@@ -218,7 +227,7 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
             continue;
         }
 
-        if( CgsDev::Log::gpDebugPrint != 0 )
+        if( CrashExitDiagEnabled() )
         {
             *CgsDev::Log::gpDebugPrint
                 << "[crash-exit] CRASH COMPLETE received for active race car "
@@ -271,9 +280,9 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
                                 "Invalid Colour Index: " );
                 }
 
-                // [DIAG] NOT IN THE X360 BINARY -- one line per credited AI takedown in a
-                // persistent-damage mode: what the rival will carry into its respawn.
-                if( CgsDev::Log::gpDebugPrint != 0 )
+                // [DIAG] BRN_CRASH_EXIT_DIAG -- NOT IN THE X360 BINARY -- one line per credited AI
+                // takedown in a persistent-damage mode: what the rival will carry into its respawn.
+                if( CrashExitDiagEnabled() )
                 {
                     *CgsDev::Log::gpDebugPrint
                         << "[persist-damage] car " << static_cast<s32>( luActiveRaceCarIndex )
@@ -332,9 +341,10 @@ void RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents(
 
         lpRaceCar->RequestResetOnTrack( lfResetSpeed, leResetType, lfResetDistance );
 
-        // [DIAG] NOT IN THE X360 BINARY -- one line per crash-exit reset request (the CRASH
-        // COMPLETE line above is the same cadence), carrying the engine state that picked the speed.
-        if( CgsDev::Log::gpDebugPrint != 0 )
+        // [DIAG] BRN_CRASH_EXIT_DIAG -- NOT IN THE X360 BINARY -- one line per crash-exit reset
+        // request (the CRASH COMPLETE line above is the same cadence), carrying the engine state
+        // that picked the speed.
+        if( CrashExitDiagEnabled() )
         {
             *CgsDev::Log::gpDebugPrint
                 << "[crash-exit] reset-on-track active race car "
@@ -454,7 +464,7 @@ void RaceCarEntityModule::PostSceneUpdate(
 
     {
         static bool sbLoggedPostScenePark = false;
-        if( !sbLoggedPostScenePark && CgsDev::Log::gpDebugPrint != 0 )
+        if( !sbLoggedPostScenePark && CrashExitDiagEnabled() )
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint

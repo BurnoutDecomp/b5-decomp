@@ -81,6 +81,9 @@ static const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
 
 #include "count.inc"
 
+// FX-RCEM4 (reviewer A on 65eadffe, 2026-09-24): the [crash-exit] / [persist-damage] witnesses'
+// env latch (BRN_CRASH_EXIT_DIAG) -- off in this harness.
+inline bool CrashExitDiagEnabled() { return false; }
 void RaceCarEntityModule::TakenDownBlock(ActiveRaceCar* lpActiveRaceCar, u32 luActiveRaceCarIndex)
 {
     (void)luActiveRaceCarIndex;

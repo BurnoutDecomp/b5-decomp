@@ -3561,6 +3561,15 @@ namespace
         static const bool sbOn = ( getenv( "BRN_RCEM_ACTION_DIAG" ) != 0 );
         return sbOn;
     }
+
+    // [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY. The latch for the two [intro-timer]
+    // witnesses (case 29 arming the drive-by start, UpdateRaceCars_PreScene releasing it). They
+    // used to print on every run, gated only on gpDebugPrint (reviewer A on 65eadffe, 2026-09-24).
+    bool IntroTimerDiagEnabled()
+    {
+        static const bool sbOn = ( getenv( "BRN_INTRO_TIMER_DIAG" ) != 0 );
+        return sbOn && CgsDev::Log::gpDebugPrint != 0;
+    }
 }
 
 void RaceCarEntityModule::HandleGameActions(
@@ -3718,8 +3727,9 @@ void RaceCarEntityModule::HandleGameActions(
                     const BrnGameState::GameStateModuleIO::StartModeIntroAction*>(lpEvent)
                         ->mfDurationSeconds - 1.4f;                               // flt_820148A0
 
-                // [DIAG] NOT IN THE X360 BINARY -- one line per armed intro (once per mode start).
-                if (CgsDev::Log::gpDebugPrint != 0)
+                // [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY -- one line per armed intro
+                // (once per mode start).
+                if (IntroTimerDiagEnabled())
                 {
                     *CgsDev::Log::gpDebugPrint << "[intro-timer] armed " << mfIntroTimer
                                                << " s (drive-by start)\n";
@@ -5576,9 +5586,10 @@ void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::Output
             mfIntroTimer = -1.0f;                                       // flt_820037C8
             SetAllCarsOnStartLine( ActiveRaceCar::E_RACE_START_STATE_ROLLING_START, false );
 
-            // [DIAG] NOT IN THE X360 BINARY. One line per armed intro (at most once per mode
-            // start), so it cannot flood; its silence in a drive-by-start mode IS the defect.
-            if( CgsDev::Log::gpDebugPrint != 0 )
+            // [DIAG] BRN_INTRO_TIMER_DIAG -- NOT IN THE X360 BINARY. One line per armed intro (at
+            // most once per mode start); with the latch set, its silence in a drive-by-start mode
+            // IS the defect.
+            if( IntroTimerDiagEnabled() )
             {
                 *CgsDev::Log::gpDebugPrint
                     << "[intro-timer] expired -> SetAllCarsOnStartLine(ROLLING_START, excluding the player)\n";
