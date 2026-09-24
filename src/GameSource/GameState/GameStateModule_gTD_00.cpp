@@ -315,17 +315,16 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
     // place it is taken is not.] The lock spans the two manager ticks below as well: both reach the
     // pre-world buffer through its read-locked accessors (the in-game player-status interface and
     // the network-to-game-state interface), exactly as they do inside the console's own lock.
+    // `addi r3, r31, 0x238 ; bl TakedownManager::Update` @0x823A59F0 -- the embedded manager, no
+    // test (the `!= 0` guard this call carried is gone, FX-TAILS-A 2026-09-24; Construct sets it).
     mpPreWorldInputBuffer->LockForRead();
-    if (mpTakedownManager != 0)
-    {
-        mpTakedownManager->Update(&mLastActiveRaceCarInterface,
-                                  lfGameTimestep,
-                                  &mpTakedownCache->mRaceCarCrashEventQueue,
-                                  &mpTakedownCache->mCrashingRaceCarInterface,
-                                  mpPreWorldInputBuffer,
-                                  mpOutputBuffer,
-                                  &mpTakedownCache->mTrafficTypeResponseQueue);
-    }
+    mpTakedownManager->Update(&mLastActiveRaceCarInterface,
+                              lfGameTimestep,
+                              &mpTakedownCache->mRaceCarCrashEventQueue,
+                              &mpTakedownCache->mCrashingRaceCarInterface,
+                              mpPreWorldInputBuffer,
+                              mpOutputBuffer,
+                              &mpTakedownCache->mTrafficTypeResponseQueue);
 
     // 0x823A59F8..0x823A5A10: `*(gsm+249944) = 0; TakedownEvent_::Append(gsm+249936, out's queue)`.
     mpTakedownCache->mTakedownEventQueue.Append(*lpOutputTakedownQueue);   // (the copy was cleared above)
@@ -379,17 +378,20 @@ void GameStateModule::TakedownPreWorldLeg(GameStateModuleIO::GameActionQueue* lp
 // (no such arm on this build yet) and GameStateModule::OnModeEnd @0x823767E0 (below, LIVE
 // 2026-09-10). ClearAllTakedowns' host callers: OnModeFinish @0x82390EE0 (below) and the online
 // case 18 (no such arm yet).
+// ⓘ [FX-TAILS-A 2026-09-24] Neither wrapper tests the manager pointer: the console has no pointer to
+// test -- the manager is embedded at gsm+0x238 and every caller calls it straight
+// (UpdateCurrentMode @0x823513DC `addi r3, r11, 0x238 ; bl IsInTakedownCamera`; OnModeEnd @0x82376804
+// `addi r3, r31, 0x238 ; bl ClearRaceCarData`). On PC the pointer is set by Construct
+// (ConstructTakedownBringUp) before any caller can run, so the `!= 0` tests these carried were
+// invented arms that could only ever pass.
 bool GameStateModule::IsInTakedownCamera() const
 {
-    return mpTakedownManager != 0 && mpTakedownManager->IsInTakedownCamera();
+    return mpTakedownManager->IsInTakedownCamera();
 }
 
 void GameStateModule::ClearTakedownRaceCarData()
 {
-    if (mpTakedownManager != 0)
-    {
-        mpTakedownManager->ClearRaceCarData();
-    }
+    mpTakedownManager->ClearRaceCarData();
 }
 
 
@@ -418,12 +420,11 @@ void GameStateModule::OnModeFinish(GameStateModuleIO::OutputBuffer* lpOutputBuff
                             GameStateModuleIO::E_ACTION_SET_TAKEDOWN_CAMERA_STATE,
                             static_cast<s32>(sizeof(lCameraOff)));
 
-    // Embedded by value on the console; a pointer on this build (see ConstructTakedownBringUp),
-    // guarded the same way ClearTakedownRaceCarData is.
-    if (mpTakedownManager != 0)
-    {
-        mpTakedownManager->ClearAllTakedowns(lpActionQueue);
-    }
+    // Embedded by value on the console (`addi r3, r30, 0x238 ; bl ClearAllTakedowns` @0x82390F2C,
+    // r4 = the action queue re-fetched @0x82390F24) -- no test. A pointer on this build (see
+    // ConstructTakedownBringUp), always set by Construct; the `!= 0` guard it used to carry is gone
+    // [FX-TAILS-A 2026-09-24, REVIEW-E on a5619c29].
+    mpTakedownManager->ClearAllTakedowns(lpActionQueue);
 
     mDriveThruManager.DriveThroughsCanNowOpenAgain();
 }
