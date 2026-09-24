@@ -296,8 +296,15 @@ namespace RaceCarEntityModuleIO
                              const RaceCarState*, u32 /*luFlags*/, u16, u32 /*luColourIndex*/,
                              s32, Vector4, Vector3, bool, bool);                             // :362 (own TU)
         void SetPlayerActiveRaceCarData(EActiveRaceCarIndex, EActiveRaceCarEngineState);     // :367 (own TU)
-        bool GetAllActiveCarsRead() const;                                                   // :370 (own TU)
-        void SetAllActiveCarsReady(bool);                                                    // :374 (own TU)
+        // :370 / :374 -- HEADER INLINES, not own-TU functions (crash parity FX-RCEM4 2026-09-24,
+        // reviewer C): the image has no out-of-line symbol for either, same as SetPlayerWrecked
+        // below. The setter's one caller, RaceCarEntityModule::UpdateStreaming @0x822FEFE0, is a bare
+        // `stb r24, 0x2861(r3)` (0x822FF210) on GetActiveRaceCarOutputInterface(); the getter's one
+        // reader, HUDMessageLogic::GenerateLeaderMessages @0x82394110, a bare `lbz r11, 0x2861(r28)`
+        // (0x8239419C) gating the race-leader HUD messages. The DWARF spells the getter
+        // GetAllActiveCarsRead [sic].
+        bool GetAllActiveCarsRead() const { return mbAllActiveCarsReady; }                  // @+0x2861
+        void SetAllActiveCarsReady(bool lbAllReady) { mbAllActiveCarsReady = lbAllReady; }  // @+0x2861
         CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec>
              GetDeformationModelResourcePtr(EActiveRaceCarIndex) const;                      // :378 (own TU)
         void SetDeformationModelResourcePtr(EActiveRaceCarIndex,

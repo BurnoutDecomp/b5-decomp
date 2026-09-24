@@ -735,9 +735,9 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
 //         else     lbAllLoaded = false;
 //     }
 // followed by the car-select wait latches (this+99168..99175, gated on
-// mbInCarSelectScreen at +0x186C9), the streaming-complete publish
-// (lpOutput[10337] = lbAllLoaded) and the "streaming finished" edge
-// (this[99144] -> this[99185]).
+// mbInCarSelectScreen at +0x186C9), the readiness publish
+// (GetActiveRaceCarOutputInterface()->SetAllActiveCarsReady(lbAllLoaded), the pseudocode's
+// `result[10337]`) and the "streaming finished" edge (this[99144] -> this[99185]).
 //
 // The RESOURCE-COMPLETE sweep IS reproduced now that the ActiveRaceCar interior is homed
 // (pose wave 2026-07-31). What still is not, and is FLAGGED rather than paraphrased:
@@ -748,8 +748,8 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
 //     physics) is not ported, so the predicate is constant-false. Left as an explicit
 //     call site guarded by the console's own condition so the moment the data lands the
 //     only missing piece is that one function.
-//   * the car-select wait latches (this+99168..99175) and the streaming-complete publish
-//     (lpOutput[10337]) -- neither member is modelled.
+//   * (both since landed: the car-select wait latches, and -- crash parity 2026-09-24, reviewer
+//     C -- the readiness publish, below.)
 void RaceCarEntityModule::UpdateStreaming(
         const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
@@ -838,6 +838,33 @@ void RaceCarEntityModule::UpdateStreaming(
             }
         }
     }
+    // 0x822FF204..0x822FF210 -- THE READINESS PUBLISH (crash parity FX-RCEM4 2026-09-24, reviewer C):
+    //   mr r3, r25 (lpOutput) ; bl OutputBuffer_PreScene::GetActiveRaceCarOutputInterface (0x822B5020,
+    //   IO.h:289, +960960) ; stb r24, 0x2861(r3)  == the inlined DWARF :374 SetAllActiveCarsReady.
+    // Unconditional, every update, before the edge below. Its reader is
+    // HUDMessageLogic::GenerateLeaderMessages @0x82394110 (`lbz r11, 0x2861(r28)`): the race-leader
+    // HUD messages wait until every active car is ready. It was never written on PC, so the flag
+    // read 0 for ever.
+    lpOutput->GetActiveRaceCarOutputInterface()->SetAllActiveCarsReady( lbAllLoaded );
+
+    // [DIAG] BRN_CARS_READY_DIAG -- NOT IN THE X360 BINARY. One capped line per change of the
+    // published value, so a run proves the publish is DISPATCHED and shows its 0 -> 1 edges.
+    {
+        static const bool sbCarsReadyDiag = ( getenv( "BRN_CARS_READY_DIAG" ) != 0 );
+        static s32 siLastPublished = -1;
+        static u32 suCarsReadyLines = 0u;
+        const s32 liPublished = lbAllLoaded ? 1 : 0;
+        if( sbCarsReadyDiag && CgsDev::Log::gpDebugPrint != 0 && liPublished != siLastPublished
+            && suCarsReadyLines < 32u )
+        {
+            siLastPublished = liPublished;
+            ++suCarsReadyLines;
+            *CgsDev::Log::gpDebugPrint << "[cars-ready] UpdateStreaming SetAllActiveCarsReady("
+                                       << liPublished << ") (waiting for streaming "
+                                       << ( mbWaitingForStreaming ? 1 : 0 ) << ")\n";
+        }
+    }
+
     // ARTIST UpdateStreaming's completion edge. Retains the existing PC resource
     // readiness predicate above (the one bring-up relaxation); the car-select prefetch and
     // junkyard-exit audio waits above are the console's own.
