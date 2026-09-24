@@ -4165,14 +4165,24 @@ void TrafficEntityModule::Reset()
     // ---- collidable cache / avoidance -----------------------------------------------------
     mCachedCollidableList.SetFullCount();
     {
+        // GATE (kept, FX-TRAFFIC4 item 3): the lane pre-fill loop 0x8272D6F0..0x8272D7E0. For
+        // packet n = 0..15 it vperms KF_MAX_FLOAT (+0x72600) into the three position members and
+        // zero (v127) into the other five through the control at unk_8327F140 + 64 * n
+        // (gSwizzleStoreConstants, filled by the CRT thunk 0x82C741A0). That table holds four
+        // 64-byte lane masks, so packets 4..15 read past its end -- the console's own bug. The
+        // fill is never observed: Reset reconstructs mVehicleSoaData, so no car is physical
+        // until UpdateCollidableVehicles has Clear()ed and refilled the list (0x82730388), and
+        // the list's only readers are the avoidance steering and DebugComponent::DrawAvoidance.
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "Reset CollidableVehicleInfo4 lane pre-fill (16x vperm of KF_MAX_FLOAT through "
-            "the permute-control constant unk_8327F140) + PrecalculateAvoidanceFeelerData "
-            "@0x8272D9C4 -- the permute control is un-dumped rodata and "
-            "PrecalculateAvoidanceFeelerData has no body. Avoidance is driving-traffic "
-            "surface (wave 2)");
+            "Reset CollidableVehicleInfo4 lane pre-fill 0x8272D6F0..0x8272D7E0 (vperm of "
+            "KF_MAX_FLOAT through unk_8327F140 + 64*n, n = 0..15, past the 4-mask table for "
+            "n >= 4) -- unobservable: the list is Clear()ed and refilled by "
+            "UpdateCollidableVehicles before any car is physical");
     }
+
+    // 0x8272D7E4..0x8272D7E8 -- LIVE (FX-TRAFFIC4 item 3): the avoidance feelers' (cos, sin).
+    PrecalculateAvoidanceFeelerData();
 
     // The four crash-slider stores. The two zeros are `stfsx f31` with f31 == 0.0f; the two
     // seeds come from flt_820BA62C (Decay) and flt_820BA5B4 (Factor), which IDA resolves as 0.5
@@ -4407,6 +4417,9 @@ void TrafficEntityModule::Construct()
 
     // ---- the debug flag defaults, measured (0x82740C58..0x82740D2C) ---------------------
     mbDEBUGEnablePressureSystem = true;    // 0x72868 stbx r27 (r27 == 1)
+    // 0x82740C58 `stbx r27, r31, 0x72869` with r27 from `li r27, 1` at 0x82740988 (non-volatile,
+    // untouched in between): the avoidance steering is ON by default on the console, and
+    // CalculateAndSetSteeringUsingAvoidance's third gate (0x8273D2F0) reads this byte.
     mbDEBUGEnableAvoidance      = true;    // 0x72869 stbx r27
     mbDEBUGTestSympCrash        = false;   // 0x7286A stbx r30 (r30 == 0 for the whole body)
     mbDEBUGRenderContacts       = false;   // 0x7286B
@@ -13017,12 +13030,505 @@ void TrafficEntityModule::CalculateAndSetSteering(u32 luVehicle, Vector3 lTarget
     // DELETE-WHEN it lands; no effect on the record.
 }
 
+// ============================================================================================
+// FX-TRAFFIC4 item 3 (crash parity wave 5, 2026-09-24) -- the avoidance steering.
+//
+// DriveTowardsTarget @0x8273DFC0 steers every driving physical car through
+// CalculateAndSetSteeringUsingAvoidance @0x8273D258 (the call at 0x8273E56C) unless it is in the
+// first three seconds of an extreme swerve, and pulls the handbrake to 0.5 when the risk that
+// call reports reaches 0.7 (0x8273E71C). The call was a gate falling back to plain target
+// steering with a zero scale, and nothing under it had a body:
+//   PrecalculateAvoidanceFeelerData            @0x82708E78  DWARF h:1890 (Reset, 0x8272D7E8)
+//   Avoidance_GetBestVehicleDirection          @0x8272C248  h:1899
+//   Avoidance_CalculateFeelers                 inlined      h:1902 (0x8272C344..0x8272C4EC)
+//   Avoidance_CalculatePassingScore            @0x827199B8  h:1893
+//   Avoidance_CalculateDistancePosVelToOrigin  @0x82708DD0  h:1896
+//   Convert3DVectorTo2D                        inlined      BrnTrafficMathsUtils.h:191
+//   GetAvoidPassImpactTimeMax .. GetAvoidMaxOverallRisk     inlined      h:1113..:1128
+// so a driving car steered straight at its target through whatever was in the way, never
+// pulled the handbrake, and its steering record never took CalculateAndSetSteering's 1.3
+// high-risk scale.
+//
+// THE PIPELINE. Five feelers: straight ahead and 15 / 30 degrees to either side (maFeelerCosSin
+// holds (cos, sin) of 75 and 60 degrees). Each is flown at the car's own speed against every
+// lane of every mCachedCollidableList packet -- the race cars and the avoidable traffic that
+// UpdateCollidableVehicles @0x827302C8 cached, pad lanes parked at FLT_MAX -- and keeps its
+// worst passing score. A pass scores 0 when the other car is more than 3 m above or below,
+// coincident, moving with us, or further than t = |relPos|^2 / |relVel|^2 = 4; otherwise
+// (4 - t) * 10 + (10 - min(|miss distance|, 10)). Each feeler adds
+// (1 - clamp01(dot(feeler, target))) * 10 for being off course; the car takes the feeler with
+// the lowest total (the first one on a tie), and the risk is the mean total over 50, clamped to
+// [0, 1]. At risk 0.2 or more, and 1 m or more from the target, the steering direction becomes
+// the best feeler (dot >= 0.94) or moves toward it by mfSimTimeStep (dot < 0.94);
+// CalculateAndSetSteering then scales the record by 1.3 from risk 0.6.
+//
+// VMX->portable, this file's convention: vrefp / vrsqrtefp + Newton steps are an exact 1/x or
+// 1/sqrt, vmaddfp is an unfused a * b + c, XMVectorSin / XMVectorCos are std::sin / std::cos.
+// vmaxfp / vminfp keep a NaN operand (AvoidVmxMax / AvoidVmxMin), and every compare keeps the
+// console's NaN polarity (a NaN fails a vcmp*fp. all-lanes test).
+// ============================================================================================
+namespace
+{
+    // PrecalculateAvoidanceFeelerData's two floats: flt_820BA254 == 0x3FC90FDB (pi / 2) and
+    // flt_82F2FDFC == 0x3E860A92 (15 degrees in radians), the DWARF's
+    // BrnTraffic::KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE (PS3 bytes 3E 86 0A 92).
+    const f32 KF_AVOIDANCE_FEELERS_START_ANGLE   = 1.57079637f;    // flt_820BA254
+    const f32 KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE = 0.261799395f;   // flt_82F2FDFC
+
+    // Avoidance_GetBestVehicleDirection's mean: unk_8300CF40 == splat(flt_82004744 == 0.2f), the
+    // dyn-init thunk at 0x82C65CE0 (0.2 == 1 / KI_TRAFFIC_AVOIDANCE_FEELERS), read at 0x8272C710.
+    const f32 KF_AVOIDANCE_FEELER_MEAN = 0.2f;
+
+    // CalculateAndSetSteeringUsingAvoidance's gates: unk_8300CBE0 lanes 0..2, from the dyn-init
+    // thunk at 0x82C66E50 (flt_82004744 / flt_82001C98 / flt_8200D58C == 0x3F70A3D7). Lane 3,
+    // flt_82004D00 == 0.6f, is CalculateAndSetSteering's KF_STEERING_SCALE_THRESHOLD.
+    const f32 KF_AVOIDANCE_MIN_RISK        = 0.2f;    // lane 0, vcmpgefp.    at 0x8273D2B8
+    const f32 KF_AVOIDANCE_MIN_TARGET_DIST = 1.0f;    // lane 1, vcmpgefp128. at 0x8273D2D4
+    const f32 KF_AVOIDANCE_SNAP_DOT        = 0.94f;   // lane 2, vcmpgtfp.    at 0x8273D314
+
+    // DriveTowardsTarget's handbrake leg: unk_8300CEE0 == splat(flt_820BA4D0 == 0.7f), the
+    // dyn-init thunk at 0x82C66990, and the stored value flt_820BA62C == 0.5f (0x8273E740).
+    const f32 KF_AVOIDANCE_HANDBRAKE_RISK = 0.7f;
+    const f32 KF_AVOIDANCE_HANDBRAKE      = 0.5f;
+
+    // vmaxfp / vminfp: a NaN operand is the result (rw::math::vpu::Max / Min are ternaries that
+    // hand back the other operand).
+    inline f32 AvoidVmxMax(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA) { return lfA; }
+        if (lfB != lfB) { return lfB; }
+        return (lfA > lfB) ? lfA : lfB;
+    }
+
+    inline f32 AvoidVmxMin(f32 lfA, f32 lfB)
+    {
+        if (lfA != lfA) { return lfA; }
+        if (lfB != lfB) { return lfB; }
+        return (lfA < lfB) ? lfA : lfB;
+    }
+
+    // One vehicle's lane of a CollidableVehicleInfo4 member (the console's lvsl / vspltw lane
+    // splat at 0x8272C5CC / 0x8272C61C), by name like SetLane rather than by pointer arithmetic.
+    inline f32 AvoidPacketLane(const Vector4& lrMember, u32 luLane)
+    {
+        switch (luLane)
+        {
+        case 0:  return lrMember.x;
+        case 1:  return lrMember.y;
+        case 2:  return lrMember.z;
+        default: return lrMember.w;
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witnesses, capped: the first
+    // KI_AVOID_QUIET_DIAG_CAP avoidance calls below the 0.2 risk gate, every call at or above it
+    // up to KI_AVOID_DIAG_CAP, and each handbrake pull up to KI_AVOID_HANDBRAKE_DIAG_CAP.
+    const s32 KI_AVOID_DIAG_CAP           = 60;
+    const s32 KI_AVOID_QUIET_DIAG_CAP     = 5;
+    const s32 KI_AVOID_HANDBRAKE_DIAG_CAP = 30;
+    s32       giAvoidDiagLines            = 0;
+    s32       giAvoidQuietDiagLines       = 0;
+    s32       giAvoidHandbrakeDiagLines   = 0;
+}
+
 // --------------------------------------------------------------------------------------------
-// TrafficEntityModule::DriveTowardsTarget  @0x8273DFC0  (.cpp 16594..16700)   PARTIAL
+// BrnTraffic::Convert3DVectorTo2D  (DWARF BrnTrafficMathsUtils.h:191, `void Convert3DVectorTo2D(
+// const Vector3 l3DVector, const Vector2& l2DVector)`), declared in BrnTrafficMathsUtils.h. No
+// out-of-line body in either build: its X360 reader, Avoidance_CalculatePassingScore @0x827199B8,
+// inlines it as one vperm through unk_82CDA450 == {00010203, 18191A1B, 00010203, 00010203}
+// (0x82719AF4 / 0x82719AF8, both operands the same vector) -- the XZ ground plane as a Vector2:
+// lane 0 = x, lane 1 = z, lanes 2 and 3 = x again. Defined here, beside that reader.
+// --------------------------------------------------------------------------------------------
+void Convert3DVectorTo2D(Vector3 l3DVector, Vector2& l2DVector)
+{
+    l2DVector.x = l3DVector.x;
+    l2DVector.y = l3DVector.z;
+    l2DVector.z = l3DVector.x;
+    l2DVector.w = l3DVector.x;
+}
+
+// --------------------------------------------------------------------------------------------
+// The six lane accessors, DWARF h:1113..:1128. The console has no bodies: each reader splats
+// its lane with vperm through an lvsl control (e.g. 0x82719A20 lane 3, 0x82719B2C lane 2,
+// 0x82719B44 lane 1, 0x82719ABC lane 0, 0x8272C42C lane 0 of +0x72790, 0x8272C72C lane 1).
+// Construct seeds the two members at 0x82740690 / 0x82740694:
+//   kfVehicle_AvoidancePassingFactor_Constants (+0x72770) = {flt_820BA8DC 4.0, flt_820BA5E4 10.0,
+//       flt_820BA5E4 10.0, flt_820BA5F4 3.0} -- the DWARF's KF_TRAFFIC_AVOIDANCE_IMPACT_TIME_MAX,
+//       _IMPACT_TIME_SCORE_FACTOR, _PASSING_MAX_DISTANCE and _HEIGHT_SKIP (PS3 4, 10, 10, 3)
+//   kfVehicle_Avoidance_Constants (+0x72790) = {flt_820BA5E4 10.0, flt_82F2FE90 50.0, 0, 0} --
+//       KF_AVOID_OFFCOURSE_SCORE_FACTOR and KF_AVOID_MAX_OVERALL_RISK (PS3 10, 50)
+// --------------------------------------------------------------------------------------------
+VecFloat TrafficEntityModule::GetAvoidPassImpactTimeMax() const
+{
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.x);
+}
+
+VecFloat TrafficEntityModule::GetAvoidPassImpactTimeScoreFactor() const
+{
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.y);
+}
+
+VecFloat TrafficEntityModule::GetAvoidPassMaxDistance() const
+{
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.z);
+}
+
+VecFloat TrafficEntityModule::GetAvoidPassHeightSkip() const
+{
+    return SplatDrive(kfVehicle_AvoidancePassingFactor_Constants.w);
+}
+
+VecFloat TrafficEntityModule::GetAvoidOffcourseScoreFactor() const
+{
+    return SplatDrive(kfVehicle_Avoidance_Constants.x);
+}
+
+VecFloat TrafficEntityModule::GetAvoidMaxOverallRisk() const
+{
+    return SplatDrive(kfVehicle_Avoidance_Constants.y);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::PrecalculateAvoidanceFeelerData  @0x82708E78  (DWARF h:1890, locals
+// liIndex / lfAngle at .cpp 17697..17698)
+//
+// maFeelerCosSin[i] = (cos, sin) of the angle stepped down from pi / 2 by 15 degrees before each
+// pair: 0x82708EC4 `fsubs f30, f0(pi/2), f31(step)` and 0x82708F00 `fsubs f0, f30, f31` --
+// 75 then 60 degrees. XMVectorCos / XMVectorSin of the splatted angle, spliced by the vperm128
+// control unk_82CDA350 == {00010203, 14151617, 00010203, 00010203} (cos lane 0, sin lane 1, cos
+// again in lanes 2 and 3), and stored at +0x72350 / +0x72360 (0x82708F34 / 0x82708F64).
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::PrecalculateAvoidanceFeelerData()
+{
+    f32 lfAngle = KF_AVOIDANCE_FEELERS_START_ANGLE;
+    for (s32 liIndex = 0; liIndex < KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT; ++liIndex)
+    {
+        lfAngle = lfAngle - KF_TRAFFIC_AVOIDANCE_FEELERS_ANGLE;
+        const f32 lfCos = std::cos(lfAngle);
+        const f32 lfSin = std::sin(lfAngle);
+
+        maFeelerCosSin[liIndex].x = lfCos;
+        maFeelerCosSin[liIndex].y = lfSin;
+        maFeelerCosSin[liIndex].z = lfCos;
+        maFeelerCosSin[liIndex].w = lfCos;
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin  @0x82708DD0  (DWARF h:1896,
+// locals lfLineLengthSq / lfCrossResultSq / lfResult at .cpp 17498..17500)
+//
+// How close the line from lStart along lVel passes to the origin:
+//   0x82708DD4..0x82708E1C  lfLineLengthSq = |lVel|^2 ; lfCrossResultSq = (Start.x * Vel.y -
+//                           Start.y * Vel.x)^2 ; |lStart|^2
+//   0x82708E24..0x82708E3C  vrefp + one Newton step ; lfResult = lfLineLengthSq == 0 ? |lStart|^2
+//                           : lfCrossResultSq * recip(lfLineLengthSq)   (vcmpeqfp / vsel)
+//   0x82708E40..0x82708E6C  vrsqrtefp + two Newton steps ; sqrt as lfResult * rsqrt, and 0 for a
+//                           zero lfResult (vcmpeqfp / vsel)
+// Unsigned: the squared cross product loses the side. FLAG (VMX->portable): the console's sqrt is
+// x * rsqrt(x), a NaN for x == +inf where std::sqrt gives +inf.
+// --------------------------------------------------------------------------------------------
+VecFloat TrafficEntityModule::Avoidance_CalculateDistancePosVelToOrigin(Vector2 lStart, Vector2 lVel)
+{
+    const f32 lfLineLengthSq  = lVel.x * lVel.x + lVel.y * lVel.y;
+    const f32 lfCross         = lStart.x * lVel.y - lStart.y * lVel.x;
+    const f32 lfCrossResultSq = lfCross * lfCross;
+    const f32 lfStartLengthSq = lStart.x * lStart.x + lStart.y * lStart.y;
+
+    const f32 lfResult = (lfLineLengthSq == 0.0f) ? lfStartLengthSq
+                                                  : lfCrossResultSq * (1.0f / lfLineLengthSq);
+
+    return SplatDrive((lfResult == 0.0f) ? 0.0f : std::sqrt(lfResult));
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::Avoidance_CalculatePassingScore  @0x827199B8  (DWARF h:1893, locals
+// .cpp 17414..17473: lRelativePosition, lRelativeVelocity, their squared sizes, lfPassingSpace,
+// lfTimeToImpact, lfPassingScore, lfTimeToImpactScore, lfTotalScore; lRelativePosition2D /
+// lRelativeVelocity2D at 17456)
+//
+//   0x827199DC..0x82719A44  |A.y - B.y| > GetAvoidPassHeightSkip() (vandc sign / vcmpgtfp.) -> 0
+//   0x82719A48..0x82719A70  lRelativePosition = B - A ; |.|^2 == 0 (vcmpeqfp.) -> 0
+//   0x82719A74..0x82719A90  lRelativeVelocity = velB - velA ; |.|^2 == 0 -> 0
+//   0x82719A94..0x82719AE0  lfTimeToImpact = relPosSq * recip(relVelSq) (vrefp + one Newton step)
+//                           > GetAvoidPassImpactTimeMax() (vcmpgtfp128.) -> 0
+//   0x82719AE4..0x82719AFC  both into the XZ plane (Convert3DVectorTo2D, the vperm unk_82CDA450),
+//                           lfPassingSpace = Avoidance_CalculateDistancePosVelToOrigin(pos2D, vel2D)
+//   0x82719B00..0x82719B5C  lfPassingScore = MaxDistance - vminfp(|lfPassingSpace|, MaxDistance) ;
+//                           lfTotalScore = (ImpactTimeMax - lfTimeToImpact) * ScoreFactor
+//                           + lfPassingScore (vmaddfp)
+// The two half-extent arguments arrive in v5 / v6 and are never read. lfTimeToImpact is the
+// SQUARED time (a ratio of squared lengths) tested against 4.
+// --------------------------------------------------------------------------------------------
+VecFloat TrafficEntityModule::Avoidance_CalculatePassingScore(Vector3 lPositionA, Vector3 lVelocityA,
+                                                              Vector3 lPositionB, Vector3 lVelocityB,
+                                                              VecFloat /*lfObjectBHalfLength*/,
+                                                              VecFloat /*lfObjectBHalfWidth*/)
+{
+    if (std::fabs(lPositionA.y - lPositionB.y) > GetAvoidPassHeightSkip().x)
+    {
+        return SplatDrive(0.0f);
+    }
+
+    const Vector3 lRelativePosition        = lPositionB - lPositionA;
+    const f32     lfRelativePositionSizeSq = rw::math::vpu::Dot(lRelativePosition, lRelativePosition);
+    if (lfRelativePositionSizeSq == 0.0f)
+    {
+        return SplatDrive(0.0f);
+    }
+
+    const Vector3 lRelativeVelocity        = lVelocityB - lVelocityA;
+    const f32     lfRelativeVelocitySizeSq = rw::math::vpu::Dot(lRelativeVelocity, lRelativeVelocity);
+    if (lfRelativeVelocitySizeSq == 0.0f)
+    {
+        return SplatDrive(0.0f);
+    }
+
+    const f32 lfTimeToImpact = lfRelativePositionSizeSq * (1.0f / lfRelativeVelocitySizeSq);
+    if (lfTimeToImpact > GetAvoidPassImpactTimeMax().x)
+    {
+        return SplatDrive(0.0f);
+    }
+
+    Vector2 lRelativePosition2D;
+    Vector2 lRelativeVelocity2D;
+    Convert3DVectorTo2D(lRelativePosition, lRelativePosition2D);
+    Convert3DVectorTo2D(lRelativeVelocity, lRelativeVelocity2D);
+    const f32 lfPassingSpace =
+        Avoidance_CalculateDistancePosVelToOrigin(lRelativePosition2D, lRelativeVelocity2D).x;
+
+    const f32 lfMaxDistance       = GetAvoidPassMaxDistance().x;
+    const f32 lfPassingScore      = lfMaxDistance - AvoidVmxMin(std::fabs(lfPassingSpace), lfMaxDistance);
+    const f32 lfTimeToImpactScore =
+        (GetAvoidPassImpactTimeMax().x - lfTimeToImpact) * GetAvoidPassImpactTimeScoreFactor().x;
+
+    return SplatDrive(lfTimeToImpactScore + lfPassingScore);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::Avoidance_CalculateFeelers  (DWARF h:1902, locals liIndex / liFeelCosSin /
+// lfContrib at .cpp 17724..17726). No X360 body: inlined in Avoidance_GetBestVehicleDirection,
+// whose stack array laFeelers (var_1E0..var_1A0) it fills --
+//   [0] lDirection                                         0x8272C3B0
+//   [1] lDirection * sin75 - lRight * cos75  (cosSin[0])   0x8272C418 vsubfp, stored 0x8272C434
+//   [2] lDirection * sin60 - lRight * cos60  (cosSin[1])   0x8272C41C vsubfp, stored 0x8272C450
+//   [3] lDirection * sin75 + lRight * cos75                0x8272C424 vmaddfp128, stored 0x8272C460
+//   [4] lDirection * sin60 + lRight * cos60                0x8272C40C vmaddfp128, stored 0x8272C468
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::Avoidance_CalculateFeelers(Vector3 lDirection, Vector3 lRight, Vector3* laFeelers)
+{
+    laFeelers[0] = lDirection;
+    for (s32 liFeelCosSin = 0; liFeelCosSin < KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT; ++liFeelCosSin)
+    {
+        const f32 lfCos = maFeelerCosSin[liFeelCosSin].x;
+        const f32 lfSin = maFeelerCosSin[liFeelCosSin].y;
+
+        laFeelers[1 + liFeelCosSin] = lDirection * lfSin - lRight * lfCos;
+        laFeelers[1 + KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT + liFeelCosSin] =
+            lDirection * lfSin + lRight * lfCos;
+    }
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::Avoidance_GetBestVehicleDirection  @0x8272C248  (DWARF h:1899, locals at
+// .cpp 17526..17652)
+//
+//   0x8272C26C..0x8272C2CC  GetVehicle, inlined with its luVehicle < 600 assert (.h 2459) ;
+//                           lpVehicle asserted (.cpp 17742)
+//   0x8272C2D8..0x8272C2FC  lfVehicleSpeed = |GetSpeed()| (vandc128 of the sign mask) ;
+//                           lTargetDir = lNewDirection
+//   0x8272C300..0x8272C340  lTransform = GetVehicleTransform ; lDirection = At (var_120), negated
+//                           (vxor128) when 0 > GetSpeed() (vcmpgtfp128.) ; lRight = row 0 ;
+//                           lPosition = row 3 (var_110)
+//   0x8272C344..0x8272C544  the feelers ; laFeelerVelocity = feeler * lfVehicleSpeed ;
+//                           lafOffcourseScore = (1 - clamp01(Dot(lTargetDir, feeler))) *
+//                           GetAvoidOffcourseScoreFactor() ; lafFeelerScore = 0 ;
+//                           lfOverallRisk = 0 (0x8272C3E8)
+//   0x8272C56C..0x8272C68C  every packet (luCachedIndex), every lane 0..3 (luCachedStructIndex),
+//                           every feeler: lafFeelerScore = vmaxfp(passing score, lafFeelerScore)
+//   0x8272C690..0x8272C6E8  score += off-course ; lfBestFeelerScore (seeded KF_MAX_FLOAT,
+//                           +0x72600) > score (vcmpgtfp128.) -> best ; lfOverallRisk += score
+//   0x8272C6F4..0x8272C750  lfOverallRisk = clamp01(lfOverallRisk * 0.2 *
+//                           recip(GetAvoidMaxOverallRisk()))
+//   0x8272C754              lNewDirection = laFeelers[liBestFeeler]
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::Avoidance_GetBestVehicleDirection(u32 luVehicle, Vector3& lNewDirection,
+                                                            VecFloat& lfOverallRisk)
+{
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);   // its own .h 2459 bound assert, inlined here
+    CGS_ASSERT(lpVehicle != 0, "lpVehicle");            // `li r5, 0x454E` (.cpp 17742)
+
+    const f32            lfVehicleSpeed = std::fabs(lpVehicle->GetSpeed().x);
+    const Vector3        lTargetDir     = lNewDirection;
+    const Matrix44Affine lTransform     = GetVehicleTransform(luVehicle);
+    const Vector3        lPosition      = lTransform.Pos();
+    const Vector3        lRight         = lTransform.Right();
+
+    Vector3 lDirection = lTransform.At();
+    if (0.0f > lpVehicle->GetSpeed().x)
+    {
+        lDirection = -lDirection;
+    }
+
+    Vector3 laFeelers[KI_TRAFFIC_AVOIDANCE_FEELERS];
+    Avoidance_CalculateFeelers(lDirection, lRight, laFeelers);
+
+    Vector3 laFeelerVelocity[KI_TRAFFIC_AVOIDANCE_FEELERS];
+    f32     lafFeelerScore[KI_TRAFFIC_AVOIDANCE_FEELERS];
+    f32     lafOffcourseScore[KI_TRAFFIC_AVOIDANCE_FEELERS];
+    for (s32 liFeelerIndex = 0; liFeelerIndex < KI_TRAFFIC_AVOIDANCE_FEELERS; ++liFeelerIndex)
+    {
+        laFeelerVelocity[liFeelerIndex] = laFeelers[liFeelerIndex] * lfVehicleSpeed;
+        lafFeelerScore[liFeelerIndex]   = 0.0f;
+
+        const f32 lfDotFeelerDir         = rw::math::vpu::Dot(lTargetDir, laFeelers[liFeelerIndex]);
+        const f32 lfDotFeelerDirPositive = AvoidVmxMin(1.0f, AvoidVmxMax(0.0f, lfDotFeelerDir));
+        lafOffcourseScore[liFeelerIndex] =
+            (1.0f - lfDotFeelerDirPositive) * GetAvoidOffcourseScoreFactor().x;
+    }
+    lfOverallRisk = SplatDrive(0.0f);
+
+    for (u32 luCachedIndex = 0; luCachedIndex < mCachedCollidableList.GetLength(); ++luCachedIndex)
+    {
+        const CollidableVehicleInfo4& lrCachedCollidableInfo = mCachedCollidableList[luCachedIndex];
+        for (u32 luCachedStructIndex = 0; luCachedStructIndex < 4u; ++luCachedStructIndex)
+        {
+            // 0x8272C600 / 0x8272C614: x and y spliced by unk_82CDA350, z inserted by vrlimi128.
+            Vector3 lCachedPosition;
+            lCachedPosition.x = AvoidPacketLane(lrCachedCollidableInfo.mPosition_X, luCachedStructIndex);
+            lCachedPosition.y = AvoidPacketLane(lrCachedCollidableInfo.mPosition_Y, luCachedStructIndex);
+            lCachedPosition.z = AvoidPacketLane(lrCachedCollidableInfo.mPosition_Z, luCachedStructIndex);
+            lCachedPosition.w = lCachedPosition.x;
+
+            Vector3 lCachedVelocity;
+            lCachedVelocity.x = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_X, luCachedStructIndex);
+            lCachedVelocity.y = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_Y, luCachedStructIndex);
+            lCachedVelocity.z = AvoidPacketLane(lrCachedCollidableInfo.mLinearVelocity_Z, luCachedStructIndex);
+            lCachedVelocity.w = lCachedVelocity.x;
+
+            const VecFloat lfHalfLength =
+                SplatDrive(AvoidPacketLane(lrCachedCollidableInfo.mHalfLengths, luCachedStructIndex));
+            const VecFloat lfHalfWidth =
+                SplatDrive(AvoidPacketLane(lrCachedCollidableInfo.mHalfWidths, luCachedStructIndex));
+
+            for (s32 liFeelerIndex = 0; liFeelerIndex < KI_TRAFFIC_AVOIDANCE_FEELERS; ++liFeelerIndex)
+            {
+                const f32 lfPassingScore =
+                    Avoidance_CalculatePassingScore(lPosition, laFeelerVelocity[liFeelerIndex],
+                                                    lCachedPosition, lCachedVelocity,
+                                                    lfHalfLength, lfHalfWidth).x;
+                lafFeelerScore[liFeelerIndex] = AvoidVmxMax(lfPassingScore, lafFeelerScore[liFeelerIndex]);
+            }
+        }
+    }
+
+    s32 liBestFeeler      = 0;
+    f32 lfBestFeelerScore = KF_MAX_FLOAT.x;
+    f32 lfRiskSum         = lfOverallRisk.x;
+    for (s32 liFeelerIndex = 0; liFeelerIndex < KI_TRAFFIC_AVOIDANCE_FEELERS; ++liFeelerIndex)
+    {
+        const f32 lfOffcourse = lafOffcourseScore[liFeelerIndex];
+        lafFeelerScore[liFeelerIndex] = lafFeelerScore[liFeelerIndex] + lfOffcourse;
+
+        if (lfBestFeelerScore > lafFeelerScore[liFeelerIndex])
+        {
+            lfBestFeelerScore = lafFeelerScore[liFeelerIndex];
+            liBestFeeler      = liFeelerIndex;
+        }
+        lfRiskSum = lfRiskSum + lafFeelerScore[liFeelerIndex];
+    }
+
+    lfRiskSum = lfRiskSum * KF_AVOIDANCE_FEELER_MEAN;
+    const f32 lfRisk = lfRiskSum * (1.0f / GetAvoidMaxOverallRisk().x);
+    lfOverallRisk    = SplatDrive(AvoidVmxMin(1.0f, AvoidVmxMax(0.0f, lfRisk)));
+    lNewDirection    = laFeelers[liBestFeeler];
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance  @0x8273D258  (DWARF h:1368, locals
+// lAvoidDirection / lfAvoidDotTargetDir at .cpp 16022..16023)
+//
+//   0x8273D288..0x8273D298  lAvoidDirection = lNewDirection (var_50) ;
+//                           Avoidance_GetBestVehicleDirection(luVehicle, lAvoidDirection,
+//                           lfOverallRisk)
+//   0x8273D2B8              lfOverallRisk >= 0.2   (unk_8300CBE0 lane 0, vcmpgefp.)    else steer
+//   0x8273D2D4              lfDistFromTarget >= 1.0 (lane 1, vcmpgefp128.)             on the
+//   0x8273D2F0              mbDEBUGEnableAvoidance (lbzx +0x72869; Construct stores    target
+//                           li r27,1 @0x82740988 at 0x82740C58, so ON)
+//   0x8273D310..0x8273D344  lfAvoidDotTargetDir = Dot(lAvoidDirection, lNewDirection) ;
+//                           0.94 > it (lane 2, vcmpgtfp.) -> lNewDirection += (lAvoidDirection -
+//                           lNewDirection) * mfSimTimeStep (+0x713FC, lvlx / vspltw / vmaddfp),
+//                           else lNewDirection = lAvoidDirection (0x8273D348)
+//   0x8273D34C..0x8273D360  CalculateAndSetSteering(luVehicle, lNewDirection, lpOutControls,
+//                           lfOverallRisk) -- the risk is its lvfScale
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::CalculateAndSetSteeringUsingAvoidance(
+        u32 luVehicle, Vector3& lNewDirection, VecFloat lfDistFromTarget,
+        BrnPhysics::Vehicle::BrnTrafficDriverControls* lpOutControls, VecFloat& lfOverallRisk)
+{
+    Vector3 lAvoidDirection = lNewDirection;
+    Avoidance_GetBestVehicleDirection(luVehicle, lAvoidDirection, lfOverallRisk);
+
+    // [DIAG] NOT IN THE X360 BINARY -- which way the gates went ("target": not all three met,
+    // the car steers on the target direction unchanged).
+    const char* lpcDiagMode     = "target";
+    f32         lfDiagDotTarget = 0.0f;
+
+    if (lfOverallRisk.x >= KF_AVOIDANCE_MIN_RISK &&
+        lfDistFromTarget.x >= KF_AVOIDANCE_MIN_TARGET_DIST &&
+        mbDEBUGEnableAvoidance)
+    {
+        const f32 lfAvoidDotTargetDir = rw::math::vpu::Dot(lAvoidDirection, lNewDirection);
+        lfDiagDotTarget = lfAvoidDotTargetDir;
+        if (KF_AVOIDANCE_SNAP_DOT > lfAvoidDotTargetDir)
+        {
+            lNewDirection = (lAvoidDirection - lNewDirection) * mfSimTimeStep + lNewDirection;
+            lpcDiagMode   = "blend";
+        }
+        else
+        {
+            lNewDirection = lAvoidDirection;
+            lpcDiagMode   = "snap";
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- see KI_AVOID_DIAG_CAP.
+    {
+        const bool lbRiskGateMet = lfOverallRisk.x >= KF_AVOIDANCE_MIN_RISK;
+        if (( lbRiskGateMet && giAvoidDiagLines < KI_AVOID_DIAG_CAP) ||
+            (!lbRiskGateMet && giAvoidQuietDiagLines < KI_AVOID_QUIET_DIAG_CAP))
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                if (lbRiskGateMet)
+                {
+                    ++giAvoidDiagLines;
+                }
+                else
+                {
+                    ++giAvoidQuietDiagLines;
+                }
+                *lpDiag << "[T-avoid] vehicle=" << luVehicle
+                        << " risk=" << lfOverallRisk.x
+                        << " dist=" << lfDistFromTarget.x
+                        << " packets=" << mCachedCollidableList.GetLength()
+                        << " mode=" << lpcDiagMode
+                        << " dotAvoidTarget=" << lfDiagDotTarget
+                        << " speed=" << GetVehicle(luVehicle)->GetSpeed().x << "\n";
+            }
+        }
+    }
+
+    CalculateAndSetSteering(luVehicle, lNewDirection, lpOutControls, lfOverallRisk);
+}
+
+// --------------------------------------------------------------------------------------------
+// TrafficEntityModule::DriveTowardsTarget  @0x8273DFC0  (.cpp 16594..16700)
 //
 // The shared driving body: give up if a slammed car is still moving, hand the car back to the
-// param sim once it is on top of its target and pointing the right way, then steer, pedal and
-// (when reversing) flip the steering sign.
+// param sim once it is on top of its target and pointing the right way, then steer (through the
+// avoidance, FX-TRAFFIC4 item 3), pedal, (when reversing) flip the steering sign and pull the
+// avoidance handbrake. Only the debug-only DEBUG_ValidateEmDriverControls call stays gated.
 // --------------------------------------------------------------------------------------------
 void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnToTraffic,
                                              BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
@@ -13105,6 +13611,11 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     // 0x8273E634..0x8273E664 -- forward distance to the target, along the car's own At axis.
     const f32 lfForwardDist = rw::math::vpu::Dot(lDiff, lTransform.At());
 
+    // var_150: the avoidance risk, written through by the avoidance call below and read by the
+    // handbrake leg at the tail. The swerve arm leaves the console's slot as scratch; the tail
+    // re-tests IsExtremeSwerving and skips then, so this 0 seed is never read.
+    VecFloat lfOverallRisk = SplatDrive(0.0f);
+
     if (lpVehicle->IsExtremeSwerving() &&
         lpVehicle->GetPhysicalTime() < KF_DRIVER_SWERVE_STEERING_TIME)
     {
@@ -13112,16 +13623,13 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     }
     else
     {
-        // GATE: CalculateAndSetSteeringUsingAvoidance @0x8273D258 (0x8273E6A0) -- unreconstructed
-        // (VMX feeler pipeline + the mbDEBUGEnableAvoidance block). FALLBACK: the console's own
-        // direct-target steering with lvfScale 0, i.e. avoidance disabled, not steering disabled.
-        // DELETE-WHEN it lands; it also outputs the score the gated handbrake leg reads.
-        static bool sbLoggedAvoid = false;
-        LogMissingLeg_T3Drive(sbLoggedAvoid,
-                      "DriveTowardsTarget's CalculateAndSetSteeringUsingAvoidance @0x8273D258 -- "
-                      "unreconstructed; falls back to CalculateAndSetSteering @0x82718E48");
-
-        CalculateAndSetSteering(luVehicle, lUnitDiff, lpControls, SplatDrive(0.0f));
+        // 0x8273E55C..0x8273E56C -- LIVE (FX-TRAFFIC4 item 3). `vmr128 v1, v122` (the distance
+        // to the target), r5 = &var_180 (the unit direction, IN and OUT), r6 = lpControls,
+        // r7 = &var_150 (the risk). DriveTowardsTarget never reads var_180 as the direction
+        // again, so the steered direction dies here.
+        Vector3 lNewDirection = lUnitDiff;
+        CalculateAndSetSteeringUsingAvoidance(luVehicle, lNewDirection, SplatDrive(lfDist),
+                                              lpControls, lfOverallRisk);
     }
 
     // 0x8273E6C4..0x8273E70C -- one signed pedal split into gas and brake.
@@ -13150,10 +13658,26 @@ void TrafficEntityModule::DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnTo
     const f32 lfSpeedSign = (lfSpeed > 0.0f) ? 1.0f : ((lfSpeed < 0.0f) ? -1.0f : 0.0f);
     lpControls->mfSteering = lpControls->mfSteering * lfSpeedSign;
 
-    // GATE: the handbrake leg @0x8273E71C. It tests the avoidance score the gated
-    // CalculateAndSetSteeringUsingAvoidance writes back against unk_8300CEE0 (recovered from
-    // its dyn-init thunk at 0x82C66990: splat(0.7)), and sets mfHandBrake 0.5.
-    // DELETE-WHEN the avoidance leg lands.
+    // 0x8273E704..0x8273E744 -- LIVE (FX-TRAFFIC4 item 3): the handbrake leg. Not extreme
+    // swerving (`bne` past it) and the avoidance risk at 0.7 or more (var_150 against
+    // unk_8300CEE0 == splat(0.7), vcmpgefp. all lanes, so a NaN risk fails): mfHandBrake (+0xC)
+    // = 0.5 (flt_820BA62C).
+    if (!lpVehicle->IsExtremeSwerving() && lfOverallRisk.x >= KF_AVOIDANCE_HANDBRAKE_RISK)
+    {
+        lpControls->mfHandBrake = KF_AVOIDANCE_HANDBRAKE;
+
+        // [DIAG] NOT IN THE X360 BINARY -- see KI_AVOID_HANDBRAKE_DIAG_CAP.
+        if (giAvoidHandbrakeDiagLines < KI_AVOID_HANDBRAKE_DIAG_CAP)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giAvoidHandbrakeDiagLines;
+                *lpDiag << "[T-avoid-handbrake] vehicle=" << luVehicle
+                        << " risk=" << lfOverallRisk.x << " dist=" << lfDist
+                        << " speed=" << lfSpeed << " -> mfHandBrake " << KF_AVOIDANCE_HANDBRAKE << "\n";
+            }
+        }
+    }
 
     // GATE: DEBUG_ValidateEmDriverControls @0x82708FF8 (0x8273E748) -- debug-only validator.
 

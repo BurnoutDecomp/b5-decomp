@@ -723,12 +723,39 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void  LeaveReplay();                                         // @ 0x82708248
         void  RestartTraffic();                                      // @ 0x82708F98
 
-        // ---- declaration-only and FLAGged. These reach sub-aggregate interiors that are
-        //      only partially recovered (Vehicle / Param tails, the VMX avoidance pipeline),
-        //      so they land with the waves that own those types. ----
-        void* Avoidance_CalculateDistancePosVelToOrig(void* lpResult);// @ 0x82708DD0 (FLAG: VMX)
-        void  Avoidance_CalculatePassingScore();                     // @ 0x827199B8 (FLAG: VMX)
-        void  CalculateAndSetSteeringUsingAvoidance();               // @ 0x8273D258 (FLAG: VMX)
+        // ---- the avoidance steering, FX-TRAFFIC4 item 3 (2026-09-24), in the DWARF shapes.
+        //      Bodies in BrnTrafficEntityModule.cpp beside CalculateAndSetSteering. ----
+        // DWARF h:1368. @0x8273D258, called by DriveTowardsTarget at 0x8273E56C. lNewDirection
+        // is the unit direction to the target on the way IN (r5, var_180) and the direction the
+        // car is steered onto on the way OUT; lfOverallRisk (r7, var_150) is written through.
+        void     CalculateAndSetSteeringUsingAvoidance(u32 luVehicle, Vector3& lNewDirection,
+                                                       VecFloat lfDistFromTarget,
+                                                       BrnPhysics::Vehicle::BrnTrafficDriverControls* lpOutControls,
+                                                       VecFloat& lfOverallRisk);
+        // DWARF h:1890. @0x82708E78, called by Reset at 0x8272D7E8. Fills maFeelerCosSin.
+        void     PrecalculateAvoidanceFeelerData();
+        // DWARF h:1893. @0x827199B8: r3 the sret VecFloat, r4 this, v1..v6 the six arguments
+        // (v5 / v6, the half extents, are never read by the X360 body).
+        VecFloat Avoidance_CalculatePassingScore(Vector3 lPositionA, Vector3 lVelocityA,
+                                                 Vector3 lPositionB, Vector3 lVelocityB,
+                                                 VecFloat lfObjectBHalfLength,
+                                                 VecFloat lfObjectBHalfWidth);
+        // DWARF h:1896. @0x82708DD0: r3 the sret VecFloat, v1 lStart, v2 lVel (`this` unread).
+        VecFloat Avoidance_CalculateDistancePosVelToOrigin(Vector2 lStart, Vector2 lVel);
+        // DWARF h:1899. @0x8272C248, called by CalculateAndSetSteeringUsingAvoidance at 0x8273D298.
+        void     Avoidance_GetBestVehicleDirection(u32 luVehicle, Vector3& lNewDirection,
+                                                   VecFloat& lfOverallRisk);
+        // DWARF h:1902. No out-of-line body: inlined at 0x8272C344..0x8272C4EC.
+        void     Avoidance_CalculateFeelers(Vector3 lDirection, Vector3 lRight, Vector3* laFeelers);
+        // DWARF h:1113..:1128. No out-of-line bodies: each is a vperm splat of one lane of
+        // kfVehicle_AvoidancePassingFactor_Constants (+0x72770) or kfVehicle_Avoidance_Constants
+        // (+0x72790), inlined at its reader.
+        VecFloat GetAvoidPassImpactTimeMax() const;
+        VecFloat GetAvoidPassImpactTimeScoreFactor() const;
+        VecFloat GetAvoidPassMaxDistance() const;
+        VecFloat GetAvoidPassHeightSkip() const;
+        VecFloat GetAvoidOffcourseScoreFactor() const;
+        VecFloat GetAvoidMaxOverallRisk() const;
         // @ 0x82718CD8. r3 is the sret VecFloat, r4 this, r5 luVehicle, v1 the forward
         // distance to the target, v2 the param's linear velocity. Bodied in _wT3_02.cpp.
         VecFloat CalculateDriverGasBrake(u32 luVehicle, VecFloat lfDistToTarget,
