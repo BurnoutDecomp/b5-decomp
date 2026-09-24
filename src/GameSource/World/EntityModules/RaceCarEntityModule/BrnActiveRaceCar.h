@@ -91,6 +91,8 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInter
 namespace BrnAI { namespace AIModuleIO { struct RaceCarAIInterface; } }
 
 namespace CgsNumeric { class Random; }   // ActiveRaceCar::Update's lpRandom (pointer-only; CgsRandom.h)
+// GetPropCollisionBox's return type (pointer-only here; vendor/renderware/collision/CollisionVolume.hpp).
+namespace rw { namespace collision { struct BoxVolume; } }
 
 namespace BrnWorld
 {
@@ -1162,6 +1164,13 @@ public:
     s32  GetResetTransformCount() const               { return mPrevTransforms.GetLength(); } // +0x5A0
 
 private:
+    // X360 0x822D3DB0 (70 insns), DWARF BrnActiveRaceCar.h:1138 (private) / .cpp:614 (crash parity
+    // CC-3 = G60-D3). The car's prop-collision box rebuilt from the DEFORMED bbox, placement-built
+    // in lpVolumeBuffer (128 bytes -- ReplaceDynamicVolume block-copies that many). Its only caller
+    // is RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene (a friend), on a frame the body
+    // deformed. See the .cpp banner.
+    rw::collision::BoxVolume* GetPropCollisionBox(void* lpVolumeBuffer);
+
     // ========================================================================
     // Layout (completed by the pose wave 2026-07-31).
     //

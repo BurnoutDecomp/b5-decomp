@@ -76,6 +76,7 @@ namespace renderengine { extern u32 guPresentCount; }   // [net] netcar witness:
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"            // BrnPhysics::Vehicle::VehicleManagerOutputInterface (the create-vehicle result queue)
 #include "GameSource/World/BrnEntityTypes.h"                                                 // BrnWorld::E_ENTITYTYPE_RACECAR (the VolumeInstanceId owner byte)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"                // InSceneUpdateInterface::SetVolumeInstanceTransform / SetEntityPosition / ClearEntityVolumesPadding
+#include "vendor/renderware/collision/CollisionVolume.hpp"                                    // rw::collision::BoxVolume (UpdatePropBoundingBoxes_PreScene's [prop-box] witness)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"                           // ContactSpyInterface::GetRaceCarContacts / GetPropContacts  [boost-wave2]
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"                              // RaceCarContact / PropContact                              [boost-wave2]
 #include "GameSource/AttribSys/Generated/classes/surface.h"                                   // Attrib::Gen::surface (the surface-list tripwire)          [boost-wave2]
@@ -5762,6 +5763,58 @@ void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::Output
     }
 }
 
+// ============================================================================
+// UpdatePropBoundingBoxes_PreScene @ 0x822F5668 (44 insns) -- crash parity CC-3 (= G60-D3),
+// 2026-09-24. Called only from PreSceneUpdate @0x8230E408 (r4 = r31 = lpOutput).
+//
+//   0x822F5690  mr r3, r27 ; bl 0x822B4F78       lpOutput->GetSceneInputInterface(), per slot
+//   0x822F56A4  bl GetActiveRaceCar(slot)
+//   0x822F56A8  lbz 0x78A ; beq -> next          mbAddedToScene
+//   0x822F56B4  lbz 0x535 ; beq -> next          mPhysicsState.mbDeformedThisFrame (+0xE0 + 1109)
+//   0x822F56C0  ld r11, 0xD0 ; std r11, 0x50(r1) mHandlingBodyVolumeId -- ALL 64 BITS
+//   0x822F56D0  bl GetPropCollisionBox(car, r4 = r1 + 0x60)   the 128-byte stack block
+//   0x822F56E0  bl ReplaceDynamicVolume(scene, r4 = ld 0(r30) the copied id, r5 = the volume)
+//   0x822F56E4..0x822F570C  the range-guarded slot increment (BurnoutConstants.h:39)
+// The key is the whole handle, the one AddToScene's AddDynamicVolume registered the car's volume
+// under (a race car's low dword is 0, so the scene's 32-bit EntityId form would post key 0); the
+// scene manager's leg 12 (0x828D2E64) hands it to VolumeManager::ReplaceDynamicVolume.
+// ============================================================================
+void RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
+{
+    for( s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot )
+    {
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::SceneInputInterface* lpSceneInterface =
+            lpOutput->GetSceneInputInterface();
+        ActiveRaceCar* lpCar = GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liSlot ) );
+
+        if( lpCar->mbAddedToScene && lpCar->mPhysicsState.mbDeformedThisFrame )
+        {
+            const CgsSceneManager::VolumeId lVolumeId( lpCar->mHandlingBodyVolumeId.muId );   // ld 0xD0 ; std
+            alignas( 16 ) u8 laVolumeBuffer[128];                                             // r1 + 0x60
+            const rw::collision::BoxVolume* lpVolume = lpCar->GetPropCollisionBox( laVolumeBuffer );
+            lpSceneInterface->ReplaceDynamicVolume( lVolumeId, lpVolume );
+
+            // [DIAG] BRN_PROP_BOX_DIAG -- NOT IN THE X360 BINARY. Capped proof the replace is
+            // DISPATCHED, with its whole key and the deformed box it carries.
+            static const bool sbPropBoxDiag = ( getenv( "BRN_PROP_BOX_DIAG" ) != 0 );
+            static u32 suPropBoxDiagLines = 0u;
+            if( sbPropBoxDiag && suPropBoxDiagLines < 64u && CgsDev::Log::gpDebugPrint != 0 )
+            {
+                ++suPropBoxDiagLines;
+                *CgsDev::Log::gpDebugPrint
+                    << "[prop-box] slot " << liSlot
+                    << " key " << static_cast<u32>( lVolumeId.mId >> 32 ) << ":" << static_cast<u32>( lVolumeId.mId )
+                    << " half (" << lpVolume->mBoxData.mfHx << ", " << lpVolume->mBoxData.mfHy << ", "
+                    << lpVolume->mBoxData.mfHz << ") pos (" << lpVolume->maTransform[3].x << ", "
+                    << lpVolume->maTransform[3].y << ", " << lpVolume->maTransform[3].z << ")\n";
+            }
+        }
+
+        CGS_ASSERT( liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );   // BurnoutConstants.h:39
+    }
+}
+
 // X360 0x8230D928 -- PARTIAL SLICE.
 //
 // The console body is a 15-step per-frame spine (replay enter/leave edge, the camera-vector
@@ -5781,7 +5834,8 @@ void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::Output
 //     the guard is constant-false and the call is unconditional. FLAGGED rather than faked.
 //   * (later waves, see each block below) HandleGameActions, the per-slot AI activation leg,
 //     UpdateRaceCars_PreScene (2026-09-23), the rival range pass, the pad-state latch,
-//     WriteUpdatedAIData and the pre-scene UpdateOutputInterfaces.
+//     WriteUpdatedAIData, UpdatePropBoundingBoxes_PreScene (2026-09-24, CC-3) and the pre-scene
+//     UpdateOutputInterfaces.
 //
 // [FLAG PC bring-up] everything else is dropped, NOT paraphrased.
 // DELETE-WHEN: the interior lands and the full spine is reconstructed.
@@ -6005,6 +6059,10 @@ void RaceCarEntityModule::PreSceneUpdate(
     }
 
     WriteUpdatedAIData( lpOutput );
+
+    // 0x8230E408 (crash parity CC-3 = G60-D3): the deformed cars' scene volumes, between
+    // WriteUpdatedAIData (0x8230E3FC) and the output-interface fetches (0x8230E40C..0x8230E44C).
+    UpdatePropBoundingBoxes_PreScene( lpOutput );
 
     UpdateOutputInterfaces( lpOutput->GetActiveRaceCarOutputInterface(),
                             lpOutput->GetGlobalRaceCarOutputInterface(),
@@ -8892,7 +8950,9 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   (UpdateCurrentWorldRegion RETIRED from this list 2026-08-25, H1 district wave -- bodied
 //    above with the stage-0 map bind; its "un-homed interior" needs were GetActiveRaceCar/
 //    IsActive/GetPosition, all long since real.)
-//   UpdateRaceCars_PreScene, UpdatePropBoundingBoxes_PreScene, UpdateRaceCarContacts,
+//   UpdateRaceCars_PreScene, UpdateRaceCarContacts,
+//   (UpdatePropBoundingBoxes_PreScene RETIRED from this list 2026-09-24, crash parity CC-3 -- bodied
+//    beside UpdateRaceCars_PreScene with ActiveRaceCar::GetPropCollisionBox.)
 //   UpdateActiveCars, UpdateDisconnectedPlayers, UpdateTrafficAndRaceCarNearMisses,
 //   SendGameEvents, SendStreamerEvents, SendAddedForCollisionStateToPhysics,
 //   (SendRaceCarSceneUpdates RETIRED from this list 2026-08-18, wave Q5 -- COMPLETE above,

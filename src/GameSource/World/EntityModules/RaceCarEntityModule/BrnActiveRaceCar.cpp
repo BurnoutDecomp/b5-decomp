@@ -3593,6 +3593,87 @@ void ActiveRaceCar::AddToScene(
 }
 
 // ============================================================================
+// GetPropCollisionBox @ 0x822D3DB0   (70 insns)  -- crash parity CC-3 (= G60-D3), 2026-09-24.
+// DWARF BrnActiveRaceCar.h:1138 (private) / .cpp:614; locals lHalfExtents (:616), lPos (:619),
+// lBoxHeightAboveRoad (:621), lvfExtraHeightForWheels (:624), lvfExtraHeight (:627),
+// lvfHalfExtraHeight (:630), lpVolume (:635).
+//
+// AddToScene's box, rebuilt from the DEFORMED bbox instead of the spec's handling-body dims:
+//   0x822D3DC8..0x822D3DDC  v0 = vcfsx(vspltisw 1, 1) = splat(0.5) ; v9 = vspltisw 0
+//   0x822D3DE4 / 0x822D3DEC lvx128 +0x6C0 / +0x6D0          == mDeformedBBox.mMin / .mMax
+//   0x822D3DF8 / 0x822D3E24 centre = (mMin + mMax) * 0.5    (vaddfp ; vmulfp128, every lane)
+//   0x822D3E04 / 0x822D3E2C lPos = (mMin + mMax) * 0.5 + mPhysicsState.mComOffset (+0x440)
+//                           (vmaddfp v12 = v7*v0 + v12; the * 0.5 is exact, so == centre + com)
+//   0x822D3E30              lHalfExtents = mMax - centre    (vsubfp, every lane)
+//   0x822D3E4C..0x822D3E78  lBoxHeightAboveRoad = (wAxis.y + centre.y) - lHalfExtents.y, splats of
+//                           mCentreOfMassTransform.wAxis (+0xC0), centre and the half-extents
+//   0x822D3E7C              lvfExtraHeightForWheels = vmaxfp(that, 0)
+//   0x822D3E80              lvfExtraHeight = + unk_82FAD550 (splat 0.05, KF_HANDLING_BODY_Y_PAD)
+//   0x822D3E84              lvfHalfExtraHeight = * 0.5
+//   0x822D3E88..0x822D3E94  half + h and pos - h, but `vrlimi128 ..., 4, 0` keeps ONLY lane y of
+//                           each: the box grows DOWNWARD by the extra height, x/z/w untouched
+//   0x822D3E50..0x822D3E74  rw::Resource, five words zeroed, word 0 = lpVolumeBuffer
+//   0x822D3EA4              BoxVolume::Initialize(resource, lHalfExtents)  (v1 = the whole row)
+//   0x822D3EAC              stvx128 lPos -> lpVolume + 0x30 == maTransform[3], ALL FOUR lanes
+// and lpVolume (Initialize's r3) is returned. Unlike AddToScene there is no fabs on the COM
+// height and no assert on the volume: the console stores through it unconditionally (the buffer
+// is always the caller's stack block, so Initialize cannot return NULL here).
+// vmaxfp is NOT `(x > 0) ? x : 0`: a NaN operand gives a QNaN (AltiVec PEM; FX-FPUMAX's note) and
+// +0 is the larger of +-0, so a NaN height stays NaN and -0 becomes +0.
+// ============================================================================
+rw::collision::BoxVolume* ActiveRaceCar::GetPropCollisionBox(void* lpVolumeBuffer)
+{
+    const Vector4& lrMin = mDeformedBBox.mMin;                   // lvx128 +0x6C0
+    const Vector4& lrMax = mDeformedBBox.mMax;                   // lvx128 +0x6D0
+    const Vector3& lrComOffset = mPhysicsState.mComOffset;       // lvx128 +0x440
+
+    Vector3 lCentre;                                             // (min + max) * 0.5, every lane
+    lCentre.x = (lrMin.x + lrMax.x) * 0.5f;
+    lCentre.y = (lrMin.y + lrMax.y) * 0.5f;
+    lCentre.z = (lrMin.z + lrMax.z) * 0.5f;
+    lCentre.w = (lrMin.w + lrMax.w) * 0.5f;
+
+    Vector3 lHalfExtents;                                        // vsubfp v13 = max - centre
+    lHalfExtents.x = lrMax.x - lCentre.x;
+    lHalfExtents.y = lrMax.y - lCentre.y;
+    lHalfExtents.z = lrMax.z - lCentre.z;
+    lHalfExtents.w = lrMax.w - lCentre.w;
+
+    Vector3 lPos;                                                // vmaddfp v12 = (min+max)*0.5 + com
+    lPos.x = lCentre.x + lrComOffset.x;
+    lPos.y = lCentre.y + lrComOffset.y;
+    lPos.z = lCentre.z + lrComOffset.z;
+    lPos.w = lCentre.w + lrComOffset.w;
+
+    // The lane-y chain (every term is a splat of one lane, so it is scalar arithmetic).
+    const f32 lfBoxHeightAboveRoad =
+        (mCentreOfMassTransform.wAxis.y + lCentre.y) - lHalfExtents.y;          // vaddfp ; vsubfp
+    const f32 lfExtraHeightForWheels =                                          // vmaxfp v10, v10, v9(0)
+        (lfBoxHeightAboveRoad != lfBoxHeightAboveRoad) ? lfBoxHeightAboveRoad
+        : ((lfBoxHeightAboveRoad > 0.0f) ? lfBoxHeightAboveRoad : 0.0f);
+    const f32 lfExtraHeight     = lfExtraHeightForWheels + KF_HANDLING_BODY_Y_PAD; // vaddfp unk_82FAD550
+    const f32 lfHalfExtraHeight = lfExtraHeight * 0.5f;                          // vmulfp128 v0 (0.5)
+
+    lHalfExtents.y = lHalfExtents.y + lfHalfExtraHeight;         // vaddfp ; vrlimi128 v6, v13, 4, 0
+    lPos.y         = lPos.y - lfHalfExtraHeight;                 // vsubfp ; vrlimi128 v7, v0, 4, 0
+
+    rw::Resource lVolumeResource = {};                           // stw 0, 0x70..0x80(r1)
+    lVolumeResource.m_baseResources[0] = lpVolumeBuffer;         // stw r4, 0x70(r1)
+
+    const rw::collision::Vec4 lvHalfExtents = { lHalfExtents.x, lHalfExtents.y, lHalfExtents.z,
+                                                lHalfExtents.w };
+    rw::collision::BoxVolume* lpVolume =
+        rw::collision::BoxVolume::Initialize(lVolumeResource, lvHalfExtents);   // bl 0x82BAA188
+
+    lpVolume->maTransform[3].x = lPos.x;                         // stvx128 v127, r3, 0x30
+    lpVolume->maTransform[3].y = lPos.y;
+    lpVolume->maTransform[3].z = lPos.z;
+    lpVolume->maTransform[3].w = lPos.w;
+
+    return lpVolume;
+}
+
+// ============================================================================
 // UpdateCarSelectStateOnline @ 0x822BFA30 (crash parity G60-D6, 2026-09-24)
 //
 //   0x822BFA44  bl IsAttached ; beq -> 0x822BFB44: stb 0, 0x79A (mbIsInCarSelectOnline) ; return
