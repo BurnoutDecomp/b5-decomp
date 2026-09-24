@@ -7,6 +7,7 @@
 #include "GameSource/Math/BrnMathUtils.h"            // BrnMath::GetPointToInfiniteLineDistance
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::operator- / operator+
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Min (the console's fsel Min)
+#include "GameSource/GameState/BrnGameStateSharedIO.h"  // BrnGameState::GameStateModuleIO::EGameModeType (Update's by-value param)
 
 #include <cmath>                                     // std::atan / std::fabs / std::copysign
 
@@ -30,6 +31,15 @@
 // ============================================================================
 namespace BrnWorld
 {
+    // Update's pointer-only parameters -- forward declarations (the BoostStrategy.h precedent). The
+    // queue's home is SharedIO/BrnRaceCarEntityModuleIOQueues.h (`struct GameEventQueue :
+    // CgsModule::VariableEventQueue<1536,16>`); the DWARF spells the parameter
+    // GameStateModuleIO::GameEventQueue* in the declaration and OutputBuffer_PrePhysics::GameEventQueue*
+    // in the definition -- the same 1536/16 queue UpdatePowerParking takes off its output buffer.
+    class ActiveRaceCar;
+    struct PlayerVehicleControls;
+    namespace RaceCarEntityModuleIO { struct GameEventQueue; }
+
     // DWARF BrnPowerParkingManager.h:46. The image carries only its square: CheckVehicleForPowerPark's
     // range test `lfDistanceSq > KF_POWER_PARK_NEARBY_RADIUS * KF_POWER_PARK_NEARBY_RADIUS` is folded
     // to the literal 225.0f (flt_82018E3C == 0x43610000, read at 0x822B2004/0x822B200C), and 15.0f is
@@ -89,6 +99,10 @@ namespace BrnWorld
         void Construct();
         void Destruct();
         bool Prepare();
+        // DWARF :89. X360 0x822F8400 (crash parity FX-RCEM4 2026-09-24).
+        void Update(BrnGameState::GameStateModuleIO::EGameModeType leGameModeType, f32 lfSimTimerStep,
+                    ActiveRaceCar* lpPlayerActiveRaceCar, PlayerVehicleControls* lpPlayerControls,
+                    RaceCarEntityModuleIO::GameEventQueue* lpEventQueue);
         void ClearData();
         void DetermineOutcome();
         void AddNearTraffic(u32 luEntityId);
@@ -99,12 +113,9 @@ namespace BrnWorld
                                         f32 lfSecondClosestDistanceSq,
                                         f32 lfClosestAngleDiff,
                                         f32 lfClosestPerpendicularDist);
-        bool IsPowerParking() const;
+        // DWARF :115 -- a header inline (no out-of-line symbol; ProcessPowerParking reads +0 twice).
+        bool IsPowerParking() const { return mbPowerParkInProgress; }
         void UpdateScoring(f32 lfAngleChange, f32 lfPositionChange, f32 lfCurrentLinearVelocity);
-
-        // NOTE: Update(EGameModeType, f32, ActiveRaceCar*, PlayerVehicleControls*, GameEventQueue*)
-        // is X360-attested but declared alongside its body (it needs BrnGameState / ActiveRaceCar /
-        // PlayerVehicleControls / GameEventQueue types); left out of this additive home for now.
     };
 
     // ---- the candidacy test (crash parity FX-RCEM4 2026-09-24) -------------------------------------
