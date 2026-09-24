@@ -896,18 +896,18 @@ namespace Vehicle
     // RaceCarPhysics::GetRecentBounce  @0x825B8B08  (asserts showtime)
     //   Copy out the recent-bounce report and CONSUME the per-frame latches.
     // ---------------------------------------------------------------------------------------
-    bool RaceCarPhysics::GetRecentBounce(s32* lpChainCount, bool* lpOverMinStress, bool* lpCarBounce,
-                                         bool* lpGoodImpact, bool* lpExtraFlag, s32* lpOtherEntityId,
-                                         Vector3* lpBounceDirection)
+    bool RaceCarPhysics::GetRecentBounce(s32* lpiBounceChain, bool* lpbFromStationary, bool* lpbOnCar,
+                                         bool* lpbBoostedBounce, bool* lpbGoodImpact,
+                                         EntityId* lpidImpactEntityId, Vector3* lpContactPoint)
     {
         // assert(mbPlayerCarInShowtime) -- elided.
-        *lpChainCount     = MS.muBounceChainCount;    // *a2 = word_82FB8486
-        *lpOverMinStress  = MS.mbBounceWasGood;       // *a3 = byte_82FB84B1
-        *lpCarBounce      = MS.mbCarBounce;            // *a4 = byte_82FB8483
-        *lpGoodImpact     = MS.mbGoodImpact;           // *a5 = byte_82FB8484
-        *lpExtraFlag      = MS.mbGoodImpactReport;     // *a6 = byte_82FB848B
-        *lpOtherEntityId  = MS.miOtherEntityId;        // *a7 = dword_82FB848C
-        *lpBounceDirection = MS.mBounceDirection;       // stvx128 (+0x10) -> *a8
+        *lpiBounceChain       = MS.muBounceChainCount;    // lhz word_82FB8486 ; extsh ; stw -> r4
+        *lpbFromStationary    = MS.mbBounceWasGood;       // lbz byte_82FB84B1 -> r5
+        *lpbOnCar             = MS.mbCarBounce;           // lbz byte_82FB8483 -> r6
+        *lpbBoostedBounce     = MS.mbGoodImpact;          // lbz byte_82FB8484 -> r7
+        *lpbGoodImpact        = MS.mbGoodImpactReport;    // lbz byte_82FB848B -> r8
+        lpidImpactEntityId->muValue = static_cast<u32>(MS.miOtherEntityId);   // lwz dword_82FB848C ; stw -> r9
+        *lpContactPoint       = MS.mBounceDirection;      // lvx128 (+0x10) ; stvx128 -> r10
 
         const bool lbBounced = MS.mbBouncedThisFrame;  // result = byte_82FB8482
         MS.mbBouncedThisFrame = false;                 // byte_82FB8482 = 0

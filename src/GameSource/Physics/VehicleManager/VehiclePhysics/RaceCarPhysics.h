@@ -538,12 +538,14 @@ namespace Vehicle
         Vector3* ComputeIdealVelocity(Vector3* lpResult, Vector3 lvTargetPosition,
                                       f32 lfSpeed2D) const;
 
-        // @0x825B8B08: copy out the recent-bounce report (chain count / over-min-stress / car-bounce /
-        // good-impact flags, the other entity id, and the bounce direction vector) and consume the
-        // bounce latch. Returns the "bounced this frame" flag and clears it + the per-frame flags.
-        bool GetRecentBounce(s32* lpChainCount, bool* lpOverMinStress, bool* lpCarBounce,
-                             bool* lpGoodImpact, bool* lpExtraFlag, s32* lpOtherEntityId,
-                             Vector3* lpBounceDirection);
+        // @0x825B8B08: copy out the recent-bounce report (the bounce chain, the four bounce flags, the
+        // impact entity and the contact point) and consume the bounce latch. Returns the "bounced
+        // this frame" flag and clears it + the per-frame flags. Signature and parameter names are the
+        // DWARF's (RaceCarPhysics.h:319; names from the BrnPhysicsUnity2 dump) -- the sixth out is an
+        // EntityId*, not an s32* [FX-TAILS-A 2026-09-24].
+        bool GetRecentBounce(s32* lpiBounceChain, bool* lpbFromStationary, bool* lpbOnCar,
+                             bool* lpbBoostedBounce, bool* lpbGoodImpact, EntityId* lpidImpactEntityId,
+                             Vector3* lpContactPoint);
 
         // @0x825B8CE0: true if the next impact should bounce-boost (the latched ShouldBounceBoost bit).
         bool ShouldBounceBoostNextImpact() const;

@@ -359,13 +359,11 @@ namespace Vehicle
             // JustBouncedEvent (DWARF BrnGameEvents.h:2782-2790), the one ProcessGameEvents'
             // case 52 @0x823A3D74 reads back; the local RecentBounceEventPayload fork is gone.
             // Same bytes, same order, same 32-byte size (the asserts below the function).
-            // The sixth out is the DWARF's `EntityId*` (RaceCarPhysics.h:319); this tree declares
-            // it `s32*`, so the record's EntityId word is handed over as its s32 view.
             BrnGameState::GameStateModuleIO::JustBouncedEvent lBounce = {};
             if (lrCar.GetRecentBounce(&lBounce.miBounceChain, &lBounce.mbFromStationary,
                                       &lBounce.mbOnCar, &lBounce.mbBoostedBounce,
                                       &lBounce.mbGoodImpact,
-                                      reinterpret_cast<s32*>(&lBounce.midImpactEntityId.muValue),
+                                      &lBounce.midImpactEntityId,
                                       &lBounce.mContactPoint))
             {
                 lpOutputQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBounce),

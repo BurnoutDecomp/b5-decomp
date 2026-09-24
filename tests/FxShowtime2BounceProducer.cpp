@@ -99,6 +99,16 @@ public:
         std::memcpy(lpBounceDirection, mScript.maf, 16);
         return mScript.mbReturn;
     }
+
+    // [FX-TAILS-A 2026-09-24, item 5] The DWARF signature (RaceCarPhysics.h:319) the tree carries from
+    // FX-TAILS-A item 5 on: the sixth out is an EntityId*. It forwards to the scripted form above,
+    // which stays so that --rev runs against the older producer (which passed an s32*) still build.
+    bool GetRecentBounce(s32* lpiBounceChain, bool* lpbFromStationary, bool* lpbOnCar, bool* lpbBoostedBounce,
+                         bool* lpbGoodImpact, EntityId* lpidImpactEntityId, Vector3* lpContactPoint)
+    {
+        return GetRecentBounce(lpiBounceChain, lpbFromStationary, lpbOnCar, lpbBoostedBounce, lpbGoodImpact,
+                               reinterpret_cast<s32*>(&lpidImpactEntityId->muValue), lpContactPoint);
+    }
 };
 
 struct ControlsStandIn
