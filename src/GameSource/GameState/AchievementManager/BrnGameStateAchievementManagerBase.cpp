@@ -61,6 +61,12 @@ namespace
     // GameStateModule::ProcessTakedownEvents. Deliberately NOT spelled with a declaration-record
     // enumerator name: the console SKU's numbering differs from that record in this band.
     const EAchievement E_CONSOLE_ACHIEVEMENT_TAKEDOWN_CHAIN        = static_cast<EAchievement>(14); // OnTakedownChain
+    // Console id 0xD, read straight off the inlined OnShowTimeMultiplier expansion at the tail of
+    // GameStateModule::UpdateShowtimeMode (`li r4, 0xD` @0x82381134 and @0x82381168). The PS3 base
+    // body (DecFIGS 0x23F824) fires 21 == E_ACHIEVEMENT_10X_MULTIPLIER_IN_SHOW_TIME for the same
+    // test; same achievement, console numbering -- so, like the one above, not spelled with the
+    // declaration-record name.
+    const EAchievement E_CONSOLE_ACHIEVEMENT_SHOWTIME_MULTIPLIER   = static_cast<EAchievement>(13); // OnShowTimeMultiplier
 
     // OnSetRoadRule street ids (X360 64-bit CgsID literals).
     const CgsID KU_ROAD_ID_TIME_WATT_ST   = 0x5E2C9u;   // 385737  (score type TIME / 0)
@@ -78,6 +84,7 @@ namespace
     const s32 KI_PERFECT_RAGE_TAKEDOWNS        = 10;
     const s32 KI_GET_500_TAKEDOWNS             = 500;
     const s32 KI_TAKEDOWN_CHAIN_FOR_ACHIEVEMENT = 10;   // OnTakedownChain (cmpwi chain, 0xA)
+    const s32 KI_SHOWTIME_MULTIPLIER_FOR_ACHIEVEMENT = 10;   // OnShowTimeMultiplier (cmpwi r29, 0xA ; blt @0x8238115C)
 }
 
 // ----------------------------------------------------------------------------
@@ -403,6 +410,31 @@ void AchievementManagerBase::OnTakedownChain(s32 liChainLength)
         && liChainLength >= KI_TAKEDOWN_CHAIN_FOR_ACHIEVEMENT)
     {
         AchievementEarnt(E_CONSOLE_ACHIEVEMENT_TAKEDOWN_CHAIN);
+    }
+}
+
+// ----------------------------------------------------------------------------
+// OnShowTimeMultiplier  (DWARF BrnGameStateAchievementManagerBase.h:153)
+//   Fires the showtime-multiplier achievement (console id 0xD) the first time the
+//   showtime score multiplier reaches ten. Like OnTakedownChain it has no standalone
+//   console symbol: its sole caller, GameStateModule::UpdateShowtimeMode @0x82380EF8,
+//   inlines it as its tail (crash-parity FX-SHOWTIME2, 2026-09-24):
+//     0x8238112C/38  addis/addi r31 = this + 0x2C5B0    ; &mAchievementManager
+//     0x82381130  lwz  r29, 0x20D4(this)             ; the argument: CrashModeScoring::miScoreMultiplier
+//     0x82381134  li   r4, 0xD ; slot 1 (lwz 4(vtbl) ; bctrl @0x8238114C)   IsAchievementEarnt(13)
+//     0x82381150  clrlwi/cmplwi ; bne -> out @0x82381158    ; already earnt
+//     0x8238115C  cmpwi r29, 0xA ; blt -> out @0x82381160   ; SIGNED, below ten
+//     0x82381168  li   r4, 0xD ; slot 0 (lwz 0(vtbl) ; bctrl @0x82381178)   AchievementEarnt(13)
+//   The PS3 base (DecFIGS 0x23F824) is the same pair on its own id 21 with `cmpwi 9 ; bgt`
+//   (> 9 == >= 10); AchievementManagerPS3's override adds a PS3-only 5x step (id 9), which the
+//   console's inlined base does not have.
+// ----------------------------------------------------------------------------
+void AchievementManagerBase::OnShowTimeMultiplier(s32 liMultiplier)
+{
+    if (!IsAchievementEarnt(E_CONSOLE_ACHIEVEMENT_SHOWTIME_MULTIPLIER)
+        && liMultiplier >= KI_SHOWTIME_MULTIPLIER_FOR_ACHIEVEMENT)
+    {
+        AchievementEarnt(E_CONSOLE_ACHIEVEMENT_SHOWTIME_MULTIPLIER);
     }
 }
 
