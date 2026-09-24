@@ -32,7 +32,7 @@ VEHICLE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTraffic
 MATH_CPP = "src/GameSource/Math/BrnMathUtils.cpp"
 SCORING_CPP = "src/GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp"
 FIXTURE = "StompFixture"
-NUMERIC_CHECKS = 39
+NUMERIC_CHECKS = 45
 CONSTANTS_BLOCK = "namespace   // the leap/stomp producer's file-scope constants"
 PRODUCER = "void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput("
 FIRST_UNUSED = "ShowtimeVehicleInfo* GetFirstUnusedShowtimeVehicleInfo(u32& luInfoIndex)"
@@ -56,6 +56,12 @@ def wiring(tree):
     clear = re.search(r"void\s+ClearStompees\(\)\s*\{\s*miPotentialStompeeCount\s*=\s*0;\s*\}", header)
     checks.append(("TrafficToRaceCarInterface_PreScene::ClearStompees() (DWARF :126) zeroes the count only",
                    clear is not None))
+    producer_body = body_or_empty(module, PRODUCER)
+    fsel = re.search(r"const\s+f32\s+lfMinDist\s*=\s*\(\s*lfMinDistRaw\s*>=\s*0\.0f\s*\)\s*\?\s*lfMinDistRaw\s*:\s*0\.0f\s*;",
+                     producer_body)
+    checks.append(("the ring minimum is the console's fsel (0x8271F574: `d - 20 >= 0 ? d - 20 : 0`, 0 for NaN), not "
+                   "rw::math::fpu::Max (which keeps a NaN) -- unobservable in the outputs, so pinned structurally",
+                   fsel is not None and "fpu::Max" not in producer_body))
     return checks
 
 
