@@ -131,13 +131,28 @@ namespace SceneManagerIO
     }
 
     // ----- Replace an existing dynamic volume's collision image (X360 0x822B15F8) -----
-    // Stages { muId = a2, maVolumeData = memcpy(a3, 128) } and appends to mReplaceDynamicVolumeQueue
-    // (no flags byte, unlike AddDynamicVolume).
-    void InSceneUpdateInterface::ReplaceDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage)
+    // DWARF CgsSceneManagerIO_SceneUpdate.h:458 `void ReplaceDynamicVolume(VolumeId, const
+    // VolRef::Volume *)` (crash parity H-SM1, 2026-09-24 -- this was a fitted 32-bit EntityId form
+    // posting `(u64)(u32)id`; see the header note). The console body, 64-bit throughout:
+    //
+    //   0x822B1604  mr    r11, r4                  ; the WHOLE 64-bit id register
+    //   0x822B160C..14  r4 = r5, r5 = 0x80, r3 = var_B0            ; memcpy args
+    //   0x822B1618  std   r11, var_C0(r1)          ; event +0x00  muId -- ALL 64 BITS
+    //   0x822B161C  bl    memcpy                   ; event +0x10  128-byte volume image
+    //   0x822B1630  lwzx  r11, this, 0xB1D34       ; miMaxLength  \  "queue too small"
+    //   0x822B1634  lwzx  r10, this, 0xB1D38       ; miLength      > tripwire (non-gating),
+    //   0x822B163C  blt   cr6 -> skip                              /  baked line 0x3BA == 954
+    //   0x822B16B8  addis r3, this, 0xB ; addi 0x1D30              ; == this + 0xB1D30
+    //   0x822B16C4  bl    BaseEventQueue<InEventReplaceDynamicVolume>::AddEvent (0x822AB670)
+    //
+    // this+0xB1D30 is mReplaceDynamicVolumeQueue, reached BY NAME. No flags byte is written
+    // (unlike AddDynamicVolume's `stb r6`): the record's +0x08 is whatever the stack held, and the
+    // consumer (CgsSceneManagerModule leg 12, 0x828D2E24) reads only the id and the image.
+    void InSceneUpdateInterface::ReplaceDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage)
     {
         InEventReplaceDynamicVolume lEvent;
-        lEvent.muId = static_cast<u64>(static_cast<u32>(lEntityId));   // std a2 @+0x00
-        std::memcpy(lEvent.maVolumeData, lpVolumeImage, 128);        // memcpy(@+0x10, a3, 0x80)
+        lEvent.muId = lVolumeId.mId;                            // std r11(=r4) @+0x00 -- all 64 bits
+        std::memcpy(lEvent.maVolumeData, lpVolumeImage, 128);   // memcpy(@+0x10, r5, 0x80)
 
         CGS_ASSERT(mReplaceDynamicVolumeQueue.GetLength() < mReplaceDynamicVolumeQueue.GetMaxLength(),
                    "SceneManager.mReplaceDynamicVolumeQueue too small, increase value in SceneManagerConstants.h");
