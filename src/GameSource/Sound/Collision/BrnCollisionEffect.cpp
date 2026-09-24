@@ -9,6 +9,7 @@
 #include "GameSource/AttribSys/Generated/classes/crashbin.h"
 #include "GameSource/AttribSys/Generated/classes/propscrashbin.h"
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
+#include "GameSource/World/BrnEntityTypes.h"   // BrnWorld::E_ENTITYTYPE_* (CalculateIntensity)
 
 #include <algorithm>
 #include <cstdio>
@@ -178,108 +179,219 @@ bool CollisionEffect::Prepare(CgsSound::Logic::State* apState)
     }
 }
 
-bool CollisionEffect::Attach()
+// ---------------------------------------------------------------------------
+// GetSizeSpecificSettings<T>  crashbin @0x826AABC8 / propscrashbin @0x826AAC88 (identical code)
+//
+//   lwz r11,0x38(r4)   ; meSize
+//   0 Large  -> layout+0x08 / +0x18 (Volumes().z / Pitch().z)
+//   1 Medium -> layout+0x04 / +0x14 (.y)
+//   2 Small  -> layout+0x00 / +0x10 (.x)
+//   >= 3     -> assert "Bad Size" (cpp:611), settings left as they were
+// ---------------------------------------------------------------------------
+template <typename T>
+void CollisionEffect::GetSizeSpecificSettings(const OutputCollision& arCollision, const T& arBin,
+                                              SizeSpecificSettings& arSettings) const
 {
-    mbUseAzimuth = true;
-    CgsSound::Logic::EffectBase::Attach();
-    CGS_ASSERT(mpCollisionControl != nullptr, "mpCollisionControl");
-    if (!mpCollisionControl)
-        return false;
-    if (mpCollisionControl->GetCollisionFinished())
-        return true;
+    switch (arCollision.meSize)
+    {
+    case E_SIZE_LARGE:
+        arSettings.mfVolume = arBin.Volumes().z;
+        arSettings.mfPitch = arBin.Pitch().z;
+        break;
+    case E_SIZE_MEDIUM:
+        arSettings.mfVolume = arBin.Volumes().y;
+        arSettings.mfPitch = arBin.Pitch().y;
+        break;
+    case E_SIZE_SMALL:
+        arSettings.mfVolume = arBin.Volumes().x;
+        arSettings.mfPitch = arBin.Pitch().x;
+        break;
+    default:
+        CGS_ASSERT(false, "Bad Size");
+        break;
+    }
+}
 
-    CollisionState* lpState = mpCollisionControl->GetCollisionState();
-    CGS_ASSERT(lpState != nullptr, "lpCollisionState");
-    CGS_ASSERT(mCrashVoice.GetVoiceObject() != nullptr, "mCrashVoice.IsCreated()");
-    if (!lpState || !mCrashVoice.GetVoiceObject())
-        return false;
-
-    const OutputCollision& lrCollision = lpState->GetOutputCollision();
+// ---------------------------------------------------------------------------
+// InitWork<T>  crashbin @0x826EB240 / propscrashbin @0x826EB368 (DWARF BrnCollisionEffect.h:126)
+//
+//   T lBin(arCollision.mBinKey, 0)                      ; ld r4,0x90(r29) -> the bin ctor
+//   lpStateManager = the state's manager (+0x24)        ; assert "lpStateManager" (cpp:541)
+//   mCrashVoice.Attach("~SplicerPlayerVoice::Slot~", the manager's splicer bank [meBankType])
+//   mCrashVoice.SetGain(0, 0.0, "Send01")               ; 0x826EB2D4..0x826EB2F4: the voice starts
+//                                                       ;   silent -- ProcessUpdate sets its gain
+//   mCrashVoice.Play(arCollision.miSampleID)            ; lwz r4,0xD8(r29)
+//   meNicotinePitchSlider = 1 ; meNicotineVolumeSlider = the bin's MixerSlider (layout +0x16C)
+//   assert meNicotineVolumeSlider > eCollisionMixerSliders::CollisionCutoff (cpp:561)
+//   GetSizeSpecificSettings<T>(arCollision, lBin, mSizeSettings)
+// ---------------------------------------------------------------------------
+template <typename T>
+void CollisionEffect::InitWork(CollisionState* apState, const OutputCollision& arCollision)
+{
+    const T lBin(arCollision.mBinKey, nullptr);
     CollisionStateManager* lpManager =
-        static_cast<CollisionStateManager*>(lpState->GetStateManager());
-    CGS_ASSERT(lpManager != nullptr, "lpCollisionStateManager");
-    if (!lpManager)
-        return false;
+        static_cast<CollisionStateManager*>(apState->GetStateManager());
+    CGS_ASSERT(lpManager != nullptr, "lpStateManager");
+
+    mCrashVoice.Attach(
+        static_cast<s32>(CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~")),
+        lpManager->GetSplicerBank(static_cast<ECollisionSpliceBankType>(arCollision.meBankType)));
+    const u32 luSend01 = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+    mCrashVoice.SetGain(0, 0.0f, &luSend01);
+    mCrashVoice.Play(arCollision.miSampleID);
 
     meNicotinePitchSlider = 1;
-    if (lrCollision.mePipeline == InputCollision::E_REGULAR)
+    meNicotineVolumeSlider = lBin.MixerSlider();
+    CGS_ASSERT(meNicotineVolumeSlider > 2,
+               "meNicotineVolumeSlider > AttribSys::Enums::eCollisionMixerSliders::CollisionCutoff");
+
+    GetSizeSpecificSettings<T>(arCollision, lBin, mSizeSettings);
+}
+
+// ---------------------------------------------------------------------------
+// CalculateIntensity  @ 0x82688240  (DWARF BrnCollisionEffect.cpp:434)
+//
+//   x = arCollision.mNormalizedImpulse.x                ; lfs f31,0x80(r31)
+//   meAction (+0x30) != Collision                        -> 0.0 (flt_82001CC0)
+//   mePipeline (+4) E_PROP                               -> flt_82F2CEC8 (12.0) * x
+//   anything but E_REGULAR / E_PROP                      -> assert "Bad pipeline" (cpp:453), then regular
+//   regular: the owner bytes of maEntityID[0] / [1] (lbz +0x18 / +0x1C, BrnWorld entity types)
+//     A race car: B world -> flt_82F2CED0, B race car -> flt_82F2CECC, B traffic -> flt_82F2CED4
+//                 (all 100.0), any other B -> 0.0
+//     A traffic  -> flt_82F2CED4 (100.0)
+//     A world, A >= 3 -> 0.0
+//     result = (K - flt_82F2CEC4 (25.0)) * x + 25.0      ; fsubs / fmadds 0x82688418..0x8268841C
+//   The "ducking: ..." TTY lines are gated on dword_82FFB8E0, a debug switch with no writer in the
+//   image -- not reproduced.
+// ---------------------------------------------------------------------------
+f32 CollisionEffect::CalculateIntensity(const OutputCollision& arCollision)
+{
+    const f32 KF_MIN_INTENSITY = 25.0f;           // flt_82F2CEC4
+    const f32 KF_PROP_INTENSITY_SCALE = 12.0f;    // flt_82F2CEC8
+    const f32 KF_RACECAR_VS_RACECAR = 100.0f;     // flt_82F2CECC
+    const f32 KF_RACECAR_VS_WORLD = 100.0f;       // flt_82F2CED0
+    const f32 KF_VERSUS_TRAFFIC = 100.0f;         // flt_82F2CED4
+
+    const f32 lfImpulse = arCollision.mNormalizedImpulse.x;
+    if (arCollision.meAction != AttribSys::Enums::eAction::Collision)
+        return 0.0f;
+
+    if (arCollision.mePipeline == InputCollision::E_PROP)
+        return KF_PROP_INTENSITY_SCALE * lfImpulse;
+    CGS_ASSERT(arCollision.mePipeline == InputCollision::E_REGULAR, "Bad pipeline");
+
+    const u32 luTypeA = arCollision.maEntityID[0].muValue >> 24;   // lbz +0x18: the owner byte
+    const u32 luTypeB = arCollision.maEntityID[1].muValue >> 24;   // lbz +0x1C
+    f32 lfFullIntensity;
+    if (luTypeA == BrnWorld::E_ENTITYTYPE_RACECAR)
     {
-        const Attrib::Gen::crashbin lBin(lrCollision.mBinKey, nullptr);
-        CGS_ASSERT(lBin.IsValid(), "lCrashBin.IsValid()");
-        meNicotineVolumeSlider = lBin.MixerSlider();
-        CGS_ASSERT(meNicotineVolumeSlider > 2,
-                   "meNicotineVolumeSlider > AttribSys::Enums::eCollisionMixerSliders::Pitch");
-        switch (lrCollision.meSize)
-        {
-        case E_SIZE_LARGE:
-            mSizeSettings.mfVolume = lBin.Volumes().z;
-            mSizeSettings.mfPitch = lBin.Pitch().z;
-            break;
-        case E_SIZE_MEDIUM:
-            mSizeSettings.mfVolume = lBin.Volumes().y;
-            mSizeSettings.mfPitch = lBin.Pitch().y;
-            break;
-        case E_SIZE_SMALL:
-            mSizeSettings.mfVolume = lBin.Volumes().x;
-            mSizeSettings.mfPitch = lBin.Pitch().x;
-            break;
-        }
+        if (luTypeB == BrnWorld::E_ENTITYTYPE_WORLD)
+            lfFullIntensity = KF_RACECAR_VS_WORLD;
+        else if (luTypeB == BrnWorld::E_ENTITYTYPE_RACECAR)
+            lfFullIntensity = KF_RACECAR_VS_RACECAR;
+        else if (luTypeB == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)
+            lfFullIntensity = KF_VERSUS_TRAFFIC;
+        else
+            return 0.0f;
+    }
+    else if (luTypeA == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)
+    {
+        lfFullIntensity = KF_VERSUS_TRAFFIC;
     }
     else
     {
-        CGS_ASSERT(lrCollision.mePipeline == InputCollision::E_PROP,
-                   "lCollision.mePipeline == InputCollision::E_PROP");
-        const Attrib::Gen::propscrashbin lBin(lrCollision.mBinKey, nullptr);
-        CGS_ASSERT(lBin.IsValid(), "lCrashBin.IsValid()");
-        meNicotineVolumeSlider = lBin.MixerSlider();
-        CGS_ASSERT(meNicotineVolumeSlider > 2,
-                   "meNicotineVolumeSlider > AttribSys::Enums::eCollisionMixerSliders::Pitch");
-        switch (lrCollision.meSize)
-        {
-        case E_SIZE_LARGE:
-            mSizeSettings.mfVolume = lBin.Volumes().z;
-            mSizeSettings.mfPitch = lBin.Pitch().z;
-            break;
-        case E_SIZE_MEDIUM:
-            mSizeSettings.mfVolume = lBin.Volumes().y;
-            mSizeSettings.mfPitch = lBin.Pitch().y;
-            break;
-        case E_SIZE_SMALL:
-            mSizeSettings.mfVolume = lBin.Volumes().x;
-            mSizeSettings.mfPitch = lBin.Pitch().x;
-            break;
-        }
+        return 0.0f;   // the world, or any other owner
     }
 
-    mCrashVoice.Attach(
-        static_cast<s32>(CgsSound::Playback::Name::MakeHash(
-            "~SplicerPlayerVoice::Slot~")),
-        lpManager->GetSplicerBank(
-            static_cast<ECollisionSpliceBankType>(lrCollision.meBankType)));
-    mCrashVoice.Play(lrCollision.miSampleID);
+    return (lfFullIntensity - KF_MIN_INTENSITY) * lfImpulse + KF_MIN_INTENSITY;
+}
 
-    if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr &&
-        CgsDev::Log::gpDebugPrint)
+// ---------------------------------------------------------------------------
+// Attach  @ 0x826F8218  (runs on the EffectBase sub-object, vtable off_820B135C)
+//
+//   mbUseAzimuth = 1 ; EffectBase::Attach() (+0x24 = 0, ++attach count)
+//   control finished (+0x34 -> +0xA0)          -> return 1
+//   assert mCrashVoice.IsCreated() (cpp:383)
+//   state = EffectBase::mpState (+8); collision = the state's output collision (+0x60)
+//   mePipeline 0 -> InitWork<crashbin>, 1 -> InitWork<propscrashbin>,
+//   else assert "Bad pipeline" (cpp:390) and InitWork<crashbin>
+//   i = max(CalculateIntensity(collision) * flt_820B78E0 (327.67), 0)      ; fneg / fsel
+//   SetMixerInputValue(0, 0x7FFF)
+//   SetMixerInputValue(1, fctiwz(min(i, flt_820AD310 (32767.0))))        ; fsubs / fsel / fctiwz
+//   collision.meFatality (+0x3C) == E_FATAL_START -> mbUseAzimuth = 0     ; 0x826F8334..0x826F8340
+//   mbFirstUpdate = 1 ; return 1
+//
+// FX-VOICEPOOL 2026-09-24: the PC sent 32767 - min(32767, max(0, x) * 327.67) as the ducking
+// input (inverted, and without CalculateIntensity's 25..100 shaping -- every hit near full
+// scale), started the voice at its previous gain (no SetGain(0) before Play), dropped the
+// azimuth on meAction == Detach instead of meFatality == E_FATAL_START, and stored an
+// mfIntensity the console's Attach never writes.
+// ---------------------------------------------------------------------------
+bool CollisionEffect::Attach()
+{
+    const f32 KF_INTENSITY_TO_MIXER = 327.67001f;   // flt_820B78E0 (0x43A3D5C3)
+    const f32 KF_MIXER_INPUT_MAX = 32767.0f;        // flt_820AD310
+
+    mbUseAzimuth = true;
+    CgsSound::Logic::EffectBase::Attach();
+    if (mpCollisionControl->GetCollisionFinished())
+        return true;
+
+    CGS_ASSERT(mCrashVoice.GetVoiceObject() != nullptr, "mCrashVoice.IsCreated()");
+    CollisionState* lpState = static_cast<CollisionState*>(GetStateBase());
+    const OutputCollision& lrCollision = lpState->GetOutputCollision();
+    switch (lrCollision.mePipeline)
     {
-        static u32 suPrintCount = 0;
-        if (suPrintCount++ < 32u)
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[collision-audio] voice attached sample="
-                << lrCollision.miSampleID
-                << " mixer=" << static_cast<s32>(meNicotineVolumeSlider)
-                << " volume=" << mSizeSettings.mfVolume
-                << " pitch=" << mSizeSettings.mfPitch << "\n";
-        }
+    case InputCollision::E_REGULAR:
+        InitWork<Attrib::Gen::crashbin>(lpState, lrCollision);
+        break;
+    case InputCollision::E_PROP:
+        InitWork<Attrib::Gen::propscrashbin>(lpState, lrCollision);
+        break;
+    default:
+        CGS_ASSERT(false, "Bad pipeline");
+        InitWork<Attrib::Gen::crashbin>(lpState, lrCollision);
+        break;
     }
 
-    mfIntensity = std::max(0.0f, lrCollision.mNormalizedImpulse.x);
+    // fneg / fsel: a negative intensity takes 0 (a NaN keeps its value).
+    f32 lfIntensity = CalculateIntensity(lrCollision) * KF_INTENSITY_TO_MIXER;
+    if (-lfIntensity >= 0.0f)
+        lfIntensity = 0.0f;
     SetMixerInputValue(0, 0x7FFF);
-    const f32 lfDucking = std::min(32767.0f, mfIntensity * 327.67001f);
-    SetMixerInputValue(1, static_cast<s32>(32767.0f - lfDucking));
-    if (lrCollision.meAction == AttribSys::Enums::eAction::Detach)
+    // fsubs / fsel: above 32767 takes 32767; fctiwz truncates toward zero.
+    const f32 lfDucking = (KF_MIXER_INPUT_MAX - lfIntensity >= 0.0f) ? lfIntensity : KF_MIXER_INPUT_MAX;
+    SetMixerInputValue(1, static_cast<s32>(lfDucking));
+
+    if (lrCollision.meFatality == E_FATAL_START)
         mbUseAzimuth = false;
     mbFirstUpdate = true;
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the voice start -- the inputs
+    // CalculateIntensity reads (pipeline, action, the two owner bytes, the impulse) and what it
+    // sends the mixer (duck = input 1), so a log line alone re-derives the console's value.
+    if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
+    {
+        static u32 suPrintCount = 0;
+        if (suPrintCount++ < 64u)
+        {
+            char lacLine[256];
+            std::snprintf(lacLine, sizeof(lacLine),
+                          "[collision-audio] voice attached sample=%d pipeline=%d action=%d owners=%u/%u "
+                          "impulse=%.9g fatality=%d mixer=%d volume=%g pitch=%g duck=%d azimuth=%d\n",
+                          lrCollision.miSampleID, static_cast<s32>(lrCollision.mePipeline),
+                          static_cast<s32>(lrCollision.meAction),
+                          static_cast<u32>(lrCollision.maEntityID[0].muValue >> 24),
+                          static_cast<u32>(lrCollision.maEntityID[1].muValue >> 24),
+                          static_cast<double>(lrCollision.mNormalizedImpulse.x),
+                          static_cast<s32>(lrCollision.meFatality),
+                          static_cast<s32>(meNicotineVolumeSlider),
+                          static_cast<double>(mSizeSettings.mfVolume),
+                          static_cast<double>(mSizeSettings.mfPitch),
+                          static_cast<s32>(lfDucking), mbUseAzimuth ? 1 : 0);
+            *CgsDev::Log::gpDebugPrint << lacLine;
+        }
+    }
     return true;
 }
 
