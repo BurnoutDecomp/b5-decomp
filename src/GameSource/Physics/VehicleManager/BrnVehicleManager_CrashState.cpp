@@ -814,10 +814,37 @@ namespace Vehicle
                 CGS_ASSERT(liSurfaceId < KI_NUM_USED_SURFACES,
                            "static_cast<int32_t>( luSurfaceId ) < KI_NUM_USED_SURFACES");          // :9374
 
-                // [GUARD] the console indexes KAB_SURFACE_IS_WATER past its end after the assert; a
-                // stale SURFACELIST.BIN can make the id >= 20 on the host, so the read is bounded.
-                // DELETE-WHEN the assert is fatal.
-                const bool lbIsWater = (liSurfaceId < KI_MAX_NUM_SURFACES) && KAB_SURFACE_IS_WATER[liSurfaceId];   // lbzx byte_82FB7DF4
+                // 0x826363C4 `lbzx r31, r31, r14` (r14 = byte_82FB7DF4 == KAB_SURFACE_IS_WATER, set at
+                // 0x82636298): the RAW id, no bound test -- the assert above falls through. The host
+                // `liSurfaceId < KI_MAX_NUM_SURFACES &&` guard that stood here is gone (FX-TRAFFIC3
+                // item 3): a race car's wheel tag has one writer, Wheel::SetRoadContact, fed by
+                // AddTractionPoint with the traction line tests' Triangle4 lane tags (the per-car
+                // triangle-cache window, filled only from the world polygon soups), and the low
+                // halfword read here is that tag's high one. On the shipped data (WORLDCOL.BIN, the
+                // only PolygonSoupList bundle) the id is 0..19, inside the 32-entry table --
+                // tests/run_fxtraffic3_race_surface.py pins the chain (I1..I5) and the data (D1/D2).
+                const bool lbIsWater = KAB_SURFACE_IS_WATER[liSurfaceId];   // lbzx byte_82FB7DF4
+
+                // [DIAG] NOT IN THE X360 BINARY. BRN_FATAL_SURFACE_DIAG: one line whenever a wheel's
+                // surface id changes (capped), so a live run shows this read was dispatched and which
+                // ids real roads produce. DELETE-WHEN-STABLE.
+                {
+                    static const bool sbFatalSurfaceDiag = (std::getenv("BRN_FATAL_SURFACE_DIAG") != 0);
+                    static s32 siFatalSurfaceLines = 0;
+                    static s32 saiLastSurfaceId[KI_MAX_ACTIVE_RACE_CARS][eNumDrivenWheels] = {
+                        { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 },
+                        { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 }, { -1, -1, -1, -1 } };
+                    if (sbFatalSurfaceDiag && siFatalSurfaceLines < 200 && CgsDev::Log::gpDebugPrint != 0
+                        && liCar < static_cast<s32>(KI_MAX_ACTIVE_RACE_CARS)
+                        && saiLastSurfaceId[liCar][liWheel] != liSurfaceId)
+                    {
+                        saiLastSurfaceId[liCar][liWheel] = liSurfaceId;
+                        ++siFatalSurfaceLines;
+                        *CgsDev::Log::gpDebugPrint << "[fatal-surface] car=" << liCar << " wheel=" << liWheel
+                                                   << " id=" << liSurfaceId << " water=" << (lbIsWater ? 1 : 0)
+                                                   << " onGround=" << (lRoadContact.mbIsOnGround ? 1 : 0) << "\n";
+                    }
+                }
 
                 if (lRoadContact.mbIsOnGround                                                      // 0x826363C8 lbz +0x28
                     && (lu16Tag & BrnWorld::KU_COLLISION_FLAG_FATAL) != 0                          // 0x826363D4 rlwinm 18,31,31 == bit 14 SET
