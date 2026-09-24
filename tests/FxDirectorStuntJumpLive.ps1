@@ -9,8 +9,9 @@
 # the free drive after the sweep happened to take this jump at 126 mph).
 # The shot: one seat 40 m before jump 4030 on the line and at the speed that run's free drive took --
 # (3026.55, -8.9, -294.9), heading 1.45 deg, 55.8 m/s (its [motion] n 8040 sample).
-# BRN_MOMENT_TICK=1 is the default-OFF opt-in the lane's pre-commit proof run used; once the call is
-# un-gated the variable is ignored and the same case runs unchanged.
+# The tick is unconditional since 0d4289ce (the BRN_MOMENT_TICK opt-in the pre-commit proof run used is
+# gone). BRN_CRASHCAM_DIAG=1 arms the NewMoment allocation line checked below (default off since the
+# 2026-09-24 diag-hygiene pass).
 @{
   Name    = 'fxdirector_stunt_jump'
   Area    = 'director'
@@ -26,7 +27,7 @@
     CrashSweepShots  = '3026.55/-8.9/-294.9/1.45:55.8'
     CrashSweepSettle = 600
   }
-  DiagEnv = 'BRN_MOMENT_TICK=1'
+  DiagEnv = 'BRN_CRASHCAM_DIAG=1'
   Checks  = @(
     @{ Kind = 'Mark';       Name = 'reached DRIVING'; Phase = 'DRIVING' }
     @{ Kind = 'LogCount';   Name = 'the sweep fired (the car was seated on the approach)'; Pattern = '\[sweep\] shot 0/'; Min = 1 }
