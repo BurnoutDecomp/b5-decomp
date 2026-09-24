@@ -24,6 +24,11 @@
 // "lpLogicModule" assert, and a non-streamed emitter's EmitterName is hashed as it stands
 // (0x826F5890); AttachController reads the controller id without a null test (0x826866B4). The
 // nameless-slot case below pins the last one; the runner's wiring checks pin the rest.
+//
+// Fourth commit (FX-EMITTER debug switch): the console arms the luEmitter assert only under
+// KB_DEBUG_WORLD_EMITTERS (`lbz r11,byte_82FFB8CB ; beq`, 0x826F57EC..0x826F57FC) -- the sound debug
+// menu's "Emitters"/"Debug" bool, false by default -- while the gate below it is unconditional. The
+// out-of-range cases run with the switch on (assert) and off (the console default: silent skip).
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -220,6 +225,10 @@ struct SoundLogicModule : public CgsSound::Logic::Module
 } }
 
 namespace BrnSound { namespace Logic { namespace World {
+// The console's "Emitters"/"Debug" menu switch (DWARF KB_DEBUG_WORLD_EMITTERS, .bss 0x82FFB8CB,
+// default false) -- the fixture's copy, flipped per case.
+bool KB_DEBUG_WORLD_EMITTERS = false;
+
 struct Emitter3dControl
 {
     const Vector3* mpPosition = nullptr;
@@ -353,9 +362,11 @@ struct Result
     std::vector<std::pair<s32, f32>> maParameters;
 };
 
-// Attach one emitter whose packed W lane holds lu32PackedW (read as ONE u32: type << 16 | radius).
-Result AttachEntity(u32 lu32PackedW)
+// Attach one emitter whose packed W lane holds lu32PackedW (read as ONE u32: type << 16 | radius),
+// with the console's "Emitters"/"Debug" switch at lbDebugSwitch (default false on the console).
+Result AttachEntity(u32 lu32PackedW, bool lbDebugSwitch = false)
 {
+    BrnSound::Logic::World::KB_DEBUG_WORLD_EMITTERS = lbDebugSwitch;
     BrnSound::Module::SoundLogicModule lModule;
     new (&lModule.mGlobalData.mWorldEmitterList) Attrib::RefSpec(0x764C301B793F44D6ull, KU_LIST_COLLECTION);
 
@@ -456,9 +467,9 @@ int main()
         return 1;
     }
 
-    const Result lStation = AttachEntity(0x001D00ADu);
+    const Result lStation = AttachEntity(0x001D00ADu, true);   // debug switch on: in range, no assert
     Check(lStation.mbReturned, "type 29: Attach returns true (li r3,1)");
-    Check(lStation.muAsserts == 0, "type 29 (< mNumWorldEmitters 38): no assert");
+    Check(lStation.muAsserts == 0, "type 29 (< mNumWorldEmitters 38), debug switch on: no assert");
     Check(ResolvedList(lStation, { EmitterKey(29) }), "type 29: resolves list slot 29 (TrainStation1)");
     Check(lStation.miCreates == 1 && lStation.miPlays == 1, "type 29: voice created and played once");
     Check(lStation.muContentSpec == static_cast<u32>(CgsSound::Playback::Name::MakeHash(gapcNames[29])),
@@ -479,15 +490,16 @@ int main()
     Check(lLast.muAsserts == 0 && lLast.miCreates == 1 && ResolvedList(lLast, { EmitterKey(37) }),
           "type 37, the last live slot: attaches (37 < 38)");
 
-    // [38, 50): past the SCALAR count, inside the array header's count. The console asserts and
-    // skips the list (`bge cr6, loc_826F59F8` jumps straight to ~Instance).
+    // [38, 50): past the SCALAR count, inside the array header's count. The console skips the list
+    // (`bge cr6, loc_826F59F8` jumps straight to ~Instance) and, with the "Emitters"/"Debug"
+    // switch on, asserts first (`lbz byte_82FFB8CB ; beq`, 0x826F57EC..0x826F57FC).
     const unsigned kauEmpty[2] = { 38u, 45u };
     for (unsigned luType : kauEmpty)
     {
-        const Result lEmpty = AttachEntity((luType << 16) | 12u);
+        const Result lEmpty = AttachEntity((luType << 16) | 12u, true);
         char lacLabel[160];
         std::snprintf(lacLabel, sizeof(lacLabel),
-                      "type %u (>= mNumWorldEmitters 38, < array count 50): the assert fires", luType);
+                      "type %u (>= mNumWorldEmitters 38, < array count 50), debug switch on: the assert fires", luType);
         Check(lEmpty.muAsserts == 1 &&
               lEmpty.maAssertTexts.size() == 1 &&
               lEmpty.maAssertTexts[0] == "luEmitter < static_cast< uint32_t >( lWorldEmitters.mNumWorldEmitters() )",
@@ -497,6 +509,13 @@ int main()
         Check(lEmpty.maResolved.empty(), lacLabel);
         std::snprintf(lacLabel, sizeof(lacLabel), "type %u: no voice, pitch output 1, returns true", luType);
         Check(lEmpty.miCreates == 0 && lEmpty.mi16PitchOutput == 1 && lEmpty.mbReturned, lacLabel);
+
+        const Result lQuiet = AttachEntity((luType << 16) | 12u, false);
+        std::snprintf(lacLabel, sizeof(lacLabel),
+                      "type %u, debug switch off (the console default): skipped silently -- no assert, no list, no voice",
+                      luType);
+        Check(lQuiet.muAsserts == 0 && lQuiet.maResolved.empty() && lQuiet.miCreates == 0 && lQuiet.mbReturned,
+              lacLabel);
     }
 
     // A live slot whose EmitterName slot is empty: the console hashes the name as it stands
@@ -509,11 +528,15 @@ int main()
           "type 12 with an empty EmitterName: the voice is still created (no invented null skip)");
     Check(lNameless.muContentSpec == 0u, "type 12 with an empty EmitterName: content spec = MakeHash(null) = 0");
 
-    // The stale build/game bytes of the same entity: the console gate refuses them as well --
-    // the assert the lanes saw is the console's own verdict on the wrong data.
-    const Result lStale = AttachEntity(0x00AD001Du);
+    // The stale build/game bytes of the same entity: the console gate refuses them as well. With
+    // the console's default switch the refusal is silent -- the pause the lanes saw came from an
+    // assert the console only arms from its debug menu.
+    const Result lStale = AttachEntity(0x00AD001Du, true);
     Check(lStale.muAsserts == 1 && lStale.maResolved.empty() && lStale.miCreates == 0,
-          "stale per-u16 flip 0x00AD001D (type 173): asserts, attaches nothing");
+          "stale per-u16 flip 0x00AD001D (type 173), debug switch on: asserts, attaches nothing");
+    const Result lStaleQuiet = AttachEntity(0x00AD001Du, false);
+    Check(lStaleQuiet.muAsserts == 0 && lStaleQuiet.maResolved.empty() && lStaleQuiet.miCreates == 0,
+          "stale per-u16 flip 0x00AD001D, debug switch off: no assert (no pause), attaches nothing");
 
     // ---- Detach @0x826F5A10 (the export hole after Attach): the staged meDetachState switch.
     const DetachResult lFresh = DetachFrom(0, true);

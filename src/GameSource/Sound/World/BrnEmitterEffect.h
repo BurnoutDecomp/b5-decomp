@@ -16,6 +16,13 @@ namespace World
 
 class Emitter3dControl;
 
+// DWARF BrnEmitterEffect.cpp:42 -- the world-emitter debug switch (rodata-free .bss bool
+// 0x82FFB8CB). The console's sound debug menu registers it as "Emitters"/"Debug"
+// (BrnSound::Debug::DebugComponent::OnActivate @0x826D5CB0, 0x826D70E4..0x826D70F8) and it
+// defaults to false. It gates EmitterEffect::Attach's luEmitter assert and is the lbDrawDebug
+// EmitterStateManager::UpdateParams hands SoundWorldScene::Query.
+extern bool KB_DEBUG_WORLD_EMITTERS;
+
 // World-map effect object.  The member list and order are the DecFIGS shape;
 // ARTIST supplies the attach/update/detach behaviour in the implementation.
 struct EmitterEffect : public BrnEffectObject
