@@ -279,17 +279,25 @@ struct GameState
     // :211 and :250, yet the console has 8 bytes there). Every store is asm: the ProcessInputQueue
     // prologue copies them from the input buffer every frame (0x8223740C..0x82237440: @0x7AB0 ->
     // +0x1CC word, @0x7AD6 -> +0x1D1, @0x7AD5 -> +0x1D0), GameState::Clear zeroes all three
-    // (0x82218CB4 / 0x82218C14 / 0x82218C1C). Their producer is BridgeGameStateToDirector
-    // (0x823CD454: the game-state output's per-car word at +0x2AFC8 + 4*player; 0x823CD4DC: its
-    // per-car byte at +0x2AEB8 + player; 0x823CD510: `f32 +0x2AF4C > 0.0 ? 0 : byte +0x2AF60`).
-    // FLAG: the NAMES are ours, from the one consumer, ArbStateRoaming::ProcessPossibleFX:
+    // (0x82218CB4 / 0x82218C14 / 0x82218C1C). Their producer is BridgeGameStateToDirector, out of
+    // the game-state output's two scoring snapshots (ScoringOutputInterface @+0x2A4B8,
+    // OnlineScoringOutputInterface @+0x2AF68):
+    //   0x823CD454  +0x2AFC8 + 4*player == OnlineScoringOutputInterface::maePlayerTeam[player]
+    //               (not yet published on PC: the team leg is still open, see the bridge);
+    //   0x823CD4DC  +0x2AEB8 + player   == ScoringOutputInterface::mabPlayerEliminated[player];
+    //   0x823CD510  `mfModeTimeRemaining (+0x2AF4C) > 0.0f ? 0 : mbTimerActive (+0x2AF60)`.
+    // FLAG: the NAMES are ours. The two flags are named for what that producer puts in them
+    // (RENAMED 2026-09-24, FX-DIRECTOR, from mbPlayerDamageCritical / mbPlayerWrecked, which were
+    // read off the post-effects they play); the team word for its one consumer. The consumer is
+    // ArbStateRoaming::ProcessPossibleFX:
     //   +0x1CC is compared == 2 (0x82234BF4) and passed as SqDistanceOfNearestOpposingTeamMember's
     //          liMyTeam (0x82234CC0) -- the player's team;
     //   +0x1D0 plays "Damage_Crit" at full blend (0x82234C8C);
-    //   +0x1D1 plays "Wrecked" while an opposing car is near (0x82234CB4).
+    //   +0x1D1 plays "Wrecked" while an opposing car is near (0x82234CB4);
+    //   the two flags only in the online modes 12 / 14 / 17 (jump table 0x82234A68).
     s32                 miPlayerTeam;                            // X360 +0x1CC (FLAG name)
-    bool                mbPlayerDamageCritical;                  // X360 +0x1D0 (FLAG name)
-    bool                mbPlayerWrecked;                         // X360 +0x1D1 (FLAG name)
+    bool                mbPlayerEliminated;                      // X360 +0x1D0 (FLAG name)
+    bool                mbModeTimeExpired;                       // X360 +0x1D1 (FLAG name)
     RankUpInfo          mRankUpInfo;                             // :250  +0x1D4
     ShowTimeInfo        mShowTimeInfo;                           // :251  +0x1DC
     DirectorProfileData mDirectorProfileData;                    // :252  +0x1F0

@@ -32,6 +32,10 @@
 //   tail 0x8223893C..0x82238A3C  +0x148 / +0x14C inactivity clocks (sim step; zeroed by mbAnyInput / sim
 //                         paused, +0x14C also by the player's mbEngineOn), +0x150 latched by mbEngineOn
 //   Arbitrator::Update 0x8226ADE0  GameState +0x151 -> SharedCameraContainer::mbUseGameplayExternal = 1
+// [the end-of-event pair, 2026-09-24]
+//   prologue 0x82237430..0x82237440  `lbz 0x7AD6` -> `stbx 0x339B1` (+0x1D1), `lbz 0x7AD5` -> `stbx 0x339B0`
+//                         (+0x1D0): a plain copy every drain, both directions (the producer is
+//                         BridgeGameStateToDirector 0x823CD4DC / 0x823CD510, run_fxdirector_end_flags.py)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
@@ -89,6 +93,8 @@ namespace DirectorIO
         s32                             miRankUpRivalInfo;
         bool                            mbPlayerTakenDown;
         bool                            mbSimPaused;
+        bool                            mbPlayerEliminated;   // @0x7AD5
+        bool                            mbModeTimeExpired;    // @0x7AD6
 
         const CgsModule::VariableEventQueue<13312, 16>* GetGameActionQueue() const { return &mGameActionQueue; }
         bool GetPlayerTakenDown() const { return mbPlayerTakenDown; }
@@ -99,6 +105,8 @@ namespace DirectorIO
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const { return &mTimerStatus; }
         const ControlInput* GetControll() const { return &mControllerInfo; }
         bool IsSimPaused() const { return mbSimPaused; }
+        bool GetPlayerEliminated() const { return mbPlayerEliminated; }
+        bool GetModeTimeExpired() const { return mbModeTimeExpired; }
     };
 }
 
@@ -594,6 +602,28 @@ int main()
     Check(lrGameState.mfPadInactiveTime == 0.0f && lrGameState.mfPlayerInactiveTime == 0.0f,
           "tail: a paused sim (input +0x7AC8) -> both clocks = 0.0 (0x82238958 / 0x822389D4)");
     gInput.mbSimPaused = false;
+
+    // 21. The prologue's end-of-event copies (0x82237430..0x82237440): input @0x7AD6 -> +0x1D1,
+    //     input @0x7AD5 -> +0x1D0, every drain, with or without game actions in the queue.
+    Check(!ModeTimeExpired(lrGameState) && !PlayerEliminated(lrGameState),
+          "the pair starts clear (GameState::Clear 0x82218C14 / 0x82218C1C; input seeds 0)");
+    gInput.mbModeTimeExpired = true;
+    Drain();
+    Check(ModeTimeExpired(lrGameState) && !PlayerEliminated(lrGameState),
+          "prologue 0x82237430 / 0x82237438: input @0x7AD6 (1) -> +0x1D1; +0x1D0 stays 0");
+    gInput.mbPlayerEliminated = true;
+    Post(Empty(), 145, 1);
+    Drain();
+    Check(ModeTimeExpired(lrGameState) && PlayerEliminated(lrGameState),
+          "prologue 0x8223743C / 0x82237440: input @0x7AD5 (1) -> +0x1D0 (a drain with an action in it)");
+    gInput.mbModeTimeExpired = false;
+    Drain();
+    Check(!ModeTimeExpired(lrGameState) && PlayerEliminated(lrGameState),
+          "a plain copy, no latch: input @0x7AD6 back to 0 clears +0x1D1, +0x1D0 stays 1");
+    gInput.mbPlayerEliminated = false;
+    Drain();
+    Check(!ModeTimeExpired(lrGameState) && !PlayerEliminated(lrGameState),
+          "input @0x7AD5 back to 0 clears +0x1D0");
 
     Check(gAsserts == 0, "no assert fired");
 

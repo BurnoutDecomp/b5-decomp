@@ -1381,10 +1381,37 @@ namespace BrnDirector
         // GameState's three X360-only members (+0x1CC / +0x1D1 / +0x1D0 -- see the GameState
         // header: they sit BEFORE RankUpInfo, which is at +0x1D4).
         maGameState.miPlayerTeam = lpInput->GetRankUpRivalInfo();                     // +0x1CC
-        // ⚠️ GATE: GameState +0x1D1 / +0x1D0 <- input @0x7AD6 / @0x7AD5 (mbPlayerWrecked /
-        //    mbPlayerDamageCritical). The input side is still the opaque InputBuffer::maFlagTail
-        //    and its producer (BridgeGameStateToDirector 0x823CD4DC / 0x823CD510) is not in this
-        //    tree, so the two copies would move zeros. Recorded, not run.
+        // ⭐ UN-GATED 2026-09-24 (crash parity FX-DIRECTOR) with its producer: the player's
+        // end-of-event pair, which BridgeGameStateToDirector now publishes (0x823CD4DC /
+        // 0x823CD510). `lbz 0x7AD6(r30)` -> `stbx 0x339B1` first, then `lbz 0x7AD5(r30)` ->
+        // `stbx 0x339B0`; a plain copy every frame, no latch.
+        maGameState.mbModeTimeExpired  = lpInput->GetModeTimeExpired();               // +0x1D1 (0x82237430 / 0x82237438)
+        maGameState.mbPlayerEliminated = lpInput->GetPlayerEliminated();              // +0x1D0 (0x8223743C / 0x82237440)
+
+        // [DIAG] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. Edge-triggered: one line each
+        // time either copied flag changes, with the event type and team they arrive in. The one
+        // reader, ArbStateRoaming::ProcessPossibleFX, acts on them in the online modes only. Its
+        // own budget (at most 40 lines), so a stunt-heavy drive that spends the per-arm lines'
+        // shared 400 cannot silence it.
+        {
+            static const bool sbEndOfEventDiag       = (getenv("BRN_DIRECTOR_ACTION_DIAG") != 0);
+            static s32        siEndOfEventLinesLeft  = 40;
+            static bool       sbLastModeTimeExpired  = false;
+            static bool       sbLastPlayerEliminated = false;
+            if ((maGameState.mbModeTimeExpired != sbLastModeTimeExpired ||
+                 maGameState.mbPlayerEliminated != sbLastPlayerEliminated) &&
+                sbEndOfEventDiag && siEndOfEventLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siEndOfEventLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[director-state] end-of-event pair -> +0x1D1 mbModeTimeExpired "
+                    << (maGameState.mbModeTimeExpired ? 1 : 0) << " +0x1D0 mbPlayerEliminated "
+                    << (maGameState.mbPlayerEliminated ? 1 : 0) << " (event type "
+                    << maGameState.meEventType << ", team " << maGameState.miPlayerTeam << ")\n";
+            }
+            sbLastModeTimeExpired  = maGameState.mbModeTimeExpired;
+            sbLastPlayerEliminated = maGameState.mbPlayerEliminated;
+        }
 
         const CgsModule::Event* lpAction = 0;
         s32 liActionSize = 0;

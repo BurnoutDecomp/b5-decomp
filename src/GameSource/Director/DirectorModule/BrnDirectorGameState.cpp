@@ -130,8 +130,8 @@ void GameState::Clear()
     // leaves mbDoingRankUpIntro / mbNewRivalFocusThisFrame / meRivalIndex alone; the old blob
     // memsets zeroed all eight bytes, which the console does not.
     mRankUpInfo.mbDoingRankUp           = false;  // stb 0, 0x1D4
-    mbPlayerDamageCritical              = false;  // stb 0, 0x1D0
-    mbPlayerWrecked                     = false;  // stb 0, 0x1D1
+    mbPlayerEliminated                  = false;  // stb 0, 0x1D0
+    mbModeTimeExpired                   = false;  // stb 0, 0x1D1
     mShowTimeInfo.Clear();                        // 0x82218C30..0x82218C54 (+0x1DC..+0x1ED)
     mDirectorProfileData.Construct();             // stw 1, 0x1F0 (meCameraMode = THIRD_PERSON)
     miPlayerTeam                        = 0;      // stw 0, 0x1CC (0x82218CB4, the function's last store)
