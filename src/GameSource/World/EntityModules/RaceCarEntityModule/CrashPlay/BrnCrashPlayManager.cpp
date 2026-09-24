@@ -62,6 +62,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/fpu/scalar_operation.h"
 #include <cstdlib>   // getenv -- the [crashplay] witness only
+#include <cmath>     // std::fmaf -- the console's fused fmadds (OnBounce / OnVehicleHitConfirmed)
 
 namespace BrnWorld
 {
@@ -945,9 +946,12 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
     {
         mbBoostChargePending = false;
 
-        const f32 lfBoostCost = KF_COST_FOR_BOUNCE_BOOST_EASY
-                              + ( ( KF_COST_FOR_BOUNCE_BOOST_HARD - KF_COST_FOR_BOUNCE_BOOST_EASY )
-                                  * mfDifficultyLevel );
+        // `fsubs f13, HARD, EASY` @0x822A7F60 ; `fmadds f0, f13, f11(mfDifficultyLevel), f0(EASY)`
+        // @0x822A7F6C -- ONE rounding (the console fuses it), then `fsubs boost - cost` @0x822A7F70.
+        // [FX-TAILS-A 2026-09-24: was two roundings; e.g. difficulty 0.48 cost 14.7999992 vs 14.8000002]
+        const f32 lfBoostCost = std::fmaf( KF_COST_FOR_BOUNCE_BOOST_HARD - KF_COST_FOR_BOUNCE_BOOST_EASY,
+                                           mfDifficultyLevel,
+                                           KF_COST_FOR_BOUNCE_BOOST_EASY );
         mfBoostPercentage -= lfBoostCost;
         ClampBoostLevel();
         ++gCrashPlayWitness.muCharges;                                                // [crashplay]
@@ -974,6 +978,9 @@ void CrashPlayManager::OnBounce( const BrnGameState::GameStateModuleIO::JustBoun
 
     if( lpBounceAction->mbFromStationary )
     {
+        // `fadds f0, power, 0.5 (flt_820147FC)` ; `fsubs f12, f0, 1.0 (flt_82001C98)` ;
+        // `fsel f0, f12, f13(1.0), f0` @0x822A800C..0x822A8018 == fpu::Min(sum, max): the rwmath fsel
+        // form (b27e1448) -- a NaN sum is kept, exactly as the console's fsel keeps its third operand.
         mfAftertouchPower = rw::math::fpu::Min(
                 mfAftertouchPower + KF_AFTERTOUCH_FOR_STATIONARY_BOUNCE_BOOST,
                 GetMaxAftertouchPower() );
@@ -1059,9 +1066,11 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
                                                          KF_UPPER_LIMIT_VEHICLE_SCORE );
         const f32 lfScaledScore  = ( lfClampedScore - KF_LOWER_LIMIT_VEHICLE_SCORE )
                                  / ( KF_UPPER_LIMIT_VEHICLE_SCORE - KF_LOWER_LIMIT_VEHICLE_SCORE );
-        const f32 lfBoost = KF_BOOST_FOR_VEHICLE_IMPACT_LOW
-                          + ( lfScaledScore * ( KF_BOOST_FOR_VEHICLE_IMPACT_HIGH
-                                                - KF_BOOST_FOR_VEHICLE_IMPACT_LOW ) );
+        // `fmadds f0, f0(scaled), f8(HIGH - LOW), f12(LOW)` @0x822C33AC -- one rounding -- then
+        // `fadds f0, f0, f7(boost)` @0x822C33B0. [FX-TAILS-A 2026-09-24: was two roundings]
+        const f32 lfBoost = std::fmaf( lfScaledScore,
+                                       KF_BOOST_FOR_VEHICLE_IMPACT_HIGH - KF_BOOST_FOR_VEHICLE_IMPACT_LOW,
+                                       KF_BOOST_FOR_VEHICLE_IMPACT_LOW );
         mfBoostPercentage += lfBoost;
         ClampBoostLevel();
     }
@@ -1077,9 +1086,15 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
 
         if( ( liTotalVehiclesHit % KI_AWARD_BOOST_EVERY_N_VEHICLES ) == 0 )
         {
-            mfBoostPercentage += KF_BOOST_FOR_EVERY_10_CARS_HIT_LO
-                               + ( ( KF_BOOST_FOR_EVERY_10_CARS_HIT_HI
-                                     - KF_BOOST_FOR_EVERY_10_CARS_HIT_LO ) * mfDifficultyLevel );
+            // The console's association, and it fuses: `fsubs f12, HI, LO` @0x822C3440 ;
+            // `fmadds f13, f12, f13(mfDifficultyLevel), f11(boost)` @0x822C3448 ; `fadds f0, f13, LO`
+            // @0x822C344C -- i.e. (boost + (HI - LO) * d) + LO, not boost + (LO + (HI - LO) * d).
+            // [FX-TAILS-A 2026-09-24 / FX-SHOWTIME2 follow-up: e.g. 30 cars, boost 8.15 ->
+            //  49.1499977 on the console, 49.1500015 in the old spelling]
+            mfBoostPercentage = std::fmaf( KF_BOOST_FOR_EVERY_10_CARS_HIT_HI - KF_BOOST_FOR_EVERY_10_CARS_HIT_LO,
+                                           mfDifficultyLevel,
+                                           mfBoostPercentage )
+                              + KF_BOOST_FOR_EVERY_10_CARS_HIT_LO;
             ClampBoostLevel();
         }
     }
