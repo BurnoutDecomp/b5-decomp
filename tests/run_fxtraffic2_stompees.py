@@ -4,6 +4,8 @@
       the ONLY caller of AddPotentialStompee @0x82706028) + its PreSceneUpdate call at 0x8274AB04
   TrafficToRaceCarInterface_PreScene::GetPotentialStompees (DWARF :122) / ClearStompees (:126)
   OutputBuffer_PreScene::AddPotentialScoree @0x8271D2E8 (no body before)
+  the SCORE leg 0x8271F84C..0x8271F8FC (a logged stub until CrashModeScoring::GetVehicleScoreData
+      @0x82312AB0 was declared static, as the console calls it)
 
 Wiring: PreSceneUpdate calls the producer right after GenerateNearMissOutput and before the state
 switch; the interface header carries GetPotentialStompees returning mPotentialStompees with the
@@ -28,6 +30,7 @@ T2RC_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnT
 T2RC_H = "src/GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"
 VEHICLE_CPP = "src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.cpp"
 MATH_CPP = "src/GameSource/Math/BrnMathUtils.cpp"
+SCORING_CPP = "src/GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp"
 FIXTURE = "StompFixture"
 NUMERIC_CHECKS = 39
 CONSTANTS_BLOCK = "namespace   // the leap/stomp producer's file-scope constants"
@@ -68,10 +71,12 @@ def numeric(tree):
         stompee = definition(tree.read(T2RC_CPP), "    void TrafficToRaceCarInterface_PreScene::AddPotentialStompee(")
         velocity = definition(tree.read(VEHICLE_CPP), "Vector3 Vehicle::GetLinearVelocity() const")
         magnitude = definition(tree.read(MATH_CPP), "    f32 Magnitude2D(Vector3 lVector)")
+        score_data = definition(tree.read(SCORING_CPP), "    void CrashModeScoring::GetVehicleScoreData(")
     except ValueError as error:
         print("NUMERIC: cannot build -- production body absent: " + str(error))
         return None
     parts += ["namespace BrnMath {", magnitude, "}"]
+    parts += ["namespace BrnGameState {", score_data, "}"]
     parts += ["namespace BrnTraffic {", "namespace BrnTrafficIO {", scoree, stompee, "}", velocity,
               constants, first_unused, producer, "}"]
     return compile_and_run(Path(__file__).with_name("FxTraffic2Stompees.cpp"), "stompees.inc", "\n".join(parts),
