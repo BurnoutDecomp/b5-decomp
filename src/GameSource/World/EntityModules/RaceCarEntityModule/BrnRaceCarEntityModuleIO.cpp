@@ -219,7 +219,10 @@ OutputBuffer_PostPhysics::GetResourceRequestInterface() const
 
 // ---- InputBuffer_PostScene --------------------------------------------------
 
-// X360 0x822B5410 (R, :346) -- const PreScene traffic->racecar accessor.
+// X360 0x822B54B8 (R, :346) -- const PreScene traffic->racecar accessor: read-lock tripwire (line
+// 0x163), then `addi r3, r28, 0xC0`. Its callers are ProcessLeapedAndStompedCars,
+// ProcessPowerParking and UpdateTrafficAndRaceCarNearMisses. (This line used to cite 0x822B5410,
+// which is the +8 twin, GetCrashInterface -- corrected 2026-09-24, FX-SCENEMGR item 4.)
 const InputBuffer_PostScene::TrafficToRaceCarInterface_PreScene*
 InputBuffer_PostScene::GetTrafficToRaceCarInterface_PreScene() const
 {
@@ -1011,9 +1014,10 @@ InputBuffer_PostScene::SetCrashInterface(const CrashInterface* lpCrashInterface)
 // buffer landed and never defined, because until this wave NOTHING READ IT: the crash module's
 // RaceCarCrashCompleteEvent ring arrived here every frame and was dropped on the floor.
 // Its first consumer is RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents.
-// The console folds it into that caller (`bl InputBuffer_Po` @0x822F3FFC returns the interface
-// address directly), so there is no separate out-of-line symbol to cite -- it is a read-lock
-// tripwire plus &mCrashInterface, the exact mirror of SetCrashInterface's write side.
+// The console reaches it from that caller as `bl InputBuffer_Po` @0x822F3FFC, i.e. X360 0x822B5410:
+// a read-lock tripwire (line 0x160) plus `addi r3, r28, 8` == &mCrashInterface, the exact mirror of
+// SetCrashInterface's write side. (Its only caller; the +0xC0 twin at 0x822B54B8 is
+// GetTrafficToRaceCarInterface_PreScene -- address pair re-read 2026-09-24, FX-SCENEMGR item 4.)
 const InputBuffer_PostScene::CrashInterface*
 InputBuffer_PostScene::GetCrashInterface() const
 {

@@ -258,6 +258,8 @@ namespace
 // [FLAG PC bring-up] the rest of the interior (streamer, boost/near-miss/crash-play/
 // power-parking managers, WorldMap2D, the RaceCar[35]/ActiveRaceCar[8] arrays) is still
 // opaque storage in this header and is NOT constructed here.
+// (Stale in part: the streamer, the crash-play manager, the power-parking manager (2026-09-24)
+// and both car arrays ARE constructed below, each at the console's own position.)
 void RaceCarEntityModule::Construct()
 {
     mePrepareStage             = 0;
@@ -282,6 +284,13 @@ void RaceCarEntityModule::Construct()
     // it stops the console's own `mpCrashPlayManager != NULL` assert (BrnCrashPlayDebugComponent
     // .cpp:111) firing once per Update frame -- 7,050 times in a single 150 s run before this.
     mCrashPlayManager.Construct();
+
+    // The power-parking manager is the next by-value member (+0x18250) and ARTIST inlines its
+    // Construct right after the crash-play block: 0x822FDADC r10 = module + 0x18250, 0x822FDB14
+    // `stb r31(=0), 0x94(r10)` and 0x822FDB1C `stw r10, 0x90(r10)` (crash parity FX-SCENEMGR
+    // item 4). Without the back pointer the component's own `mpPowerParkingManager != NULL`
+    // tripwire fires on every PowerParkingManager::Update.
+    mPowerParkingManager.Construct();
 
     // [FLAG PC bring-up] mCameraTransform is seeded to IDENTITY rather than left as whatever the
     // module's raw storage holds. The console never seeds it here -- PreSceneUpdate step 2 latches
@@ -583,7 +592,9 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
 // [FLAG PC bring-up] Stages 0 and 3 are NOT reproduced: every call they make reaches an
 // interior this header still models as opaque storage (WorldMap2D / BoostManager /
 // PowerParkingManager, and the RaceCar[35] / ActiveRaceCar[8] arrays are size-only
-// placeholders here). They are deliberately skipped rather than paraphrased. Stage 2 --
+// placeholders here). They are deliberately skipped rather than paraphrased. (Stale in part:
+// stage 0 now runs the district-map bind, BoostManager::Prepare and -- 2026-09-24, FX-SCENEMGR
+// item 4 -- PowerParkingManager::Prepare; stage 3 runs both per-car Prepare sweeps.) Stage 2 --
 // the only stage that talks to the outside world, and the one that owns
 // Vehicles/VEHICLETEX.BIN and the two data-list pointers -- is real.
 bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput,
@@ -664,6 +675,15 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // Breaker RaceCarEntityModule::Prepare @0x82303FB0..0x82303FB8. This
         // establishes the selected B5 strategy before the first physics frame.
         mBoostManager.Prepare();
+
+        // 0x82303FE8 `addi r3, r3, -0x7DB0` (module + 0x18250) ; 0x82304048 bl
+        // PowerParkingManager::Prepare -- clears the scorer and registers its debug component;
+        // the bool it returns is not tested (crash parity FX-SCENEMGR item 4, 2026-09-24).
+        // [FLAG PC bring-up] the inlined scalar resets the console runs between the two calls
+        // (0x82303FBC..0x82304044 on +0x17E68 / +0x180D8 / +0x180E8: the near-miss, air-time and
+        // traffic-check seats) and the three DebugComponent::Register calls after it (+0x180F0,
+        // +0x17E50, +0x17CF0) stay unreproduced here, as before.
+        mPowerParkingManager.Prepare();
         mePrepareStage = 0;
     // fall through
     case 1:
@@ -6961,9 +6981,10 @@ namespace
 // and that arm dispatches on the A-side owner byte. GetActiveRaceCar's own console assert is
 // therefore reachable-but-quiet, and it is left as the console's, not wrapped in a guard.
 //
-// ⭐ +0x64 ON THE POWER-PARKING SEAT. The `lwz/addi/stw 0x64(module + 0x18250)` triple both arms
-// share is PowerParkingManager::miContactTrafficCount -- the sibling of the +0x68 seat the
-// near-miss producer wave already modelled on this class. See the member's banner.
+// ⭐ +0x64 ON THE POWER-PARKING MANAGER. The `lwz/addi/stw 0x64(module + 0x18250)` triple both arms
+// share is the inlined PowerParkingManager::AddContactTraffic (miContactTrafficCount). Since the
+// manager is embedded (crash parity FX-SCENEMGR item 4, 2026-09-24) it is written as that call,
+// with the B-side entity index PS3 passes (0x14BD60: the same index as the AddContacted call).
 // =================================================================================================
 void RaceCarEntityModule::UpdateRaceCarContacts(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput )
@@ -7054,7 +7075,8 @@ void RaceCarEntityModule::UpdateRaceCarContacts(
                         static_cast<u32>( liContactIndexB ) );
                 mNearMissManager.SetNearMissTimeout( 0.0f );            // stfs f31(=0), 4(r31)
                 mNearMissManager.SetFailedNearMissChain( true );        // stb  r27(=1), 0x26C(r31)
-                ++miPowerParkingContactTrafficCount;                    // +0x64 on the PP seat
+                mPowerParkingManager.AddContactTraffic(                 // +0x64 (inlined)
+                        static_cast<u32>( liContactIndexB ) );
             }
             else if( lucOwnerB == KU_CONTACT_OWNER_RACECAR )
             {
@@ -7062,7 +7084,7 @@ void RaceCarEntityModule::UpdateRaceCarContacts(
                         static_cast<u32>( liContactIndexB ) );
                 mNearMissManager.SetNearMissTimeout( 0.0f );
                 mNearMissManager.SetFailedNearMissChain( true );
-                ++miPowerParkingContactTrafficCount;
+                mPowerParkingManager.AddContactTraffic( static_cast<u32>( liContactIndexB ) );
                 lbMarkTouching = true;                                  // b loc_822F5CA0
             }
         }
@@ -7860,6 +7882,18 @@ void RaceCarEntityModule::PostPhysicsUpdate(
         && GetActiveRaceCar( mePlayerActiveRaceCarIndex )->IsAttached() )
     {
         UpdateNearMisses( lpInput, lpOutput );
+
+        // THE POWER PARKING SCORER STEP, at the console's own position (crash parity FX-SCENEMGR
+        // item 4, 2026-09-24): 0x82307758..0x8230777C `lbzx +0x18344 (mbIsInGameMode) ; beq` to the
+        // call, else `lwzx +0x18368 (meGameModeType) ; cmpwi 0xF ; bne` past it; 0x8230778C bl
+        // UpdatePowerParking (r4 = lpInput, r5 = lpOutput). Its only other gate is the PC player
+        // slot precondition this block already stands behind (the console reads the player's
+        // active car there unguarded).
+        if( !mbIsInGameMode
+            || meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY )
+        {
+            UpdatePowerParking( lpInput, lpOutput );
+        }
 
         // ⭐⭐⭐ [boost-ticker wave 2026-09-14] THE AIR-TIME TICK, at the console's own position:
         // PostPhysicsUpdate @0x82307538 runs it inside this same sim-paused skip, after the
@@ -8942,7 +8976,10 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //            interiors or call un-homed sibling methods:
 //   Release-adjacent state writes aside, this covers: DetachActiveRaceCar,
 //   ProcessPropContactQueue, ProcessLeapedAndStompedCars,
-//   ProcessPowerParking, ProcessRaceCarCrashEvents_PostPhysics, UpdatePowerParking,
+//   ProcessRaceCarCrashEvents_PostPhysics,
+//   (ProcessPowerParking and UpdatePowerParking RETIRED from this list 2026-09-24, crash parity
+//    FX-SCENEMGR item 4 -- bodied in _CrashExit.cpp / _NearMissTailgate.cpp with the manager
+//    embedded; the "(Pre/Post variants)" entry below was only ever this one pair.)
 //   UpdateCrashingPlayerContacts,
 //   (UpdateHidingEvents RETIRED from this list 2026-09-05, rival range-loop wave -- COMPLETE in
 //    BrnRaceCarEntityModule_Range.cpp, 26 instructions, no un-homed interior at all once the
@@ -8965,7 +9002,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 //   RemoveRivals, RemoveAllRivalsFromWorld, RemoveAllNetworkCarsFromWorld, RemoveAllRaceCars,
 //   ChangePlayerCarColour, GetPersistentDamageCarCount,
 //   EnterReplay, LeaveReplay, LoadGlobalResources, IsCarColourInUse,
-//   IsPlayerCarTailgatingOtherRaceCars, UpdatePowerParking (Pre/Post variants),
+//   IsPlayerCarTailgatingOtherRaceCars,
 //   UpdateReplayStreaming-adjacent helpers (28+ total).
 //
 // [RODATA]   depend on an un-recovered rodata lookup table (NEVER fabricated):

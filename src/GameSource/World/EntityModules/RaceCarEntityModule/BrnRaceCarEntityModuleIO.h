@@ -510,16 +510,17 @@ namespace RaceCarEntityModuleIO
     };
 
     // ============================================================================
-    // InputBuffer_PostScene  (DWARF :335)  (0x822B5410 R GetTrafficToRaceCarInterface_PreScene)
+    // InputBuffer_PostScene  (DWARF :335)  (0x822B5410 R GetCrashInterface -> +8,
+    //                                       0x822B54B8 R GetTrafficToRaceCarInterface_PreScene -> +0xC0)
     // ============================================================================
     struct InputBuffer_PostScene : public CgsModule::IOBuffer
     {
         typedef BrnWorld::CrashIO::RaceCarOutputInterface                CrashInterface;                   // :92
         typedef BrnTraffic::BrnTrafficIO::TrafficToRaceCarInterface_PreScene TrafficToRaceCarInterface_PreScene; // :94
         void Construct();                                                                  // :340
-        const CrashInterface* GetCrashInterface() const;                                   // :343
+        const CrashInterface* GetCrashInterface() const;                                   // :343 R (0x822B5410)
         void                  SetCrashInterface(const CrashInterface*);                    // :344
-        const TrafficToRaceCarInterface_PreScene* GetTrafficToRaceCarInterface_PreScene() const; // :346 R (0x822B5410)
+        const TrafficToRaceCarInterface_PreScene* GetTrafficToRaceCarInterface_PreScene() const; // :346 R (0x822B54B8)
         void                  SetTrafficToRaceCarInterface_PreScene(const TrafficToRaceCarInterface_PreScene*); // :347
     private:
         CrashInterface                     mCrashInterface;                               // :351

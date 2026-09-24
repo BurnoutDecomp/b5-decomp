@@ -5,6 +5,8 @@
 // The CONSUMER end of the crash exit:
 //   RaceCarEntityModule::PostSceneUpdate                 @0x822FE3F0  (a minimal-complete SLICE)
 //   RaceCarEntityModule::ProcessRaceCarCrashCompleteEvents @0x822F3FE0 (359 insns, reconstructed)
+// and two more PostSceneUpdate callees homed beside it: ProcessLeapedAndStompedCars @0x822BD5B8
+// and ProcessPowerParking @0x822CDF10 (crash parity FX-SCENEMGR item 4, 2026-09-24).
 //
 // DWARF home is BrnRaceCarEntityModule.cpp; split out for the same reason the crash-module bodies
 // are (that TU is 5000+ lines and carries the whole entity module). DELETE-WHEN the home TU can
@@ -18,12 +20,14 @@
 // InputBuffer_PostScene::mCrashInterface and been read by nobody, every frame, forever.
 //
 // ⛔ PostSceneUpdate IS LANDED AS A DELIBERATE SLICE, NOT WHOLE. Its console body calls eight
-// helpers, and when this file landed SIX of them did not exist anywhere in this tree. Five are
+// helpers, and when this file landed SIX of them did not exist anywhere in this tree. Six are
 // bodied now -- ProcessRaceCarCrashCompleteEvents, SendResetOnTrackRequests,
-// CheckForResetOnTrackConditions, (2026-09-11) UpdateTrafficAndRaceCarNearMisses and (2026-09-24,
-// CHAIN-STOMPEES) ProcessLeapedAndStompedCars -- and the remaining TWO still have no body:
-// ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate. This body runs every leg that IS
-// reachable and logs the rest once, so it is honest about exactly what is missing.
+// CheckForResetOnTrackConditions, (2026-09-11) UpdateTrafficAndRaceCarNearMisses, (2026-09-24,
+// CHAIN-STOMPEES) ProcessLeapedAndStompedCars and (2026-09-24, FX-SCENEMGR item 4)
+// ProcessPowerParking -- and the remaining ONE is still not called:
+// PlaceOnTrackManager::PostSceneUpdate (blocked on two absent Geometric kernels, FX-SCENEMGR 3c).
+// This body runs every leg that IS reachable and logs the rest once, so it is honest about
+// exactly what is missing.
 //
 // ⚠️⚠️ THE PARK THAT MATTERS, STATED PLAINLY: SendResetOnTrackRequests is the consumer of
 // RaceCar::mbToBeResetOnTrack. RaceCar::RequestResetOnTrack (BrnRaceCar.cpp:251, real and
@@ -111,6 +115,39 @@ namespace
     {
         static const bool sbOn = ( getenv( "BRN_CRASH_EXIT_DIAG" ) != 0 );
         return sbOn && CgsDev::Log::gpDebugPrint != 0;
+    }
+
+    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE X360 BINARY. ProcessPowerParking's witness: one capped
+    // line whenever the published bit 0 flips, and one whenever the nearby-parked counts it hands the
+    // scorer change while a park is in progress (crash parity FX-SCENEMGR item 4, 2026-09-24).
+    void PowerParkPublishDiag( bool lbParking, u32 luNearbyParkedCarCount, u32 luNearbyParkedPlayerCount,
+                               f32 lfClosestDistanceSq, f32 lfClosestPerpendicularDist )
+    {
+        static const bool sbOn = ( getenv( "BRN_POWER_PARK_DIAG" ) != 0 );
+        static s32 siLastParking = -1;
+        static u32 suLastCount = 0xFFFFFFFFu, suLastPlayers = 0xFFFFFFFFu;
+        static u32 suLines = 0u;
+        if( !sbOn || CgsDev::Log::gpDebugPrint == 0 || suLines >= 96u )
+            return;
+
+        if( ( lbParking ? 1 : 0 ) != siLastParking )
+        {
+            ++suLines;
+            *CgsDev::Log::gpDebugPrint << "[power-park] publish RaceCarToTrafficInterface bit 0 = "
+                                       << ( lbParking ? 1 : 0 ) << "\n";
+            siLastParking = lbParking ? 1 : 0;
+            suLastCount = 0xFFFFFFFFu;
+        }
+        if( lbParking && ( luNearbyParkedCarCount != suLastCount || luNearbyParkedPlayerCount != suLastPlayers ) )
+        {
+            ++suLines;
+            *CgsDev::Log::gpDebugPrint << "[power-park] nearby parked data: count " << luNearbyParkedCarCount
+                                       << " players " << luNearbyParkedPlayerCount
+                                       << " closestSq " << lfClosestDistanceSq
+                                       << " perp " << lfClosestPerpendicularDist << "\n";
+            suLastCount   = luNearbyParkedCarCount;
+            suLastPlayers = luNearbyParkedPlayerCount;
+        }
     }
 }
 
@@ -411,6 +448,91 @@ void RaceCarEntityModule::ProcessLeapedAndStompedCars(
 }
 
 // =================================================================================================
+// ProcessPowerParking @ 0x822CDF10   (DWARF BrnRaceCarEntityModule.h:629, body .cpp:1420)
+// Crash parity FX-SCENEMGR item 4, 2026-09-24 -- absent before (no body, no call).
+//
+// The Power Parking CONSUMER on the post-scene tick (r27 = this, r4 = lpInput, r16 = lpOutput):
+//   0x822CDF2C  bl 0x822B54B8 (InputBuffer_PostScene::GetTrafficToRaceCarInterface_PreScene, the
+//               +0xC0 accessor) ; the inlined GetNearbyParkedTrafficData: lwz +0x20C -> r18 (the
+//               running count), lfs +0x210/+0x214/+0x218/+0x21C -> the four running measurements
+//               (stack var_E0/var_DC/var_D8/var_D4). r17, the player count, starts at 0.
+//   0x822CDF90..0x822CE100  for r19 = 0..34 (the EGlobalRaceCarIndex post-increment and its
+//               BurnoutConstants.h:84 tripwire): GetGlobalRaceCar ; the inlined IsInWorld() (muType
+//               +0xA4 vs 3, BrnRaceCar.h:547 range tripwire) ; the inlined IsNetworkDriven() (== 2,
+//               :590 tripwire) ; RaceCar::GetActiveRaceCar ; the inlined IsCrashing() (IsAttached
+//               tripwire BrnActiveRaceCar.h:1418, lbz +0x52A) -- skip a crashing car ; then
+//               CheckVehicleForPowerPark(v1 = GetActiveRaceCar(player)->GetPosition(), v2 = ...->
+//               GetDirection(), v3 = car->GetPosition(), v4 = car->GetDirection(), &the four) ->
+//               true: ++r18, ++r17. (The player's own slot is type PLAYER, never NETWORK.)
+//   0x822CE104  r11 = this + 0x18250 ; lbz 0 (IsPowerParking) ; beq -> the inlined
+//               SetNearbyParkedTrafficData: stw r18 +0x6C, r17 +0x70, stfs +0x74/+0x78/+0x7C/+0x80.
+//   0x822CE144  lbz 0 again ; bl 0x822B56B0 (GetRaceCarToTrafficInterface) ; +0x6A0 `ori 1` /
+//               `clrrwi 1` ; stw -- SetFlag(E_FLAG_PLAYER_IS_POWER_PARKING, IsPowerParking()).
+// That bit is what the traffic module's GenerateNearbyParkedTrafficOutput is gated on (FX-TRAFFIC3,
+// b5 2eadcaf1), so this body closes the loop: the park starts in UpdatePowerParking, this publishes
+// it, traffic measures the parked cars, and the next call hands them to the scorer.
+// The three tripwires inside the inlined RaceCar/ActiveRaceCar predicates are the accessors' own
+// (this tree's inline predicates carry none, the RemoveRivals precedent in _Rivals.cpp); the
+// IsAttached one is IsCrashing's.
+// =================================================================================================
+void RaceCarEntityModule::ProcessPowerParking(
+    const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
+    RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput )
+{
+    u32 luNearbyParkedPlayerCount = 0;
+    u32 luNearbyParkedCarCount;
+    f32 lfClosestDistanceSq;
+    f32 lfSecondClosestDistanceSq;
+    f32 lfClosestAngleDiff;
+    f32 lfClosestPerpendicularDist;
+
+    lpInput->GetTrafficToRaceCarInterface_PreScene()->GetNearbyParkedTrafficData(
+        &luNearbyParkedCarCount, &lfClosestDistanceSq, &lfSecondClosestDistanceSq,
+        &lfClosestAngleDiff, &lfClosestPerpendicularDist );
+
+    for( EGlobalRaceCarIndex leGlobalRaceCarIndex = E_GLOBAL_RACE_CAR_INDEX_0;
+         leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT;
+         leGlobalRaceCarIndex++ )
+    {
+        RaceCar* lpRaceCar = GetGlobalRaceCar( leGlobalRaceCarIndex );
+
+        if( lpRaceCar->IsInWorld() && lpRaceCar->IsNetworkDriven() )        // :547 / :590
+        {
+            const ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
+
+            if( !lpActiveRaceCar->IsCrashing() )                            // :1418 ; lbz +0x52A
+            {
+                if( CheckVehicleForPowerPark( GetActiveRaceCar( mePlayerActiveRaceCarIndex )->GetPosition(),
+                                              GetActiveRaceCar( mePlayerActiveRaceCarIndex )->GetDirection(),
+                                              lpRaceCar->GetPosition(),
+                                              lpRaceCar->GetDirection(),
+                                              lfClosestDistanceSq, lfSecondClosestDistanceSq,
+                                              lfClosestAngleDiff, lfClosestPerpendicularDist ) )
+                {
+                    ++luNearbyParkedCarCount;
+                    ++luNearbyParkedPlayerCount;
+                }
+            }
+        }
+    }
+
+    if( mPowerParkingManager.IsPowerParking() )
+    {
+        mPowerParkingManager.SetNearbyParkedTrafficData( luNearbyParkedCarCount, luNearbyParkedPlayerCount,
+                                                         lfClosestDistanceSq, lfSecondClosestDistanceSq,
+                                                         lfClosestAngleDiff, lfClosestPerpendicularDist );
+    }
+
+    lpOutput->GetRaceCarToTrafficInterface()->SetFlag(
+        RaceCarEntityModuleIO::RaceCarToTrafficInterface::E_FLAG_PLAYER_IS_POWER_PARKING,
+        mPowerParkingManager.IsPowerParking() );
+
+    // [DIAG] BRN_POWER_PARK_DIAG -- NOT IN THE X360 BINARY (see PowerParkPublishDiag).
+    PowerParkPublishDiag( mPowerParkingManager.IsPowerParking(), luNearbyParkedCarCount,
+                          luNearbyParkedPlayerCount, lfClosestDistanceSq, lfClosestPerpendicularDist );
+}
+
+// =================================================================================================
 // PostSceneUpdate @ 0x822FE3F0   -- MINIMAL-COMPLETE SLICE (see the file banner)
 //
 // Console order:
@@ -419,7 +541,8 @@ void RaceCarEntityModule::ProcessLeapedAndStompedCars(
 //   ProcessRaceCarCrashCompleteEvents                                 ⭐ REPRODUCED
 //   ProcessLeapedAndStompedCars                                       ⭐ REPRODUCED (2026-09-24)
 //   the Showtime traffic publish into the race-car -> traffic interface ⭐ REPRODUCED (2026-09-24)
-//   ProcessPowerParking · PlaceOnTrackManager::PostSceneUpdate         [ABSENT]
+//   if (!mbIsInGameMode || meGameModeType == 15) ProcessPowerParking  ⭐ REPRODUCED (2026-09-24)
+//   PlaceOnTrackManager::PostSceneUpdate                              [ABSENT -- FX-SCENEMGR 3c]
 //   SendResetOnTrackRequests                                          ⭐ REPRODUCED
 //   CheckForResetOnTrackConditions                                    ⭐ REPRODUCED (2026-09-05)
 //   UnlockForRead(in) · UnlockForWrite(out) · PerfMon stop
@@ -489,6 +612,17 @@ void RaceCarEntityModule::PostSceneUpdate(
         }
     }
 
+    // 0x822FE558..0x822FE588 -- THE POWER PARKING CONSUMER (crash parity FX-SCENEMGR item 4,
+    // 2026-09-24): `lbzx +0x18344 (mbIsInGameMode) ; beq` straight to the call, else `lwzx +0x18368
+    // (meGameModeType) ; cmpwi 0xF ; bne` past it -- the same gate UpdatePowerParking has in
+    // PostPhysicsUpdate. Right after the Showtime publish, before PlaceOnTrackManager::PostSceneUpdate
+    // (0x822FE598, still absent -- item 3c) and SendResetOnTrackRequests.
+    if( !mbIsInGameMode
+        || meGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY )
+    {
+        ProcessPowerParking( lpInput, lpOutput );
+    }
+
     // ⭐⭐⭐ THE PRODUCER END OF THE RESET-ON-TRACK PUMP (resetpump wave 2026-08-26), at the
     // console's own slot -- SendResetOnTrackRequests is the fifth of PostSceneUpdate's eight
     // callees and it is the ONLY reader of RaceCar::mbToBeResetOnTrack, which
@@ -508,13 +642,13 @@ void RaceCarEntityModule::PostSceneUpdate(
         {
             sbLoggedPostScenePark = true;
             *CgsDev::Log::gpDebugPrint
-                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: FIVE of the eight"
+                << "[crash-exit] RaceCarEntityModule::PostSceneUpdate SLICE: SIX of the eight"
                    " console callees are reconstructed -- ProcessRaceCarCrashCompleteEvents,"
                    " (resetpump wave 2026-08-26) SendResetOnTrackRequests, (roll-frequency"
                    " wave 2026-09-05) CheckForResetOnTrackConditions, (near-miss producer"
-                   " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses and (2026-09-24)"
-                   " ProcessLeapedAndStompedCars. TWO still have no body anywhere in this tree"
-                   " (ProcessPowerParking, PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
+                   " wave 2026-09-11) UpdateTrafficAndRaceCarNearMisses, (2026-09-24)"
+                   " ProcessLeapedAndStompedCars and (2026-09-24) ProcessPowerParking. ONE still"
+                   " has no call here (PlaceOnTrackManager::PostSceneUpdate) [FLAG]\n"
                    "[crash-exit] ... and the RESET-ON-TRACK PUMP HAS BOTH PRODUCERS: the crash"
                    " leg (ProcessRaceCarCrashCompleteEvents -> RequestResetOnTrack) and, as of"
                    " 2026-09-05, the WATCHDOG leg (CheckForResetOnTrackConditions @0x822CE9E0 --"
