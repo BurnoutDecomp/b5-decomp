@@ -1095,6 +1095,21 @@ f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
     return lfScale;
 }
 
+// ----------------------------------------------------------------------------
+// IsPlayerInShowtimeOnGround -- DWARF BrnCrashPlayManager.h:160, body :952; no out-of-line X360
+// symbol (crash parity FX-RCEM4 2026-09-24). Transcribed from its one inlined copy, the Showtime
+// traffic publish in RaceCarEntityModule::PostSceneUpdate (r27 = this):
+//   0x822FE4C4  lbz +0x14D ; beq -> false                      IsInShowtime()
+//   0x822FE4D0  lfs +0x140 ; fcmpu 0.0 ; bgt -> false          IsBounceBoosting() (NaN: not boosting)
+//   0x822FE4F8  lfs +0x118 ; fcmpu flt_82CDB540 (1.0) ; bgt -> true, else false
+//               mfTimeSinceLastInAir > KF_TIME_ON_GROUND_NO_PENALTY (NaN: false)
+// ----------------------------------------------------------------------------
+bool CrashPlayManager::IsPlayerInShowtimeOnGround() const
+{
+    return IsInShowtime() && !IsBounceBoosting()
+        && mfTimeSinceLastInAir > KF_TIME_ON_GROUND_NO_PENALTY;
+}
+
 
 // ----------------------------------------------------------------------------
 // Deactivate -- DWARF BrnCrashPlayManager.h, no out-of-line X360 symbol. The console emits it
