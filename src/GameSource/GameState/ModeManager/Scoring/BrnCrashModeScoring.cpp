@@ -793,16 +793,19 @@ namespace BrnGameState
             break;
         }
 
-        // Diagnostic trail for the unrecognised type (the X360 streams the un-compressed id
-        // through the debug print when the message filter is enabled). The un-compress call
-        // is preserved; the log emission itself is left to the (un-homed) debug-print path.
+        // The console's diagnostic trail for the unrecognised type, reached from every fallback
+        // arm (each ends `b 0x82312C4C`): un-compress the id (0x82312C54), then -- only when bit 0
+        // of the message filter is set (`ld 0x82F31908 ; clrldi r11, r11, 63` @0x82312C5C) --
+        // three calls through gpDebugPrint's slot 1 (`lwz r31, 0x82F31904`): the literal
+        // @0x8202304C, the un-compressed id, and "\n" @0x82001CC4. No null test on the console.
+        // [FX-SHOWTIME2 2026-09-24] the print is landed (it was FLAG-omitted as "not homed";
+        // both symbols are homed in CgsLog.h).
         char lacBuffer[KI_CGSID_STRING_LEN];
         CgsIDUnCompress(lVehicleTypeID, lacBuffer);
-        // FLAG: the CgsDev::Log::gpDebugPrint emission ("Unknown traffic vehicle in Showtime
-        // scoring: <id>") is gated on CgsDev::Message::gxMessageFilterFlags & 1 in the X360;
-        // that debug-print sink is not homed in this scope, so only the un-compress (its input)
-        // is reconstructed here.
-        (void)lacBuffer;
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint << "Unknown traffic vehicle in Showtime scoring: " << lacBuffer << "\n";
+        }
     }
 
     // ------------------------------------------------------------------------
