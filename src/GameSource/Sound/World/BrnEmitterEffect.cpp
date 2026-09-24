@@ -10,9 +10,11 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] BRN_EMITTER_DIAG
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 
 namespace BrnSound
 {
@@ -104,17 +106,48 @@ bool EmitterEffect::Attach()
     if (!lpLogicModule)
         return true;
 
+    // ARTIST 0x826F57E4..0x826F57F8: the entity's packed W lane read as one u32, high half
+    // (`srwi r29,r11,16`). The count is the list's SCALAR mNumWorldEmitters at layout +0x4B8
+    // (`lwz r11,0x4B8(r11)`, 0x826F5804 for the assert and 0x826F5838 for the gate), not
+    // the array header's Num_mWorldEmitters -- see worldemitterlist.h.
     Attrib::Gen::worldemitterlist lWorldEmitters(
         lpLogicModule->GetGlobalData().WorldEmitterList());
     const u32 luEmitter = lrEntity.GetType();
-    CGS_ASSERT(luEmitter < lWorldEmitters.Num_mWorldEmitters(),
+    CGS_ASSERT(luEmitter < static_cast<u32>(lWorldEmitters.mNumWorldEmitters()),
                "luEmitter < static_cast< uint32_t >( lWorldEmitters.mNumWorldEmitters() )");
 
+    // [DIAG] NOT IN THE X360 BINARY (BRN_EMITTER_DIAG=1): FX-EMITTER live witness -- every
+    // world emitter that attaches (capped) and every entity type the console gate refuses.
+    static const bool sbEmitterDiag = std::getenv("BRN_EMITTER_DIAG") != nullptr;
+    if (sbEmitterDiag && CgsDev::Log::gpDebugPrint &&
+        luEmitter >= static_cast<u32>(lWorldEmitters.mNumWorldEmitters()))
+    {
+        static u32 suRefusedLines = 0;
+        if (suRefusedLines++ < 16u)
+            *CgsDev::Log::gpDebugPrint << "[emitter] REFUSED type " << luEmitter
+                << " >= mNumWorldEmitters " << lWorldEmitters.mNumWorldEmitters()
+                << " (array count " << lWorldEmitters.Num_mWorldEmitters() << ") radius "
+                << lrEntity.GetRadius() << " pos (" << mPos.x << ", " << mPos.y << ", "
+                << mPos.z << ")\n";
+    }
+
     mi16PitchOutput = 1;
-    if (luEmitter < lWorldEmitters.Num_mWorldEmitters())
+    if (luEmitter < static_cast<u32>(lWorldEmitters.mNumWorldEmitters()))
     {
         Attrib::Gen::worldemitter lEmitter;
         lEmitter.ChangeWithDefault(lWorldEmitters.mWorldEmitters(luEmitter));
+        if (sbEmitterDiag && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 suAttachLines = 0;
+            if (suAttachLines++ < 48u)
+                *CgsDev::Log::gpDebugPrint << "[emitter] attach type " << luEmitter << " of "
+                    << lWorldEmitters.mNumWorldEmitters() << " name "
+                    << (lEmitter.EmitterName() ? lEmitter.EmitterName() : "(null)")
+                    << " radius " << lrEntity.GetRadius() << " pos (" << mPos.x << ", "
+                    << mPos.y << ", " << mPos.z << ") doppler "
+                    << static_cast<u32>(lEmitter.AffectedByDoppler()) << " stream "
+                    << static_cast<u32>(lEmitter.IsStream()) << "\n";
+        }
         CGS_ASSERT(!lEmitter.IsStream(),
                    "EmitterEffect : Emitter streams not yet supported.");
         if (!lEmitter.IsStream() && lEmitter.EmitterName())
