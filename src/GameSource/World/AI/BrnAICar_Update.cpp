@@ -103,6 +103,19 @@ namespace BrnAI
     // (The 1.0f placeholder shipped here before 2026-09-04 was ~9x too permissive.)
     const f32 KF_USEFUL_DIRECTION_MIN_LENGTH      = 0.0099999998f;   // literal (Hex-Rays decoded)
 
+    // vpu::IsZero(v, tolerance) as the console inlines it at UpdatePositionOutOfRange 0x8276F194
+    // and UpdateOutOfRangeData 0x8276F550: vandc (|v|), vrlimi128 (w := x), vcmpgtfp. |v| >
+    // splat(tolerance), then the CR6 "all false" bit (extrwi r11,r11,1,26). "No lane above the
+    // tolerance" is what counts as zero -- and a NaN lane is never above it. The shared
+    // vpu::IsZero tests |lane| <= tolerance and calls a NaN lane non-zero, so these two sites
+    // spell the console form locally (crash parity FX-AINAN2).
+    static inline bool IsZeroVmx(const Vector3& lrVector, f32 lfTolerance)
+    {
+        return !(std::fabs(lrVector.x) > lfTolerance) &&
+               !(std::fabs(lrVector.y) > lfTolerance) &&
+               !(std::fabs(lrVector.z) > lfTolerance);
+    }
+
     // The console's file strings (the unity .cpp path for .cpp-line asserts, the relative path
     // for the inlined BrnAICar.h accessors).
     static const char* const KPC_AICAR_CPP = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAICar.cpp";
@@ -190,7 +203,8 @@ namespace BrnAI
         {
             const f32 lfDesiredSpeed = CalcDesiredSpeed(lpRaceBalancingManager, lpAISectionsData, lpPlayerCar);
             mfSpeedOutOfRange = lfDesiredSpeed;   // == DWARF mfDesiredSpeed @+0x14E8 (stfs f1,0x14E8)
-            CGS_ASSERT(lfDesiredSpeed >= 0.0f, "mfDesiredSpeed >= 0.0f");                   // :897
+            // `fcmpu f1, 0.0 ; bge` 0x82799114/0x82799118 skips the assert on an unordered compare.
+            CGS_ASSERT(!(lfDesiredSpeed < 0.0f), "mfDesiredSpeed >= 0.0f");                 // :897
 
             // 0x82799138  opponents only (miOpponentIndex != -1 && !mbIsPlayer)
             if (miOpponentIndex != -1 && !mbIsPlayer)
@@ -397,7 +411,9 @@ namespace BrnAI
 
         if (meRouteFindingStyle == E_ROUTE_FINDING_FREE_ROAM)
         {
-            if (mfBuzzDistanceToPlayer >= KF_FREE_ROAM_TO_PURSUIT_DISTANCE)   // 0x8276EE80 bgelr
+            // 0x8276EE80 `fcmpu dist, 100.0 ; bgelr` returns on >= AND on unordered: a NaN
+            // distance never swaps to pursuit (FX-AINAN2; `>=` let it through).
+            if (!(mfBuzzDistanceToPlayer < KF_FREE_ROAM_TO_PURSUIT_DISTANCE))
                 return;
             if (miProximityIndex < 0)                                          // 0x8276EE90 bltlr
                 return;
@@ -548,7 +564,7 @@ namespace BrnAI
 
         const Vector3 lDelta = lTarget - mPosition;                                         // vsubfp (target - mPosition)
         bool lbAdvance = true;
-        if (!vpu::IsZero(lDelta, KF_AICAR_FLOAT_EPSILON))                                   // 0x8276F194 vcmpgtfp. |delta| > eps
+        if (!IsZeroVmx(lDelta, KF_AICAR_FLOAT_EPSILON))                                     // 0x8276F194 vcmpgtfp. |delta| > eps
         {
             const f32 lfDistanceSq = vpu::Dot(lDelta, lDelta);                              // vmsum3fp128 v127
             const Vector3 lStep = mDirection * (mfSpeedOutOfRange * lfTimeStep);            // OLD facing (lvx 0x1440 before the call) * desired speed * dt
@@ -624,7 +640,9 @@ namespace BrnAI
         const RouteNode* lpLast = lpThisRoute->GetNode(lpThisRoute->GetNodeCount() - 1);
         const Vector3 lLastPos{ lpLast->GetX(), 0.0f, lpLast->GetY(), 0.0f };
         const f32 lfDistance = vpu::Magnitude(lLastPos - GetPosition());
-        if (lfDistance >= KF_FREE_ROAM_ROUTE_OLD_DISTANCE)
+        // `fcmpu dist, flt_820C4160 (300.0) ; bge -> return false` 0x8276FD0C/0x8276FD10: a NaN
+        // distance is "not old" and keeps its destination (FX-AINAN2; `>=` invalidated it).
+        if (!(lfDistance < KF_FREE_ROAM_ROUTE_OLD_DISTANCE))
             return false;
 
         muDestinationSectionIndex = KI_INVALID_SECTION_INDEX;                               // sth 0x7FFF,0x1536
@@ -733,10 +751,13 @@ namespace BrnAI
             const f32 lfGapX = lMiddle.x - lpLast->GetX();
             const f32 lfGapZ = lMiddle.y - lpLast->GetY();
             const f32 lfGapSq = lfGapX * lfGapX + lfGapZ * lfGapZ;
-            lfDistance = lfDistance + (lfGapSq > 0.0f ? std::sqrt(lfGapSq) : 0.0f);         // vsel zero guard
+            // vcmpeqfp v12, 0, lenSq @0x8277C44C ; vsel v0, lenSq*rsqrt, 0, mask @0x8277C478: only an
+            // EXACT zero selects 0, a NaN gap stays NaN (FX-AINAN2; `lenSq > 0 ? .. : 0` gave 0).
+            lfDistance = lfDistance + ((lfGapSq == 0.0f) ? 0.0f : std::sqrt(lfGapSq));
         }
 
-        CGS_ASSERT(lfDistance >= 0.0f, "lfDistance >= 0.0f");                               // :1966
+        // `fcmpu f31, 0.0 ; bge` 0x8277C490/0x8277C494 skips the assert on an unordered compare.
+        CGS_ASSERT(!(lfDistance < 0.0f), "lfDistance >= 0.0f");                             // :1966
         *lpfOutDistance = lfDistance;
         return true;
     }
@@ -845,7 +866,7 @@ namespace BrnAI
         // operands around vmulfp/vnmsubfp), degenerate -> gKVector, else Normalize.
         const Vector3 lCross = vpu::Cross(vpu::GetVector3_YAxis(), lAtVector);
         Vector3 lRight;
-        if (vpu::IsZero(lCross, KF_AICAR_FLOAT_EPSILON))
+        if (IsZeroVmx(lCross, KF_AICAR_FLOAT_EPSILON))                                      // 0x8276F550 vcmpgtfp., all false
             lRight = vpu::GetVector3_ZAxis();                                               // lvx128 unk_82181520
         else
             lRight = vpu::Normalize(lCross);
@@ -918,7 +939,9 @@ namespace BrnAI
         CGS_ASSERT(IsActive(), "IsActive()");                                              // :396
         CGS_ASSERT(static_cast<u32>(liOpponentIndex) < 8u,
                    "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS"); // :397 (cmplwi ,8)
-        CGS_ASSERT(lfProgressionRankAsRatio >= 0.0f && lfProgressionRankAsRatio <= 1.0f,
+        // `fcmpu r,0.0 ; blt -> fire` 0x8277BDE8/0x8277BDF0 then `fcmpu r,1.0 ; ble -> skip`
+        // 0x8277BDF4/0x8277BDF8: an unordered ratio skips the assert (FX-AINAN2).
+        CGS_ASSERT(!(lfProgressionRankAsRatio < 0.0f) && !(lfProgressionRankAsRatio > 1.0f),
                    "lfProgressionRankAsRatio >= 0.0f && lfProgressionRankAsRatio <= 1.0f");  // :398
 
         Route* lpThisRoute = reinterpret_cast<Route*>(this);

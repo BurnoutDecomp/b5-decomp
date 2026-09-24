@@ -347,6 +347,10 @@ namespace BrnAI
     // forwardSep <= 0 => INFRONT_SEPARATING(3) unless facingDot <= 0 -> INFRONT_APPROACHING(2)
     // forwardSep >  0 => facingDot <= 0 ? BEHIND_SEPARATING(1) : BEHIND_APPROACHING(0)
     // (the enum labels follow the X360 result values 3/2/1/0 exactly.)
+    // NaN polarity (FX-AINAN2): `fcmpu fwd,0.0 ; ble` 0x8276FB14/0x8276FB18 takes the in-front arm
+    // on an unordered compare; there `li r11,3 ; fcmpu facing,0.0 ; bgt` 0x8276FB90/0x8276FB94 keeps
+    // 3 only for an ordered facing > 0 (a NaN is 2), and behind `fcmpu facing,0.0 ; ble`
+    // 0x8276FB48/0x8276FB4C picks 1 for a NaN. Spelt as the negated strict compares.
     // ==================================================================================
     void AICar::UpdateRelativePositionToPlayer(const AICar* lpPlayerCar)
     {
@@ -357,13 +361,13 @@ namespace BrnAI
         const f32 lfForwardSep = vpu::Dot(lPlayerPos - lThisPos, lPlayerDir);
 
         s32 liRelative;
-        if (lfForwardSep <= 0.0f)
+        if (!(lfForwardSep > 0.0f))                                // ble 0x8276FB18
         {
             const Vector3 lPlayerDir2 = lpPlayerCar->GetDirection();
             const Vector3 lThisDir    = GetDirection();
             const f32 lfFacingDot = vpu::Dot(lThisDir, lPlayerDir2);
             liRelative = E_RELATIVE_INFRONT_SEPARATING;            // 3
-            if (lfFacingDot <= 0.0f)
+            if (!(lfFacingDot > 0.0f))                             // bgt 0x8276FB94 keeps 3
                 liRelative = E_RELATIVE_INFRONT_APPROACHING;       // 2
         }
         else
@@ -371,7 +375,7 @@ namespace BrnAI
             const Vector3 lPlayerDir2 = lpPlayerCar->GetDirection();
             const Vector3 lThisDir    = GetDirection();
             const f32 lfFacingDot = vpu::Dot(lThisDir, lPlayerDir2);
-            liRelative = (lfFacingDot <= 0.0f) ? E_RELATIVE_BEHIND_SEPARATING   // 1
+            liRelative = !(lfFacingDot > 0.0f) ? E_RELATIVE_BEHIND_SEPARATING   // 1 (ble 0x8276FB4C)
                                                : E_RELATIVE_BEHIND_APPROACHING; // 0
         }
 
@@ -412,9 +416,11 @@ namespace BrnAI
                 CgsDev::Assert::EndAssert();
             }
 
+            // `fcmpu prev, dist ; bgt -> reset` 0x8278B058/0x8278B05C: only an ordered prev > dist
+            // resets, so a NaN distance keeps the wrong-way clock running (FX-AINAN2; `<=` reset it).
             if (mbIsDrivenByPlayer && mbIsInGameMode && !mbIsCrashing &&
                 GetSpeed() > KF_RACE_DISTANCE_MIN_SPEED &&
-                lfPrevDistance <= mfDistanceToCheckpoint)
+                !(lfPrevDistance > mfDistanceToCheckpoint))
             {
                 mfWrongWayTime = mfWrongWayTime + lfTimeStep;
             }
@@ -586,10 +592,12 @@ namespace BrnAI
 
         const f32 lfHoldTime = static_cast<f32>(miOpponentIndex) * KF_ALT_ROUTE_HOLD_PER_OPP +
                                KF_ALT_ROUTE_HOLD_BASE;
-        if (mfAlternativeRouteTimer < lfHoldTime)
+        if (mfAlternativeRouteTimer < lfHoldTime)                      // bgelr 0x82765E7C
         {
             mfAlternativeRouteTimer = mfAlternativeRouteTimer + lfTimeStep;
-            if (mfAlternativeRouteTimer >= lfHoldTime)
+            // `bltlr` 0x82765E8C: only an ordered timer < hold returns, so a NaN (a NaN step)
+            // requests the route (FX-AINAN2; `>=` did not).
+            if (!(mfAlternativeRouteTimer < lfHoldTime))
                 mbRouteRequested = true;
         }
 
@@ -629,7 +637,9 @@ namespace BrnAI
 
         const f32 lfNewTime = mfTimeInInvalidSection + lfTimeStep;
         mfTimeInInvalidSection = lfNewTime;
-        if (lfNewTime >= 1.0f)
+        // `fcmpu t, flt_82001C98 (1.0) ; blt` 0x8277C084/0x8277C088 skips only an ordered t < 1,
+        // so a NaN dwell time drops the route (FX-AINAN2; `>=` kept it).
+        if (!(lfNewTime < 1.0f))
         {
             mfWrongWayTime = 0.0f;
             Route* lpMutableRoute = reinterpret_cast<Route*>(this);
