@@ -11,7 +11,7 @@
 //   BrnAI::AIModule::OnModeStart                 @0x82791DB8  (133 insns; whole since 2026-09-23)
 //   BrnAI::AIModule::OnModeEnd                   @0x8277BA80  (96 insns;  whole since 2026-09-22)
 //  BrnAI::AIModule::OnPlayerTakedown  (34 insns;  whole)
-//   BrnAI::AIModule::OnRaceCarReachedCheckpoint  @0x8278A658  (NAMED PARK -- ARTIST export hole)
+//   BrnAI::AIModule::OnRaceCarReachedCheckpoint  @0x8278A658  (50 insns;  whole -- export hole, ppcdis; CC-10)
 //  BrnAI::AIModule::SetupRaceBalancingManager  (125 insns; whole)
 //
 // =================================================================================================
@@ -1453,30 +1453,53 @@ void AIModule::OnPlayerTakedown(
 }
 
 // =================================================================================================
-// OnRaceCarReachedCheckpoint @0x8278A658   (DWARF BrnAIModule.cpp:835)   -- NAMED PARK
+// OnRaceCarReachedCheckpoint @0x8278A658   (DWARF BrnAIModule.cpp:835)   (50 insns; whole)
+//
+// An ARTIST export hole -- no .ida-exports JSON and no row in the name index; HandleGameActions
+// reaches it with `bl 0x8278A658` @0x827922B4 -- decoded whole with tools/re/ppcdis.py 0x8278A658
+// (0x8278A658..0x8278A718; crash parity CC-10). A race car crossed a checkpoint: its AICar drops
+// its route so the route-request brain plans the next leg, aims at the NEXT checkpoint's AI
+// section and advances its checkpoint cursor; for an AI opponent the rubber band then logs it.
+//   0x8278A674/0x8278A678  lpAICar = GetAICar(action->meGlobalRaceCarIndex)          (lwz 4(r31))
+//   0x8278A680..0x8278A6D0 AICar::OnReachedCheckpoint(action->miCheckPointIndex (lwz 8(r31)),
+//                              action->muNextCheckpointAISectionIndex (lhz 0xC(r31)))   -- inlined
+//   0x8278A6B8..0x8278A6F0 if (AICar::IsOpponent())                                    -- inlined
+//   0x8278A6F4..0x8278A700   RaceBalancingManager::OnOpponentReachedCheckpoint @0x82789D88
+//                              (this + 0x3D9D0 == &mRaceBalancingManager, lpAICar,
+//                               action->miCheckPointIndex (lwz 8(r31), reloaded))
+// The PS3 twin (DecFIGS @0x9CB6D4) is the same shape. The console tests nothing on the car: the
+// producer, ModeManager::TransmitAndIncrementCheckPointsReached, asserts the global index is in
+// range before it posts, so GetAICar never reaches its PC-only bail (0) from here.
 // =================================================================================================
 void AIModule::OnRaceCarReachedCheckpoint(
-        const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpAction)
+        const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction* lpRaceCarReachedCheckpointAction)
 {
-    // [FLAG PC bring-up] BrnAI::AIModule::OnRaceCarReachedCheckpoint @0x8278A658 -- there is NO
-    // .ida-exports/BURNOUT_X360_ARTIST.XEX/0x8278A658.json and the symbol is absent from the
-    // 30,094-row name index; the address is known only through HandleGameActions' xrefs_from.
-    // With neither asm nor pseudocode there is nothing to reconstruct, and the DWARF gives only
-    // the signature. The sibling that IS exported -- RaceBalancingManager::
-    // OnOpponentReachedCheckpoint @0x82789D88 -- is what this almost certainly forwards to, but
-    // "almost certainly" is not evidence.
-    // Consequence: per-checkpoint race-balancing progress is not recorded, so the rubber-band
-    // works off distance only. Not on the activation path.
-    // DELETE-WHEN 0x8278A658 is exported (idat re-run) or recovered from image.bin.
-    (void)lpAction;
+    AICar* const lpAICar =
+        GetAICar(static_cast<u32>(lpRaceCarReachedCheckpointAction->meGlobalRaceCarIndex));     // 0x8278A678
 
-    static bool sbWitnessed = false;
-    if (!sbWitnessed && CgsDev::Log::gpDebugPrint != 0)
+    lpAICar->OnReachedCheckpoint(lpRaceCarReachedCheckpointAction->miCheckPointIndex,
+                                 lpRaceCarReachedCheckpointAction->muNextCheckpointAISectionIndex);
+
+    if (lpAICar->IsOpponent())
     {
-        sbWitnessed = true;
+        mRaceBalancingManager.OnOpponentReachedCheckpoint(
+            lpAICar, lpRaceCarReachedCheckpointAction->miCheckPointIndex);                       // 0x8278A700
+    }
+
+    // [FLAG PC witness] the first 16 hand-offs, so a live run proves this body ran and shows what
+    // it aimed the car at. Bounded by construction. DELETE-WHEN a multi-checkpoint race run shows
+    // the opponents re-routing to the next checkpoint.
+    static s32 siCheckpointWitness = 0;
+    if (siCheckpointWitness < 16 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        ++siCheckpointWitness;
         *CgsDev::Log::gpDebugPrint
-            << "[ai-evt] OnRaceCarReachedCheckpoint is PARKED (@0x8278A658 is an ARTIST export"
-               " hole) -- race-balancing checkpoint progress is not recorded\n";
+            << "[ai-evt] checkpoint: car "
+            << static_cast<s32>(lpRaceCarReachedCheckpointAction->meGlobalRaceCarIndex)
+            << " passed cp " << lpRaceCarReachedCheckpointAction->miCheckPointIndex
+            << " -> next section "
+            << static_cast<s32>(lpRaceCarReachedCheckpointAction->muNextCheckpointAISectionIndex)
+            << (lpAICar->IsOpponent() ? " (opponent: rubber band told)\n" : " (not an opponent)\n");
     }
 }
 

@@ -1278,4 +1278,44 @@ namespace BrnAI
     f32  AICar::GetMaxPlayerSpeed() const { return mfMaxPlayerSpeed; }
     bool AICar::IsAheadOfPlayer() const   { return mbIsAheadOfPlayer; }
 
+    // ==================================================================================
+    // The checkpoint hand-off (crash parity CC-10). No X360 symbol for any of the three:
+    // AIModule::OnRaceCarReachedCheckpoint @0x8278A658 inlines them whole (decoded with
+    // tools/re/ppcdis.py; register r4 = the AICar). The PS3 twin (DecFIGS @0x9CB6D4) is the same
+    // shape, inlining OnReachedCheckpoint / IsOpponent and calling InvalidateRoute @0x9B4DA8.
+    // ==================================================================================
+
+    // DWARF BrnAICar.h:388. PS3 @0x9B4DA8 is exactly these three stores (+5364 = 0.0, +5120 = 0,
+    // +5128 = 0); the console's inlined copy is 0x8278A698 `stfs f0(flt_82001CC0 = 0.0), 0x14F4`,
+    // 0x8278A69C `stw 0, 0x1408` and 0x8278A6A0 `stw 0, 0x1400`.
+    void AICar::InvalidateRoute()
+    {
+        Route* const lpThisRoute = GetRoute();
+        mfWrongWayTime           = 0.0f;                                     // 0x14F4 <- flt_82001CC0
+        lpThisRoute->meStatus    = Route::E_STATUS_UNINITIALISED;            // 0x1408
+        lpThisRoute->miNodeCount = 0;                                        // 0x1400
+    }
+
+    // DWARF BrnAICar.h:507. The car passed checkpoint liCheckpointIndex: drop the route so the
+    // route-request brain plans the next leg, aim at the next checkpoint's AI section, advance the
+    // checkpoint cursor, forget the old distance, and block checkpoint sections only in a race.
+    void AICar::OnReachedCheckpoint(s32 liCheckpointIndex, u16 luDestinationAISectionIndex)
+    {
+        InvalidateRoute();                                                   // 0x8278A698..0x8278A6A0
+        muDestinationSectionIndex = luDestinationAISectionIndex;             // 0x8278A6C8 sth 0x1536
+        miCurrentCheckpoint       = liCheckpointIndex + 1;                   // 0x8278A6B4 addi 1 / 0x8278A6CC stw 0x1520
+        mfDistanceToCheckpoint    = KF_AICAR_FLT_MAX;                        // 0x8278A6C0 stfs flt_82F302F4, 0x14F0
+        // 0x8278A694 `addi style,-1` / 0x8278A6A4 cntlzw / 0x8278A6BC extrwi 1,27 == (style == 1),
+        // stored as a byte at 0x8278A6D0 (stb 0x153D).
+        mbHasBlockCheckpoints     = (meRouteFindingStyle == E_ROUTE_FINDING_RACE) ? 1 : 0;
+    }
+
+    // DWARF BrnAICar.h:367. 0x8278A6B8 `lbz 0x153A` / 0x8278A6C4 `cmplwi 0xFF` / 0x8278A6D4 `beq ->
+    // no`, then 0x8278A6D8 `lbz 0x1549` / 0x8278A6DC `cmplwi 0` / 0x8278A6E0 `bne -> no`: a car
+    // holding an opponent slot that is not the player's.
+    bool AICar::IsOpponent() const
+    {
+        return miOpponentIndex != -1 && !mbIsPlayer;
+    }
+
 }

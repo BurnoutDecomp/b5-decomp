@@ -170,6 +170,15 @@ namespace BrnAI
         bool             IsPlayerCar() const;                // DWARF BrnAICar.h:326 (== mbIsPlayer @+0x1549)
         f32              GetBuzzFrequencyRatio() const { return mfBuzzFrequencyRatio; }   // mfBuzzFrequencyRatio @+0x1510 (DWARF :696); BuzzBy::ResetActiveList @0x82771C90 reads it (`lfs 0x1510(car)`)
 
+        // ---- the checkpoint hand-off AIModule::OnRaceCarReachedCheckpoint @0x8278A658 makes ----
+        // (crash parity CC-10.) No X360 symbol for any of the three: the console inlines them
+        // whole into 0x8278A658. The PS3 twin (DecFIGS @0x9CB6D4) inlines OnReachedCheckpoint and
+        // IsOpponent from this header and calls InvalidateRoute out of line (@0x9B4DA8). Bodied in
+        // BrnAICar_Update.cpp beside the other inlined-away members.
+        bool IsOpponent() const;                                                     // DWARF BrnAICar.h:367
+        void InvalidateRoute();                                                      // DWARF BrnAICar.h:388
+        void OnReachedCheckpoint(s32 liCheckpointIndex, u16 luDestinationAISectionIndex);   // DWARF BrnAICar.h:507
+
         // ---- accessors the RaceBalancingDebugComponent (debug HUD) reads (its own TU) ----------
         // The car's embedded route (mRoute is at AICar+0; the X360 passes the AICar pointer straight
         // to Route::GetNode/GetNodeCount). Restored inline so the debug HUD reaches it by name.
