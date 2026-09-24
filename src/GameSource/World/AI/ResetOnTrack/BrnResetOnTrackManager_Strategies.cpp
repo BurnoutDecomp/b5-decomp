@@ -1167,12 +1167,16 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
 //               any SHORTCUT (bit 0x01); lfAheadness = Dot2D(Normalise(junctionMiddle - side),
 //               lfRouteDirection); keep the largest POSITIVE one (`blt f30` then `ble f31`), and
 //               the junction portal's own position as lEntranceNodePosition            (v120)
+//               -- ble 0x827857F8 (bc 4,gt) is taken on unordered, so a NaN |aheadness| is
+//               SKIPPED; only an ordered |a| > best is kept
+//               (blt 0x827857EC lets a NaN through to it)
 //   0x82785848  no side road -> false
 //   0x82785850  lPlayerDirection = Flatten(player->GetDirection())         (v123 reused)
 //   0x82785874  up to KI_SIDE_SCAN_BAIL_OUT (10) steps OUT along the side road: from the current
 //               section take the linked section (never the junction itself) whose middle is
 //               FARTHEST from lJunctionMiddle, remembering that portal as lExitNodePosition
-//               (v122); none -> false; a section with no portals -> false. Then, unless the exit
+//               (v122) -- ble 0x8278596C skips a NaN distance as it skips a nearer one;
+//               none -> false; a section with no portals -> false. Then, unless the exit
 //               portal sits on the player (both lanes <= FLT_EPSILON), stop as soon as its
 //               bearing |Dot2D(Normalise(Flatten(exit - playerPos)), lPlayerDirection)| drops
 //               below cos 20 deg; otherwise the exit becomes the next entrance (0x82785AF8).
@@ -1180,8 +1184,10 @@ Vector3 ResetOnTrackManager::InterpolatePositionFromAngle(Vector2 lPlayerPositio
 //               lPlayerDirection, entrance, exit, cos 20 deg)
 //   0x82785B50  lfSeparation = |mPosition - playerPos|; 50.0 > it -> false (vcmpgtfp. all)
 //   0x82785BE4  lfAheadness = Dot(Normalise-unless-zero(mPosition - playerPos), player direction);
-//               neither `>= cos 40 deg` nor lfSeparation >= 100.0 -> "Pop up prevented\n"
-//               (printed when gxMessageFilterFlags bit 0 is set, 0x82785CF8) -> false
+//               `bge` 0x82785CE4 (aheadness vs cos 40 deg) and `bge` 0x82785CF4 (lfSeparation vs
+//               100.0) both jump past the test, and bge is taken on unordered too: only an
+//               ORDERED aheadness < cos 40 AND an ORDERED separation < 100 -> "Pop up
+//               prevented\n" (printed when gxMessageFilterFlags bit 0 is set, 0x82785CF8) -> false
 //   0x82785D28  lDirection3D = entrance - exit, STORED to mDirection before the zero test;
 //               zero -> false; else mpAISection = the last side section, mDirection normalised
 // =================================================================================================
@@ -1275,12 +1281,12 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
         }
 
         const f32 lfAheadness = Dot2D(Normalise2D(lToJunction), lfRouteDirection);
-        if (lfAheadness < KF_ZERO)
+        if (lfAheadness < KF_ZERO)                          // blt 0x827857EC: a NaN falls through
         {
             continue;
         }
         const f32 lfAbsAheadness = fabsf(lfAheadness);
-        if (lfAbsAheadness <= lfBestAheadness)
+        if (!(lfAbsAheadness > lfBestAheadness))            // ble 0x827857F8: a NaN is skipped
         {
             continue;
         }
@@ -1325,7 +1331,7 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
             const Vector2 lFromJunction = { lCandidateMiddle.x - lJunctionMiddle.x,
                                             lCandidateMiddle.y - lJunctionMiddle.y, 0.0f, 0.0f };
             const f32 lfDistance = Length2D(lFromJunction);
-            if (lfDistance <= lfFurthest)
+            if (!(lfDistance > lfFurthest))                 // ble 0x8278596C: a NaN is skipped
             {
                 continue;
             }
@@ -1389,8 +1395,10 @@ bool ResetOnTrackManager::ScanForwardsAndAlongJunction(ResetOnTrackCoords* lpRes
     }
     const f32 lfAheadness = Dot3D(lRelativePosition, lpPlayerAICar->GetDirection());
 
-    if (!(lfAheadness >= KF_ASSUMED_FOV_FOR_RESET_AHEAD) &&
-        !(lfSeparation >= KF_TOO_CLOSE_TO_SPAWN_IN_VIEW))
+    // bge 0x82785CE4 / 0x82785CF4 skip this block on >= AND on unordered (FX-NANPOL 2026-09-24:
+    // the `!(a >= K)` spelling prevented the pop-up for a NaN aheadness).
+    if (lfAheadness < KF_ASSUMED_FOV_FOR_RESET_AHEAD &&
+        lfSeparation < KF_TOO_CLOSE_TO_SPAWN_IN_VIEW)
     {
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
