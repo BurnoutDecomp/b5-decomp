@@ -109,6 +109,15 @@ namespace BrnPhysics { namespace Vehicle {
 // grounds as gpDvWatchBody and gpCrashResponseDiagBody.
 namespace BrnPhysics { extern const char* gpcDvDrainTag; }
 
+// [wedge] (FX-WEDGEVEL) -- DEFINED in ExternalPhysicsBody.cpp, banner at WedgeWindowSteps() there.
+// NOT IN THE X360 BINARY; the [wedge-contacts] census below prints only inside an open window.
+namespace BrnPhysics
+{
+    extern const ExternalPhysicsBody* gpDvWatchBody;
+    bool DvWedgeStepRecording();
+    u32  DvWitnessStepIndex();
+}
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -2286,6 +2295,13 @@ namespace Deformation
 
         const VecFloat lvfIterationZero = { 0.0f, 0.0f, 0.0f, 0.0f };  // vspltisw128 v126, 0
 
+        // [wedge-contacts] (FX-WEDGEVEL) -- the watched body's per-step contact census inside an
+        // open [wedge] window: how many sorted contacts, how many the world / car-car arm applied,
+        // how many the world arm rejected as SEPARATING (dot(v + w x r, n) >= 0). NOT X360.
+        const bool lbWedgeCensus = DvWedgeStepRecording() && &GetVehicleBody() == gpDvWatchBody
+                                && CgsDev::Log::gpDebugPrint != 0;
+        s32 liWedgeWorld = 0, liWedgeCarCar = 0, liWedgeSeparating = 0, liWedgeNoImpulse = 0;
+
         for ( s32 li = 0; li < _mContactOrder.miNumContacts; ++li )
         {
             CGS_ASSERT(li < _mContactOrder.miNumContacts, "liIndex < miNumContacts");   // h:132
@@ -2295,6 +2311,7 @@ namespace Deformation
             StoredImpulseContact lContact;
             if ( !maDeformationSensors[liSensor].GetImpulse(lContact) )   // same >1.0 skip, re-read
             {
+                ++liWedgeNoImpulse;
                 continue;
             }
 
@@ -2303,10 +2320,12 @@ namespace Deformation
             {
                 lbApplied = ApplyCarCarImpulse(lContact, lvfTimeStep, lvfIterationZero,
                                                liSensor, lrRandom);
+                if ( lbApplied ) { ++liWedgeCarCar; }
             }
             else
             {
                 lbApplied = ApplyCarWorldImpulse(lContact, lvfTimeStep, lvfIterationZero, liSensor);
+                if ( lbApplied ) { ++liWedgeWorld; } else { ++liWedgeSeparating; }
             }
 
             if ( lbApplied )
@@ -2325,6 +2344,17 @@ namespace Deformation
                 }
                 gpcDvDrainTag = "";
             }
+        }
+
+        if ( lbWedgeCensus )
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[wedge-contacts] step " << static_cast<s32>( DvWitnessStepIndex() )
+                << " sorted " << static_cast<s32>( _mContactOrder.miNumContacts )
+                << " world " << liWedgeWorld << " carcar " << liWedgeCarCar
+                << " separating " << liWedgeSeparating << " noimpulse " << liWedgeNoImpulse
+                << " worldCollisions " << static_cast<s32>( mVehicleBody.GetVehiclePhysics()->mi8NumWorldCollisions )
+                << "\n";
         }
     }
 
