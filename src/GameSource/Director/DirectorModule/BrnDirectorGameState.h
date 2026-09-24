@@ -87,41 +87,83 @@ struct GameState
         E_JY_WAITING_FOR_AUDIO    = 5,
     };
 
-    // BrnDirectorGameState.h:214 / :222 / :241 -- the three trailing sub-objects (RankUpInfo,
-    // ShowTimeInfo, DirectorProfileData). The DecFIGS DWARF names their FIELDS, but the field
-    // layouts it gives do NOT line up with the byte/word offsets GameState::Clear stores into
-    // these objects (e.g. Clear writes a byte at ShowTimeInfo+0x00 where the DWARF puts an f32,
-    // and stores out to DirectorProfileData+0x08 though the DWARF lists only a single 4-byte
-    // enum). The DWARF sub-struct layouts are unreliable here, so the three sub-objects are
-    // modelled as opaque sized blobs at their asm-attested extents (sizes pinned by Clear's
-    // store range + the next member's start). Their field NAMES (DWARF :214..:237 / :247) are
-    // recorded in the comments for when each sub-object's own TU recovers the real layout.
-    //
-    //   RankUpInfo          (+0x1CC, 8 bytes):  mbDoingRankUp/mbDoingRankUpIntro/
-    //                                           mbNewRivalFocusThisFrame/meRivalIndex
-    //   ShowTimeInfo        (+0x1D4, 20 bytes): mfDeformationLevel/miComboLevel/
-    //                                           miTotalVehiclesHit + 6 per-frame bools
-    //   DirectorProfileData (+0x1E8, 12 bytes): meCameraMode (+ un-DWARF'd trailing members;
-    //                                           Clear sets its +0x08 word to 1)
-    // RankUpInfo: the DWARF field layout (mbDoingRankUp/.../meRivalIndex) does not line up with
-    // the byte/word offsets the asm uses, so the body stays opaque. BUT the head word at +0x1CC
-    // is read by ProcessPossibleFX as a full 4-byte value (asm 0x82234BF4 lwz +0x1CC == 2, and
-    // 0x82234CC0 lwz +0x1CC passed to SqDistanceOfNearestOpposingTeamMember). Expose it as a
-    // faithful named 4-byte head (the rival-team / rank-up sub-state selector Clear stores as a
-    // word) so consumers do a real word read instead of a 1-byte cast. The remaining 4 bytes of
-    // the 8-byte blob stay opaque (the +0x1D0/+0x1D1 road-rage bools, read below).
+    // BrnDirectorGameState.h:214 / :222 / :241 -- the three trailing sub-objects, at their DWARF
+    // field layouts. ⭐ RE-MODELLED 2026-09-24 (crash parity FX-DIRECTOR). The previous model said
+    // the DWARF layouts "do not line up" with the console's stores and kept all three as opaque
+    // blobs -- RankUpInfo @+0x1CC, ShowTimeInfo @+0x1D4, DirectorProfileData @+0x1E8. They DO line
+    // up, exactly, once the three objects sit where the console puts them: 8 bytes later, behind
+    // an 8-byte run the X360 has and the PS3 DWARF does not (the three members above mRankUpInfo,
+    // see there). Pinned store for store:
+    //   ShowTimeInfo @+0x1DC -- ProcessInputQueue case 39 0x82237D94..0x82237DCC and GameState::
+    //       Clear 0x82218C30..0x82218C54 are the SAME inlined ShowTimeInfo::Clear off one base
+    //       register (`addi r11, r11, 0x39BC` == GameState +0x1DC): stfs +0x0 (mfDeformationLevel),
+    //       stw +0x8 (miTotalVehiclesHit), stw +0x4 (miComboLevel), stb +0x11 (mbInIntro),
+    //       stb +0xC..+0x10 (the five ThisFrame bools) -- nine stores, nine DWARF fields, no gaps.
+    //       The ProcessInputQueue prologue clears exactly the five ThisFrame bools
+    //       (0x82237398..0x822373A8, == ShowTimeInfo::ResetPerFrameData, DWARF h:227).
+    //   RankUpInfo @+0x1D4 -- the prologue's `stb 0, 0x1D6` (0x8223738C) is the one per-frame field,
+    //       mbNewRivalFocusThisFrame (+2); ArbStateRankUp reads +0x1D4 / +0x1D6 / +0x1D8 as
+    //       mbDoingRankUp / mbNewRivalFocusThisFrame / meRivalIndex.
+    //   DirectorProfileData @+0x1F0 -- Clear's `stw 1, 0x1F0` (0x82218C60) is its Construct
+    //       (meCameraMode = E_CAMERA_MODE_THIRD_PERSON); PostGuiUpdate stores GUI 475's word there.
+    // GameState therefore ends at +0x1F4 on the console. (A GUI header, BrnGuiOptionsDataProfile.h,
+    // carries its own 12-byte opaque `BrnDirector::GameState::DirectorProfileData` fork for a
+    // pointer-only use; it is not this type and no TU sees both.)
     struct RankUpInfo
     {
-        s32 miRivalTeamSelector;   // +0x1CC (FLAG: asm-attested 4-byte head; DWARF name unreliable)
-        u8  maOpaque[0x04];        // +0x1D0..+0x1D3 (road-rage critical/totalled bools, opaque)
+        bool                mbDoingRankUp;              // :215  +0x1D4
+        bool                mbDoingRankUpIntro;         // :216  +0x1D5
+        bool                mbNewRivalFocusThisFrame;   // :217  +0x1D6 (per-frame; cleared by the
+                                                        //              ProcessInputQueue prologue)
+        EActiveRaceCarIndex meRivalIndex;               // :218  +0x1D8
     };
-    struct ShowTimeInfo        { u8 maOpaque[0x14]; };   // FLAG: opaque (DWARF field layout unreliable)
+
+    struct ShowTimeInfo
+    {
+        f32  mfDeformationLevel;               // :229  +0x1DC
+        s32  miComboLevel;                     // :230  +0x1E0 (ArbStateCrashMode's blur scale)
+        s32  miTotalVehiclesHit;               // :231  +0x1E4
+        bool mbComboLevelIncreasedThisFrame;   // :232  +0x1E8
+        bool mbVehicleImpactThisFrame;         // :233  +0x1E9 (ArbStateCrashMode: the shake blur)
+        bool mbCrushComboThisFrame;            // :234  +0x1EA (ArbStateCrashMode: super-slo-mo close-up)
+        bool mbEarntMultiplierThisFrame;       // :235  +0x1EB (ArbStateCrashMode: close-up)
+        bool mbExtraSpinThisFrame;             // :236  +0x1EC (ArbStateCrashMode: the long blur)
+        bool mbInIntro;                        // :237  +0x1ED (the showtime intro latch)
+
+        // DWARF h:224. No out-of-line X360 symbol: inlined at ProcessInputQueue case 39
+        // (0x82237DAC..0x82237DCC) and GameState::Clear (0x82218C30..0x82218C54), both in this
+        // store order.
+        void Clear()
+        {
+            mfDeformationLevel = 0.0f;
+            miTotalVehiclesHit = 0;
+            miComboLevel       = 0;
+            mbInIntro          = false;
+            ResetPerFrameData();
+        }
+
+        // DWARF h:227. No out-of-line X360 symbol: inlined at the ProcessInputQueue prologue
+        // (0x82237398..0x822373A8) and as Clear's tail.
+        void ResetPerFrameData()
+        {
+            mbComboLevelIncreasedThisFrame = false;
+            mbVehicleImpactThisFrame       = false;
+            mbCrushComboThisFrame          = false;
+            mbEarntMultiplierThisFrame     = false;
+            mbExtraSpinThisFrame           = false;
+        }
+    };
+
     struct DirectorProfileData
     {
-        u8  maOpaque[0x08];      // +0x00..+0x07  FLAG: opaque (DWARF names one meCameraMode; the asm
-                                 //               reads six per-frame BYTES here -- see the consumers)
-        s32 miCameraModeWord;    // +0x08 (GameState +0x1F0): MainDirector::PostGuiUpdate @0x82236F88
-                                 //       stores GUI command 475's payload here; Clear stores 1
+        ECameraMode meCameraMode;   // :247  +0x1F0 (PostGuiUpdate stores GUI command 475's payload)
+
+        // DWARF h:245. No out-of-line X360 symbol: GameState::Clear inlines it as
+        // `stw r8(=1), 0x1F0` (0x82218C60).
+        void Construct()
+        {
+            meCameraMode = E_CAMERA_MODE_THIRD_PERSON;
+        }
     };
 
     // --- members, DWARF order (BrnDirectorGameState.h:85..252) ---------------------
@@ -233,9 +275,24 @@ struct GameState
     bool                mbPlayerWasTakenDown;                    // :208
     EActiveRaceCarIndex mePlayerKillerIndex;                     // :209
     bool                mbStartingFreeburnDueToPlayerJoinThisFrame; // :211
-    RankUpInfo          mRankUpInfo;                             // :250
-    ShowTimeInfo        mShowTimeInfo;                           // :251
-    DirectorProfileData mDirectorProfileData;                    // :252
+    // +0x1CC..+0x1D3 -- THREE X360-ONLY MEMBERS (merge-window delta: no DecFIGS member sits between
+    // :211 and :250, yet the console has 8 bytes there). Every store is asm: the ProcessInputQueue
+    // prologue copies them from the input buffer every frame (0x8223740C..0x82237440: @0x7AB0 ->
+    // +0x1CC word, @0x7AD6 -> +0x1D1, @0x7AD5 -> +0x1D0), GameState::Clear zeroes all three
+    // (0x82218CB4 / 0x82218C14 / 0x82218C1C). Their producer is BridgeGameStateToDirector
+    // (0x823CD454: the game-state output's per-car word at +0x2AFC8 + 4*player; 0x823CD4DC: its
+    // per-car byte at +0x2AEB8 + player; 0x823CD510: `f32 +0x2AF4C > 0.0 ? 0 : byte +0x2AF60`).
+    // FLAG: the NAMES are ours, from the one consumer, ArbStateRoaming::ProcessPossibleFX:
+    //   +0x1CC is compared == 2 (0x82234BF4) and passed as SqDistanceOfNearestOpposingTeamMember's
+    //          liMyTeam (0x82234CC0) -- the player's team;
+    //   +0x1D0 plays "Damage_Crit" at full blend (0x82234C8C);
+    //   +0x1D1 plays "Wrecked" while an opposing car is near (0x82234CB4).
+    s32                 miPlayerTeam;                            // X360 +0x1CC (FLAG name)
+    bool                mbPlayerDamageCritical;                  // X360 +0x1D0 (FLAG name)
+    bool                mbPlayerWrecked;                         // X360 +0x1D1 (FLAG name)
+    RankUpInfo          mRankUpInfo;                             // :250  +0x1D4
+    ShowTimeInfo        mShowTimeInfo;                           // :251  +0x1DC
+    DirectorProfileData mDirectorProfileData;                    // :252  +0x1F0
 
     // BrnDirectorGameState.h:255 -- ledger func @0x82218930 (defined in the .cpp).
     void Clear();
@@ -254,31 +311,20 @@ struct GameState
     bool        IsInCountdown() const { return mEventState.GetCurrent() == E_EVENT_STATE_COUNTDOWN; }
 
     // ---- rank-up control accessors (BrnArbStateRankUp consumes these) ---------------------
-    // The director "rank up" state reads three rank-up control fields the asm proves live in
-    // the trailing sub-object region (ARTIST: Prepare @0x82270EE8 / Update @0x82236380). The
-    // DecFIGS DWARF field layout for that region is unreliable (see the mShowTimeInfo /
-    // RankUpInfo note above), so this region stays an opaque blob -- but its OWN type is the
-    // legitimate home for the documented-offset reads, encapsulated here as named accessors so
-    // consuming TUs never reinterpret the blob themselves. Offsets are GameState-relative,
-    // asm-attested:
-    //   +0x1D4 (byte): the rank-up intro is still running (gates the finish/hand-off check)
-    //   +0x1D6 (byte): a new rival was selected this frame (advance the take to that rival)
-    //   +0x1D8 (word): the rival's active-race-car index (anchor the take to that car)
-    // FLAG: the names are inferred from the rank-up usage; the region's DWARF layout is
-    // unreliable so these read the opaque mShowTimeInfo bytes by documented offset until that
-    // sub-object's own TU recovers the real field layout.
+    // The director "rank up" state (ARTIST: Prepare @0x82270EE8 / Update @0x82236380) reads the
+    // three RankUpInfo fields at +0x1D4 / +0x1D6 / +0x1D8. They are named DWARF members now (see
+    // RankUpInfo); the accessors stay because ArbStateRankUp reads through them.
     bool IsRankUpIntroRunning() const
     {
-        return mShowTimeInfo.maOpaque[0x00] != 0;   // +0x1D4
+        return mRankUpInfo.mbDoingRankUp;              // +0x1D4
     }
     bool IsNewRankUpRivalThisFrame() const
     {
-        return mShowTimeInfo.maOpaque[0x02] != 0;   // +0x1D6
+        return mRankUpInfo.mbNewRivalFocusThisFrame;   // +0x1D6
     }
     EActiveRaceCarIndex GetRankUpRivalRaceCarIndex() const
     {
-        return static_cast<EActiveRaceCarIndex>(
-            *reinterpret_cast<const s32*>(&mShowTimeInfo.maOpaque[0x04]));   // +0x1D8
+        return mRankUpInfo.meRivalIndex;               // +0x1D8
     }
 };
 

@@ -381,11 +381,12 @@ namespace BrnDirector
                     }
                 }
             }
-            else if (lrSharedInfo.mpGameState->mDirectorProfileData.maOpaque[0x05] != 0)
+            else if (lrSharedInfo.mpGameState->mShowTimeInfo.mbInIntro)
             {
-                // FLAG: gameState +0x1ED, the same inferred profile-data flag ProcessPossibleFX
-                // reads. When set the external chase cam is FORCED (the selection predicate is
-                // bypassed entirely -- 0x822645C8 goes straight to container +0x04).
+                // gameState +0x1ED, ShowTimeInfo::mbInIntro (DWARF h:237; written by
+                // ProcessInputQueue case 146, E_ACTION_SHOWTIME_INTRO_START). When set the external
+                // chase cam is FORCED (the selection predicate is bypassed entirely -- 0x822645C8
+                // goes straight to container +0x04).
                 GetNonConstCamera() = lrContainer.mGameplayExternal.GetProducedCamera();
             }
             else
@@ -691,11 +692,9 @@ namespace BrnDirector
                 mbStartedJumpEffect = true;     // +0x39D
             }
 
-            // Showtime-intro borders/blur ramp, gated on a DirectorProfileData flag.
-            // FLAG: console +0x1ED -> mDirectorProfileData (showtime-intro active); the sub-
-            // object is opaque, so the flag is read through its byte blob.
-            const bool lbShowtimeIntroActive =
-                lrGameState.mDirectorProfileData.maOpaque[0x05] != 0;  // FLAG: +0x1ED inferred
+            // Showtime-intro borders/blur ramp, gated on ShowTimeInfo::mbInIntro (console +0x1ED,
+            // `lbz 0x1ED` @0x82234DC8; written by ProcessInputQueue case 146).
+            const bool lbShowtimeIntroActive = lrGameState.mShowTimeInfo.mbInIntro;   // +0x1ED
 
             if (lbShowtimeIntroActive)
             {
@@ -813,18 +812,18 @@ namespace BrnDirector
         case 14:
         case 17:
         {
-            // asm 0x82234C8C: lbz +0x1D0 -> road-rage "critical" bool (RankUpInfo blob, opaque[0]).
-            if (lrGameState.mRankUpInfo.maOpaque[0x00] != 0)   // FLAG: +0x1D0 (opaque road-rage bool)
+            // asm 0x82234C8C: lbz +0x1D0 -> GameState::mbPlayerDamageCritical (X360-only member).
+            if (lrGameState.mbPlayerDamageCritical)              // +0x1D0
             {
                 Camera::EnsureEffectIsPlaying(lrCamera, lrEffects, "Damage_Crit", KF_UNIT);
                 break;
             }
-            // asm 0x82234CB4: lbz +0x1D1 -> road-rage "totalled" bool (RankUpInfo blob, opaque[1]).
-            if (lrGameState.mRankUpInfo.maOpaque[0x01] != 0)   // FLAG: +0x1D1 (opaque road-rage bool)
+            // asm 0x82234CB4: lbz +0x1D1 -> GameState::mbPlayerWrecked (X360-only member).
+            if (lrGameState.mbPlayerWrecked)                     // +0x1D1
             {
-                // asm 0x82234CC0: lwz +0x1CC (full 4-byte word) -> the rival-team selector passed
-                // to the opposing-team query.
-                const s32 liRivalTeam = lrGameState.mRankUpInfo.miRivalTeamSelector;  // +0x1CC (word)
+                // asm 0x82234CC0: lwz +0x1CC (full 4-byte word) -> the player's team, passed
+                // as the opposing-team query's liMyTeam.
+                const s32 liRivalTeam = lrGameState.miPlayerTeam;   // +0x1CC (word)
                 const f32 lfSqDist =
                     lrSharedInfo.mpAllVehicleData->SqDistanceOfNearestOpposingTeamMember(liRivalTeam);
                 if (lfSqDist < KF_NEAREST_CAR_FX_RANGE_SQ)
@@ -845,8 +844,8 @@ namespace BrnDirector
 
         case 13:    // drive-thru: damage-crit fade by player distance + checkpoint hook
         {
-            // asm 0x82234BF4: lwz +0x1CC (full 4-byte word) compared == 2 (rival-team selector).
-            if (lrGameState.mRankUpInfo.miRivalTeamSelector == 2)   // +0x1CC (word)
+            // asm 0x82234BF4: lwz +0x1CC (full 4-byte word) compared == 2 (the player's team).
+            if (lrGameState.miPlayerTeam == 2)                       // +0x1CC (word)
             {
                 const f32 lfPlayerSqDist =
                     lrSharedInfo.mpAllVehicleData->GetSqDistanceOfNearestCarToPlayer();
@@ -1108,9 +1107,9 @@ namespace BrnDirector
         }
 
         // Rank-up / online-car-select hand-offs.
-        // asm 0x82219FF4: lbz +0x1D4 -> rank-up active (lands in the opaque mShowTimeInfo blob).
+        // asm 0x82219FF4: lbz +0x1D4 -> RankUpInfo::mbDoingRankUp.
         // asm 0x8221A018: lbz +0x1A5 -> mbIsOnlineCarSelectActive (Clear default 0).
-        if (lrGameState.mShowTimeInfo.maOpaque[0x00] != 0)      // FLAG: +0x1D4 (opaque rank-up bool)
+        if (lrGameState.mRankUpInfo.mbDoingRankUp)              // +0x1D4
         {
             // asm @0x8221A010: target 9 (RANK_UP), blocked 0xE.
             ArbUtils::ChangeToStateWithoutRelease<EState>(
