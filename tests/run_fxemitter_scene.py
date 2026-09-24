@@ -11,6 +11,8 @@ data asserts and its missing null fallbacks; nothing numeric moves):
     < 10000 (l.493, `cmplwi 0x2710`) and meRootType < 2 (l.495) before the bounds test -- no `lpMap &&`;
   * Update @0x826E6438 asserts "lpMap" (l.273) and uses it as it stands; GetZoneMap @0x8269C028 asserts
     (l.426) and returns **(handle) with no null fallback.
+  * HandleWorldZoneLoad @0x8269BF48 appends with no duplicate-zone check (the PC-only early-out is gone:
+    measured over the junction-480886 pursuit, the world streamer never double-posts a unit's load).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxemitter_scene.py [--rev <rev>]
 """
@@ -69,6 +71,10 @@ def wiring(tree):
         ("Update uses the asserted map as it stands and GetZoneMap has no null fallback (l.273 / l.426)",
          update != "" and re.search(r"if\s*\(\s*lpMap\s*\)", update) is None and
          zone_map != "" and re.search(r"\?\s*\*", zone_map) is None and ": 0" not in zone_map),
+        ("HandleWorldZoneLoad appends with no duplicate-zone check (0x8269BF48: assert l.346, append) -- "
+         "no early return on a zone already in the table",
+         load != "" and re.search(r"\breturn\b", load) is None and
+         re.search(r"GetZone\s*\(\s*\)\s*==\s*lu16Zone", load) is None),
     ]
 
 
