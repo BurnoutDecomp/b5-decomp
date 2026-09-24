@@ -9,6 +9,7 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Sound/Global/BrnHudSoundDiag.h"   // the opt-in [sweeteners-attach] witness only
 
 #include <cmath>
 
@@ -23,6 +24,7 @@ namespace
 {
 u32 guDamagePopRoundRobin = 0;
 u32 guDamageBangRoundRobin = 0;
+u32 guSweetenersDiagAttach = 0;   // [sweeteners-attach] witness budget (NOT X360; see Attach)
 
 f32 VectorElement(const Vector4& arValue, s32 aiIndex)
 {
@@ -139,6 +141,33 @@ void SweetenersEffect::CreateVoices()
     mCarStarting.Create(lParams);
 }
 
+// ---------------------------------------------------------------------------
+// SweetenersEffect::Attach @ 0x826FD7A0 (runs on this+4, the EffectBase subobject: r31)
+//
+// Re-verified against the ARTIST words 2026-09-24 (crash parity FOLLOWUPS 12, FX-XLANE):
+//   0x826FD7C4..DC  the inlined EffectBase::Attach (++mu16AttachCount, meDetachState = 0)
+//   0x826FD7E8..810 miRaceCarIndex = GetAttachInfo().muVehicleIndex
+//   0x826FD814..81C mfDelayToBang: previous = current, current = -1.0 (flt_820037C8) -- an
+//                   Update, not a Flush; 0x826FD82C/30 mfDeleayToVFXFire = (-1.0, -1.0) -- a Flush
+//   0x826FD820..834 mfDamagePopVolume / mfDamageBangVolume / mfTimeIntoStart = 0.0,
+//                   meCarStartingState = NONE.  NO store to meRaceCarEngineState (+0x1C0/+0x1C4).
+//   0x826FD838      mFadeOutEngine.Initialize(1.0, 1.0, 0.0, linear)
+//   0x826FD8B0..8C4 module RNG (module+0x13590) draw 1: hi32(seed) kept as the HIGH word, seed
+//                   = seed * 0x5851F42D4C957F2D + 1 (mulld 0x826FD8B4)
+//   0x826FD8D0..8E4 draw 2 (mulld 0x826FD8D4): its hi32 is the LOW word
+//   0x826FD8E8      SqaureWave::Construct(this+0x16C, seed, r5 = up, r6 = down), where
+//                   up   = (flt_82001CC0 0.0, flt_82002138 0.01)   (var_50)
+//                   down = (flt_82F2CD50 0.025, flt_82F2CD4C 0.15)  (var_60; initialised .data,
+//                   no dyn-init writer) -- the callee stores r5 -> mUpTimeWindow (+0, 0x826AB840)
+//                   and r6 -> mDownTimeWindow (+8, 0x826AB848).
+//   0x826FD8EC..8F8 mpFXBank = the global state manager + 0xB0 (the "mpFXBank" assert)
+// and nothing else before the attribute lookup: the module RNG is stepped exactly TWICE and the
+// effect's own mRandomGenerator is NOT reseeded here. The PC used to draw a THIRD value into
+// mRandomGenerator.SetSeed (shifting every later module-RNG draw and giving each instance its own
+// pop / sample sequence), passed the square-wave windows as up (0.15, 0.15) / down (0.0, 0.01),
+// flushed meRaceCarEngineState to OFF and flushed mfDelayToBang; and it composed the seed as
+// (A() << 32) | B(), whose two calls C++ may evaluate in either order.
+// ---------------------------------------------------------------------------
 bool SweetenersEffect::Attach()
 {
     if (!CgsSound::Logic::EffectBase::Attach())
@@ -155,23 +184,32 @@ bool SweetenersEffect::Attach()
         return false;
 
     miRaceCarIndex = static_cast<s8>(mpPhysicsControl->GetAttachInfo().muVehicleIndex);
-    mfDamageBangVolume = 0.0f;
+    mfDelayToBang.Update(-1.0f);
     mfDamagePopVolume = 0.0f;
-    mfDelayToBang.Flush(-1.0f);
-    mfDeleayToVFXFire.Flush(-1.0f);
+    mfDamageBangVolume = 0.0f;
     mfTimeIntoStart = 0.0f;
+    mfDeleayToVFXFire.Flush(-1.0f);
     meCarStartingState = E_CARSTARTINGSTATE_NONE;
-    meRaceCarEngineState.Flush(
-        BrnWorld::RaceCarEntityModuleIO::E_ACTIVE_RACE_CAR_ENGINE_STATE_OFF);
     mFadeOutEngine.Initialize(1.0f, 1.0f, 0.0f, CgsSound::Utils::Curve::E_LINEAR);
 
-    const u64 luSquareSeed =
-        (static_cast<u64>(lpModule->GetRandomGenerator().RandomUInt()) << 32) |
-        lpModule->GetRandomGenerator().RandomUInt();
-    mPopsSquareWave.Construct(luSquareSeed,
-        CgsSound::Utils::MinMax(0.15f, 0.15f),
-        CgsSound::Utils::MinMax(0.0f, 0.01f));
-    mRandomGenerator.SetSeed(lpModule->GetRandomGenerator().RandomUInt());
+    CgsNumeric::Random& lrModuleRandom = lpModule->GetRandomGenerator();
+    const u64 luSeedHighWord = lrModuleRandom.RandomUInt();   // mulld 0x826FD8B4
+    const u64 luSeedLowWord  = lrModuleRandom.RandomUInt();   // mulld 0x826FD8D4
+    mPopsSquareWave.Construct((luSeedHighWord << 32) | luSeedLowWord,
+        CgsSound::Utils::MinMax(0.0f, 0.01f),       // up:   flt_82001CC0, flt_82002138
+        CgsSound::Utils::MinMax(0.025f, 0.15f));    // down: flt_82F2CD50, flt_82F2CD4C
+
+    // [sweeteners-attach] NOT X360 -- opt-in dispatch witness on the sound family's latch
+    // (BRN_HUD_SOUND_DIAG, capped): the seed the two module-RNG draws built and the windows the
+    // square wave now holds.
+    if (BrnSound::Logic::HudSoundDiagBudget(guSweetenersDiagAttach))
+    {
+        BrnSound::Logic::HudSoundDiagPrintf(
+            "[sweeteners-attach] car %d seed %08x%08x up (%.3f, %.3f) down (%.3f, %.3f) [FLAG PC witness]\n",
+            static_cast<s32>(miRaceCarIndex), static_cast<u32>(luSeedHighWord), static_cast<u32>(luSeedLowWord),
+            static_cast<double>(mPopsSquareWave.mUpTimeWindow.mfMin), static_cast<double>(mPopsSquareWave.mUpTimeWindow.mfMax),
+            static_cast<double>(mPopsSquareWave.mDownTimeWindow.mfMin), static_cast<double>(mPopsSquareWave.mDownTimeWindow.mfMax));
+    }
 
     BrnSound::Logic::GlobalStateManager* lpGlobal =
         static_cast<BrnSound::Logic::GlobalStateManager*>(
