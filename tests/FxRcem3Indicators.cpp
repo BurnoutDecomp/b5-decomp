@@ -5,7 +5,8 @@
 // did, since nothing wrote the render bits.
 //   G60-D1  SetIndicatorState arm 1 (r4): if (!+0x1C8D) t = 0 ; +0x1C8C = 0 ; +0x1C8D = 1
 //           (0x822A52BC..0x822A52E0); arm 2 is the mirror; else t = 0 and both latches 0.
-//   G60-D2 / G61-D5  UpdateIndicators: t += dt while a latch is up; !(t <= 0.5) -> 0;
+//   G60-D2 / G61-D5  UpdateIndicators: t += dt while a latch is up; t > 0.5 -> 0 (`ble` KEEPS a NaN --
+//           NaN polarity corrected 2026-09-24, FX-NANPOL sweep / FX-RCEM4);
 //           lit = t < 0.25; mbIsIndicatingLeft = left latch && lit; mbIsIndicatingRight = right && lit.
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -109,8 +110,9 @@ int main()
         Check(c.mfIndicatorTime == 0.5f && !c.mRenderParams.mbIsIndicatingLeft,
               "G60-D2 t == 0.5 is kept (ble), and 0.5 is dark");
         c.mfIndicatorTime = std::numeric_limits<f32>::quiet_NaN(); c.UpdateIndicators(0.1f);
-        Check(c.mfIndicatorTime == 0.0f && c.mRenderParams.mbIsIndicatingLeft,
-              "G60-D2 a NaN timer fails `ble` and wraps to 0.0 (!(t <= 0.5))");
+        Check(c.mfIndicatorTime != c.mfIndicatorTime && !c.mRenderParams.mbIsIndicatingLeft,
+              "G60-D2 NaN polarity: `ble` @0x822A5370 (bc 4,25) is TAKEN on an unordered compare, so a NaN "
+              "timer is KEPT, not reset; `blt` @0x822A5394 is not taken, so the lamp is dark");
 
         ActiveRaceCar r; r.SetIndicatorState(false, true);
         r.UpdateIndicators(1.0f / 60.0f);
