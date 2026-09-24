@@ -815,23 +815,50 @@ void ActiveRaceCar::Update_PreScene( CgsSceneManager::SceneManagerIO::InSceneUpd
     }
 
     // ---- THE SHARED TAIL (0x822EB0F4..0x822EB15C), reached by every arm and the default ----
-    // [FLAG BLOCKED -- the posters live in a header outside this lane] the two physics posts:
-    //   0x822EB0F4  if (mbChangeCollisionState) {                                   (lbz 0x78D)
-    //                   { (u32)(mHandlingBodyVolumeId.muId >> 32), mbCollisionStateToChangeTo }
-    //                   -> lpVehicleInterface + 0x202A0 (mSetRaceCarCollisionEventQueue).AddEvent ;
-    //                   mbChangeCollisionState = false; }
-    //   0x822EB128  if (mbChangeCullingGroup) {                                     (lbz 0x78F)
-    //                   { entity word, mCullingGrouptoChangeTo }
-    //                   -> lpVehicleInterface + 0x202FC (mSetRaceCarCullingGroupEventQueue).AddEvent ;
-    //                   mbChangeCullingGroup = false; }
-    // The DWARF declares the posters as VehicleInputInterface::SetRaceCarCollision(EntityId, bool)
-    // and ::SetRaceCarCullingGroup(EntityId, CullingGroup) (BrnVehicleInputInterface.h:166/:171,
-    // header inlines on X360); the PC VehicleInputInterface has neither and keeps both queues
-    // private, so the posts cannot be written from here. The two flags are therefore LEFT SET
-    // (exactly as before this function existed) rather than consumed with nothing posted.
-    // Their physics-side consumer (VehicleManager::ProcessCollisionEvents) only forwards them to
-    // the deformation interface, which nothing on PC reads yet.
-    // DELETE-WHEN BrnVehicleInputInterface.h grows SetRaceCarCollision / SetRaceCarCullingGroup.
+    // The two physics posts (crash parity FX-RCEM4 2026-09-24, reviewer A on 65eadffe; they were
+    // parked until VehicleInputInterface grew the DWARF posters :166 / :171):
+    //   0x822EB0F4  lbz 0x78D ; beq          if (mbChangeCollisionState)
+    //   0x822EB100  ld 0xD0 ; srdi 32        the 32-bit entity word of mHandlingBodyVolumeId
+    //   0x822EB108  lbz 0x78E                mbCollisionStateToChangeTo
+    //   0x822EB120  bl AddEvent on r5 + 0x202A0  == lpVehicleInterface->SetRaceCarCollision(...)
+    //   0x822EB124  stb 0, 0x78D             mbChangeCollisionState = false
+    //   0x822EB128  lbz 0x78F ; beq          if (mbChangeCullingGroup)
+    //   0x822EB13C  lwz 0x790                mCullingGrouptoChangeTo
+    //   0x822EB154  bl AddEvent on r5 + 0x202FC  == lpVehicleInterface->SetRaceCarCullingGroup(...)
+    //   0x822EB158  stb 0, 0x78F             mbChangeCullingGroup = false
+    // The producers are AddToCollision / RemoveFromCollision (the collision pair) and
+    // UpdateCullingGroup (the group); the consumer is VehicleManager::ProcessCollisionEvents.
+    // [DIAG] BRN_COLLISION_POST_DIAG -- NOT IN THE X360 BINARY. Capped proof the two posts were
+    // DISPATCHED, with what they carried.
+    static const bool sbCollisionPostDiag = ( getenv( "BRN_COLLISION_POST_DIAG" ) != 0 );
+    static u32 suCollisionPostDiagLines = 0u;
+    const bool lbLogPosts = sbCollisionPostDiag && suCollisionPostDiagLines < 64u
+                         && CgsDev::Log::gpDebugPrint != 0 && ( mbChangeCollisionState || mbChangeCullingGroup );
+    if( lbLogPosts )
+    {
+        ++suCollisionPostDiagLines;
+        *CgsDev::Log::gpDebugPrint
+            << "[collision-post] slot " << static_cast<s32>( meActiveRaceCarIndex )
+            << " entity " << static_cast<u32>( mHandlingBodyVolumeId.muId >> 32 )
+            << " collision " << ( mbChangeCollisionState ? ( mbCollisionStateToChangeTo ? "on" : "off" ) : "-" )
+            << " culling " << ( mbChangeCullingGroup ? mCullingGrouptoChangeTo : -1 ) << "\n";
+    }
+
+    if( mbChangeCollisionState )
+    {
+        EntityId lBodyId;
+        lBodyId.muValue = static_cast<u32>( mHandlingBodyVolumeId.muId >> 32 );
+        lpVehicleInterface->SetRaceCarCollision( lBodyId, mbCollisionStateToChangeTo );
+        mbChangeCollisionState = false;
+    }
+    if( mbChangeCullingGroup )
+    {
+        EntityId lBodyId;
+        lBodyId.muValue = static_cast<u32>( mHandlingBodyVolumeId.muId >> 32 );
+        lpVehicleInterface->SetRaceCarCullingGroup(
+            lBodyId, static_cast<BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup>( mCullingGrouptoChangeTo ) );
+        mbChangeCullingGroup = false;
+    }
 
     mbCrashedIntoWater = false;                                             // 0x822EB15C  stb r27, 0x783
 }
