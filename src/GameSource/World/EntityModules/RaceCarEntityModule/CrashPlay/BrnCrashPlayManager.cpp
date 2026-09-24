@@ -62,7 +62,8 @@
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include "rw/math/fpu/scalar_operation.h"
 #include <cstdlib>   // getenv -- the [crashplay] witness only
-#include <cmath>     // std::fmaf -- the console's fused fmadds (OnBounce / OnVehicleHitConfirmed)
+#include <cmath>     // std::fmaf -- the console's fused fmadds / fnmsubs (OnBounce / OnVehicleHitConfirmed /
+                     // UpdateMomentum / GetShowtimeTrafficDensityScale); std::fabs (IsZeroVmx)
 
 namespace BrnWorld
 {
@@ -545,6 +546,18 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
     mCrashPlayDebugComponent.Update();
 }
 
+// vpu::IsZero(v, FLT_EPSILON) as UpdateMomentum inlines it (0x82302108..0x8230214C): `vandc` (|v|),
+// `vrlimi128 v11, v0, 1, 1` (w <- x), `vcmpgtfp.` against splat(flt_82014460 == FLT_EPSILON), then the
+// CR6 "all false" bit (`extrwi r11, r11, 1, 26`). A lane is zero when it is NOT above the tolerance, so
+// a NaN lane counts as zero; the shared vpu::IsZero (vector3_operation.h) tests `|c| <= 1e-6` and calls
+// a NaN lane non-zero. Spelled locally, as BrnAICar_Update.cpp / BrnAIBuzzBy.cpp do (crash parity).
+static inline bool IsZeroVmx( const Vector3& lrVector )
+{
+    return !( std::fabs( lrVector.x ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE ) &&
+           !( std::fabs( lrVector.y ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE ) &&
+           !( std::fabs( lrVector.z ) > rw::math::fpu::KF_IS_ZERO_TOLERANCE );
+}
+
 // =================================================================================================
 // UpdateMomentum  @ 0x823020D0  -- ⭐⭐⭐ THE ONLY THING THAT SPENDS SHOWTIME BOOST WITHOUT INPUT.
 //
@@ -563,12 +576,20 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     // The very first frame after Activate has mLastPlayerPos still zeroed, and the console skips
     // the distance award on exactly that frame (`vcmpgtfp` of |mLastPlayerPos| against a splatted
     // FLT_EPSILON, with the sign bit cleared by `vandc`, then the `vrlimi128` that folds the X and
-    // Z lanes together). Reconstructed as the vector IsZero the DWARF names.
-    if( !rw::math::vpu::IsZero( mLastPlayerPos ) )
+    // Z lanes together). Reconstructed as the vector IsZero the DWARF names -- in the CONSOLE's form
+    // (0x82302128..0x82302160): splat(flt_82014460) = FLT_EPSILON, `vcmpgtfp.` and the CR6 "all false"
+    // bit, so a lane is zero when it is NOT above the tolerance and a NaN lane counts as zero.
+    // [FX-AIBUZZ 2026-09-24: was the shared vpu::IsZero -- `|c| <= 1e-6`, NaN non-zero -- so a NaN
+    //  last position ran the award (0 * NaN) and poisoned the meter, where the console skips it]
+    if( !IsZeroVmx( mLastPlayerPos ) )
     {
         const f32 lfDistanceTravelledLastFrame =
                 BrnMath::Magnitude2D( rw::math::vpu::Subtract( lPlayerPosition, mLastPlayerPos ) );
-        mfBoostPercentage += KF_BOOST_FOR_DISTANCE_TRAVELLED * lfDistanceTravelledLastFrame;
+        // `fmadds f0, f0(KF_BOOST_FOR_DISTANCE_TRAVELLED), f1(distance), f13(boost)` @0x82302174 --
+        // ONE rounding. [FX-AIBUZZ 2026-09-24: was `+= K * d`, two roundings; K is 0.0 in the shipped
+        // tuning (see the banner), so only a tuned K could show it -- spelled as the console computes it]
+        mfBoostPercentage = std::fmaf( KF_BOOST_FOR_DISTANCE_TRAVELLED, lfDistanceTravelledLastFrame,
+                                       mfBoostPercentage );
     }
     mLastPlayerPos = lPlayerPosition;
 
@@ -589,7 +610,11 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
 
         if( mfTimeSinceLastInAir > KF_TIME_ON_GROUND_NO_PENALTY )
         {
-            mfBoostPercentage -= KF_COST_FOR_BEING_ON_GROUND * lfSimTimerTimeStep;
+            // `fnmsubs f13, f13(KF_COST_FOR_BEING_ON_GROUND), f30(dt), f12(boost)` @0x823021F8 ==
+            // -(K * dt - boost), ONE rounding == fmaf(-K, dt, boost) (round-to-nearest is symmetric).
+            // [FX-AIBUZZ 2026-09-24: was `-= K * dt`, two roundings]
+            mfBoostPercentage = std::fmaf( -KF_COST_FOR_BEING_ON_GROUND, lfSimTimerTimeStep,
+                                           mfBoostPercentage );
             ++gCrashPlayWitness.muGroundFrames;                                       // [crashplay]
             gCrashPlayWitness.mfGroundSpent += KF_COST_FOR_BEING_ON_GROUND * lfSimTimerTimeStep;
         }
@@ -606,7 +631,10 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     {
         if( lpPlayerActiveRaceCar->GetPhysicsState()->mfTimeInAir > 0.0f )
         {
-            mfBoostPercentage += KF_BOOST_FOR_INITIAL_AIRTIME * lfSimTimerTimeStep;
+            // `fmadds f0, f0(KF_BOOST_FOR_INITIAL_AIRTIME), f30(dt), f13(boost)` @0x82302260 -- ONE
+            // rounding, then the inlined Clamp(0, 100) fsel pair. [FX-AIBUZZ 2026-09-24: was two roundings]
+            mfBoostPercentage = std::fmaf( KF_BOOST_FOR_INITIAL_AIRTIME, lfSimTimerTimeStep,
+                                           mfBoostPercentage );
             ClampBoostLevel();
         }
         else
@@ -633,17 +661,21 @@ void CrashPlayManager::UpdateMomentum( f32 lfSimTimerTimeStep,
     ClampBoostLevel();
 
     // Aftertouch bleed. See the KF_AFTERTOUCH_*_DECAY_TIME note above for which arm is which.
+    // `fnmsubs f0, f30(dt), f0(rate), f12(aftertouch)` @0x82302338 == -(dt * rate - aftertouch), ONE
+    // rounding, then `fsel f0, f0, f0, 0.0` (the fpu::Max(x, 0) fsel form).
+    // [FX-AIBUZZ 2026-09-24: was `aftertouch - dt * rate`, two roundings]
     const f32 lfDecayRate = rw::math::fpu::IsZero( mfTimeSinceLastInAir )
                             ? KF_AFTERTOUCH_AIR_DECAY_TIME
                             : KF_AFTERTOUCH_GROUND_DECAY_TIME;
-    mfAftertouchPower = rw::math::fpu::Max( mfAftertouchPower - ( lfSimTimerTimeStep * lfDecayRate ),
+    mfAftertouchPower = rw::math::fpu::Max( std::fmaf( -lfSimTimerTimeStep, lfDecayRate, mfAftertouchPower ),
                                             0.0f );
 
     // ...and a second, faster bleed once the meter is empty, so a spent player loses steering too.
+    // `fnmsubs f0, f30(dt), f0(flt_820147FC 0.5), f13(aftertouch)` @0x82302374, then the same fsel.
     if( rw::math::fpu::IsZero( mfBoostPercentage ) )
     {
         mfAftertouchPower = rw::math::fpu::Max(
-                mfAftertouchPower - ( lfSimTimerTimeStep * KF_AFTERTOUCH_NO_BOOST_DECAY_TIME ),
+                std::fmaf( -lfSimTimerTimeStep, KF_AFTERTOUCH_NO_BOOST_DECAY_TIME, mfAftertouchPower ),
                 0.0f );
     }
 }
@@ -1124,9 +1156,12 @@ f32 CrashPlayManager::GetShowtimeTrafficDensityScale() const
 {
     CGS_ASSERT( mfDifficultyLevel >= 0.0f && mfDifficultyLevel <= 1.0f, "mfDifficultyLevel>=0 && mfDifficultyLevel<=1.0f" );   // X360 :973
 
-    const f32 lfScale = KF_MIN_TRAFFIC_DENSITY
-                      + ( ( KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY )
-                          * ( 1.0f - mfDifficultyLevel ) );
+    // `fsubs f12, 1.0, difficulty` ; `fsubs f13, MAX (0x82CDB558), MIN (0x82CDB554)` ;
+    // `fmadds f31, f13, f12, f0(MIN)` @0x822A8110 -- ONE rounding.
+    // [FX-AIBUZZ 2026-09-24: was MIN + (MAX - MIN) * (1 - d), two roundings]
+    const f32 lfScale = std::fmaf( KF_MAX_TRAFFIC_DENSITY - KF_MIN_TRAFFIC_DENSITY,
+                                   1.0f - mfDifficultyLevel,
+                                   KF_MIN_TRAFFIC_DENSITY );
 
     CGS_ASSERT( lfScale >= 0.0f && lfScale <= 1.0f, "lfScale >= 0.0f && lfScale <= 1.0f" );   // X360 :977
 
