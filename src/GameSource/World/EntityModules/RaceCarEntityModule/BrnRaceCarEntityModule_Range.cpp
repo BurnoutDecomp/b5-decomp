@@ -171,9 +171,10 @@ static const f32 KF_CROSS_PRODUCT_EPSILON = 1.1920929e-07f;
 //
 // [FLAG PC bring-up] the console SEEDS it from RaceCarEntityModule::Prepare, which is
 // declaration-only on this build, so it is Construct()ed lazily on first draw here instead.
-// The draw sequence is therefore the console's, but its phase is not (the console has drawn
-// from it once per car-colour pick before this loop ever runs). Nothing downstream is
-// order-sensitive: the draw only picks WHICH of two reset styles a wrap uses.
+// Since 2026-09-24 (CHAIN-RECOLOUR) GetRandomCarColour at the bottom of this TU draws from it
+// too, so the car-colour picks and the wrap draws share one sequence as on the console; only the
+// seeding moment differs. Nothing downstream is order-sensitive beyond which random colour or
+// which of two reset styles a draw picks.
 // DELETE-WHEN RaceCarEntityModule::Prepare's Construct leg lands and this object can move
 // there as a real file-scope member.
 // ============================================================================================
@@ -930,6 +931,57 @@ void RaceCarEntityModule::ReadOutOfRangeRaceCarDataFromAI(
 
         lpRaceCar->UpdatePositioningData(lTransform, &mWorldMap2D);   // `this + 0x18300`
     }
+}
+// ============================================================================================
+// GetRandomCarColour  @ 0x822EA088   (crash parity CHAIN-RECOLOUR, 2026-09-24 -- had no body)
+//
+// A colour of palette liPaletteIndex that nobody on the road is wearing. Homed in THIS TU because
+// it draws from the module RNG above (`lis r11, dword_82FAD2B0@ha` @0x822EA098; the seed is the
+// qword at +0x20, 0x82FAD2D0). Both draws are CgsNumeric::Random::RandomUInt() inlined -- `ld seed ;
+// srdi hi,32 ; mulld 0x5851F42D4C957F2D ; addi 1 ; std` -- the value is the PRE-advance high word.
+//     if (liColourIndex != -1 && !IsCarColourInUse(liPaletteIndex, liColourIndex))   0x822EA0A4
+//         if (RandomUInt() & 1) return liColourIndex;           `clrlwi r10, r10, 31` @0x822EA0DC
+//         (a lost coin flip falls through with the seed already advanced once)
+//     index = RandomUInt() & 7                                  `clrlwi r31, r10, 29` @0x822EA130
+//     for (tries = 0; tries < 8; ++tries)                       `cmpwi r30, 8` @0x822EA164
+//         if (!IsCarColourInUse(liPaletteIndex, KAI_DECENT_AI_CAR_COLOURS[index])) break;
+//         index = (index + 1) % 8                               srawi/addze/slwi/subf @0x822EA160
+//     return KAI_DECENT_AI_CAR_COLOURS[index]   (after 8 misses: the starting entry again)
+// Callers: SetupCarColour (0x822F5380) and the taken-down re-colour legs of
+// ProcessRaceCarCrashCompleteEvents (0x822F419C / 0x822F42C0), always with liColourIndex == -1.
+// ============================================================================================
+namespace
+{
+    // DWARF BrnRaceCarEntityModule.cpp:294 KAI_DECENT_AI_CAR_COLOURS -- dword_820148D8, read from
+    // the image (x360rd): 00000005 00000006 00000009 0000000C 0000000E 0000000F 00000010 00000012.
+    const s32 KAI_DECENT_AI_CAR_COLOURS[] = { 5, 6, 9, 12, 14, 15, 16, 18 };
+
+    // DWARF BrnRaceCarEntityModule.cpp:315.
+    const s32 KI_NUM_AI_CAR_COLOURS = 8;
+}
+
+s32 RaceCarEntityModule::GetRandomCarColour( s32 liPaletteIndex, s32 liColourIndex )
+{
+    if( liColourIndex != -1 && !IsCarColourInUse( liPaletteIndex, liColourIndex ) )
+    {
+        if( ( GetModuleRandom().RandomUInt() & 1u ) != 0u )
+        {
+            return liColourIndex;
+        }
+    }
+
+    s32 liTableIndex = static_cast<s32>( GetModuleRandom().RandomUInt()
+                                         % static_cast<u32>( KI_NUM_AI_CAR_COLOURS ) );
+    for( s32 liTry = 0; liTry < KI_NUM_AI_CAR_COLOURS; ++liTry )
+    {
+        if( !IsCarColourInUse( liPaletteIndex, KAI_DECENT_AI_CAR_COLOURS[liTableIndex] ) )
+        {
+            break;
+        }
+        liTableIndex = ( liTableIndex + 1 ) % KI_NUM_AI_CAR_COLOURS;
+    }
+
+    return KAI_DECENT_AI_CAR_COLOURS[liTableIndex];
 }
 
 }

@@ -23,6 +23,26 @@ struct Vector3 { f32 x, y, z, w; };
 static std::vector<std::string> gaCalls;
 
 struct DetachedPartQueue { void Construct() { gaCalls.push_back("queue"); } };
+
+// FX-RCEM4 (CHAIN-RECOLOUR / G61-D6 colour leg, 2026-09-24): OnResourcesLoaded now also reads the car's
+// authored default colour (0x822EB474..0x822EB4F0). Stand-ins so the extracted body builds; the leg
+// itself is tested by run_fxrcem4_recolour.py. The queue Construct must still come first.
+static bool gbQueueBuiltBeforeColour = false;
+namespace Attrib {
+struct Collection {};
+namespace Gen {
+struct burnoutcarasset {
+    struct RefSpec { const Collection* GetCollection() { return nullptr; } } mRef;
+    burnoutcarasset(u64, void*) { gbQueueBuiltBeforeColour = !gaCalls.empty() && gaCalls.back() == "queue"; }
+    RefSpec* GetGraphicsAssetRefSpec() const { return const_cast<RefSpec*>(&mRef); }
+};
+struct burnoutcargraphicsasset {
+    burnoutcargraphicsasset(Collection*, void*) {}
+    const s32& PlayerColourIndex() const { static const s32 kiColour = 13; return kiColour; }
+    const s32& PlayerColourPaletteIndex() const { static const s32 kiPalette = 2; return kiPalette; }
+};
+}
+}
 struct RenderParams {
     DetachedPartQueue mQueue;
     f32 mafVerletOffsets[4] = { 1.0f, 2.0f, 3.0f, 4.0f };
@@ -35,6 +55,7 @@ struct ActiveRaceCar {
     CgsResource::ResourceHandle mDeformationModelHandle, mGraphicsModelHandle;
     RenderParams mRenderParams;
     u8 muStateAtVerletReset = 0xFF;
+    s32 miDefaultColourIndex = -1, miDefaultColourPalette = -1;   // +0x1C80 / +0x1C84 (FX-RCEM4)
     bool IsAttached() const { return muState != E_STATE_INACTIVE; }
     bool IsActive() const { return muState == E_STATE_ACTIVE; }
     void ResetVerletOffsets() {
@@ -63,6 +84,8 @@ int main() {
     Check(gaCalls.size() == 2 && gaCalls[0] == "verlet" && gaCalls[1] == "queue",
           "G61-D6: ResetVerletOffsets precedes the detached-part queue Construct (0x822EB404 < 0x822EB40C)");
     Check(lCar.muStateAtVerletReset == ActiveRaceCar::E_STATE_WAITING, "G61-D6: called after the WAITING store (its !IsInactive() holds)");
+    Check(gbQueueBuiltBeforeColour && lCar.miDefaultColourIndex == 13 && lCar.miDefaultColourPalette == 2,
+          "FX-RCEM4: the default-colour leg (0x822EB474) follows the queue Construct and stores both words");
     Check(guAssertions == 0, "no assertions");
     std::printf("Rcem2ResourcesLoaded: %d checks, %d failures\n", liChecks, liFailures);
     return liFailures ? 1 : 0;

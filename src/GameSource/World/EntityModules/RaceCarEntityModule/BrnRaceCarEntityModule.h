@@ -468,6 +468,27 @@ public:
         // something else; PUSMC01 authors colour 13).
         void ChangePlayerCarColour( u32 luPaletteIndex, u32 luColourIndex );
 
+        // X360 0x822F5170 (DWARF BrnRaceCarEntityModule.h:719). A freshly loaded car whose global
+        // RaceCar has no colour yet (miColourIndex == -1) takes its authored default pair
+        // (ActiveRaceCar::GetDefaultColourIndex / GetDefaultPaletteIndex, read by
+        // OnResourcesLoaded); a non-player car in a game mode whose default colour is already on
+        // the road gets a random free one instead, and SET_OPPONENTS_TO_COPS forces colour 6.
+        // Called from OnRaceCarResourcesLoaded right after ActiveRaceCar::OnResourcesLoaded
+        // (0x822FEDD0), its only caller (crash parity CHAIN-RECOLOUR, 2026-09-24).
+        void SetupCarColour( EActiveRaceCarIndex leActiveRaceCarIndex );
+
+        // X360 0x822EA088 (DWARF BrnRaceCarEntityModule.h:875). A colour for palette
+        // liPaletteIndex nobody on the road wears: keep liColourIndex on a coin flip when it is
+        // free, else walk the eight-entry table from a random start. Bodied in the Range TU with
+        // the module RNG it draws from (0x82FAD2B0). Callers: SetupCarColour and the taken-down
+        // re-colour legs of ProcessRaceCarCrashCompleteEvents.
+        s32 GetRandomCarColour( s32 liPaletteIndex, s32 liColourIndex );
+
+        // X360 0x822D2E68 (DWARF BrnRaceCarEntityModule.h:878). True when an attached car wears
+        // colour liColourIndex (by index, any palette) or a paint within 0.22 (L1) of
+        // maPalettes[liPaletteIndex]'s entry for it.
+        bool IsCarColourInUse( s32 liPaletteIndex, s32 liColourIndex );
+
         // X360 0x822F5CF8. THE per-frame OUTPUT PUBLISH: copy every attached active slot's
         // live physics state + identity into the active-race-car output interface, and the
         // player's slot/engine-state into its player-scoped scalars. Called from both

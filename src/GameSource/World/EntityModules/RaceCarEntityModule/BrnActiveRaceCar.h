@@ -895,6 +895,13 @@ public:
     RenderParams* GetRenderParams()             { return &mRenderParams; }
     const RenderParams* GetRenderParams() const { return &mRenderParams; }
 
+    // DWARF BrnActiveRaceCar.h:871 / :874 -- the car's authored default colour pair that
+    // OnResourcesLoaded reads off its burnoutcargraphicsasset (+0x1C80 / +0x1C84). Inlined at
+    // RaceCarEntityModule::SetupCarColour @0x822F5170 (`lwz 0x1C80(r26)` / `lwz 0x1C84(r26)`),
+    // their only reader (crash parity CHAIN-RECOLOUR, 2026-09-24).
+    s32 GetDefaultColourIndex()  { return miDefaultColourIndex; }
+    s32 GetDefaultPaletteIndex() { return miDefaultColourPalette; }
+
     // ========================================================================
     // ⚠️ FLAG PC QUALITY-OF-LIFE -- NOT X360 FUNCTIONS. THE RENDER-POSE INTERPOLATOR.
     //

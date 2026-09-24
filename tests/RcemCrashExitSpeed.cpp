@@ -35,7 +35,11 @@ namespace Fixture {
 using namespace BrnWorld;
 // The persistent-damage arm (G67-D1, b6efda77) names its flag through GameModeParams; a Fixture-local
 // stand-in is found before ::BrnGameState, which the output-interface header only forward-declares.
-namespace BrnGameState { struct GameModeParams { static const u64 KU_FLAG_AI_PERSISTENT_DAMAGE = 0x40000000ull; }; }
+namespace BrnGameState { struct GameModeParams { static const u64 KU_FLAG_AI_PERSISTENT_DAMAGE = 0x40000000ull;
+                                                 static const u64 KU_FLAG_SET_OPPONENTS_TO_COPS = 0x400000000ull; }; }
+// The block's re-colour legs (CHAIN-RECOLOUR, FX-RCEM4 2026-09-24) name the DWARF :306 constant that
+// is TU-local to the CrashExit TU; the extractor copies only the method, so it is mirrored here.
+const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
 struct VolumeIdFixture {
     u32 muEntityIndex = 0;
     u32 GetEntityIDEntityIndex() const { return muEntityIndex; }
@@ -68,6 +72,10 @@ struct RaceCar {
     f32               mfResetSpeed = -1.0f, mfResetDistance = -1.0f;
     BrnAI::EResetType meResetType = BrnAI::E_RESET_TYPE_INVALID;
     f32               mfPersistentDamage = 0.0f;
+    s32               miColourIndex = 0, miColourPalette = 0;   // the re-colour legs (FX-RCEM4)
+    s32  GetColourIndex() const { return miColourIndex; }
+    s32  GetColourPalette() const { return miColourPalette; }
+    void SetColourIndex(s32 liColourIndex) { miColourIndex = liColourIndex; }
     ERaceCarType GetType() const { return meType; }
     f32 GetPersistentDamage() const { return mfPersistentDamage; }
     // Same arithmetic as RaceCar::IncreasePersistentDamage (its own test: run_persistent_damage.py).
@@ -114,6 +122,12 @@ struct RaceCarEntityModule {
         return liCount;
     }
     void ProcessRaceCarCrashCompleteEvents(const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput);
+    // The re-colour legs' palette resource + GetRandomCarColour stand-in (their own test:
+    // run_fxrcem4_recolour.py).
+    struct Palette { s32 GetNumColours() const { return 20; } };
+    struct Palettes { Palette maPalettes[4]; };
+    struct PaletteResource { Palettes mPalettes; Palettes* operator->() { return &mPalettes; } } mCarColoursResource;
+    s32 GetRandomCarColour(s32, s32) { return 7; }
 };
 #include "rcem_crash_exit_speed.inc"
 }

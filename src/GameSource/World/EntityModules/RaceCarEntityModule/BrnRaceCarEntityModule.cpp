@@ -867,14 +867,15 @@ void RaceCarEntityModule::UpdateStreaming(
 //   PlaceRaceCarOnLoad(mpRaceCar)
 //   car->mbComingInRange = false; car->mbIsJoiningGameMode = false     (+1909/+1910)
 //
-// [FLAG PC bring-up] TWO legs are not reproduced and are not paraphrased:
+// [FLAG PC bring-up] ONE leg is not reproduced and is not paraphrased:
 //   * the initial-velocity override. It reads three module members inside maTailPadB1
 //     (+100192 a Vector3, +100208 a float, +100212 a RaceCar*) that this header does not
 //     name. They form a "spawn this specific car moving" hook; the start-of-game path
 //     spawns a stationary car, so zero is the value the console would compute anyway.
-//   * SetupCarColour @0x822F5170 -- it reaches the colour-palette resource plus the
-//     per-car graphics attrib collection ActiveRaceCar::OnResourcesLoaded is itself not
-//     reading yet (see its own banner). Left as an explicit call site comment.
+// ⭐ SetupCarColour @0x822F5170 LANDED 2026-09-24 (crash parity CHAIN-RECOLOUR): `mr r4, r25 ;
+//   mr r3, r31 ; bl SetupCarColour` @0x822FEDC8..0x822FEDD0, between ActiveRaceCar::
+//   OnResourcesLoaded (which now reads the car's authored default colour pair) and
+//   PlaceRaceCarOnLoad.
 // ============================================================================
 void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         EActiveRaceCarIndex leActiveRaceCarIndex,
@@ -910,7 +911,7 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         lInitialVelocity,
         ( lpListEntry != 0 ) ? lpListEntry->GetAttribCollectionKeyHash() : 0ull );
 
-    // [FLAG PC bring-up] SetupCarColour(leActiveRaceCarIndex) -- see the banner.
+    SetupCarColour( leActiveRaceCarIndex );              // bl @0x822FEDD0
 
     PlaceRaceCarOnLoad( lpRaceCar );
 
@@ -927,6 +928,126 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
     (void)lpVehicleInputInterface;   // the console passes it straight through to
                                      // ActiveRaceCar::OnResourcesLoaded's caller chain;
                                      // AddHandlingModel is what actually consumes it.
+}
+
+// ============================================================================
+// The colour constants SetupCarColour / IsCarColourInUse read (DWARF names, BrnRaceCarEntityModule.cpp).
+// ============================================================================
+namespace
+{
+    // DWARF :306 KI_BLACK_CAR_COLOUR_INDEX = 6 -- the colour SET_OPPONENTS_TO_COPS forces
+    // (`li r11, 6` @0x822F53F0 / 0x822F54FC; `li r17, 6` in ProcessRaceCarCrashCompleteEvents).
+    const s32 KI_BLACK_CAR_COLOUR_INDEX = 6;
+
+    // DWARF :316 KF_MIN_COLOUR_SPACE_DISTANCE -- flt_82014900 == 0x3E6147AE == 0.22f (x360rd):
+    // IsCarColourInUse's L1 paint distance under which two colours count as the same
+    // (`fcmpu cr6, f13, f0 ; blt` @0x822D3118).
+    const f32 KF_MIN_COLOUR_SPACE_DISTANCE = 0.22f;
+}
+
+// ============================================================================
+// SetupCarColour  @ 0x822F5170   (crash parity CHAIN-RECOLOUR, 2026-09-24 -- had no body, and
+// its OnRaceCarResourcesLoaded call was a FLAG comment, so every rival kept RaceCar::Reset's
+// -1/-1 and rendered UpdateActiveRaceCarColours' palette 0 / colour 0 fallback).
+//
+// The console body, in asm order:
+//   car = GetActiveRaceCar(idx) ; rc = car->GetGlobalRaceCar() (the IsAttached assert, :1089)
+//   if (rc->miColourIndex (+0x94) != -1) return                          0x822F51C4
+//   idx == mePlayerActiveRaceCarIndex (+0x182F8):                         0x822F51DC
+//       rc colour  = car default colour  (+0x1C80 -> +0x94)
+//       rc palette = car default palette (+0x1C84 -> +0x98)
+//       assert palette < 4 "Invalid Palette Index: " :2269 (signed cmpwi)
+//       assert colour < maPalettes[palette].miNumColours "Invalid Colour Index: " :2270
+//   otherwise:
+//       rc palette = car default palette ; assert :2275
+//       mbIsInGameMode (+0x18344) && IsCarColourInUse(palette, car default colour)  0x822F5318
+//           ? (flag 1<<34 KU_FLAG_SET_OPPONENTS_TO_COPS ? 6 [assert :2289]
+//                                                       : GetRandomCarColour(palette, -1) [:2284])
+//           : (flag 1<<34 ? 6 [assert :2302] : car default colour [assert :2297])
+// (The flag test is `li r12,1 ; extldi r12,r12,64,34 ; ldx +0x18358 ; and` -- GetGameModeFlag
+// inlined on the 64-bit mxGameModeFlags. Every colour assert is `colour < numColours`; the two
+// cop arms fold it to `numColours > 6`.)
+// ============================================================================
+void RaceCarEntityModule::SetupCarColour( EActiveRaceCarIndex leActiveRaceCarIndex )
+{
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+    RaceCar*       lpRaceCar       = lpActiveRaceCar->GetGlobalRaceCar();
+
+    if( lpRaceCar->GetColourIndex() != -1 )
+    {
+        return;
+    }
+
+    if( leActiveRaceCarIndex == mePlayerActiveRaceCarIndex )
+    {
+        lpRaceCar->SetColourIndex( lpActiveRaceCar->GetDefaultColourIndex() );
+        lpRaceCar->SetColourPalette( lpActiveRaceCar->GetDefaultPaletteIndex() );
+        CGS_ASSERT( lpRaceCar->GetColourPalette() < E_NUM_PALETTES, "Invalid Palette Index: " );  // :2269
+        CGS_ASSERT( lpRaceCar->GetColourIndex() <
+                        mCarColoursResource->maPalettes[lpRaceCar->GetColourPalette()].GetNumColours(),
+                    "Invalid Colour Index: " );                                                   // :2270
+    }
+    else
+    {
+        lpRaceCar->SetColourPalette( lpActiveRaceCar->GetDefaultPaletteIndex() );
+        CGS_ASSERT( lpRaceCar->GetColourPalette() < E_NUM_PALETTES, "Invalid Palette Index: " );  // :2275
+
+        if( mbIsInGameMode
+            && IsCarColourInUse( lpRaceCar->GetColourPalette(), lpActiveRaceCar->GetDefaultColourIndex() ) )
+        {
+            if( !GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_SET_OPPONENTS_TO_COPS ) )
+            {
+                lpRaceCar->SetColourIndex( GetRandomCarColour( lpRaceCar->GetColourPalette(), -1 ) );
+                CGS_ASSERT( lpRaceCar->GetColourIndex() <
+                                mCarColoursResource->maPalettes[lpRaceCar->GetColourPalette()].GetNumColours(),
+                            "Invalid Colour Index: " );                                           // :2284
+            }
+            else
+            {
+                lpRaceCar->SetColourIndex( KI_BLACK_CAR_COLOUR_INDEX );
+                CGS_ASSERT( lpRaceCar->GetColourIndex() <
+                                mCarColoursResource->maPalettes[lpRaceCar->GetColourPalette()].GetNumColours(),
+                            "Invalid Colour Index: " );                                           // :2289
+            }
+        }
+        else
+        {
+            if( !GetGameModeFlag( BrnGameState::GameModeParams::KU_FLAG_SET_OPPONENTS_TO_COPS ) )
+            {
+                lpRaceCar->SetColourIndex( lpActiveRaceCar->GetDefaultColourIndex() );
+                CGS_ASSERT( lpRaceCar->GetColourIndex() <
+                                mCarColoursResource->maPalettes[lpRaceCar->GetColourPalette()].GetNumColours(),
+                            "Invalid Colour Index: " );                                           // :2297
+            }
+            else
+            {
+                lpRaceCar->SetColourIndex( KI_BLACK_CAR_COLOUR_INDEX );
+                CGS_ASSERT( lpRaceCar->GetColourIndex() <
+                                mCarColoursResource->maPalettes[lpRaceCar->GetColourPalette()].GetNumColours(),
+                            "Invalid Colour Index: " );                                           // :2302
+            }
+        }
+    }
+
+    // [FLAG PC witness] BRN_RACECAR_PAINT_DIAG -- NOT IN THE X360 BINARY. One line per car the
+    // console's own colour pick ran for (first-N capped), so a live run shows the rivals now
+    // take their authored/random colour instead of the palette 0 / colour 0 fallback.
+    {
+        static const bool sbPaintDiag = ( getenv( "BRN_RACECAR_PAINT_DIAG" ) != 0 );
+        static u32 suSetupDiagLines = 0u;
+        if( sbPaintDiag && suSetupDiagLines < KU_RACECAR_MODULE_DIAG_MAX_LINES
+            && CgsDev::Log::gpDebugPrint != 0 )
+        {
+            ++suSetupDiagLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[car-colour] SetupCarColour slot " << static_cast<s32>( leActiveRaceCarIndex )
+                << " player " << ( leActiveRaceCarIndex == mePlayerActiveRaceCarIndex ? 1 : 0 )
+                << " default palette " << lpActiveRaceCar->GetDefaultPaletteIndex()
+                << " colour " << lpActiveRaceCar->GetDefaultColourIndex()
+                << " -> palette " << lpRaceCar->GetColourPalette()
+                << " colour " << lpRaceCar->GetColourIndex() << "\n";
+        }
+    }
 }
 
 // ============================================================================
@@ -4893,6 +5014,61 @@ void RaceCarEntityModule::ChangePlayerCarColour( u32 luPaletteIndex, u32 luColou
             << " -> palette " << static_cast<s32>( luPaletteIndex )
             << " colour " << static_cast<s32>( luColourIndex ) << "\n";
     }
+}
+
+// ============================================================================
+// IsCarColourInUse  @ 0x822D2E68   (crash parity CHAIN-RECOLOUR, 2026-09-24 -- had no body)
+//
+// Is colour liColourIndex of palette liPaletteIndex already on the road? The console body:
+//   assert liPaletteIndex < 4 "liPaletteIndex < BrnWorld::eNumPalettes"           :9740
+//   assert liColourIndex < maPalettes[p].miNumColours  (StrStream " Colour index = " << c
+//          << " Palette index = " << p << "\n")                                   :9743
+//   col = maPalettes[p].GetPaintColours()[c]          `lwzx r11, r26, r31 ; lvx128 v0, r11, r10`
+//   for (slot = 0..7)                                  (the range-guarded operator++, :39)
+//       car = GetActiveRaceCar(slot) ; if (!car->IsAttached()) continue
+//       if (car->GetGlobalRaceCar()->miColourIndex == c) return true   -- the PALETTE is not compared
+//       paint = car +0x1360 (mRenderParams.mPaintColour)
+//       if ((|paint.y - col.y| + |paint.x - col.x|) + |paint.z - col.z|
+//               < KF_MIN_COLOUR_SPACE_DISTANCE (0.22f))  return true      0x822D30F0..0x822D311C
+//   return false
+// (Also asserted twice inline by the palette accessor, PlayerCarColours.h:97 "lType <
+// eNumPalettes" -- the same condition as :9740; the sibling palette reads in this TU do not
+// reproduce that accessor either.)
+// Callers: SetupCarColour and GetRandomCarColour (the Range TU).
+// ============================================================================
+bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourIndex )
+{
+    CGS_ASSERT( liPaletteIndex < E_NUM_PALETTES, "liPaletteIndex < BrnWorld::eNumPalettes" );   // :9740
+    CGS_ASSERT( liColourIndex < mCarColoursResource->maPalettes[liPaletteIndex].GetNumColours(),
+                " Colour index =  Palette index = \n" );                                       // :9743
+
+    const Vector4 lColour = mCarColoursResource->maPalettes[liPaletteIndex].GetPaintColours()[liColourIndex];
+
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
+        if( !lpActiveRaceCar->IsAttached() )
+        {
+            continue;
+        }
+
+        if( lpActiveRaceCar->GetGlobalRaceCar()->GetColourIndex() == liColourIndex )
+        {
+            return true;
+        }
+
+        const Vector4& lrPaint = lpActiveRaceCar->GetRenderParams()->GetPaintColour();
+        const f32 lfColourSpaceDistance = ( std::fabs( lrPaint.y - lColour.y ) + std::fabs( lrPaint.x - lColour.x ) )
+                                          + std::fabs( lrPaint.z - lColour.z );
+        if( lfColourSpaceDistance < KF_MIN_COLOUR_SPACE_DISTANCE )
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // ============================================================================

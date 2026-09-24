@@ -55,6 +55,16 @@ namespace Gen
         // accessor falls back to Attrib::DefaultDataArea(4) -- `li r3,4 ; bl DefaultDataArea`
         // @0x82762048 -- so the reference is always readable.
         const s32& RandomTrafficColours(u32 luIndex) const;
+
+        // DWARF burnoutcargraphicsasset.h:83 / :90 -- the two NON-array attributes, read straight off
+        // the instance's 8-byte layout (the ctor's DefaultDataArea(8u) is exactly these two words).
+        // Inlined at ActiveRaceCar::OnResourcesLoaded @0x822EB4D0..0x822EB4E4:
+        //     lwz r11, var_5C (the instance's mpAttributeData)
+        //     lwz r10, 4(r11) -> +0x1C80 miDefaultColourIndex      == PlayerColourIndex()
+        //     lwz r11, 0(r11) -> +0x1C84 miDefaultColourPalette    == PlayerColourPaletteIndex()
+        // (crash parity CHAIN-RECOLOUR / G61-D6, 2026-09-24.)
+        const s32& PlayerColourIndex() const;
+        const s32& PlayerColourPaletteIndex() const;
     };
 
     // Chain the Instance ctor, assert the collection's class is
@@ -91,6 +101,18 @@ namespace Gen
         if (lpElement == 0)
             lpElement = DefaultDataArea(4u);
         return *static_cast<const s32*>(lpElement);
+    }
+
+    // Layout word +4 (`lwz r10, 4(r11)` @0x822EB4D8). The layout is serialised AttribSys data.
+    inline const s32& burnoutcargraphicsasset::PlayerColourIndex() const
+    {
+        return static_cast<const s32*>(GetLayoutPointer())[1];
+    }
+
+    // Layout word +0 (`lwz r11, 0(r11)` @0x822EB4E0).
+    inline const s32& burnoutcargraphicsasset::PlayerColourPaletteIndex() const
+    {
+        return static_cast<const s32*>(GetLayoutPointer())[0];
     }
 }
 }
