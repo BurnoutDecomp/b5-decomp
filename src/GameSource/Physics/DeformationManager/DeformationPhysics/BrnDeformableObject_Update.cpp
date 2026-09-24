@@ -1875,15 +1875,19 @@ namespace Deformation
             s16 mi16SensorIndex;  // +8 -- which sensor owns the record
 
             // _Insertion_sort1 @0x82629898, 0x826298D4..0x826298FC: when the impact times differ by
-            // more than 0.1 of a frame (flt_82004014) the EARLIER contact goes first; only near-
-            // simultaneous contacts are ordered by the key. `<=` mirrors fcmpu/ble, so a NaN time
-            // takes the time branch. (Crash parity G20-D6, 2026-09-23: the tree sorted by key alone,
-            // so a head-on wall/ground contact always ran before an earlier car-car one.) Not a
-            // strict weak ordering -- hence the hand-written insertion sort in UpdateContacts.
+            // more than 0.1 of a frame (flt_82004014 == 0x3DCCCCCD) the EARLIER contact goes first;
+            // only near-simultaneous contacts are ordered by the key. (Crash parity G20-D6,
+            // 2026-09-23: the tree sorted by key alone, so a head-on wall/ground contact always ran
+            // before an earlier car-car one.) The gate is `fcmpu cr6, |dt|, 0.1 ; ble key` -- raw
+            // 0x4099000C @0x826298E8 (front compare) and again @0x82629974 (hole walk). ble is
+            // bc 4,cr6.gt: TAKEN whenever GT is clear, i.e. on <, == AND UNORDERED, so a NaN |dt|
+            // compares the KEYS. Hence !(|dt| > 0.1): the earlier `|dt| <= 0.1` sent a NaN to the
+            // time compare (crash parity FX-NANPOL, 2026-09-24). Not a strict weak ordering --
+            // hence the hand-written insertion sort in UpdateContacts.
             bool operator<(const ContactTime& lrOther) const
             {
                 const f32 lfDelta = mfImpactTime - lrOther.mfImpactTime;
-                if ( std::fabs(lfDelta) <= 0.1f )
+                if ( !( std::fabs(lfDelta) > 0.1f ) )
                     return mfSortKey < lrOther.mfSortKey;
                 return mfImpactTime < lrOther.mfImpactTime;
             }
