@@ -90,6 +90,8 @@ namespace CgsSceneManager { namespace SceneManagerIO { struct InSceneUpdateInter
 // this type -- BrnRaceCarEntityModuleIO.h:380); pointer-only and never dereferenced.
 namespace BrnAI { namespace AIModuleIO { struct RaceCarAIInterface; } }
 
+namespace CgsNumeric { class Random; }   // ActiveRaceCar::Update's lpRandom (pointer-only; CgsRandom.h)
+
 namespace BrnWorld
 {
 namespace RaceCarEntityModuleIO { struct GameEventQueue; }
@@ -375,6 +377,9 @@ public:
     // Only the parameters this slice consumes are declared; each dropped one is named in the
     // banner rather than accepted and ignored (an accepted-and-ignored argument is how a
     // silent-drop stub is born).
+    // lpRandom (crash parity G61-D4): the console's `Random*` stack argument (DWARF order puts it
+    // after the three bools), the module's mNonDeterministicRandom -- appended here because this
+    // slice's parameter list is already reordered.
     void Update(f32 lfTimeStep,
                 f32 lfTimeStepMultiplier,
                 f32 lfAcceleration,
@@ -384,7 +389,8 @@ public:
                 s32 liGameModeType,
                 const Vector2& lrCurrentRouteNode,
                 const Vector2& lrNextRouteNode,
-                RaceCarEntityModuleIO::GameEventQueue* lpGameEvents);
+                RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
+                CgsNumeric::Random* lpRandom);
 
     // X360 0x822B8610: for an AI car ramp a braking hysteresis counter
     // (miBrakeChangeCounter, +1 toward +KI_MAX_BRAKE_COUNTER when braking / -2 toward

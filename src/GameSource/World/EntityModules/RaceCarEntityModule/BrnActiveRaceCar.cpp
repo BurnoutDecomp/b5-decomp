@@ -51,7 +51,8 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h" // DeformationState / CarState (UpdateDeformationState, 2026-08-24)
 
 #include <cstring>   // memset (the console's own inlined clears)
-#include <cmath>     // std::fabs (UpdateDeformationState's vandc sign-mask ABS)
+#include <cmath>     // std::fabs (UpdateDeformationState's vandc sign-mask ABS), std::fmaf (Update)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random (Update's start-line draw)
 
 // includes folded in from the BrnActiveRaceCar_w*.cpp partfiles (2026-09-15)
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::mHandlingBodyDimensions
@@ -2420,8 +2421,8 @@ void ActiveRaceCar::UpdateInAirRotations(f32 lfTimeStep)
 //  1. `lpVehicleOutput != NULL` (X360 :260) -- the argument itself is not plumbed here.
 //  2-3. RESTORED: touching-world status and the crash drive-away decision/timer,
 //       including route-direction inputs and the 1.5-second game-event-38 publish.
-//  4. the IsOnRaceStartState(0) start-line rev RNG (0x822F7C64..0x822F7CE4) -- it needs the
-//     module's RNG at +0x18490.
+//  4. RESTORED 2026-09-24 (crash parity G61-D4): the IsOnRaceStartState(0) start-line boost
+//     flame (0x822F7C58..0x822F7D14) on the module's RNG at +0x18490 (lpRandom).
 //  5. RaceCar::GetTransform / GetPreviousPosition / GetPosition (0x822F7D44..0x822F7DC8):
 //     the console calls them and DISCARDS all three results (v102/v103/v104 are dead in the
 //     decompilation) -- almost certainly an inlined body Hex-Rays lost. Dropped deliberately.
@@ -2441,7 +2442,8 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
                            s32 liGameModeType,
                            const Vector2& lrCurrentRouteNode,
                            const Vector2& lrNextRouteNode,
-                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents)
+                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
+                           CgsNumeric::Random* lpRandom)
 {
     CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1418
 
@@ -2513,6 +2515,41 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
         {
             const EActiveRaceCarIndex leIndex = GetActiveRaceCarIndex();
             lpGameEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&leIndex), 38, sizeof(leIndex));
+        }
+    }
+
+    // 0x822F7C58..0x822F7D14 -- THE START-LINE BOOST FLAME (crash parity G61-D4, 2026-09-24). A car
+    // on the start line (IsOnRaceStartState(ON_START_LINE), `li r4, 0`) whose countdown
+    // mfTimeToStartLineBoostChange (+0x734) has gone below 0.0 (`fcmpu f0, f30 ; bge` skips -- a
+    // NaN does not flip) flips mbIsDoingStartLineBoost (+0x780, cntlzw ; rlwinm 27,31,31) and
+    // re-arms the countdown from the module's RNG: one ring draw (lfsx ; fsubs 1.0 ; refill the
+    // same slot ; mulld ; index + 1 & 7 == Random::RandomFloat) and ONE fmadds, t * 0.85
+    // (flt_82013A78) + 0.25 (flt_82003F40) rounded once. Every start-line frame then runs the
+    // countdown down by dt (0x822F7D0C..0x822F7D14, f31 == lfTimeStep). Its reader is
+    // UpdateOutputBoostInfo: the grid cars' pulsing boost flames before the start.
+    const bool lbWasDoingStartLineBoost = mbIsDoingStartLineBoost;   // [DIAG] input only (below)
+    if( IsOnRaceStartState( E_RACE_START_STATE_ON_START_LINE ) )
+    {
+        if( mfTimeToStartLineBoostChange < 0.0f )
+        {
+            mbIsDoingStartLineBoost      = !mbIsDoingStartLineBoost;
+            mfTimeToStartLineBoostChange = std::fmaf( lpRandom->RandomFloat(), 0.85f, 0.25f );
+        }
+        mfTimeToStartLineBoostChange -= lfTimeStep;
+    }
+    // [DIAG] BRN_START_LINE_BOOST_DIAG -- NOT IN THE X360 BINARY. Capped proof the flip above is
+    // DISPATCHED on PC: one line per flip, with the re-armed countdown (after this frame's tick).
+    {
+        static const bool sbStartLineBoostDiag = ( getenv( "BRN_START_LINE_BOOST_DIAG" ) != 0 );
+        static u32 suStartLineBoostDiagLines = 0u;
+        if( sbStartLineBoostDiag && suStartLineBoostDiagLines < 64u && CgsDev::Log::gpDebugPrint != 0
+            && mbIsDoingStartLineBoost != lbWasDoingStartLineBoost )
+        {
+            ++suStartLineBoostDiagLines;
+            *CgsDev::Log::gpDebugPrint
+                << "[start-line-boost] slot " << static_cast<s32>( meActiveRaceCarIndex )
+                << " flame " << ( mbIsDoingStartLineBoost ? 1 : 0 )
+                << " next " << mfTimeToStartLineBoostChange << "\n";
         }
     }
 
