@@ -649,6 +649,23 @@ f32 AIAggression::GetSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 //
 // NOTE: the ahead (error >= 0) span lerps the LEAD rodata pair (unk_820C42E4/E8); the
 // behind (error < 0) span lerps the SEP pair (unk_820C42EC/F0) -- they are different quads.
+//
+// UNORDERED (NaN) POLARITY, re-read instruction by instruction (crash parity FX-NANPOL,
+// 2026-09-24). After `fcmpu`, `bge` is bc 4,lt and `ble` is bc 4,gt: both are TAKEN on an
+// unordered compare. `fsel d,a,b,c` is a >= 0 ? b : c, so `fsel d, K - r, r, K` is
+// (r <= K) ? r : K and hands back K for a NaN r. Every float decision below is spelt so it
+// answers a NaN exactly as the console does:
+//   arm 2   bge 0x8277E1B0                 NaN lead         -> mFixedPassingSpeed
+//   arm 4   fsel 0x8277E0EC (cap)          NaN speed        -> GetMaxOvertakeSpeed()
+//   default bge 0x8277E264                 NaN error        -> the AHEAD span
+//           fsel 0x8277E308 (cap)          NaN ratio        -> 1.0 ahead / -0.2 behind
+//           bge 0x8277E314                 NaN curve        -> KF_AGG_FALLBACK_POS_MAGNITUDE
+// The floors (fsel 0x8277E0E4 / 0x8277E2AC / 0x8277E2FC / 0x8277E3D0) keep a NaN, as `x < K ? K : x`
+// does; bge 0x8277E380 / 0x8277E3DC and ble 0x8277E404 skip their assignments on NaN, as the
+// strict compares below do; ble 0x8277E388 (offset <= 0 -> -1.0) is only reached with an ordered
+// |offset| < 1. It is reachable: both PROX0 spans are a rodata 0.0, so a car
+// whose speed-match proximity is 0 divides 0 by 0 when its error is 0 -- the console answers the
+// full-ahead fall-back there, where the old spelling returned a NaN target speed.
 f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
 {
     switch (meSpeedMatchType)
@@ -661,10 +678,10 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             {
                 const f32 lfMaxOvertake = GetMaxOvertakeSpeed();
                 const f32 lfRaw = mpPlayerCar->GetSpeed() + KF_OVERTAKE_FAST_SPEED_BIAS;
-                f32 lfSpeed = (lfRaw < KF_OVERTAKE_FAST_MIN_SPEED) ? KF_OVERTAKE_FAST_MIN_SPEED : lfRaw;
-                if (lfSpeed > lfMaxOvertake)
-                    lfSpeed = lfMaxOvertake;
-                return lfSpeed;
+                // fsel f0,f13(MIN - raw),f30(MIN),f0 @0x8277E0E4 floors (a NaN passes through);
+                // fsel f1,f13(max - s),f0,f31(max) @0x8277E0EC caps (a NaN caps to the max).
+                const f32 lfSpeed = (lfRaw < KF_OVERTAKE_FAST_MIN_SPEED) ? KF_OVERTAKE_FAST_MIN_SPEED : lfRaw;
+                return (lfSpeed <= lfMaxOvertake) ? lfSpeed : lfMaxOvertake;
             }
             return KF_NO_PASSING_SPEED;
 
@@ -691,8 +708,11 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
             // (mFixedPassingSpeed), else flt_8300D784. Still ahead of the player we ease to the
             // passing speed; only once behind do we drop to 40 mph (crash-parity audit G00-D4:
             // the (mpCar, mpTargetCar) reading chose the opposite branch for the whole FALL_PAST).
+            // bge is bc 4,lt -- taken on >= AND on unordered -- so a NaN lead keeps the passing
+            // speed: only an ORDERED lead < 0 drops to 40 mph (FX-NANPOL 2026-09-24; `lead >= 0`
+            // sent a NaN lead to 40 mph).
             f32 lfTarget;
-            if (GetLeadingSeparation(mpPlayerCar, mpCar) >= 0.0f)
+            if (!(GetLeadingSeparation(mpPlayerCar, mpCar) < 0.0f))
                 lfTarget = mFixedPassingSpeed;
             else
                 lfTarget = KF_SLOWER_BEHIND_SPEED;
@@ -712,15 +732,19 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
                 // Clamp the normalised error into [0.2, 1.0] (ahead) or [-1.0, -0.2] (behind),
                 // normalising by a proximity-lerped span, then shape it through CurveToKeepLarge.
                 // Ahead uses the LEAD quad; behind uses the SEP quad (distinct rodata pairs).
+                // fcmpu f0,f29(0.0) ; bge @0x8277E264 -> the ahead span, which an unordered error
+                // takes too. Each span floors with one fsel that keeps a NaN (0x8277E2FC ahead,
+                // 0x8277E2AC behind) and both share the capping fsel @0x8277E308 --
+                // `fsel f1, f12(K - r), f0(r), f13(K)` with K = flt_82001C98 (1.0) ahead and
+                // flt_82020A84 (-0.2) behind -- which turns a NaN ratio into K.
                 f32 lfClamped;
-                if (lfError >= 0.0f)
+                if (!(lfError < 0.0f))
                 {
                     const f32 lfSpan = KF_SPEED_MATCH_LEAD_PROX0 +
                                        (KF_SPEED_MATCH_LEAD_PROX1 - KF_SPEED_MATCH_LEAD_PROX0) * lfProximity;
                     f32 lfRatio = lfError / lfSpan;
                     if (lfRatio < 0.2f) lfRatio = 0.2f;
-                    if (lfRatio > 1.0f) lfRatio = 1.0f;
-                    lfClamped = lfRatio;
+                    lfClamped = (lfRatio <= 1.0f) ? lfRatio : 1.0f;
                 }
                 else
                 {
@@ -728,14 +752,15 @@ f32 AIAggression::GetSpeedMatchSpeed(f32 lfTimeStep)
                                        (KF_SPEED_MATCH_SEP_PROX1 - KF_SPEED_MATCH_SEP_PROX0) * lfProximity;
                     f32 lfRatio = lfError / lfSpan;
                     if (lfRatio < -1.0f) lfRatio = -1.0f;
-                    if (lfRatio > -0.2f) lfRatio = -0.2f;
-                    lfClamped = lfRatio;
+                    lfClamped = (lfRatio <= -0.2f) ? lfRatio : -0.2f;
                 }
 
                 const f32 lfCurve = CurveToKeepLarge(lfClamped);
 
+                // fcmpu f1,f29(0.0) ; bge @0x8277E314 -> flt_8300D830: an unordered curve takes the
+                // positive magnitude.
                 f32 lfMagnitude;
-                if (lfCurve >= 0.0f)
+                if (!(lfCurve < 0.0f))
                 {
                     lfMagnitude = KF_AGG_FALLBACK_POS_MAGNITUDE;
                 }

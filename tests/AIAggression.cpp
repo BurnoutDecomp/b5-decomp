@@ -185,7 +185,7 @@ static void GroupAcrossSeparation()
 // GetLeadingSeparation @0x8277DEA0 is flat(pos(r5) - pos(r4)) on the flat unit heading of r4.
 //   arm 3 @0x8277E100: NULL player or lead < flt_82013FB4 (-15) -> flt_8300D754, else
 //         StepTo(speed(car), speed(player) - flt_8300D7F0, dt * flt_820C4150 (10)).
-//   arm 2 @0x8277E178: lead >= 0 -> lfs 0x48 (mFixedPassingSpeed), else flt_8300D784;
+//   arm 2 @0x8277E178: lead >= 0 (or unordered: bge) -> lfs 0x48 (mFixedPassingSpeed), else flt_8300D784;
 //         StepTo(speed(car), that, dt * flt_820C42C0 (90)).
 // Player at the origin heading +Z at 30 m/s, the rival at 25 m/s, dt 0.1 -- every StepTo
 // below snaps onto its target.
@@ -276,6 +276,77 @@ static void GroupSlower()
     Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOWER_BEHIND_SPEED), "mpTargetCar is not read");
     lCar.meCarState = E_AI_CAR_STATE_OUT_OF_RANGE;
     Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_NO_PASSING_SPEED), "a car out of range: flt_8300D6F4");
+}
+
+// ------------------------------------------------------------------------------------------------
+// FX-NANPOL (2026-09-24)  GetSpeedMatchSpeed @0x8277E058 with UNORDERED operands. After fcmpu,
+// bge (bc 4,lt) is TAKEN on unordered; `fsel d, K - r, r, K` is (r <= K) ? r : K, K for a NaN.
+//   arm 2   bge 0x8277E1B0: a NaN lead keeps lfs 0x48 (mFixedPassingSpeed), not flt_8300D784.
+//   arm 4   fsel 0x8277E0EC: a NaN speed caps to GetMaxOvertakeSpeed().
+//   default bge 0x8277E264: a NaN error takes the AHEAD span; fsel 0x8277E308 caps a NaN ratio to
+//           1.0 (flt_82001C98); CurveToKeepLarge(1.0) == 1.0 -> bge 0x8277E314 -> flt_8300D830.
+//           Proximity 0 makes the span the rodata 0.0 (0x820C42E8), so error 0 is 0/0 = NaN.
+// Every NaN case used to return a NaN (or the 40 mph arm) on the PC.
+// ------------------------------------------------------------------------------------------------
+static void GroupSpeedMatchUnordered()
+{
+    BeginGroup("FX-NANPOL GetSpeedMatchSpeed unordered");
+    const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+    AICar lCar{}, lPlayer{}, lTarget{};
+    PlaceSpeedMatchCars(lCar, lPlayer, lTarget);
+    lCar.meCarState = E_AI_CAR_STATE_IN_RANGE;
+    lCar.meRouteFindingStyle = E_ROUTE_FINDING_FREE_ROAM;
+    lCar.mAggressiveness.mfAggressionLevel = 0.5f;
+    AIAggression lAggression{};
+    lAggression.mpCar = &lCar;
+    lAggression.mpPlayerCar = &lPlayer;
+    lAggression.mFixedPassingSpeed = 22.0f;
+
+    // arm 2: the rival level with the player but its position unordered -> NaN lead.
+    lAggression.meSpeedMatchType = ESpeedMatch_Slower;
+    lCar.mPosition = V(0.0f, 0.0f, lfNaN);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), 22.0f),
+          "arm 2: a NaN lead keeps the passing speed (bge @0x8277E1B0 taken on unordered)");
+    lCar.mPosition = V(0.0f, 0.0f, -10.0f);
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), KF_SLOWER_BEHIND_SPEED), "arm 2: an ordered lead < 0 still drops to 40 mph");
+
+    // arm 4: the player's speed unordered.
+    lAggression.meSpeedMatchType = ESpeedMatch_OvertakeFast;
+    const f32 lfMaxOvertake = lAggression.GetMaxOvertakeSpeed();
+    lPlayer.mfSpeedInRange = lfNaN;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), lfMaxOvertake),
+          "arm 4: a NaN speed caps to GetMaxOvertakeSpeed() (fsel @0x8277E0EC picks its last operand)");
+    lPlayer.mfSpeedInRange = 50.0f;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), 50.0f + KF_OVERTAKE_FAST_SPEED_BIAS),
+          "arm 4: an ordered speed inside [min, max] passes both fsels");
+    lPlayer.mfSpeedInRange = 30.0f;
+
+    // default arm (speed match Enabled, a target): full-ahead fall-back = target speed + 13.41 m/s.
+    lAggression.meSpeedMatchType = ESpeedMatch_Enabled;
+    lAggression.mpTargetCar = &lTarget;
+    lTarget.mfSpeedInRange = 40.0f;
+    const f32 lfFullAhead = 40.0f + KF_AGG_FALLBACK_POS_MAGNITUDE * CurveToKeepLarge(1.0f);
+    lAggression.mfRelativePositionAhead = 0.0f;
+    lAggression.mfTargetSeparationAlong = 0.0f;
+    lCar.mAggressiveness.mfProximitySpeedMatch = 0.0f;   // span = rodata 0.0 -> 0/0
+    const f32 lfZeroOverZero = lAggression.GetSpeedMatchSpeed(0.1f);
+    Check(!std::isnan(lfZeroOverZero) && Near(lfZeroOverZero, lfFullAhead),
+          "default: proximity 0 and error 0 (0/0) -> the cap fsel @0x8277E308 makes the ratio 1.0");
+    lCar.mAggressiveness.mfProximitySpeedMatch = 1.0f;
+    lAggression.mfTargetSeparationAlong = lfNaN;
+    const f32 lfNaNError = lAggression.GetSpeedMatchSpeed(0.1f);
+    Check(!std::isnan(lfNaNError) && Near(lfNaNError, lfFullAhead),
+          "default: a NaN error takes the AHEAD span (bge @0x8277E264) and caps to 1.0");
+
+    // Ordered errors are unchanged: +20 of a 40 m lead span -> 0.5 -> curve 0.75 -> positive;
+    // -30 of a 60 m separation span -> -0.5 -> curve -0.75 -> relative-speed lerp at 0 (22.35 m/s).
+    lAggression.mfTargetSeparationAlong = 20.0f;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), 40.0f + KF_AGG_FALLBACK_POS_MAGNITUDE * 0.75f),
+          "default: error +20 at proximity 1 -> 40 + 13.41 * 0.75");
+    lTarget.mfSpeedInRange = 70.0f;
+    lAggression.mfTargetSeparationAlong = -30.0f;
+    Check(Near(lAggression.GetSpeedMatchSpeed(0.1f), 70.0f - KF_AGG_FALLBACK_RELSPEED_LO * 0.75f),
+          "default: error -30 at proximity 1 -> 70 - 22.35 * 0.75");
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -501,6 +572,7 @@ int main()
     GroupAcrossSeparation();
     GroupSlowToClip();
     GroupSlower();
+    GroupSpeedMatchUnordered();
     GroupLineupPointDrop();
     GroupFodderTimeFloor();
     GroupPassive();
