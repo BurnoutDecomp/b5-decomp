@@ -21,6 +21,7 @@
 #include "GameSource/GameState/RumbleManager/BrnRumbleManager.h"
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"
 #include <cstdio>
 #include <cstring>
 
@@ -35,6 +36,20 @@ namespace Assert
     void* EndAssert() { return nullptr; }
 }
 namespace Log { DebugPrint* gpDebugPrint = nullptr; }   // the bridge's [DIAG] line stays silent
+}
+
+// Harness-only: RumbleManager's mSurfaceList (Attrib::Gen::surfacelist, DWARF :108 -- typed so since
+// FX-RUMBLE3 G10-D6) is constructed and destroyed with the manager. The bridge never reads it, so the
+// Attrib runtime it links against here is an inert stub (no collection, a zeroed default area).
+namespace Attrib
+{
+    Instance::Instance(Collection* lpCollection, void* lpOwner)
+        : mpCollection(lpCollection), mpAttributeData(nullptr), mpOwner(lpOwner), muFlags(0) {}
+    Instance::~Instance() {}
+    int   Instance::GetClass() const { return 0; }
+    u64   Instance::GetCollection() const { return 0; }
+    void* DefaultDataArea(u32) { static unsigned char sau8Area[0x100]; return sau8Area; }
+    void  AssertOnClassCheck(int, int, u64) {}
 }
 
 // The production bodies, extracted verbatim (see the runner).

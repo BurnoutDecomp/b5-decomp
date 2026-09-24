@@ -9,7 +9,7 @@
 // arrays sit at the X360 offsets below.
 //
 //   X360 offset map (32-bit build):
-//     +0x000  mSurfaceList                         (surfacelist, un-homed -- see note)
+//     +0x000  mSurfaceList                         (Attrib::Gen::surfacelist, 16 bytes on the X360)
 //     +0x010  mPlayJoltEffectEventQueue            (EventQueue<PlayJoltEffectEvent,4>,   252B)
 //     +0x10C  mPlayRumbleEffectEventQueue          (EventQueue<PlayRumbleEffectEvent,4>, 284B)
 //     +0x228  mChangeVolumeRumbleEffectEventQueue  (EventQueue<ChangeVolumeRumbleEffectEvent,4>, 268B)
@@ -40,12 +40,9 @@
 //   UpdateImpacts            @0x82379370   (FX-RUMBLE / G10-D2)
 //   PlayJolt                 @0x8236E7F8   (FX-RUMBLE / G10-D7)
 //   BridgeRumbleToInput      @0x82364978   (FX-RUMBLE3 / G10-D4) -- the drain of all four queues
-// ⛔ NOT DECLARED, deliberately -- a declaration without a body is exactly the silent link-time
-// drop this campaign keeps finding:
-//   UpdateSurfaceRumble @0x82378AE0 (G10-D6) -- needs Attrib::Gen::rumblesurface's 0x3C-byte
-//       data layout + accessors and a surface::RumbleSurface() RefSpec accessor (surface layout
-//       +0x28) in GameSource/AttribSys/Generated/classes/, then mSurfaceList retyped to
-//       Attrib::Gen::surfacelist. See Update's FLAG.
+//   UpdateSurfaceRumble      @0x82378AE0   (FX-RUMBLE3 / G10-D6) -- the road-surface rumble
+//   PlayRumble / ChangeRumbleVolume / StopRumble -- DWARF :144/:150/:154 (PS3 0x256B88 / 0x25687C /
+//       0x256E4C); no X360 copies: all three are inlined into UpdateSurfaceRumble.
 // A future TU MUST GROW this class ADDITIVELY rather than redefine it -- do NOT fork.
 // ============================================================================
 
@@ -56,6 +53,7 @@
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"  // BrnPhysics::Vehicle::EImpactType (OnVehicle*Impact)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface (+ RaceCarCrashEvent via BrnVehicleEvents.h)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h" // BrnPhysics::ContactSpy::ContactSpyInterface
+#include "GameSource/AttribSys/Generated/classes/surfacelist.h"      // Attrib::Gen::surfacelist mSurfaceList (DWARF :108)
 
 namespace BrnGameState
 {
@@ -90,6 +88,13 @@ namespace BrnGameState
         // GameActionQueue == CgsModule::VariableEventQueue<13312,16>.
         void UpdatePauseState(bool lbPaused, CgsModule::VariableEventQueue<13312, 16>* lpGameActionQueue);
 
+        // @ 0x82378AE0 -- DWARF BrnRumbleManager.h:79 (cpp :362). The road-surface rumble: every
+        // grounded wheel of the player's car registers its surface (when that surface's rumblesurface
+        // has a priority >= 0); every live surface rumble is refreshed with a speed-scaled volume or
+        // stopped; every newly touched surface starts one. Update's first statement (0x82386AB8).
+        void UpdateSurfaceRumble(BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                                 EActiveRaceCarIndex                                                    lePlayerCarIndex);
+
         // @ 0x823795C8 -- DWARF BrnRumbleManager.h:87. The player slammed / shunted / traded paint
         // with a race car: one KN_RUMBLE_VEHICLE_IMPACT_PRIORITY jolt scaled by the impact type.
         // Caller ProcessGameEvents case 31 (0x823A27C8).
@@ -115,14 +120,24 @@ namespace BrnGameState
                            EActiveRaceCarIndex                                                    lePlayerCarIndex,
                            BrnPhysics::ContactSpy::ContactSpyInterface*                           lpContactSpyInterface);
 
+        // DWARF BrnRumbleManager.h:144 / :150 / :154 (PS3 cpp :894 / :912 / :929, parameter names from
+        // the PS3 DWARF). Queue one surface-rumble request for player 0 on any port through the
+        // ASSERTING AddEvent. No X360 copies: UpdateSurfaceRumble inlines all three (0x82379250..
+        // 0x82379318, 0x82378EF4..0x82378FB8, 0x82378FD0..0x82378FE8).
+        void PlayRumble(s32 liRumbleId, f32 lfVolume, s32 liRumblePriority, const CgsInput::InputIO::JoltEffect& lJoltEffect);
+        void ChangeRumbleVolume(s32 liRumbleId, f32 lfVolume, const CgsInput::InputIO::JoltEffect& lJoltEffect);
+        void StopRumble(s32 liRumbleId);
+
         // @ 0x8236E7F8 -- DWARF BrnRumbleManager.h:159. Queue one jolt for player 0 on any port.
         void PlayJolt(s32 liRumblePriority, const CgsInput::InputIO::JoltEffect& lJoltEffect);
 
-        // +0x000 -- surfacelist (Attrib-generated surface-list handle, un-homed). Held as
-        // opaque storage sized to the X360 record: this TU's reconstructed methods do not
-        // touch it, and its full type belongs to the Attrib codegen TU. Promote to the real
-        // `surfacelist` type when that lands.
-        u8 maSurfaceListStorage[16];                                                         // +0x000
+        // +0x000 -- DWARF :108 `surfacelist mSurfaceList`: the world's surface list, re-bound to the
+        // "340654" collection at the top of every UpdateSurfaceRumble (FX-RUMBLE3 G10-D6; it was 16
+        // bytes of opaque storage until its one reader existed). The X360 record is 16 bytes; the
+        // Attrib::Instance it derives from is wider on x64 (three pointers), which moves every later
+        // member -- engine-internal, never serialised, as the banner above says. Constructed by the
+        // owner's C++ constructor (RumbleManager::Construct @0x82378A70 does not touch it).
+        Attrib::Gen::surfacelist mSurfaceList;                                               // +0x000
 
         CgsModule::EventQueue<CgsInput::InputIO::PlayJoltEffectEvent, 4>          mPlayJoltEffectEventQueue;            // +0x010
         CgsModule::EventQueue<CgsInput::InputIO::PlayRumbleEffectEvent, 4>        mPlayRumbleEffectEventQueue;          // +0x10C
