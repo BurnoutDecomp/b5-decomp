@@ -157,6 +157,27 @@ namespace BrnDirector
             siLast = leState;
             *CgsDev::Log::gpDebugPrint << "[crashcam] " << lpcWhere << " meState -> " << leState << "\n";
         }
+
+        // [DIAG] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. WHICH CAMERA FILMS THE CRASH: a highlight
+        // MOMENT's (its type, whether it is valid, how many moments the selector holds valid) or, with
+        // no moment selected, the failsafe gameplay camera (-1). Edge-triggered on that choice, so a
+        // held shot costs one line. The racing-gameplay flag (E_FLAG_RACING_GAMEPLAY_CAMERA, bit 3) is
+        // printed with it: a moment camera drops it, and its rise on the way back to the gameplay
+        // camera is the edge CameraControl::UpdateParams posts the reset-on-track sting on.
+        void ReportCrashCamera(const Moment* lpMoment, u32 luValidMoments, const Camera::Camera& lrCamera)
+        {
+            if (!CrashCamDiagOn() || CgsDev::Log::gpDebugPrint == 0) { return; }
+            static s32 siLastType = -99;
+            const s32 liType = (lpMoment != 0) ? static_cast<s32>(lpMoment->GetType()) : -1;
+            if (liType == siLastType) { return; }
+            siLastType = liType;
+            *CgsDev::Log::gpDebugPrint << "[crashcam] crash camera: moment type=" << liType
+                                       << " valid=" << ((lpMoment != 0 && lpMoment->IsValid()) ? 1 : 0)
+                                       << " validMoments=" << static_cast<s32>(luValidMoments)
+                                       << " racingGameplayFlag="
+                                       << (lrCamera.mState.IsFlagSet(Camera::CameraState::E_FLAG_RACING_GAMEPLAY_CAMERA) ? 1 : 0)
+                                       << "\n";
+        }
     }
 
     // ------------------------------------------------------------------------
@@ -478,6 +499,8 @@ namespace BrnDirector
         if (mMomentSelector.HasSelectedMoment())
         {
             GetNonConstCamera() = mMomentSelector.GetSelectedMoment()->GetCamera();
+            ReportCrashCamera(mMomentSelector.GetSelectedMoment(), mMomentSelector.GetNumValidMoments(),
+                              GetCamera());   // [diag]
 
             if (mfMomentTimer > KF_MOMENT_TIME &&
                 mMomentSelector.GetSelectedMoment()->CanSwitchFromMeNow() &&   // moment +0x179
@@ -520,6 +543,7 @@ namespace BrnDirector
             // flag-selected one (`addi r3, container, 4` with no lookback test).
             GetNonConstCamera() =
                 lrSharedInfo.mpSharedCameraContainer->mGameplayExternal.GetProducedCamera();
+            ReportCrashCamera(0, mMomentSelector.GetNumValidMoments(), GetCamera());   // [diag]
 
             if (mMomentSelector.GetNumValidMoments() != 0 &&
                 mfFailsafeTimer > KF_FAILSAFE_TIME &&
