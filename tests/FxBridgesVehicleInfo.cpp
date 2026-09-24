@@ -15,12 +15,19 @@
 //   loop    contact = queue + 0x10 + 0x60 * (start + i); m2 = vmsum3fp128(stress, stress) (xyz, NO sqrt);
 //           vcmpgtfp128 m2 > best (STRICT; NaN never replaces); vsel normal (+0x30) / best / stress (+0x20)
 //   store   0x823E4B1C lfs best lane 0 -> mfHardestImpact (an empty run publishes 0 and keeps the seed normal)
+//
+// CC-7, the deformed AABB arm (0x823E4924..0x823E49B4):
+//   if (deformationOutput->mpDeformationState (+0x70) && GetCarStateF(state, mEntityId) @0x822CC340)
+//       mAABB = { CarState +0x640 (mDeformedBBoxMin), +0x650 (mDeformedBBoxMax) }   (the lookup is re-called)
+//   else  max = mHalfExtent (+0x350), min = max XOR 0x80000000 in all four lanes (vspltisw -1 ; vslw ; vxor)
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h"
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
 #include "rw/math/vpu/vector3_operation.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cmath>
@@ -67,9 +74,10 @@ static Published BuildVehicleInfo(const ActiveRaceCarsFixture* lpActiveRaceCars,
                                   EActiveRaceCarIndex leSlot,
                                   const RaceCarState* lpState,
                                   const ContactSpyInterface* lpContactSpy,
-                                  const ContactSpyData::RaceCarContactQueue* lpCarContacts)
+                                  const ContactSpyData::RaceCarContactQueue* lpCarContacts,
+                                  const BrnPhysics::Deformation::DeformationOutputInterface* lpDeformationOutputInterface)
 {
-    (void)lpContactSpy; (void)lpCarContacts;
+    (void)lpContactSpy; (void)lpCarContacts; (void)lpDeformationOutputInterface;
 #include "fxbridges_vehicle_info_region.inc"
     Published lOut;
     lOut.mMin     = lVehicleInfo.mAABB.mMin;
@@ -110,6 +118,8 @@ static const u32 KU_OTHER_ENTITY = 0x01000800u;   // owner 1, index 2
 static ContactSpyData      gSpyData;              // static storage: ~115 KB
 static ContactSpyInterface gSpy;
 static RaceCarState        gState;
+static BrnPhysics::Deformation::DeformationOutputInterface gDeformationOutput;   // mpDeformationState NULL
+static BrnPhysics::Deformation::DeformationState           gDeformationState;    // ~48 KB
 
 static RaceCarContact MakeContact(u32 luEntity, Vector3 lStress, Vector3 lNormal)
 {
@@ -152,7 +162,8 @@ static Published Run(bool lbBound)
     // unless the spy is bound.
     const ContactSpyData::RaceCarContactQueue* lpCarContacts =
         gSpy.mpData != nullptr ? gSpyData.GetRaceCarContacts() : nullptr;
-    return BuildVehicleInfo(&klCars, E_ACTIVE_RACE_CAR_INDEX_1, &gState, &gSpy, lpCarContacts);
+    return BuildVehicleInfo(&klCars, E_ACTIVE_RACE_CAR_INDEX_1, &gState, &gSpy, lpCarContacts,
+                            &gDeformationOutput);
 }
 
 int main()
@@ -253,6 +264,42 @@ int main()
         Check(SameXYZ(lOut.mMax, gState.mHalfExtent)
               && lOut.mMin.x == -1.0f && lOut.mMin.y == -0.75f && lOut.mMin.z == -2.5f,
               "(8) half-extent AABB arm (no deformation state)");
+    }
+
+    // (9) the deformation state owns this car: the camera box is the CRUSHED box, as published.
+    const Vector3 kDeformedMin = { -0.875f, -0.5f, -1.5f, 0.0f };   // a crushed nose: min.z moved in
+    const Vector3 kDeformedMax = {  1.0f,   0.625f, 2.5f, 0.0f };
+    gDeformationState.mxLiveSlots.SetBit(4);
+    gDeformationState.maCarIds[4] = KU_CAR_ENTITY;
+    gDeformationState.maCarStates[4].mDeformedBBoxMin = kDeformedMin;
+    gDeformationState.maCarStates[4].mDeformedBBoxMax = kDeformedMax;
+    gDeformationOutput.mpDeformationState = &gDeformationState;
+    {
+        const Published lOut = Run(false);
+        Check(Same(lOut.mMin, kDeformedMin) && Same(lOut.mMax, kDeformedMax),
+              "(9) live deformation state owning the car: mAABB = CarState mDeformedBBoxMin / Max (+0x640 / +0x650)");
+    }
+
+    // (10) the state is live but owns only another car: the pristine half-extent box.
+    gDeformationState.maCarIds[4] = KU_OTHER_ENTITY;
+    {
+        const Published lOut = Run(false);
+        Check(SameXYZ(lOut.mMax, gState.mHalfExtent) && lOut.mMin.z == -2.5f,
+              "(10) GetCarStateF finds no record for this car: half-extent arm");
+    }
+
+    // (11) no deformation state at all: the half-extent arm, and its min is the vxor of ALL FOUR
+    //      lanes (w too) -- a w of 0.5 publishes -0.5, a w of 0 publishes -0.0.
+    gDeformationOutput.mpDeformationState = nullptr;
+    gState.mHalfExtent.w = 0.5f;
+    {
+        const Published lOut = Run(false);
+        Check(lOut.mMin.w == -0.5f && lOut.mMax.w == 0.5f, "(11) half-extent arm: min.w = -max.w (vxor sign mask on w)");
+    }
+    gState.mHalfExtent.w = 0.0f;
+    {
+        const Published lOut = Run(false);
+        Check(lOut.mMin.w == 0.0f && std::signbit(lOut.mMin.w), "(12) half-extent arm: a zero w publishes -0.0 (sign flipped)");
     }
 
     std::printf("FxBridgesVehicleInfo: %u checks, %u failures (%u asserts fired)\n", gChecks, gFailures, gAsserts);

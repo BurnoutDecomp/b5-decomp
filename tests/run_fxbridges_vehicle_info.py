@@ -9,7 +9,11 @@ squared magnitude, normal and stress. PC published zeros for every car on every 
 Numeric: tests/FxBridgesVehicleInfo.cpp compiles the PRODUCTION region of GameBridgeWorldToX.cpp (from
 `BrnDirector::Camera::VehicleInfo lVehicleInfo;` up to the `lpDirectorInput->SetRaceCarInfo(` publish)
 against the real VehicleInfo / RaceCarState / ContactSpyInterface / ContactSpyData.
-Wiring: lpCarContacts is taken from the bound spy BEFORE the per-car loop (DWARF :87, 0x823E4010..0x823E4034).
+CC-7 -- the DEFORMED AABB arm (0x823E4924..0x823E49B4): a live DeformationState that owns the car's entity id
+(GetCarStateF @0x822CC340) publishes CarState::mDeformedBBoxMin/Max (+0x640/+0x650) as the camera box; otherwise the
+half-extent box with min = max XOR sign in all four lanes. PC always published the pristine half-extent box.
+Wiring: lpCarContacts is taken from the bound spy BEFORE the per-car loop (DWARF :87, 0x823E4010..0x823E4034);
+lpDeformationOutputInterface is fetched before the loop too (DWARF :94, 0x823E403C..0x823E4050).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxbridges_vehicle_info.py [--rev <b5 rev>]
 """
@@ -25,8 +29,9 @@ BRIDGE_CPP = "src/GameSource/Game/GameBridgeWorldToX.cpp"
 EXTRA_SOURCES = [
     REPO / "src/GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.cpp",        # RaceCarState Clear / operator=
     REPO / "src/GameSource/Physics/ContactSpies/BrnContactSpyInterface.cpp",             # GetRaceCarContactRunList
+    REPO / "src/GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState_DeformationState.cpp",  # GetCarStateF
 ]
-NUMERIC_CHECKS = 13
+NUMERIC_CHECKS = 17
 REGION_START = "BrnDirector::Camera::VehicleInfo lVehicleInfo;"
 REGION_END = "lpDirectorInput->SetRaceCarInfo("
 
@@ -53,6 +58,9 @@ def wiring(tree):
     loop = body.find("for(s32liSlot=0;liSlot<E_ACTIVE_RACE_CAR_INDEX_COUNT;++liSlot)")
     yield ("lpCarContacts comes from the bound spy (IsValid gate) before the per-car loop "
            "(DWARF :87, 0x823E4010..0x823E4034)", 0 <= gate < contacts < loop)
+    deform = body.find("lpDeformationOutputInterface=lpWorldOutput->GetDeformationOutputInterface();")
+    yield ("lpDeformationOutputInterface is fetched before the per-car loop (DWARF :94, 0x823E403C)",
+           0 <= deform < loop)
 
 
 def numeric(tree):
