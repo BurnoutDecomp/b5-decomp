@@ -163,13 +163,20 @@ namespace
         return static_cast<u16>((lEntityId.muValue >> 10) & 0x3FFFu);
     }
 
-    // The X360 spells its sign selects as `vcmpgtfp / vcmpgefp / vsel / vsel`, which is exactly
-    // signum with a hard 0.0 at zero. Never fold this to copysign (that would return +1 at 0).
+    // The console's two spellings of the sign agree on every input, NaN included:
+    //   the CHECKED / SLAMMED arms (0x8262D908..0x8262D914, 0x825EFFD0..0x825EFFDC and the drive
+    //   lanes 0x8262D9C8..0x8262D9E4 / 0x825F0090..0x825F00A8) -- `vcmpgtfp x,0 ; vcmpgefp x,0 ;
+    //   vsel(0, 1, >) ; vsel(-1, that, >=)`;
+    //   the NEAR MISS (0x82637C30) -- rw::math::fpu::Sgn<VecFloat> @0x825BC920: `vcmpeqfp. 0` ->
+    //   0.0 (flt_82001CC0), `vcmpgefp. 0` -> 1.0 (flt_82001C98), else -1.0 (flt_820037C8).
+    // So: +1 above zero, 0 at either zero, and -1 below zero AND for a NaN, which fails both
+    // compares and takes the -1 select (FX-TRAFFIC5: this helper used to return 0 for a NaN).
+    // Never fold this to copysign (that would return +1 at 0).
     inline f32 SignumLane(f32 lfValue)
     {
         if (lfValue > 0.0f)  return 1.0f;
-        if (lfValue < 0.0f)  return -1.0f;
-        return 0.0f;
+        if (lfValue >= 0.0f) return 0.0f;
+        return -1.0f;
     }
 
     inline f32 Dot3(const Vector3& lrA, const Vector3& lrB)
