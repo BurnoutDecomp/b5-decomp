@@ -12,7 +12,7 @@
 // Bodied here:
 //   Behaviour::SetCantSwitchFromMeNow @0x82206388
 //   Behaviour::Fail                   @0x822063E8
-//   Behaviour::SetCantSwitchToMeNow   (the Behaviour.h:447 twin -- see the FLAG below)
+//   Behaviour::SetCantSwitchToMeNow   (the Behaviour.h:447 twin; inlined on the console)
 //   the base virtual defaults        (DWARF Behaviour.cpp:28 / :49 / :59 / :67 -- the
 //                                     bodies the vtable's unoverridden slots point at)
 //
@@ -54,22 +54,23 @@ void Behaviour::SetCantSwitchFromMeNow(Camera& lrCamera, s32 leNoCutFromFlag)
 // ============================================================================
 // Behaviour::SetCantSwitchToMeNow (Behaviour.h:447)
 //
-// The "the director cannot cut TO me this frame" twin. No standalone X360 export exists for
-// it in the available dumps (it is inlined at every call site), so the body below is the
-// SHAPE its twin proves -- account flag + the matching gate byte -- and nothing more.
-// FLAG: `ValidityAccount::SetNoCutToFlag` is itself declaration-only (its flag BAND is not
-// attested; see BrnCameraValidityAccount.h). Nothing on the live director path calls this
-// yet, so it links only if a future consumer needs it.
-// DELETE-WHEN: the no-cut-TO account setter's address/band is identified.
+// The "the director cannot cut TO me this frame" twin. It has no standalone X360 export: the
+// console INLINES it at every call site, and the inlined copies are exactly two stores --
+//     ld/ori (1 << flag)/std on camera +0x138      the account's no-cut-to bit
+//     stb 0, 0xB(this)                              mbCanSwitchToMeNow = false
+// e.g. BehaviourBystanderCam::Update @0x82243E10 (flag 14), @0x8224420C (17), @0x822442D4 (15)
+// and BehaviourFixedCam::Update @0x8222A338 (16).
+// ⚠️ NO ASSERT. The body used to open with CGS_ASSERT(!mbHasFailed, "Setting \"Cant switch to
+// me now\" when behaviour has failed") -- copied from the FROM twin above. That text is NOT in
+// the image: the FROM twin's string is at 0x8200616C, no "switch to me now" string exists
+// anywhere in the rodata, and none of the inlined copies above tests +0x09 -- the console raises
+// the bit whether or not the behaviour has failed. The assert was invented.
 // ============================================================================
 void Behaviour::SetCantSwitchToMeNow(Camera& lrCamera, s32 leNoCutToFlag)
 {
-    CGS_ASSERT(!mbHasFailed,
-               "Setting \"Cant switch to me now\" when behaviour has failed");
-
     lrCamera.GetValidityAccount().SetNoCutToFlag(leNoCutToFlag);
 
-    mbCanSwitchToMeNow = false;
+    mbCanSwitchToMeNow = false;   // stb 0, 0xB(this)
 }
 
 // ============================================================================

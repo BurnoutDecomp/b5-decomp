@@ -44,7 +44,7 @@
 // nested sub-blocks, matching the asm (the first act is AddToPath/Serialise on a1+8, no `*a1 = 1`).
 // ============================================================================
 
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCamSerialise.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"
 
 #include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"
 #include "GameSource/Director/Camera/Utils/BrnTextFileReadSerialiser.h"

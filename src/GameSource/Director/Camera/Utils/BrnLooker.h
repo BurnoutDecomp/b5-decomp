@@ -135,8 +135,10 @@ namespace Utils
         //   function and because the alternative (leaving this unresolved) is worse.
         //   ⚠️ Any behaviour that Constructs a Looker AND relies on a different
         //   mfAssessmentTime must set it explicitly rather than trusting this seed.
-        //   DELETE-WHEN: a second embedder's Construct is transcribed (BehaviourRig @+0x410 or
-        //   BehaviourIceAnim @+0x660) and the two are diffed.
+        // ⭐ SECOND WITNESS (2026-09-24, FX-DIRECTOR): BehaviourBystanderCam::Construct @0x822438E8
+        //   inlines the same six stores over its looker at +0xB0 -- 0.0 (flt_82001CC0) +0xB0, 0.2
+        //   (flt_82004744) +0xC0, stb 1 +0xCC / +0xCD / +0xCE, stb 0 +0xCF -- and the bystander
+        //   re-tunes nothing after them. Two embedders, identical seed: the 0.2 is the Construct's.
         void Construct()
         {
             mfSlerpFactor           = 0.0f;    // stfs flt_82001CC0, +0x00

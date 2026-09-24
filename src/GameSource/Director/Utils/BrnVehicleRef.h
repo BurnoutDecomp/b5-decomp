@@ -160,8 +160,20 @@ namespace BrnDirector
         // ICEWrapper::PlayMovie call site passes 1 there).
         void Set(EType leType, EActiveRaceCarIndex leRaceCar, u32 luRef);
 
-        // Bind to a specific race car. Its own ledger function (declaration-only;
-        // the BehaviourIceAnim named-setter note records the de-inlined call shape).
+        // DWARF h:76 -- bind to the player's car. No out-of-line console symbol: inlined at every
+        // site as the four stores Set's E_PLAYER_CAR case makes (@0x8252D838..0x8252D850), e.g. the
+        // tail of BehaviourBystanderCam::Construct (@0x82243C68..0x82243C74: +0xC = 1, +0 = 0,
+        // +8 = 0, +4 = -1).
+        void SetToPlayer()
+        {
+            meType         = E_PLAYER_CAR;
+            mbSet          = true;
+            muRef          = 0;
+            miRaceCarIndex = -1;
+        }
+
+        // DWARF h:80 -- bind to a specific race car. @0x821F29D8 (body in BrnVehicleRef.cpp; its
+        // index assert cites BrnVehicleRef.h:222).
         void SetToRaceCar(EActiveRaceCarIndex leRaceCar);
 
         // @0x821F2A38 (class TU; body in BrnVehicleRef.cpp) -- memberwise inequality.

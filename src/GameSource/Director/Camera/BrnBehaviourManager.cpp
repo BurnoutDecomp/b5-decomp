@@ -26,7 +26,7 @@
 // to instantiate against and routes to the same (small) pool.
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugOrbitPlayer.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"

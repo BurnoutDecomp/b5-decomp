@@ -10,24 +10,14 @@
 //
 // ⭐ A HEADER PARTFILE OF BehaviourBystanderCam.h, NOT A NEW FILE IN THE SOURCE BUILD.
 // The DecFIGS DWARF homes BOTH impact controllers in BehaviourBystanderCam.h (:44 and :75),
-// alongside the bystander-cam behaviour itself, and that is still where they belong. They are
-// carved out here for ONE reason, recorded so nobody re-merges them by accident:
-//
-//   THIS TREE CARRIES TWO RECONSTRUCTIONS OF BehaviourBystanderCam.h.
-//   `Behaviours/BehaviourBystanderCam.h`     -- the full-behaviour slice (self-contained,
-//                                               opaque reserved spans, the Construct/Update rig)
-//   `Behaviours/BrnBehaviourBystanderCam.h`  -- the GetCol/SetParameters/SetTarget slice
-//   Both define `BrnDirector::Camera::BehaviourBystanderCam`, so any TU that reaches both is a
-//   hard C2011. They coexist today only because no TU does. ArbStateCrashing embeds BOTH
-//   controllers BY VALUE, and its header is #included by the arbitrator STATE CONTAINER, which
-//   is in turn reached by a large part of the director -- including TUs that already reach
-//   BrnBehaviourParameterBank.h -> BrnBehaviourBystanderCam.h. Pulling the whole
-//   BehaviourBystanderCam.h in behind the container would therefore have detonated that fork
-//   across the build. Splitting the two controllers into their own header costs nothing (they
-//   share no member with the behaviour) and keeps both reconstructions untouched.
-//
-// DELETE-WHEN: the two BehaviourBystanderCam reconstructions are merged into one home. Then
-// fold these two classes back into it and delete this file.
+// alongside the bystander-cam behaviour itself. They were carved out here (2026-08-29) because the
+// tree then carried THREE reconstructions of BehaviourBystanderCam, and pulling one of them in
+// behind the arbitrator state container would have been a C2011 across the director.
+// ⭐ 2026-09-24 (FX-DIRECTOR): that fork is gone -- BehaviourBystanderCam.h is the class's one
+// definition, a real Camera::Behaviour. The split is KEPT on purpose: ArbStateCrashing embeds both
+// controllers BY VALUE and its header is reached through the arbitrator state container by a large
+// part of the director, while the behaviour's header drags in the policy / looker / shake /
+// position-finder homes. The controllers share no member with the behaviour, so nothing is lost.
 //
 // The bodies live in the matching .cpp partfile, BehaviourBystanderCamImpactControllers.cpp.
 //

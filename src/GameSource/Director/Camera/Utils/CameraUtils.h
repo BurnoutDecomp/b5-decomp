@@ -271,6 +271,15 @@ namespace Utils
     bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
                                Vector3 lVelocity, f32 lfHorizontalFOV, f32 lfVerticalFOV,
                                f32* lpfTimeBeforeLeavingSecs);
+
+    // ------------------------------------------------------------------------------------
+    // The two range tests the bystander cam runs (DWARF CameraUtils.cpp:1376 / :1399). ADDED
+    // 2026-09-24 (FX-DIRECTOR); bodies in CameraUtils.cpp, their DWARF home. Neither has an X360
+    // symbol -- the console inlines both into BehaviourBystanderCam::Update.
+    // ------------------------------------------------------------------------------------
+    bool TargetOutsideRange(Vector3 lPosition, Vector3 lTarget, f32 lfRange);
+    bool TargetWillExceedRangeInXSecs(Vector3 lPosition, Vector3 lTarget, Vector3 lTargetVelocity,
+                                      f32 lfRange, f32 lfSecs);
 // ----------------------------------------------------------------------------
 // TransitionSmoother (ADDITIVE GROW: its class TU) -- a lerp-smoothed scalar
 // with a self-smoothed lerp amount. Class shape / member names / method set

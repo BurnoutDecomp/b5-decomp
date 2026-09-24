@@ -33,7 +33,7 @@
 // is odr-used) -- pull in every behaviour/utility Parameters block this TU instantiates over.
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h"

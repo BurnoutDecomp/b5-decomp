@@ -3,7 +3,7 @@
 #include "types.hpp"
 #include "GameSource/Director/MomentController/BrnMoment.h"                  // BrnDirector::Moment (base); pulls BrnBehaviourManager.h (BehaviourHandle / the BehaviourInterpolate slice)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"             // Camera::BehaviourRig(::Parameters) + the Behaviour base slice
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h" // Camera::BehaviourBystanderCam(::Parameters)
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"    // Camera::BehaviourBystanderCam(::Parameters)
 #include "GameShared/GameClasses/Containers/CgsArray.h"                     // Array<T,N> (the collections' shot tables)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"  // Camera::BehaviourInterpolate(::Parameters) -- mInterpolaterParams is held BY VALUE , so the class must be COMPLETE here; BrnBehaviourManager.h only forward-declares it , which is why this TU never compiled
 

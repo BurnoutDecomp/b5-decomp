@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"           // the bystander-cam moment blocks
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h" // BehaviourBystanderCam (SetParameters/SetTarget)
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"    // BehaviourBystanderCam (SetParameters/SetTarget)
 
 // BrnDirector::MomentBystanderSeesAction -- reconstructed from
 // the console executable (home file BrnMomentBystanderSeesAction.cpp;
@@ -129,7 +129,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
                     mBystander, 0, this, 1);
                 mBystander.GetBehaviour()->SetParameters(&lrCamParams);
                 mBystander.GetBehaviour()->SetTarget(
-                    MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo));
+                    static_cast<EActiveRaceCarIndex>(MomentSharedInfo_GetCrashVehicleIndex(lSharedInfo)));
                 SetCanSwitchToMeNow(false);
                 SetState(E_STATE_INVALID_FOUND_PREPARING);
                 GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
@@ -149,7 +149,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
                 mBystander, 0, this, 1);
             mBystander.GetBehaviour()->SetParameters(&lrCamParams);
             mBystander.GetBehaviour()->SetTarget(
-                MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo));
+                static_cast<EActiveRaceCarIndex>(MomentSharedInfo_GetTakedownVictimIndex(lSharedInfo)));
             SetCanSwitchToMeNow(false);
             SetState(E_STATE_INVALID_FOUND_PREPARING);
             GetNonConstCamera().mState.SetHeadFlag(KU_HEAD_FLAG_ALLOCATED);
@@ -219,22 +219,18 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
 // The console body, in order:
 //   read mBystander's allocated flag at +0x184  ; assert "IsAllocated "
 //   resolve the behaviour through the handle words at +0x188 / +0x18C (GetBehaviour)
-//   read the behaviour's +0x358 float and compare it with the new value;
-//     equal -> return, so it ONLY writes when the value actually changes
-//   store the new value to behaviour +0x358      ; mfPerceivedDistanceModificationFactor
-//   set the behaviour's +0xCF flag byte          ; the "re-solve the vantage" latch
-// The inequality guard is the whole point: raising the latch every frame would make the camera
-// re-solve its vantage continuously.
+//   then the INLINED BehaviourBystanderCam::SetPerceivedDistanceModificationFactor (h:268):
+//     read the behaviour's +0x358 float and compare it with the new value;
+//       equal -> return, so it ONLY writes when the value actually changes
+//     store the new value to behaviour +0x358      ; mfPerceivedDistanceModificationFactor
+//     `stb 1` to the behaviour's +0xCF             ; mLooker (+0xB0).mbForceZoomTargetUpdate
+// The inequality guard is the behaviour's own: raising the looker's latch every frame would make
+// the zoom re-snap its FOV band continuously.
 void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
 {
     CGS_ASSERT(mBystander.IsAllocated(), "IsAllocated()");
 
-    Camera::BehaviourBystanderCam* lpBystander = mBystander.GetBehaviour();
-
-    if (lfFactor != lpBystander->GetPerceivedDistanceModificationFactor())
-    {
-        lpBystander->SetPerceivedDistanceModificationFactor(lfFactor);
-    }
+    mBystander.GetBehaviour()->SetPerceivedDistanceModificationFactor(lfFactor);
 }
 
 }

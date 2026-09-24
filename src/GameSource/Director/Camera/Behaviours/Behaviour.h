@@ -307,11 +307,19 @@ namespace Camera
         class VehicleRef : public BrnDirector::VehicleRef
         {
         public:
-            // The live vehicle this reference names (DECLARATION-ONLY: the resolution walks
-            // the shared info's AllVehicleData block, whose own TU owns the walk).
-            const VehicleInfo& GetVehicle(const BehaviourSharedInfo& lrInfo) const;   // :358
-            // That vehicle's world transform.                                        // :362
-            const rw::math::vpu::Matrix44Affine& GetTransform(const BehaviourSharedInfo& lrInfo) const;
+            // The live vehicle this reference names. No out-of-line console symbol: inlined at
+            // every site as a bare `VehicleRef::Get(this, lrInfo.mpAllVehicleData)` -- e.g.
+            // BehaviourBystanderCam::Update @0x82243D24 (`lwz r4, 0x5BC(r30)` ; bl 0x822335A0).
+            const VehicleInfo& GetVehicle(const BehaviourSharedInfo& lrInfo) const    // :358
+            {
+                return *Get(lrInfo.GetWorld());
+            }
+            // That vehicle's world transform: the same Get, then `addi rN, r3, 0x1F0` -- the
+            // published RaceCarState::mTransform (BehaviourBystanderCam::Update @0x82243E48).
+            const rw::math::vpu::Matrix44Affine& GetTransform(const BehaviourSharedInfo& lrInfo) const   // :362
+            {
+                return GetVehicle(lrInfo).mRaceCarState.mTransform;
+            }
 
             // Does this reference currently resolve. (The retired forked slices exposed this
             // name; it is the base VehicleRef's own populated flag, X360-pinned at +0x0C.)
