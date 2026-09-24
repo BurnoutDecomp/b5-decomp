@@ -4432,8 +4432,12 @@ void RaceCarEntityModule::HandleGameActions(
                     const BrnGameState::GameStateModuleIO::RoadRagePlayerDamageAction*>(lpEvent);
             CGS_ASSERT(lpRoadRagePlayerDamageAction != 0,
                        "lpRoadRagePlayerDamageAction != NULL");                // :6846
-            CGS_ASSERT((lpRoadRagePlayerDamageAction->mfHowCloseToTotalled >= 0.0f)
-                           && (lpRoadRagePlayerDamageAction->mfHowCloseToTotalled <= 1.0f),
+            // NaN polarity (FX-NANPOL sweep, 2026-09-24): `fcmpu f0, f30(0.0) ; blt` @0x8230D114 FIRES
+            // (taken only when cr6.LT is set) and `fcmpu f0, f28(1.0) ; ble` @0x8230D11C SKIPS (taken
+            // whenever cr6.GT is clear), so an unordered value does NOT fire on the console. Spelled as
+            // the two branch tests, not as the printed `>=` / `<=` (which fire on NaN).
+            CGS_ASSERT(!(lpRoadRagePlayerDamageAction->mfHowCloseToTotalled < 0.0f)
+                           && !(lpRoadRagePlayerDamageAction->mfHowCloseToTotalled > 1.0f),
                        "(lpRoadRagePlayerDamageAction->mfHowCloseToTotalled >= 0.0f) && "
                        "(lpRoadRagePlayerDamageAction->mfHowCloseToTotalled <= 1.0f)");   // :6849
 
