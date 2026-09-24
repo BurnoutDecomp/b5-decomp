@@ -14,3 +14,22 @@
 // (BrnGameModule.hpp) -- this header exists so the TU has a home of its own and so future
 // siblings have somewhere to hang shared declarations.
 // ============================================================================
+
+#include "types.hpp"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<1536,16>
+
+namespace BrnWorldIO { struct UpdateOutputBuffer; }
+
+namespace BrnGame
+{
+    // [FX-BRIDGES CC-11, 2026-09-24] LEG 10 of BrnGameModule::BridgeWorldToGameState @0x823E5368
+    // (0x823E5494..0x823E554C): every route response the MODE MANAGER asked for becomes game event
+    // 174 (GameStateModuleIO::ModeManagerRouteInfoEvent { the response's event id, the route's
+    // length }) on the game-state post-world game-event queue. De-inlined because this build has
+    // TWO callers of it: BridgeWorldToGameState itself (the console home, with no call site until
+    // DoUpdate_GameStatePostWorld lands) and the one-feed post-world seam in BrnGameModule.cpp, which
+    // builds the queue the console's PostWorldInputBuffer would carry (legs 2 + 10, in that order).
+    // Body: GameBridgeWorldToX.cpp.
+    void BridgeWorldToGameState_RouteInfo(CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+                                          const BrnWorldIO::UpdateOutputBuffer*     lpWorldOutput);
+}

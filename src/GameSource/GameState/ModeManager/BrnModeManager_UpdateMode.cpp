@@ -178,31 +178,12 @@ MakePlayerFinishedModeEvent(bool lbTimedOut, bool lbCarDestroyed, bool lbCrossed
     return lEvent;
 }
 
-// ---- the action-45-family route-request record UpdateCheckpointDistanceRequests builds --------
-// [header_request #10] Its home is BrnGameActions.h (DWARF E_ACTION_REQUEST_ROUTE_INFO == 45); it is
-// built here because GameStateModule::SendRouteRequestAction owns the id + the AddEvent, and neither
-// the callee nor the record exists in the tree yet. EVERY offset is a store in the producer's asm
-// (0x82327AC8..0x82327B84) and every field the consumer reads is at the offset
-// GameStateModule::SendRouteRequestAction @0x82381DC8 loads it from (`v26 = a2 + 32` node types,
-// `v25 = a2 + 48` node ids, loop count 2 == the 4th argument):
-struct alignas(16) RouteRequestEventPayload
-{
-    Vector3 mCurrentPosition;              // +0x00  the current checkpoint landmark's box-region position
-    Vector3 mDestinationPosition;          // +0x10  the NEXT checkpoint landmark's position
-    s32     miCurrentNodeType;             // +0x20  = 0 (a plain world-position node; the callee
-                                           //        asserts "Unknown route node type" above 2)
-    s32     miDestinationNodeType;         // +0x24  = 0
-    u8      maPad28[8];                    // +0x28  never written by this producer
-    CgsID   mCurrentLandmarkId;            // +0x30  maLandmarkCgsIDs[i]
-    CgsID   mDestinationLandmarkId;        // +0x38  maLandmarkCgsIDs[i + 1]
-    u16     mu16CurrentSectionIndex;       // +0x40  mauLandmarkSectionIndices[i]
-    u16     mu16DestinationSectionIndex;   // +0x42  mauLandmarkSectionIndices[i + 1]
-    u16     mu16CheckpointIndex;           // +0x44  muNextDistanceRequestCheckpoint
-    u8      maPad46[10];                   // +0x46  tail padding to the 16-byte-aligned 0x50
-};
-
-// The two route nodes SendRouteRequestAction walks (its 4th argument, `li r6, 2`).
-const s32 KI_ROUTE_REQUEST_NODE_COUNT = 2;
+// ---- the route-request record UpdateCheckpointDistanceRequests builds --------------------------
+// [FX-BRIDGES CC-11, 2026-09-24] RE-HOMED: the bridge-local RouteRequestEventPayload this TU used to
+// carry is the DWARF's GameStateModuleIO::LandmarkRouteRequestEvent (BrnGameEvents.h:1679..1695),
+// now in BrnGameEvents.h with the same offsets pinned; and SendRouteRequestAction's last argument
+// (`li r6, 2`) is the request OWNER (BrnAI::RouteMapModuleIO::E_OWNER_MODE_MANAGER), not a node
+// count -- the callee's own loop runs over the record's KI_MAX_POINTS (`li r19, 2` @0x82381E60).
 } // anonymous namespace
 
 // ============================================================================================
@@ -825,44 +806,100 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     CGS_ASSERT(lpCurrentLandmark != nullptr, "lpCurrentLandmark");           // BrnModeManager.cpp:2297
     CGS_ASSERT(lpDestinationLandmark != nullptr, "lpDestinationLandmark");   // BrnModeManager.cpp:2298
 
-    RouteRequestEventPayload lRouteRequest;
-    std::memset(&lRouteRequest, 0, sizeof(lRouteRequest));
+    GameStateModuleIO::LandmarkRouteRequestEvent lRouteRequest;
+    std::memset(&lRouteRequest, 0, sizeof(lRouteRequest));   // +0x28..+0x2F / +0x46.. are never stored (stack residue)
 
-    // console: three `lfs` from landmark+0/4/8 plus an explicit 0.0 in the fourth lane, then one
-    // 16-byte vector move into the record. Landmark's first member is its TriggerRegion BoxRegion,
+    // console: three `lfs` from landmark+0/4/8 and an explicit 0 in the fourth lane (`stw r11(0),
+    // 0(r10)` @0x82327AF8 into var_A4; `stw r11, 0(r9)` @0x82327B54 into var_94), then one 16-byte
+    // vector move each into the record. Landmark's first member is its TriggerRegion BoxRegion,
     // whose first member is the position -- reached by name, exactly as the committed
-    // ModeManager::GetCheckpointPosition does. FLAG: the console zeroes the w lane; a host Vector3
-    // copy carries whatever w the region's position holds.
-    lRouteRequest.mCurrentPosition     = lpCurrentLandmark->GetBoxRegion()->GetPosition();
-    lRouteRequest.mDestinationPosition = lpDestinationLandmark->GetBoxRegion()->GetPosition();
+    // ModeManager::GetCheckpointPosition does -- with w zeroed as the console zeroes it.
+    const Vector3 lCurrentPosition     = lpCurrentLandmark->GetBoxRegion()->GetPosition();
+    const Vector3 lDestinationPosition = lpDestinationLandmark->GetBoxRegion()->GetPosition();
+    lRouteRequest.maPositions[0] = Vector3{ lCurrentPosition.x, lCurrentPosition.y, lCurrentPosition.z, 0.0f };
+    lRouteRequest.maPositions[1] = Vector3{ lDestinationPosition.x, lDestinationPosition.y, lDestinationPosition.z, 0.0f };
 
-    lRouteRequest.miCurrentNodeType     = 0;   // console stw of the zero register
-    lRouteRequest.miDestinationNodeType = 0;
+    // `stw r11(0), var_70 / var_6C`: both ends are LANDMARKS, so SendRouteRequestAction resolves
+    // their AI sections through ProgressionManager::FindLandmarkAISectionIndex.
+    lRouteRequest.mePointTypes[0] = GameStateModuleIO::LandmarkRouteRequestEvent::E_ROUTE_END_POINT_TYPE_LANDMARK;
+    lRouteRequest.mePointTypes[1] = GameStateModuleIO::LandmarkRouteRequestEvent::E_ROUTE_END_POINT_TYPE_LANDMARK;
 
-    lRouteRequest.mCurrentLandmarkId     = maLandmarkCgsIDs[luCheckpoint];
-    lRouteRequest.mDestinationLandmarkId = maLandmarkCgsIDs[luCheckpoint + 1];
+    lRouteRequest.maLandmarkIDs[0] = maLandmarkCgsIDs[luCheckpoint];       // `ldx r10, r8, r31` -> var_60
+    lRouteRequest.maLandmarkIDs[1] = maLandmarkCgsIDs[luCheckpoint + 1];   // -> var_58
 
-    lRouteRequest.mu16CurrentSectionIndex     = mauLandmarkSectionIndices[luCheckpoint];
-    lRouteRequest.mu16DestinationSectionIndex = mauLandmarkSectionIndices[luCheckpoint + 1];
-    lRouteRequest.mu16CheckpointIndex         = static_cast<u16>(luCheckpoint);
+    lRouteRequest.maSectionIndices[0] = mauLandmarkSectionIndices[luCheckpoint];       // -> var_50
+    lRouteRequest.maSectionIndices[1] = mauLandmarkSectionIndices[luCheckpoint + 1];   // -> var_4E
+    lRouteRequest.mu16EventID         = static_cast<u16>(luCheckpoint);                // `sth r30` -> var_4C
 
-    // [X][X] FRONTIER -- header_request #10. Console:
-    //   GameStateModule::SendRouteRequestAction(mpGameStateModule, &lRouteRequest,
-    //                                           lpGameActionQueue, 2)   // @0x82381DC8
-    // That method does not exist on the host GameStateModule (it owns the action id, the AddEvent
-    // and the per-node AI-section resolution; its own asserts are "lpRouteRequestEvent" and
-    // "lpOutputActionQueue" at BrnGameStateModule.cpp:5899/5900). The record above is built
-    // byte-for-byte so the call is a one-line re-arm the moment the callee lands. Note the request
-    // is NOT self-clearing: mbNeedToSendNextRequest and muNextDistanceRequestCheckpoint are advanced
-    // by the ROUTE RESPONSE path, not by this producer -- do not "fix" that here.
+    // 0x82327B00..0x82327B88: `lwz r3, 0x6D58(r31)` (mpGameStateModule), r4 = the record, r5 = the
+    // action queue, `li r6, 2` (E_OWNER_MODE_MANAGER), then the call -- no assert at the site.
+    // [FX-BRIDGES CC-11] RE-ARMED: the callee landed (BrnGameStateModule.cpp). Note the request is
+    // NOT self-clearing: mbNeedToSendNextRequest and muNextDistanceRequestCheckpoint are advanced
+    // by the ROUTE RESPONSE path (HandleCheckpointDistanceResponse below), not by this producer --
+    // so the same pair is asked again every frame until its answer arrives, exactly as on the
+    // console. Do not "fix" that here.
     // [!] FIX ROUND 2026-08-26: an invented `CGS_ASSERT(mpGameStateModule != nullptr,
     // "mpGameStateModule")` used to stand here. REMOVED. This export fires exactly THREE asserts
     // (BeginAssert at 0x82327A0C, 0x82327A88, 0x82327AAC -- the checkpoint bound at line 0x8F0 and
     // lpCurrentLandmark / lpDestinationLandmark at 0x8F9 / 0x8FA), and this body already carries all
-    // three, correctly. The producer tail 0x82327B00..0x82327B88 just does `lwz r3, 0x6D58(r31)` and
-    // calls -- no assert at the site.
-    (void)lpGameActionQueue;
-    (void)KI_ROUTE_REQUEST_NODE_COUNT;
+    // three, correctly.
+    mpGameStateModule->SendRouteRequestAction(&lRouteRequest, lpGameActionQueue,
+                                              BrnAI::RouteMapModuleIO::E_OWNER_MODE_MANAGER);
+}
+
+// ============================================================================================
+// ModeManager::HandleCheckpointDistanceResponse -- X360 0x8231E6C8 (DWARF BrnModeManager.h:659)
+// ============================================================================================
+// [FX-BRIDGES CC-11, 2026-09-24] The answer half of the pump above. Its sole caller is
+// ProcessGameEvents case 174 (0x823A4B48). If the answer is for the checkpoint pair the pump is
+// waiting on, the scorer learns that leg's route length; the pump then moves on to the next pair,
+// or -- after the last one -- the scorer turns the legs into distances to the finish and the pump
+// stops. An answer for any other pair (a duplicate of one already taken) is ignored.
+//   0x8231E6E4..0x8231E710  assert muNumLandmarks (+0x801C) > 1                      (line 0x91B)
+//   0x8231E718..0x8231E744  assert muNextDistanceRequestCheckpoint (+0x8C08) < muNumLandmarks (0x91C)
+//   0x8231E748..0x8231E754  `lwz 0(r27)` == muNextDistanceRequestCheckpoint (`cmpw`, signed)
+//   0x8231E758..0x8231E764  ScoringSystem (+0xDB0)::SetCheckpointDistances(checkpoint, `lfs 4(r27)`)
+//   0x8231E768..0x8231E780  ++checkpoint; `cmplw` against muNumLandmarks - 1
+//   0x8231E7B0..0x8231E7BC  still short: mbNeedToSendNextRequest (+0x8C0C) = 1
+//   0x8231E784..0x8231E7A4  done: ProcessFinishDistances(muNumLandmarks), then
+//                           mbIsCalculatingCheckpointDistances (+0x8C0D) = 0, mbNeedToSendNextRequest = 0
+void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::ModeManagerRouteInfoEvent* lpRouteInfoEvent)
+{
+    CGS_ASSERT(muNumLandmarks > 1, "muNumLandmarks > 1");                                          // BrnModeManager.cpp:2331
+    CGS_ASSERT(muNextDistanceRequestCheckpoint < muNumLandmarks,
+               "muNextDistanceRequestCheckpoint < muNumLandmarks");                                // BrnModeManager.cpp:2332
+
+    if (lpRouteInfoEvent->miEventId == static_cast<s32>(muNextDistanceRequestCheckpoint))
+    {
+        mScoringSystem.SetCheckpointDistances(muNextDistanceRequestCheckpoint, lpRouteInfoEvent->mfRouteDistance);
+
+        ++muNextDistanceRequestCheckpoint;
+        if (muNextDistanceRequestCheckpoint < muNumLandmarks - 1)
+        {
+            mbNeedToSendNextRequest = true;
+        }
+        else
+        {
+            mScoringSystem.ProcessFinishDistances(static_cast<s32>(muNumLandmarks));
+            mbIsCalculatingCheckpointDistances = false;
+            mbNeedToSendNextRequest            = false;
+        }
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_ROUTE_INFO_DIAG: every accepted leg (first 40).
+        static const bool sbRouteDiag = (getenv("BRN_ROUTE_INFO_DIAG") != 0);
+        static s32 siRouteLinesLeft = 40;
+        if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            --siRouteLinesLeft;
+            *CgsDev::Log::gpDebugPrint << "[route-info] HandleCheckpointDistanceResponse leg "
+                                       << lpRouteInfoEvent->miEventId << " distance "
+                                       << lpRouteInfoEvent->mfRouteDistance << " m; next "
+                                       << static_cast<s32>(muNextDistanceRequestCheckpoint) << " of "
+                                       << static_cast<s32>(muNumLandmarks)
+                                       << (mbIsCalculatingCheckpointDistances ? "" : " -- ProcessFinishDistances, pump stopped")
+                                       << "\n";
+        }
+    }
 }
 
 // ============================================================================================

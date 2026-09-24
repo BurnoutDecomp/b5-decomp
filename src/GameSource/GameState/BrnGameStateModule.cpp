@@ -33,6 +33,8 @@
 #include <stdlib.h>                                                     // getenv (the [showtime-crash] witness)
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"                 // BrnWorld::PropEntityID + BrnWorld::E_ENTITYTYPE_* (ProcessContacts' prop leg)
 #include "GameSource/GameState/BrnGameActions.h"                         // [boost-wave2] PlayerHitRivalAction / RivalHitPlayerAction / ShowHudMessageAction
+#include <cstring>   // [FX-BRIDGES CC-11] std::memset (SendRouteRequestAction)
+#include "SharedClasses/AI/AISectionsResourceType.h"                    // [FX-BRIDGES CC-11] AISectionsData / AISection (SendRouteRequestAction's nearest section)
 #include "GameShared/GameClasses/Core/CgsID.h"                            // [boost-wave2] CgsIDCompress (the two impact message-id tables)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"        // [boost-wave2] BrnPhysics::Vehicle::EImpactType (E_IMPACT_COUNT)
 #include "GameSource/GameState/PaybackManager/BrnPaybackManager.h"        // [FX-GS] PaybackManager::Destruct (the Destruct leg)
@@ -2987,6 +2989,144 @@ void GameStateModule::SendVehicleImpactMessages(
                 << " + msg " << static_cast<u64>(lMessageId)
                 << " [DELETE-WHEN-STABLE]\n";
         }
+    }
+}
+
+// ============================================================================================
+// [FX-BRIDGES CC-11, 2026-09-24] GameStateModule::SendRouteRequestAction -- X360 0x82381DC8
+// (DWARF BrnGameStateModule.h:648; locals lRouteRequestAction :5622, luAISectionIndex :5626,
+// liIndex :5628). THE ROUTE QUESTION. Every checkpoint-to-checkpoint distance a race learns starts
+// here: ModeManager::UpdateCheckpointDistanceRequests hands it the pair it wants measured, this
+// resolves both ends to AI sections and posts action 50 for the AI module's route planner, whose
+// answer comes back through BridgeWorldToGameState as event 174.
+//
+// THE ASM, in order:
+//   0x82381DF4..0x82381E44  the two non-gating asserts, "lpRouteRequestEvent" (line 0x170B) and
+//                           "lpOutputActionQueue" (0x170C);
+//   0x82381E60              `li r19, 2` -- the loop runs over the record's KI_MAX_POINTS ends;
+//   0x82381EA4..0x82381EB8  per end, the point type `lwz 0(r26)` (r26 = event + 0x20):
+//                             0 LANDMARK   -> ProgressionManager::FindLandmarkAISectionIndex(
+//                                             `ld 0(r20)`, the landmark id at event + 0x30 + 8i)
+//                                             @0x82381FAC (r3 = gsm + 0xBB30 == &mProgressionManager);
+//                             1 JUNCTION, 2 PLAYERPOS
+//                                          -> the AI-sections resource (gsm + 181300, the const
+//                                             ResourcePtr::operator-> @0x82367718) and its nearest
+//                                             section to the end's position (sub_8267A588) @0x82381F98;
+//                             anything else -> the streamed "Unknown route node type: <n>" assert
+//                                             (line 0x1731), then the SAME position lookup;
+//   0x82381FB4..0x82381FCC  the end's position (`lvx128 v0, r0, r29`) and the u16 section go into
+//                           the action record (+0x00/+0x10, +0x20/+0x22);
+//   0x82381FDC..0x82381FFC  +0x24 = the event id (`lhz 0x44(r30)`), +0x28 = the owner (the 3rd
+//                           argument), then AddEvent(record, 50, 0x30).
+// The console never writes +0x26..+0x27 or +0x2C..+0x2F of its stack record (residue); zeroed here.
+// ============================================================================================
+namespace
+{
+// BrnAI::AISectionsData::FindNearestAISection(Vector3) const -- X360 0x8267A588, DWARF
+// AISectionsData.h:447: the brute-force overload (no point map), whose only caller is
+// SendRouteRequestAction above. Its home is SharedClasses/AI (AISectionsData), which carries only
+// the point-map overload @0x82676CC0 on this build; until the owner lands this one there it is
+// reproduced here, instruction for instruction, over that type's public API:
+//   0x8267A5AC  best = 0x7FFF (`li r26, 0x7FFF`)       0x8267A5B8  bestDistSq = flt_820A366C
+//                                                     (image-read 0x7F7FFFFF == FLT_MAX)
+//   0x8267A5B4  for i < muNumSections (+0x30), the index kept to 16 bits (`clrlwi 16`);
+//   0x8267A5D4  GetAISection's own "luSectionIndex < muNumSections" assert (line 0x4B1);
+//   0x8267A60C  skip a section whose flag byte (+0x17) has bit 0x01 (IsShortcut) or 0x40
+//               (IsAIShortcut);
+//   0x8267A62C  d = GetMiddle() - position, `vmsum3fp128` (x*x + y*y + z*z);
+//   0x8267A648  strictly smaller (`fcmpu ; bge`) -> keep this index.
+// DELETE-WHEN AISectionsData::FindNearestAISection(Vector3) const exists in SharedClasses/AI.
+u16 FindNearestAISectionWithoutPointMap(const BrnAI::AISectionsData* lpAISectionsData, const Vector3& lPosition)
+{
+    u16 luNearestSectionIndex = 0x7FFF;
+    f32 lfNearestDistanceSquared = 3.4028234663852886e+38f;   // flt_820A366C
+    for (u16 luSectionIndex = 0; luSectionIndex < lpAISectionsData->muNumSections; ++luSectionIndex)
+    {
+        const BrnAI::AISection* lpSection = lpAISectionsData->GetAISection(luSectionIndex);
+        if (lpSection->IsShortcut() || lpSection->IsAIShortcut())
+        {
+            continue;
+        }
+        const Vector3 lMiddle = lpSection->GetMiddle();
+        const f32 lfDx = lMiddle.x - lPosition.x;
+        const f32 lfDy = lMiddle.y - lPosition.y;
+        const f32 lfDz = lMiddle.z - lPosition.z;
+        const f32 lfDistanceSquared = lfDx * lfDx + lfDy * lfDy + lfDz * lfDz;
+        if (lfDistanceSquared < lfNearestDistanceSquared)
+        {
+            luNearestSectionIndex    = luSectionIndex;
+            lfNearestDistanceSquared = lfDistanceSquared;
+        }
+    }
+    return luNearestSectionIndex;
+}
+}
+
+void GameStateModule::SendRouteRequestAction(const GameStateModuleIO::LandmarkRouteRequestEvent* lpRouteRequestEvent,
+                                             GameStateModuleIO::GameActionQueue*                  lpOutputActionQueue,
+                                             BrnAI::RouteMapModuleIO::RequestOwner                leRequestOwner)
+{
+    typedef GameStateModuleIO::LandmarkRouteRequestEvent RouteRequest;
+
+    CGS_ASSERT(lpRouteRequestEvent != nullptr, "lpRouteRequestEvent");   // BrnGameStateModule.cpp:5899 (0x170B)
+    CGS_ASSERT(lpOutputActionQueue != nullptr, "lpOutputActionQueue");   // BrnGameStateModule.cpp:5900 (0x170C)
+
+    GameStateModuleIO::RequestRouteInfoAction lRouteRequestAction;
+    std::memset(&lRouteRequestAction, 0, sizeof(lRouteRequestAction));
+
+    for (s32 liIndex = 0; liIndex < RouteRequest::KI_MAX_POINTS; ++liIndex)
+    {
+        u16 luAISectionIndex = 0;
+        switch (lpRouteRequestEvent->mePointTypes[liIndex])
+        {
+        case RouteRequest::E_ROUTE_END_POINT_TYPE_LANDMARK:
+            luAISectionIndex = mProgressionManager.FindLandmarkAISectionIndex(lpRouteRequestEvent->maLandmarkIDs[liIndex]);
+            break;
+
+        case RouteRequest::E_ROUTE_END_POINT_TYPE_JUNCTION:
+        case RouteRequest::E_ROUTE_END_POINT_TYPE_PLAYERPOS:
+            luAISectionIndex = FindNearestAISectionWithoutPointMap(mProgressionManager.GetAISectionsData(),
+                                                                   lpRouteRequestEvent->maPositions[liIndex]);
+            break;
+
+        default:
+            // The console streams the type after the text ("Unknown route node type: " << type << "\n")
+            // into Assert::gpcMessageBuffer; the static head is passed straight through (the project
+            // convention for streamed asserts). Non-gating: it then takes the position lookup.
+            CGS_ASSERT(false, "Unknown route node type: ");                     // BrnGameStateModule.cpp:5937 (0x1731)
+            luAISectionIndex = FindNearestAISectionWithoutPointMap(mProgressionManager.GetAISectionsData(),
+                                                                   lpRouteRequestEvent->maPositions[liIndex]);
+            break;
+        }
+
+        if (liIndex == 0)
+        {
+            lRouteRequestAction.mStartPosition       = lpRouteRequestEvent->maPositions[0];
+            lRouteRequestAction.muStartSectionIndex  = luAISectionIndex;
+        }
+        else
+        {
+            lRouteRequestAction.mEndPosition         = lpRouteRequestEvent->maPositions[1];
+            lRouteRequestAction.muEndSectionIndex    = luAISectionIndex;
+        }
+    }
+
+    lRouteRequestAction.muEventId = lpRouteRequestEvent->mu16EventID;           // lhz 0x44(r30) -> +0x24
+    lRouteRequestAction.miOwnerId = static_cast<s32>(leRequestOwner);           // arg_2C -> +0x28
+    lpOutputActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRouteRequestAction),
+                                  static_cast<s32>(GameStateModuleIO::E_ACTION_REQUEST_ROUTE_INFO),
+                                  static_cast<s32>(sizeof(lRouteRequestAction)));   // li r5, 0x32 ; li r6, 0x30
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_ROUTE_INFO_DIAG: the question as posted (first 40).
+    static const bool sbRouteDiag = (getenv("BRN_ROUTE_INFO_DIAG") != 0);
+    static s32 siRouteLinesLeft = 40;
+    if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        --siRouteLinesLeft;
+        *CgsDev::Log::gpDebugPrint << "[route-info] SendRouteRequestAction owner " << static_cast<s32>(leRequestOwner)
+                                   << " event " << static_cast<s32>(lRouteRequestAction.muEventId)
+                                   << " sections " << static_cast<s32>(lRouteRequestAction.muStartSectionIndex)
+                                   << " -> " << static_cast<s32>(lRouteRequestAction.muEndSectionIndex) << "\n";
     }
 }
 

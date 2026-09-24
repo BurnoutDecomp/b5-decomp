@@ -210,6 +210,15 @@ enum EGameEventType
     // reconstructed from the case body (FLAG).
     E_EVENT_FREEBURN_CHALLENGE_RESET_ALL_ACTIONS = 167, // X360-attested value; FLAGGED name
     E_EVENT_ACTIVE_FREEBURN_CHALLENGE         = 173, // X360 (PS3 167; "lpActiveChallengeEvent")
+    // [FX-BRIDGES CC-11, 2026-09-24] the checkpoint-distance route pair. The PS3 DWARF puts
+    // E_EVENT_LANDMARK_ROUTE_REQUEST at 85 and E_EVENT_MODE_MANAGER_ROUTE_INFO at 168 (its last
+    // enumerator before E_EVENT_COUNT 169); the X360 ids are the ProcessGameEvents @0x823A0A18
+    // jump-table cases whose arms name the records: case 84 hands its payload to
+    // SendRouteRequestAction (@0x823A18A4), case 174 asserts "lpRouteInfoEvent" (@0x823A4B20, line
+    // 0x1148) and calls ModeManager::HandleCheckpointDistanceResponse. 174 is also the id
+    // BridgeWorldToGameState posts (`li r5, 0xAE` @0x823E5538) -- same +6 as ACTIVE_FREEBURN above.
+    E_EVENT_LANDMARK_ROUTE_REQUEST            = 84,  // X360 (PS3 85; ProcessGameEvents case 84)
+    E_EVENT_MODE_MANAGER_ROUTE_INFO           = 174, // X360 (PS3 168; "lpRouteInfoEvent")
     // Road-rules events (StreetManager keystone, wave B). The network bridge posts the buddy and
     // the four online road-rules events under these ids, and ProcessGameEvents' cases 150 /
     // 130 / 131 / 132 / 133 call StreetManager::ProcessBuddyRemoved / ProcessNetworkHighScoreEvent
@@ -842,5 +851,58 @@ static_assert(offsetof(InProgressStuntEvent, mfTimeInAir) == 0x7C, "InProgressSt
 static_assert(offsetof(InProgressStuntEvent, mbInReverse) == 0x90, "InProgressStuntEvent reverse flag at +0x90");
 static_assert(offsetof(ActiveFburnChallengeEvent, mChallengeID) == 0x20, "ActiveFburnChallengeEvent id at +0x20");
 static_assert(offsetof(ActiveFburnChallengeEvent, miNumPlayersInChallenge) == 0x28, "ActiveFburnChallengeEvent count at +0x28");
+
+// ============================================================================================
+// [FX-BRIDGES CC-11, 2026-09-24] THE CHECKPOINT-DISTANCE ROUTE PAIR.
+//
+// LandmarkRouteRequestEvent -- DWARF BrnGameEvents.h:1679..1695. A two-point route question: each
+// end is a landmark (by id), a junction or the player's position (by world position). It travels
+// as game event 84 (the GUI's requests) and, for the mode manager's checkpoint distances, straight
+// into GameStateModule::SendRouteRequestAction @0x82381DC8, which reads every member below at the
+// DWARF's offsets: node types `lwz 0(r26)` from +0x20 (stride 4), landmark ids `ld 0(r20)` from
+// +0x30 (stride 8), positions `lvx128 v127, r0, r29` from +0x00 (stride 16), the event id
+// `lhz 0x44(r30)`. ModeManager::UpdateCheckpointDistanceRequests @0x823279B8 is the producer the
+// mode manager runs (its stores @0x82327AC8..0x82327B84 land on the same offsets).
+struct alignas(16) LandmarkRouteRequestEvent : public GameEvent<E_EVENT_LANDMARK_ROUTE_REQUEST>
+{
+    // DWARF BrnGameEvents.h:1679
+    enum ERouteEndPointType
+    {
+        E_ROUTE_END_POINT_TYPE_LANDMARK  = 0,
+        E_ROUTE_END_POINT_TYPE_JUNCTION  = 1,
+        E_ROUTE_END_POINT_TYPE_PLAYERPOS = 2,
+        E_ROUTE_END_POINT_TYPE_COUNT     = 3
+    };
+
+    static const s32 KI_MAX_POINTS = 2;            // :1688
+
+    Vector3            maPositions[KI_MAX_POINTS];      // +0x00  :1690
+    ERouteEndPointType mePointTypes[KI_MAX_POINTS];     // +0x20  :1691
+    u32                muJunctionIDs[KI_MAX_POINTS];    // +0x28  :1692
+    CgsID              maLandmarkIDs[KI_MAX_POINTS];    // +0x30  :1693
+    u16                maSectionIndices[KI_MAX_POINTS]; // +0x40  :1694
+    u16                mu16EventID;                     // +0x44  :1695
+};
+static_assert(offsetof(LandmarkRouteRequestEvent, mePointTypes)     == 0x20, "node types at +0x20 (lwz 0(r26), r26 = event + 0x20 @0x82381E5C)");
+static_assert(offsetof(LandmarkRouteRequestEvent, muJunctionIDs)    == 0x28, "junction ids at +0x28 (DWARF order)");
+static_assert(offsetof(LandmarkRouteRequestEvent, maLandmarkIDs)    == 0x30, "landmark ids at +0x30 (ld 0(r20), r20 = event + 0x30 @0x82381E58)");
+static_assert(offsetof(LandmarkRouteRequestEvent, maSectionIndices) == 0x40, "section indices at +0x40 (sth @0x82327B7C / 0x82327B84)");
+static_assert(offsetof(LandmarkRouteRequestEvent, mu16EventID)      == 0x44, "event id at +0x44 (lhz 0x44(r30) @0x82381FDC)");
+static_assert(sizeof(LandmarkRouteRequestEvent) == 0x50, "the 16-byte-aligned record the producer builds on its stack");
+
+// ModeManagerRouteInfoEvent -- DWARF BrnGameEvents.h:3008/3009. The answer to a mode-manager route
+// request: which checkpoint pair it measured and how long the route is. BridgeWorldToGameState
+// @0x823E5368 builds it from every RouteResponse whose owner is E_OWNER_MODE_MANAGER
+// (`stw r11, var_1450` = the response's u16 event id, `stfs f0, var_144C` = the distance) and posts
+// it as event 174, size 8 (@0x823E5530..0x823E5540); ModeManager::HandleCheckpointDistanceResponse
+// @0x8231E6C8 compares `lwz 0(r27)` against the next checkpoint and hands `lfs f1, 4(r27)` to
+// ScoringSystem::SetCheckpointDistances.
+struct ModeManagerRouteInfoEvent : public GameEvent<E_EVENT_MODE_MANAGER_ROUTE_INFO>
+{
+    s32 miEventId;          // +0x00  :3008
+    f32 mfRouteDistance;    // +0x04  :3009
+};
+static_assert(offsetof(ModeManagerRouteInfoEvent, mfRouteDistance) == 0x04, "distance at +4 (lfs f1, 4(r27) @0x8231E75C)");
+static_assert(sizeof(ModeManagerRouteInfoEvent) == 8, "posted with size 8 (li r6, 8 @0x823E5534)");
 }
 }

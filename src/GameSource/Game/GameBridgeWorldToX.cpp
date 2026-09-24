@@ -722,7 +722,9 @@ namespace BrnGame
     //   * leg 9  -- GameStateModuleIO::VehicleOutputInterface is a FORWARD-DECLARED class with
     //     no definition anywhere in the tree, so its operator= (X360 0x823C89C8) cannot be
     //     named. Owner: gsm.
-    //   * leg 10 -- everything on the SOURCE side exists (BrnRouteMapModuleIO.h ::
+    //   * leg 10 -- ⭐ LANDED 2026-09-24 (crash parity FX-BRIDGES CC-11) through
+    //     BridgeWorldToGameState_RouteInfo; the note below is kept as the record of what it needed.
+    //     Everything on the SOURCE side exists (BrnRouteMapModuleIO.h ::
     //     RouteResponse::GetOwnerId/GetEventId/GetRoute, BrnRoute.h :: GetNodeCount/
     //     GetDistance -- the console's `lfs` at RouteResponse+8 IS maNodes[0].z, i.e.
     //     Route::GetDistance()), and so does the destination queue. What is missing is the
@@ -744,6 +746,55 @@ namespace BrnGame
     // DELETE-WHEN DoUpdate_GameStatePostWorld lands: then this becomes the only feed and the
     // bring-up entry point retires.
     // ========================================================================================
+    // ========================================================================================
+    // [FX-BRIDGES CC-11, 2026-09-24] BridgeWorldToGameState_RouteInfo -- LEG 10 of
+    // BridgeWorldToGameState @0x823E5368, de-inlined (see GameBridgeWorldToX.h for why).
+    //   0x823E5494..0x823E54C4  lpRouteResponseOutput = worldOut->GetRouteResponseQueue() const
+    //                           (0x823B5F60); assert it (GameBridgeWorldToX.cpp:505, `li r5, 0x1F9`)
+    //   0x823E54C8..0x823E54D4  the count (`lwz r28, 8(r31)`), read once; f31 = flt_82001CC0 (0.0f)
+    //   0x823E54E0..0x823E54F8  per response: GetEvent(i), and the whole 0x1410-byte record memcpy'd
+    //                           to the stack
+    //   0x823E54FC..0x823E5504  only muOwnerId (+0x140C) == 2 (E_OWNER_MODE_MANAGER) is forwarded
+    //   0x823E5508..0x823E551C  distance = node count (+0x1400) > 0 ? Route::GetDistance() (+0x8) : 0.0f
+    //   0x823E5520..0x823E5540  { (s32) muEventId (+0x140E), distance } -> AddEvent(record, 174, 8)
+    //                           onto the post-world input's game-event queue
+    // ========================================================================================
+    void BridgeWorldToGameState_RouteInfo(CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+                                          const BrnWorldIO::UpdateOutputBuffer*     lpWorldOutput)
+    {
+        const BrnAI::RouteMapModuleIO::RouteResponseQueue* lpRouteResponseOutput = lpWorldOutput->GetRouteResponseQueue();
+        CGS_ASSERT(lpRouteResponseOutput != 0, "lpRouteResponseOutput");   // GameBridgeWorldToX.cpp:505
+
+        const s32 liNumResponses = lpRouteResponseOutput->GetLength();
+        for (s32 liResponse = 0; liResponse < liNumResponses; ++liResponse)
+        {
+            const BrnAI::RouteMapModuleIO::RouteResponse lRouteResponse = lpRouteResponseOutput->GetEvent(liResponse);
+            if (lRouteResponse.GetOwnerId() == BrnAI::RouteMapModuleIO::E_OWNER_MODE_MANAGER)
+            {
+                BrnGameState::GameStateModuleIO::ModeManagerRouteInfoEvent lRouteInfoEvent;
+                lRouteInfoEvent.miEventId       = static_cast<s32>(lRouteResponse.GetEventId());
+                lRouteInfoEvent.mfRouteDistance = (lRouteResponse.GetRoute()->GetNodeCount() > 0)
+                                                      ? lRouteResponse.GetRoute()->GetDistance()
+                                                      : 0.0f;   // f31 = flt_82001CC0
+                lpGameEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRouteInfoEvent),
+                                           static_cast<s32>(BrnGameState::GameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO),
+                                           static_cast<s32>(sizeof(lRouteInfoEvent)));   // li r5, 0xAE ; li r6, 8
+
+                // [DIAG] NOT IN THE X360 BINARY -- BRN_ROUTE_INFO_DIAG: every forwarded answer (first 40).
+                static const bool sbRouteDiag = (getenv("BRN_ROUTE_INFO_DIAG") != 0);
+                static s32 siRouteLinesLeft = 40;
+                if (sbRouteDiag && siRouteLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siRouteLinesLeft;
+                    *CgsDev::Log::gpDebugPrint << "[route-info] BridgeWorldToGameState leg 10: event 174 leg "
+                                               << lRouteInfoEvent.miEventId << " nodes "
+                                               << lRouteResponse.GetRoute()->GetNodeCount() << " distance "
+                                               << lRouteInfoEvent.mfRouteDistance << "\n";
+                }
+            }
+        }
+    }
+
     void BrnGameModule::BridgeWorldToGameState(
             BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
             const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
@@ -780,6 +831,12 @@ namespace BrnGame
                 *lpAICarDest = *lpAICarSource;
             }
         }
+
+        // ---- leg 10: the mode manager's route answers (@0x823E5494..0x823E554C) -------------
+        // [FX-BRIDGES CC-11, 2026-09-24] Landed through the de-inlined helper above, onto the same
+        // write-locked destination queue leg 2 appends into (legs 3..9 never touch it, so the
+        // queue's content order -- world events, then the answers -- is the console's).
+        BridgeWorldToGameState_RouteInfo(lpGameStateInput->GetGameEventQueue(), lpWorldOutput);
 
         // [DIAG] NOT IN THE X360 BINARY -- the `[UI-gate]` ladder's GameState-transport rung.
         // Same logger, same env guard (BRN_PROP_DIAG) and same first-N latch as

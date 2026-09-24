@@ -368,6 +368,10 @@ public:
     void ShowModeResults(const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarOutput,
                          GameStateModuleIO::GameActionQueue* lpGameActionQueue);                            // DWARF :414 / X360 0x823436D0
     void PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedModeEvent* lpEvent);                     // DWARF :397 / X360 0x823280D8
+    // [FX-BRIDGES CC-11, 2026-09-24] The answer half of the checkpoint-distance pump
+    // (UpdateCheckpointDistanceRequests asks): ProcessGameEvents case 174 hands every
+    // ModeManagerRouteInfoEvent here. Body: BrnModeManager_UpdateMode.cpp.
+    void HandleCheckpointDistanceResponse(const GameStateModuleIO::ModeManagerRouteInfoEvent* lpRouteInfoEvent); // DWARF :659 / X360 0x8231E6C8
 
     // ---- [FX-GS 2026-09-23, crash-parity G11-D4] the online team modes (11 and 13) ----------------
     // X360 0x8234C750 (DWARF :483). Called from GameStateModule::PreWorldUpdate (0x823A5C14, after

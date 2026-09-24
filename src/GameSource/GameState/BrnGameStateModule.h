@@ -20,6 +20,7 @@
 #include "GameSource/GameState/BrnResetPlayerDebugComponent.h"
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
+#include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"          // [FX-BRIDGES CC-11] BrnAI::RouteMapModuleIO::RequestOwner (SendRouteRequestAction)
 // [gateui] The two sub-objects the smash/billboard chain needs BY VALUE, both at their console
 // positions (StuntManager this+183952, DeveloperChallengeManager this+185712). Neither header
 // includes this one back, so there is no cycle (contrast mpTrainingManager below).
@@ -642,6 +643,28 @@ public:
         const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
         GameStateModuleIO::GameActionQueue*            lpActionQueue,
         GameStateModuleIO::OutputBuffer*               lpOutputBuffer);
+
+    // ⭐ [FX-BRIDGES CC-11, 2026-09-24] X360 ProcessGameEvents @0x823A0A18, THE CASE-174 ARM
+    // (@0x823A4B20..0x823A4B4C): assert the record ("lpRouteInfoEvent", line 0x1148), then
+    // ModeManager::HandleCheckpointDistanceResponse(gsm + 0x1020 == &mModeManager, record). The
+    // record is the ModeManagerRouteInfoEvent BridgeWorldToGameState posts for every route
+    // response the mode manager asked for. Extracted like its sibling arms.
+    void ProcessGameEventsModeManagerRouteInfoBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue);
+
+    // ⭐ [FX-BRIDGES CC-11, 2026-09-24] SendRouteRequestAction -- X360 0x82381DC8, DWARF
+    // BrnGameStateModule.h:648 (body BrnGameStateModule.cpp:5622). Turns a two-point
+    // LandmarkRouteRequestEvent into the world's route question: action 50
+    // (E_ACTION_REQUEST_ROUTE_INFO, the 48-byte RequestRouteInfoAction), each end's AI section
+    // resolved by its point type (a landmark through ProgressionManager::FindLandmarkAISectionIndex,
+    // a junction / the player's position through the AI-sections resource's nearest section),
+    // stamped with the request's event id and the OWNER the answer is routed back to. Callers:
+    // ModeManager::UpdateCheckpointDistanceRequests @0x823279B8 (owner E_OWNER_MODE_MANAGER, the
+    // checkpoint distances) and ProcessGameEvents case 84 @0x823A18A4 (owner E_OWNER_GUI -- that
+    // arm is not reconstructed on this build). Body: BrnGameStateModule.cpp.
+    void SendRouteRequestAction(const GameStateModuleIO::LandmarkRouteRequestEvent* lpRouteRequestEvent,
+                                GameStateModuleIO::GameActionQueue*                  lpOutputActionQueue,
+                                BrnAI::RouteMapModuleIO::RequestOwner                leRequestOwner);
 
     // ================================================================================
     // (i) [D4 PUMP SEAM] CheckIfPlayerIsAtJunctionWithAnEvent (X360 0x82390418) and
