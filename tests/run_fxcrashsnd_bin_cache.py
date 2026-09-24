@@ -13,8 +13,12 @@ were constructed in ResourcesAreReady, and the selection read the materials off 
 
 Wiring: the lifecycle glue and the mount. Numeric: tests/FxCrashSndBinCache.cpp compiles the
 PRODUCTION BinLookupCache class, Build, and SelectCollisionBin's cache walk against a fixture
-AttribSys. --rev reads the b5 sources at that revision and the PARENT's committed build script
-(the mount is a parent-repo line; the working-tree run reads the working file).
+AttribSys; tests/FxTailsBBinCacheHead.cpp (FX-TAILS-B, 2026-09-24 -- REVIEW-F found no numeric check
+biting on 35b8dc7a~1) RUNS the production head of UpdateResolver -- the text between its opening brace
+and the frame copy -- call after call against lists that change between the calls, so "both caches
+rebuilt on every call" is measured, not just read. --rev reads the b5 sources at that revision and the
+PARENT's committed build script (the mount is a parent-repo line; the working-tree run reads the
+working file).
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxcrashsnd_bin_cache.py [--rev <b5 rev>]
 """
@@ -40,7 +44,10 @@ UPDATE_RESOLVER = "void CollisionStateManager::UpdateResolver("
 PREPARE = "bool CollisionStateManager::Prepare()"
 SELECT = "void CollisionStateManager::SelectCollisionBin("
 BUILD = "void BinLookupCache::Build( const List& lrList )"
-NUMERIC_CHECKS = 28
+FRAME_COPY = "mFrameInformation = lrFrame;"
+CACHE_CHECKS = 28     # FxCrashSndBinCache.cpp
+HEAD_CHECKS = 12      # FxTailsBBinCacheHead.cpp
+NUMERIC_CHECKS = CACHE_CHECKS + HEAD_CHECKS
 
 
 def parent_build_script(rev):
@@ -161,12 +168,23 @@ def wiring(tree, rev):
     ]
 
 
+def resolver_head(manager):
+    """The production statements of UpdateResolver between its opening brace and the frame copy
+    (0x826F8F20..0x826F8F84 on the console: the input getters and the two cache builds)."""
+    body = definition(manager, UPDATE_RESOLVER)
+    stop = body.find(FRAME_COPY)
+    if stop < 0:
+        raise ValueError("UpdateResolver's frame copy `" + FRAME_COPY + "`")
+    return body[body.index("{") + 1:stop]
+
+
 def numeric(tree):
     header = tree.read(CACHE_H)
     try:
         klass = definition(header, "class BinLookupCache") + ";"
         build = "template< typename List, typename Bin >\n" + definition(tree.read(CACHE_CPP), BUILD)
         select = code_only(definition(tree.read(MANAGER_CPP), SELECT))
+        head_of_resolver = resolver_head(tree.read(MANAGER_CPP))
     except ValueError as error:
         print("NUMERIC: cannot build -- production body absent: " + str(error))
         return None
@@ -174,10 +192,18 @@ def numeric(tree):
     if not head:
         print("NUMERIC: cannot build -- SelectCollisionBin has no BinLookupCache walk")
         return None
-    return compile_and_run(Path(__file__).with_name("FxCrashSndBinCache.cpp"), "fxcrashsnd_bincache_class.inc",
-                           klass, "FxCrashSndBinCache",
-                           extra_files={"fxcrashsnd_bincache_build.inc": build,
-                                        "fxcrashsnd_select_head.inc": head})
+    cache = compile_and_run(Path(__file__).with_name("FxCrashSndBinCache.cpp"), "fxcrashsnd_bincache_class.inc",
+                            klass, "FxCrashSndBinCache",
+                            extra_files={"fxcrashsnd_bincache_build.inc": build,
+                                         "fxcrashsnd_select_head.inc": head})
+    rebuild = compile_and_run(Path(__file__).with_name("FxTailsBBinCacheHead.cpp"), "fxcrashsnd_bincache_class.inc",
+                              klass, "FxTailsBBinCacheHead",
+                              extra_files={"fxcrashsnd_bincache_build.inc": build,
+                                           "fxcrashsnd_resolver_head.inc": head_of_resolver})
+    # A program that did not run counts every one of its checks as failed.
+    cache = cache if cache is not None else (CACHE_CHECKS, CACHE_CHECKS)
+    rebuild = rebuild if rebuild is not None else (HEAD_CHECKS, HEAD_CHECKS)
+    return cache[0] + rebuild[0], cache[1] + rebuild[1]
 
 
 def main():
