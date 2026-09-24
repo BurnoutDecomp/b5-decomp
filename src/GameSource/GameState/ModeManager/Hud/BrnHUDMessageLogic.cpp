@@ -36,13 +36,13 @@ namespace BrnGameState
 {
 namespace
 {
-    // The online stunt-run mode duration (X360 read-only float at 0x82CDB7B4, also stored
-    // into GameModeParams::mfModeTimeLimit by OnlineStuntRunMode::Start @ 0x82339E70). Used
-    // by the "leading" generator to gate on at-least-ten-seconds-elapsed. Modelled as a
-    // single named constant so the elapsed-time math is self-consistent (the comparison is
-    // exact for any value of the limit). FLAG: the literal float byte value is not in the
-    // per-function IDA exports; 120.0f is the inferred online stunt-run mode length.
-    const f32 KF_ONLINE_STUNT_RUN_MODE_TIME_LIMIT = 120.0f;
+    // The online stunt-run mode duration: the X360 read-only float flt_82CDB7B4 == 0x42B40000 ==
+    // 90.0f (x360rd), also stored into GameModeParams::mfModeTimeLimit by OnlineStuntRunMode::Start
+    // @0x82339E70 (`lfs` @0x82339F10 -> `stfs 0x6C`; BrnOnlineStuntRunMode.cpp's
+    // KF_SCORING_GRACE_SECONDS). The "leading" generator reads it at 0x823949A4 and gates on
+    // `90.0 - remaining > 10.0` (`fsubs` @0x823949AC, `fcmpu ; ble` vs flt_8202AC38).
+    // [FX-FLOW 2026-09-24] was 120.0f, an inferred length; the image word is 90.0f.
+    const f32 KF_ONLINE_STUNT_RUN_MODE_TIME_LIMIT = 90.0f;   // flt_82CDB7B4
 
     // The generator gates (X360 read-only floats). Recognisable round constants from the
     // comparison context: elapsed > 10s before reporting a new leader; combo warning while
