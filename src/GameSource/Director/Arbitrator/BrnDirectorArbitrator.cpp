@@ -4,6 +4,10 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"          // ArbitratorState (cycle request / camera)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"    // BehaviourDebugFlyWorld (WarpToLookAt)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"             // DirectorIO::ControlInput (the named camera-control bytes)
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"                  // Camera::PlayerCrashInfo (the BlackFade_Water gate)
+#include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"                 // Camera::EnsureEffectIsStopped
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] CgsDev::Log::gpDebugPrint
+#include <cstdlib>                                                                // [diag] getenv
 
 // ============================================================================
 // BrnDirector::Arbitrator -- reconstructed from BURNOUT_X360_ARTIST.XEX (semantic parity)
@@ -306,26 +310,58 @@ namespace BrnDirector
 
             lrCameraInOut = GetNormalCamera();
 
-            // ⚠️ GATE: the "BlackFade_Water" branch. X360:
-            //     if ( mpPlayerCrashInfo[+39] ) {
-            //         lrCameraInOut.mState_uFlags &= ~2;
-            //         lrCameraInOut.GetEffects().mStartHookNameString.Set("BlackFade_Water");
-            //         ...mfStartHookNameBlendAmount = 1.0f; ...mbHasStartHookNameString = true;
-            //         ...mbHasStopHookNameString = false;   ...muRequestedPostFxId = 0;
-            //         mSharedCameraContainer.ForcePrimaryGameplayBehaviourToFinish();
-            //     } else {
-            //         Camera::EnsureEffectIsStopped(lrCameraInOut, *info.mpEffectInterface,
-            //                                       "BlackFade_Water");
-            //     }
-            //   The camera side is fully named (see the banner) -- what is NOT reachable is the
-            //   CONDITION: `mpPlayerCrashInfo[+39]` is a byte inside BrnDirector::PlayerCrashInfo,
-            //   which has no homed layout (MainDirector hands the slot on as raw input-buffer
-            //   storage). Running either arm on a guessed condition would drive a visible
-            //   full-screen fade at the wrong times, so BOTH arms are gated rather than one
-            //   picked. Both callees are also declaration-only today
-            //   (ForcePrimaryGameplayBehaviourToFinish / EnsureEffectIsStopped).
-            //   CONSEQUENCE: the drown/reset black-fade is neither started nor stopped by the
-            //   arbitrator. DELETE-WHEN: PlayerCrashInfo is homed.
+            // ⭐ THE "BlackFade_Water" BRANCH -- the drowning fade on a crash into water.
+            // [FX-DIRECTOR 2026-09-24] LANDED. Its gate read "DELETE-WHEN: PlayerCrashInfo is
+            // homed"; all three reasons have expired: Camera::PlayerCrashInfo is homed with
+            // mbHitWater at +0x27 (SharedIO/BrnPlayerInfo.h), its producer is live
+            // (BridgeWorldToDirector step 13: mbHitWater = HasCrashedIntoWater(player), FX-BRIDGES
+            // CC-6 9aea778c), and both callees are bodied (ForcePrimaryGameplayBehaviourToFinish,
+            // EnsureEffectIsStopped). Console @0x8226AF90..0x8226B008, store for store:
+            //     lwz r11, 0x34(info) ; lbz r11, 0x27(r11)        mpPlayerCrashInfo->mbHitWater
+            //   set:   ld/and -3/std camera +0x140                 mState_uFlags &= ~2
+            //          HookNameStringWrapper::Set(camera +0x68, "BlackFade_Water")
+            //          stfs 1.0 (flt_82001C98) camera +0xE8        mfStartHookNameBlendAmount
+            //          stb 1 camera +0x11F / stb 0 camera +0x120   has-start / has-stop
+            //          stw 0 camera +0xE4                          muRequestedPostFxId
+            //          BehaviourManager::Behaviour(this +0x38E4 == mGameplayExternal) then
+            //          stb 1 +0xB5D / stb 1 +0x29E / stfs FLT_MAX +0x290
+            //                                      == ForcePrimaryGameplayBehaviourToFinish()
+            //   clear: EnsureEffectIsStopped(camera, info.mpEffectInterface, "BlackFade_Water")
+            if (lrSharedInfo.mpPlayerCrashInfo->mbHitWater)                      // +0x27
+            {
+                lrCameraInOut.mState_uFlags &= ~2;
+                Camera::CameraEffects& lrEffects = lrCameraInOut.GetEffects();
+                lrEffects.SetStartHookName("BlackFade_Water", 1.0f);   // Set + blend + has-start
+                lrEffects.mbHasStopHookNameString = false;             // stb 0, camera +0x120
+                lrEffects.muRequestedPostFxId     = 0;                 // stw 0, camera +0xE4
+                mSharedCameraContainer.ForcePrimaryGameplayBehaviourToFinish();
+            }
+            else
+            {
+                Camera::EnsureEffectIsStopped(lrCameraInOut, *lrSharedInfo.mpEffectInterface,
+                                              "BlackFade_Water");
+            }
+
+            // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. One line per EDGE of the
+            // water flag the branch above keys on, with what the published camera now asks for.
+            {
+                static bool sbLastHitWater = false;
+                const bool  lbHitWater     = lrSharedInfo.mpPlayerCrashInfo->mbHitWater;
+                if (lbHitWater != sbLastHitWater && getenv("BRN_DIRECTOR_ACTION_DIAG") != 0 &&
+                    CgsDev::Log::gpDebugPrint != 0)
+                {
+                    const Camera::CameraEffects& lrEffects = lrCameraInOut.GetEffects();
+                    *CgsDev::Log::gpDebugPrint
+                        << "[water-fade] mbHitWater -> " << (lbHitWater ? 1 : 0)
+                        << " start-hook " << (lrEffects.mbHasStartHookNameString ? 1 : 0)
+                        << " '" << (lrEffects.mbHasStartHookNameString
+                                        ? lrEffects.mStartHookNameString.mHookNameString : "")
+                        << "' blend " << lrEffects.mfStartHookNameBlendAmount
+                        << " stop-hook " << (lrEffects.mbHasStopHookNameString ? 1 : 0)
+                        << " gameplay-cam snap " << (lbHitWater ? 1 : 0) << "\n";
+                }
+                sbLastHitWater = lbHitWater;
+            }
 
             // ⚠️ GATE: `if ( lbPaused && GetCurrentState() == mStateContainer.GetState(
             //               E_STATE_ROAMING) ) lrCameraInOut = mSharedCameraContainer.
