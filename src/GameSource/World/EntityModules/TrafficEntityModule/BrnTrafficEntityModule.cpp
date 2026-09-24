@@ -12751,12 +12751,11 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             }
             else if (leManoeuvre == Vehicle::E_MANOEUVRE_3_POINT_TURN)          // jpt case 1
             {
-                // GATE Update3PointTurnManoeuvre @0x827190B0 -- exported, no body. Reached by
-                // DriveTowardsTarget's reverse-turn leg (SetCurrentManoeuvre(2) @0x8273E6F0).
-                static bool sbLogged3PtArm = false;
-                LogMissingLeg_T3Drive(sbLogged3PtArm,
-                              "GenerateDriverInputs arm Update3PointTurnManoeuvre @0x827190B0 "
-                              "-- no body");
+                // 0x827494F0..0x82749500 `addi r5, &lControls ; mr r4, r19 ; bl 0x827190B0` -- LIVE
+                // (FX-TRAFFIC4 item 2). Started by DriveTowardsTarget's reverse-turn leg
+                // (SetCurrentManoeuvre(2) at 0x8273E6B0); always sent (0x82749514 `b loc_827496B0`).
+                // Body below UpdateGiveUpManoeuvre.
+                Update3PointTurnManoeuvre(static_cast<u32>(liVehicle), &lControls);
             }
             else if (leManoeuvre == Vehicle::E_MANOEUVRE_GIVE_UP)               // jpt case 2
             {
@@ -13528,6 +13527,158 @@ void TrafficEntityModule::UpdateGiveUpManoeuvre(u32 luVehicle,
             }
         }
     }
+}
+
+// ============================================================================================
+// FX-TRAFFIC4 item 2 (crash parity wave 5, 2026-09-24) -- the THREE-POINT TURN.
+//
+// DriveTowardsTarget starts it (0x8273E6B0 SetCurrentManoeuvre(E_MANOEUVRE_3_POINT_TURN) when the
+// target is more than 15 m BEHIND the car, the car is in no manoeuvre and its param faces the other
+// way), and GenerateDriverInputs' jump-table arm for manoeuvre 2 (0x82749500) drives it. The arm was a
+// gate: the car kept the zero-control record, so it sat still until the ten-second no-driving latch
+// made it give up. Update3PointTurnManoeuvre @0x827190B0 had no body in the tree.
+// ============================================================================================
+namespace
+{
+    // Plain .rdata reads (x360rd), no DWARF name -- literals in the console source:
+    //   flt_82011C14 == 0x3F34FDF4 == 0.707f  the turn is over once Dot(At, dir to target) exceeds it
+    //                                        (0x82719254, `vcmpgtfp.` all lanes, 0x82719278)
+    //   flt_82097A30 == 0x3F75C28F == 0.96f   phase 0 (reversing) ends once |Dot(dir, Right)| exceeds it
+    //                                        (0x82719398, `fcmpu` + `bgt`)
+    //   flt_820BA5B4 == 0x3F4CCCCD == 0.8f    the pedal each phase holds: brake (reverse) in phase 0
+    //                                        (0x827193B8), gas in phase 1 (0x827193F8)
+    const f32 KF_3_POINT_TURN_DONE_DOT         = 0.707f;
+    const f32 KF_3_POINT_TURN_REVERSE_MAX_SIDE = 0.96f;
+    const f32 KF_3_POINT_TURN_PEDAL            = 0.8f;
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witnesses of the manoeuvre, capped: each
+    // car's first phase-0 frame, its phase change and the end (per-vehicle last-logged state).
+    const s32 KI_3_POINT_TURN_DIAG_CAP = 60;
+    s32       gi3PointTurnDiagLines    = 0;
+    s8        gai3PointTurnDiagState[KU_MAX_STANDARD_TRAFFIC];   // 0 == not logged; phase + 1
+}
+
+// --------------------------------------------------------------------------------------------
+// @0x827190B0  TrafficEntityModule::Update3PointTurnManoeuvre   (224 insns; PS3 twin 0x91BEE8)
+//   DWARF BrnTrafficUnity :16616..: lpVehicle, lTargetPos, lDiff, lDirToTarget; per phase block
+//   lVehicleRight, lfSteering; the default block's lStrStream. Prologue: r3 this, r4 luVehicle,
+//   r5 lpDriverControls.
+//   0x827190D4  "lpDriverControls" (.cpp 0x41C1 == 16833) ; GetVehicle inlined (.h 2459)
+//   0x82719138  manoeuvre == E_MANOEUVRE_3_POINT_TURN (2) (.cpp 16836) ; IsOfStandardSpecies (.cpp 16837)
+//   0x82719190  GetTargetPos ; GetVehicleTransform ; lDiff = target - row 3 (vsubfp128) ;
+//               MagnitudeSquared (vmsum3fp128), Normalize (vrsqrtefp128 + two Newton steps),
+//               CompNotEqual 0 (vcmpeqfp128 + vnot128), a SECOND GetVehicleTransform, Select
+//               (vsel128): lDirToTarget = |lDiff|^2 != 0 ? normalised lDiff : row 2 (At)
+//   0x8271923C  a THIRD GetVehicleTransform ; Dot(At, lDirToTarget) > 0.707 (all lanes) ->
+//               SetCurrentManoeuvre(NONE), inlined (IsAlive .h 860 ; the phase zeroed on a change ;
+//               +0x3A = 0 ; +0x60 mfManoeuvreTime = 0.0) and return
+//   0x827192EC  GetCurrentManoeuvrePhase (extsb ; cmplwi 1): 0 -> 0x8271936C, 1 -> 0x827193DC,
+//               anything else -> the streamed "Invalid phase for E_MANOEUVRE_3_POINT_TURN: " << phase
+//               (.cpp 0x41F8 == 16888), nothing written
+//   phase 0     GetVehicleTransform ; lfSteering = Dot(lDirToTarget, row 0 (Right)) ;
+//               |lfSteering| > 0.96 (`bgt`, NaN stays) -> SetCurrentManoeuvrePhase(1) and FALL INTO
+//               phase 1; else mfSteering = lfSteering (+0x10), mfGas = 0.0 (+4), mfBrake = 0.8 (+8)
+//   phase 1     GetVehicleTransform ; lfSteering = Dot(lDirToTarget, Right) ; mfGas = 0.8,
+//               mfBrake = 0.0, mfSteering = -lfSteering (fneg)
+//   No phase stores mfManoeuvreTime and nothing reads it: the turn ends on the dot alone.
+// --------------------------------------------------------------------------------------------
+void TrafficEntityModule::Update3PointTurnManoeuvre(u32 luVehicle,
+                                                    BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls)
+{
+    CGS_ASSERT(lpControls != 0, "lpDriverControls");                                     // .cpp 16833
+
+    Vehicle* const lpVehicle = GetVehicle(luVehicle);   // its own .h 2459 bound assert, inlined here
+    CGS_ASSERT(lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_3_POINT_TURN,
+               "lpVehicle->GetCurrentManoeuvre() == Vehicle::E_MANOEUVRE_3_POINT_TURN");  // .cpp 16836
+    CGS_ASSERT(lpVehicle->IsOfStandardSpecies(), "lpVehicle->IsOfStandardSpecies()");    // .cpp 16837
+
+    const Vector3 lTargetPos = lpVehicle->GetTargetPos();
+    const Vector3 lDiff      = lTargetPos - GetVehicleTransform(luVehicle).Pos();
+
+    // MagnitudeSquared / Normalize / CompNotEqual / Select. The zero test is the console's own
+    // (vcmpeqfp128 against 0 then vnot128): a NaN length normalises (to NaN), as there.
+    // FLAG (PC-platform, numeric): vrsqrtefp + two Newton steps de-optimised to 1 / sqrt.
+    const f32 lfDiffMagSq = rw::math::vpu::Dot(lDiff, lDiff);
+    const Vector3 lDirToTarget = (lfDiffMagSq != 0.0f)
+                                     ? lDiff * (1.0f / std::sqrt(lfDiffMagSq))
+                                     : GetVehicleTransform(luVehicle).At();
+
+    // 0x82719278 -- facing the target (within 45 degrees): the turn is over.
+    if (rw::math::vpu::Dot(GetVehicleTransform(luVehicle).At(), lDirToTarget) > KF_3_POINT_TURN_DONE_DOT)
+    {
+        lpVehicle->SetCurrentManoeuvre(Vehicle::E_MANOEUVRE_NONE);                        // 0x827192BC..0x827192D8
+
+        // [DIAG] NOT IN THE X360 BINARY -- the end of the manoeuvre.
+        if (gi3PointTurnDiagLines < KI_3_POINT_TURN_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++gi3PointTurnDiagLines;
+                gai3PointTurnDiagState[luVehicle] = 0;
+                *lpDiag << "[T-3pt-turn] vehicle=" << luVehicle << " done dot="
+                        << rw::math::vpu::Dot(GetVehicleTransform(luVehicle).At(), lDirToTarget)
+                        << " speed=" << lpVehicle->GetSpeed().x << " -> NONE\n";
+            }
+        }
+        return;
+    }
+
+    const s32 liPhase = lpVehicle->GetCurrentManoeuvrePhase();
+    if (liPhase == 0)
+    {
+        const Vector3 lVehicleRight = GetVehicleTransform(luVehicle).Right();
+        const f32     lfSteering    = rw::math::vpu::Dot(lDirToTarget, lVehicleRight);  // 0x82719380
+
+        if (!(std::fabs(lfSteering) > KF_3_POINT_TURN_REVERSE_MAX_SIDE))                // 0x827193A0 bgt
+        {
+            lpControls->mfSteering = lfSteering;                                         // 0x827193A8
+            lpControls->mfGas      = 0.0f;                                               // 0x827193B4 flt_82001CC0
+            lpControls->mfBrake    = KF_3_POINT_TURN_PEDAL;                              // 0x827193BC
+
+            // [DIAG] NOT IN THE X360 BINARY -- the start of each turn, once.
+            if (gi3PointTurnDiagLines < KI_3_POINT_TURN_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC
+                && gai3PointTurnDiagState[luVehicle] != 1)
+            {
+                if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+                {
+                    ++gi3PointTurnDiagLines;
+                    gai3PointTurnDiagState[luVehicle] = 1;
+                    *lpDiag << "[T-3pt-turn] vehicle=" << luVehicle << " phase=0 reversing brake=0.8 steer="
+                            << lfSteering << " speed=" << lpVehicle->GetSpeed().x << "\n";
+                }
+            }
+            return;
+        }
+
+        lpVehicle->SetCurrentManoeuvrePhase(1);                                          // 0x827193D8
+
+        // [DIAG] NOT IN THE X360 BINARY -- the phase change.
+        if (gi3PointTurnDiagLines < KI_3_POINT_TURN_DIAG_CAP && luVehicle < KU_MAX_STANDARD_TRAFFIC)
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++gi3PointTurnDiagLines;
+                gai3PointTurnDiagState[luVehicle] = 2;
+                *lpDiag << "[T-3pt-turn] vehicle=" << luVehicle << " phase=0->1 side=" << lfSteering
+                        << " speed=" << lpVehicle->GetSpeed().x << "\n";
+            }
+        }
+    }
+    else if (liPhase != 1)
+    {
+        // The console streams the phase after the text (StrStream << GetCurrentManoeuvrePhase()).
+        CGS_ASSERT(false, "Invalid phase for E_MANOEUVRE_3_POINT_TURN: ");                 // .cpp 16888
+        return;
+    }
+
+    // 0x827193DC -- phase 1 (also the tail of the frame phase 0 hands over): drive forward, steering
+    // the other way.
+    const Vector3 lVehicleRight = GetVehicleTransform(luVehicle).Right();
+    const f32     lfSteering    = rw::math::vpu::Dot(lDirToTarget, lVehicleRight);      // 0x827193F4
+
+    lpControls->mfGas      = KF_3_POINT_TURN_PEDAL;                                      // 0x82719400
+    lpControls->mfBrake    = 0.0f;                                                       // 0x8271940C
+    lpControls->mfSteering = -lfSteering;                                                // 0x8271941C fneg
 }
 
 // --------------------------------------------------------------------------------------------
