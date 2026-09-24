@@ -67,6 +67,11 @@
 // faithfully would require fabricating both a type and constants -- not done.
 // ============================================================================
 
+// [DIAG] NOT IN THE X360 BINARY -- the PC device's present counter and its backbuffer-dump
+// period (pc/gcm/renderengine/device.cpp), read only by the BRN_SIMPLEFX_DIAG frame line so a
+// dumped bb_<present>.bmp can be matched to the simple particles drawn into it.
+namespace renderengine { extern u32 guPresentCount; u32 FrameDumpEvery(); }
+
 namespace BrnParticle
 {
     ParticleModule::ParticleModule()
@@ -1738,19 +1743,37 @@ namespace BrnParticle
             {
                 static u32 suLines        = 0;
                 static u32 suLastDrawn    = 0xFFFFFFFFu;
+                static u32 suFrameLines   = 0;
+                const u32 luFrameVertices = Native::gauSimpleParticleDrawnVertices
+                                          - (suLastDrawn == 0xFFFFFFFFu ? 0u : suLastDrawn);
                 if (suLines < 200u && Native::gauSimpleParticleDrawnVertices != suLastDrawn)
                 {
                     ++suLines;
-                    suLastDrawn = Native::gauSimpleParticleDrawnVertices;
                     char lacMsg[256];
                     std::snprintf(lacMsg, sizeof(lacMsg),
-                        "[simplefx] ladder spawned=%u quads=%u batches=%u drawn=%u/%u frame{batches=%u prelion=%u zfade=%d}\n",
+                        "[simplefx] ladder spawned=%u quads=%u batches=%u drawn=%u/%u frame{batches=%u prelion=%u zfade=%d} present=%u\n",
                         Native::gauSimpleParticleSpawned, Native::gauSimpleParticleQuadsBuilt,
                         Native::gauSimpleParticleBatchesBuilt, Native::gauSimpleParticleDrawnBatches,
                         Native::gauSimpleParticleDrawnVertices, luSimpleBatches, luPreLionCount,
-                        lbZFade ? 1 : 0);
+                        lbZFade ? 1 : 0, renderengine::guPresentCount);
                     CgsDev::Log::WriteToLog(lacMsg);
                 }
+                // One line per DUMPED frame that drew simple particles (the backbuffer dump names
+                // its file bb_<present>.bmp from this same counter, and writes it at this
+                // frame's Present), so a frame strip can be matched to what was drawn in it
+                // without guessing a frame rate.
+                if (suFrameLines < 400u && luFrameVertices != 0u
+                    && (renderengine::guPresentCount % renderengine::FrameDumpEvery()) == 0u)
+                {
+                    ++suFrameLines;
+                    char lacMsg[160];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[simplefx] frame present=%u vertices=%u batches=%u prelion=%u spawned=%u\n",
+                        renderengine::guPresentCount, luFrameVertices, luSimpleBatches, luPreLionCount,
+                        Native::gauSimpleParticleSpawned);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+                suLastDrawn = Native::gauSimpleParticleDrawnVertices;
             }
         }
     }
