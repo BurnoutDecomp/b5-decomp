@@ -816,6 +816,14 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
                                   TotalTrafficBitArray* lpMadePhysical);
 
+        // @0x82747BB8 (231). DWARF :1350. PrePhysicsUpdate's RUNNING arm, right after
+        // SendPhysicalRequests (0x8274C7DC): crash every car queued in maEmergencyCrashingVehicles
+        // (the other half of a crashed cab/trailer, queued by HandleExternalResponses) -- a
+        // physical car gets SetTrafficCrashing, a non-physical one is promoted as CRASHING --
+        // then clear the queue.
+        void SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                      TotalTrafficBitArray* lpCreatedBodies);
+
         // @0x8274AFD0 (234). DWARF :1572. Vehicle::GetPhysicalReason is SIGN-extended
         // (0x82705540 lbz + extsb) and 0x8274B184 compares cmpwi r3, -1: == -1 is correct here.
         void SafeRequestMakeVehiclePhysical(u32 luVehicle, PhysicalReason leReason,
