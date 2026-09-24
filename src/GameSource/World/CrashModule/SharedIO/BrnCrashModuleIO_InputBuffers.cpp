@@ -148,6 +148,38 @@ namespace CrashIO
     }
 
     // ====================================================================================
+    // InputBuffer_PreScene::Construct   (no out-of-line X360 symbol -- inlined by
+    // CgsIOBufferStack::CreateIOBuffer<BrnWorld::CrashIO::InputBuffer_PreScene> @0x827CEB30)
+    //
+    //   0x827CEBD8  bl Alloc(0xAE90)            ; r31 = the new buffer
+    //   0x827CEBEC  li r11,1 ; 0x827CEBF4 stb r11,0(r31)          -- IOBuffer::Construct (status = constructed)
+    //   0x827CEBF8  bl CgsSystem::TimerStatusInterface::Clear            (r31 + 0x4)
+    //   0x827CEC00  bl BrnWorld::CrashIO::NetworkInputInterface::Construct (r31 + 0x40)
+    //   0x827CEC08  bl BrnPhysics::Vehicle::VehicleDriverInputInterface::Construct (r31 + 0x3CD0)
+    //   0x827CEC10  bl RCEntityActiveRaceCarOutputInterface::Clear       (r31 + 0x5180)
+    //   0x827CEC18  bl CgsModule::VariableEventQueue<13312,16>::Construct (r31 + 0x7A70)
+    // and nothing else: mbPlayerPressingBoost (+0xAE80) is left as allocated (BridgeInputToCrashModule
+    // writes it every frame before any reader).
+    //
+    // Crash parity FOLLOWUPS 19: CgsIOBufferStack::CreateIOBuffer<T> calls T::Construct() statically,
+    // and with no InputBuffer_PreScene::Construct it bound to the base IOBuffer::Construct -- the
+    // status bit only. The crash-side NetworkInputInterface queues and the driver-update queue were
+    // therefore never constructed (the game-action queue only ever got the PC-leaf Construct inside
+    // SetGameActionQueue), which is what kept BridgeInputToCrashModule's network leg parked: its
+    // operator= Clear()+Append()s into those queues.
+    // ====================================================================================
+    void InputBuffer_PreScene::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+
+        mTimerStatusInterface.Clear();
+        mNetworkInputInterface.Construct();
+        mVehicleDriverInterface.Construct();
+        mActiveRaceCarInterface.Clear();
+        mGameActionQueue.Construct();
+    }
+
+    // ====================================================================================
     // InputBuffer_PostPhysics (DWARF BrnCrashModuleIO.h:156)
     // ====================================================================================
     void InputBuffer_PostPhysics::_AssertLayout()
