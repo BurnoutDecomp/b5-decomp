@@ -53,6 +53,21 @@ const char* BehaviourPassengerCam::GetName() const
     return "BehaviourPassengerCam";
 }
 
+// Parameters::Construct (h:108, cpp:34). ADDED 2026-09-24 (FX-DIRECTOR). No console symbol:
+// BehaviourParameterBank::Construct inlines it once, over the bank's passenger block at +0x21E4
+// (0x8223DF08..0x8223DF54). The stores are:
+//   stw 0 +0x04 (the base's debug name)
+//   the impact block's own Construct over +0x08..+0x20 (0.06 / 0.0 / 1.15 / 0.11, then
+//     0.05 / 15.0 / 5.0)
+//   stw 7 +0x00 (the type tag SetParameters asserts on)
+// Nothing else is written, so the class seed IS the block's content.
+void BehaviourPassengerCam::Parameters::Construct()
+{
+    Behaviour::Parameters::Construct();
+    mType = eBehaviourPassengerCam;
+    mImpactParams.Construct();
+}
+
 // Adopt an authored passenger-cam parameter block: assert the block's type tag (a non-gating
 // tripwire -- the stores happen either way), then store the block pointer and its debug name.
 void BehaviourPassengerCam::SetParameters(const Parameters* lpParameters)

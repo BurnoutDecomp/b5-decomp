@@ -85,6 +85,21 @@ namespace Utils
             // Serialise<Parameters> can drive it by name.
             template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
+            // DWARF BrnCameraShake.h:143. ADDED 2026-09-24 (FX-DIRECTOR). No out-of-line console
+            // symbol; two inlined copies agree store for store:
+            //   * the parameter bank's passenger block, BehaviourParameterBank::Construct
+            //     @0x8223DF34..0x8223DF50 (bank +0x21EC..+0x2204);
+            //   * the stack block ImpactShakeController::Update builds for its one call.
+            // The shake block's own seed (0.06 / 0.0 / 1.15 / 0.11), then decay 0.05 (flt_820047C8),
+            // magnitude 15.0 (flt_820047C4), frequency scale 5.0 (flt_8200426C).
+            void Construct()
+            {
+                mShakeParams.Construct();
+                mfShakeDecayFactor    = 0.05f;
+                mfShakeMagnitude      = 15.0f;
+                mfShakeFrequencyScale = 5.0f;
+            }
+
             CameraShake::Parameters mShakeParams;           // +0x00  embedded shake tunings ("Shake parameters")
             f32                     mfShakeDecayFactor;      // +0x10  "Shake decay factor"
             f32                     mfShakeMagnitude;        // +0x14  "Shake magnitude"

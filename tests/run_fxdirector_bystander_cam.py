@@ -39,6 +39,7 @@ SOURCE = f"{DIRECTOR}/Camera/Behaviours/BehaviourBystanderCam.cpp"
 BEHAVIOUR_CPP = f"{DIRECTOR}/Camera/Behaviours/Behaviour.cpp"
 FINDER_CPP = f"{DIRECTOR}/Camera/Utils/BrnPositionFinder.cpp"
 VEHICLE_REF_CPP = f"{DIRECTOR}/Utils/BrnVehicleRef.cpp"
+PASSENGER_CPP = f"{DIRECTOR}/Camera/Behaviours/BehaviourPassengerCam.cpp"
 CAMERA_UTILS_CPP = f"{DIRECTOR}/Camera/Utils/CameraUtils.cpp"
 BANK_H = f"{DIRECTOR}/Camera/BrnBehaviourParameterBank.h"
 MOMENT_CPP = f"{DIRECTOR}/MomentController/Moments/BrnMomentBystanderSeesAction.cpp"
@@ -56,9 +57,11 @@ SHADOW_HEADERS = (
     f"{DIRECTOR}/Camera/Utils/BrnLooker.h",
     f"{DIRECTOR}/Utils/BrnVehicleRef.h",
     f"{DIRECTOR}/Camera/BrnCollisionPolicy.h",
+    f"{DIRECTOR}/Camera/Behaviours/BehaviourPassengerCam.h",
+    f"{DIRECTOR}/Camera/Utils/BrnCameraImpactEffect.h",
 )
 RANGE_TESTS = ("bool TargetOutsideRange(Vector3 lPosition", "bool TargetWillExceedRangeInXSecs(Vector3 lPosition")
-NUMERIC_CHECKS = 62
+NUMERIC_CHECKS = 65
 
 _TOKENS = re.compile(r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\\n])*"|' + r"'(?:\\.|[^'\\\n])*'")
 
@@ -139,7 +142,8 @@ def numeric(tree, overrides=None):
                for name, path in (("BehaviourBystanderCam.cpp", SOURCE),
                                   ("Behaviour.cpp", BEHAVIOUR_CPP),
                                   ("BrnPositionFinder.cpp", FINDER_CPP),
-                                  ("BrnVehicleRef.cpp", VEHICLE_REF_CPP))}
+                                  ("BrnVehicleRef.cpp", VEHICLE_REF_CPP),
+                                  ("BehaviourPassengerCam.cpp", PASSENGER_CPP))}
     missing = [name for name, text in sources.items() if not text]
     utils = tree.read(CAMERA_UTILS_CPP)
     range_tests = []

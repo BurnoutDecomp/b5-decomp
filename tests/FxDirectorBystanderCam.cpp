@@ -22,9 +22,13 @@
 //                          squared distance; range Fail(7); occluded -> NoCutTo 17; leaving -> 15
 //   SetupTweaker @0x821F9B30  Rig X -0.05 [LEFT_STICK_X], Rig Y 0.05 [LOWER_TRIGGERS], Rig Z 0.05 [LEFT_STICK_Y]
 //   SetTarget @0x821F3F80 (VehicleRef::SetToRaceCar @0x821F29D8 + its h:222 assert), SetParameters @0x821F3F10
-//   BehaviourParameterBank::Construct @0x8223DC90  the four modelled bystander blocks
+//   BehaviourParameterBank::Construct @0x8223DC90  the four modelled bystander blocks, and the passenger block
+//     (BehaviourPassengerCam::Parameters::Construct inlined at 0x8223DF08..0x8223DF54: type 7 + the
+//     CameraImpactEffect::Parameters seed) that BehaviourPassengerCam::SetParameters must accept
 #include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"
+#include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"
+#include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"
@@ -318,6 +322,29 @@ int main()
           lrJumpBehind.mfTargetSpaceZ == -3.31f && lrJumpBehind.mbUseTargetSpaceInsteadOfPositionFinder &&
           !lrJumpBehind.mbUseRangeTesting && lrJumpBehind.mLookerParams.mfDesiredPerceivedDistance == 5.0f,
           "bank JumpFromBehind (slot 2, +0xE50): (1.1, -0.78, -3.31), target space, no range test");
+
+    // ---- the passenger block (record +8660, bank +0x21E4) ---------------------------------------------
+    CU::CameraImpactEffect::Parameters lImpactSeed;
+    std::memset(static_cast<void*>(&lImpactSeed), 0xCD, sizeof(lImpactSeed));
+    lImpactSeed.Construct();
+    Check(lImpactSeed.mShakeParams.mfXYShakeMagnitudeDegs == 0.06f && lImpactSeed.mShakeParams.mfZShakeMagnitudeDegs == 0.0f &&
+          lImpactSeed.mShakeParams.mfXYWobbleMagnitudeDegs == 1.15f && lImpactSeed.mShakeParams.mfWobbleCenteringFactor == 0.11f &&
+          lImpactSeed.mfShakeDecayFactor == 0.05f && lImpactSeed.mfShakeMagnitude == 15.0f &&
+          lImpactSeed.mfShakeFrequencyScale == 5.0f,
+          "CameraImpactEffect::Parameters::Construct (h:143): shake seed, then 0.05 / 15.0 / 5.0 (820047C8 / 820047C4 / 8200426C)");
+    const BehaviourPassengerCam::Parameters& lrPassenger = lBank.GetPassengerCamMomentParams();
+    Check(lrPassenger.GetType() == static_cast<u32>(eBehaviourPassengerCam) && lrPassenger.GetDebugName() == nullptr &&
+          std::memcmp(&lrPassenger.mImpactParams, &lImpactSeed, sizeof(lImpactSeed)) == 0,
+          "bank passenger block (+0x21E4): type 7, no name, the impact seed (0x8223DF08..0x8223DF54) -- was zeroed, type 0");
+    alignas(16) static u8 laPassengerSlot[sizeof(BehaviourPassengerCam) + 16];
+    std::memset(laPassengerSlot, 0xCD, sizeof(laPassengerSlot));
+    BehaviourPassengerCam* lpPassenger = new (laPassengerSlot) BehaviourPassengerCam();
+    static_cast<Behaviour*>(lpPassenger)->Construct();
+    const unsigned luAssertsBeforePassenger = gAsserts;
+    lpPassenger->SetParameters(&lrPassenger);
+    Check(gAsserts == luAssertsBeforePassenger && lpPassenger->mpParameters == &lrPassenger,
+          "BehaviourPassengerCam::SetParameters takes the bank's block without its type assert "
+          "(MomentPassengerSeesAction's shot)");
 
     // ---- the world ----------------------------------------------------------------------------------
     gWorld.Construct();

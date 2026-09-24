@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"                                 // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"          // BrnDirector::Camera::Behaviour base slice + shared-info fwd types
+#include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"      // Utils::CameraImpactEffect::Parameters (mImpactParams)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h
@@ -33,19 +34,19 @@ struct BehaviourPassengerCam : public Behaviour
     // DWARF BehaviourPassengerCam.h:104 -- the authored parameter block.
     struct Parameters : public Behaviour::Parameters
     {
-        // BehaviourPassengerCam.h:108 (cpp:34 body calls Behaviour::Parameters::
-        // Construct) -- not exported (folded); declared-only.
+        // BehaviourPassengerCam.h:108 (cpp:34). No console symbol -- BehaviourParameterBank::Construct
+        // inlines it over the bank's passenger block. BODIED 2026-09-24 (FX-DIRECTOR) in
+        // BehaviourPassengerCam.cpp.
         void Construct();
 
         // The camera-tunings visitor: walks this block's fields into the serialiser S
         // (TextFile{Read,Write}Serialiser / DebugMenuSerialiser). Body is a separate TU.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        // BehaviourPassengerCam.h:115 -- Utils::CameraImpactEffect::Parameters
-        // BY VALUE. FLAG: the impact-effect parameter block's own home
-        // (class:BrnDirector::Camera::Utils::CameraImpactEffect) has not landed;
-        // modelled as opaque NOMINAL storage (accessed by no function in this TU).
-        u8 maImpactParams[0x40];   // NOMINAL -- grown by CameraImpactEffect's own TU
+        // BehaviourPassengerCam.h:115 -- Utils::CameraImpactEffect::Parameters BY VALUE, console
+        // +0x08..+0x23. The block is 0x24 bytes: the bank's passenger block starts at bank +0x21E4
+        // and the next block at +0x2208. (It used to be a 0x40-byte NOMINAL span.)
+        Utils::CameraImpactEffect::Parameters mImpactParams;
     };
 
     // DWARF :122 -- declared-only (X360 header-inline; no exported body).
