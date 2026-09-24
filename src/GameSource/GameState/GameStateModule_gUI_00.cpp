@@ -68,6 +68,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionCarData.h"   // CarData::GetId ([car-audio] junkyard pick)
 #include "SharedClasses/DataLists/WheelList.h"                          // WheelList::FindWheelIndexFromName/GetWheelData ([car])
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h" // [FX-GS2 G10-D11] GameStateToGuiInterface::AddOnTailEvent
+#include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // [FX-FLOW NEW-EMMTAIL] GameStateToNetworkInterface::SetActiveRaceCarIndex
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // [FX-GS2 G10-D11] GetUsedCarsBitArray / GetRaceCar
 #include "rw/math/vpu/vector3_operation.h"                              // [FX-GS2 G10-D11] Magnitude (the player's speed)
 
@@ -1939,6 +1940,12 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
                 lrTimerStatusInterface.GetSimTimerStatus()->GetCurrentTimeStep(), lpActionQueue);
     }
 
+    // ---- 1c') THE REST OF THE SAME HOP: EmmPreWorldUpdate's TAIL (0x8238F1BC..0x8238F33C) ------
+    // [FX-FLOW 2026-09-24, NEW-EMMTAIL] Both arms of the IsSimPaused test above (the paused
+    // `bne loc_8238F1BC` @0x8238F188 and the fall-through after UpdateRoadRulesManager) meet at
+    // 0x8238F1BC, so the tail is unconditional. Body and map at the definition below.
+    EmmPreWorldUpdateTailBringUp(lrTimerStatusInterface);
+
     // (merge 2026-08-27: both waves added a leg at this seam the same day -- the bounce wave's
     // 1c above is EmmPreWorldUpdate's own tail; the scoring publish below runs AFTER
     // EmmPreWorldUpdate returns, per its console position. Both kept, console order.)
@@ -3107,6 +3114,76 @@ void GameStateModule::CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpO
                     << " gap " << (lfDistanceToFinish - lfPlayerDistanceToFinish)
                     << " [FLAG PC witness]\n";
             }
+        }
+    }
+}
+
+// ==============================================================================================
+// [FX-FLOW 2026-09-24, crash-parity NEW-EMMTAIL] EmmPreWorldUpdateTailBringUp -- the tail of
+// GameStateModule::EmmPreWorldUpdate @0x8238EF50 after UpdateRoadRulesManager, in the console's
+// order. r23 is the output buffer, r25 the ScoringSystem (`addi r25, r31, 0x1DD0` @0x8238F1C4 ==
+// gsm+0x1020 ModeManager + 0xDB0, reached by name through GetScoringSystem()).
+//
+//   (1) 0x8238F1BC..0x8238F214  the game-mode elapsed time:
+//         Time::Time(&t, f31 = flt_82001CC0 = 0.0f)
+//         if (GetPlayerActiveRaceCarIndex() != -1)
+//             t = ScoringSystem::GetRaceCarTotalTime(player, <sim time>)      ; 0x8231F480
+//         OutputBuffer::SetGameModeElapsedTime(&t)                            ; 0x82362F80
+//       <sim time> is var_90: the sim TimerStatus's Time out of the 48-byte timer copy at
+//       gsm+0x32DC8 (+0x28 = second entry +0x10). [FLAG PC] read off the caller's interface, the
+//       deviation leg 1b of PreWorldUpdateStuntBringUp names (same data, one copy earlier).
+//   (2) 0x8238F218..0x8238F288  every active slot 0..7 (the BurnoutConstants.h:39 operator++):
+//         CarData* lp = ScoringSystem::GetCarData(slot)                      ; sub_8231DCD0
+//         if (lp) OutputBuffer::GetGameStateToNetworkInterface()             ; sub_8231D800
+//                   ->SetActiveRaceCarIndex(lp +0x148 network id, lp +0x144 slot) ; 0x823558A0
+//   (3) 0x8238F28C..0x8238F33C  the overtake record:
+//         if (player != -1 && ScoringSystem::GetOvertakenRival(player))     ; inlined, h:2227
+//             GameStateToGuiInterface::AddOvertakeEvent(                     ; inlined, +0xC8
+//                 (u8)ScoringSystem::GetCarRacePosition(player), player)     ; 0x82326980
+// ==============================================================================================
+void GameStateModule::EmmPreWorldUpdateTailBringUp(const CgsSystem::TimerStatusInterface& lrTimerStatusInterface)
+{
+    ScoringSystem* const lpScoringSystem = mModeManager.GetScoringSystem();
+
+    // ---- (1) the game-mode elapsed time -----------------------------------------------------
+    CgsSystem::Time lGameModeElapsedTime(0.0f);   // Time::Time(f31 == flt_82001CC0 == 0.0f) @0x8238F1C8
+    if (GetPlayerActiveRaceCarIndex() != ::E_ACTIVE_RACE_CAR_INDEX_INVALID)
+    {
+        lGameModeElapsedTime = lpScoringSystem->GetRaceCarTotalTime(
+            GetPlayerActiveRaceCarIndex(), lrTimerStatusInterface.GetSimTimerStatus()->GetTime());
+    }
+    mpOutputBuffer->SetGameModeElapsedTime(&lGameModeElapsedTime);
+
+    // ---- (2) the network interface's active-race-car mapping ---------------------------------
+    for (::EActiveRaceCarIndex leIndex = ::E_ACTIVE_RACE_CAR_INDEX_0;
+         leIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
+    {
+        const CarData* lpCarData = lpScoringSystem->GetCarData(leIndex);   // BrnGameState::CarData
+        if (lpCarData != 0)
+        {
+            mpOutputBuffer->GetGameStateToNetworkInterface()->SetActiveRaceCarIndex(
+                lpCarData->GetNetworkPlayerID(), lpCarData->GetActiveRaceCarIndex());
+        }
+    }
+
+    // ---- (3) the overtake record (GUI 371 via TranslateGuiInterfaceToGuiEvents) ---------------
+    if (GetPlayerActiveRaceCarIndex() != ::E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+        lpScoringSystem->GetOvertakenRival(GetPlayerActiveRaceCarIndex()))
+    {
+        const ::EActiveRaceCarIndex lePlayer = GetPlayerActiveRaceCarIndex();
+        const u8 lu8NewPosition =
+            static_cast<u8>(lpScoringSystem->GetCarRacePosition(GetPlayerActiveRaceCarIndex()));
+        mpOutputBuffer->GetGameStateToGuiInterface()->AddOvertakeEvent(lu8NewPosition, lePlayer);
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_MODEMGR_DIAG (the race-HUD cases' gate), first 12.
+        static const bool sbOvertakeDiag = (getenv("BRN_MODEMGR_DIAG") != 0);
+        static s32        siOvertakesWitnessed = 0;
+        if (sbOvertakeDiag && siOvertakesWitnessed < 12 && CgsDev::Log::gpDebugPrint != 0)
+        {
+            ++siOvertakesWitnessed;
+            *CgsDev::Log::gpDebugPrint
+                << "[overtake] player slot " << static_cast<s32>(lePlayer) << " gained a place -> position "
+                << static_cast<s32>(lu8NewPosition) << " (GameStateToGuiInterface +0xC8 -> GUI 371)\n";
         }
     }
 }

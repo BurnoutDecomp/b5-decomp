@@ -480,8 +480,7 @@ void OutputBuffer::Construct()
     // (a REAL payback kind) with aggressor car 0 from the first frame the bridge runs.
     meActivePaybackType      = static_cast<BrnNetwork::EPaybackType>(3);
     meActivePaybackAggressor = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;   // the GLOBAL enum -- see the accessor's ⚠️
-    mGameModeElapsedTime.miSeconds  = 0;
-    mGameModeElapsedTime.mfFraction = 0.0f;
+    mGameModeElapsedTime.SetFloatVal(0.0f);   // Time::SetFloatVal(this + 173188, 0.0f)
 
     //     8 x s32 zeroed from this+173196; this+173228 = 0.0f; this+173232 = 0
     // == RaceCarRaceDistanceInterface::Clear (X360 0x82357470) on the +173196 member.
@@ -838,11 +837,10 @@ void OutputBuffer::SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor)
 
 // X360 0x82362F80 - write-lock setter for mGameModeElapsedTime (this+173188, two-word copy).
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
-void OutputBuffer::SetGameModeElapsedTime(const OutputBufferTime* lpTime)
+void OutputBuffer::SetGameModeElapsedTime(const CgsSystem::Time* lpTime)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-    mGameModeElapsedTime.miSeconds  = lpTime->miSeconds;
-    mGameModeElapsedTime.mfFraction = lpTime->mfFraction;
+    mGameModeElapsedTime = *lpTime;
 }
 
 // X360 0x823B9F88 - read-lock getter for mbControllerActive (this+192490).

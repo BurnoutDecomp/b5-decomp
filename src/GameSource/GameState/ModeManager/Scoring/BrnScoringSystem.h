@@ -453,7 +453,25 @@ namespace BrnGameState
         EActiveRaceCarIndex GetPositionedCarIndex(s32 liPosition) const;                     // :664
         EActiveRaceCarIndex GetRaceCarEliminatorIndex(EActiveRaceCarIndex leRaceCarIndex) const; // :669 / 0x82326BB0
         s32  GetNumberOfEliminations(EActiveRaceCarIndex leRaceCarIndex) const;              // :674 / 0x82326C38
-        bool GetOvertakenRival(EActiveRaceCarIndex leRaceCarIndex) const;                    // :679
+        // DWARF :679. Header-inline on the X360: its one inlined copy, GameStateModule::
+        // EmmPreWorldUpdate @0x8238F2A4..0x8238F2FC, is the range assert (BrnScoringSystem.h:2227,
+        // `li r5, 0x8B3`), the const GetCarData (0x8231DC18) and `lbz 0x44` -- CarScoreData::
+        // mbRacePositionImproved, which UpdateRacePositions raises on the frame the car gains a place --
+        // false when the car has no record.
+        bool GetOvertakenRival(EActiveRaceCarIndex leRaceCarIndex) const                     // :679
+        {
+            CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
+                       (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
+                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
+                       "(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+
+            const CarData* lpCarData = GetCarData(leRaceCarIndex);
+            if (lpCarData != NULL)
+            {
+                return lpCarData->GetScoreData()->GetRacePositionImproved();
+            }
+            return false;
+        }
 
         // ===== lead / last (trivial inline) =====
         EActiveRaceCarIndex GetLead() const           { return meLeadRaceCarIndex; }         // :683 / 0x82310DA0
