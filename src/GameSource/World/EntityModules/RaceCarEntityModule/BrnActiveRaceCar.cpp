@@ -3075,7 +3075,9 @@ void ActiveRaceCar::SetIndicatorState(bool lbLeftIndicatorOn, bool lbRightIndica
 // producer reads had no writer on PC.
 //   0x822A5340  lbz r9, +0x1C8C (right latch, read once) ; || lbz +0x1C8D (left latch)
 //   0x822A5358  lfs +0x1C88 ; fadds f0, f0, f1 ; stfs +0x1C88        mfIndicatorTime += lfTimeStep
-//   0x822A5368  lfs flt_820147FC (0.5) ; fcmpu ; ble -> keep          !(t <= 0.5) -> 0.0
+//   0x822A5368  lfs flt_820147FC (0.5) ; fcmpu ; ble -> keep          t > 0.5 -> 0.0
+//               (`ble cr6` 0x40990010 == bc 4, 25: branch when cr6.GT is CLEAR, so an unordered
+//               compare KEEPS a NaN timer -- corrected 2026-09-24, FX-NANPOL sweep / FX-RCEM4)
 //   0x822A5374  stfs flt_82001CC0 (0.0) +0x1C88
 //   0x822A5380  lfs +0x1C88 ; lfs flt_82003F40 (0.25) ; fcmpu ; blt   lbIndicatorActive = t < 0.25
 //   0x822A53C4  stb (left latch && active)  -> +0x1BE9 == mRenderParams.mbIsIndicatingLeft
@@ -3086,7 +3088,7 @@ void ActiveRaceCar::UpdateIndicators(f32 lfTimeStep)
     if (mbRightIndicatorActive || mbLeftIndicatorActive)
     {
         mfIndicatorTime = mfIndicatorTime + lfTimeStep;
-        if (!(mfIndicatorTime <= 0.5f))                  // flt_820147FC; `ble` keeps, so a NaN wraps
+        if (mfIndicatorTime > 0.5f)                      // flt_820147FC; `ble` keeps -- a NaN is NOT reset
         {
             mfIndicatorTime = 0.0f;                      // flt_82001CC0
         }
