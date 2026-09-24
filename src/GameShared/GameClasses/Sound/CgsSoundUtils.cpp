@@ -33,16 +33,106 @@ namespace Utils
 // flt_820AD47C -- the degenerate-span epsilon used by this ctor (1e-6f).
 static const f32 KF_MIN_INPUT_SPAN = 0.000001f;
 
-// ARTIST @ 0x82689698.  The original indexes a 512-entry table containing
-// sin(index * pi / (2 * 511)); preserve its integer-indexed shape here while
-// deriving the value instead of carrying the generated lookup data.
+// gafArraySinTable (DWARF CgsSoundUtils.cpp:85, float32_t[513]) -- the image's .data table at
+// 0x82F2D920, read entry by entry with tools/re/x360rd.py and carried as that data: a quarter
+// sine over 512 intervals, entry i the 5-decimal literal of sin(i * 3.14159 / 1024) (all 513
+// match that, the authored 3.14159 included; entries 511 and 512 are both 1.0). No CRT
+// initialiser writes it -- the five sites that materialise 0x82F2D920 are all readers:
+// GetOutput's two table arms and the E_ONE_MINUS_EQPWR copies inlined into
+// MusicStream::UpdateVoiceParams (0x826BB950), World::EmitterEffect::ProcessUpdate (0x826E6DC4)
+// and Streaming::StreamingEffect::Detach (0x826EEBA8).
+f32 gafArraySinTable[513] =
+{
+    /*   0 */ 0.00000f, 0.00307f, 0.00614f, 0.00920f, 0.01227f, 0.01534f, 0.01841f, 0.02147f,
+    /*   8 */ 0.02454f, 0.02761f, 0.03067f, 0.03374f, 0.03681f, 0.03987f, 0.04294f, 0.04600f,
+    /*  16 */ 0.04907f, 0.05213f, 0.05520f, 0.05826f, 0.06132f, 0.06438f, 0.06744f, 0.07050f,
+    /*  24 */ 0.07356f, 0.07662f, 0.07968f, 0.08274f, 0.08580f, 0.08885f, 0.09191f, 0.09496f,
+    /*  32 */ 0.09802f, 0.10107f, 0.10412f, 0.10717f, 0.11022f, 0.11327f, 0.11632f, 0.11937f,
+    /*  40 */ 0.12241f, 0.12545f, 0.12850f, 0.13154f, 0.13458f, 0.13762f, 0.14066f, 0.14369f,
+    /*  48 */ 0.14673f, 0.14976f, 0.15280f, 0.15583f, 0.15886f, 0.16189f, 0.16491f, 0.16794f,
+    /*  56 */ 0.17096f, 0.17398f, 0.17700f, 0.18002f, 0.18304f, 0.18605f, 0.18907f, 0.19208f,
+    /*  64 */ 0.19509f, 0.19810f, 0.20110f, 0.20411f, 0.20711f, 0.21011f, 0.21311f, 0.21611f,
+    /*  72 */ 0.21910f, 0.22209f, 0.22508f, 0.22807f, 0.23106f, 0.23404f, 0.23702f, 0.24000f,
+    /*  80 */ 0.24298f, 0.24595f, 0.24893f, 0.25190f, 0.25487f, 0.25783f, 0.26079f, 0.26375f,
+    /*  88 */ 0.26671f, 0.26967f, 0.27262f, 0.27557f, 0.27852f, 0.28146f, 0.28441f, 0.28735f,
+    /*  96 */ 0.29028f, 0.29322f, 0.29615f, 0.29908f, 0.30201f, 0.30493f, 0.30785f, 0.31077f,
+    /* 104 */ 0.31368f, 0.31659f, 0.31950f, 0.32241f, 0.32531f, 0.32821f, 0.33111f, 0.33400f,
+    /* 112 */ 0.33689f, 0.33978f, 0.34266f, 0.34554f, 0.34842f, 0.35129f, 0.35416f, 0.35703f,
+    /* 120 */ 0.35989f, 0.36276f, 0.36561f, 0.36847f, 0.37132f, 0.37416f, 0.37701f, 0.37985f,
+    /* 128 */ 0.38268f, 0.38552f, 0.38834f, 0.39117f, 0.39399f, 0.39681f, 0.39962f, 0.40243f,
+    /* 136 */ 0.40524f, 0.40804f, 0.41084f, 0.41364f, 0.41643f, 0.41922f, 0.42200f, 0.42478f,
+    /* 144 */ 0.42755f, 0.43033f, 0.43309f, 0.43586f, 0.43862f, 0.44137f, 0.44412f, 0.44687f,
+    /* 152 */ 0.44961f, 0.45235f, 0.45508f, 0.45781f, 0.46054f, 0.46326f, 0.46598f, 0.46869f,
+    /* 160 */ 0.47140f, 0.47410f, 0.47680f, 0.47949f, 0.48218f, 0.48487f, 0.48755f, 0.49023f,
+    /* 168 */ 0.49290f, 0.49556f, 0.49823f, 0.50088f, 0.50354f, 0.50619f, 0.50883f, 0.51147f,
+    /* 176 */ 0.51410f, 0.51673f, 0.51936f, 0.52197f, 0.52459f, 0.52720f, 0.52980f, 0.53240f,
+    /* 184 */ 0.53500f, 0.53759f, 0.54017f, 0.54275f, 0.54532f, 0.54789f, 0.55046f, 0.55302f,
+    /* 192 */ 0.55557f, 0.55812f, 0.56066f, 0.56320f, 0.56573f, 0.56826f, 0.57078f, 0.57330f,
+    /* 200 */ 0.57581f, 0.57831f, 0.58081f, 0.58331f, 0.58580f, 0.58828f, 0.59076f, 0.59323f,
+    /* 208 */ 0.59570f, 0.59816f, 0.60062f, 0.60307f, 0.60551f, 0.60795f, 0.61038f, 0.61281f,
+    /* 216 */ 0.61523f, 0.61765f, 0.62006f, 0.62246f, 0.62486f, 0.62725f, 0.62964f, 0.63202f,
+    /* 224 */ 0.63439f, 0.63676f, 0.63912f, 0.64148f, 0.64383f, 0.64618f, 0.64851f, 0.65085f,
+    /* 232 */ 0.65317f, 0.65549f, 0.65781f, 0.66011f, 0.66242f, 0.66471f, 0.66700f, 0.66928f,
+    /* 240 */ 0.67156f, 0.67383f, 0.67609f, 0.67835f, 0.68060f, 0.68285f, 0.68508f, 0.68731f,
+    /* 248 */ 0.68954f, 0.69176f, 0.69397f, 0.69618f, 0.69838f, 0.70057f, 0.70275f, 0.70493f,
+    /* 256 */ 0.70711f, 0.70927f, 0.71143f, 0.71358f, 0.71573f, 0.71787f, 0.72000f, 0.72213f,
+    /* 264 */ 0.72425f, 0.72636f, 0.72846f, 0.73056f, 0.73265f, 0.73474f, 0.73682f, 0.73889f,
+    /* 272 */ 0.74095f, 0.74301f, 0.74506f, 0.74710f, 0.74914f, 0.75116f, 0.75319f, 0.75520f,
+    /* 280 */ 0.75721f, 0.75921f, 0.76120f, 0.76319f, 0.76517f, 0.76714f, 0.76910f, 0.77106f,
+    /* 288 */ 0.77301f, 0.77495f, 0.77689f, 0.77882f, 0.78074f, 0.78265f, 0.78456f, 0.78645f,
+    /* 296 */ 0.78835f, 0.79023f, 0.79211f, 0.79398f, 0.79584f, 0.79769f, 0.79954f, 0.80138f,
+    /* 304 */ 0.80321f, 0.80503f, 0.80685f, 0.80866f, 0.81046f, 0.81225f, 0.81404f, 0.81581f,
+    /* 312 */ 0.81758f, 0.81935f, 0.82110f, 0.82285f, 0.82459f, 0.82632f, 0.82804f, 0.82976f,
+    /* 320 */ 0.83147f, 0.83317f, 0.83486f, 0.83655f, 0.83822f, 0.83989f, 0.84155f, 0.84321f,
+    /* 328 */ 0.84485f, 0.84649f, 0.84812f, 0.84974f, 0.85135f, 0.85296f, 0.85456f, 0.85615f,
+    /* 336 */ 0.85773f, 0.85930f, 0.86087f, 0.86242f, 0.86397f, 0.86551f, 0.86705f, 0.86857f,
+    /* 344 */ 0.87009f, 0.87159f, 0.87309f, 0.87459f, 0.87607f, 0.87754f, 0.87901f, 0.88047f,
+    /* 352 */ 0.88192f, 0.88336f, 0.88480f, 0.88622f, 0.88764f, 0.88905f, 0.89045f, 0.89184f,
+    /* 360 */ 0.89322f, 0.89460f, 0.89597f, 0.89732f, 0.89867f, 0.90002f, 0.90135f, 0.90267f,
+    /* 368 */ 0.90399f, 0.90530f, 0.90660f, 0.90789f, 0.90917f, 0.91044f, 0.91171f, 0.91296f,
+    /* 376 */ 0.91421f, 0.91545f, 0.91668f, 0.91790f, 0.91911f, 0.92032f, 0.92151f, 0.92270f,
+    /* 384 */ 0.92388f, 0.92505f, 0.92621f, 0.92736f, 0.92851f, 0.92964f, 0.93077f, 0.93188f,
+    /* 392 */ 0.93299f, 0.93409f, 0.93518f, 0.93627f, 0.93734f, 0.93840f, 0.93946f, 0.94051f,
+    /* 400 */ 0.94154f, 0.94257f, 0.94359f, 0.94460f, 0.94561f, 0.94660f, 0.94759f, 0.94856f,
+    /* 408 */ 0.94953f, 0.95049f, 0.95143f, 0.95237f, 0.95331f, 0.95423f, 0.95514f, 0.95604f,
+    /* 416 */ 0.95694f, 0.95783f, 0.95870f, 0.95957f, 0.96043f, 0.96128f, 0.96212f, 0.96295f,
+    /* 424 */ 0.96378f, 0.96459f, 0.96539f, 0.96619f, 0.96698f, 0.96775f, 0.96852f, 0.96928f,
+    /* 432 */ 0.97003f, 0.97077f, 0.97150f, 0.97223f, 0.97294f, 0.97364f, 0.97434f, 0.97503f,
+    /* 440 */ 0.97570f, 0.97637f, 0.97703f, 0.97768f, 0.97832f, 0.97895f, 0.97957f, 0.98018f,
+    /* 448 */ 0.98079f, 0.98138f, 0.98196f, 0.98254f, 0.98311f, 0.98366f, 0.98421f, 0.98475f,
+    /* 456 */ 0.98528f, 0.98580f, 0.98631f, 0.98681f, 0.98730f, 0.98778f, 0.98826f, 0.98872f,
+    /* 464 */ 0.98918f, 0.98962f, 0.99006f, 0.99048f, 0.99090f, 0.99131f, 0.99171f, 0.99210f,
+    /* 472 */ 0.99248f, 0.99285f, 0.99321f, 0.99356f, 0.99391f, 0.99424f, 0.99456f, 0.99488f,
+    /* 480 */ 0.99518f, 0.99548f, 0.99577f, 0.99604f, 0.99631f, 0.99657f, 0.99682f, 0.99706f,
+    /* 488 */ 0.99729f, 0.99751f, 0.99772f, 0.99793f, 0.99812f, 0.99830f, 0.99848f, 0.99864f,
+    /* 496 */ 0.99880f, 0.99894f, 0.99908f, 0.99920f, 0.99932f, 0.99943f, 0.99953f, 0.99962f,
+    /* 504 */ 0.99970f, 0.99977f, 0.99983f, 0.99988f, 0.99992f, 0.99996f, 0.99998f, 1.00000f,
+    /* 512 */ 1.00000f
+};
+
+// KF_LAST_ELEMENT_IN_ARRAY (DWARF CgsSoundUtils.cpp:129) = flt_820AA7B0 = 511.0f; the E_POWER
+// arm multiplies by its negation, flt_820AD414 = -511.0f.
+static const f32 KF_LAST_ELEMENT_IN_ARRAY = 511.0f;
+
+// Both table arms read an entry the same way: fctiwz, then `slwi r10,r10,2 ; subf r11,r10,r11 ;
+// lfs 0(r11)` (0x8268975C..0x82689764, 0x826897A4..0x826897AC) -- table - (lnIndex << 2) in
+// 32-bit address arithmetic, i.e. entry -lnIndex. A NaN converts to 0x80000000 (fctiwz, and
+// x64's cvttss2si alike), whose byte offset wraps to 0: the console reads entry 0.
+static f32 ReadSinTable(s32 lnIndex)
+{
+    const u32 luByteOffset = static_cast<u32>(lnIndex) << 2;
+    return gafArraySinTable[(0u - luByteOffset) >> 2];
+}
+
+// ARTIST @ 0x82689698 (DWARF CgsSoundUtils.cpp:159). Every caller clamps its fraction to [0, 1]
+// first -- the fsel pair of Slope::GetValue, PathLine<2/3>::Update and InterpolateLine::Update,
+// which also turns a NaN into 1.
 f32 Curve::GetOutput(f32 lfFraction, ECurveType leCurve)
 {
-    CGS_ASSERT(lfFraction <= 1.0f && lfFraction >= 0.0f,
+    // `fcmpu f31,1.0 ; bgt -> fire ; fcmpu f31,0.0 ; bge -> past` (0x826896CC..0x826896D8): the
+    // assert fires for an input above 1 or below 0 only -- a NaN passes it on the console.
+    CGS_ASSERT(!(lfFraction > 1.0f || lfFraction < 0.0f),
                "( lfInput <= 1.0f ) && ( lfInput >= 0.0f )");
-
-    const f32 lfHalfPi = 1.57079632679489661923f;
-    const s32 lnLastTableIndex = 511;
 
     switch (leCurve)
     {
@@ -50,11 +140,8 @@ f32 Curve::GetOutput(f32 lfFraction, ECurveType leCurve)
             return lfFraction;
 
         case E_POWER:
-        {
-            const s32 lnIndex = static_cast<s32>(lfFraction * lnLastTableIndex);
-            return std::sin(static_cast<f32>(lnIndex) *
-                            (lfHalfPi / static_cast<f32>(lnLastTableIndex)));
-        }
+            // fmuls by -511 (flt_820AD414), fctiwz: entry trunc(lfFraction * 511).
+            return ReadSinTable(static_cast<s32>(lfFraction * -KF_LAST_ELEMENT_IN_ARRAY));
 
         case E_EQ_PWR_SQ:
         {
@@ -63,7 +150,11 @@ f32 Curve::GetOutput(f32 lfFraction, ECurveType leCurve)
         }
 
         case E_ONE_MINUS_EQPWR:
-            return 1.0f - GetOutput(1.0f - lfFraction, E_POWER);
+            // Its own lookup, not a call into E_POWER (0x82689780..0x826897B0): fmsubs
+            // lfFraction * 511 - 511 rounded ONCE (std::fma -- bit-exact to it for every float in
+            // [0, 1]), fctiwz -- entry trunc(511 * (1 - lfFraction)) -- then 1 - the entry.
+            return 1.0f - ReadSinTable(static_cast<s32>(std::fma(
+                lfFraction, KF_LAST_ELEMENT_IN_ARRAY, -KF_LAST_ELEMENT_IN_ARRAY)));
 
         case E_ONE_MINUS_EQPWR_SQ:
         {
