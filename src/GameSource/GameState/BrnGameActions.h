@@ -867,6 +867,23 @@ enum EGameActionType
     //      GeneratePlayerCheckpointMessage), `li r5,0xF9` + `li r6,0x18` @0x82399CC8/0x82399CC4.
     // 250: HUDMessageLogic::DetectCrashes @0x82394418 (`li r5,0xFA` + `li r6,0x10`
     //      @0x823944F8/0x823944F0) and ::DetectOnlineCrashes @0x82394528 (@0x823947F8/0x823947F4).
+    // [FX-FLOW 2026-09-24, G11-D1 remainder] the other seven. Every AddEvent into a
+    // VariableEventQueue in the image with r5 in 242..248 is one of these five producers (a scan of
+    // the ARTIST export); 246 has none (DWARF-only DetectNeckAndNeck), but the translator keeps its arm.
+    //   242 GenerateFirstOrLastMessage @0x82395760  `li r5,0xF2 ; li r6,0x10` @0x823958F8/0x823958F0
+    //   243                 "                        `li r5,0xF3 ; li r6,0x10` @0x82395A4C/0x82395A44
+    //   244 GenerateDistanceToFinishMessage @0x82395A88 `li r5,0xF4 ; li r6,8` @0x82395B78/0x82395B74
+    //   245 GenerateLeaderMessages @0x82394110      `li r5,0xF5 ; li r6,0x18` @0x82394234/0x8239422C
+    //   247 GenerateFinisherMessage @0x82394258     `li r5,0xF7 ; li r6,8` @0x82394310/0x8239430C
+    //   248 GenerateRivalCheckpointMessage @0x82394338 `li r5,0xF8 ; li r6,0x18` @0x823943F4/0x823943F0
+    // The translator drops 243, 244 and 249 (default arm of jpt_823EA1F0).
+    E_ACTION_HUD_MESSAGE_TOOK_LEAD                       = 242,  // DWARF 232 (+10 X360); size 16 PINNED (producer + translator)
+    E_ACTION_HUD_MESSAGE_TOOK_LAST                       = 243,  // DWARF 233 (+10 X360); size 16 PINNED (producer)
+    E_ACTION_HUD_MESSAGE_DIST_TO_FINISH                  = 244,  // DWARF 234 (+10 X360); size 8  PINNED (producer)
+    E_ACTION_HUD_MESSAGE_LEADING                         = 245,  // DWARF 235 (+10 X360); size 24 PINNED (producer + translator)
+    E_ACTION_HUD_MESSAGE_NECK_AND_NECK                   = 246,  // DWARF 236 (+10 X360); no producer; translator arm only
+    E_ACTION_HUD_MESSAGE_X_FINISHES                      = 247,  // DWARF 237 (+10 X360); size 8  PINNED (producer + translator)
+    E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT            = 248,  // DWARF 238 (+10 X360); size 24 PINNED (producer + translator)
     E_ACTION_HUD_MESSAGE_PLAYER_REACHES_CHECKPOINT       = 249,  // DWARF 239 (+10 X360); size 24 BAND
     E_ACTION_HUD_MESSAGE_X_CRASHES                       = 250,  // DWARF 240 (+10 X360); size 16 PINNED (translator case 250)
     // ---- [FX-GS 2026-09-23, crash-parity G11-D4] the online team-takedown trio -----------------
@@ -2686,6 +2703,82 @@ struct HUDMessageRoadRageTimeExtensionAction : public GameAction<E_ACTION_HUD_ME
 };
 static_assert(sizeof(HUDMessageRoadRageTimeExtensionAction) == 4,
               "X360 posts action 255 with size 4");
+
+// [FX-FLOW 2026-09-24, G11-D1 remainder] The race-mode HUD records of HUDMessageLogic's five race
+// generators (DecFIGS BrnGameActions.h:4373..4470). Offsets are the X360 producers' stores into the
+// stack record handed to VariableEventQueue<256,16>::AddEvent; sizes are their `li r6` literals.
+//
+// 242 / 243: GenerateFirstOrLastMessage @0x82395760 -- `std GetRivalId(), var+0` / `stw index, var+8`
+// (@0x823958EC/0x823958F4 and @0x82395A40/0x82395A48), size 16.
+struct HUDMessageTookLeadAction : public GameAction<E_ACTION_HUD_MESSAGE_TOOK_LEAD>
+{
+    CgsID                 mCarId;                 // +0x00  DWARF :4375
+    ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x08  DWARF :4376
+};
+static_assert(sizeof(HUDMessageTookLeadAction) == 16 &&
+              offsetof(HUDMessageTookLeadAction, meActiveRaceCarIndex) == 8,
+              "X360 posts action 242 with size 16; the index at +8");
+
+struct HUDMessageTookLastAction : public GameAction<E_ACTION_HUD_MESSAGE_TOOK_LAST>
+{
+    CgsID                 mCarId;                 // +0x00  DWARF :4391
+    ::EActiveRaceCarIndex meActiveRaceCarIndex;   // +0x08  DWARF :4392
+};
+static_assert(sizeof(HUDMessageTookLastAction) == 16 &&
+              offsetof(HUDMessageTookLastAction, meActiveRaceCarIndex) == 8,
+              "X360 posts action 243 with size 16; the index at +8");
+
+// 244: GenerateDistanceToFinishMessage @0x82395A88 -- `stfs next-message distance, var+0`
+// @0x82395B64 / `stw GetCarRacePosition(), var+4` @0x82395B70, size 8.
+struct HUDMessageDistanceToFinishAction : public GameAction<E_ACTION_HUD_MESSAGE_DIST_TO_FINISH>
+{
+    f32 mfDistanceToFinish;   // +0x00  DWARF :4408
+    s32 miPlayerPosition;     // +0x04  DWARF :4409
+};
+static_assert(sizeof(HUDMessageDistanceToFinishAction) == 8,
+              "X360 posts action 244 with size 8");
+
+// 245: GenerateLeaderMessages @0x82394110 -- `std GetRivalId(), var+0` @0x82394228, `stfs split,
+// var+8` @0x82394230, `stw leader index, var+0xC` @0x82394240, `stb player-leads, var+0x10`
+// @0x82394238, size 24. [!] X360 ORDER, NOT THE PS3 DWARF'S: the DWARF (:4423..:4426) lists
+// mbLocalPlayerIsLeading before meLeadingCarIndex, but the X360 producer stores the index at +0xC
+// and the byte at +0x10, and the translator's case 245 reads them back from there (`lwz 0xC` /
+// `lbz 0x10` @0x823EC058/0x823EC050) into GuiInEventLeaderSplit, whose DWARF order is that one.
+struct HUDMessageLeadingAction : public GameAction<E_ACTION_HUD_MESSAGE_LEADING>
+{
+    CgsID                 mLeadingCarID;            // +0x00  DWARF :4423
+    f32                   mfLeadTime;               // +0x08  DWARF :4424 (seconds)
+    ::EActiveRaceCarIndex meLeadingCarIndex;        // +0x0C  DWARF :4426
+    bool                  mbLocalPlayerIsLeading;   // +0x10  DWARF :4425
+};
+static_assert(sizeof(HUDMessageLeadingAction) == 24 &&
+              offsetof(HUDMessageLeadingAction, mfLeadTime) == 8 &&
+              offsetof(HUDMessageLeadingAction, meLeadingCarIndex) == 0xC &&
+              offsetof(HUDMessageLeadingAction, mbLocalPlayerIsLeading) == 0x10,
+              "X360 posts action 245 with size 24; split +8, index +0xC, flag +0x10");
+
+// 247: GenerateFinisherMessage @0x82394258 -- `stw meFinishedRaceCarIndex, var+0` @0x82394314 /
+// `stw miFinishPosition, var+4` @0x82394320, size 8.
+struct HUDMessageXFinishesAction : public GameAction<E_ACTION_HUD_MESSAGE_X_FINISHES>
+{
+    ::EActiveRaceCarIndex meRivalRaceCarIndex;   // +0x00  DWARF :4453
+    s32                   miFinishPosition;      // +0x04  DWARF :4454
+};
+static_assert(sizeof(HUDMessageXFinishesAction) == 8,
+              "X360 posts action 247 with size 8");
+
+// 248: GenerateRivalCheckpointMessage @0x82394338 -- `std GetRivalId(), var+0` @0x823943EC,
+// `std mRivalCheckpointID, var+8` @0x823943E4, `stw rival index, var+0x10` @0x823943F8, size 24.
+struct HUDMessageXReachesCheckpointAction : public GameAction<E_ACTION_HUD_MESSAGE_X_REACHES_CHECKPOINT>
+{
+    CgsID                 mRivalID;              // +0x00  DWARF :4468
+    CgsID                 mLandmarkID;           // +0x08  DWARF :4469
+    ::EActiveRaceCarIndex meRivalRaceCarIndex;   // +0x10  DWARF :4470
+};
+static_assert(sizeof(HUDMessageXReachesCheckpointAction) == 24 &&
+              offsetof(HUDMessageXReachesCheckpointAction, mLandmarkID) == 8 &&
+              offsetof(HUDMessageXReachesCheckpointAction, meRivalRaceCarIndex) == 0x10,
+              "X360 posts action 248 with size 24; landmark id +8, index +0x10");
 
 // [FX-GS 2026-09-23, crash-parity G11-D1] DecFIGS BrnGameActions.h:4482-4487. Producer
 // HUDMessageLogic::GenerateRaceModeMessages @0x82399C78 (the inlined GeneratePlayerCheckpointMessage):

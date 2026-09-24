@@ -2247,6 +2247,26 @@ static_assert(__builtin_offsetof(GuiInEventLeaderSplit, meLeaderActiveRaceCarInd
 static_assert(__builtin_offsetof(GuiInEventLeaderSplit, mbLocalPlayerIsLeading) == 0x10,
               "X360 mbLocalPlayerIsLeading @0x10");
 
+// DWARF :5638 / BrnGuiEventTypeDefs.h:4788 (GuiEvent<417>; X360 id 422). sizeof 24 == the AddEvent
+// literal in AddGuiEvent<GuiInEventRivalProgress> @0x823D57F8 (`li r6, 0x18 ; li r5, 0x1A6`). Flat
+// record: its one producer, TranslateGameActionsToGuiEvents case 248 @0x823EC0A0, copies the action's
+// +0x08 / +0x00 qwords and +0x10 word to the same offsets. No console GUI switch reads 422 (it falls
+// to the default arm of HudMessageAnalyzer::Update's third table @0x82526BF0 and every other
+// covering switch). [FX-FLOW 2026-09-24] Upgraded from the BrnGuiDemangledEventTypes.h
+// GuiEvent<422> + u8[12] placeholder, removed there.
+struct GuiInEventRivalProgress
+{
+    CgsID               mRivalID;                    // +0x00  DWARF :4790
+    CgsID               mLandmarkID;                 // +0x08  DWARF :4791
+    EActiveRaceCarIndex meRivalActiveRaceCarIndex;   // +0x10  DWARF :4792
+
+    s32 GetEventType() const { return 422; }
+};
+static_assert(sizeof(GuiInEventRivalProgress) == 24, "X360 AddGuiEvent size 24 (id 422)");
+static_assert(__builtin_offsetof(GuiInEventRivalProgress, mLandmarkID) == 0x08, "X360 mLandmarkID @0x08");
+static_assert(__builtin_offsetof(GuiInEventRivalProgress, meRivalActiveRaceCarIndex) == 0x10,
+              "X360 meRivalActiveRaceCarIndex @0x10");
+
 // DWARF :5690 (GuiEvent<420>; X360 id 425). sizeof 12 == the AddEvent literal @0x823D4B08.
 // HandleRaceCheckpointReached @0x8251B350 compares the GLOBAL index (not the active one).
 struct GuiRaceCheckpointReached

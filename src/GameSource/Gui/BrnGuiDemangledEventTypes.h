@@ -468,7 +468,10 @@ namespace BrnGui
     // BrnGuiEventTypeDefs.h with its real DWARF field set (DWARF :5618, sizeof 24).
     // The opaque placeholder that stood here was DELETED rather than left to shadow it.
     struct GuiInEventNeckAndNeck { u8 maData[1]; s32 GetEventType() const { return 421; } };  // id 421 size 1 (raw; size not GuiEvent-shaped)
-    struct GuiInEventRivalProgress : public CgsGui::GuiEvent<422> { u8 maPayload[12]; };  // id 422 size 24 (12B GuiEvent header + opaque payload)
+    // [FX-FLOW 2026-09-24] GuiInEventRivalProgress (id 422) has been RECOVERED and now lives in
+    // BrnGuiEventTypeDefs.h with its DWARF fields (:4788 {mRivalID, mLandmarkID,
+    // meRivalActiveRaceCarIndex}, 24 bytes, flat). The GuiEvent<422> + u8[12] shell that stood
+    // here was DELETED rather than left to shadow it.
     // [boost-msg wave] RECOVERED (was the opaque GuiEvent<391>+u8[12] shell). DWARF
     // BrnGuiEventTypeDefs.h:4433 (:4435..:4441); RAW wire pinned by AddGuiEvent @0x823D2940
     // -> AddEvent(q, ev, 391, 24) and HandleOnInProgressStunt @0x82411C70 reading the mask at
