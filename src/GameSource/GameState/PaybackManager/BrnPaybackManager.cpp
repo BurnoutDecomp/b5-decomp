@@ -202,6 +202,47 @@ namespace BrnGameState
     }
 
     // -----------------------------------------------------------------------------------
+    // SetTimerInterface  (DWARF BrnPaybackManager.h:109, body BrnPaybackManager.cpp:1023)
+    // [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING] No out-of-line X360 body: its only caller,
+    // GameStateModule::CopyInputDataToPaybackManager @0x8239AA78, inlines it as the 48-byte
+    // member-wise copy 0x8239AAA0..0x8239AB0C (two 24-byte TimerStatus runs into this+0x00 /
+    // this+0x18: lwz/stw +0, lfs/stfs +4/+8, lbz/stb +0xC, lwz/stw +0x10, lfs/stfs +0x14) --
+    // the DWARF hint is exactly `CgsSystem::TimerStatusInterface::operator=`.
+    // Without a caller the copy stayed at Construct's Clear(), so every read of it -- the
+    // aggressor timer's per-frame step in Update and the frame-count reseed in OnRoundStart /
+    // OnRoundEnd -- read zero on this build.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::SetTimerInterface(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface)
+    {
+        mTimerStatusInterface = *lpTimerStatusInterface;
+    }
+
+    // -----------------------------------------------------------------------------------
+    // SetDirtyTrickButtonState  (DWARF BrnPaybackManager.h:106, body BrnPaybackManager.cpp:880)
+    // [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING] Inlined by the same caller, 0x8239AB14..0x8239AB58:
+    //     lbz r11, 0xC(ControllerInput)  ; the new press (mbDirtyTrickPressed)
+    //     lbz r10, 0x264(this)           ; the previous mbDirtyTrickButtonDown
+    //     stb r11, 0x264 ; stb r10, 0x265
+    //     press edge (new && !old) && meAwardedDirtyTrick (+0x258) != 3 &&
+    //     mePaybackAggressorState (+0x25C) == 4  ->  ChangeState(5) @0x823919B0
+    // i.e. the player's dirty-trick button fires the trick they are holding.
+    // -----------------------------------------------------------------------------------
+    void
+    PaybackManager::SetDirtyTrickButtonState(bool lbButtonPressed)
+    {
+        mbDirtyTrickButtonWasDown = mbDirtyTrickButtonDown;   // +0x265
+        mbDirtyTrickButtonDown    = lbButtonPressed;          // +0x264
+
+        if (mbDirtyTrickButtonDown && !mbDirtyTrickButtonWasDown &&
+            meAwardedDirtyTrick != KE_NO_DIRTY_TRICK &&
+            mePaybackAggressorState == E_PAYBACK_AGGRESSOR_STATE_YOU_TRIGGERED_DT)
+        {
+            ChangeState(E_PAYBACK_AGGRESSOR_STATE_TRIGGER_DT);
+        }
+    }
+
+    // -----------------------------------------------------------------------------------
     // ResetState  (DWARF BrnPaybackManager.h:170; PS3 DecFIGS 0x23CB04)
     // No out-of-line X360 body: the console inlines it into Destruct @0x8236D110
     // (0x8236D150..0x8236D190) and OnRoundStart @0x8236D290 (0x8236D2B0..0x8236D304), and both
@@ -1063,7 +1104,13 @@ namespace BrnGameState
         lpOutput->GetGameStateToNetworkInterface()->GetDirtyTrickQueue()->Append(mDirtyTrickOutputQueue);
         mDirtyTrickOutputQueue.Clear();
 
-        // (X360 tail: a virtual hook on the embedded debug component -- a debug-only per-frame record
-        // call -- is omitted here; it has no retail-observable effect. See packet uncertainties.)
+        // [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING part 4 -- verified, deliberately not emitted] X360
+        // tail 0x8239ADF0..0x8239AE04: `lwz r11, 0x26C(this)` (the embedded component's vtable),
+        // `lwz r11, 0(r11)`, `bctrl` with r3 = &mDebugComponent -- slot 0, DebugComponent::Update.
+        // PaybackDebugComponent's vtable @0x820CDDCC reads (image) {0x8284CB38, 0x8284CB38,
+        // 0x8284CB38, 0x82357B88 GetName, 0x827E2F38, 0x827E2F38, 0x82357B98 OnActivate}: slot 0 is
+        // 0x8284CB38, the ICF-folded bare `blr` (the same target Destruct's DebugComponent::Destruct
+        // call lands on). The call does nothing on the console, and CgsDev::DebugComponent::Update
+        // is the same empty body here, so leaving it out is behaviour-identical.
     }
 }

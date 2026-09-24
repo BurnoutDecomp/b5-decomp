@@ -1703,6 +1703,21 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
         /*lbInviteInProgress*/ false,
         GetVehicleList());
 
+    // ---- 0a) THE PAYBACK MANAGER'S INPUT COPY (console 0x823A572C) ----------------------------
+    // ⭐ [FX-FLOW 2026-09-24, NEW-PAYBACK-WIRING] GameStateModule::CopyInputDataToPaybackManager
+    // @0x8239AA78 (r4 = the pre-world input buffer), unconditionally, straight after the drive-thru
+    // tick and before the rumble producers below: the frame's timer block and the dirty-trick press
+    // reach PaybackManager before its Update (in the takedown leg) reads them.
+    // [FLAG PC] the pre-world buffer is the module's stand-in (GetPreWorldInputBuffer), never
+    // locked by the seam, so its read lock is taken here around the copy -- the same move the
+    // takedown leg makes for the two manager ticks (GameStateModule_gTD_00.cpp).
+    if (mpPreWorldInputBuffer != 0)
+    {
+        mpPreWorldInputBuffer->LockForRead();
+        CopyInputDataToPaybackManager(mpPreWorldInputBuffer);
+        mpPreWorldInputBuffer->UnlockForRead();
+    }
+
     // ---- 0b) THE RUMBLE PRODUCERS (console #55) ----------------------------------------------
     // ⭐ [FX-RUMBLE 2026-09-22, crash-parity G10-D1] RumbleManager::Update @0x82386A98. X360
     // PreWorldUpdate @0x823A5328 `bl` #55 (0x823A5800), straight-line (no branch in

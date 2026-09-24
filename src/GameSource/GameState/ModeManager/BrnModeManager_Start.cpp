@@ -862,13 +862,15 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
         // Behaviour cost: a road score buffered when the event started stays buffered.
     }
 
-    // ✅ LANDED 2026-09-10 (was: PARKED LEG, conductor decision #6). Console @0x8234C6E4:
+    // ✅ LANDED 2026-09-10 (was: PARKED LEG, conductor decision #6). Console @0x8234C6DC..0x8234C6E4:
+    //     mr r4, r29                                             ; r29 = !lbOnlineLobbyHandover
     //     mpGameStateModule->OnModeEnd(!lbOnlineLobbyHandover);   // X360 0x823767E0
-    // The callee's prologue never reads r4 -- the `!lbOnlineLobbyHandover` the caller computes is
-    // dead in it (see BrnGameStateModule.h) -- so the host signature takes nothing. Body in
-    // GameStateModule_gTD_00.cpp: takedown car data cleared, showtime lockout re-armed, drive-thrus
-    // reopen.
-    mpGameStateModule->OnModeEnd();
+    // ⚠ CORRECTED 2026-09-24 (FX-FLOW, NEW-PAYBACK-WIRING): the argument is LIVE. OnModeEnd hands
+    // r4 on untouched to MugshotManager::OnRoundEnd(bool) and PaybackManager::OnRoundEnd(bool) (see
+    // BrnGameStateModule.h), so the old "dead in the callee, takes nothing" reading dropped both
+    // managers' end-of-round reset. Body in GameStateModule_gTD_00.cpp: the two round ends, takedown
+    // car data cleared, showtime lockout re-armed, drive-thrus reopen.
+    mpGameStateModule->OnModeEnd(!lbOnlineLobbyHandover);
 
     // RE-ARMED 2026-08-26 (mode-tick verify): the controller-state reset. Console @0x8234C70C:
     //     *(s32*)(mpGameStateModule + 232292) = 0;   // meControllerState = E_CONTROLLERSTATE_NOT_IN_GAME
