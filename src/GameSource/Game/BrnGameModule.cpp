@@ -1781,21 +1781,71 @@ namespace BrnGame
     //     each record's race-car index against the player's, publishing mbPlayerTakenDown /
     //     mePlayerKillerCarIndex into the director input (+31424 / +31404) with the verbatim
     //     assert "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID"
-    //     (GameBridgeGameStateToX.cpp:228);
+    //     (GameBridgeGameStateToX.cpp:228) -- ⭐ RECONSTRUCTED 2026-09-24 (crash parity FX-BRIDGES
+    //     CC-8), see the body: both of its reasons had expired (the queue is walked by name for
+    //     the world and GUI bridges, and MainDirector::ProcessInputQueue / ArbStateCrashing are its
+    //     consumers);
     //   * the player's vehicle TEAM into the director input (+31408) and all 8 teams through
     //     DirectorIO::InputBuffer::SetVehicleTeam;
     //   * a CarScoreData::operator= of the player's score record (gameStateOut+173240 + 296*i)
     //     into the director input at +12560, plus +12888 and the two flags at +31445/+31446.
-    // NONE of those legs is reconstructed here: every source member they read is still opaque
-    // storage in this model's GameStateModuleIO::OutputBuffer and every one of their consumers
-    // in the director input is likewise unmodelled. Writing them against opaque zeroes would be
-    // the "data arrives wrong-but-plausible" failure mode, so they are documented, not faked.
-    // DELETE-WHEN: the takedown queue / score / team spans of OutputBuffer are typed.
+    // The team / score legs are still not reconstructed: their director-input destinations are
+    // opaque storage in this model and none of them is on the crash path. Writing them against
+    // opaque zeroes would be the "data arrives wrong-but-plausible" failure mode, so they are
+    // documented, not faked. DELETE-WHEN: the score / team spans of the input buffer are typed.
     // ------------------------------------------------------------------------------------
     void BrnGameModule::BridgeGameStateToDirector(
         BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
+        // ---- the player-taken-down leg (X360 live arm 0x823CD330..0x823CD3C8) ----------------
+        //   0x823CD330  r25 = `lwzx gameStateOut + 0x2AEEC` == ScoringOutputInterface
+        //               (+173240) ::mePlayerRaceCarIndex (+0xA34)
+        //   0x823CD340  r27 = GetTakedownEventOutputQueue() const (sub_823B9840)->miLength, read ONCE
+        //   0x823CD36C  per event: the queue is re-fetched and GetEvent(i) (0x822AC660) taken;
+        //               `lwz 4` (meVictimIndex) == r25 -> killer = `lwz 0` (meAggressorIndex),
+        //               the :228 assert, then `stb 1, 0x7AC0` + `stw killer, 0x7AAC` (the inlined
+        //               SetPlayerKiller). A later match overwrites an earlier one.
+        // The cast is the documented cross-home one the world and GUI bridges carry:
+        // GameStateModuleIO::TakedownEventOutputQueueType is still a forward-declared class and the
+        // payload behind it is the committed EventQueue<BrnGameState::TakedownEvent,8>.
+        // The director input is a fresh, Construct()ed buffer every sub-step on this build too
+        // (DoUpdate_Director), so the pair starts cleared exactly as the console's does.
+        {
+            const EActiveRaceCarIndex lePlayerRaceCarIndex =
+                lpGameStateOutput->GetScoringOutputInterface()->mePlayerRaceCarIndex;
+            const s32 liNumTakedowns = reinterpret_cast<const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*>(
+                lpGameStateOutput->GetTakedownEventOutputQueue())->GetLength();
+            for (s32 liTakedown = 0; liTakedown < liNumTakedowns; ++liTakedown)
+            {
+                const BrnGameState::TakedownEvent& lrTakedownEvent =
+                    reinterpret_cast<const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*>(
+                        lpGameStateOutput->GetTakedownEventOutputQueue())->GetEvent(liTakedown);
+                if (lrTakedownEvent.meVictimIndex == lePlayerRaceCarIndex)
+                {
+                    const EActiveRaceCarIndex lePlayerKillerRaceCarIndex = lrTakedownEvent.meAggressorIndex;
+                    CGS_ASSERT(lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                               "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");   // GameBridgeGameStateToX.cpp:228
+                    lpDirectorInput->SetPlayerKiller(lrTakedownEvent.meAggressorIndex);
+
+                    // [DIAG] NOT IN THE X360 BINARY -- BRN_CRASHCAM_DIAG (the crash-camera gate):
+                    // the takedown camera's input as published (at most 30 lines).
+                    static const bool sbTakenDownDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
+                    static s32 siTakenDownLinesLeft = 30;
+                    if (sbTakenDownDiag && siTakenDownLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        --siTakenDownLinesLeft;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[takedown-cam] BridgeGameStateToDirector: player slot "
+                            << static_cast<s32>(lePlayerRaceCarIndex) << " taken down by slot "
+                            << static_cast<s32>(lePlayerKillerRaceCarIndex)
+                            << " (takedown type " << static_cast<s32>(lrTakedownEvent.meType)
+                            << ") -> director input mbPlayerTakenDown 1\n";
+                    }
+                }
+            }
+        }
+
         lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
     }
 

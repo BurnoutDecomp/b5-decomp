@@ -66,10 +66,11 @@
 //     mbStarting100PercentSeq    @0x7AD3 (31443)   bridge 469/470 with flag != 0
 //     mbFinished100PercentSeq    @0x7AD4 (31444)   bridge 469/470 with flag == 0
 //
-// The three flags with no store site of their own (mbPlayerTakenDown @0x7AC0,
-// mbWorldWantsDebugControllerFocus @0x7AC7, mbPlayerCrashbreakerFired @0x7ACA) sit at the
-// offsets the DWARF member order puts them at BETWEEN two attested neighbours, so their
-// placement is forced rather than guessed.
+// The flags with no store site of their own (mbWorldWantsDebugControllerFocus @0x7AC7,
+// mbPlayerCrashbreakerFired @0x7ACA) sit at the offsets the DWARF member order puts them at
+// BETWEEN two attested neighbours, so their placement is forced rather than guessed.
+// mbPlayerTakenDown @0x7AC0 was the third; its store site is now reconstructed
+// (SetPlayerKiller, BridgeGameStateToDirector `stb 1, 0x7AC0` @0x823CD3B8).
 //
 // VehicleInfo's own internal offsets are independently confirmed by SetCrashingCentreOfMass:
 // element base this+1264*idx, mCrashingCentreOfMass at element+0x460 (BrnPlayerInfo.h), the
@@ -169,6 +170,17 @@ namespace DirectorIO
         // "mbPlayerTakenDown" at BrnMainDirector.cpp:232 before taking the killer index).
         bool                                               GetPlayerTakenDown() const;
         EActiveRaceCarIndex                                GetPlayerKillerCarIndex() const;
+        // DWARF :226 `void SetPlayerKiller(EActiveRaceCarIndex)` -- the only writer of the pair
+        // (2026-09-24, crash parity FX-BRIDGES CC-8). INLINED by the console at
+        // BridgeGameStateToDirector's live arm @0x823CD3B8 / 0x823CD3BC (and its replay arm
+        // @0x823CD2C8 / 0x823CD2CC) as two bare stores, `stb 1, 0x7AC0` then `stw killer, 0x7AAC`,
+        // with no lock-bit test. The DWARF has no separate taken-down setter: this one raises the
+        // flag as it records the killer.
+        void SetPlayerKiller(EActiveRaceCarIndex lePlayerKillerCarIndex)
+        {
+            mbPlayerTakenDown      = true;
+            mePlayerKillerCarIndex = lePlayerKillerCarIndex;
+        }
 
         // @0x7AB0 -- copied verbatim into GameState +0x1CC (mRankUpInfo's 4-byte head) by
         // ProcessInputQueue's prologue (`lwz r11, 0x7AB0(r30); stwx r11, r31, 0x339AC`).
@@ -376,8 +388,8 @@ namespace DirectorIO
         // @0x7AA8 (31400): the active player car index (GetPlayerCarIndex, read as a 32-bit word).
         EActiveRaceCarIndex mePlayerCarIndex;            // @0x7AA8
         // @0x7AAC (31404): the DWARF's mePlayerKillerCarIndex -- next in member order, same
-        // 4-byte enum width. Not addressed by any recovered body; named, not opaque, so the
-        // run down to the flag block is continuous.
+        // 4-byte enum width. Written by SetPlayerKiller (BridgeGameStateToDirector
+        // `stw killer, 0x7AAC` @0x823CD3BC), read back by MainDirector::ProcessInputQueue.
         EActiveRaceCarIndex mePlayerKillerCarIndex;      // @0x7AAC
         // @0x7AB0 (31408): NAMED 2026-08-01 (it was `mUnknownScalar7AB0`, "no recovered body
         // touches it" -- that was a NAME search failing, not an absent writer).
@@ -407,7 +419,7 @@ namespace DirectorIO
         bool mbStartNewProfileIntro;                     // @0x7ABD
         bool mbStartGameIntroFlyby;                      // @0x7ABE
         bool mbStopGameIntroFlyby;                       // @0x7ABF
-        bool mbPlayerTakenDown;                          // @0x7AC0 (DWARF order; not addressed here)
+        bool mbPlayerTakenDown;                          // @0x7AC0 (SetPlayerKiller, `stb 1, 0x7AC0` @0x823CD3B8)
         bool mbHasGotHookEnumeration;                    // @0x7AC1
         bool mbEndOfCarSelect;                           // @0x7AC2
         bool mbGotCrashNavShownEvent;                    // @0x7AC3
