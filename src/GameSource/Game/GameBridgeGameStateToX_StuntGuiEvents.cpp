@@ -192,6 +192,17 @@ namespace
         s32 GetEventType() const { return 374; }
     };
     static_assert(sizeof(ShutdownFinishedEventWire374) == 1, "GUI 374 size 1");
+
+    // [FX-FLOW 2026-09-24, G13-X5 remainder] the on-queue record of GUI event 373
+    // (BrnGui::GuiShutdownEvent, DWARF BrnGuiEventTypeDefs.h:3618 {CgsID mVictimCarID}), TU-LOCAL
+    // beside its 374 sibling for the same include reason. Wire shape: AddGuiEvent<GuiShutdownEvent>
+    // @0x823D8990 posts the 8-byte id (`li r6, 8 ; li r5, 0x175` @0x823D8A2C..0x823D8A30).
+    struct ShutdownEventWire373
+    {
+        CgsID mVictimCarID;                     // +0x00
+        s32 GetEventType() const { return 373; }
+    };
+    static_assert(sizeof(ShutdownEventWire373) == 8, "GUI 373 size 8");
 }
 
     // =========================================================================
@@ -775,6 +786,38 @@ namespace
                 break;
             }
 
+            // ---- 120 -> GUI 373, A FREE-BURN RIVAL WAS SHUT DOWN -------------------------------
+            // [FX-FLOW 2026-09-24, crash-parity G13-X5 remainder] ARTIST 0x823ED88C..0x823ED8A0
+            // (jpt_823EA1F0 entry 120):
+            //     ld   r11, 0(r31)        ; ShutdownAction::mVictimCarID (record +0)
+            //     std  r11, var_35D8      ; the GuiShutdownEvent's one member
+            //     bl   AddGuiEvent<BrnGui::GuiShutdownEvent>   -> AddEvent(q, rec, 373, 8)
+            // Producer: TakedownManager::ProcessTakedownEvent @0x823940AC..0x823940D0 (action 120,
+            // size 24). Consumers, in the GUI's own order: GuiCache::RecEvent case 373 stores the id
+            // (mShutdownCarID, 0x8250FFA8) -- forwarded by GuiModule::DispatchInboundGuiEvents ahead
+            // of the flow routing -- then BrnGui::InGame's case 373 shuts the HUD down and sends
+            // "TO_RVL_POST" into BrnGui::OfflineRivalShutdown (e3b62101), whose presentation reads
+            // the id back through GetShutdownCarID(). The arm was held back until both of those
+            // existed (run_rcem2_rival_shutdown.py guards the order).
+            case BrnGameState::GameStateModuleIO::E_ACTION_SHUTDOWN:   // 120
+            {
+                const BrnGameState::GameStateModuleIO::ShutdownAction* lpShutdownAction =
+                    reinterpret_cast<const BrnGameState::GameStateModuleIO::ShutdownAction*>(lpAction);
+                ShutdownEventWire373 lEvent;
+                lEvent.mVictimCarID = lpShutdownAction->mVictimCarID;   // `ld 0(r31)` -> `std`
+                PushGuiEvent(lEvent, lpGuiInput);
+
+                // [DIAG] BRN_TD_DIAG -- NOT IN THE X360 BINARY.
+                static const bool sbTdShutdownDiag = (getenv("BRN_TD_DIAG") != 0);
+                if (sbTdShutdownDiag && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    *CgsDev::Log::gpDebugPrint << "[td-gui] action 120 -> gui 373 (victim car id "
+                                               << static_cast<u32>(lEvent.mVictimCarID >> 32) << ":"
+                                               << static_cast<u32>(lEvent.mVictimCarID) << ")\n";
+                }
+                break;
+            }
+
             // ---- 121 -> GUI 374, THE FREE-BURN RIVAL SHUTDOWN IS FINISHED --------------------
             // [crash-parity 2026-09-22] ARTIST 0x823ED8A8..0x823ED8B4 (jpt_823EA1F0 entry 121 at
             // 0x823EA3D8):
@@ -785,18 +828,8 @@ namespace
             // (0x8250FFC4..0x8250FFC8), stores mbCarUnlockPending = 1 without reading it, so a
             // zero byte stands in for the residue. Producer: TakedownManager::EndTakedownCamera's
             // free-burn arm (action 121, after the car is handed back to the player).
-            // ⚠️ [FLAG] THE CONSUMER HALF IS NOT ON PC YET: GuiCache::RecEvent has no case 374 and
-            // GuiModule::DispatchInboundGuiEvents does not forward 374, so today nothing observes
-            // this post. DELETE-WHEN GuiCache case 374 and its forward land.
-            //
-            // ⛔ [FLAG] THE SIBLING 120 -> GUI 373 IS DELIBERATELY NOT LANDED. The console arm is
-            // ARTIST 0x823ED88C..0x823ED8A0 (`ld r11, 0(record)` == ShutdownAction::mVictimCarID
-            // -> AddGuiEvent<GuiShutdownEvent> @0x823D8990 -> AddEvent(q, rec, 373, 8)). On PC,
-            // BrnGui::InGame's existing case 373 shuts the HUD down and sends "TO_RVL_POST" into
-            // BrnGui::OfflineRivalShutdown, which has no state bodies here (console OnEnter
-            // 0x824B9588, Update 0x824DAFE0, HandleIncomingEvents 0x824C23D0), so posting 373
-            // would strand the screen flow after every free-burn rival shutdown.
-            // DELETE-WHEN OfflineRivalShutdown and GuiCache's case 373 (mShutdownCarID) land.
+            // [FX-FLOW 2026-09-24] The consumer half is on PC now: GuiCache::RecEvent case 374 and
+            // its GuiModule::DispatchInboundGuiEvents forward.
             case BrnGameState::GameStateModuleIO::E_ACTION_SHUTDOWN_FINISHED:   // 121
             {
                 ShutdownFinishedEventWire374 lEvent;

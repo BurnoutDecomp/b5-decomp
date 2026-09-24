@@ -1997,6 +1997,8 @@ void GuiModule::Destruct()
                 case 321:   // [event-end 2026-09-10] GuiEventFinishedModeResults -- GuiCache's shared LABEL_232 tail
                 case 322:   // [event-end 2026-09-10] GuiEventStopMode -- game mode back to NONE, tracker cleared
                 case 556:   // [event-state 2026-09-10] GuiEventEventStateResponse -- the DISCOVERED-event array
+                case 373:   // [FX-FLOW 2026-09-24, G13-X5] GuiShutdownEvent -- mShutdownCarID (RecEvent 0x8250FFA8)
+                case 374:   // [FX-FLOW 2026-09-24, G13-X5] GuiShutdownFinishedEvent -- mbCarUnlockPending (0x8250FFC4)
                     // [H1 wave 2026-08-25] On the console EVERY module-input event reaches
                     // GuiCache::RecEvent (its ~180-case switch consumes what it wants);
                     // this build's pump routes selectively, so the two cache-consumed ids

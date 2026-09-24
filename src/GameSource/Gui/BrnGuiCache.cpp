@@ -1656,6 +1656,23 @@ namespace BrnGui
             mbInShortcut = *reinterpret_cast<const u8*>(lpEvent) != 0;
             break;
 
+        // ---- [FX-FLOW 2026-09-24, crash-parity G13-X5 remainder] the free-burn rival shutdown ----
+        // The jump table at 0x8250F34C is indexed `id - 0xF5` (`addi r11, r5, -0xF5` @0x8250F320),
+        // so its entries 128 / 129 are GUI 373 / 374:
+        //   373 (GuiShutdownEvent, the 8-byte {CgsID mVictimCarID} TranslateGameActionsToGuiEvents
+        //       posts from action 120): `ld r11, 0(r30) ; stdx r11, r31, 0x9FF0` (0x8250FFA8..B4) --
+        //       mShutdownCarID, which OfflineRivalShutdown reads through GetShutdownCarID() (its
+        //       kCGSID_NULL assert is why this writer had to land before the 120 arm).
+        //   374 (GuiShutdownFinishedEvent, 1 byte, from action 121): `li r11, 1 ; stb r11, 0x4B75(r31)`
+        //       (0x8250FFC4..C8) -- mbCarUnlockPending raised without reading the payload.
+        case 373:
+            mShutdownCarID = *reinterpret_cast<const CgsID*>(lpEvent);   // +0x9FF0
+            break;
+
+        case 374:
+            mbCarUnlockPending = true;                                     // +0x4B75
+            break;
+
         case 379:
             // [hud reveal gate 2026-08-25] X360 case 379 -- the IGNITION latch, and the
             // whole free-burn HUD reveal gate. The console arm is one store, and it is the
