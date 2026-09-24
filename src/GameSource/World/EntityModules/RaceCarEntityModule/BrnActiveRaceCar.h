@@ -321,6 +321,11 @@ public:
     // X360 0x822A2150: assert IsAttached(), then return mPhysicsState.mbCrashing.
     bool IsCrashing() const;
 
+    // DWARF BrnActiveRaceCar.h:781 -- a header inline (no out-of-line X360 symbol). Inlined in
+    // PowerParkingManager::Update as `lfs f0, 0x4E0(car) ; fcmpu f0, 0.0 ; bgt` (0x822F8830..0x822F883C):
+    // +0x4E0 == mPhysicsState (+0xE0) + 1024 == RaceCarState::mfTimeDrifting. A NaN is not drifting.
+    bool IsDrifting() const { return mPhysicsState.mfTimeDrifting > 0.0f; }
+
     // ⭐ X360 0x822BFDA0 -- LANDED 2026-08-11 (player-input wave; its consumer is
     // RaceCarEntityModule::ProcessPlayerVehicleInput @0x822FFE30, which zeroes the driver
     // controls while `IsCrashing() && IsWrecked()`). "Wrecked" is NOT just the mbIsWrecked
