@@ -55,7 +55,10 @@ public:
     // Fold it back out-of-line if a real BrnCheckpointData.cpp ever lands.
     u16                   GetAISectionIndex() const { return muAISectionIndex; }
     s32                   GetDistrict() const { return meDistrict; } // ARTIST0x823EAFB8
-    const Array<u32, 8u>* GetBlockSectionIds() const;               // declared-only
+    // DWARF BrnGameModeParams.h; the PS3 build emits it out of line (BrnWorldAIUnity.cpp). ARTIST
+    // inlines it at its one reader, AIModule::OnModeStart: 0x82791F00 `addi r4, cp, 8` -- the
+    // address of mauBlockSectionIds (+0x08). Bodied 2026-09-23 (crash parity G04-D1).
+    const Array<u32, 8u>* GetBlockSectionIds() const { return &mauBlockSectionIds; }
 
 private:
     LandmarkIndex  muLandmarkIndex;     // 0x00 (s16) -- DWARF :92
