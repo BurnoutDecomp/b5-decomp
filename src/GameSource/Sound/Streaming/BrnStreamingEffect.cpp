@@ -4,6 +4,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lpState / IsAttached tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (FindStreamSettings' own miss print)
 #include "GameShared/GameClasses/Sound/CgsStreamDiag.h"  // [DIAG] NOT IN THE X360 BINARY
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"  // CgsSound::Utils::Curve (Detach's equal-power fade)
+#include "rw/math/fpu/scalar_operation.h"                // rw::math::fpu::Clamp (Detach's fsel clamp)
 #include <algorithm>
 
 // =============================================================================
@@ -320,6 +322,27 @@ f32 StreamingEffect::GetFadeOut() const
     return lpState ? lpState->GetFadeOut() : 0.0f;
 }
 
+// ---------------------------------------------------------------------------
+// StreamingEffect::Detach  @0x826EEA68 (switch on meDetachState, jpt_826EEAAC)
+//   case 0 (0x826EEAC0..0x826EEAE4)  mfTimeThroughFade = 0.0 (flt_82001CC0); mfGainPreFade =
+//                                    VoiceWrapper::GetGain @0x826C5218 of the "Send01" send --
+//                                    dword_8300A6E0, MakeHash("Send01") by the CRT thunk
+//                                    0x82C61A18..0x82C61A34 (string 0x820AF630) -- not the stream's
+//                                    own send name
+//   case 1 (0x826EEAE8..0x826EEBE8)  both clocks += dt; f = mfTimeThroughFade / GetFadeOut() (`fdivs`,
+//                                    no guard on the length) clamped to [0, 1] by `fneg ; fsel` +
+//                                    `fsubs ; fsel` (a NaN -> 1.0) = rw::math::fpu::Clamp; the send
+//                                    gain = Curve::GetOutput(1 - f, E_ONE_MINUS_EQPWR) * mfGainPreFade --
+//                                    GetOutput inlined at 0x826EEB38..0x826EEBC8 (its CgsSoundUtils.cpp:161
+//                                    assert, `fmsubs x*511 - 511` flt_820AA7B0, `fctiwz`, 1 -
+//                                    gafArraySinTable[..]): the equal-power fade, 1 - sin(f * pi/2),
+//                                    not a linear 1 - f -- written through the wrapper's voice-present
+//                                    test (0x826EEB70..0x826EEB7C) to the stream's own send (index,
+//                                    name); then GetFadeOut() AGAIN (0x826EEBD4): still fading ->
+//                                    false (`blt`, a NaN goes on), else release the voice
+//   case 2 (0x826EEBEC..0x826EEBFC)  wait for the stream buffer (mbBufferReleased)
+//   case 3 (0x826EEC00..0x826EEC1C)  BrnEffectObject::Detach
+// ---------------------------------------------------------------------------
 bool StreamingEffect::Detach()
 {
     switch (meDetachState)
@@ -327,7 +350,7 @@ bool StreamingEffect::Detach()
     case E_DETACH_STATE_NONE:
     {
         mfTimeThroughFade = 0.0f;
-        const s32 liSendName = static_cast<s32>(mCreateParams.mSendName);
+        const s32 liSendName = static_cast<s32>(CgsSound::Playback::Name::MakeHash("Send01"));
         mfGainPreFade = mVoice.GetGain(&liSendName);
         meDetachState = E_DETACH_STATE_BEGIN;
         // fall through
@@ -336,14 +359,28 @@ bool StreamingEffect::Detach()
     {
         mfElapsedTime += mfDeltaTime;
         mfTimeThroughFade += mfDeltaTime;
-        const f32 lfFadeOut = GetFadeOut();
-        const f32 lfFraction = lfFadeOut > 0.0f
-            ? std::min(1.0f, std::max(0.0f, mfTimeThroughFade / lfFadeOut))
-            : 1.0f;
+        const f32 lfFadeOut = GetFadeOut();                                          // 0x826EEB14
+        const f32 lfFraction = rw::math::fpu::Clamp(mfTimeThroughFade / lfFadeOut, 0.0f, 1.0f);
+        const f32 lfGain = CgsSound::Utils::Curve::GetOutput(
+                               1.0f - lfFraction, CgsSound::Utils::Curve::E_ONE_MINUS_EQPWR) *
+                           mfGainPreFade;
         const u32 luSendName = mCreateParams.mSendName;
-        mVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex),
-                       (1.0f - lfFraction) * mfGainPreFade, &luSendName);
-        if (mfTimeThroughFade < lfFadeOut)
+        mVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex), lfGain, &luSendName);
+
+        // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1): each fading frame's position and the gain
+        // written to the send, so a live run can re-derive the console's curve from f and the pre-fade
+        // gain. Capped at 96 lines per run.
+        static u32 su32FadeLines = 0;
+        if (CgsSound::Diag::StreamDiagEnabled() && su32FadeLines < 96u)
+        {
+            ++su32FadeLines;
+            CgsSound::Diag::StreamDiagPrintf(
+                "[sndstream] fade spec=0x%08X t=%.6f fade=%.6f f=%.6f pre=%.6f gain=%.6f\n",
+                static_cast<u32>(mCreateParams.mContentSpecName), mfTimeThroughFade, lfFadeOut,
+                lfFraction, mfGainPreFade, lfGain);
+        }
+
+        if (mfTimeThroughFade < GetFadeOut())                                        // 0x826EEBD4
             return false;
         mVoice.Release();
         meDetachState = E_DETACH_STATE_UPDATING;
