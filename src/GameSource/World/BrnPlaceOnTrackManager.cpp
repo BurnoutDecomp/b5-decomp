@@ -455,10 +455,10 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
 }
 
 // ===========================================================================
-// The per-result tail of PrePhysicsUpdate, factored out (asm 0x822F7274..0x822F7898).
+// The per-result tail of PrePhysicsUpdate, factored out (asm 0x822F711C..0x822F7898).
 // `lpBestIntersection == 0` is the console's own "the line test found nothing usable"
-// arm -- it logs "Failed to find valid place on track location - reverting to ring
-// buffer" and falls back.
+// arm (0x822F712C `beq` -> 0x822F7384) -- it logs "Failed to find valid place on track
+// location - reverting to ring buffer" and takes ActiveRaceCar::GetResetCoords.
 // ===========================================================================
 void PlaceOnTrackManager::PlaceCarOnTrack(
         EActiveRaceCarIndex leActiveRaceCarIndex,
@@ -489,60 +489,65 @@ void PlaceOnTrackManager::PlaceCarOnTrack(
         {
             GetValuesForCarSelect( lpBestIntersection, lpActiveRaceCar,
                                    &lResetPosition, &lResetNormal, &lResetDirection );
-            if( CgsDev::Log::gpDebugPrint != 0 )
+            // 0x822F7224..0x822F7248 (gxMessageFilterFlags & 1), string 0x8201E9E8.
+            if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
                 *CgsDev::Log::gpDebugPrint << "    Selecting special values for car select\n";
-        }
-        // The console's own "    Selected reset data: lResetPosition=" line (v205 in the
-        // export), printed lane by lane; the intersection's own height beside it so a log
-        // shows the DROP height at a glance.
-        if( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            *CgsDev::Log::gpDebugPrint << "    Selected reset data: lResetPosition=("
-                << lResetPosition.x << ", " << lResetPosition.y << ", " << lResetPosition.z
-                << ") lResetNormal=(" << lResetNormal.x << ", " << lResetNormal.y << ", "
-                << lResetNormal.z << ") intersection.y=" << lpBestIntersection->mPosition.y
-                << " carSelect=" << ( mpRaceCarEntityModule->IsInCarSelectScreen() ? 1 : 0 )
-                << " resetType=" << mpRaceCarEntityModule->GetCarSelectResetType() << "\n";
         }
     }
     else
     {
-        // Console: "Failed to find valid place on track location - reverting to ring buffer"
-        // then ActiveRaceCar::GetResetCoords(car, &lResetPosition, &lResetDirection) and
-        // lResetNormal = the world Y axis (unk_82181510).
+        // 0x822F7384..0x822F73B8 -- the console's "found nothing usable" arm: the print
+        // (gxMessageFilterFlags & 1, string 0x8201EA18), then ActiveRaceCar::GetResetCoords
+        // @0x822BF2D0 (r4 = &lResetPosition sp+0xC0, r5 = &lResetDirection sp+0xB0) -- the OLDEST
+        // live ring transform, or the car's live transform on an empty ring (0x822BF318 `bgt` /
+        // 0x822BF384 +0x300 / +0x2F0) -- and the world Y axis as the normal (`lwz r11, 0x5C(r1)`
+        // == &unk_82181510, the stack copy set at 0x822F6E68; read 2026-09-24: (0, 1, 0, 0)).
         //
-        // ⚠️⚠️ CORRECTED 2026-08-26 (aicar_reset wave) -- THE HALF OF THIS NOTE THAT SAID
-        // "it would place the car at the origin" WAS WRONG, AND IT IS THE HALF FOUR OTHER
-        // BANNERS IN THIS TREE COPIED. GetResetCoords IS reconstructed now
-        // (BrnActiveRaceCar.cpp), and the asm settles what an empty ring does:
-        //     0x822BF318  lwz r11, 0x5A0(r31)          <- mPrevTransforms.miLength
-        //     0x822BF320  bgt cr6, loc_822BF33C        <- length > 0 : read the ring
-        //     0x822BF37C  li r11, 0x300 ; li r10, 0x2F0
-        //     0x822BF384  lvx128 v0, r31, r11          <- length == 0 : mPhysicsState.mTransform
-        // An empty ring falls back to the car's LIVE transform ({wAxis, zAxis}), NOT the origin.
-        //
-        // ⚠️ [FLAG PC bring-up] IT STAYS PARKED HERE ANYWAY, for the reason that survives: this
-        // arm runs for a car ActiveRaceCar::Attach has just spawned, whose mPhysicsState is
-        // itself unseeded at that moment -- so the fallback would hand out THAT, not a pose. The
-        // requested position is used instead, which is what the earlier revision's own
-        // no-intersection arm does and is exactly the pose the request carried.
-        // ⭐ The ring itself is now WRITTEN per frame (ActiveRaceCar::UpdateResetTransform, landed
-        // 2026-08-26), but it only fills while the car is inside the AI section system, which
-        // needs the above-ground line-test round trip -- see that function's banner.
-        // DELETE-WHEN the ring fills on a booted drive AND the scene fine-query round trip
-        // produces real results (at which point this arm stops being the one that runs).
-        // ⚠️ 2026-09-24 (FX-GEOMETRIC): the round trip DOES produce real results now
-        // (PostSceneUpdate + the scene's CollideLineAgainstPolySoupList), so this arm runs only
-        // when the console's 100 m single-sided line genuinely finds no usable surface. The park
-        // itself is unchanged (not this change's to retire); the console's own print below says
-        // when it runs, so a live log can measure it.
+        // ⭐ RETIRED 2026-09-24 (crash parity FX-GEOMETRIC): the PC park that stood here -- the
+        // REQUESTED pose (GetPlaceOnTrackPosition / GetPlaceOnTrackDirection) instead of the
+        // console's ring pose. Its DELETE-WHEN, "the ring fills on a booted drive AND the scene
+        // fine-query round trip produces real results", is met and measured on
+        // scratch/bugtest/runs/fxgeometric/20260924_160935: `[rot-ring] player depth=4 ...
+        // inSystem=1`, and 57 of 57 requests answered by PostSceneUpdate's round trip. The reason
+        // it gave for staying (a just-attached car's physics state is unseeded) is the console's
+        // own exposure too -- the console reads the same state through the same call.
+        // The practical difference: a reset whose only candidates are unusable (ComputeBestPlaceOnT
+        // returns none -- e.g. every surface under the request is fatal) now reverts to the last
+        // recorded road pose, as on the console, instead of seating the car on the request.
         if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
         {
             *CgsDev::Log::gpDebugPrint
                 << "    Failed to find valid place on track location - reverting to ring buffer\n";
         }
-        lResetPosition = lpActiveRaceCar->GetPlaceOnTrackPosition();
-        lResetNormal   = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };
+        lpActiveRaceCar->GetResetCoords( &lResetPosition, &lResetDirection );   // 0x822F73B0
+        lResetNormal = Vector3{ 0.0f, 1.0f, 0.0f, 0.0f };                        // unk_82181510
+    }
+
+    // 0x822F725C..0x822F7380 -- the console's "Selected reset data" line, printed for BOTH arms
+    // (the no-intersection arm joins at 0x822F7250): strings 0x8201EA68 / 0x8201EA94 / 0x8201EAA4,
+    // each vector through AppendFormat("(%f, %f, %f)"), then "\n" (0x82001CC4). CORRECTED
+    // 2026-09-24 (FX-GEOMETRIC): it printed only with an intersection, without the direction and
+    // with three PC fields appended; those now go on their own tagged line below.
+    if( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "    Selected reset data: lResetPosition=";
+        CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lResetPosition.x, lResetPosition.y,
+                                                 lResetPosition.z );
+        *CgsDev::Log::gpDebugPrint << ", lResetNormal=";
+        CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lResetNormal.x, lResetNormal.y,
+                                                 lResetNormal.z );
+        *CgsDev::Log::gpDebugPrint << ", lResetDirection=";
+        CgsDev::Log::gpDebugPrint->AppendFormat( "(%f, %f, %f)", lResetDirection.x, lResetDirection.y,
+                                                 lResetDirection.z );
+        *CgsDev::Log::gpDebugPrint << "\n";
+    }
+    // [DIAG] NOT AN X360 PRINT (car-select drop wave 2026-09-18): the chosen intersection's own
+    // height beside the reset pose, so a log shows a car-select DROP height at a glance.
+    if( lpBestIntersection != 0 && CgsDev::Log::gpDebugPrint != 0 )
+    {
+        *CgsDev::Log::gpDebugPrint << "    [pc-diag] intersection.y=" << lpBestIntersection->mPosition.y
+            << " carSelect=" << ( mpRaceCarEntityModule->IsInCarSelectScreen() ? 1 : 0 )
+            << " resetType=" << mpRaceCarEntityModule->GetCarSelectResetType() << "\n";
     }
 
     CGS_ASSERT( BrnMath::IsNormal( lResetNormal ), "BrnMath::IsNormal( lResetNormal )" );  // :221

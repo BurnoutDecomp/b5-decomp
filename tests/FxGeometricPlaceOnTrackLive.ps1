@@ -75,7 +75,7 @@
             }
             @{ Pass = ($done -ge 1); Detail = "$done crash reset(s) through the round trip: " + ($detail -join ' | ') }
         } }
-        @{ Kind = 'Script'; Name = 'INFO -- hits per answer and no-intersection parks (never fails)'; Script = {
+        @{ Kind = 'Script'; Name = 'INFO -- hits per answer and empty answers reverted to the ring (never fails)'; Script = {
             param($ctx)
             $hist = @{}; $parks = 0
             foreach ($l in $ctx.LogLines) {
@@ -83,7 +83,7 @@
                 if ($l -match 'Failed to find valid place on track location') { $parks++ }
             }
             $h = ($hist.GetEnumerator() | Sort-Object Name | ForEach-Object { "$($_.Name) hit(s) x$($_.Value)" }) -join ', '
-            @{ Pass = $true; Detail = "$h; no-intersection parks $parks" }
+            @{ Pass = $true; Detail = "$h; empty answers reverted to GetResetCoords $parks" }
         } }
     )
 }
