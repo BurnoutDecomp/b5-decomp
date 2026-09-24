@@ -3,7 +3,8 @@
 ARTIST CollisionStateManager::ResourcesAreReady @0x826D3788 builds two BinLookupCaches -- the
 crash-bin list's (0x826D37C0, Build<crashbinlist, crashbin> @0x826A85F8) and the props crash-bin
 list's (0x826D37D0, Build<propscrashbinlist, propscrashbin> @0x826A8710) -- raises
-mbResourcesAreLoaded on every call (0x826D37E0) and constructs NO Content: Prepare @0x826F8B78
+mbResourcesAreLoaded on every call (0x826D37E0) and constructs NO Content; UpdateResolver
+@0x826F8F20 rebuilds both caches at its head on every call (0x826F8F74 / 0x826F8F84); Prepare @0x826F8B78
 state 2 constructs the three Contents once that flag is up (0x826F8C64 / 0x826F8CA0 / 0x826F8CDC)
 and registers the "Collisions" CPU monitor (0x826F8E1C). SelectBin<List, Bin> (@0x826A97E8 /
 @0x826A8828) walks maBinLoopupCache[mePipeline] for the material pre-filter. On the PC nothing
@@ -35,6 +36,7 @@ PROPSCRASHBIN_H = "src/GameSource/AttribSys/Generated/classes/propscrashbin.h"
 BUILD_BAT = "tools/build/build_game_exe.bat"
 
 RESOURCES_ARE_READY = "void CollisionStateManager::ResourcesAreReady()"
+UPDATE_RESOLVER = "void CollisionStateManager::UpdateResolver("
 PREPARE = "bool CollisionStateManager::Prepare()"
 SELECT = "void CollisionStateManager::SelectCollisionBin("
 BUILD = "void BinLookupCache::Build( const List& lrList )"
@@ -86,6 +88,8 @@ def wiring(tree, rev):
     gate = re.search(r"if\s*\(\s*!\s*mbResourcesAreLoaded\s*\)\s*return\s+false\s*;", arm)
     constructs_after_gate = arm[gate.end():] if gate else ""
     select = body_or_empty(tree.read(MANAGER_CPP), SELECT)
+    resolver = body_or_empty(tree.read(MANAGER_CPP), UPDATE_RESOLVER)
+    resolver_head = resolver[:resolver.find("mFrameInformation")] if "mFrameInformation" in resolver else ""
     manager_h = code_only(tree.read(MANAGER_H))
     cache_cpp = code_only(tree.read(CACHE_CPP))
     crashbin = code_only(tree.read(CRASHBIN_H))
@@ -105,6 +109,15 @@ def wiring(tree, rev):
          re.search(r"maBinLoopupCache\s*\[\s*InputCollision::E_PROP\s*\]\s*\.\s*Build\s*<\s*Attrib::Gen::"
                    r"propscrashbinlist\s*,\s*Attrib::Gen::propscrashbin\s*>\s*\(\s*mPropsCrashBinList\s*\)",
                    loaded_block) is not None),
+        ("UpdateResolver rebuilds both caches at its head on every call, before the frame copy "
+         "(0x826F8F74 / 0x826F8F84, no branch around them)",
+         re.search(r"maBinLoopupCache\s*\[\s*InputCollision::E_REGULAR\s*\]\s*\.\s*Build\s*<\s*Attrib::Gen::"
+                   r"crashbinlist\s*,\s*Attrib::Gen::crashbin\s*>\s*\(\s*mCrashBinList\s*\)\s*;", resolver_head)
+         is not None and
+         re.search(r"maBinLoopupCache\s*\[\s*InputCollision::E_PROP\s*\]\s*\.\s*Build\s*<\s*Attrib::Gen::"
+                   r"propscrashbinlist\s*,\s*Attrib::Gen::propscrashbin\s*>\s*\(\s*mPropsCrashBinList\s*\)\s*;",
+                   resolver_head) is not None and
+         not re.search(r"\bif\s*\(", resolver_head)),
         ("ResourcesAreReady raises mbResourcesAreLoaded after the build block, on every call (0x826D37E0)",
          "mbResourcesAreLoaded = true" not in loaded_block and
          re.search(r"mbResourcesAreLoaded\s*=\s*true\s*;", after_block) is not None),
