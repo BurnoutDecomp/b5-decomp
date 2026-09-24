@@ -39,6 +39,10 @@
 // back, and its ControllerInput +0x45 gesture byte is readable by consumers for the first time.
 // The banner on GetGameStatePreWorldInputBuffer below carries the console attestation and
 // refutes the "gameStateModule + 0x2BE8" reading this file used to state.
+//
+// ⭐ [crash parity FX-BRIDGES CC-9, 2026-09-24] BridgeControllerToWorld's Showtime-intro override
+// (0x823CDB80..0x823CDBCC) is reconstructed -- it was a comment -- and the controls record is the
+// real BrnWorld::PlayerVehicleControls (the bridge-local WorldVehicleControlsImage is retired).
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
@@ -54,7 +58,10 @@
 #include "GameSource/GameState/BrnGameStateModuleIO.h"            // BrnGameState::GameStateModuleIO::PreWorldInputBuffer
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16>
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"        // [DIAG] CgsDev::Log::gpDebugPrint ([showtime-intro])
+
 #include <cmath>     // std::fabs
+#include <cstdlib>   // std::getenv ([DIAG])
 #include <cstring>   // std::memcpy
 
 namespace BrnGame
@@ -347,62 +354,105 @@ namespace BrnGame
 
         const CgsInput::InputIO::ActionInfo* lpActions = lpPad->maActionInfo;
 
-        WorldVehicleControlsImage lControls;
+        // The controls record is the real 60-byte BrnWorld::PlayerVehicleControls (DWARF
+        // BrnPlayerVehicleControls.h, 13 float32_t + 8 bool) -- the very type
+        // UpdateInputBuffer::SetPlayerVehicleControls copies. (It used to be a bridge-local
+        // "WorldVehicleControlsImage" with offset-derived names; every offset below is unchanged,
+        // only the names are now the DWARF's.) The console stores all 60 bytes one by one; the
+        // memset is the PC's belt-and-braces and is overwritten field by field.
+        BrnWorld::PlayerVehicleControls lControls;
         std::memset(&lControls, 0, sizeof(lControls));
 
-        // Steering: |stickLX| run through the response curve (X360 VMX polynomial). FLAG: modelled as
-        // the faithful magnitude + sign reproduction (the curve is a monotone shaping fn; store-for-store
-        // we preserve sign and pass the magnitude through). When stick is at rest the curve gives 0.
+        // Steering: sign(stickLX) * |stickLX|^e, the X360 VMX pow (vlogefp / vexptefp with the
+        // polynomial tables at 0x82014AC0..0x82014AF0) whose exponent e is the float at 0x82035228
+        // (`lvlx v0` @0x823CD9BC) -- image-read 0x3F800000 == 1.0f. So the curve is the identity on
+        // the magnitude (to the VMX approximation's last bits), and `fmuls` by flt_820037C8 (-1.0f)
+        // restores the sign for a negative stick (@0x823CDB20..0x823CDB2C).
         f32 lfStickX = lpPad->mfStickLX;
         f32 lfSteering;
         bool lbControllerStateNotTwo = (lpPad->meControllerState - 2) != 0;
         if (!lbControllerStateNotTwo)
         {
-            lfSteering = lpPad->mfAxis10; // controller-state==2 path uses the raw axis
+            lfSteering = lpPad->mfAxis10; // controller-state==2 (wheel) path uses the raw steering axis
         }
         else
         {
-            f32 lfShaped = std::fabs(lfStickX);  // FLAG: response-curve placeholder (identity magnitude)
+            f32 lfShaped = std::fabs(lfStickX);  // |x|^1.0 (exponent @0x82035228)
             lfSteering = (lfStickX < 0.0f) ? (lfShaped * -1.0f) : lfShaped;
         }
 
         // Axis block, store-for-store against the asm (controls offsets are var_140-relative):
-        //   controls+0x00 = *(pad+0x08)      controls+0x04 = *(pad+0x00) (stickLX)
-        //   controls+0x08 = *(pad+0x0C)      controls+0x0C = *(pad+0x04) (stickLY)
-        //   controls+0x10..0x1C = 0          (already zeroed by the memset above)
-        //   controls+0x20 = *(pad+0x18)      controls+0x24 = *(pad+0x20)  controls+0x28 = *(pad+0x28)
-        lControls.mfAxis08  = lpPad->mfStickRX;   // var_140 = *(pad+0x08)
-        lControls.mfStickLX = lpPad->mfStickLX;   // var_13C = *(pad+0x00)
-        lControls.mfAxis0C  = lpPad->mfStickRY;   // var_138 = *(pad+0x0C)
-        lControls.mfStickLY = lpPad->mfStickLY;   // var_134 = *(pad+0x04)
-        lControls.mfAxis18  = lpActions[0].mfValue; // var_120 = *(pad+0x18) = maActionInfo[0].mfValue
-        lControls.mfAxis20  = lpActions[1].mfValue; // var_11C = *(pad+0x20) = maActionInfo[1].mfValue
-        lControls.mfAxis28  = lpActions[2].mfValue; // var_118 = *(pad+0x28) = maActionInfo[2].mfValue
+        //   +0x00 mfXAxis1 = *(pad+0x08)      +0x04 mfXAxis0 = *(pad+0x00) (stickLX)
+        //   +0x08 mfYAxis1 = *(pad+0x0C)      +0x0C mfYAxis0 = *(pad+0x04) (stickLY)
+        //   +0x10..+0x1C the four sensors = f31 (0.0)
+        //   +0x20 mfAcceleration = *(pad+0x18)   +0x24 mfBraking = *(pad+0x20)   +0x28 mfHandBrake = *(pad+0x28)
+        lControls.mfXAxis1       = lpPad->mfStickRX;     // var_140 = *(pad+0x08)
+        lControls.mfXAxis0       = lpPad->mfStickLX;     // var_13C = *(pad+0x00)
+        lControls.mfYAxis1       = lpPad->mfStickRY;     // var_138 = *(pad+0x0C)
+        lControls.mfYAxis0       = lpPad->mfStickLY;     // var_134 = *(pad+0x04)
+        lControls.mfXSensor      = 0.0f;                 // var_130 = f31 (flt_82001CC0 0.0)
+        lControls.mfYSensor      = 0.0f;                 // var_12C
+        lControls.mfZSensor      = 0.0f;                 // var_128
+        lControls.mfGSensor      = 0.0f;                 // var_124
+        lControls.mfAcceleration = lpActions[0].mfValue; // var_120 = *(pad+0x18) = maActionInfo[0].mfValue
+        lControls.mfBraking      = lpActions[1].mfValue; // var_11C = *(pad+0x20) = maActionInfo[1].mfValue
+        lControls.mfHandBrake    = lpActions[2].mfValue; // var_118 = *(pad+0x28) = maActionInfo[2].mfValue
 
-        lControls.mfSteeringCurved = lfSteering;  // var_114 = curve(stickX)  @ +0x2C
-        lControls.mfDistance = lpActions[(464 - 24) / 8].mfValue - lpActions[(456 - 24) / 8].mfValue; // var_110 @ +0x30 = action[55].value - action[54].value
+        lControls.mfSteering = lfSteering;  // var_114 = curve(stickX)  @ +0x2C
+        lControls.mfSpin = lpActions[(464 - 24) / 8].mfValue - lpActions[(456 - 24) / 8].mfValue; // var_110 @ +0x30 = action[55].value - action[54].value
 
         // Eight status bytes @ controls+0x34..+0x3B (X360 var_10C..var_105), each from a pad status
         // bit (the status words live inside maActionInfo at pad+0x34/0x44/0x54/0x5C/0x6C/0x84).
-        lControls.mabStatus[0] = static_cast<u8>(lpActions[13].muStatus & 1);          // var_10C = *(pad+0x84) & 1
-        lControls.mabStatus[1] = static_cast<u8>((lpActions[5].muStatus >> 1) & 1);    // var_10B = (*(pad+0x44)>>1)&1
-        lControls.mabStatus[2] = static_cast<u8>((lpActions[8].muStatus >> 1) & 1);    // var_10A = (*(pad+0x5C)>>1)&1
-        lControls.mabStatus[3] = static_cast<u8>(lpActions[7].muStatus & 1);           // var_109 = *(pad+0x54) & 1
-        lControls.mabStatus[4] = static_cast<u8>(lpActions[10].muStatus & 1);          // var_108 = *(pad+0x6C) & 1
-        lControls.mabStatus[5] = static_cast<u8>(lpActions[3].muStatus & 1);           // var_107 = *(pad+0x34) & 1
-        lControls.mabStatus[6] = static_cast<u8>(lpPad->meControllerState == 2);       // var_106 = (controllerState == 2)
-        lControls.mabStatus[7] = static_cast<u8>((lpActions[3].muStatus >> 1) & 1);    // var_105 = (*(pad+0x34)>>1)&1
+        lControls.mbHorn        = (lpActions[13].muStatus & 1) != 0;          // var_10C = *(pad+0x84) & 1
+        lControls.mbChangeView  = ((lpActions[5].muStatus >> 1) & 1) != 0;    // var_10B = (*(pad+0x44)>>1)&1
+        lControls.mbStart       = ((lpActions[8].muStatus >> 1) & 1) != 0;    // var_10A = (*(pad+0x5C)>>1)&1
+        lControls.mbReset       = (lpActions[7].muStatus & 1) != 0;           // var_109 = *(pad+0x54) & 1
+        lControls.mbToggle      = (lpActions[10].muStatus & 1) != 0;          // var_108 = *(pad+0x6C) & 1
+        lControls.mbBoost       = (lpActions[3].muStatus & 1) != 0;           // var_107 = *(pad+0x34) & 1
+        lControls.mbIsWheel     = lpPad->meControllerState == 2;              // var_106 = (controllerState == 2)
+        lControls.mbBoostBounce = ((lpActions[3].muStatus >> 1) & 1) != 0;    // var_105 = (*(pad+0x34)>>1)&1
 
-        // ShowtimeIntro override: when the game-state module is in the showtime intro, force the
-        // controls and take the steering from GetShowtimeIntroSteering. FLAG: IsInShowtimeIntro /
-        // GetShowtimeIntroSteering are GameStateModule methods (un-homed in the minimal layout); the
-        // game module embeds mGameStateModule, addressed by name.
-        // (Modelled as a guarded no-op until GameStateModule exposes these; the store-for-store
-        //  override block is preserved in comments.)
-        // if (mGameStateModule.IsInShowtimeIntro()) { ...force controls...; lControls.mfSteeringCurved = mGameStateModule.GetShowtimeIntroSteering(); }
+        // ---- the Showtime-intro override, X360 0x823CDB80..0x823CDBCC (2026-09-24, crash parity
+        // FX-BRIDGES CC-9) ---------------------------------------------------------------------
+        // While GameStateModule::IsInShowtimeIntro() @0x82356A60 (the 0.5 s window DetectModeStarts
+        // opens when both bumpers are held) the bridge takes the car away from the pad: full
+        // throttle and full handbrake (flt_82001C98, image-read 0x3F800000 == 1.0f), no brake, the
+        // steering GetShowtimeIntroSteering() @0x82356A90 latched from the sign of the car's yaw
+        // rate (+/-1.0f), and every stick / sensor lane zeroed (f31 == flt_82001CC0 0.0f). The
+        // spin into Showtime is this override; without it the player simply kept driving.
+        // Console store order: +0x24, +0x20, +0x28, call, +0x2C, +0x04, +0x00, +0x0C, +0x08,
+        // +0x10, +0x14, +0x18, +0x1C. mfSpin and the eight bools are left as read from the pad.
+        if (mGameStateModule.IsInShowtimeIntro())                 // r30 = this + 0x669500 (the embedded module)
+        {
+            lControls.mfBraking      = 0.0f;                      // stfs f31, var_11C  @0x823CDB94
+            lControls.mfAcceleration = 1.0f;                      // stfs flt_82001C98, var_120 @0x823CDBA0
+            lControls.mfHandBrake    = 1.0f;                      // stfs flt_82001C98, var_118 @0x823CDBA4
+            lControls.mfSteering     = mGameStateModule.GetShowtimeIntroSteering();   // @0x823CDBA8 / 0x823CDBAC
+            lControls.mfXAxis0       = 0.0f;                      // var_13C @0x823CDBB0
+            lControls.mfXAxis1       = 0.0f;                      // var_140 @0x823CDBB4
+            lControls.mfYAxis0       = 0.0f;                      // var_134 @0x823CDBB8
+            lControls.mfYAxis1       = 0.0f;                      // var_138 @0x823CDBBC
+            lControls.mfXSensor      = 0.0f;                      // var_130 @0x823CDBC0
+            lControls.mfYSensor      = 0.0f;                      // var_12C @0x823CDBC4
+            lControls.mfZSensor      = 0.0f;                      // var_128 @0x823CDBC8
+            lControls.mfGSensor      = 0.0f;                      // var_124 @0x823CDBCC
 
-        lpWorldInput->SetPlayerVehicleControls(
-            reinterpret_cast<const BrnWorldIO::PlayerVehicleControls*>(&lControls));
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_PROP_DIAG, the gate of the showtime arm's own
+            // [showtime] witnesses (GameStateModule_gSR_00.cpp ShowtimeDiagEnabled): the forced
+            // controls as published (first 20 frames, then silent).
+            static const bool sbShowtimeIntroDiag = (std::getenv("BRN_PROP_DIAG") != 0);
+            static s32 siShowtimeIntroLinesLeft = 20;
+            if (sbShowtimeIntroDiag && siShowtimeIntroLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siShowtimeIntroLinesLeft;
+                *CgsDev::Log::gpDebugPrint << "[showtime-intro] BridgeControllerToWorld override: accel "
+                                           << lControls.mfAcceleration << " brake " << lControls.mfBraking
+                                           << " handbrake " << lControls.mfHandBrake << " steering "
+                                           << lControls.mfSteering << "\n";
+            }
+        }
+
+        lpWorldInput->SetPlayerVehicleControls(&lControls);
 
         // Camera/replay control events: when the relevant action bits are set, push two events onto
         // the world game-action queue (X360 AddEvent type 3 size 4, then a 144-byte type-97 event).
