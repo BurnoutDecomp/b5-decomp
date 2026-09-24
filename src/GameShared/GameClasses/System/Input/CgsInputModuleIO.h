@@ -222,7 +222,8 @@ namespace InputIO
         // ---- connection / controller-state / connected-this-scan tail ----------------------------
         u32  muConnectionWord;  // +0x398 (GetPadInfoForPlayer0: `*(PadInfo+920)`; 0 => use this pad)
         u32  meControllerState; // +0x39C (==2 test feeds the pressed-bit in ToGameState / ToWorld / ToGui)
-        u8   mbDisconnected;    // +0x3A0 (GetPadInfo scan / ToGui: nonzero => pad not present this scan)
+        u8   mbDisconnected;    // +0x3A0 == DWARF mbPadIdle: 1 = no action held or released this frame
+                                //   (InputPads::Update `stb r7, 0x3A0(r25)` @0x828F8CB0; Construct seeds 1)
         u8   maPad0x3A1[0x3A4 - 0x3A1]; // +0x3A1 close the 932-byte (0x3A4) record
     };
 

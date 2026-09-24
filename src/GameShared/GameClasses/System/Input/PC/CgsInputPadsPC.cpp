@@ -1269,7 +1269,7 @@ namespace CgsInput
         // button has no travel, so it is full scale; a trigger and a stick direction carry
         // their normalised curve), and the status is the console muStatus contract (bit0 held,
         // bit1 pressed-this-frame, bit2 released-this-frame) with "held" being InputPads::
-        // Update's own `mfValue > 0.1` ACTION test (0x820F78E4), not the device's 0.2.
+        // Update's own `!(mfValue < 0.1)` ACTION test (0x820F78E4), not the device's 0.2.
         // ✅✅ THE OFFLINE PAUSE SHIPS (pauseresume wave, 2026-08-27). Action 46 is bound above
         // and the whole chain behind it works, pause AND resume, repeatedly:
         //     action 46 -> CrashNavMapMain::OnEnter -> GuiEventActivateCrashNav(false) ->
@@ -1399,11 +1399,25 @@ namespace CgsInput
         }
 
         // ---- the status pass (InputPads::Update @0x828F89B4, per ACTION) -------------------
+        // FLAG PC-platform leaf (FX-TAILS-A 2026-09-24): the pad record's idle byte, computed the
+        // way the console's pass computes it. InputPads::Update seeds r7 = 1 per pad (`li r26,1`
+        // @0x828F8780, `mr r7,r26` @0x828F89B8), clears it (`mr r7,r23`, r23 = 0) on every action
+        // that is HELD (0x828F89EC) or RELEASED THIS FRAME (the not-held arm whose previous-frame
+        // down byte is set, 0x828F8A6C), and after the 112 actions stores it with
+        // `stb r7, 0x3A0(r25)` @0x828F8CB0 -- DWARF PadOutputInformation::mbPadIdle. Actions past
+        // E_GAMEINPUTACTIONS_COUNT are never mapped, so they read 0.0 / not down and cannot clear it.
+        // This leaf used to store 0 ("not idle") on every fill, so BridgeControllerToDirector's
+        // "some input this frame" byte (cntlzw of +0x3A0, 0x823C0FC8..0x823C0FFC) was 1 on every
+        // frame and the director's two inactivity clocks never ran.
+        bool lbPadIdle = true;
         static bool sabActionWasDown[E_GAMEINPUTACTIONS_COUNT] = {};
         for (u32 luAction = 0; luAction < E_GAMEINPUTACTIONS_COUNT; ++luAction)
         {
             const f32  lfValue = lafActionValue[luAction];
-            const bool lbDown  = (lfValue > KF_ACTION_DOWN_THRESHOLD);
+            // The console's ACTION test: `lfs f0, 0x78E4(r17)` (0x820F78E4 = 0.1f) ; `fcmpu value, f0`
+            // ; `blt` -> not held (0x828F89C8..0x828F89E4). Held unless BELOW 0.1: exactly 0.1 is held,
+            // and so is an unordered value (blt is not taken on NaN).
+            const bool lbDown  = !(lfValue < KF_ACTION_DOWN_THRESHOLD);
 
             // ---- [input-src] WHO PRESSED THE BUTTON THAT PAUSED THE WORLD ------------------
             // DIAG. NOT IN THE X360 BINARY. Always on for the two ids that stop the simulation --
@@ -1446,6 +1460,8 @@ namespace CgsInput
                 luStatus |= 2u;                                  // pressed edge
             if (!lbDown && sabActionWasDown[luAction])
                 luStatus |= 4u;                                  // released edge
+            if (lbDown || sabActionWasDown[luAction])
+                lbPadIdle = false;                               // held, or released this frame: r7 = 0
             sabActionWasDown[luAction] = lbDown;
 
             InputIO::ActionInfo& lrAction = lrPad.maActionInfo[luAction];
@@ -1458,7 +1474,7 @@ namespace CgsInput
         // CgsInput::Device::EType) / mbPadIdle -- see the note in CgsInputModuleIO.h.
         lrPad.muConnectionWord  = 0;   // player 0 (GetPadInfoForPlayer0's gate)
         lrPad.meControllerState = 1;   // a standard pad (2 == wheel: the bridges' wheel arms)
-        lrPad.mbDisconnected    = 0;   // not idle
+        lrPad.mbDisconnected    = lbPadIdle ? 1 : 0;   // mbPadIdle: `stb r7, 0x3A0(r25)` @0x828F8CB0
     }
 
     // ============================================================================================
