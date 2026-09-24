@@ -129,6 +129,9 @@ struct RaceCarEntityModule {
     void UpdateRaceCars_PreScene(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
     void Dispatch(s32 liType, const CgsModule::Event* lpEvent, OutputFixture* lpOutput);
 };
+// FX-RCEM4 (reviewer A on 65eadffe, 2026-09-24): the [intro-timer] witnesses' env latch
+// (BRN_INTRO_TIMER_DIAG) -- off in this harness.
+inline bool IntroTimerDiagEnabled() { return false; }
 #include "rcem2_update_racecars_prescene.inc"
 #include "rcem2_prescene_actions.inc"
 }   // namespace Fixture
