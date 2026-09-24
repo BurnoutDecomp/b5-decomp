@@ -624,7 +624,9 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
 
     if ((lfNextAheadness - lfPrevAheadness) == 0.0f)
     {
-        if (CgsDev::Log::gpDebugPrint != 0)
+        // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82785E9C..0x82785EB4: bit 0 gates the line.
+        // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint << "<AI> Nodes in same place\n";
         }
@@ -632,6 +634,14 @@ Vector3 ResetOnTrackManager::DeterminePositionBetweenNodes(Vector3 lPrevPortalPo
     }
 
     const f32 lfInterp = (lfResetDistance - lfPrevAheadness) / (lfNextAheadness - lfPrevAheadness);
+
+    // 0x82785ED4..0x82785F38, the same bit-0 gate: "Lerping " t " from " prev " to " next "\n" (f31 / f30 /
+    // f28, StrStreamBase::operator<<(float) sub_821F0F40 = "%f"). [FX-TAILS-A item 8: this line was absent]
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint << "Lerping " << lfInterp << " from " << lfPrevAheadness
+                                   << " to " << lfNextAheadness << "\n";
+    }
 
     if (lfInterp < 0.0f)
     {
@@ -686,7 +696,9 @@ bool ResetOnTrackManager::ConvertNodesToPositionAndDirection(const RouteNode* lp
         return false;   // [GUARD] see ScanBackwardsAlongExtrapolatedRoute
     }
 
-    if (CgsDev::Log::gpDebugPrint != 0)
+    // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82790380..0x82790390: bit 0 gates the line.
+    // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
+    if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
     {
         *CgsDev::Log::gpDebugPrint << "Converting nodes to position & direction\n";
     }
@@ -781,7 +793,9 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
     const u16 liResetOnTrackIndex = lpPlayerAICar->muResetOnTrackSectionIndex;
     if (liResetOnTrackIndex == KU_INVALID_SECTION_INDEX)
     {
-        if (CgsDev::Log::gpDebugPrint != 0)
+        // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x8278450C..0x8278451C: bit 0 gates the line.
+        // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint << "<AI> routeless fail\n";
         }
@@ -839,7 +853,9 @@ bool ResetOnTrackManager::ResetNearRoutelessPlayer(ResetOnTrackCoords* lpResetDa
 
     if (lfAheadness > 0.0f)
     {
-        if (CgsDev::Log::gpDebugPrint != 0)
+        // `ld gxMessageFilterFlags ; clrldi 63 ; cmpldi ; beq` 0x82784738..0x82784748: bit 0 gates the line.
+        // [FX-TAILS-A item 8 2026-09-24: printed whenever gpDebugPrint was set]
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint != 0)
         {
             *CgsDev::Log::gpDebugPrint
                 << "<AI> Car tried to start ahead of player. Forced behind instead.\n";

@@ -1027,9 +1027,13 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             //     same bring-up entry point) only PRIMES the count: it pushes each victim's
             //     traffic index onto GameStateModule::mShowtimePendingTrafficIndexStack, and the
             //     pre-world half has to turn that into a traffic-type request, get an answer back
-            //     from the traffic module, and only then score it. Three of those hops are still
-            //     unreconstructed -- see the stack's banner in BrnGameStateModule.h for the full
-            //     eight-hop map with each remaining gap's address.
+            //     from the traffic module, and only then score it. ✅ The three hops that were still
+            //     unreconstructed when this was written landed 2026-09-24 (FX-SHOWTIME2):
+            //     UpdateShowtimeMode's body and its PreWorldUpdate call (b72520a2), PhysicsModule::
+            //     HandleGameActions case 116 onto the traffic-type request queue (d6f7aba1) and
+            //     ProcessGameEvents' case-52/53 bounce relay to actions 144/145 (f2e66b94) -- see the
+            //     stack's banner in BrnGameStateModule.h for the whole chain. [FX-TAILS-A item 8
+            //     2026-09-24: this said "Three of those hops are still unreconstructed".]
             // [[diagnostics-that-lie]] -- "X has no caller" is not the same claim as
             // "X is what writes the field".
             mScoringSystem.GetCrashScorer()->Update(lpActiveRaceCarOutput,
