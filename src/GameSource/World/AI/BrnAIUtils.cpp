@@ -209,7 +209,7 @@ namespace BrnAI
     //
     // lpSectionEdges points at four consecutive 4-lane vectors (lane i == edge i):
     //   edgeX0 @+0x00, edgeY0 @+0x10, coefA @+0x20, coefB @+0x30.
-    // Per edge the inside test is:  coefA[i]*(lfY - edgeY0[i]) - coefB[i]*(lfX - edgeX0[i]) >= 0.
+    // Per edge the side is  coefA[i]*(lfY - edgeY0[i]) - coefB[i]*(lfX - edgeX0[i]); an ORDERED side >= 0 is OUTSIDE (inside = all four `!(side >= 0)`, see the body).
     // FLAGGED (low): the section-edge SoA field semantics beyond these four attested
     // lane-vectors are not DWARF-attested; the vperm(unk_8327F110)+vcmpequw reduction is
     // modelled as a plain over-all-four-edges AND. Pointer kept opaque (const void*).
