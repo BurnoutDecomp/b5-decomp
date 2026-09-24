@@ -567,13 +567,17 @@ void AIModule::SetSuitabilityForAggression(EActiveRaceCarIndex leActiveRaceCarIn
     else
     {
         lpDriver->GetAggression()->SetSuitabilityForAggression(false);
+        // NaN polarity (FX-AINAN2): both float tests are `fcmpu ; blt -> not suitable` -- the speed
+        // at 0x8276E8D4/0x8276E8D8 and the race timer against flt_820C4150 (10.0) at
+        // 0x8276E8F4/0x8276E8F8 -- so an unordered compare falls through to "suitable"; `>=`
+        // answered no. Spelt as the negated strict compares.
         lbSuitable = !mbIsInOnlineGameMode
                   && lpDriver->mbIsActive != 0
                   && mbDoAggressiveDriving
                   && mePlayerActiveRaceCarIndex != leActiveRaceCarIndex
-                  && lpCar->GetSpeed() >= KF_MIN_SPEED_FOR_AGGRESSION
+                  && !(lpCar->GetSpeed() < KF_MIN_SPEED_FOR_AGGRESSION)
                   && (lpCar->GetRouteFindingStyle() == static_cast<ERouteFindingStyle>(0)
-                      || lpCar->mfRaceTimer >= 10.0f);
+                      || !(lpCar->mfRaceTimer < 10.0f));
     }
     if (lbSuitable)
     {
