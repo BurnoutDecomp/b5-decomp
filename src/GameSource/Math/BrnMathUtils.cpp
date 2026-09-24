@@ -10,6 +10,20 @@
 
 namespace BrnMath
 {
+    namespace
+    {
+        // flt_82002138 (x360rd 0x3C23D70A = 0.01f): both IsNormal overloads' tolerance.
+        const f32 KF_UNIT_LENGTH_EPSILON = 0.01f;
+
+        // The IsNormal overloads' magnitude: mag^2 * rsqrt(mag^2) (vrsqrtefp + two Newton steps,
+        // then vmulfp128), forced to 0 by the vcmpeqfp/vsel zero mask. An infinite mag^2 gives
+        // inf * 0 = NaN, as the console's estimate does.
+        inline f32 UnitLengthMagnitude(f32 lfLengthSquared)
+        {
+            return ( lfLengthSquared == 0.0f ) ? 0.0f : lfLengthSquared * ( 1.0f / std::sqrt( lfLengthSquared ) );
+        }
+    }
+
     // ---------------------------------------------------------------------------------------
     // Flatten (X360 @ 0x822CB8E8) -> Vector2
     //
@@ -34,27 +48,45 @@ namespace BrnMath
     //
     // ASM: `vmsum3fp128 v0,v1,v1` = dot(xyz,xyz) = magnitude^2. Then vrsqrtefp + two
     // Newton-Raphson refinement steps build 1/sqrt(mag^2); `vmulfp128 v0,v0,v13` = mag^2 *
-    // (1/mag) = magnitude. `vsubfp v0,v0,v6` subtracts the constant v6 (flt_82001C98, loaded
-    // 1.0 -- the same 1.0 RoundWith reuses), `vandc v0,v0,v11` clears the sign bit (fabs),
-    // and `vcmpgtfp v0,v0,v8` tests |magnitude - 1.0| > v8 (flt_82002138, the tolerance).
-    // The final cntlzw/extrwi extracts the boolean: TRUE when the compare is NOT greater,
-    // i.e. the magnitude is within tolerance of 1.0. NO IsValid assert in this function.
+    // (1/mag) = magnitude, and `vsel v0,v0,v7,v12` (0x822B1DAC) forces it to 0 where
+    // `vcmpeqfp` found mag^2 == 0. `vsubfp v0,v0,v6` subtracts v6 (flt_82001C98 = 1.0),
+    // `vandc v0,v0,v11` clears the sign bit (fabs), and `vcmpgtfp v0,v0,v8` (0x822B1DB8) tests
+    // |magnitude - 1.0| > v8 (flt_82002138, the tolerance). The final vperm/cntlzw/extrwi
+    // (0x822B1DBC..DCC) returns TRUE when the compare is NOT greater -- so a NaN magnitude reads
+    // as normal, exactly like an in-tolerance one. NO IsValid assert in this function.
     // `return COERCE_INT(1.0) == 0` in the pseudocode is pure Hex-Rays noise.
     //
-    // FLAG (VMX->portable): rsqrt-estimate + 2 Newton steps -> exact std::sqrt (via the
-    //   Magnitude helper); numerically tighter than the console estimate, not a placeholder.
-    // FLAG (IsNormal epsilon): the tolerance constant flt_82002138 is an un-valued .rdata
-    //   float. 0.01f is taken from the directly analogous unit-length test in
-    //   CgsTriangle4.cpp (KF_UNIT_LENGTH_EPSILON = 0.01f; `fabsf(lfLen - 1.0f) > eps`), which
-    //   is the same |magnitude - 1| > eps shape. INFERRED value; the test structure is faithful.
+    // The tolerance is READ from the image (2026-09-24, crash parity G07-D1 leftover):
+    // x360rd 0x82002138 = 0x3C23D70A = 0.01f (the old "un-valued .rdata, inferred from
+    // CgsTriangle4.cpp" FLAG is retired -- the inference was right).
+    // ⚠️ Crash parity 2026-09-24: the PC body used to return `fabs(m - 1) <= eps`, which is FALSE
+    // for a NaN (or infinite) vector where the console returns TRUE; it now spells the console's
+    // `!(fabs(m - 1) > eps)` and its zero-guarded mag^2 * rsqrt(mag^2) (inf * 0 = NaN, as on the
+    // console). Callers that branch on it (BrnAICar.cpp / BrnAICar_Update.cpp) see the console's
+    // answer.
+    // FLAG (VMX->portable): the rsqrt estimate + 2 Newton steps -> an exact 1/sqrt.
     bool IsNormal(Vector3 lVector)
     {
-        // CgsTriangle4.cpp's unit-length tolerance; the X360 rodata float (flt_82002138) is
-        // not in the available exports. INFERRED value, faithful structure -- see FLAG above.
-        const f32 KF_UNIT_LENGTH_EPSILON = 0.01f;
+        const f32 lfMagnitude = UnitLengthMagnitude(lVector.x * lVector.x + lVector.y * lVector.y
+                                                    + lVector.z * lVector.z);   // vmsum3fp128
+        return !(std::fabs(lfMagnitude - 1.0f) > KF_UNIT_LENGTH_EPSILON);
+    }
 
-        const f32 lfMagnitude = rw::math::vpu::Magnitude(lVector);  // sqrt(x^2 + y^2 + z^2)
-        return std::fabs(lfMagnitude - 1.0f) <= KF_UNIT_LENGTH_EPSILON;
+    // ---------------------------------------------------------------------------------------
+    // IsNormal (Vector2 overload; X360 sub_8276AC48, DWARF BrnMathUtils.h `bool IsNormal(Vector2)`)
+    //
+    // Its only caller is ResetOnTrackManager::TestCarHNG (0x82790C40, the :2216 assert
+    // "BrnMath::IsNormal( lDirection )"). The same pipeline as the Vector3 overload over lanes
+    // 0 and 1 of the register:
+    //   0x8276AC4C  vmulfp128 v11 = v*v ; 0x8276ACA0/B8 vspltw lanes 0 and 1 ; 0x8276ACC4 vaddfp
+    //               -> x*x + y*y
+    //   0x8276ACD4..ACFC  vrsqrtefp + 2 Newton steps, * mag^2 ; 0x8276AD00 vsel -> 0 when mag^2 == 0
+    //   0x8276AD0C  - flt_82001C98 (1.0) ; 0x8276AD10 vandc (fabs) ; 0x8276AD14 vcmpgtfp > flt_82002138 (0.01)
+    //   0x8276AD18..AD28  vperm / cntlzw / extrwi -> TRUE unless |m - 1| > 0.01 (NaN reads normal)
+    bool IsNormal(Vector2 lVector)
+    {
+        const f32 lfMagnitude = UnitLengthMagnitude(lVector.x * lVector.x + lVector.y * lVector.y);
+        return !(std::fabs(lfMagnitude - 1.0f) > KF_UNIT_LENGTH_EPSILON);
     }
 
     // ---------------------------------------------------------------------------------------

@@ -6,6 +6,7 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnMath::Flatten                         @ 0x822CB8E8
 //   BrnMath::IsNormal                        @ 0x822B1CF8  (EXECUTED in goal trace)
+//   BrnMath::IsNormal (Vector2)              @ 0x8276AC48  (sub_; TestCarHNG's :2216 assert)
 //   BrnMath::Magnitude2D                     @ 0x822B1DD8
 //   BrnMath::MagnitudeSquared2D              @ 0x8276AD30
 //   BrnMath::RoundWithNumSignificantFigures  @ 0x82361600  (uses helper sub_82C09970 @ 0x82C09970)
@@ -31,8 +32,13 @@ namespace BrnMath
     // XZ ground-plane flatten: drops the Y (height) lane. @ 0x822CB8E8
     Vector2 Flatten(Vector3 lVector);
 
-    // True iff lVector is unit length within a tolerance. @ 0x822B1CF8
+    // True unless |lVector| is further than 0.01 (flt_82002138) from 1 -- a NaN vector reads as
+    // normal, as on the console. @ 0x822B1CF8
     bool IsNormal(Vector3 lVector);
+
+    // The Vector2 overload (DWARF BrnMathUtils.h `bool IsNormal(Vector2)`; X360 sub_8276AC48):
+    // the same test over lanes x and y. Caller: ResetOnTrackManager::TestCarHNG's :2216 assert.
+    bool IsNormal(Vector2 lVector);
 
     // sqrt(x*x + z*z) -- 2D (XZ) magnitude. @ 0x822B1DD8
     f32 Magnitude2D(Vector3 lVector);
