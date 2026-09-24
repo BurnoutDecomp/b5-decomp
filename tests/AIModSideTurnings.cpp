@@ -26,6 +26,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 
 static unsigned gAssertions = 0, gChecks = 0, gFailures = 0;
 namespace CgsDev {
@@ -285,6 +286,42 @@ int main()
           "K: t -1.375 < 0 -> the entrance node");
     Check(Near(sManager.InterpolatePositionFromAngle(lOrigin, lHeading, Vector3{ -20.0f, 0.0f, 200.0f, 0.0f }, Vector3{ -100.0f, 4.0f, 190.0f, 0.0f }, lfCos20), -60.20707f, 2.0103536f, 194.97412f),
           "K: lerp on all lanes at t 0.50259");
+
+    // (L..N) FX-NANPOL (2026-09-24): the UNORDERED arms of the hole's float decisions. After fcmpu,
+    //     ble (bc 4,gt) and bge (bc 4,lt) are TAKEN on unordered. Each fixture carries one NaN lane;
+    //     BrnMath::Flatten's IsValid tripwire fires on it (fire-and-continue, like the console's dev
+    //     assert), so the assertion count is restored after the block.
+    const unsigned luAssertionsBeforeNaN = gAssertions;
+    const f32 lfNaN = std::numeric_limits<f32>::quiet_NaN();
+
+    // (L) ble 0x827857F8: a side road whose |aheadness| is NaN is SKIPPED -- even after the best one.
+    ClearWorld();
+    JunctionWorld(-10.0f, 140.0f, -20.0f, 200.0f);
+    SetMiddle(11, lfNaN, 100.0f);
+    AddPortal(2, 11, 0.0f, 120.0f);             // S2's sixth portal, scanned after S5 (0.5547) and S7
+    Check(sManager.ScanForwardsAndAlongJunction(&lCoords) &&
+          Near(lCoords.mPosition, -60.20707f, 0.0f, 194.97412f) && lCoords.mpAISection == &saSections[10],
+          "L: a NaN aheadness is skipped (ble @0x827857F8 taken on unordered) -> the S5 join of case A");
+
+    // (M) ble 0x8278596C: a neighbour whose distance from the junction is NaN is SKIPPED.
+    ClearWorld();
+    JunctionWorld(-10.0f, 140.0f, -20.0f, 200.0f);
+    SetMiddle(12, lfNaN, 0.0f);
+    AddPortal(5, 12, -150.0f, 150.0f);          // S5's fourth portal, scanned after S8 (117 m) and S9 (95 m)
+    Check(sManager.ScanForwardsAndAlongJunction(&lCoords) &&
+          Near(lCoords.mPosition, -60.20707f, 0.0f, 194.97412f) && lCoords.mpAISection == &saSections[10],
+          "M: a NaN neighbour distance is skipped (ble @0x8278596C taken on unordered) -> case A");
+
+    // (N) bge 0x82785CE4: an unordered aheadness does NOT prevent the pop-up. The player's y lane is
+    //     NaN: every flattened (x, z) test is unchanged, but mPosition - playerPos is 3D, so the
+    //     separation and the aheadness are both NaN at the two bge.
+    ClearWorld();
+    JunctionWorld(-10.0f, 140.0f, -20.0f, 200.0f);
+    saCars[0].mPosition = Vector3{ 0.0f, lfNaN, 0.0f, 0.0f };
+    Check(sManager.ScanForwardsAndAlongJunction(&lCoords) &&
+          Near(lCoords.mPosition, -60.20707f, 0.0f, 194.97412f) && lCoords.mpAISection == &saSections[10],
+          "N: a NaN aheadness takes bge @0x82785CE4 past the pop-up test -> joins as case A");
+    gAssertions = luAssertionsBeforeNaN;
 
     Check(gAssertions == 0, "valid fixtures raise no assertion");
     std::printf("AIModSideTurnings: %u checks, %u failures\n", gChecks, gFailures);
