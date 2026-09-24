@@ -267,6 +267,14 @@ public:
     bool IsExtremeSwerving() const;
     bool IsBeingChecked() const;
     bool IsNormalPhysical() const;
+    // DWARF BrnTrafficVehicle.h:387 `bool IsSympatheticCrasher() const`. No out-of-line body in
+    // the X360 or the PS3 image; its one use, TrafficEntityModule::GenerateSympatheticCrasherOutput,
+    // reads the latched target RAW after IsCrashing(): X360 0x82715C80 `lwz r11,0(r30)` (r30 =
+    // vehicle + 0x40, mSympCrashTarget) `; cmpwi cr6,r11,-1 ; bne -> crasher`, PS3 0x92E378
+    // `*(vehicle + 0x40) == -1 -> not`. So the predicate is the target's validity WITHOUT
+    // GetSympatheticCrashTarget()'s "mSympCrashTarget.IsValid()" assert (that accessor may only be
+    // asked of a car that has a target; this one is asked of every crashing car).
+    bool IsSympatheticCrasher() const { return mSympCrashTarget.muValue != 0xFFFFFFFFu; }
 
     void SetSteering(f32 lfValue);
     void SetWheelRot(f32 lfValue);
