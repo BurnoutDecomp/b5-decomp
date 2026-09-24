@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // State -> StateManager walk
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"    // Name::MakeHash
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
+#include "GameSource/Sound/Collision/BrnCollisionStateManager.h" // Notify case 8: the collision splice bank
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Global/BrnHudSoundDiag.h"            // [DIAG] NOT IN THE X360 BINARY
 
@@ -280,12 +281,15 @@ s32 FxEffect::FindFreeVoice() const
 //     case 6 E_CAMERA_PHOTO:      GetSampleTag(2,  6, sel),  bank = FX
 //     case 7 E_QUIT_EVENT:        GetSampleTag(4,  8, sel),  bank = PRESENTATION
 //     case 8 E_CRASH_IN_WATER:    GetSampleTag(1,  5, sel),  bank = the COLLISION
-//                                 splice bank (module +10600 -> +33320)
+//                                 state manager's own splice bank:
+//                                 GetEnvironment().GetStateManager(5)
+//                                   ->GetSplicerBank(E_COLLISION_SPLICE_BANK_COLLISION)
 //     case 9 E_ONLINE_RIVAL_SWEEP:GetSampleTag(4, 23, sel),  bank = PRESENTATION
 //     default (4 E_STUNT_JUMP):   result = 0 -> play nothing
 //   }
 //   every handled case also stamps mau8MixerOutputs[liSlot] = 3.
 //   if ( resolved ) {
+//       assert( liIndexToUse >= 0 ); assert( liIndexToUse < KI_NUMBER_OF_FX_VOICES );
 //       mVoiceWrappers[liSlot].Create({ module, ~SplicerFactory::SK_NAME~,
 //            SplicerVoiceSpec, <bank>, 0, ~SplicerPlayerVoice::Slot~, Send01,
 //            submix 1, sendIndex 0 });
@@ -380,15 +384,37 @@ void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
         break;
 
     case FxMessage::E_CRASH_IN_WATER:
+    {
+        // 826F7474..826F7498 -- SampleTagCollision (1), tag index 5
+        // (Collision::E_COLLISION_SPLICE_CRASH_IN_WATER), round-robin dword_8300C79C.
         lbResolved = GetSampleTag(1, 5, guFxSelectCrashInWater++, lTag);
-        // The X360 walks module+10600 -> +33320 for this one: the COLLISION state
-        // manager's own splice bank, not a Global one.
-        // FLAG: the collision manager is not reachable by name from this effect in
-        // this tree, so the bank stays null for type 8 and the voice plays from the
-        // registry default. No PC producer posts type 8 today.
-        lpBank = 0;
+
+        // 826F749C  lwz   r11, 0x28(r31)      ; mpLogicModule (this == primary + 4)
+        // 826F74A4  lwz   r11, 0x2968(r11)    ; GetEnvironment().GetStateManager(5), inlined
+        // 826F74AC  addis r30, r11, 1
+        // 826F74B0  addi  r30, r30, -0x7DD8   ; +0x8228 == &mCollisionSplicerBank[0]
+        // Module +0x2950 is the logic Environment (CreateStateManagers 0x826AFF18
+        // `addi r26, r29, 0x2950` before AddStateManager) and map slot N sits at +4 + 4*N
+        // (AddStateManager 0x82680E0C `stwx` at (type + 1) * 4), so +0x2968 is slot 5: the
+        // CollisionStateManager (ObjectID 5). Its +0x8228 is the Content that
+        // CollisionStateManager::Prepare 0x826F8B78 constructs with the splicer factory
+        // dword_83008404 (the same factory this voice is created with) and the name
+        // dword_83005F24 == MakeHash("CollisionSpliceBank") (CRT thunk 0x82C63340). The PS3 twin
+        // (DecFIGS 0x899534..0x899564) makes the Environment::GetStateManager(5) call out of
+        // line, and the DWARF names the local (BrnFxEffect.cpp:354). No null check exists on
+        // either console. The earlier null bank (a stale "no PC producer posts type 8" FLAG --
+        // UpdateParams below posts it) tripped VoiceWrapper::Create's mpContent assert and
+        // then faulted on every player crash into water.
+        Collision::CollisionStateManager* lpCollisionStateManager =
+            static_cast<Collision::CollisionStateManager*>(
+                lpModule->GetEnvironment().GetStateManager(5));
+        lpBank = &lpCollisionStateManager->GetSplicerBank(
+            Collision::E_COLLISION_SPLICE_BANK_COLLISION);
+
+        // 826F74A8  stb r28 (== 3), 0x184(r10)
         mau8MixerOutputs[liSlot] = 3;
         break;
+    }
 
     case FxMessage::E_ONLINE_RIVAL_SWEEP:
         lbResolved = GetSampleTag(4, 23, guFxSelectOnlineRivalSweep++, lTag);
@@ -413,6 +439,10 @@ void FxEffect::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 
     if (!lbResolved)
         return;
+
+    // 826F7630..826F7674 (BrnFxEffect.cpp:483 / :484).
+    CGS_ASSERT(liSlot >= 0, "liIndexToUse >= 0");
+    CGS_ASSERT(liSlot < KI_NUM_VOICES, "liIndexToUse < KI_NUMBER_OF_FX_VOICES");
 
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
     lParams.Clear();
