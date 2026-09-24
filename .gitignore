@@ -20,3 +20,6 @@ vendor/renderware/lib/
 
 # --- Agent-local session state (never committed) ---
 .claude/
+
+# --- Python bytecode from the tests/run_*.py runners (never committed) ---
+__pycache__/
