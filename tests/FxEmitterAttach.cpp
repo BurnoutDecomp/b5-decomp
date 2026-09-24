@@ -18,6 +18,12 @@
 //   RefSpec[50] @+8: slots 0..37 name the 38 world emitters, 38..49 are empty (collection key 0)
 //   mNumWorldEmitters (Int32) = 38 @+1208 (0x4B8)          -- ARTIST embedded schema, layout 1216
 // The Attrib runtime's out-of-line bodies are replaced by recording doubles below.
+//
+// Second commit (FX-EMITTER invented arms): the console's Attach has no null tests of its own --
+// the 3D control is called unconditionally (0x826F5774..0x826F5790), the body runs on after the
+// "lpLogicModule" assert, and a non-streamed emitter's EmitterName is hashed as it stands
+// (0x826F5890); AttachController reads the controller id without a null test (0x826866B4). The
+// nameless-slot case below pins the last one; the runner's wiring checks pin the rest.
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -37,6 +43,7 @@
 
 static unsigned guAsserts = 0;
 static std::vector<std::string> gaAssertTexts;
+static std::vector<std::string> gaCallOrder;   // Detach: base detach / voice release / 3D control, in order
 namespace CgsDev { namespace Assert {
 int BeginAssert() { return 0; }
 int FireAssert(const char* lpcExpression, const char*, int) { ++guAsserts; gaAssertTexts.push_back(lpcExpression); return 0; }
@@ -111,12 +118,15 @@ unsigned int Private::GetLength() const   // @0x82803558 `lhz r3, 2(r3)` -- the 
 }
 } // namespace Attrib
 
-// ---- playback names: a stand-in intern hash (FNV-1a) and fixed factory/slot names.
+// ---- playback names: a stand-in intern hash (FNV-1a) and fixed factory/slot names. Like the real
+// Name::MakeHash (CgsCommon.cpp), a null or empty string hashes to 0.
 namespace CgsSound { namespace Playback {
 struct Name
 {
     static uintptr_t MakeHash(const char* lpcText)
     {
+        if (!lpcText || !*lpcText)
+            return 0;
         u32 lu = 2166136261u;
         for (; *lpcText; ++lpcText)
             lu = (lu ^ static_cast<u8>(*lpcText)) * 16777619u;
@@ -155,14 +165,38 @@ struct VoiceWrapper
     void Create(const CreateParams& lrParams) { mLast = lrParams; ++miCreates; }
     void Play(u32) { ++miPlays; }
     void SetParameter(s32 liIndex, f32 lfValue, const u32*) { maParameters.push_back(std::make_pair(liIndex, lfValue)); }
+    void Release() { gaCallOrder.push_back("voice-release"); }
 };
 
 struct EffectBase
 {
+    enum EDetachState
+    {
+        E_DETACH_STATE_NONE     = 0,
+        E_DETACH_STATE_BEGIN    = 1,
+        E_DETACH_STATE_UPDATING = 2,
+        E_DETACH_STATE_FINISHED = 3,
+    };
     u16 mu16AttachCount = 0;
-    s32 meDetachState = 7;
+    EDetachState meDetachState = static_cast<EDetachState>(7);
     Module* mpLogicModule = nullptr;
-    bool Attach() { meDetachState = 0; ++mu16AttachCount; return true; }   // EffectBase::Attach @0x826A1138
+    bool Attach() { meDetachState = E_DETACH_STATE_NONE; ++mu16AttachCount; return true; }   // EffectBase::Attach @0x826A1138
+};
+} }
+
+// BrnEffectObject::Detach @0x826EBF88 always completes on the console (drop requests, attach state
+// 0, detach state FINISHED, return 1); the double can also refuse, to pin what the caller does then.
+namespace BrnSound { namespace Logic {
+struct BrnEffectObject : public CgsSound::Logic::EffectBase
+{
+    bool mbDetachResult = true;
+    bool Detach()
+    {
+        gaCallOrder.push_back("base-detach");
+        if (mbDetachResult)
+            meDetachState = E_DETACH_STATE_FINISHED;
+        return mbDetachResult;
+    }
 };
 } }
 
@@ -190,10 +224,15 @@ struct Emitter3dControl
 {
     const Vector3* mpPosition = nullptr;
     int miCalls = 0;
-    void AttachEmitterPosition(const Vector3* lpPosition) { mpPosition = lpPosition; ++miCalls; }
+    void AttachEmitterPosition(const Vector3* lpPosition)
+    {
+        mpPosition = lpPosition;
+        ++miCalls;
+        gaCallOrder.push_back("3d-position");
+    }
 };
 
-struct EmitterEffect : public CgsSound::Logic::EffectBase
+struct EmitterEffect : public BrnSound::Logic::BrnEffectObject
 {
     CgsSound::Logic::VoiceWrapper mVoice;
     Vector3 mPos;
@@ -204,6 +243,7 @@ struct EmitterEffect : public CgsSound::Logic::EffectBase
     const BrnSound::World::StaticSoundEntity& GetSoundEntity() const { return mEntity; }
 
     bool Attach();
+    bool Detach();
 };
 
 #include "fxemitter_attach_body.inc"
@@ -352,6 +392,37 @@ Result AttachEntity(u32 lu32PackedW)
     return lResult;
 }
 
+struct DetachResult
+{
+    bool mbReturned;
+    std::vector<std::string> maOrder;
+    s32 meFinalState;
+    bool mbPositionKept;
+};
+
+// Detach an effect whose meDetachState starts at leStartState; the base Detach completes or refuses.
+DetachResult DetachFrom(s32 leStartState, bool lbBaseCompletes)
+{
+    BrnSound::Logic::World::Emitter3dControl l3dControl;
+    BrnSound::Logic::World::EmitterEffect lEffect;
+    lEffect.mp3dControl = &l3dControl;
+    l3dControl.mpPosition = &lEffect.mPos;
+    lEffect.meDetachState = static_cast<CgsSound::Logic::EffectBase::EDetachState>(leStartState);
+    lEffect.mbDetachResult = lbBaseCompletes;
+    gaCallOrder.clear();
+    DetachResult lResult;
+    lResult.mbReturned = lEffect.Detach();
+    lResult.maOrder = gaCallOrder;
+    lResult.meFinalState = lEffect.meDetachState;
+    lResult.mbPositionKept = l3dControl.mpPosition == &lEffect.mPos && l3dControl.miCalls == 0;
+    return lResult;
+}
+
+bool Order(const DetachResult& lrResult, const std::vector<std::string>& laExpected)
+{
+    return lrResult.maOrder == laExpected;
+}
+
 bool ResolvedList(const Result& lrResult, const std::vector<u64>& laExpected)
 {
     return lrResult.maResolved == laExpected;
@@ -428,11 +499,42 @@ int main()
         Check(lEmpty.miCreates == 0 && lEmpty.mi16PitchOutput == 1 && lEmpty.mbReturned, lacLabel);
     }
 
+    // A live slot whose EmitterName slot is empty: the console hashes the name as it stands
+    // (0x826F5890 `lwz r3,0(r11)` ; `bl MakeHash`, no null test) and still creates the voice.
+    const u32 luSavedName = gaEmitterLayouts[12].muEmitterName;
+    gaEmitterLayouts[12].muEmitterName = 0u;
+    const Result lNameless = AttachEntity((12u << 16) | 30u);
+    gaEmitterLayouts[12].muEmitterName = luSavedName;
+    Check(lNameless.muAsserts == 0 && lNameless.miCreates == 1 && lNameless.miPlays == 1,
+          "type 12 with an empty EmitterName: the voice is still created (no invented null skip)");
+    Check(lNameless.muContentSpec == 0u, "type 12 with an empty EmitterName: content spec = MakeHash(null) = 0");
+
     // The stale build/game bytes of the same entity: the console gate refuses them as well --
     // the assert the lanes saw is the console's own verdict on the wrong data.
     const Result lStale = AttachEntity(0x00AD001Du);
     Check(lStale.muAsserts == 1 && lStale.maResolved.empty() && lStale.miCreates == 0,
           "stale per-u16 flip 0x00AD001D (type 173): asserts, attaches nothing");
+
+    // ---- Detach @0x826F5A10 (the export hole after Attach): the staged meDetachState switch.
+    const DetachResult lFresh = DetachFrom(0, true);
+    Check(lFresh.mbReturned && Order(lFresh, { "base-detach", "voice-release" }) && lFresh.meFinalState == 3,
+          "Detach from NONE: BrnEffectObject::Detach first, then the voice release; FINISHED, returns 1");
+    Check(lFresh.mbPositionKept, "Detach leaves the 3D control's position pointer alone (no null hand-off)");
+    const DetachResult lBegin = DetachFrom(1, true);
+    Check(lBegin.mbReturned && Order(lBegin, { "base-detach", "voice-release" }),
+          "Detach from BEGIN: same path as NONE (jump-table cases 0 and 1 share 0x826F5A58)");
+    const DetachResult lUpdating = DetachFrom(2, true);
+    Check(lUpdating.mbReturned && Order(lUpdating, { "base-detach", "voice-release" }),
+          "Detach from UPDATING: base detach, then the voice release");
+    const DetachResult lFinished = DetachFrom(3, true);
+    Check(lFinished.mbReturned && Order(lFinished, { "voice-release" }) && lFinished.meFinalState == 3,
+          "Detach from FINISHED: only the voice release (case 3 @0x826F5A7C), returns 1");
+    const DetachResult lRefused = DetachFrom(0, false);
+    Check(!lRefused.mbReturned && Order(lRefused, { "base-detach" }) && lRefused.meFinalState == 2,
+          "base detach refuses: returns 0 in UPDATING, the voice is NOT released yet");
+    const DetachResult lBadState = DetachFrom(5, true);
+    Check(!lBadState.mbReturned && lBadState.maOrder.empty(),
+          "meDetachState > FINISHED: returns 0 and touches nothing (`cmplwi 3 ; bgt`)");
 
     std::printf("FxEmitterAttach: %u checks, %u failures\n", guChecks, guFailures);
     return guFailures == 0 ? 0 : 1;
