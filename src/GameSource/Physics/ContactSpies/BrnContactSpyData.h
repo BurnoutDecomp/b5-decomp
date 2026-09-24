@@ -144,7 +144,13 @@ namespace BrnPhysics
             // read, no tripwire, on this half of the chain (the "mpData != NULL" assert at
             // 0x822FA970 belongs to ContactSpyInterface::GetPropContacts, one level up).
             const PropContactQueue*            GetPropContacts() const { return &mPropContactQueue; }
-            const DiscardedContactQueue*       GetDiscardedContacts() const;
+            // ⭐ BODIED 2026-09-24 (FX-TAILS-B). DWARF BrnContactSpyData.h:138. Same footing as the
+            // siblings above: no out-of-line emission -- its one caller, ContactSpyInterface::
+            // GetDiscardedContacts, is inlined into CollisionStateManager::UpdateResolver, which folds
+            // this level to `addis r4,r11,2 ; addi r4,r4,-0x6C40` (0x826F93FC..0x826F9404) == mpData +
+            // 0x193C0, the mDiscardedContactQueue seat below. Declared here with no definition anywhere
+            // in the tree until now; the queue is private, so it is the only route to it.
+            const DiscardedContactQueue*       GetDiscardedContacts() const { return &mDiscardedContactQueue; }
             // INLINE (attested): ContactSpyInterface::GetRaceCarContactRunList @0x82355BF0
             // inlines this accessor as bare offset math (mpData + 0x198D0) -- the console body
             // was header-inline. Defined here so the interface's retyped accessor can call it.
