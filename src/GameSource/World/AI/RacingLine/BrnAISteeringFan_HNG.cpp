@@ -227,8 +227,13 @@ void SteeringFan::IncludeHardNoGo(RacingLineGenerator* lpRacingLineGenerator,
         const f32 lfValue = mfWeighting[eFan_ExitHNG][liStep];
         if (lfValue == 0.0f)
             continue;
-        if (lfValue < lfMinimum) lfMinimum = lfValue;
-        if (lfValue > lfMaximum) lfMaximum = lfValue;
+        // Spelt as the two fsels (0x82779FC0 / 0x82779FC4 for the first step): fsel takes its
+        // THIRD operand on an unordered test, so a NaN entry BECOMES the running minimum (the next
+        // entry replaces it again, `v - NaN` being unordered too) and leaves the maximum alone; a
+        // NaN in the last folded entry therefore NaNs every rescaled entry below (crash parity
+        // FX-AINAN2; the old `if (v < min) ..; if (v > max) ..` skipped a NaN on both).
+        lfMinimum = ((lfValue - lfMinimum) >= 0.0f) ? lfMinimum : lfValue;
+        lfMaximum = ((lfValue - lfMaximum) >= 0.0f) ? lfValue : lfMaximum;
     }
 
     // 0x8277A0D0 / 0x8277A0D8 -- a flat row (min == max) and an all-zero row (min still the
@@ -458,9 +463,13 @@ void SteeringFan::IncludeRouteEdgeIntersection(RacingLineGenerator* lpRacingLine
                 lfDistance = (lfLeftHit < lfRightHit) ? lfLeftHit : lfRightHit;
             }
 
+            // The high clamp is `fsubs t,1.0,r ; fsel r,t,r,1.0` 0x8277A558/0x8277A55C: fsel takes
+            // its THIRD operand on an unordered test, so a NaN range is 1.0 (closeness 0, a zero
+            // weight) -- spelt as the fsel (FX-AINAN2; `if (r > 1) r = 1` kept the NaN). The low
+            // clamp (fneg + fsel 0x8277A550/0x8277A554) keeps a NaN either way.
             f32 lfRange = lfDistance / KF_ROUTE_EDGE_RANGE;
             if (lfRange <= 0.0f) lfRange = 0.0f;                 // 0x8277A550 fneg + fsel
-            if (lfRange >  1.0f) lfRange = 1.0f;                 // 0x8277A558 fsubs + fsel
+            lfRange = ((1.0f - lfRange) >= 0.0f) ? lfRange : 1.0f;   // 0x8277A558 fsubs + fsel
             const f32 lfCloseness = 1.0f - lfRange;
             mfWeighting[eFan_AvoidEdges][liStep] =
                 lfCloseness * lfCloseness * mTravelDirectionBias[liStep];
