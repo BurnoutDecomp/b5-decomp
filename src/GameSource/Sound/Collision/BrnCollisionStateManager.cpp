@@ -1018,6 +1018,395 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
     }
 }
 
+// =================================================================================================
+// THE SCRAPE LEGS (FX-CRASHSND2 item 2). A contact that goes on touching the same thing on the same
+// face -- the same entity pair and orientation (ScrapeInfo::operator== @0x826821F0) -- is a scrape:
+// UpdateScrapes eats its repeated impacts, hands it to a collision state with the SCRAPE lifetime
+// (whose ScrapeEffect runs the AEMS scrape granulator) and keeps it in the 16-entry history while it
+// stays fresh. Before this the history was never written, so no scrape ever sounded and every frame
+// of a grind was a fresh impact.
+// =================================================================================================
+
+// KF_SCRAPE_IDLE_TIME (DWARF cpp:77) -- unk_82FFBF40 = splat(0.2f), written by the CRT thunk
+// 0x82C63250 from 0x82004744 (0x3E4CCCCD): a history scrape not refreshed for this long is dropped.
+VecFloat KF_SCRAPE_IDLE_TIME = { 0.2f, 0.2f, 0.2f, 0.2f };
+
+// KF_CULLING_DISTANCE_SQUARED (DWARF cpp:86) -- unk_82FFBF50 = splat(2500.0f), CRT 0x82C632E0 from
+// 0x8200D510 (0x451C4000): only scrapes within 50 m of the player are tracked. Named by the CRT
+// order: cpp:85 KF_EARLY_CULL_DISTANCE_SQUARED is the thunk before it (0x82C632B8, 4900, the one
+// AddInputCollision reads at 0x830085A0).
+const VecFloat KF_CULLING_DISTANCE_SQUARED = { 2500.0f, 2500.0f, 2500.0f, 2500.0f };
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::FindOldestScrapeInHistory()  sub_82688A58  (DWARF cpp:2881)
+//
+// The first free history slot (`lbz 0x29 ; beq`), else the one with the smallest time stamp
+// (`fcmpu ; bge` -- a strict less-than from 1e10, flt_82011E3C). Asserts it found one (cpp:2992).
+// ---------------------------------------------------------------------------
+BrnSound::Logic::Collision::ScrapeInfo* CollisionStateManager::FindOldestScrapeInHistory()
+{
+    s32 liOldestIndex = -1;
+    f32 lfOldestTimeStamp = 1.0e10f;
+    for (s32 liIndex = 0; liIndex < E_MAX_SCRAPE_HISTORY; ++liIndex)
+    {
+        if (!maScrapeHistory[liIndex].mbValid)
+            return &maScrapeHistory[liIndex];
+        if (maScrapeHistory[liIndex].mfTimeStamp < lfOldestTimeStamp)
+        {
+            lfOldestTimeStamp = maScrapeHistory[liIndex].mfTimeStamp;
+            liOldestIndex = liIndex;
+        }
+    }
+    CGS_ASSERT(liOldestIndex >= 0 && liOldestIndex < E_MAX_SCRAPE_HISTORY,
+               "liOldestIndex >= 0 && liOldestIndex < E_MAX_SCRAPE_HISTORY");
+    return &maScrapeHistory[liOldestIndex];
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::UniqueScrape(const ScrapeInfo&, const InputCollision* const*, u32) const
+//   @ 0x82688B20  (DWARF cpp:2975)
+//
+// False as soon as one listed collision's scrape is the same scrape (`bl operator==` with the
+// listed collision as `this`), else true.
+// ---------------------------------------------------------------------------
+bool CollisionStateManager::UniqueScrape(const BrnSound::Logic::Collision::ScrapeInfo& lScrapeInfo,
+                                         const InputCollision* const* lapCollisions,
+                                         u32 lu32Count) const
+{
+    for (u32 lu32Index = 0; lu32Index < lu32Count; ++lu32Index)
+    {
+        if (lapCollisions[lu32Index]->mScrapeInfo == lScrapeInfo)
+            return false;
+    }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::FindEntity(const EntityId&, GenericEntity&) const  @ 0x826A0398
+//   (DWARF cpp:3000)
+//
+// Reads one side of a scrape from the sound input (asserts mpBrnLogicInputBuffer, h:432, and
+// lpInputBuffer, cpp:3100). Only the fields of the entity's own kind are written -- the caller's
+// entity keeps whatever an earlier call left in the others:
+//   owner 0 (world)     mbWorld = true                                            0x826A0580
+//   owner 1 (race car)  false unless IsRaceCarActive and GetRaceCarState; else mbCrashing
+//                       (+0x44A), mPosition = the transform's position (+0x220), mVelocity =
+//                       mLinearVelocity (+0x330), mbPlayer = IsRaceCarPlayer      0x826A04EC..0x826A0568
+//   owner 2 (traffic)   the traffic sound entity (GetTrafficOutputInterface @0x82694DD8,
+//                       GetTrafficEntityIndex @0x82681EC8); none -> false; else mbCrashing =
+//                       mbIsCrashed (+0x4D), mPosition = its position (+0x30), mVelocity = its At
+//                       row (+0x20) scaled by mfSpeed (+0x44, vmulfp128 by the splat)  0x826A0494..0x826A04E0
+//   owner 3+            false                                                     0x826A0424
+// [NOT IN THIS TREE] while the replay serialiser plays back (sound logic module +0x13600, modes
+// 4..6) the console reads traffic from the recording instead (SoundSerialiser::
+// GetTrafficEntityByTrafficIndex @0x826823E0). This tree's SoundLogicModule holds no
+// SoundSerialiser and nothing drives a serialiser's mode (BrnSoundLogicModule.cpp case 218), so
+// only the live traffic interface is read.
+// ---------------------------------------------------------------------------
+bool CollisionStateManager::FindEntity(const EntityId& lEntityId, GenericEntity& lEntity) const
+{
+    const LogicInputBuffer* lpInputBuffer =
+        static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule())->GetBrnInputStructure();
+    CGS_ASSERT(lpInputBuffer != nullptr, "lpInputBuffer");
+
+    const u32 luOwner = GetEntityOwner(lEntityId);
+    if (luOwner == KU_ENTITY_OWNER_WORLD)
+    {
+        lEntity.mbWorld = true;
+        return true;
+    }
+    if (luOwner == KU_ENTITY_OWNER_RACE_CAR)
+    {
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface& lrVehicles =
+            *lpInputBuffer->GetVehicleInterface();
+        const EActiveRaceCarIndex leIndex = static_cast<EActiveRaceCarIndex>(GetEntityIndex(lEntityId));
+        if (!lrVehicles.IsRaceCarActive(leIndex))
+            return false;
+        const BrnPhysics::Vehicle::RaceCarState* lpState = lrVehicles.GetRaceCarState(leIndex);
+        if (!lpState)
+            return false;
+        lEntity.mbCrashing = lpState->mbCrashing;
+        lEntity.mPosition = lpState->mTransform.Pos();
+        lEntity.mVelocity = lpState->mLinearVelocity;
+        // [STAND-IN] the console calls IsRaceCarPlayer(idx) here (0x826A055C -> 0x82681DF0: the two
+        // index asserts, then bit 1 -- E_RACE_CAR_OUTPUT_FLAG_PLAYER, raised for the PLAYER-type car --
+        // of the private maxRaceCarFlags[idx]). That accessor is declared
+        // (BrnRaceCarEntityModuleOutputInterface.h:172) but has NO BODY in this tree, and its home
+        // (BrnRCEntityActiveRaceCarOutputInterface.cpp) is not this lane's file. Until it is bodied, the
+        // player test is the interface's own player index (GetPlayerActiveRaceCarIndex @0x82277BF8,
+        // the PLAYER-type car's slot); replace with `lrVehicles.IsRaceCarPlayer(leIndex)` then.
+        lEntity.mbPlayer = lrVehicles.GetPlayerActiveRaceCarIndex() == leIndex;
+        return true;
+    }
+    if (luOwner >= KU_ENTITY_OWNER_PROP)
+        return false;
+
+    const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTraffic =
+        lpInputBuffer->GetTrafficOutputInterface().GetTrafficEntityIndex(
+            static_cast<u16>(GetEntityIndex(lEntityId)));
+    if (!lpTraffic)
+        return false;
+    lEntity.mbCrashing = lpTraffic->mbIsCrashed;
+    lEntity.mPosition = lpTraffic->mLocalTransform.Pos();
+    const Vector3& lrAt = lpTraffic->mLocalTransform.At();
+    const f32 lfSpeed = lpTraffic->mfSpeed;
+    lEntity.mVelocity.x = lrAt.x * lfSpeed;
+    lEntity.mVelocity.y = lrAt.y * lfSpeed;
+    lEntity.mVelocity.z = lrAt.z * lfSpeed;
+    lEntity.mVelocity.w = lrAt.w * lfSpeed;
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::UpdateScrapeHistory(const FrameInformation&)  @ 0x826BEB98
+//   (DWARF cpp:2916; the frame is not read)
+//
+// Two GenericEntity locals, built ONCE before the loop, and the last pair looked up (both -1): a
+// slot whose side is the same entity as the previous slot's reuses what the previous lookup left.
+// For each valid slot:
+//   not (KF_SCRAPE_IDLE_TIME > now - stamp)  -> dropped (all-lanes vcmpgtfp.; a NaN age drops)
+//   A differs from the last A and FindEntity(A) fails, or the same for B  -> dropped
+//   else the pair is remembered, mRelativeVelocity = B's velocity - A's (vsubfp, 0x826BED54;
+//   asserted not NaN, cpp:3040) and mbCrashing = a player's car in the pair is crashing
+//   (0x826BED98..0x826BEDD8).
+// ---------------------------------------------------------------------------
+void CollisionStateManager::UpdateScrapeHistory(const BrnSound::Logic::FrameInformation& /*lrFrame*/)
+{
+    GenericEntity lEntityA;
+    GenericEntity lEntityB;
+    u32 lu32LastEntityA = 0xFFFFFFFFu;
+    u32 lu32LastEntityB = 0xFFFFFFFFu;
+    const f32 lfTime = mfCurrentTime;
+
+    for (u32 lu32Index = 0; lu32Index < E_MAX_SCRAPE_HISTORY; ++lu32Index)
+    {
+        BrnSound::Logic::Collision::ScrapeInfo& lrScrape = maScrapeHistory[lu32Index];
+        if (!lrScrape.mbValid)
+            continue;
+
+        const f32 lfAge = lfTime - lrScrape.mfTimeStamp;
+        if (!(KF_SCRAPE_IDLE_TIME.x > lfAge) ||
+            (lu32LastEntityA != lrScrape.mEntityIdA.muValue && !FindEntity(lrScrape.mEntityIdA, lEntityA)) ||
+            (lu32LastEntityB != lrScrape.mEntityIdB.muValue && !FindEntity(lrScrape.mEntityIdB, lEntityB)))
+        {
+            lrScrape.mbValid = false;
+            continue;
+        }
+        lu32LastEntityA = lrScrape.mEntityIdA.muValue;
+        lu32LastEntityB = lrScrape.mEntityIdB.muValue;
+
+        lrScrape.mRelativeVelocity.x = lEntityB.mVelocity.x - lEntityA.mVelocity.x;
+        lrScrape.mRelativeVelocity.y = lEntityB.mVelocity.y - lEntityA.mVelocity.y;
+        lrScrape.mRelativeVelocity.z = lEntityB.mVelocity.z - lEntityA.mVelocity.z;
+        lrScrape.mRelativeVelocity.w = lEntityB.mVelocity.w - lEntityA.mVelocity.w;
+        CGS_ASSERT(lrScrape.mRelativeVelocity.x == lrScrape.mRelativeVelocity.x &&
+                   lrScrape.mRelativeVelocity.y == lrScrape.mRelativeVelocity.y &&
+                   lrScrape.mRelativeVelocity.z == lrScrape.mRelativeVelocity.z,
+                   "maScrapeHistory[ i ].mRelativeVelocity == maScrapeHistory[ i ].mRelativeVelocity");
+
+        lrScrape.mbCrashing = (lEntityA.mbPlayer && lEntityA.mbCrashing) ||
+                              (lEntityB.mbPlayer && lEntityB.mbCrashing);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// CollisionStateManager::UpdateScrapes(const FrameInformation&)  @ 0x826D3F50  (DWARF cpp:2678)
+//
+// Called by UpdateResolver after every contact is imported, before CullInputCollisions
+// (0x826F9720). After UpdateScrapeHistory, each input collision that carries a scrape and lies
+// within KF_CULLING_DISTANCE_SQUARED of the player (the frame's player position, +0x30; a NaN
+// distance counts as near) is looked up in the history:
+//   found      -> if it is younger than 0.1 s (flt_820ABB14) and not listed yet, list it as a
+//                 CONTINUING scrape and give it the history's relative velocity; the history takes
+//                 its stamp and intensity (ScrapeInfo::UpdateHistory) and it takes the history's
+//                 mbCrashing; outside a fatality (meFatality == E_FATAL_OFF) the collision is eaten
+//                 (mbCull -- "Scraping culling. Collision is eaten.", 0x826D40F0..0x826D4100)
+//   not found  -> list it as a NEW scrape (once per scrape)
+// Then:
+//   continuing  -> every attached collision state whose own scrape is this scrape takes the
+//                  SCRAPE lifetime and the new scrape (0x826D41B8..0x826D42B0: each state and each
+//                  listed scrape pairs off at most once); a scrape no state took gets a free state
+//                  (the BASE StateManager::GetFreeState @0x8268D7D0, a direct call -- no priority
+//                  steal) attached to an OutputCollision holding just its position and scrape,
+//                  with the SCRAPE lifetime (0x826D42C8..0x826D4340); no free state ends this leg
+//   new         -> recorded over the oldest history slot when FindEntity knows both sides
+//                  (0x826D4380..0x826D44B0; asserts the slot, cpp:2930)
+// [NOT IN THIS TREE] the replay recorder: the console keeps a BrnReplays::SoundSerialiser in the
+// sound logic module (+0x13600) and, while it records (modes 1..3), zeroes the frame's scrape count
+// (0x826D3F90..0x826D3FC8) and mirrors every tracked scrape into it while it holds fewer than 4
+// (AddScrape @0x826959B8, 0x826D4160..0x826D4194). This tree's SoundLogicModule holds no
+// SoundSerialiser and nothing drives a serialiser's mode (BrnSoundLogicModule.cpp case 218).
+// The eaten-collision spew (dword_82FFB91C >= 3 -> InputCollision::DebugPrint) is a developer
+// print on a zero .bss level; left out.
+// ---------------------------------------------------------------------------
+void CollisionStateManager::UpdateScrapes(const BrnSound::Logic::FrameInformation& lrFrame)
+{
+    UpdateScrapeHistory(lrFrame);
+
+    const f32 lfTime = mfCurrentTime;
+    const InputCollision* lapContinuing[64];
+    const InputCollision* lapNew[64];
+    u32 lu32Continuing = 0;
+    u32 lu32New = 0;
+
+    for (u32 lu32Index = 0; lu32Index < mu32InputCollisionCount; ++lu32Index)
+    {
+        InputCollision& lrInput = maInputCollision[lu32Index];
+        if (!lrInput.mScrapeInfo.mbValid)
+            continue;
+
+        const Vector3& lrPlayer = lrFrame.mPlayerTransform.Pos();
+        const f32 lfX = lrPlayer.x - lrInput.mPosition.x;
+        const f32 lfY = lrPlayer.y - lrInput.mPosition.y;
+        const f32 lfZ = lrPlayer.z - lrInput.mPosition.z;
+        if (lfX * lfX + lfY * lfY + lfZ * lfZ >= KF_CULLING_DISTANCE_SQUARED.x)
+            continue;
+
+        BrnSound::Logic::Collision::ScrapeInfo* lpScrape = FindInScrapeHistory(lrInput.mScrapeInfo);
+        if (lpScrape)
+        {
+            if (lfTime - lpScrape->mfTimeStamp < 0.1f &&
+                UniqueScrape(lrInput.mScrapeInfo, lapContinuing, lu32Continuing))
+            {
+                lapContinuing[lu32Continuing++] = &lrInput;
+                lrInput.mScrapeInfo.mRelativeVelocity = lpScrape->mRelativeVelocity;
+            }
+            lpScrape->UpdateHistory(lrInput.mScrapeInfo);
+            lrInput.mScrapeInfo.mbCrashing = lpScrape->mbCrashing;
+            if (mFrameInformation.meFatality.GetCurrent() == E_FATAL_OFF)
+            {
+                lrInput.mbCull = true;
+                // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a repeated impact eaten.
+                if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+                {
+                    static u32 suEatenPrintCount = 0;
+                    if (suEatenPrintCount++ < 16u)
+                    {
+                        char lacLine[160];
+                        std::snprintf(lacLine, sizeof(lacLine),
+                                      "[collision-audio] scrape eaten A=%u:%u B=%u:%u orient=%d\n",
+                                      GetEntityOwner(lrInput.mScrapeInfo.mEntityIdA),
+                                      GetEntityIndex(lrInput.mScrapeInfo.mEntityIdA),
+                                      GetEntityOwner(lrInput.mScrapeInfo.mEntityIdB),
+                                      GetEntityIndex(lrInput.mScrapeInfo.mEntityIdB),
+                                      static_cast<s32>(lrInput.mScrapeInfo.meOrientation));
+                        *CgsDev::Log::gpDebugPrint << lacLine;
+                    }
+                }
+            }
+        }
+        else if (UniqueScrape(lrInput.mScrapeInfo, lapNew, lu32New))
+        {
+            lapNew[lu32New++] = &lrInput;
+        }
+    }
+
+    if (lu32Continuing != 0u)
+    {
+        CollisionState* lapStates[32];
+        u32 lu32States = 0;
+        for (CgsSound::Logic::State* lpState = GetHeadState(); lpState; lpState = lpState->GetNextState())
+        {
+            if (lpState->IsAttached())
+                lapStates[lu32States++] = static_cast<CollisionState*>(lpState);
+        }
+
+        for (u32 lu32State = 0; lu32State < lu32States; ++lu32State)
+        {
+            CollisionState* lpState = lapStates[lu32State];
+            for (u32 lu32Scrape = 0; lu32Scrape < lu32Continuing; ++lu32Scrape)
+            {
+                if (!lpState || !lapContinuing[lu32Scrape])
+                    continue;
+                BrnSound::Logic::Collision::ScrapeInfo& lrStateScrape =
+                    lpState->GetOutputCollision().mScrapeInfo;
+                if (!lrStateScrape.mbValid || !(lrStateScrape == lapContinuing[lu32Scrape]->mScrapeInfo))
+                    continue;
+                lpState->SetLifetime(CollisionState::E_SCRAPE);
+                lrStateScrape = lapContinuing[lu32Scrape]->mScrapeInfo;
+                // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a state keeps a scrape.
+                if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+                {
+                    static u32 suRefreshPrintCount = 0;
+                    if (suRefreshPrintCount++ < 16u)
+                    {
+                        char lacLine[160];
+                        std::snprintf(lacLine, sizeof(lacLine),
+                                      "[collision-audio] scrape refresh A=%u:%u B=%u:%u orient=%d intensity=%.3f\n",
+                                      GetEntityOwner(lrStateScrape.mEntityIdA), GetEntityIndex(lrStateScrape.mEntityIdA),
+                                      GetEntityOwner(lrStateScrape.mEntityIdB), GetEntityIndex(lrStateScrape.mEntityIdB),
+                                      static_cast<s32>(lrStateScrape.meOrientation), lrStateScrape.mfIntensity);
+                        *CgsDev::Log::gpDebugPrint << lacLine;
+                    }
+                }
+                lpState = nullptr;
+                lapContinuing[lu32Scrape] = nullptr;
+            }
+            lapStates[lu32State] = lpState;
+        }
+    }
+
+    for (u32 lu32Scrape = 0; lu32Scrape < lu32Continuing; ++lu32Scrape)
+    {
+        const InputCollision* lpInput = lapContinuing[lu32Scrape];
+        if (!lpInput)
+            continue;
+        OutputCollision lOutput;
+        lOutput.mPosition = lpInput->mPosition;
+        lOutput.mScrapeInfo = lpInput->mScrapeInfo;
+        CollisionState* lpState =
+            static_cast<CollisionState*>(CgsSound::Logic::StateManager::GetFreeState(nullptr));
+        if (!lpState)
+            break;
+        lpState->Attach(&lOutput);
+        lpState->SetLifetime(CollisionState::E_SCRAPE);
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a scrape takes a free state.
+        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 suStartPrintCount = 0;
+            if (suStartPrintCount++ < 16u)
+            {
+                char lacLine[160];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] scrape start A=%u:%u B=%u:%u orient=%d intensity=%.3f\n",
+                              GetEntityOwner(lOutput.mScrapeInfo.mEntityIdA), GetEntityIndex(lOutput.mScrapeInfo.mEntityIdA),
+                              GetEntityOwner(lOutput.mScrapeInfo.mEntityIdB), GetEntityIndex(lOutput.mScrapeInfo.mEntityIdB),
+                              static_cast<s32>(lOutput.mScrapeInfo.meOrientation), lOutput.mScrapeInfo.mfIntensity);
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
+    }
+
+    for (u32 lu32Scrape = 0; lu32Scrape < lu32New; ++lu32Scrape)
+    {
+        GenericEntity lEntityA;
+        GenericEntity lEntityB;
+        const InputCollision* lpInput = lapNew[lu32Scrape];
+        if (FindEntity(lpInput->mScrapeInfo.mEntityIdA, lEntityA) &&
+            FindEntity(lpInput->mScrapeInfo.mEntityIdB, lEntityB))
+        {
+            BrnSound::Logic::Collision::ScrapeInfo* lpScrape = FindOldestScrapeInHistory();
+            CGS_ASSERT(lpScrape != nullptr, "lpScrape");
+            *lpScrape = lpInput->mScrapeInfo;
+            // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): a scrape enters the history.
+            if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+            {
+                static u32 suHistoryPrintCount = 0;
+                if (suHistoryPrintCount++ < 16u)
+                {
+                    char lacLine[160];
+                    std::snprintf(lacLine, sizeof(lacLine),
+                                  "[collision-audio] scrape history A=%u:%u B=%u:%u orient=%d stamp=%.3f\n",
+                                  GetEntityOwner(lpScrape->mEntityIdA), GetEntityIndex(lpScrape->mEntityIdA),
+                                  GetEntityOwner(lpScrape->mEntityIdB), GetEntityIndex(lpScrape->mEntityIdB),
+                                  static_cast<s32>(lpScrape->meOrientation), lpScrape->mfTimeStamp);
+                    *CgsDev::Log::gpDebugPrint << lacLine;
+                }
+            }
+        }
+    }
+}
+
 void CollisionStateManager::AddInputCollision(const InputCollision& lrCollision)
 {
     // ARTIST 0x826D3CF0: default (unfiltered) developer settings. The distance
@@ -1293,6 +1682,17 @@ void CollisionStateManager::UpdateResolver(
         }
     }
 
+    // 0x826F92D0..0x826F9328, on the frame just copied: any change of the impact time (either way,
+    // `lwz 4 / lwz 0 ; cmpw ; bne` at +0x81E8) or the fatality turning to E_FATAL_START (+0x81E0,
+    // `cmpw ; beq` then `cmpwi 2`) forgets every scrape in the history (`stb 0` to each slot's
+    // mbValid, +0x1E69 stride 0x30).
+    if (mFrameInformation.meImpactTime.HasChanged() ||
+        mFrameInformation.meFatality.HasChangedTo(E_FATAL_START))
+    {
+        for (u32 lu32Index = 0; lu32Index < E_MAX_SCRAPE_HISTORY; ++lu32Index)
+            maScrapeHistory[lu32Index].mbValid = false;
+    }
+
     mu32InputCollisionCount = 0;                                                      // 0x826F933C
     SetCameraInfo(lrCamera);                                                          // 0x826F9340
 
@@ -1315,8 +1715,9 @@ void CollisionStateManager::UpdateResolver(
         ImportContactSpies(*lrContacts.GetPropContacts(), lrInput, mfCurrentTime, afDeltaTime);
     }
 
-    CullInputCollisions();
-    ProcessCollisions();
+    UpdateScrapes(lrFrame);                                                           // 0x826F9720
+    CullInputCollisions();                                                            // 0x826F9728
+    ProcessCollisions();                                                              // 0x826F9730
     if (mu32InputCollisionCount != 0u && CollisionAudioDiagEnabled() &&
         CgsDev::Log::gpDebugPrint)
     {
