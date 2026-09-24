@@ -12365,6 +12365,14 @@ namespace
     s32 giDemoteFromRecycle  = 0;   // HandleRecycledTraffic
     s32 giDemoteFromReturn   = 0;   // ReturnPhysicalVehicleToTraffic
 
+    // [DIAG] NOT IN THE X360 BINARY -- the [T-static-clearup] witness of GenerateDriverInputs'
+    // static section (FX-TRAFFIC4 item 1): first visit per vehicle, every clear-up, a census.
+    const s32 KI_STATIC_CLEARUP_DIAG_CAP      = 60;
+    const s32 KI_STATIC_CLEARUP_CENSUS_PERIOD = 600;
+    s32       giStaticClearupDiagLines        = 0;
+    s32       giStaticClearupVisits           = 0;
+    bool      gabStaticClearupDiagSeen[KU_MAX_TOTAL_TRAFFIC];
+
     // One-shot gate banner -- NOT IN THE X360 BINARY. Retire with the last gate below.
     void LogMissingLeg_T3Drive(bool& lrbAlreadyLogged, const char* lpcLegNameAndAddress)
     {
@@ -12585,10 +12593,12 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
     mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.UnSetAll();
     mVehicleSoaData.mPhysicalVehiclesTryingToRecover.UnSetAll();
 
-    for (CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIterator =
-             lPhysicalAliveVehicles.Begin();
-         lIterator != lPhysicalAliveVehicles.End();
-         ++lIterator)
+    // The iterator OUTLIVES the standard-pool loop: the static section below carries on from the
+    // index this loop stopped at (PS3 twin 0x966064, `goto LABEL_42` with the live iterator).
+    CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>::Iterator lIterator =
+        lPhysicalAliveVehicles.Begin();
+
+    for (; lIterator != lPhysicalAliveVehicles.End(); ++lIterator)
     {
         const s32 liVehicle = lIterator.GetIndex();
 
@@ -12597,15 +12607,11 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
         CGS_ASSERT(liVehicle >= 0 && liVehicle < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC),
                    "Index has gone out of range");
 
-        // GATE TrafficEntityModule (second section) @0x82749B48 -- the >= 400 static/parked pool
-        // arm, ~600 insns with its own TryClearupOffscreenTraffic @0x8274A1E8.
-        // Blocker: parked cars are never promoted on this build (only standard traffic is).
-        // DELETE-WHEN the static pool gains physical promotion.
-        if (liVehicle >= static_cast<s32>(KU_MAX_STANDARD_TRAFFIC))            // 0x82749224
+        // 0x82749224 `cmplwi r19, 0x190 ; bge loc_82749B48` -- the first static/parked (or
+        // trailer) index ENDS the standard pool's loop; the section after the loop takes over.
+        if (liVehicle >= static_cast<s32>(KU_MAX_STANDARD_TRAFFIC))
         {
-            static bool sbLoggedStaticPool = false;
-            LogMissingLeg_T3Drive(sbLoggedStaticPool, "the static/parked pool section @0x82749B48");
-            continue;
+            break;
         }
 
         // 0x82749230..0x82749240 -- UNGATED as of 2026-09-06: TryClearupOffscreenTraffic is
@@ -12847,6 +12853,65 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             lpDriverInputInterface->GetUpdateDriverQueue()
                 ->AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(
                     &lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);                 // 0x82749834
+        }
+    }
+
+    // ---- 0x82749B48..0x8274A4FC -- the STATIC (parked) and trailer pool (FX-TRAFFIC4 item 1) ----
+    // A parked car becomes physical the way any traffic car does (UpdateCollidableVehicles volume
+    // -> overlap pair -> HandleHalfPotentialContact -> AddVehicleToPhysics POTENTIAL -> the physics
+    // side's crash / slam -> HandleExternalResponses -> RecordTrafficVehicleIsPhysical), but it has
+    // no driver: the console sends it NO control record, it only runs the offscreen clear-up valve.
+    //   0x82749B50..0x82749B84  the same stack set rebuilt IN PLACE (alive & physical, ten fields):
+    //                           the standard arms above may have changed either SoA set
+    //   0x82749B88              the iterator already at End() -> return
+    //   0x82749DE8..0x82749E7C  IsBitSet(lIterator) against the REBUILT set (GetMask, h:374) --
+    //                           set: straight to the body; clear: ++lIterator first
+    //   0x8274A1D4..0x8274A4E8  for (; != End(); ++) TryClearupOffscreenTraffic(lIterator) with the
+    //                           result IGNORED (0x8274A1EC is ++'s own range assert, no test)
+    // When the loop above ran to End() the section does nothing (the X360 returns straight from
+    // the loop; the PS3 rebuilds the set and then fails both End() tests). IsBitSet is read by
+    // INDEX here: the host FastBitArray has no Iterator overload, and the iterator's cached mask
+    // is 1 << (index & 63) by construction, so the two reads are the same word and bit.
+    lPhysicalAliveVehicles.SetAnd(mVehicleSoaData.mAliveVehicles, mVehicleSoaData.mPhysicalVehicles);
+
+    if (lIterator != lPhysicalAliveVehicles.End()
+        && !lPhysicalAliveVehicles.IsBitSet(static_cast<u32>(lIterator.GetIndex())))
+    {
+        ++lIterator;
+    }
+
+    for (; lIterator != lPhysicalAliveVehicles.End(); ++lIterator)
+    {
+        // [DIAG] NOT IN THE X360 BINARY -- the result is kept only for the witness below.
+        const bool lbDiagClearedUp = TryClearupOffscreenTraffic(lIterator);                 // 0x8274A1E8
+
+        // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness of the static section, capped:
+        // the first visit of each parked car, every clear-up, and a census every
+        // KI_STATIC_CLEARUP_CENSUS_PERIOD visits.
+        const s32 liDiagVehicle = lIterator.GetIndex();
+        ++giStaticClearupVisits;
+        if (giStaticClearupDiagLines < KI_STATIC_CLEARUP_DIAG_CAP
+            && (lbDiagClearedUp
+                || (liDiagVehicle >= 0 && liDiagVehicle < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC)
+                    && !gabStaticClearupDiagSeen[liDiagVehicle])
+                || (giStaticClearupVisits % KI_STATIC_CLEARUP_CENSUS_PERIOD) == 0))
+        {
+            if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+            {
+                ++giStaticClearupDiagLines;
+                if (liDiagVehicle >= 0 && liDiagVehicle < static_cast<s32>(KU_MAX_TOTAL_TRAFFIC))
+                {
+                    gabStaticClearupDiagSeen[liDiagVehicle] = true;
+                }
+                const Vector3 lDiagPos = GetVehicleTransform(static_cast<u32>(liDiagVehicle)).Pos();
+                *lpDiag << "[T-static-clearup] vehicle=" << liDiagVehicle
+                        << " species=" << static_cast<s32>(GetVehicleSpecies(static_cast<u32>(liDiagVehicle)))
+                        << " pos=(" << lDiagPos.x << ", " << lDiagPos.y << ", " << lDiagPos.z << ")"
+                        << " far=" << (mVehicleSoaData.mPhysicalVehiclesFarFromPlayer.IsBitSet(
+                                           static_cast<u32>(liDiagVehicle)) ? 1 : 0)
+                        << " cleared=" << (lbDiagClearedUp ? 1 : 0)
+                        << " visits=" << giStaticClearupVisits << "\n";
+            }
         }
     }
 }
