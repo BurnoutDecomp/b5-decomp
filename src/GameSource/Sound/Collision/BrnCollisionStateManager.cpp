@@ -1064,6 +1064,65 @@ InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager&
     }
 }
 
+// ---------------------------------------------------------------------------
+// InputCollision::InputCollision(const CameraInfo&, CollisionStateManager&, const DiscardedContact&,
+//                                const LogicInputBuffer&, f32, f32)   sub_826BDAE8 (DWARF h:424)
+//
+// The discarded contacts (ImportContactSpies<EventQueue<DiscardedContact,20>> 0x826DD1C0):
+//   0x826BDAF4..0x826BDB58  mScrapeInfo.mbValid = 0 (+0x29), mePipeline = E_REGULAR (+0x94),
+//                           mfPriorityAddition = 0.0 (flt_82001CC0, +0x88), meAction = Collision
+//                           (+0x8C), mbCull = 0 (+0x98), mPosition = the point on A (+0x60),
+//                           maEntityID = (A, B) (+0x80 / +0x84)
+//   0x826BDB5C..0x826BDB6C  meOrientation from MapPositionToOrientation (A's side, at A's point, with
+//                           the contact normal; the result is not tested)
+//   0x826BDB70..0x826BDC28  maMaterial[0] / [1] = `extsw` MapEntityIdToMaterial(A) / (B) with the
+//                           vehicle interface's player index (the h:980 assert before each); NO
+//                           0x2000000000 bit on [1] -- Hex-Rays prints one, the instructions are
+//                           `extsw r9,r3 ; std r9,0x78(r31)` (0x826BDC0C / 0x826BDC28)
+//   0x826BDC2C..0x826BDC64  maParameter[0] = splat(the record's closing velocity, +8) -- as it comes,
+//                           no normal stress and no 1 / (K * dt) scale
+//   0x826BDC10..0x826BDCA8  maParameter[1] = |position - camera|^2, maParameter[2] =
+//                           normalize(position - camera) . the camera's At row, as the regular builder
+// Unlike the regular builder: no scrape entry, no race-car ordering, no pair reversal, no SloMoCrash
+// culling -- and the stamp and the step (f1 / f2) are never read.
+// ---------------------------------------------------------------------------
+InputCollision::InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                               const BrnPhysics::ContactSpy::DiscardedContact& lSpy,
+                               const LogicInputBuffer& lInput, f32 /*lfTimeStamp*/, f32 /*lfTimeStep*/)
+    : maMaterial{0, 0}
+    , maEntityID{{0}, {0}}
+    , mfPriorityAddition(0.0f)
+    , meAction(AttribSys::Enums::eAction::Collision)
+    , meOrientation(AttribSys::Enums::eOrientation::Front)
+    , mePipeline(E_REGULAR)
+    , mbCull(false)
+{
+    mScrapeInfo.mbValid = false;
+    mPosition = lSpy.mPointOnA;
+    maEntityID[0] = lSpy.mEntityIdA;
+    maEntityID[1] = lSpy.mEntityIdB;
+
+    MapPositionToOrientation(lMgr.GetFrameInformation().mPlayerTransform, lSpy.mPointOnA,
+                             lSpy.mNormal, lSpy.mEntityIdA, lSpy.mEntityIdB, lMgr, meOrientation);
+
+    maMaterial[0] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lSpy.mEntityIdA, lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
+    maMaterial[1] = static_cast<u64>(static_cast<s64>(MapEntityIdToMaterial(
+        lSpy.mEntityIdB, lInput.GetVehicleInterface()->GetPlayerActiveRaceCarIndex(), lInput)));
+
+    maParameter[0] = Splat(lSpy.mfClosingVelocity);
+    const Vector3 lSpyToCamera = { mPosition.x - lCamera.mTransform.Pos().x,
+                                   mPosition.y - lCamera.mTransform.Pos().y,
+                                   mPosition.z - lCamera.mTransform.Pos().z, 0.0f };
+    const f32 lfDistanceSquared = Dot3(lSpyToCamera, lSpyToCamera);
+    maParameter[1] = Splat(lfDistanceSquared);
+    const f32 lfInverseDistance = 1.0f / std::sqrt(lfDistanceSquared);
+    const Vector3 lDirection = { lSpyToCamera.x * lfInverseDistance,
+                                 lSpyToCamera.y * lfInverseDistance,
+                                 lSpyToCamera.z * lfInverseDistance, 0.0f };
+    maParameter[2] = Splat(Dot3(lDirection, lCamera.mTransform.At()));
+}
+
 // =================================================================================================
 // THE SCRAPE LEGS (FX-CRASHSND2 item 2). A contact that goes on touching the same thing on the same
 // face -- the same entity pair and orientation (ScrapeInfo::operator== @0x826821F0) -- is a scrape:
@@ -2156,12 +2215,13 @@ u32 CollisionStateManager::MapGameModesToBinFlags(const void* lpGameMode) const
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::ImportContactSpies<SpyQueue>  (DWARF cpp:1509; ARTIST 0x826DD090
-// RaceCarContact [export hole, ppcdis], 0x826DD128 TrafficContact, 0x826EB490 PropContact):
+// RaceCarContact [export hole, ppcdis], 0x826DD128 TrafficContact, 0x826DD1C0 DiscardedContact,
+// 0x826EB490 PropContact):
 //   lCameraInfo = mCameraInfo (`addis r26, this, 1 ; addi -0x7EC0`); lu32SpyCount = length
 //   (`lwz r28, 8(queue)`); for each record: InputCollision lCollision(lCameraInfo, *this, lSpy,
 //   lInputBuffer, lfTimeStamp, lfTimeStep) -> AddInputCollision(lCollision).
-// The overload the record type picks is the console's builder: a PropContact the prop one,
-// every other contact the regular one.
+// The overload the record type picks is the console's builder: a PropContact the prop one, a
+// DiscardedContact the discarded one (sub_826BDAE8), every other contact the regular one.
 // ---------------------------------------------------------------------------
 template <typename SpyQueue>
 void CollisionStateManager::ImportContactSpies(const SpyQueue& lSpyQueue,
@@ -2252,10 +2312,6 @@ void CollisionStateManager::UpdateResolver(
     // hinging body-part, broken-joint, detached-part and car-part legs -- then the props (+0x167E0).
     // (Each group sits behind a developer filter -- dword_82FFB920 / B92C / B928 / B924, zero .bss
     // with no writer.)
-    // [BLOCKED] the discarded-contact leg (0x826F93EC..0x826F9408): ContactSpyData keeps
-    // mDiscardedContactQueue (@0x193C0) private and exposes no accessor on PC; it needs
-    // ContactSpyInterface::GetDiscardedContacts() const (the inline "mpData != NULL" tripwire at
-    // BrnContactSpyInterface.h:219, then &mpData->mDiscardedContactQueue).
     const BrnPhysics::ContactSpy::ContactSpyInterface& lrContacts =
         lrInput.GetContactSpyQueueInterface();
     s32 liPropCount = 0;
@@ -2263,6 +2319,50 @@ void CollisionStateManager::UpdateResolver(
     {
         ImportContactSpies(*lrContacts.GetRaceCarContacts(), lrInput, mfCurrentTime, afDeltaTime);
         ImportContactSpies(*lrContacts.GetTrafficContacts(), lrInput, mfCurrentTime, afDeltaTime);
+
+        // 0x826F93C4..0x826F9408: the discarded contacts, through the inlined
+        // ContactSpyInterface::GetDiscardedContacts ("mpData != NULL", h:219, then mpData + 0x193C0),
+        // one builder each (sub_826BDAE8). CONSOLE FACT: the queue is empty on every frame. Its only
+        // producer is PhysicsModule::BridgeSimulationToOutput draining VehicleManager::mDiscardedContacts
+        // (0x825B055C..0x825B05EC), and nothing in the image appends to that one -- every instruction on
+        // its seats is Construct's bind (0x8263BFA0..0x8263C060), a Clear (PrepareData 0x82633710,
+        // DoCrashPrediction 0x82646198) or that drain. The leg runs as the console runs it, over nothing.
+        const u32 lu32DiscardedFrom = mu32InputCollisionCount;
+        ImportContactSpies(*lrContacts.GetDiscardedContacts(), lrInput, mfCurrentTime, afDeltaTime);
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): proves the leg is dispatched and
+        // counts what it carried -- the first three frames, every 1800th after that (8 lines), and any
+        // frame whose queue is not empty (16 lines).
+        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 su32DiscardedFrames = 0;
+            static u32 su32DiscardedRecords = 0;
+            static u32 su32DiscardedPeriodicLines = 0;
+            static u32 su32DiscardedFilledLines = 0;
+            const s32 liDiscarded = lrContacts.GetDiscardedContacts()->GetLength();
+            ++su32DiscardedFrames;
+            su32DiscardedRecords += static_cast<u32>(liDiscarded);
+            bool lbPrint = false;
+            if (liDiscarded != 0 && su32DiscardedFilledLines < 16u)
+            {
+                ++su32DiscardedFilledLines;
+                lbPrint = true;
+            }
+            else if ((su32DiscardedFrames <= 3u || su32DiscardedFrames % 1800u == 0u) &&
+                     su32DiscardedPeriodicLines < 8u)
+            {
+                ++su32DiscardedPeriodicLines;
+                lbPrint = true;
+            }
+            if (lbPrint)
+            {
+                char lacLine[192];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] discarded leg dispatched frame=%u n=%d added=%u total_records=%u\n",
+                              su32DiscardedFrames, liDiscarded, mu32InputCollisionCount - lu32DiscardedFrom,
+                              su32DiscardedRecords);
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
 
         // The deformation legs (item 3), on the deformation output the sound input carries (the
         // third input getter, r16): glass 0x826F9420, hinged parts (+0x74) 0x826F9438, broken joints

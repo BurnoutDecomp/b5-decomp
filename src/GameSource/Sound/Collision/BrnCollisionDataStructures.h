@@ -12,7 +12,7 @@
 
 // The InputCollision constructors (DWARF BrnCollisionStateManager.h:405..466) take these by
 // reference only; their bodies live in BrnCollisionStateManager.cpp, which includes the full types.
-namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; struct PhysicalCarPartContact; } }
+namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; struct PhysicalCarPartContact; struct DiscardedContact; } }
 namespace BrnPhysics { namespace Deformation {
     enum EBodyParts : s32;
     struct BrokenJointNotificationEvent;
@@ -163,6 +163,13 @@ struct InputCollision
     InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
                    const InputPropSpy& lSpy, const LogicInputBuffer& lInput,
                    f32 lfTimeStamp, f32 lfTimeStep);
+
+    // DWARF BrnCollisionStateManager.h:424 -- a discarded contact (the regular pipeline): ARTIST
+    // sub_826BDAE8, reached from ImportContactSpies<EventQueue<DiscardedContact,20>> 0x826DD1C0 on
+    // ContactSpyData's discarded queue (which nothing fills on the console -- see UpdateResolver).
+    InputCollision(const CameraInfo& lCamera, CollisionStateManager& lMgr,
+                   const BrnPhysics::ContactSpy::DiscardedContact& lSpy,
+                   const LogicInputBuffer& lInput, f32 lfTimeStamp, f32 lfTimeStep);
 
     // DWARF BrnCollisionStateManager.h:433 -- a contact of a physical car part (a detached body
     // part or wheel): ARTIST sub_826BDCB8, reached from ImportContactSpies<PhysicalCarPartContact>

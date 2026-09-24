@@ -168,6 +168,26 @@ namespace ContactSpy
             return mpData->GetHingedPartContacts();
         }
 
+        // ⭐ NEW 2026-09-24 (FX-TAILS-B). DWARF BrnContactSpyInterface.h:104
+        //     `const ContactSpyData::DiscardedContactQueue * GetDiscardedContacts() const;`
+        // INLINED by the console at its one consumer, BrnSound CollisionStateManager::UpdateResolver
+        // @0x826F93C4..0x826F9404 (the discarded-contact leg):
+        //     lwz   r11, 0(r17)             ; mpData
+        //     cmplwi/bne                    ; the null test
+        //     FireAssert("mpData != NULL", "..\..\..\GameSource\Physics/ContactSpies/…", 0xDB)
+        //     lwz   r11, 0(r17)             ; re-read mpData
+        //     addis r4, r11, 2 ; addi r4, r4, -0x6C40      ; mpData + 0x193C0
+        // -- the assert this header's own line 219 bakes (0xDB == 219), then the pass-through to
+        // ContactSpyData::GetDiscardedContacts(), whose +0x193C0 is mDiscardedContactQueue. Kept
+        // header-inline for the same reason as the siblings: no state, CGS_ASSERT-stamped.
+        // ⚠️ The queue it returns is EMPTY on every frame, on the console too: nothing in the ARTIST
+        // image appends to its source, VehicleManager::mDiscardedContacts (see UpdateResolver).
+        const ContactSpyData::DiscardedContactQueue* GetDiscardedContacts() const
+        {
+            CGS_ASSERT(mpData != nullptr, "mpData != NULL");
+            return mpData->GetDiscardedContacts();
+        }
+
     private:
         // DWARF BrnContactSpyInterface.h:130. The single published-aggregate pointer
         // (the console's 32-bit slot; widens to 8 on this host -- see the banner).
