@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (PathLine stage machines)
+#include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Clamp (PathLine<2>::Update's fsel pair)
 
 #include <algorithm>   // std::sort (SelectionHistory::FindRandomOldest)
 #include <cmath>
@@ -398,9 +399,11 @@ void PathLine<2>::Update(f32 lfDeltaTime)
         // Interpolate within the current stage.
         const f32 lfRange = maFinish[lnStage] - maStart[lnStage];
 
-        f32 lfFraction = mfElapsedTime / maLength[lnStage];
-        if (lfFraction < 0.0f) { lfFraction = 0.0f; }
-        if (lfFraction > 1.0f) { lfFraction = 1.0f; }
+        // 0x8268F3D4..0x8268F410: `fdivs`, then `fneg ; fsel` (Max(0, x): a NaN stays) and
+        // `fsubs ; fsel` (Min(1, x): a NaN becomes 1.0) -- rw::math::fpu::Clamp's own forms. A NaN
+        // position (a NaN step or length, or 0 / 0 on a zero-length stage after the maLength
+        // tripwire) reads the curve at 1.0, i.e. the stage's finish level.
+        const f32 lfFraction = rw::math::fpu::Clamp(mfElapsedTime / maLength[lnStage], 0.0f, 1.0f);
 
         mfCurrentValue = Curve::GetOutput(lfFraction, maCurveTypes[lnStage]) * lfRange
                        + maStart[mnCurrentStage];
