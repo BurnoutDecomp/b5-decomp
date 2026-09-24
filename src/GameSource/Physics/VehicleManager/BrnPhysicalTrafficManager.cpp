@@ -787,9 +787,9 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
 
 // PhysicalTrafficVehicle::SetArticulated   @0x825F3B68
 //   Assert the type is CAB or TRAILER and this vehicle has no joint yet (miJointIndex == -1). Set
-//   meArticulatedVehicleType (+0x24) and mark the joint ATTACHED (+0x28). The console then computes
-//   mArticulationPointLocal from the deformation model's hitch locator and, when fully physical, sets
-//   the full body's articulated solve-penetration weight; both are delegated (see inline flags).
+//   meArticulatedVehicleType (+0x24) and mark the joint ATTACHED (+0x28), then compute
+//   mArticulationPointLocal from the deformation model's hitch locator (G39-D2). When fully physical
+//   the console finally sets the full body's articulated solve-penetration weight (see the flag).
 void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
                                             EArticulatedVehicleType leVehicleType)
 {
@@ -800,19 +800,58 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
     meArticulatedVehicleType = leVehicleType;                  // +0x24
     meArticulatedJointState  = E_ARTICULATE_JOINT_ATTACHED;    // +0x28
 
-    // FLAG (delegated articulation-point computation): the console resolves the spawn event's model
-    // handle (lrCreateTrafficEvent.mModelHandle, event +0x78) to a Deformation::StreamedDeformationSpec
-    // (CgsResource::BaseResourcePtr::CreateFromHandle + BrnPhysics::Def), builds the inverse
-    // car-model->handling-body transform (StreamedDeformationSpec::GetCarModelSpaceToHandlingBodySpace
-    // Transform + rw::math::vpu::InverseOfMatrixWithOrthonormal3x3), searches the spec's generic
-    // locator list (GetGenericLocators) for the hitch tag point (tag type 29 for a CAB, 28 for a
-    // TRAILER; asserts "Failed to find articulation tag point" when absent), then transforms that
-    // locator's translation into handling-body space (LocatorPointSpecList::GetLocatorXf +
-    // rw::math::vpu::TransformPoint) and stores the result into mArticulationPointLocal (+0), asserting
-    // "RwMathVPU::IsValid( mArticulationPointLocal )". Those collaborators (BrnPhysics::Def and the
-    // StreamedDeformationSpec transform/locator accessors) are owned by the resource + deformation TUs
-    // and are not declared for this TU; the point is NOT fabricated here.
-    (void)lrCreateTrafficEvent;
+    // THE HITCH POINT (G39-D2, 2026-09-24), 0x825F3BEC..0x825F3E3C. Locals named per the DWARF
+    // (BrnPhysicalTrafficVehicle.cpp:441..:450): lpDeformationSpec, lTagPointSpaceToModelSpace,
+    // lTagPoints, luTagPointIndex.
+    //   0x825F3BEC..0x825F3C34  a stack ResourcePtr<StreamedDeformationSpec> bound by
+    //       CgsResource::BaseResourcePtr::CreateFromHandle(event +0x78 == mModelHandle) and read
+    //       through BrnPhysics::Def (0x822C7708, "Can not instance resource pointer - it has no main
+    //       memory resource\n"). CreateFromHandle copies *(handle.mpResourceMemory) into the
+    //       pointer's +0 and Def returns that word, so this is the direct read
+    //       PreparePhysicsForNewTrafficVehicle already spells (BrnPhysicalTrafficManager_Create.cpp).
+    //       The ResourcePtr's ring unlink at 0x825F3E40..0x825F3E64 is its destructor.
+    //   0x825F3C38..0x825F3C94  spec +0x610 (mCarModelSpaceToHandlingBodySpaceTransform): the
+    //       vmrghw/vmrglw transpose of the 3x3, `vsubfp 0 - row3`, then vmulfp128 / vmaddfp128 /
+    //       vmaddcfp128 t' = -(t.x T0 + t.y T1 + t.z T2) == InverseOfMatrixWithOrthonormal3x3.
+    //   0x825F3C9C..0x825F3D10  spec +0x24 (mGenericTags: count +0, array +4, stride 0x50, type
+    //       +0x40): the FIRST locator of type 0x1D (E_TAGPOINT_ARTICULATIONPOINT_REAR) when +0x24 is
+    //       1 (CAB), else of type 0x1C (E_TAGPOINT_ARTICULATIONPOINT_FRONT); the count if none.
+    //   0x825F3D14..0x825F3D88  index >= count -> streamed "Failed to find articulation tag point"
+    //       (BrnPhysicalTrafficVehicle.cpp:463); non-gating, the index is used regardless.
+    //   0x825F3D8C..0x825F3DC4  GetLocatorXf(index) (0x825B31E0) row 3 (+0x30) broadcast and
+    //       accumulated t' + x T0 + y T1 + z T2 == TransformPoint; `stvx128 v0, r0, r25` -> +0.
+    //   0x825F3DC8..0x825F3E3C  vcmpeqfp. self-compares of x, y, z ->
+    //       "RwMathVPU::IsValid( mArticulationPointLocal )" (:469).
+    const Deformation::StreamedDeformationSpec* lpDeformationSpec =
+        lrCreateTrafficEvent.mModelHandle.mpResourceMemory != 0
+            ? *reinterpret_cast<Deformation::StreamedDeformationSpec* const*>(
+                   lrCreateTrafficEvent.mModelHandle.mpResourceMemory)
+            : 0;
+    CGS_ASSERT(lpDeformationSpec != 0,
+               "Can not instance resource pointer - it has no main memory resource\n");   // BrnPhysics::Def
+
+    const Matrix44Affine lTagPointSpaceToModelSpace =
+        rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(
+            lpDeformationSpec->mCarModelSpaceToHandlingBodySpaceTransform);
+
+    const Deformation::LocatorPointSpecList& lTagPoints = lpDeformationSpec->mGenericTags;
+    const Deformation::ETagPointType leHitchTagPoint =
+        (meArticulatedVehicleType == E_ARTICULATE_VEHICLE_CAB)
+            ? Deformation::E_TAGPOINT_ARTICULATIONPOINT_REAR    // 0x1D: a cab hitches at its back
+            : Deformation::E_TAGPOINT_ARTICULATIONPOINT_FRONT;  // 0x1C: a trailer at its front
+    u32 luTagPointIndex = 0;
+    while (luTagPointIndex < lTagPoints.muNumLocators
+           && lTagPoints.GetLocatorSpec(luTagPointIndex)->meTagPointType != leHitchTagPoint)
+    {
+        ++luTagPointIndex;
+    }
+    CGS_ASSERT(luTagPointIndex < lTagPoints.muNumLocators,
+               "Failed to find articulation tag point");                                 // :463
+
+    mArticulationPointLocal = rw::math::vpu::TransformPoint(
+        lTagPointSpaceToModelSpace, lTagPoints.GetLocatorXf(luTagPointIndex)->wAxis);  // +0
+    CGS_ASSERT(rw::math::vpu::IsValid(mArticulationPointLocal),
+               "RwMathVPU::IsValid( mArticulationPointLocal )");                          // :469
 
     // FLAG (un-recoverable constant + un-declared setter): when fully physical the console finally
     // calls VehiclePhysics::SetSolvePenetrationWeightFactor(GetFullTraffic(),
