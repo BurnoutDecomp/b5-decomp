@@ -50,7 +50,8 @@ typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueueImpl;
 //                          then Update fires KI_ACTION_STOPPED_DRIVE_THRU/SetPlayerCarDriver
 //                          when the countdown crosses 2.1.
 //   flt_82CDBD94 == 5625.0 : KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ (75m squared XZ discovery radius).
-//   flt_82FADEC8 : the "just-armed min-time" comparison bound.
+//   flt_82FADEC8 == 2.1 - 1.0 : the "just-armed min-time" comparison bound (.bss, set by the
+//                          TU's static initialiser -- see KF_DRIVE_THRU_JUST_ARMED_BOUND below).
 //   flt_82F31928 == 0.4470399916 : exit-speed scale applied to KAF_MAX_DRIVE_THRU_EXIT_SPEEDS[i].
 // ============================================================================
 static const f32 KF_DRIVE_THRU_INACTIVE_TIME         = -1.0f;  // flt_82001CC0
@@ -60,7 +61,15 @@ static const f32 KF_TRAINING_TIP_SETTLE_TIME         =  5.0f;  // flt_8200426C
 static const f32 KF_DRIVE_THRU_ACTIVATION_TIME       =  2.1f;  // flt_82CDBD90
 static const f32 KF_DRIVE_THRU_DISCOVERY_DISTANCE_SQ =  5625.0f;       // flt_82CDBD94
 static const f32 KF_DRIVE_THRU_DISCOVERY_MAX_Y       =  5.0f;  // X360 literal 5.0
-static const f32 KF_DRIVE_THRU_JUST_ARMED_BOUND      =  0.0f;  // FLAG: flt_82FADEC8 (not in exports)
+// flt_82FADEC8 is .bss, so it reads 0 in the image; its value comes from the TU's dynamic
+// initialiser @0x82C4D730..0x82C4D748 (findinit.py / ppcdis.py):
+//     lfs   f0,  flt_82CDBD90      ; 2.1f  (0x40066666, KF_DRIVE_THRU_ACTIVATION_TIME)
+//     lfs   f13, flt_82001C98      ; 1.0f  (0x3F800000, KF_DRIVE_THRU_REARM_TIME)
+//     fsubs f0,  f0, f13           ; single-precision: 1.0999999f (0x3F8CCCCC)
+//     stfs  f0,  flt_82FADEC8
+// Its one reader is HandleDriveThru @0x8239B698 (the re-arm test below). The DWARF's own name for
+// it is not recoverable (the derived constant is not among the named KF_ statics at :34-:48).
+static const f32 KF_DRIVE_THRU_JUST_ARMED_BOUND      =  KF_DRIVE_THRU_ACTIVATION_TIME - KF_DRIVE_THRU_REARM_TIME;
 static const f32 KF_DRIVE_THRU_EXIT_SPEED_SCALE      =  0.4470399916f; // flt_82F31928
 
 // X360 rodata `unk_8202AD38`: one exit-speed entry per DriveThruTriggerData slot. Update
@@ -597,6 +606,11 @@ void DriveThruManager::HandleDriveThru(
             mbIsClosed = false;
         }
 
+        // 0x8239B690..0x8239B6BC: `lfs flt_82FADEC8 ; fcmpu ; bge` / `cmpwi r17(type), 0 ; beq` /
+        // `lfs flt_82001C98 ; fcmpu ; bge` / `stfs f13, 0x20(r19)`. This runs on the entry frame
+        // (ProcessPlayerTriggers' lbFirstFrame gate): a car that re-enters a shop whose countdown is
+        // still in [0, 1.0) has it pushed back up to 1.0, so the shop stays un-armable for at least a
+        // second after the re-entry. With the old 0.0 bound only a negative countdown qualified.
         const f32 lfTimer = lrEntry.mfTimeToActiveation;
         if (lfTimer < KF_DRIVE_THRU_JUST_ARMED_BOUND && leType != 0 && lfTimer < KF_DRIVE_THRU_REARM_TIME)
             lrEntry.mfTimeToActiveation = KF_DRIVE_THRU_REARM_TIME;   // 1.0
