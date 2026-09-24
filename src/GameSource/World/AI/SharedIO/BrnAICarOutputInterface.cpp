@@ -41,7 +41,9 @@ namespace AIModuleIO
     {
         CGS_ASSERT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
                    "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
-        CGS_ASSERT(lfDistanceToCheckpoint >= 0.0f,
+        // `fcmpu d, 0.0 ; bge -> skip` @0x82764548/0x8276454C is taken on an unordered compare, so
+        // a NaN distance skips the assert (FX-AINAN2); `d >= 0` fired it -- every frame, per car.
+        CGS_ASSERT(!(lfDistanceToCheckpoint < 0.0f),
                    "The lfDistToRouteEnd  is less than 0! Mental!");
         mafDistanceToCheckpoint[liAICarIndex] = lfDistanceToCheckpoint;
     }
