@@ -106,6 +106,7 @@
 #include "rw/math/fpu/scalar_operation.h"                                          // rw::math::fpu::Max (leap/stomp producer)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // CgsDev::DebugInterface (leap/stomp debug view)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"  // CgsDev::DebugRender::DrawSphere
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h" // CrashModeScoring::GetVehicleScoreData (leap/stomp score leg)
 
 namespace BrnTraffic
 {
@@ -17801,31 +17802,29 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
             if (lbOnScreenVehicle
                 && lfDistanceSq < KF_SHOWTIME_SHOW_SCORE_RADIUS * KF_SHOWTIME_SHOW_SCORE_RADIUS)
             {
-                // ⛔ BLOCKED LEG -- header request (lane FX-TRAFFIC2, 2026-09-24). The console body,
-                // 0x8271F84C..0x8271F8FC, is:
-                //     s32 liScore; s32 liMultiplier; BrnTraffic::VehicleScoreCategory leCategory;
-                //     const VehicleTypeData* lpVehicleType = &mpData->mpaVehicleTypes[lpVehicle->GetVehicleType()];
-                //     const VehicleClass leClass = static_cast<VehicleClass>(lpVehicleType->muVehicleClass); // lbz +3
-                //     const CgsID lTypeID = mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId(); // lbz +5 ; ldx
-                //     BrnGameState::CrashModeScoring::GetVehicleScoreData(leClass, lTypeID,
-                //                                                         &liScore, &liMultiplier, &leCategory);
-                //     Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
-                //     lVehiclePos.y += KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[leClass];
-                //     lpOutput->AddPotentialScoree(lVehiclePos, lfDistanceSq, liScore, liMultiplier,
-                //                                  static_cast<u16>(luVehicle));
-                // It cannot be written here yet: the console calls GetVehicleScoreData @0x82312AB0
-                // with NO object -- r3 is the VehicleClass (0x8271F898 `mr r3, r29`), r4 the 64-bit
-                // CgsID, r5..r7 the out-pointers, and the callee switches on r3 (0x82312BA4 `cmplwi
-                // r27, 3`) -- i.e. it is a STATIC member, but BrnCrashModeScoringRecentCrash.h:144
-                // declares it non-static and that header is GameState/** (lane FX-FLOW this wave).
-                // HEADER REQUEST: `static void GetVehicleScoreData(...)` (its body reads no member).
-                // DELETE WHEN that lands: replace this log with the block above (AddPotentialScoree
-                // @0x8271D2E8 is bodied in BrnTrafficEntityModuleIO.cpp and unit-tested).
-                static bool sbLogged = false;
-                LogMissingLeg_T1(sbLogged,
-                    "GeneratePotentialLeapedAndStompedCarsOutput score leg (0x8271F84C..0x8271F8FC: "
-                    "GetVehicleScoreData -> AddPotentialScoree) -- BLOCKED on CrashModeScoring::"
-                    "GetVehicleScoreData being declared non-static (console: static, r3 = VehicleClass)");
+                // THE SCORE LEG (2026-09-24, was a logged stub until GetVehicleScoreData became the
+                // static it is on the console), 0x8271F84C..0x8271F8FC:
+                //   0x8271F854 / 0x8271F87C `bl TrafficData>::operator->` (mpData, +0x71840)
+                //   0x8271F860 `bl Vehicle::GetVehicleType` ; `lwz 0x2C` (mpaVehicleTypes) ; stride 8
+                //   0x8271F878 `lbz r29, 3` (muVehicleClass) ; 0x8271F880 `lbz r11, 5` (muAssetId)
+                //   0x8271F890 `lwz 0x34` (mpaVehicleAssets) ; 0x8271F89C `ldx r4` (the 8-byte CgsID)
+                //   0x8271F8A0 `bl GetVehicleScoreData(r3 = class, r4 = id, r5 score, r6 mult, r7 cat)`
+                //   0x8271F8B0 `lvx128 v0, r24` (the vehicle's Pos) ; 0x8271F8D0 `lfsx` the class's
+                //     height tweak ; `vaddfp` ; 0x8271F8F4 `vrlimi128 v13, v0, 4, 0` (lane y only)
+                //   0x8271F8FC `bl AddPotentialScoree(v1 = pos', f1 = d^2, r5 = score, r6 = mult,
+                //     r7 = (u16)vehicle)` -- the category (var_A8) is never read back.
+                s32 liScore      = 0;
+                s32 liMultiplier = 0;
+                BrnTraffic::VehicleScoreCategory leCategory = BrnTraffic::E_VEHICLESCORE_CAR;
+                const VehicleTypeData* lpVehicleType = &mpData->mpaVehicleTypes[lpVehicle->GetVehicleType()];
+                const VehicleClass leClass = static_cast<VehicleClass>(lpVehicleType->muVehicleClass);
+                const CgsID lTypeID = mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId();
+                BrnGameState::CrashModeScoring::GetVehicleScoreData(leClass, lTypeID,
+                                                                    &liScore, &liMultiplier, &leCategory);
+                Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
+                lVehiclePos.y += KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[leClass];
+                lpOutput->AddPotentialScoree(lVehiclePos, lfDistanceSq, liScore, liMultiplier,
+                                             static_cast<u16>(luVehicle));
             }
 
             // 0x8271F914 `lfs f31, var_140` ; 0x8271F918 `fcmpu f31, f28 ; blt` ; 0x8271F920

@@ -4,6 +4,7 @@
 //   OutputBuffer_PreScene::AddPotentialScoree                             @0x8271D2E8
 //   TrafficToRaceCarInterface_PreScene::AddPotentialStompee               @0x82706028
 //   TrafficToRaceCarInterface_PreScene::GetPotentialStompees / ClearStompees (DWARF :122 / :126)
+//   CrashModeScoring::GetVehicleScoreData (static)                        @0x82312AB0
 // extracted from the b5 sources by run_fxtraffic2_stompees.py and hosted on a fixture that has
 // the module's real member types. Every expected value below is derived from the ARTIST asm
 // (the decode is in the producer's banner in BrnTrafficEntityModule.cpp):
@@ -18,12 +19,19 @@
 //   inclusive: blt / bgt); slot bit 0 iff in the ring and PHYSICAL & ALIVE; slot bit 1 (crash
 //   magnet) iff the crash slider FACTOR (+0x72378) > 1.5 (flt_820BA5DC) and the CURRENT
 //   distance^2 <= 2500 (flt_820BA858) and on screen; the slot is kept iff a bit is set;
-//   the debug view draws spheres of 20 and sqrt(2500) on the player (0x46006400 / 0x46006464).
+//   the debug view draws spheres of 20 and sqrt(2500) on the player (0x46006400 / 0x46006464);
+//   the SCORE leg (on screen and d^2 < 45^2): GetVehicleScoreData(class +3, asset CgsID) then
+//   AddPotentialScoree(pos with y + the class's height tweak, d^2, score, multiplier, (u16)vehicle).
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
+#include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"
+#include "SharedClasses/Traffic/BrnTrafficVehicleAsset.h"
+#include "SharedClasses/Traffic/BrnTrafficVehicleType.h"
+#include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Numeric/CgsPolynomial.h"
 #include "GameSource/Math/BrnMathUtils.h"
 #include "rw/math/fpu/scalar_operation.h"
@@ -41,6 +49,9 @@
 
 static unsigned gAsserts = 0, gChecks = 0, gFailures = 0;
 static const char* gpcLastAssert = "";
+
+// GetVehicleScoreData's unknown-type diagnostic un-compresses the id; not under test.
+void CgsIDUnCompress(CgsID, char* lpcString) { lpcString[0] = 0; }
 
 // ---- the debug view: recorders ----------------------------------------------------------
 struct SphereCall { Vector3 mCentre; f32 mfRadius; u32 muColour; };
@@ -132,6 +143,7 @@ namespace BrnTrafficIO
         decltype(M::maVehicles)                     maVehicles;
         decltype(M::maVehicleTransforms)            maVehicleTransforms;
         decltype(M::mVehicleSoaData)                mVehicleSoaData;
+        decltype(M::mpData)                         mpData;
 
         ShowtimeVehicleInfo* GetFirstUnusedShowtimeVehicleInfo(u32& luInfoIndex);
         void GeneratePotentialLeapedAndStompedCarsOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
@@ -169,6 +181,12 @@ static bool NearVec(const Vector3& lrA, f32 lfX, f32 lfY, f32 lfZ, f32 lfToleran
 alignas(64) static unsigned char gaFixture[sizeof(Fixture)];
 alignas(64) static unsigned char gaInput[sizeof(InputBuffer_PreScene)];
 alignas(64) static unsigned char gaOutput[sizeof(OutputBuffer_PreScene)];
+alignas(64) static unsigned char gaTrafficData[sizeof(TrafficData)];
+static VehicleTypeData gaVehicleTypes[1];
+static VehicleAsset    gaVehicleAssets[1];
+// Every fixture car is vehicle type 0: a VAN (class 1) whose asset is the first
+// TARGETVEHICLE row of GetVehicleScoreData's table (0xBF2E42A8A7700000: 6000 points, multiplier 1).
+static const CgsID KID_TARGET_VEHICLE = 0xBF2E42A8A7700000ULL;
 
 static Fixture& F()        { return *reinterpret_cast<Fixture*>(gaFixture); }
 static InputBuffer_PreScene&  In()  { return *reinterpret_cast<InputBuffer_PreScene*>(gaInput); }
@@ -212,6 +230,14 @@ static void Fresh(bool lbShowtime, bool lbValidGround, f32 lfHeight, f32 lfVeloc
     Iface().miPotentialStompeeCount = 5;
     Iface().mPotentialStompees[0].mfDistanceSquared = 77.0f;
     lr.muShowtimeVehicleInfoCount = 7;
+    std::memset(gaTrafficData, 0, sizeof(gaTrafficData));
+    std::memset(gaVehicleTypes, 0, sizeof(gaVehicleTypes));
+    gaVehicleTypes[0].muVehicleClass = static_cast<u8>(E_VEHICLECLASS_VAN);
+    gaVehicleTypes[0].muAssetId      = 0;
+    gaVehicleAssets[0].SetVehicleId(KID_TARGET_VEHICLE);
+    reinterpret_cast<TrafficData*>(gaTrafficData)->mpaVehicleTypes  = gaVehicleTypes;
+    reinterpret_cast<TrafficData*>(gaTrafficData)->mpaVehicleAssets = gaVehicleAssets;
+    lr.mpData.mpResourceMemory = gaTrafficData;
     gSpheres.clear();
     guDebugInterfaces = guDebugReleases = 0;
     guBlockedScoreLegLogs = 0;
@@ -320,9 +346,16 @@ int main()
               && F().maShowtimeVehicleInfoList[0].muVehicleIndex == 3 && F().maShowtimeVehicleInfoList[0].muFlags == 1
               && F().maShowtimeVehicleInfoList[1].muVehicleIndex == 4 && F().maShowtimeVehicleInfoList[1].muFlags == 1,
               "Showtime slots kept only when flagged: cars 3 and 4 (physical, alive, in the ring -> bit 0)");
-        Check(guBlockedScoreLegLogs == 1,
-              "the score leg is reached for the on-screen car within 45 m only (car 4: d^2 900 < 2025)");
-        Check(Out().mPotentialScorees.GetCount() == 0, "the score leg publishes nothing while it is blocked");
+        Check(guBlockedScoreLegLogs == 0 && Out().mPotentialScorees.GetCount() == 1,
+              "the score leg publishes the on-screen car within 45 m only (car 4: d^2 900 < 2025), no stub log");
+        {
+            const VehicleScoreData& lrScoree = Out().mPotentialScorees.maElements[0];
+            Check(lrScoree.muVehicleIndex == 4 && Near(lrScoree.mfDistanceSquared, 900.0f)
+                  && lrScoree.miScore == 6000 && lrScoree.miMultiplier == 1
+                  && NearVec(lrScoree.mPosition, 130.0f, 3.2f, 200.0f),
+                  "the scoree: GetVehicleScoreData(VAN, TARGETVEHICLE id) = 6000 x1, position y + 3.2 "
+                  "(KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[VAN], vrlimi128 lane y), d^2 900, index 4");
+        }
         Check(gSpheres.empty() && guDebugInterfaces == 0, "no debug view unless mbDEBUGShowtimeStuff (+0x72874)");
     }
 

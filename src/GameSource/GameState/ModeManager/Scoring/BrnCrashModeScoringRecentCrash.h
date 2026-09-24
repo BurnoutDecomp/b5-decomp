@@ -141,10 +141,15 @@ struct CrashModeScoring
     // element's 64-bit CgsID in mRecentStuntSet unless the live window already holds it.
     // Sole caller: BrnGameModule::TranslateShowtimeActionToGuiEvent @0x823E1988 case 127.
     void DealWithShowtimeStunt(const GameStateModuleIO::WorldStuntAction* lpStuntAction);
-    void GetVehicleScoreData(BrnTraffic::VehicleClass leVehicleClass,
-                             CgsID lVehicleTypeID,
-                             s32* lpiScore, s32* lpiMultiplier,
-                             BrnTraffic::VehicleScoreCategory* lpeCategory);        // X360 0x82312AB0
+    // STATIC (2026-09-24, FX-TRAFFIC2 on the conductor's instruction). The console calls it with NO
+    // object: TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput passes the
+    // VehicleClass in r3 (0x8271F898 `mr r3, r29`), the CgsID in r4 and the three out-pointers in
+    // r5..r7, and the body keeps r3 as the class it switches on (0x82312AC4 `mr r27, r3` ;
+    // 0x82312BA4 `cmplwi r27, 3`). The body reads no member.
+    static void GetVehicleScoreData(BrnTraffic::VehicleClass leVehicleClass,
+                                    CgsID lVehicleTypeID,
+                                    s32* lpiScore, s32* lpiMultiplier,
+                                    BrnTraffic::VehicleScoreCategory* lpeCategory); // X360 0x82312AB0
     bool IsActiveCrash(const RecentCrash* lpCrash) const;                          // X360 0x82312A30
 
     // DWARF BrnCrashModeScoring.h:157, X360 0x8232BF90. Drop the recent-crash entry of every traffic
