@@ -453,10 +453,30 @@ void State::ProcessUpdate()
     }
 }
 
+// ---------------------------------------------------------------------------
+// State::Detach  @ 0x826C4C20  (vtable +0x18 of State off_820AE1F4 and of every state that does not
+// override it -- PassbyState's DWARF cpp:118 override is identical-code-folded into this address)
+//
+//   lwz r10, 0x38 ; cmpwi 5 ; beq ok ; li r3, 0 ; blr      ; not E_UPDATE_ATTACHED -> false, no store
+//   ok: stw 0, 0x10                                        ; mpvAttachment = 0
+//       stb 0, 0x48                                        ; mbIsAttached = false
+//       lwz r10, 0x38 ; stw 6, 0x38 ; stw r10, 0x3C        ; meUpdateState.Set(E_UPDATE_DETATCHING)
+//       li r3, 1
+// VehicleState::Detach @0x826C9FF8 inlines the same body word for word before its Clear(), and
+// StreamingState::Detach @0x826C9C58 its tail. The PC detached from ANY update state (an
+// initialising state too), kept the stale attachment for IsAttachedToThis / GetStateObj, and never
+// wrote the history word. The manager-side callers test the result: CollisionStateManager::
+// GetFreeState's lowest-priority steal and EmitterStateManager's farthest-emitter steal take a state
+// only when this returns true.
+// ---------------------------------------------------------------------------
 bool State::Detach()
 {
-    mauUpdateState[0] = E_UPDATE_DETATCHING;
+    if (mauUpdateState[0] != E_UPDATE_ATTACHED)
+        return false;
+    mpvAttachment = 0;
     mbIsAttached = false;
+    mauUpdateState[1] = mauUpdateState[0];
+    mauUpdateState[0] = E_UPDATE_DETATCHING;
     return true;
 }
 
