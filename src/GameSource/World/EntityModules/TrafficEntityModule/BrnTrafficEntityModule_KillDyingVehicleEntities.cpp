@@ -53,23 +53,12 @@ namespace
         }
     }
 
-    // The scene owner byte a traffic VolumeInstanceId carries -- the same two-line build as
-    // _wT4_01.cpp's file-local MakeTrafficVolumeInstanceId (that helper is anonymous-namespace
-    // there, so it is mirrored here rather than reached across TUs). The console builds the
-    // id inline both times it needs one (0x8272ED60/0x8272ED88: lis/ori the owner word, then
+    // MakeTrafficVolumeInstanceId (and KU8_TRAFFIC_ENTITY_OWNER) live in BrnTrafficConstants.h (DWARF
+    // :163, body in the header at :165). This file mirrored them as an anonymous-namespace copy until
+    // crash parity FX-NETCRASH (2026-09-24) folded both copies into that header, which
+    // CrashModule::HandleNetworkCrashingTraffic also needs. The console builds the id inline both
+    // times it needs one here (0x8272ED60/0x8272ED88: the owner word, then
     // VolumeInstanceId::SetEntityIDEntityIndex).
-    const u8 KU8_TRAFFIC_ENTITY_OWNER = 2;   // E_ENTITYTYPE_TRAFFIC
-
-    inline CgsSceneManager::VolumeInstanceId MakeTrafficVolumeInstanceId(u32 luVehicle)
-    {
-        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
-        lVolumeInstanceId.muId =
-            static_cast<u64>(KU8_TRAFFIC_ENTITY_OWNER)
-            << (CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX
-                + CgsSceneManager::VolumeInstanceId::KU_OWNER_BASE);
-        lVolumeInstanceId.SetEntityIDEntityIndex(luVehicle);
-        return lVolumeInstanceId;
-    }
 }
 
 // ----------------------------------------------------------------------------

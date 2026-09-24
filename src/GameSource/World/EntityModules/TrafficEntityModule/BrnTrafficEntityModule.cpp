@@ -11389,40 +11389,23 @@ namespace
     // unpacked. Mirrored file-local exactly as _wT3_02.cpp / _wT3_04.cpp mirror it.
     const u32 KU_ENTITY_INDEX_SHIFT   = 10;
     const u32 KU_ENTITY_INDEX_MASK    = 0x3FFFu;
-    const u8  KU8_TRAFFIC_ENTITY_OWNER = 2;   // E_ENTITYTYPE_TRAFFIC
+    // (KU8_TRAFFIC_ENTITY_OWNER now lives beside MakeTrafficVolumeInstanceId in BrnTrafficConstants.h.)
 
     inline u32 EntityIndexOf(EntityId lId)
     {
         return (lId.muValue >> KU_ENTITY_INDEX_SHIFT) & KU_ENTITY_INDEX_MASK;
     }
 
-    // The console seeds the owner byte INLINE and calls only the index setter -- verbatim at
-    // KillDyingVehicleEntity 0x8272F678..0x8272F68C:
-    //     li     r11, 1
-    //     extldi r30, r11, 64,57      ; == 1 << 57 == owner 2 in the entity word's high byte
-    //     std    r30, var_1F8(r1)     ; muId seeded whole
-    //     bl     CgsSceneManager::VolumeInstanceId::SetEntityIDEntityIndex
-    // and again at 0x8272F6AC/0x8272F6B0. VolumeInstanceId::SetEntityIDOwner @0x822B0E00 is
-    // NOT called by either traffic body (the only EntityID call in 0x8272EB40's whole listing
-    // is SetEntityIDEntityIndex, twice), so seeding through it would be an arm the console
-    // does not have. THIS shape is therefore the one wave T3/T4/KillDying now share -- issue
-    // #20 folded the three copies and this is the one with the asm behind it.
+    // MakeTrafficVolumeInstanceId: its home is BrnTrafficConstants.h (DWARF :163, body in the header at
+    // :165), where the console's KillDyingVehicleEntity 0x8272F678..0x8272F68C derivation now lives.
+    // (Crash parity FX-NETCRASH 2026-09-24: this anonymous-namespace copy was folded there, because
+    // CrashModule::HandleNetworkCrashingTraffic needs the same helper from another TU.)
     //
     // At THIS file's own call site the console folds the build differently again --
     // GenerateCrashedVehicleEvents 0x827202C0 `sldi r27, r29, 32`, shifting the whole victim
     // EntityId (owner 2 and the index already packed by MakeTrafficEntityId) into the high
     // dword. That produces the identical 64-bit value: (2<<24 | idx<<10) << 32 ==
     // 2 << 56 | idx << 42.
-    inline CgsSceneManager::VolumeInstanceId MakeTrafficVolumeInstanceId(u32 luVehicle)
-    {
-        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
-        lVolumeInstanceId.muId =
-            static_cast<u64>(KU8_TRAFFIC_ENTITY_OWNER)
-            << (CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX
-                + CgsSceneManager::VolumeInstanceId::KU_OWNER_BASE);
-        lVolumeInstanceId.SetEntityIDEntityIndex(luVehicle);
-        return lVolumeInstanceId;
-    }
 
     // GenerateCrashedVehicleEvents' three literal arguments, `li r31,3` / `li r11,4` /
     // `li r11,1` at 0x827204E4 / 0x827205CC / 0x827205C4.

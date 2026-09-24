@@ -4,6 +4,7 @@
 #include "BrnCommonTypes.h"                                  // Matrix44Affine
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"     // CgsModule::EventQueue<T, N>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<N>
+#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (GetCrashingTrafficUpdateQueue's tripwire)
 
 namespace BrnWorld
 {
@@ -63,6 +64,21 @@ namespace CrashIO
 
         // True when the race car's bit is set.
         bool IsRaceCarMarkedForUpdate(s32 liRaceCarId) const;
+
+        // ADDITIVE (crash parity FX-NETCRASH 2026-09-24): DWARF BrnCrashModuleNetworkIOInterfaces.h:105
+        // `const CrashingTrafficUpdateQueue* GetCrashingTrafficUpdateQueue(int32_t) const`. No
+        // out-of-line X360 symbol: its one caller, CrashModule::HandleNetworkCrashingTraffic, inlines
+        // it at 0x827CBA18..0x827CBA58 --
+        //   bl IsRaceCarMarkedForUpdate ; beq -> assert "Attempting to access network traffic queue
+        //   for non-updated race car" (this header, line 0x108 == 264, a non-gating tripwire)
+        //   mulli r11, liRaceCarId, 0x790 ; add ; addi 0x10   == &maCrashingTrafficUpdateQueues[i]
+        // (0x10 == the bitset padded to the queues' 16-byte alignment, 0x790 == one queue).
+        const CrashingTrafficUpdateQueue* GetCrashingTrafficUpdateQueue(s32 liRaceCarId) const
+        {
+            CGS_ASSERT(IsRaceCarMarkedForUpdate(liRaceCarId),
+                       "Attempting to access network traffic queue for non-updated race car");   // :264
+            return &maCrashingTrafficUpdateQueues[liRaceCarId];
+        }
 
         // Per-instance copy: copy the active-car bitset, then merge each source queue's
         // live events onto the matching (freshly cleared) destination queue (X360 operator=).

@@ -20,11 +20,19 @@ namespace BrnWorld
         // DWARF BrnCrashModule.h:150 (body BrnCrashModule.cpp:361): flag bit 0x4 (`lbz 1 ;
         // rlwinm 0,29,29` at OnContactFromNetworkPlayer 0x827C642C).
         bool IsConfirmedNetwork() const { return (mxFlags & 4) != 0; }
+        // DWARF BrnCrashModule.h:149 (body BrnCrashModule.cpp:355): flag bit 0x2 (`lbz 1 ;
+        // rlwinm 0,30,30` at HandleNetworkCrashingTraffic 0x827CBC98 / 0x827CBFC4 / 0x827CC60C).
+        bool IsUnconfirmedNetwork() const { return (mxFlags & 2) != 0; }
         // DWARF BrnCrashModule.h:134 (body BrnCrashModule.cpp:295). Inlined into
         // CrashModule::OnContactFromNetworkPlayer @0x827C6444..0x827C6478: assert
         // IsConfirmedNetwork() (:297) then store KF_NETWORK_CRASH_TIMEOUT (20.0f) at +4.
         // Body in BrnCrashModule_RaceCarCrashes.cpp.
         void ResetNetworkTimeout();
+        // DWARF BrnCrashModule.h:130 / :138 (bodies BrnCrashModule.cpp:278 / :310). Both are inlined
+        // by CrashModule::HandleNetworkCrashingTraffic @0x827CB788 (crash parity FX-NETCRASH,
+        // G64-D2); bodies and asm in BrnTrafficCrash.cpp.
+        void ConfirmNetworkOwner(EActiveRaceCarIndex leConfirmedOwner);
+        void SetNetworkVehicleClearedUp();
 
     private:
         s8 miOwner;             // +0

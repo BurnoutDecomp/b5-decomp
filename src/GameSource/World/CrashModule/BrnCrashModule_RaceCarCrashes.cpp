@@ -19,9 +19,9 @@
 // BrnCrashModule_Lifecycle.cpp. DELETE-WHEN the home TU becomes mountable whole.
 //
 // Traffic producers, ownership, countdown and cleanup now run through the original phases.
-// The network race-car reset (ResetCrashedNetworkRaceCars + OnContactFromNetworkPlayer) and the
-// owned-traffic publisher (GenerateOwnedTrafficUpdates) run under the online gate;
-// HandleNetworkCrashingTraffic remains parked (see its park note), and none of the online arms is
+// The network race-car reset (ResetCrashedNetworkRaceCars + OnContactFromNetworkPlayer), the
+// owned-traffic publisher (GenerateOwnedTrafficUpdates) and its receive twin
+// (HandleNetworkCrashingTraffic, G64-D2) run under the online gate; none of the online arms is
 // certified by the offline lifecycle pass.
 
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
@@ -36,6 +36,7 @@
 #include "GameSource/BurnoutConstants.h"                            // E_ACTIVE_RACE_CAR_INDEX_*
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"   // BrnNetworkDriverControls, E_DRIVER_TYPE_NETWORK
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h" // BrnTraffic::MakeTrafficVolumeInstanceId
 
 namespace BrnWorld
 {
@@ -51,16 +52,6 @@ namespace
     // Refreshed by RaceCarCrash / TrafficCrash::ResetNetworkTimeout below.
     const f32 KF_NETWORK_CRASH_TIMEOUT = 20.0f;
 
-    // One-shot park logger. Each parked helper gets its own static bool at its call site.
-    void LogCrashPark(bool& lrbAlreadyLogged, const char* lpcText)
-    {
-        if (lrbAlreadyLogged || CgsDev::Log::gpDebugPrint == 0)
-        {
-            return;
-        }
-        lrbAlreadyLogged = true;
-        *CgsDev::Log::gpDebugPrint << lpcText;
-    }
 }
 
 // =================================================================================================
@@ -429,7 +420,7 @@ void TrafficCrash::ResetNetworkTimeout()
 //   0x827C63D4..0x827C6480  over mTrafficCrashes (+0x2F8): owner s8 at +0 == lePlayer (`lbz ;
 //               extsb ; cmpw`) AND flag bit 0x4 (IsConfirmedNetwork), then
 //               TrafficCrash::ResetNetworkTimeout.
-// Callers: HandleNetworkCrashingTraffic @0x827CB788 (parked, G64-D2) and
+// Callers: HandleNetworkCrashingTraffic @0x827CCAF8 (G64-D2, below) and
 // ResetCrashedNetworkRaceCars @0x827CE9BC below -- both online-only.
 // =================================================================================================
 void CrashModule::OnContactFromNetworkPlayer( EActiveRaceCarIndex lePlayer )
@@ -620,6 +611,230 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
 }
 
 // =================================================================================================
+// HandleNetworkCrashingTraffic @ 0x827CB788   (1268 insns)   -- G64-D2 (crash parity FX-NETCRASH
+// 2026-09-24). DWARF BrnCrashModule.cpp:1054, locals liEvent (:1060), lpCrashingTrafficQueue (:1061),
+// lCrashingTrafficForPlayer (:1063), leActiveRaceCarIndex (:1064), lEvent / luVehicle /
+// lbContentious (:1083-:1085), luTrafficCrash / lpTrafficCrash (:1096 / :1101), lVolumeInstanceId
+// (:1130), lNewCrashingTraffic / lClearedUpTraffic (:1140 / :1141), luVehicle / luTrafficCrash /
+// lpTrafficCrash (:1176-:1184, :1202, :1223-:1228).
+//
+// Online only -- the receive twin of GenerateOwnedTrafficUpdates. For every OTHER player whose
+// crashing-traffic updates arrived this frame (the network TrafficManager marks the car and fills
+// its queue): replay each transform onto the physics module, then diff the set of vehicles that
+// player updated this frame against the set it owned last frame -- the new ones become (or are
+// confirmed as) that player's network wrecks, the ones it stopped sending are cleared up.
+//   0x827CB7B4..0x827CB82C  tripwires lpInput (:1056), lpOutput (:1057), IsOnlineGameMode() (:1058)
+//   0x827CB9A4  per race car 0..7: GetNetworkInputInterface (0x827BB330) ->
+//               IsRaceCarMarkedForUpdate; not marked -> next car (0x827CCB14)
+//   0x827CB9C0..0x827CBA0C  tripwires meLocalActiveRaceCarIndex in [0,8) (:1074) and
+//               leActiveRaceCarIndex != meLocalActiveRaceCarIndex (:1075)
+//   0x827CBA14  lCrashingTrafficForPlayer.Clear() (`stw 0` the length)
+//   0x827CBA18..0x827CBA58  GetNetworkInputInterface()->GetCrashingTrafficUpdateQueue(car) (inlined)
+//   PER EVENT (0x827CBA74..0x827CBD6C):
+//     GetEvent (0x8254D968), copy; Contains-assert "Duplicate crashing traffic update for player"
+//     (:1089); lbContentious when the vehicle is crashing here (mCrashingTraffic +0x808) with a
+//     record that another player owns and has CONFIRMED (0x827CBC88..0x827CBCA8), or that wants to
+//     be cleared up (flag bit 0, 0x827CBCAC..0x827CBCBC); and when another player slammed it
+//     (maiSlammedTrafficOwners +0x8A8 != -1 and != this car, 0x827CBCC0..0x827CBCDC).
+//     Not contentious: MakeTrafficVolumeInstanceId (inlined, CgsEntityId.h:160 assert) ->
+//     GetVehicleInputInterface (0x827BB678) -> UpdateNetworkTraffic (inlined AddEvent 0x827C2950 on
+//     +139760) -> lCrashingTrafficForPlayer.Insert (0x827C7B40).
+//   0x827CBD70..0x827CBD98  lNewCrashingTraffic = this frame \ maCrashingTrafficForPlayers[car]
+//               (+0xB00 + car*0x144); lClearedUpTraffic = last frame's \ this frame
+//               (SetDifference 0x827C8608, both)
+//   NEW (0x827CBDA8..0x827CC56C):
+//     already crashing here -> assert a record (:1182) that is still UNCONFIRMED (:1185); another
+//       owner's -> Erase from that owner's set (0x827C2E80) + Insert into this car's; then
+//       ConfirmNetworkOwner(car) (inlined, :280)
+//     else -> asserts !mCrashingNetworkTraffic (:1199) and no record (:1200); Grow (0x827B54D8) +
+//       Construct(car, vehicle, KF_NETWORK_CRASH_TIMEOUT flt_820CA5A8 20.0f, true) + ConfirmNetworkOwner
+//       (inlined); mCrashingTraffic SetBit; Insert into this car's set;
+//       GetTrafficOutputInterface (0x827BB5D0)->StartNetworkTrafficVehicleCrashing (inlined AddEvent
+//       0x827C2D48 on +0x510)
+//     both -> mCrashingNetworkTraffic (+0x858) SetBit
+//   CLEARED UP (0x827CC570..0x827CCAEC): assert a record (:1226); an UNCONFIRMED record is skipped;
+//     else tripwires owner == car (:1236), mCrashingTraffic (:1238) and mCrashingNetworkTraffic (:1239)
+//     set, then SetNetworkVehicleClearedUp() (inlined, :312). The vehicle is NOT erased from the
+//     player's set here.
+//   0x827CCAF8  OnContactFromNetworkPlayer(car) -- every marked car, whatever its queue held.
+// =================================================================================================
+namespace
+{
+    // FLAG PC witness (BRN_NETCRASH_DIAG, default off; NOT console code). Hard-capped so an online
+    // session cannot flood the log.
+    bool NetCrashDiagEnabled()
+    {
+        static const bool sbEnabled = ( std::getenv( "BRN_NETCRASH_DIAG" ) != 0 );
+        return sbEnabled;
+    }
+    const s32 KI_NETCRASH_DIAG_MAX_LINES = 40;
+}
+
+void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreScene* lpInput,
+                                                CrashIO::OutputBuffer_PreScene* lpOutput )
+{
+    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );             // :1056
+    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );           // :1057
+    CGS_ASSERT( mbIsOnlineGameMode, "IsOnlineGameMode()" );    // :1058
+
+    Set<u16, 160> lCrashingTrafficForPlayer;
+
+    for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
+         leActiveRaceCarIndex++ )
+    {
+        if( !lpInput->GetNetworkInputInterface()->IsRaceCarMarkedForUpdate( leActiveRaceCarIndex ) )
+        {
+            continue;
+        }
+
+        CGS_ASSERT( meLocalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
+                    meLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                    "(meLocalActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && "
+                    "(meLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)" );                 // :1074
+        CGS_ASSERT( leActiveRaceCarIndex != meLocalActiveRaceCarIndex,
+                    "leActiveRaceCarIndex != meLocalActiveRaceCarIndex" );                          // :1075
+
+        lCrashingTrafficForPlayer.Clear();
+
+        const CrashIO::NetworkInputInterface::CrashingTrafficUpdateQueue* lpCrashingTrafficQueue =
+            lpInput->GetNetworkInputInterface()->GetCrashingTrafficUpdateQueue( leActiveRaceCarIndex );
+
+        for( s32 liEvent = 0; liEvent < lpCrashingTrafficQueue->GetLength(); ++liEvent )
+        {
+            const CrashIO::CrashingTrafficUpdateEvent lEvent = lpCrashingTrafficQueue->GetEvent( liEvent );
+            const u16 luVehicle = lEvent.muVehicleId;
+            bool lbContentious = false;
+
+            CGS_ASSERT( !lCrashingTrafficForPlayer.Contains( luVehicle ),
+                        "Duplicate crashing traffic update for player" );                           // :1089
+
+            if( mCrashingTraffic.IsBitSet( luVehicle ) )
+            {
+                const u32 luTrafficCrash = FindCrashForTrafficVehicle( luVehicle );
+                if( luTrafficCrash != KU_INVALID_CRASH )
+                {
+                    const TrafficCrash* lpTrafficCrash = &mTrafficCrashes.GetItem( luTrafficCrash );
+                    if( lpTrafficCrash->GetOwner() != leActiveRaceCarIndex &&
+                        !lpTrafficCrash->IsUnconfirmedNetwork() )
+                    {
+                        lbContentious = true;
+                    }
+                    if( lpTrafficCrash->WantsToBeClearedUp() )
+                    {
+                        lbContentious = true;
+                    }
+                }
+            }
+
+            if( maiSlammedTrafficOwners[luVehicle] != -1 &&
+                maiSlammedTrafficOwners[luVehicle] != leActiveRaceCarIndex )
+            {
+                lbContentious = true;
+            }
+
+            if( !lbContentious )
+            {
+                const CgsSceneManager::VolumeInstanceId lVolumeInstanceId =
+                    BrnTraffic::MakeTrafficVolumeInstanceId( luVehicle );
+                lpOutput->GetVehicleInputInterface()->UpdateNetworkTraffic( lVolumeInstanceId, lEvent.mTransform );
+                lCrashingTrafficForPlayer.Insert( luVehicle );
+            }
+        }
+
+        Set<u16, 160> lNewCrashingTraffic;
+        Set<u16, 160> lClearedUpTraffic;
+        lNewCrashingTraffic.SetDifference( lCrashingTrafficForPlayer,
+                                           maCrashingTrafficForPlayers[leActiveRaceCarIndex] );
+        lClearedUpTraffic.SetDifference( maCrashingTrafficForPlayers[leActiveRaceCarIndex],
+                                         lCrashingTrafficForPlayer );
+
+        for( u32 luVehicleIndex = 0; luVehicleIndex < lNewCrashingTraffic.GetLength(); ++luVehicleIndex )
+        {
+            const u32 luVehicle = lNewCrashingTraffic[luVehicleIndex];
+
+            if( mCrashingTraffic.IsBitSet( luVehicle ) )
+            {
+                const u32 luTrafficCrash = FindCrashForTrafficVehicle( luVehicle );
+                CGS_ASSERT( luTrafficCrash != KU_INVALID_CRASH, "luTrafficCrash != KU_INVALID_CRASH" );   // :1182
+                TrafficCrash* lpTrafficCrash = &mTrafficCrashes.GetItem( luTrafficCrash );
+                CGS_ASSERT( lpTrafficCrash->IsUnconfirmedNetwork(),
+                            "lpTrafficCrash->IsUnconfirmedNetwork()" );                                 // :1185
+
+                if( lpTrafficCrash->GetOwner() != leActiveRaceCarIndex )
+                {
+                    maCrashingTrafficForPlayers[lpTrafficCrash->GetOwner()].Erase( static_cast<u16>( luVehicle ) );
+                    maCrashingTrafficForPlayers[leActiveRaceCarIndex].Insert( static_cast<u16>( luVehicle ) );
+                }
+                lpTrafficCrash->ConfirmNetworkOwner( leActiveRaceCarIndex );
+            }
+            else
+            {
+                CGS_ASSERT( !mCrashingNetworkTraffic.IsBitSet( luVehicle ),
+                            "!mCrashingNetworkTraffic.IsBitSet( luVehicle )" );                         // :1199
+                CGS_ASSERT( FindCrashForTrafficVehicle( luVehicle ) == KU_INVALID_CRASH,
+                            "FindCrashForTrafficVehicle( luVehicle ) == KU_INVALID_CRASH" );             // :1200
+
+                TrafficCrash* lpTrafficCrash = mTrafficCrashes.Grow();
+                lpTrafficCrash->Construct( leActiveRaceCarIndex, static_cast<u16>( luVehicle ),
+                                           KF_NETWORK_CRASH_TIMEOUT, true );
+                lpTrafficCrash->ConfirmNetworkOwner( leActiveRaceCarIndex );
+
+                mCrashingTraffic.SetBit( luVehicle );
+                maCrashingTrafficForPlayers[leActiveRaceCarIndex].Insert( static_cast<u16>( luVehicle ) );
+                lpOutput->GetTrafficOutputInterface()->StartNetworkTrafficVehicleCrashing( luVehicle );
+            }
+
+            mCrashingNetworkTraffic.SetBit( luVehicle );
+        }
+
+        for( u32 luVehicleIndex = 0; luVehicleIndex < lClearedUpTraffic.GetLength(); ++luVehicleIndex )
+        {
+            const u32 luVehicle = lClearedUpTraffic[luVehicleIndex];
+            const u32 luTrafficCrash = FindCrashForTrafficVehicle( luVehicle );
+            CGS_ASSERT( luTrafficCrash != KU_INVALID_CRASH, "luTrafficCrash != KU_INVALID_CRASH" );       // :1226
+            TrafficCrash* lpTrafficCrash = &mTrafficCrashes.GetItem( luTrafficCrash );
+
+            if( lpTrafficCrash->IsUnconfirmedNetwork() )
+            {
+                continue;
+            }
+
+            CGS_ASSERT( lpTrafficCrash->GetOwner() == leActiveRaceCarIndex,
+                        "lpTrafficCrash->GetOwner() == leActiveRaceCarIndex" );                         // :1236
+            CGS_ASSERT( mCrashingTraffic.IsBitSet( luVehicle ),
+                        "mCrashingTraffic.IsBitSet( luVehicle ) is false" );                            // :1238
+            CGS_ASSERT( mCrashingNetworkTraffic.IsBitSet( luVehicle ),
+                        "mCrashingNetworkTraffic.IsBitSet( luVehicle ) is false" );                     // :1239
+            lpTrafficCrash->SetNetworkVehicleClearedUp();
+        }
+
+        // FLAG PC witness (BRN_NETCRASH_DIAG, capped; NOT console code): proves this body ran on a
+        // frame that carried the other player's crashing traffic, and what it did with it.
+        if( NetCrashDiagEnabled() && CgsDev::Log::gpDebugPrint && lpCrashingTrafficQueue->GetLength() > 0 )
+        {
+            static s32 siLines = 0;
+            if( siLines < KI_NETCRASH_DIAG_MAX_LINES )
+            {
+                ++siLines;
+                const CrashIO::CrashingTrafficUpdateEvent& lrFirst = lpCrashingTrafficQueue->GetEvent( 0 );
+                *CgsDev::Log::gpDebugPrint
+                    << "[netcrash] HandleNetworkCrashingTraffic player=" << static_cast<s32>( leActiveRaceCarIndex )
+                    << " updates=" << lpCrashingTrafficQueue->GetLength()
+                    << " posted=" << lCrashingTrafficForPlayer.GetLength()
+                    << " new=" << lNewCrashingTraffic.GetLength()
+                    << " cleared=" << lClearedUpTraffic.GetLength()
+                    << " first=" << static_cast<s32>( lrFirst.muVehicleId )
+                    << " pos=(" << lrFirst.mTransform.wAxis.x << ", " << lrFirst.mTransform.wAxis.y
+                    << ", " << lrFirst.mTransform.wAxis.z << ") [FLAG PC witness]\n";
+            }
+        }
+
+        OnContactFromNetworkPlayer( leActiveRaceCarIndex );
+    }
+}
+
+// =================================================================================================
 // PreSceneUpdate @ 0x827D3A60   (86 insns)
 //
 //   0x827D3A80  LockForWrite(lpOutput) ; LockForRead(lpInput)         -- in THAT order
@@ -629,7 +844,7 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
 //   0x827D3B30  HandleGameActions                                     [LIVE]
 //   0x827D3B44  if (!(lUpdateSet & 1)) {
 //   0x827D3B48      ClearUpRecycledTraffic                            [LIVE]
-//   0x827D3B4C      if (mbIsOnlineGameMode) { HandleNetworkCrashingTraffic ;       [PARKED, G64-D2]
+//   0x827D3B4C      if (mbIsOnlineGameMode) { HandleNetworkCrashingTraffic ;       [LIVE online, G64-D2]
 //                                             ResetCrashedNetworkRaceCars }   [LIVE online, G65-D1]
 //   0x827D3B78      if (mbClearUpEnabled)  { TickCrashes ; ClearupCrashes }   <-- THE EXIT
 //               }
@@ -665,15 +880,7 @@ void CrashModule::PreSceneUpdate( CgsModule::IOBufferStack* /*lpInputBufferStack
 
         if( mbIsOnlineGameMode )                                  // 0x827D3B4C lbz 0x1529
         {
-            // 0x827D3B64 HandleNetworkCrashingTraffic(lpInput, lpOutput) -- still PARKED (G64-D2):
-            // its body reads NetworkInputInterface::GetCrashingTrafficUpdateQueue (DWARF :105, the
-            // per-car queue) and posts through VehicleInputInterface::UpdateNetworkTraffic (DWARF
-            // BrnVehicleInputInterface.h:148); neither accessor exists in this tree yet.
-            static bool sbLoggedNetworkPark = false;
-            LogCrashPark( sbLoggedNetworkPark,
-                          "[crash-exit] CrashModule network arm PARK: HandleNetworkCrashingTraffic"
-                          " is not reconstructed [FLAG]\n" );
-
+            HandleNetworkCrashingTraffic( lpInput, lpOutput );    // 0x827D3B64 (G64-D2)
             ResetCrashedNetworkRaceCars( lpInput, lpOutput );    // 0x827D3B74
         }
 

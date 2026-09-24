@@ -25,6 +25,7 @@
 
 #include "types.hpp"        // u8/u32/s32/f32
 #include "BrnCommonTypes.h" // EntityId (32-bit packed scene-entity handle)
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"   // MakeTrafficVolumeInstanceId's return type
 
 namespace BrnTraffic
 {
@@ -157,6 +158,29 @@ namespace BrnTraffic
     // CgsSceneManager::EntityId's 8/12/12: this helper packs the raw u32 rather than calling
     // EntityId::Set.
     EntityId MakeTrafficEntityId(u32 luEntityIndex);
+
+    // ADDITIVE (crash parity FX-NETCRASH 2026-09-24). DWARF :163 `extern VolumeInstanceId
+    // MakeTrafficVolumeInstanceId(uint32_t)` -- the body is IN THIS HEADER (its local
+    // lVolumeInstanceId is DWARF :165), so every console caller inlines it:
+    //   KillDyingVehicleEntity 0x8272F678..0x8272F68C  `li r11,1 ; extldi r30,r11,64,57` (owner 2
+    //       in the entity word's high byte) ; std ; bl VolumeInstanceId::SetEntityIDEntityIndex
+    //   CrashModule::HandleNetworkCrashingTraffic 0x827CBCEC..0x827CBD18  the same two steps with
+    //       SetEntityIDEntityIndex itself inlined: `cmplwi 0x4000` assert (CgsEntityId.h:160),
+    //       `slwi 10 ; oris 0x200 ; sldi 32`
+    // It was mirrored as an anonymous-namespace copy in BrnTrafficEntityModule.cpp and in
+    // BrnTrafficEntityModule_KillDyingVehicleEntities.cpp; those two copies now resolve here.
+    static const u8 KU8_TRAFFIC_ENTITY_OWNER = 2;   // BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE
+
+    inline CgsSceneManager::VolumeInstanceId MakeTrafficVolumeInstanceId(u32 luVehicle)
+    {
+        CgsSceneManager::VolumeInstanceId lVolumeInstanceId;
+        lVolumeInstanceId.muId =
+            static_cast<u64>(KU8_TRAFFIC_ENTITY_OWNER)
+            << (CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX
+                + CgsSceneManager::VolumeInstanceId::KU_OWNER_BASE);
+        lVolumeInstanceId.SetEntityIDEntityIndex(luVehicle);
+        return lVolumeInstanceId;
+    }
 
     // The scene entity-type flag word traffic vehicles register under. X360
     // CreateNewVehicleEntities @0x8272FA30, 0x8272FF74: `li r29, 0x488` staged straight into

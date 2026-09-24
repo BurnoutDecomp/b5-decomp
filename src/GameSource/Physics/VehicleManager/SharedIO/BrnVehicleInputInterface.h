@@ -99,6 +99,26 @@ namespace Vehicle
             mRemoveCrashedTrafficEventQueue.AddEvent(lEvent);
         }
 
+        // DWARF BrnVehicleInputInterface.h:148 `int32_t UpdateNetworkTraffic(VolumeInstanceId,
+        // Matrix44Affine)` (crash parity FX-NETCRASH 2026-09-24, G64-D2). No out-of-line X360 symbol:
+        // inlined at its one caller, CrashModule::HandleNetworkCrashingTraffic --
+        //   0x827CBD1C  bl OutputBuffer_PreScene::GetVehicleInputInterface (write lock)
+        //   0x827CBD24  addis r3,r3,2 ; addi r3,r3,0x21F0   == +139760 mUpdateNetworkTrafficEventQueue
+        //   0x827CBD30..0x827CBD4C  std the 8-byte id at var_520, stvx128 x4 the transform at +0x10
+        //   0x827CBD50  bl BaseEventQueue<UpdateNetworkTrafficEvent>::AddEvent @0x827C2950
+        // PhysicalTrafficManager::ProcessUpdateNetworkTrafficEvents drains the queue.
+        // [FLAG] the return is unobservable (the only caller discards r3); it follows the DWARF
+        // int32_t sibling whose body IS out of line, CreateRaceCar @0x822CC288..0x822CC294
+        // (`lwzx` the queue length ; `addi r3, r11, -1` == the just-added slot).
+        s32 UpdateNetworkTraffic(VolumeInstanceId lVolumeInstanceId, Matrix44Affine lTransform)
+        {
+            UpdateNetworkTrafficEvent lEvent;
+            lEvent.mVolumeInstanceID = lVolumeInstanceId;
+            lEvent.mTransform        = lTransform;
+            mUpdateNetworkTrafficEventQueue.AddEvent(lEvent);
+            return mUpdateNetworkTrafficEventQueue.GetLength() - 1;
+        }
+
         // @0x8271C9C0 (478). DWARF :144. The trailer (cab + trailer) twin. DECLARED so
         // AddVehicleToPhysics' articulated arm compiles; the body is a named gate (trailers are
         // parked for wave-T3 round 1 -- wave-T2 generation only builds InitialiseAsStandard cars,
