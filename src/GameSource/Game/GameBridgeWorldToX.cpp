@@ -43,22 +43,20 @@
 //   14. input->mbWorldWantsDebugControllerFocus = world-entity-status byte
 //   15. mDirectorBridgeSerialiser.Unlock()
 //
-// REPRODUCED HERE: 2, 3, 6, 7, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 on 2026-09-24.)
+// REPRODUCED HERE: 2, 3, 6, 7, 8, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 and 8 on 2026-09-24.)
 //
 // [FLAG PC bring-up] dropped rather than paraphrased, each for a NAMED reason:
 //   1/15 + the whole state-4..6 replay arm -- BrnGameModule has no mDirectorBridgeSerialiser
 //        member (the console's is at gm+0x9A1070, inside this layout's omitted range) and
 //        DirectorBridgeSerialiser::GetStaticLayout is declaration-only. The PC has no replay
 //        path at all, so the live arm is the only one that can run.
-//   4/5/8 -- their DESTINATIONS (mMidInterfaceBlock, the tail of
-//        mVehicleDriverInputInterface, mGlobalRaceCarInterface) are honest-opaque byte spans
+//   4/5 -- their DESTINATIONS (mMidInterfaceBlock, the tail of
+//        mVehicleDriverInputInterface) are honest-opaque byte spans
 //        in BrnDirectorModuleIO.h. Writing into them by console byte offset is exactly the
 //        offset-poke this project forbids; they land when those interface homes do.
-//        ⚠️ FINDING for whoever homes mGlobalRaceCarInterface: the console copy is
-//        `XMemCpy(input + 16, src, 2416)` and 16 + 2416 == 2432 == mUsedRaceCars, so the real
-//        member starts at +16 (16-aligned after the 1-byte IOBuffer base), not at +1 as the
-//        current opaque span models it. sizeof(RCEntityGlobalRaceCarOutputInterface) is 2416
-//        on x64 too, so retyping that span to the real type reproduces the layout exactly.
+//   (8 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-DIRECTOR. Its destination is
+//        typed now: InputBuffer::mGlobalRaceCarInterface at +16, exactly as the finding that stood
+//        here said -- 16 + 2416 == 2432 == mUsedRaceCars, and the x64 sizeof is 2416 too.)
 //   (6 IS NO LONGER DROPPED -- restored 2026-08-02, see the step in the body.)
 //   (13 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-BRIDGES CC-6. Both of its
 //        reasons had expired: Camera::PlayerCrashInfo is homed (SharedIO/BrnPlayerInfo.h) and so is
@@ -250,6 +248,14 @@ namespace BrnGame
 
         // ---- step 7: the contact-spy publish ---------------------------------------------
         lpDirectorInput->AppendContacts(lpWorldOutput->GetContactSpyInterface());
+
+        // ---- step 8: the global race-car table ---------------------------------------------
+        // ⭐ RESTORED 2026-09-24 (crash parity FX-DIRECTOR). 0x823E3FD8..0x823E3FEC:
+        // `XMemCpy(input + 0x10, world->GetRaceCarGlobalOutputInterface() (0x823B5AC8), 0x970)` --
+        // the inlined DWARF InputBuffer::SetGlobalRaceCarInterface. MainDirector::ProcessInputQueue
+        // converts the global race-car indices in actions 113 (a car reached a checkpoint) and 223
+        // (a car joined) to active indices through it; unpublished, both conversions read nothing.
+        lpDirectorInput->SetGlobalRaceCarInterface(lpWorldOutput->GetRaceCarGlobalOutputInterface());
 
         lpDirectorInput->SetPlayerCarIndex(lePlayerIndex);
 

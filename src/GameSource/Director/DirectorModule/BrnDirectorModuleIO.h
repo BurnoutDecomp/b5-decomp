@@ -11,6 +11,7 @@
 #include "GameSource/Director/Camera/Utils/BrnDebugController.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface @0x6750, exactly 48B)
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h" // BrnDirector::BrnDirectorVehicleInputInterface (mVehicleDriverInputInterface @0x6780)
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (mGlobalRaceCarInterface @0x0010)
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
 // Like every CgsModule IO buffer it derives the shared CgsModule::IOBuffer (status-flag-guarded
@@ -24,6 +25,8 @@
 // bodies in BURNOUT_X360_ARTIST.XEX (the getters `return this + <off>`; the setters store at
 // `this + <off>`):
 //
+//     mGlobalRaceCarInterface    @0x0010 (16)      BridgeWorldToDirector `XMemCpy(input + 0x10, src, 0x970)`;
+//                                                  ProcessInputQueue 113 / 223 `addi r3, <input>, 0x10`
 //     mUsedRaceCars              @0x0980 (2432)    GetUsedRaceCars / SetRaceCarInfo bit-set
 //     mRaceCarInfo[8]            @0x0990 (2448)    SetRaceCarInfo:  VehicleInfo stride 0x4F0 (1264),
 //                                                  SetCrashingCentreOfMass: 1264*idx + 0xDF0/0xE75
@@ -81,11 +84,12 @@
 // mbHasCrashingCenterOfMass flag at element+0x4E5 -- exactly the committed VehicleInfo layout.
 //
 // HONEST PLACEHOLDERS. Several embedded members are large interface aggregates whose full byte
-// layouts are not yet reconstructed (RCEntityGlobalRaceCarOutputInterface, ControllerInfo,
+// layouts are not yet reconstructed (ControllerInfo,
 // TimerStatusInterface, BrnDirectorVehicleInputInterface, the world StatusInterface, the
 // ContactSpyInterface, TrafficDirectorOutputInterface, GuiPFXHookEnumeration,
 // CarScoreData, DirectorProfileData, and the GameActionQueue). (PlayerCrashInfo left this list
-// 2026-09-24: it is the typed Camera::PlayerCrashInfo member @0x78E0 now.) Rather than fork those homes
+// 2026-09-24: it is the typed Camera::PlayerCrashInfo member @0x78E0 now. So did
+// RCEntityGlobalRaceCarOutputInterface, the same day: the typed mGlobalRaceCarInterface @0x0010.) Rather than fork those homes
 // with guessed members, they are modelled here as correctly-SIZED, byte-addressable opaque
 // storage members carrying their DWARF names and offsets. This preserves the exact object
 // layout the accessors index into (every recovered offset is asserted below) while being honest
@@ -196,6 +200,23 @@ namespace DirectorIO
         bool GetPlayerEliminated() const                  { return mbPlayerEliminated; }
         bool GetModeTimeExpired() const                   { return mbModeTimeExpired; }
 
+        // DWARF :230 / :231 -- the world's global race-car table (see mGlobalRaceCarInterface).
+        // The console INLINES both, with no lock-bit test: the getter is the `addi r3, <input>, 0x10`
+        // ProcessInputQueue's cases 113 / 223 hand to RCEntityGlobalRaceCarOutputInterface::
+        // GetActiveRaceCarIndex (0x822385DC / 0x82238298); the setter is BridgeWorldToDirector
+        // step 8's `XMemCpy(input + 0x10, src, 0x970)` (0x823E3FD8..0x823E3FEC). The copy goes
+        // through the interface's member-wise operator= (a byte copy of the console's 2416 bytes is
+        // not portable to the x64 layout -- see that operator's body).
+        const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* GetGlobalRaceCarInterface() const
+        {
+            return &mGlobalRaceCarInterface;
+        }
+        void SetGlobalRaceCarInterface(
+                const BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpGlobalRaceCarInterface)
+        {
+            mGlobalRaceCarInterface = *lpGlobalRaceCarInterface;
+        }
+
         // @0x7AB0 -- copied verbatim into GameState +0x1CC (mRankUpInfo's 4-byte head) by
         // ProcessInputQueue's prologue (`lwz r11, 0x7AB0(r30); stwx r11, r31, 0x339AC`).
         // InputBuffer::Construct seeds it to 0 (`stw r30, 0x7AB0`).
@@ -291,10 +312,18 @@ namespace DirectorIO
     private:
         // Recovered byte offsets are pinned by _AssertLayout() below.
 
-        // @0x0001 .. : the IOBuffer base is 1 byte (FlagSet8). The first published member,
-        // mGlobalRaceCarInterface (RCEntityGlobalRaceCarOutputInterface), spans from just past the
-        // base up to mUsedRaceCars @0x0980. HONEST opaque storage (type home not yet reconstructed).
-        u8  mGlobalRaceCarInterface[0x0980 - 0x0001];   // RCEntityGlobalRaceCarOutputInterface @ ~0x0001
+        // @0x0001: the IOBuffer base is 1 byte (FlagSet8); the console's first member starts at the
+        // next 16-byte boundary. Explicit, so the member lands at +0x10 whatever its host alignment.
+        u8  maIOBufferBasePad[0x0010 - 0x0001];
+        // @0x0010 (16): the world's global race-car table (DWARF :324 mGlobalRaceCarInterface) --
+        // 35 parallel slots giving every global race car its position, speed, flags and ACTIVE
+        // race-car index. RETYPED 2026-09-24 (crash parity FX-DIRECTOR) from the opaque
+        // `u8 mGlobalRaceCarInterface[0x0980 - 0x0001]`: BridgeWorldToDirector copies it in with
+        // `XMemCpy(input + 0x10, src, 0x970)` (0x823E3FE4 `li r5, 0x970` / 0x823E3FE8 `addi r3,
+        // r26, 0x10`), and 0x10 + 0x970 == 0x980 == mUsedRaceCars, so it fills the span exactly.
+        // The x64 sizeof is the console's 2416 too (the interface's own offset pins run to +0x968;
+        // both are asserted in _AssertLayout()).
+        BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface mGlobalRaceCarInterface;   // @0x0010
 
         // @0x0980 (2432): the active-race-car bitmask. BitArray<8u> is one u64 field (8 bytes);
         // VehicleInfo is alignas(16) so the array slot is 16-byte aligned -> 8 bytes trailing pad.
