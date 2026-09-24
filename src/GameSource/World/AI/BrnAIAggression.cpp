@@ -1799,11 +1799,15 @@ void AIAggression::Construct(AIDriver* lpDriver)
     mbTargetPosValid          = false;                               // +0x44
     meSpeedMatchType          = ESpeedMatch_Disabled;                // +0x58
 
-    // [FLAG PC bring-up] the X360 seeds the static mRandom with 0x8FE06DC2 here (the inlined
-    // Random::Construct @0x8278B390..0x8278B438) and fills all eight ring slots from that seed;
-    // the host Random::Construct uses KU_RANDOM_DEFAULT_SEED and writes slot 0 as exactly 1.0f.
-    // Same shape, different sequence. Sequence-level parity of the aggression RNG is not a
-    // bring-up goal. DELETE-WHEN CgsNumeric::Random gains a seeded Construct.
+    // The inlined Random::Construct @0x8278B390..0x8278B438 IS the default Construct(): seed
+    // 0x8FE06DC2 is the DWARF default seed 2413850050 (CgsRandom.h:34), and the 8-pass loop
+    // (write 0x3F800000 | hi32(seed) >> 9 at the cursor, seed = seed * 0x5851F42D4C957F2D + 1,
+    // cursor = (cursor + 1) & 7) leaves ring[0] = 1.0f (hi32 of that seed is 0), ring[1..7] from
+    // the next seven seeds, the seed eight steps on and the cursor back at 0. Construct() below
+    // starts from the first step pre-folded (KU_RANDOM_DEFAULT_SEED == 2413850050 * K + 1) and
+    // ends in the same state (crash parity G00-D7 re-verified 2026-09-24: REFUTED -- the old
+    // "different sequence" FLAG here was wrong; tests/run_fxgs2_random.py pins
+    // Construct() == SetSeed(2413850050)).
     mRandom.Construct();
 }
 
