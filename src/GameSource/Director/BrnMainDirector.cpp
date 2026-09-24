@@ -60,6 +60,8 @@
 // -- the event-state journal legs: the game-action records they read, and the traffic-light
 //    lookup the prepare-for-mode arm resolves the event's junction logic box through ----------
 #include "GameSource/GameState/BrnGameActions.h"                   // the mode-lifecycle records
+#include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntInfo (case 132's record)
+#include <cstddef>   // offsetof (the alignas(16) records read by console offset)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"         // WorldMap::GetTrafficData
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"      // GetJunctionLogicBoxForTrafficLight
 
@@ -1291,9 +1293,14 @@ namespace BrnDirector
     // this was a live defect for SMASHES today, not only for jumps.
     //
     // ⚠️ WHAT IS GATED, and why (each is a NO-OP here, never a wrong value):
-    //   * the other handled cases (0, 53, 54, 107, 113, 120, 132, 150, 151, 215, 216, 218, 223,
-    //     224) -- the reason once given for all of them ("writes into a part of the GameState
-    //     that is still opaque") is STALE: see the crash-parity audit in the FX-DIRECTOR log.
+    //   * 113 and 223 only -- both convert a global race-car index through the director input's
+    //     global race-car interface (input + 0x10), which this build does not publish (see the
+    //     gate at the foot of the switch).
+    //     ⭐ 0 / 53 / 54 / 107 / 120 / 132 / 150 / 151 / 215 / 216 / 218 / 224 CAME OFF THIS LIST
+    //     2026-09-24 (FX-DIRECTOR, crash-parity audit): the reason once given for all of them
+    //     ("writes into a part of the GameState that is still opaque") was STALE -- every field
+    //     they write is a named DWARF member. So did the tail's mbForceSloMoNotAllowed drop and
+    //     the two inactivity clocks.
     //     ⭐ 42 / 43 / 140 / 144 / 145 / 146 (the Showtime arms) CAME OFF THIS LIST 2026-09-24
     //     (FX-DIRECTOR): every field they write is a named DWARF member (mbImpactTimeActive,
     //     mfImpactTimeSloMoFactor, GameState::ShowTimeInfo). Their absence floored Showtime's sim
@@ -1316,8 +1323,7 @@ namespace BrnDirector
     //     pipeline" -- had expired: every field they touch is a named DWARF member today and the
     //     "pipeline" is two 64-byte matrix copies out of a serialised payload. They are the ONLY
     //     writers of mbDriveThruActive in the image, i.e. the drive-thru camera's entire gate.
-    //   * ProcessNewVehicleEvents -- declaration-only (AllVehicleData un-homed).
-    //   * the post-loop slomo / crash-active tail and the whole debug-render block.
+    //   * the post-loop debug-render block (development drawing only).
     // The console's own default arm is a no-op `b def_...`, so an unhandled id costs nothing.
     //
     // ⚠️ ACTION IDs ARE X360 ids, which run +5 above the PS3 DecFIGS DWARF's E_ACTION_* enum
@@ -2111,6 +2117,242 @@ namespace BrnDirector
                 break;
             }
 
+            // ================= THE REST OF THE CONSOLE'S ARMS (crash-parity audit) =========
+            // [FX-DIRECTOR 2026-09-24] Every arm below was on the gated list with the blanket
+            // reason "writes into a part of the GameState that is still opaque". MEASURED AND
+            // STALE: every field they write is a named DWARF member of BrnDirector::GameState.
+            // Transcribed store for store from the ARTIST asm (GameState = MainDirector + 0x337E0;
+            // r23 = 1 and r29 = 0 for the whole function, 0x82237500 / 0x82237330).
+
+            // ---- 0  E_ACTION_RESET_PLAYER_CAR (80 bytes) @0x82238478 -------------------
+            //     lbz r11, 0x42(r30) ; stbx r11, 0x33931   -> +0x151 mbShouldResetPlayerCameraThisFrame
+            // Record +0x42 is DWARF ResetPlayerCarAction::mbResetPlayerCamera (BrnGameActions.h:669;
+            // this tree names the byte muReserved0x42 -- HandleChangePlayerCarEvent posts it from
+            // ChangePlayerCarEvent::mbResetPlayerCamera). Per-frame (ResetPerFrameData, 0x82237360).
+            // Consumer: Arbitrator::Update @0x8226ADE0 -> SharedCameraContainer::mbUseGameplayExternal.
+            // Read by offset: the record is alignas(16) and the queue does not align payloads.
+            case 0:
+            {
+                static_assert(offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42) == 0x42,
+                              "the console reads the reset-camera byte at record +0x42");
+                maGameState.mbShouldResetPlayerCameraThisFrame =
+                    (lpacPayload[offsetof(BrnGameState::GameStateModuleIO::ResetPlayerCarAction, muReserved0x42)] != 0);
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 0 RESET_PLAYER_CAR -> mbShouldResetPlayerCameraThisFrame "
+                        << (maGameState.mbShouldResetPlayerCameraThisFrame ? 1 : 0) << "\n";
+                }
+                break;
+            }
+
+            // ---- 53  E_ACTION_PLAYER_HIT_RIVAL / 54  E_ACTION_RIVAL_HIT_PLAYER (12 bytes) ----
+            //     53 @0x822384E8: stbx 1 -> 0x33991 (+0x1B1) ; stbx 1 -> 0x33992 (+0x1B2)
+            //     54 @0x82238504: stbx 1 -> 0x33991 (+0x1B1) ; stbx 0 -> 0x33992 (+0x1B2)
+            // No payload read. Both per-frame. Consumer: ArbStateRoaming::ProcessPossibleFX.
+            case 53:
+            {
+                maGameState.mbPlayerAndRivalImpactOccured = true;                                  // +0x1B1
+                maGameState.mbPlayerWonImpactAgainstRival = true;                                  // +0x1B2
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 53 PLAYER_HIT_RIVAL -> impact 1 won 1\n";
+                }
+                break;
+            }
+            case 54:
+            {
+                maGameState.mbPlayerAndRivalImpactOccured = true;                                  // +0x1B1
+                maGameState.mbPlayerWonImpactAgainstRival = false;                                 // +0x1B2
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 54 RIVAL_HIT_PLAYER -> impact 1 won 0\n";
+                }
+                break;
+            }
+
+            // ---- 107  E_ACTION_ON_TRAFFIC_CHECKING (2 bytes) @0x82238520 ----------------
+            //     stbx 1 -> 0x33993 (+0x1B3 mbPlayerCheckedTraffic). No payload read; per-frame.
+            case 107:
+            {
+                maGameState.mbPlayerCheckedTraffic = true;                                         // +0x1B3
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 107 ON_TRAFFIC_CHECKING -> mbPlayerCheckedTraffic 1\n";
+                }
+                break;
+            }
+
+            // ---- 120  E_ACTION_SHUTDOWN (24 bytes) @0x82237E44 -------------------------
+            //     stbx 1 -> 0x338BC (+0xDC mbIsShutdown). No payload read. NOT per-frame: the
+            //     inactive arm of case 6 (the takedown camera ending) is what clears it.
+            // Consumer: ArbStateTakedown (the shutdown camera / its shot selection).
+            case 120:
+            {
+                maGameState.mbIsShutdown = true;                                                   // +0xDC
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 120 SHUTDOWN -> mbIsShutdown 1\n";
+                }
+                break;
+            }
+
+            // ---- 132  E_ACTION_HUD_MESSAGE_STUNT_PERFORMED (DWARF 242; 24 bytes) @0x82238530 --
+            //     lwz r11, 0xC(r30) ; cmpwi 0 ; bgt -> 1 else 0 ; stbx 0x33995 (+0x1B5)
+            // The record is DWARF HUDMessageStuntPerformed { StuntInfo mStuntInfo; } (h:4528);
+            // +0xC is StuntInfo::miStuntMultiplier (StuntModeScoring stores it there, `stw r3,
+            // 0xC(r31)`). Producer: HUDMessageLogic::GenerateStuntMessage (`li r5, 0x84`). Per-frame.
+            case 132:
+            {
+                static_assert(offsetof(BrnGameState::StuntInfo, miStuntMultiplier) == 0x0C,
+                              "the console reads the stunt multiplier at record +0x0C");
+                const BrnGameState::StuntInfo& lrStunt =
+                    *reinterpret_cast<const BrnGameState::StuntInfo*>(lpacPayload);
+                maGameState.mbPlayerPerformedStunt = lrStunt.miStuntMultiplier > 0;               // +0x1B5
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 132 HUD_MESSAGE_STUNT_PERFORMED multiplier " << lrStunt.miStuntMultiplier
+                        << " -> mbPlayerPerformedStunt " << (maGameState.mbPlayerPerformedStunt ? 1 : 0) << "\n";
+                }
+                break;
+            }
+
+            // ---- 150  E_ACTION_GAME_TRAINING_PAUSE / 151  ..._UNPAUSE (DWARF 142/143) ----
+            //     150 @0x82237E84: stbx 1 -> 0x339A2 (+0x1C2 mbTrainingPause)
+            //     151 @0x82237E94: stbx 0 -> 0x339A2
+            // Producer: TrainingManager (0x96 / 0x97). Not per-frame.
+            case 150:
+            {
+                maGameState.mbTrainingPause = true;                                                // +0x1C2
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 150 GAME_TRAINING_PAUSE -> mbTrainingPause 1\n";
+                }
+                break;
+            }
+            case 151:
+            {
+                maGameState.mbTrainingPause = false;                                               // +0x1C2
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 151 GAME_TRAINING_UNPAUSE -> mbTrainingPause 0\n";
+                }
+                break;
+            }
+
+            // ---- 215  E_ACTION_PAYBACK_ACTIVATED (12 bytes) @0x82238488 ----------------
+            //     the console asserts the record ("lpAction", BrnMainDirector.cpp:1437, r5 0x59D)
+            //     stbx 1 -> 0x338D0 (+0xF0 mbPaybackActive) ; lwz 0(r30) -> 0x338D4 (+0xF4)
+            case 215:
+            {
+                CGS_ASSERT(lpAction != 0, "lpAction");
+                const BrnGameState::GameStateModuleIO::PaybackActivatedAction& lrPayback =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::PaybackActivatedAction*>(lpacPayload);
+                maGameState.mbPaybackActive     = true;                                            // +0xF0
+                maGameState.meActivePaybackType = lrPayback.mePaybackType;                         // +0xF4
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 215 PAYBACK_ACTIVATED -> mbPaybackActive 1 meActivePaybackType "
+                        << static_cast<s32>(maGameState.meActivePaybackType) << "\n";
+                }
+                break;
+            }
+
+            // ---- 216  E_ACTION_PAYBACK_OVER (1 byte) @0x822384C8 -----------------------
+            //     stbx 0 -> 0x338D0 (+0xF0) ; li r11, 3 ; stwx -> 0x338D4 (+0xF4)
+            // 3 is the "no payback" sentinel GameState::Clear also stores (E_PAYBACK_TYPE_SIX_AXIS_
+            // STEERING, the one type ArbStateRoaming asserts it never plays).
+            case 216:
+            {
+                maGameState.mbPaybackActive     = false;                                           // +0xF0
+                maGameState.meActivePaybackType = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;    // +0xF4 = 3
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 216 PAYBACK_OVER -> mbPaybackActive 0 meActivePaybackType 3\n";
+                }
+                break;
+            }
+
+            // ---- 218  E_ACTION_SOUND_TRIGGER (32 bytes) @0x82238550 --------------------
+            //     lwz r28, 0x10(r30)                     SoundTriggerAction::mEntityId
+            //     AllVehicleData::GetPlayer(this + 0x12C80) ; lwz 0x3C8 ; cmplw ; bne -> skip
+            //                                            the player's RaceCarState::mEntityId
+            //     lwz 0x14(r30) ; cmpwi 1 ; bne -> skip  meResultType == E_TYPE_AT_ENTITY
+            //     lwz 0x18(r30) ; six single-bit tests (bits 0..5, 0x8223857C..0x822385C0)
+            //     any set -> stbx 1 -> 0x338D8 (+0xF8 mbPlayerInTunnel)
+            // Per-frame. Producer: TriggerQueryManager::PreWorldUpdate's maSoundActions drain
+            // (0x8239F848, `li r5, 0xDA`).
+            case 218:
+            {
+                static_assert(offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, mEntityId) == 0x10 &&
+                              offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, meResultType) == 0x14 &&
+                              offsetof(BrnGameState::GameStateModuleIO::SoundTriggerAction, muActiveTriggers) == 0x18,
+                              "the console reads the sound trigger's entity / type / bits at +0x10 / +0x14 / +0x18");
+                const BrnGameState::GameStateModuleIO::SoundTriggerAction& lrTrigger =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::SoundTriggerAction*>(lpacPayload);
+                if (lrTrigger.mEntityId.muValue == mAllVehicleData.GetPlayer().mRaceCarState.mEntityId.muValue &&
+                    lrTrigger.meResultType == BrnGameState::GameStateModuleIO::SoundTriggerAction::E_TYPE_AT_ENTITY)
+                {
+                    const u32 luActiveTriggers = lrTrigger.muActiveTriggers;
+                    if ((luActiveTriggers & 0x01) != 0 || (luActiveTriggers & 0x02) != 0 ||
+                        (luActiveTriggers & 0x04) != 0 || (luActiveTriggers & 0x08) != 0 ||
+                        (luActiveTriggers & 0x10) != 0 || (luActiveTriggers & 0x20) != 0)
+                    {
+                        maGameState.mbPlayerInTunnel = true;                                       // +0xF8
+                    }
+                }
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 218 SOUND_TRIGGER entity " << lrTrigger.mEntityId.muValue
+                        << " type " << static_cast<s32>(lrTrigger.meResultType)
+                        << " triggers " << lrTrigger.muActiveTriggers
+                        << " -> mbPlayerInTunnel " << (maGameState.mbPlayerInTunnel ? 1 : 0) << "\n";
+                }
+                break;
+            }
+
+            // ---- 224  E_ACTION_CAR_ADDITION_PRESENTATION_END (DWARF 216) @0x822382C0 ----
+            //     stbx 0 -> 0x33932 (+0x152 mbNewCarAdded) ; stfsx f31 -> 0x33934 (+0x154)
+            // f31 is flt_82001CC0 == 0.0 (0x82237340, the same register ResetPerFrameData stores).
+            // meAddedCarID (+0x158) is not touched.
+            case 224:
+            {
+                maGameState.mbNewCarAdded                       = false;                          // +0x152
+                maGameState.mfCarAddedPresentationTimeRemaining = 0.0f;                           // +0x154
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint << "[director-action] 224 CAR_ADDITION_PRESENTATION_END -> mbNewCarAdded 0\n";
+                }
+                break;
+            }
+
+            // ⚠️ GATE (113, 223): both convert a GLOBAL race-car index through
+            //   RCEntityGlobalRaceCarOutputInterface::GetActiveRaceCarIndex on the director input's
+            //   global race-car interface (`addi r3, <input>, 0x10`):
+            //     113 @0x822385D4 E_ACTION_RACE_CAR_REACHED_CHECKPOINT: GetActi(input+0x10, rec+0x04)
+            //         == GetPlayerCarIndex() -> +0x1B4 mbPlayerHitCheckpointThisFrame = 1
+            //     223 @0x82238278 E_ACTION_CAR_ADDITION_PRESENTATION_START: if (rec+0x18 mbDoCamera)
+            //         { +0x152 = 1; +0x154 = rec+0x14; +0x158 = GetActi(input+0x10, rec+0x10); }
+            //   That interface is not published into this build's InputBuffer (BridgeWorldToDirector's
+            //   copy into input+0x10 is not in the tree), so the conversion would read nothing.
+            //   CONSEQUENCE: the checkpoint camera FX and the online new-car moment have no request.
+            //   DELETE-WHEN: the InputBuffer carries the global race-car interface at +0x10.
+
             default:
                 // The console's own default arm, plus the GATED cases listed in the banner.
                 break;
@@ -2140,8 +2382,15 @@ namespace BrnDirector
             maGameState.mbRankUpMessageReceivedThisFrame = true;
         }
 
-        // ⚠️ GATE: `if (<flag tail +0x35431>) mbCanUseSlomo = false;` and the whole debug-render
-        //   tail. (Both still blocked on the un-homed MainDirector flag tail.)
+        // 0x8223886C..0x82238888 -- `lbzx +0x35431 ; beq ; stbx r29(=0), 0x338E0`: while the
+        // director's mbForceSloMoNotAllowed latch is up, slow motion is withdrawn every drain.
+        if (maStateFlagTail[E_FLAG_TAIL_FORCE_SLOMO_NOT_ALLOWED])
+        {
+            maGameState.mbCanUseSlomo = false;                              // +0x100
+        }
+
+        // ⚠️ GATE: the debug-render tail (0x82238A40.., gated on the flag-tail bytes +0x3543E /
+        //   +0x3543F and a DebugInterface draw of the event journal) -- development-only drawing.
         //
         // ⭐⭐⭐ THE CRASH-ACTIVE LEG IS LANDED (2026-08-29, crash-camera wave). It is the ONLY
         // writer of GameState::mbCrashActive in the whole image -- an image-wide scan of every
@@ -2219,6 +2468,43 @@ namespace BrnDirector
                 // last second of a crash.
                 maGameState.mfCrashTimeRemaining = KF_CRASH_TIME_WINDOW;
             }
+        }
+
+        // 0x8223893C..0x82238A3C -- THE TWO INACTIVITY CLOCKS and the been-active latch
+        // (GameState +0x148 / +0x14C / +0x150). Each clock runs on the SIM timestep
+        // (`lfs 0x20 ; lfs 0x1C ; fmadds` off GetTimerStatusInterface() -- the same sim step the
+        // crash window above counts down by) and is zeroed (f31 == flt_82001CC0 == 0.0) by any
+        // pad input or a paused sim; the player clock is also zeroed by the player's engine
+        // (VehicleInfo +0x4E6 mbEngineOn), which latches mbPlayerBeenActive. Consumers:
+        // ArbStateRoaming's picture-paradise idle entry and ArbStateCarSelect's orbit.
+        {
+            const DirectorIO::ControlInput* lpControl = lpInput->GetControll();
+            const bool lbAnyInput  = lpControl->mbAnyInput;                  // lbz 0(GetControll())
+            const bool lbSimPaused = lpInput->IsSimPaused();                 // lbz 0x7AC8(input)
+            const f32  lfSimTimestep =
+                lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep();
+
+            // The player's VehicleInfo, read the way the crash block above reads it (the console
+            // indexes the published array without a guard; the host guard is the same one).
+            const BrnDirector::Camera::VehicleInfo* lpRaceCars = lpInput->GetRaceCarInfo();
+            const s32 liPlayerCarIndex = static_cast<s32>(lpInput->GetPlayerCarIndex());
+            const bool lbEngineOn =
+                (lpRaceCars != 0 && liPlayerCarIndex >= 0)
+                    ? lpRaceCars[liPlayerCarIndex].mbEngineOn
+                    : false;
+
+            if (lbAnyInput || lbSimPaused)
+                maGameState.mfPadInactiveTime = 0.0f;                         // +0x148
+            else
+                maGameState.mfPadInactiveTime += lfSimTimestep;
+
+            if (lbEngineOn || lbAnyInput || lbSimPaused)
+                maGameState.mfPlayerInactiveTime = 0.0f;                      // +0x14C
+            else
+                maGameState.mfPlayerInactiveTime += lfSimTimestep;
+
+            if (lbEngineOn)
+                maGameState.mbPlayerBeenActive = true;                        // +0x150
         }
     }
 

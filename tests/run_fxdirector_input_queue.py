@@ -27,16 +27,19 @@ sys.dont_write_bytecode = True
 from fxgs_common import Tree, definition, code_only, compile_and_run, report, REPO, STRSTREAM_CPP
 
 DIRECTOR_CPP = "src/GameSource/Director/BrnMainDirector.cpp"
+ARBITRATOR_CPP = "src/GameSource/Director/Arbitrator/BrnDirectorArbitrator.cpp"
 DIRECTOR_H = "src/GameSource/Director/BrnMainDirector.h"
 GAMESTATE_H = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 GAMESTATE_CPP = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.cpp"
 CRASHMODE_CPP = "src/GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.cpp"
 REGION_CPP = REPO / "src/SharedClasses/Trigger/BrnRegion.cpp"
-NUMERIC_CHECKS = 32
+NUMERIC_CHECKS = 77
 
 PROCESS_INPUT_QUEUE = "void MainDirector::ProcessInputQueue(const DirectorInputOutput* lpIO)"
 CLEAR_PRESENTATION = "static void ClearEventPresentationBlock(GameState& lrGameState)"
 IMPACT_RECORD = "struct ImpactTimeStartActionRecord"
+ARB_UPDATE = "void Arbitrator::Update(bool lbPaused, Camera::Camera& lrCameraInOut,"
+ARB_RESET_READ = "if (lrSharedInfo.mpGameState->mbShouldResetPlayerCameraThisFrame)"
 
 # GameState field accessors per header layout. NEW: the DWARF sub-objects (FX-DIRECTOR re-model).
 # OLD (<= 2eadcaf1): ShowTimeInfo = u8[0x14] @+0x1D4, DirectorProfileData = {u8[8], s32} @+0x1E8.
@@ -102,6 +105,28 @@ def wiring(tree):
                "mShowTimeInfo.mbCrushComboThisFrame", "mShowTimeInfo.mbEarntMultiplierThisFrame",
                "mShowTimeInfo.mbVehicleImpactThisFrame", "mShowTimeInfo.mbExtraSpinThisFrame",
                "mShowTimeInfo.miComboLevel", "SetRequestedTimeDilation(lrGameState.mfImpactTimeSloMoFactor)")))
+    # [item 2] the rest of the console's arms, the tail, and the arbitrator's +0x151 read.
+    yield ("ProcessInputQueue has the audit's arms 0 / 53 / 54 / 107 / 120 / 132 / 150 / 151 / 215 / 216 / 218 / 224 "
+           "(0x82238478 / 0x822384E8 / 0x82238504 / 0x82238520 / 0x82237E44 / 0x82238530 / 0x82237E84 / "
+           "0x82237E94 / 0x82238488 / 0x822384C8 / 0x82238550 / 0x822382C0)",
+           all(has_case(pinq, case_id) for case_id in (0, 53, 54, 107, 120, 132, 150, 151, 215, 216, 218, 224)))
+    crash_window = flat.find("maGameState.mfCrashTimeRemaining=KF_CRASH_TIME_WINDOW;")
+    pad_clock = flat.find("maGameState.mfPadInactiveTime=0.0f;")
+    player_clock = flat.find("maGameState.mfPlayerInactiveTime=0.0f;")
+    been_active = flat.find("maGameState.mbPlayerBeenActive=true;")
+    yield ("the tail drops mbCanUseSlomo on the mbForceSloMoNotAllowed latch (0x8223886C) and runs the two "
+           "inactivity clocks after the crash window (0x8223893C..0x82238A3C)",
+           "if(maStateFlagTail[E_FLAG_TAIL_FORCE_SLOMO_NOT_ALLOWED])" in flat
+           and 0 <= crash_window < pad_clock < player_clock < been_active)
+    try:
+        arb = re.sub(r"\s+", "", code_only(definition(tree.read(ARBITRATOR_CPP), ARB_UPDATE)))
+    except ValueError:
+        arb = ""
+    read = arb.find(re.sub(r"\s+", "", ARB_RESET_READ))
+    yield ("Arbitrator::Update reads +0x151 into mbUseGameplayExternal after publishing its containers and before "
+           "clearing mbLookbackOverride (0x8226ADE0..0x8226ADFC)",
+           0 <= arb.find("lrSharedInfo.mpSharedCameraContainer=&mSharedCameraContainer;") < read
+           < arb.find("mSharedCameraContainer.mbLookbackOverride=false;"))
 
 
 def numeric(tree):
@@ -136,6 +161,7 @@ def numeric(tree):
            "struct MainDirector\n{\n"
            "    GameState maGameState;\n"
            "    u8        maStateFlagTail[0x20];\n"
+           "    AllVehicleDataStandIn mAllVehicleData;\n"
            "    enum EFlagTail\n    {\n        " + enum + "\n    };\n"
            "    void ProcessNewVehicleEvents(const DirectorIO::InputBuffer*) {}\n"
            "    void HandlePrepareForModeAction(const BrnGameState::GameStateModuleIO::PrepareForModeAction&,\n"
@@ -146,6 +172,20 @@ def numeric(tree):
            "namespace\n{\n    " + window.group(0) + "\n" + record + "\n"
            "    bool BrnDiag_DirectorActionDiagOn() { return false; }\n}\n"
            + clear_block + "\n" + pinq + "\n}\n" + accessors)
+    try:
+        arb_update = code_only(definition(tree.read(ARBITRATOR_CPP), ARB_UPDATE))
+    except ValueError:
+        arb_update = ""
+    start = arb_update.find(ARB_RESET_READ)
+    if start >= 0:
+        brace = arb_update.find("{", start)
+        arb_stmt = arb_update[start:arb_update.find("}", brace) + 1]
+    else:
+        print("NUMERIC: Arbitrator::Update has no +0x151 read in this revision (empty stand-in)")
+        arb_stmt = "/* [stand-in: no mbShouldResetPlayerCameraThisFrame read in this revision] */"
+    inc += ("namespace BrnDirector\n{\n"
+            "void ArbitratorPrologueStandIn(SharedCameraContainerStandIn& mSharedCameraContainer,\n"
+            "                               ArbSharedInfoStandIn& lrSharedInfo)\n{\n" + arb_stmt + "\n}\n}\n")
     shadow = {GAMESTATE_H: header}
     return compile_and_run(Path(__file__).with_name("FxDirectorInputQueue.cpp"), "director_input_queue.inc", inc,
                            "FxDirectorInputQueue", shadow=shadow,
