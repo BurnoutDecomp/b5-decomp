@@ -11187,6 +11187,8 @@ void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
                         << " magnet=" << (lrThing.mbShowtimeCrashMagnet ? 1 : 0)
                         << " distSq=" << rw::math::vpu::Dot(lToThing, lToThing)
                         << " camDistSq=" << lfDistFromCameraSq
+                        << " showtime=" << (mbPlayingShowtimeMode ? 1 : 0)
+                        << " recipY=" << lfConeRecipYScale.x
                         << " [DELETE-WHEN-STABLE]\n";
             }
         }
