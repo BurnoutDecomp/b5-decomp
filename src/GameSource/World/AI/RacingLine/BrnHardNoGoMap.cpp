@@ -225,7 +225,9 @@ void HardNoGoMap::SpreadHNGAlongTrack(f32* lpafStretchDistance, f32 lfSpreadDist
 
                 lpafStretchDistance[liWidth] -= lfRowStep;
 
-                if (lpafStretchDistance[liWidth] <= 0.0f)
+                // NaN polarity (FX-AINAN2): `fcmpu budget, 0.0 ; bgt -> next column` @0x82782EE8/
+                // 0x82782EEC -- a NaN budget falls into the neighbour fill; `<= 0` skipped it.
+                if (!(lpafStretchDistance[liWidth] > 0.0f))
                 {
                     // Exhausted: inherit whichever neighbouring column still has budget.
                     if (liWidth == 0)
@@ -284,7 +286,9 @@ void HardNoGoMap::SpreadHNGIntoPreviousSection(f32* lpafStretchDistance)
 
         for (s32 liWidth = 0; liWidth < KI_HNG_MAP_WIDTH; ++liWidth)
         {
-            if (lpafStretchDistance[liWidth] <= 0.0f)
+            // NaN polarity (FX-AINAN2): `fcmpu budget, 0.0 ; ble` @0x82777AC0/0x82777AC4 is taken on
+            // an unordered compare -- a NaN budget skips the column as an exhausted one does.
+            if (!(lpafStretchDistance[liWidth] > 0.0f))
             {
                 continue;   // ble -> the loop increment, skipping the step advance
             }
@@ -299,7 +303,9 @@ void HardNoGoMap::SpreadHNGIntoPreviousSection(f32* lpafStretchDistance)
 
                 lpafStretchDistance[liWidth] -= lfRowStep;
 
-                if (lpafStretchDistance[liWidth] <= 0.0f)
+                // NaN polarity (FX-AINAN2): `bgt -> next column` @0x82777B08/0x82777B0C -- a NaN
+                // budget falls into the neighbour fill; `<= 0` skipped it.
+                if (!(lpafStretchDistance[liWidth] > 0.0f))
                 {
                     if (liWidth == 0)
                     {
@@ -671,15 +677,19 @@ void HardNoGoMap::WriteIntoMap(Vector2 lStart, Vector2 lEnd)
     f32 lfEndSquareX   = lfEndInterpX   * static_cast<f32>(KI_HNG_MAP_WIDTH);
     f32 lfEndSquareY   = lfEndInterpY   * static_cast<f32>(KI_HNG_MAP_HEIGHT);
 
-    if (lfStartSquareX <= 0.0f) { lfStartSquareX = 0.0f; }
-    if (lfStartSquareY <= 0.0f) { lfStartSquareY = 0.0f; }
-    if (lfEndSquareX   <= 0.0f) { lfEndSquareX   = 0.0f; }
-    if (lfEndSquareY   <= 0.0f) { lfEndSquareY   = 0.0f; }
+    // NaN polarity (FX-AINAN2): spelt as the fsels (0x82782C48..0x82782C58..0x82782CA4). fsel
+    // takes its THIRD operand on an unordered test, so a NaN survives the low clamp (-> v) and
+    // becomes the MAXIMUM at the high one (-> 31 / 7): the console always rasterises an in-grid
+    // square. The old if/if kept the NaN, and (s32)NaN indexed SetMapSquare out of the grid.
+    lfStartSquareX = (-lfStartSquareX >= 0.0f) ? 0.0f : lfStartSquareX;   // fneg ; fsel
+    lfStartSquareY = (-lfStartSquareY >= 0.0f) ? 0.0f : lfStartSquareY;
+    lfEndSquareX   = (-lfEndSquareX   >= 0.0f) ? 0.0f : lfEndSquareX;
+    lfEndSquareY   = (-lfEndSquareY   >= 0.0f) ? 0.0f : lfEndSquareY;
 
-    if (lfStartSquareX > lfMaxWidth)  { lfStartSquareX = lfMaxWidth;  }
-    if (lfEndSquareX   > lfMaxWidth)  { lfEndSquareX   = lfMaxWidth;  }
-    if (lfStartSquareY > lfMaxHeight) { lfStartSquareY = lfMaxHeight; }
-    if (lfEndSquareY   > lfMaxHeight) { lfEndSquareY   = lfMaxHeight; }
+    lfStartSquareX = ((lfMaxWidth  - lfStartSquareX) >= 0.0f) ? lfStartSquareX : lfMaxWidth;   // fsubs ; fsel
+    lfEndSquareX   = ((lfMaxWidth  - lfEndSquareX)   >= 0.0f) ? lfEndSquareX   : lfMaxWidth;
+    lfStartSquareY = ((lfMaxHeight - lfStartSquareY) >= 0.0f) ? lfStartSquareY : lfMaxHeight;
+    lfEndSquareY   = ((lfMaxHeight - lfEndSquareY)   >= 0.0f) ? lfEndSquareY   : lfMaxHeight;
 
     const f32 lfDeltaX = lfEndSquareX - lfStartSquareX;
     const f32 lfDeltaY = lfEndSquareY - lfStartSquareY;
