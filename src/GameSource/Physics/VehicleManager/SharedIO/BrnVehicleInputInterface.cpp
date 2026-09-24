@@ -24,8 +24,8 @@ namespace Vehicle
     //   order with the four late-added queues appended; order is irrelevant (each Construct
     //   only touches its own sub-object) so the members are walked in DECLARATION order
     //   here, which is what the DWARF gives and what operator= above already assumes.
-    //   The two scalars: the triangle-cache manager pointer (a1+128016) and the
-    //   added-for-collision BitArray (a1+142160) are both zeroed.
+    //   The two scalars: the triangle-cache manager pointer (a1+128016, 0x822E6754) and the
+    //   added-for-collision BitArray (a1+142160, 0x822E6770/74) are both zeroed.
     // ========================================================================
     void VehicleInputInterface::Construct()
     {
@@ -44,9 +44,12 @@ namespace Vehicle
         mUpdateNetworkTrafficEventQueue.Construct();
         mImpactEventQueue.Construct();
 
-        // asm `*(a1 + 128016) = 0` -- mTriangleCacheInterface's manager pointer. [FLAG] the
-        // interface's own type is committed but has no Construct; the console clears exactly
-        // this one word.
+        // 0x822E6740 lis r11,1 / 0x822E6748 ori r11,r11,0xF410 / 0x822E6754 stwx r30(=0),r31,r11:
+        // this+128016 == mTriangleCacheInterface.mpTriangleCacheManager -- the inlined
+        // TriangleCacheInterface::Construct (DWARF CgsSceneManagerModuleIO.h:572; no out-of-line
+        // X360 symbol). Crash parity G27-D1: the comment was here, the store was not, and PC IO
+        // buffers are not zero-filled, so the pointer kept whatever the IO stack held.
+        mTriangleCacheInterface.mpTriangleCacheManager = nullptr;
         // asm `*(a1 + 142160) = 0` -- mRaceCarsAddedForCollision (BitArray<8>).
         mRaceCarsAddedForCollision.UnSetAll();
     }
