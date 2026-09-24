@@ -491,6 +491,18 @@ void PrepareForModeAction::SetPlayerScoringIndex(s32 liIndex, EPlayerScoringInde
 }
 
 // -----------------------------------------------------------------------------
+// GetPlayerScoringIndex (record +0x04 + 4*liIndex). Inlined at its reader,
+// RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby: the setter's index assert
+// (same string, BrnGameActions.h line 0x4DF) then `lwzx` of the slot. Non-gating, as above.
+// -----------------------------------------------------------------------------
+EPlayerScoringIndex PrepareForModeAction::GetPlayerScoringIndex(s32 liIndex) const
+{
+    CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_PLAYERS,
+               "(liIndex>=0) && (liIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+    return maePlayerScoringIndex[liIndex];
+}
+
+// -----------------------------------------------------------------------------
 // SetPlayerBoostEarning (record +0x8C8, mfPlayerBoostEarning).
 // ModeManager::PrepareForMode @0x82342A94 lfs f0, 0x31C(r31) -> @0x82342A9C stfs f0, var_B8(r1),
 // i.e. record +0x8C8. The source is StartGameModeParams::GetBoostEarning(), bodied this same

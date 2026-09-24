@@ -63,6 +63,9 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"                // GameModeParams::KU_FLAG_AI_RESET_ON_TRACK_BEHIND
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
+#include "GameSource/Director/Camera/Utils/CameraUtils.h"                                    // BrnDirector::Camera::Utils::CreateLookAt (action 219)
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"                                  // [net] witness lines (PC harness)
+namespace renderengine { extern u32 guPresentCount; }   // [net] netcar witness: the frame-dump index
 #include "rw/math/vpu/matrix44affine_operation.h"                                        // rw::math::vpu::IsValid(Matrix44Affine) / Mult
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec::WheelSpec (the authored wheel placements)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h"                // VehicleLocatorData (the rest-pose light-locator stand-in)
@@ -3707,6 +3710,65 @@ void RaceCarEntityModule::HandleGameActions(
             break;
         }
 
+        // Action 219 (OnlinePlayerAddedAction; second jump table, entry 112): a player joined the
+        // online free-burn lobby -- spawn its NETWORK car. The console builds the transform at the
+        // ORIGIN looking along the local car's direction (the network car's first update snaps it
+        // to its owner's pose), spawns and attaches it to any free slot, puts it in the current
+        // mode, marks it CONNECTING with no driver controls yet, applies the record's palette /
+        // colour (both asserted against the palette resource) and base deformation, and maps the
+        // record's scoring slot to the new active slot.
+        case BrnGameState::GameStateModuleIO::E_ACTION_ONLINE_PLAYER_ADDED: // 219
+        {
+            const BrnGameState::GameStateModuleIO::OnlinePlayerAddedAction* lpPlayerAddedAction =
+                reinterpret_cast<const BrnGameState::GameStateModuleIO::OnlinePlayerAddedAction*>(lpEvent);
+            CGS_ASSERT(lpPlayerAddedAction != 0, "lpPlayerAddedAction");
+
+            BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface = lpOutput->GetRaceCarAIInterface();
+            const Vector3 lOrigin    = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
+            const Vector3 lDirection = GetActiveRaceCar(mePlayerActiveRaceCarIndex)->GetDirection();
+            const Matrix44Affine lTransform =
+                BrnDirector::Camera::Utils::CreateLookAt(lOrigin, rw::math::vpu::Add(lOrigin, lDirection));
+
+            const EGlobalRaceCarIndex leGlobalRaceCarIndex =
+                SpawnRaceCar(lpRaceCarAIInterface, lTransform, E_RACE_CAR_TYPE_NETWORK,
+                             lpPlayerAddedAction->mModelID, false, lpPlayerAddedAction->mWheelID,
+                             0 /* lpRivalId: none */, -1 /* liOpponentIndex */);
+            RaceCar* lpRaceCar = GetGlobalRaceCar(leGlobalRaceCarIndex);
+            AttachActiveRaceCar(lpRaceCar, E_ACTIVE_RACE_CAR_INDEX_INVALID);
+            lpRaceCar->SetInCurrentGameMode(mbIsInGameMode, mbCarSelectAllowedInGameMode);
+
+            ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
+            lpActiveRaceCar->meOnlineState                   = ActiveRaceCar::E_ONLINE_STATE_CONNECTING;
+            lpActiveRaceCar->mbReceivedNetworkDriverControls = false;
+
+            const s32 liPalette = static_cast<s32>(lpPlayerAddedAction->mu16CarPaintFinishIndex);
+            CGS_ASSERT(liPalette < E_NUM_PALETTES, "Invalid Palette Index: ");
+            lpRaceCar->SetColourPalette(liPalette);
+            const s32 liColour = static_cast<s32>(lpPlayerAddedAction->mu16CarColourIndex);
+            // The colour check indexes the palette table by that palette; evaluated only for an
+            // in-range palette so a failed first assert cannot read past the four entries.
+            if (liPalette < E_NUM_PALETTES)
+            {
+                CGS_ASSERT(liColour < mCarColoursResource->maPalettes[liPalette].GetNumColours(),
+                           "Invalid Colour Index: ");
+            }
+            lpRaceCar->SetColourIndex(liColour);
+
+            const f32 lfDeformAmount = lpPlayerAddedAction->mfBaseDeformationAmount;
+            lpRaceCar->GetActiveRaceCar()->mfBaseDeformAmount = lfDeformAmount;
+            lpRaceCar->GetActiveRaceCar()->meBaseDeformationType =
+                static_cast<BrnPhysics::Deformation::DeformationResetType>((lfDeformAmount == 0.0f) ? -1 : 1);
+
+            SetActiveRaceCarForPlayerScoringIndex(lpPlayerAddedAction->mePlayerScoringIndex,
+                                                  lpRaceCar->GetActiveRaceCarIndex());
+
+            BrnNetHarnessPC::Witness("world", "network car spawned for net=%d active=%d global=%d",
+                                     static_cast<s32>(lpPlayerAddedAction->mAddedPlayerNetworkID),
+                                     static_cast<s32>(lpRaceCar->GetActiveRaceCarIndex()),
+                                     static_cast<s32>(leGlobalRaceCarIndex));
+            break;
+        }
+
         // ARTIST 0x8230C75C..0x8230C76C forwards this/action/output with no
         // reshaping. The handler's non-Showtime boost spine is reconstructed
         // in BrnRaceCarEntityModule_ModeArming.cpp.
@@ -5811,6 +5873,39 @@ void RaceCarEntityModule::PreSceneUpdate(
     {
         const EActiveRaceCarIndex leActivateSlot = static_cast<EActiveRaceCarIndex>(liActivateSlot);
         ActiveRaceCar* lpActivateCar = GetActiveRaceCar(leActivateSlot);
+        // The pass's first leg: a slot whose network driver controls arrived this frame (the
+        // world bridge's CheckForNetworkDriverControlsReceived latch) gets its car's
+        // "received" byte raised -- what moves a CONNECTING network car to NORMAL (drawn and
+        // added for collision) in ActiveRaceCar::Update_PreScene. Only ever set, never cleared here.
+        if (lpInput->GetReceivedNetworkDriverControls(leActivateSlot))
+        {
+            lpActivateCar->mbReceivedNetworkDriverControls = true;
+        }
+        // [PC HARNESS, NOT X360] bounded witness (LAN runs only): once per 150-present bucket of
+        // the renderer's present counter -- the index BRN_FRAME_DUMP names its bb_<n>.bmp by --
+        // the state of every NETWORK car slot: online state, controls received, active, in the
+        // scene, drawn this frame, and its world position.
+        {
+            static u32 suLastPresentBucket = 0xFFFFFFFFu;
+            static bool sbPrintBucket = false;
+            if (liActivateSlot == 0)
+            {
+                const u32 luBucket = renderengine::guPresentCount / 150u;
+                sbPrintBucket = (luBucket != suLastPresentBucket);
+                suLastPresentBucket = luBucket;
+            }
+            if (sbPrintBucket && lpActivateCar->IsAttached() &&
+                lpActivateCar->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK)
+            {
+                const Vector3 lPos = lpActivateCar->GetPosition();
+                BrnNetHarnessPC::Witness("netcar", "present=%u slot %d online=%d received=%d active=%d scene=%d render=%d pos=(%.1f, %.1f, %.1f)",
+                                         renderengine::guPresentCount, liActivateSlot,
+                                         static_cast<s32>(lpActivateCar->GetOnlineState()),
+                                         lpActivateCar->mbReceivedNetworkDriverControls ? 1 : 0,
+                                         lpActivateCar->IsActive() ? 1 : 0, lpActivateCar->mbAddedToScene ? 1 : 0,
+                                         lpActivateCar->mbRenderThisFrame ? 1 : 0, lPos.x, lPos.y, lPos.z);
+            }
+        }
         if (lpActivateCar != 0 && lpActivateCar->mbAIToBeActivated && lpActivateCar->IsAttached())
         {
             CGS_ASSERT(lpActivateCar->IsAttached(), "IsAttached()");   // BrnActiveRaceCar.h:1089
@@ -7812,7 +7907,8 @@ void RaceCarEntityModule::PrePhysicsUpdate(
         // + 32 / + 36 == mfAcceleration / mfBraking.
         UpdateActiveCars( mfTimeStep, mfTimeStepMultiplier,
                           mPlayerVehicleControls.mfAcceleration,
-                          mPlayerVehicleControls.mfBraking, lpOutput->GetGameEventQueue() );
+                          mPlayerVehicleControls.mfBraking, lpOutput->GetGameEventQueue(),
+                          lpOutput->GetVehicleInputInterface() );
 
         // Breaker @0x823072FC..0x82307318: tailgate state is updated first,
         // then the writable game-event queue is passed to UpdateBoost. The PC
@@ -7867,16 +7963,16 @@ void RaceCarEntityModule::PrePhysicsUpdate(
 // that function's banner for the drop list.
 //
 // ---- [FLAG PC bring-up] DROPPED HERE ------------------------------------------------------
-//  * the `lpVehicleOutput != NULL` assert (X360 :4335) -- the pointer is not plumbed.
-//  * the tail call SendAddedForCollisionStateToPhysics(lpVehicleOutput) @0x822FF360: it walks
-//    each car's mAddRemoveNetworkCarForCollisionQueue, and the producer for that queue
-//    (ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents @0x822BF840) is itself
-//    dropped by Update's slice, so running it here would drain a queue nothing fills.
+//  (The stack argument the console calls lpVehicleOutput is the pre-physics output buffer's
+//  VehicleInputInterface -- PrePhysicsUpdate's `GetVehicleInputInterface()` write getter --
+//  asserted non-null on entry and handed to the tail call below.)
 // ============================================================================
 void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
                                            f32 lfAcceleration, f32 lfBraking,
-                                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents )
+                                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
+                                           BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
 {
+    CGS_ASSERT( lpVehicleInput != 0, "lpVehicleOutput != NULL" );
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
         ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
@@ -7888,6 +7984,28 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
             lrCar.Update( lfTimeStep, lfTimeStepMultiplier, lfAcceleration, lfBraking,
                           mbIsInOnlineGameMode, mbInCarSelectScreen, static_cast<s32>(meGameModeType),
                           mPlayersCurrentRouteNodePosition, mPlayersNextRouteNodePosition, lpGameEvents );
+        }
+    }
+
+    SendAddedForCollisionStateToPhysics( lpVehicleInput );
+}
+
+// ============================================================================
+// SendAddedForCollisionStateToPhysics -- for each of the eight active slots: an ACTIVE car whose
+// mbAddedForCollision byte (+0x78B) is set is marked added-for-collision on the vehicle input
+// interface (VehicleInputInterface::SetRaceCarAddedForCollision). The assert names the argument
+// the way the console does.
+// ============================================================================
+void RaceCarEntityModule::SendAddedForCollisionStateToPhysics( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
+{
+    CGS_ASSERT( lpVehicleInput != 0, "lpVehicleOutput != NULL" );
+
+    for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
+    {
+        const ActiveRaceCar& lrCar = maActiveRaceCars[liCar];
+        if( lrCar.IsActive() && lrCar.mbAddedForCollision )
+        {
+            lpVehicleInput->SetRaceCarAddedForCollision( static_cast<EActiveRaceCarIndex>( liCar ) );
         }
     }
 }

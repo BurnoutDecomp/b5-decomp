@@ -55,7 +55,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"                     // [tut-ticker] GameStateModule accessors (the clock leg)
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"     // [tut-ticker] TrainingManager::IsInPictureParadise
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"          // [tut-ticker] CarSelectManager::GetJunkyardId
-#include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h" // [stuntrace] the bring-up round-manager stand-in
+#include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h" // NetworkRoundManager (mpNetworkRoundManager)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 
 namespace BrnGameState
@@ -117,6 +117,15 @@ void ModeManager::ConstructInterModeStateBringUp(GameStateModule* lpGameStateMod
     mScoringSystemDebugComponent.Construct(GetScoringSystem());
     mScoringSystemDebugComponent.Register();
 
+    // The real Construct's first leg: the embedded ChallengeManager (+0x6E00), handed the module,
+    // this manager, and the module's own progression / road-rules / trigger-query managers -- the
+    // arguments the sole call site passes. Pure state set-up (every timer, status and per-player
+    // completion slot reset, the back-pointers stored); the lobby's player-added / -finalised arms
+    // write the per-player slots it frees, so it must run before the first online player joins.
+    mChallengeManager.Construct(lpGameStateModule, this, lpGameStateModule->GetProgressionManager(),
+                                lpGameStateModule->GetRoadRulesManager(),
+                                lpGameStateModule->GetTriggerQueryManager());
+
     mpGameStateModule = lpGameStateModule;                                  // +27992
     // [stuntrace 2026-08-26] +28000: the real Construct @0x82340008 wires the TQM back-pointer
     // from its lpTriggerQueryManager argument, which at the sole call site is the module's own
@@ -130,15 +139,12 @@ void ModeManager::ConstructInterModeStateBringUp(GameStateModule* lpGameStateMod
     // through a null PM, AV @module+0x1B504A with this == 0x170 == the embedded-Profile
     // adjust on a null base).
     mpProgressionManager  = lpGameStateModule->GetProgressionManager();     // +27996
-    // +28004: GameStateModule has no NetworkRoundManager member (measured, wave-B fix round),
-    // but SetupGameMode reads GetCurrentRound() UNCONDITIONALLY on the console (boot-proven:
-    // a null here AV'd @module+0x27D1B0 the first time a mode started). Bring-up stand-in: a
-    // zero-initialised file-static instance -- static storage zero-init makes
-    // GetCurrentRound() == miTotalRounds - miRoundsRemaining - 1 == -1, the no-round
-    // sentinel, and every online read stays inert-sane. DELETE-WHEN the online wave homes the
-    // real owner (NetworkRoundManager::Construct is still declared-only; do not call it).
-    static BrnGameState::NetworkRoundManager sBringUpNetworkRoundManager;
-    mpNetworkRoundManager = &sBringUpNetworkRoundManager;                   // +28004
+    // +28004: the real Construct's lpNetworkRoundManager argument is the module's own embedded
+    // manager at the sole call site (gsm +0xB9F8), the object ProcessGameEvents' case-17/18 arms
+    // latch the lobby roster into. SetupGameMode reads GetCurrentRound() unconditionally, so the
+    // pointer must be live from boot; the module's static-storage zero-fill gives
+    // GetCurrentRound() == -1, the no-round sentinel.
+    mpNetworkRoundManager = lpGameStateModule->GetNetworkRoundManager();    // +28004
     mpCurrentGameMode = nullptr;                                            // +3480
 
     // [stuntrace 2026-08-26] THE MODE-POINTER ARRAY + the per-mode Constructs -- the real

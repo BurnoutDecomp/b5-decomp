@@ -38,35 +38,27 @@ void OnlineFreeBurnLobbyMode::Start(const StartGameModeParams* /*lpStartGameMode
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY);
 
-    // muFlags |= 0x400 (CAR_SELECT_ALLOWED) -- X360 v6 | 0x400.
+    // The stores, in the console's order after Construct: +0x94 mbIsOnline = 1, muFlags |= 0x400
+    // (CAR_SELECT_ALLOWED), +0x30 traffic density 0.5 (flt 0x3F000000), +0x13C mbInfiniteBoost = 0,
+    // +0x140 meOnlineBoostStrategy = 0, +0x04 rank ratio 0.0; then the density drops to 0.0 when the
+    // start event says traffic is off (event +0xF5 mbIsTrafficOn).
+    lpGameModeParams->mbIsOnline = true;
     lpGameModeParams->SetFlag(GameModeParams::KU_FLAG_CAR_SELECT_ALLOWED);
-
-    // Light lobby traffic by default; forced off if the start event says traffic is off
-    // (StartNetworkGameEvent::mbIsTrafficOn == byte at v5+245). X360: *(a3+48)=0.5; if(!*(v5+245)) *(a3+48)=0.0.
-    f32 lfTrafficDensityScale = 0.5f;
+    lpGameModeParams->SetTrafficDensityScale(0.5f);
+    lpGameModeParams->mbInfiniteBoost       = false;
+    lpGameModeParams->meOnlineBoostStrategy = static_cast<EBoostType_Stub>(0);
+    lpGameModeParams->SetProgressionRankAsRatio(0.0f);
     if (!lpStartNetworkGameEvent->mbIsTrafficOn)
     {
-        lfTrafficDensityScale = 0.0f;
+        lpGameModeParams->SetTrafficDensityScale(0.0f);
     }
-    lpGameModeParams->SetTrafficDensityScale(lfTrafficDensityScale);
 
-    lpGameModeParams->mbIsOnline = true;                  // X360 *(a3+148)=1
-    lpGameModeParams->SetProgressionRankAsRatio(0.0f);    // X360 *(a3+4)=0.0
-
-    // X360 *(a3+316)=0 / *(a3+320)=0 -- two int tuning fields the lobby zeroes. In the committed
-    // (offset-not-faithful) layout these are best-effort-mapped to the pursuit/road-rage tuning ints
-    // (LOW confidence on the exact named identity; both are s32 so the writes compile and the
-    // zeroing intent is preserved).
-    lpGameModeParams->miRoadRageThreshold       = 0;      // X360 *(a3+316) (ambiguous offset)
-    lpGameModeParams->miPursuitRivalTotalDamage = 0;      // X360 *(a3+320) (ambiguous offset)
-
-    // Copy the eight per-player network ids (v5 bytes 120..148 == StartNetworkGameEvent::
-    // maNetworkPlayerID[8]) into GameModeParams::maNetworkPlayerID[8] (a3+280..308). After the home
-    // grow both sides are BrnNetwork::NetworkPlayerID (s32) -- type-matched.
+    // The eight teams: event +0x78..+0x94 (maePlayerTeam) -> params +0x118..+0x134 (maePlayerTeam).
+    // SetOnlineRaceCars below copies every other per-car run but not the teams.
     for (s32 liPlayer = 0; liPlayer < GameStateModuleIO::KI_MAX_RACE_CARS; ++liPlayer)
     {
-        lpGameModeParams->maNetworkPlayerID[liPlayer] =
-            lpStartNetworkGameEvent->maNetworkPlayerID[liPlayer];
+        lpGameModeParams->maePlayerTeam[liPlayer] =
+            static_cast<EPlayerTeam_Stub>(static_cast<s32>(lpStartNetworkGameEvent->maePlayerTeam[liPlayer]));
     }
 
     GetModeManager()->SetOnlineRaceCars(lpGameModeParams, lpStartNetworkGameEvent);

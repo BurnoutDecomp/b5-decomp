@@ -946,6 +946,9 @@ enum EGameActionType
     E_ACTION_ROAD_RULES_CHALLENGE_SCORES                 = 232,
     E_ACTION_ROAD_RULES_PERSONAL_BEST                    = 233,
     E_ACTION_ROAD_RULES_OVERWRITE_SERVER_RECORD          = 234,
+    //   235 band +8 (reference 227): ProcessGameEvents' case-17 arm posts it, one uninitialised byte,
+    //   when a host restarts the free-burn lobby because a player joined.
+    E_ACTION_START_GAME_THROUGH_PLAYER_JOIN              = 235,
     E_ACTION_RESTART_TRAFFIC                             = 236,
     E_ACTION_REQUEST_GAMERCARD                           = 239,
     //   296 band +14: the bridge copies {texture pointer, player name} into event 48.
@@ -1420,9 +1423,19 @@ struct OnlinePlayerAddedAction : public GameAction<E_ACTION_ONLINE_PLAYER_ADDED>
     CgsID               mWheelID;             // 0x08
     EPlayerScoringIndex mePlayerScoringIndex; // 0x10
     EPlayerTeam         meTeam;               // 0x14
+    // The rest of the 0x28-byte record ProcessGameEvents' case-127 arm builds (every field copied
+    // from the OnlinePlayerAddedEvent) and the world's action-219 arm reads.
+    BrnNetwork::NetworkPlayerID mAddedPlayerNetworkID;   // +0x18
+    // +0x1C: console-only f32 (the event's +0x18), the joining car's base deformation -- the
+    // world arm stores it as the car's mfBaseDeformAmount. Named after that use.
+    f32                 mfBaseDeformationAmount;          // +0x1C
+    u16                 mu16CarColourIndex;               // +0x20
+    u16                 mu16CarPaintFinishIndex;          // +0x22
 
     void SetPlayerScoringIndex(EPlayerScoringIndex lePlayerScoringIndex);
 };
+static_assert(sizeof(OnlinePlayerAddedAction) == 0x28,
+              "ProcessGameEvents posts action 219 with size 0x28");
 
 // X360 0x82355258 (SetActiveRaceCarIndex). Minimal slice: only the member the body touches.
 struct OnlinePlayerRemovedAction : public GameAction<E_ACTION_ONLINE_PLAYER_REMOVED>

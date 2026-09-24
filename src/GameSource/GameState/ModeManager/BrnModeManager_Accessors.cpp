@@ -265,6 +265,26 @@ const NetworkRoundManager* ModeManager::GetNetworkRoundManager() const
     return mpNetworkRoundManager;
 }
 
+// A tail call into the embedded ChallengeManager (+0x6E00) -- the whole body.
+void ModeManager::CancelFreeburnChallenge(GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    mChallengeManager.CancelFreeburnChallenge(lpActionQueue);
+}
+
+// A tail call into the embedded ChallengeManager (+0x6E00) -- the whole body.
+void ModeManager::NetworkPlayerAdded(BrnNetwork::NetworkPlayerID lPlayerID,
+                                     GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost)
+{
+    mChallengeManager.NetworkPlayerAdded(lPlayerID, lpActionQueue, lbIsHost);
+}
+
+// A tail call into the embedded ChallengeManager (+0x6E00) -- the whole body.
+void ModeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlayerID,
+                                         GameStateModuleIO::GameActionQueue* lpActionQueue, bool lbIsHost)
+{
+    mChallengeManager.NetworkPlayerFinalised(lPlayerID, lpActionQueue, lbIsHost);
+}
+
 // ============================================================================================
 // 4. THE TRIGGER / TRAFFIC RESOURCE READS (through mpTriggerQueryManager -- accessor grow (5))
 // ============================================================================================

@@ -99,10 +99,10 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
         lpGameModeParams->mau16CarPaintFinishIndex[liRaceCar] =
             lpStartNetworkGameEvent->mau16CarPaintFinishIndex[liRaceCar];
 
-        // The event's per-player rating lands in the mode's per-car overtaking difficulty -- the
-        // only f32[8] on either record, and the two slots the console copies between are the ones
-        // GameModeParams::Construct seeds with the same default in the same eight-step loop.
-        lpGameModeParams->mfOvertakingDifficulty[liRaceCar] =
+        // event +0xB8+4i -> params +0xD8+4i: the event's per-player value
+        // (the freeburn deformation the lobby roster carries) lands in the params' per-car
+        // online deformation run, the one GameModeParams::Construct seeds -1.0f.
+        lpGameModeParams->mafOnlineDeformationAmount[liRaceCar] =
             lpStartNetworkGameEvent->mafPlayerData[liRaceCar];
     }
 }

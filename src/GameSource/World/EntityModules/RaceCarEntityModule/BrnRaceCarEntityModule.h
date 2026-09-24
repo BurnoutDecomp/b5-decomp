@@ -762,6 +762,34 @@ public:
     void SetupOpponents(const BrnGameState::GameModeParams* lpGameModeParams,
                         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
 
+    // HandlePrepareForModeAction's ONLINE arm (the params' mbIsOnline byte): clear the world of
+    // race cars, then seat every roster car -- the local player's first, then each network player
+    // -- on the event's start grid or, for the free-burn lobby, wherever the lobby puts it.
+    // Bodies in ModeArming.cpp.
+    //
+    // RemoveRaceCar every global slot that is in the world; the PLAYER's car only when
+    // lbRemovePlayerCar is set.
+    void RemoveAllRaceCars(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput,
+                           bool lbRemovePlayerCar);
+
+    // One roster car: its transform (the grid slot's start location, or in the free-burn lobby the
+    // local car's own pose for the local player and the origin for a network player -- the first
+    // update snaps it), the local car's boost strategy + stats from its vehicle-list entry, a
+    // SpawnRaceCar (type PLAYER or NETWORK) + AttachActiveRaceCar unless the local car is kept,
+    // its base deformation, the AI module's AddCarToCurrentModeEvent, colour + palette, the
+    // scoring-slot mapping, the disconnected flag, and the team-boost setup of online modes 11/13.
+    // NINE arguments: seven integer ones and the local car's position and direction vectors.
+    void AddRaceCarToStartingGridOrFreeburnLobby(
+        const BrnGameState::GameStateModuleIO::PrepareForModeAction* lpPFMAction,
+        BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+        const BrnGameState::GameModeParams* lpGameModeParams,
+        bool lbIsFreeburnLobby,
+        bool lbRespawnLocalCar,
+        s32 liGridPosition,
+        EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex,
+        Vector3 lLocalPosition,
+        Vector3 lLocalDirection);
+
     // X360 0x823058F8. Put the PLAYER's car on start-grid slot 0 (offline: a place-on-track
     // request; online: a remove/respawn at the built transform), carry its colour across,
     // publish the AI module's AddCarToCurrentModeEvent, and map the player's scoring slot.
@@ -1504,7 +1532,12 @@ private:
     // console's other four arguments and for SendAddedForCollisionStateToPhysics.
     void UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultiplier,
                            f32 lfAcceleration, f32 lfBraking,
-                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents );
+                           RaceCarEntityModuleIO::GameEventQueue* lpGameEvents,
+                           BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput );
+    // UpdateActiveCars' tail: tell the physics which active cars are currently added for
+    // collision (the per-slot mbAddedForCollision byte of every active car). The physics copies
+    // the set each frame; its only reader is the network-car un-hide gate.
+    void SendAddedForCollisionStateToPhysics( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput );
     void StorePlayerRoutePortalPositions(const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput);
 
     // X360 +0x17890 (96400). DWARF :347. The receiver of

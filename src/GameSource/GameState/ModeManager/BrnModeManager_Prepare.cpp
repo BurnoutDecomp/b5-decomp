@@ -715,7 +715,11 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
     // offline event path -- the whole stunt-race campaign -- the byte is zero and the two behaviours
     // coincide. The BROADER gate (mode != SHOWTIME) is the one the campaign turns on and it IS here.
     // ------------------------------------------------------------------------------------------
-    if (lpGameModeParams->GetGameModeType() != GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME)
+    // The second half of the gate is params +0x94 == mbIsOnline (RaceCarEntityModule::
+    // HandlePrepareForModeAction's own assert names the byte: "lpGameModeParams->mbIsOnline ||
+    // ..."), so the split prepare is offline-only; an online mode goes out in one record.
+    if (lpGameModeParams->GetGameModeType() != GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME
+        && !lpGameModeParams->mbIsOnline)
     {
         lAction.SetPrepareStage(GameStateModuleIO::PrepareForModeAction::E_PFM_STAGE_FIRST_OF_TWO);
 
