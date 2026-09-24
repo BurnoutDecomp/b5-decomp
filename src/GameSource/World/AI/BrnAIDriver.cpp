@@ -874,10 +874,17 @@ namespace BrnAI
             // (lane0 <- .x, lane1 <- .z) before the unit facing is added
             // (`vmaddcfp128 v0, v13, v0, v127` @0x8277CCC4). ⛔ FIXED 2026-09-04 (aiwave R7): the
             // host read lPos.y (world height) into the ground lane.
+            // The normalise's LAST multiply is fused with the position add: the rsqrt chain
+            // (0x8277CC88..0x8277CCC0, `vmulfp128` squares, `vaddfp`, `vrsqrtefp` + two Newton
+            // steps, no zero guard) leaves y2 in v0, then `vmaddcfp128 v0, v13(dir.xz), v0(y2),
+            // v127(pos.xz)` @0x8277CCC4 == pos + dir * y2 with ONE rounding per lane.
+            // [FX-AIBUZZ 2026-09-24 (FX-TAILS-A follow-up): was pos + Normalize2D(dir) -- the product
+            //  dir * y2 rounded on its own, then the add]
             const Vector3 lPos = lpCar->GetPosition();
-            const Vector2 lDir = Normalize2D(To2D(lpCar->GetDirection()));
-            lResult.x = lPos.x + lDir.x;                         // position + unit facing
-            lResult.y = lPos.z + lDir.y;
+            const Vector2 lDir = To2D(lpCar->GetDirection());
+            const f32 lfInvLen = 1.0f / std::sqrt(lDir.x * lDir.x + lDir.y * lDir.y);
+            lResult.x = std::fmaf(lDir.x, lfInvLen, lPos.x);     // position + unit facing
+            lResult.y = std::fmaf(lDir.y, lfInvLen, lPos.z);
             lResult.z = 0.0f; lResult.w = 0.0f;
         }
         else
