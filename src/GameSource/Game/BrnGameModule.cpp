@@ -7,6 +7,7 @@
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage (RenderMetricsMessageHandler)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiAudioTriggerEvent (GUI-out event 201) + GuiEventProgressionProfileData (350)
 #include "GameSource/Game/GameBridgeGameStateToX.h"  // BrnGame::BridgeGameStateToGui_EventStatus (the GUI-leg status seam)
+#include "GameSource/Game/GameBridgeWorldToX.h"      // [FX-BRIDGES CC-11] BrnGame::BridgeWorldToGameState_RouteInfo (leg 10)
 #include "GameSource/GameState/Progression/BrnProfile.h" // BrnProgression::Profile (the action-193 payload's first word)
 
 #include <cstring>   // memset
@@ -4814,9 +4815,21 @@ namespace BrnGame
                     // no writer anywhere in the tree and this pointer would hand ProcessContacts
                     // an interface whose IsValid() is false on every frame -- an argument that
                     // looks live and is inert. [[silent-drop-stubs]]
+                    // ⭐ [FX-BRIDGES CC-11, 2026-09-24] THE POST-WORLD GAME-EVENT QUEUE IS LEGS 2 + 10.
+                    // The console's PostWorldInputBuffer game-event queue (<1536,16>, the one its
+                    // PostWorldUpdate Appends into the carry queue) is filled by BridgeWorldToGameState
+                    // leg 2 (the world's game events) and then leg 10 (event 174 for every route answer
+                    // the mode manager asked for). Same one-feed rule as every argument here: the local
+                    // queue below IS that queue's content, in that order, built from this sub-step's
+                    // world output -- so ProcessGameEvents' case-174 arm sees the answers and the
+                    // checkpoint-distance pump (ModeManager::UpdateCheckpointDistanceRequests) can stop.
+                    CgsModule::VariableEventQueue<1536, 16> lPostWorldGameEventQueue;
+                    lPostWorldGameEventQueue.Construct();
+                    lPostWorldGameEventQueue.Append(*lpcWorldOutput->GetGameEventQueue());
+                    BrnGame::BridgeWorldToGameState_RouteInfo(&lPostWorldGameEventQueue, lpcWorldOutput);
                     mGameStateModule.PostWorldUpdateStuntBringUp(
                         lpcWorldOutput->GetActiveRaceCarOutputInterface(),
-                        lpcWorldOutput->GetGameEventQueue(),
+                        &lPostWorldGameEventQueue,
                         mGameTimer.GetRate() * mGameTimer.GetScaleCurrent(),
                         lpcWorldOutput->GetContactSpyInterface(),
                         // [road-rage wave 2026-09-02] leg 1 of BridgeWorldToGameState, by the

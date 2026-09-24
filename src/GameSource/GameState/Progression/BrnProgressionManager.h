@@ -124,6 +124,13 @@ public:
     // bring-up caveat: its PRODUCER (ComputeLandmarkAISectionIndices) is not mounted yet.
     u16 FindLandmarkAISectionIndex(CgsID lLandmarkId) const;
 
+    // [FX-BRIDGES CC-11, 2026-09-24] The AI-sections resource (mpAISectionData, X360 +133380), for
+    // GameStateModule::SendRouteRequestAction @0x82381DC8, which reaches it INLINE: gsm + 181300
+    // (== mProgressionManager + 133380) handed to the const ResourcePtr::operator-> @0x82367718
+    // (its "Can not instance resource pointer" assert, CgsResourcePtr.h line 0x233). This is that
+    // operator-> by name -- the member stays private.
+    const BrnAI::AISectionsData* GetAISectionsData() const { return mpAISectionData.operator->(); }
+
     // ------------------------------------------------------------------------
     // ADDITIVE GROW (declare-only) for the AchievementManagerBase TU.
     //

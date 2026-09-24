@@ -1439,6 +1439,44 @@ void GameStateModule::ProcessGameEventsRankInfoRequestBringUp(
 }
 
 // ============================================================================
+// ⭐ [FX-BRIDGES CC-11, 2026-09-24] ProcessGameEvents @0x823A0A18, THE CASE-174 ARM
+// (@0x823A4B20..0x823A4B4C) -- the mode manager's checkpoint-distance answers.
+//   0x823A4B20  `cmplwi r25, 0` -> the "lpRouteInfoEvent" assert (line 0x1148 == 4424), non-gating
+//   0x823A4B40  r4 = the record, r3 = gsm + 0x1020 (== &mModeManager)
+//   0x823A4B48  bl ModeManager::HandleCheckpointDistanceResponse
+// The record is the ModeManagerRouteInfoEvent BridgeWorldToGameState @0x823E5368 posts for every
+// route response owned by the mode manager (leg 10; on this build it reaches the carry queue
+// through the one-feed seam in BrnGameModule.cpp). Extracted like its sibling arms: one walk of the
+// merged queue, before the Clear.
+// ============================================================================
+void GameStateModule::ProcessGameEventsModeManagerRouteInfoBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue)
+{
+    if (lpGameEventQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_MODE_MANAGER_ROUTE_INFO)
+        {
+            const GameStateModuleIO::ModeManagerRouteInfoEvent* lpRouteInfoEvent =
+                reinterpret_cast<const GameStateModuleIO::ModeManagerRouteInfoEvent*>(lpEvent);
+            CGS_ASSERT(lpRouteInfoEvent != 0, "lpRouteInfoEvent");   // BrnGameStateModule.cpp:4424 (0x1148)
+            mModeManager.HandleCheckpointDistanceResponse(lpRouteInfoEvent);
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // ⭐⭐⭐ [pause-stats wave 2026-08-29] ProcessGameEventsGameStatsRequestBringUp -- the
 // extracted CASE-79 arm of GameStateModule::ProcessGameEvents @0x823A0A18. Same queue walk,
 // same must-run-before-the-Clear position as the case-80 arm immediately above; the console
@@ -1830,6 +1868,11 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     ProcessGameEventsModeIntroBringUp(&lGameEventQueue);
     // The dispatcher's cases 17 and 18 (the online game / round start), same walk.
     ProcessGameEventsNetworkGameBringUp(&lGameEventQueue, lpActionQueue, mpOutputBuffer);
+    // ⭐ [FX-BRIDGES CC-11] the dispatcher's CASE-174 arm (the checkpoint-distance answers), same walk,
+    // same must-run-before-the-Clear constraint. It runs before the ModeManager tick below, so a
+    // pair answered this frame is not asked again by UpdateCheckpointDistanceRequests -- the
+    // console's order (ProcessGameEvents precedes ModeManager::PreWorldUpdate in PreWorldUpdate).
+    ProcessGameEventsModeManagerRouteInfoBringUp(&lGameEventQueue);
 
     // ---- 1a) THE TAKEDOWN FEED (console: the `if (!IsSimPaused)` block between #68 and #86) --
     // ⭐⭐⭐ [road-rage wave, agent C] GameStateModule::ProcessTakedownEvents @0x8238FC50. X360
