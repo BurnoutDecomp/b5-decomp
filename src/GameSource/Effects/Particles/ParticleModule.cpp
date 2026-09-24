@@ -107,9 +107,11 @@ namespace BrnParticle
         // to poke. The console's off_820CEBE0 store is part of that object's genuine
         // construction, which ParticleModule::Prepare now performs through
         // Im3dTexPlusLighting::Construct.
-        mSmokeRenderer.mpVTable = nullptr;              // X360 off_820CEBE8
-        mSmokeRenderer.mu04 = 0;
-        mSmokeRenderer.mu08 = 0;
+        // mSmokeRenderer is no longer a ContainedInterface placeholder either (2026-09-24,
+        // FX-CRASHVFX) -- it is the real BrnGraphics::Im3dSmokeRenderer, so there are no mpVTable /
+        // mu04 / mu08 fields to poke. The console's off_820CEBE8 store is part of that object's
+        // genuine construction, which ParticleModule::Prepare now performs through
+        // Im3dSmokeRenderer::Construct @0x82295260.
         // mLionImmediateModeRenderer is no longer a ContainedInterface placeholder -- it is
         // the real BrnGraphics::LionBlendRenderer (0x1E0 bytes), so there are no mpVTable /
         // mu04 / mu08 fields to poke. The console's off_820CFA1C store is part of that
@@ -368,6 +370,25 @@ namespace BrnParticle
     // RenderFullResParticles replays it through SparkRenderer::Dispatch -- all three calls
     // are in this file. DELETE-WHEN the job parameter blocks are typed.
     Native::SparkBatchArray gSparkBatchArray;
+
+    // FLAG PC-platform leaf, the same reason again, for the SIMPLE-particle batches. The console's
+    // SimpleParticleBatchArray is the one inside the simple-particle job's parameter block (module
+    // +0x25C00 == job 1 +0x180, its count word the -1 the ctor stamps at +0x25CD0 and its pre-Lion
+    // split at +0x25CD4, which RenderQuarterResParticles reads with `lwzx` of 0x25CD4). The block is
+    // inside maJob1Placeholder, so the real array lives beside the module, exactly like the two above:
+    // BeginParticleRenderJob's inline simple job fills it and RenderQuarterResParticles replays it --
+    // both in this file. DELETE-WHEN the job parameter blocks are typed.
+    Native::SimpleParticleBatchArray gSimpleParticleBatchArray;
+
+    // ParticleRenderJob::RenderSimpleParticles @0x8291DE88 builds the batch list in TWO passes over
+    // two static type lists, and the split between them is the pre-Lion count the quarter-res pass
+    // draws before cLionFX::Dispatch: the ten skid-smoke types first, the two impact types after.
+    //     0x82101268  { 3, 4, 5, 6, 7, 8, 9, 10, 11, 12 }   (`li r7, 0xA`)
+    //     0x82101290  { 1, 2 }                              (`li r7, 2`)
+    // (both read out of the image; the ten are eParticleArray_SkidSmokeNormal..Grass2, the two
+    // eParticleArray_ImpactSmoke and eParticleArray_CrashImpactDust).
+    const u32 KAU_SIMPLE_PRE_LION_TYPES[10]  = { 3u, 4u, 5u, 6u, 7u, 8u, 9u, 10u, 11u, 12u };
+    const u32 KAU_SIMPLE_POST_LION_TYPES[2]  = { 1u, 2u };
 
     // [DIAG] how many times the BRN_SPARK_TEST control actually called SparkArray::SpawnSpark.
     // A live count that never moves cannot say whether the producer stopped producing or the
@@ -839,8 +860,9 @@ namespace BrnParticle
     //     +656 &maSparks[0]                         +688 mSparkFrameDataSetUpdate
     //     +664 mfTimeStepMultiplier (the blur scale)
     //     +668 mfWhiteLevel                         +672 (muFlags >> 6) & 1
-    // The SIMPLE-PARTICLE job (`if (*(a2+673))` -> RenderSimpleParticles) is announced: its
-    // array family is still a partial layout. DELETE-WHEN the job framework lands.
+    // The SIMPLE-PARTICLE job (`if (*(a2+673))` -> RenderSimpleParticles) runs inline the same way
+    // (2026-09-24, FX-CRASHVFX): SimpleParticleVertexBufferBuilder::BuildDispatchData twice, over the
+    // particle manager's locked buffer and gSimpleParticleBatchArray. DELETE-WHEN the job framework lands.
     // =========================================================================
     void ParticleModule::BeginParticleRenderJob(const ParticleRenderData* lpRenderData)
     {
@@ -1039,6 +1061,11 @@ namespace BrnParticle
             }
         }
 
+        // The console clears BOTH jobs' batch lists here, every frame, before the flips: the simple
+        // list's count and pre-Lion split (`stw r28(=0), 0xD0 / 0xD4` off module+0x25C00,
+        // 0x8228A9B0..0x8228A9B4) and then the spark list's count (`stwx r28, r31, 0x25008`). So a
+        // frame whose simple job does not run replays NOTHING, never last frame's batches.
+        gSimpleParticleBatchArray.Clear();
         gSparkBatchArray.Clear();
 
         // The console's `*(this+143752) = (*(this+143752) - 1) & 1` pair, one per manager,
@@ -1070,16 +1097,47 @@ namespace BrnParticle
         // assert storm that starves the harness rather than a missing effect.
         mVertexBufferManagerSparks.UnLock();
 
-        // The console also locks mVertexBufferManagerParticles here for the SIMPLE-PARTICLE
-        // job. That job is announced (below), so its buffer is deliberately NOT locked --
-        // an unmatched lock is the assert storm described above.
+        // ---- ParticleRenderJob::Execute @0x8291DF38, the SIMPLE-PARTICLE arm, run inline -------
+        // ⭐ 2026-09-24 (FX-CRASHVFX): BODIED (was announced while BrnSimpleParticleArray was a
+        // partial layout). The console locks mVertexBufferManagerParticles right after the spark
+        // manager (0x8228AA74) and stages the second job block (module +0x25A80) with:
+        //     +0x000 the render data's camera (Camera::operator= from renderData+0x60, 0x8228AB50)
+        //     +0x170 the locked particle vertex buffer      +0x28C &maSimpleParticles[0] (+0x228D0)
+        //     +0x294 renderData+0x08 mfCurrentTime          +0x298 renderData+0x10 (unread here)
+        //     +0x29C renderData+0x208 mfWhiteLevel          +0x2A0 (muFlags >> 6) & 1
+        //     +0x2A1 (muFlags >> 3) & 1 -- run the simple job    +0x2A2 0 -- no sparks in this job
+        // and Execute's `if (*(a2 + 673))` arm is ParticleRenderJob::RenderSimpleParticles @0x8291DE88:
+        //     batches.Clear();                                      (count AND pre-Lion split)
+        //     BuildDispatchData(buffer, batches, arrays, {3..12}, 10, time, camera, white, crash);
+        //     batches.SetPreLionCount();
+        //     BuildDispatchData(buffer, batches, arrays, {1, 2},  2, time, camera, white, crash);
+        // The crash banks render only when the reduced-frame-rate bit is set -- the same byte the
+        // spark job's crash-bank argument is.
+        // Locked and unlocked here for the reason the spark bracket above states: the job body ran
+        // inline, so the bracket closes inline, before RenderQuarterResParticles' !mbLocked assert.
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::BeginParticleRenderJob's SIMPLE-PARTICLE job "
-                "(ParticleRenderJob::RenderSimpleParticles -- BrnSimpleParticleArray is a "
-                "partial layout), and its vertex-buffer lock with it. THE SPARK JOB IS REAL "
-                "AND RUNS");
+            EffectsVertexBufferLocked& lrLockedParticleBuffer = mVertexBufferManagerParticles.Lock();
+
+            if ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagRenderSimple) != 0)
+            {
+                const bool lbRenderCrashBanks =
+                    (lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0;
+
+                gSimpleParticleBatchArray.Clear();
+                Native::SimpleParticleVertexBufferBuilder::BuildDispatchData(
+                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, maSimpleParticles,
+                    KAU_SIMPLE_PRE_LION_TYPES, 10u,
+                    lpRenderData->mfCurrentTime, lpRenderData->mCgsCamera,
+                    lpRenderData->mfWhiteLevel, lbRenderCrashBanks);
+                gSimpleParticleBatchArray.SetPreLionCount();
+                Native::SimpleParticleVertexBufferBuilder::BuildDispatchData(
+                    &lrLockedParticleBuffer, gSimpleParticleBatchArray, maSimpleParticles,
+                    KAU_SIMPLE_POST_LION_TYPES, 2u,
+                    lpRenderData->mfCurrentTime, lpRenderData->mCgsCamera,
+                    lpRenderData->mfWhiteLevel, lbRenderCrashBanks);
+            }
+
+            mVertexBufferManagerParticles.UnLock();
         }
 
         // =====================================================================================
@@ -1583,12 +1641,12 @@ namespace BrnParticle
     //     StartMonitor(v6[13])
     //     assert(!mbLocked)                                     -- EffectsVertexBufferManager.h:97
     //     v7 = the Lion vertex-buffer manager's CURRENT slot     (the inlined GetVertexBuffer)
-    //     v8 = miSimpleParticleSplit ; v10 = miSimpleParticleCount
+    //     v8 = gSimpleParticleBatchArray.GetPreLionCount() ; v10 = its count
     //     assert(count != -1)                                   -- CgsArray.h:336
     //     v13 = (flags & 0x40) || mbZFadeEnabled                -- the z-fade argument
-    //     BrnSimpleParticleRenderer::Dispatch(..., 0,  v8, ...)  -- the debris FIRST half
+    //     BrnSimpleParticleRenderer::Dispatch(..., 0,  v8, ...)  -- the skid smoke (pre-Lion)
     //     if (!mbIsInJunkyard) { cLionFX::Dispatch(GetVertexBuffer(), ...) }
-    //     BrnSimpleParticleRenderer::Dispatch(..., v8, v10, ...) -- the debris SECOND half
+    //     BrnSimpleParticleRenderer::Dispatch(..., v8, v10, ...) -- impact smoke + crash dust
     //     StopMonitor(v6[13])
     //
     //   ⭐ THE LION GATE IS THE FULL-RES ARM'S, INVERTED, ON THE SAME BYTE. RenderFullResParticles
@@ -1600,9 +1658,10 @@ namespace BrnParticle
     //   CLEARED buffer and is composited OVER the scene with a (1 - alpha) term, so a saturating
     //   flame REPLACES its background instead of adding to it.
     //
-    //   THE TWO DEBRIS DISPATCHES cannot run here for exactly the reason they cannot run in the
-    //   full-res arm: BrnSimpleParticleRenderer's frame arrays are asm-sized placeholders on this
-    //   build. Said once, not dropped silently.
+    //   THE TWO SIMPLE-PARTICLE DISPATCHES RUN (2026-09-24, FX-CRASHVFX). They were announced while
+    //   BrnSimpleParticleRenderer's frame arrays were asm-sized placeholders ("the debris halves" in
+    //   the old wording -- they are the SIMPLE particles: skid smoke before the Lion pass, impact
+    //   smoke and crash dust after it, split by SimpleParticleBatchArray's pre-Lion count).
     //
     //   THE PERFMON BRACKET IS NOT REPRODUCED, this file's standing reason (every id is 0).
     // =========================================================================
@@ -1612,6 +1671,30 @@ namespace BrnParticle
             return;
 
         const f32 lfWhiteLevel = lpRenderData->mfWhiteLevel;   // renderData +0x208
+
+        // ---- the simple particles' two halves (0x82294A70..0x82294B64 and 0x82294BD8..0x82294C04) --
+        // ⭐ 2026-09-24 (FX-CRASHVFX): BODIED. The inlined GetVertexBuffer of the PARTICLE manager
+        // (the !mbLocked assert at EffectsVertexBufferManager.h:97, then maVertexBuffers[current]),
+        // the batch list's constructed-assert and its pre-Lion split, the camera's two clip planes
+        // (renderData+0x1BC / +0x1C0 == mCgsCamera.maProjectionScalars[7] / [8]) and the z-fade byte
+        //     r27 = (muFlags & 0x40) != 0 || mbZFadeEnabled
+        // feed BrnSimpleParticleRenderer::Dispatch TWICE: batches [0, preLion) -- the ten skid-smoke
+        // types -- BEFORE the Lion dispatch, and [preLion, count) -- impact smoke and crash dust --
+        // AFTER it. The r5 render target the console passes (`*(renderer + 0x25C)`) is not handed to
+        // this function on this build; Dispatch's banner says what that costs (the z-fade arm).
+        const bool lbZFade =
+            ((lpRenderData->muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
+            || mbZFadeEnabled;
+        renderengine::VertexBuffer* const lpParticleVertexBuffer =
+            mVertexBufferManagerParticles.GetVertexBuffer();
+        CGS_ASSERT(gSimpleParticleBatchArray.GetCount() != -1, "Array used before Construct/Clear was called");
+        const u32 luPreLionCount   = gSimpleParticleBatchArray.GetPreLionCount();
+        const u32 luSimpleBatches  = static_cast<u32>(gSimpleParticleBatchArray.GetCount());
+        const f32 lfNearPlane      = lpRenderData->mCgsCamera.maProjectionScalars[7];
+        const f32 lfFarPlane       = lpRenderData->mCgsCamera.maProjectionScalars[8];
+
+        mSimpleParticleRenderer.Dispatch(lpParticleVertexBuffer, gSimpleParticleBatchArray,
+                                         0u, luPreLionCount, 0, lfNearPlane, lfFarPlane, lbZFade);
 
         if (!mbIsInJunkyard)
         {
@@ -1630,12 +1713,45 @@ namespace BrnParticle
                               0);                          // the stack slot, written 0
         }
 
+        mSimpleParticleRenderer.Dispatch(lpParticleVertexBuffer, gSimpleParticleBatchArray,
+                                         luPreLionCount, luSimpleBatches, 0, lfNearPlane, lfFarPlane,
+                                         lbZFade);
+
+        // =====================================================================================
+        // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. OFF BY DEFAULT. DELETE-WHEN-STABLE.
+        // The simple-particle ladder in one line, at the point the batches are CONSUMED: quads
+        // Render wrote, batches BuildDispatchData appended, batches / vertices Dispatch handed the
+        // device -- all running totals -- plus this frame's list (count, pre-Lion split). Change-
+        // gated and capped at 200 lines so an idle run does not flood.
         {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::RenderQuarterResParticles' two BrnSimpleParticleRenderer::"
-                "Dispatch calls (the debris halves either side of the Lion dispatch) -- their "
-                "frame arrays are asm-sized placeholders. THE LION DISPATCH IS REAL AND RUNS");
+            static bool sbArmed  = false;
+            static bool sbProbed = false;
+            if (!sbProbed)
+            {
+                sbProbed = true;
+                const char* const lpcEnv = std::getenv("BRN_SIMPLEFX_DIAG");
+                sbArmed = (lpcEnv != 0 && lpcEnv[0] != '0');
+                if (sbArmed)
+                    CgsDev::Log::WriteToLog("[simplefx] probe ARMED (BRN_SIMPLEFX_DIAG)\n");
+            }
+            if (sbArmed)
+            {
+                static u32 suLines        = 0;
+                static u32 suLastDrawn    = 0xFFFFFFFFu;
+                if (suLines < 200u && Native::gauSimpleParticleDrawnVertices != suLastDrawn)
+                {
+                    ++suLines;
+                    suLastDrawn = Native::gauSimpleParticleDrawnVertices;
+                    char lacMsg[256];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[simplefx] ladder spawned=%u quads=%u batches=%u drawn=%u/%u frame{batches=%u prelion=%u zfade=%d}\n",
+                        Native::gauSimpleParticleSpawned, Native::gauSimpleParticleQuadsBuilt,
+                        Native::gauSimpleParticleBatchesBuilt, Native::gauSimpleParticleDrawnBatches,
+                        Native::gauSimpleParticleDrawnVertices, luSimpleBatches, luPreLionCount,
+                        lbZFade ? 1 : 0);
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
         }
     }
 

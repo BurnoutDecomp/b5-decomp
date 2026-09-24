@@ -42,10 +42,14 @@
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                                         // Vector2/3/4, Vector3Plus
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"  // CgsResource::SafeResourceHandle
+#include "GameShared/GameClasses/Graphics/CgsCamera.h"                 // CgsGraphics::Camera (the render-state block)
+#include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"  // NativeParticleVertex::VertexIterator
+#include "GameSource/Effects/Particles/Native/BrnSimpleParticleBatch.h"   // SimpleParticleBatchArray
 
 namespace CgsMemory { class HeapMalloc; }     // CgsHeapMalloc.h (pointer-only here)
 namespace renderengine { class Texture; }      // pointer-only
 namespace Attrib { namespace Gen { class nativeparticleparams; } }   // UpdateParams' argument
+struct EffectsVertexBufferLocked;              // EffectsVertexBuffer.h (pointer-only here)
 
 namespace BrnParticle
 {
@@ -147,6 +151,22 @@ namespace Native
     };
     extern const BrnParticleBankSize gBrnParticleBankSize[eParticleArray_Max];
 
+    // The render-state block SimpleParticleVertexBufferBuilder::BuildDispatchData @0x8291F870
+    // builds on its stack (var_200) and hands CB4ParticleBank::Render in r6:
+    //   +0x000  the job's camera, copied in by CgsGraphics::Camera::operator= (0x8291F8A8)
+    //   +0x170  (flt_8201A7A8 = 1280.0, flt_8201A7A4 = 720.0, 0, 0) -- the lvx128/stvx128 pair at
+    //           0x8291F8E4 moves the 16 bytes (the second 8 zeroed by `std r9(=0)` at 0x8291F8D8)
+    //   +0x180  f1 (the current time)   +0x184  f2 (the white level)
+    // Xenon-only code: the PS3 build renders these on the SPU and its DWARF has no shape for the
+    // block, so the name and member names are ours, named for what the console stores.
+    struct SimpleParticleRenderState
+    {
+        CgsGraphics::Camera    mCamera;          // +0x000
+        rw::math::vpu::Vector4 mvScreenSize;     // +0x170
+        f32                    mfCurrentTime;    // +0x180
+        f32                    mfWhiteLevel;     // +0x184
+    };
+
     struct BrnSimpleParticleArray
     {
         // BrnSimpleParticleRenderer.h:286 -- one ring of spawn records.
@@ -164,8 +184,12 @@ namespace Native
             void Prepare(BrnSimpleParticleArray* lpArray);
 
             // @0x8291E600 -- evaluate every live record and write its quad. Body in
-            // BrnSimpleParticleArray_CB4ParticleBank_Render.cpp.
-            void Render(void* lpIterator, BrnSimpleParticleArray* lpArray, void* lpCamera);
+            // BrnSimpleParticleArray_CB4ParticleBank_Render.cpp. Xenon-only (no PS3 DWARF): the
+            // register contract is BuildDispatchData's call setup at 0x8291F948..0x8291F958 --
+            // r3 this, r4 the batch's vertex iterator, r5 the owning array, r6 the render state.
+            void Render(NativeParticleVertex::VertexIterator& lrIterator,
+                        const BrnSimpleParticleArray& lrArray,
+                        const SimpleParticleRenderState& lrState) const;
         };
 
         // @0x8228C5A0 (DWARF :226).
@@ -211,6 +235,36 @@ namespace Native
         static CgsResource::SafeResourceHandle<renderengine::Texture> maTextures[eParticleArray_Max];
         static CB4ParticleArrayStandardParams                         maStandardParams[eParticleArray_Max];
     };
+
+    // The vertex-buffer builder of the simple-particle job: no state, one static. Xenon-only
+    // (no PS3 DWARF). Its only caller is ParticleRenderJob::RenderSimpleParticles @0x8291DE88,
+    // which runs it twice -- the ten skid-smoke types, then the two impact types.
+    struct SimpleParticleVertexBufferBuilder
+    {
+        // X360 @0x8291F870. For each listed type: open a batch, render the regular bank when it
+        // holds a particle young enough to be alive (and the crash bank too when
+        // lbRenderCrashBanks), close the batch, and append it with its type and blend mode when
+        // anything was written. Register contract: r3 r4 r5 r6 r7 as below, f1 the time (eats
+        // r8), r9 the camera, f2 the white level (eats r10), the bool on the stack (arg_57).
+        static void BuildDispatchData(EffectsVertexBufferLocked*    lpLockedBuffer,
+                                      SimpleParticleBatchArray&     lrBatches,
+                                      BrnSimpleParticleArray*       lpArrays,
+                                      const u32*                    lpauParticleTypes,
+                                      u32                           luNumParticleTypes,
+                                      f32                           lfCurrentTime,
+                                      const CgsGraphics::Camera&    lrCamera,
+                                      f32                           lfWhiteLevel,
+                                      bool                          lbRenderCrashBanks);
+    };
+
+    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The simple-particle ladder this run:
+    // records SpawnParticle wrote, quads CB4ParticleBank::Render wrote, batches BuildDispatchData
+    // appended, and the batches / vertices BrnSimpleParticleRenderer::Dispatch handed the device.
+    extern u32 gauSimpleParticleSpawned;
+    extern u32 gauSimpleParticleQuadsBuilt;
+    extern u32 gauSimpleParticleBatchesBuilt;
+    extern u32 gauSimpleParticleDrawnBatches;
+    extern u32 gauSimpleParticleDrawnVertices;
 }
 }
 

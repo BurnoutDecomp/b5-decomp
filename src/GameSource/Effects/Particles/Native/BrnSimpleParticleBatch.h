@@ -32,6 +32,7 @@
 
 #include "types.hpp"
 #include "GameSource/Effects/Particles/EffectsVertexBuffer.h"  // the canonical EffectsVertexBufferBatch
+#include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N> (SimpleParticleBatchArray's base)
 
 namespace BrnParticle
 {
@@ -56,6 +57,36 @@ namespace Native
         u32 meParticleType;   // enum word @ +0x08
         // CB4ParticleArrayStandardParams::EParticleBlend (BrnSimpleParticleRenderer.h:131)
         u32 meBlendMode;      // enum word @ +0x0C
+    };
+
+    // BrnSimpleParticleRenderer.h:136 (DWARF) -- the frame's simple-particle batch list plus the
+    // one word that splits it around the Lion pass.
+    //   struct SimpleParticleBatchArray : public Array<SimpleParticleBatch,13u> {
+    //       uint32_t muPreLionCount;          // :160
+    //       void Clear();                     // :140
+    //       void SetPreLionCount();           // :147
+    //       uint32_t GetPreLionCount() const; // :153
+    //   }
+    // All three members are inlined on the console, and each is recovered from its one site:
+    //   Clear            ParticleRenderJob::RenderSimpleParticles 0x8291DECC/0x8291DED4 -- `stw 0`
+    //                    into the count word (+0xD0) AND into +0xD4, before the first build.
+    //   SetPreLionCount  the same body, 0x8291DEF4..0x8291DEFC -- `bl GetLength ; stw r3, 0xD4(r30)`
+    //                    between the ten skid-smoke types and the two impact types.
+    //   GetPreLionCount  ParticleModule::RenderQuarterResParticles 0x82294AC4 -- `lwzx` of +0x25CD4
+    //                    (the array at +0x25C00, +0xD4), the split both Dispatch calls take.
+    // +0xD4 == 13 * 16 + 4: the word directly behind Array's count, as the DWARF orders it.
+    struct SimpleParticleBatchArray : public Array<SimpleParticleBatch, 13>
+    {
+        void Clear()
+        {
+            Array<SimpleParticleBatch, 13>::Clear();
+            muPreLionCount = 0;
+        }
+        void SetPreLionCount() { muPreLionCount = GetLength(); }
+        u32  GetPreLionCount() const { return muPreLionCount; }
+
+    private:
+        u32 muPreLionCount;   // :160 (+0xD4)
     };
 }
 }
