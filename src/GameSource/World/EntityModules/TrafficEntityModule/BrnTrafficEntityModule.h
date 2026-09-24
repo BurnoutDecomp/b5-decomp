@@ -985,6 +985,14 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         void ProcessDeformationData(
             const BrnPhysics::Deformation::DeformationOutputInterfaceForEntityModules* lpDefInterface);
 
+        // @0x82742CE8 (58). DWARF h:1446 `void HandleResetRaceCarEvents(const InputBuffer_PostPhysics*)`.
+        // PostPhysicsUpdate's RUNNING head leg at 0x8274EA5C (after HandleExternalResponses,
+        // before HandleContactPoints): for every RaceCarResetEvent the vehicle manager published
+        // for the LOCAL player that is a reset after a wreck, KillAllTrafficInCylinder around the
+        // reset position (75 m offline, 12 m online, 10 m half-height, parked cars included), so
+        // the player resumes on a clear road.
+        void HandleResetRaceCarEvents(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput);
+
         // @0x827340C0 (190). DWARF h:1462 `void HandleContactPoints(const InputBuffer_PostPhysics*)`.
         // PostPhysicsUpdate's RUNNING head leg at 0x8274EA68 (after HandleResetRaceCarEvents,
         // before ProcessDeformationData): runs down every used TrafficPhysicsInfo's

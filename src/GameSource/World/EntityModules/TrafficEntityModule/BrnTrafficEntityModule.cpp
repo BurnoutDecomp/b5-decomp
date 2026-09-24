@@ -3430,8 +3430,10 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         // the player hits actually moves.
         HandleExternalResponses(lpInput);
 
-        // GATE (FX-TRAFFIC3, next commit): HandleResetRaceCarEvents @0x82742CE8 (0x8274EA5C) --
-        // no body yet. DELETE-WHEN CC-1 lands it here, before HandleContactPoints.
+        // 0x8274EA54..0x8274EA5C: HandleResetRaceCarEvents(this, lpInput) @0x82742CE8 -- LIVE
+        // 2026-09-24 (FX-TRAFFIC3, CC-1). After a local-player wreck the console clears every
+        // traffic car, parked ones included, within 75 m (12 m online) of the reset point.
+        HandleResetRaceCarEvents(lpInput);
 
         // 0x8274EA60..0x8274EA68: HandleContactPoints(this, lpInput) @0x827340C0 -- LIVE
         // 2026-09-24 (FX-TRAFFIC3, CC-2). The contact-side detector: without it no traffic car
@@ -14059,6 +14061,91 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
                                                       : KF_CRASH_SLIDER_PLAYER_CRASH_SCORE;
                 mfCrashSliderCrashScore += mfCrashSliderCrashScoreFactor * lfScore;
             }
+        }
+    }
+}
+
+}  // namespace BrnTraffic
+
+// ============================================================================
+// FX-TRAFFIC3 (crash parity wave 5, 2026-09-24, CC-1) -- the post-wreck traffic clear.
+//
+//   TrafficEntityModule::HandleResetRaceCarEvents @0x82742CE8 (58 insns, DWARF h:1446)
+//
+// It had no body and PostPhysicsUpdate's RUNNING arm never made the console's call at 0x8274EA5C.
+// The producer was live all along -- VehicleManager::ProcessResetEvents posts a RaceCarResetEvent
+// for every reset (BrnVehicleManager_WriteOutVehicleStats.cpp, 0x82617E28) and the manager output
+// interface reaches this buffer every frame -- and KillAllTrafficInCylinder is bodied, so only the
+// consumer was missing: after a wreck the player was put back on the road with the traffic (parked
+// cars included) still standing on and around the reset point.
+// The PS3 twin (DecFIGS 0x939344) is the same body.
+// ============================================================================
+namespace BrnTraffic
+{
+namespace
+{
+    // DWARF BrnTrafficEntityModule.cpp:119 / :120 / :122 (`const float32_t`), plain .rdata read
+    // with x360rd: the offline radius, the shared half-height, and the online radius, loaded at
+    // 0x82742DB0 / 0x82742D90 / 0x82742DA8 off one base (r31 = flt_820BA5E4).
+    const f32 KF_RESET_ON_TRACK_KILL_RADIUS        = 75.0f;   // flt_820BA7C4 (0x42960000)
+    const f32 KF_RESET_ON_TRACK_KILL_HALFHEIGHT    = 10.0f;   // flt_820BA5E4 (0x41200000)
+    const f32 KF_RESET_ON_TRACK_KILL_RADIUS_ONLINE = 12.0f;   // flt_820BA7CC (0x41400000)
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFIC_DIAG witness of each consumed reset, capped.
+    const s32 KI_RESET_DIAG_CAP  = 40;
+    s32       giResetDiagLines   = 0;
+}
+
+// -------------------------------------------------------------------------------------------------
+// @0x82742CE8  TrafficEntityModule::HandleResetRaceCarEvents
+//   DWARF h:1446 `void HandleResetRaceCarEvents(const InputBuffer_PostPhysics*)`.
+//
+//   0x82742CFC  "lpInput" (.cpp 6767) -- a tripwire, no early-out
+//   0x82742D28  GetVehicleManagerOutputInterface (0x82711700) ; `addi r27, r3, 0x5B0` ==
+//               GetRaceCarResetEventQueue() (EventQueue<RaceCarResetEvent,8>)
+//   0x82742D3C  `lbzx r25, this, 0x717DC` -- mbIsOnlineGameMode, read once before the walk
+//   0x82742D40  for i < GetLength() (re-read every pass): GetEvent (0x82709958), then
+//   0x82742D70  `lwz meLocalPlayerIndex (+0x713F0) ; cmpw` against meActiveRaceCarIndex (+0)
+//   0x82742D80  `lbz +4` mbResettingAfterWreck != 0
+//   0x82742D94  KillAllTrafficInCylinder(v1 = mResetPosition (+0x10),
+//               f1 = online ? 12.0 : 75.0, f2 = 10.0, r6 = 1 -- parked cars included)
+// -------------------------------------------------------------------------------------------------
+void TrafficEntityModule::HandleResetRaceCarEvents(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
+{
+    CGS_ASSERT(lpInput != 0, "lpInput");                                            // .cpp 6767
+
+    const BrnPhysics::Vehicle::VehicleManagerOutputInterface::RaceCarResetEventQueue* const lpResetEvents =
+        lpInput->GetVehicleManagerOutputInterface()->GetRaceCarResetEventQueue();
+
+    const bool lbIsOnlineGameMode = mbIsOnlineGameMode;
+
+    for (s32 liEvent = 0; liEvent < lpResetEvents->GetLength(); ++liEvent)
+    {
+        const BrnPhysics::Vehicle::RaceCarResetEvent& lrEvent = lpResetEvents->GetEvent(liEvent);
+
+        if (lrEvent.meActiveRaceCarIndex == meLocalPlayerIndex && lrEvent.mbResettingAfterWreck)
+        {
+            const f32 lfRadius = lbIsOnlineGameMode ? KF_RESET_ON_TRACK_KILL_RADIUS_ONLINE
+                                                    : KF_RESET_ON_TRACK_KILL_RADIUS;
+
+            // [DIAG] NOT IN THE X360 BINARY: BRN_TRAFFIC_DIAG (capped) names the reset this clear
+            // answers; BRN_TRAFFIC_TRACK tags the removals RemoveVehicle prints.
+            if (giResetDiagLines < KI_RESET_DIAG_CAP)
+            {
+                if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+                {
+                    ++giResetDiagLines;
+                    *lpDiag << "[T-reset] car=" << static_cast<s32>(lrEvent.meActiveRaceCarIndex)
+                            << " after-wreck clear at (" << lrEvent.mResetPosition.x << ", "
+                            << lrEvent.mResetPosition.y << ", " << lrEvent.mResetPosition.z
+                            << ") r=" << lfRadius << " h=" << KF_RESET_ON_TRACK_KILL_HALFHEIGHT
+                            << " online=" << (lbIsOnlineGameMode ? 1 : 0) << "\n";
+                }
+            }
+            const TrafficRemoveReasonTag lTag("reset-after-wreck-cylinder");
+
+            KillAllTrafficInCylinder(lrEvent.mResetPosition, lfRadius,
+                                     KF_RESET_ON_TRACK_KILL_HALFHEIGHT, true);
         }
     }
 }
