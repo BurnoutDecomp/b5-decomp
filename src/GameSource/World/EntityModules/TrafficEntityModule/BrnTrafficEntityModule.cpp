@@ -791,11 +791,11 @@ void TrafficEntityModule::PrePhysicsUpdate( CgsModule::IOBufferStack* /*lpInputB
             // 0x8274C7CC -- LIVE (cluster C1, _wT3_01.cpp). lCreatedBodies stops
             // being write-only here: it is this leg's OUT parameter.
             SendPhysicalRequests( lpOutput, &lCreatedBodies );
-            {
-                static bool sbLogged = false;
-                LogMissingLeg_Q7PrePhysics( sbLogged,
-                    "SendEmergencyCrashEvents @0x82747BB8 (out, &lCreatedBodies)" );
-            }
+
+            // 0x8274C7D0..0x8274C7DC -- LIVE (G59-D2, 2026-09-24). Drains the cab/trailer
+            // other-half queue; its one producer (HandleExternalResponses' articulated arm) is
+            // still parked, so the queue is empty on this build and this is a faithful no-op.
+            SendEmergencyCrashEvents( lpOutput, &lCreatedBodies );
             {
                 static bool sbLogged = false;
                 LogMissingLeg_Q7PrePhysics( sbLogged,
@@ -11465,6 +11465,81 @@ void TrafficEntityModule::SendPhysicalRequests(BrnTrafficIO::OutputBuffer_PrePhy
 
         lrRequests.Clear();   // 0x8274C670 `stw r20, 0x548(r29)` == the count word
     }
+}
+
+// ----------------------------------------------------------------------------
+// TrafficEntityModule::SendEmergencyCrashEvents  @ 0x82747BB8 (231)   DWARF :1350
+//
+// PrePhysicsUpdate's RUNNING arm, right after SendPhysicalRequests (0x8274C7DC). Drains
+// maEmergencyCrashingVehicles -- the queue HandleExternalResponses @0x82733450 fills with the
+// OTHER half of a crashed cab/trailer pair -- into crashes, then clears it. Locals per the
+// BrnTrafficUnity.cpp hints: luIndex (:5375), lpInfo (:5378), luVehicle (:5379), lpVehicle (:5389).
+//
+//   0x82747BEC / 0x82747C10  asserts "lpOutput" (.cpp 0x1564 = 5476), "lpCreatedBodies" (5477)
+//   0x82747C34..0x82747C3C   r29 = this + 0x572F0 == &maEmergencyCrashingVehicles; the count
+//                            (+0xA00) is re-read every iteration (CgsArray.h:336 assert)
+//   0x82747CE4               GetItem(luIndex) (0x8270CF08) -> lpInfo
+//   0x82747CF4               luVehicle = extrwi(victim, 14, 8) == the victim's entity index
+//   0x82747CF8..0x82747D14   assert "lpInfo->mVictimId != lpInfo->mCauserId" (5485)
+//   0x82747D18..0x82747E54   lpCreatedBodies->IsBitSet(luVehicle) (streamed "invalid index : "
+//                            < 600, CgsBitArray.h:203) -> already promoted this frame: next
+//   0x82747E58..0x82747E80   GetVehicle(luVehicle) ("luIndex < KU_MAX_TOTAL_TRAFFIC", .h:2459)
+//   0x82747E84..0x82747E90   !IsAlive() (mxFlags bit 0) -> next
+//   0x82747E98..0x82747EA4   IsCrashing() (0x82704A70) -> next
+//   0x82747EA8..0x82747EB4   IsPhysical() (mxFlags bit 3):
+//     0x82747EBC..0x82747EE8   IsRecoveringFromSlam() (0x82704C90) -> RecordTrafficVehicleIsPhysical(
+//                              luVehicle, victim, causer, r7 = 0 eCrashTrafficType_Standard,
+//                              f1 = f2 = flt_82001CC0 = 0.0f)
+//     0x82747EEC..0x82747EFC   then, recovering or not, GetVehicleInputInterface() (0x82711460,
+//                              the write-locked accessor) ->SetTrafficCrashing(victim) (0x8271D138)
+//   0x82747F04..0x82747F20   else MakeVehiclePhysical(luVehicle, lpOutput, lpCreatedBodies, causer,
+//                            r8 = 1 E_TRAFFIC_TYPE_CRASHING, r9 = 0 eCrashTrafficType_Standard)
+//   0x82747F3C..0x82747F48   `stwx 0` over this + 0x57CF0 (the count word) == Clear()
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::SendEmergencyCrashEvents(BrnTrafficIO::OutputBuffer_PrePhysics* lpOutput,
+                                                   TotalTrafficBitArray* lpCreatedBodies)
+{
+    CGS_ASSERT(lpOutput != 0, "lpOutput");                 // .cpp:5476
+    CGS_ASSERT(lpCreatedBodies != 0, "lpCreatedBodies");   // .cpp:5477
+
+    for (u32 luIndex = 0; luIndex < maEmergencyCrashingVehicles.GetLength(); ++luIndex)
+    {
+        const TrafficCrashInfo* lpInfo = &maEmergencyCrashingVehicles.GetItem(luIndex);
+        const u32 luVehicle = EntityIndexOf(lpInfo->mVictimId);
+        CGS_ASSERT(lpInfo->mVictimId.muValue != lpInfo->mCauserId.muValue,
+                   "lpInfo->mVictimId != lpInfo->mCauserId");   // .cpp:5485
+
+        CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC, "invalid index : ");   // CgsBitArray.h:203
+        if (lpCreatedBodies->IsBitSet(luVehicle))
+        {
+            continue;
+        }
+
+        Vehicle* lpVehicle = GetVehicle(luVehicle);
+        if (!lpVehicle->IsAlive() || lpVehicle->IsCrashing())
+        {
+            continue;
+        }
+
+        if (lpVehicle->IsPhysical())
+        {
+            if (lpVehicle->IsRecoveringFromSlam())
+            {
+                RecordTrafficVehicleIsPhysical(luVehicle, lpInfo->mVictimId, lpInfo->mCauserId,
+                                               BrnPhysics::Vehicle::eCrashTrafficType_Standard,
+                                               0.0f, 0.0f);   // flt_82001CC0 twice
+            }
+            lpOutput->GetVehicleInputInterface()->SetTrafficCrashing(lpInfo->mVictimId);
+        }
+        else
+        {
+            MakeVehiclePhysical(luVehicle, lpOutput, lpCreatedBodies, lpInfo->mCauserId,
+                                BrnPhysics::Vehicle::E_TRAFFIC_TYPE_CRASHING,
+                                BrnPhysics::Vehicle::eCrashTrafficType_Standard);
+        }
+    }
+
+    maEmergencyCrashingVehicles.Clear();
 }
 
 // ----------------------------------------------------------------------------
