@@ -1,10 +1,12 @@
 #include "SharedClasses/Sound/World/BrnSoundWorldScene.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint, gxMessageFilterFlags ("[Static map]" spew)
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 
 #include <cstdio>
+#include <cstdlib>
 #include <cmath>
 
 namespace BrnSound
@@ -13,6 +15,22 @@ namespace Logic
 {
 namespace World
 {
+
+// DWARF BrnSoundWorldScene.cpp:38 -- the static-map spew switch (.bss 0x82FFB8CA, default false),
+// read at the four "[Static map]" spew sites: HandleWorldZoneLoad 0x8269BF60, Update 0x826E659C,
+// ResourcesAreReady 0x826BA9E0, HandleWorldZoneUnload 0x826BAB28 (each also requires
+// gxMessageFilterFlags bit 0). [DIAG] NOT IN THE X360 BINARY: BRN_EMITTER_DIAG=1 turns it on for a
+// harness run, standing in for the debugger/menu that flips it on a console.
+bool KB_SPEW_STATIC_MAP_INFO = std::getenv("BRN_EMITTER_DIAG") != nullptr;
+
+namespace
+{
+bool SpewStaticMapInfo()
+{
+    return KB_SPEW_STATIC_MAP_INFO && (CgsDev::Message::gxMessageFilterFlags & 1) != 0 &&
+           CgsDev::Log::gpDebugPrint != 0;
+}
+} // namespace
 
 void StaticSoundMapZone::Construct(u16 lu16Zone)
 {
@@ -86,8 +104,16 @@ BrnSound::Logic::ResourceRegistrar& SoundWorldScene::GetResourceRegistrar()
     return mpLogicModule->GetResourceRegistrar();
 }
 
+// ARTIST @0x8269BF48: spew "[Static map] 1: Load unit" (under KB_SPEW_STATIC_MAP_INFO), assert the
+// table has room (l.346) and append the zone. FLAG (FX-EMITTER 2026-09-24): the console has NO
+// duplicate-zone check -- the early-out loop below is PC-only, kept until the world streamer
+// (WorldEntityModule::OnWorldGraphicsLoadComplete @0x822D7828) is measured never to double-post a
+// load; the spew above shows any duplicate as a second "1: Load unit" without a "4: Unload unit".
 void SoundWorldScene::HandleWorldZoneLoad(u16 lu16Zone)
 {
+    if (SpewStaticMapInfo())
+        *CgsDev::Log::gpDebugPrint << "[Static map] 1: Load unit\t" << static_cast<s32>(lu16Zone) << "\n";
+
     for (s32 liZone = 0; liZone < miNumZonesInUse; ++liZone)
     {
         if (maSoundMapZones[liZone].GetZone() == lu16Zone)
@@ -99,8 +125,12 @@ void SoundWorldScene::HandleWorldZoneLoad(u16 lu16Zone)
         maSoundMapZones[miNumZonesInUse++].Construct(lu16Zone);
 }
 
+// ARTIST @0x826BAB10 (spew "[Static map] 4: Unload unit" under KB_SPEW_STATIC_MAP_INFO first).
 void SoundWorldScene::HandleWorldZoneUnload(u16 lu16Zone)
 {
+    if (SpewStaticMapInfo())
+        *CgsDev::Log::gpDebugPrint << "[Static map] 4: Unload unit\t" << static_cast<s32>(lu16Zone) << "\n";
+
     s32 liFound = -1;
     for (s32 liZone = 0; liZone < miNumZonesInUse; ++liZone)
     {
@@ -159,6 +189,10 @@ void SoundWorldScene::Update()
                 continue;
             mbAcquireInProgress = true;
             mu16AcquiringZone = maSoundMapZones[liZone].GetZone();
+            // 0x826E659C: the console's spew (its "Aqcuire" spelling).
+            if (SpewStaticMapInfo())
+                *CgsDev::Log::gpDebugPrint << "[Static map] 2: Aqcuire unit\t"
+                                           << static_cast<s32>(mu16AcquiringZone) << "\n";
             char lacResourceName[32];
             std::snprintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
                           static_cast<unsigned>(mu16AcquiringZone), mpcResourceExt);
@@ -184,20 +218,22 @@ void SoundWorldScene::Update()
             if (!lrZone.IsPrepared() || lrZone.HasPackedMinAndMax())
                 continue;
             const BrnSound::World::StaticSoundMap* lpMap = GetZoneMap(liZone);
-            CGS_ASSERT(lpMap != 0, "lpMap");
-            if (lpMap)
-            {
-                const Vector2& lrMin = lpMap->GetMin();
-                const Vector2& lrMax = lpMap->GetMax();
-                Vector4 lBounds = { lrMin.x, lrMin.y, lrMax.x, lrMax.y };
-                lrZone.SetPackedMinAndMax(lBounds);
-            }
+            CGS_ASSERT(lpMap != 0, "lpMap");   // l.273, then used as it stands
+            const Vector2& lrMin = lpMap->GetMin();
+            const Vector2& lrMax = lpMap->GetMax();
+            Vector4 lBounds = { lrMin.x, lrMin.y, lrMax.x, lrMax.y };
+            lrZone.SetPackedMinAndMax(lBounds);
         }
     }
 }
 
+// ARTIST @0x826BA9C8 (spew "[Static map] 3: Resource for unit" under KB_SPEW_STATIC_MAP_INFO first).
 void SoundWorldScene::ResourcesAreReady()
 {
+    if (SpewStaticMapInfo())
+        *CgsDev::Log::gpDebugPrint << "[Static map] 3: Resource for unit\t"
+                                   << static_cast<s32>(mu16AcquiringZone) << "\n";
+
     bool lbFound = false;
     char lacResourceName[32];
     std::snprintf(lacResourceName, sizeof(lacResourceName), "TRK_UNIT%u%s",
@@ -224,12 +260,11 @@ const BrnSound::World::StaticSoundMap* SoundWorldScene::GetZoneMap(s32 liIndex) 
     CGS_ASSERT(liIndex >= 0 && liIndex < miNumZonesInUse &&
                maSoundMapZones[liIndex].IsPrepared(),
                "( liIndex < miNumZonesInUse ) && ( maSoundMapZones[ liIndex ].IsPrepared() )");
+    // ARTIST @0x8269C028: assert (l.426), then `return **(handle)` -- no null fallback.
     const CgsResource::ResourceHandle& lrHandle =
         maSoundMapZones[liIndex].GetResourceHandle();
-    return lrHandle.mpResourceMemory
-        ? *reinterpret_cast<const BrnSound::World::StaticSoundMap* const*>(
-              lrHandle.mpResourceMemory)
-        : 0;
+    return *reinterpret_cast<const BrnSound::World::StaticSoundMap* const*>(
+        lrHandle.mpResourceMemory);
 }
 
 s32 SoundWorldScene::Query(const Vector3& lrPosition, f32 lfRadius,
@@ -241,20 +276,31 @@ s32 SoundWorldScene::Query(const Vector3& lrPosition, f32 lfRadius,
     CGS_ASSERT(lfRadius > 0.0f,
                "SoundWorldScene : You must supply a positive radius.");
     QueryInfo lQuery(lrPosition, lfRadius, lpEntitiesOut, liMaxEntities, lbDrawDebug);
+    CGS_ASSERT(mpLogicModule != 0, "mpLogicModule");   // l.478
     const BrnSound::Module::Io::RootInputBuffer::UpdateInfo* lpUpdateInfo =
         mpLogicModule->GetBrnInputStructure()->GetUpdateInfo();
     if (lpUpdateInfo->mData[0] != 0)
+    {
+        // ARTIST 0x826E6AA8..0x826E6AC0: gated by gxMessageFilterFlags bit 0 alone (`clrldi 63`).
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0 && CgsDev::Log::gpDebugPrint)
+            *CgsDev::Log::gpDebugPrint << "[Static map] Stalled.\n";
         return 0;
+    }
     for (s32 liZone = 0; liZone < miNumZonesInUse; ++liZone)
     {
         const StaticSoundMapZone& lrZone = maSoundMapZones[liZone];
         if (!lrZone.IsPrepared())
             continue;
-        CGS_ASSERT(lrZone.HasPackedMinAndMax(), "HasPackedMinAndMax()");
+        // The map's own sanity (ARTIST l.493 `cmplwi 0x2710` on miNumEntities, l.495 `cmplwi 2` on
+        // meRootType; the console formats "Index <zone>" into its message buffer), then the bounds.
         const BrnSound::World::StaticSoundMap* lpMap = GetZoneMap(liZone);
-        if (lpMap && lpMap->IsInRange(lrPosition, lfRadius,
-                                      lrZone.GetPackedMinAndMax()))
-            QuerySoundMap(lQuery, lpMap);
+        CGS_ASSERT(static_cast<u32>(lpMap->GetNumEntities()) < 10000u, "Index");
+        CGS_ASSERT(static_cast<u32>(lpMap->GetRootType()) <
+                       static_cast<u32>(BrnSound::World::StaticSoundMap::E_ROOT_TYPE_COUNT),
+                   "Index");
+        CGS_ASSERT(lrZone.HasPackedMinAndMax(), "HasPackedMinAndMax()");
+        if (lpMap->IsInRange(lrPosition, lfRadius, lrZone.GetPackedMinAndMax()))
+            QuerySoundMap(lQuery, GetZoneMap(liZone));
     }
     return lQuery.miEntitiesWritten;
 }
