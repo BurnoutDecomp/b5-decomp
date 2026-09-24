@@ -1155,6 +1155,109 @@ void GameStateModule::ProcessGameEventsVehicleImpactBringUp(
 }
 
 // ============================================================================
+// ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] ProcessGameEventsShowtimeBounceBringUp -- the extracted CASE-52
+// and CASE-53 arms of GameStateModule::ProcessGameEvents @0x823A0A18 (the showtime bounce relay),
+// the same one-walk-per-arm precedent as the case-31 arm above. r25 = the event, r22 = the action
+// queue, r31 = this, r18 = 0.
+//
+// case 52 @0x823A3D74..0x823A3E0C -- store for store into a stack JustBouncedAction (var_1C40):
+//     lwz r11, 0(ev)  -> rec+0x10      lbz 4(ev) -> rec+0x20   lbz 5(ev) -> rec+0x21
+//     lbz 6(ev)       -> rec+0x22      lbz 7(ev) -> rec+0x23
+//     lwz r8, 0x20D0(this) -> rec+0x14   (the crash scorer's miCurrentComboCount, scorer = this+0x1DF0)
+//     r9 = r18 (0) + the four words at this+0x20D8.. (`li r11, 4` loop) -> rec+0x18 (GetNumCarsCrashed())
+//     lwz r11, 8(ev)  -> rec+0x1C
+//     `li r11, 0x10 ; lvx128 v0, r25, r11 ; stvx128 v0, r0, rec` -> rec+0x00 (the contact point)
+//     AddEvent(queue, rec, 0x90 (144), 0x30 (48))
+//   then CrashModeScoring::DealWithPlayerBounced(scorer, lbz rec+0x21, lbz rec+0x23, lwz rec+0x1C)
+//   @0x823A3DF8..0x823A3E08 (empty on the console -- see its body).
+// case 53 @0x823A3E10..0x823A3E20 -- AddEvent(queue, var_1EC8, 0x91 (145), 1); the byte is never
+//   written by the console (an uninitialised stack slot), so the record is zeroed here.
+// Nothing else happens in either arm: no Clear (PreWorldUpdateStuntBringUp owns it), no guard.
+// ============================================================================
+void GameStateModule::ProcessGameEventsShowtimeBounceBringUp(
+        const CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
+        GameStateModuleIO::GameActionQueue* lpActionQueue)
+{
+    if (lpGameEventQueue == 0 || lpActionQueue == 0)
+    {
+        return;
+    }
+
+    const CgsModule::Event* lpEvent = 0;
+    s32                     liSize  = 0;
+    s32                     liType  = lpGameEventQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    while (lpEvent != 0)
+    {
+        if (liType == GameStateModuleIO::E_EVENT_JUST_BOUNCED)              // world 52
+        {
+            const GameStateModuleIO::JustBouncedEvent* lpBounceEvent =
+                reinterpret_cast<const GameStateModuleIO::JustBouncedEvent*>(lpEvent);
+            CrashModeScoring* const lpCrashScorer = mModeManager.GetScoringSystem()->GetCrashScorer();
+
+            GameStateModuleIO::JustBouncedAction lBouncyBouncy = {};   // +0x24..+0x2F never written
+            lBouncyBouncy.miEventWord0           = lpBounceEvent->miBounceChain;
+            lBouncyBouncy.mbBoostedBounce        = lpBounceEvent->mbBoostedBounce;
+            lBouncyBouncy.mu8EventByte7          = lpBounceEvent->mbGoodImpact ? 1 : 0;
+            lBouncyBouncy.mbFromStationary       = lpBounceEvent->mbFromStationary;
+            lBouncyBouncy.miCurrentComboCount    = lpCrashScorer->GetCurrentComboCount();
+            lBouncyBouncy.mbOnCar                = lpBounceEvent->mbOnCar;
+            lBouncyBouncy.miTotalVehiclesCrashed = lpCrashScorer->GetNumCarsCrashed();
+            lBouncyBouncy.miEventWord2           = static_cast<s32>(lpBounceEvent->midImpactEntityId.muValue);
+            lBouncyBouncy.mContactPoint          = lpBounceEvent->mContactPoint;
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBouncyBouncy),
+                                    GameStateModuleIO::E_ACTION_JUST_BOUNCED,
+                                    static_cast<s32>(sizeof(lBouncyBouncy)));
+
+            // The console re-loads the three arguments from the record it just posted.
+            EntityId lImpactEntityId;
+            lImpactEntityId.muValue = static_cast<u32>(lBouncyBouncy.miEventWord2);
+            lpCrashScorer->DealWithPlayerBounced(lBouncyBouncy.mbOnCar,
+                                                 lBouncyBouncy.mu8EventByte7 != 0,
+                                                 lImpactEntityId);
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_SHOWTIME_WATCH, capped: one line per relayed bounce.
+            {
+                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+                static s32        siLinesLeft = 64;
+                if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && siLinesLeft > 0)
+                {
+                    --siLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[showtime-bounce] event 52 -> action 144: chain " << lBouncyBouncy.miEventWord0
+                        << " combo " << lBouncyBouncy.miCurrentComboCount
+                        << " carsCrashed " << lBouncyBouncy.miTotalVehiclesCrashed
+                        << " fromStationary " << (lBouncyBouncy.mbFromStationary ? 1 : 0)
+                        << " onCar " << (lBouncyBouncy.mbOnCar ? 1 : 0)
+                        << " boosted " << (lBouncyBouncy.mbBoostedBounce ? 1 : 0)
+                        << " goodImpact " << static_cast<s32>(lBouncyBouncy.mu8EventByte7) << "\n";
+                }
+            }
+        }
+        else if (liType == GameStateModuleIO::E_EVENT_JUST_APPLIED_EXTRA_SPIN)  // world 53
+        {
+            const GameStateModuleIO::JustAppliedExtraSpinAction lSpinAction = {};
+            lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lSpinAction),
+                                    GameStateModuleIO::E_ACTION_JUST_APPLIED_EXTRA_SPIN,
+                                    static_cast<s32>(sizeof(lSpinAction)));
+
+            {
+                static const bool sbWatch = (getenv("BRN_SHOWTIME_WATCH") != 0);
+                static s32        siLinesLeft = 32;
+                if (sbWatch && CgsDev::Log::gpDebugPrint != 0 && siLinesLeft > 0)
+                {
+                    --siLinesLeft;
+                    *CgsDev::Log::gpDebugPrint << "[showtime-bounce] event 53 -> action 145 (extra spin)\n";
+                }
+            }
+        }
+
+        const CgsModule::Event* lpCurrent = lpEvent;
+        liType = lpGameEventQueue->GetNextEvent(lpCurrent, &lpEvent, &liSize);
+    }
+}
+
+// ============================================================================
 // [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
 // console emits a bare AddEvent per arm.// ============================================================================
 // [boost-ticker wave] The shared post + its opt-in witness. NOT a console function: the
@@ -1852,6 +1955,12 @@ void GameStateModule::PreWorldUpdateStuntBringUp(
     // action queue this function already holds the write lock for; RaceCarEntityModule::
     // HandleGameActions turns 53 into the OnPlayerAttacksRival boost award in the SAME sub-step.
     ProcessGameEventsVehicleImpactBringUp(&lGameEventQueue, lpActionQueue);
+    // ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] the dispatcher's CASE-52 / CASE-53 arms (the showtime bounce
+    // relay), same walk, same must-run-before-the-Clear constraint. They post actions 144 / 145 onto
+    // the action queue this function already holds the write lock for; their consumers are the
+    // director (MainDirector::ProcessInputQueue cases 144 / 145), RaceCarEntityModule (144 ->
+    // CrashPlayManager::OnBounce) and the GUI translator (144 -> GUI event 402).
+    ProcessGameEventsShowtimeBounceBringUp(&lGameEventQueue, lpActionQueue);
     // â­ [P1 sim-pause] the dispatcher's pause-family arms (cases 33/35/36/93), same walk,
     // same must-run-before-the-Clear constraint; RequestPause/RequestUnpause post actions
     // 86/87/88 onto the action queue this function already holds the write lock for --

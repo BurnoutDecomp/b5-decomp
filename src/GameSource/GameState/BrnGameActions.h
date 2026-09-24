@@ -450,6 +450,11 @@ enum EGameActionType
     //              (jump-table 131) @0x825A7868 -> VehicleManager::SetShowtimeBehaviour.
     E_ACTION_TRAFFIC_TYPE_REQUEST       = 116,   // DWARF 111 (+5 X360); size 2  PINNED (producer + consumer)
     E_ACTION_TOGGLE_SHOWTIME_BEHAVIOUR  = 138,   // DWARF 130 (+8 X360); size 4  PINNED (producer + consumer)
+    // ...and the one ProcessGameEvents posts beside 144:
+    //   X360 145 = DWARF 137 JUST_APPLIED_EXTRA_SPIN (+8). Producer ProcessGameEvents case 53
+    //              @0x823A3E10..0x823A3E20 `li r6,1 ; li r5,0x91`; consumer MainDirector::
+    //              ProcessInputQueue case 145 @0x822386BC (+0x1EC mbExtraSpinThisFrame).
+    E_ACTION_JUST_APPLIED_EXTRA_SPIN    = 145,   // DWARF 137 (+8 X360); size 1  PINNED (producer + consumer)
 
     // X360-ATTESTED value (NOT a DWARF-only import -- both ends agree on 15):
     //   producer  GameStateModule::ProcessGameEvents @0x823A0A18, the E_EVENT_COMPLETED_STUNT
@@ -1201,19 +1206,46 @@ static_assert(offsetof(AddRivalCarAction, mu8RivalIndex)      == 0xA2, "record +
 //     rec+0x20  lbz r11, 4(event)   rec+0x21  lbz r11, 5(event)
 //     rec+0x22  lbz r8,  6(event)   rec+0x23  lbz r8,  7(event)
 //     li r6, 0x30 (48) ; li r5, 0x90 (144)
-struct JustBouncedAction
+//
+// ⭐⭐⭐ [FX-SHOWTIME2 2026-09-24] THE HEAD IS RECOVERED AND THE PRODUCER IS LANDED
+// (GameStateModule::ProcessGameEventsShowtimeBounceBringUp, GameStateModule_gUI_00.cpp). The arm also
+// copies the event's contact point whole -- `li r11, 0x10 ; lvx128 v0, r25, r11 ; stvx128 v0, r0, rec`
+// @0x823A3DE4..0x823A3DF0 -- so +0x00 is DWARF's `Vector3 mContactPoint` (:3446), and the id is read
+// (`li r5, 0x90`), so the record now carries its GameAction<E_ACTION_JUST_BOUNCED> tag like its
+// neighbours (an empty base: no byte moves). The event words map onto the DWARF names one for one:
+// +0x10 = JustBouncedEvent::miBounceChain (DWARF miBounceChain :3438), +0x1C = midImpactEntityId
+// (:3445), +0x23 = mbGoodImpact (:3442). Those three keep the names other lanes' code already reads
+// them by; the DWARF name rides in each comment.
+struct JustBouncedAction : public GameAction<E_ACTION_JUST_BOUNCED>
 {
-    u8   maPad00[0x10];      // +0x00 still-unrecovered ARTIST head -- outside the store run
-    s32  miEventWord0;       // +0x10 FLAG name (the game event's word 0)
+    Vector3 mContactPoint;   // +0x00 DWARF :3446 -- the event's +0x10 vector, copied whole
+    s32  miEventWord0;       // +0x10 DWARF miBounceChain (:3438), the event's word 0
     s32  miCurrentComboCount;// +0x14
     s32  miTotalVehiclesCrashed; // +0x18 (maiNumCarsCrashed[0..3] summed by the producer)
-    s32  miEventWord2;       // +0x1C FLAG name (the game event's word 2)
+    s32  miEventWord2;       // +0x1C DWARF midImpactEntityId (:3445), the event's word 2
     bool mbFromStationary;   // +0x20 DWARF BrnGameActions.h:3439
     bool mbOnCar;            // +0x21 DWARF BrnGameActions.h:3440
     bool mbBoostedBounce;    // +0x22 DWARF BrnGuiEventTypeDefs.h:4520 via the GUI twin
-    u8   mu8EventByte7;      // +0x23 FLAG name -- stored by the producer, read by nobody
+    u8   mu8EventByte7;      // +0x23 DWARF mbGoodImpact (:3442); MainDirector case 144 reads it (+0x1E9)
     u8   maPad24[0x30 - 0x24]; // +0x24..+0x2F -- outside the store run; posted size is 48.
 };
+static_assert(sizeof(JustBouncedAction) == 0x30,                      "action 144 wire size (li r6, 0x30)");
+static_assert(offsetof(JustBouncedAction, mContactPoint)          == 0x00, "rec+0x00  stvx128 (the event's +0x10)");
+static_assert(offsetof(JustBouncedAction, miEventWord0)           == 0x10, "rec+0x10  lwz 0(event)");
+static_assert(offsetof(JustBouncedAction, miCurrentComboCount)    == 0x14, "rec+0x14  lwz 0x20D0(gsm)");
+static_assert(offsetof(JustBouncedAction, miTotalVehiclesCrashed) == 0x18, "rec+0x18  the four-word sum");
+static_assert(offsetof(JustBouncedAction, miEventWord2)           == 0x1C, "rec+0x1C  lwz 8(event)");
+static_assert(offsetof(JustBouncedAction, mbFromStationary)       == 0x20, "rec+0x20  lbz 4(event)");
+static_assert(offsetof(JustBouncedAction, mbOnCar)                == 0x21, "rec+0x21  lbz 5(event)");
+static_assert(offsetof(JustBouncedAction, mbBoostedBounce)        == 0x22, "rec+0x22  lbz 6(event)");
+static_assert(offsetof(JustBouncedAction, mu8EventByte7)          == 0x23, "rec+0x23  lbz 7(event)");
+
+// Action 145, 1 byte -- "an extra spin was just applied" (DWARF BrnGameActions.h:3457, no members).
+// [FX-SHOWTIME2 2026-09-24] Producer ProcessGameEvents case 53 @0x823A3E10..0x823A3E20 (`li r6, 1 ;
+// li r5, 0x91`, the byte handed over is an uninitialised stack slot); consumer MainDirector::
+// ProcessInputQueue case 145 @0x822386BC.
+struct JustAppliedExtraSpinAction : public GameAction<E_ACTION_JUST_APPLIED_EXTRA_SPIN> {};
+static_assert(sizeof(JustAppliedExtraSpinAction) == 1, "action 145 wire size (li r6, 1)");
 
 // Consumer: CrashPlayManager::OnEnterRoad @0x822A7D68 -- `ld r11, 0x10(r30)`, twice, and
 // nothing else. The 8-byte load is what types mRoadId as CgsID (== u64); the assert string the

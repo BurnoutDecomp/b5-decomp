@@ -136,6 +136,11 @@ struct CrashModeScoring
                                       s32* lpiScoreMultiplierEarned,
                                       s32* lpiComboBonusEarned);                    // X360 0x82338778
     void DealWithVehicleLeaping(const VehicleLeaptEvent* lpLeapEvent);             // X360 0x82312980
+    // [FX-SHOWTIME2 2026-09-24] DWARF BrnCrashModeScoring.h:152 (body :763). EMPTY on both consoles:
+    // the ARTIST call site, ProcessGameEvents case 52 @0x823A3E08, lands on a lone `blr` @0x8284CB38
+    // (ICF-folded, named BaseCollisionGenerator::Destruct there) and the PS3 body (DecFIGS 0x1CD04C)
+    // is `;`. Declared and called so the case-52 arm keeps the console's call.
+    void DealWithPlayerBounced(bool lbOnCar, bool lbWasGoodImpact, EntityId lidImpactEntityId);
 
     // [showtime-score 2026-08-29] X360 0x82320F38. The recent-stunt de-dupe: record this stunt
     // element's 64-bit CgsID in mRecentStuntSet unless the live window already holds it.
