@@ -76,10 +76,13 @@ Vector3 Vector3Randomiser::RandomiseXYZ(CgsNumeric::Random &lrRandom)
     //     mVecB = max * speedScale - min * speedScale   (vsubfp v11, v10, v11 -> var_140)
     // which is base+range and is only meaningful under this reading.
     Vector3 lvResult;
-    lvResult.x = mVecA.x + mVecB.x * lvPrev.x;
-    lvResult.y = mVecA.y + mVecB.y * lvPrev.y;
-    lvResult.z = mVecA.z + mVecB.z * lvPrev.z;
-    lvResult.w = mVecA.w + mVecB.w * lvPrev.w;
+    // FX-CRASHVFX 2026-09-24: the combine is ONE `vmaddfp` -- FUSED, rounded once -- so it is
+    // std::fma, not `a + b * r` (MSVC rounds the product first; that differs from the console in
+    // the last bit of 28 of the 192 lanes tests/run_fxcrashvfx_randomisers.py draws).
+    lvResult.x = std::fma(mVecB.x, lvPrev.x, mVecA.x);
+    lvResult.y = std::fma(mVecB.y, lvPrev.y, mVecA.y);
+    lvResult.z = std::fma(mVecB.z, lvPrev.z, mVecA.z);
+    lvResult.w = std::fma(mVecB.w, lvPrev.w, mVecA.w);
     return lvResult;
 }
 
@@ -144,10 +147,11 @@ Vector3 Vector3Randomiser::RandomInterpolate(CgsNumeric::Random &lrRandom)
     const f32 lfT = DrawInterpolant(lrRandom);
 
     Vector3 lvResult;
-    lvResult.x = mVecA.x + mVecB.x * lfT;
-    lvResult.y = mVecA.y + mVecB.y * lfT;
-    lvResult.z = mVecA.z + mVecB.z * lfT;
-    lvResult.w = mVecA.w + mVecB.w * lfT;
+    // `vmaddfp128 v13, v122, v0, v13` (0x8229A50C..0x8229A520): fused, as in RandomiseXYZ.
+    lvResult.x = std::fma(mVecB.x, lfT, mVecA.x);
+    lvResult.y = std::fma(mVecB.y, lfT, mVecA.y);
+    lvResult.z = std::fma(mVecB.z, lfT, mVecA.z);
+    lvResult.w = std::fma(mVecB.w, lfT, mVecA.w);
     return lvResult;
 }
 
@@ -188,10 +192,13 @@ Vector4 Vector4Randomiser::RandomiseXYZW(CgsNumeric::Random &lrRandom)
     // v13 == *(this + 16) == mVecB and v12 == *(this + 0) == mVecA, raw field order D,A,B,C
     // => mVecB * (prev - 1.0) + mVecA.
     Vector4 lvResult;
-    lvResult.x = mVecA.x + mVecB.x * lvPrev.x;
-    lvResult.y = mVecA.y + mVecB.y * lvPrev.y;
-    lvResult.z = mVecA.z + mVecB.z * lvPrev.z;
-    lvResult.w = mVecA.w + mVecB.w * lvPrev.w;
+    // FX-CRASHVFX 2026-09-24: the combine is ONE `vmaddfp` -- FUSED, rounded once -- so it is
+    // std::fma, not `a + b * r` (MSVC rounds the product first; that differs from the console in
+    // the last bit of 28 of the 192 lanes tests/run_fxcrashvfx_randomisers.py draws).
+    lvResult.x = std::fma(mVecB.x, lvPrev.x, mVecA.x);
+    lvResult.y = std::fma(mVecB.y, lvPrev.y, mVecA.y);
+    lvResult.z = std::fma(mVecB.z, lvPrev.z, mVecA.z);
+    lvResult.w = std::fma(mVecB.w, lvPrev.w, mVecA.w);
     return lvResult;
 }
 
