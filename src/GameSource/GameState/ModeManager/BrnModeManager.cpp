@@ -621,7 +621,7 @@ void ModeManager::RaceCarFinishes(EGlobalRaceCarIndex leGlobalRaceCarIndex,
         const s32 liPosition = mScoringSystem.GetCarRaceFinishPosition(leActiveRaceCarIndex);
         if (liPosition <= 3)
         {
-            mHUDMessageLogic.meFinishingRaceCarIndex = leActiveRaceCarIndex;
+            mHUDMessageLogic.meFinishedRaceCarIndex = leActiveRaceCarIndex;
             mHUDMessageLogic.miFinishPosition = liPosition;
         }
     }

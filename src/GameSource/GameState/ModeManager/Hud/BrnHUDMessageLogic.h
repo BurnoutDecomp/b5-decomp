@@ -192,6 +192,26 @@ public:
     // (0x82399CB4..0x82399CE8): the player-reached-checkpoint record (action 249, 24 bytes).
     void GeneratePlayerCheckpointMessage();
 
+    // [FX-FLOW 2026-09-24, G11-D1 remainder] The five race-arm generators GenerateRaceModeMessages
+    // calls around the checkpoint and crash legs (DWARF BrnHUDMessageLogic.h:138/:147/:155/:219/:224).
+    // X360 0x82394110. On the frame the player passes a checkpoint (offline modes only): the time gap
+    // to the leader -- or, when the player leads, to second place -- as action 245 (24 bytes).
+    void GenerateLeaderMessages(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                                ScoringSystem* lpScoringSystem);
+    // X360 0x82394258. A rival that finished in the top three (ModeManager::RaceCarFinishes latches
+    // it): action 247 (8 bytes), then the latch drops. The player's own finish stays latched.
+    void GenerateFinisherMessage(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface);
+    // X360 0x82394338. A rival passed a new checkpoint at least 500 m ahead of the player: action 248.
+    void GenerateRivalCheckpointMessage(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
+                                        ScoringSystem* lpScoringSystem);
+    // X360 0x82395760. A new leader that held the lead for 1.5 s (action 242) and a new last place
+    // held for 7.5 s (action 243), each timed on its own CgsSystem::Time.
+    void GenerateFirstOrLastMessage(ScoringSystem* lpScoringSystem, f32 lfTimeStep,
+                                    EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
+                                    const StuntModeScoring::ActiveRaceCarOutputInterface* lpLastActiveRaceCarInterface);
+    // X360 0x82395A88. The player crossing the next 500 m distance-to-finish mark: action 244.
+    void GenerateDistanceToFinishMessage(ScoringSystem* lpScoringSystem, EActiveRaceCarIndex lePlayerRaceCarIndex);
+
     // X360 0x82394418 (DWARF BrnHUDMessageLogic.h:160). Offline race: one "X crashes" record
     // (action 250, 16 bytes) per non-player crash event this frame.
     void DetectCrashes(const StuntModeScoring::ActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
@@ -265,7 +285,9 @@ private:
     // delta into it; Prepare zeroes it.
     f32                 mfTimeInMode;                 // +0x1C4 (452)
 
-    EActiveRaceCarIndex meFinishingRaceCarIndex; // ARTIST +456
+    // The rival that finished in the top three, until GenerateFinisherMessage posts it (X360 +0x1C8,
+    // DWARF :274 -- the name its range asserts spell, "meFinishedRaceCarIndex >= ..." @0x82394294).
+    EActiveRaceCarIndex meFinishedRaceCarIndex;  // ARTIST +456
     s32 miFinishPosition;                       // ARTIST +460
 
     // Stunt-run score-milestone tracker (X360 +0x1D0..+0x1D8): the rival whose milestone
@@ -289,6 +311,12 @@ private:
     CgsID mNextPlayerCheckpointID;    // ARTIST +504
     bool mbIsLastCheckpoint;         // ARTIST +512
     bool mbPlayerHasJustTriggeredCheckpoint; // ARTIST +513
+    // [FX-FLOW 2026-09-24] GenerateFirstOrLastMessage's two debounce clocks (DWARF :288/:289): the
+    // time since the lead / last place last changed hands. X360 +0x214 / +0x21C (`addi r3, r27,
+    // 0x214` @0x823957E8, `addi r3, r27, 0x21C` @0x8239593C); Prepare seeds them to the thresholds
+    // (1.5 s / 7.5 s) so nothing is announced before the first change.
+    CgsSystem::Time mTimeSinceNewLeader;     // ARTIST +532
+    CgsSystem::Time mTimeSinceNewLast;       // ARTIST +540
     s32 miNextRivalCheckpoint;       // ARTIST +548
     EActiveRaceCarIndex meCheckpointTriggeringRaceCarIndex; // ARTIST +552
     CgsID mRivalCheckpointID;        // ARTIST +560
@@ -296,5 +324,10 @@ private:
     // Per-car "has changed team this round" flags (X360 +0x240). One bit per active race
     // car slot (E_ACTIVE_RACE_CAR_INDEX_COUNT == 8).
     CgsContainers::BitArray<E_ACTIVE_RACE_CAR_INDEX_COUNT> mTeamChangedBits; // +0x240
+
+    // [FX-FLOW 2026-09-24] The next distance-to-finish mark GenerateDistanceToFinishMessage announces
+    // (DWARF :307, X360 +0x250): -1.0 until the first frame of the mode sets it, 0.0 once the last
+    // mark is spent.
+    f32 mfNextDistanceToFinishMessage;   // ARTIST +592
 };
 }
