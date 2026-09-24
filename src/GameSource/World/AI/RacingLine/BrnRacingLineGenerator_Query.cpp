@@ -349,7 +349,9 @@ bool RacingLineGenerator::HasSpreadHardNoGoLinesFinished(RacingLine* lpRacingLin
 {
     for (s32 liColumn = 0; liColumn < KI_HNG_STRETCH_COUNT; ++liColumn)
     {
-        if (lpRacingLine->maStretchDistanceForHNG[liColumn] >= 0.0f)
+        // NaN polarity (FX-AINAN2): `fcmpu stretch, 0.0 ; bge -> not finished` @0x8278F804/
+        // 0x8278F808 is taken on an unordered compare -- a NaN column still counts as budget.
+        if (!(lpRacingLine->maStretchDistanceForHNG[liColumn] < 0.0f))
             return false;
     }
     return true;
