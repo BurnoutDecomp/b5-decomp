@@ -290,6 +290,15 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
     // :367 -- one showtime-eligible traffic vehicle (the showtime "crash magnet" list).
     struct ShowtimeVehicleInfo
     {
+        // DWARF :385. No out-of-line body in either build; GeneratePotentialLeapedAndStomped-
+        // CarsOutput @0x8271F298 inlines it on the slot GetFirstUnusedShowtimeVehicleInfo hands
+        // back: `stb r31(0), 4(r21)` then `stw r28(luVehicle), 0(r21)` at 0x8271F6C0/0x8271F6C4.
+        void Construct(u32 luVehicleIndex)
+        {
+            muFlags        = 0;
+            muVehicleIndex = luVehicleIndex;
+        }
+
         u32 muVehicleIndex; // :378
         u8  muFlags;        // :379
     };
@@ -1138,6 +1147,37 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // argument and is never read.
         void GenerateNearMissOutput(BrnTrafficIO::InputBuffer_PreScene* lpInput,
                                     BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
+        // @0x8271F298 (DWARF `void GeneratePotentialLeapedAndStompedCarsOutput(const
+        // InputBuffer_PreScene*, OutputBuffer_PreScene*)`, BrnTrafficUnity.cpp:7320). The third
+        // of PreSceneUpdate's output producers (0x8274AB04). In Showtime it predicts where the
+        // airborne player lands and publishes (a) the on-screen traffic cars inside the landing
+        // ring as the race-car module's potential stompees (the ONLY caller of
+        // AddPotentialStompee), (b) the on-screen cars within the score radius as the GUI's
+        // potential scorees, and (c) this frame's Showtime vehicle list (maShowtimeVehicleInfoList
+        // -- the crash magnets). Body at the end of BrnTrafficEntityModule.cpp.
+        void GeneratePotentialLeapedAndStompedCarsOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                                         BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
+        // DWARF :1872 (body .h:2746, local `lpInfo`). The next free slot of
+        // maShowtimeVehicleInfoList, or NULL once all KU_MAX_SHOWTIME_TRAFFIC_VEHICLES are taken;
+        // luInfoIndex receives the slot's index. The slot is only CLAIMED when its owner bumps
+        // muShowtimeVehicleInfoCount. No out-of-line body; inlined by
+        // GeneratePotentialLeapedAndStompedCarsOutput @0x8271F298:
+        //   0x8271F69C  lwz r11, 0(r26)        ; muShowtimeVehicleInfoCount (+0x72480)
+        //   0x8271F6A0  cmplwi r11, 0x20 ; bge -> NULL (0x8271F908 `mr r21, r31`)
+        //   0x8271F6A8  r21 = this + 0x72380 + 8 * count   ; &maShowtimeVehicleInfoList[count]
+        // (the console never materialises luInfoIndex -- its one caller does not read it).
+        ShowtimeVehicleInfo* GetFirstUnusedShowtimeVehicleInfo(u32& luInfoIndex)
+        {
+            ShowtimeVehicleInfo* lpInfo = 0;
+            if (muShowtimeVehicleInfoCount < KU_MAX_SHOWTIME_TRAFFIC_VEHICLES)
+            {
+                luInfoIndex = muShowtimeVehicleInfoCount;
+                lpInfo      = &maShowtimeVehicleInfoList[luInfoIndex];
+            }
+            return lpInfo;
+        }
 
         // @0x82727768 (273 insns). DWARF `void GenerateVehicleCrashedEvents(
         // OutputBuffer_PostPhysics*)` (BrnTrafficUnity.cpp:20156). One of PostPhysicsUpdate's

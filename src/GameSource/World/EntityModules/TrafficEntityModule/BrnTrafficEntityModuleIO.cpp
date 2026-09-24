@@ -702,6 +702,59 @@ namespace BrnTrafficIO
         return &mTriggerManagementInputInterface;
     }
 
+    // X360 0x8271D2E8 (DWARF :198 `void AddPotentialScoree(Vector3, float32_t, int32_t, int32_t,
+    // uint16_t)`; an export hole, read with tools/re/ppcdis.py). Registers: v1 lPosition, f1
+    // lfDistanceSquared (it takes the r4 slot), r5 liVehicleScore, r6 liScoreMultiplier, r7
+    // luVehicleIndex. One caller: TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput
+    // (0x8271F8FC). r31 = this + 0xE84A0 (+951456) == mPotentialScorees.
+    //   0x8271D31C..0x8271D358  IsFull() -- the constructed assert (CgsArray.h 0x150) then
+    //                           `cmplwi count, 0x14 ; beq full`
+    //   0x8271D360              not full: Grow() @0x827094F0 (its own two asserts), -> store
+    //   0x8271D368..0x8271D3BC  full: GetLength() (the same constructed assert) read ONCE into
+    //                           r29, then i = 0 .. r29 (signed): operator[](i) @0x8270C170,
+    //                           `fcmpu f31, f0(+0x10) ; ble found` -- the first stored car at
+    //                           least as far away as the new one is overwritten; none -> return
+    //   0x8271D3D4              found: operator[](i) again
+    //   0x8271D3E0              `cmplwi r3, 0 ; beq return` -- the NULL test on lpData
+    //   0x8271D3EC..0x8271D404  stfs +0x10 ; stvx128 +0 ; sth +0x16 ; sth +0x18 ; sth +0x14
+    //   0x8271D408              `cmpw extsh(score), score ; beq` else assert
+    //                           "(int32_t) lpData->miScore == liVehicleScore" (0x820BD414,
+    //                           BrnTrafficEntityModuleIO.h line 0x226)
+    void OutputBuffer_PreScene::AddPotentialScoree(Vector3 lPosition, f32 lfDistanceSquared,
+                                                   s32 liVehicleScore, s32 liScoreMultiplier,
+                                                   u16 luVehicleIndex)
+    {
+        VehicleScoreData* lpData = 0;
+
+        if (!mPotentialScorees.IsFull())
+        {
+            lpData = mPotentialScorees.Grow();
+        }
+        else
+        {
+            const s32 liLength = static_cast<s32>(mPotentialScorees.GetLength());
+            for (s32 liIndex = 0; liIndex < liLength; ++liIndex)
+            {
+                if (lfDistanceSquared <= mPotentialScorees[static_cast<u32>(liIndex)].mfDistanceSquared)
+                {
+                    lpData = &mPotentialScorees[static_cast<u32>(liIndex)];
+                    break;
+                }
+            }
+        }
+
+        if (lpData)
+        {
+            lpData->mfDistanceSquared = lfDistanceSquared;
+            lpData->mPosition         = lPosition;
+            lpData->miMultiplier      = static_cast<s16>(liScoreMultiplier);
+            lpData->muVehicleIndex    = luVehicleIndex;
+            lpData->miScore           = static_cast<s16>(liVehicleScore);
+            CGS_ASSERT(static_cast<s32>(lpData->miScore) == liVehicleScore,
+                       "(int32_t) lpData->miScore == liVehicleScore");
+        }
+    }
+
     // ========================================================================
     // OutputBuffer_Prepare accessors.
     // ========================================================================

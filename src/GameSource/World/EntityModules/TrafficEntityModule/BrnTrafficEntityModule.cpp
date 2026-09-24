@@ -101,6 +101,11 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficToRaceCarInterface.h"
 #include "GameSource/World/BrnEntityTypes.h"                                       // EEntityTypeID
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"                 // OutCoarseQueryResult
+#include "GameShared/GameClasses/Numeric/CgsPolynomial.h"                          // CgsNumeric::SolveQuadratic (leap/stomp producer)
+#include "GameSource/Math/BrnMathUtils.h"                                          // BrnMath::Magnitude2D (leap/stomp producer)
+#include "rw/math/fpu/scalar_operation.h"                                          // rw::math::fpu::Max (leap/stomp producer)
+#include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // CgsDev::DebugInterface (leap/stomp debug view)
+#include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"  // CgsDev::DebugRender::DrawSphere
 
 namespace BrnTraffic
 {
@@ -4749,15 +4754,21 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     // on this build; nothing in this function calls it.
     GenerateNearMissOutput(lpInput, lpOutput);
 
+    // 0x8274AAF8..0x8274AB04 `mr r5, r26 ; mr r4, r25 ; mr r3, r31 ; bl 0x8271F298` -- LIVE
+    // (CHAIN-STOMPEES part a, 2026-09-24). The Showtime landing prediction: the race-car module's
+    // stompees, the GUI's scorees and the Showtime vehicle list (the crash magnets).
+    GeneratePotentialLeapedAndStompedCarsOutput(lpInput, lpOutput);
+
     {
-        // GATE: the three remaining pre-scene output producers, none bodied in this tree. They
-        // are placed in the console's own order around the live call above. They write into
+        // GATE: the two remaining pre-scene output producers, neither bodied in this tree. They
+        // are placed in the console's own order around the live calls above. They write into
         // OutputBuffer_PreScene. DELETE WHEN the bodies land.
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "PreSceneUpdate output producers -- GenerateSympatheticCrasherOutput (before the "
-            "live GenerateNearMissOutput), GeneratePotentialLeapedAndStompedCarsOutput and "
-            "GenerateNearbyParkedTrafficOutput (after it). No bodies in this tree");
+            "PreSceneUpdate output producers -- GenerateSympatheticCrasherOutput @0x82715C30 "
+            "(before the live GenerateNearMissOutput) and GenerateNearbyParkedTrafficOutput "
+            "@0x8271FA18 (after the live GeneratePotentialLeapedAndStompedCarsOutput). No bodies "
+            "in this tree");
     }
 
     switch (meState)
@@ -10643,10 +10654,12 @@ namespace
     const u32 KU_ENTITY_OWNER_TRAFFIC  = 2;
 
     // A showtime list entry only becomes a crash magnet with this bit set
-    // (`lbz r11, 4(r29) ; rlwinm r11,r11,0,30,30` @0x82737C40). The producer,
-    // SpawnShowtimeTraffic @0x82743038, has no body in this tree yet, and nothing else in the
-    // image names the bit -- so it stays the console's own literal rather than an invented
-    // enumerator. DebugComponent::DrawShowtime @0x8275CA58 tests the same bit.
+    // (`lbz r11, 4(r29) ; rlwinm r11,r11,0,30,30` @0x82737C40). The producer is
+    // GeneratePotentialLeapedAndStompedCarsOutput @0x8271F298 (`ori r11, r11, 2` at 0x8271F9B0,
+    // a crash spike running and the car on screen within 50 m); it also rebuilds the list and
+    // its count every frame. Nothing in the image names the bit -- so it stays the console's own
+    // literal rather than an invented enumerator. DebugComponent::DrawShowtime @0x8275CA58 tests
+    // the same bit.
     const u8 KU_SHOWTIME_INFO_FLAG_CRASH_MAGNET = 0x02u;
 
     // Unpack a traffic/race-car EntityId back to its entity index (the inverse of the 14/10
@@ -17411,6 +17424,354 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
         std::memcpy( lpInterface->GetNearMissRaceCarCollection(),
                      lpNearMissRaceCarCollection,
                      sizeof( TrafficInterface::NearMissRaceCarCollection ) );
+    }
+}
+
+}   // namespace BrnTraffic
+
+// ============================================================================
+// TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput  @0x8271F298  (479 insns)
+//
+// CHAIN-STOMPEES part (a) (crash parity, lane FX-TRAFFIC2, 2026-09-24). Before this the body did
+// not exist, so AddPotentialStompee (xrefs_to: this function only) never ran, the race-car
+// module's Showtime leap/stomp target assist read an empty stompee list, the Showtime vehicle
+// list stayed empty (no Showtime crash magnet ever reached the crash module), the player's
+// ground position / mis-bounce timer never moved, and the GUI's potential scorees stayed empty.
+//
+// Sources, in ladder order: the ARTIST asm (0x8271F298..0x8271FA10, read instruction by
+// instruction; the pseudocode's register allocation failed), DecFIGS 0x91D530 (the same body with
+// the helpers it inlines named: FastBitArray<601>::IsBitSet, KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS,
+// the IsPlayerCarActive accessors), and the DWARF variable hints
+// (dwarfdump _compile/BrnTrafficUnity.cpp:7320) for every local's name and every inlined call:
+// ClearStompees, GetPlayerRaceCarState, CgsNumeric::SolveQuadratic, Magnitude2D, Max<float>,
+// GetPlayerPosition, GetFirstUnusedShowtimeVehicleInfo, GetLinearVelocity, AddPotentialStompee,
+// GetVehicleType, AddPotentialScoree, and the debug block's DebugInterface/DrawSphere.
+//
+// Member map (every one already named in BrnTrafficEntityModule.h, read by name):
+//   +0x717DD mbPlayingShowtimeMode     +0x713FC mfSimTimeStep      +0x72378 mfCrashSliderCrashScoreFactor
+//   +0x72380 maShowtimeVehicleInfoList +0x72480 muShowtimeVehicleInfoCount
+//   +0x72490 mShowtimePlayerLandingPos2D  +0x724A0 mShowtimePlayerGroundPos  +0x724BC mfShowtimeMisBounceTimer
+//   +0x72874 mbDEBUGShowtimeStuff      +0x2A80 + 128*i maVehicles[i] (mxFlags at +5)
+//   +0x1ECB0 + 64*i maVehicleTransforms[i].Pos()   +0x28460 mVehicleSoaData.mVehiclesRenderedLastFrame
+//   RaceCarState +0x1E0/+0x1E8 mAboveGroundTestResult.mfVerticalDistance/.mbValid,
+//   +0x220 mTransform.Pos(), +0x330 mLinearVelocity.
+// ⚠️ +0x72378 is the crash slider's FACTOR, not its final value: UpdateCrashSlider @0x82715A18
+// stores score/decay/factor/final at +0x72370/+0x72374/+0x72378/+0x7237C (0x82715AE0..AF0,
+// 0x82715C24). The factor is 10.0 inside a crash spike and 1.5 after it, so the crash-magnet
+// test below (factor > 1.5) reads "is a crash spike running".
+// ============================================================================
+
+namespace BrnTraffic
+{
+namespace   // the leap/stomp producer's file-scope constants (DWARF BrnTrafficEntityModule.cpp)
+{
+    // :135. The image carries only its square: the score test compares with flt_820BD6B0 ==
+    // 2025.0 == 45.0 * 45.0 exactly (0x8271F648 `lfs f27` ; 0x8271F844 `fcmpu f29, f27 ; bge`).
+    const f32 KF_SHOWTIME_SHOW_SCORE_RADIUS = 45.0f;
+
+    // :136. flt_820BA7E4 == 20.0: the half-width of the landing ring (0x8271F520 `lfs f13` ->
+    // `fsubs f12, f0, f13` / `fadds f0, f0, f13`) and the first debug sphere's radius (0x8271F5CC).
+    const f32 KF_TRAFFIC_STOMP_DISTANCE = 20.0f;
+
+    // :137 `const float32_t[4]`. The table at 0x820BA7E8..0x820BA7F4 (x360rd: 1.6, 3.2, 4.0, 4.5),
+    // indexed by the vehicle's VehicleClass (0x8271F8B4 `addi r10, r30, 0x204` + class * 4).
+    const f32 KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[4] = { 1.6f, 3.2f, 4.0f, 4.5f };
+
+    // :234. flt_820BA858 == 2500.0 (0x8271F990 `lfs f0, 0x274(r30)` ; `fcmpu f29, f0 ; bgt`); the
+    // second debug sphere is drawn at its square root (0x8271F5E8 `lfd dbl_820BD6B8` == 2500.0 ;
+    // `fsqrts`).
+    const f32 KF_SHOWTIME_CRASHMAGNET_DISTANCESQ = 2500.0f;
+
+    // :235. flt_820BA8DC == 4.0 (0x8271F358 `lfs f13` ; 0x8271F364 `fcmpu f0, f13` ; `bge`).
+    const f32 KF_SHOWTIME_MISBOUNCE_MIN_HEIGHT = 4.0f;
+}
+
+// ----------------------------------------------------------------------------
+// The body, in console order.
+//   0x8271F2CC..0x8271F2F8  ClearStompees() on the write-locked traffic->race-car interface,
+//                           muShowtimeVehicleInfoCount = 0, then `beq` out unless Showtime.
+//   0x8271F2FC..0x8271F3D4  the player's ground: default height 10.0 (flt_820BA5E4); a valid
+//                           above-ground test replaces it, drops the ground point by it, and
+//                           runs the mis-bounce timer while the car is within 4 m of the ground.
+//   0x8271F3D8..0x8271F594  time until landing: CgsNumeric::SolveQuadratic(-4.905 (flt_820BD6C0),
+//                           velocity.y, height) (inlined); the smaller root, else the larger; a
+//                           negative time lands "here". Otherwise the XZ travel d = Magnitude2D(v)
+//                           * t gives the landing point pos + vXZ * t and the stomp ring
+//                           [Max(d - 20, 0)^2, (d + 20)^2] (0x8271F54C..0x8271F578).
+//   0x8271F598..0x8271F604  the debug view: two spheres on the player.
+//   0x8271F608..0x8271F9F0  every live vehicle (0..599): claim a Showtime slot; its position at
+//                           landing time; XZ distances now and at landing; the on-screen bit;
+//                           the score leg (on screen and within 45 m); the stomp leg (landing
+//                           distance inside the ring); the crash-magnet leg (a crash spike and
+//                           within 50 m); the slot is kept only if a flag was set.
+// ----------------------------------------------------------------------------
+void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
+        const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+        BrnTrafficIO::OutputBuffer_PreScene*      lpOutput)
+{
+    // 0x8271F2CC `bl GetTrafficToRaceCarInterface_PreScene` (0x82710DD0) ; 0x8271F2E4 `stw 0, 0x208`.
+    lpOutput->GetTrafficToRaceCarInterface_PreScene()->ClearStompees();
+    // 0x8271F2F4 `stw r31(0), 0(r26)` -- r26 == &muShowtimeVehicleInfoCount.
+    muShowtimeVehicleInfoCount = 0;
+
+    // 0x8271F2E8 `lbzx +0x717DD` ; 0x8271F2F8 `beq` -> the epilogue.
+    if (mbPlayingShowtimeMode)
+    {
+        // 0x8271F300 `bl sub_82710BD8` (GetActiveRaceCarOutputInterface) ; 0x8271F304 `bl
+        // sub_82310240` (GetPlayerRaceCarState -- its IsPlayerCarActive asserts, no early-out).
+        const BrnPhysics::Vehicle::RaceCarState* lpPlayerRaceCarState =
+            lpInput->GetActiveRaceCarOutputInterface()->GetPlayerRaceCarState();
+
+        f32 lfGroundHeight     = 10.0f;   // flt_820BA5E4 (0x8271F31C ; stfs var_1A0)
+        f32 lfMinDistSq        = -1.0f;   // flt_820037C8 (0x8271F324, f28)
+        f32 lfMaxDistSq        = -1.0f;   //              (0x8271F330, f26)
+        f32 lfTimeUntilLanding = 0.0f;    // flt_82001CC0 (0x8271F334 / 0x8271F33C, f30)
+
+        // 0x8271F338 `lbz r11, 0x1E8(r3)` ; `beq` -> 0x8271F3CC.
+        if (lpPlayerRaceCarState->mAboveGroundTestResult.mbValid)
+        {
+            // 0x8271F34C `lfs f0, 0x1E0(r3)` ; 0x8271F360 `stfs f0, var_1A0`.
+            lfGroundHeight = lpPlayerRaceCarState->mAboveGroundTestResult.mfVerticalDistance;
+
+            // 0x8271F378 `stvx128 v0 (+0x220), +0x724A0` then 0x8271F38C..0x8271F394 subtract the
+            // splatted height and keep only the result's Y lane (`vrlimi128 v12, v0, 4, 0`).
+            mShowtimePlayerGroundPos    = lpPlayerRaceCarState->mTransform.Pos();
+            mShowtimePlayerGroundPos.y -= lfGroundHeight;
+
+            if (lfGroundHeight < KF_SHOWTIME_MISBOUNCE_MIN_HEIGHT)
+            {
+                // 0x8271F3AC `lfsx f0, +0x713FC` ; `fadds f0, f0, f13` ; `stfs +0x724BC`.
+                mfShowtimeMisBounceTimer += mfSimTimeStep;
+            }
+            else
+            {
+                mfShowtimeMisBounceTimer = 0.0f;   // 0x8271F3C4 `stfsx f31(0.0), +0x724BC`
+            }
+        }
+        else
+        {
+            mShowtimePlayerGroundPos = lpPlayerRaceCarState->mTransform.Pos();   // 0x8271F3D4
+        }
+
+        // 0x8271F3DC..0x8271F4C8 -- CgsNumeric::SolveQuadratic inlined (see CgsPolynomial.h for the
+        // instruction map): a = -4.905 (flt_820BD6C0, `lvlx var_19C`), b = the player's
+        // mLinearVelocity.y (`vspltw v10, [+0x330], 1`), c = lfGroundHeight (`lvlx var_1A0`).
+        // 0x8271F4BC..0x8271F4C8 `mfocrf ; extrwi 1,24 ; bne` is the mask's GetBool.
+        VecFloat lfT0;
+        VecFloat lfT1;
+        if (CgsNumeric::SolveQuadratic(rw::math::vpu::Splat(-4.905f),
+                                       rw::math::vpu::Splat(lpPlayerRaceCarState->mLinearVelocity.y),
+                                       rw::math::vpu::Splat(lfGroundHeight),
+                                       lfT0, lfT1).GetBool())
+        {
+            // 0x8271F4CC `vminfp` ; 0x8271F4E0 `fcmpu f0, f31(0.0) ; bge` ; 0x8271F4E8 `vmaxfp`.
+            lfTimeUntilLanding = rw::math::vpu::Min(lfT0, lfT1).x;
+            if (lfTimeUntilLanding < 0.0f)
+            {
+                lfTimeUntilLanding = rw::math::vpu::Max(lfT0, lfT1).x;
+            }
+
+            // 0x8271F4F8 `fcmpu f30, f31 ; blt` -> 0x8271F584.
+            if (lfTimeUntilLanding < 0.0f)
+            {
+                // 0x8271F584..0x8271F594: t = 0 and the landing point is where the car is. The
+                // ring stays at its -1 seeds, so no traffic car can be a stompee this frame.
+                lfTimeUntilLanding          = 0.0f;
+                mShowtimePlayerLandingPos2D = lpPlayerRaceCarState->mTransform.Pos();
+            }
+            else
+            {
+                // 0x8271F500 `lvx128 v1, +0x330` ; `bl BrnMath::Magnitude2D` ; 0x8271F514 `fmuls f0, f1, f30`.
+                const f32 lfDistanceTravelledXZ =
+                    BrnMath::Magnitude2D(lpPlayerRaceCarState->mLinearVelocity) * lfTimeUntilLanding;
+
+                // 0x8271F564 `vrlimi128 v0, v12(0), 4, 3` -- the velocity with its Y lane zeroed.
+                Vector3 lLinearVelocityXZ = lpPlayerRaceCarState->mLinearVelocity;
+                lLinearVelocityXZ.y       = 0.0f;
+
+                // 0x8271F570 `vmaddfp v0, v0, v13, v11` (D = A*C + B: vXZ * t + pos) ; 0x8271F57C
+                // `stvx128 v0, +0x72490`.
+                mShowtimePlayerLandingPos2D = lpPlayerRaceCarState->mTransform.Pos()
+                                            + lLinearVelocityXZ * lfTimeUntilLanding;
+
+                // 0x8271F54C `fsubs f12, f0, f13` ; 0x8271F574 `fsel f0, f12, f12, f31(0)` ==
+                // Max(d - 20, 0) ; 0x8271F578 `fmuls f28, f0, f0`.
+                const f32 lfMinDist = rw::math::fpu::Max(lfDistanceTravelledXZ - KF_TRAFFIC_STOMP_DISTANCE, 0.0f);
+                lfMinDistSq = lfMinDist * lfMinDist;
+                // 0x8271F550 `fadds f0, f0, f13` ; 0x8271F56C `fmuls f26, f0, f0`.
+                const f32 lfMaxDist = lfDistanceTravelledXZ + KF_TRAFFIC_STOMP_DISTANCE;
+                lfMaxDistSq = lfMaxDist * lfMaxDist;
+            }
+        }
+
+        // 0x8271F598 `lbzx +0x72874` ; `beq` -> 0x8271F608. The automatic DebugInterface (ctor
+        // 0x821F1F20; its release is the `lbz var_14C ; ThreadSafeRelease` at 0x8271F5F4) and two
+        // spheres on the player. The colours are the packed words the console passes in r5
+        // (`lis r5, 0x4600 ; ori r5, r5, 0x6400 / 0x6464`); rw::RGBA::RGBA @0x821F05B0 packs
+        // (a<<24)|(b<<16)|(g<<8)|r, so they are RGBA(0,100,0,70) and RGBA(100,100,0,70). The
+        // tree's CgsDev::RGBA is that packed u32.
+        if (mbDEBUGShowtimeStuff)
+        {
+            CgsDev::DebugInterface lDebugInterface;
+            CgsDev::DebugRender&   lDebugRender = lDebugInterface.GetRender();
+            lDebugRender.DrawSphere(lpPlayerRaceCarState->mTransform.Pos(),
+                                    KF_TRAFFIC_STOMP_DISTANCE, 0x46006400u);
+            lDebugRender.DrawSphere(lpPlayerRaceCarState->mTransform.Pos(),
+                                    std::sqrt(KF_SHOWTIME_CRASHMAGNET_DISTANCESQ), 0x46006464u);
+        }
+
+        // 0x8271F608..0x8271F618 `bl sub_82710BD8` ; `bl sub_823102F0` (GetPlayerPosition) -> v126.
+        const Vector3 lPlayerPosition = lpInput->GetActiveRaceCarOutputInterface()->GetPlayerPosition();
+
+        // Vehicles 0..599: 0x8271F9E8 `cmplwi r28, 0x258 ; blt`.
+        for (u32 luVehicle = 0; luVehicle < KU_MAX_TOTAL_TRAFFIC; ++luVehicle)
+        {
+            Vehicle* lpVehicle = &maVehicles[luVehicle];
+
+            // 0x8271F68C `lbz r11, 0(r29)` (mxFlags) ; `clrlwi 31` ; `beq` -> the loop step.
+            if (!lpVehicle->IsAlive())
+            {
+                continue;
+            }
+
+            // 0x8271F69C..0x8271F6C4 (GetFirstUnusedShowtimeVehicleInfo + Construct, inlined).
+            u32 luShowtimeInfoIndex = 0;
+            ShowtimeVehicleInfo* lpShowtimeInfo = GetFirstUnusedShowtimeVehicleInfo(luShowtimeInfoIndex);
+            if (lpShowtimeInfo)
+            {
+                lpShowtimeInfo->Construct(luVehicle);
+            }
+
+            // 0x8271F6D4 `lvx128 v127, r24` (the transform's Pos row) ; 0x8271F6EC
+            // `bl Vehicle::GetLinearVelocity` ; 0x8271F718 `vmaddfp128 v127, v13, v12, v127`
+            // (vmx128.py: v127 = v13 * v12 + v127 -- velocity * t + position).
+            const Vector3 lTrafficStompPos = maVehicleTransforms[luVehicle].Pos()
+                                           + lpVehicle->GetLinearVelocity() * lfTimeUntilLanding;
+
+            // 0x8271F710 `vsubfp128 v0, v13, v126` ; 0x8271F730 `vsubfp128 v13, v127, v126`.
+            const Vector3 lPlayerToVehicle  = maVehicleTransforms[luVehicle].Pos() - lPlayerPosition;
+            const Vector3 lPlayerToStompPos = lTrafficStompPos - lPlayerPosition;
+
+            // XZ only, Z first (DWARF: operator*<Z,Z> then operator+= of operator*<X,X>):
+            // 0x8271F72C / 0x8271F734 -> var_130 ; 0x8271F748 / 0x8271F754 -> var_140.
+            f32 lfDistanceSq = lPlayerToVehicle.z * lPlayerToVehicle.z;
+            lfDistanceSq    += lPlayerToVehicle.x * lPlayerToVehicle.x;
+            f32 lfDistanceStompSq = lPlayerToStompPos.z * lPlayerToStompPos.z;
+            lfDistanceStompSq    += lPlayerToStompPos.x * lPlayerToStompPos.x;
+
+            // 0x8271F7FC..0x8271F834 -- FastBitArray IsBitSet on +0x28460.
+            const bool lbOnScreenVehicle = mVehicleSoaData.mVehiclesRenderedLastFrame.IsBitSet(luVehicle);
+
+            // 0x8271F83C `beq` / 0x8271F844 `fcmpu f29, f27(2025.0) ; bge` -> skip.
+            if (lbOnScreenVehicle
+                && lfDistanceSq < KF_SHOWTIME_SHOW_SCORE_RADIUS * KF_SHOWTIME_SHOW_SCORE_RADIUS)
+            {
+                // ⛔ BLOCKED LEG -- header request (lane FX-TRAFFIC2, 2026-09-24). The console body,
+                // 0x8271F84C..0x8271F8FC, is:
+                //     s32 liScore; s32 liMultiplier; BrnTraffic::VehicleScoreCategory leCategory;
+                //     const VehicleTypeData* lpVehicleType = &mpData->mpaVehicleTypes[lpVehicle->GetVehicleType()];
+                //     const VehicleClass leClass = static_cast<VehicleClass>(lpVehicleType->muVehicleClass); // lbz +3
+                //     const CgsID lTypeID = mpData->mpaVehicleAssets[lpVehicleType->muAssetId].GetVehicleId(); // lbz +5 ; ldx
+                //     BrnGameState::CrashModeScoring::GetVehicleScoreData(leClass, lTypeID,
+                //                                                         &liScore, &liMultiplier, &leCategory);
+                //     Vector3 lVehiclePos = maVehicleTransforms[luVehicle].Pos();
+                //     lVehiclePos.y += KF_SCORE_HEIGHT_TWEAK_BY_VEHICLE_CLASS[leClass];
+                //     lpOutput->AddPotentialScoree(lVehiclePos, lfDistanceSq, liScore, liMultiplier,
+                //                                  static_cast<u16>(luVehicle));
+                // It cannot be written here yet: the console calls GetVehicleScoreData @0x82312AB0
+                // with NO object -- r3 is the VehicleClass (0x8271F898 `mr r3, r29`), r4 the 64-bit
+                // CgsID, r5..r7 the out-pointers, and the callee switches on r3 (0x82312BA4 `cmplwi
+                // r27, 3`) -- i.e. it is a STATIC member, but BrnCrashModeScoringRecentCrash.h:144
+                // declares it non-static and that header is GameState/** (lane FX-FLOW this wave).
+                // HEADER REQUEST: `static void GetVehicleScoreData(...)` (its body reads no member).
+                // DELETE WHEN that lands: replace this log with the block above (AddPotentialScoree
+                // @0x8271D2E8 is bodied in BrnTrafficEntityModuleIO.cpp and unit-tested).
+                static bool sbLogged = false;
+                LogMissingLeg_T1(sbLogged,
+                    "GeneratePotentialLeapedAndStompedCarsOutput score leg (0x8271F84C..0x8271F8FC: "
+                    "GetVehicleScoreData -> AddPotentialScoree) -- BLOCKED on CrashModeScoring::"
+                    "GetVehicleScoreData being declared non-static (console: static, r3 = VehicleClass)");
+            }
+
+            // 0x8271F914 `lfs f31, var_140` ; 0x8271F918 `fcmpu f31, f28 ; blt` ; 0x8271F920
+            // `fcmpu f31, f26 ; bgt` -- inside the landing ring.
+            if (lfDistanceStompSq >= lfMinDistSq && lfDistanceStompSq <= lfMaxDistSq)
+            {
+                // 0x8271F928 `cmplwi r26 (on screen), 0 ; beq` ; 0x8271F930..0x8271F944
+                // GetTrafficToRaceCarInterface_PreScene() ; AddPotentialStompee(r4 = luVehicle,
+                // v1 = v127 (the landing-time position), f1 = f31).
+                if (lbOnScreenVehicle)
+                {
+                    lpOutput->GetTrafficToRaceCarInterface_PreScene()->AddPotentialStompee(
+                        luVehicle, lTrafficStompPos, lfDistanceStompSq);
+                }
+
+                // 0x8271F948..0x8271F974: a claimed slot, and mxFlags has E_FLAG_PHYSICAL
+                // (`rlwinm 0,28,28`) and E_FLAG_ALIVE (`clrlwi 31`) -> muFlags |= 1. Bit 0 is the
+                // console's literal; nothing in the image names it (DrawShowtime @0x8275CA58 and
+                // the crash-thing gather read bit 1 only).
+                if (lpShowtimeInfo && lpVehicle->IsPhysical() && lpVehicle->IsAlive())
+                {
+                    lpShowtimeInfo->muFlags |= 0x01u;
+                }
+            }
+
+            // 0x8271F97C `lfs f0, -8(r30)` (flt_820BA5DC == 1.5, the same word UpdateCrashSlider
+            // stores as the after-spike factor) ; 0x8271F984 `lfsx f13, +0x72378` ; `fcmpu f13, f0 ;
+            // ble` ; 0x8271F990 `lfs f0, 0x274(r30)` ; `fcmpu f29, f0 ; bgt` -- a crash spike is
+            // running and the car is within 50 m NOW.
+            if (mfCrashSliderCrashScoreFactor > 1.5f && lfDistanceSq <= KF_SHOWTIME_CRASHMAGNET_DISTANCESQ)
+            {
+                // 0x8271F99C `cmplwi r21, 0 ; beq` (the console threads this straight to the loop
+                // step: with no slot the count test below cannot pass either) ; 0x8271F9A4
+                // `cmplwi r26, 0 ; beq` ; `ori 2`.
+                if (lpShowtimeInfo && lbOnScreenVehicle)
+                {
+                    lpShowtimeInfo->muFlags |= KU_SHOWTIME_INFO_FLAG_CRASH_MAGNET;
+                }
+            }
+
+            // 0x8271F9B8..0x8271F9D8: the slot is kept only if something flagged it.
+            if (lpShowtimeInfo && lpShowtimeInfo->muFlags != 0)
+            {
+                ++muShowtimeVehicleInfoCount;
+            }
+        }
+
+        // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Dispatch witness for the live case
+        // (tests/FxTraffic2StompeesLive.ps1): the first Showtime frames, then every frame that
+        // published a stompee or a Showtime slot, capped.
+        if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+        {
+            static u32 suDiagShowtimeFrames = 0;
+            static u32 suDiagLines          = 0;
+            s32 liNumStompees = 0;
+            lpOutput->GetTrafficToRaceCarInterface_PreScene()->GetPotentialStompees(&liNumStompees);
+            ++suDiagShowtimeFrames;
+            if (suDiagLines < 60u
+                && (suDiagShowtimeFrames <= 3u || liNumStompees > 0 || muShowtimeVehicleInfoCount > 0))
+            {
+                ++suDiagLines;
+                u32 luMagnets = 0;
+                for (u32 luInfo = 0; luInfo < muShowtimeVehicleInfoCount; ++luInfo)
+                {
+                    if ((maShowtimeVehicleInfoList[luInfo].muFlags & KU_SHOWTIME_INFO_FLAG_CRASH_MAGNET) != 0)
+                    {
+                        ++luMagnets;
+                    }
+                }
+                *lpDiag << "[T5-stomp] frame=" << static_cast<s32>(suDiagShowtimeFrames)
+                        << " valid=" << (lpPlayerRaceCarState->mAboveGroundTestResult.mbValid ? 1 : 0)
+                        << " h=" << lfGroundHeight
+                        << " t=" << lfTimeUntilLanding
+                        << " minSq=" << lfMinDistSq
+                        << " maxSq=" << lfMaxDistSq
+                        << " stompees=" << liNumStompees
+                        << " infos=" << static_cast<s32>(muShowtimeVehicleInfoCount)
+                        << " magnets=" << static_cast<s32>(luMagnets)
+                        << " misbounce=" << mfShowtimeMisBounceTimer << "\n";
+            }
+        }
     }
 }
 

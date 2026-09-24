@@ -608,8 +608,9 @@ namespace BrnTrafficIO
     // mPotentialScorees (:209) is the buffer's last member: the 656-byte score-target array at
     // console +951456 (the allocation is 952112 == 951456 + 656), whose count word Construct
     // zeroes at +952096 (== 951456 + 20 * 32). The world's pre-scene traffic-info bridge copies
-    // the whole array out as the GUI traffic-car-info event. Its producer AddPotentialScoree
-    // (:198) has no home in the tree yet, so the array is empty on every frame.
+    // the whole array out as the GUI traffic-car-info event. Its producer is AddPotentialScoree
+    // (:198, X360 0x8271D2E8), whose one caller is
+    // TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput @0x8271F298.
     class OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
     public:
@@ -642,6 +643,12 @@ namespace BrnTrafficIO
         // +819328 read/write.
         const TriggerManagementInputInterface* GetTriggerManagementInputInterface() const;       // 0x8279FE00 [192]
         TriggerManagementInputInterface*       GetTriggerManagementInputInterface();             // 0x82710E78 [193]
+
+        // :198 -- X360 0x8271D2E8 (an export hole; read with tools/re/ppcdis.py). Stage one
+        // scorable traffic car for the GUI: append while the array has room, else overwrite the
+        // first stored car at least as far away. Body in BrnTrafficEntityModuleIO.cpp.
+        void AddPotentialScoree(Vector3 lPosition, f32 lfDistanceSquared, s32 liVehicleScore,
+                                s32 liScoreMultiplier, u16 luVehicleIndex);
 
         // :202 -- +951456 read. A header inline on the console: the world's pre-scene
         // traffic-info bridge reaches the array with a bare displacement and no lock check.
