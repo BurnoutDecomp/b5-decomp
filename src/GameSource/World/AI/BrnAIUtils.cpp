@@ -10,17 +10,27 @@ namespace BrnAI
     // asm: f31=current, f29=target, f30=step; f28 = fabs(target-current). Assert step >= 0.
     // If step > |target-current| the move overshoots, so return the target. Otherwise step toward
     // the target: +step when target >= current, -step otherwise.
+    //
+    // UNORDERED (NaN) POLARITY (crash parity FX-AINAN2). Every test is `fcmpu` + one CR bit:
+    //   0x82766BD4/0x82766BDC  fcmpu step,0.0      ; bge skip-assert  -> only an ORDERED step < 0
+    //                                                                    fires "Negative Step"
+    //   0x82766C00/0x82766C04  fcmpu step,|delta|  ; ble -> C10       -> return the target only
+    //                                                                    on an ordered step > |d|
+    //   0x82766C10/0x82766C14  fcmpu target,current; bge -> C20 (+)   -> +step on >= AND unordered
+    // so a NaN target (|delta| NaN, the ble falls to C10) steps UP by lfStep. The old
+    // `if (target >= current)` stepped a NaN target DOWN, and `CGS_ASSERT(step >= 0)` fired on a
+    // NaN step the console lets through. UpdateSteeringAngle feeds this every frame.
     f32 StepTo(f32 lfCurrent, f32 lfTarget, f32 lfStep)
     {
         const f32 lfDelta = lfTarget - lfCurrent;
-        const f32 lfAbsDelta = (lfDelta < 0.0f) ? -lfDelta : lfDelta;
+        const f32 lfAbsDelta = std::fabs(lfDelta);                  // fabs f28, f13 @0x82766BD8
 
-        CGS_ASSERT(lfStep >= 0.0f, "Negative Step");
+        CGS_ASSERT(!(lfStep < 0.0f), "Negative Step");
 
         if (lfStep > lfAbsDelta)
             return lfTarget;
 
-        if (lfTarget >= lfCurrent)
+        if (!(lfTarget < lfCurrent))
             return lfCurrent + lfStep;
 
         return lfCurrent - lfStep;

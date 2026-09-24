@@ -42,7 +42,10 @@ f32 PIDController::GetErrorDerivative()
 
     const s32 lnCurrentIndex = mn8CurrentIndex;
     const f32 lfTimeInterval = mafTimeStep[lnCurrentIndex];
-    if (lfTimeInterval <= 0.001f)
+    // 0x827684F4 `fcmpu dt, 0.001 (flt_82013F90)` ; 0x827684F8 `ble` -> the 999999.0 sentinel
+    // (flt_820C5864). ble is bc 4,gt: taken on <= AND on unordered, so only an ordered
+    // dt > 0.001 divides (crash parity FX-AINAN2; `dt <= 0.001f` divided a NaN step).
+    if (!(lfTimeInterval > 0.001f))
         return 999999.0f;
 
     const f32 lfDifference = mafError[lnCurrentIndex] - mafError[mn8PreviousIndex];
