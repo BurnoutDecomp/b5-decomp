@@ -70,3 +70,45 @@ const char* MomentFailSafe::GetName() const
     return "MomentFailSafe";
 }
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentFailSafe> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_8200748C (AllocateVoid<MomentFailSafe>
+// @0x8222E9B0 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 1 Prepare          0x821F7560  meState = E_STATE_INVALID_SEARCHING, return true (the shared
+//                                       body the export names MomentBystanderSeesAction::Prepare)
+//   slot 4 Release          0x821F7560  the same body as slot 1
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+//   slot 3 SetParameters    0x821F7670  `stw r4, 0x180(r3)` -- mpParameters
+//   slot 7 GetInstanceType  0x824B5A18  `li r3, 6 ; blr` -- E_MOMENT_FAILSAFE
+namespace BrnDirector
+{
+bool MomentFailSafe::Prepare(void* /*lrBehaviourController*/)
+{
+    SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
+    return true;                           // li r3, 1
+}
+
+bool MomentFailSafe::Release()
+{
+    // Slot 4 of off_8200748C is 0x821F7560 -- the SAME body as slot 1 (the shared "searching"
+    // Prepare): the fail-safe owns no behaviour, so releasing it only parks it at SEARCHING.
+    SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
+    return true;                           // li r3, 1
+}
+
+void MomentFailSafe::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+
+void MomentFailSafe::SetParameters(const Moment::Parameters* lpParameters)
+{
+    mpParameters = static_cast<const Parameters*>(lpParameters);   // stw r4, 0x180(r3)
+}
+
+Moment::EType MomentFailSafe::GetInstanceType()
+{
+    return E_MOMENT_FAILSAFE;   // li r3, 6
+}
+}

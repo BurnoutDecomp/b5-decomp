@@ -354,3 +354,24 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
 }
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentPlayerStunt> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_820074AC (AllocateVoid<MomentPlayerStunt>
+// @0x8222EA98 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 1 Prepare          0x821F7560  meState = E_STATE_INVALID_SEARCHING, return true (the shared
+//                                       body the export names MomentBystanderSeesAction::Prepare)
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+namespace BrnDirector
+{
+bool MomentPlayerStunt::Prepare(void* /*lrBehaviourController*/)
+{
+    SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
+    return true;                           // li r3, 1
+}
+
+void MomentPlayerStunt::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+}

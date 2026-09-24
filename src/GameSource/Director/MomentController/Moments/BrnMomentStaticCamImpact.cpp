@@ -120,3 +120,36 @@ const char* MomentStaticCamImpact::GetName() const
 }
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentStaticCamImpact> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_820074CC (AllocateVoid<MomentStaticCamImpact>
+// @0x8222EB80 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 1 Prepare          0x821F7560  meState = E_STATE_INVALID_SEARCHING, return true (the shared
+//                                       body the export names MomentBystanderSeesAction::Prepare)
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+//   slot 3 SetParameters    0x821F76A8  `stw r4, 0x194(r3)` -- mpParameters
+//   slot 7 GetInstanceType  0x821F7658  `li r3, 9 ; blr` -- E_MOMENT_STATIC_CAM_IMPACT
+namespace BrnDirector
+{
+bool MomentStaticCamImpact::Prepare(void* /*lrBehaviourController*/)
+{
+    SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
+    return true;                           // li r3, 1
+}
+
+void MomentStaticCamImpact::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+
+void MomentStaticCamImpact::SetParameters(const Moment::Parameters* lpParameters)
+{
+    mpParameters = static_cast<const Parameters*>(lpParameters);   // stw r4, 0x194(r3)
+}
+
+Moment::EType MomentStaticCamImpact::GetInstanceType()
+{
+    return E_MOMENT_STATIC_CAM_IMPACT;   // li r3, 9
+}
+}

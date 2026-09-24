@@ -450,3 +450,22 @@ void MomentHardStop::Update(f32 lfTimeStep, void* lrBehaviourController,
 }
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentHardStop> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_820073EC (AllocateVoid<MomentHardStop>
+// @0x8222E528 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+//   slot 7 GetInstanceType  0x827E2F38  `li r3, 0 ; blr` -- E_MOMENT_HARD_STOP
+namespace BrnDirector
+{
+void MomentHardStop::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+
+Moment::EType MomentHardStop::GetInstanceType()
+{
+    return E_MOMENT_HARD_STOP;   // li r3, 0
+}
+}

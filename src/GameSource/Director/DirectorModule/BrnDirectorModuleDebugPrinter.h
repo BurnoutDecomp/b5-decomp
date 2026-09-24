@@ -72,13 +72,12 @@ namespace BrnDirector
         // @0x82220E68, ArbStateCrashing::{SelectNormalCrashCamera @0x82254FB0 (x4, mixed with
         // literals), Update @0x8226BFB0}, ArbStateTestbed::Update @0x8226B638.
         //
-        // ⓘ FOR WHOEVER NEEDS PrintInactive: the same survey shows THREE sites loading r5 from
+        // ⓘ PrintInactive / PrintActive: the same survey shows THREE sites loading r5 from
         // +0x18 == mDebugPrinterInfo.muInactiveColour (MomentController::UpdateAllMoments
         // @0x82239DE8, BehaviourManager::UpdateAllBehaviours @0x82251960, MainDirector::Update
-        // @0x82274070) -- that is PrintInactive, and its body is the same forwarder over
-        // muInactiveColour. Left declaration-only because nothing in the tree calls it yet and an
-        // unused body cannot be link-verified. NO call site in the export set loads +0x14, so
-        // PrintActive has no attestation at all -- do not guess it by symmetry.
+        // @0x82274070) -- that is PrintInactive. [2026-09-24 correction] the earlier survey missed
+        // the +0x14 load in UpdateAllMoments itself (0x82239EEC `lwz r5, 0x14(r3)`): PrintActive IS
+        // attested there. Both are bodied below, from that function.
         void Print(const char* lpcMessage) { ActualPrint(lpcMessage, mDebugPrinterInfo.muColour); }
 
         // BODIED as the inline forwarder the console actually emits (2026-08-01). Every X360 call
@@ -91,8 +90,22 @@ namespace BrnDirector
         // `static void ActualPrint(void*, const char*, s32)` slice this retires.)
         void Print(const char* lpcMessage, CgsDev::RGBA luColour) { ActualPrint(lpcMessage, luColour); }
         void PrintName(const Moment& lrMoment, CgsDev::RGBA luColour);
-        void PrintActive(const char* lpcMessage);
-        void PrintInactive(const char* lpcMessage);
+        // BODIED 2026-09-24 (FX-DIRECTOR, the moment tick). MomentController::UpdateAllMoments
+        // @0x82239DE8 is the attestation for BOTH: its "can switch to me" line is
+        // `lbz r11, 0x20(r3) ; beq ; lwz r5, 0x14(r3) ; bl ActualPrint` (0x82239EDC..0x82239F34 --
+        // the +0x14 muActiveColour load the survey above had not found) and its fallback line is
+        // the same shape over +0x18 muInactiveColour (0x82239F1C..0x82239F34). Both test mbEnabled
+        // before the call, unlike the explicit-colour Print, which calls ActualPrint directly.
+        void PrintActive(const char* lpcMessage)
+        {
+            if (mbEnabled)
+                ActualPrint(lpcMessage, mDebugPrinterInfo.muActiveColour);
+        }
+        void PrintInactive(const char* lpcMessage)
+        {
+            if (mbEnabled)
+                ActualPrint(lpcMessage, mDebugPrinterInfo.muInactiveColour);
+        }
 
         const DebugPrinterInfo& GetDebugPrinterInfo() const { return mDebugPrinterInfo; }
         void SetDebugPrinterInfo(const DebugPrinterInfo& lrInfo) { mDebugPrinterInfo = lrInfo; }

@@ -26,6 +26,7 @@
 namespace BrnDirector
 {
     namespace Camera { class BehaviourManager; }   // threaded through NewMoment / MomentHandle::Prepare (by ref, not read)
+    struct MomentSharedInfo;                        // UpdateAllMoments' per-frame context (BrnMomentSharedInfo.h)
 
     // NOTE: BrnDirector::MomentDescription used to be modelled here as an opaque
     // `u32 mauOpaque[4]` span. That was a HYPOTHESIS, and it was wrong: the declarations
@@ -67,35 +68,17 @@ namespace BrnDirector
     //     1120 / 928  ==  1.207  ->  1296 * 1.207  ==  1564  ->  ceil(1564 / 16)  ==  98
     // The pool grows from 20*1120 == 22,400 to 20*1568 == 31,360 bytes.
     //
-    // ⭐ THE NUMBER CANNOT SILENTLY ROT: BrnMomentControllerNewMoment.cpp -- the one TU that
-    // sees all twelve concrete moment types -- carries a static_assert per type against
-    // sizeof(AbstractPool<...>::Bucket). Grow a moment past the bucket and that TU stops
-    // compiling instead of the heap stopping working.
+    // ⭐ THE NUMBER CANNOT SILENTLY ROT: BrnMomentController.cpp -- the one TU that sees all
+    // twelve concrete moment types, because NewMoment lives there -- carries a static_assert per
+    // type against sizeof(AbstractPool<...>::Bucket). Grow a moment past the bucket and that TU
+    // stops compiling instead of the heap stopping working.
     //
-    // ⛔⛔ AND THERE IS A SECOND, BIGGER SIZE LANDMINE ON THE SAME OBJECT -- IN A FILE THIS
-    //    LANE MAY NOT EDIT. BrnMainDirector.h does NOT hold a MomentController; it holds
-    //        u8 maMomentController[0x1CA60 - 0x172D0];        // == 22,416 bytes
-    //    the CONSOLE's byte span -- and BrnMainDirector.cpp reinterpret_casts it to
-    //    MomentController* to fill ArbStateSharedInfo::mpMomentController. Those are console
-    //    numbers standing in for a host object: on x64 the host MomentController is already
-    //    larger than 22,416 with the console's own 70-unit bucket (20 buckets alone are 22,400,
-    //    before the vptr, the pool's free queue/count/occupancy and the 72-byte parameter
-    //    bank), and the widening above adds 20 * (1568 - 1120) == 8,960 more.
-    //
-    //    ⭐ IT IS INERT TODAY, WHICH IS THE ONLY REASON THIS IS SAFE TO LAND: nothing ever
-    //    constructs or writes through that cast, because MomentController::NewMoment is still
-    //    a GROUP F stub (DirectorLinkStubs.cpp) that touches nothing, and this class is never
-    //    instantiated anywhere in the mounted build -- so sizeof() is never consulted and not
-    //    one byte of the shipped exe changes. The FIRST write through that pointer will be
-    //    NewMoment's AllocateVoid, and it will run off the end of the span into
-    //    MainDirector::maMomentBucketFreeQueue and everything after it.
-    //
-    //    ⇒ REQUIRED BEFORE THE MOMENT CLOSURE IS MOUNTED (NOT this lane's file):
-    //      replace BrnMainDirector.h's opaque byte span with a real
-    //      `BrnDirector::MomentController mMomentController;` member (and drop the three
-    //      hand-modelled pool fields at +0x1CA60 that go with it, which are that same pool's
-    //      free queue / count / occupancy modelled a second time). Until then the moment
-    //      sub-system MUST stay stubbed.
+    // ✅ THE SECOND SIZE LANDMINE IS GONE (2026-09-24, FX-DIRECTOR). MainDirector used to model this
+    //    object as the console's 22,416-byte span (`u8 maMomentController[0x1CA60 - 0x172D0]`) plus
+    //    the pool's free queue / count / occupancy a second time, and reinterpret_cast the span
+    //    for ArbStateSharedInfo::mpMomentController -- which the host object (widened bucket, 8-byte
+    //    vptr) does not fit. It now holds `MomentController mMomentController;` BY VALUE and reaches
+    //    it by name, so NewMoment's AllocateVoid writes into memory the controller owns.
     public:
         static const u32 KU_MOMENT_POOL_UNITS_CONSOLE = 70u;   // the console's own bucket
         static const u32 KU_MOMENT_POOL_UNITS      = 98u;   // this host's re-derivation (see above)
@@ -124,16 +107,16 @@ namespace BrnDirector
             // (== mMomentPoolHandle.mpObject). Bodied in BrnMomentController.cpp.
             Moment* GetMoment() const;
 
-            // console callee. Take ownership of a freshly-allocated pool slot:
-            // stash the handle/parent, mark allocated, and tag the moment's type. Bodied in
-            // BrnMomentControllerNewMoment.cpp. (Prepare(AbstractPoolVoidHandle,
-            // MomentController&, BehaviourManager&).)
+            // @0x821F7298 (DWARF BrnMomentController.cpp:235). Take ownership of a freshly placed
+            // pool slot -- stash the parent / the allocated flag / the handle -- then bring the
+            // moment up: its vtable slot 0 (Construct), then Prepare(lBehaviourManager) under the
+            // :242 assert. Bodied in BrnMomentController.cpp.
             bool Prepare(AbstractPoolVoidHandle lVoidHandle,
                          MomentController& lrParentMomentController,
                          Camera::BehaviourManager& lrBehaviourManager);
 
             // Release the held slot back to the pool and clear the allocated flag (a no-op
-            // when nothing is held). Bodied in BrnMomentControllerNewMoment.cpp.
+            // when nothing is held). Bodied in BrnMomentController.cpp.
             bool Release();
 
             bool IsAllocated() const { return mbIsAllocated; }
@@ -152,12 +135,25 @@ namespace BrnDirector
                        MomentHandle& lrMomentHandleInOut,
                        Camera::BehaviourManager& lrBehaviourManager);
 
-        // Lifecycle (declared-only here -- bodies live in
-        // BrnMomentController.cpp and forward to the pool/bank members).
+        // Lifecycle. DWARF BrnMomentController.cpp:24 / :33 / :96 / :105. The console has no
+        // out-of-line symbol for any of them: MainDirector inlines Construct (0x8225B538..
+        // 0x8225B554: the pool's occupancy word cleared, then MomentParameterBank::Construct at
+        // controller +0x57F0), Prepare (its PREPARE stage 5: the pool's free queue refilled 19..0,
+        // count 20, occupancy cleared) and Destruct (0x8224FCC0: the occupancy word cleared).
+        // Construct / Prepare / Destruct are bodied in BrnMomentController.cpp; Release has no
+        // caller in the image and stays declaration-only.
         void Construct();
         bool Prepare();
         bool Release();
         void Destruct();
+
+        // @0x82239DE8 (DWARF BrnMomentController.cpp:44). Once per director frame, from
+        // MainDirector::UpdateMoments: every ALLOCATED moment slot gets its debug name line, its
+        // PreUpdate (the three per-frame permission bits back to true, its camera's validity
+        // account masked to the latched failures) and its Update(timestep, manager, info).
+        // Bodied in BrnMomentController.cpp.
+        void UpdateAllMoments(Camera::BehaviourManager& lrBehaviourManager,
+                              const MomentSharedInfo& lrMomentSharedInfo);
 
     private:
         // Member list, held by value, pool first.

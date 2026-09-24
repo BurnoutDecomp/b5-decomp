@@ -395,3 +395,30 @@ void MomentNewCarJoined::Construct()
 }
 
 }
+
+// ---- [FX-DIRECTOR 2026-09-24] the vtable one-liners the moment factory needs --------------------
+// MomentController::NewMoment's AllocateVoid<MomentNewCarJoined> placement-constructs the moment, which emits its
+// vftable, so every slot needs a body. Read off the console vftable off_820074EC (AllocateVoid<MomentNewCarJoined>
+// @0x8222EC68 stores it at +0) and the ICF-folded slot bodies it points at:
+//   slot 1 Prepare          0x821F7560  meState = E_STATE_INVALID_SEARCHING, return true (the shared
+//                                       body the export names MomentBystanderSeesAction::Prepare)
+//   slot 5 Destruct         0x8284CB38  `blr` (the one empty body all twelve moments share)
+//   slot 3 SetParameters    0x821F7670  `stw r4, 0x180(r3)` -- mpParameters
+namespace BrnDirector
+{
+bool MomentNewCarJoined::Prepare(void* /*lrBehaviourController*/)
+{
+    SetState(E_STATE_INVALID_SEARCHING);   // li r10, 1 ; stw r10, 0x174(r3)
+    return true;                           // li r3, 1
+}
+
+void MomentNewCarJoined::Destruct()
+{
+    // 0x8284CB38 is a lone `blr`: nothing to tear down.
+}
+
+void MomentNewCarJoined::SetParameters(const Moment::Parameters* lpParameters)
+{
+    mpParameters = static_cast<const Parameters*>(lpParameters);   // stw r4, 0x180(r3)
+}
+}
