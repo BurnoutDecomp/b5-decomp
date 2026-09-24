@@ -5543,8 +5543,12 @@ void RaceCarEntityModule::UpdateOutputBoostInfo(
 //       stfs flt_820037C8 (-1.0) ; SetAllCarsOnStartLine(r4 = 1 ROLLING_START, r5 = 0 not the player)
 //     so the rivals roll out 1.4 s BEFORE the intro ends. Until this landed nothing counted the
 //     timer down and they sat on the line until action 34 (START_PLAYING_MODE) set RACING.
-//     The two tests keep the console's branch polarity (`ble` skips, `bge` skips): a NaN timer
-//     is not skipped by either.
+//     ⛔ NaN POLARITY (corrected 2026-09-24, reviewer A on 65eadffe): both skips are TAKEN on an
+//     unordered compare. `ble cr6` @0x822F5624 is `bc 4, 25` (branch when cr6.GT is clear) and
+//     `bge cr6` @0x822F5640 is `bc 4, 24` (branch when cr6.LT is clear); fcmpu on a NaN sets only
+//     cr6.FU, so a NaN timer (or a NaN time step) is SKIPPED -- the body runs only for a timer
+//     > 0 and the expiry only for a result < 0. The old `!(t <= 0)` / `!(t >= 0)` spelling
+//     entered both on NaN and fired the rolling start.
 // ============================================================================
 void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
 {
@@ -5564,10 +5568,10 @@ void RaceCarEntityModule::UpdateRaceCars_PreScene( RaceCarEntityModuleIO::Output
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );   // BurnoutConstants.h:39
     }
 
-    if( !( mfIntroTimer <= 0.0f ) )                                     // fcmpu ; ble -> skip
+    if( mfIntroTimer > 0.0f )                                           // fcmpu ; ble -> skip (NaN skips)
     {
         mfIntroTimer -= mfTimeStep;                                     // lfsx +0x18398 ; fsubs ; stfs
-        if( !( mfIntroTimer >= 0.0f ) )                                 // fcmpu ; bge -> skip
+        if( mfIntroTimer < 0.0f )                                       // fcmpu ; bge -> skip (NaN skips)
         {
             mfIntroTimer = -1.0f;                                       // flt_820037C8
             SetAllCarsOnStartLine( ActiveRaceCar::E_RACE_START_STATE_ROLLING_START, false );

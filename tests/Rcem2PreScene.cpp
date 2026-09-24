@@ -17,6 +17,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -93,6 +94,7 @@ struct RaceCarEntityModule {
     f32  mfTimeStep = 1.0f / 30.0f;
     bool mbSpawnAIBehindStartGrid = false;
     int  miStartLineCalls = 0;
+    f32  mfTimerAtStartLineCall = 0.0f;
     ActiveRaceCar::ERaceStartState meStartLineState = ActiveRaceCar::E_RACE_START_STATE_RACING;
     bool mbStartLineIncludePlayer = true;
     ActiveRaceCar* GetActiveRaceCar(EActiveRaceCarIndex leIndex) {
@@ -100,7 +102,8 @@ struct RaceCarEntityModule {
         return &maActiveRaceCars[leIndex];
     }
     void SetAllCarsOnStartLine(ActiveRaceCar::ERaceStartState leState, bool lbIncludePlayer) {
-        ++miStartLineCalls; meStartLineState = leState; mbStartLineIncludePlayer = lbIncludePlayer; }
+        ++miStartLineCalls; meStartLineState = leState; mbStartLineIncludePlayer = lbIncludePlayer;
+        mfTimerAtStartLineCall = mfIntroTimer; }
     void UpdateRaceCars_PreScene(RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput);
     void Dispatch(s32 liType, const CgsModule::Event* lpEvent, OutputFixture* lpOutput);
 };
@@ -224,6 +227,31 @@ int main() {
         Check(lModule.meStartLineState == ActiveRaceCar::E_RACE_START_STATE_ROLLING_START && !lModule.mbStartLineIncludePlayer,
               "G68-D5: SetAllCarsOnStartLine(1 ROLLING_START, 0 = not the player)");
         Check(lModule.mfIntroTimer == -1.0f, "G68-D5: timer parked at flt_820037C8 (-1.0) after expiry");
+        Check(lModule.mfTimerAtStartLineCall == -1.0f,
+              "G68-D5: the -1.0 store precedes the call (stfs @0x822F5658, bl @0x822F565C)");
+    }
+
+    // ---- G68-D5 NaN POLARITY (FX-RCEM4, reviewer A on 65eadffe, 2026-09-24) ---------------------
+    // `ble cr6` @0x822F5624 (bc 4,25: branch when GT is clear) and `bge cr6` @0x822F5640 (bc 4,24:
+    // branch when LT is clear) are both TAKEN on an unordered fcmpu, so a NaN SKIPS each leg.
+    {
+        const f32 lfNan = std::numeric_limits<f32>::quiet_NaN();
+        OutputFixture lOut;
+        RaceCarEntityModule lNanTimer; lNanTimer.mfIntroTimer = lfNan;
+        lNanTimer.UpdateRaceCars_PreScene(&lOut);
+        Check(lNanTimer.miStartLineCalls == 0 && lNanTimer.mfIntroTimer != lNanTimer.mfIntroTimer,
+              "G68-D5 NaN: a NaN timer is skipped (ble @0x822F5624 taken): no rolling start, the NaN stays");
+        RaceCarEntityModule lNanStep; lNanStep.mfIntroTimer = 0.5f; lNanStep.mfTimeStep = lfNan;
+        lNanStep.UpdateRaceCars_PreScene(&lOut);
+        Check(lNanStep.miStartLineCalls == 0 && lNanStep.mfIntroTimer != lNanStep.mfIntroTimer,
+              "G68-D5 NaN: a NaN step stores the NaN difference, then the expiry is skipped (bge @0x822F5640 taken)");
+        RaceCarEntityModule lZero; lZero.mfIntroTimer = 0.0f;
+        lZero.UpdateRaceCars_PreScene(&lOut);
+        Check(lZero.miStartLineCalls == 0 && lZero.mfIntroTimer == 0.0f, "G68-D5: a zero timer is skipped (0 > 0 is false)");
+        RaceCarEntityModule lExact; lExact.mfIntroTimer = 0.25f; lExact.mfTimeStep = 0.25f;
+        lExact.UpdateRaceCars_PreScene(&lOut);
+        Check(lExact.miStartLineCalls == 0 && lExact.mfIntroTimer == 0.0f,
+              "G68-D5: counting down to exactly 0 does not expire (0 < 0 is false)");
     }
 
     Check(guAssertions == 0, "valid fixtures fire no assertions");
