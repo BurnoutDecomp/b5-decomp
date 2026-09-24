@@ -13,11 +13,16 @@
 //   0x823CD3B8  `stb 1, 0x7AC0` + `stw killer, 0x7AAC` (the inlined SetPlayerKiller) -- a later match
 //               overwrites an earlier one; a non-matching event touches nothing;
 //   0x823CD3FC  THEN the game-action queue Append.
+// FIXTURE NOTE (2026-09-24, FX-DIRECTOR, no check changed): since b5 b04e9725 the body also publishes the
+// player's end-of-event pair after the Append (0x823CD4A0..0x823CD510), reading the scoring snapshot as the
+// REAL ScoringOutputInterface and calling the input's inline SetPlayerEliminated / SetModeTimeExpired. The
+// scoring fixture is therefore backed by that real type, and the input fixture forwards the two setters.
 #include "types.hpp"
 #include "BrnCommonTypes.h"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // the REAL InputBuffer
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"    // the REAL TakedownEvent
+#include "GameSource/GameState/BrnGameStateSharedIO.h"                      // the REAL ScoringOutputInterface
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // the [takedown-cam] witness (silent here)
@@ -44,10 +49,9 @@ typedef CgsModule::EventQueue<BrnGameState::TakedownEvent, 8> TakedownQueue;
 
 static s32 giSequence = 0;   // orders the setter against the Append
 
-struct ScoringOutputFixture
-{
-    EActiveRaceCarIndex mePlayerRaceCarIndex;
-};
+// The scoring snapshot is the REAL ScoringOutputInterface, in raw storage (CarScoreData's constructor
+// is declared-only on this build). The takedown leg reads mePlayerRaceCarIndex from it.
+typedef BrnGameState::GameStateModuleIO::ScoringOutputInterface ScoringOutputInterface;
 
 struct GameActionQueueFixture
 {
@@ -69,10 +73,14 @@ struct DirectorActionQueueFixture
 
 struct GameStateOutputFixture
 {
-    ScoringOutputFixture   mScoring;
+    alignas(16) unsigned char maScoringStorage[sizeof(ScoringOutputInterface)];
     TakedownQueue          mTakedowns;
     GameActionQueueFixture mActions;
-    const ScoringOutputFixture*   GetScoringOutputInterface() const { return &mScoring; }
+    ScoringOutputInterface&       Scoring() { return *reinterpret_cast<ScoringOutputInterface*>(maScoringStorage); }
+    const ScoringOutputInterface* GetScoringOutputInterface() const
+    {
+        return reinterpret_cast<const ScoringOutputInterface*>(maScoringStorage);
+    }
     const TakedownQueue*          GetTakedownEventOutputQueue() const { return &mTakedowns; }
     const GameActionQueueFixture* GetGameActionQueue() const { return &mActions; }
 };
@@ -93,6 +101,17 @@ struct DirectorInputFixture
         static_cast<T*>(mpReal)->SetPlayerKiller(lePlayerKillerCarIndex);
         ++miSetterCalls;
         miLastSetterSequence = ++giSequence;
+    }
+    // The end-of-event pair (b04e9725): the buffer's own inline setters, templates for the same reason.
+    template <class T = InputBuffer>
+    void SetPlayerEliminated(bool lbPlayerEliminated)
+    {
+        static_cast<T*>(mpReal)->SetPlayerEliminated(lbPlayerEliminated);
+    }
+    template <class T = InputBuffer>
+    void SetModeTimeExpired(bool lbModeTimeExpired)
+    {
+        static_cast<T*>(mpReal)->SetModeTimeExpired(lbModeTimeExpired);
     }
     DirectorActionQueueFixture* GetGameActionQueue() { return &mQueue; }
 };
@@ -136,7 +155,8 @@ static void Reset(EActiveRaceCarIndex lePlayer)
     gInput.miLastSetterSequence  = 0;
     giSequence                   = 0;
     gAsserts                     = 0;
-    gOutput.mScoring.mePlayerRaceCarIndex = lePlayer;
+    std::memset(gOutput.maScoringStorage, 0, sizeof(gOutput.maScoringStorage));
+    gOutput.Scoring().mePlayerRaceCarIndex = lePlayer;
     gOutput.mTakedowns.Construct();
     gOutput.mActions.miTag = 0x5EED;
 }
