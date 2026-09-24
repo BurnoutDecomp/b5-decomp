@@ -61,8 +61,11 @@ namespace BrnWorld
         // Need at least two nearby parked cars, and the player must be well aligned to the kerb
         // (perpendicular distance below the alignment threshold); otherwise the outcome is left
         // undetermined and nothing is scored.
+        // 0x822A74B8 `cmplwi 2 ; bge` and 0x822A74D4 `fcmpu f13(+0x80), f0(3.0) ; bge` -> outcome 0.
+        // That bge is bc 4,lt: TAKEN on NaN, so a NaN distance is "not aligned" -- the negated
+        // compare keeps that (the old `>=` spelling went on to score a NaN park as a SUCCESS).
         if (muNearbyParkedCarCount < 2u ||
-            mfClosestPerpendicularDist >= KF_MAX_PERPENDICULAR_DISTANCE_FOR_ALIGNMENT)
+            !(mfClosestPerpendicularDist < KF_MAX_PERPENDICULAR_DISTANCE_FOR_ALIGNMENT))
         {
             mePowerParkOutcome = E_PPO_TO_BE_DETERMINED;
             return;
