@@ -5,6 +5,8 @@
 //
 //   BrnGameModule::BridgeWorldToGui            @0x823EDD50  (PS3 0x11E564-region)
 //   BrnGameModule::BridgeWorldVehicleDataToGui @0x823E5768  (PS3 named 0x318A18)
+//   BrnGameModule::BridgeWorldTrafficAndPropDataToGui @0x823E5560 (crash parity FX-FLOW, G10-D9 caller)
+//   BrnGameModule::BridgeWorldImpactInformationToGui  @0x823E6A80
 //
 // PARTIAL SLICE (boost-bar 206 wave, 2026-08-25). The console's per-frame
 // vehicle-data bridge posts, in order: the player-crashing state-change event (377), the
@@ -37,7 +39,11 @@
 //  GameSource/Gui/BrnGuiDemangledEventTypes.h here: it collides with
 //  BrnNetworkPlayerImageRenderer.h over a PRE-EXISTING duplicate definition of
 //  BrnGui::GuiEventNetworkPlayerImage -- see the note in the wave log.)
+#include "GameSource/GameState/ModeManager/BrnModeManager.h"  // ModeManager::IsInProgress / GetScoringSystem
+#include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"                // ScoringSystem::GetCrashScorer
+#include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"  // CrashModeScoring::DealWithRemovedTraffic
 #include <cmath>                                             // sqrtf/acosf (the icon heading derivation)
+#include <cstdlib>                                           // [DIAG] getenv (BRN_TRAFFICGUI_DIAG)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the satnav-diag one-shots
 #include "GameShared/GameClasses/Development/BrnDiagFilmLatch.h" // [DIAG] gFilmLatch.mfLiveBoostFraction
 
@@ -730,13 +736,186 @@ void BrnGameModule::BridgeWorldToGui(
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInputBuffer,
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutputBuffer)
 {
-    BridgeWorldVehicleDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);
+    BridgeWorldVehicleDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);              // 0x823EDD68
 
-    // FLAG deferred (console order): BridgeWorldRouteInformationToGui and
-    // BridgeWorldTrafficAndPropDataToGui sit between the two calls below on the console
-    // (0x823EDD50), and the world-entity-state -> GuiEventRequestCollisionWorldEvent tail
-    // follows. Each is its own X360 body; they land with their consumers.
-    BridgeWorldImpactInformationToGui(lpGuiInputBuffer, lpWorldOutputBuffer);
+    // FLAG deferred (console order): BridgeWorldRouteInformationToGui (0x823EDD74) sits here, and
+    // the world-entity-state -> GuiEventRequestCollisionWorldEvent tail (0x823EDD98..0x823EDE08)
+    // follows the impact leg. Each is its own X360 body; they land with their consumers.
+    BridgeWorldTrafficAndPropDataToGui(lpGuiInputBuffer, lpWorldOutputBuffer);       // 0x823EDD84
+    BridgeWorldImpactInformationToGui(lpGuiInputBuffer, lpWorldOutputBuffer);        // 0x823EDD94
+}
+
+// ============================================================================
+// BridgeWorldTrafficAndPropDataToGui @0x823E5560 (DWARF BrnGameModule.h:820; the PS3 unity build
+// places it at GameBridgeWorldToGui.cpp:126..193) -- the world output's GUI event queue
+// (VariableEventQueue<32768,16>) -> the GUI input, one arm per record the world posts there:
+//
+//   512  GuiEventTrafficPoolEmptied (1)   forwarded                    @0x823E5724..0x823E5738
+//   208  GuiTrafficCarInfoEvent (656)     forwarded while the mode is in progress, else an
+//                                         empty record (only its count word written)
+//                                                                      @0x823E5640..0x823E569C
+//   209  GuiRemovedTrafficEvent (56)      forwarded, then handed to
+//                                         CrashModeScoring::DealWithRemovedTraffic @0x8232BF90
+//                                         (its only caller)            @0x823E5618..0x823E5638
+//   210  GuiOverheadSignInfoEvent (1040)  as 208                       @0x823E56A0..0x823E56FC
+//   592  the X360-only 4-byte record WorldModule::BridgeRaceCarEntityInfoToOutput_PreScene posts
+//        per flagged race car (its active race car index word, `stw r31` @0x827AF414; no PS3 /
+//        DWARF record); forwarded                                      @0x823E5710..0x823E5738
+//
+// Every other id is left alone. The walk does not consume the queue (the world output buffer is
+// this sub-step's, rebuilt by the next world update). "In progress" is the inlined
+// ModeManager::IsInProgress (this+0x66A520 = the module's ModeManager: `lwz 0xD98` mpCurrentGameMode,
+// null -> false, else `lwz 0x28` meCurrentState == 2); the scorer is this+0x66B2F0 = that
+// ModeManager's ScoringSystem (+0xDB0) + 0x20, i.e. GetScoringSystem()->GetCrashScorer().
+// The GUI pushes are AddGuiEvent<T> inlined to GetGuiEvents() (sub_8284F238, "Not locked for
+// writing") + AddEvent(record, id, size) with the literal (id, size) pairs above.
+// ============================================================================
+void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
+        CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
+        const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
+{
+    CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");         // cpp:126 (`li r5, 0x7E` @0x823E5590)
+    CGS_ASSERT(lpWorldOutput != 0, "lpWorldOutput");   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_TRAFFICGUI_DIAG: the first few forwards of each id and
+    // every removed-traffic record that named a car, with the scorer's recent-crash count around
+    // DealWithRemovedTraffic.
+    static const bool sbDiag       = (getenv("BRN_TRAFFICGUI_DIAG") != 0);
+    static s32        siLinesLeft  = 32;
+    static s32        siFirstLeft[5] = { 2, 2, 2, 2, 2 };   // 512 / 208 / 209 / 210 / 592
+
+    const CgsModule::Event* lpEvent     = 0;   // DWARF :129
+    s32                     liEventSize = 0;   // DWARF :130
+    s32                     liEventId   =      // DWARF :131
+        lpWorldOutput->GetGuiEventQueue()->GetFirstEvent(&lpEvent, &liEventSize);
+
+    while (lpEvent != 0)
+    {
+        switch (liEventId)
+        {
+            case 512:   // 0x200
+            {
+                const BrnGui::GuiEventTrafficPoolEmptied* lpTrafficPoolEmptiedEvent =   // DWARF :141
+                    reinterpret_cast<const BrnGui::GuiEventTrafficPoolEmptied*>(lpEvent);
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    lpEvent, lpTrafficPoolEmptiedEvent->GetEventType(),
+                    static_cast<s32>(sizeof(*lpTrafficPoolEmptiedEvent)));
+                if (sbDiag && siLinesLeft > 0 && siFirstLeft[0] > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siLinesLeft;
+                    --siFirstLeft[0];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[traffic-gui] 512 traffic pool emptied "
+                        << (lpTrafficPoolEmptiedEvent->mbTrafficPoolEmpty ? 1 : 0) << " -> GUI\n";
+                }
+                break;
+            }
+
+            case 208:   // 0xD0
+            {
+                const bool lbInProgress = mGameStateModule.GetModeManager()->IsInProgress();
+                if (lbInProgress)
+                {
+                    const BrnGui::GuiTrafficCarInfoEvent* lpTrafficCarInfoEvent =   // DWARF :153
+                        reinterpret_cast<const BrnGui::GuiTrafficCarInfoEvent*>(lpEvent);
+                    lpGuiInput->GetGuiEvents()->AddEvent(
+                        lpEvent, lpTrafficCarInfoEvent->GetEventType(),
+                        static_cast<s32>(sizeof(*lpTrafficCarInfoEvent)));
+                }
+                else
+                {
+                    BrnGui::GuiTrafficCarInfoEvent lEmptyEvent;   // DWARF :160
+                    lEmptyEvent.Construct();
+                    lpGuiInput->GetGuiEvents()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lEmptyEvent),
+                        lEmptyEvent.GetEventType(), static_cast<s32>(sizeof(lEmptyEvent)));
+                }
+                if (sbDiag && siLinesLeft > 0 && siFirstLeft[1] > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siLinesLeft;
+                    --siFirstLeft[1];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[traffic-gui] 208 score targets "
+                        << reinterpret_cast<const BrnGui::GuiTrafficCarInfoEvent*>(lpEvent)->mScoreTargets.GetCount()
+                        << " (mode in progress " << (lbInProgress ? 1 : 0) << ") -> GUI\n";
+                }
+                break;
+            }
+
+            case 209:   // 0xD1
+            {
+                const BrnGui::GuiRemovedTrafficEvent* lpRemovedTrafficEvent =   // DWARF :171
+                    reinterpret_cast<const BrnGui::GuiRemovedTrafficEvent*>(lpEvent);
+                lpGuiInput->GetGuiEvents()->AddEvent(
+                    lpEvent, lpRemovedTrafficEvent->GetEventType(),
+                    static_cast<s32>(sizeof(*lpRemovedTrafficEvent)));
+
+                BrnGameState::CrashModeScoring* const lpCrashScorer =
+                    mGameStateModule.GetModeManager()->GetScoringSystem()->GetCrashScorer();
+                const s32 liRecentBefore = sbDiag ? lpCrashScorer->maRecentCrashes.GetCount() : 0;   // [DIAG]
+                lpCrashScorer->DealWithRemovedTraffic(lpRemovedTrafficEvent);
+                if (sbDiag && siLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 &&
+                    (lpRemovedTrafficEvent->mRemovedTrafficArray.GetCount() > 0 || siFirstLeft[2] > 0))
+                {
+                    const s32 liRemoved = lpRemovedTrafficEvent->mRemovedTrafficArray.GetCount();
+                    --siLinesLeft;
+                    if (siFirstLeft[2] > 0)
+                        --siFirstLeft[2];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[traffic-gui] 209 removed traffic " << liRemoved
+                        << " car(s) -> GUI + CrashModeScoring::DealWithRemovedTraffic (recent crashes "
+                        << liRecentBefore << " -> " << lpCrashScorer->maRecentCrashes.GetCount() << ")\n";
+                }
+                break;
+            }
+
+            case 210:   // 0xD2
+            {
+                const bool lbInProgress = mGameStateModule.GetModeManager()->IsInProgress();
+                if (lbInProgress)
+                {
+                    const BrnGui::GuiOverheadSignInfoEvent* lpOverheadSignInfoEvent =   // DWARF :186
+                        reinterpret_cast<const BrnGui::GuiOverheadSignInfoEvent*>(lpEvent);
+                    lpGuiInput->GetGuiEvents()->AddEvent(
+                        lpEvent, lpOverheadSignInfoEvent->GetEventType(),
+                        static_cast<s32>(sizeof(*lpOverheadSignInfoEvent)));
+                }
+                else
+                {
+                    BrnGui::GuiOverheadSignInfoEvent lEmptyEvent;   // DWARF :193
+                    lEmptyEvent.mVisibleOverheadSignArray.Construct();
+                    lpGuiInput->GetGuiEvents()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lEmptyEvent),
+                        lEmptyEvent.GetEventType(), static_cast<s32>(sizeof(lEmptyEvent)));
+                }
+                if (sbDiag && siLinesLeft > 0 && siFirstLeft[3] > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siLinesLeft;
+                    --siFirstLeft[3];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[traffic-gui] 210 overhead signs (mode in progress "
+                        << (lbInProgress ? 1 : 0) << ") -> GUI\n";
+                }
+                break;
+            }
+
+            case 592:   // 0x250 -- X360-only; the one active race car index word
+                lpGuiInput->GetGuiEvents()->AddEvent(lpEvent, 592, 4);   // `li r5, 0x250 ; li r6, 4`
+                if (sbDiag && siLinesLeft > 0 && siFirstLeft[4] > 0 && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siLinesLeft;
+                    --siFirstLeft[4];
+                    *CgsDev::Log::gpDebugPrint
+                        << "[traffic-gui] 592 race car " << *reinterpret_cast<const s32*>(lpEvent) << " -> GUI\n";
+                }
+                break;
+
+            default:
+                break;
+        }
+
+        liEventId = lpWorldOutput->GetGuiEventQueue()->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+    }
 }
 
 // ============================================================================

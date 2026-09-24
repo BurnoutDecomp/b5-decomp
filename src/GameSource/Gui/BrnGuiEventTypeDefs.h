@@ -56,6 +56,7 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"      // CgsNetwork::PlayerName (road-rule high score / left-lobby payloads)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // BrnGameState::StuntInfo (GuiHUDMessageStuntPerformed)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (dirty-trick payloads)
+#include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray (GuiTrafficCarInfoEvent, DWARF BrnTrafficGuiInterface.h:54)
 
 // Fixed-underlying-type opaque declaration (committed home BrnVehicleConstants.h:
 // `enum EImpactType : s32`); keeps the vehicle-constants header out of this GUI payload
@@ -1556,6 +1557,48 @@ struct GuiRemovedTrafficEvent
     s32 GetEventType() const { return 209; }
 };
 static_assert(sizeof(GuiRemovedTrafficEvent) == 56, "X360 AddEvent size 56 (id 209)");
+
+// DWARF :1975 (GuiEvent<206>; X360 id 208, record 656 bytes, count word +0x280). The scored traffic
+// cars the HUD marks: WorldModule::BridgeTrafficEntityInfoToOutput_PreScene posts the traffic
+// module's ScoringVehicleArray with AddEvent(.., 208, 656), and
+// BrnGameModule::BridgeWorldTrafficAndPropDataToGui @0x823E5560 forwards it while the mode is in
+// progress (`li r5, 0xD0 ; li r6, 0x290` @0x823E567C) and an empty one otherwise (0x823E5688).
+struct GuiTrafficCarInfoEvent
+{
+    BrnTraffic::BrnTrafficIO::ScoringVehicleArray mScoreTargets;   // DWARF :1977  +0x00 (count word +0x280)
+
+    // DWARF :1980. Inlined into the bridge's empty record as the one store `stw r27(=0), var_460`
+    // @0x823E5688 -- var_460 - var_6E0 == +0x280, the array's count word.
+    void Construct() { mScoreTargets.Construct(); }
+
+    s32 GetEventType() const { return 208; }
+};
+static_assert(sizeof(GuiTrafficCarInfoEvent) == 656, "X360 AddEvent size 656 (id 208, `li r6, 0x290`)");
+
+// DWARF :1985 (GuiEvent<208>; X360 id 210, record 1040 bytes, count word +0x400). The overhead signs
+// on screen; forwarded like 208 (`li r5, 0xD2 ; li r6, 0x410` @0x823E56D8), with an empty record whose
+// only store is the count word (`stw r27(=0), var_50` @0x823E56E8; var_50 - var_450 == +0x400) when
+// the mode is not in progress.
+struct GuiOverheadSignInfoEvent
+{
+    typedef Array<OverheadSignScore, 32> VisibleOverheadSignArray;   // DWARF :129
+
+    VisibleOverheadSignArray mVisibleOverheadSignArray;   // DWARF :1987  +0x00 (count word +0x400)
+
+    s32 GetEventType() const { return 210; }
+};
+static_assert(sizeof(GuiOverheadSignInfoEvent) == 1040, "X360 AddEvent size 1040 (id 210, `li r6, 0x410`)");
+
+// DWARF :234 (GuiEvent<502>; X360 id 512, record 1 byte). The traffic pool emptied (true) or refilled
+// (false): TrafficEntityModule::UpdateStreaming posts it (AddEvent(.., 512, 1) @0x82748920 /
+// 0x8274896C) and the bridge forwards it unchanged (`li r5, 0x200 ; li r6, 1` @0x823E572C).
+struct GuiEventTrafficPoolEmptied
+{
+    bool mbTrafficPoolEmpty;   // DWARF :236  +0x00
+
+    s32 GetEventType() const { return 512; }
+};
+static_assert(sizeof(GuiEventTrafficPoolEmptied) == 1, "X360 AddEvent size 1 (id 512)");
 
 // DWARF :3708 (GuiEvent<363>; X360 id 368 = Update dispatch 313+55). HandleSignatureStunt
 // @0x8251D7E8 reads the id qword @+0x00.
