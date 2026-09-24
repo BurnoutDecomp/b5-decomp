@@ -357,6 +357,10 @@ void CrashPlayManager::ClampBoostLevel()
 //                 never reaches OnBounce, i.e. the HandleGameActions arm is still parked)
 //   ground        frames the player was charged KF_COST_FOR_BEING_ON_GROUND
 //   spent         total percentage points removed by the ground cost
+//   hits          OnVehicleHitConfirmed ran, i.e. action 140 reached this manager (0 while the
+//                 GameState answers VEHICLE_HITs => the RaceCarEntityModule 140 arm is not relayed)
+//   paid          of those, the unchained hits that paid the per-vehicle award (hitAward = total)
+//   everyN        every-KI_AWARD_BOOST_EVERY_N_VEHICLES awards paid
 // =================================================================================================
 namespace
 {
@@ -381,8 +385,12 @@ namespace
         u32 muGroundFrames;
         f32 mfGroundSpent;
         f32 mfChargeSpent;
+        u32 muHits;
+        u32 muHitsPaid;
+        u32 muEveryNAwards;
+        f32 mfHitAward;
     };
-    CrashPlayWitness gCrashPlayWitness = { 0u, 0u, 0u, 0u, 0u, 0u, 0.0f, 0.0f };
+    CrashPlayWitness gCrashPlayWitness = { 0u, 0u, 0u, 0u, 0u, 0u, 0.0f, 0.0f, 0u, 0u, 0u, 0.0f };
 }
 
 // =================================================================================================
@@ -524,6 +532,10 @@ void CrashPlayManager::Update( const Matrix44Affine& lCameraTransform,
             << " crashPlayTime=" << mfCrashPlayTime
             << " groundSpent=" << gCrashPlayWitness.mfGroundSpent
             << " chargeSpent=" << gCrashPlayWitness.mfChargeSpent
+            << " | hits=" << static_cast<s32>( gCrashPlayWitness.muHits )
+            << " paid=" << static_cast<s32>( gCrashPlayWitness.muHitsPaid )
+            << " everyN=" << static_cast<s32>( gCrashPlayWitness.muEveryNAwards )
+            << " hitAward=" << gCrashPlayWitness.mfHitAward
             << "\n";
     }
 
@@ -1058,6 +1070,8 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
                                               s32 liVehicleChainBonus,
                                               s32 liTotalVehiclesHit )
 {
+    ++gCrashPlayWitness.muHits;                                                       // [crashplay]
+
     // Only an UNCHAINED hit pays the per-vehicle award.
     if( liVehicleChainBonus == 0 )
     {
@@ -1073,6 +1087,8 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
                                        KF_BOOST_FOR_VEHICLE_IMPACT_LOW );
         mfBoostPercentage += lfBoost;
         ClampBoostLevel();
+        ++gCrashPlayWitness.muHitsPaid;                                               // [crashplay]
+        gCrashPlayWitness.mfHitAward += lfBoost;
     }
 
     if( liTotalVehiclesHit > 0 )
@@ -1096,6 +1112,7 @@ void CrashPlayManager::OnVehicleHitConfirmed( s32 liVehicleBaseScore,
                                            mfBoostPercentage )
                               + KF_BOOST_FOR_EVERY_10_CARS_HIT_LO;
             ClampBoostLevel();
+            ++gCrashPlayWitness.muEveryNAwards;                                       // [crashplay]
         }
     }
 }
