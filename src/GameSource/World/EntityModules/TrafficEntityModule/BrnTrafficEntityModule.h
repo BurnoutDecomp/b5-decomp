@@ -1141,6 +1141,16 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // promotion, so with this gated append #161 overwrites the count word with an entity id.
         void GenerateCrashedVehicleEvents(BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
 
+        // @0x82715C30 (DWARF :1293 `void GenerateSympatheticCrasherOutput(const
+        // InputBuffer_PreScene*, OutputBuffer_PreScene*)`, BrnTrafficUnity.cpp :3612). The first
+        // of PreSceneUpdate's output producers (0x8274AAE4). In Showtime it writes, for every
+        // standard traffic slot, whether that car is a live crashing car with a latched
+        // sympathetic-crash target into the race-car interface's mSympatheticCrashers bit set
+        // (set or cleared, all 400); outside Showtime the bit set is left untouched. lpInput is the
+        // family's shared argument and is never read. Body at the end of BrnTrafficEntityModule.cpp.
+        void GenerateSympatheticCrasherOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                              BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
+
         // One of PreSceneUpdate's per-frame output producers: copies mNearMissTrafficCollection
         // and mNearMissRaceCarCollection wholesale into the output buffer's traffic->race-car
         // pre-scene interface. Body in _wG_NearMissOutput.cpp. lpInput is the family's shared

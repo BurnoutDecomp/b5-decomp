@@ -4746,12 +4746,17 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     // above was. Disassembling this function straight out of the image shows the producers as a
     // straight run right here, between the hull-sync banner and the state switch, each called
     // with (this, lpInput, lpOutput):
-    //     GenerateSympatheticCrasherOutput
-    //     GenerateNearMissOutput                 <- LIVE below
-    //     GeneratePotentialLeapedAndStompedCarsOutput
-    //     GenerateNearbyParkedTrafficOutput
+    //     GenerateSympatheticCrasherOutput       <- LIVE below (0x8274AAE4)
+    //     GenerateNearMissOutput                 <- LIVE below (0x8274AAF4)
+    //     GeneratePotentialLeapedAndStompedCarsOutput  <- LIVE below (0x8274AB04)
+    //     GenerateNearbyParkedTrafficOutput      (0x8274AB14, gated below)
     // then ManageTriggers, then the switch. GenerateRivalInActiveHullOutput is NOT among them
     // on this build; nothing in this function calls it.
+
+    // 0x8274AAD8..0x8274AAE4 `mr r5, r26 ; mr r4, r25 ; mr r3, r31 ; bl 0x82715C30` -- LIVE
+    // (G58-D1, 2026-09-24). Showtime's per-slot sympathetic-crasher bits for the race-car module.
+    GenerateSympatheticCrasherOutput(lpInput, lpOutput);
+
     GenerateNearMissOutput(lpInput, lpOutput);
 
     // 0x8274AAF8..0x8274AB04 `mr r5, r26 ; mr r4, r25 ; mr r3, r31 ; bl 0x8271F298` -- LIVE
@@ -4760,15 +4765,13 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     GeneratePotentialLeapedAndStompedCarsOutput(lpInput, lpOutput);
 
     {
-        // GATE: the two remaining pre-scene output producers, neither bodied in this tree. They
-        // are placed in the console's own order around the live calls above. They write into
-        // OutputBuffer_PreScene. DELETE WHEN the bodies land.
+        // GATE: the one remaining pre-scene output producer, not bodied in this tree. It is placed
+        // in the console's own order after the live calls above (0x8274AB14). It writes into
+        // OutputBuffer_PreScene. DELETE WHEN the body lands.
         static bool sbLogged = false;
         LogMissingLeg_T1(sbLogged,
-            "PreSceneUpdate output producers -- GenerateSympatheticCrasherOutput @0x82715C30 "
-            "(before the live GenerateNearMissOutput) and GenerateNearbyParkedTrafficOutput "
-            "@0x8271FA18 (after the live GeneratePotentialLeapedAndStompedCarsOutput). No bodies "
-            "in this tree");
+            "PreSceneUpdate output producer -- GenerateNearbyParkedTrafficOutput @0x8271FA18 "
+            "(after the live GeneratePotentialLeapedAndStompedCarsOutput). No body in this tree");
     }
 
     switch (meState)
@@ -17773,6 +17776,64 @@ void TrafficEntityModule::GeneratePotentialLeapedAndStompedCarsOutput(
                         << " magnets=" << static_cast<s32>(luMagnets)
                         << " misbounce=" << mfShowtimeMisBounceTimer << "\n";
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// TrafficEntityModule::GenerateSympatheticCrasherOutput  @0x82715C30  (36 insns)
+//   DWARF :1293; BrnTrafficUnity.cpp hints `luVehicle` (:3612), `lpVehicle` (:3615), calls
+//   Vehicle::IsCrashing and TrafficToRaceCarInterface_PreScene::SetSympatheticCrasher. PS3 twin
+//   0x92E378 (IsCrashing inlined there: +1 crash-traffic byte == 0, "IsPhysical()" .h:1186).
+//
+//   0x82715C3C..0x82715C50  lis/ori 0x717DD ; lbzx ; beq -> return   mbPlayingShowtimeMode (:716)
+//   0x82715C54/0x82715C58   r31 = 0 ; r30 = this + 0x2AC0           &maVehicles[0] + 0x40 (mSympCrashTarget)
+//   0x82715C5C..0x82715C68  lbz r11,-0x3B(r30) ; clrlwi 31 ; beq     IsAlive() (mxFlags +5, bit 0) -> 0
+//   0x82715C6C..0x82715C7C  addi r3,r30,-0x40 ; bl 0x82704A70 ; beq  IsCrashing() -> 0
+//   0x82715C80..0x82715C8C  lwz r11,0(r30) ; li r29,1 ; cmpwi -1 ; bne   IsSympatheticCrasher() -> 1
+//   0x82715C90              li r29, 0
+//   0x82715C94..0x82715CA4  bl 0x82710DD0 (GetTrafficToRaceCarInterface_PreScene) ;
+//                           SetSympatheticCrasher(r31, r29) (bl 0x82710848)
+//   0x82715CA8..0x82715CB4  ++r31 ; r30 += 0x80 (sizeof Vehicle) ; cmplwi r31,0x190 ; blt
+// 0x190 == KU_MAX_STANDARD_TRAFFIC (400): the standard slots only. Every slot's bit is written
+// each Showtime frame, set or cleared; outside Showtime nothing is written. lpInput (r4) is dead.
+// ---------------------------------------------------------------------------------------------
+void TrafficEntityModule::GenerateSympatheticCrasherOutput(const BrnTrafficIO::InputBuffer_PreScene* lpInput,
+                                                           BrnTrafficIO::OutputBuffer_PreScene* lpOutput)
+{
+    (void)lpInput;
+
+    if (!mbPlayingShowtimeMode)   // +0x717DD
+    {
+        return;
+    }
+
+    u32 luNumCrashers = 0;   // [DIAG] count only; see the BRN_TRAFFIC_DIAG block below
+    for (u32 luVehicle = 0; luVehicle < KU_MAX_STANDARD_TRAFFIC; ++luVehicle)
+    {
+        Vehicle* lpVehicle = &maVehicles[luVehicle];
+        bool lbIsCrasher = false;
+        if (lpVehicle->IsAlive() && lpVehicle->IsCrashing() && lpVehicle->IsSympatheticCrasher())
+        {
+            lbIsCrasher = true;
+            ++luNumCrashers;
+        }
+        lpOutput->GetTrafficToRaceCarInterface_PreScene()->SetSympatheticCrasher(
+            static_cast<s32>(luVehicle), lbIsCrasher);
+    }
+
+    // [DIAG] BRN_TRAFFIC_DIAG -- NOT IN THE X360 BINARY. Dispatch witness: the first Showtime
+    // frames, then every frame that flagged a sympathetic crasher, capped.
+    if (CgsDev::Log::DebugPrint* lpDiag = TrafficDiagStream())
+    {
+        static u32 suDiagShowtimeFrames = 0;
+        static u32 suDiagLines          = 0;
+        ++suDiagShowtimeFrames;
+        if (suDiagLines < 40u && (suDiagShowtimeFrames <= 3u || luNumCrashers > 0u))
+        {
+            ++suDiagLines;
+            *lpDiag << "[T5-sympcrasher] frame=" << static_cast<s32>(suDiagShowtimeFrames)
+                    << " crashers=" << static_cast<s32>(luNumCrashers) << "\n";
         }
     }
 }
