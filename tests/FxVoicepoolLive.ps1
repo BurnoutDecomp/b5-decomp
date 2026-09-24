@@ -19,6 +19,11 @@
 #   [collision-audio] detach finished lifetime=<1 impact|2 scrape> sample=.. attached=.. now=..
 #                                               (CollisionControl::UpdateParams releases the state)
 #   [collision-audio] no free state ...          (all seven states held; the console has the same 7)
+#   [collision-audio] voice attached sample=.. pipeline=.. action=.. owners=A/B impulse=.. fatality=..
+#                    ... duck=<mixer input 1> azimuth=<0|1>
+#                                               (CollisionEffect::Attach @0x826F8218: the ducking the crash
+#                                                sends the mix, re-derived here from CalculateIntensity's
+#                                                console constants; second piece of this lane)
 @{
   Name    = 'fxvoicepool'
   Area    = 'sound'
@@ -67,6 +72,35 @@
         }
         return @{ Pass = ($plays -gt 0 -and $finished -ge ($plays - 7))
                   Detail = ('{0} impacts voiced (the play print stops at 64), {1} voices finished, {2} full-pool refusals (print cap 32)' -f $plays, $finished, $refusals) }
+      } }
+    @{ Kind = 'Script';     Name = 'every crash voice ducks the mix by the console''s amount (Attach 0x826F8218 + CalculateIntensity 0x82688240) and keeps its azimuth unless it starts a fatality'; Script = {
+        param($ctx)
+        # [collision-audio] voice attached sample=.. pipeline=P action=A owners=a/b impulse=x fatality=F ... duck=D azimuth=Z
+        $n = 0; $bad = 0; $live = 0; $first = ''
+        foreach ($l in $ctx.LogLines) {
+          if ($l -notmatch '^\[collision-audio\] voice attached sample=-?\d+ pipeline=(\d+) action=(\d+) owners=(\d+)/(\d+) impulse=(\S+) fatality=(\d+) .* duck=(-?\d+) azimuth=(\d)') { continue }
+          $n++
+          $pipe = [int]$Matches[1]; $act = [int]$Matches[2]; $a = [int]$Matches[3]; $b = [int]$Matches[4]
+          $x = [double]::Parse($Matches[5], [Globalization.CultureInfo]::InvariantCulture)
+          $fat = [int]$Matches[6]; $duck = [int]$Matches[7]; $az = [int]$Matches[8]
+          # CalculateIntensity: 12 * x for a prop hit; (100 - 25) * x + 25 for race car vs world/race car/traffic
+          # or traffic vs anything (flt_82F2CEC4..flt_82F2CED4); 0 otherwise or for a non-Collision action.
+          $ci = 0.0
+          if ($act -eq 1) {
+            if ($pipe -eq 1) { $ci = 12.0 * $x }
+            elseif (($a -eq 1 -and $b -le 2) -or $a -eq 2) { $ci = 75.0 * $x + 25.0 }
+          }
+          $want = $ci * 327.67001
+          if ($want -le 0) { $want = 0 }
+          if ($want -gt 32767) { $want = 32767 }
+          $want = [math]::Truncate($want)
+          $azWant = if ($fat -eq 2) { 0 } else { 1 }
+          if ([math]::Abs($duck - $want) -gt 2 -or $az -ne $azWant) { $bad++; if (-not $first) { $first = $l } }
+          if ($duck -gt 0) { $live++ }
+        }
+        $detail = ('{0} voice starts checked, {1} ducking the mix, {2} off the console value' -f $n, $live, $bad)
+        if ($first) { $detail += (' -- first: ' + $first) }
+        return @{ Pass = ($n -gt 0 -and $bad -eq 0 -and $live -gt 0); Detail = $detail }
       } }
     @{ Kind = 'NewAsserts'; Name = 'no NEW assert families' }
     @{ Kind = 'LogCount';   Name = 'zero asserts'; Pattern = '\[ASSERT \d+\]'; Max = 0 }

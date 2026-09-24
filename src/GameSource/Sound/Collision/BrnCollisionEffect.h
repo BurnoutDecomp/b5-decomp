@@ -49,6 +49,7 @@ namespace Collision
 
 struct CollisionControl;
 struct CollisionState;
+struct OutputCollision;
 
 struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
 {
@@ -98,15 +99,26 @@ struct CollisionEffect : public BrnSound::Logic::BrnEffectObject
     f32 GetGain() const;
     f32 GetPitch() const;
 
-    // ---- DEFERRED virtuals (declared for the effect vtable shape; outside this
-    // TU's recon'd function set -- not bodied by this group). The DWARF home lists
-    // GetTypeInfo / GetTypeName / CreateObject / Prepare / GetController /
-    // AttachController / Attach / UpdateParams / ProcessUpdate / Detach /
-    // GetPitch / CalculateIntensity; none are in this TU's dossier, so they are
-    // NOT declared here to avoid fabricating a vtable shape the binary does not
-    // pin in this slice.
+    // The DWARF home lists GetTypeInfo / GetTypeName / CreateObject / Prepare /
+    // GetController / AttachController / Attach / UpdateParams / ProcessUpdate / Detach /
+    // GetGain / GetPitch (above) and the private CalculateIntensity / InitWork<T> (below).
 
 private:
+    // BrnCollisionEffect.h:126 (DWARF): attach the bank, silence Send01, play the sample and
+    // take the bin's mixer slider and size settings. Instantiated for crashbin @0x826EB240 and
+    // propscrashbin @0x826EB368, called from Attach @0x826F8218 by pipeline.
+    template <typename T>
+    void InitWork(CollisionState* apState, const OutputCollision& arCollision);
+
+    // The bin's volume / pitch for the collision's size (crashbin @0x826AABC8): Large -> z,
+    // Medium -> y, Small -> x, anything else asserts "Bad Size".
+    template <typename T>
+    void GetSizeSpecificSettings(const OutputCollision& arCollision, const T& arBin,
+                                 SizeSpecificSettings& arSettings) const;
+
+    // BrnCollisionEffect.cpp:434 (DWARF) @0x82688240: the crash's ducking intensity, 0..100.
+    f32 CalculateIntensity(const OutputCollision& arCollision);
+
     // --- members (DWARF order; X360 offsets in comments only, not asserted) ---
 
     // BrnCollisionEffect.h:151 (DWARF): the owning collision control, set by
