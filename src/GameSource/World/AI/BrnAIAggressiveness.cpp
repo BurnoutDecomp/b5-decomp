@@ -17,21 +17,25 @@ namespace BrnAI
     // @0x827645E0 -- store mfProximitySpeedMatch (this+0x8).
     void Aggressiveness::SetProximityToSpeedMatch(f32 lfValue)
     {
-        CGS_ASSERT(lfValue >= 0.0f && lfValue <= 1.0f, "Bad Proximity is ");
+        // `fcmpu v,0 ; blt -> fire` 0x82764600/0x82764604 then `fcmpu v,1 ; ble -> skip`
+        // 0x82764610/0x82764614: an unordered value skips the assert (FX-AINAN2).
+        CGS_ASSERT(!(lfValue < 0.0f) && !(lfValue > 1.0f), "Bad Proximity is ");
         mfProximitySpeedMatch = lfValue;
     }
 
     // @0x827646C8 -- store mfAcclerationRateForSpeedMatch (this+0x14).
     void Aggressiveness::SetAcclerationRateForSpeedMatch(f32 lfValue)
     {
-        CGS_ASSERT(lfValue >= 0.0f && lfValue <= 1.0f, "Bad percentage is ");
+        // blt 0x827646EC -> fire, ble 0x827646FC -> skip: a NaN skips the assert (FX-AINAN2).
+        CGS_ASSERT(!(lfValue < 0.0f) && !(lfValue > 1.0f), "Bad percentage is ");
         mfAcclerationRateForSpeedMatch = lfValue;
     }
 
     // @0x827647B0 -- store mfTimeForSpeedMatch (this+0xC).
     void Aggressiveness::SetTimeForSpeedMatch(f32 lfValue)
     {
-        CGS_ASSERT(lfValue >= 0.0f && lfValue <= 1.0f, "Bad speed match time is ");
+        // blt 0x827647D4 -> fire, ble 0x827647E4 -> skip: a NaN skips the assert (FX-AINAN2).
+        CGS_ASSERT(!(lfValue < 0.0f) && !(lfValue > 1.0f), "Bad speed match time is ");
         mfTimeForSpeedMatch = lfValue;
     }
 
