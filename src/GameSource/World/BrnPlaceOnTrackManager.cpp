@@ -237,9 +237,11 @@ void PlaceOnTrackManager::Construct(RaceCarEntityModule* lpRaceCarEntityModule)
 //
 // THE WALK (asm 0x822F6E2C..0x822F7890). Drain the pre-physics scene-result queue; take
 // only events whose TYPE is E_OUT_EVENT_LINE_TEST_FINE_RESULT (1) **and** whose query-id
-// OWNER byte is KI_LINE_TEST_OWNER (5) -- the console tests the owner as the raw second
-// byte of the event (`BYTE1(*v4) != 5`), not through SceneQueryId::GetOwner. The query
-// id's low byte is the active-race-car index that asked.
+// OWNER is KI_LINE_TEST_OWNER (5). The console reads the id WORD and extracts the owner as
+// bits [16..23] (`extrwi 8,8` @0x822F6F78) and the asking slot as the low half (`clrlwi 16`
+// @0x822F6F84) -- SceneQueryId::GetOwner / GetIndex, inlined. (Hex-Rays prints the owner test
+// as `BYTE1(*v4) != 5`, a big-endian MEMORY byte; this file transcribed that literally as
+// byte [1] until 2026-09-24, which on this host is bits [8..15] and never matched.)
 //
 // ⚠️ VERSION DRIFT vs the earlier source revision; the retail binary is authority on all three:
 //   * the transform is built by BrnMath::BuildTransform(pos, direction, normal), NOT by
@@ -271,16 +273,24 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
 
     while( lpEvent != 0 )
     {
-        // `FirstEvent == 1 && BYTE1(*event) == 5`
-        if( liType == KI_OUT_EVENT_LINE_TEST_FINE_RESULT
-            && reinterpret_cast<const u8*>( lpEvent )[1] == KI_PLACE_ON_TRACK_LINE_TEST_OWNER )
-        {
-            const PlaceOnTrackCandidateList* lpLineTestResult =
-                reinterpret_cast<const PlaceOnTrackCandidateList*>( lpEvent );
+        // The result record: the scene-result queue hands back a pointer into its own packed
+        // byte buffer (the sanctioned external-byte-stream case).
+        const PlaceOnTrackCandidateList* lpLineTestResult =
+            reinterpret_cast<const PlaceOnTrackCandidateList*>( lpEvent );
 
-            // The query id's low byte is the slot that asked (`v6 = *v4`).
+        // 0x822F6F6C `cmpwi r3, 1` (the event type) ; 0x822F6F74 `lwz r11, 0(r22)` ;
+        // 0x822F6F78 `extrwi r10, r11, 8, 8` ; 0x822F6F7C `cmplwi r10, 5` -- the query id's OWNER,
+        // bits [16..23] of the WORD. CORRECTED 2026-09-24 (FX-SCENEMGR): this read the raw bytes
+        // [1] (owner) and [0] (slot) -- Hex-Rays' BYTE1 is a big-endian memory byte. On this host
+        // byte 1 of Set(5, slot) == 0x0005000S is bits [8..15] == 0, so no place-on-track result
+        // could ever match, and a foreign id with 5 in bits [8..15] (0x0000050S) would have been
+        // taken for slot S's answer.
+        if( liType == KI_OUT_EVENT_LINE_TEST_FINE_RESULT
+            && lpLineTestResult->mQueryId.GetOwner() == KI_PLACE_ON_TRACK_LINE_TEST_OWNER )
+        {
+            // 0x822F6F84 `clrlwi r20, r11, 16` -- the query id's INDEX is the slot that asked.
             const EActiveRaceCarIndex leActiveRaceCarIndex =
-                static_cast<EActiveRaceCarIndex>( reinterpret_cast<const u8*>( lpEvent )[0] );
+                static_cast<EActiveRaceCarIndex>( lpLineTestResult->mQueryId.GetIndex() );
 
             const ActiveRaceCar* lpActiveRaceCar =
                 mpRaceCarEntityModule->GetActiveRaceCar( leActiveRaceCarIndex );

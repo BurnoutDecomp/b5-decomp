@@ -5,6 +5,7 @@
 #include "BrnCommonTypes.h"   // Vector4
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"   // CgsNumeric::Random mRandom (DWARF :69)
+#include "GameShared/GameClasses/SceneManager/CgsSceneQueryId.h"   // CgsSceneManager::SceneQueryId (the result's +0x00)
 
 // =============================================================================
 // BrnWorld::PlaceOnTrackManager
@@ -89,7 +90,10 @@ struct PlaceOnTrackCandidate
 // muNumCandidates @ +0x04, maCandidates @ +0x10.)
 struct PlaceOnTrackCandidateList
 {
-    u8                    maReserved00[4];  // +0x00 (untouched here)
+    // +0x00 NAMED 2026-09-24 (FX-SCENEMGR): OutEventLineTestFineResult::mQueryId (DWARF
+    // CgsSceneManagerModuleIO.h:219). PrePhysicsUpdate reads its owner and index BY VALUE
+    // (0x822F6F74 `lwz` ; `extrwi 8,8` ; `clrlwi 16`) -- see SceneQueryId.
+    CgsSceneManager::SceneQueryId mQueryId; // +0x00
     s32                   muNumCandidates;  // +0x04
     u8                    maReserved08[8];  // +0x08..+0x0F (untouched here)
     PlaceOnTrackCandidate maCandidates[1];  // +0x10  (flexible inline array)
