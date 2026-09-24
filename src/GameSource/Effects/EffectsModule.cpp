@@ -176,6 +176,39 @@ namespace
     // The one EBodyParts id ProcessCarDetatchedPartContacts routes to DUST instead of sparks
     // (`cmpwi cr6, r11, 0x5B`). Same FLAG as the pair above: the value is the console's.
     const s32 KI_DETACHED_DUST_PART_TYPE    = 91;
+    // ---- the detached-part DUST arm (ProcessCarDetatchedPartContacts 0x82293150..0x8229333C) ----
+    // flt_820054CC -- particles per second of scraping: the part's accumulator gains mDt * 20.0
+    // each frame (`fmadds f0, f0, f26, f13`, f26 loaded at 0x8229304C).
+    const f32 KF_DETACHED_DUST_PER_SECOND   = 20.0f;
+    // flt_8200DD28 / flt_8200DD24 -- every velocity lane's jitter is Random() * 6.0 - 3.0
+    // (`fmsubs f13, f13, f30, f29`: f30 at 0x82293000, f29 at 0x82293008), uniform in [-3, 3).
+    const f32 KF_DETACHED_DUST_JITTER_SPAN  = 6.0f;
+    const f32 KF_DETACHED_DUST_JITTER_HALF  = 3.0f;
+    // flt_82001DA0 / flt_8200DD40 -- the size scale is Random() * 0.5 + 0.2
+    // (`fmadds f1, f0, f28, f27`: f28 at 0x82293054 -- the same cell as the 0.5 m/s speed gate --
+    // f27 at 0x82293010).
+    const f32 KF_DETACHED_DUST_SIZE_RANGE   = 0.5f;
+    const f32 KF_DETACHED_DUST_SIZE_MIN     = 0.2f;
+    // flt_82001C98 -- the alpha every dust particle is spawned with (`fmr f3, f31`, f31 at 0x82293028).
+    const f32 KF_DETACHED_DUST_ALPHA        = 1.0f;
+
+    // The console's inline floor + fctiwz (0x82293170..0x82293194): `fsel` on the sign picks
+    // -2^52 or +2^52 (dbl_82001CB8 / dbl_82001CB0), the subtract-then-add rounds to an integer,
+    // a second `fsel` takes 1.0 (dbl_82001CA0) or 0.0 (dbl_82001CA8) off when that rounded up,
+    // then frsp and fctiwz. That is floor() for every finite input. fctiwz SATURATES and turns a
+    // NaN into 0x80000000; both are spelled out so the conversion is defined on the host too
+    // (a NaN accumulator therefore spawns nothing, as on the console: 0x80000000 <= 0).
+    s32 FloorToS32Fctiwz(f32 lfValue)
+    {
+        const f32 lfFloor = static_cast<f32>(std::floor(static_cast<f64>(lfValue)));
+        if (lfFloor != lfFloor)
+            return static_cast<s32>(0x80000000u);
+        if (lfFloor >= 2147483648.0f)
+            return 0x7FFFFFFF;
+        if (lfFloor < -2147483648.0f)
+            return static_cast<s32>(0x80000000u);
+        return static_cast<s32>(lfFloor);
+    }
     // The visualfxsurface words the two drains read past the skid block: +0x4F is the bool the
     // detached-part arm gates its HandleSparkContacts call on, +0x54 is the f32 both drains pass
     // as HandleSparkContacts' fifth float. ⚠ FLAG -- the NAMES are the consumers', not the
@@ -2652,25 +2685,12 @@ void EffectsModule::ProcessCarContactQueues(const EffectsModuleParams& lrParams,
 }
 
 // ------------------------------------------------------------------------------------------------
-// ProcessRaceCarContacts @0x82297C08 (965 instr, DWARF EffectsModule.cpp:3292) and
-// ProcessCarDetatchedPartContacts @0x82292FA0 (308 instr, :3654).
+// ProcessRaceCarContacts @0x82297C08 (965 instr, DWARF EffectsModule.cpp:3292).
 //
-// NOT RECONSTRUCTED in this wave, and each announces itself once rather than being dropped
-// silently. Both are READ; the callee wall below is measured, not estimated, so the next pass does
-// not have to re-derive it:
-//
-//   ProcessCarDetatchedPartContacts has TWO arms, split on the contact's meType:
-//     * meType == 91 -> a dust burst: |mVelocity| must exceed 0.5, then
-//       mafAccumulatedParticleCountTyres[carIndex] += params.mDt * 20.0, floor() it, and call
-//       BrnParticle::ParticleModule::SpawnSimple @0x82281A10 (55 instr, NO BODY IN THE TREE --
-//       not even declared) that many times with a +/-3 m jittered normal.
-//     * meType != 91 -> the SPARK arm: |mVelocity| must exceed 10.0, the surface's
-//       visualfxsurface +0x4F bool must be set, and then it is the same HandleSparkContacts call
-//       ProcessHingedPartContacts makes -- except that it passes the contact's own mVelocity
-//       (copy + 0x60) as the spark velocity and flt_8200DD14 (0.005) as the threshold.
-//     Its one other gate: a contact whose mEntityIdA high byte is 1 is skipped when the active
-//     race car's byte at +0x452 is set.
-//   ⇒ ONE missing body (SpawnSimple) blocks the dust arm; the spark arm is otherwise ready.
+// NOT RECONSTRUCTED in this wave; it announces itself once rather than being dropped silently.
+// It is READ; the callee wall below is measured, not estimated, so the next pass does not have to
+// re-derive it. (Its sibling ProcessCarDetatchedPartContacts, which this banner used to share, is
+// whole below: both of its arms run.)
 //
 //   ProcessRaceCarContacts does NOT call HandleSparkContacts at all. Its own callees are, from
 //   its call list: HandleRaceCarRaceCarSparks @0x82290A48 (96), HandleVehicleVehicleSparks
@@ -2701,18 +2721,33 @@ void EffectsModule::ProcessRaceCarContacts(
 //
 // The deformable car parts (attached or knocked off) hitting the world. Two arms, split on the
 // contact's meType at copy + 0x70, and they are NOT alternatives of the same effect:
-//   * meType == 91  -> a DUST burst through ParticleModule::SpawnSimple. NOT RECONSTRUCTED here --
-//                      SpawnSimple @0x82281A10 forwards to BrnSimpleParticleArray::SpawnParticle,
-//                      which has no body and no declaration in the tree. Announced, with the whole
-//                      arm written down in the announcement so it is one job, not a re-read.
-//   * meType != 91  -> the SPARK arm, and it is real below.
+//   * meType == 91  -> a DUST burst: CRASH IMPACT DUST simple particles (type 2) through
+//                      ParticleModule::SpawnSimple, at a rate of 20 per second of scraping.
+//                      (FX-CRASHVFX 2026-09-24: this arm used to announce itself, blocked on
+//                      SpawnSimple / BrnSimpleParticleArray::SpawnParticle, which 2a28113a landed,
+//                      and on the render half, which f5018cb0 landed.)
+//                      ⛔ A CONSOLE-DEAD PATH ON RETAIL DATA -- do not try to make it fire. 91 is
+//                      EBodyParts eWHEEL (DecFIGS BrnPhysicsPartTypes.h). Its two producers are
+//                      CreateDetachedPartContactEvent @0x825DD628 (meType = the detached body part's
+//                      IK part type -- and NONE of the 430 retail VEH_*_AT.BIN IK tables carries a
+//                      part of type 87..95, surveyed 2026-09-24 with tools/re/part_bbox_dump.py's
+//                      readers) and CreateDetachedWheelContactEvent @0x825B95B0, which ZEROES
+//                      mVelocity (`vspltisw v0, 0 ; li r11, 0x60 ; stvx128 v0, r29, r11` at
+//                      0x825B9688..0x825B969C) and nothing rewrites it. So every eWHEEL contact
+//                      reaches this arm at speed 0 and fails the 0.5 gate, on the console as here.
+//                      The arm is still the console's, bit for bit (tests/run_fxcrashvfx_detached_
+//                      dust.py runs it against the drain's own instruction words), and the
+//                      [simplefx] dust gate census below is the live proof that it stays shut.
+//   * meType != 91  -> the SPARK arm.
 //
-// The two gates ahead of both arms:
+// The gates ahead of both arms:
 //   * an entity whose EntityId owner byte is E_ENTITYTYPE_RACECAR (1) contributes its 14-bit entity
 //     index as the accumulator slot AND is skipped entirely when that car's RaceCarState says
-//     mbIsHidden (`lbz r11, 0x452(r3)` == +1106); anything else uses slot 8;
-//   * the spark arm additionally needs |mVelocity| > 10 m/s and the surface's visualfxsurface
-//     "sparks enabled" bool at +0x4F.
+//     mbIsHidden (`lbz r11, 0x452(r3)` == +1106); anything else uses slot 8. The console reads the
+//     state through GetRaceCarStateMutable @0x8227D690, which returns &maRaceCarStates[i] and is
+//     never null, and it tests the byte without a null check -- so there is none here either;
+//   * the dust arm needs |mVelocity| > 0.5 m/s, the spark arm |mVelocity| > 10 m/s and the
+//     surface's visualfxsurface "sparks enabled" bool at +0x4F.
 // ------------------------------------------------------------------------------------------------
 void EffectsModule::ProcessCarDetatchedPartContacts(
          const BrnPhysics::ContactSpy::ContactSpyData::PhysicalCarPartContactQueue* lpQueue,
@@ -2734,9 +2769,8 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
         if (lEntityId.GetOwner() == BrnWorld::E_ENTITYTYPE_RACECAR)
         {
             luAccumulatorSlot = lEntityId.GetEntityIndex();
-            const BrnPhysics::Vehicle::RaceCarState* const lpState =
-                lpActiveRaceCars->GetRaceCarState(static_cast<EActiveRaceCarIndex>(luAccumulatorSlot));
-            if (lpState != 0 && lpState->mbIsHidden)                          // +1106
+            if (lpActiveRaceCars->GetRaceCarState(
+                    static_cast<EActiveRaceCarIndex>(luAccumulatorSlot))->mbIsHidden)   // +1106
                 continue;
         }
 
@@ -2747,17 +2781,96 @@ void EffectsModule::ProcessCarDetatchedPartContacts(
 
         if (lContact.meType == KI_DETACHED_DUST_PART_TYPE)
         {
+            // ---- the dust arm (0x822930E8..0x8229333C) ----
+            // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The gate
+            // census: every eWHEEL contact this drain sees and how many of them move faster than
+            // the gate below, logged at each power-of-two count (bounded). On retail data
+            // `moving` stays 0 -- see the banner -- and this line is how a live run shows it.
+            {
+                static const bool sbDustGateDiag = (std::getenv("BRN_SIMPLEFX_DIAG") != 0);
+                static u32 suDustGateSeen = 0, suDustGateMoving = 0, suDustGateLines = 0;
+                if (sbDustGateDiag)
+                {
+                    ++suDustGateSeen;
+                    if (lfSpeed > KF_DETACHED_DUST_MIN_SPEED)
+                        ++suDustGateMoving;
+                    if (suDustGateLines < KU_EFFECTS_DIAG_MAX_LINES
+                        && (suDustGateSeen & (suDustGateSeen - 1u)) == 0u)
+                    {
+                        ++suDustGateLines;
+                        char lacMsg[192];
+                        std::snprintf(lacMsg, sizeof(lacMsg),
+                            "[simplefx] dust gate: eWHEEL contacts=%u moving=%u (this one: slot=%u speed=%.3f)\n",
+                            suDustGateSeen, suDustGateMoving, static_cast<unsigned>(luAccumulatorSlot),
+                            static_cast<double>(lfSpeed));
+                        CgsDev::Log::WriteToLog(lacMsg);
+                    }
+                }
+            }
+            // `vcmpgtfp.` against splat(flt_82001DA0) and a branch on the ALL-TRUE bit: a NaN
+            // speed fails, like any speed at or under 0.5.
             if (!(lfSpeed > KF_DETACHED_DUST_MIN_SPEED))
                 continue;
 
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "EffectsModule::ProcessCarDetatchedPartContacts' DUST arm (meType == 91, "
-                "0x82293150..0x8229333C): mafAccumulatedParticleCountTyres[slot] += mDt * 20.0, "
-                "floor() it, then that many ParticleModule::SpawnSimple(&mParticleModule, 2, "
-                "mPointOnA, mNormal + Random(-3..3), size = Random()*0.5 + 0.2, mTime, 1.0) calls. "
-                "BLOCKED: SpawnSimple @0x82281A10 -> BrnSimpleParticleArray::SpawnParticle has no "
-                "body and no declaration. THE SPARK ARM OF THIS DRAIN IS REAL AND RUNS");
+            // The accumulator gains mDt * 20 (ONE rounding: `fmadds`) and is stored back BEFORE
+            // the count is taken (`stfsx` at 0x8229316C), so a frame that does not reach a whole
+            // particle still banks its fraction.
+            f32& lrfAccumulated = mafAccumulatedParticleCountTyres[luAccumulatorSlot];   // +0x2D014
+            lrfAccumulated = std::fma(lrParams.mDt, KF_DETACHED_DUST_PER_SECOND, lrfAccumulated);
+
+            const s32 liNumParticles = FloorToS32Fctiwz(lrfAccumulated);
+            if (liNumParticles <= 0)                                          // `ble cr6`
+                continue;
+            lrfAccumulated -= static_cast<f32>(liNumParticles);              // fcfid, frsp, fsubs
+
+            // [DIAG] BRN_SIMPLEFX_DIAG=1 -- NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. One line
+            // per burst, capped, so a live run can name the frame a scraping part shed its dust.
+            {
+                static const bool sbDustDiag = (std::getenv("BRN_SIMPLEFX_DIAG") != 0);
+                static u32 suDustDiagLines = 0;
+                if (sbDustDiag && suDustDiagLines < KU_EFFECTS_DIAG_MAX_LINES)
+                {
+                    ++suDustDiagLines;
+                    char lacMsg[256];
+                    std::snprintf(lacMsg, sizeof(lacMsg),
+                        "[simplefx] dust burst slot=%u n=%d speed=%.3f carry=%.4f t=%.3f at (%.2f,%.2f,%.2f)\n",
+                        static_cast<unsigned>(luAccumulatorSlot), static_cast<int>(liNumParticles),
+                        static_cast<double>(lfSpeed), static_cast<double>(lrfAccumulated),
+                        static_cast<double>(lrParams.mTime),
+                        static_cast<double>(lContact.mPointOnA.x),
+                        static_cast<double>(lContact.mPointOnA.y),
+                        static_cast<double>(lContact.mPointOnA.z));
+                    CgsDev::Log::WriteToLog(lacMsg);
+                }
+            }
+
+            for (s32 liParticle = liNumParticles; liParticle != 0; --liParticle)
+            {
+                // Four draws on the module's ring, in the console's order: the SIZE first, then the
+                // jitter's z, y and x lanes (stored to +0x88, +0x84, +0x80 of the quad the `vaddfp`
+                // at 0x82293328 adds to the normal; its w lane is the `stw r27, 0x8C` zero).
+                const f32 lfSizeFraction = mRandom.RandomFloat();
+                const f32 lfJitterZ = std::fma(mRandom.RandomFloat(), KF_DETACHED_DUST_JITTER_SPAN,
+                                               -KF_DETACHED_DUST_JITTER_HALF);
+                const f32 lfJitterY = std::fma(mRandom.RandomFloat(), KF_DETACHED_DUST_JITTER_SPAN,
+                                               -KF_DETACHED_DUST_JITTER_HALF);
+                const f32 lfJitterX = std::fma(mRandom.RandomFloat(), KF_DETACHED_DUST_JITTER_SPAN,
+                                               -KF_DETACHED_DUST_JITTER_HALF);
+
+                Vector3 lvVelocity = lContact.mNormal;                         // copy + 0x30
+                lvVelocity.x += lfJitterX;
+                lvVelocity.y += lfJitterY;
+                lvVelocity.z += lfJitterZ;
+                lvVelocity.w += 0.0f;
+
+                mParticleModule.SpawnSimple(lContact.mPointOnA,                // v1: copy + 0x40
+                                            lvVelocity,                        // v2
+                                            BrnParticle::Native::eParticleArray_CrashImpactDust,  // `li r4, 2`
+                                            std::fma(lfSizeFraction, KF_DETACHED_DUST_SIZE_RANGE,
+                                                     KF_DETACHED_DUST_SIZE_MIN),               // f1
+                                            lrParams.mTime,                    // f2: params + 4
+                                            KF_DETACHED_DUST_ALPHA);           // f3
+            }
             continue;
         }
 
