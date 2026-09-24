@@ -24,6 +24,7 @@
 #include "SharedClasses/AI/AISectionsResourceType.h"
 #undef protected
 #undef private
+#include "GameSource/Math/BrnMathUtils.h"   // BrnMath::IsNormal(Vector2): TestCarHNG's :2216 assert (FX-NANPOL)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
 #include <cstdio>

@@ -246,17 +246,18 @@ bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
 // BrnAI::LineTestTrafficHNG @0x8277A878 got its body in BrnHNGTest.cpp. A reset pose with a car of
 // the avoidance list on its look-ahead or across its nose now sends AvoidObstacles into the sweep.
 //
-// ⛔ [FLAG blocked: GameSource/Math is not this lane's file] the :2216 assert needs
-// BrnMath::IsNormal(Vector2) (DWARF-attested overload; sub_8276AC48 -- |v.xy| via rsqrt, then
-// fabs(|v| - 1.0) > flt_82002138), which BrnMathUtils does not carry. It is a dev assert only.
-// DELETE-WHEN BrnMath::IsNormal(Vector2) lands.
+// The :2216 assert landed 2026-09-24 (crash parity G07-D1 leftover, FX-NANPOL) once FX-XLANE gave
+// BrnMath::IsNormal(Vector2) its body (f559c8bd): 0x82790C3C reloads lDirection (spilled from v2
+// at 0x82790C0C), 0x82790C40 `bl 0x8276AC48` (the Vector2 overload), `bne` past FireAssert with
+// r5 = 0x8A8 (:2216) and r3 = 0x82019E68 ("BrnMath::IsNormal( lDirection )"). A NaN direction reads
+// as normal there (vcmpgtfp + cntlzw), so it does not fire.
 // =================================================================================================
 bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
                                      const NearbyVehicles* lpaNearbyVehicles,
                                      Vector2 lPosition, Vector2 lDirection, f32 lfSpeed)
 {
     CGS_ASSERT(lpAISection != 0, "lpAISection != NULL");   // :2215
-    // [FLAG] :2216 CGS_ASSERT(BrnMath::IsNormal(lDirection)) -- see the banner.
+    CGS_ASSERT(BrnMath::IsNormal(lDirection), "BrnMath::IsNormal( lDirection )");   // :2216
 
     const f32 KF_CAR_HNG_LOOK_AHEAD   = 6.0f;   // flt_820C4250
     const f32 KF_CAR_HNG_MIDDLE       = 4.5f;   // flt_820C4844

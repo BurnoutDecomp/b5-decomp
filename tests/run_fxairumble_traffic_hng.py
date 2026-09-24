@@ -39,8 +39,11 @@ def main():
               "namespace {", body_or_stub(avoid, "    void NoteTrafficLegs(", ""), "}",
               definition(avoid, "bool ResetOnTrackManager::TestCarHNG("),
               "}"]
+    # BrnMathUtils.cpp: TestCarHNG's :2216 assert calls BrnMath::IsNormal(Vector2) (FX-NANPOL
+    # 2026-09-24, the G07-D1 leftover).
     sys.exit(compile_and_run("FxAiRumbleTrafficHng.cpp", chunks,
-                             [REPO / "src/GameShared/GameClasses/Development/CgsStrStream.cpp"],
+                             [REPO / "src/GameShared/GameClasses/Development/CgsStrStream.cpp",
+                              REPO / "src/GameSource/Math/BrnMathUtils.cpp"],
                              prefix="brn_fxairumble_hng_"))
 
 
