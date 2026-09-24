@@ -14,5 +14,12 @@ $case.Checks += @(
        Pattern = '\[T5-stomp\] frame=\d+ '; Expect = $true }
     @{ Kind = 'LogMatch'; Name = 'CHAIN-STOMPEES a Showtime frame published at least one stompee'
        Pattern = '\[T5-stomp\] .* stompees=[1-8] '; Expect = $true }
+    # 33317822: the score leg (GetVehicleScoreData -> AddPotentialScoree) -- the HUD's Showtime
+    # score targets. The diag prints the potential-scoree count the frame ended with.
+    @{ Kind = 'LogMatch'; Name = 'CHAIN-STOMPEES score leg published a potential scoree'
+       Pattern = '\[T5-stomp\] .* scorees=([1-9]|1[0-9]|20) '; Expect = $true }
+    # a8f25c60 (G58-D1): the sympathetic-crasher producer runs every Showtime frame.
+    @{ Kind = 'LogMatch'; Name = 'G58-D1 the sympathetic-crasher producer ran in Showtime'
+       Pattern = '\[T5-sympcrasher\] frame=\d+ crashers=\d+'; Expect = $true }
 )
 $case
