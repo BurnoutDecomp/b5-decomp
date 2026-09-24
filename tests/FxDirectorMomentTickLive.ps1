@@ -18,8 +18,8 @@
 #                                                                    films through a MOMENT's camera
 #   [fx-sting-post] reset-on-track #N update=U                    -- BRN_HUD_SOUND_DIAG
 # and the run must be clean: 0 asserts, 0 exceptions.
-# BRN_MOMENT_TICK=1 is the default-OFF opt-in the lane's pre-commit proof run used; once the call is
-# un-gated the variable is ignored and the same case runs unchanged.
+# The tick is unconditional since 0d4289ce (the BRN_MOMENT_TICK opt-in the pre-commit proof run used is
+# gone); BRN_CRASHCAM_DIAG also arms the NewMoment allocation line (default off since 2026-09-24).
 @{
   Name    = 'fxdirector_moment_tick'
   Area    = 'director'
@@ -35,7 +35,7 @@
     CrashSweepShots  = '1758.5/-0.8/-2399.6/262:12,1790.5/-3.2/-2393.0/260:44,1758.5/-0.8/-2399.6/262:12'
     CrashSweepSettle = 300
   }
-  DiagEnv = 'BRN_HUD_SOUND_DIAG=1,BRN_WRECK_LATCH_DIAG=1,BRN_CRASHCAM_DIAG=1,BRN_MOMENT_TICK=1'
+  DiagEnv = 'BRN_HUD_SOUND_DIAG=1,BRN_WRECK_LATCH_DIAG=1,BRN_CRASHCAM_DIAG=1'
   Checks  = @(
     @{ Kind = 'Mark';       Name = 'reached DRIVING'; Phase = 'DRIVING' }
     @{ Kind = 'LogCount';   Name = 'the sweep fired (the car was placed)'; Pattern = '\[sweep\] shot 0/'; Min = 1 }

@@ -25,6 +25,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                     // CgsDev::StrStream (lacMessage)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (mbIsAllocated guard)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the NewMoment allocation rung
+#include <cstdlib>                                           // [DIAG] getenv (BRN_CRASHCAM_DIAG)
 // ---- the twelve concrete moment types NewMoment allocates ----------------------------------------
 // This umbrella lives HERE, in the only TU that needs all twelve, and NOT in a shared header: these
 // headers are far too heavy for BrnMainDirector.cpp's include path. MomentBystanderSeesAction (case 5)
@@ -300,10 +301,12 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
 
     // [DIAG] NOT IN THE console BINARY. One line per moment TYPE the factory really allocates (the
     // selectors' Prepares call NewMoment a handful of times and then never again), so a log shows
-    // which moments exist. Unchanged from the split TU.
+    // which moments exist. Behind BRN_CRASHCAM_DIAG (the crash-camera gate, default off) since
+    // 2026-09-24 (crash-parity diag hygiene): it used to print whenever a log existed.
     {
+        static const bool sbMomentDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
         static bool sbaLoggedType[Moment::E_MOMENT_COUNT] = { false };
-        if (leMomentType >= 0 && leMomentType < Moment::E_MOMENT_COUNT &&
+        if (sbMomentDiag && leMomentType >= 0 && leMomentType < Moment::E_MOMENT_COUNT &&
             !sbaLoggedType[leMomentType] && CgsDev::Log::gpDebugPrint != 0)
         {
             sbaLoggedType[leMomentType] = true;

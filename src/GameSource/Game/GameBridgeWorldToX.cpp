@@ -425,18 +425,21 @@ namespace BrnGame
             lpDirectorInput->SetRaceCarInfo(static_cast<u32>(liSlot), lVehicleInfo);
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG (the camera-input gate). The
-            // impact-shake input as published: the first 40 non-zero publishes, then every 200th.
+            // impact-shake input as published: the first 40 non-zero publishes, then every 200th --
+            // and at most 60 lines per session (HARD CAP 2026-09-24, crash-parity diag hygiene).
             // sqrt(impact) * 0.0001 is the chase camera's raw shake request
             // (BehaviourGameplayExternal::Update, before its 40 MPH ramp and 0.8 clamp).
             {
                 static const bool sbImpactDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
                 static u32 suNonZeroImpacts = 0;
+                static s32 siImpactLinesLeft = 60;
                 if (sbImpactDiag && lVehicleInfo.mfHardestImpact > 0.0f
                     && CgsDev::Log::gpDebugPrint != 0)
                 {
                     ++suNonZeroImpacts;
-                    if (suNonZeroImpacts <= 40u || (suNonZeroImpacts % 200u) == 0u)
+                    if (siImpactLinesLeft > 0 && (suNonZeroImpacts <= 40u || (suNonZeroImpacts % 200u) == 0u))
                     {
+                        --siImpactLinesLeft;
                         const Vector3& lN = lVehicleInfo.mHardestNormalStressNormal;
                         const Vector3& lS = lVehicleInfo.mHardestNormalStress;
                         *CgsDev::Log::gpDebugPrint
@@ -452,18 +455,21 @@ namespace BrnGame
 
             // [DIAG] NOT IN THE X360 BINARY -- BRN_CAM_INPUT_DIAG. The camera box as published when
             // it came from the DEFORMATION state (the arm CC-7 restored): the first 12 such
-            // publishes, then every 400th, with the pristine half-extent box beside it and the
-            // largest per-axis difference between the two.
+            // publishes, then every 400th -- at most 24 lines per session (HARD CAP 2026-09-24) --
+            // with the pristine half-extent box beside it and the largest per-axis difference
+            // between the two.
             {
                 static const bool sbBoxDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
                 static u32 suDeformedBoxes = 0;
+                static s32 siBoxLinesLeft = 24;
                 if (sbBoxDiag && CgsDev::Log::gpDebugPrint != 0
                     && lpDeformationOutputInterface->mpDeformationState != 0
                     && lpDeformationOutputInterface->mpDeformationState->GetCarStateF(lpState->mEntityId.muValue) != 0)
                 {
                     ++suDeformedBoxes;
-                    if (suDeformedBoxes <= 12u || (suDeformedBoxes % 400u) == 0u)
+                    if (siBoxLinesLeft > 0 && (suDeformedBoxes <= 12u || (suDeformedBoxes % 400u) == 0u))
                     {
+                        --siBoxLinesLeft;
                         const Vector3& lMin = lVehicleInfo.mAABB.mMin;
                         const Vector3& lMax = lVehicleInfo.mAABB.mMax;
                         const Vector3& lHalf = lpState->mHalfExtent;
@@ -486,16 +492,22 @@ namespace BrnGame
                 }
             }
 
-            // Bring-up diagnostic: print the pose the cameras will actually frame -- on the
-            // FIRST publish (which lands the frame the car is attached, before its physics
-            // state has been seeded) and then every 3000th (~40 s), which is the steady
-            // state. This is the exact claim the retired fake-car stand-in could not make.
-            // (Remove when the whole world->director staging is routine.)
+            // [DIAG] NOT IN THE X360 BINARY -- bring-up diagnostic: print the pose the cameras will
+            // actually frame -- on the FIRST publish (which lands the frame the car is attached,
+            // before its physics state has been seeded) and then every 3000th (~40 s), which is the
+            // steady state. This is the exact claim the retired fake-car stand-in could not make.
+            // GATED 2026-09-24 (crash-parity diag hygiene) behind BRN_CAM_INPUT_DIAG, the file's
+            // default-off camera-input switch, and capped at 20 lines: an ungated periodic print is
+            // not console behaviour. (Remove when the whole world->director staging is routine.)
             ++suRaceCarInfoPublishCount;
-            if (suRaceCarInfoPublishCount == 1u || (suRaceCarInfoPublishCount % 3000u) == 0u)
+            static const bool sbPublishDiag = (getenv("BRN_CAM_INPUT_DIAG") != 0);
+            static s32 siPublishLinesLeft = 20;
+            if (sbPublishDiag && siPublishLinesLeft > 0 &&
+                (suRaceCarInfoPublishCount == 1u || (suRaceCarInfoPublishCount % 3000u) == 0u))
             {
                 if (CgsDev::Log::gpDebugPrint != 0)
                 {
+                    --siPublishLinesLeft;
                     const Vector3& lPos = lVehicleInfo.mRaceCarState.mTransform.Pos();
                     // [BRING-UP MEASUREMENT, physics wave 1] the WRITE end of the half-extent
                     // transfer; BehaviourRotateAboutVehicle::Update prints the READ end.

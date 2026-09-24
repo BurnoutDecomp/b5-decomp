@@ -610,16 +610,21 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
 
     // [DIAG] NOT IN THE X360 BINARY -- BRN_CAMRIG_DIAG, the FX-CAMRIG live witness: proves this
     // body ran and shows what it published against the lagged car origin it follows. The first
-    // ten frames after each Prepare, then every 15th. Prints only.
+    // ten frames after each Prepare, then every 15th -- and at most 240 lines per session (HARD
+    // CAP 2026-09-24, crash-parity diag hygiene: the rate limit alone grew with every crash
+    // camera a long drive raised). Prints only.
     {
         static const bool sbRigDiag = (getenv("BRN_CAMRIG_DIAG") != 0);
         static s32 siDiagFrame = 0;
+        static s32 siDiagLinesLeft = 240;
         if (lbDiagFirstFrame)
         {
             siDiagFrame = 0;
         }
-        if (sbRigDiag && CgsDev::Log::gpDebugPrint != 0 && (siDiagFrame < 10 || siDiagFrame % 15 == 0))
+        if (sbRigDiag && siDiagLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0 &&
+            (siDiagFrame < 10 || siDiagFrame % 15 == 0))
         {
+            --siDiagLinesLeft;
             const Vector3& lrPublished = lrCamera.GetTransform().wAxis;
             *CgsDev::Log::gpDebugPrint
                 << "[camrig] Update frame " << siDiagFrame
