@@ -60,6 +60,8 @@
 #include "GameSource/GameState/BrnGameEvents.h"                                          // E_EVENT_CHANGE_WORLD_REGION (115, the district producer)
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"                         // BrnAI::AIModuleIO::RaceCarAIInterface / AttachAIControlEvent
 #include "GameSource/World/AI/BrnAISharedConstants.h"                                    // BrnAI::EResetType (PlaceRaceCarOnLoad's non-player arms)
+#include "GameSource/World/AI/BrnAIBuzzBy.h"                                             // BrnAI::BuzzBy::MaintainAheadOrBehind (PlaceRaceCarOnLoad's ARM A1)
+#include "GameSource/World/AI/SharedIO/BrnAIModuleRequestInterface.h"                    // BrnAI::AIModuleIO::ResetOnTrackRequest (its result record)
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"                // GameModeParams::KU_FLAG_AI_RESET_ON_TRACK_BEHIND
 #include "GameSource/Math/BrnMathUtils.h"                                                // BrnMath::BuildTransform / IsNormal
 #include "rw/math/vpu/vector3_operation.h"                                               // rw::math::vpu::IsValid(Vector3)
@@ -1173,6 +1175,41 @@ namespace
             << " dist " << lfDistance
             << " [FLAG PC witness]\n";
     }
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_BUZZBY_PLACE_DIAG=1, default OFF, first 16 lines).
+    // Crash parity FX-AIBUZZ: proves ARM A1 DISPATCHED BuzzBy::MaintainAheadOrBehind for a free-roam
+    // rival that streamed in within 250 m of the player, and prints what the console's leaf answered
+    // (the request the car is then reset with) next to the inputs that decide it: the player-relative
+    // position, its projection on the player's heading (> 0 == ahead) and the two headings' dot.
+    void WitnessBuzzByPlacement( const BrnWorld::RaceCar* lpRaceCar,
+                                 const Vector3& lrCarPosition, const Vector3& lrCarDirection,
+                                 const Vector3& lrPlayerPosition, const Vector3& lrPlayerVelocity,
+                                 const Vector3& lrPlayerDirection,
+                                 const BrnAI::AIModuleIO::ResetOnTrackRequest& lrRequest )
+    {
+        static const bool sbDiag = ( getenv( "BRN_BUZZBY_PLACE_DIAG" ) != 0 );
+        static s32 siLines = 0;
+        if( !sbDiag || CgsDev::Log::gpDebugPrint == 0 || siLines >= 16 )
+        {
+            return;
+        }
+        ++siLines;
+
+        const Vector3 lRelative = { lrCarPosition.x - lrPlayerPosition.x,
+                                    lrCarPosition.y - lrPlayerPosition.y,
+                                    lrCarPosition.z - lrPlayerPosition.z, 0.0f };
+        *CgsDev::Log::gpDebugPrint
+            << "[buzzby-place] MaintainAheadOrBehind global "
+            << static_cast<s32>( lpRaceCar->GetGlobalRaceCarIndex() )
+            << " dist " << std::sqrt( rw::math::vpu::MagnitudeSquared( lRelative ) )
+            << " along " << rw::math::vpu::Dot( lRelative, lrPlayerDirection )
+            << " headingDot " << rw::math::vpu::Dot( lrCarDirection, lrPlayerDirection )
+            << " playerSpeed " << std::sqrt( rw::math::vpu::MagnitudeSquared( lrPlayerVelocity ) )
+            << " -> resetType " << static_cast<s32>( lrRequest.GetResetType() )
+            << " speed " << lrRequest.GetResetSpeed()
+            << " resetDist " << lrRequest.GetResetDistance()
+            << " [DIAG BRN_BUZZBY_PLACE_DIAG]\n";
+    }
 }
 
 // ============================================================================
@@ -1271,37 +1308,30 @@ namespace
 // dynamic initialiser leaves no IDA export); it is proof that nothing in the CODE writes it.
 // DELETE-WHEN a data-driven writer for the BurnoutConstants block is found.
 //
-// ---- [FLAG PC bring-up] the BuzzBy leaf of ARM A ---------------------------------------------
-// BrnAI::BuzzBy::MaintainAheadOrBehind is DECLARATION-ONLY in this tree (BrnAIBuzzBy.h:84, no
-// body anywhere under GameSource/World/AI), so calling it is an LNK2019, and World/AI is owned
-// by another lane this wave. The leaf is left as a NAMED park with a witness rather than
-// paraphrased: inventing an ahead/behind pose would be inventing the console's answer.
-// It is OFF the rival path this wave targets -- it sits behind `!mbIsInGameMode`, i.e. free-roam
-// buzz-by placement, and every rival SetUpAIForMode spawns arrives with mbIsInGameMode already
-// true (HandlePrepareForModeAction sets it before SetupOpponents runs).
-// DELETE-WHEN BrnAI::BuzzBy::MaintainAheadOrBehind has a body.
+// ---- ARM A1's BuzzBy leaf -- LANDED 2026-09-24 (crash parity FX-AIBUZZ) ------------------------
+// BrnAI::BuzzBy::MaintainAheadOrBehind @0x82766C40 was declaration-only, so this arm used to be a
+// NAMED PARK that requested nothing: a free-roam rival streaming in within 250 m of the player was
+// never placed and sat in E_STATE_WAITING (live: fxvehphys_drift/20260923_144455, [ai-attach] ...
+// arm A1-buzzBy-PARKED, then no [PLACEONTRACK] race car 1 -> E_STATE_ACTIVE). The leaf is a static
+// member (the request in r3, no `this`) and is now called in the console's order below.
 //
-// ---- [GUARD] two null/range tests that are NOT the console's ---------------------------------
-//   * `lpActiveRaceCar != 0` before every RequestPlaceOnTrack, and folded into the
-//     IsOnRaceStartState test that picks ARM A vs ARM B. On console GetActiveRaceCar returns the
-//     attached slot and OnRaceCarResourcesLoaded has already asserted IsAttached(), so it cannot
-//     be null there; on this build the caller chain is still being assembled and a null here
-//     would be a fault rather than a dropped placement. (A null therefore falls into ARM B,
-//     whose own placement leg is guarded too, so nothing is dispatched against it either way.)
-//   * `mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID` before
-//     GetActiveRaceCar(mePlayerActiveRaceCarIndex) in ARM A. The console indexes with the raw
-//     word; with the sentinel -1 that is maActiveRaceCars[-1], a read 7376 bytes in front of the
-//     array. The console reaches this arm only with a player car present.
+// ---- the [GUARD]s are gone (FX-AIBUZZ, re-derived from the asm above) ------------------------
+// The console has NO null or range test in this function: r30 (lpRaceCar) is used straight from
+// r4 (GetActiveRaceCar at 0x822CE5B8 is the first instruction that touches it; no "lpRaceCar"
+// assert), r29 (lpActiveRaceCar) goes unguarded into IsOnRaceStartState (0x822CE684) and every
+// RequestPlaceOnTrack (0x822CE9BC), the player index word is passed raw (`lwzx r4, r31, 0x182F8`
+// @0x822CE6C8 -- GetActiveRaceCar @0x822A34A8 asserts its own range, as ours does), and ARM B3's
+// `fdivs f13, f0, f13` @0x822CE944 divides by miOpponentCount unguarded. The host's float divide
+// by zero is the same IEEE inf/NaN (FP exceptions stay masked; BrnSystemHWX360.cpp only sets the
+// rounding / denormal fields), and OnRaceCarResourcesLoaded -- the one caller -- already refuses a
+// null lpRaceCar before it gets here. Removed: the lpRaceCar assert + early-out, the four
+// lpActiveRaceCar != 0 tests, the mePlayerActiveRaceCarIndex INVALID test, the miOpponentCount != 0
+// test. The player arm re-fetches its ActiveRaceCar (`bl RaceCar::GetActiveRaceCar` @0x822CE65C,
+// after the pose getters) where the other arms reuse r29; spelled the same way.
 // ============================================================================
 void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 {
-    CGS_ASSERT( lpRaceCar != 0, "lpRaceCar" );
-    if( lpRaceCar == 0 )
-    {
-        return;
-    }
-
-    // 0x822CE5B8 -- fetched BEFORE the type assert, and reused by every arm below.
+    // 0x822CE5B8 -- fetched BEFORE the type assert, and reused by every non-player arm below.
     ActiveRaceCar* lpActiveRaceCar = lpRaceCar->GetActiveRaceCar();
 
     CGS_ASSERT( lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
@@ -1316,18 +1346,19 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
             // are the same zero literal.
             lpRaceCar->RequestResetOnTrack( 0.0f, BrnAI::E_RESET_TYPE_STANDARD, 0.0f );
         }
-        else if( lpActiveRaceCar != 0 )                                 // [GUARD], see banner
+        else
         {
-            lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
-                                                  lpRaceCar->GetDirection(),
-                                                  0.0f );
+            // 0x822CE628..0x822CE66C: GetDirection, GetPosition, then a second
+            // RaceCar::GetActiveRaceCar (0x822CE65C) whose result takes the request.
+            const Vector3 lDirection = lpRaceCar->GetDirection();
+            const Vector3 lPosition  = lpRaceCar->GetPosition();
+            lpRaceCar->GetActiveRaceCar()->RequestPlaceOnTrack( lPosition, lDirection, 0.0f );
         }
         return;
     }
 
     // ---- NON-PLAYER: pick the arm (0x822CE670..0x822CE6A4) ---------------------------------
     const bool lbRacing =
-        ( lpActiveRaceCar != 0 ) &&
         lpActiveRaceCar->IsOnRaceStartState( ActiveRaceCar::E_RACE_START_STATE_RACING );
 
     if( lbRacing && !mbPlayerRollsOnEventStart )                        // +0x18351 (99153)
@@ -1353,20 +1384,17 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
         }
 
         // ---- A1 (0x822CE6C0): keep the car near the player ---------------------------------
-        ActiveRaceCar* lpPlayerCar =
-            ( mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID )   // [GUARD]
-                ? GetActiveRaceCar( mePlayerActiveRaceCarIndex )                // +0x182F8
-                : 0;
+        ActiveRaceCar* lpPlayerCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );   // +0x182F8
 
-        bool lbDropWhereItIs = ( lpPlayerCar == 0 ) || !lpPlayerCar->IsActive();
+        bool lbDropWhereItIs = !lpPlayerCar->IsActive();                // 0x822CE6D4..0x822CE6E4
 
         if( !lbDropWhereItIs )
         {
             // 0x822CE700..0x822CE754: `vmsum3fp128 v0, v0, v0` -- the THREE-lane squared
             // magnitude of (player position - this car's position), compared against
-            // flt_8201BCC4 == 62500.0f == 250 m squared.
-            const Vector3 lPlayerPosition = lpPlayerCar->GetPosition();
+            // flt_8201BCC4 == 62500.0f == 250 m squared (`vcmpgtfp.` all-true: a NaN stays near).
             const Vector3 lCarPosition    = lpRaceCar->GetPosition();
+            const Vector3 lPlayerPosition = lpPlayerCar->GetPosition();
             const Vector3 lDelta = { lPlayerPosition.x - lCarPosition.x,
                                      lPlayerPosition.y - lCarPosition.y,
                                      lPlayerPosition.z - lCarPosition.z,
@@ -1379,26 +1407,40 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 
         if( lbDropWhereItIs )
         {
-            if( lpActiveRaceCar != 0 )                                  // [GUARD]
-            {
-                lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
-                                                      lpRaceCar->GetDirection(),
-                                                      0.0f );
-            }
+            // loc_822CE9A0: GetDirection, GetPosition, RequestPlaceOnTrack(r29, pos, dir, 0.0).
+            lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
+                                                  lpRaceCar->GetDirection(),
+                                                  0.0f );
             WitnessPlaceRaceCarOnLoad( lpRaceCar, "A1-placeOwnPose", -1, 0.0f );
             return;
         }
 
-        // [FLAG PC bring-up] the BuzzBy leaf -- see the banner. The console runs
-        //   BuzzBy::MaintainAheadOrBehind(&lRequest, carPos, carDir,
-        //                                 playerPos, playerVelocity, playerDirection)
-        // (argument order pinned by 0x822CE7D0..0x822CE7E0's v1..v5 loads) and then
-        //   RequestResetOnTrack(lRequest.mfSpeed, lRequest.meType, lRequest.mfDistance)
-        // (0x822CE7E8..0x822CE7FC: f1 <- request+4, f2 <- request+8, r5 <- request+12).
-        // BrnAI::BuzzBy::MaintainAheadOrBehind has no body in this tree and World/AI is another
-        // lane's this wave, so nothing is requested here rather than a made-up pose.
-        // DELETE-WHEN that body exists.
-        WitnessPlaceRaceCarOnLoad( lpRaceCar, "A1-buzzBy-PARKED", -1, 0.0f );
+        // 0x822CE780..0x822CE7E4: the five poses in the console's argument registers --
+        //   v1 car position, v2 car direction (RaceCar getters), v3 player position,
+        //   v4 player velocity, v5 player direction (ActiveRaceCar getters) --
+        // into the static leaf, the request on the stack (var_B0) in r3; then
+        // 0x822CE7E8..0x822CE7FC: RequestResetOnTrack(f1 <- +4 speed, r5 <- +0xC type,
+        // f2 <- +8 distance). [FX-AIBUZZ 2026-09-24: was the A1-buzzBy-PARKED no-op]
+        const Vector3 lPlayerDirection = lpPlayerCar->GetDirection();
+        const Vector3 lPlayerVelocity  = lpPlayerCar->GetVelocity();
+        const Vector3 lPlayerPosition  = lpPlayerCar->GetPosition();
+        const Vector3 lCarDirection    = lpRaceCar->GetDirection();
+        const Vector3 lCarPosition     = lpRaceCar->GetPosition();
+
+        BrnAI::AIModuleIO::ResetOnTrackRequest lRequest;
+        BrnAI::BuzzBy::MaintainAheadOrBehind( &lRequest,
+                                              lCarPosition, lCarDirection,
+                                              lPlayerPosition, lPlayerVelocity, lPlayerDirection );
+
+        lpRaceCar->RequestResetOnTrack( lRequest.GetResetSpeed(),
+                                        lRequest.GetResetType(),
+                                        lRequest.GetResetDistance() );
+
+        WitnessPlaceRaceCarOnLoad( lpRaceCar, "A1-buzzBy",
+                                   static_cast<s32>( lRequest.GetResetType() ),
+                                   lRequest.GetResetDistance() );
+        WitnessBuzzByPlacement( lpRaceCar, lCarPosition, lCarDirection,
+                                lPlayerPosition, lPlayerVelocity, lPlayerDirection, lRequest );
         return;
     }
 
@@ -1414,12 +1456,9 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
 
     if( !mbSpawnAIBehindStartGrid )                                     // +0x18350 (99152)
     {
-        if( lpActiveRaceCar != 0 )                                      // [GUARD]
-        {
-            lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
-                                                  lpRaceCar->GetDirection(),
-                                                  0.0f );
-        }
+        lpActiveRaceCar->RequestPlaceOnTrack( lpRaceCar->GetPosition(),
+                                              lpRaceCar->GetDirection(),
+                                              0.0f );
         WitnessPlaceRaceCarOnLoad( lpRaceCar, "B-placeOnGrid", -1, 0.0f );
         return;
     }
@@ -1439,15 +1478,11 @@ void RaceCarEntityModule::PlaceRaceCarOnLoad( RaceCar* lpRaceCar )
     {
         // 0x822CE920..0x822CE94C: normalise by the mode's own opponent count and rescale by
         // flt_820054D0 == 7.0 -- i.e. the whole rival field is squeezed into a fixed 7 m stride
-        // however many rivals the mode has.
-        // [GUARD] the divide is the console's, unguarded; miOpponentCount is written by
-        // HandlePrepareForModeAction from GameModeParams::GetOpponentCount() and this arm is
-        // reached only inside a game mode, but a zero would be a division by zero on the host.
-        if( miOpponentCount != 0 )
-        {
-            lfGridOffset =
-                ( lfGridOffset / static_cast<f32>( miOpponentCount ) ) * KF_GRID_SPACING_IN_MODE;
-        }
+        // however many rivals the mode has. The divide is the console's, unguarded (`fdivs`
+        // @0x822CE944); miOpponentCount is written by HandlePrepareForModeAction from
+        // GameModeParams::GetOpponentCount(), and a zero is IEEE inf/NaN here as there.
+        lfGridOffset =
+            ( lfGridOffset / static_cast<f32>( miOpponentCount ) ) * KF_GRID_SPACING_IN_MODE;
     }
 
     // 0x822CE950..0x822CE974: flt_82013FAC == -45.0 for Road Rage, flt_8201BC80 == -25.0 otherwise.

@@ -45,6 +45,12 @@ namespace BrnAI
     extern const f32 KF_MIN_SPEED_FOR_BUZZING;       // flt_8300D938 (runtime)
     extern const f32 KF_START_BEHIND_PROBABLITY;     // flt_820C4168 = 0.5f (spelling per DWARF)
     extern const f32 KF_SIDE_TURNING_PROBABILITY;    // flt_820C4330
+    // ADDITIVE NOTE (crash parity FX-AIBUZZ, 2026-09-24): three slot notes above are superseded.
+    // KF_ON_COMING_RESET_SPEED is flt_8300DBEC (80 mph, CRT thunk 0x82C68EE8), not the 200.0
+    // literal flt_820C4318 (that is the ahead reset DISTANCE); flt_8300D7F4 (25 mph) is
+    // KF_FASTER_THAN_PLAYER, defined file-local in BrnAIBuzzBy.cpp. KF_START_FAR_AHEAD /
+    // KF_START_FAR_BEHIND have no reader and no initialiser in the X360 image and are NOT defined
+    // anywhere -- do not use them. Evidence (PS3 twins + thunk order) at the .cpp definitions.
 
     static const s32 KI_MAX_CARS_AWAITING_COLLECTION = 3;
 
@@ -81,7 +87,13 @@ namespace BrnAI
         void SetInGameMode(bool lbInGameMode)  { mbIsInGameMode = lbInGameMode; }
         void SetInJunkyard(bool lbInJunkyard)  { mbIsInJunkyard = lbInJunkyard; }
         void DrawBuzzTimer();
-        void MaintainAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest,
+        // ADDITIVE (crash parity FX-AIBUZZ, 2026-09-24): `static`. MaintainAheadOrBehind @0x82766C40
+        // has no `this`: its only caller, RaceCarEntityModule::PlaceRaceCarOnLoad, passes the
+        // request in r3 (`addi r3, r1, var_B0` @0x822CE7CC) and the five vectors in v1..v5, and the
+        // body writes the request through r3 (`stw r11, 0(r3)` @0x82766D48 / 0x82766DA4). The PS3 twin is
+        // the same shape (DecFIGS 0x9CE620: lpRequest in r3; its thunk sub_12630 forwards one
+        // integer argument). Body in BrnAIBuzzBy.cpp.
+        static void MaintainAheadOrBehind(AIModuleIO::ResetOnTrackRequest* lpRequest,
                                    Vector3 lPosition, Vector3 lDirection, Vector3 lPlayerPosition,
                                    Vector3 lPlayerVelocity, Vector3 lPlayerDirection);
         void SetCarsAwaitingCollection(s32 liCarsAwaitingCollection);
