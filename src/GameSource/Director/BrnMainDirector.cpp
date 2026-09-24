@@ -2907,10 +2907,9 @@ namespace BrnDirector
     // touches the camera the arbitrator just produced):
     //   * UpdateDebugPrinters / DebugLog::Print / DebugLog::Update -- DebugPrinter and
     //     DebugLog are un-homed named regions.
-    //   * UpdateMoments -- BODIED 2026-09-24, but the CALL is gated (see the GATE at the call
-    //     site: two behaviours the moments pool are hollow shells). UpdateICE -- declaration-only
-    //     (the ICE take is un-homed).
-    //     ⚠️ ORDERING NOTE: the console runs those three BEFORE UpdateArbitrator, so the
+    //   * UpdateICE -- declaration-only (the ICE take is un-homed). (UpdateMoments is bodied and
+    //     CALLED since 2026-09-24 -- see the call site.)
+    //     ⚠️ ORDERING NOTE: the console runs those BEFORE UpdateArbitrator, so the
     //     arbitrator sees last frame's behaviour output rather than this frame's. That is a
     //     one-frame staleness in the behaviour-driven camera, not a wrong camera.
     //   * lines 271-823 -- ~550 lines of VMX AllVehicleData debug-render work, the camera
@@ -2945,19 +2944,19 @@ namespace BrnDirector
             // BehaviourRoadRunner::Update run at all.
             UpdateCameraBehavioursPostScene(lpIO, liPlayerCarIndex);
 
-            // ⚠️ GATE: UpdateMoments( lpIO, liPlayerCarIndex );   (0x82274348 -- the moment tick)
-            //   UpdateMoments / MomentController::UpdateAllMoments / the factory are REAL (2026-09-24,
-            //   FX-DIRECTOR); only this call is held back. Its first live run AV'd at the first crash
-            //   moment (scratch/bugtest/runs/fxvoicepool/20260924_163149): BehaviourHelper::Prepare
-            //   @0x82255F48 dispatches the pooled behaviour's vtable slot 0, and two behaviours the
-            //   moments pool are HOLLOW SHELLS here -- Camera::BehaviourBystanderCam (three competing
-            //   definitions) and Camera::BehaviourFixedCam are modelled without their DWARF
-            //   `public Behaviour` base, so their pooled objects have no vtable.
-            //   CONSEQUENCE: no moment is ever Updated; every crash is filmed by the failsafe arm on the
-            //   gameplay camera, and the reset-on-track sting never fires (camera flag bit 3 never drops).
-            //   DELETE-WHEN: BehaviourBystanderCam (vtable off_8200A5C0) and BehaviourFixedCam
-            //   (off_8200A620) are real Camera::Behaviour subclasses and a live crash run with the tick
-            //   on is clean.
+            // ⭐ @0x82250268 -- the MOMENT tick (the call at 0x82274348). It builds the frame's
+            // MomentSharedInfo and runs MomentController::UpdateAllMoments, which Updates every allocated
+            // highlight moment (tumbling, hard stop, bystander / passenger sees action, static cam, stunt
+            // ...). It is what gives a crash its highlight camera, and what drops the racing-gameplay
+            // flag the reset-on-track sting rises on. Unconditional, right after the behaviour pass, as on
+            // the console.
+            // UN-GATED 2026-09-24 (FX-DIRECTOR). The call was held back after its first live run AV'd
+            // in BehaviourHelper::Prepare: BehaviourBystanderCam and BehaviourFixedCam were hollow shells
+            // with no vtable (made real in c65dea67 / 22091bb2), the bank's passenger block was zeroed
+            // (8d9b0b73), and the stunt moment sign-extended its take id (b6b8c178). Clean with it on:
+            // scratch/bugtest/runs/fxdirector_moment_tick/20260924_181711 and
+            // scratch/bugtest/runs/fxdirector_stunt_jump/20260924_182507.
+            UpdateMoments(lpIO, liPlayerCarIndex);
             // ⚠️ GATE: if ( !<ICE-owns-frame latch> ) UpdateICE( lpIO, liPlayerCarIndex );
 
             // ⭐ The arbitrator picks and runs the state that owns this frame's camera.

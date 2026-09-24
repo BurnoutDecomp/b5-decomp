@@ -16,9 +16,10 @@ FakeMoments in the real pool), and the production MainDirector::UpdateMoments ag
 director carrying the production member names and the revision's own flag-tail enum. A revision without a
 body gets a labelled stand-in (and fails).
 Wiring: the lifecycle calls, the member layout, the Construct seeds, the factory's home and arms, the
-GROUP F stub's retirement and the per-moment vtable one-liners. The call site itself (0x82274348) is
-checked only once CALL_SITE_LIVE is True: it stays gated until the two hollow-shell behaviours the
-moments pool (BehaviourBystanderCam, BehaviourFixedCam) are real -- its first live run AV'd there.
+GROUP F stub's retirement and the per-moment vtable one-liners, and the call site itself (0x82274348):
+UpdateMoments right after UpdateCameraBehavioursPostScene, unconditionally, before UpdateArbitrator.
+(It was gated until the two hollow-shell behaviours the moments pool were real -- BehaviourBystanderCam
+c65dea67, BehaviourFixedCam 22091bb2 -- because its first live run AV'd there. Un-gated 2026-09-24.)
 
     env -u NoDefaultCurrentDirectoryInExePath python b5-decomp/tests/run_fxdirector_moments.py [--rev <b5 rev>]
 """
@@ -59,7 +60,7 @@ PLAYER_INFO_CPP = REPO / "src/GameSource/Director/Camera/SharedIO/BrnPlayerInfo.
 NUMERIC_CHECKS = 41
 # The call site goes live (and this flips to True) only with the two hollow-shell behaviours made real
 # and a clean live crash run with the tick on -- the conductor's condition for the unconditional call.
-CALL_SITE_LIVE = False
+CALL_SITE_LIVE = True
 
 STAND_IN = "/* [stand-in: no body in this revision] */"
 CONTROLLER_BODIES = (
