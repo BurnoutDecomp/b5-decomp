@@ -917,6 +917,24 @@ namespace BrnDirector
             lpTakenDownCam->SetSecondaryVehicleRefToRaceCar(mePlayerKillerIndex); // behaviour +0xE00
             lpTakenDownCam->SetUseCollisionPolicy(true);                          // behaviour +0xE28
             lpTakenDownCam->SetCollisionPolicyCanFail(false);                     // behaviour +0x28
+
+            // [diag] BRN_CRASHCAM_DIAG -- NOT IN THE X360 BINARY. The camera end of the taken-down
+            // chain (the bridge's and the director read's [takedown-cam] lines are the input end):
+            // one line per taken-down ICE camera this state STARTS, capped, carrying what it was
+            // started with -- the killer it anchors on, the shot group's size and whether the
+            // handle really holds a behaviour.
+            static s32 siTakenDownCamLinesLeft = 20;
+            if (CrashCamDiagOn() && siTakenDownCamLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+            {
+                --siTakenDownCamLinesLeft;
+                *CgsDev::Log::gpDebugPrint
+                    << "[takedown-cam] ArbStateCrashing: taken-down ICE camera started on killer slot "
+                    << static_cast<s32>(mePlayerKillerIndex)
+                    << " allocated " << (mTakenDownCam.IsAllocated() ? 1 : 0)
+                    << " takendown shots " << static_cast<s32>(lrTakendown.Num_ShotList())
+                    << " shot " << static_cast<s32>(KU_TAKENDOWN_SHOT_INDEX)
+                    << " meState " << static_cast<s32>(meState) << "\n";
+            }
         }
 
         // GameState +0xFC: how much crash is left. Under a second and the director stops cutting.
