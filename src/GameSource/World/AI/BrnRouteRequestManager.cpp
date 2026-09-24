@@ -152,12 +152,16 @@ AStarDistanceFunction RouteRequestManager::ChooseDistanceFunction(
     // The X360 self-equality NaN cascades on every Flatten output are rw::math::vpu::IsValid
     // tripwires (folded out, like BrnMathUtils.cpp); behaviour is unchanged.
 
-    // lbDrivingAway: the projection of the offset onto the heading falls short of the same
-    // "countryside" divide used for the Euclidean early-out. Reconstructed from the asm compare
-    // (both operands loaded from the SAME {200.0,0,0,0} literal buffer used just below):
-    //   KF_HACK_CONTRYSIDE_DIVIDE > (diff.x*dir.x + diff.y*dir.y)
+    // lbDrivingAway: the destination lies BEHIND the car's heading -- `0.0 > dot(diff, dir)`.
+    // ⛔ CORRECTED (FX-AINAN2, crash parity 2026-09-24): this compared against 200.0, on the note
+    // that "both operands come from the same {200.0,0,0,0} literal buffer used just below". They
+    // do not. The buffer (var_80) holds flt_82001CC0 (0.0) at the compare -- 0x82788D68 lfs /
+    // 0x82788D70 stfs -> 0x82788D88 lvx128 / 0x82788D8C vspltw -> 0x82788DA0 `vcmpgtfp. v0, 0.0,
+    // dot` (CR6 all-true, extrwi 1,24 @0x82788DB8) -- and flt_820C4318 (200.0) is stored into it
+    // only AFTER, at 0x82788DBC/0x82788DC0, for the countryside test. A NaN dot is not > (false,
+    // as below).
     const f32  lfHeadingDot  = lDiff.x * lDir.x + lDiff.y * lDir.y;
-    const bool lbDrivingAway = KF_HACK_CONTRYSIDE_DIVIDE > lfHeadingDot;
+    const bool lbDrivingAway = 0.0f > lfHeadingDot;
 
     // Both endpoints in the countryside half -> plain Euclidean.
     if (KF_HACK_CONTRYSIDE_DIVIDE > lEnd.x && KF_HACK_CONTRYSIDE_DIVIDE > lStart.x)
