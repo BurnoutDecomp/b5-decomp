@@ -14,16 +14,24 @@
 #include "GameSource/World/AI/BrnHNGTest.h"
 #undef protected
 #undef private
+#include "GameSource/Math/BrnMathUtils.h"   // BrnMath::IsNormal(Vector2) -- the :2216 assert
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 
 static unsigned gAssertions = 0, gChecks = 0, gFailures = 0;
+static const char* gpcLastAssert = "";
 namespace CgsDev {
 namespace Log { DebugPrint* gpDebugPrint = nullptr; }
 namespace Assert {
 int BeginAssert() { return 0; }
-int FireAssert(const char* lpcText, const char*, int) { ++gAssertions; std::fprintf(stderr, "assert: %s\n", lpcText); return 0; }
+int FireAssert(const char* lpcText, const char*, int)
+{
+    ++gAssertions; gpcLastAssert = lpcText;
+    std::fprintf(stderr, "assert: %s\n", lpcText);
+    return 0;
+}
 void* EndAssert() { return nullptr; }
 } }
 namespace CgsResource {
@@ -90,6 +98,20 @@ int main()
           "diagonal cross leg uses (dir.y, -dir.x) * 1.25");
 
     Check(gAssertions == 0, "valid inputs raise no assertion");
+
+    // G07-D1 leftover (FX-NANPOL 2026-09-24): the :2216 assert. 0x82790C40 `bl 0x8276AC48`
+    // (BrnMath::IsNormal(Vector2)) ; `bne` past FireAssert(r3 = 0x82019E68, r5 = 0x8A8). A non-unit
+    // heading fires it once; a NaN heading reads as normal (vcmpgtfp + cntlzw) and does not.
+    const Vector2 lLong = { 0.0f, 2.0f, 0.0f, 0.0f };
+    gSectionCalls = 0; gSectionHitOnCall = 0;
+    sManager.TestCarHNG(&lSection, 0, lPos, lLong, 4.0f);
+    Check(gAssertions == 1 && std::strcmp(gpcLastAssert, "BrnMath::IsNormal( lDirection )") == 0,
+          "a non-unit heading fires the :2216 IsNormal assert, with the console's text");
+    const unsigned luBeforeNaN = gAssertions;
+    const Vector2 lNaNDir = { std::nanf(""), 1.0f, 0.0f, 0.0f };
+    sManager.TestCarHNG(&lSection, 0, lPos, lNaNDir, 4.0f);
+    Check(gAssertions == luBeforeNaN, "a NaN heading reads as normal: no :2216 assert (IsNormal's NaN polarity)");
+
     std::printf("AIModCarHNG: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures ? 1 : 0;
 }
