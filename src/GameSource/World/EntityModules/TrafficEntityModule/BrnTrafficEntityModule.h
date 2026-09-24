@@ -937,7 +937,9 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // (UpdateNormalPhysical passes 1).
         void DriveTowardsTarget(u32 luVehicle, bool lbAllowReturnToTraffic,
                                 BrnPhysics::Vehicle::BrnTrafficDriverControls* lpControls);
-        // @0x8272C010 -- declaration only this round (see the gate in _wT3_02.cpp).
+        // @0x8272C010 (DWARF :1863). Bodied (FX-TRAFFIC3 item 1b) below DriveTowardsTarget, its
+        // caller at 0x8273E150: a car wedged past KF_MIN_TIME_FOR_STUCK (3.2 s) at its nose
+        // may start STUCK_REVERSE (UpdateStuckReverseManoeuvre @0x82719430), at both ends gives up.
         bool CheckIfPhysicalVehicleIsStuck(u32 luVehicle);
         // @0x8273D378 (594). DWARF :1394. BODIED 2026-08-29 in
         // BrnTrafficEntityModule_SympatheticCrash.cpp -- the four-state chain-crash driver

@@ -238,6 +238,9 @@ public:
     f32 GetManoeuvreTime() const;
     void AddPhysicalTime(f32 lfDelta);
     void AddManoeuvreTime(f32 lfDelta);
+    // DWARF BrnTrafficVehicle.h:484. Inlined by UpdateStuckReverseManoeuvre @0x82719430 as the
+    // `stfs 0.0, 0x60(vehicle)` at 0x8271984C (Vehicle+0x60 == mfManoeuvreTime).
+    void ResetManoeuvreTime(f32 lfTime);
     s32 GetPhysicalReason() const;
     s32 GetCurrentManoeuvrePhase() const;
     EntityId GetSympatheticCrashTarget() const;
