@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // Prepare: the "Collisions" CPU monitor
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameSource/Director/Camera/Camera.h"
@@ -16,6 +17,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <type_traits>
@@ -83,6 +85,7 @@ bool CollisionAudioDiagEnabled()
 // ---------------------------------------------------------------------------
 CollisionStateManager::CollisionStateManager()
     : BrnSound::Logic::BrnStateManager()
+    , maBinLoopupCache()          // 0x826FFB00 / 0x826FFB04: `stw 0` to both muEntryCounts
     , maSelectionHistory()
     , maPropToMaterialMappings()
     , maInputCollision()
@@ -226,14 +229,20 @@ const char* CollisionStateManager::GetTypeName() const
 // CollisionStateManager::Prepare()  @ 0x826F8B78   (vtable +0x0C)
 //
 // X360 body: a switch on the +0x24 prepare-state (cases 0/5 -> 0, 1, 2, 3, 4):
-//   state 1: SetCollisionBinList(this) (seed the per-material crash-bin lists);
-//            Content::Construct + LoadAsset the crash splicer banks
-//            (MakeHash the crash content names);
-//   state 2: if (!Content::IsLoaded(...)) return 0;
-//            mCpuMonitor = PerfMonCpu::AddMonitor("Collisions", 14, 0, 1.0, ...)
-//   state 3: if (!StateManager::PrepareStates(...)) return 0;
+//   state 1: SetCollisionBinList(global-data keys) (0x826F8BF8), then LoadAsset the
+//            collision splice bundle and the scrape patch bundle (0x826F8C18 / 0x826F8C30);
+//   state 2: wait for ResourcesAreReady (mbResourcesAreLoaded, 0x826F8C44); THEN construct
+//            each of the three Contents that has no object yet (0x826F8C64 / 0x826F8CA0 /
+//            0x826F8CDC) -- ScrapesCsis and ScrapePatchBank.abi on dword_83008664 ==
+//            MakeHash("~AemsFactory::SK_NAME~") (CRT thunk 0x82C65790), the collision splice
+//            bank on dword_83008404 / dword_83005F24 (the splicer factory / "CollisionSpliceBank");
+//            wait until all three are loaded; miCpuMonitor (+0x94) =
+//            PerfMonCpu::AddMonitor("Collisions", 14, 0, 1.0f, 0, 1) (0x826F8E00..0x826F8E20);
+//   state 3: if (!StateManager::PrepareStates(3, 7, 0)) return 0;
 //   state 4: return 1;
 //
+// The Content construction lives HERE on the console, not in ResourcesAreReady (which only
+// builds the bin lookup caches and raises mbResourcesAreLoaded).
 // ---------------------------------------------------------------------------
 bool CollisionStateManager::Prepare()
 {
@@ -263,12 +272,39 @@ bool CollisionStateManager::Prepare()
                   ResourceRegistrar::E_DATA);
         // fall through
     case E_PREPARE_UPDATING:
+    {
         mePrepareState = E_PREPARE_UPDATING;
-        if (!mbResourcesAreLoaded ||
-            !mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].IsLoaded() ||
-            !mScrapesCsisInterface.IsLoaded() ||
-            !mScrapesAemsBank.IsLoaded())
+        if (!mbResourcesAreLoaded)                                                  // 0x826F8C44
             return false;
+
+        CgsSound::Logic::Module* lpModule = GetLogicModule();                      // lwz 0x2C(r31)
+        const u32 luAemsFactory = static_cast<u32>(
+            CgsSound::Playback::AemsFactorySkName().GetValue());                   // dword_83008664
+        if (!mScrapesCsisInterface.IsCreated())                                     // 0x826F8C64
+            mScrapesCsisInterface.Construct(
+                lpModule, luAemsFactory,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("ScrapesCsis")));
+        if (!mScrapesAemsBank.IsCreated())                                          // 0x826F8CA0
+            mScrapesAemsBank.Construct(
+                lpModule, luAemsFactory,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("ScrapePatchBank.abi")));
+        if (!mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].IsCreated())  // 0x826F8CDC
+            mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].Construct(
+                lpModule,
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~")),  // dword_83008404
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("CollisionSpliceBank")));       // dword_83005F24
+
+        // 0x826F8D04..0x826F8DFC: the splice bank's state is read first and kept, then the
+        // scrape CSIS interface, the scrape patch bank, and the kept splice-bank result.
+        const bool lbSplicerBankLoaded =
+            mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].IsLoaded();
+        if (!mScrapesCsisInterface.IsLoaded() ||
+            !mScrapesAemsBank.IsLoaded() ||
+            !lbSplicerBankLoaded)
+            return false;
+
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor("Collisions", 14, 0, 1.0, 0, 1);  // 0x826F8E1C
+    }
         // fall through
     case E_PREPARE_STATES:
         mePrepareState = E_PREPARE_STATES;
@@ -285,31 +321,44 @@ bool CollisionStateManager::Prepare()
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::ResourcesAreReady() @ 0x826D3788
-// (IResourceRequester completion callback)
+// (IResourceRequester completion callback; entered on the IResourceRequester sub-object,
+// which is why the console reaches the primary with `addi r3, r31, -0x90` for
+// BuildPropToMaterialTable at 0x826D3828)
 //
+//   0x826D37A8  lbz mbResourcesAreLoaded ; bne -> skip
+//   0x826D37C0  maBinLoopupCache[0].Build<crashbinlist, crashbin>(mCrashBinList)
+//   0x826D37D0  maBinLoopupCache[1].Build<propscrashbinlist, propscrashbin>(mPropsCrashBinList)
+//   0x826D37E0  stb 1, mbResourcesAreLoaded           ; on EVERY call, outside the if
+//   0x826D37E4  if (mbBoundToProps) { GetAsset(0, CgsIDUnCompress(0xA773D7113DF454BF))
+//                                     -> mPropDataResourceHandle; BuildPropToMaterialTable(); }
+// No Content is constructed here -- Prepare state 2 does that once this flag is up.
 // ---------------------------------------------------------------------------
 void CollisionStateManager::ResourcesAreReady()
 {
     if (!mbResourcesAreLoaded)
     {
-        CgsSound::Logic::Module* lpModule = GetLogicModule();
-        const u32 luAemsFactory = static_cast<u32>(
-            CgsSound::Playback::AemsFactorySkName().GetValue());
-        const u32 luSplicerFactory = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("~SplicerFactory::SK_NAME~"));
+        maBinLoopupCache[InputCollision::E_REGULAR]
+            .Build<Attrib::Gen::crashbinlist, Attrib::Gen::crashbin>(mCrashBinList);
+        maBinLoopupCache[InputCollision::E_PROP]
+            .Build<Attrib::Gen::propscrashbinlist, Attrib::Gen::propscrashbin>(mPropsCrashBinList);
 
-        mScrapesCsisInterface.Construct(
-            lpModule, luAemsFactory,
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash("ScrapesCsis")));
-        mScrapesAemsBank.Construct(
-            lpModule, luAemsFactory,
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash("ScrapePatchBank.abi")));
-        mCollisionSplicerBank[E_COLLISION_SPLICE_BANK_COLLISION].Construct(
-            lpModule, luSplicerFactory,
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash("CollisionSpliceBank")));
-        mbResourcesAreLoaded = true;
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the two caches the bin
+        // selection reads, as built.
+        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "[collision-audio] bin caches built regular="
+                << static_cast<s32>(maBinLoopupCache[InputCollision::E_REGULAR].GetEntryCount())
+                << "/" << static_cast<s32>(mCrashBinList.mNumCrashBins())
+                << " prop="
+                << static_cast<s32>(maBinLoopupCache[InputCollision::E_PROP].GetEntryCount())
+                << "/" << static_cast<s32>(mPropsCrashBinList.mNumCrashBins()) << "\n";
+        }
     }
+    mbResourcesAreLoaded = true;
 
+    // [NOTE] the prop branch below keeps two host guards the console lacks (the handle must be
+    // NULL to re-fetch, and a NULL fetch skips the table build); see the FX-CRASHSND log.
     if (mbBoundToProps &&
         mPropDataResourceHandle == CgsResource::NULLResourceHandle)
     {
@@ -1155,23 +1204,34 @@ void CollisionStateManager::SelectCollisionBin(
     u32 luDistanceBins = 0;
     u32 luImpulseBins = 0;
 
-    for (u32 luIndex = 0; luIndex < lrList.mNumCrashBins(); ++luIndex)
+    // SelectBin<List, Bin> (@0x826A97E8 crashbin / @0x826A8828 propscrashbin): the material pair
+    // of every bin comes from THIS PIPELINE'S LOOKUP CACHE, built by ResourcesAreReady --
+    //   0x826A987C  mulli r10, mePipeline, 0x408 ; addi 0x98   == &maBinLoopupCache[mePipeline]
+    //   0x826A9894  lwz muEntryCount                            == the walk's bound
+    //   0x826A9A6C  GetEntry(i) (its "lu32Index < muEntryCount" assert, h:252)
+    //   0x826A9A94..0x826A9AE8  forward  (mat[0] & A) && (B & mat[1])
+    //                           reverse  (mat[1] & A) && (B & mat[0]), taken only on the REGULAR
+    //                           pipeline (0x826A9884 cntlzw -> the `pipeline == 0` byte)
+    // and the bin's attributes are resolved only for an entry whose materials match.
+    const BinLookupCache& lrCache = maBinLoopupCache[lrOutput.mePipeline];
+    const bool lbReverseAllowed = lrOutput.mePipeline == InputCollision::E_REGULAR;
+    for (u32 luIndex = 0; luIndex < lrCache.GetEntryCount(); ++luIndex)
     {
+        const BinLookupCache::CacheEntry& lrEntry = lrCache.GetEntry(luIndex);
+        const bool lbMaterialsForward =
+            (lrOutput.maMaterial[0] & lrEntry.mx64MaterialA) != 0 &&
+            (lrEntry.mx64MaterialB & lrOutput.maMaterial[1]) != 0;
+        const bool lbMaterialsReverse =
+            (lrOutput.maMaterial[1] & lrEntry.mx64MaterialA) != 0 &&
+            (lrEntry.mx64MaterialB & lrOutput.maMaterial[0]) != 0;
+        if (!lbMaterialsForward && !(lbMaterialsReverse && lbReverseAllowed))
+            continue;
+        ++luMaterialBins;
+
         BinType lBin(lrList.GetCrashBinCollectionKey(luIndex), nullptr);
         if (!lBin.IsValid())
             continue;
         ++luValidBins;
-
-        const bool lbMaterialsForward =
-            (lBin.mMaterialA() & lrOutput.maMaterial[0]) != 0 &&
-            (lBin.mMaterialB() & lrOutput.maMaterial[1]) != 0;
-        const bool lbMaterialsReverse =
-            lrOutput.mePipeline == InputCollision::E_REGULAR &&
-            (lBin.mMaterialA() & lrOutput.maMaterial[1]) != 0 &&
-            (lBin.mMaterialB() & lrOutput.maMaterial[0]) != 0;
-        if (!lbMaterialsForward && !lbMaterialsReverse)
-            continue;
-        ++luMaterialBins;
         if ((lBin.mCameras() & mx32CameraBinFlags) == 0)
             continue;
         ++luCameraBins;
@@ -1232,6 +1292,26 @@ void CollisionStateManager::SelectCollisionBin(
                    "leSpliceBankType < E_COLLISION_SPLICE_BANK_MAX");
         lrOutput.miBinIndex = static_cast<s8>(luIndex);
         lrOutput.mfPriority += lBin.Priority();
+
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the selection resolved
+        // through the pipeline's lookup cache -- which entry, and the pair it matched on.
+        if (CollisionAudioDiagEnabled() && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 suCacheSelectPrintCount = 0;
+            if (suCacheSelectPrintCount++ < 32u)
+            {
+                char lacLine[160];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] cache select pipeline=%d entry=%u/%u %s "
+                              "matA=0x%016llx matB=0x%016llx\n",
+                              static_cast<int>(lrOutput.mePipeline), luIndex,
+                              lrCache.GetEntryCount(),
+                              lbMaterialsForward ? "forward" : "reverse",
+                              static_cast<unsigned long long>(lrEntry.mx64MaterialA),
+                              static_cast<unsigned long long>(lrEntry.mx64MaterialB));
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
         return;
     }
 
@@ -1243,9 +1323,9 @@ void CollisionStateManager::SelectCollisionBin(
             *CgsDev::Log::gpDebugPrint
                 << "[collision-audio] reject pipeline="
                 << static_cast<s32>(lrOutput.mePipeline)
-                << " bins=" << static_cast<s32>(lrList.mNumCrashBins())
-                << " gates=" << static_cast<s32>(luValidBins)
-                << "/" << static_cast<s32>(luMaterialBins)
+                << " bins=" << static_cast<s32>(lrCache.GetEntryCount())
+                << " gates=" << static_cast<s32>(luMaterialBins)
+                << "/" << static_cast<s32>(luValidBins)
                 << "/" << static_cast<s32>(luCameraBins)
                 << "/" << static_cast<s32>(luGameModeBins)
                 << "/" << static_cast<s32>(luImpactTimeBins)

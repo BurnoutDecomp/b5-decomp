@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Sound/Module/LogicModule/BrnStateManager.h"   // BrnSound::Logic::BrnStateManager (committed base)
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h" // BrnSound::Logic::Collision::ScrapeInfo (committed; maScrapeHistory element)
+#include "GameSource/Sound/Collision/BrnBinLookupCache.h"          // BinLookupCache (maBinLoopupCache, DWARF h:787)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"       // CgsSound::Playback::Name::MakeHash (SelectBin helper)
 #include "GameShared/GameClasses/Sound/Logic/CgsContent.h"
 #include "GameSource/AttribSys/Generated/classes/crashbin.h"
@@ -235,6 +236,11 @@ private:
     template <typename BinType>
     void GetRandomSampleID(OutputCollision& lrOutput);
 
+    // DWARF BrnCollisionStateManager.h:787 (the console's own spelling). One material pre-filter
+    // per pipeline, indexed by InputCollision::EPipeline: ResourcesAreReady @0x826D3788 builds
+    // [E_REGULAR] from mCrashBinList (0x826D37C0) and [E_PROP] from mPropsCrashBinList
+    // (0x826D37D0); SelectBin reads [mePipeline] (0x826A987C `mulli 0x408` + 0x98).
+    BinLookupCache maBinLoopupCache[InputCollision::E_MAX_PIPELINES];
     CgsSound::Utils::SelectionHistory<512, u16, u16, 65536>
         maSelectionHistory[E_COLLISION_SPLICE_BANK_MAX];
     PropToMaterialMapping maPropToMaterialMappings[500];
