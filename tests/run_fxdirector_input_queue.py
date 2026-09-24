@@ -35,11 +35,12 @@ GAMESTATE_H = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 GAMESTATE_CPP = "src/GameSource/Director/DirectorModule/BrnDirectorGameState.cpp"
 CRASHMODE_CPP = "src/GameSource/Director/Arbitrator/States/BrnArbStateCrashMode.cpp"
 REGION_CPP = REPO / "src/SharedClasses/Trigger/BrnRegion.cpp"
-NUMERIC_CHECKS = 82
+NUMERIC_CHECKS = 94
 
 PROCESS_INPUT_QUEUE = "void MainDirector::ProcessInputQueue(const DirectorInputOutput* lpIO)"
 CLEAR_PRESENTATION = "static void ClearEventPresentationBlock(GameState& lrGameState)"
 IMPACT_RECORD = "struct ImpactTimeStartActionRecord"
+CAR_ADDITION_RECORD = "struct CarAdditionPresentationStartActionRecord"
 ARB_UPDATE = "void Arbitrator::Update(bool lbPaused, Camera::Camera& lrCameraInOut,"
 ARB_RESET_READ = "if (lrSharedInfo.mpGameState->mbShouldResetPlayerCameraThisFrame)"
 
@@ -155,6 +156,11 @@ def wiring(tree):
     yield ("the prologue copies input @0x7AD6 -> +0x1D1 then @0x7AD5 -> +0x1D0, after +0x1CC and before the drain "
            "(0x82237430..0x82237440)",
            0 <= team < expired < eliminated < first_event)
+    # [2026-09-24] the two global-table arms.
+    yield ("ProcessInputQueue has cases 113 / 223, both converting through the input's global race-car table "
+           "(0x822385D4 / 0x82238278)",
+           has_case(pinq, 113) and has_case(pinq, 223)
+           and flat.count("lpInput->GetGlobalRaceCarInterface()->GetActiveRaceCarIndex(") == 2)
 
 
 def numeric(tree):
@@ -176,6 +182,10 @@ def numeric(tree):
         record = definition(director, IMPACT_RECORD) + ";"
     except ValueError:
         record = "// [this revision has no ImpactTimeStartActionRecord]"
+    try:
+        record += "\n" + definition(director, CAR_ADDITION_RECORD) + ";"
+    except ValueError:
+        record += "\n// [this revision has no CarAdditionPresentationStartActionRecord]"
     if "mbCrushComboThisFrame" in header:
         accessors = ACCESSORS_NEW
     elif "miCameraModeWord" in header:

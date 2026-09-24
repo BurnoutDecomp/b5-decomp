@@ -125,6 +125,24 @@ namespace BrnDirector
         static_assert(sizeof(ImpactTimeStartActionRecord) == 8,
                       "X360 UpdateRoadRulesManager posts action 42 with size 8");
 
+        // Action 223's record, E_ACTION_CAR_ADDITION_PRESENTATION_START (DWARF 215): a TU-local
+        // mirror of the DWARF's CarAdditionPresentationStartAction (BrnGameActions.h:4208..4220),
+        // which this build's BrnGameActions.h (a GameState-side header) does not carry. The console
+        // reads the three members ProcessInputQueue needs at +0x10 / +0x14 / +0x18 (0x82238278..
+        // 0x822382A8), which the DWARF member order puts exactly there after the two CgsIDs.
+        struct CarAdditionPresentationStartActionRecord
+        {
+            CgsID               mRivalID;                  // +0x00  DWARF :4212
+            CgsID               mCarID;                    // +0x08  DWARF :4213
+            EGlobalRaceCarIndex meAddedCarGlobalIndex;     // +0x10  DWARF :4214
+            f32                 mfPresentationDuration;    // +0x14  DWARF :4217
+            bool                mbDoCamera;                // +0x18  DWARF :4220
+        };
+        static_assert(offsetof(CarAdditionPresentationStartActionRecord, meAddedCarGlobalIndex) == 0x10 &&
+                      offsetof(CarAdditionPresentationStartActionRecord, mfPresentationDuration) == 0x14 &&
+                      offsetof(CarAdditionPresentationStartActionRecord, mbDoCamera) == 0x18,
+                      "the console reads action 223's global index / duration / camera flag at +0x10 / +0x14 / +0x18");
+
         // [DIAG] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. One line per director
         // game-action arm this lane landed, printing the GameState VALUES the arm left behind
         // (not "the arm ran"), capped so a per-hit Showtime stream cannot flood the log.
@@ -2385,17 +2403,81 @@ namespace BrnDirector
                 break;
             }
 
-            // ⚠️ GATE (113, 223): both convert a GLOBAL race-car index through
-            //   RCEntityGlobalRaceCarOutputInterface::GetActiveRaceCarIndex on the director input's
-            //   global race-car interface (`addi r3, <input>, 0x10`):
-            //     113 @0x822385D4 E_ACTION_RACE_CAR_REACHED_CHECKPOINT: GetActi(input+0x10, rec+0x04)
-            //         == GetPlayerCarIndex() -> +0x1B4 mbPlayerHitCheckpointThisFrame = 1
-            //     223 @0x82238278 E_ACTION_CAR_ADDITION_PRESENTATION_START: if (rec+0x18 mbDoCamera)
-            //         { +0x152 = 1; +0x154 = rec+0x14; +0x158 = GetActi(input+0x10, rec+0x10); }
-            //   That interface is not published into this build's InputBuffer (BridgeWorldToDirector's
-            //   copy into input+0x10 is not in the tree), so the conversion would read nothing.
-            //   CONSEQUENCE: the checkpoint camera FX and the online new-car moment have no request.
-            //   DELETE-WHEN: the InputBuffer carries the global race-car interface at +0x10.
+            // ---- 113  E_ACTION_RACE_CAR_REACHED_CHECKPOINT (16 bytes) @0x822385D4 --------
+            //     ⭐ UN-GATED 2026-09-24 (crash parity FX-DIRECTOR) with the input's global race-car
+            //     table (BridgeWorldToDirector step 8 publishes it now).
+            //     lwz r4, 4(r30)                          meGlobalRaceCarIndex
+            //     addi r3, <input>, 0x10 ; bl 0x821F46C8  GlobalRaceCarInterface::GetActiveRaceCarIndex
+            //     bl InputBuffer::GetPlayerCarIndex (0x82206E48) ; cmpw ; bne -> skip
+            //     stbx r23(=1) -> 0x33994 (+0x1B4 mbPlayerHitCheckpointThisFrame)
+            // Every car's checkpoint posts one (ModeManager::TransmitAndIncrementCheckPointsReached);
+            // only the player's raises the flag. Its reader is ArbStateRoaming::ProcessPossibleFX's
+            // "Checkpoint" hook, in event types 10 / 11 / 13 / 15 / 16. Per-frame (ResetPerFrameData).
+            case 113:
+            {
+                static_assert(offsetof(BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction,
+                                       meGlobalRaceCarIndex) == 0x04,
+                              "the console reads the checkpoint action's global race-car index at +0x04");
+                const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction& lrCheckpoint =
+                    *reinterpret_cast<const BrnGameState::GameStateModuleIO::RaceCarReachedCheckpointAction*>(lpacPayload);
+                // The console converts first, then fetches the player's index (0x822385E0, 0x822385EC).
+                const EActiveRaceCarIndex leCheckpointCar =
+                    lpInput->GetGlobalRaceCarInterface()->GetActiveRaceCarIndex(lrCheckpoint.meGlobalRaceCarIndex);
+                const EActiveRaceCarIndex lePlayerCar = lpInput->GetPlayerCarIndex();
+                if (leCheckpointCar == lePlayerCar)
+                {
+                    maGameState.mbPlayerHitCheckpointThisFrame = true;                            // +0x1B4
+                }
+
+                // [diag] BRN_DIRECTOR_ACTION_DIAG -- NOT IN THE X360 BINARY. Its own budget (at most
+                // 60 lines): every car's checkpoint posts one, and a long race would otherwise spend
+                // the shared 400 before the player's.
+                {
+                    static const bool sbCheckpointDiag      = (getenv("BRN_DIRECTOR_ACTION_DIAG") != 0);
+                    static s32        siCheckpointLinesLeft = 60;
+                    if (sbCheckpointDiag && siCheckpointLinesLeft > 0 && CgsDev::Log::gpDebugPrint != 0)
+                    {
+                        --siCheckpointLinesLeft;
+                        *CgsDev::Log::gpDebugPrint
+                            << "[director-action] 113 RACE_CAR_REACHED_CHECKPOINT global "
+                            << static_cast<s32>(lrCheckpoint.meGlobalRaceCarIndex) << " -> active "
+                            << static_cast<s32>(leCheckpointCar) << " (player " << static_cast<s32>(lePlayerCar)
+                            << ") -> mbPlayerHitCheckpointThisFrame "
+                            << (maGameState.mbPlayerHitCheckpointThisFrame ? 1 : 0) << "\n";
+                    }
+                }
+                break;
+            }
+
+            // ---- 223  E_ACTION_CAR_ADDITION_PRESENTATION_START (DWARF 215) @0x82238278 --
+            //     ⭐ UN-GATED 2026-09-24 (crash parity FX-DIRECTOR), as 113.
+            //     lbz 0x18(r30) ; beq -> skip             mbDoCamera
+            //     stbx r23(=1) -> 0x33932 (+0x152 mbNewCarAdded)
+            //     lfs 0x14(r30) -> stfsx 0x33934          (+0x154 mfCarAddedPresentationTimeRemaining)
+            //     lwz r4, 0x10(r30) ; GetActiveRaceCarIndex(input + 0x10) -> stwx 0x33938 (+0x158 meAddedCarID)
+            // The online new-car presentation; MomentSharedInfo reads +0x152 / +0x158.
+            case 223:
+            {
+                const CarAdditionPresentationStartActionRecord& lrAddition =
+                    *reinterpret_cast<const CarAdditionPresentationStartActionRecord*>(lpacPayload);
+                if (lrAddition.mbDoCamera)
+                {
+                    maGameState.mbNewCarAdded                       = true;                           // +0x152
+                    maGameState.mfCarAddedPresentationTimeRemaining = lrAddition.mfPresentationDuration; // +0x154
+                    maGameState.meAddedCarID =
+                        lpInput->GetGlobalRaceCarInterface()->GetActiveRaceCarIndex(lrAddition.meAddedCarGlobalIndex); // +0x158
+                }
+
+                if (BrnDiag_DirectorActionDiagOn())
+                {
+                    *CgsDev::Log::gpDebugPrint
+                        << "[director-action] 223 CAR_ADDITION_PRESENTATION_START camera "
+                        << (lrAddition.mbDoCamera ? 1 : 0) << " -> mbNewCarAdded "
+                        << (maGameState.mbNewCarAdded ? 1 : 0) << " meAddedCarID "
+                        << static_cast<s32>(maGameState.meAddedCarID) << "\n";
+                }
+                break;
+            }
 
             default:
                 // The console's own default arm, plus the GATED cases listed in the banner.

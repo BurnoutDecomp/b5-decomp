@@ -29,6 +29,9 @@ namespace DirectorIO
     // ---- byte-offset pins (X360-recovered) --------------------------------------------------
     void InputBuffer::_AssertLayout()
     {
+        static_assert(offsetof(InputBuffer, mGlobalRaceCarInterface) == 0x0010, "mGlobalRaceCarInterface @0x0010");
+        static_assert(sizeof(BrnWorld::RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface) == 0x970,
+                      "RCEntityGlobalRaceCarOutputInterface is the console's 2416 bytes (XMemCpy li r5, 0x970 @0x823E3FE4)");
         static_assert(offsetof(InputBuffer, mUsedRaceCars)        == 0x0980, "mUsedRaceCars @0x0980");
         static_assert(offsetof(InputBuffer, mRaceCarInfo)         == 0x0990, "mRaceCarInfo @0x0990");
         static_assert(sizeof(BrnDirector::Camera::VehicleInfo)    == 1264,   "VehicleInfo stride 0x4F0");

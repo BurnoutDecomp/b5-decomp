@@ -36,6 +36,11 @@
 //   prologue 0x82237430..0x82237440  `lbz 0x7AD6` -> `stbx 0x339B1` (+0x1D1), `lbz 0x7AD5` -> `stbx 0x339B0`
 //                         (+0x1D0): a plain copy every drain, both directions (the producer is
 //                         BridgeGameStateToDirector 0x823CD4DC / 0x823CD510, run_fxdirector_end_flags.py)
+// [the global race-car table arms, 2026-09-24]
+//   case 113 @0x822385D4  lwz 4(r30) -> GetActiveRaceCarIndex(input + 0x10) == GetPlayerCarIndex() ->
+//                         stbx 1 -> 0x33994 (+0x1B4 mbPlayerHitCheckpointThisFrame; the prologue clears it, 0x82237374)
+//   case 223 @0x82238278  lbz 0x18 (mbDoCamera) != 0 -> +0x152 = 1, +0x154 = lfs 0x14,
+//                         +0x158 = GetActiveRaceCarIndex(input + 0x10, lwz 0x10)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"
 #include "GameSource/GameState/BrnGameActions.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
@@ -80,6 +85,19 @@ namespace BrnDirector
 {
 namespace DirectorIO
 {
+    // Stand-in for the input's global race-car table (RCEntityGlobalRaceCarOutputInterface @+0x10):
+    // the one accessor cases 113 / 223 call, over a 35-slot global -> active map, counting lookups.
+    struct GlobalRaceCarTableStandIn
+    {
+        EActiveRaceCarIndex maeActiveRaceCarIndices[35];
+        mutable s32         miLookups;
+        EActiveRaceCarIndex GetActiveRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
+        {
+            ++miLookups;
+            return maeActiveRaceCarIndices[leGlobalRaceCarIndex];
+        }
+    };
+
     // Stand-in for DirectorIO::InputBuffer: exactly the accessor surface ProcessInputQueue reads,
     // over the real queue / timer / vehicle-info / controller types.
     struct InputBuffer
@@ -95,6 +113,7 @@ namespace DirectorIO
         bool                            mbSimPaused;
         bool                            mbPlayerEliminated;   // @0x7AD5
         bool                            mbModeTimeExpired;    // @0x7AD6
+        GlobalRaceCarTableStandIn       mGlobalRaceCars;      // @0x0010
 
         const CgsModule::VariableEventQueue<13312, 16>* GetGameActionQueue() const { return &mGameActionQueue; }
         bool GetPlayerTakenDown() const { return mbPlayerTakenDown; }
@@ -107,6 +126,7 @@ namespace DirectorIO
         bool IsSimPaused() const { return mbSimPaused; }
         bool GetPlayerEliminated() const { return mbPlayerEliminated; }
         bool GetModeTimeExpired() const { return mbModeTimeExpired; }
+        const GlobalRaceCarTableStandIn* GetGlobalRaceCarInterface() const { return &mGlobalRaceCars; }
     };
 }
 
@@ -232,6 +252,23 @@ static WireRecord StopMode()   // action 39, 24 bytes
     return lRecord;
 }
 static WireRecord Empty() { return WireRecord(); }
+static WireRecord Checkpoint(s32 liGlobalRaceCarIndex)   // action 113, 16 bytes
+{
+    WireRecord lRecord;
+    lRecord.Word(0x00, 1);                      // meActiveRaceCarIndex -- NOT what the console reads
+    lRecord.Word(0x04, liGlobalRaceCarIndex);   // meGlobalRaceCarIndex
+    lRecord.Word(0x08, 2);                      // miCheckPointIndex
+    lRecord.Byte(0x0E, 1);                      // mbIsLocalPlayer -- NOT what the console reads
+    return lRecord;
+}
+static WireRecord CarAdditionStart(s32 liGlobalRaceCarIndex, f32 lfDuration, u8 lu8DoCamera)   // action 223, 32 bytes
+{
+    WireRecord lRecord;
+    lRecord.Word(0x10, liGlobalRaceCarIndex);   // meAddedCarGlobalIndex
+    lRecord.Float(0x14, lfDuration);            // mfPresentationDuration
+    lRecord.Byte(0x18, lu8DoCamera);            // mbDoCamera
+    return lRecord;
+}
 static WireRecord ResetPlayerCar(u8 lu8ResetCamera)   // action 0, 80 bytes
 {
     WireRecord lRecord;
@@ -624,6 +661,62 @@ int main()
     Drain();
     Check(!ModeTimeExpired(lrGameState) && !PlayerEliminated(lrGameState),
           "input @0x7AD5 back to 0 clears +0x1D0");
+
+    // 22. RACE_CAR_REACHED_CHECKPOINT (113): the record's GLOBAL index through the input's table, vs the
+    //     player's ACTIVE index. The record's own +0x00 active index / +0x0E local-player flag are junk
+    //     here on purpose: the console reads neither.
+    for (s32 liSlot = 0; liSlot < 35; ++liSlot)
+    {
+        gInput.mGlobalRaceCars.maeActiveRaceCarIndices[liSlot] = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+    }
+    gInput.mGlobalRaceCars.maeActiveRaceCarIndices[4] = E_ACTIVE_RACE_CAR_INDEX_0;               // the player
+    gInput.mGlobalRaceCars.maeActiveRaceCarIndices[9] = static_cast<EActiveRaceCarIndex>(2);     // a rival
+    gInput.mGlobalRaceCars.maeActiveRaceCarIndices[0] = static_cast<EActiveRaceCarIndex>(5);     // the raw-index trap
+    gInput.mGlobalRaceCars.miLookups = 0;
+    gInput.mePlayerCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+    Post(Checkpoint(9), 113, 16);
+    Drain();
+    Check(!lrGameState.mbPlayerHitCheckpointThisFrame, "113: a rival's checkpoint (global 9 -> active 2) raises nothing");
+    Post(Checkpoint(4), 113, 16);
+    Drain();
+    Check(lrGameState.mbPlayerHitCheckpointThisFrame,
+          "113 @0x822385D4: the player's checkpoint (global 4 -> active 0 == GetPlayerCarIndex 0) -> +0x1B4 = 1");
+    Check(gInput.mGlobalRaceCars.miLookups == 2, "113: every record's index goes through GetActiveRaceCarIndex (0x822385E0)");
+    Drain();
+    Check(!lrGameState.mbPlayerHitCheckpointThisFrame, "the prologue clears +0x1B4 (0x82237374)");
+    Post(Checkpoint(0), 113, 16);
+    Drain();
+    Check(!lrGameState.mbPlayerHitCheckpointThisFrame,
+          "113: global 0 maps to active 5 -- the converted index is compared, not the raw one");
+    Post(Checkpoint(20), 113, 16);
+    Drain();
+    Check(!lrGameState.mbPlayerHitCheckpointThisFrame, "113: a global slot with no active car (-1) raises nothing");
+    gInput.mePlayerCarIndex = static_cast<EActiveRaceCarIndex>(2);
+    Post(Checkpoint(9), 113, 16);
+    Drain();
+    Check(lrGameState.mbPlayerHitCheckpointThisFrame,
+          "113: the player is InputBuffer::GetPlayerCarIndex (0x822385EC), here 2 -- global 9 now raises +0x1B4");
+    gInput.mePlayerCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+
+    // 23. CAR_ADDITION_PRESENTATION_START (223): the online new-car presentation.
+    lrGameState.mbNewCarAdded                       = false;
+    lrGameState.mfCarAddedPresentationTimeRemaining = -7.0f;
+    lrGameState.meAddedCarID                        = static_cast<EActiveRaceCarIndex>(6);
+    Post(CarAdditionStart(9, 3.5f, 0), 223, 32);
+    Drain();
+    Check(!lrGameState.mbNewCarAdded && lrGameState.mfCarAddedPresentationTimeRemaining == -7.0f &&
+          static_cast<s32>(lrGameState.meAddedCarID) == 6,
+          "223 @0x82238278: mbDoCamera (+0x18) clear -> nothing is written");
+    Post(CarAdditionStart(9, 3.5f, 1), 223, 32);
+    Drain();
+    Check(lrGameState.mbNewCarAdded, "223: +0x152 mbNewCarAdded = 1 (stbx r23)");
+    Check(lrGameState.mfCarAddedPresentationTimeRemaining == 3.5f,
+          "223: +0x154 = the record's mfPresentationDuration (+0x14)");
+    Check(static_cast<s32>(lrGameState.meAddedCarID) == 2,
+          "223: +0x158 meAddedCarID = GetActiveRaceCarIndex(global 9) = 2, not the raw global index");
+    Drain();
+    Check(lrGameState.mbNewCarAdded && lrGameState.mfCarAddedPresentationTimeRemaining == 3.5f,
+          "223: the presentation latch is NOT per-frame (224 ends it)");
 
     Check(gAsserts == 0, "no assert fired");
 
