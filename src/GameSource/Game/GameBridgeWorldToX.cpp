@@ -43,7 +43,7 @@
 //   14. input->mbWorldWantsDebugControllerFocus = world-entity-status byte
 //   15. mDirectorBridgeSerialiser.Unlock()
 //
-// REPRODUCED HERE: 2, 3, 6, 7, 9, 10, 11, 12.   (6 restored 2026-08-02.)
+// REPRODUCED HERE: 2, 3, 6, 7, 9, 10, 11, 12, 13.   (6 restored 2026-08-02; 13 on 2026-09-24.)
 //
 // [FLAG PC bring-up] dropped rather than paraphrased, each for a NAMED reason:
 //   1/15 + the whole state-4..6 replay arm -- BrnGameModule has no mDirectorBridgeSerialiser
@@ -60,8 +60,9 @@
 //        current opaque span models it. sizeof(RCEntityGlobalRaceCarOutputInterface) is 2416
 //        on x64 too, so retyping that span to the real type reproduces the layout exactly.
 //   (6 IS NO LONGER DROPPED -- restored 2026-08-02, see the step in the body.)
-//   13 -- BrnDirector::PlayerCrashInfo has no reconstructed home, and its source (the
-//        vehicle-manager output's 64-byte crash-event ring) is inside an opaque span.
+//   (13 IS NO LONGER DROPPED -- restored 2026-09-24, crash parity FX-BRIDGES CC-6. Both of its
+//        reasons had expired: Camera::PlayerCrashInfo is homed (SharedIO/BrnPlayerInfo.h) and so is
+//        its source, VehicleManagerOutputInterface::GetRaceCarCrashEventQueue (+0x3A0).)
 //   14 -- reads world-entity-status byte +217668, inside an opaque span.
 //   (the per-car HARDEST-IMPACT leg of 10 IS NO LONGER DROPPED -- restored 2026-09-24, crash
 //        parity FX-BRIDGES CC-5. Its "not homed" reason had expired: BaseContact is homed in
@@ -135,6 +136,9 @@
 #include <cstring>   // std::memcpy
 #include <cmath>     // std::sqrt (the [cam-impact] diagnostic)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"          // ContactSpyInterface / RaceCarContactQueue / BaseContact (the hardest-impact leg)
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface::RaceCarCrashEventQueue (step 13)
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"          // VolumeInstanceId entity-word geometry (step 13)
+#include "GameSource/World/BrnEntityTypes.h"                                  // E_ENTITYTYPE_* (step 13 owner switch)
 #include "rw/math/vpu/vector3_operation.h"       // rw::math::vpu::IsValid / IsZero / operator- / MagnitudeSquared
 #include "rw/math/vpu/matrix44affine_operation.h"// rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/fpu/scalar_operation.h"        // rw::math::fpu::IsValid(float)
@@ -476,6 +480,100 @@ namespace BrnGame
                 lfBoostPercentage = lpBoost->mfBoostAmount / lpBoost->mfMaxBoost;
             }
             lpDirectorInput->SetPlayerBoostPercentage(lfBoostPercentage);
+        }
+
+        // ---- step 13: the player's crash record (X360 0x823E4DF0..0x823E4FE4) ----------------
+        // DWARF GameBridgeWorldToX.cpp:216..:231 (lPlayerCrashInfo / luLoop / lpCrashEventQueue /
+        // luNumCrashEvents / lCrashEvent). The director reads it through ArbStateSharedInfo::
+        // mpPlayerCrashInfo: mbWrecked picks the "Wrecked" crash treatment and the wrecked exit
+        // (ArbStateCrashing), mbHitWater the drowning fade (Arbitrator), the two hard-stop flags
+        // the crash moment selector.
+        //   Construct             0x823E4DF4..0x823E4E20  zero vectors, mfSpeedMPH = f31 (0.0), bools
+        //   mbWrecked             0x823E4E08 / 0x823E4E14 `lbz 0x28E0` = IsPlayerWrecked()
+        //   mbHitWater            0x823E4E44..0x823E4E94  HasCrashedIntoWater(GetPlayerActiveRaceCarIndex())
+        //                         (the inlined getter's line-980 assert, then `lbz 0x2810(iface + idx)`)
+        //   crash queue           GetVehicleManagerOutputInterface() + 0x3A0, length `lwz 8`, stride 0x40
+        //   match                 `ld 0 ; srdi 32` -- the entity word of mRaceCarVolumeInstanceID --
+        //                         against GetRaceCarState(player)->mEntityId (`lwz 0x3C8`), UNSIGNED loop
+        //   copy                  mfSpeedMPH +0x34, mCollisionNormal +0x10, mContactPoint +0x20: the LAST
+        //                         matching event wins; the two flags only ever set, so they ACCUMULATE
+        //   owner                 `lbz 8` = the high byte of mCrasherEntityID: 0 (WORLD) -> hard stop vs
+        //                         wall; 1 (RACECAR) or 2 (TRAFFIC_VEHICLE) -> hard stop vs AI; else none
+        //   publish               0x823E4FC4..0x823E4FE4, 6 x ld/std into input + 0x78E0
+        {
+            BrnDirector::Camera::PlayerCrashInfo lPlayerCrashInfo;
+            lPlayerCrashInfo.Construct();
+            lPlayerCrashInfo.mbWrecked  = lpActiveRaceCars->IsPlayerWrecked();
+            lPlayerCrashInfo.mbHitWater =
+                lpActiveRaceCars->HasCrashedIntoWater(lpActiveRaceCars->GetPlayerActiveRaceCarIndex());
+
+            const BrnPhysics::Vehicle::VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpCrashEventQueue =
+                lpWorldOutput->GetVehicleManagerOutputInterface()->GetRaceCarCrashEventQueue();
+            const u32 luNumCrashEvents = static_cast<u32>(lpCrashEventQueue->GetLength());
+            for (u32 luLoop = 0; luLoop < luNumCrashEvents; ++luLoop)
+            {
+                const BrnPhysics::Vehicle::RaceCarCrashEvent& lCrashEvent =
+                    lpCrashEventQueue->GetEvent(static_cast<s32>(luLoop));
+
+                // VolumeInstanceId::GetEntityId (DWARF call list): the HIGH dword of the 64-bit id.
+                const u32 luCrashedEntityId = static_cast<u32>(
+                    lCrashEvent.mRaceCarVolumeInstanceID.muId
+                    >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
+                if (luCrashedEntityId == lpActiveRaceCars->GetRaceCarState(lePlayerIndex)->mEntityId.muValue)
+                {
+                    lPlayerCrashInfo.mfSpeedMPH        = lCrashEvent.mfSpeedMPH;
+                    lPlayerCrashInfo.mvCollisionNormal = lCrashEvent.mCollisionNormal;
+                    lPlayerCrashInfo.mvContactPoint    = lCrashEvent.mContactPoint;
+
+                    // The owner byte of the crasher's entity word (bits 24..31).
+                    switch (lCrashEvent.mCrasherEntityID.muValue >> CgsSceneManager::VolumeInstanceId::KU_OWNER_BASE)
+                    {
+                    case BrnWorld::E_ENTITYTYPE_WORLD:
+                        lPlayerCrashInfo.mbHardstopVsWall = true;
+                        break;
+                    case BrnWorld::E_ENTITYTYPE_RACECAR:
+                    case BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE:
+                        lPlayerCrashInfo.mbHardStopVsAI = true;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
+
+            lpDirectorInput->SetPlayerCrashInfo(&lPlayerCrashInfo);
+
+            // [DIAG] NOT IN THE X360 BINARY -- BRN_CRASHCAM_DIAG (the crash-camera gate). The
+            // record as published, on every CHANGE of its four flags or of a non-zero speed (at
+            // most 60 lines): the witness that ArbStateCrashing / the moment selector / the water
+            // fade now receive what the world says instead of a zeroed slot.
+            {
+                static const bool sbCrashInfoDiag = (getenv("BRN_CRASHCAM_DIAG") != 0);
+                static s32 siLinesLeft = 60;
+                static u32 suLastKey = 0;
+                const u32 luKey = (lPlayerCrashInfo.mbHardstopVsWall ? 1u : 0u)
+                                | (lPlayerCrashInfo.mbHardStopVsAI   ? 2u : 0u)
+                                | (lPlayerCrashInfo.mbWrecked        ? 4u : 0u)
+                                | (lPlayerCrashInfo.mbHitWater       ? 8u : 0u)
+                                | (lPlayerCrashInfo.mfSpeedMPH != 0.0f ? 16u : 0u);
+                if (sbCrashInfoDiag && luKey != suLastKey && siLinesLeft > 0
+                    && CgsDev::Log::gpDebugPrint != 0)
+                {
+                    --siLinesLeft;
+                    *CgsDev::Log::gpDebugPrint
+                        << "[crash-info] player slot " << static_cast<s32>(lePlayerIndex)
+                        << " wrecked " << (lPlayerCrashInfo.mbWrecked ? 1 : 0)
+                        << " hitWater " << (lPlayerCrashInfo.mbHitWater ? 1 : 0)
+                        << " hardstopVsWall " << (lPlayerCrashInfo.mbHardstopVsWall ? 1 : 0)
+                        << " hardStopVsAI " << (lPlayerCrashInfo.mbHardStopVsAI ? 1 : 0)
+                        << " speedMPH " << lPlayerCrashInfo.mfSpeedMPH
+                        << " normal (" << lPlayerCrashInfo.mvCollisionNormal.x << ", "
+                        << lPlayerCrashInfo.mvCollisionNormal.y << ", "
+                        << lPlayerCrashInfo.mvCollisionNormal.z << ")"
+                        << " crash events " << static_cast<s32>(luNumCrashEvents) << "\n";
+                }
+                suLastKey = luKey;
+            }
         }
     }
 
