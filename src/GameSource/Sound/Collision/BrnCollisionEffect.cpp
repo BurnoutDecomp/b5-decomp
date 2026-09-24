@@ -11,6 +11,7 @@
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <cstdlib>
 
 // =============================================================================
@@ -48,14 +49,16 @@ namespace Collision
 // The leading vptr stores (+0/+4) and the base-region zero stores are the
 // compiler-emitted base sub-object construction (BrnEffectObject's own ctor chain),
 // produced implicitly here by the base default ctor. This body sets the LEAF
-// members the X360 explicitly initialises. The +0x34 slot (mpCollisionDMixIo) is
-// nulled by the X360 (stw 0,0x34) -- see header FLAG on the DWARF name divergence.
+// members the X360 explicitly initialises. The EffectBase sub-object sits at +4 (the
+// off_820B135C vtable holds its virtuals), so the +0x34 store is EffectBase::mpDynamicMixIo
+// (EffectBase+0x30, base region) and mpCollisionControl is the +0x38 store (EffectBase+0x34,
+// AttachController @0x8268812C) -- FX-VOICEPOOL 2026-09-24; see GetGain.
 // ---------------------------------------------------------------------------
 CollisionEffect::CollisionEffect()
-    : mpCollisionControl(nullptr)         // stw 0, 0x34
-    , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE) // +0x38 zero-region
-    , mbFirstUpdate(false)                // +0x3C zero-region
-    , mbUseAzimuth(false)                 // +0x3C zero-region
+    : mpCollisionControl(nullptr)         // stw 0, 0x38
+    , mePrepareState(E_PREPARE_STATE_CONSTRUCT_VOICE) // stw 0, 0x3C
+    , mbFirstUpdate(false)                // +0x40: the X360 ctor leaves it; Attach sets it
+    , mbUseAzimuth(false)                 // +0x41: the X360 ctor leaves it; Attach sets it
     , mfIntensity(0.0f)                   // stfs 0.0, 0x50
     , meNicotineVolumeSlider(5)           // stw 5, 0x54
     , meNicotinePitchSlider(5)            // stw 5, 0x58
@@ -304,6 +307,27 @@ void CollisionEffect::ProcessUpdate()
 
     if (!mCrashVoice.IsPlaying())
     {
+        // [DIAG] NOT IN THE X360 BINARY (BRN_COLLISION_AUDIO_DIAG): the crash voice ended (its
+        // splice ran every sample to the end of its envelope) -- the control releases the state
+        // on its next UpdateParams. pitch / gain are this frame's GetPitch() / GetGain().
+        if (std::getenv("BRN_COLLISION_AUDIO_DIAG") != nullptr && CgsDev::Log::gpDebugPrint)
+        {
+            static u32 suFinishedPrintCount = 0;
+            const CollisionState* lpState = mpCollisionControl->GetCollisionState();
+            if (lpState && suFinishedPrintCount++ < 256u)
+            {
+                char lacLine[192];
+                std::snprintf(lacLine, sizeof(lacLine),
+                              "[collision-audio] voice finished sample=%d bin=%d attached=%.3f now=%.3f "
+                              "pitch=%g gain=%g\n",
+                              lpState->GetOutputCollision().miSampleID,
+                              static_cast<s32>(lpState->GetOutputCollision().miBinIndex),
+                              static_cast<double>(lpState->GetTimeWeAttached()),
+                              static_cast<double>(lpState->GetCurrentTime()),
+                              static_cast<double>(lfPitch), static_cast<double>(lfGain));
+                *CgsDev::Log::gpDebugPrint << lacLine;
+            }
+        }
         mpCollisionControl->SetCollisionFinished(true);
         return;
     }
@@ -335,15 +359,15 @@ bool CollisionEffect::Detach()
 // ---------------------------------------------------------------------------
 // GetGain  @ 0x82688138
 //
-//   lwz  r3, 0x34(this)       ; r3 = mpCollisionDMixIo
+//   lwz  r3, 0x34(this)       ; r3 = EffectBase::mpDynamicMixIo -- the EFFECT's own endpoint
 //   lwz  r4, 0x54(this)       ; r4 = meNicotineVolumeSlider
 //   cmplwi r3, 0
-//   beq  zero                 ; no dmix handle -> gain contribution 0
+//   beq  zero                 ; no endpoint -> gain contribution 0
 //     li   r5, 0              ; preset = 0  (DMX_VOL)
 //     bl   Nicotine::DMixIO::GetDMixOutput(r3, r4, 0)
 //     extsw r11, r3           ; SIGN-extend the s32 result
 //     fcfid / frsp            ; (s64)->f64->f32
-//     fmuls f0, f12, flt_820AA8F8   ; * 0.000030518509  (== 1/32768, the Q15 scale)
+//     fmuls f0, f12, flt_820AA8F8   ; * 3.0518509e-05 (0x38000100, the Q15 scale)
 //     b    tail
 //   zero:
 //     lfs  f0, flt_82001CC0   ; f0 = 0.0
@@ -352,21 +376,29 @@ bool CollisionEffect::Detach()
 //   fmuls f1, f13, f0         ; return mfVolume * scaledMixerOutput
 //   blr
 //
-// Reads the latched dynamic-mixer output for the volume slider, converts the signed
+// Reads the effect's dynamic-mixer output for the volume slider, converts the signed
 // Q15 mixer value to a normalised f32, and scales it by the size-specific volume.
-// When no dmix handle is connected the mixer contribution is 0.0f (so the gain is 0).
-// FLAG: DWARF declares GetGain() const; the +0x34 slot is the latched
-// Nicotine::DMixIO (see header FLAG on the DWARF mpCollisionControl name).
+// When the effect has no endpoint the mixer contribution is 0.0f (so the gain is 0).
+//
+// WHOSE ENDPOINT (FX-VOICEPOOL, 2026-09-24). `this` here is the primary object (ProcessUpdate
+// @0x826BCFE0 calls it with `addi r31,r30,-4`); CollisionEffect's EffectBase sub-object sits at
+// +4 (its vtable off_820B135C, stored by the ctor at 0x826AFD8C, holds AttachController,
+// Attach, ProcessUpdate and Detach), so +0x34 is EffectBase+0x30 = mpDynamicMixIo, the
+// endpoint DynamicMixer::ConnectDMixIO gives the EFFECT (SetDMixIOPtr @0x826808D8
+// `stw r31,0x30(this)`). The control lives one word further (EffectBase+0x34 = +0x38,
+// AttachController @0x8268812C). The PC read the CONTROL's endpoint here, which the mix map
+// never connects: gain and pitch were 0 on every crash voice -- silent, and at pitch 0 the
+// splice clock never reached the end of a sample, so no crash voice ever finished and the
+// seven collision states filled after seven impacts.
 // ---------------------------------------------------------------------------
 f32 CollisionEffect::GetGain() const
 {
-    // 0.000030518509f == flt_820AA8F8 (the Q15 -> [0,1) scale, 1/32768).
+    // flt_820AA8F8 = 3.0518509e-05 (0x38000100): the Q15 -> [0,1] scale.
     const f32 KF_Q15_TO_NORMALISED = 0.000030518509f;
 
     f32 lfMixerOutput;
-    Nicotine::DMixIO* lpDmix =
-        mpCollisionControl ? mpCollisionControl->GetDMixIOPtr() : nullptr;
-    if (lpDmix != nullptr) // lwz r3,0x34; cmplwi; beq
+    Nicotine::DMixIO* lpDmix = GetDMixIOPtr();   // lwz r3,0x34(this): the effect's own endpoint
+    if (lpDmix != nullptr) // cmplwi; beq
     {
         // GetDMixOutput(slot, preset): preset 0 == DMX_VOL. extsw -> signed s32.
         const s32 liOutput =
@@ -381,18 +413,39 @@ f32 CollisionEffect::GetGain() const
     return mSizeSettings.mfVolume * lfMixerOutput; // fmuls f1, f13, f0
 }
 
+// ---------------------------------------------------------------------------
+// GetPitch  @ 0x826881B0
+//
+//   lwz  r3, 0x34(r31)        ; EffectBase::mpDynamicMixIo -- the effect's own endpoint (see GetGain)
+//   lwz  r4, 0x58(r31)        ; meNicotinePitchSlider
+//   lfs  f31, flt_82001CC0    ; 0.0
+//   cmplwi r3, 0 ; beq none
+//     li r5, 1 ; bl Nicotine::DMixIO::GetDMixOutput(r3, r4, DMX_PITCH)
+//     extsw / fcfid / frsp ; fmuls f13, f13, flt_820AA8F4   ; * 0.000244140625 (Q12)
+//   none: f13 = f31 (0.0)
+//   lfs  f0, 0x60(r31)        ; mSizeSettings.mfPitch
+//   fcmpu f0, f31 ; bne keep  ; a size pitch of 0.0 ...
+//   lfs  f0, flt_82001C98     ; ... is taken as 1.0
+//   keep: fmuls f1, f0, f13
+// ---------------------------------------------------------------------------
 f32 CollisionEffect::GetPitch() const
 {
-    Nicotine::DMixIO* lpDmix =
-        mpCollisionControl ? mpCollisionControl->GetDMixIOPtr() : nullptr;
-    f32 lfMixerOutput = 0.0f;
+    // flt_820AA8F4 = 0.000244140625 (0x39800000): the Q12 pitch-multiplier scale.
+    const f32 KF_Q12_TO_PITCH = 0.000244140625f;
+
+    Nicotine::DMixIO* lpDmix = GetDMixIOPtr();   // lwz r3,0x34(r31): the effect's own endpoint
+    f32 lfMixerOutput = 0.0f;                    // flt_82001CC0
     if (lpDmix)
     {
         lfMixerOutput = static_cast<f32>(lpDmix->GetDMixOutput(
             meNicotinePitchSlider, Nicotine::DMixIO::DMX_PITCH)) *
-            0.00024414062f;
+            KF_Q12_TO_PITCH;
     }
-    return mSizeSettings.mfPitch * lfMixerOutput;
+
+    f32 lfSizePitch = mSizeSettings.mfPitch;     // lfs f0,0x60(r31)
+    if (lfSizePitch == 0.0f)                     // fcmpu f0,f31 ; bne (NaN keeps its value)
+        lfSizePitch = 1.0f;                      // flt_82001C98
+    return lfSizePitch * lfMixerOutput;
 }
 
 static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::EffectObject>* const
