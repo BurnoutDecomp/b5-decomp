@@ -93,6 +93,26 @@ struct PassbyState : public BrnSound::Logic::BrnState
     // storable in ClassTypeInfo<State>::mpfnCreateObject.
     static CgsSound::Logic::State* CreateObject(u32 auType);
 
+    // BrnPassbyState.cpp:73 @ 0x826D4A98. Take a copy of the posted record, restart the
+    // time-out, then the base State::Attach. Bodied in BrnPassbyState.cpp.
+    virtual void Attach(void* apvAttachment) override;
+
+    // BrnPassbyState.cpp:94 @ 0x826D4B30. The base update, then the time-out: an attached
+    // state detaches itself once it has held a pass-by for more than KF_TIMEOUT_TIMER.
+    virtual void UpdateParams(f32 afDeltaTime) override;
+
+    // (BrnPassbyState.cpp:118 declares a Detach override, but its body is identical-code-folded
+    // with State::Detach -- slot +0x18 of this class's vtable off_820B2B18 IS 0x826C4C20, the
+    // same entry State's own vtable off_820AE1F4 holds -- so the base is not re-declared here.)
+
+    // BrnPassbyState.h:81 / :87 / :93 (DWARF) -- header inlines.
+    PassbyStateManager* GetPassbyStateManager()
+    {
+        return static_cast<PassbyStateManager*>(GetStateManager());
+    }
+    const PassbyStateManager::Passby& GetPassbyData() const { return mPassbyData; }
+    f32 GetTimeOutTimer() const { return mfTimeOutTimer; }
+
 private:
     // DWARF BrnPassbyState.h:73 `PassbyStateManager::Passby mPassbyData`. The
     // passby record this state is servicing. Console offset +96 (16-aligned); the

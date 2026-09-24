@@ -3,6 +3,13 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name::MakeHash
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] sink
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // the "Passbys" CPU monitor
+#include "GameShared/GameClasses/Module/CgsEventQueue.h"                    // EventQueue<PropUpdateNotification, 200>
+#include "GameShared/GameClasses/Sound/Logic/CgsMicrophone.h"               // the camera microphone (UpdateDynamicPropBys)
+#include "GameShared/GameClasses/Sound/Logic/CgsState.h"                    // State::Attach (UpdateParams' dispatch)
+#include "GameSource/Physics/PropManager/SharedIO/BrnPropEvents.h"          // BrnPhysics::Props::PropUpdateNotification
+#include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 
@@ -176,14 +183,17 @@ PassbyStateManager::Passby::Passby(
 }
 
 // =============================================================================
-// State-manager surface grown in this slice (the RTTI/factory + boot virtuals so
-// PassbyStateManager is a CONCRETE, registrable leaf the StateManager factory
-// CreateStateMan @ 0x826A5B60 can construct). Sources:
-//   PassbyStateManager::CreateObject        @ 0x82702030  (real)
-//   PassbyStateManager::Prepare             @ 0x826F9748  (stub -- domain cascade)
-//   PassbyStateManager::GetTypeName         @ 0x82688FF8  (real)
-//   PassbyStateManager::ResourcesAreReady   @ 0x826D4BA8  (minimal -- domain cascade)
-//   PassbyStateManager::Release             @ 0x826D4CC8  (stub -- Content cascade)
+// State-manager surface (the RTTI/factory + the boot and per-frame virtuals).
+// Sources:
+//   PassbyStateManager::CreateObject        @ 0x82702030
+//   PassbyStateManager::Prepare             @ 0x826F9748
+//   PassbyStateManager::GetTypeName         @ 0x82688FF8
+//   PassbyStateManager::ResourcesAreReady   @ 0x826D4BA8  (the bank; the assert-only
+//                                                          passbybin walk is omitted)
+//   PassbyStateManager::Release             @ 0x826D4CC8
+//   PassbyStateManager::UpdateParams        @ 0x826D4D00
+//   PassbyStateManager::UpdateDynamicPropBys @ 0x826A0DD0
+//   DynamicPropByCache::Insert              @ 0x826975C8
 //   ctor                                    @ 0x826FFED8  (JSON ABSENT -- minimal)
 // GetTypeInfo / GetStaticTypeInfo / GetResourceRegistrar were NOT individually
 // exported; reconstructed from the established in-tree RTTI pattern
@@ -333,99 +343,142 @@ const char* PassbyStateManager::GetTypeName() const
 // ---------------------------------------------------------------------------
 // PassbyStateManager::Prepare()  @ 0x826F9748   (vtable +0x0C)
 //
-// X360 body: a switch on the +0x24 prepare-state (cases 0/5 -> 0, 1, 2, 3, 4):
-//   state 1: LoadAsset(this+0x90, "sound\\splicer\\PassbyAsset.bundle", 0, 0)
-//   state 2: if (!Content::IsLoaded(this+0x224)) return 0;
-//            mCpuMonitor = PerfMonCpu::AddMonitor("Passbys", 14, 0, 1.0, ...)
-//   state 3: if (!StateManager::PrepareStates(this, 1, 8, 0)) return 0;
-//   state 4: return 1;
-//
-// FLAG (stub -- domain cascade): the real body cascades into
-//   * BrnSound::Logic::IResourceRequester::LoadAsset (the streaming-resource broker),
-//   * CgsSound::Logic::Content::IsLoaded (the splicer-bank content object),
-//   * CgsDev::PerfMonCpu::AddMonitor (the CPU perf monitor), and
-//   * CgsSound::Logic::StateManager::PrepareStates @ 0x826EAD30 (the State machine,
-//     itself a declared-only stub in the foundation).
-// None of these are reconstructed in this slice. PrepareStateManagersOnBoot
-// (0x826837F8) only needs Prepare() to return true to advance boot, so this stub
-// returns true (boot-ready) WITHOUT running the asset load / state bring-up. NOT an
-// X360-faithful body -- the prepare state machine is deferred. X360 addr above.
+//   switch (mePrepareState) {                               ; the 6-entry jump table
+//     case 0: case 5: mePrepareState = 0;                   // fall through
+//     case 1: mePrepareState = 1;
+//             LoadAsset("sound\\splicer\\PassbyAsset.bundle", 0, E_DATA);   ; r5 = r6 = 0
+//             // fall through
+//     case 2: mePrepareState = 2;
+//             if (!mSplicerBank.IsLoaded()) return false;   ; Content::IsLoaded(this+0x224)
+//             miCpuMonitor = PerfMonCpu::AddMonitor("Passbys", 14, 0, 1.0f, 1);   ; stw 0x94
+//             // fall through
+//     case 3: mePrepareState = 3;
+//             if (!PrepareStates(1, 8, 0)) return false;    ; KU_NUMBER_OF_PASSBY_STATES
+//             // fall through
+//     case 4: mePrepareState = 4; return true;
+//     default: return false;
+//   }
+// ResourcesAreReady (below) constructs mSplicerBank once the bundle resolves, which is what
+// state 2 waits on. The eight states are created by PrepareStates through PassbyState's
+// registered descriptor, each with one PassbyEffect (ObjectID 0x40000) and its Passby3DControl
+// (BrnPassbyState.cpp / BrnPassbyEffect.cpp).
+// (Until FX-TAILS-B item 6 this returned true at once: with no states and no effect bodies the
+// posted pass-bys were queued and dropped every frame -- nothing was ever voiced.)
 // ---------------------------------------------------------------------------
 bool PassbyStateManager::Prepare()
 {
-    // ⛔ THE REAL BODY IS WRITTEN AND VERIFIED, AND IS DELIBERATELY NOT ENABLED.
-    // It is preserved verbatim in the block comment below. Enabling it TODAY is a
-    // REGRESSION, measured on run scratch/flow_run/soundD_passby_C (2026-09-15):
-    // the console's PrepareStates(mask 1, 8 instances, state 0) reached
-    // CgsSound::Logic::StateManager::CreateState and fired
-    //   [ASSERT] Failed to find State Object  (CgsStateManager.cpp:283)  x8
-    //   [ASSERT] lpState                      (CgsStateManager.cpp:217)  x8
-    // -- asserts=16 where every other run this session was asserts=0 -- because
-    // TWO things below this manager do not exist yet:
-    //   (1) BrnPassbyState.cpp and BrnPassbyEffect.cpp are NOT MOUNTED in
-    //       tools/build/build_game_exe.bat (only BrnPassbyStateManager.cpp is), so
-    //       neither leaf's static-init registration is even in the exe;
-    //   (2) BrnSound::Logic::Passby::PassbyEffect is a bare two-member shell -- no
-    //       ObjectID, no GetStaticTypeInfo, no AddToClassTypeInfoArray, no Attach /
-    //       UpdateParams / Notify -- so even with the states created, each state's
-    //       CreateSFXObjs(mask 1) would fire "Failed to find Effect Object" once per
-    //       state per prepare poll: an assert storm that starves the harness.
-    // The prepare chain ITSELF is proven to work: with the body enabled the run
-    // logged LoadAsset issued -> ResourcesAreReady -> "splicer bank LOADED" ->
-    // PrepareStates -> FINISHED, i.e. PassbyAsset.bundle really does resolve through
-    // the registrar. Re-enable this body in the SAME commit that lands the two mount
-    // lines + PassbyEffect's RTTI/Attach.
-    //
-    // X360 body @0x826F9748 (verbatim):
-    //   switch ( mePrepareState ) {
-    //     case 0: case 5: mePrepareState = 0;                 // fall through
-    //     case 1: mePrepareState = 1;
-    //             LoadAsset("sound\\splicer\\PassbyAsset.bundle", 0, E_DATA);
-    //             // fall through
-    //     case 2: mePrepareState = 2;
-    //             if ( !mSplicerBank.IsLoaded() ) return false;
-    //             miCpuMonitor = PerfMonCpu::AddMonitor("Passbys", 14, 0, 1.0, .., 1);
-    //             // fall through
-    //     case 3: mePrepareState = 3;
-    //             if ( !PrepareStates(1, 8, 0) ) return false;
-    //             // fall through
-    //     case 4: mePrepareState = 4; return true;
-    //     default: return false;
-    //   }
-    return true;
+    switch( GetPrepareState() )
+    {
+    case E_PREPARE_NONE:
+    case E_PREPARE_RELEASED:
+        mePrepareState = E_PREPARE_NONE;
+        // fall through
+    case E_PREPARE_BEGIN:
+        mePrepareState = E_PREPARE_BEGIN;
+        LoadAsset( "sound\\splicer\\PassbyAsset.bundle", nullptr, ResourceRegistrar::E_DATA );
+        PassbySoundDiag( "[passby-sound] Prepare: LoadAsset issued for "
+                         "sound\\splicer\\PassbyAsset.bundle\n" );
+        // fall through
+    case E_PREPARE_UPDATING:
+        mePrepareState = E_PREPARE_UPDATING;
+        if( !mSplicerBank.IsLoaded() )
+        {
+            PassbySoundDiagWaiting( mSplicerBank.IsCreated() );
+            return false;
+        }
+        miCpuMonitor = CgsDev::PerfMonCpu::AddMonitor(
+            "Passbys", static_cast<CgsDev::PerfMonCpuPage>( 14 ), false, 1.0f, true );
+        PassbySoundDiag( "[passby-sound] Prepare: splicer bank LOADED\n" );
+        // fall through
+    case E_PREPARE_STATES:
+        mePrepareState = E_PREPARE_STATES;
+        if( !PrepareStates( 1, KU_NUMBER_OF_PASSBY_STATES, 0 ) )
+            return false;
+        PassbySoundDiag( "[passby-sound] Prepare: FINISHED (8 states prepared)\n" );
+        // fall through
+    case E_PREPARE_FINISHED:
+        mePrepareState = E_PREPARE_FINISHED;
+        return true;
+    default:
+        return false;
+    }
 }
 
 // ---------------------------------------------------------------------------
 // PassbyStateManager::Release()  @ 0x826D4CC8
 //
-//   if ( *(this+0x228) ) Content::Destruct(this+0x224);   // drop the splicer bank
+//   if ( *(this+0x228) ) Content::Destruct(this+0x224);   // the splicer bank, if constructed
 //   return 1;
-//
-// FLAG (stub -- Content cascade): the real body conditionally destructs the held
-// splicer-bank CgsSound::Logic::Content (the +0x224 sub-object, guarded by the
-// +0x228 "constructed" flag). CgsSound::Logic::Content is modelled here only as the
-// opaque ContentPlaceholder (mSplicerBank) -- the committed CgsContent.h does not
-// compile under this gate (see the header's GetSplicerBank FLAG) -- so the
-// Content::Destruct call cannot be reproduced faithfully. Returns true (the X360
-// return) without the teardown; the held content is never constructed by this
-// slice's Prepare stub, so there is nothing to destruct. Deferred with Content.
+// (+0x228 is mSplicerBank's handle word -- Content::IsCreated().)
 // ---------------------------------------------------------------------------
 bool PassbyStateManager::Release()
 {
+    if( mSplicerBank.IsCreated() )
+        mSplicerBank.Destruct();
     return true;
 }
 
 // ---------------------------------------------------------------------------
-// PassbyStateManager::UpdateParams(f32)  (vtable per-frame param update)
+// PassbyStateManager::UpdateParams(f32)  @ 0x826D4D00  (vtable +0x18)
 //
-// FLAG (stub -- domain cascade): the per-frame parameter update collects posted
-// passbys + drives the 3D passby voices (the deep Passby voice/effect graph). Not
-// in this slice's reconstructed surface and not needed for boot. No-op stub.
-// (The committed sibling AIVehicleStateManager::UpdateParams @ 0x826CA578 shows the
-// scale of this domain.)
+//   PerfMonCpu::StartMonitor(miCpuMonitor)                   ; +0x94
+//   StateManager::UpdateParams(dt)                           ; 0x8268D800 -- the states
+//   UpdateDynamicPropBys(dt)
+//   lpInput = module->mpBrnLogicInputBuffer                  ; asserts "mpBrnLogicInputBuffer"
+//                                                            ;   (h:432) and "lpInput" (cpp:201)
+//   IsPlayerCarActive() on the vehicle interface (@0x82694D30, inlined: the index < 8 tripwire,
+//   -1 -> false, else mbIsPlayerCarActive @+0x2860):
+//       for each posted pass-by (+0xA0, stride 0x30, count +0x220):
+//           lpState = GetFreeState(&posted[i])               ; vt +0x14
+//           none -> ["[AWWWOOGA AWWWOOGA] No more free pass-by states" on the
+//                    KI_SPEW_PASSBY_STATE_INFO dev switch] ; break
+//           lpState->Attach(&posted[i])                      ; vt +0xC
+//   muPostedPassbyCount = 0                                  ; every frame, dispatched or not
+//   [the KI_SPEW_PASSBY_STATE_INFO state dump -- dev switch, not reproduced]
+//   PerfMonCpu::StopMonitor(miCpuMonitor)
 // ---------------------------------------------------------------------------
-void PassbyStateManager::UpdateParams( f32 /*lfTimeStep*/ )
+void PassbyStateManager::UpdateParams( f32 lfTimeStep )
 {
+    CgsDev::PerfMonCpu::StartMonitor( miCpuMonitor );
+    CgsSound::Logic::StateManager::UpdateParams( lfTimeStep );
+    UpdateDynamicPropBys( lfTimeStep );
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
+    const BrnSound::Module::Io::LogicInputBuffer* lpInput = lpModule->GetBrnInputStructure();
+    CGS_ASSERT( lpInput != 0, "lpInput" );
+    u32 luAttached = 0;
+    if( lpInput->GetVehicleInterface()->IsPlayerCarActive() )
+    {
+        for( u32 luPassby = 0; luPassby < muPostedPassbyCount; ++luPassby )
+        {
+            CgsSound::Logic::State* lpState = GetFreeState( &maPostedPassbys[luPassby] );
+            if( !lpState )
+                break;
+            lpState->Attach( &maPostedPassbys[luPassby] );
+            ++luAttached;
+        }
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY (BRN_PASSBY_SOUND_DIAG): each frame that had posts --
+    // how many were handed to a state. Capped at 64 lines.
+    if( muPostedPassbyCount != 0 && PassbySoundDiagEnabled() )
+    {
+        static u32 suPrintCount = 0;
+        if( suPrintCount++ < 64u )
+        {
+            char lacMsg[160];
+            std::snprintf( lacMsg, sizeof( lacMsg ),
+                           "[passby-sound] dispatch posted=%u attached=%u type0=%d relVel0=%g control0=%d\n",
+                           muPostedPassbyCount, luAttached, static_cast<s32>( maPostedPassbys[0].meType ),
+                           static_cast<double>( maPostedPassbys[0].mfRelativeVelocityMagnitude ),
+                           maPostedPassbys[0].mp3dControl != 0 ? 1 : 0 );
+            CgsDev::Log::WriteToLog( lacMsg );
+        }
+    }
+
+    muPostedPassbyCount = 0;
+    CgsDev::PerfMonCpu::StopMonitor( miCpuMonitor );
 }
 
 // ---------------------------------------------------------------------------
@@ -437,15 +490,11 @@ void PassbyStateManager::UpdateParams( f32 /*lfTimeStep*/ )
 // ChangeWithDefault) seeding 18 passby-type records, asserting the boost/passby
 // index ordering.
 //
-// FLAG (minimal -- deep domain cascade): the real body pulls
-//   * CgsSound::Playback::Name::MakeHash, CgsSound::Logic::Content::Construct,
-//   * Attrib::Gen::passbybin + Attrib::Instance::ChangeWithDefault + Attrib::Private
-//     (the AttribSys-generated passby tuning table), none reconstructed here, and it
-//   * touches mSplicerBank, which is the opaque ContentPlaceholder under this gate.
-// This is the IResourceRequester completion callback; it is invoked by the resource
-// broker only AFTER LoadAsset resolves, which this slice's Prepare stub never issues.
-// Bodied as a no-op so the leaf is concrete; NOT X360-faithful. Deferred with the
-// AttribSys passby table + Content. X360 addr above.
+//   0x826D4BB4..0x826D4BD8  Content::Construct(&mSplicerBank (this+0x194 on the requester
+//                           sub-object == +0x224), mpLogicModule, dword_83008404
+//                           (MakeHash("~SplicerFactory::SK_NAME~")), MakeHash("PassbyAsset"))
+// This is the IResourceRequester completion callback the registrar runs once Prepare's
+// LoadAsset resolves; Prepare's state 2 waits on the bank it constructs.
 // ---------------------------------------------------------------------------
 void PassbyStateManager::ResourcesAreReady()
 {
@@ -464,28 +513,8 @@ void PassbyStateManager::ResourcesAreReady()
     // returns -- so it is not reproduced here.
 }
 
-// ---------------------------------------------------------------------------
-// PassbyStateManager::GetResourceRegistrar()  (IResourceRequester slot 1)
-//
-// Recovered semantically from the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850, which loads this->mpLogicModule (+0x2C) then tail-calls the
-// IResourceRequester slot-1 of the module's embedded ResourceRegistrar
-// (SoundLogicModule::mResourceRegistrar @ module+0x4C90). The state-manager leaves
-// share the same +0x2C module back-pointer (stamped by CreateStateMan), so the
-// route is identical.
-//
-// FLAG (module opaque): mpLogicModule is the base StateManager's +0x2C back-pointer
-// (modelled void* in the full view; here reached via the BrnStateManager base). The
-// SoundLogicModule home is not reconstructed in this slice and the minimal
-// StateManager view in this TU does not expose mpLogicModule, so the +0x2C member
-// cannot be read here without the full view. This override therefore cannot be
-// bodied faithfully in this TU; it is provided as a non-cascading stub that
-// abort-asserts if ever reached on boot (PrepareStateManagersOnBoot does NOT call
-// it -- it is only used on the per-frame attach/detach path, which this slice does
-// not exercise). FLAG: returns a reference to a TU-local empty registrar purely to
-// satisfy the non-void signature; NOT a faithful body. Body via the module once the
-// full StateManager view (mpLogicModule) + SoundLogicModule are available.
-// ---------------------------------------------------------------------------
+// (GetResourceRegistrar: the console has no PassbyStateManager override -- the inherited
+// BrnStateManager::GetResourceRegistrar @0x82696510 serves LoadAsset; see the header.)
 
 
 // ---------------------------------------------------------------------------
@@ -511,6 +540,136 @@ PassbyStateManager::DynamicPropByCache::Find( const EntityId& lId )
         }
     }
     return 0;
+}
+
+// ---------------------------------------------------------------------------
+// DynamicPropByCache::Insert  @ 0x826975C8  (DWARF BrnPassbyStateManager.h:160)
+//   assert Find(lId) == 0                              ; "Find( lEntity ) == 0" (h:163, li r5, 0xA3)
+//   the first INACTIVE slot (stride 0xC, cap 0x20):
+//       mfTimeStamp = lfTimeStamp ; mbActive = 1 ; mId = lId ; return it
+//   no free slot -> 0
+// ---------------------------------------------------------------------------
+PassbyStateManager::DynamicPropByCache::Item*
+PassbyStateManager::DynamicPropByCache::Insert( f32 lfTimeStamp, const EntityId& lId )
+{
+    CGS_ASSERT( Find( lId ) == 0, "Find( lEntity ) == 0" );
+    for( u32 luIndex = 0; luIndex < PassbyStateManager::KU_DYNAMIC_PROP_CACHE_SIZE; ++luIndex )
+    {
+        Item& lrItem = maItems[ luIndex ];
+        if( !lrItem.mbActive )
+        {
+            lrItem.mfTimeStamp = lfTimeStamp;
+            lrItem.mbActive = true;
+            lrItem.mId = lId;
+            return &lrItem;
+        }
+    }
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Passby::Passby( Vector3, f32, EePassbyTypes, bool, f32 )  (DWARF BrnPassbyStateManager.h:102)
+//
+// Header inline on the console; its inlined copies (UpdateDynamicPropBys @0x826A1070..
+// 0x826A1094, StaticPassbyControl::TriggerPassby @0x826B9BF0) store exactly
+//   mStaticPos = lStaticPos (stvx128) ; mp3dControl = 0 ; mfRelativeVelocityMagnitude ;
+//   meType ; mfVolumeModifier ; mbSuppressBoostBys
+// and no range assert (TriggerPassby passes a run-time type and shows only its own
+// "lePassbyType < ePassbyTypes::MaxPassbyTypes" check, BrnStaticPassbyControl.cpp:247).
+// ---------------------------------------------------------------------------
+PassbyStateManager::Passby::Passby(
+        Vector3 lStaticPos,
+        f32 lfRelativeVelocityMagnitude,
+        EePassbyTypes leType,
+        bool lbSuppressBoostBys,
+        f32 lfVolumeModifier )
+    : mStaticPos( lStaticPos )
+    , mp3dControl( 0 )
+    , mfRelativeVelocityMagnitude( lfRelativeVelocityMagnitude )
+    , meType( leType )
+    , mfVolumeModifier( lfVolumeModifier )
+    , mbSuppressBoostBys( lbSuppressBoostBys )
+{
+}
+
+namespace
+{
+// |a - b| over x / y / z: `vsubfp ; vmsum3fp`, vrsqrtefp with two Newton steps, and the
+// `vcmpeqfp / vsel` guard that makes a zero vector 0 instead of 0 * infinity.
+f32 DistanceBetween( const Vector3& lrA, const Vector3& lrB )
+{
+    const f32 lfX = lrA.x - lrB.x;
+    const f32 lfY = lrA.y - lrB.y;
+    const f32 lfZ = lrA.z - lrB.z;
+    const f32 lfSquared = lfX * lfX + lfY * lfY + lfZ * lfZ;
+    return lfSquared == 0.0f ? 0.0f : std::sqrt( lfSquared );
+}
+}
+
+// ---------------------------------------------------------------------------
+// PassbyStateManager::UpdateDynamicPropBys(f32)  @ 0x826A0DD0  (DWARF cpp:~230)
+//
+//   listener = the CAMERA microphone, maMicrophones[E_MIC_CAMERA][E_PLAYER_1]
+//              (module+0x29B0: position = its current matrix row 3 @+0x30, velocity @+0x90)
+//   queue    = the logic input buffer's prop-update notifications (assert
+//              "mpBrnLogicInputBuffer", h:432 ; GetPropUpdateNotificationQueue @0x826949E8)
+//   mDynamicPropCache.Update(mfCurrentTime)                 ; lfs f28, 4(this)
+//   for each notification (BaseEventQueue::GetEvent @0x8268EA38, 64-byte stride):
+//       id = its PropEntityID (the inlined owner tripwire, BrnPropEntityID.h:278)
+//       cached -> item.mfTimeStamp = mfCurrentTime ; next
+//       speed = |mLinearVelocity (+0x10) - listener velocity|
+//       !(speed > 25 mph)                         -> next    ; splat(flt_82F31928 0.44704 *
+//                                                              flt_820AA53C 25.0), static
+//       !(speed * flt_82004E58 (0.15) > |mPosition - listener position|) -> next
+//       PostPassby(Passby(mPosition, speed, Camera (10), false, 1.0f))   ; inlined, result unused
+//       mDynamicPropCache.Insert(mfCurrentTime, GetEntityId() @0x826944E0)
+// i.e. a prop flung past the camera that will reach it within 0.15 s is voiced once, and is
+// not voiced again until it has been out of the notifications for KF_PROP_BY_CACHE_LIFETIME.
+// ---------------------------------------------------------------------------
+void PassbyStateManager::UpdateDynamicPropBys( f32 /*lfTimeStep*/ )
+{
+    static const f32 KF_MIN_PROP_SPEED = 0.44704f * 25.0f;     // flt_82F31928 * flt_820AA53C (0x826A0FD4)
+    static const f32 KF_PROP_TIME_TO_LISTENER = 0.15f;         // flt_82004E58
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
+    const CgsSound::Logic::MicrophoneSystem::Microphone* lpListener =
+        lpModule->GetEnvironment().GetMicrophoneSystem().GetMicrophone(
+            CgsSound::Logic::MicrophoneSystem::E_MIC_CAMERA, CgsSound::Logic::MicrophoneSystem::E_PLAYER_1 );
+    const Vector3 lListenerPosition = lpListener->GetMicrophoneMatrix().Pos();
+    const Vector3 lListenerVelocity = lpListener->GetVelocity();
+
+    // The input buffer's attested-width queue storage, viewed through the world's typed queue
+    // -- the identity BrnGameModule::BridgeWorldToSound's Append already relies on.
+    typedef CgsModule::EventQueue<BrnPhysics::Props::PropUpdateNotification, 200> NotificationQueue;
+    const NotificationQueue& lrNotifications = *reinterpret_cast<const NotificationQueue*>(
+        static_cast<const BrnSound::Module::Io::LogicInputBuffer*>( lpModule->GetBrnInputStructure() )
+            ->GetPropUpdateNotificationQueue() );
+
+    const f32 lfCurrentTime = mfCurrentTime;
+    mDynamicPropCache.Update( lfCurrentTime );
+    for( s32 liNotification = 0; liNotification < lrNotifications.GetLength(); ++liNotification )
+    {
+        const BrnPhysics::Props::PropUpdateNotification& lrNotification =
+            lrNotifications.GetEvent( liNotification );
+        DynamicPropByCache::Item* lpItem = mDynamicPropCache.Find( lrNotification.GetEntityId().mEntityId );
+        if( lpItem )
+        {
+            lpItem->mfTimeStamp = lfCurrentTime;
+            continue;
+        }
+
+        const f32 lfSpeed = DistanceBetween( lrNotification.mLinearVelocity, lListenerVelocity );
+        if( !( lfSpeed > KF_MIN_PROP_SPEED ) )
+            continue;
+        if( !( lfSpeed * KF_PROP_TIME_TO_LISTENER > DistanceBetween( lrNotification.mPosition, lListenerPosition ) ) )
+            continue;
+
+        const Passby lPassby( lrNotification.mPosition, lfSpeed,
+                              AttribSys::Enums::ePassbyTypes::Camera, false, 1.0f );
+        PostPassby( lPassby );
+        mDynamicPropCache.Insert( lfCurrentTime, lrNotification.GetEntityId().mEntityId );
+    }
 }
 
 } // namespace Passby

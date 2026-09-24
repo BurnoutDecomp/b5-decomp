@@ -27,10 +27,11 @@ namespace CgsSound { namespace Logic { struct Cgs3dEffectControl; } }
 // turns them into 3D passby voices. It derives the committed BrnStateManager
 // (CgsSound::Logic::StateManager primary base + IResourceRequester sub-object).
 //
-// This TU bodies ONE ledger function:
-//   BrnSound::Logic::Passby::PassbyStateManager::PostPassby  @ 0x82683488
-//     -- append one Passby record to the fixed maPostedPassbys[] ring, guarded by
-//        muPostedPassbyCount, returning true on success / false when full.
+// PostPassby @ 0x82683488 (inline below) appends one Passby record to the fixed
+// maPostedPassbys[] ring, guarded by muPostedPassbyCount, returning true on success /
+// false when full. UpdateParams @0x826D4D00 hands every posted record to a free
+// PassbyState each frame and empties the ring; the rest of the surface is bodied in
+// BrnPassbyStateManager.cpp.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 asm reaches muPostedPassbyCount
 // at +0x220 and the array at +0xA0, and copies the Passby payload as 6x 8-byte
@@ -209,6 +210,10 @@ protected:
 
     // BrnPassbyStateManager.h:130 (DWARF).
     static const u32 KU_MAX_PASSBY_POSTS = 8;
+
+    // BrnPassbyStateManager.cpp:23 (DWARF): the states Prepare asks PrepareStates for
+    // (`li r5, 8` at 0x826F9808).
+    static const u32 KU_NUMBER_OF_PASSBY_STATES = 8;
 
     Passby             maPostedPassbys[KU_MAX_PASSBY_POSTS]; // h:194
     u32                muPostedPassbyCount;                  // h:195

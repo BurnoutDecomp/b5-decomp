@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Passby/BrnPassbyState.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 // =============================================================================
 // BrnSound::Logic::Passby::PassbyState — out-of-line bodies.
@@ -8,6 +9,8 @@
 // This TU's recon'd function set:
 //   GetStaticTypeInfo()  @ 0x82688FC8
 //   PassbyState()        @ 0x826BF5E0
+//   Attach(void*)        @ 0x826D4A98
+//   UpdateParams(f32)    @ 0x826D4B30
 // =============================================================================
 
 namespace BrnSound
@@ -102,6 +105,46 @@ CgsSound::Logic::State* PassbyState::CreateObject(u32 /*auType*/)
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::State>* PassbyState::GetTypeInfo() const
 {
     return GetStaticTypeInfo();
+}
+
+// BrnPassbyState.cpp:23 (DWARF `const float32_t KF_TIMEOUT_TIMER`): flt_820ABCD8, 5.0f.
+static const f32 KF_TIMEOUT_TIMER = 5.0f;
+
+// ---------------------------------------------------------------------------
+// PassbyState::Attach(void*)  @ 0x826D4A98  (DWARF cpp:73)
+//
+//   assert lpvAttachment                        ; "lpvAttachment" (cpp:75, li r5, 0x4B)
+//   mPassbyData = *(Passby*)lpvAttachment       ; 6 x ld/std -- the 48-byte record (+0x60)
+//   mfTimeOutTimer = 0.0f                       ; stfs flt_82001CC0, 0x90
+//   State::Attach(lpvAttachment)                ; bl 0x826C4B88
+//
+// The attachment is the manager's maPostedPassbys[i] slot, which UpdateParams recycles the
+// same frame (the count is zeroed after the dispatch loop) -- hence the copy.
+// ---------------------------------------------------------------------------
+void PassbyState::Attach(void* apvAttachment)
+{
+    CGS_ASSERT(apvAttachment != nullptr, "lpvAttachment");
+    mPassbyData = *static_cast<const PassbyStateManager::Passby*>(apvAttachment);
+    mfTimeOutTimer = 0.0f;
+    CgsSound::Logic::State::Attach(apvAttachment);
+}
+
+// ---------------------------------------------------------------------------
+// PassbyState::UpdateParams(f32)  @ 0x826D4B30  (DWARF cpp:94)
+//
+//   State::UpdateParams(dt)                     ; bl 0x826C4850
+//   mbIsAttached (+0x48):
+//       mfTimeOutTimer += dt                    ; fadds
+//       mfTimeOutTimer > KF_TIMEOUT_TIMER -> Detach()   ; `fcmpu ; ble` -- a NaN timer holds
+// ---------------------------------------------------------------------------
+void PassbyState::UpdateParams(f32 afDeltaTime)
+{
+    CgsSound::Logic::State::UpdateParams(afDeltaTime);
+    if (!IsAttached())
+        return;
+    mfTimeOutTimer += afDeltaTime;
+    if (mfTimeOutTimer > KF_TIMEOUT_TIMER)
+        Detach();
 }
 
 const char* PassbyState::GetTypeName() const
