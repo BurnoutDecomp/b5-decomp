@@ -785,11 +785,16 @@ void PhysicalTrafficVehicle::Update(f32 lfSimTimerTimeStep, f32 lfGameTimerTimeS
     mfTimeSinceCheckNotify += lfSimTimerTimeStep;
 }
 
+// DWARF BrnPhysicalTrafficVehicle.cpp:29 `const float32_t KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR`
+// (namespace BrnPhysics::Vehicle). X360 unk_8208FACC = 0x3F000000 (x360rd); findinit: one reference,
+// SetArticulated's `lis/addi` at 0x825F3EB4. PS3 0x712298 loads it by this name.
+const f32 KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR = 0.5f;
+
 // PhysicalTrafficVehicle::SetArticulated   @0x825F3B68
 //   Assert the type is CAB or TRAILER and this vehicle has no joint yet (miJointIndex == -1). Set
 //   meArticulatedVehicleType (+0x24) and mark the joint ATTACHED (+0x28), then compute
-//   mArticulationPointLocal from the deformation model's hitch locator (G39-D2). When fully physical
-//   the console finally sets the full body's articulated solve-penetration weight (see the flag).
+//   mArticulationPointLocal from the deformation model's hitch locator (G39-D2), and when fully
+//   physical halve the full body's solve-penetration weight (G39-D3).
 void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
                                             EArticulatedVehicleType leVehicleType)
 {
@@ -853,12 +858,23 @@ void PhysicalTrafficVehicle::SetArticulated(const CreatePhysicalTrafficEvent& lr
     CGS_ASSERT(rw::math::vpu::IsValid(mArticulationPointLocal),
                "RwMathVPU::IsValid( mArticulationPointLocal )");                          // :469
 
-    // FLAG (un-recoverable constant + un-declared setter): when fully physical the console finally
-    // calls VehiclePhysics::SetSolvePenetrationWeightFactor(GetFullTraffic(),
-    // KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR), inserting the weight into the full body at
-    // +0x1050. The factor is loaded from un-dumped rodata (unk_8208FACC) so its value is not
-    // recoverable (a guessed constant would be wrong), and the setter is undeclared; delegated to the
-    // full-physics TU rather than guessed.
+    // THE ARTICULATED SOLVE-PENETRATION WEIGHT (G39-D3, 2026-09-24), 0x825F3E6C..0x825F3ED0, after
+    // the ResourcePtr's destructor (the console order). `lbz r31, 0x32` (mu8PhysicalType) with the
+    // inlined IsFullyPhysical()'s "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT" (BrnPhysicalTrafficVehicle.h
+    // :382); FULL (0) only: `lvlx` unk_8208FACC ; vspltw128 v127 ; GetFullTraffic (0x825C0148) ;
+    // `addi r11, r3, 0x1050` ; lvx128 ; `vrlimi128 v0, v127, 1, 0` (lane w ONLY) ; stvx128 -- the
+    // DWARF's VehiclePhysics::SetSolvePenetrationWeightFactor(VecFloat) inlined. The other three
+    // lanes (Prepare's -0.1 / 1.0 / 100.0) are untouched. SolvePenetration reads the lane back through
+    // DeformableObject::GetWeightFactor, so an articulated full-physics truck pushes out of
+    // penetration at half weight.
+    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");                                 // h:382
+    if (mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_FULL)
+    {
+        GetFullTrafficPhysics()
+            ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor.w =
+            KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR;
+    }
 }
 
 // =================================================================================================

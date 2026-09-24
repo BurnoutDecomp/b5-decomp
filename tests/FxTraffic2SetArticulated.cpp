@@ -1,4 +1,4 @@
-// FX-TRAFFIC2 (crash parity 2026-09-24, G39-D2): the PRODUCTION
+// FX-TRAFFIC2 (crash parity 2026-09-24, G39-D2 + G39-D3): the PRODUCTION
 //   PhysicalTrafficVehicle::SetArticulated                       @0x825F3B68
 //   PhysicalTrafficVehicle::GetFullTrafficPhysics                @0x825C0148
 //   Deformation::LocatorPointSpecList::GetLocatorXf              @0x825B31E0
@@ -10,6 +10,8 @@
 //   for an orthonormal R with translation t that is (dot(X, p - t), dot(Y, p - t), dot(Z, p - t), 0)
 //   and it lands in mArticulationPointLocal (+0); a spec without the tag fires
 //   "Failed to find articulation tag point" (:463) and the index (== the count) is still used.
+//   G39-D3: a FULL (type 0) car's body +0x1050 gets lane w = 0.5 (unk_8208FACC, `vrlimi128 ... 1, 0`)
+//   and nothing else; a SIMPLE car's body is never touched.
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
@@ -66,11 +68,17 @@ static bool Near(f32 lfA, f32 lfB) { return std::fabs(lfA - lfB) <= 1.0e-6f; }
 
 alignas(64) static unsigned char gaSpec[sizeof(StreamedDeformationSpec)];
 alignas(64) static unsigned char gaVehicle[sizeof(PhysicalTrafficVehicle)];
+alignas(64) static unsigned char gaBody[sizeof(TrafficPhysics)];
 static StreamedDeformationSpec* gpSpec = nullptr;
 static LocatorPointSpec* gpLocators = nullptr;   // below 4 GB: the list holds a Ptr32
 
 static StreamedDeformationSpec& Spec() { return *reinterpret_cast<StreamedDeformationSpec*>(gaSpec); }
 static PhysicalTrafficVehicle& Car()  { return *reinterpret_cast<PhysicalTrafficVehicle*>(gaVehicle); }
+static Vector4& WeightRow()
+{
+    return reinterpret_cast<TrafficPhysics*>(gaBody)
+        ->mvPropSpeedMaintainAlongZ_PropSpeedMaintainAlongVel_TimeSinceLastRaceCarContact_SolvePenetrationWeightFactor;
+}
 
 static void Locator(u32 luIndex, ETagPointType leType, f32 lfX, f32 lfY, f32 lfZ)
 {
@@ -101,6 +109,9 @@ static void Fresh(u32 luNumTags)
     Car().miJointIndex = -1;
     Car().mu8PhysicalType = PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
     Car().mArticulationPointLocal = { 999.0f, 999.0f, 999.0f, 999.0f };
+    std::memset(gaBody, 0, sizeof(gaBody));
+    Car().mpVehicleBody = reinterpret_cast<SimpleVehiclePhysics*>(gaBody);
+    WeightRow() = { -0.1f, 1.0f, 100.0f, 1.0f };   // as VehiclePhysics::Prepare seeds it
     gAsserts = 0;
     gTagMisses = 0;
 }
@@ -156,6 +167,20 @@ int main()
     Run(PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB);
     Check(gTagMisses == 1, "CAB with no type-29 locator: \"Failed to find articulation tag point\" fires exactly once");
     Check(Hitch(0.0f, 1.1f, 3.0f), "... and the point is still read at index == count (non-gating assert)");
+
+    // ---- G39-D3: a FULL car's body gets the articulated solve-penetration weight, lane w only ----
+    Fresh(4);
+    Car().mu8PhysicalType = PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL;
+    Run(PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB);
+    Check(WeightRow().w == 0.5f, "FULL: body +0x1050 .w = KF_ARTICULATED_SOLVE_PENETRATION_WEIGHT_FACTOR (0.5, unk_8208FACC)");
+    Check(WeightRow().x == -0.1f && WeightRow().y == 1.0f && WeightRow().z == 100.0f,
+          "FULL: lanes x/y/z untouched (vrlimi128 mask 1)");
+
+    Fresh(4);   // SIMPLE (type 1)
+    Run(PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER);
+    Check(WeightRow().x == -0.1f && WeightRow().y == 1.0f && WeightRow().z == 100.0f && WeightRow().w == 1.0f
+          && gAsserts == 0,
+          "SIMPLE: the body is never touched and GetFullTrafficPhysics is never asked");
 
     std::printf("FxTraffic2SetArticulated: %u checks, %u failures\n", gChecks, gFailures);
     return gFailures ? 1 : 0;
