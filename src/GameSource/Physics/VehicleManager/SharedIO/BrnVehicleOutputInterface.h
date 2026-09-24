@@ -408,6 +408,9 @@ namespace Vehicle
         const TrafficCrashedEventQueue* GetCrashedTrafficEventQueue() const { return &mCrashedTrafficEventQueue; }
         const TrafficSlammedEventQueue* GetSlammedTrafficEventQueue() const { return &mSlammedTrafficEventQueue; }
         const RaceCarCrashEventQueue*   GetRaceCarCrashEventQueue()   const { return &mRaceCarCrashEventQueue; }
+        // DWARF BrnVehicleOutputInterface.h:229; TrafficEntityModule::HandleResetRaceCarEvents
+        // @0x82742CE8 inlines it as `addi r27, <managerOut>, 0x5B0` (0x82742D30) == the seat below.
+        const RaceCarResetEventQueue*   GetRaceCarResetEventQueue()   const { return &mRaceCarResetEventQueue; }
 
         // ADDITIVE 2026-09-06 (traffic-demotion wave), same family and same evidence as the
         // three above: TrafficEntityModule::PostPhysicsUpdate @0x8274E880 folds this accessor
