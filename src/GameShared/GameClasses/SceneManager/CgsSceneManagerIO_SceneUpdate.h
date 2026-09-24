@@ -236,9 +236,27 @@ namespace SceneManagerIO
         }
         void SetVolumeInstanceTransform(CgsSceneManager::EntityId lEntityId, const Matrix44Affine& lrTransform);
 
+        // ---- ReplaceDynamicVolume: the DWARF's ONE spelling, 64-bit key ----------------------
+        // CORRECTED 2026-09-24 (crash parity H-SM1, FX-SCENEMGR). DWARF
+        // CgsSceneManagerIO_SceneUpdate.h:458 (again :931/:1294) declares only
+        //     void ReplaceDynamicVolume(VolumeId, const VolRef::Volume *);
+        // and the one X360 body (0x822B15F8) stores the WHOLE r4 (`mr r11, r4` @0x822B1604 ;
+        // `std r11, var_C0(r1)` @0x822B1618 -- Hex-Rays' `LODWORD(v3) = a2` is a misread of a
+        // plain 64-bit register move). This used to be a fitted `(CgsSceneManager::EntityId,
+        // const void*)` form whose body posted `(u64)(u32)id`: the only console caller,
+        // RaceCarEntityModule::UpdatePropBoundingBoxes_PreScene @0x822F5668, passes a race car's
+        // mHandlingBodyVolumeId (`ld r11, 0xD0`), whose entity word is in the HIGH dword and whose
+        // low dword ActiveRaceCar::Attach seeds to zero -- narrowing would replace volume key 0 for
+        // every car. That fitted form had no caller anywhere (ARTIST: 0x822B15F8's xrefs_to is that
+        // one function; the queue's Add @0x822AB670 is called only from here), so it is retired
+        // rather than kept beside the real one: a 32-bit key is now a compile error, not a silent
+        // key-0 post. The volume stays `const void*` for the same reason AddDynamicVolume's does
+        // (VolRef::Volume is a forward declaration here; the body only block-copies 0x80 bytes).
+        // Body in CgsSceneManagerIO_SceneUpdate.cpp.
+        void ReplaceDynamicVolume(VolumeId lVolumeId, const void* lpVolumeImage);
+
         // ADDITIVE GROW: bodies emitted by this TU (X360 producers) -- these were not
         // previously declared. Signatures taken from the producers' asm-attested args.
-        void ReplaceDynamicVolume(CgsSceneManager::EntityId lEntityId, const void* lpVolumeImage);
         void SetEntityRadius(CgsSceneManager::EntityId lEntityId, f32 lfBoundingRadius);
         void ClearCullingTable(bool lbCullAll);
         // ADDITIVE (WorldModule::Prepare @0x827D53B0 stage 3 stages the ten
