@@ -233,7 +233,11 @@ namespace BrnAI
             // test made every section probe miss, which left the whole racing line inert.
             // Corroborated by AISection::IsInside @0x82677058 (inside == cross <= 0) and the
             // winding SectionData::SetFastSectionCorners builds.
-            if (!(lfSide < 0.0f))
+            // NaN polarity (FX-AINAN2): the lane mask is `vnot(vcmpgefp(cross, 0))` @0x827686EC/
+            // 0x827686F0 -- "not >= 0" -- and a NaN cross fails vcmpgefp, so its lane counts as
+            // INSIDE. Only an ORDERED cross >= 0 puts the point outside; `!(cross < 0)` also sent
+            // a NaN outside.
+            if (lfSide >= 0.0f)
             {
                 return false;
             }
