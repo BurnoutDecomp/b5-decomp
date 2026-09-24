@@ -6,7 +6,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGameplayExternal.h"  // BehaviourGameplayExternal::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"           // BehaviourGyroCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"          // BehaviourFixedCam::Parameters
-#include "GameSource/Director/Camera/Behaviours/BrnBehaviourBystanderCam.h"       // BehaviourBystanderCam::Parameters
+#include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"          // BehaviourBystanderCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"            // BehaviourPassengerCam::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h" // BehaviourRotateAboutVehicle::Parameters
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h" // BehaviourSpirallingDeathcam::Parameters
@@ -696,18 +696,62 @@ namespace BrnDirector
                 mGameplayExternalCameraParamsForCar.Construct();         // over +0x2488
                 mGameplayBumperCameraParamsForCar.Construct();           // over +0x2538
 
-                // ⭐ 2026-09-11: the remaining moment camera blocks. None of their Parameters
-                // classes has a recovered Construct, so each is zeroed and -- where the tag
-                // is reachable -- stamped with the type tag its SetParameters asserts on.
-                // Same [FLAG, PC-only] posture as the two ZeroBlocks above: the console's
-                // authored tunings for these blocks are compiled into the bank's own
-                // Construct, which is not recovered, so every block reads as a zeroed rig.
-                ZeroBlock(&mBystanderCloseParameters, sizeof(mBystanderCloseParameters));
-                ZeroBlock(&mBystanderFarParameters,   sizeof(mBystanderFarParameters));
-                ZeroBlock(&mPassengerDefault,         sizeof(mPassengerDefault));
+                // ⭐ 2026-09-24 (FX-DIRECTOR): THE FOUR BYSTANDER BLOCKS THIS BANK MODELS ARE
+                // CONSTRUCTED, no longer zeroed and tagged. The console runs
+                // BehaviourBystanderCam::Parameters::Construct @0x821F9A00 over all seven blocks of
+                // the record's bystander run (`bl 0x821F9A00` x7, 0x8223DE20..0x8223DE5C, bank
+                // +0xD18 stride 0x9C) and re-tunes each one later with constant stores
+                // (0x8223E150..0x8223E29C); the stores into the four modelled blocks follow, each
+                // constant read at its load site. Close is a COPY of Far taken AFTER Far's re-tunes
+                // (`memcpy(bank+0xEEC, bank+0x1024, 0x9C)` @0x8223E260) with its perceived distance
+                // cut to 4.0 (0x8223E268). With the zeroed blocks the crash bystander shot framed
+                // the car at perceived distance 0 and failed its range test at 0 m.
+                mBystanderJumpLeftParameters.Construct();          // slot 0, bank +0xD18
+                mBystanderJumpFromBehindParameters.Construct();    // slot 2, bank +0xE50
+                mBystanderCloseParameters.Construct();             // slot 3, bank +0xEEC
+                mBystanderFarParameters.Construct();               // slot 5, bank +0x1024
 
-                mBystanderCloseParameters.meType = eBehaviourBystanderCam;
-                mBystanderFarParameters.meType   = eBehaviourBystanderCam;
+                // slot 0 (0x8223E150..0x8223E1F8): planted at a fixed point in the car's own space.
+                mBystanderJumpLeftParameters.mLookerParams.mfTrackingTolerance        = 0.2f;     // +0x38 flt_82004744
+                mBystanderJumpLeftParameters.mLookerParams.mfTrackingSpeed            = 0.1f;     // +0x3C flt_82004014
+                mBystanderJumpLeftParameters.mLookerParams.mfDesiredPerceivedDistance = 5.0f;     // +0x4C flt_8200426C
+                mBystanderJumpLeftParameters.mLookerParams.mbUseZoom                  = false;    // +0x77 stb 0
+                mBystanderJumpLeftParameters.mfDistanceForFailKM                      = 0.0125f;  // +0x84 flt_82009B98
+                mBystanderJumpLeftParameters.mfTargetSpaceX                           = 2.0f;     // +0x88 flt_82001D9C
+                mBystanderJumpLeftParameters.mfTargetSpaceY                           = -2.0f;    // +0x8C flt_82006D70
+                mBystanderJumpLeftParameters.mfTargetSpaceZ                           = 4.0f;     // +0x90 flt_82004EF4
+                mBystanderJumpLeftParameters.mbUseTargetSpaceInsteadOfPositionFinder  = true;     // +0x98 stb 1
+                mBystanderJumpLeftParameters.mbUseRangeTesting                        = false;    // +0x99 stb 0
+
+                // slot 2 (0x8223E1B8..0x8223E1F8): the same, behind the car.
+                mBystanderJumpFromBehindParameters.mLookerParams.mfTrackingTolerance        = 0.2f;    // +0x38 flt_82004744
+                mBystanderJumpFromBehindParameters.mLookerParams.mfTrackingSpeed            = 0.1f;    // +0x3C flt_82004014
+                mBystanderJumpFromBehindParameters.mLookerParams.mfDesiredPerceivedDistance = 5.0f;    // +0x4C flt_8200426C
+                mBystanderJumpFromBehindParameters.mLookerParams.mbUseZoom                  = false;   // +0x77 stb 0
+                mBystanderJumpFromBehindParameters.mfDistanceForFailKM                      = 0.0125f; // +0x84 flt_82009B98
+                mBystanderJumpFromBehindParameters.mfTargetSpaceX                           = 1.1f;    // +0x88 flt_82004A1C
+                mBystanderJumpFromBehindParameters.mfTargetSpaceY                           = -0.78f;  // +0x8C flt_82009B94
+                mBystanderJumpFromBehindParameters.mfTargetSpaceZ                           = -3.31f;  // +0x90 flt_82009B90
+                mBystanderJumpFromBehindParameters.mbUseTargetSpaceInsteadOfPositionFinder  = true;    // +0x98 stb 1
+                mBystanderJumpFromBehindParameters.mbUseRangeTesting                        = false;   // +0x99 stb 0
+
+                // slot 5 (0x8223E220..0x8223E25C): a roadside position within 40 m, failing past 60 m.
+                mBystanderFarParameters.mLookerParams.mfTrackingTolerance              = 0.5f;    // +0x38 flt_82001DA0
+                mBystanderFarParameters.mLookerParams.mfMinFOVVelocity                 = 120.0f;  // +0x44 flt_82004A28
+                mBystanderFarParameters.mLookerParams.mfMaxFOVVelocity                 = 130.0f;  // +0x48 flt_8200544C
+                mBystanderFarParameters.mLookerParams.mfDesiredPerceivedDistance       = 8.0f;    // +0x4C flt_82004C88
+                mBystanderFarParameters.mLookerParams.mfToleranceForDistanceFromIdeal  = 20.0f;   // +0x54 flt_820054CC
+                mBystanderFarParameters.mLookerParams.mfToleranceForDistanceFromTarget = 0.1f;    // +0x58 flt_82004014
+                mBystanderFarParameters.mfVelocityInfluenceOnPosition                  = 0.75f;   // +0x7C flt_82004018
+                mBystanderFarParameters.mfMaxInitialDistanceKM                         = 0.04f;   // +0x80 flt_82009B88
+                mBystanderFarParameters.mfDistanceForFailKM                            = 0.06f;   // +0x84 flt_820047B8
+
+                // slot 3: Far, closer.
+                mBystanderCloseParameters = mBystanderFarParameters;                               // memcpy 0x9C @0x8223E260
+                mBystanderCloseParameters.mLookerParams.mfDesiredPerceivedDistance     = 4.0f;    // +0x4C flt_82004EF4
+
+                // The passenger block is still the 2026-09-11 zeroed stand-in (see its accessor).
+                ZeroBlock(&mPassengerDefault,         sizeof(mPassengerDefault));
 
                 // ⭐ 2026-09-24 (FX-DIRECTOR): the fixed-cam block is no longer a zeroed stand-in. The
                 // console inlines BehaviourFixedCam::Parameters::Construct over it (0x8223DC90:
@@ -718,7 +762,8 @@ namespace BrnDirector
                 // assert "lfFOV > 0.0f" and render at FOV 0.
                 mFixedDefault.Construct();
 
-                // ⭐ 2026-09-12: the eleven player-jumping shot blocks, same posture.
+                // ⭐ 2026-09-12: the nine player-jumping RIG blocks (the two bystander ones are
+                // constructed above since 2026-09-24).
                 // ⚠ THE NINE RIG BLOCKS' TYPE TAGS ARE NOT SEEDED and cannot be from here:
                 // BehaviourRig::Parameters inherits the shared Behaviour::Parameters head,
                 // whose mType is protected, and the only thing that writes it is
@@ -729,8 +774,6 @@ namespace BrnDirector
                 // MomentPlayerJumping::Prepare, whose TU is not in the link. Inert, not wrong.
                 // DELETE-WHEN: BehaviourRig.cpp is mounted, and Construct calls
                 // BehaviourRig::Parameters::Construct on each of the nine instead of zeroing.
-                ZeroBlock(&mBystanderJumpLeftParameters,       sizeof(mBystanderJumpLeftParameters));
-                ZeroBlock(&mBystanderJumpFromBehindParameters, sizeof(mBystanderJumpFromBehindParameters));
                 ZeroBlock(&mRigRearQFwd,        sizeof(mRigRearQFwd));
                 ZeroBlock(&mRigFrontQCuFwd,     sizeof(mRigFrontQCuFwd));
                 ZeroBlock(&mRigBootViewFwd,     sizeof(mRigBootViewFwd));
@@ -740,9 +783,6 @@ namespace BrnDirector
                 ZeroBlock(&mRigDropUnderbelly,  sizeof(mRigDropUnderbelly));
                 ZeroBlock(&mRigDropFrontQCuFwd, sizeof(mRigDropFrontQCuFwd));
                 ZeroBlock(&mRigDropBootViewFwd, sizeof(mRigDropBootViewFwd));
-
-                mBystanderJumpLeftParameters.meType       = eBehaviourBystanderCam;
-                mBystanderJumpFromBehindParameters.meType = eBehaviourBystanderCam;
             }
 
             // The named-parameter record this bank owns, at bank +0x10. The arbitrator states

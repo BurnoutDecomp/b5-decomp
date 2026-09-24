@@ -173,8 +173,7 @@ bool BehaviourFixedCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrIn
 
     if (mCollisionPolicy.IsVisibilityInterrupted())
     {
-        lrCamera.GetValidityAccount().SetNoCutToFlag(KI_NOCUTTO_SUBJECT_LEFT_FRAME);
-        mbCanSwitchToMeNow = false;
+        SetCantSwitchToMeNow(lrCamera, KI_NOCUTTO_SUBJECT_LEFT_FRAME);
     }
 
     lrCamera.SetFOV(mpParameters->mfFOV);

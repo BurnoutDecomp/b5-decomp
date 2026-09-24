@@ -1438,6 +1438,30 @@ bool PointWillLeaveFrustrum(const Matrix44Affine& lTransform, Vector3 lPoint,
     return true;
 }
 
+// ============================================================================
+// The two range tests BehaviourBystanderCam::Update runs (DWARF CameraUtils.cpp:1376 / :1399).
+// ADDED 2026-09-24 (FX-DIRECTOR). Neither has an X360 symbol: the console inlines both into
+// BehaviourBystanderCam::Update @0x82243C80, and these are read off those expansions.
+// ============================================================================
+
+// Is lTarget further than lfRange from lPosition? A squared compare, no square root:
+//   vsubfp d = lPosition - lTarget ; vmsum3fp128 d.d ; fmuls range*range ; vcmpgtfp. d.d > range^2
+// (0x82243F5C..0x82243F84 and 0x82244194..0x822441BC).
+bool TargetOutsideRange(Vector3 lPosition, Vector3 lTarget, f32 lfRange)
+{
+    return rw::math::vpu::MagnitudeSquared(lPosition - lTarget) > lfRange * lfRange;
+}
+
+// Will lTarget, moving at lTargetVelocity, be further than lfRange from lPosition lfSecs from now?
+//   vmaddfp p = lTargetVelocity * lfSecs + lTarget ; vsubfp d = p - lPosition ;
+//   vmsum3fp128 d.d > range^2 (0x8224424C..0x822442C0).
+bool TargetWillExceedRangeInXSecs(Vector3 lPosition, Vector3 lTarget, Vector3 lTargetVelocity,
+                                  f32 lfRange, f32 lfSecs)
+{
+    const Vector3 lFutureTarget = lTarget + lTargetVelocity * lfSecs;
+    return rw::math::vpu::MagnitudeSquared(lFutureTarget - lPosition) > lfRange * lfRange;
+}
+
 }
 }
 }

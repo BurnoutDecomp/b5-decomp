@@ -2,244 +2,162 @@
 #define GAMESOURCE_DIRECTOR_CAMERA_BEHAVIOURS_BEHAVIOUR_BYSTANDER_CAM_H
 
 #include "types.hpp"
-#include "BrnCommonTypes.h"                            // Vector3 / Matrix44Affine / VecFloat aliases
-#include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT (the mpParameters / mbSetup asserts)
-#include "GameShared/GameClasses/Numeric/CgsRandom.h"  // CgsNumeric::Random (Camera::Utils::Random typedef)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"               // CgsNumeric::Random (mRandom)
+#include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex (SetTarget)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE canonical Camera::Behaviour base
+#include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // VisibilityCollisionPolicy (mCollisionPolicy)
+#include "GameSource/Director/Camera/Utils/BrnCameraShake.h"        // Utils::CameraShake (+ Parameters)
+#include "GameSource/Director/Camera/Utils/BrnLooker.h"             // Utils::Looker (+ Parameters)
+#include "GameSource/Director/Camera/Utils/BrnPositionFinder.h"     // Utils::PositionFinder
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h
 //
-// BrnDirector::Camera::BehaviourBystanderCam -- the "bystander cam" camera behaviour: the
-// dramatic third-party camera that frames a chosen race car from a roadside vantage. This
-// header is the HOME for the full-behaviour slice of this class (its construction, the per-frame
-// Update, the dev-tools tweaker hookup, the Prepare gate, the name accessor) AND for the two
-// impact-effect controllers declared alongside it in the original .cpp:
-//   - BehaviourBystanderCam::Construct           @0x822438E8  (virtual; seed the rig + RNG + sub-objects)
-//   - BehaviourBystanderCam::Prepare             @0x821F9AD0  (virtual; assert mbSetup, mark prepared)
-//   - BehaviourBystanderCam::Update              @0x82243C80  (virtual; the per-frame camera solve)
-//   - BehaviourBystanderCam::GetName             @0x821F9C78  (virtual; "BehaviourBystanderCam")
-//   - BehaviourBystanderCam::SetupTweaker        @0x821F9B30  (virtual; wire Rig X/Y/Z to the tweaker)
-//   - BehaviourBystanderCam::Parameters::Construct @0x821F9A00 (seed the param block defaults)
-//   - ImpactSlomoController::Update              @0x82227230  (drive the crash slow-mo state machine)
-//   - ImpactShakeController::Update              @0x82243720  (register a velocity-scaled impact shake)
+// BrnDirector::Camera::BehaviourBystanderCam -- the "bystander cam": a camera planted at the
+// roadside near a chosen car (found on the traffic lanes by a PositionFinder, or placed at a
+// fixed offset in the car's own space), which then only turns and zooms to keep the car framed
+// (Looker) with a little hand-held wobble (CameraShake). The crash-highlight moment
+// MomentBystanderSeesAction and the player-jumping moment's bystander collection pool it.
 //
-// The trivial in-header slices (GetCol / SetParameters / SetTarget) and the virtual
-// GetCollisionPolicy are owned by the sibling TU BrnBehaviourBystanderCam.h, which models the
-// SAME class as a partial layout. To avoid forking that committed type, THIS header is a
-// SELF-CONTAINED layout used only by this compile unit (the two reconstructions agree
-// store-for-store on every pinned offset: mpParameters @+0x350, mCollisionPolicy @+0xD0,
-// mTarget @+0x340, mbSetup @+0x35C, mbGotPosition @+0x35D, the RNG @+0x310).
+// ⭐ RE-BASED 2026-09-24 (FX-DIRECTOR). The tree used to carry THREE reconstructions of this one
+// class -- this header (a self-contained byte-span layout with no base and every sub-object
+// opaque), BrnBehaviourBystanderCam.h (a slice modelling SetParameters/SetTarget/GetCol only) and
+// BrnBehaviourBystanderCamSerialise.h (a Parameters-only view) -- and not one of them derived from
+// Camera::Behaviour. NewBehaviour<BehaviourBystanderCam> therefore placed a vtable-less object in
+// the behaviour pool and BehaviourHelper::Prepare @0x82255F48, which dispatches the pooled
+// object's vtable slot 0 (Construct) first, read a null vptr: the access violation that stopped
+// the crash-highlight moment tick (scratch/bugtest/runs/fxvoicepool/20260924_163149,
+// NewBehaviour<BehaviourBystanderCam> <- MomentBystanderSeesAction::Update). The two other
+// definitions are gone; this is the only one.
 //
-// Heavy embedded sub-objects (PositionFinder, CameraShake, Looker, the collision policy, the
-// CgsNumeric::Random RNG, mTransform) are modelled as opaque reserved byte spans at their
-// asm-attested offsets; the cross-TU helpers that operate on them (Looker::Update,
-// CameraShake::Update, PositionFinder::FindPosition/Update, VehicleRef::Get/IsValid,
-// Timestep::Get, Camera::ValidateTransformWithDebugInfo, the impact-effect helpers) are declared
-// as free functions on opaque handles -- their real homes land with their own TUs; under the
-// per-TU `cl /c` gate only the declaration is load-bearing.
+// LAYOUT AUTHORITY: the DecFIGS DWARF (BehaviourBystanderCam.h:107 `: public Behaviour`, members
+// :156..:175, Parameters :181..:198), pinned by the ARTIST asm:
+//   AllocateVoid<BehaviourBystanderCam> @0x82253B10  stw off_8200A5C0 -> +0x000 (this vtable),
+//                                                    stw off_8200A158 -> +0x0D0 (the policy's),
+//                                                    slot size li r7, 0x360
+//   +0x020 mTransform          Update copies it into the camera (0x8224402C..0x82244048)
+//   +0x060 mPositionFinder     Construct stb 0/0/1 -> +0x90/+0x91/+0x92 (finder +0x30..+0x32)
+//   +0x0A0 mShake              Construct's four stfs 0.0 +0xA0..+0xAC; Update `addi r3, r31, 0xA0`
+//   +0x0B0 mLooker             Construct +0xB0 / +0xC0 / +0xCC..+0xCF; Update `addi r3, r31, 0xB0`
+//   +0x0D0 mCollisionPolicy    GetCollisionPolicy @0x821F9B28 is `addi r3, r3, 0xD0`
+//   +0x310 mRandom             Construct's LCG fill; Update passes its six doublewords by value
+//   +0x340 mTarget             SetTarget @0x821F3F80 stores +0x340..+0x34C
+//   +0x350 mpParameters        SetParameters @0x821F3F10 `stw r31, 0x350(r30)`
+//   +0x354 mfSquaredDistanceToTarget, +0x358 mfPerceivedDistanceModificationFactor,
+//   +0x35C mbSetup, +0x35D mbGotPosition
+// (x64: the base's pointer, the policy and mpParameters widen, so absolute offsets are PROVENANCE --
+//  every access below is BY NAME.)
 //
-// SIZE-STABLE PIN: the X360 is a 4-byte-pointer build; this PC reconstruction is 64-bit, so a
-// real 8-byte pointer mid-struct would shift every later offset. mpParameters is therefore kept
-// as a size-stable 32-bit slot at its pinned +0x350 and re-exposed by name through an accessor
-// that round-trips the opaque handle; the embedded reserved spans reproduce every offset exactly.
-// ----------------------------------------------------------------------------
+// VTABLE off_8200A5C0 (eight slots, the canonical Behaviour order):
+//   0 Construct            0x822438E8        4 Release            0x8284CB38 (the base's empty body)
+//   1 Prepare              0x821F9AD0        5 GetCollisionPolicy 0x821F9B28
+//   2 Update               0x82243C80        6 SetupTweaker       0x821F9B30
+//   3 PostCollisionUpdate  0x82C296C8 (`li r3, 1` -- the base's)   7 GetName    0x821F9C78
+//
+// The two impact controllers the DWARF also homes in this header (ImpactSlomoController :44,
+// ImpactShakeController :75) live in BehaviourBystanderCamImpactControllers.h: the crash arbitrator
+// state embeds both by value and share no member with the behaviour.
+// ============================================================================
 
-// ---- cross-TU types this behaviour threads through. Their real homes land with their own TUs;
-//   under the per-TU `cl /c` gate only these opaque forward-declarations are load-bearing. They
-//   appear only by reference/pointer here, so an incomplete type suffices and nothing is forked. ----
 namespace BrnDirector
 {
-
-// ⚠️ CLASS-KEY: `struct`, matching the real home (BrnDirectorModuleDebugPrinter.h:40) and
-// every other forward declaration (Behaviour.h:92, BrnBehaviourManager.h:71,
-// BrnCameraTweaker.h:38). It used to be `class` here, and MSVC mangles the class-key into the
-// symbol: any TU that saw THIS header first emitted `AEAVDebugPrinter` while the
-// BehaviourManager TU emitted `AEAUDebugPrinter`, so BehaviourManager::UpdateAllBehaviours
-// came up unresolved at link (the same fork class the renderer wave hit on rw::IResourceAllocator).
-struct DebugPrinter;                // dev print sink (threaded only)
-class AllVehicleData;               // the per-frame all-vehicle data (GetPlayer source)
-class VehicleTracker;               // a vehicle's per-frame tracker (velocity journal owner)
-class VehicleRef;                   // a resolved race-car handle (Get/IsValid source)
-struct BehaviourSharedInfo;         // per-frame shared info passed to Update
-struct BehaviourSharedPrepareReleaseInfo; // shared info passed to Prepare/Release
-
 namespace Camera
 {
 
-class Camera;                 // the camera being driven (its flags/transform live in the shared info)
-
-namespace Utils
-{
-    struct Tweaker;           // dev-tools tweaker SetupTweaker wires the rig members into
-                              // (`struct` per its real home Camera/Utils/BrnCameraTweaker.h:45 --
-                              //  the class-key is part of the MSVC mangled name)
-    // The randomised-offset RNG. DE-FORKED 2026-07-30: this used to be `class Random;`, a
-    // forward declaration of a class that does not exist -- Camera::Utils::Random is a TYPEDEF
-    // of CgsNumeric::Random (see Utils/BrnCameraShake.h:51 and Utils/BrnLooker.h:31, which both
-    // spell it that way). The two forms are not interchangeable: a TU that saw both was C2371
-    // ("redefinition; different basic types"), which is what BrnArbStateTakedown.cpp hit the
-    // moment the ICE-anim behaviour started including the real CameraShake/Looker homes. A
-    // repeated typedef to the same type is well-formed, so this now matches them exactly.
-    typedef CgsNumeric::Random Random;
-}
-
-// FLAG: the camera-behaviour type tag. Each behaviour carries a type id in the leading word of
-//   its Parameters block; the bystander-cam enumerator's console VALUE is 5 (asm: the sibling
-//   SetParameters @0x821F3F30 compares the block's first word against 5; Parameters::Construct
-//   here stores 5 into the leading word). Replace with the real EBehaviourType enum when the
-//   Behaviour base TU lands.
+// The bystander-cam behaviour-type tag. SetParameters @0x821F3F10 compares the block's first word
+// against 5 (`cmplwi r11, 5`); Parameters::Construct @0x821F9A00 stores 5 there.
 enum EBehaviourTypeBystanderCam
 {
     eBehaviourBystanderCam = 5
 };
-// ----------------------------------------------------------------------------
-// ⭐ THE TWO IMPACT CONTROLLERS MOVED OUT (2026-08-29, crash-camera wave), to
-//     Behaviours/BehaviourBystanderCamImpactControllers.h
-// They are still DWARF-homed in this file (:44 and :75) and nothing about them changed
-// conceptually -- but ArbStateCrashing embeds BOTH by value, its header is #included by the
-// arbitrator state CONTAINER, and the container is reached by TUs that already reach the OTHER
-// reconstruction of this same source file (BrnBehaviourBystanderCam.h, via
-// BrnBehaviourParameterBank.h). Two definitions of BrnDirector::Camera::BehaviourBystanderCam
-// in one TU is a hard C2011, so dragging this whole header in behind the container would have
-// detonated that fork across the build. The controllers share no member with the behaviour, so
-// carving just them out costs nothing and leaves both reconstructions untouched.
-// ⚠️ ImpactShakeController is 20 BYTES there, not the 68 this file used to model
-// (`f32 mfImpactScalar + u8 maImpactEffect[0x40]`, itself FLAGged as a guess): the DWARF gives
-// the class exactly one member, a CameraImpactEffect, and ArbStateCrashing::ApplySlomoAndShake
-// clears exactly five floats over it.
-// The two Update BODIES moved with them, to the matching .cpp partfile -- see the banner in
-// BehaviourBystanderCam.cpp for why they could not stay here.
-// ----------------------------------------------------------------------------
-// ----------------------------------------------------------------------------
-// The bystander-cam behaviour. DWARF BehaviourBystanderCam.h:107 (public Behaviour base).
-// ----------------------------------------------------------------------------
-class BehaviourBystanderCam
+
+class BehaviourBystanderCam : public Behaviour
 {
 public:
-
-    // The bystander-cam parameter block (DWARF :181, public Behaviour::Parameters). Layout +
-    // defaults pinned store-for-store from Parameters::Construct @0x821F9A00.
-    class Parameters
+    // DWARF BehaviourBystanderCam.h:181 -- the bystander-cam parameter block (console size 0x9C,
+    // the stride of the parameter bank's seven-block bystander run).
+    class Parameters : public Behaviour::Parameters
     {
     public:
-        EBehaviourTypeBystanderCam GetType() const
-        {
-            return static_cast<EBehaviourTypeBystanderCam>(meType);
-        }
+        // X360 visitor: `void Serialise<S>(S&)` -- walks this block's fields into the camera-tunings
+        // serialiser S. Body + instantiations: BrnBehaviourBystanderCamSerialise.cpp.
+        template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        // Reset every field to its construction default (asm @0x821F9A00).
+        // DWARF :201 (BehaviourBystanderCam.cpp:186) @0x821F9A00. Body in the .cpp.
         void Construct();
 
-        // ---- Behaviour::Parameters base head (DWARF :181) ----
-        s32 meType;                                  // +0x00  type tag (= eBehaviourBystanderCam, 5)
-        s32 miBaseField04;                           // +0x04  base param word (cleared to 0)
-
-        // ---- mShakeParams (CameraShake::Parameters, DWARF :184), 4 floats @+0x08..+0x17 ----
-        f32 mfShakeParam08;                          // +0x08  stfs 0.0 (was 0.06)
-        f32 mfShakeParam0C;                          // +0x0C  stfs 0.0
-        f32 mfShakeParam10;                          // +0x10  stfs 1.0 (was 1.15)
-        f32 mfShakeParam14;                          // +0x14  stfs 0.25 (was 0.11)
-
-        // ---- mLookerParams (Looker::Parameters, DWARF :185), 0x64 bytes @+0x18..+0x7B.
-        //   Seeded by Looker::Parameters::Construct(this+0x18); only the two fields this TU
-        //   over-writes after that call are named, the rest is the looker's own default block. ----
-        u8  maLookerParams[0x7C - 0x18];             // +0x18  Looker::Parameters (opaque sub-block)
-
-        // ---- bystander-specific scalars (DWARF :187..:198) ----
-        f32 mfVelocityInfluenceOnPosition;           // +0x7C  stfs 0.5
-        f32 mfMaxInitialDistanceKM;                  // +0x80  stfs 40.0
-        f32 mfDistanceForFailKM;                     // +0x84  stfs 80.0
-        f32 mfTargetSpaceX;                          // +0x88  stfs 2.0
-        f32 mfTargetSpaceY;                          // +0x8C  stfs 0.0
-        f32 mfTargetSpaceZ;                          // +0x90  stfs 0.0
-        f32 mfHeight;                                // +0x94  stfs 1.0
-        bool mbUseTargetSpaceInsteadOfPositionFinder;// +0x98  stb 0
-        bool mbUseRangeTesting;                      // +0x99  stb 1
+        Utils::CameraShake::Parameters mShakeParams;                 // :184  console +0x08
+        Utils::Looker::Parameters      mLookerParams;                // :185  console +0x18
+        f32  mfVelocityInfluenceOnPosition;                          // :187  console +0x7C
+        f32  mfMaxInitialDistanceKM;                                 // :188  console +0x80
+        f32  mfDistanceForFailKM;                                    // :189  console +0x84
+        f32  mfTargetSpaceX;                                         // :191  console +0x88
+        f32  mfTargetSpaceY;                                         // :192  console +0x8C
+        f32  mfTargetSpaceZ;                                         // :193  console +0x90
+        f32  mfHeight;                                               // :195  console +0x94
+        bool mbUseTargetSpaceInsteadOfPositionFinder;                // :197  console +0x98
+        bool mbUseRangeTesting;                                      // :198  console +0x99
     };
 
-    // The embedded collision-policy sub-object GetCollisionPolicy returns (DWARF :162). Concrete
-    // type lands with the collision-policy TU; opaque here so the accessor types the +0xD0 address.
-    class CollisionPolicy;
-
-    BehaviourBystanderCam() {}
-
-    // ---- the virtual behaviour API this TU bodies (declared virtual to match the vtable) ----
-    virtual void Construct();                                   // @0x822438E8
-    virtual bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo); // @0x821F9AD0
-    virtual bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo); // @0x82243C80
-    virtual CollisionPolicy* GetCollisionPolicy();             // owned by sibling TU (decl only)
-    virtual void SetupTweaker(Utils::Tweaker& lrTweaker);      // @0x821F9B30
-    virtual const char* GetName() const;                      // @0x821F9C78
-
-    // The adopted parameter block, typed by name (round-trips the size-stable +0x350 slot).
-    const Parameters* GetParameters() const
+    // DWARF h:213, @0x821F3F10 (the assert cites BehaviourBystanderCam.h:215): assert the block's
+    // type tag, store the pointer (+0x350) and cache the block's debug name in the base's +0x10 slot.
+    // NOT a virtual override -- it takes the DERIVED Parameters, so it hides the base's pair.
+    void SetParameters(const Parameters* lpParameters)
     {
-        return static_cast<const Parameters*>(mpParametersSlot);
+        CGS_ASSERT(lpParameters->GetType() == eBehaviourBystanderCam,
+                   "lpParameters->GetType() == eBehaviourBystanderCam");   // h:215
+        mpParameters = lpParameters;                                        // stw r31, 0x350(r30)
+        SetDebugParametersName(lpParameters->GetDebugName());              // lwz 4(lp) ; stw 0x10(this)
     }
 
+    // DWARF h:250, @0x821F3F80: the inlined VehicleRef::SetToRaceCar over mTarget (its four stores
+    // and its BrnVehicleRef.h:222 index assert, 0x821F3FA0..0x821F3FD4), then mbSetup = 1.
+    void SetTarget(EActiveRaceCarIndex leRaceCarIndex)
+    {
+        mTarget.SetToRaceCar(leRaceCarIndex);
+        mbSetup = true;                                                     // stb r30(=1), 0x35C(r31)
+    }
+
+    // DWARF h:259 -- the squared camera-to-subject distance the last Update measured.
+    f32 GetSquaredDistanceToTarget() const { return mfSquaredDistanceToTarget; }
+
+    // DWARF h:268. No out-of-line console symbol; MomentBystanderSeesAction::
+    // SetPerceivedDistanceModificationFactor @0x822197E0 inlines it: `fcmpu` the new value against
+    // +0x358, equal -> nothing; else store it and `stb 1` to +0xCF == mLooker (+0xB0) +0x1F, the
+    // looker's mbForceZoomTargetUpdate, so the next Zoom re-snaps its FOV band to the new framing.
+    void SetPerceivedDistanceModificationFactor(f32 lfFactor)
+    {
+        if (lfFactor != mfPerceivedDistanceModificationFactor)
+        {
+            mfPerceivedDistanceModificationFactor = lfFactor;
+            mLooker.ForceZoomTargetUpdate();
+        }
+    }
+
+    // ---- the virtual interface (vtable off_8200A5C0) -----------------------------------------
+    void Construct() override;                                                    // slot 0 (cpp:221)
+    bool Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo) override;        // slot 1 (cpp:251)
+    bool Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo) override;     // slot 2 (cpp:270)
+    CollisionPolicy* GetCollisionPolicy() override;                                // slot 5 (cpp:396)
+    void SetupTweaker(Utils::Tweaker& lrTweaker) override;                         // slot 6 (cpp:410)
+    const char* GetName() const override;                                          // slot 7 (cpp:435)
+
 private:
-
-    // FLAG: full layout pinned from the Construct/Update/Prepare/SetupTweaker asm. Heavy embedded
-    //   sub-objects are opaque reserved spans at their pinned offsets. The vtable pointer at +0x000
-    //   is the compiler's own (these methods are declared `virtual` per the DWARF), so no explicit
-    //   vtable member is declared -- the named members below begin at the X360 +0x004 base word.
-    //   (PC is a 64-bit build: the implicit vtable pointer is 8 bytes here, so the X360 byte offsets
-    //   in the comments are documentation of the console layout, not the PC struct's literal offsets.)
-    u8    mbBaseField04;                             // +0x004  base flag (stw 0 covers +0x04..+0x07)
-    u8    maBaseHead005[0x08 - 0x05];                // +0x005..+0x007
-    u8    mbBaseFlag08;                              // +0x008  base flag (Prepare: stb 1; Construct: 0)
-    u8    mbBaseFlag09;                              // +0x009  base flag (Construct 0; Update writes 1)
-    u8    mbBaseFlag0A;                              // +0x00A  base flag (Construct 0; Update reads)
-    u8    mbBaseFlag0B;                              // +0x00B  base flag (Update clears)
-    u8    mbBaseFlag0C;                              // +0x00C  base flag (Construct 0; Update sets 1)
-    u8    maBaseHead00D[0x10 - 0x0D];                // +0x00D..+0x00F
-    s32   miParamWord1;                              // +0x010  cached parameter word (sibling: mParamWord1)
-    u8    maBaseHead014[0x20 - 0x14];                // +0x014..+0x01F (base rig, incl. 4B param slot)
-
-    Matrix44Affine mTransform;                       // +0x020  rig transform (DWARF :156, 64 bytes)
-
-    // mPositionFinder (DWARF :158). Mostly opaque; the three latch bytes Update gates on are
-    // surfaced by name at their pinned offsets (Construct seeds them 0/0/1).
-    u8    maPositionFinder060[0x90 - 0x60];          // +0x060  PositionFinder head (opaque)
-    bool  mbPositionFinderSeeded;                    // +0x090  set once FindPosition has seeded it
-    bool  mbPositionFinderValid;                     // +0x091  set by Update when a vantage was found
-    bool  mbPositionFinderField92;                   // +0x092  third latch (Construct = 1)
-    u8    maPositionFinder093[0xD0 - 0x93];          // +0x093  PositionFinder tail (opaque)
-    u8    mCollisionPolicy[0x150 - 0xD0];            // +0x0D0  VisibilityCollisionPolicy (DWARF :162, &-of)
-    u8    maMid150[0x270 - 0x150];                   // +0x150  mShake/mLooker interior (DWARF :159/:160)
-
-    // --- rig fade-out flags Update reads at +0x270..+0x272 (inside the mShake/mLooker rig). The
-    //     concrete sub-object owns them; surfaced here by name so Update's fade gate is offset-clean.
-    bool  mbRigFadeFlag270;                          // +0x270  fade-out latch A
-    bool  mbRigFadeFlag271;                          // +0x271  fade-out latch B (forces the camera flag)
-    bool  mbRigFadeFlag272;                          // +0x272  fade-out latch C (gates latch A)
-    u8    maMid273[0x310 - 0x273];                   // +0x273  rest of the mShake/mLooker interior
-
-    u8    mRandom[0x340 - 0x310];                    // +0x310  CgsNumeric::Random (DWARF :164, LCG state)
-
-    // --- mTarget (Behaviour::VehicleRef, DWARF :166), +0x340..+0x34F ---
-    s32   miTargetSet;                               // +0x340  target-set flag (Construct 0)
-    s32   meTargetRaceCarIndex;                      // +0x344  target race-car index (Construct -1)
-    s32   miTargetField348;                          // +0x348  cleared to 0
-    u8    mbTargetField34C;                          // +0x34C  flag (Construct toggles 0 then 1)
-    u8    maReserved34D[0x350 - 0x34D];              // +0x34D..+0x34F (VehicleRef tail)
-
-    void* mpParametersSlot;                          // +0x350  adopted Parameters* (DWARF :168)
-    f32   mfSquaredDistanceToTarget;                 // +0x354  cached squared distance (DWARF :170)
-    f32   mfPerceivedDistanceModificationFactor;     // +0x358  perceived-distance factor (DWARF :172, =1.0)
-    bool  mbSetup;                                   // +0x35C  setup-complete flag (DWARF :174)
-    bool  mbGotPosition;                             // +0x35D  position-acquired flag (DWARF :175)
+    // ---- layout (DWARF :156..:175) ---------------------------------------------------------------
+    Matrix44Affine             mTransform;                               // :156  console +0x020
+    Utils::PositionFinder      mPositionFinder;                          // :158  console +0x060
+    Utils::CameraShake         mShake;                                   // :159  console +0x0A0
+    Utils::Looker              mLooker;                                  // :160  console +0x0B0
+    VisibilityCollisionPolicy  mCollisionPolicy;                         // :162  console +0x0D0
+    Utils::Random              mRandom;                                  // :164  console +0x310
+    Behaviour::VehicleRef      mTarget;                                  // :166  console +0x340
+    const Parameters*          mpParameters;                             // :168  console +0x350
+    f32                        mfSquaredDistanceToTarget;                // :170  console +0x354
+    f32                        mfPerceivedDistanceModificationFactor;    // :172  console +0x358
+    bool                       mbSetup;                                  // :174  console +0x35C
+    bool                       mbGotPosition;                            // :175  console +0x35D
 };
-
-// ----------------------------------------------------------------------------
-// BrnDirector::Camera::BehaviourBystanderCam::GetName @0x821F9C78
-//   lis r11, aBehaviourbysta@ha ; addi r3, ... ; blr   -> the literal class name
-// ----------------------------------------------------------------------------
-inline const char*
-BehaviourBystanderCam::GetName() const
-{
-    return "BehaviourBystanderCam";
-}
 
 } // namespace Camera
 } // namespace BrnDirector

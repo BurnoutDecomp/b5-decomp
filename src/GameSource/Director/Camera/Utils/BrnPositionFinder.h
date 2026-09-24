@@ -23,9 +23,13 @@ namespace Utils
         // own ledger function (nothing here consumes it).
         struct Parameters;
 
-        // DWARF h:65/h:68 (cpp:53/cpp:62) -- their own ledger functions
-        // (declaration-only here).
+        // DWARF h:65 (cpp:53) -- BODIED 2026-09-24 (FX-DIRECTOR) in BrnPositionFinder.cpp. No
+        // out-of-line console symbol: BehaviourBystanderCam::Construct @0x822438E8 inlines it over
+        // its finder at +0x60 as three stores -- stb 0 +0x90, stb 0 +0x91, stb 1 +0x92, i.e.
+        // mbIsInitialised = 0, mbFoundPosition = 0, mbConstructed = 1 (the latch both
+        // FindPosition and Update assert on).
         void Construct();
+        // DWARF h:68 (cpp:62) -- its own ledger function (declaration-only here; no caller).
         void Clear();
 
         // @0x821F8E68 (this TU, cpp:~70) -- arm the finder: latch the target +

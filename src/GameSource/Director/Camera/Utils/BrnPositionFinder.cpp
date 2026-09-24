@@ -1,17 +1,17 @@
 #include "GameSource/Director/Camera/Utils/BrnPositionFinder.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
-#include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"        // BehaviourSharedInfo (accessor slice)
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"           // BehaviourSharedInfo (GetWorldMap)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"             // BrnDirector::WorldMap
 
 // BrnDirector::Camera::Utils::PositionFinder -- reconstructed from
 // BURNOUT_X360_ARTIST.XEX.
 //
-// Bodied here (2 ledger functions, DWARF primary file
-// GameSource/Director/Camera/Utils/BrnPositionFinder.cpp):
+// Bodied here (DWARF primary file GameSource/Director/Camera/Utils/BrnPositionFinder.cpp):
+//   PositionFinder::Construct    (cpp:53, inlined by BehaviourBystanderCam::Construct @0x822438E8)
 //   PositionFinder::FindPosition @0x821F8E68
 //   PositionFinder::Update       @0x8223FCD8
-// Both are called by BrnDirector::Camera::BehaviourBystanderCam::Update.
+// FindPosition and Update are called by BrnDirector::Camera::BehaviourBystanderCam::Update.
 
 namespace BrnDirector
 {
@@ -19,6 +19,16 @@ namespace Camera
 {
 namespace Utils
 {
+
+// cpp:53. No console symbol of its own -- BehaviourBystanderCam::Construct inlines it over the
+// finder at behaviour +0x60: `stb r10(=0), 0x90` / `stb r10(=0), 0x91` / `stb r7(=1), 0x92`
+// (0x82243950..0x82243960). The three vectors are left alone.
+void PositionFinder::Construct()
+{
+    mbIsInitialised = false;
+    mbFoundPosition = false;
+    mbConstructed   = true;
+}
 
 // @ 0x821F8E68
 void PositionFinder::FindPosition(Vector3 lTarget, Vector3 lDisplacement)

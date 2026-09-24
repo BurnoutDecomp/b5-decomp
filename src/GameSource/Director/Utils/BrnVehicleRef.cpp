@@ -54,14 +54,23 @@ namespace BrnDirector
         }
     }
 
-    // The E_RACE_CAR case of Set: bind the reference to a specific race car index
-    // (mirrors the E_PLAYER_CAR fill -- populate the four fields, ref slot cleared).
+    // @ 0x821F29D8 (DWARF BrnVehicleRef.h:80) -- bind the reference to a specific race car; the
+    // E_RACE_CAR case of Set calls it (`bl 0x821F29D8`). Four stores, then the index assert:
+    //   stw r4, 4(r3) ; stb 1, 0xC(r3) ; stw 1, 0(r3) ; stw 0, 8(r3)
+    //   cmpwi cr6, r4, 8 ; blt -> done       (a SIGNED compare: the -1 "no car" index passes)
+    //   assert "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars"   (0x82002660, h:222)
+    // ⭐ 2026-09-24 (FX-DIRECTOR): the assert was missing here. BehaviourBystanderCam::SetTarget
+    // @0x821F3F80 and BehaviourGyroCam's AttachToRaceCar inline this body with it.
     void VehicleRef::SetToRaceCar(EActiveRaceCarIndex leRaceCar)
     {
-        meType         = E_RACE_CAR;
-        mbSet          = true;
+        const s32 KI_MAX_NUM_RACE_CARS = 8;   // BrnPhysics::Vehicle::ku8MaxNumRaceCars (`cmpwi cr6, r4, 8`)
+
         miRaceCarIndex = static_cast<s32>(leRaceCar);
+        mbSet          = true;
+        meType         = E_RACE_CAR;
         muRef          = 0;
+        CGS_ASSERT(static_cast<s32>(leRaceCar) < KI_MAX_NUM_RACE_CARS,
+                   "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");   // BrnVehicleRef.h:222
     }
 
     // @ 0x821F2A38 (class:BrnDirector::VehicleRef TU) -- memberwise inequality over
