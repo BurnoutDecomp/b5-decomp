@@ -39,6 +39,25 @@ StrStreamBase& StrStreamBase::operator<<(s32) { return *this; }
 StrStreamBase& StrStreamBase::operator<<(f32) { return *this; }
 }
 
+// Harness-only (FX-RUMBLE3 G10-D6, 2026-09-24): RumbleManager now holds its DWARF `surfacelist mSurfaceList`
+// (BrnRumbleManager.h:108), constructed and destroyed with the manager, and Update's first statement is
+// UpdateSurfaceRumble @0x82378AE0 (0x82386AB8). Neither is under test here -- the surface rumble has its own
+// runner (run_fxrumble3_surface_rumble.py) -- so the Attrib runtime is an inert stub and UpdateSurfaceRumble
+// a no-op: it only touches the play / volume / stop queues and the surface arrays, none of which these
+// checks read.
+namespace Attrib
+{
+    Instance::Instance(Collection* lpCollection, void* lpOwner)
+        : mpCollection(lpCollection), mpAttributeData(nullptr), mpOwner(lpOwner), muFlags(0) {}
+    Instance::~Instance() {}
+    int   Instance::GetClass() const { return 0; }
+    u64   Instance::GetCollection() const { return 0; }
+    void* DefaultDataArea(u32) { static unsigned char sau8Area[0x100]; return sau8Area; }
+    void  AssertOnClassCheck(int, int, u64) {}
+}
+void BrnGameState::RumbleManager::UpdateSurfaceRumble(
+    BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*, EActiveRaceCarIndex) {}
+
 // Harness-only: RaceCarState's default ctor calls Clear() (BrnVehicleEvents.cpp, not under test).
 // Every field the rumble bodies read is set explicitly by each case below.
 void BrnPhysics::Vehicle::RaceCarState::Clear() { std::memset(this, 0, sizeof(*this)); }
