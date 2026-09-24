@@ -84,6 +84,12 @@ struct Cgs3dEffectControl : public CgsSound::Logic::EffectControl
     // class's own TU (Cgs3dEffectControl.cpp). DWARF declares the dtor LAST.
     virtual ~Cgs3dEffectControl();           // Cgs3dEffectControl.h:36 (DWARF)
 
+    // Cgs3dEffectControl.h:99 (DWARF `DataPoint<Vector3> GetEmitterPosition() const`), header
+    // inline: the emitter-position history UpdateParams pushes from mpEmitterPosition. Its
+    // readers take the current half straight off the control (+0x60 on X360) --
+    // PassbyEffect::UpdatePosition @0x826BF7F0 and GetRelativeVelocityMag @0x826BF84C.
+    CgsSound::Utils::DataPoint<rw::math::vpu::Vector3> GetEmitterPosition() const { return mEmitterPosition; }
+
 protected:
     // Cgs3dEffectControl.h:221 @ 0x82682570. Push a raw value into one of the
     // dynamic-mixer input slots (via mpDynamicMixIo->GetDMixInputPtr()).

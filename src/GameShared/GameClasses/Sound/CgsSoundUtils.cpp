@@ -255,6 +255,32 @@ Slope::Slope(const SlopeParams& params)
     }
 }
 
+// Nothing to undo: the console's stack Slopes (PassbyEffect::UpdateParams builds two, at
+// 0x826D5208 and 0x826D5258) are never destroyed -- no destructor call follows either
+// GetValue. The declaration (DWARF CgsSoundUtils.h:386) had no body, so the first Slope
+// object in the game would not have linked.
+Slope::~Slope()
+{
+}
+
+// ---------------------------------------------------------------------------
+// CgsSound::Utils::Slope::GetValue(f32, Curve::ECurveType) const  @ 0x826897F0 (DWARF CgsSoundUtils.h:330)
+//   0x82689804..0x82689824  f = (lfInput - mfMinInput) / (mfMaxInput - mfMinInput)  (fsubs, fsubs, fdivs)
+//   0x82689828..0x82689838  `fneg ; fsel` + `fsubs ; fsel` -- rw::math::fpu::Clamp(f, 0, 1): a NaN -> 1.0
+//   0x8268983C             Curve::GetOutput(f, leCurve) -- the curve rides r5, because the f32 input
+//                          takes f1 and EATS the r4 slot (`mr r4, r5` before the call)
+//   0x82689840..0x8268984C  `fsubs f13, mfMaxOutput, mfMinOutput ; fmadds f1, f13, f1(out), f0(mfMinOutput)`
+//                          -- ONE rounding: std::fmaf with the console's operands
+// Its one caller is PassbyEffect::UpdateParams @0x826D5068 (the pass-by pitch and volume scales).
+// ---------------------------------------------------------------------------
+f32 Slope::GetValue(f32 lfInput, Curve::ECurveType leCurve) const
+{
+    const f32 lfFraction = rw::math::fpu::Clamp(
+        (lfInput - mParams.mfMinInput) / (mParams.mfMaxInput - mParams.mfMinInput), 0.0f, 1.0f);
+    return std::fmaf(mParams.mfMaxOutput - mParams.mfMinOutput, Curve::GetOutput(lfFraction, leCurve),
+                     mParams.mfMinOutput);
+}
+
 // ============================================================================================
 // CgsSound::Utils::PathLine stage-machine bodies, reconstructed store-for-store from
 // BURNOUT_X360.XEX. Two instantiations are attested by the X360 build:

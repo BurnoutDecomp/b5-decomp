@@ -414,6 +414,9 @@ public:
     ~Slope();
 
     f32 GetValue(f32 lfInput) const;
+    // DWARF CgsSoundUtils.h:330. The input mapped onto [0, 1] (the fsel clamp), through the curve,
+    // onto the output range. @0x826897F0 -- see CgsSoundUtils.cpp.
+    f32 GetValue(f32 lfInput, Curve::ECurveType leCurve) const;
 
     void Initialize(f32 lfMinInput, f32 lfMaxInput, f32 lfMinOutput, f32 lfMaxOutput);
     void Initialize(const SlopeParams& params);
