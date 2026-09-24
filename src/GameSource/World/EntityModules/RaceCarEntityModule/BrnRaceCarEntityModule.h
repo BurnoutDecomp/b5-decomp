@@ -191,6 +191,15 @@ public:
         void ProcessRaceCarCrashCompleteEvents(
             const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput );
 
+        // X360 0x822BD5B8 (DWARF BrnRaceCarEntityModule.h:626). The Showtime leap/stomp target
+        // list: while Showtime is on and the player is airborne, copy the traffic module's
+        // potential stompees into mStoredStompees / miStoredStompeeCount, which
+        // ProcessPlayerVehicleInput hands to AddTargetAssist. Called from PostSceneUpdate right
+        // after ProcessRaceCarCrashCompleteEvents (bl @0x822FE4B8); the console passes lpOutput
+        // (r5 @0x822FE4AC) and the body never reads it (crash parity CHAIN-STOMPEES c, 2026-09-24).
+        void ProcessLeapedAndStompedCars( const RaceCarEntityModuleIO::InputBuffer_PostScene* lpInput,
+                                          RaceCarEntityModuleIO::OutputBuffer_PostScene* lpOutput );
+
         // ---- THE CRASH ENTRY, consumer side (crash wave 2026-09-02). X360 0x822BD8B0
         //      (127 insns), DWARF :668. Body in BrnRaceCarEntityModule_CrashExit.cpp beside its
         //      exit twin. Drains the physics module's RaceCarCrashEvent queue every post-physics
