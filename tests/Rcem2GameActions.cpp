@@ -21,6 +21,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -234,6 +235,21 @@ int main() {
         lModule.Dispatch(E_ACTION_ROAD_RAGE_PLAYER_DAMAGE, AsEvent(&lDamage), &lOut);
         Check(lModule.miPlayerBaseDeformationTypeMirror == 4 && lModule.mfPlayerBaseDeformAmountMirror == 0.5f,
               "G68-D6 205: totalled -> mirror restored from the saved pair (+0x184D4/+0x184E0)");
+
+        // NaN polarity (FX-NANPOL sweep / FX-RCEM4, 2026-09-24): `blt` @0x8230D114 fires only on
+        // cr6.LT and `ble` @0x8230D11C skips whenever cr6.GT is clear -- an unordered value does NOT
+        // fire the :6849 range assert; out-of-range values still do.
+        const unsigned luBefore = guAssertions;
+        lDamage.mbPlayerTotalled = false; lDamage.mfHowCloseToTotalled = std::numeric_limits<f32>::quiet_NaN();
+        lModule.Dispatch(E_ACTION_ROAD_RAGE_PLAYER_DAMAGE, AsEvent(&lDamage), &lOut);
+        Check(guAssertions == luBefore && lModule.mfPlayerBaseDeformAmountMirror != lModule.mfPlayerBaseDeformAmountMirror,
+              "G68-D6 205 NaN: no :6849 assert (blt / ble both fall through to the store), the NaN is mirrored");
+        lDamage.mfHowCloseToTotalled = -0.25f;
+        lModule.Dispatch(E_ACTION_ROAD_RAGE_PLAYER_DAMAGE, AsEvent(&lDamage), &lOut);
+        lDamage.mfHowCloseToTotalled = 1.5f;
+        lModule.Dispatch(E_ACTION_ROAD_RAGE_PLAYER_DAMAGE, AsEvent(&lDamage), &lOut);
+        Check(guAssertions == luBefore + 2, "G68-D6 205: -0.25 (blt taken) and 1.5 (ble not taken) each fire :6849");
+        guAssertions = luBefore;   // the two deliberate out-of-range asserts are not failures
     }
 
     // ---- G68-D7: action 97 ---------------------------------------------------------------------
