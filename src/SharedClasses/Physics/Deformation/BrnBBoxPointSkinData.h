@@ -59,8 +59,9 @@ namespace Deformation
 		f32 GetWeight(s32 liInfluence) const { return mafWeights[liInfluence]; }
 		u8  GetBoneIndex(s32 liInfluence) const { return mauBoneIndices[liInfluence]; }
 
-		// BBoxPointSkinData::HackSwapHandedness @ 0x825E6DB8. Transform mVertex through the
-		// passed frame with a handedness flip. KEYSTONE: VMX pipeline, see banner / .cpp.
+		// BBoxPointSkinData::HackSwapHandedness @ 0x825E6DB8. Mirrors mVertex's local x in the
+		// passed frame: L = R(P - T), L.x = -L.x (flt_820037C8 = -1.0), P = T + R^T L (all four
+		// lanes). Reconstructed from the VMX pipeline (crash parity G16-D1) -- see the .cpp banner.
 		// The DWARF (BrnIKBodyPartSpec.h:60) types the argument Matrix44Affine -- the four
 		// 16-byte rows the asm lvx128's at r4 +0x00/+0x10/+0x20/+0x30.
 		// Caller (X360 xref): BrnPhysics::Deformation::BodyPartBBoxSpec::HackCheckHandedness.
